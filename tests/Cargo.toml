@@ -1,0 +1,15 @@
+[package]
+name = "eta-tests"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dev-dependencies]
+eta-llm = { path = "../crates/core/eta-llm" }
+eta-llm-test-providers = { path = "../crates/tests-helper/eta-llm-test-providers" }
+tokio.workspace = true
+tokio-stream.workspace = true
+
+[[test]]
+name = "eta_llm"
+path = "eta-llm/mod.rs"

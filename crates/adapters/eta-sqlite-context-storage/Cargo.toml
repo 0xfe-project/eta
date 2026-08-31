@@ -1,0 +1,11 @@
+[package]
+name = "eta-sqlite-context-storage"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+rusqlite.workspace = true
+eta-context = { path = "../../core/eta-context" }
+eta-session = { path = "../../core/eta-session" }

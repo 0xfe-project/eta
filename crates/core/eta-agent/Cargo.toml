@@ -1,0 +1,17 @@
+[package]
+name = "eta-agent"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+tokio-util.workspace = true
+eta-llm = { path = "../eta-llm" }
+eta-context = { path = "../eta-context" }
+eta-session = { path = "../eta-session" }
+
+[dev-dependencies]
+eta-llm-test-providers = { path = "../../tests-helper/eta-llm-test-providers" }

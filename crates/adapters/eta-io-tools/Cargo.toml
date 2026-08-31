@@ -1,0 +1,10 @@
+[package]
+name = "eta-io-tools"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+eta-agent = { path = "../../core/eta-agent" }
+eta-session = { path = "../../core/eta-session" }

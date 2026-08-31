@@ -1,0 +1,8 @@
+[package]
+name = "eta-self-mgmt"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+eta-agent = { path = "../eta-agent" }
+eta-llm = { path = "../eta-llm" }

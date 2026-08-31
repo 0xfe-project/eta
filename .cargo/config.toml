@@ -1,0 +1,6 @@
+[build]
+rustflags = ["-Z", "unstable-options"]
+
+# [unstable]
+# build-std = ["std", "panic_abort"]
+# build-std-features = ["panic_abort", "optimize_for_size"]

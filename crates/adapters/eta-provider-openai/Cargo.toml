@@ -1,0 +1,11 @@
+[package]
+name = "eta-provider-openai"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+tokio-stream.workspace = true
+reqwest.workspace = true
+eta-llm = { path = "../../core/eta-llm" }
