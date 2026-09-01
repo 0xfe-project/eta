@@ -2,8 +2,8 @@
 
 use std::pin::Pin;
 
-use tokio_stream::Stream;
 use serde::{Deserialize, Serialize};
+use tokio_stream::Stream;
 
 /// A provider streaming error.
 #[derive(Debug, Clone, thiserror::Error)]
@@ -49,66 +49,84 @@ pub struct Usage {
     pub cache_write: u64,
 }
 
+/// A model descriptor. A bare `&str` / `String` is only a convenience entry
+/// point; `core` uses `Model` to carry api / provider selection.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Model {
+    pub id: String,
+    pub label: Option<String>,
+    pub api: Option<String>,
+    pub base_url: Option<String>,
+    pub reasoning: Option<bool>,
+    pub context_window: Option<u64>,
+    pub max_tokens: Option<u64>,
+    pub cost: Option<serde_json::Value>,
+}
+
+impl Model {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            label: None,
+            api: None,
+            base_url: None,
+            reasoning: None,
+            context_window: None,
+            max_tokens: None,
+            cost: None,
+        }
+    }
+}
+
+impl From<&str> for Model {
+    fn from(id: &str) -> Self {
+        Model::new(id)
+    }
+}
+
+impl From<String> for Model {
+    fn from(id: String) -> Self {
+        Model::new(id)
+    }
+}
+
+/// Why a stream ended. Drives retry decisions without guessing:
+/// truncation = `MaxTokens`, empty response = `EndTurn` with no Content/ToolCall,
+/// mid-stream error = `Error`, model used a tool = `ToolUse`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StopReason {
+    EndTurn,
+    MaxTokens,
+    Error,
+    ToolUse,
+}
+
 /// A streamed event from the provider.
 #[derive(Clone, Debug)]
 pub enum Event {
     Content(serde_json::Value),
     ToolCall {
+        id: String,
         name: String,
         arguments: serde_json::Value,
     },
     End {
         usage: Usage,
+        stop: StopReason,
     },
 }
 
 /// A streaming provider. Implementations translate their native wire format
 /// into the SDK's `Event` stream.
+///
+/// `Item = Result` so mid-stream errors (rate limit / network / API) surface as
+/// `Err` and can be retried; a stream that fails to even start (model not found)
+/// yields a single immediate `Err` item.
 pub trait Provider: Send + Sync {
     fn stream(
         &self,
-        model: &str,
+        model: &Model,
         context: &Context,
         opts: Option<&serde_json::Value>,
-    ) -> Result<Pin<Box<dyn Stream<Item = Event> + Send>>, ProviderError>;
-}
-
-/// Measures UTF-8 bytes per second over recorded text deltas.
-#[derive(Debug)]
-pub struct ThroughputMeter {
-    bytes: u64,
-    start: Option<std::time::Instant>,
-}
-
-impl Default for ThroughputMeter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ThroughputMeter {
-    pub fn new() -> Self {
-        Self {
-            bytes: 0,
-            start: None,
-        }
-    }
-
-    pub fn record(&mut self, text: &str) {
-        if self.start.is_none() {
-            self.start = Some(std::time::Instant::now());
-        }
-        self.bytes += text.len() as u64;
-    }
-
-    pub fn utf8_per_sec(&self) -> f64 {
-        let Some(start) = self.start else {
-            return 0.0;
-        };
-        let secs = start.elapsed().as_secs_f64();
-        if secs <= 0.0 {
-            return 0.0;
-        }
-        self.bytes as f64 / secs
-    }
+    ) -> Pin<Box<dyn Stream<Item = Result<Event, ProviderError>> + Send>>;
 }

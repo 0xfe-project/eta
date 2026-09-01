@@ -1,3 +1,7 @@
 /target
 .DS_Store
 PLAN.md
+CORE_PLAN.md
+
+# local e2e test env
+.env.local

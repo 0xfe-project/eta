@@ -5,11 +5,23 @@ edition.workspace = true
 publish = false
 
 [dev-dependencies]
+eta-core = { path = "../crates/core/eta-core" }
 eta-llm = { path = "../crates/core/eta-llm" }
 eta-llm-test-providers = { path = "../crates/tests-helper/eta-llm-test-providers" }
+eta-session = { path = "../crates/core/eta-session" }
+async-trait.workspace = true
+serde_json.workspace = true
 tokio.workspace = true
 tokio-stream.workspace = true
 
 [[test]]
 name = "eta_llm"
 path = "eta-llm/mod.rs"
+
+[[test]]
+name = "eta_core"
+path = "eta-core/mod.rs"
+
+[[test]]
+name = "eta_session"
+path = "eta-session/mod.rs"

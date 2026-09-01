@@ -121,28 +121,29 @@ dependencies = [
 name = "eta-anycodingagent-config-reader"
 version = "0.1.0"
 dependencies = [
+ "eta-config",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "eta-context"
+name = "eta-config"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
 name = "eta-core"
 version = "0.1.0"
 dependencies = [
- "eta-context",
+ "async-trait",
  "eta-llm",
  "eta-llm-test-providers",
- "eta-session",
  "serde",
  "serde_json",
+ "thiserror",
  "tokio",
  "tokio-stream",
  "tokio-util",
@@ -153,16 +154,6 @@ name = "eta-io-tools"
 version = "0.1.0"
 dependencies = [
  "eta-core",
- "eta-session",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "eta-jsonl-context-storage"
-version = "0.1.0"
-dependencies = [
- "eta-context",
  "eta-session",
  "serde",
  "serde_json",
@@ -223,16 +214,17 @@ name = "eta-session"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "eta-core",
+ "eta-llm",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "eta-sqlite-context-storage"
+name = "eta-sqlite-storage"
 version = "0.1.0"
 dependencies = [
- "eta-context",
- "eta-session",
+ "eta-core",
  "rusqlite",
  "serde",
  "serde_json",
@@ -242,8 +234,12 @@ dependencies = [
 name = "eta-tests"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "eta-core",
  "eta-llm",
  "eta-llm-test-providers",
+ "eta-session",
+ "serde_json",
  "tokio",
  "tokio-stream",
 ]

@@ -1,8 +1,9 @@
 # eta-session
 
-Session & persistence contracts.
+Session management & persistence.
 
-Defines the `Session` data model (transcript entries, checkpoints, branches)
-and the `SessionStorage` trait.
+Implements `SessionStorage` (the trait is defined in `eta-core`) plus context
+assembly (progressive disclosure, `build_context`) and git-like time travel
+(fork / commit / checkout / rollback / merge / search).
 
-Storage backends are implemented in adapters.
+Storage backends are implemented in adapters (e.g. `eta-sqlite-storage`).

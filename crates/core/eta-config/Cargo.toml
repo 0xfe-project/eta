@@ -1,8 +1,8 @@
 [package]
-name = "eta-context"
+name = "eta-config"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
 serde.workspace = true
-async-trait.workspace = true
+serde_json.workspace = true

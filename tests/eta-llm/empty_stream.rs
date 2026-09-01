@@ -1,11 +1,11 @@
-use eta_llm::{Context, Event, Provider};
+use eta_llm::{Context, Event, Model, Provider};
 use eta_llm_test_providers::EmptyStreamLLMProvider;
 use tokio_stream::StreamExt;
 
 #[tokio::test]
 async fn yields_no_events() {
     let provider = EmptyStreamLLMProvider;
-    let stream = provider.stream("m", &Context::default(), None).unwrap();
-    let events: Vec<Event> = stream.collect().await;
+    let stream = provider.stream(&Model::new("m"), &Context::default(), None);
+    let events: Vec<Result<Event, _>> = stream.collect().await;
     assert!(events.is_empty());
 }
