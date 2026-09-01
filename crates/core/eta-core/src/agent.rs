@@ -1,5 +1,6 @@
 //! The agent engine: channels, the drive loop, and the retry / tool pipeline.
 
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 use tokio::sync::{broadcast, mpsc};
@@ -15,7 +16,7 @@ use crate::store::SessionStorage;
 use crate::tool::{CancelToken, Tool, builtin_state_tools, validate_args};
 use crate::types::{
     AgentEvent, AgentId, AgentInput, ControlPlaneAction, ControlPlaneDecision, ControlPlanePrompt,
-    GoalContinuationGate, GoalState, GoalStatus, ToolCall, ToolResult, TurnContext,
+    GoalContinuationGate, GoalState, GoalStatus, ToolCall, ToolResult, TurnContext, TurnDriver,
 };
 
 /// Detects anti-spin: 3 consecutive tool-free turns auto-pauses the goal.
@@ -214,9 +215,13 @@ impl AgentRuntime {
         }
     }
 
-    /// Run turns until no tool result or goal continuation is pending.
+    /// Run turns until no driver is pending. Dequeue-once per turn boundary:
+    /// one `pop_front`, at most one `push_back`.
     async fn run_turn_chain(&mut self) {
-        loop {
+        let mut queue: VecDeque<TurnDriver> = VecDeque::new();
+        queue.push_back(TurnDriver::UserMessage(serde_json::Value::Null));
+
+        while let Some(_driver) = queue.pop_front() {
             if self.cancel.is_cancelled() {
                 break;
             }
@@ -239,15 +244,15 @@ impl AgentRuntime {
                 self.emit_goal_change();
             }
 
-            // Feed tool results back (had_tools) or continue the goal.
+            // Enqueue the next driver.
             if outcome.had_tools {
+                queue.push_back(TurnDriver::UserMessage(serde_json::Value::Null));
                 continue;
             }
             if self.should_continue_goal() {
                 if let Some(g) = &mut self.goal {
                     g.round_count += 1;
                 }
-                // Stop when over the round cap or the evaluator says done.
                 let max_rounds = self.cfg.max_goal_rounds.unwrap_or(DEFAULT_MAX_GOAL_ROUNDS);
                 let over_limit = self
                     .goal
@@ -260,9 +265,9 @@ impl AgentRuntime {
                     self.emit_goal_change();
                     break;
                 }
-                continue;
+                queue.push_back(TurnDriver::GoalContinuation);
             }
-            break;
+            // else: no next driver → loop ends.
         }
     }
 
