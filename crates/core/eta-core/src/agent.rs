@@ -442,7 +442,7 @@ impl AgentRuntime {
                 if retries < max_retries && classify_provider_error(err).is_retryable() {
                     retries += 1;
                     self.messages
-                        .push(serde_json::json!({ "role": "user", "content": prompts::CONTINUATION_CONTINUE }));
+                        .push(serde_json::json!({ "role": "user", "content": prompts::RESUME }));
                     continue;
                 }
                 return step;
@@ -453,7 +453,7 @@ impl AgentRuntime {
                 retries += 1;
                 self.messages.push(serde_json::json!({
                     "role": "user",
-                    "content": prompts::CONTINUATION_TRUNCATED
+                    "content": prompts::RESUME_TRUNCATED
                 }));
                 continue;
             }
@@ -467,7 +467,7 @@ impl AgentRuntime {
                 retries += 1;
                 self.messages.push(serde_json::json!({
                     "role": "user",
-                    "content": prompts::CONTINUATION_EMPTY
+                    "content": prompts::RESUME_EMPTY
                 }));
                 continue;
             }
@@ -481,7 +481,7 @@ impl AgentRuntime {
                         self.loop_detector.reset();
                         self.messages.push(serde_json::json!({
                             "role": "user",
-                            "content": prompts::CONTINUATION_LOOP
+                            "content": prompts::RESUME_LOOP
                         }));
                         continue;
                     }
