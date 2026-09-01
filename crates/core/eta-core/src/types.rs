@@ -170,7 +170,7 @@ pub enum GoalStatus {
 pub struct GoalState {
     pub objective: String,
     pub status: GoalStatus,
-    pub continuation_count: u32,
+    pub round_count: u32,
     pub idle_without_tools: u32,
     pub active_duration_ms: u64,
     pub last_accrued_at: Option<std::time::Instant>,
@@ -182,7 +182,7 @@ impl GoalState {
         Self {
             objective: objective.into(),
             status: GoalStatus::Active,
-            continuation_count: 0,
+            round_count: 0,
             idle_without_tools: 0,
             active_duration_ms: 0,
             last_accrued_at: None,

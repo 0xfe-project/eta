@@ -20,8 +20,8 @@ use crate::types::{
 /// Detects anti-spin: 3 consecutive tool-free turns auto-pauses the goal.
 const ANTI_SPIN_LIMIT: u32 = 3;
 
-/// Hard cap on goal self-continuations per activation.
-const MAX_CONTINUATIONS: u32 = 100;
+/// Default goal round cap when the config does not specify one.
+const DEFAULT_MAX_GOAL_ROUNDS: u32 = 100;
 
 /// Configuration for a single agent instance.
 pub struct AgentConfig {
@@ -33,6 +33,8 @@ pub struct AgentConfig {
     pub store: Arc<dyn SessionStorage>,
     pub system_prompt: String,
     pub max_retries: usize,
+    /// Goal self-continuation cap (`None` = `DEFAULT_MAX_GOAL_ROUNDS`).
+    pub max_goal_rounds: Option<u32>,
 }
 
 /// A handle to a running agent.
@@ -236,13 +238,14 @@ impl AgentRuntime {
             }
             if self.should_continue_goal() {
                 if let Some(g) = &mut self.goal {
-                    g.continuation_count += 1;
+                    g.round_count += 1;
                 }
-                // Stop when over the continuation cap or the evaluator says done.
+                // Stop when over the round cap or the evaluator says done.
+                let max_rounds = self.cfg.max_goal_rounds.unwrap_or(DEFAULT_MAX_GOAL_ROUNDS);
                 let over_limit = self
                     .goal
                     .as_ref()
-                    .is_some_and(|g| g.continuation_count >= MAX_CONTINUATIONS);
+                    .is_some_and(|g| g.round_count >= max_rounds);
                 if over_limit || self.evaluate_goal_achieved().await {
                     if let Some(g) = &mut self.goal {
                         g.status = GoalStatus::Achieved;

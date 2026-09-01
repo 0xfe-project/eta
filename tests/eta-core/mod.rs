@@ -156,6 +156,7 @@ fn make_agent(provider: Arc<dyn Provider>, tools: Vec<Arc<dyn Tool>>) -> Agent {
         store,
         system_prompt: "test".into(),
         max_retries: 2,
+        max_goal_rounds: None,
     })
 }
 
