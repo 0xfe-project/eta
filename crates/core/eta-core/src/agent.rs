@@ -23,6 +23,10 @@ const ANTI_SPIN_LIMIT: u32 = 3;
 /// Default goal round cap when the config does not specify one.
 const DEFAULT_MAX_GOAL_ROUNDS: u32 = 100;
 
+/// Mid-loop summarization thresholds (percentage of the context window).
+const MID_LOOP_APPROACH_PCT: usize = 80;
+const MID_LOOP_SEVERE_PCT: usize = 95;
+
 /// Configuration for a single agent instance.
 pub struct AgentConfig {
     pub agent_id: AgentId,
@@ -62,6 +66,7 @@ impl Agent {
             goal: None,
             loop_detector: LoopDetector::new(),
             pending_ask_user: None,
+            pending_summary: None,
             validation_failures: 0,
             request_counter: 0,
             input_rx,
@@ -105,6 +110,7 @@ struct AgentRuntime {
     goal: Option<GoalState>,
     loop_detector: LoopDetector,
     pending_ask_user: Option<String>,
+    pending_summary: Option<tokio::task::JoinHandle<String>>,
     validation_failures: u32,
     request_counter: u64,
     input_rx: mpsc::Receiver<AgentInput>,
@@ -317,10 +323,11 @@ impl AgentRuntime {
             .sum()
     }
 
-    /// Mid-loop emergency compression: when the accumulated context approaches
-    /// the model window during a turn chain, summarize the prefix into a
-    /// `[Previous conversation summary]`. Temporary — the authoritative
-    /// compaction (B11) replaces it later.
+    /// Mid-loop emergency compression, two-tier:
+    /// - approaching the window (`MID_LOOP_APPROACH_PCT`): start an async
+    ///   background summary, don't block;
+    /// - severely over (`MID_LOOP_SEVERE_PCT`): block until summarized.
+    /// The result is temporary — the authoritative compaction (B11) replaces it.
     async fn maybe_summarize_mid_loop(&mut self) {
         let Some(window) = self.cfg.model.context_window else {
             return;
@@ -330,36 +337,49 @@ impl AgentRuntime {
         if self.messages.len() <= keep {
             return;
         }
-        if self.estimate_tokens() * 100 < window * 80 {
-            return;
+
+        // Collect a finished background summary, if any.
+        if let Some(handle) = self.pending_summary.take() {
+            if handle.is_finished() {
+                if let Ok(summary) = handle.await {
+                    self.apply_summary(summary, keep);
+                    return;
+                }
+            } else {
+                self.pending_summary = Some(handle);
+            }
         }
+
+        let pct = self.estimate_tokens() * 100 / window.max(1);
+        if pct >= MID_LOOP_SEVERE_PCT {
+            // Severe: block until summarized.
+            let split = self.messages.len() - keep;
+            let prefix = self.messages[..split].to_vec();
+            let summary =
+                summarize_with(self.cfg.provider.clone(), self.cfg.model.clone(), prefix).await;
+            self.apply_summary(summary, keep);
+        } else if pct >= MID_LOOP_APPROACH_PCT && self.pending_summary.is_none() {
+            // Approach: start a background summary, don't block.
+            let split = self.messages.len() - keep;
+            let prefix = self.messages[..split].to_vec();
+            let provider = self.cfg.provider.clone();
+            let model = self.cfg.model.clone();
+            self.pending_summary = Some(tokio::spawn(async move {
+                summarize_with(provider, model, prefix).await
+            }));
+        }
+    }
+
+    /// Replace the prefix with a `[Previous conversation summary]`, keeping the
+    /// most recent `keep` messages.
+    fn apply_summary(&mut self, summary: String, keep: usize) {
         let split = self.messages.len() - keep;
-        let prefix = self.messages[..split].to_vec();
-        let summary = self.summarize(&prefix).await;
         let mut new_messages = vec![serde_json::json!({
             "role": "user",
             "content": format!("[Previous conversation summary]\n{summary}"),
         })];
         new_messages.extend_from_slice(&self.messages[split..]);
         self.messages = new_messages;
-    }
-
-    async fn summarize(&self, messages: &[serde_json::Value]) -> String {
-        let context = Context {
-            system_prompt: Some("Summarize the conversation so far, concisely.".into()),
-            messages: messages.to_vec(),
-            tools: vec![],
-        };
-        let mut stream = self.cfg.provider.stream(&self.cfg.model, &context, None);
-        let mut out = String::new();
-        while let Some(item) = stream.next().await {
-            if let Ok(Event::Content(c)) = item {
-                if let Some(t) = c.get("text").and_then(|t| t.as_str()) {
-                    out.push_str(t);
-                }
-            }
-        }
-        out
     }
 
     /// Assemble the LLM context for a step (system prompt + messages + tools),
@@ -688,4 +708,28 @@ struct StepResult {
     stop: StopReason,
     error: Option<ProviderError>,
     content: String,
+}
+
+/// Summarize `messages` into a single concise string. Shared by mid-loop
+/// summarization and (later) authoritative compaction.
+async fn summarize_with(
+    provider: Arc<dyn Provider>,
+    model: Model,
+    messages: Vec<serde_json::Value>,
+) -> String {
+    let context = Context {
+        system_prompt: Some("Summarize the conversation so far, concisely.".into()),
+        messages,
+        tools: vec![],
+    };
+    let mut stream = provider.stream(&model, &context, None);
+    let mut out = String::new();
+    while let Some(item) = stream.next().await {
+        if let Ok(Event::Content(c)) = item {
+            if let Some(t) = c.get("text").and_then(|t| t.as_str()) {
+                out.push_str(t);
+            }
+        }
+    }
+    out
 }
