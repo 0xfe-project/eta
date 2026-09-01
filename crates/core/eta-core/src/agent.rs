@@ -712,9 +712,14 @@ async fn summarize_with(
     model: Model,
     messages: Vec<serde_json::Value>,
 ) -> String {
+    let mut prompt_messages = messages;
+    prompt_messages.push(serde_json::json!({
+        "role": "user",
+        "content": prompts::SUMMARIZE_REQUEST,
+    }));
     let context = Context {
-        system_prompt: Some(prompts::SUMMARIZE_PROMPT.to_string()),
-        messages,
+        system_prompt: Some(prompts::SUMMARIZE_SYSTEM_PROMPT.to_string()),
+        messages: prompt_messages,
         tools: vec![],
     };
     let mut stream = provider.stream(&model, &context, None);
