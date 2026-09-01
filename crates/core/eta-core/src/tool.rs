@@ -156,6 +156,28 @@ impl Tool for ListStateTool {
     }
 }
 
+/// Validate tool arguments against the tool's input JSON Schema.
+///
+/// Returns `Err(message)` when the arguments are invalid so the engine can feed
+/// the error back to the model.
+pub(crate) fn validate_args(
+    schema: &serde_json::Value,
+    args: &serde_json::Value,
+) -> Result<(), String> {
+    let validator =
+        jsonschema::Validator::new(schema).map_err(|e| format!("invalid tool schema: {e}"))?;
+    if validator.is_valid(args) {
+        Ok(())
+    } else {
+        let errors = validator
+            .iter_errors(args)
+            .map(|e| e.to_string())
+            .collect::<Vec<_>>()
+            .join("; ");
+        Err(format!("invalid arguments: {errors}"))
+    }
+}
+
 /// Build the three builtin state tools backed by the session store.
 pub(crate) fn builtin_state_tools(store: Arc<dyn SessionStorage>) -> Vec<Arc<dyn Tool>> {
     vec![

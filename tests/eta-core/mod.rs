@@ -292,3 +292,23 @@ async fn builtin_state_tool_writes_to_store() {
 
     assert_eq!(store.get_state("k").await, Some(serde_json::json!("v")));
 }
+
+#[tokio::test]
+async fn rejects_invalid_tool_arguments() {
+    // update_state requires "action" and "key"; empty args are invalid.
+    let provider = Arc::new(ScriptedProvider::new(vec![
+        vec![
+            tool_call("bad", "update_state", serde_json::json!({})),
+            end(StopReason::ToolUse),
+        ],
+        vec![content("after"), end(StopReason::EndTurn)],
+    ]));
+    let mut agent = make_agent(provider, vec![]);
+    let events = collect(&mut agent, user_message("go")).await;
+
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, AgentEvent::ToolExecutionEnd { is_error: true, .. }))
+    );
+}

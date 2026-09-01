@@ -11,7 +11,7 @@ use crate::error::classify_provider_error;
 use crate::hooks::Hooks;
 use crate::loop_detect::LoopDetector;
 use crate::store::SessionStorage;
-use crate::tool::{CancelToken, Tool, builtin_state_tools};
+use crate::tool::{CancelToken, Tool, builtin_state_tools, validate_args};
 use crate::types::{
     AgentEvent, AgentId, AgentInput, ControlPlaneAction, ControlPlaneDecision, ControlPlanePrompt,
     GoalContinuationGate, GoalState, GoalStatus, ToolCall, ToolResult, TurnContext,
@@ -56,6 +56,7 @@ impl Agent {
             goal: None,
             loop_detector: LoopDetector::new(),
             pending_ask_user: None,
+            validation_failures: 0,
             request_counter: 0,
             input_rx,
             output_tx,
@@ -97,6 +98,7 @@ struct AgentRuntime {
     goal: Option<GoalState>,
     loop_detector: LoopDetector,
     pending_ask_user: Option<String>,
+    validation_failures: u32,
     request_counter: u64,
     input_rx: mpsc::Receiver<AgentInput>,
     output_tx: mpsc::Sender<AgentEvent>,
@@ -453,6 +455,41 @@ impl AgentRuntime {
             arguments: arguments.clone(),
         };
         self.cfg.hooks.before_tool_call(&call);
+
+        // Validate arguments against the tool's input JSON Schema; feed any
+        // error back to the model so it can retry, up to 3 times, then ask the
+        // user to correct the input.
+        if let Err(msg) = validate_args(&tool.schema(), &arguments) {
+            self.validation_failures += 1;
+            if self.validation_failures >= 3 {
+                self.validation_failures = 0;
+                self.handle_ask_user(
+                    id,
+                    serde_json::json!({
+                        "kind": "fill",
+                        "question": format!("Tool '{name}' was called with invalid arguments: {msg}"),
+                    }),
+                );
+                return;
+            }
+            let result = ToolResult {
+                id: id.clone(),
+                value: serde_json::json!({ "error": msg }),
+                is_error: true,
+            };
+            self.cfg.hooks.after_tool_call(&call, &result);
+            let _ = self
+                .output_tx
+                .send(AgentEvent::ToolExecutionEnd {
+                    id: id.clone(),
+                    result: result.value.clone(),
+                    is_error: true,
+                })
+                .await;
+            self.append_tool_result(id, result.value, true);
+            return;
+        }
+        self.validation_failures = 0;
 
         // Permission gate (fail-closed) for tools that require approval.
         if tool.requires_approval() {
