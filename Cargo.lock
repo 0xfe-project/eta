@@ -112,15 +112,9 @@ dependencies = [
 name = "eta-agent"
 version = "0.1.0"
 dependencies = [
- "eta-context",
- "eta-llm",
- "eta-llm-test-providers",
- "eta-session",
+ "eta-core",
  "serde",
  "serde_json",
- "tokio",
- "tokio-stream",
- "tokio-util",
 ]
 
 [[package]]
@@ -140,19 +134,35 @@ dependencies = [
 ]
 
 [[package]]
-name = "eta-goal"
+name = "eta-core"
 version = "0.1.0"
 dependencies = [
- "eta-agent",
+ "eta-context",
+ "eta-llm",
+ "eta-llm-test-providers",
+ "eta-session",
  "serde",
  "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
 ]
 
 [[package]]
 name = "eta-io-tools"
 version = "0.1.0"
 dependencies = [
- "eta-agent",
+ "eta-core",
+ "eta-session",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "eta-jsonl-context-storage"
+version = "0.1.0"
+dependencies = [
+ "eta-context",
  "eta-session",
  "serde",
  "serde_json",
@@ -181,7 +191,7 @@ dependencies = [
 name = "eta-mcp"
 version = "0.1.0"
 dependencies = [
- "eta-agent",
+ "eta-core",
  "serde",
  "serde_json",
 ]
@@ -209,14 +219,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "eta-self-mgmt"
-version = "0.1.0"
-dependencies = [
- "eta-agent",
- "eta-llm",
-]
-
-[[package]]
 name = "eta-session"
 version = "0.1.0"
 dependencies = [
@@ -232,15 +234,6 @@ dependencies = [
  "eta-context",
  "eta-session",
  "rusqlite",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "eta-subagent"
-version = "0.1.0"
-dependencies = [
- "eta-agent",
  "serde",
  "serde_json",
 ]

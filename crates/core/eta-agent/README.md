@@ -1,11 +1,12 @@
 # eta-agent
 
-The pure heart of the eta agent SDK.
+Multi-agent layer on top of `eta-core`.
 
-Owns the `Agent` state machine, its channel-based input/output interface, the
-linear turn loop, and the trait contracts the rest of the stack plugs into:
-`AgentTool`, `ContextPlugin`, `SessionStorage`, `Spawner`, and the cancellation
-token.
+Master/slave orchestration: the master agent is the single user-facing
+interface; it picks (or creates) sub-agents by their `skill`/`memory`, assigns
+kanban tasks, and talks to them via `SendToAgent`. Agent creation, update,
+listing, and messaging are all `Tool` impls over recursive `eta-core::Agent`s.
 
-Side-effect free: no filesystem, no network, no process spawning. Anything that touches the outside world is a trait here and an
-implementation in an `eta-*` adapter, injected by the embedder.
+The kanban board (task decomposition, `deps`, cascade pause/resume) and the
+per-agent registry (`id`/`name` index into `MemoryStore`/`SkillStore`) live
+here.

@@ -20,4 +20,9 @@ pub trait SessionStorage: Send + Sync {
     async fn load(&self) -> Vec<SessionEntry>;
     async fn append(&self, entry: SessionEntry);
     async fn checkpoint(&self, state: serde_json::Value);
+
+    /// Search entries matching `query`, returning matching entry ids.
+    ///
+    /// Backend-specific: SQLite uses BM25 (FTS5); JSONL uses regex.
+    async fn search(&self, query: &str) -> Vec<u64>;
 }
