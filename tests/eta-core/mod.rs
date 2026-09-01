@@ -1,6 +1,12 @@
-//! Integration tests for the `eta-core` engine: a single agent running a turn,
-//! executing tools, and applying the retry paths — driven by scripted mock
-//! providers and an in-memory session store.
+//! Integration tests for the `eta-core` engine.
+//!
+//! Each submodule covers one behavior; shared test doubles and helpers live here.
+
+mod basic_turn;
+mod retry;
+mod state_tool;
+mod tool_execution;
+mod validation;
 
 use std::pin::Pin;
 use std::sync::Arc;
@@ -15,7 +21,7 @@ use eta_core::{
 use eta_llm::{Context, Event, Model, Provider, ProviderError, StopReason, Usage};
 use tokio_stream::Stream;
 
-// ── Test doubles ─────────────────────────────────────────────────────────────
+// ── Shared test doubles ──────────────────────────────────────────────────────
 
 struct NoopHooks;
 impl AgentHooks for NoopHooks {}
@@ -112,7 +118,7 @@ impl Tool for CountingTool {
     }
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Shared helpers ───────────────────────────────────────────────────────────
 
 fn content(text: &str) -> Result<Event, ProviderError> {
     Ok(Event::Content(
@@ -149,14 +155,15 @@ fn make_agent(provider: Arc<dyn Provider>, tools: Vec<Arc<dyn Tool>>) -> Agent {
     })
 }
 
-async fn collect(agent: &mut Agent, input: AgentInput) -> Vec<AgentEvent> {
+async fn collect(agent: &Agent, input: AgentInput) -> Vec<AgentEvent> {
+    let mut rx = agent.subscribe();
     agent.send(input).await.unwrap();
     let mut events = Vec::new();
     loop {
-        match tokio::time::timeout(Duration::from_millis(200), agent.recv()).await {
-            Ok(Some(AgentEvent::AgentEnd)) => break,
-            Ok(Some(ev)) => events.push(ev),
-            Ok(None) | Err(_) => break,
+        match tokio::time::timeout(Duration::from_millis(200), rx.recv()).await {
+            Ok(Ok(AgentEvent::AgentEnd)) => break,
+            Ok(Ok(ev)) => events.push(ev),
+            Ok(Err(_)) | Err(_) => break,
         }
     }
     events
@@ -173,142 +180,4 @@ fn user_message(text: &str) -> AgentInput {
     AgentInput::UserMessage {
         content: serde_json::json!({ "type": "text", "text": text }),
     }
-}
-
-// ── Tests ────────────────────────────────────────────────────────────────────
-
-#[tokio::test]
-async fn runs_a_basic_turn() {
-    let provider = Arc::new(ScriptedProvider::new(vec![vec![
-        content("hello"),
-        end(StopReason::EndTurn),
-    ]]));
-    let mut agent = make_agent(provider, vec![]);
-    let events = collect(&mut agent, user_message("hi")).await;
-
-    assert!(
-        events
-            .iter()
-            .any(|e| matches!(e, AgentEvent::TurnStart { .. }))
-    );
-    assert!(has_text(&events, "hello"));
-    assert!(
-        events
-            .iter()
-            .any(|e| matches!(e, AgentEvent::TurnEnd { .. }))
-    );
-}
-
-#[tokio::test]
-async fn executes_a_tool_then_continues() {
-    let calls = Arc::new(AtomicUsize::new(0));
-    let tool: Arc<dyn Tool> = Arc::new(CountingTool {
-        calls: calls.clone(),
-    });
-
-    let provider = Arc::new(ScriptedProvider::new(vec![
-        vec![
-            tool_call("c1", "count", serde_json::json!({})),
-            end(StopReason::ToolUse),
-        ],
-        vec![content("done"), end(StopReason::EndTurn)],
-    ]));
-
-    let mut agent = make_agent(provider, vec![tool]);
-    let events = collect(&mut agent, user_message("go")).await;
-
-    assert!(
-        events
-            .iter()
-            .any(|e| matches!(e, AgentEvent::ToolExecutionStart { name, .. } if name == "count"))
-    );
-    assert_eq!(calls.load(Ordering::SeqCst), 1);
-    assert!(has_text(&events, "done"));
-}
-
-#[tokio::test]
-async fn retries_on_midstream_error() {
-    let provider = Arc::new(ScriptedProvider::new(vec![
-        vec![Err(ProviderError::RateLimit)],
-        vec![content("recovered"), end(StopReason::EndTurn)],
-    ]));
-    let mut agent = make_agent(provider, vec![]);
-    let events = collect(&mut agent, user_message("hi")).await;
-
-    assert!(has_text(&events, "recovered"));
-}
-
-#[tokio::test]
-async fn retries_on_truncation() {
-    let provider = Arc::new(ScriptedProvider::new(vec![
-        vec![end(StopReason::MaxTokens)],
-        vec![content("continued"), end(StopReason::EndTurn)],
-    ]));
-    let mut agent = make_agent(provider, vec![]);
-    let events = collect(&mut agent, user_message("hi")).await;
-
-    assert!(has_text(&events, "continued"));
-}
-
-#[tokio::test]
-async fn retries_on_empty_response() {
-    let provider = Arc::new(ScriptedProvider::new(vec![
-        vec![end(StopReason::EndTurn)],
-        vec![content("finally"), end(StopReason::EndTurn)],
-    ]));
-    let mut agent = make_agent(provider, vec![]);
-    let events = collect(&mut agent, user_message("hi")).await;
-
-    assert!(has_text(&events, "finally"));
-}
-
-#[tokio::test]
-async fn builtin_state_tool_writes_to_store() {
-    // The model calls update_state, then (next turn) continues.
-    let provider = Arc::new(ScriptedProvider::new(vec![
-        vec![
-            tool_call(
-                "s1",
-                "update_state",
-                serde_json::json!({ "action": "set", "key": "k", "value": "v" }),
-            ),
-            end(StopReason::ToolUse),
-        ],
-        vec![content("ok"), end(StopReason::EndTurn)],
-    ]));
-
-    let store = Arc::new(MemStore::default());
-    let mut agent = Agent::spawn(AgentConfig {
-        agent_id: AgentId("test".into()),
-        provider,
-        model: Model::new("test-model"),
-        tools: vec![],
-        hooks: hooks(),
-        store: store.clone(),
-        system_prompt: "test".into(),
-        max_retries: 2,
-    });
-    let _events = collect(&mut agent, user_message("write k")).await;
-
-    assert_eq!(store.get_state("k").await, Some(serde_json::json!("v")));
-}
-
-#[tokio::test]
-async fn rejects_invalid_tool_arguments() {
-    // update_state requires "action" and "key"; empty args are invalid.
-    let provider = Arc::new(ScriptedProvider::new(vec![
-        vec![
-            tool_call("bad", "update_state", serde_json::json!({})),
-            end(StopReason::ToolUse),
-        ],
-        vec![content("after"), end(StopReason::EndTurn)],
-    ]));
-    let mut agent = make_agent(provider, vec![]);
-    let events = collect(&mut agent, user_message("go")).await;
-
-    assert!(
-        events
-            .iter()
-            .any(|e| matches!(e, AgentEvent::ToolExecutionEnd { is_error: true, .. }))
-    );
 }

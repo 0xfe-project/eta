@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 use tokio_stream::StreamExt;
 
 use eta_llm::{Context, Event, Model, Provider, ProviderError, StopReason, ToolSchema, Usage};
@@ -35,7 +35,7 @@ pub struct AgentConfig {
 /// A handle to a running agent.
 pub struct Agent {
     input: mpsc::Sender<AgentInput>,
-    output: mpsc::Receiver<AgentEvent>,
+    output: broadcast::Sender<AgentEvent>,
     cancel: CancelToken,
 }
 
@@ -43,7 +43,8 @@ impl Agent {
     /// Spawn the agent's background loop and return a handle to it.
     pub fn spawn(mut cfg: AgentConfig) -> Self {
         let (input_tx, input_rx) = mpsc::channel(256);
-        let (output_tx, output_rx) = mpsc::channel(256);
+        let (output_tx, _) = broadcast::channel(256);
+        let output_handle = output_tx.clone();
         let cancel = CancelToken::new();
 
         // Builtin state tools always attach to the session store.
@@ -69,7 +70,7 @@ impl Agent {
 
         Agent {
             input: input_tx,
-            output: output_rx,
+            output: output_handle,
             cancel,
         }
     }
@@ -79,9 +80,10 @@ impl Agent {
         self.input.send(input).await
     }
 
-    /// Receive the next event from the agent.
-    pub async fn recv(&mut self) -> Option<AgentEvent> {
-        self.output.recv().await
+    /// Subscribe to the agent's event stream. Each call returns an independent
+    /// receiver; events are broadcast to all subscribers.
+    pub fn subscribe(&self) -> broadcast::Receiver<AgentEvent> {
+        self.output.subscribe()
     }
 
     /// Cancel the agent.
@@ -101,7 +103,7 @@ struct AgentRuntime {
     validation_failures: u32,
     request_counter: u64,
     input_rx: mpsc::Receiver<AgentInput>,
-    output_tx: mpsc::Sender<AgentEvent>,
+    output_tx: broadcast::Sender<AgentEvent>,
     cancel: CancelToken,
 }
 
@@ -188,14 +190,14 @@ impl AgentRuntime {
         }
 
         self.cfg.hooks.on_stop(&agent_id);
-        let _ = self.output_tx.send(AgentEvent::AgentEnd).await;
+        let _ = self.output_tx.send(AgentEvent::AgentEnd);
     }
 
     fn emit_goal_change(&self) {
         if let Some(g) = &self.goal {
             let _ = self
                 .output_tx
-                .try_send(AgentEvent::GoalStateChange { status: g.status });
+                .send(AgentEvent::GoalStateChange { status: g.status });
             self.cfg.hooks.on_goal_change(g);
         }
     }
@@ -279,22 +281,16 @@ impl AgentRuntime {
         };
 
         self.cfg.hooks.on_turn_start(&turn_ctx);
-        let _ = self
-            .output_tx
-            .send(AgentEvent::TurnStart {
-                request_id: request_id.clone(),
-            })
-            .await;
+        let _ = self.output_tx.send(AgentEvent::TurnStart {
+            request_id: request_id.clone(),
+        });
 
         let step = self.run_step_with_retry(&context).await;
 
         self.cfg.hooks.on_turn_end(&turn_ctx);
-        let _ = self
-            .output_tx
-            .send(AgentEvent::TurnEnd {
-                request_id: request_id.clone(),
-            })
-            .await;
+        let _ = self.output_tx.send(AgentEvent::TurnEnd {
+            request_id: request_id.clone(),
+        });
 
         TurnOutcome {
             had_tools: step.had_tools,
@@ -349,7 +345,7 @@ impl AgentRuntime {
             // Single-message loop → inject reminder + retry once.
             if step.error.is_none() && step.had_content && !step.had_tools {
                 if self.loop_detector.observe(&step.content) {
-                    let _ = self.output_tx.try_send(AgentEvent::LoopDetected);
+                    let _ = self.output_tx.send(AgentEvent::LoopDetected);
                     if retries < max_retries {
                         retries += 1;
                         self.loop_detector.reset();
@@ -383,13 +379,10 @@ impl AgentRuntime {
                         content_text.push_str(text);
                     }
                     self.append_message("assistant", c.clone());
-                    let _ = self
-                        .output_tx
-                        .send(AgentEvent::MessageUpdate {
-                            agent_id: self.cfg.agent_id.clone(),
-                            message: c,
-                        })
-                        .await;
+                    let _ = self.output_tx.send(AgentEvent::MessageUpdate {
+                        agent_id: self.cfg.agent_id.clone(),
+                        message: c,
+                    });
                 }
                 Ok(Event::ToolCall {
                     id,
@@ -433,7 +426,7 @@ impl AgentRuntime {
     /// input.
     fn handle_ask_user(&mut self, tool_call_id: String, question: serde_json::Value) {
         self.pending_ask_user = Some(tool_call_id.clone());
-        let _ = self.output_tx.try_send(AgentEvent::AskUserStarted {
+        let _ = self.output_tx.send(AgentEvent::AskUserStarted {
             req_id: tool_call_id.clone(),
             question,
         });
@@ -478,14 +471,11 @@ impl AgentRuntime {
                 is_error: true,
             };
             self.cfg.hooks.after_tool_call(&call, &result);
-            let _ = self
-                .output_tx
-                .send(AgentEvent::ToolExecutionEnd {
-                    id: id.clone(),
-                    result: result.value.clone(),
-                    is_error: true,
-                })
-                .await;
+            let _ = self.output_tx.send(AgentEvent::ToolExecutionEnd {
+                id: id.clone(),
+                result: result.value.clone(),
+                is_error: true,
+            });
             self.append_tool_result(id, result.value, true);
             return;
         }
@@ -514,14 +504,11 @@ impl AgentRuntime {
             }
         }
 
-        let _ = self
-            .output_tx
-            .send(AgentEvent::ToolExecutionStart {
-                id: id.clone(),
-                name: name.clone(),
-                args: arguments.clone(),
-            })
-            .await;
+        let _ = self.output_tx.send(AgentEvent::ToolExecutionStart {
+            id: id.clone(),
+            name: name.clone(),
+            args: arguments.clone(),
+        });
 
         let result = tool.execute(arguments, self.cancel.clone()).await;
 
@@ -533,14 +520,11 @@ impl AgentRuntime {
                     is_error: false,
                 };
                 self.cfg.hooks.after_tool_call(&call, &tr);
-                let _ = self
-                    .output_tx
-                    .send(AgentEvent::ToolExecutionEnd {
-                        id: id.clone(),
-                        result: value.clone(),
-                        is_error: false,
-                    })
-                    .await;
+                let _ = self.output_tx.send(AgentEvent::ToolExecutionEnd {
+                    id: id.clone(),
+                    result: value.clone(),
+                    is_error: false,
+                });
                 self.append_tool_result(id, value, false);
             }
             Err(e) => {
@@ -550,14 +534,11 @@ impl AgentRuntime {
                     is_error: true,
                 };
                 self.cfg.hooks.after_tool_call(&call, &tr);
-                let _ = self
-                    .output_tx
-                    .send(AgentEvent::ToolExecutionEnd {
-                        id: id.clone(),
-                        result: tr.value.clone(),
-                        is_error: true,
-                    })
-                    .await;
+                let _ = self.output_tx.send(AgentEvent::ToolExecutionEnd {
+                    id: id.clone(),
+                    result: tr.value.clone(),
+                    is_error: true,
+                });
                 self.append_tool_result(id, tr.value, true);
             }
         }
