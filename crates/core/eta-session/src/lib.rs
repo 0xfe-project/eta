@@ -8,6 +8,10 @@ use eta_llm::{Context, ToolSchema};
 
 pub use eta_core::{SessionEntry, SessionState, SessionStorage};
 
+mod progressive_disclosure;
+
+pub use progressive_disclosure::{MAX_TRUNCATED_DESCRIPTION_LENGTH, render_skills_catalog};
+
 // ── C1: in-memory SessionStorage implementation ─────────────────────────────
 
 /// In-memory `SessionStorage` implementation — the reference impl used in tests
