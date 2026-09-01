@@ -7,7 +7,9 @@ pub const SUMMARIZE_SYSTEM_PROMPT: &str = "Summarize the conversation. Follow <s
 pub const SUMMARIZE_REQUEST: &str = "<summarization_request>
 Transcript above = the conversation (system prompt removed).
 
-Write a DETAILED summary another AI uses to continue the task. NEVER mention \"summary\". Output only what continues the work. Thorough on technical details, code patterns, architectural decisions.
+Write a DETAILED summary with **USER's LANGUAGE** then another AI uses to continue the task.
+NEVER mention \"summary\". Output only what continues the work.
+Thorough on technical details, code patterns, architectural decisions.
 
 Sections:
 1. Primary Request and Intent
@@ -24,7 +26,7 @@ If a next step: quote the most recent conversation VERBATIM.
 </summarization_request>";
 
 /// Retry variant: write a shorter summary.
-pub const SUMMARIZE_SHORTER_RETRY: &str = "Shorter summary. Focus on highest-signal context. Skip long code snippets. Prioritize recent user intent, recent work, unresolved blockers. User messages: capture intent, don't repeat verbatim.";
+pub const SUMMARIZE_SHORTER_RETRY: &str = "Shorter summary in **USER's LANGUAGE**. Focus on highest-signal context. Skip long code snippets. Prioritize recent user intent, recent work, unresolved blockers. User messages: capture intent, don't repeat verbatim.";
 
 /// A summarized history block injected in place of the compressed prefix.
 pub fn previous_summary(summary: &str) -> String {
