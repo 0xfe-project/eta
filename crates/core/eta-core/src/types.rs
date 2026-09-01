@@ -172,6 +172,8 @@ pub struct GoalState {
     pub status: GoalStatus,
     pub continuation_count: u32,
     pub idle_without_tools: u32,
+    pub active_duration_ms: u64,
+    pub last_accrued_at: Option<std::time::Instant>,
     pub blocked_reason: Option<String>,
 }
 
@@ -182,7 +184,17 @@ impl GoalState {
             status: GoalStatus::Active,
             continuation_count: 0,
             idle_without_tools: 0,
+            active_duration_ms: 0,
+            last_accrued_at: None,
             blocked_reason: None,
         }
+    }
+
+    /// Guidelines injected into the context while pursuing this goal.
+    pub fn build_goal_pursuit_guidelines(&self) -> String {
+        format!(
+            "You are working toward the goal: {}. Keep pursuing it until it is done.",
+            self.objective
+        )
     }
 }

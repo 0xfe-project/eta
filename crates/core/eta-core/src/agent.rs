@@ -20,6 +20,9 @@ use crate::types::{
 /// Detects anti-spin: 3 consecutive tool-free turns auto-pauses the goal.
 const ANTI_SPIN_LIMIT: u32 = 3;
 
+/// Hard cap on goal self-continuations per activation.
+const MAX_CONTINUATIONS: u32 = 100;
+
 /// Configuration for a single agent instance.
 pub struct AgentConfig {
     pub agent_id: AgentId,
@@ -235,6 +238,18 @@ impl AgentRuntime {
                 if let Some(g) = &mut self.goal {
                     g.continuation_count += 1;
                 }
+                // Stop when over the continuation cap or the evaluator says done.
+                let over_limit = self
+                    .goal
+                    .as_ref()
+                    .is_some_and(|g| g.continuation_count >= MAX_CONTINUATIONS);
+                if over_limit || self.evaluate_goal_achieved().await {
+                    if let Some(g) = &mut self.goal {
+                        g.status = GoalStatus::Achieved;
+                    }
+                    self.emit_goal_change();
+                    break;
+                }
                 continue;
             }
             break;
@@ -249,6 +264,46 @@ impl AgentRuntime {
             self.goal.as_ref().map(|g| g.status),
             Some(GoalStatus::Active)
         )
+    }
+
+    /// Run an independent, tool-free evaluation call to judge whether the active
+    /// goal is achieved. Returns true when the model answers affirmatively.
+    async fn evaluate_goal_achieved(&mut self) -> bool {
+        let Some(goal) = self.goal.clone() else {
+            return false;
+        };
+        // Bounded transcript: only the tail of the conversation.
+        let messages: Vec<serde_json::Value> = self
+            .messages
+            .iter()
+            .rev()
+            .take(20)
+            .cloned()
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        let context = Context {
+            system_prompt: Some(format!(
+                "You judge whether a goal is achieved. Goal: \"{}\". \
+                 Based on the conversation, is the goal fully achieved? \
+                 Reply with exactly YES or NO.",
+                goal.objective
+            )),
+            messages,
+            tools: vec![],
+        };
+
+        let mut stream = self.cfg.provider.stream(&self.cfg.model, &context, None);
+        let mut answer = String::new();
+        while let Some(item) = stream.next().await {
+            if let Ok(Event::Content(c)) = item {
+                if let Some(t) = c.get("text").and_then(|t| t.as_str()) {
+                    answer.push_str(t);
+                }
+            }
+        }
+        answer.trim().to_ascii_uppercase().starts_with("YES")
     }
 
     async fn run_turn(&mut self) -> TurnOutcome {
