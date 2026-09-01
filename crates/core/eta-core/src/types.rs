@@ -192,9 +192,6 @@ impl GoalState {
 
     /// Guidelines injected into the context while pursuing this goal.
     pub fn build_goal_pursuit_guidelines(&self) -> String {
-        format!(
-            "You are working toward the goal: {}. Keep pursuing it until it is done.",
-            self.objective
-        )
+        eta_system_prompts::goal_pursuit_guidelines(&self.objective)
     }
 }

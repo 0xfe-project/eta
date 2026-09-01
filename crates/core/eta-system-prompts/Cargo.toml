@@ -1,0 +1,6 @@
+[package]
+name = "eta-system-prompts"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

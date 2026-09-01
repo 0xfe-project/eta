@@ -194,6 +194,7 @@ dependencies = [
  "async-trait",
  "eta-llm",
  "eta-llm-test-providers",
+ "eta-system-prompts",
  "jsonschema",
  "serde",
  "serde_json",
@@ -284,6 +285,10 @@ dependencies = [
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "eta-system-prompts"
+version = "0.1.0"
 
 [[package]]
 name = "eta-tests"

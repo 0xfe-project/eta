@@ -6,6 +6,7 @@ use tokio::sync::{broadcast, mpsc};
 use tokio_stream::StreamExt;
 
 use eta_llm::{Context, Event, Model, Provider, ProviderError, StopReason, ToolSchema, Usage};
+use eta_system_prompts as prompts;
 
 use crate::error::classify_provider_error;
 use crate::hooks::Hooks;
@@ -293,12 +294,7 @@ impl AgentRuntime {
             .rev()
             .collect();
         let context = Context {
-            system_prompt: Some(format!(
-                "You judge whether a goal is achieved. Goal: \"{}\". \
-                 Based on the conversation, is the goal fully achieved? \
-                 Reply with exactly YES or NO.",
-                goal.objective
-            )),
+            system_prompt: Some(prompts::goal_evaluator_prompt(&goal.objective)),
             messages,
             tools: vec![],
         };
@@ -376,7 +372,7 @@ impl AgentRuntime {
         let split = self.messages.len() - keep;
         let mut new_messages = vec![serde_json::json!({
             "role": "user",
-            "content": format!("[Previous conversation summary]\n{summary}"),
+            "content": prompts::previous_summary(&summary),
         })];
         new_messages.extend_from_slice(&self.messages[split..]);
         self.messages = new_messages;
@@ -445,9 +441,8 @@ impl AgentRuntime {
             if let Some(err) = &step.error {
                 if retries < max_retries && classify_provider_error(err).is_retryable() {
                     retries += 1;
-                    self.messages.push(
-                        serde_json::json!({ "role": "user", "content": "[continuation] continue" }),
-                    );
+                    self.messages
+                        .push(serde_json::json!({ "role": "user", "content": prompts::CONTINUATION_CONTINUE }));
                     continue;
                 }
                 return step;
@@ -458,7 +453,7 @@ impl AgentRuntime {
                 retries += 1;
                 self.messages.push(serde_json::json!({
                     "role": "user",
-                    "content": "[continuation] output was truncated, continue in smaller chunks"
+                    "content": prompts::CONTINUATION_TRUNCATED
                 }));
                 continue;
             }
@@ -472,7 +467,7 @@ impl AgentRuntime {
                 retries += 1;
                 self.messages.push(serde_json::json!({
                     "role": "user",
-                    "content": "[continuation] no output produced, continue"
+                    "content": prompts::CONTINUATION_EMPTY
                 }));
                 continue;
             }
@@ -486,7 +481,7 @@ impl AgentRuntime {
                         self.loop_detector.reset();
                         self.messages.push(serde_json::json!({
                             "role": "user",
-                            "content": "[continuation] detected a loop, try a different approach"
+                            "content": prompts::CONTINUATION_LOOP
                         }));
                         continue;
                     }
@@ -718,7 +713,7 @@ async fn summarize_with(
     messages: Vec<serde_json::Value>,
 ) -> String {
     let context = Context {
-        system_prompt: Some("Summarize the conversation so far, concisely.".into()),
+        system_prompt: Some(prompts::SUMMARIZE_PROMPT.to_string()),
         messages,
         tools: vec![],
     };
