@@ -3,6 +3,7 @@
 //! Each submodule covers one behavior; shared test doubles and helpers live here.
 
 mod basic_turn;
+mod loop_detect;
 mod retry;
 mod state_tool;
 mod tool_execution;

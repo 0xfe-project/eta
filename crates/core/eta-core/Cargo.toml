@@ -12,6 +12,7 @@ tokio-util.workspace = true
 async-trait.workspace = true
 thiserror.workspace = true
 jsonschema.workspace = true
+strsim.workspace = true
 eta-llm = { path = "../eta-llm" }
 
 [dev-dependencies]
