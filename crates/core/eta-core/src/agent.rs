@@ -309,11 +309,62 @@ impl AgentRuntime {
         answer.trim().to_ascii_uppercase().starts_with("YES")
     }
 
-    async fn run_turn(&mut self) -> TurnOutcome {
-        let agent_id = self.cfg.agent_id.clone();
-        self.request_counter += 1;
-        let request_id = format!("req_{}", self.request_counter);
+    /// Rough token estimate (~4 chars per token).
+    fn estimate_tokens(&self) -> usize {
+        self.messages
+            .iter()
+            .map(|m| m.to_string().len() / 4 + 1)
+            .sum()
+    }
 
+    /// Mid-loop emergency compression: when the accumulated context approaches
+    /// the model window during a turn chain, summarize the prefix into a
+    /// `[Previous conversation summary]`. Temporary — the authoritative
+    /// compaction (B11) replaces it later.
+    async fn maybe_summarize_mid_loop(&mut self) {
+        let Some(window) = self.cfg.model.context_window else {
+            return;
+        };
+        let window = window as usize;
+        let keep = 4;
+        if self.messages.len() <= keep {
+            return;
+        }
+        if self.estimate_tokens() * 100 < window * 80 {
+            return;
+        }
+        let split = self.messages.len() - keep;
+        let prefix = self.messages[..split].to_vec();
+        let summary = self.summarize(&prefix).await;
+        let mut new_messages = vec![serde_json::json!({
+            "role": "user",
+            "content": format!("[Previous conversation summary]\n{summary}"),
+        })];
+        new_messages.extend_from_slice(&self.messages[split..]);
+        self.messages = new_messages;
+    }
+
+    async fn summarize(&self, messages: &[serde_json::Value]) -> String {
+        let context = Context {
+            system_prompt: Some("Summarize the conversation so far, concisely.".into()),
+            messages: messages.to_vec(),
+            tools: vec![],
+        };
+        let mut stream = self.cfg.provider.stream(&self.cfg.model, &context, None);
+        let mut out = String::new();
+        while let Some(item) = stream.next().await {
+            if let Ok(Event::Content(c)) = item {
+                if let Some(t) = c.get("text").and_then(|t| t.as_str()) {
+                    out.push_str(t);
+                }
+            }
+        }
+        out
+    }
+
+    /// Assemble the LLM context for a step (system prompt + messages + tools),
+    /// then let hooks transform it.
+    fn build_context(&self) -> Context {
         let tool_schemas: Vec<ToolSchema> = self
             .cfg
             .tools
@@ -324,13 +375,19 @@ impl AgentRuntime {
                 schema: t.schema(),
             })
             .collect();
-
         let mut context = Context {
             system_prompt: Some(self.cfg.system_prompt.clone()),
             messages: self.messages.clone(),
             tools: tool_schemas,
         };
         self.cfg.hooks.transform_context(&mut context);
+        context
+    }
+
+    async fn run_turn(&mut self) -> TurnOutcome {
+        let agent_id = self.cfg.agent_id.clone();
+        self.request_counter += 1;
+        let request_id = format!("req_{}", self.request_counter);
 
         let turn_ctx = TurnContext {
             agent_id: agent_id.clone(),
@@ -343,7 +400,7 @@ impl AgentRuntime {
             request_id: request_id.clone(),
         });
 
-        let step = self.run_step_with_retry(&context).await;
+        let step = self.run_step_with_retry().await;
 
         self.cfg.hooks.on_turn_end(&turn_ctx);
         let _ = self.output_tx.send(AgentEvent::TurnEnd {
@@ -357,12 +414,12 @@ impl AgentRuntime {
 
     /// One provider step + the three retry paths (error / truncation / empty /
     /// single-message loop).
-    async fn run_step_with_retry(&mut self, context: &Context) -> StepResult {
+    async fn run_step_with_retry(&mut self) -> StepResult {
         let max_retries = self.cfg.max_retries;
         let mut retries = 0usize;
 
         loop {
-            let step = self.run_step(context).await;
+            let step = self.run_step().await;
 
             // Mid-stream / setup error → retry (retriable only).
             if let Some(err) = &step.error {
@@ -420,8 +477,10 @@ impl AgentRuntime {
         }
     }
 
-    async fn run_step(&mut self, context: &Context) -> StepResult {
-        let mut stream = self.cfg.provider.stream(&self.cfg.model, context, None);
+    async fn run_step(&mut self) -> StepResult {
+        self.maybe_summarize_mid_loop().await;
+        let context = self.build_context();
+        let mut stream = self.cfg.provider.stream(&self.cfg.model, &context, None);
 
         let mut had_tools = false;
         let mut had_content = false;

@@ -6,6 +6,7 @@ mod basic_turn;
 mod goal;
 mod loop_detect;
 mod loop_manager;
+mod mid_loop;
 mod parse_duration;
 mod retry;
 mod state_tool;
