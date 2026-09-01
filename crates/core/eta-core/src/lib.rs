@@ -15,6 +15,7 @@ mod hooks;
 mod loop_detect;
 mod loop_mgr;
 mod store;
+mod time;
 mod tool;
 mod types;
 
@@ -24,6 +25,7 @@ pub use hooks::{AgentHooks, Hooks};
 pub use loop_detect::LoopDetector;
 pub use loop_mgr::{LoopManager, LoopSpec, Trigger};
 pub use store::{MemoryStore, SessionEntry, SessionState, SessionStorage, Skill, SkillStore};
+pub use time::{DurationParseError, parse_duration};
 pub use tool::{CancelToken, Tool};
 pub use types::{
     AgentEvent, AgentId, AgentInput, ControlPlaneAction, ControlPlaneDecision, ControlPlanePrompt,
