@@ -23,7 +23,7 @@ pub use agent::{Agent, AgentConfig};
 pub use error::{AgentError, ToolError, classify_provider_error};
 pub use hooks::{AgentHooks, Hooks};
 pub use loop_detect::LoopDetector;
-pub use loop_mgr::{LoopManager, LoopSpec, Trigger};
+pub use loop_mgr::{LoopManager, LoopSpec, Trigger, TriggerRuntime, bootstrap_loops};
 pub use store::{MemoryStore, SessionEntry, SessionState, SessionStorage, Skill, SkillStore};
 pub use time::{DurationParseError, parse_duration};
 pub use tool::{CancelToken, Tool};

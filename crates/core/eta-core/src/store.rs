@@ -49,6 +49,12 @@ pub trait SessionStorage: Send + Sync {
     async fn set_state(&self, key: &str, value: serde_json::Value);
     async fn delete_state(&self, key: &str);
     async fn list_state_keys(&self) -> Vec<String>;
+
+    /// All session ids in the backend. Single-session stores return an empty
+    /// vec; the multi-session backend (e.g. SQLite) overrides this.
+    async fn list_sessions(&self) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 /// A skill catalog entry (injected into the `<skills>` section of the system prompt).
