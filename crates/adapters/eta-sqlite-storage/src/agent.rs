@@ -1,5 +1,6 @@
-//! Per-agent SQLite store: memory (and later persona / preferred skills) truth
-//! source, keyed by agent name (`~/.eta/agents/<NAME>.sqlite`).
+//! Per-agent SQLite store: memory truth source, keyed by agent name
+//! (`~/.eta/agents/<NAME>.sqlite`). Persona cards live in `eta-system-prompts`
+//! and custom `*.persona.md` files, not here.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -26,10 +27,6 @@ impl SqliteAgentStore {
                 kind    TEXT NOT NULL,
                 content TEXT NOT NULL
             );
-            CREATE TABLE IF NOT EXISTS persona (
-                name     TEXT PRIMARY KEY,
-                content  TEXT NOT NULL
-            );
             ",
         )?;
         Ok(Self {
@@ -47,48 +44,12 @@ impl SqliteAgentStore {
                 kind    TEXT NOT NULL,
                 content TEXT NOT NULL
             );
-            CREATE TABLE IF NOT EXISTS persona (
-                name     TEXT PRIMARY KEY,
-                content  TEXT NOT NULL
-            );
             ",
         )
         .expect("schema");
         Self {
             conn: Mutex::new(conn),
         }
-    }
-
-    /// Store a persona card (name → markdown body). Upsert.
-    pub fn set_persona(&self, name: &str, content: &str) {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "INSERT INTO persona (name, content) VALUES (?1, ?2)
-             ON CONFLICT(name) DO UPDATE SET content = excluded.content",
-            params![name, content],
-        )
-        .unwrap();
-    }
-
-    /// Load a persona card body by name.
-    pub fn persona(&self, name: &str) -> Option<String> {
-        let conn = self.conn.lock().unwrap();
-        conn.query_row(
-            "SELECT content FROM persona WHERE name = ?1",
-            params![name],
-            |row| row.get::<_, String>(0),
-        )
-        .ok()
-    }
-
-    /// All persona names.
-    pub fn persona_names(&self) -> Vec<String> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn
-            .prepare("SELECT name FROM persona ORDER BY name")
-            .unwrap();
-        let rows = stmt.query_map([], |row| row.get::<_, String>(0)).unwrap();
-        rows.filter_map(|r| r.ok()).collect()
     }
 
     fn load_memory_sync(&self) -> BTreeMap<u64, MemoryEntry> {

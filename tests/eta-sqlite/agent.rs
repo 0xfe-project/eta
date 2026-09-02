@@ -1,4 +1,4 @@
-//! Per-agent store: memory + persona.
+//! Per-agent store: memory only.
 
 use eta_core::MemoryStore;
 use eta_sqlite_storage::SqliteAgentStore;
@@ -42,16 +42,4 @@ async fn memory_apply_over_cap_fails() {
         .await;
     assert!(res.is_err());
     assert!(store.load().await.is_empty());
-}
-
-#[test]
-fn persona_upsert_and_load() {
-    let store = SqliteAgentStore::in_memory();
-    store.set_persona("thinker", "# You are a thinker");
-    assert_eq!(store.persona("thinker").unwrap(), "# You are a thinker");
-    assert_eq!(store.persona_names(), vec!["thinker"]);
-
-    // Upsert overwrites.
-    store.set_persona("thinker", "# thinker v2");
-    assert_eq!(store.persona("thinker").unwrap(), "# thinker v2");
 }
