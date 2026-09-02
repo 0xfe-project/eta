@@ -595,6 +595,7 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
 #[cfg(test)]
 mod tests {
     use super::{AgentId, App, Arc, MemoryStore, SessionManager, SessionStorage, spawn_session};
+    use eta_core::{Agent, AgentEvent, AgentInput};
     use eta_llm::{Context, Event, Model, Provider, ProviderError, StopReason, Usage};
     use eta_sqlite_storage::{SqliteAgentStore, SqliteSessionStore};
     use serde_json::json;
@@ -696,5 +697,75 @@ mod tests {
 
         assert_eq!(app.remove_loop(&id).await, Some(true));
         assert!(app.list_loops().await.expect("loop list").is_empty());
+    }
+
+    #[tokio::test]
+    async fn two_sessions_run_concurrently() {
+        fn make(id: &str, text: &'static str) -> (AgentId, Agent) {
+            let provider: Arc<dyn Provider> = Arc::new(ScriptedProvider {
+                events: vec![
+                    Ok(Event::Content(json!({"type": "text", "text": text}))),
+                    Ok(Event::End {
+                        usage: Usage::default(),
+                        stop: StopReason::EndTurn,
+                    }),
+                ],
+            });
+            let handle = spawn_session(
+                id,
+                AgentId(id.into()),
+                provider,
+                Model::new("test-model"),
+                Arc::new(SqliteSessionStore::in_memory()),
+                Arc::new(SqliteAgentStore::in_memory()),
+                vec![],
+                "you are eta".into(),
+                String::new(),
+            );
+            (AgentId(id.into()), handle.agent.expect("agent"))
+        }
+
+        let (id_a, agent_a) = make("a", "hello A");
+        let (id_b, agent_b) = make("b", "hello B");
+        let mut rx_a = agent_a.subscribe();
+        let mut rx_b = agent_b.subscribe();
+
+        agent_a
+            .send(AgentInput::UserMessage {
+                content: json!({"type": "text", "text": "go"}),
+            })
+            .await
+            .unwrap();
+        agent_b
+            .send(AgentInput::UserMessage {
+                content: json!({"type": "text", "text": "go"}),
+            })
+            .await
+            .unwrap();
+
+        let mut saw_a = false;
+        let mut saw_b = false;
+        for _ in 0..20 {
+            if let Ok(event) = rx_a.try_recv() {
+                if matches!(&event, AgentEvent::MessageUpdate { agent_id, message, .. }
+                    if agent_id == &id_a && message.get("text").and_then(|v| v.as_str()) == Some("hello A"))
+                {
+                    saw_a = true;
+                }
+            }
+            if let Ok(event) = rx_b.try_recv() {
+                if matches!(&event, AgentEvent::MessageUpdate { agent_id, message, .. }
+                    if agent_id == &id_b && message.get("text").and_then(|v| v.as_str()) == Some("hello B"))
+                {
+                    saw_b = true;
+                }
+            }
+            if saw_a && saw_b {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(saw_a, "session A did not stream");
+        assert!(saw_b, "session B did not stream");
     }
 }
