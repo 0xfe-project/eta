@@ -413,4 +413,38 @@ mod tests {
         );
         assert!(app.context.is_some(), "context snapshot was not refreshed");
     }
+
+    #[tokio::test]
+    async fn loop_commands_manage_registry() {
+        let provider: Arc<dyn Provider> = Arc::new(ScriptedProvider { events: vec![] });
+        let store: Arc<dyn SessionStorage> = Arc::new(SqliteSessionStore::in_memory());
+        let memory: Arc<dyn MemoryStore> = Arc::new(SqliteAgentStore::in_memory());
+        let handle = spawn_session(
+            "s1",
+            AgentId("dev".into()),
+            provider,
+            Model::new("test-model"),
+            store,
+            memory,
+            vec![],
+            "you are eta".into(),
+            String::new(),
+        );
+        let mut sessions = SessionManager::new();
+        sessions.insert(handle);
+        sessions.attach("s1");
+        let mut app = App::with_sessions(sessions);
+
+        let id = app
+            .register_loop("10m".into(), "ship it".into())
+            .await
+            .expect("loop id");
+        assert!(id.starts_with("loop-"));
+
+        let listed = app.list_loops().await.expect("loop list");
+        assert!(listed.iter().any(|line| line.contains("ship it")));
+
+        assert_eq!(app.remove_loop(&id).await, Some(true));
+        assert!(app.list_loops().await.expect("loop list").is_empty());
+    }
 }
