@@ -234,8 +234,42 @@ impl App {
             return;
         };
         self.save_model(&model).await;
+        self.respawn_with_model(&model);
         self.screen = Screen::session();
         self.answers.push(format!("model: {model} (session)"));
+    }
+
+    fn respawn_with_model(&mut self, model_id: &str) {
+        let Some(store) = self.sessions.current().map(|handle| handle.store.clone()) else {
+            return;
+        };
+        let provider: Arc<dyn Provider> = Arc::new(OpenAiProvider::from_env());
+        let id = model_id
+            .split('/')
+            .next_back()
+            .unwrap_or(model_id)
+            .to_string();
+        let model = Model::new(id);
+        let memory: Arc<dyn MemoryStore> = Arc::new(SqliteAgentStore::in_memory());
+        let agent_id = self
+            .sessions
+            .current()
+            .map(|handle| handle.meta.agent_id.clone())
+            .unwrap_or_else(|| AgentId("eta".into()));
+        let handle = spawn_session(
+            "default",
+            agent_id,
+            provider,
+            model,
+            store,
+            memory,
+            builtin_io_tools(),
+            DEFAULT_SYSTEM_PROMPT.to_string(),
+            String::new(),
+        );
+        self.sessions = SessionManager::new();
+        self.sessions.insert(handle);
+        self.sessions.attach("default");
     }
 
     fn open_agent_switch(&mut self) {
