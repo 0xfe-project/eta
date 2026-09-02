@@ -57,7 +57,11 @@ pub fn draw(
         Screen::Startup {
             recent, selected, ..
         } => {
-            let comp = completions.len().min(8) as u16;
+            let comp = if completions.is_empty() {
+                0
+            } else {
+                (completions.len().min(8) + 2) as u16
+            };
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
@@ -121,7 +125,11 @@ pub fn draw(
         Screen::Session => {}
     }
 
-    let completions_height = completions.len().min(8);
+    let completions_height = if completions.is_empty() {
+        0
+    } else {
+        (completions.len().min(8) + 2) as u16
+    };
     let outer = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -327,5 +335,39 @@ mod tests {
             ]
         );
         assert_eq!(focus.next(), Focus::Input);
+    }
+
+    #[test]
+    fn renders_completion_popup_content() {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        let backend = TestBackend::new(120, 40);
+        let mut terminal = Terminal::new(backend).expect("test backend");
+        terminal
+            .draw(|frame| {
+                draw(
+                    frame,
+                    &Screen::session(),
+                    Focus::Input,
+                    &TextArea::default(),
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    &["/goal (set <objective>) - manage goal".to_string()],
+                )
+            })
+            .expect("draw");
+        let rendered: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(
+            rendered.contains("manage goal"),
+            "completion popup content not rendered"
+        );
     }
 }

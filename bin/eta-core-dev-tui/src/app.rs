@@ -622,7 +622,30 @@ fn last_message_preview(entries: &[SessionEntry]) -> String {
 #[cfg(test)]
 mod tests {
     use super::last_message_preview;
+    use crossterm::event::{Event, KeyCode, KeyEvent};
     use eta_core::{SessionEntry, entry_kind};
+    use tui_textarea::TextArea;
+
+    #[test]
+    fn textarea_lines_after_typing_slash_g() {
+        let mut area = TextArea::default();
+        area.input(Event::Key(KeyEvent::from(KeyCode::Char('/'))));
+        area.input(Event::Key(KeyEvent::from(KeyCode::Char('g'))));
+        let joined = area.lines().join("\n");
+        assert_eq!(joined, "/g");
+    }
+
+    #[test]
+    fn app_completions_matches_slash_g() {
+        let mut app = super::App::new();
+        app.input.input(KeyEvent::from(KeyCode::Char('/')));
+        app.input.input(KeyEvent::from(KeyCode::Char('g')));
+        let comps = app.completions();
+        assert!(
+            comps.iter().any(|c| c.contains("/goal")),
+            "expected goal completion, got {comps:?}"
+        );
+    }
 
     #[test]
     fn previews_last_message_and_truncates() {
