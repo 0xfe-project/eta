@@ -10,7 +10,10 @@ pub use eta_core::{SessionEntry, SessionState, SessionStorage, entry_kind};
 
 mod progressive_disclosure;
 
-pub use progressive_disclosure::{MAX_TRUNCATED_DESCRIPTION_LENGTH, render_skills_catalog};
+pub use progressive_disclosure::{
+    MAX_TRUNCATED_DESCRIPTION_LENGTH, McpServerDir, assemble_system_prompt, render_mcp_directory,
+    render_skills_catalog,
+};
 
 // ── C1: in-memory SessionStorage implementation ─────────────────────────────
 
