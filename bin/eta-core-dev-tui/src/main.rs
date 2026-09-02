@@ -83,7 +83,7 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                             } else if let Some(id) =
                                 app.screen.startup_selection().map(str::to_owned)
                             {
-                                app.attach_existing_session(&id);
+                                app.attach_existing_session(&id).await;
                             }
                         }
                         _ => {

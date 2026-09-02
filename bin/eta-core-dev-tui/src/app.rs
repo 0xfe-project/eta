@@ -462,7 +462,7 @@ impl App {
     }
 
     /// Open an existing session by id and spawn its agent, then attach it.
-    pub(crate) fn attach_existing_session(&mut self, session_id: &str) {
+    pub(crate) async fn attach_existing_session(&mut self, session_id: &str) {
         let sqlite = Arc::new(
             SqliteSessionStore::open(eta_fs::session_db(session_id))
                 .unwrap_or_else(|_| SqliteSessionStore::in_memory()),
@@ -485,6 +485,9 @@ impl App {
             DEFAULT_SYSTEM_PROMPT.to_string(),
             String::new(),
         );
+        if let Some(loop_manager) = handle.loop_manager.clone() {
+            loop_manager.start().await;
+        }
         self.sqlite = Some(sqlite);
         self.sessions.insert(handle);
         self.sessions.attach(session_id);
