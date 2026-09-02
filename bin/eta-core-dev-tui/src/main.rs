@@ -34,6 +34,8 @@ struct App {
     focus: Focus,
     input: TextArea<'static>,
     sessions: SessionManager,
+    sqlite: Option<Arc<SqliteSessionStore>>,
+    head: Option<u64>,
     answers: Vec<String>,
     dev: Vec<String>,
     context: Option<ContextSnapshot>,
@@ -48,6 +50,8 @@ impl App {
             focus: Focus::Input,
             input,
             sessions: SessionManager::new(),
+            sqlite: None,
+            head: None,
             answers: Vec::new(),
             dev: Vec::new(),
             context: None,
@@ -58,6 +62,12 @@ impl App {
     fn with_sessions(sessions: SessionManager) -> Self {
         let mut app = Self::new();
         app.sessions = sessions;
+        app
+    }
+
+    fn with_runtime(sessions: SessionManager, sqlite: Arc<SqliteSessionStore>) -> Self {
+        let mut app = Self::with_sessions(sessions);
+        app.sqlite = Some(sqlite);
         app
     }
 
@@ -118,16 +128,23 @@ impl App {
             let _ = agent.send(input).await;
         }
     }
+
+    /// Apply a time-travel command against the concrete SQLite session store.
+    fn apply_time_travel(&mut self, command: &Command) -> Option<String> {
+        let sqlite = self.sqlite.as_ref()?;
+        session::apply_time_travel(sqlite, &mut self.head, command)
+    }
 }
 
 /// Build a single default session from environment-configured OpenAI-compatible
 /// provider + io tools + in-memory SQLite stores. The durable paths are swapped
 /// in E5/E6 when session/agent lifecycle is wired.
-fn spawn_default_session() -> SessionManager {
+fn spawn_default_session() -> (SessionManager, Arc<SqliteSessionStore>) {
     let mut manager = SessionManager::new();
     let provider: Arc<dyn Provider> = Arc::new(OpenAiProvider::from_env());
     let model = Model::new(std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into()));
-    let store: Arc<dyn SessionStorage> = Arc::new(SqliteSessionStore::in_memory());
+    let sqlite = Arc::new(SqliteSessionStore::in_memory());
+    let store: Arc<dyn SessionStorage> = sqlite.clone();
     let memory: Arc<dyn MemoryStore> = Arc::new(SqliteAgentStore::in_memory());
     let handle = spawn_session(
         "default",
@@ -142,13 +159,14 @@ fn spawn_default_session() -> SessionManager {
     );
     manager.insert(handle);
     manager.attach("default");
-    manager
+    (manager, sqlite)
 }
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
     let mut terminal = ratatui::init();
-    let mut app = App::with_sessions(spawn_default_session());
+    let (sessions, sqlite) = spawn_default_session();
+    let mut app = App::with_runtime(sessions, sqlite);
     let result = run(&mut terminal, &mut app).await;
     ratatui::restore();
     result
@@ -187,11 +205,13 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                             let line = app.input.lines().join("\n");
                             app.input = TextArea::default();
                             if let Some(command) = parse_command(&line) {
-                                match command {
+                                match &command {
                                     Command::Quit => return Ok(()),
                                     Command::Clear => app.answers.clear(),
-                                    command => {
-                                        if let Some(input) = command.to_agent_input() {
+                                    _ => {
+                                        if let Some(line) = app.apply_time_travel(&command) {
+                                            app.answers.push(line);
+                                        } else if let Some(input) = command.to_agent_input() {
                                             app.send_input(input).await;
                                         }
                                     }
