@@ -4,7 +4,8 @@
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Style};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 use tui_textarea::TextArea;
 
 use self::goal::GoalInfo;
@@ -52,6 +53,9 @@ pub fn draw(
     context: Option<&ContextSnapshot>,
     goal: Option<&GoalInfo>,
     completions: &[String],
+    answers_scroll: usize,
+    context_scroll: usize,
+    dev_scroll: usize,
 ) {
     match screen {
         Screen::Startup {
@@ -150,27 +154,38 @@ pub fn draw(
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(columns[1]);
 
-    let focused_style = Style::default().fg(Color::Yellow);
-    let answers_block = panel("answers", focus == Focus::Answers, focused_style);
-    frame.render_widget(answers_block.clone(), columns[0]);
-    frame.render_widget(
-        Paragraph::new(answers.join("\n")),
-        answers_block.inner(columns[0]),
+    render_panel(
+        frame,
+        columns[0],
+        "answers",
+        focus == Focus::Answers,
+        answers,
+        answers_scroll,
+        style_answer,
     );
 
-    let context_block = panel("current context", focus == Focus::Context, focused_style);
-    frame.render_widget(context_block.clone(), right[0]);
     let context_lines = context
         .map(|snapshot| context::render_snapshot(snapshot, 8))
         .unwrap_or_default();
-    frame.render_widget(
-        Paragraph::new(context_lines.join("\n")),
-        context_block.inner(right[0]),
+    render_panel(
+        frame,
+        right[0],
+        "current context",
+        focus == Focus::Context,
+        &context_lines,
+        context_scroll,
+        style_context,
     );
 
-    let dev_block = panel("dev events", focus == Focus::DevEvents, focused_style);
-    frame.render_widget(dev_block.clone(), right[1]);
-    frame.render_widget(Paragraph::new(dev.join("\n")), dev_block.inner(right[1]));
+    render_panel(
+        frame,
+        right[1],
+        "dev events",
+        focus == Focus::DevEvents,
+        dev,
+        dev_scroll,
+        style_dev,
+    );
 
     let goal_line = goal
         .map(|goal| goal.status_line())
@@ -269,12 +284,82 @@ fn draw_completion_popup(frame: &mut Frame, area: ratatui::layout::Rect, complet
     frame.render_widget(Paragraph::new(completions.join("\n")), block.inner(area));
 }
 
-fn panel(title: &str, selected: bool, focused: Style) -> Block<'static> {
-    let style = if selected { focused } else { Style::default() };
-    Block::default()
-        .title(title.to_owned())
+/// Render a bordered, scrollable, wrap-enabled panel with per-line colors.
+fn render_panel(
+    frame: &mut Frame,
+    rect: ratatui::layout::Rect,
+    title: &str,
+    focused: bool,
+    lines: &[String],
+    scroll: usize,
+    style_fn: fn(&str) -> Vec<Span<'static>>,
+) {
+    let border_style = if focused {
+        Style::default().fg(Color::Yellow)
+    } else {
+        Style::default()
+    };
+    let block = Block::default()
+        .title(title)
         .borders(Borders::ALL)
-        .border_style(style)
+        .border_style(border_style);
+    frame.render_widget(block.clone(), rect);
+    let inner = block.inner(rect);
+    let height = inner.height as usize;
+    let start = scroll.min(lines.len());
+    let end = (start + height).min(lines.len());
+    let window = &lines[start..end];
+    let rendered: Vec<Line> = window
+        .iter()
+        .map(|line| Line::from(style_fn(line)))
+        .collect();
+    frame.render_widget(Paragraph::new(rendered).wrap(Wrap { trim: false }), inner);
+}
+
+fn style_answer(line: &str) -> Vec<Span<'static>> {
+    let color = if line.starts_with("──") {
+        Color::DarkGray
+    } else if line.starts_with('⚙') || line.starts_with('✓') {
+        Color::Cyan
+    } else if line.starts_with('✗') {
+        Color::Red
+    } else if line.starts_with("goal:") {
+        Color::Magenta
+    } else if line.starts_with("model:") || line.starts_with("session:") {
+        Color::Yellow
+    } else {
+        Color::White
+    };
+    vec![Span::styled(line.to_string(), Style::default().fg(color))]
+}
+
+fn style_dev(line: &str) -> Vec<Span<'static>> {
+    if let Some((prefix, rest)) = line.split_once("] ") {
+        let category = rest
+            .split("::")
+            .next()
+            .and_then(|head| head.split_whitespace().last())
+            .unwrap_or("");
+        let cat_color = dev::category_color(category);
+        vec![
+            Span::styled(format!("{prefix}]"), Style::default().fg(Color::DarkGray)),
+            Span::styled(rest.to_string(), Style::default().fg(cat_color)),
+        ]
+    } else {
+        vec![Span::styled(
+            line.to_string(),
+            Style::default().fg(Color::Gray),
+        )]
+    }
+}
+
+fn style_context(line: &str) -> Vec<Span<'static>> {
+    let color = if line.contains("──") {
+        Color::Magenta
+    } else {
+        Color::White
+    };
+    vec![Span::styled(line.to_string(), Style::default().fg(color))]
 }
 
 #[cfg(test)]
@@ -300,6 +385,9 @@ mod tests {
                     None,
                     None,
                     &[],
+                    0,
+                    0,
+                    0,
                 )
             })
             .expect("draw");
@@ -355,6 +443,9 @@ mod tests {
                     None,
                     None,
                     &["/goal (set <objective>) - manage goal".to_string()],
+                    0,
+                    0,
+                    0,
                 )
             })
             .expect("draw");

@@ -47,13 +47,16 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
         if matches!(app.screen, Screen::Session) {
             app.pump().await;
         }
-        let (answers, dev, context, goal) = {
+        let (answers, dev, context, goal, answers_scroll, context_scroll, dev_scroll) = {
             let view = app.view();
             (
                 view.answers.clone(),
                 view.dev.clone(),
                 view.context.clone(),
                 view.goal.clone(),
+                view.answers_scroll,
+                view.context_scroll,
+                view.dev_scroll,
             )
         };
         let completions = app.completions();
@@ -68,6 +71,9 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                 context.as_ref(),
                 goal.as_ref(),
                 &completions,
+                answers_scroll,
+                context_scroll,
+                dev_scroll,
             )
         })?;
 
@@ -176,8 +182,15 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                             app.focus = app.focus.next();
                             continue;
                         }
-                        if app.focus == Focus::Input {
-                            match key.code {
+                        match app.focus {
+                            Focus::Answers | Focus::Context | Focus::DevEvents => match key.code {
+                                KeyCode::Up => app.scroll_panel(app.focus, -1),
+                                KeyCode::Down => app.scroll_panel(app.focus, 1),
+                                KeyCode::PageUp => app.scroll_panel(app.focus, -8),
+                                KeyCode::PageDown => app.scroll_panel(app.focus, 8),
+                                _ => {}
+                            },
+                            Focus::Input => match key.code {
                                 KeyCode::Enter if !shift => {
                                     let line = app.input.lines().join("\n");
                                     app.input = TextArea::default();
@@ -268,7 +281,7 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                 _ => {
                                     let _ = app.input.input(key);
                                 }
-                            }
+                            },
                         }
                     }
                 }

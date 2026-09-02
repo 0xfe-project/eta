@@ -9,9 +9,10 @@ use ratatui::style::Color;
 #[allow(dead_code)]
 pub fn dev_event_line(event: &AgentDevEvent, base: Instant) -> String {
     let relative = event.ts.saturating_duration_since(base).as_secs_f32();
+    let agent_id = event.agent_id.0.chars().take(8).collect::<String>();
     format!(
-        "[{relative:>7.2}s] {} {}::{} {}",
-        event.agent_id, event.category, event.action, event.data
+        "[{relative:>7.2}s] {agent_id} {}::{} {}",
+        event.category, event.action, event.data
     )
 }
 

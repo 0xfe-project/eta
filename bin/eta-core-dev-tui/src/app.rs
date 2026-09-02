@@ -38,6 +38,9 @@ pub(crate) struct SessionView {
     pub(crate) dev: Vec<String>,
     pub(crate) context: Option<ContextSnapshot>,
     pub(crate) goal: Option<GoalInfo>,
+    pub(crate) answers_scroll: usize,
+    pub(crate) context_scroll: usize,
+    pub(crate) dev_scroll: usize,
 }
 
 /// Interactive UI state: current focus, input, the session registry, and the
@@ -81,6 +84,28 @@ impl App {
         self.views.entry(id).or_default()
     }
 
+    /// Scroll the focused panel by `delta` rows (negative = up), clamped.
+    pub(crate) fn scroll_panel(&mut self, panel: crate::tui::Focus, delta: i64) {
+        let view = self.view();
+        let len = match panel {
+            crate::tui::Focus::Answers => view.answers.len(),
+            crate::tui::Focus::DevEvents => view.dev.len(),
+            crate::tui::Focus::Context => view
+                .context
+                .as_ref()
+                .map(|snapshot| crate::tui::context::render_snapshot(snapshot, 8).len())
+                .unwrap_or(0),
+            crate::tui::Focus::Input => return,
+        };
+        let scroll = match panel {
+            crate::tui::Focus::Answers => &mut view.answers_scroll,
+            crate::tui::Focus::DevEvents => &mut view.dev_scroll,
+            crate::tui::Focus::Context => &mut view.context_scroll,
+            crate::tui::Focus::Input => return,
+        };
+        *scroll = (*scroll as i64 + delta).clamp(0, len as i64) as usize;
+    }
+
     /// `/<cmd>`-style completions based on the current input text.
     pub(crate) fn completions(&self) -> Vec<String> {
         let text = self.input.lines().join("\n").trim().to_string();
@@ -118,7 +143,28 @@ impl App {
             session_id = handle.meta.id.clone();
 
             if let Some(events) = handle.event_rx.as_mut() {
+                let mut saw_text = false;
                 while let Ok(event) = events.try_recv() {
+                    if let AgentEvent::MessageUpdate { message, .. } = &event {
+                        if message
+                            .get("text")
+                            .and_then(|text| text.as_str())
+                            .is_some_and(|text| !text.is_empty())
+                        {
+                            saw_text = true;
+                        }
+                    }
+                    if let AgentEvent::TurnStart { .. } = &event {
+                        saw_text = false;
+                    }
+                    if let AgentEvent::TurnEnd { .. } = &event {
+                        if !saw_text {
+                            answer_lines.push(
+                                "(no assistant text this turn — check model/provider or dev events)"
+                                    .to_string(),
+                            );
+                        }
+                    }
                     if let AgentEvent::AskUserStarted { req_id, .. } = &event {
                         self.pending_ask = Some(PendingAsk {
                             req_id: req_id.clone(),
