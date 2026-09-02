@@ -100,9 +100,42 @@ pub fn parse_command(input: &str) -> Option<Command> {
         "new-session" => Some(Command::NewSession),
         "clear" => Some(Command::Clear),
         "help" => Some(Command::Help),
-        "quit" => Some(Command::Quit),
+        "quit" | "exit" => Some(Command::Quit),
         _ => None,
     }
+}
+
+/// Usage strings for `/`-command completion. Given the text so far (starting
+/// with `/`), return the matching command signatures so a picker can show them.
+pub fn command_completions(input: &str) -> Vec<String> {
+    let all: Vec<String> = vec![
+        "/goal (set <objective> | pause | resume | cancel | reset)".into(),
+        "/loop (<duration> <prompt> | list | cancel <id>)".into(),
+        "/ask <question>".into(),
+        "/fork <name>".into(),
+        "/commit <msg>".into(),
+        "/checkout <ref>".into(),
+        "/rollback <id>".into(),
+        "/history".into(),
+        "/merge <branch>".into(),
+        "/search <q>".into(),
+        "/session [new | rm <prefix> | rename <prefix> <name>]".into(),
+        "/new-session".into(),
+        "/agent".into(),
+        "/model [provider/model]".into(),
+        "/compact".into(),
+        "/tools".into(),
+        "/skills".into(),
+        "/memory".into(),
+        "/todos".into(),
+        "/usage".into(),
+        "/load_other_agent_config".into(),
+        "/help".into(),
+        "/quit".into(),
+    ];
+    all.into_iter()
+        .filter(|signature| input.is_empty() || signature.starts_with(input))
+        .collect()
 }
 
 fn parse_goal(rest: &[String]) -> Option<Command> {
@@ -188,7 +221,7 @@ fn tokenize(input: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Command, parse_command};
+    use super::{Command, command_completions, parse_command};
     use eta_core::AgentInput;
 
     #[test]
@@ -307,6 +340,15 @@ mod tests {
     }
 
     #[test]
+    fn goal_set_is_equivalent_to_bare_objective() {
+        assert_eq!(parse_command("/goal set task"), parse_command("/goal task"));
+        assert_eq!(
+            parse_command("/goal set task"),
+            Some(Command::Goal("task".into()))
+        );
+    }
+
+    #[test]
     fn parses_loop_shorthand_and_cancel() {
         assert_eq!(
             parse_command("/loop 1h30m ship it"),
@@ -334,5 +376,21 @@ mod tests {
             parse_command("/load_other_agent_config"),
             Some(Command::LoadOtherAgentConfig)
         );
+    }
+
+    #[test]
+    fn exit_is_an_alias_for_quit() {
+        assert_eq!(parse_command("/exit"), Some(Command::Quit));
+        assert_eq!(parse_command("/quit"), Some(Command::Quit));
+    }
+
+    #[test]
+    fn completions_filter_by_prefix() {
+        let all = command_completions("/");
+        assert!(all.iter().any(|c| c.starts_with("/goal")));
+        assert!(all.iter().any(|c| c.starts_with("/loop")));
+        let goals = command_completions("/go");
+        assert!(goals.iter().all(|c| c.starts_with("/go")));
+        assert!(goals.iter().any(|c| c.starts_with("/goal")));
     }
 }

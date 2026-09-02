@@ -34,6 +34,7 @@ const HELP_TEXT: &str = concat!(
 async fn main() -> io::Result<()> {
     let mut terminal = ratatui::init();
     let mut app = App::new();
+    app.bootstrap_sessions().await;
     let result = run(&mut terminal, &mut app).await;
     ratatui::restore();
     result
@@ -55,6 +56,7 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                 view.goal.clone(),
             )
         };
+        let completions = app.completions();
         terminal.draw(|frame| {
             tui::draw(
                 frame,
@@ -65,6 +67,7 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                 &dev,
                 context.as_ref(),
                 goal.as_ref(),
+                &completions,
             )
         })?;
 
@@ -76,6 +79,11 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                     app.cancel_current();
                     continue;
                 }
+                let ctrl_d =
+                    key.code == KeyCode::Char('d') && key.modifiers.contains(KeyModifiers::CONTROL);
+                if ctrl_d {
+                    return Ok(());
+                }
                 let shift = key.modifiers.contains(KeyModifiers::SHIFT);
                 match app.screen.clone() {
                     Screen::Startup { .. } => match key.code {
@@ -84,6 +92,16 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                         KeyCode::Enter if !shift => {
                             let line = app.input.lines().join("\n");
                             app.input = TextArea::default();
+                            if line.trim_start().starts_with('/') {
+                                match parse_command(line.trim()) {
+                                    Some(Command::Quit) => return Ok(()),
+                                    Some(Command::Help) => {
+                                        app.view().answers.push(HELP_TEXT.to_string());
+                                        continue;
+                                    }
+                                    _ => {}
+                                }
+                            }
                             if !line.trim().is_empty() {
                                 if let Some(draft) = app.screen.text_mut() {
                                     *draft = line;
@@ -246,11 +264,6 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                     } else if !line.trim().is_empty() {
                                         app.send_message(line.trim()).await;
                                     }
-                                }
-                                KeyCode::Char('d')
-                                    if key.modifiers.contains(KeyModifiers::CONTROL) =>
-                                {
-                                    return Ok(());
                                 }
                                 _ => {
                                     let _ = app.input.input(key);

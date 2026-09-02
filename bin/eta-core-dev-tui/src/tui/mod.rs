@@ -51,13 +51,24 @@ pub fn draw(
     dev: &[String],
     context: Option<&ContextSnapshot>,
     goal: Option<&GoalInfo>,
+    completions: &[String],
 ) {
     match screen {
         Screen::Startup {
             recent, selected, ..
         } => {
-            draw_startup(frame, recent, *selected);
-            draw_input(frame, input);
+            let comp = completions.len().min(8) as u16;
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Min(1),
+                    Constraint::Length(comp),
+                    Constraint::Length(3),
+                ])
+                .split(frame.area());
+            draw_startup(frame, chunks[0], recent, *selected);
+            draw_completion_popup(frame, chunks[1], completions);
+            draw_input(frame, chunks[2], input);
             return;
         }
         Screen::AgentMode { selected, .. } => {
@@ -72,8 +83,12 @@ pub fn draw(
             return;
         }
         Screen::CreateAgentName { .. } => {
-            draw_startup(frame, &["new agent name:".to_string()], 0);
-            draw_input(frame, input);
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(3)])
+                .split(frame.area());
+            draw_startup(frame, chunks[0], &["new agent name:".to_string()], 0);
+            draw_input(frame, chunks[1], input);
             return;
         }
         Screen::PersonaPicker {
@@ -106,15 +121,17 @@ pub fn draw(
         Screen::Session => {}
     }
 
+    let completions_height = completions.len().min(8);
     let outer = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(1),
             Constraint::Length(1),
+            Constraint::Length(completions_height as u16),
             Constraint::Length(3),
         ])
         .split(frame.area());
-    let (main, goal_area, input_area) = (outer[0], outer[1], outer[2]);
+    let (main, goal_area, completions_area, input_area) = (outer[0], outer[1], outer[2], outer[3]);
 
     let columns = Layout::default()
         .direction(Direction::Horizontal)
@@ -152,12 +169,25 @@ pub fn draw(
         .unwrap_or_else(|| "goal: —".into());
     frame.render_widget(Paragraph::new(goal_line), goal_area);
 
+    if !completions.is_empty() {
+        frame.render_widget(
+            Paragraph::new(completions.join("\n"))
+                .block(Block::default().title("commands").borders(Borders::ALL)),
+            completions_area,
+        );
+    }
+
     let input_block = Block::default().title("input").borders(Borders::ALL);
     frame.render_widget(input_block.clone(), input_area);
     frame.render_widget(input, input_block.inner(input_area));
 }
 
-fn draw_startup(frame: &mut Frame, recent: &[String], selected: usize) {
+fn draw_startup(
+    frame: &mut Frame,
+    area: ratatui::layout::Rect,
+    recent: &[String],
+    selected: usize,
+) {
     let body = if recent.is_empty() {
         "no recent sessions — type a message to start".to_string()
     } else {
@@ -173,7 +203,7 @@ fn draw_startup(frame: &mut Frame, recent: &[String], selected: usize) {
     };
     frame.render_widget(
         Paragraph::new(body).block(Block::default().title("eta").borders(Borders::ALL)),
-        frame.area(),
+        area,
     );
 }
 
@@ -216,15 +246,19 @@ fn draw_session_picker(
     );
 }
 
-fn draw_input(frame: &mut Frame, input: &TextArea) {
-    let area = frame.area();
-    let input_area = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(3)])
-        .split(area)[1];
+fn draw_input(frame: &mut Frame, area: ratatui::layout::Rect, input: &TextArea) {
     let input_block = Block::default().title("input").borders(Borders::ALL);
-    frame.render_widget(input_block.clone(), input_area);
-    frame.render_widget(input, input_block.inner(input_area));
+    frame.render_widget(input_block.clone(), area);
+    frame.render_widget(input, input_block.inner(area));
+}
+
+fn draw_completion_popup(frame: &mut Frame, area: ratatui::layout::Rect, completions: &[String]) {
+    if completions.is_empty() {
+        return;
+    }
+    let block = Block::default().title("commands").borders(Borders::ALL);
+    frame.render_widget(block.clone(), area);
+    frame.render_widget(Paragraph::new(completions.join("\n")), block.inner(area));
 }
 
 fn panel(title: &str, selected: bool, focused: Style) -> Block<'static> {
@@ -257,6 +291,7 @@ mod tests {
                     &["tool::start".to_string()],
                     None,
                     None,
+                    &[],
                 )
             })
             .expect("draw");

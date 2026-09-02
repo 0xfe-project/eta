@@ -81,6 +81,16 @@ impl App {
         self.views.entry(id).or_default()
     }
 
+    /// `/<cmd>`-style completions based on the current input text.
+    pub(crate) fn completions(&self) -> Vec<String> {
+        let text = self.input.lines().join("\n").trim_start().to_string();
+        if text.starts_with('/') {
+            crate::commands::command_completions(&text)
+        } else {
+            Vec::new()
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn with_sessions(sessions: SessionManager) -> Self {
         let mut app = Self::new();
@@ -517,6 +527,23 @@ impl App {
 
     /// Open an existing session by id and spawn its agent, then attach it.
     pub(crate) async fn attach_existing_session(&mut self, session_id: &str) {
+        let Some((handle, sqlite)) = self.spawn_session_handle(session_id) else {
+            return;
+        };
+        if let Some(loop_manager) = handle.loop_manager.clone() {
+            loop_manager.start().await;
+        }
+        self.sqlite = Some(sqlite);
+        self.sessions.insert(handle);
+        self.sessions.attach(session_id);
+        self.screen = Screen::session();
+    }
+
+    /// Open an existing session store and spawn its agent without attaching.
+    fn spawn_session_handle(
+        &self,
+        session_id: &str,
+    ) -> Option<(crate::session::SessionHandle, Arc<SqliteSessionStore>)> {
         let sqlite = Arc::new(
             SqliteSessionStore::open(eta_fs::session_db(session_id))
                 .unwrap_or_else(|_| SqliteSessionStore::in_memory()),
@@ -539,13 +566,24 @@ impl App {
             DEFAULT_SYSTEM_PROMPT.to_string(),
             String::new(),
         );
-        if let Some(loop_manager) = handle.loop_manager.clone() {
-            loop_manager.start().await;
+        Some((handle, sqlite))
+    }
+
+    /// Cold-start: spawn every persisted session and resume its loops without
+    /// waiting for the user to attach.
+    pub(crate) async fn bootstrap_sessions(&mut self) {
+        let ids = eta_sqlite_storage::list_sessions_in(&eta_fs::sessions_dir()).unwrap_or_default();
+        for id in ids {
+            if self.sessions.get(&id).is_some() {
+                continue;
+            }
+            if let Some((handle, _sqlite)) = self.spawn_session_handle(&id) {
+                if let Some(loop_manager) = handle.loop_manager.clone() {
+                    loop_manager.start().await;
+                }
+                self.sessions.insert(handle);
+            }
         }
-        self.sqlite = Some(sqlite);
-        self.sessions.insert(handle);
-        self.sessions.attach(session_id);
-        self.screen = Screen::session();
     }
 }
 
