@@ -110,6 +110,36 @@ async fn fire_hook_suppresses_deep_cascade() {
     assert_eq!(lm.fire_hook("event_x", "key_8", "trace_1").await, 0);
 }
 
+#[tokio::test]
+async fn loop_manager_emits_dev_events() {
+    use eta_core::{AgentDevEvent, AgentId, dev_category};
+
+    let store = Arc::new(MemStore::default());
+    let (tx, _rx) = tokio::sync::mpsc::channel(8);
+    let (dev_tx, mut dev_rx) = tokio::sync::broadcast::channel(32);
+    let mut lm = LoopManager::new(store, tx);
+    lm.with_dev(AgentId("a1".into()), dev_tx);
+    lm.register(hook_spec("h1", "event_x")).await;
+    lm.fire_hook("event_x", "key_1", "trace_1").await;
+    lm.fire_hook("event_x", "key_1", "trace_2").await;
+
+    let mut events: Vec<AgentDevEvent> = Vec::new();
+    while let Ok(ev) = dev_rx.try_recv() {
+        events.push(ev);
+    }
+
+    assert!(
+        events
+            .iter()
+            .any(|e| e.category == dev_category::LOOP && e.action == "register")
+    );
+    assert!(
+        events
+            .iter()
+            .any(|e| e.category == dev_category::LOOP && e.action == "suppress")
+    );
+}
+
 /// A multi-session backend that only enumerates session ids.
 struct FakeBackend {
     sessions: Vec<String>,

@@ -4,11 +4,12 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 
+use crate::dev_event::{AgentDevEvent, dev_category};
 use crate::store::SessionStorage;
 use crate::time::parse_duration;
-use crate::types::AgentInput;
+use crate::types::{AgentId, AgentInput};
 
 /// A loop trigger: a cron schedule or a hook event filter.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -63,6 +64,8 @@ impl TriggerRuntime {
 pub struct LoopManager {
     store: Arc<dyn SessionStorage>,
     input_tx: mpsc::Sender<AgentInput>,
+    dev_tx: Option<broadcast::Sender<AgentDevEvent>>,
+    agent_id: Option<AgentId>,
     runtime: Mutex<TriggerRuntime>,
 }
 
@@ -71,7 +74,27 @@ impl LoopManager {
         Self {
             store,
             input_tx,
+            dev_tx: None,
+            agent_id: None,
             runtime: Mutex::new(TriggerRuntime::default()),
+        }
+    }
+
+    /// Attach a dev (observability) stream so loop register / fire / suppress
+    /// events are emitted. Idempotent; call before `start` / `register`.
+    pub fn with_dev(&mut self, agent_id: AgentId, dev_tx: broadcast::Sender<AgentDevEvent>) {
+        self.agent_id = Some(agent_id);
+        self.dev_tx = Some(dev_tx);
+    }
+
+    fn emit_dev(&self, action: &str, data: serde_json::Value) {
+        if let (Some(tx), Some(id)) = (&self.dev_tx, &self.agent_id) {
+            let _ = tx.send(AgentDevEvent::new(
+                id.clone(),
+                dev_category::LOOP,
+                action,
+                data,
+            ));
         }
     }
 
@@ -90,6 +113,14 @@ impl LoopManager {
         specs.retain(|s| s.loop_id != spec.loop_id);
         specs.push(spec.clone());
         self.save(&specs).await;
+        self.emit_dev(
+            "register",
+            serde_json::json!({
+                "loop_id": spec.loop_id,
+                "enabled": spec.enabled,
+                "trigger": serde_json::to_value(&spec.trigger).unwrap_or_default(),
+            }),
+        );
         if spec.enabled {
             self.schedule(spec);
         }
@@ -119,12 +150,16 @@ impl LoopManager {
         let specs = self.match_hook(event_filter).await;
         let mut fired = 0;
         for spec in specs {
-            if !self
+            let proceed = self
                 .runtime
                 .lock()
                 .unwrap()
-                .should_fire(idempotency_key, trace_id)
-            {
+                .should_fire(idempotency_key, trace_id);
+            if !proceed {
+                self.emit_dev(
+                    "suppress",
+                    serde_json::json!({ "loop_id": spec.loop_id, "reason": "duplicate_or_depth" }),
+                );
                 continue;
             }
             let _ = self
