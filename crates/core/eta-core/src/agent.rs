@@ -755,6 +755,13 @@ impl AgentRuntime {
                 }
             }
 
+            if let Some(err) = &step.error {
+                self.emit_dev(
+                    dev_category::RETRY,
+                    "error",
+                    serde_json::json!({ "error": err.to_string() }),
+                );
+            }
             return step;
         }
     }
