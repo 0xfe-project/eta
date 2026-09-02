@@ -105,36 +105,58 @@ pub fn parse_command(input: &str) -> Option<Command> {
     }
 }
 
-/// Usage strings for `/`-command completion. Given the text so far (starting
-/// with `/`), return the matching command signatures so a picker can show them.
-pub fn command_completions(input: &str) -> Vec<String> {
-    let all: Vec<String> = vec![
-        "/goal (set <objective> | pause | resume | cancel | reset)".into(),
-        "/loop (<duration> <prompt> | list | cancel <id>)".into(),
-        "/ask <question>".into(),
-        "/fork <name>".into(),
-        "/commit <msg>".into(),
-        "/checkout <ref>".into(),
-        "/rollback <id>".into(),
-        "/history".into(),
-        "/merge <branch>".into(),
-        "/search <q>".into(),
-        "/session [new | rm <prefix> | rename <prefix> <name>]".into(),
-        "/new-session".into(),
-        "/agent".into(),
-        "/model [provider/model]".into(),
-        "/compact".into(),
-        "/tools".into(),
-        "/skills".into(),
-        "/memory".into(),
-        "/todos".into(),
-        "/usage".into(),
-        "/load_other_agent_config".into(),
-        "/help".into(),
-        "/quit".into(),
+/// A `/`-command completion item: usage signature + one-line description.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommandCompletion {
+    pub usage: String,
+    pub desc: String,
+}
+
+/// Usage + description for `/`-command completion. Given the text so far
+/// (starting with `/`), return the matching signatures so a picker can show them
+/// with a short explanation.
+pub fn command_completions(input: &str) -> Vec<CommandCompletion> {
+    let all: Vec<(&str, &str)> = vec![
+        (
+            "/goal (set <objective> | pause | resume | cancel | reset)",
+            "manage the agent goal",
+        ),
+        (
+            "/loop (<duration> <prompt> | list | cancel <id>)",
+            "schedule, list, or cancel a loop",
+        ),
+        ("/ask <question>", "ask an inline question"),
+        ("/fork <name>", "fork a time-travel branch"),
+        ("/commit <msg>", "commit a session snapshot"),
+        ("/checkout <ref>", "checkout a branch or commit"),
+        ("/rollback <id>", "rollback to a commit"),
+        ("/history", "show commit history"),
+        ("/merge <branch>", "merge a branch"),
+        ("/search <q>", "search session history"),
+        (
+            "/session [new | rm <prefix> | rename <prefix> <name>]",
+            "manage sessions",
+        ),
+        ("/new-session", "start a new session"),
+        ("/agent", "switch the session agent"),
+        ("/model [provider/model]", "pick a model per session"),
+        ("/compact", "force a one-off context compression"),
+        ("/tools", "list tools"),
+        ("/skills", "list skills"),
+        ("/memory", "show memory"),
+        ("/todos", "show current tasks"),
+        ("/usage", "show token usage"),
+        ("/load_other_agent_config", "import custom models from home"),
+        ("/help", "show help"),
+        ("/quit", "quit"),
     ];
+    let input = input.trim();
     all.into_iter()
-        .filter(|signature| input.is_empty() || signature.starts_with(input))
+        .filter(|(usage, _)| input.is_empty() || usage.starts_with(input))
+        .map(|(usage, desc)| CommandCompletion {
+            usage: usage.to_string(),
+            desc: desc.to_string(),
+        })
         .collect()
 }
 
@@ -387,10 +409,11 @@ mod tests {
     #[test]
     fn completions_filter_by_prefix() {
         let all = command_completions("/");
-        assert!(all.iter().any(|c| c.starts_with("/goal")));
-        assert!(all.iter().any(|c| c.starts_with("/loop")));
+        assert!(all.iter().any(|c| c.usage.starts_with("/goal")));
+        assert!(all.iter().any(|c| c.usage.starts_with("/loop")));
+        assert!(all.iter().all(|c| !c.desc.is_empty()));
         let goals = command_completions("/go");
-        assert!(goals.iter().all(|c| c.starts_with("/go")));
-        assert!(goals.iter().any(|c| c.starts_with("/goal")));
+        assert!(!goals.is_empty(), "expected matches for /go");
+        assert!(goals.iter().all(|c| c.usage.starts_with("/go")));
     }
 }

@@ -83,9 +83,12 @@ impl App {
 
     /// `/<cmd>`-style completions based on the current input text.
     pub(crate) fn completions(&self) -> Vec<String> {
-        let text = self.input.lines().join("\n").trim_start().to_string();
+        let text = self.input.lines().join("\n").trim().to_string();
         if text.starts_with('/') {
             crate::commands::command_completions(&text)
+                .into_iter()
+                .map(|item| format!("{} — {}", item.usage, item.desc))
+                .collect()
         } else {
             Vec::new()
         }
