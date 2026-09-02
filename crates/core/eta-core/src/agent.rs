@@ -1,7 +1,7 @@
 //! The agent engine: channels, the drive loop, and the retry / tool pipeline.
 
 use std::collections::VecDeque;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use tokio::sync::{broadcast, mpsc};
 use tokio_stream::StreamExt;
@@ -54,6 +54,7 @@ pub struct Agent {
     input: mpsc::Sender<AgentInput>,
     output: broadcast::Sender<AgentEvent>,
     answer: mpsc::Sender<AskUserAnswer>,
+    usage: Arc<Mutex<Usage>>,
     cancel: CancelToken,
 }
 
@@ -65,6 +66,7 @@ impl Agent {
         let output_handle = output_tx.clone();
         let (answer_tx, answer_rx) = mpsc::channel(16);
         let cancel = CancelToken::new();
+        let usage = Arc::new(Mutex::new(Usage::default()));
 
         // Builtin state + todo + evo + skill tools always attach to the store.
         cfg.tools.extend(builtin_state_tools(cfg.store.clone()));
@@ -78,7 +80,7 @@ impl Agent {
             mistakes: Vec::new(),
             evo_called: false,
             evo_reminders: 0,
-            usage: Usage::default(),
+            usage: usage.clone(),
             goal: None,
             loop_detector: LoopDetector::new(),
             answer_rx,
@@ -99,6 +101,7 @@ impl Agent {
             input: input_tx,
             output: output_handle,
             answer: answer_tx,
+            usage,
             cancel,
         }
     }
@@ -106,6 +109,11 @@ impl Agent {
     /// Send an input into the agent's queue.
     pub async fn send(&self, input: AgentInput) -> Result<(), mpsc::error::SendError<AgentInput>> {
         self.input.send(input).await
+    }
+
+    /// The accumulated token / cache usage so far.
+    pub fn usage(&self) -> Usage {
+        *self.usage.lock().unwrap()
     }
 
     /// Subscribe to the agent's event stream. Each call returns an independent
@@ -135,7 +143,7 @@ struct AgentRuntime {
     mistakes: Vec<String>,
     evo_called: bool,
     evo_reminders: u32,
-    usage: Usage,
+    usage: Arc<Mutex<Usage>>,
     goal: Option<GoalState>,
     loop_detector: LoopDetector,
     answer_rx: mpsc::Receiver<AskUserAnswer>,
@@ -649,10 +657,12 @@ impl AgentRuntime {
                     stop = StopReason::ToolUse;
                 }
                 Ok(Event::End { usage, stop: s }) => {
-                    self.usage.input += usage.input;
-                    self.usage.output += usage.output;
-                    self.usage.cache_read += usage.cache_read;
-                    self.usage.cache_write += usage.cache_write;
+                    let mut acc = self.usage.lock().unwrap();
+                    acc.input += usage.input;
+                    acc.output += usage.output;
+                    acc.cache_read += usage.cache_read;
+                    acc.cache_write += usage.cache_write;
+                    drop(acc);
                     stop = s;
                 }
                 Err(e) => {

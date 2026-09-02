@@ -49,6 +49,20 @@ pub struct Usage {
     pub cache_write: u64,
 }
 
+impl Usage {
+    /// Cache hit rate: `cache_read / (input + cache_read)`.
+    ///
+    /// `0.0` when there is no input at all; `1.0` when everything was a cache hit.
+    pub fn cache_rate(&self) -> f64 {
+        let total = self.input + self.cache_read;
+        if total == 0 {
+            0.0
+        } else {
+            self.cache_read as f64 / total as f64
+        }
+    }
+}
+
 /// A model descriptor. A bare `&str` / `String` is only a convenience entry
 /// point; `core` uses `Model` to carry api / provider selection.
 #[derive(Clone, Debug, Serialize, Deserialize)]
