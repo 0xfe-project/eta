@@ -23,7 +23,7 @@ use eta_sqlite_storage::{SqliteAgentStore, SqliteSessionStore};
 use eta_system_prompts::DEFAULT_SYSTEM_PROMPT;
 use serde_json::json;
 use session::{SessionManager, spawn_session};
-use tui::screen::Screen;
+use tui::screen::{NewConversation, Screen};
 use tui::{ContextSnapshot, Focus};
 use tui_textarea::TextArea;
 
@@ -179,41 +179,65 @@ impl App {
         Some(manager.remove(loop_id).await)
     }
 
-    /// Enter the persona picker with the built-in + custom persona catalog.
-    fn begin_picker(&mut self) {
-        let personas = config::persona_names(eta_fs::persona_dir());
-        self.screen.begin_picker(personas);
+    fn persona_catalog(&self) -> Vec<String> {
+        config::persona_names(eta_fs::persona_dir())
+    }
+
+    fn begin_agent_mode(&mut self) {
+        self.screen.begin_agent_mode();
+    }
+
+    fn confirm_agent_mode(&mut self) {
+        let agents = config::agent_names(eta_fs::agents_dir());
+        self.screen.confirm_agent_mode(agents);
     }
 
     fn cancel_picker(&mut self) {
         self.screen = self.screen.clone().cancel();
     }
 
-    /// Confirm the picker, spawn a session with the selected persona, and send
-    /// the startup draft as the first user message.
-    async fn confirm_picker(&mut self) {
-        let Some((persona, draft)) = self.screen.clone().confirm() else {
+    async fn confirm_existing_agent(&mut self) {
+        let Some(NewConversation::ExistingAgent { agent, draft }) = self.screen.confirm_agent()
+        else {
             return;
         };
-        self.spawn_session_with_persona(&persona);
+        self.spawn_session_for_agent(&agent, None);
         self.screen = Screen::session();
         self.send_message(&draft).await;
     }
 
-    fn spawn_session_with_persona(&mut self, persona: &str) {
+    fn begin_persona_picker(&mut self) {
+        let personas = self.persona_catalog();
+        self.screen.begin_persona_picker(personas);
+    }
+
+    async fn confirm_new_agent(&mut self) {
+        let Some(NewConversation::NewAgent {
+            name,
+            persona,
+            draft,
+        }) = self.screen.confirm()
+        else {
+            return;
+        };
+        self.spawn_session_for_agent(&name, Some(&persona));
+        self.screen = Screen::session();
+        self.send_message(&draft).await;
+    }
+
+    fn spawn_session_for_agent(&mut self, name: &str, persona: Option<&str>) {
         let provider: Arc<dyn Provider> = Arc::new(OpenAiProvider::from_env());
         let model = Model::new(std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into()));
         let sqlite = Arc::new(SqliteSessionStore::in_memory());
         let store: Arc<dyn SessionStorage> = sqlite.clone();
         let memory: Arc<dyn MemoryStore> = Arc::new(SqliteAgentStore::in_memory());
-        let body = eta_system_prompts::builtin_personas()
-            .get(persona)
-            .cloned()
+        let body = persona
+            .and_then(|persona| eta_system_prompts::builtin_personas().get(persona).cloned())
             .unwrap_or_default();
         let system_prompt = format!("{DEFAULT_SYSTEM_PROMPT}\n\n{body}");
         let handle = spawn_session(
             "default",
-            AgentId(persona.to_string()),
+            AgentId(name.to_string()),
             provider,
             model,
             store,
@@ -270,10 +294,36 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                         if key.code == KeyCode::Enter && !shift {
                             let line = app.input.lines().join("\n");
                             app.input = TextArea::default();
-                            if let Some(draft) = app.screen.draft_mut() {
+                            if let Some(draft) = app.screen.text_mut() {
                                 *draft = line;
                             }
-                            app.begin_picker();
+                            app.begin_agent_mode();
+                        } else {
+                            let _ = app.input.input(key);
+                        }
+                    }
+                    Screen::AgentMode { .. } => match key.code {
+                        KeyCode::Up => app.screen.move_selection(-1),
+                        KeyCode::Down => app.screen.move_selection(1),
+                        KeyCode::Enter => app.confirm_agent_mode(),
+                        KeyCode::Esc => app.cancel_picker(),
+                        _ => {}
+                    },
+                    Screen::AgentPicker { .. } => match key.code {
+                        KeyCode::Up => app.screen.move_selection(-1),
+                        KeyCode::Down => app.screen.move_selection(1),
+                        KeyCode::Enter => app.confirm_existing_agent().await,
+                        KeyCode::Esc => app.cancel_picker(),
+                        _ => {}
+                    },
+                    Screen::CreateAgentName { .. } => {
+                        if key.code == KeyCode::Enter && !shift {
+                            let line = app.input.lines().join("\n");
+                            app.input = TextArea::default();
+                            if let Some(name) = app.screen.text_mut() {
+                                *name = line;
+                            }
+                            app.begin_persona_picker();
                         } else {
                             let _ = app.input.input(key);
                         }
@@ -281,7 +331,7 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                     Screen::PersonaPicker { .. } => match key.code {
                         KeyCode::Up => app.screen.move_selection(-1),
                         KeyCode::Down => app.screen.move_selection(1),
-                        KeyCode::Enter => app.confirm_picker().await,
+                        KeyCode::Enter => app.confirm_new_agent().await,
                         KeyCode::Esc => app.cancel_picker(),
                         _ => {}
                     },

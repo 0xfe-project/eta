@@ -51,20 +51,29 @@ pub fn draw(
     match screen {
         Screen::Startup { recent, .. } => {
             draw_startup(frame, recent);
-            let area = frame.area();
-            let input_area = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Min(1), Constraint::Length(3)])
-                .split(area)[1];
-            let input_block = Block::default().title("input").borders(Borders::ALL);
-            frame.render_widget(input_block.clone(), input_area);
-            frame.render_widget(input, input_block.inner(input_area));
+            draw_input(frame, input);
+            return;
+        }
+        Screen::AgentMode { selected, .. } => {
+            let options = vec!["existing agent".to_string(), "create new agent".to_string()];
+            draw_list(frame, "new conversation", &options, *selected);
+            return;
+        }
+        Screen::AgentPicker {
+            agents, selected, ..
+        } => {
+            draw_list(frame, "choose agent", agents, *selected);
+            return;
+        }
+        Screen::CreateAgentName { .. } => {
+            draw_startup(frame, &["new agent name:".to_string()]);
+            draw_input(frame, input);
             return;
         }
         Screen::PersonaPicker {
             personas, selected, ..
         } => {
-            draw_picker(frame, personas, *selected);
+            draw_list(frame, "choose persona", personas, *selected);
             return;
         }
         Screen::Session => {}
@@ -74,7 +83,7 @@ pub fn draw(
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(3)])
         .split(frame.area());
-    let (main, input_area) = (outer[0], outer[1]);
+    let main = outer[0];
 
     let columns = Layout::default()
         .direction(Direction::Horizontal)
@@ -107,9 +116,7 @@ pub fn draw(
     frame.render_widget(dev_block.clone(), right[1]);
     frame.render_widget(Paragraph::new(dev.join("\n")), dev_block.inner(right[1]));
 
-    let input_block = Block::default().title("input").borders(Borders::ALL);
-    frame.render_widget(input_block.clone(), input_area);
-    frame.render_widget(input, input_block.inner(input_area));
+    draw_input(frame, input);
 }
 
 fn draw_startup(frame: &mut Frame, recent: &[String]) {
@@ -126,26 +133,33 @@ fn draw_startup(frame: &mut Frame, recent: &[String]) {
     );
 }
 
-fn draw_picker(frame: &mut Frame, personas: &[String], selected: usize) {
-    let lines: Vec<String> = personas
+fn draw_list(frame: &mut Frame, title: &str, items: &[String], selected: usize) {
+    let lines: Vec<String> = items
         .iter()
         .enumerate()
-        .map(|(index, persona)| {
+        .map(|(index, item)| {
             if index == selected {
-                format!("> {persona}")
+                format!("> {item}")
             } else {
-                format!("  {persona}")
+                format!("  {item}")
             }
         })
         .collect();
     frame.render_widget(
-        Paragraph::new(lines.join("\n")).block(
-            Block::default()
-                .title("choose persona")
-                .borders(Borders::ALL),
-        ),
+        Paragraph::new(lines.join("\n")).block(Block::default().title(title).borders(Borders::ALL)),
         frame.area(),
     );
+}
+
+fn draw_input(frame: &mut Frame, input: &TextArea) {
+    let area = frame.area();
+    let input_area = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(3)])
+        .split(area)[1];
+    let input_block = Block::default().title("input").borders(Borders::ALL);
+    frame.render_widget(input_block.clone(), input_area);
+    frame.render_widget(input, input_block.inner(input_area));
 }
 
 fn panel(title: &str, selected: bool, focused: Style) -> Block<'static> {
