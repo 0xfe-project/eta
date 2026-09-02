@@ -9,6 +9,7 @@ use super::*;
 fn cron_spec(id: &str, schedule: &str) -> LoopSpec {
     LoopSpec {
         loop_id: id.into(),
+        prompt: "run the loop".into(),
         trigger: Trigger::Cron {
             schedule: schedule.into(),
         },
@@ -22,6 +23,7 @@ fn cron_spec(id: &str, schedule: &str) -> LoopSpec {
 fn hook_spec(id: &str, event_filter: &str) -> LoopSpec {
     LoopSpec {
         loop_id: id.into(),
+        prompt: "run the hook".into(),
         trigger: Trigger::Hook {
             event_filter: event_filter.into(),
         },

@@ -131,6 +131,12 @@ impl Agent {
         self.input.send(input).await
     }
 
+    /// A clone of the agent's input channel, so an external `LoopManager` can
+    /// inject `AgentInput::Loop` on the same queue the drive loop consumes.
+    pub fn input_sender(&self) -> mpsc::Sender<AgentInput> {
+        self.input.clone()
+    }
+
     /// The accumulated token / cache usage so far.
     pub fn usage(&self) -> Usage {
         *self.usage.lock().unwrap()

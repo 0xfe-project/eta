@@ -25,6 +25,8 @@ pub enum Trigger {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LoopSpec {
     pub loop_id: String,
+    /// The prompt injected into the agent when this loop fires.
+    pub prompt: String,
     pub trigger: Trigger,
     pub enabled: bool,
     pub last_fired_at: Option<String>,
@@ -192,7 +194,7 @@ impl LoopManager {
                 .input_tx
                 .send(AgentInput::Loop {
                     loop_id: spec.loop_id.clone(),
-                    prompt: serde_json::json!({ "loop_id": spec.loop_id }),
+                    prompt: serde_json::json!({ "loop_id": spec.loop_id, "prompt": spec.prompt }),
                 })
                 .await;
             fired += 1;
@@ -232,7 +234,7 @@ impl LoopManager {
         let tx = self.input_tx.clone();
         let loop_id = spec.loop_id.clone();
         tokio::spawn(async move {
-            let prompt = serde_json::json!({ "loop_id": loop_id.clone() });
+            let prompt = serde_json::json!({ "loop_id": loop_id.clone(), "prompt": spec.prompt });
             let mut next = tokio::time::Instant::now() + interval;
             loop {
                 tokio::select! {
