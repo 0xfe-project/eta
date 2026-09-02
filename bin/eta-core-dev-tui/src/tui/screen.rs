@@ -30,6 +30,11 @@ pub enum Screen {
         models: Vec<String>,
         selected: usize,
     },
+    /// Switch the current session's agent to an existing one.
+    AgentSwitch {
+        agents: Vec<String>,
+        selected: usize,
+    },
     /// A live session is attached.
     Session,
 }
@@ -101,6 +106,11 @@ impl Screen {
             }
             | Screen::ModelPicker {
                 models: personas,
+                selected,
+                ..
+            }
+            | Screen::AgentSwitch {
+                agents: personas,
                 selected,
                 ..
             } => (personas.len(), selected),
@@ -234,6 +244,36 @@ impl Screen {
         }
     }
 
+    pub fn open_agent_switch(&mut self, agents: Vec<String>) -> bool {
+        if matches!(self, Screen::Session) {
+            *self = Screen::AgentSwitch {
+                agents,
+                selected: 0,
+            };
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn agent_switch_selection(&self) -> Option<&str> {
+        match self {
+            Screen::AgentSwitch {
+                agents, selected, ..
+            } => agents.get(*selected).map(String::as_str),
+            _ => None,
+        }
+    }
+
+    pub fn confirm_agent_switch(&mut self) -> Option<String> {
+        match self {
+            Screen::AgentSwitch {
+                agents, selected, ..
+            } => agents.get(*selected).cloned(),
+            _ => None,
+        }
+    }
+
     pub fn confirm(&mut self) -> Option<NewConversation> {
         match self {
             Screen::PersonaPicker {
@@ -262,7 +302,7 @@ impl Screen {
             | Screen::AgentPicker { draft, .. }
             | Screen::CreateAgentName { draft, .. }
             | Screen::PersonaPicker { draft, .. } => draft,
-            Screen::ModelPicker { .. } => return Screen::Session,
+            Screen::ModelPicker { .. } | Screen::AgentSwitch { .. } => return Screen::Session,
             other => return other,
         };
         Screen::Startup {
@@ -338,6 +378,16 @@ mod tests {
         screen.move_selection(1);
         assert_eq!(screen.model_selection(), Some("b/claude"));
         assert_eq!(screen.confirm_model(), Some("b/claude".into()));
+        assert!(matches!(screen.cancel(), Screen::Session));
+    }
+
+    #[test]
+    fn agent_switch_selects_and_cancels_back_to_session() {
+        let mut screen = Screen::session();
+        assert!(screen.open_agent_switch(vec!["alice".into(), "bob".into()]));
+        screen.move_selection(1);
+        assert_eq!(screen.agent_switch_selection(), Some("bob"));
+        assert_eq!(screen.confirm_agent_switch(), Some("bob".into()));
         assert!(matches!(screen.cancel(), Screen::Session));
     }
 }

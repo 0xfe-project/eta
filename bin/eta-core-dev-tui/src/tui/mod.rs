@@ -86,6 +86,12 @@ pub fn draw(
             draw_list(frame, "choose model", models, *selected);
             return;
         }
+        Screen::AgentSwitch {
+            agents, selected, ..
+        } => {
+            draw_list(frame, "switch agent", agents, *selected);
+            return;
+        }
         Screen::Session => {}
     }
 

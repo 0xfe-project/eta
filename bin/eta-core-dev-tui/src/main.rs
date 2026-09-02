@@ -238,6 +238,43 @@ impl App {
         self.answers.push(format!("model: {model} (session)"));
     }
 
+    fn open_agent_switch(&mut self) {
+        let agents = config::agent_names(eta_fs::agents_dir());
+        self.screen.open_agent_switch(agents);
+    }
+
+    fn switch_agent(&mut self, name: &str) {
+        let Some(store) = self.sessions.current().map(|handle| handle.store.clone()) else {
+            return;
+        };
+        let provider: Arc<dyn Provider> = Arc::new(OpenAiProvider::from_env());
+        let model = Model::new(std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into()));
+        let memory: Arc<dyn MemoryStore> = Arc::new(SqliteAgentStore::in_memory());
+        let handle = spawn_session(
+            "default",
+            AgentId(name.to_string()),
+            provider,
+            model,
+            store,
+            memory,
+            builtin_io_tools(),
+            DEFAULT_SYSTEM_PROMPT.to_string(),
+            String::new(),
+        );
+        self.sessions = SessionManager::new();
+        self.sessions.insert(handle);
+        self.sessions.attach("default");
+        self.answers.push(format!("agent: {name}"));
+    }
+
+    fn confirm_agent_switch(&mut self) {
+        let Some(name) = self.screen.confirm_agent_switch() else {
+            return;
+        };
+        self.switch_agent(&name);
+        self.screen = Screen::session();
+    }
+
     fn persona_catalog(&self) -> Vec<String> {
         config::persona_names(eta_fs::persona_dir())
     }
@@ -402,6 +439,13 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                         KeyCode::Esc => app.cancel_picker(),
                         _ => {}
                     },
+                    Screen::AgentSwitch { .. } => match key.code {
+                        KeyCode::Up => app.screen.move_selection(-1),
+                        KeyCode::Down => app.screen.move_selection(1),
+                        KeyCode::Enter => app.confirm_agent_switch(),
+                        KeyCode::Esc => app.cancel_picker(),
+                        _ => {}
+                    },
                     Screen::Session => {
                         if key.code == KeyCode::Tab {
                             app.focus = app.focus.next();
@@ -445,6 +489,9 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                             }
                                             Command::Model(None) => {
                                                 app.open_model_picker();
+                                            }
+                                            Command::Agent => {
+                                                app.open_agent_switch();
                                             }
                                             Command::LoadOtherAgentConfig => {
                                                 match eta_anycodingagent_config_reader::import_from_default_home()
