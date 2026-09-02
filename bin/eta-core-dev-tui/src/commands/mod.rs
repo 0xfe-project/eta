@@ -1,5 +1,8 @@
 //! Slash-command parsing (E7).
 
+use eta_core::AgentInput;
+use serde_json::json;
+
 /// Commands recognized by the input box. Each later maps to an `AgentInput`,
 /// session-manager call, or time-travel operation.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -36,6 +39,26 @@ pub enum Command {
     Clear,
     Help,
     Quit,
+}
+
+impl Command {
+    /// Map engine-driving commands into an `AgentInput`. Display-only commands
+    /// (`/tools`, `/usage`, …) and session/time-travel commands return `None`.
+    pub fn to_agent_input(&self) -> Option<AgentInput> {
+        match self {
+            Command::Goal(objective) => Some(AgentInput::SetGoal {
+                objective: objective.clone(),
+            }),
+            Command::PauseGoal => Some(AgentInput::PauseGoal),
+            Command::ResumeGoal => Some(AgentInput::ResumeGoal),
+            Command::ClearGoal => Some(AgentInput::ClearGoal),
+            Command::Ask(question) => Some(AgentInput::Custom(json!({
+                "kind": "ask_user",
+                "question": question,
+            }))),
+            _ => None,
+        }
+    }
 }
 
 /// Parse a line beginning with `/` into a command, or `None` for plain text.
@@ -136,6 +159,7 @@ fn tokenize(input: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::{Command, parse_command};
+    use eta_core::AgentInput;
 
     #[test]
     fn returns_none_for_plain_text() {
@@ -206,5 +230,33 @@ mod tests {
             Some(Command::Model("deepseek/chat".into()))
         );
         assert_eq!(parse_command("/quit"), Some(Command::Quit));
+    }
+
+    #[test]
+    fn maps_engine_commands_to_agent_inputs() {
+        assert!(matches!(
+            Command::Goal("ship".into()).to_agent_input(),
+            Some(AgentInput::SetGoal { objective }) if objective == "ship"
+        ));
+        assert!(matches!(
+            Command::PauseGoal.to_agent_input(),
+            Some(AgentInput::PauseGoal)
+        ));
+        assert!(matches!(
+            Command::ResumeGoal.to_agent_input(),
+            Some(AgentInput::ResumeGoal)
+        ));
+        assert!(matches!(
+            Command::ClearGoal.to_agent_input(),
+            Some(AgentInput::ClearGoal)
+        ));
+    }
+
+    #[test]
+    fn display_only_commands_have_no_agent_input() {
+        assert!(Command::Tools.to_agent_input().is_none());
+        assert!(Command::Usage.to_agent_input().is_none());
+        assert!(Command::Session.to_agent_input().is_none());
+        assert!(Command::Fork("dev".into()).to_agent_input().is_none());
     }
 }

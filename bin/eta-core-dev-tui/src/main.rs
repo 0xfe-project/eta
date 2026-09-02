@@ -103,15 +103,19 @@ impl App {
 
     /// Send a plain user message to the currently attached session.
     async fn send_message(&mut self, text: &str) {
+        self.send_input(AgentInput::UserMessage {
+            content: json!({ "type": "text", "text": text }),
+        })
+        .await;
+    }
+
+    /// Send an engine input to the currently attached session.
+    async fn send_input(&mut self, input: AgentInput) {
         let Some(handle) = self.sessions.current() else {
             return;
         };
         if let Some(agent) = handle.agent.as_ref() {
-            let _ = agent
-                .send(AgentInput::UserMessage {
-                    content: json!({ "type": "text", "text": text }),
-                })
-                .await;
+            let _ = agent.send(input).await;
         }
     }
 }
@@ -183,8 +187,14 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                             let line = app.input.lines().join("\n");
                             app.input = TextArea::default();
                             if let Some(command) = parse_command(&line) {
-                                if command == Command::Quit {
-                                    return Ok(());
+                                match command {
+                                    Command::Quit => return Ok(()),
+                                    Command::Clear => app.answers.clear(),
+                                    command => {
+                                        if let Some(input) = command.to_agent_input() {
+                                            app.send_input(input).await;
+                                        }
+                                    }
                                 }
                             } else if !line.trim().is_empty() {
                                 app.send_message(line.trim()).await;
