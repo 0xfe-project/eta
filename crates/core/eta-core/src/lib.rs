@@ -22,7 +22,8 @@ mod types;
 
 pub use agent::{Agent, AgentConfig};
 pub use compaction::{
-    TOOL_MESSAGE_DROP_THRESHOLD, drop_tool_pairs, estimate_tokens, partition, should_compact,
+    TOOL_MESSAGE_DROP_THRESHOLD, drop_tool_pairs, estimate_tokens, max_min_fair_allocations,
+    partition, reduce_budget, should_compact, truncate_fairly,
 };
 pub use error::{AgentError, ToolError, classify_provider_error};
 pub use hooks::{AgentHooks, Hooks};

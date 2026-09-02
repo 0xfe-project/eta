@@ -1,11 +1,46 @@
 //! Compaction: context compression at the turn boundary.
 
 use async_trait::async_trait;
-use eta_core::{drop_tool_pairs, partition, should_compact};
+use eta_core::{
+    drop_tool_pairs, max_min_fair_allocations, partition, reduce_budget, should_compact,
+    truncate_fairly,
+};
 
 use super::*;
 
 // ── Pure functions ───────────────────────────────────────────────────────────
+
+#[test]
+fn max_min_fair_allocations_distributes_budget() {
+    // Small message gets its full size; the large one gets the rest.
+    assert_eq!(max_min_fair_allocations(&[10, 100], 50), vec![10, 40]);
+}
+
+#[test]
+fn truncate_fairly_marks_omissions_and_truncations() {
+    let msgs = vec![
+        serde_json::json!({ "role": "user", "content": "short" }),
+        serde_json::json!({ "role": "assistant", "content": "x".repeat(5000) }),
+    ];
+    let out = truncate_fairly(&msgs, 1000).unwrap();
+    assert!(out.contains("short"));
+    assert!(out.contains("[... truncated"));
+}
+
+#[test]
+fn truncate_fairly_returns_none_when_nothing_fits() {
+    let msgs = vec![
+        serde_json::json!({ "role": "user", "content": "x".repeat(5000) }),
+        serde_json::json!({ "role": "assistant", "content": "x".repeat(5000) }),
+    ];
+    assert!(truncate_fairly(&msgs, 10).is_none());
+}
+
+#[test]
+fn reduce_budget_halves_then_thirds() {
+    assert_eq!(reduce_budget(10000, 1, 10000, 1000), 5000);
+    assert_eq!(reduce_budget(5000, 2, 5000, 1000), 1666);
+}
 
 #[test]
 fn should_compact_at_80_percent() {

@@ -80,3 +80,67 @@ pub fn drop_tool_pairs(messages: &[Value]) -> Vec<Value> {
         .cloned()
         .collect()
 }
+
+/// Max-min-fair character allocations across messages (grok-bot
+/// `computeMaxMinFairAllocations`): sort ascending, give each `min(size,
+/// fair_share)`, redistributing leftover from small messages.
+pub fn max_min_fair_allocations(sizes: &[usize], budget: usize) -> Vec<usize> {
+    let n = sizes.len();
+    if n == 0 {
+        return vec![];
+    }
+    let mut allocs = vec![0usize; n];
+    let mut indices: Vec<usize> = (0..n).collect();
+    indices.sort_by_key(|&i| sizes[i]);
+    let mut remaining = budget;
+    let mut count = n;
+    for &i in &indices {
+        let fair = remaining / count;
+        let take = fair.min(sizes[i]);
+        allocs[i] = take;
+        remaining -= take;
+        count -= 1;
+    }
+    allocs
+}
+
+/// Deterministic fallback when the LLM summarizer fails: max-min-fair truncate
+/// the messages to `char_budget`. Messages too small to keep a useful chunk are
+/// replaced by an omission note. Returns `None` if nothing useful fits.
+pub fn truncate_fairly(messages: &[serde_json::Value], char_budget: usize) -> Option<String> {
+    const MIN_USEFUL_CHARS: usize = 200;
+    let serialized: Vec<String> = messages.iter().map(|m| m.to_string()).collect();
+    let sizes: Vec<usize> = serialized.iter().map(|s| s.chars().count()).collect();
+    let allocs = max_min_fair_allocations(&sizes, char_budget);
+
+    let mut parts = Vec::new();
+    let mut kept = 0;
+    for (i, msg) in serialized.iter().enumerate() {
+        let size = sizes[i];
+        let alloc = allocs[i];
+        if alloc >= size {
+            parts.push(msg.clone());
+            kept += 1;
+        } else if alloc < MIN_USEFUL_CHARS {
+            parts.push(format!("[omitted message, {size} chars]"));
+        } else {
+            let truncated: String = msg.chars().take(alloc).collect();
+            parts.push(format!("{truncated}\n[... truncated, {size} chars]"));
+            kept += 1;
+        }
+    }
+    if kept == 0 {
+        return None;
+    }
+    Some(parts.join("\n\n"))
+}
+
+/// Reduce the summarization prompt budget on input-too-large (grok-bot
+/// `reducePromptBudget`): `/2` on the first reduction, `/3` after, capped at
+/// 75% of the original length, and never below `min`.
+pub fn reduce_budget(current: usize, attempt: usize, original_len: usize, min: usize) -> usize {
+    let divisor = if attempt >= 2 { 3 } else { 2 };
+    let mut next = current / divisor;
+    next = next.min(original_len * 3 / 4);
+    next.max(min)
+}

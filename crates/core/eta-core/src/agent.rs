@@ -344,12 +344,27 @@ impl AgentRuntime {
         }
         let tokens_before = compaction::estimate_tokens(&self.messages);
         let prefix = compaction::drop_tool_pairs(&prefix);
-        let summary =
-            summarize_with(self.cfg.provider.clone(), self.cfg.model.clone(), prefix).await;
+        let summary = summarize_with(
+            self.cfg.provider.clone(),
+            self.cfg.model.clone(),
+            prefix.clone(),
+        )
+        .await;
+
+        // Deterministic fallback when the LLM summarizer fails: max-min-fair
+        // truncation, marked untrusted/informational.
+        let content = if summary.trim().is_empty() {
+            match compaction::truncate_fairly(&prefix, keep_recent * 4) {
+                Some(truncated) => format!("{}\n{}", prompts::UNTRUSTED_SUMMARY_NOTE, truncated),
+                None => prompts::UNTRUSTED_SUMMARY_NOTE.to_string(),
+            }
+        } else {
+            summary
+        };
 
         let mut new_messages = vec![serde_json::json!({
             "role": "user",
-            "content": prompts::previous_summary(&summary),
+            "content": prompts::previous_summary(&content),
         })];
         new_messages.extend(suffix);
         self.messages = new_messages;
@@ -780,29 +795,42 @@ struct StepResult {
 
 /// Summarize `messages` into a single concise string. Shared by mid-loop
 /// summarization and (later) authoritative compaction.
+///
+/// Anti-overflow: retries up to 3 times, asking for shorter output on empty /
+/// truncated results.
 async fn summarize_with(
     provider: Arc<dyn Provider>,
     model: Model,
     messages: Vec<serde_json::Value>,
 ) -> String {
-    let mut prompt_messages = messages;
-    prompt_messages.push(serde_json::json!({
-        "role": "user",
-        "content": prompts::SUMMARIZE_REQUEST,
-    }));
-    let context = Context {
-        system_prompt: Some(prompts::SUMMARIZE_SYSTEM_PROMPT.to_string()),
-        messages: prompt_messages,
-        tools: vec![],
-    };
-    let mut stream = provider.stream(&model, &context, None);
-    let mut out = String::new();
-    while let Some(item) = stream.next().await {
-        if let Ok(Event::Content(c)) = item {
-            if let Some(t) = c.get("text").and_then(|t| t.as_str()) {
-                out.push_str(t);
+    const MAX_ATTEMPTS: usize = 3;
+    let mut shorter = false;
+    for _ in 0..MAX_ATTEMPTS {
+        let mut request = prompts::SUMMARIZE_REQUEST.to_string();
+        if shorter {
+            request.push_str("\n\n");
+            request.push_str(prompts::SUMMARIZE_SHORTER_RETRY);
+        }
+        let mut prompt_messages = messages.clone();
+        prompt_messages.push(serde_json::json!({ "role": "user", "content": request }));
+        let context = Context {
+            system_prompt: Some(prompts::SUMMARIZE_SYSTEM_PROMPT.to_string()),
+            messages: prompt_messages,
+            tools: vec![],
+        };
+        let mut stream = provider.stream(&model, &context, None);
+        let mut out = String::new();
+        while let Some(item) = stream.next().await {
+            if let Ok(Event::Content(c)) = item {
+                if let Some(t) = c.get("text").and_then(|t| t.as_str()) {
+                    out.push_str(t);
+                }
             }
         }
+        if !out.trim().is_empty() {
+            return out;
+        }
+        shorter = true;
     }
-    out
+    String::new()
 }
