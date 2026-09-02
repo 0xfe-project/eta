@@ -1,7 +1,7 @@
 //! Per-agent store: memory only.
 
 use eta_core::MemoryStore;
-use eta_sqlite_storage::SqliteAgentStore;
+use eta_sqlite_storage::{SqliteAgentStore, list_agents_in};
 
 #[tokio::test]
 async fn memory_roundtrip_and_remove() {
@@ -42,4 +42,16 @@ async fn memory_apply_over_cap_fails() {
         .await;
     assert!(res.is_err());
     assert!(store.load().await.is_empty());
+}
+
+#[test]
+fn list_agents_in_enumerates_sqlite_files() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("alice.sqlite"), b"").unwrap();
+    std::fs::write(dir.path().join("bob.sqlite"), b"").unwrap();
+    std::fs::write(dir.path().join("notes.txt"), b"x").unwrap();
+    assert_eq!(
+        list_agents_in(dir.path()).unwrap(),
+        vec!["alice".to_string(), "bob".to_string()]
+    );
 }

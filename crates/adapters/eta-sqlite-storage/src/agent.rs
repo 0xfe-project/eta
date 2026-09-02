@@ -10,6 +10,22 @@ use async_trait::async_trait;
 use eta_core::{MemoryEntry, MemoryStore, apply_memory_edits};
 use rusqlite::{Connection, params};
 
+/// Enumerate `*.sqlite` agent files in `dir`, returning agent names (filename
+/// without extension). Non-recursive; used by the TUI's agent picker.
+pub fn list_agents_in(dir: &Path) -> std::io::Result<Vec<String>> {
+    let mut names = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.extension().and_then(|ext| ext.to_str()) == Some("sqlite") {
+            if let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) {
+                names.push(stem.to_string());
+            }
+        }
+    }
+    names.sort();
+    Ok(names)
+}
+
 /// A single agent's durable store: memory lives here, not in the session.
 pub struct SqliteAgentStore {
     conn: Mutex<Connection>,
