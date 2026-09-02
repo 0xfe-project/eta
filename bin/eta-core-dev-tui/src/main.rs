@@ -246,6 +246,7 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                             }
                                             Command::Model(Some(id)) => {
                                                 app.save_model(id).await;
+                                                app.respawn_with_model(id);
                                                 app.view().answers.push(format!("model: {id} (session)"));
                                             }
                                             Command::Model(None) => {

@@ -40,6 +40,7 @@ pub(crate) struct SessionView {
     pub(crate) dev: Vec<String>,
     pub(crate) context: Option<ContextSnapshot>,
     pub(crate) goal: Option<GoalInfo>,
+    pub(crate) tool_names: Vec<String>,
     pub(crate) answers_scroll: usize,
     pub(crate) context_scroll: usize,
     pub(crate) dev_scroll: usize,
@@ -332,6 +333,7 @@ impl App {
             .or(view.goal.as_ref())
             .map(|goal| goal.status_line())
             .unwrap_or_default();
+        let tools = view.tool_names.clone();
         view.context = Some(ContextSnapshot {
             session_id,
             branch: "main".to_string(),
@@ -342,6 +344,7 @@ impl App {
             cache_rate: usage.cache_rate(),
             goal: goal_text,
             todos,
+            tools,
             ..Default::default()
         });
         if let Some(goal) = new_goal {
@@ -688,6 +691,8 @@ impl App {
             .and_then(|persona| eta_system_prompts::builtin_personas().get(persona).cloned())
             .unwrap_or_default();
         let system_prompt = format!("{DEFAULT_SYSTEM_PROMPT}\n\n{body}");
+        let tools = builtin_io_tools();
+        let tool_names: Vec<String> = tools.iter().map(|tool| tool.name().to_string()).collect();
         let handle = spawn_session(
             &session_id,
             AgentId(name.to_string()),
@@ -695,7 +700,7 @@ impl App {
             model,
             store,
             memory,
-            builtin_io_tools(),
+            tools,
             system_prompt,
             String::new(),
         );
@@ -703,6 +708,7 @@ impl App {
         self.sessions = SessionManager::new();
         self.sessions.insert(handle);
         self.sessions.attach(&session_id);
+        self.views.entry(session_id.clone()).or_default().tool_names = tool_names;
     }
 
     /// Open an existing session by id and spawn its agent, then attach it.
