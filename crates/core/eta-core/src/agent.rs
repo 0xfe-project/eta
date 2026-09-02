@@ -15,8 +15,8 @@ use crate::hooks::Hooks;
 use crate::loop_detect::LoopDetector;
 use crate::store::SessionStorage;
 use crate::tool::{
-    CancelToken, Tool, builtin_state_tools, builtin_todo_tool, load_todos, render_todos,
-    validate_args,
+    CancelToken, Tool, builtin_evo_tool, builtin_state_tools, builtin_todo_tool, load_memory,
+    load_todos, render_memory, render_todos, validate_args,
 };
 use crate::types::{
     AgentEvent, AgentId, AgentInput, AskUserAnswer, ControlPlaneAction, ControlPlaneDecision,
@@ -65,13 +65,17 @@ impl Agent {
         let (answer_tx, answer_rx) = mpsc::channel(16);
         let cancel = CancelToken::new();
 
-        // Builtin state tools + todo tool always attach to the session store.
+        // Builtin state + todo + evo tools always attach to the session store.
         cfg.tools.extend(builtin_state_tools(cfg.store.clone()));
         cfg.tools.push(builtin_todo_tool(cfg.store.clone()));
+        cfg.tools.push(builtin_evo_tool(cfg.store.clone()));
 
         let mut runtime = AgentRuntime {
             cfg,
             messages: Vec::new(),
+            mistakes: Vec::new(),
+            evo_called: false,
+            evo_reminders: 0,
             usage: Usage::default(),
             goal: None,
             loop_detector: LoopDetector::new(),
@@ -126,6 +130,9 @@ impl Agent {
 struct AgentRuntime {
     cfg: AgentConfig,
     messages: Vec<serde_json::Value>,
+    mistakes: Vec<String>,
+    evo_called: bool,
+    evo_reminders: u32,
     usage: Usage,
     goal: Option<GoalState>,
     loop_detector: LoopDetector,
@@ -225,6 +232,8 @@ impl AgentRuntime {
     async fn run_turn_chain(&mut self) {
         let mut queue: VecDeque<TurnDriver> = VecDeque::new();
         queue.push_back(TurnDriver::UserMessage(serde_json::Value::Null));
+        self.evo_called = false;
+        self.evo_reminders = 0;
 
         while let Some(_driver) = queue.pop_front() {
             if self.cancel.is_cancelled() {
@@ -271,6 +280,14 @@ impl AgentRuntime {
                     break;
                 }
                 queue.push_back(TurnDriver::GoalContinuation);
+            } else if !self.evo_called && self.evo_reminders == 0 {
+                // The agent must call `evo` to finalize its memory before ending.
+                self.evo_reminders += 1;
+                self.messages.push(serde_json::json!({
+                    "role": "user",
+                    "content": prompts::EVO_SIGNOFF_REMINDER,
+                }));
+                queue.push_back(TurnDriver::UserMessage(serde_json::Value::Null));
             }
             // else: no next driver → loop ends.
         }
@@ -464,6 +481,16 @@ impl AgentRuntime {
             system_prompt.push_str(&todos_block);
         }
 
+        // Memory guidance + full memory (the agent carries all of it).
+        system_prompt.push_str("\n\n");
+        system_prompt.push_str(prompts::MEMORY_GUIDANCE);
+        let memory = load_memory(self.cfg.store.as_ref()).await;
+        let memory_block = render_memory(&memory);
+        if !memory_block.is_empty() {
+            system_prompt.push_str("\n\n");
+            system_prompt.push_str(&memory_block);
+        }
+
         let mut context = Context {
             system_prompt: Some(system_prompt),
             messages: self.messages.clone(),
@@ -602,6 +629,9 @@ impl AgentRuntime {
                         self.handle_ask_user(id, arguments).await;
                         stop = StopReason::ToolUse;
                         break;
+                    }
+                    if name == "evo" {
+                        self.evo_called = true;
                     }
                     self.run_tool(id, name, arguments).await;
                     stop = StopReason::ToolUse;
@@ -748,6 +778,8 @@ impl AgentRuntime {
                 self.append_tool_result(id, value, false);
             }
             Err(e) => {
+                self.mistakes
+                    .push(format!("tool {} failed: {e}", call.name));
                 let tr = ToolResult {
                     id: id.clone(),
                     value: serde_json::json!({ "error": e.to_string() }),

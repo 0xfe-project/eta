@@ -92,11 +92,3 @@ pub trait SkillStore: Send + Sync {
     /// Return the skill body as a string; the model figures out what to do with it.
     async fn load(&self, name: &str) -> Option<String>;
 }
-
-/// Storage-agnostic agent memory (seam trait; per-agent, just strings — not part
-/// of the session).
-#[async_trait]
-pub trait MemoryStore: Send + Sync {
-    async fn get_all(&self) -> Vec<String>;
-    async fn put(&self, memory: String);
-}

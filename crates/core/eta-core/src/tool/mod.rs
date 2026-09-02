@@ -1,5 +1,6 @@
 //! The `Tool` trait + builtin tools.
 
+mod evo;
 mod state;
 mod todo;
 
@@ -66,6 +67,8 @@ pub(crate) fn validate_args(
     }
 }
 
+pub use evo::render_memory;
+pub(crate) use evo::{builtin_evo_tool, load_memory};
 pub(crate) use state::builtin_state_tools;
 pub use todo::render_todos;
 pub(crate) use todo::{builtin_todo_tool, load_todos};

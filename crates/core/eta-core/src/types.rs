@@ -218,3 +218,23 @@ pub enum TodoStatus {
     Completed,
     Cancelled,
 }
+
+/// Memory classification.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryKind {
+    /// User's hard requirement (e.g. "never use nextjs again").
+    Decision,
+    /// User's weaker preference (e.g. "prefer sqlite over pg").
+    Preference,
+    /// Lesson from tool failures or negative feedback.
+    Lesson,
+}
+
+/// A single memory entry (`{ "type": ..., "content": ... }`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MemoryEntry {
+    #[serde(rename = "type")]
+    pub kind: MemoryKind,
+    pub content: String,
+}
