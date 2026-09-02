@@ -23,6 +23,7 @@ use eta_sqlite_storage::{SqliteAgentStore, SqliteSessionStore};
 use eta_system_prompts::DEFAULT_SYSTEM_PROMPT;
 use serde_json::json;
 use session::{SessionManager, spawn_session};
+use tui::screen::Screen;
 use tui::{ContextSnapshot, Focus};
 use tui_textarea::TextArea;
 
@@ -31,6 +32,7 @@ use commands::{Command, parse_command};
 /// Interactive UI state: current focus, input, the session registry, and the
 /// rendered buffers for the three upper panels.
 struct App {
+    screen: Screen,
     focus: Focus,
     input: TextArea<'static>,
     sessions: SessionManager,
@@ -47,6 +49,7 @@ impl App {
         let mut input = TextArea::default();
         input.set_placeholder_text("type a message…");
         Self {
+            screen: Screen::startup(Vec::new()),
             focus: Focus::Input,
             input,
             sessions: SessionManager::new(),
@@ -59,15 +62,11 @@ impl App {
         }
     }
 
+    #[cfg(test)]
     fn with_sessions(sessions: SessionManager) -> Self {
         let mut app = Self::new();
         app.sessions = sessions;
-        app
-    }
-
-    fn with_runtime(sessions: SessionManager, sqlite: Arc<SqliteSessionStore>) -> Self {
-        let mut app = Self::with_sessions(sessions);
-        app.sqlite = Some(sqlite);
+        app.screen = Screen::session();
         app
     }
 
@@ -134,51 +133,77 @@ impl App {
         let sqlite = self.sqlite.as_ref()?;
         session::apply_time_travel(sqlite, &mut self.head, command)
     }
-}
 
-/// Build a single default session from environment-configured OpenAI-compatible
-/// provider + io tools + in-memory SQLite stores. The durable paths are swapped
-/// in E5/E6 when session/agent lifecycle is wired.
-fn spawn_default_session() -> (SessionManager, Arc<SqliteSessionStore>) {
-    let mut manager = SessionManager::new();
-    let provider: Arc<dyn Provider> = Arc::new(OpenAiProvider::from_env());
-    let model = Model::new(std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into()));
-    let sqlite = Arc::new(SqliteSessionStore::in_memory());
-    let store: Arc<dyn SessionStorage> = sqlite.clone();
-    let memory: Arc<dyn MemoryStore> = Arc::new(SqliteAgentStore::in_memory());
-    let handle = spawn_session(
-        "default",
-        AgentId("eta".into()),
-        provider,
-        model,
-        store,
-        memory,
-        builtin_io_tools(),
-        DEFAULT_SYSTEM_PROMPT.to_string(),
-        String::new(),
-    );
-    manager.insert(handle);
-    manager.attach("default");
-    (manager, sqlite)
+    /// Enter the persona picker with the built-in + custom persona catalog.
+    fn begin_picker(&mut self) {
+        let personas = config::persona_names(eta_fs::persona_dir());
+        self.screen.begin_picker(personas);
+    }
+
+    fn cancel_picker(&mut self) {
+        self.screen = self.screen.clone().cancel();
+    }
+
+    /// Confirm the picker, spawn a session with the selected persona, and send
+    /// the startup draft as the first user message.
+    async fn confirm_picker(&mut self) {
+        let Some((persona, draft)) = self.screen.clone().confirm() else {
+            return;
+        };
+        self.spawn_session_with_persona(&persona);
+        self.screen = Screen::session();
+        self.send_message(&draft).await;
+    }
+
+    fn spawn_session_with_persona(&mut self, persona: &str) {
+        let provider: Arc<dyn Provider> = Arc::new(OpenAiProvider::from_env());
+        let model = Model::new(std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into()));
+        let sqlite = Arc::new(SqliteSessionStore::in_memory());
+        let store: Arc<dyn SessionStorage> = sqlite.clone();
+        let memory: Arc<dyn MemoryStore> = Arc::new(SqliteAgentStore::in_memory());
+        let body = eta_system_prompts::builtin_personas()
+            .get(persona)
+            .cloned()
+            .unwrap_or_default();
+        let system_prompt = format!("{DEFAULT_SYSTEM_PROMPT}\n\n{body}");
+        let handle = spawn_session(
+            "default",
+            AgentId(persona.to_string()),
+            provider,
+            model,
+            store,
+            memory,
+            builtin_io_tools(),
+            system_prompt,
+            String::new(),
+        );
+        self.sqlite = Some(sqlite);
+        self.sessions = SessionManager::new();
+        self.sessions.insert(handle);
+        self.sessions.attach("default");
+    }
 }
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
     let mut terminal = ratatui::init();
-    let (sessions, sqlite) = spawn_default_session();
-    let mut app = App::with_runtime(sessions, sqlite);
+    let mut app = App::new();
     let result = run(&mut terminal, &mut app).await;
     ratatui::restore();
     result
 }
 
-/// Event loop: pump engine events, draw the four panels, route input.
+/// Event loop: pump engine events when in a session, draw the active screen,
+/// and route input depending on the screen.
 async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()> {
     loop {
-        app.pump().await;
+        if matches!(app.screen, Screen::Session) {
+            app.pump().await;
+        }
         terminal.draw(|frame| {
             tui::draw(
                 frame,
+                &app.screen,
                 app.focus,
                 &app.input,
                 &app.answers,
@@ -194,37 +219,64 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                 if ctrl_c {
                     return Ok(());
                 }
-                if key.code == KeyCode::Tab {
-                    app.focus = app.focus.next();
-                    continue;
-                }
-                if app.focus == Focus::Input {
-                    let shift = key.modifiers.contains(KeyModifiers::SHIFT);
-                    match key.code {
-                        KeyCode::Enter if !shift => {
+                let shift = key.modifiers.contains(KeyModifiers::SHIFT);
+                match app.screen.clone() {
+                    Screen::Startup { .. } => {
+                        if key.code == KeyCode::Enter && !shift {
                             let line = app.input.lines().join("\n");
                             app.input = TextArea::default();
-                            if let Some(command) = parse_command(&line) {
-                                match &command {
-                                    Command::Quit => return Ok(()),
-                                    Command::Clear => app.answers.clear(),
-                                    _ => {
-                                        if let Some(line) = app.apply_time_travel(&command) {
-                                            app.answers.push(line);
-                                        } else if let Some(input) = command.to_agent_input() {
-                                            app.send_input(input).await;
+                            if let Some(draft) = app.screen.draft_mut() {
+                                *draft = line;
+                            }
+                            app.begin_picker();
+                        } else {
+                            let _ = app.input.input(key);
+                        }
+                    }
+                    Screen::PersonaPicker { .. } => match key.code {
+                        KeyCode::Up => app.screen.move_selection(-1),
+                        KeyCode::Down => app.screen.move_selection(1),
+                        KeyCode::Enter => app.confirm_picker().await,
+                        KeyCode::Esc => app.cancel_picker(),
+                        _ => {}
+                    },
+                    Screen::Session => {
+                        if key.code == KeyCode::Tab {
+                            app.focus = app.focus.next();
+                            continue;
+                        }
+                        if app.focus == Focus::Input {
+                            match key.code {
+                                KeyCode::Enter if !shift => {
+                                    let line = app.input.lines().join("\n");
+                                    app.input = TextArea::default();
+                                    if let Some(command) = parse_command(&line) {
+                                        match &command {
+                                            Command::Quit => return Ok(()),
+                                            Command::Clear => app.answers.clear(),
+                                            _ => {
+                                                if let Some(line) = app.apply_time_travel(&command)
+                                                {
+                                                    app.answers.push(line);
+                                                } else if let Some(input) = command.to_agent_input()
+                                                {
+                                                    app.send_input(input).await;
+                                                }
+                                            }
                                         }
+                                    } else if !line.trim().is_empty() {
+                                        app.send_message(line.trim()).await;
                                     }
                                 }
-                            } else if !line.trim().is_empty() {
-                                app.send_message(line.trim()).await;
+                                KeyCode::Char('d')
+                                    if key.modifiers.contains(KeyModifiers::CONTROL) =>
+                                {
+                                    return Ok(());
+                                }
+                                _ => {
+                                    let _ = app.input.input(key);
+                                }
                             }
-                        }
-                        KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            return Ok(());
-                        }
-                        _ => {
-                            let _ = app.input.input(key);
                         }
                     }
                 }

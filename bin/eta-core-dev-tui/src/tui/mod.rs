@@ -13,6 +13,7 @@ pub mod dev;
 pub mod screen;
 
 pub use context::ContextSnapshot;
+pub use screen::Screen;
 
 /// The four focusable regions. `Tab` cycles through them in this order.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -40,12 +41,35 @@ impl Focus {
 /// buffered events and snapshot.
 pub fn draw(
     frame: &mut Frame,
+    screen: &Screen,
     focus: Focus,
     input: &TextArea,
     answers: &[String],
     dev: &[String],
     context: Option<&ContextSnapshot>,
 ) {
+    match screen {
+        Screen::Startup { recent, .. } => {
+            draw_startup(frame, recent);
+            let area = frame.area();
+            let input_area = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(3)])
+                .split(area)[1];
+            let input_block = Block::default().title("input").borders(Borders::ALL);
+            frame.render_widget(input_block.clone(), input_area);
+            frame.render_widget(input, input_block.inner(input_area));
+            return;
+        }
+        Screen::PersonaPicker {
+            personas, selected, ..
+        } => {
+            draw_picker(frame, personas, *selected);
+            return;
+        }
+        Screen::Session => {}
+    }
+
     let outer = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(3)])
@@ -88,6 +112,42 @@ pub fn draw(
     frame.render_widget(input, input_block.inner(input_area));
 }
 
+fn draw_startup(frame: &mut Frame, recent: &[String]) {
+    let body = if recent.is_empty() {
+        "no recent sessions — type a message to start".to_string()
+    } else {
+        let mut lines = vec!["recent sessions:".to_string()];
+        lines.extend(recent.iter().map(|id| format!("  {id}")));
+        lines.join("\n")
+    };
+    frame.render_widget(
+        Paragraph::new(body).block(Block::default().title("eta").borders(Borders::ALL)),
+        frame.area(),
+    );
+}
+
+fn draw_picker(frame: &mut Frame, personas: &[String], selected: usize) {
+    let lines: Vec<String> = personas
+        .iter()
+        .enumerate()
+        .map(|(index, persona)| {
+            if index == selected {
+                format!("> {persona}")
+            } else {
+                format!("  {persona}")
+            }
+        })
+        .collect();
+    frame.render_widget(
+        Paragraph::new(lines.join("\n")).block(
+            Block::default()
+                .title("choose persona")
+                .borders(Borders::ALL),
+        ),
+        frame.area(),
+    );
+}
+
 fn panel(title: &str, selected: bool, focused: Style) -> Block<'static> {
     let style = if selected { focused } else { Style::default() };
     Block::default()
@@ -98,7 +158,7 @@ fn panel(title: &str, selected: bool, focused: Style) -> Block<'static> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Focus, draw};
+    use super::{Focus, Screen, draw};
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
     use tui_textarea::TextArea;
@@ -111,6 +171,7 @@ mod tests {
             .draw(|frame| {
                 draw(
                     frame,
+                    &Screen::session(),
                     Focus::Input,
                     &TextArea::default(),
                     &["hello".to_string()],
