@@ -76,6 +76,7 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                 context_scroll,
                 dev_scroll,
                 &status,
+                &app.dev_filter,
             )
         })?;
 
@@ -185,7 +186,22 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                             continue;
                         }
                         match app.focus {
-                            Focus::Answers | Focus::Context | Focus::DevEvents => match key.code {
+                            Focus::DevEvents => {
+                                if app.dev_filtering {
+                                    app.dev_filter_key(key.code);
+                                } else {
+                                    match key.code {
+                                        KeyCode::Up => app.scroll_panel(Focus::DevEvents, -1),
+                                        KeyCode::Down => app.scroll_panel(Focus::DevEvents, 1),
+                                        KeyCode::PageUp => app.scroll_panel(Focus::DevEvents, -8),
+                                        KeyCode::PageDown => app.scroll_panel(Focus::DevEvents, 8),
+                                        KeyCode::Char('/') => app.start_dev_filter(),
+                                        KeyCode::Char('c') => app.clear_dev(),
+                                        _ => {}
+                                    }
+                                }
+                            }
+                            Focus::Answers | Focus::Context => match key.code {
                                 KeyCode::Up => app.scroll_panel(app.focus, -1),
                                 KeyCode::Down => app.scroll_panel(app.focus, 1),
                                 KeyCode::PageUp => app.scroll_panel(app.focus, -8),

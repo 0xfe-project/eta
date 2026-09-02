@@ -57,6 +57,7 @@ pub fn draw(
     context_scroll: usize,
     dev_scroll: usize,
     status: &str,
+    dev_filter: &str,
 ) {
     match screen {
         Screen::Startup {
@@ -180,12 +181,20 @@ pub fn draw(
         style_context,
     );
 
+    let dev_filtered: Vec<String> = if dev_filter.is_empty() {
+        dev.to_vec()
+    } else {
+        dev.iter()
+            .filter(|line| line.contains(dev_filter))
+            .cloned()
+            .collect()
+    };
     render_panel(
         frame,
         right[1],
         "dev events",
         focus == Focus::DevEvents,
-        dev,
+        &dev_filtered,
         dev_scroll,
         style_dev,
     );
@@ -432,6 +441,7 @@ mod tests {
                     0,
                     0,
                     "",
+                    "",
                 )
             })
             .expect("draw");
@@ -490,6 +500,7 @@ mod tests {
                     0,
                     0,
                     0,
+                    "",
                     "",
                 )
             })

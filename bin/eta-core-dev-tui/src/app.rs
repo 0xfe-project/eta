@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
+use crossterm::event::KeyCode;
+
 use eta_core::{
     AgentEvent, AgentId, AgentInput, AskUserAnswer, LoopSpec, MemoryStore, SessionEntry,
     SessionStorage, Trigger, dev_category, entry_kind,
@@ -58,6 +60,8 @@ pub(crate) struct App {
     pub(crate) dev_base: Instant,
     history: Vec<String>,
     history_idx: Option<usize>,
+    pub(crate) dev_filter: String,
+    pub(crate) dev_filtering: bool,
 }
 
 impl App {
@@ -79,6 +83,8 @@ impl App {
             dev_base: Instant::now(),
             history: Vec::new(),
             history_idx: None,
+            dev_filter: String::new(),
+            dev_filtering: false,
         }
     }
 
@@ -154,6 +160,35 @@ impl App {
             .map(|handle| handle.meta.agent_id.0.clone())
             .unwrap_or_default();
         format!("{mode} · session {session} · agent {agent}")
+    }
+
+    pub(crate) fn start_dev_filter(&mut self) {
+        self.dev_filter.clear();
+        self.dev_filtering = true;
+    }
+
+    /// Feed one key into the dev-filter input; returns whether filtering is open.
+    pub(crate) fn dev_filter_key(&mut self, key_code: KeyCode) -> bool {
+        if !self.dev_filtering {
+            return false;
+        }
+        match key_code {
+            KeyCode::Esc | KeyCode::Enter => {
+                self.dev_filtering = false;
+            }
+            KeyCode::Backspace => {
+                self.dev_filter.pop();
+            }
+            KeyCode::Char(ch) => {
+                self.dev_filter.push(ch);
+            }
+            _ => {}
+        }
+        self.dev_filtering
+    }
+
+    pub(crate) fn clear_dev(&mut self) {
+        self.view().dev.clear();
     }
 
     /// `/<cmd>`-style completions based on the current input text.
