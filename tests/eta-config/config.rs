@@ -1,37 +1,134 @@
-use eta_anycodingagent_config_reader::{ConfigWatcher, parse_config};
-use eta_config::load_personas;
+use eta_anycodingagent_config_reader::{
+    import_claude, import_codex, import_from_home, import_opencode, import_pi,
+};
+use eta_config::{Config, load_personas};
+use std::collections::BTreeMap;
 use std::fs;
 
 #[test]
-fn normalizes_config_and_custom_persona_overrides_builtin() {
-    let config =
-        parse_config(r#"{"model":"anthropic/claude","persona":["思考者","custom"]}"#).unwrap();
-    assert_eq!(config.model, "anthropic/claude");
-    let dir = tempfile::tempdir().unwrap();
-    fs::write(dir.path().join("custom.persona.md"), "custom body").unwrap();
-    fs::write(dir.path().join("思考者.persona.md"), "override body").unwrap();
-    let personas = load_personas(&config, dir.path());
-    assert_eq!(personas["思考者"], "override body");
-    assert_eq!(personas["custom"], "custom body");
+fn imports_real_codex_custom_provider_shape_only() {
+    let imported = import_codex(
+        r#"
+model_provider = "custom"
+model = "gpt-5.6-sol"
+model_reasoning_effort = "high"
+[model_providers.custom]
+name = "CCCoding"
+base_url = "https://ccapi.example/v1"
+wire_api = "responses"
+requires_openai_auth = true
+"#,
+    )
+    .unwrap();
+    assert_eq!(imported.providers.len(), 1);
+    assert_eq!(
+        imported.providers["custom"].options["wire_api"],
+        "responses"
+    );
+    assert!(
+        imported.providers["custom"]
+            .models
+            .contains_key("gpt-5.6-sol")
+    );
 }
 
 #[test]
-fn config_watcher_reloads_persona_and_bumps_version() {
-    let dir = tempfile::tempdir().unwrap();
-    let config_path = dir.path().join("config.json");
-    let persona_dir = dir.path().join("persona");
-    fs::create_dir_all(&persona_dir).unwrap();
-    fs::write(
-        &config_path,
-        r#"{"model":"openai/demo","persona":["live"]}"#,
+fn imports_real_claude_env_custom_models() {
+    let imported = import_claude(
+        r#"{"env":{"ANTHROPIC_AUTH_TOKEN":"secret","ANTHROPIC_BASE_URL":"https://ccapi.example","ANTHROPIC_DEFAULT_OPUS_MODEL":"claude-opus-custom","ANTHROPIC_DEFAULT_SONNET_MODEL":"claude-sonnet-custom"},"model":"ignored","permissions":{"allow":["ignored"]}}"#,
     )
     .unwrap();
-    fs::write(persona_dir.join("live.persona.md"), "v1").unwrap();
-    let mut watcher = ConfigWatcher::watch(&config_path, &persona_dir).unwrap();
-    fs::write(persona_dir.join("live.persona.md"), "v2").unwrap();
-    let snapshot = watcher
-        .recv_timeout(std::time::Duration::from_secs(2))
-        .unwrap();
-    assert_eq!(snapshot.personas["live"], "v2");
-    assert_eq!(snapshot.assembly_version, 1);
+    let provider = &imported.providers["claude-custom"];
+    assert_eq!(provider.options["baseURL"], "https://ccapi.example");
+    assert_eq!(provider.models.len(), 2);
+}
+
+#[test]
+fn imports_opencode_provider_table_without_top_level_settings() {
+    let imported = import_opencode(
+        r#"{"model":"ignore/me","provider":{"custom":{"npm":"@ai-sdk/openai-compatible","models":{"grok-custom":{"name":"Grok"}},"options":{"baseURL":"https://example/v1","apiKey":"secret"}}},"plugin":["ignored"]}"#,
+    )
+    .unwrap();
+    assert_eq!(
+        imported.providers["custom"].options["npm"],
+        "@ai-sdk/openai-compatible"
+    );
+    assert!(
+        imported.providers["custom"]
+            .models
+            .contains_key("grok-custom")
+    );
+}
+
+#[test]
+fn imports_pi_provider_model_array() {
+    let imported = import_pi(
+        r#"{"providers":{"local":{"baseUrl":"http://localhost:1234/v1","api":"openai-completions","models":[{"id":"local-model","name":"Local"}]}}}"#,
+    )
+    .unwrap();
+    assert_eq!(
+        imported.providers["local"].options["baseUrl"],
+        "http://localhost:1234/v1"
+    );
+    assert!(
+        imported.providers["local"]
+            .models
+            .contains_key("local-model")
+    );
+}
+
+#[test]
+fn one_shot_home_import_preserves_eta_settings() {
+    let home = tempfile::tempdir().unwrap();
+    fs::create_dir_all(home.path().join(".config/opencode")).unwrap();
+    fs::write(
+        home.path().join(".config/opencode/opencode.json"),
+        r#"{"provider":{"imported":{"models":{"m":{"name":"m"}},"options":{"baseURL":"https://example"}}}}"#,
+    )
+    .unwrap();
+    let imported = import_from_home(home.path()).unwrap();
+    let mut config = Config {
+        model: "eta/original".into(),
+        small_model: None,
+        provider: BTreeMap::new(),
+        persona: vec!["艺术家".into()],
+    };
+    imported.apply_to(&mut config);
+    assert_eq!(config.model, "eta/original");
+    assert_eq!(config.persona, vec!["艺术家"]);
+    assert!(config.provider.contains_key("imported"));
+}
+
+#[test]
+fn custom_persona_loading_remains_independent() {
+    let config = Config {
+        model: "eta/model".into(),
+        small_model: None,
+        provider: BTreeMap::new(),
+        persona: vec!["思考者".into()],
+    };
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("思考者.persona.md"), "override body").unwrap();
+    assert_eq!(
+        load_personas(&config, dir.path())["思考者"],
+        "override body"
+    );
+}
+
+#[test]
+#[ignore = "requires locally installed coding-agent configs"]
+fn imports_installed_custom_models_once() {
+    let home = std::env::var_os("HOME").expect("HOME");
+    let imported = import_from_home(std::path::PathBuf::from(home)).unwrap();
+    assert!(
+        !imported.providers.is_empty(),
+        "no installed custom providers found"
+    );
+    assert!(
+        imported
+            .providers
+            .values()
+            .any(|provider| !provider.models.is_empty()),
+        "installed providers contained no custom models"
+    );
 }

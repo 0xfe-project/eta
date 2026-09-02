@@ -1,113 +1,200 @@
 #![doc = include_str!("../README.md")]
 
 use eta_config::{Config, ProviderConfig};
-use std::collections::BTreeMap;
-use std::path::Path;
-use std::path::PathBuf;
+use serde_json::{Map, Value, json};
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
 
-/// Read an existing agent config and normalize common Codex/Claude/OpenCode/
-/// Pi shapes into eta's provider/model schema.
-pub fn read_config(path: impl AsRef<Path>) -> Result<Config, String> {
-    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    parse_config(&text)
+/// Supported one-shot import sources.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ImportSource {
+    Codex,
+    Claude,
+    OpenCode,
+    Pi,
 }
 
-pub fn parse_config(text: &str) -> Result<Config, String> {
-    let value: serde_json::Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
-    let model = value
-        .get("model")
-        .and_then(|v| v.as_str())
-        .or_else(|| value.pointer("/model/id").and_then(|v| v.as_str()))
-        .or_else(|| value.pointer("/defaultModel").and_then(|v| v.as_str()))
-        .unwrap_or("openai/gpt-4o")
-        .to_owned();
-    let mut provider = BTreeMap::new();
-    if let Some(map) = value.get("provider").and_then(|v| v.as_object()) {
-        for (name, cfg) in map {
-            provider.insert(
-                name.clone(),
-                ProviderConfig {
-                    options: cfg
-                        .get("options")
-                        .cloned()
-                        .unwrap_or_else(|| serde_json::json!({})),
-                    models: cfg
-                        .get("models")
-                        .and_then(|v| v.as_object())
-                        .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
-                        .unwrap_or_default(),
-                },
-            );
+/// Custom providers/models discovered in installed coding-agent configs.
+#[derive(Clone, Debug, Default)]
+pub struct CustomModelImport {
+    pub providers: BTreeMap<String, ProviderConfig>,
+}
+
+impl CustomModelImport {
+    /// Merge once into eta config. Existing eta providers win on collisions.
+    pub fn apply_to(self, config: &mut Config) {
+        for (id, provider) in self.providers {
+            config.provider.entry(id).or_insert(provider);
         }
     }
-    Ok(Config {
-        model,
-        small_model: value
-            .get("small_model")
-            .and_then(|v| v.as_str())
-            .map(String::from),
-        provider,
-        persona: value
-            .get("persona")
-            .and_then(|v| v.as_array())
-            .map(|a| {
-                a.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect()
-            })
-            .unwrap_or_default(),
+
+    fn extend(&mut self, other: CustomModelImport) {
+        self.providers.extend(other.providers);
+    }
+}
+
+/// Read one source config without retaining a watcher or source reference.
+pub fn import_file(
+    source: ImportSource,
+    path: impl AsRef<Path>,
+) -> Result<CustomModelImport, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    match source {
+        ImportSource::Codex => import_codex(&text),
+        ImportSource::Claude => import_claude(&text),
+        ImportSource::OpenCode => import_opencode(&text),
+        ImportSource::Pi => import_pi(&text),
+    }
+}
+
+/// Import from conventional locations. Missing clients are ignored.
+pub fn import_from_home(home: impl AsRef<Path>) -> Result<CustomModelImport, String> {
+    let mut imported = CustomModelImport::default();
+    for (source, path) in source_paths(home) {
+        if path.is_file() {
+            imported.extend(import_file(source, path)?);
+        }
+    }
+    Ok(imported)
+}
+
+/// Codex custom endpoints live in `[model_providers.<id>]`. Its active model is
+/// attached only to the selected custom provider.
+pub fn import_codex(text: &str) -> Result<CustomModelImport, String> {
+    let root: toml::Value = toml::from_str(text).map_err(|e| e.to_string())?;
+    let selected_provider = root.get("model_provider").and_then(toml::Value::as_str);
+    let selected_model = root.get("model").and_then(toml::Value::as_str);
+    let mut providers = BTreeMap::new();
+    let Some(custom) = root.get("model_providers").and_then(toml::Value::as_table) else {
+        return Ok(CustomModelImport { providers });
+    };
+    for (id, value) in custom {
+        let options = serde_json::to_value(value).map_err(|e| e.to_string())?;
+        let mut models = BTreeMap::new();
+        if selected_provider == Some(id.as_str()) {
+            if let Some(model) = selected_model {
+                models.insert(model.to_owned(), json!({"name": model}));
+            }
+        }
+        providers.insert(id.clone(), ProviderConfig { options, models });
+    }
+    Ok(CustomModelImport { providers })
+}
+
+/// Claude custom models are expressed through `ANTHROPIC_BASE_URL` and the
+/// `ANTHROPIC_*_MODEL` environment settings.
+pub fn import_claude(text: &str) -> Result<CustomModelImport, String> {
+    let root: Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
+    let Some(env) = root.get("env").and_then(Value::as_object) else {
+        return Ok(CustomModelImport::default());
+    };
+    let Some(base_url) = env.get("ANTHROPIC_BASE_URL").and_then(Value::as_str) else {
+        return Ok(CustomModelImport::default());
+    };
+    let mut model_ids = BTreeSet::new();
+    for (key, value) in env {
+        if (key == "ANTHROPIC_MODEL"
+            || (key.starts_with("ANTHROPIC_DEFAULT_") && key.ends_with("_MODEL")))
+            && let Some(id) = value.as_str()
+        {
+            model_ids.insert(id.to_owned());
+        }
+    }
+    let models = model_ids
+        .into_iter()
+        .map(|id| (id.clone(), json!({"name": id})))
+        .collect();
+    let mut options = Map::new();
+    options.insert("baseURL".into(), json!(base_url));
+    if let Some(token) = env.get("ANTHROPIC_AUTH_TOKEN").and_then(Value::as_str) {
+        options.insert("apiKey".into(), json!(token));
+    }
+    options.insert("api".into(), json!("anthropic-messages"));
+    Ok(CustomModelImport {
+        providers: BTreeMap::from([(
+            "claude-custom".into(),
+            ProviderConfig {
+                options: Value::Object(options),
+                models,
+            },
+        )]),
     })
 }
 
-/// Hot-reload snapshot. `assembly_version` is bumped for every accepted
-/// config/persona change so callers can invalidate their stable prompt block.
-pub struct ConfigWatcher {
-    _watcher: eta_fs::FsWatcher,
-    receiver: std::sync::mpsc::Receiver<eta_fs::WatchEvent>,
-    config_path: PathBuf,
-    persona_dir: PathBuf,
-    assembly_version: u64,
-}
-
-pub struct ConfigSnapshot {
-    pub config: Config,
-    pub personas: BTreeMap<String, String>,
-    pub assembly_version: u64,
-}
-
-impl ConfigWatcher {
-    pub fn watch(
-        config_path: impl Into<PathBuf>,
-        persona_dir: impl Into<PathBuf>,
-    ) -> notify::Result<Self> {
-        let config_path = config_path.into();
-        let persona_dir = persona_dir.into();
-        let config_parent = config_path.parent().unwrap_or(Path::new(".")).to_path_buf();
-        let mut paths = vec![config_parent];
-        if persona_dir.exists() {
-            paths.push(persona_dir.clone());
+/// OpenCode already uses eta's target provider shape. Only that table is read.
+pub fn import_opencode(text: &str) -> Result<CustomModelImport, String> {
+    let root: Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
+    let mut providers = BTreeMap::new();
+    for (id, value) in root
+        .get("provider")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        let mut options = value
+            .get("options")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        if let Some(npm) = value.get("npm") {
+            options.insert("npm".into(), npm.clone());
         }
-        let (watcher, receiver) = eta_fs::FsWatcher::watch(&paths)?;
-        Ok(Self {
-            _watcher: watcher,
-            receiver,
-            config_path,
-            persona_dir,
-            assembly_version: 0,
-        })
+        providers.insert(
+            id.clone(),
+            ProviderConfig {
+                options: Value::Object(options),
+                models: object_to_btree(value.get("models")),
+            },
+        );
     }
+    Ok(CustomModelImport { providers })
+}
 
-    pub fn recv_timeout(&mut self, timeout: std::time::Duration) -> Result<ConfigSnapshot, String> {
-        self.receiver
-            .recv_timeout(timeout)
-            .map_err(|e| e.to_string())?;
-        let config = read_config(&self.config_path)?;
-        let personas = eta_config::load_personas(&config, &self.persona_dir);
-        self.assembly_version = self.assembly_version.saturating_add(1);
-        Ok(ConfigSnapshot {
-            config,
-            personas,
-            assembly_version: self.assembly_version,
-        })
+/// Pi stores providers under `providers` and their models as arrays.
+pub fn import_pi(text: &str) -> Result<CustomModelImport, String> {
+    let root: Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
+    let mut providers = BTreeMap::new();
+    for (id, value) in root
+        .get("providers")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        let mut options = value.as_object().cloned().unwrap_or_default();
+        let models_value = options.remove("models").unwrap_or_else(|| json!([]));
+        let mut models = BTreeMap::new();
+        for model in models_value.as_array().into_iter().flatten() {
+            if let Some(model_id) = model.get("id").and_then(Value::as_str) {
+                models.insert(model_id.to_owned(), model.clone());
+            }
+        }
+        providers.insert(
+            id.clone(),
+            ProviderConfig {
+                options: Value::Object(options),
+                models,
+            },
+        );
     }
+    Ok(CustomModelImport { providers })
+}
+
+fn object_to_btree(value: Option<&Value>) -> BTreeMap<String, Value> {
+    value
+        .and_then(Value::as_object)
+        .map(|map| map.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+        .unwrap_or_default()
+}
+
+pub fn source_paths(home: impl AsRef<Path>) -> Vec<(ImportSource, PathBuf)> {
+    let home = home.as_ref();
+    vec![
+        (ImportSource::Codex, home.join(".codex/config.toml")),
+        (ImportSource::Claude, home.join(".claude/settings.json")),
+        (
+            ImportSource::OpenCode,
+            home.join(".config/opencode/opencode.json"),
+        ),
+        (ImportSource::Pi, home.join(".pi/agent/models.json")),
+    ]
 }
