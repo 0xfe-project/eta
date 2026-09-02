@@ -10,3 +10,4 @@ async-trait.workspace = true
 eta-core = { path = "../../core/eta-core" }
 eta-fs = { path = "../eta-fs" }
 notify.workspace = true
+tokio.workspace = true

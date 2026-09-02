@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use eta_core::{CancelToken, Tool};
-use eta_mcp::{CallTool, GetTools, McpClient, McpRegistry, McpToolDescriptor, McpTransport};
+use eta_mcp::{
+    CallTool, GetTools, McpClient, McpRegistry, McpToolDescriptor, McpTransport, StdioMcpTransport,
+};
 use serde_json::{Value, json};
 use std::sync::Arc;
 
@@ -60,4 +62,20 @@ fn registry_loads_explicit_mcp_json_and_reloads() {
         .recv_timeout(std::time::Duration::from_secs(2))
         .unwrap();
     assert_eq!(updated.server("local").unwrap()["command"], "updated");
+}
+
+#[tokio::test]
+async fn stdio_transport_runs_registered_server_process() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("mcp.json");
+    let script = "read a; echo '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'; read b; read c; echo '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"tools\":[{\"name\":\"echo\",\"description\":\"echo\",\"input_schema\":{\"type\":\"object\"}}]}}'";
+    std::fs::write(
+        &path,
+        serde_json::json!({"mcpServers":{"local":{"command":"sh","args":["-c",script]}}})
+            .to_string(),
+    )
+    .unwrap();
+    let transport = StdioMcpTransport::new(McpRegistry::load(&path).unwrap());
+    let tools = transport.list_tools("local").await.unwrap();
+    assert_eq!(tools[0].name, "echo");
 }

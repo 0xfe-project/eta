@@ -11,6 +11,7 @@ use std::sync::Mutex;
 pub struct McpToolDescriptor {
     pub name: String,
     pub description: String,
+    #[serde(rename = "inputSchema", alias = "input_schema")]
     pub input_schema: Value,
 }
 
@@ -70,6 +71,99 @@ pub struct McpRegistryWatcher {
     _watcher: eta_fs::FsWatcher,
     receiver: std::sync::mpsc::Receiver<eta_fs::WatchEvent>,
     path: PathBuf,
+}
+
+/// Real stdio MCP transport backed by the explicit registry. Each operation
+/// starts a short-lived server session, performs the MCP initialize handshake,
+/// sends one request, then closes stdin. This favors isolation and correctness;
+/// a future connection pool can reuse long-lived processes behind the trait.
+pub struct StdioMcpTransport {
+    registry: McpRegistry,
+}
+
+impl StdioMcpTransport {
+    pub fn new(registry: McpRegistry) -> Self {
+        Self { registry }
+    }
+
+    async fn request(&self, server: &str, method: &str, params: Value) -> Result<Value, String> {
+        let config = self
+            .registry
+            .server(server)
+            .cloned()
+            .ok_or_else(|| format!("unknown MCP server: {server}"))?;
+        let method = method.to_owned();
+        tokio::task::spawn_blocking(move || run_stdio_request(&config, &method, params))
+            .await
+            .map_err(|e| e.to_string())?
+    }
+}
+
+#[async_trait]
+impl McpTransport for StdioMcpTransport {
+    async fn list_tools(&self, server: &str) -> Result<Vec<McpToolDescriptor>, String> {
+        let result = self.request(server, "tools/list", json!({})).await?;
+        serde_json::from_value(result.get("tools").cloned().unwrap_or_else(|| json!([])))
+            .map_err(|e| e.to_string())
+    }
+
+    async fn call_tool(&self, server: &str, name: &str, arguments: Value) -> Result<Value, String> {
+        self.request(
+            server,
+            "tools/call",
+            json!({"name": name, "arguments": arguments}),
+        )
+        .await
+    }
+}
+
+fn run_stdio_request(config: &Value, method: &str, params: Value) -> Result<Value, String> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    let command = config
+        .get("command")
+        .and_then(Value::as_str)
+        .ok_or("MCP command is required")?;
+    let mut process = Command::new(command);
+    if let Some(args) = config.get("args").and_then(Value::as_array) {
+        process.args(args.iter().filter_map(Value::as_str));
+    }
+    if let Some(env) = config.get("env").and_then(Value::as_object) {
+        process.envs(env.iter().filter_map(|(k, v)| v.as_str().map(|v| (k, v))));
+    }
+    let mut child = process
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    let mut stdin = child.stdin.take().ok_or("MCP stdin unavailable")?;
+    let messages = [
+        json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"eta","version":"0.1.0"}}}),
+        json!({"jsonrpc":"2.0","method":"notifications/initialized","params":{}}),
+        json!({"jsonrpc":"2.0","id":2,"method":method,"params":params}),
+    ];
+    for message in messages {
+        writeln!(stdin, "{message}").map_err(|e| e.to_string())?;
+    }
+    drop(stdin);
+    let output = child.wait_with_output().map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).into_owned());
+    }
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let Ok(value) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        if value.get("id").and_then(Value::as_u64) == Some(2) {
+            if let Some(error) = value.get("error") {
+                return Err(error.to_string());
+            }
+            return Ok(value.get("result").cloned().unwrap_or(Value::Null));
+        }
+    }
+    Err("MCP server returned no response for request 2".into())
 }
 
 impl McpRegistryWatcher {
