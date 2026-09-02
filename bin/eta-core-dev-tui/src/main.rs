@@ -196,7 +196,7 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                                 app.open_agent_switch();
                                             }
                                             Command::Session => {
-                                                app.open_session_picker();
+                                                app.open_session_picker().await;
                                             }
                                             Command::NewSession | Command::SessionNew => {
                                                 let recent = eta_sqlite_storage::list_sessions_in(

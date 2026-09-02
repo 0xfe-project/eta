@@ -95,9 +95,12 @@ pub fn draw(
             return;
         }
         Screen::SessionPicker {
-            sessions, selected, ..
+            current,
+            sessions,
+            selected,
+            ..
         } => {
-            draw_list(frame, "sessions", sessions, *selected);
+            draw_session_picker(frame, current.as_deref(), sessions, *selected);
             return;
         }
         Screen::Session => {}
@@ -188,6 +191,27 @@ fn draw_list(frame: &mut Frame, title: &str, items: &[String], selected: usize) 
         .collect();
     frame.render_widget(
         Paragraph::new(lines.join("\n")).block(Block::default().title(title).borders(Borders::ALL)),
+        frame.area(),
+    );
+}
+
+fn draw_session_picker(
+    frame: &mut Frame,
+    current: Option<&str>,
+    sessions: &[String],
+    selected: usize,
+) {
+    let mut lines = vec![format!("current session: {}", current.unwrap_or("-"))];
+    lines.extend(sessions.iter().enumerate().map(|(index, entry)| {
+        if index == selected {
+            format!("> {entry}")
+        } else {
+            format!("  {entry}")
+        }
+    }));
+    frame.render_widget(
+        Paragraph::new(lines.join("\n"))
+            .block(Block::default().title("sessions").borders(Borders::ALL)),
         frame.area(),
     );
 }

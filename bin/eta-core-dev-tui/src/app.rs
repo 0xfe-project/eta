@@ -4,8 +4,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use eta_core::{
-    AgentEvent, AgentId, AgentInput, AskUserAnswer, LoopSpec, MemoryStore, SessionStorage, Trigger,
-    dev_category,
+    AgentEvent, AgentId, AgentInput, AskUserAnswer, LoopSpec, MemoryStore, SessionEntry,
+    SessionStorage, Trigger, dev_category, entry_kind,
 };
 use eta_io_tools::builtin_io_tools;
 use eta_llm::{Model, Provider};
@@ -342,9 +342,23 @@ impl App {
         self.screen.open_agent_switch(agents);
     }
 
-    pub(crate) fn open_session_picker(&mut self) {
-        let sessions = self.sessions.ids();
-        self.screen.open_session_picker(sessions);
+    pub(crate) async fn open_session_picker(&mut self) {
+        let current = self.sessions.current_id().map(String::from);
+        let ids = self.sessions.ids();
+        let mut sessions = Vec::new();
+        for id in &ids {
+            let preview = if let Some(handle) = self.sessions.get(id) {
+                last_message_preview(&handle.store.load().await)
+            } else {
+                String::new()
+            };
+            if preview.is_empty() {
+                sessions.push(id.clone());
+            } else {
+                sessions.push(format!("{id} - {preview}"));
+            }
+        }
+        self.screen.open_session_picker(current, sessions, ids);
     }
 
     pub(crate) fn confirm_session_picker(&mut self) {
@@ -506,4 +520,33 @@ impl App {
         self.sessions.attach(session_id);
         self.screen = Screen::session();
     }
+}
+
+/// Extract a short preview of the last user/assistant message in a session.
+fn last_message_preview(entries: &[SessionEntry]) -> String {
+    for entry in entries.iter().rev() {
+        if entry.kind != entry_kind::USER_MESSAGE && entry.kind != entry_kind::ASSISTANT_MESSAGE {
+            continue;
+        }
+        let text = entry
+            .data
+            .get("content")
+            .map(|content| {
+                content
+                    .as_str()
+                    .map(String::from)
+                    .or_else(|| {
+                        content
+                            .get("text")
+                            .and_then(|text| text.as_str())
+                            .map(String::from)
+                    })
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
+        if !text.is_empty() {
+            return text.chars().take(40).collect();
+        }
+    }
+    String::new()
 }

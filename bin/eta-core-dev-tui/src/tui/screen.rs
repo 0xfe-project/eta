@@ -41,7 +41,9 @@ pub enum Screen {
     },
     /// Session picker for `/session` attach switching.
     SessionPicker {
+        current: Option<String>,
         sessions: Vec<String>,
+        ids: Vec<String>,
         selected: usize,
     },
     /// A live session is attached.
@@ -128,7 +130,7 @@ impl Screen {
                 ..
             }
             | Screen::SessionPicker {
-                sessions: personas,
+                ids: personas,
                 selected,
                 ..
             } => (personas.len(), selected),
@@ -302,10 +304,17 @@ impl Screen {
         }
     }
 
-    pub fn open_session_picker(&mut self, sessions: Vec<String>) -> bool {
+    pub fn open_session_picker(
+        &mut self,
+        current: Option<String>,
+        sessions: Vec<String>,
+        ids: Vec<String>,
+    ) -> bool {
         if matches!(self, Screen::Session) {
             *self = Screen::SessionPicker {
+                current,
                 sessions,
+                ids,
                 selected: 0,
             };
             true
@@ -325,9 +334,7 @@ impl Screen {
 
     pub fn confirm_session(&mut self) -> Option<String> {
         match self {
-            Screen::SessionPicker {
-                sessions, selected, ..
-            } => sessions.get(*selected).cloned(),
+            Screen::SessionPicker { ids, selected, .. } => ids.get(*selected).cloned(),
             _ => None,
         }
     }
@@ -464,9 +471,13 @@ mod tests {
     #[test]
     fn session_picker_selects_and_cancels_back_to_session() {
         let mut screen = Screen::session();
-        assert!(screen.open_session_picker(vec!["a".into(), "b".into()]));
+        assert!(screen.open_session_picker(
+            Some("a".into()),
+            vec!["a - hello".into(), "b - world".into()],
+            vec!["a".into(), "b".into()],
+        ));
         screen.move_selection(1);
-        assert_eq!(screen.session_selection(), Some("b"));
+        assert_eq!(screen.session_selection(), Some("b - world"));
         assert_eq!(screen.confirm_session(), Some("b".into()));
         assert!(matches!(screen.cancel(), Screen::Session));
     }
