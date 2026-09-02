@@ -11,6 +11,7 @@
 
 mod agent;
 mod compaction;
+mod dev_event;
 mod error;
 mod hooks;
 mod loop_detect;
@@ -25,6 +26,7 @@ pub use compaction::{
     TOOL_MESSAGE_DROP_THRESHOLD, drop_tool_pairs, estimate_tokens, max_min_fair_allocations,
     partition, reduce_budget, should_compact, truncate_fairly,
 };
+pub use dev_event::{AgentDevEvent, dev_category};
 pub use error::{AgentError, ToolError, classify_provider_error};
 pub use hooks::{AgentHooks, Hooks};
 pub use loop_detect::LoopDetector;

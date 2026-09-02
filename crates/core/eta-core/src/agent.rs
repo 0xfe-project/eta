@@ -10,6 +10,7 @@ use eta_llm::{Context, Event, Model, Provider, ProviderError, StopReason, ToolSc
 use eta_system_prompts as prompts;
 
 use crate::compaction;
+use crate::dev_event::{AgentDevEvent, dev_category};
 use crate::error::classify_provider_error;
 use crate::hooks::Hooks;
 use crate::loop_detect::LoopDetector;
@@ -53,6 +54,7 @@ pub struct AgentConfig {
 pub struct Agent {
     input: mpsc::Sender<AgentInput>,
     output: broadcast::Sender<AgentEvent>,
+    dev: broadcast::Sender<AgentDevEvent>,
     answer: mpsc::Sender<AskUserAnswer>,
     usage: Arc<Mutex<Usage>>,
     cancel: CancelToken,
@@ -64,6 +66,8 @@ impl Agent {
         let (input_tx, input_rx) = mpsc::channel(256);
         let (output_tx, _) = broadcast::channel(256);
         let output_handle = output_tx.clone();
+        let (dev_tx, _) = broadcast::channel(1024);
+        let dev_handle = dev_tx.clone();
         let (answer_tx, answer_rx) = mpsc::channel(16);
         let cancel = CancelToken::new();
         let usage = Arc::new(Mutex::new(Usage::default()));
@@ -96,6 +100,7 @@ impl Agent {
             request_counter: 0,
             input_rx,
             output_tx,
+            dev_tx,
             cancel: cancel.clone(),
         };
 
@@ -106,6 +111,7 @@ impl Agent {
         Agent {
             input: input_tx,
             output: output_handle,
+            dev: dev_handle,
             answer: answer_tx,
             usage,
             cancel,
@@ -126,6 +132,12 @@ impl Agent {
     /// receiver; events are broadcast to all subscribers.
     pub fn subscribe(&self) -> broadcast::Receiver<AgentEvent> {
         self.output.subscribe()
+    }
+
+    /// Subscribe to the agent's dev (observability) stream — turns, token
+    /// usage, system prompt, compaction, loops, goals, and every state CRUD.
+    pub fn subscribe_dev(&self) -> broadcast::Receiver<AgentDevEvent> {
+        self.dev.subscribe()
     }
 
     /// Answer a pending `ask_user` question.
@@ -157,6 +169,7 @@ struct AgentRuntime {
     request_counter: u64,
     input_rx: mpsc::Receiver<AgentInput>,
     output_tx: broadcast::Sender<AgentEvent>,
+    dev_tx: broadcast::Sender<AgentDevEvent>,
     cancel: CancelToken,
 }
 
@@ -166,9 +179,23 @@ struct TurnOutcome {
 }
 
 impl AgentRuntime {
+    /// Emit a dev (observability) event. Fire-and-forget; a full/closed channel
+    /// never blocks the engine.
+    fn emit_dev(&self, category: &str, action: &str, data: serde_json::Value) {
+        let _ = self.dev_tx.send(AgentDevEvent::new(
+            self.cfg.agent_id.clone(),
+            category,
+            action,
+            data,
+        ));
+    }
+}
+
+impl AgentRuntime {
     async fn run(&mut self) {
         let agent_id = self.cfg.agent_id.clone();
         self.cfg.hooks.on_spawn(&agent_id);
+        self.emit_dev(dev_category::LIFECYCLE, "spawn", serde_json::json!({}));
 
         while !self.cancel.is_cancelled() {
             let Some(input) = self.input_rx.recv().await else {
@@ -192,7 +219,12 @@ impl AgentRuntime {
                         .push(serde_json::json!({ "role": "user", "content": message }));
                     self.run_turn_chain().await;
                 }
-                AgentInput::Loop { loop_id: _, prompt } => {
+                AgentInput::Loop { loop_id, prompt } => {
+                    self.emit_dev(
+                        dev_category::LOOP,
+                        "fired",
+                        serde_json::json!({ "loop_id": loop_id }),
+                    );
                     self.messages
                         .push(serde_json::json!({ "role": "user", "content": prompt }));
                     self.run_turn_chain().await;
@@ -221,7 +253,11 @@ impl AgentRuntime {
                     self.goal = None;
                 }
                 AgentInput::Abort { reason } => {
-                    let _ = reason;
+                    self.emit_dev(
+                        dev_category::LIFECYCLE,
+                        "abort",
+                        serde_json::json!({ "reason": reason }),
+                    );
                     break;
                 }
                 AgentInput::Resume | AgentInput::Custom(_) => {}
@@ -229,6 +265,7 @@ impl AgentRuntime {
         }
 
         self.cfg.hooks.on_stop(&agent_id);
+        self.emit_dev(dev_category::LIFECYCLE, "stop", serde_json::json!({}));
         let _ = self.output_tx.send(AgentEvent::AgentEnd);
     }
 
@@ -237,6 +274,16 @@ impl AgentRuntime {
             let _ = self
                 .output_tx
                 .send(AgentEvent::GoalStateChange { status: g.status });
+            self.emit_dev(
+                dev_category::GOAL,
+                "change",
+                serde_json::json!({
+                    "objective": g.objective,
+                    "status": format!("{:?}", g.status),
+                    "round_count": g.round_count,
+                    "idle_without_tools": g.idle_without_tools,
+                }),
+            );
             self.cfg.hooks.on_goal_change(g);
         }
     }
@@ -342,6 +389,7 @@ impl AgentRuntime {
         if edits.as_object().map(|o| o.is_empty()).unwrap_or(true) {
             return;
         }
+        self.emit_dev(dev_category::MEMORY, "edit", edits.clone());
         let _ = apply_memory_edits(self.cfg.store.as_ref(), &edits).await;
     }
 
@@ -428,6 +476,16 @@ impl AgentRuntime {
         new_messages.extend(suffix);
         self.messages = new_messages;
         self.compaction_epoch += 1;
+        let tokens_after = compaction::estimate_tokens(&self.messages);
+        self.emit_dev(
+            dev_category::COMPACTION,
+            "complete",
+            serde_json::json!({
+                "tokens_before": tokens_before,
+                "tokens_after": tokens_after,
+                "epoch": self.compaction_epoch,
+            }),
+        );
         let _ = self.output_tx.send(AgentEvent::Compaction {
             tokens_before: tokens_before as u64,
         });
@@ -543,11 +601,19 @@ impl AgentRuntime {
         }
 
         let mut context = Context {
-            system_prompt: Some(system_prompt),
+            system_prompt: Some(system_prompt.clone()),
             messages: self.messages.clone(),
             tools: tool_schemas,
         };
         self.cfg.hooks.transform_context(&mut context);
+        self.emit_dev(
+            dev_category::PROMPT,
+            "assembled",
+            serde_json::json!({
+                "system_prompt": system_prompt,
+                "tool_count": self.cfg.tools.len(),
+            }),
+        );
         context
     }
 
@@ -566,6 +632,11 @@ impl AgentRuntime {
         let _ = self.output_tx.send(AgentEvent::TurnStart {
             request_id: request_id.clone(),
         });
+        self.emit_dev(
+            dev_category::TURN,
+            "start",
+            serde_json::json!({ "request_id": request_id }),
+        );
 
         // Turn-boundary compaction (authoritative, between turns).
         self.maybe_compact().await;
@@ -576,6 +647,11 @@ impl AgentRuntime {
         let _ = self.output_tx.send(AgentEvent::TurnEnd {
             request_id: request_id.clone(),
         });
+        self.emit_dev(
+            dev_category::TURN,
+            "end",
+            serde_json::json!({ "request_id": request_id }),
+        );
 
         TurnOutcome {
             had_tools: step.had_tools,
@@ -595,6 +671,11 @@ impl AgentRuntime {
             if let Some(err) = &step.error {
                 if retries < max_retries && classify_provider_error(err).is_retryable() {
                     retries += 1;
+                    self.emit_dev(
+                        dev_category::RETRY,
+                        "error",
+                        serde_json::json!({ "attempt": retries, "error": err.to_string() }),
+                    );
                     self.messages
                         .push(serde_json::json!({ "role": "user", "content": prompts::RESUME }));
                     continue;
@@ -605,6 +686,11 @@ impl AgentRuntime {
             // Truncation → retry with "continue smaller".
             if step.stop == StopReason::MaxTokens && retries < max_retries {
                 retries += 1;
+                self.emit_dev(
+                    dev_category::RETRY,
+                    "max_tokens",
+                    serde_json::json!({ "attempt": retries }),
+                );
                 self.messages.push(serde_json::json!({
                     "role": "user",
                     "content": prompts::RESUME_TRUNCATED
@@ -619,6 +705,11 @@ impl AgentRuntime {
                 && retries < max_retries
             {
                 retries += 1;
+                self.emit_dev(
+                    dev_category::RETRY,
+                    "empty",
+                    serde_json::json!({ "attempt": retries }),
+                );
                 self.messages.push(serde_json::json!({
                     "role": "user",
                     "content": prompts::RESUME_EMPTY
@@ -691,6 +782,16 @@ impl AgentRuntime {
                     acc.cache_read += usage.cache_read;
                     acc.cache_write += usage.cache_write;
                     drop(acc);
+                    self.emit_dev(
+                        dev_category::USAGE,
+                        "delta",
+                        serde_json::json!({
+                            "input": usage.input,
+                            "output": usage.output,
+                            "cache_read": usage.cache_read,
+                            "cache_write": usage.cache_write,
+                        }),
+                    );
                     stop = s;
                 }
                 Err(e) => {
@@ -715,8 +816,13 @@ impl AgentRuntime {
     async fn handle_ask_user(&mut self, tool_call_id: String, question: serde_json::Value) {
         let _ = self.output_tx.send(AgentEvent::AskUserStarted {
             req_id: tool_call_id.clone(),
-            question,
+            question: question.clone(),
         });
+        self.emit_dev(
+            dev_category::ASK_USER,
+            "asked",
+            serde_json::json!({ "req_id": tool_call_id, "question": question }),
+        );
         self.messages.push(serde_json::json!({
             "role": "assistant",
             "tool_calls": [{ "id": tool_call_id, "name": "ask_user" }],
@@ -724,6 +830,11 @@ impl AgentRuntime {
 
         while let Some(answer) = self.answer_rx.recv().await {
             if answer.tool_call_id == tool_call_id {
+                self.emit_dev(
+                    dev_category::ASK_USER,
+                    "answered",
+                    serde_json::json!({ "req_id": tool_call_id }),
+                );
                 self.messages.push(serde_json::json!({
                     "role": "tool",
                     "tool_call_id": tool_call_id,
@@ -809,6 +920,11 @@ impl AgentRuntime {
             name: name.clone(),
             args: arguments.clone(),
         });
+        self.emit_dev(
+            dev_category::TOOL,
+            "start",
+            serde_json::json!({ "id": id.clone(), "name": name.clone(), "args": arguments.clone() }),
+        );
 
         let result = tool.execute(arguments, self.cancel.clone()).await;
 
@@ -825,6 +941,12 @@ impl AgentRuntime {
                     result: value.clone(),
                     is_error: false,
                 });
+                self.emit_dev(
+                    dev_category::TOOL,
+                    "end",
+                    serde_json::json!({ "id": id.clone(), "name": name.clone(), "is_error": false }),
+                );
+                self.emit_crud(&name, &call.arguments);
                 self.append_tool_result(id, value, false);
             }
             Err(e) => {
@@ -841,6 +963,11 @@ impl AgentRuntime {
                     result: tr.value.clone(),
                     is_error: true,
                 });
+                self.emit_dev(
+                    dev_category::TOOL,
+                    "end",
+                    serde_json::json!({ "id": id, "name": name, "is_error": true, "error": e.to_string() }),
+                );
                 self.append_tool_result(id, tr.value, true);
             }
         }
@@ -849,6 +976,21 @@ impl AgentRuntime {
     fn append_message(&mut self, role: &str, content: serde_json::Value) {
         let msg = serde_json::json!({ "role": role, "content": content });
         self.messages.push(msg);
+    }
+
+    /// Emit a semantic CRUD dev event for the builtin state / todo / skill tools
+    /// (they write straight to the store, bypassing the message pipeline).
+    fn emit_crud(&self, name: &str, args: &serde_json::Value) {
+        match name {
+            "update_state" => self.emit_dev(
+                dev_category::STATE,
+                args.get("action").and_then(|a| a.as_str()).unwrap_or("set"),
+                serde_json::json!({ "key": args.get("key") }),
+            ),
+            "update_todos" => self.emit_dev(dev_category::TODO, "update", args.clone()),
+            "skill" => self.emit_dev(dev_category::SKILL, "update", args.clone()),
+            _ => {}
+        }
     }
 
     fn append_tool_result(

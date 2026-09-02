@@ -7,7 +7,6 @@ mod base;
 mod evo;
 mod goal;
 mod resume;
-mod skill;
 mod summary;
 mod todo;
 
