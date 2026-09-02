@@ -136,6 +136,21 @@ impl Provider for OpenAiProvider {
                             return;
                         }
                     }
+                    // DeepSeek reasoning models stream their chain-of-thought
+                    // separately. Preserve it as text while marking the block
+                    // so consumers may hide it from the final answer UI.
+                    if let Some(text) = delta.get("reasoning_content").and_then(Value::as_str) {
+                        if !text.is_empty()
+                            && tx
+                                .send(Ok(Event::Content(
+                                    json!({"type":"text","text":text,"reasoning":true}),
+                                )))
+                                .await
+                                .is_err()
+                        {
+                            return;
+                        }
+                    }
                     if let Some(calls) = delta.get("tool_calls").and_then(Value::as_array) {
                         for call in calls {
                             let idx =
