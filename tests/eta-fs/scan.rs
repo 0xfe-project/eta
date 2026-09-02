@@ -50,3 +50,27 @@ fn discovers_submodule_skill_roots() {
             .any(|p| p.ends_with("vendor/lib/.agents/skills"))
     );
 }
+
+#[test]
+fn watcher_rescans_new_skill_content() {
+    let temp = tempfile::tempdir().unwrap();
+    let project = temp.path().join("repo");
+    fs::create_dir_all(project.join(".git")).unwrap();
+    let watcher = ResourceScanner::new(&project).watch().unwrap();
+    let skill = project.join(".agents/skills/live/SKILL.md");
+    fs::create_dir_all(skill.parent().unwrap()).unwrap();
+    fs::write(&skill, "live").unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    loop {
+        let snapshot = watcher
+            .recv_timeout(std::time::Duration::from_millis(500))
+            .unwrap();
+        if snapshot.skills.contains_key("live") {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "rescan did not observe new skill"
+        );
+    }
+}

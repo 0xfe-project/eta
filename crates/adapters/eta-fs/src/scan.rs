@@ -6,12 +6,30 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
+
+use crate::{FsWatcher, WatchEvent};
 
 /// Filesystem resource scanner.  Roots are ordered from lowest to highest
 /// precedence, so later roots replace an earlier skill with the same name.
 #[derive(Clone, Debug)]
 pub struct ResourceScanner {
     start: PathBuf,
+}
+
+/// A resource snapshot produced after each relevant filesystem event.
+#[derive(Clone, Debug)]
+pub struct ResourceSnapshot {
+    pub trigger: WatchEvent,
+    pub skills: BTreeMap<String, PathBuf>,
+    pub eta_roots: Vec<PathBuf>,
+}
+
+/// Keeps the low-level watcher alive and turns coarse events into fresh scans.
+pub struct ResourceWatcher {
+    _watcher: FsWatcher,
+    receiver: mpsc::Receiver<WatchEvent>,
+    scanner: ResourceScanner,
 }
 
 impl ResourceScanner {
@@ -84,6 +102,35 @@ impl ResourceScanner {
             .chain(self.eta_roots())
             .collect()
     }
+
+    /// Watch existing parent directories and rescan on every event. Watching
+    /// parents allows a missing `.eta` or skill directory to appear later.
+    pub fn watch(self) -> notify::Result<ResourceWatcher> {
+        let mut paths = self.watch_paths();
+        paths = paths.into_iter().map(nearest_existing_parent).collect();
+        paths.sort();
+        paths.dedup();
+        let (watcher, receiver) = FsWatcher::watch(&paths)?;
+        Ok(ResourceWatcher {
+            _watcher: watcher,
+            receiver,
+            scanner: self,
+        })
+    }
+}
+
+impl ResourceWatcher {
+    pub fn recv_timeout(
+        &self,
+        timeout: std::time::Duration,
+    ) -> Result<ResourceSnapshot, mpsc::RecvTimeoutError> {
+        let trigger = self.receiver.recv_timeout(timeout)?;
+        Ok(ResourceSnapshot {
+            trigger,
+            skills: self.scanner.skills(),
+            eta_roots: self.scanner.eta_roots(),
+        })
+    }
 }
 
 pub fn scan_skill_dirs(start: impl AsRef<Path>) -> Vec<PathBuf> {
@@ -134,4 +181,12 @@ fn submodule_roots(root: &Path, suffix: &str) -> Vec<PathBuf> {
         })
         .map(|path| root.join(path.trim()).join(suffix))
         .collect()
+}
+
+fn nearest_existing_parent(mut path: PathBuf) -> PathBuf {
+    while !path.exists() {
+        let Some(parent) = path.parent() else { break };
+        path = parent.to_path_buf();
+    }
+    path
 }
