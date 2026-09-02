@@ -266,6 +266,9 @@ impl AgentRuntime {
                     }
                     self.goal = None;
                 }
+                AgentInput::Compact => {
+                    self.compact(true).await;
+                }
                 AgentInput::Abort { reason } => {
                     self.emit_dev(
                         dev_category::LIFECYCLE,
@@ -449,21 +452,31 @@ impl AgentRuntime {
         compaction::estimate_tokens(&self.messages)
     }
 
-    /// Turn-boundary authoritative compaction: when the context is ≥80% of the
-    /// window, fold the prefix into a `[Previous conversation summary]`, drop
-    /// tool noise, and bump the compaction epoch.
-    async fn maybe_compact(&mut self) {
+    /// Authoritative compaction: fold the prefix into a
+    /// `[Previous conversation summary]`, drop tool noise, and bump the epoch.
+    ///
+    /// Called at turn boundaries with `force = false` (only above the window
+    /// threshold); `/compact` calls it with `force = true` to compress now.
+    async fn compact(&mut self, force: bool) {
         let Some(window) = self.cfg.model.context_window else {
             return;
         };
         let window = window as usize;
-        if !compaction::should_compact(&self.messages, window) {
+        if !force && !compaction::should_compact(&self.messages, window) {
             return;
         }
         let keep_recent = (window / 4).max(1);
-        let (prefix, suffix) = compaction::partition(&self.messages, keep_recent);
+        let (mut prefix, mut suffix) = compaction::partition(&self.messages, keep_recent);
         if prefix.is_empty() {
-            return;
+            // Forced `/compact` on a small context still compresses: summarize
+            // everything but the newest message.
+            if force && self.messages.len() > 1 {
+                let split = self.messages.len() - 1;
+                prefix = self.messages[..split].to_vec();
+                suffix = self.messages[split..].to_vec();
+            } else {
+                return;
+            }
         }
         let tokens_before = compaction::estimate_tokens(&self.messages);
         let prefix = compaction::drop_tool_pairs(&prefix);
@@ -659,7 +672,7 @@ impl AgentRuntime {
         );
 
         // Turn-boundary compaction (authoritative, between turns).
-        self.maybe_compact().await;
+        self.compact(false).await;
 
         let step = self.run_step_with_retry().await;
 

@@ -55,6 +55,7 @@ impl Command {
             Command::PauseGoal => Some(AgentInput::PauseGoal),
             Command::ResumeGoal => Some(AgentInput::ResumeGoal),
             Command::ClearGoal => Some(AgentInput::ClearGoal),
+            Command::Compact => Some(AgentInput::Compact),
             Command::Ask(question) => Some(AgentInput::Custom(json!({
                 "kind": "ask_user",
                 "question": question,
@@ -278,6 +279,10 @@ mod tests {
         assert!(matches!(
             Command::ClearGoal.to_agent_input(),
             Some(AgentInput::ClearGoal)
+        ));
+        assert!(matches!(
+            Command::Compact.to_agent_input(),
+            Some(AgentInput::Compact)
         ));
     }
 

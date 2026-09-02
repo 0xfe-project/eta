@@ -163,3 +163,49 @@ async fn compacts_when_context_grows() {
     );
     assert!(has_text(&events, "done"));
 }
+
+#[tokio::test]
+async fn manual_compact_forces_summary_below_threshold() {
+    let provider = Arc::new(ScriptedProvider::new(vec![
+        vec![content("hi"), end(StopReason::EndTurn)],
+        vec![content("[summary]"), end(StopReason::EndTurn)],
+    ]));
+
+    let mut model = Model::new("test-model");
+    model.context_window = Some(1000);
+
+    let agent = Agent::spawn(AgentConfig {
+        agent_id: AgentId("test".into()),
+        provider,
+        model,
+        tools: vec![],
+        hooks: hooks(),
+        store: Arc::new(MemStore::default()),
+        system_prompt: "test".into(),
+        adapter_system_prompt: "".into(),
+        max_retries: 2,
+        skill_store: None,
+        memory_store: Arc::new(MemMemoryStore::default()),
+        max_goal_rounds: None,
+    });
+
+    let mut rx = agent.subscribe();
+    agent.send(user_message("hello")).await.unwrap();
+    // Let the first turn + memory extraction settle, then force compaction.
+    tokio::time::sleep(Duration::from_millis(30)).await;
+    agent.send(AgentInput::Compact).await.unwrap();
+
+    let mut saw_compaction = false;
+    loop {
+        match tokio::time::timeout(Duration::from_millis(500), rx.recv()).await {
+            Ok(Ok(AgentEvent::Compaction { .. })) => {
+                saw_compaction = true;
+                break;
+            }
+            Ok(Ok(AgentEvent::AgentEnd)) => break,
+            Ok(Ok(_)) => {}
+            Ok(Err(_)) | Err(_) => break,
+        }
+    }
+    assert!(saw_compaction, "manual /compact did not emit Compaction");
+}

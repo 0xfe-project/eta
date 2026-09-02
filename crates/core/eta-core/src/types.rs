@@ -38,6 +38,8 @@ pub enum AgentInput {
     PauseGoal,
     ResumeGoal,
     ClearGoal,
+    /// Manually compact the conversation prefix now (outside turn boundary).
+    Compact,
     Custom(serde_json::Value),
 }
 
