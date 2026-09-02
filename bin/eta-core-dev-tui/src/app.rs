@@ -303,6 +303,11 @@ impl App {
         let view = self.views.entry(session_id.clone()).or_default();
         view.answers.extend(answer_lines);
         view.dev.extend(dev_lines);
+        let goal_text = new_goal
+            .as_ref()
+            .or(view.goal.as_ref())
+            .map(|goal| goal.status_line())
+            .unwrap_or_default();
         view.context = Some(ContextSnapshot {
             session_id,
             branch: "main".to_string(),
@@ -311,6 +316,7 @@ impl App {
             cache_read: usage.cache_read,
             cache_write: usage.cache_write,
             cache_rate: usage.cache_rate(),
+            goal: goal_text,
             ..Default::default()
         });
         if let Some(goal) = new_goal {
