@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
-use eta_core::{AgentId, AgentInput, MemoryStore, SessionStorage};
+use eta_core::{AgentId, AgentInput, LoopSpec, MemoryStore, SessionStorage, Trigger};
 use eta_io_tools::builtin_io_tools;
 use eta_llm::{Model, Provider};
 use eta_provider_openai::OpenAiProvider;
@@ -38,6 +38,7 @@ struct App {
     sessions: SessionManager,
     sqlite: Option<Arc<SqliteSessionStore>>,
     head: Option<u64>,
+    loop_counter: u64,
     answers: Vec<String>,
     dev: Vec<String>,
     context: Option<ContextSnapshot>,
@@ -55,6 +56,7 @@ impl App {
             sessions: SessionManager::new(),
             sqlite: None,
             head: None,
+            loop_counter: 0,
             answers: Vec::new(),
             dev: Vec::new(),
             context: None,
@@ -132,6 +134,40 @@ impl App {
     fn apply_time_travel(&mut self, command: &Command) -> Option<String> {
         let sqlite = self.sqlite.as_ref()?;
         session::apply_time_travel(sqlite, &mut self.head, command)
+    }
+
+    /// Register a cron loop on the current session and return its id.
+    async fn register_loop(&mut self, schedule: String, prompt: String) -> Option<String> {
+        self.loop_counter += 1;
+        let loop_id = format!("loop-{}", self.loop_counter);
+        let spec = LoopSpec {
+            loop_id: loop_id.clone(),
+            prompt: prompt.clone(),
+            trigger: Trigger::Cron { schedule },
+            enabled: true,
+            last_fired_at: None,
+            run_count: 0,
+            state: json!({}),
+        };
+        let manager = self.sessions.current()?.loop_manager.as_ref()?;
+        manager.register(spec).await;
+        Some(loop_id)
+    }
+
+    async fn list_loops(&mut self) -> Option<Vec<String>> {
+        let manager = self.sessions.current()?.loop_manager.as_ref()?;
+        let specs = manager.list().await;
+        Some(
+            specs
+                .into_iter()
+                .map(|spec| format!("{} - {}", spec.loop_id, spec.prompt))
+                .collect(),
+        )
+    }
+
+    async fn remove_loop(&mut self, loop_id: &str) -> Option<bool> {
+        let manager = self.sessions.current()?.loop_manager.as_ref()?;
+        Some(manager.remove(loop_id).await)
     }
 
     /// Enter the persona picker with the built-in + custom persona catalog.
@@ -254,6 +290,26 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                         match &command {
                                             Command::Quit => return Ok(()),
                                             Command::Clear => app.answers.clear(),
+                                            Command::LoopAdd { schedule, prompt } => {
+                                                if let Some(id) = app
+                                                    .register_loop(schedule.clone(), prompt.clone())
+                                                    .await
+                                                {
+                                                    app.answers
+                                                        .push(format!("registered loop {id}"));
+                                                }
+                                            }
+                                            Command::LoopList => {
+                                                if let Some(lines) = app.list_loops().await {
+                                                    app.answers.extend(lines);
+                                                }
+                                            }
+                                            Command::LoopRemove(id) => {
+                                                if let Some(removed) = app.remove_loop(id).await {
+                                                    app.answers
+                                                        .push(format!("removed loop: {removed}"));
+                                                }
+                                            }
                                             _ => {
                                                 if let Some(line) = app.apply_time_travel(&command)
                                                 {

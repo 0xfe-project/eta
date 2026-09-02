@@ -13,8 +13,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use eta_core::{
-    Agent, AgentConfig, AgentDevEvent, AgentEvent, AgentId, Hooks, MemoryStore, SessionStorage,
-    Tool,
+    Agent, AgentConfig, AgentDevEvent, AgentEvent, AgentId, Hooks, LoopManager, MemoryStore,
+    SessionStorage, Tool,
 };
 use eta_llm::{Model, Provider};
 use eta_sqlite_storage::{SqliteSessionStore, list_sessions_in};
@@ -46,6 +46,7 @@ pub struct SessionHandle {
     pub agent: Option<Agent>,
     pub event_rx: Option<tokio::sync::broadcast::Receiver<AgentEvent>>,
     pub dev_rx: Option<tokio::sync::broadcast::Receiver<AgentDevEvent>>,
+    pub loop_manager: Option<Arc<LoopManager>>,
     pub store: Arc<dyn SessionStorage>,
     pub meta: SessionMeta,
 }
@@ -170,6 +171,7 @@ impl SessionManager {
                     agent: None,
                     event_rx: None,
                     dev_rx: None,
+                    loop_manager: None,
                     store: Arc::new(store),
                     meta: SessionMeta {
                         id: id.clone(),
@@ -218,10 +220,12 @@ pub fn spawn_session(
     });
     let event_rx = agent.subscribe();
     let dev_rx = agent.subscribe_dev();
+    let loop_manager = Arc::new(LoopManager::new(store.clone(), agent.input_sender()));
     SessionHandle {
         agent: Some(agent),
         event_rx: Some(event_rx),
         dev_rx: Some(dev_rx),
+        loop_manager: Some(loop_manager),
         store,
         meta: SessionMeta {
             id: session_id.into(),
@@ -338,6 +342,7 @@ mod tests {
             agent: None,
             event_rx: None,
             dev_rx: None,
+            loop_manager: None,
             store: Arc::new(SqliteSessionStore::in_memory()),
             meta: SessionMeta {
                 id: id.to_string(),
