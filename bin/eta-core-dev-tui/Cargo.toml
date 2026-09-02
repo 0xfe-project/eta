@@ -15,6 +15,7 @@ crossterm.workspace = true
 tui-textarea.workspace = true
 clap.workspace = true
 tokio.workspace = true
+serde_json.workspace = true
 
 # eta engine + real adapters (wired up in later Part E items).
 eta-core = { path = "../../crates/core/eta-core" }

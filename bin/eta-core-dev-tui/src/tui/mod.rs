@@ -7,6 +7,8 @@ use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders};
 use tui_textarea::TextArea;
 
+pub mod answer;
+
 /// The four focusable regions. `Tab` cycles through them in this order.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Focus {
