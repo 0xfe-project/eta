@@ -15,8 +15,9 @@ use crate::loop_detect::LoopDetector;
 use crate::store::SessionStorage;
 use crate::tool::{CancelToken, Tool, builtin_state_tools, validate_args};
 use crate::types::{
-    AgentEvent, AgentId, AgentInput, ControlPlaneAction, ControlPlaneDecision, ControlPlanePrompt,
-    GoalContinuationGate, GoalState, GoalStatus, ToolCall, ToolResult, TurnContext, TurnDriver,
+    AgentEvent, AgentId, AgentInput, AskUserAnswer, ControlPlaneAction, ControlPlaneDecision,
+    ControlPlanePrompt, GoalContinuationGate, GoalState, GoalStatus, ToolCall, ToolResult,
+    TurnContext, TurnDriver,
 };
 
 /// Detects anti-spin: 3 consecutive tool-free turns auto-pauses the goal.
@@ -47,6 +48,7 @@ pub struct AgentConfig {
 pub struct Agent {
     input: mpsc::Sender<AgentInput>,
     output: broadcast::Sender<AgentEvent>,
+    answer: mpsc::Sender<AskUserAnswer>,
     cancel: CancelToken,
 }
 
@@ -56,6 +58,7 @@ impl Agent {
         let (input_tx, input_rx) = mpsc::channel(256);
         let (output_tx, _) = broadcast::channel(256);
         let output_handle = output_tx.clone();
+        let (answer_tx, answer_rx) = mpsc::channel(16);
         let cancel = CancelToken::new();
 
         // Builtin state tools always attach to the session store.
@@ -67,7 +70,7 @@ impl Agent {
             usage: Usage::default(),
             goal: None,
             loop_detector: LoopDetector::new(),
-            pending_ask_user: None,
+            answer_rx,
             pending_summary: None,
             validation_failures: 0,
             request_counter: 0,
@@ -83,6 +86,7 @@ impl Agent {
         Agent {
             input: input_tx,
             output: output_handle,
+            answer: answer_tx,
             cancel,
         }
     }
@@ -98,6 +102,14 @@ impl Agent {
         self.output.subscribe()
     }
 
+    /// Answer a pending `ask_user` question.
+    pub async fn answer(
+        &self,
+        answer: AskUserAnswer,
+    ) -> Result<(), mpsc::error::SendError<AskUserAnswer>> {
+        self.answer.send(answer).await
+    }
+
     /// Cancel the agent.
     pub fn cancel(&self) {
         self.cancel.cancel();
@@ -111,7 +123,7 @@ struct AgentRuntime {
     usage: Usage,
     goal: Option<GoalState>,
     loop_detector: LoopDetector,
-    pending_ask_user: Option<String>,
+    answer_rx: mpsc::Receiver<AskUserAnswer>,
     pending_summary: Option<tokio::task::JoinHandle<String>>,
     validation_failures: u32,
     request_counter: u64,
@@ -179,20 +191,6 @@ impl AgentRuntime {
                         self.emit_goal_change();
                     }
                     self.goal = None;
-                }
-                AgentInput::Answer {
-                    tool_call_id,
-                    answer,
-                } => {
-                    if self.pending_ask_user.as_deref() == Some(&tool_call_id) {
-                        self.pending_ask_user = None;
-                        self.messages.push(serde_json::json!({
-                            "role": "tool",
-                            "tool_call_id": tool_call_id,
-                            "content": answer,
-                        }));
-                        self.run_turn_chain().await;
-                    }
                 }
                 AgentInput::Abort { reason } => {
                     let _ = reason;
@@ -528,7 +526,7 @@ impl AgentRuntime {
                 }) => {
                     had_tools = true;
                     if name == "ask_user" {
-                        self.handle_ask_user(id, arguments);
+                        self.handle_ask_user(id, arguments).await;
                         stop = StopReason::ToolUse;
                         break;
                     }
@@ -558,11 +556,10 @@ impl AgentRuntime {
         }
     }
 
-    /// `ask_user` is a special case: it does not go through `run_tool`; instead
-    /// the loop records a pending question and the answer re-enters on the next
-    /// input.
-    fn handle_ask_user(&mut self, tool_call_id: String, question: serde_json::Value) {
-        self.pending_ask_user = Some(tool_call_id.clone());
+    /// `ask_user` is a special case: it does not go through `run_tool`. Instead
+    /// the loop emits `AskUserStarted` and blocks on the dedicated answer
+    /// channel until the matching answer arrives.
+    async fn handle_ask_user(&mut self, tool_call_id: String, question: serde_json::Value) {
         let _ = self.output_tx.send(AgentEvent::AskUserStarted {
             req_id: tool_call_id.clone(),
             question,
@@ -571,6 +568,18 @@ impl AgentRuntime {
             "role": "assistant",
             "tool_calls": [{ "id": tool_call_id, "name": "ask_user" }],
         }));
+
+        while let Some(answer) = self.answer_rx.recv().await {
+            if answer.tool_call_id == tool_call_id {
+                self.messages.push(serde_json::json!({
+                    "role": "tool",
+                    "tool_call_id": tool_call_id,
+                    "content": answer.answer,
+                }));
+                return;
+            }
+            // Ignore answers for a different (stale) question.
+        }
     }
 
     async fn run_tool(&mut self, id: String, name: String, arguments: serde_json::Value) {
@@ -599,7 +608,8 @@ impl AgentRuntime {
                         "kind": "fill",
                         "question": format!("Tool '{name}' was called with invalid arguments: {msg}"),
                     }),
-                );
+                )
+                .await;
                 return;
             }
             let result = ToolResult {

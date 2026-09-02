@@ -28,6 +28,7 @@ pub use store::{MemoryStore, SessionEntry, SessionState, SessionStorage, Skill, 
 pub use time::{DurationParseError, parse_duration};
 pub use tool::{CancelToken, Tool};
 pub use types::{
-    AgentEvent, AgentId, AgentInput, ControlPlaneAction, ControlPlaneDecision, ControlPlanePrompt,
-    GoalContinuationGate, GoalState, GoalStatus, ToolCall, ToolResult, TurnContext, TurnDriver,
+    AgentEvent, AgentId, AgentInput, AskUserAnswer, ControlPlaneAction, ControlPlaneDecision,
+    ControlPlanePrompt, GoalContinuationGate, GoalState, GoalStatus, ToolCall, ToolResult,
+    TurnContext, TurnDriver,
 };

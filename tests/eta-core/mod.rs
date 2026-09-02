@@ -2,6 +2,7 @@
 //!
 //! Each submodule covers one behavior; shared test doubles and helpers live here.
 
+mod ask_user;
 mod basic_turn;
 mod goal;
 mod loop_detect;

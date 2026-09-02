@@ -38,12 +38,15 @@ pub enum AgentInput {
     PauseGoal,
     ResumeGoal,
     ClearGoal,
-    /// Answer to a pending `ask_user`.
-    Answer {
-        tool_call_id: String,
-        answer: serde_json::Value,
-    },
     Custom(serde_json::Value),
+}
+
+/// An answer to a pending `ask_user` question, sent over the agent's dedicated
+/// answer channel (not through `AgentInput`).
+#[derive(Clone, Debug)]
+pub struct AskUserAnswer {
+    pub tool_call_id: String,
+    pub answer: serde_json::Value,
 }
 
 /// Internal driver queue items.
