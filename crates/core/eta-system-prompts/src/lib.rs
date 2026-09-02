@@ -12,12 +12,11 @@ mod summary;
 mod todo;
 
 pub use base::DEFAULT_SYSTEM_PROMPT;
-pub use evo::{EVO_SIGNOFF_REMINDER, MEMORY_GUIDANCE};
+pub use evo::{MEMORY_EXTRACT_PROMPT, MEMORY_EXTRACT_SYSTEM_PROMPT};
 pub use goal::{goal_evaluator_prompt, goal_pursuit_guidelines};
 pub use resume::{RESUME, RESUME_EMPTY, RESUME_LOOP, RESUME_TRUNCATED};
-pub use skill::SKILL_GUIDANCE;
 pub use summary::{
     SUMMARIZE_REQUEST, SUMMARIZE_SHORTER_RETRY, SUMMARIZE_SYSTEM_PROMPT, UNTRUSTED_SUMMARY_NOTE,
     previous_summary,
 };
-pub use todo::{CURRENT_TASKS_GUIDANCE, TODO_UPDATE_SUCCESS};
+pub use todo::TODO_UPDATE_SUCCESS;

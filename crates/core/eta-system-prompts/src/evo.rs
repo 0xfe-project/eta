@@ -1,16 +1,20 @@
-//! Evo / memory prompts.
+//! Memory prompts / out-of-band extraction.
 
-/// Memory guidance: how to use the `evo` tool to keep memory lean.
-pub const MEMORY_GUIDANCE: &str = "
-Memory has 3 sections: 
-decision (user's HARD requirements)
-preference (weaker)
-lesson (from failures + negative feedback). 
+/// Prompt for the background call that turns the transcript into memory
+/// updates. Runs after a turn; the agent never sees it.
+pub const MEMORY_EXTRACT_PROMPT: &str = "Read the conversation. Extract what the user wants that's worth remembering, into these sections:
 
-Before ending, call evo to finalize memory.
-Remove stale/merged entries as you add. 
-Memory cap: 20000 chars — if over, add fails; remove junk or less used memory first.";
+- decision: the user's HARD requirements / musts
+- preference: weaker, how they like it
+- lesson: from failures and negative feedback
 
-/// Reminder injected when the agent would end without calling `evo`.
-pub const EVO_SIGNOFF_REMINDER: &str =
-    "You must call evo to finalize your memory before ending (even with empty args).";
+Ignore small talk. Only capture durable, reusable things.
+
+Output ONLY a JSON object:
+{\"add_new_decision\": [\"...\"], \"add_new_preference\": [\"...\"], \"learn_new_lesson\": [\"...\"], \"remove_memory_ids\": [0]}
+
+If nothing is worth keeping, output the same object with all empty arrays.";
+
+/// System prompt paired with the extraction call.
+pub const MEMORY_EXTRACT_SYSTEM_PROMPT: &str =
+    "You are a memory extractor for a coding assistant. Be terse and specific.";

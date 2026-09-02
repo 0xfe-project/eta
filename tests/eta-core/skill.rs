@@ -29,10 +29,6 @@ async fn skill_tool_writes_skills() {
             ),
             end(StopReason::ToolUse),
         ],
-        vec![
-            tool_call("e1", "evo", serde_json::json!({})),
-            end(StopReason::ToolUse),
-        ],
         vec![content("done"), end(StopReason::EndTurn)],
     ]));
 

@@ -1,109 +1,19 @@
-//! Builtin `evo` tool: finalize memory (remove / add decisions, preferences,
-//! and lessons).
+//! Memory storage helpers for the `eta.memory` session key.
+//!
+//! Memory is written out-of-band by the engine at the end of a turn; the agent
+//! never calls an `evo`-style tool and is not told how memory is managed.
 
 use std::collections::BTreeMap;
-use std::sync::Arc;
-
-use async_trait::async_trait;
 
 use crate::error::ToolError;
 use crate::store::SessionStorage;
-use crate::tool::{CancelToken, Tool};
 use crate::types::{MemoryEntry, MemoryKind};
 
 /// Storage key for the persisted memory.
 const MEMORY_KEY: &str = "eta.memory";
 
 /// Memory size cap in chars: beyond this, `add` fails until entries are removed.
-const MEMORY_MAX_CHARS: usize = 20_000;
-
-/// Builtin `evo` tool: the agent MUST call it to finalize its memory.
-struct EvoTool {
-    store: Arc<dyn SessionStorage>,
-}
-
-#[async_trait]
-impl Tool for EvoTool {
-    fn name(&self) -> &str {
-        "evo"
-    }
-    fn description(&self) -> &str {
-        "Finalize memory: remove / add decisions, preferences, and lessons."
-    }
-    fn schema(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "object",
-            "properties": {
-                "remove_memory_ids": { "type": "array", "items": { "type": "integer" } },
-                "add_new_decision": { "type": "array", "items": { "type": "string" } },
-                "add_new_preference": { "type": "array", "items": { "type": "string" } },
-                "learn_new_lesson": { "type": "array", "items": { "type": "string" } }
-            }
-        })
-    }
-    async fn execute(
-        &self,
-        input: serde_json::Value,
-        _cancel: CancelToken,
-    ) -> Result<serde_json::Value, ToolError> {
-        let mut memory = load_memory(self.store.as_ref()).await;
-
-        // Remove ids first (always allowed).
-        if let Some(ids) = input.get("remove_memory_ids").and_then(|v| v.as_array()) {
-            for id in ids {
-                if let Some(n) = id.as_u64() {
-                    memory.remove(&n);
-                }
-            }
-        }
-
-        // Collect new entries.
-        let mut additions: Vec<(MemoryKind, String)> = Vec::new();
-        for (kind, key) in [
-            (MemoryKind::Decision, "add_new_decision"),
-            (MemoryKind::Preference, "add_new_preference"),
-            (MemoryKind::Lesson, "learn_new_lesson"),
-        ] {
-            if let Some(items) = input.get(key).and_then(|v| v.as_array()) {
-                for item in items {
-                    if let Some(s) = item.as_str() {
-                        if !s.trim().is_empty() {
-                            additions.push((kind, s.to_string()));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Cap check: `add` fails when the total would exceed the cap.
-        let current: usize = memory.values().map(|e| e.content.chars().count()).sum();
-        let incoming: usize = additions.iter().map(|(_, s)| s.chars().count()).sum();
-        let total = current + incoming;
-        if total > MEMORY_MAX_CHARS {
-            return Err(ToolError::Execution(format!(
-                "memory would exceed {MEMORY_MAX_CHARS} chars (would be {total}); remove stale entries first"
-            )));
-        }
-
-        // Add.
-        let mut next_id = memory.keys().max().copied().unwrap_or(0) + 1;
-        for (kind, content) in additions {
-            memory.insert(next_id, MemoryEntry { kind, content });
-            next_id += 1;
-        }
-
-        self.store
-            .set_state(MEMORY_KEY, serde_json::json!(memory))
-            .await;
-
-        Ok(serde_json::json!({ "ok": true, "memory_size_chars": total }))
-    }
-}
-
-/// Build the builtin `evo` tool backed by the session store.
-pub(crate) fn builtin_evo_tool(store: Arc<dyn SessionStorage>) -> Arc<dyn Tool> {
-    Arc::new(EvoTool { store })
-}
+pub(crate) const MEMORY_MAX_CHARS: usize = 20_000;
 
 /// Load the memory from session state (empty when absent or malformed).
 pub(crate) async fn load_memory(store: &dyn SessionStorage) -> BTreeMap<u64, MemoryEntry> {
@@ -112,6 +22,65 @@ pub(crate) async fn load_memory(store: &dyn SessionStorage) -> BTreeMap<u64, Mem
         .await
         .and_then(|v| serde_json::from_value(v).ok())
         .unwrap_or_default()
+}
+
+/// Apply a memory edit (remove ids, then add decisions / preferences / lessons)
+/// to the store. Shared by the turn-end extraction. Returns the new total char
+/// count. Fails when the addition would blow the cap (so the caller can retry
+/// with a smaller set).
+pub(crate) async fn apply_memory_edits(
+    store: &dyn SessionStorage,
+    input: &serde_json::Value,
+) -> Result<usize, ToolError> {
+    let mut memory = load_memory(store).await;
+
+    // Remove ids first (always allowed).
+    if let Some(ids) = input.get("remove_memory_ids").and_then(|v| v.as_array()) {
+        for id in ids {
+            if let Some(n) = id.as_u64() {
+                memory.remove(&n);
+            }
+        }
+    }
+
+    // Collect new entries.
+    let mut additions: Vec<(MemoryKind, String)> = Vec::new();
+    for (kind, key) in [
+        (MemoryKind::Decision, "add_new_decision"),
+        (MemoryKind::Preference, "add_new_preference"),
+        (MemoryKind::Lesson, "learn_new_lesson"),
+    ] {
+        if let Some(items) = input.get(key).and_then(|v| v.as_array()) {
+            for item in items {
+                if let Some(s) = item.as_str() {
+                    if !s.trim().is_empty() {
+                        additions.push((kind, s.to_string()));
+                    }
+                }
+            }
+        }
+    }
+
+    // Cap check: `add` fails when the total would exceed the cap.
+    let current: usize = memory.values().map(|e| e.content.chars().count()).sum();
+    let incoming: usize = additions.iter().map(|(_, s)| s.chars().count()).sum();
+    let total = current + incoming;
+    if total > MEMORY_MAX_CHARS {
+        return Err(ToolError::Execution(format!(
+            "memory would exceed {MEMORY_MAX_CHARS} chars (would be {total})"
+        )));
+    }
+
+    // Add.
+    let mut next_id = memory.keys().max().copied().unwrap_or(0) + 1;
+    for (kind, content) in additions {
+        memory.insert(next_id, MemoryEntry { kind, content });
+        next_id += 1;
+    }
+
+    store.set_state(MEMORY_KEY, serde_json::json!(memory)).await;
+
+    Ok(total)
 }
 
 fn kind_str(kind: MemoryKind) -> &'static str {

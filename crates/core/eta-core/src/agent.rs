@@ -15,7 +15,7 @@ use crate::hooks::Hooks;
 use crate::loop_detect::LoopDetector;
 use crate::store::SessionStorage;
 use crate::tool::{
-    CancelToken, Tool, builtin_evo_tool, builtin_multi_tool_use_tool, builtin_skill_tool,
+    CancelToken, Tool, apply_memory_edits, builtin_multi_tool_use_tool, builtin_skill_tool,
     builtin_state_tools, builtin_todo_tool, load_memory, load_skills, load_todos, render_memory,
     render_skills, render_todos, validate_args,
 };
@@ -68,12 +68,12 @@ impl Agent {
         let cancel = CancelToken::new();
         let usage = Arc::new(Mutex::new(Usage::default()));
 
-        // Builtin state + todo + evo + skill tools, plus user tools, form the
-        // registry; multi_tool_use wraps them for parallel execution.
+        // Builtin state + todo + skill tools, plus user tools, form the registry;
+        // multi_tool_use wraps them for parallel execution. Memory ("evo") is
+        // managed out-of-band at turn end, so it is never exposed as a tool.
         let mut registry: Vec<Arc<dyn Tool>> = Vec::new();
         registry.extend(builtin_state_tools(cfg.store.clone()));
         registry.push(builtin_todo_tool(cfg.store.clone()));
-        registry.push(builtin_evo_tool(cfg.store.clone()));
         registry.push(builtin_skill_tool(cfg.store.clone()));
         registry.append(&mut cfg.tools);
 
@@ -86,8 +86,6 @@ impl Agent {
             cfg,
             messages: Vec::new(),
             mistakes: Vec::new(),
-            evo_called: false,
-            evo_reminders: 0,
             usage: usage.clone(),
             goal: None,
             loop_detector: LoopDetector::new(),
@@ -149,8 +147,6 @@ struct AgentRuntime {
     cfg: AgentConfig,
     messages: Vec<serde_json::Value>,
     mistakes: Vec<String>,
-    evo_called: bool,
-    evo_reminders: u32,
     usage: Arc<Mutex<Usage>>,
     goal: Option<GoalState>,
     loop_detector: LoopDetector,
@@ -246,12 +242,12 @@ impl AgentRuntime {
     }
 
     /// Run turns until no driver is pending. Dequeue-once per turn boundary:
-    /// one `pop_front`, at most one `push_back`.
+    /// one `pop_front`, at most one `push_back`. At natural chain end, extract
+    /// memory out-of-band so the agent stays unaware of it.
     async fn run_turn_chain(&mut self) {
+        let turn_start = self.messages.len();
         let mut queue: VecDeque<TurnDriver> = VecDeque::new();
         queue.push_back(TurnDriver::UserMessage(serde_json::Value::Null));
-        self.evo_called = false;
-        self.evo_reminders = 0;
 
         while let Some(_driver) = queue.pop_front() {
             if self.cancel.is_cancelled() {
@@ -298,17 +294,12 @@ impl AgentRuntime {
                     break;
                 }
                 queue.push_back(TurnDriver::GoalContinuation);
-            } else if !self.evo_called && self.evo_reminders == 0 {
-                // The agent must call `evo` to finalize its memory before ending.
-                self.evo_reminders += 1;
-                self.messages.push(serde_json::json!({
-                    "role": "user",
-                    "content": prompts::EVO_SIGNOFF_REMINDER,
-                }));
-                queue.push_back(TurnDriver::UserMessage(serde_json::Value::Null));
             }
-            // else: no next driver → loop ends.
+            // else: no next driver → natural chain end → extract memory below.
         }
+
+        self.extract_memory(self.messages[turn_start..].to_vec())
+            .await;
     }
 
     fn should_continue_goal(&self) -> bool {
@@ -319,6 +310,39 @@ impl AgentRuntime {
             self.goal.as_ref().map(|g| g.status),
             Some(GoalStatus::Active)
         )
+    }
+
+    /// Natural chain end: extract memory out-of-band (the agent's only memory
+    /// writer). Input is just this turn's new messages, not the whole transcript.
+    async fn extract_memory(&mut self, turn_messages: Vec<serde_json::Value>) {
+        if turn_messages.is_empty() {
+            return;
+        }
+        let mut prompt_messages = turn_messages;
+        prompt_messages.push(serde_json::json!({
+            "role": "user",
+            "content": prompts::MEMORY_EXTRACT_PROMPT,
+        }));
+        let context = Context {
+            system_prompt: Some(prompts::MEMORY_EXTRACT_SYSTEM_PROMPT.to_string()),
+            messages: prompt_messages,
+            tools: vec![],
+        };
+        let mut stream = self.cfg.provider.stream(&self.cfg.model, &context, None);
+        let mut out = String::new();
+        while let Some(item) = stream.next().await {
+            if let Ok(Event::Content(c)) = item {
+                if let Some(t) = c.get("text").and_then(|t| t.as_str()) {
+                    out.push_str(t);
+                }
+            }
+        }
+        let edits: serde_json::Value =
+            serde_json::from_str(&out).unwrap_or_else(|_| serde_json::json!({}));
+        if edits.as_object().map(|o| o.is_empty()).unwrap_or(true) {
+            return;
+        }
+        let _ = apply_memory_edits(self.cfg.store.as_ref(), &edits).await;
     }
 
     /// Run an independent, tool-free evaluation call to judge whether the active
@@ -494,9 +518,7 @@ impl AgentRuntime {
             system_prompt.push_str(&goal.build_goal_pursuit_guidelines());
         }
 
-        // Current-tasks (todo) guidance + durable block, in the stable region.
-        system_prompt.push_str("\n\n");
-        system_prompt.push_str(prompts::CURRENT_TASKS_GUIDANCE);
+        // Current-tasks (todo) durable block.
         let todos = load_todos(self.cfg.store.as_ref()).await;
         let todos_block = render_todos(&todos);
         if !todos_block.is_empty() {
@@ -504,9 +526,7 @@ impl AgentRuntime {
             system_prompt.push_str(&todos_block);
         }
 
-        // Memory guidance + full memory (the agent carries all of it).
-        system_prompt.push_str("\n\n");
-        system_prompt.push_str(prompts::MEMORY_GUIDANCE);
+        // Memory: render only (read-only), no guidance on how it's written.
         let memory = load_memory(self.cfg.store.as_ref()).await;
         let memory_block = render_memory(&memory);
         if !memory_block.is_empty() {
@@ -514,9 +534,7 @@ impl AgentRuntime {
             system_prompt.push_str(&memory_block);
         }
 
-        // Skills guidance + preferred skills (the agent carries all of them).
-        system_prompt.push_str("\n\n");
-        system_prompt.push_str(prompts::SKILL_GUIDANCE);
+        // Skills: render only (read-only), no guidance on how it's written.
         let skills = load_skills(self.cfg.store.as_ref()).await;
         let skills_block = render_skills(&skills);
         if !skills_block.is_empty() {
@@ -662,9 +680,6 @@ impl AgentRuntime {
                         self.handle_ask_user(id, arguments).await;
                         stop = StopReason::ToolUse;
                         break;
-                    }
-                    if name == "evo" {
-                        self.evo_called = true;
                     }
                     self.run_tool(id, name, arguments).await;
                     stop = StopReason::ToolUse;
