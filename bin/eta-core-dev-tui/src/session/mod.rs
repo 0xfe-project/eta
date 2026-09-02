@@ -21,6 +21,9 @@ use eta_sqlite_storage::{SqliteSessionStore, list_sessions_in};
 
 use crate::commands::Command;
 
+/// Session KV key for the per-session model override.
+const MODEL_KEY: &str = "eta.model";
+
 /// Coarse lifecycle label shown in the `/session` picker.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SessionStatus {
@@ -300,11 +303,26 @@ pub fn apply_time_travel(
     }
 }
 
+/// Persist a per-session model override (E9 `/model`).
+#[allow(dead_code)]
+pub async fn save_model(store: &dyn SessionStorage, model: &str) {
+    store.set_state(MODEL_KEY, serde_json::json!(model)).await;
+}
+
+/// Read the per-session model override, if any.
+#[allow(dead_code)]
+pub async fn load_model(store: &dyn SessionStorage) -> Option<String> {
+    store
+        .get_state(MODEL_KEY)
+        .await
+        .and_then(|value| value.as_str().map(String::from))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         Picker, SessionHandle, SessionManager, SessionMeta, SessionStatus, apply_time_travel,
-        spawn_session,
+        load_model, save_model, spawn_session,
     };
     use crate::commands::Command;
     use eta_core::{
@@ -503,5 +521,13 @@ mod tests {
         let history = apply_time_travel(&store, &mut head, &Command::History).expect("history");
         assert!(history.contains("second"));
         assert!(history.contains("root"));
+    }
+
+    #[tokio::test]
+    async fn session_model_override_roundtrips() {
+        let store = SqliteSessionStore::in_memory();
+        assert_eq!(load_model(&store).await, None);
+        save_model(&store, "deepseek/chat").await;
+        assert_eq!(load_model(&store).await.as_deref(), Some("deepseek/chat"));
     }
 }

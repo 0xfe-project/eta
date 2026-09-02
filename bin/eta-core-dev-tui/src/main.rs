@@ -203,6 +203,14 @@ impl App {
         Some(manager.remove(loop_id).await)
     }
 
+    /// Persist a per-session model override in session KV.
+    async fn save_model(&mut self, model: &str) {
+        if let Some(handle) = self.sessions.current() {
+            let store = handle.store.clone();
+            session::save_model(store.as_ref(), model).await;
+        }
+    }
+
     fn persona_catalog(&self) -> Vec<String> {
         config::persona_names(eta_fs::persona_dir())
     }
@@ -396,6 +404,14 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                                     app.answers
                                                         .push(format!("removed loop: {removed}"));
                                                 }
+                                            }
+                                            Command::Model(Some(id)) => {
+                                                app.save_model(id).await;
+                                                app.answers.push(format!("model: {id} (session)"));
+                                            }
+                                            Command::Model(None) => {
+                                                app.answers
+                                                    .push("model picker not wired yet".into());
                                             }
                                             _ => {
                                                 if let Some(line) = app.apply_time_travel(&command)
