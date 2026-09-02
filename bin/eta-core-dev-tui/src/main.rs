@@ -268,7 +268,7 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
 #[cfg(test)]
 mod tests {
     use crate::app::App;
-    use crate::session::{SessionManager, spawn_session};
+    use crate::session::{SessionHandle, SessionManager, spawn_session};
     use eta_core::{Agent, AgentEvent, AgentId, AgentInput, MemoryStore, SessionStorage};
     use eta_llm::{Context, Event, Model, Provider, ProviderError, StopReason, Usage};
     use eta_sqlite_storage::{SqliteAgentStore, SqliteSessionStore};
@@ -445,5 +445,82 @@ mod tests {
         }
         assert!(saw_a, "session A did not stream");
         assert!(saw_b, "session B did not stream");
+    }
+
+    #[tokio::test]
+    async fn attach_switch_keeps_per_session_views() {
+        fn make(id: &str, text: &'static str) -> (AgentId, SessionHandle) {
+            let provider: Arc<dyn Provider> = Arc::new(ScriptedProvider {
+                events: vec![
+                    Ok(Event::Content(json!({"type": "text", "text": text}))),
+                    Ok(Event::End {
+                        usage: Usage::default(),
+                        stop: StopReason::EndTurn,
+                    }),
+                ],
+            });
+            let handle = spawn_session(
+                id,
+                AgentId(id.into()),
+                provider,
+                Model::new("test-model"),
+                Arc::new(SqliteSessionStore::in_memory()),
+                Arc::new(SqliteAgentStore::in_memory()),
+                vec![],
+                "you are eta".into(),
+                String::new(),
+            );
+            (AgentId(id.into()), handle)
+        }
+
+        let mut sessions = SessionManager::new();
+        sessions.insert(make("a", "hello A").1);
+        sessions.insert(make("b", "hello B").1);
+        sessions.attach("a");
+        let mut app = App::with_sessions(sessions);
+
+        app.send_message("go").await;
+        for _ in 0..20 {
+            app.pump().await;
+            if app
+                .view()
+                .answers
+                .iter()
+                .any(|line| line.contains("hello A"))
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        app.sessions.attach("b");
+        app.send_message("go").await;
+        for _ in 0..20 {
+            app.pump().await;
+            if app
+                .view()
+                .answers
+                .iter()
+                .any(|line| line.contains("hello B"))
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        app.sessions.attach("a");
+        assert!(
+            app.view()
+                .answers
+                .iter()
+                .any(|line| line.contains("hello A"))
+        );
+        app.sessions.attach("b");
+        assert!(
+            app.view()
+                .answers
+                .iter()
+                .any(|line| line.contains("hello B"))
+        );
     }
 }
