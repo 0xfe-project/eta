@@ -64,6 +64,9 @@ pub fn render_snapshot(snapshot: &ContextSnapshot, max_items: usize) -> Vec<Stri
 }
 
 fn fold_items(items: &[String], max: usize) -> Vec<String> {
+    if items.is_empty() {
+        return vec!["—".to_string()];
+    }
     let mut lines: Vec<String> = items
         .iter()
         .take(max)
@@ -76,6 +79,9 @@ fn fold_items(items: &[String], max: usize) -> Vec<String> {
 }
 
 fn fold_text(text: &str, max: usize) -> Vec<String> {
+    if text.is_empty() {
+        return vec!["—".to_string()];
+    }
     let lines: Vec<&str> = text.lines().collect();
     if lines.len() <= max {
         return lines.into_iter().map(String::from).collect();
