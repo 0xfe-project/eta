@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, mpsc};
+use tokio_util::sync::CancellationToken;
 
 use crate::dev_event::{AgentDevEvent, dev_category};
 use crate::store::SessionStorage;
@@ -67,6 +68,7 @@ pub struct LoopManager {
     dev_tx: Option<broadcast::Sender<AgentDevEvent>>,
     agent_id: Option<AgentId>,
     runtime: Mutex<TriggerRuntime>,
+    cancels: Mutex<HashMap<String, CancellationToken>>,
 }
 
 impl LoopManager {
@@ -77,6 +79,7 @@ impl LoopManager {
             dev_tx: None,
             agent_id: None,
             runtime: Mutex::new(TriggerRuntime::default()),
+            cancels: Mutex::new(HashMap::new()),
         }
     }
 
@@ -109,6 +112,10 @@ impl LoopManager {
 
     /// Upsert a loop into the registry and schedule it if it is enabled.
     pub async fn register(&self, spec: LoopSpec) {
+        // Cancel any previously scheduled task for this id before re-scheduling.
+        if let Some(cancel) = self.cancels.lock().unwrap().remove(&spec.loop_id) {
+            cancel.cancel();
+        }
         let mut specs = self.load().await;
         specs.retain(|s| s.loop_id != spec.loop_id);
         specs.push(spec.clone());
@@ -124,6 +131,25 @@ impl LoopManager {
         if spec.enabled {
             self.schedule(spec);
         }
+    }
+
+    /// All registered loops (the persisted registry).
+    pub async fn list(&self) -> Vec<LoopSpec> {
+        self.load().await
+    }
+
+    /// Remove a loop by id, cancelling any running cron task. Returns whether a
+    /// matching loop existed.
+    pub async fn remove(&self, loop_id: &str) -> bool {
+        if let Some(cancel) = self.cancels.lock().unwrap().remove(loop_id) {
+            cancel.cancel();
+        }
+        let mut specs = self.load().await;
+        let before = specs.len();
+        specs.retain(|spec| spec.loop_id != loop_id);
+        self.save(&specs).await;
+        self.emit_dev("remove", serde_json::json!({ "loop_id": loop_id }));
+        specs.len() != before
     }
 
     /// Loops whose hook trigger matches `event_filter`.
@@ -198,20 +224,29 @@ impl LoopManager {
         let Ok(interval) = parse_duration(schedule) else {
             return;
         };
+        let cancel = CancellationToken::new();
+        self.cancels
+            .lock()
+            .unwrap()
+            .insert(spec.loop_id.clone(), cancel.clone());
         let tx = self.input_tx.clone();
         let loop_id = spec.loop_id.clone();
         tokio::spawn(async move {
             let prompt = serde_json::json!({ "loop_id": loop_id.clone() });
             let mut next = tokio::time::Instant::now() + interval;
             loop {
-                tokio::time::sleep_until(next).await;
-                next += interval;
-                let _ = tx
-                    .send(AgentInput::Loop {
-                        loop_id: loop_id.clone(),
-                        prompt: prompt.clone(),
-                    })
-                    .await;
+                tokio::select! {
+                    _ = cancel.cancelled() => break,
+                    _ = tokio::time::sleep_until(next) => {
+                        next += interval;
+                        let _ = tx
+                            .send(AgentInput::Loop {
+                                loop_id: loop_id.clone(),
+                                prompt: prompt.clone(),
+                            })
+                            .await;
+                    }
+                }
             }
         });
     }

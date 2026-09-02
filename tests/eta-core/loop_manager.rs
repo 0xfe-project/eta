@@ -67,6 +67,26 @@ async fn persisted_loops_resume_on_start() {
 }
 
 #[tokio::test]
+async fn list_and_remove_manage_registry() {
+    let store = Arc::new(MemStore::default());
+    let (tx, _rx) = tokio::sync::mpsc::channel(8);
+    let lm = LoopManager::new(store, tx);
+
+    lm.register(cron_spec("l1", "10ms")).await;
+    lm.register(hook_spec("h1", "event_x")).await;
+
+    let listed = lm.list().await;
+    assert_eq!(listed.len(), 2);
+
+    assert!(lm.remove("l1").await);
+    let remaining = lm.list().await;
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0].loop_id, "h1");
+
+    assert!(!lm.remove("missing").await);
+}
+
+#[tokio::test]
 async fn fire_hook_fires_matching_loops() {
     let store = Arc::new(MemStore::default());
     let (tx, mut rx) = tokio::sync::mpsc::channel(8);
