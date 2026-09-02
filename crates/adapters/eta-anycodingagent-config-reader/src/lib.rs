@@ -3,6 +3,7 @@
 use eta_config::{Config, ProviderConfig};
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::path::PathBuf;
 
 /// Read an existing agent config and normalize common Codex/Claude/OpenCode/
 /// Pi shapes into eta's provider/model schema.
@@ -56,4 +57,57 @@ pub fn parse_config(text: &str) -> Result<Config, String> {
             })
             .unwrap_or_default(),
     })
+}
+
+/// Hot-reload snapshot. `assembly_version` is bumped for every accepted
+/// config/persona change so callers can invalidate their stable prompt block.
+pub struct ConfigWatcher {
+    _watcher: eta_fs::FsWatcher,
+    receiver: std::sync::mpsc::Receiver<eta_fs::WatchEvent>,
+    config_path: PathBuf,
+    persona_dir: PathBuf,
+    assembly_version: u64,
+}
+
+pub struct ConfigSnapshot {
+    pub config: Config,
+    pub personas: BTreeMap<String, String>,
+    pub assembly_version: u64,
+}
+
+impl ConfigWatcher {
+    pub fn watch(
+        config_path: impl Into<PathBuf>,
+        persona_dir: impl Into<PathBuf>,
+    ) -> notify::Result<Self> {
+        let config_path = config_path.into();
+        let persona_dir = persona_dir.into();
+        let config_parent = config_path.parent().unwrap_or(Path::new(".")).to_path_buf();
+        let mut paths = vec![config_parent];
+        if persona_dir.exists() {
+            paths.push(persona_dir.clone());
+        }
+        let (watcher, receiver) = eta_fs::FsWatcher::watch(&paths)?;
+        Ok(Self {
+            _watcher: watcher,
+            receiver,
+            config_path,
+            persona_dir,
+            assembly_version: 0,
+        })
+    }
+
+    pub fn recv_timeout(&mut self, timeout: std::time::Duration) -> Result<ConfigSnapshot, String> {
+        self.receiver
+            .recv_timeout(timeout)
+            .map_err(|e| e.to_string())?;
+        let config = read_config(&self.config_path)?;
+        let personas = eta_config::load_personas(&config, &self.persona_dir);
+        self.assembly_version = self.assembly_version.saturating_add(1);
+        Ok(ConfigSnapshot {
+            config,
+            personas,
+            assembly_version: self.assembly_version,
+        })
+    }
 }
