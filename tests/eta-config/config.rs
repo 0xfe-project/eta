@@ -1,5 +1,5 @@
 use eta_anycodingagent_config_reader::{
-    import_claude, import_codex, import_from_home, import_opencode, import_pi,
+    import_claude, import_codex, import_from_home, import_opencode, import_path, import_pi,
 };
 use eta_config::{Config, ProviderFormat, load_personas};
 use std::collections::BTreeMap;
@@ -140,6 +140,19 @@ fn custom_persona_loading_remains_independent() {
         load_personas(&config, dir.path())["思考者"],
         "override body"
     );
+}
+
+#[test]
+fn import_path_detects_opencode_and_lists_models() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("opencode.json");
+    fs::write(
+        &path,
+        r#"{"provider":{"custom":{"models":{"grok":{"name":"Grok"}},"options":{"baseURL":"https://example"}}}}"#,
+    )
+    .unwrap();
+    let imported = import_path(&path).unwrap();
+    assert_eq!(imported.model_entries(), vec!["custom/grok"]);
 }
 
 #[test]

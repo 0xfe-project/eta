@@ -413,6 +413,25 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                                 app.answers
                                                     .push("model picker not wired yet".into());
                                             }
+                                            Command::LoadOtherAgentConfig(path) => {
+                                                match eta_anycodingagent_config_reader::import_path(
+                                                    path,
+                                                ) {
+                                                    Ok(imported) => {
+                                                        let entries = imported.model_entries();
+                                                        if entries.is_empty() {
+                                                            app.answers.push(
+                                                                "no custom models found".into(),
+                                                            );
+                                                        } else {
+                                                            app.answers.extend(entries);
+                                                        }
+                                                    }
+                                                    Err(error) => app.answers.push(format!(
+                                                        "config load error: {error}"
+                                                    )),
+                                                }
+                                            }
                                             _ => {
                                                 if let Some(line) = app.apply_time_travel(&command)
                                                 {

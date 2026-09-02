@@ -31,6 +31,18 @@ impl CustomModelImport {
     fn extend(&mut self, other: CustomModelImport) {
         self.providers.extend(other.providers);
     }
+
+    /// Flatten imported providers into sorted `provider/model` entries.
+    pub fn model_entries(&self) -> Vec<String> {
+        let mut entries = Vec::new();
+        for (provider_id, provider) in &self.providers {
+            for model_id in provider.models.keys() {
+                entries.push(format!("{provider_id}/{model_id}"));
+            }
+        }
+        entries.sort();
+        entries
+    }
 }
 
 /// Read one source config without retaining a watcher or source reference.
@@ -56,6 +68,23 @@ pub fn import_from_home(home: impl AsRef<Path>) -> Result<CustomModelImport, Str
         }
     }
     Ok(imported)
+}
+
+/// Import from an arbitrary path, auto-detecting the source by extension.
+/// `.toml` is Codex; JSON tries OpenCode, then Claude, then Pi.
+pub fn import_path(path: impl AsRef<Path>) -> Result<CustomModelImport, String> {
+    let path = path.as_ref();
+    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    if path.extension().and_then(|e| e.to_str()) == Some("toml") {
+        return import_codex(&text);
+    }
+    for parse in [import_opencode, import_claude, import_pi] {
+        let imported = parse(&text)?;
+        if !imported.providers.is_empty() {
+            return Ok(imported);
+        }
+    }
+    Ok(CustomModelImport::default())
 }
 
 /// Codex custom endpoints live in `[model_providers.<id>]`. Its active model is
