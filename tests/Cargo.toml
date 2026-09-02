@@ -11,6 +11,9 @@ eta-llm-test-providers = { path = "../crates/tests-helper/eta-llm-test-providers
 eta-session = { path = "../crates/core/eta-session" }
 eta-fs = { path = "../crates/adapters/eta-fs" }
 eta-io-tools = { path = "../crates/adapters/eta-io-tools" }
+eta-provider-openai = { path = "../crates/adapters/eta-provider-openai" }
+eta-provider-anthropic = { path = "../crates/adapters/eta-provider-anthropic" }
+eta-mcp = { path = "../crates/adapters/eta-mcp" }
 eta-sqlite-storage = { path = "../crates/adapters/eta-sqlite-storage" }
 async-trait.workspace = true
 serde_json.workspace = true
@@ -37,6 +40,14 @@ path = "eta-fs/mod.rs"
 [[test]]
 name = "eta_io_tools"
 path = "eta-io-tools/mod.rs"
+
+[[test]]
+name = "eta_providers"
+path = "eta-providers/mod.rs"
+
+[[test]]
+name = "eta_mcp"
+path = "eta-mcp/mod.rs"
 
 [[test]]
 name = "eta_sqlite"

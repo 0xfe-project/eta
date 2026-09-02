@@ -249,10 +249,12 @@ dependencies = [
 name = "eta-io-tools"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "eta-core",
  "eta-session",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -278,6 +280,7 @@ dependencies = [
 name = "eta-mcp"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "eta-core",
  "serde",
  "serde_json",
@@ -288,9 +291,11 @@ name = "eta-provider-anthropic"
 version = "0.1.0"
 dependencies = [
  "eta-llm",
+ "futures-util",
  "reqwest",
  "serde",
  "serde_json",
+ "tokio",
  "tokio-stream",
 ]
 
@@ -299,9 +304,11 @@ name = "eta-provider-openai"
 version = "0.1.0"
 dependencies = [
  "eta-llm",
+ "futures-util",
  "reqwest",
  "serde",
  "serde_json",
+ "tokio",
  "tokio-stream",
 ]
 
@@ -339,8 +346,12 @@ dependencies = [
  "async-trait",
  "eta-core",
  "eta-fs",
+ "eta-io-tools",
  "eta-llm",
  "eta-llm-test-providers",
+ "eta-mcp",
+ "eta-provider-anthropic",
+ "eta-provider-openai",
  "eta-session",
  "eta-sqlite-storage",
  "serde_json",
