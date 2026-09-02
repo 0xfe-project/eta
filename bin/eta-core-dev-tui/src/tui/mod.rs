@@ -56,6 +56,7 @@ pub fn draw(
     answers_scroll: usize,
     context_scroll: usize,
     dev_scroll: usize,
+    status: &str,
 ) {
     match screen {
         Screen::Startup {
@@ -134,16 +135,18 @@ pub fn draw(
     } else {
         (completions.len().min(8) + 2) as u16
     };
-    let outer = Layout::default()
+    let outer_2 = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(1),
+            Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(completions_height as u16),
             Constraint::Length(3),
         ])
         .split(frame.area());
-    let (main, goal_area, completions_area, input_area) = (outer[0], outer[1], outer[2], outer[3]);
+    let (main, goal_area, status_area, completions_area, input_area) =
+        (outer_2[0], outer_2[1], outer_2[2], outer_2[3], outer_2[4]);
 
     let columns = Layout::default()
         .direction(Direction::Horizontal)
@@ -191,6 +194,10 @@ pub fn draw(
         .map(|goal| goal.status_line())
         .unwrap_or_else(|| "goal: —".into());
     frame.render_widget(Paragraph::new(goal_line), goal_area);
+    frame.render_widget(
+        Paragraph::new(status.to_string()).style(Style::default().fg(Color::DarkGray)),
+        status_area,
+    );
 
     if !completions.is_empty() {
         frame.render_widget(
@@ -424,6 +431,7 @@ mod tests {
                     0,
                     0,
                     0,
+                    "",
                 )
             })
             .expect("draw");
@@ -482,6 +490,7 @@ mod tests {
                     0,
                     0,
                     0,
+                    "",
                 )
             })
             .expect("draw");

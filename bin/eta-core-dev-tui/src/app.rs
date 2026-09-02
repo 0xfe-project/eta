@@ -140,6 +140,22 @@ impl App {
         self.input = input;
     }
 
+    /// One-line status for the bottom bar.
+    pub(crate) fn status_line(&self) -> String {
+        let mode = match self.screen {
+            Screen::Session => "session",
+            Screen::Startup { .. } => "startup",
+            _ => "picker",
+        };
+        let session = self.sessions.current_id().unwrap_or("-");
+        let agent = self
+            .sessions
+            .current()
+            .map(|handle| handle.meta.agent_id.0.clone())
+            .unwrap_or_default();
+        format!("{mode} · session {session} · agent {agent}")
+    }
+
     /// `/<cmd>`-style completions based on the current input text.
     pub(crate) fn completions(&self) -> Vec<String> {
         let text = self.input.lines().join("\n").trim().to_string();

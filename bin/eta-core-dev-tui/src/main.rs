@@ -60,6 +60,7 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
             )
         };
         let completions = app.completions();
+        let status = app.status_line();
         terminal.draw(|frame| {
             tui::draw(
                 frame,
@@ -74,6 +75,7 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                 answers_scroll,
                 context_scroll,
                 dev_scroll,
+                &status,
             )
         })?;
 
