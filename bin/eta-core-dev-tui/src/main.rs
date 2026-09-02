@@ -69,8 +69,10 @@ impl App {
     fn new() -> Self {
         let mut input = TextArea::default();
         input.set_placeholder_text("type a message…");
+        let recent =
+            eta_sqlite_storage::list_sessions_in(&eta_fs::sessions_dir()).unwrap_or_default();
         Self {
-            screen: Screen::startup(Vec::new()),
+            screen: Screen::startup(recent),
             focus: Focus::Input,
             input,
             sessions: SessionManager::new(),
@@ -429,6 +431,37 @@ impl App {
         self.sessions = SessionManager::new();
         self.sessions.insert(handle);
         self.sessions.attach(&session_id);
+    }
+
+    /// Open an existing session by id and spawn its agent, then attach it.
+    #[allow(dead_code)] // wired into the startup recent-session cursor in E5.
+    fn attach_existing_session(&mut self, session_id: &str) {
+        let sqlite = Arc::new(
+            SqliteSessionStore::open(eta_fs::session_db(session_id))
+                .unwrap_or_else(|_| SqliteSessionStore::in_memory()),
+        );
+        let store: Arc<dyn SessionStorage> = sqlite.clone();
+        let provider: Arc<dyn Provider> = Arc::new(OpenAiProvider::from_env());
+        let model = Model::new(std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into()));
+        let memory: Arc<dyn MemoryStore> = Arc::new(
+            SqliteAgentStore::open(eta_fs::agent_db(session_id))
+                .unwrap_or_else(|_| SqliteAgentStore::in_memory()),
+        );
+        let handle = spawn_session(
+            session_id,
+            AgentId(session_id.to_string()),
+            provider,
+            model,
+            store,
+            memory,
+            builtin_io_tools(),
+            DEFAULT_SYSTEM_PROMPT.to_string(),
+            String::new(),
+        );
+        self.sqlite = Some(sqlite);
+        self.sessions.insert(handle);
+        self.sessions.attach(session_id);
+        self.screen = Screen::session();
     }
 }
 
