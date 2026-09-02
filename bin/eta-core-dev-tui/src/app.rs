@@ -56,6 +56,8 @@ pub(crate) struct App {
     views: HashMap<String, SessionView>,
     pub(crate) pending_ask: Option<PendingAsk>,
     pub(crate) dev_base: Instant,
+    history: Vec<String>,
+    history_idx: Option<usize>,
 }
 
 impl App {
@@ -75,6 +77,8 @@ impl App {
             views: HashMap::new(),
             pending_ask: None,
             dev_base: Instant::now(),
+            history: Vec::new(),
+            history_idx: None,
         }
     }
 
@@ -104,6 +108,36 @@ impl App {
             crate::tui::Focus::Input => return,
         };
         *scroll = (*scroll as i64 + delta).clamp(0, len as i64) as usize;
+    }
+
+    /// Whether the input box is currently empty.
+    pub(crate) fn input_is_empty(&self) -> bool {
+        self.input.lines().iter().all(|line| line.is_empty())
+    }
+
+    /// Record a submitted line into prompt history (dedup of the last entry).
+    pub(crate) fn push_history(&mut self, text: String) {
+        let text = text.trim().to_string();
+        if text.is_empty() {
+            return;
+        }
+        if self.history.last() != Some(&text) {
+            self.history.push(text);
+        }
+        self.history_idx = None;
+    }
+
+    /// Recall a previous prompt, setting the input box content to it.
+    pub(crate) fn recall_history(&mut self, delta: i64) {
+        if self.history.is_empty() {
+            return;
+        }
+        let current = self.history_idx.unwrap_or(self.history.len());
+        let next = (current as i64 + delta).clamp(0, self.history.len() as i64 - 1) as usize;
+        self.history_idx = Some(next);
+        let mut input = TextArea::default();
+        input.insert_str(&self.history[next]);
+        self.input = input;
     }
 
     /// `/<cmd>`-style completions based on the current input text.

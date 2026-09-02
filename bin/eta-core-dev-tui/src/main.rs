@@ -194,6 +194,7 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                 KeyCode::Enter if !shift => {
                                     let line = app.input.lines().join("\n");
                                     app.input = TextArea::default();
+                                    app.push_history(line.clone());
                                     if app.pending_ask.is_some() {
                                         app.answer_ask_user(line.trim().to_string()).await;
                                         continue;
@@ -279,7 +280,17 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                     }
                                 }
                                 _ => {
-                                    let _ = app.input.input(key);
+                                    if app.input_is_empty() && !app.pending_ask.is_some() {
+                                        match key.code {
+                                            KeyCode::Up => app.recall_history(-1),
+                                            KeyCode::Down => app.recall_history(1),
+                                            _ => {
+                                                let _ = app.input.input(key);
+                                            }
+                                        }
+                                    } else {
+                                        let _ = app.input.input(key);
+                                    }
                                 }
                             },
                         }
