@@ -94,6 +94,12 @@ pub fn draw(
             draw_list(frame, "switch agent", agents, *selected);
             return;
         }
+        Screen::SessionPicker {
+            sessions, selected, ..
+        } => {
+            draw_list(frame, "sessions", sessions, *selected);
+            return;
+        }
         Screen::Session => {}
     }
 

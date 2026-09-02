@@ -342,6 +342,19 @@ impl App {
         self.screen.open_agent_switch(agents);
     }
 
+    pub(crate) fn open_session_picker(&mut self) {
+        let sessions = self.sessions.ids();
+        self.screen.open_session_picker(sessions);
+    }
+
+    pub(crate) fn confirm_session_picker(&mut self) {
+        let Some(id) = self.screen.confirm_session() else {
+            return;
+        };
+        self.sessions.attach(&id);
+        self.screen = Screen::session();
+    }
+
     pub(crate) fn switch_agent(&mut self, name: &str) {
         let Some(session) = self.sessions.current() else {
             return;

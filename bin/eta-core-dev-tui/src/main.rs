@@ -137,6 +137,13 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                         KeyCode::Esc => app.cancel_picker(),
                         _ => {}
                     },
+                    Screen::SessionPicker { .. } => match key.code {
+                        KeyCode::Up => app.screen.move_selection(-1),
+                        KeyCode::Down => app.screen.move_selection(1),
+                        KeyCode::Enter => app.confirm_session_picker(),
+                        KeyCode::Esc => app.cancel_picker(),
+                        _ => {}
+                    },
                     Screen::Session => {
                         if key.code == KeyCode::Tab {
                             app.focus = app.focus.next();
@@ -189,9 +196,7 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                                 app.open_agent_switch();
                                             }
                                             Command::Session => {
-                                                let id = app.sessions.current_id().unwrap_or("-");
-                                                app.answers
-                                                    .push(format!("session: {id}"));
+                                                app.open_session_picker();
                                             }
                                             Command::NewSession | Command::SessionNew => {
                                                 let recent = eta_sqlite_storage::list_sessions_in(
