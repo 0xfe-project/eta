@@ -72,9 +72,10 @@ pub fn import_file(
     source: ImportSource,
     path: impl AsRef<Path>,
 ) -> Result<CustomModelImport, String> {
+    let path = path.as_ref();
     let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
     match source {
-        ImportSource::Codex => import_codex(&text),
+        ImportSource::Codex => import_codex_with_base(&text, path.parent()),
         ImportSource::Claude => import_claude(&text),
         ImportSource::OpenCode => import_opencode(&text),
         ImportSource::Pi => import_pi(&text),
@@ -105,7 +106,7 @@ pub fn import_path(path: impl AsRef<Path>) -> Result<CustomModelImport, String> 
     let path = path.as_ref();
     let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
     if path.extension().and_then(|e| e.to_str()) == Some("toml") {
-        return import_codex(&text);
+        return import_codex_with_base(&text, path.parent());
     }
     for parse in [import_opencode, import_claude, import_pi] {
         let imported = parse(&text)?;
@@ -119,9 +120,22 @@ pub fn import_path(path: impl AsRef<Path>) -> Result<CustomModelImport, String> 
 /// Codex custom endpoints live in `[model_providers.<id>]`. Its active model is
 /// attached only to the selected custom provider.
 pub fn import_codex(text: &str) -> Result<CustomModelImport, String> {
+    import_codex_with_base(text, None)
+}
+
+/// Codex import that additionally resolves `model_catalog_json` so a single
+/// custom provider surfaces every model in its catalog, not just the active one.
+fn import_codex_with_base(
+    text: &str,
+    catalog_base: Option<&Path>,
+) -> Result<CustomModelImport, String> {
     let root: toml::Value = toml::from_str(text).map_err(|e| e.to_string())?;
     let selected_provider = root.get("model_provider").and_then(toml::Value::as_str);
     let selected_model = root.get("model").and_then(toml::Value::as_str);
+    let catalog_path = root
+        .get("model_catalog_json")
+        .and_then(toml::Value::as_str)
+        .map(|catalog| resolve_model_catalog(catalog, catalog_base));
     let mut providers = BTreeMap::new();
     let Some(custom) = root.get("model_providers").and_then(toml::Value::as_table) else {
         return Ok(CustomModelImport { providers });
@@ -139,6 +153,29 @@ pub fn import_codex(text: &str) -> Result<CustomModelImport, String> {
                         limit: ModelLimit::default(),
                     },
                 );
+            }
+            // Expand the provider's model list from `model_catalog_json` so the
+            // catalog is exposed in the picker, not just the one active model.
+            if let Some(path) = &catalog_path {
+                if let Ok(catalog_text) = std::fs::read_to_string(path) {
+                    if let Ok(catalog) = serde_json::from_str::<Value>(&catalog_text) {
+                        for entry in catalog
+                            .get("models")
+                            .and_then(Value::as_array)
+                            .into_iter()
+                            .flatten()
+                        {
+                            let id = catalog_model_id(entry);
+                            if let Some(id) = id {
+                                let entry_id = id.clone();
+                                models.entry(id).or_insert_with(|| ModelConfig {
+                                    name: catalog_model_name(entry, &entry_id),
+                                    limit: catalog_model_limit(entry),
+                                });
+                            }
+                        }
+                    }
+                }
             }
         }
         providers.insert(
@@ -283,14 +320,39 @@ fn format_from_pi(api: Option<&str>) -> ProviderFormat {
 }
 
 fn parse_models(value: Option<&Value>) -> BTreeMap<String, ModelConfig> {
-    value
-        .and_then(Value::as_object)
-        .map(|map| {
-            map.iter()
-                .map(|(id, model)| (id.clone(), model_config_from(model, id)))
-                .collect()
-        })
-        .unwrap_or_default()
+    let Some(value) = value else {
+        return BTreeMap::new();
+    };
+    match value {
+        // Object map: `{ "model-id": { name, limit, ... } }`.
+        Value::Object(map) => map
+            .iter()
+            .map(|(id, model)| (id.clone(), model_config_from(model, id)))
+            .collect(),
+        // Array form: `["model-a", "model-b"]` or `[{ "id": "x" }, ...]`.
+        Value::Array(items) => items
+            .iter()
+            .filter_map(|item| match item {
+                Value::String(id) => Some((
+                    id.clone(),
+                    ModelConfig {
+                        name: id.clone(),
+                        limit: ModelLimit::default(),
+                    },
+                )),
+                Value::Object(map) => {
+                    let id = map
+                        .get("id")
+                        .or_else(|| map.get("model"))
+                        .and_then(Value::as_str)?
+                        .to_string();
+                    Some((id.clone(), model_config_from(item, &id)))
+                }
+                _ => None,
+            })
+            .collect(),
+        _ => BTreeMap::new(),
+    }
 }
 
 fn parse_pi_models(value: &Value) -> BTreeMap<String, ModelConfig> {
@@ -319,6 +381,55 @@ fn model_config_from(value: &Value, id: &str) -> ModelConfig {
         })
         .unwrap_or_default();
     ModelConfig { name, limit }
+}
+
+/// Resolve a Codex `model_catalog_json` path, which is normally relative to the
+/// config file's directory (i.e. `~/.codex`). Falls back to `~/.codex` when no
+/// base directory was supplied.
+fn resolve_model_catalog(catalog: &str, base: Option<&Path>) -> PathBuf {
+    let path = PathBuf::from(catalog);
+    if path.is_absolute() {
+        return path;
+    }
+    let codex_dir = base
+        .map(|dir| dir.to_path_buf())
+        .or_else(|| dirs::home_dir().map(|home| home.join(".codex")));
+    codex_dir.map(|dir| dir.join(&path)).unwrap_or(path)
+}
+
+/// Extract a model id from a Codex catalog entry. The catalog uses `slug`, but
+/// some variants carry `model` or `id`.
+fn catalog_model_id(entry: &Value) -> Option<String> {
+    ["slug", "model", "id"]
+        .iter()
+        .find_map(|key| entry.get(*key).and_then(Value::as_str))
+        .map(str::to_string)
+}
+
+/// Human-readable label for a catalog entry, favouring `display_name`.
+fn catalog_model_name(entry: &Value, id: &str) -> String {
+    entry
+        .get("display_name")
+        .or_else(|| entry.get("name"))
+        .and_then(Value::as_str)
+        .unwrap_or(id)
+        .to_string()
+}
+
+/// Optional context/output limits from a catalog entry.
+fn catalog_model_limit(entry: &Value) -> ModelLimit {
+    ModelLimit {
+        context: entry
+            .get("context_window")
+            .or_else(|| entry.get("context"))
+            .and_then(Value::as_u64)
+            .unwrap_or(0),
+        output: entry
+            .get("max_output")
+            .or_else(|| entry.get("output"))
+            .and_then(Value::as_u64)
+            .unwrap_or(0),
+    }
 }
 
 pub fn source_paths(home: impl AsRef<Path>) -> Vec<(ImportSource, PathBuf)> {
