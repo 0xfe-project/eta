@@ -211,21 +211,57 @@ fn draw_startup(
     recent: &[String],
     selected: usize,
 ) {
-    let body = if recent.is_empty() {
-        "no recent sessions — type a message to start".to_string()
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled(
+                "✦ eta",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::styled(
+                "  — dev-mode coding agent",
+                Style::default().fg(Color::DarkGray),
+            ),
+        ]),
+        Line::from(""),
+    ];
+    if recent.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "no recent sessions yet",
+            Style::default().fg(Color::DarkGray),
+        )));
     } else {
-        let mut lines = vec!["recent sessions:".to_string()];
+        lines.push(Line::from(Span::styled(
+            "recent sessions:",
+            Style::default().fg(Color::Magenta),
+        )));
         lines.extend(recent.iter().enumerate().map(|(index, id)| {
             if index == selected {
-                format!("> {id}")
+                Line::from(vec![
+                    Span::styled("> ", Style::default().fg(Color::Yellow)),
+                    Span::styled(
+                        id.clone(),
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(ratatui::style::Modifier::BOLD),
+                    ),
+                ])
             } else {
-                format!("  {id}")
+                Line::from(vec![
+                    Span::styled("  ", Style::default()),
+                    Span::styled(id.clone(), Style::default().fg(Color::Gray)),
+                ])
             }
         }));
-        lines.join("\n")
-    };
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "type a message, or / for commands, ↑/↓ to pick a session",
+        Style::default().fg(Color::DarkGray),
+    )));
     frame.render_widget(
-        Paragraph::new(body).block(Block::default().title("eta").borders(Borders::ALL)),
+        Paragraph::new(lines).block(Block::default().borders(Borders::ALL)),
         area,
     );
 }
