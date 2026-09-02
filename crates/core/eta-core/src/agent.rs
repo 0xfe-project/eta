@@ -473,7 +473,12 @@ impl AgentRuntime {
                 schema: t.schema(),
             })
             .collect();
-        let mut system_prompt = self.cfg.system_prompt.clone();
+        let mut system_prompt = String::new();
+        system_prompt.push_str(prompts::DEFAULT_SYSTEM_PROMPT);
+        if !self.cfg.system_prompt.is_empty() {
+            system_prompt.push_str("\n\n");
+            system_prompt.push_str(&self.cfg.system_prompt);
+        }
 
         // Goal guidelines when a goal is active (goal-mode prompt enhancement).
         if let Some(goal) = &self.goal {
