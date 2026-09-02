@@ -10,6 +10,7 @@ use tui_textarea::TextArea;
 pub mod answer;
 pub mod context;
 pub mod dev;
+pub mod screen;
 
 pub use context::ContextSnapshot;
 
