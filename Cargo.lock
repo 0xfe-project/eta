@@ -350,7 +350,6 @@ dependencies = [
 name = "eta-core-dev-tui"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "crossterm",
  "eta-anycodingagent-config-reader",
  "eta-config",

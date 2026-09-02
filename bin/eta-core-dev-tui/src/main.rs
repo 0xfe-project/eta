@@ -15,7 +15,10 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
-use eta_core::{AgentId, AgentInput, LoopSpec, MemoryStore, SessionStorage, Trigger, dev_category};
+use eta_core::{
+    AgentEvent, AgentId, AgentInput, AskUserAnswer, LoopSpec, MemoryStore, SessionStorage, Trigger,
+    dev_category,
+};
 use eta_io_tools::builtin_io_tools;
 use eta_llm::{Model, Provider};
 use eta_provider_openai::OpenAiProvider;
@@ -39,6 +42,11 @@ const HELP_TEXT: &str = concat!(
     "  /model [provider/model] /agent /compact /tools /skills /memory /todos /usage /help /quit\n"
 );
 
+/// A pending `ask_user` question waiting for the user's answer.
+struct PendingAsk {
+    req_id: String,
+}
+
 /// Interactive UI state: current focus, input, the session registry, and the
 /// rendered buffers for the three upper panels.
 struct App {
@@ -53,6 +61,7 @@ struct App {
     dev: Vec<String>,
     context: Option<ContextSnapshot>,
     goal: Option<GoalInfo>,
+    pending_ask: Option<PendingAsk>,
     dev_base: Instant,
 }
 
@@ -72,6 +81,7 @@ impl App {
             dev: Vec::new(),
             context: None,
             goal: None,
+            pending_ask: None,
             dev_base: Instant::now(),
         }
     }
@@ -94,6 +104,11 @@ impl App {
 
         if let Some(events) = handle.event_rx.as_mut() {
             while let Ok(event) = events.try_recv() {
+                if let AgentEvent::AskUserStarted { req_id, .. } = &event {
+                    self.pending_ask = Some(PendingAsk {
+                        req_id: req_id.clone(),
+                    });
+                }
                 if let Some(line) = tui::answer::event_line(&agent_id, &event) {
                     self.answers.push(line);
                 }
@@ -160,6 +175,25 @@ impl App {
         };
         if let Some(agent) = handle.agent.as_ref() {
             let _ = agent.send(input).await;
+        }
+    }
+
+    /// Answer the pending `ask_user` question and resume the engine.
+    async fn answer_ask_user(&mut self, answer: String) {
+        let Some(pending) = self.pending_ask.take() else {
+            return;
+        };
+        if let Some(agent) = self
+            .sessions
+            .current()
+            .and_then(|handle| handle.agent.as_ref())
+        {
+            let _ = agent
+                .answer(AskUserAnswer {
+                    tool_call_id: pending.req_id,
+                    answer: json!(answer),
+                })
+                .await;
         }
     }
 
@@ -505,6 +539,10 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                 KeyCode::Enter if !shift => {
                                     let line = app.input.lines().join("\n");
                                     app.input = TextArea::default();
+                                    if app.pending_ask.is_some() {
+                                        app.answer_ask_user(line.trim().to_string()).await;
+                                        continue;
+                                    }
                                     if let Some(command) = parse_command(&line) {
                                         match &command {
                                             Command::Quit => return Ok(()),
