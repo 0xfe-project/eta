@@ -16,6 +16,7 @@ pub enum Command {
     LoopRemove(String),
     LoopEnable(String),
     LoopDisable(String),
+    Compact,
     Ask(String),
     Fork(String),
     Commit(String),
@@ -29,13 +30,15 @@ pub enum Command {
     Memory,
     Todos,
     Usage,
-    Model(String),
+    Model(Option<String>),
     Provider(String),
+    Agent,
     Session,
     NewSession,
     SessionNew,
     SessionRemove(String),
     SessionRename { prefix: String, name: String },
+    LoadOtherAgentConfig(String),
     Clear,
     Help,
     Quit,
@@ -67,7 +70,7 @@ pub fn parse_command(input: &str) -> Option<Command> {
     let tokens = tokenize(body);
     let (head, rest) = tokens.split_first()?;
     match head.to_ascii_lowercase().as_str() {
-        "goal" => Some(Command::Goal(rest.join(" "))),
+        "goal" => parse_goal(rest),
         "pause-goal" => Some(Command::PauseGoal),
         "resume-goal" => Some(Command::ResumeGoal),
         "clear-goal" => Some(Command::ClearGoal),
@@ -87,14 +90,31 @@ pub fn parse_command(input: &str) -> Option<Command> {
         "memory" => Some(Command::Memory),
         "todos" => Some(Command::Todos),
         "usage" => Some(Command::Usage),
-        "model" => rest.first().map(|id| Command::Model(id.clone())),
+        "model" => Some(Command::Model(rest.first().cloned())),
         "provider" => rest.first().map(|name| Command::Provider(name.clone())),
+        "agent" => Some(Command::Agent),
+        "compact" => Some(Command::Compact),
+        "load_other_agent_config" => Some(Command::LoadOtherAgentConfig(rest.join(" "))),
         "session" => parse_session(rest),
         "new-session" => Some(Command::NewSession),
         "clear" => Some(Command::Clear),
         "help" => Some(Command::Help),
         "quit" => Some(Command::Quit),
         _ => None,
+    }
+}
+
+fn parse_goal(rest: &[String]) -> Option<Command> {
+    match rest.first().map(|value| value.to_ascii_lowercase()) {
+        Some(action) if action == "set" => Some(Command::Goal(
+            rest.get(1..)
+                .map(|parts| parts.join(" "))
+                .unwrap_or_default(),
+        )),
+        Some(action) if action == "pause" => Some(Command::PauseGoal),
+        Some(action) if action == "resume" => Some(Command::ResumeGoal),
+        Some(action) if action == "cancel" || action == "reset" => Some(Command::ClearGoal),
+        _ => Some(Command::Goal(rest.join(" "))),
     }
 }
 
@@ -110,10 +130,19 @@ fn parse_loop(rest: &[String]) -> Option<Command> {
             Some(Command::LoopAdd { schedule, prompt })
         }
         Some(action) if action == "list" => Some(Command::LoopList),
+        Some(action) if action == "cancel" => rest.get(1).cloned().map(Command::LoopRemove),
         Some(action) if action == "rm" => rest.get(1).cloned().map(Command::LoopRemove),
         Some(action) if action == "enable" => rest.get(1).cloned().map(Command::LoopEnable),
         Some(action) if action == "disable" => rest.get(1).cloned().map(Command::LoopDisable),
-        _ => None,
+        _ => {
+            // Shorthand: `/loop <duration> <prompt>`.
+            let schedule = rest.first()?.clone();
+            let prompt = rest
+                .get(1..)
+                .map(|parts| parts.join(" "))
+                .unwrap_or_default();
+            Some(Command::LoopAdd { schedule, prompt })
+        }
     }
 }
 
@@ -227,7 +256,7 @@ mod tests {
         assert_eq!(parse_command("/usage"), Some(Command::Usage));
         assert_eq!(
             parse_command("/model deepseek/chat"),
-            Some(Command::Model("deepseek/chat".into()))
+            Some(Command::Model(Some("deepseek/chat".into())))
         );
         assert_eq!(parse_command("/quit"), Some(Command::Quit));
     }
@@ -258,5 +287,47 @@ mod tests {
         assert!(Command::Usage.to_agent_input().is_none());
         assert!(Command::Session.to_agent_input().is_none());
         assert!(Command::Fork("dev".into()).to_agent_input().is_none());
+    }
+
+    #[test]
+    fn parses_goal_subcommands() {
+        assert_eq!(
+            parse_command("/goal set ship it"),
+            Some(Command::Goal("ship it".into()))
+        );
+        assert_eq!(parse_command("/goal pause"), Some(Command::PauseGoal));
+        assert_eq!(parse_command("/goal resume"), Some(Command::ResumeGoal));
+        assert_eq!(parse_command("/goal cancel"), Some(Command::ClearGoal));
+        assert_eq!(parse_command("/goal reset"), Some(Command::ClearGoal));
+    }
+
+    #[test]
+    fn parses_loop_shorthand_and_cancel() {
+        assert_eq!(
+            parse_command("/loop 1h30m ship it"),
+            Some(Command::LoopAdd {
+                schedule: "1h30m".into(),
+                prompt: "ship it".into(),
+            })
+        );
+        assert_eq!(
+            parse_command("/loop cancel 7"),
+            Some(Command::LoopRemove("7".into()))
+        );
+    }
+
+    #[test]
+    fn parses_new_ux_commands() {
+        assert_eq!(parse_command("/model"), Some(Command::Model(None)));
+        assert_eq!(
+            parse_command("/model deepseek/chat"),
+            Some(Command::Model(Some("deepseek/chat".into())))
+        );
+        assert_eq!(parse_command("/agent"), Some(Command::Agent));
+        assert_eq!(parse_command("/compact"), Some(Command::Compact));
+        assert_eq!(
+            parse_command("/load_other_agent_config ~/cfg.json"),
+            Some(Command::LoadOtherAgentConfig("~/cfg.json".into()))
+        );
     }
 }
