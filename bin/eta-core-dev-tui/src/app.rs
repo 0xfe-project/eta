@@ -118,7 +118,12 @@ impl App {
             crate::tui::Focus::Context => &mut view.context_scroll,
             crate::tui::Focus::Input => return,
         };
-        *scroll = (*scroll as i64 + delta).clamp(0, len as i64) as usize;
+        // Scrolling is by physical rows after wrapping, so a single logical line
+        // can occupy many rows. Keep a generous upper bound and let ratatui's
+        // `Paragraph::scroll` clamp to the actual content; only guard against
+        // underflow on the low end.
+        let upper = len.saturating_mul(16).max(1) as i64;
+        *scroll = (*scroll as i64 + delta).clamp(0, upper) as usize;
     }
 
     /// Whether the input box is currently empty.

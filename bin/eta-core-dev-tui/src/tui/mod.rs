@@ -357,15 +357,21 @@ fn render_panel(
         .border_style(border_style);
     frame.render_widget(block.clone(), rect);
     let inner = block.inner(rect);
-    let height = inner.height as usize;
-    let start = scroll.min(lines.len());
-    let end = (start + height).min(lines.len());
-    let window = &lines[start..end];
-    let rendered: Vec<Line> = window
+    // Render the full line set and let ratatui handle wrapping and scrolling by
+    // physical rows. Previously we sliced `[start..end]` by logical line count
+    // *before* wrapping, which meant a single logical line that wrapped across
+    // multiple rows could consume the whole viewport and make content appear to
+    // vanish after one scroll step.
+    let rendered: Vec<Line> = lines
         .iter()
         .map(|line| Line::from(style_fn(line)))
         .collect();
-    frame.render_widget(Paragraph::new(rendered).wrap(Wrap { trim: false }), inner);
+    frame.render_widget(
+        Paragraph::new(rendered)
+            .wrap(Wrap { trim: false })
+            .scroll((scroll as u16, 0)),
+        inner,
+    );
 }
 
 fn style_answer(line: &str) -> Vec<Span<'static>> {
