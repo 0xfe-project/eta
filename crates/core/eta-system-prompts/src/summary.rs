@@ -1,7 +1,7 @@
 //! Summarization prompts (shared by mid-loop summarization and compaction).
 
 /// Short system prompt for the summarizer.
-pub const SUMMARIZE_SYSTEM_PROMPT: &str = "Summarize the conversation. Follow <summarization_request>. The summary continues the task for another AI. Align with the task. NEVER mention \"summary\".";
+pub const SUMMARIZE_SYSTEM_PROMPT: &str = "Summarize the conversation. Follow <summarization_request>...</summarization_request>. The summary continues the task for another AI. Align with the task. NEVER mention \"summary\".";
 
 /// Detailed summarization instruction, appended as the final user message.
 pub const SUMMARIZE_REQUEST: &str = "<summarization_request>

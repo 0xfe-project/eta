@@ -198,3 +198,23 @@ impl GoalState {
         eta_system_prompts::goal_pursuit_guidelines(&self.objective)
     }
 }
+
+/// A todo item in the agent's current-tasks plan.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TodoItem {
+    pub id: String,
+    /// Optional on update — an empty `content` keeps the existing value.
+    #[serde(default)]
+    pub content: String,
+    pub status: TodoStatus,
+}
+
+/// Todo item status.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TodoStatus {
+    Pending,
+    InProgress,
+    Completed,
+    Cancelled,
+}

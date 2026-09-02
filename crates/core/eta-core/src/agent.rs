@@ -14,7 +14,10 @@ use crate::error::classify_provider_error;
 use crate::hooks::Hooks;
 use crate::loop_detect::LoopDetector;
 use crate::store::SessionStorage;
-use crate::tool::{CancelToken, Tool, builtin_state_tools, validate_args};
+use crate::tool::{
+    CancelToken, Tool, builtin_state_tools, builtin_todo_tool, load_todos, render_todos,
+    validate_args,
+};
 use crate::types::{
     AgentEvent, AgentId, AgentInput, AskUserAnswer, ControlPlaneAction, ControlPlaneDecision,
     ControlPlanePrompt, GoalContinuationGate, GoalState, GoalStatus, ToolCall, ToolResult,
@@ -62,8 +65,9 @@ impl Agent {
         let (answer_tx, answer_rx) = mpsc::channel(16);
         let cancel = CancelToken::new();
 
-        // Builtin state tools always attach to the session store.
+        // Builtin state tools + todo tool always attach to the session store.
         cfg.tools.extend(builtin_state_tools(cfg.store.clone()));
+        cfg.tools.push(builtin_todo_tool(cfg.store.clone()));
 
         let mut runtime = AgentRuntime {
             cfg,
@@ -415,8 +419,8 @@ impl AgentRuntime {
     }
 
     /// Assemble the LLM context for a step (system prompt + messages + tools),
-    /// then let hooks transform it.
-    fn build_context(&self) -> Context {
+    /// then let hooks transform it. Reads the todo list from session state.
+    async fn build_context(&self) -> Context {
         let tool_schemas: Vec<ToolSchema> = self
             .cfg
             .tools
@@ -427,8 +431,26 @@ impl AgentRuntime {
                 schema: t.schema(),
             })
             .collect();
+        let mut system_prompt = self.cfg.system_prompt.clone();
+
+        // Goal guidelines when a goal is active (goal-mode prompt enhancement).
+        if let Some(goal) = &self.goal {
+            system_prompt.push_str("\n\n");
+            system_prompt.push_str(&goal.build_goal_pursuit_guidelines());
+        }
+
+        // Current-tasks (todo) guidance + durable block, in the stable region.
+        system_prompt.push_str("\n\n");
+        system_prompt.push_str(prompts::CURRENT_TASKS_GUIDANCE);
+        let todos = load_todos(self.cfg.store.as_ref()).await;
+        let todos_block = render_todos(&todos);
+        if !todos_block.is_empty() {
+            system_prompt.push_str("\n\n");
+            system_prompt.push_str(&todos_block);
+        }
+
         let mut context = Context {
-            system_prompt: Some(self.cfg.system_prompt.clone()),
+            system_prompt: Some(system_prompt),
             messages: self.messages.clone(),
             tools: tool_schemas,
         };
@@ -533,7 +555,7 @@ impl AgentRuntime {
 
     async fn run_step(&mut self) -> StepResult {
         self.maybe_summarize_mid_loop().await;
-        let context = self.build_context();
+        let context = self.build_context().await;
         let mut stream = self.cfg.provider.stream(&self.cfg.model, &context, None);
 
         let mut had_tools = false;
