@@ -15,6 +15,8 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use tui::Focus;
 use tui_textarea::TextArea;
 
+use commands::{Command, parse_command};
+
 /// Interactive UI state. More panels and session state are added in later
 /// Part E items; for now this only tracks focus and the input box.
 struct App {
@@ -57,7 +59,24 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()>
                     continue;
                 }
                 if app.focus == Focus::Input {
-                    app.input.input(key);
+                    let shift = key.modifiers.contains(KeyModifiers::SHIFT);
+                    match key.code {
+                        KeyCode::Enter if !shift => {
+                            let line = app.input.lines().join("\n");
+                            app.input = TextArea::default();
+                            if let Some(command) = parse_command(&line) {
+                                if command == Command::Quit {
+                                    return Ok(());
+                                }
+                            }
+                        }
+                        KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            return Ok(());
+                        }
+                        _ => {
+                            let _ = app.input.input(key);
+                        }
+                    }
                 }
             }
             _ => {}
