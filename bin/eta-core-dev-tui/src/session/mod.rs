@@ -12,7 +12,8 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
-use eta_core::{Agent, SessionStorage};
+use eta_core::{Agent, AgentConfig, AgentId, Hooks, MemoryStore, SessionStorage, Tool};
+use eta_llm::{Model, Provider};
 use eta_sqlite_storage::{SqliteSessionStore, list_sessions_in};
 
 /// Coarse lifecycle label shown in the `/session` picker.
@@ -133,12 +134,78 @@ impl SessionManager {
     }
 }
 
+/// Build and spawn one independent engine (1 agent : 1 session). The concrete
+/// adapters (provider, session store, memory store, tools) are injected so this
+/// stays testable with a mock provider and in-memory stores.
+#[allow(dead_code)]
+pub fn spawn_session(
+    session_id: impl Into<String>,
+    agent_id: AgentId,
+    provider: Arc<dyn Provider>,
+    model: Model,
+    store: Arc<dyn SessionStorage>,
+    memory_store: Arc<dyn MemoryStore>,
+    tools: Vec<Arc<dyn Tool>>,
+    system_prompt: String,
+    adapter_system_prompt: String,
+) -> SessionHandle {
+    let agent = Agent::spawn(AgentConfig {
+        agent_id,
+        provider,
+        model,
+        tools,
+        hooks: Hooks::new(),
+        store: store.clone(),
+        skill_store: None,
+        memory_store,
+        system_prompt,
+        adapter_system_prompt,
+        max_retries: 2,
+        max_goal_rounds: None,
+    });
+    SessionHandle {
+        agent: Some(agent),
+        store,
+        meta: SessionMeta {
+            id: session_id.into(),
+            status: SessionStatus::Running,
+            goal: None,
+            turn_count: 0,
+            last_activity: Instant::now(),
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{SessionHandle, SessionManager, SessionMeta, SessionStatus};
+    use super::{SessionHandle, SessionManager, SessionMeta, SessionStatus, spawn_session};
+    use eta_core::{AgentEvent, AgentId, AgentInput, MemoryStore, SessionStorage};
+    use eta_llm::{Context, Event, Model, Provider, ProviderError, StopReason, Usage};
+    use eta_sqlite_storage::SqliteAgentStore;
     use eta_sqlite_storage::SqliteSessionStore;
+    use serde_json::json;
+    use std::pin::Pin;
     use std::sync::Arc;
-    use std::time::Instant;
+    use std::time::{Duration, Instant};
+    use tokio_stream::Stream;
+
+    /// Provider that replays one fixed stream on every call. Good enough for a
+    /// single-turn smoke test: the engine reuses the same content for the
+    /// out-of-band memory-extraction pass, which then finds no JSON edits.
+    struct ScriptedProvider {
+        events: Vec<Result<Event, ProviderError>>,
+    }
+
+    impl Provider for ScriptedProvider {
+        fn stream(
+            &self,
+            _model: &Model,
+            _context: &Context,
+            _opts: Option<&serde_json::Value>,
+        ) -> Pin<Box<dyn Stream<Item = Result<Event, ProviderError>> + Send>> {
+            Box::pin(tokio_stream::iter(self.events.clone()))
+        }
+    }
 
     fn handle(id: &str) -> SessionHandle {
         SessionHandle {
@@ -187,5 +254,55 @@ mod tests {
 
         let manager = SessionManager::from_dir(dir.path());
         assert_eq!(manager.ids(), vec!["s1".to_string(), "s2".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn spawn_session_runs_one_complete_turn() {
+        let provider: Arc<dyn Provider> = Arc::new(ScriptedProvider {
+            events: vec![
+                Ok(Event::Content(json!({"type": "text", "text": "hello"}))),
+                Ok(Event::End {
+                    usage: Usage::default(),
+                    stop: StopReason::EndTurn,
+                }),
+            ],
+        });
+        let store: Arc<dyn SessionStorage> = Arc::new(SqliteSessionStore::in_memory());
+        let memory: Arc<dyn MemoryStore> = Arc::new(SqliteAgentStore::in_memory());
+
+        let handle = spawn_session(
+            "s1",
+            AgentId("dev".into()),
+            provider,
+            Model::new("test-model"),
+            store,
+            memory,
+            vec![],
+            "you are eta".into(),
+            String::new(),
+        );
+        let agent = handle.agent.as_ref().expect("agent spawned");
+        let mut rx = agent.subscribe();
+        agent
+            .send(AgentInput::UserMessage {
+                content: json!({"type": "text", "text": "hi"}),
+            })
+            .await
+            .expect("send");
+
+        let mut saw_hello = false;
+        loop {
+            match tokio::time::timeout(Duration::from_millis(500), rx.recv()).await {
+                Ok(Ok(AgentEvent::AgentEnd)) => break,
+                Ok(Ok(AgentEvent::MessageUpdate { message, .. })) => {
+                    if message.get("text").and_then(|t| t.as_str()) == Some("hello") {
+                        saw_hello = true;
+                    }
+                }
+                Ok(Ok(_)) => {}
+                Ok(Err(_)) | Err(_) => break,
+            }
+        }
+        assert!(saw_hello, "engine did not stream assistant content");
     }
 }

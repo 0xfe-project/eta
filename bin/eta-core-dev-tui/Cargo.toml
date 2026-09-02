@@ -17,6 +17,7 @@ tokio.workspace = true
 serde_json.workspace = true
 
 # eta engine + real adapters (wired up in later Part E items).
+eta-llm = { path = "../../crates/core/eta-llm" }
 eta-core = { path = "../../crates/core/eta-core" }
 eta-session = { path = "../../crates/core/eta-session" }
 eta-fs = { path = "../../crates/adapters/eta-fs" }
@@ -30,3 +31,4 @@ eta-anycodingagent-config-reader = { path = "../../crates/adapters/eta-anycoding
 
 [dev-dependencies]
 tempfile = "3"
+tokio-stream.workspace = true

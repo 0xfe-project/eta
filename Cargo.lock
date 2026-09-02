@@ -355,6 +355,7 @@ dependencies = [
  "eta-core",
  "eta-fs",
  "eta-io-tools",
+ "eta-llm",
  "eta-mcp",
  "eta-provider-anthropic",
  "eta-provider-openai",
@@ -364,6 +365,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "tokio-stream",
  "tui-textarea",
 ]
 
