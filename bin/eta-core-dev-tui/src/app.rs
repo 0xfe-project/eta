@@ -62,6 +62,7 @@ pub(crate) struct App {
     history_idx: Option<usize>,
     pub(crate) dev_filter: String,
     pub(crate) dev_filtering: bool,
+    pub(crate) current_model: String,
 }
 
 impl App {
@@ -85,6 +86,7 @@ impl App {
             history_idx: None,
             dev_filter: String::new(),
             dev_filtering: false,
+            current_model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into()),
         }
     }
 
@@ -159,7 +161,10 @@ impl App {
             .current()
             .map(|handle| handle.meta.agent_id.0.clone())
             .unwrap_or_default();
-        format!("{mode} · session {session} · agent {agent}")
+        format!(
+            "{mode} · session {session} · agent {agent} · model {}",
+            self.current_model
+        )
     }
 
     pub(crate) fn start_dev_filter(&mut self) {
@@ -488,6 +493,7 @@ impl App {
         let agent_id = session.meta.agent_id.clone();
         let store = session.store.clone();
         let (provider, model) = self.resolve_provider_model(model_id);
+        self.current_model = model.id.clone();
         let memory: Arc<dyn MemoryStore> = Arc::new(
             SqliteAgentStore::open(eta_fs::agent_db(&agent_id.to_string()))
                 .unwrap_or_else(|_| SqliteAgentStore::in_memory()),
@@ -548,6 +554,7 @@ impl App {
         let store = session.store.clone();
         let provider: Arc<dyn Provider> = Arc::new(OpenAiProvider::from_env());
         let model = Model::new(std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into()));
+        self.current_model = model.id.clone();
         let memory: Arc<dyn MemoryStore> = Arc::new(
             SqliteAgentStore::open(eta_fs::agent_db(name))
                 .unwrap_or_else(|_| SqliteAgentStore::in_memory()),
@@ -626,6 +633,7 @@ impl App {
     pub(crate) fn spawn_session_for_agent(&mut self, name: &str, persona: Option<&str>) {
         let provider: Arc<dyn Provider> = Arc::new(OpenAiProvider::from_env());
         let model = Model::new(std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into()));
+        self.current_model = model.id.clone();
         let session_id = uuid::Uuid::now_v7().to_string();
         let _ = std::fs::create_dir_all(eta_fs::sessions_dir());
         let _ = std::fs::create_dir_all(eta_fs::agents_dir());
