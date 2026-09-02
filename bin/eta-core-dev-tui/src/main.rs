@@ -240,9 +240,12 @@ impl App {
     }
 
     fn respawn_with_model(&mut self, model_id: &str) {
-        let Some(store) = self.sessions.current().map(|handle| handle.store.clone()) else {
+        let Some(session) = self.sessions.current() else {
             return;
         };
+        let session_id = session.meta.id.clone();
+        let agent_id = session.meta.agent_id.clone();
+        let store = session.store.clone();
         let provider: Arc<dyn Provider> = Arc::new(OpenAiProvider::from_env());
         let id = model_id
             .split('/')
@@ -250,14 +253,12 @@ impl App {
             .unwrap_or(model_id)
             .to_string();
         let model = Model::new(id);
-        let memory: Arc<dyn MemoryStore> = Arc::new(SqliteAgentStore::in_memory());
-        let agent_id = self
-            .sessions
-            .current()
-            .map(|handle| handle.meta.agent_id.clone())
-            .unwrap_or_else(|| AgentId("eta".into()));
+        let memory: Arc<dyn MemoryStore> = Arc::new(
+            SqliteAgentStore::open(eta_fs::agent_db(&agent_id.to_string()))
+                .unwrap_or_else(|_| SqliteAgentStore::in_memory()),
+        );
         let handle = spawn_session(
-            "default",
+            &session_id,
             agent_id,
             provider,
             model,
@@ -269,7 +270,7 @@ impl App {
         );
         self.sessions = SessionManager::new();
         self.sessions.insert(handle);
-        self.sessions.attach("default");
+        self.sessions.attach(&session_id);
     }
 
     fn open_agent_switch(&mut self) {
@@ -278,14 +279,19 @@ impl App {
     }
 
     fn switch_agent(&mut self, name: &str) {
-        let Some(store) = self.sessions.current().map(|handle| handle.store.clone()) else {
+        let Some(session) = self.sessions.current() else {
             return;
         };
+        let session_id = session.meta.id.clone();
+        let store = session.store.clone();
         let provider: Arc<dyn Provider> = Arc::new(OpenAiProvider::from_env());
         let model = Model::new(std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into()));
-        let memory: Arc<dyn MemoryStore> = Arc::new(SqliteAgentStore::in_memory());
+        let memory: Arc<dyn MemoryStore> = Arc::new(
+            SqliteAgentStore::open(eta_fs::agent_db(name))
+                .unwrap_or_else(|_| SqliteAgentStore::in_memory()),
+        );
         let handle = spawn_session(
-            "default",
+            &session_id,
             AgentId(name.to_string()),
             provider,
             model,
@@ -297,7 +303,7 @@ impl App {
         );
         self.sessions = SessionManager::new();
         self.sessions.insert(handle);
-        self.sessions.attach("default");
+        self.sessions.attach(&session_id);
         self.answers.push(format!("agent: {name}"));
     }
 
@@ -358,15 +364,24 @@ impl App {
     fn spawn_session_for_agent(&mut self, name: &str, persona: Option<&str>) {
         let provider: Arc<dyn Provider> = Arc::new(OpenAiProvider::from_env());
         let model = Model::new(std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into()));
-        let sqlite = Arc::new(SqliteSessionStore::in_memory());
+        let session_id = uuid::Uuid::now_v7().to_string();
+        let _ = std::fs::create_dir_all(eta_fs::sessions_dir());
+        let _ = std::fs::create_dir_all(eta_fs::agents_dir());
+        let sqlite = Arc::new(
+            SqliteSessionStore::open(eta_fs::session_db(&session_id))
+                .unwrap_or_else(|_| SqliteSessionStore::in_memory()),
+        );
         let store: Arc<dyn SessionStorage> = sqlite.clone();
-        let memory: Arc<dyn MemoryStore> = Arc::new(SqliteAgentStore::in_memory());
+        let memory: Arc<dyn MemoryStore> = Arc::new(
+            SqliteAgentStore::open(eta_fs::agent_db(name))
+                .unwrap_or_else(|_| SqliteAgentStore::in_memory()),
+        );
         let body = persona
             .and_then(|persona| eta_system_prompts::builtin_personas().get(persona).cloned())
             .unwrap_or_default();
         let system_prompt = format!("{DEFAULT_SYSTEM_PROMPT}\n\n{body}");
         let handle = spawn_session(
-            "default",
+            &session_id,
             AgentId(name.to_string()),
             provider,
             model,
@@ -379,7 +394,7 @@ impl App {
         self.sqlite = Some(sqlite);
         self.sessions = SessionManager::new();
         self.sessions.insert(handle);
-        self.sessions.attach("default");
+        self.sessions.attach(&session_id);
     }
 }
 
