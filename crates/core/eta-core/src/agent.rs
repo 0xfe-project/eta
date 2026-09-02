@@ -684,8 +684,9 @@ impl AgentRuntime {
             dev_category::PROMPT,
             "assembled",
             serde_json::json!({
-                "system_prompt": system_prompt,
+                "system_prompt_chars": system_prompt.chars().count(),
                 "tool_count": self.cfg.tools.len(),
+                "message_count": self.messages.len(),
             }),
         );
         context
@@ -754,6 +755,13 @@ impl AgentRuntime {
                         .push(serde_json::json!({ "role": "user", "content": prompts::RESUME }));
                     continue;
                 }
+                // Final (non-retriable or exhausted) error: surface it so the
+                // dev panel can show exactly why the turn produced no text.
+                self.emit_dev(
+                    dev_category::RETRY,
+                    "error",
+                    serde_json::json!({ "error": err.to_string() }),
+                );
                 return step;
             }
 
@@ -807,13 +815,6 @@ impl AgentRuntime {
                 }
             }
 
-            if let Some(err) = &step.error {
-                self.emit_dev(
-                    dev_category::RETRY,
-                    "error",
-                    serde_json::json!({ "error": err.to_string() }),
-                );
-            }
             return step;
         }
     }
