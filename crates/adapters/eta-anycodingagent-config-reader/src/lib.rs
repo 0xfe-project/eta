@@ -2,7 +2,7 @@
 
 use eta_config::{Config, ModelConfig, ModelLimit, ProviderConfig, ProviderFormat};
 use serde_json::{Map, Value, json};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 use std::path::{Path, PathBuf};
 
 /// Supported one-shot import sources.
@@ -28,8 +28,30 @@ impl CustomModelImport {
         }
     }
 
-    fn extend(&mut self, other: CustomModelImport) {
-        self.providers.extend(other.providers);
+    /// Merge another import into this one, deduplicating providers and models.
+    /// Existing providers/models/options win on collision.
+    pub fn merge(&mut self, other: CustomModelImport) {
+        for (id, provider) in other.providers {
+            match self.providers.entry(id) {
+                Entry::Vacant(slot) => {
+                    slot.insert(provider);
+                }
+                Entry::Occupied(mut slot) => {
+                    let existing = slot.get_mut();
+                    for (model_id, model) in provider.models {
+                        existing.models.entry(model_id).or_insert(model);
+                    }
+                    if let (Some(dst), Some(src)) = (
+                        existing.options.as_object_mut(),
+                        provider.options.as_object(),
+                    ) {
+                        for (key, value) in src {
+                            dst.entry(key.clone()).or_insert_with(|| value.clone());
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// Flatten imported providers into sorted `provider/model` entries.
@@ -64,10 +86,17 @@ pub fn import_from_home(home: impl AsRef<Path>) -> Result<CustomModelImport, Str
     let mut imported = CustomModelImport::default();
     for (source, path) in source_paths(home) {
         if path.is_file() {
-            imported.extend(import_file(source, path)?);
+            imported.merge(import_file(source, path)?);
         }
     }
     Ok(imported)
+}
+
+/// Import from the user's home directory, reading the few installed client
+/// configs (codex / claude / opencode / pi) without a path argument.
+pub fn import_from_default_home() -> Result<CustomModelImport, String> {
+    let home = dirs::home_dir().ok_or_else(|| "no home directory".to_string())?;
+    import_from_home(home)
 }
 
 /// Import from an arbitrary path, auto-detecting the source by extension.

@@ -312,6 +312,7 @@ dependencies = [
 name = "eta-anycodingagent-config-reader"
 version = "0.1.0"
 dependencies = [
+ "dirs",
  "eta-config",
  "serde",
  "serde_json",

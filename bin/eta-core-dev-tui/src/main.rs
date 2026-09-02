@@ -413,10 +413,9 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                                 app.answers
                                                     .push("model picker not wired yet".into());
                                             }
-                                            Command::LoadOtherAgentConfig(path) => {
-                                                match eta_anycodingagent_config_reader::import_path(
-                                                    path,
-                                                ) {
+                                            Command::LoadOtherAgentConfig => {
+                                                match eta_anycodingagent_config_reader::import_from_default_home()
+                                                {
                                                     Ok(imported) => {
                                                         let entries = imported.model_entries();
                                                         if entries.is_empty() {

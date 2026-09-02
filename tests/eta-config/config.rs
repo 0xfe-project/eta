@@ -1,7 +1,8 @@
 use eta_anycodingagent_config_reader::{
-    import_claude, import_codex, import_from_home, import_opencode, import_path, import_pi,
+    CustomModelImport, import_claude, import_codex, import_from_home, import_opencode, import_path,
+    import_pi,
 };
-use eta_config::{Config, ProviderFormat, load_personas};
+use eta_config::{Config, ModelConfig, ModelLimit, ProviderConfig, ProviderFormat, load_personas};
 use std::collections::BTreeMap;
 use std::fs;
 
@@ -153,6 +154,52 @@ fn import_path_detects_opencode_and_lists_models() {
     .unwrap();
     let imported = import_path(&path).unwrap();
     assert_eq!(imported.model_entries(), vec!["custom/grok"]);
+}
+
+#[test]
+fn merge_dedups_providers_and_models() {
+    let mut a = CustomModelImport::default();
+    a.providers.insert(
+        "p".into(),
+        ProviderConfig {
+            format: ProviderFormat::OpenAiChatCompletion,
+            options: serde_json::json!({"baseURL": "https://a"}),
+            models: [(
+                "m".into(),
+                ModelConfig {
+                    name: "m".into(),
+                    limit: ModelLimit::default(),
+                },
+            )]
+            .into_iter()
+            .collect(),
+        },
+    );
+
+    let mut b = CustomModelImport::default();
+    b.providers.insert(
+        "p".into(),
+        ProviderConfig {
+            format: ProviderFormat::OpenAiChatCompletion,
+            options: serde_json::json!({"apiKey": "secret"}),
+            models: [(
+                "m2".into(),
+                ModelConfig {
+                    name: "m2".into(),
+                    limit: ModelLimit::default(),
+                },
+            )]
+            .into_iter()
+            .collect(),
+        },
+    );
+
+    a.merge(b);
+    let provider = &a.providers["p"];
+    assert!(provider.models.contains_key("m"));
+    assert!(provider.models.contains_key("m2"));
+    assert_eq!(provider.options["baseURL"], "https://a");
+    assert_eq!(provider.options["apiKey"], "secret");
 }
 
 #[test]
