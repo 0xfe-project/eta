@@ -221,6 +221,7 @@ dependencies = [
 name = "eta-config"
 version = "0.1.0"
 dependencies = [
+ "eta-system-prompts",
  "serde",
  "serde_json",
 ]

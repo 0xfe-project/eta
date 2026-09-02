@@ -20,23 +20,13 @@ pub struct Config {
     pub persona: Vec<String>,
 }
 
-/// Built-in persona cards. Applications may replace any card with a file of
-/// the same name in `~/.eta/persona`.
-pub fn builtin_personas() -> BTreeMap<String, String> {
-    BTreeMap::from([
-        ("思考者".into(), "以严谨推理和证据为先。".into()),
-        ("提倡者".into(), "积极提出方案并说明取舍。".into()),
-        ("落地者".into(), "优先给出可执行、可验证的步骤。".into()),
-        ("艺术家".into(), "重视表达、创意与用户体验。".into()),
-    ])
-}
-
-/// Load configured personas, with custom markdown cards overriding presets.
+/// Load configured personas, with custom markdown cards overriding the built-in
+/// presets from `eta-system-prompts`. Both sets share the same name namespace.
 pub fn load_personas(
     config: &Config,
     directory: impl AsRef<std::path::Path>,
 ) -> BTreeMap<String, String> {
-    let mut available = builtin_personas();
+    let mut available = eta_system_prompts::builtin_personas();
     if let Ok(entries) = std::fs::read_dir(directory) {
         for entry in entries.flatten() {
             let path = entry.path();

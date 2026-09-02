@@ -6,6 +6,7 @@
 mod base;
 mod evo;
 mod goal;
+mod persona;
 mod resume;
 mod summary;
 mod todo;
@@ -13,6 +14,7 @@ mod todo;
 pub use base::DEFAULT_SYSTEM_PROMPT;
 pub use evo::{MEMORY_EXTRACT_PROMPT, MEMORY_EXTRACT_SYSTEM_PROMPT};
 pub use goal::{goal_evaluator_prompt, goal_pursuit_guidelines};
+pub use persona::builtin_personas;
 pub use resume::{RESUME, RESUME_EMPTY, RESUME_LOOP, RESUME_TRUNCATED};
 pub use summary::{
     SUMMARIZE_REQUEST, SUMMARIZE_SHORTER_RETRY, SUMMARIZE_SYSTEM_PROMPT, UNTRUSTED_SUMMARY_NOTE,
