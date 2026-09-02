@@ -44,6 +44,7 @@ async fn skill_store_dumped_into_context() {
         hooks: hooks(),
         store,
         skill_store: Some(Arc::new(OneSkillStore)),
+        memory_store: None,
         system_prompt: "test".into(),
         max_retries: 2,
         max_goal_rounds: None,

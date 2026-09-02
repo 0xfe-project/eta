@@ -204,15 +204,18 @@ impl<'a> SqliteTimeTravel<'a> {
         self.commit(message, &[base, other])
     }
 
-    /// Full-text search over commit snapshots (FTS5).
+    /// Full-text search over commit snapshots (FTS5 / BM25).
+    ///
+    /// The query is wrapped as a phrase so hyphens / punctuation in user input
+    /// aren't parsed as FTS5 operators.
     pub fn search_commits(&self, query: &str) -> Vec<u64> {
         let conn = self.conn.lock().unwrap();
+        let phrase = format!("\"{}\"", query.replace('"', "\"\""));
         let mut stmt = conn
-            .prepare("SELECT id FROM commits WHERE snapshot LIKE ?1 ORDER BY id")
+            .prepare("SELECT rowid FROM commits_fts WHERE commits_fts MATCH ?1 ORDER BY rowid")
             .unwrap();
-        let like = format!("%{query}%");
         let rows = stmt
-            .query_map(params![like], |row| row.get::<_, i64>(0))
+            .query_map(params![phrase], |row| row.get::<_, i64>(0))
             .unwrap();
         rows.filter_map(|r| r.ok()).map(|v| v as u64).collect()
     }

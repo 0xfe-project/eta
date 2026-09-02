@@ -28,7 +28,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use eta_core::{
     Agent, AgentConfig, AgentEvent, AgentHooks, AgentId, AgentInput, CancelToken, Hooks,
-    SessionEntry, SessionStorage, Tool, ToolError,
+    MemoryEntry, MemoryStore, SessionEntry, SessionStorage, Tool, ToolError,
 };
 use eta_llm::{Context, Event, Model, Provider, ProviderError, StopReason, Usage};
 use tokio_stream::Stream;
@@ -42,6 +42,23 @@ fn hooks() -> Hooks {
     let mut h = Hooks::new();
     h.push(Arc::new(NoopHooks));
     h
+}
+
+/// In-memory `MemoryStore` used to observe memory writes.
+#[derive(Default)]
+struct MemMemoryStore {
+    inner: std::sync::Mutex<std::collections::BTreeMap<u64, MemoryEntry>>,
+}
+
+#[async_trait]
+impl MemoryStore for MemMemoryStore {
+    async fn load(&self) -> std::collections::BTreeMap<u64, MemoryEntry> {
+        self.inner.lock().unwrap().clone()
+    }
+    async fn apply(&self, edits: &serde_json::Value) -> Result<usize, ToolError> {
+        let mut memory = self.inner.lock().unwrap();
+        eta_core::apply_memory_edits(&mut memory, edits)
+    }
 }
 
 /// In-memory `SessionStorage` used to observe state writes.
@@ -165,6 +182,7 @@ fn make_agent(provider: Arc<dyn Provider>, tools: Vec<Arc<dyn Tool>>) -> Agent {
         system_prompt: "test".into(),
         max_retries: 2,
         skill_store: None,
+        memory_store: None,
         max_goal_rounds: None,
     })
 }

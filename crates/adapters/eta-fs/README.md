@@ -12,7 +12,7 @@ Two concerns, kept separate so `eta-core` stays zero-IO:
 
 Layout (overridable via `ETA_HOME` for tests):
 
-```
+```text
 ~/.eta/
   persona/            *.persona.md
   skills/             (same rules as .agents/skills)

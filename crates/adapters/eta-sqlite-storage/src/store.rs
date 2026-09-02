@@ -71,6 +71,16 @@ impl SqliteSessionStore {
                 INSERT INTO entries_fts(entries_fts, rowid, kind, data)
                     VALUES ('delete', old.id, old.kind, old.data);
             END;
+            CREATE VIRTUAL TABLE IF NOT EXISTS commits_fts
+                USING fts5(message, snapshot, content='commits', content_rowid='id');
+            CREATE TRIGGER IF NOT EXISTS commits_ai AFTER INSERT ON commits BEGIN
+                INSERT INTO commits_fts(rowid, message, snapshot)
+                    VALUES (new.id, new.message, new.snapshot);
+            END;
+            CREATE TRIGGER IF NOT EXISTS commits_ad AFTER DELETE ON commits BEGIN
+                INSERT INTO commits_fts(commits_fts, rowid, message, snapshot)
+                    VALUES ('delete', old.id, old.message, old.snapshot);
+            END;
             ",
         )
     }
@@ -126,11 +136,13 @@ impl SessionStorage for SqliteSessionStore {
 
     async fn search(&self, query: &str) -> Vec<u64> {
         let conn = self.conn.lock().unwrap();
+        // Wrap as a phrase so hyphens / punctuation aren't parsed as FTS5 operators.
+        let phrase = format!("\"{}\"", query.replace('"', "\"\""));
         let mut stmt = conn
             .prepare("SELECT rowid FROM entries_fts WHERE entries_fts MATCH ?1")
             .unwrap();
         let rows = stmt
-            .query_map(params![query], |row| row.get::<_, i64>(0))
+            .query_map(params![phrase], |row| row.get::<_, i64>(0))
             .unwrap();
         rows.filter_map(|r| r.ok()).map(|id| id as u64).collect()
     }

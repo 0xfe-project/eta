@@ -69,8 +69,7 @@ pub(crate) fn validate_args(
     }
 }
 
-pub use evo::render_memory;
-pub(crate) use evo::{apply_memory_edits, load_memory};
+pub use evo::{apply_memory_edits, render_memory};
 pub(crate) use multi_tool_use::builtin_multi_tool_use_tool;
 pub use skill::render_skills;
 pub(crate) use state::builtin_state_tools;

@@ -3,6 +3,8 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
+use crate::types::MemoryEntry;
+
 /// A single append-only transcript entry in a session.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SessionEntry {
@@ -89,4 +91,16 @@ pub struct Skill {
 pub trait SkillStore: Send + Sync {
     /// All installed skills.
     async fn list(&self) -> Vec<Skill>;
+}
+
+/// Storage-agnostic memory source (seam trait; implemented by the per-agent
+/// sqlite backend). Memory is `{ id: { type, content } }`, keyed by id so the
+/// engine can `remove` stale entries by id before adding new ones.
+#[async_trait]
+pub trait MemoryStore: Send + Sync {
+    /// All memory entries.
+    async fn load(&self) -> std::collections::BTreeMap<u64, MemoryEntry>;
+    /// Apply an edit: remove ids, then add decisions / preferences / lessons.
+    /// Returns the new total char count, or an error when over the cap.
+    async fn apply(&self, edits: &serde_json::Value) -> Result<usize, crate::error::ToolError>;
 }

@@ -14,11 +14,10 @@ use crate::dev_event::{AgentDevEvent, dev_category};
 use crate::error::classify_provider_error;
 use crate::hooks::Hooks;
 use crate::loop_detect::LoopDetector;
-use crate::store::{SessionStorage, SkillStore};
+use crate::store::{MemoryStore, SessionStorage, SkillStore};
 use crate::tool::{
-    CancelToken, Tool, apply_memory_edits, builtin_multi_tool_use_tool, builtin_state_tools,
-    builtin_todo_tool, load_memory, load_todos, render_memory, render_skills, render_todos,
-    validate_args,
+    CancelToken, Tool, builtin_multi_tool_use_tool, builtin_state_tools, builtin_todo_tool,
+    load_todos, render_memory, render_skills, render_todos, validate_args,
 };
 use crate::types::{
     AgentEvent, AgentId, AgentInput, AskUserAnswer, ControlPlaneAction, ControlPlaneDecision,
@@ -47,6 +46,9 @@ pub struct AgentConfig {
     /// Skill source; its whole list is dumped into the `<skills>` block.
     /// `None` = no skills.
     pub skill_store: Option<Arc<dyn SkillStore>>,
+    /// Memory source; the engine writes/reads memory here out-of-band.
+    /// `None` = no memory (the `<memory>` block is simply empty).
+    pub memory_store: Option<Arc<dyn MemoryStore>>,
     pub system_prompt: String,
     pub max_retries: usize,
     /// Goal self-continuation cap (`None` = `DEFAULT_MAX_GOAL_ROUNDS`).
@@ -392,7 +394,9 @@ impl AgentRuntime {
             return;
         }
         self.emit_dev(dev_category::MEMORY, "edit", edits.clone());
-        let _ = apply_memory_edits(self.cfg.store.as_ref(), &edits).await;
+        if let Some(memory_store) = &self.cfg.memory_store {
+            let _ = memory_store.apply(&edits).await;
+        }
     }
 
     /// Run an independent, tool-free evaluation call to judge whether the active
@@ -587,11 +591,13 @@ impl AgentRuntime {
         }
 
         // Memory: render only (read-only), no guidance on how it's written.
-        let memory = load_memory(self.cfg.store.as_ref()).await;
-        let memory_block = render_memory(&memory);
-        if !memory_block.is_empty() {
-            system_prompt.push_str("\n\n");
-            system_prompt.push_str(&memory_block);
+        if let Some(memory_store) = &self.cfg.memory_store {
+            let memory = memory_store.load().await;
+            let memory_block = render_memory(&memory);
+            if !memory_block.is_empty() {
+                system_prompt.push_str("\n\n");
+                system_prompt.push_str(&memory_block);
+            }
         }
 
         // Skills: dump the whole installed list (name + path/body).

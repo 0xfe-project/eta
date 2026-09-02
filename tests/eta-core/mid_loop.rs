@@ -56,6 +56,7 @@ async fn summarizes_when_context_grows() {
         system_prompt: "test".into(),
         max_retries: 2,
         skill_store: None,
+        memory_store: None,
         max_goal_rounds: None,
     });
 

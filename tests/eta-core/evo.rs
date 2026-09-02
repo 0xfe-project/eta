@@ -41,6 +41,7 @@ async fn extract_memory_writes_out_of_band() {
     ]));
 
     let store = Arc::new(MemStore::default());
+    let memory_store = Arc::new(MemMemoryStore::default());
     let agent = Agent::spawn(AgentConfig {
         agent_id: AgentId("test".into()),
         provider,
@@ -48,6 +49,7 @@ async fn extract_memory_writes_out_of_band() {
         tools: vec![],
         hooks: hooks(),
         store: store.clone(),
+        memory_store: Some(memory_store.clone()),
         system_prompt: "test".into(),
         max_retries: 2,
         skill_store: None,
@@ -55,8 +57,7 @@ async fn extract_memory_writes_out_of_band() {
     });
     let _events = collect(&agent, user_message("hi")).await;
 
-    let saved = store.get_state("eta.memory").await.unwrap();
-    let memory: BTreeMap<u64, MemoryEntry> = serde_json::from_value(saved).unwrap();
+    let memory = memory_store.load().await;
     assert_eq!(memory.len(), 2);
     assert!(memory.values().any(|e| e.content == "never nextjs"));
     assert!(memory.values().any(|e| e.content == "read errors first"));
@@ -70,6 +71,7 @@ async fn extract_memory_ignores_non_json() {
         vec![content("nothing to remember")],
     ]));
     let store = Arc::new(MemStore::default());
+    let memory_store = Arc::new(MemMemoryStore::default());
     let agent = Agent::spawn(AgentConfig {
         agent_id: AgentId("test".into()),
         provider,
@@ -77,6 +79,7 @@ async fn extract_memory_ignores_non_json() {
         tools: vec![],
         hooks: hooks(),
         store: store.clone(),
+        memory_store: Some(memory_store.clone()),
         system_prompt: "test".into(),
         max_retries: 2,
         skill_store: None,
@@ -84,7 +87,7 @@ async fn extract_memory_ignores_non_json() {
     });
     let _events = collect(&agent, user_message("hi")).await;
 
-    assert!(store.get_state("eta.memory").await.is_none());
+    assert!(memory_store.load().await.is_empty());
 }
 
 #[tokio::test]
@@ -97,6 +100,7 @@ async fn extract_memory_cap_enforced() {
         vec![content(&response)],
     ]));
     let store = Arc::new(MemStore::default());
+    let memory_store = Arc::new(MemMemoryStore::default());
     let agent = Agent::spawn(AgentConfig {
         agent_id: AgentId("test".into()),
         provider,
@@ -104,6 +108,7 @@ async fn extract_memory_cap_enforced() {
         tools: vec![],
         hooks: hooks(),
         store: store.clone(),
+        memory_store: Some(memory_store.clone()),
         system_prompt: "test".into(),
         max_retries: 2,
         skill_store: None,
@@ -111,5 +116,5 @@ async fn extract_memory_cap_enforced() {
     });
     let _events = collect(&agent, user_message("hi")).await;
 
-    assert!(store.get_state("eta.memory").await.is_none());
+    assert!(memory_store.load().await.is_empty());
 }
