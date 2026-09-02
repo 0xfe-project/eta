@@ -238,3 +238,11 @@ pub struct MemoryEntry {
     pub kind: MemoryKind,
     pub content: String,
 }
+
+/// An agent-owned (preferred) skill: a name + the content string returned on
+/// use (a path / url / SKILL.md body).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SkillEntry {
+    pub name: String,
+    pub content: String,
+}

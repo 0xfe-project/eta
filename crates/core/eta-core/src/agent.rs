@@ -15,8 +15,9 @@ use crate::hooks::Hooks;
 use crate::loop_detect::LoopDetector;
 use crate::store::SessionStorage;
 use crate::tool::{
-    CancelToken, Tool, builtin_evo_tool, builtin_state_tools, builtin_todo_tool, load_memory,
-    load_todos, render_memory, render_todos, validate_args,
+    CancelToken, Tool, builtin_evo_tool, builtin_skill_tool, builtin_state_tools,
+    builtin_todo_tool, load_memory, load_skills, load_todos, render_memory, render_skills,
+    render_todos, validate_args,
 };
 use crate::types::{
     AgentEvent, AgentId, AgentInput, AskUserAnswer, ControlPlaneAction, ControlPlaneDecision,
@@ -65,10 +66,11 @@ impl Agent {
         let (answer_tx, answer_rx) = mpsc::channel(16);
         let cancel = CancelToken::new();
 
-        // Builtin state + todo + evo tools always attach to the session store.
+        // Builtin state + todo + evo + skill tools always attach to the store.
         cfg.tools.extend(builtin_state_tools(cfg.store.clone()));
         cfg.tools.push(builtin_todo_tool(cfg.store.clone()));
         cfg.tools.push(builtin_evo_tool(cfg.store.clone()));
+        cfg.tools.push(builtin_skill_tool(cfg.store.clone()));
 
         let mut runtime = AgentRuntime {
             cfg,
@@ -489,6 +491,16 @@ impl AgentRuntime {
         if !memory_block.is_empty() {
             system_prompt.push_str("\n\n");
             system_prompt.push_str(&memory_block);
+        }
+
+        // Skills guidance + preferred skills (the agent carries all of them).
+        system_prompt.push_str("\n\n");
+        system_prompt.push_str(prompts::SKILL_GUIDANCE);
+        let skills = load_skills(self.cfg.store.as_ref()).await;
+        let skills_block = render_skills(&skills);
+        if !skills_block.is_empty() {
+            system_prompt.push_str("\n\n");
+            system_prompt.push_str(&skills_block);
         }
 
         let mut context = Context {

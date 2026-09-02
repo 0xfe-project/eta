@@ -31,9 +31,9 @@ pub use loop_detect::LoopDetector;
 pub use loop_mgr::{LoopManager, LoopSpec, Trigger, TriggerRuntime, bootstrap_loops};
 pub use store::{SessionEntry, SessionState, SessionStorage, Skill, SkillStore, entry_kind};
 pub use time::{DurationParseError, parse_duration};
-pub use tool::{CancelToken, Tool, render_memory, render_todos};
+pub use tool::{CancelToken, Tool, render_memory, render_skills, render_todos};
 pub use types::{
     AgentEvent, AgentId, AgentInput, AskUserAnswer, ControlPlaneAction, ControlPlaneDecision,
     ControlPlanePrompt, GoalContinuationGate, GoalState, GoalStatus, MemoryEntry, MemoryKind,
-    TodoItem, TodoStatus, ToolCall, ToolResult, TurnContext, TurnDriver,
+    SkillEntry, TodoItem, TodoStatus, ToolCall, ToolResult, TurnContext, TurnDriver,
 };

@@ -12,6 +12,7 @@ mod loop_manager;
 mod mid_loop;
 mod parse_duration;
 mod retry;
+mod skill;
 mod state_tool;
 mod todo;
 mod tool_execution;
