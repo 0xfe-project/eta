@@ -29,6 +29,15 @@ use tui_textarea::TextArea;
 
 use commands::{Command, parse_command};
 
+/// Help text shown by `/help`.
+const HELP_TEXT: &str = concat!(
+    "commands:\n",
+    "  /goal [set] <objective> | /goal pause|resume|cancel|reset\n",
+    "  /loop <duration> <prompt> | /loop list | /loop cancel <id>\n",
+    "  /fork <name> /commit <msg> /checkout <ref> /rollback <id> /history /merge <branch> /search <q>\n",
+    "  /model [provider/model] /agent /compact /tools /skills /memory /todos /usage /help /quit\n"
+);
+
 /// Interactive UI state: current focus, input, the session registry, and the
 /// rendered buffers for the three upper panels.
 struct App {
@@ -290,6 +299,9 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                         match &command {
                                             Command::Quit => return Ok(()),
                                             Command::Clear => app.answers.clear(),
+                                            Command::Help => {
+                                                app.answers.push(HELP_TEXT.to_string())
+                                            }
                                             Command::LoopAdd { schedule, prompt } => {
                                                 if let Some(id) = app
                                                     .register_loop(schedule.clone(), prompt.clone())
