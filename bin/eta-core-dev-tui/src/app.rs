@@ -9,6 +9,7 @@ use eta_core::{
 };
 use eta_io_tools::builtin_io_tools;
 use eta_llm::{Model, Provider};
+use eta_provider_anthropic::AnthropicProvider;
 use eta_provider_openai::OpenAiProvider;
 use eta_sqlite_storage::{SqliteAgentStore, SqliteSessionStore};
 use eta_system_prompts::DEFAULT_SYSTEM_PROMPT;
@@ -244,6 +245,11 @@ impl App {
     }
 
     pub(crate) fn model_catalog(&self) -> Vec<String> {
+        config::model_entries(&self.load_config())
+    }
+
+    /// Load the user's custom provider/model catalog from home.
+    fn load_config(&self) -> eta_config::Config {
         let mut config = eta_config::Config {
             model: String::new(),
             small_model: None,
@@ -253,7 +259,39 @@ impl App {
         if let Ok(imported) = eta_anycodingagent_config_reader::import_from_default_home() {
             imported.apply_to(&mut config);
         }
-        config::model_entries(&config)
+        config
+    }
+
+    /// Resolve a `provider/model` entry into a provider + model carrying the
+    /// provider's base URL and wire protocol.
+    fn resolve_provider_model(&self, entry: &str) -> (Arc<dyn Provider>, Model) {
+        let (provider_id, model_id) = entry.split_once('/').unwrap_or((entry, entry));
+        let config = self.load_config();
+        let Some(provider) = config.provider.get(provider_id) else {
+            return (Arc::new(OpenAiProvider::from_env()), Model::new(model_id));
+        };
+        let base = provider
+            .options
+            .get("baseURL")
+            .or_else(|| provider.options.get("base_url"))
+            .and_then(|value| value.as_str())
+            .unwrap_or_default();
+        let key = provider
+            .options
+            .get("apiKey")
+            .or_else(|| provider.options.get("api_key"))
+            .and_then(|value| value.as_str())
+            .unwrap_or_default();
+        let mut model = Model::new(model_id);
+        model.api = Some(provider.format.as_str().to_string());
+        model.base_url = Some(base.to_string());
+        let provider: Arc<dyn Provider> =
+            if provider.format == eta_config::ProviderFormat::AnthropicMessages {
+                Arc::new(AnthropicProvider::new(Some(key.to_string()), base))
+            } else {
+                Arc::new(OpenAiProvider::new(Some(key.to_string()), base))
+            };
+        (provider, model)
     }
 
     pub(crate) fn open_model_picker(&mut self) {
@@ -278,13 +316,7 @@ impl App {
         let session_id = session.meta.id.clone();
         let agent_id = session.meta.agent_id.clone();
         let store = session.store.clone();
-        let provider: Arc<dyn Provider> = Arc::new(OpenAiProvider::from_env());
-        let id = model_id
-            .split('/')
-            .next_back()
-            .unwrap_or(model_id)
-            .to_string();
-        let model = Model::new(id);
+        let (provider, model) = self.resolve_provider_model(model_id);
         let memory: Arc<dyn MemoryStore> = Arc::new(
             SqliteAgentStore::open(eta_fs::agent_db(&agent_id.to_string()))
                 .unwrap_or_else(|_| SqliteAgentStore::in_memory()),
