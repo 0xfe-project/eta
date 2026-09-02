@@ -182,7 +182,7 @@ fn make_agent(provider: Arc<dyn Provider>, tools: Vec<Arc<dyn Tool>>) -> Agent {
         system_prompt: "test".into(),
         max_retries: 2,
         skill_store: None,
-        memory_store: None,
+        memory_store: Arc::new(MemMemoryStore::default()),
         max_goal_rounds: None,
     })
 }

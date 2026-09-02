@@ -47,8 +47,8 @@ pub struct AgentConfig {
     /// `None` = no skills.
     pub skill_store: Option<Arc<dyn SkillStore>>,
     /// Memory source; the engine writes/reads memory here out-of-band.
-    /// `None` = no memory (the `<memory>` block is simply empty).
-    pub memory_store: Option<Arc<dyn MemoryStore>>,
+    /// Required — every agent carries memory.
+    pub memory_store: Arc<dyn MemoryStore>,
     pub system_prompt: String,
     pub max_retries: usize,
     /// Goal self-continuation cap (`None` = `DEFAULT_MAX_GOAL_ROUNDS`).
@@ -394,9 +394,7 @@ impl AgentRuntime {
             return;
         }
         self.emit_dev(dev_category::MEMORY, "edit", edits.clone());
-        if let Some(memory_store) = &self.cfg.memory_store {
-            let _ = memory_store.apply(&edits).await;
-        }
+        let _ = self.cfg.memory_store.apply(&edits).await;
     }
 
     /// Run an independent, tool-free evaluation call to judge whether the active
@@ -591,13 +589,11 @@ impl AgentRuntime {
         }
 
         // Memory: render only (read-only), no guidance on how it's written.
-        if let Some(memory_store) = &self.cfg.memory_store {
-            let memory = memory_store.load().await;
-            let memory_block = render_memory(&memory);
-            if !memory_block.is_empty() {
-                system_prompt.push_str("\n\n");
-                system_prompt.push_str(&memory_block);
-            }
+        let memory = self.cfg.memory_store.load().await;
+        let memory_block = render_memory(&memory);
+        if !memory_block.is_empty() {
+            system_prompt.push_str("\n\n");
+            system_prompt.push_str(&memory_block);
         }
 
         // Skills: dump the whole installed list (name + path/body).
