@@ -56,6 +56,47 @@ pub struct SessionManager {
     current: Option<String>,
 }
 
+/// A small cursor-over-list helper for the session picker and persona/agent
+/// selection popups. Pure and reusable; `↑`/`↓` move the cursor, `Enter`
+/// returns the selected item.
+#[derive(Clone, Debug)]
+pub struct Picker<T> {
+    items: Vec<T>,
+    selected: usize,
+}
+
+impl<T> Picker<T> {
+    pub fn new(items: Vec<T>) -> Self {
+        Self { items, selected: 0 }
+    }
+
+    pub fn move_up(&mut self) {
+        self.selected = self.selected.saturating_sub(1);
+    }
+
+    pub fn move_down(&mut self) {
+        if !self.items.is_empty() && self.selected + 1 < self.items.len() {
+            self.selected += 1;
+        }
+    }
+
+    pub fn selected(&self) -> Option<&T> {
+        self.items.get(self.selected)
+    }
+
+    pub fn selected_index(&self) -> usize {
+        self.selected
+    }
+
+    pub fn len(&self) -> usize {
+        self.items.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+}
+
 impl SessionManager {
     pub fn new() -> Self {
         Self::default()
@@ -193,7 +234,7 @@ pub fn spawn_session(
 
 #[cfg(test)]
 mod tests {
-    use super::{SessionHandle, SessionManager, SessionMeta, SessionStatus, spawn_session};
+    use super::{Picker, SessionHandle, SessionManager, SessionMeta, SessionStatus, spawn_session};
     use eta_core::{AgentEvent, AgentId, AgentInput, MemoryStore, SessionStorage};
     use eta_llm::{Context, Event, Model, Provider, ProviderError, StopReason, Usage};
     use eta_sqlite_storage::SqliteAgentStore;
@@ -322,5 +363,27 @@ mod tests {
             }
         }
         assert!(saw_hello, "engine did not stream assistant content");
+    }
+
+    #[test]
+    fn picker_moves_and_clamps() {
+        let mut picker = Picker::new(vec!["a".to_string(), "b".to_string(), "c".to_string()]);
+        assert_eq!(picker.selected(), Some(&"a".to_string()));
+        picker.move_down();
+        picker.move_down();
+        picker.move_down();
+        assert_eq!(picker.selected(), Some(&"c".to_string()));
+        picker.move_up();
+        picker.move_up();
+        picker.move_up();
+        picker.move_up();
+        assert_eq!(picker.selected(), Some(&"a".to_string()));
+    }
+
+    #[test]
+    fn empty_picker_has_no_selection() {
+        let picker: Picker<String> = Picker::new(vec![]);
+        assert!(picker.is_empty());
+        assert_eq!(picker.selected(), None);
     }
 }

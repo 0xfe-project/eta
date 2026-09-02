@@ -4,6 +4,7 @@
 //! unit-tested without a TTY; the answer panel buffers their output later.
 
 use eta_core::{AgentEvent, AgentId};
+use ratatui::style::Color;
 
 /// Render one engine event as a single display line. `None` means the event
 /// carries no visible content (for example a start/end envelope with no text).
@@ -43,6 +44,28 @@ pub fn event_line(agent_id: &AgentId, event: &AgentEvent) -> Option<String> {
     }
 }
 
+/// Stable per-agent color, derived from the agent id so the same agent keeps the
+/// same color across sessions without any registry.
+#[allow(dead_code)]
+pub fn agent_color(agent_id: &AgentId) -> Color {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    const PALETTE: [Color; 8] = [
+        Color::Cyan,
+        Color::Green,
+        Color::Yellow,
+        Color::Magenta,
+        Color::Blue,
+        Color::LightGreen,
+        Color::LightCyan,
+        Color::LightMagenta,
+    ];
+    let mut hasher = DefaultHasher::new();
+    agent_id.to_string().hash(&mut hasher);
+    PALETTE[hasher.finish() as usize % PALETTE.len()]
+}
+
 /// Render an `ask_user` question as an inline popup-style block of text.
 #[allow(dead_code)]
 pub fn render_ask_user(req_id: &str, question: &serde_json::Value) -> String {
@@ -71,7 +94,7 @@ pub fn render_ask_user(req_id: &str, question: &serde_json::Value) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{event_line, render_ask_user};
+    use super::{agent_color, event_line, render_ask_user};
     use eta_core::{AgentEvent, AgentId, GoalStatus};
 
     #[test]
@@ -133,5 +156,13 @@ mod tests {
         );
         assert!(text.contains("[ask_user r1] (single) pick one"));
         assert!(text.contains("options: a, b"));
+    }
+
+    #[test]
+    fn agent_color_is_stable_for_the_same_id() {
+        let id = AgentId("alice".into());
+        assert_eq!(agent_color(&id), agent_color(&id));
+        let other = AgentId("bob".into());
+        let _ = agent_color(&other);
     }
 }
