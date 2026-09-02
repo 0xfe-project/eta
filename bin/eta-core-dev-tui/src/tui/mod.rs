@@ -53,8 +53,10 @@ pub fn draw(
     goal: Option<&GoalInfo>,
 ) {
     match screen {
-        Screen::Startup { recent, .. } => {
-            draw_startup(frame, recent);
+        Screen::Startup {
+            recent, selected, ..
+        } => {
+            draw_startup(frame, recent, *selected);
             draw_input(frame, input);
             return;
         }
@@ -70,7 +72,7 @@ pub fn draw(
             return;
         }
         Screen::CreateAgentName { .. } => {
-            draw_startup(frame, &["new agent name:".to_string()]);
+            draw_startup(frame, &["new agent name:".to_string()], 0);
             draw_input(frame, input);
             return;
         }
@@ -146,12 +148,18 @@ pub fn draw(
     frame.render_widget(input, input_block.inner(input_area));
 }
 
-fn draw_startup(frame: &mut Frame, recent: &[String]) {
+fn draw_startup(frame: &mut Frame, recent: &[String], selected: usize) {
     let body = if recent.is_empty() {
         "no recent sessions — type a message to start".to_string()
     } else {
         let mut lines = vec!["recent sessions:".to_string()];
-        lines.extend(recent.iter().map(|id| format!("  {id}")));
+        lines.extend(recent.iter().enumerate().map(|(index, id)| {
+            if index == selected {
+                format!("> {id}")
+            } else {
+                format!("  {id}")
+            }
+        }));
         lines.join("\n")
     };
     frame.render_widget(

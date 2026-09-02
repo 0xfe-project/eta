@@ -68,18 +68,27 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                 }
                 let shift = key.modifiers.contains(KeyModifiers::SHIFT);
                 match app.screen.clone() {
-                    Screen::Startup { .. } => {
-                        if key.code == KeyCode::Enter && !shift {
+                    Screen::Startup { .. } => match key.code {
+                        KeyCode::Up => app.screen.move_selection(-1),
+                        KeyCode::Down => app.screen.move_selection(1),
+                        KeyCode::Enter if !shift => {
                             let line = app.input.lines().join("\n");
                             app.input = TextArea::default();
-                            if let Some(draft) = app.screen.text_mut() {
-                                *draft = line;
+                            if !line.trim().is_empty() {
+                                if let Some(draft) = app.screen.text_mut() {
+                                    *draft = line;
+                                }
+                                app.begin_agent_mode();
+                            } else if let Some(id) =
+                                app.screen.startup_selection().map(str::to_owned)
+                            {
+                                app.attach_existing_session(&id);
                             }
-                            app.begin_agent_mode();
-                        } else {
+                        }
+                        _ => {
                             let _ = app.input.input(key);
                         }
-                    }
+                    },
                     Screen::AgentMode { .. } => match key.code {
                         KeyCode::Up => app.screen.move_selection(-1),
                         KeyCode::Down => app.screen.move_selection(1),

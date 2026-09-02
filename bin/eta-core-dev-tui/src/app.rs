@@ -419,7 +419,6 @@ impl App {
     }
 
     /// Open an existing session by id and spawn its agent, then attach it.
-    #[allow(dead_code)] // wired into the startup recent-session cursor in E5.
     pub(crate) fn attach_existing_session(&mut self, session_id: &str) {
         let sqlite = Arc::new(
             SqliteSessionStore::open(eta_fs::session_db(session_id))

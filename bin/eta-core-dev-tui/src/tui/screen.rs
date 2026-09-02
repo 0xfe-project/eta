@@ -7,7 +7,11 @@
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Screen {
     /// Cold-start: recent sessions + a draft box for the first message.
-    Startup { recent: Vec<String>, draft: String },
+    Startup {
+        recent: Vec<String>,
+        draft: String,
+        selected: usize,
+    },
     /// New conversation: choose an existing agent or create a new one.
     AgentMode { draft: String, selected: usize },
     /// Pick an existing agent by name.
@@ -65,6 +69,7 @@ impl Screen {
         Screen::Startup {
             recent,
             draft: String::new(),
+            selected: 0,
         }
     }
 
@@ -97,6 +102,9 @@ impl Screen {
     /// Move the cursor for whichever picker is currently active.
     pub fn move_selection(&mut self, delta: isize) {
         let (len, selected) = match self {
+            Screen::Startup {
+                recent, selected, ..
+            } => (recent.len(), selected),
             Screen::AgentMode { selected, .. } => (2, selected),
             Screen::AgentPicker {
                 agents, selected, ..
@@ -120,6 +128,16 @@ impl Screen {
             return;
         }
         *selected = (*selected as isize + delta).clamp(0, len as isize - 1) as usize;
+    }
+
+    /// The currently selected recent session on the startup screen.
+    pub fn startup_selection(&self) -> Option<&str> {
+        match self {
+            Screen::Startup {
+                recent, selected, ..
+            } => recent.get(*selected).map(String::as_str),
+            _ => None,
+        }
     }
 
     pub fn agent_mode_choice(&self) -> Option<AgentChoice> {
@@ -308,6 +326,7 @@ impl Screen {
         Screen::Startup {
             recent: Vec::new(),
             draft,
+            selected: 0,
         }
     }
 }
@@ -389,5 +408,14 @@ mod tests {
         assert_eq!(screen.agent_switch_selection(), Some("bob"));
         assert_eq!(screen.confirm_agent_switch(), Some("bob".into()));
         assert!(matches!(screen.cancel(), Screen::Session));
+    }
+
+    #[test]
+    fn startup_cursor_moves_over_recent_sessions() {
+        let mut screen = Screen::startup(vec!["s1".into(), "s2".into()]);
+        screen.move_selection(1);
+        assert_eq!(screen.startup_selection(), Some("s2"));
+        screen.move_selection(-5);
+        assert_eq!(screen.startup_selection(), Some("s1"));
     }
 }
