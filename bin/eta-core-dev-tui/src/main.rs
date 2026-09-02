@@ -211,6 +211,33 @@ impl App {
         }
     }
 
+    fn model_catalog(&self) -> Vec<String> {
+        let mut config = eta_config::Config {
+            model: String::new(),
+            small_model: None,
+            provider: Default::default(),
+            persona: vec![],
+        };
+        if let Ok(imported) = eta_anycodingagent_config_reader::import_from_default_home() {
+            imported.apply_to(&mut config);
+        }
+        config::model_entries(&config)
+    }
+
+    fn open_model_picker(&mut self) {
+        let models = self.model_catalog();
+        self.screen.open_model_picker(models);
+    }
+
+    async fn confirm_model_picker(&mut self) {
+        let Some(model) = self.screen.confirm_model() else {
+            return;
+        };
+        self.save_model(&model).await;
+        self.screen = Screen::session();
+        self.answers.push(format!("model: {model} (session)"));
+    }
+
     fn persona_catalog(&self) -> Vec<String> {
         config::persona_names(eta_fs::persona_dir())
     }
@@ -368,6 +395,13 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                         KeyCode::Esc => app.cancel_picker(),
                         _ => {}
                     },
+                    Screen::ModelPicker { .. } => match key.code {
+                        KeyCode::Up => app.screen.move_selection(-1),
+                        KeyCode::Down => app.screen.move_selection(1),
+                        KeyCode::Enter => app.confirm_model_picker().await,
+                        KeyCode::Esc => app.cancel_picker(),
+                        _ => {}
+                    },
                     Screen::Session => {
                         if key.code == KeyCode::Tab {
                             app.focus = app.focus.next();
@@ -410,8 +444,7 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                                 app.answers.push(format!("model: {id} (session)"));
                                             }
                                             Command::Model(None) => {
-                                                app.answers
-                                                    .push("model picker not wired yet".into());
+                                                app.open_model_picker();
                                             }
                                             Command::LoadOtherAgentConfig => {
                                                 match eta_anycodingagent_config_reader::import_from_default_home()

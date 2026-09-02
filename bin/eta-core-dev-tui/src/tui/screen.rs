@@ -25,6 +25,11 @@ pub enum Screen {
         personas: Vec<String>,
         selected: usize,
     },
+    /// Choose a `provider/model` override for the current session.
+    ModelPicker {
+        models: Vec<String>,
+        selected: usize,
+    },
     /// A live session is attached.
     Session,
 }
@@ -93,6 +98,11 @@ impl Screen {
             } => (agents.len(), selected),
             Screen::PersonaPicker {
                 personas, selected, ..
+            }
+            | Screen::ModelPicker {
+                models: personas,
+                selected,
+                ..
             } => (personas.len(), selected),
             _ => return,
         };
@@ -193,6 +203,37 @@ impl Screen {
         }
     }
 
+    pub fn model_selection(&self) -> Option<&str> {
+        match self {
+            Screen::ModelPicker {
+                models, selected, ..
+            } => models.get(*selected).map(String::as_str),
+            _ => None,
+        }
+    }
+
+    /// Open the model picker from a live session.
+    pub fn open_model_picker(&mut self, models: Vec<String>) -> bool {
+        if matches!(self, Screen::Session) {
+            *self = Screen::ModelPicker {
+                models,
+                selected: 0,
+            };
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn confirm_model(&mut self) -> Option<String> {
+        match self {
+            Screen::ModelPicker {
+                models, selected, ..
+            } => models.get(*selected).cloned(),
+            _ => None,
+        }
+    }
+
     pub fn confirm(&mut self) -> Option<NewConversation> {
         match self {
             Screen::PersonaPicker {
@@ -221,6 +262,7 @@ impl Screen {
             | Screen::AgentPicker { draft, .. }
             | Screen::CreateAgentName { draft, .. }
             | Screen::PersonaPicker { draft, .. } => draft,
+            Screen::ModelPicker { .. } => return Screen::Session,
             other => return other,
         };
         Screen::Startup {
@@ -287,5 +329,15 @@ mod tests {
         screen.begin_agent_mode();
         let cancelled = screen.cancel();
         assert!(matches!(cancelled, Screen::Startup { draft, .. } if draft == "hi"));
+    }
+
+    #[test]
+    fn model_picker_selects_and_cancels_back_to_session() {
+        let mut screen = Screen::session();
+        assert!(screen.open_model_picker(vec!["a/gpt".into(), "b/claude".into()]));
+        screen.move_selection(1);
+        assert_eq!(screen.model_selection(), Some("b/claude"));
+        assert_eq!(screen.confirm_model(), Some("b/claude".into()));
+        assert!(matches!(screen.cancel(), Screen::Session));
     }
 }

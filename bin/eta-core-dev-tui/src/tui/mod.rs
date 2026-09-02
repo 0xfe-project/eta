@@ -80,6 +80,12 @@ pub fn draw(
             draw_list(frame, "choose persona", personas, *selected);
             return;
         }
+        Screen::ModelPicker {
+            models, selected, ..
+        } => {
+            draw_list(frame, "choose model", models, *selected);
+            return;
+        }
         Screen::Session => {}
     }
 
