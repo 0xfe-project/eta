@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use eta_core::{CancelToken, Tool};
-use eta_mcp::{CallTool, GetTools, McpClient, McpToolDescriptor, McpTransport};
+use eta_mcp::{CallTool, GetTools, McpClient, McpRegistry, McpToolDescriptor, McpTransport};
 use serde_json::{Value, json};
 use std::sync::Arc;
 
@@ -45,4 +45,19 @@ async fn call_requires_discovery_and_then_invokes() {
         .await
         .unwrap();
     assert_eq!(result["arguments"]["text"], "x");
+}
+
+#[test]
+fn registry_loads_explicit_mcp_json_and_reloads() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("mcp.json");
+    std::fs::write(&path, r#"{"mcpServers":{"local":{"command":"demo"}}}"#).unwrap();
+    let registry = McpRegistry::load(&path).unwrap();
+    assert_eq!(registry.server("local").unwrap()["command"], "demo");
+    let watcher = registry.watch().unwrap();
+    std::fs::write(&path, r#"{"mcpServers":{"local":{"command":"updated"}}}"#).unwrap();
+    let updated = watcher
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .unwrap();
+    assert_eq!(updated.server("local").unwrap()["command"], "updated");
 }

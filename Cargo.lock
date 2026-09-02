@@ -206,6 +206,8 @@ name = "eta-anycodingagent-config-reader"
 version = "0.1.0"
 dependencies = [
  "eta-config",
+ "eta-fs",
+ "notify",
  "serde",
  "serde_json",
 ]
@@ -282,6 +284,8 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "eta-core",
+ "eta-fs",
+ "notify",
  "serde",
  "serde_json",
 ]

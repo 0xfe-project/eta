@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use eta_core::{CancelToken, Tool, ToolError};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -23,6 +24,66 @@ pub trait McpTransport: Send + Sync {
 pub struct McpClient<T> {
     transport: T,
     discovered: Mutex<std::collections::HashSet<String>>,
+}
+
+/// User-managed `mcp.json` registry. The file is the explicit allow-list;
+/// servers are never discovered implicitly.
+#[derive(Clone, Debug, Default)]
+pub struct McpRegistry {
+    pub servers: std::collections::BTreeMap<String, Value>,
+    pub path: PathBuf,
+}
+
+impl McpRegistry {
+    pub fn load(path: impl Into<PathBuf>) -> Result<Self, String> {
+        let path = path.into();
+        let value: Value = if path.is_file() {
+            serde_json::from_str(&std::fs::read_to_string(&path).map_err(|e| e.to_string())?)
+                .map_err(|e| e.to_string())?
+        } else {
+            json!({"mcpServers": {}})
+        };
+        let servers = value
+            .get("mcpServers")
+            .and_then(Value::as_object)
+            .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+            .unwrap_or_default();
+        Ok(Self { servers, path })
+    }
+
+    pub fn server(&self, name: &str) -> Option<&Value> {
+        self.servers.get(name)
+    }
+
+    pub fn watch(self) -> notify::Result<McpRegistryWatcher> {
+        let parent = self.path.parent().unwrap_or(Path::new(".")).to_path_buf();
+        let (watcher, receiver) = eta_fs::FsWatcher::watch(&[parent])?;
+        Ok(McpRegistryWatcher {
+            _watcher: watcher,
+            receiver,
+            path: self.path,
+        })
+    }
+}
+
+pub struct McpRegistryWatcher {
+    _watcher: eta_fs::FsWatcher,
+    receiver: std::sync::mpsc::Receiver<eta_fs::WatchEvent>,
+    path: PathBuf,
+}
+
+impl McpRegistryWatcher {
+    pub fn recv_timeout(
+        &self,
+        timeout: std::time::Duration,
+    ) -> Result<McpRegistry, std::sync::mpsc::RecvTimeoutError> {
+        loop {
+            self.receiver.recv_timeout(timeout)?;
+            if let Ok(registry) = McpRegistry::load(self.path.clone()) {
+                return Ok(registry);
+            }
+        }
+    }
 }
 
 impl<T: McpTransport> McpClient<T> {
