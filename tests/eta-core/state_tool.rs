@@ -27,6 +27,7 @@ async fn builtin_state_tool_writes_to_store() {
         store: store.clone(),
         system_prompt: "test".into(),
         max_retries: 2,
+        skill_store: None,
         max_goal_rounds: None,
     });
     let _events = collect(&agent, user_message("write k")).await;

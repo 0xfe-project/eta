@@ -14,11 +14,11 @@ use crate::dev_event::{AgentDevEvent, dev_category};
 use crate::error::classify_provider_error;
 use crate::hooks::Hooks;
 use crate::loop_detect::LoopDetector;
-use crate::store::SessionStorage;
+use crate::store::{SessionStorage, SkillStore};
 use crate::tool::{
-    CancelToken, Tool, apply_memory_edits, builtin_multi_tool_use_tool, builtin_skill_tool,
-    builtin_state_tools, builtin_todo_tool, load_memory, load_skills, load_todos, render_memory,
-    render_skills, render_todos, validate_args,
+    CancelToken, Tool, apply_memory_edits, builtin_multi_tool_use_tool, builtin_state_tools,
+    builtin_todo_tool, load_memory, load_todos, render_memory, render_skills, render_todos,
+    validate_args,
 };
 use crate::types::{
     AgentEvent, AgentId, AgentInput, AskUserAnswer, ControlPlaneAction, ControlPlaneDecision,
@@ -44,6 +44,9 @@ pub struct AgentConfig {
     pub tools: Vec<Arc<dyn Tool>>,
     pub hooks: Hooks,
     pub store: Arc<dyn SessionStorage>,
+    /// Skill source; its whole list is dumped into the `<skills>` block.
+    /// `None` = no skills.
+    pub skill_store: Option<Arc<dyn SkillStore>>,
     pub system_prompt: String,
     pub max_retries: usize,
     /// Goal self-continuation cap (`None` = `DEFAULT_MAX_GOAL_ROUNDS`).
@@ -72,13 +75,12 @@ impl Agent {
         let cancel = CancelToken::new();
         let usage = Arc::new(Mutex::new(Usage::default()));
 
-        // Builtin state + todo + skill tools, plus user tools, form the registry;
+        // Builtin state + todo tools, plus user tools, form the registry;
         // multi_tool_use wraps them for parallel execution. Memory ("evo") is
-        // managed out-of-band at turn end, so it is never exposed as a tool.
+        // managed out-of-band at turn end; skills are dumped wholesale, not a tool.
         let mut registry: Vec<Arc<dyn Tool>> = Vec::new();
         registry.extend(builtin_state_tools(cfg.store.clone()));
         registry.push(builtin_todo_tool(cfg.store.clone()));
-        registry.push(builtin_skill_tool(cfg.store.clone()));
         registry.append(&mut cfg.tools);
 
         let registry = Arc::new(registry);
@@ -592,12 +594,14 @@ impl AgentRuntime {
             system_prompt.push_str(&memory_block);
         }
 
-        // Skills: render only (read-only), no guidance on how it's written.
-        let skills = load_skills(self.cfg.store.as_ref()).await;
-        let skills_block = render_skills(&skills);
-        if !skills_block.is_empty() {
-            system_prompt.push_str("\n\n");
-            system_prompt.push_str(&skills_block);
+        // Skills: dump the whole installed list (name + path/body).
+        if let Some(skill_store) = &self.cfg.skill_store {
+            let skills = skill_store.list().await;
+            let skills_block = render_skills(&skills);
+            if !skills_block.is_empty() {
+                system_prompt.push_str("\n\n");
+                system_prompt.push_str(&skills_block);
+            }
         }
 
         let mut context = Context {
@@ -978,7 +982,7 @@ impl AgentRuntime {
         self.messages.push(msg);
     }
 
-    /// Emit a semantic CRUD dev event for the builtin state / todo / skill tools
+    /// Emit a semantic CRUD dev event for the builtin state / todo tools
     /// (they write straight to the store, bypassing the message pipeline).
     fn emit_crud(&self, name: &str, args: &serde_json::Value) {
         match name {
@@ -988,7 +992,6 @@ impl AgentRuntime {
                 serde_json::json!({ "key": args.get("key") }),
             ),
             "update_todos" => self.emit_dev(dev_category::TODO, "update", args.clone()),
-            "skill" => self.emit_dev(dev_category::SKILL, "update", args.clone()),
             _ => {}
         }
     }

@@ -37,5 +37,5 @@ pub use tool::{CancelToken, Tool, render_memory, render_skills, render_todos};
 pub use types::{
     AgentEvent, AgentId, AgentInput, AskUserAnswer, ControlPlaneAction, ControlPlaneDecision,
     ControlPlanePrompt, GoalContinuationGate, GoalState, GoalStatus, MemoryEntry, MemoryKind,
-    SkillEntry, TodoItem, TodoStatus, ToolCall, ToolResult, TurnContext, TurnDriver,
+    TodoItem, TodoStatus, ToolCall, ToolResult, TurnContext, TurnDriver,
 };

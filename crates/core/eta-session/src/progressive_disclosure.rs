@@ -37,7 +37,7 @@ pub fn render_skills_catalog(skills: &[Skill], protected: &[String], budget: usi
     // Level 1: full.
     let full = skills
         .iter()
-        .map(|s| format!("- {}: {}", s.name, s.description))
+        .map(|s| format!("- {}: {}", s.name, s.content))
         .collect::<Vec<_>>();
     if cost(&full) <= budget {
         return full.join("\n");
@@ -48,11 +48,11 @@ pub fn render_skills_catalog(skills: &[Skill], protected: &[String], budget: usi
         .iter()
         .map(|s| {
             let mut desc = s
-                .description
+                .content
                 .chars()
                 .take(MAX_TRUNCATED_DESCRIPTION_LENGTH)
                 .collect::<String>();
-            if s.description.chars().count() > MAX_TRUNCATED_DESCRIPTION_LENGTH {
+            if s.content.chars().count() > MAX_TRUNCATED_DESCRIPTION_LENGTH {
                 desc.push('…');
             }
             format!("- {}: {}", s.name, desc)

@@ -55,6 +55,7 @@ async fn summarizes_when_context_grows() {
         store: Arc::new(MemStore::default()),
         system_prompt: "test".into(),
         max_retries: 2,
+        skill_store: None,
         max_goal_rounds: None,
     });
 

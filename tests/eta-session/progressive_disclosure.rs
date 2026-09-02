@@ -8,7 +8,7 @@ use eta_session::{
 fn skill(name: &str, desc: &str) -> Skill {
     Skill {
         name: name.into(),
-        description: desc.into(),
+        content: desc.into(),
     }
 }
 

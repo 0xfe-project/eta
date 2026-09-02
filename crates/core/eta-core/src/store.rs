@@ -73,22 +73,20 @@ pub trait SessionStorage: Send + Sync {
     }
 }
 
-/// A skill catalog entry (injected into the `<skills>` section of the system prompt).
+/// A skill: a name + a content string (a path, URL, or inline body).
 ///
-/// A skill is just a standard: a folder containing a `SKILL.md` that may point
-/// at a bunch of local paths. The catalog only carries `name` + `description`;
-/// the body is read on demand by the model via its read tool.
+/// Skills are injected wholesale into the `<skills>` block — the model reads the
+/// file/path when it needs one, no search/load tool.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Skill {
     pub name: String,
-    pub description: String,
+    pub content: String,
 }
 
-/// Storage-agnostic skill catalog (seam trait; implemented per-agent by `eta-agent`).
+/// Storage-agnostic skill source (seam trait; implemented by the adapter that
+/// scans `.agents/skills` etc.). The engine dumps every skill into context.
 #[async_trait]
 pub trait SkillStore: Send + Sync {
-    /// Search the catalog (name + description) by query.
-    async fn search(&self, query: &str) -> Vec<Skill>;
-    /// Return the skill body as a string; the model figures out what to do with it.
-    async fn load(&self, name: &str) -> Option<String>;
+    /// All installed skills.
+    async fn list(&self) -> Vec<Skill>;
 }

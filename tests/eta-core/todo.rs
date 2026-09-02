@@ -66,6 +66,7 @@ async fn update_todos_persists_and_merges() {
         store: store.clone(),
         system_prompt: "test".into(),
         max_retries: 2,
+        skill_store: None,
         max_goal_rounds: None,
     });
     let _events = collect(&agent, user_message("plan")).await;
