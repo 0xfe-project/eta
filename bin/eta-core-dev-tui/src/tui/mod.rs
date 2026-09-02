@@ -7,9 +7,12 @@ use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use tui_textarea::TextArea;
 
+use self::goal::GoalInfo;
+
 pub mod answer;
 pub mod context;
 pub mod dev;
+pub mod goal;
 pub mod screen;
 
 pub use context::ContextSnapshot;
@@ -47,6 +50,7 @@ pub fn draw(
     answers: &[String],
     dev: &[String],
     context: Option<&ContextSnapshot>,
+    goal: Option<&GoalInfo>,
 ) {
     match screen {
         Screen::Startup { recent, .. } => {
@@ -81,9 +85,13 @@ pub fn draw(
 
     let outer = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(3)])
+        .constraints([
+            Constraint::Min(1),
+            Constraint::Length(1),
+            Constraint::Length(3),
+        ])
         .split(frame.area());
-    let main = outer[0];
+    let (main, goal_area, input_area) = (outer[0], outer[1], outer[2]);
 
     let columns = Layout::default()
         .direction(Direction::Horizontal)
@@ -116,7 +124,14 @@ pub fn draw(
     frame.render_widget(dev_block.clone(), right[1]);
     frame.render_widget(Paragraph::new(dev.join("\n")), dev_block.inner(right[1]));
 
-    draw_input(frame, input);
+    let goal_line = goal
+        .map(|goal| goal.status_line())
+        .unwrap_or_else(|| "goal: —".into());
+    frame.render_widget(Paragraph::new(goal_line), goal_area);
+
+    let input_block = Block::default().title("input").borders(Borders::ALL);
+    frame.render_widget(input_block.clone(), input_area);
+    frame.render_widget(input, input_block.inner(input_area));
 }
 
 fn draw_startup(frame: &mut Frame, recent: &[String]) {
@@ -190,6 +205,7 @@ mod tests {
                     &TextArea::default(),
                     &["hello".to_string()],
                     &["tool::start".to_string()],
+                    None,
                     None,
                 )
             })

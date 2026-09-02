@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
-use eta_core::{AgentId, AgentInput, LoopSpec, MemoryStore, SessionStorage, Trigger};
+use eta_core::{AgentId, AgentInput, LoopSpec, MemoryStore, SessionStorage, Trigger, dev_category};
 use eta_io_tools::builtin_io_tools;
 use eta_llm::{Model, Provider};
 use eta_provider_openai::OpenAiProvider;
@@ -23,6 +23,7 @@ use eta_sqlite_storage::{SqliteAgentStore, SqliteSessionStore};
 use eta_system_prompts::DEFAULT_SYSTEM_PROMPT;
 use serde_json::json;
 use session::{SessionManager, spawn_session};
+use tui::goal::GoalInfo;
 use tui::screen::{NewConversation, Screen};
 use tui::{ContextSnapshot, Focus};
 use tui_textarea::TextArea;
@@ -51,6 +52,7 @@ struct App {
     answers: Vec<String>,
     dev: Vec<String>,
     context: Option<ContextSnapshot>,
+    goal: Option<GoalInfo>,
     dev_base: Instant,
 }
 
@@ -69,6 +71,7 @@ impl App {
             answers: Vec::new(),
             dev: Vec::new(),
             context: None,
+            goal: None,
             dev_base: Instant::now(),
         }
     }
@@ -101,6 +104,27 @@ impl App {
             while let Ok(event) = dev_events.try_recv() {
                 self.dev
                     .push(tui::dev::dev_event_line(&event, self.dev_base));
+                if event.category == dev_category::GOAL && event.action == "change" {
+                    self.goal = Some(GoalInfo {
+                        status: event
+                            .data
+                            .get("status")
+                            .and_then(|value| value.as_str())
+                            .unwrap_or_default()
+                            .to_string(),
+                        objective: event
+                            .data
+                            .get("objective")
+                            .and_then(|value| value.as_str())
+                            .unwrap_or_default()
+                            .to_string(),
+                        round: event
+                            .data
+                            .get("round_count")
+                            .and_then(|value| value.as_u64())
+                            .unwrap_or_default(),
+                    });
+                }
             }
         }
 
@@ -278,6 +302,7 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                 &app.answers,
                 &app.dev,
                 app.context.as_ref(),
+                app.goal.as_ref(),
             )
         })?;
 
