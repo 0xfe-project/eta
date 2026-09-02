@@ -20,16 +20,12 @@ use crate::tool::{
     load_todos, render_memory, render_skills, render_todos, validate_args,
 };
 use crate::types::{
-    AgentEvent, AgentId, AgentInput, AskUserAnswer, ControlPlaneAction, ControlPlaneDecision,
-    ControlPlanePrompt, GoalContinuationGate, GoalState, GoalStatus, ToolCall, ToolResult,
-    TurnContext, TurnDriver,
+    AgentEvent, AgentId, AgentInput, AskUserAnswer, GoalContinuationGate, GoalState, GoalStatus,
+    ToolCall, ToolResult, TurnContext, TurnDriver,
 };
 
 /// Detects anti-spin: 3 consecutive tool-free turns auto-pauses the goal.
 const ANTI_SPIN_LIMIT: u32 = 3;
-
-/// Default goal round cap when the config does not specify one.
-const DEFAULT_MAX_GOAL_ROUNDS: u32 = 100;
 
 /// Mid-loop summarization thresholds (percentage of the context window).
 const MID_LOOP_APPROACH_PCT: usize = 80;
@@ -55,8 +51,6 @@ pub struct AgentConfig {
     /// host-specific conventions without editing the engine's stable block.
     pub adapter_system_prompt: String,
     pub max_retries: usize,
-    /// Goal self-continuation cap (`None` = `DEFAULT_MAX_GOAL_ROUNDS`).
-    pub max_goal_rounds: Option<u32>,
 }
 
 /// A handle to a running agent.
@@ -345,12 +339,7 @@ impl AgentRuntime {
                 if let Some(g) = &mut self.goal {
                     g.round_count += 1;
                 }
-                let max_rounds = self.cfg.max_goal_rounds.unwrap_or(DEFAULT_MAX_GOAL_ROUNDS);
-                let over_limit = self
-                    .goal
-                    .as_ref()
-                    .is_some_and(|g| g.round_count >= max_rounds);
-                if over_limit || self.evaluate_goal_achieved().await {
+                if self.evaluate_goal_achieved().await {
                     if let Some(g) = &mut self.goal {
                         g.status = GoalStatus::Achieved;
                     }
@@ -924,29 +913,6 @@ impl AgentRuntime {
             return;
         }
         self.validation_failures = 0;
-
-        // Permission gate (fail-closed) for tools that require approval.
-        if tool.requires_approval() {
-            let prompt = ControlPlanePrompt {
-                request_id: id.clone(),
-                action: ControlPlaneAction::ExecuteTool,
-                tool_call: Some(call.clone()),
-                context: serde_json::json!({ "tool": name }),
-            };
-            if !matches!(
-                self.cfg.hooks.on_control_plane_prompt(&prompt).await,
-                ControlPlaneDecision::Allow
-            ) {
-                let result = ToolResult {
-                    id: id.clone(),
-                    value: serde_json::json!({ "error": "permission denied" }),
-                    is_error: true,
-                };
-                self.cfg.hooks.after_tool_call(&call, &result);
-                self.append_tool_result(id, result.value, result.is_error);
-                return;
-            }
-        }
 
         let _ = self.output_tx.send(AgentEvent::ToolExecutionStart {
             id: id.clone(),

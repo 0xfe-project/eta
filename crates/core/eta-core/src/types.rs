@@ -113,24 +113,6 @@ pub struct TurnContext {
     pub messages_since_start: usize,
 }
 
-/// What the model wants to do that requires authorization.
-#[derive(Clone, Debug)]
-pub enum ControlPlaneAction {
-    ExecuteTool,
-    CreateAgent,
-    SendToAgent,
-    Custom(String),
-}
-
-/// A permission gate request (fail-closed).
-#[derive(Clone, Debug)]
-pub struct ControlPlanePrompt {
-    pub request_id: String,
-    pub action: ControlPlaneAction,
-    pub tool_call: Option<ToolCall>,
-    pub context: serde_json::Value,
-}
-
 /// A tool call the model issued.
 #[derive(Clone, Debug)]
 pub struct ToolCall {
@@ -145,13 +127,6 @@ pub struct ToolResult {
     pub id: String,
     pub value: serde_json::Value,
     pub is_error: bool,
-}
-
-/// A permission decision.
-#[derive(Clone, Debug)]
-pub enum ControlPlaneDecision {
-    Allow,
-    Deny { reason: String },
 }
 
 /// Whether goal self-continuation is managed by the engine or delegated.

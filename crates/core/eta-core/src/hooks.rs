@@ -6,13 +6,11 @@ use async_trait::async_trait;
 use eta_llm::Context;
 
 use crate::types::{
-    AgentId, AgentInput, ControlPlaneDecision, ControlPlanePrompt, GoalContinuationGate, GoalState,
-    ToolCall, ToolResult, TurnContext,
+    AgentId, AgentInput, GoalContinuationGate, GoalState, ToolCall, ToolResult, TurnContext,
 };
 
 /// Lifecycle / decision extension points. Every method has a default no-op so
-/// "not implementing = unchanged behavior" (except `on_control_plane_prompt`,
-/// which defaults to `Deny`).
+/// "not implementing = unchanged behavior".
 #[async_trait]
 pub trait AgentHooks: Send + Sync {
     fn on_spawn(&self, _agent: &AgentId) {}
@@ -33,11 +31,6 @@ pub trait AgentHooks: Send + Sync {
     fn on_goal_change(&self, _goal: &GoalState) {}
     fn goal_continuation_gate(&self) -> GoalContinuationGate {
         GoalContinuationGate::AutoContinue
-    }
-    async fn on_control_plane_prompt(&self, _prompt: &ControlPlanePrompt) -> ControlPlaneDecision {
-        ControlPlaneDecision::Deny {
-            reason: "denied by default (fail-closed)".into(),
-        }
     }
 }
 
@@ -139,16 +132,5 @@ impl Hooks {
         } else {
             GoalContinuationGate::AutoContinue
         }
-    }
-    pub async fn on_control_plane_prompt(
-        &self,
-        prompt: &ControlPlanePrompt,
-    ) -> ControlPlaneDecision {
-        for h in &self.inner {
-            if let ControlPlaneDecision::Deny { reason } = h.on_control_plane_prompt(prompt).await {
-                return ControlPlaneDecision::Deny { reason };
-            }
-        }
-        ControlPlaneDecision::Allow
     }
 }

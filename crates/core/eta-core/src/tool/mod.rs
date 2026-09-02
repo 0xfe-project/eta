@@ -37,9 +37,6 @@ pub trait Tool: Send + Sync {
     fn name(&self) -> &str;
     fn description(&self) -> &str;
     fn schema(&self) -> serde_json::Value;
-    fn requires_approval(&self) -> bool {
-        false
-    }
     async fn execute(
         &self,
         input: serde_json::Value,

@@ -37,7 +37,6 @@ pub use store::{
 pub use time::{DurationParseError, parse_duration};
 pub use tool::{CancelToken, Tool, apply_memory_edits, render_memory, render_skills, render_todos};
 pub use types::{
-    AgentEvent, AgentId, AgentInput, AskUserAnswer, ControlPlaneAction, ControlPlaneDecision,
-    ControlPlanePrompt, GoalContinuationGate, GoalState, GoalStatus, MemoryEntry, MemoryKind,
-    TodoItem, TodoStatus, ToolCall, ToolResult, TurnContext, TurnDriver,
+    AgentEvent, AgentId, AgentInput, AskUserAnswer, GoalContinuationGate, GoalState, GoalStatus,
+    MemoryEntry, MemoryKind, TodoItem, TodoStatus, ToolCall, ToolResult, TurnContext, TurnDriver,
 };

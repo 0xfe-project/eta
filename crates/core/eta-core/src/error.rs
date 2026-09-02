@@ -7,8 +7,6 @@ use eta_llm::ProviderError;
 pub enum ToolError {
     #[error("validation failed: {0}")]
     Validation(String),
-    #[error("permission denied: {0}")]
-    PermissionDenied(String),
     #[error("execution failed: {0}")]
     Execution(String),
     #[error("cancelled")]
