@@ -550,3 +550,38 @@ fn last_message_preview(entries: &[SessionEntry]) -> String {
     }
     String::new()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::last_message_preview;
+    use eta_core::{SessionEntry, entry_kind};
+
+    #[test]
+    fn previews_last_message_and_truncates() {
+        let entries = vec![
+            SessionEntry {
+                id: 0,
+                kind: entry_kind::USER_MESSAGE.into(),
+                data: serde_json::json!({"role": "user", "content": {"type": "text", "text": "first"}}),
+            },
+            SessionEntry {
+                id: 1,
+                kind: entry_kind::ASSISTANT_MESSAGE.into(),
+                data: serde_json::json!({"role": "assistant", "content": {"type": "text", "text": "x".repeat(100)}}),
+            },
+        ];
+        let preview = last_message_preview(&entries);
+        assert_eq!(preview.chars().count(), 40);
+        assert!(preview.starts_with('x'));
+    }
+
+    #[test]
+    fn preview_ignores_non_message_entries() {
+        let entries = vec![SessionEntry {
+            id: 0,
+            kind: entry_kind::USAGE.into(),
+            data: serde_json::json!({"tokens": 3}),
+        }];
+        assert_eq!(last_message_preview(&entries), "");
+    }
+}

@@ -260,7 +260,6 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
 mod tests {
     use crate::app::App;
     use crate::session::{SessionManager, spawn_session};
-    use crate::tui::screen::Screen;
     use eta_core::{Agent, AgentEvent, AgentId, AgentInput, MemoryStore, SessionStorage};
     use eta_llm::{Context, Event, Model, Provider, ProviderError, StopReason, Usage};
     use eta_sqlite_storage::{SqliteAgentStore, SqliteSessionStore};
