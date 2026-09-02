@@ -188,6 +188,19 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                             Command::Agent => {
                                                 app.open_agent_switch();
                                             }
+                                            Command::Session => {
+                                                let id = app.sessions.current_id().unwrap_or("-");
+                                                app.answers
+                                                    .push(format!("session: {id}"));
+                                            }
+                                            Command::NewSession | Command::SessionNew => {
+                                                let recent = eta_sqlite_storage::list_sessions_in(
+                                                    &eta_fs::sessions_dir(),
+                                                )
+                                                .unwrap_or_default();
+                                                app.screen = Screen::startup(recent);
+                                                app.input = TextArea::default();
+                                            }
                                             Command::LoadOtherAgentConfig => {
                                                 match eta_anycodingagent_config_reader::import_from_default_home()
                                                 {
