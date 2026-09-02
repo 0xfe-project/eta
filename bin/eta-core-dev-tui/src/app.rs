@@ -233,6 +233,10 @@ impl App {
         let mut dev_lines = Vec::new();
         let mut new_goal: Option<GoalInfo> = None;
         let mut todos = Vec::new();
+        let mut memory = Vec::new();
+        let mut skills = Vec::new();
+        let mut stable_prompt = String::new();
+        let mut adaptive_prompt = String::new();
         let usage;
         let session_id;
         {
@@ -314,6 +318,12 @@ impl App {
                 .as_ref()
                 .map(|agent| agent.usage())
                 .unwrap_or_default();
+            if let Some(agent) = handle.agent.as_ref() {
+                memory = agent.memory_entries().await;
+                skills = agent.skill_names().await;
+                stable_prompt = agent.stable_prompt().to_string();
+                adaptive_prompt = agent.adaptive_prompt().to_string();
+            }
             if let Some(value) = handle.store.get_state("eta.todos").await {
                 if let Ok(items) = serde_json::from_value::<Vec<TodoItem>>(value) {
                     todos = items
@@ -347,9 +357,13 @@ impl App {
             cache_read: usage.cache_read,
             cache_write: usage.cache_write,
             cache_rate: usage.cache_rate(),
+            stable_prompt,
+            adaptive_prompt,
             goal: goal_text,
             todos,
             tools,
+            memory,
+            skills,
             ..Default::default()
         });
         if let Some(goal) = new_goal {
@@ -727,6 +741,14 @@ impl App {
         self.sqlite = Some(sqlite);
         self.sessions.insert(handle);
         self.sessions.attach(session_id);
+        let tool_names = builtin_io_tools()
+            .iter()
+            .map(|tool| tool.name().to_string())
+            .collect();
+        self.views
+            .entry(session_id.to_string())
+            .or_default()
+            .tool_names = tool_names;
         self.screen = Screen::session();
     }
 
@@ -773,6 +795,11 @@ impl App {
                     loop_manager.start().await;
                 }
                 self.sessions.insert(handle);
+                let tool_names = builtin_io_tools()
+                    .iter()
+                    .map(|tool| tool.name().to_string())
+                    .collect();
+                self.views.entry(id.clone()).or_default().tool_names = tool_names;
             }
         }
     }

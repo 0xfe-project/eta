@@ -12,6 +12,7 @@ mod tools;
 mod tui;
 
 use std::io;
+use std::time::Duration;
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use tui::Focus;
@@ -80,6 +81,11 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
             )
         })?;
 
+        // Poll instead of blocking on `read()` so the agent's streaming answers
+        // and dev events repaint live, even when no key is pressed.
+        if !event::poll(Duration::from_millis(50))? {
+            continue;
+        }
         match event::read()? {
             Event::Key(key) if key.kind == KeyEventKind::Press => {
                 let ctrl_c =

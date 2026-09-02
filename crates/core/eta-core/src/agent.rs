@@ -61,11 +61,22 @@ pub struct Agent {
     answer: mpsc::Sender<AskUserAnswer>,
     usage: Arc<Mutex<Usage>>,
     cancel: CancelToken,
+    memory_store: Arc<dyn MemoryStore>,
+    skill_store: Option<Arc<dyn SkillStore>>,
+    system_prompt: String,
+    adapter_system_prompt: String,
 }
 
 impl Agent {
     /// Spawn the agent's background loop and return a handle to it.
     pub fn spawn(mut cfg: AgentConfig) -> Self {
+        // Snapshot the read-only context sources before `cfg` is moved into the
+        // runtime, so the handle can serve a live context view to the TUI.
+        let memory_store = cfg.memory_store.clone();
+        let skill_store = cfg.skill_store.clone();
+        let system_prompt = cfg.system_prompt.clone();
+        let adapter_system_prompt = cfg.adapter_system_prompt.clone();
+
         let (input_tx, input_rx) = mpsc::channel(256);
         let (output_tx, _) = broadcast::channel(256);
         let output_handle = output_tx.clone();
@@ -117,6 +128,10 @@ impl Agent {
             answer: answer_tx,
             usage,
             cancel,
+            memory_store,
+            skill_store,
+            system_prompt,
+            adapter_system_prompt,
         }
     }
 
@@ -134,6 +149,43 @@ impl Agent {
     /// The accumulated token / cache usage so far.
     pub fn usage(&self) -> Usage {
         *self.usage.lock().unwrap()
+    }
+
+    /// Read-only memory snapshot for display. Entries are formatted as
+    /// `[kind] content` without the `<memory>` wrapper.
+    pub async fn memory_entries(&self) -> Vec<String> {
+        self.memory_store
+            .load()
+            .await
+            .into_iter()
+            .map(|(_, entry)| {
+                let kind = format!("{:?}", entry.kind).to_lowercase();
+                format!("[{kind}] {}", entry.content)
+            })
+            .collect()
+    }
+
+    /// Read-only list of installed skill names for display.
+    pub async fn skill_names(&self) -> Vec<String> {
+        match &self.skill_store {
+            Some(store) => store
+                .list()
+                .await
+                .into_iter()
+                .map(|skill| skill.name)
+                .collect(),
+            None => Vec::new(),
+        }
+    }
+
+    /// The configured base system prompt (before memory/skills/todos are added).
+    pub fn stable_prompt(&self) -> &str {
+        &self.system_prompt
+    }
+
+    /// The adapter-provided system prompt slot, if any.
+    pub fn adaptive_prompt(&self) -> &str {
+        &self.adapter_system_prompt
     }
 
     /// Subscribe to the agent's event stream. Each call returns an independent
