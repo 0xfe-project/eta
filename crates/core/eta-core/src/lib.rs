@@ -10,6 +10,7 @@
 #![doc = include_str!("../README.md")]
 
 mod agent;
+mod compaction;
 mod error;
 mod hooks;
 mod loop_detect;
@@ -20,6 +21,9 @@ mod tool;
 mod types;
 
 pub use agent::{Agent, AgentConfig};
+pub use compaction::{
+    TOOL_MESSAGE_DROP_THRESHOLD, drop_tool_pairs, estimate_tokens, partition, should_compact,
+};
 pub use error::{AgentError, ToolError, classify_provider_error};
 pub use hooks::{AgentHooks, Hooks};
 pub use loop_detect::LoopDetector;

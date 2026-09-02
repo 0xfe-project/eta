@@ -4,6 +4,7 @@
 
 mod ask_user;
 mod basic_turn;
+mod compaction;
 mod goal;
 mod loop_detect;
 mod loop_manager;

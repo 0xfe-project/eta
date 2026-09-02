@@ -9,6 +9,7 @@ use tokio_stream::StreamExt;
 use eta_llm::{Context, Event, Model, Provider, ProviderError, StopReason, ToolSchema, Usage};
 use eta_system_prompts as prompts;
 
+use crate::compaction;
 use crate::error::classify_provider_error;
 use crate::hooks::Hooks;
 use crate::loop_detect::LoopDetector;
@@ -73,6 +74,7 @@ impl Agent {
             answer_rx,
             pending_summary: None,
             validation_failures: 0,
+            compaction_epoch: 0,
             request_counter: 0,
             input_rx,
             output_tx,
@@ -126,6 +128,7 @@ struct AgentRuntime {
     answer_rx: mpsc::Receiver<AskUserAnswer>,
     pending_summary: Option<tokio::task::JoinHandle<String>>,
     validation_failures: u32,
+    compaction_epoch: u64,
     request_counter: u64,
     input_rx: mpsc::Receiver<AgentInput>,
     output_tx: broadcast::Sender<AgentEvent>,
@@ -316,10 +319,40 @@ impl AgentRuntime {
 
     /// Rough token estimate (~4 chars per token).
     fn estimate_tokens(&self) -> usize {
-        self.messages
-            .iter()
-            .map(|m| m.to_string().len() / 4 + 1)
-            .sum()
+        compaction::estimate_tokens(&self.messages)
+    }
+
+    /// Turn-boundary authoritative compaction: when the context is ≥80% of the
+    /// window, fold the prefix into a `[Previous conversation summary]`, drop
+    /// tool noise, and bump the compaction epoch.
+    async fn maybe_compact(&mut self) {
+        let Some(window) = self.cfg.model.context_window else {
+            return;
+        };
+        let window = window as usize;
+        if !compaction::should_compact(&self.messages, window) {
+            return;
+        }
+        let keep_recent = (window / 4).max(1);
+        let (prefix, suffix) = compaction::partition(&self.messages, keep_recent);
+        if prefix.is_empty() {
+            return;
+        }
+        let tokens_before = compaction::estimate_tokens(&self.messages);
+        let prefix = compaction::drop_tool_pairs(&prefix);
+        let summary =
+            summarize_with(self.cfg.provider.clone(), self.cfg.model.clone(), prefix).await;
+
+        let mut new_messages = vec![serde_json::json!({
+            "role": "user",
+            "content": prompts::previous_summary(&summary),
+        })];
+        new_messages.extend(suffix);
+        self.messages = new_messages;
+        self.compaction_epoch += 1;
+        let _ = self.output_tx.send(AgentEvent::Compaction {
+            tokens_before: tokens_before as u64,
+        });
     }
 
     /// Mid-loop emergency compression, two-tier:
@@ -418,6 +451,9 @@ impl AgentRuntime {
         let _ = self.output_tx.send(AgentEvent::TurnStart {
             request_id: request_id.clone(),
         });
+
+        // Turn-boundary compaction (authoritative, between turns).
+        self.maybe_compact().await;
 
         let step = self.run_step_with_retry().await;
 
