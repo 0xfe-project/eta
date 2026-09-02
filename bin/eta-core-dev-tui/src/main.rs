@@ -64,7 +64,8 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                 let ctrl_c =
                     key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL);
                 if ctrl_c {
-                    return Ok(());
+                    app.cancel_current();
+                    continue;
                 }
                 let shift = key.modifiers.contains(KeyModifiers::SHIFT);
                 match app.screen.clone() {

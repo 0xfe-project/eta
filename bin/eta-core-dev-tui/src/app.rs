@@ -161,6 +161,17 @@ impl App {
         }
     }
 
+    /// Interrupt the current turn without quitting.
+    pub(crate) fn cancel_current(&self) {
+        if let Some(agent) = self
+            .sessions
+            .current()
+            .and_then(|handle| handle.agent.as_ref())
+        {
+            agent.cancel();
+        }
+    }
+
     /// Answer the pending `ask_user` question and resume the engine.
     pub(crate) async fn answer_ask_user(&mut self, answer: String) {
         let Some(pending) = self.pending_ask.take() else {
