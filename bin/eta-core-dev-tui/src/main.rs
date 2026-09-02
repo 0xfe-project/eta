@@ -46,16 +46,25 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
         if matches!(app.screen, Screen::Session) {
             app.pump().await;
         }
+        let (answers, dev, context, goal) = {
+            let view = app.view();
+            (
+                view.answers.clone(),
+                view.dev.clone(),
+                view.context.clone(),
+                view.goal.clone(),
+            )
+        };
         terminal.draw(|frame| {
             tui::draw(
                 frame,
                 &app.screen,
                 app.focus,
                 &app.input,
-                &app.answers,
-                &app.dev,
-                app.context.as_ref(),
-                app.goal.as_ref(),
+                &answers,
+                &dev,
+                context.as_ref(),
+                goal.as_ref(),
             )
         })?;
 
@@ -161,33 +170,33 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                     if let Some(command) = parse_command(&line) {
                                         match &command {
                                             Command::Quit => return Ok(()),
-                                            Command::Clear => app.answers.clear(),
+                                            Command::Clear => app.view().answers.clear(),
                                             Command::Help => {
-                                                app.answers.push(HELP_TEXT.to_string())
+                                                app.view().answers.push(HELP_TEXT.to_string())
                                             }
                                             Command::LoopAdd { schedule, prompt } => {
                                                 if let Some(id) = app
                                                     .register_loop(schedule.clone(), prompt.clone())
                                                     .await
                                                 {
-                                                    app.answers
+                                                    app.view().answers
                                                         .push(format!("registered loop {id}"));
                                                 }
                                             }
                                             Command::LoopList => {
                                                 if let Some(lines) = app.list_loops().await {
-                                                    app.answers.extend(lines);
+                                                    app.view().answers.extend(lines);
                                                 }
                                             }
                                             Command::LoopRemove(id) => {
                                                 if let Some(removed) = app.remove_loop(id).await {
-                                                    app.answers
+                                                    app.view().answers
                                                         .push(format!("removed loop: {removed}"));
                                                 }
                                             }
                                             Command::Model(Some(id)) => {
                                                 app.save_model(id).await;
-                                                app.answers.push(format!("model: {id} (session)"));
+                                                app.view().answers.push(format!("model: {id} (session)"));
                                             }
                                             Command::Model(None) => {
                                                 app.open_model_picker();
@@ -212,14 +221,14 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                                     Ok(imported) => {
                                                         let entries = imported.model_entries();
                                                         if entries.is_empty() {
-                                                            app.answers.push(
+                                                            app.view().answers.push(
                                                                 "no custom models found".into(),
                                                             );
                                                         } else {
-                                                            app.answers.extend(entries);
+                                                            app.view().answers.extend(entries);
                                                         }
                                                     }
-                                                    Err(error) => app.answers.push(format!(
+                                                    Err(error) => app.view().answers.push(format!(
                                                         "config load error: {error}"
                                                     )),
                                                 }
@@ -227,7 +236,7 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                             _ => {
                                                 if let Some(line) = app.apply_time_travel(&command)
                                                 {
-                                                    app.answers.push(line);
+                                                    app.view().answers.push(line);
                                                 } else if let Some(input) = command.to_agent_input()
                                                 {
                                                     app.send_input(input).await;
@@ -317,18 +326,21 @@ mod tests {
         app.send_message("hi").await;
         for _ in 0..20 {
             app.pump().await;
-            if app.answers.iter().any(|line| line.contains("hello")) {
+            if app.view().answers.iter().any(|line| line.contains("hello")) {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
 
         assert!(
-            app.answers.iter().any(|line| line.contains("hello")),
+            app.view().answers.iter().any(|line| line.contains("hello")),
             "answer panel was not updated: {:?}",
-            app.answers
+            app.view().answers
         );
-        assert!(app.context.is_some(), "context snapshot was not refreshed");
+        assert!(
+            app.view().context.is_some(),
+            "context snapshot was not refreshed"
+        );
     }
 
     #[tokio::test]

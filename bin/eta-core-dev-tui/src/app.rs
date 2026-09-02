@@ -1,5 +1,6 @@
 //! Application state and session/agent/model lifecycle for the dev TUI.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -29,6 +30,16 @@ pub(crate) struct PendingAsk {
     pub(crate) req_id: String,
 }
 
+/// Per-session panel state, kept so attach switching restores each session's
+/// own answer/dev/context/goal view.
+#[derive(Default)]
+pub(crate) struct SessionView {
+    pub(crate) answers: Vec<String>,
+    pub(crate) dev: Vec<String>,
+    pub(crate) context: Option<ContextSnapshot>,
+    pub(crate) goal: Option<GoalInfo>,
+}
+
 /// Interactive UI state: current focus, input, the session registry, and the
 /// rendered buffers for the three upper panels.
 pub(crate) struct App {
@@ -39,10 +50,7 @@ pub(crate) struct App {
     pub(crate) sqlite: Option<Arc<SqliteSessionStore>>,
     pub(crate) head: Option<u64>,
     pub(crate) loop_counter: u64,
-    pub(crate) answers: Vec<String>,
-    pub(crate) dev: Vec<String>,
-    pub(crate) context: Option<ContextSnapshot>,
-    pub(crate) goal: Option<GoalInfo>,
+    views: HashMap<String, SessionView>,
     pub(crate) pending_ask: Option<PendingAsk>,
     pub(crate) dev_base: Instant,
 }
@@ -61,13 +69,16 @@ impl App {
             sqlite: None,
             head: None,
             loop_counter: 0,
-            answers: Vec::new(),
-            dev: Vec::new(),
-            context: None,
-            goal: None,
+            views: HashMap::new(),
             pending_ask: None,
             dev_base: Instant::now(),
         }
+    }
+
+    /// The current session's panel view, creating it on first use.
+    pub(crate) fn view(&mut self) -> &mut SessionView {
+        let id = self.sessions.current_id().unwrap_or_default().to_string();
+        self.views.entry(id).or_default()
     }
 
     #[cfg(test)]
@@ -81,59 +92,70 @@ impl App {
     /// Drain the current session's engine/dev streams into the panels and
     /// refresh the context snapshot from `Agent::usage()`.
     pub(crate) async fn pump(&mut self) {
-        let Some(handle) = self.sessions.current_mut() else {
-            return;
-        };
-        let agent_id = handle.meta.agent_id.clone();
+        let mut answer_lines = Vec::new();
+        let mut dev_lines = Vec::new();
+        let mut new_goal: Option<GoalInfo> = None;
+        let usage;
+        let session_id;
+        {
+            let Some(handle) = self.sessions.current_mut() else {
+                return;
+            };
+            let agent_id = handle.meta.agent_id.clone();
+            session_id = handle.meta.id.clone();
 
-        if let Some(events) = handle.event_rx.as_mut() {
-            while let Ok(event) = events.try_recv() {
-                if let AgentEvent::AskUserStarted { req_id, .. } = &event {
-                    self.pending_ask = Some(PendingAsk {
-                        req_id: req_id.clone(),
-                    });
-                }
-                if let Some(line) = tui::answer::event_line(&agent_id, &event) {
-                    self.answers.push(line);
-                }
-            }
-        }
-
-        if let Some(dev_events) = handle.dev_rx.as_mut() {
-            while let Ok(event) = dev_events.try_recv() {
-                self.dev
-                    .push(tui::dev::dev_event_line(&event, self.dev_base));
-                if event.category == dev_category::GOAL && event.action == "change" {
-                    self.goal = Some(GoalInfo {
-                        status: event
-                            .data
-                            .get("status")
-                            .and_then(|value| value.as_str())
-                            .unwrap_or_default()
-                            .to_string(),
-                        objective: event
-                            .data
-                            .get("objective")
-                            .and_then(|value| value.as_str())
-                            .unwrap_or_default()
-                            .to_string(),
-                        round: event
-                            .data
-                            .get("round_count")
-                            .and_then(|value| value.as_u64())
-                            .unwrap_or_default(),
-                    });
+            if let Some(events) = handle.event_rx.as_mut() {
+                while let Ok(event) = events.try_recv() {
+                    if let AgentEvent::AskUserStarted { req_id, .. } = &event {
+                        self.pending_ask = Some(PendingAsk {
+                            req_id: req_id.clone(),
+                        });
+                    }
+                    if let Some(line) = tui::answer::event_line(&agent_id, &event) {
+                        answer_lines.push(line);
+                    }
                 }
             }
+
+            if let Some(dev_events) = handle.dev_rx.as_mut() {
+                while let Ok(event) = dev_events.try_recv() {
+                    dev_lines.push(tui::dev::dev_event_line(&event, self.dev_base));
+                    if event.category == dev_category::GOAL && event.action == "change" {
+                        new_goal = Some(GoalInfo {
+                            status: event
+                                .data
+                                .get("status")
+                                .and_then(|value| value.as_str())
+                                .unwrap_or_default()
+                                .to_string(),
+                            objective: event
+                                .data
+                                .get("objective")
+                                .and_then(|value| value.as_str())
+                                .unwrap_or_default()
+                                .to_string(),
+                            round: event
+                                .data
+                                .get("round_count")
+                                .and_then(|value| value.as_u64())
+                                .unwrap_or_default(),
+                        });
+                    }
+                }
+            }
+
+            usage = handle
+                .agent
+                .as_ref()
+                .map(|agent| agent.usage())
+                .unwrap_or_default();
         }
 
-        let usage = handle
-            .agent
-            .as_ref()
-            .map(|agent| agent.usage())
-            .unwrap_or_default();
-        self.context = Some(ContextSnapshot {
-            session_id: handle.meta.id.clone(),
+        let view = self.views.entry(session_id.clone()).or_default();
+        view.answers.extend(answer_lines);
+        view.dev.extend(dev_lines);
+        view.context = Some(ContextSnapshot {
+            session_id,
             branch: "main".to_string(),
             input_tokens: usage.input,
             output_tokens: usage.output,
@@ -142,6 +164,9 @@ impl App {
             cache_rate: usage.cache_rate(),
             ..Default::default()
         });
+        if let Some(goal) = new_goal {
+            view.goal = Some(goal);
+        }
     }
 
     /// Send a plain user message to the currently attached session.
@@ -306,7 +331,9 @@ impl App {
         self.save_model(&model).await;
         self.respawn_with_model(&model);
         self.screen = Screen::session();
-        self.answers.push(format!("model: {model} (session)"));
+        self.view()
+            .answers
+            .push(format!("model: {model} (session)"));
     }
 
     pub(crate) fn respawn_with_model(&mut self, model_id: &str) {
@@ -395,7 +422,7 @@ impl App {
         self.sessions = SessionManager::new();
         self.sessions.insert(handle);
         self.sessions.attach(&session_id);
-        self.answers.push(format!("agent: {name}"));
+        self.view().answers.push(format!("agent: {name}"));
     }
 
     pub(crate) fn confirm_agent_switch(&mut self) {
