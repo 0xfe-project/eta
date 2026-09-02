@@ -63,6 +63,7 @@ pub(crate) struct App {
     pub(crate) dev_filter: String,
     pub(crate) dev_filtering: bool,
     pub(crate) current_model: String,
+    pub(crate) working: bool,
 }
 
 impl App {
@@ -87,6 +88,7 @@ impl App {
             dev_filter: String::new(),
             dev_filtering: false,
             current_model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into()),
+            working: false,
         }
     }
 
@@ -161,8 +163,9 @@ impl App {
             .current()
             .map(|handle| handle.meta.agent_id.0.clone())
             .unwrap_or_default();
+        let state = if self.working { "working…" } else { "idle" };
         format!(
-            "{mode} · session {session} · agent {agent} · model {}",
+            "{mode} · {state} · session {session} · agent {agent} · model {}",
             self.current_model
         )
     }
@@ -236,6 +239,12 @@ impl App {
             if let Some(events) = handle.event_rx.as_mut() {
                 let mut saw_text = false;
                 while let Ok(event) = events.try_recv() {
+                    if let AgentEvent::TurnStart { .. } = &event {
+                        self.working = true;
+                    }
+                    if let AgentEvent::TurnEnd { .. } = &event {
+                        self.working = false;
+                    }
                     if let AgentEvent::MessageUpdate { message, .. } = &event {
                         if message
                             .get("text")
