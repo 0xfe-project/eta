@@ -8,7 +8,7 @@ use crossterm::event::KeyCode;
 
 use eta_core::{
     AgentEvent, AgentId, AgentInput, AskUserAnswer, LoopSpec, MemoryStore, SessionEntry,
-    SessionStorage, Trigger, dev_category, entry_kind,
+    SessionStorage, TodoItem, Trigger, dev_category, entry_kind,
 };
 use eta_io_tools::builtin_io_tools;
 use eta_llm::{Model, Provider};
@@ -223,6 +223,7 @@ impl App {
         let mut answer_lines = Vec::new();
         let mut dev_lines = Vec::new();
         let mut new_goal: Option<GoalInfo> = None;
+        let mut todos = Vec::new();
         let usage;
         let session_id;
         {
@@ -298,6 +299,20 @@ impl App {
                 .as_ref()
                 .map(|agent| agent.usage())
                 .unwrap_or_default();
+            if let Some(value) = handle.store.get_state("eta.todos").await {
+                if let Ok(items) = serde_json::from_value::<Vec<TodoItem>>(value) {
+                    todos = items
+                        .iter()
+                        .map(|item| {
+                            format!(
+                                "- {} [{}]",
+                                item.content,
+                                format!("{:?}", item.status).to_lowercase()
+                            )
+                        })
+                        .collect();
+                }
+            }
         }
 
         let view = self.views.entry(session_id.clone()).or_default();
@@ -317,6 +332,7 @@ impl App {
             cache_write: usage.cache_write,
             cache_rate: usage.cache_rate(),
             goal: goal_text,
+            todos,
             ..Default::default()
         });
         if let Some(goal) = new_goal {
@@ -425,7 +441,14 @@ impl App {
     }
 
     pub(crate) fn model_catalog(&self) -> Vec<String> {
-        config::model_entries(&self.load_config())
+        let mut entries = config::model_entries(&self.load_config());
+        let env_model = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into());
+        let default = format!("default/{env_model}");
+        if !entries.contains(&default) {
+            entries.push(default);
+            entries.sort();
+        }
+        entries
     }
 
     /// Load the user's custom provider/model catalog from home.
