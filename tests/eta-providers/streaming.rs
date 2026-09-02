@@ -1,6 +1,6 @@
 use eta_llm::{Context, Event, Model, Provider, StopReason};
 use eta_provider_anthropic::AnthropicProvider;
-use eta_provider_openai::OpenAiProvider;
+use eta_provider_openai::{OpenAiProvider, ResponsesProvider};
 use std::io::{Read, Write};
 use std::net::TcpListener;
 
@@ -122,5 +122,56 @@ async fn openai_puts_adapter_system_prompt_on_the_wire() {
     assert!(
         body.contains("adapter tools + env"),
         "missing adapter prompt: {body}"
+    );
+}
+
+#[tokio::test]
+async fn openai_responses_sse_translates_text_tool_and_stop() {
+    let body = "data: {\"type\":\"response.output_item.added\",\"item\":{\"type\":\"function_call\",\"call_id\":\"call_1\",\"name\":\"bash\"}}\n\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"hello \"}\n\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"command\\\":\"}\n\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\"pwd\\\"}\"}\n\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"command\\\":\\\"pwd\\\"}\"}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[{\"type\":\"function_call\"}],\"usage\":{\"input_tokens\":10,\"output_tokens\":5}}}\n\n";
+    let provider = ResponsesProvider::new(None, server(body, 200));
+    let mut stream = provider.stream(&Model::new("demo"), &Context::default(), None);
+    let mut saw_text = false;
+    let mut saw_tool = false;
+    let mut saw_end = false;
+    while let Some(item) = tokio_stream::StreamExt::next(&mut stream).await {
+        match item.unwrap() {
+            Event::Content(value) => saw_text |= value["text"] == "hello ",
+            Event::ToolCall { name, .. } => saw_tool |= name == "bash",
+            Event::End { stop, .. } => {
+                saw_end = true;
+                assert_eq!(stop, StopReason::ToolUse);
+            }
+        }
+    }
+    assert!(saw_text && saw_tool && saw_end);
+}
+
+#[tokio::test]
+async fn openai_responses_sends_responses_input_shape() {
+    let (url, rx) = capturing_server(200);
+    let provider = ResponsesProvider::new(None, url);
+    let context = Context {
+        system_prompt: Some("sys".into()),
+        messages: vec![serde_json::json!({"role":"user","content":"hi"})],
+        ..Default::default()
+    };
+    let mut stream = provider.stream(&Model::new("demo"), &context, None);
+    while tokio_stream::StreamExt::next(&mut stream).await.is_some() {}
+
+    let body = rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .expect("request body");
+    assert!(body.contains("\"input\""), "missing input: {body}");
+    assert!(
+        body.contains("\"role\":\"system\""),
+        "missing system: {body}"
+    );
+    assert!(
+        body.contains("\"input_text\""),
+        "missing input_text: {body}"
+    );
+    assert!(
+        body.contains("\"store\":false"),
+        "missing store=false: {body}"
     );
 }
