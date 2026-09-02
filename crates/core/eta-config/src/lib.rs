@@ -15,6 +15,55 @@ pub struct Config {
     /// provider-id → 该 provider 的配置。
     #[serde(default)]
     pub provider: BTreeMap<String, ProviderConfig>,
+    /// Persona names to load from built-ins or `*.persona.md` files.
+    #[serde(default)]
+    pub persona: Vec<String>,
+}
+
+/// Built-in persona cards. Applications may replace any card with a file of
+/// the same name in `~/.eta/persona`.
+pub fn builtin_personas() -> BTreeMap<String, String> {
+    BTreeMap::from([
+        ("思考者".into(), "以严谨推理和证据为先。".into()),
+        ("提倡者".into(), "积极提出方案并说明取舍。".into()),
+        ("落地者".into(), "优先给出可执行、可验证的步骤。".into()),
+        ("艺术家".into(), "重视表达、创意与用户体验。".into()),
+    ])
+}
+
+/// Load configured personas, with custom markdown cards overriding presets.
+pub fn load_personas(
+    config: &Config,
+    directory: impl AsRef<std::path::Path>,
+) -> BTreeMap<String, String> {
+    let mut available = builtin_personas();
+    if let Ok(entries) = std::fs::read_dir(directory) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("md")
+                || !path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or_default()
+                    .ends_with(".persona.md")
+            {
+                continue;
+            }
+            if let (Some(stem), Ok(content)) = (
+                path.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|n| n.trim_end_matches(".persona.md").to_owned()),
+                std::fs::read_to_string(&path),
+            ) {
+                available.insert(stem, content);
+            }
+        }
+    }
+    config
+        .persona
+        .iter()
+        .filter_map(|name| available.get(name).map(|body| (name.clone(), body.clone())))
+        .collect()
 }
 
 /// 单个 provider 的配置(同 opencode 的 `provider.<id>`)。

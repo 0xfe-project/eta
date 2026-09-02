@@ -14,6 +14,8 @@ eta-io-tools = { path = "../crates/adapters/eta-io-tools" }
 eta-provider-openai = { path = "../crates/adapters/eta-provider-openai" }
 eta-provider-anthropic = { path = "../crates/adapters/eta-provider-anthropic" }
 eta-mcp = { path = "../crates/adapters/eta-mcp" }
+eta-config = { path = "../crates/core/eta-config" }
+eta-anycodingagent-config-reader = { path = "../crates/adapters/eta-anycodingagent-config-reader" }
 eta-sqlite-storage = { path = "../crates/adapters/eta-sqlite-storage" }
 async-trait.workspace = true
 serde_json.workspace = true
@@ -48,6 +50,10 @@ path = "eta-providers/mod.rs"
 [[test]]
 name = "eta_mcp"
 path = "eta-mcp/mod.rs"
+
+[[test]]
+name = "eta_config"
+path = "eta-config/mod.rs"
 
 [[test]]
 name = "eta_sqlite"
