@@ -8,8 +8,10 @@ use eta_llm::{Context, ToolSchema};
 
 pub use eta_core::{SessionEntry, SessionState, SessionStorage, entry_kind};
 
+mod cache;
 mod progressive_disclosure;
 
+pub use cache::{ContextCache, blob_id};
 pub use progressive_disclosure::{
     MAX_TRUNCATED_DESCRIPTION_LENGTH, McpServerDir, assemble_system_prompt, render_mcp_directory,
     render_skills_catalog,
