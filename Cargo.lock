@@ -361,6 +361,7 @@ dependencies = [
  "eta-provider-openai",
  "eta-session",
  "eta-sqlite-storage",
+ "eta-system-prompts",
  "ratatui",
  "serde_json",
  "tempfile",

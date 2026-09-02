@@ -12,7 +12,10 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
-use eta_core::{Agent, AgentConfig, AgentId, Hooks, MemoryStore, SessionStorage, Tool};
+use eta_core::{
+    Agent, AgentConfig, AgentDevEvent, AgentEvent, AgentId, Hooks, MemoryStore, SessionStorage,
+    Tool,
+};
 use eta_llm::{Model, Provider};
 use eta_sqlite_storage::{SqliteSessionStore, list_sessions_in};
 
@@ -29,6 +32,7 @@ pub enum SessionStatus {
 #[derive(Clone, Debug)]
 pub struct SessionMeta {
     pub id: String,
+    pub agent_id: AgentId,
     pub status: SessionStatus,
     pub goal: Option<String>,
     pub turn_count: u64,
@@ -38,6 +42,8 @@ pub struct SessionMeta {
 /// A single session: its engine handle (if spawned), store, and metadata.
 pub struct SessionHandle {
     pub agent: Option<Agent>,
+    pub event_rx: Option<tokio::sync::broadcast::Receiver<AgentEvent>>,
+    pub dev_rx: Option<tokio::sync::broadcast::Receiver<AgentDevEvent>>,
     pub store: Arc<dyn SessionStorage>,
     pub meta: SessionMeta,
 }
@@ -119,9 +125,12 @@ impl SessionManager {
             if let Ok(store) = SqliteSessionStore::open(dir.as_ref().join(format!("{id}.sqlite"))) {
                 manager.insert(SessionHandle {
                     agent: None,
+                    event_rx: None,
+                    dev_rx: None,
                     store: Arc::new(store),
                     meta: SessionMeta {
                         id: id.clone(),
+                        agent_id: AgentId(id.clone()),
                         status: SessionStatus::Empty,
                         goal: None,
                         turn_count: 0,
@@ -149,6 +158,7 @@ pub fn spawn_session(
     system_prompt: String,
     adapter_system_prompt: String,
 ) -> SessionHandle {
+    let meta_agent_id = agent_id.clone();
     let agent = Agent::spawn(AgentConfig {
         agent_id,
         provider,
@@ -163,11 +173,16 @@ pub fn spawn_session(
         max_retries: 2,
         max_goal_rounds: None,
     });
+    let event_rx = agent.subscribe();
+    let dev_rx = agent.subscribe_dev();
     SessionHandle {
         agent: Some(agent),
+        event_rx: Some(event_rx),
+        dev_rx: Some(dev_rx),
         store,
         meta: SessionMeta {
             id: session_id.into(),
+            agent_id: meta_agent_id,
             status: SessionStatus::Running,
             goal: None,
             turn_count: 0,
@@ -210,9 +225,12 @@ mod tests {
     fn handle(id: &str) -> SessionHandle {
         SessionHandle {
             agent: None,
+            event_rx: None,
+            dev_rx: None,
             store: Arc::new(SqliteSessionStore::in_memory()),
             meta: SessionMeta {
                 id: id.to_string(),
+                agent_id: AgentId(id.to_string()),
                 status: SessionStatus::Empty,
                 goal: None,
                 turn_count: 0,

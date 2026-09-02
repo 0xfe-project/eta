@@ -4,12 +4,14 @@
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Style};
-use ratatui::widgets::{Block, Borders};
+use ratatui::widgets::{Block, Borders, Paragraph};
 use tui_textarea::TextArea;
 
 pub mod answer;
 pub mod context;
 pub mod dev;
+
+pub use context::ContextSnapshot;
 
 /// The four focusable regions. `Tab` cycles through them in this order.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -33,8 +35,16 @@ impl Focus {
 }
 
 /// Draw the four-region screen: left answer area, right context/dev columns,
-/// and a bottom input box. Data is wired into the panels in later Part E items.
-pub fn draw(frame: &mut Frame, focus: Focus, input: &TextArea) {
+/// and a bottom input box. Panel contents come from the current session's
+/// buffered events and snapshot.
+pub fn draw(
+    frame: &mut Frame,
+    focus: Focus,
+    input: &TextArea,
+    answers: &[String],
+    dev: &[String],
+    context: Option<&ContextSnapshot>,
+) {
     let outer = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(3)])
@@ -51,18 +61,27 @@ pub fn draw(frame: &mut Frame, focus: Focus, input: &TextArea) {
         .split(columns[1]);
 
     let focused_style = Style::default().fg(Color::Yellow);
+    let answers_block = panel("answers", focus == Focus::Answers, focused_style);
+    frame.render_widget(answers_block.clone(), columns[0]);
     frame.render_widget(
-        panel("answers", focus == Focus::Answers, focused_style),
-        columns[0],
+        Paragraph::new(answers.join("\n")),
+        answers_block.inner(columns[0]),
     );
+
+    let context_block = panel("current context", focus == Focus::Context, focused_style);
+    frame.render_widget(context_block.clone(), right[0]);
+    let context_lines = context
+        .map(|snapshot| context::render_snapshot(snapshot, 8))
+        .unwrap_or_default();
     frame.render_widget(
-        panel("current context", focus == Focus::Context, focused_style),
-        right[0],
+        Paragraph::new(context_lines.join("\n")),
+        context_block.inner(right[0]),
     );
-    frame.render_widget(
-        panel("dev events", focus == Focus::DevEvents, focused_style),
-        right[1],
-    );
+
+    let dev_block = panel("dev events", focus == Focus::DevEvents, focused_style);
+    frame.render_widget(dev_block.clone(), right[1]);
+    frame.render_widget(Paragraph::new(dev.join("\n")), dev_block.inner(right[1]));
+
     let input_block = Block::default().title("input").borders(Borders::ALL);
     frame.render_widget(input_block.clone(), input_area);
     frame.render_widget(input, input_block.inner(input_area));
@@ -88,7 +107,16 @@ mod tests {
         let backend = TestBackend::new(100, 30);
         let mut terminal = Terminal::new(backend).expect("test backend");
         terminal
-            .draw(|frame| draw(frame, Focus::Input, &TextArea::default()))
+            .draw(|frame| {
+                draw(
+                    frame,
+                    Focus::Input,
+                    &TextArea::default(),
+                    &["hello".to_string()],
+                    &["tool::start".to_string()],
+                    None,
+                )
+            })
             .expect("draw");
 
         let rendered: String = terminal
@@ -99,7 +127,7 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect();
 
-        for label in ["answers", "current context", "dev events", "input"] {
+        for label in ["answers", "current context", "dev events", "input", "hello"] {
             assert!(rendered.contains(label), "missing panel label: {label}");
         }
     }
