@@ -1,7 +1,7 @@
 use eta_anycodingagent_config_reader::{
     import_claude, import_codex, import_from_home, import_opencode, import_pi,
 };
-use eta_config::{Config, load_personas};
+use eta_config::{Config, ProviderFormat, load_personas};
 use std::collections::BTreeMap;
 use std::fs;
 
@@ -25,6 +25,10 @@ requires_openai_auth = true
         imported.providers["custom"].options["wire_api"],
         "responses"
     );
+    assert_eq!(
+        imported.providers["custom"].format,
+        ProviderFormat::OpenAiResponses
+    );
     assert!(
         imported.providers["custom"]
             .models
@@ -40,6 +44,7 @@ fn imports_real_claude_env_custom_models() {
     .unwrap();
     let provider = &imported.providers["claude-custom"];
     assert_eq!(provider.options["baseURL"], "https://ccapi.example");
+    assert_eq!(provider.format, ProviderFormat::AnthropicMessages);
     assert_eq!(provider.models.len(), 2);
 }
 
@@ -52,6 +57,10 @@ fn imports_opencode_provider_table_without_top_level_settings() {
     assert_eq!(
         imported.providers["custom"].options["npm"],
         "@ai-sdk/openai-compatible"
+    );
+    assert_eq!(
+        imported.providers["custom"].format,
+        ProviderFormat::OpenAiChatCompletion
     );
     assert!(
         imported.providers["custom"]
@@ -70,11 +79,29 @@ fn imports_pi_provider_model_array() {
         imported.providers["local"].options["baseUrl"],
         "http://localhost:1234/v1"
     );
+    assert_eq!(
+        imported.providers["local"].format,
+        ProviderFormat::OpenAiChatCompletion
+    );
     assert!(
         imported.providers["local"]
             .models
             .contains_key("local-model")
     );
+}
+
+#[test]
+fn derives_format_and_parses_model_limit() {
+    let imported = import_opencode(
+        r#"{"provider":{"my-provider-name":{"npm":"@ai-sdk/openai-compatible","options":{"baseURL":"https://api.xxx.com/v1","apiKey":"xxxxx"},"models":{"xxx":{"name":"xxx","limit":{"context":500000,"output":450000}}}}}}"#,
+    )
+    .unwrap();
+    let provider = &imported.providers["my-provider-name"];
+    assert_eq!(provider.format, ProviderFormat::OpenAiChatCompletion);
+    let model = &provider.models["xxx"];
+    assert_eq!(model.name, "xxx");
+    assert_eq!(model.limit.context, 500000);
+    assert_eq!(model.limit.output, 450000);
 }
 
 #[test]

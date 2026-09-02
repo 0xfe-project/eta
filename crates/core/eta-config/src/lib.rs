@@ -56,13 +56,53 @@ pub fn load_personas(
         .collect()
 }
 
-/// 单个 provider 的配置(同 opencode 的 `provider.<id>`)。
+/// 单个 provider 的配置。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProviderConfig {
+    /// 该 provider 用的 wire 协议,只有三种。
+    #[serde(default)]
+    pub format: ProviderFormat,
     /// 请求 / 认证选项(apiKey / baseURL / timeout / chunkTimeout / setCacheKey …),弱类型。
     #[serde(default)]
     pub options: serde_json::Value,
-    /// model-id → 该 model 的覆盖配置(name / limit / cost / reasoning …),弱类型。
+    /// model-id → 该 model 的配置(name + limit)。
     #[serde(default)]
-    pub models: BTreeMap<String, serde_json::Value>,
+    pub models: BTreeMap<String, ModelConfig>,
+}
+
+/// 三种 wire 协议。
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProviderFormat {
+    #[serde(rename = "openai/chat-completion")]
+    #[default]
+    OpenAiChatCompletion,
+    #[serde(rename = "openai/responses")]
+    OpenAiResponses,
+    #[serde(rename = "anthropic/messages")]
+    AnthropicMessages,
+}
+
+impl ProviderFormat {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ProviderFormat::OpenAiChatCompletion => "openai/chat-completion",
+            ProviderFormat::OpenAiResponses => "openai/responses",
+            ProviderFormat::AnthropicMessages => "anthropic/messages",
+        }
+    }
+}
+
+/// 一个 model 的配置:展示名 + 上下文/输出上限。
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ModelConfig {
+    pub name: String,
+    #[serde(default)]
+    pub limit: ModelLimit,
+}
+
+/// 上下文窗口与单次最大输出 token 数。0 表示未知。
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub struct ModelLimit {
+    pub context: u64,
+    pub output: u64,
 }
