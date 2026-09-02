@@ -11,6 +11,22 @@ pub struct SessionEntry {
     pub data: serde_json::Value,
 }
 
+/// Session entry kinds (the append-only entry types). The store is the single
+/// source of truth; the event log is a projection of these entries.
+pub mod entry_kind {
+    pub const USER_MESSAGE: &str = "user_message";
+    pub const ASSISTANT_MESSAGE: &str = "assistant_message";
+    pub const TOOL_RESULT: &str = "tool_result";
+    pub const USAGE: &str = "usage";
+    pub const TURN: &str = "turn";
+    pub const GOAL: &str = "goal";
+    pub const COMPACTION: &str = "compaction";
+    pub const STATE_WRITE: &str = "state_write";
+    pub const ERROR_RETRY: &str = "error_retry";
+    pub const ASK_USER: &str = "ask_user";
+    pub const ANSWER: &str = "answer";
+}
+
 /// Strong-typed envelope around session state (content is opaque `Value`).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SessionState {

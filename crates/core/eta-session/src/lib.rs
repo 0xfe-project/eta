@@ -6,7 +6,7 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 use eta_llm::{Context, ToolSchema};
 
-pub use eta_core::{SessionEntry, SessionState, SessionStorage};
+pub use eta_core::{SessionEntry, SessionState, SessionStorage, entry_kind};
 
 mod progressive_disclosure;
 
@@ -48,23 +48,67 @@ impl SessionStorage for MemorySessionStore {
     }
 }
 
-// ── C2: context assembly ─────────────────────────────────────────────────────
+// ── C1: build_context (replay + compaction) ─────────────────────────────────
 
-/// Assemble the LLM context for a turn.
+/// Assemble the LLM context by replaying the append-only entries.
 ///
-/// Stable block (system prompt) + messages + tools. Progressive disclosure
-/// (skills / mcp-tool directories with 4-level degradation) is layered on top
-/// of `system_prompt` by the caller — this keeps the core assembly explicit.
+/// Handles compaction: the last `compaction` entry contributes a summary and
+/// marks `first_kept_entry_id`; entries before it are skipped (they were
+/// summarized), so a `--resume` never loses the pre-compaction tail.
 pub fn build_context(
+    entries: &[SessionEntry],
     system_prompt: &str,
-    messages: &[serde_json::Value],
     tools: &[ToolSchema],
 ) -> Context {
+    // Find the last compaction entry.
+    let mut first_kept = 0u64;
+    let mut summary: Option<String> = None;
+    for entry in entries {
+        if entry.kind == entry_kind::COMPACTION {
+            first_kept = entry
+                .data
+                .get("first_kept_entry_id")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            summary = entry
+                .data
+                .get("summary")
+                .and_then(|v| v.as_str())
+                .map(String::from);
+        }
+    }
+
+    let mut messages: Vec<serde_json::Value> = Vec::new();
+    if let Some(s) = summary {
+        messages.push(serde_json::json!({
+            "role": "user",
+            "content": format!("[Previous conversation summary]\n{s}"),
+        }));
+    }
+    for entry in entries {
+        if entry.id < first_kept {
+            continue; // summarized prefix
+        }
+        if is_message_kind(&entry.kind) {
+            messages.push(entry.data.clone());
+        }
+    }
+
     Context {
         system_prompt: Some(system_prompt.to_string()),
-        messages: messages.to_vec(),
+        messages,
         tools: tools.to_vec(),
     }
+}
+
+fn is_message_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        entry_kind::USER_MESSAGE
+            | entry_kind::ASSISTANT_MESSAGE
+            | entry_kind::TOOL_RESULT
+            | entry_kind::ANSWER
+    )
 }
 
 // ── C4: git-like time travel ─────────────────────────────────────────────────
