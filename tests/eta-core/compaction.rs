@@ -136,6 +136,7 @@ async fn compacts_when_context_grows() {
         hooks: hooks(),
         store: Arc::new(MemStore::default()),
         system_prompt: "test".into(),
+        adapter_system_prompt: "".into(),
         max_retries: 2,
         skill_store: None,
         memory_store: Arc::new(MemMemoryStore::default()),

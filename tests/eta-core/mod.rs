@@ -2,6 +2,7 @@
 //!
 //! Each submodule covers one behavior; shared test doubles and helpers live here.
 
+mod adapter_prompt;
 mod ask_user;
 mod basic_turn;
 mod compaction;
@@ -180,6 +181,7 @@ fn make_agent(provider: Arc<dyn Provider>, tools: Vec<Arc<dyn Tool>>) -> Agent {
         hooks: hooks(),
         store,
         system_prompt: "test".into(),
+        adapter_system_prompt: "".into(),
         max_retries: 2,
         skill_store: None,
         memory_store: Arc::new(MemMemoryStore::default()),

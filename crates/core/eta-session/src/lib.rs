@@ -96,6 +96,7 @@ pub fn build_context(
 
     Context {
         system_prompt: Some(system_prompt.to_string()),
+        adapter_system_prompt: None,
         messages,
         tools: tools.to_vec(),
     }

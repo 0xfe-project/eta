@@ -50,6 +50,10 @@ pub struct AgentConfig {
     /// Required — every agent carries memory.
     pub memory_store: Arc<dyn MemoryStore>,
     pub system_prompt: String,
+    /// Client/adapter system prompt injected as a separate context slot. Part-E
+    /// style embedders use it to expose their own tools, environment, and
+    /// host-specific conventions without editing the engine's stable block.
+    pub adapter_system_prompt: String,
     pub max_retries: usize,
     /// Goal self-continuation cap (`None` = `DEFAULT_MAX_GOAL_ROUNDS`).
     pub max_goal_rounds: Option<u32>,
@@ -376,6 +380,7 @@ impl AgentRuntime {
         }));
         let context = Context {
             system_prompt: Some(prompts::MEMORY_EXTRACT_SYSTEM_PROMPT.to_string()),
+            adapter_system_prompt: None,
             messages: prompt_messages,
             tools: vec![],
         };
@@ -416,6 +421,7 @@ impl AgentRuntime {
             .collect();
         let context = Context {
             system_prompt: Some(prompts::goal_evaluator_prompt(&goal.objective)),
+            adapter_system_prompt: None,
             messages,
             tools: vec![],
         };
@@ -608,6 +614,8 @@ impl AgentRuntime {
 
         let mut context = Context {
             system_prompt: Some(system_prompt.clone()),
+            adapter_system_prompt: (!self.cfg.adapter_system_prompt.is_empty())
+                .then(|| self.cfg.adapter_system_prompt.clone()),
             messages: self.messages.clone(),
             tools: tool_schemas,
         };
@@ -1044,6 +1052,7 @@ async fn summarize_with(
         prompt_messages.push(serde_json::json!({ "role": "user", "content": request }));
         let context = Context {
             system_prompt: Some(prompts::SUMMARIZE_SYSTEM_PROMPT.to_string()),
+            adapter_system_prompt: None,
             messages: prompt_messages,
             tools: vec![],
         };

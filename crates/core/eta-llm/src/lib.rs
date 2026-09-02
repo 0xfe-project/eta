@@ -35,7 +35,12 @@ pub struct ToolSchema {
 /// A provider request context.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Context {
+    /// Engine-assembled system prompt (persona + role + memory + skills …).
     pub system_prompt: Option<String>,
+    /// Client/adapter-injected system prompt, kept separate so an embedder can
+    /// add its own tool list, environment notes, or host-specific conventions
+    /// without rewriting the engine's stable block.
+    pub adapter_system_prompt: Option<String>,
     pub messages: Vec<serde_json::Value>,
     pub tools: Vec<ToolSchema>,
 }

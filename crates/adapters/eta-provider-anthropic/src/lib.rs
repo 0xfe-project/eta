@@ -48,7 +48,9 @@ impl Provider for AnthropicProvider {
         let opts = opts.cloned();
         tokio::spawn(async move {
             let mut body = json!({"model": model.id, "messages": context.messages, "stream": true, "max_tokens": model.max_tokens.unwrap_or(1024)});
-            if let Some(system) = context.system_prompt {
+            if let Some(system) =
+                join_system_prompts(&context.system_prompt, &context.adapter_system_prompt)
+            {
                 body["system"] = json!(system);
             }
             if !context.tools.is_empty() {
@@ -181,6 +183,17 @@ impl Provider for AnthropicProvider {
             let _ = tx.send(Ok(Event::End { usage, stop })).await;
         });
         Box::pin(ReceiverStream::new(rx))
+    }
+}
+
+/// Combine the engine prompt and the client adapter prompt into Anthropic's
+/// single `system` string while keeping the two slots distinct in `Context`.
+fn join_system_prompts(engine: &Option<String>, adapter: &Option<String>) -> Option<String> {
+    match (engine, adapter) {
+        (Some(engine), Some(adapter)) => Some(format!("{engine}\n\n{adapter}")),
+        (Some(engine), None) => Some(engine.clone()),
+        (None, Some(adapter)) => Some(adapter.clone()),
+        (None, None) => None,
     }
 }
 

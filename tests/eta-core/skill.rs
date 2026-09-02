@@ -46,6 +46,7 @@ async fn skill_store_dumped_into_context() {
         skill_store: Some(Arc::new(OneSkillStore)),
         memory_store: Arc::new(MemMemoryStore::default()),
         system_prompt: "test".into(),
+        adapter_system_prompt: "".into(),
         max_retries: 2,
         max_goal_rounds: None,
     });
