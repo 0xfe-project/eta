@@ -459,6 +459,7 @@ dependencies = [
  "eta-sqlite-storage",
  "ratatui",
  "serde_json",
+ "tempfile",
  "tokio",
  "tui-textarea",
 ]
