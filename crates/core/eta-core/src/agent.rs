@@ -15,9 +15,9 @@ use crate::hooks::Hooks;
 use crate::loop_detect::LoopDetector;
 use crate::store::SessionStorage;
 use crate::tool::{
-    CancelToken, Tool, builtin_evo_tool, builtin_skill_tool, builtin_state_tools,
-    builtin_todo_tool, load_memory, load_skills, load_todos, render_memory, render_skills,
-    render_todos, validate_args,
+    CancelToken, Tool, builtin_evo_tool, builtin_multi_tool_use_tool, builtin_skill_tool,
+    builtin_state_tools, builtin_todo_tool, load_memory, load_skills, load_todos, render_memory,
+    render_skills, render_todos, validate_args,
 };
 use crate::types::{
     AgentEvent, AgentId, AgentInput, AskUserAnswer, ControlPlaneAction, ControlPlaneDecision,
@@ -68,11 +68,19 @@ impl Agent {
         let cancel = CancelToken::new();
         let usage = Arc::new(Mutex::new(Usage::default()));
 
-        // Builtin state + todo + evo + skill tools always attach to the store.
-        cfg.tools.extend(builtin_state_tools(cfg.store.clone()));
-        cfg.tools.push(builtin_todo_tool(cfg.store.clone()));
-        cfg.tools.push(builtin_evo_tool(cfg.store.clone()));
-        cfg.tools.push(builtin_skill_tool(cfg.store.clone()));
+        // Builtin state + todo + evo + skill tools, plus user tools, form the
+        // registry; multi_tool_use wraps them for parallel execution.
+        let mut registry: Vec<Arc<dyn Tool>> = Vec::new();
+        registry.extend(builtin_state_tools(cfg.store.clone()));
+        registry.push(builtin_todo_tool(cfg.store.clone()));
+        registry.push(builtin_evo_tool(cfg.store.clone()));
+        registry.push(builtin_skill_tool(cfg.store.clone()));
+        registry.append(&mut cfg.tools);
+
+        let registry = Arc::new(registry);
+        let mut tools = registry.as_ref().clone();
+        tools.push(builtin_multi_tool_use_tool(registry));
+        cfg.tools = tools;
 
         let mut runtime = AgentRuntime {
             cfg,

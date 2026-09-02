@@ -10,6 +10,7 @@ mod goal;
 mod loop_detect;
 mod loop_manager;
 mod mid_loop;
+mod multi_tool_use;
 mod parse_duration;
 mod retry;
 mod skill;

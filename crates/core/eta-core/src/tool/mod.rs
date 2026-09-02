@@ -1,6 +1,7 @@
 //! The `Tool` trait + builtin tools.
 
 mod evo;
+mod multi_tool_use;
 mod skill;
 mod state;
 mod todo;
@@ -70,6 +71,7 @@ pub(crate) fn validate_args(
 
 pub use evo::render_memory;
 pub(crate) use evo::{builtin_evo_tool, load_memory};
+pub(crate) use multi_tool_use::builtin_multi_tool_use_tool;
 pub use skill::render_skills;
 pub(crate) use skill::{builtin_skill_tool, load_skills};
 pub(crate) use state::builtin_state_tools;
