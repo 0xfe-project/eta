@@ -1,6 +1,6 @@
 use eta_anycodingagent_config_reader::{
-    CustomModelImport, import_claude, import_codex, import_from_home, import_opencode, import_path,
-    import_pi,
+    CustomModelImport, ImportSource, import_claude, import_codex, import_file, import_from_home,
+    import_opencode, import_path, import_pi,
 };
 use eta_config::{Config, ModelConfig, ModelLimit, ProviderConfig, ProviderFormat, load_personas};
 use std::collections::BTreeMap;
@@ -67,6 +67,22 @@ fn imports_opencode_provider_table_without_top_level_settings() {
         imported.providers["custom"]
             .models
             .contains_key("grok-custom")
+    );
+}
+
+#[test]
+fn imports_opencode_array_model_list() {
+    let imported = import_opencode(
+        r#"{"provider":{"custom":{"models":["gpt-4o","claude-sonnet"],"options":{"baseURL":"https://example/v1"}}}}"#,
+    )
+    .unwrap();
+    assert_eq!(
+        imported.providers["custom"]
+            .models
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>(),
+        vec!["claude-sonnet", "gpt-4o"]
     );
 }
 
@@ -200,6 +216,35 @@ fn merge_dedups_providers_and_models() {
     assert!(provider.models.contains_key("m2"));
     assert_eq!(provider.options["baseURL"], "https://a");
     assert_eq!(provider.options["apiKey"], "secret");
+}
+
+#[test]
+fn codex_import_expands_model_catalog_relative_to_config_dir() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(
+        dir.path().join("config.toml"),
+        r#"
+model_provider = "custom"
+model = "active-model"
+model_catalog_json = "catalog.json"
+
+[model_providers.custom]
+name = "Custom"
+base_url = "https://example/v1"
+wire_api = "responses"
+"#,
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("catalog.json"),
+        r#"{"models":[{"slug":"active-model","display_name":"Active"},{"slug":"extra-model","display_name":"Extra"}]}"#,
+    )
+    .unwrap();
+
+    let imported = import_file(ImportSource::Codex, dir.path().join("config.toml")).unwrap();
+    let models = &imported.providers["custom"].models;
+    assert!(models.contains_key("active-model"));
+    assert!(models.contains_key("extra-model"));
 }
 
 #[test]
