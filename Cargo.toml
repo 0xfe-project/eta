@@ -4,6 +4,7 @@ members = [
     "crates/core/*",
     "crates/adapters/*",
     "crates/tests-helper/*",
+    "bin/*",
     "tests",
 ]
 
@@ -21,7 +22,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # async
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time", "signal"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tokio-util = "0.7"
 async-trait = "0.1"
@@ -40,6 +41,12 @@ dirs = "6"
 reqwest = { version = "0.12", default-features = false, features = ["stream", "json", "rustls-tls"] }
 futures-util = "0.3"
 toml = "0.9"
+
+# tui
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+tui-textarea = "0.7"
+clap = { version = "4", features = ["derive"] }
 
 
 
