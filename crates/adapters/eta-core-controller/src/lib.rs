@@ -4,6 +4,13 @@
 //! adapters (provider selection, config loading, adapter prompt building) so
 //! embedders stay thin renderers over the engine.
 
+mod config;
+
+pub use config::{
+    config_path, empty_config, load_config_persisted, read_config, set_active_model,
+    upsert_provider, write_config,
+};
+
 use std::sync::Arc;
 
 use eta_llm::{Model, Provider};
@@ -32,27 +39,16 @@ pub fn mcp_tools(registry: &McpRegistry) -> Vec<Arc<dyn eta_core::Tool>> {
     tools
 }
 
-/// Load the user's provider/model catalog from `~/.eta/eta.json`, then merge
-/// any custom providers discovered in installed coding-agent configs.
+/// Load the user's provider/model catalog.
 ///
-/// No default model is invented here: when nothing is configured the returned
-/// config has an empty `model` and an empty `provider` map, and callers decide
-/// how to surface that to the user (e.g. open a config prompt) rather than
-/// silently picking a model the user never chose.
+/// `~/.eta/eta.json` is the single source of truth. On first launch (no
+/// `eta.json` yet) a one-time import from installed coding-agent configs
+/// (codex/claude/opencode/pi) runs and the merged result is persisted
+/// immediately; later launches read the file directly. No default model is
+/// invented: with nothing configured the returned config has an empty `model`
+/// and callers decide how to surface that (e.g. open a picker).
 pub fn load_config() -> eta_config::Config {
-    let mut config = std::fs::read_to_string(eta_fs::eta_home().join("eta.json"))
-        .ok()
-        .and_then(|text| serde_json::from_str::<eta_config::Config>(&text).ok())
-        .unwrap_or_else(|| eta_config::Config {
-            model: String::new(),
-            small_model: None,
-            provider: Default::default(),
-            persona: vec![],
-        });
-    if let Ok(imported) = eta_anycodingagent_config_reader::import_from_default_home() {
-        imported.apply_to(&mut config);
-    }
-    config
+    load_config_persisted()
 }
 
 /// The model that is currently selected, either from `~/.eta/eta.json` or the

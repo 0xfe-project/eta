@@ -12,7 +12,7 @@ use eta_core::{
 };
 use eta_core_controller::{
     build_adapter_system_prompt, configured_model, load_config, load_mcp_registry, mcp_tools,
-    model_entries, resolve_provider_model,
+    model_entries, resolve_provider_model, set_active_model,
 };
 use eta_io_tools::builtin_io_tools;
 use eta_sqlite_storage::{SqliteAgentStore, SqliteSessionStore};
@@ -501,11 +501,15 @@ impl App {
             return;
         };
         self.save_model(&model).await;
+        // Persist the global default so the selection survives restarts.
+        // The session KV above stays as a per-session override.
+        let persisted = set_active_model(&model).is_ok();
         self.respawn_with_model(&model);
         self.screen = Screen::session();
+        let scope = if persisted { "saved" } else { "session" };
         self.view()
             .answers
-            .push(format!("model: {model} (session)"));
+            .push(format!("model: {model} ({scope})"));
     }
 
     pub(crate) fn respawn_with_model(&mut self, model_id: &str) {

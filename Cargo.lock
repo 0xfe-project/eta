@@ -364,6 +364,7 @@ dependencies = [
  "eta-system-prompts",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
 ]
 
@@ -508,6 +509,7 @@ dependencies = [
  "eta-anycodingagent-config-reader",
  "eta-config",
  "eta-core",
+ "eta-core-controller",
  "eta-fs",
  "eta-io-tools",
  "eta-llm",

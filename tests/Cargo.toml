@@ -17,6 +17,7 @@ eta-mcp = { path = "../crates/adapters/eta-mcp" }
 eta-config = { path = "../crates/core/eta-config" }
 eta-anycodingagent-config-reader = { path = "../crates/adapters/eta-anycodingagent-config-reader" }
 eta-sqlite-storage = { path = "../crates/adapters/eta-sqlite-storage" }
+eta-core-controller = { path = "../crates/adapters/eta-core-controller" }
 async-trait.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
