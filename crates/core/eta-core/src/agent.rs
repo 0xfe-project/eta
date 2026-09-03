@@ -892,14 +892,28 @@ impl AgentRuntime {
             match item {
                 Ok(Event::Content(c)) => {
                     had_content = true;
-                    if let Some(text) = c.get("text").and_then(|t| t.as_str()) {
-                        content_text.push_str(text);
+                    let is_reasoning = c
+                        .get("reasoning")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    if is_reasoning {
+                        // Reasoning blocks are NOT stored in the transcript — they're ephemeral display only.
+                        if let Some(text) = c.get("text").and_then(|t| t.as_str()) {
+                            let _ = self.output_tx.send(AgentEvent::ReasoningUpdate {
+                                agent_id: self.cfg.agent_id.clone(),
+                                text: text.to_string(),
+                            });
+                        }
+                    } else {
+                        if let Some(text) = c.get("text").and_then(|t| t.as_str()) {
+                            content_text.push_str(text);
+                        }
+                        self.append_message("assistant", c.clone()).await;
+                        let _ = self.output_tx.send(AgentEvent::MessageUpdate {
+                            agent_id: self.cfg.agent_id.clone(),
+                            message: c,
+                        });
                     }
-                    self.append_message("assistant", c.clone()).await;
-                    let _ = self.output_tx.send(AgentEvent::MessageUpdate {
-                        agent_id: self.cfg.agent_id.clone(),
-                        message: c,
-                    });
                 }
                 Ok(Event::ToolCall {
                     id,

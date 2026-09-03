@@ -111,7 +111,26 @@ impl Provider for AnthropicProvider {
                     match v.get("type").and_then(Value::as_str) {
                         Some("content_block_delta") => {
                             if let Some(delta) = v.get("delta") {
-                                if let Some(text) = delta.get("text").and_then(Value::as_str) {
+                                let delta_type =
+                                    delta.get("type").and_then(Value::as_str).unwrap_or("");
+                                if delta_type == "thinking_delta" {
+                                    if let Some(thinking) =
+                                        delta.get("thinking").and_then(Value::as_str)
+                                    {
+                                        if !thinking.is_empty() {
+                                            if tx
+                                                .send(Ok(Event::Content(
+                                                    json!({"type":"text","text":thinking,"reasoning":true}),
+                                                )))
+                                                .await
+                                                .is_err()
+                                            {
+                                                return;
+                                            }
+                                        }
+                                    }
+                                } else if let Some(text) = delta.get("text").and_then(Value::as_str)
+                                {
                                     if tx
                                         .send(Ok(Event::Content(
                                             json!({"type":"text","text":text}),

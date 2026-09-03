@@ -80,6 +80,12 @@ pub enum AgentEvent {
         agent_id: AgentId,
         message: serde_json::Value,
     },
+    /// A reasoning/thinking block from the model (chain-of-thought). Kept
+    /// separate from `MessageUpdate` so UIs can fold/hide it independently.
+    ReasoningUpdate {
+        agent_id: AgentId,
+        text: String,
+    },
     ToolExecutionStart {
         id: String,
         name: String,
