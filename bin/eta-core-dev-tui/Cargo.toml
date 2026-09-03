@@ -30,6 +30,7 @@ eta-provider-anthropic = { path = "../../crates/adapters/eta-provider-anthropic"
 eta-mcp = { path = "../../crates/adapters/eta-mcp" }
 eta-config = { path = "../../crates/core/eta-config" }
 eta-anycodingagent-config-reader = { path = "../../crates/adapters/eta-anycodingagent-config-reader" }
+eta-core-controller = { path = "../../crates/adapters/eta-core-controller" }
 
 [dev-dependencies]
 tempfile = "3"

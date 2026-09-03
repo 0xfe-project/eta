@@ -1,0 +1,25 @@
+[package]
+name = "eta-core-controller"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+async-trait.workspace = true
+eta-core = { path = "../../core/eta-core" }
+eta-llm = { path = "../../core/eta-llm" }
+eta-config = { path = "../../core/eta-config" }
+eta-system-prompts = { path = "../../core/eta-system-prompts" }
+eta-fs = { path = "../eta-fs" }
+eta-io-tools = { path = "../eta-io-tools" }
+eta-mcp = { path = "../eta-mcp" }
+eta-sqlite-storage = { path = "../eta-sqlite-storage" }
+eta-anycodingagent-config-reader = { path = "../eta-anycodingagent-config-reader" }
+eta-provider-openai = { path = "../eta-provider-openai" }
+eta-provider-anthropic = { path = "../eta-provider-anthropic" }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+serde_json.workspace = true

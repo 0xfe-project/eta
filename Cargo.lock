@@ -347,6 +347,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "eta-core-controller"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "eta-anycodingagent-config-reader",
+ "eta-config",
+ "eta-core",
+ "eta-fs",
+ "eta-io-tools",
+ "eta-llm",
+ "eta-mcp",
+ "eta-provider-anthropic",
+ "eta-provider-openai",
+ "eta-sqlite-storage",
+ "eta-system-prompts",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "eta-core-dev-tui"
 version = "0.1.0"
 dependencies = [
@@ -354,6 +375,7 @@ dependencies = [
  "eta-anycodingagent-config-reader",
  "eta-config",
  "eta-core",
+ "eta-core-controller",
  "eta-fs",
  "eta-io-tools",
  "eta-llm",

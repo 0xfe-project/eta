@@ -10,10 +10,11 @@ use eta_core::{
     AgentEvent, AgentId, AgentInput, AskUserAnswer, LoopSpec, MemoryStore, SessionEntry,
     SessionStorage, TodoItem, Trigger, dev_category, entry_kind,
 };
+use eta_core_controller::{
+    build_adapter_system_prompt, configured_model, load_config, model_entries,
+    resolve_provider_model,
+};
 use eta_io_tools::builtin_io_tools;
-use eta_llm::{Model, Provider};
-use eta_provider_anthropic::AnthropicProvider;
-use eta_provider_openai::OpenAiProvider;
 use eta_sqlite_storage::{SqliteAgentStore, SqliteSessionStore};
 use eta_system_prompts::DEFAULT_SYSTEM_PROMPT;
 use serde_json::json;
@@ -88,7 +89,7 @@ impl App {
             history_idx: None,
             dev_filter: String::new(),
             dev_filtering: false,
-            current_model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into()),
+            current_model: configured_model(&load_config()).unwrap_or_default(),
             working: false,
         }
     }
@@ -487,72 +488,7 @@ impl App {
     }
 
     pub(crate) fn model_catalog(&self) -> Vec<String> {
-        let mut entries = config::model_entries(&self.load_config());
-        let env_model = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into());
-        let default = format!("default/{env_model}");
-        if !entries.contains(&default) {
-            entries.push(default);
-            entries.sort();
-        }
-        entries
-    }
-
-    /// Load the user's custom provider/model catalog from home.
-    fn load_config(&self) -> eta_config::Config {
-        let mut config = eta_config::Config {
-            model: String::new(),
-            small_model: None,
-            provider: Default::default(),
-            persona: vec![],
-        };
-        if let Ok(imported) = eta_anycodingagent_config_reader::import_from_default_home() {
-            imported.apply_to(&mut config);
-        }
-        config
-    }
-
-    /// Resolve a `provider/model` entry into a provider + model carrying the
-    /// provider's base URL and wire protocol.
-    fn resolve_provider_model(&self, entry: &str) -> (Arc<dyn Provider>, Model) {
-        let (provider_id, model_id) = entry.split_once('/').unwrap_or((entry, entry));
-        let config = self.load_config();
-        let Some(provider) = config.provider.get(provider_id) else {
-            return (Arc::new(OpenAiProvider::from_env()), Model::new(model_id));
-        };
-        let base = provider
-            .options
-            .get("baseURL")
-            .or_else(|| provider.options.get("base_url"))
-            .and_then(|value| value.as_str())
-            .unwrap_or_default();
-        let key = provider
-            .options
-            .get("apiKey")
-            .or_else(|| provider.options.get("api_key"))
-            .and_then(|value| value.as_str())
-            .unwrap_or_default();
-        let mut model = Model::new(model_id);
-        model.api = Some(provider.format.as_str().to_string());
-        model.base_url = Some(base.to_string());
-        if let Some(cfg) = provider.models.get(model_id) {
-            model.context_window = if cfg.limit.context > 0 {
-                Some(cfg.limit.context)
-            } else {
-                None
-            };
-            model.max_tokens = if cfg.limit.output > 0 {
-                Some(cfg.limit.output)
-            } else {
-                None
-            };
-        }
-        let provider: Arc<dyn Provider> =
-            if provider.format == eta_config::ProviderFormat::AnthropicMessages {
-                Arc::new(AnthropicProvider::new(Some(key.to_string()), base))
-            } else {
-                Arc::new(OpenAiProvider::new(Some(key.to_string()), base))
-            };
-        (provider, model)
+        model_entries(&load_config())
     }
 
     pub(crate) fn open_model_picker(&mut self) {
@@ -579,7 +515,10 @@ impl App {
         let session_id = session.meta.id.clone();
         let agent_id = session.meta.agent_id.clone();
         let store = session.store.clone();
-        let (provider, model) = self.resolve_provider_model(model_id);
+        let Some((provider, model)) = resolve_provider_model(model_id, &load_config()) else {
+            self.screen.open_model_picker(self.model_catalog());
+            return;
+        };
         self.current_model = model.id.clone();
         let memory: Arc<dyn MemoryStore> = Arc::new(
             SqliteAgentStore::open(eta_fs::agent_db(&agent_id.to_string()))
@@ -643,8 +582,15 @@ impl App {
         };
         let session_id = session.meta.id.clone();
         let store = session.store.clone();
-        let provider: Arc<dyn Provider> = Arc::new(OpenAiProvider::from_env());
-        let model = Model::new(std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into()));
+        let config = load_config();
+        let Some(model_id) = configured_model(&config) else {
+            self.open_model_picker();
+            return;
+        };
+        let Some((provider, model)) = resolve_provider_model(&model_id, &config) else {
+            self.open_model_picker();
+            return;
+        };
         self.current_model = model.id.clone();
         let memory: Arc<dyn MemoryStore> = Arc::new(
             SqliteAgentStore::open(eta_fs::agent_db(name))
@@ -728,8 +674,15 @@ impl App {
     }
 
     pub(crate) async fn spawn_session_for_agent(&mut self, name: &str, persona: Option<&str>) {
-        let provider: Arc<dyn Provider> = Arc::new(OpenAiProvider::from_env());
-        let model = Model::new(std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into()));
+        let config = load_config();
+        let Some(model_id) = configured_model(&config) else {
+            self.open_model_picker();
+            return;
+        };
+        let Some((provider, model)) = resolve_provider_model(&model_id, &config) else {
+            self.open_model_picker();
+            return;
+        };
         self.current_model = model.id.clone();
         let session_id = uuid::Uuid::now_v7().to_string();
         let _ = std::fs::create_dir_all(eta_fs::sessions_dir());
@@ -811,10 +764,11 @@ impl App {
         let owner = session::load_owner(store.as_ref())
             .await
             .unwrap_or_else(|| session_id.to_string());
+        let config = load_config();
         let model_id = session::load_model(store.as_ref())
             .await
-            .unwrap_or_else(|| std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into()));
-        let (provider, model) = self.resolve_provider_model(&model_id);
+            .or_else(|| configured_model(&config))?;
+        let (provider, model) = resolve_provider_model(&model_id, &config)?;
         let memory: Arc<dyn MemoryStore> = Arc::new(
             SqliteAgentStore::open(eta_fs::agent_db(&owner))
                 .unwrap_or_else(|_| SqliteAgentStore::in_memory()),
@@ -858,42 +812,6 @@ impl App {
             }
         }
     }
-}
-
-fn build_adapter_system_prompt(
-    session_id: &str,
-    agent_name: &str,
-    model_id: &str,
-    tool_names: &[String],
-) -> String {
-    let sessions_dir = eta_fs::sessions_dir();
-    let agents_dir = eta_fs::agents_dir();
-    let mcp_json = eta_fs::mcp_json();
-    let cwd = std::env::current_dir().unwrap_or_default();
-    let tool_lines = tool_names
-        .iter()
-        .map(|name| format!("- {name}"))
-        .collect::<Vec<_>>()
-        .join("\n");
-    format!(
-        r#"You are running as agent "{agent_name}" in session {session_id}.
-
-## Environment
-- Sessions directory: {sessions}
-- Agents directory: {agents}
-- MCP config: {mcp}
-- Working directory: {cwd}
-- Model: {model_id}
-
-## Available tools
-{tool_lines}
-
-You can reference your own session at {sessions}/{session_id}.sqlite and read other agent memories from {agents}/<name>.sqlite."#,
-        sessions = sessions_dir.display(),
-        agents = agents_dir.display(),
-        mcp = mcp_json.display(),
-        cwd = cwd.display(),
-    )
 }
 
 /// Truncate a status-bar label to `max` chars, adding an ellipsis when needed.
