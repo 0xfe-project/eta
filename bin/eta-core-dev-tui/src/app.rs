@@ -534,6 +534,18 @@ impl App {
         let mut model = Model::new(model_id);
         model.api = Some(provider.format.as_str().to_string());
         model.base_url = Some(base.to_string());
+        if let Some(cfg) = provider.models.get(model_id) {
+            model.context_window = if cfg.limit.context > 0 {
+                Some(cfg.limit.context)
+            } else {
+                None
+            };
+            model.max_tokens = if cfg.limit.output > 0 {
+                Some(cfg.limit.output)
+            } else {
+                None
+            };
+        }
         let provider: Arc<dyn Provider> =
             if provider.format == eta_config::ProviderFormat::AnthropicMessages {
                 Arc::new(AnthropicProvider::new(Some(key.to_string()), base))
@@ -573,6 +585,10 @@ impl App {
             SqliteAgentStore::open(eta_fs::agent_db(&agent_id.to_string()))
                 .unwrap_or_else(|_| SqliteAgentStore::in_memory()),
         );
+        let tools = builtin_io_tools();
+        let tool_names: Vec<String> = tools.iter().map(|t| t.name().to_string()).collect();
+        let adapter_prompt =
+            build_adapter_system_prompt(&session_id, &agent_id.0, model_id, &tool_names);
         let handle = spawn_session(
             &session_id,
             agent_id,
@@ -580,9 +596,9 @@ impl App {
             model,
             store,
             memory,
-            builtin_io_tools(),
+            tools,
             DEFAULT_SYSTEM_PROMPT.to_string(),
-            String::new(),
+            adapter_prompt,
         );
         self.sessions = SessionManager::new();
         self.sessions.insert(handle);
@@ -634,6 +650,10 @@ impl App {
             SqliteAgentStore::open(eta_fs::agent_db(name))
                 .unwrap_or_else(|_| SqliteAgentStore::in_memory()),
         );
+        let tools = builtin_io_tools();
+        let tool_names: Vec<String> = tools.iter().map(|t| t.name().to_string()).collect();
+        let adapter_prompt =
+            build_adapter_system_prompt(&session_id, name, &self.current_model, &tool_names);
         let handle = spawn_session(
             &session_id,
             AgentId(name.to_string()),
@@ -641,9 +661,9 @@ impl App {
             model,
             store,
             memory,
-            builtin_io_tools(),
+            tools,
             DEFAULT_SYSTEM_PROMPT.to_string(),
-            String::new(),
+            adapter_prompt,
         );
         if let Some(old) = self.sessions.current().and_then(|s| s.agent.as_ref()) {
             old.cancel();
@@ -730,6 +750,8 @@ impl App {
         let system_prompt = format!("{DEFAULT_SYSTEM_PROMPT}\n\n{body}");
         let tools = builtin_io_tools();
         let tool_names: Vec<String> = tools.iter().map(|tool| tool.name().to_string()).collect();
+        let adapter_prompt =
+            build_adapter_system_prompt(&session_id, name, &self.current_model, &tool_names);
         let handle = spawn_session(
             &session_id,
             AgentId(name.to_string()),
@@ -739,7 +761,7 @@ impl App {
             memory,
             tools,
             system_prompt,
-            String::new(),
+            adapter_prompt,
         );
         self.sqlite = Some(sqlite);
         self.sessions.insert(handle);
@@ -797,6 +819,10 @@ impl App {
             SqliteAgentStore::open(eta_fs::agent_db(&owner))
                 .unwrap_or_else(|_| SqliteAgentStore::in_memory()),
         );
+        let tools = builtin_io_tools();
+        let tool_names: Vec<String> = tools.iter().map(|t| t.name().to_string()).collect();
+        let adapter_prompt =
+            build_adapter_system_prompt(session_id, &owner, &model_id, &tool_names);
         let handle = spawn_session(
             session_id,
             AgentId(owner),
@@ -804,9 +830,9 @@ impl App {
             model,
             store,
             memory,
-            builtin_io_tools(),
+            tools,
             DEFAULT_SYSTEM_PROMPT.to_string(),
-            String::new(),
+            adapter_prompt,
         );
         Some((handle, sqlite))
     }
@@ -832,6 +858,42 @@ impl App {
             }
         }
     }
+}
+
+fn build_adapter_system_prompt(
+    session_id: &str,
+    agent_name: &str,
+    model_id: &str,
+    tool_names: &[String],
+) -> String {
+    let sessions_dir = eta_fs::sessions_dir();
+    let agents_dir = eta_fs::agents_dir();
+    let mcp_json = eta_fs::mcp_json();
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let tool_lines = tool_names
+        .iter()
+        .map(|name| format!("- {name}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        r#"You are running as agent "{agent_name}" in session {session_id}.
+
+## Environment
+- Sessions directory: {sessions}
+- Agents directory: {agents}
+- MCP config: {mcp}
+- Working directory: {cwd}
+- Model: {model_id}
+
+## Available tools
+{tool_lines}
+
+You can reference your own session at {sessions}/{session_id}.sqlite and read other agent memories from {agents}/<name>.sqlite."#,
+        sessions = sessions_dir.display(),
+        agents = agents_dir.display(),
+        mcp = mcp_json.display(),
+        cwd = cwd.display(),
+    )
 }
 
 /// Truncate a status-bar label to `max` chars, adding an ellipsis when needed.

@@ -364,6 +364,21 @@ impl AgentRuntime {
         let mut queue: VecDeque<TurnDriver> = VecDeque::new();
         queue.push_back(TurnDriver::UserMessage(serde_json::Value::Null));
 
+        let todos = load_todos(self.cfg.store.as_ref()).await;
+        let todo_sentinel_idx = self.messages.len();
+        let injected_todo_sentinel = !todos.is_empty();
+        if injected_todo_sentinel {
+            self.messages.push(serde_json::json!({
+                "role": "user",
+                "content": prompts::TODO_REVIEW_PROMPT,
+            }));
+            self.emit_dev(
+                dev_category::TODO,
+                "review_injected",
+                serde_json::json!({ "count": todos.len() }),
+            );
+        }
+
         while let Some(_driver) = queue.pop_front() {
             if self.cancel.is_cancelled() {
                 break;
@@ -410,6 +425,10 @@ impl AgentRuntime {
 
         self.extract_memory(self.messages[turn_start..].to_vec())
             .await;
+
+        if injected_todo_sentinel && todo_sentinel_idx < self.messages.len() {
+            self.messages.remove(todo_sentinel_idx);
+        }
     }
 
     fn should_continue_goal(&self) -> bool {
