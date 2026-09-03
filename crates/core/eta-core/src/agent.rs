@@ -419,6 +419,14 @@ impl AgentRuntime {
                     break;
                 }
                 queue.push_back(TurnDriver::GoalContinuation);
+                continue;
+            }
+            // Agentic auto-continuation: if the last assistant message shows clear
+            // intent to proceed (phrases like "Now let me...", "Next I'll..."),
+            // continue the chain even without an explicit goal.
+            if self.goal.is_none() && self.last_message_shows_intent() {
+                queue.push_back(TurnDriver::UserMessage(serde_json::Value::Null));
+                continue;
             }
             // else: no next driver → natural chain end → extract memory below.
         }
@@ -439,6 +447,33 @@ impl AgentRuntime {
             self.goal.as_ref().map(|g| g.status),
             Some(GoalStatus::Active)
         )
+    }
+
+    /// Check if the last assistant message shows clear intent to continue work.
+    ///
+    /// Detects phrases like "Now let me...", "Next I'll...", "Continuing with..."
+    /// that signal the model is mid-task and should be allowed to proceed without
+    /// an explicit goal.
+    fn last_message_shows_intent(&self) -> bool {
+        let Some(last_msg) = self.messages.last() else {
+            return false;
+        };
+        if last_msg.get("role").and_then(|r| r.as_str()) != Some("assistant") {
+            return false;
+        }
+        let Some(content) = last_msg.get("content").and_then(|c| c.as_str()) else {
+            return false;
+        };
+        let lower = content.to_lowercase();
+        lower.contains("now let me")
+            || lower.contains("next i'll")
+            || lower.contains("next i will")
+            || lower.contains("continuing with")
+            || lower.contains("i'll now")
+            || lower.contains("i will now")
+            || lower.contains("let me now")
+            || lower.contains("moving on to")
+            || lower.contains("proceeding to")
     }
 
     /// Natural chain end: extract memory out-of-band (the agent's only memory
