@@ -30,7 +30,6 @@ async fn builtin_state_tool_writes_to_store() {
         max_retries: 2,
         skill_store: None,
         memory_store: Arc::new(MemMemoryStore::default()),
-        max_goal_rounds: None,
     });
     let _events = collect(&agent, user_message("write k")).await;
 

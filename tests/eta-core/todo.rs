@@ -69,7 +69,6 @@ async fn update_todos_persists_and_merges() {
         max_retries: 2,
         skill_store: None,
         memory_store: Arc::new(MemMemoryStore::default()),
-        max_goal_rounds: None,
     });
     let _events = collect(&agent, user_message("plan")).await;
 

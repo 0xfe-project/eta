@@ -48,7 +48,6 @@ async fn skill_store_dumped_into_context() {
         system_prompt: "test".into(),
         adapter_system_prompt: "".into(),
         max_retries: 2,
-        max_goal_rounds: None,
     });
     let mut dev = agent.subscribe_dev();
     let _events = collect(&agent, user_message("hi")).await;

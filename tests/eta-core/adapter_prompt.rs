@@ -38,7 +38,6 @@ async fn adapter_prompt_flows_into_context() {
         max_retries: 2,
         skill_store: None,
         memory_store: Arc::new(MemMemoryStore::default()),
-        max_goal_rounds: None,
     });
     let _events = collect(&agent, user_message("hi")).await;
 

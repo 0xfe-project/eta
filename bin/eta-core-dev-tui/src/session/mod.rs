@@ -114,6 +114,15 @@ impl SessionManager {
         self.sessions.insert(id, handle);
     }
 
+    /// Replace one session's engine while preserving every other registered
+    /// session and the current attach pointer.
+    pub fn replace(&mut self, handle: SessionHandle) -> bool {
+        let id = handle.meta.id.clone();
+        let existed = self.sessions.contains_key(&id);
+        self.sessions.insert(id, handle);
+        existed
+    }
+
     /// Attach the given session id, returning whether it exists.
     pub fn attach(&mut self, id: &str) -> bool {
         if self.sessions.contains_key(id) {
@@ -219,11 +228,12 @@ pub fn spawn_session(
         system_prompt,
         adapter_system_prompt,
         max_retries: 2,
-        max_goal_rounds: None,
     });
     let event_rx = agent.subscribe();
     let dev_rx = agent.subscribe_dev();
-    let loop_manager = Arc::new(LoopManager::new(store.clone(), agent.input_sender()));
+    let mut loop_manager = LoopManager::new(store.clone(), agent.input_sender());
+    loop_manager.with_dev(meta_agent_id.clone(), agent.dev_sender());
+    let loop_manager = Arc::new(loop_manager);
     SessionHandle {
         agent: Some(agent),
         event_rx: Some(event_rx),
@@ -307,6 +317,19 @@ pub fn apply_time_travel(
 #[allow(dead_code)]
 pub async fn save_model(store: &dyn SessionStorage, model: &str) {
     store.set_state(MODEL_KEY, serde_json::json!(model)).await;
+}
+
+const OWNER_KEY: &str = "eta.owner";
+
+pub async fn save_owner(store: &dyn SessionStorage, owner: &str) {
+    store.set_state(OWNER_KEY, serde_json::json!(owner)).await;
+}
+
+pub async fn load_owner(store: &dyn SessionStorage) -> Option<String> {
+    store
+        .get_state(OWNER_KEY)
+        .await
+        .and_then(|value| value.as_str().map(String::from))
 }
 
 /// Read the per-session model override, if any.

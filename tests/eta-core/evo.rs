@@ -54,7 +54,6 @@ async fn extract_memory_writes_out_of_band() {
         adapter_system_prompt: "".into(),
         max_retries: 2,
         skill_store: None,
-        max_goal_rounds: None,
     });
     let _events = collect(&agent, user_message("hi")).await;
 
@@ -85,7 +84,6 @@ async fn extract_memory_ignores_non_json() {
         adapter_system_prompt: "".into(),
         max_retries: 2,
         skill_store: None,
-        max_goal_rounds: None,
     });
     let _events = collect(&agent, user_message("hi")).await;
 
@@ -115,7 +113,6 @@ async fn extract_memory_cap_enforced() {
         adapter_system_prompt: "".into(),
         max_retries: 2,
         skill_store: None,
-        max_goal_rounds: None,
     });
     let _events = collect(&agent, user_message("hi")).await;
 

@@ -163,17 +163,18 @@ impl App {
             Screen::Startup { .. } => "startup",
             _ => "picker",
         };
-        let session = self.sessions.current_id().unwrap_or("-");
-        let agent = self
-            .sessions
-            .current()
-            .map(|handle| handle.meta.agent_id.0.clone())
-            .unwrap_or_default();
+        let session = shorten(self.sessions.current_id().unwrap_or("-"), 12);
+        let agent = shorten(
+            &self
+                .sessions
+                .current()
+                .map(|handle| handle.meta.agent_id.0.clone())
+                .unwrap_or_default(),
+            12,
+        );
+        let model = shorten(&self.current_model, 24);
         let state = if self.working { "working…" } else { "idle" };
-        format!(
-            "{mode} · {state} · session {session} · agent {agent} · model {}",
-            self.current_model
-        )
+        format!("{mode} · {state} · session {session} · agent {agent} · model {model}")
     }
 
     pub(crate) fn start_dev_filter(&mut self) {
@@ -248,41 +249,50 @@ impl App {
 
             if let Some(events) = handle.event_rx.as_mut() {
                 let mut saw_text = false;
+                let mut streaming = String::new();
                 while let Ok(event) = events.try_recv() {
                     if let AgentEvent::TurnStart { .. } = &event {
                         self.working = true;
-                    }
-                    if let AgentEvent::TurnEnd { .. } = &event {
-                        self.working = false;
-                    }
-                    if let AgentEvent::MessageUpdate { message, .. } = &event {
-                        if message
-                            .get("text")
-                            .and_then(|text| text.as_str())
-                            .is_some_and(|text| !text.is_empty())
-                        {
-                            saw_text = true;
-                        }
-                    }
-                    if let AgentEvent::TurnStart { .. } = &event {
                         saw_text = false;
                     }
                     if let AgentEvent::TurnEnd { .. } = &event {
-                        if !saw_text {
-                            answer_lines.push(
-                                "(no assistant text this turn — check model/provider or dev events)"
-                                    .to_string(),
-                            );
-                        }
+                        self.working = false;
                     }
                     if let AgentEvent::AskUserStarted { req_id, .. } = &event {
                         self.pending_ask = Some(PendingAsk {
                             req_id: req_id.clone(),
                         });
                     }
-                    if let Some(line) = tui::answer::event_line(&agent_id, &event) {
-                        answer_lines.push(line);
+                    match &event {
+                        AgentEvent::MessageUpdate { message, .. } => {
+                            if let Some(text) = message.get("text").and_then(|text| text.as_str()) {
+                                if !text.is_empty() {
+                                    streaming.push_str(text);
+                                    saw_text = true;
+                                }
+                            }
+                        }
+                        _ => {
+                            // Coalesce a burst of content deltas into one answer
+                            // line so streaming text reads as a paragraph instead
+                            // of one fragment per frame.
+                            if !streaming.is_empty() {
+                                answer_lines.push(std::mem::take(&mut streaming));
+                            }
+                            if matches!(&event, AgentEvent::TurnEnd { .. }) && !saw_text {
+                                answer_lines.push(
+                                    "(no assistant text this turn — check model/provider or dev events)"
+                                        .to_string(),
+                                );
+                            }
+                            if let Some(line) = tui::answer::event_line(&agent_id, &event) {
+                                answer_lines.push(line);
+                            }
+                        }
                     }
+                }
+                if !streaming.is_empty() {
+                    answer_lines.push(streaming);
                 }
             }
 
@@ -371,12 +381,17 @@ impl App {
         }
     }
 
-    /// Send a plain user message to the currently attached session.
+    /// Send the submitted line to the current session. While the agent is
+    /// running, Enter acts as a steer (interrupt + inject) instead of queueing a
+    /// second user message; otherwise it is a normal user message.
     pub(crate) async fn send_message(&mut self, text: &str) {
-        self.send_input(AgentInput::UserMessage {
-            content: json!({ "type": "text", "text": text }),
-        })
-        .await;
+        let content = json!({ "type": "text", "text": text });
+        let input = if self.working {
+            AgentInput::Steer { message: content }
+        } else {
+            AgentInput::UserMessage { content }
+        };
+        self.send_input(input).await;
     }
 
     /// Send an engine input to the currently attached session.
@@ -606,7 +621,7 @@ impl App {
         self.screen = Screen::session();
     }
 
-    pub(crate) fn switch_agent(&mut self, name: &str) {
+    pub(crate) async fn switch_agent(&mut self, name: &str) {
         let Some(session) = self.sessions.current() else {
             return;
         };
@@ -630,17 +645,19 @@ impl App {
             DEFAULT_SYSTEM_PROMPT.to_string(),
             String::new(),
         );
-        self.sessions = SessionManager::new();
-        self.sessions.insert(handle);
+        if let Some(old) = self.sessions.current().and_then(|s| s.agent.as_ref()) {
+            old.cancel();
+        }
+        self.sessions.replace(handle);
         self.sessions.attach(&session_id);
         self.view().answers.push(format!("agent: {name}"));
     }
 
-    pub(crate) fn confirm_agent_switch(&mut self) {
+    pub(crate) async fn confirm_agent_switch(&mut self) {
         let Some(name) = self.screen.confirm_agent_switch() else {
             return;
         };
-        self.switch_agent(&name);
+        self.switch_agent(&name).await;
         self.screen = Screen::session();
     }
 
@@ -666,7 +683,7 @@ impl App {
         else {
             return;
         };
-        self.spawn_session_for_agent(&agent, None);
+        self.spawn_session_for_agent(&agent, None).await;
         self.screen = Screen::session();
         self.send_message(&draft).await;
     }
@@ -685,12 +702,12 @@ impl App {
         else {
             return;
         };
-        self.spawn_session_for_agent(&name, Some(&persona));
+        self.spawn_session_for_agent(&name, Some(&persona)).await;
         self.screen = Screen::session();
         self.send_message(&draft).await;
     }
 
-    pub(crate) fn spawn_session_for_agent(&mut self, name: &str, persona: Option<&str>) {
+    pub(crate) async fn spawn_session_for_agent(&mut self, name: &str, persona: Option<&str>) {
         let provider: Arc<dyn Provider> = Arc::new(OpenAiProvider::from_env());
         let model = Model::new(std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into()));
         self.current_model = model.id.clone();
@@ -702,6 +719,7 @@ impl App {
                 .unwrap_or_else(|_| SqliteSessionStore::in_memory()),
         );
         let store: Arc<dyn SessionStorage> = sqlite.clone();
+        session::save_owner(store.as_ref(), name).await;
         let memory: Arc<dyn MemoryStore> = Arc::new(
             SqliteAgentStore::open(eta_fs::agent_db(name))
                 .unwrap_or_else(|_| SqliteAgentStore::in_memory()),
@@ -724,7 +742,6 @@ impl App {
             String::new(),
         );
         self.sqlite = Some(sqlite);
-        self.sessions = SessionManager::new();
         self.sessions.insert(handle);
         self.sessions.attach(&session_id);
         self.views.entry(session_id.clone()).or_default().tool_names = tool_names;
@@ -732,7 +749,14 @@ impl App {
 
     /// Open an existing session by id and spawn its agent, then attach it.
     pub(crate) async fn attach_existing_session(&mut self, session_id: &str) {
-        let Some((handle, sqlite)) = self.spawn_session_handle(session_id) else {
+        if let Some(existing) = self.sessions.get(session_id) {
+            if existing.agent.is_some() {
+                self.sessions.attach(session_id);
+                self.screen = Screen::session();
+                return;
+            }
+        }
+        let Some((handle, sqlite)) = self.spawn_session_handle(session_id).await else {
             return;
         };
         if let Some(loop_manager) = handle.loop_manager.clone() {
@@ -753,7 +777,7 @@ impl App {
     }
 
     /// Open an existing session store and spawn its agent without attaching.
-    fn spawn_session_handle(
+    async fn spawn_session_handle(
         &self,
         session_id: &str,
     ) -> Option<(crate::session::SessionHandle, Arc<SqliteSessionStore>)> {
@@ -762,15 +786,20 @@ impl App {
                 .unwrap_or_else(|_| SqliteSessionStore::in_memory()),
         );
         let store: Arc<dyn SessionStorage> = sqlite.clone();
-        let provider: Arc<dyn Provider> = Arc::new(OpenAiProvider::from_env());
-        let model = Model::new(std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into()));
+        let owner = session::load_owner(store.as_ref())
+            .await
+            .unwrap_or_else(|| session_id.to_string());
+        let model_id = session::load_model(store.as_ref())
+            .await
+            .unwrap_or_else(|| std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into()));
+        let (provider, model) = self.resolve_provider_model(&model_id);
         let memory: Arc<dyn MemoryStore> = Arc::new(
-            SqliteAgentStore::open(eta_fs::agent_db(session_id))
+            SqliteAgentStore::open(eta_fs::agent_db(&owner))
                 .unwrap_or_else(|_| SqliteAgentStore::in_memory()),
         );
         let handle = spawn_session(
             session_id,
-            AgentId(session_id.to_string()),
+            AgentId(owner),
             provider,
             model,
             store,
@@ -790,7 +819,7 @@ impl App {
             if self.sessions.get(&id).is_some() {
                 continue;
             }
-            if let Some((handle, _sqlite)) = self.spawn_session_handle(&id) {
+            if let Some((handle, _sqlite)) = self.spawn_session_handle(&id).await {
                 if let Some(loop_manager) = handle.loop_manager.clone() {
                     loop_manager.start().await;
                 }
@@ -803,6 +832,16 @@ impl App {
             }
         }
     }
+}
+
+/// Truncate a status-bar label to `max` chars, adding an ellipsis when needed.
+fn shorten(text: &str, max: usize) -> String {
+    let chars = text.chars().collect::<Vec<_>>();
+    if chars.len() <= max {
+        return text.to_string();
+    }
+    let keep = max.saturating_sub(1);
+    chars[..keep].iter().collect::<String>() + "…"
 }
 
 /// Extract a short preview of the last user/assistant message in a session.

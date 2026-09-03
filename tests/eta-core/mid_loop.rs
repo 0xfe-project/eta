@@ -58,7 +58,6 @@ async fn summarizes_when_context_grows() {
         max_retries: 2,
         skill_store: None,
         memory_store: Arc::new(MemMemoryStore::default()),
-        max_goal_rounds: None,
     });
 
     let events = collect(&agent, user_message("go")).await;

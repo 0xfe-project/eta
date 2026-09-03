@@ -140,7 +140,6 @@ async fn compacts_when_context_grows() {
         max_retries: 2,
         skill_store: None,
         memory_store: Arc::new(MemMemoryStore::default()),
-        max_goal_rounds: None,
     });
 
     let mut rx = agent.subscribe();
@@ -186,7 +185,6 @@ async fn manual_compact_forces_summary_below_threshold() {
         max_retries: 2,
         skill_store: None,
         memory_store: Arc::new(MemMemoryStore::default()),
-        max_goal_rounds: None,
     });
 
     let mut rx = agent.subscribe();

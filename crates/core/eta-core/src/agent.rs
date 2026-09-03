@@ -200,6 +200,13 @@ impl Agent {
         self.dev.subscribe()
     }
 
+    /// Clone the dev-event sender for adapter-owned supervisors such as the
+    /// loop manager.  Keeping this as a sender accessor avoids making the
+    /// supervisor depend on the agent's private runtime implementation.
+    pub fn dev_sender(&self) -> broadcast::Sender<AgentDevEvent> {
+        self.dev.clone()
+    }
+
     /// Answer a pending `ask_user` question.
     pub async fn answer(
         &self,
@@ -254,6 +261,7 @@ impl AgentRuntime {
 impl AgentRuntime {
     async fn run(&mut self) {
         let agent_id = self.cfg.agent_id.clone();
+        self.restore_messages().await;
         self.cfg.hooks.on_spawn(&agent_id);
         self.emit_dev(dev_category::LIFECYCLE, "spawn", serde_json::json!({}));
 
@@ -265,8 +273,7 @@ impl AgentRuntime {
 
             match input {
                 AgentInput::UserMessage { content } => {
-                    self.messages
-                        .push(serde_json::json!({ "role": "user", "content": content }));
+                    self.append_message("user", content).await;
                     self.run_turn_chain().await;
                 }
                 AgentInput::Steer { message } => {
@@ -275,8 +282,7 @@ impl AgentRuntime {
                         request_id: String::new(),
                         messages_since_start: self.messages.len(),
                     });
-                    self.messages
-                        .push(serde_json::json!({ "role": "user", "content": message }));
+                    self.append_message("user", message).await;
                     self.run_turn_chain().await;
                 }
                 AgentInput::Loop { loop_id, prompt } => {
@@ -285,8 +291,7 @@ impl AgentRuntime {
                         "fired",
                         serde_json::json!({ "loop_id": loop_id }),
                     );
-                    self.messages
-                        .push(serde_json::json!({ "role": "user", "content": prompt }));
+                    self.append_message("user", prompt).await;
                     self.run_turn_chain().await;
                 }
                 AgentInput::SetGoal { objective } => {
@@ -676,7 +681,7 @@ impl AgentRuntime {
             system_prompt: Some(system_prompt.clone()),
             adapter_system_prompt: (!self.cfg.adapter_system_prompt.is_empty())
                 .then(|| self.cfg.adapter_system_prompt.clone()),
-            messages: self.messages.clone(),
+            messages: normalize_messages(&self.messages),
             tools: tool_schemas,
         };
         self.cfg.hooks.transform_context(&mut context);
@@ -684,9 +689,8 @@ impl AgentRuntime {
             dev_category::PROMPT,
             "assembled",
             serde_json::json!({
-                "system_prompt_chars": system_prompt.chars().count(),
+                "system_prompt": system_prompt,
                 "tool_count": self.cfg.tools.len(),
-                "message_count": self.messages.len(),
             }),
         );
         context
@@ -837,7 +841,7 @@ impl AgentRuntime {
                     if let Some(text) = c.get("text").and_then(|t| t.as_str()) {
                         content_text.push_str(text);
                     }
-                    self.append_message("assistant", c.clone());
+                    self.append_message("assistant", c.clone()).await;
                     let _ = self.output_tx.send(AgentEvent::MessageUpdate {
                         agent_id: self.cfg.agent_id.clone(),
                         message: c,
@@ -905,10 +909,12 @@ impl AgentRuntime {
             "asked",
             serde_json::json!({ "req_id": tool_call_id, "question": question }),
         );
-        self.messages.push(serde_json::json!({
+        let tool_use = serde_json::json!({
             "role": "assistant",
             "tool_calls": [{ "id": tool_call_id, "name": "ask_user" }],
-        }));
+        });
+        self.messages.push(tool_use.clone());
+        self.persist_message(&tool_use).await;
 
         while let Some(answer) = self.answer_rx.recv().await {
             if answer.tool_call_id == tool_call_id {
@@ -917,11 +923,13 @@ impl AgentRuntime {
                     "answered",
                     serde_json::json!({ "req_id": tool_call_id }),
                 );
-                self.messages.push(serde_json::json!({
+                let tool_result = serde_json::json!({
                     "role": "tool",
                     "tool_call_id": tool_call_id,
                     "content": answer.answer,
-                }));
+                });
+                self.messages.push(tool_result.clone());
+                self.persist_message(&tool_result).await;
                 return;
             }
             // Ignore answers for a different (stale) question.
@@ -930,7 +938,8 @@ impl AgentRuntime {
 
     async fn run_tool(&mut self, id: String, name: String, arguments: serde_json::Value) {
         let Some(tool) = self.cfg.tools.iter().find(|t| t.name() == name) else {
-            self.append_tool_result(id, serde_json::json!({ "error": "unknown tool" }), true);
+            self.append_tool_result(id, serde_json::json!({ "error": "unknown tool" }), true)
+                .await;
             return;
         };
 
@@ -969,7 +978,7 @@ impl AgentRuntime {
                 result: result.value.clone(),
                 is_error: true,
             });
-            self.append_tool_result(id, result.value, true);
+            self.append_tool_result(id, result.value, true).await;
             return;
         }
         self.validation_failures = 0;
@@ -1006,7 +1015,7 @@ impl AgentRuntime {
                     serde_json::json!({ "id": id.clone(), "name": name.clone(), "is_error": false }),
                 );
                 self.emit_crud(&name, &call.arguments);
-                self.append_tool_result(id, value, false);
+                self.append_tool_result(id, value, false).await;
             }
             Err(e) => {
                 self.mistakes
@@ -1027,14 +1036,15 @@ impl AgentRuntime {
                     "end",
                     serde_json::json!({ "id": id, "name": name, "is_error": true, "error": e.to_string() }),
                 );
-                self.append_tool_result(id, tr.value, true);
+                self.append_tool_result(id, tr.value, true).await;
             }
         }
     }
 
-    fn append_message(&mut self, role: &str, content: serde_json::Value) {
+    async fn append_message(&mut self, role: &str, content: serde_json::Value) {
         let msg = serde_json::json!({ "role": role, "content": content });
-        self.messages.push(msg);
+        self.messages.push(msg.clone());
+        self.persist_message(&msg).await;
     }
 
     /// Emit a semantic CRUD dev event for the builtin state / todo tools
@@ -1051,17 +1061,52 @@ impl AgentRuntime {
         }
     }
 
-    fn append_tool_result(
+    async fn append_tool_result(
         &mut self,
         tool_call_id: String,
         content: serde_json::Value,
         _is_error: bool,
     ) {
-        self.messages.push(serde_json::json!({
+        let msg = serde_json::json!({
             "role": "tool",
             "tool_call_id": tool_call_id,
             "content": content,
-        }));
+        });
+        self.messages.push(msg.clone());
+        self.persist_message(&msg).await;
+    }
+
+    async fn persist_message(&self, message: &serde_json::Value) {
+        let kind = match message.get("role").and_then(|v| v.as_str()) {
+            Some("user") => crate::store::entry_kind::USER_MESSAGE,
+            Some("assistant") => crate::store::entry_kind::ASSISTANT_MESSAGE,
+            Some("tool") => crate::store::entry_kind::TOOL_RESULT,
+            _ => return,
+        };
+        self.cfg
+            .store
+            .append(crate::store::SessionEntry {
+                id: 0,
+                kind: kind.into(),
+                data: message.clone(),
+            })
+            .await;
+    }
+
+    async fn restore_messages(&mut self) {
+        let entries = self.cfg.store.load().await;
+        self.messages = entries
+            .into_iter()
+            .filter(|entry| {
+                matches!(
+                    entry.kind.as_str(),
+                    crate::store::entry_kind::USER_MESSAGE
+                        | crate::store::entry_kind::ASSISTANT_MESSAGE
+                        | crate::store::entry_kind::TOOL_RESULT
+                )
+            })
+            .map(|entry| entry.data)
+            .collect();
     }
 }
 
@@ -1116,4 +1161,90 @@ async fn summarize_with(
         shorter = true;
     }
     String::new()
+}
+
+/// Normalize a transcript for the provider. Streaming code may have appended
+/// one assistant message per content delta, and persisted/reconstructed
+/// histories can contain invalid same-role runs. Coalesce consecutive
+/// assistant text messages, then insert lightweight sentinels so the role
+/// sequence stays valid: user/user → assistant " ", assistant/assistant →
+/// user " ", and a tool-call assistant between assistants gets `{}` as a
+/// tool result instead of a plain space.
+fn normalize_messages(messages: &[serde_json::Value]) -> Vec<serde_json::Value> {
+    let mut merged: Vec<serde_json::Value> = Vec::new();
+
+    for message in messages {
+        let role = message
+            .get("role")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("");
+        if role == "assistant" && message.get("tool_calls").is_none() {
+            let text = message
+                .get("content")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
+            if let Some(last) = merged.last_mut()
+                && last.get("role").and_then(serde_json::Value::as_str) == Some("assistant")
+                && last.get("tool_calls").is_none()
+            {
+                let previous = last
+                    .get("content")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("");
+                *last = serde_json::json!({
+                    "role": "assistant",
+                    "content": format!("{previous}{text}"),
+                });
+                continue;
+            }
+        }
+        merged.push(message.clone());
+    }
+
+    #[derive(PartialEq)]
+    enum ChatRole {
+        User,
+        Assistant,
+    }
+
+    let mut out: Vec<serde_json::Value> = Vec::new();
+    let mut last_chat: Option<ChatRole> = None;
+    for message in merged {
+        let role = message
+            .get("role")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("");
+        match role {
+            "user" => {
+                if last_chat == Some(ChatRole::User) {
+                    out.push(serde_json::json!({ "role": "assistant", "content": " " }));
+                }
+                out.push(message);
+                last_chat = Some(ChatRole::User);
+            }
+            "assistant" => {
+                let is_tool_call = message.get("tool_calls").is_some();
+                if last_chat == Some(ChatRole::Assistant) {
+                    if is_tool_call {
+                        out.push(serde_json::json!({
+                            "role": "tool",
+                            "tool_call_id": "",
+                            "content": serde_json::json!({}),
+                        }));
+                    } else {
+                        out.push(serde_json::json!({ "role": "user", "content": " " }));
+                    }
+                }
+                out.push(message);
+                last_chat = Some(ChatRole::Assistant);
+            }
+            "tool" => {
+                out.push(message);
+            }
+            _ => {
+                out.push(message);
+            }
+        }
+    }
+    out
 }

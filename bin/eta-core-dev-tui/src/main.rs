@@ -175,7 +175,7 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                     Screen::AgentSwitch { .. } => match key.code {
                         KeyCode::Up => app.screen.move_selection(-1),
                         KeyCode::Down => app.screen.move_selection(1),
-                        KeyCode::Enter => app.confirm_agent_switch(),
+                        KeyCode::Enter => app.confirm_agent_switch().await,
                         KeyCode::Esc => app.cancel_picker(),
                         _ => {}
                     },

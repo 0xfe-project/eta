@@ -2,6 +2,7 @@
 .DS_Store
 PLAN.md
 CORE_PLAN.md
+PROMPT_GUIDE.md
 
 # local e2e test env
 .env.local
