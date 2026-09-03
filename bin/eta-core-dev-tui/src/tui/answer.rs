@@ -40,6 +40,16 @@ pub fn event_line(agent_id: &AgentId, event: &AgentEvent) -> Option<String> {
         AgentEvent::LoopDetected => Some("loop detected".to_string()),
         AgentEvent::AskUserStarted { req_id, question } => Some(render_ask_user(req_id, question)),
         AgentEvent::AgentEnd => Some(format!("agent {agent_id} ended")),
+        AgentEvent::ReasoningUpdate { text, .. } => {
+            let first_line = text.lines().next().unwrap_or_default();
+            let preview: String = first_line.chars().take(80).collect();
+            let ellipsis = if first_line.chars().count() > 80 {
+                "…"
+            } else {
+                ""
+            };
+            Some(format!("💭 thinking: {preview}{ellipsis}"))
+        }
         AgentEvent::Custom(value) => Some(format!("custom: {value}")),
     }
 }

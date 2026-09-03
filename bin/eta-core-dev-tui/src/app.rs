@@ -11,8 +11,8 @@ use eta_core::{
     SessionStorage, TodoItem, Trigger, dev_category, entry_kind,
 };
 use eta_core_controller::{
-    build_adapter_system_prompt, configured_model, load_config, model_entries,
-    resolve_provider_model,
+    build_adapter_system_prompt, configured_model, load_config, load_mcp_registry, mcp_tools,
+    model_entries, resolve_provider_model,
 };
 use eta_io_tools::builtin_io_tools;
 use eta_sqlite_storage::{SqliteAgentStore, SqliteSessionStore};
@@ -524,7 +524,9 @@ impl App {
             SqliteAgentStore::open(eta_fs::agent_db(&agent_id.to_string()))
                 .unwrap_or_else(|_| SqliteAgentStore::in_memory()),
         );
-        let tools = builtin_io_tools();
+        let registry = load_mcp_registry();
+        let mut tools = builtin_io_tools();
+        tools.extend(mcp_tools(&registry));
         let tool_names: Vec<String> = tools.iter().map(|t| t.name().to_string()).collect();
         let adapter_prompt =
             build_adapter_system_prompt(&session_id, &agent_id.0, model_id, &tool_names);
@@ -596,7 +598,9 @@ impl App {
             SqliteAgentStore::open(eta_fs::agent_db(name))
                 .unwrap_or_else(|_| SqliteAgentStore::in_memory()),
         );
-        let tools = builtin_io_tools();
+        let registry = load_mcp_registry();
+        let mut tools = builtin_io_tools();
+        tools.extend(mcp_tools(&registry));
         let tool_names: Vec<String> = tools.iter().map(|t| t.name().to_string()).collect();
         let adapter_prompt =
             build_adapter_system_prompt(&session_id, name, &self.current_model, &tool_names);
@@ -701,7 +705,9 @@ impl App {
             .and_then(|persona| eta_system_prompts::builtin_personas().get(persona).cloned())
             .unwrap_or_default();
         let system_prompt = format!("{DEFAULT_SYSTEM_PROMPT}\n\n{body}");
-        let tools = builtin_io_tools();
+        let registry = load_mcp_registry();
+        let mut tools = builtin_io_tools();
+        tools.extend(mcp_tools(&registry));
         let tool_names: Vec<String> = tools.iter().map(|tool| tool.name().to_string()).collect();
         let adapter_prompt =
             build_adapter_system_prompt(&session_id, name, &self.current_model, &tool_names);
@@ -773,7 +779,9 @@ impl App {
             SqliteAgentStore::open(eta_fs::agent_db(&owner))
                 .unwrap_or_else(|_| SqliteAgentStore::in_memory()),
         );
-        let tools = builtin_io_tools();
+        let registry = load_mcp_registry();
+        let mut tools = builtin_io_tools();
+        tools.extend(mcp_tools(&registry));
         let tool_names: Vec<String> = tools.iter().map(|t| t.name().to_string()).collect();
         let adapter_prompt =
             build_adapter_system_prompt(session_id, &owner, &model_id, &tool_names);

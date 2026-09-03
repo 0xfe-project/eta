@@ -7,8 +7,30 @@
 use std::sync::Arc;
 
 use eta_llm::{Model, Provider};
+use eta_mcp::{CallTool, GetTools, McpClient, McpRegistry, StdioMcpTransport};
 use eta_provider_anthropic::AnthropicProvider;
 use eta_provider_openai::OpenAiProvider;
+
+/// Load MCP registry from `~/.eta/mcp.json`. Returns an empty registry when
+/// the file does not exist.
+pub fn load_mcp_registry() -> McpRegistry {
+    McpRegistry::load(eta_fs::mcp_json()).unwrap_or_default()
+}
+
+/// Build MCP GetTools and CallTool adapters for all servers in the registry.
+///
+/// Returns a list of boxed `Tool` implementations ready to inject into the
+/// agent's tool list.
+pub fn mcp_tools(registry: &McpRegistry) -> Vec<Arc<dyn eta_core::Tool>> {
+    let mut tools: Vec<Arc<dyn eta_core::Tool>> = Vec::new();
+    let transport = StdioMcpTransport::new(registry.clone());
+    let client = Arc::new(McpClient::new(transport));
+    for server in registry.servers.keys() {
+        tools.push(Arc::new(GetTools::new(client.clone(), server)));
+        tools.push(Arc::new(CallTool::new(client.clone(), server)));
+    }
+    tools
+}
 
 /// Load the user's provider/model catalog from `~/.eta/eta.json`, then merge
 /// any custom providers discovered in installed coding-agent configs.
