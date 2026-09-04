@@ -42,24 +42,9 @@ pub fn agent_names(dir: impl AsRef<Path>) -> Vec<String> {
     names
 }
 
-/// Flatten provider models into sorted `provider/model` entries for the
-/// `/model` grouped picker.
-#[allow(dead_code)]
-pub fn model_entries(config: &eta_config::Config) -> Vec<String> {
-    let mut entries = Vec::new();
-    for (provider_id, provider) in &config.provider {
-        for model_id in provider.models.keys() {
-            entries.push(format!("{provider_id}/{model_id}"));
-        }
-    }
-    entries.sort();
-    entries
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{agent_names, model_entries, persona_names};
-    use eta_config::{Config, ModelConfig, ProviderConfig, ProviderFormat};
+    use super::{agent_names, persona_names};
 
     #[test]
     fn persona_names_include_builtins_and_custom_cards() {
@@ -79,52 +64,6 @@ mod tests {
         assert_eq!(
             agent_names(dir.path()),
             vec!["alice".to_string(), "bob".to_string()]
-        );
-    }
-
-    #[test]
-    fn model_entries_flatten_providers() {
-        let mut config = Config {
-            model: "a/gpt".into(),
-            small_model: None,
-            provider: Default::default(),
-            persona: vec![],
-        };
-        config.provider.insert(
-            "openai".into(),
-            ProviderConfig {
-                format: ProviderFormat::OpenAiChatCompletion,
-                options: serde_json::json!({}),
-                models: [(
-                    "gpt-4o".into(),
-                    ModelConfig {
-                        name: "gpt-4o".into(),
-                        limit: Default::default(),
-                    },
-                )]
-                .into_iter()
-                .collect(),
-            },
-        );
-        config.provider.insert(
-            "anthropic".into(),
-            ProviderConfig {
-                format: ProviderFormat::AnthropicMessages,
-                options: serde_json::json!({}),
-                models: [(
-                    "claude".into(),
-                    ModelConfig {
-                        name: "claude".into(),
-                        limit: Default::default(),
-                    },
-                )]
-                .into_iter()
-                .collect(),
-            },
-        );
-        assert_eq!(
-            model_entries(&config),
-            vec!["anthropic/claude".to_string(), "openai/gpt-4o".to_string()]
         );
     }
 }

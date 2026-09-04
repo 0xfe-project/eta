@@ -19,6 +19,7 @@ eta-sqlite-storage = { path = "../eta-sqlite-storage" }
 eta-anycodingagent-config-reader = { path = "../eta-anycodingagent-config-reader" }
 eta-provider-openai = { path = "../eta-provider-openai" }
 eta-provider-anthropic = { path = "../eta-provider-anthropic" }
+uuid.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

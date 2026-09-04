@@ -5,10 +5,16 @@
 //! embedders stay thin renderers over the engine.
 
 mod config;
+mod session;
 
 pub use config::{
     config_path, empty_config, load_config_persisted, read_config, set_active_model,
     upsert_provider, write_config,
+};
+pub use session::{
+    SessionHandle, SessionManager, SessionMeta, SessionStatus, SpawnError, SpawnPlan, SpawnRequest,
+    assemble_new, assemble_respawn, assemble_resume, default_tools, load_model, load_owner,
+    save_model, save_owner, spawn,
 };
 
 use std::sync::Arc;
@@ -49,6 +55,15 @@ pub fn mcp_tools(registry: &McpRegistry) -> Vec<Arc<dyn eta_core::Tool>> {
 /// and callers decide how to surface that (e.g. open a picker).
 pub fn load_config() -> eta_config::Config {
     load_config_persisted()
+}
+
+/// Run the any-coding-agent import (codex/claude/opencode/pi) and return the
+/// flattened `provider/model` entries found, for the `/load-config` display.
+/// This is a read-only listing; persisting happens through `load_config`'s
+/// one-shot migration path.
+pub fn import_model_entries() -> Result<Vec<String>, String> {
+    let imported = eta_anycodingagent_config_reader::import_from_default_home()?;
+    Ok(imported.model_entries())
 }
 
 /// The model that is currently selected, either from `~/.eta/eta.json` or the

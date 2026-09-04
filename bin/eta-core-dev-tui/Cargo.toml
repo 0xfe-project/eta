@@ -17,21 +17,15 @@ tokio.workspace = true
 serde_json.workspace = true
 uuid.workspace = true
 
-# eta engine + real adapters (wired up in later Part E items).
-eta-llm = { path = "../../crates/core/eta-llm" }
+# eta engine events + the controller that owns every adapter.
 eta-core = { path = "../../crates/core/eta-core" }
 eta-system-prompts = { path = "../../crates/core/eta-system-prompts" }
-eta-session = { path = "../../crates/core/eta-session" }
 eta-fs = { path = "../../crates/adapters/eta-fs" }
 eta-sqlite-storage = { path = "../../crates/adapters/eta-sqlite-storage" }
-eta-io-tools = { path = "../../crates/adapters/eta-io-tools" }
-eta-provider-openai = { path = "../../crates/adapters/eta-provider-openai" }
-eta-provider-anthropic = { path = "../../crates/adapters/eta-provider-anthropic" }
-eta-mcp = { path = "../../crates/adapters/eta-mcp" }
-eta-config = { path = "../../crates/core/eta-config" }
-eta-anycodingagent-config-reader = { path = "../../crates/adapters/eta-anycodingagent-config-reader" }
 eta-core-controller = { path = "../../crates/adapters/eta-core-controller" }
 
 [dev-dependencies]
 tempfile = "3"
 tokio-stream.workspace = true
+# Tests inject mock providers straight into controller::SpawnPlan.
+eta-llm = { path = "../../crates/core/eta-llm" }

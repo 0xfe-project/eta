@@ -7,21 +7,18 @@ use std::time::Instant;
 use crossterm::event::KeyCode;
 
 use eta_core::{
-    AgentEvent, AgentId, AgentInput, AskUserAnswer, LoopSpec, MemoryStore, SessionEntry,
-    SessionStorage, TodoItem, Trigger, dev_category, entry_kind,
+    AgentEvent, AgentInput, AskUserAnswer, LoopSpec, SessionEntry, TodoItem, Trigger, dev_category,
+    entry_kind,
 };
 use eta_core_controller::{
-    build_adapter_system_prompt, configured_model, load_config, load_mcp_registry, mcp_tools,
-    model_entries, resolve_provider_model, set_active_model,
+    self as controller, SessionManager, SpawnError, SpawnRequest, configured_model, load_config,
+    model_entries, set_active_model,
 };
-use eta_io_tools::builtin_io_tools;
-use eta_sqlite_storage::{SqliteAgentStore, SqliteSessionStore};
-use eta_system_prompts::DEFAULT_SYSTEM_PROMPT;
+use eta_sqlite_storage::SqliteSessionStore;
 use serde_json::json;
 
 use crate::commands::Command;
 use crate::config;
-use crate::session::{self, SessionManager, spawn_session};
 use crate::tui;
 use crate::tui::goal::GoalInfo;
 use crate::tui::screen::{NewConversation, Screen};
@@ -438,7 +435,7 @@ impl App {
     /// Apply a time-travel command against the concrete SQLite session store.
     pub(crate) fn apply_time_travel(&mut self, command: &Command) -> Option<String> {
         let sqlite = self.sqlite.as_ref()?;
-        session::apply_time_travel(sqlite, &mut self.head, command)
+        crate::session::apply_time_travel(sqlite, &mut self.head, command)
     }
 
     /// Register a cron loop on the current session and return its id.
@@ -483,7 +480,7 @@ impl App {
     pub(crate) async fn save_model(&mut self, model: &str) {
         if let Some(handle) = self.sessions.current() {
             let store = handle.store.clone();
-            session::save_model(store.as_ref(), model).await;
+            controller::save_model(store.as_ref(), model).await;
         }
     }
 
@@ -504,7 +501,7 @@ impl App {
         // Persist the global default so the selection survives restarts.
         // The session KV above stays as a per-session override.
         let persisted = set_active_model(&model).is_ok();
-        self.respawn_with_model(&model);
+        self.respawn_with_model(&model).await;
         self.screen = Screen::session();
         let scope = if persisted { "saved" } else { "session" };
         self.view()
@@ -512,42 +509,25 @@ impl App {
             .push(format!("model: {model} ({scope})"));
     }
 
-    pub(crate) fn respawn_with_model(&mut self, model_id: &str) {
+    pub(crate) async fn respawn_with_model(&mut self, model_id: &str) {
         let Some(session) = self.sessions.current() else {
             return;
         };
         let session_id = session.meta.id.clone();
-        let agent_id = session.meta.agent_id.clone();
+        let agent_name = session.meta.agent_id.0.clone();
         let store = session.store.clone();
-        let Some((provider, model)) = resolve_provider_model(model_id, &load_config()) else {
+        let Ok(plan) =
+            controller::assemble_respawn(&session_id, &agent_name, model_id, store).await
+        else {
             self.screen.open_model_picker(self.model_catalog());
             return;
         };
-        self.current_model = model.id.clone();
-        let memory: Arc<dyn MemoryStore> = Arc::new(
-            SqliteAgentStore::open(eta_fs::agent_db(&agent_id.to_string()))
-                .unwrap_or_else(|_| SqliteAgentStore::in_memory()),
-        );
-        let registry = load_mcp_registry();
-        let mut tools = builtin_io_tools();
-        tools.extend(mcp_tools(&registry));
-        let tool_names: Vec<String> = tools.iter().map(|t| t.name().to_string()).collect();
-        let adapter_prompt =
-            build_adapter_system_prompt(&session_id, &agent_id.0, model_id, &tool_names);
-        let handle = spawn_session(
-            &session_id,
-            agent_id,
-            provider,
-            model,
-            store,
-            memory,
-            tools,
-            DEFAULT_SYSTEM_PROMPT.to_string(),
-            adapter_prompt,
-        );
-        self.sessions = SessionManager::new();
-        self.sessions.insert(handle);
+        self.current_model = plan.model.id.clone();
+        let tool_names = plan.tool_names.clone();
+        let handle = controller::spawn(plan);
+        self.sessions.replace(handle);
         self.sessions.attach(&session_id);
+        self.views.entry(session_id.clone()).or_default().tool_names = tool_names;
     }
 
     pub(crate) fn open_agent_switch(&mut self) {
@@ -588,41 +568,25 @@ impl App {
         };
         let session_id = session.meta.id.clone();
         let store = session.store.clone();
-        let config = load_config();
-        let Some(model_id) = configured_model(&config) else {
+        let model_id = if self.current_model.is_empty() {
+            let Some(model_id) = configured_model(&load_config()) else {
+                self.open_model_picker();
+                return;
+            };
+            model_id
+        } else {
+            self.current_model.clone()
+        };
+        let Ok(plan) = controller::assemble_respawn(&session_id, name, &model_id, store).await
+        else {
             self.open_model_picker();
             return;
         };
-        let Some((provider, model)) = resolve_provider_model(&model_id, &config) else {
-            self.open_model_picker();
-            return;
-        };
-        self.current_model = model.id.clone();
-        let memory: Arc<dyn MemoryStore> = Arc::new(
-            SqliteAgentStore::open(eta_fs::agent_db(name))
-                .unwrap_or_else(|_| SqliteAgentStore::in_memory()),
-        );
-        let registry = load_mcp_registry();
-        let mut tools = builtin_io_tools();
-        tools.extend(mcp_tools(&registry));
-        let tool_names: Vec<String> = tools.iter().map(|t| t.name().to_string()).collect();
-        let adapter_prompt =
-            build_adapter_system_prompt(&session_id, name, &self.current_model, &tool_names);
-        let handle = spawn_session(
-            &session_id,
-            AgentId(name.to_string()),
-            provider,
-            model,
-            store,
-            memory,
-            tools,
-            DEFAULT_SYSTEM_PROMPT.to_string(),
-            adapter_prompt,
-        );
+        self.current_model = plan.model.id.clone();
         if let Some(old) = self.sessions.current().and_then(|s| s.agent.as_ref()) {
             old.cancel();
         }
-        self.sessions.replace(handle);
+        self.sessions.replace(controller::spawn(plan));
         self.sessions.attach(&session_id);
         self.view().answers.push(format!("agent: {name}"));
     }
@@ -682,51 +646,23 @@ impl App {
     }
 
     pub(crate) async fn spawn_session_for_agent(&mut self, name: &str, persona: Option<&str>) {
-        let config = load_config();
-        let Some(model_id) = configured_model(&config) else {
-            self.open_model_picker();
-            return;
+        let request = SpawnRequest {
+            agent_name: name.to_string(),
+            persona: persona.map(String::from),
+            model_id: None,
         };
-        let Some((provider, model)) = resolve_provider_model(&model_id, &config) else {
-            self.open_model_picker();
-            return;
+        let plan = match controller::assemble_new(&request).await {
+            Ok(plan) => plan,
+            Err(SpawnError::NoModel) | Err(SpawnError::UnknownModel(_)) => {
+                self.open_model_picker();
+                return;
+            }
         };
-        self.current_model = model.id.clone();
-        let session_id = uuid::Uuid::now_v7().to_string();
-        let _ = std::fs::create_dir_all(eta_fs::sessions_dir());
-        let _ = std::fs::create_dir_all(eta_fs::agents_dir());
-        let sqlite = Arc::new(
-            SqliteSessionStore::open(eta_fs::session_db(&session_id))
-                .unwrap_or_else(|_| SqliteSessionStore::in_memory()),
-        );
-        let store: Arc<dyn SessionStorage> = sqlite.clone();
-        session::save_owner(store.as_ref(), name).await;
-        let memory: Arc<dyn MemoryStore> = Arc::new(
-            SqliteAgentStore::open(eta_fs::agent_db(name))
-                .unwrap_or_else(|_| SqliteAgentStore::in_memory()),
-        );
-        let body = persona
-            .and_then(|persona| eta_system_prompts::builtin_personas().get(persona).cloned())
-            .unwrap_or_default();
-        let system_prompt = format!("{DEFAULT_SYSTEM_PROMPT}\n\n{body}");
-        let registry = load_mcp_registry();
-        let mut tools = builtin_io_tools();
-        tools.extend(mcp_tools(&registry));
-        let tool_names: Vec<String> = tools.iter().map(|tool| tool.name().to_string()).collect();
-        let adapter_prompt =
-            build_adapter_system_prompt(&session_id, name, &self.current_model, &tool_names);
-        let handle = spawn_session(
-            &session_id,
-            AgentId(name.to_string()),
-            provider,
-            model,
-            store,
-            memory,
-            tools,
-            system_prompt,
-            adapter_prompt,
-        );
-        self.sqlite = Some(sqlite);
+        let session_id = plan.session_id.clone();
+        self.current_model = plan.model.id.clone();
+        let tool_names = plan.tool_names.clone();
+        self.sqlite = Some(plan.sqlite.clone());
+        let handle = controller::spawn(plan);
         self.sessions.insert(handle);
         self.sessions.attach(&session_id);
         self.views.entry(session_id.clone()).or_default().tool_names = tool_names;
@@ -735,72 +671,28 @@ impl App {
     /// Open an existing session by id and spawn its agent, then attach it.
     pub(crate) async fn attach_existing_session(&mut self, session_id: &str) {
         if let Some(existing) = self.sessions.get(session_id) {
-            if existing.agent.is_some() {
+            if existing.is_spawned() {
                 self.sessions.attach(session_id);
                 self.screen = Screen::session();
                 return;
             }
         }
-        let Some((handle, sqlite)) = self.spawn_session_handle(session_id).await else {
+        let Ok(plan) = controller::assemble_resume(session_id).await else {
             return;
         };
+        let tool_names = plan.tool_names.clone();
+        self.sqlite = Some(plan.sqlite.clone());
+        let handle = controller::spawn(plan);
         if let Some(loop_manager) = handle.loop_manager.clone() {
             loop_manager.start().await;
         }
-        self.sqlite = Some(sqlite);
         self.sessions.insert(handle);
         self.sessions.attach(session_id);
-        let tool_names = builtin_io_tools()
-            .iter()
-            .map(|tool| tool.name().to_string())
-            .collect();
         self.views
             .entry(session_id.to_string())
             .or_default()
             .tool_names = tool_names;
         self.screen = Screen::session();
-    }
-
-    /// Open an existing session store and spawn its agent without attaching.
-    async fn spawn_session_handle(
-        &self,
-        session_id: &str,
-    ) -> Option<(crate::session::SessionHandle, Arc<SqliteSessionStore>)> {
-        let sqlite = Arc::new(
-            SqliteSessionStore::open(eta_fs::session_db(session_id))
-                .unwrap_or_else(|_| SqliteSessionStore::in_memory()),
-        );
-        let store: Arc<dyn SessionStorage> = sqlite.clone();
-        let owner = session::load_owner(store.as_ref())
-            .await
-            .unwrap_or_else(|| session_id.to_string());
-        let config = load_config();
-        let model_id = session::load_model(store.as_ref())
-            .await
-            .or_else(|| configured_model(&config))?;
-        let (provider, model) = resolve_provider_model(&model_id, &config)?;
-        let memory: Arc<dyn MemoryStore> = Arc::new(
-            SqliteAgentStore::open(eta_fs::agent_db(&owner))
-                .unwrap_or_else(|_| SqliteAgentStore::in_memory()),
-        );
-        let registry = load_mcp_registry();
-        let mut tools = builtin_io_tools();
-        tools.extend(mcp_tools(&registry));
-        let tool_names: Vec<String> = tools.iter().map(|t| t.name().to_string()).collect();
-        let adapter_prompt =
-            build_adapter_system_prompt(session_id, &owner, &model_id, &tool_names);
-        let handle = spawn_session(
-            session_id,
-            AgentId(owner),
-            provider,
-            model,
-            store,
-            memory,
-            tools,
-            DEFAULT_SYSTEM_PROMPT.to_string(),
-            adapter_prompt,
-        );
-        Some((handle, sqlite))
     }
 
     /// Cold-start: spawn every persisted session and resume its loops without
@@ -811,15 +703,13 @@ impl App {
             if self.sessions.get(&id).is_some() {
                 continue;
             }
-            if let Some((handle, _sqlite)) = self.spawn_session_handle(&id).await {
+            if let Ok(plan) = controller::assemble_resume(&id).await {
+                let tool_names = plan.tool_names.clone();
+                let handle = controller::spawn(plan);
                 if let Some(loop_manager) = handle.loop_manager.clone() {
                     loop_manager.start().await;
                 }
                 self.sessions.insert(handle);
-                let tool_names = builtin_io_tools()
-                    .iter()
-                    .map(|tool| tool.name().to_string())
-                    .collect();
                 self.views.entry(id.clone()).or_default().tool_names = tool_names;
             }
         }

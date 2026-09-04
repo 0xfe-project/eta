@@ -235,7 +235,8 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                                     .register_loop(schedule.clone(), prompt.clone())
                                                     .await
                                                 {
-                                                    app.view().answers
+                                                    app.view()
+                                                        .answers
                                                         .push(format!("registered loop {id}"));
                                                 }
                                             }
@@ -246,14 +247,17 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                             }
                                             Command::LoopRemove(id) => {
                                                 if let Some(removed) = app.remove_loop(id).await {
-                                                    app.view().answers
+                                                    app.view()
+                                                        .answers
                                                         .push(format!("removed loop: {removed}"));
                                                 }
                                             }
                                             Command::Model(Some(id)) => {
                                                 app.save_model(id).await;
-                                                app.respawn_with_model(id);
-                                                app.view().answers.push(format!("model: {id} (session)"));
+                                                app.respawn_with_model(id).await;
+                                                app.view()
+                                                    .answers
+                                                    .push(format!("model: {id} (session)"));
                                             }
                                             Command::Model(None) => {
                                                 app.open_model_picker();
@@ -273,10 +277,8 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                                 app.input = TextArea::default();
                                             }
                                             Command::LoadOtherAgentConfig => {
-                                                match eta_anycodingagent_config_reader::import_from_default_home()
-                                                {
-                                                    Ok(imported) => {
-                                                        let entries = imported.model_entries();
+                                                match eta_core_controller::import_model_entries() {
+                                                    Ok(entries) => {
                                                         if entries.is_empty() {
                                                             app.view().answers.push(
                                                                 "no custom models found".into(),
@@ -330,8 +332,8 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
 #[cfg(test)]
 mod tests {
     use crate::app::App;
-    use crate::session::{SessionHandle, SessionManager, spawn_session};
     use eta_core::{Agent, AgentEvent, AgentId, AgentInput, MemoryStore, SessionStorage};
+    use eta_core_controller::{SessionHandle, SessionManager, SpawnPlan, spawn as spawn_session};
     use eta_llm::{Context, Event, Model, Provider, ProviderError, StopReason, Usage};
     use eta_sqlite_storage::{SqliteAgentStore, SqliteSessionStore};
     use serde_json::json;
@@ -339,6 +341,29 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
     use tokio_stream::Stream;
+
+    /// Build a handle from injected parts — the same path `assemble_*` feeds.
+    fn test_handle(
+        id: &str,
+        provider: Arc<dyn Provider>,
+        store: Arc<dyn SessionStorage>,
+        memory: Arc<dyn MemoryStore>,
+    ) -> SessionHandle {
+        let sqlite = Arc::new(SqliteSessionStore::in_memory());
+        spawn_session(SpawnPlan {
+            session_id: id.to_string(),
+            agent_id: AgentId(id.to_string()),
+            provider,
+            model: Model::new("test-model"),
+            store,
+            memory,
+            tools: vec![],
+            system_prompt: "you are eta".into(),
+            adapter_prompt: String::new(),
+            tool_names: vec![],
+            sqlite,
+        })
+    }
 
     struct ScriptedProvider {
         events: Vec<Result<Event, ProviderError>>,
@@ -368,17 +393,7 @@ mod tests {
         });
         let store: Arc<dyn SessionStorage> = Arc::new(SqliteSessionStore::in_memory());
         let memory: Arc<dyn MemoryStore> = Arc::new(SqliteAgentStore::in_memory());
-        let handle = spawn_session(
-            "s1",
-            AgentId("dev".into()),
-            provider,
-            Model::new("test-model"),
-            store,
-            memory,
-            vec![],
-            "you are eta".into(),
-            String::new(),
-        );
+        let handle = test_handle("s1", provider, store, memory);
 
         let mut sessions = SessionManager::new();
         sessions.insert(handle);
@@ -410,17 +425,7 @@ mod tests {
         let provider: Arc<dyn Provider> = Arc::new(ScriptedProvider { events: vec![] });
         let store: Arc<dyn SessionStorage> = Arc::new(SqliteSessionStore::in_memory());
         let memory: Arc<dyn MemoryStore> = Arc::new(SqliteAgentStore::in_memory());
-        let handle = spawn_session(
-            "s1",
-            AgentId("dev".into()),
-            provider,
-            Model::new("test-model"),
-            store,
-            memory,
-            vec![],
-            "you are eta".into(),
-            String::new(),
-        );
+        let handle = test_handle("s1", provider, store, memory);
         let mut sessions = SessionManager::new();
         sessions.insert(handle);
         sessions.attach("s1");
@@ -451,16 +456,11 @@ mod tests {
                     }),
                 ],
             });
-            let handle = spawn_session(
+            let handle = test_handle(
                 id,
-                AgentId(id.into()),
                 provider,
-                Model::new("test-model"),
                 Arc::new(SqliteSessionStore::in_memory()),
                 Arc::new(SqliteAgentStore::in_memory()),
-                vec![],
-                "you are eta".into(),
-                String::new(),
             );
             (AgentId(id.into()), handle.agent.expect("agent"))
         }
@@ -521,16 +521,11 @@ mod tests {
                     }),
                 ],
             });
-            let handle = spawn_session(
+            let handle = test_handle(
                 id,
-                AgentId(id.into()),
                 provider,
-                Model::new("test-model"),
                 Arc::new(SqliteSessionStore::in_memory()),
                 Arc::new(SqliteAgentStore::in_memory()),
-                vec![],
-                "you are eta".into(),
-                String::new(),
             );
             (AgentId(id.into()), handle)
         }

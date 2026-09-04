@@ -366,6 +366,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -373,17 +374,10 @@ name = "eta-core-dev-tui"
 version = "0.1.0"
 dependencies = [
  "crossterm",
- "eta-anycodingagent-config-reader",
- "eta-config",
  "eta-core",
  "eta-core-controller",
  "eta-fs",
- "eta-io-tools",
  "eta-llm",
- "eta-mcp",
- "eta-provider-anthropic",
- "eta-provider-openai",
- "eta-session",
  "eta-sqlite-storage",
  "eta-system-prompts",
  "ratatui",
