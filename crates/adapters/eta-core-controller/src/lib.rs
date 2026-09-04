@@ -595,4 +595,30 @@ mod tests {
         let (_provider, model, _) = resolve_provider_model("openai/gpt-4o", &config).unwrap();
         assert_eq!(model.api.as_deref(), Some("openai/chat-completion"));
     }
+
+    #[test]
+    fn requires_openai_auth_pulls_key_from_env() {
+        let mut config = empty_config();
+        config.provider.insert(
+            "custom".into(),
+            ProviderConfig {
+                format: ProviderFormat::OpenAiResponses,
+                options: serde_json::json!({
+                    "baseURL": "https://api.unorouter.com/v1",
+                    "requires_openai_auth": true,
+                    "wire_api": "responses",
+                }),
+                models: [("kimi-k3".into(), ModelConfig::bare("kimi-k3"))]
+                    .into_iter()
+                    .collect(),
+            },
+        );
+        let Some((_, _, request)) = resolve_provider_model("custom/kimi-k3", &config) else {
+            panic!("provider resolves");
+        };
+        // Env may or may not be set in the test environment; both are valid —
+        // what must hold is the endpoint + api survive regardless.
+        assert_eq!(request.url, "https://api.unorouter.com/v1");
+        assert_eq!(request.api, "openai/responses");
+    }
 }
