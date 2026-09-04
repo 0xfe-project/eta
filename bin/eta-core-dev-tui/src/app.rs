@@ -6,10 +6,7 @@ use std::time::Instant;
 
 use crossterm::event::KeyCode;
 
-use eta_core::{
-    AgentEvent, AgentInput, AskUserAnswer, LoopSpec, SessionEntry, TodoItem, Trigger, dev_category,
-    entry_kind,
-};
+use eta_core::{AgentInput, AskUserAnswer, LoopSpec, SessionEntry, Trigger, entry_kind};
 use eta_core_controller::{
     self as controller, SessionManager, SpawnError, SpawnRequest, configured_model, load_config,
     model_entries, set_active_model,
@@ -55,6 +52,7 @@ pub(crate) struct App {
     pub(crate) head: Option<u64>,
     pub(crate) loop_counter: u64,
     views: HashMap<String, SessionView>,
+    projectors: HashMap<String, controller::SessionProjection>,
     pub(crate) pending_ask: Option<PendingAsk>,
     pub(crate) dev_base: Instant,
     history: Vec<String>,
@@ -80,6 +78,7 @@ impl App {
             head: None,
             loop_counter: 0,
             views: HashMap::new(),
+            projectors: HashMap::new(),
             pending_ask: None,
             dev_base: Instant::now(),
             history: Vec::new(),
@@ -228,155 +227,59 @@ impl App {
     /// Drain the current session's engine/dev streams into the panels and
     /// refresh the context snapshot from `Agent::usage()`.
     pub(crate) async fn pump(&mut self) {
-        let mut answer_lines = Vec::new();
-        let mut dev_lines = Vec::new();
-        let mut new_goal: Option<GoalInfo> = None;
-        let mut todos = Vec::new();
-        let mut memory = Vec::new();
-        let mut skills = Vec::new();
-        let mut stable_prompt = String::new();
-        let mut adaptive_prompt = String::new();
-        let usage;
-        let session_id;
-        {
+        let Some(session_id) = self.sessions.current_id().map(String::from) else {
+            return;
+        };
+        let mut projector = self.projectors.remove(&session_id).unwrap_or_default();
+        let update = {
             let Some(handle) = self.sessions.current_mut() else {
+                self.projectors.insert(session_id.clone(), projector);
                 return;
             };
-            let agent_id = handle.meta.agent_id.clone();
-            session_id = handle.meta.id.clone();
-
-            if let Some(events) = handle.event_rx.as_mut() {
-                let mut saw_text = false;
-                let mut streaming = String::new();
-                while let Ok(event) = events.try_recv() {
-                    if let AgentEvent::TurnStart { .. } = &event {
-                        self.working = true;
-                        saw_text = false;
-                    }
-                    if let AgentEvent::TurnEnd { .. } = &event {
-                        self.working = false;
-                    }
-                    if let AgentEvent::AskUserStarted { req_id, .. } = &event {
-                        self.pending_ask = Some(PendingAsk {
-                            req_id: req_id.clone(),
-                        });
-                    }
-                    match &event {
-                        AgentEvent::MessageUpdate { message, .. } => {
-                            if let Some(text) = message.get("text").and_then(|text| text.as_str()) {
-                                if !text.is_empty() {
-                                    streaming.push_str(text);
-                                    saw_text = true;
-                                }
-                            }
-                        }
-                        _ => {
-                            // Coalesce a burst of content deltas into one answer
-                            // line so streaming text reads as a paragraph instead
-                            // of one fragment per frame.
-                            if !streaming.is_empty() {
-                                answer_lines.push(std::mem::take(&mut streaming));
-                            }
-                            if matches!(&event, AgentEvent::TurnEnd { .. }) && !saw_text {
-                                answer_lines.push(
-                                    "(no assistant text this turn — check model/provider or dev events)"
-                                        .to_string(),
-                                );
-                            }
-                            if let Some(line) = tui::answer::event_line(&agent_id, &event) {
-                                answer_lines.push(line);
-                            }
-                        }
-                    }
-                }
-                if !streaming.is_empty() {
-                    answer_lines.push(streaming);
-                }
-            }
-
-            if let Some(dev_events) = handle.dev_rx.as_mut() {
-                while let Ok(event) = dev_events.try_recv() {
-                    dev_lines.push(tui::dev::dev_event_line(&event, self.dev_base));
-                    if event.category == dev_category::GOAL && event.action == "change" {
-                        new_goal = Some(GoalInfo {
-                            status: event
-                                .data
-                                .get("status")
-                                .and_then(|value| value.as_str())
-                                .unwrap_or_default()
-                                .to_string(),
-                            objective: event
-                                .data
-                                .get("objective")
-                                .and_then(|value| value.as_str())
-                                .unwrap_or_default()
-                                .to_string(),
-                            round: event
-                                .data
-                                .get("round_count")
-                                .and_then(|value| value.as_u64())
-                                .unwrap_or_default(),
-                        });
-                    }
-                }
-            }
-
-            usage = handle
-                .agent
-                .as_ref()
-                .map(|agent| agent.usage())
-                .unwrap_or_default();
-            if let Some(agent) = handle.agent.as_ref() {
-                memory = agent.memory_entries().await;
-                skills = agent.skill_names().await;
-                stable_prompt = agent.stable_prompt().to_string();
-                adaptive_prompt = agent.adaptive_prompt().to_string();
-            }
-            if let Some(value) = handle.store.get_state("eta.todos").await {
-                if let Ok(items) = serde_json::from_value::<Vec<TodoItem>>(value) {
-                    todos = items
-                        .iter()
-                        .map(|item| {
-                            format!(
-                                "- {} [{}]",
-                                item.content,
-                                format!("{:?}", item.status).to_lowercase()
-                            )
-                        })
-                        .collect();
-                }
-            }
+            projector.poll(handle).await
+        };
+        self.working = projector.working();
+        if let Some(req_id) = projector.pending_ask() {
+            self.pending_ask = Some(PendingAsk {
+                req_id: req_id.to_string(),
+            });
         }
+        self.projectors.insert(session_id.clone(), projector);
 
+        let dev_base = self.dev_base;
         let view = self.views.entry(session_id.clone()).or_default();
-        view.answers.extend(answer_lines);
-        view.dev.extend(dev_lines);
-        let goal_text = new_goal
-            .as_ref()
-            .or(view.goal.as_ref())
-            .map(|goal| goal.status_line())
-            .unwrap_or_default();
-        let tools = view.tool_names.clone();
+        view.answers.extend(update.answer_lines);
+        view.dev.extend(
+            update
+                .dev_events
+                .iter()
+                .map(|event| tui::dev::dev_event_line(event, dev_base)),
+        );
+        if let Some(goal) = update.goal {
+            view.goal = Some(GoalInfo {
+                status: goal.status,
+                objective: goal.objective,
+                round: goal.round,
+            });
+        }
+        let ctx = update.context;
         view.context = Some(ContextSnapshot {
             session_id,
-            branch: "main".to_string(),
-            input_tokens: usage.input,
-            output_tokens: usage.output,
-            cache_read: usage.cache_read,
-            cache_write: usage.cache_write,
-            cache_rate: usage.cache_rate(),
-            stable_prompt,
-            adaptive_prompt,
-            goal: goal_text,
-            todos,
-            tools,
-            memory,
-            skills,
+            branch: ctx.branch,
+            input_tokens: ctx.input_tokens,
+            output_tokens: ctx.output_tokens,
+            cache_read: ctx.cache_read,
+            cache_write: ctx.cache_write,
+            cache_rate: ctx.cache_rate,
+            stable_prompt: ctx.stable_prompt,
+            adaptive_prompt: ctx.adaptive_prompt,
+            goal: ctx.goal,
+            todos: ctx.todos,
+            tools: ctx.tools,
+            memory: ctx.memory,
+            skills: ctx.skills,
             ..Default::default()
         });
-        if let Some(goal) = new_goal {
-            view.goal = Some(goal);
-        }
     }
 
     /// Send the submitted line to the current session. While the agent is

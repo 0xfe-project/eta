@@ -6,6 +6,7 @@
 
 mod config;
 mod session;
+mod view;
 
 pub use config::{
     config_path, empty_config, load_config_persisted, read_config, set_active_model,
@@ -16,6 +17,7 @@ pub use session::{
     assemble_new, assemble_respawn, assemble_resume, default_tools, load_model, load_owner,
     save_model, save_owner, spawn,
 };
+pub use view::{GoalState, SessionProjection, SessionViewState, ViewUpdate, event_line};
 
 use std::sync::Arc;
 
