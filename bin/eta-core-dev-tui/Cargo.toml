@@ -24,6 +24,9 @@ eta-fs = { path = "../../crates/adapters/eta-fs" }
 eta-sqlite-storage = { path = "../../crates/adapters/eta-sqlite-storage" }
 eta-core-controller = { path = "../../crates/adapters/eta-core-controller" }
 
+syntect = "5.3"
+two-face = { version = "0.5", default-features = false, features = ["syntect-default-onig"] }
+
 [dev-dependencies]
 tempfile = "3"
 tokio-stream.workspace = true

@@ -15,6 +15,7 @@ pub mod context;
 pub mod dev;
 pub mod goal;
 pub mod screen;
+pub mod syntax;
 
 pub use context::ContextSnapshot;
 pub use screen::Screen;
@@ -158,14 +159,22 @@ pub fn draw(
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(columns[1]);
 
-    render_panel(
+    let mut highlighter = syntax::CodeHighlighter::default();
+    render_panel_with(
         frame,
         columns[0],
         "answers",
         focus == Focus::Answers,
         answers,
         answers_scroll,
-        style_answer,
+        |line| {
+            let code_spans = highlighter.style(line);
+            if code_spans.is_empty() {
+                style_answer(line)
+            } else {
+                code_spans
+            }
+        },
     );
 
     let context_lines = context
@@ -345,6 +354,20 @@ fn render_panel(
     lines: &[String],
     scroll: usize,
     style_fn: fn(&str) -> Vec<Span<'static>>,
+) {
+    render_panel_with(frame, rect, title, focused, lines, scroll, |line| {
+        style_fn(line)
+    });
+}
+
+fn render_panel_with(
+    frame: &mut Frame,
+    rect: ratatui::layout::Rect,
+    title: &str,
+    focused: bool,
+    lines: &[String],
+    scroll: usize,
+    mut style_fn: impl FnMut(&str) -> Vec<Span<'static>>,
 ) {
     let border_style = if focused {
         Style::default().fg(Color::Yellow)
