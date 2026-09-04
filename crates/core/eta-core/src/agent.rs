@@ -265,7 +265,15 @@ impl AgentRuntime {
         let agent_id = self.cfg.agent_id.clone();
         self.restore_messages().await;
         self.cfg.hooks.on_spawn(&agent_id);
-        self.emit_dev(dev_category::LIFECYCLE, "spawn", serde_json::json!({}));
+        self.emit_dev(
+            dev_category::LIFECYCLE,
+            "spawn",
+            serde_json::json!({
+                "model": self.cfg.model.id,
+                "api": self.cfg.model.api,
+                "base_url": self.cfg.model.base_url,
+            }),
+        );
 
         while !self.cancel.is_cancelled() {
             let Some(input) = self.input_rx.recv().await else {

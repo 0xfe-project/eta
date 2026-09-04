@@ -362,6 +362,7 @@ mod tests {
             system_prompt: "you are eta".into(),
             adapter_prompt: String::new(),
             tool_names: vec![],
+            provider_has_key: true,
             sqlite,
         })
     }

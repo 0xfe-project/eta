@@ -19,7 +19,9 @@ use eta_llm::{Model, Provider};
 use eta_sqlite_storage::{SqliteAgentStore, SqliteSessionStore, list_sessions_in};
 use eta_system_prompts::DEFAULT_SYSTEM_PROMPT;
 
-use crate::{build_adapter_system_prompt, configured_model, load_mcp_registry, mcp_tools};
+use crate::{
+    ProviderRequest, build_adapter_system_prompt, configured_model, load_mcp_registry, mcp_tools,
+};
 
 /// Session KV key for the per-session model override.
 const MODEL_KEY: &str = "eta.model";
@@ -187,6 +189,8 @@ pub struct SpawnPlan {
     pub system_prompt: String,
     pub adapter_prompt: String,
     pub tool_names: Vec<String>,
+    /// Whether an API key resolved for the provider (for the request log).
+    pub provider_has_key: bool,
     /// The concrete sqlite store, for time-travel and other raw access.
     pub sqlite: Arc<SqliteSessionStore>,
 }
@@ -264,7 +268,7 @@ pub async fn assemble_new(request: &SpawnRequest) -> Result<SpawnPlan, SpawnErro
         .clone()
         .or_else(|| configured_model(&config))
         .ok_or(SpawnError::NoModel)?;
-    let (provider, model) = crate::resolve_provider_model(&model_id, &config)
+    let (provider, model, wire) = crate::resolve_provider_model(&model_id, &config)
         .ok_or_else(|| SpawnError::UnknownModel(model_id.clone()))?;
 
     let session_id = uuid::Uuid::now_v7().to_string();
@@ -296,6 +300,7 @@ pub async fn assemble_new(request: &SpawnRequest) -> Result<SpawnPlan, SpawnErro
         system_prompt: system_prompt_for(request.persona.as_deref()),
         adapter_prompt,
         tool_names,
+        provider_has_key: wire.has_key,
         sqlite,
     })
 }
@@ -313,7 +318,7 @@ pub async fn assemble_resume(session_id: &str) -> Result<SpawnPlan, SpawnError> 
         .await
         .or_else(|| configured_model(&config))
         .ok_or(SpawnError::NoModel)?;
-    let (provider, model) = crate::resolve_provider_model(&model_id, &config)
+    let (provider, model, wire) = crate::resolve_provider_model(&model_id, &config)
         .ok_or_else(|| SpawnError::UnknownModel(model_id.clone()))?;
     let memory = open_agent_memory(&owner);
     let (tools, tool_names, tool_cards) = default_tools();
@@ -337,6 +342,7 @@ pub async fn assemble_resume(session_id: &str) -> Result<SpawnPlan, SpawnError> 
         system_prompt: DEFAULT_SYSTEM_PROMPT.to_string(),
         adapter_prompt,
         tool_names,
+        provider_has_key: wire.has_key,
         sqlite,
     })
 }
@@ -350,7 +356,7 @@ pub async fn assemble_respawn(
     store: Arc<dyn SessionStorage>,
 ) -> Result<SpawnPlan, SpawnError> {
     let config = crate::load_config();
-    let (provider, model) = crate::resolve_provider_model(model_id, &config)
+    let (provider, model, wire) = crate::resolve_provider_model(model_id, &config)
         .ok_or_else(|| SpawnError::UnknownModel(model_id.to_string()))?;
     let memory = open_agent_memory(agent_name);
     let (tools, tool_names, tool_cards) = default_tools();
@@ -378,6 +384,7 @@ pub async fn assemble_respawn(
         system_prompt: DEFAULT_SYSTEM_PROMPT.to_string(),
         adapter_prompt,
         tool_names,
+        provider_has_key: wire.has_key,
         sqlite,
     })
 }
@@ -385,6 +392,13 @@ pub async fn assemble_respawn(
 /// Spawn one engine from a plan (1 agent : 1 session).
 pub fn spawn(plan: SpawnPlan) -> SessionHandle {
     let meta_agent_id = plan.agent_id.clone();
+    // Surface the exact wire target + auth mode before the first request, so
+    // a 401/403 is debuggable from the dev panel instead of a bare error.
+    let request = ProviderRequest {
+        url: plan.model.base_url.clone().unwrap_or_default(),
+        api: plan.model.api.clone().unwrap_or_default(),
+        has_key: plan.provider_has_key,
+    };
     let agent = Agent::spawn(AgentConfig {
         agent_id: plan.agent_id,
         provider: plan.provider,
@@ -400,6 +414,12 @@ pub fn spawn(plan: SpawnPlan) -> SessionHandle {
     });
     let event_rx = agent.subscribe();
     let dev_rx = agent.subscribe_dev();
+    let _ = agent.dev_sender().send(eta_core::AgentDevEvent::new(
+        meta_agent_id.clone(),
+        "provider",
+        "request",
+        request.to_json(),
+    ));
     let mut loop_manager = LoopManager::new(plan.store.clone(), agent.input_sender());
     loop_manager.with_dev(meta_agent_id.clone(), agent.dev_sender());
     SessionHandle {

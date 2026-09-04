@@ -143,8 +143,65 @@ fn config_provider_models(config: &eta_config::Config) -> impl Iterator<Item = S
     })
 }
 
-/// Resolve a `provider/model` entry into a provider + model carrying the
-/// provider's base URL and wire protocol.
+/// Where one provider call was about to be sent, plus whether an API key
+/// resolved. Emitted as a dev event at spawn time so auth problems are
+/// debuggable from the dev panel instead of a bare 403.
+
+/// Resolve a provider's API key. Order: explicit `apiKey`/`api_key` in the
+/// provider options → `$OPENAI_API_KEY` (when the imported config flags
+/// `requires_openai_auth` or `preferred_auth_method=apikey`) → `""`.
+pub fn resolve_api_key(cfg: &eta_config::ProviderConfig) -> &str {
+    if let Some(key) = cfg
+        .options
+        .get("apiKey")
+        .or_else(|| cfg.options.get("api_key"))
+        .and_then(|value| value.as_str())
+    {
+        return key;
+    }
+    let needs_env = cfg
+        .options
+        .get("requires_openai_auth")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+        || cfg
+            .options
+            .get("preferred_auth_method")
+            .and_then(|v| v.as_str())
+            == Some("apikey");
+    if needs_env {
+        static CACHED_ENV: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+        let env = CACHED_ENV.get_or_init(|| {
+            std::env::var("OPENAI_API_KEY")
+                .ok()
+                .filter(|k| !k.is_empty())
+        });
+        if let Some(key) = env.as_deref() {
+            return key;
+        }
+    }
+    ""
+}
+
+/// The endpoint + auth a provider resolved to. `seed` packs it into the
+/// spawn plan; `to_json` renders it for dev events.
+#[derive(Clone, Debug)]
+pub struct ProviderRequest {
+    pub url: String,
+    pub api: String,
+    pub has_key: bool,
+}
+
+impl ProviderRequest {
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "url": self.url,
+            "api": self.api,
+            "auth": if self.has_key { "bearer" } else { "none" },
+        })
+    }
+}
+
 ///
 /// Returns `None` when the provider id is not in the config — the caller
 /// decides how to surface "no such provider" (a config prompt) rather than
@@ -152,7 +209,7 @@ fn config_provider_models(config: &eta_config::Config) -> impl Iterator<Item = S
 pub fn resolve_provider_model(
     model_id: &str,
     config: &eta_config::Config,
-) -> Option<(Arc<dyn Provider>, Model)> {
+) -> Option<(Arc<dyn Provider>, Model, ProviderRequest)> {
     let (provider_id, model_id_only) = model_id.split_once('/').unwrap_or((model_id, model_id));
     let provider_cfg = config.provider.get(provider_id)?;
     let base = provider_cfg
@@ -161,12 +218,7 @@ pub fn resolve_provider_model(
         .or_else(|| provider_cfg.options.get("base_url"))
         .and_then(|value| value.as_str())
         .unwrap_or_default();
-    let key = provider_cfg
-        .options
-        .get("apiKey")
-        .or_else(|| provider_cfg.options.get("api_key"))
-        .and_then(|value| value.as_str())
-        .unwrap_or_default();
+    let key = resolve_api_key(provider_cfg);
     let mut model = Model::new(model_id_only);
     model.api = Some(provider_cfg.format.as_str().to_string());
     model.base_url = Some(base.to_string());
@@ -193,7 +245,8 @@ pub fn resolve_provider_model(
     if model.context_window.is_none() {
         model.context_window = known_context_window(&model.id);
     }
-    let key = (!key.is_empty()).then(|| key.to_string());
+    let has_key = !key.is_empty();
+    let key = has_key.then(|| key.to_string());
     let provider: Arc<dyn Provider> = match provider_cfg.format {
         eta_config::ProviderFormat::AnthropicMessages => {
             Arc::new(AnthropicProvider::new(key, base))
@@ -205,7 +258,12 @@ pub fn resolve_provider_model(
             Arc::new(OpenAiProvider::new(key, base))
         }
     };
-    Some((provider, model))
+    let request = ProviderRequest {
+        url: base.to_string(),
+        api: provider_cfg.format.as_str().to_string(),
+        has_key,
+    };
+    Some((provider, model, request))
 }
 
 /// Known context-window sizes for common model families, keyed by id prefix.
@@ -396,7 +454,7 @@ mod tests {
     #[test]
     fn resolves_known_model_and_context_window() {
         let config = config_with("openai");
-        let (_provider, model) =
+        let (_provider, model, _) =
             resolve_provider_model("openai/gpt-4o", &config).expect("provider resolves");
         assert_eq!(model.id, "gpt-4o");
         assert_eq!(model.context_window, Some(128_000));
@@ -491,7 +549,7 @@ mod tests {
                 options: serde_json::json!({"reasoningEffort": "high"}),
             },
         );
-        let (_provider, model) =
+        let (_provider, model, _) =
             resolve_provider_model("anthropic/claude-sonnet-4", &config).unwrap();
         assert_eq!(model.reasoning, Some(true));
         let opts = model.request_options.unwrap();
@@ -518,9 +576,12 @@ mod tests {
                 .collect(),
             },
         );
-        let (provider, model) =
+        let (provider, model, request) =
             resolve_provider_model("custom/deepseek-v4-flash", &config).unwrap();
         assert_eq!(model.api.as_deref(), Some("openai/responses"));
+        assert_eq!(request.api, "openai/responses");
+        assert!(request.has_key);
+        assert!(request.url.contains("api.example.com"));
         // The provider must actually speak the responses API: it posts to
         // /responses, not /chat/completions. We can't see the private URL, but
         // the type is observable through a canary stream call shape — instead
@@ -531,7 +592,7 @@ mod tests {
     #[test]
     fn chat_completion_format_stays_on_chat_wire() {
         let config = config_with("openai");
-        let (_provider, model) = resolve_provider_model("openai/gpt-4o", &config).unwrap();
+        let (_provider, model, _) = resolve_provider_model("openai/gpt-4o", &config).unwrap();
         assert_eq!(model.api.as_deref(), Some("openai/chat-completion"));
     }
 }
