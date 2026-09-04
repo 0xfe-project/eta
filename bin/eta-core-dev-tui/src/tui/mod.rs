@@ -15,6 +15,7 @@ pub mod context;
 pub mod dev;
 pub mod goal;
 pub mod screen;
+pub mod scrollbar;
 pub mod syntax;
 
 pub use context::ContextSnapshot;
@@ -385,6 +386,7 @@ fn render_panel_with(
     // *before* wrapping, which meant a single logical line that wrapped across
     // multiple rows could consume the whole viewport and make content appear to
     // vanish after one scroll step.
+    let content_len = lines.len();
     let rendered: Vec<Line> = lines
         .iter()
         .map(|line| Line::from(style_fn(line)))
@@ -395,6 +397,16 @@ fn render_panel_with(
             .scroll((scroll as u16, 0)),
         inner,
     );
+    // Scrollbar on the panel's right border column so users see the position
+    // without giving up an inner column.
+    let metrics = scrollbar::ScrollMetrics::new(content_len, inner.height as usize, scroll);
+    let track = ratatui::layout::Rect {
+        x: rect.x + rect.width.saturating_sub(1),
+        y: rect.y + 1,
+        width: 1,
+        height: rect.height.saturating_sub(2),
+    };
+    scrollbar::render(frame.buffer_mut(), metrics, track);
 }
 
 fn style_answer(line: &str) -> Vec<Span<'static>> {
