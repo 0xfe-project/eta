@@ -185,6 +185,7 @@ fn merge_dedups_providers_and_models() {
                 ModelConfig {
                     name: "m".into(),
                     limit: ModelLimit::default(),
+                    options: serde_json::Value::Null,
                 },
             )]
             .into_iter()
@@ -203,6 +204,7 @@ fn merge_dedups_providers_and_models() {
                 ModelConfig {
                     name: "m2".into(),
                     limit: ModelLimit::default(),
+                    options: serde_json::Value::Null,
                 },
             )]
             .into_iter()

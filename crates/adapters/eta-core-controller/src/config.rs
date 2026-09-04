@@ -123,6 +123,7 @@ mod tests {
                     ModelConfig {
                         name: "gpt-4o".into(),
                         limit: Default::default(),
+                        options: serde_json::Value::Null,
                     },
                 )]
                 .into_iter()

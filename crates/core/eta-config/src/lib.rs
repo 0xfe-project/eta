@@ -98,6 +98,21 @@ pub struct ModelConfig {
     pub name: String,
     #[serde(default)]
     pub limit: ModelLimit,
+    /// Per-model wire extras (e.g. `reasoningEffort`), merged into request
+    /// bodies by providers. Weakly typed, like `ProviderConfig::options`.
+    #[serde(default, skip_serializing_if = "serde_json::Value::is_null")]
+    pub options: serde_json::Value,
+}
+
+impl ModelConfig {
+    /// A model entry with no limits and no extra wire options.
+    pub fn bare(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            limit: ModelLimit::default(),
+            options: serde_json::Value::Null,
+        }
+    }
 }
 
 /// 上下文窗口与单次最大输出 token 数。0 表示未知。

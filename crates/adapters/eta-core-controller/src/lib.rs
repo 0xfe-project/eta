@@ -129,6 +129,22 @@ pub fn resolve_provider_model(
     if let Some(cfg) = provider_cfg.models.get(model_id_only) {
         model.context_window = (cfg.limit.context > 0).then_some(cfg.limit.context);
         model.max_tokens = (cfg.limit.output > 0).then_some(cfg.limit.output);
+        if let Some(opts) = cfg.options.as_object().filter(|o| !o.is_empty()) {
+            // Normalize reasoningEffort (config spelling) to the wire name.
+            let mut wire = serde_json::Map::new();
+            for (key, value) in opts {
+                let wire_key = match key.as_str() {
+                    "reasoningEffort" => "reasoning_effort",
+                    other => other,
+                };
+                wire.insert(wire_key.to_string(), value.clone());
+            }
+            if let Some(effort) = wire.get("reasoning_effort").and_then(|v| v.as_str()) {
+                model.reasoning = Some(true);
+                let _ = effort;
+            }
+            model.request_options = Some(serde_json::Value::Object(wire));
+        }
     }
     if model.context_window.is_none() {
         model.context_window = known_context_window(&model.id);
@@ -296,6 +312,7 @@ mod tests {
                             context: 128_000,
                             output: 4_096,
                         },
+                        options: serde_json::Value::Null,
                     },
                 )]
                 .into_iter()
@@ -415,5 +432,26 @@ mod tests {
         let prompt = build_adapter_system_prompt("s1", "dev", "openai/gpt-4o", &[], &[], None);
         assert!(prompt.contains("MCP servers: none configured"));
         assert!(!prompt.contains("Workspace rules"));
+    }
+
+    #[test]
+    fn reasoning_effort_maps_into_request_options() {
+        let mut config = config_with("anthropic");
+        config.provider.get_mut("anthropic").unwrap().format =
+            eta_config::ProviderFormat::AnthropicMessages;
+        config.provider.get_mut("anthropic").unwrap().models.insert(
+            "claude-sonnet-4".into(),
+            ModelConfig {
+                name: "claude-sonnet-4".into(),
+                limit: ModelLimit::default(),
+                options: serde_json::json!({"reasoningEffort": "high"}),
+            },
+        );
+        let (_provider, model) =
+            resolve_provider_model("anthropic/claude-sonnet-4", &config).unwrap();
+        assert_eq!(model.reasoning, Some(true));
+        let opts = model.request_options.unwrap();
+        assert_eq!(opts["reasoning_effort"], "high");
+        assert!(opts.get("reasoningEffort").is_none());
     }
 }

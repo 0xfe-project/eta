@@ -80,6 +80,11 @@ pub struct Model {
     pub context_window: Option<u64>,
     pub max_tokens: Option<u64>,
     pub cost: Option<serde_json::Value>,
+    /// Per-model wire extras merged into every request body (e.g.
+    /// `reasoning_effort`, `thinking`). Provider-specific; merged shallowly,
+    /// explicit call-site options win.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_options: Option<serde_json::Value>,
 }
 
 impl Model {
@@ -93,6 +98,7 @@ impl Model {
             context_window: None,
             max_tokens: None,
             cost: None,
+            request_options: None,
         }
     }
 }

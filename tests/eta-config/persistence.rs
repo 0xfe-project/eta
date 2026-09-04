@@ -54,6 +54,7 @@ fn set_active_model_roundtrips_through_disk() {
                 ModelConfig {
                     name: "gpt-4o".into(),
                     limit: Default::default(),
+                    options: serde_json::Value::Null,
                 },
             )]
             .into_iter()

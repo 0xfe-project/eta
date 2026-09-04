@@ -151,6 +151,7 @@ fn import_codex_with_base(
                     ModelConfig {
                         name: model.to_string(),
                         limit: ModelLimit::default(),
+                        options: serde_json::Value::Null,
                     },
                 );
             }
@@ -171,6 +172,7 @@ fn import_codex_with_base(
                                 models.entry(id).or_insert_with(|| ModelConfig {
                                     name: catalog_model_name(entry, &entry_id),
                                     limit: catalog_model_limit(entry),
+                                    options: serde_json::Value::Null,
                                 });
                             }
                         }
@@ -217,6 +219,7 @@ pub fn import_claude(text: &str) -> Result<CustomModelImport, String> {
                 ModelConfig {
                     name: id,
                     limit: ModelLimit::default(),
+                    options: serde_json::Value::Null,
                 },
             )
         })
@@ -338,6 +341,7 @@ fn parse_models(value: Option<&Value>) -> BTreeMap<String, ModelConfig> {
                     ModelConfig {
                         name: id.clone(),
                         limit: ModelLimit::default(),
+                        options: serde_json::Value::Null,
                     },
                 )),
                 Value::Object(map) => {
@@ -380,7 +384,15 @@ fn model_config_from(value: &Value, id: &str) -> ModelConfig {
             output: limit.get("output").and_then(Value::as_u64).unwrap_or(0),
         })
         .unwrap_or_default();
-    ModelConfig { name, limit }
+    let options = value
+        .get("options")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+    ModelConfig {
+        name,
+        limit,
+        options,
+    }
 }
 
 /// Resolve a Codex `model_catalog_json` path, which is normally relative to the

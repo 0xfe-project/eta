@@ -495,7 +495,11 @@ impl AgentRuntime {
             messages: prompt_messages,
             tools: vec![],
         };
-        let mut stream = self.cfg.provider.stream(&self.cfg.model, &context, None);
+        let mut stream = self.cfg.provider.stream(
+            &self.cfg.model,
+            &context,
+            self.cfg.model.request_options.as_ref(),
+        );
         let mut out = String::new();
         while let Some(item) = stream.next().await {
             if let Ok(Event::Content(c)) = item {
@@ -537,7 +541,11 @@ impl AgentRuntime {
             tools: vec![],
         };
 
-        let mut stream = self.cfg.provider.stream(&self.cfg.model, &context, None);
+        let mut stream = self.cfg.provider.stream(
+            &self.cfg.model,
+            &context,
+            self.cfg.model.request_options.as_ref(),
+        );
         let mut answer = String::new();
         while let Some(item) = stream.next().await {
             if let Ok(Event::Content(c)) = item {
@@ -890,7 +898,11 @@ impl AgentRuntime {
     async fn run_step(&mut self) -> StepResult {
         self.maybe_summarize_mid_loop().await;
         let context = self.build_context().await;
-        let mut stream = self.cfg.provider.stream(&self.cfg.model, &context, None);
+        let mut stream = self.cfg.provider.stream(
+            &self.cfg.model,
+            &context,
+            self.cfg.model.request_options.as_ref(),
+        );
 
         let mut had_tools = false;
         let mut had_content = false;
