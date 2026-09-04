@@ -38,7 +38,6 @@ pub enum Command {
     SessionNew,
     SessionRemove(String),
     SessionRename { prefix: String, name: String },
-    LoadOtherAgentConfig,
     Clear,
     Help,
     Quit,
@@ -95,7 +94,6 @@ pub fn parse_command(input: &str) -> Option<Command> {
         "provider" => rest.first().map(|name| Command::Provider(name.clone())),
         "agent" => Some(Command::Agent),
         "compact" => Some(Command::Compact),
-        "load_other_agent_config" => Some(Command::LoadOtherAgentConfig),
         "session" => parse_session(rest),
         "new-session" => Some(Command::NewSession),
         "clear" => Some(Command::Clear),
@@ -146,7 +144,6 @@ pub fn command_completions(input: &str) -> Vec<CommandCompletion> {
         ("/memory", "show memory"),
         ("/todos", "show current tasks"),
         ("/usage", "show token usage"),
-        ("/load_other_agent_config", "import custom models from home"),
         ("/help", "show help"),
         ("/quit", "quit"),
     ];
@@ -394,10 +391,7 @@ mod tests {
         );
         assert_eq!(parse_command("/agent"), Some(Command::Agent));
         assert_eq!(parse_command("/compact"), Some(Command::Compact));
-        assert_eq!(
-            parse_command("/load_other_agent_config"),
-            Some(Command::LoadOtherAgentConfig)
-        );
+
     }
 
     #[test]

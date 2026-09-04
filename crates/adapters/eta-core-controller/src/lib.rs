@@ -59,28 +59,6 @@ pub fn load_config() -> eta_config::Config {
     load_config_persisted()
 }
 
-/// Run the any-coding-agent import (codex/claude/opencode/pi) and return the
-/// flattened `provider/model` entries found. Read-only listing.
-pub fn import_model_entries() -> Result<Vec<String>, String> {
-    let imported = eta_anycodingagent_config_reader::import_from_default_home()?;
-    Ok(imported.model_entries())
-}
-
-/// Re-run the import and **merge its providers into `~/.eta/eta.json`**
-/// (existing user config wins on collisions; new providers are appended).
-/// Returns the flattened `provider/model` entries that were merged in —
-/// this is an explicit user action, unlike the one-shot import on first
-/// launch which ran once behind the user's back.
-pub fn import_and_merge() -> Result<Vec<String>, String> {
-    let imported = eta_anycodingagent_config_reader::import_from_default_home()?;
-    let entries = imported.model_entries();
-    let path = config_path();
-    let mut config = read_config(&path).unwrap_or_else(empty_config);
-    imported.apply_to(&mut config);
-    write_config(&path, &config).map_err(|e| e.to_string())?;
-    Ok(entries)
-}
-
 /// A live watch on `mcp.json`. Each time the file changes, the reloaded
 /// registry (server-name list included) is broadcast to every subscriber.
 /// Backed by a blocking thread over the fs watcher; drop the receiver to

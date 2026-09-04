@@ -373,7 +373,35 @@ impl Provider for ResponsesProvider {
                                 }
                             }
                         }
+                        "response.content_part.delta" => {
+                            // Older OpenAI responses format, or third-party
+                            // implementations (deepseek/unorouter) that emit this.
+                            if let Some(text) = value.get("delta").and_then(Value::as_str) {
+                                if tx
+                                    .send(Ok(Event::Content(json!({"type":"text","text":text}))))
+                                    .await
+                                    .is_err()
+                                {
+                                    return;
+                                }
+                            }
+                        }
                         "response.reasoning_summary_text.delta" => {
+                            if let Some(text) = value.get("delta").and_then(Value::as_str) {
+                                if tx
+                                    .send(Ok(Event::Content(
+                                        json!({"type":"text","text":text,"reasoning":true}),
+                                    )))
+                                    .await
+                                    .is_err()
+                                {
+                                    return;
+                                }
+                            }
+                        }
+                        "response.content_part.delta"
+                            if value.get("content_type") == Some(&json!("reasoning")) =>
+                        {
                             if let Some(text) = value.get("delta").and_then(Value::as_str) {
                                 if tx
                                     .send(Ok(Event::Content(

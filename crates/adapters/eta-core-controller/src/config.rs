@@ -59,26 +59,19 @@ pub fn write_config(path: &Path, config: &Config) -> std::io::Result<()> {
 ///   but never overwrite the file the user may want to rescue.
 pub fn load_config_persisted() -> Config {
     let path = config_path();
-    match std::fs::metadata(&path) {
-        Ok(_) => match read_config(&path) {
-            Some(config) => config,
-            None => import_merged(),
-        },
-        Err(_) => {
-            let config = import_merged();
-            let _ = write_config(&path, &config);
+    match read_config(&path) {
+        Some(config) => config,
+        // Missing file → persist an empty config once so subsequent edits
+        // have a stable target; corrupt file → in-memory empty, never
+        // overwrite what the user may want to rescue.
+        None => {
+            let config = empty_config();
+            if !path.exists() {
+                let _ = write_config(&path, &config);
+            }
             config
         }
     }
-}
-
-/// Run the any-coding-agent import and merge it over an empty config.
-fn import_merged() -> Config {
-    let mut config = empty_config();
-    if let Ok(imported) = eta_anycodingagent_config_reader::import_from_default_home() {
-        imported.apply_to(&mut config);
-    }
-    config
 }
 
 /// Persist the active default model (`provider/model`) back to `eta.json`.
@@ -88,7 +81,7 @@ fn import_merged() -> Config {
 /// The `ETA_MODEL` env var overrides at read time only and is never written.
 pub fn set_active_model(model_id: &str) -> std::io::Result<()> {
     let path = config_path();
-    let mut config = read_config(&path).unwrap_or_else(import_merged);
+    let mut config = read_config(&path).unwrap_or_else(empty_config);
     config.model = model_id.to_string();
     write_config(&path, &config)
 }
@@ -99,7 +92,7 @@ pub fn upsert_provider(
     provider: eta_config::ProviderConfig,
 ) -> std::io::Result<Config> {
     let path = config_path();
-    let mut config = read_config(&path).unwrap_or_else(import_merged);
+    let mut config = read_config(&path).unwrap_or_else(empty_config);
     config.provider.insert(provider_id.to_string(), provider);
     write_config(&path, &config)?;
     Ok(config)

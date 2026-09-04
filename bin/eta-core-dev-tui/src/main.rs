@@ -277,26 +277,6 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                                 app.screen = Screen::startup(recent);
                                                 app.input = TextArea::default();
                                             }
-                                            Command::LoadOtherAgentConfig => {
-                                                match eta_core_controller::import_and_merge() {
-                                                    Ok(entries) => {
-                                                        if entries.is_empty() {
-                                                            app.view().answers.push(
-                                                                "no custom models found".into(),
-                                                            );
-                                                        } else {
-                                                            app.view().answers.push(format!(
-                                                                "merged {} providers into eta.json",
-                                                                entries.len()
-                                                            ));
-                                                            app.view().answers.extend(entries);
-                                                        }
-                                                    }
-                                                    Err(error) => app.view().answers.push(format!(
-                                                        "config import error: {error}"
-                                                    )),
-                                                }
-                                            }
                                             _ => {
                                                 if let Some(line) = app.apply_time_travel(&command)
                                                 {
