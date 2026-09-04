@@ -68,6 +68,50 @@ pub fn import_model_entries() -> Result<Vec<String>, String> {
     Ok(imported.model_entries())
 }
 
+/// A live watch on `mcp.json`. Each time the file changes, the reloaded
+/// registry (server-name list included) is broadcast to every subscriber.
+/// Backed by a blocking thread over the fs watcher; drop the receiver to
+/// stop caring (the thread exits once all receivers are gone).
+pub struct McpWatcher {
+    rx: tokio::sync::broadcast::Receiver<Vec<String>>,
+    _task: std::thread::JoinHandle<()>,
+}
+
+impl McpWatcher {
+    /// Start watching `~/.eta/mcp.json`. Returns `None` when the fs watcher
+    /// cannot be installed (e.g. sandboxed environments).
+    pub fn start() -> Option<Self> {
+        let registry = load_mcp_registry();
+        let watcher = registry.watch().ok()?;
+        let (tx, rx) = tokio::sync::broadcast::channel(8);
+        let task = std::thread::spawn(move || {
+            loop {
+                match watcher.recv_timeout(std::time::Duration::from_secs(3600)) {
+                    Ok(reloaded) => {
+                        let names: Vec<String> = reloaded.servers.keys().cloned().collect();
+                        // Stop once every receiver is gone.
+                        if tx.send(names).is_err() {
+                            return;
+                        }
+                    }
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                        if tx.receiver_count() == 0 {
+                            return;
+                        }
+                    }
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
+                }
+            }
+        });
+        Some(Self { rx, _task: task })
+    }
+
+    /// Non-blocking receive: `Some(server_names)` when mcp.json changed.
+    pub fn try_recv(&mut self) -> Option<Vec<String>> {
+        self.rx.try_recv().ok()
+    }
+}
+
 /// The model that is currently selected, either from `~/.eta/eta.json` or the
 /// `ETA_MODEL` env override. Empty when nothing is configured.
 pub fn configured_model(config: &eta_config::Config) -> Option<String> {

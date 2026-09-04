@@ -45,6 +45,7 @@ async fn main() -> io::Result<()> {
 /// and route input depending on the screen.
 async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Result<()> {
     loop {
+        app.poll_mcp_changes();
         if matches!(app.screen, Screen::Session) {
             app.pump().await;
         }

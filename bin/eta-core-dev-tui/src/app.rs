@@ -61,6 +61,7 @@ pub(crate) struct App {
     pub(crate) dev_filtering: bool,
     pub(crate) current_model: String,
     pub(crate) working: bool,
+    mcp_watcher: Option<controller::McpWatcher>,
 }
 
 impl App {
@@ -87,6 +88,28 @@ impl App {
             dev_filtering: false,
             current_model: configured_model(&load_config()).unwrap_or_default(),
             working: false,
+            mcp_watcher: controller::McpWatcher::start(),
+        }
+    }
+
+    /// Hot-reload notice: mcp.json changed on disk. New sessions pick the new
+    /// servers up automatically; existing sessions keep their spawn-time set.
+    pub(crate) fn poll_mcp_changes(&mut self) {
+        let mut changes = Vec::new();
+        if let Some(watcher) = self.mcp_watcher.as_mut() {
+            while let Some(servers) = watcher.try_recv() {
+                changes.push(servers);
+            }
+        }
+        for servers in changes {
+            let list = if servers.is_empty() {
+                "none".to_string()
+            } else {
+                servers.join(", ")
+            };
+            self.view().dev.push(format!(
+                "mcp.json reloaded — servers: {list} (applies to new sessions)"
+            ));
         }
     }
 
