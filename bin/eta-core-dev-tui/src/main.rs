@@ -278,18 +278,22 @@ async fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> io::Resu
                                                 app.input = TextArea::default();
                                             }
                                             Command::LoadOtherAgentConfig => {
-                                                match eta_core_controller::import_model_entries() {
+                                                match eta_core_controller::import_and_merge() {
                                                     Ok(entries) => {
                                                         if entries.is_empty() {
                                                             app.view().answers.push(
                                                                 "no custom models found".into(),
                                                             );
                                                         } else {
+                                                            app.view().answers.push(format!(
+                                                                "merged {} providers into eta.json",
+                                                                entries.len()
+                                                            ));
                                                             app.view().answers.extend(entries);
                                                         }
                                                     }
                                                     Err(error) => app.view().answers.push(format!(
-                                                        "config load error: {error}"
+                                                        "config import error: {error}"
                                                     )),
                                                 }
                                             }
