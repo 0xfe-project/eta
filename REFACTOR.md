@@ -30,7 +30,7 @@
 
 ## 二、重构任务清单（按顺序执行）
 
-### R1. config 读写修正（最优先，影响一切）
+### R1. config 读写修正（✅ 60b6c41）（最优先，影响一切）
 
 **问题**：`load_config` 每次启动从 `eta.json` + anycodingagent import 合并，结果只在内存；用户 `/model` 选完不写盘；没有 `eta.json` 时第一次启动全靠 picker 碰运气。
 
@@ -43,7 +43,7 @@
 - [ ] 环境变量优先级文档化：`ETA_MODEL` > `eta.json.model`，env 只覆盖读取、不回写。
 - [ ] 测试：tempdir 模拟 `ETA_HOME`，覆盖 首次 import 落盘 / 读写往返 / 损坏 JSON 不覆盖旧文件 / 并发写不撕裂。
 
-### R2. controller 接管 session 生命周期（TUI 瘦身核心）
+### R2. controller 接管 session 生命周期（✅ d342447）（TUI 瘦身核心）
 
 把 `app.rs` / `session/mod.rs` 里这些逻辑整体搬进 `eta-core-controller`，TUI 只拿句柄和快照：
 
@@ -57,19 +57,19 @@
 - [ ] 依赖反转：TUI 的 `Cargo.toml` 删掉 `eta-sqlite-storage` / `eta-io-tools` / `eta-system-prompts` / `eta-provider-*` / `eta-mcp` / `eta-config` / `eta-anycodingagent-config-reader`，只留 `eta-core`（事件类型）+ `eta-core-controller`。
 - [ ] 测试：controller 层用 mock provider 覆盖 spawn/resume/respawn/model 切换后 session 存活（现在 `two_sessions_run_concurrently` 这类测试应能搬到 controller 层、不依赖 ratatui）。
 
-### R3. event pump / 会话状态聚合下沉
+### R3. event pump / 会话状态聚合下沉（✅ d3ff323）
 
 - [ ] controller 新增 `SessionView`（纯数据）：`answer_blocks`、`dev_lines`、`goal`、`todos`、`memory`、`skills`、`stable_prompt`、`adaptive_prompt`、`usage`、`working`、`pending_ask`——就是现在 `App::pump` 每次算出来的那一堆。
 - [ ] `SessionHandle::poll(&mut view)` 或独立 `ViewProjector`：把 event 流翻译成 `SessionView` 增量（streaming 合并、空 turn 提示、AskUser 状态都在这层做）。
 - [ ] TUI 每帧只做 `view.render(focus, scroll)`；Web/GUI 之后复用同一个 `SessionView`，serde 序列化即可走 WebSocket。
 - [ ] `SessionView` 加 `serde::Serialize`，为 remote 前端做准备（dev 事件里注意别塞不可序列化类型）。
 
-### R4. slash 命令与输入路由下沉
+### R4. slash 命令与输入路由下沉（✅ 5612858）
 
 - [ ] `commands/mod.rs` 419 行里与 UI 无关的命令语义（`/model`、`/agent`、`/session`、`/loop`、time-travel 命令的校验与执行）搬到 controller，TUI 的 command 层只剩 keybinding → command 映射和 picker 展示。
 - [ ] `apply_time_travel`、`register_loop`、`list_loops`、`remove_loop` 这些纯转发函数从 `App` 删掉。
 
-### R5. 渲染层补强（参考 crabcode，只取对开发有用的）
+### R5. 渲染层补强（✅ f7b3b11 + 7e23c2f）（参考 crabcode，只取对开发有用的）
 
 crabcode 里值得抄的（消费级特性如主题商店/音效/upgrade 不抄）：
 
@@ -80,32 +80,32 @@ crabcode 里值得抄的（消费级特性如主题商店/音效/upgrade 不抄�
 - [ ] **滚动条**（`crabcode/src/ui/scrollbar.rs`）：长输出时知道自己在哪。
 - [ ] **thinking 统计**：status line 显示 thinking chars/chunks 独立计数。
 
-### R6. agentic loop 健壮性（参考 crabcode）
+### R6. agentic loop 健壮性（✅ 4cac675(doom/tail);StreamRollback 回归、权限 seam 未完）（参考 crabcode）
 
 - [ ] **doom loop 检测加强**：现有 `LoopDetector` 只数工具调用重复（`repeat_count >= 2`）。crabcode 还有 `tail_repetition:N@thinking`（输出尾部重复检测）。在 core 的 loop_detect 里补 content 尾部重复检测，触发后注入 corrective reminder。
 - [ ] **reasoning StreamRollback**：crabcode 在流回滚时连 reasoning 一起回滚，防止 thinking 污染历史。检查我们 compaction / retry 路径里 reasoning block 是否会被误带进下一次请求的 messages（2ae920c 做了隔离，需补一个 retry 场景的回归测试）。
 - [ ] **工具权限系统**：crabcode 有 `AutoApprove` / `AllowList`。我们目前 io tools 全放行。加 `ToolPermission` seam（core 已有 `ControlPlanePrompt`，把 io tools 的写操作接到这个 gate，dev TUI 默认 auto-approve 但留配置口）。
 - [ ] **空响应/截断重试可见性**：`StopReason::MaxTokens` 的重试现在静默发生，dev events 里加 `retry::max_tokens` 类别，方便调试。
 
-### R7. context 注入补全
+### R7. context 注入补全（✅ 7f8fa7c）
 
 - [ ] **`AGENTS.md` 自动注入**：spawn 时从 cwd 向上找 `AGENTS.md`，内容附到 adapter prompt（crabcode 有，我们没有）。注意缓存——每 turn 重读太贵，spawn 时读一次 + mtime 失效。
 - [ ] **工具参考卡注入**：crabcode 把工具描述摘要注入 system prompt。我们 adapter prompt 只列了工具名，补上每个工具的一句话 description。
 - [ ] **MCP 服务列表注入**：`mcp.json` 里配置了哪些 server 也写进 adapter prompt（现在只注入了 mcp.json 的路径）。
 - [ ] **compaction 摘要前缀**：crabcode 有 `SUMMARY_PREFIX` 告知模型"这段是另一个 LLM 写的摘要"。检查我们 compaction 写入的摘要是否有类似标记，没有则加。
 
-### R8. MCP 体验
+### R8. MCP 体验（✅ 3a39121）
 
 - [ ] **mcp.json 热重载接入 TUI**：`McpRegistry::watch` 已实现（`notify` watcher），但没接进任何地方。controller 起 watcher，registry 变更时给现有 session 推送工具列表更新（或至少在新 spawn 生效 + dev event 提示）。
 - [ ] MCP server 启动失败/dev event：现在 server 挂了静默，`CallTool` 失败才报错。spawn 时探测一次 server 可用性，失败发 dev event。
 
-### R9. provider 层对齐
+### R9. provider 层对齐（✅ ad77a5b）
 
 - [ ] **`reasoning_effort` 透传**：`ProviderConfig.options` 里的 `reasoningEffort` 传到 API 请求体（OpenAI `reasoning_effort` / Anthropic `thinking.budget_tokens`）。crabcode 每个 provider 有独立 reasoning 路径，我们 openai/anthropic 已各有一条，补参数透传即可。
 - [ ] **model→provider 反查**：给一个不带 provider 前缀的 model id 时按已知前缀推断 provider（crabcode 有）。低优先级——我们强制 `provider/model` 格式，只在 config import 迁移时有用。
 - [ ] **prompt caching 标记**：Anthropic `cache_control` 标记（system prompt + 长前缀），crabcode 有。我们 anthropic provider 检查是否已发 `cache_control`，没有则加（stable system prompt 天然受益）。
 
-### R10. 收尾：TUI 最终形态
+### R10. 收尾：TUI 最终形态（✅ a2a1661）
 
 完成 R1–R4 后，TUI 应该只剩：
 
