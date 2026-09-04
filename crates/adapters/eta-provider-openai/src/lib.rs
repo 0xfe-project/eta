@@ -277,10 +277,9 @@ impl Provider for ResponsesProvider {
                 "model": model.id,
                 "input": responses_input(&context),
                 "stream": true,
-                "store": false,
             });
             if let Some(max) = model.max_tokens {
-                body["max_output_tokens"] = json!(max);
+                body["max_tokens"] = json!(max);
             }
             if !context.tools.is_empty() {
                 body["tools"] = json!(

@@ -391,7 +391,6 @@ mod tests {
         );
         assert_eq!(parse_command("/agent"), Some(Command::Agent));
         assert_eq!(parse_command("/compact"), Some(Command::Compact));
-
     }
 
     #[test]
