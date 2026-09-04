@@ -147,40 +147,20 @@ fn config_provider_models(config: &eta_config::Config) -> impl Iterator<Item = S
 /// resolved. Emitted as a dev event at spawn time so auth problems are
 /// debuggable from the dev panel instead of a bare 403.
 
-/// Resolve a provider's API key. Order: explicit `apiKey`/`api_key` in the
-/// provider options → `$OPENAI_API_KEY` (when the imported config flags
-/// `requires_openai_auth` or `preferred_auth_method=apikey`) → `""`.
+/// Resolve a provider's API key from **the provider's own config only**.
+///
+/// Imported keys such as codex's `requires_openai_auth` are a flag on that
+/// client's auth model, not permission for us to grab credentials from the
+/// environment behind the user's back. If the options carry no
+/// `apiKey`/`api_key`, the provider runs unauthenticated and the
+/// `provider::request` dev event says `auth: none` — the user decides what
+/// to put in their config.
 pub fn resolve_api_key(cfg: &eta_config::ProviderConfig) -> &str {
-    if let Some(key) = cfg
-        .options
+    cfg.options
         .get("apiKey")
         .or_else(|| cfg.options.get("api_key"))
         .and_then(|value| value.as_str())
-    {
-        return key;
-    }
-    let needs_env = cfg
-        .options
-        .get("requires_openai_auth")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false)
-        || cfg
-            .options
-            .get("preferred_auth_method")
-            .and_then(|v| v.as_str())
-            == Some("apikey");
-    if needs_env {
-        static CACHED_ENV: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
-        let env = CACHED_ENV.get_or_init(|| {
-            std::env::var("OPENAI_API_KEY")
-                .ok()
-                .filter(|k| !k.is_empty())
-        });
-        if let Some(key) = env.as_deref() {
-            return key;
-        }
-    }
-    ""
+        .unwrap_or("")
 }
 
 /// The endpoint + auth a provider resolved to. `seed` packs it into the
@@ -594,31 +574,5 @@ mod tests {
         let config = config_with("openai");
         let (_provider, model, _) = resolve_provider_model("openai/gpt-4o", &config).unwrap();
         assert_eq!(model.api.as_deref(), Some("openai/chat-completion"));
-    }
-
-    #[test]
-    fn requires_openai_auth_pulls_key_from_env() {
-        let mut config = empty_config();
-        config.provider.insert(
-            "custom".into(),
-            ProviderConfig {
-                format: ProviderFormat::OpenAiResponses,
-                options: serde_json::json!({
-                    "baseURL": "https://api.unorouter.com/v1",
-                    "requires_openai_auth": true,
-                    "wire_api": "responses",
-                }),
-                models: [("kimi-k3".into(), ModelConfig::bare("kimi-k3"))]
-                    .into_iter()
-                    .collect(),
-            },
-        );
-        let Some((_, _, request)) = resolve_provider_model("custom/kimi-k3", &config) else {
-            panic!("provider resolves");
-        };
-        // Env may or may not be set in the test environment; both are valid —
-        // what must hold is the endpoint + api survive regardless.
-        assert_eq!(request.url, "https://api.unorouter.com/v1");
-        assert_eq!(request.api, "openai/responses");
     }
 }

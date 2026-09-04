@@ -606,8 +606,13 @@ impl AgentRuntime {
         .await;
 
         // Deterministic fallback when the LLM summarizer fails: max-min-fair
-        // truncation, marked untrusted/informational.
+        // truncation, marked untrusted/informational in the summary itself.
         let content = if summary.trim().is_empty() {
+            self.emit_dev(
+                dev_category::COMPACTION,
+                "fallback",
+                serde_json::json!({ "kind": "deterministic_truncate" }),
+            );
             match compaction::truncate_fairly(&prefix, keep_recent * 4) {
                 Some(truncated) => format!("{}\n{}", prompts::UNTRUSTED_SUMMARY_NOTE, truncated),
                 None => prompts::UNTRUSTED_SUMMARY_NOTE.to_string(),
