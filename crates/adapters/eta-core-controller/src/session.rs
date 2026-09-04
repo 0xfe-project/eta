@@ -108,6 +108,46 @@ impl SessionHandle {
     pub fn is_spawned(&self) -> bool {
         self.agent.is_some()
     }
+
+    /// Register a cron-style loop on this session's loop manager.
+    pub async fn register_loop(&self, loop_id: &str, schedule: String, prompt: String) -> bool {
+        let Some(manager) = self.loop_manager.as_ref() else {
+            return false;
+        };
+        manager
+            .register(eta_core::LoopSpec {
+                loop_id: loop_id.to_string(),
+                prompt,
+                trigger: eta_core::Trigger::Cron { schedule },
+                enabled: true,
+                last_fired_at: None,
+                run_count: 0,
+                state: serde_json::json!({}),
+            })
+            .await;
+        true
+    }
+
+    /// List registered loops as `id - prompt` display lines.
+    pub async fn list_loops(&self) -> Vec<String> {
+        let Some(manager) = self.loop_manager.as_ref() else {
+            return Vec::new();
+        };
+        manager
+            .list()
+            .await
+            .into_iter()
+            .map(|spec| format!("{} - {}", spec.loop_id, spec.prompt))
+            .collect()
+    }
+
+    /// Remove a loop by id.
+    pub async fn remove_loop(&self, loop_id: &str) -> bool {
+        let Some(manager) = self.loop_manager.as_ref() else {
+            return false;
+        };
+        manager.remove(loop_id).await
+    }
 }
 
 /// Why a spawn request could not be fulfilled. Clients map these onto their

@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use crossterm::event::KeyCode;
 
-use eta_core::{AgentInput, AskUserAnswer, LoopSpec, SessionEntry, Trigger, entry_kind};
+use eta_core::{AgentInput, AskUserAnswer, SessionEntry, entry_kind};
 use eta_core_controller::{
     self as controller, SessionManager, SpawnError, SpawnRequest, configured_model, load_config,
     model_entries, set_active_model,
@@ -349,34 +349,19 @@ impl App {
     ) -> Option<String> {
         self.loop_counter += 1;
         let loop_id = format!("loop-{}", self.loop_counter);
-        let spec = LoopSpec {
-            loop_id: loop_id.clone(),
-            prompt: prompt.clone(),
-            trigger: Trigger::Cron { schedule },
-            enabled: true,
-            last_fired_at: None,
-            run_count: 0,
-            state: json!({}),
-        };
-        let manager = self.sessions.current()?.loop_manager.as_ref()?;
-        manager.register(spec).await;
-        Some(loop_id)
+        let handle = self.sessions.current()?;
+        handle
+            .register_loop(&loop_id, schedule, prompt)
+            .await
+            .then_some(loop_id)
     }
 
     pub(crate) async fn list_loops(&mut self) -> Option<Vec<String>> {
-        let manager = self.sessions.current()?.loop_manager.as_ref()?;
-        let specs = manager.list().await;
-        Some(
-            specs
-                .into_iter()
-                .map(|spec| format!("{} - {}", spec.loop_id, spec.prompt))
-                .collect(),
-        )
+        Some(self.sessions.current()?.list_loops().await)
     }
 
     pub(crate) async fn remove_loop(&mut self, loop_id: &str) -> Option<bool> {
-        let manager = self.sessions.current()?.loop_manager.as_ref()?;
-        Some(manager.remove(loop_id).await)
+        Some(self.sessions.current()?.remove_loop(loop_id).await)
     }
 
     /// Persist a per-session model override in session KV.
