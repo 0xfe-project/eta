@@ -422,6 +422,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "eta-core-web"
+version = "0.1.0"
+dependencies = [
+ "eta-core",
+ "eta-core-controller",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "eta-fs"
 version = "0.1.0"
 dependencies = [
