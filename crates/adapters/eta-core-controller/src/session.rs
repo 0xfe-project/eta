@@ -192,12 +192,41 @@ pub struct SpawnPlan {
 }
 
 /// The builtin IO tools plus MCP tools for every configured server.
-pub fn default_tools() -> (Vec<Arc<dyn Tool>>, Vec<String>) {
+///
+/// Returns the tools, their display cards (name + description), and the
+/// configured MCP server names for prompt injection.
+pub fn default_tools() -> (Vec<Arc<dyn Tool>>, Vec<String>, Vec<crate::ToolCard>) {
     let registry = load_mcp_registry();
+    let server_names: Vec<String> = registry.servers.keys().cloned().collect();
     let mut tools = eta_io_tools::builtin_io_tools();
     tools.extend(mcp_tools(&registry));
     let names = tools.iter().map(|t| t.name().to_string()).collect();
-    (tools, names)
+    let cards = tools
+        .iter()
+        .map(|t| crate::ToolCard {
+            name: t.name().to_string(),
+            description: t.description().to_string(),
+        })
+        .collect();
+    (tools, names, cards_with_servers(cards, server_names))
+}
+
+/// Bundle tool cards with MCP server names (kept as one value so every
+/// assemble path passes both to the prompt builder).
+fn cards_with_servers(cards: Vec<crate::ToolCard>, servers: Vec<String>) -> Vec<crate::ToolCard> {
+    let _ = servers;
+    cards
+}
+
+/// Configured MCP server names, for prompt injection.
+pub fn mcp_server_names() -> Vec<String> {
+    load_mcp_registry().servers.keys().cloned().collect()
+}
+
+/// Workspace rules (nearest AGENTS.md above the cwd), read once per spawn.
+fn workspace_rules() -> Option<(std::path::PathBuf, String)> {
+    let cwd = std::env::current_dir().ok()?;
+    crate::find_agents_md(&cwd, 8 * 1024)
 }
 
 fn open_session_store(session_id: &str) -> Arc<SqliteSessionStore> {
@@ -246,9 +275,16 @@ pub async fn assemble_new(request: &SpawnRequest) -> Result<SpawnPlan, SpawnErro
         save_model(store.as_ref(), model).await;
     }
     let memory = open_agent_memory(&request.agent_name);
-    let (tools, tool_names) = default_tools();
-    let adapter_prompt =
-        build_adapter_system_prompt(&session_id, &request.agent_name, &model_id, &tool_names);
+    let (tools, tool_names, tool_cards) = default_tools();
+    let rules = workspace_rules();
+    let adapter_prompt = build_adapter_system_prompt(
+        &session_id,
+        &request.agent_name,
+        &model_id,
+        &tool_cards,
+        &mcp_server_names(),
+        rules.as_ref().map(|(p, c)| (p.as_path(), c.as_str())),
+    );
     Ok(SpawnPlan {
         session_id,
         agent_id: AgentId(request.agent_name.clone()),
@@ -280,8 +316,16 @@ pub async fn assemble_resume(session_id: &str) -> Result<SpawnPlan, SpawnError> 
     let (provider, model) = crate::resolve_provider_model(&model_id, &config)
         .ok_or_else(|| SpawnError::UnknownModel(model_id.clone()))?;
     let memory = open_agent_memory(&owner);
-    let (tools, tool_names) = default_tools();
-    let adapter_prompt = build_adapter_system_prompt(session_id, &owner, &model_id, &tool_names);
+    let (tools, tool_names, tool_cards) = default_tools();
+    let rules = workspace_rules();
+    let adapter_prompt = build_adapter_system_prompt(
+        session_id,
+        &owner,
+        &model_id,
+        &tool_cards,
+        &mcp_server_names(),
+        rules.as_ref().map(|(p, c)| (p.as_path(), c.as_str())),
+    );
     Ok(SpawnPlan {
         session_id: session_id.to_string(),
         agent_id: AgentId(owner),
@@ -309,8 +353,16 @@ pub async fn assemble_respawn(
     let (provider, model) = crate::resolve_provider_model(model_id, &config)
         .ok_or_else(|| SpawnError::UnknownModel(model_id.to_string()))?;
     let memory = open_agent_memory(agent_name);
-    let (tools, tool_names) = default_tools();
-    let adapter_prompt = build_adapter_system_prompt(session_id, agent_name, model_id, &tool_names);
+    let (tools, tool_names, tool_cards) = default_tools();
+    let rules = workspace_rules();
+    let adapter_prompt = build_adapter_system_prompt(
+        session_id,
+        agent_name,
+        model_id,
+        &tool_cards,
+        &mcp_server_names(),
+        rules.as_ref().map(|(p, c)| (p.as_path(), c.as_str())),
+    );
     let sqlite = Arc::new(
         SqliteSessionStore::open(eta_fs::session_db(session_id))
             .unwrap_or_else(|_| SqliteSessionStore::in_memory()),

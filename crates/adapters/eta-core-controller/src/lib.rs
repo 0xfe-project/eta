@@ -173,23 +173,79 @@ pub fn known_context_window(model_id: &str) -> Option<u64> {
     }
 }
 
+/// A tool's display card: name plus its one-line description.
+#[derive(Clone, Debug)]
+pub struct ToolCard {
+    pub name: String,
+    pub description: String,
+}
+
+/// Find the nearest `AGENTS.md` walking up from `dir` (workspace rules file,
+/// same convention as crabcode/claude-code). Returns the file path and its
+/// contents, capped at `max_bytes` to keep prompts bounded.
+pub fn find_agents_md(
+    dir: &std::path::Path,
+    max_bytes: usize,
+) -> Option<(std::path::PathBuf, String)> {
+    let mut dir = if dir.is_dir() {
+        dir.to_path_buf()
+    } else {
+        dir.parent()?.to_path_buf()
+    };
+    loop {
+        let candidate = dir.join("AGENTS.md");
+        if candidate.is_file() {
+            if let Ok(text) = std::fs::read_to_string(&candidate) {
+                let truncated: String = text.chars().take(max_bytes).collect();
+                return Some((candidate, truncated));
+            }
+        }
+        if !dir.pop() {
+            return None;
+        }
+    }
+}
+
 /// Build the client/adapter system prompt describing the environment, host
-/// layout, and available tools so the model knows where it is running.
+/// layout, available tools (with descriptions), configured MCP servers, and
+/// any workspace `AGENTS.md` rules found above the working directory.
 pub fn build_adapter_system_prompt(
     session_id: &str,
     agent_name: &str,
     model_id: &str,
-    tool_names: &[String],
+    tools: &[ToolCard],
+    mcp_servers: &[String],
+    agents_md: Option<(&std::path::Path, &str)>,
 ) -> String {
     let sessions_dir = eta_fs::sessions_dir();
     let agents_dir = eta_fs::agents_dir();
     let mcp_json = eta_fs::mcp_json();
     let cwd = std::env::current_dir().unwrap_or_default();
-    let tool_lines = tool_names
+    let tool_lines = tools
         .iter()
-        .map(|name| format!("- {name}"))
+        .map(|tool| {
+            let description = tool.description.lines().next().unwrap_or_default();
+            if description.is_empty() {
+                format!("- {}", tool.name)
+            } else {
+                format!("- {} — {}", tool.name, description)
+            }
+        })
         .collect::<Vec<_>>()
         .join("\n");
+    let mcp_line = if mcp_servers.is_empty() {
+        "none configured".to_string()
+    } else {
+        mcp_servers.join(", ")
+    };
+    let rules_section = match agents_md {
+        Some((path, contents)) => format!(
+            "\n\n## Workspace rules ({})\n\n{}",
+            path.display(),
+            contents
+        ),
+        None => String::new(),
+    };
     format!(
         r#"You are running as agent "{agent_name}" in session {session_id}.
 
@@ -197,13 +253,14 @@ pub fn build_adapter_system_prompt(
 - Sessions directory: {sessions}
 - Agents directory: {agents}
 - MCP config: {mcp}
+- MCP servers: {mcp_line}
 - Working directory: {cwd}
 - Model: {model_id}
 
 ## Available tools
 {tool_lines}
 
-You can reference your own session at {sessions}/{session_id}.sqlite and read other agent memories from {agents}/<name>.sqlite."#,
+You can reference your own session at {sessions}/{session_id}.sqlite and read other agent memories from {agents}/<name>.sqlite.{rules_section}"#,
         sessions = sessions_dir.display(),
         agents = agents_dir.display(),
         mcp = mcp_json.display(),
@@ -301,5 +358,62 @@ mod tests {
         assert_eq!(known_context_window("claude-sonnet-5"), Some(200_000));
         assert_eq!(known_context_window("deepseek-coder"), Some(64_000));
         assert_eq!(known_context_window("unknown-model"), None);
+    }
+
+    #[test]
+    fn find_agents_md_walks_up_from_nested_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::write(root.join("AGENTS.md"), "workspace rules here").unwrap();
+        let nested = root.join("a/b/c");
+        std::fs::create_dir_all(&nested).unwrap();
+        let (path, contents) = find_agents_md(&nested, 4096).expect("found");
+        assert_eq!(path, root.join("AGENTS.md"));
+        assert_eq!(contents, "workspace rules here");
+    }
+
+    #[test]
+    fn find_agents_md_caps_content_and_reports_none() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(find_agents_md(dir.path(), 4096).is_none());
+        std::fs::write(dir.path().join("AGENTS.md"), "x".repeat(100)).unwrap();
+        let (_, contents) = find_agents_md(dir.path(), 10).unwrap();
+        assert_eq!(contents.len(), 10);
+    }
+
+    #[test]
+    fn adapter_prompt_includes_tool_descriptions_mcp_and_rules() {
+        let dir = tempfile::tempdir().unwrap();
+        let rules_path = dir.path().join("AGENTS.md");
+        let prompt = build_adapter_system_prompt(
+            "s1",
+            "dev",
+            "openai/gpt-4o",
+            &[
+                ToolCard {
+                    name: "read_file".into(),
+                    description: "Read a file from disk".into(),
+                },
+                ToolCard {
+                    name: "mystery".into(),
+                    description: String::new(),
+                },
+            ],
+            &["github".into(), "fs".into()],
+            Some((rules_path.as_path(), "always run tests")),
+        );
+        assert!(prompt.contains("- read_file — Read a file from disk"));
+        assert!(prompt.contains("- mystery\n") || prompt.contains("- mystery"));
+        assert!(!prompt.contains("- mystery —"));
+        assert!(prompt.contains("MCP servers: github, fs"));
+        assert!(prompt.contains("## Workspace rules ("));
+        assert!(prompt.contains("always run tests"));
+    }
+
+    #[test]
+    fn adapter_prompt_without_rules_or_mcp() {
+        let prompt = build_adapter_system_prompt("s1", "dev", "openai/gpt-4o", &[], &[], None);
+        assert!(prompt.contains("MCP servers: none configured"));
+        assert!(!prompt.contains("Workspace rules"));
     }
 }
