@@ -518,18 +518,16 @@ fn responses_message(message: &Value) -> Vec<Value> {
             vec![json!({"role":"user","content":[{"type":"input_text","text":text}]})]
         }
         "assistant" => {
-            let mut items = Vec::new();
-            if let Some(content) = message.get("content").and_then(Value::as_str) {
-                if !content.is_empty() {
-                    items.push(json!({
-                        "role": "assistant",
-                        "content": [{"type": "output_text", "text": content}],
-                    }));
+            let mut content = Vec::new();
+            let mut function_calls = Vec::new();
+            if let Some(text) = message.get("content").and_then(Value::as_str) {
+                if !text.is_empty() {
+                    content.push(json!({"type": "output_text", "text": text}));
                 }
             }
             if let Some(tool_calls) = message.get("tool_calls").and_then(Value::as_array) {
                 for call in tool_calls {
-                    items.push(json!({
+                    function_calls.push(json!({
                         "type": "function_call",
                         "call_id": call.get("id").and_then(Value::as_str).unwrap_or(""),
                         "name": call.get("function").and_then(|f| f.get("name")).and_then(Value::as_str).unwrap_or(""),
@@ -537,7 +535,17 @@ fn responses_message(message: &Value) -> Vec<Value> {
                     }));
                 }
             }
-            items
+            if content.is_empty() && function_calls.is_empty() {
+                return vec![];
+            }
+            let mut msg = json!({"role": "assistant"});
+            if !content.is_empty() {
+                msg["content"] = json!(content);
+            }
+            if !function_calls.is_empty() {
+                msg["function_calls"] = json!(function_calls);
+            }
+            vec![msg]
         }
         "tool" => {
             let call_id = message
