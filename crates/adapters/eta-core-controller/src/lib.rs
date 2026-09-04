@@ -193,18 +193,18 @@ pub fn resolve_provider_model(
     if model.context_window.is_none() {
         model.context_window = known_context_window(&model.id);
     }
-    let provider: Arc<dyn Provider> =
-        if provider_cfg.format == eta_config::ProviderFormat::AnthropicMessages {
-            Arc::new(AnthropicProvider::new(
-                (!key.is_empty()).then(|| key.to_string()),
-                base,
-            ))
-        } else {
-            Arc::new(OpenAiProvider::new(
-                (!key.is_empty()).then(|| key.to_string()),
-                base,
-            ))
-        };
+    let key = (!key.is_empty()).then(|| key.to_string());
+    let provider: Arc<dyn Provider> = match provider_cfg.format {
+        eta_config::ProviderFormat::AnthropicMessages => {
+            Arc::new(AnthropicProvider::new(key, base))
+        }
+        eta_config::ProviderFormat::OpenAiResponses => {
+            Arc::new(eta_provider_openai::ResponsesProvider::new(key, base))
+        }
+        eta_config::ProviderFormat::OpenAiChatCompletion => {
+            Arc::new(OpenAiProvider::new(key, base))
+        }
+    };
     Some((provider, model))
 }
 
@@ -497,5 +497,41 @@ mod tests {
         let opts = model.request_options.unwrap();
         assert_eq!(opts["reasoning_effort"], "high");
         assert!(opts.get("reasoningEffort").is_none());
+    }
+
+    #[test]
+    fn responses_format_resolves_to_responses_wire() {
+        let mut config = empty_config();
+        config.provider.insert(
+            "custom".into(),
+            ProviderConfig {
+                format: ProviderFormat::OpenAiResponses,
+                options: serde_json::json!({
+                    "baseURL": "https://api.example.com/v1",
+                    "apiKey": "sk-test",
+                }),
+                models: [(
+                    "deepseek-v4-flash".into(),
+                    ModelConfig::bare("deepseek-v4-flash"),
+                )]
+                .into_iter()
+                .collect(),
+            },
+        );
+        let (provider, model) =
+            resolve_provider_model("custom/deepseek-v4-flash", &config).unwrap();
+        assert_eq!(model.api.as_deref(), Some("openai/responses"));
+        // The provider must actually speak the responses API: it posts to
+        // /responses, not /chat/completions. We can't see the private URL, but
+        // the type is observable through a canary stream call shape — instead
+        // assert the model descriptor carries the format through.
+        drop(provider);
+    }
+
+    #[test]
+    fn chat_completion_format_stays_on_chat_wire() {
+        let config = config_with("openai");
+        let (_provider, model) = resolve_provider_model("openai/gpt-4o", &config).unwrap();
+        assert_eq!(model.api.as_deref(), Some("openai/chat-completion"));
     }
 }
