@@ -13,7 +13,7 @@ use crate::compaction;
 use crate::dev_event::{AgentDevEvent, dev_category};
 use crate::error::classify_provider_error;
 use crate::hooks::Hooks;
-use crate::loop_detect::LoopDetector;
+use crate::loop_detect::{DoomLoopDetector, LoopDetector, tail_repetition};
 use crate::store::{MemoryStore, SessionStorage, SkillStore};
 use crate::tool::{
     CancelToken, Tool, builtin_multi_tool_use_tool, builtin_state_tools, builtin_todo_tool,
@@ -106,6 +106,7 @@ impl Agent {
             usage: usage.clone(),
             goal: None,
             loop_detector: LoopDetector::new(),
+            doom_detector: DoomLoopDetector::new(),
             answer_rx,
             pending_summary: None,
             validation_failures: 0,
@@ -229,6 +230,7 @@ struct AgentRuntime {
     usage: Arc<Mutex<Usage>>,
     goal: Option<GoalState>,
     loop_detector: LoopDetector,
+    doom_detector: DoomLoopDetector,
     answer_rx: mpsc::Receiver<AskUserAnswer>,
     pending_summary: Option<tokio::task::JoinHandle<String>>,
     validation_failures: u32,
@@ -859,7 +861,15 @@ impl AgentRuntime {
 
             // Single-message loop → inject reminder + retry once.
             if step.error.is_none() && step.had_content && !step.had_tools {
-                if self.loop_detector.observe(&step.content) {
+                let tail_stuck = tail_repetition(&step.content, 4);
+                if let Some(unit) = &tail_stuck {
+                    self.emit_dev(
+                        dev_category::LOOP,
+                        "tail_repetition",
+                        serde_json::json!({ "unit": unit, "min_repeats": 4 }),
+                    );
+                }
+                if tail_stuck.is_some() || self.loop_detector.observe(&step.content) {
                     let _ = self.output_tx.send(AgentEvent::LoopDetected);
                     if retries < max_retries {
                         retries += 1;
@@ -1010,6 +1020,27 @@ impl AgentRuntime {
                 .await;
             return;
         };
+
+        // Doom loop: the same tool with identical arguments over and over.
+        if self.doom_detector.observe(&name, &arguments) {
+            self.emit_dev(
+                dev_category::LOOP,
+                "doom_loop",
+                serde_json::json!({ "tool": name.clone(), "args": arguments.clone() }),
+            );
+            let _ = self.output_tx.send(AgentEvent::LoopDetected);
+            self.append_tool_result(
+                id,
+                serde_json::json!({
+                    "error": format!(
+                        "doom loop: tool '{name}' was called repeatedly with identical arguments; stop and try a different approach"
+                    )
+                }),
+                true,
+            )
+            .await;
+            return;
+        }
 
         let call = ToolCall {
             id: id.clone(),

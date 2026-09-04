@@ -29,7 +29,7 @@ pub use compaction::{
 pub use dev_event::{AgentDevEvent, dev_category};
 pub use error::{AgentError, ToolError, classify_provider_error};
 pub use hooks::{AgentHooks, Hooks};
-pub use loop_detect::LoopDetector;
+pub use loop_detect::{DOOM_LOOP_THRESHOLD, DoomLoopDetector, LoopDetector, tail_repetition};
 pub use loop_mgr::{LoopManager, LoopSpec, Trigger, TriggerRuntime, bootstrap_loops};
 pub use store::{
     MemoryStore, SessionEntry, SessionState, SessionStorage, Skill, SkillStore, entry_kind,
