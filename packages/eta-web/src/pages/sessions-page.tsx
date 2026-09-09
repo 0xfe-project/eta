@@ -68,6 +68,7 @@ export function SessionsPage() {
 								<>
 									<span data-testid="header-tokens" className="header-chip">tok {(view.usage.input + view.usage.output).toLocaleString()}</span>
 									<span data-testid="header-cache" className="header-chip">cache {Math.round(view.cacheRate * 100)}%</span>
+									{view.gitBranch !== undefined ? <span data-testid="header-branch" className="header-chip" title="git branch"> {view.gitBranch}</span> : null}
 									{view.cwd !== undefined ? <span data-testid="header-cwd" className="header-chip max-w-[220px] truncate" title={view.cwd}>{view.cwd}</span> : null}
 								</>
 							) : null}
