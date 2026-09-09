@@ -11,6 +11,7 @@ import { ContextPanel } from "../features/sessions/context-panel.tsx";
 import { DevRail } from "../features/sessions/dev-rail.tsx";
 import { CommandPalette } from "../features/sessions/command-palette.tsx";
 import { Welcome } from "../features/sessions/welcome.tsx";
+import { TerminalDrawer } from "../features/sessions/terminal-drawer.tsx";
 import { etaStore } from "../lib/eta-store.ts";
 
 function useRunNotifications(state: ReturnType<typeof useEta>) {
@@ -49,6 +50,7 @@ export function SessionsPage() {
 	useRunNotifications(state);
 	useDeepLink();
 	const [tab, setTab] = useState<"context" | "dev">("context");
+	const [termOpen, setTermOpen] = useState(false);
 	const shell = useShellOptional();
 	const selected = state.attach ?? state.sessions[0]?.name ?? null;
 	const view = selected === null ? undefined : state.views[selected];
@@ -75,6 +77,7 @@ export function SessionsPage() {
 								<>
 									<button data-testid="shell-toggle-left" onClick={shell.toggleLeft} className="header-chip hover:text-foreground" title={t("nav.sessions")}>▤</button>
 									<button data-testid="shell-toggle-right" onClick={shell.toggleRight} className="header-chip hover:text-foreground" title={t("nav.context")}>⧉</button>
+							<button data-testid="term-toggle" onClick={() => setTermOpen((open) => !open)} className="header-chip hover:text-foreground" title={t("term.title")}>⌨</button>
 								</>
 							) : null}
 						</span>
@@ -87,6 +90,7 @@ export function SessionsPage() {
 						<>
 							<Timeline view={view} session={selected ?? ""} running={running} />
 							<Composer session={selected ?? ""} running={running} hasPendingAsk={view.pendingAsk !== undefined} topSlot={<ContextBar session={selected ?? ""} view={view} />} onNavigateSettings={() => window.location.assign("/settings")} queue={view.queue} />
+							{termOpen ? <TerminalDrawer {...(view.cwd !== undefined ? { cwd: view.cwd } : {})} onClose={() => setTermOpen(false)} /> : null}
 							<AskModal session={selected ?? ""} view={view} />
 						</>
 					)}

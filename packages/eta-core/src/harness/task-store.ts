@@ -36,6 +36,17 @@ export class TaskStore {
 		return { task, warnings };
 	}
 
+	/** Drop a task outright; dangling references in other tasks are pruned. */
+	remove(id: string): boolean {
+		if (!this.tasks.delete(id)) return false;
+		for (const task of this.tasks.values()) {
+			if (task.dependsOn?.includes(id)) task.dependsOn = task.dependsOn.filter((dep) => dep !== id);
+			if (task.blocks?.includes(id)) task.blocks = task.blocks.filter((dep) => dep !== id);
+		}
+		this.mutate();
+		return true;
+	}
+
 	get(id: string): StoredTask | undefined {
 		return this.tasks.get(id);
 	}

@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useAppI18n } from "../../i18n.ts";
 import type { DevFrame } from "../../lib/protocol.ts";
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog.tsx";
 
 // Graphite rule: hue only where meaning demands it (failure/attention).
 const CATEGORY_COLORS: Record<string, string> = {
@@ -16,6 +17,7 @@ export function DevRail({ frames }: { frames: DevFrame[] }) {
 	const { t } = useAppI18n();
 	const [filter, setFilter] = useState("");
 	const [paused, setPaused] = useState(false);
+	const [selected, setSelected] = useState<DevFrame | null>(null);
 	const frozen = useRef<DevFrame[]>(frames);
 	if (!paused) frozen.current = frames;
 	const held = paused ? frozen.current : frames;
@@ -41,14 +43,31 @@ export function DevRail({ frames }: { frames: DevFrame[] }) {
 					.slice(-200)
 					.reverse()
 					.map((frame, index) => (
-						<div key={`${frame.ts}-${index}`} data-testid="dev-frame" className="flex gap-2 px-1 py-0.5 hover:bg-overlay">
-							<span className="text-muted">{new Date(frame.ts).toLocaleTimeString()}</span>
-							<span style={{ color: CATEGORY_COLORS[frame.category] ?? "var(--muted)" }}>{frame.category}</span>
-							<span>{frame.action}</span>
-							<span className="truncate text-muted">{JSON.stringify(frame.data)}</span>
-						</div>
+						<button
+							key={`${frame.ts}-${index}`}
+							data-testid="dev-frame"
+							onClick={() => setSelected(frame)}
+							className="flex min-w-0 gap-2 px-1 py-0.5 text-left hover:bg-overlay"
+						>
+							<span className="shrink-0 text-muted">{new Date(frame.ts).toLocaleTimeString()}</span>
+							<span className="shrink-0" style={{ color: CATEGORY_COLORS[frame.category] ?? "var(--muted)" }}>{frame.category}</span>
+							<span className="shrink-0">{frame.action}</span>
+							<span className="min-w-0 overflow-x-auto whitespace-nowrap text-muted">{JSON.stringify(frame.data)}</span>
+						</button>
 					))}
 			</div>
+			<Dialog open={selected !== null} onOpenChange={(open) => !open && setSelected(null)}>
+				<DialogContent className="max-w-[720px]" data-testid="dev-frame-dialog">
+					<DialogHeader>
+						<DialogTitle className="mono text-[11px] uppercase tracking-[0.12em]">
+							{selected === null ? "" : `${new Date(selected.ts).toLocaleTimeString()} · ${selected.category} · ${selected.action}`}
+						</DialogTitle>
+					</DialogHeader>
+					<DialogBody>
+						<pre className="mono max-h-[52vh] overflow-auto bg-code-bg p-2 text-[11px] whitespace-pre-wrap">{selected === null ? "" : JSON.stringify(selected.data, null, 2)}</pre>
+					</DialogBody>
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }

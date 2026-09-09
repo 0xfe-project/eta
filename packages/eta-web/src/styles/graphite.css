@@ -131,6 +131,13 @@ body {
 	border: 0;
 }
 
+.no-scrollbar {
+	scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+	display: none;
+}
+
 :focus-visible {
 	outline: 2px solid var(--fg);
 	outline-offset: 1px;
@@ -785,4 +792,35 @@ details[open] > .tool-card-head .thinking-block-chevron {
 .conn-dot.off {
 	background: var(--danger);
 	border-color: var(--danger);
+}
+
+.task-status-chip {
+	width: 12px;
+	height: 12px;
+	border: 2px solid var(--border-strong);
+	background: transparent;
+}
+.task-row[data-status="in_progress"] .task-status-chip {
+	border-color: var(--warning, var(--accent));
+	background: color-mix(in oklab, var(--warning, var(--accent)) 55%, transparent);
+}
+.task-row[data-status="completed"] .task-status-chip {
+	border-color: var(--primary);
+	background: var(--primary);
+}
+.task-row[data-status="completed"] [data-testid^="task-content"] {
+	text-decoration: line-through;
+	color: var(--muted);
+}
+.task-row[data-status="cancelled"] .task-status-chip {
+	border-style: dashed;
+	border-color: var(--border-strong);
+	background: transparent;
+}
+.task-row[data-status="cancelled"] [data-testid^="task-content"] {
+	text-decoration: line-through;
+	color: var(--faint, var(--muted));
+}
+.task-row:hover .task-status-chip {
+	border-color: var(--foreground);
 }

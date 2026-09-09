@@ -33,7 +33,7 @@ export function Timeline({ view, session, running = false }: { view: SessionView
 
 	return (
 		<div className="relative min-h-0 flex-1">
-			<div ref={scroller} onScroll={onScroll} data-testid="timeline" className="h-full overflow-y-auto px-6 py-4">
+			<div ref={scroller} onScroll={onScroll} data-testid="timeline" className="no-scrollbar h-full overflow-y-auto px-6 py-4">
 				<div className="mx-auto max-w-[860px]">
 				{view.messages.length === 0 && view.systems.length === 0 ? <p className="p-4 text-sm text-muted">{t("timeline.empty")}</p> : null}
 				{view.systems.map((row) => (
@@ -76,14 +76,14 @@ export function Timeline({ view, session, running = false }: { view: SessionView
 			</div>
 			</div>
 			{prompts.length > 1 ? (
-				<div data-testid="prompt-rail" className="absolute right-1 top-16 flex max-h-[60%] flex-col gap-1 overflow-y-auto">
+				<div data-testid="prompt-rail" className="no-scrollbar absolute right-1 top-16 flex max-h-[60%] flex-col items-end gap-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-1">
 					{prompts.map((entry, index) => (
 						<button
 							key={entry.entryId}
 							data-testid={`prompt-rail-${index + 1}`}
 							title={`${index + 1}`}
 							onClick={() => jumpTo(index)}
-							className="mono h-5 w-5 border border-border bg-elevated text-[9px] text-muted hover:border-border-strong hover:text-foreground"
+							className="mono flex h-5 min-w-5 shrink-0 items-center justify-center border border-border bg-elevated px-1 text-[9px] leading-none text-muted hover:border-border-strong hover:text-foreground"
 						>
 							{index + 1}
 						</button>

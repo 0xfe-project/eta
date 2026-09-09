@@ -43,11 +43,20 @@ export function ContextBar({ session, view }: { session: string; view: SessionVi
 				</div>
 			))}
 			{view.goal != null ? (
-				<div data-testid="goal-card" className="flex items-center gap-2 border border-border bg-overlay px-2 py-1">
-					<span className="mono min-w-0 flex-1 truncate text-[11px] text-muted">◆ {view.goal.objective}</span>
-					<Button size="sm" variant="ghost" onClick={() => send({ op: "goal", session, action: view.goal?.status === "active" ? "pause" : "resume" })}>
-						{view.goal.status === "active" ? t("panel.pause") : t("panel.resume")}
-					</Button>
+				<div data-testid="goal-card" data-goal-status={view.goal.status} className={`flex items-center gap-2 border px-2 py-1 ${view.goal.status === "achieved" ? "border-primary bg-overlay" : "border-border bg-overlay"}`}>
+					<span data-testid="goal-state" className="mono shrink-0 text-[11px]" style={{ color: view.goal.status === "achieved" ? "var(--primary)" : undefined }}>
+						{view.goal.status === "achieved" ? "✓" : view.goal.status === "paused" ? "⏸" : "◆"}
+					</span>
+					<span className={`mono min-w-0 flex-1 truncate text-[11px] text-muted ${view.goal.status === "achieved" ? "line-through" : ""}`}>{view.goal.objective}</span>
+					{view.goal.status === "achieved" ? (
+						<span data-testid="goal-achieved" className="mono shrink-0 border border-primary px-1.5 py-0.5 text-[9px] tracking-[0.12em] uppercase" style={{ color: "var(--primary)" }}>
+							{t("goal.achieved")}
+						</span>
+					) : (
+						<Button size="sm" variant="ghost" onClick={() => send({ op: "goal", session, action: view.goal?.status === "active" ? "pause" : "resume" })}>
+							{view.goal.status === "active" ? t("panel.pause") : t("panel.resume")}
+						</Button>
+					)}
 					<Button size="sm" variant="ghost" onClick={() => send({ op: "goal", session, action: "clear" })}>
 						{t("panel.clear")}
 					</Button>
@@ -55,7 +64,7 @@ export function ContextBar({ session, view }: { session: string; view: SessionVi
 			) : null}
 			{view.tasks.length > 0 ? (
 				<div data-testid="tasks-list" className="flex flex-wrap gap-x-3 gap-y-1">
-					{view.tasks.map((task) => (
+					{view.tasks.filter((task) => task.status !== "completed" && task.status !== "cancelled").map((task) => (
 						<button
 							key={task.id}
 							data-testid={`task-row-${task.id}`}

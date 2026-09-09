@@ -27,7 +27,12 @@ export type ClientMessage =
 	| { op: "focus"; session: string }
 	| { op: "prompt"; session: string; text: string; mode?: "queue" | "steer" }
 	| { op: "goal"; session: string; action: "set" | "pause" | "resume" | "clear"; objective?: string }
+	| { op: "taskCreate"; session: string; content: string; priority?: "high" | "medium" | "low" }
+	| { op: "taskUpdate"; session: string; id: string; content?: string; priority?: "high" | "medium" | "low" }
+	| { op: "taskRemove"; session: string; id: string }
+	| { op: "loopRemove"; session: string; id: string }
 	| { op: "loopToggle"; session: string; id: string; paused: boolean }
+	| { op: "loopCreate"; session: string; id: string; note: string; every?: string }
 	| { op: "taskSet"; session: string; id: string; status: "pending" | "in_progress" | "completed" | "cancelled" }
 	| { op: "btwOpen"; session: string; kind: "contextual" | "tangent" }
 	| { op: "btwAnswer"; session: string; threadId: string; question: string; answer: string }

@@ -6,7 +6,10 @@
  */
 
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT, EtaAgent, FileStorage } from "@eta/core";
+import { BACKGROUND_CONTEXT, EtaAgent, FileStorage, MemoryCache } from "@eta/core";
+import { homedir } from "node:os";
+import { complete } from "@earendil-works/pi-ai/compat";
+import { NodeEtaFs } from "./node-fs.ts";
 import { DEFAULT_SYSTEM_PROMPT } from "@eta/core/prompts";
 import { createModels, fauxAssistantMessage, fauxProvider, type Context, type FauxProviderHandle } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
@@ -31,6 +34,7 @@ export class UnknownPersonaError extends Error {}
 export interface CreatedSession {
 	agent: EtaAgent;
 	faux: FauxProviderHandle | undefined;
+	memory?: () => Promise<{ text: string; files: string[] }>;
 }
 
 export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSession> {
@@ -68,8 +72,54 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 		? new MemoryStorage()
 		: await FileStorage.load({ path: join(cfg.persistDir, "journal.jsonl") }, BACKGROUND_CONTEXT);
 	const session = new StorageBackedSession({ id: cfg.name, createdAt: Date.now(), storageVersion: 1, cwd: cfg.cwd }, storage);
+	const memoryCache = new MemoryCache(new NodeEtaFs(), homedir());
+	const judgeApiKey = providerApiKey(etaConfig, model.provider);
 	const agent = await EtaAgent.create(
-		{ session, models: models ?? withFaux(faux!), model, baseSystemPrompt: DEFAULT_SYSTEM_PROMPT, persona, heartbeatMs: 0 },
+		{
+			session,
+			models: models ?? withFaux(faux!),
+			model,
+			baseSystemPrompt: DEFAULT_SYSTEM_PROMPT,
+			persona,
+			heartbeatMs: 0,
+			memorySource: async () => (await memoryCache.load(cfg.cwd)).text,
+			evaluateGoal:
+				faux !== undefined
+					? async () => false
+					: async (objective, messages) => {
+							const tail = messages
+								.slice(-8)
+								.map((message) => transcriptText(message))
+								.filter((line) => line.length > 0)
+								.join("\n---\n")
+								.slice(-2_400);
+							try {
+								const verdict = await complete(
+									model,
+									{
+										systemPrompt: "You are a strict goal-completion judge. Reply with exactly ACHIEVED if the objective is fully satisfied by the shown work, otherwise CONTINUE.",
+										messages: [
+											{
+												role: "user",
+												content: `Objective: ${objective}\n\nRecent work:\n${tail}`,
+												timestamp: Date.now(),
+											},
+										],
+									},
+									{ apiKey: judgeApiKey },
+								);
+								const text = verdict.content
+									.filter((block): block is { type: "text"; text: string } => block.type === "text")
+									.map((block) => block.text)
+									.join("")
+									.trim()
+									.toUpperCase();
+								return text.startsWith("ACHIEVED");
+							} catch {
+								return false;
+							}
+						},
+		},
 		BACKGROUND_CONTEXT,
 	);
 	if (faux !== undefined) {
@@ -78,7 +128,7 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 			if (handle.getPendingResponseCount() === 0) handle.appendResponses([echoResponder(cfg.personaId)]);
 		});
 	}
-	return { agent, faux };
+	return { agent, faux, memory: async () => memoryCache.load(cfg.cwd) };
 }
 
 function withFaux(faux: FauxProviderHandle) {
@@ -106,4 +156,21 @@ function lastUserText(messages: readonly { role: string; content: unknown }[]): 
 		}
 	}
 	return "";
+}
+
+function providerApiKey(config: { providers?: { id: string; apiKey?: string }[] }, providerId: string): string {
+	const provider = (config.providers ?? []).find((entry) => entry.id === providerId);
+	return provider?.apiKey && provider.apiKey.length > 0 ? provider.apiKey : "eta-no-key";
+}
+
+function transcriptText(message: unknown): string {
+	const record = message as { role?: string; content?: unknown };
+	if (record.role !== "assistant" && record.role !== "user") return "";
+	if (typeof record.content === "string") return `${record.role}: ${record.content}`;
+	if (!Array.isArray(record.content)) return "";
+	const text = (record.content as { type?: string; text?: string }[])
+		.filter((block) => block.type === "text" && (block.text ?? "").trim().length > 0)
+		.map((block) => block.text!.trim())
+		.join("\n");
+	return text.length === 0 ? "" : `${record.role}: ${text}`;
 }

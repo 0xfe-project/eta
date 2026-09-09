@@ -23,7 +23,7 @@ const initialLocale =
 
 void i18n.use(initReactI18next).init({
 	fallbackLng: defaultLocale,
-	interpolation: { escapeValue: false },
+	interpolation: { escapeValue: false, prefix: "{", suffix: "}" },
 	keySeparator: false,
 	nsSeparator: false,
 	lng: initialLocale,

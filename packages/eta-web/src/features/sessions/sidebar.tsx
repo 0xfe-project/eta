@@ -10,6 +10,8 @@ const BADGE_STYLES: Record<string, string> = {
 	goal: "text-success",
 	"ask-pending": "bg-warning/20 text-warning",
 	loop: "bg-overlay text-muted",
+
+	"goal-done": "bg-primary/20 text-primary",
 };
 
 export function Sidebar({ selected }: { selected: string | null }) {

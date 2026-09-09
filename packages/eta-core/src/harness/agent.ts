@@ -47,7 +47,7 @@ export interface EtaAgentOptions {
 	/** Extra tools the caller owns (merged with the battery tools). */
 	tools?: readonly AgentHarnessTool<object | undefined>[];
 	/** Independent goal judge; true = achieved. */
-	evaluateGoal?: (objective: string) => Promise<boolean>;
+	evaluateGoal?: (objective: string, messages: AgentMessage[]) => Promise<boolean>;
 	askTimeoutMs?: number;
 	/** No interactive UI: ask_user degrades to this text protocol; null = no answer. */
 	askHeadless?: HeadlessAsk;
@@ -111,6 +111,17 @@ export class EtaAgent {
 
 	reportPromptBlocks(blocks: { stableChars: number; adaptiveChars: number; sections: EtaPromptSection[] }): void {
 		this.lastPromptBlocksValue = blocks;
+	}
+
+	private promptRefresh: (() => Promise<void>) | undefined = undefined;
+
+	bindPromptRefresh(fn: () => Promise<void>): void {
+		this.promptRefresh = fn;
+	}
+
+	/** Recompute prompt blocks from current state so the panel works right after restore. */
+	async refreshPromptBlocks(): Promise<void> {
+		await this.promptRefresh?.();
 	}
 
 	/** Output tokens/sec over a sliding 2s window of observed output (usage events or streaming text). */
@@ -249,25 +260,23 @@ export class EtaAgent {
 			}),
 		];
 
-		const systemPrompt =
-			options.baseSystemPrompt === undefined
-				? undefined
-				: async () => {
-						const memory = await options.memorySource?.();
-						const state = {
-							...(goal.current === undefined
-								? {}
-								: { goal: { objective: goal.current.objective, status: goal.current.status } }),
-							tasks: tasks.list(),
-							...(options.persona === undefined || options.persona.text.length === 0 ? {} : { persona: options.persona.text }),
-							...(memory === undefined || memory.length === 0 ? {} : { memory }),
-						};
-						const blocks = etaPromptBlockChars(options.baseSystemPrompt ?? "", state);
-						const detail = { ...blocks, sections: etaPromptSectionsDetailed(options.baseSystemPrompt ?? "", state) };
-						agentRef?.reportPromptBlocks(detail);
-						emit("prompt", "blocks", { ...blocks });
-						return composeEtaSystemPrompt(options.baseSystemPrompt ?? "", state);
-					};
+		const refreshBlocks = async (): Promise<string> => {
+			const memory = await options.memorySource?.();
+			const state = {
+				...(goal.current === undefined
+					? {}
+					: { goal: { objective: goal.current.objective, status: goal.current.status } }),
+				tasks: tasks.list(),
+				...(options.persona === undefined || options.persona.text.length === 0 ? {} : { persona: options.persona.text }),
+				...(memory === undefined || memory.length === 0 ? {} : { memory }),
+			};
+			const blocks = etaPromptBlockChars(options.baseSystemPrompt ?? "", state);
+			const detail = { ...blocks, sections: etaPromptSectionsDetailed(options.baseSystemPrompt ?? "", state) };
+			agentRef?.reportPromptBlocks(detail);
+			emit("prompt", "blocks", { ...blocks });
+			return composeEtaSystemPrompt(options.baseSystemPrompt ?? "", state);
+		};
+		const systemPrompt = options.baseSystemPrompt === undefined ? undefined : () => refreshBlocks();
 
 		const { harness } = await AgentHarness.create(
 			{
@@ -316,6 +325,9 @@ export class EtaAgent {
 			stopHeartbeat,
 		);
 		agentRef = agent;
+		agent.bindPromptRefresh(async () => {
+			await refreshBlocks();
+		});
 		agent.personas = options.persona?.names ?? [];
 		return agent;
 	}
