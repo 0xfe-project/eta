@@ -96,6 +96,7 @@ export class Host {
 		}, BACKGROUND_CONTEXT);
 		entry.detach = attached.detach;
 		this.attachPointerValue ??= name;
+		this.emit({ channel: "view", session: name, view: entry.view });
 	}
 
 	sidebar(): SidebarSession[] {

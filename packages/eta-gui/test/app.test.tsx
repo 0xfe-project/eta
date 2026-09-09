@@ -26,6 +26,26 @@ describeNative("G0 layout", () => {
 	});
 });
 
+describeNative("G1 cold start", () => {
+	it("renders once open finishes even when the window mounted first", async () => {
+		const { Host } = await import("../src/host.ts");
+		const { makeFauxAgent } = await import("../src/faux-agent.ts");
+		const { LiveApp } = await import("../src/main.tsx");
+		const host = new Host();
+		const ready = host.open("eta-main", () => makeFauxAgent("eta-main"));
+		const { render, renderer } = createTestRoot();
+		render(<LiveApp host={host} ready={ready} />);
+		expect(renderer.getPaintedText()).toContain("starting…");
+		await connectTest(renderer);
+		for (let attempt = 0; attempt < 100; attempt += 1) {
+			if (renderer.getPaintedText().some((line) => line.includes("ask eta anything"))) break;
+			await new Promise((resolve) => setTimeout(resolve, 20));
+		}
+		expect(renderer.getPaintedText().some((line) => line.includes("ask eta anything"))).toBe(true);
+		await host.close();
+	});
+});
+
 describeNative("G1 live turn", () => {
 	it("paints a real turn streamed through the host", async () => {
 		const { Host } = await import("../src/host.ts");

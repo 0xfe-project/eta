@@ -7,7 +7,7 @@ import type { DevFrame, ChannelFrame } from "./channels.ts";
 import type { SessionView } from "@eta/core";
 import { makeFauxAgent } from "./faux-agent.ts";
 
-export function LiveApp({ host }: { host: Host }) {
+export function LiveApp({ host, ready }: { host: Host; ready?: Promise<void> }) {
 	const [pointer, setPointer] = useState<string>(host.attachPointer ?? "eta-main");
 	const [sessions, setSessions] = useState<SidebarSession[]>(host.sidebar());
 	const [view, setView] = useState<SessionView | undefined>(host.viewOf(pointer));
@@ -28,9 +28,11 @@ export function LiveApp({ host }: { host: Host }) {
 			});
 		};
 		const off = host.subscribe((frame: ChannelFrame) => frame && refresh());
-		void host.prompt(host.attachPointer ?? "eta-main", "hello eta").catch(() => undefined);
+		void (ready ?? Promise.resolve())
+			.then(() => host.prompt(host.attachPointer ?? "eta-main", "hello eta"))
+			.catch(() => undefined);
 		return off;
-	}, [host]);
+	}, [host, ready]);
 
 	const ops: GuiOps = {
 		focus: (name) => {
@@ -79,8 +81,8 @@ const isEntryPoint =
 
 if (isEntryPoint) {
 	const host = new Host();
-	void host.open("eta-main", () => makeFauxAgent("eta-main"));
-	render(<LiveApp host={host} />, {
+	const ready = host.open("eta-main", () => makeFauxAgent("eta-main"));
+	render(<LiveApp host={host} ready={ready} />, {
 		title: "eta",
 		width: 1280,
 		height: 800,
