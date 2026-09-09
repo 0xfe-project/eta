@@ -51,6 +51,8 @@ export interface EtaAgentOptions {
 	approve?: (toolName: string, args: Record<string, unknown>) => Promise<boolean>;
 	/** Loop heartbeat interval in ms; 0 disables. Default 30s. */
 	heartbeatMs?: number;
+	/** Stable <memory> block source (e.g. MemoryCache.load); re-injected every generation. */
+	memorySource?: () => string | Promise<string>;
 }
 
 const memoryKv = (): StateKV => {
@@ -163,13 +165,16 @@ export class EtaAgent {
 		const systemPrompt =
 			options.baseSystemPrompt === undefined
 				? undefined
-				: () =>
-						composeEtaSystemPrompt(options.baseSystemPrompt ?? "", {
+				: async () => {
+						const memory = await options.memorySource?.();
+						return composeEtaSystemPrompt(options.baseSystemPrompt ?? "", {
 							...(goal.current === undefined
 								? {}
 								: { goal: { objective: goal.current.objective, status: goal.current.status } }),
 							tasks: { tasks: tasks.list(), updatedAt: new Date().toISOString() },
+							...(memory === undefined || memory.length === 0 ? {} : { memory }),
 						});
+					};
 
 		const { harness } = await AgentHarness.create(
 			{

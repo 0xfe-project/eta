@@ -118,7 +118,7 @@
 
 - [x] D1 sqlite 后端 + conformance 全绿(F0.3);重放/fork/navigation 白拿。
 - [x] D2 compaction 补两点上游没有的:tool **整对丢弃**(ratio≥25%、绝不劈半对)+ **max-min-fair 确定性兜底** + untrusted note(平移老 `compaction.rs` 纯函数,已测)。完成条件:配对完整性测试(`src/harness/compaction/eta-compaction.ts` + test/eta/compaction-eta.test.ts,失败兜底带 untrusted note)。
-- [ ] D3 durable 再注入:`buildContext` 时 goal/tasks 摘要/memory 稳定块重注,自适应块(skills/工具目录)放 cache 边界后可降级。完成条件:compaction 后语义块不丢。
+- [x] D3 durable 再注入:`buildContext` 时 goal/tasks 摘要/memory 稳定块重注,自适应块(skills/工具目录)放 cache 边界后可降级。完成条件:compaction 后语义块不丢(EtaAgent systemPrompt fn 每次 generation 现组:goal 指南+current_tasks+memory 稳定块,测于 D3 用例;自适应块在 cache 边界后由上游控制)。
 - [ ] D4 **SessionView 投影器**:基于上游已有 reducer 快照(reduceLaneSnapshot)+ telemetry 流,产出 `{messages,thinking,goal,tasks,loops,sideThread,usage,cacheRate,branch,pendingAsk}` 可序列化;attach = 重放 + 增量。完成条件:双前端并行 attach 一致。
 
 ## Part E:observability
