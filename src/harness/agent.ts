@@ -93,6 +93,8 @@ export class EtaAgent {
 	readonly ask: AskRegistry;
 	readonly btw: BtwManager;
 	readonly subagents: SubagentManager;
+	/** The KV surface the state tools operate on; the Context panel lists it. */
+	readonly stateKv: StateKV;
 		/** All tools the harness runs: battery surface plus caller extras. */
 	readonly agentTools: AgentHarnessTool<object | undefined>[];
 	/** Prompt block sizes from the last generation; undefined until the first one. */
@@ -132,6 +134,7 @@ export class EtaAgent {
 	private constructor(
 		harness: AgentHarness,
 		lane: AgentLane,
+		kv: StateKV,
 		goal: GoalManager,
 		tasks: TaskStore,
 		loops: LoopScheduler,
@@ -144,6 +147,7 @@ export class EtaAgent {
 	) {
 		this.harness = harness;
 		this.lane = lane;
+		this.stateKv = kv;
 		this.goal = goal;
 		this.tasks = tasks;
 		this.loops = loops;
@@ -183,6 +187,7 @@ export class EtaAgent {
 				void options.session.setValue(loopState(spec.def.id), spec, BACKGROUND_CONTEXT).catch(() => undefined);
 			});
 
+		const kv = options.kv ?? memoryKv();
 		const goal = new GoalManager();
 		goal.observe = emit;
 		goal.onChange = (change) => writeEntry(goalEntry(goalPayloadFor(change)));
@@ -207,7 +212,7 @@ export class EtaAgent {
 
 		const agentTools: AgentHarnessTool<object | undefined>[] = [
 			...createTaskTools(tasks, emit),
-			...createStateTools(options.kv ?? memoryKv(), emit),
+			...createStateTools(kv, emit),
 			...createLoopTools(loops),
 			...createScheduleTool(loops),
 			...createSubagentTools(subagents),
@@ -263,6 +268,7 @@ export class EtaAgent {
 		const agent = new EtaAgent(
 			harness,
 			lane,
+			kv,
 			goal,
 			tasks,
 			loops,
