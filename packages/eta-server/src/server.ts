@@ -255,6 +255,9 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 		case "modelSet":
 			await host.modelSet(message.session, message.modelId);
 			break;
+		case "thinkingLevel":
+			await host.thinkingLevel(message.session, message.level);
+			break;
 		case "queueRemove":
 			host.queueRemove(message.session, message.entryId);
 			break;

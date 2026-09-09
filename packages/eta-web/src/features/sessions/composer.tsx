@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useAppI18n } from "../../i18n.ts";
-import { etaStore } from "../../lib/eta-store.ts";
+import { etaStore, useEta } from "../../lib/eta-store.ts";
 import { Button } from "../../components/ui/button.tsx";
 import { ModelPicker } from "./model-picker.tsx";
 
@@ -241,6 +241,7 @@ export function Composer({
 									<ModelPicker {...(session === undefined ? {} : { session })} {...(createMode ? { onPick: setPickedModel } : {})} />
 								</span>
 							) : null}
+							{!createMode && session !== undefined ? <ThinkingChip session={session} /> : null}
 							{createMode && create !== undefined ? (
 								<input
 									data-testid="composer-cwd"
@@ -259,5 +260,25 @@ export function Composer({
 				</form>
 			</div>
 		</footer>
+	);
+}
+
+const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high"] as const;
+
+function ThinkingChip({ session }: { session: string }) {
+	const { t } = useAppI18n();
+	const store = etaStore();
+	const state = useEta();
+	const level = (state.views[session]?.thinkingLevel ?? "off") as (typeof THINKING_LEVELS)[number];
+	const next = THINKING_LEVELS[(THINKING_LEVELS.indexOf(level) + 1) % THINKING_LEVELS.length];
+	return (
+		<button
+			data-testid="thinking-chip"
+			title={t("composer.thinkingHint")}
+			onClick={() => store.send({ op: "thinkingLevel", session, level: next })}
+			className={`mono shrink-0 border border-border-strong px-2 py-1 text-[10px] uppercase tracking-[0.1em] ${level === "off" ? "text-muted" : "text-foreground"}`}
+		>
+			{t("composer.thinking")}:{level}
+		</button>
 	);
 }

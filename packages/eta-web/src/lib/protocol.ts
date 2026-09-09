@@ -38,6 +38,7 @@ export type ClientMessage =
 	| { op: "btwAnswer"; session: string; threadId: string; question: string; answer: string }
 	| { op: "btwAsk"; session: string; threadId: string; question: string }
 	| { op: "modelSet"; session: string; modelId: string }
+	| { op: "thinkingLevel"; session: string; level: "off" | "minimal" | "low" | "medium" | "high" }
 	| { op: "queueRemove"; session: string; entryId: string }
 	| { op: "btwSave"; session: string; threadId: string }
 	| { op: "btwClear"; session: string; threadId: string }
