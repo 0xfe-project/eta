@@ -168,7 +168,7 @@ export class Host {
 			agent,
 			projector,
 			ring,
-			view: await projector.snapshot(BACKGROUND_CONTEXT),
+			view: this.stampView({ agent, projector, ring, view: null as unknown as SessionView, running: false, queue: [], cwd: options.cwd ?? process.cwd(), persistDir: options.persistDir, created: made, detach: () => {} }),
 			running: false,
 			queue: [],
 			cwd: options.cwd ?? process.cwd(),
@@ -177,6 +177,7 @@ export class Host {
 			detach: () => {},
 		};
 		this.hosted.set(name, entry);
+		entry.view = this.stampView(entry, await projector.snapshot(BACKGROUND_CONTEXT));
 		for (const type of AGENT_EVENT_TYPES) {
 			agent.harness.events.on(type, (event: HarnessEvent) => {
 				if (type === "run_start") entry.running = true;
