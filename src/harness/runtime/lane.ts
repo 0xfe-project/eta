@@ -92,7 +92,7 @@ import {
 	setValue,
 } from "../session/values.ts";
 import type { StoredValue, Value } from "../session/values.ts";
-import { formatSkillInvocation } from "../skills.ts";
+import { formatSkillInvocation } from "../prompt-blocks.ts";
 import { durableBranchPreparation, durableCompactionPreparation } from "./drive/structural.ts";
 import { driveOperation } from "./drive.ts";
 import { readAssistantFrames } from "./progress.ts";

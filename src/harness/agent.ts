@@ -7,10 +7,11 @@
  */
 
 import type { Api, Model, Models } from "@earendil-works/pi-ai";
+import type { AgentMessage } from "../types.ts";
 import { BACKGROUND_CONTEXT, type Context } from "./context.ts";
 import { AgentHarness, type AgentLane } from "./agent-harness.ts";
 import { loopFollowUp } from "../prompts/index.ts";
-import { loopState, loopStateInventoryPrefix, taskState } from "./session/values.ts";
+import { loopState, loopStateInventoryPrefix, taskState, type Value } from "./session/values.ts";
 import type { PendingEntry, StoredTask, TaskStatus } from "./session/types.ts";
 import { applyGoalEntries } from "./goal.ts";
 import type { AgentHarnessTool } from "./types.ts";
@@ -185,17 +186,22 @@ export class EtaAgent {
 		const writeEntry = (entry: PendingEntry) => {
 			void laneRef?.append(entry, BACKGROUND_CONTEXT).catch(() => undefined);
 		};
+		const persist = <T>(address: Value<T>, value: T) => {
+			void options.session
+				.setValue(address, value, BACKGROUND_CONTEXT)
+				.catch(() => emit("state", "persist_failed", { key: address.key }));
+		};
 		const persistLoop =
 			options.persistLoop ??
 			((spec: LoopSpec) => {
-				void options.session.setValue(loopState(spec.def.id), spec, BACKGROUND_CONTEXT).catch(() => undefined);
+				persist(loopState(spec.def.id), spec);
 			});
 
 		const kv = options.kv ?? memoryKv();
 		const goal = new GoalManager();
 		goal.observe = emit;
 		goal.onChange = (change) => writeEntry(goalEntry(goalPayloadFor(change)));
-		const tasks = new TaskStore(() => void options.session.setValue(taskState, tasks.list(), BACKGROUND_CONTEXT).catch(() => undefined));
+		const tasks = new TaskStore(() => persist(taskState, tasks.list()));
 		const loops = new LoopScheduler({
 			followUpFor: (spec) => loopFollowUp(spec.def.id, spec.def.note),
 			persist: persistLoop,
@@ -206,7 +212,13 @@ export class EtaAgent {
 			onAnswer: (payload) => writeEntry(answerEntry(payload)),
 			...(options.askHeadless === undefined ? {} : { headless: options.askHeadless }),
 		});
-		const btw = new BtwManager(() => ({ messages: [] }), (note) => writeEntry(btwEntry({ note })), emit);
+		const btw = new BtwManager(
+			(entries) => ({
+				messages: (entries as { message?: AgentMessage }[]).flatMap((entry) => (entry.message === undefined ? [] : [entry.message])),
+			}),
+			(note) => writeEntry(btwEntry({ note })),
+			emit,
+		);
 		const subagentBus: SubagentBus = { emit: (type: SubagentBusEvent, payload) => emit("lifecycle", type, payload) };
 		const subagents = new SubagentManager(
 			subagentBus,
