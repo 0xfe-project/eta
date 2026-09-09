@@ -1938,6 +1938,17 @@ export class Lane<TContext extends object | undefined> implements AgentLane {
 			: this.session.scanBranch({ ...query, start, order: query.order ?? "newestFirst" }, context);
 	}
 
+	/** Entries appended during a run: durable as pending values, not yet boundary-committed. */
+	async pendingEntries(context: Context): Promise<PendingEntry[]> {
+		this.assertOpen();
+		const out: PendingEntry[] = [];
+		for (const item of inboxItems(this.state.inbox, "write")) {
+			const stored = await this.session.getValue(pendingEntry(item.entryId), context);
+			if (stored !== undefined) out.push(stored.value);
+		}
+		return out;
+	}
+
 	async findEntry(query: BranchScan | undefined, context: Context): Promise<Entry | undefined> {
 		query ??= {};
 		return (

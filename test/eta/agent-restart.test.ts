@@ -3,7 +3,7 @@
  * (entries + session values) must rebuild from storage in a fresh agent.
  */
 
-import { createModels, fauxAssistantMessage, fauxProvider, fauxText } from "@earendil-works/pi-ai";
+import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
 import { BACKGROUND_CONTEXT } from "../../src/harness/context.ts";
 import { EtaAgent } from "../../src/harness/agent.ts";
@@ -16,6 +16,7 @@ const CTX = BACKGROUND_CONTEXT;
 interface Opened {
 	agent: EtaAgent;
 	turn(): Promise<void>;
+	faux: ReturnType<typeof fauxProvider>;
 }
 
 async function openAgent(storage: MemoryStorage, laneName: string): Promise<Opened> {
@@ -26,6 +27,7 @@ async function openAgent(storage: MemoryStorage, laneName: string): Promise<Open
 	const agent = await EtaAgent.create({ session, models, model: faux.getModel(), baseSystemPrompt: "x", heartbeatMs: 0 }, CTX);
 	return {
 		agent,
+		faux,
 		turn: async () => {
 			faux.setResponses([fauxAssistantMessage([fauxText("ok")] as never)]);
 			await agent.lane.prompt("go", undefined, CTX);
@@ -59,6 +61,44 @@ describe("restart through storage", () => {
 		expect(second.agent.goal.current?.objective).toBe("ship the restart test");
 		expect(second.agent.tasks.list().map((t) => [t.id, t.content, t.status])).toEqual([["t1", "persist me", "in_progress"]]);
 		expect(second.agent.tasks.create("fresh").task.id).toBe("t2");
+	});
+
+	it("a fired loop's registry value survives the restart", async () => {
+		const storage = new MemoryStorage();
+		const first = await openAgent(storage, "eta-loop");
+		first.agent.loops.upsert({ def: { id: "tick", note: "check ci", every: "10ms" }, runCount: 0, createdAt: Date.now(), nextDueAt: Date.now() - 1, paused: false });
+		first.agent.loops.pump(Date.now() + 1);
+		await first.turn();
+		const second = await openAgent(storage, "eta-loop");
+		await second.agent.restore(CTX);
+		const specs = second.agent.loops.list();
+		expect(specs.map((spec) => [spec.def.id, spec.runCount])).toEqual([["tick", 1]]);
+	});
+
+	it("an ask pending at kill time re-surfaces from durable pending values", async () => {
+		const storage = new MemoryStorage();
+		const first = await openAgent(storage, "eta-kill");
+		first.faux.setResponses([
+			fauxAssistantMessage([fauxToolCall("ask_user", { question: "which theme?", options: [{ title: "dark" }, { title: "light" }] })] as never),
+			fauxAssistantMessage([fauxText("theme locked")] as never),
+		]);
+		const run = first.agent.lane.prompt("pick a theme", undefined, CTX);
+		for (let attempt = 0; attempt < 100 && first.agent.ask.pendingAsks().length === 0; attempt += 1) {
+			await new Promise((resolve) => setTimeout(resolve, 5));
+		}
+		expect(first.agent.ask.pendingAsks()[0]?.question).toBe("which theme?");
+
+		const second = await openAgent(storage, "eta-kill");
+		await second.agent.restore(CTX);
+		const reSurfaced = second.agent.ask.pendingAsks()[0];
+		expect(reSurfaced?.question).toBe("which theme?");
+		expect(second.agent.ask.answer(reSurfaced!.questionId, { kind: "selection", selections: ["dark"] })).toBe(true);
+
+		first.agent.ask.answer(first.agent.ask.pendingAsks()[0]!.questionId, { kind: "selection", selections: ["dark"] });
+		await run;
+		const types = (await first.agent.lane.findEntries(undefined, CTX)).map((e) => e.type);
+		expect(types).toContain("ask");
+		expect(types).toContain("answer");
 	});
 
 	it("goal entries replay in order and the achieved state wins", async () => {

@@ -282,9 +282,14 @@ export class EtaAgent {
 	/** Rebuild battery state from the replayed session log and values. */
 	async restore(context: Context): Promise<void> {
 		const entries = await this.lane.findEntries(undefined, context);
-		const changes = entries
-			.filter((e): e is Extract<typeof e, { payload: unknown }> => e.type === "goal" || e.type === "ask" || e.type === "answer" || e.type === "btw")
-			.sort((a, b) => a.seq - b.seq);
+		const isBattery = (type: string) => type === "goal" || type === "ask" || type === "answer" || type === "btw";
+		const changes: { type: string; payload: unknown }[] = entries
+			.filter((e): e is Extract<typeof e, { payload: unknown }> => isBattery(e.type))
+			.sort((a, b) => a.seq - b.seq)
+			.map((e) => ({ type: e.type, payload: e.payload }));
+		for (const pending of await this.lane.pendingEntries(context)) {
+			if (isBattery(pending.type)) changes.push({ type: pending.type, payload: pending.payload });
+		}
 		const replayGoal = this.goal.onChange;
 		this.goal.onChange = undefined;
 		try {

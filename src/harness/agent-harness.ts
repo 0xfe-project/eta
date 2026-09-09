@@ -549,6 +549,8 @@ export interface AgentLane {
 	appendCustomEntry(customType: string, data: JsonValue | undefined, context: Context): Promise<string>;
 	/** Append any entry — message, custom, or goal/ask/answer/btw — to this lane. */
 	append(entry: PendingEntry, context: Context): Promise<string>;
+	/** Entries written mid-run: durable pending values not yet chained onto the branch. */
+	pendingEntries(context: Context): Promise<PendingEntry[]>;
 	/** Join another branch's tip into this lane's history via a merge entry; idle lane only. */
 	mergeBranch(fromBranch: string, context: Context, summary?: string): Promise<string>;
 	/** Rewind the lane tip to an ancestor without summarizing. */
