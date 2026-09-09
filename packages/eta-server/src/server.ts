@@ -131,6 +131,7 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 			},
 			close(socket: Socket) {
 				sockets.delete(socket);
+				opTails.delete(socket);
 			},
 			async message(socket: Socket, raw: string | Buffer) {
 				let message: ClientMessage;
@@ -140,6 +141,8 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 					send(socket, { type: "error", message: "bad frame" });
 					return;
 				}
+				// Ops from one connection apply strictly in arrival order.
+				const run = async () => {
 				try {
 					await applyOp(host, message);
 					if (message.op === "session.create") send(socket, { type: "created", name: message.name });
@@ -149,9 +152,15 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 					const text = error instanceof UnknownPersonaError || error instanceof Error ? error.message : String(error);
 					send(socket, { type: "error", message: text });
 				}
+				};
+				const previous = opTails.get(socket) ?? Promise.resolve();
+				const chain = previous.then(run, run);
+				opTails.set(socket, chain);
+				await chain;
 			},
 		},
 	});
+	const opTails = new Map<Socket, Promise<void>>();
 	const sockets = new Set<Socket>();
 	let nextSocketId = 1;
 
