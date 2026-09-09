@@ -50,7 +50,6 @@ export {
 	UnknownTarget,
 	UnknownTemplate,
 } from "./result.ts";
-export { SliceNotImplemented } from "./runtime/types.ts";
 
 import { createAgentHarness } from "./runtime/harness.ts";
 import type { PendingEntry } from "./session/types.ts";
@@ -622,7 +621,6 @@ export interface AgentHarness<TContext extends object | undefined = object | und
 	setSteeringMode(mode: QueueMode, context: Context): Promise<void>;
 	getFollowUpMode(context: Context): Promise<QueueMode>;
 	setFollowUpMode(mode: QueueMode, context: Context): Promise<void>;
-	watchSession(context: Context): Promise<WatchHandle<SessionSnapshot>>;
 	readonly hooks: Hooks;
 	readonly events: Events;
 	close(context: Context): Promise<void>;

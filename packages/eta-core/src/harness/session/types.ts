@@ -1,13 +1,48 @@
 import type { JsonValue } from "@earendil-works/chord";
 import type { AssistantMessage, StopReason, Usage } from "@earendil-works/pi-ai";
 import type { AgentMessage, QueueMode, ThinkingLevel } from "../../types.ts";
-import type { BranchPreparation } from "../compaction/branch-summarization.ts";
-import type { CompactionPreparation, CompactionSettings } from "../compaction/compaction.ts";
 import type { Context } from "../context.ts";
 import type { AgentHarnessStreamOptions } from "../types.ts";
 import type { ListElement, ListReadOptions, ListWrite, StoredValue, Value, ValueList, ValueWrite } from "./values.ts";
 
 export type { JsonValue } from "@earendil-works/chord";
+
+/** Session-domain vocabulary shared with the compaction battery (leaf types,
+ * owned here so storage never imports upward). */
+export interface FileOperations {
+	/** Files read but not necessarily modified. */
+	read: Set<string>;
+	/** Files written by full-file write operations. */
+	written: Set<string>;
+	/** Files modified by edit operations. */
+	edited: Set<string>;
+}
+
+/** Messages and file operations selected for a branch summary. */
+export interface BranchPreparation {
+	messages: AgentMessage[];
+	fileOps: FileOperations;
+	totalTokens: number;
+}
+
+/** Tuning knobs for automatic compaction. */
+export interface CompactionSettings {
+	enabled: boolean;
+	reserveTokens: number;
+	keepRecentTokens: number;
+}
+
+/** Session entries staged for compaction, produced by the compaction battery. */
+export interface CompactionPreparation {
+	messagesToSummarize: AgentMessage[];
+	turnPrefixMessages: AgentMessage[];
+	retainedTail: AgentMessage[];
+	isSplitTurn: boolean;
+	tokensBefore: number;
+	previousSummary?: string;
+	fileOps: FileOperations;
+	settings: CompactionSettings;
+}
 
 export type SettledAssistantMessage = AssistantMessage & {
 	stopReason: Exclude<StopReason, "pending">;
@@ -93,7 +128,6 @@ export interface AskEntry extends EntryBase {
 export interface AnswerPayload {
 	questionId: string;
 	answers: string[];
-	skipped?: boolean;
 }
 
 export interface AnswerEntry extends EntryBase {

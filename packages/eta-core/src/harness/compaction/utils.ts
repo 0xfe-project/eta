@@ -1,15 +1,7 @@
 import { contentText, type Message } from "@earendil-works/pi-ai";
+import type { FileOperations } from "../session/types.ts";
+export type { FileOperations } from "../session/types.ts";
 import type { AgentMessage } from "../../types.ts";
-
-/** File paths touched by a session branch or compaction range. */
-export interface FileOperations {
-	/** Files read but not necessarily modified. */
-	read: Set<string>;
-	/** Files written by full-file write operations. */
-	written: Set<string>;
-	/** Files modified by edit operations. */
-	edited: Set<string>;
-}
 
 /** Create an empty file-operation accumulator. */
 export function createFileOps(): FileOperations {

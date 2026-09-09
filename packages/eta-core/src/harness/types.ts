@@ -5,8 +5,9 @@ import type { Context } from "./context.ts";
 import type { JsonValue } from "./session/types.ts";
 import type { TruncationResult } from "./utils/truncate.ts";
 
-/** Result of a fallible operation. Expected failures are returned as `ok: false` instead of thrown. */
-export type Result<TValue, TError> = { ok: true; value: TValue } | { ok: false; error: TError };
+/** The one Result of the codebase lives in result.ts; helpers here type against it. */
+import type { Result } from "./result.ts";
+export type { Result } from "./result.ts";
 
 /** Create a successful {@link Result}. */
 export function ok<TValue, TError>(value: TValue): Result<TValue, TError> {
