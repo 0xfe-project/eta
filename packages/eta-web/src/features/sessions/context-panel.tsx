@@ -62,13 +62,13 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 
 			<Section title={t("panel.inspect")} testid="section-inspect">
 				<div className="grid grid-cols-3 gap-1">
-					<Button data-testid="prompt-open" size="sm" variant="outline" className="border-border-strong" disabled={view.prompt === undefined} onClick={() => setPromptOpen(true)}>
+					<Button data-testid="prompt-open" size="sm" variant="outline" className="h-8 justify-start border-2 border-border-strong px-2 text-[11px] uppercase tracking-[0.12em] hover:bg-foreground hover:text-background" disabled={view.prompt === undefined} onClick={() => setPromptOpen(true)}>
 						{t("panel.viewPrompt")}
 					</Button>
-					<Button data-testid="persona-open" size="sm" variant="outline" className="border-border-strong" disabled={view.prompt === undefined && view.personas.length === 0} onClick={() => setPersonaOpen(true)}>
+					<Button data-testid="persona-open" size="sm" variant="outline" className="h-8 justify-start border-2 border-border-strong px-2 text-[11px] uppercase tracking-[0.12em] hover:bg-foreground hover:text-background" disabled={view.prompt === undefined && view.personas.length === 0} onClick={() => setPersonaOpen(true)}>
 						{t("panel.personas")}
 					</Button>
-					<Button data-testid="json-open" size="sm" variant="outline" className="border-border-strong" onClick={() => setJsonOpen(true)}>
+					<Button data-testid="json-open" size="sm" variant="outline" className="h-8 justify-start border-2 border-border-strong px-2 text-[11px] uppercase tracking-[0.12em] hover:bg-foreground hover:text-background" onClick={() => setJsonOpen(true)}>
 						{t("panel.viewJson")}
 					</Button>
 				</div>
