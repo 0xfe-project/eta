@@ -15,6 +15,17 @@ export class TaskStore {
 	private tasks = new Map<string, StoredTask>();
 	private nextId = 1;
 
+	/** Fires after every create/update so the owner can persist the whole list. */
+	private readonly onMutate: (() => void) | undefined;
+
+	constructor(onMutate?: () => void) {
+		this.onMutate = onMutate;
+	}
+
+	private mutate(): void {
+		this.onMutate?.();
+	}
+
 	/** Rebuild the store from persisted tasks; ids are never reused across a restore. */
 	restore(tasks: StoredTask[]): void {
 		this.tasks = new Map(tasks.map((task) => [task.id, task]));
@@ -27,6 +38,7 @@ export class TaskStore {
 		const task: StoredTask = { id, content, status: "pending", priority: extra.priority, dependsOn: [], blocks: [] };
 		this.tasks.set(id, task);
 		const warnings = this.setDeps(task, extra.deps ?? []);
+		this.mutate();
 		return { task, warnings };
 	}
 
@@ -49,6 +61,7 @@ export class TaskStore {
 		if (patch.content !== undefined) task.content = patch.content;
 		if (patch.priority !== undefined) task.priority = patch.priority;
 		if (patch.deps !== undefined) warnings.push(...this.setDeps(task, patch.deps));
+		this.mutate();
 		return { task, warnings };
 	}
 

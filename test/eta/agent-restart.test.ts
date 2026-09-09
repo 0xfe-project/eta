@@ -51,12 +51,13 @@ describe("restart through storage", () => {
 		first.agent.goal.set("ship the restart test");
 		const create = first.agent.agentTools.find((t) => t.name === "TaskCreate")!;
 		await create.execute("c1", { content: "persist me" }, () => {}, undefined, {} as never, CTX);
+		expect(first.agent.setTask("t1", { status: "in_progress" })?.task.status).toBe("in_progress");
 		await first.turn();
 
 		const second = await openAgent(storage, "eta-restart");
 		await second.agent.restore(CTX);
 		expect(second.agent.goal.current?.objective).toBe("ship the restart test");
-		expect(second.agent.tasks.list().map((t) => [t.id, t.content])).toEqual([["t1", "persist me"]]);
+		expect(second.agent.tasks.list().map((t) => [t.id, t.content, t.status])).toEqual([["t1", "persist me", "in_progress"]]);
 		expect(second.agent.tasks.create("fresh").task.id).toBe("t2");
 	});
 

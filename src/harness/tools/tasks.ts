@@ -14,9 +14,8 @@ export type { TaskStatus };
 export const TASK_TOOL_NAMES: ReadonlySet<string> = new Set(["TaskCreate", "TaskList", "TaskGet", "TaskUpdate"]);
 
 /** TaskCreate / TaskList / TaskGet / TaskUpdate over a TaskStore. */
-export function createTaskTools(store: TaskStore, onChange?: () => void, observe?: EtaEmit): AgentHarnessTool<object | undefined, any, any>[] {
+export function createTaskTools(store: TaskStore, observe?: EtaEmit): AgentHarnessTool<object | undefined, any, any>[] {
 	const notify = (action?: string, data?: Record<string, unknown>) => {
-		onChange?.();
 		if (action !== undefined) observe?.("todo", action, data);
 	};
 	return [

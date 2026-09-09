@@ -77,7 +77,7 @@ describe("batteries emit on the shared sink", () => {
 		expect(await btw.flushQueued()).toBe(1);
 
 		const store = new TaskStore();
-		const taskTools = createTaskTools(store, undefined, c.emit);
+		const taskTools = createTaskTools(store, c.emit);
 		await taskTools[0]!.execute("c1", { content: "step one" }, NOOP, undefined, {} as never, CTX);
 		await taskTools[3]!.execute("c2", { id: store.list()[0]!.id, status: "completed" }, NOOP, undefined, {} as never, CTX);
 
