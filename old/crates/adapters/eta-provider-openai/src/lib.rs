@@ -64,6 +64,7 @@ impl Provider for OpenAiProvider {
                     }
                 }
             }
+            eprintln!("[responses] request body: {}", serde_json::to_string_pretty(&body).unwrap_or_default());
             let mut req = client.post(url).json(&body);
             if let Some(key) = key {
                 req = req.bearer_auth(key);
@@ -303,6 +304,7 @@ impl Provider for ResponsesProvider {
                 }
             }
 
+            eprintln!("[responses] request body: {}", serde_json::to_string_pretty(&body).unwrap_or_default());
             let mut req = client.post(url).json(&body);
             if let Some(key) = key {
                 req = req.bearer_auth(key);
