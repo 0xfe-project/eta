@@ -67,6 +67,7 @@ interface Hosted {
 	running: boolean;
 	queue: LaneQueuedItem[];
 	cwd: string;
+	gitBranch?: string;
 	persistDir?: string;
 	created: CreatedSession;
 	detach(): void;
@@ -172,12 +173,14 @@ export class Host {
 			running: false,
 			queue: [],
 			cwd: options.cwd ?? process.cwd(),
+			gitBranch: undefined as string | undefined,
 			persistDir: options.persistDir,
 			created: made,
 			detach: () => {},
 		};
 		this.hosted.set(name, entry);
 		entry.view = this.stampView(entry, await projector.snapshot(BACKGROUND_CONTEXT));
+		this.refreshBranch(name);
 		for (const type of AGENT_EVENT_TYPES) {
 			agent.harness.events.on(type, (event: HarnessEvent) => {
 				if (type === "run_start") entry.running = true;
@@ -356,10 +359,31 @@ export class Host {
 	}
 
 	/** Lane queue items ride the view so the composer renders the real queue, not guesses. */
+	/** Best-effort git branch of the session cwd; stamped into the header on success. */
+	private refreshBranch(name: string): void {
+		const entry = this.hosted.get(name);
+		if (entry === undefined) return;
+		try {
+			const proc = Bun.spawn(["git", "rev-parse", "--abbrev-ref", "HEAD"], { cwd: entry.cwd, stdout: "pipe", stderr: "ignore" });
+			void proc.exited.then(async (code) => {
+				if (code !== 0) return;
+				const branch = (await new Response(proc.stdout as ReadableStream).text()).trim();
+				if (branch.length === 0 || branch.length > 60) return;
+				const hosted = this.hosted.get(name);
+				if (hosted === undefined) return;
+				hosted.gitBranch = branch;
+				this.refreshView(name);
+			});
+		} catch {
+			/* git missing or cwd not a checkout */
+		}
+	}
+
 	private stampView(entry: Hosted, view: SessionView = entry.view): SessionView {
 		return {
 			...view,
 			cwd: entry.cwd,
+			...(entry.gitBranch === undefined ? {} : { gitBranch: entry.gitBranch }),
 			queue: entry.queue.map((item) => ({
 				entryId: item.entryId,
 				kind: item.kind,
