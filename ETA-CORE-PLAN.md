@@ -61,7 +61,7 @@
 
 - [x] 落地:`src/eta/ask.ts` AskRegistry(pending/answer/timeout/abort→none、`replay()` 重启重挂未决)+ `createAskUserTool`(questionId=invocationId,onAsk 先写 `eta.ask`);kill-重启全链路集成测试随 M4 harness。
 
-- [ ] core 按名拦截,发 `AskUserStarted` 挂起 step 等 `answer()`。**它的 execute 本质 = await UI 组件的 Promise**(index.ts:2211-2260):抄 abort signal→null、timeout→`done(null)`、finally 发 blocked/unblocked(= 我们的 dev 事件)。
+- [x] core 按名拦截,发 `AskUserStarted` 挂起 step 等 `answer()`。**它的 execute 本质 = await UI 组件的 Promise**(index.ts:2211-2260):抄 abort signal→null、timeout→`done(null)`、finally 发 blocked/unblocked(= 我们的 dev 事件)。
 - [x] schema 抄:`question/context/options[{title,description}](扁平避 anyOf)/allowMultiple/allowFreeform`;别名键归一化(`normalizeAskOptions`:label/text/value/name→title,测过);结果信封 `AskResponse = {kind:"selection",selections,comment?} | {kind:"freeform",text}`。timeout 参数并入 AskRegistry.ask opts。
 - [ ] headless 语义抄它:无交互 UI 时降级为简单 select/input 协议(index.ts:2311),失败回文本 tool_result。
 - [x] **它没有的,我们加**:`eta.ask` entry 持久化 pending,kill→重启→重发未决问题→回填续跑。完成条件:四路单测(选择/填空/超时/取消)+ kill-重启集成测试。
@@ -123,7 +123,7 @@
 
 ## Part E:observability
 
-- [ ] telemetry category 对齐老 14 类 + 电池扩展(`loop: fired/paused/expired/suppressed`、`ask: asked/answered/expired`、`btw: opened/injected/summarized/saved`)。完成条件:混合 turn 全类别可观测,内存实现测过。
+- [x] telemetry category 对齐老 14 类 + 电池扩展(`loop: fired/paused/expired/suppressed`、`ask: asked/answered/expired`、`btw: opened/injected/summarized/saved`)。完成条件:混合 turn 全类别可观测,内存实现测过。
 
 ## Part F:验证(GUI-PLAN.md 的 G 系列并入,day-0 起 GUI 就是 harness)
 

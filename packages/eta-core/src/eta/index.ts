@@ -15,3 +15,5 @@ export * from "./ask.ts";
 export * from "./loops.ts";
 export * from "./btw.ts";
 export * from "./subagent.ts";
+export * from "./dev-events.ts";
+export * from "./dev-bridge.ts";

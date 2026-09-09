@@ -8,6 +8,7 @@
 import { Type } from "typebox";
 import { awaitWithContext } from "../harness/context.ts";
 import type { AgentHarnessTool } from "../harness/types.ts";
+import type { DevEmit } from "./dev-events.ts";
 import { ASK_CUSTOM_TYPE, type AskPayload } from "./entries.ts";
 
 export type AskResponse =
@@ -22,27 +23,34 @@ interface PendingAsk {
 
 export class AskRegistry {
 	private pending = new Map<string, PendingAsk>();
+	private readonly dev: DevEmit | undefined;
+
+	constructor(opts: { dev?: DevEmit } = {}) {
+		this.dev = opts.dev;
+	}
 
 	/** The tool waits on this; abort/timeout resolve to "none", never hang. */
 	ask(payload: AskPayload, opts: { timeoutMs?: number; signal?: AbortSignal } = {}): Promise<AskResponse> {
 		return new Promise<AskResponse>((resolve) => {
 			let done = false;
-			const settle = (response: AskResponse) => {
+			const settle = (response: AskResponse, action: string) => {
 				if (done) return;
 				done = true;
 				this.pending.delete(payload.questionId);
 				if (timer !== undefined) clearTimeout(timer);
 				opts.signal?.removeEventListener("abort", onAbort);
+				this.dev?.("ask_user", action, { questionId: payload.questionId, kind: response.kind });
 				resolve(response);
 			};
 			let timer: ReturnType<typeof setTimeout> | undefined;
 			if (opts.timeoutMs !== undefined) {
-				timer = setTimeout(() => settle({ kind: "none" }), opts.timeoutMs);
+				timer = setTimeout(() => settle({ kind: "none" }, "expired"), opts.timeoutMs);
 				timer.unref?.();
 			}
-			const onAbort = () => settle({ kind: "none" });
+			const onAbort = () => settle({ kind: "none" }, "canceled");
 			opts.signal?.addEventListener("abort", onAbort, { once: true });
-			this.pending.set(payload.questionId, { payload, settle });
+			this.pending.set(payload.questionId, { payload, settle: (response) => settle(response, "answered") });
+			this.dev?.("ask_user", "asked", { questionId: payload.questionId });
 		});
 	}
 
