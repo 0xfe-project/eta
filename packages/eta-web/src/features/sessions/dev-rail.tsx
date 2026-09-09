@@ -15,11 +15,19 @@ const CATEGORY_COLORS: Record<string, string> = {
 export function DevRail({ frames }: { frames: DevFrame[] }) {
 	const { t } = useAppI18n();
 	const [filter, setFilter] = useState("");
+	const [paused, setPaused] = useState(false);
+	const [held, setHeld] = useState<DevFrame[]>(frames);
+	if (!paused) setHeld(frames);
 	const needle = filter.trim().toLowerCase();
-	const shown = needle.length === 0 ? frames : frames.filter((f) => f.category.toLowerCase().includes(needle) || f.action.toLowerCase().includes(needle));
+	const shown = needle.length === 0 ? held : held.filter((f) => f.category.toLowerCase().includes(needle) || f.action.toLowerCase().includes(needle));
 
 	return (
 		<div className="flex h-full flex-col p-2" data-testid="dev-rail">
+			<div className="mb-2 flex gap-2">
+				<button data-testid="dev-pause" onClick={() => setPaused(!paused)} className="rounded-lg border border-border px-2 py-1 text-[10px] text-muted">
+					{paused ? "resume" : "pause"}
+				</button>
+			</div>
 			<input
 				data-testid="dev-filter"
 				value={filter}

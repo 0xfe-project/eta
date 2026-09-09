@@ -22,6 +22,13 @@ export function Timeline({ view }: { view: SessionView }) {
 		setPinned(node.scrollHeight - node.scrollTop - node.clientHeight <= 32);
 	};
 
+	const prompts = view.messages.filter((entry) => entry.message.role === "user");
+
+	const jumpTo = (index: number) => {
+		const node = document.getElementById(`eta-msg-${prompts[index]?.entryId ?? ""}`);
+		node?.scrollIntoView({ behavior: "smooth", block: "start" });
+	};
+
 	return (
 		<div className="relative min-h-0 flex-1">
 			<div ref={scroller} onScroll={onScroll} data-testid="timeline" className="h-full overflow-y-auto px-4 py-3">
@@ -32,9 +39,26 @@ export function Timeline({ view }: { view: SessionView }) {
 					</div>
 				))}
 				{view.messages.map((entry) => (
-					<MessageRow key={entry.entryId} role={entry.message.role} message={entry.message} />
+					<div key={entry.entryId} id={`eta-msg-${entry.entryId}`}>
+						<MessageRow role={entry.message.role} message={entry.message} />
+					</div>
 				))}
 			</div>
+			{prompts.length > 1 ? (
+				<div data-testid="prompt-rail" className="absolute right-1 top-16 flex max-h-[60%] flex-col gap-1 overflow-y-auto">
+					{prompts.map((entry, index) => (
+						<button
+							key={entry.entryId}
+							data-testid={`prompt-rail-${index + 1}`}
+							title={`${index + 1}`}
+							onClick={() => jumpTo(index)}
+							className="mono h-5 w-5 rounded-full border border-border bg-elevated text-[9px] text-muted hover:border-border-strong hover:text-foreground"
+						>
+							{index + 1}
+						</button>
+					))}
+				</div>
+			) : null}
 			{pinned ? null : (
 				<button
 					data-testid="new-activity"
