@@ -13,6 +13,7 @@ import { BACKGROUND_CONTEXT, EtaAgent, SessionViewProjector, type HarnessEvent, 
 import { DevRing, type ChannelFrame, type DevFrame, type SidebarSession } from "./protocol.ts";
 import { configDefaultModel, etaConfigPath, loadEtaConfig, type EtaConfig } from "./config.ts";
 import { createSessionAgent, type CreatedSession } from "./agent.ts";
+import { renderPersonaFor } from "./personas.ts";
 
 const AGENT_EVENT_TYPES = [
 	"run_start",
@@ -67,6 +68,7 @@ interface Hosted {
 	running: boolean;
 	queue: LaneQueuedItem[];
 	cwd: string;
+	updated: number;
 	gitBranch?: string;
 	persistDir?: string;
 	created: CreatedSession;
@@ -169,10 +171,11 @@ export class Host {
 			agent,
 			projector,
 			ring,
-			view: this.stampView({ agent, projector, ring, view: null as unknown as SessionView, running: false, queue: [], cwd: options.cwd ?? process.cwd(), persistDir: options.persistDir, created: made, detach: () => {} }),
+			view: this.stampView({ agent, projector, ring, view: null as unknown as SessionView, running: false, queue: [], cwd: options.cwd ?? process.cwd(), updated: Date.now(), persistDir: options.persistDir, created: made, detach: () => {} }),
 			running: false,
 			queue: [],
 			cwd: options.cwd ?? process.cwd(),
+			updated: Date.now(),
 			gitBranch: undefined as string | undefined,
 			persistDir: options.persistDir,
 			created: made,
@@ -234,9 +237,9 @@ export class Host {
 		if (this.attachPointerValue === name) this.attachPointerValue = this.hosted.keys().next().value ?? null;
 	}
 
-	private readonly meta = new Map<string, { title?: string; pinned?: boolean; archived?: boolean; modelId?: string }>();
+	private readonly meta = new Map<string, { title?: string; pinned?: boolean; archived?: boolean; modelId?: string; personaId?: string }>();
 
-	setMeta(name: string, patch: { pinned?: boolean; archived?: boolean; modelId?: string; title?: string }): void {
+	setMeta(name: string, patch: { pinned?: boolean; archived?: boolean; modelId?: string; title?: string; personaId?: string }): void {
 		this.meta.set(name, { ...this.meta.get(name), ...patch });
 		const persistDir = this.hosted.get(name)?.persistDir;
 		if (persistDir !== undefined) {
@@ -301,6 +304,8 @@ export class Host {
 			...(this.autoTitle(name) === undefined ? {} : { title: this.autoTitle(name) }),
 			...(this.meta.get(name)?.pinned === true ? { pinned: true } : {}),
 			...(this.meta.get(name)?.archived === true ? { archived: true } : {}),
+			cwd: entry.cwd,
+			updated: entry.updated,
 			badges: [
 				...(entry.running ? ["running"] : []),
 				...(entry.view.goal?.status === "active" ? ["goal"] : []),
@@ -472,6 +477,7 @@ export class Host {
 	private refreshView(name: string): void {
 		const entry = this.hosted.get(name);
 		if (entry === undefined) return;
+		entry.updated = Date.now();
 		entry.view = this.stampView(entry);
 		this.emit({ channel: "view", session: name, view: entry.view });
 	}
@@ -507,6 +513,19 @@ export class Host {
 	}
 
 	/** Hot-swap the configured model (real providers only) and remember the choice. */
+	/** Swap a live session's persona and persist the choice in meta.json. */
+	async personaSet(name: string, personaId: string): Promise<void> {
+		const entry = this.hosted.get(name);
+		if (entry === undefined) return;
+		const persona = await renderPersonaFor(entry.cwd, personaId);
+		if (persona === undefined) return;
+		entry.agent.applyPersona(persona);
+		this.setMeta(name, { personaId });
+		entry.updated = Date.now();
+		entry.view = this.stampView(entry, await entry.projector.snapshot(BACKGROUND_CONTEXT));
+		this.emit({ channel: "view", session: name, view: entry.view });
+	}
+
 	async thinkingLevel(name: string, level: "off" | "minimal" | "low" | "medium" | "high"): Promise<void> {
 		await this.must(name).lane.setThinkingLevel(level, BACKGROUND_CONTEXT);
 		this.refreshView(name);
