@@ -53,8 +53,6 @@ export interface EtaAgentOptions {
 	kv?: StateKV;
 	subagentRunner?: SubagentRunner;
 	poolSize?: number;
-	/** Approval callback for anything the agent marks approval-worthy (fail-closed). */
-	approve?: (toolName: string, args: Record<string, unknown>) => Promise<boolean>;
 	/** Loop heartbeat interval in ms; 0 disables. Default 30s. */
 	heartbeatMs?: number;
 	/** Stable <memory> block source (e.g. MemoryCache.load); re-injected every generation. */
@@ -207,15 +205,6 @@ export class EtaAgent {
 		harness.hooks.on("before_run_end", goalDriver({ goal, evaluate: options.evaluateGoal ?? (() => Promise.resolve(false)) }), { id: "eta.goal" });
 		harness.hooks.on("before_run_end", loopDriver(loops), { id: "eta.loop" });
 		harness.hooks.on("before_run_end", emptyResponseGuard(), { id: "eta.empty" });
-		if (options.approve !== undefined) {
-			const approve = options.approve;
-			harness.hooks.on(
-				"before_tool",
-				async (event: { toolName: string; args: Record<string, unknown> }) =>
-					(await approve(event.toolName, event.args)) ? undefined : { block: { reason: "permission denied" } },
-				{ id: "eta.approval" },
-			);
-		}
 		const stopHeartbeat = options.heartbeatMs === 0 ? undefined : startLoopHeartbeat(loops, options.heartbeatMs ?? 30_000);
 		return new EtaAgent(
 			harness,

@@ -53,7 +53,7 @@
 | memory | 水位条 + 条目 | 打开 `.eta/MEMORY.md`、清空段 |
 | task | tasks 卡(DAG) | 改状态/删/加 |
 | state | KV 列表 | set/delete |
-| tool | timeline 工具行(校验失败×3→ask 可见) | requires_approval **Allow/Deny 弹窗**(fail-closed 的 UI 面) |
+| tool | timeline 工具行(校验失败×3→ask 可见) | —(无审批门:一切工具最高权限) |
 | retry | timeline 行内徽标 | — |
 | ask | 弹窗 + `eta.ask` 历史 | answer |
 | btw | sideThread 面板 + modal | 新线程/inject/summarize/clear |
@@ -86,7 +86,7 @@
 | G1 | M1 | 真 turn 流+retry/loop 系统行 | T3 的 turn 段(真 turn 流已通:faux 模型经 Host 三通道渲染进 timeline,test/app.test.tsx G1;retry/loop 系统行随 L2) |
 | G2 | M2 | tasks 卡(reminder 注入可见) | DAG 渲染+操作 |
 | G3 | M3 | goal 卡+控制 | 续命/暂停在屏上可见 |
-| G4 | M4 | ask 弹窗+fail-closed 授权弹窗 | kill-重启-弹-答续跑 |
+| G4 | M4 | ask 弹窗 | kill-重启-弹-答续跑 |
 | G5 | M5 | compaction 行+Context/epoch/cacheRate | 压缩前后对照 |
 | G6 | M6 | loops 卡+bootstrap 恢复 | 重启后 loops 在、到点火 |
 | G7 | M7-M8 | memory 水位+fleet 行 | 抽取/subagent 可见 |

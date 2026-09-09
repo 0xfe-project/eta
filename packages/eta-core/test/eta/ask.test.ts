@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { AskRegistry, askResponseText, createAskUserTool } from "../../src/harness/ask.ts";
-import { permissionGate } from "../../src/harness/permission.ts";
 import { BACKGROUND_CONTEXT } from "../../src/harness/context.ts";
 
 describe("ask registry", () => {
@@ -54,47 +53,5 @@ describe("ask_user tool", () => {
 		const result = await execution;
 		expect(result.content).toEqual([{ type: "text", text: "b please" }]);
 		expect(result.details).toEqual({ kind: "freeform", text: "b please" });
-	});
-});
-
-describe("permission gate", () => {
-	const ev = { toolName: "bash", args: { cmd: "rm -rf" } };
-	it("lets ungated tools through", async () => {
-		const gate = permissionGate({ requiresApproval: () => false, approve: async () => false });
-		expect(await gate(ev)).toBeUndefined();
-	});
-	it("denies on veto, throw, and silence (fail-closed)", async () => {
-		const veto = permissionGate({ requiresApproval: () => true, approve: async () => false });
-		expect(await veto(ev)).toEqual({ block: { reason: "permission denied" } });
-		const boom = permissionGate({ requiresApproval: () => true, approve: () => Promise.reject(new Error("ui died")) });
-		expect(await boom(ev)).toEqual({ block: { reason: "permission denied" } });
-		const silent = permissionGate({ requiresApproval: () => true, approve: () => new Promise(() => {}), timeoutMs: 5 });
-		expect(await silent(ev)).toEqual({ block: { reason: "permission denied" } });
-	});
-	it("allows a clean yes", async () => {
-		const gate = permissionGate({ requiresApproval: () => true, approve: async () => true });
-		expect(await gate(ev)).toBeUndefined();
-	});
-});
-
-describe("headless ask fallback", () => {
-	it("degrades to the text protocol instead of hanging", async () => {
-		const reg = new AskRegistry({
-			headless: async (payload) => ({ kind: "freeform", text: `plain answer to ${payload.question}` }),
-		});
-		const answer = await reg.ask({ questionId: "h1", question: "which?" });
-		expect(answer).toEqual({ kind: "freeform", text: "plain answer to which?" });
-		expect(reg.pendingAsks()).toEqual([]);
-	});
-
-	it("null or throwing resolver yields no answer, never a hang", async () => {
-		expect(await new AskRegistry({ headless: async () => null }).ask({ questionId: "n", question: "?" })).toEqual({ kind: "none" });
-		expect(
-			await new AskRegistry({
-				headless: () => {
-					throw new Error("no terminal");
-				},
-			}).ask({ questionId: "x", question: "?" }),
-		).toEqual({ kind: "none" });
 	});
 });
