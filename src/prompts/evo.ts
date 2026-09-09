@@ -17,4 +17,4 @@ Output ONLY a JSON object:
 If nothing is worth keeping, output the same object with all empty arrays.`;
 
 export const MEMORY_EXTRACT_SYSTEM_PROMPT =
-	"You are a memory extractor for a coding assistant. Be terse and specific.";
+	"You keep notes on what's worth remembering about this person and their work. Be terse and specific.";

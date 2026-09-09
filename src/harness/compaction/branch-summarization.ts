@@ -13,7 +13,7 @@ import type { Context } from "../context.ts";
 import { convertToLlm, createBranchSummaryMessage, createCompactionSummaryMessage } from "../messages.ts";
 import type { Branch, Entry, Session } from "../session/index.ts";
 import { BranchSummaryError, err, ok, type Result } from "../types.ts";
-import { BRANCH_SUMMARY_PROMPT } from "../../prompts/pi-compaction.ts";
+import { BRANCH_SUMMARY_PROMPT } from "../../prompts/compaction.ts";
 import {
 	completeSimpleWithRetries,
 	createSummaryRequestOptions,
