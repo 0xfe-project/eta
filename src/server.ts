@@ -91,6 +91,12 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 			if (url.pathname === "/api/health") {
 				return Response.json({ ok: true });
 			}
+			if (url.pathname === "/api/memory") {
+				const memorySession = url.searchParams.get("session");
+				const loader = memorySession === null ? undefined : host.memoryText(memorySession);
+				if (loader === undefined) return Response.json({ text: "", files: [] });
+				return Response.json(await loader);
+			}
 			if (url.pathname === "/api/personas") {
 				return Response.json(await listPersonaSummaries(cwd));
 			}
@@ -219,8 +225,23 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 		case "goal":
 			host.goal(message.session, message.action, message.objective);
 			return;
+		case "loopRemove":
+			host.loopRemove(message.session, message.id);
+			return;
 		case "loopToggle":
 			host.loopToggle(message.session, message.id, message.paused);
+			return;
+		case "loopCreate":
+			host.loopCreate(message.session, message.id, message.note, message.every);
+			return;
+		case "taskCreate":
+			host.taskCreate(message.session, message.content, message.priority);
+			return;
+		case "taskUpdate":
+			host.taskUpdate(message.session, message.id, { ...(message.content === undefined ? {} : { content: message.content }), ...(message.priority === undefined ? {} : { priority: message.priority }) });
+			return;
+		case "taskRemove":
+			host.taskRemove(message.session, message.id);
 			return;
 		case "taskSet":
 			host.taskSet(message.session, message.id, message.status);

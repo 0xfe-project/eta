@@ -6,7 +6,7 @@
  */
 
 import { readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT, EtaAgent, SessionViewProjector, type HarnessEvent, type LaneQueuedItem, type SessionView } from "@eta/core";
@@ -153,11 +153,21 @@ export class Host {
 		const made = await create();
 		const agent = made.agent;
 		if (options.restore === true) await agent.restore(BACKGROUND_CONTEXT);
+		await agent.refreshPromptBlocks();
 		const projector = new SessionViewProjector(agent);
+		const ring = new DevRing();
+		if (options.persistDir !== undefined) {
+			try {
+				const lines = (await readFile(join(options.persistDir, "dev.jsonl"), "utf8")).split("\n").filter((line) => line.length > 0);
+				ring.seed(lines.slice(-512).map((line) => JSON.parse(line) as DevFrame));
+			} catch {
+				/* first boot for this session */
+			}
+		}
 		const entry: Hosted = {
 			agent,
 			projector,
-			ring: new DevRing(),
+			ring,
 			view: await projector.snapshot(BACKGROUND_CONTEXT),
 			running: false,
 			queue: [],
@@ -183,6 +193,7 @@ export class Host {
 			const frame: DevFrame = { ts: Date.now(), session: name, category: event.category, action: event.action, data: event.data };
 			entry.ring.push(frame);
 			this.emit({ channel: "dev", frame });
+			if (entry.persistDir !== undefined) void appendFile(join(entry.persistDir, "dev.jsonl"), `${JSON.stringify(frame)}\n`, "utf8").catch(() => undefined);
 		});
 		const attached = await projector.attach((view) => {
 			entry.view = this.stampView(entry, view);
@@ -277,6 +288,7 @@ export class Host {
 			badges: [
 				...(entry.running ? ["running"] : []),
 				...(entry.view.goal?.status === "active" ? ["goal"] : []),
+				...(entry.view.goal?.status === "achieved" ? ["goal-done"] : []),
 				...(entry.view.pendingAsk === undefined ? [] : ["ask-pending"]),
 				...(entry.view.loops.length > 0 ? ["loop"] : []),
 			],
@@ -354,18 +366,77 @@ export class Host {
 
 	goal(name: string, action: "set" | "pause" | "resume" | "clear", objective?: string): void {
 		const agent = this.must(name);
+		const entry = this.hosted.get(name);
+		if (entry === undefined) return;
 		if (action === "set" && objective !== undefined) agent.goal.set(objective);
 		if (action === "pause") agent.goal.pause();
 		if (action === "resume") agent.goal.resume();
 		if (action === "clear") agent.goal.clear();
+		entry.view = this.stampView(entry);
+		this.emit({ channel: "view", session: name, view: entry.view });
+		// Setting a goal means "go work on it": kick a run when the lane is idle.
+		if (action === "set" && objective !== undefined && !entry.running) {
+			void this.prompt(name, `Work toward the goal: ${objective}`).catch(() => undefined);
+		}
+	}
+
+	loopCreate(name: string, id: string, note: string, every?: string): void {
+		const entry = this.hosted.get(name);
+		if (entry === undefined) return;
+		entry.agent.loops.upsert({
+			def: { id, note, ...(every === undefined || every.length === 0 ? {} : { every }) },
+			runCount: 0,
+			createdAt: Date.now(),
+			paused: false,
+		});
+		entry.view = this.stampView(entry);
+		this.emit({ channel: "view", session: name, view: entry.view });
 	}
 
 	loopToggle(name: string, id: string, paused: boolean): void {
 		this.must(name).loops.pause(id, paused);
+		this.refreshView(name);
+	}
+
+	loopRemove(name: string, id: string): void {
+		const agent = this.must(name);
+		agent.loops.remove(id);
+		void agent.lane.publish([{ type: "eta", category: "loop", action: "remove", data: { loopId: id } }], BACKGROUND_CONTEXT).catch(() => undefined);
+		this.refreshView(name);
+	}
+
+	memoryText(name: string): Promise<{ text: string; files: string[] }> | undefined {
+		const loader = this.hosted.get(name)?.created.memory;
+		return loader === undefined ? undefined : loader();
 	}
 
 	taskSet(name: string, id: string, status: "pending" | "in_progress" | "completed" | "cancelled"): void {
 		this.must(name).setTask(id, { status });
+		this.refreshView(name);
+	}
+
+	taskCreate(name: string, content: string, priority?: "high" | "medium" | "low"): void {
+		this.must(name).tasks.create(content, priority === undefined ? {} : { priority });
+		this.refreshView(name);
+	}
+
+	taskUpdate(name: string, id: string, patch: { content?: string; priority?: "high" | "medium" | "low" }): void {
+		this.must(name).setTask(id, patch);
+		this.refreshView(name);
+	}
+
+	taskRemove(name: string, id: string): void {
+		const agent = this.must(name);
+		agent.tasks.remove(id);
+		void agent.lane.publish([{ type: "eta", category: "task", action: "remove", data: { taskId: id } }], BACKGROUND_CONTEXT).catch(() => undefined);
+		this.refreshView(name);
+	}
+
+	private refreshView(name: string): void {
+		const entry = this.hosted.get(name);
+		if (entry === undefined) return;
+		entry.view = this.stampView(entry);
+		this.emit({ channel: "view", session: name, view: entry.view });
 	}
 
 	stateSet(name: string, key: string, value: string | null): void {
