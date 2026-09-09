@@ -113,8 +113,8 @@ export class EtaAgent {
 		this.lastPromptBlocksValue = blocks;
 	}
 
-	/** Output tokens/sec over the last usage delta; one tracker, every projector agrees. */
-	private usageWatch: { out: number; at: number } | undefined;
+	/** Output tokens/sec over a sliding 2s window of observed output (usage events or streaming text). */
+	private outSamples: { out: number; at: number }[] = [];
 	private tokensPerSecValue = 0;
 
 	get tokensPerSec(): number {
@@ -122,15 +122,25 @@ export class EtaAgent {
 	}
 
 	trackUsage(totalsOut: number): void {
+		this.observeOut(totalsOut);
+	}
+
+	/** Feed a monotonically growing output-token estimate; the sliding window absorbs jumps. */
+	observeOut(totalsOut: number): void {
 		const now = Date.now();
-		if (this.usageWatch === undefined || totalsOut < this.usageWatch.out) {
-			this.usageWatch = { out: totalsOut, at: now };
+		const samples = this.outSamples;
+		if (samples.length === 0 || totalsOut < samples[samples.length - 1]!.out) {
+			samples.length = 0;
+			samples.push({ out: totalsOut, at: now });
 			return;
 		}
-		if (totalsOut > this.usageWatch.out) {
-			this.tokensPerSecValue = (totalsOut - this.usageWatch.out) / Math.max(0.001, (now - this.usageWatch.at) / 1000);
-			this.usageWatch = { out: totalsOut, at: now };
-		}
+		if (totalsOut === samples[samples.length - 1]!.out) return;
+		samples.push({ out: totalsOut, at: now });
+		while (samples.length > 2 && now - samples[0]!.at > 2_000) samples.shift();
+		const first = samples[0]!;
+		const last = samples[samples.length - 1]!;
+		const seconds = (last.at - first.at) / 1_000;
+		if (seconds >= 0.5) this.tokensPerSecValue = (last.out - first.out) / seconds;
 	}
 	/** Size of the last <memory> block for the water level panel; undefined when no source. */
 	readonly memoryInfo: (() => Promise<{ chars: number }>) | undefined;
@@ -275,6 +285,12 @@ export class EtaAgent {
 		loops.attach();
 
 		harness.events.on("usage", (event) => agentRef?.trackUsage((event as { totals?: { output?: number } }).totals?.output ?? 0));
+		harness.events.on("run_start", () => {
+			if (agentRef !== undefined) {
+				agentRef.outSamples.length = 0;
+				agentRef.tokensPerSecValue = 0;
+			}
+		});
 		harness.hooks.on("before_run_end", goalDriver({ goal, evaluate: options.evaluateGoal ?? (() => Promise.resolve(false)) }), { id: "eta.goal" });
 		harness.hooks.on("before_run_end", loopDriver(loops), { id: "eta.loop" });
 		harness.hooks.on("before_run_end", emptyResponseGuard(), { id: "eta.empty" });

@@ -195,7 +195,12 @@ export class SessionViewProjector {
 		};
 		for (const type of VIEW_EVENTS) offs.push(this.agent.harness.events.on(type, refresh));
 		const onStream = (event: unknown) => {
-			this.inFlight = (event as { message?: AgentMessage }).message ?? this.inFlight;
+			const message = (event as { message?: AgentMessage }).message;
+			if (message !== undefined && message.role === "assistant") {
+				this.inFlight = message;
+				const est = inFlightOutputTokens(message);
+				if (est !== undefined) this.agent.observeOut(est);
+			}
 			refresh();
 		};
 		offs.push(this.agent.harness.events.on("message_start", onStream));
@@ -210,6 +215,20 @@ export class SessionViewProjector {
 		);
 		return { view: await this.snapshot(context), detach: () => offs.forEach((off) => off()) };
 	}
+}
+
+/** Output tokens of an in-flight message: provider usage when present, else a chars/3 estimate. */
+function inFlightOutputTokens(message: AgentMessage): number | undefined {
+	const candidate = message as { usage?: { output?: number }; content?: unknown };
+	const usageOut = candidate.usage?.output ?? 0;
+	if (usageOut > 0) return usageOut;
+	if (!Array.isArray(candidate.content)) return undefined;
+	let chars = 0;
+	for (const block of candidate.content as { type?: string; text?: string; partialJson?: string }[]) {
+		if (block.type === "text" || block.type === "thinking") chars += block.text?.length ?? 0;
+		else if (block.type === "toolCall") chars += block.partialJson?.length ?? 0;
+	}
+	return chars > 0 ? Math.ceil(chars / 3) : undefined;
 }
 
 function cacheRate(usage: Usage): number {
