@@ -21,12 +21,16 @@ interface PendingAsk {
 	settle(response: AskResponse): void;
 }
 
+export type HeadlessAsk = (payload: AskPayload) => Promise<AskResponse | null>;
+
 export class AskRegistry {
 	private pending = new Map<string, PendingAsk>();
 	private readonly dev: DevEmit | undefined;
+	private readonly headless: HeadlessAsk | undefined;
 
-	constructor(opts: { dev?: DevEmit } = {}) {
+	constructor(opts: { dev?: DevEmit; headless?: HeadlessAsk } = {}) {
 		this.dev = opts.dev;
+		this.headless = opts.headless;
 	}
 
 	/** The tool waits on this; abort/timeout resolve to "none", never hang. */
@@ -51,6 +55,13 @@ export class AskRegistry {
 			opts.signal?.addEventListener("abort", onAbort, { once: true });
 			this.pending.set(payload.questionId, { payload, settle: (response) => settle(response, "answered") });
 			this.dev?.("ask_user", "asked", { questionId: payload.questionId });
+			if (this.headless !== undefined) {
+				const headless = this.headless;
+				void Promise.resolve()
+					.then(() => headless(payload))
+					.then((response) => settle(response ?? { kind: "none" }, "answered"))
+					.catch(() => settle({ kind: "none" }, "canceled"));
+			}
 		});
 	}
 

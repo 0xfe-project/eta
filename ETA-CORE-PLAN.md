@@ -65,7 +65,7 @@
 
 - [x] core 按名拦截,发 `AskUserStarted` 挂起 step 等 `answer()`。**它的 execute 本质 = await UI 组件的 Promise**(index.ts:2211-2260):抄 abort signal→null、timeout→`done(null)`、finally 发 blocked/unblocked(= 我们的 dev 事件)。
 - [x] schema 抄:`question/context/options[{title,description}](扁平避 anyOf)/allowMultiple/allowFreeform`;别名键归一化(`normalizeAskOptions`:label/text/value/name→title,测过);结果信封 `AskResponse = {kind:"selection",selections,comment?} | {kind:"freeform",text}`。timeout 参数并入 AskRegistry.ask opts。
-- [ ] headless 语义抄它:无交互 UI 时降级为简单 select/input 协议(index.ts:2311),失败回文本 tool_result。
+- [x] headless 语义抄它:无交互 UI 时降级为简单 select/input 协议(`AskRegistry({headless})`,`EtaAgentOptions.askHeadless`),null/抛错回文本 tool_result(No answer),测过。
 - [x] **它没有的,我们加**:`eta.ask` entry 持久化 pending,kill→重启→重发未决问题→回填续跑。完成条件:四路单测(选择/填空/超时/取消)+ kill-重启集成测试。
 
 ### C4 tasks(built-in,抄 pi-tasks lite)
@@ -113,7 +113,7 @@
 - [x] **自定义卡**:`.eta/persona/*.persona.md`(pwd 向上 + git 感知,同 C5 扫描规则)+ `~/.eta/persona/`;与内置**同一命名空间,同名自定义覆盖内置**;卡内容按 untrusted 处理。完成条件:`discoverPersonas` 测过(项目卡覆盖内置,untrusted)。
 - [x] **注入位置 = 稳定块**:composer slots persona → goal/tasks → memory(`EtaPromptState.persona/memory`),同输入字节恒等测过;失效重扫复用 `MemoryCache` 的 mtime 签名;assembly version bump 归 GUI 侧。
 - [x] **槽位与装配**(占位达成:`renderPersonaBlock(names, cards)` 名字列表;owner 绑定留给 multi-agent):`AgentConfig.personas: string[]`(按序拼),core 只认名字列表不管来源;`persona → agent → weak-bind session` 的绑定(owner 归属、复用旧 agent 带 memory)**留给 multi-agent 阶段**,本期只在 session meta 存 `owner` 槽。完成条件:不带 persona 时行为与现在一致(占位)。
-- [ ] 编辑契约:`old/PROMPT_GUIDE.md` 的核心要素表(价值观行为化定义、冲突优先级、心理安全感、摩擦最小化)平移进文档,作为写新卡的 spec;新卡必须能填进那张五列表。
+- [x] 编辑契约:`old/PROMPT_GUIDE.md` 核心要素表已平移进 `docs/PROMPT_GUIDE.md`(五列总表 + Must-Have 要素),作为新卡 spec。
 
 ## Part D:session 与 context(fork 基本白拿)
 
