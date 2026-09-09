@@ -13,6 +13,16 @@ describe("ask registry", () => {
 		expect(askResponseText(await p)).toBe("Selected: a — but fast");
 	});
 
+	it("a timed question exposes its deadline until settled", async () => {
+		const reg = new AskRegistry();
+		const asked = reg.ask({ questionId: "q7", question: "?" }, { timeoutMs: 5000 });
+		const deadline = reg.deadline("q7");
+		expect(deadline).toBeGreaterThan(Date.now());
+		reg.answer("q7", { kind: "none" });
+		await asked;
+		expect(reg.deadline("q7")).toBeUndefined();
+	});
+
 	it("timeout and abort resolve to none", async () => {
 		const reg = new AskRegistry();
 		const to = await reg.ask({ questionId: "t", question: "?" }, { timeoutMs: 5 });

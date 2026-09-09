@@ -60,6 +60,8 @@ export interface SessionView {
 	cacheRate: number;
 	branch: { tipId: string | null };
 	pendingAsk: AskPayload | undefined;
+	/** Deadline of the pending ask when it carries a timeout; drives the modal countdown. */
+	pendingAskDeadline: number | undefined;
 	/** KV keys the state tools have set; shown and deletable in the Context panel. */
 	stateKeys: string[];
 	/** System prompt block sizes for the Context panel; undefined before the first generation. */
@@ -146,6 +148,7 @@ export class SessionViewProjector {
 			cacheRate: cacheRate(stats.usage),
 			branch: { tipId: entries[entries.length - 1]?.id ?? null },
 			pendingAsk: ask.pendingAsks()[0],
+			pendingAskDeadline: ask.pendingAsks()[0] === undefined ? undefined : ask.deadline(ask.pendingAsks()[0]!.questionId),
 			prompt: this.agent.lastPromptBlocks,
 			tokensPerSec: this.agent.tokensPerSec,
 		};
