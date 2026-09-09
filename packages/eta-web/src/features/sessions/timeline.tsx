@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { SessionView } from "@eta/core";
 import { useAppI18n } from "../../i18n.ts";
 import { MessageMarkdown } from "./message-markdown.tsx";
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog.tsx";
 
 type ToolResultLike = { toolCallId: string; content: unknown; isError?: boolean };
 
@@ -32,7 +33,8 @@ export function Timeline({ view, session, running = false }: { view: SessionView
 
 	return (
 		<div className="relative min-h-0 flex-1">
-			<div ref={scroller} onScroll={onScroll} data-testid="timeline" className="h-full overflow-y-auto px-4 py-3">
+			<div ref={scroller} onScroll={onScroll} data-testid="timeline" className="h-full overflow-y-auto px-6 py-4">
+				<div className="mx-auto max-w-[860px]">
 				{view.messages.length === 0 && view.systems.length === 0 ? <p className="p-4 text-sm text-muted">{t("timeline.empty")}</p> : null}
 				{view.systems.map((row) => (
 					<div key={row.entryId} data-testid="system-row" className="system-message mono mx-auto my-2 w-fit bg-overlay px-3 py-1 text-[11px] text-muted">
@@ -45,6 +47,7 @@ export function Timeline({ view, session, running = false }: { view: SessionView
 						<MessageRow role={entry.message.role} message={entry.message} session={session} streaming={running && entry === view.messages[view.messages.length - 1] && entry.message.role === "assistant"} />
 					</div>
 				))}
+			</div>
 			</div>
 			{prompts.length > 1 ? (
 				<div data-testid="prompt-rail" className="absolute right-1 top-16 flex max-h-[60%] flex-col gap-1 overflow-y-auto">
@@ -111,13 +114,13 @@ function MessageRow({ role, message, session, streaming = false }: { role: strin
 			<div className="message assistant my-2" data-testid="assistant-message">
 				{blocks.map((block, index) => {
 					if (block.type === "text") {
-						return <MessageMarkdown key={index} text={String(block.text ?? "")} streaming={streaming} />;
+						return <MessageMarkdown key={index} content={String(block.text ?? "")} streaming={streaming} />;
 					}
 					if (block.type === "thinking") {
 						return (
-							<details key={index} className="thinking-block my-1 border border-border text-xs text-muted">
-								<summary className="thinking-toggle cursor-pointer px-2 py-1">thinking</summary>
-								<pre className="thinking-content mono whitespace-pre-wrap px-2 pb-2">{String(block.thinking ?? "")}</pre>
+							<details key={index} className="thinking-block">
+								<summary className="thinking-block-header"><span className="thinking-block-chevron">▸</span>thinking</summary>
+								<pre className="thinking-block-content">{String(block.thinking ?? "")}</pre>
 							</details>
 						);
 					}
@@ -125,19 +128,19 @@ function MessageRow({ role, message, session, streaming = false }: { role: strin
 						const callId = String(block.id ?? "");
 						const args = block.arguments ?? block.args ?? {};
 						return (
-							<details key={index} data-testid={`tool-row-${String(block.name ?? "")}`} className="tool-card my-1 border border-border">
-								<summary className="cursor-pointer px-2 py-1 text-xs">
-									<span className="mono text-accent">{String(block.name ?? "?")}</span>
-									<span className="ml-2 text-muted">{summarize(args)}</span>
+							<details key={index} data-testid={`tool-row-${String(block.name ?? "")}`} className="tool-card">
+								<summary className="tool-card-head">
+									<span className="tool-card-label">{String(block.name ?? "?")}</span>
+									<span className="tool-card-status">{summarize(args)}</span>
 								</summary>
-								<pre className="tool-args mono max-h-60 overflow-auto bg-code-bg px-2 py-1 text-[11px]">{JSON.stringify(args, null, 2)}</pre>
+								<pre className="tool-card-block tool-card-block-content">{JSON.stringify(args, null, 2)}</pre>
 							</details>
 						);
 					}
 					return null;
 				})}
 				{touched.length > 0 ? (
-					<div data-testid="turn-file-chips" className="turn-file-chips mt-1 flex flex-wrap gap-1">
+					<div data-testid="turn-file-chips" className="turn-file-chips">
 						{touched.map((path) => (
 							<button
 								key={path}
@@ -157,28 +160,25 @@ function MessageRow({ role, message, session, streaming = false }: { role: strin
 						))}
 					</div>
 				) : null}
-				{preview !== null ? (
-					<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" data-testid="file-preview" onClick={() => setPreview(null)}>
-						<div className="dialog max-h-[80vh] w-full max-w-[720px] overflow-auto" onClick={(event) => event.stopPropagation()}>
-							<div className="mb-2 flex items-center gap-2">
-								<span className="mono text-xs">{preview.path}</span>
-								<button data-testid="file-preview-close" onClick={() => setPreview(null)} className="ml-auto border border-border px-2 py-0.5 text-[10px] text-muted">
-									{t("common.close")}
-								</button>
-							</div>
-							<pre className="mono max-h-[70vh] overflow-auto bg-code-bg p-2 text-[11px]">{preview.text}</pre>
-						</div>
-					</div>
-				) : null}
+				<Dialog open={preview !== null} onOpenChange={(open) => !open && setPreview(null)}>
+					<DialogContent className="max-w-[720px]" data-testid="file-preview">
+						<DialogHeader>
+							<DialogTitle data-testid="file-preview-path" className="min-w-0 flex-1 truncate normal-case">{preview?.path}</DialogTitle>
+						</DialogHeader>
+						<DialogBody>
+							<pre className="mono bg-code-bg p-2 text-[11px]">{preview?.text}</pre>
+						</DialogBody>
+					</DialogContent>
+				</Dialog>
 			</div>
 		);
 	}
 	if (role === "toolResult" || role === "tool") {
 		const result = message as unknown as ToolResultLike;
 		return (
-			<details className="tool-card my-1 ml-4 border border-border text-xs" data-testid={`tool-result-${result.toolCallId ?? ""}`}>
-				<summary className={`cursor-pointer px-2 py-1 ${result.isError === true ? "text-danger" : "text-muted"}`}>{result.isError === true ? "failed" : "done"}</summary>
-				<pre className="mono max-h-60 overflow-auto bg-code-bg px-2 py-1 text-[11px]">{renderContent(result.content)}</pre>
+			<details className="tool-card ml-4" data-testid={`tool-result-${result.toolCallId ?? ""}`}>
+				<summary className={`tool-card-head ${result.isError === true ? "text-danger" : ""}`}><span className="tool-card-label">{result.isError === true ? "failed" : "done"}</span></summary>
+				<pre className="tool-card-block tool-card-block-content">{renderContent(result.content)}</pre>
 			</details>
 		);
 	}

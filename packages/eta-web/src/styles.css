@@ -2,56 +2,28 @@
 
 @custom-variant dark (&:is(.dark *));
 
-:root,
-.light {
-	color-scheme: light;
-	--background: #ffffff;
-	--foreground: #181818;
-	--surface: #f2f2f2;
-	--surface-foreground: #181818;
-	--elevated: #ffffff;
-	--muted: #666666;
-	--border: color-mix(in srgb, #181818 12%, transparent);
-	--border-strong: color-mix(in srgb, #181818 24%, transparent);
-	--overlay: color-mix(in srgb, #181818 6%, transparent);
-	--overlay-hover: color-mix(in srgb, #181818 10%, transparent);
-	--accent: #181818;
-	--accent-foreground: #ffffff;
-	--success: #2f8f4e;
-	--warning: #b47716;
-	--danger: #c0392b;
-	--code-bg: #f4f4f4;
-	--shadow: 0 8px 32px color-mix(in srgb, #181818 12%, transparent);
-}
-
-.dark {
-	color-scheme: dark;
-	--background: #181818;
-	--foreground: #ffffff;
-	--surface: #1f1f1f;
-	--surface-foreground: #ffffff;
-	--elevated: #232323;
-	--muted: #aaaaaa;
-	--border: color-mix(in srgb, #ffffff 12%, transparent);
-	--border-strong: color-mix(in srgb, #ffffff 24%, transparent);
-	--overlay: color-mix(in srgb, #ffffff 6%, transparent);
-	--overlay-hover: color-mix(in srgb, #ffffff 10%, transparent);
-	--accent: #ffffff;
-	--accent-foreground: #181818;
-	--success: #5cb87a;
-	--warning: #d9a441;
-	--danger: #e06a5a;
-	--code-bg: #101010;
-	--shadow: 0 8px 32px rgb(0 0 0 / 0.5);
-}
-
 @theme inline {
 	--color-background: var(--background);
 	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	--radius-sm: 0;
+	--radius-md: 0;
+	--radius-lg: 0;
+	--radius-xl: 0;
 	--color-surface: var(--surface);
 	--color-surface-foreground: var(--surface-foreground);
 	--color-elevated: var(--elevated);
-	--color-muted: var(--muted);
+	--color-muted: var(--muted-foreground);
+	--color-muted-bg: var(--muted);
 	--color-border: var(--border);
 	--color-border-strong: var(--border-strong);
 	--color-overlay: var(--overlay);
@@ -73,22 +45,5 @@ body,
 body {
 	background: var(--background);
 	color: var(--foreground);
-	font-family: ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
 	overscroll-behavior: none;
 }
-
-.mono {
-	font-family: ui-monospace, "SF Mono", Menlo, monospace;
-}
-
-.markdown > *:first-child { margin-top: 0; }
-.markdown > *:last-child { margin-bottom: 0; }
-.markdown p { margin: 0.4em 0; }
-.markdown ul, .markdown ol { margin: 0.4em 0; padding-left: 1.4em; }
-.markdown code { background: var(--code-bg); padding: 0.1em 0.3em; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; }
-.markdown pre { background: var(--code-bg); padding: 0.6em; overflow-x: auto; }
-.markdown pre code { background: transparent; padding: 0; }
-.markdown table { border-collapse: collapse; margin: 0.5em 0; }
-.markdown th, .markdown td { border: 1px solid var(--border); padding: 0.25em 0.5em; }
-.markdown a { color: var(--foreground); text-decoration: underline; text-underline-offset: 2px; }
-.markdown blockquote { border-left: 2px solid var(--border-strong); margin: 0.5em 0; padding-left: 0.8em; color: var(--muted); }

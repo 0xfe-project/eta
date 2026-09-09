@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import type { SessionView } from "@eta/core";
 import { useAppI18n } from "../../i18n.ts";
 import { etaStore } from "../../lib/eta-store.ts";
+import { Button } from "../../components/ui/button.tsx";
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog.tsx";
 
 export function ContextPanel({ session, view }: { session: string; view: SessionView }) {
 	const { t } = useAppI18n();
 	const store = etaStore();
-	const [goalDraft, setGoalDraft] = useState("");
 	const [compacting, setCompacting] = useState(false);
 	const [promptOpen, setPromptOpen] = useState(false);
 	const [jsonOpen, setJsonOpen] = useState(false);
@@ -57,103 +58,51 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 					<p className="mono min-w-0 flex-1 truncate text-[11px] text-muted">
 						{t("panel.prompt")}: {t("panel.stable")} {view.prompt.stableChars} / {t("panel.adaptive")} {view.prompt.adaptiveChars}
 					</p>
-					<button data-testid="prompt-open" onClick={() => setPromptOpen(true)} className="border border-border px-2 py-0.5 text-[10px] text-muted hover:bg-overlay">
+					<Button data-testid="prompt-open" size="sm" onClick={() => setPromptOpen(true)}>
 						{t("panel.viewPrompt")}
-					</button>
+					</Button>
 				</div>
 			) : null}
-			{promptOpen && view.prompt !== undefined ? (
-				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" data-testid="prompt-overlay" onClick={() => setPromptOpen(false)}>
-					<div className="dialog max-h-[80vh] w-full max-w-[720px] overflow-hidden" onClick={(event) => event.stopPropagation()}>
-						<div className="dialog-header flex items-center gap-2">
-							<span className="font-medium">{t("panel.prompt")}</span>
-							<button data-testid="prompt-close" onClick={() => setPromptOpen(false)} className="ml-auto border border-border px-2 py-0.5 text-[10px] text-muted">
-								{t("common.close")}
-							</button>
-						</div>
-						<div className="dialog-body overflow-y-auto">
-							{view.prompt.sections.map((section, index) => (
-								<section key={`${section.name}-${index}`} data-testid={`prompt-section-${section.name}`} className="mb-3">
-									<h4 className="mono mb-1 text-[10px] text-muted">
-										{t(("prompt." + section.name) as "prompt.base")} · {section.stable ? t("prompt.stable") : t("prompt.adaptive")} · {section.text.length}
-									</h4>
-									<pre className="mono max-h-[240px] overflow-auto bg-code-bg p-2 text-[11px] whitespace-pre-wrap">{section.text}</pre>
-								</section>
-							))}
-						</div>
-					</div>
-				</div>
-			) : null}
+			<Dialog open={promptOpen && view.prompt !== undefined} onOpenChange={setPromptOpen}>
+				<DialogContent className="max-w-[720px]" data-testid="prompt-overlay">
+					<DialogHeader>
+						<DialogTitle>{t("panel.prompt")}</DialogTitle>
+					</DialogHeader>
+					<DialogBody className="p-3">
+						{view.prompt?.sections.map((section, index) => (
+							<section key={`${section.name}-${index}`} data-testid={`prompt-section-${section.name}`} className="mb-3">
+								<h4 className="mono mb-1 text-[10px] text-muted">
+									{t(("prompt." + section.name) as "prompt.base")} · {section.stable ? t("prompt.stable") : t("prompt.adaptive")} · {section.text.length}
+								</h4>
+								<pre className="mono max-h-[240px] overflow-auto bg-code-bg p-2 text-[11px] whitespace-pre-wrap">{section.text}</pre>
+							</section>
+						))}
+					</DialogBody>
+				</DialogContent>
+			</Dialog>
 			<div data-testid="json-row" className="flex items-center gap-2">
 				<p className="mono min-w-0 flex-1 truncate text-[11px] text-muted">
 					{t("panel.tokensPerSec")}: {(Math.round((view.tokensPerSec ?? 0) * 10) / 10).toFixed(1)}
 				</p>
-				<button data-testid="json-open" onClick={() => setJsonOpen(true)} className="border border-border px-2 py-0.5 text-[10px] text-muted hover:bg-overlay">
+				<Button data-testid="json-open" size="sm" onClick={() => setJsonOpen(true)}>
 					{t("panel.viewJson")}
-				</button>
+				</Button>
 			</div>
-			{jsonOpen ? (
-				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" data-testid="json-overlay" onClick={() => setJsonOpen(false)}>
-					<div className="dialog flex max-h-[80vh] w-full max-w-[720px] flex-col overflow-hidden" onClick={(event) => event.stopPropagation()}>
-						<div className="dialog-header flex items-center gap-2">
-							<span className="font-medium">{t("panel.sessionJson")}</span>
-							<button data-testid="json-close" onClick={() => setJsonOpen(false)} className="ml-auto border border-border px-2 py-0.5 text-[10px] text-muted">
-								{t("common.close")}
-							</button>
-						</div>
-						<div className="dialog-body overflow-y-auto">
-							<pre data-testid="json-body" className="mono max-h-[70vh] overflow-auto bg-code-bg p-2 text-[11px] whitespace-pre-wrap">
-								{JSON.stringify(view, null, 2)}
-							</pre>
-						</div>
-					</div>
-				</div>
-			) : null}
+			<Dialog open={jsonOpen} onOpenChange={setJsonOpen}>
+				<DialogContent className="max-w-[720px]" data-testid="json-overlay">
+					<DialogHeader>
+						<DialogTitle>{t("panel.sessionJson")}</DialogTitle>
+					</DialogHeader>
+					<DialogBody>
+						<pre data-testid="json-body" className="mono bg-code-bg p-2 text-[11px] whitespace-pre-wrap">
+							{JSON.stringify(view, null, 2)}
+						</pre>
+					</DialogBody>
+				</DialogContent>
+			</Dialog>
 			<p data-testid="persona-row" className="mono text-[11px] text-accent">
 				{t("panel.personas")}: {view.personas.join(", ")}
 			</p>
-			{view.goal != null ? (
-				<div data-testid="goal-card" className="border border-border p-2 text-xs">
-					<div className="font-medium">{view.goal.objective}</div>
-					<div className="mt-1 flex gap-1">
-						{view.goal.status === "active" ? (
-							<button className="border border-border px-2 py-0.5 text-[10px] text-muted" onClick={() => send({ op: "goal", session, action: "pause" })}>{t("panel.pause")}</button>
-						) : (
-							<button className="border border-border px-2 py-0.5 text-[10px] text-muted" onClick={() => send({ op: "goal", session, action: "resume" })}>{t("panel.resume")}</button>
-						)}
-						<button className="border border-border px-2 py-0.5 text-[10px] text-muted" onClick={() => send({ op: "goal", session, action: "clear" })}>{t("panel.clear")}</button>
-					</div>
-				</div>
-			) : (
-				<div className="flex gap-1">
-					<input data-testid="goal-input" value={goalDraft} placeholder={t("panel.goal")} onChange={(e) => setGoalDraft(e.target.value)} className="min-w-0 flex-1 border border-border bg-background px-2 py-1 text-xs outline-none" />
-					<button
-						data-testid="goal-set"
-						disabled={goalDraft.trim().length === 0}
-						onClick={() => {
-							send({ op: "goal", session, action: "set", objective: goalDraft.trim() });
-							setGoalDraft("");
-						}}
-						className="border border-border px-2 py-1 text-xs text-muted disabled:opacity-40"
-					>
-						{t("panel.goal")}
-					</button>
-				</div>
-			)}
-			{view.tasks.length > 0 ? (
-				<div data-testid="tasks-list" className="flex flex-col gap-1">
-					{view.tasks.map((task) => (
-						<button
-							key={task.id}
-							data-testid={`task-row-${task.id}`}
-							onClick={() => send({ op: "taskSet", session, id: task.id, status: task.status === "completed" ? "pending" : "completed" })}
-							className="mono text-left text-[11px] text-muted hover:text-accent"
-						>
-							[{task.status}] {task.content}
-						</button>
-					))}
-				</div>
-			) : null}
 			{view.loops.map((loop) => (
 				<div key={loop.id} data-testid={`loop-row-${loop.id}`} className="mono flex items-center gap-2 text-[11px] text-muted">
 					<span>loop {loop.id} · {loop.note} · {loop.runCount}×</span>
@@ -183,7 +132,6 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 				</div>
 			))}
 			<div className="mt-auto flex gap-2">
-				<button data-testid="btw-open" className="border border-border px-2 py-1 text-xs text-muted" onClick={() => send({ op: "btwOpen", session, kind: "tangent" })}>btw</button>
 				<button
 					data-testid="panel-compact"
 					disabled={compacting}

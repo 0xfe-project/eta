@@ -5,6 +5,7 @@ import { useEta } from "../lib/eta-store.ts";
 import { Sidebar } from "../features/sessions/sidebar.tsx";
 import { Timeline } from "../features/sessions/timeline.tsx";
 import { Composer } from "../features/sessions/composer.tsx";
+import { ContextBar } from "../features/sessions/context-bar.tsx";
 import { AskModal } from "../features/sessions/ask-modal.tsx";
 import { ContextPanel } from "../features/sessions/context-panel.tsx";
 import { DevRail } from "../features/sessions/dev-rail.tsx";
@@ -69,7 +70,7 @@ export function SessionsPage() {
 					) : (
 						<>
 							<Timeline view={view} session={selected ?? ""} running={running} />
-							<Composer session={selected ?? ""} running={running} hasPendingAsk={view.pendingAsk !== undefined} onNavigateSettings={() => window.location.assign("/settings")} userTexts={view.messages.filter((entry) => entry.message.role === "user").map((entry) => JSON.stringify(entry.message))} />
+							<Composer session={selected ?? ""} running={running} hasPendingAsk={view.pendingAsk !== undefined} topSlot={<ContextBar session={selected ?? ""} view={view} />} onNavigateSettings={() => window.location.assign("/settings")} userTexts={view.messages.filter((entry) => entry.message.role === "user").map((entry) => JSON.stringify(entry.message))} />
 							<AskModal session={selected ?? ""} view={view} />
 						</>
 					)}

@@ -92,5 +92,15 @@
 	"welcome.pressEnter": "Enter to start chatting",
 	"panel.tokensPerSec": "tokens/s",
 	"panel.viewJson": "json",
-	"panel.sessionJson": "Session JSON"
+	"panel.sessionJson": "Session JSON",
+	"palette.placeholder": "Type a command…",
+	"palette.empty": "no match",
+	"cmd.btw": "side thread (btw)",
+	"btw.open": "btw",
+	"btw.title": "side thread",
+	"btw.ask": "ask",
+	"btw.empty": "no exchanges yet — ask something",
+	"btw.save": "save",
+	"btw.clear": "clear",
+	"mention.empty": "no matching files"
 }

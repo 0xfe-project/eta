@@ -31,6 +31,8 @@ export type ClientMessage =
 	| { op: "taskSet"; session: string; id: string; status: "pending" | "in_progress" | "completed" | "cancelled" }
 	| { op: "btwOpen"; session: string; kind: "contextual" | "tangent" }
 	| { op: "btwAnswer"; session: string; threadId: string; question: string; answer: string }
+	| { op: "btwAsk"; session: string; threadId: string; question: string }
+	| { op: "modelSet"; session: string; modelId: string }
 	| { op: "btwSave"; session: string; threadId: string }
 	| { op: "btwClear"; session: string; threadId: string }
 	| { op: "stateDelete"; session: string; key: string }

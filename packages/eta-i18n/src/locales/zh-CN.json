@@ -92,5 +92,15 @@
 	"welcome.pressEnter": "回车开始聊天",
 	"panel.tokensPerSec": "词元/秒",
 	"panel.viewJson": "查看 JSON",
-	"panel.sessionJson": "会话 JSON"
+	"panel.sessionJson": "会话 JSON",
+	"palette.placeholder": "输入命令…",
+	"palette.empty": "无匹配",
+	"cmd.btw": "旁路对话",
+	"btw.open": "旁路",
+	"btw.title": "旁路对话",
+	"btw.ask": "提问",
+	"btw.empty": "还没有对话,问点什么",
+	"btw.save": "保存",
+	"btw.clear": "清除",
+	"mention.empty": "没有匹配的文件"
 }

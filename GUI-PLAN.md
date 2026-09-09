@@ -90,3 +90,12 @@
 5. 开第二个 session 后切走:后台跑完侧栏出未读点、Web Notification(授权后)点击跳回;dev rail 三通道过滤/pause。
 6. 375px(手机或 DevTools):只剩聊天 + 两个抽屉按钮;抽屉开关持久化;无横向滚动条。
 7. 杀 server 重启:前端自动重连,状态恢复,未决 ask 重弹。
+
+## T4 石墨重皮 + shadcn 组件层(用户审美定稿)
+
+- [x] token 层 = 用户给的 shadcn oklch 中性板(`--radius: 0`);`styles/graphite.css` 是唯一的组件样式表(picot CSS 全删)
+- [x] `components/ui/`:shadcn 风 Button/Dialog(Radix)/DropdownMenu/Tooltip/Badge;命令面板换 cmdk
+- [x] markdown:streamdown + @streamdown/code + @streamdown/math(KaTeX css 显式 import,公式不重复)
+- [x] composer 重排:goal/tasks/旁路在输入框上方(ContextBar),工具条含模型下拉(ModelPicker→/api/models+modelSet op)、斜杠菜单上弹、排队 chip
+- [x] btw 大窗:BtwDialog(exchanges + 提问 → btwAsk op,faux echo 应答)+ /btw 命令
+- [x] 聊天区 padding + 860px 居中列(与 composer 对齐);prompt/session-JSON 查看弹窗 = Radix Dialog

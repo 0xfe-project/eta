@@ -84,7 +84,15 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 			if (url.pathname === "/api/sessions") {
 				return Response.json(host.sidebar());
 			}
-			const filesSession = url.searchParams.get("files");
+			if (url.pathname === "/api/models") {
+				const session = url.searchParams.get("session");
+				try {
+					return Response.json(session === null ? { models: [{ id: "faux", label: "faux echo" }], current: "faux" } : host.modelInfo(session));
+				} catch {
+					return Response.json({ models: [{ id: "faux", label: "faux echo" }], current: "faux" });
+				}
+			}
+			const filesSession = url.searchParams.get("files") ?? url.searchParams.get("session");
 			if (filesSession !== null) {
 				return Response.json(host.filesOf(filesSession));
 			}
@@ -194,6 +202,13 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 			return;
 		case "btwOpen":
 			await host.btwOpen(message.session, message.kind);
+			break;
+		case "btwAsk":
+			host.btwAsk(message.session, message.threadId, message.question);
+			break;
+		case "modelSet":
+			await host.modelSet(message.session, message.modelId);
+			break;
 			return;
 		case "btwAnswer":
 			host.btwAnswer(message.session, message.threadId, message.question, message.answer);

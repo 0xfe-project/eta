@@ -1,11 +1,12 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useLocation } from "wouter";
+import { Command } from "cmdk";
 import { useAppI18n } from "../../i18n.ts";
 import { etaStore, useEta } from "../../lib/eta-store.ts";
 import { useAppTheme } from "../../app/theme.tsx";
 import { useShell } from "../../app/app-shell.tsx";
 
-interface Command {
+interface CommandEntry {
 	id: string;
 	label: string;
 	run(): void;
@@ -17,9 +18,8 @@ export function CommandPalette() {
 	const state = useEta();
 	const [, navigate] = useLocation();
 	const shell = useShell();
-	const [filter, setFilter] = useState("");
 
-	const commands = useMemo<Command[]>(
+	const commands = useMemo<CommandEntry[]>(
 		() => [
 			...state.sessions.map((session) => ({
 				id: `focus-${session.name}`,
@@ -66,30 +66,29 @@ export function CommandPalette() {
 		[state.sessions, locale, navigate, setLocale, setTheme, shell, t],
 	);
 
-	const needle = filter.trim().toLowerCase();
-	const shown = needle.length === 0 ? commands : commands.filter((command) => command.label.toLowerCase().includes(needle));
-
 	return (
-		<div data-testid="command-palette" className="border border-border bg-elevated p-2 shadow-[var(--shadow)]">
-			<input
-				data-testid="palette-input"
-				autoFocus
-				value={filter}
-				onChange={(event) => setFilter(event.target.value)}
-				className="w-full bg-transparent px-2 py-1 text-sm outline-none"
-			/>
-			<div className="max-h-[300px] overflow-y-auto">
-				{shown.map((command) => (
-					<button
-						key={command.id}
-						data-testid={`palette-item-${command.id}`}
-						onClick={command.run}
-						className="block w-full px-2 py-1.5 text-left text-sm hover:bg-overlay"
-					>
-						{command.label}
-					</button>
-				))}
-			</div>
+		<div data-testid="command-palette" className="border-2 border-border-strong bg-popover text-popover-foreground shadow-[6px_6px_0_0_var(--shadow)]">
+			<Command data-testid="command-root" className="bg-transparent">
+				<Command.Input
+					data-testid="palette-input"
+					autoFocus
+					placeholder={t("palette.placeholder")}
+					className="w-full border-b border-border bg-transparent px-3 py-2 text-sm outline-none"
+				/>
+				<Command.List className="max-h-[300px] overflow-y-auto p-1">
+					<Command.Empty className="px-3 py-2 font-mono text-[11px] text-muted">{t("palette.empty")}</Command.Empty>
+					{commands.map((command) => (
+						<Command.Item
+							key={command.id}
+							data-testid={`palette-item-${command.id}`}
+							onSelect={command.run}
+							className="flex cursor-pointer items-center px-3 py-1.5 text-sm outline-none select-none data-[selected=true]:bg-primary data-[selected=true]:text-primary-foreground"
+						>
+							{command.label}
+						</Command.Item>
+					))}
+				</Command.List>
+			</Command>
 		</div>
 	);
 }

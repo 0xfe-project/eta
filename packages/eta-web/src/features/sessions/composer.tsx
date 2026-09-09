@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useAppI18n } from "../../i18n.ts";
 import { etaStore } from "../../lib/eta-store.ts";
+import { Button } from "../../components/ui/button.tsx";
+import { ModelPicker } from "./model-picker.tsx";
 
 interface SlashCommand {
 	name: string;
@@ -13,19 +15,19 @@ export function Composer({
 	running,
 	hasPendingAsk,
 	userTexts = [],
+	topSlot,
 	onNavigateSettings,
 }: {
 	session: string;
 	running: boolean;
 	hasPendingAsk: boolean;
 	userTexts?: string[];
+	topSlot?: ReactNode;
 	onNavigateSettings?: () => void;
 }) {
 	const { t } = useAppI18n();
 	const store = etaStore();
 	const [text, setText] = useState("");
-	const textRef = useRef(text);
-	textRef.current = text;
 	const [files, setFiles] = useState<string[]>([]);
 	const [pending, setPending] = useState<string[]>([]);
 	const [slashIndex, setSlashIndex] = useState(0);
@@ -35,6 +37,7 @@ export function Composer({
 	const commands: SlashCommand[] = [
 		{ name: "compact", description: t("cmd.compact"), run: () => store.send({ op: "compact", session }) },
 		{ name: "abort", description: t("cmd.abort"), run: () => store.send({ op: "abort", session }) },
+		{ name: "btw", description: t("cmd.btw"), run: () => store.send({ op: "btwOpen", session, kind: "contextual" }) },
 		{ name: "settings", description: t("cmd.settings"), run: () => onNavigateSettings?.() },
 	];
 
@@ -145,96 +148,96 @@ export function Composer({
 			.catch(() => setText((current) => `${current}${pasted}`));
 	};
 
+	const autoGrow = (node: HTMLTextAreaElement) => {
+		node.style.height = "auto";
+		node.style.height = `${Math.min(node.scrollHeight, 220)}px`;
+	};
+
 	return (
 		<footer className="input-area" data-testid="composer">
-			{pending.length > 0 ? (
-				<div data-testid="queued-bar" className="queued-messages">
-					{pending.map((item, index) => (
-						<div key={`${item}-${index}`} className="queued-message-chip">
-							{t("composer.queued")} · {item}
-						</div>
-					))}
-				</div>
-			) : null}
-			<form
-				onSubmit={(event) => {
-					event.preventDefault();
-					submit("queue");
-				}}
-			>
-				<div className="composer-card" data-testid="composer-card">
-					{slashMatches.length > 0 ? (
-						<div className="skill-slash-menu" role="listbox" data-testid="slash-menu">
-							{slashMatches.map((command, index) => (
-								<button
-									key={command.name}
-									type="button"
-									role="option"
-									aria-selected={index === slashIndex}
-									data-testid={`slash-${command.name}`}
-									className={`skill-slash-option${index === slashIndex ? " selected" : ""}`}
-									onClick={() => runCommand(command)}
-								>
-									<span className="skill-slash-icon">/</span>
-									<span className="skill-slash-name">{command.name}</span>
-									<span className="skill-slash-description">{command.description}</span>
-								</button>
-							))}
-						</div>
-					) : (
-						<div className="skill-slash-menu hidden" />
-					)}
-					{atChoices.length > 0 ? (
-						<div className="at-file-mention-menu" role="listbox" data-testid="mention-popup">
-							{atChoices.map((file, index) => (
-								<button
-									key={file}
-									type="button"
-									role="option"
-									aria-selected={index === atIndex}
-									data-testid={`mention-${file}`}
-									className={`at-file-mention-option${index === atIndex ? " selected" : ""}`}
-									onClick={() => pickFile(file)}
-								>
-									<span className="at-file-mention-name">@{file}</span>
-								</button>
-							))}
-						</div>
-					) : (
-						<div className="at-file-mention-menu hidden" />
-					)}
+			<div className="input-outer">
+				{topSlot}
+				{pending.length > 0 ? (
+					<div data-testid="queued-bar" className="queued-messages">
+						{pending.map((item, index) => (
+							<div key={`${item}-${index}`} className="queued-message-chip">
+								{t("composer.queued")} · {item}
+							</div>
+						))}
+					</div>
+				) : null}
+				{slashMatches.length > 0 ? (
+					<div className="skill-slash-menu" role="listbox" data-testid="slash-menu">
+						{slashMatches.map((command, index) => (
+							<button
+								key={command.name}
+								type="button"
+								role="option"
+								aria-selected={index === slashIndex}
+								data-testid={`slash-${command.name}`}
+								className={`skill-slash-option${index === slashIndex ? " selected" : ""}`}
+								onClick={() => runCommand(command)}
+							>
+								<span className="skill-slash-option-name">/{command.name}</span>
+								<span className="skill-slash-option-desc">{command.description}</span>
+							</button>
+						))}
+					</div>
+				) : null}
+				{mentionQuery !== null && !menuClosed ? (
+					<div className="at-file-mention-menu" role="listbox" data-testid="mention-popup">
+						{atChoices.length === 0 ? <p className="skill-slash-empty">{t("mention.empty")}</p> : null}
+						{atChoices.map((file, index) => (
+							<button
+								key={file}
+								type="button"
+								role="option"
+								aria-selected={index === atIndex}
+								data-testid={`mention-${file}`}
+								className={`at-file-mention-option${index === atIndex ? " selected" : ""}`}
+								onClick={() => pickFile(file)}
+							>
+								<span className="at-file-mention-option-name">@{file}</span>
+							</button>
+						))}
+					</div>
+				) : null}
+				<form
+					className="composer-card"
+					data-testid="composer-card"
+					onSubmit={(event) => {
+						event.preventDefault();
+						submit("queue");
+					}}
+				>
 					<textarea
 						id="message-input"
 						data-testid="composer-input"
 						rows={2}
+						ref={(node) => { if (node !== null) autoGrow(node); }}
 						value={text}
 						placeholder={t("composer.placeholder")}
 						autoComplete="off"
 						onChange={(event) => {
 							setText(event.target.value);
 							setMenuClosed(false);
-							const node = event.target;
-							node.style.height = "auto";
-							node.style.height = `${Math.min(node.scrollHeight, 220)}px`;
+							autoGrow(event.target);
 						}}
 						onKeyDown={onKey}
 						onPaste={onPaste}
+						className="composer-editor"
 					/>
 					<div className="composer-toolbar">
-						<div className="composer-toolbar-left">
-							<span className="shortcuts-hint">{running ? t("composer.runningHint") : t("composer.hint")}</span>
+						<div className="flex min-w-0 items-center gap-2">
+							<ModelPicker session={session} />
+							<span className="composer-toolbar-hints min-w-0 truncate">{running ? t("composer.runningHint") : t("composer.hint")}</span>
 						</div>
-						<button
-							type="submit"
-							data-testid="composer-submit"
-							disabled={hasPendingAsk}
-							className="ui-button ui-button--primary"
-						>
-							{text.trim().length > 0 ? t("composer.send") : running ? t("composer.stop") : t("composer.send")}
-						</button>
+						<Button type="submit" variant="invert" data-testid="composer-submit" disabled={hasPendingAsk}>
+							{text.trim().length > 0 || !running ? t("composer.send") : t("composer.stop")}
+						</Button>
 					</div>
-				</div>
-			</form>
+				</form>
+			</div>
 		</footer>
 	);
 }
