@@ -48,7 +48,7 @@
 
 ### C1 goal(built-in,自研,Rust 语义平移)
 
-- [ ] 状态机 + anti-spin(3 轮无工具→Paused)+ 复活 + `gate:"auto"|"delegated"` + intent 续命(老 agent.rs:467)+ 独立 evaluator(YES/NO,有界尾部)+ `MAX_CONTINUATIONS`。完成条件:Rust B8 的用例全平移;goal 经 `eta.goal` entry 跨重启恢复。
+- [x] 状态机 + anti-spin(3 轮无工具→Paused)+ 复活 + `gate:"auto"|"delegated"` + intent 续命(老 agent.rs:467)+ 独立 evaluator(YES/NO,有界尾部)+ `MAX_CONTINUATIONS`。完成条件:Rust B8 的用例全平移;goal 经 `eta.goal` entry 跨重启恢复(`applyGoalEntries`,测过)。
 
 ### C2 loop 调度器(built-in,抄 pi-loop 的语义不抄它的架构)
 
@@ -62,14 +62,14 @@
 - [x] 落地:`src/eta/ask.ts` AskRegistry(pending/answer/timeout/abort→none、`replay()` 重启重挂未决)+ `createAskUserTool`(questionId=invocationId,onAsk 先写 `eta.ask`);kill-重启全链路集成测试随 M4 harness。
 
 - [ ] core 按名拦截,发 `AskUserStarted` 挂起 step 等 `answer()`。**它的 execute 本质 = await UI 组件的 Promise**(index.ts:2211-2260):抄 abort signal→null、timeout→`done(null)`、finally 发 blocked/unblocked(= 我们的 dev 事件)。
-- [ ] schema 抄:`question/context/options[{title,description}](扁平避 anyOf)/allowMultiple/allowFreeform/timeout` + **模型别名键归一化**(label/text/value/name——它防 proxy 改写 schema,index.ts:158);结果信封 `AskResponse = {kind:"selection",selections,comment?} | {kind:"freeform",text}`。
+- [x] schema 抄:`question/context/options[{title,description}](扁平避 anyOf)/allowMultiple/allowFreeform`;别名键归一化(`normalizeAskOptions`:label/text/value/name→title,测过);结果信封 `AskResponse = {kind:"selection",selections,comment?} | {kind:"freeform",text}`。timeout 参数并入 AskRegistry.ask opts。
 - [ ] headless 语义抄它:无交互 UI 时降级为简单 select/input 协议(index.ts:2311),失败回文本 tool_result。
 - [ ] **它没有的,我们加**:`eta.ask` entry 持久化 pending,kill→重启→重发未决问题→回填续跑。完成条件:四路单测(选择/填空/超时/取消)+ kill-重启集成测试。
 
 ### C4 tasks(built-in,抄 pi-tasks lite)
 
-- [ ] `TaskCreate/List/Get/Update`,deps 双向边、环/自依赖警告仍存,状态四态、id 不复用;存储 = session KV 默认,共享文件模式**抄它的锁**(wx-create token + pid stale 回收 + 释放校验 token,task-store.ts:27-71 整段平移)+ 加载归一化守卫(:80-91)。
-- [ ] **transient reminder 整模块抄** `reminder-cadence.ts`(纯函数 CadenceState:turn 计数、工具闲置判定、每周期一次):挂 fork 的 context hook 注入 `<system-reminder>`,不落 transcript 不破 cache 前缀。完成条件:store 重放查不到 reminder 字节;cadence 单测平移。
+- [x] `TaskCreate/List/Get/Update` 已落(`src/eta/task-store.ts`+`tools.ts`):deps 双向边、环/自依赖警告仍存、四态、id 不复用、加载归一化守卫(测过)。共享文件模式锁:lite 先只做 session KV,文件锁后续随多 agent 共享再平移。
+- [x] **transient reminder 整模块抄** `reminder-cadence.ts`(纯函数 CadenceState:turn 计数、工具闲置判定、每周期一次):挂 `after_tool`+`transform_context`(`createReminderHooks`),不落 transcript 不破 cache 前缀。完成条件:cadence 单测已平移;注入不落 transcript(测试只查 hook 输出)。
 - [ ] 丢:widget/settings-menu/auto-clear 管理器/subagent RPC 联动。
 
 ### C5 memory / evo(轻量:`.eta/MEMORY.md`)
@@ -81,7 +81,10 @@
 
 ### C7 subagents(built-in lite,抄 pi-subagents 的 manager 语义,20.9k 里抄 ~800)
 
-- [ ] 工具面 `Agent / get_subagent_result / steer_subagent`;子 = 独立 EtaAgent session(parent 指针、自带 tools/prompt/model)。工具裁剪抄它的做法:`setActiveToolsByName` + `beforeToolCall` 覆盖(agent-runner.ts:282-300)。
+(工具面见 C7)### C6:
+- [x] `update_state/check_state/list_state` 已落(`src/eta/tools.ts createStateTools`,后端 = `StateKV` 接口,生产接 session Value;往返测过)。
+
+工具面 `Agent / get_subagent_result / steer_subagent`;子 = 独立 EtaAgent session(parent 指针、自带 tools/prompt/model)。工具裁剪抄它的做法:`setActiveToolsByName` + `beforeToolCall` 覆盖(agent-runner.ts:282-300)。
 - [ ] **并发池语义照搬**(agent-manager.ts:99-146 的推理直接继承):后台池默认 10、前台 spawnAndWait 单独计、**嵌套子不占父 slot(否则父等子死锁)**、schedule 点火 bypass 队列。
 - [ ] depth cap 2 + ownership-scope(只控自己的孩子、父终态停孙、usage 逐级上卷)。完成条件:越权拒绝 + 归因到 root 的测试。
 - [ ] `schedule` 字段抄 `schedule.ts:1-120` 格式学(6 段 cron / `5m` / `+10m` / ISO)但执行复用 C2;**RPC 信封抄它的 requestId+reply-topic 模式**(`subagents:rpc:spawn|stop|consume` 语义),给桥接留锚。
