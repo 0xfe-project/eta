@@ -9,27 +9,15 @@
  */
 
 import { nextCronAt, parseCron } from "./cron.ts";
-import type { LoopDef } from "./tasks.ts";
+import type { LoopDef, LoopSpec } from "./session/types.ts";
+
+export type { LoopDef, LoopSpec } from "./session/types.ts";
 
 export interface LoopEvent {
 	type: string;
 	/** Flattened text used for substring / regex filters. */
 	text?: string;
 	payload?: Record<string, unknown>;
-}
-
-/** Extra scheduling fields carried alongside LoopDef in the registry value. */
-export interface LoopSpec {
-	def: LoopDef;
-	/** Event trigger: fires when a bus event matches. */
-	on?: { type: string; contains?: string; regex?: string; equals?: Record<string, unknown> };
-	expiresAt?: string;
-	/** Runtime bookkeeping; part of the persisted value. */
-	runCount: number;
-	nextDueAt?: number;
-	createdAt: number;
-	paused: boolean;
-	disposed?: boolean;
 }
 
 const EVERY_PATTERN = /^(\d+)(ms|s|m|h|d)?$/;

@@ -75,7 +75,7 @@ describe("ask_user kill-restart-answer", () => {
 		const tool = createAskUserTool({
 			registry,
 			onAsk: async (payload: AskPayload) => {
-				await laneRef.lane?.appendCustomEntry("eta.ask", payload as never, CTX);
+				await laneRef.lane?.append({ type: "ask", payload } as never, CTX);
 			},
 		});
 		const faux = fauxProvider();
@@ -116,7 +116,7 @@ describe("ask_user kill-restart-answer", () => {
 		await resume;
 		await second.lane.waitForIdle(CTX);
 		const after = await entryLog(second.lane);
-		expect(after.some((e) => e.type === "custom" && e.customType === "eta.ask")).toBe(true);
+		expect(after.some((e) => e.type === "ask")).toBe(true);
 		expect(after.filter((e) => e.type === "message" && e.message.role === "toolResult")).toBeTruthy();
 		void second.harness.close(CTX);
 		void second.session.close(CTX);
@@ -129,7 +129,7 @@ describe("run-end drivers", () => {
 		const laneRef: { lane?: Awaited<ReturnType<AgentHarness["lane"]>> } = {};
 		let evalCalls = 0;
 		goal.onChange = async (change) => {
-			await laneRef.lane?.appendCustomEntry("eta.goal", { kind: change.goal.status, objective: change.goal.objective } as never, CTX);
+			await laneRef.lane?.append({ type: "goal", payload: { kind: change.goal.status, objective: change.goal.objective } } as never, CTX);
 		};
 		goal.set("ship M4");
 		const faux = fauxProvider();
@@ -147,7 +147,7 @@ describe("run-end drivers", () => {
 			(e) => e.type === "message" && e.message.role === "user" && JSON.stringify(e.message.content).includes(GOAL_CONTINUATION),
 		);
 		expect(injected.length).toBe(1);
-		expect(entries.some((e) => e.type === "custom" && e.customType === "eta.goal")).toBe(true);
+		expect(entries.some((e) => e.type === "goal")).toBe(true);
 		await harness.close(CTX);
 		await session.close(CTX);
 	}, 15_000);

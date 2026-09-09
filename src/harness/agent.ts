@@ -10,6 +10,9 @@ import type { Api, Model, Models } from "@earendil-works/pi-ai";
 import { BACKGROUND_CONTEXT, type Context } from "./context.ts";
 import { AgentHarness, type AgentLane } from "./agent-harness.ts";
 import { loopFollowUp } from "../prompts/index.ts";
+import { loopState, loopStateInventoryPrefix } from "./session/values.ts";
+import type { PendingEntry } from "./session/types.ts";
+import { applyGoalEntries } from "./goal.ts";
 import type { AgentHarnessTool } from "./types.ts";
 import type { Session } from "./session/types.ts";
 import type { EtaEmit } from "./eta-events.ts";
@@ -93,6 +96,8 @@ export class EtaAgent {
 	readonly btw: BtwManager;
 	readonly subagents: SubagentManager;
 	readonly batteryTools: BatteryTool[];
+	/** Size of the last <memory> block for the water level panel; undefined when no source. */
+	readonly memoryInfo: (() => Promise<{ chars: number }>) | undefined;
 	private readonly stopHeartbeat: (() => void) | undefined;
 
 	private constructor(
@@ -105,6 +110,7 @@ export class EtaAgent {
 		btw: BtwManager,
 		subagents: SubagentManager,
 		batteryTools: BatteryTool[],
+		memoryInfo: (() => Promise<{ chars: number }>) | undefined,
 		stopHeartbeat: (() => void) | undefined,
 	) {
 		this.harness = harness;
@@ -116,6 +122,7 @@ export class EtaAgent {
 		this.btw = btw;
 		this.subagents = subagents;
 		this.batteryTools = batteryTools;
+		this.memoryInfo = memoryInfo;
 		this.stopHeartbeat = stopHeartbeat;
 	}
 
@@ -128,11 +135,14 @@ export class EtaAgent {
 		const emit: EtaEmit = (category, action, data) => {
 			void laneRef?.publish([{ type: "eta", category, action, data: data ?? {} }], BACKGROUND_CONTEXT).catch(() => undefined);
 		};
-		const writeEntry = (entry: { customType: string; payload: object }) => {
-			void laneRef?.appendCustomEntry(entry.customType, entry.payload as never, BACKGROUND_CONTEXT).catch(() => undefined);
+		const writeEntry = (entry: PendingEntry) => {
+			void laneRef?.append(entry, BACKGROUND_CONTEXT).catch(() => undefined);
 		};
 		const persistLoop =
-			options.persistLoop ?? ((spec: LoopSpec) => writeEntry({ customType: "eta_loop_state", payload: spec }));
+			options.persistLoop ??
+			((spec: LoopSpec) => {
+				void options.session.setValue(loopState(spec.def.id), spec, BACKGROUND_CONTEXT).catch(() => undefined);
+			});
 
 		const goal = new GoalManager();
 		goal.dev = emit;
@@ -207,17 +217,39 @@ export class EtaAgent {
 			);
 		}
 		const stopHeartbeat = options.heartbeatMs === 0 ? undefined : startLoopHeartbeat(loops, options.heartbeatMs ?? 30_000);
-		return new EtaAgent(harness, lane, goal, tasks, loops, ask, btw, subagents, batteryTools, stopHeartbeat);
+		return new EtaAgent(
+			harness,
+			lane,
+			goal,
+			tasks,
+			loops,
+			ask,
+			btw,
+			subagents,
+			batteryTools,
+			options.memorySource === undefined
+				? undefined
+				: async () => ({ chars: (await options.memorySource!()).length }),
+			stopHeartbeat,
+		);
 	}
 
-	/** Unanswered asks after a restart, from the replayed entry log. */
+	/** Rebuild battery state from the replayed session log and values. */
 	async restore(context: Context): Promise<void> {
 		const entries = await this.lane.findEntries(undefined, context);
-		this.ask.replay(
-			entries
-				.filter((e): e is Extract<typeof e, { type: "custom" }> => e.type === "custom" && (e.customType === "eta.ask" || e.customType === "eta.answer"))
-				.map((e) => ({ customType: e.customType, payload: e.data })),
-		);
+		const changes = entries.filter((e): e is Extract<typeof e, { payload: unknown }> => e.type === "goal" || e.type === "ask" || e.type === "answer" || e.type === "btw");
+		const replayGoal = this.goal.onChange;
+		this.goal.onChange = undefined;
+		try {
+			applyGoalEntries(this.goal, changes);
+		} finally {
+			this.goal.onChange = replayGoal;
+		}
+		this.ask.replay(changes);
+		this.btw.replay(changes);
+		for (const stored of await this.lane.scanValues(loopStateInventoryPrefix(), context)) {
+			this.loops.upsert(stored.value);
+		}
 	}
 
 	async close(context: Context): Promise<void> {

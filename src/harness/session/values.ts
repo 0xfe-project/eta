@@ -1,6 +1,6 @@
 import type { AssistantMessageFrame } from "@earendil-works/pi-ai";
 import type { AgentToolResult } from "../../types.ts";
-import type {
+import type {LoopSpec,
 	DurableStructuralPreparation,
 	JsonValue,
 	LaneConfiguration,
@@ -155,6 +155,8 @@ export function resolveListReadOptions(options: ListReadOptions = {}): ResolvedL
 	};
 }
 
+export const loopState = (id: string) => value<LoopSpec>("eta.loop.state", id);
+export const loopStateInventoryPrefix = () => value<LoopSpec>("eta.loop.state");
 export const branchTip = (branch: string) => value<string | null>("pi.branch.tip", branch);
 export const branchTipInventoryPrefix = () => value<string | null>("pi.branch.tip");
 export const laneConfig = (lane: string) => value<LaneConfiguration>("pi.lane.config", lane);

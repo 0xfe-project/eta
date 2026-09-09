@@ -91,6 +91,7 @@ import {
 	pendingToolOutput,
 	setValue,
 } from "../session/values.ts";
+import type { StoredValue, Value } from "../session/values.ts";
 import { formatSkillInvocation } from "../skills.ts";
 import { durableBranchPreparation, durableCompactionPreparation } from "./drive/structural.ts";
 import { driveOperation } from "./drive.ts";
@@ -197,13 +198,21 @@ function pendingEntryWrite(entryId: string, pending: PendingEntry): NewEntry {
 					mergedParentId: pending.payload.mergedParentId,
 					summary: pending.payload.summary,
 				}
-			: {
-					id: entryId,
-					parentId: null,
-					type: "custom",
-					customType: pending.customType,
-					...(pending.payload === undefined ? {} : { data: pending.payload }),
-				};
+			: pending.type === "custom"
+				? {
+						id: entryId,
+						parentId: null,
+						type: "custom",
+						customType: pending.customType,
+						...(pending.payload === undefined ? {} : { data: pending.payload }),
+					}
+				: pending.type === "goal"
+					? { id: entryId, parentId: null, type: "goal", payload: pending.payload }
+					: pending.type === "ask"
+						? { id: entryId, parentId: null, type: "ask", payload: pending.payload }
+						: pending.type === "answer"
+							? { id: entryId, parentId: null, type: "answer", payload: pending.payload }
+							: { id: entryId, parentId: null, type: "btw", payload: pending.payload };
 }
 
 function capturedModel(operation: Operation): ModelIdentity | undefined {
@@ -1604,6 +1613,10 @@ export class Lane<TContext extends object | undefined> implements AgentLane {
 		return this.session.getStats(context);
 	}
 
+	scanValues<T>(prefix: Value<T>, context: Context): Promise<StoredValue<T>[]> {
+		return this.session.scanValues(prefix, context);
+	}
+
 	async waitForIdle(context: Context): Promise<void> {
 		for (;;) {
 			const observation = await this.command<IdleObservation>(
@@ -1978,7 +1991,8 @@ export class Lane<TContext extends object | undefined> implements AgentLane {
 		return this.navigateTree(targetId, { summarize: false }, context);
 	}
 
-	private append(pending: PendingEntry, context: Context): Promise<string> {
+	/** Append any entry — message, custom, or goal/ask/answer/btw — to this lane. */
+	append(pending: PendingEntry, context: Context): Promise<string> {
 		this.assertOpen();
 		if (
 			pending.type === "message" &&
@@ -2026,19 +2040,19 @@ export class Lane<TContext extends object | undefined> implements AgentLane {
 				...(await readLaneQueues(reader, state.inbox, context)),
 				pending.type === "message"
 					? { entryId: id, kind: "write" as const, type: "message" as const, message: pending.payload }
-					: pending.type === "merge"
+					: pending.type === "custom"
 						? {
-								entryId: id,
-								kind: "write" as const,
-								type: "custom" as const,
-								customType: "eta.merge_placeholder",
-							}
-						: {
 								entryId: id,
 								kind: "write" as const,
 								type: "custom" as const,
 								customType: pending.customType,
 								...(pending.payload === undefined ? {} : { data: pending.payload }),
+							}
+						: {
+								entryId: id,
+								kind: "write" as const,
+								type: "custom" as const,
+								customType: `eta.${pending.type}_placeholder`,
 							},
 			];
 			return {

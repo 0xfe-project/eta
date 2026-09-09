@@ -104,7 +104,7 @@ export function readLaneQueues(
 				entryId: item.entryId,
 				kind: "write",
 				type: "custom",
-				customType: stored.value.type === "custom" ? stored.value.customType : "eta.merge_placeholder",
+				customType: stored.value.type === "custom" ? stored.value.customType : `eta.${stored.value.type}_placeholder`,
 				...(stored.value.type === "custom" && stored.value.payload !== undefined ? { data: stored.value.payload } : {}),
 			};
 		}),

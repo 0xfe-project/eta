@@ -32,9 +32,26 @@ export interface SessionViewLoop {
 	nextDueAt?: number;
 }
 
+export interface SessionViewSystemRow {
+	entryId: string;
+	seq: number;
+	kind: "goal" | "ask" | "btw" | "compaction" | "merge";
+	text: string;
+}
+
+export interface SessionViewSubagent {
+	id: string;
+	status: string;
+	turns: number;
+}
+
 export interface SessionView {
 	messages: SessionViewMessage[];
+	systems: SessionViewSystemRow[];
 	thinking: string[];
+	compactionEpoch: number;
+	memory: { chars: number } | undefined;
+	subagents: SessionViewSubagent[];
 	goal: GoalState | undefined;
 	tasks: StoredTask[];
 	loops: SessionViewLoop[];
@@ -60,15 +77,40 @@ export class SessionViewProjector {
 		const { lane, goal, tasks, loops, btw, ask } = this.agent;
 		const entries = await lane.findEntries({ order: "oldestFirst" }, context);
 		const messages: SessionViewMessage[] = [];
+		const systems: SessionViewSystemRow[] = [];
 		const thinking: string[] = [];
+		let compactionEpoch = 0;
 		for (const entry of entries) {
-			if (entry.type !== "message") continue;
-			messages.push({ entryId: entry.id, seq: entry.seq, message: entry.message });
-			const content = (entry.message as { content?: unknown }).content;
-			if (Array.isArray(content)) {
-				for (const block of content as { type?: string; thinking?: string }[]) {
-					if (block.type === "thinking" && typeof block.thinking === "string") thinking.push(block.thinking);
+			if (entry.type === "message") {
+				messages.push({ entryId: entry.id, seq: entry.seq, message: entry.message });
+				const content = (entry.message as { content?: unknown }).content;
+				if (Array.isArray(content)) {
+					for (const block of content as { type?: string; thinking?: string }[]) {
+						if (block.type === "thinking" && typeof block.thinking === "string") thinking.push(block.thinking);
+					}
 				}
+				continue;
+			}
+			if (entry.type === "compaction") {
+				compactionEpoch += 1;
+				systems.push({ entryId: entry.id, seq: entry.seq, kind: "compaction", text: `compaction #${compactionEpoch}: ${entry.summary.slice(0, 120)}` });
+				continue;
+			}
+			if (entry.type === "merge") {
+				systems.push({ entryId: entry.id, seq: entry.seq, kind: "merge", text: entry.summary });
+				continue;
+			}
+			if (entry.type === "goal") {
+				const payload = entry.payload;
+				systems.push({ entryId: entry.id, seq: entry.seq, kind: "goal", text: payload.objective === undefined ? `goal ${payload.kind}` : `goal ${payload.kind}: ${payload.objective}` });
+				continue;
+			}
+			if (entry.type === "ask") {
+				systems.push({ entryId: entry.id, seq: entry.seq, kind: "ask", text: `ask: ${entry.payload.question}` });
+				continue;
+			}
+			if (entry.type === "btw") {
+				systems.push({ entryId: entry.id, seq: entry.seq, kind: "btw", text: `btw: ${entry.payload.note}` });
 			}
 		}
 		const stats = await lane.getStats(context);
@@ -83,7 +125,11 @@ export class SessionViewProjector {
 		});
 		return {
 			messages,
+			systems,
 			thinking,
+			compactionEpoch,
+			memory: await this.agent.memoryInfo?.(),
+			subagents: this.agent.subagents.list().map((r) => ({ id: r.id, status: r.status, turns: r.turns })),
 			goal: goal.current,
 			tasks: tasks.list(),
 			loops: loops.list().map(specView),

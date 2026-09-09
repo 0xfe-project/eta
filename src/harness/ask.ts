@@ -9,7 +9,7 @@ import { Type } from "typebox";
 import { awaitWithContext } from "./context.ts";
 import type { AgentHarnessTool } from "./types.ts";
 import type { DevEmit } from "./dev-events.ts";
-import { ASK_CUSTOM_TYPE, type AskPayload } from "./entries.ts";
+import type { AskPayload } from "./session/types.ts";
 
 export type AskResponse =
 	| { kind: "selection"; selections: string[]; comment?: string }
@@ -84,13 +84,13 @@ export class AskRegistry {
 	 * call ask() again for the same questionId; until then this is what makes
 	 * the pending question visible to the UI after a restart.
 	 */
-	replay(entries: { customType: string; payload: unknown }[]): void {
+	replay(entries: { type: string; payload: unknown }[]): void {
 		const answered = new Set<string>();
 		const asks: AskPayload[] = [];
 		for (const entry of entries) {
-			if (entry.customType === ASK_CUSTOM_TYPE) {
+			if (entry.type === "ask") {
 				asks.push(entry.payload as AskPayload);
-			} else if (entry.customType === "eta.answer") {
+			} else if (entry.type === "answer") {
 				answered.add((entry.payload as { questionId: string }).questionId);
 			}
 		}
