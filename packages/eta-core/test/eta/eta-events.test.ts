@@ -7,15 +7,15 @@ import { BACKGROUND_CONTEXT } from "../../src/harness/context.ts";
 import type { HarnessEvent } from "../../src/harness/agent-harness.ts";
 import { createNodeSqliteFactory, SQLITE_STORAGE_VERSION, SqliteStorage, sql } from "../../../eta-storage-sqlite/src/index.ts";
 import { applyInitialSchema } from "../../../eta-storage-sqlite/src/sqlite/migrations.ts";
-import { AskRegistry } from "../../src/eta/ask.ts";
+import { AskRegistry } from "../../src/harness/ask.ts";
 import { StorageBackedSession } from "../../src/harness/session/session.ts";
-import { EtaAgent } from "../../src/eta/agent.ts";
-import { BtwManager } from "../../src/eta/btw.ts";
-import type { DevEmit } from "../../src/eta/dev-events.ts";
-import { GoalManager } from "../../src/eta/goal.ts";
-import { LoopScheduler } from "../../src/eta/loops.ts";
-import { TaskStore } from "../../src/eta/task-store.ts";
-import { createStateTools, createTaskTools } from "../../src/eta/tools.ts";
+import { EtaAgent } from "../../src/harness/agent.ts";
+import { BtwManager } from "../../src/harness/btw.ts";
+import type { DevEmit } from "../../src/harness/dev-events.ts";
+import { GoalManager } from "../../src/harness/goal.ts";
+import { LoopScheduler } from "../../src/harness/loops.ts";
+import { TaskStore } from "../../src/harness/task-store.ts";
+import { createStateTools, createTaskTools } from "../../src/harness/tools.ts";
 
 const CTX = BACKGROUND_CONTEXT;
 const EMPTY_USAGE = {

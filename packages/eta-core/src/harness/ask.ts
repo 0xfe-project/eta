@@ -6,8 +6,8 @@
  */
 
 import { Type } from "typebox";
-import { awaitWithContext } from "../harness/context.ts";
-import type { AgentHarnessTool } from "../harness/types.ts";
+import { awaitWithContext } from "./context.ts";
+import type { AgentHarnessTool } from "./types.ts";
 import type { DevEmit } from "./dev-events.ts";
 import { ASK_CUSTOM_TYPE, type AskPayload } from "./entries.ts";
 

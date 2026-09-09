@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { AskRegistry, askResponseText, createAskUserTool } from "../../src/eta/ask.ts";
-import { permissionGate } from "../../src/eta/permission.ts";
+import { AskRegistry, askResponseText, createAskUserTool } from "../../src/harness/ask.ts";
+import { permissionGate } from "../../src/harness/permission.ts";
 import { BACKGROUND_CONTEXT } from "../../src/harness/context.ts";
 
 describe("ask registry", () => {

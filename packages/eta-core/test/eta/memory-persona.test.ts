@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { MEMORY_SECTIONS, MemoryCache, applyExtraction, extractMemory, parseMemory, renderMemory, scanMemoryPaths } from "../../src/eta/memory.ts";
-import { discoverPersonas, renderPersonaBlock } from "../../src/eta/persona.ts";
-import type { EtaFs } from "../../src/eta/memory.ts";
+import { MEMORY_SECTIONS, MemoryCache, applyExtraction, extractMemory, parseMemory, renderMemory, scanMemoryPaths } from "../../src/harness/memory.ts";
+import { discoverPersonas, renderPersonaBlock } from "../../src/harness/persona.ts";
+import type { EtaFs } from "../../src/harness/memory.ts";
 
 function memFs(files: Record<string, string>): EtaFs & { touch(p: string): void } {
 	const times = Object.fromEntries(Object.keys(files).map((k) => [k, 1000]));

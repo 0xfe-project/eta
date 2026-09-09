@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { TaskStore } from "../../src/eta/task-store.ts";
-import { createCadenceState, drainReminderForContext, evaluateToolResult, onTurnStart } from "../../src/eta/cadence.ts";
-import { createReminderHooks, createStateTools, createTaskTools, TASK_TOOL_NAMES } from "../../src/eta/tools.ts";
-import { GoalManager, applyGoalEntries } from "../../src/eta/goal.ts";
-import { normalizeAskOptions } from "../../src/eta/ask.ts";
+import { TaskStore } from "../../src/harness/task-store.ts";
+import { createCadenceState, drainReminderForContext, evaluateToolResult, onTurnStart } from "../../src/harness/cadence.ts";
+import { createReminderHooks, createStateTools, createTaskTools, TASK_TOOL_NAMES } from "../../src/harness/tools.ts";
+import { GoalManager, applyGoalEntries } from "../../src/harness/goal.ts";
+import { normalizeAskOptions } from "../../src/harness/ask.ts";
 
 describe("task store", () => {
 	it("auto-ids never get reused", () => {

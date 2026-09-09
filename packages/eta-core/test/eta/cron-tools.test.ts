@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as CTX } from "../../src/harness/context.ts";
-import { nextCronAt, parseCron } from "../../src/eta/cron.ts";
-import { LoopScheduler } from "../../src/eta/loops.ts";
-import { createLoopTools, createScheduleTool, createSubagentTools } from "../../src/eta/tools.ts";
-import { SubagentManager, type SubagentBus, type SubagentBusEvent, type SubagentUsage } from "../../src/eta/subagent.ts";
+import { nextCronAt, parseCron } from "../../src/harness/cron.ts";
+import { LoopScheduler } from "../../src/harness/loops.ts";
+import { createLoopTools, createScheduleTool, createSubagentTools } from "../../src/harness/tools.ts";
+import { SubagentManager, type SubagentBus, type SubagentBusEvent, type SubagentUsage } from "../../src/harness/subagent.ts";
 
 const utc = (y: number, mo: number, d: number, h = 0, mi = 0, s = 0) => Date.UTC(y, mo - 1, d, h, mi, s);
 

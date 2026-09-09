@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { LoopScheduler, computeJitter, eventMatches, parseEvery, DEFAULT_LOOP_TTL_MS, MAX_TRACE_DEPTH } from "../../src/eta/loops.ts";
-import type { LoopSpec } from "../../src/eta/loops.ts";
+import { LoopScheduler, computeJitter, eventMatches, parseEvery, DEFAULT_LOOP_TTL_MS, MAX_TRACE_DEPTH } from "../../src/harness/loops.ts";
+import type { LoopSpec } from "../../src/harness/loops.ts";
 
 interface Over { id: string; note?: string; every?: string; maxRuns?: number; createdAt?: number; on?: LoopSpec["on"]; expiresAt?: string; nextDueAt?: number; runCount?: number }
 function spec(over: Over): LoopSpec {

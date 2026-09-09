@@ -32,19 +32,20 @@
 ## Part B:对 fork 的外科手术(真实 delta)
 
 > **组装管线(已核实)**:pi 每次 generation 现算 `systemPrompt`(string 或 fn,`drive/generation.ts:58-65`),随后 `transform_context` hook 可改写 `{messages, systemPrompt}`,再 `before_payload`。fork 自带完整 `HookMap`(before_run / before_drive / before_run_end{followUp?} / transform_context / before_request / before_payload / after_response / before_tool / after_tool / before_compaction / before_navigation,`agent-harness.ts:430-502`)。
-> **手术=挂 hook 优先**:S1 用 `before_run_end` 的 `followUp` 注入 driver;S3 用 `before_tool`(doom)+ `after_response`(tail/similar→下一 turn `transform_context` 注 RESUME_LOOP);S4 用 `before_tool` block(fail-closed);C4 reminder 用 `transform_context`(<system-reminder> 不落 transcript)。`<current_tasks>`/goal guidelines 一律走 `src/eta/composer.ts` 包的 systemPrompt fn,不碰 drive。只有 S2(空响应)必须动 `drive/response.ts`。
+> **手术=挂 hook 优先**:S1 用 `before_run_end` 的 `followUp` 注入 driver;S3 用 `before_tool`(doom)+ `after_response`(tail/similar→下一 turn `transform_context` 注 RESUME_LOOP);S4 用 `before_tool` block(fail-closed);C4 reminder 用 `transform_context`(<system-reminder> 不落 transcript)。`<current_tasks>`/goal guidelines 一律走 `src/harness/composer.ts` 包的 systemPrompt fn,不碰 drive。只有 S2(空响应)必须动 `drive/response.ts`。
 > **单一事件流(整合,反插件化)**:`HarnessEvent` 是唯一事件总线——不再有独立 dev bus / bridge / 第二订阅通道。事件 union 新增一等变体 `eta {category, action, data}`(电池直接发进主总线,与 turn/tool/usage 同流同序同 lane 标签)与 `prompt_assembled`(generation 原生发)。生命周期/turn/usage/tool/retry/compaction 类别 = 原生事件本身。`EtaAgent` 整合门面:电池(goal/tasks/loops/ask/btw/memory/persona)= agent 内部状态,由它统一构造并接线;对外只有一套 harness、一条事件流、一份 entry log(customTypes 早已在主 entry 流里)。
 
-- [~] S1 **driver 队列**(goal driver 与 loop driver 均走 `before_run_end.followUp`,`src/eta/run-end.ts`):goal 续命与 loop 触发是「turn 边界优先消费的 driver」,不是普通 inbox 消息;dequeue 顺序 driver > had_tools > break(老 B2 语义)。完成条件:两个 driver 各一条集成测试。
-- [x] S2 **空响应重试**:不动 `drive/response.ts`(well-formed 空答上游不重试是正确的);`src/eta/run-end.ts emptyResponseGuard` 挂 `before_run_end`,空 stop → RESUME_EMPTY followUp,预算 2 次,真实回答即复位。完成条件:已测(含复位)。
+- [~] S1 **driver 队列**(goal driver 与 loop driver 均走 `before_run_end.followUp`,`src/harness/run-end.ts`):goal 续命与 loop 触发是「turn 边界优先消费的 driver」,不是普通 inbox 消息;dequeue 顺序 driver > had_tools > break(老 B2 语义)。完成条件:两个 driver 各一条集成测试。
+- [x] S2 **空响应重试**:不动 `drive/response.ts`(well-formed 空答上游不重试是正确的);`src/harness/run-end.ts emptyResponseGuard` 挂 `before_run_end`,空 stop → RESUME_EMPTY followUp,预算 2 次,真实回答即复位。完成条件:已测(含复位)。
 - [x] S3 **漂移检测**:平移老 `loop_detect.rs`(doom 指纹≥3、tail_repetition、similar 三指标)为纯函数模块,接入 loop reminder,再犯抛 `LoopDetected`。完成条件:Rust 单测全数平移。
-- [x] S4 **fail-closed 权限**(挂 `before_tool`;`src/eta/permission.ts`:拒绝/抛错/超时=deny,测过):上游 `beforeToolCall` 是 fail-open;给 `requires_approval` 工具加 gate——无 hook/超时 = Deny + `permission denied` tool_result(老 B7)。完成条件:无 hook 场景测过。
+- [x] S4 **fail-closed 权限**(挂 `before_tool`;`src/harness/permission.ts`:拒绝/抛错/超时=deny,测过):上游 `beforeToolCall` 是 fail-open;给 `requires_approval` 工具加 gate——无 hook/超时 = Deny + `permission denied` tool_result(老 B7)。完成条件:无 hook 场景测过。
 - [x] S5 **ask_user 拦截 + answer 通道**(见 C3),S6 **新 entry customTypes**(customTypes 见 C5 契约;ask/answer 通道见 C3 已落):`eta.goal / eta.ask / eta.answer / eta.btw`(tasks/loops 走 KV Value)。完成条件:重放后 store 语义完整。
 
 ---
 
 ## Part C:内建电池(`src/batteries/`,每节一个模块 + config 开关)
 
+ > **单一整体**:`src/harness/` 一棵树一个命名空间——fork 的 runtime/session/compaction 与电池(goal/loops/ask/tasks/btw/subagents/agent/session-view)平铺同级,没有 src/eta、没有第二 barrel;模型可见字符串(loop follow-up、btw handoff、merge summary)与系统提示一样全部收在 prompts。
 > **Prompt 仓库**:全部系统提示集中在 `packages/eta-core/src/prompts/`(按主题一文件,`index.ts` 总出)。上游 v0.85.1 自带的 5 条 compaction/branch 提示已重写成 eta 口吻收进 `src/prompts/compaction.ts`(EXACT 格式模板逐字保留=输出契约),harness 两处改为 import。文风规则:markdown 只用于保格式;不提 AI/assistant/LLM 这类词,用对朋友说话的口吻;代码与文档中不出现 pi 字样(npm 包名与 UPSTREAM.md 溯源除外)。
 
 ### C1 goal(built-in,自研,Rust 语义平移)
@@ -53,14 +54,14 @@
 
 ### C2 loop 调度器(built-in,抄 pi-loop 的语义不抄它的架构)
 
-- [x] Trigger:`event | interval | cron(6 段 UTC,`src/eta/cron.ts`)已落(`src/eta/loops.ts`:contains/regex:/equals filter 语义照抄);cron/dynamic 后续补。**event filter 语法原样抄** `trigger-system.ts:141-155`(substring / `regex:` / JSON 等值)。事件源 = 进程内 bus(`turn_end/tasks_updated/subagents:*`),对应它 `pi.events.on`。
+- [x] Trigger:`event | interval | cron(6 段 UTC,`src/harness/cron.ts`)已落(`src/harness/loops.ts`:contains/regex:/equals filter 语义照抄);cron/dynamic 后续补。**event filter 语法原样抄** `trigger-system.ts:141-155`(substring / `regex:` / JSON 等值)。事件源 = 进程内 bus(`turn_end/tasks_updated/subagents:*`),对应它 `pi.events.on`。
 - [x] **pump 模型照抄**:调度器不自主定时,`pump(now)` 由 turn 边界 + **30s unref 心跳**驱动(session-runtime.ts:13 的注释就是理由:idle 时不 pump 的 loop 永不触发);**jitter** 抄 `loop-parse.computeJitter`;**session generation 计数器**防跨 session 陈旧回调。
 - [x] 生命周期语义:`expiresAt`(默认 7d `DEFAULT_LOOP_TTL_MS`)过期即 dispose;**fire 上限→pause**(controller_limit 语义);trace 深度 ≤8(`MAX_TRACE_DEPTH`)。完成条件:pump/jitter/expiry/cap/event 各一条测试(已达)。
 - [x] 持久化**不抄它的 event-sourced reducer store(956 行)**:registry 进 session KV,纯函数 CRUD + 文件锁即可;`loop-events.ts` 的恢复语义(resume_event_stale)要有。完成条件:未 attach session 到点火、重启全恢复、过期/上限/去重各一条测试。
 
 ### C3 ask_user(built-in,读码结论:schema 抄、UI 丢、持久化我们补)
 
-- [x] 落地:`src/eta/ask.ts` AskRegistry(pending/answer/timeout/abort→none、`replay()` 重启重挂未决)+ `createAskUserTool`(questionId=invocationId,onAsk 先写 `eta.ask`);kill-重启全链路集成测试随 M4 harness。
+- [x] 落地:`src/harness/ask.ts` AskRegistry(pending/answer/timeout/abort→none、`replay()` 重启重挂未决)+ `createAskUserTool`(questionId=invocationId,onAsk 先写 `eta.ask`);kill-重启全链路集成测试随 M4 harness。
 
 - [x] core 按名拦截,发 `AskUserStarted` 挂起 step 等 `answer()`。**它的 execute 本质 = await UI 组件的 Promise**(index.ts:2211-2260):抄 abort signal→null、timeout→`done(null)`、finally 发 blocked/unblocked(= 我们的 dev 事件)。
 - [x] schema 抄:`question/context/options[{title,description}](扁平避 anyOf)/allowMultiple/allowFreeform`;别名键归一化(`normalizeAskOptions`:label/text/value/name→title,测过);结果信封 `AskResponse = {kind:"selection",selections,comment?} | {kind:"freeform",text}`。timeout 参数并入 AskRegistry.ask opts。
@@ -69,7 +70,7 @@
 
 ### C4 tasks(built-in,抄 pi-tasks lite)
 
-- [x] `TaskCreate/List/Get/Update` 已落(`src/eta/task-store.ts`+`tools.ts`):deps 双向边、环/自依赖警告仍存、四态、id 不复用、加载归一化守卫(测过)。共享文件模式锁:lite 先只做 session KV,文件锁后续随多 agent 共享再平移。
+- [x] `TaskCreate/List/Get/Update` 已落(`src/harness/task-store.ts`+`tools.ts`):deps 双向边、环/自依赖警告仍存、四态、id 不复用、加载归一化守卫(测过)。共享文件模式锁:lite 先只做 session KV,文件锁后续随多 agent 共享再平移。
 - [x] **transient reminder 整模块抄** `reminder-cadence.ts`(纯函数 CadenceState:turn 计数、工具闲置判定、每周期一次):挂 `after_tool`+`transform_context`(`createReminderHooks`),不落 transcript 不破 cache 前缀。完成条件:cadence 单测已平移;注入不落 transcript(测试只查 hook 输出)。
 - [x] 丢:widget/settings-menu/auto-clear 管理器/subagent RPC 联动(工具面 `Agent/get_subagent_result/steer_subagent` 已落,`createSubagentTools`)。
 
@@ -83,17 +84,17 @@
 ### C7 subagents(built-in lite,抄 pi-subagents 的 manager 语义,20.9k 里抄 ~800)
 
 (工具面见 C7)### C6:
-- [x] `update_state/check_state/list_state` 已落(`src/eta/tools.ts createStateTools`,后端 = `StateKV` 接口,生产接 session Value;往返测过)。
+- [x] `update_state/check_state/list_state` 已落(`src/harness/tools.ts createStateTools`,后端 = `StateKV` 接口,生产接 session Value;往返测过)。
 
 工具面 `Agent / get_subagent_result / steer_subagent`;子 = 独立 EtaAgent session(parent 指针、自带 tools/prompt/model)。工具裁剪抄它的做法:`setActiveToolsByName` + `beforeToolCall` 覆盖(agent-runner.ts:282-300)。
 - [x] **并发池语义照搬**(后台池默认 10、前台单独计、嵌套 bypass 队列、深度 cap——全测过)。
 - [x] depth cap 2 + ownership-scope(越权拒绝、父终态停孙、usage 上卷,测过)。
-- [x] `Schedule` 工具复用 C2 的 `every`/`cron`/`expiresAt` 格式(`src/eta/tools.ts createScheduleTool`,一次性 maxRuns=1)。**RPC 信封抄它的 requestId+reply-topic 模式**(`subagents:rpc:spawn|stop|consume` 客户端/服务端两半 + steer/steered 事件,`src/eta/subagent.ts`,测过)。
+- [x] `Schedule` 工具复用 C2 的 `every`/`cron`/`expiresAt` 格式(`src/harness/tools.ts createScheduleTool`,一次性 maxRuns=1)。**RPC 信封抄它的 requestId+reply-topic 模式**(`subagents:rpc:spawn|stop|consume` 客户端/服务端两半 + steer/steered 事件,`src/harness/subagent.ts`,测过)。
 - [x] 完成/失败发 `subagents:completed|failed` 总线事件;turn-limit「警告→硬停」测过。丢:widget/FleetView/@mention/SubagentWorkflow/worktree/memory 三 scope。
 
 ### C8 btw 旁路通道(built-in,抄 pi-btw 的机制,丢它的 overlay)
 
-- [x] **core 原语 `SideSession`**(`src/eta/btw.ts`:seed 过滤 + fallback 两分支平移,Q/A 合成对回放):独立 in-memory 子会话,与主 loop 并发跑(它靠真 AgentSession + 事件流驱动 UI,我们用 fork 的第二个会话实例,事件走 SessionView);`contextual` 种子 = `buildSessionContext(entries, leafId)` **过滤 `eta.btw` 可见消息**(btw.ts:263 整段逻辑平移,连 fallback 分支一起),`tangent` = 无种子;线程连续性 = 把已答的 Q/A 作**合成 user/assistant 对话对回放进 messages**(btw.ts:299-355),不建第二套 transcript 模型。完成条件:seed 不含 `eta.btw` 可见消息(测过);主 context 重放查不到 side 消息(side 消息只存 `eta.btw` entry)。
+- [x] **core 原语 `SideSession`**(`src/harness/btw.ts`:seed 过滤 + fallback 两分支平移,Q/A 合成对回放):独立 in-memory 子会话,与主 loop 并发跑(它靠真 AgentSession + 事件流驱动 UI,我们用 fork 的第二个会话实例,事件走 SessionView);`contextual` 种子 = `buildSessionContext(entries, leafId)` **过滤 `eta.btw` 可见消息**(btw.ts:263 整段逻辑平移,连 fallback 分支一起),`tangent` = 无种子;线程连续性 = 把已答的 Q/A 作**合成 user/assistant 对话对回放进 messages**(btw.ts:299-355),不建第二套 transcript 模型。完成条件:seed 不含 `eta.btw` 可见消息(测过);主 context 重放查不到 side 消息(side 消息只存 `eta.btw` entry)。
 - [x] 持久化:`eta.btw` CustomEntry 存线程(`replay()`);save 态机 `not-saved|queued|saved` + `flushQueued()` run 边界落盘(测过)。
 - [x] **handoff = S1 driver**:`BtwManager.handoff()` 产 followUp(测过);summarize 强制 thinking off = `setOverride({thinking:"off"})` 由调用方保证,失败不丢线程(线程与 save 态独立)。
 - [x] per-thread override:`setOverride` 变更 bump `assemblyVersion`(=dispose+重建信号)、exchanges 保留(测过)。丢:overlay/modal/焦点快捷键/UI split。
@@ -119,7 +120,7 @@
 - [x] D1 sqlite 后端 + conformance 全绿(F0.3);重放/fork/navigation 白拿。
 - [x] D2 compaction 补两点上游没有的:tool **整对丢弃**(ratio≥25%、绝不劈半对)+ **max-min-fair 确定性兜底** + untrusted note(平移老 `compaction.rs` 纯函数,已测)。完成条件:配对完整性测试(`src/harness/compaction/eta-compaction.ts` + test/eta/compaction-eta.test.ts,失败兜底带 untrusted note)。
 - [x] D3 durable 再注入:`buildContext` 时 goal/tasks 摘要/memory 稳定块重注,自适应块(skills/工具目录)放 cache 边界后可降级。完成条件:compaction 后语义块不丢(EtaAgent systemPrompt fn 每次 generation 现组:goal 指南+current_tasks+memory 稳定块,测于 D3 用例;自适应块在 cache 边界后由上游控制)。
-- [ ] D4 **SessionView 投影器**:基于上游已有 reducer 快照(reduceLaneSnapshot)+ telemetry 流,产出 `{messages,thinking,goal,tasks,loops,sideThread,usage,cacheRate,branch,pendingAsk}` 可序列化;attach = 重放 + 增量。完成条件:双前端并行 attach 一致。
+- [x] D4 **SessionView 投影器**:基于上游已有 reducer 快照(reduceLaneSnapshot)+ telemetry 流,产出 `{messages,thinking,goal,tasks,loops,sideThread,usage,cacheRate,branch,pendingAsk}` 可序列化;attach = 重放 + 增量。完成条件:双前端并行 attach 一致(`src/harness/session-view.ts` SessionViewProjector.snapshot/attach;test/eta/session-view.test.ts 双 projector 收敛一致 + detach 后静默)。
 
 ## Part E:observability
 

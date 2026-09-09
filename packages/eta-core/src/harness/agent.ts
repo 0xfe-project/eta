@@ -7,11 +7,12 @@
  */
 
 import type { Api, Model, Models } from "@earendil-works/pi-ai";
-import { BACKGROUND_CONTEXT, type Context } from "../harness/context.ts";
-import { AgentHarness, type AgentLane } from "../harness/agent-harness.ts";
-import type { AgentHarnessTool } from "../harness/types.ts";
-import type { Session } from "../harness/session/types.ts";
-import type { EtaEmit } from "../harness/eta-events.ts";
+import { BACKGROUND_CONTEXT, type Context } from "./context.ts";
+import { AgentHarness, type AgentLane } from "./agent-harness.ts";
+import { loopFollowUp } from "../prompts/index.ts";
+import type { AgentHarnessTool } from "./types.ts";
+import type { Session } from "./session/types.ts";
+import type { EtaEmit } from "./eta-events.ts";
 import { composeEtaSystemPrompt } from "./composer.ts";
 import { AskRegistry, createAskUserTool } from "./ask.ts";
 import { BtwManager } from "./btw.ts";
@@ -136,7 +137,7 @@ export class EtaAgent {
 		goal.onChange = (change) => writeEntry(goalEntry(goalPayloadFor(change)));
 		const tasks = new TaskStore();
 		const loops = new LoopScheduler({
-			followUpFor: (spec) => `[loop ${spec.def.id}] ${spec.def.note}`,
+			followUpFor: (spec) => loopFollowUp(spec.def.id, spec.def.note),
 			persist: persistLoop,
 			dev: emit,
 		});

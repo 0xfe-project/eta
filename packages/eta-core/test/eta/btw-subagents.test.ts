@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { BtwManager } from "../../src/eta/btw.ts";
-import { DEPTH_CAP, SubagentManager, type SubagentRecord, type SubagentBus } from "../../src/eta/subagent.ts";
+import { BtwManager } from "../../src/harness/btw.ts";
+import { DEPTH_CAP, SubagentManager, type SubagentRecord, type SubagentBus } from "../../src/harness/subagent.ts";
 
 describe("btw side channel", () => {
 	const userMsg = { role: "user", content: [{ type: "text", text: "main" }], timestamp: 0 };

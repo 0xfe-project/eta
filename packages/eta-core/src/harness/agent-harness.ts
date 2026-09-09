@@ -584,6 +584,7 @@ export interface AgentLane {
 	getThinkingLevel(context: Context): Promise<ThinkingLevel>;
 	setThinkingLevel(level: ThinkingLevel, context: Context): Promise<void>;
 	getActiveTools(context: Context): Promise<string[]>;
+	getStats(context: Context): Promise<SessionStats>;
 	setActiveTools(names: string[], context: Context): Promise<void>;
 	watch(context: Context): Promise<WatchHandle<LaneSnapshot>>;
 }
