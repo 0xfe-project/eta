@@ -5,8 +5,9 @@
  */
 
 import { existsSync } from "node:fs";
+import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { encodeMessage, decodeClientMessage, type ClientMessage, type ServerMessage } from "./protocol.ts";
 import { Host } from "./host.ts";
@@ -102,6 +103,25 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 			}
 			if (url.pathname === "/api/personas") {
 				return Response.json(await listPersonaSummaries(cwd));
+			}
+			if (url.pathname === "/api/files") {
+				const session = url.searchParams.get("session");
+				const root = session === null ? null : host.cwdOf(session);
+				return Response.json(root == null ? [] : await listWorkspaceFiles(root));
+			}
+			if (url.pathname === "/api/upload" && request.method === "POST") {
+				const uploadSession = url.searchParams.get("session") ?? "";
+				const root = host.cwdOf(uploadSession);
+				if (root == null) return Response.json({ error: "no session" }, { status: 400 });
+				const form = await request.formData();
+				const file = form.get("file");
+				if (!(file instanceof File)) return Response.json({ error: "no file" }, { status: 400 });
+				const dir = join(root, ".eta-attachments");
+				await mkdir(dir, { recursive: true });
+				const safeName = file.name.replace(/[^\w.-]/g, "_").slice(-80) || "image.bin";
+				const path = join(dir, `${Date.now().toString(36)}-${safeName}`);
+				await writeFile(path, new Uint8Array(await file.arrayBuffer()));
+				return Response.json({ path: `.eta-attachments/${path.slice(path.lastIndexOf("/") + 1)}`, absolute: path });
 			}
 			if (url.pathname === "/api/sessions") {
 				return Response.json(host.sidebar());
@@ -299,4 +319,32 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 			await host.deleteSession(message.name);
 			return;
 	}
+}
+
+const WALK_IGNORED = new Set(["node_modules", "dist", "target", "build", ".git"]);
+
+/** Workspace files for @-mentions: recursive, newest-first, capped at 50 relative paths. */
+export async function listWorkspaceFiles(root: string): Promise<string[]> {
+	const found: { path: string; mtime: number }[] = [];
+	const walk = async (dir: string, depth: number): Promise<void> => {
+		if (depth > 6 || found.length >= 2000) return;
+		let entries;
+		try {
+			entries = await readdir(dir, { withFileTypes: true });
+		} catch {
+			return;
+		}
+		for (const entry of entries) {
+			if (entry.isDirectory()) {
+				if (entry.name.startsWith(".") || WALK_IGNORED.has(entry.name)) continue;
+				await walk(join(dir, entry.name), depth + 1);
+				continue;
+			}
+			if (!entry.isFile() || entry.name.startsWith(".")) continue;
+			const info = await stat(join(dir, entry.name)).catch(() => null);
+			found.push({ path: relative(root, join(dir, entry.name)), mtime: info?.mtimeMs ?? 0 });
+		}
+	};
+	await walk(root, 0);
+	return found.sort((a, b) => b.mtime - a.mtime).slice(0, 50).map((entry) => entry.path);
 }
