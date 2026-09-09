@@ -71,6 +71,8 @@ export interface SessionView {
 	prompt: { stableChars: number; adaptiveChars: number; sections: { name: string; stable: boolean; text: string }[] } | undefined;
 	/** Output tokens/sec over the last usage delta; 0 until two usage events pass. */
 	tokensPerSec: number;
+	/** Configured model as "provider:modelId"; drives the composer model picker. */
+	model: string;
 }
 
 export type ViewListener = (view: SessionView) => void;
@@ -87,6 +89,13 @@ export class SessionViewProjector {
 	async snapshot(context: Context = BACKGROUND_CONTEXT): Promise<SessionView> {
 		const { lane, goal, tasks, loops, btw, ask } = this.agent;
 		const entries = await lane.findEntries({ order: "oldestFirst" }, context);
+		let modelLabel = "unknown";
+		try {
+			const execution = await lane.inspectExecution(context);
+			modelLabel = `${execution.configuredModel.provider}:${execution.configuredModel.modelId}`;
+		} catch {
+			/* harness not inspectable yet */
+		}
 		const messages: SessionViewMessage[] = [];
 		const systems: SessionViewSystemRow[] = [];
 		const thinking: string[] = [];
@@ -156,6 +165,7 @@ export class SessionViewProjector {
 			personas: this.agent.personas,
 			prompt: this.agent.lastPromptBlocks,
 			tokensPerSec: this.agent.tokensPerSec,
+			model: modelLabel,
 		};
 	}
 
