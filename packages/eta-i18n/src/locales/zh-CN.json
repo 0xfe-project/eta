@@ -89,5 +89,8 @@
 	"prompt.memory": "记忆",
 	"welcome.placeholder": "随便问点什么 · / 可查看命令 · @ 可添加上下文…",
 	"welcome.pickPersona": "选择人设,回车开始聊天",
-	"welcome.pressEnter": "回车开始聊天"
+	"welcome.pressEnter": "回车开始聊天",
+	"panel.tokensPerSec": "词元/秒",
+	"panel.viewJson": "查看 JSON",
+	"panel.sessionJson": "会话 JSON"
 }

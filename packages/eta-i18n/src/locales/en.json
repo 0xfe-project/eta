@@ -89,5 +89,8 @@
 	"prompt.memory": "Memory",
 	"welcome.placeholder": "Ask anything · / for commands · @ to add context…",
 	"welcome.pickPersona": "Pick a persona, then Enter to start",
-	"welcome.pressEnter": "Enter to start chatting"
+	"welcome.pressEnter": "Enter to start chatting",
+	"panel.tokensPerSec": "tokens/s",
+	"panel.viewJson": "json",
+	"panel.sessionJson": "Session JSON"
 }

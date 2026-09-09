@@ -71,3 +71,85 @@
 	font-size: var(--font-size-md);
 	line-height: 1.6;
 }
+
+/* ---- modern brutalist pass: hard edges, hard shadows, loud structure ---- */
+
+::selection {
+	background: var(--text-primary);
+	color: var(--bg-solid);
+}
+
+*::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+*::-webkit-scrollbar-track {
+	background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+	background: var(--border);
+	border: 0;
+}
+*::-webkit-scrollbar-thumb:hover {
+	background: var(--border-hover);
+}
+
+:focus-visible {
+	outline: 2px solid var(--text-primary);
+	outline-offset: 1px;
+}
+
+.composer-card,
+.dialog,
+.welcome-card {
+	border: 2px solid var(--border-hover);
+	background: var(--bg-glass-strong);
+	box-shadow: 4px 4px 0 0 var(--border);
+}
+
+.tool-card,
+.thinking-block,
+.system-message {
+	border: 1px solid var(--border);
+}
+
+.system-message {
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	font-weight: 600;
+}
+
+.skill-slash-menu,
+.at-file-mention-menu {
+	border: 2px solid var(--border-hover);
+	box-shadow: 4px 4px 0 0 var(--border);
+}
+
+.skill-slash-option.selected,
+.at-file-mention-option.selected {
+	background: var(--text-primary);
+	color: var(--bg-solid);
+}
+
+.ui-button--primary {
+	border: 2px solid var(--text-primary);
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+.ui-button--primary:hover {
+	background: var(--text-primary);
+	color: var(--bg-solid);
+}
+
+.message.user .message-content {
+	border: 1px solid var(--border-hover);
+	box-shadow: 3px 3px 0 0 var(--border);
+}
+
+.message-copy-btn {
+	opacity: 0;
+}
+.message:hover .message-copy-btn {
+	opacity: 1;
+}

@@ -9,6 +9,7 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 	const [goalDraft, setGoalDraft] = useState("");
 	const [compacting, setCompacting] = useState(false);
 	const [promptOpen, setPromptOpen] = useState(false);
+	const [jsonOpen, setJsonOpen] = useState(false);
 	const [epochAtRequest, setEpochAtRequest] = useState<number | null>(null);
 	const send = (op: Parameters<typeof store.send>[0]) => store.send(op);
 
@@ -79,6 +80,31 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 									<pre className="mono max-h-[240px] overflow-auto bg-code-bg p-2 text-[11px] whitespace-pre-wrap">{section.text}</pre>
 								</section>
 							))}
+						</div>
+					</div>
+				</div>
+			) : null}
+			<div data-testid="json-row" className="flex items-center gap-2">
+				<p className="mono min-w-0 flex-1 truncate text-[11px] text-muted">
+					{t("panel.tokensPerSec")}: {(Math.round((view.tokensPerSec ?? 0) * 10) / 10).toFixed(1)}
+				</p>
+				<button data-testid="json-open" onClick={() => setJsonOpen(true)} className="border border-border px-2 py-0.5 text-[10px] text-muted hover:bg-overlay">
+					{t("panel.viewJson")}
+				</button>
+			</div>
+			{jsonOpen ? (
+				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" data-testid="json-overlay" onClick={() => setJsonOpen(false)}>
+					<div className="dialog flex max-h-[80vh] w-full max-w-[720px] flex-col overflow-hidden" onClick={(event) => event.stopPropagation()}>
+						<div className="dialog-header flex items-center gap-2">
+							<span className="font-medium">{t("panel.sessionJson")}</span>
+							<button data-testid="json-close" onClick={() => setJsonOpen(false)} className="ml-auto border border-border px-2 py-0.5 text-[10px] text-muted">
+								{t("common.close")}
+							</button>
+						</div>
+						<div className="dialog-body overflow-y-auto">
+							<pre data-testid="json-body" className="mono max-h-[70vh] overflow-auto bg-code-bg p-2 text-[11px] whitespace-pre-wrap">
+								{JSON.stringify(view, null, 2)}
+							</pre>
 						</div>
 					</div>
 				</div>

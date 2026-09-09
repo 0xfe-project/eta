@@ -26,8 +26,7 @@ export function Welcome({ onCreated }: { onCreated: (name: string) => void }) {
 		const value = text.trim();
 		if (personaId === null || value.length === 0) return;
 		const name = `s-${Date.now().toString(36)}`;
-		store.send({ op: "session.create", name, personaId });
-		store.send({ op: "prompt", session: name, text: value });
+		store.send({ op: "session.create", name, personaId, prompt: value });
 		onCreated(name);
 	};
 
