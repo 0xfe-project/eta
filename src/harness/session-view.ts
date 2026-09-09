@@ -82,6 +82,8 @@ export interface SessionView {
 	queue: { entryId: string; kind: string; text: string }[];
 	/** Working directory of the session; the host stamps it. */
 	cwd?: string;
+	/** Short git branch name of the session cwd, when it is a git checkout. */
+	gitBranch?: string;
 	/** In-flight assistant message while a run is streaming; absent once committed or idle. */
 	streaming?: AgentMessage;
 }
