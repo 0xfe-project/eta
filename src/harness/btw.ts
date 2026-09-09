@@ -10,6 +10,7 @@
 import type { AgentMessage } from "../types.ts";
 import type { DevEmit } from "./dev-events.ts";
 import { BTW_CUSTOM_TYPE, type BtwPayload } from "./entries.ts";
+import { btwHandoff } from "../prompts/index.ts";
 
 export type BtwSaveState = "not-saved" | "queued" | "saved";
 
@@ -161,7 +162,7 @@ export class BtwManager {
 		const thread = this.threads.get(threadId);
 		if (thread === undefined || thread.exchanges.length === 0) return undefined;
 		this.dev?.("btw", "summarized", { threadId });
-		return `[btw ${thread.id}] side thread has results: fold them in or summarize for the user.`;
+		return btwHandoff(thread.id);
 	}
 
 	/** Override changes rebuild the child session but never lose the thread. */

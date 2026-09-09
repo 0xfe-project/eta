@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ANTI_SPIN_LIMIT, GoalManager, MAX_CONTINUATIONS, lastMessageShowsIntent } from "../../src/eta/goal.ts";
+import { ANTI_SPIN_LIMIT, GoalManager, MAX_CONTINUATIONS, lastMessageShowsIntent } from "../../src/harness/goal.ts";
 
 describe("goal state machine", () => {
 	it("set makes an active goal; clear removes it", () => {

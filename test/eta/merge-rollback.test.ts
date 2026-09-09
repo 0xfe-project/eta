@@ -31,7 +31,7 @@ describe("D4 merge and rollback", () => {
 		expect(path.find((entry) => entry.id === mergeId)?.type).toBe("merge");
 
 		const merged = await lane.findEntries({ type: "message", order: "oldestFirst" }, CTX);
-		const texts = merged.flatMap((entry) => (entry.type === "message" ? [String(entry.message.content)] : []));
+		const texts = merged.flatMap((entry) => (entry.type === "message" ? [String((entry.message as { content?: string }).content)] : []));
 		expect(texts).toEqual(["shared history", "main work", "side work"]);
 
 		const rolled = (await lane.rollback(mainWork, CTX)) as { ok: boolean };

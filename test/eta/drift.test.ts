@@ -7,7 +7,7 @@ import {
 	sorensenDice,
 	jaroWinkler,
 	tailRepetition,
-} from "../../src/eta/drift.ts";
+} from "../../src/harness/drift.ts";
 
 describe("doom loop detector", () => {
 	it("fires on the third identical call", () => {

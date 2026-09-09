@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { TASKS_KEY, loopStateKey, parseLoopState, parseTaskList, renderCurrentTasks, serializeLoopState, serializeTaskList } from "../../src/eta/tasks.ts";
-import { answerEntry, askEntry, btwEntry, goalEntry, isEtaCustomType } from "../../src/eta/entries.ts";
+import { TASKS_KEY, loopStateKey, parseLoopState, parseTaskList, renderCurrentTasks, serializeLoopState, serializeTaskList } from "../../src/harness/tasks.ts";
+import { answerEntry, askEntry, btwEntry, goalEntry, isEtaCustomType } from "../../src/harness/entries.ts";
 
 describe("tasks kv values", () => {
 	it("round-trips and renders current_tasks", () => {

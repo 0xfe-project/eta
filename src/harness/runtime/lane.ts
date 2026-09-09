@@ -55,9 +55,11 @@ import {
 } from "../result.ts";
 import { insertEntry, insertUsage } from "../session/commit.ts";
 import { SessionInvariantError, SessionPendingAssistantMessageError } from "../session/session.ts";
+import { mergeSummary } from "../../prompts/index.ts";
 import type {
 	BranchScan,
 	Entry,
+	SessionStats,
 	InboxItem,
 	InboxItemKind,
 	JsonValue,
@@ -1598,6 +1600,10 @@ export class Lane<TContext extends object | undefined> implements AgentLane {
 		}, context);
 	}
 
+	async getStats(context: Context): Promise<SessionStats> {
+		return this.session.getStats(context);
+	}
+
 	async waitForIdle(context: Context): Promise<void> {
 		for (;;) {
 			const observation = await this.command<IdleObservation>(
@@ -1951,7 +1957,7 @@ export class Lane<TContext extends object | undefined> implements AgentLane {
 				parentId: state.tipId,
 				type: "merge",
 				mergedParentId,
-				summary: summary ?? `merged branch ${fromBranch}`,
+				summary: summary ?? mergeSummary(fromBranch),
 			};
 			return {
 				kind: "commit",

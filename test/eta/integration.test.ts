@@ -18,12 +18,12 @@ const EMPTY_USAGE = {
 };
 import { StorageBackedSession } from "../../src/harness/session/session.ts";
 import type { Entry, Session } from "../../src/harness/session/types.ts";
-import { AskRegistry, createAskUserTool } from "../../src/eta/ask.ts";
-import { GoalManager } from "../../src/eta/goal.ts";
-import { LoopScheduler } from "../../src/eta/loops.ts";
+import { AskRegistry, createAskUserTool } from "../../src/harness/ask.ts";
+import { GoalManager } from "../../src/harness/goal.ts";
+import { LoopScheduler } from "../../src/harness/loops.ts";
 import { GOAL_CONTINUATION } from "../../src/prompts/index.ts";
-import { goalDriver, loopDriver } from "../../src/eta/run-end.ts";
-import type { AskPayload } from "../../src/eta/entries.ts";
+import { goalDriver, loopDriver } from "../../src/harness/run-end.ts";
+import type { AskPayload } from "../../src/harness/entries.ts";
 
 const CTX = BACKGROUND_CONTEXT;
 const dirs: string[] = [];

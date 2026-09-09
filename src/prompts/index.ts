@@ -11,3 +11,6 @@ export * from "./summary.ts";
 export * from "./resume.ts";
 export * from "./persona.ts";
 export * from "./compaction.ts";
+export * from "./loops.ts";
+export * from "./btw.ts";
+export * from "./merge.ts";

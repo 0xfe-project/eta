@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { composeEtaSystemPrompt, etaPromptSections } from "../../src/eta/composer.ts";
+import { composeEtaSystemPrompt, etaPromptSections } from "../../src/harness/composer.ts";
 
 const tasks = {
 	updatedAt: "now",

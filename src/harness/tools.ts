@@ -5,8 +5,8 @@
  */
 
 import { Type, type TSchema } from "typebox";
-import type { Context } from "../harness/context.ts";
-import type { AgentHarnessTool, AgentHarnessToolInvocation } from "../harness/types.ts";
+import type { Context } from "./context.ts";
+import type { AgentHarnessTool, AgentHarnessToolInvocation } from "./types.ts";
 import { TODO_REVIEW_PROMPT, TODO_UPDATE_SUCCESS } from "../prompts/index.ts";
 import type { DevEmit } from "./dev-events.ts";
 import { createCadenceState, drainReminderForContext, evaluateToolResult, onTurnStart, type CadenceState } from "./cadence.ts";
