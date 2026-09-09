@@ -90,3 +90,22 @@ export function emptyResponseGuard(maxRetries = 2) {
 		return { followUp: RESUME_EMPTY };
 	};
 }
+
+/**
+ * before_run_end handler: pumps the loop scheduler at run boundaries and hands
+ * the first due loop back as a followUp driver (one per boundary; the rest
+ * wait for the next tick).
+ */
+export function loopDriver(scheduler: import("./loops.ts").LoopScheduler) {
+	return (): { followUp?: string } | undefined => {
+		const first = scheduler.pump(Date.now()).fired[0];
+		return first === undefined ? undefined : { followUp: first.followUp };
+	};
+}
+
+/** Idle-session heartbeat: pumps every interval (unref'd, stops on returned call). */
+export function startLoopHeartbeat(scheduler: import("./loops.ts").LoopScheduler, intervalMs = 30_000): () => void {
+	const timer = setInterval(() => scheduler.pump(Date.now()), intervalMs);
+	timer.unref?.();
+	return () => clearInterval(timer);
+}
