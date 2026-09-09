@@ -83,6 +83,18 @@ export class AskRegistry {
 	}
 }
 
+/** Proxy-safe option keys: models sometimes rewrite option fields to label/text/value/name. */
+export function normalizeAskOptions(raw: unknown): { title: string; description?: string }[] | undefined {
+	if (!Array.isArray(raw)) return undefined;
+	return raw.map((item) => {
+		if (typeof item === "string") return { title: item };
+		const o = item as Record<string, unknown>;
+		const title = [o.title, o.label, o.text, o.value, o.name].find((v) => typeof v === "string");
+		const description = [o.description, o.detail, o.desc].find((v) => typeof v === "string");
+		return { title: title ?? JSON.stringify(o), ...(description !== undefined ? { description } : {}) };
+	});
+}
+
 export function askResponseText(response: AskResponse): string {
 	switch (response.kind) {
 		case "selection":
@@ -127,10 +139,11 @@ export function createAskUserTool(
 			"Ask the user one question and wait for the answer. Use only when you genuinely can't pick a reasonable default yourself.",
 		parameters: askSchema,
 		async execute(_toolCallId, params, _onUpdate, _toolContext, invocation, context) {
+			const options = normalizeAskOptions((params as { options?: unknown }).options);
 			const payload: AskPayload = {
 				questionId: invocation.invocationId,
 				question: params.question,
-				options: params.options?.map((o) => o.title),
+				options: options?.map((o) => o.title),
 				multi: params.allowMultiple,
 			};
 			await deps.onAsk?.(payload);

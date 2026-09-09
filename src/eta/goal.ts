@@ -5,6 +5,8 @@
  * (eta.goal CustomEntry / telemetry category "goal").
  */
 
+import { GOAL_CUSTOM_TYPE, type GoalPayload } from "./entries.ts";
+
 export type GoalStatus = "active" | "paused" | "achieved";
 
 export type GoalBlockedReason = "question-pending" | undefined;
@@ -135,4 +137,32 @@ const INTENT_PHRASES = [
 export function lastMessageShowsIntent(text: string): boolean {
 	const lower = text.toLowerCase();
 	return INTENT_PHRASES.some((phrase) => lower.includes(phrase));
+}
+
+/** Restore goal state from a replayed `eta.goal` entry log (restart path). */
+export function applyGoalEntries(manager: GoalManager, entries: { customType: string; payload: unknown }[]): void {
+	for (const entry of entries) {
+		if (entry.customType !== GOAL_CUSTOM_TYPE) continue;
+		const payload = entry.payload as GoalPayload;
+		switch (payload.kind) {
+			case "set":
+				if (payload.objective !== undefined) manager.set(payload.objective);
+				break;
+			case "pause":
+				manager.pause();
+				break;
+			case "resume":
+				manager.resume();
+				break;
+			case "achieved":
+				manager.markAchieved();
+				break;
+			case "cleared":
+				manager.clear();
+				break;
+			case "blocked":
+				manager.setBlockedReason(payload.reason as GoalBlockedReason | undefined);
+				break;
+		}
+	}
 }
