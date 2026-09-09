@@ -23,13 +23,24 @@ export interface EtaPromptState {
 }
 
 /** One section pipeline: order and stable/adaptive tagging defined once. */
-function sections(base: string, state: EtaPromptState): { text: string; stable: boolean }[] {
-	const out: { text: string; stable: boolean }[] = [{ text: base, stable: true }];
-	if (state.persona !== undefined && state.persona.length > 0) out.push({ text: state.persona, stable: true });
-	if (state.goal && state.goal.status === "active") out.push({ text: goalPursuitGuidelines(state.goal.objective), stable: false });
-	if (state.tasks && state.tasks.length > 0) out.push({ text: `${TASK_REVIEW_PROMPT}\n\n${renderCurrentTasks(state.tasks)}`, stable: false });
-	if (state.memory !== undefined && state.memory.length > 0) out.push({ text: state.memory, stable: false });
+export interface EtaPromptSection {
+	name: "base" | "persona" | "goal" | "tasks" | "memory";
+	stable: boolean;
+	text: string;
+}
+
+function sections(base: string, state: EtaPromptState): EtaPromptSection[] {
+	const out: EtaPromptSection[] = [{ name: "base", text: base, stable: true }];
+	if (state.persona !== undefined && state.persona.length > 0) out.push({ name: "persona", text: state.persona, stable: true });
+	if (state.goal && state.goal.status === "active") out.push({ name: "goal", text: goalPursuitGuidelines(state.goal.objective), stable: false });
+	if (state.tasks && state.tasks.length > 0) out.push({ name: "tasks", text: `${TASK_REVIEW_PROMPT}\n\n${renderCurrentTasks(state.tasks)}`, stable: false });
+	if (state.memory !== undefined && state.memory.length > 0) out.push({ name: "memory", text: state.memory, stable: false });
 	return out.filter((section) => section.text.length > 0);
+}
+
+/** The live prompt as named blocks, for the Context panel's prompt dialog. */
+export function etaPromptSectionsDetailed(base: string, state: EtaPromptState): EtaPromptSection[] {
+	return sections(base, state);
 }
 
 /** The prompt split the way the Context panel thinks about it: what a provider

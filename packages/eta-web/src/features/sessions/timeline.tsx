@@ -5,7 +5,7 @@ import { MessageMarkdown } from "./message-markdown.tsx";
 
 type ToolResultLike = { toolCallId: string; content: unknown; isError?: boolean };
 
-export function Timeline({ view, session }: { view: SessionView; session: string }) {
+export function Timeline({ view, session, running = false }: { view: SessionView; session: string; running?: boolean }) {
 	const { t } = useAppI18n();
 	const scroller = useRef<HTMLDivElement | null>(null);
 	const [pinned, setPinned] = useState(true);
@@ -42,7 +42,7 @@ export function Timeline({ view, session }: { view: SessionView; session: string
 				))}
 				{view.messages.map((entry) => (
 					<div key={entry.entryId} id={`eta-msg-${entry.entryId}`}>
-						<MessageRow role={entry.message.role} message={entry.message} session={session} />
+						<MessageRow role={entry.message.role} message={entry.message} session={session} streaming={running && entry === view.messages[view.messages.length - 1] && entry.message.role === "assistant"} />
 					</div>
 				))}
 			</div>
@@ -78,7 +78,7 @@ export function Timeline({ view, session }: { view: SessionView; session: string
 	);
 }
 
-function MessageRow({ role, message, session }: { role: string; message: unknown; session: string }) {
+function MessageRow({ role, message, session, streaming = false }: { role: string; message: unknown; session: string; streaming?: boolean }) {
 	const { t } = useAppI18n();
 	const content = (message as { content?: unknown }).content;
 	const [preview, setPreview] = useState<{ path: string; text: string } | null>(null);
@@ -111,7 +111,7 @@ function MessageRow({ role, message, session }: { role: string; message: unknown
 			<div className="my-2" data-testid="assistant-message">
 				{blocks.map((block, index) => {
 					if (block.type === "text") {
-						return <MessageMarkdown key={index} text={String(block.text ?? "")} />;
+						return <MessageMarkdown key={index} text={String(block.text ?? "")} streaming={streaming} />;
 					}
 					if (block.type === "thinking") {
 						return (

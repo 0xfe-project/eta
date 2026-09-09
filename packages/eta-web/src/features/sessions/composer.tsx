@@ -2,7 +2,25 @@ import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } 
 import { useAppI18n } from "../../i18n.ts";
 import { etaStore } from "../../lib/eta-store.ts";
 
-export function Composer({ session, running, hasPendingAsk, userTexts = [] }: { session: string; running: boolean; hasPendingAsk: boolean; userTexts?: string[] }) {
+interface SlashCommand {
+	name: string;
+	description: string;
+	run: () => void;
+}
+
+export function Composer({
+	session,
+	running,
+	hasPendingAsk,
+	userTexts = [],
+	onNavigateSettings,
+}: {
+	session: string;
+	running: boolean;
+	hasPendingAsk: boolean;
+	userTexts?: string[];
+	onNavigateSettings?: () => void;
+}) {
 	const { t } = useAppI18n();
 	const store = etaStore();
 	const [text, setText] = useState("");
@@ -10,6 +28,15 @@ export function Composer({ session, running, hasPendingAsk, userTexts = [] }: { 
 	textRef.current = text;
 	const [files, setFiles] = useState<string[]>([]);
 	const [pending, setPending] = useState<string[]>([]);
+	const [slashIndex, setSlashIndex] = useState(0);
+	const [atIndex, setAtIndex] = useState(0);
+	const [menuClosed, setMenuClosed] = useState(false);
+
+	const commands: SlashCommand[] = [
+		{ name: "compact", description: t("cmd.compact"), run: () => store.send({ op: "compact", session }) },
+		{ name: "abort", description: t("cmd.abort"), run: () => store.send({ op: "abort", session }) },
+		{ name: "settings", description: t("cmd.settings"), run: () => onNavigateSettings?.() },
+	];
 
 	useEffect(() => {
 		setText(localStorage.getItem(`eta.draft.${session}`) ?? "");
@@ -39,10 +66,18 @@ export function Composer({ session, running, hasPendingAsk, userTexts = [] }: { 
 			.catch(() => undefined);
 	}, [mentionQuery !== null, session, files.length]);
 
-	const choices = mentionQuery === null ? [] : files.filter((file) => file.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, 8);
+	const slashQuery = !menuClosed && !mentionQuery && text.startsWith("/") && !text.startsWith("//") && !/\s/.test(text) ? text.slice(1).toLowerCase() : null;
+	const slashMatches = slashQuery === null ? [] : commands.filter((command) => command.name.startsWith(slashQuery));
+	const atChoices = mentionQuery === null ? [] : files.filter((file) => file.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, 8);
+	const menuOpen = slashMatches.length > 0 || atChoices.length > 0;
 
 	const pickFile = (file: string) => {
 		setText((current) => current.replace(/(^|\s)@([\w./-]*)$/, (_match, lead: string) => `${lead}@${file} `));
+	};
+
+	const runCommand = (command: SlashCommand) => {
+		command.run();
+		setText("");
 	};
 
 	const submit = (mode: "queue" | "steer") => {
@@ -51,19 +86,47 @@ export function Composer({ session, running, hasPendingAsk, userTexts = [] }: { 
 			if (running) store.send({ op: "abort", session });
 			return;
 		}
-		store.send({ op: "prompt", session, text: value, ...(mode === "steer" ? { mode } : {}) });
+		if (value.startsWith("//")) {
+			store.send({ op: "prompt", session, text: value.slice(1), ...(mode === "steer" ? { mode } : {}) });
+		} else if (value.startsWith("/")) {
+			const name = /^\/([^\s]+)/.exec(value)?.[1] ?? "";
+			const command = commands.find((entry) => entry.name === name);
+			if (command !== undefined) {
+				command.run();
+				setText("");
+				return;
+			}
+			store.send({ op: "prompt", session, text: value, ...(mode === "steer" ? { mode } : {}) });
+		} else {
+			store.send({ op: "prompt", session, text: value, ...(mode === "steer" ? { mode } : {}) });
+		}
 		setPending((current) => [...current, value]);
 		setText("");
 	};
 
 	const onKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-		if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
-		if (event.shiftKey) return;
-		if (choices.length > 0) {
-			event.preventDefault();
-			pickFile(choices[0]!);
-			return;
+		if (menuOpen && !menuClosed) {
+			if (event.key === "Escape") {
+				event.preventDefault();
+				setMenuClosed(true);
+				return;
+			}
+			if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+				event.preventDefault();
+				const size = slashMatches.length > 0 ? slashMatches.length : atChoices.length;
+				const step = event.key === "ArrowDown" ? 1 : -1;
+				if (slashMatches.length > 0) setSlashIndex((index) => (index + step + size) % size);
+				else setAtIndex((index) => (index + step + size) % size);
+				return;
+			}
+			if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+				event.preventDefault();
+				if (slashMatches.length > 0) runCommand(slashMatches[Math.min(slashIndex, slashMatches.length - 1)]!);
+				else if (atChoices.length > 0) pickFile(atChoices[Math.min(atIndex, atChoices.length - 1)]!);
+				return;
+			}
 		}
+		if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
 		event.preventDefault();
 		submit(event.metaKey || event.ctrlKey ? "steer" : "queue");
 	};
@@ -83,55 +146,95 @@ export function Composer({ session, running, hasPendingAsk, userTexts = [] }: { 
 	};
 
 	return (
-		<footer className="relative border-t border-border p-3" data-testid="composer">
+		<footer className="input-area" data-testid="composer">
 			{pending.length > 0 ? (
-				<div data-testid="queued-bar" className="mx-auto mb-2 flex max-w-[880px] flex-wrap gap-1">
+				<div data-testid="queued-bar" className="queued-messages">
 					{pending.map((item, index) => (
-						<span key={`${item}-${index}`} className="max-w-[240px] truncate border border-border bg-elevated px-2 py-0.5 text-[10px] text-muted">
+						<div key={`${item}-${index}`} className="queued-message-chip">
 							{t("composer.queued")} · {item}
-						</span>
+						</div>
 					))}
 				</div>
 			) : null}
-			{choices.length > 0 ? (
-				<div data-testid="mention-popup" className="absolute bottom-full left-1/2 mb-1 w-[min(92%,420px)] -translate-x-1/2 border border-border bg-elevated p-1 shadow-[var(--shadow)]">
-					{choices.map((file) => (
-						<button key={file} data-testid={`mention-${file}`} onClick={() => pickFile(file)} className="mono block w-full px-2 py-1 text-left text-xs hover:bg-overlay">
-							@{file}
+			<form
+				onSubmit={(event) => {
+					event.preventDefault();
+					submit("queue");
+				}}
+			>
+				<div className="composer-card" data-testid="composer-card">
+					{slashMatches.length > 0 ? (
+						<div className="skill-slash-menu" role="listbox" data-testid="slash-menu">
+							{slashMatches.map((command, index) => (
+								<button
+									key={command.name}
+									type="button"
+									role="option"
+									aria-selected={index === slashIndex}
+									data-testid={`slash-${command.name}`}
+									className={`skill-slash-option${index === slashIndex ? " selected" : ""}`}
+									onClick={() => runCommand(command)}
+								>
+									<span className="skill-slash-icon">/</span>
+									<span className="skill-slash-name">{command.name}</span>
+									<span className="skill-slash-description">{command.description}</span>
+								</button>
+							))}
+						</div>
+					) : (
+						<div className="skill-slash-menu hidden" />
+					)}
+					{atChoices.length > 0 ? (
+						<div className="at-file-mention-menu" role="listbox" data-testid="mention-popup">
+							{atChoices.map((file, index) => (
+								<button
+									key={file}
+									type="button"
+									role="option"
+									aria-selected={index === atIndex}
+									data-testid={`mention-${file}`}
+									className={`at-file-mention-option${index === atIndex ? " selected" : ""}`}
+									onClick={() => pickFile(file)}
+								>
+									<span className="at-file-mention-name">@{file}</span>
+								</button>
+							))}
+						</div>
+					) : (
+						<div className="at-file-mention-menu hidden" />
+					)}
+					<textarea
+						id="message-input"
+						data-testid="composer-input"
+						rows={2}
+						value={text}
+						placeholder={t("composer.placeholder")}
+						autoComplete="off"
+						onChange={(event) => {
+							setText(event.target.value);
+							setMenuClosed(false);
+							const node = event.target;
+							node.style.height = "auto";
+							node.style.height = `${Math.min(node.scrollHeight, 220)}px`;
+						}}
+						onKeyDown={onKey}
+						onPaste={onPaste}
+					/>
+					<div className="composer-toolbar">
+						<div className="composer-toolbar-left">
+							<span className="shortcuts-hint">{running ? t("composer.runningHint") : t("composer.hint")}</span>
+						</div>
+						<button
+							type="submit"
+							data-testid="composer-submit"
+							disabled={hasPendingAsk}
+							className="ui-button ui-button--primary"
+						>
+							{text.trim().length > 0 ? t("composer.send") : running ? t("composer.stop") : t("composer.send")}
 						</button>
-					))}
+					</div>
 				</div>
-			) : null}
-			<div className="mx-auto flex max-w-[880px] items-end gap-2 border border-border bg-elevated p-2">
-				<textarea
-					data-testid="composer-input"
-					rows={1}
-					value={text}
-					placeholder={t("composer.placeholder")}
-					onChange={(event) => {
-						setText(event.target.value);
-						const node = event.target;
-						node.style.height = "auto";
-						node.style.height = `${Math.min(node.scrollHeight, 220)}px`;
-					}}
-					onKeyDown={onKey}
-					onPaste={onPaste}
-					className="max-h-[220px] min-h-[24px] flex-1 resize-none bg-transparent text-sm outline-none"
-				/>
-				<button
-					data-testid="composer-submit"
-					onClick={() => submit("queue")}
-					disabled={hasPendingAsk}
-					className="bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground disabled:opacity-50"
-				>
-					{text.trim().length > 0 ? t("composer.send") : running ? t("composer.stop") : t("composer.send")}
-				</button>
-			</div>
-			{running ? (
-				<p data-testid="composer-hint" className="mx-auto mt-1 max-w-[880px] text-center text-[10px] text-muted">
-					{t("composer.runningHint")}
-				</p>
-			) : null}
+			</form>
 		</footer>
 	);
 }

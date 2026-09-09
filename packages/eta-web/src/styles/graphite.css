@@ -1,0 +1,73 @@
+/* Graphite discipline over the copied picot design system:
+ * shape and spacing are theirs; every color maps to our two-tone palette,
+ * and radius is zeroed everywhere. Saturation stays reserved for state. */
+
+:root,
+:root[data-theme="night"],
+:root[data-theme="clean"] {
+	--radius-xs: 0;
+	--radius-sm: 0;
+	--radius-md: 0;
+	--radius: 0;
+	--radius-lg: 0;
+	--radius-pill: 0;
+	--blur: 0;
+	--blur-heavy: 0;
+}
+
+:root[data-theme="night"] {
+	--bg-solid: #181818;
+	--bg-glass: rgba(255, 255, 255, 0.04);
+	--bg-glass-hover: rgba(255, 255, 255, 0.08);
+	--bg-glass-active: rgba(255, 255, 255, 0.12);
+	--bg-glass-strong: #222222;
+	--bg-frosted: #1c1c1c;
+	--border: rgba(255, 255, 255, 0.12);
+	--border-hover: rgba(255, 255, 255, 0.22);
+	--border-bright: rgba(255, 255, 255, 0.32);
+	--text-primary: #ffffff;
+	--text-secondary: #aaaaaa;
+	--text-placeholder: #666666;
+	--accent: #ffffff;
+	--accent-text: #ffffff;
+	--accent-subtle: rgba(255, 255, 255, 0.08);
+	--accent-glow: none;
+	--header-bg: #181818;
+	--header-pill-text: #aaaaaa;
+	--shadow-sm: none;
+	--shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+	--shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.6);
+	--shadow-inset: none;
+}
+
+:root[data-theme="clean"] {
+	--bg-solid: #ffffff;
+	--bg-glass: rgba(24, 24, 24, 0.04);
+	--bg-glass-hover: rgba(24, 24, 24, 0.08);
+	--bg-glass-active: rgba(24, 24, 24, 0.12);
+	--bg-glass-strong: #f4f4f4;
+	--bg-frosted: #fafafa;
+	--border: rgba(24, 24, 24, 0.14);
+	--border-hover: rgba(24, 24, 24, 0.24);
+	--border-bright: rgba(24, 24, 24, 0.34);
+	--text-primary: #181818;
+	--text-secondary: #666666;
+	--text-placeholder: #999999;
+	--accent: #181818;
+	--accent-text: #181818;
+	--accent-subtle: rgba(24, 24, 24, 0.06);
+	--accent-glow: none;
+	--header-bg: #ffffff;
+	--header-pill-text: #666666;
+	--shadow-sm: none;
+	--shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+	--shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+	--shadow-inset: none;
+}
+
+/* streamdown inherits our typography, not tailwind typography defaults */
+.streamdown,
+.message-content .streamdown {
+	font-size: var(--font-size-md);
+	line-height: 1.6;
+}

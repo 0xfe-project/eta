@@ -8,6 +8,7 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 	const store = etaStore();
 	const [goalDraft, setGoalDraft] = useState("");
 	const [compacting, setCompacting] = useState(false);
+	const [promptOpen, setPromptOpen] = useState(false);
 	const [epochAtRequest, setEpochAtRequest] = useState<number | null>(null);
 	const send = (op: Parameters<typeof store.send>[0]) => store.send(op);
 
@@ -51,9 +52,36 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 				);
 			})()}
 			{view.prompt !== undefined ? (
-				<p data-testid="prompt-row" className="mono text-[11px] text-muted">
-					{t("panel.prompt")}: {t("panel.stable")} {view.prompt.stableChars} / {t("panel.adaptive")} {view.prompt.adaptiveChars}
-				</p>
+				<div data-testid="prompt-row" className="flex items-center gap-2">
+					<p className="mono min-w-0 flex-1 truncate text-[11px] text-muted">
+						{t("panel.prompt")}: {t("panel.stable")} {view.prompt.stableChars} / {t("panel.adaptive")} {view.prompt.adaptiveChars}
+					</p>
+					<button data-testid="prompt-open" onClick={() => setPromptOpen(true)} className="border border-border px-2 py-0.5 text-[10px] text-muted hover:bg-overlay">
+						{t("panel.viewPrompt")}
+					</button>
+				</div>
+			) : null}
+			{promptOpen && view.prompt !== undefined ? (
+				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" data-testid="prompt-overlay" onClick={() => setPromptOpen(false)}>
+					<div className="dialog max-h-[80vh] w-full max-w-[720px] overflow-hidden" onClick={(event) => event.stopPropagation()}>
+						<div className="dialog-header flex items-center gap-2">
+							<span className="font-medium">{t("panel.prompt")}</span>
+							<button data-testid="prompt-close" onClick={() => setPromptOpen(false)} className="ml-auto border border-border px-2 py-0.5 text-[10px] text-muted">
+								{t("common.close")}
+							</button>
+						</div>
+						<div className="dialog-body overflow-y-auto">
+							{view.prompt.sections.map((section, index) => (
+								<section key={`${section.name}-${index}`} data-testid={`prompt-section-${section.name}`} className="mb-3">
+									<h4 className="mono mb-1 text-[10px] text-muted">
+										{t(("prompt." + section.name) as "prompt.base")} · {section.stable ? t("prompt.stable") : t("prompt.adaptive")} · {section.text.length}
+									</h4>
+									<pre className="mono max-h-[240px] overflow-auto bg-code-bg p-2 text-[11px] whitespace-pre-wrap">{section.text}</pre>
+								</section>
+							))}
+						</div>
+					</div>
+				</div>
 			) : null}
 			<p data-testid="persona-row" className="mono text-[11px] text-accent">
 				{t("panel.personas")}: {view.personas.join(", ")}

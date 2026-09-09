@@ -68,7 +68,7 @@ export interface SessionView {
 	/** Persona card names baked into the stable prompt block; empty when none. */
 	personas: string[];
 	/** System prompt block sizes for the Context panel; undefined before the first generation. */
-	prompt: { stableChars: number; adaptiveChars: number } | undefined;
+	prompt: { stableChars: number; adaptiveChars: number; sections: { name: string; stable: boolean; text: string }[] } | undefined;
 	/** Output tokens/sec over the last usage delta; 0 until two usage events pass. */
 	tokensPerSec: number;
 }

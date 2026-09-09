@@ -69,6 +69,16 @@ describe("composer keyboard semantics", () => {
 		expect(input.value).toContain("@package.json");
 	});
 
+	it("slash /ab lists commands and Enter runs abort", async () => {
+		const { Composer } = await import("../src/features/sessions/composer.tsx");
+		render(<Composer session="s1" running={false} hasPendingAsk={false} />);
+		const input = screen.getByTestId("composer-input") as HTMLTextAreaElement;
+		fireEvent.change(input, { target: { value: "/ab" } });
+		expect(await screen.findByTestId("slash-abort")).toBeTruthy();
+		fireEvent.keyDown(input, { key: "Enter" });
+		expect(last()).toEqual({ op: "abort", session: "s1" });
+	});
+
 	it("pending ask disables the composer submit", async () => {
 		const { Composer } = await import("../src/features/sessions/composer.tsx");
 		render(<Composer session="s1" running={false} hasPendingAsk />);

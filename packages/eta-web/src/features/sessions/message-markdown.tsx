@@ -1,26 +1,9 @@
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { Streamdown } from "streamdown";
 
-const REMARK_PLUGINS = [remarkGfm];
-
-const MARKDOWN_COMPONENTS = {
-	code: ({ className, children }: { className?: string; children?: React.ReactNode }) => {
-		const code = String(children).replace(/\n$/, "");
-		return <code className={className}>{code}</code>;
-	},
-	a: ({ href, children }: { href?: string; children?: React.ReactNode }) => (
-		<a href={href} rel="noreferrer" target="_blank">
-			{children}
-		</a>
-	),
-} as const;
-
-export function MessageMarkdown({ text }: { readonly text: string }) {
+export function MessageMarkdown({ text, streaming = false }: { text: string; streaming?: boolean }) {
 	return (
-		<div className="markdown">
-			<ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={MARKDOWN_COMPONENTS}>
-				{text}
-			</ReactMarkdown>
+		<div className={`message-content${streaming ? " streaming" : ""}`} data-testid="message-markdown">
+			<Streamdown mode={streaming ? "streaming" : "static"}>{text}</Streamdown>
 		</div>
 	);
 }

@@ -9,6 +9,7 @@ import { AskModal } from "../features/sessions/ask-modal.tsx";
 import { ContextPanel } from "../features/sessions/context-panel.tsx";
 import { DevRail } from "../features/sessions/dev-rail.tsx";
 import { CommandPalette } from "../features/sessions/command-palette.tsx";
+import { Welcome } from "../features/sessions/welcome.tsx";
 import { etaStore } from "../lib/eta-store.ts";
 
 function useRunNotifications(state: ReturnType<typeof useEta>) {
@@ -61,12 +62,14 @@ export function SessionsPage() {
 						<span data-testid="active-session" className="truncate text-sm font-medium">{selected ?? t("app.title")}</span>
 						<span className="ml-auto text-[10px] text-muted">{state.connected ? "" : t("connection.disconnected")}</span>
 					</header>
-					{view === undefined ? (
+					{state.sessions.length === 0 ? (
+						<Welcome onCreated={() => undefined} />
+					) : view === undefined ? (
 						<p className="p-6 text-sm text-muted">{t("sidebar.noSessions")}</p>
 					) : (
 						<>
-							<Timeline view={view} session={selected ?? ""} />
-							<Composer session={selected ?? ""} running={running} hasPendingAsk={view.pendingAsk !== undefined} userTexts={view.messages.filter((entry) => entry.message.role === "user").map((entry) => JSON.stringify(entry.message))} />
+							<Timeline view={view} session={selected ?? ""} running={running} />
+							<Composer session={selected ?? ""} running={running} hasPendingAsk={view.pendingAsk !== undefined} onNavigateSettings={() => window.location.assign("/settings")} userTexts={view.messages.filter((entry) => entry.message.role === "user").map((entry) => JSON.stringify(entry.message))} />
 							<AskModal session={selected ?? ""} view={view} />
 						</>
 					)}

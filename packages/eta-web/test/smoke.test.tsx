@@ -44,7 +44,7 @@ function view(session: string): unknown {
 		branch: { tipId: "e1" },
 		pendingAsk: undefined,
 		personas: ["eta"],
-		prompt: undefined,
+		prompt: { stableChars: 4, adaptiveChars: 2, sections: [{ name: "base", stable: true, text: "BASE" }] },
 		tokensPerSec: 0,
 		running: false,
 		kind: session,
@@ -70,12 +70,17 @@ describe("sessions page smoke", () => {
 				</ThemeProvider>
 			</StrictMode>,
 		);
+		expect(document.querySelector("[data-testid='welcome-wordmark']")).not.toBeNull();
 		const socket = FakeSocket.instances[0]!;
 		act(() => socket.fire("open", {}));
 		act(() => socket.fire("message", { data: JSON.stringify({ type: "hello", sessions: [{ name: "s1", badges: [], personas: [] }], attach: "s1" }) }));
 		act(() => socket.fire("message", { data: JSON.stringify({ channel: "view", session: "s1", view: view("s1") }) }));
 		if (document.querySelector("[data-testid='user-message']") === null) console.log("BODY:", document.body.innerHTML.slice(0, 1200));
 		expect(document.querySelector("[data-testid='user-message']")).not.toBeNull();
+		act(() => {
+			(document.querySelector("[data-testid='prompt-open']") as HTMLButtonElement).click();
+		});
+		expect(document.querySelector("[data-testid='prompt-section-base']")).not.toBeNull();
 	});
 });
 
