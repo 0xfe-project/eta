@@ -122,11 +122,6 @@ export interface Task {
 	priority?: "high" | "medium" | "low";
 }
 
-export interface TaskList {
-	tasks: Task[];
-	updatedAt: string;
-}
-
 /** Task with dependency edges; persisted whole under the session tasks value. */
 export interface StoredTask extends Task {
 	/** Ids this task waits on; reverse edges are computed, not duplicated. */
@@ -720,4 +715,33 @@ export interface SessionRepo<
 	list(options: TListOptions | undefined, context: Context): Promise<TMetadata[]>;
 	delete(metadata: TMetadata, context: Context): Promise<void>;
 	fork(source: TMetadata, options: ForkOptions, context: Context): Promise<Session<TMetadata>>;
+}
+
+/** Cross-session full-text query contracts, part of the storage domain vocabulary. */
+export interface SearchQuery {
+	text: string;
+	limit?: number;
+}
+
+export interface SessionSearchHit {
+	sessionId: string;
+	score?: number;
+	top?: { entryId: string; snippet?: string; timestamp: number };
+}
+
+export interface EntrySearchHit {
+	sessionId: string;
+	entryId: string;
+	timestamp: number;
+	snippet?: string;
+	score?: number;
+}
+
+export interface SessionSearchService {
+	searchSessions(query: SearchQuery): Promise<SessionSearchHit[]>;
+	searchEntries?(query: SearchQuery): Promise<EntrySearchHit[]>;
+	sync(): Promise<void>;
+	notify(sessionId: string): void;
+	remove(sessionId: string): Promise<void>;
+	close(): Promise<void>;
 }

@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { composeEtaSystemPrompt, etaPromptSections } from "../../src/harness/composer.ts";
 
-const tasks = {
-	updatedAt: "now",
-	tasks: [{ id: "t1", content: "wire composer", status: "in_progress" as const }],
-};
+const tasks = [{ id: "t1", content: "wire composer", status: "in_progress" as const }];
 
 describe("eta prompt composer", () => {
 	it("empty state is just the base prompt", () => {

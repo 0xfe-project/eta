@@ -26,12 +26,6 @@ export class TaskStore {
 		this.onMutate?.();
 	}
 
-	/** Rebuild the store from persisted tasks; ids are never reused across a restore. */
-	restore(tasks: StoredTask[]): void {
-		this.tasks = new Map(tasks.map((task) => [task.id, task]));
-		this.nextId = Math.max(0, ...tasks.map((task) => Number(/^t(\d+)$/.exec(task.id)?.[1] ?? 0))) + 1;
-	}
-
 	/** Add a task; auto-ids are t1, t2, ... and are never reused. */
 	create(content: string, extra: { deps?: string[]; priority?: Task["priority"] } = {}): { task: StoredTask; warnings: string[] } {
 		const id = `t${this.nextId++}`;
@@ -112,8 +106,8 @@ export class TaskStore {
 		return this.list();
 	}
 
-	/** Load guard: drop malformed rows, keep the rest; report what got dropped. */
-	deserialize(raw: unknown): { kept: number; dropped: string[] } {
+	/** The one load path: drop malformed rows, keep the rest; ids are never reused across a restore. */
+	restore(raw: unknown): { kept: number; dropped: string[] } {
 		const dropped: string[] = [];
 		let kept = 0;
 		if (!Array.isArray(raw)) return { kept: 0, dropped: ["root"] };

@@ -107,8 +107,8 @@ describe("batteries emit on the shared sink", () => {
 		expect(c.of("ask_user", "expired").length).toBe(1);
 		expect(c.of("ask_user", "canceled").length).toBe(1);
 		expect([...c.of("btw").map((e) => e.action).sort()]).toEqual(["injected", "opened", "saved", "summarized"]);
-		expect(c.of("todo", "add").length).toBe(1);
-		expect(c.of("todo", "update").length).toBe(1);
+		expect(c.of("task", "add").length).toBe(1);
+		expect(c.of("task", "update").length).toBe(1);
 		expect(c.of("state", "set").length).toBe(1);
 	});
 });
@@ -157,7 +157,7 @@ describe("EtaAgent integrates batteries on the main bus", () => {
 		await agent.lane.prompt("get started", undefined, CTX);
 
 		expect(eta.some((e) => e.type === "eta" && e.category === "goal" && e.action === "set")).toBe(true);
-		expect(eta.some((e) => e.type === "eta" && e.category === "todo" && e.action === "add")).toBe(true);
+		expect(eta.some((e) => e.type === "eta" && e.category === "task" && e.action === "add")).toBe(true);
 		expect(eta.every((e) => e.type === "eta" && e.lane === "main")).toBe(true);
 		expect(native).toContain("prompt_assembled:true");
 		expect(native).toContain("tool_end:TaskCreate");

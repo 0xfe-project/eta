@@ -10,12 +10,12 @@
  */
 
 import type { GoalStatus } from "./goal.ts";
-import { goalPursuitGuidelines, TODO_REVIEW_PROMPT } from "../prompts/index.ts";
-import { renderCurrentTasks, type TaskList } from "./tasks.ts";
+import { goalPursuitGuidelines, TASK_REVIEW_PROMPT } from "../prompts/index.ts";
+import { renderCurrentTasks, type Task } from "./tasks.ts";
 
 export interface EtaPromptState {
 	goal?: { objective: string; status: GoalStatus };
-	tasks?: TaskList;
+	tasks?: Task[];
 	/** Rendered persona block (stable card text); goes right after the base prompt. */
 	persona?: string;
 	/** Rendered <memory> block; always last, it changes most often. */
@@ -30,8 +30,8 @@ export function splitEtaPromptSections(base: string, state: EtaPromptState): { s
 	if (state.goal && state.goal.status === "active") {
 		adaptive.push(goalPursuitGuidelines(state.goal.objective));
 	}
-	if (state.tasks && state.tasks.tasks.length > 0) {
-		adaptive.push(`${TODO_REVIEW_PROMPT}\n\n${renderCurrentTasks(state.tasks)}`);
+	if (state.tasks && state.tasks.length > 0) {
+		adaptive.push(`${TASK_REVIEW_PROMPT}\n\n${renderCurrentTasks(state.tasks)}`);
 	}
 	if (state.memory !== undefined && state.memory.length > 0) adaptive.push(state.memory);
 	return { stable, adaptive };
@@ -50,8 +50,8 @@ export function etaPromptSections(state: EtaPromptState): string[] {
 	if (state.goal && state.goal.status === "active") {
 		sections.push(goalPursuitGuidelines(state.goal.objective));
 	}
-	if (state.tasks && state.tasks.tasks.length > 0) {
-		sections.push(`${TODO_REVIEW_PROMPT}\n\n${renderCurrentTasks(state.tasks)}`);
+	if (state.tasks && state.tasks.length > 0) {
+		sections.push(`${TASK_REVIEW_PROMPT}\n\n${renderCurrentTasks(state.tasks)}`);
 	}
 	if (state.memory !== undefined && state.memory.length > 0) sections.push(state.memory);
 	return sections;

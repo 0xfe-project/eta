@@ -1,4 +1,3 @@
-export { uuidv7 } from "@earendil-works/pi-ai";
 export type {
 	AttributeValue,
 	ExactTelemetryAttributes,
@@ -38,8 +37,6 @@ export {
 	InMemoryTelemetryContext,
 	NOOP_TELEMETRY_CONTEXT,
 } from "@earendil-works/pi-telemetry";
-export * from "./agent.ts";
-export * from "./agent-loop.ts";
 export * from "./harness/agent-harness.ts";
 export {
 	type BranchPreparation,
@@ -147,7 +144,6 @@ export { applyShellOutputUpdate } from "./harness/utils/output-capture.ts";
 export * from "./harness/utils/shell-output.ts";
 export * from "./harness/utils/truncate.ts";
 export * from "./proxy.ts";
-export * from "./search/index.ts";
 export { setDefaultStreamFn } from "./stream-fn.ts";
 export * from "./types.ts";
 
@@ -161,8 +157,6 @@ export * from "./harness/loops.ts";
 export * from "./harness/session-view.ts";
 export * from "./harness/persona.ts";
 export * from "./harness/drivers.ts";
-export * from "./harness/drift.ts";
-export * from "./harness/tools/index.ts";
 export * from "./harness/cron.ts";
 export * from "./harness/ask.ts";
 export * from "./harness/composer.ts";
