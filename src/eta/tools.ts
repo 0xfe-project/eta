@@ -8,6 +8,7 @@ import { Type, type TSchema } from "typebox";
 import type { Context } from "../harness/context.ts";
 import type { AgentHarnessTool, AgentHarnessToolInvocation } from "../harness/types.ts";
 import { TODO_REVIEW_PROMPT, TODO_UPDATE_SUCCESS } from "../prompts/index.ts";
+import type { DevEmit } from "./dev-events.ts";
 import { createCadenceState, drainReminderForContext, evaluateToolResult, onTurnStart, type CadenceState } from "./cadence.ts";
 import type { TaskStore } from "./task-store.ts";
 import { renderCurrentTasks, type TaskStatus } from "./tasks.ts";
@@ -35,8 +36,11 @@ const withId = <T>(id: string, extra: T) => ({ content: [{ type: "text" as const
 export const TASK_TOOL_NAMES: ReadonlySet<string> = new Set(["TaskCreate", "TaskList", "TaskGet", "TaskUpdate"]);
 
 /** TaskCreate / TaskList / TaskGet / TaskUpdate over a TaskStore. */
-export function createTaskTools(store: TaskStore, onChange?: () => void): BatteryTool[] {
-	const notify = () => onChange?.();
+export function createTaskTools(store: TaskStore, onChange?: () => void, dev?: DevEmit): BatteryTool[] {
+	const notify = (action?: string, data?: Record<string, unknown>) => {
+		onChange?.();
+		if (action !== undefined) dev?.("todo", action, data);
+	};
 	return [
 		{
 			name: "TaskCreate",
@@ -49,7 +53,7 @@ export function createTaskTools(store: TaskStore, onChange?: () => void): Batter
 			}),
 			async execute(_id, params) {
 				const { task, warnings } = store.create(params.content, { deps: params.deps, priority: params.priority });
-				notify();
+				notify("add", { taskId: task.id });
 				return withId(`Created ${task.id}. ${TODO_UPDATE_SUCCESS}${warnings.length > 0 ? `\nwarnings: ${warnings.join("; ")}` : ""}`, { task, warnings });
 			},
 		},
@@ -88,7 +92,7 @@ export function createTaskTools(store: TaskStore, onChange?: () => void): Batter
 			async execute(_id, { id, ...patch }) {
 				const result = store.update(id, patch);
 				if (result === undefined) return withId(`No task ${id}.`, { task: undefined });
-				notify();
+				notify("update", { taskId: id, status: result.task.status });
 				return withId(`Updated ${id}. ${TODO_UPDATE_SUCCESS}${result.warnings.length > 0 ? `\nwarnings: ${result.warnings.join("; ")}` : ""}`, {
 					task: result.task,
 					warnings: result.warnings,
@@ -106,7 +110,7 @@ export interface StateKV {
 	keys(): Promise<string[]>;
 }
 
-export function createStateTools(kv: StateKV): BatteryTool[] {
+export function createStateTools(kv: StateKV, dev?: DevEmit): BatteryTool[] {
 	return [
 		{
 			name: "update_state",
@@ -115,6 +119,7 @@ export function createStateTools(kv: StateKV): BatteryTool[] {
 			parameters: Type.Object({ key: Type.String(), value: Type.Union([Type.String(), Type.Null()]) }),
 			async execute(_id, { key, value }) {
 				await kv.set(key, value);
+				dev?.("state", value === null ? "delete" : "set", { key });
 				return withId(value === null ? `Deleted ${key}.` : `Stored ${key}.`, { key });
 			},
 		},

@@ -89,6 +89,8 @@ export interface LoopSchedulerOptions {
 	followUpFor(spec: LoopSpec): string;
 	/** Persist one registry value (session KV `eta.loop.state.<id>`). */
 	persist?(spec: LoopSpec): void;
+	/** Dev-stream emission (category "loop"). */
+	dev?(category: string, action: string, data?: Record<string, unknown>): void;
 }
 
 export class LoopScheduler {
@@ -150,6 +152,7 @@ export class LoopScheduler {
 				result.disposed.push(spec.def.id);
 				this.loops.delete(spec.def.id);
 				this.opts.persist?.(spec);
+				this.opts.dev?.("loop", "expired", { id: spec.def.id });
 			}
 		}
 		for (const fired of result.fired) {
@@ -167,13 +170,19 @@ export class LoopScheduler {
 		const paused: string[] = [];
 		const disposed: string[] = [];
 		for (const spec of this.loops.values()) {
-			if (spec.paused || spec.disposed || traceDepth > MAX_TRACE_DEPTH) continue;
+			if (spec.paused || spec.disposed) continue;
 			if (!due(spec)) continue;
+			if (traceDepth > MAX_TRACE_DEPTH) {
+				this.opts.dev?.("loop", "suppressed", { id: spec.def.id, reason: "trace_depth" });
+				continue;
+			}
 			spec.runCount += 1;
 			fired.push({ spec, followUp: this.opts.followUpFor(spec) });
+			this.opts.dev?.("loop", "fired", { id: spec.def.id, runCount: spec.runCount });
 			if (spec.def.maxRuns !== undefined && spec.runCount >= spec.def.maxRuns) {
 				spec.paused = true;
 				paused.push(spec.def.id);
+				this.opts.dev?.("loop", "paused", { id: spec.def.id, reason: "max_runs" });
 			}
 			this.opts.persist?.(spec);
 		}

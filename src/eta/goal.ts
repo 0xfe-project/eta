@@ -6,6 +6,7 @@
  */
 
 import { GOAL_CUSTOM_TYPE, type GoalPayload } from "./entries.ts";
+import type { DevEmit } from "./dev-events.ts";
 
 export type GoalStatus = "active" | "paused" | "achieved";
 
@@ -39,6 +40,7 @@ export class GoalManager {
 	maxContinuations = MAX_CONTINUATIONS;
 	antiSpinLimit = ANTI_SPIN_LIMIT;
 	onChange?: (change: GoalChange) => void;
+	dev?: DevEmit;
 
 	get current(): GoalState | undefined {
 		return this.goal;
@@ -48,15 +50,20 @@ export class GoalManager {
 		const from = this.goal?.status ?? ("none" as const);
 		this.goal = { objective, status: "active", roundCount: 0, idleWithoutTools: 0 };
 		const change: GoalChange = { from, goal: { ...this.goal } };
-		this.onChange?.(change);
+		this.changed(change, "set");
 		return change;
+	}
+
+	private changed(change: GoalChange, action: string): void {
+		this.dev?.("goal", action, { status: change.goal.status, from: change.from });
+		this.onChange?.(change);
 	}
 
 	pause(): void {
 		if (!this.goal || this.goal.status === "achieved") return;
 		const from = this.goal.status;
 		this.goal.status = "paused";
-		this.onChange?.({ from, goal: { ...this.goal } });
+		this.changed({ from, goal: { ...this.goal } }, "paused");
 	}
 
 	resume(): void {
@@ -65,21 +72,21 @@ export class GoalManager {
 		this.goal.status = "active";
 		this.goal.idleWithoutTools = 0;
 		this.goal.blockedReason = undefined;
-		this.onChange?.({ from, goal: { ...this.goal } });
+		this.changed({ from, goal: { ...this.goal } }, "resumed");
 	}
 
 	markAchieved(): void {
 		if (!this.goal) return;
 		const from = this.goal.status;
 		this.goal.status = "achieved";
-		this.onChange?.({ from, goal: { ...this.goal } });
+		this.changed({ from, goal: { ...this.goal } }, "achieved");
 	}
 
 	clear(): void {
 		if (!this.goal) return;
 		const from = this.goal.status;
 		this.goal = undefined;
-		this.onChange?.({ from, goal: { objective: "", status: "achieved", roundCount: 0, idleWithoutTools: 0 } });
+		this.changed({ from, goal: { objective: "", status: "achieved", roundCount: 0, idleWithoutTools: 0 } }, "cleared");
 	}
 
 	setBlockedReason(reason: GoalBlockedReason): void {
@@ -99,7 +106,7 @@ export class GoalManager {
 		this.goal.idleWithoutTools += 1;
 		if (this.goal.idleWithoutTools >= this.antiSpinLimit) {
 			this.goal.status = "paused";
-			this.onChange?.({ from: "active", goal: { ...this.goal } });
+			this.changed({ from: "active", goal: { ...this.goal } }, "spun_down");
 			return true;
 		}
 		return false;
@@ -116,7 +123,10 @@ export class GoalManager {
 	}
 
 	noteContinuation(): void {
-		if (this.goal) this.goal.roundCount += 1;
+		if (this.goal) {
+			this.goal.roundCount += 1;
+			this.dev?.("goal", "continued", { roundCount: this.goal.roundCount });
+		}
 	}
 }
 
