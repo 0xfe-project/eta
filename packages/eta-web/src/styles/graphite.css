@@ -772,11 +772,12 @@ details[open] > .tool-card-head .thinking-block-chevron {
 	opacity: 1;
 }
 .header-chip {
-	border: 1px solid var(--border);
+	border: 1px solid var(--border-strong);
 	padding: 1px 6px;
 	font-family: var(--font-mono);
 	font-size: 10px;
-	color: var(--muted);
+	color: var(--muted-foreground);
+	background: var(--overlay);
 	white-space: nowrap;
 }
 .conn-dot {

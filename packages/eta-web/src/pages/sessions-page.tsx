@@ -44,6 +44,22 @@ function useDeepLink() {
 	}, []);
 }
 
+function HeaderButtons({ termOpen, onToggleTerm }: { termOpen: boolean; onToggleTerm: () => void }) {
+	const { t } = useAppI18n();
+	const shell = useShellOptional();
+	return (
+		<>
+			{shell !== undefined ? (
+				<>
+					<button data-testid="shell-toggle-left" onClick={shell.toggleLeft} className="header-chip hover:text-foreground" title={t("nav.sessions")}>▤</button>
+					<button data-testid="shell-toggle-right" onClick={shell.toggleRight} className="header-chip hover:text-foreground" title={t("nav.context")}>⧉</button>
+				</>
+			) : null}
+			<button data-testid="term-toggle" onClick={onToggleTerm} className={`header-chip hover:text-foreground ${termOpen ? "text-foreground" : ""}`} title={t("term.title")}>⌨</button>
+		</>
+	);
+}
+
 export function SessionsPage() {
 	const { t } = useAppI18n();
 	const state = useEta();
@@ -51,7 +67,6 @@ export function SessionsPage() {
 	useDeepLink();
 	const [tab, setTab] = useState<"context" | "dev">("context");
 	const [termOpen, setTermOpen] = useState(false);
-	const shell = useShellOptional();
 	const selected = state.attach ?? state.sessions[0]?.name ?? null;
 	const view = selected === null ? undefined : state.views[selected];
 	const running = selected === null ? false : (state.sessions.find((session) => session.name === selected)?.badges.includes("running") ?? false);
@@ -73,13 +88,7 @@ export function SessionsPage() {
 								</>
 							) : null}
 							<span data-testid="conn-dot" className={`conn-dot ${state.connected ? "on" : "off"}`} title={state.connected ? "" : t("connection.disconnected")} />
-							{shell !== undefined ? (
-								<>
-									<button data-testid="shell-toggle-left" onClick={shell.toggleLeft} className="header-chip hover:text-foreground" title={t("nav.sessions")}>▤</button>
-									<button data-testid="shell-toggle-right" onClick={shell.toggleRight} className="header-chip hover:text-foreground" title={t("nav.context")}>⧉</button>
-							<button data-testid="term-toggle" onClick={() => setTermOpen((open) => !open)} className="header-chip hover:text-foreground" title={t("term.title")}>⌨</button>
-								</>
-							) : null}
+							<HeaderButtons termOpen={termOpen} onToggleTerm={() => setTermOpen((open) => !open)} />
 						</span>
 					</header>
 					{state.sessions.length === 0 ? (

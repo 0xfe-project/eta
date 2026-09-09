@@ -19,6 +19,7 @@
   "new.firstPrompt": "First prompt (optional)",
   "new.create": "Create session",
   "new.creating": "Creating…",
+  "settings.close": "close",
   "settings.title": "Settings",
   "settings.theme": "Theme",
   "settings.language": "Language",

@@ -19,6 +19,7 @@
   "new.firstPrompt": "第一条 prompt(可留空)",
   "new.create": "创建会话",
   "new.creating": "创建中…",
+  "settings.close": "关闭",
   "settings.title": "设置",
   "settings.theme": "主题",
   "settings.language": "语言",

@@ -15,7 +15,17 @@ export function SettingsPage() {
 
 	return (
 		<main className="mx-auto flex w-full max-w-[520px] flex-col gap-6 p-6" data-testid="settings-page">
-			<h1 className="text-lg font-semibold">{t("settings.title")}</h1>
+			<header className="flex items-center gap-2">
+				<h1 className="text-lg font-semibold">{t("settings.title")}</h1>
+				<button
+					data-testid="settings-close"
+					title={t("settings.close")}
+					onClick={() => (window.history.length > 1 ? window.history.back() : window.location.assign("/"))}
+					className="mono ml-auto border border-border-strong px-3 py-1 text-xs text-muted hover:text-foreground"
+				>
+					✕ {t("settings.close")}
+				</button>
+			</header>
 			<section>
 				<h2 className="mb-2 text-sm text-muted">{t("settings.theme")}</h2>
 				<div className="flex gap-2">
