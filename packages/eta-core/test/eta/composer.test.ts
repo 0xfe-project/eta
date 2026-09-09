@@ -29,3 +29,30 @@ describe("eta prompt composer", () => {
 		expect(sections[1].includes("<current_tasks>")).toBe(true);
 	});
 });
+
+import { builtinPersonas } from "../../src/prompts/persona.ts";
+
+describe("persona and memory slots", () => {
+	it("order is persona, goal, tasks, memory", () => {
+		const sections = etaPromptSections({
+			persona: "PERSONA",
+			goal: { objective: "g", status: "active" },
+			tasks,
+			memory: "MEMORY",
+		});
+		expect(sections.map((s) => s.split("\n")[0].slice(0, 7))).toEqual(["PERSONA", "Goal: g", "Before ", "MEMORY"]);
+	});
+	it("same state renders byte-identical twice", () => {
+		const state = { persona: "P", memory: "M", tasks };
+		expect(composeEtaSystemPrompt("BASE", state)).toBe(composeEtaSystemPrompt("BASE", state));
+	});
+	it("built-in cards are byte-stable prose (no headings, no bullets)", () => {
+		const cards = builtinPersonas();
+		expect(Object.keys(cards).sort()).toEqual(["Artist", "Executor", "INSIGHTER", "Thinker"]);
+		for (const card of Object.values(cards)) {
+			expect(card).not.toMatch(/^#/m);
+			expect(card).not.toMatch(/^- /m);
+		}
+		expect(cards.Thinker).toMatchSnapshot();
+	});
+});

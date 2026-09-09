@@ -9,4 +9,5 @@ export * from "./evo.ts";
 export * from "./todo.ts";
 export * from "./summary.ts";
 export * from "./resume.ts";
+export * from "./persona.ts";
 export * from "./compaction.ts";

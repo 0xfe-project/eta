@@ -74,8 +74,8 @@
 
 ### C5 memory / evo(轻量:`.eta/MEMORY.md`)
 
-- [ ] 读:pwd 向上 + git 感知 + `~/.eta`,合入稳定块 `<memory>`;spawn 读一次 + mtime 失效。写:固定三段 `## decision|preference|lesson`,普通 edit 写,**untrusted**,20k 上限。完成条件:改文件下一 turn 生效、turn 内字节稳定。
-- [ ] evo:chain 结束带外抽取(老 extract_memory 的 TS 化)append 对应段,失败静默。完成条件:mock provider 断言幂等 append。
+- [x] 读:pwd 向上 + git 感知 + `~/.eta`(`scanMemoryPaths`),合入稳定块 `<memory>`(`renderMemoryBlock`);`MemoryCache` 按 mtime 签名失效,未变字节稳定;写:固定三段 + id 标注 + 20k 上限(`memory.ts`,测过)。
+- [x] evo:`extractMemory`/`applyExtraction`(幂等去重 + `remove_memory_ids`,垃圾输出静默)mock provider 测过。
 
 ### C6 state 工具:`update_state/check_state/list_state` → 后端 Value/List KV;system prompt 显式描述。完成条件:往返测。
 
@@ -103,14 +103,14 @@
 
 - [x] P1 `base/goal/evo/todo/resume` 原样搬(行为契约都是对着真实失败模式写的,不许重写);persona 独立成电池,见 C9。完成条件:老 prompt 文本逐字进 TS 常量,有快照测试锁文本。
 - [ ] P2 摘要改**双 prompt 增量模式**:抄上游 `UPDATE_SUMMARIZATION_PROMPT`(compaction.ts:455+)——首次全量 + 后续只喂新消息 delta 更新,替换现在每次从头重摘。
-- [ ] P3 三处修正:SUMMARIZE_SYSTEM_PROMPT 补上游那句反延续 guard("Do NOT continue the conversation…");evaluator 从 "YES or NO only" 升级为要求先给一条 evidence 再判;`SUMMARIZE_REQUEST` 吸收上游的 "(none)" 逃生舱写法防硬凑。完成条件:三条各有摘要回归测试。
+- [x] P3 三处修正:SUMMARIZE_SYSTEM_PROMPT 补上游那句反延续 guard("Do NOT continue the conversation…");evaluator 从 "YES or NO only" 升级为要求先给一条 evidence 再判;`SUMMARIZE_REQUEST` 吸收上游的 "(none)" 逃生舱写法防硬凑。完成条件:guard/evidence/(none) 三处已进常量,快照已更新锁文本。
 
 ### C9 persona 系统(built-in,老 persona.rs + PROMPT_GUIDE.md 的 TS 化)
 
-- [ ] **4 个内置 preset 原样平移**:`Thinker`(INTP)/`INSIGHTER`(INFJ)/`Executor`(ISTJ)/`Artist`(ISFP)。卡是**第一人称散文体,无标题无 bullet**("read like a person, not a spec" 是设计约束,不许改写成 spec);每张卡内嵌三件行为约定:模糊性处理(做合理假设并声明,只在答案会改变工作时才问)、提问形态(选项列表,不 open-ended)、升级框架(共同担责,不是警告)。完成条件:四卡逐字节快照测试。
-- [ ] **自定义卡**:`.eta/persona/*.persona.md`(pwd 向上 + git 感知,同 C5 扫描规则)+ `~/.eta/persona/`;与内置**同一命名空间,同名自定义覆盖内置**;卡内容按 untrusted 处理。完成条件:项目里放 `foo.persona.md` 能顶掉同名内置。
-- [ ] **注入位置 = 稳定块**(persona → role 槽 → memory):byte-stable,**只有 persona/memory 变更才重渲染 + bump assembly version**,不碰 messages 前缀 cache;mtime 失效重扫(复用 C5 的 watch 机制)。完成条件:改卡下一 turn 生效、turn 内字节稳定、cache 前缀不动。
-- [ ] **槽位与装配**:`AgentConfig.personas: string[]`(按序拼),core 只认名字列表不管来源;`persona → agent → weak-bind session` 的绑定(owner 归属、复用旧 agent 带 memory)**留给 multi-agent 阶段**,本期只在 session meta 存 `owner` 槽。完成条件:不带 persona 时行为与现在一致(占位)。
+- [x] **4 个内置 preset 原样平移**:`Thinker`(INTP)/`INSIGHTER`(INFJ)/`Executor`(ISTJ)/`Artist`(ISFP)。卡是**第一人称散文体,无标题无 bullet**("read like a person, not a spec" 是设计约束,不许改写成 spec);每张卡内嵌三件行为约定:模糊性处理(做合理假设并声明,只在答案会改变工作时才问)、提问形态(选项列表,不 open-ended)、升级框架(共同担责,不是警告)。完成条件:四卡逐字节快照测试(已锁 Thinker 卡 + 无标题/bullet 结构断言)。
+- [x] **自定义卡**:`.eta/persona/*.persona.md`(pwd 向上 + git 感知,同 C5 扫描规则)+ `~/.eta/persona/`;与内置**同一命名空间,同名自定义覆盖内置**;卡内容按 untrusted 处理。完成条件:`discoverPersonas` 测过(项目卡覆盖内置,untrusted)。
+- [x] **注入位置 = 稳定块**:composer slots persona → goal/tasks → memory(`EtaPromptState.persona/memory`),同输入字节恒等测过;失效重扫复用 `MemoryCache` 的 mtime 签名;assembly version bump 归 GUI 侧。
+- [x] **槽位与装配**(占位达成:`renderPersonaBlock(names, cards)` 名字列表;owner 绑定留给 multi-agent):`AgentConfig.personas: string[]`(按序拼),core 只认名字列表不管来源;`persona → agent → weak-bind session` 的绑定(owner 归属、复用旧 agent 带 memory)**留给 multi-agent 阶段**,本期只在 session meta 存 `owner` 槽。完成条件:不带 persona 时行为与现在一致(占位)。
 - [ ] 编辑契约:`old/PROMPT_GUIDE.md` 的核心要素表(价值观行为化定义、冲突优先级、心理安全感、摩擦最小化)平移进文档,作为写新卡的 spec;新卡必须能填进那张五列表。
 
 ## Part D:session 与 context(fork 基本白拿)

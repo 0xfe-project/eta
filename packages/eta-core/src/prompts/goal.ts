@@ -19,7 +19,7 @@ Completion:
 
 /** Goal evaluator: a tool-free call that judges whether the goal is achieved. */
 export function goalEvaluatorPrompt(objective: string): string {
-	return `Is the goal achieved? Goal: "${objective}". Reply YES or NO only.`;
+	return `Is the goal achieved? Goal: "${objective}". First state ONE piece of evidence from the conversation, then write YES or NO on the last line.`;
 }
 
 /** followUp injected at run end to drive a goal continuation turn. */
