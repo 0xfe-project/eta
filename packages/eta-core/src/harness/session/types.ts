@@ -13,7 +13,7 @@ export type SettledAssistantMessage = AssistantMessage & {
 	stopReason: Exclude<StopReason, "pending">;
 };
 
-export type EntryType = "message" | "compaction" | "branch_summary" | "custom";
+export type EntryType = "message" | "compaction" | "branch_summary" | "merge" | "custom";
 
 export interface EntryBase {
 	id: string;
@@ -49,6 +49,15 @@ export interface BranchSummaryEntry extends EntryBase {
 	fromHook: boolean;
 }
 
+export interface MergeEntry extends EntryBase {
+	type: "merge";
+	/** Second parent: tip of the branch being merged in; its chain joins here. */
+	mergedParentId: string;
+	summary: string;
+	details?: JsonValue;
+	usage?: Usage;
+}
+
 export interface CustomEntry extends EntryBase {
 	type: "custom";
 	customType: string;
@@ -61,7 +70,7 @@ export type EntryProjector = (
 	context: Context,
 ) => AgentMessage[] | undefined | Promise<AgentMessage[] | undefined>;
 
-export type Entry = MessageEntry | CompactionEntry | BranchSummaryEntry | CustomEntry;
+export type Entry = MessageEntry | CompactionEntry | BranchSummaryEntry | MergeEntry | CustomEntry;
 
 /** Entry supplied to a transaction before storage assigns sequence and timestamp. */
 export type NewEntry<TEntry extends Entry = Entry> = TEntry extends Entry ? Omit<TEntry, "seq" | "timestamp"> : never;
@@ -408,6 +417,7 @@ export interface CommitResult {
 export interface EntryStructure {
 	id: string;
 	parentId: string | null;
+	mergedParentId?: string;
 	seq: number;
 	timestamp: number;
 	type: EntryType;

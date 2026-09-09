@@ -1,5 +1,6 @@
 import type {
 	BranchSummaryEntry,
+	MergeEntry,
 	CompactionEntry,
 	CustomEntry,
 	Entry,
@@ -52,6 +53,15 @@ function entryPayload(entry: Entry): StoredEntryPayload<Entry> {
 				...(entry.details === undefined ? {} : { details: entry.details }),
 				...(entry.usage === undefined ? {} : { usage: entry.usage }),
 				fromHook: entry.fromHook,
+			};
+			return payload;
+		}
+		case "merge": {
+			const payload: StoredEntryPayload<MergeEntry> = {
+				mergedParentId: entry.mergedParentId,
+				summary: entry.summary,
+				...(entry.details === undefined ? {} : { details: entry.details }),
+				...(entry.usage === undefined ? {} : { usage: entry.usage }),
 			};
 			return payload;
 		}
@@ -114,6 +124,8 @@ export function decodeEntryRow(row: EntryRow): Entry {
 			return { ...base, type: "compaction", ...parsePayload<CompactionEntry>(row) };
 		case "branch_summary":
 			return { ...base, type: "branch_summary", ...parsePayload<BranchSummaryEntry>(row) };
+		case "merge":
+			return { ...base, type: "merge", ...parsePayload<MergeEntry>(row) };
 		case "custom":
 			if (row.custom_type === null) throw new Error(`Custom entry ${row.id} is missing custom_type`);
 			return { ...base, type: "custom", customType: row.custom_type, ...parsePayload<CustomEntry>(row) };
@@ -124,6 +136,7 @@ export function entryStructureFromRow(row: EntryRow): EntryStructure {
 	return {
 		id: row.id,
 		parentId: row.parent_id,
+		...(row.type === "merge" ? { mergedParentId: parsePayload<MergeEntry>(row).mergedParentId } : {}),
 		seq: row.seq,
 		timestamp: row.timestamp,
 		type: row.type,

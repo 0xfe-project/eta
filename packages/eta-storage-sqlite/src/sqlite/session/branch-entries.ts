@@ -1,7 +1,8 @@
 import type { Entry, EntryStructure, StorageBranchScan } from "@eta/core";
+import { spliceMergedChain } from "@eta/core";
 import { joinSqlFragments, type SqlQuery, sql } from "../sql.ts";
 import type { SqliteDatabase } from "../types.ts";
-import { decodeEntryRow, type EntryRow } from "./entries.ts";
+import { decodeEntryRow, entryStructureFromRow, type EntryRow } from "./entries.ts";
 
 interface BranchMembershipRow {
 	branch_id: string;
@@ -311,8 +312,34 @@ function scanBranchSegments<T>(
 	return rows;
 }
 
+function readEntryRowById(db: SqliteDatabase, sessionId: string, id: string): EntryRow | undefined {
+	const rows = sql`SELECT id, parent_id, seq, type, custom_type, timestamp, payload
+		FROM entries WHERE session_id = ${sessionId} AND id = ${id}`.all<EntryRow>(db);
+	return rows[0];
+}
+
+function matchesBranchScan(entry: { type: string; customType?: string; seq: number }, query: StorageBranchScan): boolean {
+	if (query.type !== undefined && entry.type !== query.type) return false;
+	if (query.customType !== undefined && entry.customType !== query.customType) return false;
+	if (query.cursor !== undefined) {
+		const newer = query.order === "oldestFirst" ? entry.seq > query.cursor.seq : entry.seq < query.cursor.seq;
+		if (!newer) return false;
+	}
+	return true;
+}
+
 export function scanBranchEntries(db: SqliteDatabase, sessionId: string, query: StorageBranchScan): Entry[] {
-	return scanBranchSegments(db, sessionId, query, scanEntrySegmentRows).map(decodeEntryRow);
+	const openQuery: StorageBranchScan = { ...query, type: undefined, customType: undefined, cursor: undefined, limit: undefined };
+	const decoded = scanBranchSegments(db, sessionId, openQuery, scanEntrySegmentRows).map(decodeEntryRow);
+	const oldestFirst = query.order === "oldestFirst";
+	const newestFirst = oldestFirst ? decoded.slice().reverse() : decoded;
+	spliceMergedChain(newestFirst, (id) => {
+		const row = readEntryRowById(db, sessionId, id);
+		return row === undefined ? undefined : decodeEntryRow(row);
+	});
+	const ordered = oldestFirst ? newestFirst.slice().reverse() : newestFirst;
+	const filtered = ordered.filter((entry) => matchesBranchScan(entry, query));
+	return query.limit === undefined ? filtered : filtered.slice(0, Math.max(0, query.limit));
 }
 
 export function scanBranchEntryStructures(
@@ -320,5 +347,15 @@ export function scanBranchEntryStructures(
 	sessionId: string,
 	query: StorageBranchScan,
 ): EntryStructure[] {
-	return scanBranchSegments(db, sessionId, query, scanStructureSegmentRows);
+	const rows = scanBranchSegments(db, sessionId, query, scanStructureSegmentRows);
+	const oldestFirst = query.order === "oldestFirst";
+	const newestFirst = oldestFirst ? rows.slice().reverse() : rows;
+	spliceMergedChain(newestFirst, (id) => {
+		const row = readEntryRowById(db, sessionId, id);
+		return row === undefined ? undefined : entryStructureFromRow(row);
+	});
+	const ordered = oldestFirst ? newestFirst.slice().reverse() : newestFirst;
+	return ordered
+		.filter((structure) => matchesBranchScan(structure, query))
+		.slice(0, query.limit === undefined ? undefined : Math.max(0, query.limit));
 }

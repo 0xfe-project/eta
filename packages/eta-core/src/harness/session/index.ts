@@ -12,16 +12,9 @@ export type {
 export { commitWrite, insertEntry, insertUsage, prepareStorageCommit, validateCommittedWrites } from "./commit.ts";
 export { createForkSnapshot, type ForkSourceSnapshot } from "./fork.ts";
 export { type ForkCurrentStatePlan, projectForkCurrentStateWrite } from "./fork-policy.ts";
-export {
-	JSONL_STORAGE_VERSION,
-	type JsonlSessionCreateOptions,
-	type JsonlSessionListOptions,
-	type JsonlSessionMetadata,
-	JsonlSessionRepo,
-	type JsonlSessionRepoOptions,
-} from "./jsonl/index.ts";
 export type { MemorySessionRepoOptions } from "./memory.ts";
 export { MemorySessionRepo } from "./memory.ts";
+export { spliceMergedChain, type MergeSplittable } from "./merge-splice.ts";
 export {
 	SessionBranchExistsError,
 	SessionInvalidBranchError,
