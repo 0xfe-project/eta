@@ -2,14 +2,15 @@ import type { ServerWebSocket } from "bun";
 import { homedir } from "node:os";
 import { statSync } from "node:fs";
 
-export type TermSocket = ServerWebSocket<{ kind?: "ws" | "term"; socketId?: number; shell?: unknown }>;;;
+export type TermSocket = ServerWebSocket<{ kind?: "ws" | "term"; socketId?: number; shell?: unknown }>;
 
 export interface ShellHandle {
 	proc: BunShell;
-	socket: TermSocket;
+	alive: boolean;
 }
 
-type BunShell = ReturnType<typeof Bun.spawn> & { resize?: (cols: number, rows: number) => void };
+type BunTerminal = { write(data: string | Uint8Array): void; resize: (cols: number, rows: number) => void };
+type BunShell = ReturnType<typeof Bun.spawn> & { terminal?: BunTerminal };
 
 type StartFrame = { op: "start"; cols: number; rows: number; cwd?: string };
 
@@ -34,20 +35,22 @@ export class TermRegistry {
 		if (frame.op === "start") {
 			this.kill(socket);
 			const shell = process.env.SHELL ?? "/bin/zsh";
+			const handle: ShellHandle = { proc: undefined as unknown as BunShell, alive: true };
+			socket.data.shell = handle;
 			const proc = Bun.spawn([shell, "-i"], {
 				cwd: frame.cwd && directoryExists(frame.cwd) ? frame.cwd : homedir(),
 				env: { ...process.env, TERM: "xterm-256color" },
 				terminal: {
 					cols: frame.cols,
 					rows: frame.rows,
-					data: (child, data) => {
-						if ((child as unknown) !== ((socket.data.shell as ShellHandle | undefined)?.proc as unknown)) return;
-						if (socket.readyState === 1) socket.send(data);
+					data: (_terminal, data) => {
+						if (handle.alive && socket.readyState === 1) socket.send(data);
 					},
 				},
 			}) as unknown as BunShell;
-			socket.data.shell = { proc, socket };
+			handle.proc = proc;
 			void proc.exited.then((code: number) => {
+				handle.alive = false;
 				if (socket.readyState === 1) socket.send(JSON.stringify({ event: "exit", code }));
 			});
 			return;
@@ -55,10 +58,10 @@ export class TermRegistry {
 		const shell = socket.data.shell as ShellHandle | undefined;
 		if (shell === undefined) return;
 		if (frame.op === "input") {
-			(shell.proc.stdin as { write(data: Uint8Array): void } | null)?.write(Buffer.from(frame.data));
+			shell.proc.terminal?.write(frame.data);
 			return;
 		}
-		if (frame.op === "resize") shell.proc.resize?.(frame.cols, frame.rows);
+		if (frame.op === "resize") shell.proc.terminal?.resize(frame.cols, frame.rows);
 	}
 
 	close(socket: TermSocket): void {
@@ -69,6 +72,7 @@ export class TermRegistry {
 		const shell = socket.data.shell as ShellHandle | undefined;
 		if (shell === undefined) return;
 		socket.data.shell = undefined;
+		shell.alive = false;
 		try {
 			shell.proc.kill();
 		} catch {
