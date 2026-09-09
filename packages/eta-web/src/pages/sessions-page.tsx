@@ -51,11 +51,11 @@ function HeaderButtons({ termOpen, onToggleTerm }: { termOpen: boolean; onToggle
 		<>
 			{shell !== undefined ? (
 				<>
-					<button data-testid="shell-toggle-left" onClick={shell.toggleLeft} className="header-chip hover:text-foreground" title={t("nav.sessions")}>▤</button>
-					<button data-testid="shell-toggle-right" onClick={shell.toggleRight} className="header-chip hover:text-foreground" title={t("nav.context")}>⧉</button>
+					<button data-testid="shell-toggle-left" onClick={shell.toggleLeft} className="header-icon-btn" title={t("nav.sessions")}>▤</button>
+					<button data-testid="shell-toggle-right" onClick={shell.toggleRight} className="header-icon-btn" title={t("nav.context")}>⧉</button>
 				</>
 			) : null}
-			<button data-testid="term-toggle" onClick={onToggleTerm} className={`header-chip hover:text-foreground ${termOpen ? "text-foreground" : ""}`} title={t("term.title")}>⌨</button>
+			<button data-testid="term-toggle" onClick={onToggleTerm} className={`header-icon-btn ${termOpen ? "active" : ""}`} title={t("term.title")}>⌨</button>
 		</>
 	);
 }
