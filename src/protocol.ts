@@ -44,6 +44,7 @@ export type GuiOp =
 	| { op: "btwOpen"; session: string; kind: "contextual" | "tangent" }
 	| { op: "btwAsk"; session: string; threadId: string; question: string }
 	| { op: "modelSet"; session: string; modelId: string }
+	| { op: "thinkingLevel"; session: string; level: "off" | "minimal" | "low" | "medium" | "high" }
 	| { op: "queueRemove"; session: string; entryId: string }
 	| { op: "btwAnswer"; session: string; threadId: string; question: string; answer: string }
 	| { op: "btwSave"; session: string; threadId: string }

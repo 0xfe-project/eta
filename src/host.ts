@@ -470,6 +470,17 @@ export class Host {
 	}
 
 	/** Hot-swap the configured model (real providers only) and remember the choice. */
+	async thinkingLevel(name: string, level: "off" | "minimal" | "low" | "medium" | "high"): Promise<void> {
+		await this.must(name).lane.setThinkingLevel(level, BACKGROUND_CONTEXT);
+		this.refreshView(name);
+		void this.hosted.get(name)?.projector.snapshot(BACKGROUND_CONTEXT).then((view) => {
+			const hosted = this.hosted.get(name);
+			if (hosted === undefined) return;
+			hosted.view = this.stampView(hosted, view);
+			this.emit({ channel: "view", session: name, view: hosted.view });
+		});
+	}
+
 	async modelSet(name: string, modelId: string): Promise<void> {
 		const agent = this.must(name);
 		this.setMeta(name, { modelId });
