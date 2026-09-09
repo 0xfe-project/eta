@@ -17,7 +17,7 @@ import { applyGoalEntries } from "./goal.ts";
 import type { AgentHarnessTool } from "./types.ts";
 import type { Session } from "./session/types.ts";
 import type { EtaEmit } from "./events.ts";
-import { composeEtaSystemPrompt, etaPromptBlockChars } from "./composer.ts";
+import { composeEtaSystemPrompt, etaPromptBlockChars, etaPromptSectionsDetailed, type EtaPromptSection } from "./composer.ts";
 import { AskRegistry, createAskUserTool, type HeadlessAsk } from "./ask.ts";
 import { BtwManager } from "./btw.ts";
 import { answerEntry, askEntry, btwEntry, goalEntry, type GoalPayload } from "./entries.ts";
@@ -103,13 +103,13 @@ export class EtaAgent {
 	/** Persona card names baked into the stable prompt block; empty when none. */
 	personas: string[] = [];
 	/** Prompt block sizes from the last generation; undefined until the first one. */
-	private lastPromptBlocksValue: { stableChars: number; adaptiveChars: number } | undefined = undefined;
+	private lastPromptBlocksValue: { stableChars: number; adaptiveChars: number; sections: EtaPromptSection[] } | undefined = undefined;
 
-	get lastPromptBlocks(): { stableChars: number; adaptiveChars: number } | undefined {
+	get lastPromptBlocks(): { stableChars: number; adaptiveChars: number; sections: EtaPromptSection[] } | undefined {
 		return this.lastPromptBlocksValue;
 	}
 
-	reportPromptBlocks(blocks: { stableChars: number; adaptiveChars: number }): void {
+	reportPromptBlocks(blocks: { stableChars: number; adaptiveChars: number; sections: EtaPromptSection[] }): void {
 		this.lastPromptBlocksValue = blocks;
 	}
 
@@ -253,7 +253,8 @@ export class EtaAgent {
 							...(memory === undefined || memory.length === 0 ? {} : { memory }),
 						};
 						const blocks = etaPromptBlockChars(options.baseSystemPrompt ?? "", state);
-						agentRef?.reportPromptBlocks(blocks);
+						const detail = { ...blocks, sections: etaPromptSectionsDetailed(options.baseSystemPrompt ?? "", state) };
+						agentRef?.reportPromptBlocks(detail);
 						emit("prompt", "blocks", { ...blocks });
 						return composeEtaSystemPrompt(options.baseSystemPrompt ?? "", state);
 					};
