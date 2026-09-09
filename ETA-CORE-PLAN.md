@@ -1,0 +1,141 @@
+# ETA-CORE-PLAN — eta-core(TypeScript)实现计划
+
+> 哲学:**battery included minimal**。pi 的 minimal = 一切电池赶进 extension;我们的 minimal = 电池全部预装在 core 里,每节可关。没有 extension 装载机制——电池是模块,编译期内建。
+>
+> 做法:**不从头写。fork `pi/packages/agent`(v0.85.1,MIT)做基线,regex 改名 pi→eta,然后做外科手术 + 装电池。** 上游的运行时状态机、session 存储、compaction、工具循环、整套 vitest/conformance 全部白拿。
+>
+> 范围:对标 packages/agent 层。不含 TUI/GUI、不含 kanban 分解 harness。
+>
+> 已读码参考(全在 `refs/`,是行为与局部代码的来源,不是依赖):
+>
+> | 包 | LOC | 真正抄的东西 |
+> |---|---|---|
+> | pi-loop | 13.4k | Trigger 四态、pump+心跳、filter 语法、过期/上限语义(~400 行的语义,包体 13k 别抄) |
+> | pi-ask-user | 2.4k | tool schema、答案归一化、timeout/abort/headless 语义(TUI 组件 2k 全丢) |
+> | pi-subagents | 20.9k | manager 并发池语义、schedule 格式、RPC 信封(UI/workflow-vm 全丢) |
+> | pi-tasks | ~2k | task-store 文件锁、reminder-cadence 纯函数 |
+> | pi-btw | 2.3k(单文件) | 旁路子会话原语:种子过滤、线程合成对回放、followUp 注入 |
+>
+> 每条 `- [ ]` 末尾是完成条件。
+
+---
+
+## 0. Fork 策略(替代原 Part A/B 的重写)
+
+- [ ] F0.1 vendor import:`cp -r pi/packages/agent packages/eta-core` + 它的 test/,单个 commit 落地(记录上游 commit 到 `UPSTREAM.md`,以后同步 = 3-way merge,目录结构不许动)。完成条件:包能 build、**上游测试原样全绿**。
+- [ ] F0.2 改名 codemod:**只改自有标识符**(`pi-agent-core`→`@eta/core`、导出符号、telemetry 前缀);依赖 scope `@earendil-works/pi-ai` / `pi-telemetry` / `chord` **不改**(它们是被 import 的库,regex 一刀切会把 import 全杀掉)。完成条件:`rg -i "\bpi\b" src --glob '!pi-ai'` 只剩依赖名。
+- [ ] F0.3 白拿资产清单确认(runtime 状态机 7.5k / session+jsonl repo+fork 4.4k / compaction 1.3k / hooks+telemetry+skills+prompt-templates 3.5k / tools 一套;`faux` provider 来自 pi-ai,单测不联网)。完成条件:vitest 全绿 + sqlite-node 后端 conformance 全绿(vendor 它,Entry 类型不动,新语义走 `CustomEntry{customType}`——决策 D1)。
+- [ ] F0.4 lane/drive 状态机(**先留不拆**):它是重试/backoff/persistence 正确性的本体;跑通 M1-M4 后若确认用不上再砍,砍之前不许重写。
+
+---
+
+## Part B:对 fork 的外科手术(真实 delta)
+
+- [ ] S1 **driver 队列**:goal 续命与 loop 触发是「turn 边界优先消费的 driver」,不是普通 inbox 消息;dequeue 顺序 driver > had_tools > break(老 B2 语义)。完成条件:两个 driver 各一条集成测试。
+- [ ] S2 **空响应重试**:上游 `drive/response.ts` 只覆盖 error/length;补 `stop==="stop" && 无 content 无 toolCall` → 注 continuation 重试(带预算)。完成条件:faux 注入空响应触发。
+- [ ] S3 **漂移检测**:平移老 `loop_detect.rs`(doom 指纹≥3、tail_repetition、similar 三指标)为纯函数模块,接入 loop reminder,再犯抛 `LoopDetected`。完成条件:Rust 单测全数平移。
+- [ ] S4 **fail-closed 权限**:上游 `beforeToolCall` 是 fail-open;给 `requires_approval` 工具加 gate——无 hook/超时 = Deny + `permission denied` tool_result(老 B7)。完成条件:无 hook 场景测过。
+- [ ] S5 **ask_user 拦截 + answer 通道**(见 C3),S6 **新 entry customTypes**:`eta.goal / eta.ask / eta.answer / eta.btw`(tasks/loops 走 KV Value)。完成条件:重放后 store 语义完整。
+
+---
+
+## Part C:内建电池(`src/batteries/`,每节一个模块 + config 开关)
+
+### C1 goal(built-in,自研,Rust 语义平移)
+
+- [ ] 状态机 + anti-spin(3 轮无工具→Paused)+ 复活 + `gate:"auto"|"delegated"` + intent 续命(老 agent.rs:467)+ 独立 evaluator(YES/NO,有界尾部)+ `MAX_CONTINUATIONS`。完成条件:Rust B8 的用例全平移;goal 经 `eta.goal` entry 跨重启恢复。
+
+### C2 loop 调度器(built-in,抄 pi-loop 的语义不抄它的架构)
+
+- [ ] Trigger:`cron | event | dynamic`(hybrid 缓);**event filter 语法原样抄** `trigger-system.ts:141-155`(substring / `regex:` / JSON 等值)。事件源 = 进程内 bus(`turn_end/tasks_updated/subagents:*`),对应它 `pi.events.on`。
+- [ ] **pump 模型照抄**:调度器不自主定时,`pump(now)` 由 turn 边界 + **30s unref 心跳**驱动(session-runtime.ts:13 的注释就是理由:idle 时不 pump 的 loop 永不触发);**jitter** 抄 `loop-parse.computeJitter`;**session generation 计数器**防跨 session 陈旧回调。
+- [ ] 生命周期语义:`expiresAt`(默认 7d,`ETA_LOOP_EXPIRES_IN`),过期 disposition `deleted|paused`(有 workflow 的 pause、裸 loop delete);**fire 上限→`controller_limit` pause**(防失控);幂等键 + trace 深度 ≤8(老 B9)。
+- [ ] 持久化**不抄它的 event-sourced reducer store(956 行)**:registry 进 session KV,纯函数 CRUD + 文件锁即可;`loop-events.ts` 的恢复语义(resume_event_stale)要有。完成条件:未 attach session 到点火、重启全恢复、过期/上限/去重各一条测试。
+
+### C3 ask_user(built-in,读码结论:schema 抄、UI 丢、持久化我们补)
+
+- [ ] core 按名拦截,发 `AskUserStarted` 挂起 step 等 `answer()`。**它的 execute 本质 = await UI 组件的 Promise**(index.ts:2211-2260):抄 abort signal→null、timeout→`done(null)`、finally 发 blocked/unblocked(= 我们的 dev 事件)。
+- [ ] schema 抄:`question/context/options[{title,description}](扁平避 anyOf)/allowMultiple/allowFreeform/timeout` + **模型别名键归一化**(label/text/value/name——它防 proxy 改写 schema,index.ts:158);结果信封 `AskResponse = {kind:"selection",selections,comment?} | {kind:"freeform",text}`。
+- [ ] headless 语义抄它:无交互 UI 时降级为简单 select/input 协议(index.ts:2311),失败回文本 tool_result。
+- [ ] **它没有的,我们加**:`eta.ask` entry 持久化 pending,kill→重启→重发未决问题→回填续跑。完成条件:四路单测(选择/填空/超时/取消)+ kill-重启集成测试。
+
+### C4 tasks(built-in,抄 pi-tasks lite)
+
+- [ ] `TaskCreate/List/Get/Update`,deps 双向边、环/自依赖警告仍存,状态四态、id 不复用;存储 = session KV 默认,共享文件模式**抄它的锁**(wx-create token + pid stale 回收 + 释放校验 token,task-store.ts:27-71 整段平移)+ 加载归一化守卫(:80-91)。
+- [ ] **transient reminder 整模块抄** `reminder-cadence.ts`(纯函数 CadenceState:turn 计数、工具闲置判定、每周期一次):挂 fork 的 context hook 注入 `<system-reminder>`,不落 transcript 不破 cache 前缀。完成条件:store 重放查不到 reminder 字节;cadence 单测平移。
+- [ ] 丢:widget/settings-menu/auto-clear 管理器/subagent RPC 联动。
+
+### C5 memory / evo(轻量:`.eta/MEMORY.md`)
+
+- [ ] 读:pwd 向上 + git 感知 + `~/.eta`,合入稳定块 `<memory>`;spawn 读一次 + mtime 失效。写:固定三段 `## decision|preference|lesson`,普通 edit 写,**untrusted**,20k 上限。完成条件:改文件下一 turn 生效、turn 内字节稳定。
+- [ ] evo:chain 结束带外抽取(老 extract_memory 的 TS 化)append 对应段,失败静默。完成条件:mock provider 断言幂等 append。
+
+### C6 state 工具:`update_state/check_state/list_state` → 后端 Value/List KV;system prompt 显式描述。完成条件:往返测。
+
+### C7 subagents(built-in lite,抄 pi-subagents 的 manager 语义,20.9k 里抄 ~800)
+
+- [ ] 工具面 `Agent / get_subagent_result / steer_subagent`;子 = 独立 EtaAgent session(parent 指针、自带 tools/prompt/model)。工具裁剪抄它的做法:`setActiveToolsByName` + `beforeToolCall` 覆盖(agent-runner.ts:282-300)。
+- [ ] **并发池语义照搬**(agent-manager.ts:99-146 的推理直接继承):后台池默认 10、前台 spawnAndWait 单独计、**嵌套子不占父 slot(否则父等子死锁)**、schedule 点火 bypass 队列。
+- [ ] depth cap 2 + ownership-scope(只控自己的孩子、父终态停孙、usage 逐级上卷)。完成条件:越权拒绝 + 归因到 root 的测试。
+- [ ] `schedule` 字段抄 `schedule.ts:1-120` 格式学(6 段 cron / `5m` / `+10m` / ISO)但执行复用 C2;**RPC 信封抄它的 requestId+reply-topic 模式**(`subagents:rpc:spawn|stop|consume` 语义),给桥接留锚。
+- [ ] 完成/失败发 `subagents:completed|failed` 总线事件 → 父经 followUp 唤醒(与它的完成通知同构);中断跑完的「wrap up 警告→硬停」抄它 turn-limit 语义。丢:widget/FleetView/@mention/SubagentWorkflow/worktree/memory 三 scope。
+
+### C8 btw 旁路通道(built-in,抄 pi-btw 的机制,丢它的 overlay)
+
+- [ ] **core 原语 `SideSession`**:独立 in-memory 子会话,与主 loop 并发跑(它靠真 AgentSession + 事件流驱动 UI,我们用 fork 的第二个会话实例,事件走 SessionView);`contextual` 种子 = `buildSessionContext(entries, leafId)` **过滤 `eta.btw` 可见消息**(btw.ts:263 整段逻辑平移,连 fallback 分支一起),`tangent` = 无种子;线程连续性 = 把已答的 Q/A 作**合成 user/assistant 对话对回放进 messages**(btw.ts:299-355),不建第二套 transcript 模型。完成条件:主 agent 忙时 side 跑通、主 context 重放查不到 side 消息。
+- [ ] 持久化:`eta.btw` CustomEntry 存线程(与 D1 同路);`--save` 语义 = 单条 exchange 写**可见** note 进主 session,默认 hidden;save 态机 `not-saved|queued|saved`(主 turn 未完时排队等落盘,btw.ts:81+2109 语义)。
+- [ ] **handoff = S1 driver**:inject/summarize 投 followUp driver(= 它的 `pi.sendMessage(...,{deliverAs:"followUp"})`,btw.ts:990);summarize 用当前 BTW 模型但**强制 thinking off**,失败保留线程可重试(btw.ts:1893)。完成条件:忙时 inject→followUp→主续跑后收到。
+- [ ] per-thread `model/thinking` override:override 变更 = dispose 子会话 + 重建、hidden thread 保留(它的行为,照抄)。丢:overlay/modal/焦点快捷键/UI split。
+
+---
+
+## Prompt 资产(old/eta-system-prompts 全量平移,按此修)
+
+- [ ] P1 `base/goal/evo/todo/resume` 原样搬(行为契约都是对着真实失败模式写的,不许重写);persona 独立成电池,见 C9。完成条件:老 prompt 文本逐字进 TS 常量,有快照测试锁文本。
+- [ ] P2 摘要改**双 prompt 增量模式**:抄上游 `UPDATE_SUMMARIZATION_PROMPT`(compaction.ts:455+)——首次全量 + 后续只喂新消息 delta 更新,替换现在每次从头重摘。
+- [ ] P3 三处修正:SUMMARIZE_SYSTEM_PROMPT 补上游那句反延续 guard("Do NOT continue the conversation…");evaluator 从 "YES or NO only" 升级为要求先给一条 evidence 再判;`SUMMARIZE_REQUEST` 吸收上游的 "(none)" 逃生舱写法防硬凑。完成条件:三条各有摘要回归测试。
+
+### C9 persona 系统(built-in,老 persona.rs + PROMPT_GUIDE.md 的 TS 化)
+
+- [ ] **4 个内置 preset 原样平移**:`Thinker`(INTP)/`INSIGHTER`(INFJ)/`Executor`(ISTJ)/`Artist`(ISFP)。卡是**第一人称散文体,无标题无 bullet**("read like a person, not a spec" 是设计约束,不许改写成 spec);每张卡内嵌三件行为约定:模糊性处理(做合理假设并声明,只在答案会改变工作时才问)、提问形态(选项列表,不 open-ended)、升级框架(共同担责,不是警告)。完成条件:四卡逐字节快照测试。
+- [ ] **自定义卡**:`.eta/persona/*.persona.md`(pwd 向上 + git 感知,同 C5 扫描规则)+ `~/.eta/persona/`;与内置**同一命名空间,同名自定义覆盖内置**;卡内容按 untrusted 处理。完成条件:项目里放 `foo.persona.md` 能顶掉同名内置。
+- [ ] **注入位置 = 稳定块**(persona → role 槽 → memory):byte-stable,**只有 persona/memory 变更才重渲染 + bump assembly version**,不碰 messages 前缀 cache;mtime 失效重扫(复用 C5 的 watch 机制)。完成条件:改卡下一 turn 生效、turn 内字节稳定、cache 前缀不动。
+- [ ] **槽位与装配**:`AgentConfig.personas: string[]`(按序拼),core 只认名字列表不管来源;`persona → agent → weak-bind session` 的绑定(owner 归属、复用旧 agent 带 memory)**留给 multi-agent 阶段**,本期只在 session meta 存 `owner` 槽。完成条件:不带 persona 时行为与现在一致(占位)。
+- [ ] 编辑契约:`old/PROMPT_GUIDE.md` 的核心要素表(价值观行为化定义、冲突优先级、心理安全感、摩擦最小化)平移进文档,作为写新卡的 spec;新卡必须能填进那张五列表。
+
+## Part D:session 与 context(fork 基本白拿)
+
+- [ ] D1 sqlite 后端 + conformance 全绿(F0.3);重放/fork/navigation 白拿。
+- [ ] D2 compaction 补两点上游没有的:tool **整对丢弃**(ratio≥25%、绝不劈半对)+ **max-min-fair 确定性兜底** + untrusted note(平移老 `compaction.rs` 纯函数,已测)。完成条件:配对完整性测试。
+- [ ] D3 durable 再注入:`buildContext` 时 goal/tasks 摘要/memory 稳定块重注,自适应块(skills/工具目录)放 cache 边界后可降级。完成条件:compaction 后语义块不丢。
+- [ ] D4 时间旅行补 `merge`(双 parent)+ 显式 `rollback`。完成条件:fork→commit→merge→rollback 链路。
+- [ ] D5 **SessionView 投影器**:基于上游已有 reducer 快照(reduceLaneSnapshot)+ telemetry 流,产出 `{messages,thinking,goal,tasks,loops,sideThread,usage,cacheRate,branch,pendingAsk}` 可序列化;attach = 重放 + 增量。完成条件:双前端并行 attach 一致。
+
+## Part E:observability
+
+- [ ] telemetry category 对齐老 14 类 + 电池扩展(`loop: fired/paused/expired/suppressed`、`ask: asked/answered/expired`、`btw: opened/injected/summarized/saved`)。完成条件:混合 turn 全类别可观测,内存实现测过。
+
+## Part F:验证(GUI-PLAN.md 的 G 系列并入,day-0 起 GUI 就是 harness)
+
+- [ ] F1 ~~dev-cli~~ **退役**:自 G0 起验证在 GUI 内做(`TestGpuixRenderer`/screenshot/automation tree),headless CI 用测试渲染器跑同一条;readline 壳只留作 no-GPU 兜底。
+- [ ] F2 SessionView + AgentEvent + telemetry 三通道过 WebSocket 给第二前端——**总验收**(老 R10 等价物;GUI 与远端前端吃同一契约,见 GUI-PLAN G0.2)。
+
+## 明确不做
+
+extension/plugin 装载;widget/fleet/workflow-vm/monitor;kanban 分解 harness;persona preset(留槽);provider/auth(pi-ai 全权);pi-loop 的 task-backlog/workflow 状态机。
+
+## 里程碑
+
+| # | 内容 | 验收 |
+|---|---|---|
+| M0 | F0 fork + 改名 + 上游测试/conformance 绿 | 基线可信 |
+| M1 | S1-S3 driver/空响应/漂移 | 手术各有测试 |
+| M2 | C6+C4 tasks(含锁与 cadence 平移) | DAG + transient reminder |
+| M3 | C1 goal | 状态机全语义 |
+| M4 | S4+S5+C3 ask_user | kill-重启-回答续跑 |
+| M5 | D2-D3 compaction 补齐 | 配对完整 |
+| M6 | C2 loop(心跳/pump/过期/bootstrap) | 重启恢复+过期+上限 |
+| M7 | C5 memory/evo + C9 persona(P1-P3 prompt 资产) | 带外抽取 + persona 稳定块生效 |
+| M8 | C7 subagents | followUp 唤醒 + 池语义 |
+| M9 | C8 btw 旁路 | 主忙时 side 跑通、inject 回灌 |
+| M10 | D4-D5 + F1/F2 | 双前端总验收 |

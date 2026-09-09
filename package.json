@@ -1,0 +1,20 @@
+{
+	"name": "eta-workspace",
+	"private": true,
+	"type": "module",
+	"workspaces": ["packages/*"],
+	"scripts": {
+		"test": "bun run --cwd packages/eta-core test",
+		"typecheck": "bun run --cwd packages/eta-core typecheck"
+	},
+	"dependencies": {
+		"@anthropic-ai/sdk": "0.124.0",
+		"@aws-sdk/client-bedrock-runtime": "3.1127.0",
+		"@google/genai": "2.21.0",
+		"@smithy/node-http-handler": "4.12.1",
+		"http-proxy-agent": "9.1.0",
+		"https-proxy-agent": "9.1.0",
+		"openai": "6.40.0",
+		"partial-json": "0.1.7"
+	}
+}

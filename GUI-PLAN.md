@@ -1,0 +1,102 @@
+# GUI-PLAN — eta GUI(GPUIX,gpuix)+ Day-0 交付
+
+> 原则:**GUI 不是 core 稳定后的外壳,是 core 的观测仪器**。继承老 CORE_PLAN Part E 的铁律——「不留任何只有引擎知道、UI 看不到的功能」,每节电池上线的同一个里程碑必须带它的面板,否则不算完成。渲染层与 core 的唯一契约 = `SessionView` 快照/增量 + 两条流(`AgentEvent` + telemetry);进程内直连,同一契约以后原样搬上 WebSocket。
+>
+> 产品形态抄 pi-gui(Codex 式 thread timeline + 侧栏 + diff 面板 + composer),引擎暴露面抄老 E3/E4(Context 面板 + dev rail),渲染栈换 gpuix(native GPUI,无 Electron/webview)。前置结论沿用已读码分析:terminal 用 gpui-terminal 挂 CustomElement,图片粘贴给 gpuix 补 `paste-assets`(~30 行,`input.rs:1084` 只取了 `.text()`)。
+>
+> 每条 `- [ ]` 末尾是完成条件。
+
+---
+
+## 0. 进程与数据契约(day-0 就定死,以后不许旁路)
+
+- [ ] G0.1 单 bun 进程:`@eta/core` in-process + gpuix 窗口。三条通道:**SessionView**(真值快照+增量 patch)、**AgentEvent**(交互投影)、**telemetry dev events**(引擎内部,per-session ring buffer 最近 N 条)。**GUI 除这三样外不许碰 core 内部对象**。完成条件:类型上 GUI 只 import 这三类。
+- [ ] G0.2 三条通道全 JSON-safe。完成条件:序列化 roundtrip 测试;attach = `replay(store)` + 订阅增量,后台 session 重 attach 用 SessionView 重放 + dev ring 回填(老 E6 语义)。
+- [ ] G0.3 线程模型:N 个 session = N 个 agent 并发,GUI 只有一个 attach 指针;后台 goal/loop 照常跑,GUI 断连不影响。完成条件:后台 session 的 loop 到点火、GUI 无窗口时 core 不退出。
+
+---
+
+## 1. 布局
+
+```
+┌────────┬──────────────────────────────┬─────────────────┐
+│ 侧栏    │  timeline(主列)             │ tab: Context     │
+│ thread │  消息=流式 <markdown>         │ tab: Dev rail   │
+│ +badge │  工具=折叠 <code>/<diff>      │ (14+类事件 tail  │
+│ +archive│  系统行=compaction/goal/     │  +category 过滤) │
+│        │  loop/ask/btw                ├─────────────────┤
+│        │                              │ diff 侧挂(⌘D)  │
+├────────┴──────────────────────────────┴─────────────────┤
+│ composer:textarea + @mention(anchored)+ 图片 chips       │
+│ ask_user 内联弹窗 / 排队消息条 / btw 模态(Alt+/)          │
+└─────────────────────────────────────────────────────────┘
+终端底部面板(⌘`,gpui-terminal 元素,默认收起)
+```
+
+- [ ] L1 侧栏:session 列表 + 状态 badge(`running / goal / ask-pending / loop`)+ archive;数据 = 各 session SessionView 摘要行。完成条件:切 attach 不丢任何 session 状态。
+- [ ] L2 timeline 行类型:在 pi-gui `activity|tool|summary|turn-marker`(timeline-types.ts)基础上扩 `goal-change / loop-fire / compaction / ask / btw-note / retry`。工具行内嵌 `<code>`(参数/结果)+ `<diff>`(edit 类)。完成条件:virtual-list 变高行 + 尾部锚定(chat 语义),历史重放与直播同一渲染路径。
+- [ ] L3 Context 面板:system prompt 拆**稳定块/自适应块**两段 + `compactionEpoch`;usage 表(input/output/cache_read/write + `cacheRate` + tokens/sec,速率用 dev ts);goal 卡、tasks、loops、memory 水位(20k)、subagents fleet 行、btw sideThread。完成条件:跑一个 turn 每块都实时刷新。
+- [ ] L4 dev rail:全 category 着色 tail,`/` 过滤、暂停/恢复;环满丢最旧。完成条件:14+类各有颜色且能过滤。
+- [ ] L5 composer:textarea + @mention 弹层(文件/agent)、**paste-assets 图片 chips**、排队消息条(等 turn 边界,= S1 driver)、`ask_user` 内联弹窗(单选/多选/填空,含 timeout 倒计时,答案走 `answer()`)。完成条件:kill-重启后未决 ask 在 GUI 重弹。
+
+---
+
+## 2. UI 暴露映射(遥测 category → 面板 → 可驱动回操作)
+
+| category | 显示在 | 面板可反操作 |
+|---|---|---|
+| lifecycle/turn | timeline 系统行 + Context(working) | abort(⌘.) |
+| usage/prompt | Context 表 + prompt 分块视图 | 改模型/切 persona |
+| compaction | timeline 系统行 + epoch | 手动 compact |
+| loop | loops 卡(fired/paused/expired/suppressed) | CRUD + enable/disable |
+| goal | goal 卡(status/round/anti-spin) | set/pause/resume/clear |
+| memory | 水位条 + 条目 | 打开 `.eta/MEMORY.md`、清空段 |
+| task | tasks 卡(DAG) | 改状态/删/加 |
+| state | KV 列表 | set/delete |
+| tool | timeline 工具行(校验失败×3→ask 可见) | requires_approval **Allow/Deny 弹窗**(fail-closed 的 UI 面) |
+| retry | timeline 行内徽标 | — |
+| ask | 弹窗 + `eta.ask` 历史 | answer |
+| btw | sideThread 面板 + modal | 新线程/inject/summarize/clear |
+| subagent | fleet 行(spawn/steer/stop) | Agent 工具同款操作 |
+
+- [ ] M 映射表 = 验收清单:telemetry 每类必须能在 GUI 找到落点、有电池的有反操作。完成条件:表→测试一一对应。
+
+---
+
+## 3. 组件清单
+
+- **gpuix 白拿**:`markdown`/`code`/`diff`/`virtual-list`/`textarea`/`anchored`/`combobox`/`select`/`tooltip`/`floating`/motion/theme(连 metrics 都在 theme 里)/app menu/焦点系统。
+- **GUI 自写**:timeline 变高虚拟行 + 尾部锚定、ask 弹窗、goal/tasks/loops/fleet/memory 卡、dev rail(过滤态机)、session badge、主题 preset(light/dark 各一套 GpuixMetrics 微调)。
+- **给 gpuix 打的两个补丁**(上游 PR,fork 期间自己背):`paste-assets` 事件(图片 C-V);`terminal` CustomElement 挂 gpui-terminal(alacritty VTE;gpui 版本对齐 fork,自建 native,不用 npm prebuilt)。
+- **薄 OS 层**(bun 侧):通知(spawn terminal-notifier/osascript)、openUrl、文件对话框(osascript/zenity)。v1 够用。
+
+## 4. 测试
+
+- [ ] T1 `TestGpuixRenderer` + `getAutomationTree`/`getPaintedText`:面板级单测(喂假 dev events 断言渲染),不占 GPU。完成条件:每面板至少一条。
+- [ ] T2 `captureScreenshot` golden:每电池里程碑存一张面板截图进 `_goldens/`。完成条件:G9 时 golden 覆盖全部映射表行。
+- [ ] T3 端到端:真实模型 + 混合会话(goal+ask+tasks+compaction+loop+btw+subagent)在 GUI 跑完,automation tree 全链路断言。完成条件 = F1 退役,GU‍I 即 harness;headless 兜底留 `TestGpuixRenderer` 跑同一条。
+
+---
+
+## 5. 里程碑(与 core 的 M 交错,同 commit 系列)
+
+| # | 绑定 | GUI 内容 | 验收 |
+|---|---|---|---|
+| G0 | M0 | 窗口+空 timeline+dev rail(假事件) | 布局四块可渲染 |
+| G1 | M1 | 真 turn 流+retry/loop 系统行 | T3 的 turn 段 |
+| G2 | M2 | tasks 卡(reminder 注入可见) | DAG 渲染+操作 |
+| G3 | M3 | goal 卡+控制 | 续命/暂停在屏上可见 |
+| G4 | M4 | ask 弹窗+fail-closed 授权弹窗 | kill-重启-弹-答续跑 |
+| G5 | M5 | compaction 行+Context/epoch/cacheRate | 压缩前后对照 |
+| G6 | M6 | loops 卡+bootstrap 恢复 | 重启后 loops 在、到点火 |
+| G7 | M7-M8 | memory 水位+fleet 行 | 抽取/subagent 可见 |
+| G8 | M9 | btw modal+sideThread+inject | 主忙 side 跑、inject 落 timeline |
+| G9 | M10 | WS 薄壳(远端前端复用三通道)+ golden 全集 | 第二前端并行 attach=F2 |
+
+## 6. 明确不做
+
+Electron/webview/远端渲染;extension dock(pi-gui 的文本协议——eta 无 extension,天然无此项);多窗口;marketplace/主题商店;Windows/Linux day-0(pi-gui 也没承诺 win,先 macOS,Linux 跟进,i18n 无)。
+
+## 7. 风险
+
+gpuix 演进快 → **vendored fork + pin submodule**(remorses/zed@branch gpuix),两个补丁走上游 PR 降低漂移成本;gpui-terminal 依赖 crates.io gpui 与 fork 对齐是 G0 唯一的 native 风险,解不开就砍终端面板(其余面板零依赖它);自建 native 三平台 CI 贵 → day-0 只保 macOS arm64。

@@ -1,0 +1,17 @@
+/target
+.DS_Store
+PLAN.md
+CORE_PLAN.md
+PROMPT_GUIDE.md
+
+# local e2e test env
+.env.local
+# scratch
+STATE.md
+refs/
+node_modules/
+dist/
+out/
+pi/
+pi-gui/
+gpuix/
