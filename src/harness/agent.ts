@@ -41,6 +41,8 @@ export interface EtaAgentOptions {
 	model: Model<Api>;
 	laneName?: string;
 	baseSystemPrompt?: string;
+	/** Persona cards baked into the stable prompt block (renderPersonaBlock output). */
+	persona?: { names: string[]; text: string };
 	/** Extra tools the caller owns (merged with the battery tools). */
 	tools?: readonly AgentHarnessTool<object | undefined>[];
 	/** Independent goal judge; true = achieved. */
@@ -97,6 +99,8 @@ export class EtaAgent {
 	readonly stateKv: StateKV;
 		/** All tools the harness runs: battery surface plus caller extras. */
 	readonly agentTools: AgentHarnessTool<object | undefined>[];
+	/** Persona card names baked into the stable prompt block; empty when none. */
+	personas: string[] = [];
 	/** Prompt block sizes from the last generation; undefined until the first one. */
 	private lastPromptBlocksValue: { stableChars: number; adaptiveChars: number } | undefined = undefined;
 
@@ -233,6 +237,7 @@ export class EtaAgent {
 								? {}
 								: { goal: { objective: goal.current.objective, status: goal.current.status } }),
 							tasks: { tasks: tasks.list(), updatedAt: new Date().toISOString() },
+							...(options.persona === undefined || options.persona.text.length === 0 ? {} : { persona: options.persona.text }),
 							...(memory === undefined || memory.length === 0 ? {} : { memory }),
 						};
 						const blocks = etaPromptBlockChars(options.baseSystemPrompt ?? "", state);
@@ -282,6 +287,7 @@ export class EtaAgent {
 			stopHeartbeat,
 		);
 		agentRef = agent;
+		agent.personas = options.persona?.names ?? [];
 		return agent;
 	}
 

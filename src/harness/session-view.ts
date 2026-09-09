@@ -64,6 +64,8 @@ export interface SessionView {
 	pendingAskDeadline: number | undefined;
 	/** KV keys the state tools have set; shown and deletable in the Context panel. */
 	stateKeys: string[];
+	/** Persona card names baked into the stable prompt block; empty when none. */
+	personas: string[];
 	/** System prompt block sizes for the Context panel; undefined before the first generation. */
 	prompt: { stableChars: number; adaptiveChars: number } | undefined;
 	/** Output tokens/sec over the last usage delta; 0 until two usage events pass. */
@@ -149,6 +151,7 @@ export class SessionViewProjector {
 			branch: { tipId: entries[entries.length - 1]?.id ?? null },
 			pendingAsk: ask.pendingAsks()[0],
 			pendingAskDeadline: ask.pendingAsks()[0] === undefined ? undefined : ask.deadline(ask.pendingAsks()[0]!.questionId),
+			personas: this.agent.personas,
 			prompt: this.agent.lastPromptBlocks,
 			tokensPerSec: this.agent.tokensPerSec,
 		};
