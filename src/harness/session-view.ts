@@ -74,6 +74,8 @@ export interface SessionView {
 	tokensPerSec: number;
 	/** Configured model as "provider:modelId"; drives the composer model picker. */
 	model: string;
+	/** Current thinking level; drives the composer thinking chip. */
+	thinkingLevel: string;
 	/** Tools the harness will execute this session: name + description for the inspector. */
 	tools: { name: string; description: string }[];
 	/** Messages waiting in the lane queue (follow-up/steer); the host stamps these from lane events. */
@@ -86,7 +88,7 @@ export interface SessionView {
 
 export type ViewListener = (view: SessionView) => void;
 
-const VIEW_EVENTS = ["entry_added", "eta", "usage", "run_end", "compaction_end", "navigation_end"] as const;
+const VIEW_EVENTS = ["entry_added", "eta", "usage", "run_end", "compaction_end", "navigation_end", "config_update"] as const;
 
 export class SessionViewProjector {
 	private readonly agent: EtaAgent;
@@ -176,6 +178,7 @@ export class SessionViewProjector {
 			prompt: this.agent.lastPromptBlocks,
 			tokensPerSec: this.agent.tokensPerSec,
 			model: modelLabel,
+			thinkingLevel: this.agent.thinkingLevel,
 			tools: this.agent.agentTools.map((tool) => ({ name: tool.name, description: tool.description })),
 			queue: [],
 			...(this.inFlight === undefined ? {} : { streaming: this.inFlight }),

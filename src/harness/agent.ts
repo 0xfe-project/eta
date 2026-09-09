@@ -15,6 +15,7 @@ import { loopState, loopStateInventoryPrefix, taskState, type Value } from "./se
 import type { PendingEntry, StoredTask, TaskStatus } from "./session/types.ts";
 import { applyGoalEntries } from "./goal.ts";
 import type { AgentHarnessTool, ExecutionEnv } from "./types.ts";
+import type { ThinkingLevel } from "../types.ts";
 import type { Session } from "./session/types.ts";
 import type { EtaEmit } from "./events.ts";
 import { composeEtaSystemPrompt, etaPromptBlockChars, etaPromptSectionsDetailed, type EtaPromptSection } from "./composer.ts";
@@ -133,6 +134,17 @@ export class EtaAgent {
 	/** Output tokens/sec over a sliding 2s window of observed output (usage events or streaming text). */
 	private outSamples: { out: number; at: number }[] = [];
 	private tokensPerSecValue = 0;
+
+	/** Last known lane thinking level; mirrored from config_update so view assembly stays sync. */
+	private thinkingLevelValue: ThinkingLevel = "off";
+
+	get thinkingLevel(): ThinkingLevel {
+		return this.thinkingLevelValue;
+	}
+
+	setThinkingLevelValue(level: ThinkingLevel): void {
+		this.thinkingLevelValue = level;
+	}
 
 	get tokensPerSec(): number {
 		return this.tokensPerSecValue;
@@ -304,6 +316,10 @@ export class EtaAgent {
 		loops.attach();
 
 		harness.events.on("usage", (event) => agentRef?.trackUsage((event as { totals?: { output?: number } }).totals?.output ?? 0));
+		harness.events.on("config_update", (event) => {
+			const update = event as { property?: string; value?: unknown };
+			if (update.property === "thinkingLevel" && typeof update.value === "string") agentRef?.setThinkingLevelValue(update.value as ThinkingLevel);
+		});
 		harness.events.on("run_start", () => {
 			if (agentRef !== undefined) {
 				agentRef.outSamples.length = 0;
