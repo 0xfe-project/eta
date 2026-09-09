@@ -129,7 +129,7 @@
 ## Part F:验证(GUI-PLAN.md 的 G 系列并入,day-0 起 GUI 就是 harness)
 
 - [ ] F1 ~~dev-cli~~ **退役**:自 G0 起验证在 GUI 内做(`TestGpuixRenderer`/screenshot/automation tree),headless CI 用测试渲染器跑同一条;readline 壳只留作 no-GPU 兜底。
-- [ ] F2 SessionView + AgentEvent + telemetry 三通道过 WebSocket 给第二前端——**总验收**(老 R10 等价物;GUI 与远端前端吃同一契约,见 GUI-PLAN G0.2)。
+- [x] F2 SessionView + AgentEvent + telemetry 三通道过 WebSocket 给第二前端(packages/eta-gui/src/ws.ts;test/ws.test.ts 两个裸 WebSocket 对等消费+回驱全部 op;session-tagged view/agent frames)——**总验收**(老 R10 等价物;GUI 与远端前端吃同一契约,见 GUI-PLAN G0.2)。
 
 ## 明确不做
 

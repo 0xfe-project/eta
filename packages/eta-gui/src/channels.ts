@@ -16,8 +16,8 @@ export interface DevFrame {
 }
 
 export type ChannelFrame =
-	| { channel: "view"; view: SessionView }
-	| { channel: "agent"; event: HarnessEvent }
+	| { channel: "view"; session: string; view: SessionView }
+	| { channel: "agent"; session: string; event: HarnessEvent }
 	| { channel: "dev"; frame: DevFrame };
 
 /** Per-session ring of the last N telemetry frames; full ring replays on attach. */

@@ -81,7 +81,7 @@ export class Host {
 			agent.harness.events.on(type, (event: HarnessEvent) => {
 				if (type === "run_start") entry.running = true;
 				if (type === "run_end") entry.running = false;
-				this.emit({ channel: "agent", event });
+				this.emit({ channel: "agent", session: name, event });
 			});
 		}
 		agent.events.on("eta", (event) => {
@@ -91,7 +91,7 @@ export class Host {
 		});
 		const attached = await projector.attach((view) => {
 			entry.view = view;
-			this.emit({ channel: "view", view });
+			this.emit({ channel: "view", session: name, view });
 		}, BACKGROUND_CONTEXT);
 		entry.detach = attached.detach;
 		this.attachPointerValue ??= name;

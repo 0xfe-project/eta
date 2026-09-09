@@ -7,8 +7,8 @@ describe("channel contract", () => {
 	it("every channel frame survives a JSON roundtrip", () => {
 		const event: HarnessEvent = { type: "eta", lane: "main", category: "goal", action: "set", data: { objective: "ship" } };
 		const frames: ChannelFrame[] = [
-			{ channel: "view", view: emptyView() },
-			{ channel: "agent", event },
+			{ channel: "view", session: "s", view: emptyView() },
+			{ channel: "agent", session: "s", event },
 			{ channel: "dev", frame: { ts: 1, session: "s", category: "loop", action: "fired", data: { id: "l1" } } },
 		];
 		for (const frame of frames) {
