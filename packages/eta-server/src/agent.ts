@@ -11,6 +11,7 @@ import { homedir } from "node:os";
 import { complete } from "@earendil-works/pi-ai/compat";
 import { NodeEtaFs } from "./node-fs.ts";
 import { DEFAULT_SYSTEM_PROMPT } from "@eta/core/prompts";
+import { NodeExecutionEnv } from "@eta/core/node";
 import { createModels, fauxAssistantMessage, fauxProvider, type Context, type FauxProviderHandle } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { MemoryStorage, StorageBackedSession } from "@eta/core";
@@ -80,6 +81,7 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 			models: models ?? withFaux(faux!),
 			model,
 			baseSystemPrompt: DEFAULT_SYSTEM_PROMPT,
+			executionEnv: new NodeExecutionEnv({ cwd: cfg.cwd }),
 			persona,
 			heartbeatMs: 0,
 			memorySource: async () => (await memoryCache.load(cfg.cwd)).text,

@@ -42,6 +42,7 @@
   "panel.prompt": "system prompt",
   "panel.stable": "stable",
   "panel.adaptive": "adaptive",
+  "panel.tools": "tools",
   "panel.personas": "persona",
   "panel.goal": "goal",
   "panel.tasks": "tasks",

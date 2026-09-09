@@ -43,6 +43,7 @@ function view(session: string): unknown {
 		cacheRate: 0,
 		branch: { tipId: "e1" },
 		pendingAsk: undefined,
+		tools: [],
 		personas: ["eta"],
 		prompt: { stableChars: 4, adaptiveChars: 2, sections: [{ name: "base", stable: true, text: "BASE" }] },
 		tokensPerSec: 0,

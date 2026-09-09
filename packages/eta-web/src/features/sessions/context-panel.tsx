@@ -12,7 +12,7 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 	const store = etaStore();
 	const [compacting, setCompacting] = useState(false);
 	const [promptOpen, setPromptOpen] = useState(false);
-	const [personaOpen, setPersonaOpen] = useState(false);
+	const [toolsOpen, setToolsOpen] = useState(false);
 	const [jsonOpen, setJsonOpen] = useState(false);
 	const [btwOpen, setBtwOpen] = useState(false);
 	const [epochAtRequest, setEpochAtRequest] = useState<number | null>(null);
@@ -65,8 +65,8 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 					<Button data-testid="prompt-open" size="sm" variant="outline" className="h-8 justify-start border-2 border-border-strong px-2 text-[11px] uppercase tracking-[0.12em] hover:bg-foreground hover:text-background" disabled={view.prompt === undefined} onClick={() => setPromptOpen(true)}>
 						{t("panel.viewPrompt")}
 					</Button>
-					<Button data-testid="persona-open" size="sm" variant="outline" className="h-8 justify-start border-2 border-border-strong px-2 text-[11px] uppercase tracking-[0.12em] hover:bg-foreground hover:text-background" disabled={view.prompt === undefined && view.personas.length === 0} onClick={() => setPersonaOpen(true)}>
-						{t("panel.personas")}
+					<Button data-testid="tools-open" size="sm" variant="outline" className="h-8 justify-start border-2 border-border-strong px-2 text-[11px] uppercase tracking-[0.12em] hover:bg-foreground hover:text-background" onClick={() => setToolsOpen(true)}>
+						{t("panel.tools")}
 					</Button>
 					<Button data-testid="json-open" size="sm" variant="outline" className="h-8 justify-start border-2 border-border-strong px-2 text-[11px] uppercase tracking-[0.12em] hover:bg-foreground hover:text-background" onClick={() => setJsonOpen(true)}>
 						{t("panel.viewJson")}
@@ -212,21 +212,20 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 					</DialogBody>
 				</DialogContent>
 			</Dialog>
-			<Dialog open={personaOpen} onOpenChange={setPersonaOpen}>
-				<DialogContent className="max-w-[640px]" data-testid="persona-overlay">
+			<Dialog open={toolsOpen} onOpenChange={setToolsOpen}>
+				<DialogContent className="max-w-[640px]" data-testid="tools-overlay">
 					<DialogHeader>
-						<DialogTitle>{t("panel.personas")}: {view.personas.join(", ")}</DialogTitle>
+						<DialogTitle>{t("panel.tools")}: {view.tools.length}</DialogTitle>
 					</DialogHeader>
 					<DialogBody>
-						{(() => {
-							const sections = (view.prompt?.sections ?? []).filter((section) => section.name === "persona" || section.name === "goal" || section.name === "tasks" || section.name === "memory");
-							return sections.length === 0 ? <p className="mono text-[11px] text-faint">—</p> : sections.map((section, index) => (
-								<section key={`${section.name}-${index}`} data-testid={`persona-section-${section.name}`} className="mb-3">
-									<h4 className="mono mb-1 text-[10px] text-muted">{t(("prompt." + section.name) as "prompt.base")}</h4>
-									<pre className="mono max-h-[240px] overflow-auto bg-code-bg p-2 text-[11px] whitespace-pre-wrap">{section.text}</pre>
-								</section>
-							));
-						})()}
+						<ul className="flex flex-col gap-2">
+							{view.tools.map((tool) => (
+								<li key={tool.name} data-testid={`tool-row-${tool.name}`} className="border border-border p-2">
+									<span className="mono text-[11px] uppercase tracking-[0.12em] text-foreground">{tool.name}</span>
+									<p className="mono mt-1 text-[10px] leading-relaxed text-muted">{tool.description}</p>
+								</li>
+							))}
+						</ul>
 					</DialogBody>
 				</DialogContent>
 			</Dialog>
