@@ -111,18 +111,21 @@
 
 ### B. 面板与菜单(拖拽/显隐/终端)
 - [ ] xterm 终端:前端 @xterm/xterm + fit/web-links 插件;"终端"tab 从 dev 独立成顶栏可开合面板,多 tab(× / +),ws 桥 `/term`;server Bun.spawn pty(列宽 resize op)
-- [ ] 三栏都可拖:侧栏宽、右栏宽、终端高(鼠标分隔条,pointer capture;宽度存 localStorage)
-- [ ] 每栏显隐按钮(照抄 picot 顶栏右侧的图标按钮组:侧栏/右栏/终端/抽屉),窄屏自动收
+- [x] 侧栏/右栏可拖(pointer capture 分隔条,宽度存 localStorage;终端高度并入 xterm 项)
+- [x] 顶栏显隐按钮组(▤ 侧栏 / ⧉ 右栏)+ 窄屏浮动按钮与 scrim
 - [ ] composer 左下 `+` 附件/插入菜单(上传文件→@path、选图片、执行 /命令、新建 btw)
-- [ ] 消息 footer 加复制 + 时间/成本(见 C 的 cost);滚动时右下浮动 "New ↓"(回底+新消息数)
+- [x] 消息 footer:时间 + 复制(New ↓ 早已有);成本字段见 C
 
 ### C. 数据与 API 补齐(@ 补全等)
 - [ ] @ 补全升级:现在只有 cwd 一层文件名。要(1)递归模糊匹配(fuzzy + mtime 排序,server /api/files 改 walk+score,上限 50);(2)目录树前缀 `@dir/` 继续钻;(3)菜单显示路径相对 cwd + 行高对齐;(4)粘贴图片自动落盘 `<cwd>/.eta-attachments/` 并插入 @引用(POST /api/upload)
 - [ ] prompt 带图片:`prompt` op 加 `images?: {mime,dataBase64}[]`(协议+host+faux 忽略即可)
-- [ ] tool 卡片状态:toolCall 与 toolResult 关联(按 toolCallId),头右侧 COMPLETE/FAILED/running 徽章;输入输出折叠
-- [ ] usage 行加费用字段(价表不做,取 provider 回传 cost,若有)
-- [ ] thinking level 按钮(thinking off/minimal/low/med/high 循环,thinkingLevel op,faux 忽略)——照抄 pi-web-ui "minimal" chip
+- [x] tool 卡片:toolCall/toolResult 按 id 关联,RUNNING/COMPLETE/FAILED 徽章,输入输出同卡折叠
+- [x] 顶栏状态组:tokens 合计、cache%、cwd chip、连接点(usage 行同左)
+- [ ] thinking level 按钮(thinking off/minimal/low/med/high 循环,thinkingLevel op)——照抄 pi-web-ui "minimal" chip
 - [ ] 侧栏:按 cwd 分组的 PROJECTS 段(组内 count + 折叠 + Show more)、行右时间(`updated` 字段,humanize)、组 `+` 新建、行 `⋯` 菜单(重命名/置顶/归档/删除)
 - [ ] 顶栏状态组:tokens 合计、cache%、当前分支(`git rev-parse` 经 host 暴露)、连接状态点(connected/disconnected)、`cwd` chip
 - [ ] 自定义 persona 的热加载:监听 `.eta/persona/`(server fs.watch)→ personas frame
 - [x] 真模型集成通道:`~/.eta/config.json`(providers[] + defaultModel,无 env)经 `openai-completions` provider 上线;pro6000 / `qwen3.8-flash-next-uncensored` 端到端实测(真回复 + reasoning 折叠 + usage)。空 key 用占位 `eta-no-key`(网关不校验)。集成测试(工具调用/goal/loop/压缩)下一步改走真 provider;成本/价表明确不做
+
+### D. 流式(2026-09-10 修复)
+- [x] streaming 蹦字:projector 监听 message_start/update/end,in-flight 消息挂 `SessionView.streaming`;web 渲染 streaming-row,实测逐帧增量;commit 后清除

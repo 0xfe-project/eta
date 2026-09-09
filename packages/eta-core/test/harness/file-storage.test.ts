@@ -43,9 +43,7 @@ describe("FileStorage journal replay", () => {
 					id: "e1",
 					parentId: null,
 					type: "message",
-					timestamp: NOW,
-					role: "user",
-					content: "hello",
+					message: { role: "user", content: "hello", timestamp: NOW },
 				}),
 				storedValues.setValue(storedValues.sessionName, "persisted"),
 			],
@@ -56,7 +54,7 @@ describe("FileStorage journal replay", () => {
 		const reopened = await FileStorage.load({ path }, BACKGROUND_CONTEXT);
 		const entries = await reopened.getEntries(["e1"], BACKGROUND_CONTEXT);
 		expect(entries.get("e1")).toBeDefined();
-		expect((entries.get("e1") as { content?: string }).content).toBe("hello");
+		expect((entries.get("e1") as { message?: { content?: string } }).message?.content).toBe("hello");
 		expect(await reopened.getValue(storedValues.sessionName, BACKGROUND_CONTEXT)).toBeDefined();
 		const stats = await reopened.getStats(BACKGROUND_CONTEXT);
 		expect(stats.messageCount).toBe(1);

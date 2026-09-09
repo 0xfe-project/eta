@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useAppI18n } from "../i18n.ts";
-import { AppShell } from "../app/app-shell.tsx";
+import { AppShell, useShellOptional } from "../app/app-shell.tsx";
 import { useEta } from "../lib/eta-store.ts";
 import { Sidebar } from "../features/sessions/sidebar.tsx";
 import { Timeline } from "../features/sessions/timeline.tsx";
@@ -49,6 +49,7 @@ export function SessionsPage() {
 	useRunNotifications(state);
 	useDeepLink();
 	const [tab, setTab] = useState<"context" | "dev">("context");
+	const shell = useShellOptional();
 	const selected = state.attach ?? state.sessions[0]?.name ?? null;
 	const view = selected === null ? undefined : state.views[selected];
 	const running = selected === null ? false : (state.sessions.find((session) => session.name === selected)?.badges.includes("running") ?? false);
@@ -61,7 +62,22 @@ export function SessionsPage() {
 				<div className="flex min-h-0 flex-1 flex-col">
 					<header className="flex items-center gap-2 border-b border-border px-4 py-2">
 						<span data-testid="active-session" className="truncate text-sm font-medium">{selected ?? t("app.title")}</span>
-						<span className="ml-auto text-[10px] text-muted">{state.connected ? "" : t("connection.disconnected")}</span>
+						<span className="ml-auto flex items-center gap-1.5">
+							{view !== undefined ? (
+								<>
+									<span data-testid="header-tokens" className="header-chip">tok {(view.usage.input + view.usage.output).toLocaleString()}</span>
+									<span data-testid="header-cache" className="header-chip">cache {Math.round(view.cacheRate * 100)}%</span>
+									{view.cwd !== undefined ? <span data-testid="header-cwd" className="header-chip max-w-[220px] truncate" title={view.cwd}>{view.cwd}</span> : null}
+								</>
+							) : null}
+							<span data-testid="conn-dot" className={`conn-dot ${state.connected ? "on" : "off"}`} title={state.connected ? "" : t("connection.disconnected")} />
+							{shell !== undefined ? (
+								<>
+									<button data-testid="shell-toggle-left" onClick={shell.toggleLeft} className="header-chip hover:text-foreground" title={t("nav.sessions")}>▤</button>
+									<button data-testid="shell-toggle-right" onClick={shell.toggleRight} className="header-chip hover:text-foreground" title={t("nav.context")}>⧉</button>
+								</>
+							) : null}
+						</span>
 					</header>
 					{state.sessions.length === 0 ? (
 						<Welcome onCreated={() => undefined} onNavigateSettings={() => window.location.assign("/settings")} />

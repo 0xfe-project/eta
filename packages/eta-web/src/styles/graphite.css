@@ -736,3 +736,53 @@ details[open] > .tool-card-head .thinking-block-chevron {
 	border: 0;
 	border-top: 1px solid var(--border);
 }
+
+.tool-badge {
+	margin-left: auto;
+	border: 1px solid var(--border);
+	padding: 0 0.4em;
+	font-family: var(--font-mono);
+	font-size: 9px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+}
+.tool-badge.running {
+	color: var(--warning, var(--muted));
+	border-color: var(--warning, var(--border-strong));
+}
+.tool-badge.done {
+	color: var(--primary);
+	border-color: var(--primary);
+}
+.tool-badge.failed {
+	color: var(--danger);
+	border-color: var(--danger);
+}
+.msg-footer {
+	opacity: 0.75;
+}
+.message:hover .msg-footer {
+	opacity: 1;
+}
+.header-chip {
+	border: 1px solid var(--border);
+	padding: 1px 6px;
+	font-family: var(--font-mono);
+	font-size: 10px;
+	color: var(--muted);
+	white-space: nowrap;
+}
+.conn-dot {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border: 1px solid var(--border-strong);
+}
+.conn-dot.on {
+	background: var(--primary);
+	border-color: var(--primary);
+}
+.conn-dot.off {
+	background: var(--danger);
+	border-color: var(--danger);
+}

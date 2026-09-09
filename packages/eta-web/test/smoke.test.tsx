@@ -30,7 +30,7 @@ class FakeSocket {
 function view(session: string): unknown {
 	return {
 		stateKeys: [],
-		messages: [{ entryId: "e1", seq: 1, message: { role: "user", content: "hello", timestamp: 1 } }],
+		messages: [{ entryId: "e1", seq: 1, at: 1, message: { role: "user", content: "hello", timestamp: 1 } }],
 		systems: [],
 		thinking: [],
 		compactionEpoch: 0,

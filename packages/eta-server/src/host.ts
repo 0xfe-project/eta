@@ -334,6 +334,7 @@ export class Host {
 	private stampView(entry: Hosted, view: SessionView = entry.view): SessionView {
 		return {
 			...view,
+			cwd: entry.cwd,
 			queue: entry.queue.map((item) => ({
 				entryId: item.entryId,
 				kind: item.kind,

@@ -42,11 +42,37 @@ export function Timeline({ view, session, running = false }: { view: SessionView
 						{row.args.objective ?? row.args.question ?? row.args.note ?? row.args.summary ? <span className="ml-1 text-muted">{row.args.objective ?? row.args.question ?? row.args.note ?? row.args.summary}</span> : null}
 					</div>
 				))}
-				{view.messages.map((entry) => (
-					<div key={entry.entryId} id={`eta-msg-${entry.entryId}`}>
-						<MessageRow role={entry.message.role} message={entry.message} session={session} streaming={running && entry === view.messages[view.messages.length - 1] && entry.message.role === "assistant"} />
-					</div>
-				))}
+				{(() => {
+					const results = new Map<string, ToolResultLike>();
+					for (const entry of view.messages) {
+						const role = entry.message.role;
+						if (role === "toolResult") {
+							const result = entry.message as unknown as ToolResultLike;
+							results.set(String(result.toolCallId ?? ""), result);
+						}
+					}
+					const rows = view.messages.map((entry, index) => (
+						<div key={entry.entryId} id={`eta-msg-${entry.entryId}`}>
+							<MessageRow
+								role={entry.message.role}
+								message={entry.message}
+								session={session}
+								at={entry.at}
+								results={results}
+								isLast={index === view.messages.length - 1 && view.streaming === undefined}
+								streaming={running && index === view.messages.length - 1 && entry.message.role === "assistant"}
+							/>
+						</div>
+					));
+					if (view.streaming !== undefined) {
+						rows.push(
+							<div key="streaming" data-testid="streaming-row">
+								<MessageRow role={view.streaming.role} message={view.streaming} session={session} at={Date.now()} results={results} streaming />
+							</div>,
+						);
+					}
+					return rows;
+				})()}
 			</div>
 			</div>
 			{prompts.length > 1 ? (
@@ -81,7 +107,7 @@ export function Timeline({ view, session, running = false }: { view: SessionView
 	);
 }
 
-function MessageRow({ role, message, session, streaming = false }: { role: string; message: unknown; session: string; streaming?: boolean }) {
+function MessageRow({ role, message, session, streaming = false, at = 0, results = new Map(), isLast = false }: { role: string; message: unknown; session: string; streaming?: boolean; at?: number; results?: Map<string, ToolResultLike>; isLast?: boolean }) {
 	const { t } = useAppI18n();
 	const content = (message as { content?: unknown }).content;
 	const [preview, setPreview] = useState<{ path: string; text: string } | null>(null);
@@ -91,6 +117,7 @@ function MessageRow({ role, message, session, streaming = false }: { role: strin
 			<div className="message user my-2 flex justify-end" data-testid="user-message">
 				<div className="message-content max-w-[80%] bg-accent px-3 py-2 text-sm text-accent-foreground" style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}>
 					{blocks.map((block, index) => (block.type === "text" ? <span key={index}>{String(block.text ?? "")}</span> : null))}
+					<MessageFooter at={at} blocks={blocks} />
 				</div>
 			</div>
 		);
@@ -127,13 +154,17 @@ function MessageRow({ role, message, session, streaming = false }: { role: strin
 					if (block.type === "toolCall") {
 						const callId = String(block.id ?? "");
 						const args = block.arguments ?? block.args ?? {};
+						const result = results.get(callId);
+						const state = result === undefined ? "running" : result.isError === true ? "failed" : "done";
 						return (
 							<details key={index} data-testid={`tool-row-${String(block.name ?? "")}`} className="tool-card">
 								<summary className="tool-card-head">
 									<span className="tool-card-label">{String(block.name ?? "?")}</span>
 									<span className="tool-card-status">{summarize(args)}</span>
+									<span className={`tool-badge ${state}`} data-testid={`tool-badge-${callId || String(block.name ?? "")}`}>{t(`timeline.tool.${state}`)}</span>
 								</summary>
 								<pre className="tool-card-block tool-card-block-content">{JSON.stringify(args, null, 2)}</pre>
+								{result !== undefined ? <pre className="tool-card-block tool-card-block-content">{renderContent(result.content)}</pre> : null}
 							</details>
 						);
 					}
@@ -160,6 +191,7 @@ function MessageRow({ role, message, session, streaming = false }: { role: strin
 						))}
 					</div>
 				) : null}
+				<MessageFooter at={at} blocks={blocks} />
 				<Dialog open={preview !== null} onOpenChange={(open) => !open && setPreview(null)}>
 					<DialogContent className="max-w-[720px]" data-testid="file-preview">
 						<DialogHeader>
@@ -173,11 +205,15 @@ function MessageRow({ role, message, session, streaming = false }: { role: strin
 			</div>
 		);
 	}
-	if (role === "toolResult" || role === "tool") {
+	if (role === "toolResult") {
 		const result = message as unknown as ToolResultLike;
+		if (results.has(String(result.toolCallId ?? ""))) return null;
 		return (
 			<details className="tool-card ml-4" data-testid={`tool-result-${result.toolCallId ?? ""}`}>
-				<summary className={`tool-card-head ${result.isError === true ? "text-danger" : ""}`}><span className="tool-card-label">{result.isError === true ? "failed" : "done"}</span></summary>
+				<summary className={`tool-card-head ${result.isError === true ? "text-danger" : ""}`}>
+					<span className="tool-card-label">{String((result as unknown as { toolName?: string }).toolName ?? "tool")}</span>
+					<span className={`tool-badge ${result.isError === true ? "failed" : "done"}`}>{t(`timeline.tool.${result.isError === true ? "failed" : "done"}`)}</span>
+				</summary>
 				<pre className="tool-card-block tool-card-block-content">{renderContent(result.content)}</pre>
 			</details>
 		);
@@ -189,6 +225,32 @@ function contentBlocks(content: unknown): { type?: string; text?: unknown; think
 	if (typeof content === "string") return [{ type: "text", text: content }];
 	if (Array.isArray(content)) return content as { type?: string }[];
 	return [];
+}
+
+function MessageFooter({ at, blocks }: { at: number; blocks: { type?: string; text?: unknown }[] }) {
+	const { t } = useAppI18n();
+	const [copied, setCopied] = useState(false);
+	if (at === 0) return null;
+	const text = blocks.filter((block) => block.type === "text").map((block) => String(block.text ?? "")).join("\n").trim();
+	return (
+		<div className="msg-footer mono flex items-center gap-2 pt-1 text-[10px] text-muted">
+			<span data-testid="msg-time">{new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+			{text.length > 0 ? (
+				<button
+					data-testid="msg-copy"
+					onClick={() => {
+						void navigator.clipboard.writeText(text).then(() => {
+							setCopied(true);
+							setTimeout(() => setCopied(false), 1_200);
+						});
+					}}
+					className="border border-transparent px-1 hover:border-border hover:text-foreground"
+				>
+					{copied ? "\u2713" : t("timeline.copy")}
+				</button>
+			) : null}
+		</div>
+	);
 }
 
 function summarize(args: unknown): string {

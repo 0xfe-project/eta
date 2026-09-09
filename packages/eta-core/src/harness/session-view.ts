@@ -19,6 +19,7 @@ import type { StoredTask } from "./task-store.ts";
 export interface SessionViewMessage {
 	entryId: string;
 	seq: number;
+	at: number;
 	message: AgentMessage;
 }
 
@@ -75,6 +76,10 @@ export interface SessionView {
 	model: string;
 	/** Messages waiting in the lane queue (follow-up/steer); the host stamps these from lane events. */
 	queue: { entryId: string; kind: string; text: string }[];
+	/** Working directory of the session; the host stamps it. */
+	cwd?: string;
+	/** In-flight assistant message while a run is streaming; absent once committed or idle. */
+	streaming?: AgentMessage;
 }
 
 export type ViewListener = (view: SessionView) => void;
@@ -83,6 +88,7 @@ const VIEW_EVENTS = ["entry_added", "eta", "usage", "run_end", "compaction_end",
 
 export class SessionViewProjector {
 	private readonly agent: EtaAgent;
+	private inFlight: AgentMessage | undefined;
 
 	constructor(agent: EtaAgent) {
 		this.agent = agent;
@@ -104,7 +110,7 @@ export class SessionViewProjector {
 		let compactionEpoch = 0;
 		for (const entry of entries) {
 			if (entry.type === "message") {
-				messages.push({ entryId: entry.id, seq: entry.seq, message: entry.message });
+				messages.push({ entryId: entry.id, seq: entry.seq, at: entry.timestamp, message: entry.message });
 				const content = (entry.message as { content?: unknown }).content;
 				if (Array.isArray(content)) {
 					for (const block of content as { type?: string; thinking?: string }[]) {
@@ -169,6 +175,7 @@ export class SessionViewProjector {
 			tokensPerSec: this.agent.tokensPerSec,
 			model: modelLabel,
 			queue: [],
+			...(this.inFlight === undefined ? {} : { streaming: this.inFlight }),
 		};
 	}
 
@@ -187,6 +194,20 @@ export class SessionViewProjector {
 				});
 		};
 		for (const type of VIEW_EVENTS) offs.push(this.agent.harness.events.on(type, refresh));
+		const onStream = (event: unknown) => {
+			this.inFlight = (event as { message?: AgentMessage }).message ?? this.inFlight;
+			refresh();
+		};
+		offs.push(this.agent.harness.events.on("message_start", onStream));
+		offs.push(this.agent.harness.events.on("message_update", onStream));
+		offs.push(this.agent.harness.events.on("message_end", onStream));
+		offs.push(
+			this.agent.harness.events.on("entry_added", (event) => {
+				const entry = (event as { entry?: { message?: { role?: string } } }).entry;
+				if (entry?.message?.role === "assistant") this.inFlight = undefined;
+				refresh();
+			}),
+		);
 		return { view: await this.snapshot(context), detach: () => offs.forEach((off) => off()) };
 	}
 }
