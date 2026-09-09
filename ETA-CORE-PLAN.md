@@ -33,7 +33,7 @@
 
 - [ ] S1 **driver 队列**:goal 续命与 loop 触发是「turn 边界优先消费的 driver」,不是普通 inbox 消息;dequeue 顺序 driver > had_tools > break(老 B2 语义)。完成条件:两个 driver 各一条集成测试。
 - [ ] S2 **空响应重试**:上游 `drive/response.ts` 只覆盖 error/length;补 `stop==="stop" && 无 content 无 toolCall` → 注 continuation 重试(带预算)。完成条件:faux 注入空响应触发。
-- [ ] S3 **漂移检测**:平移老 `loop_detect.rs`(doom 指纹≥3、tail_repetition、similar 三指标)为纯函数模块,接入 loop reminder,再犯抛 `LoopDetected`。完成条件:Rust 单测全数平移。
+- [x] S3 **漂移检测**:平移老 `loop_detect.rs`(doom 指纹≥3、tail_repetition、similar 三指标)为纯函数模块,接入 loop reminder,再犯抛 `LoopDetected`。完成条件:Rust 单测全数平移。
 - [ ] S4 **fail-closed 权限**:上游 `beforeToolCall` 是 fail-open;给 `requires_approval` 工具加 gate——无 hook/超时 = Deny + `permission denied` tool_result(老 B7)。完成条件:无 hook 场景测过。
 - [ ] S5 **ask_user 拦截 + answer 通道**(见 C3),S6 **新 entry customTypes**:`eta.goal / eta.ask / eta.answer / eta.btw`(tasks/loops 走 KV Value)。完成条件:重放后 store 语义完整。
 
