@@ -5,6 +5,8 @@ export * from "./tasks.ts";
 export * from "./task-store.ts";
 export * from "./cadence.ts";
 export * from "./tools.ts";
+export * from "./memory.ts";
+export * from "./persona.ts";
 export * from "./entries.ts";
 export * from "./composer.ts";
 export * from "./run-end.ts";

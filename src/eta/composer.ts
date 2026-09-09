@@ -16,17 +16,23 @@ import { renderCurrentTasks, type TaskList } from "./tasks.ts";
 export interface EtaPromptState {
 	goal?: { objective: string; status: GoalStatus };
 	tasks?: TaskList;
+	/** Rendered persona block (stable card text); goes right after the base prompt. */
+	persona?: string;
+	/** Rendered <memory> block; always last, it changes most often. */
+	memory?: string;
 }
 
 /** Sections appended after the base prompt, in stable order. */
 export function etaPromptSections(state: EtaPromptState): string[] {
 	const sections: string[] = [];
+	if (state.persona !== undefined && state.persona.length > 0) sections.push(state.persona);
 	if (state.goal && state.goal.status === "active") {
 		sections.push(goalPursuitGuidelines(state.goal.objective));
 	}
 	if (state.tasks && state.tasks.tasks.length > 0) {
 		sections.push(`${TODO_REVIEW_PROMPT}\n\n${renderCurrentTasks(state.tasks)}`);
 	}
+	if (state.memory !== undefined && state.memory.length > 0) sections.push(state.memory);
 	return sections;
 }
 

@@ -3,7 +3,7 @@
  */
 
 export const SUMMARIZE_SYSTEM_PROMPT =
-	'Summarize the conversation. Follow <summarization_request>...</summarization_request>. What you write is what the next person continues the task from. Align with the task. Never say you wrote a "summary."';
+	'Summarize the conversation. Follow <summarization_request>...</summarization_request>. What you write is what the next person continues the task from. Align with the task. Never say you wrote a "summary." Do NOT continue the conversation; do not respond to questions in it.';
 
 export const SUMMARIZE_REQUEST = `<summarization_request>
 Transcript above = the conversation (system prompt removed).
@@ -23,6 +23,8 @@ Sections:
 8. Current Work (right before this summary; file names + snippets)
 9. Optional Next Step (ONLY if it matches the user's latest request; else omit)
 
+A section with nothing to say gets a \"(none)\", not filler.
+A section with nothing to say gets a "(none)", not filler.
 If a next step: quote the most recent conversation VERBATIM.
 </summarization_request>`;
 
