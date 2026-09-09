@@ -171,7 +171,7 @@ export class EtaAgent {
 	setTask(id: string, patch: { status?: TaskStatus; content?: string; deps?: string[]; priority?: "high" | "medium" | "low" }): { task: StoredTask; warnings: string[] } | undefined {
 		const result = this.tasks.update(id, patch);
 		if (result !== undefined) {
-			void this.lane.publish([{ type: "eta", category: "todo", action: "update", data: { taskId: id, status: result.task.status } }], BACKGROUND_CONTEXT).catch(() => undefined);
+			void this.lane.publish([{ type: "eta", category: "task", action: "update", data: { taskId: id, status: result.task.status } }], BACKGROUND_CONTEXT).catch(() => undefined);
 		}
 		return result;
 	}
@@ -236,7 +236,7 @@ export class EtaAgent {
 							...(goal.current === undefined
 								? {}
 								: { goal: { objective: goal.current.objective, status: goal.current.status } }),
-							tasks: { tasks: tasks.list(), updatedAt: new Date().toISOString() },
+							tasks: tasks.list(),
 							...(options.persona === undefined || options.persona.text.length === 0 ? {} : { persona: options.persona.text }),
 							...(memory === undefined || memory.length === 0 ? {} : { memory }),
 						};

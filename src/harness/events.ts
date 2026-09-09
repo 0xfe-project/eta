@@ -18,7 +18,7 @@ export const ETA_EVENT_CATEGORIES = [
 	"goal",
 	"memory",
 	"skill",
-	"todo",
+	"task",
 	"state",
 	"tool",
 	"retry",

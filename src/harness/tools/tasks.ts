@@ -3,7 +3,7 @@
 import { Type } from "typebox";
 import type { Context } from "../context.ts";
 import type { AgentHarnessTool } from "../types.ts";
-import { TODO_UPDATE_SUCCESS } from "../../prompts/index.ts";
+import { TASK_UPDATE_SUCCESS } from "../../prompts/index.ts";
 import type { EtaEmit } from "../events.ts";
 import type { TaskStore } from "../task-store.ts";
 import { renderCurrentTasks, type TaskStatus } from "../tasks.ts";
@@ -16,7 +16,7 @@ export const TASK_TOOL_NAMES: ReadonlySet<string> = new Set(["TaskCreate", "Task
 /** TaskCreate / TaskList / TaskGet / TaskUpdate over a TaskStore. */
 export function createTaskTools(store: TaskStore, observe?: EtaEmit): AgentHarnessTool<object | undefined, any, any>[] {
 	const notify = (action?: string, data?: Record<string, unknown>) => {
-		if (action !== undefined) observe?.("todo", action, data);
+		if (action !== undefined) observe?.("task", action, data);
 	};
 	return [
 		{
@@ -31,7 +31,7 @@ export function createTaskTools(store: TaskStore, observe?: EtaEmit): AgentHarne
 			async execute(_id, params: { content: string; deps?: string[]; priority?: "high" | "medium" | "low" }) {
 				const { task, warnings } = store.create(params.content, { deps: params.deps, priority: params.priority });
 				notify("add", { taskId: task.id });
-				return withId(`Created ${task.id}. ${TODO_UPDATE_SUCCESS}${warnings.length > 0 ? `\nwarnings: ${warnings.join("; ")}` : ""}`, { task, warnings });
+				return withId(`Created ${task.id}. ${TASK_UPDATE_SUCCESS}${warnings.length > 0 ? `\nwarnings: ${warnings.join("; ")}` : ""}`, { task, warnings });
 			},
 		},
 		{
@@ -40,7 +40,7 @@ export function createTaskTools(store: TaskStore, observe?: EtaEmit): AgentHarne
 			description: "Show the current task list.",
 			parameters: Type.Object({}),
 			async execute() {
-				const rendered = renderCurrentTasks({ tasks: store.list(), updatedAt: new Date().toISOString() });
+				const rendered = renderCurrentTasks(store.list());
 				return withId(rendered, { tasks: store.list() });
 			},
 		},
@@ -70,7 +70,7 @@ export function createTaskTools(store: TaskStore, observe?: EtaEmit): AgentHarne
 				const result = store.update(id, patch);
 				if (result === undefined) return withId(`No task ${id}.`, { task: undefined });
 				notify("update", { taskId: id, status: result.task.status });
-				return withId(`Updated ${id}. ${TODO_UPDATE_SUCCESS}${result.warnings.length > 0 ? `\nwarnings: ${result.warnings.join("; ")}` : ""}`, {
+				return withId(`Updated ${id}. ${TASK_UPDATE_SUCCESS}${result.warnings.length > 0 ? `\nwarnings: ${result.warnings.join("; ")}` : ""}`, {
 					task: result.task,
 					warnings: result.warnings,
 				});

@@ -27,7 +27,7 @@ describe("task store", () => {
 	});
 	it("load guard drops malformed rows and reports them", () => {
 		const s = new TaskStore();
-		const r = s.deserialize([
+		const r = s.restore([
 			{ id: "t1", content: "ok", status: "pending" },
 			{ id: "t2", content: "bad status", status: "done" },
 			{ content: "no id", status: "pending" },
