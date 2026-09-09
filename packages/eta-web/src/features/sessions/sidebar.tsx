@@ -60,9 +60,9 @@ export function Sidebar({ selected, termActive, onTerminal }: { selected: string
 						data-testid="term-toggle"
 						onClick={onTerminal}
 						title={t("term.title")}
-						className={`border border-border-strong px-2 py-1 text-xs text-muted hover:bg-foreground hover:text-background ${termActive ? "bg-foreground text-background" : ""}`}
+						className={`border border-border-strong px-2 py-1 text-xs uppercase tracking-[0.12em] text-muted hover:bg-foreground hover:text-background ${termActive ? "bg-foreground text-background" : ""}`}
 					>
-						{t("term.title")}
+						{t("term.open")}
 					</button>
 					<Link href="/new" data-testid="nav-new" className="bg-accent px-2 py-1 text-xs font-medium text-accent-foreground">
 						{t("nav.new")}

@@ -220,7 +220,7 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 					<DialogBody>
 						<ul className="flex flex-col gap-2">
 							{view.tools.map((tool) => (
-								<li key={tool.name} data-testid={`tool-row-${tool.name}`} className="border border-border p-2">
+								<li key={tool.name} data-testid={`inspect-tool-${tool.name}`} className="border border-border p-2">
 									<span className="mono text-[11px] uppercase tracking-[0.12em] text-foreground">{tool.name}</span>
 									<p className="mono mt-1 text-[10px] leading-relaxed text-muted">{tool.description}</p>
 								</li>

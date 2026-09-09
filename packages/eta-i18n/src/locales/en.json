@@ -107,6 +107,7 @@
   "mention.empty": "no matching files",
   "composer.queueCancel": "click to cancel",
   "timeline.copy": "copy",
+  "term.open": "open terminal",
   "term.title": "terminal",
   "term.new": "+ new",
   "loop.note": "loop note",

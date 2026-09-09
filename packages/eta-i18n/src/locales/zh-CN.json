@@ -107,6 +107,7 @@
   "mention.empty": "没有匹配的文件",
   "composer.queueCancel": "点击取消排队",
   "timeline.copy": "复制",
+  "term.open": "打开终端",
   "term.title": "终端",
   "term.new": "+ 新建",
   "loop.note": "循环内容",
