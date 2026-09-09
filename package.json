@@ -7,7 +7,9 @@
 	"types": "./src/index.ts",
 	"exports": {
 		".": "./src/index.ts",
-		"./testing": "./src/harness/session/testing/index.ts"
+		"./testing": "./src/harness/session/testing/index.ts",
+		"./node": "./src/node.ts",
+		"./node": "./src/node.ts"
 	},
 	"scripts": {
 		"test": "vitest --run",
