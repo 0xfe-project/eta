@@ -7,6 +7,7 @@ interface PersonaSummary {
 	id: string;
 	name: string;
 	description: string;
+	custom: boolean;
 }
 
 export function NewSessionPage() {
@@ -30,8 +31,10 @@ export function NewSessionPage() {
 				.catch(() => undefined);
 		};
 		load();
+		window.addEventListener("eta:personas", load);
 		return () => {
 			live = false;
+			window.removeEventListener("eta:personas", load);
 		};
 	}, []);
 
@@ -61,7 +64,10 @@ export function NewSessionPage() {
 						onClick={() => setPersonaId(persona.id)}
 						className={`border-2 p-3 text-left ${personaId === persona.id ? "border-primary bg-primary text-primary-foreground shadow-[4px_4px_0_0_var(--shadow)]" : "border-border hover:border-border-strong"}`}
 					>
-						<div className="text-sm font-medium">{persona.name}</div>
+						<div className="flex items-center gap-1.5 text-sm font-medium">
+							{persona.name}
+							{persona.custom ? <span data-testid={`persona-custom-${persona.id}`} className="border border-current px-1 text-[8px] uppercase">{t("persona.custom")}</span> : null}
+						</div>
 						<div className={`mt-1 line-clamp-2 text-xs ${personaId === persona.id ? "text-primary-foreground/70" : "text-muted"}`}>{persona.description}</div>
 					</button>
 				))}

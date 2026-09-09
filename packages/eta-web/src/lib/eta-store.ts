@@ -86,7 +86,9 @@ export class EtaStore {
 		});
 		socket.addEventListener("error", () => socket.close());
 		socket.addEventListener("message", (event) => {
-			this.state = reduceEtaState(this.state, JSON.parse(String(event.data)) as ServerMessage);
+			const message = JSON.parse(String(event.data)) as ServerMessage;
+			this.state = reduceEtaState(this.state, message);
+			if ("type" in message && message.type === "personas") window.dispatchEvent(new CustomEvent("eta:personas"));
 			this.emit();
 		});
 	}

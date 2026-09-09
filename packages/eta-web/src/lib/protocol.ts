@@ -59,6 +59,7 @@ export type ServerMessage =
 	| { channel: "dev"; frame: DevFrame }
 	| { type: "hello"; sessions: SidebarSession[]; attach: string | null }
 	| { type: "sessions"; sessions: SidebarSession[] }
+	| { type: "personas" }
 	| { type: "created"; name: string }
 	| { type: "deleted"; name: string }
 	| { type: "error"; message: string };

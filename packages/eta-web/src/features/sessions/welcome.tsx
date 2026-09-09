@@ -7,6 +7,7 @@ interface PersonaSummary {
 	id: string;
 	name: string;
 	description: string;
+	custom: boolean;
 }
 
 export function Welcome({ onCreated, onNavigateSettings }: { onCreated: (name: string) => void; onNavigateSettings: () => void }) {
@@ -16,11 +17,16 @@ export function Welcome({ onCreated, onNavigateSettings }: { onCreated: (name: s
 	const [personaId, setPersonaId] = useState<string | null>(null);
 	const [cwd, setCwd] = useState("");
 
-	useEffect(() => {
+	const load = () => {
 		void fetch("/api/personas")
 			.then((response) => response.json() as Promise<PersonaSummary[]>)
 			.then(setPersonas)
 			.catch(() => undefined);
+	};
+	useEffect(() => {
+		load();
+		window.addEventListener("eta:personas", load);
+		return () => window.removeEventListener("eta:personas", load);
 	}, []);
 
 	const chips = (
@@ -34,6 +40,7 @@ export function Welcome({ onCreated, onNavigateSettings }: { onCreated: (name: s
 					className={`border px-2 py-0.5 font-mono text-[11px] tracking-[0.08em] uppercase ${personaId === persona.id ? "border-2 border-primary bg-primary text-primary-foreground" : "border-border text-muted hover:border-border-strong"}`}
 				>
 					{persona.name}
+					{persona.custom ? <span data-testid={`persona-custom-${persona.id}`} className="ml-1 border border-current px-1 text-[8px]">{t("persona.custom")}</span> : null}
 				</button>
 			))}
 		</div>

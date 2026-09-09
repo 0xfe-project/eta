@@ -10,7 +10,7 @@ import { resolve } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { encodeMessage, decodeClientMessage, type ClientMessage, type ServerMessage } from "./protocol.ts";
 import { Host } from "./host.ts";
-import { listPersonaSummaries } from "./personas.ts";
+import { listPersonaSummaries, watchPersonaDirs } from "./personas.ts";
 import { UnknownPersonaError } from "./agent.ts";
 import { TermRegistry } from "./terminal.ts";
 
@@ -75,6 +75,9 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 	});
 
 	const terms = new TermRegistry();
+	watchPersonaDirs(process.cwd(), () => {
+		for (const socket of sockets) send(socket, { type: "personas" });
+	});
 	const server = Bun.serve<{ kind?: "ws" | "term"; socketId?: number; shell?: unknown }>({
 		port: options.port ?? 3000,
 		hostname: options.hostname ?? "0.0.0.0",
