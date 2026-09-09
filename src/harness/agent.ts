@@ -14,7 +14,7 @@ import type { AgentHarnessTool } from "./types.ts";
 import type { Session } from "./session/types.ts";
 import type { EtaEmit } from "./eta-events.ts";
 import { composeEtaSystemPrompt } from "./composer.ts";
-import { AskRegistry, createAskUserTool } from "./ask.ts";
+import { AskRegistry, createAskUserTool, type HeadlessAsk } from "./ask.ts";
 import { BtwManager } from "./btw.ts";
 import { askEntry, btwEntry, goalEntry, type GoalPayload } from "./entries.ts";
 import { GoalManager } from "./goal.ts";
@@ -43,6 +43,8 @@ export interface EtaAgentOptions {
 	/** Independent goal judge; true = achieved. */
 	evaluateGoal?: (objective: string) => Promise<boolean>;
 	askTimeoutMs?: number;
+	/** No interactive UI: ask_user degrades to this text protocol; null = no answer. */
+	askHeadless?: HeadlessAsk;
 	/** Where loop registry values persist; default: custom entry `eta_loop_state`. */
 	persistLoop?: (spec: LoopSpec) => void;
 	kv?: StateKV;
@@ -141,7 +143,7 @@ export class EtaAgent {
 			persist: persistLoop,
 			dev: emit,
 		});
-		const ask = new AskRegistry({ dev: emit });
+		const ask = new AskRegistry({ dev: emit, ...(options.askHeadless === undefined ? {} : { headless: options.askHeadless }) });
 		const btw = new BtwManager(() => ({ messages: [] }), (note) => writeEntry(btwEntry({ note })), emit);
 		const subagentBus: SubagentBus = { emit: (type: SubagentBusEvent, payload) => emit("lifecycle", type, payload) };
 		const subagents = new SubagentManager(
