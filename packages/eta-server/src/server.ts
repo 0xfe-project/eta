@@ -12,6 +12,7 @@ import { encodeMessage, decodeClientMessage, type ClientMessage, type ServerMess
 import { Host } from "./host.ts";
 import { listPersonaSummaries } from "./personas.ts";
 import { UnknownPersonaError } from "./agent.ts";
+import { TermRegistry } from "./terminal.ts";
 
 export interface EtaServerOptions {
 	port?: number;
@@ -28,7 +29,7 @@ export interface EtaServer {
 	close(): void;
 }
 
-type Socket = ServerWebSocket<{ socketId: number }>;
+type Socket = ServerWebSocket<{ kind?: "ws" | "term"; socketId?: number; shell?: unknown }>;
 
 const CONTENT_TYPES: Record<string, string> = {
 	".html": "text/html; charset=utf-8",
@@ -73,13 +74,18 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 		}
 	});
 
-	const server = Bun.serve<{ socketId: number }>({
+	const terms = new TermRegistry();
+	const server = Bun.serve<{ kind?: "ws" | "term"; socketId?: number; shell?: unknown }>({
 		port: options.port ?? 3000,
 		hostname: options.hostname ?? "0.0.0.0",
 		async fetch(request, srv) {
 			const url = new URL(request.url);
 			if (url.pathname === "/ws") {
-				if (srv.upgrade(request, { data: { socketId: nextSocketId++ } })) return;
+				if (srv.upgrade(request, { data: { kind: "ws", socketId: nextSocketId++ } })) return;
+				return new Response("upgrade failed", { status: 400 });
+			}
+			if (url.pathname === "/term") {
+				if (srv.upgrade(request, { data: { kind: "term", socketId: nextSocketId++ } })) return;
 				return new Response("upgrade failed", { status: 400 });
 			}
 			if (url.pathname === "/api/health") {
@@ -136,6 +142,10 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 		},
 		websocket: {
 			open(socket: Socket) {
+				if (socket.data.kind === "term") {
+					terms.open(socket);
+					return;
+				}
 				sockets.add(socket);
 				send(socket, { type: "hello", sessions: host.sidebar(), attach: host.attachPointer });
 				for (const name of [...host.names()]) {
@@ -145,10 +155,18 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 				}
 			},
 			close(socket: Socket) {
+				if (socket.data.kind === "term") {
+					terms.close(socket);
+					return;
+				}
 				sockets.delete(socket);
 				opTails.delete(socket);
 			},
 			async message(socket: Socket, raw: string | Buffer) {
+				if (socket.data.kind === "term") {
+					terms.message(socket, raw);
+					return;
+				}
 				let message: ClientMessage;
 				try {
 					message = decodeClientMessage(String(raw));
