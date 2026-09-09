@@ -69,5 +69,10 @@
 	"sidebar.unpin": "取消置顶",
 	"sidebar.archive": "归档",
 	"sidebar.unarchive": "取消归档",
-	"composer.runningHint": "运行中 · Enter 排队 · ⌘Enter 转向"
+	"composer.runningHint": "运行中 · Enter 排队 · ⌘Enter 转向",
+	"system.compaction": "压缩 #{epoch}:",
+	"system.merge": "合并:",
+	"system.goal": "目标 {action}:",
+	"system.ask": "提问:",
+	"system.btw": "插话:"
 }

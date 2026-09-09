@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useAppI18n } from "../../i18n.ts";
 import type { DevFrame } from "../../lib/protocol.ts";
 
@@ -16,8 +16,9 @@ export function DevRail({ frames }: { frames: DevFrame[] }) {
 	const { t } = useAppI18n();
 	const [filter, setFilter] = useState("");
 	const [paused, setPaused] = useState(false);
-	const [held, setHeld] = useState<DevFrame[]>(frames);
-	if (!paused) setHeld(frames);
+	const frozen = useRef<DevFrame[]>(frames);
+	if (!paused) frozen.current = frames;
+	const held = paused ? frozen.current : frames;
 	const needle = filter.trim().toLowerCase();
 	const shown = needle.length === 0 ? held : held.filter((f) => f.category.toLowerCase().includes(needle) || f.action.toLowerCase().includes(needle));
 

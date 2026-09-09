@@ -36,7 +36,8 @@ export function Timeline({ view, session }: { view: SessionView; session: string
 				{view.messages.length === 0 && view.systems.length === 0 ? <p className="p-4 text-sm text-muted">{t("timeline.empty")}</p> : null}
 				{view.systems.map((row) => (
 					<div key={row.entryId} data-testid="system-row" className="mono mx-auto my-2 w-fit bg-overlay px-3 py-1 text-[11px] text-muted">
-						{row.kind} · {row.text}
+						{t(`system.${row.kind}`, row.args)}
+						{row.args.objective ?? row.args.question ?? row.args.note ?? row.args.summary ? <span className="ml-1 text-muted">{row.args.objective ?? row.args.question ?? row.args.note ?? row.args.summary}</span> : null}
 					</div>
 				))}
 				{view.messages.map((entry) => (

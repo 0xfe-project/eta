@@ -58,7 +58,7 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 			<p data-testid="persona-row" className="mono text-[11px] text-accent">
 				{t("panel.personas")}: {view.personas.join(", ")}
 			</p>
-			{view.goal !== undefined ? (
+			{view.goal != null ? (
 				<div data-testid="goal-card" className="border border-border p-2 text-xs">
 					<div className="font-medium">{view.goal.objective}</div>
 					<div className="mt-1 flex gap-1">

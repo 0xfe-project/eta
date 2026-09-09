@@ -69,5 +69,10 @@
 	"sidebar.unpin": "unpin",
 	"sidebar.archive": "archive",
 	"sidebar.unarchive": "unarchive",
-	"composer.runningHint": "running · Enter queues · ⌘Enter steers"
+	"composer.runningHint": "running · Enter queues · ⌘Enter steers",
+	"system.compaction": "compaction #{epoch}:",
+	"system.merge": "merge:",
+	"system.goal": "goal {action}:",
+	"system.ask": "ask:",
+	"system.btw": "btw:"
 }
