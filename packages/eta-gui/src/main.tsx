@@ -1,13 +1,48 @@
+import { useEffect, useState } from "react";
 import { render } from "@gpuix/react";
 import { EtaApp } from "./app.tsx";
-import { fakeFeed } from "./fake.ts";
+import { Host } from "./host.ts";
+import type { SidebarSession } from "./fake.ts";
+import type { DevFrame, ChannelFrame } from "./channels.ts";
+import type { SessionView } from "@eta/core";
+import { makeFauxAgent } from "./faux-agent.ts";
+
+export function LiveApp({ host }: { host: Host }) {
+	const [sessions, setSessions] = useState<SidebarSession[]>(host.sidebar());
+	const [view, setView] = useState<SessionView | undefined>(host.viewOf(host.attachPointer ?? ""));
+	const [dev, setDev] = useState<DevFrame[]>(host.ringOf(host.attachPointer ?? "")?.tail() ?? []);
+
+	useEffect(() => {
+		let queued = false;
+		const refresh = () => {
+			if (queued) return;
+			queued = true;
+			queueMicrotask(() => {
+				queued = false;
+				setSessions(host.sidebar());
+				const pointer = host.attachPointer ?? "";
+				setView(host.viewOf(pointer));
+				setDev(host.ringOf(pointer)?.tail() ?? []);
+			});
+		};
+		const off = host.subscribe((frame: ChannelFrame) => frame && refresh());
+		void host.prompt(host.attachPointer ?? "eta-main", "hello eta").catch(() => undefined);
+		return off;
+	}, [host]);
+
+	if (view === undefined) {
+		return <div style={{ width: 1280, height: 800, backgroundColor: "#1e1e2e", color: "#cdd6f4", padding: 24 }}>starting…</div>;
+	}
+	return <EtaApp sessions={sessions} view={view} dev={dev} />;
+}
 
 const isEntryPoint =
 	typeof import.meta.main === "boolean" ? import.meta.main : typeof window !== "undefined";
 
 if (isEntryPoint) {
-	const feed = fakeFeed();
-	render(<EtaApp sessions={feed.sessions} view={feed.view} dev={feed.dev} />, {
+	const host = new Host();
+	void host.open("eta-main", () => makeFauxAgent("eta-main"));
+	render(<LiveApp host={host} />, {
 		title: "eta",
 		width: 1280,
 		height: 800,

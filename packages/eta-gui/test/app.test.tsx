@@ -24,3 +24,23 @@ describeNative("G0 layout", () => {
 		expect(painted).toContain("turn");
 	});
 });
+
+describeNative("G1 live turn", () => {
+	it("paints a real turn streamed through the host", async () => {
+		const { Host } = await import("../src/host.ts");
+		const { makeFauxAgent } = await import("../src/faux-agent.ts");
+		const { LiveApp } = await import("../src/main.tsx");
+		const host = new Host();
+		await host.open("eta-main", () => makeFauxAgent("eta-main"));
+		const { render, renderer } = createTestRoot();
+		render(<LiveApp host={host} />);
+		const app = await connectTest(renderer);
+		for (let attempt = 0; attempt < 50; attempt += 1) {
+			if (renderer.getPaintedText().some((line) => line.includes("first frame, fed by the real core"))) break;
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			void app;
+		}
+		expect(renderer.getPaintedText().some((line) => line.includes("first frame, fed by the real core"))).toBe(true);
+		await host.close();
+	});
+});

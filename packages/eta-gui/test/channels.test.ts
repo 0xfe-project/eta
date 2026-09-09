@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { HarnessEventPayload } from "@eta/core";
+import type { HarnessEvent } from "@eta/core";
 import { decodeFrame, DevRing, encodeFrame, type ChannelFrame } from "../src/channels.ts";
 import { emptyView } from "../src/fake.ts";
 
 describe("channel contract", () => {
 	it("every channel frame survives a JSON roundtrip", () => {
-		const event: HarnessEventPayload = { type: "eta", category: "goal", action: "set", data: { objective: "ship" } };
+		const event: HarnessEvent = { type: "eta", lane: "main", category: "goal", action: "set", data: { objective: "ship" } };
 		const frames: ChannelFrame[] = [
 			{ channel: "view", view: emptyView() },
 			{ channel: "agent", event },

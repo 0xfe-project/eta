@@ -5,19 +5,19 @@
  * core internals beyond these frames.
  */
 
-import type { HarnessEventPayload, JsonValue, SessionView } from "@eta/core";
+import type { HarnessEvent, SessionView } from "@eta/core";
 
 export interface DevFrame {
 	ts: number;
 	session: string;
 	category: string;
 	action: string;
-	data: JsonValue;
+	data: unknown;
 }
 
 export type ChannelFrame =
 	| { channel: "view"; view: SessionView }
-	| { channel: "agent"; event: HarnessEventPayload }
+	| { channel: "agent"; event: HarnessEvent }
 	| { channel: "dev"; frame: DevFrame };
 
 /** Per-session ring of the last N telemetry frames; full ring replays on attach. */
