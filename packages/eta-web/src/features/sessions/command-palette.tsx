@@ -31,14 +31,6 @@ export function CommandPalette() {
 				},
 			})),
 			{
-				id: "inbox",
-				label: t("inbox.entry"),
-				run: () => {
-					shell.setPaletteOpen(false);
-					navigate("/inbox");
-				},
-			},
-			{
 				id: "new",
 				label: t("nav.new"),
 				run: () => {
@@ -78,13 +70,13 @@ export function CommandPalette() {
 	const shown = needle.length === 0 ? commands : commands.filter((command) => command.label.toLowerCase().includes(needle));
 
 	return (
-		<div data-testid="command-palette" className="rounded-xl border border-border bg-elevated p-2 shadow-[var(--shadow)]">
+		<div data-testid="command-palette" className="border border-border bg-elevated p-2 shadow-[var(--shadow)]">
 			<input
 				data-testid="palette-input"
 				autoFocus
 				value={filter}
 				onChange={(event) => setFilter(event.target.value)}
-				className="w-full rounded-lg bg-transparent px-2 py-1 text-sm outline-none"
+				className="w-full bg-transparent px-2 py-1 text-sm outline-none"
 			/>
 			<div className="max-h-[300px] overflow-y-auto">
 				{shown.map((command) => (
@@ -92,7 +84,7 @@ export function CommandPalette() {
 						key={command.id}
 						data-testid={`palette-item-${command.id}`}
 						onClick={command.run}
-						className="block w-full rounded-lg px-2 py-1.5 text-left text-sm hover:bg-overlay"
+						className="block w-full px-2 py-1.5 text-left text-sm hover:bg-overlay"
 					>
 						{command.label}
 					</button>

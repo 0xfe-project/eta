@@ -6,7 +6,7 @@
 
 import { useSyncExternalStore } from "react";
 import type { SessionView } from "@eta/core";
-import type { ClientMessage, DevFrame, InboxTaskJson, ServerMessage, SidebarSession } from "./protocol.ts";
+import type { ClientMessage, DevFrame, ServerMessage, SidebarSession } from "./protocol.ts";
 
 const DEV_CAP = 512;
 
@@ -16,16 +16,26 @@ export interface EtaState {
 	attach: string | null;
 	views: Record<string, SessionView>;
 	dev: Record<string, DevFrame[]>;
-	tasks: InboxTaskJson[];
+	unread: string[];
+	runningBySession: Record<string, boolean>;
 	error: string | null;
 }
 
-export const initialEtaState: EtaState = { connected: false, sessions: [], attach: null, views: {}, dev: {}, tasks: [], error: null };
+export const initialEtaState: EtaState = { connected: false, sessions: [], attach: null, views: {}, dev: {}, unread: [], runningBySession: {}, error: null };
 
 /** Pure reducer, exported for tests: fold one server frame into the state. */
 export function reduceEtaState(state: EtaState, message: ServerMessage): EtaState {
 	if ("channel" in message) {
-		if (message.channel === "view") return { ...state, views: { ...state.views, [message.session]: message.view } };
+		if (message.channel === "view") {
+			const previous = state.views[message.session];
+			const grew = previous !== undefined && message.view.messages.length > previous.messages.length;
+			const unseen = grew && message.session !== state.attach && !state.unread.includes(message.session);
+			return {
+				...state,
+				views: { ...state.views, [message.session]: message.view },
+				unread: unseen ? [...state.unread, message.session] : state.unread,
+			};
+		}
 		if (message.channel === "dev") {
 			const existing = state.dev[message.frame.session] ?? [];
 			return { ...state, dev: { ...state.dev, [message.frame.session]: [...existing, message.frame].slice(-DEV_CAP) } };
@@ -34,11 +44,12 @@ export function reduceEtaState(state: EtaState, message: ServerMessage): EtaStat
 	}
 	switch (message.type) {
 		case "hello":
-			return { ...state, connected: true, sessions: message.sessions, attach: state.sessions.length > 0 ? state.attach : message.attach, views: {}, dev: {}, tasks: message.tasks, error: null };
-		case "sessions":
-			return { ...state, sessions: message.sessions };
-		case "tasks":
-			return { ...state, tasks: message.tasks };
+			return { ...state, connected: true, sessions: message.sessions, attach: state.sessions.length > 0 ? state.attach : message.attach, views: {}, dev: {}, error: null };
+		case "sessions": {
+			const runningNow: Record<string, boolean> = {};
+			for (const session of message.sessions) runningNow[session.name] = session.badges.includes("running");
+			return { ...state, sessions: message.sessions, runningBySession: runningNow };
+		}
 		case "error":
 			return { ...state, error: message.message };
 		default:
@@ -81,6 +92,10 @@ export class EtaStore {
 	}
 
 	send(message: ClientMessage): void {
+		if (message.op === "focus") {
+			this.state = { ...this.state, attach: message.session, unread: this.state.unread.filter((name) => name !== message.session) };
+			this.emit();
+		}
 		if (this.socket !== undefined && this.socket.readyState === 1) this.socket.send(JSON.stringify(message));
 	}
 

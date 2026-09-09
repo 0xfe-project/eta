@@ -62,9 +62,6 @@
 	--color-warning: var(--warning);
 	--color-danger: var(--danger);
 	--color-code-bg: var(--code-bg);
-	--radius-md: 6px;
-	--radius-lg: 10px;
-	--radius-xl: 14px;
 }
 
 html,

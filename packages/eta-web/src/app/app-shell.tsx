@@ -119,14 +119,14 @@ export function AppShell({ sidebar, main, panel, palette }: { sidebar: ReactNode
 				<button
 					data-testid="toggle-left"
 					onClick={toggleLeft}
-					className="fixed bottom-3 left-3 z-40 rounded-lg border border-border bg-elevated px-3 py-2 text-xs text-muted md:hidden"
+					className="fixed bottom-3 left-3 z-40 border border-border bg-elevated px-3 py-2 text-xs text-muted md:hidden"
 				>
 					☰
 				</button>
 				<button
 					data-testid="toggle-right"
 					onClick={toggleRight}
-					className="fixed bottom-3 right-3 z-40 rounded-lg border border-border bg-elevated px-3 py-2 text-xs text-muted lg:hidden"
+					className="fixed bottom-3 right-3 z-40 border border-border bg-elevated px-3 py-2 text-xs text-muted lg:hidden"
 				>
 					⧉
 				</button>

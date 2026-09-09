@@ -10,7 +10,7 @@ interface AskLike {
 	multi?: boolean;
 }
 
-export function AskModal({ session, view }: { session: string; view: SessionView }) {
+export function AskModal({ session, view, visible = true }: { session: string; view: SessionView; visible?: boolean }) {
 	const { t } = useAppI18n();
 	const store = etaStore();
 	const ask = view.pendingAsk as AskLike | undefined;
@@ -24,7 +24,7 @@ export function AskModal({ session, view }: { session: string; view: SessionView
 		return () => clearInterval(timer);
 	}, [view.pendingAskDeadline]);
 
-	if (ask === undefined) return null;
+	if (ask === undefined || !visible) return null;
 	const options = ask.options ?? [];
 	const multi = ask.multi === true;
 	const seconds = view.pendingAskDeadline === undefined ? undefined : Math.max(0, Math.ceil((view.pendingAskDeadline - now) / 1000));
@@ -37,7 +37,7 @@ export function AskModal({ session, view }: { session: string; view: SessionView
 
 	return (
 		<div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-3 sm:items-center" data-testid="ask-modal">
-			<div className="w-full max-w-[480px] rounded-xl border border-border bg-elevated p-4 shadow-[var(--shadow)]">
+			<div className="w-full max-w-[480px] border border-border bg-elevated p-4 shadow-[var(--shadow)]">
 				<p data-testid="ask-question" className="text-sm font-medium">
 					{ask.question}
 				</p>
@@ -57,7 +57,7 @@ export function AskModal({ session, view }: { session: string; view: SessionView
 										}
 										setSelected(on ? selected.filter((item) => item !== option) : [...selected, option]);
 									}}
-									className={`rounded-lg border px-3 py-1.5 text-xs ${on ? "border-accent text-accent" : "border-border hover:bg-overlay"}`}
+									className={`border px-3 py-1.5 text-xs ${on ? "border-accent text-accent" : "border-border hover:bg-overlay"}`}
 								>
 									{option}
 								</button>
@@ -71,7 +71,7 @@ export function AskModal({ session, view }: { session: string; view: SessionView
 						value={freeform}
 						placeholder={t("ask.freeform")}
 						onChange={(event) => setFreeform(event.target.value)}
-						className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2 py-1.5 text-sm outline-none focus:border-border-strong"
+						className="min-w-0 flex-1 border border-border bg-background px-2 py-1.5 text-sm outline-none focus:border-border-strong"
 					/>
 					<button
 						data-testid="ask-answer"
@@ -83,7 +83,7 @@ export function AskModal({ session, view }: { session: string; view: SessionView
 							}
 							answer({ kind: "freeform", text: freeform.trim() });
 						}}
-						className="rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+						className="px-3 py-1.5 text-xs font-medium disabled:opacity-50"
 						style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
 					>
 						{t("ask.answer")}

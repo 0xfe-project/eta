@@ -29,17 +29,27 @@ describe("eta store reducer", () => {
 
 	it("hello resyncs sessions and clears stale views", () => {
 		let state = reduceEtaState(initialEtaState, viewFrame("gone", 1));
-		state = reduceEtaState(state, { type: "hello", sessions: [{ name: "fresh", badges: [], personas: ["Thinker"] }], attach: "fresh", tasks: [] });
+		state = reduceEtaState(state, { type: "hello", sessions: [{ name: "fresh", badges: [], personas: ["Thinker"] }], attach: "fresh" });
 		expect(state.views).toEqual({});
 		expect(state.attach).toBe("fresh");
 		expect(state.sessions.map((s) => s.name)).toEqual(["fresh"]);
 	});
 
 	it("keeps a local attach across re-hellos but adopts the first one", () => {
-		let state = reduceEtaState(initialEtaState, { type: "hello", sessions: [{ name: "mine", badges: [], personas: [] }], attach: "mine", tasks: [] });
+		let state = reduceEtaState(initialEtaState, { type: "hello", sessions: [{ name: "mine", badges: [], personas: [] }], attach: "mine" });
 		expect(state.attach).toBe("mine");
-		state = reduceEtaState(state, { type: "hello", sessions: [{ name: "mine", badges: [], personas: [] }], attach: "other", tasks: [] });
+		state = reduceEtaState(state, { type: "hello", sessions: [{ name: "mine", badges: [], personas: [] }], attach: "other" });
 		expect(state.attach).toBe("mine");
+	});
+
+	it("marks background sessions unread when their messages grow", () => {
+		let state = reduceEtaState(initialEtaState, { type: "hello", sessions: [{ name: "bg", badges: [], personas: [] }], attach: "fg" });
+		state = reduceEtaState(state, { channel: "view", session: "bg", view: { messages: [] } as never });
+		expect(state.unread).toEqual([]);
+		state = reduceEtaState(state, { channel: "view", session: "bg", view: { messages: [1] } as never });
+		expect(state.unread).toEqual(["bg"]);
+		state = reduceEtaState(state, { channel: "view", session: "bg", view: { messages: [1, 2] } as never });
+		expect(state.unread).toEqual(["bg"]);
 	});
 
 	it("surfaces server errors", () => {

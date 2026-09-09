@@ -27,7 +27,7 @@
 - [x] W1.1 脚手架:`packages/eta-web` = Vite + React 19 + wouter 3 + Tailwind v4(`@tailwindcss/vite`,无 config 文件)+ TS(extends 根 tsconfig,`@/*` alias);vitest 复用 vite config。完成条件:`bun run dev` 出页面,`bun run test`/`typecheck` 绿。
 - [x] W1.2 路由(wouter)(`/`、`/new`、`/settings`;数据驱动 route-definitions 表暂以路由常量代替;WS store 为模块级单例,切页不重连):数据驱动 route-definitions(侧栏/面包屑共用);路由:`/`(session 列表+timeline)、`/new`(persona 向导)、`/settings`(主题/语言)。完成条件:`useLocation` 切换不重挂 WS 连接。
 - [x] W1.3 i18n:workspace 包 `packages/eta-i18n`(i18next,`en` + `zh-CN` 扁平点号 key,`TranslationKey` 编译期校验,单一 translation namespace,`keySeparator:false`);检测链 URL `?locale=` → localStorage(`eta.locale`)→ cookie → navigator → 默认 `zh-CN`;跨 tab 同步(storage + CustomEvent)。完成条件:key 覆盖率测试(en/zh 键集相等)+ 传错 key TS 报错。
-- [x] W1.4 主题:两套 CSS 变量,Tailwind v4 `@theme inline` 映射,`.dark` class 切换;dark 基底 `#181818`、light 基底 `#ffffff`;边框/hover/accent 淡色用 `color-mix` 派生(pi-gui 的机制,变量名换 shadcn 风格全集);theme-provider:localStorage `eta.theme` + `matchMedia` system + 跨 tab 同步,`useAppTheme()`。完成条件:两套主题下全组件可读,切换无闪白(FOUC 由内联脚本预防)。
+- [x] W1.4 主题(硬朗石墨:**全平台零圆角**,border-radius 一律不用;高饱和色只允许出现在语义状态):两套 CSS 变量,Tailwind v4 `@theme inline` 映射,`.dark` class 切换;dark 基底 `#181818`、light 基底 `#ffffff`;边框/hover/accent 淡色用 `color-mix` 派生(pi-gui 的机制,变量名换 shadcn 风格全集);theme-provider:localStorage `eta.theme` + `matchMedia` system + 跨 tab 同步,`useAppTheme()`。完成条件:两套主题下全组件可读,切换无闪白(FOUC 由内联脚本预防)。
 - [ ] W1.5 组件层:shadcn copy-in(`components/ui/`,radix 原语)+ `cn()`;chat 类组件(消息气泡/工具行/composer)手写在 `features/session/components/`。完成条件:无孤儿依赖,`bun run typecheck` 绿。
 
 ## 2. 界面(v2 布局)
@@ -66,7 +66,7 @@
 
 ## 5. picot 借鉴(调研自 `picot/`,Tauri+内嵌 server+SPA,与我们同构)
 
-- [ ] W5.1 Agent Inbox lite(无 Telegram,进件源留 union):server 端 `inbox/tasks.json`(status 机 `pending/needs_input/blocked/running/done/failed` + 追加式 events 审计) + 固定 "Agent Inbox" session(persona=Executor,workspace=inbox 目录,agent 用 KV/工具写任务);GUI 侧栏固定入口带 badge(pending+running 数)+ 任务面板(过滤计数/卡片折叠/项目(session)下拉/**本地批准后**才 `session.create` 派发 headless 子 session 执行,先落面包屑再执行 / View Session 跳转 / Force Cancel / History);派发 prompt 带 Task ID+来源+"要澄清就停下报 needs_input"+"完成总结改动/验证/风险"。回流:server 订阅子 session `run_end`/ask → 自动写终态/needs_input(把 picot 没接完的闭环在我们契约里做对)。完成条件:任务卡 Approve→新 session 跑完→面板自动变 done,全程无手改 json。
+- ~~W5.1 Agent Inbox lite~~ **用户决定移除**(连同 server inbox 模块/协议 task ops/web 页面/i18n 一并撤除;`source` union 的概念留给未来通道)
 - [ ] W5.2 后台会话事件镜像:侧栏未读点 + 流式绿点(单 server 全量事件流,近乎白送)。
 - [ ] W5.3 Context popover 化:分段条(输入/输出/缓存读/缓存写/可用)+ 就地 Compact + "请求已接受 vs 真完成"协调器。
 - [ ] W5.4 回合文件 chip:每回合末尾列出写过的文件成 chip,点击预览;write/edit 工具完成自动跟随。

@@ -2,11 +2,20 @@ import { useEffect, useState, type KeyboardEvent } from "react";
 import { useAppI18n } from "../../i18n.ts";
 import { etaStore } from "../../lib/eta-store.ts";
 
-export function Composer({ session, running, hasPendingAsk }: { session: string; running: boolean; hasPendingAsk: boolean }) {
+export function Composer({ session, running, hasPendingAsk, userTexts = [] }: { session: string; running: boolean; hasPendingAsk: boolean; userTexts?: string[] }) {
 	const { t } = useAppI18n();
 	const store = etaStore();
 	const [text, setText] = useState("");
 	const [files, setFiles] = useState<string[]>([]);
+	const [pending, setPending] = useState<string[]>([]);
+
+	const seen = userTexts.join("\n");
+	useEffect(() => {
+		setPending((current) => {
+			const next = current.filter((item) => !seen.includes(item));
+			return next.length === current.length ? current : next;
+		});
+	}, [seen]);
 
 	const mention = /(^|\s)@([\w./-]*)$/.exec(text);
 	const mentionQuery = mention?.[2] ?? null;
@@ -32,6 +41,7 @@ export function Composer({ session, running, hasPendingAsk }: { session: string;
 			return;
 		}
 		store.send({ op: "prompt", session, text: value });
+		setPending((current) => [...current, value]);
 		setText("");
 	};
 
@@ -49,16 +59,25 @@ export function Composer({ session, running, hasPendingAsk }: { session: string;
 
 	return (
 		<footer className="relative border-t border-border p-3" data-testid="composer">
+			{pending.length > 0 ? (
+				<div data-testid="queued-bar" className="mx-auto mb-2 flex max-w-[880px] flex-wrap gap-1">
+					{pending.map((item, index) => (
+						<span key={`${item}-${index}`} className="max-w-[240px] truncate border border-border bg-elevated px-2 py-0.5 text-[10px] text-muted">
+							{t("composer.queued")} · {item}
+						</span>
+					))}
+				</div>
+			) : null}
 			{choices.length > 0 ? (
-				<div data-testid="mention-popup" className="absolute bottom-full left-1/2 mb-1 w-[min(92%,420px)] -translate-x-1/2 rounded-xl border border-border bg-elevated p-1 shadow-[var(--shadow)]">
+				<div data-testid="mention-popup" className="absolute bottom-full left-1/2 mb-1 w-[min(92%,420px)] -translate-x-1/2 border border-border bg-elevated p-1 shadow-[var(--shadow)]">
 					{choices.map((file) => (
-						<button key={file} data-testid={`mention-${file}`} onClick={() => pickFile(file)} className="mono block w-full rounded-lg px-2 py-1 text-left text-xs hover:bg-overlay">
+						<button key={file} data-testid={`mention-${file}`} onClick={() => pickFile(file)} className="mono block w-full px-2 py-1 text-left text-xs hover:bg-overlay">
 							@{file}
 						</button>
 					))}
 				</div>
 			) : null}
-			<div className="mx-auto flex max-w-[880px] items-end gap-2 rounded-xl border border-border bg-elevated p-2">
+			<div className="mx-auto flex max-w-[880px] items-end gap-2 border border-border bg-elevated p-2">
 				<textarea
 					data-testid="composer-input"
 					rows={1}
@@ -77,7 +96,7 @@ export function Composer({ session, running, hasPendingAsk }: { session: string;
 					data-testid="composer-submit"
 					onClick={submit}
 					disabled={hasPendingAsk}
-					className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground disabled:opacity-50"
+					className="bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground disabled:opacity-50"
 				>
 					{text.trim().length > 0 ? t("composer.send") : running ? t("composer.stop") : t("composer.send")}
 				</button>

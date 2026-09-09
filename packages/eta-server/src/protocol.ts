@@ -47,30 +47,13 @@ export type ControlOp =
 	| { op: "session.create"; name: string; personaId: string; cwd?: string; prompt?: string }
 	| { op: "session.delete"; name: string };
 
-export type InboxOp =
-	| { op: "task.create"; title: string; description: string; targetProject?: string }
-	| { op: "task.approve"; id: string }
-	| { op: "task.dismiss"; id: string }
-	| { op: "task.clearDone" };
 
-export interface InboxTaskJson {
-	id: string;
-	title: string;
-	description: string;
-	status: "pending" | "running" | "needs_input" | "blocked" | "done" | "failed";
-	targetProject: string;
-	source: { channel: string; detail?: string };
-	result?: { status: string; summary: string; completedAt: number };
-	dispatch?: { childSession: string; startedAt: number; finishedAt?: number };
-	events: { at: number; type: string; status: string; message: string }[];
-}
 
-export type ClientMessage = GuiOp | ControlOp | InboxOp;
+export type ClientMessage = GuiOp | ControlOp;
 
 export type ServerMessage =
 	| ChannelFrame
-	| { type: "hello"; sessions: SidebarSession[]; attach: string | null; tasks: InboxTaskJson[] }
-	| { type: "tasks"; tasks: InboxTaskJson[] }
+	| { type: "hello"; sessions: SidebarSession[]; attach: string | null }
 	| { type: "sessions"; sessions: SidebarSession[] }
 	| { type: "created"; name: string }
 	| { type: "deleted"; name: string }

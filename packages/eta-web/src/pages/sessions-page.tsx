@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAppI18n } from "../i18n.ts";
 import { AppShell } from "../app/app-shell.tsx";
 import { useEta } from "../lib/eta-store.ts";
@@ -9,10 +9,43 @@ import { AskModal } from "../features/sessions/ask-modal.tsx";
 import { ContextPanel } from "../features/sessions/context-panel.tsx";
 import { DevRail } from "../features/sessions/dev-rail.tsx";
 import { CommandPalette } from "../features/sessions/command-palette.tsx";
+import { etaStore } from "../lib/eta-store.ts";
+
+function useRunNotifications(state: ReturnType<typeof useEta>) {
+	const seen = useRef<Record<string, boolean>>({});
+	useEffect(() => {
+		for (const [name, running] of Object.entries(state.runningBySession)) {
+			const was = seen.current[name] === true;
+			seen.current[name] = running;
+			if (was && !running && name !== state.attach && typeof Notification !== "undefined" && Notification.permission === "granted") {
+				const notification = new Notification(`eta · ${name}`, { body: "run finished", tag: `eta-${name}` });
+				notification.onclick = () => {
+					etaStore().send({ op: "focus", session: name });
+					window.focus();
+				};
+			}
+		}
+	}, [state.runningBySession, state.attach]);
+}
+
+function useDeepLink() {
+	useEffect(() => {
+		const params = new URLSearchParams(window.location.search);
+		const session = params.get("session");
+		if (session !== null) {
+			etaStore().send({ op: "focus", session });
+			params.delete("session");
+			const query = params.toString();
+			window.history.replaceState(null, "", `${window.location.pathname}${query.length > 0 ? `?${query}` : ""}`);
+		}
+	}, []);
+}
 
 export function SessionsPage() {
 	const { t } = useAppI18n();
 	const state = useEta();
+	useRunNotifications(state);
+	useDeepLink();
 	const [tab, setTab] = useState<"context" | "dev">("context");
 	const selected = state.attach ?? state.sessions[0]?.name ?? null;
 	const view = selected === null ? undefined : state.views[selected];
@@ -32,8 +65,8 @@ export function SessionsPage() {
 						<p className="p-6 text-sm text-muted">{t("sidebar.noSessions")}</p>
 					) : (
 						<>
-							<Timeline view={view} />
-							<Composer session={selected ?? ""} running={running} hasPendingAsk={view.pendingAsk !== undefined} />
+							<Timeline view={view} session={selected ?? ""} />
+							<Composer session={selected ?? ""} running={running} hasPendingAsk={view.pendingAsk !== undefined} userTexts={view.messages.filter((entry) => entry.message.role === "user").map((entry) => JSON.stringify(entry.message))} />
 							<AskModal session={selected ?? ""} view={view} />
 						</>
 					)}
@@ -46,14 +79,14 @@ export function SessionsPage() {
 							<button
 								data-testid="tab-context"
 								onClick={() => setTab("context")}
-								className={`rounded-md px-3 py-1 text-xs ${tab === "context" ? "bg-overlay font-medium" : "text-muted"}`}
+								className={`px-3 py-1 text-xs ${tab === "context" ? "bg-overlay font-medium" : "text-muted"}`}
 							>
 								{t("nav.context")}
 							</button>
 							<button
 								data-testid="tab-dev"
 								onClick={() => setTab("dev")}
-								className={`rounded-md px-3 py-1 text-xs ${tab === "dev" ? "bg-overlay font-medium" : "text-muted"}`}
+								className={`px-3 py-1 text-xs ${tab === "dev" ? "bg-overlay font-medium" : "text-muted"}`}
 							>
 								{t("nav.dev")}
 							</button>

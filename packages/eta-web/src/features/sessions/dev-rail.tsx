@@ -24,7 +24,7 @@ export function DevRail({ frames }: { frames: DevFrame[] }) {
 	return (
 		<div className="flex h-full flex-col p-2" data-testid="dev-rail">
 			<div className="mb-2 flex gap-2">
-				<button data-testid="dev-pause" onClick={() => setPaused(!paused)} className="rounded-lg border border-border px-2 py-1 text-[10px] text-muted">
+				<button data-testid="dev-pause" onClick={() => setPaused(!paused)} className="border border-border px-2 py-1 text-[10px] text-muted">
 					{paused ? "resume" : "pause"}
 				</button>
 			</div>
@@ -33,14 +33,14 @@ export function DevRail({ frames }: { frames: DevFrame[] }) {
 				value={filter}
 				placeholder={t("panel.filter")}
 				onChange={(event) => setFilter(event.target.value)}
-				className="mb-2 rounded-lg border border-border bg-background px-2 py-1 text-xs outline-none"
+				className="mb-2 border border-border bg-background px-2 py-1 text-xs outline-none"
 			/>
 			<div className="mono flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto text-[10px]">
 				{shown
 					.slice(-200)
 					.reverse()
 					.map((frame, index) => (
-						<div key={`${frame.ts}-${index}`} data-testid="dev-frame" className="flex gap-2 rounded px-1 py-0.5 hover:bg-overlay">
+						<div key={`${frame.ts}-${index}`} data-testid="dev-frame" className="flex gap-2 px-1 py-0.5 hover:bg-overlay">
 							<span className="text-muted">{new Date(frame.ts).toLocaleTimeString()}</span>
 							<span style={{ color: CATEGORY_COLORS[frame.category] ?? "var(--muted)" }}>{frame.category}</span>
 							<span>{frame.action}</span>
