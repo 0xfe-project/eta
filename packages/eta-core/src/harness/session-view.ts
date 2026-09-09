@@ -60,6 +60,8 @@ export interface SessionView {
 	cacheRate: number;
 	branch: { tipId: string | null };
 	pendingAsk: AskPayload | undefined;
+	/** KV keys the state tools have set; shown and deletable in the Context panel. */
+	stateKeys: string[];
 	/** System prompt block sizes for the Context panel; undefined before the first generation. */
 	prompt: { stableChars: number; adaptiveChars: number } | undefined;
 	/** Output tokens/sec over the last usage delta; 0 until two usage events pass. */
@@ -127,7 +129,9 @@ export class SessionViewProjector {
 			paused: spec.paused,
 			...(spec.nextDueAt === undefined ? {} : { nextDueAt: spec.nextDueAt }),
 		});
+		const stateKeys = await this.agent.stateKv.keys().catch(() => []);
 		return {
+			stateKeys,
 			messages,
 			systems,
 			thinking,

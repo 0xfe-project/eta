@@ -85,6 +85,21 @@ describe("host", () => {
 		await host.close();
 	});
 
+	it("G3: goal set and pause are visible on the view", async () => {
+		const host = new Host();
+		await host.open("a", () => makeAgent("eta-g3", 0));
+		host.goal("a", "set", "ship the panel");
+		await settle(() => host.viewOf("a")?.goal?.objective === "ship the panel");
+		expect(host.viewOf("a")!.goal!.status).toBe("active");
+		host.goal("a", "pause");
+		await settle(() => host.viewOf("a")?.goal?.status === "paused");
+		host.stateSet("a", "build.cmd", "bun test");
+		await settle(() => (host.viewOf("a")?.stateKeys.length ?? 0) >= 1);
+		host.stateSet("a", "build.cmd", null);
+		await settle(() => (host.viewOf("a")?.stateKeys.length ?? 1) === 0);
+		await host.close();
+	});
+
 	it("G4: an unanswered ask survives a kill, re-surfaces on reopen, and answering settles it", async () => {
 		const storage = new MemoryStorage();
 		const host = new Host();

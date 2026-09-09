@@ -142,6 +142,16 @@ export class Host {
 		this.must(name).setTask(id, { status });
 	}
 
+	stateSet(name: string, key: string, value: string | null): void {
+		const agent = this.must(name);
+		void agent.stateKv.set(key, value);
+		void agent.lane.publish([{ type: "eta", category: "state", action: value === null ? "delete" : "set", data: { key } }], BACKGROUND_CONTEXT).catch(() => undefined);
+	}
+
+	subagentStop(name: string, id: string): void {
+		this.must(name).subagents.stop(id, undefined);
+	}
+
 	btwOpen(name: string, kind: "contextual" | "tangent"): void {
 		this.must(name).btw.create(kind);
 	}

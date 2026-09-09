@@ -45,6 +45,8 @@ export function LiveApp({ host }: { host: Host }) {
 		btwAnswer: (threadId, question, answer) => host.btwAnswer(pointer, threadId, question, answer),
 		btwSave: (threadId) => host.btwSave(pointer, threadId),
 		btwClear: (threadId) => host.btwClear(pointer, threadId),
+		stateDelete: (key) => host.stateSet(pointer, key, null),
+		subagentStop: (id) => host.subagentStop(pointer, id),
 		compact: () => void host.compact(pointer).catch(() => undefined),
 		abort: () => void host.abort(pointer).catch(() => undefined),
 		answer: (questionId, response) => host.askOf(pointer)?.answer(questionId, response as Parameters<NonNullable<ReturnType<Host["askOf"]>>["answer"]>[1]),

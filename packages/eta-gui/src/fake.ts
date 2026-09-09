@@ -19,6 +19,7 @@ export interface FakeFeed {
 }
 
 export const emptyView = (): SessionView => ({
+	stateKeys: ["build.cmd"],
 	messages: [],
 	systems: [],
 	thinking: [],

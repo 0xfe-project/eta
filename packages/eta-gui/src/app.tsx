@@ -27,6 +27,8 @@ export interface GuiOps {
 	btwAnswer(threadId: string, question: string, answer: string): void;
 	btwSave(threadId: string): void;
 	btwClear(threadId: string): void;
+	stateDelete(key: string): void;
+	subagentStop(id: string): void;
 	compact(): void;
 	abort(): void;
 	answer(questionId: string, response: AskAnswer): void;
@@ -42,6 +44,8 @@ export const noOps: GuiOps = {
 	btwAnswer: () => {},
 	btwSave: () => {},
 	btwClear: () => {},
+	stateDelete: () => {},
+	subagentStop: () => {},
 	compact: () => {},
 	abort: () => {},
 	answer: () => {},
@@ -285,7 +289,7 @@ export function EtaApp({ sessions, active, view, dev, ops, running = false, defa
 					</div>
 				</div>
 				{tab === "context" ? (
-					<div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
+					<div style={{ flexGrow: 1, padding: 12, display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
 						<div testId="usage-row">usage in {view.usage.input} / out {view.usage.output} / cache {(view.cacheRate * 100).toFixed(0)}% · epoch {view.compactionEpoch} · {Math.round(view.tokensPerSec)} tok/s</div>
 						<div testId="prompt-row">{view.prompt === undefined ? "prompt not assembled yet" : `prompt ${view.prompt.stableChars} stable / ${view.prompt.adaptiveChars} adaptive`}</div>
 						<div testId="goal-card" style={{ borderWidth: 1, borderColor: CATEGORY_COLORS.goal, padding: 8 }}>
@@ -312,36 +316,44 @@ export function EtaApp({ sessions, active, view, dev, ops, running = false, defa
 								[{task.status}] {task.content}
 							</div>
 						))}
+						{view.subagents.map((subagent) => (
+							<div key={subagent.id} testId={`fleet-${subagent.id}`} style={{ display: "flex", flexDirection: "row", gap: 6 }}>
+								<div>{`agent ${subagent.id} · ${subagent.status} · turns ${subagent.turns}`}</div>
+								<div testId={`fleet-stop-${subagent.id}`} onClick={() => ops.subagentStop(subagent.id)} style={BUTTON}>
+									stop
+								</div>
+							</div>
+						))}
+						{view.stateKeys.map((key) => (
+							<div key={key} testId={`state-${key.replace(/[^a-zA-Z0-9_-]/g, "_")}`} style={{ display: "flex", flexDirection: "row", gap: 6 }}>
+								<div>{`kv ${key}`}</div>
+								<div testId={`state-delete-${key.replace(/[^a-zA-Z0-9_-]/g, "_")}`} onClick={() => ops.stateDelete(key)} style={BUTTON}>
+									delete
+								</div>
+							</div>
+						))}
+						{view.sideThread.map((thread) => (
+							<div key={thread.id} testId={`sideThread-${thread.id}`} style={{ color: CATEGORY_COLORS.btw, display: "flex", flexDirection: "row", gap: 4, flexWrap: "wrap" }}>
+								<div>{`btw ${thread.id} · ${thread.exchanges.length}x · ${thread.saveState}`}</div>
+								<div testId={`btw-save-${thread.id}`} onClick={() => ops.btwSave(thread.id)} style={BUTTON}>
+									save
+								</div>
+								<div testId={`btw-clear-${thread.id}`} onClick={() => ops.btwClear(thread.id)} style={BUTTON}>
+									clear
+								</div>
+							</div>
+						))}
+						<div testId="btw-new" onClick={() => ops.btwOpen("tangent")} style={{ ...BUTTON, alignSelf: "flex-start" }}>
+							new btw
+						</div>
+						<div testId="compact" onClick={ops.compact} style={{ ...BUTTON, alignSelf: "flex-start" }}>
+							compact
+						</div>
 						{view.loops.map((loop) => (
 							<div key={loop.id} testId={`loop-${loop.id}`} onClick={() => ops.loopToggle(loop.id, !loop.paused)} style={{ color: loop.paused ? DIM : CATEGORY_COLORS.loop }}>
 								loop {loop.id} · {loop.note} · {loop.paused ? "paused" : "on"} · fired {loop.runCount}
 							</div>
 						))}
-						{view.sideThread.map((thread) => (
-							<div key={thread.id} testId={`sideThread-${thread.id}`} style={{ color: CATEGORY_COLORS.btw }}>
-								<div>{`btw ${thread.id} · ${thread.kind} · ${thread.exchanges.length} exchanges · ${thread.saveState}`}</div>
-								<div style={{ display: "flex", flexDirection: "row", gap: 6 }}>
-									<div testId={`btw-save-${thread.id}`} onClick={() => ops.btwSave(thread.id)} style={BUTTON}>
-										save
-									</div>
-									<div testId={`btw-clear-${thread.id}`} onClick={() => ops.btwClear(thread.id)} style={BUTTON}>
-										clear
-									</div>
-								</div>
-								<input
-									testId={`btw-answer-${thread.id}`}
-									placeholder="inject a note…"
-									onSubmit={(event) => {
-										const text = (event.value ?? "").trim();
-										if (text !== "") ops.btwAnswer(thread.id, "from the panel", text);
-									}}
-									style={{ fontSize: 12, color: DIM, borderWidth: 1, borderColor: BG }}
-								/>
-							</div>
-						))}
-						<div testId="btw-new" onClick={() => ops.btwOpen("tangent")} style={BUTTON}>
-							new btw
-						</div>
 						{view.memory === undefined ? null : (
 							<div>
 								memory {view.memory.chars}/20000
@@ -350,16 +362,18 @@ export function EtaApp({ sessions, active, view, dev, ops, running = false, defa
 								</div>
 							</div>
 						)}
-						{view.subagents.map((subagent) => (
-							<div key={subagent.id}>
-								agent {subagent.id} · {subagent.status} · turns {subagent.turns}
-							</div>
+						{view.sideThread.map((thread) => (
+							<input
+								key={`answer-${thread.id}`}
+								testId={`btw-answer-${thread.id}`}
+								placeholder="inject a note…"
+								onSubmit={(event) => {
+									const text = (event.value ?? "").trim();
+									if (text !== "") ops.btwAnswer(thread.id, "from the panel", text);
+								}}
+								style={{ fontSize: 12, color: DIM, borderWidth: 1, borderColor: BG }}
+							/>
 						))}
-						<div style={{ display: "flex", flexDirection: "row", gap: 6 }}>
-							<div testId="compact" onClick={ops.compact} style={BUTTON}>
-								compact
-							</div>
-						</div>
 					</div>
 				) : (
 					<div style={{ flexGrow: 1, display: "flex", flexDirection: "column" }}>
