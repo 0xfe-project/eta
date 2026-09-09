@@ -22,9 +22,9 @@
 
 ## 0. Fork 策略(替代原 Part A/B 的重写)
 
-- [ ] F0.1 vendor import:`cp -r pi/packages/agent packages/eta-core` + 它的 test/,单个 commit 落地(记录上游 commit 到 `UPSTREAM.md`,以后同步 = 3-way merge,目录结构不许动)。完成条件:包能 build、**上游测试原样全绿**。
-- [ ] F0.2 改名 codemod:**只改自有标识符**(`pi-agent-core`→`@eta/core`、导出符号、telemetry 前缀);依赖 scope `@earendil-works/pi-ai` / `pi-telemetry` / `chord` **不改**(它们是被 import 的库,regex 一刀切会把 import 全杀掉)。完成条件:`rg -i "\bpi\b" src --glob '!pi-ai'` 只剩依赖名。
-- [ ] F0.3 白拿资产清单确认(runtime 状态机 7.5k / session+jsonl repo+fork 4.4k / compaction 1.3k / hooks+telemetry+skills+prompt-templates 3.5k / tools 一套;`faux` provider 来自 pi-ai,单测不联网)。完成条件:vitest 全绿 + sqlite-node 后端 conformance 全绿(vendor 它,Entry 类型不动,新语义走 `CustomEntry{customType}`——决策 D1)。
+- [x] F0.1 vendor import:`cp -r pi/packages/agent packages/eta-core` + 它的 test/,单个 commit 落地(记录上游 commit 到 `UPSTREAM.md`,以后同步 = 3-way merge,目录结构不许动)。完成条件:包能 build、**上游测试原样全绿**。
+- [x] F0.2 改名 codemod:**只改自有标识符**(`pi-agent-core`→`@eta/core`、导出符号、telemetry 前缀);依赖 scope `@earendil-works/pi-ai` / `pi-telemetry` / `chord` **不改**(它们是被 import 的库,regex 一刀切会把 import 全杀掉)。完成条件:`rg -i "\bpi\b" src --glob '!pi-ai'` 只剩依赖名。
+- [x] F0.3 白拿资产清单确认(runtime 状态机 7.5k / session+jsonl repo+fork 4.4k / compaction 1.3k / hooks+telemetry+skills+prompt-templates 3.5k / tools 一套;`faux` provider 来自 pi-ai,单测不联网)。完成条件:vitest 全绿 + sqlite-node 后端 conformance 全绿(vendor 它,Entry 类型不动,新语义走 `CustomEntry{customType}`——决策 D1)。
 - [ ] F0.4 lane/drive 状态机(**先留不拆**):它是重试/backoff/persistence 正确性的本体;跑通 M1-M4 后若确认用不上再砍,砍之前不许重写。
 
 ---
