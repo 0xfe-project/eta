@@ -4,3 +4,4 @@ export * as prompts from "../prompts/index.ts";
 export * from "./tasks.ts";
 export * from "./entries.ts";
 export * from "./composer.ts";
+export * from "./run-end.ts";

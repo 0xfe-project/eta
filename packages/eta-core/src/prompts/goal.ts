@@ -21,3 +21,6 @@ Completion:
 export function goalEvaluatorPrompt(objective: string): string {
 	return `Is the goal achieved? Goal: "${objective}". Reply YES or NO only.`;
 }
+
+/** followUp injected at run end to drive a goal continuation turn. */
+export const GOAL_CONTINUATION = "[goal] keep going: make concrete progress on the active goal, or finish it.";
