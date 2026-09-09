@@ -45,12 +45,12 @@
 ```
 
 - [ ] W2.0 响应式(移动优先):桌面三栏 grid;**竖屏/窄屏只剩 timeline+composer**,侧栏=左滑出抽屉(遮罩关闭)、Context/Dev 面板=右滑出抽屉、排队条/附件等=底部抽屉(sheet)。断点一套 CSS(`@theme`/container query),所有抽屉状态持久化。完成条件:375px 宽下全功能可用(建 session/发消息/审批 ask/开 Context),无横向滚动条。
-- [ ] W2.1 连接层:`useEtaSocket` 单例——重连指数退避、断线 banner、revision 防乱序(v1 `ChannelFrame` 反序列化进 reducer store,快照优先 + 增量合并,抄 pi-gui `applySnapshotIfNewer` 思路)。完成条件:kill server 再起,前端自动恢复且状态正确。
+- [x] W2.1 连接层:`useEtaSocket` 单例——重连指数退避、断线 banner、revision 防乱序(v1 `ChannelFrame` 反序列化进 reducer store,快照优先 + 增量合并,抄 pi-gui `applySnapshotIfNewer` 思路)。完成条件:kill server 再起,前端自动恢复且状态正确。(重连退避+hello resync 语义有 fake-timers 测试)
 - [x] W2.2 侧栏:session 列表 + badge(`running/goal/ask-pending/loop`)+ delete;New session 按钮 → `/new`。数据 = server `GET /api/sessions` + view 帧。完成条件:后台 session loop 点火时 badge 实时变,切走再回不丢。
-- [ ] W2.3 timeline:delta 合并进最后一条 assistant(不产生新节点);pin-bottom(滚离 >32px 解除钉底 + "New activity below" 按钮);工具行按 callId 原位 upsert(running→done/failed,图标按 toolName,展开 `<pre>`/diff);行类型在 v1 L2 基础上原样(`goal-change/loop-fire/compaction/ask/btw-note/retry`)。完成条件:历史重放与直播同一渲染路径;reducer 纯函数有单测。
-- [ ] W2.4 Context 面板 + Dev rail:v1 L3/L4 的内容原样搬(usage/prompt 拆块/goal/tasks/loops/memory/fleet/btw + 15 类着色 tail、`/` 过滤、暂停)。完成条件:每块实时刷新,dev ring 满丢最旧。
-- [ ] W2.5 composer:textarea 自动增高;running 时空输入 Enter=停止、有输入 Enter=入队 followUp、⌘↵=steer;`@` mention(server 文件列表模糊匹配);ask 模态 = v1 ask_user(单选即点/多选+confirm/freeform/倒计时,队列取第一个)。完成条件:kill-重启后未决 ask 重弹。
-- [ ] W2.6 快捷键:`⌘B` 侧栏、`⌘⇧O` 新建、`⌘K` 命令面板(最小集:切 session/切主题/切语言)。完成条件:与浏览器保留键无冲突。
+- [x] W2.3 timeline:delta 合并进最后一条 assistant(不产生新节点);pin-bottom(滚离 >32px 解除钉底 + "New activity below" 按钮);工具行按 callId 原位 upsert(running→done/failed,图标按 toolName,展开 `<pre>`/diff);行类型在 v1 L2 基础上原样(`goal-change/loop-fire/compaction/ask/btw-note/retry`)。完成条件:历史重放与直播同一渲染路径;reducer 纯函数有单测。(prompt rail:右侧编号跳 user prompt;工具行折叠;reducer 纯函数在 web test)
+- [x] W2.4 Context 面板 + Dev rail:v1 L3/L4 的内容原样搬(usage/prompt 拆块/goal/tasks/loops/memory/fleet/btw + 15 类着色 tail、`/` 过滤、暂停)。完成条件:每块实时刷新,dev ring 满丢最旧。(pause 冻结快照;ring 溢出丢最旧在 reducer test)
+- [x] W2.5 composer:textarea 自动增高;running 时空输入 Enter=停止、有输入 Enter=入队 followUp、⌘↵=steer;`@` mention(server 文件列表模糊匹配);ask 模态 = v1 ask_user(单选即点/多选+confirm/freeform/倒计时,队列取第一个)。完成条件:kill-重启后未决 ask 重弹。(@mention 走 /api/files?session=,Enter 选首个;排队消息条并入 W5.5;未决 ask 重弹由 view.pendingAsk 驱动)
+- [x] W2.6 快捷键:`⌘B` 侧栏、`⌘⇧O` 新建、`⌘K` 命令面板(最小集:切 session/切主题/切语言)。完成条件:与浏览器保留键无冲突。(⌘B 侧栏、⌘⇧O 新建、⌘K 命令面板:切 session/切主题/切语言)
 
 ## 3. 新建 session 向导(eta 独有)
 

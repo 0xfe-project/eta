@@ -29,6 +29,12 @@ export function Sidebar({ selected }: { selected: string | null }) {
 					</Link>
 				</div>
 			</div>
+			<Link href="/inbox" className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm" data-testid="inbox-entry">
+				<span>⚡ {t("inbox.entry")}</span>
+				{inboxBadge(state.tasks) > 0 ? (
+					<span data-testid="inbox-badge" className="ml-auto rounded-full bg-accent px-1.5 text-[10px] text-accent-foreground">{inboxBadge(state.tasks)}</span>
+				) : null}
+			</Link>
 			<div className="min-h-0 flex-1 overflow-y-auto p-2" data-testid="session-list">
 				{state.sessions.length === 0 ? <p className="p-2 text-sm text-muted">{t("sidebar.noSessions")}</p> : null}
 				{state.sessions.map((session) => (
@@ -38,6 +44,10 @@ export function Sidebar({ selected }: { selected: string | null }) {
 			{state.connected ? null : <p data-testid="connection-banner" className="border-t border-border bg-warning/10 p-2 text-xs text-warning">{t("connection.disconnected")}</p>}
 		</div>
 	);
+}
+
+function inboxBadge(tasks: { status: string }[]): number {
+	return tasks.filter((task) => task.status === "pending" || task.status === "running" || task.status === "needs_input").length;
 }
 
 function SessionRow({ session, selected, onSelect, onDelete }: { session: SidebarSession; selected: boolean; onSelect(): void; onDelete(): void }) {

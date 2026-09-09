@@ -6,7 +6,7 @@
 
 import { useSyncExternalStore } from "react";
 import type { SessionView } from "@eta/core";
-import type { ClientMessage, DevFrame, ServerMessage, SidebarSession } from "./protocol.ts";
+import type { ClientMessage, DevFrame, InboxTaskJson, ServerMessage, SidebarSession } from "./protocol.ts";
 
 const DEV_CAP = 512;
 
@@ -16,10 +16,11 @@ export interface EtaState {
 	attach: string | null;
 	views: Record<string, SessionView>;
 	dev: Record<string, DevFrame[]>;
+	tasks: InboxTaskJson[];
 	error: string | null;
 }
 
-export const initialEtaState: EtaState = { connected: false, sessions: [], attach: null, views: {}, dev: {}, error: null };
+export const initialEtaState: EtaState = { connected: false, sessions: [], attach: null, views: {}, dev: {}, tasks: [], error: null };
 
 /** Pure reducer, exported for tests: fold one server frame into the state. */
 export function reduceEtaState(state: EtaState, message: ServerMessage): EtaState {
@@ -33,9 +34,11 @@ export function reduceEtaState(state: EtaState, message: ServerMessage): EtaStat
 	}
 	switch (message.type) {
 		case "hello":
-			return { ...state, connected: true, sessions: message.sessions, attach: state.sessions.length > 0 ? state.attach : message.attach, views: {}, dev: {}, error: null };
+			return { ...state, connected: true, sessions: message.sessions, attach: state.sessions.length > 0 ? state.attach : message.attach, views: {}, dev: {}, tasks: message.tasks, error: null };
 		case "sessions":
 			return { ...state, sessions: message.sessions };
+		case "tasks":
+			return { ...state, tasks: message.tasks };
 		case "error":
 			return { ...state, error: message.message };
 		default:

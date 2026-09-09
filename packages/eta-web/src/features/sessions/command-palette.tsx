@@ -31,6 +31,14 @@ export function CommandPalette() {
 				},
 			})),
 			{
+				id: "inbox",
+				label: t("inbox.entry"),
+				run: () => {
+					shell.setPaletteOpen(false);
+					navigate("/inbox");
+				},
+			},
+			{
 				id: "new",
 				label: t("nav.new"),
 				run: () => {

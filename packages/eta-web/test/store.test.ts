@@ -29,16 +29,16 @@ describe("eta store reducer", () => {
 
 	it("hello resyncs sessions and clears stale views", () => {
 		let state = reduceEtaState(initialEtaState, viewFrame("gone", 1));
-		state = reduceEtaState(state, { type: "hello", sessions: [{ name: "fresh", badges: [], personas: ["Thinker"] }], attach: "fresh" });
+		state = reduceEtaState(state, { type: "hello", sessions: [{ name: "fresh", badges: [], personas: ["Thinker"] }], attach: "fresh", tasks: [] });
 		expect(state.views).toEqual({});
 		expect(state.attach).toBe("fresh");
 		expect(state.sessions.map((s) => s.name)).toEqual(["fresh"]);
 	});
 
 	it("keeps a local attach across re-hellos but adopts the first one", () => {
-		let state = reduceEtaState(initialEtaState, { type: "hello", sessions: [{ name: "mine", badges: [], personas: [] }], attach: "mine" });
+		let state = reduceEtaState(initialEtaState, { type: "hello", sessions: [{ name: "mine", badges: [], personas: [] }], attach: "mine", tasks: [] });
 		expect(state.attach).toBe("mine");
-		state = reduceEtaState(state, { type: "hello", sessions: [{ name: "mine", badges: [], personas: [] }], attach: "other" });
+		state = reduceEtaState(state, { type: "hello", sessions: [{ name: "mine", badges: [], personas: [] }], attach: "other", tasks: [] });
 		expect(state.attach).toBe("mine");
 	});
 

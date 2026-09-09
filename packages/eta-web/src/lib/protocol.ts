@@ -36,13 +36,30 @@ export type ClientMessage =
 	| { op: "abort"; session: string }
 	| { op: "answer"; session: string; questionId: string; response: unknown }
 	| { op: "session.create"; name: string; personaId: string; cwd?: string; prompt?: string }
-	| { op: "session.delete"; name: string };
+	| { op: "session.delete"; name: string }
+	| { op: "task.create"; title: string; description: string; targetProject?: string }
+	| { op: "task.approve"; id: string }
+	| { op: "task.dismiss"; id: string }
+	| { op: "task.clearDone" };
+
+export interface InboxTaskJson {
+	id: string;
+	title: string;
+	description: string;
+	status: "pending" | "running" | "needs_input" | "blocked" | "done" | "failed";
+	targetProject: string;
+	source: { channel: string; detail?: string };
+	result?: { status: string; summary: string; completedAt: number };
+	dispatch?: { childSession: string; startedAt: number; finishedAt?: number };
+	events: { at: number; type: string; status: string; message: string }[];
+}
 
 export type ServerMessage =
 	| { channel: "view"; session: string; view: SessionView }
 	| { channel: "agent"; session: string; event: HarnessEvent }
 	| { channel: "dev"; frame: DevFrame }
-	| { type: "hello"; sessions: SidebarSession[]; attach: string | null }
+	| { type: "hello"; sessions: SidebarSession[]; attach: string | null; tasks: InboxTaskJson[] }
+	| { type: "tasks"; tasks: InboxTaskJson[] }
 	| { type: "sessions"; sessions: SidebarSession[] }
 	| { type: "created"; name: string }
 	| { type: "deleted"; name: string }

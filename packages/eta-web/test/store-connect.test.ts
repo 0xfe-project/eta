@@ -7,7 +7,10 @@ class MiniSocket {
 	readyState = 1;
 	private readonly handlers = new Map<string, ((data?: unknown) => void)[]>();
 
-	constructor(public readonly url: string) {
+	readonly url: string;
+
+	constructor(url: string) {
+		this.url = url;
 		MiniSocket.instances.push(this);
 	}
 
