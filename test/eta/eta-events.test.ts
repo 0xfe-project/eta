@@ -202,9 +202,12 @@ describe("D3 durable re-injection", () => {
 		);
 		const prompts: string[] = [];
 		agent.events.on("prompt_assembled", () => undefined);
-		agent.harness.hooks.on("transform_context", (event: { systemPrompt: string }) => {
-			prompts.push(event.systemPrompt);
-		});
+		agent.harness.hooks.on(
+			"transform_context",
+			((event: { systemPrompt: string }) => {
+				prompts.push(event.systemPrompt);
+			}) as never,
+		);
 
 		agent.goal.set("finish the migration");
 		agent.goal.gate = "delegated";

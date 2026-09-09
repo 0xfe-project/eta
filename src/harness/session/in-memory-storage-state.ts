@@ -1,4 +1,5 @@
 import { addUsage, emptyUsage } from "../utils/usage.ts";
+import { spliceMergedChain } from "./merge-splice.ts";
 import {
 	type CommittedListAppendWrite,
 	type CommittedValueSetWrite,
@@ -70,7 +71,7 @@ function compareKeys(left: string, right: string): number {
 }
 
 /**
- * Complete materialized session state for MemoryStorage and JsonlStorage.
+ * Complete materialized session state for MemoryStorage.
  *
  * This is intentionally unsuitable for database backends and long-running sessions that may not fit in memory.
  * Those backends should query indexed durable state and update durable aggregates within each commit transaction.
@@ -282,6 +283,7 @@ export class InMemoryStorageState {
 			entry = this.entries.get(entry.parentId);
 			if (entry === undefined) throw new Error("Corrupt branch: missing parent");
 		}
+		spliceMergedChain(path, (id) => this.entries.get(id));
 		if (query.order === "oldestFirst") path.reverse();
 
 		const stopped: Entry[] = [];
@@ -304,6 +306,7 @@ export class InMemoryStorageState {
 		return this.scanBranch(query).map((entry) => ({
 			id: entry.id,
 			parentId: entry.parentId,
+			...(entry.type === "merge" ? { mergedParentId: entry.mergedParentId } : {}),
 			seq: entry.seq,
 			timestamp: entry.timestamp,
 			type: entry.type,
