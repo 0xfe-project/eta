@@ -52,7 +52,7 @@
 
 ### C2 loop 调度器(built-in,抄 pi-loop 的语义不抄它的架构)
 
-- [~] Trigger:`event | interval` 已落(`src/eta/loops.ts`:contains/regex:/equals filter 语义照抄);cron/dynamic 后续补。**event filter 语法原样抄** `trigger-system.ts:141-155`(substring / `regex:` / JSON 等值)。事件源 = 进程内 bus(`turn_end/tasks_updated/subagents:*`),对应它 `pi.events.on`。
+- [x] Trigger:`event | interval | cron(6 段 UTC,`src/eta/cron.ts`)已落(`src/eta/loops.ts`:contains/regex:/equals filter 语义照抄);cron/dynamic 后续补。**event filter 语法原样抄** `trigger-system.ts:141-155`(substring / `regex:` / JSON 等值)。事件源 = 进程内 bus(`turn_end/tasks_updated/subagents:*`),对应它 `pi.events.on`。
 - [x] **pump 模型照抄**:调度器不自主定时,`pump(now)` 由 turn 边界 + **30s unref 心跳**驱动(session-runtime.ts:13 的注释就是理由:idle 时不 pump 的 loop 永不触发);**jitter** 抄 `loop-parse.computeJitter`;**session generation 计数器**防跨 session 陈旧回调。
 - [x] 生命周期语义:`expiresAt`(默认 7d `DEFAULT_LOOP_TTL_MS`)过期即 dispose;**fire 上限→pause**(controller_limit 语义);trace 深度 ≤8(`MAX_TRACE_DEPTH`)。完成条件:pump/jitter/expiry/cap/event 各一条测试(已达)。
 - [x] 持久化**不抄它的 event-sourced reducer store(956 行)**:registry 进 session KV,纯函数 CRUD + 文件锁即可;`loop-events.ts` 的恢复语义(resume_event_stale)要有。完成条件:未 attach session 到点火、重启全恢复、过期/上限/去重各一条测试。
@@ -70,7 +70,7 @@
 
 - [x] `TaskCreate/List/Get/Update` 已落(`src/eta/task-store.ts`+`tools.ts`):deps 双向边、环/自依赖警告仍存、四态、id 不复用、加载归一化守卫(测过)。共享文件模式锁:lite 先只做 session KV,文件锁后续随多 agent 共享再平移。
 - [x] **transient reminder 整模块抄** `reminder-cadence.ts`(纯函数 CadenceState:turn 计数、工具闲置判定、每周期一次):挂 `after_tool`+`transform_context`(`createReminderHooks`),不落 transcript 不破 cache 前缀。完成条件:cadence 单测已平移;注入不落 transcript(测试只查 hook 输出)。
-- [ ] 丢:widget/settings-menu/auto-clear 管理器/subagent RPC 联动。
+- [x] 丢:widget/settings-menu/auto-clear 管理器/subagent RPC 联动(工具面 `Agent/get_subagent_result/steer_subagent` 已落,`createSubagentTools`)。
 
 ### C5 memory / evo(轻量:`.eta/MEMORY.md`)
 
@@ -87,7 +87,7 @@
 工具面 `Agent / get_subagent_result / steer_subagent`;子 = 独立 EtaAgent session(parent 指针、自带 tools/prompt/model)。工具裁剪抄它的做法:`setActiveToolsByName` + `beforeToolCall` 覆盖(agent-runner.ts:282-300)。
 - [x] **并发池语义照搬**(后台池默认 10、前台单独计、嵌套 bypass 队列、深度 cap——全测过)。
 - [x] depth cap 2 + ownership-scope(越权拒绝、父终态停孙、usage 上卷,测过)。
-- [~] `schedule` 复用 C2 的 `every`/`expiresAt` 格式;6 段 cron 未平移。**RPC 信封抄它的 requestId+reply-topic 模式**(`subagents:rpc:spawn|stop|consume` 语义),给桥接留锚。
+- [x] `Schedule` 工具复用 C2 的 `every`/`cron`/`expiresAt` 格式(`src/eta/tools.ts createScheduleTool`,一次性 maxRuns=1)。**RPC 信封抄它的 requestId+reply-topic 模式**(`subagents:rpc:spawn|stop|consume` 客户端/服务端两半 + steer/steered 事件,`src/eta/subagent.ts`,测过)。
 - [x] 完成/失败发 `subagents:completed|failed` 总线事件;turn-limit「警告→硬停」测过。丢:widget/FleetView/@mention/SubagentWorkflow/worktree/memory 三 scope。
 
 ### C8 btw 旁路通道(built-in,抄 pi-btw 的机制,丢它的 overlay)
