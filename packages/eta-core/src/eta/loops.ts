@@ -84,19 +84,22 @@ export interface PumpResult {
 	paused: string[];
 }
 
+export interface LoopSchedulerOptions {
+	/** Turn a due loop into the followUp text handed to the run boundary. */
+	followUpFor(spec: LoopSpec): string;
+	/** Persist one registry value (session KV `eta.loop.state.<id>`). */
+	persist?(spec: LoopSpec): void;
+}
+
 export class LoopScheduler {
 	private loops = new Map<string, LoopSpec>();
 	/** Bumped whenever a session attaches so stale callbacks from the old session can't pump. */
 	generation = 0;
+	private readonly opts: LoopSchedulerOptions;
 
-	constructor(
-		private readonly opts: {
-			/** Turn a due loop into the followUp text handed to the run boundary. */
-			followUpFor(spec: LoopSpec): string;
-			/** Persist one registry value (session KV `eta.loop.state.<id>`). */
-			persist?(spec: LoopSpec): void;
-		},
-	) {}
+	constructor(opts: LoopSchedulerOptions) {
+		this.opts = opts;
+	}
 
 	attach(): void {
 		this.generation += 1;
