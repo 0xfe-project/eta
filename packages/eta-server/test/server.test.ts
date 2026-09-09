@@ -152,3 +152,27 @@ describe("ws protocol", () => {
 		});
 	});
 });
+
+describe("sidebar ops", () => {
+	it("session.rename, pin and personaSet update the sidebar and view", async () => {
+		await withServer(async (server) => {
+			const { socket, reader } = await connect(server);
+			await reader.next();
+			send(socket, { op: "session.create", name: "ops-1", personaId: "Thinker" });
+			await reader.until((m): m is Extract<ServerMessage, { type: "created" }> => "type" in m && m.type === "created");
+			send(socket, { op: "session.rename", session: "ops-1", title: "Renamed" });
+			send(socket, { op: "session.pin", session: "ops-1", pinned: true });
+			send(socket, { op: "personaSet", session: "ops-1", personaId: "INSIGHTER" });
+			const sessions = await reader.until(
+				(m): m is Extract<ServerMessage, { type: "sessions" }> => "type" in m && m.type === "sessions" && m.sessions.some((row) => row.name === "ops-1" && row.title === "Renamed" && row.pinned === true),
+			);
+			const row = sessions.sessions.find((candidate) => candidate.name === "ops-1");
+			expect(typeof row?.updated).toBe("number");
+			expect(typeof row?.cwd).toBe("string");
+			await reader.until(
+				(m): m is Extract<ServerMessage, { channel: "view" }> => "channel" in m && m.channel === "view" && "session" in m && m.session === "ops-1" && "personas" in m.view && m.view.personas.includes("INSIGHTER"),
+			);
+			socket.close();
+		});
+	});
+});

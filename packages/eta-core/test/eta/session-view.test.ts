@@ -27,6 +27,29 @@ describe("SessionView projector", () => {
 		expect(view.prompt!.stableChars).toBeGreaterThanOrEqual("you are eta".length + "PILOT CARD TEXT".length);
 	});
 
+	it("applyPersona swaps the persona card and rebuilds prompt blocks mid-session", async () => {
+		const faux = fauxProvider();
+		faux.setResponses([fauxAssistantMessage([fauxText("one")]), fauxAssistantMessage([fauxText("two")])]);
+		const models = createModels();
+		models.setProvider(faux.provider);
+		const session = new StorageBackedSession({ id: "eta-persona-swap", createdAt: Date.now(), storageVersion: 1 }, new MemoryStorage());
+		const agent = await EtaAgent.create(
+			{ session, models, model: faux.getModel(), baseSystemPrompt: "you are eta", persona: { names: ["Thinker"], text: "OLD CARD TEXT AAAAAAAAAAAAAAAA" }, heartbeatMs: 0 },
+			CTX,
+		);
+		const projector = new SessionViewProjector(agent);
+		await agent.lane.prompt("go", undefined, CTX);
+		expect((await projector.snapshot(CTX)).personas).toEqual(["Thinker"]);
+		const stableBefore = (await projector.snapshot(CTX)).prompt!.stableChars;
+		agent.applyPersona({ names: ["pilot"], text: "NEW" });
+		await agent.refreshPromptBlocks();
+		const swapped = await projector.snapshot(CTX);
+		expect(swapped.personas).toEqual(["pilot"]);
+		expect(stableBefore - swapped.prompt!.stableChars).toBeGreaterThanOrEqual(15);
+		await agent.lane.prompt("again", undefined, CTX);
+		expect((await projector.snapshot(CTX)).personas).toEqual(["pilot"]);
+	});
+
 	it("two attached front-ends converge to the same view", async () => {
 		const faux = fauxProvider();
 		faux.setResponses([

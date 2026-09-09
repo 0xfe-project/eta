@@ -70,8 +70,8 @@
 - [x] W5.2 后台会话事件镜像:侧栏未读点(view 帧消息数增长且非 attach)+ running badge;focus/点击清未读(reducer 有单测)。
 - [x] W5.3 Context 面板 usage 分段条(输入/输出/缓存读/缓存写比例)+ 就地 Compact + "请求已接受 vs 真完成"协调器(compactionEpoch 追踪 + 15s 兜底)。
 - [x] W5.4 回合文件 chip:assistant 回合末尾从 toolCall 参数(path/file_path/file)聚合去重成 chip,点击弹预览(`GET /api/file`,200KB 截断、cwd 越界防护)。
-- [x] W5.5 排队消息 pill:composer 上方逐条(乐观入队,出现在 timeline user 流后自动消失)。展示型;可改/删未做。
-- [x] W5.6 侧栏增强:PINNED/RECENT/ARCHIVED(折叠)分组 + server 全文搜索(带片段扫 timeline)+ hover pin/archive/delete。行内改名未做(标题=自动)。
+- [x] W5.5 排队消息 pill:composer 上方逐条(乐观入队,出现在 timeline user 流后自动消失)。chip 点击 = queueRemove 撤销(view.queue 驱动,server queue_update 真源)。
+- [x] W5.6 侧栏增强:PINNED/RECENT/ARCHIVED(折叠)分组 + server 全文搜索(带片段扫 timeline);PINNED/RECENT/ARCHIVED 已升级为 PROJECTS 分组(见 D 组条目),行 `⋯` 菜单含重命名(⋯ → prompt → session.rename,标题覆盖自动标题)。
 - [x] W5.7 自动会话标题:启发式=首条用户消息前 60 字符(server 端,零额外回合);pin 状态 server meta 持久。
 - [x] W5.8 >4KB 粘贴自动落盘 session cwd(`POST /api/paste`,`.eta-paste-*.txt`)并替换成 `@file` 引用;失败回退原文粘贴。
 - [x] W5.9 ask 模态只对前台 session 渲染(后台提问不弹模态,侧栏 ask badge 提示;取答案走 AskRegistry 队列)。
