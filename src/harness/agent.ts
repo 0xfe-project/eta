@@ -14,7 +14,7 @@ import { loopFollowUp } from "../prompts/index.ts";
 import { loopState, loopStateInventoryPrefix, taskState, type Value } from "./session/values.ts";
 import type { PendingEntry, StoredTask, TaskStatus } from "./session/types.ts";
 import { applyGoalEntries } from "./goal.ts";
-import type { AgentHarnessTool } from "./types.ts";
+import type { AgentHarnessTool, ExecutionEnv } from "./types.ts";
 import type { Session } from "./session/types.ts";
 import type { EtaEmit } from "./events.ts";
 import { composeEtaSystemPrompt, etaPromptBlockChars, etaPromptSectionsDetailed, type EtaPromptSection } from "./composer.ts";
@@ -32,7 +32,11 @@ import {
 	createScheduleTool,
 	createStateTools,
 	createSubagentTools,
+	createBashTool,
+	createEditTool,
+	createReadTool,
 	createTaskTools,
+	createWriteTool,
 	type StateKV,
 } from "./tools/index.ts";
 
@@ -41,6 +45,8 @@ export interface EtaAgentOptions {
 	models: Models;
 	model: Model<Api>;
 	laneName?: string;
+	/** Filesystem/shell environment for the default execution tools (read/write/edit/bash); tools omitted when absent. */
+	executionEnv?: ExecutionEnv;
 	baseSystemPrompt?: string;
 	/** Persona cards baked into the stable prompt block (renderPersonaBlock output). */
 	persona?: { names: string[]; text: string };
@@ -249,6 +255,9 @@ export class EtaAgent {
 
 		const agentTools: AgentHarnessTool<object | undefined>[] = [
 			...createTaskTools(tasks, emit),
+			...(options.executionEnv === undefined
+				? []
+				: [createReadTool(), createWriteTool(), createEditTool(), createBashTool()]),
 			...createStateTools(kv, emit),
 			...createLoopTools(loops),
 			...createScheduleTool(loops),
@@ -285,6 +294,7 @@ export class EtaAgent {
 				model: options.model,
 				...(systemPrompt === undefined ? {} : { systemPrompt }),
 				activeToolNames: [...new Set(agentTools.map((tool) => tool.name))],
+			...(options.executionEnv === undefined ? {} : { toolContext: { env: options.executionEnv } }),
 				tools: [...agentTools, ...(options.tools ?? [])],
 			},
 			context,

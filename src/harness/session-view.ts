@@ -74,6 +74,8 @@ export interface SessionView {
 	tokensPerSec: number;
 	/** Configured model as "provider:modelId"; drives the composer model picker. */
 	model: string;
+	/** Tools the harness will execute this session: name + description for the inspector. */
+	tools: { name: string; description: string }[];
 	/** Messages waiting in the lane queue (follow-up/steer); the host stamps these from lane events. */
 	queue: { entryId: string; kind: string; text: string }[];
 	/** Working directory of the session; the host stamps it. */
@@ -174,6 +176,7 @@ export class SessionViewProjector {
 			prompt: this.agent.lastPromptBlocks,
 			tokensPerSec: this.agent.tokensPerSec,
 			model: modelLabel,
+			tools: this.agent.agentTools.map((tool) => ({ name: tool.name, description: tool.description })),
 			queue: [],
 			...(this.inFlight === undefined ? {} : { streaming: this.inFlight }),
 		};
