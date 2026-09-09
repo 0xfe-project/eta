@@ -168,3 +168,61 @@ describe("EtaAgent integrates batteries on the main bus", () => {
 		void session.close(CTX);
 	});
 });
+
+describe("D3 durable re-injection", () => {
+	it("goal, tasks, and memory blocks survive compaction", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "eta-d3-"));
+		dirs.push(dir);
+		const db = await createNodeSqliteFactory().open(join(dir, "m.db"));
+		await applyInitialSchema(db);
+		sql`INSERT INTO sessions
+			(id, created_at, parent_session_id, storage_version, metadata, message_count, usage_payload, next_seq)
+			VALUES (${"eta-main"}, ${Date.now()}, ${null}, ${SQLITE_STORAGE_VERSION}, ${null}, ${0}, ${JSON.stringify(EMPTY_USAGE)}, ${1})`.run(db);
+		const storage = new SqliteStorage(db, { sessionId: "eta-main", now: () => Date.now() });
+
+		const faux = fauxProvider();
+		faux.setResponses([
+			fauxAssistantMessage("first turn"),
+			fauxAssistantMessage("compact summary of the old part"),
+			fauxAssistantMessage("second turn"),
+		]);
+		const models = createModels();
+		models.setProvider(faux.provider);
+		const session = new StorageBackedSession({ id: "eta-main", createdAt: Date.now(), storageVersion: SQLITE_STORAGE_VERSION }, storage);
+		const agent = await EtaAgent.create(
+			{
+				session,
+				models,
+				model: faux.getModel(),
+				baseSystemPrompt: "you are eta",
+				memorySource: () => "<memory>\n[untrusted notes collected earlier]\n## decision\n- use bun\n</memory>",
+				heartbeatMs: 0,
+			},
+			CTX,
+		);
+		const prompts: string[] = [];
+		agent.events.on("prompt_assembled", () => undefined);
+		agent.harness.hooks.on("transform_context", (event: { systemPrompt: string }) => {
+			prompts.push(event.systemPrompt);
+		});
+
+		agent.goal.set("finish the migration");
+		agent.goal.gate = "delegated";
+		await agent.lane.prompt("start", undefined, CTX);
+		const store = agent.tasks;
+		const created = store.create("run the tests", {});
+		expect(created.task.id).toBe("t1");
+
+		await agent.lane.compact(undefined, CTX);
+		await agent.lane.prompt("continue", undefined, CTX);
+
+		const last = prompts[prompts.length - 1]!;
+		expect(last).toContain("finish the migration");
+		expect(last).toContain("run the tests");
+		expect(last).toContain("use bun");
+		expect(last.indexOf("you are eta")).toBeLessThan(last.indexOf("use bun"));
+
+		await agent.close(CTX);
+		void session.close(CTX);
+	});
+});
