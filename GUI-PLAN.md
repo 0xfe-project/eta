@@ -96,7 +96,3 @@
 ## 6. 明确不做
 
 Electron/webview/远端渲染;extension dock(pi-gui 的文本协议——eta 无 extension,天然无此项);多窗口;marketplace/主题商店;Windows/Linux day-0(pi-gui 也没承诺 win,先 macOS,Linux 跟进,i18n 无)。
-
-## 7. 风险
-
-gpuix 演进快 → **vendored fork + pin submodule**(remorses/zed@branch gpuix),两个补丁走上游 PR 降低漂移成本;gpui-terminal 依赖 crates.io gpui 与 fork 对齐是 G0 唯一的 native 风险,解不开就砍终端面板(其余面板零依赖它);自建 native 三平台 CI 贵 → day-0 只保 macOS arm64。

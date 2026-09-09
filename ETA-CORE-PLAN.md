@@ -102,7 +102,7 @@
 ## Prompt 资产(old/eta-system-prompts 全量平移,按此修)
 
 - [x] P1 `base/goal/evo/todo/resume` 原样搬(行为契约都是对着真实失败模式写的,不许重写);persona 独立成电池,见 C9。完成条件:老 prompt 文本逐字进 TS 常量,有快照测试锁文本。
-- [ ] P2 摘要改**双 prompt 增量模式**:抄上游 `UPDATE_SUMMARIZATION_PROMPT`(compaction.ts:455+)——首次全量 + 后续只喂新消息 delta 更新,替换现在每次从头重摘。
+- [x] P2 摘要改**双 prompt 增量模式**:抄上游 `UPDATE_SUMMARIZATION_PROMPT`(compaction.ts:455+)——首次全量 + 后续只喂新消息 delta 更新,替换现在每次从头重摘(机制在 prepareCompaction→previousSummary→UPDATE prompt,增量测于 test/eta/summary-incremental.test.ts)。
 - [x] P3 三处修正:SUMMARIZE_SYSTEM_PROMPT 补上游那句反延续 guard("Do NOT continue the conversation…");evaluator 从 "YES or NO only" 升级为要求先给一条 evidence 再判;`SUMMARIZE_REQUEST` 吸收上游的 "(none)" 逃生舱写法防硬凑。完成条件:guard/evidence/(none) 三处已进常量,快照已更新锁文本。
 
 ### C9 persona 系统(built-in,老 persona.rs + PROMPT_GUIDE.md 的 TS 化)
