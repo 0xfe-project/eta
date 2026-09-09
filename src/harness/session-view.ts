@@ -73,6 +73,8 @@ export interface SessionView {
 	tokensPerSec: number;
 	/** Configured model as "provider:modelId"; drives the composer model picker. */
 	model: string;
+	/** Messages waiting in the lane queue (follow-up/steer); the host stamps these from lane events. */
+	queue: { entryId: string; kind: string; text: string }[];
 }
 
 export type ViewListener = (view: SessionView) => void;
@@ -166,6 +168,7 @@ export class SessionViewProjector {
 			prompt: this.agent.lastPromptBlocks,
 			tokensPerSec: this.agent.tokensPerSec,
 			model: modelLabel,
+			queue: [],
 		};
 	}
 
