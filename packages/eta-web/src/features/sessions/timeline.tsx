@@ -35,7 +35,7 @@ export function Timeline({ view, session, running = false }: { view: SessionView
 			<div ref={scroller} onScroll={onScroll} data-testid="timeline" className="h-full overflow-y-auto px-4 py-3">
 				{view.messages.length === 0 && view.systems.length === 0 ? <p className="p-4 text-sm text-muted">{t("timeline.empty")}</p> : null}
 				{view.systems.map((row) => (
-					<div key={row.entryId} data-testid="system-row" className="mono mx-auto my-2 w-fit bg-overlay px-3 py-1 text-[11px] text-muted">
+					<div key={row.entryId} data-testid="system-row" className="system-message mono mx-auto my-2 w-fit bg-overlay px-3 py-1 text-[11px] text-muted">
 						{t(`system.${row.kind}`, row.args)}
 						{row.args.objective ?? row.args.question ?? row.args.note ?? row.args.summary ? <span className="ml-1 text-muted">{row.args.objective ?? row.args.question ?? row.args.note ?? row.args.summary}</span> : null}
 					</div>
@@ -85,8 +85,8 @@ function MessageRow({ role, message, session, streaming = false }: { role: strin
 	const blocks = contentBlocks(content);
 	if (role === "user") {
 		return (
-			<div className="my-2 flex justify-end" data-testid="user-message">
-				<div className="max-w-[80%] bg-accent px-3 py-2 text-sm text-accent-foreground" style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}>
+			<div className="message user my-2 flex justify-end" data-testid="user-message">
+				<div className="message-content max-w-[80%] bg-accent px-3 py-2 text-sm text-accent-foreground" style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}>
 					{blocks.map((block, index) => (block.type === "text" ? <span key={index}>{String(block.text ?? "")}</span> : null))}
 				</div>
 			</div>
@@ -108,16 +108,16 @@ function MessageRow({ role, message, session, streaming = false }: { role: strin
 				.filter((value): value is string => value !== null),
 		)];
 		return (
-			<div className="my-2" data-testid="assistant-message">
+			<div className="message assistant my-2" data-testid="assistant-message">
 				{blocks.map((block, index) => {
 					if (block.type === "text") {
 						return <MessageMarkdown key={index} text={String(block.text ?? "")} streaming={streaming} />;
 					}
 					if (block.type === "thinking") {
 						return (
-							<details key={index} className="my-1 border border-border text-xs text-muted">
-								<summary className="cursor-pointer px-2 py-1">thinking</summary>
-								<pre className="mono whitespace-pre-wrap px-2 pb-2">{String(block.thinking ?? "")}</pre>
+							<details key={index} className="thinking-block my-1 border border-border text-xs text-muted">
+								<summary className="thinking-toggle cursor-pointer px-2 py-1">thinking</summary>
+								<pre className="thinking-content mono whitespace-pre-wrap px-2 pb-2">{String(block.thinking ?? "")}</pre>
 							</details>
 						);
 					}
@@ -125,19 +125,19 @@ function MessageRow({ role, message, session, streaming = false }: { role: strin
 						const callId = String(block.id ?? "");
 						const args = block.arguments ?? block.args ?? {};
 						return (
-							<details key={index} data-testid={`tool-row-${String(block.name ?? "")}`} className="my-1 border border-border">
+							<details key={index} data-testid={`tool-row-${String(block.name ?? "")}`} className="tool-card my-1 border border-border">
 								<summary className="cursor-pointer px-2 py-1 text-xs">
 									<span className="mono text-accent">{String(block.name ?? "?")}</span>
 									<span className="ml-2 text-muted">{summarize(args)}</span>
 								</summary>
-								<pre className="mono max-h-60 overflow-auto bg-code-bg px-2 py-1 text-[11px]">{JSON.stringify(args, null, 2)}</pre>
+								<pre className="tool-args mono max-h-60 overflow-auto bg-code-bg px-2 py-1 text-[11px]">{JSON.stringify(args, null, 2)}</pre>
 							</details>
 						);
 					}
 					return null;
 				})}
 				{touched.length > 0 ? (
-					<div data-testid="turn-file-chips" className="mt-1 flex flex-wrap gap-1">
+					<div data-testid="turn-file-chips" className="turn-file-chips mt-1 flex flex-wrap gap-1">
 						{touched.map((path) => (
 							<button
 								key={path}
@@ -150,7 +150,7 @@ function MessageRow({ role, message, session, streaming = false }: { role: strin
 										})
 										.catch(() => undefined);
 								}}
-								className="mono border border-border px-2 py-0.5 text-[10px] text-muted hover:text-foreground"
+								className="turn-file-chip mono border border-border px-2 py-0.5 text-[10px] text-muted hover:text-foreground"
 							>
 								{path}
 							</button>
@@ -159,7 +159,7 @@ function MessageRow({ role, message, session, streaming = false }: { role: strin
 				) : null}
 				{preview !== null ? (
 					<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" data-testid="file-preview" onClick={() => setPreview(null)}>
-						<div className="max-h-[80vh] w-full max-w-[720px] overflow-auto border border-border bg-elevated p-3" onClick={(event) => event.stopPropagation()}>
+						<div className="dialog max-h-[80vh] w-full max-w-[720px] overflow-auto" onClick={(event) => event.stopPropagation()}>
 							<div className="mb-2 flex items-center gap-2">
 								<span className="mono text-xs">{preview.path}</span>
 								<button data-testid="file-preview-close" onClick={() => setPreview(null)} className="ml-auto border border-border px-2 py-0.5 text-[10px] text-muted">
@@ -176,7 +176,7 @@ function MessageRow({ role, message, session, streaming = false }: { role: strin
 	if (role === "toolResult" || role === "tool") {
 		const result = message as unknown as ToolResultLike;
 		return (
-			<details className="my-1 ml-4 border border-border text-xs" data-testid={`tool-result-${result.toolCallId ?? ""}`}>
+			<details className="tool-card my-1 ml-4 border border-border text-xs" data-testid={`tool-result-${result.toolCallId ?? ""}`}>
 				<summary className={`cursor-pointer px-2 py-1 ${result.isError === true ? "text-danger" : "text-muted"}`}>{result.isError === true ? "failed" : "done"}</summary>
 				<pre className="mono max-h-60 overflow-auto bg-code-bg px-2 py-1 text-[11px]">{renderContent(result.content)}</pre>
 			</details>

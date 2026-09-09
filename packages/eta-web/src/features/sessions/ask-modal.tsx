@@ -37,8 +37,8 @@ export function AskModal({ session, view, visible = true }: { session: string; v
 
 	return (
 		<div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-3 sm:items-center" data-testid="ask-modal">
-			<div className="w-full max-w-[480px] border border-border bg-elevated p-4 shadow-[var(--shadow)]">
-				<p data-testid="ask-question" className="text-sm font-medium">
+			<div className="dialog w-full max-w-[480px]">
+				<p data-testid="ask-question" className="dialog-message text-sm font-medium">
 					{ask.question}
 				</p>
 				{seconds !== undefined ? <p data-testid="ask-countdown" className="mt-1 text-[11px] text-warning">{t("ask.seconds", { seconds })}</p> : null}
