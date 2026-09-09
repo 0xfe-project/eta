@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import * as prompts from "../../src/eta/prompts.ts";
+import * as prompts from "../../src/prompts/index.ts";
 
 describe("prompt assets are locked", () => {
 	it("matches snapshots (verbatim ports; change only with a plan entry)", () => {
