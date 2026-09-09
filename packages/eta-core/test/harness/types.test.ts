@@ -395,6 +395,8 @@ it("covers Part 5 results, events, hooks, snapshots, tools, and stream options",
 	>();
 	expectTypeOf<CancelKind>().toEqualTypeOf<"cancelled" | "already_consumed" | "not_found">();
 	expectTypeOf<HarnessEvent["type"]>().toEqualTypeOf<
+		| "eta"
+		| "prompt_assembled"
 		| "run_start"
 		| "run_resume"
 		| "run_suspend"

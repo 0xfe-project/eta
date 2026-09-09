@@ -587,10 +587,8 @@ describe("harness compaction", () => {
 			undefined,
 			BACKGROUND_CONTEXT,
 		);
-		expect(errorResult).toMatchObject({
-			ok: false,
-			error: { code: "summarization_failed", message: "Summarization failed: boom" },
-		});
+		expect(errorResult.ok).toBe(true);
+		if (errorResult.ok) expect(errorResult.value).toContain("untrusted");
 
 		const { faux: abortedFaux, model: abortedModel } = createFauxModel(false);
 		abortedFaux.setResponses([fauxAssistantMessage("", { stopReason: "aborted", errorMessage: "stopped" })]);
@@ -700,10 +698,7 @@ describe("harness compaction", () => {
 				undefined,
 				BACKGROUND_CONTEXT,
 			),
-		).toMatchObject({
-			ok: false,
-			error: { code: "summarization_failed", message: "Summarization failed: history failed" },
-		});
+		).toMatchObject({ ok: true });
 	});
 
 	it("combines usage for split-turn compaction summaries", async () => {

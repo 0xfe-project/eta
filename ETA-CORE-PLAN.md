@@ -33,6 +33,7 @@
 
 > **组装管线(已核实)**:pi 每次 generation 现算 `systemPrompt`(string 或 fn,`drive/generation.ts:58-65`),随后 `transform_context` hook 可改写 `{messages, systemPrompt}`,再 `before_payload`。fork 自带完整 `HookMap`(before_run / before_drive / before_run_end{followUp?} / transform_context / before_request / before_payload / after_response / before_tool / after_tool / before_compaction / before_navigation,`agent-harness.ts:430-502`)。
 > **手术=挂 hook 优先**:S1 用 `before_run_end` 的 `followUp` 注入 driver;S3 用 `before_tool`(doom)+ `after_response`(tail/similar→下一 turn `transform_context` 注 RESUME_LOOP);S4 用 `before_tool` block(fail-closed);C4 reminder 用 `transform_context`(<system-reminder> 不落 transcript)。`<current_tasks>`/goal guidelines 一律走 `src/eta/composer.ts` 包的 systemPrompt fn,不碰 drive。只有 S2(空响应)必须动 `drive/response.ts`。
+> **单一事件流(整合,反插件化)**:`HarnessEvent` 是唯一事件总线——不再有独立 dev bus / bridge / 第二订阅通道。事件 union 新增一等变体 `eta {category, action, data}`(电池直接发进主总线,与 turn/tool/usage 同流同序同 lane 标签)与 `prompt_assembled`(generation 原生发)。生命周期/turn/usage/tool/retry/compaction 类别 = 原生事件本身。`EtaAgent` 整合门面:电池(goal/tasks/loops/ask/btw/memory/persona)= agent 内部状态,由它统一构造并接线;对外只有一套 harness、一条事件流、一份 entry log(customTypes 早已在主 entry 流里)。
 
 - [~] S1 **driver 队列**(goal driver 与 loop driver 均走 `before_run_end.followUp`,`src/eta/run-end.ts`):goal 续命与 loop 触发是「turn 边界优先消费的 driver」,不是普通 inbox 消息;dequeue 顺序 driver > had_tools > break(老 B2 语义)。完成条件:两个 driver 各一条集成测试。
 - [x] S2 **空响应重试**:不动 `drive/response.ts`(well-formed 空答上游不重试是正确的);`src/eta/run-end.ts emptyResponseGuard` 挂 `before_run_end`,空 stop → RESUME_EMPTY followUp,预算 2 次,真实回答即复位。完成条件:已测(含复位)。
@@ -122,7 +123,7 @@
 
 ## Part E:observability
 
-- [x] telemetry category 对齐老 14 类 + 电池扩展(`loop: fired/paused/expired/suppressed`、`ask: asked/answered/expired`、`btw: opened/injected/summarized/saved`)。完成条件:混合 turn 全类别可观测,内存实现测过。
+- [x] telemetry category 对齐老 14 类 + 电池扩展(重构:类别走主事件总线 `eta` 变体,无独立 bus/bridge;`EtaAgent` 统一接线)(`loop: fired/paused/expired/suppressed`、`ask: asked/answered/expired`、`btw: opened/injected/summarized/saved`)。完成条件:混合 turn 全类别可观测,内存实现测过。
 
 ## Part F:验证(GUI-PLAN.md 的 G 系列并入,day-0 起 GUI 就是 harness)
 

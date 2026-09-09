@@ -17,6 +17,7 @@ import type { AgentMessage, AgentToolResult, QueueMode, ThinkingLevel } from "..
 import type { BranchPreparation, BranchSummaryResult } from "./compaction/branch-summarization.ts";
 import type { CompactionPreparation, CompactionSettings, CompactResult } from "./compaction/compaction.ts";
 import type { Context } from "./context.ts";
+import type { EtaEventPayload, PromptAssembledPayload } from "./eta-events.ts";
 import type {
 	Closed,
 	InvalidMessage,
@@ -253,6 +254,8 @@ export interface SessionSnapshot {
 }
 
 export type HarnessEventPayload =
+	| EtaEventPayload
+	| PromptAssembledPayload
 	| { type: "run_start"; runId: string; startedAt: number }
 	| { type: "run_resume"; runId: string }
 	| { type: "run_suspend"; runId: string; reason: "deferred"; deferred: DeferredHandle; poll: number }
@@ -558,6 +561,8 @@ export interface AgentLane {
 		context: Context,
 	): Promise<NavigationResult>;
 	resume(context: Context): Promise<ResumeResult>;
+	/** Publish battery/observation events on the main bus, ordered with the lane's own events. */
+	publish(events: readonly EtaEventPayload[], context: Context): Promise<void>;
 	abort(context: Context): Promise<AbortResult>;
 	steer(message: string | AgentMessage, images: ImageContent[] | undefined, context: Context): Promise<QueueResult>;
 	followUp(message: string | AgentMessage, images: ImageContent[] | undefined, context: Context): Promise<QueueResult>;

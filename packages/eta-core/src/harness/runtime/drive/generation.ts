@@ -118,6 +118,19 @@ async function prepareGeneration<TContext extends object | undefined>(
 		beforeRequest?.streamOptions === undefined
 			? generation.generationContext.streamOptions
 			: applyStreamOptionsPatch(generation.generationContext.streamOptions, beforeRequest.streamOptions);
+	await lane.emitBatch(
+		[
+			{
+				type: "prompt_assembled",
+				lane: lane.name,
+				runId: drive.operationId,
+				systemPromptChars: systemPrompt.length,
+				messages: messages.value.length,
+				attempt: generation.nextAttempt,
+			},
+		],
+		drive.context,
+	);
 	return {
 		kind: "ready",
 		model,
