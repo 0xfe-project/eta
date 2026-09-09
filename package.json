@@ -6,8 +6,8 @@
 		"packages/*"
 	],
 	"scripts": {
-		"test": "bun run --cwd packages/eta-core test && bun run --cwd packages/eta-storage-sqlite test",
-		"typecheck": "bun run --cwd packages/eta-core typecheck"
+		"test": "bun run --cwd packages/eta-core test && bun run --cwd packages/eta-storage-sqlite test && bun run --cwd packages/eta-server test",
+		"typecheck": "bun run --cwd packages/eta-core typecheck && bun run --cwd packages/eta-server typecheck"
 	},
 	"dependencies": {
 		"@anthropic-ai/sdk": "0.124.0",
