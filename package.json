@@ -1,0 +1,19 @@
+{
+	"name": "@eta/server",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"start": "bun src/main.ts",
+		"test": "bun test test",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@eta/core": "workspace:*",
+		"@earendil-works/pi-ai": "0.85.1"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.2.0",
+		"typescript": "^5.8.0"
+	}
+}
