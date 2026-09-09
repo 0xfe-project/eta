@@ -167,7 +167,6 @@ export * from "./harness/cron.ts";
 export * from "./harness/ask.ts";
 export * from "./harness/composer.ts";
 export * from "./harness/memory.ts";
-export * from "./harness/permission.ts";
 export * from "./harness/subagent.ts";
 export * from "./harness/tasks.ts";
 export * from "./harness/eta-events.ts";
