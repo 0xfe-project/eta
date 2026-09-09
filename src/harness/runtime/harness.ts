@@ -23,7 +23,7 @@ import { branchTip, deleteValue, entryLabel, laneConfig, laneState, sessionName,
 import type { AgentHarnessStreamOptions, AgentHarnessTool } from "../types.ts";
 import { Lane } from "./lane.ts";
 import { readLaneStorage, restoreLaneState, restoreSession } from "./restore.ts";
-import { type Config, type LaneState, SliceNotImplemented } from "./types.ts";
+import { type Config, type LaneState } from "./types.ts";
 
 /** Runtime implementation of AgentHarness. The harness manages lanes but is not itself a lane. */
 export class Harness<TContext extends object | undefined> implements AgentHarness<TContext> {
@@ -302,9 +302,6 @@ export class Harness<TContext extends object | undefined> implements AgentHarnes
 		);
 	}
 
-	async watchSession(_context: Context): Promise<never> {
-		throw new SliceNotImplemented("watchSession");
-	}
 
 	fault(cause: unknown, context: Context): Error {
 		if (this.faultError !== undefined) return this.faultError;

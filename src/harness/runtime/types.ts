@@ -15,13 +15,6 @@ import type {
 } from "../session/types.ts";
 import type { AgentHarnessStreamOptions, AgentHarnessTool } from "../types.ts";
 
-export class SliceNotImplemented extends Error {
-	constructor(operation: string) {
-		super(`${operation} is not implemented until its later AgentHarness slice`);
-		this.name = "SliceNotImplemented";
-	}
-}
-
 /** Current process-local harness configuration. */
 export interface Config<TContext extends object | undefined> {
 	readonly tools: AgentHarnessTool<TContext>[];

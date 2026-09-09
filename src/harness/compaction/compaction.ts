@@ -1,6 +1,8 @@
 import { SUMMARIZATION_PROMPT, SUMMARIZATION_SYSTEM_PROMPT, TURN_PREFIX_SUMMARIZATION_PROMPT, UPDATE_SUMMARIZATION_PROMPT } from "../../prompts/compaction.ts";
 export { SUMMARIZATION_SYSTEM_PROMPT };
 import { dropToolPairs, untrustedFallback } from "./eta-compaction.ts";
+import type { CompactionPreparation, CompactionSettings, FileOperations } from "../session/types.ts";
+export type { CompactionPreparation, CompactionSettings, FileOperations } from "../session/types.ts";
 import {	isRetryableAssistantError,
 	type Context as AiContext,
 	type Api,
@@ -26,7 +28,6 @@ import {
 	computeFileLists,
 	createFileOps,
 	extractFileOpsFromMessage,
-	type FileOperations,
 	formatFileOperations,
 	serializeConversation,
 } from "./utils.ts";
@@ -147,15 +148,6 @@ export async function completeSimpleWithRetries(
 }
 
 /** Compaction thresholds and retention settings. */
-export interface CompactionSettings {
-	/** Enable automatic compaction decisions. */
-	enabled: boolean;
-	/** Tokens reserved for summary prompt and output. */
-	reserveTokens: number;
-	/** Approximate recent-context tokens to keep after compaction. */
-	keepRecentTokens: number;
-}
-
 /** Default compaction settings used by the harness. */
 export const DEFAULT_COMPACTION_SETTINGS: CompactionSettings = {
 	enabled: true,
@@ -553,25 +545,6 @@ export async function generateSummaryWithRequest(
 }
 
 /** Prepared inputs for a compaction run. */
-export interface CompactionPreparation {
-	/** Messages summarized into the history summary. */
-	messagesToSummarize: AgentMessage[];
-	/** Prefix messages summarized separately when compaction splits a turn. */
-	turnPrefixMessages: AgentMessage[];
-	/** Recent messages retained after compaction and stored on the compaction entry. */
-	retainedTail: AgentMessage[];
-	/** Whether compaction splits a turn. */
-	isSplitTurn: boolean;
-	/** Estimated context tokens before compaction. */
-	tokensBefore: number;
-	/** Previous compaction summary used for iterative updates. */
-	previousSummary?: string;
-	/** File operations extracted from summarized history. */
-	fileOps: FileOperations;
-	/** Settings used to prepare compaction. */
-	settings: CompactionSettings;
-}
-
 /** Prepare session entries for compaction, or return undefined when compaction is not applicable. */
 export function prepareCompaction(
 	pathEntries: Entry[],

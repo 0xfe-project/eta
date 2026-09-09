@@ -25,7 +25,6 @@ import {
 	computeFileLists,
 	createFileOps,
 	extractFileOpsFromMessage,
-	type FileOperations,
 	formatFileOperations,
 	serializeConversation,
 } from "./utils.ts";
@@ -46,18 +45,10 @@ export interface BranchSummaryDetails {
 	modifiedFiles: string[];
 }
 
-export type { FileOperations } from "./utils.ts";
+import type { BranchPreparation, FileOperations } from "../session/types.ts";
+export type { BranchPreparation, FileOperations } from "../session/types.ts";
 
 /** Prepared branch content for summarization. */
-export interface BranchPreparation {
-	/** Messages selected for the branch summary. */
-	messages: AgentMessage[];
-	/** File operations extracted from the branch. */
-	fileOps: FileOperations;
-	/** Estimated token count for selected messages. */
-	totalTokens: number;
-}
-
 /** Entries selected for branch summarization. */
 export interface CollectEntriesResult {
 	/** Entries to summarize in chronological order. */
