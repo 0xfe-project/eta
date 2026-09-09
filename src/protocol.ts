@@ -69,6 +69,7 @@ export type ServerMessage =
 	| ChannelFrame
 	| { type: "hello"; sessions: SidebarSession[]; attach: string | null }
 	| { type: "sessions"; sessions: SidebarSession[] }
+	| { type: "personas" }
 	| { type: "search"; query: string; hits: { session: string; snippet: string }[] }
 	| { type: "created"; name: string }
 	| { type: "deleted"; name: string }
