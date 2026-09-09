@@ -40,6 +40,19 @@ const AGENT_EVENT_TYPES = [
 	"handler_error",
 ] as const;
 
+function userText(message: { role: string; content?: unknown; text?: string }): string {
+	if (typeof message.text === "string" && message.text.length > 0) return message.text;
+	if (message.role !== "user") return "";
+	if (typeof message.content === "string") return message.content;
+	if (Array.isArray(message.content)) {
+		for (const block of message.content) {
+			const record = block as { type?: string; text?: string };
+			if (record.type === "text" && typeof record.text === "string") return record.text;
+		}
+	}
+	return "";
+}
+
 export type AnswerFn = (questionId: string, response: Parameters<EtaAgent["ask"]["answer"]>[1]) => boolean;
 
 interface Hosted {
@@ -117,9 +130,46 @@ export class Host {
 		if (this.attachPointerValue === name) this.attachPointerValue = this.hosted.keys().next().value ?? null;
 	}
 
+	private readonly meta = new Map<string, { title?: string; pinned?: boolean; archived?: boolean }>();
+
+	setMeta(name: string, patch: { pinned?: boolean; archived?: boolean }): void {
+		this.meta.set(name, { ...this.meta.get(name), ...patch });
+	}
+
+	private autoTitle(name: string): string | undefined {
+		const stored = this.meta.get(name)?.title;
+		if (stored !== undefined) return stored;
+		for (const entry of this.hosted.get(name)?.view.messages ?? []) {
+			const text = userText(entry.message);
+			if (text.length >= 3) return text.slice(0, 60);
+		}
+		return undefined;
+	}
+
+	/** Substring search across hosted sessions' visible timelines. */
+	search(query: string): { session: string; snippet: string }[] {
+		const hits: { session: string; snippet: string }[] = [];
+		const needle = query.toLowerCase();
+		if (needle.length === 0) return hits;
+		for (const [name, hosted] of this.hosted) {
+			for (const entry of hosted.view.messages) {
+				const text = JSON.stringify(entry.message).toLowerCase();
+				const index = text.indexOf(needle);
+				if (index >= 0) {
+					hits.push({ session: name, snippet: JSON.stringify(entry.message).slice(Math.max(0, index - 30), index + 60) });
+					break;
+				}
+			}
+		}
+		return hits;
+	}
+
 	sidebar(): SidebarSession[] {
 		return [...this.hosted.entries()].map(([name, entry]) => ({
 			name,
+			...(this.autoTitle(name) === undefined ? {} : { title: this.autoTitle(name) }),
+			...(this.meta.get(name)?.pinned === true ? { pinned: true } : {}),
+			...(this.meta.get(name)?.archived === true ? { archived: true } : {}),
 			badges: [
 				...(entry.running ? ["running"] : []),
 				...(entry.view.goal?.status === "active" ? ["goal"] : []),
@@ -139,6 +189,14 @@ export class Host {
 	}
 
 	/** Workspace entries the composer's @mention popup can complete to. */
+	isRunning(name: string): boolean {
+		return this.hosted.get(name)?.running ?? false;
+	}
+
+	cwdOf(name: string): string | undefined {
+		return this.hosted.get(name)?.cwd;
+	}
+
 	filesOf(name: string): string[] {
 		const entry = this.hosted.get(name);
 		if (entry === undefined) return [];
@@ -227,6 +285,19 @@ export class Host {
 		const entry = this.hosted.get(name);
 		if (entry === undefined) throw new Error(`no session ${name}`);
 		return entry.agent;
+	}
+
+	/** Composer send: steer mid-run, follow-up while running, plain prompt otherwise. */
+	queue(name: string, text: string, mode: "queue" | "steer"): void {
+		const entry = this.hosted.get(name);
+		if (entry === undefined) return;
+		this.attachPointerValue = name;
+		const lane = entry.agent.lane;
+		void (entry.running && mode === "steer"
+			? lane.steer(text, undefined, BACKGROUND_CONTEXT)
+			: entry.running
+				? lane.followUp(text, undefined, BACKGROUND_CONTEXT)
+				: lane.prompt(text, undefined, BACKGROUND_CONTEXT));
 	}
 
 	async prompt(name: string, text: string): Promise<void> {

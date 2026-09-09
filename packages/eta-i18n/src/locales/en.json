@@ -34,7 +34,6 @@
 	"composer.placeholder": "Message eta…",
 	"composer.send": "Send",
 	"composer.stop": "Stop",
-	"composer.queueHint": "Enter queues a follow-up · Shift+Enter sends now",
 	"ask.answer": "Answer",
 	"ask.freeform": "Type an answer…",
 	"ask.seconds": "auto-answer in {seconds}s",
@@ -60,5 +59,15 @@
 	"common.delete": "Delete",
 	"settings.notifications": "Background notifications",
 	"panel.compacting": "compacting…",
-	"composer.queued": "queued"
+	"composer.queued": "queued",
+	"sidebar.search": "search sessions…",
+	"sidebar.noHits": "no hits",
+	"sidebar.pinned": "PINNED",
+	"sidebar.recent": "RECENT",
+	"sidebar.archived": "ARCHIVED",
+	"sidebar.pin": "pin",
+	"sidebar.unpin": "unpin",
+	"sidebar.archive": "archive",
+	"sidebar.unarchive": "unarchive",
+	"composer.runningHint": "running · Enter queues · ⌘Enter steers"
 }

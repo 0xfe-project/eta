@@ -22,6 +22,9 @@ export type ChannelFrame =
 
 export interface SidebarSession {
 	name: string;
+	title?: string;
+	pinned?: boolean;
+	archived?: boolean;
 	badges: string[];
 	personas: string[];
 }
@@ -29,7 +32,7 @@ export interface SidebarSession {
 /** The full GUI write path; identical semantics to the v1 in-process GuiOps. */
 export type GuiOp =
 	| { op: "focus"; session: string }
-	| { op: "prompt"; session: string; text: string }
+	| { op: "prompt"; session: string; text: string; mode?: "queue" | "steer" }
 	| { op: "goal"; session: string; action: "set" | "pause" | "resume" | "clear"; objective?: string }
 	| { op: "loopToggle"; session: string; id: string; paused: boolean }
 	| { op: "taskSet"; session: string; id: string; status: "pending" | "in_progress" | "completed" | "cancelled" }
@@ -45,7 +48,9 @@ export type GuiOp =
 
 export type ControlOp =
 	| { op: "session.create"; name: string; personaId: string; cwd?: string; prompt?: string }
-	| { op: "session.delete"; name: string };
+	| { op: "session.delete"; name: string }
+	| { op: "session.pin"; session: string; pinned: boolean }
+	| { op: "session.archive"; session: string; archived: boolean };
 
 
 
@@ -55,6 +60,7 @@ export type ServerMessage =
 	| ChannelFrame
 	| { type: "hello"; sessions: SidebarSession[]; attach: string | null }
 	| { type: "sessions"; sessions: SidebarSession[] }
+	| { type: "search"; query: string; hits: { session: string; snippet: string }[] }
 	| { type: "created"; name: string }
 	| { type: "deleted"; name: string }
 	| { type: "error"; message: string };

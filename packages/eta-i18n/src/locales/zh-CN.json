@@ -34,7 +34,6 @@
 	"composer.placeholder": "给 eta 发消息…",
 	"composer.send": "发送",
 	"composer.stop": "停止",
-	"composer.queueHint": "回车排队追发 · Shift+回车立即发送",
 	"ask.answer": "回答",
 	"ask.freeform": "输入回答…",
 	"ask.seconds": "{seconds} 秒后自动应答",
@@ -60,5 +59,15 @@
 	"common.delete": "删除",
 	"settings.notifications": "后台完成通知",
 	"panel.compacting": "压缩中…",
-	"composer.queued": "排队中"
+	"composer.queued": "排队中",
+	"sidebar.search": "搜索会话…",
+	"sidebar.noHits": "无匹配",
+	"sidebar.pinned": "置顶",
+	"sidebar.recent": "最近",
+	"sidebar.archived": "已归档",
+	"sidebar.pin": "置顶",
+	"sidebar.unpin": "取消置顶",
+	"sidebar.archive": "归档",
+	"sidebar.unarchive": "取消归档",
+	"composer.runningHint": "运行中 · Enter 排队 · ⌘Enter 转向"
 }

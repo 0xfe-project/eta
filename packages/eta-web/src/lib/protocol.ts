@@ -16,13 +16,16 @@ export interface DevFrame {
 
 export interface SidebarSession {
 	name: string;
+	title?: string;
+	pinned?: boolean;
+	archived?: boolean;
 	badges: string[];
 	personas: string[];
 }
 
 export type ClientMessage =
 	| { op: "focus"; session: string }
-	| { op: "prompt"; session: string; text: string }
+	| { op: "prompt"; session: string; text: string; mode?: "queue" | "steer" }
 	| { op: "goal"; session: string; action: "set" | "pause" | "resume" | "clear"; objective?: string }
 	| { op: "loopToggle"; session: string; id: string; paused: boolean }
 	| { op: "taskSet"; session: string; id: string; status: "pending" | "in_progress" | "completed" | "cancelled" }
@@ -36,7 +39,9 @@ export type ClientMessage =
 	| { op: "abort"; session: string }
 	| { op: "answer"; session: string; questionId: string; response: unknown }
 	| { op: "session.create"; name: string; personaId: string; cwd?: string; prompt?: string }
-	| { op: "session.delete"; name: string };
+	| { op: "session.delete"; name: string }
+	| { op: "session.pin"; session: string; pinned: boolean }
+	| { op: "session.archive"; session: string; archived: boolean };
 
 
 export type ServerMessage =

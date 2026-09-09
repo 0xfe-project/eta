@@ -42,8 +42,8 @@ export function useShell(): ShellContextValue {
  * live here so every surface gets them.
  */
 export function AppShell({ sidebar, main, panel, palette }: { sidebar: ReactNode; main: ReactNode; panel: ReactNode; palette?: ReactNode }) {
-	const [leftOpen, setLeftOpen] = useState(() => storedFlag("eta.drawer.sidebar", true));
-	const [rightOpen, setRightOpen] = useState(() => storedFlag("eta.drawer.panel", true));
+	const [leftOpen, setLeftOpen] = useState(() => storedFlag("eta.drawer.sidebar", typeof window === "undefined" || window.innerWidth >= 768));
+	const [rightOpen, setRightOpen] = useState(() => storedFlag("eta.drawer.panel", typeof window === "undefined" || window.innerWidth >= 1024));
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	const [, navigate] = useLocation();
 

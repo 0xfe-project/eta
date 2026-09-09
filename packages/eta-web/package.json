@@ -16,6 +16,8 @@
 		"react": "^19.2.0",
 		"react-dom": "^19.2.0",
 		"react-i18next": "^16.2.0",
+		"react-markdown": "^10.1.0",
+		"remark-gfm": "^4.0.1",
 		"wouter": "^3.7.1"
 	},
 	"devDependencies": {

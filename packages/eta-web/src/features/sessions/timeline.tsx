@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { SessionView } from "@eta/core";
 import { useAppI18n } from "../../i18n.ts";
+import { MessageMarkdown } from "./message-markdown.tsx";
 
 type ToolResultLike = { toolCallId: string; content: unknown; isError?: boolean };
 
@@ -109,11 +110,7 @@ function MessageRow({ role, message, session }: { role: string; message: unknown
 			<div className="my-2" data-testid="assistant-message">
 				{blocks.map((block, index) => {
 					if (block.type === "text") {
-						return (
-							<p key={index} className="whitespace-pre-wrap py-1 text-sm leading-relaxed">
-								{String(block.text ?? "")}
-							</p>
-						);
+						return <MessageMarkdown key={index} text={String(block.text ?? "")} />;
 					}
 					if (block.type === "thinking") {
 						return (

@@ -80,3 +80,15 @@ body {
 .mono {
 	font-family: ui-monospace, "SF Mono", Menlo, monospace;
 }
+
+.markdown > *:first-child { margin-top: 0; }
+.markdown > *:last-child { margin-bottom: 0; }
+.markdown p { margin: 0.4em 0; }
+.markdown ul, .markdown ol { margin: 0.4em 0; padding-left: 1.4em; }
+.markdown code { background: var(--code-bg); padding: 0.1em 0.3em; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; }
+.markdown pre { background: var(--code-bg); padding: 0.6em; overflow-x: auto; }
+.markdown pre code { background: transparent; padding: 0; }
+.markdown table { border-collapse: collapse; margin: 0.5em 0; }
+.markdown th, .markdown td { border: 1px solid var(--border); padding: 0.25em 0.5em; }
+.markdown a { color: var(--foreground); text-decoration: underline; text-underline-offset: 2px; }
+.markdown blockquote { border-left: 2px solid var(--border-strong); margin: 0.5em 0; padding-left: 0.8em; color: var(--muted); }
