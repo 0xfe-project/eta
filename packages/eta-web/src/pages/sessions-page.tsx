@@ -81,7 +81,7 @@ export function SessionsPage() {
 					) : (
 						<>
 							<Timeline view={view} session={selected ?? ""} running={running} />
-							<Composer session={selected ?? ""} running={running} hasPendingAsk={view.pendingAsk !== undefined} topSlot={<ContextBar session={selected ?? ""} view={view} />} onNavigateSettings={() => window.location.assign("/settings")} queue={view.queue} />
+							<Composer session={selected ?? ""} running={running} hasPendingAsk={view.pendingAsk !== undefined} topSlot={<ContextBar session={selected ?? ""} view={view} />} onNavigateSettings={() => window.location.assign("/settings")} onToggleTerminal={() => setTermOpen((open) => !open)} queue={view.queue} />
 							{termOpen ? <TerminalDrawer {...(view.cwd !== undefined ? { cwd: view.cwd } : {})} onClose={() => setTermOpen(false)} /> : null}
 							<AskModal session={selected ?? ""} view={view} />
 						</>

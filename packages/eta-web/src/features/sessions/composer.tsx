@@ -3,11 +3,13 @@ import { useAppI18n } from "../../i18n.ts";
 import { etaStore, useEta } from "../../lib/eta-store.ts";
 import { Button } from "../../components/ui/button.tsx";
 import { ModelPicker } from "./model-picker.tsx";
+import { themeStorageKey, themeChangeEvent } from "../../app/theme.tsx";
+import { useShellOptional } from "../../app/app-shell.tsx";
 
 interface SlashCommand {
 	name: string;
 	description: string;
-	run: () => void;
+	run: (args: string) => void;
 }
 
 export interface ComposerCreate {
@@ -25,6 +27,7 @@ export function Composer({
 	topSlot,
 	create,
 	onNavigateSettings,
+	onToggleTerminal,
 }: {
 	session?: string;
 	running?: boolean;
@@ -33,23 +36,51 @@ export function Composer({
 	topSlot?: ReactNode;
 	create?: ComposerCreate;
 	onNavigateSettings?: () => void;
+	onToggleTerminal?: () => void;
 }) {
 	const createMode = create !== undefined;
-	const { t } = useAppI18n();
+	const { t, locale, setLocale } = useAppI18n();
+	const toggleTheme = () => {
+		try {
+			localStorage.setItem(themeStorageKey, localStorage.getItem(themeStorageKey) === "dark" ? "light" : "dark");
+		} catch {
+			/* private mode */
+		}
+		window.dispatchEvent(new CustomEvent(themeChangeEvent));
+	};
+	const shell = useShellOptional();
 	const store = etaStore();
+	const state = useEta();
+	const cycleThinking = () => {
+		const level = (state.views[session ?? ""]?.thinkingLevel ?? "off") as (typeof THINKING_LEVELS)[number];
+		const next = THINKING_LEVELS[(THINKING_LEVELS.indexOf(level) + 1) % THINKING_LEVELS.length];
+		store.send({ op: "thinkingLevel", session: session ?? "", level: next });
+	};
+	const commands: SlashCommand[] = [
+		...(createMode || session === undefined
+			? []
+			: [
+					{ name: "compact", description: t("cmd.compact"), run: () => store.send({ op: "compact", session }) },
+					{ name: "abort", description: t("cmd.abort"), run: () => store.send({ op: "abort", session }) },
+					{ name: "btw", description: t("cmd.btw"), run: () => store.send({ op: "btwOpen", session, kind: "contextual" }) },
+					{ name: "goal", description: t("cmd.goal"), run: (args: string) => (args.length > 0 ? store.send({ op: "goal", session, action: "set", objective: args }) : setText("/goal ")) },
+					{ name: "loop", description: t("cmd.loop"), run: (args: string) => (args.length > 0 ? store.send({ op: "loopCreate", session, id: `ui-${Date.now().toString(36)}`, note: args }) : setText("/loop ")) },
+					{ name: "thinking", description: t("cmd.thinking"), run: () => cycleThinking() },
+					{ name: "delete", description: t("cmd.delete"), run: () => store.send({ op: "session.delete", name: session }) },
+			  ]),
+		{ name: "new", description: t("cmd.new"), run: () => window.location.assign("/new") },
+		...(onToggleTerminal === undefined ? [] : [{ name: "terminal", description: t("cmd.terminal"), run: () => onToggleTerminal() }]),
+		{ name: "theme", description: t("cmd.theme"), run: () => toggleTheme() },
+		{ name: "lang", description: t("cmd.lang"), run: () => setLocale(locale === "en" ? "zh-CN" : "en") },
+		{ name: "settings", description: t("cmd.settings"), run: () => onNavigateSettings?.() },
+		...(shell === undefined ? [] : [{ name: "help", description: t("cmd.help"), run: () => shell.setPaletteOpen(true) }]),
+	];
 	const [text, setText] = useState("");
 	const [files, setFiles] = useState<string[]>([]);
 	const [pickedModel, setPickedModel] = useState<string | undefined>(undefined);
 	const [slashIndex, setSlashIndex] = useState(0);
 	const [atIndex, setAtIndex] = useState(0);
 	const [menuClosed, setMenuClosed] = useState(false);
-
-	const commands: SlashCommand[] = [
-		...(createMode || session === undefined ? [] : [{ name: "compact", description: t("cmd.compact"), run: () => store.send({ op: "compact", session }) }]),
-		...(createMode || session === undefined ? [] : [{ name: "abort", description: t("cmd.abort"), run: () => store.send({ op: "abort", session }) }]),
-		...(createMode || session === undefined ? [] : [{ name: "btw", description: t("cmd.btw"), run: () => store.send({ op: "btwOpen", session, kind: "contextual" }) }]),
-		{ name: "settings", description: t("cmd.settings"), run: () => onNavigateSettings?.() },
-	];
 
 	const draftKey = `eta.draft.${session ?? "new"}`;
 	useEffect(() => {
@@ -81,8 +112,8 @@ export function Composer({
 		setText((current) => current.replace(/(^|\s)@([\w./-]*)$/, (_match, lead: string) => `${lead}@${file} `));
 	};
 
-	const runCommand = (command: SlashCommand) => {
-		command.run();
+	const runCommand = (command: SlashCommand, args = "") => {
+		command.run(args);
 		setText("");
 	};
 
@@ -104,16 +135,10 @@ export function Composer({
 			store.send({ op: "prompt", session, text: value.slice(1), ...(mode === "steer" ? { mode } : {}) });
 		} else if (value.startsWith("/")) {
 			const name = /^\/([^\s]+)/.exec(value)?.[1] ?? "";
+			const args = value.slice(name.length + 1).trim();
 			const command = commands.find((entry) => entry.name === name);
 			if (command !== undefined) {
-				command.run();
-				setText("");
-				return;
-			}
-			const goalArg = /^\/goal\s+(.+)$/s.exec(value);
-			if (goalArg !== null) {
-				store.send({ op: "goal", session, action: "set", objective: goalArg[1]!.trim() });
-				setText("");
+				runCommand(command, args);
 				return;
 			}
 			store.send({ op: "prompt", session, text: value, ...(mode === "steer" ? { mode } : {}) });
@@ -140,7 +165,7 @@ export function Composer({
 			}
 			if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
 				event.preventDefault();
-				if (slashMatches.length > 0) runCommand(slashMatches[Math.min(slashIndex, slashMatches.length - 1)]!);
+				if (slashMatches.length > 0) runCommand(slashMatches[Math.min(slashIndex, slashMatches.length - 1)]!, text.trim().split(/\s+/).slice(1).join(" "));
 				else if (atChoices.length > 0) pickFile(atChoices[Math.min(atIndex, atChoices.length - 1)]!);
 				return;
 			}

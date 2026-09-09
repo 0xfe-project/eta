@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -18,6 +18,29 @@ export function TerminalDrawer({ cwd, onClose }: { cwd?: string; onClose: () => 
 	const [tabs, setTabs] = useState<Tab[]>([{ id: 1 }]);
 	const [nextId, setNextId] = useState(2);
 	const [active, setActive] = useState(1);
+	const [height, setHeight] = useState(() => {
+		const stored = Number(localStorage.getItem("eta.height.terminal"));
+		return Number.isFinite(stored) && stored >= 120 ? stored : Math.round(window.innerHeight * 0.4);
+	});
+	const heightRef = useRef(height);
+	heightRef.current = height;
+	const startDrag = (event: ReactPointerEvent) => {
+		event.preventDefault();
+		const startY = event.clientY;
+		const startH = heightRef.current;
+		const move = (ev: PointerEvent) => setHeight(Math.min(Math.max(startH + (startY - ev.clientY), 120), Math.round(window.innerHeight * 0.85)));
+		const up = () => {
+			window.removeEventListener("pointermove", move);
+			window.removeEventListener("pointerup", up);
+			try {
+				localStorage.setItem("eta.height.terminal", String(heightRef.current));
+			} catch {
+				/* private mode */
+			}
+		};
+		window.addEventListener("pointermove", move);
+		window.addEventListener("pointerup", up);
+	};
 
 	const close = (id: number) => {
 		setTabs((current) => {
@@ -29,7 +52,8 @@ export function TerminalDrawer({ cwd, onClose }: { cwd?: string; onClose: () => 
 	};
 
 	return (
-		<div data-testid="terminal-drawer" className="flex h-[40vh] shrink-0 flex-col border-t-2 border-border bg-[#0a0a0a]">
+		<div data-testid="terminal-drawer" className="flex shrink-0 flex-col border-t-2 border-border bg-[#0a0a0a]" style={{ height }}>
+			<div data-testid="terminal-resize" onPointerDown={startDrag} className="h-1.5 shrink-0 cursor-row-resize bg-overlay hover:bg-border-strong" />
 			<div className="flex items-stretch border-b border-border bg-surface">
 				{tabs.map((tab) => (
 					<button
@@ -65,7 +89,8 @@ export function TerminalDrawer({ cwd, onClose }: { cwd?: string; onClose: () => 
 				>
 					{t("term.new")}
 				</button>
-				<button data-testid="terminal-hide" onClick={onClose} className="mono ml-auto px-3 text-[11px] text-muted hover:text-foreground">
+				{cwd !== undefined ? <span data-testid="terminal-cwd" className="mono ml-auto max-w-[220px] self-center truncate text-[9px] text-faint" title={cwd}>{cwd}</span> : <span className="ml-auto" />}
+				<button data-testid="terminal-hide" onClick={onClose} className="mono px-3 text-[11px] text-muted hover:text-foreground">
 					✕
 				</button>
 			</div>
@@ -91,6 +116,7 @@ function TermTab({ cwd, onExit }: { cwd?: string; onExit: () => void }) {
 		const term = new Terminal({
 			fontSize: 12,
 			fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+			scrollback: 5000,
 			cursorBlink: false,
 			convertEol: true,
 			theme: { background: "#0a0a0a", foreground: "#e8e8e8", cursor: "#e8e8e8" },
