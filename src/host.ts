@@ -130,9 +130,9 @@ export class Host {
 		if (this.attachPointerValue === name) this.attachPointerValue = this.hosted.keys().next().value ?? null;
 	}
 
-	private readonly meta = new Map<string, { title?: string; pinned?: boolean; archived?: boolean }>();
+	private readonly meta = new Map<string, { title?: string; pinned?: boolean; archived?: boolean; modelId?: string }>();
 
-	setMeta(name: string, patch: { pinned?: boolean; archived?: boolean }): void {
+	setMeta(name: string, patch: { pinned?: boolean; archived?: boolean; modelId?: string }): void {
 		this.meta.set(name, { ...this.meta.get(name), ...patch });
 	}
 
@@ -267,6 +267,34 @@ export class Host {
 
 	btwAnswer(name: string, threadId: string, question: string, answer: string): void {
 		this.must(name).btw.answer(threadId, question, answer);
+	}
+
+	/** Side-thread question from the UI; the faux provider answers with an echo, real providers answer later. */
+	btwAsk(name: string, threadId: string, question: string): void {
+		const agent = this.must(name);
+		const faux = this.hosted.get(name)?.created.faux;
+		const answer = faux !== undefined ? `btw echo: ${question}` : "(awaiting model)";
+		agent.btw.answer(threadId, question, answer);
+	}
+
+	/** Hot-swap the configured model (real providers only) and remember the choice. */
+	async modelSet(name: string, modelId: string): Promise<void> {
+		const agent = this.must(name);
+		this.setMeta(name, { modelId });
+		if (this.hosted.get(name)?.created.faux === undefined) {
+			try {
+				await agent.lane.setModel({ provider: "anthropic", modelId }, BACKGROUND_CONTEXT);
+			} catch {
+				/* unknown id for this registry: keep the meta so it applies on next open */
+			}
+		}
+	}
+
+	modelInfo(name: string): { models: { id: string; label: string }[]; current: string } {
+		const faux = this.hosted.get(name)?.created.faux;
+		const current = this.meta.get(name)?.modelId ?? (faux !== undefined ? "faux" : "claude-sonnet-4-5");
+		if (faux !== undefined) return { models: [{ id: "faux", label: "faux echo" }], current };
+		return { models: ["claude-haiku-4-5", "claude-sonnet-4-5", "claude-opus-4-1"].map((id) => ({ id, label: id })), current };
 	}
 
 	btwSave(name: string, threadId: string): void {

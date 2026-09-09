@@ -37,6 +37,8 @@ export type GuiOp =
 	| { op: "loopToggle"; session: string; id: string; paused: boolean }
 	| { op: "taskSet"; session: string; id: string; status: "pending" | "in_progress" | "completed" | "cancelled" }
 	| { op: "btwOpen"; session: string; kind: "contextual" | "tangent" }
+	| { op: "btwAsk"; session: string; threadId: string; question: string }
+	| { op: "modelSet"; session: string; modelId: string }
 	| { op: "btwAnswer"; session: string; threadId: string; question: string; answer: string }
 	| { op: "btwSave"; session: string; threadId: string }
 	| { op: "btwClear"; session: string; threadId: string }
