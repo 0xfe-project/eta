@@ -102,5 +102,6 @@
 	"btw.empty": "还没有对话,问点什么",
 	"btw.save": "保存",
 	"btw.clear": "清除",
-	"mention.empty": "没有匹配的文件"
+	"mention.empty": "没有匹配的文件",
+	"composer.queueCancel": "点击取消排队"
 }

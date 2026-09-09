@@ -18,6 +18,8 @@ export interface EtaServerOptions {
 	hostname?: string;
 	cwd?: string;
 	webDist?: string;
+	configPath?: string;
+	dataDir?: string;
 }
 
 export interface EtaServer {
@@ -40,13 +42,18 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 export async function startServer(options: EtaServerOptions = {}): Promise<EtaServer> {
-	const host = new Host();
+	const host = new Host({ ...(options.configPath === undefined ? {} : { configPath: options.configPath }), ...(options.dataDir === undefined ? {} : { dataDir: options.dataDir }) });
+	await host.restoreSessions();
 	const cwd = options.cwd ?? process.cwd();
 	const webDist = options.webDist ?? resolve(import.meta.dir, "../../eta-web/dist");
 	const sessionsDirty = new WeakMap<Socket, boolean>();
 
 	const send = (socket: Socket, message: ServerMessage): void => {
-		socket.send(encodeMessage(message));
+		try {
+			socket.send(encodeMessage(message));
+		} catch {
+			/* socket already gone */
+		}
 	};
 
 	const flushSessions = (socket: Socket): void => {
@@ -87,7 +94,7 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 			if (url.pathname === "/api/models") {
 				const session = url.searchParams.get("session");
 				try {
-					return Response.json(session === null ? { models: [{ id: "faux", label: "faux echo" }], current: "faux" } : host.modelInfo(session));
+					return Response.json(session === null ? host.modelCatalog() : host.modelInfo(session));
 				} catch {
 					return Response.json({ models: [{ id: "faux", label: "faux echo" }], current: "faux" });
 				}
@@ -209,6 +216,9 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 		case "modelSet":
 			await host.modelSet(message.session, message.modelId);
 			break;
+		case "queueRemove":
+			host.queueRemove(message.session, message.entryId);
+			break;
 			return;
 		case "btwAnswer":
 			host.btwAnswer(message.session, message.threadId, message.question, message.answer);
@@ -237,7 +247,7 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 			return;
 		}
 		case "session.create":
-			await host.createSession(message.name, message.personaId, message.cwd ?? process.cwd());
+			await host.createSession(message.name, message.personaId, message.cwd ?? process.cwd(), message.modelId);
 			if (message.prompt !== undefined && message.prompt.length > 0) await host.prompt(message.name, message.prompt);
 			return;
 		case "session.delete":

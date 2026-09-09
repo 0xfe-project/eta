@@ -9,13 +9,13 @@ interface ModelInfo {
 	current: string;
 }
 
-export function ModelPicker({ session }: { session: string }) {
+export function ModelPicker({ session, onPick }: { session?: string; onPick?: (modelId: string) => void }) {
 	const store = etaStore();
 	const [info, setInfo] = useState<ModelInfo | undefined>(undefined);
 
 	useEffect(() => {
 		setInfo(undefined);
-		void fetch(`/api/models?session=${encodeURIComponent(session)}`)
+		void fetch(session === undefined ? "/api/models" : `/api/models?session=${encodeURIComponent(session)}`)
 			.then((response) => (response.ok ? (response.json() as Promise<ModelInfo>) : undefined))
 			.then((body) => setInfo(body))
 			.catch(() => undefined);
@@ -39,7 +39,8 @@ export function ModelPicker({ session }: { session: string }) {
 						disabled={model.id === info.current}
 						onClick={() => {
 							setInfo({ ...info, current: model.id });
-							store.send({ op: "modelSet", session, modelId: model.id });
+							if (session !== undefined) store.send({ op: "modelSet", session, modelId: model.id });
+							onPick?.(model.id);
 						}}
 					>
 						{model.label}

@@ -103,11 +103,11 @@
 ## T5 差距清单(2026-09-10 对照 pi-web-ui / picot / deepseek-harness `apps/web`+`packages/*`)
 
 ### A. 交互修正(用户点名,先做)
-- [ ] 排队语义重做:server 已有 lane follow-up 队列,但 UI 只有本地 pill。补 `queue_update` 帧 → `SessionView.queue: {id,text}[]`,排队条渲染真实队列,支持逐条移除(`queueRemove` op)、running 结束后按序消失;本地 optimistic pill 与真实队列去重
-- [ ] persona 可选自定义:`/api/personas` 已含 `.eta/persona/*.persona.md`,但 welcome/向导的 chips 只画了内置——渲染整个列表(含 custom 标记);session 内 persona 行加"切换"入口(personaSet op,下次 run 生效)
-- [ ] 旁路(btw)按钮从 composer 上方 ContextBar 撤掉;入口 = 右栏 sideThread 行(点击 = 打开 BtwDialog,与弹窗行为一致)+ `/btw` 命令
-- [ ] goal 未 set 时 ContextBar 不出现 goal 输入行;set 后才渲染 objective 条(入口:面板 / `/goal <text>` 命令)
-- [ ] loop 行排在 goal 之上(ContextBar/右栏同一顺序约定:queue → loops → goal → tasks)
+- [x] 排队语义重做:`queue_update` 事件 → host 缓存 → `SessionView.queue`;ContextBar 渲染真实队列,chip 点击 `queueRemove`(lane.cancelQueued);本地 optimistic pill 已删
+- [ ] persona 自定义(半):welcome chips 已渲染 `/api/personas` 全列表(含 custom)。剩:custom 标记徽章、session 内 personaSet 切换入口
+- [x] btw 入口 = 右栏 sideThread 行(点击开 BtwDialog)+ `/btw` 命令;ContextBar 已无 btw 块
+- [x] goal 未 set 时 ContextBar 不渲染;入口 = `/goal <text>` 命令 + 面板 hint
+- [x] 顺序固定 queue → loops → goal → tasks(ContextBar)
 
 ### B. 面板与菜单(拖拽/显隐/终端)
 - [ ] xterm 终端:前端 @xterm/xterm + fit/web-links 插件;"终端"tab 从 dev 独立成顶栏可开合面板,多 tab(× / +),ws 桥 `/term`;server Bun.spawn pty(列宽 resize op)
@@ -120,9 +120,9 @@
 - [ ] @ 补全升级:现在只有 cwd 一层文件名。要(1)递归模糊匹配(fuzzy + mtime 排序,server /api/files 改 walk+score,上限 50);(2)目录树前缀 `@dir/` 继续钻;(3)菜单显示路径相对 cwd + 行高对齐;(4)粘贴图片自动落盘 `<cwd>/.eta-attachments/` 并插入 @引用(POST /api/upload)
 - [ ] prompt 带图片:`prompt` op 加 `images?: {mime,dataBase64}[]`(协议+host+faux 忽略即可)
 - [ ] tool 卡片状态:toolCall 与 toolResult 关联(按 toolCallId),头右侧 COMPLETE/FAILED/running 徽章;输入输出折叠
-- [ ] 成本:`core/pricing.ts` 模型价表(内置 anthropic 三家,未知模型 0)→ view.costUsd;usage 行显示 `in/out/缓存/费用/tok/s`
+- [ ] usage 行加费用字段(价表不做,取 provider 回传 cost,若有)
 - [ ] thinking level 按钮(thinking off/minimal/low/med/high 循环,thinkingLevel op,faux 忽略)——照抄 pi-web-ui "minimal" chip
 - [ ] 侧栏:按 cwd 分组的 PROJECTS 段(组内 count + 折叠 + Show more)、行右时间(`updated` 字段,humanize)、组 `+` 新建、行 `⋯` 菜单(重命名/置顶/归档/删除)
 - [ ] 顶栏状态组:tokens 合计、cache%、当前分支(`git rev-parse` 经 host 暴露)、连接状态点(connected/disconnected)、`cwd` chip
-- [ ] 语音输入按钮(picot 有;可选项,低优先)
 - [ ] 自定义 persona 的热加载:监听 `.eta/persona/`(server fs.watch)→ personas frame
+- [x] 真模型集成通道:`~/.eta/config.json`(providers[] + defaultModel,无 env)经 `openai-completions` provider 上线;pro6000 / `qwen3.8-flash-next-uncensored` 端到端实测(真回复 + reasoning 折叠 + usage)。空 key 用占位 `eta-no-key`(网关不校验)。集成测试(工具调用/goal/loop/压缩)下一步改走真 provider;成本/价表明确不做

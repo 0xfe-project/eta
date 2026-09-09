@@ -4,6 +4,7 @@ import { useAppI18n } from "../../i18n.ts";
 import { etaStore } from "../../lib/eta-store.ts";
 import { Button } from "../../components/ui/button.tsx";
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog.tsx";
+import { BtwDialog } from "./btw-dialog.tsx";
 
 export function ContextPanel({ session, view }: { session: string; view: SessionView }) {
 	const { t } = useAppI18n();
@@ -11,6 +12,7 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 	const [compacting, setCompacting] = useState(false);
 	const [promptOpen, setPromptOpen] = useState(false);
 	const [jsonOpen, setJsonOpen] = useState(false);
+	const [btwOpen, setBtwOpen] = useState(false);
 	const [epochAtRequest, setEpochAtRequest] = useState<number | null>(null);
 	const send = (op: Parameters<typeof store.send>[0]) => store.send(op);
 
@@ -111,6 +113,9 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 					</button>
 				</div>
 			))}
+			{view.goal == null ? (
+				<p data-testid="goal-hint" className="mono text-[10px] text-muted">/goal <span className="text-faint">…</span></p>
+			) : null}
 			{view.memory !== undefined ? <p data-testid="memory-row" className="mono text-[11px] text-muted">{t("panel.memory")}: {view.memory.chars} chars</p> : null}
 			{view.subagents.map((sub) => (
 				<div key={sub.id} data-testid={`fleet-row-${sub.id}`} className="mono flex items-center gap-2 text-[11px] text-muted">
@@ -119,12 +124,21 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 				</div>
 			))}
 			{view.sideThread.map((thread) => (
-				<div key={thread.id} data-testid={`btw-row-${thread.id}`} className="mono flex items-center gap-2 text-[11px] text-muted">
-					<span>btw {thread.id} · {thread.exchanges.length}x · {thread.saveState}</span>
-					<button className="border border-border px-2 py-0.5 text-[10px]" onClick={() => send({ op: "btwSave", session, threadId: thread.id })}>save</button>
-					<button className="border border-border px-2 py-0.5 text-[10px]" onClick={() => send({ op: "btwClear", session, threadId: thread.id })}>×</button>
+				<div
+					key={thread.id}
+					data-testid={`btw-row-${thread.id}`}
+					role="button"
+					tabIndex={0}
+					onClick={() => setBtwOpen(true)}
+					onKeyDown={(event) => event.key === "Enter" && setBtwOpen(true)}
+					className="mono flex cursor-pointer items-center gap-2 text-[11px] text-muted hover:text-foreground"
+				>
+					<span className="min-w-0 flex-1 truncate">btw {thread.id} · {thread.exchanges.length}x · {thread.saveState}</span>
+					<button className="border border-border px-2 py-0.5 text-[10px]" onClick={(event) => { event.stopPropagation(); send({ op: "btwSave", session, threadId: thread.id }); }}>save</button>
+					<button className="border border-border px-2 py-0.5 text-[10px]" onClick={(event) => { event.stopPropagation(); send({ op: "btwClear", session, threadId: thread.id }); }}>×</button>
 				</div>
 			))}
+			<BtwDialog session={session} view={view} open={btwOpen} onOpenChange={setBtwOpen} />
 			{view.stateKeys.map((key) => (
 				<div key={key} data-testid={`kv-row-${key}`} className="mono flex items-center gap-2 text-[11px] text-muted">
 					<span>{t("panel.state")}: {key}</span>

@@ -39,6 +39,7 @@ export type GuiOp =
 	| { op: "btwOpen"; session: string; kind: "contextual" | "tangent" }
 	| { op: "btwAsk"; session: string; threadId: string; question: string }
 	| { op: "modelSet"; session: string; modelId: string }
+	| { op: "queueRemove"; session: string; entryId: string }
 	| { op: "btwAnswer"; session: string; threadId: string; question: string; answer: string }
 	| { op: "btwSave"; session: string; threadId: string }
 	| { op: "btwClear"; session: string; threadId: string }
@@ -49,7 +50,7 @@ export type GuiOp =
 	| { op: "answer"; session: string; questionId: string; response: unknown };
 
 export type ControlOp =
-	| { op: "session.create"; name: string; personaId: string; cwd?: string; prompt?: string }
+	| { op: "session.create"; name: string; personaId: string; cwd?: string; prompt?: string; modelId?: string }
 	| { op: "session.delete"; name: string }
 	| { op: "session.pin"; session: string; pinned: boolean }
 	| { op: "session.archive"; session: string; archived: boolean };

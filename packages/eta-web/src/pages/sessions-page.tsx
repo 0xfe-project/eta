@@ -64,13 +64,13 @@ export function SessionsPage() {
 						<span className="ml-auto text-[10px] text-muted">{state.connected ? "" : t("connection.disconnected")}</span>
 					</header>
 					{state.sessions.length === 0 ? (
-						<Welcome onCreated={() => undefined} />
+						<Welcome onCreated={() => undefined} onNavigateSettings={() => window.location.assign("/settings")} />
 					) : view === undefined ? (
 						<p className="p-6 text-sm text-muted">{t("sidebar.noSessions")}</p>
 					) : (
 						<>
 							<Timeline view={view} session={selected ?? ""} running={running} />
-							<Composer session={selected ?? ""} running={running} hasPendingAsk={view.pendingAsk !== undefined} topSlot={<ContextBar session={selected ?? ""} view={view} />} onNavigateSettings={() => window.location.assign("/settings")} userTexts={view.messages.filter((entry) => entry.message.role === "user").map((entry) => JSON.stringify(entry.message))} />
+							<Composer session={selected ?? ""} running={running} hasPendingAsk={view.pendingAsk !== undefined} topSlot={<ContextBar session={selected ?? ""} view={view} />} onNavigateSettings={() => window.location.assign("/settings")} queue={view.queue} />
 							<AskModal session={selected ?? ""} view={view} />
 						</>
 					)}

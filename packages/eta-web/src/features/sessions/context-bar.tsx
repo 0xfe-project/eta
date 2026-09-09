@@ -1,19 +1,47 @@
-import { useState } from "react";
 import type { SessionView } from "@eta/core";
 import { useAppI18n } from "../../i18n.ts";
 import { etaStore } from "../../lib/eta-store.ts";
 import { Button } from "../../components/ui/button.tsx";
-import { BtwDialog } from "./btw-dialog.tsx";
 
+/**
+ * The strip above the composer: real lane queue, loops, goal (only once set), tasks.
+ * Ordering is fixed: queue → loops → goal → tasks.
+ */
 export function ContextBar({ session, view }: { session: string; view: SessionView }) {
 	const { t } = useAppI18n();
 	const store = etaStore();
-	const [goalDraft, setGoalDraft] = useState("");
-	const [btwOpen, setBtwOpen] = useState(false);
 	const send = (op: Parameters<typeof store.send>[0]) => store.send(op);
+
+	const queue = view.queue ?? [];
+	if (queue.length === 0 && view.loops.length === 0 && view.goal == null && view.tasks.length === 0) return null;
 
 	return (
 		<div className="flex flex-col gap-1" data-testid="context-bar">
+			{queue.length > 0 ? (
+				<div data-testid="queued-bar" className="queued-messages">
+					{queue.map((item) => (
+						<button
+							key={item.entryId}
+							data-testid={`queue-${item.entryId}`}
+							title={t("composer.queueCancel")}
+							onClick={() => send({ op: "queueRemove", session, entryId: item.entryId })}
+							className="queued-message-chip"
+						>
+							{t("composer.queued")} · {item.text} ×
+						</button>
+					))}
+				</div>
+			) : null}
+			{view.loops.map((loop) => (
+				<div key={loop.id} data-testid={`loop-row-${loop.id}`} className="flex items-center gap-2">
+					<span className="mono min-w-0 flex-1 truncate text-[11px] text-muted">
+						loop {loop.id} · {loop.note} · {loop.runCount}×
+					</span>
+					<Button size="sm" variant="ghost" onClick={() => send({ op: "loopToggle", session, id: loop.id, paused: !loop.paused })}>
+						{loop.paused ? t("panel.resume") : t("panel.pause")}
+					</Button>
+				</div>
+			))}
 			{view.goal != null ? (
 				<div data-testid="goal-card" className="flex items-center gap-2 border border-border bg-overlay px-2 py-1">
 					<span className="mono min-w-0 flex-1 truncate text-[11px] text-muted">◆ {view.goal.objective}</span>
@@ -24,28 +52,7 @@ export function ContextBar({ session, view }: { session: string; view: SessionVi
 						{t("panel.clear")}
 					</Button>
 				</div>
-			) : (
-				<form
-					className="flex items-center gap-1"
-					onSubmit={(event) => {
-						event.preventDefault();
-						if (goalDraft.trim().length === 0) return;
-						send({ op: "goal", session, action: "set", objective: goalDraft.trim() });
-						setGoalDraft("");
-					}}
-				>
-					<input
-						data-testid="goal-input"
-						value={goalDraft}
-						placeholder={t("panel.goal")}
-						onChange={(event) => setGoalDraft(event.target.value)}
-						className="mono min-w-0 flex-1 border border-border bg-transparent px-2 py-0.5 text-[11px] outline-none focus:border-border-strong"
-					/>
-					<Button data-testid="goal-set" size="sm" type="submit" disabled={goalDraft.trim().length === 0}>
-						{t("panel.goal")}
-					</Button>
-				</form>
-			)}
+			) : null}
 			{view.tasks.length > 0 ? (
 				<div data-testid="tasks-list" className="flex flex-wrap gap-x-3 gap-y-1">
 					{view.tasks.map((task) => (
@@ -60,17 +67,6 @@ export function ContextBar({ session, view }: { session: string; view: SessionVi
 					))}
 				</div>
 			) : null}
-			<div className="flex items-center gap-1">
-				<Button size="sm" variant="ghost" data-testid="btw-open" onClick={() => { send({ op: "btwOpen", session, kind: "contextual" }); setBtwOpen(true); }}>
-					{t("btw.open")}{view.sideThread.length > 0 ? ` · ${view.sideThread.length}` : ""}
-				</Button>
-				{view.sideThread.length > 0 ? (
-					<Button size="sm" variant="ghost" data-testid="btw-show" onClick={() => setBtwOpen(true)}>
-						{t("btw.title")}
-					</Button>
-				) : null}
-			</div>
-			<BtwDialog session={session} view={view} open={btwOpen} onOpenChange={setBtwOpen} />
 		</div>
 	);
 }

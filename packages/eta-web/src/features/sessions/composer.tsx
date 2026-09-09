@@ -10,59 +10,62 @@ interface SlashCommand {
 	run: () => void;
 }
 
+export interface ComposerCreate {
+	personaReady: boolean;
+	cwd: string;
+	onCwd: (cwd: string) => void;
+	onSend: (text: string, modelId?: string) => void;
+}
+
 export function Composer({
 	session,
-	running,
-	hasPendingAsk,
-	userTexts = [],
+	running = false,
+	hasPendingAsk = false,
+	queue = [],
 	topSlot,
+	create,
 	onNavigateSettings,
 }: {
-	session: string;
-	running: boolean;
-	hasPendingAsk: boolean;
-	userTexts?: string[];
+	session?: string;
+	running?: boolean;
+	hasPendingAsk?: boolean;
+	queue?: { entryId: string; kind: string; text: string }[];
 	topSlot?: ReactNode;
+	create?: ComposerCreate;
 	onNavigateSettings?: () => void;
 }) {
+	const createMode = create !== undefined;
 	const { t } = useAppI18n();
 	const store = etaStore();
 	const [text, setText] = useState("");
 	const [files, setFiles] = useState<string[]>([]);
-	const [pending, setPending] = useState<string[]>([]);
+	const [pickedModel, setPickedModel] = useState<string | undefined>(undefined);
 	const [slashIndex, setSlashIndex] = useState(0);
 	const [atIndex, setAtIndex] = useState(0);
 	const [menuClosed, setMenuClosed] = useState(false);
 
 	const commands: SlashCommand[] = [
-		{ name: "compact", description: t("cmd.compact"), run: () => store.send({ op: "compact", session }) },
-		{ name: "abort", description: t("cmd.abort"), run: () => store.send({ op: "abort", session }) },
-		{ name: "btw", description: t("cmd.btw"), run: () => store.send({ op: "btwOpen", session, kind: "contextual" }) },
+		...(createMode || session === undefined ? [] : [{ name: "compact", description: t("cmd.compact"), run: () => store.send({ op: "compact", session }) }]),
+		...(createMode || session === undefined ? [] : [{ name: "abort", description: t("cmd.abort"), run: () => store.send({ op: "abort", session }) }]),
+		...(createMode || session === undefined ? [] : [{ name: "btw", description: t("cmd.btw"), run: () => store.send({ op: "btwOpen", session, kind: "contextual" }) }]),
 		{ name: "settings", description: t("cmd.settings"), run: () => onNavigateSettings?.() },
 	];
 
+	const draftKey = `eta.draft.${session ?? "new"}`;
 	useEffect(() => {
-		setText(localStorage.getItem(`eta.draft.${session}`) ?? "");
-	}, [session]);
+		setText(localStorage.getItem(draftKey) ?? "");
+	}, [draftKey]);
 
 	useEffect(() => {
-		if (text.length === 0) localStorage.removeItem(`eta.draft.${session}`);
-		else localStorage.setItem(`eta.draft.${session}`, text);
-	}, [text, session]);
-
-	const seen = userTexts.join("\n");
-	useEffect(() => {
-		setPending((current) => {
-			const next = current.filter((item) => !seen.includes(item));
-			return next.length === current.length ? current : next;
-		});
-	}, [seen]);
+		if (text.length === 0) localStorage.removeItem(draftKey);
+		else localStorage.setItem(draftKey, text);
+	}, [text, draftKey]);
 
 	const mention = /(^|\s)@([\w./-]*)$/.exec(text);
 	const mentionQuery = mention?.[2] ?? null;
 
 	useEffect(() => {
-		if (mentionQuery === null || files.length > 0) return;
+		if (mentionQuery === null || files.length > 0 || session === undefined) return;
 		void fetch(`/api/files?session=${encodeURIComponent(session)}`)
 			.then((response) => response.json())
 			.then((body: string[]) => setFiles(body))
@@ -85,6 +88,14 @@ export function Composer({
 
 	const submit = (mode: "queue" | "steer") => {
 		const value = text.trim();
+		if (createMode && create !== undefined) {
+			const plain = value.startsWith("//") ? value.slice(1) : value;
+			if (plain.length === 0 || !create.personaReady) return;
+			create.onSend(plain, pickedModel);
+			setText("");
+			return;
+		}
+		if (session === undefined) return;
 		if (value.length === 0) {
 			if (running) store.send({ op: "abort", session });
 			return;
@@ -99,11 +110,16 @@ export function Composer({
 				setText("");
 				return;
 			}
+			const goalArg = /^\/goal\s+(.+)$/s.exec(value);
+			if (goalArg !== null) {
+				store.send({ op: "goal", session, action: "set", objective: goalArg[1]!.trim() });
+				setText("");
+				return;
+			}
 			store.send({ op: "prompt", session, text: value, ...(mode === "steer" ? { mode } : {}) });
 		} else {
 			store.send({ op: "prompt", session, text: value, ...(mode === "steer" ? { mode } : {}) });
 		}
-		setPending((current) => [...current, value]);
 		setText("");
 	};
 
@@ -136,7 +152,7 @@ export function Composer({
 
 	const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
 		const pasted = event.clipboardData.getData("text");
-		if (pasted.length <= 4096) return;
+		if (pasted.length <= 4096 || session === undefined) return;
 		event.preventDefault();
 		void fetch(`/api/paste?session=${encodeURIComponent(session)}`, {
 			method: "POST",
@@ -157,15 +173,6 @@ export function Composer({
 		<footer className="input-area" data-testid="composer">
 			<div className="input-outer">
 				{topSlot}
-				{pending.length > 0 ? (
-					<div data-testid="queued-bar" className="queued-messages">
-						{pending.map((item, index) => (
-							<div key={`${item}-${index}`} className="queued-message-chip">
-								{t("composer.queued")} · {item}
-							</div>
-						))}
-					</div>
-				) : null}
 				{slashMatches.length > 0 ? (
 					<div className="skill-slash-menu" role="listbox" data-testid="slash-menu">
 						{slashMatches.map((command, index) => (
@@ -229,10 +236,23 @@ export function Composer({
 					/>
 					<div className="composer-toolbar">
 						<div className="flex min-w-0 items-center gap-2">
-							<ModelPicker session={session} />
+							{createMode || session !== undefined ? (
+								<span className={createMode && !create.personaReady ? "opacity-60" : undefined}>
+									<ModelPicker {...(session === undefined ? {} : { session })} {...(createMode ? { onPick: setPickedModel } : {})} />
+								</span>
+							) : null}
+							{createMode && create !== undefined ? (
+								<input
+									data-testid="composer-cwd"
+									value={create.cwd}
+									placeholder={t("new.cwd")}
+									onChange={(event) => create.onCwd(event.target.value)}
+									className="mono min-w-0 max-w-[180px] flex-1 border border-border bg-transparent px-1.5 py-0.5 text-[10px] text-muted outline-none focus:border-border-strong"
+								/>
+							) : null}
 							<span className="composer-toolbar-hints min-w-0 truncate">{running ? t("composer.runningHint") : t("composer.hint")}</span>
 						</div>
-						<Button type="submit" variant="invert" data-testid="composer-submit" disabled={hasPendingAsk}>
+						<Button type="submit" variant="invert" data-testid="composer-submit" disabled={hasPendingAsk || (createMode && create !== undefined && !create.personaReady)}>
 							{text.trim().length > 0 || !running ? t("composer.send") : t("composer.stop")}
 						</Button>
 					</div>

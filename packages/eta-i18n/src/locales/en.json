@@ -102,5 +102,6 @@
 	"btw.empty": "no exchanges yet — ask something",
 	"btw.save": "save",
 	"btw.clear": "clear",
-	"mention.empty": "no matching files"
+	"mention.empty": "no matching files",
+	"composer.queueCancel": "click to cancel"
 }
