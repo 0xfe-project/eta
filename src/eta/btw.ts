@@ -42,10 +42,13 @@ export class BtwManager {
 	/** Seed cache per thread; contextual threads rebuild it from entries. */
 	private seeds = new Map<string, AgentMessage[]>();
 
-	constructor(
-		private readonly buildContext: BuildContext,
-		private readonly onVisibleNote?: (note: string) => void | Promise<void>,
-	) {}
+	private readonly buildContext: BuildContext;
+	private readonly onVisibleNote?: (note: string) => void | Promise<void>;
+
+	constructor(buildContext: BuildContext, onVisibleNote?: (note: string) => void | Promise<void>) {
+		this.buildContext = buildContext;
+		this.onVisibleNote = onVisibleNote;
+	}
 
 	create(kind: BtwThread["kind"], overrides: { model?: string; thinking?: string } = {}): BtwThread {
 		const thread: BtwThread = {
