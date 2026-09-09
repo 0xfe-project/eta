@@ -347,7 +347,11 @@ export function scanBranchEntryStructures(
 	sessionId: string,
 	query: StorageBranchScan,
 ): EntryStructure[] {
-	const rows = scanBranchSegments(db, sessionId, query, scanStructureSegmentRows);
+	const rows = scanBranchSegments(db, sessionId, query, scanStructureSegmentRows).map((structure) => {
+		if (structure.type !== "merge" || structure.mergedParentId !== undefined) return structure;
+		const row = readEntryRowById(db, sessionId, structure.id);
+		return row === undefined ? structure : entryStructureFromRow(row);
+	});
 	const oldestFirst = query.order === "oldestFirst";
 	const newestFirst = oldestFirst ? rows.slice().reverse() : rows;
 	spliceMergedChain(newestFirst, (id) => {

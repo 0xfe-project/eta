@@ -106,7 +106,8 @@ export async function planBoundaryInbox<TContext extends object | undefined>(
 		);
 	let pending = await load(selected);
 	const projects = (value: (typeof pending)[number]["pending"]): boolean =>
-		value.type === "message" || lane.readConfig().entryProjectors[value.customType] !== undefined;
+		value.type === "message" ||
+		(value.type === "custom" && lane.readConfig().entryProjectors[value.customType] !== undefined);
 	if (followUpWhenNoTrigger && !pending.some(({ pending: value }) => projects(value))) {
 		const followUp = state.inbox.filter((item) => item.kind === "followUp");
 		const selectedFollowUp = scope.settings.followUpMode === "all" ? followUp : followUp.slice(0, 1);
@@ -120,13 +121,21 @@ export async function planBoundaryInbox<TContext extends object | undefined>(
 		const entry: NewEntry =
 			value.type === "message"
 				? { id: item.entryId, parentId, type: "message", message: value.payload }
-				: {
-						id: item.entryId,
-						parentId,
-						type: "custom",
-						customType: value.customType,
-						...(value.payload === undefined ? {} : { data: value.payload }),
-					};
+				: value.type === "merge"
+					? {
+							id: item.entryId,
+							parentId,
+							type: "merge",
+							mergedParentId: value.payload.mergedParentId,
+							summary: value.payload.summary,
+						}
+					: {
+							id: item.entryId,
+							parentId,
+							type: "custom",
+							customType: value.customType,
+							...(value.payload === undefined ? {} : { data: value.payload }),
+						};
 		parentId = item.entryId;
 		if (projects(value)) triggerEntryId = item.entryId;
 		return entry;

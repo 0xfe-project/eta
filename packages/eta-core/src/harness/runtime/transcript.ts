@@ -104,8 +104,8 @@ export function readLaneQueues(
 				entryId: item.entryId,
 				kind: "write",
 				type: "custom",
-				customType: stored.value.customType,
-				...(stored.value.payload === undefined ? {} : { data: stored.value.payload }),
+				customType: stored.value.type === "custom" ? stored.value.customType : "eta.merge_placeholder",
+				...(stored.value.type === "custom" && stored.value.payload !== undefined ? { data: stored.value.payload } : {}),
 			};
 		}),
 	);

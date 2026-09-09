@@ -545,6 +545,10 @@ export interface AgentLane {
 	findEntry(query: BranchScan | undefined, context: Context): Promise<Entry | undefined>;
 	appendMessage(message: AgentMessage, context: Context): Promise<string>;
 	appendCustomEntry(customType: string, data: JsonValue | undefined, context: Context): Promise<string>;
+	/** Join another branch's tip into this lane's history via a merge entry; idle lane only. */
+	mergeBranch(fromBranch: string, context: Context, summary?: string): Promise<string>;
+	/** Rewind the lane tip to an ancestor without summarizing. */
+	rollback(targetId: string | null, context: Context): Promise<unknown>;
 	getResult(operationId: string, context: Context): Promise<OperationResultRecord | undefined>;
 	accept(request: OperationRequest, context: Context): Promise<OperationAdmissionResult>;
 	drive(options: DriveOptions, context: Context): Promise<DriveResult>;

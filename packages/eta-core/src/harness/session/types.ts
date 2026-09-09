@@ -358,7 +358,8 @@ export interface LaneState {
 
 export type PendingEntry =
 	| { type: "message"; payload: AgentMessage }
-	| { type: "custom"; customType: string; payload?: JsonValue };
+	| { type: "custom"; customType: string; payload?: JsonValue }
+	| { type: "merge"; payload: { mergedParentId: string; summary: string } };
 
 export interface DurableFileOperations {
 	read: string[];
