@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { BACKGROUND_CONTEXT as CTX } from "../../src/harness/context.ts";
 import { nextCronAt, parseCron } from "../../src/harness/cron.ts";
 import { LoopScheduler } from "../../src/harness/loops.ts";
-import { createLoopTools, createScheduleTool, createSubagentTools } from "../../src/harness/tools.ts";
+import { createLoopTools, createScheduleTool, createSubagentTools } from "../../src/harness/tools/index.ts";
 import { SubagentManager, type SubagentBus, type SubagentBusEvent, type SubagentUsage } from "../../src/harness/subagent.ts";
+
+const NOOP = () => {};
 
 const utc = (y: number, mo: number, d: number, h = 0, mi = 0, s = 0) => Date.UTC(y, mo - 1, d, h, mi, s);
 
@@ -57,24 +59,24 @@ describe("loop / schedule / subagent tools", () => {
 		await tools[0]!.execute(
 			"t1",
 			{ id: "ci", note: "check ci", every: "5m", expiresIn: "1d", maxRuns: 3 },
-			undefined,
+			NOOP,
 			undefined,
 			{} as never,
 			CTX,
 		);
-		const listed = await tools[1]!.execute("t2", {}, undefined, undefined, {} as never, CTX);
-		expect(listed.content[0]!.text).toContain("ci");
-		await tools[2]!.execute("t3", { id: "ci" }, undefined, undefined, {} as never, CTX);
+		const listed = await tools[1]!.execute("t2", {}, NOOP, undefined, {} as never, CTX);
+		expect((listed.content[0] as { text: string }).text).toContain("ci");
+		await tools[2]!.execute("t3", { id: "ci" }, NOOP, undefined, {} as never, CTX);
 		expect(scheduler.list().length).toBe(0);
 		expect(() =>
-			tools[0]!.execute("t4", { id: "bad", note: "n" }, undefined, undefined, {} as never, CTX).then((r) => r.details),
+			tools[0]!.execute("t4", { id: "bad", note: "n" }, NOOP, undefined, {} as never, CTX).then((r) => r.details),
 		).not.toThrow();
 	});
 
 	it("Schedule fires exactly once", () => {
 		const scheduler = new LoopScheduler({ followUpFor: (spec) => spec.def.note });
 		const tools = createScheduleTool(scheduler);
-		void tools[0]!.execute("s1", { note: "call mom", every: "10m" }, undefined, undefined, {} as never, CTX);
+		void tools[0]!.execute("s1", { note: "call mom", every: "10m" }, NOOP, undefined, {} as never, CTX);
 		const spec = scheduler.list()[0]!;
 		spec.nextDueAt = 1;
 		expect(scheduler.pump(2).fired.length).toBe(1);
@@ -120,13 +122,13 @@ describe("loop / schedule / subagent tools", () => {
 		await new Promise((r) => setTimeout(r, 0));
 		const result = await manager.rpc("consume", { id: spawned.id });
 		expect((result as { status: string }).status).toBe("done");
-		const getResult = await tools[1]!.execute("g1", { id: spawned.id }, undefined, undefined, {} as never, CTX);
-		expect(getResult.content[0]!.text).toContain("done");
+		const getResult = await tools[1]!.execute("g1", { id: spawned.id }, NOOP, undefined, {} as never, CTX);
+		expect((getResult.content[0] as { text: string }).text).toContain("done");
 
-		const live = await tools[0]!.execute("a1", { task: "run", background: true }, undefined, undefined, {} as never, CTX);
+		const live = await tools[0]!.execute("a1", { task: "run", background: true }, NOOP, undefined, {} as never, CTX);
 		const liveId = (live.details as { record: { id: string } }).record.id;
-		const steer = await tools[2]!.execute("st", { id: liveId, note: "careful" }, undefined, undefined, {} as never, CTX);
-		expect(steer.content[0]!.text).toContain("Steered");
+		const steer = await tools[2]!.execute("st", { id: liveId, note: "careful" }, NOOP, undefined, {} as never, CTX);
+		expect((steer.content[0] as { text: string }).text).toContain("Steered");
 		expect(manager.pendingNotes(liveId)).toEqual(["careful"]);
 		stopServing();
 	});

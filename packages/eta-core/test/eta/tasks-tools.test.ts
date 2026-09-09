@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { TaskStore } from "../../src/harness/task-store.ts";
 import { createCadenceState, drainReminderForContext, evaluateToolResult, onTurnStart } from "../../src/harness/cadence.ts";
-import { createReminderHooks, createStateTools, createTaskTools, TASK_TOOL_NAMES } from "../../src/harness/tools.ts";
+import { createReminderHooks, createStateTools, createTaskTools, TASK_TOOL_NAMES } from "../../src/harness/tools/index.ts";
 import { GoalManager, applyGoalEntries } from "../../src/harness/goal.ts";
 import { normalizeAskOptions } from "../../src/harness/ask.ts";
 

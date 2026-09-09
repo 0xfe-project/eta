@@ -6,7 +6,7 @@
  */
 
 import type { GoalPayload } from "./session/types.ts";
-import type { DevEmit } from "./dev-events.ts";
+import type { EtaEmit } from "./events.ts";
 
 export type GoalStatus = "active" | "paused" | "achieved";
 
@@ -40,7 +40,7 @@ export class GoalManager {
 	maxContinuations = MAX_CONTINUATIONS;
 	antiSpinLimit = ANTI_SPIN_LIMIT;
 	onChange?: (change: GoalChange) => void;
-	dev?: DevEmit;
+	observe?: EtaEmit;
 
 	get current(): GoalState | undefined {
 		return this.goal;
@@ -55,7 +55,7 @@ export class GoalManager {
 	}
 
 	private changed(change: GoalChange, action: string): void {
-		this.dev?.("goal", action, { status: change.goal.status, from: change.from });
+		this.observe?.("goal", action, { status: change.goal.status, from: change.from });
 		this.onChange?.(change);
 	}
 
@@ -125,7 +125,7 @@ export class GoalManager {
 	noteContinuation(): void {
 		if (this.goal) {
 			this.goal.roundCount += 1;
-			this.dev?.("goal", "continued", { roundCount: this.goal.roundCount });
+			this.observe?.("goal", "continued", { roundCount: this.goal.roundCount });
 		}
 	}
 }

@@ -11,11 +11,13 @@ import { AskRegistry } from "../../src/harness/ask.ts";
 import { StorageBackedSession } from "../../src/harness/session/session.ts";
 import { EtaAgent } from "../../src/harness/agent.ts";
 import { BtwManager } from "../../src/harness/btw.ts";
-import type { DevEmit } from "../../src/harness/dev-events.ts";
+import type { EtaEmit } from "../../src/harness/events.ts";
 import { GoalManager } from "../../src/harness/goal.ts";
 import { LoopScheduler } from "../../src/harness/loops.ts";
 import { TaskStore } from "../../src/harness/task-store.ts";
-import { createStateTools, createTaskTools } from "../../src/harness/tools.ts";
+import { createStateTools, createTaskTools } from "../../src/harness/tools/index.ts";
+
+const NOOP = () => {};
 
 const CTX = BACKGROUND_CONTEXT;
 const EMPTY_USAGE = {
@@ -29,7 +31,7 @@ const EMPTY_USAGE = {
 
 function collector() {
 	const events: { category: string; action: string; data: Record<string, unknown> }[] = [];
-	const emit: DevEmit = (category, action, data) => events.push({ category, action, data: data ?? {} });
+	const emit: EtaEmit = (category, action, data) => events.push({ category, action, data: data ?? {} });
 	return {
 		events,
 		emit,
@@ -43,12 +45,12 @@ describe("batteries emit on the shared sink", () => {
 		const c = collector();
 
 		const goal = new GoalManager();
-		goal.dev = c.emit;
+		goal.observe = c.emit;
 		goal.set("ship it");
 		goal.noteContinuation();
 		goal.markAchieved();
 
-		const scheduler = new LoopScheduler({ followUpFor: (spec) => `loop ${spec.def.id}`, dev: c.emit });
+		const scheduler = new LoopScheduler({ followUpFor: (spec) => `loop ${spec.def.id}`, observe: c.emit });
 		const now = Date.now();
 		scheduler.upsert({ def: { id: "tick", note: "ci", every: "1s" }, runCount: 0, createdAt: now - 5_000, nextDueAt: now - 1, paused: false });
 		scheduler.upsert({ def: { id: "capped", note: "once", every: "1s", maxRuns: 1 }, runCount: 0, createdAt: now - 5_000, nextDueAt: now - 1, paused: false });
@@ -57,7 +59,7 @@ describe("batteries emit on the shared sink", () => {
 		scheduler.upsert({ def: { id: "ev", note: "on turn" }, on: { type: "turn_end" }, runCount: 0, createdAt: now, paused: false });
 		scheduler.event({ type: "turn_end" }, 99);
 
-		const registry = new AskRegistry({ dev: c.emit });
+		const registry = new AskRegistry({ observe: c.emit });
 		const ask = registry.ask({ questionId: "q1", question: "which?" });
 		registry.answer("q1", { kind: "freeform", text: "b" });
 		await ask;
@@ -76,8 +78,8 @@ describe("batteries emit on the shared sink", () => {
 
 		const store = new TaskStore();
 		const taskTools = createTaskTools(store, undefined, c.emit);
-		await taskTools[0]!.execute("c1", { content: "step one" }, undefined, undefined, {} as never, CTX);
-		await taskTools[3]!.execute("c2", { id: store.list()[0]!.id, status: "completed" }, undefined, undefined, {} as never, CTX);
+		await taskTools[0]!.execute("c1", { content: "step one" }, NOOP, undefined, {} as never, CTX);
+		await taskTools[3]!.execute("c2", { id: store.list()[0]!.id, status: "completed" }, NOOP, undefined, {} as never, CTX);
 
 		const kv = new Map<string, string>();
 		const stateTools = createStateTools(
@@ -91,7 +93,7 @@ describe("batteries emit on the shared sink", () => {
 			},
 			c.emit,
 		);
-		await stateTools[0]!.execute("s1", { key: "phase", value: "m5" }, undefined, undefined, {} as never, CTX);
+		await stateTools[0]!.execute("s1", { key: "phase", value: "m5" }, NOOP, undefined, {} as never, CTX);
 
 		expect(c.of("goal", "set").length).toBe(1);
 		expect(c.of("goal", "continued").length).toBe(1);

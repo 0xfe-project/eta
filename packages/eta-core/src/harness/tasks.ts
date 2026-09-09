@@ -1,37 +1,13 @@
 /**
- * Tasks & loops as KV values (D1: no new entry types).
- * Serialization is pure; storage side is a single Value row under
- * `eta.tasks` (tasks) and `eta.loop.<id>` (loop state).
+ * Task prompt vocabulary: rendering the live task list into the system prompt
+ * and the KV-safe serialization used when persisting it. The task types
+ * themselves (Task, TaskStatus, TaskList, StoredTask) are first-class session
+ * vocabulary (session/types.ts).
  */
 
-export type TaskStatus = "pending" | "in_progress" | "completed" | "cancelled";
+import type { Task, TaskList, TaskStatus } from "./session/types.ts";
 
-export interface Task {
-	id: string;
-	content: string;
-	status: TaskStatus;
-	priority?: "high" | "medium" | "low";
-}
-
-export interface TaskList {
-	tasks: Task[];
-	updatedAt: string;
-}
-
-export type { LoopDef } from "./session/types.ts";
-import type { LoopDef } from "./session/types.ts";
-
-export interface LoopState {
-	defId: string;
-	runCount: number;
-	lastRunAt?: string;
-	nextRunAt?: string;
-	paused: boolean;
-}
-
-export const TASKS_KEY = "eta.tasks";
-export const loopDefKey = (id: string) => `eta.loop.${id}`;
-export const loopStateKey = (id: string) => `eta.loop.state.${id}`;
+export type { Task, TaskList, TaskStatus } from "./session/types.ts";
 
 export function serializeTaskList(tasks: Task[]): string {
 	return JSON.stringify({ tasks, updatedAt: new Date().toISOString() } satisfies TaskList);
@@ -48,17 +24,6 @@ export function parseTaskList(raw: string): TaskList {
 	return parsed;
 }
 
-export function serializeLoopState(state: LoopState): string {
-	return JSON.stringify(state);
-}
-
-export function parseLoopState(raw: string): LoopState {
-	const parsed = JSON.parse(raw) as LoopState;
-	if (!parsed.defId || typeof parsed.runCount !== "number") throw new Error("eta.loop: invalid state");
-	return parsed;
-}
-
-/** Render the `<current_tasks>` prompt block (used with TODO_REVIEW_PROMPT). */
 export function renderCurrentTasks(list: TaskList): string {
 	const marks: Record<TaskStatus, string> = {
 		pending: "[ ]",

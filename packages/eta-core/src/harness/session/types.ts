@@ -112,6 +112,29 @@ export interface BtwEntry extends EntryBase {
 	payload: BtwPayload;
 }
 
+export type TaskStatus = "pending" | "in_progress" | "completed" | "cancelled";
+
+/** One planned step in the agent's task list. */
+export interface Task {
+	id: string;
+	content: string;
+	status: TaskStatus;
+	priority?: "high" | "medium" | "low";
+}
+
+export interface TaskList {
+	tasks: Task[];
+	updatedAt: string;
+}
+
+/** Task with dependency edges; persisted whole under the session tasks value. */
+export interface StoredTask extends Task {
+	/** Ids this task waits on; reverse edges are computed, not duplicated. */
+	dependsOn?: string[];
+	/** Ids waiting on this task. */
+	blocks?: string[];
+}
+
 /** Loop registry definition; part of the session loop-state value. */
 export interface LoopDef {
 	id: string;

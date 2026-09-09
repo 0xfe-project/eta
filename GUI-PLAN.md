@@ -1,6 +1,6 @@
 # GUI-PLAN — eta GUI(GPUIX,gpuix)+ Day-0 交付
 
-> 原则:**GUI 不是 core 稳定后的外壳,是 core 的观测仪器**。继承老 CORE_PLAN Part E 的铁律——「不留任何只有引擎知道、UI 看不到的功能」,每节电池上线的同一个里程碑必须带它的面板,否则不算完成。渲染层与 core 的唯一契约 = `SessionView` 快照/增量 + 两条流(`AgentEvent` + telemetry);进程内直连,同一契约以后原样搬上 WebSocket。
+> 原则:**GUI 不是 core 稳定后的外壳,是 core 的观测仪器**。继承老 CORE_PLAN Part E 的铁律——「不留任何只有引擎知道、UI 看不到的功能」,每节电池上线的同一个里程碑必须带它的面板,否则不算完成。渲染层与 core 的唯一契约 = `SessionView` 快照/增量 + 两条流(`AgentEvent` + telemetry);
 >
 > 产品形态抄 pi-gui(Codex 式 thread timeline + 侧栏 + diff 面板 + composer),引擎暴露面抄老 E3/E4(Context 面板 + dev rail),渲染栈换 gpuix(native GPUI,无 Electron/webview)。前置结论沿用已读码分析:terminal 用 gpui-terminal 挂 CustomElement,图片粘贴给 gpuix 补 `paste-assets`(~30 行,`input.rs:1084` 只取了 `.text()`)。
 >
@@ -91,7 +91,6 @@
 | G6 | M6 | loops 卡+bootstrap 恢复 | 重启后 loops 在、到点火 |
 | G7 | M7-M8 | memory 水位+fleet 行 | 抽取/subagent 可见 |
 | G8 | M9 | btw modal+sideThread+inject | 主忙 side 跑、inject 落 timeline |
-| G9 | M10 | WS 薄壳(远端前端复用三通道)+ golden 全集 | 第二前端并行 attach=F2 |
 
 ## 6. 明确不做
 

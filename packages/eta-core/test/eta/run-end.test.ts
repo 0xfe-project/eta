@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AgentMessage } from "../../src/types.ts";
 import { GoalManager } from "../../src/harness/goal.ts";
-import { emptyResponseGuard, goalDriver, isEmptyStop } from "../../src/harness/run-end.ts";
+import { emptyResponseGuard, goalDriver, isEmptyStop } from "../../src/harness/drivers.ts";
 import { GOAL_CONTINUATION, RESUME_EMPTY } from "../../src/prompts/index.ts";
 
 const user = { role: "user", content: "do it", timestamp: 0 } as unknown as AgentMessage;
