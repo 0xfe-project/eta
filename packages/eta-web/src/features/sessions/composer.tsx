@@ -6,6 +6,26 @@ import { ModelPicker } from "./model-picker.tsx";
 import { themeStorageKey, themeChangeEvent } from "../../app/theme.tsx";
 import { useShellOptional } from "../../app/app-shell.tsx";
 
+/** Subsequence fuzzy score: higher = better match; -1 = no match. */
+function fuzzyScore(query: string, target: string): number {
+	const q = query.toLowerCase();
+	const t = target.toLowerCase();
+	let qi = 0;
+	let score = 0;
+	let streak = 0;
+	for (let i = 0; i < t.length && qi < q.length; i += 1) {
+		if (t[i] === q[qi]) {
+			streak += 1;
+			qi += 1;
+			const boundary = i === 0 || /[/.\-_\\]/.test(t[i - 1] ?? "/");
+			score += 1 + streak * 2 + (boundary ? 3 : 0);
+		} else {
+			streak = 0;
+		}
+	}
+	return qi === q.length ? score : -1;
+}
+
 interface SlashCommand {
 	name: string;
 	description: string;
@@ -105,7 +125,7 @@ export function Composer({
 
 	const slashQuery = !menuClosed && !mentionQuery && text.startsWith("/") && !text.startsWith("//") && !/\s/.test(text) ? text.slice(1).toLowerCase() : null;
 	const slashMatches = slashQuery === null ? [] : commands.filter((command) => command.name.startsWith(slashQuery));
-	const atChoices = mentionQuery === null ? [] : files.filter((file) => file.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, 8);
+	const atChoices = mentionQuery === null ? [] : files.map((file) => ({ file, score: fuzzyScore(mentionQuery, file) })).filter((entry) => entry.score >= 0).sort((a, b) => b.score - a.score).slice(0, 8).map((entry) => entry.file);
 	const menuOpen = slashMatches.length > 0 || atChoices.length > 0;
 
 	const pickFile = (file: string) => {
@@ -176,6 +196,24 @@ export function Composer({
 	};
 
 	const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+		const pastedFiles = Array.from(event.clipboardData.files);
+		if (pastedFiles.length > 0) {
+			if (session === undefined) return;
+			event.preventDefault();
+			for (const file of pastedFiles) {
+				const form = new FormData();
+				form.append("file", file);
+				void fetch(`/api/upload?session=${encodeURIComponent(session)}`, { method: "POST", body: form })
+					.then((response) => response.json() as Promise<{ path?: string }>)
+					.then((body) => setText((current) => `${current}${current.endsWith(" ") || current.length === 0 ? "" : " "}${body.path ? `@${body.path}` : ""} `))
+					.catch(() => undefined);
+			}
+			void fetch(`/api/files?session=${encodeURIComponent(session)}`)
+				.then((response) => response.json() as Promise<string[]>)
+				.then(setFiles)
+				.catch(() => undefined);
+			return;
+		}
 		const pasted = event.clipboardData.getData("text");
 		if (pasted.length <= 4096 || session === undefined) return;
 		event.preventDefault();
