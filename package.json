@@ -9,8 +9,6 @@
 		".": "./src/index.ts",
 		"./testing": "./src/harness/session/testing/index.ts",
 		"./node": "./src/node.ts",
-		"./eta": "./src/eta/index.ts",
-		"./node": "./src/node.ts",
 		"./eta": "./src/eta/index.ts"
 	},
 	"scripts": {
