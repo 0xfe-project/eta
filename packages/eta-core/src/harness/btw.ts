@@ -157,6 +157,13 @@ export class BtwManager {
 		this.observe?.("btw", "saved", { threadId: thread.id });
 	}
 
+	/** Drop a thread from the panel; history written to the log stays. */
+	clear(threadId: string): boolean {
+		const had = this.threads.delete(threadId);
+		if (had) this.observe?.("btw", "cleared", { threadId });
+		return had;
+	}
+
 	/** FollowUp text handed to the main run (handoff = S1 driver). */
 	handoff(threadId: string): string | undefined {
 		const thread = this.threads.get(threadId);

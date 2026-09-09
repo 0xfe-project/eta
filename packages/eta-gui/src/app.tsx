@@ -23,6 +23,10 @@ export interface GuiOps {
 	goal(action: "set" | "pause" | "resume" | "clear", objective?: string): void;
 	loopToggle(id: string, paused: boolean): void;
 	taskSet(id: string, status: TaskStatus): void;
+	btwOpen(kind: "contextual" | "tangent"): void;
+	btwAnswer(threadId: string, question: string, answer: string): void;
+	btwSave(threadId: string): void;
+	btwClear(threadId: string): void;
 	compact(): void;
 	abort(): void;
 	answer(questionId: string, response: AskAnswer): void;
@@ -34,6 +38,10 @@ export const noOps: GuiOps = {
 	goal: () => {},
 	loopToggle: () => {},
 	taskSet: () => {},
+	btwOpen: () => {},
+	btwAnswer: () => {},
+	btwSave: () => {},
+	btwClear: () => {},
 	compact: () => {},
 	abort: () => {},
 	answer: () => {},
@@ -45,6 +53,7 @@ export interface EtaAppProps {
 	view: SessionView;
 	dev: DevFrame[];
 	ops: GuiOps;
+	running?: boolean;
 	defaultTab?: "context" | "dev";
 }
 
@@ -167,7 +176,7 @@ function TimelineRow({ row }: { row: { el: unknown } }) {
 	);
 }
 
-export function EtaApp({ sessions, active, view, dev, ops, defaultTab = "dev" }: EtaAppProps) {
+export function EtaApp({ sessions, active, view, dev, ops, running = false, defaultTab = "dev" }: EtaAppProps) {
 	const [tab, setTab] = useState<"context" | "dev">(defaultTab);
 	const [filter, setFilter] = useState("");
 	const [draft, setDraft] = useState("");
@@ -256,6 +265,11 @@ export function EtaApp({ sessions, active, view, dev, ops, defaultTab = "dev" }:
 						onSubmit={send}
 						style={{ flexGrow: 1, fontSize: 14, color: TEXT }}
 					/>
+					{running ? (
+						<div testId="queued-bar" style={{ color: DIM, fontSize: 12 }}>
+							run in progress — next message lands at the turn boundary
+						</div>
+					) : null}
 					<div testId="abort" onClick={ops.abort} style={{ color: DIM, fontSize: 12 }}>
 						abort
 					</div>
@@ -305,9 +319,29 @@ export function EtaApp({ sessions, active, view, dev, ops, defaultTab = "dev" }:
 						))}
 						{view.sideThread.map((thread) => (
 							<div key={thread.id} testId={`sideThread-${thread.id}`} style={{ color: CATEGORY_COLORS.btw }}>
-								{`btw ${thread.id} · ${thread.kind} · ${thread.exchanges.length} exchanges · ${thread.saveState}`}
+								<div>{`btw ${thread.id} · ${thread.kind} · ${thread.exchanges.length} exchanges · ${thread.saveState}`}</div>
+								<div style={{ display: "flex", flexDirection: "row", gap: 6 }}>
+									<div testId={`btw-save-${thread.id}`} onClick={() => ops.btwSave(thread.id)} style={BUTTON}>
+										save
+									</div>
+									<div testId={`btw-clear-${thread.id}`} onClick={() => ops.btwClear(thread.id)} style={BUTTON}>
+										clear
+									</div>
+								</div>
+								<input
+									testId={`btw-answer-${thread.id}`}
+									placeholder="inject a note…"
+									onSubmit={(event) => {
+										const text = (event.value ?? "").trim();
+										if (text !== "") ops.btwAnswer(thread.id, "from the panel", text);
+									}}
+									style={{ fontSize: 12, color: DIM, borderWidth: 1, borderColor: BG }}
+								/>
 							</div>
 						))}
+						<div testId="btw-new" onClick={() => ops.btwOpen("tangent")} style={BUTTON}>
+							new btw
+						</div>
 						{view.memory === undefined ? null : (
 							<div>
 								memory {view.memory.chars}/20000

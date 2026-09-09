@@ -64,8 +64,9 @@ export class Host {
 		this.attachPointerValue = name;
 	}
 
-	async open(name: string, create: () => Promise<EtaAgent>): Promise<void> {
+	async open(name: string, create: () => Promise<EtaAgent>, options: { restore?: boolean } = {}): Promise<void> {
 		const agent = await create();
+		if (options.restore === true) await agent.restore(BACKGROUND_CONTEXT);
 		const projector = new SessionViewProjector(agent);
 		const entry: Hosted = {
 			agent,
@@ -139,6 +140,22 @@ export class Host {
 
 	taskSet(name: string, id: string, status: "pending" | "in_progress" | "completed" | "cancelled"): void {
 		this.must(name).setTask(id, { status });
+	}
+
+	btwOpen(name: string, kind: "contextual" | "tangent"): void {
+		this.must(name).btw.create(kind);
+	}
+
+	btwAnswer(name: string, threadId: string, question: string, answer: string): void {
+		this.must(name).btw.answer(threadId, question, answer);
+	}
+
+	btwSave(name: string, threadId: string): void {
+		this.must(name).btw.save(threadId, false);
+	}
+
+	btwClear(name: string, threadId: string): void {
+		this.must(name).btw.clear(threadId);
 	}
 
 	async compact(name: string): Promise<void> {

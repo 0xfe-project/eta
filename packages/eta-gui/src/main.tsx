@@ -41,6 +41,10 @@ export function LiveApp({ host }: { host: Host }) {
 		goal: (action, objective) => host.goal(pointer, action, objective),
 		loopToggle: (id, paused) => host.loopToggle(pointer, id, paused),
 		taskSet: (id, status) => host.taskSet(pointer, id, status),
+		btwOpen: (kind) => host.btwOpen(pointer, kind),
+		btwAnswer: (threadId, question, answer) => host.btwAnswer(pointer, threadId, question, answer),
+		btwSave: (threadId) => host.btwSave(pointer, threadId),
+		btwClear: (threadId) => host.btwClear(pointer, threadId),
 		compact: () => void host.compact(pointer).catch(() => undefined),
 		abort: () => void host.abort(pointer).catch(() => undefined),
 		answer: (questionId, response) => host.askOf(pointer)?.answer(questionId, response as Parameters<NonNullable<ReturnType<Host["askOf"]>>["answer"]>[1]),
@@ -55,7 +59,16 @@ export function LiveApp({ host }: { host: Host }) {
 	if (view === undefined) {
 		return <div style={{ width: 1280, height: 800, backgroundColor: "#1e1e2e", color: "#cdd6f4", padding: 24 }}>starting…</div>;
 	}
-	return <EtaApp sessions={sessions} active={pointer} view={view} dev={dev} ops={ops} />;
+	return (
+		<EtaApp
+			sessions={sessions}
+			active={pointer}
+			view={view}
+			dev={dev}
+			ops={ops}
+			running={sessions.find((session) => session.name === pointer)?.badges.includes("running") ?? false}
+		/>
+	);
 }
 
 const isEntryPoint =

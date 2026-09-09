@@ -164,3 +164,25 @@ describeNative("L4 dev rail", () => {
 		expect(renderer.getPaintedText().some((line) => line.includes("skill · loaded"))).toBe(true);
 	});
 });
+
+describeNative("L5 composer", () => {
+	it("shows a queued-message bar while the run is busy and btw controls reach ops", async () => {
+		const feed = fakeFeed();
+		const calls: string[] = [];
+		const ops: GuiOps = {
+			...noOps,
+			btwOpen: (kind) => calls.push(`open:${kind}`),
+			btwAnswer: (id, question, answer) => calls.push(`answer:${id}:${answer}`),
+			btwSave: (id) => calls.push(`save:${id}`),
+			btwClear: (id) => calls.push(`clear:${id}`),
+		};
+		const { render, renderer } = createTestRoot();
+		render(<EtaApp sessions={feed.sessions} active="eta-main" view={feed.view} dev={feed.dev} ops={ops} running defaultTab="context" />);
+		const app = await connectTest(renderer);
+		expect(renderer.getPaintedText().some((line) => line.includes("turn boundary"))).toBe(true);
+		await app.getByTestId("btw-new").click();
+		await app.getByTestId("btw-save-b1").click();
+		await app.getByTestId("btw-clear-b1").click();
+		expect(calls).toEqual(["open:tangent", "save:b1", "clear:b1"]);
+	});
+});

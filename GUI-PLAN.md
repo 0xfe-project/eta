@@ -39,7 +39,7 @@
 - [x] L2 timeline 行类型:在 pi-gui `activity|tool|summary|turn-marker`(timeline-types.ts)基础上扩 `goal-change / loop-fire / compaction / ask / btw-note / retry`。工具行内嵌 `<code>`(参数/结果)+ `<diff>`(edit 类)。完成条件:virtual-list 变高行 + 尾部锚定(chat 语义),历史重放与直播同一渲染路径。(app.tsx `<virtual-list followTail>`;工具行内嵌 `<code>` args/结果;loop/retry 瞬态行来自 dev 通道;test L2 timeline rows)
 - [x] L3 Context 面板:system prompt 拆**稳定块/自适应块**两段 + `compactionEpoch`;usage 表(input/output/cache_read/write + `cacheRate` + tokens/sec,速率用 dev ts);goal 卡、tasks、loops、memory 水位(20k)、subagents fleet 行、btw sideThread。完成条件:跑一个 turn 每块都实时刷新。(prompt 拆 stable(base+persona)/adaptive(goal+tasks+memory):composer.splitEtaPromptSections,agent 每次 generation 上报 prompt.blocks 观测;tokens/sec 由 agent 单一 usage 追踪器算,投影器只搬运;Context usage 行+prompt 行有 testId,app.test/G2-G6 与 session-view.test 断言)
 - [x] L4 dev rail:全 category 着色 tail,`/` 过滤、暂停/恢复;环满丢最旧。完成条件:14+类各有颜色且能过滤。(CATEGORY_COLORS 覆盖 15 eta 类+badge 类;dev-filter 过滤;pause 冻结快照;DevRing 满则丢最旧;test L4 dev rail / all-category rail)
-- [ ] L5 composer:textarea + @mention 弹层(文件/agent)、**paste-assets 图片 chips**、排队消息条(等 turn 边界,= S1 driver)、`ask_user` 内联弹窗(单选/多选/填空,含 timeout 倒计时,答案走 `answer()`)。完成条件:kill-重启后未决 ask 在 GUI 重弹。
+- [ ] L5 composer:textarea + @mention 弹层(文件/agent)、**paste-assets 图片 chips**、排队消息条(等 turn 边界,= S1 driver)、`ask_user` 内联弹窗(单选/多选/填空,含 timeout 倒计时,答案走 `answer()`)。完成条件:kill-重启后未决 ask 在 GUI 重弹。(重弹 ✅ pendingEntries+restore;排队消息条 ✅ queued-bar;ask 弹窗 ✅;@mention 弹层与 paste-assets 图片 chips 依赖给 gpuix 的补丁,后续)
 
 ---
 
@@ -88,11 +88,11 @@
 | G1 | M1 | 真 turn 流+retry/loop 系统行 | T3 的 turn 段(真 turn 流已通:faux 模型经 Host 三通道渲染进 timeline,test/app.test.tsx G1;retry/loop 系统行随 L2 已通:瞬态行渲染) |
 | G2 | M2 | tasks 卡(reminder 注入可见) | DAG 渲染+操作 |
 | G3 | M3 | goal 卡+控制 | 续命/暂停在屏上可见 |
-| G4 | M4 | ask 弹窗 | kill-重启-弹-答续跑 |
-| G5 | M5 | compaction 行+Context/epoch/cacheRate | 压缩前后对照 |
-| G6 | M6 | loops 卡+bootstrap 恢复 | 重启后 loops 在、到点火 |
-| G7 | M7-M8 | memory 水位+fleet 行 | 抽取/subagent 可见 |
-| G8 | M9 | btw modal+sideThread+inject | 主忙 side 跑、inject 落 timeline |
+| G4 | M4 | ask 弹窗 | kill-重启-弹-答续跑 ✅ core: pending inbox entries durable (`lane.pendingEntries`),restore 重浮现;gui host.test G4 |
+| G5 | M5 | compaction 行+Context/epoch/cacheRate | 压缩前后对照 ✅ host.test G5(systems 行+epoch) |
+| G6 | M6 | loops 卡+bootstrap 恢复 | 重启后 loops 在、到点火 ✅ agent-restart(fired loop values 重启后在)+面板 loops 行 |
+| G7 | M7-M8 | memory 水位+fleet 行 | 抽取/subagent 可见 ✅ 水位条(G2-G6)+fleet 行实时更新(host.test G7) |
+| G8 | M9 | btw modal+sideThread+inject | 主忙 side 跑、inject 落 timeline ✅ host.test G8(open/inject/save 落 btw 行/clear)+面板 btw 控件 |
 
 ## 6. 明确不做
 
