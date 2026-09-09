@@ -1,6 +1,7 @@
 import type { AssistantMessageFrame } from "@earendil-works/pi-ai";
 import type { AgentToolResult } from "../../types.ts";
 import type {LoopSpec,
+	StoredTask,
 	DurableStructuralPreparation,
 	JsonValue,
 	LaneConfiguration,
@@ -156,6 +157,7 @@ export function resolveListReadOptions(options: ListReadOptions = {}): ResolvedL
 }
 
 export const loopState = (id: string) => value<LoopSpec>("eta.loop.state", id);
+export const taskState = value<StoredTask[]>("eta.tasks.state");
 export const loopStateInventoryPrefix = () => value<LoopSpec>("eta.loop.state");
 export const branchTip = (branch: string) => value<string | null>("pi.branch.tip", branch);
 export const branchTipInventoryPrefix = () => value<string | null>("pi.branch.tip");

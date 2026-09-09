@@ -8,8 +8,8 @@
 import { Type } from "typebox";
 import { awaitWithContext } from "./context.ts";
 import type { AgentHarnessTool } from "./types.ts";
-import type { DevEmit } from "./dev-events.ts";
-import type { AskPayload } from "./session/types.ts";
+import type { EtaEmit } from "./events.ts";
+import type { AnswerPayload, AskPayload } from "./session/types.ts";
 
 export type AskResponse =
 	| { kind: "selection"; selections: string[]; comment?: string }
@@ -25,11 +25,13 @@ export type HeadlessAsk = (payload: AskPayload) => Promise<AskResponse | null>;
 
 export class AskRegistry {
 	private pending = new Map<string, PendingAsk>();
-	private readonly dev: DevEmit | undefined;
+	private readonly observe: EtaEmit | undefined;
+	private readonly onAnswer: ((payload: AnswerPayload) => void) | undefined;
 	private readonly headless: HeadlessAsk | undefined;
 
-	constructor(opts: { dev?: DevEmit; headless?: HeadlessAsk } = {}) {
-		this.dev = opts.dev;
+	constructor(opts: { observe?: EtaEmit; headless?: HeadlessAsk; onAnswer?: (payload: AnswerPayload) => void } = {}) {
+		this.observe = opts.observe;
+		this.onAnswer = opts.onAnswer;
 		this.headless = opts.headless;
 	}
 
@@ -43,7 +45,7 @@ export class AskRegistry {
 				this.pending.delete(payload.questionId);
 				if (timer !== undefined) clearTimeout(timer);
 				opts.signal?.removeEventListener("abort", onAbort);
-				this.dev?.("ask_user", action, { questionId: payload.questionId, kind: response.kind });
+				this.observe?.("ask_user", action, { questionId: payload.questionId, kind: response.kind });
 				resolve(response);
 			};
 			let timer: ReturnType<typeof setTimeout> | undefined;
@@ -54,7 +56,7 @@ export class AskRegistry {
 			const onAbort = () => settle({ kind: "none" }, "canceled");
 			opts.signal?.addEventListener("abort", onAbort, { once: true });
 			this.pending.set(payload.questionId, { payload, settle: (response) => settle(response, "answered") });
-			this.dev?.("ask_user", "asked", { questionId: payload.questionId });
+			this.observe?.("ask_user", "asked", { questionId: payload.questionId });
 			if (this.headless !== undefined) {
 				const headless = this.headless;
 				void Promise.resolve()
@@ -71,9 +73,14 @@ export class AskRegistry {
 	}
 
 	/** Backfill one waiting ask; false when nobody is waiting on that id. */
+	/** Backfill a waiting question; a real answer is recorded before settling. */
 	answer(questionId: string, response: AskResponse): boolean {
 		const waiting = this.pending.get(questionId);
 		if (waiting === undefined) return false;
+		if (this.onAnswer !== undefined) {
+			const answers = response.kind === "selection" ? [...response.selections, ...(response.comment === undefined ? [] : [response.comment])] : response.kind === "freeform" ? [response.text] : [];
+			if (response.kind !== "none") this.onAnswer({ questionId, answers });
+		}
 		waiting.settle(response);
 		return true;
 	}

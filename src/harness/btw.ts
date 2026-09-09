@@ -8,7 +8,7 @@
  */
 
 import type { AgentMessage } from "../types.ts";
-import type { DevEmit } from "./dev-events.ts";
+import type { EtaEmit } from "./events.ts";
 import type { BtwPayload } from "./session/types.ts";
 import { btwHandoff } from "../prompts/index.ts";
 
@@ -46,16 +46,16 @@ export class BtwManager {
 
 	private readonly buildContext: BuildContext;
 	private readonly onVisibleNote?: (note: string) => void | Promise<void>;
-	private readonly dev: DevEmit | undefined;
+	private readonly observe: EtaEmit | undefined;
 
 	constructor(
 		buildContext: BuildContext,
 		onVisibleNote?: (note: string) => void | Promise<void>,
-		dev?: DevEmit,
+		observe?: EtaEmit,
 	) {
 		this.buildContext = buildContext;
 		this.onVisibleNote = onVisibleNote;
-		this.dev = dev;
+		this.observe = observe;
 	}
 
 	create(kind: BtwThread["kind"], overrides: { model?: string; thinking?: string } = {}): BtwThread {
@@ -69,7 +69,7 @@ export class BtwManager {
 			assemblyVersion: 1,
 		};
 		this.threads.set(thread.id, thread);
-		this.dev?.("btw", "opened", { threadId: thread.id, kind: thread.kind });
+		this.observe?.("btw", "opened", { threadId: thread.id, kind: thread.kind });
 		return thread;
 	}
 
@@ -120,7 +120,7 @@ export class BtwManager {
 
 	answer(threadId: string, question: string, answer: string): void {
 		this.threads.get(threadId)?.exchanges.push({ question, answer, at: Date.now() });
-		this.dev?.("btw", "injected", { threadId });
+		this.observe?.("btw", "injected", { threadId });
 	}
 
 	/**
@@ -154,14 +154,14 @@ export class BtwManager {
 		const last = thread.exchanges[thread.exchanges.length - 1];
 		if (last !== undefined) await this.onVisibleNote?.(`btw ${thread.id}: ${last.question} -> ${last.answer}`);
 		thread.saveState = "saved";
-		this.dev?.("btw", "saved", { threadId: thread.id });
+		this.observe?.("btw", "saved", { threadId: thread.id });
 	}
 
 	/** FollowUp text handed to the main run (handoff = S1 driver). */
 	handoff(threadId: string): string | undefined {
 		const thread = this.threads.get(threadId);
 		if (thread === undefined || thread.exchanges.length === 0) return undefined;
-		this.dev?.("btw", "summarized", { threadId });
+		this.observe?.("btw", "summarized", { threadId });
 		return btwHandoff(thread.id);
 	}
 

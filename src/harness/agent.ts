@@ -10,30 +10,30 @@ import type { Api, Model, Models } from "@earendil-works/pi-ai";
 import { BACKGROUND_CONTEXT, type Context } from "./context.ts";
 import { AgentHarness, type AgentLane } from "./agent-harness.ts";
 import { loopFollowUp } from "../prompts/index.ts";
-import { loopState, loopStateInventoryPrefix } from "./session/values.ts";
+import { loopState, loopStateInventoryPrefix, taskState } from "./session/values.ts";
 import type { PendingEntry } from "./session/types.ts";
 import { applyGoalEntries } from "./goal.ts";
 import type { AgentHarnessTool } from "./types.ts";
 import type { Session } from "./session/types.ts";
-import type { EtaEmit } from "./eta-events.ts";
+import type { EtaEmit } from "./events.ts";
 import { composeEtaSystemPrompt } from "./composer.ts";
 import { AskRegistry, createAskUserTool, type HeadlessAsk } from "./ask.ts";
 import { BtwManager } from "./btw.ts";
-import { askEntry, btwEntry, goalEntry, type GoalPayload } from "./entries.ts";
+import { answerEntry, askEntry, btwEntry, goalEntry, type GoalPayload } from "./entries.ts";
 import { GoalManager } from "./goal.ts";
 import { LoopScheduler, type LoopSpec } from "./loops.ts";
-import { emptyResponseGuard, goalDriver, loopDriver, startLoopHeartbeat } from "./run-end.ts";
+import { emptyResponseGuard, goalDriver, loopDriver, startLoopHeartbeat } from "./drivers.ts";
 import { SubagentManager, type SubagentBus, type SubagentBusEvent, type SubagentRunner } from "./subagent.ts";
 import { TaskStore } from "./task-store.ts";
 import {
 	createLoopTools,
+	createReminderHooks,
 	createScheduleTool,
 	createStateTools,
 	createSubagentTools,
 	createTaskTools,
-	type BatteryTool,
 	type StateKV,
-} from "./tools.ts";
+} from "./tools/index.ts";
 
 export interface EtaAgentOptions {
 	session: Session;
@@ -93,7 +93,8 @@ export class EtaAgent {
 	readonly ask: AskRegistry;
 	readonly btw: BtwManager;
 	readonly subagents: SubagentManager;
-	readonly batteryTools: BatteryTool[];
+		/** All tools the harness runs: battery surface plus caller extras. */
+	readonly agentTools: AgentHarnessTool<object | undefined>[];
 	/** Size of the last <memory> block for the water level panel; undefined when no source. */
 	readonly memoryInfo: (() => Promise<{ chars: number }>) | undefined;
 	private readonly stopHeartbeat: (() => void) | undefined;
@@ -107,7 +108,7 @@ export class EtaAgent {
 		ask: AskRegistry,
 		btw: BtwManager,
 		subagents: SubagentManager,
-		batteryTools: BatteryTool[],
+		agentTools: AgentHarnessTool<object | undefined>[],
 		memoryInfo: (() => Promise<{ chars: number }>) | undefined,
 		stopHeartbeat: (() => void) | undefined,
 	) {
@@ -119,7 +120,7 @@ export class EtaAgent {
 		this.ask = ask;
 		this.btw = btw;
 		this.subagents = subagents;
-		this.batteryTools = batteryTools;
+		this.agentTools = agentTools;
 		this.memoryInfo = memoryInfo;
 		this.stopHeartbeat = stopHeartbeat;
 	}
@@ -143,15 +144,20 @@ export class EtaAgent {
 			});
 
 		const goal = new GoalManager();
-		goal.dev = emit;
+		goal.observe = emit;
 		goal.onChange = (change) => writeEntry(goalEntry(goalPayloadFor(change)));
 		const tasks = new TaskStore();
+		const persistTasks = () => void options.session.setValue(taskState, tasks.list(), BACKGROUND_CONTEXT).catch(() => undefined);
 		const loops = new LoopScheduler({
 			followUpFor: (spec) => loopFollowUp(spec.def.id, spec.def.note),
 			persist: persistLoop,
-			dev: emit,
+			observe: emit,
 		});
-		const ask = new AskRegistry({ dev: emit, ...(options.askHeadless === undefined ? {} : { headless: options.askHeadless }) });
+		const ask = new AskRegistry({
+			observe: emit,
+			onAnswer: (payload) => writeEntry(answerEntry(payload)),
+			...(options.askHeadless === undefined ? {} : { headless: options.askHeadless }),
+		});
 		const btw = new BtwManager(() => ({ messages: [] }), (note) => writeEntry(btwEntry({ note })), emit);
 		const subagentBus: SubagentBus = { emit: (type: SubagentBusEvent, payload) => emit("lifecycle", type, payload) };
 		const subagents = new SubagentManager(
@@ -160,8 +166,8 @@ export class EtaAgent {
 			options.poolSize,
 		);
 
-		const batteryTools: BatteryTool[] = [
-			...createTaskTools(tasks, undefined, emit),
+		const agentTools: AgentHarnessTool<object | undefined>[] = [
+			...createTaskTools(tasks, persistTasks, emit),
 			...createStateTools(options.kv ?? memoryKv(), emit),
 			...createLoopTools(loops),
 			...createScheduleTool(loops),
@@ -170,7 +176,7 @@ export class EtaAgent {
 				registry: ask,
 				onAsk: (payload) => writeEntry(askEntry(payload)),
 				...(options.askTimeoutMs === undefined ? {} : { timeoutMs: options.askTimeoutMs }),
-			}) as unknown as BatteryTool,
+			}),
 		];
 
 		const systemPrompt =
@@ -193,8 +199,8 @@ export class EtaAgent {
 				models: options.models,
 				model: options.model,
 				...(systemPrompt === undefined ? {} : { systemPrompt }),
-				activeToolNames: [...new Set(batteryTools.map((tool) => tool.name))],
-				tools: [...batteryTools, ...(options.tools ?? [])] as never,
+				activeToolNames: [...new Set(agentTools.map((tool) => tool.name))],
+				tools: [...agentTools, ...(options.tools ?? [])],
 			},
 			context,
 		);
@@ -205,6 +211,10 @@ export class EtaAgent {
 		harness.hooks.on("before_run_end", goalDriver({ goal, evaluate: options.evaluateGoal ?? (() => Promise.resolve(false)) }), { id: "eta.goal" });
 		harness.hooks.on("before_run_end", loopDriver(loops), { id: "eta.loop" });
 		harness.hooks.on("before_run_end", emptyResponseGuard(), { id: "eta.empty" });
+
+		const reminder = createReminderHooks(tasks);
+		harness.hooks.on("after_tool", (event) => reminder.afterTool({ toolName: event.toolName }), { id: "eta.reminder" });
+		harness.hooks.on("transform_context", (event) => reminder.transformContext(event), { id: "eta.reminder" });
 		const stopHeartbeat = options.heartbeatMs === 0 ? undefined : startLoopHeartbeat(loops, options.heartbeatMs ?? 30_000);
 		return new EtaAgent(
 			harness,
@@ -215,7 +225,7 @@ export class EtaAgent {
 			ask,
 			btw,
 			subagents,
-			batteryTools,
+			agentTools,
 			options.memorySource === undefined
 				? undefined
 				: async () => ({ chars: (await options.memorySource!()).length }),
@@ -226,7 +236,9 @@ export class EtaAgent {
 	/** Rebuild battery state from the replayed session log and values. */
 	async restore(context: Context): Promise<void> {
 		const entries = await this.lane.findEntries(undefined, context);
-		const changes = entries.filter((e): e is Extract<typeof e, { payload: unknown }> => e.type === "goal" || e.type === "ask" || e.type === "answer" || e.type === "btw");
+		const changes = entries
+			.filter((e): e is Extract<typeof e, { payload: unknown }> => e.type === "goal" || e.type === "ask" || e.type === "answer" || e.type === "btw")
+			.sort((a, b) => a.seq - b.seq);
 		const replayGoal = this.goal.onChange;
 		this.goal.onChange = undefined;
 		try {
@@ -236,6 +248,8 @@ export class EtaAgent {
 		}
 		this.ask.replay(changes);
 		this.btw.replay(changes);
+		const storedTasks = await this.lane.scanValues(taskState, context);
+		if (storedTasks[0] !== undefined) this.tasks.restore(storedTasks[0].value);
 		for (const stored of await this.lane.scanValues(loopStateInventoryPrefix(), context)) {
 			this.loops.upsert(stored.value);
 		}

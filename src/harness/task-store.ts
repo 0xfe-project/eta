@@ -5,20 +5,21 @@
  * load so a corrupt KV row can't poison the session.
  */
 
-import type { Task, TaskStatus } from "./tasks.ts";
+import type { StoredTask, Task, TaskStatus } from "./session/types.ts";
 
-export interface StoredTask extends Task {
-	/** Ids this task waits on; reverse edges are computed, not duplicated. */
-	dependsOn?: string[];
-	/** Ids waiting on this task. */
-	blocks?: string[];
-}
+export type { StoredTask } from "./session/types.ts";
 
 const STATUSES: readonly TaskStatus[] = ["pending", "in_progress", "completed", "cancelled"];
 
 export class TaskStore {
 	private tasks = new Map<string, StoredTask>();
 	private nextId = 1;
+
+	/** Rebuild the store from persisted tasks; ids are never reused across a restore. */
+	restore(tasks: StoredTask[]): void {
+		this.tasks = new Map(tasks.map((task) => [task.id, task]));
+		this.nextId = Math.max(0, ...tasks.map((task) => Number(/^t(\d+)$/.exec(task.id)?.[1] ?? 0))) + 1;
+	}
 
 	/** Add a task; auto-ids are t1, t2, ... and are never reused. */
 	create(content: string, extra: { deps?: string[]; priority?: Task["priority"] } = {}): { task: StoredTask; warnings: string[] } {

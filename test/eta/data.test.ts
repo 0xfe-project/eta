@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TASKS_KEY, loopStateKey, parseLoopState, parseTaskList, renderCurrentTasks, serializeLoopState, serializeTaskList } from "../../src/harness/tasks.ts";
+import { parseTaskList, renderCurrentTasks, serializeTaskList } from "../../src/harness/tasks.ts";
 import { answerEntry, askEntry, btwEntry, goalEntry } from "../../src/harness/entries.ts";
 
 describe("tasks kv values", () => {
@@ -8,13 +8,10 @@ describe("tasks kv values", () => {
 		const list = parseTaskList(serializeTaskList(tasks));
 		expect(list.tasks).toEqual(tasks);
 		expect(renderCurrentTasks(list)).toContain("[~] t1: wire storage");
-		expect(TASKS_KEY).toBe("eta.tasks");
 	});
 	it("rejects malformed payloads", () => {
 		expect(() => parseTaskList(JSON.stringify({ tasks: [{ id: "x" }] }))).toThrow();
-		expect(() => parseLoopState("{}")).toThrow();
-		expect(parseLoopState(serializeLoopState({ defId: "l1", runCount: 2, paused: false }))).toEqual({ defId: "l1", runCount: 2, paused: false });
-		expect(loopStateKey("l1")).toBe("eta.loop.state.l1");
+		expect(() => parseTaskList("{}")).toThrow();
 	});
 });
 

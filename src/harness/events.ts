@@ -1,6 +1,57 @@
 import type { EventListener, Events, HarnessEvent, HarnessEventType, WatchHandle } from "./agent-harness.ts";
 import type { Context } from "./context.ts";
 
+/**
+ * Battery observations ride the main bus as `eta` events: one bus, one order,
+ * one lane tag. Old core had fourteen categories; eta keeps them and adds
+ * `btw`. The lifecycle/turn/usage/prompt/compaction/tool/retry categories are
+ * the native HarnessEvent variants themselves, not re-emitted here.
+ */
+
+export const ETA_EVENT_CATEGORIES = [
+	"lifecycle",
+	"turn",
+	"usage",
+	"prompt",
+	"compaction",
+	"loop",
+	"goal",
+	"memory",
+	"skill",
+	"todo",
+	"state",
+	"tool",
+	"retry",
+	"ask_user",
+	"btw",
+] as const;
+
+export type EtaEventCategory = (typeof ETA_EVENT_CATEGORIES)[number];
+
+export interface EtaEventData {
+	[key: string]: unknown;
+}
+
+/** One observation on the main bus (lane-tagged like every other event). */
+export interface EtaEventPayload {
+	type: "eta";
+	category: EtaEventCategory | string;
+	action: string;
+	data: EtaEventData;
+}
+
+/** Emitted by the generation step once the system prompt and context are assembled. */
+export interface PromptAssembledPayload {
+	type: "prompt_assembled";
+	runId: string;
+	systemPromptChars: number;
+	messages: number;
+	attempt: number;
+}
+
+/** Sink every subsystem calls to report an observation; bound to the bus by the agent. */
+export type EtaEmit = (category: EtaEventCategory | string, action: string, data?: EtaEventData) => void;
+
 type UntypedEventListener = (event: HarnessEvent, context: Context) => void | Promise<void>;
 type ResnapshotCapture<T> = (context: Context, markBoundary: () => void) => Promise<T>;
 
