@@ -1,7 +1,7 @@
-import type { RetryPolicy } from "@earendil-works/pi-ai";
+import type { AgentRetryPolicy } from "./../../../internal/retry-compat.ts";
 import { retryDelayMs } from "./../../../internal/retry-compat.ts";
 export function retryNotBefore(
-	policy: Pick<RetryPolicy, "baseDelayMs" | "maxAgentDelayMs">,
+	policy: Pick<AgentRetryPolicy, "baseDelayMs" | "maxAgentDelayMs">,
 	attempt: number,
 	now = Date.now(),
 ): number {

@@ -1,3 +1,4 @@
+import type { AgentRetryPolicy } from "../../../internal/retry-compat.ts";
 import { DEFAULT_MAX_AGENT_RETRY_DELAY_MS, retryDelayMs } from "../../../internal/retry-compat.ts";
 import type { HarnessEvent, LaneQueuedItem } from "../../agent-harness.ts";
 import { insertEntry } from "../../session/commit.ts";
@@ -44,7 +45,7 @@ type FinishBoundaryOperation =
 export function normalizedRetryPolicy<TContext extends object | undefined>(
 	lane: Lane<TContext>,
 ): NormalizedRetryPolicy {
-	const retry = lane.readConfig().retryPolicy;
+	const retry = lane.readConfig().retryPolicy as AgentRetryPolicy;
 	return {
 		maxAttempts: retry.enabled ? retry.maxRetries + 1 : 1,
 		baseDelayMs: retry.baseDelayMs,
