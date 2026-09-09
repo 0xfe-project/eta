@@ -7,7 +7,7 @@ import type { ServerMessage } from "../src/protocol.ts";
 
 async function withServer(run: (server: EtaServer) => Promise<void>): Promise<void> {
 	const cwd = mkdtempSync(join(tmpdir(), "eta-server-test-"));
-	const server = await startServer({ port: 0, cwd, webDist: join(cwd, "no-dist") });
+	const server = await startServer({ port: 0, cwd, webDist: join(cwd, "no-dist"), configPath: join(cwd, "no-config.json"), dataDir: join(cwd, "sessions") });
 	serverCwds.set(server, cwd);
 	try {
 		await run(server);
