@@ -1,5 +1,6 @@
 import { SUMMARIZATION_PROMPT, SUMMARIZATION_SYSTEM_PROMPT, TURN_PREFIX_SUMMARIZATION_PROMPT, UPDATE_SUMMARIZATION_PROMPT } from "../../prompts/compaction.ts";
 export { SUMMARIZATION_SYSTEM_PROMPT };
+import { dropToolPairs, untrustedFallback } from "./eta-compaction.ts";
 import {	type Context as AiContext,
 	type Api,
 	type AssistantMessage,
@@ -522,6 +523,13 @@ export async function generateSummaryWithRequest(
 		return err(new CompactionError("aborted", response.errorMessage || "Summarization aborted"));
 	}
 	if (response.stopReason === "error") {
+		const fallback = untrustedFallback(currentMessages, maxTokens * 4);
+		if (fallback !== undefined) {
+			return ok({
+				text: fallback,
+				usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+			});
+		}
 		return err(
 			new CompactionError(
 				"summarization_failed",
@@ -595,11 +603,12 @@ export function prepareCompaction(
 
 	const cutPoint = findCutPoint(compactableEntries, 0, boundaryEnd, settings.keepRecentTokens);
 	const historyEnd = cutPoint.isSplitTurn ? cutPoint.turnStartIndex : cutPoint.firstKeptEntryIndex;
-	const messagesToSummarize: AgentMessage[] = [];
+	const history: AgentMessage[] = [];
 	for (let i = 0; i < historyEnd; i++) {
 		const msg = getMessageFromEntryForCompaction(compactableEntries[i]);
-		if (msg) messagesToSummarize.push(msg);
+		if (msg) history.push(msg);
 	}
+	const messagesToSummarize = dropToolPairs(history);
 	const turnPrefixMessages: AgentMessage[] = [];
 	if (cutPoint.isSplitTurn) {
 		for (let i = cutPoint.turnStartIndex; i < cutPoint.firstKeptEntryIndex; i++) {
