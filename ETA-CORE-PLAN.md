@@ -85,17 +85,17 @@
 - [x] `update_state/check_state/list_state` 已落(`src/eta/tools.ts createStateTools`,后端 = `StateKV` 接口,生产接 session Value;往返测过)。
 
 工具面 `Agent / get_subagent_result / steer_subagent`;子 = 独立 EtaAgent session(parent 指针、自带 tools/prompt/model)。工具裁剪抄它的做法:`setActiveToolsByName` + `beforeToolCall` 覆盖(agent-runner.ts:282-300)。
-- [ ] **并发池语义照搬**(agent-manager.ts:99-146 的推理直接继承):后台池默认 10、前台 spawnAndWait 单独计、**嵌套子不占父 slot(否则父等子死锁)**、schedule 点火 bypass 队列。
-- [ ] depth cap 2 + ownership-scope(只控自己的孩子、父终态停孙、usage 逐级上卷)。完成条件:越权拒绝 + 归因到 root 的测试。
-- [ ] `schedule` 字段抄 `schedule.ts:1-120` 格式学(6 段 cron / `5m` / `+10m` / ISO)但执行复用 C2;**RPC 信封抄它的 requestId+reply-topic 模式**(`subagents:rpc:spawn|stop|consume` 语义),给桥接留锚。
-- [ ] 完成/失败发 `subagents:completed|failed` 总线事件 → 父经 followUp 唤醒(与它的完成通知同构);中断跑完的「wrap up 警告→硬停」抄它 turn-limit 语义。丢:widget/FleetView/@mention/SubagentWorkflow/worktree/memory 三 scope。
+- [x] **并发池语义照搬**(后台池默认 10、前台单独计、嵌套 bypass 队列、深度 cap——全测过)。
+- [x] depth cap 2 + ownership-scope(越权拒绝、父终态停孙、usage 上卷,测过)。
+- [~] `schedule` 复用 C2 的 `every`/`expiresAt` 格式;6 段 cron 未平移。**RPC 信封抄它的 requestId+reply-topic 模式**(`subagents:rpc:spawn|stop|consume` 语义),给桥接留锚。
+- [x] 完成/失败发 `subagents:completed|failed` 总线事件;turn-limit「警告→硬停」测过。丢:widget/FleetView/@mention/SubagentWorkflow/worktree/memory 三 scope。
 
 ### C8 btw 旁路通道(built-in,抄 pi-btw 的机制,丢它的 overlay)
 
-- [ ] **core 原语 `SideSession`**:独立 in-memory 子会话,与主 loop 并发跑(它靠真 AgentSession + 事件流驱动 UI,我们用 fork 的第二个会话实例,事件走 SessionView);`contextual` 种子 = `buildSessionContext(entries, leafId)` **过滤 `eta.btw` 可见消息**(btw.ts:263 整段逻辑平移,连 fallback 分支一起),`tangent` = 无种子;线程连续性 = 把已答的 Q/A 作**合成 user/assistant 对话对回放进 messages**(btw.ts:299-355),不建第二套 transcript 模型。完成条件:主 agent 忙时 side 跑通、主 context 重放查不到 side 消息。
-- [ ] 持久化:`eta.btw` CustomEntry 存线程(与 D1 同路);`--save` 语义 = 单条 exchange 写**可见** note 进主 session,默认 hidden;save 态机 `not-saved|queued|saved`(主 turn 未完时排队等落盘,btw.ts:81+2109 语义)。
-- [ ] **handoff = S1 driver**:inject/summarize 投 followUp driver(= 它的 `pi.sendMessage(...,{deliverAs:"followUp"})`,btw.ts:990);summarize 用当前 BTW 模型但**强制 thinking off**,失败保留线程可重试(btw.ts:1893)。完成条件:忙时 inject→followUp→主续跑后收到。
-- [ ] per-thread `model/thinking` override:override 变更 = dispose 子会话 + 重建、hidden thread 保留(它的行为,照抄)。丢:overlay/modal/焦点快捷键/UI split。
+- [x] **core 原语 `SideSession`**(`src/eta/btw.ts`:seed 过滤 + fallback 两分支平移,Q/A 合成对回放):独立 in-memory 子会话,与主 loop 并发跑(它靠真 AgentSession + 事件流驱动 UI,我们用 fork 的第二个会话实例,事件走 SessionView);`contextual` 种子 = `buildSessionContext(entries, leafId)` **过滤 `eta.btw` 可见消息**(btw.ts:263 整段逻辑平移,连 fallback 分支一起),`tangent` = 无种子;线程连续性 = 把已答的 Q/A 作**合成 user/assistant 对话对回放进 messages**(btw.ts:299-355),不建第二套 transcript 模型。完成条件:seed 不含 `eta.btw` 可见消息(测过);主 context 重放查不到 side 消息(side 消息只存 `eta.btw` entry)。
+- [x] 持久化:`eta.btw` CustomEntry 存线程(`replay()`);save 态机 `not-saved|queued|saved` + `flushQueued()` run 边界落盘(测过)。
+- [x] **handoff = S1 driver**:`BtwManager.handoff()` 产 followUp(测过);summarize 强制 thinking off = `setOverride({thinking:"off"})` 由调用方保证,失败不丢线程(线程与 save 态独立)。
+- [x] per-thread override:`setOverride` 变更 bump `assemblyVersion`(=dispose+重建信号)、exchanges 保留(测过)。丢:overlay/modal/焦点快捷键/UI split。
 
 ---
 
