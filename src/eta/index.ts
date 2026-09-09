@@ -16,4 +16,5 @@ export * from "./loops.ts";
 export * from "./btw.ts";
 export * from "./subagent.ts";
 export * from "./dev-events.ts";
-export * from "./dev-bridge.ts";
+export * from "../harness/eta-events.ts";
+export * from "./agent.ts";

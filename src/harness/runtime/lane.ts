@@ -1324,6 +1324,11 @@ export class Lane<TContext extends object | undefined> implements AgentLane {
 		);
 	}
 
+	async publish(events: readonly { type: "eta"; category: string; action: string; data: Record<string, unknown> }[], context: Context): Promise<void> {
+		this.assertOpen();
+		await this.emitBatch(events.map((event) => ({ ...event, lane: this.name })), context);
+	}
+
 	async resume(context: Context): Promise<ResumeResult> {
 		if (this.closedError instanceof HarnessClosed) {
 			return Result.err(new Closed({ message: this.closedError.message }));

@@ -1,7 +1,8 @@
 import { SUMMARIZATION_PROMPT, SUMMARIZATION_SYSTEM_PROMPT, TURN_PREFIX_SUMMARIZATION_PROMPT, UPDATE_SUMMARIZATION_PROMPT } from "../../prompts/compaction.ts";
 export { SUMMARIZATION_SYSTEM_PROMPT };
 import { dropToolPairs, untrustedFallback } from "./eta-compaction.ts";
-import {	type Context as AiContext,
+import {	isRetryableAssistantError,
+	type Context as AiContext,
 	type Api,
 	type AssistantMessage,
 	contentText,
@@ -523,6 +524,14 @@ export async function generateSummaryWithRequest(
 		return err(new CompactionError("aborted", response.errorMessage || "Summarization aborted"));
 	}
 	if (response.stopReason === "error") {
+		if (isRetryableAssistantError(response)) {
+			return err(
+				new CompactionError(
+					"summarization_failed",
+					`Summarization failed: ${response.errorMessage || "Unknown error"}`,
+				),
+			);
+		}
 		const fallback = untrustedFallback(currentMessages, maxTokens * 4);
 		if (fallback !== undefined) {
 			return ok({

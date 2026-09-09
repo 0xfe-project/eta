@@ -37,7 +37,7 @@ function currentRun(messages: AgentMessage[]): AgentMessage[] {
 function runUsedTools(messages: AgentMessage[]): boolean {
 	for (const m of currentRun(messages)) {
 		const role = (m as { role?: string }).role;
-		if (role === "tool") return true;
+		if (role === "tool" || role === "toolResult") return true;
 		const content = (m as { content?: unknown }).content;
 		if (role === "assistant" && Array.isArray(content) && content.some((p) => (p as { type?: string }).type === "toolCall")) {
 			return true;
