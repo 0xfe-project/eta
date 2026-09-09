@@ -187,13 +187,21 @@ function durableLaneState(
 function pendingEntryWrite(entryId: string, pending: PendingEntry): NewEntry {
 	return pending.type === "message"
 		? { id: entryId, parentId: null, type: "message", message: pending.payload }
-		: {
-				id: entryId,
-				parentId: null,
-				type: "custom",
-				customType: pending.customType,
-				...(pending.payload === undefined ? {} : { data: pending.payload }),
-			};
+		: pending.type === "merge"
+			? {
+					id: entryId,
+					parentId: null,
+					type: "merge",
+					mergedParentId: pending.payload.mergedParentId,
+					summary: pending.payload.summary,
+				}
+			: {
+					id: entryId,
+					parentId: null,
+					type: "custom",
+					customType: pending.customType,
+					...(pending.payload === undefined ? {} : { data: pending.payload }),
+				};
 }
 
 function capturedModel(operation: Operation): ModelIdentity | undefined {
@@ -1926,6 +1934,44 @@ export class Lane<TContext extends object | undefined> implements AgentLane {
 		return this.append({ type: "custom", customType, ...(data === undefined ? {} : { payload: data }) }, context);
 	}
 
+	/** Join another branch's tip into this lane's history; the lane must be idle. */
+	async mergeBranch(fromBranch: string, context: Context, summary?: string): Promise<string> {
+		this.assertOpen();
+		const branch = await this.session.branch(fromBranch, context);
+		if (branch === undefined) throw new Error(`eta: unknown branch ${fromBranch}`);
+		const mergedParentId = await branch.getTipId(context);
+		if (mergedParentId === null || (await this.session.getEntry(mergedParentId, context)) === undefined) {
+			throw new Error(`eta: branch ${fromBranch} has no tip to merge`);
+		}
+		const id = this.session.idGenerator.next();
+		return this.command((state) => {
+			if (state.operation !== null) throw new Error("eta: mergeBranch requires an idle lane");
+			const entry: NewEntry = {
+				id,
+				parentId: state.tipId,
+				type: "merge",
+				mergedParentId,
+				summary: summary ?? `merged branch ${fromBranch}`,
+			};
+			return {
+				kind: "commit",
+				writes: [
+					insertEntry(entry),
+					setValue(branchTip(this.name), id),
+					setValue(laneStateValue(this.name), durableLaneState(state, null, state.inbox)),
+				],
+				next: { ...state, tipId: id },
+				materialize: () => id,
+				events: (commit) => committedEntryEvents([entry], commit, this.name),
+			};
+		}, context);
+	}
+
+	/** Explicit rewind of the lane tip to an ancestor; keeps history, adds no summary. */
+	async rollback(targetId: string | null, context: Context): Promise<NavigationResult> {
+		return this.navigateTree(targetId, { summarize: false }, context);
+	}
+
 	private append(pending: PendingEntry, context: Context): Promise<string> {
 		this.assertOpen();
 		if (
@@ -1974,13 +2020,20 @@ export class Lane<TContext extends object | undefined> implements AgentLane {
 				...(await readLaneQueues(reader, state.inbox, context)),
 				pending.type === "message"
 					? { entryId: id, kind: "write" as const, type: "message" as const, message: pending.payload }
-					: {
-							entryId: id,
-							kind: "write" as const,
-							type: "custom" as const,
-							customType: pending.customType,
-							...(pending.payload === undefined ? {} : { data: pending.payload }),
-						},
+					: pending.type === "merge"
+						? {
+								entryId: id,
+								kind: "write" as const,
+								type: "custom" as const,
+								customType: "eta.merge_placeholder",
+							}
+						: {
+								entryId: id,
+								kind: "write" as const,
+								type: "custom" as const,
+								customType: pending.customType,
+								...(pending.payload === undefined ? {} : { data: pending.payload }),
+							},
 			];
 			return {
 				kind: "commit",

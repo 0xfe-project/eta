@@ -273,6 +273,40 @@ export function createStorageConformance(factory: () => Promise<StorageFixture>)
 
 		createCase(
 			factory,
+			"branch",
+			"splices a merge entry's second-parent chain into branch scans",
+			async ({ storage }) => {
+				await storage.commit([insertEntry(userEntry("root")), insertEntry(userEntry("main", "root"))], BACKGROUND_CONTEXT);
+				await storage.commit([insertEntry(userEntry("side", "root"))], BACKGROUND_CONTEXT);
+				await storage.commit(
+					[
+						insertEntry({
+							id: "merge",
+							parentId: "main",
+							type: "merge",
+							mergedParentId: "side",
+							summary: "merged the side branch",
+						}),
+					],
+					BACKGROUND_CONTEXT,
+				);
+				deepStrictEqual(
+					ids(await storage.scanBranch({ start: "merge", order: "oldestFirst" }, BACKGROUND_CONTEXT)),
+					["root", "main", "side", "merge"],
+				);
+				const structure = await storage.scanBranchStructure({ start: "merge", order: "oldestFirst" }, BACKGROUND_CONTEXT);
+				deepStrictEqual(ids(structure), ["root", "main", "side", "merge"]);
+				const mergeStructure = structure.find((entry) => entry.id === "merge");
+				ok(mergeStructure !== undefined && mergeStructure.mergedParentId === "side");
+				deepStrictEqual(
+					ids(await storage.scanBranch({ start: "merge", order: "oldestFirst", type: "merge" }, BACKGROUND_CONTEXT)),
+					["merge"],
+				);
+			},
+		),
+
+		createCase(
+			factory,
 			"transactions",
 			"resolves parents only from prior entries and earlier writes",
 			async ({ storage }) => {
