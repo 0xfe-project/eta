@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useAppI18n } from "../../i18n.ts";
 import { etaStore, useEta } from "../../lib/eta-store.ts";
 import type { SidebarSession } from "../../lib/protocol.ts";
@@ -33,10 +33,15 @@ export function Sidebar({ selected, termActive, onTerminal }: { selected: string
 			.catch(() => setHits(null));
 	};
 
+	const [, navigate] = useLocation();
+	const [expanded, setExpanded] = useState<string[]>([]);
+
 	const visible = state.sessions.filter((session) => session.archived !== true);
-	const pinned = visible.filter((session) => session.pinned === true);
-	const recent = visible.filter((session) => session.pinned !== true);
 	const archived = state.sessions.filter((session) => session.archived === true);
+	const byUpdated = (a: SidebarSession, b: SidebarSession) => (b.updated ?? 0) - (a.updated ?? 0);
+	const projectKeys = [...new Set(visible.map((session) => session.cwd ?? session.name))].sort();
+	const projectOf = (key: string) => visible.filter((session) => (session.cwd ?? session.name) === key).sort(byUpdated);
+	const basenameOf = (key: string) => key.split("/").filter((part) => part.length > 0).pop() ?? key;
 
 	const row = (session: SidebarSession) => (
 		<SessionRow
@@ -48,6 +53,7 @@ export function Sidebar({ selected, termActive, onTerminal }: { selected: string
 			onDelete={() => store.send({ op: "session.delete", name: session.name })}
 			onPin={() => store.send({ op: "session.pin", session: session.name, pinned: session.pinned !== true })}
 			onArchive={() => store.send({ op: "session.archive", session: session.name, archived: session.archived !== true })}
+			onRename={(title) => store.send({ op: "session.rename", session: session.name, title })}
 		/>
 	);
 
@@ -92,10 +98,37 @@ export function Sidebar({ selected, termActive, onTerminal }: { selected: string
 			) : null}
 			<div className="min-h-0 flex-1 overflow-y-auto p-2" data-testid="session-list">
 				{state.sessions.length === 0 ? <p className="p-2 text-sm text-muted">{t("sidebar.noSessions")}</p> : null}
-				{pinned.length > 0 ? <p data-testid="group-pinned" className="px-1 pb-1 pt-2 text-[10px] font-semibold text-muted">{t("sidebar.pinned")}</p> : null}
-				{pinned.map(row)}
-				{recent.length > 0 ? <p data-testid="group-recent" className="px-1 pb-1 pt-2 text-[10px] font-semibold text-muted">{t("sidebar.recent")}</p> : null}
-				{recent.map(row)}
+				{projectKeys.map((key) => {
+					const group = projectOf(key);
+					const showAll = expanded.includes(key) || group.length <= 6;
+					const shown = showAll ? group : group.slice(0, 5);
+					return (
+						<details key={key} open data-testid={`group-project-${basenameOf(key)}`} className="mb-1">
+							<summary className="flex cursor-pointer items-center gap-1 px-1 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted">
+								<span data-testid={`project-name-${basenameOf(key)}`} className="truncate">{basenameOf(key)}</span>
+								<span className="bg-overlay px-1 text-[9px]">{group.length}</span>
+								<button
+									data-testid={`project-new-${basenameOf(key)}`}
+									title={t("sidebar.newInProject")}
+									className="ml-auto border border-border-strong px-1 text-[9px] hover:bg-foreground hover:text-background"
+									onClick={(event) => {
+										event.preventDefault();
+										navigate(`/new?cwd=${encodeURIComponent(key)}`);
+									}}
+								>
+									+
+								</button>
+							</summary>
+							{group.filter((session) => session.pinned === true && shown.includes(session)).map(row)}
+							{shown.filter((session) => session.pinned !== true).map(row)}
+							{showAll ? null : (
+								<button data-testid={`project-more-${basenameOf(key)}`} className="w-full px-1 py-1 text-left text-[10px] text-accent" onClick={() => setExpanded((current) => [...current, key])}>
+									{t("sidebar.showMore")} ({group.length - shown.length})
+								</button>
+							)}
+						</details>
+					);
+				})}
 				{archived.length > 0 ? (
 					<details data-testid="group-archived">
 						<summary className="cursor-pointer px-1 pb-1 pt-2 text-[10px] font-semibold text-muted">{t("sidebar.archived")} ({archived.length})</summary>
@@ -108,8 +141,19 @@ export function Sidebar({ selected, termActive, onTerminal }: { selected: string
 	);
 }
 
-function SessionRow({ session, unread, selected, onSelect, onDelete, onPin, onArchive }: { session: SidebarSession; unread: boolean; selected: boolean; onSelect(): void; onDelete(): void; onPin(): void; onArchive(): void }) {
+function humanizeAge(updated: number | undefined): string {
+	if (updated === undefined) return "";
+	const minutes = Math.max(0, Math.floor((Date.now() - updated) / 60_000));
+	if (minutes < 1) return "now";
+	if (minutes < 60) return `${minutes}m`;
+	const hours = Math.floor(minutes / 60);
+	if (hours < 24) return `${hours}h`;
+	return `${Math.floor(hours / 24)}d`;
+}
+
+function SessionRow({ session, unread, selected, onSelect, onDelete, onPin, onArchive, onRename }: { session: SidebarSession; unread: boolean; selected: boolean; onSelect(): void; onDelete(): void; onPin(): void; onArchive(): void; onRename(title: string): void }) {
 	const { t } = useAppI18n();
+	const [menuOpen, setMenuOpen] = useState(false);
 	return (
 		<div
 			role="button"
@@ -121,36 +165,69 @@ function SessionRow({ session, unread, selected, onSelect, onDelete, onPin, onAr
 				<span className="truncate text-sm">{session.title ?? session.name}</span>
 				{session.pinned === true ? <span data-testid={`pinned-${session.name}`} className="text-[10px] text-muted">◆</span> : null}
 				{unread ? <span data-testid={`unread-${session.name}`} className="h-2 w-2 shrink-0 bg-accent" /> : null}
-				<button
-					data-testid={`session-pin-${session.name}`}
-					className="ml-auto hidden text-xs text-muted group-hover:inline"
-					onClick={(event) => {
-						event.stopPropagation();
-						onPin();
-					}}
-				>
-					{t(session.pinned === true ? "sidebar.unpin" : "sidebar.pin")}
-				</button>
-				<button
-					data-testid={`session-archive-${session.name}`}
-					className="hidden text-xs text-muted group-hover:inline"
-					onClick={(event) => {
-						event.stopPropagation();
-						onArchive();
-					}}
-				>
-					{t(session.archived === true ? "sidebar.unarchive" : "sidebar.archive")}
-				</button>
-				<button
-					data-testid={`session-delete-${session.name}`}
-					className="hidden text-xs text-muted group-hover:inline"
-					onClick={(event) => {
-						event.stopPropagation();
-						onDelete();
-					}}
-				>
-					{t("sidebar.delete")}
-				</button>
+				<span data-testid={`session-age-${session.name}`} className="ml-auto shrink-0 mono text-[10px] text-muted">{humanizeAge(session.updated)}</span>
+				<div className="relative shrink-0">
+					<button
+						data-testid={`session-menu-${session.name}`}
+						aria-label="menu"
+						className="border border-transparent px-1 text-xs text-muted hover:border-border-strong hover:text-foreground"
+						onClick={(event) => {
+							event.stopPropagation();
+							setMenuOpen((current) => !current);
+						}}
+					>
+						⋯
+					</button>
+					{menuOpen ? (
+						<div data-testid={`session-menu-open-${session.name}`} className="absolute right-0 top-6 z-20 min-w-[120px] border-2 border-border-strong bg-elevated shadow-[4px_4px_0_0_var(--shadow)]">
+							<button
+								data-testid={`session-rename-${session.name}`}
+								className="block w-full border-b border-border px-2 py-1 text-left text-xs hover:bg-overlay"
+								onClick={(event) => {
+									event.stopPropagation();
+									setMenuOpen(false);
+									const next = window.prompt(t("sidebar.renameTo"), session.title ?? session.name);
+									if (next !== null && next.trim().length > 0) onRename(next.trim());
+								}}
+							>
+								{t("sidebar.rename")}
+							</button>
+							<button
+								data-testid={`session-pin-${session.name}`}
+								className="block w-full border-b border-border px-2 py-1 text-left text-xs hover:bg-overlay"
+								onClick={(event) => {
+									event.stopPropagation();
+									setMenuOpen(false);
+									onPin();
+								}}
+							>
+								{t(session.pinned === true ? "sidebar.unpin" : "sidebar.pin")}
+							</button>
+							<button
+								data-testid={`session-archive-${session.name}`}
+								className="block w-full border-b border-border px-2 py-1 text-left text-xs hover:bg-overlay"
+								onClick={(event) => {
+									event.stopPropagation();
+									setMenuOpen(false);
+									onArchive();
+								}}
+							>
+								{t(session.archived === true ? "sidebar.unarchive" : "sidebar.archive")}
+							</button>
+							<button
+								data-testid={`session-delete-${session.name}`}
+								className="block w-full px-2 py-1 text-left text-xs text-danger hover:bg-overlay"
+								onClick={(event) => {
+									event.stopPropagation();
+									setMenuOpen(false);
+									onDelete();
+								}}
+							>
+								{t("sidebar.delete")}
+							</button>
+						</div>
+					) : null}
+				</div>
 			</div>
 			{session.title !== undefined ? <p className="mono truncate text-[10px] text-muted">{session.name}</p> : null}
 			<div className="mt-1 flex flex-wrap gap-1">

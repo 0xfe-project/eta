@@ -137,8 +137,39 @@ export function Composer({
 		setText("");
 	};
 
+	const [pendingImages, setPendingImages] = useState<{ name: string; mime: string; dataBase64: string }[]>([]);
+	const [attachOpen, setAttachOpen] = useState(false);
+	const fileInput = useRef<HTMLInputElement | null>(null);
+	const imageInput = useRef<HTMLInputElement | null>(null);
+
+	const attachFile = (file: File, asImage: boolean) => {
+		if (session === undefined) return;
+		const current = session;
+		const form = new FormData();
+		form.append("file", file);
+		void fetch(`/api/upload?session=${encodeURIComponent(current)}`, { method: "POST", body: form })
+			.then((response) => response.json() as Promise<{ path?: string }>)
+			.then((body) => {
+				if (body.path === undefined) return;
+				setText((textValue) => `${textValue}${textValue.endsWith(" ") || textValue.length === 0 ? "" : " "}@${body.path} `);
+				void fetch(`/api/files?session=${encodeURIComponent(current)}`)
+					.then((response) => response.json() as Promise<string[]>)
+					.then(setFiles)
+					.catch(() => undefined);
+				if (!asImage) return;
+				const reader = new FileReader();
+				reader.onload = () => {
+					const url = String(reader.result ?? "");
+					setPendingImages((list) => [...list, { name: file.name, mime: file.type || "application/octet-stream", dataBase64: url.slice(url.indexOf(",") + 1) }]);
+				};
+				reader.readAsDataURL(file);
+			})
+			.catch(() => undefined);
+	};
+
 	const submit = (mode: "queue" | "steer") => {
 		const value = text.trim();
+		const imagesPayload = pendingImages.length > 0 ? { images: pendingImages.map((image) => ({ mime: image.mime, dataBase64: image.dataBase64 })) } : {};
 		if (createMode && create !== undefined) {
 			const plain = value.startsWith("//") ? value.slice(1) : value;
 			if (plain.length === 0 || !create.personaReady) return;
@@ -147,12 +178,17 @@ export function Composer({
 			return;
 		}
 		if (session === undefined) return;
+		if (value.length === 0 && pendingImages.length > 0) {
+			store.send({ op: "prompt", session, text: "", ...imagesPayload });
+			setPendingImages([]);
+			return;
+		}
 		if (value.length === 0) {
 			if (running) store.send({ op: "abort", session });
 			return;
 		}
 		if (value.startsWith("//")) {
-			store.send({ op: "prompt", session, text: value.slice(1), ...(mode === "steer" ? { mode } : {}) });
+			store.send({ op: "prompt", session, text: value.slice(1), ...(mode === "steer" ? { mode } : {}), ...imagesPayload });
 		} else if (value.startsWith("/")) {
 			const name = /^\/([^\s]+)/.exec(value)?.[1] ?? "";
 			const args = value.slice(name.length + 1).trim();
@@ -163,8 +199,9 @@ export function Composer({
 			}
 			store.send({ op: "prompt", session, text: value, ...(mode === "steer" ? { mode } : {}) });
 		} else {
-			store.send({ op: "prompt", session, text: value, ...(mode === "steer" ? { mode } : {}) });
+			store.send({ op: "prompt", session, text: value, ...(mode === "steer" ? { mode } : {}), ...imagesPayload });
 		}
+		setPendingImages([]);
 		setText("");
 	};
 
@@ -236,6 +273,19 @@ export function Composer({
 		<footer className="input-area" data-testid="composer">
 			<div className="input-outer">
 				{topSlot}
+				{pendingImages.length > 0 ? (
+					<div data-testid="attach-chips" className="flex flex-wrap gap-1 pb-1">
+						{pendingImages.map((image, index) => (
+							<span key={`${image.name}-${index}`} data-testid={`attach-chip-${index}`} className="flex items-center gap-1 border border-border-strong bg-elevated px-1.5 py-0.5 text-[10px]">
+								<img src={`data:${image.mime};base64,${image.dataBase64}`} alt="" className="h-5 w-5 object-cover" />
+								<span className="mono max-w-[120px] truncate">{image.name}</span>
+								<button data-testid={`attach-chip-drop-${index}`} className="text-muted hover:text-foreground" onClick={() => setPendingImages((list) => list.filter((_, position) => position !== index))}>
+									×
+								</button>
+							</span>
+						))}
+					</div>
+				) : null}
 				{slashMatches.length > 0 ? (
 					<div className="skill-slash-menu" role="listbox" data-testid="slash-menu">
 						{slashMatches.map((command, index) => (
@@ -299,6 +349,83 @@ export function Composer({
 					/>
 					<div className="composer-toolbar">
 						<div className="flex min-w-0 items-center gap-2">
+							{!createMode && session !== undefined ? (
+								<div className="relative shrink-0">
+									<button
+										data-testid="composer-plus"
+										title={t("composer.attach")}
+										className="border border-border-strong px-2 py-1 text-xs font-bold uppercase hover:bg-foreground hover:text-background"
+										onClick={() => setAttachOpen((open) => !open)}
+									>
+										+
+									</button>
+									{attachOpen ? (
+										<div data-testid="composer-attach-menu" className="absolute bottom-8 left-0 z-20 min-w-[150px] border-2 border-border-strong bg-elevated shadow-[4px_4px_0_0_var(--shadow)]">
+											<button
+												data-testid="attach-upload"
+												className="block w-full border-b border-border px-2 py-1.5 text-left text-xs hover:bg-overlay"
+												onClick={() => {
+													setAttachOpen(false);
+													fileInput.current?.click();
+												}}
+											>
+												{t("composer.uploadFile")}
+											</button>
+											<button
+												data-testid="attach-image"
+												className="block w-full border-b border-border px-2 py-1.5 text-left text-xs hover:bg-overlay"
+												onClick={() => {
+													setAttachOpen(false);
+													imageInput.current?.click();
+												}}
+											>
+												{t("composer.pickImage")}
+											</button>
+											<button
+												data-testid="attach-command"
+												className="block w-full border-b border-border px-2 py-1.5 text-left text-xs hover:bg-overlay"
+												onClick={() => {
+													setAttachOpen(false);
+													setText("/");
+												}}
+											>
+												{t("composer.runCommand")}
+											</button>
+											<button
+												data-testid="attach-btw"
+												className="block w-full px-2 py-1.5 text-left text-xs hover:bg-overlay"
+												onClick={() => {
+													setAttachOpen(false);
+													store.send({ op: "btwOpen", session, kind: "tangent" });
+												}}
+											>
+												{t("composer.newBtw")}
+											</button>
+										</div>
+									) : null}
+									<input
+										ref={fileInput}
+										type="file"
+										className="hidden"
+										onChange={(event) => {
+											const file = event.target.files?.[0];
+											if (file !== undefined) attachFile(file, false);
+											event.target.value = "";
+										}}
+									/>
+									<input
+										ref={imageInput}
+										type="file"
+										accept="image/*"
+										className="hidden"
+										onChange={(event) => {
+											const file = event.target.files?.[0];
+											if (file !== undefined) attachFile(file, true);
+											event.target.value = "";
+										}}
+									/>
+								</div>
+							) : null}
 							{createMode || session !== undefined ? (
 								<span className={createMode && !create.personaReady ? "opacity-60" : undefined}>
 									<ModelPicker {...(session === undefined ? {} : { session })} {...(createMode ? { onPick: setPickedModel } : {})} />

@@ -44,7 +44,7 @@
 	"panel.adaptive": "adaptive",
 	"panel.tools": "tools",
 	"persona.custom": "custom",
-  "panel.personas": "persona",
+	"panel.personas": "persona",
 	"panel.goal": "goal",
 	"panel.tasks": "tasks",
 	"panel.loops": "loops",
@@ -130,5 +130,18 @@
 	"goal.achieved": "achieved",
 	"sidebar.goal-done": "done",
 	"panel.viewMemory": "memory",
-	"panel.inspect": "inspect"
+	"panel.inspect": "inspect",
+	"sidebar.rename": "rename",
+	"sidebar.renameTo": "New title",
+	"sidebar.showMore": "show more",
+	"sidebar.newInProject": "new session in this project",
+	"composer.attach": "attach",
+	"composer.uploadFile": "upload file",
+	"composer.pickImage": "pick image",
+	"composer.runCommand": "run /command",
+	"composer.newBtw": "new btw",
+	"panel.personaSwitch": "switch",
+	"panel.personaSwitchTo": "switch persona",
+	"panel.persona": "persona",
+	"panel.noPersona": "no persona"
 }

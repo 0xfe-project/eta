@@ -20,7 +20,7 @@
 - [x] W0.3 WS 协议 = v1 channels 帧的超集:`{channel:"view"|"agent"|"dev", session, frame}` 下行,`{op:GuiOps, session?}` + 控制消息上行;控制消息:`session.create {name, personaId, cwd}` / `session.delete` / `personas.refresh`。完成条件:roundtrip 测试 + 双客户端同 attach 一个 session 帧一致。
 - [x] W0.4 persona 源:`GET /api/personas` 返回 core persona battery(4 内置卡 + `.eta/persona/*.persona.md` 发现结果)的 `{id,name,description}` 摘要;`session.create` 必带 `personaId`,非法 id 拒绝。完成条件:drop 一个 `.persona.md` 进 cwd 的 `.eta/persona/`,不重启 API 能看到。
 - [x] W0.5 dev 拓扑:vite dev server(5173)`/ws`、`/api` proxy 到 server(3000);prod 同域静态托管。完成条件:`bun run dev` 两条命令起全栈,浏览器可用。
-- [ ] W0.6 手机可达:**默认已绑 `0.0.0.0`**,`ETA_HOST=0.0.0.0` 开局域网直连(手机同 WiFi 用本机 IP);远程场景走用户自己的隧道(指向 loopback 即可,无配对/鉴权体系)。响应式到位即手机可用(见 W2.0),不做 PWA 安装/二维码。完成条件:手机上能完成建 session→发消息→收流式。
+- [ ] W0.6 手机可达(代码侧完成:0.0.0.0 绑定 + 375px 抽屉响应式已验证;剩用户手机实测反馈):**默认已绑 `0.0.0.0`**,`ETA_HOST=0.0.0.0` 开局域网直连(手机同 WiFi 用本机 IP);远程场景走用户自己的隧道(指向 loopback 即可,无配对/鉴权体系)。响应式到位即手机可用(见 W2.0),不做 PWA 安装/二维码。完成条件:手机上能完成建 session→发消息→收流式。
 
 ## 1. eta-web 工程(照抄 matrix/apps/web)
 
@@ -104,7 +104,7 @@
 
 ### A. 交互修正(用户点名,先做)
 - [x] 排队语义重做:`queue_update` 事件 → host 缓存 → `SessionView.queue`;ContextBar 渲染真实队列,chip 点击 `queueRemove`(lane.cancelQueued);本地 optimistic pill 已删
-- [ ] persona 自定义(半):welcome chips 已渲染 `/api/personas` 全列表(含 custom)。剩:custom 标记徽章、session 内 personaSet 切换入口
+- [x] persona 自定义:welcome/向导 chips 渲染全列表 + custom 徽章(`persona.custom`);Context 面板 PERSONA 段带 切换 按钮(personaSwitch dialog → personaSet op,core applyPersona 重建 prompt blocks + meta 持久);persona 变更实时推 `personas` 帧
 - [x] btw 入口 = 右栏 sideThread 行(点击开 BtwDialog)+ `/btw` 命令;ContextBar 已无 btw 块
 - [x] goal 未 set 时 ContextBar 不渲染;入口 = `/goal <text>` 命令 + 面板 hint
 - [x] 顺序固定 queue → loops → goal → tasks(ContextBar)
@@ -113,18 +113,18 @@
 - [x] xterm 终端:侧栏「打开终端」文字按钮开合底部抽屉;多 tab(× / +),ws 桥 `/term`,高度拖拽(存 localStorage)+ cwd chip;server Bun.spawn pty(terminal data 回调 + subprocess.terminal.write/resize)
 - [x] 侧栏/右栏可拖(pointer capture 分隔条,宽度存 localStorage;终端高度并入 xterm 项)
 - [x] 顶栏显隐按钮组(用户要求移除 emoji 按钮 → 侧栏文字按钮 + 快捷键 ⌘B/⌘⇧O;窄屏浮动按钮与 scrim 保留)
-- [ ] composer 左下 `+` 附件/插入菜单(上传文件→@path、选图片、执行 /命令、新建 btw)
+- [x] composer 左下 `+` 附件菜单:上传文件→@path 落盘引用、选择图片(上传 + base64 chip 随 prompt 发送)、执行 /命令(插入 /)、新建 btw
 - [x] 消息 footer:时间 + 复制(New ↓ 早已有);成本字段见 C
 
 ### C. 数据与 API 补齐(@ 补全等)
-- [ ] @ 补全升级:现在只有 cwd 一层文件名。要(1)递归模糊匹配(fuzzy + mtime 排序,server /api/files 改 walk+score,上限 50);(2)目录树前缀 `@dir/` 继续钻;(3)菜单显示路径相对 cwd + 行高对齐;(4)粘贴图片自动落盘 `<cwd>/.eta-attachments/` 并插入 @引用(POST /api/upload)
-- [ ] prompt 带图片:`prompt` op 加 `images?: {mime,dataBase64}[]`(协议+host+faux 忽略即可)
+- [x] @ 补全升级:`/api/files?session=` 递归 walk(depth≤6、跳隐藏/构建目录)+ mtime 排序 + 相对路径 + 上限 50;web 端 subsequence fuzzy 打分(边界/连续加成)排序;粘贴图片 POST /api/upload 落盘 `<cwd>/.eta-attachments/` 插 @引用;实测 `@host`→`src/host.ts`(注:score 在 web,server 只排序列表)
+- [x] prompt 带图片:`prompt` op `images?: {mime,dataBase64}[]`(server+web 协议对称,faux 忽略);composer 图片 chip 随 send 附带,附件落盘 @引用兜底文本模型
 - [x] tool 卡片:toolCall/toolResult 按 id 关联,RUNNING/COMPLETE/FAILED 徽章,输入输出同卡折叠
 - [x] 顶栏状态组:tokens 合计、cache%、cwd chip、连接点(usage 行同左)
 - [x] thinking level 按钮:composer 工具条 THINK:{level} chip 循环 off→high,`thinkingLevel` op → lane.setThinkingLevel;view 镜像走 config_update(已入 VIEW_EVENTS)
-- [ ] 侧栏:按 cwd 分组的 PROJECTS 段(组内 count + 折叠 + Show more)、行右时间(`updated` 字段,humanize)、组 `+` 新建、行 `⋯` 菜单(重命名/置顶/归档/删除)
+- [x] 侧栏 PROJECTS:按 cwd 分组(sidebar() 现带 cwd+updated)、组头 count+折叠+`+`(→/new?cwd=)、>6 行 Show more、行右 humanize 时间(now/m/h/d)、行 `⋯` 菜单(重命名(prompt)/置顶/归档/删除);server 补齐 session.pin/session.archive/session.rename handler(此前静默丢弃)
 - [x] 顶栏状态组:tokens 合计、cache%、当前分支(gitBranch chip,host git rev-parse)、连接状态点、`cwd` chip
-- [ ] 自定义 persona 的热加载:监听 `.eta/persona/`(server fs.watch)→ personas frame
+- [x] 自定义 persona 热加载:watchPersonaDirs fs.watch(home+cwd `.eta/persona/`,异步 error 吞掉防崩)→ 广播 `{type:"personas"}` 帧 → welcome/向导/persona 对话框 refetch;实测 drop 卡片 5s 内收到帧、API 即含 custom
 - [x] 真模型集成通道:`~/.eta/config.json`(providers[] + defaultModel,无 env)经 `openai-completions` provider 上线;pro6000 / `qwen3.8-flash-next-uncensored` 端到端实测(真回复 + reasoning 折叠 + usage)。空 key 用占位 `eta-no-key`(网关不校验)。集成测试(工具调用/goal/loop/压缩)下一步改走真 provider;成本/价表明确不做
 
 ### D. 流式(2026-09-10 修复)

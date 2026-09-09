@@ -25,6 +25,8 @@ export interface SidebarSession {
 	title?: string;
 	pinned?: boolean;
 	archived?: boolean;
+	cwd?: string;
+	updated?: number;
 	badges: string[];
 	personas: string[];
 }
@@ -32,7 +34,7 @@ export interface SidebarSession {
 /** The full GUI write path; identical semantics to the v1 in-process GuiOps. */
 export type GuiOp =
 	| { op: "focus"; session: string }
-	| { op: "prompt"; session: string; text: string; mode?: "queue" | "steer" }
+	| { op: "prompt"; session: string; text: string; mode?: "queue" | "steer"; images?: { mime: string; dataBase64: string }[] }
 	| { op: "goal"; session: string; action: "set" | "pause" | "resume" | "clear"; objective?: string }
 	| { op: "taskCreate"; session: string; content: string; priority?: "high" | "medium" | "low" }
 	| { op: "taskUpdate"; session: string; id: string; content?: string; priority?: "high" | "medium" | "low" }
@@ -44,6 +46,7 @@ export type GuiOp =
 	| { op: "btwOpen"; session: string; kind: "contextual" | "tangent" }
 	| { op: "btwAsk"; session: string; threadId: string; question: string }
 	| { op: "modelSet"; session: string; modelId: string }
+	| { op: "personaSet"; session: string; personaId: string }
 	| { op: "thinkingLevel"; session: string; level: "off" | "minimal" | "low" | "medium" | "high" }
 	| { op: "queueRemove"; session: string; entryId: string }
 	| { op: "btwAnswer"; session: string; threadId: string; question: string; answer: string }
@@ -59,7 +62,8 @@ export type ControlOp =
 	| { op: "session.create"; name: string; personaId: string; cwd?: string; prompt?: string; modelId?: string }
 	| { op: "session.delete"; name: string }
 	| { op: "session.pin"; session: string; pinned: boolean }
-	| { op: "session.archive"; session: string; archived: boolean };
+	| { op: "session.archive"; session: string; archived: boolean }
+	| { op: "session.rename"; session: string; title: string };
 
 
 

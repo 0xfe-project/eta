@@ -278,6 +278,18 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 		case "modelSet":
 			await host.modelSet(message.session, message.modelId);
 			break;
+		case "personaSet":
+			await host.personaSet(message.session, message.personaId);
+			break;
+		case "session.pin":
+			host.setMeta(message.session, { pinned: message.pinned });
+			break;
+		case "session.archive":
+			host.setMeta(message.session, { archived: message.archived });
+			break;
+		case "session.rename":
+			host.setMeta(message.session, { title: message.title });
+			break;
 		case "thinkingLevel":
 			await host.thinkingLevel(message.session, message.level);
 			break;

@@ -44,7 +44,7 @@
 	"panel.adaptive": "自适应块",
 	"panel.tools": "工具",
 	"persona.custom": "自定义",
-  "panel.personas": "persona",
+	"panel.personas": "persona",
 	"panel.goal": "目标",
 	"panel.tasks": "任务",
 	"panel.loops": "循环",
@@ -130,5 +130,18 @@
 	"goal.achieved": "已达成",
 	"sidebar.goal-done": "已达成",
 	"panel.viewMemory": "记忆",
-	"panel.inspect": "查看器"
+	"panel.inspect": "查看器",
+	"sidebar.rename": "重命名",
+	"sidebar.renameTo": "新标题",
+	"sidebar.showMore": "展开更多",
+	"sidebar.newInProject": "在此项目新建会话",
+	"composer.attach": "附件",
+	"composer.uploadFile": "上传文件",
+	"composer.pickImage": "选择图片",
+	"composer.runCommand": "执行 /命令",
+	"composer.newBtw": "新建 btw",
+	"panel.personaSwitch": "切换",
+	"panel.personaSwitchTo": "切换 persona",
+	"panel.persona": "persona",
+	"panel.noPersona": "未设置 persona"
 }

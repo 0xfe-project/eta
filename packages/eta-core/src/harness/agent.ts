@@ -109,6 +109,15 @@ export class EtaAgent {
 	readonly agentTools: AgentHarnessTool<object | undefined>[];
 	/** Persona card names baked into the stable prompt block; empty when none. */
 	personas: string[] = [];
+	/** Mutable persona box read by the prompt-block builder; swapped mid-session via applyPersona. */
+	personaBox: { persona?: { names: string[]; text: string } } = { persona: undefined };
+
+	/** Swap the persona mid-session: rebuild prompt blocks and mirror the new names. */
+	applyPersona(persona: { names: string[]; text: string } | undefined): void {
+		this.personaBox.persona = persona;
+		this.personas = persona?.names ?? [];
+		void this.refreshPromptBlocks();
+	}
 	/** Prompt block sizes from the last generation; undefined until the first one. */
 	private lastPromptBlocksValue: { stableChars: number; adaptiveChars: number; sections: EtaPromptSection[] } | undefined = undefined;
 
@@ -281,6 +290,9 @@ export class EtaAgent {
 			}),
 		];
 
+		const personaBox: { persona?: { names: string[]; text: string } } = {
+			...(options.persona === undefined ? {} : { persona: options.persona }),
+		};
 		const refreshBlocks = async (): Promise<string> => {
 			const memory = await options.memorySource?.();
 			const state = {
@@ -288,7 +300,7 @@ export class EtaAgent {
 					? {}
 					: { goal: { objective: goal.current.objective, status: goal.current.status } }),
 				tasks: tasks.list(),
-				...(options.persona === undefined || options.persona.text.length === 0 ? {} : { persona: options.persona.text }),
+				...(personaBox.persona === undefined || personaBox.persona.text.length === 0 ? {} : { persona: personaBox.persona.text }),
 				...(memory === undefined || memory.length === 0 ? {} : { memory }),
 			};
 			const blocks = etaPromptBlockChars(options.baseSystemPrompt ?? "", state);
@@ -354,7 +366,8 @@ export class EtaAgent {
 		agent.bindPromptRefresh(async () => {
 			await refreshBlocks();
 		});
-		agent.personas = options.persona?.names ?? [];
+		agent.personaBox = personaBox;
+		agent.personas = personaBox.persona?.names ?? [];
 		return agent;
 	}
 

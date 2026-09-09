@@ -15,6 +15,8 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 	const [toolsOpen, setToolsOpen] = useState(false);
 	const [jsonOpen, setJsonOpen] = useState(false);
 	const [btwOpen, setBtwOpen] = useState(false);
+	const [personaPicker, setPersonaPicker] = useState(false);
+	const [personaOptions, setPersonaOptions] = useState<{ id: string; name: string; custom: boolean }[]>([]);
 	const [epochAtRequest, setEpochAtRequest] = useState<number | null>(null);
 	const send = (op: Parameters<typeof store.send>[0]) => store.send(op);
 
@@ -58,6 +60,35 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 						</div>
 					);
 				})()}
+			</Section>
+
+			<Section
+				title={t("panel.persona")}
+				testid="section-persona"
+				right={
+					<button
+						data-testid="persona-switch-open"
+						className="border border-border-strong px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] hover:bg-foreground hover:text-background"
+						onClick={() => {
+							setPersonaPicker(true);
+							void fetch("/api/personas")
+								.then((response) => response.json() as Promise<{ id: string; name: string; custom: boolean }[]>)
+								.then(setPersonaOptions)
+								.catch(() => undefined);
+						}}
+					>
+						{t("panel.personaSwitch")}
+					</button>
+				}
+			>
+				<div data-testid="panel-personas" className="flex flex-wrap gap-1">
+					{view.personas.length === 0 ? <span className="text-[11px] text-muted">{t("panel.noPersona")}</span> : null}
+					{view.personas.map((persona) => (
+						<span key={persona} data-testid={`panel-persona-${persona}`} className="mono bg-overlay px-1.5 py-0.5 text-[10px]">
+							{persona}
+						</span>
+					))}
+				</div>
 			</Section>
 
 			<Section title={t("panel.inspect")} testid="section-inspect">
@@ -195,6 +226,31 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 				<button data-testid="panel-abort" className="border border-border px-2 py-1 text-xs text-danger" onClick={() => send({ op: "abort", session })}>{t("panel.abort")}</button>
 			</div>
 
+			<Dialog open={personaPicker} onOpenChange={setPersonaPicker}>
+				<DialogContent data-testid="persona-switch-dialog" className="max-w-sm">
+					<DialogHeader>
+						<DialogTitle>{t("panel.personaSwitchTo")}</DialogTitle>
+					</DialogHeader>
+					<DialogBody>
+						<div className="grid gap-1">
+							{personaOptions.map((option) => (
+								<button
+									key={option.id}
+									data-testid={`persona-switch-${option.id}`}
+									className={`flex items-center gap-2 border border-border px-2 py-1.5 text-left text-sm hover:border-border-strong ${view.personas.includes(option.name) ? "border-2 border-primary" : ""}`}
+									onClick={() => {
+										send({ op: "personaSet", session, personaId: option.id });
+										setPersonaPicker(false);
+									}}
+								>
+									<span className="truncate">{option.name}</span>
+									{option.custom ? <span className="ml-auto border border-current px-1 text-[8px] uppercase">{t("persona.custom")}</span> : null}
+								</button>
+							))}
+						</div>
+					</DialogBody>
+				</DialogContent>
+			</Dialog>
 			<Dialog open={promptOpen && view.prompt !== undefined} onOpenChange={setPromptOpen}>
 				<DialogContent className="max-w-[720px]" data-testid="prompt-overlay">
 					<DialogHeader>
