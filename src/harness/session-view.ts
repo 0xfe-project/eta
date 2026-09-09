@@ -60,6 +60,10 @@ export interface SessionView {
 	cacheRate: number;
 	branch: { tipId: string | null };
 	pendingAsk: AskPayload | undefined;
+	/** System prompt block sizes for the Context panel; undefined before the first generation. */
+	prompt: { stableChars: number; adaptiveChars: number } | undefined;
+	/** Output tokens/sec over the last usage delta; 0 until two usage events pass. */
+	tokensPerSec: number;
 }
 
 export type ViewListener = (view: SessionView) => void;
@@ -138,6 +142,8 @@ export class SessionViewProjector {
 			cacheRate: cacheRate(stats.usage),
 			branch: { tipId: entries[entries.length - 1]?.id ?? null },
 			pendingAsk: ask.pendingAsks()[0],
+			prompt: this.agent.lastPromptBlocks,
+			tokensPerSec: this.agent.tokensPerSec,
 		};
 	}
 

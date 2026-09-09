@@ -57,6 +57,8 @@ describe("SessionView projector", () => {
 		expect(viewA.branch.tipId).not.toBeNull();
 		expect(viewA.pendingAsk).toBeUndefined();
 		expect(typeof viewA.cacheRate).toBe("number");
+		expect(viewA.prompt?.stableChars).toBeGreaterThan(0);
+		expect(typeof viewA.tokensPerSec).toBe("number");
 
 		attachA.detach();
 		const afterDetach = updatesA;

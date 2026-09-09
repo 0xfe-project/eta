@@ -22,6 +22,27 @@ export interface EtaPromptState {
 	memory?: string;
 }
 
+/** The prompt split the way the Context panel thinks about it: what a provider
+ * cache keeps across turns versus what gets rewritten every generation. */
+export function splitEtaPromptSections(base: string, state: EtaPromptState): { stable: string[]; adaptive: string[] } {
+	const stable = [base, state.persona ?? ""].filter((part) => part.length > 0);
+	const adaptive: string[] = [];
+	if (state.goal && state.goal.status === "active") {
+		adaptive.push(goalPursuitGuidelines(state.goal.objective));
+	}
+	if (state.tasks && state.tasks.tasks.length > 0) {
+		adaptive.push(`${TODO_REVIEW_PROMPT}\n\n${renderCurrentTasks(state.tasks)}`);
+	}
+	if (state.memory !== undefined && state.memory.length > 0) adaptive.push(state.memory);
+	return { stable, adaptive };
+}
+
+export function etaPromptBlockChars(base: string, state: EtaPromptState): { stableChars: number; adaptiveChars: number } {
+	const { stable, adaptive } = splitEtaPromptSections(base, state);
+	const chars = (parts: string[]) => parts.reduce((sum, part) => sum + part.length, 0);
+	return { stableChars: chars(stable), adaptiveChars: chars(adaptive) };
+}
+
 /** Sections appended after the base prompt, in stable order. */
 export function etaPromptSections(state: EtaPromptState): string[] {
 	const sections: string[] = [];
