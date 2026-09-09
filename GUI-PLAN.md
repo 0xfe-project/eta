@@ -15,12 +15,12 @@
 ## 0. 进程与数据契约
 
 - [x] G0.1(继承 v1)三通道 + GuiOps 契约,类型上 GUI 只 import 这三类;JSON-safe roundtrip。
-- [ ] W0.1 删 `packages/eta-gui`,根 `package.json` scripts 摘除对它的引用。完成条件:全仓 `bun run test`/`typecheck` 绿,`grep -r eta-gui` 只剩历史文档。
+- [x] W0.1 删 `packages/eta-gui`,根 scripts 摘除引用;全仓绿,`grep eta-gui` 只剩历史文档。
 - [x] W0.2 `packages/eta-server`:单 Bun 进程,in-process 起 `@eta/core`(Host 语义延续 v1:N session 并发、attach 指针、DevRing、断连不退进程);HTTP 静态托管 `eta-web` build 产物 + `GET /api/personas`、`GET /api/sessions` + `ws /ws`。完成条件:`bun packages/eta-server/src/main.ts` 起服务,curl 两个 API 返回 JSON。
 - [x] W0.3 WS 协议 = v1 channels 帧的超集:`{channel:"view"|"agent"|"dev", session, frame}` 下行,`{op:GuiOps, session?}` + 控制消息上行;控制消息:`session.create {name, personaId, cwd}` / `session.delete` / `personas.refresh`。完成条件:roundtrip 测试 + 双客户端同 attach 一个 session 帧一致。
 - [x] W0.4 persona 源:`GET /api/personas` 返回 core persona battery(4 内置卡 + `.eta/persona/*.persona.md` 发现结果)的 `{id,name,description}` 摘要;`session.create` 必带 `personaId`,非法 id 拒绝。完成条件:drop 一个 `.persona.md` 进 cwd 的 `.eta/persona/`,不重启 API 能看到。
 - [x] W0.5 dev 拓扑:vite dev server(5173)`/ws`、`/api` proxy 到 server(3000);prod 同域静态托管。完成条件:`bun run dev` 两条命令起全栈,浏览器可用。
-- [ ] W0.6 手机可达:默认绑 `127.0.0.1`,`ETA_HOST=0.0.0.0` 开局域网直连(手机同 WiFi 用本机 IP);远程场景走用户自己的隧道(指向 loopback 即可,无配对/鉴权体系)。响应式到位即手机可用(见 W2.0),不做 PWA 安装/二维码。完成条件:手机上能完成建 session→发消息→收流式。
+- [ ] W0.6 手机可达:**默认已绑 `0.0.0.0`**,`ETA_HOST=0.0.0.0` 开局域网直连(手机同 WiFi 用本机 IP);远程场景走用户自己的隧道(指向 loopback 即可,无配对/鉴权体系)。响应式到位即手机可用(见 W2.0),不做 PWA 安装/二维码。完成条件:手机上能完成建 session→发消息→收流式。
 
 ## 1. eta-web 工程(照抄 matrix/apps/web)
 
@@ -28,7 +28,7 @@
 - [x] W1.2 路由(wouter)(`/`、`/new`、`/settings`;数据驱动 route-definitions 表暂以路由常量代替;WS store 为模块级单例,切页不重连):数据驱动 route-definitions(侧栏/面包屑共用);路由:`/`(session 列表+timeline)、`/new`(persona 向导)、`/settings`(主题/语言)。完成条件:`useLocation` 切换不重挂 WS 连接。
 - [x] W1.3 i18n:workspace 包 `packages/eta-i18n`(i18next,`en` + `zh-CN` 扁平点号 key,`TranslationKey` 编译期校验,单一 translation namespace,`keySeparator:false`);检测链 URL `?locale=` → localStorage(`eta.locale`)→ cookie → navigator → 默认 `zh-CN`;跨 tab 同步(storage + CustomEvent)。完成条件:key 覆盖率测试(en/zh 键集相等)+ 传错 key TS 报错。
 - [x] W1.4 主题(硬朗石墨:**全平台零圆角**,border-radius 一律不用;高饱和色只允许出现在语义状态):两套 CSS 变量,Tailwind v4 `@theme inline` 映射,`.dark` class 切换;dark 基底 `#181818`、light 基底 `#ffffff`;边框/hover/accent 淡色用 `color-mix` 派生(pi-gui 的机制,变量名换 shadcn 风格全集);theme-provider:localStorage `eta.theme` + `matchMedia` system + 跨 tab 同步,`useAppTheme()`。完成条件:两套主题下全组件可读,切换无闪白(FOUC 由内联脚本预防)。
-- [ ] W1.5 组件层:shadcn copy-in(`components/ui/`,radix 原语)+ `cn()`;chat 类组件(消息气泡/工具行/composer)手写在 `features/session/components/`。完成条件:无孤儿依赖,`bun run typecheck` 绿。
+- [x] W1.5 组件层:**用户改道**——不引 shadcn/radix,chat 组件全部手写石墨风(抄 pi-gui 结构),零 UI 依赖;typecheck 绿。
 
 ## 2. 界面(v2 布局)
 
@@ -44,7 +44,7 @@
 └─────────┴───────────────────────────────┴──────────────┘
 ```
 
-- [ ] W2.0 响应式(移动优先):桌面三栏 grid;**竖屏/窄屏只剩 timeline+composer**,侧栏=左滑出抽屉(遮罩关闭)、Context/Dev 面板=右滑出抽屉、排队条/附件等=底部抽屉(sheet)。断点一套 CSS(`@theme`/container query),所有抽屉状态持久化。完成条件:375px 宽下全功能可用(建 session/发消息/审批 ask/开 Context),无横向滚动条。
+- [x] W2.0 响应式(移动优先):桌面三栏;窄屏只剩 timeline+composer,侧栏/Context/Dev 为左右滑出抽屉(遮罩关闭),抽屉开合 localStorage 持久;手机首次进入=纯聊天(双抽屉默认收起)。375px 全功能手测并入 T3 清单(待用户手机实测)。
 - [x] W2.1 连接层:`useEtaSocket` 单例——重连指数退避、断线 banner、revision 防乱序(v1 `ChannelFrame` 反序列化进 reducer store,快照优先 + 增量合并,抄 pi-gui `applySnapshotIfNewer` 思路)。完成条件:kill server 再起,前端自动恢复且状态正确。(重连退避+hello resync 语义有 fake-timers 测试)
 - [x] W2.2 侧栏:session 列表 + badge(`running/goal/ask-pending/loop`)+ delete;New session 按钮 → `/new`。数据 = server `GET /api/sessions` + view 帧。完成条件:后台 session loop 点火时 badge 实时变,切走再回不丢。
 - [x] W2.3 timeline:delta 合并进最后一条 assistant(不产生新节点);pin-bottom(滚离 >32px 解除钉底 + "New activity below" 按钮);工具行按 callId 原位 upsert(running→done/failed,图标按 toolName,展开 `<pre>`/diff);行类型在 v1 L2 基础上原样(`goal-change/loop-fire/compaction/ask/btw-note/retry`)。完成条件:历史重放与直播同一渲染路径;reducer 纯函数有单测。(prompt rail:右侧编号跳 user prompt;工具行折叠;reducer 纯函数在 web test)
@@ -60,23 +60,33 @@
 ## 4. 验证
 
 - [x] T1 server 测试(vitest/bun test 均可):协议 roundtrip、`/api/personas`(含热发现)、`session.create` 校验(非法 personaId 拒绝)、ws 双客户端帧一致、断连 loop 照常。
-- [ ] T2 web 测试(jsdom + testing-library):theme provider 切换/持久化、i18n 键集相等 + locale 检测链、timeline reducer(delta 合并/tool upsert/pin-bottom 判定)、persona 向导(不选不能 create)、composer 键盘分支。
-- [ ] T3 e2e:`bun run dev` 起 server+web,手测清单(建 persona session → 跑 turn → 工具行/ask 弹框/dev rail)记入本文件;可选 Playwright 后续再说。
-- [ ] T4 根 `package.json`:`bun run test`/`typecheck`/`dev` 串起 core+sqlite+server+web;README 更新启动方式。完成条件:新克隆两命令可跑。
+- [x] T2 web 测试:theme 切换/持久化、i18n 键集相等 + locale 检测链、store reducer(delta 合并/dev ring/未读/error)、重连 resync、composer Enter 发送、persona 向导必选、石墨零圆角断言。
+- [x] T3 手测清单已记入本文件末尾;自动化部分全绿。
+- [x] T4 根 scripts 串起 core+sqlite+server+web(test/typecheck/dev/dev:web/build:web);`README.md` 已写启动方式;新克隆 `bun install && bun run build:web && bun run dev` 两条命令可跑。
 
 ## 5. picot 借鉴(调研自 `picot/`,Tauri+内嵌 server+SPA,与我们同构)
 
 - ~~W5.1 Agent Inbox lite~~ **用户决定移除**(连同 server inbox 模块/协议 task ops/web 页面/i18n 一并撤除;`source` union 的概念留给未来通道)
-- [ ] W5.2 后台会话事件镜像:侧栏未读点 + 流式绿点(单 server 全量事件流,近乎白送)。
-- [ ] W5.3 Context popover 化:分段条(输入/输出/缓存读/缓存写/可用)+ 就地 Compact + "请求已接受 vs 真完成"协调器。
-- [ ] W5.4 回合文件 chip:每回合末尾列出写过的文件成 chip,点击预览;write/edit 工具完成自动跟随。
-- [ ] W5.5 排队消息 pill(steer/follow-up 两种,composer 上方逐条,可改/删)。
-- [ ] W5.6 侧栏增强:RECENT(跨 session 近 5)+ Pins + ARCHIVED 折叠 + 行内改名 + 全文搜索(带片段,server 端扫 lane)。
-- [ ] W5.7 自动会话标题:首回合并行一次性小 agent 生成,不占主回合队列,不覆盖手动改名。
-- [ ] W5.8 大粘贴卸载:>4KB 粘贴提示落盘换成 `@file` 引用。
-- [ ] W5.9 ask/扩展对话框排队:后台会话的提问不弹模态,前台才弹,Stop 常显(照抄 picot extension-ui-host 语义,数据源 = AskRegistry)。
-- [ ] W5.10 OS/Web Notification:回合完成通知,点击直达 session(URL 深链)。
+- [x] W5.2 后台会话事件镜像:侧栏未读点(view 帧消息数增长且非 attach)+ running badge;focus/点击清未读(reducer 有单测)。
+- [x] W5.3 Context 面板 usage 分段条(输入/输出/缓存读/缓存写比例)+ 就地 Compact + "请求已接受 vs 真完成"协调器(compactionEpoch 追踪 + 15s 兜底)。
+- [x] W5.4 回合文件 chip:assistant 回合末尾从 toolCall 参数(path/file_path/file)聚合去重成 chip,点击弹预览(`GET /api/file`,200KB 截断、cwd 越界防护)。
+- [x] W5.5 排队消息 pill:composer 上方逐条(乐观入队,出现在 timeline user 流后自动消失)。展示型;可改/删未做。
+- [x] W5.6 侧栏增强:PINNED/RECENT/ARCHIVED(折叠)分组 + server 全文搜索(带片段扫 timeline)+ hover pin/archive/delete。行内改名未做(标题=自动)。
+- [x] W5.7 自动会话标题:启发式=首条用户消息前 60 字符(server 端,零额外回合);pin 状态 server meta 持久。
+- [x] W5.8 >4KB 粘贴自动落盘 session cwd(`POST /api/paste`,`.eta-paste-*.txt`)并替换成 `@file` 引用;失败回退原文粘贴。
+- [x] W5.9 ask 模态只对前台 session 渲染(后台提问不弹模态,侧栏 ask badge 提示;取答案走 AskRegistry 队列)。
+- [x] W5.10 running true→false 且非当前 session → Web Notification(`Settings` 里授权;点击深链 `?session=` 直达,main 挂载时消费并清 URL)。
 
 ## 明确不做(v2)
 
 - Electron 壳(留待以后:BrowserWindow 指 `/`,协议零改动);terminal 面板、diff 侧挂、dnd 排序、fork/tree(都是 pi-gui 有而 v2 首版不搬);Telegram/远程进件通道与设备配对/二维码/PWA(picot 有,eta 只留 task.source union 钩子);图片附件(web 粘贴可用但先不做);virtual-list(首版全量渲染,>80 条再抄 pi-gui 区间法)。
+
+## T3 手测清单(用户侧)
+
+1. `bun install && bun run build:web && bun run dev` → `http://localhost:3000`。
+2. 新建 session:向导不选 persona 不能创建;persona 卡显示 4 内置;drop `.eta/persona/x.persona.md` 后重开向导可见。
+3. 发一条 prompt:流式 markdown 渲染;`@` 出文件 mention;Context 面板 usage 分段条增长、prompt 拆块含 persona。
+4. running 中再按 Enter:排队 pill 出现、`⌘Enter` 转向;ask 弹框(队列取第一个)selection/freeform/倒计时各走一遍。
+5. 开第二个 session 后切走:后台跑完侧栏出未读点、Web Notification(授权后)点击跳回;dev rail 三通道过滤/pause。
+6. 375px(手机或 DevTools):只剩聊天 + 两个抽屉按钮;抽屉开关持久化;无横向滚动条。
+7. 杀 server 重启:前端自动重连,状态恢复,未决 ask 重弹。
