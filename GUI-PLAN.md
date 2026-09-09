@@ -14,6 +14,8 @@
 - [x] G0.2 三条通道全 JSON-safe。完成条件:序列化 roundtrip 测试(`test/channels.test.ts` encode/decode roundtrip + DevRing 容量/过滤);attach = `replay(store)` + 订阅增量,后台 session 重 attach 用 SessionView 重放 + dev ring 回填(老 E6 语义)。
 - [x] G0.3 线程模型:N 个 session = N 个 agent 并发,GUI 只有一个 attach 指针;后台 goal/loop 照常跑,GUI 断连不影响。完成条件:后台 session 的 loop 到点火、GUI 无窗口时 core 不退出(`src/host.ts` Host;test/host.test.ts:attach 指针在 A、B 的 loop 点火进 ring/帧流;detach 后 B 视图照常更新)。
 
+ ** gpuix/examples/chat.tsx 可以大量借鉴 **
+
 ---
 
 ## 1. 布局
@@ -34,7 +36,7 @@
 ```
 
 - [ ] L1 侧栏:session 列表 + 状态 badge(`running / goal / ask-pending / loop`)+ archive;数据 = 各 session SessionView 摘要行。完成条件:切 attach 不丢任何 session 状态。
-- [ ] L2 timeline 行类型:在 pi-gui `activity|tool|summary|turn-marker`(timeline-types.ts)基础上扩 `goal-change / loop-fire / compaction / ask / btw-note / retry`。工具行内嵌 `<code>`(参数/结果)+ `<diff>`(edit 类)。完成条件:virtual-list 变高行 + 尾部锚定(chat 语义),历史重放与直播同一渲染路径。
+- [x] L2 timeline 行类型:在 pi-gui `activity|tool|summary|turn-marker`(timeline-types.ts)基础上扩 `goal-change / loop-fire / compaction / ask / btw-note / retry`。工具行内嵌 `<code>`(参数/结果)+ `<diff>`(edit 类)。完成条件:virtual-list 变高行 + 尾部锚定(chat 语义),历史重放与直播同一渲染路径。(app.tsx `<virtual-list followTail>`;工具行内嵌 `<code>` args/结果;loop/retry 瞬态行来自 dev 通道;test L2 timeline rows)
 - [ ] L3 Context 面板:system prompt 拆**稳定块/自适应块**两段 + `compactionEpoch`;usage 表(input/output/cache_read/write + `cacheRate` + tokens/sec,速率用 dev ts);goal 卡、tasks、loops、memory 水位(20k)、subagents fleet 行、btw sideThread。完成条件:跑一个 turn 每块都实时刷新。
 - [ ] L4 dev rail:全 category 着色 tail,`/` 过滤、暂停/恢复;环满丢最旧。完成条件:14+类各有颜色且能过滤。
 - [ ] L5 composer:textarea + @mention 弹层(文件/agent)、**paste-assets 图片 chips**、排队消息条(等 turn 边界,= S1 driver)、`ask_user` 内联弹窗(单选/多选/填空,含 timeout 倒计时,答案走 `answer()`)。完成条件:kill-重启后未决 ask 在 GUI 重弹。
@@ -83,7 +85,7 @@
 | # | 绑定 | GUI 内容 | 验收 |
 |---|---|---|---|
 | G0 | M0 | 窗口+空 timeline+dev rail(假事件) | 布局四块可渲染 |
-| G1 | M1 | 真 turn 流+retry/loop 系统行 | T3 的 turn 段(真 turn 流已通:faux 模型经 Host 三通道渲染进 timeline,test/app.test.tsx G1;retry/loop 系统行随 L2) |
+| G1 | M1 | 真 turn 流+retry/loop 系统行 | T3 的 turn 段(真 turn 流已通:faux 模型经 Host 三通道渲染进 timeline,test/app.test.tsx G1;retry/loop 系统行随 L2 已通:瞬态行渲染) |
 | G2 | M2 | tasks 卡(reminder 注入可见) | DAG 渲染+操作 |
 | G3 | M3 | goal 卡+控制 | 续命/暂停在屏上可见 |
 | G4 | M4 | ask 弹窗 | kill-重启-弹-答续跑 |

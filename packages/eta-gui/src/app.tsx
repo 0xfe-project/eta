@@ -5,7 +5,7 @@
  */
 
 import { useState } from "react";
-import type { SessionView } from "@eta/core";
+import type { SessionView, SessionViewMessage } from "@eta/core";
 import type { DevFrame } from "./channels.ts";
 import type { SidebarSession } from "./fake.ts";
 
@@ -15,11 +15,14 @@ export interface AskAnswer {
 	text?: string;
 }
 
+export type TaskStatus = "pending" | "in_progress" | "completed" | "cancelled";
+
 export interface GuiOps {
 	focus(name: string): void;
 	prompt(text: string): void;
 	goal(action: "set" | "pause" | "resume" | "clear", objective?: string): void;
 	loopToggle(id: string, paused: boolean): void;
+	taskSet(id: string, status: TaskStatus): void;
 	compact(): void;
 	abort(): void;
 	answer(questionId: string, response: AskAnswer): void;
@@ -30,6 +33,7 @@ export const noOps: GuiOps = {
 	prompt: () => {},
 	goal: () => {},
 	loopToggle: () => {},
+	taskSet: () => {},
 	compact: () => {},
 	abort: () => {},
 	answer: () => {},
@@ -66,22 +70,102 @@ const CATEGORY_COLORS: Record<string, string> = {
 	ask_user: "#a6e3a1",
 	btw: "#cba6f7",
 	running: "#89b4fa",
-	"ask-pending": "#a6e3a1",
+	"ask-pending": "#a6adc8",
 };
 
-const textOf = (message: unknown): string => {
+const SYSTEM_KIND_CATEGORY: Record<string, string> = { goal: "goal", ask: "ask_user", btw: "btw", compaction: "compaction", merge: "lifecycle" };
+
+const NEXT_STATUS: Record<TaskStatus, TaskStatus> = {
+	pending: "in_progress",
+	in_progress: "completed",
+	completed: "cancelled",
+	cancelled: "pending",
+};
+
+interface Block {
+	type: string;
+	text?: string;
+	thinking?: string;
+	id?: string;
+	name?: string;
+	arguments?: unknown;
+}
+
+const blocksOf = (message: unknown): Block[] => {
 	const content = (message as { content?: unknown }).content;
-	if (typeof content === "string") return content;
+	if (typeof content === "string") return [{ type: "text", text: content }];
+	if (Array.isArray(content)) return content as Block[];
+	return [];
+};
+
+const resultText = (message: unknown): string => {
+	const content = (message as { content?: unknown }).content;
 	if (Array.isArray(content)) {
 		return (content as { type?: string; text?: string }[])
 			.filter((b) => b.type === "text")
 			.map((b) => b.text ?? "")
-			.join("");
+			.join("\n");
 	}
 	return "";
 };
 
+const roleLabel = (message: SessionViewMessage["message"]): string => {
+	const role = (message as { role?: string }).role ?? "";
+	return role === "user" ? "you" : role === "toolResult" ? "tool" : "eta";
+};
+
 const BUTTON = { padding: 6, borderWidth: 1, borderColor: PANEL, fontSize: 12, color: TEXT } as const;
+
+const TRANSIENT_ACTIONS: Record<string, string[]> = {
+	loop: ["fired", "paused", "expired", "suppressed"],
+	retry: [],
+};
+
+function TimelineRow({ row }: { row: { el: unknown } }) {
+	const el = row.el as { entryId?: string; seq?: number; frame?: DevFrame };
+	if (el.frame !== undefined) {
+		const frame = el.frame;
+		return (
+			<div testId={`event-${frame.category}-${frame.action}`} style={{ fontSize: 12, color: CATEGORY_COLORS[frame.category] ?? DIM }}>
+				{`${frame.category} · ${frame.action}`}
+			</div>
+		);
+	}
+	if (el.entryId !== undefined && el.seq !== undefined && "kind" in el && typeof (el as { kind?: unknown }).kind === "string" && !("message" in el)) {
+		const system = el as unknown as { entryId: string; kind: string; text: string };
+		return (
+			<div testId={`system-${system.entryId}`} style={{ fontSize: 12, color: CATEGORY_COLORS[SYSTEM_KIND_CATEGORY[system.kind]] ?? DIM }}>
+				{system.text}
+			</div>
+		);
+	}
+	const entry = el as unknown as SessionViewMessage;
+	const role = (entry.message as { role?: string }).role ?? "";
+	if (role === "toolResult") {
+		const toolName = (entry.message as { toolName?: string }).toolName ?? "tool";
+		return (
+			<div key={entry.entryId} testId={`tool-result-${(entry.message as { toolCallId?: string }).toolCallId ?? entry.entryId}`}>
+				<div style={{ fontSize: 12, color: CATEGORY_COLORS.tool }}>{`↳ ${toolName}`}</div>
+				<code code={resultText(entry.message)} language="text" style={{ fontSize: 12, color: DIM }} />
+			</div>
+		);
+	}
+	const blocks = blocksOf(entry.message);
+	const texts = blocks.filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n");
+	const calls = blocks.filter((b) => b.type === "toolCall");
+	return (
+		<div key={entry.entryId} testId={`msg-${entry.entryId}`} style={{ fontSize: 14 }}>
+			<div style={{ color: DIM }}>{roleLabel(entry.message)}</div>
+			{texts === "" ? null : <markdown source={texts} style={{ fontSize: 14, color: TEXT }} />}
+			{calls.map((call) => (
+				<div key={call.id} testId={`tool-${call.id}`} style={{ marginTop: 4 }}>
+					<div style={{ fontSize: 12, color: CATEGORY_COLORS.tool }}>{`⚙ ${call.name}`}</div>
+					<code code={JSON.stringify(call.arguments ?? {})} language="json" style={{ fontSize: 12, color: DIM }} />
+				</div>
+			))}
+		</div>
+	);
+}
 
 export function EtaApp({ sessions, active, view, dev, ops, defaultTab = "dev" }: EtaAppProps) {
 	const [tab, setTab] = useState<"context" | "dev">(defaultTab);
@@ -91,10 +175,13 @@ export function EtaApp({ sessions, active, view, dev, ops, defaultTab = "dev" }:
 	const rows = dev.filter(
 		(f) => needle === "" || f.category.toLowerCase().includes(needle) || f.action.toLowerCase().includes(needle),
 	);
-	const timeline = [
+	const transient = dev.filter((f) => (TRANSIENT_ACTIONS[f.category]?.includes(f.action) ?? false) || f.category === "retry");
+	const timeline: { seq: number; el: unknown }[] = [
 		...view.messages.map((m) => ({ seq: m.seq, el: m })),
 		...view.systems.map((s) => ({ seq: s.seq, el: s })),
-	].sort((a, b) => a.seq - b.seq);
+	];
+	timeline.sort((a, b) => a.seq - b.seq);
+	for (const frame of transient) timeline.push({ seq: Number.MAX_SAFE_INTEGER, el: { frame } });
 	const send = () => {
 		const text = draft.trim();
 		if (text !== "") ops.prompt(text);
@@ -128,19 +215,16 @@ export function EtaApp({ sessions, active, view, dev, ops, defaultTab = "dev" }:
 				<div style={{ color: DIM, fontSize: 12, paddingTop: 24 }}>archive</div>
 			</div>
 			<div style={{ flexGrow: 1, display: "flex", flexDirection: "column" }}>
-				<div style={{ flexGrow: 1, padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
-					{timeline.map((row) =>
-						"entryId" in row.el && "kind" in row.el ? (
-							<div key={row.el.entryId} style={{ fontSize: 12, color: CATEGORY_COLORS[row.el.kind === "ask" ? "ask_user" : row.el.kind === "goal" ? "goal" : row.el.kind] ?? DIM }}>
-								{row.el.text}
-							</div>
-						) : (
-							<div key={(row.el as { entryId: string }).entryId} style={{ fontSize: 14 }}>
-								{`${(row.el as { message: { role?: string } }).message.role === "user" ? "you" : "eta"}: ${textOf((row.el as { message: unknown }).message)}`}
-							</div>
-						),
-					)}
-				</div>
+				<virtual-list followTail estimatedItemHeight={32} style={{ flexGrow: 1, padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+					{timeline.map((row) => (
+						<TimelineRow key={`row-${(row.el as { entryId?: string; frame?: DevFrame }).entryId ?? `${(row.el as { frame?: DevFrame }).frame?.ts}`}`} row={row} />
+					))}
+					{view.thinking.slice(-1).map((thought, index) => (
+						<div key={`thinking-${index}`} testId="thinking-row" style={{ fontSize: 12, color: DIM }}>
+							{`… ${thought.slice(0, 80)}`}
+						</div>
+					))}
+				</virtual-list>
 				{view.pendingAsk === undefined ? null : (
 					<div testId="ask-modal" style={{ borderWidth: 1, borderColor: CATEGORY_COLORS.ask_user, padding: 12, margin: 12, backgroundColor: PANEL }}>
 						<div style={{ fontSize: 14 }}>{view.pendingAsk.question}</div>
@@ -200,13 +284,23 @@ export function EtaApp({ sessions, active, view, dev, ops, defaultTab = "dev" }:
 							</div>
 						</div>
 						{view.tasks.map((task) => (
-							<div key={task.id} style={{ color: task.status === "completed" ? DIM : TEXT }}>
+							<div
+								key={task.id}
+								testId={`task-${task.id}`}
+								onClick={() => ops.taskSet(task.id, NEXT_STATUS[task.status as TaskStatus] ?? "pending")}
+								style={{ color: task.status === "completed" ? DIM : TEXT }}
+							>
 								[{task.status}] {task.content}
 							</div>
 						))}
 						{view.loops.map((loop) => (
 							<div key={loop.id} testId={`loop-${loop.id}`} onClick={() => ops.loopToggle(loop.id, !loop.paused)} style={{ color: loop.paused ? DIM : CATEGORY_COLORS.loop }}>
 								loop {loop.id} · {loop.note} · {loop.paused ? "paused" : "on"} · fired {loop.runCount}
+							</div>
+						))}
+						{view.sideThread.map((thread) => (
+							<div key={thread.id} testId={`sideThread-${thread.id}`} style={{ color: CATEGORY_COLORS.btw }}>
+								{`btw ${thread.id} · ${thread.kind} · ${thread.exchanges.length} exchanges · ${thread.saveState}`}
 							</div>
 						))}
 						{view.memory === undefined ? null : (
@@ -231,11 +325,13 @@ export function EtaApp({ sessions, active, view, dev, ops, defaultTab = "dev" }:
 				) : (
 					<div style={{ flexGrow: 1, display: "flex", flexDirection: "column" }}>
 						<input testId="dev-filter" value={filter} placeholder="filter" onChange={(event) => setFilter(event.value ?? "")} style={{ marginBottom: 8, fontSize: 12, color: DIM }} />
-						{rows.map((frame, index) => (
-							<div key={`${frame.ts}-${index}`} style={{ paddingTop: 2, paddingBottom: 2, paddingLeft: 12, paddingRight: 12, fontSize: 12 }}>
-								<div style={{ color: CATEGORY_COLORS[frame.category] ?? DIM }}>{`${frame.category} · ${frame.action}`}</div>
-							</div>
-						))}
+						<virtual-list followTail estimatedItemHeight={18} style={{ flexGrow: 1 }}>
+							{rows.map((frame, index) => (
+								<div key={`${frame.ts}-${index}`} style={{ paddingTop: 2, paddingBottom: 2, paddingLeft: 12, paddingRight: 12, fontSize: 12 }}>
+									<div style={{ color: CATEGORY_COLORS[frame.category] ?? DIM }}>{`${frame.category} · ${frame.action}`}</div>
+								</div>
+							))}
+						</virtual-list>
 					</div>
 				)}
 			</div>

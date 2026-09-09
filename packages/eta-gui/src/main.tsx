@@ -40,6 +40,7 @@ export function LiveApp({ host }: { host: Host }) {
 		prompt: (text) => void host.prompt(pointer, text).catch(() => undefined),
 		goal: (action, objective) => host.goal(pointer, action, objective),
 		loopToggle: (id, paused) => host.loopToggle(pointer, id, paused),
+		taskSet: (id, status) => host.taskSet(pointer, id, status),
 		compact: () => void host.compact(pointer).catch(() => undefined),
 		abort: () => void host.abort(pointer).catch(() => undefined),
 		answer: (questionId, response) => host.askOf(pointer)?.answer(questionId, response as Parameters<NonNullable<ReturnType<Host["askOf"]>>["answer"]>[1]),

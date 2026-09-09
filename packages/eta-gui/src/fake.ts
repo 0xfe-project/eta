@@ -45,8 +45,32 @@ export function fakeFeed(): FakeFeed {
 	const view = emptyView();
 	view.messages = [
 		message("m1", "user", "hello eta"),
-		message("m2", "assistant", "rendering the first frame"),
+		{
+			entryId: "m2",
+			seq: 2,
+			message: {
+				role: "assistant",
+				content: [
+					{ type: "text", text: "rendering the first frame" },
+					{ type: "toolCall", id: "c1", name: "TaskCreate", arguments: { content: "write the thing" } },
+				],
+				timestamp: 0,
+			} as SessionView["messages"][number]["message"],
+		},
+		{
+			entryId: "m3",
+			seq: 3,
+			message: {
+				role: "toolResult",
+				toolCallId: "c1",
+				toolName: "TaskCreate",
+				content: [{ type: "text", text: "Created t1." }],
+				timestamp: 0,
+			} as SessionView["messages"][number]["message"],
+		},
 	];
+	view.thinking = ["pick a tool first"];
+	view.sideThread = [{ id: "b1", kind: "tangent", exchanges: [{ question: "side note", answer: "noted", at: 0 }], saveState: "not-saved" }];
 	view.systems = [{ entryId: "s1", seq: 1, kind: "goal", text: "goal set: paint the window" }];
 	view.tasks = [{ id: "t1", content: "write the thing", status: "pending" }];
 	view.loops = [{ id: "tick", note: "check ci", every: "1s", runCount: 2, paused: false }];

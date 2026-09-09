@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { connectTest } from "@gpuix/react/automation";
 import { createTestRoot, hasNativeTestRenderer } from "@gpuix/react/testing";
+import type { GuiOps, TaskStatus } from "../src/app.tsx";
 import { EtaApp, noOps } from "../src/app.tsx";
 import { fakeFeed } from "../src/fake.ts";
 
@@ -90,5 +91,47 @@ describeNative("G2-G6 panels", () => {
 		}
 		expect(host.viewOf("side")?.messages.length).toBeGreaterThanOrEqual(2);
 		await host.close();
+	});
+});
+
+describeNative("L2 timeline rows", () => {
+	it("paints tool call code, tool result, thinking, transient rows and sideThread", async () => {
+		const feed = fakeFeed();
+		const { render, renderer } = createTestRoot();
+		render(<EtaApp sessions={feed.sessions} active="eta-main" view={feed.view} dev={feed.dev} ops={noOps} defaultTab="context" />);
+		await connectTest(renderer);
+		const painted = renderer.getPaintedText();
+		const has = (needle: string) => painted.some((line) => line.includes(needle));
+		expect(has("⚙ TaskCreate")).toBe(true);
+		expect(has('\"content\":\"write the thing\"')).toBe(true);
+		expect(has("↳ TaskCreate")).toBe(true);
+		expect(has("Created t1.")).toBe(true);
+		expect(has("pick a tool first")).toBe(true);
+		expect(has("loop · fired")).toBe(true);
+		expect(has("btw b1 · tangent · 1 exchanges · not-saved")).toBe(true);
+	});
+
+	it("clicking a task row cycles its status through ops", async () => {
+		const feed = fakeFeed();
+		const calls: [string, TaskStatus][] = [];
+		const ops: GuiOps = { ...noOps, taskSet: (id, status) => calls.push([id, status]) };
+		const { render, renderer } = createTestRoot();
+		render(<EtaApp sessions={feed.sessions} active="eta-main" view={feed.view} dev={feed.dev} ops={ops} defaultTab="context" />);
+		const app = await connectTest(renderer);
+		await app.getByTestId("task-t1").click();
+		expect(calls).toEqual([["t1", "in_progress"]]);
+	});
+
+	it("dev rail paints every event category", async () => {
+		const feed = fakeFeed();
+		const categories = ["lifecycle", "turn", "usage", "prompt", "compaction", "loop", "goal", "memory", "skill", "todo", "state", "tool", "retry", "ask_user", "btw"];
+		feed.dev = categories.map((category, index) => ({ ts: index, session: "eta-main", category, action: `act-${category}`, data: {} }));
+		const { render, renderer } = createTestRoot();
+		render(<EtaApp sessions={feed.sessions} active="eta-main" view={feed.view} dev={feed.dev} ops={noOps} />);
+		await connectTest(renderer);
+		const painted = renderer.getPaintedText();
+		for (const category of categories) {
+			expect(painted.some((line) => line.includes(`${category} · act-${category}`))).toBe(true);
+		}
 	});
 });

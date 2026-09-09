@@ -11,7 +11,7 @@ import { BACKGROUND_CONTEXT, type Context } from "./context.ts";
 import { AgentHarness, type AgentLane } from "./agent-harness.ts";
 import { loopFollowUp } from "../prompts/index.ts";
 import { loopState, loopStateInventoryPrefix, taskState } from "./session/values.ts";
-import type { PendingEntry } from "./session/types.ts";
+import type { PendingEntry, StoredTask, TaskStatus } from "./session/types.ts";
 import { applyGoalEntries } from "./goal.ts";
 import type { AgentHarnessTool } from "./types.ts";
 import type { Session } from "./session/types.ts";
@@ -129,6 +129,15 @@ export class EtaAgent {
 		return this.harness.events;
 	}
 
+	/** UI write path: mutate a task (the store persists) and mirror a todo observation. */
+	setTask(id: string, patch: { status?: TaskStatus; content?: string; deps?: string[]; priority?: "high" | "medium" | "low" }): { task: StoredTask; warnings: string[] } | undefined {
+		const result = this.tasks.update(id, patch);
+		if (result !== undefined) {
+			void this.lane.publish([{ type: "eta", category: "todo", action: "update", data: { taskId: id, status: result.task.status } }], BACKGROUND_CONTEXT).catch(() => undefined);
+		}
+		return result;
+	}
+
 	static async create(options: EtaAgentOptions, context: Context): Promise<EtaAgent> {
 		let laneRef: AgentLane | undefined;
 		const emit: EtaEmit = (category, action, data) => {
@@ -146,8 +155,7 @@ export class EtaAgent {
 		const goal = new GoalManager();
 		goal.observe = emit;
 		goal.onChange = (change) => writeEntry(goalEntry(goalPayloadFor(change)));
-		const tasks = new TaskStore();
-		const persistTasks = () => void options.session.setValue(taskState, tasks.list(), BACKGROUND_CONTEXT).catch(() => undefined);
+		const tasks = new TaskStore(() => void options.session.setValue(taskState, tasks.list(), BACKGROUND_CONTEXT).catch(() => undefined));
 		const loops = new LoopScheduler({
 			followUpFor: (spec) => loopFollowUp(spec.def.id, spec.def.note),
 			persist: persistLoop,
@@ -167,7 +175,7 @@ export class EtaAgent {
 		);
 
 		const agentTools: AgentHarnessTool<object | undefined>[] = [
-			...createTaskTools(tasks, persistTasks, emit),
+			...createTaskTools(tasks, emit),
 			...createStateTools(options.kv ?? memoryKv(), emit),
 			...createLoopTools(loops),
 			...createScheduleTool(loops),

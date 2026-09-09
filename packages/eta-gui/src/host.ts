@@ -137,6 +137,10 @@ export class Host {
 		this.must(name).loops.pause(id, paused);
 	}
 
+	taskSet(name: string, id: string, status: "pending" | "in_progress" | "completed" | "cancelled"): void {
+		this.must(name).setTask(id, { status });
+	}
+
 	async compact(name: string): Promise<void> {
 		await this.must(name).lane.compact(undefined, BACKGROUND_CONTEXT);
 	}

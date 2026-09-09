@@ -59,4 +59,19 @@ describe("host", () => {
 		unsubscribe();
 		await host.close();
 	});
+
+	it("L2: taskSet through the host mutates the store and repaints the view", async () => {
+		const host = new Host();
+		await host.open("a", () => makeAgent("eta-a", 0));
+		const agent = host.agentOf("a")!;
+		agent.tasks.create("wire the panel");
+		host.taskSet("a", "t1", "completed");
+		expect(agent.tasks.get("t1")?.status).toBe("completed");
+		for (let attempt = 0; attempt < 20; attempt += 1) {
+			if (host.viewOf("a")?.tasks.some((t) => t.id === "t1" && t.status === "completed") === true) break;
+			await new Promise((resolve) => setTimeout(resolve, 10));
+		}
+		expect(host.viewOf("a")?.tasks.some((t) => t.id === "t1" && t.status === "completed")).toBe(true);
+		await host.close();
+	});
 });
