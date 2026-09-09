@@ -88,6 +88,20 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 			if (filesSession !== null) {
 				return Response.json(host.filesOf(filesSession));
 			}
+			if (request.method === "POST" && url.pathname === "/api/paste") {
+				const session = url.searchParams.get("session") ?? "";
+				const body = (await request.json()) as { text?: string };
+				const text = body.text ?? "";
+				if (text.length <= 4096) return Response.json({ path: null });
+				const cwd = host.cwdOf(session);
+				if (cwd === undefined) return new Response("no session", { status: 404 });
+				const path = `.eta-paste-${Date.now().toString(36)}.txt`;
+				await Bun.write(`${cwd}/${path}`, text);
+				return Response.json({ path });
+			}
+			if (url.pathname === "/api/search") {
+				return Response.json({ query: url.searchParams.get("q") ?? "", hits: host.search(url.searchParams.get("q") ?? "") });
+			}
 			const fileSession = url.searchParams.get("session");
 			const filePath = url.searchParams.get("path");
 			if (url.pathname === "/api/file" && fileSession !== null && filePath !== null) {
@@ -158,7 +172,7 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 			host.focus(message.session);
 			return;
 		case "prompt":
-			await host.prompt(message.session, message.text);
+			host.queue(message.session, message.text, message.mode ?? "queue");
 			return;
 		case "goal":
 			host.goal(message.session, message.action, message.objective);
