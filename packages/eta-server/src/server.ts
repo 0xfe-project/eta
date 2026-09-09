@@ -293,7 +293,7 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 			if (message.prompt !== undefined && message.prompt.length > 0) await host.prompt(message.name, message.prompt);
 			return;
 		case "session.delete":
-			await host.closeSession(message.name);
+			await host.deleteSession(message.name);
 			return;
 	}
 }

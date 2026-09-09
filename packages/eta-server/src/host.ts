@@ -6,7 +6,7 @@
  */
 
 import { readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
-import { appendFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT, EtaAgent, SessionViewProjector, type HarnessEvent, type LaneQueuedItem, type SessionView } from "@eta/core";
@@ -203,6 +203,18 @@ export class Host {
 		entry.detach = attached.detach;
 		this.attachPointerValue ??= name;
 		this.emit({ channel: "view", session: name, view: entry.view });
+	}
+
+	/** Close and permanently erase a session's on-disk state. */
+	async deleteSession(name: string): Promise<void> {
+		const persistDir = this.hosted.get(name)?.persistDir ?? join(this.dataDir, name);
+		try {
+			await this.closeSession(name);
+		} catch {
+			/* not loaded: still erase any leftover directory */
+		}
+		this.meta.delete(name);
+		await rm(persistDir, { recursive: true, force: true });
 	}
 
 	async closeSession(name: string): Promise<void> {
