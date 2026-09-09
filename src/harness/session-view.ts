@@ -36,7 +36,8 @@ export interface SessionViewSystemRow {
 	entryId: string;
 	seq: number;
 	kind: "goal" | "ask" | "btw" | "compaction" | "merge";
-	text: string;
+	/** Display parameters; the client renders them (i18n lives in the frontend). */
+	args: Record<string, string>;
 }
 
 export interface SessionViewSubagent {
@@ -61,7 +62,7 @@ export interface SessionView {
 	branch: { tipId: string | null };
 	pendingAsk: AskPayload | undefined;
 	/** Deadline of the pending ask when it carries a timeout; drives the modal countdown. */
-	pendingAskDeadline: number | undefined;
+	pendingAskDeadline?: number;
 	/** KV keys the state tools have set; shown and deletable in the Context panel. */
 	stateKeys: string[];
 	/** Persona card names baked into the stable prompt block; empty when none. */
@@ -103,26 +104,27 @@ export class SessionViewProjector {
 			}
 			if (entry.type === "compaction") {
 				compactionEpoch += 1;
-				systems.push({ entryId: entry.id, seq: entry.seq, kind: "compaction", text: `compaction #${compactionEpoch}: ${entry.summary.slice(0, 120)}` });
+				systems.push({ entryId: entry.id, seq: entry.seq, kind: "compaction", args: { epoch: String(compactionEpoch), summary: entry.summary.slice(0, 120) } });
 				continue;
 			}
 			if (entry.type === "merge") {
-				systems.push({ entryId: entry.id, seq: entry.seq, kind: "merge", text: entry.summary });
+				systems.push({ entryId: entry.id, seq: entry.seq, kind: "merge", args: { summary: entry.summary } });
 				continue;
 			}
 			if (entry.type === "goal") {
 				const payload = entry.payload;
-				systems.push({ entryId: entry.id, seq: entry.seq, kind: "goal", text: payload.objective === undefined ? `goal ${payload.kind}` : `goal ${payload.kind}: ${payload.objective}` });
+				systems.push({ entryId: entry.id, seq: entry.seq, kind: "goal", args: { action: payload.kind, ...(payload.objective === undefined ? {} : { objective: payload.objective }) } });
 				continue;
 			}
 			if (entry.type === "ask") {
-				systems.push({ entryId: entry.id, seq: entry.seq, kind: "ask", text: `ask: ${entry.payload.question}` });
+				systems.push({ entryId: entry.id, seq: entry.seq, kind: "ask", args: { question: entry.payload.question } });
 				continue;
 			}
 			if (entry.type === "btw") {
-				systems.push({ entryId: entry.id, seq: entry.seq, kind: "btw", text: `btw: ${entry.payload.note}` });
+				systems.push({ entryId: entry.id, seq: entry.seq, kind: "btw", args: { note: entry.payload.note } });
 			}
 		}
+		const pending = ask.pendingAsks();
 		const stats = await lane.getStats(context);
 		const specView = (spec: LoopSpec): SessionViewLoop => ({
 			id: spec.def.id,
@@ -149,8 +151,8 @@ export class SessionViewProjector {
 			usage: stats.usage,
 			cacheRate: cacheRate(stats.usage),
 			branch: { tipId: entries[entries.length - 1]?.id ?? null },
-			pendingAsk: ask.pendingAsks()[0],
-			pendingAskDeadline: ask.pendingAsks()[0] === undefined ? undefined : ask.deadline(ask.pendingAsks()[0]!.questionId),
+			pendingAsk: pending[0],
+			...(pending[0] === undefined ? {} : { pendingAskDeadline: ask.deadline(pending[0].questionId) }),
 			personas: this.agent.personas,
 			prompt: this.agent.lastPromptBlocks,
 			tokensPerSec: this.agent.tokensPerSec,

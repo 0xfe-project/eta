@@ -22,19 +22,21 @@ export interface EtaPromptState {
 	memory?: string;
 }
 
+/** One section pipeline: order and stable/adaptive tagging defined once. */
+function sections(base: string, state: EtaPromptState): { text: string; stable: boolean }[] {
+	const out: { text: string; stable: boolean }[] = [{ text: base, stable: true }];
+	if (state.persona !== undefined && state.persona.length > 0) out.push({ text: state.persona, stable: true });
+	if (state.goal && state.goal.status === "active") out.push({ text: goalPursuitGuidelines(state.goal.objective), stable: false });
+	if (state.tasks && state.tasks.length > 0) out.push({ text: `${TASK_REVIEW_PROMPT}\n\n${renderCurrentTasks(state.tasks)}`, stable: false });
+	if (state.memory !== undefined && state.memory.length > 0) out.push({ text: state.memory, stable: false });
+	return out.filter((section) => section.text.length > 0);
+}
+
 /** The prompt split the way the Context panel thinks about it: what a provider
  * cache keeps across turns versus what gets rewritten every generation. */
 export function splitEtaPromptSections(base: string, state: EtaPromptState): { stable: string[]; adaptive: string[] } {
-	const stable = [base, state.persona ?? ""].filter((part) => part.length > 0);
-	const adaptive: string[] = [];
-	if (state.goal && state.goal.status === "active") {
-		adaptive.push(goalPursuitGuidelines(state.goal.objective));
-	}
-	if (state.tasks && state.tasks.length > 0) {
-		adaptive.push(`${TASK_REVIEW_PROMPT}\n\n${renderCurrentTasks(state.tasks)}`);
-	}
-	if (state.memory !== undefined && state.memory.length > 0) adaptive.push(state.memory);
-	return { stable, adaptive };
+	const all = sections(base, state);
+	return { stable: all.filter((s) => s.stable).map((s) => s.text), adaptive: all.filter((s) => !s.stable).map((s) => s.text) };
 }
 
 export function etaPromptBlockChars(base: string, state: EtaPromptState): { stableChars: number; adaptiveChars: number } {
@@ -45,19 +47,10 @@ export function etaPromptBlockChars(base: string, state: EtaPromptState): { stab
 
 /** Sections appended after the base prompt, in stable order. */
 export function etaPromptSections(state: EtaPromptState): string[] {
-	const sections: string[] = [];
-	if (state.persona !== undefined && state.persona.length > 0) sections.push(state.persona);
-	if (state.goal && state.goal.status === "active") {
-		sections.push(goalPursuitGuidelines(state.goal.objective));
-	}
-	if (state.tasks && state.tasks.length > 0) {
-		sections.push(`${TASK_REVIEW_PROMPT}\n\n${renderCurrentTasks(state.tasks)}`);
-	}
-	if (state.memory !== undefined && state.memory.length > 0) sections.push(state.memory);
-	return sections;
+	return sections("", state).map((section) => section.text);
 }
 
 /** The composed prompt handed to the harness `systemPrompt` option. */
 export function composeEtaSystemPrompt(base: string, state: EtaPromptState): string {
-	return [base, ...etaPromptSections(state)].filter((s) => s.length > 0).join("\n\n");
+	return sections(base, state).map((section) => section.text).join("\n\n");
 }
