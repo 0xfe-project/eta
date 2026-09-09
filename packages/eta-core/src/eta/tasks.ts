@@ -21,8 +21,8 @@ export interface TaskList {
 export interface LoopDef {
 	id: string;
 	note: string;
-	cron?: string;
-	intervalSeconds?: number;
+	/** Interval trigger: "45s" | "5m" | "2h" | "1d" (cron: planned, see C2). */
+	every?: string;
 	maxRuns?: number;
 }
 
