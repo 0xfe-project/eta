@@ -9,6 +9,24 @@ import { SessionViewProjector, type SessionView } from "../../src/harness/sessio
 const CTX = BACKGROUND_CONTEXT;
 
 describe("SessionView projector", () => {
+	it("persona cards ride the stable block and show up in the view", async () => {
+		const faux = fauxProvider();
+		faux.setResponses([fauxAssistantMessage([fauxText("hi")])]);
+		const models = createModels();
+		models.setProvider(faux.provider);
+		const session = new StorageBackedSession({ id: "eta-persona", createdAt: Date.now(), storageVersion: 1 }, new MemoryStorage());
+		const agent = await EtaAgent.create(
+			{ session, models, model: faux.getModel(), baseSystemPrompt: "you are eta", persona: { names: ["pilot"], text: "PILOT CARD TEXT" }, heartbeatMs: 0 },
+			CTX,
+		);
+		const snapshot = await new SessionViewProjector(agent).snapshot(CTX);
+		expect(snapshot.personas).toEqual(["pilot"]);
+		await agent.lane.prompt("go", undefined, CTX);
+		const view = await new SessionViewProjector(agent).snapshot(CTX);
+		expect(view.personas).toEqual(["pilot"]);
+		expect(view.prompt!.stableChars).toBeGreaterThanOrEqual("you are eta".length + "PILOT CARD TEXT".length);
+	});
+
 	it("two attached front-ends converge to the same view", async () => {
 		const faux = fauxProvider();
 		faux.setResponses([
