@@ -10,8 +10,8 @@
 
 ## 0. 进程与数据契约(day-0 就定死,以后不许旁路)
 
-- [ ] G0.1 单 bun 进程:`@eta/core` in-process + gpuix 窗口。三条通道:**SessionView**(真值快照+增量 patch)、**AgentEvent**(交互投影)、**telemetry dev events**(引擎内部,per-session ring buffer 最近 N 条)。**GUI 除这三样外不许碰 core 内部对象**。完成条件:类型上 GUI 只 import 这三类。
-- [ ] G0.2 三条通道全 JSON-safe。完成条件:序列化 roundtrip 测试;attach = `replay(store)` + 订阅增量,后台 session 重 attach 用 SessionView 重放 + dev ring 回填(老 E6 语义)。
+- [x] G0.1 单 bun 进程:`@eta/core` in-process + gpuix 窗口。三条通道:**SessionView**(真值快照+增量 patch)、**AgentEvent**(交互投影)、**telemetry dev events**(引擎内部,per-session ring buffer 最近 N 条)。**GUI 除这三样外不许碰 core 内部对象**。完成条件:类型上 GUI 只 import 这三类。
+- [x] G0.2 三条通道全 JSON-safe。完成条件:序列化 roundtrip 测试(`test/channels.test.ts` encode/decode roundtrip + DevRing 容量/过滤);attach = `replay(store)` + 订阅增量,后台 session 重 attach 用 SessionView 重放 + dev ring 回填(老 E6 语义)。
 - [ ] G0.3 线程模型:N 个 session = N 个 agent 并发,GUI 只有一个 attach 指针;后台 goal/loop 照常跑,GUI 断连不影响。完成条件:后台 session 的 loop 到点火、GUI 无窗口时 core 不退出。
 
 ---

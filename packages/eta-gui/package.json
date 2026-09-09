@@ -1,0 +1,22 @@
+{
+	"name": "@eta/gui",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"test": "vitest --run",
+		"typecheck": "tsc --noEmit",
+		"start": "bun src/main.tsx"
+	},
+	"dependencies": {
+		"@eta/core": "workspace:*",
+		"@gpuix/react": "^0.7.0",
+		"react": "^19.2.4"
+	},
+	"devDependencies": {
+		"@types/react": "^19.2.0",
+		"typescript": "^5.8.0",
+		"vitest": "^4.0.18",
+		"@types/bun": "^1.2.0"
+	}
+}
