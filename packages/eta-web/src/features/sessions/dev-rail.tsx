@@ -2,25 +2,14 @@ import { useState } from "react";
 import { useAppI18n } from "../../i18n.ts";
 import type { DevFrame } from "../../lib/protocol.ts";
 
+// Graphite rule: hue only where meaning demands it (failure/attention).
 const CATEGORY_COLORS: Record<string, string> = {
-	goal: "var(--success)",
-	todo: "var(--warning)",
-	loop: "#8a7fd0",
-	ask: "var(--warning)",
-	"ask-pending": "var(--warning)",
-	btw: "#5aa7c8",
-	compaction: "#c8a15a",
-	memory: "#63a36a",
-	prompt: "#8f8fc8",
-	state: "var(--muted)",
-	subagent: "#c85a9d",
-	usage: "var(--muted)",
 	retry: "var(--danger)",
 	fault: "var(--danger)",
 	drift: "var(--danger)",
-	merge: "#5ac8c0",
-	queue: "var(--muted)",
-	nav: "#9a9a9a",
+	ask: "var(--warning)",
+	"ask-pending": "var(--warning)",
+	goal: "var(--success)",
 };
 
 export function DevRail({ frames }: { frames: DevFrame[] }) {

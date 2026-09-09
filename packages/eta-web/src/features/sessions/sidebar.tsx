@@ -3,9 +3,10 @@ import { useAppI18n } from "../../i18n.ts";
 import { etaStore, useEta } from "../../lib/eta-store.ts";
 import type { SidebarSession } from "../../lib/protocol.ts";
 
+// Graphite rule: saturation reserved for state (goal ok / ask needs attention / running).
 const BADGE_STYLES: Record<string, string> = {
 	running: "bg-accent text-accent-foreground",
-	goal: "bg-success/20 text-success",
+	goal: "text-success",
 	"ask-pending": "bg-warning/20 text-warning",
 	loop: "bg-overlay text-muted",
 };
@@ -63,7 +64,7 @@ function SessionRow({ session, selected, onSelect, onDelete }: { session: Sideba
 			</div>
 			<div className="mt-1 flex flex-wrap gap-1">
 				{session.personas.map((persona) => (
-					<span key={persona} data-testid={`session-persona-${session.name}`} className="mono rounded px-1.5 py-0.5 text-[10px] text-accent" style={{ background: "color-mix(in srgb, var(--accent) 15%, transparent)" }}>
+					<span key={persona} data-testid={`session-persona-${session.name}`} className="mono rounded bg-overlay px-1.5 py-0.5 text-[10px] text-foreground">
 						{persona}
 					</span>
 				))}

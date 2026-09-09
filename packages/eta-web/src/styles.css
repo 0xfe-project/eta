@@ -10,12 +10,12 @@
 	--surface: #f2f2f2;
 	--surface-foreground: #181818;
 	--elevated: #ffffff;
-	--muted: #6b6b6b;
+	--muted: #666666;
 	--border: color-mix(in srgb, #181818 12%, transparent);
 	--border-strong: color-mix(in srgb, #181818 24%, transparent);
 	--overlay: color-mix(in srgb, #181818 6%, transparent);
 	--overlay-hover: color-mix(in srgb, #181818 10%, transparent);
-	--accent: #d2542f;
+	--accent: #181818;
 	--accent-foreground: #ffffff;
 	--success: #2f8f4e;
 	--warning: #b47716;
@@ -27,16 +27,16 @@
 .dark {
 	color-scheme: dark;
 	--background: #181818;
-	--foreground: #e8e8e8;
+	--foreground: #ffffff;
 	--surface: #1f1f1f;
-	--surface-foreground: #e8e8e8;
+	--surface-foreground: #ffffff;
 	--elevated: #232323;
-	--muted: #9a9a9a;
+	--muted: #aaaaaa;
 	--border: color-mix(in srgb, #ffffff 12%, transparent);
 	--border-strong: color-mix(in srgb, #ffffff 24%, transparent);
 	--overlay: color-mix(in srgb, #ffffff 6%, transparent);
 	--overlay-hover: color-mix(in srgb, #ffffff 10%, transparent);
-	--accent: #e2795b;
+	--accent: #ffffff;
 	--accent-foreground: #181818;
 	--success: #5cb87a;
 	--warning: #d9a441;

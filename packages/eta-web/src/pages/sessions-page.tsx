@@ -8,6 +8,7 @@ import { Composer } from "../features/sessions/composer.tsx";
 import { AskModal } from "../features/sessions/ask-modal.tsx";
 import { ContextPanel } from "../features/sessions/context-panel.tsx";
 import { DevRail } from "../features/sessions/dev-rail.tsx";
+import { CommandPalette } from "../features/sessions/command-palette.tsx";
 
 export function SessionsPage() {
 	const { t } = useAppI18n();
@@ -19,6 +20,7 @@ export function SessionsPage() {
 
 	return (
 		<AppShell
+			palette={<CommandPalette />}
 			sidebar={<Sidebar selected={selected} />}
 			main={
 				<div className="flex min-h-0 flex-1 flex-col">
