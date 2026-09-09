@@ -6,8 +6,11 @@
 		"packages/*"
 	],
 	"scripts": {
-		"test": "bun run --cwd packages/eta-core test && bun run --cwd packages/eta-storage-sqlite test && bun run --cwd packages/eta-server test",
-		"typecheck": "bun run --cwd packages/eta-core typecheck && bun run --cwd packages/eta-server typecheck"
+		"test": "bun run --cwd packages/eta-core test && bun run --cwd packages/eta-storage-sqlite test && bun run --cwd packages/eta-server test && bun run --cwd packages/eta-web test",
+		"typecheck": "bun run --cwd packages/eta-core typecheck && bun run --cwd packages/eta-server typecheck && bun run --cwd packages/eta-web typecheck",
+		"build:web": "bun run --cwd packages/eta-web build",
+		"dev": "bun packages/eta-server/src/main.ts",
+		"dev:web": "bun run --cwd packages/eta-web dev"
 	},
 	"dependencies": {
 		"@anthropic-ai/sdk": "0.124.0",

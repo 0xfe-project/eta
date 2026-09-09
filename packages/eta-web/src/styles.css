@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+:root,
+.light {
+	color-scheme: light;
+	--background: #ffffff;
+	--foreground: #181818;
+	--surface: #f2f2f2;
+	--surface-foreground: #181818;
+	--elevated: #ffffff;
+	--muted: #6b6b6b;
+	--border: color-mix(in srgb, #181818 12%, transparent);
+	--border-strong: color-mix(in srgb, #181818 24%, transparent);
+	--overlay: color-mix(in srgb, #181818 6%, transparent);
+	--overlay-hover: color-mix(in srgb, #181818 10%, transparent);
+	--accent: #d2542f;
+	--accent-foreground: #ffffff;
+	--success: #2f8f4e;
+	--warning: #b47716;
+	--danger: #c0392b;
+	--code-bg: #f4f4f4;
+	--shadow: 0 8px 32px color-mix(in srgb, #181818 12%, transparent);
+}
+
+.dark {
+	color-scheme: dark;
+	--background: #181818;
+	--foreground: #e8e8e8;
+	--surface: #1f1f1f;
+	--surface-foreground: #e8e8e8;
+	--elevated: #232323;
+	--muted: #9a9a9a;
+	--border: color-mix(in srgb, #ffffff 12%, transparent);
+	--border-strong: color-mix(in srgb, #ffffff 24%, transparent);
+	--overlay: color-mix(in srgb, #ffffff 6%, transparent);
+	--overlay-hover: color-mix(in srgb, #ffffff 10%, transparent);
+	--accent: #e2795b;
+	--accent-foreground: #181818;
+	--success: #5cb87a;
+	--warning: #d9a441;
+	--danger: #e06a5a;
+	--code-bg: #101010;
+	--shadow: 0 8px 32px rgb(0 0 0 / 0.5);
+}
+
+@theme inline {
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-surface: var(--surface);
+	--color-surface-foreground: var(--surface-foreground);
+	--color-elevated: var(--elevated);
+	--color-muted: var(--muted);
+	--color-border: var(--border);
+	--color-border-strong: var(--border-strong);
+	--color-overlay: var(--overlay);
+	--color-overlay-hover: var(--overlay-hover);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-success: var(--success);
+	--color-warning: var(--warning);
+	--color-danger: var(--danger);
+	--color-code-bg: var(--code-bg);
+	--radius-md: 6px;
+	--radius-lg: 10px;
+	--radius-xl: 14px;
+}
+
+html,
+body,
+#root {
+	height: 100%;
+}
+
+body {
+	background: var(--background);
+	color: var(--foreground);
+	font-family: ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+	overscroll-behavior: none;
+}
+
+.mono {
+	font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
