@@ -22,7 +22,7 @@ export interface RunEndEvent {
 export interface GoalDriverDeps {
 	goal: GoalManager;
 	/** Independent judgment call (tool-free request); true = achieved. */
-	evaluate(objective: string): Promise<boolean>;
+	evaluate(objective: string, messages: AgentMessage[]): Promise<boolean>;
 }
 
 /** Slice of the transcript belonging to the run that just ended. */
@@ -50,10 +50,15 @@ function runUsedTools(messages: AgentMessage[]): boolean {
 export function goalDriver(deps: GoalDriverDeps) {
 	return async (event: RunEndEvent): Promise<{ followUp?: string } | undefined> => {
 		deps.goal.recordTurnOutcome(runUsedTools(event.messages));
-		if (!deps.goal.wantsContinuation()) return undefined;
+		if (!deps.goal.wantsContinuation()) {
+			// Hit the hard continuation cap: park the goal instead of leaving it a zombie.
+			const state = deps.goal.current;
+			if (state !== undefined && state.status === "active" && state.roundCount >= deps.goal.maxContinuations) deps.goal.pause();
+			return undefined;
+		}
 		const objective = deps.goal.current?.objective;
 		if (objective === undefined) return undefined;
-		if (await deps.evaluate(objective)) {
+		if (await deps.evaluate(objective, event.messages)) {
 			deps.goal.markAchieved();
 			return undefined;
 		}
