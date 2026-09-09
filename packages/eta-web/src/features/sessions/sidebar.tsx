@@ -14,7 +14,7 @@ const BADGE_STYLES: Record<string, string> = {
 	"goal-done": "bg-primary/20 text-primary",
 };
 
-export function Sidebar({ selected }: { selected: string | null }) {
+export function Sidebar({ selected, termActive, onTerminal }: { selected: string | null; termActive: boolean; onTerminal: () => void }) {
 	const { t } = useAppI18n();
 	const state = useEta();
 	const store = etaStore();
@@ -56,6 +56,14 @@ export function Sidebar({ selected }: { selected: string | null }) {
 			<div className="flex items-center gap-2 border-b border-border p-3">
 				<span className="mono text-sm font-bold text-accent">eta</span>
 				<div className="ml-auto flex gap-1">
+					<button
+						data-testid="term-toggle"
+						onClick={onTerminal}
+						title={t("term.title")}
+						className={`border border-border-strong px-2 py-1 text-xs text-muted hover:bg-foreground hover:text-background ${termActive ? "bg-foreground text-background" : ""}`}
+					>
+						{t("term.title")}
+					</button>
 					<Link href="/new" data-testid="nav-new" className="bg-accent px-2 py-1 text-xs font-medium text-accent-foreground">
 						{t("nav.new")}
 					</Link>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useAppI18n } from "../i18n.ts";
-import { AppShell, useShellOptional } from "../app/app-shell.tsx";
+import { AppShell } from "../app/app-shell.tsx";
 import { useEta } from "../lib/eta-store.ts";
 import { Sidebar } from "../features/sessions/sidebar.tsx";
 import { Timeline } from "../features/sessions/timeline.tsx";
@@ -44,22 +44,6 @@ function useDeepLink() {
 	}, []);
 }
 
-function HeaderButtons({ termOpen, onToggleTerm }: { termOpen: boolean; onToggleTerm: () => void }) {
-	const { t } = useAppI18n();
-	const shell = useShellOptional();
-	return (
-		<>
-			{shell !== undefined ? (
-				<>
-					<button data-testid="shell-toggle-left" onClick={shell.toggleLeft} className="header-icon-btn" title={t("nav.sessions")}>▤</button>
-					<button data-testid="shell-toggle-right" onClick={shell.toggleRight} className="header-icon-btn" title={t("nav.context")}>⧉</button>
-				</>
-			) : null}
-			<button data-testid="term-toggle" onClick={onToggleTerm} className={`header-icon-btn ${termOpen ? "active" : ""}`} title={t("term.title")}>⌨</button>
-		</>
-	);
-}
-
 export function SessionsPage() {
 	const { t } = useAppI18n();
 	const state = useEta();
@@ -74,7 +58,7 @@ export function SessionsPage() {
 	return (
 		<AppShell
 			palette={<CommandPalette />}
-			sidebar={<Sidebar selected={selected} />}
+			sidebar={<Sidebar selected={selected} termActive={termOpen} onTerminal={() => setTermOpen((open) => !open)} />}
 			main={
 				<div className="flex min-h-0 flex-1 flex-col">
 					<header className="flex items-center gap-2 border-b border-border px-4 py-2">
@@ -88,7 +72,6 @@ export function SessionsPage() {
 								</>
 							) : null}
 							<span data-testid="conn-dot" className={`conn-dot ${state.connected ? "on" : "off"}`} title={state.connected ? "" : t("connection.disconnected")} />
-							<HeaderButtons termOpen={termOpen} onToggleTerm={() => setTermOpen((open) => !open)} />
 						</span>
 					</header>
 					{state.sessions.length === 0 ? (
