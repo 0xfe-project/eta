@@ -257,8 +257,12 @@ export class Host {
 		this.must(name).subagents.stop(id, undefined);
 	}
 
-	btwOpen(name: string, kind: "contextual" | "tangent"): void {
-		this.must(name).btw.create(kind);
+	async btwOpen(name: string, kind: "contextual" | "tangent"): Promise<void> {
+		const agent = this.must(name);
+		const thread = agent.btw.create(kind);
+		if (kind === "contextual") {
+			agent.btw.seedFrom(thread.id, await agent.lane.findEntries(undefined, BACKGROUND_CONTEXT), null);
+		}
 	}
 
 	btwAnswer(name: string, threadId: string, question: string, answer: string): void {
