@@ -184,7 +184,7 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 			host.taskSet(message.session, message.id, message.status);
 			return;
 		case "btwOpen":
-			host.btwOpen(message.session, message.kind);
+			await host.btwOpen(message.session, message.kind);
 			return;
 		case "btwAnswer":
 			host.btwAnswer(message.session, message.threadId, message.question, message.answer);

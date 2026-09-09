@@ -33,6 +33,7 @@ export interface BtwThread {
 
 type BuildContext = (entries: unknown[], leafId: string | null) => { messages: AgentMessage[] };
 
+/** Legacy CustomEntry-shaped btw notes; first-class `btw` entries carry no message. */
 function isVisibleBtw(entry: unknown): boolean {
 	const e = entry as { role?: string; customType?: string };
 	return e?.role === "custom" && e.customType === "eta.btw";

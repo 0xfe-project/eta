@@ -164,3 +164,4 @@ export * from "./harness/memory.ts";
 export * from "./harness/subagent.ts";
 export * from "./harness/tasks.ts";
 export * from "./harness/events.ts";
+export * from "./harness/prompt-blocks.ts";
