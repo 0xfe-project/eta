@@ -44,7 +44,7 @@
 
 ## Part C:内建电池(`src/batteries/`,每节一个模块 + config 开关)
 
-> **Prompt 仓库**:全部系统提示集中在 `packages/eta-core/src/prompts/`(按主题一文件,`index.ts` 总出);pi v0.85.1 自带的 5 条 compaction/branch 提示已按 eta 口吻重写(`src/prompts/pi-compaction.ts`,EXACT 格式模板逐字保留),compaction.ts / branch-summarization.ts 改为 import。
+> **Prompt 仓库**:全部系统提示集中在 `packages/eta-core/src/prompts/`(按主题一文件,`index.ts` 总出)。上游 v0.85.1 自带的 5 条 compaction/branch 提示已重写成 eta 口吻收进 `src/prompts/compaction.ts`(EXACT 格式模板逐字保留=输出契约),harness 两处改为 import。文风规则:markdown 只用于保格式;不提 AI/assistant/LLM 这类词,用对朋友说话的口吻;代码与文档中不出现 pi 字样(npm 包名与 UPSTREAM.md 溯源除外)。
 
 ### C1 goal(built-in,自研,Rust 语义平移)
 

@@ -1,7 +1,7 @@
 /**
  * System prompt assembly for eta batteries.
  *
- * pi has one string prompt per generation, resolved fresh each turn via
+ * the harness keeps one string prompt per generation, resolved fresh each turn via
  * `AgentHarnessOptions.systemPrompt` and then rewritten by the
  * `transform_context` hook. So eta never patches the drive loop for prompts:
  * it wraps the base prompt in this composer, and everything else (goal
