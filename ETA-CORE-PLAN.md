@@ -31,6 +31,9 @@
 
 ## Part B:对 fork 的外科手术(真实 delta)
 
+> **组装管线(已核实)**:pi 每次 generation 现算 `systemPrompt`(string 或 fn,`drive/generation.ts:58-65`),随后 `transform_context` hook 可改写 `{messages, systemPrompt}`,再 `before_payload`。fork 自带完整 `HookMap`(before_run / before_drive / before_run_end{followUp?} / transform_context / before_request / before_payload / after_response / before_tool / after_tool / before_compaction / before_navigation,`agent-harness.ts:429-505`)。
+> **手术=挂 hook 优先**:S1 用 `before_run_end` 的 `followUp` 注入 driver;S3 用 `before_tool`(doom)+ `after_response`(tail/similar→下一 turn `transform_context` 注 RESUME_LOOP);S4 用 `before_tool` block(fail-closed);C4 reminder 用 `transform_context`(<system-reminder> 不落 transcript)。`<current_tasks>`/goal guidelines 一律走 `src/eta/composer.ts` 包的 systemPrompt fn,不碰 drive。只有 S2(空响应)必须动 `drive/response.ts`。
+
 - [ ] S1 **driver 队列**:goal 续命与 loop 触发是「turn 边界优先消费的 driver」,不是普通 inbox 消息;dequeue 顺序 driver > had_tools > break(老 B2 语义)。完成条件:两个 driver 各一条集成测试。
 - [ ] S2 **空响应重试**:上游 `drive/response.ts` 只覆盖 error/length;补 `stop==="stop" && 无 content 无 toolCall` → 注 continuation 重试(带预算)。完成条件:faux 注入空响应触发。
 - [x] S3 **漂移检测**:平移老 `loop_detect.rs`(doom 指纹≥3、tail_repetition、similar 三指标)为纯函数模块,接入 loop reminder,再犯抛 `LoopDetected`。完成条件:Rust 单测全数平移。
