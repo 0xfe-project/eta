@@ -16,7 +16,7 @@ import { applyGoalEntries } from "./goal.ts";
 import type { AgentHarnessTool } from "./types.ts";
 import type { Session } from "./session/types.ts";
 import type { EtaEmit } from "./events.ts";
-import { composeEtaSystemPrompt } from "./composer.ts";
+import { composeEtaSystemPrompt, etaPromptBlockChars } from "./composer.ts";
 import { AskRegistry, createAskUserTool, type HeadlessAsk } from "./ask.ts";
 import { BtwManager } from "./btw.ts";
 import { answerEntry, askEntry, btwEntry, goalEntry, type GoalPayload } from "./entries.ts";
@@ -95,6 +95,36 @@ export class EtaAgent {
 	readonly subagents: SubagentManager;
 		/** All tools the harness runs: battery surface plus caller extras. */
 	readonly agentTools: AgentHarnessTool<object | undefined>[];
+	/** Prompt block sizes from the last generation; undefined until the first one. */
+	private lastPromptBlocksValue: { stableChars: number; adaptiveChars: number } | undefined = undefined;
+
+	get lastPromptBlocks(): { stableChars: number; adaptiveChars: number } | undefined {
+		return this.lastPromptBlocksValue;
+	}
+
+	reportPromptBlocks(blocks: { stableChars: number; adaptiveChars: number }): void {
+		this.lastPromptBlocksValue = blocks;
+	}
+
+	/** Output tokens/sec over the last usage delta; one tracker, every projector agrees. */
+	private usageWatch: { out: number; at: number } | undefined;
+	private tokensPerSecValue = 0;
+
+	get tokensPerSec(): number {
+		return this.tokensPerSecValue;
+	}
+
+	trackUsage(totalsOut: number): void {
+		const now = Date.now();
+		if (this.usageWatch === undefined || totalsOut < this.usageWatch.out) {
+			this.usageWatch = { out: totalsOut, at: now };
+			return;
+		}
+		if (totalsOut > this.usageWatch.out) {
+			this.tokensPerSecValue = (totalsOut - this.usageWatch.out) / Math.max(0.001, (now - this.usageWatch.at) / 1000);
+			this.usageWatch = { out: totalsOut, at: now };
+		}
+	}
 	/** Size of the last <memory> block for the water level panel; undefined when no source. */
 	readonly memoryInfo: (() => Promise<{ chars: number }>) | undefined;
 	private readonly stopHeartbeat: (() => void) | undefined;
@@ -140,6 +170,7 @@ export class EtaAgent {
 
 	static async create(options: EtaAgentOptions, context: Context): Promise<EtaAgent> {
 		let laneRef: AgentLane | undefined;
+		let agentRef: EtaAgent | undefined;
 		const emit: EtaEmit = (category, action, data) => {
 			void laneRef?.publish([{ type: "eta", category, action, data: data ?? {} }], BACKGROUND_CONTEXT).catch(() => undefined);
 		};
@@ -192,13 +223,17 @@ export class EtaAgent {
 				? undefined
 				: async () => {
 						const memory = await options.memorySource?.();
-						return composeEtaSystemPrompt(options.baseSystemPrompt ?? "", {
+						const state = {
 							...(goal.current === undefined
 								? {}
 								: { goal: { objective: goal.current.objective, status: goal.current.status } }),
 							tasks: { tasks: tasks.list(), updatedAt: new Date().toISOString() },
 							...(memory === undefined || memory.length === 0 ? {} : { memory }),
-						});
+						};
+						const blocks = etaPromptBlockChars(options.baseSystemPrompt ?? "", state);
+						agentRef?.reportPromptBlocks(blocks);
+						emit("prompt", "blocks", { ...blocks });
+						return composeEtaSystemPrompt(options.baseSystemPrompt ?? "", state);
 					};
 
 		const { harness } = await AgentHarness.create(
@@ -216,6 +251,7 @@ export class EtaAgent {
 		laneRef = lane;
 		loops.attach();
 
+		harness.events.on("usage", (event) => agentRef?.trackUsage((event as { totals?: { output?: number } }).totals?.output ?? 0));
 		harness.hooks.on("before_run_end", goalDriver({ goal, evaluate: options.evaluateGoal ?? (() => Promise.resolve(false)) }), { id: "eta.goal" });
 		harness.hooks.on("before_run_end", loopDriver(loops), { id: "eta.loop" });
 		harness.hooks.on("before_run_end", emptyResponseGuard(), { id: "eta.empty" });
@@ -224,7 +260,7 @@ export class EtaAgent {
 		harness.hooks.on("after_tool", (event) => reminder.afterTool({ toolName: event.toolName }), { id: "eta.reminder" });
 		harness.hooks.on("transform_context", (event) => reminder.transformContext(event), { id: "eta.reminder" });
 		const stopHeartbeat = options.heartbeatMs === 0 ? undefined : startLoopHeartbeat(loops, options.heartbeatMs ?? 30_000);
-		return new EtaAgent(
+		const agent = new EtaAgent(
 			harness,
 			lane,
 			goal,
@@ -239,6 +275,8 @@ export class EtaAgent {
 				: async () => ({ chars: (await options.memorySource!()).length }),
 			stopHeartbeat,
 		);
+		agentRef = agent;
+		return agent;
 	}
 
 	/** Rebuild battery state from the replayed session log and values. */

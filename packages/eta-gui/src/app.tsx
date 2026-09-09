@@ -4,7 +4,7 @@
  * Context/Dev tabs | composer, plus the ask modal.
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { SessionView, SessionViewMessage } from "@eta/core";
 import type { DevFrame } from "./channels.ts";
 import type { SidebarSession } from "./fake.ts";
@@ -172,9 +172,13 @@ export function EtaApp({ sessions, active, view, dev, ops, defaultTab = "dev" }:
 	const [filter, setFilter] = useState("");
 	const [draft, setDraft] = useState("");
 	const needle = filter.trim().toLowerCase();
-	const rows = dev.filter(
+	const filtered = dev.filter(
 		(f) => needle === "" || f.category.toLowerCase().includes(needle) || f.action.toLowerCase().includes(needle),
 	);
+	const [devPaused, setDevPaused] = useState(false);
+	const frozen = useRef(filtered);
+	if (!devPaused) frozen.current = filtered;
+	const rows = frozen.current;
 	const transient = dev.filter((f) => (TRANSIENT_ACTIONS[f.category]?.includes(f.action) ?? false) || f.category === "retry");
 	const timeline: { seq: number; el: unknown }[] = [
 		...view.messages.map((m) => ({ seq: m.seq, el: m })),
@@ -268,7 +272,8 @@ export function EtaApp({ sessions, active, view, dev, ops, defaultTab = "dev" }:
 				</div>
 				{tab === "context" ? (
 					<div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
-						<div>usage in {view.usage.input} / out {view.usage.output} / cache {(view.cacheRate * 100).toFixed(0)}% · epoch {view.compactionEpoch}</div>
+						<div testId="usage-row">usage in {view.usage.input} / out {view.usage.output} / cache {(view.cacheRate * 100).toFixed(0)}% · epoch {view.compactionEpoch} · {Math.round(view.tokensPerSec)} tok/s</div>
+						<div testId="prompt-row">{view.prompt === undefined ? "prompt not assembled yet" : `prompt ${view.prompt.stableChars} stable / ${view.prompt.adaptiveChars} adaptive`}</div>
 						<div testId="goal-card" style={{ borderWidth: 1, borderColor: CATEGORY_COLORS.goal, padding: 8 }}>
 							<div>{view.goal === undefined ? "no goal" : `goal: ${view.goal.objective} (${view.goal.status})`}</div>
 							<div style={{ display: "flex", flexDirection: "row", gap: 6, marginTop: 6 }}>
@@ -324,7 +329,12 @@ export function EtaApp({ sessions, active, view, dev, ops, defaultTab = "dev" }:
 					</div>
 				) : (
 					<div style={{ flexGrow: 1, display: "flex", flexDirection: "column" }}>
-						<input testId="dev-filter" value={filter} placeholder="filter" onChange={(event) => setFilter(event.value ?? "")} style={{ marginBottom: 8, fontSize: 12, color: DIM }} />
+						<div style={{ display: "flex", flexDirection: "row", gap: 8 }}>
+							<input testId="dev-filter" value={filter} placeholder="filter" onChange={(event) => setFilter(event.value ?? "")} style={{ flexGrow: 1, marginBottom: 8, fontSize: 12, color: DIM }} />
+							<div testId="dev-pause" onClick={() => setDevPaused((p) => !p)} style={{ ...BUTTON, fontSize: 12 }}>
+								{devPaused ? "resume" : "pause"}
+							</div>
+						</div>
 						<virtual-list followTail estimatedItemHeight={18} style={{ flexGrow: 1 }}>
 							{rows.map((frame, index) => (
 								<div key={`${frame.ts}-${index}`} style={{ paddingTop: 2, paddingBottom: 2, paddingLeft: 12, paddingRight: 12, fontSize: 12 }}>

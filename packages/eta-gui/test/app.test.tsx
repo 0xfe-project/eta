@@ -64,7 +64,10 @@ describeNative("G2-G6 panels", () => {
 		expect(painted).toContain("a1");
 		expect(painted).toContain("running");
 		expect(painted).toContain("compact");
-		expect(painted).toContain("which theme?");
+		expect(painted).toContain("42");
+	expect(painted.some((line) => line.includes("tok/s"))).toBe(true);
+	expect(painted.some((line) => line.includes("1200 stable / 340 adaptive"))).toBe(true);
+	expect(painted).toContain("which theme?");
 		expect(painted).toContain("dark");
 		expect(painted).toContain("light");
 		expect(painted).toContain("decline");
@@ -133,5 +136,31 @@ describeNative("L2 timeline rows", () => {
 		for (const category of categories) {
 			expect(painted.some((line) => line.includes(`${category} · act-${category}`))).toBe(true);
 		}
+	});
+});
+
+describeNative("L4 dev rail", () => {
+	it("filters by text and freezes on pause", async () => {
+		const feed = fakeFeed();
+		const { render, renderer } = createTestRoot();
+		const app = await connectTest(renderer);
+		render(<EtaApp sessions={feed.sessions} active="eta-main" view={feed.view} dev={feed.dev} ops={noOps} />);
+		const painted = renderer.getPaintedText();
+		expect(painted.some((line) => line.includes("goal · set"))).toBe(true);
+		expect(painted.some((line) => line.includes("usage · row"))).toBe(true);
+		const filter = app.getByTestId("dev-filter");
+		await filter.fill("goal");
+		expect(renderer.getPaintedText().some((line) => line.includes("usage · row"))).toBe(false);
+		expect(renderer.getPaintedText().some((line) => line.includes("goal · set"))).toBe(true);
+		await filter.fill("");
+		await app.getByTestId("dev-pause").click();
+		feed.dev.push({ ts: 99, session: "eta-main", category: "skill", action: "loaded", data: {} });
+		render(<EtaApp sessions={feed.sessions} active="eta-main" view={feed.view} dev={feed.dev} ops={noOps} />);
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		expect(renderer.getPaintedText().some((line) => line.includes("skill · loaded"))).toBe(false);
+		await app.getByTestId("dev-pause").click();
+		render(<EtaApp sessions={feed.sessions} active="eta-main" view={feed.view} dev={feed.dev} ops={noOps} />);
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		expect(renderer.getPaintedText().some((line) => line.includes("skill · loaded"))).toBe(true);
 	});
 });

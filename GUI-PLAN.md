@@ -35,10 +35,10 @@
 终端底部面板(⌘`,gpui-terminal 元素,默认收起)
 ```
 
-- [ ] L1 侧栏:session 列表 + 状态 badge(`running / goal / ask-pending / loop`)+ archive;数据 = 各 session SessionView 摘要行。完成条件:切 attach 不丢任何 session 状态。
+- [x] L1 侧栏:session 列表 + 状态 badge(`running / goal / ask-pending / loop`)+ archive;数据 = 各 session SessionView 摘要行。完成条件:切 attach 不丢任何 session 状态。(Host 常驻 agent+projector+DevRing,sidebar() 每次现算 badge;focus 只挪指针;test G0.3 后台 loop 在指针离开后照常触发)
 - [x] L2 timeline 行类型:在 pi-gui `activity|tool|summary|turn-marker`(timeline-types.ts)基础上扩 `goal-change / loop-fire / compaction / ask / btw-note / retry`。工具行内嵌 `<code>`(参数/结果)+ `<diff>`(edit 类)。完成条件:virtual-list 变高行 + 尾部锚定(chat 语义),历史重放与直播同一渲染路径。(app.tsx `<virtual-list followTail>`;工具行内嵌 `<code>` args/结果;loop/retry 瞬态行来自 dev 通道;test L2 timeline rows)
-- [ ] L3 Context 面板:system prompt 拆**稳定块/自适应块**两段 + `compactionEpoch`;usage 表(input/output/cache_read/write + `cacheRate` + tokens/sec,速率用 dev ts);goal 卡、tasks、loops、memory 水位(20k)、subagents fleet 行、btw sideThread。完成条件:跑一个 turn 每块都实时刷新。
-- [ ] L4 dev rail:全 category 着色 tail,`/` 过滤、暂停/恢复;环满丢最旧。完成条件:14+类各有颜色且能过滤。
+- [x] L3 Context 面板:system prompt 拆**稳定块/自适应块**两段 + `compactionEpoch`;usage 表(input/output/cache_read/write + `cacheRate` + tokens/sec,速率用 dev ts);goal 卡、tasks、loops、memory 水位(20k)、subagents fleet 行、btw sideThread。完成条件:跑一个 turn 每块都实时刷新。(prompt 拆 stable(base+persona)/adaptive(goal+tasks+memory):composer.splitEtaPromptSections,agent 每次 generation 上报 prompt.blocks 观测;tokens/sec 由 agent 单一 usage 追踪器算,投影器只搬运;Context usage 行+prompt 行有 testId,app.test/G2-G6 与 session-view.test 断言)
+- [x] L4 dev rail:全 category 着色 tail,`/` 过滤、暂停/恢复;环满丢最旧。完成条件:14+类各有颜色且能过滤。(CATEGORY_COLORS 覆盖 15 eta 类+badge 类;dev-filter 过滤;pause 冻结快照;DevRing 满则丢最旧;test L4 dev rail / all-category rail)
 - [ ] L5 composer:textarea + @mention 弹层(文件/agent)、**paste-assets 图片 chips**、排队消息条(等 turn 边界,= S1 driver)、`ask_user` 内联弹窗(单选/多选/填空,含 timeout 倒计时,答案走 `answer()`)。完成条件:kill-重启后未决 ask 在 GUI 重弹。
 
 ---

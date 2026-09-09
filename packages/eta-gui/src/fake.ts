@@ -33,6 +33,8 @@ export const emptyView = (): SessionView => ({
 	cacheRate: 0,
 	branch: { tipId: null },
 	pendingAsk: undefined,
+	prompt: undefined,
+	tokensPerSec: 0,
 });
 
 const message = (entryId: string, role: "user" | "assistant", text: string): SessionView["messages"][number] => ({
@@ -78,6 +80,8 @@ export function fakeFeed(): FakeFeed {
 	view.subagents = [{ id: "a1", status: "running", turns: 3 }];
 	view.goal = { objective: "paint the window", status: "active", roundCount: 0, idleWithoutTools: 0 };
 	view.pendingAsk = { questionId: "q1", question: "which theme?", options: ["dark", "light"] };
+	view.prompt = { stableChars: 1200, adaptiveChars: 340 };
+	view.tokensPerSec = 42;
 	const dev: DevFrame[] = [
 		{ ts: 1, session: "eta-main", category: "turn", action: "turn_start", data: {} },
 		{ ts: 2, session: "eta-main", category: "tool", action: "end", data: { toolName: "TaskCreate" } },
