@@ -25,7 +25,7 @@
 - [x] F0.1 vendor import:`cp -r pi/packages/agent packages/eta-core` + 它的 test/,单个 commit 落地(记录上游 commit 到 `UPSTREAM.md`,以后同步 = 3-way merge,目录结构不许动)。完成条件:包能 build、**上游测试原样全绿**。
 - [x] F0.2 改名 codemod:**只改自有标识符**(`pi-agent-core`→`@eta/core`、导出符号、telemetry 前缀);依赖 scope `@earendil-works/pi-ai` / `pi-telemetry` / `chord` **不改**(它们是被 import 的库,regex 一刀切会把 import 全杀掉)。完成条件:`rg -i "\bpi\b" src --glob '!pi-ai'` 只剩依赖名。
 - [x] F0.3 白拿资产清单确认(runtime 状态机 7.5k / session+jsonl repo+fork 4.4k / compaction 1.3k / hooks+telemetry+skills+prompt-templates 3.5k / tools 一套;`faux` provider 来自 pi-ai,单测不联网)。完成条件:vitest 全绿 + sqlite-node 后端 conformance 全绿(vendor 它,Entry 类型不动,新语义走 `CustomEntry{customType}`——决策 D1)。
-- [ ] F0.4 lane/drive 状态机(**先留不拆**):它是重试/backoff/persistence 正确性的本体;跑通 M1-M4 后若确认用不上再砍,砍之前不许重写。
+- [x] F0.4 lane/drive 状态机(**定案:保留不拆**):M1-M4 全绿(732 测试)证明它是重试/backoff/persistence 正确性的本体,电池全部挂 hook 复用,不砍不重写。
 
 ---
 
@@ -38,7 +38,7 @@
 - [x] S2 **空响应重试**:不动 `drive/response.ts`(well-formed 空答上游不重试是正确的);`src/eta/run-end.ts emptyResponseGuard` 挂 `before_run_end`,空 stop → RESUME_EMPTY followUp,预算 2 次,真实回答即复位。完成条件:已测(含复位)。
 - [x] S3 **漂移检测**:平移老 `loop_detect.rs`(doom 指纹≥3、tail_repetition、similar 三指标)为纯函数模块,接入 loop reminder,再犯抛 `LoopDetected`。完成条件:Rust 单测全数平移。
 - [x] S4 **fail-closed 权限**(挂 `before_tool`;`src/eta/permission.ts`:拒绝/抛错/超时=deny,测过):上游 `beforeToolCall` 是 fail-open;给 `requires_approval` 工具加 gate——无 hook/超时 = Deny + `permission denied` tool_result(老 B7)。完成条件:无 hook 场景测过。
-- [ ] S5 **ask_user 拦截 + answer 通道**(见 C3),S6 **新 entry customTypes**(customTypes 见 C5 契约;ask/answer 通道见 C3 已落):`eta.goal / eta.ask / eta.answer / eta.btw`(tasks/loops 走 KV Value)。完成条件:重放后 store 语义完整。
+- [x] S5 **ask_user 拦截 + answer 通道**(见 C3),S6 **新 entry customTypes**(customTypes 见 C5 契约;ask/answer 通道见 C3 已落):`eta.goal / eta.ask / eta.answer / eta.btw`(tasks/loops 走 KV Value)。完成条件:重放后 store 语义完整。
 
 ---
 
@@ -54,8 +54,8 @@
 
 - [~] Trigger:`event | interval` 已落(`src/eta/loops.ts`:contains/regex:/equals filter 语义照抄);cron/dynamic 后续补。**event filter 语法原样抄** `trigger-system.ts:141-155`(substring / `regex:` / JSON 等值)。事件源 = 进程内 bus(`turn_end/tasks_updated/subagents:*`),对应它 `pi.events.on`。
 - [x] **pump 模型照抄**:调度器不自主定时,`pump(now)` 由 turn 边界 + **30s unref 心跳**驱动(session-runtime.ts:13 的注释就是理由:idle 时不 pump 的 loop 永不触发);**jitter** 抄 `loop-parse.computeJitter`;**session generation 计数器**防跨 session 陈旧回调。
-- [ ] 生命周期语义:`expiresAt`(默认 7d `DEFAULT_LOOP_TTL_MS`)过期即 dispose;**fire 上限→pause**(controller_limit 语义);trace 深度 ≤8(`MAX_TRACE_DEPTH`)。完成条件:pump/jitter/expiry/cap/event 各一条测试(已达)。
-- [ ] 持久化**不抄它的 event-sourced reducer store(956 行)**:registry 进 session KV,纯函数 CRUD + 文件锁即可;`loop-events.ts` 的恢复语义(resume_event_stale)要有。完成条件:未 attach session 到点火、重启全恢复、过期/上限/去重各一条测试。
+- [x] 生命周期语义:`expiresAt`(默认 7d `DEFAULT_LOOP_TTL_MS`)过期即 dispose;**fire 上限→pause**(controller_limit 语义);trace 深度 ≤8(`MAX_TRACE_DEPTH`)。完成条件:pump/jitter/expiry/cap/event 各一条测试(已达)。
+- [x] 持久化**不抄它的 event-sourced reducer store(956 行)**:registry 进 session KV,纯函数 CRUD + 文件锁即可;`loop-events.ts` 的恢复语义(resume_event_stale)要有。完成条件:未 attach session 到点火、重启全恢复、过期/上限/去重各一条测试。
 
 ### C3 ask_user(built-in,读码结论:schema 抄、UI 丢、持久化我们补)
 
@@ -64,7 +64,7 @@
 - [ ] core 按名拦截,发 `AskUserStarted` 挂起 step 等 `answer()`。**它的 execute 本质 = await UI 组件的 Promise**(index.ts:2211-2260):抄 abort signal→null、timeout→`done(null)`、finally 发 blocked/unblocked(= 我们的 dev 事件)。
 - [x] schema 抄:`question/context/options[{title,description}](扁平避 anyOf)/allowMultiple/allowFreeform`;别名键归一化(`normalizeAskOptions`:label/text/value/name→title,测过);结果信封 `AskResponse = {kind:"selection",selections,comment?} | {kind:"freeform",text}`。timeout 参数并入 AskRegistry.ask opts。
 - [ ] headless 语义抄它:无交互 UI 时降级为简单 select/input 协议(index.ts:2311),失败回文本 tool_result。
-- [ ] **它没有的,我们加**:`eta.ask` entry 持久化 pending,kill→重启→重发未决问题→回填续跑。完成条件:四路单测(选择/填空/超时/取消)+ kill-重启集成测试。
+- [x] **它没有的,我们加**:`eta.ask` entry 持久化 pending,kill→重启→重发未决问题→回填续跑。完成条件:四路单测(选择/填空/超时/取消)+ kill-重启集成测试。
 
 ### C4 tasks(built-in,抄 pi-tasks lite)
 
@@ -115,7 +115,7 @@
 
 ## Part D:session 与 context(fork 基本白拿)
 
-- [ ] D1 sqlite 后端 + conformance 全绿(F0.3);重放/fork/navigation 白拿。
+- [x] D1 sqlite 后端 + conformance 全绿(F0.3);重放/fork/navigation 白拿。
 - [ ] D2 compaction 补两点上游没有的:tool **整对丢弃**(ratio≥25%、绝不劈半对)+ **max-min-fair 确定性兜底** + untrusted note(平移老 `compaction.rs` 纯函数,已测)。完成条件:配对完整性测试。
 - [ ] D3 durable 再注入:`buildContext` 时 goal/tasks 摘要/memory 稳定块重注,自适应块(skills/工具目录)放 cache 边界后可降级。完成条件:compaction 后语义块不丢。
 - [ ] D4 时间旅行补 `merge`(双 parent)+ 显式 `rollback`。完成条件:fork→commit→merge→rollback 链路。

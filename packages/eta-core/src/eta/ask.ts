@@ -138,14 +138,17 @@ export function createAskUserTool(
 		description:
 			"Ask the user one question and wait for the answer. Use only when you genuinely can't pick a reasonable default yourself.",
 		parameters: askSchema,
+		replay: "safe",
 		async execute(_toolCallId, params, _onUpdate, _toolContext, invocation, context) {
 			const options = normalizeAskOptions((params as { options?: unknown }).options);
-			const payload: AskPayload = {
+			const remembered = (await invocation.getMemo("eta.ask")) as AskPayload | undefined;
+			const payload: AskPayload = remembered ?? {
 				questionId: invocation.invocationId,
 				question: params.question,
 				options: options?.map((o) => o.title),
 				multi: params.allowMultiple,
 			};
+			if (remembered === undefined) await invocation.setMemo("eta.ask", payload as never);
 			await deps.onAsk?.(payload);
 			const response = await awaitWithContext(
 				deps.registry.ask(payload, { timeoutMs: deps.timeoutMs, signal: context.abortSignal }),
