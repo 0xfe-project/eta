@@ -55,3 +55,37 @@ describe("ask_user tool", () => {
 		expect(result.details).toEqual({ kind: "freeform", text: "b please" });
 	});
 });
+
+describe("headless ask fallback", () => {
+	it("degrades to the text protocol instead of hanging", async () => {
+		const reg = new AskRegistry({
+			headless: async (payload) => ({ kind: "freeform", text: `plain answer to ${payload.question}` }),
+		});
+		const answer = await reg.ask({ questionId: "h1", question: "which?" });
+		expect(answer).toEqual({ kind: "freeform", text: "plain answer to which?" });
+		expect(reg.pendingAsks()).toEqual([]);
+	});
+
+	it("null or throwing resolver yields no answer, never a hang", async () => {
+		expect(await new AskRegistry({ headless: async () => null }).ask({ questionId: "n", question: "?" })).toEqual({ kind: "none" });
+		expect(
+			await new AskRegistry({
+				headless: () => {
+					throw new Error("no terminal");
+				},
+			}).ask({ questionId: "x", question: "?" }),
+		).toEqual({ kind: "none" });
+	});
+});
+
+describe("answer recording", () => {
+	it("a real answer reports its payload; none stays silent", async () => {
+		const written: unknown[] = [];
+		const reg = new AskRegistry({ onAnswer: (payload) => written.push(payload) });
+		const asked = reg.ask({ questionId: "q9", question: "pick" });
+		reg.answer("q9", { kind: "freeform", text: "zork" });
+		await asked;
+		reg.answer("gone", { kind: "none" });
+		expect(written).toEqual([{ questionId: "q9", answers: ["zork"] }]);
+	});
+});
