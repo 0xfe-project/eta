@@ -5,7 +5,7 @@
  * browser is connected, and disconnecting the GUI never stops the core.
  */
 
-import { readdirSync } from "node:fs";
+import { readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { BACKGROUND_CONTEXT, EtaAgent, SessionViewProjector, type HarnessEvent, type SessionView } from "@eta/core";
 import { DevRing, type ChannelFrame, type DevFrame, type SidebarSession } from "./protocol.ts";
 import { createSessionAgent, type CreatedSession } from "./agent.ts";
@@ -143,6 +143,21 @@ export class Host {
 		const entry = this.hosted.get(name);
 		if (entry === undefined) return [];
 		return listWorkspace(entry.cwd);
+	}
+
+	/** Read a workspace-relative text file for the timeline's file chips. */
+	fileText(name: string, path: string): string | undefined {
+		const entry = this.hosted.get(name);
+		if (entry === undefined || path.length === 0 || path.startsWith("/") || path.includes("..")) return undefined;
+		const full = `${entry.cwd}/${path}`;
+		try {
+			if (statSync(full).size > 200_000) return "[file too large to preview]";
+			const root = realpathSync(entry.cwd);
+			if (!realpathSync(full).startsWith(`${root}/`)) return undefined;
+			return readFileSync(full, "utf8");
+		} catch {
+			return undefined;
+		}
 	}
 
 	viewOf(name: string): SessionView | undefined {

@@ -9,9 +9,7 @@ import { homedir } from "node:os";
 import { resolve } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { encodeMessage, decodeClientMessage, type ClientMessage, type ServerMessage } from "./protocol.ts";
-import { InboxStore, buildTaskPrompt } from "./inbox.ts";
 import { Host } from "./host.ts";
-import { join } from "node:path";
 import { listPersonaSummaries } from "./personas.ts";
 import { UnknownPersonaError } from "./agent.ts";
 
@@ -24,7 +22,6 @@ export interface EtaServerOptions {
 
 export interface EtaServer {
 	host: Host;
-	inbox: InboxStore;
 	port: number;
 	close(): void;
 }
@@ -45,7 +42,6 @@ const CONTENT_TYPES: Record<string, string> = {
 export async function startServer(options: EtaServerOptions = {}): Promise<EtaServer> {
 	const host = new Host();
 	const cwd = options.cwd ?? process.cwd();
-	const inbox = new InboxStore(join(cwd, ".eta-inbox"));
 	const webDist = options.webDist ?? resolve(import.meta.dir, "../../eta-web/dist");
 	const sessionsDirty = new WeakMap<Socket, boolean>();
 
@@ -64,26 +60,15 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 	};
 
 	const unsubscribe = host.subscribe((frame) => {
-		const child = frame.channel === "view" || frame.channel === "agent" ? inbox.childOf(frame.session) : undefined;
-		if (child !== undefined && child.status === "running") {
-			if (frame.channel === "view" && frame.view.pendingAsk !== undefined) inbox.needsInput(child.id, "child session is waiting for an answer");
-			if (frame.channel === "agent" && frame.event.type === "run_end") inbox.complete(child.id, "child run finished");
-		} else if (child !== undefined && child.status === "needs_input" && frame.channel === "agent" && frame.event.type === "run_end") {
-			inbox.complete(child.id, "child run finished after answer");
-		}
 		for (const socket of sockets) {
 			send(socket, frame);
 			flushSessions(socket);
 		}
 	});
 
-	const unsubscribeTasks = inbox.onChanged((tasks) => {
-		for (const socket of sockets) send(socket, { type: "tasks", tasks });
-	});
-
 	const server = Bun.serve<{ socketId: number }>({
 		port: options.port ?? 3000,
-		hostname: options.hostname ?? "127.0.0.1",
+		hostname: options.hostname ?? "0.0.0.0",
 		async fetch(request, srv) {
 			const url = new URL(request.url);
 			if (url.pathname === "/ws") {
@@ -103,6 +88,12 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 			if (filesSession !== null) {
 				return Response.json(host.filesOf(filesSession));
 			}
+			const fileSession = url.searchParams.get("session");
+			const filePath = url.searchParams.get("path");
+			if (url.pathname === "/api/file" && fileSession !== null && filePath !== null) {
+				const text = host.fileText(fileSession, filePath);
+				return text === undefined ? new Response("not found", { status: 404 }) : Response.json({ path: filePath, text });
+			}
 			const distFile = resolve(webDist, `.${url.pathname === "/" ? "/index.html" : url.pathname}`);
 			if (distFile.startsWith(`${webDist}/`) && existsSync(distFile) && (await Bun.file(distFile).exists())) {
 				const ext = distFile.slice(distFile.lastIndexOf("."));
@@ -117,7 +108,7 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 		websocket: {
 			open(socket: Socket) {
 				sockets.add(socket);
-				send(socket, { type: "hello", sessions: host.sidebar(), attach: host.attachPointer, tasks: inbox.list() });
+				send(socket, { type: "hello", sessions: host.sidebar(), attach: host.attachPointer });
 				for (const name of [...host.names()]) {
 					const view = host.viewOf(name);
 					if (view !== undefined) send(socket, { channel: "view", session: name, view });
@@ -136,7 +127,7 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 					return;
 				}
 				try {
-					await applyOp(host, inbox, cwd, message);
+					await applyOp(host, message);
 					if (message.op === "session.create") send(socket, { type: "created", name: message.name });
 					if (message.op === "session.delete") send(socket, { type: "deleted", name: message.name });
 					send(socket, { type: "sessions", sessions: host.sidebar() });
@@ -152,18 +143,16 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 
 	return {
 		host,
-		inbox,
 		port: server.port as number,
 		close() {
 			unsubscribe();
-			unsubscribeTasks();
 			server.stop();
 			void host.close();
 		},
 	};
 }
 
-export async function applyOp(host: Host, inbox: InboxStore, defaultCwd: string, message: ClientMessage): Promise<void> {
+export async function applyOp(host: Host, message: ClientMessage): Promise<void> {
 	switch (message.op) {
 		case "focus":
 			host.focus(message.session);
@@ -215,27 +204,6 @@ export async function applyOp(host: Host, inbox: InboxStore, defaultCwd: string,
 			return;
 		case "session.delete":
 			await host.closeSession(message.name);
-			return;
-		case "task.create":
-			inbox.create({ title: message.title, description: message.description, targetProject: message.targetProject ?? defaultCwd });
-			return;
-		case "task.approve": {
-			const task = inbox.of(message.id);
-			if (task === undefined) throw new Error(`no task ${message.id}`);
-			const child = `task-${message.id}`;
-			await host.createSession(child, "Executor", task.targetProject || defaultCwd);
-			const approved = inbox.approve(message.id, "approved locally");
-			await host.prompt(child, buildTaskPrompt(approved ?? task));
-			return;
-		}
-		case "task.dismiss": {
-			const task = inbox.of(message.id);
-			inbox.dismiss(message.id);
-			if (task?.dispatch !== undefined) await host.closeSession(task.dispatch.childSession).catch(() => undefined);
-			return;
-		}
-		case "task.clearDone":
-			inbox.clearDone();
 			return;
 	}
 }
