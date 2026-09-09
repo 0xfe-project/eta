@@ -59,21 +59,21 @@ export function NewSessionPage() {
 						data-testid={`persona-card-${persona.id}`}
 						data-selected={personaId === persona.id ? "1" : "0"}
 						onClick={() => setPersonaId(persona.id)}
-						className={`border p-3 text-left transition-colors ${personaId === persona.id ? "border-accent" : "border-border hover:bg-overlay"}`}
+						className={`border-2 p-3 text-left ${personaId === persona.id ? "border-primary bg-primary text-primary-foreground shadow-[4px_4px_0_0_var(--shadow)]" : "border-border hover:border-border-strong"}`}
 					>
 						<div className="text-sm font-medium">{persona.name}</div>
-						<div className="mt-1 line-clamp-2 text-xs text-muted">{persona.description}</div>
+						<div className={`mt-1 line-clamp-2 text-xs ${personaId === persona.id ? "text-primary-foreground/70" : "text-muted"}`}>{persona.description}</div>
 					</button>
 				))}
 			</div>
-			<input data-testid="cwd-input" value={cwd} placeholder={t("new.cwd")} onChange={(event) => setCwd(event.target.value)} className="border border-border bg-background px-3 py-2 text-sm outline-none focus:border-border-strong" />
-			<textarea data-testid="prompt-input" rows={3} value={prompt} placeholder={t("new.firstPrompt")} onChange={(event) => setPrompt(event.target.value)} className="border border-border bg-background px-3 py-2 text-sm outline-none focus:border-border-strong" />
+			<input data-testid="cwd-input" value={cwd} placeholder={t("new.cwd")} onChange={(event) => setCwd(event.target.value)} className="border-2 border-border bg-background px-3 py-2 text-sm outline-none focus:border-border-strong" />
+			<textarea data-testid="prompt-input" rows={3} value={prompt} placeholder={t("new.firstPrompt")} onChange={(event) => setPrompt(event.target.value)} className="border-2 border-border bg-background px-3 py-2 text-sm outline-none focus:border-border-strong" />
 			<div className="flex items-center gap-3">
 				<button
 					data-testid="create-session"
 					disabled={personaId === null || creating}
 					onClick={create}
-					className="px-4 py-2 text-sm font-medium disabled:opacity-40"
+					className="border-2 border-primary bg-primary px-4 py-2 font-mono text-sm font-bold tracking-[0.12em] text-primary-foreground uppercase disabled:opacity-40"
 					style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
 				>
 					{creating ? t("new.creating") : t("new.create")}

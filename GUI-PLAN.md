@@ -99,3 +99,30 @@
 - [x] composer 重排:goal/tasks/旁路在输入框上方(ContextBar),工具条含模型下拉(ModelPicker→/api/models+modelSet op)、斜杠菜单上弹、排队 chip
 - [x] btw 大窗:BtwDialog(exchanges + 提问 → btwAsk op,faux echo 应答)+ /btw 命令
 - [x] 聊天区 padding + 860px 居中列(与 composer 对齐);prompt/session-JSON 查看弹窗 = Radix Dialog
+
+## T5 差距清单(2026-09-10 对照 pi-web-ui / picot / deepseek-harness `apps/web`+`packages/*`)
+
+### A. 交互修正(用户点名,先做)
+- [ ] 排队语义重做:server 已有 lane follow-up 队列,但 UI 只有本地 pill。补 `queue_update` 帧 → `SessionView.queue: {id,text}[]`,排队条渲染真实队列,支持逐条移除(`queueRemove` op)、running 结束后按序消失;本地 optimistic pill 与真实队列去重
+- [ ] persona 可选自定义:`/api/personas` 已含 `.eta/persona/*.persona.md`,但 welcome/向导的 chips 只画了内置——渲染整个列表(含 custom 标记);session 内 persona 行加"切换"入口(personaSet op,下次 run 生效)
+- [ ] 旁路(btw)按钮从 composer 上方 ContextBar 撤掉;入口 = 右栏 sideThread 行(点击 = 打开 BtwDialog,与弹窗行为一致)+ `/btw` 命令
+- [ ] goal 未 set 时 ContextBar 不出现 goal 输入行;set 后才渲染 objective 条(入口:面板 / `/goal <text>` 命令)
+- [ ] loop 行排在 goal 之上(ContextBar/右栏同一顺序约定:queue → loops → goal → tasks)
+
+### B. 面板与菜单(拖拽/显隐/终端)
+- [ ] xterm 终端:前端 @xterm/xterm + fit/web-links 插件;"终端"tab 从 dev 独立成顶栏可开合面板,多 tab(× / +),ws 桥 `/term`;server Bun.spawn pty(列宽 resize op)
+- [ ] 三栏都可拖:侧栏宽、右栏宽、终端高(鼠标分隔条,pointer capture;宽度存 localStorage)
+- [ ] 每栏显隐按钮(照抄 picot 顶栏右侧的图标按钮组:侧栏/右栏/终端/抽屉),窄屏自动收
+- [ ] composer 左下 `+` 附件/插入菜单(上传文件→@path、选图片、执行 /命令、新建 btw)
+- [ ] 消息 footer 加复制 + 时间/成本(见 C 的 cost);滚动时右下浮动 "New ↓"(回底+新消息数)
+
+### C. 数据与 API 补齐(@ 补全等)
+- [ ] @ 补全升级:现在只有 cwd 一层文件名。要(1)递归模糊匹配(fuzzy + mtime 排序,server /api/files 改 walk+score,上限 50);(2)目录树前缀 `@dir/` 继续钻;(3)菜单显示路径相对 cwd + 行高对齐;(4)粘贴图片自动落盘 `<cwd>/.eta-attachments/` 并插入 @引用(POST /api/upload)
+- [ ] prompt 带图片:`prompt` op 加 `images?: {mime,dataBase64}[]`(协议+host+faux 忽略即可)
+- [ ] tool 卡片状态:toolCall 与 toolResult 关联(按 toolCallId),头右侧 COMPLETE/FAILED/running 徽章;输入输出折叠
+- [ ] 成本:`core/pricing.ts` 模型价表(内置 anthropic 三家,未知模型 0)→ view.costUsd;usage 行显示 `in/out/缓存/费用/tok/s`
+- [ ] thinking level 按钮(thinking off/minimal/low/med/high 循环,thinkingLevel op,faux 忽略)——照抄 pi-web-ui "minimal" chip
+- [ ] 侧栏:按 cwd 分组的 PROJECTS 段(组内 count + 折叠 + Show more)、行右时间(`updated` 字段,humanize)、组 `+` 新建、行 `⋯` 菜单(重命名/置顶/归档/删除)
+- [ ] 顶栏状态组:tokens 合计、cache%、当前分支(`git rev-parse` 经 host 暴露)、连接状态点(connected/disconnected)、`cwd` chip
+- [ ] 语音输入按钮(picot 有;可选项,低优先)
+- [ ] 自定义 persona 的热加载:监听 `.eta/persona/`(server fs.watch)→ personas frame
