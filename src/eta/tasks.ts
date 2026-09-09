@@ -21,8 +21,10 @@ export interface TaskList {
 export interface LoopDef {
 	id: string;
 	note: string;
-	/** Interval trigger: "45s" | "5m" | "2h" | "1d" (cron: planned, see C2). */
+	/** Interval trigger: "45s" | "5m" | "2h" | "1d". */
 	every?: string;
+	/** 6-field cron trigger (sec min hour dom mon dow), UTC. */
+	cron?: string;
 	maxRuns?: number;
 }
 

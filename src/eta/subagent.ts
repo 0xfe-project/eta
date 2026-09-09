@@ -34,10 +34,22 @@ _blocking: boolean;
 	turns: number;
 	warnedWrapUp: boolean;
 	children: string[];
+	/** Steering notes queued for the runner to pick up at its next boundary. */
+	notes: string[];
 }
 
+export type SubagentBusEvent =
+	| "subagents:completed"
+	| "subagents:failed"
+	| "subagents:steered"
+	| "subagents:rpc:spawn"
+	| "subagents:rpc:stop"
+	| "subagents:rpc:consume"
+	| "subagents:rpc:reply";
+
 export interface SubagentBus {
-	emit(type: "subagents:completed" | "subagents:failed", payload: { id: string; parentId: string | undefined }): void;
+	emit(type: SubagentBusEvent, payload: Record<string, unknown>): void;
+	on?(type: SubagentBusEvent, listener: (payload: Record<string, unknown>) => void): () => void;
 }
 
 /** Injected executor: the real one runs a second harness lane over pi-ai. */
@@ -45,6 +57,8 @@ export type SubagentRunner = (record: SubagentRecord, api: SubagentApi) => Promi
 
 export interface SubagentApi {
 	reportTurn(recordId: string): void;
+	/** Take (and clear) steering notes for this child. */
+	pendingNotes(recordId: string): string[];
 }
 
 export const DEPTH_CAP = 2;
@@ -86,6 +100,7 @@ export class SubagentManager {
 			turns: 0,
 			warnedWrapUp: false,
 			children: [],
+			notes: [],
 		};
 		this.records.set(record.id, record);
 		if (parent) parent.children.push(record.id);
@@ -119,6 +134,24 @@ export class SubagentManager {
 		}
 	}
 
+	/** Queue a steering note for a live child; ownership enforced like stop. */
+	steer(id: string, byId: string | undefined, note: string): boolean {
+		const record = this.records.get(id);
+		if (record === undefined || (record.status !== "running" && record.status !== "queued")) return false;
+		if (byId !== undefined && byId !== id && record.parentId !== byId) return false;
+		record.notes.push(note);
+		this.bus.emit("subagents:steered", { id: record.id, parentId: record.parentId, note });
+		return true;
+	}
+
+	pendingNotes(id: string): string[] {
+		const record = this.records.get(id);
+		if (record === undefined) return [];
+		const notes = [...record.notes];
+		record.notes = [];
+		return notes;
+	}
+
 	stop(id: string, byId: string | undefined): void {
 		const record = this.records.get(id);
 		if (record === undefined) throw new Error(`unknown agent ${id}`);
@@ -136,6 +169,64 @@ export class SubagentManager {
 		if (record === undefined || record.status !== "running") return;
 		this.release(record);
 		this.finish(record, failed ? "failed" : "done", usage);
+	}
+
+	private rpcSequence = 0;
+
+	/** Client half of the RPC envelope: requestId in, one matched reply out. */
+	rpc(topic: "spawn" | "stop" | "consume", payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+		if (this.bus.on === undefined) throw new Error("subagent bus has no on(): RPC needs a two-way bus");
+		const requestId = `rpc-${(this.rpcSequence += 1)}`;
+		return new Promise((resolve, reject) => {
+			const off = this.bus.on?.("subagents:rpc:reply", (reply) => {
+				if (reply.requestId !== requestId) return;
+				off?.();
+				if (reply.ok === true) resolve((reply.result ?? {}) as Record<string, unknown>);
+				else reject(new Error(String(reply.error ?? "rpc failed")));
+			});
+			this.bus.emit(`subagents:rpc:${topic}`, { requestId, ...payload });
+		});
+	}
+
+	/** Server half: answer spawn/stop/consume RPC on the bus on behalf of parentId. */
+	serveRpc(parentId?: string): () => void {
+		if (this.bus.on === undefined) throw new Error("subagent bus has no on(): RPC needs a two-way bus");
+		const offs: (() => void)[] = [];
+		const reply = (requestId: unknown, ok: boolean, extra: Record<string, unknown>) => {
+			this.bus.emit("subagents:rpc:reply", { requestId, ok, ...extra });
+		};
+		offs.push(
+			this.bus.on("subagents:rpc:spawn", ({ requestId, spec, blocking }) => {
+				try {
+					const record = this.spawn(spec as SubagentSpec, parentId, blocking === true);
+					reply(requestId, true, { result: { id: record.id, status: record.status } });
+				} catch (error) {
+					reply(requestId, false, { error: String(error) });
+				}
+			}),
+		);
+		offs.push(
+			this.bus.on("subagents:rpc:stop", ({ requestId, id }) => {
+				try {
+					this.stop(String(id), parentId ?? undefined);
+					reply(requestId, true, { result: { id } });
+				} catch (error) {
+					reply(requestId, false, { error: String(error) });
+				}
+			}),
+		);
+		offs.push(
+			this.bus.on("subagents:rpc:consume", ({ requestId, id }) => {
+				const record = this.records.get(String(id));
+				if (record === undefined) reply(requestId, false, { error: `unknown agent ${String(id)}` });
+				else if (record.status === "running" || record.status === "queued")
+					reply(requestId, false, { error: `still ${record.status}` });
+				else reply(requestId, true, { result: { id: record.id, status: record.status, usage: record.totalUsage } });
+			}),
+		);
+		return () => {
+			for (const off of offs) off();
+		};
 	}
 
 	private finish(record: SubagentRecord, status: SubagentStatus, usage: SubagentUsage): void {
@@ -187,7 +278,7 @@ export class SubagentManager {
 				if (record._blocking) this.runningForeground += 1;
 				else this.runningBackground += 1;
 			}
-			void Promise.resolve(this.runner(record, { reportTurn: (id) => this.reportTurn(id) }))
+			void Promise.resolve(this.runner(record, { reportTurn: (id) => this.reportTurn(id), pendingNotes: (id) => this.pendingNotes(id) }))
 				.then((usage) => this.settle(record.id, usage))
 				.catch(() => this.settle(record.id, record.usage, true));
 		}

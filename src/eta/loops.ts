@@ -8,6 +8,7 @@
  * run boundary (S1), never as a mid-run interrupt.
  */
 
+import { nextCronAt, parseCron } from "./cron.ts";
 import type { LoopDef } from "./tasks.ts";
 
 export interface LoopEvent {
@@ -108,6 +109,10 @@ export class LoopScheduler {
 	}
 
 	upsert(spec: LoopSpec): void {
+		if (spec.def.cron !== undefined) {
+			const schedule = parseCron(spec.def.cron);
+			spec.nextDueAt = nextCronAt(schedule, spec.createdAt);
+		}
 		this.loops.set(spec.def.id, spec);
 		this.opts.persist?.(spec);
 	}
@@ -139,7 +144,13 @@ export class LoopScheduler {
 	/** Run-boundary tick: fires interval loops that are due and sweeps expiry. */
 	public pump(now: number): PumpResult {
 		const result = this.collect(0, (spec) => {
-			if (spec.def.every === undefined || spec.paused) return false;
+			if (spec.paused) return false;
+			if (spec.def.cron !== undefined) {
+				const dueAt = spec.nextDueAt ?? nextCronAt(parseCron(spec.def.cron), now);
+				spec.nextDueAt = dueAt;
+				return now >= dueAt;
+			}
+			if (spec.def.every === undefined) return false;
 			const everyMs = parseEvery(spec.def.every);
 			const dueAt = spec.nextDueAt ?? spec.createdAt + everyMs + computeJitter(spec.def.id, everyMs);
 			return now >= dueAt;
@@ -157,7 +168,11 @@ export class LoopScheduler {
 		}
 		for (const fired of result.fired) {
 			const spec = this.loops.get(fired.spec.def.id);
-			if (spec?.def.every !== undefined) {
+			if (spec === undefined) continue;
+			if (spec.def.cron !== undefined) {
+				spec.nextDueAt = nextCronAt(parseCron(spec.def.cron), now + 1_000);
+				this.opts.persist?.(spec);
+			} else if (spec.def.every !== undefined) {
 				spec.nextDueAt = now + parseEvery(spec.def.every) + computeJitter(spec.def.id, parseEvery(spec.def.every));
 				this.opts.persist?.(spec);
 			}
