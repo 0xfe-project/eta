@@ -58,15 +58,14 @@ describeNative("G2-G6 panels", () => {
 		expect(painted).toContain("resume");
 		expect(painted).toContain("clear");
 		expect(painted).toContain("write the thing");
-		expect(painted.some((line) => line.includes("btw b1 · 1x · not-saved"))).toBe(true);
+		expect(painted.some((line) => line.includes("btw btw-1 · 1x · not-saved"))).toBe(true);
 		expect(painted).toContain("pending");
 		expect(painted).toContain("check ci");
 		expect(painted).toContain("/20000");
-		expect(painted.some((line) => line.includes("a1"))).toBe(true);
 		expect(painted.some((line) => line.includes("running"))).toBe(true);
 		expect(painted).toContain("compact");
 		expect(painted.some((line) => line.includes("kv build.cmd"))).toBe(true);
-		expect(painted.some((line) => line.includes("agent a1"))).toBe(true);
+		expect(painted.some((line) => line.includes("agent sub-1"))).toBe(true);
 		expect(painted).toContain("42");
 	expect(painted.some((line) => line.includes("tok/s"))).toBe(true);
 	expect(painted.some((line) => line.includes("1200 stable / 340 adaptive"))).toBe(true);
@@ -114,7 +113,7 @@ describeNative("L2 timeline rows", () => {
 		expect(has("Created t1.")).toBe(true);
 		expect(has("pick a tool first")).toBe(true);
 		expect(has("loop · fired")).toBe(true);
-		expect(has("btw b1 · 1x · not-saved")).toBe(true);
+		expect(has("btw btw-1 · 1x · not-saved")).toBe(true);
 	});
 
 	it("clicking a task row cycles its status through ops", async () => {
@@ -133,8 +132,8 @@ describeNative("L2 timeline rows", () => {
 		await app.getByTestId("task-t1").click();
 		await app.getByTestId("goal-pause").click();
 		await app.getByTestId("state-delete-build_cmd").click();
-		await app.getByTestId("fleet-stop-a1").click();
-		expect(calls).toEqual([["t1", "in_progress"], "goal:pause", "state:build.cmd", "stop:a1"]);
+		await app.getByTestId("fleet-stop-sub-1").click();
+		expect(calls).toEqual([["t1", "in_progress"], "goal:pause", "state:build.cmd", "stop:sub-1"]);
 	});
 
 	it("dev rail paints every event category", async () => {
@@ -193,8 +192,8 @@ describeNative("L5 composer", () => {
 		const app = await connectTest(renderer);
 		expect(renderer.getPaintedText().some((line) => line.includes("turn boundary"))).toBe(true);
 		await app.getByTestId("btw-new").click();
-		await app.getByTestId("btw-save-b1").click();
-		await app.getByTestId("btw-clear-b1").click();
-		expect(calls).toEqual(["open:tangent", "save:b1", "clear:b1"]);
+		await app.getByTestId("btw-save-btw-1").click();
+		await app.getByTestId("btw-clear-btw-1").click();
+		expect(calls).toEqual(["open:tangent", "save:btw-1", "clear:btw-1"]);
 	});
 });

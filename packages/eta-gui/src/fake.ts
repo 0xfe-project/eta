@@ -73,12 +73,12 @@ export function fakeFeed(): FakeFeed {
 		},
 	];
 	view.thinking = ["pick a tool first"];
-	view.sideThread = [{ id: "b1", kind: "tangent", exchanges: [{ question: "side note", answer: "noted", at: 0 }], saveState: "not-saved" }];
+	view.sideThread = [{ id: "btw-1", kind: "tangent", exchanges: [{ question: "side note", answer: "noted", at: 0 }], saveState: "not-saved" }];
 	view.systems = [{ entryId: "s1", seq: 1, kind: "goal", text: "goal set: paint the window" }];
 	view.tasks = [{ id: "t1", content: "write the thing", status: "pending" }];
 	view.loops = [{ id: "tick", note: "check ci", every: "1s", runCount: 2, paused: false }];
 	view.memory = { chars: 800 };
-	view.subagents = [{ id: "a1", status: "running", turns: 3 }];
+	view.subagents = [{ id: "sub-1", status: "running", turns: 3 }];
 	view.goal = { objective: "paint the window", status: "active", roundCount: 0, idleWithoutTools: 0 };
 	view.pendingAsk = { questionId: "q1", question: "which theme?", options: ["dark", "light"] };
 	view.prompt = { stableChars: 1200, adaptiveChars: 340 };
