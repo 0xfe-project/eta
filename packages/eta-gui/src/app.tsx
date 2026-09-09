@@ -4,7 +4,7 @@
  * Context/Dev tabs | composer, plus the ask modal.
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SessionView, SessionViewMessage } from "@eta/core";
 import type { DevFrame } from "./channels.ts";
 import type { SidebarSession } from "./fake.ts";
@@ -58,6 +58,7 @@ export interface EtaAppProps {
 	dev: DevFrame[];
 	ops: GuiOps;
 	running?: boolean;
+	files?: string[];
 	defaultTab?: "context" | "dev";
 }
 
@@ -180,10 +181,25 @@ function TimelineRow({ row }: { row: { el: unknown } }) {
 	);
 }
 
-export function EtaApp({ sessions, active, view, dev, ops, running = false, defaultTab = "dev" }: EtaAppProps) {
+export function EtaApp({ sessions, active, view, dev, ops, running = false, files = [], defaultTab = "dev" }: EtaAppProps) {
 	const [tab, setTab] = useState<"context" | "dev">(defaultTab);
 	const [filter, setFilter] = useState("");
 	const [draft, setDraft] = useState("");
+	const [picked, setPicked] = useState<string[]>([]);
+	const [reply, setReply] = useState("");
+	const [now, setNow] = useState(() => Date.now());
+	const deadline = view.pendingAskDeadline;
+	useEffect(() => {
+		if (deadline === undefined) return;
+		const timer = setInterval(() => setNow(Date.now()), 500);
+		return () => clearInterval(timer);
+	}, [deadline]);
+	const mentionMatch = /(?:^|\s)@([\w./-]*)$/.exec(draft);
+	const mentions = mentionMatch === null ? [] : files.filter((f) => f.toLowerCase().includes((mentionMatch[1] ?? "").toLowerCase())).slice(0, 5);
+	const pickMention = (file: string) => {
+		const token = `@${mentionMatch?.[1] ?? ""}`;
+		setDraft(`${draft.slice(0, draft.length - token.length)}${file} `);
+	};
 	const needle = filter.trim().toLowerCase();
 	const filtered = dev.filter(
 		(f) => needle === "" || f.category.toLowerCase().includes(needle) || f.action.toLowerCase().includes(needle),
@@ -245,26 +261,67 @@ export function EtaApp({ sessions, active, view, dev, ops, running = false, defa
 				{view.pendingAsk === undefined ? null : (
 					<div testId="ask-modal" style={{ borderWidth: 1, borderColor: CATEGORY_COLORS.ask_user, padding: 12, margin: 12, backgroundColor: PANEL }}>
 						<div style={{ fontSize: 14 }}>{view.pendingAsk.question}</div>
+						{deadline === undefined ? null : (
+							<div testId="ask-timeout" style={{ fontSize: 12, color: DIM }}>
+								{`${Math.max(0, Math.ceil((deadline - now) / 1000))}s`}
+							</div>
+						)}
 						{(view.pendingAsk.options ?? []).map((option) => (
 							<div
 								key={option}
 								testId={`ask-option-${option}`}
-								onClick={() => ops.answer(view.pendingAsk!.questionId, { kind: "selection", selections: [option] })}
-								style={{ ...BUTTON, marginTop: 6 }}
+								onClick={() => {
+									if (view.pendingAsk === undefined) return;
+									const questionId = view.pendingAsk.questionId;
+									const multi = view.pendingAsk.multi === true;
+									if (multi) {
+										setPicked((p) => (p.includes(option) ? p.filter((x) => x !== option) : [...p, option]));
+									} else {
+										ops.answer(questionId, { kind: "selection", selections: [option] });
+									}
+								}}
+								style={{ ...BUTTON, marginTop: 6, backgroundColor: picked.includes(option) ? BG : undefined }}
 							>
 								{option}
 							</div>
 						))}
+						{view.pendingAsk.multi === true ? (
+							<div testId="ask-confirm" onClick={() => ops.answer(view.pendingAsk!.questionId, { kind: "selection", selections: picked })} style={{ ...BUTTON, marginTop: 6 }}>
+								confirm
+							</div>
+						) : null}
+						<input
+							testId="ask-reply"
+							value={reply}
+							placeholder="answer in your own words…"
+							onChange={(event) => setReply(event.value ?? "")}
+							onSubmit={(event) => {
+								const text = (event.value ?? reply).trim();
+								if (text !== "") ops.answer(view.pendingAsk!.questionId, { kind: "freeform", text });
+							}}
+							style={{ ...BUTTON, marginTop: 6, borderWidth: 1, borderColor: BG }}
+						/>
 						<div testId="ask-decline" onClick={() => ops.answer(view.pendingAsk!.questionId, { kind: "none" })} style={{ ...BUTTON, marginTop: 6, color: DIM }}>
 							decline
 						</div>
 					</div>
 				)}
-				<div style={{ height: 64, borderTopWidth: 1, borderColor: PANEL, display: "flex", flexDirection: "row", alignItems: "center", paddingLeft: 12, paddingRight: 12, gap: 8 }}>
-					<input
+				<div style={{ minHeight: 64, borderTopWidth: 1, borderColor: PANEL, display: "flex", flexDirection: "row", alignItems: "center", paddingLeft: 12, paddingRight: 12, gap: 8 }}>
+					{mentions.length === 0 ? null : (
+						<anchored side="top" align="start" style={{ borderWidth: 1, borderColor: PANEL, backgroundColor: PANEL, padding: 4 }}>
+							{mentions.map((file) => (
+								<div key={file} testId={`mention-${file.replace(/[^a-zA-Z0-9_-]/g, "_")}`} onClick={() => pickMention(file)} style={{ ...BUTTON, fontSize: 12 }}>
+									{file}
+								</div>
+							))}
+						</anchored>
+					)}
+					<textarea
 						testId="composer"
 						value={draft}
-						placeholder="ask eta anything…"
+						placeholder="ask eta anything… @ to mention files"
+						minRows={1}
+						maxRows={4}
 						onChange={(event) => setDraft(event.value ?? "")}
 						onSubmit={send}
 						style={{ flexGrow: 1, fontSize: 14, color: TEXT }}

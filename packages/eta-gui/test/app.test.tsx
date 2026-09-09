@@ -20,7 +20,7 @@ describeNative("G0 layout", () => {
 		expect(painted.some((line) => line.includes("rendering the first frame"))).toBe(true);
 		expect(painted).toContain("Context");
 		expect(painted).toContain("Dev");
-		expect(painted).toContain("ask eta anything…");
+		expect(painted.some((line) => line.includes("ask eta anything"))).toBe(true);
 		expect(painted).toContain("goal");
 		expect(painted.some((line) => line.startsWith("turn"))).toBe(true);
 	});
@@ -195,5 +195,44 @@ describeNative("L5 composer", () => {
 		await app.getByTestId("btw-save-btw-1").click();
 		await app.getByTestId("btw-clear-btw-1").click();
 		expect(calls).toEqual(["open:tangent", "save:btw-1", "clear:btw-1"]);
+	});
+});
+
+describeNative("L5 mentions, replies and countdown", () => {
+	it("the @mention popup completes files and freeform answers reach ops", async () => {
+		const feed = fakeFeed();
+		const calls: string[] = [];
+		const ops: GuiOps = {
+			...noOps,
+			prompt: (text) => calls.push(`prompt:${text}`),
+			answer: (questionId, response) => calls.push(`answer:${questionId}:${response.kind}:${(response as { text?: string; selections?: string[] }).text ?? (response as { selections?: string[] }).selections?.join("+") ?? ""}`),
+		};
+		const { render, renderer } = createTestRoot();
+		render(<EtaApp sessions={feed.sessions} active="eta-main" view={feed.view} dev={feed.dev} ops={ops} files={["README.md", "package.json"]} />);
+		const app = await connectTest(renderer);
+		expect(renderer.getPaintedText().some((line) => /^[0-9]+s$/.test(line))).toBe(true);
+		const composer = app.getByTestId("composer");
+		await composer.fill("look @READ");
+		await app.getByTestId("mention-README_md").click();
+		await composer.press("enter");
+		const reply = app.getByTestId("ask-reply");
+		await reply.fill("both please");
+		await reply.press("enter");
+		expect(calls).toEqual(["prompt:look README.md", "answer:q1:freeform:both please"]);
+	});
+
+	it("multi asks accumulate picks until confirm", async () => {
+		const feed = fakeFeed();
+		const calls: string[] = [];
+		const ops: GuiOps = { ...noOps, answer: (questionId, response) => calls.push(`${questionId}:${(response as { selections?: string[] }).selections?.join("+") ?? ""}`) };
+		feed.view.pendingAsk = { questionId: "q2", question: "pick two", options: ["a", "b"], multi: true };
+		const { render, renderer } = createTestRoot();
+		render(<EtaApp sessions={feed.sessions} active="eta-main" view={feed.view} dev={feed.dev} ops={ops} />);
+		const app = await connectTest(renderer);
+		await app.getByTestId("ask-option-a").click();
+		await app.getByTestId("ask-option-b").click();
+		expect(calls).toEqual([]);
+		await app.getByTestId("ask-confirm").click();
+		expect(calls).toEqual(["q2:a+b"]);
 	});
 });

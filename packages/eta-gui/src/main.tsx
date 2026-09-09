@@ -68,6 +68,7 @@ export function LiveApp({ host }: { host: Host }) {
 			view={view}
 			dev={dev}
 			ops={ops}
+			files={host.listFiles()}
 			running={sessions.find((session) => session.name === pointer)?.badges.includes("running") ?? false}
 		/>
 	);

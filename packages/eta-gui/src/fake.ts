@@ -34,6 +34,7 @@ export const emptyView = (): SessionView => ({
 	cacheRate: 0,
 	branch: { tipId: null },
 	pendingAsk: undefined,
+	pendingAskDeadline: undefined,
 	prompt: undefined,
 	tokensPerSec: 0,
 });
@@ -81,6 +82,7 @@ export function fakeFeed(): FakeFeed {
 	view.subagents = [{ id: "sub-1", status: "running", turns: 3 }];
 	view.goal = { objective: "paint the window", status: "active", roundCount: 0, idleWithoutTools: 0 };
 	view.pendingAsk = { questionId: "q1", question: "which theme?", options: ["dark", "light"] };
+	view.pendingAskDeadline = Date.now() + 5000;
 	view.prompt = { stableChars: 1200, adaptiveChars: 340 };
 	view.tokensPerSec = 42;
 	const dev: DevFrame[] = [

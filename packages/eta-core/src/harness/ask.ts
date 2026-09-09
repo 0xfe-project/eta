@@ -25,6 +25,7 @@ export type HeadlessAsk = (payload: AskPayload) => Promise<AskResponse | null>;
 
 export class AskRegistry {
 	private pending = new Map<string, PendingAsk>();
+	private deadlines = new Map<string, number>();
 	private readonly observe: EtaEmit | undefined;
 	private readonly onAnswer: ((payload: AnswerPayload) => void) | undefined;
 	private readonly headless: HeadlessAsk | undefined;
@@ -43,6 +44,7 @@ export class AskRegistry {
 				if (done) return;
 				done = true;
 				this.pending.delete(payload.questionId);
+				this.deadlines.delete(payload.questionId);
 				if (timer !== undefined) clearTimeout(timer);
 				opts.signal?.removeEventListener("abort", onAbort);
 				this.observe?.("ask_user", action, { questionId: payload.questionId, kind: response.kind });
@@ -52,6 +54,7 @@ export class AskRegistry {
 			if (opts.timeoutMs !== undefined) {
 				timer = setTimeout(() => settle({ kind: "none" }, "expired"), opts.timeoutMs);
 				timer.unref?.();
+				this.deadlines.set(payload.questionId, Date.now() + opts.timeoutMs);
 			}
 			const onAbort = () => settle({ kind: "none" }, "canceled");
 			opts.signal?.addEventListener("abort", onAbort, { once: true });
@@ -65,6 +68,11 @@ export class AskRegistry {
 					.catch(() => settle({ kind: "none" }, "canceled"));
 			}
 		});
+	}
+
+	/** Wall-clock expiry of a timed question, for the GUI countdown; undefined without a timeout. */
+	deadline(questionId: string): number | undefined {
+		return this.deadlines.get(questionId);
 	}
 
 	/** Questions still waiting for a human — what the UI re-surfaces on boot. */

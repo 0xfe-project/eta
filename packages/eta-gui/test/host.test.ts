@@ -70,6 +70,12 @@ describe("host", () => {
 		await host.close();
 	});
 
+	it("listFiles feeds the composer mentions", async () => {
+		const host = new Host();
+		expect(host.listFiles()).toContain("package.json");
+		await host.close();
+	});
+
 	it("L2: taskSet through the host mutates the store and repaints the view", async () => {
 		const host = new Host();
 		await host.open("a", () => makeAgent("eta-a", 0));

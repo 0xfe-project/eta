@@ -5,6 +5,7 @@
  * and closing the GUI never stops the core.
  */
 
+import { readdirSync } from "node:fs";
 import { BACKGROUND_CONTEXT, EtaAgent, type HarnessEvent, type SessionView } from "@eta/core";
 import { SessionViewProjector } from "@eta/core";
 import { DevRing, type ChannelFrame, type DevFrame } from "./channels.ts";
@@ -111,6 +112,17 @@ export class Host {
 
 	agentOf(name: string): EtaAgent | undefined {
 		return this.hosted.get(name)?.agent;
+	}
+
+	/** Top-level workspace entries the composer's @mention popup can complete to. */
+	listFiles(): string[] {
+		try {
+			return readdirSync(process.cwd())
+				.filter((name) => !name.startsWith(".") && name !== "node_modules")
+				.slice(0, 24);
+		} catch {
+			return [];
+		}
 	}
 
 	viewOf(name: string): SessionView | undefined {
