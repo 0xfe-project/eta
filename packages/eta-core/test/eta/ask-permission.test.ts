@@ -27,9 +27,9 @@ describe("ask registry", () => {
 	it("replay re-surfaces unanswered asks from an entry log", () => {
 		const reg = new AskRegistry();
 		reg.replay([
-			{ customType: "eta.ask", payload: { questionId: "q1", question: "still open" } },
-			{ customType: "eta.ask", payload: { questionId: "q2", question: "answered" } },
-			{ customType: "eta.answer", payload: { questionId: "q2", answers: ["x"] } },
+			{ type: "ask", payload: { questionId: "q1", question: "still open" } },
+			{ type: "ask", payload: { questionId: "q2", question: "answered" } },
+			{ type: "answer", payload: { questionId: "q2", answers: ["x"] } },
 		]);
 		expect(reg.pendingAsks().map((a) => a.questionId)).toEqual(["q1"]);
 	});

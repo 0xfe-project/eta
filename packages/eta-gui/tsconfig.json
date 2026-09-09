@@ -16,7 +16,8 @@
 		],
 		"allowImportingTsExtensions": true,
 		"erasableSyntaxOnly": true,
-		"verbatimModuleSyntax": true
+		"verbatimModuleSyntax": true,
+		"jsxImportSource": "@gpuix/react"
 	},
 	"include": [
 		"src",

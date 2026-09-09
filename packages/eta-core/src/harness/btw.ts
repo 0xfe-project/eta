@@ -9,7 +9,7 @@
 
 import type { AgentMessage } from "../types.ts";
 import type { DevEmit } from "./dev-events.ts";
-import { BTW_CUSTOM_TYPE, type BtwPayload } from "./entries.ts";
+import type { BtwPayload } from "./session/types.ts";
 import { btwHandoff } from "../prompts/index.ts";
 
 export type BtwSaveState = "not-saved" | "queued" | "saved";
@@ -35,7 +35,7 @@ type BuildContext = (entries: unknown[], leafId: string | null) => { messages: A
 
 function isVisibleBtw(entry: unknown): boolean {
 	const e = entry as { role?: string; customType?: string };
-	return e?.role === "custom" && e.customType === BTW_CUSTOM_TYPE;
+	return e?.role === "custom" && e.customType === "eta.btw";
 }
 
 export class BtwManager {
@@ -176,9 +176,9 @@ export class BtwManager {
 	}
 
 	/** Re-register threads from a replayed `eta.btw` entry log. */
-	replay(entries: { customType: string; payload: unknown }[]): void {
+	replay(entries: { type: string; payload: unknown }[]): void {
 		for (const entry of entries) {
-			if (entry.customType !== BTW_CUSTOM_TYPE) continue;
+			if (entry.type !== "btw") continue;
 			const payload = entry.payload as BtwPayload & Partial<BtwThread>;
 			if (typeof payload?.note !== "string") continue;
 			const id = payload.id ?? `btw-replay-${++this.sequence}`;

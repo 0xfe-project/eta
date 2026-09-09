@@ -43,6 +43,11 @@ export function sessionEntryToContextMessages(entry: Entry): AgentMessage[] {
 			return entry.summary ? [createBranchSummaryMessage(entry.summary, entry.mergedParentId, entry.timestamp)] : [];
 		case "custom":
 			return [];
+		case "goal":
+		case "ask":
+		case "answer":
+		case "btw":
+			return [];
 	}
 }
 

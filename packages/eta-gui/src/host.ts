@@ -125,6 +125,32 @@ export class Host {
 		return entry === undefined ? undefined : { answer: (id, response) => entry.agent.ask.answer(id, response) };
 	}
 
+	goal(name: string, action: "set" | "pause" | "resume" | "clear", objective?: string): void {
+		const agent = this.must(name);
+		if (action === "set" && objective !== undefined) agent.goal.set(objective);
+		if (action === "pause") agent.goal.pause();
+		if (action === "resume") agent.goal.resume();
+		if (action === "clear") agent.goal.clear();
+	}
+
+	loopToggle(name: string, id: string, paused: boolean): void {
+		this.must(name).loops.pause(id, paused);
+	}
+
+	async compact(name: string): Promise<void> {
+		await this.must(name).lane.compact(undefined, BACKGROUND_CONTEXT);
+	}
+
+	async abort(name: string): Promise<void> {
+		await this.must(name).lane.abort(BACKGROUND_CONTEXT);
+	}
+
+	private must(name: string): EtaAgent {
+		const entry = this.hosted.get(name);
+		if (entry === undefined) throw new Error(`no session ${name}`);
+		return entry.agent;
+	}
+
 	async prompt(name: string, text: string): Promise<void> {
 		const entry = this.hosted.get(name);
 		if (entry === undefined) throw new Error(`no session ${name}`);

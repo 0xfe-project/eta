@@ -108,10 +108,10 @@ describe("goal replay + ask normalization", () => {
 	it("replays goal lifecycle from entries", () => {
 		const m = new GoalManager();
 		applyGoalEntries(m, [
-			{ customType: "eta.goal", payload: { kind: "set", objective: "ship" } },
-			{ customType: "eta.goal", payload: { kind: "pause" } },
-			{ customType: "eta.goal", payload: { kind: "resume" } },
-			{ customType: "noise", payload: {} },
+			{ type: "goal", payload: { kind: "set", objective: "ship" } },
+			{ type: "goal", payload: { kind: "pause" } },
+			{ type: "goal", payload: { kind: "resume" } },
+			{ type: "noise", payload: {} },
 		]);
 		expect(m.current?.objective).toBe("ship");
 		expect(m.current?.status).toBe("active");

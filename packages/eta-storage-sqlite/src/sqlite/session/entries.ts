@@ -7,6 +7,10 @@ import type {
 	EntryScan,
 	EntryStructure,
 	MessageEntry,
+	AskEntry,
+	AnswerEntry,
+	BtwEntry,
+	GoalEntry,
 } from "@eta/core";
 import { joinSqlFragments, type SqlQuery, sql } from "../sql.ts";
 import type { SqliteDatabase, SqliteStatement } from "../types.ts";
@@ -69,6 +73,14 @@ function entryPayload(entry: Entry): StoredEntryPayload<Entry> {
 			const payload: StoredEntryPayload<CustomEntry> = entry.data === undefined ? {} : { data: entry.data };
 			return payload;
 		}
+		case "goal":
+			return { payload: entry.payload } satisfies StoredEntryPayload<GoalEntry>;
+		case "ask":
+			return { payload: entry.payload } satisfies StoredEntryPayload<AskEntry>;
+		case "answer":
+			return { payload: entry.payload } satisfies StoredEntryPayload<AnswerEntry>;
+		case "btw":
+			return { payload: entry.payload } satisfies StoredEntryPayload<BtwEntry>;
 	}
 }
 
@@ -129,6 +141,14 @@ export function decodeEntryRow(row: EntryRow): Entry {
 		case "custom":
 			if (row.custom_type === null) throw new Error(`Custom entry ${row.id} is missing custom_type`);
 			return { ...base, type: "custom", customType: row.custom_type, ...parsePayload<CustomEntry>(row) };
+		case "goal":
+			return { ...base, type: "goal", ...parsePayload<GoalEntry>(row) };
+		case "ask":
+			return { ...base, type: "ask", ...parsePayload<AskEntry>(row) };
+		case "answer":
+			return { ...base, type: "answer", ...parsePayload<AnswerEntry>(row) };
+		case "btw":
+			return { ...base, type: "btw", ...parsePayload<BtwEntry>(row) };
 	}
 }
 

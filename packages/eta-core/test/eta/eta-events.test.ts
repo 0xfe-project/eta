@@ -162,7 +162,7 @@ describe("EtaAgent integrates batteries on the main bus", () => {
 		expect(agent.tasks.list().length).toBe(1);
 
 		const entries = await agent.lane.findEntries(undefined, CTX);
-		expect(entries.some((e) => e.type === "custom" && e.customType === "eta.goal")).toBe(true);
+		expect(entries.some((e) => e.type === "goal")).toBe(true);
 
 		await agent.close(CTX);
 		void session.close(CTX);

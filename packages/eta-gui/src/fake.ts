@@ -20,7 +20,11 @@ export interface FakeFeed {
 
 export const emptyView = (): SessionView => ({
 	messages: [],
+	systems: [],
 	thinking: [],
+	compactionEpoch: 0,
+	memory: undefined,
+	subagents: [],
 	goal: undefined,
 	tasks: [],
 	loops: [],
@@ -43,6 +47,13 @@ export function fakeFeed(): FakeFeed {
 		message("m1", "user", "hello eta"),
 		message("m2", "assistant", "rendering the first frame"),
 	];
+	view.systems = [{ entryId: "s1", seq: 1, kind: "goal", text: "goal set: paint the window" }];
+	view.tasks = [{ id: "t1", content: "write the thing", status: "pending" }];
+	view.loops = [{ id: "tick", note: "check ci", every: "1s", runCount: 2, paused: false }];
+	view.memory = { chars: 800 };
+	view.subagents = [{ id: "a1", status: "running", turns: 3 }];
+	view.goal = { objective: "paint the window", status: "active", roundCount: 0, idleWithoutTools: 0 };
+	view.pendingAsk = { questionId: "q1", question: "which theme?", options: ["dark", "light"] };
 	const dev: DevFrame[] = [
 		{ ts: 1, session: "eta-main", category: "turn", action: "turn_start", data: {} },
 		{ ts: 2, session: "eta-main", category: "tool", action: "end", data: { toolName: "TaskCreate" } },

@@ -5,7 +5,7 @@
  * (eta.goal CustomEntry / telemetry category "goal").
  */
 
-import { GOAL_CUSTOM_TYPE, type GoalPayload } from "./entries.ts";
+import type { GoalPayload } from "./session/types.ts";
 import type { DevEmit } from "./dev-events.ts";
 
 export type GoalStatus = "active" | "paused" | "achieved";
@@ -150,9 +150,9 @@ export function lastMessageShowsIntent(text: string): boolean {
 }
 
 /** Restore goal state from a replayed `eta.goal` entry log (restart path). */
-export function applyGoalEntries(manager: GoalManager, entries: { customType: string; payload: unknown }[]): void {
+export function applyGoalEntries(manager: GoalManager, entries: { type: string; payload: unknown }[]): void {
 	for (const entry of entries) {
-		if (entry.customType !== GOAL_CUSTOM_TYPE) continue;
+		if (entry.type !== "goal") continue;
 		const payload = entry.payload as GoalPayload;
 		switch (payload.kind) {
 			case "set":

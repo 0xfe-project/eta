@@ -53,6 +53,7 @@ export {
 export { SliceNotImplemented } from "./runtime/types.ts";
 
 import { createAgentHarness } from "./runtime/harness.ts";
+import type { PendingEntry } from "./session/types.ts";
 import type {
 	BranchScan,
 	Entry,
@@ -66,6 +67,7 @@ import type {
 	SettledAssistantMessage,
 	UsageRow,
 } from "./session/types.ts";
+import type { StoredValue, Value } from "./session/values.ts";
 import type {
 	AgentHarnessResources,
 	AgentHarnessStreamOptions,
@@ -545,6 +547,8 @@ export interface AgentLane {
 	findEntry(query: BranchScan | undefined, context: Context): Promise<Entry | undefined>;
 	appendMessage(message: AgentMessage, context: Context): Promise<string>;
 	appendCustomEntry(customType: string, data: JsonValue | undefined, context: Context): Promise<string>;
+	/** Append any entry — message, custom, or goal/ask/answer/btw — to this lane. */
+	append(entry: PendingEntry, context: Context): Promise<string>;
 	/** Join another branch's tip into this lane's history via a merge entry; idle lane only. */
 	mergeBranch(fromBranch: string, context: Context, summary?: string): Promise<string>;
 	/** Rewind the lane tip to an ancestor without summarizing. */
@@ -585,6 +589,7 @@ export interface AgentLane {
 	setThinkingLevel(level: ThinkingLevel, context: Context): Promise<void>;
 	getActiveTools(context: Context): Promise<string[]>;
 	getStats(context: Context): Promise<SessionStats>;
+	scanValues<T>(prefix: Value<T>, context: Context): Promise<StoredValue<T>[]>;
 	setActiveTools(names: string[], context: Context): Promise<void>;
 	watch(context: Context): Promise<WatchHandle<LaneSnapshot>>;
 }

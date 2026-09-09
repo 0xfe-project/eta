@@ -129,13 +129,21 @@ export async function planBoundaryInbox<TContext extends object | undefined>(
 							mergedParentId: value.payload.mergedParentId,
 							summary: value.payload.summary,
 						}
-					: {
-							id: item.entryId,
-							parentId,
-							type: "custom",
-							customType: value.customType,
-							...(value.payload === undefined ? {} : { data: value.payload }),
-						};
+					: value.type === "custom"
+						? {
+								id: item.entryId,
+								parentId,
+								type: "custom",
+								customType: value.customType,
+								...(value.payload === undefined ? {} : { data: value.payload }),
+							}
+						: value.type === "goal"
+							? { id: item.entryId, parentId, type: "goal", payload: value.payload }
+							: value.type === "ask"
+								? { id: item.entryId, parentId, type: "ask", payload: value.payload }
+								: value.type === "answer"
+									? { id: item.entryId, parentId, type: "answer", payload: value.payload }
+									: { id: item.entryId, parentId, type: "btw", payload: value.payload };
 		parentId = item.entryId;
 		if (projects(value)) triggerEntryId = item.entryId;
 		return entry;

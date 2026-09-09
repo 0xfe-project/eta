@@ -13,7 +13,7 @@ export type SettledAssistantMessage = AssistantMessage & {
 	stopReason: Exclude<StopReason, "pending">;
 };
 
-export type EntryType = "message" | "compaction" | "branch_summary" | "merge" | "custom";
+export type EntryType = "message" | "compaction" | "branch_summary" | "merge" | "custom" | "goal" | "ask" | "answer" | "btw";
 
 export interface EntryBase {
 	id: string;
@@ -64,13 +64,96 @@ export interface CustomEntry extends EntryBase {
 	data?: JsonValue;
 }
 
+/** Battery vocabulary: goal changes recorded in the session log. */
+export interface GoalPayload {
+	kind: "set" | "pause" | "resume" | "achieved" | "cleared" | "blocked";
+	objective?: string;
+	reason?: string;
+}
+
+export interface GoalEntry extends EntryBase {
+	type: "goal";
+	payload: GoalPayload;
+}
+
+/** ask_user question recorded before waiting for a human. */
+export interface AskPayload {
+	questionId: string;
+	question: string;
+	options?: string[];
+	multi?: boolean;
+}
+
+export interface AskEntry extends EntryBase {
+	type: "ask";
+	payload: AskPayload;
+}
+
+/** The human's backfill for an ask entry. */
+export interface AnswerPayload {
+	questionId: string;
+	answers: string[];
+	skipped?: boolean;
+}
+
+export interface AnswerEntry extends EntryBase {
+	type: "answer";
+	payload: AnswerPayload;
+}
+
+/** Visible note left by a side thread. */
+export interface BtwPayload {
+	note: string;
+	sourceEntryId?: string;
+}
+
+export interface BtwEntry extends EntryBase {
+	type: "btw";
+	payload: BtwPayload;
+}
+
+/** Loop registry definition; part of the session loop-state value. */
+export interface LoopDef {
+	id: string;
+	note: string;
+	/** Interval trigger: "45s" | "5m" | "2h" | "1d". */
+	every?: string;
+	/** 6-field cron trigger (sec min hour dom mon dow), UTC. */
+	cron?: string;
+	maxRuns?: number;
+}
+
+/** Full loop registry record persisted as a session value. */
+export interface LoopSpec {
+	def: LoopDef;
+	/** Event trigger: fires when a bus event matches. */
+	on?: { type: string; contains?: string; regex?: string; equals?: Record<string, unknown> };
+	expiresAt?: string;
+	/** Runtime bookkeeping; part of the persisted value. */
+	runCount: number;
+	nextDueAt?: number;
+	createdAt: number;
+	paused: boolean;
+	disposed?: boolean;
+}
+
+
 /** Convert an application-defined custom entry into model context. */
 export type EntryProjector = (
 	entry: CustomEntry,
 	context: Context,
 ) => AgentMessage[] | undefined | Promise<AgentMessage[] | undefined>;
 
-export type Entry = MessageEntry | CompactionEntry | BranchSummaryEntry | MergeEntry | CustomEntry;
+export type Entry =
+	| MessageEntry
+	| CompactionEntry
+	| BranchSummaryEntry
+	| MergeEntry
+	| CustomEntry
+	| GoalEntry
+	| AskEntry
+	| AnswerEntry
+	| BtwEntry;
 
 /** Entry supplied to a transaction before storage assigns sequence and timestamp. */
 export type NewEntry<TEntry extends Entry = Entry> = TEntry extends Entry ? Omit<TEntry, "seq" | "timestamp"> : never;
@@ -359,7 +442,11 @@ export interface LaneState {
 export type PendingEntry =
 	| { type: "message"; payload: AgentMessage }
 	| { type: "custom"; customType: string; payload?: JsonValue }
-	| { type: "merge"; payload: { mergedParentId: string; summary: string } };
+	| { type: "merge"; payload: { mergedParentId: string; summary: string } }
+	| { type: "goal"; payload: GoalPayload }
+	| { type: "ask"; payload: AskPayload }
+	| { type: "answer"; payload: AnswerPayload }
+	| { type: "btw"; payload: BtwPayload };
 
 export interface DurableFileOperations {
 	read: string[];

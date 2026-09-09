@@ -1,56 +1,25 @@
 /**
- * CustomEntry payload contracts (D1: all new session semantics ride on
- * CustomEntry.customType, so upstream entry types stay untouched and
- * upstream storage conformance keeps passing).
+ * The session log records goal changes, ask_user questions and answers, and
+ * btw notes as first-class entry types, exactly like messages and compactions.
+ * These constructors build queued entries for lane.append; loop state persists
+ * as a session value (see values.ts loopState).
  */
 
-export const GOAL_CUSTOM_TYPE = "eta.goal";
-export const ASK_CUSTOM_TYPE = "eta.ask";
-export const ANSWER_CUSTOM_TYPE = "eta.answer";
-export const BTW_CUSTOM_TYPE = "eta.btw";
+export type { GoalPayload, AskPayload, AnswerPayload, BtwPayload } from "./session/types.ts";
+import type { AnswerPayload, AskPayload, BtwPayload, GoalPayload, PendingEntry } from "./session/types.ts";
 
-export interface GoalPayload {
-	kind: "set" | "pause" | "resume" | "achieved" | "cleared" | "blocked";
-	objective?: string;
-	reason?: string;
+export function goalEntry(payload: GoalPayload): Extract<PendingEntry, { type: "goal" }> {
+	return { type: "goal", payload };
 }
 
-export interface AskPayload {
-	questionId: string;
-	question: string;
-	options?: string[];
-	multi?: boolean;
+export function askEntry(payload: AskPayload): Extract<PendingEntry, { type: "ask" }> {
+	return { type: "ask", payload };
 }
 
-export interface AnswerPayload {
-	questionId: string;
-	answers: string[];
-	skipped?: boolean;
+export function answerEntry(payload: AnswerPayload): Extract<PendingEntry, { type: "answer" }> {
+	return { type: "answer", payload };
 }
 
-export interface BtwPayload {
-	note: string;
-	sourceEntryId?: string;
-}
-
-export function goalEntry(payload: GoalPayload): { customType: string; payload: GoalPayload } {
-	return { customType: GOAL_CUSTOM_TYPE, payload };
-}
-
-export function askEntry(payload: AskPayload): { customType: string; payload: AskPayload } {
-	return { customType: ASK_CUSTOM_TYPE, payload };
-}
-
-export function answerEntry(payload: AnswerPayload): { customType: string; payload: AnswerPayload } {
-	return { customType: ANSWER_CUSTOM_TYPE, payload };
-}
-
-export function btwEntry(payload: BtwPayload): { customType: string; payload: BtwPayload } {
-	return { customType: BTW_CUSTOM_TYPE, payload };
-}
-
-const TYPES = new Set([GOAL_CUSTOM_TYPE, ASK_CUSTOM_TYPE, ANSWER_CUSTOM_TYPE, BTW_CUSTOM_TYPE]);
-
-export function isEtaCustomType(customType: string): boolean {
-	return TYPES.has(customType);
+export function btwEntry(payload: BtwPayload): Extract<PendingEntry, { type: "btw" }> {
+	return { type: "btw", payload };
 }

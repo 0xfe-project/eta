@@ -47,6 +47,10 @@ describe("SessionView projector", () => {
 		expect(viewA).toEqual(viewB);
 
 		expect(viewA.goal?.objective).toBe("ship the view");
+		expect(viewA.systems.some((row) => row.kind === "goal" && row.text.includes("ship the view"))).toBe(true);
+		expect(viewA.compactionEpoch).toBe(0);
+		expect(viewA.subagents).toEqual([]);
+		expect(viewA.memory).toBeUndefined();
 		expect(viewA.tasks).toHaveLength(1);
 		expect(viewA.messages.length).toBeGreaterThanOrEqual(2);
 		expect(viewA.thinking).toEqual(["pick a task first"]);

@@ -51,7 +51,7 @@ describe("btw side channel", () => {
 	});
 	it("replay restores threads from eta.btw entries", () => {
 		const mgr = new BtwManager(() => ({ messages: [] }));
-		mgr.replay([{ customType: "eta.btw", payload: { id: "btw-9", kind: "tangent", note: "n", exchanges: [{ question: "q", answer: "a", at: 1 }], saveState: "saved" } }]);
+		mgr.replay([{ type: "btw", payload: { id: "btw-9", kind: "tangent", note: "n", exchanges: [{ question: "q", answer: "a", at: 1 }], saveState: "saved" } }]);
 		expect(mgr.get("btw-9")?.saveState).toBe("saved");
 	});
 	it("handoff hands a followUp for threads with results", () => {

@@ -307,6 +307,37 @@ export function createStorageConformance(factory: () => Promise<StorageFixture>)
 
 		createCase(
 			factory,
+			"branch",
+			"goal, ask, answer and btw entries round-trip with typed payloads",
+			async ({ storage }) => {
+				await storage.commit(
+					[
+						insertEntry({ id: "g", parentId: null, type: "goal", payload: { kind: "set", objective: "ship" } }),
+						insertEntry({ id: "q", parentId: "g", type: "ask", payload: { questionId: "q1", question: "which?" } }),
+						insertEntry({ id: "ans", parentId: "q", type: "answer", payload: { questionId: "q1", answers: ["left"] } }),
+						insertEntry({ id: "b", parentId: "ans", type: "btw", payload: { note: "saw this", sourceEntryId: "g" } }),
+					],
+					BACKGROUND_CONTEXT,
+				);
+				const entries = await storage.scanBranch({ start: "b", order: "oldestFirst" }, BACKGROUND_CONTEXT);
+				deepStrictEqual(
+					entries.map((entry) => [entry.type, (entry as { payload?: unknown }).payload]),
+					[
+						["goal", { kind: "set", objective: "ship" }],
+						["ask", { questionId: "q1", question: "which?" }],
+						["answer", { questionId: "q1", answers: ["left"] }],
+						["btw", { note: "saw this", sourceEntryId: "g" }],
+					],
+				);
+				deepStrictEqual(
+					ids(await storage.scanBranch({ start: "b", order: "oldestFirst", type: "answer" }, BACKGROUND_CONTEXT)),
+					["ans"],
+				);
+			},
+		),
+
+		createCase(
+			factory,
 			"transactions",
 			"resolves parents only from prior entries and earlier writes",
 			async ({ storage }) => {
