@@ -5,6 +5,11 @@
  * Source: pi packages/ai/src/utils/retry.ts (MIT, Mario Zechner).
  */
 
+import type { RetryPolicy } from "@earendil-works/pi-ai";
+
+/** Published RetryPolicy lacks `maxAgentDelayMs` (present in upstream git). */
+export type AgentRetryPolicy = RetryPolicy & { maxAgentDelayMs?: number };
+
 export const DEFAULT_MAX_AGENT_RETRY_DELAY_MS = 60_000;
 
 export function retryDelayMs(

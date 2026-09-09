@@ -1,8 +1,7 @@
-import type { RetryPolicy } from "@earendil-works/pi-ai";
-import { DEFAULT_MAX_AGENT_RETRY_DELAY_MS } from "../internal/retry-compat.ts";
+import { DEFAULT_MAX_AGENT_RETRY_DELAY_MS, type AgentRetryPolicy } from "../internal/retry-compat.ts";
 import type { CompactionSettings } from "./compaction/compaction.ts";
 
-export const DEFAULT_RETRY_POLICY: RetryPolicy = {
+export const DEFAULT_RETRY_POLICY: AgentRetryPolicy = {
 	enabled: true,
 	maxRetries: 3,
 	baseDelayMs: 1_000,
@@ -17,7 +16,7 @@ export function validateToolNames(tools: readonly { name: string }[]): void {
 	}
 }
 
-export function validateRetryPolicy(policy: RetryPolicy): void {
+export function validateRetryPolicy(policy: AgentRetryPolicy): void {
 	if (
 		!Number.isSafeInteger(policy.maxRetries) ||
 		policy.maxRetries < 0 ||

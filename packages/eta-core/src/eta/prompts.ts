@@ -78,7 +78,7 @@ If a next step: quote the most recent conversation VERBATIM.
 </summarization_request>`;
 
 export const SUMMARIZE_SHORTER_RETRY =
-	'Shorter summary in **USER's LANGUAGE**. Focus on highest-signal context. Skip long code snippets. Prioritize recent user intent, recent work, unresolved blockers. User messages: capture intent, don\'t repeat verbatim.';
+	"Shorter summary in **USER's LANGUAGE**. Focus on highest-signal context. Skip long code snippets. Prioritize recent user intent, recent work, unresolved blockers. User messages: capture intent, don't repeat verbatim.";
 
 export function previousSummary(summary: string): string {
 	return `[Previous conversation summary]:\n${summary}`;
