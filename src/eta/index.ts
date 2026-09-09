@@ -5,3 +5,5 @@ export * from "./tasks.ts";
 export * from "./entries.ts";
 export * from "./composer.ts";
 export * from "./run-end.ts";
+export * from "./permission.ts";
+export * from "./ask.ts";
