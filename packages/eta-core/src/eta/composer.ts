@@ -10,7 +10,7 @@
  */
 
 import type { GoalStatus } from "./goal.ts";
-import { goalPursuitGuidelines, TODO_REVIEW_PROMPT } from "./prompts.ts";
+import { goalPursuitGuidelines, TODO_REVIEW_PROMPT } from "../prompts/index.ts";
 import { renderCurrentTasks, type TaskList } from "./tasks.ts";
 
 export interface EtaPromptState {

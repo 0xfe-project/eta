@@ -44,6 +44,8 @@
 
 ## Part C:内建电池(`src/batteries/`,每节一个模块 + config 开关)
 
+> **Prompt 仓库**:全部系统提示集中在 `packages/eta-core/src/prompts/`(按主题一文件,`index.ts` 总出);pi v0.85.1 自带的 5 条 compaction/branch 提示已按 eta 口吻重写(`src/prompts/pi-compaction.ts`,EXACT 格式模板逐字保留),compaction.ts / branch-summarization.ts 改为 import。
+
 ### C1 goal(built-in,自研,Rust 语义平移)
 
 - [ ] 状态机 + anti-spin(3 轮无工具→Paused)+ 复活 + `gate:"auto"|"delegated"` + intent 续命(老 agent.rs:467)+ 独立 evaluator(YES/NO,有界尾部)+ `MAX_CONTINUATIONS`。完成条件:Rust B8 的用例全平移;goal 经 `eta.goal` entry 跨重启恢复。

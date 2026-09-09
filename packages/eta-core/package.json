@@ -9,7 +9,8 @@
 		".": "./src/index.ts",
 		"./testing": "./src/harness/session/testing/index.ts",
 		"./node": "./src/node.ts",
-		"./eta": "./src/eta/index.ts"
+		"./eta": "./src/eta/index.ts",
+		"./prompts": "./src/prompts/index.ts"
 	},
 	"scripts": {
 		"test": "vitest --run",
