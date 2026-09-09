@@ -37,8 +37,8 @@
 - [~] S1 **driver 队列**(goal driver 已走 `before_run_end.followUp`,loop driver 随 C2):goal 续命与 loop 触发是「turn 边界优先消费的 driver」,不是普通 inbox 消息;dequeue 顺序 driver > had_tools > break(老 B2 语义)。完成条件:两个 driver 各一条集成测试。
 - [x] S2 **空响应重试**:不动 `drive/response.ts`(well-formed 空答上游不重试是正确的);`src/eta/run-end.ts emptyResponseGuard` 挂 `before_run_end`,空 stop → RESUME_EMPTY followUp,预算 2 次,真实回答即复位。完成条件:已测(含复位)。
 - [x] S3 **漂移检测**:平移老 `loop_detect.rs`(doom 指纹≥3、tail_repetition、similar 三指标)为纯函数模块,接入 loop reminder,再犯抛 `LoopDetected`。完成条件:Rust 单测全数平移。
-- [ ] S4 **fail-closed 权限**:上游 `beforeToolCall` 是 fail-open;给 `requires_approval` 工具加 gate——无 hook/超时 = Deny + `permission denied` tool_result(老 B7)。完成条件:无 hook 场景测过。
-- [ ] S5 **ask_user 拦截 + answer 通道**(见 C3),S6 **新 entry customTypes**:`eta.goal / eta.ask / eta.answer / eta.btw`(tasks/loops 走 KV Value)。完成条件:重放后 store 语义完整。
+- [x] S4 **fail-closed 权限**(挂 `before_tool`;`src/eta/permission.ts`:拒绝/抛错/超时=deny,测过):上游 `beforeToolCall` 是 fail-open;给 `requires_approval` 工具加 gate——无 hook/超时 = Deny + `permission denied` tool_result(老 B7)。完成条件:无 hook 场景测过。
+- [ ] S5 **ask_user 拦截 + answer 通道**(见 C3),S6 **新 entry customTypes**(customTypes 见 C5 契约;ask/answer 通道见 C3 已落):`eta.goal / eta.ask / eta.answer / eta.btw`(tasks/loops 走 KV Value)。完成条件:重放后 store 语义完整。
 
 ---
 
@@ -58,6 +58,8 @@
 - [ ] 持久化**不抄它的 event-sourced reducer store(956 行)**:registry 进 session KV,纯函数 CRUD + 文件锁即可;`loop-events.ts` 的恢复语义(resume_event_stale)要有。完成条件:未 attach session 到点火、重启全恢复、过期/上限/去重各一条测试。
 
 ### C3 ask_user(built-in,读码结论:schema 抄、UI 丢、持久化我们补)
+
+- [x] 落地:`src/eta/ask.ts` AskRegistry(pending/answer/timeout/abort→none、`replay()` 重启重挂未决)+ `createAskUserTool`(questionId=invocationId,onAsk 先写 `eta.ask`);kill-重启全链路集成测试随 M4 harness。
 
 - [ ] core 按名拦截,发 `AskUserStarted` 挂起 step 等 `answer()`。**它的 execute 本质 = await UI 组件的 Promise**(index.ts:2211-2260):抄 abort signal→null、timeout→`done(null)`、finally 发 blocked/unblocked(= 我们的 dev 事件)。
 - [ ] schema 抄:`question/context/options[{title,description}](扁平避 anyOf)/allowMultiple/allowFreeform/timeout` + **模型别名键归一化**(label/text/value/name——它防 proxy 改写 schema,index.ts:158);结果信封 `AskResponse = {kind:"selection",selections,comment?} | {kind:"freeform",text}`。
