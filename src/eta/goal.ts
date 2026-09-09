@@ -1,0 +1,138 @@
+/**
+ * Goal subsystem: turn-internal self-continuation with anti-spin bookkeeping.
+ * Port of the Rust core's goal semantics (old agent.rs B8 + goal.rs).
+ * Pure state machine; persistence and event emission are the caller's job
+ * (eta.goal CustomEntry / telemetry category "goal").
+ */
+
+export type GoalStatus = "active" | "paused" | "achieved";
+
+export type GoalBlockedReason = "question-pending" | undefined;
+
+/** Continuation gate: "auto" self-continues; "delegated" keeps the goal alive
+ * but external signals alone drive it (master parallel phase). */
+export type GoalGate = "auto" | "delegated";
+
+export interface GoalState {
+	objective: string;
+	status: GoalStatus;
+	roundCount: number;
+	idleWithoutTools: number;
+	blockedReason?: GoalBlockedReason;
+}
+
+/** Consecutive tool-free turns before the goal auto-pauses. */
+export const ANTI_SPIN_LIMIT = 3;
+/** Hard cap on self-continuations per goal. */
+export const MAX_CONTINUATIONS = 12;
+
+export interface GoalChange {
+	from: GoalStatus | "none";
+	goal: GoalState;
+}
+
+export class GoalManager {
+	private goal: GoalState | undefined;
+	gate: GoalGate = "auto";
+	maxContinuations = MAX_CONTINUATIONS;
+	antiSpinLimit = ANTI_SPIN_LIMIT;
+	onChange?: (change: GoalChange) => void;
+
+	get current(): GoalState | undefined {
+		return this.goal;
+	}
+
+	set(objective: string): GoalChange {
+		const from = this.goal?.status ?? ("none" as const);
+		this.goal = { objective, status: "active", roundCount: 0, idleWithoutTools: 0 };
+		const change: GoalChange = { from, goal: { ...this.goal } };
+		this.onChange?.(change);
+		return change;
+	}
+
+	pause(): void {
+		if (!this.goal || this.goal.status === "achieved") return;
+		const from = this.goal.status;
+		this.goal.status = "paused";
+		this.onChange?.({ from, goal: { ...this.goal } });
+	}
+
+	resume(): void {
+		if (!this.goal || this.goal.status === "achieved") return;
+		const from = this.goal.status;
+		this.goal.status = "active";
+		this.goal.idleWithoutTools = 0;
+		this.goal.blockedReason = undefined;
+		this.onChange?.({ from, goal: { ...this.goal } });
+	}
+
+	markAchieved(): void {
+		if (!this.goal) return;
+		const from = this.goal.status;
+		this.goal.status = "achieved";
+		this.onChange?.({ from, goal: { ...this.goal } });
+	}
+
+	clear(): void {
+		if (!this.goal) return;
+		const from = this.goal.status;
+		this.goal = undefined;
+		this.onChange?.({ from, goal: { objective: "", status: "achieved", roundCount: 0, idleWithoutTools: 0 } });
+	}
+
+	setBlockedReason(reason: GoalBlockedReason): void {
+		if (!this.goal) return;
+		this.goal.blockedReason = reason;
+	}
+
+	/** Call at turn end with whether the turn produced tool work.
+	 * Applies anti-spin: N consecutive tool-free turns pause the goal.
+	 * Returns true when a pause happened (caller emits the change event). */
+	recordTurnOutcome(hadTools: boolean): boolean {
+		if (!this.goal || this.goal.status !== "active") return false;
+		if (hadTools) {
+			this.goal.idleWithoutTools = 0;
+			return false;
+		}
+		this.goal.idleWithoutTools += 1;
+		if (this.goal.idleWithoutTools >= this.antiSpinLimit) {
+			this.goal.status = "paused";
+			this.onChange?.({ from: "active", goal: { ...this.goal } });
+			return true;
+		}
+		return false;
+	}
+
+	/** Whether the goal manager should enqueue a continuation driver now.
+	 * The caller then runs the evaluator; `noteContinuation` on pass. */
+	wantsContinuation(): boolean {
+		return (
+			this.gate === "auto" &&
+			this.goal?.status === "active" &&
+			this.goal.roundCount < this.maxContinuations
+		);
+	}
+
+	noteContinuation(): void {
+		if (this.goal) this.goal.roundCount += 1;
+	}
+}
+
+/** Intent phrases: the model says it is mid-task; continue without a goal. */
+const INTENT_PHRASES = [
+	"now let me",
+	"next i'll",
+	"next i will",
+	"continuing with",
+	"i'll now",
+	"i will now",
+	"let me now",
+	"moving on to",
+	"proceeding to",
+];
+
+/** True when the last assistant text shows clear intent to keep working. */
+export function lastMessageShowsIntent(text: string): boolean {
+	const lower = text.toLowerCase();
+	return INTENT_PHRASES.some((phrase) => lower.includes(phrase));
+}
