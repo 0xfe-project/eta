@@ -157,6 +157,8 @@ export interface CurrentOperationInfo {
 }
 
 export interface LaneExecutionInfo {
+	running: boolean;
+	activeOperation: boolean;
 	lane: string;
 	tipId: string | null;
 	configuredModel: ModelIdentity;
