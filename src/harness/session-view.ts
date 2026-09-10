@@ -131,17 +131,10 @@ export class SessionViewProjector {
 		}
 		const messages: SessionViewMessage[] = [];
 		const systems: SessionViewSystemRow[] = [];
-		const thinking: string[] = [];
 		let compactionEpoch = 0;
 		for (const entry of entries) {
 			if (entry.type === "message") {
 				messages.push({ entryId: entry.id, seq: entry.seq, at: entry.timestamp, message: entry.message });
-				const content = (entry.message as { content?: unknown }).content;
-				if (Array.isArray(content)) {
-					for (const block of content as { type?: string; thinking?: string }[]) {
-						if (block.type === "thinking" && typeof block.thinking === "string") thinking.push(block.thinking);
-					}
-				}
 				continue;
 			}
 			if (entry.type === "compaction") {
@@ -186,6 +179,16 @@ export class SessionViewProjector {
 		}
 		const messagesBefore = Math.max(0, messages.length - VIEW_MESSAGE_WINDOW);
 		const windowedMessages = messages.slice(-VIEW_MESSAGE_WINDOW);
+		// Thinking blocks are read out of the windowed messages, not the whole log:
+		// the transcript that left the window must not keep its thinking behind.
+		const thinking: string[] = [];
+		for (const row of windowedMessages) {
+			const content = (row.message as { content?: unknown }).content;
+			if (!Array.isArray(content)) continue;
+			for (const block of content as { type?: string; thinking?: string }[]) {
+				if (block.type === "thinking" && typeof block.thinking === "string") thinking.push(block.thinking);
+			}
+		}
 		const pending = ask.pendingAsks();
 		const stats = await lane.getStats(context);
 		const specView = (spec: LoopSpec): SessionViewLoop => ({
