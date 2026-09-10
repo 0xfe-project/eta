@@ -1,5 +1,6 @@
 import type { ServerWebSocket } from "bun";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import { statSync } from "node:fs";
 
 export type TermSocket = ServerWebSocket<{ kind?: "ws" | "term"; socketId?: number; shell?: unknown }>;
@@ -37,8 +38,9 @@ export class TermRegistry {
 			const shell = process.env.SHELL ?? "/bin/zsh";
 			const handle: ShellHandle = { proc: undefined as unknown as BunShell, alive: true };
 			socket.data.shell = handle;
+			const requested = frame.cwd === undefined ? undefined : frame.cwd === "~" ? homedir() : frame.cwd.startsWith("~/") ? join(homedir(), frame.cwd.slice(2)) : frame.cwd;
 			const proc = Bun.spawn([shell, "-i"], {
-				cwd: frame.cwd && directoryExists(frame.cwd) ? frame.cwd : homedir(),
+				cwd: requested !== undefined && directoryExists(requested) ? requested : homedir(),
 				env: { ...process.env, TERM: "xterm-256color" },
 				terminal: {
 					cols: frame.cols,
