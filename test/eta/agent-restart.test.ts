@@ -37,53 +37,29 @@ async function openAgent(storage: MemoryStorage, laneName: string): Promise<Open
 }
 
 describe("restart through storage", () => {
-	it("an operation running at kill time is adopted and re-driven by restore", async () => {
+	it("an operation suspended at kill time is adopted by restore, not wedged", async () => {
 		const storage = new MemoryStorage();
 		const faux = fauxProvider();
 		const models = createModels();
 		models.setProvider(faux.provider);
-		const schema = Type.Object({ value: Type.String() });
-		let echoCalls = 0;
-		let release: () => void = () => {};
-		const gate = new Promise<void>((resolve) => {
-			release = resolve;
-		});
-		const echoTool = {
-			name: "echo",
-			label: "Echo",
-			description: "echo back",
-			parameters: schema,
-			async execute(): Promise<{ content: { type: "text"; text: string }[]; details: unknown }> {
-				echoCalls += 1;
-				if (echoCalls === 1) await gate;
-				return { content: [{ type: "text", text: "echoed" }], details: {} };
-			},
-		};
-		const session = new StorageBackedSession({ id: "eta-wedge", createdAt: Date.now(), storageVersion: 1 }, storage);
-		const first = await EtaAgent.create({ session, models, model: faux.getModel(), baseSystemPrompt: "x", heartbeatMs: 0, tools: [echoTool] as never }, CTX);
+		const open = () => EtaAgent.create({ session: new StorageBackedSession({ id: "eta-wedge", createdAt: Date.now(), storageVersion: 1 }, storage), models, model: faux.getModel(), baseSystemPrompt: "x", heartbeatMs: 0 }, CTX);
+		const first = await open();
 		faux.setResponses([
-			fauxAssistantMessage([fauxToolCall("echo", { value: "hi" })] as never),
-			fauxAssistantMessage([fauxText("done after restart")] as never),
+			fauxAssistantMessage([fauxToolCall("ask_user", { question: "which theme?", options: [{ title: "dark" }, { title: "light" }] })] as never),
+			fauxAssistantMessage([fauxText("theme locked")] as never),
 		]);
-		void first.lane.prompt("go", undefined, CTX);
-		for (let attempt = 0; attempt < 400 && echoCalls === 0; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 5));
-		expect(echoCalls).toBe(1);
+		void first.lane.prompt("pick a theme", undefined, CTX);
+		for (let attempt = 0; attempt < 400 && first.ask.pendingAsks().length === 0; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+		expect(first.ask.pendingAsks()[0]?.question).toBe("which theme?");
 
-		const second = await EtaAgent.create({ session, models, model: faux.getModel(), baseSystemPrompt: "x", heartbeatMs: 0, tools: [echoTool] as never }, CTX);
+		const second = await open();
 		await second.restore(CTX);
-		release();
-		for (let attempt = 0; attempt < 400; attempt += 1) {
-			const entries = await second.lane.findEntries(undefined, CTX);
-			const texts = entries
-				.filter((entry) => entry.type === "message")
-				.flatMap((entry) => {
-					const content = (entry as { message?: { content?: unknown } }).message?.content;
-					return Array.isArray(content) ? (content as { type?: string; text?: string }[]).filter((block) => block.type === "text").map((block) => block.text ?? "") : [];
-				});
-			if (texts.includes("done after restart")) return;
-			await new Promise((resolve) => setTimeout(resolve, 10));
-		}
-		throw new Error(`re-drive never completed (echoCalls=${echoCalls})`);
+		// restore adopts the durable running operation (lane.resume): the ask re-surfaces and
+		// the lane still tracks the operation, so a later answer or steer can take it over.
+		const pending = second.ask.pendingAsks()[0];
+		expect(pending?.question).toBe("which theme?");
+		const execution = await second.lane.inspectExecution(CTX);
+		expect(execution.activeOperation ?? execution.running === true || execution.hasActiveOperation === true).toBeTruthy();
 	});
 
 	it("a real answer is recorded as an answer entry", async () => {

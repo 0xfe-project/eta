@@ -303,6 +303,7 @@ export class EtaAgent {
 				onAsk: (payload) => writeEntry(askEntry(payload)),
 				...(options.askTimeoutMs === undefined ? {} : { timeoutMs: options.askTimeoutMs }),
 			}),
+			...(options.tools ?? []),
 		];
 
 		const personaBox: { persona?: { names: string[]; text: string } } = {
@@ -338,7 +339,7 @@ export class EtaAgent {
 				...(systemPrompt === undefined ? {} : { systemPrompt }),
 				activeToolNames: [...new Set(agentTools.map((tool) => tool.name))],
 			...(options.executionEnv === undefined ? {} : { toolContext: { env: options.executionEnv } }),
-				tools: [...agentTools, ...(options.tools ?? [])],
+				tools: agentTools,
 			},
 			context,
 		);
