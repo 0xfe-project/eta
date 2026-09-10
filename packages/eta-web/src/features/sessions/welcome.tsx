@@ -48,10 +48,10 @@ export function Welcome({ onCreated, onNavigateSettings }: { onCreated: (name: s
 
 	return (
 		<div data-testid="welcome" className="relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden px-4">
-			<div data-testid="welcome-wordmark" className="mono pointer-events-none absolute inset-0 flex items-center justify-center text-[18vh] font-black tracking-[0.08em] select-none" style={{ color: "color-mix(in oklab, var(--foreground) 6%, transparent)" }}>
+			<div data-testid="welcome-wordmark" className="mono pointer-events-none absolute inset-x-0 top-0 flex items-start justify-center pt-[9vh] text-[18vh] font-black leading-none tracking-[0.08em] select-none" style={{ color: "color-mix(in oklab, var(--foreground) 6%, transparent)" }}>
 				eta
 			</div>
-			<div className="relative z-10 w-full max-w-[860px]">
+			<div className="relative z-10 mt-[26vh] w-full max-w-[860px]">
 				<p data-testid="persona-hint" className="mb-2 text-center font-mono text-[11px] text-muted">
 					{personaId === null ? t("new.pickPersona") : ""}
 				</p>
