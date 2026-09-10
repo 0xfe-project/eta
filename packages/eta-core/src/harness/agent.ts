@@ -51,6 +51,8 @@ export interface EtaAgentOptions {
 	baseSystemPrompt?: string;
 	/** Persona cards baked into the stable prompt block (renderPersonaBlock output). */
 	persona?: { names: string[]; text: string };
+	/** Pre-rendered <skills> catalog block; watch-reloadable via applySkills. */
+	skillsSection?: string;
 	/** Extra tools the caller owns (merged with the battery tools). */
 	tools?: readonly AgentHarnessTool<object | undefined>[];
 	/** Independent goal judge; true = achieved. */
@@ -112,6 +114,14 @@ export class EtaAgent {
 	personas: string[] = [];
 	/** Mutable persona box read by the prompt-block builder; swapped mid-session via applyPersona. */
 	personaBox: { persona?: { names: string[]; text: string } } = { persona: undefined };
+	/** Mutable <skills> catalog box; swapped by watch reloads via applySkills. */
+	skillBox: { skills?: string } = {};
+
+	/** Swap the <skills> catalog mid-session: rebuild prompt blocks so the new list rides the stable block. */
+	applySkills(block: string | undefined): void {
+		this.skillBox.skills = block === undefined || block.length === 0 ? undefined : block;
+		void this.refreshPromptBlocks();
+	}
 
 	/** Swap the persona mid-session: rebuild prompt blocks and mirror the new names. */
 	applyPersona(persona: { names: string[]; text: string } | undefined): void {
@@ -298,6 +308,9 @@ export class EtaAgent {
 		const personaBox: { persona?: { names: string[]; text: string } } = {
 			...(options.persona === undefined ? {} : { persona: options.persona }),
 		};
+		const skillBox: { skills?: string } = {
+			...(options.skillsSection === undefined || options.skillsSection.length === 0 ? {} : { skills: options.skillsSection }),
+		};
 		const refreshBlocks = async (): Promise<string> => {
 			const memory = await options.memorySource?.();
 			const state = {
@@ -306,6 +319,7 @@ export class EtaAgent {
 					: { goal: { objective: goal.current.objective, status: goal.current.status } }),
 				tasks: tasks.list(),
 				...(personaBox.persona === undefined || personaBox.persona.text.length === 0 ? {} : { persona: personaBox.persona.text }),
+				...(skillBox.skills === undefined ? {} : { skills: skillBox.skills }),
 				...(memory === undefined || memory.length === 0 ? {} : { memory }),
 			};
 			const blocks = etaPromptBlockChars(options.baseSystemPrompt ?? "", state);
@@ -372,6 +386,7 @@ export class EtaAgent {
 			await refreshBlocks();
 		});
 		agent.personaBox = personaBox;
+		agent.skillBox = skillBox;
 		agent.personas = personaBox.persona?.names ?? [];
 		return agent;
 	}

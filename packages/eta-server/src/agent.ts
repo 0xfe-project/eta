@@ -17,6 +17,7 @@ import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { MemoryStorage, StorageBackedSession } from "@eta/core";
 import { configDefaultModel, configModels, loadEtaConfig } from "./config.ts";
 import { renderPersonaFor } from "./personas.ts";
+import { discoverSkillDirs, renderSkillsBlock, watchSkillDirs } from "./skills.ts";
 
 export interface SessionConfig {
 	name: string;
@@ -75,13 +76,16 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 	const session = new StorageBackedSession({ id: cfg.name, createdAt: Date.now(), storageVersion: 1, cwd: cfg.cwd }, storage);
 	const memoryCache = new MemoryCache(new NodeEtaFs(), homedir());
 	const judgeApiKey = providerApiKey(etaConfig, model.provider);
+	const execEnv = new NodeExecutionEnv({ cwd: cfg.cwd });
+	const skillsBlock = await renderSkillsBlock(execEnv, cfg.cwd);
 	const agent = await EtaAgent.create(
 		{
 			session,
 			models: models ?? withFaux(faux!),
 			model,
 			baseSystemPrompt: DEFAULT_SYSTEM_PROMPT,
-			executionEnv: new NodeExecutionEnv({ cwd: cfg.cwd }),
+			executionEnv: execEnv,
+			skillsSection: skillsBlock === "" ? undefined : skillsBlock,
 			persona,
 			heartbeatMs: 0,
 			memorySource: async () => (await memoryCache.load(cfg.cwd)).text,
@@ -130,6 +134,11 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 			if (handle.getPendingResponseCount() === 0) handle.appendResponses([echoResponder(cfg.personaId)]);
 		});
 	}
+	let skillsTimer: ReturnType<typeof setTimeout> | undefined;
+	watchSkillDirs(discoverSkillDirs(cfg.cwd), () => {
+		clearTimeout(skillsTimer);
+		skillsTimer = setTimeout(() => void renderSkillsBlock(execEnv, cfg.cwd).then((block) => agent.applySkills(block)), 300);
+	});
 	return { agent, faux, memory: async () => memoryCache.load(cfg.cwd) };
 }
 

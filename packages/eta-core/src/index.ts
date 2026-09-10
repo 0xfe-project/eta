@@ -141,6 +141,7 @@ export {
 	type Skill,
 	toError,
 } from "./harness/types.ts";
+export { loadSkills, type SkillDiagnostic } from "./harness/skills.ts";
 export { applyShellOutputUpdate } from "./harness/utils/output-capture.ts";
 export * from "./harness/utils/shell-output.ts";
 export * from "./harness/utils/truncate.ts";
