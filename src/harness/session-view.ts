@@ -15,6 +15,8 @@ import type { GoalState } from "./goal.ts";
 import type { LoopSpec } from "./loops.ts";
 import type { BtwThread } from "./btw.ts";
 import type { StoredTask } from "./task-store.ts";
+import type { Entry } from "./session/types.ts";
+import { buildContextEntries, sessionEntryToContextMessages } from "./session/context.ts";
 
 export interface SessionViewMessage {
 	entryId: string;
@@ -126,47 +128,13 @@ export class SessionViewProjector {
 		const systems: SessionViewSystemRow[] = [];
 		const thinking: string[] = [];
 		let compactionEpoch = 0;
-		let userChars = 0;
-		let assistantChars = 0;
-		let toolChars = 0;
-		const blockChars = (block: { text?: unknown; thinking?: unknown; content?: unknown; args?: unknown }): number =>
-			(typeof block.text === "string" ? block.text.length : 0) +
-			(typeof block.thinking === "string" ? block.thinking.length : 0) +
-			(typeof block.content === "string"
-				? block.content.length
-				: Array.isArray(block.content)
-					? (block.content as { text?: string }[]).reduce((n, part) => n + (part.text?.length ?? 0), 0)
-					: 0) +
-			(block.args !== undefined ? JSON.stringify(block.args).length : 0);
 		for (const entry of entries) {
 			if (entry.type === "message") {
 				messages.push({ entryId: entry.id, seq: entry.seq, at: entry.timestamp, message: entry.message });
-				const message = entry.message as { role?: string; content?: unknown };
-				const content = message.content;
-				if (message.role === "toolResult") {
-					toolChars +=
-						typeof content === "string"
-							? content.length
-							: Array.isArray(content)
-								? (content as { text?: string; content?: unknown }[]).reduce(
-										(n, block) => n + blockChars(block),
-										0,
-									)
-								: 0;
-					continue;
-				}
+				const content = (entry.message as { content?: unknown }).content;
 				if (Array.isArray(content)) {
-					for (const block of content as {
-						type?: string;
-						thinking?: string;
-						text?: string;
-						content?: unknown;
-						args?: unknown;
-					}[]) {
+					for (const block of content as { type?: string; thinking?: string }[]) {
 						if (block.type === "thinking" && typeof block.thinking === "string") thinking.push(block.thinking);
-						const chars = blockChars(block);
-						if (message.role === "user") userChars += chars;
-						else assistantChars += chars;
 					}
 				}
 				continue;
@@ -234,9 +202,7 @@ export class SessionViewProjector {
 			goal: goal.current,
 			tasks: tasks.list(),
 			contextShare: {
-				userChars,
-				assistantChars,
-				toolChars,
+				...contextShare(entries),
 				toolDefChars: this.agent.agentTools.reduce(
 					(n, tool) =>
 						n +
@@ -276,14 +242,25 @@ export class SessionViewProjector {
 	): Promise<{ view: SessionView; detach(): void }> {
 		const offs: (() => void)[] = [];
 		let queued = false;
+		// Events that land while a snapshot is in flight are exactly the ones that
+		// must not be dropped — the commit of a run's last message usually is one.
+		// The in-flight pass re-runs once for everything it swallowed.
+		let again = false;
 		const refresh = () => {
-			if (queued) return;
+			if (queued) {
+				again = true;
+				return;
+			}
 			queued = true;
 			void this.snapshot(context)
 				.then(listener)
 				.catch(() => undefined)
 				.finally(() => {
 					queued = false;
+					if (again) {
+						again = false;
+						refresh();
+					}
 				});
 		};
 		for (const type of VIEW_EVENTS) offs.push(this.agent.harness.events.on(type, refresh));
@@ -307,6 +284,48 @@ export class SessionViewProjector {
 		);
 		return { view: await this.snapshot(context), detach: () => offs.forEach((off) => off()) };
 	}
+}
+
+/**
+ * Transcript size by role, measured over the context the model would actually be
+ * sent: from the last compaction onward, that entry contributing its summary and
+ * its retained tail — the same expansion `buildSessionContext` performs. Summing
+ * the whole log instead is what kept the donut at its pre-compaction level: the
+ * compacted-away messages were still being counted, so nothing came down.
+ */
+export function contextShare(entries: readonly Entry[]): {
+	userChars: number;
+	assistantChars: number;
+	toolChars: number;
+} {
+	const blockChars = (block: { text?: unknown; thinking?: unknown; content?: unknown; args?: unknown }): number =>
+		(typeof block.text === "string" ? block.text.length : 0) +
+		(typeof block.thinking === "string" ? block.thinking.length : 0) +
+		(typeof block.content === "string"
+			? block.content.length
+			: Array.isArray(block.content)
+				? (block.content as { text?: string }[]).reduce((n, part) => n + (part.text?.length ?? 0), 0)
+				: 0) +
+		(block.args !== undefined ? JSON.stringify(block.args).length : 0);
+	const messageChars = (message: AgentMessage): number => {
+		// Compaction and branch summaries carry their text in `summary`.
+		const candidate = message as { content?: unknown; summary?: unknown };
+		if (typeof candidate.summary === "string") return candidate.summary.length;
+		const content = candidate.content;
+		if (typeof content === "string") return content.length;
+		if (!Array.isArray(content)) return 0;
+		return (content as Parameters<typeof blockChars>[0][]).reduce((sum, block) => sum + blockChars(block), 0);
+	};
+	let userChars = 0;
+	let assistantChars = 0;
+	let toolChars = 0;
+	for (const message of buildContextEntries(entries).flatMap(sessionEntryToContextMessages)) {
+		const chars = messageChars(message);
+		if (message.role === "toolResult") toolChars += chars;
+		else if (message.role === "user") userChars += chars;
+		else assistantChars += chars;
+	}
+	return { userChars, assistantChars, toolChars };
 }
 
 /** Output tokens of an in-flight message: provider usage when present, else a chars/3 estimate. */
