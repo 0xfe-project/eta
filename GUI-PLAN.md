@@ -177,3 +177,12 @@ picot 右侧是 4 个可独立开合栏:文件树+Git tab(staged/changes/untrack
 - [x] 选了粗跳档 + 当前窗口(fisheye 的离散版,同 skip-list 分层):钉子 = 最旧 + 最新 + 中间均匀 4 根,永远不动;再加当前回合 ±3 的细窗。40 个回合 → 12 格 + 4 个 `⋯`,一屏看完。
 - [x] `⋯` 说得出跳了多远(`title="跳过 23 回合"`),采样这件事就不藏着;格子从 `h-5` 缩到 `h-4`、间距 4→3,为了十几格塞进右栏给的那 ~350px。
 - [x] 锚点不动 ⇒ 滚动时只有细窗在滑,整栏不重排 —— 这就是没选递归二分(A 方案)的原因:焦点跟滚动,递归重排会晃。
+
+### T10 失败的回合要说话(2026-09-11,用户:前端加上 stopReason==="error" 的红色气泡)
+
+- 起因:Desktop 那个会话每轮都被模型端点 400 拒(`Failed to load image`),assistant 的 `content` 是空的,前端又**从没读过** `stopReason` / `errorMessage`(grep 零命中)—— 气泡里只剩一个时间戳,于是「每轮都失败」看起来像「界面冻住」。
+- [x] eta-web 与 eta-client 两边同一处渲染:`failure` memo 认 `stopReason === "error" | "aborted"`,渲染 `data-testid="message-error"`(danger 描边 + 12% danger 底,和 `.tool-badge.failed` 同一套语义色)+ 详情一行。
+- [x] `aborted` 一起管:journal 里那种「Assistant request was interrupted」同样是隐形失败。
+- [x] i18n:`timeline.error` / `timeline.aborted` / `timeline.errorNoDetail`(provider 不给原因时也有一句话,不留空气泡)。
+- [x] 两边各 3 条测试(error / 无详情 / stop 时不渲染)。
+- 坑:`<Show when={failure() !== null}>{(v) => …}</Show>` 回调拿到的是那个**布尔**,不是对象;要 `when={failure()}` 直接把对象交给回调。

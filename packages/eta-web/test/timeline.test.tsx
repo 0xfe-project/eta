@@ -146,3 +146,25 @@ describe("timeline jump rail", () => {
 		expect(document.body.textContent).toContain("最早的一条");
 	});
 });
+
+describe("a turn that died", () => {
+	function failedView(stopReason: string, errorMessage?: string) {
+		const message = { role: "assistant", content: [], stopReason, ...(errorMessage === undefined ? {} : { errorMessage }) } as unknown as SessionView["messages"][number]["message"];
+		return { messages: [{ entryId: "a1", seq: 0, at: 0, message }] as SessionView["messages"], systems: [], streaming: undefined } as unknown as SessionView;
+	}
+
+	it("says why instead of showing an empty bubble", () => {
+		render(<Timeline view={failedView("error", '400: {"message":"Failed to load image"}')} session="s-1" />);
+		expect(byId("message-error-detail").textContent).toContain("Failed to load image");
+	});
+
+	it("still speaks when the provider stays silent", () => {
+		render(<Timeline view={failedView("aborted")} session="s-1" />);
+		expect(byId("message-error-detail").textContent!.trim().length).toBeGreaterThan(0);
+	});
+
+	it("stays out of the way when the turn is fine", () => {
+		render(<Timeline view={failedView("stop")} session="s-1" />);
+		expect(queryId("message-error")).toBeNull();
+	});
+});

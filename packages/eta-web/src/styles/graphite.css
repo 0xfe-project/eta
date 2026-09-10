@@ -768,6 +768,28 @@ details[open] > .tool-card-head .thinking-block-chevron {
 	color: var(--danger);
 	border-color: var(--danger);
 }
+
+.message-error {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	margin: 6px 0;
+	padding: 6px 10px;
+	border: 1px solid var(--danger);
+	background: color-mix(in oklab, var(--danger) 12%, transparent);
+	color: var(--danger);
+	font-size: 12px;
+}
+.message-error-label {
+	font-size: 9px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+.message-error-text {
+	color: var(--foreground);
+	opacity: 0.85;
+	word-break: break-word;
+}
 .msg-footer {
 	opacity: 0.75;
 }

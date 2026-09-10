@@ -380,11 +380,29 @@ function AssistantMessage(props: { message: unknown; session: string; streaming:
 			.filter((value): value is string => value !== null),
 	)]);
 
+
+	// A turn can die with no content at all — a provider 400, an abort. Without this the
+	// message renders as an empty bubble, and a session that is failing every turn just
+	// looks frozen.
+	const failure = createMemo(() => {
+		const message = props.message as { stopReason?: string; errorMessage?: unknown };
+		if (message.stopReason !== "error" && message.stopReason !== "aborted") return null;
+		return { aborted: message.stopReason === "aborted", detail: String(message.errorMessage ?? "") };
+	});
+
 	return (
 		<div class="message assistant my-2" data-testid="assistant-message">
 			<Index each={blocks()}>
 				{(block) => <AssistantBlock block={block()} streaming={props.streaming} results={props.results} />}
 			</Index>
+			<Show when={failure()}>
+				{(fail) => (
+					<div data-testid="message-error" class="message-error" role="status">
+						<span class="message-error-label mono">{i18n.t(fail().aborted ? "timeline.aborted" : "timeline.error")}</span>
+						<span data-testid="message-error-detail" class="message-error-text">{fail().detail !== "" ? fail().detail : i18n.t("timeline.errorNoDetail")}</span>
+					</div>
+				)}
+			</Show>
 			<Show when={touched().length > 0}>
 				<div data-testid="turn-file-chips" class="turn-file-chips">
 					<For each={touched()}>
