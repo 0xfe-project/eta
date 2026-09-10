@@ -869,7 +869,7 @@ html.dark .markdown [data-streamdown="code-block-body"] span {
 	padding: 0;
 	border: 1px solid var(--border-strong);
 	border-radius: 0;
-	background: var(--code-bg);
+	background: var(--background);
 }
 .markdown [data-streamdown="code-block-header"] {
 	display: flex;
