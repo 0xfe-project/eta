@@ -1,29 +1,23 @@
-import { Streamdown } from "streamdown";
-import "streamdown/styles.css";
-import { code } from "@streamdown/code";
-import { math } from "@streamdown/math";
+import { StreamMarkdown } from "solid-streamdown";
+import "solid-streamdown/styles.css";
 import "katex/dist/katex.min.css";
 
-const plugins = { code, math };
-
-export function MarkdownMessage({ content }: { content: string }) {
+export function MarkdownMessage(props: { content: string }) {
 	return (
-		<Streamdown mode="streaming" plugins={plugins} className="message-content markdown" data-testid="message-markdown">
-			{content}
-		</Streamdown>
+		<div data-testid="message-markdown">
+			<StreamMarkdown content={props.content} showCaret={false} class="message-content markdown" />
+		</div>
 	);
 }
 
-export function MessageMarkdown({ content, streaming }: { content: string; streaming: boolean }) {
+export function MessageMarkdown(props: { content: string; streaming: boolean }) {
 	return (
-		<Streamdown
-			mode="streaming"
-			isAnimating={streaming}
-			plugins={plugins}
-			className={"message-content markdown" + (streaming ? " streaming" : "")}
-			data-testid="message-markdown"
-		>
-			{content}
-		</Streamdown>
+		<div data-testid="message-markdown">
+			<StreamMarkdown
+				content={props.content}
+				showCaret={props.streaming}
+				class={"message-content markdown" + (props.streaming ? " streaming" : "")}
+			/>
+		</div>
 	);
 }

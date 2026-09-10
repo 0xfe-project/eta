@@ -1,6 +1,5 @@
-import { useMemo } from "react";
-import { useLocation } from "wouter";
-import { Command } from "cmdk";
+import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
+import { useNavigate } from "@solidjs/router";
 import { useAppI18n } from "../../i18n.ts";
 import { etaStore, useEta } from "../../lib/eta-store.ts";
 import { useAppTheme } from "../../app/theme.tsx";
@@ -13,82 +12,113 @@ interface CommandEntry {
 }
 
 export function CommandPalette() {
-	const { t, locale, setLocale } = useAppI18n();
-	const { setTheme } = useAppTheme();
+	const i18n = useAppI18n();
+	const theme = useAppTheme();
 	const state = useEta();
-	const [, navigate] = useLocation();
+	const navigate = useNavigate();
 	const shell = useShell();
+	const [query, setQuery] = createSignal("");
+	const [active, setActive] = createSignal(0);
 
-	const commands = useMemo<CommandEntry[]>(
-		() => [
-			...state.sessions.map((session) => ({
-				id: `focus-${session.name}`,
-				label: `${t("nav.sessions")} → ${session.name}`,
-				run: () => {
-					etaStore().send({ op: "focus", session: session.name });
-					shell.setPaletteOpen(false);
-					navigate("/");
-				},
-			})),
-			{
-				id: "new",
-				label: t("nav.new"),
-				run: () => {
-					shell.setPaletteOpen(false);
-					navigate("/new");
-				},
+	const commands = createMemo<CommandEntry[]>(() => [
+		...state.sessions.map((session) => ({
+			id: `focus-${session.name}`,
+			label: `${i18n.t("nav.sessions")} → ${session.name}`,
+			run: () => {
+				etaStore().send({ op: "focus", session: session.name });
+				shell.setPaletteOpen(false);
+				void navigate("/");
 			},
-			{
-				id: "theme-dark",
-				label: `${t("settings.theme")}: ${t("theme.dark")}`,
-				run: () => {
-					setTheme("dark");
-					shell.setPaletteOpen(false);
-				},
+		})),
+		{
+			id: "new",
+			label: i18n.t("nav.new"),
+			run: () => {
+				shell.setPaletteOpen(false);
+				void navigate("/new");
 			},
-			{
-				id: "theme-light",
-				label: `${t("settings.theme")}: ${t("theme.light")}`,
-				run: () => {
-					setTheme("light");
-					shell.setPaletteOpen(false);
-				},
+		},
+		{
+			id: "theme-dark",
+			label: `${i18n.t("settings.theme")}: ${i18n.t("theme.dark")}`,
+			run: () => {
+				theme.setTheme("dark");
+				shell.setPaletteOpen(false);
 			},
-			{
-				id: "locale-toggle",
-				label: `${t("settings.language")}: ${locale === "en" ? "中文" : "English"}`,
-				run: () => {
-					setLocale(locale === "en" ? "zh-CN" : "en");
-					shell.setPaletteOpen(false);
-				},
+		},
+		{
+			id: "theme-light",
+			label: `${i18n.t("settings.theme")}: ${i18n.t("theme.light")}`,
+			run: () => {
+				theme.setTheme("light");
+				shell.setPaletteOpen(false);
 			},
-		],
-		[state.sessions, locale, navigate, setLocale, setTheme, shell, t],
-	);
+		},
+		{
+			id: "locale-toggle",
+			label: `${i18n.t("settings.language")}: ${i18n.locale === "en" ? "中文" : "English"}`,
+			run: () => {
+				i18n.setLocale(i18n.locale === "en" ? "zh-CN" : "en");
+				shell.setPaletteOpen(false);
+			},
+		},
+	]);
+
+	const filtered = createMemo(() => {
+		const needle = query().trim().toLowerCase();
+		return needle.length === 0 ? commands() : commands().filter((command) => command.label.toLowerCase().includes(needle));
+	});
+
+	createEffect(() => {
+		filtered();
+		setActive(0);
+	});
+
+	const onKey = (event: KeyboardEvent) => {
+		if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+			event.preventDefault();
+			const size = filtered().length;
+			if (size === 0) return;
+			const step = event.key === "ArrowDown" ? 1 : -1;
+			setActive((index) => (index + step + size) % size);
+			return;
+		}
+		if (event.key === "Enter") {
+			event.preventDefault();
+			filtered()[active()]?.run();
+		}
+	};
 
 	return (
-		<div data-testid="command-palette" className="border-2 border-border-strong bg-popover text-popover-foreground shadow-[6px_6px_0_0_var(--shadow)]">
-			<Command data-testid="command-root" className="bg-transparent">
-				<Command.Input
+		<div data-testid="command-palette" class="border-2 border-border-strong bg-popover text-popover-foreground shadow-[6px_6px_0_0_var(--shadow)]">
+			<div data-testid="command-root" class="bg-transparent">
+				<input
 					data-testid="palette-input"
-					autoFocus
-					placeholder={t("palette.placeholder")}
-					className="w-full border-b border-border bg-transparent px-3 py-2 text-sm outline-none"
+					autofocus
+					placeholder={i18n.t("palette.placeholder")}
+					value={query()}
+					onInput={(event) => setQuery(event.currentTarget.value)}
+					onKeyDown={onKey}
+					class="w-full border-b border-border bg-transparent px-3 py-2 text-sm outline-none"
 				/>
-				<Command.List className="max-h-[300px] overflow-y-auto p-1">
-					<Command.Empty className="px-3 py-2 font-mono text-[11px] text-muted">{t("palette.empty")}</Command.Empty>
-					{commands.map((command) => (
-						<Command.Item
-							key={command.id}
-							data-testid={`palette-item-${command.id}`}
-							onSelect={command.run}
-							className="flex cursor-pointer items-center px-3 py-1.5 text-sm outline-none select-none data-[selected=true]:bg-primary data-[selected=true]:text-primary-foreground"
-						>
-							{command.label}
-						</Command.Item>
-					))}
-				</Command.List>
-			</Command>
+				<div class="max-h-[300px] overflow-y-auto p-1">
+					<Show when={filtered().length === 0}>
+						<p class="px-3 py-2 font-mono text-[11px] text-muted">{i18n.t("palette.empty")}</p>
+					</Show>
+					<For each={filtered()}>
+						{(command, index) => (
+							<button
+								data-testid={`palette-item-${command.id}`}
+								data-selected={index() === active() ? "true" : "false"}
+								onClick={() => command.run()}
+								class={`flex w-full cursor-pointer items-center px-3 py-1.5 text-left text-sm outline-none select-none ${index() === active() ? "bg-primary text-primary-foreground" : ""}`}
+							>
+								{command.label}
+							</button>
+						)}
+					</For>
+				</div>
+			</div>
 		</div>
 	);
 }

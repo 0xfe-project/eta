@@ -1,31 +1,12 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { StrictMode } from "react";
-import { render, act } from "@testing-library/react";
-import { cleanup } from "@testing-library/react";
+// @vitest-environment jsdom
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { queryId } from "./dom.ts";
+import { FakeSocket } from "./fake-socket.ts";
+import { click, flush, render } from "./render.tsx";
+import { Route } from "@solidjs/router";
 import { MemoryRouter } from "./memory-router.tsx";
 import { SessionsPage } from "../src/pages/sessions-page.tsx";
 import { ThemeProvider } from "../src/app/theme.tsx";
-import { etaStore } from "../src/lib/eta-store.ts";
-import { ThemeProvider as _tp } from "../src/app/theme.tsx";
-
-void _tp;
-
-class FakeSocket {
-	static instances: FakeSocket[] = [];
-	readyState = 1;
-	listeners = new Map<string, ((event: unknown) => void)[]>();
-	constructor(_url: string) {
-		FakeSocket.instances.push(this);
-	}
-	addEventListener(type: string, cb: (event: unknown) => void): void {
-		this.listeners.set(type, [...(this.listeners.get(type) ?? []), cb]);
-	}
-	send(_data: string): void {}
-	close(): void {}
-	fire(type: string, event: unknown): void {
-		for (const cb of this.listeners.get(type) ?? []) cb(event);
-	}
-}
 
 function view(session: string): unknown {
 	return {
@@ -52,37 +33,62 @@ function view(session: string): unknown {
 	};
 }
 
-afterEach(() => {
-	cleanup();
-	FakeSocket.instances = [];
-	vi.unstubAllGlobals();
-});
-
 describe("sessions page smoke", () => {
-	it("renders a hello + view without looping", () => {
+	beforeEach(() => {
 		vi.stubGlobal("WebSocket", FakeSocket);
 		vi.stubGlobal("fetch", () => Promise.resolve({ ok: false, json: () => Promise.resolve([]) } as Response));
+	});
+
+	it("renders a hello + view without looping", () => {
 		render(
-			<StrictMode>
-				<ThemeProvider>
-					<MemoryRouter>
-						<SessionsPage />
-					</MemoryRouter>
-				</ThemeProvider>
-			</StrictMode>,
+			<ThemeProvider>
+				<MemoryRouter>
+					<Route path="/" component={SessionsPage} />
+				</MemoryRouter>
+			</ThemeProvider>,
 		);
-		expect(document.querySelector("[data-testid='welcome-wordmark']")).not.toBeNull();
+		expect(queryId("welcome-wordmark")).not.toBeNull();
 		const socket = FakeSocket.instances[0]!;
-		act(() => socket.fire("open", {}));
-		act(() => socket.fire("message", { data: JSON.stringify({ type: "hello", sessions: [{ name: "s1", badges: [], personas: [] }], attach: "s1" }) }));
-		act(() => socket.fire("message", { data: JSON.stringify({ channel: "view", session: "s1", view: view("s1") }) }));
-		if (document.querySelector("[data-testid='user-message']") === null) console.log("BODY:", document.body.innerHTML.slice(0, 1200));
-		expect(document.querySelector("[data-testid='user-message']")).not.toBeNull();
-		act(() => {
-			(document.querySelector("[data-testid='prompt-open']") as HTMLButtonElement).click();
-		});
-		expect(document.querySelector("[data-testid='prompt-section-base']")).not.toBeNull();
+		flush(() => socket.fire("open", {}));
+		flush(() => socket.fire("message", { data: JSON.stringify({ type: "hello", sessions: [{ name: "s1", badges: [], personas: [] }], attach: "s1" }) }));
+		flush(() => socket.fire("message", { data: JSON.stringify({ channel: "view", session: "s1", view: view("s1") }) }));
+		expect(queryId("user-message")).not.toBeNull();
+		flush(() => click("prompt-open"));
+		expect(queryId("prompt-section-base")).not.toBeNull();
+	});
+
+	it("pauses the dev rail so later frames stay off the list", () => {
+		render(
+			<ThemeProvider>
+				<MemoryRouter>
+					<Route path="/" component={SessionsPage} />
+				</MemoryRouter>
+			</ThemeProvider>,
+		);
+		const socket = FakeSocket.instances[0]!;
+		flush(() => socket.fire("open", {}));
+		flush(() => socket.fire("message", { data: JSON.stringify({ type: "hello", sessions: [{ name: "s1", badges: [], personas: [] }], attach: "s1" }) }));
+		flush(() => socket.fire("message", { data: JSON.stringify({ channel: "view", session: "s1", view: view("s1") }) }));
+		for (let i = 0; i < 3; i += 1) {
+			flush(() =>
+				socket.fire("message", {
+					data: JSON.stringify({ channel: "dev", frame: { ts: i, session: "s1", category: "state", action: `a${i}`, data: {} } }),
+				}),
+			);
+		}
+		click("tab-dev");
+		expect(document.querySelectorAll('[data-testid="dev-frame"]')).toHaveLength(3);
+		click("dev-pause");
+		expect(queryId("dev-pause")?.textContent).toBe("resume");
+		flush(() =>
+			socket.fire("message", {
+				data: JSON.stringify({ channel: "dev", frame: { ts: 99, session: "s1", category: "state", action: "paused-out", data: {} } }),
+			}),
+		);
+		expect(document.querySelectorAll('[data-testid="dev-frame"]')).toHaveLength(3);
+		expect(document.body.textContent).not.toContain("paused-out");
+		click("dev-pause");
+		expect(document.querySelectorAll('[data-testid="dev-frame"]')).toHaveLength(4);
+		expect(document.body.textContent).toContain("paused-out");
 	});
 });
-
-void etaStore;

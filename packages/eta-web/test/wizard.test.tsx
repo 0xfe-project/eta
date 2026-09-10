@@ -1,22 +1,13 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { Route, Switch } from "wouter";
+import { Route } from "@solidjs/router";
+import { byId, findId, queryId } from "./dom.ts";
+import { FakeSocket } from "./fake-socket.ts";
+import { click, render } from "./render.tsx";
 import { MemoryRouter } from "./memory-router.tsx";
-
-class FakeSocket {
-	static sent: string[] = [];
-	readyState = 1;
-	addEventListener(): void {}
-	close(): void {}
-	send(data: string): void {
-		FakeSocket.sent.push(data);
-	}
-}
 
 describe("new session wizard", () => {
 	beforeEach(() => {
-		FakeSocket.sent = [];
 		vi.stubGlobal("WebSocket", FakeSocket);
 		vi.stubGlobal(
 			"fetch",
@@ -33,24 +24,20 @@ describe("new session wizard", () => {
 		const { NewSessionPage } = await import("../src/pages/new-session-page.tsx");
 		render(
 			<MemoryRouter initial="/new">
-				<Switch>
-					<Route path="/new">{<NewSessionPage />}</Route>
-					<Route path="/"><div data-testid="home">home</div></Route>
-				</Switch>
+				<Route path="/new" component={NewSessionPage} />
+				<Route path="/" component={() => <div data-testid="home">home</div>} />
 			</MemoryRouter>,
 		);
-		const grid = await screen.findByTestId("persona-grid");
-		expect(grid.children).toHaveLength(2);
-		const create = screen.getByTestId("create-session") as HTMLButtonElement;
-		expect(create.disabled).toBe(true);
-		expect(screen.getByTestId("persona-required")).toBeTruthy();
+		await findId("persona-card-Thinker");
+		expect(byId("persona-grid").children).toHaveLength(2);
+		expect((byId("create-session") as HTMLButtonElement).disabled).toBe(true);
+		expect(queryId("persona-required")).not.toBeNull();
 
-		fireEvent.click(screen.getByTestId("persona-card-Executor"));
-		expect(create.disabled).toBe(false);
-		fireEvent.click(create);
+		click("persona-card-Executor");
+		expect((byId("create-session") as HTMLButtonElement).disabled).toBe(false);
+		click("create-session");
 
-		const message = JSON.parse(FakeSocket.sent.at(-1)!) as Record<string, unknown>;
-		expect(message).toMatchObject({ op: "session.create", personaId: "Executor" });
-		expect(screen.getByTestId("home")).toBeTruthy();
+		expect(FakeSocket.last()).toMatchObject({ op: "session.create", personaId: "Executor" });
+		expect(await findId("home")).toBeTruthy();
 	});
 });

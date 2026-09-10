@@ -1,6 +1,5 @@
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import { Route, Router, Switch } from "wouter";
+import { render } from "solid-js/web";
+import { Route, Router } from "@solidjs/router";
 import "./styles/graphite.css";
 import "./styles.css";
 import "./i18n.ts";
@@ -13,17 +12,16 @@ function NotFound() {
 	return null;
 }
 
-createRoot(document.getElementById("root")!).render(
-	<StrictMode>
+render(
+	() => (
 		<ThemeProvider>
 			<Router>
-				<Switch>
-					<Route path="/" component={SessionsPage} />
-					<Route path="/new" component={NewSessionPage} />
-					<Route path="/settings" component={SettingsPage} />
-					<Route component={NotFound} />
-				</Switch>
+				<Route path="/" component={SessionsPage} />
+				<Route path="/new" component={NewSessionPage} />
+				<Route path="/settings" component={SettingsPage} />
+				<Route path="*404" component={NotFound} />
 			</Router>
 		</ThemeProvider>
-	</StrictMode>,
+	),
+	document.getElementById("root")!,
 );

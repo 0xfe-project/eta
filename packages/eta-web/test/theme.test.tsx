@@ -1,9 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-
-import { fireEvent, render, screen } from "@testing-library/react";
-import { ThemeProvider } from "../src/app/theme.tsx";
-import { resolveTheme } from "../src/app/theme.tsx";
+import { click, render } from "./render.tsx";
+import { ThemeProvider, resolveTheme } from "../src/app/theme.tsx";
 import "../src/i18n.ts";
 
 describe("theme provider", () => {
@@ -21,11 +19,11 @@ describe("theme provider", () => {
 				<SettingsPage />
 			</ThemeProvider>,
 		);
-		fireEvent.click(screen.getByTestId("theme-light"));
+		click("theme-light");
 		expect(document.documentElement.classList.contains("light")).toBe(true);
 		expect(document.documentElement.classList.contains("dark")).toBe(false);
 		expect(localStorage.getItem("eta.theme")).toBe("light");
-		fireEvent.click(screen.getByTestId("theme-dark"));
+		click("theme-dark");
 		expect(document.documentElement.classList.contains("dark")).toBe(true);
 		expect(localStorage.getItem("eta.theme")).toBe("dark");
 	});

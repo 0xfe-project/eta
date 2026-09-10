@@ -1,5 +1,5 @@
 import i18next, { type i18n as I18nInstance } from "i18next";
-import { initReactI18next, useTranslation } from "react-i18next";
+import { createSignal } from "solid-js";
 import { defaultLocale, resources, supportedLocales, type AppLocale, type TranslationKey } from "@eta/i18n";
 import { detectLocale, localeChangeEvent, localeStorageKey, persistLocale } from "./i18n/locale.ts";
 
@@ -21,16 +21,17 @@ const initialLocale =
 				navigator.language,
 			);
 
-void i18n.use(initReactI18next).init({
+void i18n.init({
 	fallbackLng: defaultLocale,
 	interpolation: { escapeValue: false, prefix: "{", suffix: "}" },
 	keySeparator: false,
 	nsSeparator: false,
 	lng: initialLocale,
-	react: { useSuspense: false },
 	resources,
 	supportedLngs: [...supportedLocales],
 });
+
+const [locale, setLocaleState] = createSignal<AppLocale>(initialLocale === "en" ? "en" : "zh-CN");
 
 if (typeof window !== "undefined") {
 	document.documentElement.lang = initialLocale;
@@ -53,6 +54,7 @@ async function applyExternalLocale(): Promise<void> {
 	const next = detectLocale(window.location.search, safeStorage(), document.cookie || null, navigator.language);
 	if (next !== i18n.language) await i18n.changeLanguage(next);
 	document.documentElement.lang = next;
+	setLocaleState(next === "en" ? "en" : "zh-CN");
 }
 
 function safeStorage(): string | null {
@@ -68,10 +70,14 @@ export function useAppI18n(): {
 	setLocale: (next: AppLocale) => void;
 	t: (key: TranslationKey, options?: Record<string, unknown>) => string;
 } {
-	const { t, i18n: active } = useTranslation();
 	return {
-		locale: (active.language === "en" ? "en" : "zh-CN") as AppLocale,
+		get locale() {
+			return locale();
+		},
 		setLocale: (next) => persistLocale(next),
-		t: (key, options) => String(t(String(key), options)),
+		t: (key, options) => {
+			locale();
+			return String(i18n.t(String(key), options));
+		},
 	};
 }
