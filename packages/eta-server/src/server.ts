@@ -68,6 +68,8 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 		});
 	};
 
+	const sockets = new Set<Socket>();
+
 	const unsubscribe = host.subscribe((frame) => {
 		for (const socket of sockets) {
 			send(socket, frame);
@@ -223,7 +225,6 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 		},
 	});
 	const opTails = new Map<Socket, Promise<void>>();
-	const sockets = new Set<Socket>();
 	let nextSocketId = 1;
 
 	return {
