@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createSignal, on, onCleanup, type JSX } from "solid-js";
+import { For, Index, Show, createEffect, createSignal, on, onCleanup, type JSX } from "solid-js";
 import type { SessionView } from "@eta/core";
 import { useAppI18n } from "../../i18n.ts";
 import { etaStore } from "../../lib/eta-store.ts";
@@ -369,26 +369,33 @@ function UsageDonut(props: { view: SessionView; contextWindow: number | null }) 
 		<div class="flex items-center gap-3">
 			<svg viewBox="0 0 120 120" class="h-[124px] w-[124px] shrink-0" data-testid="usage-donut">
 				<circle cx="60" cy="60" r={r} fill="none" stroke="var(--overlay)" stroke-width="14" />
-				<For each={dashNodes()}>
+				{/*
+				 * Index, not For: `slices()` builds fresh object literals on every read and
+				 * the numbers under it move with every token, so keying by item identity
+				 * would rebuild six circles and six legend rows per token — inside the panel
+				 * the user is trying to click. There is always one slice per source and the
+				 * order is fixed, so position is the honest key and only the attributes move.
+				 */}
+				<Index each={dashNodes()}>
 					{(slice) => (
-						<circle cx="60" cy="60" r={r} fill="none" stroke={slice.color} stroke-opacity={slice.opacity ?? 1} stroke-width="14" stroke-dasharray={`${slice.dash} ${c - slice.dash}`} stroke-dashoffset={-slice.offset} transform="rotate(-90 60 60)">
-							<title>{`${slice.label}: ~${slice.tokens.toLocaleString()} tokens`}</title>
+						<circle cx="60" cy="60" r={r} fill="none" stroke={slice().color} stroke-opacity={slice().opacity ?? 1} stroke-width="14" stroke-dasharray={`${slice().dash} ${c - slice().dash}`} stroke-dashoffset={-slice().offset} transform="rotate(-90 60 60)">
+							<title>{`${slice().label}: ~${slice().tokens.toLocaleString()} tokens`}</title>
 						</circle>
 					)}
-				</For>
+				</Index>
 				<text x="60" y="57" text-anchor="middle" dominant-baseline="middle" fill="var(--foreground)" font-size="17" font-weight="700">{used().toLocaleString()}</text>
 				<text x="60" y="74" text-anchor="middle" dominant-baseline="middle" fill="var(--muted-foreground)" font-size="9">{`ctx ${Math.round(ctx() / 1000)}k · ${Math.min(999, Math.round((used() / ctx()) * 100))}%`}</text>
 			</svg>
 			<div class="grid min-w-0 flex-1 grid-cols-1 gap-0.5 text-[10px]">
-				<For each={slices()}>
+				<Index each={slices()}>
 					{(slice) => (
 						<span class="flex items-center gap-1.5 truncate text-muted">
-							<span class="h-2 w-2 shrink-0" style={{ background: slice.color, opacity: slice.opacity ?? 1 }} />
-							<span class="truncate">{slice.label}</span>
-							<span class="mono ml-auto text-foreground">~{slice.tokens.toLocaleString()}</span>
+							<span class="h-2 w-2 shrink-0" style={{ background: slice().color, opacity: slice().opacity ?? 1 }} />
+							<span class="truncate">{slice().label}</span>
+							<span class="mono ml-auto text-foreground">~{slice().tokens.toLocaleString()}</span>
 						</span>
 					)}
-				</For>
+				</Index>
 				<span class="flex items-center gap-1.5 text-muted">
 					<span class="h-2 w-2 shrink-0 bg-overlay" />
 					<span class="truncate">{i18n.t("usage.remaining")}</span>

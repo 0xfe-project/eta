@@ -1,7 +1,8 @@
-import { For, Show, createMemo, createSignal } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js";
 import { A, useNavigate } from "@solidjs/router";
 import { useAppI18n } from "../../i18n.ts";
 import { etaStore, useEta } from "../../lib/eta-store.ts";
+import { sidebarPrefs, type ProjectSort } from "../../lib/prefs.ts";
 import type { SidebarSession } from "../../lib/protocol.ts";
 
 // Graphite rule: saturation reserved for state (goal ok / ask needs attention / running).
@@ -14,13 +15,41 @@ const BADGE_STYLES: Record<string, string> = {
 	"goal-done": "bg-primary/20 text-primary",
 };
 
+const PINNED_GROUP = "\u0000pinned";
+const ARCHIVED_GROUP = "\u0000archived";
+const UNGROUPED = "\u0000ungrouped";
+const GROUP_LIMIT = 6;
+
+interface Group {
+	key: string;
+	/** Full cwd, or UNGROUPED when the session has no cwd at all. */
+	path: string;
+	label: string;
+	/** Set when another cwd shares this basename, so the two stay tellable apart. */
+	parent: string;
+	sessions: SidebarSession[];
+	running: number;
+	unread: number;
+}
+
+function basenameOf(path: string): string {
+	return path.split("/").filter((part) => part.length > 0).pop() ?? path;
+}
+
+function parentOf(path: string): string {
+	const parts = path.split("/").filter((part) => part.length > 0);
+	return parts.length < 2 ? "" : parts[parts.length - 2]!;
+}
+
 export function Sidebar(props: { selected: string | null; termActive: boolean; onTerminal: () => void }) {
 	const i18n = useAppI18n();
 	const state = useEta();
 	const store = etaStore();
+	const navigate = useNavigate();
 	const [query, setQuery] = createSignal("");
 	const [hits, setHits] = createSignal<{ session: string; snippet: string }[] | null>(null);
-	const navigate = useNavigate();
+	const collapsed = () => sidebarPrefs.collapsed;
+	const sort = () => sidebarPrefs.sort;
 	const [expanded, setExpanded] = createSignal<string[]>([]);
 
 	const search = (value: string) => {
@@ -35,18 +64,77 @@ export function Sidebar(props: { selected: string | null; termActive: boolean; o
 			.catch(() => setHits(null));
 	};
 
+	const byUpdated = (a: SidebarSession, b: SidebarSession) => (b.updated ?? 0) - (a.updated ?? 0);
+	const isUnread = (session: SidebarSession) => state.unread.includes(session.name);
 	const visible = createMemo(() => state.sessions.filter((session) => session.archived !== true));
 	const archived = createMemo(() => state.sessions.filter((session) => session.archived === true));
-	const byUpdated = (a: SidebarSession, b: SidebarSession) => (b.updated ?? 0) - (a.updated ?? 0);
-	const projectKeys = createMemo(() => [...new Set(visible().map((session) => session.cwd ?? session.name))].sort());
-	const projectOf = (key: string) => visible().filter((session) => (session.cwd ?? session.name) === key).sort(byUpdated);
-	const basenameOf = (key: string) => key.split("/").filter((part) => part.length > 0).pop() ?? key;
+	const pinned = createMemo(() => visible().filter((session) => session.pinned === true).sort(byUpdated));
+
+	const groups = createMemo<Group[]>(() => {
+		const keys = [...new Set(visible().filter((session) => session.pinned !== true).map((session) => session.cwd ?? UNGROUPED))];
+		const built = keys.map((key) => {
+			const members = visible()
+				.filter((session) => session.pinned !== true && (session.cwd ?? UNGROUPED) === key)
+				.sort(byUpdated);
+			return {
+				key,
+				path: key,
+				label: key === UNGROUPED ? i18n.t("sidebar.ungrouped") : basenameOf(key),
+				parent: "",
+				sessions: members,
+				running: members.filter((session) => session.badges.includes("running")).length,
+				unread: members.filter(isUnread).length,
+			} satisfies Group;
+		});
+		const duplicated = new Set(built.map((group) => group.label).filter((label, index, all) => all.indexOf(label) !== index));
+		for (const group of built) group.parent = duplicated.has(group.label) ? parentOf(group.path) : "";
+		return built.sort((a, b) =>
+			sort() === "name"
+				? a.label.localeCompare(b.label)
+				: Math.max(0, ...b.sessions.map((session) => session.updated ?? 0)) - Math.max(0, ...a.sessions.map((session) => session.updated ?? 0)),
+		);
+	});
+
+	const foldable = createMemo(() => [...groups().map((group) => group.key), ARCHIVED_GROUP]);
+	const allCollapsed = () => foldable().every((key) => collapsed().includes(key));
+	const toggleGroup = (key: string) => sidebarPrefs.toggleCollapsed(key);
+	const toggleAll = () => sidebarPrefs.setCollapsed(allCollapsed() ? [] : foldable());
+	const pickSort = (mode: ProjectSort) => sidebarPrefs.setSort(mode);
+	const isOpen = (key: string) => !collapsed().includes(key);
+	const testKeyOf = (group: Group) => (group.path === UNGROUPED ? "ungrouped" : basenameOf(group.path));
+
+	const rowProps = (session: SidebarSession) => ({
+		session,
+		unread: isUnread(session),
+		selected: session.name === props.selected,
+		onSelect: () => store.send({ op: "focus", session: session.name }),
+		onDelete: () => store.send({ op: "session.delete", name: session.name }),
+		onPin: () => store.send({ op: "session.pin", session: session.name, pinned: session.pinned !== true }),
+		onArchive: () => store.send({ op: "session.archive", session: session.name, archived: session.archived !== true }),
+		onRename: (title: string) => store.send({ op: "session.rename", session: session.name, title }),
+	});
 
 	return (
 		<div class="flex h-full flex-col" data-testid="sidebar">
 			<div class="topbar gap-2 px-3">
 				<img src="/Eta-Logo.svg" alt="eta" class="h-5 w-5 shrink-0" data-testid="logo" />
 				<div class="ml-auto flex gap-1">
+					<button
+						data-testid="sidebar-sort"
+						title={i18n.t("sidebar.sortTitle")}
+						onClick={() => pickSort(sort() === "recent" ? "name" : "recent")}
+						class="border border-border px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-muted hover:text-foreground"
+					>
+						{i18n.t(sort() === "recent" ? "sidebar.sortRecent" : "sidebar.sortName")}
+					</button>
+					<button
+						data-testid="sidebar-fold"
+						title={i18n.t("sidebar.collapseAll")}
+						onClick={toggleAll}
+						class="border border-border px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-muted hover:text-foreground"
+					>
+						{allCollapsed() ? i18n.t("sidebar.expandAll") : i18n.t("sidebar.collapseAll")}
+					</button>
 					<button
 						data-testid="term-toggle"
 						onClick={() => props.onTerminal()}
@@ -91,89 +179,140 @@ export function Sidebar(props: { selected: string | null; termActive: boolean; o
 				<Show when={state.sessions.length === 0}>
 					<p class="p-2 text-sm text-muted">{i18n.t("sidebar.noSessions")}</p>
 				</Show>
-				<For each={projectKeys()}>
-					{(key) => {
-						const group = () => projectOf(key);
-						const showAll = () => expanded().includes(key) || group().length <= 6;
-						const shown = () => (showAll() ? group() : group().slice(0, 5));
+				<Show when={pinned().length > 0}>
+					<Section
+						testid="group-pinned"
+						title={i18n.t("sidebar.pinned")}
+						count={pinned().length}
+						open={isOpen(PINNED_GROUP)}
+						onToggle={() => toggleGroup(PINNED_GROUP)}
+					>
+						<For each={pinned()}>{(session) => <SessionRow {...rowProps(session)} />}</For>
+					</Section>
+				</Show>
+				<For each={groups()}>
+					{(group) => {
+						const key = testKeyOf(group);
+						const showAll = () => expanded().includes(group.key) || group.sessions.length <= GROUP_LIMIT;
+						const shown = () => (showAll() ? group.sessions : group.sessions.slice(0, GROUP_LIMIT));
 						return (
-							<details open data-testid={`group-project-${basenameOf(key)}`} class="mb-1">
-								<summary class="flex cursor-pointer items-center gap-1 px-1 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted">
-									<span data-testid={`project-name-${basenameOf(key)}`} class="truncate">{basenameOf(key)}</span>
-									<span class="bg-overlay px-1 text-[9px]">{group().length}</span>
-									<button
-										data-testid={`project-new-${basenameOf(key)}`}
-										title={i18n.t("sidebar.newInProject")}
-										class="ml-auto border border-border-strong px-1 text-[9px] hover:bg-foreground hover:text-background"
-										onClick={(event) => {
-											event.preventDefault();
-											void navigate(`/new?cwd=${encodeURIComponent(key)}`);
-										}}
-									>
-										+
-									</button>
-								</summary>
-								<For each={group().filter((session) => session.pinned === true && shown().includes(session))}>
-									{(session) => (
-										<SessionRow
-											session={session}
-											unread={state.unread.includes(session.name)}
-											selected={session.name === props.selected}
-											onSelect={() => store.send({ op: "focus", session: session.name })}
-											onDelete={() => store.send({ op: "session.delete", name: session.name })}
-											onPin={() => store.send({ op: "session.pin", session: session.name, pinned: session.pinned !== true })}
-											onArchive={() => store.send({ op: "session.archive", session: session.name, archived: session.archived !== true })}
-											onRename={(title) => store.send({ op: "session.rename", session: session.name, title })}
-										/>
-									)}
-								</For>
-								<For each={shown().filter((session) => session.pinned !== true)}>
-									{(session) => (
-										<SessionRow
-											session={session}
-											unread={state.unread.includes(session.name)}
-											selected={session.name === props.selected}
-											onSelect={() => store.send({ op: "focus", session: session.name })}
-											onDelete={() => store.send({ op: "session.delete", name: session.name })}
-											onPin={() => store.send({ op: "session.pin", session: session.name, pinned: session.pinned !== true })}
-											onArchive={() => store.send({ op: "session.archive", session: session.name, archived: session.archived !== true })}
-											onRename={(title) => store.send({ op: "session.rename", session: session.name, title })}
-										/>
-									)}
-								</For>
+							<Section
+								testid={`group-project-${key}`}
+								title={group.label}
+								path={group.path === UNGROUPED ? undefined : group.path}
+								parent={group.parent}
+								running={group.running}
+								unreadCount={group.unread}
+								count={group.sessions.length}
+								open={isOpen(group.key)}
+								onToggle={() => toggleGroup(group.key)}
+								newTitle={i18n.t("sidebar.newInProject")}
+								onNew={group.path === UNGROUPED ? undefined : () => void navigate(`/new?cwd=${encodeURIComponent(group.path)}`)}
+							>
+								<For each={shown()}>{(session) => <SessionRow {...rowProps(session)} />}</For>
 								<Show when={!showAll()}>
-									<button data-testid={`project-more-${basenameOf(key)}`} class="w-full px-1 py-1 text-left text-[10px] text-accent" onClick={() => setExpanded((current) => [...current, key])}>
-										{i18n.t("sidebar.showMore")} ({group().length - shown().length})
+									<button data-testid={`project-more-${key}`} class="w-full px-1 py-1 text-left text-[10px] text-accent" onClick={() => setExpanded((current) => [...current, group.key])}>
+										{i18n.t("sidebar.showMore")} ({group.sessions.length - shown().length})
 									</button>
 								</Show>
-							</details>
+							</Section>
 						);
 					}}
 				</For>
 				<Show when={archived().length > 0}>
-					<details data-testid="group-archived">
-						<summary class="cursor-pointer px-1 pb-1 pt-2 text-[10px] font-semibold text-muted">{i18n.t("sidebar.archived")} ({archived().length})</summary>
-						<For each={archived()}>
-							{(session) => (
-								<SessionRow
-									session={session}
-									unread={state.unread.includes(session.name)}
-									selected={session.name === props.selected}
-									onSelect={() => store.send({ op: "focus", session: session.name })}
-									onDelete={() => store.send({ op: "session.delete", name: session.name })}
-									onPin={() => store.send({ op: "session.pin", session: session.name, pinned: session.pinned !== true })}
-									onArchive={() => store.send({ op: "session.archive", session: session.name, archived: session.archived !== true })}
-									onRename={(title) => store.send({ op: "session.rename", session: session.name, title })}
-								/>
-							)}
-						</For>
-					</details>
+					<Section
+						testid="group-archived"
+						title={i18n.t("sidebar.archived")}
+						count={archived().length}
+						open={isOpen(ARCHIVED_GROUP)}
+						onToggle={() => toggleGroup(ARCHIVED_GROUP)}
+					>
+						<For each={archived()}>{(session) => <SessionRow {...rowProps(session)} />}</For>
+					</Section>
 				</Show>
 			</div>
 			<Show when={!state.connected}>
 				<p data-testid="connection-banner" class="border-t border-border bg-warning/10 p-2 text-xs text-warning">{i18n.t("connection.disconnected")}</p>
 			</Show>
 		</div>
+	);
+}
+
+function Section(props: {
+	testid: string;
+	title: string;
+	path?: string;
+	parent?: string;
+	count: number;
+	running?: number;
+	unreadCount?: number;
+	open: boolean;
+	onToggle(): void;
+	newTitle?: string;
+	onNew?(): void;
+	children?: JSX.Element;
+}) {
+	return (
+		<div class="mb-1" data-testid={props.testid}>
+			<div class="flex items-center gap-1 px-1 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted">
+				<button
+					data-testid={`${props.testid}-toggle`}
+					title={props.path ?? props.title}
+					onClick={props.onToggle}
+					class="flex min-w-0 items-center gap-1 hover:text-foreground"
+				>
+					<span class="shrink-0">{props.open ? "▾" : "▸"}</span>
+					<span data-testid={props.testid.replace("group-", "project-name-")} class="truncate">{props.title}</span>
+					<Show when={(props.parent ?? "").length > 0}>
+						<span class="mono shrink-0 text-[9px] normal-case text-faint">/{props.parent}</span>
+					</Show>
+				</button>
+				<Show when={(props.running ?? 0) > 0}>
+					<span data-testid={`${props.testid}-running`} class="bg-accent px-1 text-[9px] text-accent-foreground">{props.running}</span>
+				</Show>
+				<Show when={(props.unreadCount ?? 0) > 0}>
+					<span data-testid={`${props.testid}-unread`} class="bg-overlay px-1 text-[9px] text-accent">{props.unreadCount}</span>
+				</Show>
+				<span class="bg-overlay px-1 text-[9px]">{props.count}</span>
+				<Show when={props.onNew !== undefined}>
+					<button
+						data-testid={props.testid.replace("group-project-", "project-new-")}
+						title={props.newTitle}
+						class="ml-auto border border-border-strong px-1 text-[9px] hover:bg-foreground hover:text-background"
+						onClick={props.onNew}
+					>
+						+
+					</button>
+				</Show>
+			</div>
+			<Show when={props.open}>{props.children}</Show>
+		</div>
+	);
+}
+
+/** Title replaced in place: focused and selected, so renaming means typing, not clicking twice. */
+function RenameField(props: { testid: string; initial: string; onCommit(next: string): void; onCancel(): void }) {
+	const [value, setValue] = createSignal(props.initial);
+	let field: HTMLInputElement | undefined;
+	onMount(() => {
+		field?.focus();
+		field?.select();
+	});
+	return (
+		<input
+			data-testid={props.testid}
+			ref={field}
+			value={value()}
+			onInput={(event) => setValue(event.currentTarget.value)}
+			onKeyDown={(event) => {
+				event.stopPropagation();
+				if (event.key === "Enter") props.onCommit(value());
+				if (event.key === "Escape") props.onCancel();
+			}}
+			onBlur={() => props.onCommit(value())}
+			onClick={(event) => event.stopPropagation()}
+			class="mono min-w-0 flex-1 border border-accent bg-elevated px-1 text-sm outline-none"
+		/>
 	);
 }
 
@@ -190,6 +329,39 @@ function humanizeAge(updated: number | undefined): string {
 function SessionRow(props: { session: SidebarSession; unread: boolean; selected: boolean; onSelect(): void; onDelete(): void; onPin(): void; onArchive(): void; onRename(title: string): void }) {
 	const i18n = useAppI18n();
 	const [menuOpen, setMenuOpen] = createSignal(false);
+	const [draft, setDraft] = createSignal<string | null>(null);
+	let anchor: HTMLDivElement | undefined;
+
+	// The menu lives inside a scrolling list and is gone as soon as anything else
+	// takes focus, so it closes on outside press and on Escape rather than only
+	// from its own trigger.
+	createEffect(() => {
+		if (!menuOpen()) return;
+		const onPointer = (event: MouseEvent) => {
+			const target = event.target as Node | null;
+			if (target !== null && anchor !== undefined && anchor.contains(target)) return;
+			setMenuOpen(false);
+		};
+		const onKey = (event: KeyboardEvent) => {
+			if (event.key === "Escape") setMenuOpen(false);
+		};
+		document.addEventListener("mousedown", onPointer);
+		document.addEventListener("keydown", onKey);
+		onCleanup(() => {
+			document.removeEventListener("mousedown", onPointer);
+			document.removeEventListener("keydown", onKey);
+		});
+	});
+
+	const title = () => props.session.title ?? props.session.name;
+	// Blur fires once more as the field unmounts; the cleared draft makes that a no-op.
+	const applyRename = (next: string) => {
+		if (draft() === null) return;
+		setDraft(null);
+		const trimmed = next.trim();
+		if (trimmed.length > 0 && trimmed !== title()) props.onRename(trimmed);
+	};
+
 	return (
 		<div
 			role="button"
@@ -198,7 +370,19 @@ function SessionRow(props: { session: SidebarSession; unread: boolean; selected:
 			class={`group mb-1 cursor-pointer border border-transparent p-2 ${props.selected ? "border-border-strong bg-overlay" : "hover:bg-overlay"}`}
 		>
 			<div class="flex items-center gap-1">
-				<span class="truncate text-sm">{props.session.title ?? props.session.name}</span>
+				<Show
+					when={draft() === null}
+					fallback={
+						<RenameField
+							testid={`session-rename-input-${props.session.name}`}
+							initial={draft() ?? ""}
+							onCommit={applyRename}
+							onCancel={() => setDraft(null)}
+						/>
+					}
+				>
+					<span class="truncate text-sm">{title()}</span>
+				</Show>
 				<Show when={props.session.pinned === true}>
 					<span data-testid={`pinned-${props.session.name}`} class="text-[10px] text-muted">◆</span>
 				</Show>
@@ -206,10 +390,11 @@ function SessionRow(props: { session: SidebarSession; unread: boolean; selected:
 					<span data-testid={`unread-${props.session.name}`} class="h-2 w-2 shrink-0 bg-accent" />
 				</Show>
 				<span data-testid={`session-age-${props.session.name}`} class="ml-auto shrink-0 mono text-[10px] text-muted">{humanizeAge(props.session.updated)}</span>
-				<div class="relative shrink-0">
+				<div ref={anchor} class="relative shrink-0">
 					<button
 						data-testid={`session-menu-${props.session.name}`}
 						aria-label="menu"
+						aria-expanded={menuOpen()}
 						class="border border-transparent px-1 text-xs text-muted hover:border-border-strong hover:text-foreground"
 						onClick={(event) => {
 							event.stopPropagation();
@@ -226,8 +411,7 @@ function SessionRow(props: { session: SidebarSession; unread: boolean; selected:
 								onClick={(event) => {
 									event.stopPropagation();
 									setMenuOpen(false);
-									const next = window.prompt(i18n.t("sidebar.renameTo"), props.session.title ?? props.session.name);
-									if (next !== null && next.trim().length > 0) props.onRename(next.trim());
+									setDraft(title());
 								}}
 							>
 								{i18n.t("sidebar.rename")}
@@ -271,6 +455,9 @@ function SessionRow(props: { session: SidebarSession; unread: boolean; selected:
 			</div>
 			<Show when={props.session.title !== undefined}>
 				<p class="mono truncate text-[10px] text-muted">{props.session.name}</p>
+			</Show>
+			<Show when={props.session.cwd !== undefined}>
+				<p class="mono truncate text-[10px] text-faint" title={props.session.cwd}>{props.session.cwd}</p>
 			</Show>
 			<div class="mt-1 flex flex-wrap gap-1">
 				<For each={props.session.personas}>

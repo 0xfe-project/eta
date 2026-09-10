@@ -16,8 +16,18 @@ import {
 	type HarnessEvent,
 	type LaneQueuedItem,
 	type SessionView,
+	type ThinkingLevel,
 } from "@eta/core";
-import { DevRing, type ChannelFrame, type DevFrame, type SidebarSession } from "./protocol.ts";
+import {
+	DevRing,
+	encodeMessage,
+	viewFingerprint,
+	viewPatch,
+	type ChannelFrame,
+	type DevFrame,
+	type SidebarSession,
+} from "./protocol.ts";
+import { ViewPacer } from "./view-pacer.ts";
 import { configDefaultModel, etaConfigPath, loadEtaConfig, type EtaConfig } from "./config.ts";
 import { createSessionAgent, type CreatedSession } from "./agent.ts";
 import { renderPersonaFor } from "./personas.ts";
@@ -72,6 +82,8 @@ interface Hosted {
 	projector: SessionViewProjector;
 	ring: DevRing;
 	view: SessionView;
+	/** Coalesces this session's view frames; see view-pacer.ts. */
+	pacer: ViewPacer;
 	running: boolean;
 	queue: LaneQueuedItem[];
 	cwd: string;
@@ -87,6 +99,34 @@ export interface HostOptions {
 	configPath?: string;
 	/** Where per-session journals and meta.json live; defaults to ~/.eta/sessions. */
 	dataDir?: string;
+}
+
+/**
+ * View-frame budget. Measured on a live 675-message session: one snapshot is
+ * 2.0MB and streaming pushed 21 of them per second — 42MB/s into a single browser
+ * tab, whose main thread then could not answer a click for 200ms. A frame now
+ * buys silence in proportion to its own size, so the wire stops costing more as a
+ * conversation grows; the session in front keeps a tighter floor because that is
+ * the streaming you are watching, and the ones behind it settle for a few updates
+ * a second. See view-pacer.ts.
+ */
+const ATTACHED_VIEW_FLOOR_MS = 100;
+const BACKGROUND_VIEW_FLOOR_MS = 600;
+const VIEW_TARGET_BYTES_PER_SECOND = 4 * 1024 * 1024;
+
+/** Levels the thinking chip offers; anything else in a settings POST is dropped. */
+const THINKING_LEVELS: readonly ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+
+/**
+ * Defaults new sessions start from, edited on the settings page and kept in
+ * `<dataDir>/settings.json`. Deliberately narrow: only things that are useless
+ * to change per message and have no better home.
+ */
+export interface SettingsFile {
+	personaId?: string;
+	modelId?: string;
+	thinkingLevel?: ThinkingLevel;
+	keepRecentTokens?: number;
 }
 
 interface SessionMetaFile {
@@ -112,7 +152,7 @@ export class Host {
 	private etaConfig(): EtaConfig {
 		return loadEtaConfig(this.configPath) ?? {};
 	}
-	private readonly listeners = new Set<(frame: ChannelFrame) => void>();
+	private readonly listeners = new Set<(frame: ChannelFrame, payload?: string) => void>();
 	private attachPointerValue: string | null = null;
 
 	get attachPointer(): string | null {
@@ -121,6 +161,10 @@ export class Host {
 
 	focus(name: string): void {
 		this.attachPointerValue = name;
+		// Whoever just came to the front should not have to wait out a budget bought
+		// by frames sent while it was in the background, and the client may have been
+		// holding a frame from before the last reconnect.
+		this.hosted.get(name)?.pacer.publishNow();
 	}
 
 	async createSession(name: string, personaId: string, cwd: string, modelId?: string): Promise<void> {
@@ -213,14 +257,17 @@ export class Host {
 				/* first boot for this session */
 			}
 		}
+		const pacer = this.createViewPacer(name);
 		const entry: Hosted = {
 			agent,
 			projector,
 			ring,
+			pacer,
 			view: this.stampView({
 				agent,
 				projector,
 				ring,
+				pacer,
 				view: null as unknown as SessionView,
 				running: false,
 				queue: [],
@@ -244,12 +291,24 @@ export class Host {
 		this.refreshBranch(name);
 		for (const type of AGENT_EVENT_TYPES) {
 			agent.harness.events.on(type, (event: HarnessEvent) => {
-				if (type === "run_start") entry.running = true;
-				if (type === "run_end") entry.running = false;
+				// A run's boundaries are not traffic: the frame that opens one and the
+				// frame that closes it are the ones somebody is waiting for, so both get
+				// the budget forgiven and only the tokens in between are coalesced.
+				if (type === "run_start") {
+					entry.running = true;
+					entry.pacer.relax();
+				}
+				// The projector refreshes on run_end as well, and that refresh is the
+				// frame carrying "not running any more": forgive the budget so it is the
+				// next one out rather than one queued behind the run's own traffic.
+				if (type === "run_end") {
+					entry.running = false;
+					entry.pacer.relax();
+				}
 				if (type === "queue_update") {
 					entry.queue = (event as { queues: LaneQueuedItem[] }).queues;
 					entry.view = this.stampView(entry);
-					this.emit({ channel: "view", session: name, view: entry.view });
+					this.publishView(name);
 				}
 				this.emit({ channel: "agent", session: name, event });
 			});
@@ -271,11 +330,77 @@ export class Host {
 		});
 		const attached = await projector.attach((view) => {
 			entry.view = this.stampView(entry, view);
-			this.emit({ channel: "view", session: name, view });
+			this.publishView(name);
 		}, BACKGROUND_CONTEXT);
 		entry.detach = attached.detach;
 		this.attachPointerValue ??= name;
-		this.emit({ channel: "view", session: name, view: entry.view });
+		// A session's first frame is not traffic, it is what the client has been
+		// waiting for: send it, do not pace it.
+		entry.pacer.publishNow();
+	}
+
+	/**
+	 * The view channel of one session. The newest stamped view is encoded once per
+	 * publish and the string is shared with every socket, so the server neither
+	 * re-serializes a megabyte per tab nor ships an intermediate snapshot that no
+	 * one will ever paint. While the journal stands still the frame that goes out is
+	 * a patch: the transcript stays where it already is.
+	 */
+	private createViewPacer(name: string): ViewPacer {
+		let published: SessionView | undefined;
+		let pending: ChannelFrame | undefined;
+		return new ViewPacer({
+			minIntervalMs: () => (this.attachPointerValue === name ? ATTACHED_VIEW_FLOOR_MS : BACKGROUND_VIEW_FLOOR_MS),
+			targetBytesPerSecond: () => VIEW_TARGET_BYTES_PER_SECOND,
+			encode: (forced) => {
+				const view = this.hosted.get(name)?.view;
+				if (view === undefined || (!forced && view === published)) return undefined;
+				published = view;
+				// The transcript moves only with the journal. When the fingerprint says it did
+				// not move, the frame leaves it out and carries the rest — which is what a
+				// streaming token actually changes. Safe to assume every socket holds the same
+				// messages because a socket's first view frame is always the whole one, sent
+				// in the same synchronous block that adds it to the fan-out set.
+				const next = viewFingerprint(view);
+				const unchanged = this.viewFingerprints.get(name) === next;
+				this.viewFingerprints.set(name, next);
+				pending = unchanged
+					? { channel: "view", session: name, patch: viewPatch(view) }
+					: { channel: "view", session: name, view };
+				return encodeMessage(pending);
+			},
+			deliver: (payload) => {
+				if (pending !== undefined) this.emit(pending, payload);
+			},
+		});
+	}
+
+	/**
+	 * What the transcript half of each session's last published frame looked like.
+	 * Kept here rather than in the pacer's closure because a new connection has to
+	 * sign for the whole view it is handed: every socket is promised one, and the
+	 * frames after it may be patches onto exactly that.
+	 */
+	private readonly viewFingerprints = new Map<string, string>();
+
+	/** Note that `view` was just sent to someone in full, so patches may follow it. */
+	rememberView(name: string, view: SessionView): void {
+		this.viewFingerprints.set(name, viewFingerprint(view));
+	}
+
+	/**
+	 * Hand a freshly stamped view to the session's pacer.
+	 *
+	 * Only the stream is paced. While a run is in flight the projector fires per
+	 * token, and that is the traffic worth shaping; anything that happens while the
+	 * session is idle is one state change — a clicked op, the frame that closes a
+	 * run — and a frame the user is waiting for is not traffic, so it goes out now.
+	 */
+	private publishView(name: string): void {
+		const entry = this.hosted.get(name);
+		if (entry === undefined) return;
+		if (entry.running) entry.pacer.markDirty();
+		else entry.pacer.publishNow();
 	}
 
 	/** Close and permanently erase a session's on-disk state. */
@@ -301,6 +426,8 @@ export class Host {
 			/* closing with an active operation aborts it; the journal already holds everything committed */
 		}
 		this.hosted.delete(name);
+		entry.pacer.dispose();
+		this.viewFingerprints.delete(name);
 		if (this.attachPointerValue === name) this.attachPointerValue = this.hosted.keys().next().value ?? null;
 	}
 
@@ -341,6 +468,43 @@ export class Host {
 		} catch {
 			return undefined;
 		}
+	}
+
+	private settingsFile: SettingsFile | undefined = undefined;
+
+	/** Session defaults, read once from `<dataDir>/settings.json`; {} on first run. */
+	settings(): SettingsFile {
+		if (this.settingsFile === undefined) {
+			try {
+				this.settingsFile = JSON.parse(readFileSync(join(this.dataDir, "settings.json"), "utf8")) as SettingsFile;
+			} catch {
+				this.settingsFile = {};
+			}
+		}
+		return this.settingsFile;
+	}
+
+	/** Merge a patch over the stored defaults, keep only known keys, persist, return all. */
+	async saveSettings(patch: Record<string, unknown>): Promise<SettingsFile> {
+		const next: SettingsFile = { ...this.settings() };
+		for (const key of ["personaId", "modelId"] as const) {
+			const value = patch[key];
+			if (value === null) delete next[key];
+			else if (typeof value === "string" && value.trim().length > 0) next[key] = value.trim();
+		}
+		if (typeof patch.thinkingLevel === "string") {
+			const level = patch.thinkingLevel as ThinkingLevel;
+			if (patch.thinkingLevel === null) delete next.thinkingLevel;
+			else if (THINKING_LEVELS.includes(level)) next.thinkingLevel = level;
+		} else if (patch.thinkingLevel === null) delete next.thinkingLevel;
+		if (typeof patch.keepRecentTokens === "number") {
+			if (Number.isSafeInteger(patch.keepRecentTokens) && patch.keepRecentTokens > 0)
+				next.keepRecentTokens = patch.keepRecentTokens;
+		} else if (patch.keepRecentTokens === null) delete next.keepRecentTokens;
+		this.settingsFile = next;
+		await mkdir(this.dataDir, { recursive: true });
+		await writeFile(join(this.dataDir, "settings.json"), JSON.stringify(next), "utf8");
+		return next;
 	}
 
 	private autoTitle(name: string): string | undefined {
@@ -502,7 +666,7 @@ export class Host {
 		if (action === "resume") agent.goal.resume();
 		if (action === "clear") agent.goal.clear();
 		entry.view = this.stampView(entry);
-		this.emit({ channel: "view", session: name, view: entry.view });
+		this.publishView(name);
 		// Setting a goal means "go work on it": kick a run when the lane is idle.
 		if (action === "set" && objective !== undefined && !entry.running) {
 			void this.prompt(name, `Work toward the goal: ${objective}`).catch(() => undefined);
@@ -519,7 +683,7 @@ export class Host {
 			paused: false,
 		});
 		entry.view = this.stampView(entry);
-		this.emit({ channel: "view", session: name, view: entry.view });
+		this.publishView(name);
 	}
 
 	loopToggle(name: string, id: string, paused: boolean): void {
@@ -570,7 +734,7 @@ export class Host {
 		if (entry === undefined) return;
 		entry.updated = Date.now();
 		entry.view = this.stampView(entry);
-		this.emit({ channel: "view", session: name, view: entry.view });
+		this.publishView(name);
 	}
 
 	stateSet(name: string, key: string, value: string | null): void {
@@ -619,7 +783,7 @@ export class Host {
 		this.setMeta(name, { personaId });
 		entry.updated = Date.now();
 		entry.view = this.stampView(entry, await entry.projector.snapshot(BACKGROUND_CONTEXT));
-		this.emit({ channel: "view", session: name, view: entry.view });
+		this.publishView(name);
 	}
 
 	async thinkingLevel(name: string, level: "off" | "minimal" | "low" | "medium" | "high"): Promise<void> {
@@ -632,7 +796,7 @@ export class Host {
 				const hosted = this.hosted.get(name);
 				if (hosted === undefined) return;
 				hosted.view = this.stampView(hosted, view);
-				this.emit({ channel: "view", session: name, view: hosted.view });
+				this.publishView(name);
 			});
 	}
 
@@ -738,7 +902,11 @@ export class Host {
 		await entry.agent.lane.prompt(text, undefined, BACKGROUND_CONTEXT);
 	}
 
-	subscribe(listener: (frame: ChannelFrame) => void): () => void {
+	/**
+	 * Channel subscribers. `payload` is the wire string for view frames — encoded
+	 * once for every socket, so a fan-out does not re-serialize a megabyte per tab.
+	 */
+	subscribe(listener: (frame: ChannelFrame, payload?: string) => void): () => void {
 		this.listeners.add(listener);
 		return () => this.listeners.delete(listener);
 	}
@@ -751,8 +919,8 @@ export class Host {
 		this.hosted.clear();
 	}
 
-	private emit(frame: ChannelFrame): void {
-		for (const listener of [...this.listeners]) listener(frame);
+	private emit(frame: ChannelFrame, payload?: string): void {
+		for (const listener of [...this.listeners]) listener(frame, payload);
 	}
 }
 

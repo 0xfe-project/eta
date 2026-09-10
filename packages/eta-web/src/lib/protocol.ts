@@ -7,6 +7,12 @@
 import type { HarnessEvent, SessionView } from "@eta/core";
 
 export interface DevFrame {
+	/**
+	 * Assigned by the client as the frame is folded in, so a dev list can be
+	 * reconciled by key instead of replaced — the rail keeps its rows and the pause
+	 * button keeps its snapshot.
+	 */
+	id?: number;
 	ts: number;
 	session: string;
 	category: string;
@@ -57,6 +63,7 @@ export interface GitDiff {
 
 export type ClientMessage =
 	| { op: "focus"; session: string }
+	| { op: "resync"; session: string }
 	| {
 			op: "prompt";
 			session: string;
@@ -93,8 +100,18 @@ export type ClientMessage =
 	| { op: "session.archive"; session: string; archived: boolean }
 	| { op: "session.rename"; session: string; title: string };
 
+/**
+ * A view frame without the transcript. Mirrors the server's `SessionViewPatch`:
+ * everything except the three lists that only move when the journal does, which
+ * every client already holds from that session's first (whole) frame.
+ */
+export type SessionViewPatch = Omit<SessionView, "messages" | "systems" | "thinking">;
+
+export const HEAVY_VIEW_FIELDS = ["messages", "systems", "thinking"] as const;
+
 export type ServerMessage =
 	| { channel: "view"; session: string; view: SessionView }
+	| { channel: "view"; session: string; patch: SessionViewPatch }
 	| { channel: "agent"; session: string; event: HarnessEvent }
 	| { channel: "dev"; frame: DevFrame }
 	| { type: "hello"; sessions: SidebarSession[]; attach: string | null }

@@ -19,14 +19,34 @@ export function NewSessionPage() {
 	const [cwd, setCwd] = createSignal("");
 	const [prompt, setPrompt] = createSignal("");
 	const [creating, setCreating] = createSignal(false);
+	// The host's configured defaults, so a fresh browser doesn't start blank.
+	const [defaults, setDefaults] = createSignal<{ personaId?: string; modelId?: string }>({});
+
+	// Nothing picked by hand yet — take the configured default when it actually exists.
+	const preselect = (list: PersonaSummary[]) => {
+		const preferred = defaults().personaId;
+		if (personaId() === null && preferred !== undefined && list.some((persona) => persona.id === preferred)) {
+			setPersonaId(preferred);
+		}
+	};
 
 	onMount(() => {
 		let live = true;
+		void fetch("/api/settings")
+			.then((response) => response.json())
+			.then((body: { personaId?: string; modelId?: string }) => {
+				if (!live) return;
+				setDefaults(body ?? {});
+				preselect(personas());
+			})
+			.catch(() => undefined);
 		const load = () => {
 			void fetch("/api/personas")
 				.then((response) => response.json())
 				.then((body: PersonaSummary[]) => {
-					if (live) setPersonas(body);
+					if (!live) return;
+					setPersonas(body);
+					preselect(body);
 				})
 				.catch(() => undefined);
 		};
@@ -48,6 +68,7 @@ export function NewSessionPage() {
 			personaId: id,
 			...(cwd().trim().length > 0 ? { cwd: cwd().trim() } : {}),
 			...(prompt().trim().length > 0 ? { prompt: prompt().trim() } : {}),
+			...(defaults().modelId === undefined ? {} : { modelId: defaults().modelId }),
 		});
 		void navigate("/");
 	};

@@ -139,7 +139,7 @@ describe("sessions page smoke", () => {
 		expect(document.body.textContent).toContain("paused-out");
 	});
 
-	it("reuses transcript rows across view frames instead of rebuilding them", () => {
+	it("reuses transcript rows across view frames instead of rebuilding them", async () => {
 		render(
 			<ThemeProvider>
 				<MemoryRouter>
@@ -150,12 +150,15 @@ describe("sessions page smoke", () => {
 		const socket = FakeSocket.instances[0]!;
 		flush(() => socket.fire("open", {}));
 		flush(() => socket.fire("message", { data: JSON.stringify({ type: "hello", sessions: [{ name: "s1", badges: [], personas: [] }], attach: "s1" }) }));
-		const frame = (patch: Record<string, unknown>) =>
+		const frame = async (patch: Record<string, unknown>) => {
 			flush(() => socket.fire("message", { data: JSON.stringify({ channel: "view", session: "s1", view: view("s1", patch) }) }));
+			// Follow-scroll is throttled to one write per painted frame; let it paint.
+			await new Promise((resolve) => requestAnimationFrame(resolve));
+		};
 		/** The `<For>` row element itself — the thing that must survive a frame. */
 		const row = (entryId: string) => document.getElementById(`eta-msg-${entryId}`) as HTMLElement;
 
-		frame({ messages: [userEntry, toolCallEntry] });
+		await frame({ messages: [userEntry, toolCallEntry] });
 		const userRow = row("e1");
 		const badge = byId("tool-badge-c1");
 		expect(badge.className).toContain("running");
@@ -176,7 +179,7 @@ describe("sessions page smoke", () => {
 			},
 		});
 
-		frame({ messages: [userEntry, toolCallEntry], streaming: { role: "assistant", content: "hel", timestamp: 2 } });
+		await frame({ messages: [userEntry, toolCallEntry], streaming: { role: "assistant", content: "hel", timestamp: 2 } });
 		expect(scrolls).toBe(1);
 		const streamRow = byId("streaming-row");
 		expect(row("e1")).toBe(userRow);
@@ -184,7 +187,7 @@ describe("sessions page smoke", () => {
 		expect(assistantRow).not.toBeNull();
 		expect(byId("tool-badge-c1")).toBe(badge);
 
-		frame({ messages: [userEntry, toolCallEntry], streaming: { role: "assistant", content: "hello there", timestamp: 2 } });
+		await frame({ messages: [userEntry, toolCallEntry], streaming: { role: "assistant", content: "hello there", timestamp: 2 } });
 		expect(scrolls).toBe(2);
 		expect(row("e1")).toBe(userRow);
 		expect(row("e2")).toBe(assistantRow);
@@ -193,7 +196,7 @@ describe("sessions page smoke", () => {
 
 		// The result arrives as a new entry. The already-mounted tool card has to
 		// notice it on its own — re-mounting the row is not available as a fix.
-		frame({ messages: [userEntry, toolCallEntry, toolResultEntry] });
+		await frame({ messages: [userEntry, toolCallEntry, toolResultEntry] });
 		expect(scrolls).toBe(3);
 		expect(row("e1")).toBe(userRow);
 		expect(row("e2")).toBe(assistantRow);

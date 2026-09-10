@@ -18,9 +18,13 @@ export function LogRail(props: { frames: DevFrame[] }) {
 	const [filter, setFilter] = createSignal("");
 	const [paused, setPaused] = createSignal(false);
 	const [selected, setSelected] = createSignal<DevFrame | null>(null);
-	const frozen: { current: DevFrame[] } = { current: props.frames };
+	// A paused rail holds the list it had when pause was pressed — copied, not
+	// aliased. `dev` is reconciled in place now, so the live array object is the very
+	// one that keeps growing at the tail; holding it would hold the growth too.
+	// Holding the items is enough: a dev frame is written once and never revised.
+	const frozen: { current: DevFrame[] } = { current: [...props.frames] };
 	createEffect(() => {
-		if (!paused()) frozen.current = props.frames;
+		if (!paused()) frozen.current = [...props.frames];
 	});
 	const held = () => (paused() ? frozen.current : props.frames);
 	const shown = createMemo(() => {
@@ -28,6 +32,9 @@ export function LogRail(props: { frames: DevFrame[] }) {
 		const list = held();
 		return needle.length === 0 ? list : list.filter((frame) => frame.category.toLowerCase().includes(needle) || frame.action.toLowerCase().includes(needle));
 	});
+	// Built once per change, not once per read: `For` below would otherwise be handed
+	// a fresh copy of a reversed copy on every evaluation of its memo.
+	const rows = createMemo(() => shown().slice(-200).reverse());
 
 	return (
 		<div class="flex h-full flex-col p-2" data-testid="log-rail">
@@ -44,7 +51,7 @@ export function LogRail(props: { frames: DevFrame[] }) {
 				class="mb-2 border border-border bg-background px-2 py-1 text-xs outline-none"
 			/>
 			<div class="mono flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto text-[10px]">
-				<For each={[...shown()].slice(-200).reverse()}>
+				<For each={rows()}>
 					{(frame) => (
 						<button
 							data-testid="log-frame"

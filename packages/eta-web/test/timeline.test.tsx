@@ -100,4 +100,32 @@ describe("timeline jump rail", () => {
 		expect(byId("prompt-rail-2").getAttribute("aria-current")).toBe("true");
 		expect(byId("turn-rail-1").getAttribute("aria-current")).not.toBe("true");
 	});
+
+	it("samples a long run: both ends, a window around you, coarse jumps elsewhere", async () => {
+		const long = [entry("user", "u1", "开个头"), entry("user", "u2", "再补一句")];
+		for (let turn = 1; turn <= 40; turn += 1) long.push(entry("assistant", `a${turn}`, `第 ${turn} 次回答`));
+		renderTimeline(long);
+		// Scroll so that turn 20 is the thing pressed up against the top edge.
+		const place = (id: string, top: number) => {
+			const node = document.getElementById(`eta-msg-${id}`);
+			if (node === null) throw new Error(`missing message ${id}`);
+			node.getBoundingClientRect = () => ({ top, bottom: top + 10, left: 0, right: 0, width: 0, height: 10, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+		};
+		place("u1", -400);
+		place("u2", -300);
+		for (let turn = 1; turn <= 40; turn += 1) place(`a${turn}`, -200 + turn * 10);
+		byId("timeline").dispatchEvent(new Event("scroll"));
+		await new Promise((resolve) => requestAnimationFrame(resolve));
+
+		const rail = byId("turn-rail");
+		// Forty turns, and the whole rail still fits: ends pinned, ±3 around turn 20,
+		// coarse anchors elsewhere, and every skipped stretch admitted with a ⋯.
+		expect(rail.querySelector("button")?.getAttribute("data-testid")).toBe("turn-rail-1");
+		expect(queryId("turn-rail-40")).not.toBeNull();
+		for (const turn of [17, 18, 19, 20, 21, 22, 23]) expect(queryId(`turn-rail-${turn}`)).not.toBeNull();
+		expect(queryId("turn-rail-30")).toBeNull();
+		expect(byId("turn-rail-20").getAttribute("aria-current")).toBe("true");
+		expect(rail.querySelectorAll("button").length).toBeLessThanOrEqual(20);
+		expect(document.querySelectorAll('[data-testid="turn-rail-gap"]').length).toBeGreaterThan(0);
+	});
 });

@@ -19,6 +19,34 @@ describe("eta store reducer", () => {
 		expect(Object.keys(state.views).sort()).toEqual(["a", "b"]);
 	});
 
+	it("folds a patch onto the view it follows, transcript included", () => {
+		let state = reduceEtaState(initialEtaState, {
+			channel: "view",
+			session: "a",
+			view: { messages: [1], usage: { output: 1 }, streaming: { content: "hi" } } as never,
+		});
+		state = reduceEtaState(state, { channel: "view", session: "a", patch: { usage: { output: 2 } } as never });
+		const merged = state.views["a"] as unknown as {
+			messages: unknown[];
+			usage: { output: number };
+			streaming: { content: string };
+		};
+		expect(merged.messages).toHaveLength(1);
+		expect(merged.usage.output).toBe(2);
+		expect(merged.streaming.content).toBe("hi");
+		expect(state.unread).toEqual([]);
+	});
+
+	it("drops a patch with no whole frame behind it", () => {
+		let state = reduceEtaState(initialEtaState, {
+			type: "hello",
+			sessions: [{ name: "b", badges: [], personas: [] }],
+			attach: "fg",
+		});
+		state = reduceEtaState(state, { channel: "view", session: "b", patch: { usage: { output: 9 } } as never });
+		expect(state.views["b"]).toBeUndefined();
+	});
+
 	it("caps the dev ring per session at 512 keeping the newest", () => {
 		let state = initialEtaState;
 		for (let i = 0; i < 600; i += 1) state = reduceEtaState(state, { channel: "dev", frame: devFrame("a", i) });

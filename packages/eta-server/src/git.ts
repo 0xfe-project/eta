@@ -49,7 +49,10 @@ interface GitRun {
 	truncated: boolean;
 }
 
-async function readCapped(stream: ReadableStream<Uint8Array>, cap: number): Promise<{ text: string; truncated: boolean }> {
+async function readCapped(
+	stream: ReadableStream<Uint8Array>,
+	cap: number,
+): Promise<{ text: string; truncated: boolean }> {
 	const reader = stream.getReader();
 	const kept: Uint8Array[] = [];
 	let keptBytes = 0;
@@ -176,7 +179,7 @@ export async function gitStatus(cwd: string): Promise<GitStatus> {
 		const fields = record.slice(2).split(" ");
 		if (kind === "?") {
 			const path = record.slice(2);
-			untrackedScans.set(path, await untrackedCounts(cwd, path) ?? { added: 0, partial: false });
+			untrackedScans.set(path, (await untrackedCounts(cwd, path)) ?? { added: 0, partial: false });
 			continue;
 		}
 		if (kind === "1" || kind === "2" || kind === "u") {

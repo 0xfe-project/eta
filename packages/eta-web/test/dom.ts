@@ -4,6 +4,14 @@
  * The React (and later Solid) renderer only lives in `./render.tsx`.
  */
 
+// vitest's jsdom environment does not forward window.CSS; the timeline rail
+// escapes entry ids before querying them.
+if (globalThis.CSS === undefined) {
+	(globalThis as Record<string, unknown>).CSS = {
+		escape: (value: string) => value.replace(/[^\w-]/g, (c) => `\\${c}`),
+	};
+}
+
 export function testId(id: string): string {
 	return `[data-testid="${id.replaceAll('"', '\\"')}"]`;
 }

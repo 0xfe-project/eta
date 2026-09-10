@@ -1,4 +1,4 @@
-import { For, Index, Show, Match, Switch, createEffect, createMemo, createSignal } from "solid-js";
+import { For, Index, Show, Match, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import type { SessionView } from "@eta/core";
 import { useAppI18n } from "../../i18n.ts";
 import { MessageMarkdown } from "./message-markdown.tsx";
@@ -9,7 +9,7 @@ type ContentBlock = { type?: string; text?: unknown; thinking?: unknown; name?: 
 
 const EMPTY_RESULTS = new Map<string, ToolResultLike>();
 
-const RAIL_NUM = "mono flex h-5 min-w-5 shrink-0 items-center justify-center border border-border bg-elevated px-1 text-[9px] leading-none hover:border-border-strong hover:text-foreground";
+const RAIL_NUM = "mono flex h-4 min-w-4 items-center justify-center border border-border bg-elevated px-1 text-[9px] leading-none hover:border-border-strong hover:text-foreground";
 const RAIL_ACTIVE = "border-border-strong bg-foreground text-background";
 
 /** Cheap "did the transcript change shape" reading, for the follow-scroll effect. */
@@ -31,9 +31,9 @@ export function Timeline(props: { view: SessionView; session: string; running?: 
 	let railFrame = 0;
 	const [pinned, setPinned] = createSignal(true);
 
-	// Follow the tail while pinned. Reconciled views keep the snapshot's object
-	// identity across frames, so nothing fires when a token only rewrites text:
-	// the trigger has to be the tail content itself, read in here.
+	// What "the transcript moved" costs nothing to answer: reconciled views keep the
+	// snapshot's object identity across frames, so a token that only rewrites text has
+	// to be read as content, here. The follow itself is below.
 	const tail = createMemo(() => {
 		const messages = props.view.messages;
 		return (
@@ -44,11 +44,26 @@ export function Timeline(props: { view: SessionView; session: string; running?: 
 		);
 	});
 
+	// Follow the tail, but at most once per painted frame. The view channel can land
+	// faster than the screen repaints, and every write to `scrollTop` outside a frame
+	// boundary drags a synchronous layout out of the browser — paid for by whoever is
+	// trying to click something in this column while the model talks.
+	const follow: { frame: number } = { frame: 0 };
+
 	createEffect(() => {
 		if (!pinned()) return;
 		tail();
-		const node = scroller;
-		if (node !== undefined) node.scrollTop = node.scrollHeight;
+		if (follow.frame !== 0) return;
+		follow.frame = requestAnimationFrame(() => {
+			follow.frame = 0;
+			const node = scroller;
+			if (node === undefined) return;
+			node.scrollTop = node.scrollHeight;
+		});
+	});
+	onCleanup(() => {
+		if (follow.frame !== 0) cancelAnimationFrame(follow.frame);
+		follow.frame = 0;
 	});
 
 	const onScroll = () => {
@@ -116,6 +131,33 @@ export function Timeline(props: { view: SessionView; session: string; running?: 
 		return squash(blocks.map((block) => String(block.thinking ?? "")).join(" "));
 	};
 
+	// A few hundred identical squares neither fit nor say anything. The rail keeps a
+	// handful of anchors that never move, plus a window you can walk around wherever
+	// you happen to be reading: far jumps to aim at, nearby steps to take.
+	const RAIL_ANCHORS = 6;
+	const RAIL_WINDOW = 3;
+	type RailRow = { turn?: number; skipped: number };
+	const railRows = createMemo<RailRow[]>(() => {
+		const total = turns().length;
+		if (total < 2) return [];
+		const all = turns();
+		const at = all.findIndex((entry) => entry.entryId === activeEntry());
+		const focus = at === -1 ? total - 1 : at;
+		const picked = new Set<number>([0, total - 1]);
+		for (let step = 1; step < RAIL_ANCHORS - 1; step += 1) picked.add(Math.round((step * (total - 1)) / (RAIL_ANCHORS - 1)));
+		for (let index = focus - RAIL_WINDOW; index <= focus + RAIL_WINDOW; index += 1) {
+			if (index >= 0 && index < total) picked.add(index);
+		}
+		const rows: RailRow[] = [];
+		let prev = -1;
+		for (const index of [...picked].sort((left, right) => left - right)) {
+			if (index - prev > 1) rows.push({ skipped: index - prev - 1 });
+			rows.push({ turn: index, skipped: 0 });
+			prev = index;
+		}
+		return rows;
+	});
+
 	return (
 		<div class="relative min-h-0 flex-1">
 			<div
@@ -176,25 +218,32 @@ export function Timeline(props: { view: SessionView; session: string; running?: 
 					class="absolute right-1 top-16 flex flex-row items-start gap-1"
 				>
 					<Show when={turns().length > 1}>
-						<div data-testid="turn-rail" class="no-scrollbar flex max-h-[60vh] flex-col items-end gap-1 overflow-y-auto overscroll-contain pb-1">
-							<For each={turns()}>
-								{(entry, index) => (
-									<button
-										data-testid={`turn-rail-${index() + 1}`}
-										data-entry={entry.entryId}
-										aria-current={activeEntry() === entry.entryId}
-										title={`${index() + 1} · ${previewOf(entry)}`}
-										onClick={() => jumpToEntry(entry.entryId)}
-										class={`${RAIL_NUM} ${activeEntry() === entry.entryId ? RAIL_ACTIVE : "text-muted"}`}
-									>
-										{index() + 1}
-									</button>
-								)}
+						<div data-testid="turn-rail" class="no-scrollbar flex max-h-[60vh] flex-col items-end gap-[3px] overflow-y-auto overscroll-contain pb-1">
+							<For each={railRows()}>
+								{(row) => {
+									if (row.turn === undefined) {
+										return <span data-testid="turn-rail-gap" title={`跳过 ${row.skipped} 回合`} class="mono px-1 text-[8px] leading-4 text-muted">⋯</span>;
+									}
+									const entry = turns()[row.turn];
+									if (entry === undefined) return null;
+									return (
+										<button
+											data-testid={`turn-rail-${row.turn + 1}`}
+											data-entry={entry.entryId}
+											aria-current={activeEntry() === entry.entryId}
+											title={`${row.turn + 1} · ${previewOf(entry)}`}
+											onClick={() => jumpToEntry(entry.entryId)}
+											class={`${RAIL_NUM} ${activeEntry() === entry.entryId ? RAIL_ACTIVE : "text-muted"}`}
+										>
+											{row.turn + 1}
+										</button>
+									);
+								}}
 							</For>
 						</div>
 					</Show>
 					<Show when={prompts().length > 1}>
-						<div data-testid="prompt-rail" class="no-scrollbar flex max-h-[60vh] flex-col items-end gap-1 overflow-y-auto overscroll-contain pb-1">
+						<div data-testid="prompt-rail" class="no-scrollbar flex max-h-[60vh] flex-col items-end gap-[3px] overflow-y-auto overscroll-contain pb-1">
 							<For each={prompts()}>
 								{(entry, index) => (
 									<button
