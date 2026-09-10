@@ -1,29 +1,73 @@
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
 import { BACKGROUND_CONTEXT } from "../../src/harness/context.ts";
-import { generateSummaryWithRequest, prepareCompaction, DEFAULT_COMPACTION_SETTINGS, type SummaryRequest } from "../../src/harness/compaction/compaction.ts";
-import { dropToolPairs, maxMinFairAllocations, reducePromptBudget, toolResultShare, truncateFairly, untrustedFallback } from "../../src/harness/compaction/eta-compaction.ts";
+import {
+	generateSummaryWithRequest,
+	prepareCompaction,
+	DEFAULT_COMPACTION_SETTINGS,
+	type SummaryRequest,
+} from "../../src/harness/compaction/compaction.ts";
+import {
+	dropToolPairs,
+	maxMinFairAllocations,
+	reducePromptBudget,
+	toolResultShare,
+	truncateFairly,
+	untrustedFallback,
+} from "../../src/harness/compaction/eta-compaction.ts";
 import { UNTRUSTED_SUMMARY_NOTE } from "../../src/prompts/summary.ts";
 import type { Entry } from "../../src/harness/session/types.ts";
 
 const userMsg = (text: string) => ({ role: "user", content: text, timestamp: 1 }) as never;
 const toolResult = (id: string, text = "x".repeat(200)) =>
-	({ role: "toolResult", toolCallId: id, toolName: "t", content: [{ type: "text", text }], isError: false, timestamp: 1 }) as never;
+	({
+		role: "toolResult",
+		toolCallId: id,
+		toolName: "t",
+		content: [{ type: "text", text }],
+		isError: false,
+		timestamp: 1,
+	}) as never;
 const assistantCalls = (id: string) =>
-	({ role: "assistant", content: [{ type: "toolCall", id, name: "t", arguments: {} }], timestamp: 1, usage: undefined }) as never;
+	({
+		role: "assistant",
+		content: [{ type: "toolCall", id, name: "t", arguments: {} }],
+		timestamp: 1,
+		usage: undefined,
+	}) as never;
 
 describe("eta compaction helpers", () => {
 	it("drops whole tool pairs only past the ratio", () => {
-		const chatty = [userMsg("go"), assistantCalls("c1"), toolResult("c1"), userMsg("again"), assistantCalls("c2"), toolResult("c2")];
+		const chatty = [
+			userMsg("go"),
+			assistantCalls("c1"),
+			toolResult("c1"),
+			userMsg("again"),
+			assistantCalls("c2"),
+			toolResult("c2"),
+		];
 		expect(toolResultShare(chatty as never)).toBeGreaterThanOrEqual(25);
 		const dropped = dropToolPairs(chatty as never);
 		expect(dropped.length).toBe(2);
 		const noisyAnswer = [
 			userMsg("go"),
-			{ role: "assistant", content: [{ type: "text", text: "thinking" }, { type: "toolCall", id: "c9", name: "t", arguments: {} }], timestamp: 1 } as never,
+			{
+				role: "assistant",
+				content: [
+					{ type: "text", text: "thinking" },
+					{ type: "toolCall", id: "c9", name: "t", arguments: {} },
+				],
+				timestamp: 1,
+			} as never,
 			toolResult("c9"),
 		];
-		const kept = dropToolPairs([userMsg("hi"), userMsg("hi"), noisyAnswer[1]!, noisyAnswer[2]!, noisyAnswer[0]!] as never);
+		const kept = dropToolPairs([
+			userMsg("hi"),
+			userMsg("hi"),
+			noisyAnswer[1]!,
+			noisyAnswer[2]!,
+			noisyAnswer[0]!,
+		] as never);
 		expect(kept).toContain(noisyAnswer[1]);
 	});
 
@@ -54,8 +98,14 @@ describe("eta compaction helpers", () => {
 	});
 
 	it("summarizer failure falls back to fair truncation with the untrusted note", async () => {
-		const failing: SummaryRequest = async () => fauxAssistantMessage("x", { stopReason: "error", errorMessage: "dead" });
-		const result = await generateSummaryWithRequest([userMsg("hello there")] as never, { model: { id: "m", api: "faux" } as never, reserveTokens: 4096 }, failing, BACKGROUND_CONTEXT);
+		const failing: SummaryRequest = async () =>
+			fauxAssistantMessage("x", { stopReason: "error", errorMessage: "dead" });
+		const result = await generateSummaryWithRequest(
+			[userMsg("hello there")] as never,
+			{ model: { id: "m", api: "faux" } as never, reserveTokens: 4096 },
+			failing,
+			BACKGROUND_CONTEXT,
+		);
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.value.text.startsWith(UNTRUSTED_SUMMARY_NOTE)).toBe(true);
@@ -66,10 +116,31 @@ describe("eta compaction helpers", () => {
 	it("prepareCompaction drops tool noise from the summarized history", () => {
 		const entries: Entry[] = [];
 		for (let i = 0; i < 6; i++) {
-			entries.push({ type: "message", id: `a${i}`, parentId: null, seq: i, timestamp: i, message: assistantCalls(`c${i}`) });
-			entries.push({ type: "message", id: `r${i}`, parentId: null, seq: i, timestamp: i, message: toolResult(`c${i}`) });
+			entries.push({
+				type: "message",
+				id: `a${i}`,
+				parentId: null,
+				seq: i,
+				timestamp: i,
+				message: assistantCalls(`c${i}`),
+			});
+			entries.push({
+				type: "message",
+				id: `r${i}`,
+				parentId: null,
+				seq: i,
+				timestamp: i,
+				message: toolResult(`c${i}`),
+			});
 		}
-		entries.push({ type: "message", id: "keep", parentId: null, seq: 99, timestamp: 99, message: userMsg("u".repeat(4_000)) });
+		entries.push({
+			type: "message",
+			id: "keep",
+			parentId: null,
+			seq: 99,
+			timestamp: 99,
+			message: userMsg("u".repeat(4_000)),
+		});
 		const prepared = prepareCompaction(entries, { enabled: true, reserveTokens: 1000, keepRecentTokens: 500 });
 		expect(prepared.ok && prepared.value).toBeDefined();
 		if (prepared.ok && prepared.value !== undefined) {

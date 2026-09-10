@@ -97,7 +97,11 @@ export class FileStorage implements Storage {
 		return this.memory.scanValues(prefix, context);
 	}
 
-	readList<T>(address: ValueList<T>, options: ListReadOptions | undefined, context: Context): Promise<ListElement<T>[]> {
+	readList<T>(
+		address: ValueList<T>,
+		options: ListReadOptions | undefined,
+		context: Context,
+	): Promise<ListElement<T>[]> {
 		return this.memory.readList(address, options, context);
 	}
 

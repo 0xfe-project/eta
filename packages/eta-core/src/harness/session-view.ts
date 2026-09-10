@@ -71,7 +71,9 @@ export interface SessionView {
 	/** Persona card names baked into the stable prompt block; empty when none. */
 	personas: string[];
 	/** System prompt block sizes for the Context panel; undefined before the first generation. */
-	prompt: { stableChars: number; adaptiveChars: number; sections: { name: string; stable: boolean; text: string }[] } | undefined;
+	prompt:
+		| { stableChars: number; adaptiveChars: number; sections: { name: string; stable: boolean; text: string }[] }
+		| undefined;
 	/** Output tokens/sec over the last usage delta; 0 until two usage events pass. */
 	tokensPerSec: number;
 	/** Configured model as "provider:modelId"; drives the composer model picker. */
@@ -92,7 +94,15 @@ export interface SessionView {
 
 export type ViewListener = (view: SessionView) => void;
 
-const VIEW_EVENTS = ["entry_added", "eta", "usage", "run_end", "compaction_end", "navigation_end", "config_update"] as const;
+const VIEW_EVENTS = [
+	"entry_added",
+	"eta",
+	"usage",
+	"run_end",
+	"compaction_end",
+	"navigation_end",
+	"config_update",
+] as const;
 
 export class SessionViewProjector {
 	private readonly agent: EtaAgent;
@@ -122,7 +132,11 @@ export class SessionViewProjector {
 		const blockChars = (block: { text?: unknown; thinking?: unknown; content?: unknown; args?: unknown }): number =>
 			(typeof block.text === "string" ? block.text.length : 0) +
 			(typeof block.thinking === "string" ? block.thinking.length : 0) +
-			(typeof block.content === "string" ? block.content.length : Array.isArray(block.content) ? (block.content as { text?: string }[]).reduce((n, part) => n + (part.text?.length ?? 0), 0) : 0) +
+			(typeof block.content === "string"
+				? block.content.length
+				: Array.isArray(block.content)
+					? (block.content as { text?: string }[]).reduce((n, part) => n + (part.text?.length ?? 0), 0)
+					: 0) +
 			(block.args !== undefined ? JSON.stringify(block.args).length : 0);
 		for (const entry of entries) {
 			if (entry.type === "message") {
@@ -130,11 +144,25 @@ export class SessionViewProjector {
 				const message = entry.message as { role?: string; content?: unknown };
 				const content = message.content;
 				if (message.role === "toolResult") {
-					toolChars += typeof content === "string" ? content.length : Array.isArray(content) ? (content as { text?: string; content?: unknown }[]).reduce((n, block) => n + blockChars(block), 0) : 0;
+					toolChars +=
+						typeof content === "string"
+							? content.length
+							: Array.isArray(content)
+								? (content as { text?: string; content?: unknown }[]).reduce(
+										(n, block) => n + blockChars(block),
+										0,
+									)
+								: 0;
 					continue;
 				}
 				if (Array.isArray(content)) {
-					for (const block of content as { type?: string; thinking?: string; text?: string; content?: unknown; args?: unknown }[]) {
+					for (const block of content as {
+						type?: string;
+						thinking?: string;
+						text?: string;
+						content?: unknown;
+						args?: unknown;
+					}[]) {
 						if (block.type === "thinking" && typeof block.thinking === "string") thinking.push(block.thinking);
 						const chars = blockChars(block);
 						if (message.role === "user") userChars += chars;
@@ -145,7 +173,12 @@ export class SessionViewProjector {
 			}
 			if (entry.type === "compaction") {
 				compactionEpoch += 1;
-				systems.push({ entryId: entry.id, seq: entry.seq, kind: "compaction", args: { epoch: String(compactionEpoch), summary: entry.summary.slice(0, 120) } });
+				systems.push({
+					entryId: entry.id,
+					seq: entry.seq,
+					kind: "compaction",
+					args: { epoch: String(compactionEpoch), summary: entry.summary.slice(0, 120) },
+				});
 				continue;
 			}
 			if (entry.type === "merge") {
@@ -154,11 +187,24 @@ export class SessionViewProjector {
 			}
 			if (entry.type === "goal") {
 				const payload = entry.payload;
-				systems.push({ entryId: entry.id, seq: entry.seq, kind: "goal", args: { action: payload.kind, ...(payload.objective === undefined ? {} : { objective: payload.objective }) } });
+				systems.push({
+					entryId: entry.id,
+					seq: entry.seq,
+					kind: "goal",
+					args: {
+						action: payload.kind,
+						...(payload.objective === undefined ? {} : { objective: payload.objective }),
+					},
+				});
 				continue;
 			}
 			if (entry.type === "ask") {
-				systems.push({ entryId: entry.id, seq: entry.seq, kind: "ask", args: { question: entry.payload.question } });
+				systems.push({
+					entryId: entry.id,
+					seq: entry.seq,
+					kind: "ask",
+					args: { question: entry.payload.question },
+				});
 				continue;
 			}
 			if (entry.type === "btw") {
@@ -192,12 +238,23 @@ export class SessionViewProjector {
 				assistantChars,
 				toolChars,
 				toolDefChars: this.agent.agentTools.reduce(
-					(n, tool) => n + (tool.name?.length ?? 0) + (tool.description?.length ?? 0) + (tool.parameters !== undefined ? JSON.stringify(tool.parameters).length : 0),
+					(n, tool) =>
+						n +
+						(tool.name?.length ?? 0) +
+						(tool.description?.length ?? 0) +
+						(tool.parameters !== undefined ? JSON.stringify(tool.parameters).length : 0),
 					0,
 				),
 			},
 			loops: loops.list().map(specView),
-			sideThread: btw.list().map((thread) => ({ id: thread.id, kind: thread.kind, exchanges: thread.exchanges, saveState: thread.saveState })),
+			sideThread: btw
+				.list()
+				.map((thread) => ({
+					id: thread.id,
+					kind: thread.kind,
+					exchanges: thread.exchanges,
+					saveState: thread.saveState,
+				})),
 			usage: stats.usage,
 			cacheRate: cacheRate(stats.usage),
 			branch: { tipId: entries[entries.length - 1]?.id ?? null },
@@ -215,7 +272,10 @@ export class SessionViewProjector {
 	}
 
 	/** Snapshot first, then an update on every bus event that can change the view. */
-	async attach(listener: ViewListener, context: Context = BACKGROUND_CONTEXT): Promise<{ view: SessionView; detach(): void }> {
+	async attach(
+		listener: ViewListener,
+		context: Context = BACKGROUND_CONTEXT,
+	): Promise<{ view: SessionView; detach(): void }> {
 		const offs: (() => void)[] = [];
 		let queued = false;
 		const refresh = () => {

@@ -38,7 +38,9 @@ export function dropToolPairs(messages: AgentMessage[]): AgentMessage[] {
 	return messages.filter((message) => {
 		if (message.role === "toolResult") return false;
 		if (message.role !== "assistant") return true;
-		const calls = message.content.filter((block): block is Extract<typeof block, { type: "toolCall" }> => block.type === "toolCall");
+		const calls = message.content.filter(
+			(block): block is Extract<typeof block, { type: "toolCall" }> => block.type === "toolCall",
+		);
 		if (calls.length === 0) return true;
 		return !calls.every((call) => results.has(call.id));
 	});

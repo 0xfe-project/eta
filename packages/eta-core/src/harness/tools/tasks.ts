@@ -31,7 +31,10 @@ export function createTaskTools(store: TaskStore, observe?: EtaEmit): AgentHarne
 			async execute(_id, params: { content: string; deps?: string[]; priority?: "high" | "medium" | "low" }) {
 				const { task, warnings } = store.create(params.content, { deps: params.deps, priority: params.priority });
 				notify("add", { taskId: task.id });
-				return withId(`Created ${task.id}. ${TASK_UPDATE_SUCCESS}${warnings.length > 0 ? `\nwarnings: ${warnings.join("; ")}` : ""}`, { task, warnings });
+				return withId(
+					`Created ${task.id}. ${TASK_UPDATE_SUCCESS}${warnings.length > 0 ? `\nwarnings: ${warnings.join("; ")}` : ""}`,
+					{ task, warnings },
+				);
 			},
 		},
 		{
@@ -61,7 +64,14 @@ export function createTaskTools(store: TaskStore, observe?: EtaEmit): AgentHarne
 			description: "Change a task: status (pending|in_progress|completed|cancelled), content, deps, priority.",
 			parameters: Type.Object({
 				id: Type.String(),
-				status: Type.Optional(Type.Union([Type.Literal("pending"), Type.Literal("in_progress"), Type.Literal("completed"), Type.Literal("cancelled")])),
+				status: Type.Optional(
+					Type.Union([
+						Type.Literal("pending"),
+						Type.Literal("in_progress"),
+						Type.Literal("completed"),
+						Type.Literal("cancelled"),
+					]),
+				),
 				content: Type.Optional(Type.String()),
 				deps: Type.Optional(Type.Array(Type.String())),
 				priority: Type.Optional(Type.Union([Type.Literal("high"), Type.Literal("medium"), Type.Literal("low")])),
@@ -70,12 +80,14 @@ export function createTaskTools(store: TaskStore, observe?: EtaEmit): AgentHarne
 				const result = store.update(id, patch);
 				if (result === undefined) return withId(`No task ${id}.`, { task: undefined });
 				notify("update", { taskId: id, status: result.task.status });
-				return withId(`Updated ${id}. ${TASK_UPDATE_SUCCESS}${result.warnings.length > 0 ? `\nwarnings: ${result.warnings.join("; ")}` : ""}`, {
-					task: result.task,
-					warnings: result.warnings,
-				});
+				return withId(
+					`Updated ${id}. ${TASK_UPDATE_SUCCESS}${result.warnings.length > 0 ? `\nwarnings: ${result.warnings.join("; ")}` : ""}`,
+					{
+						task: result.task,
+						warnings: result.warnings,
+					},
+				);
 			},
 		},
 	];
 }
-

@@ -21,7 +21,16 @@ export interface EtaState {
 	error: string | null;
 }
 
-export const initialEtaState: EtaState = { connected: false, sessions: [], attach: null, views: {}, dev: {}, unread: [], runningBySession: {}, error: null };
+export const initialEtaState: EtaState = {
+	connected: false,
+	sessions: [],
+	attach: null,
+	views: {},
+	dev: {},
+	unread: [],
+	runningBySession: {},
+	error: null,
+};
 
 /** Pure reducer, exported for tests: fold one server frame into the state. */
 export function reduceEtaState(state: EtaState, message: ServerMessage): EtaState {
@@ -38,13 +47,24 @@ export function reduceEtaState(state: EtaState, message: ServerMessage): EtaStat
 		}
 		if (message.channel === "dev") {
 			const existing = state.dev[message.frame.session] ?? [];
-			return { ...state, dev: { ...state.dev, [message.frame.session]: [...existing, message.frame].slice(-DEV_CAP) } };
+			return {
+				...state,
+				dev: { ...state.dev, [message.frame.session]: [...existing, message.frame].slice(-DEV_CAP) },
+			};
 		}
 		return state;
 	}
 	switch (message.type) {
 		case "hello":
-			return { ...state, connected: true, sessions: message.sessions, attach: state.sessions.length > 0 ? state.attach : message.attach, views: {}, dev: {}, error: null };
+			return {
+				...state,
+				connected: true,
+				sessions: message.sessions,
+				attach: state.sessions.length > 0 ? state.attach : message.attach,
+				views: {},
+				dev: {},
+				error: null,
+			};
 		case "sessions": {
 			const runningNow: Record<string, boolean> = {};
 			for (const session of message.sessions) runningNow[session.name] = session.badges.includes("running");
@@ -95,7 +115,11 @@ export class EtaStore {
 
 	send(message: ClientMessage): void {
 		if (message.op === "focus") {
-			this.state = { ...this.state, attach: message.session, unread: this.state.unread.filter((name) => name !== message.session) };
+			this.state = {
+				...this.state,
+				attach: message.session,
+				unread: this.state.unread.filter((name) => name !== message.session),
+			};
 			this.emit();
 		}
 		if (this.socket !== undefined && this.socket.readyState === 1) this.socket.send(JSON.stringify(message));

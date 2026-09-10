@@ -9,7 +9,13 @@ import type { ServerMessage } from "../src/protocol.ts";
 
 async function withServer(run: (server: EtaServer) => Promise<void>): Promise<void> {
 	const cwd = mkdtempSync(join(tmpdir(), "eta-server-test-"));
-	const server = await startServer({ port: 0, cwd, webDist: join(cwd, "no-dist"), configPath: join(cwd, "no-config.json"), dataDir: join(cwd, "sessions") });
+	const server = await startServer({
+		port: 0,
+		cwd,
+		webDist: join(cwd, "no-dist"),
+		configPath: join(cwd, "no-config.json"),
+		dataDir: join(cwd, "sessions"),
+	});
 	serverCwds.set(server, cwd);
 	try {
 		await run(server);
@@ -20,7 +26,11 @@ async function withServer(run: (server: EtaServer) => Promise<void>): Promise<vo
 
 class SocketReader {
 	private readonly messages: ServerMessage[] = [];
-	private readonly waiters: { resolve(m: ServerMessage): void; reject(e: unknown): void; timer: ReturnType<typeof setTimeout> }[] = [];
+	private readonly waiters: {
+		resolve(m: ServerMessage): void;
+		reject(e: unknown): void;
+		timer: ReturnType<typeof setTimeout>;
+	}[] = [];
 
 	constructor(socket: WebSocket) {
 		socket.addEventListener("message", (event) => {
@@ -81,7 +91,10 @@ describe("persona api", () => {
 			expect(ids).toContain("Executor");
 			const cwd = serverCwd(server);
 			mkdirSync(join(cwd, ".eta", "persona"), { recursive: true });
-			writeFileSync(join(cwd, ".eta", "persona", "custom.persona.md"), "# Custom reviewer card\nReviews with care.\n");
+			writeFileSync(
+				join(cwd, ".eta", "persona", "custom.persona.md"),
+				"# Custom reviewer card\nReviews with care.\n",
+			);
 			const next = await (await fetch(`http://127.0.0.1:${server.port}/api/personas`)).json();
 			const custom = (next as { id: string; description: string }[]).find((p) => p.id === "custom");
 			expect(custom?.description).toBe("Custom reviewer card");
@@ -106,32 +119,47 @@ describe("ws protocol", () => {
 			expect(hello).toMatchObject({ type: "hello", sessions: [] });
 
 			send(a.socket, { op: "session.create", name: "s1", personaId: "nope" });
-			const err = await a.reader.until((m): m is Extract<ServerMessage, { type: "error" }> => "type" in m && m.type === "error");
+			const err = await a.reader.until(
+				(m): m is Extract<ServerMessage, { type: "error" }> => "type" in m && m.type === "error",
+			);
 			expect(err.message).toContain("unknown persona");
 
 			send(a.socket, { op: "session.create", name: "s1", personaId: "Thinker" });
-			const created = await a.reader.until((m): m is Extract<ServerMessage, { type: "created" }> => "type" in m && m.type === "created");
+			const created = await a.reader.until(
+				(m): m is Extract<ServerMessage, { type: "created" }> => "type" in m && m.type === "created",
+			);
 			expect(created.name).toBe("s1");
 
 			const b = await connect(server);
 			await b.reader.next();
 			// second client gets the view frame for the existing session
-			await b.reader.until((m): m is Extract<ServerMessage, { channel: "view" }> => "channel" in m && m.channel === "view" && "session" in m && m.session === "s1");
+			await b.reader.until(
+				(m): m is Extract<ServerMessage, { channel: "view" }> =>
+					"channel" in m && m.channel === "view" && "session" in m && m.session === "s1",
+			);
 
 			send(a.socket, { op: "prompt", session: "s1", text: "hello eta" });
 			const bView = await b.reader.until(
 				(m): m is Extract<ServerMessage, { channel: "view" }> =>
-					"channel" in m && m.channel === "view" && "session" in m && m.session === "s1" && JSON.stringify(m.view).includes("[Thinker faux echo]"),
+					"channel" in m &&
+					m.channel === "view" &&
+					"session" in m &&
+					m.session === "s1" &&
+					JSON.stringify(m.view).includes("[Thinker faux echo]"),
 			);
 			const painted = JSON.stringify(bView.view);
 			expect(painted).toContain("hello eta");
 			expect(painted).toContain("[Thinker faux echo] hello eta");
 
 			// dev ring + frames reach both clients equally: dev channel arrived on a
-			await a.reader.until((m): m is Extract<ServerMessage, { channel: "dev" }> => "channel" in m && m.channel === "dev");
+			await a.reader.until(
+				(m): m is Extract<ServerMessage, { channel: "dev" }> => "channel" in m && m.channel === "dev",
+			);
 
 			send(a.socket, { op: "session.delete", name: "s1" });
-			await a.reader.until((m): m is Extract<ServerMessage, { type: "deleted" }> => "type" in m && m.type === "deleted");
+			await a.reader.until(
+				(m): m is Extract<ServerMessage, { type: "deleted" }> => "type" in m && m.type === "deleted",
+			);
 
 			a.socket.close();
 			b.socket.close();
@@ -143,12 +171,17 @@ describe("ws protocol", () => {
 			const a = await connect(server);
 			await a.reader.next();
 			send(a.socket, { op: "session.create", name: "bg", personaId: "Executor" });
-			await a.reader.until((m): m is Extract<ServerMessage, { type: "created" }> => "type" in m && m.type === "created");
+			await a.reader.until(
+				(m): m is Extract<ServerMessage, { type: "created" }> => "type" in m && m.type === "created",
+			);
 			a.socket.close();
 			await new Promise((resolve) => setTimeout(resolve, 50));
 			const b = await connect(server);
 			await b.reader.next();
-			const view = await b.reader.until((m): m is Extract<ServerMessage, { channel: "view" }> => "channel" in m && m.channel === "view" && "session" in m && m.session === "bg");
+			const view = await b.reader.until(
+				(m): m is Extract<ServerMessage, { channel: "view" }> =>
+					"channel" in m && m.channel === "view" && "session" in m && m.session === "bg",
+			);
 			expect(view.view.personas).toEqual(["Executor"]);
 			b.socket.close();
 		});
@@ -161,18 +194,29 @@ describe("sidebar ops", () => {
 			const { socket, reader } = await connect(server);
 			await reader.next();
 			send(socket, { op: "session.create", name: "ops-1", personaId: "Thinker" });
-			await reader.until((m): m is Extract<ServerMessage, { type: "created" }> => "type" in m && m.type === "created");
+			await reader.until(
+				(m): m is Extract<ServerMessage, { type: "created" }> => "type" in m && m.type === "created",
+			);
 			send(socket, { op: "session.rename", session: "ops-1", title: "Renamed" });
 			send(socket, { op: "session.pin", session: "ops-1", pinned: true });
 			send(socket, { op: "personaSet", session: "ops-1", personaId: "INSIGHTER" });
 			const sessions = await reader.until(
-				(m): m is Extract<ServerMessage, { type: "sessions" }> => "type" in m && m.type === "sessions" && m.sessions.some((row) => row.name === "ops-1" && row.title === "Renamed" && row.pinned === true),
+				(m): m is Extract<ServerMessage, { type: "sessions" }> =>
+					"type" in m &&
+					m.type === "sessions" &&
+					m.sessions.some((row) => row.name === "ops-1" && row.title === "Renamed" && row.pinned === true),
 			);
 			const row = sessions.sessions.find((candidate) => candidate.name === "ops-1");
 			expect(typeof row?.updated).toBe("number");
 			expect(typeof row?.cwd).toBe("string");
 			await reader.until(
-				(m): m is Extract<ServerMessage, { channel: "view" }> => "channel" in m && m.channel === "view" && "session" in m && m.session === "ops-1" && "personas" in m.view && m.view.personas.includes("INSIGHTER"),
+				(m): m is Extract<ServerMessage, { channel: "view" }> =>
+					"channel" in m &&
+					m.channel === "view" &&
+					"session" in m &&
+					m.session === "ops-1" &&
+					"personas" in m.view &&
+					m.view.personas.includes("INSIGHTER"),
 			);
 			socket.close();
 		});

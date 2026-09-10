@@ -20,10 +20,19 @@ export interface PersonaSummary {
 export async function listPersonaSummaries(cwd: string, home = homedir()): Promise<PersonaSummary[]> {
 	const cards = await discoverPersonas(new NodeEtaFs(), cwd, home);
 	const builtin = new Set(Object.keys(builtinPersonas()));
-	return Object.entries(cards).map(([id, text]) => ({ id, name: id, description: describeCard(text), custom: !builtin.has(id) }));
+	return Object.entries(cards).map(([id, text]) => ({
+		id,
+		name: id,
+		description: describeCard(text),
+		custom: !builtin.has(id),
+	}));
 }
 
-export async function renderPersonaFor(cwd: string, personaId: string, home = homedir()): Promise<{ names: string[]; text: string } | undefined> {
+export async function renderPersonaFor(
+	cwd: string,
+	personaId: string,
+	home = homedir(),
+): Promise<{ names: string[]; text: string } | undefined> {
 	const cards = await discoverPersonas(new NodeEtaFs(), cwd, home);
 	if (!(personaId in cards)) return undefined;
 	return { names: [personaId], text: renderPersonaBlock([personaId], cards).text };
@@ -31,7 +40,10 @@ export async function renderPersonaFor(cwd: string, personaId: string, home = ho
 
 function describeCard(text: string): string {
 	for (const line of text.split("\n")) {
-		const clean = line.replace(/^#+\s*/, "").replace(/^>\s*/, "").trim();
+		const clean = line
+			.replace(/^#+\s*/, "")
+			.replace(/^>\s*/, "")
+			.trim();
 		if (clean.length > 0) return clean.length > 140 ? `${clean.slice(0, 140)}…` : clean;
 	}
 	return "";

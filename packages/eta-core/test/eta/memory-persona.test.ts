@@ -1,17 +1,38 @@
 import { describe, expect, it } from "vitest";
-import { MEMORY_SECTIONS, MemoryCache, applyExtraction, extractMemory, parseMemory, renderMemory, scanMemoryPaths } from "../../src/harness/memory.ts";
+import {
+	MEMORY_SECTIONS,
+	MemoryCache,
+	applyExtraction,
+	extractMemory,
+	parseMemory,
+	renderMemory,
+	scanMemoryPaths,
+} from "../../src/harness/memory.ts";
 import { discoverPersonas, renderPersonaBlock } from "../../src/harness/persona.ts";
 import type { EtaFs } from "../../src/harness/memory.ts";
 
 function memFs(files: Record<string, string>): EtaFs & { touch(p: string): void } {
 	const times = Object.fromEntries(Object.keys(files).map((k) => [k, 1000]));
-	const dirList = (dir: string) => Object.keys(files).filter((p) => p.startsWith(`${dir}/`) && !p.slice(dir.length + 1).includes("/"));
+	const dirList = (dir: string) =>
+		Object.keys(files).filter((p) => p.startsWith(`${dir}/`) && !p.slice(dir.length + 1).includes("/"));
 	return {
-		touch(p) { files[p] ??= ""; times[p] = (times[p] ?? 1000) + 500; },
-		async readFile(p) { return files[p]; },
-		async mtime(p) { return times[p] ?? (files[p] !== undefined ? 1000 : undefined); },
-		async writeFile(p, c) { files[p] = c; times[p] = (times[p] ?? 1000) + 1; },
-		async listFileNames(d) { return dirList(d); },
+		touch(p) {
+			files[p] ??= "";
+			times[p] = (times[p] ?? 1000) + 500;
+		},
+		async readFile(p) {
+			return files[p];
+		},
+		async mtime(p) {
+			return times[p] ?? (files[p] !== undefined ? 1000 : undefined);
+		},
+		async writeFile(p, c) {
+			files[p] = c;
+			times[p] = (times[p] ?? 1000) + 1;
+		},
+		async listFileNames(d) {
+			return dirList(d);
+		},
 	};
 }
 
@@ -70,7 +91,13 @@ describe("extraction", () => {
 	});
 	it("out-of-band call parses provider JSON, silence on garbage", async () => {
 		const fs = memFs({ "/m/MEMORY.md": "" });
-		const r = await extractMemory(fs, "/m/MEMORY.md", "user said X", async () => 'noise {"learn_new_lesson":["ask earlier"],"add_new_decision":[],"add_new_preference":[],"remove_memory_ids":[]} noise');
+		const r = await extractMemory(
+			fs,
+			"/m/MEMORY.md",
+			"user said X",
+			async () =>
+				'noise {"learn_new_lesson":["ask earlier"],"add_new_decision":[],"add_new_preference":[],"remove_memory_ids":[]} noise',
+		);
 		expect(r?.added).toBe(1);
 		expect(await extractMemory(fs, "/m/MEMORY.md", "x", async () => "no json here")).toBeUndefined();
 	});

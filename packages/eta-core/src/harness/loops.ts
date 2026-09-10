@@ -44,7 +44,7 @@ export function computeJitter(id: string, intervalMs: number): number {
 		hash ^= id.charCodeAt(i);
 		hash = Math.imul(hash, 16777619);
 	}
-	return (Math.abs(hash) % (Math.floor(intervalMs * 0.1) + 1));
+	return Math.abs(hash) % (Math.floor(intervalMs * 0.1) + 1);
 }
 
 /** Default lifetime for loops without an explicit expiry (pi-loop parity). */

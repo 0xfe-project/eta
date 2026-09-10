@@ -33,11 +33,16 @@ export interface EtaPromptSection {
 
 function sections(base: string, state: EtaPromptState): EtaPromptSection[] {
 	const out: EtaPromptSection[] = [{ name: "base", text: base, stable: true }];
-	if (state.persona !== undefined && state.persona.length > 0) out.push({ name: "persona", text: state.persona, stable: true });
-	if (state.skills !== undefined && state.skills.length > 0) out.push({ name: "skills", text: state.skills, stable: true });
-	if (state.goal && state.goal.status === "active") out.push({ name: "goal", text: goalPursuitGuidelines(state.goal.objective), stable: false });
-	if (state.tasks && state.tasks.length > 0) out.push({ name: "tasks", text: `${TASK_REVIEW_PROMPT}\n\n${renderCurrentTasks(state.tasks)}`, stable: false });
-	if (state.memory !== undefined && state.memory.length > 0) out.push({ name: "memory", text: state.memory, stable: false });
+	if (state.persona !== undefined && state.persona.length > 0)
+		out.push({ name: "persona", text: state.persona, stable: true });
+	if (state.skills !== undefined && state.skills.length > 0)
+		out.push({ name: "skills", text: state.skills, stable: true });
+	if (state.goal && state.goal.status === "active")
+		out.push({ name: "goal", text: goalPursuitGuidelines(state.goal.objective), stable: false });
+	if (state.tasks && state.tasks.length > 0)
+		out.push({ name: "tasks", text: `${TASK_REVIEW_PROMPT}\n\n${renderCurrentTasks(state.tasks)}`, stable: false });
+	if (state.memory !== undefined && state.memory.length > 0)
+		out.push({ name: "memory", text: state.memory, stable: false });
 	return out.filter((section) => section.text.length > 0);
 }
 
@@ -50,10 +55,16 @@ export function etaPromptSectionsDetailed(base: string, state: EtaPromptState): 
  * cache keeps across turns versus what gets rewritten every generation. */
 export function splitEtaPromptSections(base: string, state: EtaPromptState): { stable: string[]; adaptive: string[] } {
 	const all = sections(base, state);
-	return { stable: all.filter((s) => s.stable).map((s) => s.text), adaptive: all.filter((s) => !s.stable).map((s) => s.text) };
+	return {
+		stable: all.filter((s) => s.stable).map((s) => s.text),
+		adaptive: all.filter((s) => !s.stable).map((s) => s.text),
+	};
 }
 
-export function etaPromptBlockChars(base: string, state: EtaPromptState): { stableChars: number; adaptiveChars: number } {
+export function etaPromptBlockChars(
+	base: string,
+	state: EtaPromptState,
+): { stableChars: number; adaptiveChars: number } {
 	const { stable, adaptive } = splitEtaPromptSections(base, state);
 	const chars = (parts: string[]) => parts.reduce((sum, part) => sum + part.length, 0);
 	return { stableChars: chars(stable), adaptiveChars: chars(adaptive) };
@@ -66,5 +77,7 @@ export function etaPromptSections(state: EtaPromptState): string[] {
 
 /** The composed prompt handed to the harness `systemPrompt` option. */
 export function composeEtaSystemPrompt(base: string, state: EtaPromptState): string {
-	return sections(base, state).map((section) => section.text).join("\n\n");
+	return sections(base, state)
+		.map((section) => section.text)
+		.join("\n\n");
 }

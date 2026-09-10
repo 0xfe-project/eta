@@ -5,7 +5,13 @@
 
 import type { AgentMessage } from "../../types.ts";
 import { TASK_REVIEW_PROMPT } from "../../prompts/index.ts";
-import { createCadenceState, drainReminderForContext, evaluateToolResult, onTurnStart, type CadenceState } from "../cadence.ts";
+import {
+	createCadenceState,
+	drainReminderForContext,
+	evaluateToolResult,
+	onTurnStart,
+	type CadenceState,
+} from "../cadence.ts";
 import type { TaskStore } from "../task-store.ts";
 import { TASK_TOOL_NAMES } from "./tasks.ts";
 
@@ -32,7 +38,11 @@ export function createReminderHooks(store: TaskStore, reminderInterval = 5): Rem
 			return {
 				messages: [
 					...event.messages,
-					{ role: "user", content: `<system-reminder>\n${TASK_REVIEW_PROMPT}\n</system-reminder>`, timestamp: Date.now() },
+					{
+						role: "user",
+						content: `<system-reminder>\n${TASK_REVIEW_PROMPT}\n</system-reminder>`,
+						timestamp: Date.now(),
+					},
 				],
 			};
 		},

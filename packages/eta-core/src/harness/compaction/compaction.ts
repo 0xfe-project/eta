@@ -1,9 +1,15 @@
-import { SUMMARIZATION_PROMPT, SUMMARIZATION_SYSTEM_PROMPT, TURN_PREFIX_SUMMARIZATION_PROMPT, UPDATE_SUMMARIZATION_PROMPT } from "../../prompts/compaction.ts";
+import {
+	SUMMARIZATION_PROMPT,
+	SUMMARIZATION_SYSTEM_PROMPT,
+	TURN_PREFIX_SUMMARIZATION_PROMPT,
+	UPDATE_SUMMARIZATION_PROMPT,
+} from "../../prompts/compaction.ts";
 export { SUMMARIZATION_SYSTEM_PROMPT };
 import { dropToolPairs, untrustedFallback } from "./eta-compaction.ts";
 import type { CompactionPreparation, CompactionSettings, FileOperations } from "../session/types.ts";
 export type { CompactionPreparation, CompactionSettings, FileOperations } from "../session/types.ts";
-import {	isRetryableAssistantError,
+import {
+	isRetryableAssistantError,
 	type Context as AiContext,
 	type Api,
 	type AssistantMessage,
@@ -528,7 +534,14 @@ export async function generateSummaryWithRequest(
 		if (fallback !== undefined) {
 			return ok({
 				text: fallback,
-				usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+				usage: {
+					input: 0,
+					output: 0,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 0,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+				},
 			});
 		}
 		return err(
@@ -621,8 +634,6 @@ export function prepareCompaction(
 		settings,
 	});
 }
-
-
 
 export { serializeConversation } from "./utils.ts";
 

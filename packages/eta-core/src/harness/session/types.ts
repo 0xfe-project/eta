@@ -48,7 +48,16 @@ export type SettledAssistantMessage = AssistantMessage & {
 	stopReason: Exclude<StopReason, "pending">;
 };
 
-export type EntryType = "message" | "compaction" | "branch_summary" | "merge" | "custom" | "goal" | "ask" | "answer" | "btw";
+export type EntryType =
+	| "message"
+	| "compaction"
+	| "branch_summary"
+	| "merge"
+	| "custom"
+	| "goal"
+	| "ask"
+	| "answer"
+	| "btw";
 
 export interface EntryBase {
 	id: string;
@@ -188,7 +197,6 @@ export interface LoopSpec {
 	paused: boolean;
 	disposed?: boolean;
 }
-
 
 /** Convert an application-defined custom entry into model context. */
 export type EntryProjector = (

@@ -18,7 +18,12 @@ import type { AgentHarnessTool, ExecutionEnv } from "./types.ts";
 import type { ThinkingLevel } from "../types.ts";
 import type { Session } from "./session/types.ts";
 import type { EtaEmit } from "./events.ts";
-import { composeEtaSystemPrompt, etaPromptBlockChars, etaPromptSectionsDetailed, type EtaPromptSection } from "./composer.ts";
+import {
+	composeEtaSystemPrompt,
+	etaPromptBlockChars,
+	etaPromptSectionsDetailed,
+	type EtaPromptSection,
+} from "./composer.ts";
 import { AskRegistry, createAskUserTool, type HeadlessAsk } from "./ask.ts";
 import { BtwManager } from "./btw.ts";
 import { answerEntry, askEntry, btwEntry, goalEntry, type GoalPayload } from "./entries.ts";
@@ -83,7 +88,11 @@ const memoryKv = (): StateKV => {
 	};
 };
 
-const goalPayloadFor = (change: { goal: { objective: string; status: string }; from: string; action?: string }): GoalPayload => {
+const goalPayloadFor = (change: {
+	goal: { objective: string; status: string };
+	from: string;
+	action?: string;
+}): GoalPayload => {
 	if (change.action === "cleared") return { kind: "cleared", objective: "" };
 	switch (change.goal.status) {
 		case "achieved":
@@ -108,7 +117,7 @@ export class EtaAgent {
 	readonly subagents: SubagentManager;
 	/** The KV surface the state tools operate on; the Context panel lists it. */
 	readonly stateKv: StateKV;
-		/** All tools the harness runs: battery surface plus caller extras. */
+	/** All tools the harness runs: battery surface plus caller extras. */
 	readonly agentTools: AgentHarnessTool<object | undefined>[];
 	/** Persona card names baked into the stable prompt block; empty when none. */
 	personas: string[] = [];
@@ -130,7 +139,9 @@ export class EtaAgent {
 		void this.refreshPromptBlocks();
 	}
 	/** Prompt block sizes from the last generation; undefined until the first one. */
-	private lastPromptBlocksValue: { stableChars: number; adaptiveChars: number; sections: EtaPromptSection[] } | undefined = undefined;
+	private lastPromptBlocksValue:
+		| { stableChars: number; adaptiveChars: number; sections: EtaPromptSection[] }
+		| undefined = undefined;
 
 	get lastPromptBlocks(): { stableChars: number; adaptiveChars: number; sections: EtaPromptSection[] } | undefined {
 		return this.lastPromptBlocksValue;
@@ -228,10 +239,18 @@ export class EtaAgent {
 	}
 
 	/** UI write path: mutate a task (the store persists) and mirror a todo observation. */
-	setTask(id: string, patch: { status?: TaskStatus; content?: string; deps?: string[]; priority?: "high" | "medium" | "low" }): { task: StoredTask; warnings: string[] } | undefined {
+	setTask(
+		id: string,
+		patch: { status?: TaskStatus; content?: string; deps?: string[]; priority?: "high" | "medium" | "low" },
+	): { task: StoredTask; warnings: string[] } | undefined {
 		const result = this.tasks.update(id, patch);
 		if (result !== undefined) {
-			void this.lane.publish([{ type: "eta", category: "task", action: "update", data: { taskId: id, status: result.task.status } }], BACKGROUND_CONTEXT).catch(() => undefined);
+			void this.lane
+				.publish(
+					[{ type: "eta", category: "task", action: "update", data: { taskId: id, status: result.task.status } }],
+					BACKGROUND_CONTEXT,
+				)
+				.catch(() => undefined);
 		}
 		return result;
 	}
@@ -240,7 +259,9 @@ export class EtaAgent {
 		let laneRef: AgentLane | undefined;
 		let agentRef: EtaAgent | undefined;
 		const emit: EtaEmit = (category, action, data) => {
-			void laneRef?.publish([{ type: "eta", category, action, data: data ?? {} }], BACKGROUND_CONTEXT).catch(() => undefined);
+			void laneRef
+				?.publish([{ type: "eta", category, action, data: data ?? {} }], BACKGROUND_CONTEXT)
+				.catch(() => undefined);
 		};
 		const writeEntry = (entry: PendingEntry) => {
 			void laneRef?.append(entry, BACKGROUND_CONTEXT).catch(() => undefined);
@@ -254,7 +275,9 @@ export class EtaAgent {
 			options.persistLoop ??
 			((spec: LoopSpec) => {
 				if (spec.disposed) {
-					void options.session.deleteValue(loopState(spec.def.id), BACKGROUND_CONTEXT).catch(() => emit("state", "persist_failed", { key: loopState(spec.def.id).key }));
+					void options.session
+						.deleteValue(loopState(spec.def.id), BACKGROUND_CONTEXT)
+						.catch(() => emit("state", "persist_failed", { key: loopState(spec.def.id).key }));
 					return;
 				}
 				persist(loopState(spec.def.id), spec);
@@ -277,7 +300,9 @@ export class EtaAgent {
 		});
 		const btw = new BtwManager(
 			(entries) => ({
-				messages: (entries as { message?: AgentMessage }[]).flatMap((entry) => (entry.message === undefined ? [] : [entry.message])),
+				messages: (entries as { message?: AgentMessage }[]).flatMap((entry) =>
+					entry.message === undefined ? [] : [entry.message],
+				),
 			}),
 			(note) => writeEntry(btwEntry({ note })),
 			emit,
@@ -310,7 +335,9 @@ export class EtaAgent {
 			...(options.persona === undefined ? {} : { persona: options.persona }),
 		};
 		const skillBox: { skills?: string } = {
-			...(options.skillsSection === undefined || options.skillsSection.length === 0 ? {} : { skills: options.skillsSection }),
+			...(options.skillsSection === undefined || options.skillsSection.length === 0
+				? {}
+				: { skills: options.skillsSection }),
 		};
 		const refreshBlocks = async (): Promise<string> => {
 			const memory = await options.memorySource?.();
@@ -319,7 +346,9 @@ export class EtaAgent {
 					? {}
 					: { goal: { objective: goal.current.objective, status: goal.current.status } }),
 				tasks: tasks.list(),
-				...(personaBox.persona === undefined || personaBox.persona.text.length === 0 ? {} : { persona: personaBox.persona.text }),
+				...(personaBox.persona === undefined || personaBox.persona.text.length === 0
+					? {}
+					: { persona: personaBox.persona.text }),
 				...(skillBox.skills === undefined ? {} : { skills: skillBox.skills }),
 				...(memory === undefined || memory.length === 0 ? {} : { memory }),
 			};
@@ -338,7 +367,7 @@ export class EtaAgent {
 				model: options.model,
 				...(systemPrompt === undefined ? {} : { systemPrompt }),
 				activeToolNames: [...new Set(agentTools.map((tool) => tool.name))],
-			...(options.executionEnv === undefined ? {} : { toolContext: { env: options.executionEnv } }),
+				...(options.executionEnv === undefined ? {} : { toolContext: { env: options.executionEnv } }),
 				tools: agentTools,
 			},
 			context,
@@ -347,10 +376,13 @@ export class EtaAgent {
 		laneRef = lane;
 		loops.attach();
 
-		harness.events.on("usage", (event) => agentRef?.trackUsage((event as { totals?: { output?: number } }).totals?.output ?? 0));
+		harness.events.on("usage", (event) =>
+			agentRef?.trackUsage((event as { totals?: { output?: number } }).totals?.output ?? 0),
+		);
 		harness.events.on("config_update", (event) => {
 			const update = event as { property?: string; value?: unknown };
-			if (update.property === "thinkingLevel" && typeof update.value === "string") agentRef?.setThinkingLevelValue(update.value as ThinkingLevel);
+			if (update.property === "thinkingLevel" && typeof update.value === "string")
+				agentRef?.setThinkingLevelValue(update.value as ThinkingLevel);
 		});
 		harness.events.on("run_start", () => {
 			if (agentRef !== undefined) {
@@ -358,14 +390,21 @@ export class EtaAgent {
 				agentRef.tokensPerSecValue = 0;
 			}
 		});
-		harness.hooks.on("before_run_end", goalDriver({ goal, evaluate: options.evaluateGoal ?? (() => Promise.resolve(false)) }), { id: "eta.goal" });
+		harness.hooks.on(
+			"before_run_end",
+			goalDriver({ goal, evaluate: options.evaluateGoal ?? (() => Promise.resolve(false)) }),
+			{ id: "eta.goal" },
+		);
 		harness.hooks.on("before_run_end", loopDriver(loops), { id: "eta.loop" });
 		harness.hooks.on("before_run_end", emptyResponseGuard(), { id: "eta.empty" });
 
 		const reminder = createReminderHooks(tasks);
-		harness.hooks.on("after_tool", (event) => reminder.afterTool({ toolName: event.toolName }), { id: "eta.reminder" });
+		harness.hooks.on("after_tool", (event) => reminder.afterTool({ toolName: event.toolName }), {
+			id: "eta.reminder",
+		});
 		harness.hooks.on("transform_context", (event) => reminder.transformContext(event), { id: "eta.reminder" });
-		const stopHeartbeat = options.heartbeatMs === 0 ? undefined : startLoopHeartbeat(loops, options.heartbeatMs ?? 30_000);
+		const stopHeartbeat =
+			options.heartbeatMs === 0 ? undefined : startLoopHeartbeat(loops, options.heartbeatMs ?? 30_000);
 		const agent = new EtaAgent(
 			harness,
 			lane,

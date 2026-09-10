@@ -27,7 +27,13 @@ export interface SidebarSession {
 
 export type ClientMessage =
 	| { op: "focus"; session: string }
-	| { op: "prompt"; session: string; text: string; mode?: "queue" | "steer"; images?: { mime: string; dataBase64: string }[] }
+	| {
+			op: "prompt";
+			session: string;
+			text: string;
+			mode?: "queue" | "steer";
+			images?: { mime: string; dataBase64: string }[];
+	  }
 	| { op: "goal"; session: string; action: "set" | "pause" | "resume" | "clear"; objective?: string }
 	| { op: "taskCreate"; session: string; content: string; priority?: "high" | "medium" | "low" }
 	| { op: "taskUpdate"; session: string; id: string; content?: string; priority?: "high" | "medium" | "low" }
@@ -56,7 +62,6 @@ export type ClientMessage =
 	| { op: "session.pin"; session: string; pinned: boolean }
 	| { op: "session.archive"; session: string; archived: boolean }
 	| { op: "session.rename"; session: string; title: string };
-
 
 export type ServerMessage =
 	| { channel: "view"; session: string; view: SessionView }

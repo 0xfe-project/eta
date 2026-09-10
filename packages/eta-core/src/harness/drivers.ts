@@ -39,7 +39,11 @@ function runUsedTools(messages: AgentMessage[]): boolean {
 		const role = (m as { role?: string }).role;
 		if (role === "tool" || role === "toolResult") return true;
 		const content = (m as { content?: unknown }).content;
-		if (role === "assistant" && Array.isArray(content) && content.some((p) => (p as { type?: string }).type === "toolCall")) {
+		if (
+			role === "assistant" &&
+			Array.isArray(content) &&
+			content.some((p) => (p as { type?: string }).type === "toolCall")
+		) {
 			return true;
 		}
 	}
@@ -53,7 +57,8 @@ export function goalDriver(deps: GoalDriverDeps) {
 		if (!deps.goal.wantsContinuation()) {
 			// Hit the hard continuation cap: park the goal instead of leaving it a zombie.
 			const state = deps.goal.current;
-			if (state !== undefined && state.status === "active" && state.roundCount >= deps.goal.maxContinuations) deps.goal.pause();
+			if (state !== undefined && state.status === "active" && state.roundCount >= deps.goal.maxContinuations)
+				deps.goal.pause();
 			return undefined;
 		}
 		const objective = deps.goal.current?.objective;

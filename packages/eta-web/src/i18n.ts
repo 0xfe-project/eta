@@ -39,7 +39,11 @@ if (typeof window !== "undefined") {
 		params.delete("locale");
 		params.delete("lang");
 		const query = params.toString();
-		window.history.replaceState(null, "", `${window.location.pathname}${query.length > 0 ? `?${query}` : ""}${window.location.hash}`);
+		window.history.replaceState(
+			null,
+			"",
+			`${window.location.pathname}${query.length > 0 ? `?${query}` : ""}${window.location.hash}`,
+		);
 	}
 	window.addEventListener("storage", () => void applyExternalLocale());
 	window.addEventListener(localeChangeEvent, () => void applyExternalLocale());
@@ -59,7 +63,11 @@ function safeStorage(): string | null {
 	}
 }
 
-export function useAppI18n(): { locale: AppLocale; setLocale: (next: AppLocale) => void; t: (key: TranslationKey, options?: Record<string, unknown>) => string } {
+export function useAppI18n(): {
+	locale: AppLocale;
+	setLocale: (next: AppLocale) => void;
+	t: (key: TranslationKey, options?: Record<string, unknown>) => string;
+} {
 	const { t, i18n: active } = useTranslation();
 	return {
 		locale: (active.language === "en" ? "en" : "zh-CN") as AppLocale,

@@ -14,7 +14,12 @@ export function normalizeLocale(raw: string | undefined | null): StoredLocale | 
 	return (supported as readonly string[]).includes(value) ? (value as StoredLocale) : undefined;
 }
 
-export function detectLocale(search: string, storage: string | null, cookie: string | null, navigatorLang: string | undefined): StoredLocale {
+export function detectLocale(
+	search: string,
+	storage: string | null,
+	cookie: string | null,
+	navigatorLang: string | undefined,
+): StoredLocale {
 	const params = new URLSearchParams(search);
 	const fromUrl = normalizeLocale(params.get("locale") ?? params.get("lang"));
 	if (fromUrl !== undefined) return fromUrl;

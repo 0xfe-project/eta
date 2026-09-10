@@ -16,7 +16,10 @@ describe("D4 merge and rollback", () => {
 		const faux = fauxProvider();
 		const models = createModels();
 		models.setProvider(faux.provider);
-		const { harness } = await AgentHarness.create({ session, models, model: faux.getModel(), activeToolNames: [], tools: [] }, CTX);
+		const { harness } = await AgentHarness.create(
+			{ session, models, model: faux.getModel(), activeToolNames: [], tools: [] },
+			CTX,
+		);
 		const lane = await harness.lane("main", CTX);
 
 		const shared = await lane.appendMessage(user("shared history"), CTX);
@@ -31,7 +34,9 @@ describe("D4 merge and rollback", () => {
 		expect(path.find((entry) => entry.id === mergeId)?.type).toBe("merge");
 
 		const merged = await lane.findEntries({ type: "message", order: "oldestFirst" }, CTX);
-		const texts = merged.flatMap((entry) => (entry.type === "message" ? [String((entry.message as { content?: string }).content)] : []));
+		const texts = merged.flatMap((entry) =>
+			entry.type === "message" ? [String((entry.message as { content?: string }).content)] : [],
+		);
 		expect(texts).toEqual(["shared history", "main work", "side work"]);
 
 		const rolled = (await lane.rollback(mainWork, CTX)) as { ok: boolean };

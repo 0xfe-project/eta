@@ -4,7 +4,9 @@ import zhCN from "../../eta-i18n/src/locales/zh-CN.json";
 
 function keySet(obj: Record<string, unknown>, prefix = ""): string[] {
 	return Object.entries(obj).flatMap(([key, value]) =>
-		typeof value === "object" && value !== null ? keySet(value as Record<string, unknown>, `${prefix}${key}.`) : [`${prefix}${key}`],
+		typeof value === "object" && value !== null
+			? keySet(value as Record<string, unknown>, `${prefix}${key}.`)
+			: [`${prefix}${key}`],
 	);
 }
 

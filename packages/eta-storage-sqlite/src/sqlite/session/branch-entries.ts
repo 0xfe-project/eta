@@ -318,7 +318,10 @@ function readEntryRowById(db: SqliteDatabase, sessionId: string, id: string): En
 	return rows[0];
 }
 
-function matchesBranchScan(entry: { type: string; customType?: string; seq: number }, query: StorageBranchScan): boolean {
+function matchesBranchScan(
+	entry: { type: string; customType?: string; seq: number },
+	query: StorageBranchScan,
+): boolean {
 	if (query.type !== undefined && entry.type !== query.type) return false;
 	if (query.customType !== undefined && entry.customType !== query.customType) return false;
 	if (query.cursor !== undefined) {
@@ -329,7 +332,13 @@ function matchesBranchScan(entry: { type: string; customType?: string; seq: numb
 }
 
 export function scanBranchEntries(db: SqliteDatabase, sessionId: string, query: StorageBranchScan): Entry[] {
-	const openQuery: StorageBranchScan = { ...query, type: undefined, customType: undefined, cursor: undefined, limit: undefined };
+	const openQuery: StorageBranchScan = {
+		...query,
+		type: undefined,
+		customType: undefined,
+		cursor: undefined,
+		limit: undefined,
+	};
 	const decoded = scanBranchSegments(db, sessionId, openQuery, scanEntrySegmentRows).map(decodeEntryRow);
 	const oldestFirst = query.order === "oldestFirst";
 	const newestFirst = oldestFirst ? decoded.slice().reverse() : decoded;

@@ -63,13 +63,24 @@ describe("ask_user tool", () => {
 	it("waits after emitting the ask entry and renders the answer", async () => {
 		const reg = new AskRegistry();
 		const seen: string[] = [];
-		const tool = createAskUserTool({ registry: reg, onAsk: (p) => { seen.push(p.questionId); } });
+		const tool = createAskUserTool({
+			registry: reg,
+			onAsk: (p) => {
+				seen.push(p.questionId);
+			},
+		});
 		const execution = tool.execute(
 			"tc",
 			{ question: "pick one", options: [{ title: "a" }, { title: "b" }] },
 			() => {},
 			{},
-			{ invocationId: "inv-1", operationId: "op", turnId: "t", getMemo: async () => undefined, setMemo: async () => {} },
+			{
+				invocationId: "inv-1",
+				operationId: "op",
+				turnId: "t",
+				getMemo: async () => undefined,
+				setMemo: async () => {},
+			},
 			BACKGROUND_CONTEXT,
 		);
 		await new Promise((r) => setTimeout(r, 0));
@@ -92,7 +103,9 @@ describe("headless ask fallback", () => {
 	});
 
 	it("null or throwing resolver yields no answer, never a hang", async () => {
-		expect(await new AskRegistry({ headless: async () => null }).ask({ questionId: "n", question: "?" })).toEqual({ kind: "none" });
+		expect(await new AskRegistry({ headless: async () => null }).ask({ questionId: "n", question: "?" })).toEqual({
+			kind: "none",
+		});
 		expect(
 			await new AskRegistry({
 				headless: () => {

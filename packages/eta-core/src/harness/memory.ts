@@ -34,7 +34,9 @@ export function parseMemory(text: string): MemoryEntry[] {
 	for (const line of text.split("\n")) {
 		const heading = /^##\s+(\w+)/.exec(line);
 		if (heading !== null) {
-			section = (MEMORY_SECTIONS as readonly string[]).includes(heading[1]) ? (heading[1] as MemorySection) : undefined;
+			section = (MEMORY_SECTIONS as readonly string[]).includes(heading[1])
+				? (heading[1] as MemorySection)
+				: undefined;
 			continue;
 		}
 		if (section === undefined) continue;

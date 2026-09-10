@@ -35,7 +35,10 @@ export async function discoverPersonas(fs: EtaFs, cwd: string, home: string): Pr
 	return cards;
 }
 
-export function renderPersonaBlock(names: string[], cards: Record<string, string>): { text: string; missing: string[] } {
+export function renderPersonaBlock(
+	names: string[],
+	cards: Record<string, string>,
+): { text: string; missing: string[] } {
 	const missing: string[] = [];
 	const parts: string[] = [];
 	for (const name of names) {

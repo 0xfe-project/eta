@@ -1343,9 +1343,15 @@ export class Lane<TContext extends object | undefined> implements AgentLane {
 		);
 	}
 
-	async publish(events: readonly { type: "eta"; category: string; action: string; data: Record<string, unknown> }[], context: Context): Promise<void> {
+	async publish(
+		events: readonly { type: "eta"; category: string; action: string; data: Record<string, unknown> }[],
+		context: Context,
+	): Promise<void> {
 		this.assertOpen();
-		await this.emitBatch(events.map((event) => ({ ...event, lane: this.name })), context);
+		await this.emitBatch(
+			events.map((event) => ({ ...event, lane: this.name })),
+			context,
+		);
 	}
 
 	async resume(context: Context): Promise<ResumeResult> {

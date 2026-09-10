@@ -1,19 +1,19 @@
 import type { Entry, EntryScan, EntryStructure } from "@eta/core";
 import type { SqliteDatabase } from "../types.ts";
 export interface EntryRow {
-    id: string;
-    parent_id: string | null;
-    seq: number;
-    type: Entry["type"];
-    custom_type: string | null;
-    timestamp: number;
-    payload: string;
+	id: string;
+	parent_id: string | null;
+	seq: number;
+	type: Entry["type"];
+	custom_type: string | null;
+	timestamp: number;
+	payload: string;
 }
 export declare class EntryRowWriter {
-    private readonly insertStatement;
-    private readonly sessionId;
-    constructor(db: SqliteDatabase, sessionId: string);
-    insert(entry: Entry): void;
+	private readonly insertStatement;
+	private readonly sessionId;
+	constructor(db: SqliteDatabase, sessionId: string);
+	insert(entry: Entry): void;
 }
 export declare function insertEntryRow(db: SqliteDatabase, sessionId: string, entry: Entry): void;
 export declare function decodeEntryRow(row: EntryRow): Entry;

@@ -5,7 +5,12 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { BACKGROUND_CONTEXT } from "../../src/harness/context.ts";
 import type { HarnessEvent } from "../../src/harness/agent-harness.ts";
-import { createNodeSqliteFactory, SQLITE_STORAGE_VERSION, SqliteStorage, sql } from "../../../eta-storage-sqlite/src/index.ts";
+import {
+	createNodeSqliteFactory,
+	SQLITE_STORAGE_VERSION,
+	SqliteStorage,
+	sql,
+} from "../../../eta-storage-sqlite/src/index.ts";
 import { applyInitialSchema } from "../../../eta-storage-sqlite/src/sqlite/migrations.ts";
 import { AskRegistry } from "../../src/harness/ask.ts";
 import { StorageBackedSession } from "../../src/harness/session/session.ts";
@@ -52,11 +57,35 @@ describe("batteries emit on the shared sink", () => {
 
 		const scheduler = new LoopScheduler({ followUpFor: (spec) => `loop ${spec.def.id}`, observe: c.emit });
 		const now = Date.now();
-		scheduler.upsert({ def: { id: "tick", note: "ci", every: "1s" }, runCount: 0, createdAt: now - 5_000, nextDueAt: now - 1, paused: false });
-		scheduler.upsert({ def: { id: "capped", note: "once", every: "1s", maxRuns: 1 }, runCount: 0, createdAt: now - 5_000, nextDueAt: now - 1, paused: false });
-		scheduler.upsert({ def: { id: "stale", note: "old", every: "1s" }, runCount: 0, createdAt: now - 5_000, expiresAt: new Date(now - 1).toISOString(), paused: false });
+		scheduler.upsert({
+			def: { id: "tick", note: "ci", every: "1s" },
+			runCount: 0,
+			createdAt: now - 5_000,
+			nextDueAt: now - 1,
+			paused: false,
+		});
+		scheduler.upsert({
+			def: { id: "capped", note: "once", every: "1s", maxRuns: 1 },
+			runCount: 0,
+			createdAt: now - 5_000,
+			nextDueAt: now - 1,
+			paused: false,
+		});
+		scheduler.upsert({
+			def: { id: "stale", note: "old", every: "1s" },
+			runCount: 0,
+			createdAt: now - 5_000,
+			expiresAt: new Date(now - 1).toISOString(),
+			paused: false,
+		});
 		scheduler.pump(now);
-		scheduler.upsert({ def: { id: "ev", note: "on turn" }, on: { type: "turn_end" }, runCount: 0, createdAt: now, paused: false });
+		scheduler.upsert({
+			def: { id: "ev", note: "on turn" },
+			on: { type: "turn_end" },
+			runCount: 0,
+			createdAt: now,
+			paused: false,
+		});
 		scheduler.event({ type: "turn_end" }, 99);
 
 		const registry = new AskRegistry({ observe: c.emit });
@@ -69,7 +98,11 @@ describe("batteries emit on the shared sink", () => {
 		ac.abort();
 		expect((await canceled).kind).toBe("none");
 
-		const btw = new BtwManager(() => ({ messages: [] }), async () => {}, c.emit);
+		const btw = new BtwManager(
+			() => ({ messages: [] }),
+			async () => {},
+			c.emit,
+		);
 		const thread = btw.create("tangent");
 		btw.answer(thread.id, "why?", "because");
 		expect(btw.handoff(thread.id)).toContain("fold them in");
@@ -79,7 +112,14 @@ describe("batteries emit on the shared sink", () => {
 		const store = new TaskStore();
 		const taskTools = createTaskTools(store, c.emit);
 		await taskTools[0]!.execute("c1", { content: "step one" }, NOOP, undefined, {} as never, CTX);
-		await taskTools[3]!.execute("c2", { id: store.list()[0]!.id, status: "completed" }, NOOP, undefined, {} as never, CTX);
+		await taskTools[3]!.execute(
+			"c2",
+			{ id: store.list()[0]!.id, status: "completed" },
+			NOOP,
+			undefined,
+			{} as never,
+			CTX,
+		);
 
 		const kv = new Map<string, string>();
 		const stateTools = createStateTools(
@@ -106,7 +146,12 @@ describe("batteries emit on the shared sink", () => {
 		expect(c.of("ask_user", "answered").length).toBe(1);
 		expect(c.of("ask_user", "expired").length).toBe(1);
 		expect(c.of("ask_user", "canceled").length).toBe(1);
-		expect([...c.of("btw").map((e) => e.action).sort()]).toEqual(["injected", "opened", "saved", "summarized"]);
+		expect([
+			...c
+				.of("btw")
+				.map((e) => e.action)
+				.sort(),
+		]).toEqual(["injected", "opened", "saved", "summarized"]);
 		expect(c.of("task", "add").length).toBe(1);
 		expect(c.of("task", "update").length).toBe(1);
 		expect(c.of("state", "set").length).toBe(1);
@@ -126,7 +171,9 @@ describe("EtaAgent integrates batteries on the main bus", () => {
 		await applyInitialSchema(db);
 		sql`INSERT INTO sessions
 			(id, created_at, parent_session_id, storage_version, metadata, message_count, usage_payload, next_seq)
-			VALUES (${"eta-main"}, ${Date.now()}, ${null}, ${SQLITE_STORAGE_VERSION}, ${null}, ${0}, ${JSON.stringify(EMPTY_USAGE)}, ${1})`.run(db);
+			VALUES (${"eta-main"}, ${Date.now()}, ${null}, ${SQLITE_STORAGE_VERSION}, ${null}, ${0}, ${JSON.stringify(EMPTY_USAGE)}, ${1})`.run(
+			db,
+		);
 		const storage = new SqliteStorage(db, { sessionId: "eta-main", now: () => Date.now() });
 
 		const faux = fauxProvider();
@@ -136,9 +183,15 @@ describe("EtaAgent integrates batteries on the main bus", () => {
 		]);
 		const models = createModels();
 		models.setProvider(faux.provider);
-		const session = new StorageBackedSession({ id: "eta-main", createdAt: Date.now(), storageVersion: SQLITE_STORAGE_VERSION }, storage);
+		const session = new StorageBackedSession(
+			{ id: "eta-main", createdAt: Date.now(), storageVersion: SQLITE_STORAGE_VERSION },
+			storage,
+		);
 
-		const agent = await EtaAgent.create({ session, models, model: faux.getModel(), baseSystemPrompt: "you are eta", heartbeatMs: 0 }, CTX);
+		const agent = await EtaAgent.create(
+			{ session, models, model: faux.getModel(), baseSystemPrompt: "you are eta", heartbeatMs: 0 },
+			CTX,
+		);
 		const eta: HarnessEvent[] = [];
 		const native: string[] = [];
 		agent.events.on("eta", (event) => {
@@ -179,7 +232,9 @@ describe("D3 durable re-injection", () => {
 		await applyInitialSchema(db);
 		sql`INSERT INTO sessions
 			(id, created_at, parent_session_id, storage_version, metadata, message_count, usage_payload, next_seq)
-			VALUES (${"eta-main"}, ${Date.now()}, ${null}, ${SQLITE_STORAGE_VERSION}, ${null}, ${0}, ${JSON.stringify(EMPTY_USAGE)}, ${1})`.run(db);
+			VALUES (${"eta-main"}, ${Date.now()}, ${null}, ${SQLITE_STORAGE_VERSION}, ${null}, ${0}, ${JSON.stringify(EMPTY_USAGE)}, ${1})`.run(
+			db,
+		);
 		const storage = new SqliteStorage(db, { sessionId: "eta-main", now: () => Date.now() });
 
 		const faux = fauxProvider();
@@ -190,7 +245,10 @@ describe("D3 durable re-injection", () => {
 		]);
 		const models = createModels();
 		models.setProvider(faux.provider);
-		const session = new StorageBackedSession({ id: "eta-main", createdAt: Date.now(), storageVersion: SQLITE_STORAGE_VERSION }, storage);
+		const session = new StorageBackedSession(
+			{ id: "eta-main", createdAt: Date.now(), storageVersion: SQLITE_STORAGE_VERSION },
+			storage,
+		);
 		const agent = await EtaAgent.create(
 			{
 				session,
@@ -204,12 +262,9 @@ describe("D3 durable re-injection", () => {
 		);
 		const prompts: string[] = [];
 		agent.events.on("prompt_assembled", () => undefined);
-		agent.harness.hooks.on(
-			"transform_context",
-			((event: { systemPrompt: string }) => {
-				prompts.push(event.systemPrompt);
-			}) as never,
-		);
+		agent.harness.hooks.on("transform_context", ((event: { systemPrompt: string }) => {
+			prompts.push(event.systemPrompt);
+		}) as never);
 
 		agent.goal.set("finish the migration");
 		agent.goal.gate = "delegated";

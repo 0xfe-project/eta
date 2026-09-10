@@ -2,7 +2,13 @@ import { type AssistantMessage, type AssistantMessageEvent, EventStream, getMode
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { Agent } from "../src/agent.ts";
-import { type AgentEvent, type AgentTool, type AgentToolUpdateCallback, type StreamFn, setDefaultStreamFn } from "../src/index.ts";
+import {
+	type AgentEvent,
+	type AgentTool,
+	type AgentToolUpdateCallback,
+	type StreamFn,
+	setDefaultStreamFn,
+} from "../src/index.ts";
 
 // Mock stream that mimics AssistantMessageEventStream
 class MockAssistantStream extends EventStream<AssistantMessageEvent, AssistantMessage> {

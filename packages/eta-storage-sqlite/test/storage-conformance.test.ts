@@ -1,9 +1,5 @@
 import { BACKGROUND_CONTEXT } from "@eta/core";
-import {
-	type ConformanceCase,
-	createStorageConformance,
-	type StorageFixture,
-} from "@eta/core/testing";
+import { type ConformanceCase, createStorageConformance, type StorageFixture } from "@eta/core/testing";
 import { describe, it } from "vitest";
 import { createNodeSqliteFactory, SQLITE_STORAGE_VERSION, SqliteStorage, sql } from "../src/index.ts";
 import { applyInitialSchema } from "../src/sqlite/migrations.ts";

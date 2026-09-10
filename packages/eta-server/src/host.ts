@@ -9,7 +9,14 @@ import { readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { appendFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT, EtaAgent, SessionViewProjector, type HarnessEvent, type LaneQueuedItem, type SessionView } from "@eta/core";
+import {
+	BACKGROUND_CONTEXT,
+	EtaAgent,
+	SessionViewProjector,
+	type HarnessEvent,
+	type LaneQueuedItem,
+	type SessionView,
+} from "@eta/core";
 import { DevRing, type ChannelFrame, type DevFrame, type SidebarSession } from "./protocol.ts";
 import { configDefaultModel, etaConfigPath, loadEtaConfig, type EtaConfig } from "./config.ts";
 import { createSessionAgent, type CreatedSession } from "./agent.ts";
@@ -120,8 +127,24 @@ export class Host {
 		if (this.hosted.has(name)) throw new Error(`session exists: ${name}`);
 		const persistDir = join(this.dataDir, name);
 		await mkdir(persistDir, { recursive: true });
-		await writeFile(join(persistDir, "meta.json"), JSON.stringify({ personaId, cwd, ...(modelId === undefined ? {} : { modelId }), createdAt: Date.now() }), "utf8");
-		await this.open(name, () => createSessionAgent({ name, personaId, cwd, ...(modelId === undefined ? {} : { modelId }), configPath: this.configPath, persistDir }), { cwd, persistDir });
+		await writeFile(
+			join(persistDir, "meta.json"),
+			JSON.stringify({ personaId, cwd, ...(modelId === undefined ? {} : { modelId }), createdAt: Date.now() }),
+			"utf8",
+		);
+		await this.open(
+			name,
+			() =>
+				createSessionAgent({
+					name,
+					personaId,
+					cwd,
+					...(modelId === undefined ? {} : { modelId }),
+					configPath: this.configPath,
+					persistDir,
+				}),
+			{ cwd, persistDir },
+		);
 	}
 
 	/** Reopen every persisted session so the sidebar and runs survive restarts. */
@@ -143,16 +166,37 @@ export class Host {
 			if (meta.personaId === undefined) continue;
 			const cwd = meta.cwd ?? process.cwd();
 			const persistDir = join(this.dataDir, dir);
-			this.meta.set(dir, { ...(meta.title === undefined ? {} : { title: meta.title }), ...(meta.pinned === true ? { pinned: true } : {}), ...(meta.archived === true ? { archived: true } : {}), ...(meta.modelId === undefined ? {} : { modelId: meta.modelId }) });
+			this.meta.set(dir, {
+				...(meta.title === undefined ? {} : { title: meta.title }),
+				...(meta.pinned === true ? { pinned: true } : {}),
+				...(meta.archived === true ? { archived: true } : {}),
+				...(meta.modelId === undefined ? {} : { modelId: meta.modelId }),
+			});
 			try {
-				await this.open(dir, () => createSessionAgent({ name: dir, personaId: meta.personaId!, cwd, ...(meta.modelId === undefined ? {} : { modelId: meta.modelId }), configPath: this.configPath, persistDir }), { cwd, persistDir, restore: true });
+				await this.open(
+					dir,
+					() =>
+						createSessionAgent({
+							name: dir,
+							personaId: meta.personaId!,
+							cwd,
+							...(meta.modelId === undefined ? {} : { modelId: meta.modelId }),
+							configPath: this.configPath,
+							persistDir,
+						}),
+					{ cwd, persistDir, restore: true },
+				);
 			} catch {
 				/* a broken journal must not take the whole server down */
 			}
 		}
 	}
 
-	async open(name: string, create: () => Promise<CreatedSession>, options: { restore?: boolean; cwd?: string; persistDir?: string } = {}): Promise<void> {
+	async open(
+		name: string,
+		create: () => Promise<CreatedSession>,
+		options: { restore?: boolean; cwd?: string; persistDir?: string } = {},
+	): Promise<void> {
 		const made = await create();
 		const agent = made.agent;
 		if (options.restore === true) await agent.restore(BACKGROUND_CONTEXT);
@@ -161,7 +205,9 @@ export class Host {
 		const ring = new DevRing();
 		if (options.persistDir !== undefined) {
 			try {
-				const lines = (await readFile(join(options.persistDir, "dev.jsonl"), "utf8")).split("\n").filter((line) => line.length > 0);
+				const lines = (await readFile(join(options.persistDir, "dev.jsonl"), "utf8"))
+					.split("\n")
+					.filter((line) => line.length > 0);
 				ring.seed(lines.slice(-512).map((line) => JSON.parse(line) as DevFrame));
 			} catch {
 				/* first boot for this session */
@@ -171,7 +217,19 @@ export class Host {
 			agent,
 			projector,
 			ring,
-			view: this.stampView({ agent, projector, ring, view: null as unknown as SessionView, running: false, queue: [], cwd: options.cwd ?? process.cwd(), updated: Date.now(), persistDir: options.persistDir, created: made, detach: () => {} }),
+			view: this.stampView({
+				agent,
+				projector,
+				ring,
+				view: null as unknown as SessionView,
+				running: false,
+				queue: [],
+				cwd: options.cwd ?? process.cwd(),
+				updated: Date.now(),
+				persistDir: options.persistDir,
+				created: made,
+				detach: () => {},
+			}),
 			running: false,
 			queue: [],
 			cwd: options.cwd ?? process.cwd(),
@@ -197,10 +255,19 @@ export class Host {
 			});
 		}
 		agent.events.on("eta", (event) => {
-			const frame: DevFrame = { ts: Date.now(), session: name, category: event.category, action: event.action, data: event.data };
+			const frame: DevFrame = {
+				ts: Date.now(),
+				session: name,
+				category: event.category,
+				action: event.action,
+				data: event.data,
+			};
 			entry.ring.push(frame);
 			this.emit({ channel: "dev", frame });
-			if (entry.persistDir !== undefined) void appendFile(join(entry.persistDir, "dev.jsonl"), `${JSON.stringify(frame)}\n`, "utf8").catch(() => undefined);
+			if (entry.persistDir !== undefined)
+				void appendFile(join(entry.persistDir, "dev.jsonl"), `${JSON.stringify(frame)}\n`, "utf8").catch(
+					() => undefined,
+				);
 		});
 		const attached = await projector.attach((view) => {
 			entry.view = this.stampView(entry, view);
@@ -237,9 +304,15 @@ export class Host {
 		if (this.attachPointerValue === name) this.attachPointerValue = this.hosted.keys().next().value ?? null;
 	}
 
-	private readonly meta = new Map<string, { title?: string; pinned?: boolean; archived?: boolean; modelId?: string; personaId?: string }>();
+	private readonly meta = new Map<
+		string,
+		{ title?: string; pinned?: boolean; archived?: boolean; modelId?: string; personaId?: string }
+	>();
 
-	setMeta(name: string, patch: { pinned?: boolean; archived?: boolean; modelId?: string; title?: string; personaId?: string }): void {
+	setMeta(
+		name: string,
+		patch: { pinned?: boolean; archived?: boolean; modelId?: string; title?: string; personaId?: string },
+	): void {
 		this.meta.set(name, { ...this.meta.get(name), ...patch });
 		const persistDir = this.hosted.get(name)?.persistDir;
 		if (persistDir !== undefined) {
@@ -290,7 +363,10 @@ export class Host {
 				const text = JSON.stringify(entry.message).toLowerCase();
 				const index = text.indexOf(needle);
 				if (index >= 0) {
-					hits.push({ session: name, snippet: JSON.stringify(entry.message).slice(Math.max(0, index - 30), index + 60) });
+					hits.push({
+						session: name,
+						snippet: JSON.stringify(entry.message).slice(Math.max(0, index - 30), index + 60),
+					});
 					break;
 				}
 			}
@@ -360,7 +436,9 @@ export class Host {
 	}
 
 	queueRemove(name: string, entryId: string): void {
-		void this.must(name).lane.cancelQueued(entryId, BACKGROUND_CONTEXT).catch(() => undefined);
+		void this.must(name)
+			.lane.cancelQueued(entryId, BACKGROUND_CONTEXT)
+			.catch(() => undefined);
 	}
 
 	/** Lane queue items ride the view so the composer renders the real queue, not guesses. */
@@ -369,7 +447,11 @@ export class Host {
 		const entry = this.hosted.get(name);
 		if (entry === undefined) return;
 		try {
-			const proc = Bun.spawn(["git", "rev-parse", "--abbrev-ref", "HEAD"], { cwd: entry.cwd, stdout: "pipe", stderr: "ignore" });
+			const proc = Bun.spawn(["git", "rev-parse", "--abbrev-ref", "HEAD"], {
+				cwd: entry.cwd,
+				stdout: "pipe",
+				stderr: "ignore",
+			});
 			void proc.exited.then(async (code) => {
 				if (code !== 0) return;
 				const branch = (await new Response(proc.stdout as ReadableStream).text()).trim();
@@ -392,7 +474,10 @@ export class Host {
 			queue: entry.queue.map((item) => ({
 				entryId: item.entryId,
 				kind: item.kind,
-				text: item.type === "message" ? userText(item.message as unknown as { role: string; content?: unknown; text?: string }) : String(item.customType),
+				text:
+					item.type === "message"
+						? userText(item.message as unknown as { role: string; content?: unknown; text?: string })
+						: String(item.customType),
 			})),
 		};
 	}
@@ -403,7 +488,9 @@ export class Host {
 
 	askOf(name: string): { answer: AnswerFn; abort(questionId: string): boolean } | undefined {
 		const entry = this.hosted.get(name);
-		return entry === undefined ? undefined : { answer: (id, response) => entry.agent.ask.answer(id, response), abort: (id) => entry.agent.ask.abort(id) };
+		return entry === undefined
+			? undefined
+			: { answer: (id, response) => entry.agent.ask.answer(id, response), abort: (id) => entry.agent.ask.abort(id) };
 	}
 
 	goal(name: string, action: "set" | "pause" | "resume" | "clear", objective?: string): void {
@@ -443,7 +530,9 @@ export class Host {
 	loopRemove(name: string, id: string): void {
 		const agent = this.must(name);
 		agent.loops.remove(id);
-		void agent.lane.publish([{ type: "eta", category: "loop", action: "remove", data: { loopId: id } }], BACKGROUND_CONTEXT).catch(() => undefined);
+		void agent.lane
+			.publish([{ type: "eta", category: "loop", action: "remove", data: { loopId: id } }], BACKGROUND_CONTEXT)
+			.catch(() => undefined);
 		this.refreshView(name);
 	}
 
@@ -470,7 +559,9 @@ export class Host {
 	taskRemove(name: string, id: string): void {
 		const agent = this.must(name);
 		agent.tasks.remove(id);
-		void agent.lane.publish([{ type: "eta", category: "task", action: "remove", data: { taskId: id } }], BACKGROUND_CONTEXT).catch(() => undefined);
+		void agent.lane
+			.publish([{ type: "eta", category: "task", action: "remove", data: { taskId: id } }], BACKGROUND_CONTEXT)
+			.catch(() => undefined);
 		this.refreshView(name);
 	}
 
@@ -485,7 +576,12 @@ export class Host {
 	stateSet(name: string, key: string, value: string | null): void {
 		const agent = this.must(name);
 		void agent.stateKv.set(key, value);
-		void agent.lane.publish([{ type: "eta", category: "state", action: value === null ? "delete" : "set", data: { key } }], BACKGROUND_CONTEXT).catch(() => undefined);
+		void agent.lane
+			.publish(
+				[{ type: "eta", category: "state", action: value === null ? "delete" : "set", data: { key } }],
+				BACKGROUND_CONTEXT,
+			)
+			.catch(() => undefined);
 	}
 
 	subagentStop(name: string, id: string): void {
@@ -529,12 +625,15 @@ export class Host {
 	async thinkingLevel(name: string, level: "off" | "minimal" | "low" | "medium" | "high"): Promise<void> {
 		await this.must(name).lane.setThinkingLevel(level, BACKGROUND_CONTEXT);
 		this.refreshView(name);
-		void this.hosted.get(name)?.projector.snapshot(BACKGROUND_CONTEXT).then((view) => {
-			const hosted = this.hosted.get(name);
-			if (hosted === undefined) return;
-			hosted.view = this.stampView(hosted, view);
-			this.emit({ channel: "view", session: name, view: hosted.view });
-		});
+		void this.hosted
+			.get(name)
+			?.projector.snapshot(BACKGROUND_CONTEXT)
+			.then((view) => {
+				const hosted = this.hosted.get(name);
+				if (hosted === undefined) return;
+				hosted.view = this.stampView(hosted, view);
+				this.emit({ channel: "view", session: name, view: hosted.view });
+			});
 	}
 
 	async modelSet(name: string, modelId: string): Promise<void> {
@@ -542,7 +641,10 @@ export class Host {
 		this.setMeta(name, { modelId });
 		if (this.hosted.get(name)?.created.faux === undefined) {
 			const split = modelId.indexOf(":");
-			const identity = split > 0 ? { provider: modelId.slice(0, split), modelId: modelId.slice(split + 1) } : { provider: "anthropic", modelId };
+			const identity =
+				split > 0
+					? { provider: modelId.slice(0, split), modelId: modelId.slice(split + 1) }
+					: { provider: "anthropic", modelId };
 			try {
 				await agent.lane.setModel(identity, BACKGROUND_CONTEXT);
 			} catch {
@@ -561,15 +663,37 @@ export class Host {
 		return this.modelCatalogFrom(this.etaConfig(), faux !== undefined, this.meta.get(name)?.modelId);
 	}
 
-	private modelCatalogFrom(cfg: EtaConfig, faux: boolean, currentOverride?: string): { models: { id: string; label: string; contextWindow: number }[]; current: string } {
+	private modelCatalogFrom(
+		cfg: EtaConfig,
+		faux: boolean,
+		currentOverride?: string,
+	): { models: { id: string; label: string; contextWindow: number }[]; current: string } {
 		const configured = (cfg.providers ?? []).flatMap((provider) =>
-			provider.models.map((model) => ({ id: `${provider.id}:${model.id}`, label: model.name ?? model.id, contextWindow: model.contextWindow ?? 128_000 })),
+			provider.models.map((model) => ({
+				id: `${provider.id}:${model.id}`,
+				label: model.name ?? model.id,
+				contextWindow: model.contextWindow ?? 128_000,
+			})),
 		);
 		const fallback = configDefaultModel(cfg);
-		const current = currentOverride ?? (configured.length > 0 ? fallback !== undefined ? `${fallback.provider}:${fallback.modelId}` : configured[0]!.id : undefined) ?? (faux ? "faux" : "claude-sonnet-4-5");
+		const current =
+			currentOverride ??
+			(configured.length > 0
+				? fallback !== undefined
+					? `${fallback.provider}:${fallback.modelId}`
+					: configured[0]!.id
+				: undefined) ??
+			(faux ? "faux" : "claude-sonnet-4-5");
 		if (configured.length > 0) return { models: configured, current };
 		if (faux) return { models: [{ id: "faux", label: "faux echo", contextWindow: 128_000 }], current };
-		return { models: ["claude-haiku-4-5", "claude-sonnet-4-5", "claude-opus-4-1"].map((id) => ({ id: `anthropic:${id}`, label: id, contextWindow: 200_000 })), current };
+		return {
+			models: ["claude-haiku-4-5", "claude-sonnet-4-5", "claude-opus-4-1"].map((id) => ({
+				id: `anthropic:${id}`,
+				label: id,
+				contextWindow: 200_000,
+			})),
+			current,
+		};
 	}
 
 	btwSave(name: string, threadId: string): void {
@@ -634,7 +758,9 @@ export class Host {
 
 export function listWorkspace(cwd: string): string[] {
 	try {
-		return readdirSync(cwd).filter((name) => !name.startsWith(".") && name !== "node_modules").slice(0, 24);
+		return readdirSync(cwd)
+			.filter((name) => !name.startsWith(".") && name !== "node_modules")
+			.slice(0, 24);
 	} catch {
 		return [];
 	}

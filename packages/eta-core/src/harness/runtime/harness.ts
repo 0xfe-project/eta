@@ -302,7 +302,6 @@ export class Harness<TContext extends object | undefined> implements AgentHarnes
 		);
 	}
 
-
 	fault(cause: unknown, context: Context): Error {
 		if (this.faultError !== undefined) return this.faultError;
 		if (this.closedError !== undefined) return this.closedError;

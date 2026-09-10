@@ -1,10 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-	type ConformanceCase,
-	createSessionRepoConformance,
-} from "@eta/core/testing";
+import { type ConformanceCase, createSessionRepoConformance } from "@eta/core/testing";
 import { describe, it } from "vitest";
 import { createNodeSqliteFactory, SqliteSessionRepo } from "../src/index.ts";
 

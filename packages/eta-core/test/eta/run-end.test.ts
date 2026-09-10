@@ -6,8 +6,16 @@ import { GOAL_CONTINUATION, RESUME_EMPTY } from "../../src/prompts/index.ts";
 
 const user = { role: "user", content: "do it", timestamp: 0 } as unknown as AgentMessage;
 const empty = { role: "assistant", stopReason: "stop", content: [] } as unknown as AgentMessage;
-const said = { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "done!" }] } as unknown as AgentMessage;
-const worked = { role: "assistant", stopReason: "toolUse", content: [{ type: "toolCall", id: "1", name: "read", arguments: {} }] } as unknown as AgentMessage;
+const said = {
+	role: "assistant",
+	stopReason: "stop",
+	content: [{ type: "text", text: "done!" }],
+} as unknown as AgentMessage;
+const worked = {
+	role: "assistant",
+	stopReason: "toolUse",
+	content: [{ type: "toolCall", id: "1", name: "read", arguments: {} }],
+} as unknown as AgentMessage;
 
 describe("goal driver (before_run_end)", () => {
 	it("enqueues a continuation followUp when the evaluator says not achieved", async () => {
@@ -59,7 +67,15 @@ describe("empty response guard", () => {
 	it("only clean empty stops count", () => {
 		expect(isEmptyStop(empty)).toBe(true);
 		expect(isEmptyStop(said)).toBe(false);
-		expect(isEmptyStop({ role: "assistant", stopReason: "error", content: [] } as unknown as AgentMessage)).toBe(false);
-		expect(isEmptyStop({ role: "assistant", stopReason: "stop", content: [{ type: "text", text: "  " }] } as unknown as AgentMessage)).toBe(true);
+		expect(isEmptyStop({ role: "assistant", stopReason: "error", content: [] } as unknown as AgentMessage)).toBe(
+			false,
+		);
+		expect(
+			isEmptyStop({
+				role: "assistant",
+				stopReason: "stop",
+				content: [{ type: "text", text: "  " }],
+			} as unknown as AgentMessage),
+		).toBe(true);
 	});
 });
