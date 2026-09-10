@@ -17,6 +17,8 @@
 	"new.pickPersona": "Pick a persona — required",
 	"new.personaRequired": "Pick a persona first.",
 	"new.cwd": "Workspace path",
+	"new.close": "Close",
+	"new.browse": "Browse…",
 	"new.firstPrompt": "First prompt (optional)",
 	"new.create": "Create session",
 	"new.creating": "Creating…",

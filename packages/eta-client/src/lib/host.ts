@@ -54,17 +54,29 @@ function resolveHost(injected: Partial<EtaHost> | undefined): EtaHost {
 	};
 }
 
-/** Read once at module load: the shell's preload runs before us, so it cannot move under us. */
-export const host: EtaHost = resolveHost(typeof window === "undefined" ? undefined : window.__ETA_HOST__);
+let resolved: EtaHost | undefined;
+
+/**
+ * The host this page is running in. Decided on first use rather than at import:
+ * the shell's preload runs before any of our code, so in production the answer
+ * cannot move under us either way, but a page module imported during a test sees
+ * the module graph loaded long before the test can describe its host — and the
+ * same page then looked like two different hosts depending on which spec ran
+ * first. Asking once, late, is the same answer with that trap removed.
+ */
+export function host(): EtaHost {
+	if (resolved === undefined) resolved = resolveHost(typeof window === "undefined" ? undefined : window.__ETA_HOST__);
+	return resolved;
+}
 
 export function apiUrl(path: string): string {
 	if (/^[a-z][a-z\d+\-.]*:/i.test(path)) return path;
-	return `${host.apiBase}${path.startsWith("/") ? path : `/${path}`}`;
+	return `${host().apiBase}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
 export function wsUrl(path: string): string {
 	if (/^wss?:\/\//i.test(path)) return path;
-	return `${host.wsBase}${path.startsWith("/") ? path : `/${path}`}`;
+	return `${host().wsBase}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
 /**
@@ -75,14 +87,16 @@ export function wsUrl(path: string): string {
  */
 export function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
 	const url = apiUrl(path);
-	if (host.token === undefined) return Object.keys(init).length === 0 ? fetch(url) : fetch(url, init);
+	const { token } = host();
+	if (token === undefined) return Object.keys(init).length === 0 ? fetch(url) : fetch(url, init);
 	const headers = new Headers(init.headers);
-	if (!headers.has("authorization")) headers.set("authorization", `Bearer ${host.token}`);
+	if (!headers.has("authorization")) headers.set("authorization", `Bearer ${token}`);
 	return fetch(url, { ...init, headers });
 }
 
 /** The token for endpoints a `<script>`/`<img>`/WebSocket must carry in the URL. */
 export function withToken(path: string): string {
-	if (host.token === undefined) return path;
-	return `${path}${path.includes("?") ? "&" : "?"}token=${encodeURIComponent(host.token)}`;
+	const { token } = host();
+	if (token === undefined) return path;
+	return `${path}${path.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
 }

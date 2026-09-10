@@ -9,7 +9,7 @@ import { apiUrl, apiFetch, host, wsUrl } from "../src/lib/host.ts";
  */
 describe("host resolution in a browser tab", () => {
 	it("stays same-origin for /api, so the vite proxy is enough", () => {
-		expect(host.kind).toBe("browser");
+		expect(host().kind).toBe("browser");
 		expect(apiUrl("/api/sessions")).toBe("/api/sessions");
 		expect(apiUrl("api/sessions")).toBe("/api/sessions");
 	});

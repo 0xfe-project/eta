@@ -6,28 +6,37 @@ import { FakeSocket } from "./fake-socket.ts";
 import { click, render } from "./render.tsx";
 import { MemoryRouter } from "./memory-router.tsx";
 
+async function mountWizard() {
+	const { NewSessionPage } = await import("../src/pages/new-session-page.tsx");
+	render(
+		<MemoryRouter initial="/new">
+			<Route path="/new" component={NewSessionPage} />
+			<Route path="/" component={() => <div data-testid="home">home</div>} />
+		</MemoryRouter>,
+	);
+}
+
 describe("new session wizard", () => {
 	beforeEach(() => {
 		vi.stubGlobal("WebSocket", FakeSocket);
 		vi.stubGlobal(
 			"fetch",
-			vi.fn(async () => ({
-				json: async () => [
-					{ id: "Thinker", name: "Thinker", description: "INTP card" },
-					{ id: "Executor", name: "Executor", description: "doer card" },
-				],
+			vi.fn(async (input: RequestInfo | URL) => ({
+				ok: true,
+				// The native endpoints answer with an object; everything else with personas.
+				json: async () =>
+					String(input).includes("/api/native/")
+						? { path: "/picked/dir" }
+						: [
+								{ id: "Thinker", name: "Thinker", description: "INTP card" },
+								{ id: "Executor", name: "Executor", description: "doer card" },
+							],
 			})),
 		);
 	});
 
 	it("requires a persona before create is possible and sends session.create", async () => {
-		const { NewSessionPage } = await import("../src/pages/new-session-page.tsx");
-		render(
-			<MemoryRouter initial="/new">
-				<Route path="/new" component={NewSessionPage} />
-				<Route path="/" component={() => <div data-testid="home">home</div>} />
-			</MemoryRouter>,
-		);
+		await mountWizard();
 		await findId("persona-card-Thinker");
 		expect(byId("persona-grid").children).toHaveLength(2);
 		expect((byId("create-session") as HTMLButtonElement).disabled).toBe(true);
@@ -38,6 +47,15 @@ describe("new session wizard", () => {
 		click("create-session");
 
 		expect(FakeSocket.last()).toMatchObject({ op: "session.create", personaId: "Executor" });
+		expect(await findId("home")).toBeTruthy();
+	});
+
+	it("gives the transcript area back when closed", async () => {
+		await mountWizard();
+		await findId("persona-card-Thinker");
+		// A browser tab has no folder dialog to reach, so it gets no dead button for one.
+		expect(queryId("cwd-browse")).toBeNull();
+		click("new-close");
 		expect(await findId("home")).toBeTruthy();
 	});
 });

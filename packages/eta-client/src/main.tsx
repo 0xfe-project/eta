@@ -6,7 +6,7 @@ import "./i18n.ts";
 import { host } from "./lib/host.ts";
 
 // The shell and a browser tab want different chrome; CSS reads this.
-document.documentElement.dataset.host = host.kind;
+document.documentElement.dataset.host = host().kind;
 import { ThemeProvider } from "./app/theme.tsx";
 import { SessionsPage } from "./pages/sessions-page.tsx";
 import { NewSessionPage } from "./pages/new-session-page.tsx";
@@ -34,7 +34,7 @@ const routes = (
 render(
 	() => (
 		<ThemeProvider>
-			{host.kind === "desktop" ? <HashRouter>{routes}</HashRouter> : <Router>{routes}</Router>}
+			{host().kind === "desktop" ? <HashRouter>{routes}</HashRouter> : <Router>{routes}</Router>}
 		</ThemeProvider>
 	),
 	document.getElementById("root")!,

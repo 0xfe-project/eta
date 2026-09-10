@@ -17,6 +17,8 @@
 	"new.pickPersona": "请选择Agent的人格(persona)",
 	"new.personaRequired": "必须先选 persona。",
 	"new.cwd": "工作目录",
+	"new.close": "关闭",
+	"new.browse": "浏览…",
 	"new.firstPrompt": "第一条 prompt(可留空)",
 	"new.create": "创建会话",
 	"new.creating": "创建中…",

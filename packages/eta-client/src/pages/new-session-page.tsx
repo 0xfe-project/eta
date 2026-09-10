@@ -2,7 +2,8 @@ import { For, Show, createSignal, onCleanup, onMount } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { useAppI18n } from "../i18n.ts";
 import { etaStore } from "../lib/eta-store.ts";
-import { apiFetch } from "../lib/host.ts";
+import { apiFetch, host } from "../lib/host.ts";
+import { pickFolder } from "../lib/native.ts";
 
 interface PersonaSummary {
 	id: string;
@@ -59,6 +60,14 @@ export function NewSessionPage() {
 		});
 	});
 
+	/** The shell's own folder picker; a browser tab has no equivalent, so the button
+ * is not offered there rather than offered and dead. */
+	const browse = async () => {
+		const starting = cwd().trim();
+		const picked = await pickFolder(starting.length > 0 ? starting : undefined);
+		if (typeof picked === "string" && picked.length > 0) setCwd(picked);
+	};
+
 	const create = () => {
 		const id = personaId();
 		if (id === null) return;
@@ -76,7 +85,18 @@ export function NewSessionPage() {
 
 	return (
 		<main class="mx-auto flex h-full w-full max-w-[720px] flex-col gap-4 overflow-y-auto p-6" data-testid="new-page">
-			<h1 class="text-lg font-semibold">{i18n.t("new.title")}</h1>
+			<div class="flex items-center gap-2">
+				<h1 class="text-lg font-semibold">{i18n.t("new.title")}</h1>
+				{/* The page replaces the whole transcript area, so it has to give that space back. */}
+				<button
+					data-testid="new-close"
+					title={i18n.t("new.close")}
+					onClick={() => navigate("/")}
+					class="ml-auto border border-border px-2.5 py-1 text-sm leading-none text-muted hover:bg-foreground hover:text-background"
+				>
+					×
+				</button>
+			</div>
 			<p data-testid="persona-hint" class="text-sm text-muted">{i18n.t("new.pickPersona")}</p>
 			<div class="grid grid-cols-1 gap-2 sm:grid-cols-2" data-testid="persona-grid">
 				<For each={personas()}>
@@ -98,7 +118,19 @@ export function NewSessionPage() {
 					)}
 				</For>
 			</div>
-			<input data-testid="cwd-input" value={cwd()} placeholder={i18n.t("new.cwd")} onInput={(event) => setCwd(event.currentTarget.value)} class="border-2 border-border bg-background px-3 py-2 text-sm outline-none focus:border-border-strong" />
+			<div class="flex items-center gap-2">
+				<input data-testid="cwd-input" value={cwd()} placeholder={i18n.t("new.cwd")} onInput={(event) => setCwd(event.currentTarget.value)} class="min-w-0 flex-1 border-2 border-border bg-background px-3 py-2 text-sm outline-none focus:border-border-strong" />
+				<Show when={host().kind === "desktop"}>
+					<button
+						data-testid="cwd-browse"
+						title={i18n.t("new.browse")}
+						onClick={() => void browse()}
+						class="shrink-0 whitespace-nowrap border-2 border-border bg-background px-3 py-2 text-sm text-muted hover:border-border-strong"
+					>
+						{i18n.t("new.browse")}
+					</button>
+				</Show>
+			</div>
 			<textarea data-testid="prompt-input" rows={3} value={prompt()} placeholder={i18n.t("new.firstPrompt")} onInput={(event) => setPrompt(event.currentTarget.value)} class="border-2 border-border bg-background px-3 py-2 text-sm outline-none focus:border-border-strong" />
 			<div class="flex items-center gap-3">
 				<button
