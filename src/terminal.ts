@@ -23,6 +23,13 @@ type StartFrame = { op: "start"; cols: number; rows: number; cwd?: string };
 export class TermRegistry {
 	open(socket: TermSocket): void {
 		socket.data.kind = "term";
+		// Bun's default `idleTimeout` is 120s of silence, and a terminal the user is
+		// thinking in is silent by definition — a dropped socket would cost them
+		// their editor. bun-types has no `ws.idleTimeout` field yet, so disarm it
+		// per connection. (A/B'd over 140s: both survive today; this keeps intent
+		// explicit rather than relying on that.)
+		const withTimeout = socket as unknown as { timeout?: (seconds: number) => void };
+		withTimeout.timeout?.(0);
 	}
 
 	message(socket: TermSocket, raw: Buffer | string): void {
