@@ -19,6 +19,19 @@ function sched() {
 	return new LoopScheduler({ followUpFor: (s) => `[loop ${s.def.id}] ${s.def.note}` });
 }
 
+describe("loop removal", () => {
+	it("remove marks the spec disposed and persists so restore cannot revive it", () => {
+		const saved: LoopSpec[] = [];
+		const s = new LoopScheduler({ followUpFor: (x) => x.def.id, persist: (savedSpec) => saved.push(savedSpec) });
+		s.upsert(spec({ id: "L1", every: "5m" }));
+		expect(s.remove("L1")).toBe(true);
+		const last = saved[saved.length - 1];
+		expect(last?.def.id).toBe("L1");
+		expect(last?.disposed).toBe(true);
+		expect(s.remove("L1")).toBe(false);
+	});
+});
+
 describe("interval parsing and jitter", () => {
 	it("parses duration formats", () => {
 		expect(parseEvery("500ms")).toBe(500);

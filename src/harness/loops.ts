@@ -106,7 +106,13 @@ export class LoopScheduler {
 	}
 
 	remove(id: string): boolean {
-		return this.loops.delete(id);
+		const spec = this.loops.get(id);
+		if (spec === undefined) return false;
+		spec.disposed = true;
+		this.loops.delete(id);
+		this.opts.persist?.(spec);
+		this.opts.observe?.("loop", "removed", { id });
+		return true;
 	}
 
 	pause(id: string, paused = true): void {
