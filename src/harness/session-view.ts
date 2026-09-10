@@ -49,6 +49,8 @@ export interface SessionViewSubagent {
 
 export interface SessionView {
 	messages: SessionViewMessage[];
+	/** Per-part transcript size in characters, for the context-usage donut. */
+	contextShare?: { userChars: number; assistantChars: number; toolChars: number };
 	systems: SessionViewSystemRow[];
 	thinking: string[];
 	compactionEpoch: number;
@@ -114,13 +116,26 @@ export class SessionViewProjector {
 		const systems: SessionViewSystemRow[] = [];
 		const thinking: string[] = [];
 		let compactionEpoch = 0;
+		let userChars = 0;
+		let assistantChars = 0;
+		let toolChars = 0;
+		const blockChars = (block: { text?: unknown; thinking?: unknown; content?: unknown; args?: unknown }): number =>
+			(typeof block.text === "string" ? block.text.length : 0) +
+			(typeof block.thinking === "string" ? block.thinking.length : 0) +
+			(typeof block.content === "string" ? block.content.length : Array.isArray(block.content) ? (block.content as { text?: string }[]).reduce((n, part) => n + (part.text?.length ?? 0), 0) : 0) +
+			(block.args !== undefined ? JSON.stringify(block.args).length : 0);
 		for (const entry of entries) {
 			if (entry.type === "message") {
 				messages.push({ entryId: entry.id, seq: entry.seq, at: entry.timestamp, message: entry.message });
 				const content = (entry.message as { content?: unknown }).content;
 				if (Array.isArray(content)) {
-					for (const block of content as { type?: string; thinking?: string }[]) {
+					const role = (entry.message as { role?: string }).role;
+					for (const block of content as { type?: string; thinking?: string; text?: string; content?: unknown; args?: unknown }[]) {
 						if (block.type === "thinking" && typeof block.thinking === "string") thinking.push(block.thinking);
+						const chars = blockChars(block);
+						if (block.type === "toolResult") toolChars += chars;
+						else if (role === "user") userChars += chars;
+						else assistantChars += chars;
 					}
 				}
 				continue;
@@ -169,6 +184,7 @@ export class SessionViewProjector {
 			subagents: this.agent.subagents.list().map((r) => ({ id: r.id, status: r.status, turns: r.turns })),
 			goal: goal.current,
 			tasks: tasks.list(),
+			contextShare: { userChars, assistantChars, toolChars },
 			loops: loops.list().map(specView),
 			sideThread: btw.list().map((thread) => ({ id: thread.id, kind: thread.kind, exchanges: thread.exchanges, saveState: thread.saveState })),
 			usage: stats.usage,
