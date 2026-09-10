@@ -165,7 +165,7 @@ export function AppShell({ sidebar, main, panel, palette }: { sidebar: ReactNode
 				>
 					{panel}
 				</aside>
-				{leftOpen && rightOpen ? null : (
+				{!leftOpen && !rightOpen ? null : (
 					<button
 						aria-label="close drawers"
 						data-testid="drawer-scrim"
@@ -175,7 +175,7 @@ export function AppShell({ sidebar, main, panel, palette }: { sidebar: ReactNode
 							setRightOpen(false);
 							persistFlag("eta.drawer.panel", false);
 						}}
-						className="fixed inset-0 z-20 hidden bg-black/40 max-lg:block"
+						className={`fixed inset-0 z-20 bg-black/40 ${rightOpen ? "hidden max-lg:block" : "hidden max-md:block"}`}
 					/>
 				)}
 				<button
