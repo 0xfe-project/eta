@@ -51,11 +51,11 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 					const share = view.contextShare ?? { userChars: 0, assistantChars: 0, toolChars: 0 };
 					const est = (chars: number) => Math.round(chars / 4);
 					const slices = [
-						{ label: t("usage.system"), tokens: est(view.prompt?.stableChars ?? 0), color: "var(--foreground)" },
+						{ label: t("usage.system"), tokens: est(view.prompt?.stableChars ?? 0), color: "var(--chart-purple)" },
 						{ label: t("usage.context"), tokens: est(Math.max(0, (view.prompt?.adaptiveChars ?? 0) - (view.prompt?.stableChars ?? 0))), color: "var(--accent)" },
-						{ label: t("usage.user"), tokens: est(share.userChars), color: "var(--primary)" },
+						{ label: t("usage.user"), tokens: est(share.userChars), color: "var(--success)" },
 						{ label: t("usage.assistant"), tokens: est(share.assistantChars), color: "var(--warning)" },
-						{ label: t("usage.tool"), tokens: est(share.toolChars), color: "var(--border-strong)" },
+						{ label: t("usage.tool"), tokens: est(share.toolChars), color: "var(--chart-blue)" },
 					];
 					const used = slices.reduce((sum, slice) => sum + slice.tokens, 0);
 					const ctx = contextWindow ?? 128_000;

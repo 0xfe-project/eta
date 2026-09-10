@@ -15,6 +15,8 @@
 	--success: #2f8f4e;
 	--warning: #b47716;
 	--danger: #c0392b;
+	--chart-purple: #6d4fa3;
+	--chart-blue: #2f6fb3;
 	--code-bg: #e8e8e5;
 	--overlay: rgba(24, 24, 24, 0.05);
 	--overlay-hover: rgba(24, 24, 24, 0.09);
@@ -75,6 +77,8 @@
 	--success: #5cb87a;
 	--warning: #d9a441;
 	--danger: #e06a5a;
+	--chart-purple: #a98ee0;
+	--chart-blue: #6fb3e8;
 	--code-bg: #101010;
 	--overlay: rgba(255, 255, 255, 0.05);
 	--overlay-hover: rgba(255, 255, 255, 0.09);
