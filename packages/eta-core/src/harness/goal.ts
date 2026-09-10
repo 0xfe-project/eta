@@ -32,6 +32,7 @@ export const MAX_CONTINUATIONS = 12;
 export interface GoalChange {
 	from: GoalStatus | "none";
 	goal: GoalState;
+	action?: string;
 }
 
 export class GoalManager {
@@ -55,6 +56,7 @@ export class GoalManager {
 	}
 
 	private changed(change: GoalChange, action: string): void {
+		change = { ...change, action };
 		this.observe?.("goal", action, { status: change.goal.status, from: change.from });
 		this.onChange?.(change);
 	}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ANTI_SPIN_LIMIT, GoalManager, MAX_CONTINUATIONS, lastMessageShowsIntent } from "../../src/harness/goal.ts";
+import { ANTI_SPIN_LIMIT, GoalManager, MAX_CONTINUATIONS, applyGoalEntries, lastMessageShowsIntent } from "../../src/harness/goal.ts";
 
 describe("goal state machine", () => {
 	it("set makes an active goal; clear removes it", () => {
@@ -7,6 +7,15 @@ describe("goal state machine", () => {
 		g.set("ship M0");
 		expect(g.current?.status).toBe("active");
 		g.clear();
+		expect(g.current).toBeUndefined();
+	});
+
+	it("replay honors cleared entries instead of reviving the goal", () => {
+		const g = new GoalManager();
+		applyGoalEntries(g, [
+			{ type: "goal", payload: { kind: "set", objective: "ship M0" } },
+			{ type: "goal", payload: { kind: "cleared", objective: "" } },
+		]);
 		expect(g.current).toBeUndefined();
 	});
 

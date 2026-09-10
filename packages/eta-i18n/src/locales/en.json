@@ -143,5 +143,7 @@
 	"panel.personaSwitch": "switch",
 	"panel.personaSwitchTo": "switch persona",
 	"panel.persona": "persona",
-	"panel.noPersona": "no persona"
+	"panel.noPersona": "no persona",
+	"ask.abort": "abort",
+	"ask.abortHint": "dismiss the question and stop this run"
 }

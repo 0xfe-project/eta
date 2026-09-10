@@ -56,7 +56,8 @@ export type GuiOp =
 	| { op: "subagentStop"; session: string; id: string }
 	| { op: "compact"; session: string }
 	| { op: "abort"; session: string }
-	| { op: "answer"; session: string; questionId: string; response: unknown };
+	| { op: "answer"; session: string; questionId: string; response: unknown }
+	| { op: "askAbort"; session: string; questionId: string };
 
 export type ControlOp =
 	| { op: "session.create"; name: string; personaId: string; cwd?: string; prompt?: string; modelId?: string }

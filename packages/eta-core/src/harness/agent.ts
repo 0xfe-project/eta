@@ -81,7 +81,8 @@ const memoryKv = (): StateKV => {
 	};
 };
 
-const goalPayloadFor = (change: { goal: { objective: string; status: string }; from: string }): GoalPayload => {
+const goalPayloadFor = (change: { goal: { objective: string; status: string }; from: string; action?: string }): GoalPayload => {
+	if (change.action === "cleared") return { kind: "cleared", objective: "" };
 	switch (change.goal.status) {
 		case "achieved":
 			return { kind: "achieved", objective: change.goal.objective };
@@ -242,6 +243,10 @@ export class EtaAgent {
 		const persistLoop =
 			options.persistLoop ??
 			((spec: LoopSpec) => {
+				if (spec.disposed) {
+					void options.session.deleteValue(loopState(spec.def.id), BACKGROUND_CONTEXT).catch(() => emit("state", "persist_failed", { key: loopState(spec.def.id).key }));
+					return;
+				}
 				persist(loopState(spec.def.id), spec);
 			});
 
@@ -394,6 +399,7 @@ export class EtaAgent {
 		const storedTasks = await this.lane.scanValues(taskState, context);
 		if (storedTasks[0] !== undefined) this.tasks.restore(storedTasks[0].value);
 		for (const stored of await this.lane.scanValues(loopStateInventoryPrefix(), context)) {
+			if (stored.value.disposed) continue;
 			this.loops.upsert(stored.value);
 		}
 	}

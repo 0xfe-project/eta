@@ -136,10 +136,6 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 					return Response.json({ models: [{ id: "faux", label: "faux echo" }], current: "faux" });
 				}
 			}
-			const filesSession = url.searchParams.get("files") ?? url.searchParams.get("session");
-			if (filesSession !== null) {
-				return Response.json(host.filesOf(filesSession));
-			}
 			if (request.method === "POST" && url.pathname === "/api/paste") {
 				const session = url.searchParams.get("session") ?? "";
 				const body = (await request.json()) as { text?: string };
@@ -324,9 +320,15 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 			ask?.answer(message.questionId, message.response as Parameters<typeof ask.answer>[1]);
 			return;
 		}
+		case "askAbort": {
+			const ask = host.askOf(message.session);
+			ask?.abort(message.questionId);
+			await host.abort(message.session);
+			return;
+		}
 		case "session.create":
 			await host.createSession(message.name, message.personaId, message.cwd ?? process.cwd(), message.modelId);
-			if (message.prompt !== undefined && message.prompt.length > 0) await host.prompt(message.name, message.prompt);
+			if (message.prompt !== undefined && message.prompt.length > 0) host.queue(message.name, message.prompt, "queue");
 			return;
 		case "session.delete":
 			await host.deleteSession(message.name);

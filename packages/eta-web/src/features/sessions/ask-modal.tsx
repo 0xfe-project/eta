@@ -36,6 +36,10 @@ export function AskModal({ session, view, visible = true }: { session: string; v
 		if (ask !== undefined) store.send({ op: "answer", session, questionId: ask.questionId, response });
 	};
 
+	const abort = () => {
+		if (ask !== undefined) store.send({ op: "askAbort", session, questionId: ask.questionId });
+	};
+
 	return (
 		<Dialog open={ask !== undefined && visible}>
 			<DialogContent className="max-w-[480px]" hideClose data-testid="ask-modal">
@@ -98,6 +102,15 @@ export function AskModal({ session, view, visible = true }: { session: string; v
 							}}
 						>
 							{t("ask.answer")}
+						</Button>
+						<Button
+							data-testid="ask-abort"
+							variant="outline"
+							title={t("ask.abortHint")}
+							className="border-2 border-danger px-3 py-1.5 text-xs font-bold normal-case text-danger hover:bg-danger hover:text-background"
+							onClick={abort}
+						>
+							{t("ask.abort")}
 						</Button>
 					</div>
 				</div>

@@ -33,6 +33,21 @@ describe("ask registry", () => {
 		expect(await p).toEqual({ kind: "none" });
 	});
 
+	it("abort settles as none, records an answer entry, and replay keeps it closed", async () => {
+		const recorded: { questionId: string; answers: string[] }[] = [];
+		const reg = new AskRegistry({ onAnswer: (payload) => recorded.push(payload) });
+		const p = reg.ask({ questionId: "q9", question: "abort me" });
+		expect(reg.abort("q9")).toBe(true);
+		expect(await p).toEqual({ kind: "none" });
+		expect(reg.pendingAsks()).toEqual([]);
+		expect(recorded).toEqual([{ questionId: "q9", answers: ["user-aborted"] }]);
+		reg.replay([
+			{ type: "ask", payload: { questionId: "q9", question: "abort me" } },
+			{ type: "answer", payload: { questionId: "q9", answers: ["user-aborted"] } },
+		]);
+		expect(reg.pendingAsks()).toEqual([]);
+	});
+
 	it("replay re-surfaces unanswered asks from an entry log", () => {
 		const reg = new AskRegistry();
 		reg.replay([

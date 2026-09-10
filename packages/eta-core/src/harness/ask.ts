@@ -81,6 +81,15 @@ export class AskRegistry {
 	}
 
 	/** Backfill one waiting ask; false when nobody is waiting on that id. */
+	/** GUI abort: settle as "none" but record an answer entry so replay/re-drive never re-surfaces it. */
+	abort(questionId: string): boolean {
+		const waiting = this.pending.get(questionId);
+		if (waiting === undefined) return false;
+		this.onAnswer?.({ questionId, answers: ["user-aborted"] });
+		waiting.settle({ kind: "none" });
+		return true;
+	}
+
 	/** Backfill a waiting question; a real answer is recorded before settling. */
 	answer(questionId: string, response: AskResponse): boolean {
 		const waiting = this.pending.get(questionId);

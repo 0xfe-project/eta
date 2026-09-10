@@ -401,9 +401,9 @@ export class Host {
 		return this.hosted.get(name)?.ring;
 	}
 
-	askOf(name: string): { answer: AnswerFn } | undefined {
+	askOf(name: string): { answer: AnswerFn; abort(questionId: string): boolean } | undefined {
 		const entry = this.hosted.get(name);
-		return entry === undefined ? undefined : { answer: (id, response) => entry.agent.ask.answer(id, response) };
+		return entry === undefined ? undefined : { answer: (id, response) => entry.agent.ask.answer(id, response), abort: (id) => entry.agent.ask.abort(id) };
 	}
 
 	goal(name: string, action: "set" | "pause" | "resume" | "clear", objective?: string): void {

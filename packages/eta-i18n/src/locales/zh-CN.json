@@ -143,5 +143,7 @@
 	"panel.personaSwitch": "切换",
 	"panel.personaSwitchTo": "切换 persona",
 	"panel.persona": "persona",
-	"panel.noPersona": "未设置 persona"
+	"panel.noPersona": "未设置 persona",
+	"ask.abort": "中止",
+	"ask.abortHint": "放弃回答并中止当前回合"
 }
