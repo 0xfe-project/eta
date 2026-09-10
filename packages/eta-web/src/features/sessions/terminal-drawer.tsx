@@ -53,7 +53,7 @@ export function TerminalDrawer({ cwd, onClose }: { cwd?: string; onClose: () => 
 
 	return (
 		<div data-testid="terminal-drawer" className="flex shrink-0 flex-col border-t-2 border-border bg-[#0a0a0a]" style={{ height }}>
-			<div data-testid="terminal-resize" onPointerDown={startDrag} className="h-1.5 shrink-0 cursor-row-resize bg-overlay hover:bg-border-strong" />
+			<div data-testid="terminal-resize" onPointerDown={startDrag} className="h-[2px] shrink-0 cursor-row-resize bg-overlay hover:bg-border-strong" />
 			<div className="flex items-stretch border-b border-border bg-surface">
 				{tabs.map((tab) => (
 					<button

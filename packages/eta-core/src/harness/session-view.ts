@@ -50,7 +50,7 @@ export interface SessionViewSubagent {
 export interface SessionView {
 	messages: SessionViewMessage[];
 	/** Per-part transcript size in characters, for the context-usage donut. */
-	contextShare?: { userChars: number; assistantChars: number; toolChars: number };
+	contextShare?: { userChars: number; assistantChars: number; toolChars: number; toolDefChars: number };
 	systems: SessionViewSystemRow[];
 	thinking: string[];
 	compactionEpoch: number;
@@ -127,14 +127,17 @@ export class SessionViewProjector {
 		for (const entry of entries) {
 			if (entry.type === "message") {
 				messages.push({ entryId: entry.id, seq: entry.seq, at: entry.timestamp, message: entry.message });
-				const content = (entry.message as { content?: unknown }).content;
+				const message = entry.message as { role?: string; content?: unknown };
+				const content = message.content;
+				if (message.role === "toolResult") {
+					toolChars += typeof content === "string" ? content.length : Array.isArray(content) ? (content as { text?: string; content?: unknown }[]).reduce((n, block) => n + blockChars(block), 0) : 0;
+					continue;
+				}
 				if (Array.isArray(content)) {
-					const role = (entry.message as { role?: string }).role;
 					for (const block of content as { type?: string; thinking?: string; text?: string; content?: unknown; args?: unknown }[]) {
 						if (block.type === "thinking" && typeof block.thinking === "string") thinking.push(block.thinking);
 						const chars = blockChars(block);
-						if (block.type === "toolResult") toolChars += chars;
-						else if (role === "user") userChars += chars;
+						if (message.role === "user") userChars += chars;
 						else assistantChars += chars;
 					}
 				}
@@ -184,7 +187,15 @@ export class SessionViewProjector {
 			subagents: this.agent.subagents.list().map((r) => ({ id: r.id, status: r.status, turns: r.turns })),
 			goal: goal.current,
 			tasks: tasks.list(),
-			contextShare: { userChars, assistantChars, toolChars },
+			contextShare: {
+				userChars,
+				assistantChars,
+				toolChars,
+				toolDefChars: this.agent.agentTools.reduce(
+					(n, tool) => n + (tool.name?.length ?? 0) + (tool.description?.length ?? 0) + (tool.parameters !== undefined ? JSON.stringify(tool.parameters).length : 0),
+					0,
+				),
+			},
 			loops: loops.list().map(specView),
 			sideThread: btw.list().map((thread) => ({ id: thread.id, kind: thread.kind, exchanges: thread.exchanges, saveState: thread.saveState })),
 			usage: stats.usage,

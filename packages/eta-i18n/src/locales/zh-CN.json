@@ -150,6 +150,7 @@
 	"usage.context": "persona/目标/任务",
 	"usage.user": "用户",
 	"usage.assistant": "助手",
-	"usage.tool": "工具",
+	"usage.tool": "工具调用",
+	"usage.tooldefs": "工具定义",
 	"usage.remaining": "剩余"
 }

@@ -48,14 +48,15 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 		<div className="flex h-full flex-col gap-4 overflow-y-auto p-3 text-sm" data-testid="context-panel">
 			<Section title={t("panel.usage")} testid="section-usage" right={<span className="text-[10px]">{(Math.round(view.tokensPerSec * 10) / 10).toFixed(1)} tok/s</span>}>
 				{(() => {
-					const share = view.contextShare ?? { userChars: 0, assistantChars: 0, toolChars: 0 };
+					const share = view.contextShare ?? { userChars: 0, assistantChars: 0, toolChars: 0, toolDefChars: 0 };
 					const est = (chars: number) => Math.round(chars / 4);
 					const slices = [
 						{ label: t("usage.system"), tokens: est(view.prompt?.stableChars ?? 0), color: "var(--chart-purple)" },
 						{ label: t("usage.context"), tokens: est(Math.max(0, (view.prompt?.adaptiveChars ?? 0) - (view.prompt?.stableChars ?? 0))), color: "var(--accent)" },
 						{ label: t("usage.user"), tokens: est(share.userChars), color: "var(--success)" },
 						{ label: t("usage.assistant"), tokens: est(share.assistantChars), color: "var(--warning)" },
-						{ label: t("usage.tool"), tokens: est(share.toolChars), color: "var(--chart-blue)" },
+						{ label: t("usage.tooldefs"), tokens: est(share.toolDefChars), color: "var(--chart-blue)", opacity: 0.45 },
+						{ label: t("usage.tool"), tokens: est(share.toolChars), color: "var(--chart-blue)", opacity: 1 },
 					];
 					const used = slices.reduce((sum, slice) => sum + slice.tokens, 0);
 					const ctx = contextWindow ?? 128_000;
@@ -70,7 +71,7 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 								{slices.map((slice) => {
 									const dash = Math.max(0, (slice.tokens / cap) * c - 1.5);
 									const node = (
-										<circle key={slice.label} cx="60" cy="60" r={r} fill="none" stroke={slice.color} strokeWidth="14" strokeDasharray={`${dash} ${c - dash}`} strokeDashoffset={-offset} transform="rotate(-90 60 60)">
+										<circle key={slice.label} cx="60" cy="60" r={r} fill="none" stroke={slice.color} strokeOpacity={slice.opacity ?? 1} strokeWidth="14" strokeDasharray={`${dash} ${c - dash}`} strokeDashoffset={-offset} transform="rotate(-90 60 60)">
 											<title>{`${slice.label}: ~${slice.tokens.toLocaleString()} tokens`}</title>
 										</circle>
 										);
@@ -83,7 +84,7 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 							<div className="grid min-w-0 flex-1 grid-cols-1 gap-0.5 text-[10px]">
 								{slices.map((slice) => (
 									<span key={slice.label} className="flex items-center gap-1.5 truncate text-muted">
-										<span className="h-2 w-2 shrink-0" style={{ background: slice.color }} />
+										<span className="h-2 w-2 shrink-0" style={{ background: slice.color, opacity: slice.opacity ?? 1 }} />
 										<span className="truncate">{slice.label}</span>
 										<span className="mono ml-auto text-foreground">~{slice.tokens.toLocaleString()}</span>
 									</span>

@@ -150,6 +150,7 @@
 	"usage.context": "persona/goal/tasks",
 	"usage.user": "user",
 	"usage.assistant": "assistant",
-	"usage.tool": "tool io",
+	"usage.tool": "tool calls",
+	"usage.tooldefs": "tool defs",
 	"usage.remaining": "remaining"
 }
