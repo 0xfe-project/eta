@@ -9,6 +9,9 @@ type ContentBlock = { type?: string; text?: unknown; thinking?: unknown; name?: 
 
 const EMPTY_RESULTS = new Map<string, ToolResultLike>();
 
+const RAIL_NUM = "mono flex h-5 min-w-5 shrink-0 items-center justify-center border border-border bg-elevated px-1 text-[9px] leading-none hover:border-border-strong hover:text-foreground";
+const RAIL_ACTIVE = "border-border-strong bg-foreground text-background";
+
 /** Cheap "did the transcript change shape" reading, for the follow-scroll effect. */
 function contentChars(message: { content?: unknown } | undefined): number {
 	const content = message?.content;
@@ -24,6 +27,8 @@ function contentChars(message: { content?: unknown } | undefined): number {
 export function Timeline(props: { view: SessionView; session: string; running?: boolean }) {
 	const i18n = useAppI18n();
 	let scroller: HTMLDivElement | undefined;
+	let railWrap: HTMLDivElement | undefined;
+	let railFrame = 0;
 	const [pinned, setPinned] = createSignal(true);
 
 	// Follow the tail while pinned. Reconciled views keep the snapshot's object
@@ -50,9 +55,35 @@ export function Timeline(props: { view: SessionView; session: string; running?: 
 		const node = scroller;
 		if (node === undefined) return;
 		setPinned(node.scrollHeight - node.scrollTop - node.clientHeight <= 32);
+		if (railFrame === 0) railFrame = requestAnimationFrame(markActive);
 	};
 
+	// Which rail number you are looking at. A long run puts a few hundred identical
+	// squares on the wall, and a list of those is noise without a position in it.
+	const [activeEntry, setActiveEntry] = createSignal("");
+	function markActive() {
+		railFrame = 0;
+		const node = scroller;
+		if (node === undefined) return;
+		const edge = node.getBoundingClientRect().top + 8;
+		let current = "";
+		// Wrappers come out in document order, so the first one below the edge ends the scan.
+		for (const el of node.querySelectorAll<HTMLElement>("[id^='eta-msg-']")) {
+			if (el.getBoundingClientRect().top > edge) break;
+			current = el.id.slice("eta-msg-".length);
+		}
+		setActiveEntry(current);
+		if (railWrap !== undefined && !railWrap.matches(":hover")) {
+			railWrap.querySelector<HTMLElement>(`[data-entry="${CSS.escape(current)}"]`)?.scrollIntoView({ block: "nearest" });
+		}
+	}
+
 	const prompts = createMemo(() => props.view.messages.filter((entry) => entry.message.role === "user"));
+	// Agent turns, the other axis the rail navigates: one prompt that set the agent
+	// off for sixty replies has exactly one prompt number, which navigates nothing.
+	const turns = createMemo(() => props.view.messages.filter((entry) => entry.message.role === "assistant"));
+	// The rail takes a lane on the right, so the transcript yields it one.
+	const railShown = createMemo(() => prompts().length > 1 || turns().length > 1);
 	const results = createMemo(() => {
 		const map = new Map<string, ToolResultLike>();
 		for (const entry of props.view.messages) {
@@ -64,9 +95,25 @@ export function Timeline(props: { view: SessionView; session: string; running?: 
 		return map;
 	});
 
+	const jumpToEntry = (entryId: string) => {
+		document.getElementById(`eta-msg-${entryId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+	};
+
 	const jumpTo = (index: number) => {
-		const node = document.getElementById(`eta-msg-${prompts()[index]?.entryId ?? ""}`);
-		node?.scrollIntoView({ behavior: "smooth", block: "start" });
+		jumpToEntry(prompts()[index]?.entryId ?? "");
+	};
+
+	/** Where a rail number lands, in words — a bare number says nothing about the destination. */
+	const previewOf = (entry: { message: unknown }) => {
+		const content = (entry.message as { content?: unknown }).content;
+		const blocks: ContentBlock[] = typeof content === "string" ? [{ type: "text", text: content }] : Array.isArray(content) ? (content as ContentBlock[]) : [];
+		const squash = (value: string) => value.trim().replace(/\s+/g, " ").slice(0, 44);
+		const prose = squash(blocks.map((block) => String(block.text ?? "")).join(" "));
+		if (prose !== "") return prose;
+		// A turn that is nothing but tool calls has no words to quote; its tools say enough.
+		const tools = blocks.filter((block) => block.type === "toolCall").map((block) => String(block.name ?? "?"));
+		if (tools.length > 0) return tools.join(" · ");
+		return squash(blocks.map((block) => String(block.thinking ?? "")).join(" "));
 	};
 
 	return (
@@ -77,7 +124,7 @@ export function Timeline(props: { view: SessionView; session: string; running?: 
 				}}
 				onScroll={onScroll}
 				data-testid="timeline"
-				class="no-scrollbar h-full overflow-y-auto px-6 py-4"
+				class={`no-scrollbar h-full overflow-y-auto py-4 pl-6 ${railShown() ? "pr-14" : "pr-6"}`}
 			>
 				<div class="mx-auto max-w-[860px]">
 					<Show when={props.view.messages.length === 0 && props.view.systems.length === 0}>
@@ -120,20 +167,50 @@ export function Timeline(props: { view: SessionView; session: string; running?: 
 					</Show>
 				</div>
 			</div>
-			<Show when={prompts().length > 1}>
-				<div data-testid="prompt-rail" class="no-scrollbar absolute right-1 top-16 flex max-h-[60%] flex-col items-end gap-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-1">
-					<For each={prompts()}>
-						{(entry, index) => (
-							<button
-								data-testid={`prompt-rail-${index() + 1}`}
-								title={`${index() + 1}`}
-								onClick={() => jumpTo(index())}
-								class="mono flex h-5 min-w-5 shrink-0 items-center justify-center border border-border bg-elevated px-1 text-[9px] leading-none text-muted hover:border-border-strong hover:text-foreground"
-							>
-								{index() + 1}
-							</button>
-						)}
-					</For>
+			<Show when={railShown()}>
+				<div
+					ref={(node) => {
+						railWrap = node;
+					}}
+					data-testid="rail"
+					class="absolute right-1 top-16 flex flex-row items-start gap-1"
+				>
+					<Show when={turns().length > 1}>
+						<div data-testid="turn-rail" class="no-scrollbar flex max-h-[60vh] flex-col items-end gap-1 overflow-y-auto overscroll-contain pb-1">
+							<For each={turns()}>
+								{(entry, index) => (
+									<button
+										data-testid={`turn-rail-${index() + 1}`}
+										data-entry={entry.entryId}
+										aria-current={activeEntry() === entry.entryId}
+										title={`${index() + 1} · ${previewOf(entry)}`}
+										onClick={() => jumpToEntry(entry.entryId)}
+										class={`${RAIL_NUM} ${activeEntry() === entry.entryId ? RAIL_ACTIVE : "text-muted"}`}
+									>
+										{index() + 1}
+									</button>
+								)}
+							</For>
+						</div>
+					</Show>
+					<Show when={prompts().length > 1}>
+						<div data-testid="prompt-rail" class="no-scrollbar flex max-h-[60vh] flex-col items-end gap-1 overflow-y-auto overscroll-contain pb-1">
+							<For each={prompts()}>
+								{(entry, index) => (
+									<button
+										data-testid={`prompt-rail-${index() + 1}`}
+										data-entry={entry.entryId}
+										aria-current={activeEntry() === entry.entryId}
+										title={`${index() + 1} · ${previewOf(entry)}`}
+										onClick={() => jumpTo(index())}
+										class={`${RAIL_NUM} rounded-full border-border-strong ${activeEntry() === entry.entryId ? RAIL_ACTIVE : "text-foreground"}`}
+									>
+										{index() + 1}
+									</button>
+								)}
+							</For>
+						</div>
+					</Show>
 				</div>
 			</Show>
 			<Show when={!pinned()}>
