@@ -851,6 +851,14 @@ details[open] > .tool-card-head .thinking-block-chevron {
 	border-color: var(--foreground);
 }
 
+/* shiki token colors: streamdown ships classes the host tailwind never compiled; consume the inline vars directly */
+.markdown [data-streamdown="code-block-body"] span {
+	color: var(--sdm-c, inherit);
+}
+html.dark .markdown [data-streamdown="code-block-body"] span {
+	color: var(--shiki-dark, var(--sdm-c, inherit));
+}
+
 /* ---- streamdown code blocks: one flat layer, header row with inline actions ---- */
 .markdown [data-streamdown="code-block"] {
 	position: relative;
