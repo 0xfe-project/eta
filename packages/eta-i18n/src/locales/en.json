@@ -42,6 +42,7 @@
 	"theme.system": "System",
 	"timeline.empty": "Session is idle. Type below.",
 	"timeline.newActivity": "New activity below",
+	"timeline.loadEarlier": "Load earlier",
 	"timeline.thinking": "thinking",
 	"timeline.tool.running": "running",
 	"timeline.tool.done": "done",

@@ -128,4 +128,21 @@ describe("timeline jump rail", () => {
 		expect(rail.querySelectorAll("button").length).toBeLessThanOrEqual(20);
 		expect(document.querySelectorAll('[data-testid="turn-rail-gap"]').length).toBeGreaterThan(0);
 	});
+
+	it("loads older transcript rows from disk on demand", async () => {
+		const fakeFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			json: () => Promise.resolve([entry("user", "u0", "最早的一条")]),
+		} as Response);
+		vi.stubGlobal("fetch", fakeFetch);
+		const v = view([entry("user", "u1", "最近的一条")]) as SessionView & { messagesBefore?: number };
+		v.messagesBefore = 5;
+		render(<Timeline view={v} session="s-1" />);
+		expect(byId("load-earlier")).not.toBeNull();
+		click("load-earlier");
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		expect(fakeFetch).toHaveBeenCalledWith(expect.stringContaining("/api/history?session=s-1&before="));
+		expect(document.getElementById("eta-msg-u0")).not.toBeNull();
+		expect(document.body.textContent).toContain("最早的一条");
+	});
 });

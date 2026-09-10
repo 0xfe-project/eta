@@ -42,6 +42,7 @@
 	"theme.system": "跟随系统",
 	"timeline.empty": "会话空闲中,在下面输入。",
 	"timeline.newActivity": "下方有新内容",
+	"timeline.loadEarlier": "加载更早",
 	"timeline.thinking": "思考",
 	"timeline.tool.running": "执行中",
 	"timeline.tool.done": "完成",

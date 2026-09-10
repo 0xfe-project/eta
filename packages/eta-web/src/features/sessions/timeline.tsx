@@ -1,5 +1,5 @@
 import { For, Index, Show, Match, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
-import type { SessionView } from "@eta/core";
+import type { SessionView, SessionViewMessage } from "@eta/core";
 import { useAppI18n } from "../../i18n.ts";
 import { MessageMarkdown } from "./message-markdown.tsx";
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog.tsx";
@@ -30,6 +30,27 @@ export function Timeline(props: { view: SessionView; session: string; running?: 
 	let railWrap: HTMLDivElement | undefined;
 	let railFrame = 0;
 	const [pinned, setPinned] = createSignal(true);
+	// Rows older than the server's window, pulled on demand from /api/history and
+	// prepended; the transcript lives on disk, not in the view frame.
+	const [older, setOlder] = createSignal<SessionViewMessage[]>([]);
+	const [loadingOlder, setLoadingOlder] = createSignal(false);
+	const [exhausted, setExhausted] = createSignal(false);
+	const hasOlder = createMemo(() => !exhausted() && ((props.view.messagesBefore ?? 0) > 0 || older().length > 0));
+	const loadOlder = async () => {
+		if (loadingOlder() || exhausted()) return;
+		const oldest = older()[0] ?? props.view.messages[0];
+		if (oldest === undefined) return;
+		setLoadingOlder(true);
+		try {
+			const res = await fetch(`/api/history?session=${encodeURIComponent(props.session)}&before=${oldest.seq}&limit=100`);
+			if (!res.ok) return;
+			const rows = (await res.json()) as SessionViewMessage[];
+			setOlder((prev) => [...rows, ...prev]);
+			if (rows.length < 100) setExhausted(true);
+		} finally {
+			setLoadingOlder(false);
+		}
+	};
 
 	// What "the transcript moved" costs nothing to answer: reconciled views keep the
 	// snapshot's object identity across frames, so a token that only rewrites text has
@@ -172,6 +193,32 @@ export function Timeline(props: { view: SessionView; session: string; running?: 
 					<Show when={props.view.messages.length === 0 && props.view.systems.length === 0}>
 						<p class="p-4 text-sm text-muted">{i18n.t("timeline.empty")}</p>
 					</Show>
+					<Show when={hasOlder()}>
+						<button
+							type="button"
+							data-testid="load-earlier"
+							class="system-message mono mx-auto my-2 block w-fit bg-overlay px-3 py-1 text-[11px] text-muted hover:text-foreground"
+							onClick={() => void loadOlder()}
+							disabled={loadingOlder()}
+						>
+							{loadingOlder() ? "…" : i18n.t("timeline.loadEarlier")}
+						</button>
+					</Show>
+					<For each={older()}>
+						{(entry) => (
+							<div id={`eta-msg-${entry.entryId}`}>
+								<MessageRow
+									role={entry.message.role}
+									message={entry.message}
+									session={props.session}
+									at={entry.at}
+									results={results()}
+									isLast={false}
+									streaming={false}
+								/>
+							</div>
+						)}
+					</For>
 					<For each={props.view.systems}>
 						{(row) => (
 							<div data-testid="system-row" class="system-message mono mx-auto my-2 w-fit bg-overlay px-3 py-1 text-[11px] text-muted">
