@@ -18,13 +18,15 @@ export interface EtaPromptState {
 	tasks?: Task[];
 	/** Rendered persona block (stable card text); goes right after the base prompt. */
 	persona?: string;
+	/** Rendered <skills> catalog block; stable, appended after the persona. */
+	skills?: string;
 	/** Rendered <memory> block; always last, it changes most often. */
 	memory?: string;
 }
 
 /** One section pipeline: order and stable/adaptive tagging defined once. */
 export interface EtaPromptSection {
-	name: "base" | "persona" | "goal" | "tasks" | "memory";
+	name: "base" | "persona" | "skills" | "goal" | "tasks" | "memory";
 	stable: boolean;
 	text: string;
 }
@@ -32,6 +34,7 @@ export interface EtaPromptSection {
 function sections(base: string, state: EtaPromptState): EtaPromptSection[] {
 	const out: EtaPromptSection[] = [{ name: "base", text: base, stable: true }];
 	if (state.persona !== undefined && state.persona.length > 0) out.push({ name: "persona", text: state.persona, stable: true });
+	if (state.skills !== undefined && state.skills.length > 0) out.push({ name: "skills", text: state.skills, stable: true });
 	if (state.goal && state.goal.status === "active") out.push({ name: "goal", text: goalPursuitGuidelines(state.goal.objective), stable: false });
 	if (state.tasks && state.tasks.length > 0) out.push({ name: "tasks", text: `${TASK_REVIEW_PROMPT}\n\n${renderCurrentTasks(state.tasks)}`, stable: false });
 	if (state.memory !== undefined && state.memory.length > 0) out.push({ name: "memory", text: state.memory, stable: false });
