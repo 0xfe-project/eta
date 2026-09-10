@@ -16,6 +16,7 @@ import {
 	type HarnessEvent,
 	type LaneQueuedItem,
 	type SessionView,
+	type SessionViewMessage,
 	type ThinkingLevel,
 } from "@eta/core";
 import {
@@ -628,6 +629,22 @@ export class Host {
 		} catch {
 			return undefined;
 		}
+	}
+
+	/** Older transcript rows for pagination: the messages just before `beforeSeq`, oldest first. */
+	async historyOf(name: string, beforeSeq: number, limit: number): Promise<SessionViewMessage[] | undefined> {
+		const agent = this.hosted.get(name)?.agent;
+		if (agent === undefined) return undefined;
+		const entries = await agent.lane.findEntries(
+			{ order: "newestFirst", type: "message", cursor: { seq: beforeSeq }, limit },
+			BACKGROUND_CONTEXT,
+		);
+		const messages: SessionViewMessage[] = [];
+		for (const entry of entries) {
+			if (entry.type !== "message") continue;
+			messages.push({ entryId: entry.id, seq: entry.seq, at: entry.timestamp, message: entry.message });
+		}
+		return messages.reverse();
 	}
 
 	viewOf(name: string): SessionView | undefined {

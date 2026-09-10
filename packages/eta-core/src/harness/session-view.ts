@@ -51,6 +51,8 @@ export interface SessionViewSubagent {
 
 export interface SessionView {
 	messages: SessionViewMessage[];
+	/** Messages older than the window in `messages`; set once the transcript is paged. */
+	messagesBefore?: number;
 	/** Per-part transcript size in characters, for the context-usage donut. */
 	contextShare?: { userChars: number; assistantChars: number; toolChars: number; toolDefChars: number };
 	systems: SessionViewSystemRow[];
@@ -93,6 +95,9 @@ export interface SessionView {
 	/** In-flight assistant message while a run is streaming; absent once committed or idle. */
 	streaming?: AgentMessage;
 }
+
+/** How many transcript rows a snapshot keeps; older ones are fetched on demand. */
+export const VIEW_MESSAGE_WINDOW = 200;
 
 export type ViewListener = (view: SessionView) => void;
 
@@ -179,6 +184,8 @@ export class SessionViewProjector {
 				systems.push({ entryId: entry.id, seq: entry.seq, kind: "btw", args: { note: entry.payload.note } });
 			}
 		}
+		const messagesBefore = Math.max(0, messages.length - VIEW_MESSAGE_WINDOW);
+		const windowedMessages = messages.slice(-VIEW_MESSAGE_WINDOW);
 		const pending = ask.pendingAsks();
 		const stats = await lane.getStats(context);
 		const specView = (spec: LoopSpec): SessionViewLoop => ({
@@ -193,7 +200,8 @@ export class SessionViewProjector {
 		const stateKeys = await this.agent.stateKv.keys().catch(() => []);
 		return {
 			stateKeys,
-			messages,
+			messages: windowedMessages,
+			...(messagesBefore === 0 ? {} : { messagesBefore }),
 			systems,
 			thinking,
 			compactionEpoch,

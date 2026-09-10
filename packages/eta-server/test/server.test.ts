@@ -196,6 +196,30 @@ describe("ws protocol", () => {
 		});
 	});
 
+	it("serves older transcript rows from /api/history", async () => {
+		await withServer(async (server) => {
+			const { socket, reader } = await connect(server);
+			await reader.next();
+			send(socket, { op: "session.create", name: "hist", personaId: "Thinker" });
+			await reader.until(
+				(m): m is Extract<ServerMessage, { type: "created" }> => "type" in m && m.type === "created",
+			);
+			send(socket, { op: "prompt", session: "hist", text: "hello" });
+			await reader.until(
+				(m): m is Extract<ServerMessage, { channel: "view" }> =>
+					"channel" in m &&
+					m.channel === "view" &&
+					"view" in m &&
+					JSON.stringify(m.view).includes("[Thinker faux echo]"),
+			);
+			const history = (await (
+				await fetch(`http://127.0.0.1:${server.port}/api/history?session=hist&before=999999&limit=10`)
+			).json()) as { seq: number }[];
+			expect(history.length).toBeGreaterThanOrEqual(2);
+			socket.close();
+		});
+	});
+
 	it("stamps a monotonic version on every view frame", async () => {
 		await withServer(async (server) => {
 			const { socket, reader } = await connect(server, true);

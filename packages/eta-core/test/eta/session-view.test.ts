@@ -4,7 +4,12 @@ import { BACKGROUND_CONTEXT } from "../../src/harness/context.ts";
 import { EtaAgent } from "../../src/harness/agent.ts";
 import { MemoryStorage } from "../../src/harness/session/memory.ts";
 import { StorageBackedSession } from "../../src/harness/session/session.ts";
-import { contextShare, SessionViewProjector, type SessionView } from "../../src/harness/session-view.ts";
+import {
+	contextShare,
+	SessionViewProjector,
+	VIEW_MESSAGE_WINDOW,
+	type SessionView,
+} from "../../src/harness/session-view.ts";
 import type { Entry } from "../../src/harness/session/types.ts";
 
 const CTX = BACKGROUND_CONTEXT;
@@ -114,6 +119,27 @@ describe("SessionView projector", () => {
 		const view = await new SessionViewProjector(agent).snapshot(CTX);
 		expect(view.personas).toEqual(["pilot"]);
 		expect(view.prompt!.stableChars).toBeGreaterThanOrEqual("you are eta".length + "PILOT CARD TEXT".length);
+	});
+
+	it("windows the transcript and reports how many older rows exist", async () => {
+		const faux = fauxProvider();
+		const models = createModels();
+		models.setProvider(faux.provider);
+		const session = new StorageBackedSession(
+			{ id: "eta-window", createdAt: Date.now(), storageVersion: 1 },
+			new MemoryStorage(),
+		);
+		const agent = await EtaAgent.create(
+			{ session, models, model: faux.getModel(), baseSystemPrompt: "base", heartbeatMs: 0 },
+			CTX,
+		);
+		for (let i = 0; i < VIEW_MESSAGE_WINDOW + 5; i += 1) {
+			await agent.lane.appendMessage({ role: "user", content: `m${i}` } as never, CTX);
+		}
+		const view = await new SessionViewProjector(agent).snapshot(CTX);
+		expect(view.messages).toHaveLength(VIEW_MESSAGE_WINDOW);
+		expect(view.messagesBefore).toBe(5);
+		expect(JSON.stringify(view.messages[0]?.message)).toContain("m5");
 	});
 
 	it("contextShare splits the transcript by role and counts tool definitions", async () => {
