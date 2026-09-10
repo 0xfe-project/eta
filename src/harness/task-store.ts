@@ -27,7 +27,10 @@ export class TaskStore {
 	}
 
 	/** Add a task; auto-ids are t1, t2, ... and are never reused. */
-	create(content: string, extra: { deps?: string[]; priority?: Task["priority"] } = {}): { task: StoredTask; warnings: string[] } {
+	create(
+		content: string,
+		extra: { deps?: string[]; priority?: Task["priority"] } = {},
+	): { task: StoredTask; warnings: string[] } {
 		const id = `t${this.nextId++}`;
 		const task: StoredTask = { id, content, status: "pending", priority: extra.priority, dependsOn: [], blocks: [] };
 		this.tasks.set(id, task);
@@ -55,7 +58,10 @@ export class TaskStore {
 		return [...this.tasks.values()];
 	}
 
-	update(id: string, patch: { content?: string; status?: TaskStatus; deps?: string[]; priority?: Task["priority"] }): { task: StoredTask; warnings: string[] } | undefined {
+	update(
+		id: string,
+		patch: { content?: string; status?: TaskStatus; deps?: string[]; priority?: Task["priority"] },
+	): { task: StoredTask; warnings: string[] } | undefined {
 		const task = this.tasks.get(id);
 		if (task === undefined) return undefined;
 		const warnings: string[] = [];

@@ -14,9 +14,19 @@ describe("SessionView projector", () => {
 		faux.setResponses([fauxAssistantMessage([fauxText("hi")])]);
 		const models = createModels();
 		models.setProvider(faux.provider);
-		const session = new StorageBackedSession({ id: "eta-persona", createdAt: Date.now(), storageVersion: 1 }, new MemoryStorage());
+		const session = new StorageBackedSession(
+			{ id: "eta-persona", createdAt: Date.now(), storageVersion: 1 },
+			new MemoryStorage(),
+		);
 		const agent = await EtaAgent.create(
-			{ session, models, model: faux.getModel(), baseSystemPrompt: "you are eta", persona: { names: ["pilot"], text: "PILOT CARD TEXT" }, heartbeatMs: 0 },
+			{
+				session,
+				models,
+				model: faux.getModel(),
+				baseSystemPrompt: "you are eta",
+				persona: { names: ["pilot"], text: "PILOT CARD TEXT" },
+				heartbeatMs: 0,
+			},
 			CTX,
 		);
 		const snapshot = await new SessionViewProjector(agent).snapshot(CTX);
@@ -32,10 +42,26 @@ describe("SessionView projector", () => {
 		faux.setResponses([fauxAssistantMessage([fauxText("ok")])]);
 		const models = createModels();
 		models.setProvider(faux.provider);
-		const session = new StorageBackedSession({ id: "eta-share", createdAt: Date.now(), storageVersion: 1 }, new MemoryStorage());
-		const agent = await EtaAgent.create({ session, models, model: faux.getModel(), baseSystemPrompt: "base", heartbeatMs: 0 }, CTX);
+		const session = new StorageBackedSession(
+			{ id: "eta-share", createdAt: Date.now(), storageVersion: 1 },
+			new MemoryStorage(),
+		);
+		const agent = await EtaAgent.create(
+			{ session, models, model: faux.getModel(), baseSystemPrompt: "base", heartbeatMs: 0 },
+			CTX,
+		);
 		await agent.lane.prompt("hello user text", undefined, CTX);
-		await agent.lane.appendMessage({ role: "toolResult", toolCallId: "c1", toolName: "bash", content: [{ type: "text", text: "X".repeat(400) }], isError: false, timestamp: 1 } as never, CTX);
+		await agent.lane.appendMessage(
+			{
+				role: "toolResult",
+				toolCallId: "c1",
+				toolName: "bash",
+				content: [{ type: "text", text: "X".repeat(400) }],
+				isError: false,
+				timestamp: 1,
+			} as never,
+			CTX,
+		);
 		const view = await new SessionViewProjector(agent).snapshot(CTX);
 		expect(view.contextShare?.userChars).toBeGreaterThanOrEqual("hello user text".length);
 		expect(view.contextShare?.assistantChars).toBeGreaterThanOrEqual("ok".length);
@@ -48,9 +74,19 @@ describe("SessionView projector", () => {
 		faux.setResponses([fauxAssistantMessage([fauxText("one")]), fauxAssistantMessage([fauxText("two")])]);
 		const models = createModels();
 		models.setProvider(faux.provider);
-		const session = new StorageBackedSession({ id: "eta-persona-swap", createdAt: Date.now(), storageVersion: 1 }, new MemoryStorage());
+		const session = new StorageBackedSession(
+			{ id: "eta-persona-swap", createdAt: Date.now(), storageVersion: 1 },
+			new MemoryStorage(),
+		);
 		const agent = await EtaAgent.create(
-			{ session, models, model: faux.getModel(), baseSystemPrompt: "you are eta", persona: { names: ["Thinker"], text: "OLD CARD TEXT AAAAAAAAAAAAAAAA" }, heartbeatMs: 0 },
+			{
+				session,
+				models,
+				model: faux.getModel(),
+				baseSystemPrompt: "you are eta",
+				persona: { names: ["Thinker"], text: "OLD CARD TEXT AAAAAAAAAAAAAAAA" },
+				heartbeatMs: 0,
+			},
 			CTX,
 		);
 		const projector = new SessionViewProjector(agent);
@@ -78,7 +114,10 @@ describe("SessionView projector", () => {
 		models.setProvider(faux.provider);
 		const storage = new MemoryStorage();
 		const session = new StorageBackedSession({ id: "eta-view", createdAt: Date.now(), storageVersion: 1 }, storage);
-		const agent = await EtaAgent.create({ session, models, model: faux.getModel(), baseSystemPrompt: "you are eta", heartbeatMs: 0 }, CTX);
+		const agent = await EtaAgent.create(
+			{ session, models, model: faux.getModel(), baseSystemPrompt: "you are eta", heartbeatMs: 0 },
+			CTX,
+		);
 
 		const projectorA = new SessionViewProjector(agent);
 		const projectorB = new SessionViewProjector(agent);

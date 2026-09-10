@@ -3,7 +3,12 @@ import { BACKGROUND_CONTEXT as CTX } from "../../src/harness/context.ts";
 import { nextCronAt, parseCron } from "../../src/harness/cron.ts";
 import { LoopScheduler } from "../../src/harness/loops.ts";
 import { createLoopTools, createScheduleTool, createSubagentTools } from "../../src/harness/tools/index.ts";
-import { SubagentManager, type SubagentBus, type SubagentBusEvent, type SubagentUsage } from "../../src/harness/subagent.ts";
+import {
+	SubagentManager,
+	type SubagentBus,
+	type SubagentBusEvent,
+	type SubagentUsage,
+} from "../../src/harness/subagent.ts";
 
 const NOOP = () => {};
 
@@ -42,7 +47,12 @@ describe("loop cron scheduling", () => {
 	it("fires when due and reschedules past the fired second", () => {
 		const scheduler = new LoopScheduler({ followUpFor: (spec) => `go ${spec.def.id}` });
 		const now = utc(2026, 3, 9, 9, 30);
-		scheduler.upsert({ def: { id: "nine", note: "standup", cron: "0 30 9 * * *" }, runCount: 0, createdAt: now - 86_400_000, paused: false });
+		scheduler.upsert({
+			def: { id: "nine", note: "standup", cron: "0 30 9 * * *" },
+			runCount: 0,
+			createdAt: now - 86_400_000,
+			paused: false,
+		});
 		const fired = scheduler.pump(now);
 		expect(fired.fired.map((f) => f.spec.def.id)).toEqual(["nine"]);
 		expect(fired.fired[0]?.followUp).toBe("go nine");

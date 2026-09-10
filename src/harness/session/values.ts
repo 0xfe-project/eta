@@ -1,6 +1,7 @@
 import type { AssistantMessageFrame } from "@earendil-works/pi-ai";
 import type { AgentToolResult } from "../../types.ts";
-import type {LoopSpec,
+import type {
+	LoopSpec,
 	StoredTask,
 	DurableStructuralPreparation,
 	JsonValue,

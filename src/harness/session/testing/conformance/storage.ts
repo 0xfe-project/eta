@@ -276,7 +276,10 @@ export function createStorageConformance(factory: () => Promise<StorageFixture>)
 			"branch",
 			"splices a merge entry's second-parent chain into branch scans",
 			async ({ storage }) => {
-				await storage.commit([insertEntry(userEntry("root")), insertEntry(userEntry("main", "root"))], BACKGROUND_CONTEXT);
+				await storage.commit(
+					[insertEntry(userEntry("root")), insertEntry(userEntry("main", "root"))],
+					BACKGROUND_CONTEXT,
+				);
 				await storage.commit([insertEntry(userEntry("side", "root"))], BACKGROUND_CONTEXT);
 				await storage.commit(
 					[
@@ -294,12 +297,17 @@ export function createStorageConformance(factory: () => Promise<StorageFixture>)
 					ids(await storage.scanBranch({ start: "merge", order: "oldestFirst" }, BACKGROUND_CONTEXT)),
 					["root", "main", "side", "merge"],
 				);
-				const structure = await storage.scanBranchStructure({ start: "merge", order: "oldestFirst" }, BACKGROUND_CONTEXT);
+				const structure = await storage.scanBranchStructure(
+					{ start: "merge", order: "oldestFirst" },
+					BACKGROUND_CONTEXT,
+				);
 				deepStrictEqual(ids(structure), ["root", "main", "side", "merge"]);
 				const mergeStructure = structure.find((entry) => entry.id === "merge");
 				ok(mergeStructure !== undefined && mergeStructure.mergedParentId === "side");
 				deepStrictEqual(
-					ids(await storage.scanBranch({ start: "merge", order: "oldestFirst", type: "merge" }, BACKGROUND_CONTEXT)),
+					ids(
+						await storage.scanBranch({ start: "merge", order: "oldestFirst", type: "merge" }, BACKGROUND_CONTEXT),
+					),
 					["merge"],
 				);
 			},
@@ -313,9 +321,24 @@ export function createStorageConformance(factory: () => Promise<StorageFixture>)
 				await storage.commit(
 					[
 						insertEntry({ id: "g", parentId: null, type: "goal", payload: { kind: "set", objective: "ship" } }),
-						insertEntry({ id: "q", parentId: "g", type: "ask", payload: { questionId: "q1", question: "which?" } }),
-						insertEntry({ id: "ans", parentId: "q", type: "answer", payload: { questionId: "q1", answers: ["left"] } }),
-						insertEntry({ id: "b", parentId: "ans", type: "btw", payload: { note: "saw this", sourceEntryId: "g" } }),
+						insertEntry({
+							id: "q",
+							parentId: "g",
+							type: "ask",
+							payload: { questionId: "q1", question: "which?" },
+						}),
+						insertEntry({
+							id: "ans",
+							parentId: "q",
+							type: "answer",
+							payload: { questionId: "q1", answers: ["left"] },
+						}),
+						insertEntry({
+							id: "b",
+							parentId: "ans",
+							type: "btw",
+							payload: { note: "saw this", sourceEntryId: "g" },
+						}),
 					],
 					BACKGROUND_CONTEXT,
 				);

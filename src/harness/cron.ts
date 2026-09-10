@@ -79,7 +79,8 @@ function parseField(raw: string, spec: FieldSpec): CronField {
 
 export function parseCron(expression: string): CronSchedule {
 	const parts = expression.trim().split(/\s+/);
-	if (parts.length !== 6) throw new Error(`eta.cron: need 6 fields (sec min hour dom mon dow), got ${JSON.stringify(expression)}`);
+	if (parts.length !== 6)
+		throw new Error(`eta.cron: need 6 fields (sec min hour dom mon dow), got ${JSON.stringify(expression)}`);
 	const [seconds, minutes, hours, dom, mon, dow] = parts as [string, string, string, string, string, string];
 	return {
 		seconds: parseField(seconds, { min: 0, max: 59 }),

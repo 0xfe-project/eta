@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { TaskStore } from "../../src/harness/task-store.ts";
-import { createCadenceState, drainReminderForContext, evaluateToolResult, onTurnStart } from "../../src/harness/cadence.ts";
-import { createReminderHooks, createStateTools, createTaskTools, TASK_TOOL_NAMES } from "../../src/harness/tools/index.ts";
+import {
+	createCadenceState,
+	drainReminderForContext,
+	evaluateToolResult,
+	onTurnStart,
+} from "../../src/harness/cadence.ts";
+import {
+	createReminderHooks,
+	createStateTools,
+	createTaskTools,
+	TASK_TOOL_NAMES,
+} from "../../src/harness/tools/index.ts";
 import { GoalManager, applyGoalEntries } from "../../src/harness/goal.ts";
 import { normalizeAskOptions } from "../../src/harness/ask.ts";
 
@@ -68,9 +78,23 @@ describe("tools", () => {
 		const store = new TaskStore();
 		const tools = createTaskTools(store);
 		const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
-		const created = await byName.TaskCreate.execute("c", { content: "wire tools", deps: [], priority: "high" }, () => {}, {}, fakeInvocation, ctx() as never);
+		const created = await byName.TaskCreate.execute(
+			"c",
+			{ content: "wire tools", deps: [], priority: "high" },
+			() => {},
+			{},
+			fakeInvocation,
+			ctx() as never,
+		);
 		expect(JSON.stringify(created.details)).toContain("t1");
-		await byName.TaskUpdate.execute("c", { id: "t1", status: "in_progress" }, () => {}, {}, fakeInvocation, ctx() as never);
+		await byName.TaskUpdate.execute(
+			"c",
+			{ id: "t1", status: "in_progress" },
+			() => {},
+			{},
+			fakeInvocation,
+			ctx() as never,
+		);
 		const listed = await byName.TaskList.execute("c", {}, () => {}, {}, fakeInvocation, ctx() as never);
 		expect(String((listed.content[0] as { text: string }).text)).toContain("[~] t1: wire tools");
 	});
@@ -78,16 +102,47 @@ describe("tools", () => {
 		const map = new Map<string, string>();
 		const kv = {
 			get: async (k: string) => map.get(k),
-			set: async (k: string, v: string | null) => { if (v === null) map.delete(k); else map.set(k, v); },
+			set: async (k: string, v: string | null) => {
+				if (v === null) map.delete(k);
+				else map.set(k, v);
+			},
 			keys: async () => [...map.keys()],
 		};
 		const tools = createStateTools(kv);
 		const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
-		await byName.update_state.execute("c", { key: "eta.demo", value: "42" }, () => {}, {}, fakeInvocation, ctx() as never);
-		const read = await byName.check_state.execute("c", { key: "eta.demo" }, () => {}, {}, fakeInvocation, ctx() as never);
+		await byName.update_state.execute(
+			"c",
+			{ key: "eta.demo", value: "42" },
+			() => {},
+			{},
+			fakeInvocation,
+			ctx() as never,
+		);
+		const read = await byName.check_state.execute(
+			"c",
+			{ key: "eta.demo" },
+			() => {},
+			{},
+			fakeInvocation,
+			ctx() as never,
+		);
 		expect(String((read.content[0] as { text: string }).text)).toBe("42");
-		await byName.update_state.execute("c", { key: "eta.demo", value: null }, () => {}, {}, fakeInvocation, ctx() as never);
-		const gone = await byName.check_state.execute("c", { key: "eta.demo" }, () => {}, {}, fakeInvocation, ctx() as never);
+		await byName.update_state.execute(
+			"c",
+			{ key: "eta.demo", value: null },
+			() => {},
+			{},
+			fakeInvocation,
+			ctx() as never,
+		);
+		const gone = await byName.check_state.execute(
+			"c",
+			{ key: "eta.demo" },
+			() => {},
+			{},
+			fakeInvocation,
+			ctx() as never,
+		);
 		expect(String((gone.content[0] as { text: string }).text)).toContain("not set");
 	});
 	it("reminder injects transiently at context time", () => {
@@ -126,5 +181,13 @@ describe("goal replay + ask normalization", () => {
 	});
 });
 
-const fakeInvocation = { invocationId: "i", operationId: "o", turnId: "t", getMemo: async () => undefined, setMemo: async () => {} };
-function ctx() { return { value: () => undefined, abortSignal: undefined }; }
+const fakeInvocation = {
+	invocationId: "i",
+	operationId: "o",
+	turnId: "t",
+	getMemo: async () => undefined,
+	setMemo: async () => {},
+};
+function ctx() {
+	return { value: () => undefined, abortSignal: undefined };
+}

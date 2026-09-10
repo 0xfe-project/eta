@@ -95,7 +95,12 @@ export class AskRegistry {
 		const waiting = this.pending.get(questionId);
 		if (waiting === undefined) return false;
 		if (this.onAnswer !== undefined) {
-			const answers = response.kind === "selection" ? [...response.selections, ...(response.comment === undefined ? [] : [response.comment])] : response.kind === "freeform" ? [response.text] : [];
+			const answers =
+				response.kind === "selection"
+					? [...response.selections, ...(response.comment === undefined ? [] : [response.comment])]
+					: response.kind === "freeform"
+						? [response.text]
+						: [];
 			if (response.kind !== "none") this.onAnswer({ questionId, answers });
 		}
 		waiting.settle(response);

@@ -3,8 +3,7 @@
  */
 
 /** Success reminder returned by the todo/state tools after a write. */
-export const TASK_UPDATE_SUCCESS =
-	"Updated TODOs. FOLLOW and update your TODO list as you progress.";
+export const TASK_UPDATE_SUCCESS = "Updated TODOs. FOLLOW and update your TODO list as you progress.";
 
 /** Auto-injected at the start of a turn when persisted todos exist. */
 export const TASK_REVIEW_PROMPT =

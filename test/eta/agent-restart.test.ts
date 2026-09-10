@@ -25,7 +25,10 @@ async function openAgent(storage: MemoryStorage, laneName: string): Promise<Open
 	const models = createModels();
 	models.setProvider(faux.provider);
 	const session = new StorageBackedSession({ id: laneName, createdAt: Date.now(), storageVersion: 1 }, storage);
-	const agent = await EtaAgent.create({ session, models, model: faux.getModel(), baseSystemPrompt: "x", heartbeatMs: 0 }, CTX);
+	const agent = await EtaAgent.create(
+		{ session, models, model: faux.getModel(), baseSystemPrompt: "x", heartbeatMs: 0 },
+		CTX,
+	);
 	return {
 		agent,
 		faux,
@@ -42,14 +45,30 @@ describe("restart through storage", () => {
 		const faux = fauxProvider();
 		const models = createModels();
 		models.setProvider(faux.provider);
-		const open = () => EtaAgent.create({ session: new StorageBackedSession({ id: "eta-wedge", createdAt: Date.now(), storageVersion: 1 }, storage), models, model: faux.getModel(), baseSystemPrompt: "x", heartbeatMs: 0 }, CTX);
+		const open = () =>
+			EtaAgent.create(
+				{
+					session: new StorageBackedSession(
+						{ id: "eta-wedge", createdAt: Date.now(), storageVersion: 1 },
+						storage,
+					),
+					models,
+					model: faux.getModel(),
+					baseSystemPrompt: "x",
+					heartbeatMs: 0,
+				},
+				CTX,
+			);
 		const first = await open();
 		faux.setResponses([
-			fauxAssistantMessage([fauxToolCall("ask_user", { question: "which theme?", options: [{ title: "dark" }, { title: "light" }] })] as never),
+			fauxAssistantMessage([
+				fauxToolCall("ask_user", { question: "which theme?", options: [{ title: "dark" }, { title: "light" }] }),
+			] as never),
 			fauxAssistantMessage([fauxText("theme locked")] as never),
 		]);
 		void first.lane.prompt("pick a theme", undefined, CTX);
-		for (let attempt = 0; attempt < 400 && first.ask.pendingAsks().length === 0; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+		for (let attempt = 0; attempt < 400 && first.ask.pendingAsks().length === 0; attempt += 1)
+			await new Promise((resolve) => setTimeout(resolve, 5));
 		expect(first.ask.pendingAsks()[0]?.question).toBe("which theme?");
 
 		const second = await open();
@@ -59,7 +78,7 @@ describe("restart through storage", () => {
 		const pending = second.ask.pendingAsks()[0];
 		expect(pending?.question).toBe("which theme?");
 		const execution = await second.lane.inspectExecution(CTX);
-		expect(execution.activeOperation ?? execution.running === true || execution.hasActiveOperation === true).toBeTruthy();
+		expect(execution.current).not.toBeNull();
 	});
 
 	it("a real answer is recorded as an answer entry", async () => {
@@ -85,14 +104,22 @@ describe("restart through storage", () => {
 		const second = await openAgent(storage, "eta-restart");
 		await second.agent.restore(CTX);
 		expect(second.agent.goal.current?.objective).toBe("ship the restart test");
-		expect(second.agent.tasks.list().map((t) => [t.id, t.content, t.status])).toEqual([["t1", "persist me", "in_progress"]]);
+		expect(second.agent.tasks.list().map((t) => [t.id, t.content, t.status])).toEqual([
+			["t1", "persist me", "in_progress"],
+		]);
 		expect(second.agent.tasks.create("fresh").task.id).toBe("t2");
 	});
 
 	it("a fired loop's registry value survives the restart", async () => {
 		const storage = new MemoryStorage();
 		const first = await openAgent(storage, "eta-loop");
-		first.agent.loops.upsert({ def: { id: "tick", note: "check ci", every: "10ms" }, runCount: 0, createdAt: Date.now(), nextDueAt: Date.now() - 1, paused: false });
+		first.agent.loops.upsert({
+			def: { id: "tick", note: "check ci", every: "10ms" },
+			runCount: 0,
+			createdAt: Date.now(),
+			nextDueAt: Date.now() - 1,
+			paused: false,
+		});
 		first.agent.loops.pump(Date.now() + 1);
 		await first.turn();
 		const second = await openAgent(storage, "eta-loop");
@@ -105,7 +132,9 @@ describe("restart through storage", () => {
 		const storage = new MemoryStorage();
 		const first = await openAgent(storage, "eta-kill");
 		first.faux.setResponses([
-			fauxAssistantMessage([fauxToolCall("ask_user", { question: "which theme?", options: [{ title: "dark" }, { title: "light" }] })] as never),
+			fauxAssistantMessage([
+				fauxToolCall("ask_user", { question: "which theme?", options: [{ title: "dark" }, { title: "light" }] }),
+			] as never),
 			fauxAssistantMessage([fauxText("theme locked")] as never),
 		]);
 		const run = first.agent.lane.prompt("pick a theme", undefined, CTX);

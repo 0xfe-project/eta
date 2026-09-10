@@ -4,7 +4,7 @@ import {
 	isContextOverflow,
 	isRecoverableLength,
 	isRetryableAssistantError,
-	} from "@earendil-works/pi-ai";
+} from "@earendil-works/pi-ai";
 import { retryDelayMs } from "./../../../internal/retry-compat.ts";
 import type { HarnessEvent } from "../../agent-harness.ts";
 import type { Context } from "../../context.ts";

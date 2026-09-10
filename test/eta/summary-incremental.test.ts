@@ -1,7 +1,12 @@
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
 import { BACKGROUND_CONTEXT } from "../../src/harness/context.ts";
-import { DEFAULT_COMPACTION_SETTINGS, generateSummaryWithRequest, prepareCompaction, type SummaryRequest } from "../../src/harness/compaction/compaction.ts";
+import {
+	DEFAULT_COMPACTION_SETTINGS,
+	generateSummaryWithRequest,
+	prepareCompaction,
+	type SummaryRequest,
+} from "../../src/harness/compaction/compaction.ts";
 import type { Entry } from "../../src/harness/session/types.ts";
 import { UPDATE_SUMMARIZATION_PROMPT } from "../../src/prompts/compaction.ts";
 
@@ -53,8 +58,18 @@ describe("P2 incremental summaries", () => {
 			return fauxAssistantMessage("notes");
 		};
 		const messages = [user("u1", "hello")] as never;
-		await generateSummaryWithRequest(messages, { model: { id: "m", api: "faux" } as never, reserveTokens: 100, previousSummary: "OLD NOTES" }, request, BACKGROUND_CONTEXT);
-		await generateSummaryWithRequest(messages, { model: { id: "m", api: "faux" } as never, reserveTokens: 100 }, request, BACKGROUND_CONTEXT);
+		await generateSummaryWithRequest(
+			messages,
+			{ model: { id: "m", api: "faux" } as never, reserveTokens: 100, previousSummary: "OLD NOTES" },
+			request,
+			BACKGROUND_CONTEXT,
+		);
+		await generateSummaryWithRequest(
+			messages,
+			{ model: { id: "m", api: "faux" } as never, reserveTokens: 100 },
+			request,
+			BACKGROUND_CONTEXT,
+		);
 		expect(captured[0]).toContain("OLD NOTES");
 		expect(captured[0]).toContain(UPDATE_SUMMARIZATION_PROMPT.slice(0, 40));
 		expect(captured[1]).not.toContain("OLD NOTES");

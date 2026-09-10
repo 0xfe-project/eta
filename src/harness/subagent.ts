@@ -25,7 +25,7 @@ export interface SubagentRecord {
 	id: string;
 	parentId: string | undefined;
 	depth: number;
-_blocking: boolean;
+	_blocking: boolean;
 	background: boolean;
 	status: SubagentStatus;
 	usage: SubagentUsage;
@@ -232,10 +232,14 @@ export class SubagentManager {
 	private finish(record: SubagentRecord, status: SubagentStatus, usage: SubagentUsage): void {
 		record.status = status;
 		record.usage = usage;
-		record.totalUsage = { input: record.totalUsage.input + usage.input, output: record.totalUsage.output + usage.output };
+		record.totalUsage = {
+			input: record.totalUsage.input + usage.input,
+			output: record.totalUsage.output + usage.output,
+		};
 		let node: SubagentRecord | undefined = record;
 		while (node !== undefined) {
-			const parent: SubagentRecord | undefined = node.parentId === undefined ? undefined : this.records.get(node.parentId);
+			const parent: SubagentRecord | undefined =
+				node.parentId === undefined ? undefined : this.records.get(node.parentId);
 			if (parent === undefined) break;
 			parent.totalUsage = {
 				input: parent.totalUsage.input + node.totalUsage.input,
@@ -243,7 +247,10 @@ export class SubagentManager {
 			};
 			node = parent;
 		}
-		this.bus.emit(status === "done" ? "subagents:completed" : "subagents:failed", { id: record.id, parentId: record.parentId });
+		this.bus.emit(status === "done" ? "subagents:completed" : "subagents:failed", {
+			id: record.id,
+			parentId: record.parentId,
+		});
 		if (status === "done" || status === "failed" || status === "stopped") {
 			for (const child of record.children) {
 				const c = this.records.get(child);
@@ -278,7 +285,12 @@ export class SubagentManager {
 				if (record._blocking) this.runningForeground += 1;
 				else this.runningBackground += 1;
 			}
-			void Promise.resolve(this.runner(record, { reportTurn: (id) => this.reportTurn(id), pendingNotes: (id) => this.pendingNotes(id) }))
+			void Promise.resolve(
+				this.runner(record, {
+					reportTurn: (id) => this.reportTurn(id),
+					pendingNotes: (id) => this.pendingNotes(id),
+				}),
+			)
 				.then((usage) => this.settle(record.id, usage))
 				.catch(() => this.settle(record.id, record.usage, true));
 		}

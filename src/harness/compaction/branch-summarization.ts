@@ -178,8 +178,6 @@ Summary of that exploration:
 
 `;
 
-
-
 /** Generate a summary for abandoned branch entries. */
 export function generateBranchSummary(
 	entries: Entry[],

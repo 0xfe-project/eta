@@ -14,11 +14,19 @@ describe("eta prompt composer", () => {
 		expect(paused).toEqual([]);
 	});
 	it("skills catalog rides the stable block between persona and adaptive sections", () => {
-		const state = { persona: "PERSONA", skills: "<skills>\n- demo does things : /repo/.agents/skills/demo\n</skills>", goal: { objective: "ship it", status: "active" as const } };
+		const state = {
+			persona: "PERSONA",
+			skills: "<skills>\n- demo does things : /repo/.agents/skills/demo\n</skills>",
+			goal: { objective: "ship it", status: "active" as const },
+		};
 		const s = composeEtaSystemPrompt("BASE", state);
 		expect(s.indexOf("PERSONA")).toBeLessThan(s.indexOf("<skills>"));
 		expect(s.indexOf("</skills>")).toBeLessThan(s.indexOf("Goal: ship it"));
-		expect(etaPromptSectionsDetailed("BASE", state).find((section) => section.name === "skills")).toEqual({ name: "skills", text: "<skills>\n- demo does things : /repo/.agents/skills/demo\n</skills>", stable: true });
+		expect(etaPromptSectionsDetailed("BASE", state).find((section) => section.name === "skills")).toEqual({
+			name: "skills",
+			text: "<skills>\n- demo does things : /repo/.agents/skills/demo\n</skills>",
+			stable: true,
+		});
 		expect(etaPromptSections({})).toEqual([]);
 	});
 	it("tasks append review prompt and rendered list", () => {

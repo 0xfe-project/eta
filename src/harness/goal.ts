@@ -88,7 +88,10 @@ export class GoalManager {
 		if (!this.goal) return;
 		const from = this.goal.status;
 		this.goal = undefined;
-		this.changed({ from, goal: { objective: "", status: "achieved", roundCount: 0, idleWithoutTools: 0 } }, "cleared");
+		this.changed(
+			{ from, goal: { objective: "", status: "achieved", roundCount: 0, idleWithoutTools: 0 } },
+			"cleared",
+		);
 	}
 
 	setBlockedReason(reason: GoalBlockedReason): void {
@@ -117,11 +120,7 @@ export class GoalManager {
 	/** Whether the goal manager should enqueue a continuation driver now.
 	 * The caller then runs the evaluator; `noteContinuation` on pass. */
 	wantsContinuation(): boolean {
-		return (
-			this.gate === "auto" &&
-			this.goal?.status === "active" &&
-			this.goal.roundCount < this.maxContinuations
-		);
+		return this.gate === "auto" && this.goal?.status === "active" && this.goal.roundCount < this.maxContinuations;
 	}
 
 	noteContinuation(): void {

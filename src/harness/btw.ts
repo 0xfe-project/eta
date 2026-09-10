@@ -49,11 +49,7 @@ export class BtwManager {
 	private readonly onVisibleNote?: (note: string) => void | Promise<void>;
 	private readonly observe: EtaEmit | undefined;
 
-	constructor(
-		buildContext: BuildContext,
-		onVisibleNote?: (note: string) => void | Promise<void>,
-		observe?: EtaEmit,
-	) {
+	constructor(buildContext: BuildContext, onVisibleNote?: (note: string) => void | Promise<void>, observe?: EtaEmit) {
 		this.buildContext = buildContext;
 		this.onVisibleNote = onVisibleNote;
 		this.observe = observe;

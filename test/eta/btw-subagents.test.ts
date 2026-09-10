@@ -31,7 +31,12 @@ describe("btw side channel", () => {
 	});
 	it("saving while the main run is busy queues, then flushes at the boundary", async () => {
 		const notes: string[] = [];
-		const mgr = new BtwManager(() => ({ messages: [] }), (n) => { notes.push(n); });
+		const mgr = new BtwManager(
+			() => ({ messages: [] }),
+			(n) => {
+				notes.push(n);
+			},
+		);
 		const t = mgr.create("tangent");
 		mgr.answer(t.id, "q", "a");
 		expect(mgr.save(t.id, true)).toBe("queued");
@@ -51,7 +56,18 @@ describe("btw side channel", () => {
 	});
 	it("replay restores threads from eta.btw entries", () => {
 		const mgr = new BtwManager(() => ({ messages: [] }));
-		mgr.replay([{ type: "btw", payload: { id: "btw-9", kind: "tangent", note: "n", exchanges: [{ question: "q", answer: "a", at: 1 }], saveState: "saved" } }]);
+		mgr.replay([
+			{
+				type: "btw",
+				payload: {
+					id: "btw-9",
+					kind: "tangent",
+					note: "n",
+					exchanges: [{ question: "q", answer: "a", at: 1 }],
+					saveState: "saved",
+				},
+			},
+		]);
 		expect(mgr.get("btw-9")?.saveState).toBe("saved");
 	});
 	it("handoff hands a followUp for threads with results", () => {
@@ -79,11 +95,15 @@ describe("subagent manager", () => {
 	it("caps the background pool at the configured size", () => {
 		const { b } = bus();
 		const handles: ReturnType<typeof deferred>[] = [];
-		const mgr = new SubagentManager(b, () => {
-			const d = deferred();
-			handles.push(d);
-			return d.promise;
-		}, 2);
+		const mgr = new SubagentManager(
+			b,
+			() => {
+				const d = deferred();
+				handles.push(d);
+				return d.promise;
+			},
+			2,
+		);
 		mgr.spawn({ prompt: "a" });
 		mgr.spawn({ prompt: "b" });
 		const third = mgr.spawn({ prompt: "c" });
@@ -134,7 +154,9 @@ describe("subagent manager", () => {
 		const { b } = bus();
 		let childDone!: (u: { input: number; output: number }) => void;
 		const childP = new Promise<{ input: number; output: number }>((r) => (childDone = r));
-		const mgr = new SubagentManager(b, (r: SubagentRecord) => (r.spec.prompt === "child" ? childP : childP.then(() => ({ input: 1, output: 1 }))));
+		const mgr = new SubagentManager(b, (r: SubagentRecord) =>
+			r.spec.prompt === "child" ? childP : childP.then(() => ({ input: 1, output: 1 })),
+		);
 		const p = mgr.spawn({ prompt: "parent" });
 		const c = mgr.spawn({ prompt: "child" }, p.id);
 		childDone({ input: 5, output: 2 });
