@@ -11,19 +11,16 @@
  *
  * What happens to each piece:
  *
- * - `views`, front session only: reconciled, keyed by `entryId`, so message objects
- *   survive a frame and `<For>` keeps its rows. A patch is written field by field
- *   instead, so only the fields that moved notify. Sessions that are not in front
- *   are held as the plain parsed object they arrived as (`buffered`) and reconciled
- *   once, on the jump to the front — walking a transcript nobody can see is what
- *   made a background tab cost as much as the visible one.
- * - `sessions`: reconciled by `name`. The server re-sends the whole sidebar list
- *   after every op, and replacing it wholesale hands `<For>` a new object per row,
- *   which re-creates the row and takes whatever local state it held (an open ⋯
- *   menu) down with it.
+ * - `views`: the session in front only. Reconciled, keyed by `entryId`, so message
+ *   objects survive a frame and `<For>` keeps its rows; a patch is written field
+ *   by field so only the fields that moved notify. A session that leaves the
+ *   front is evicted to a stub — `{ version, messageCount }` — and the transcript
+ *   it held is gone; coming back resyncs the whole view.
+ * - `stubs`: every session that is not in front, held as version + transcript
+ *   length. That is all the memory a background session costs, and it is what
+ *   makes the unread dot work without walking a transcript nobody can see.
+ * - `sessions`: reconciled by `name`, so the sidebar keeps its rows.
  * - `dev`: reconciled by a client-assigned `id`, so the log rail keeps its rows.
- *   LogRail's pause freezes the list it is showing, which is enough: a dev frame is
- *   written once and never revised.
  *
  * Everything else replaces wholesale — a handful of scalars.
  */
@@ -45,7 +42,10 @@ export interface EtaState {
 	connected: boolean;
 	sessions: SidebarSession[];
 	attach: string | null;
+	/** The session in front, held as a whole view; every other session is a stub. */
 	views: Record<string, SessionView>;
+	/** Version + transcript length of each session not in front, for unread and resync. */
+	stubs: Record<string, { version: number; messageCount: number }>;
 	dev: Record<string, DevFrame[]>;
 	unread: string[];
 	runningBySession: Record<string, boolean>;
@@ -57,33 +57,53 @@ export const initialEtaState: EtaState = {
 	sessions: [],
 	attach: null,
 	views: {},
+	stubs: {},
 	dev: {},
 	unread: [],
 	runningBySession: {},
 	error: null,
 };
 
+/** Which session the UI shows: the focus pointer, else the first session. */
+function frontSession(state: EtaState): string | null {
+	return state.attach ?? state.sessions[0]?.name ?? null;
+}
+
 /** Pure reducer, exported for tests: fold one server frame into the state. */
 export function reduceEtaState(state: EtaState, message: ServerMessage): EtaState {
 	if ("channel" in message) {
 		if (message.channel === "view") {
-			const previous = state.views[message.session];
+			const front = frontSession(state);
 			if (!("view" in message)) {
-				// A patch with nothing to patch onto: this client never took the whole
-				// frame, so there is no transcript to hold the fields still missing. Drop
-				// it — the next frame that moves the journal is a whole one, and that
-				// resyncs. Patches never grow the transcript, so an unread dot waits for
-				// the whole frame that says so.
+				// A patch never carries the transcript. For a background session the
+				// stub just advances its version; for the front it folds onto the whole
+				// view, or is dropped when there is no whole view behind it.
+				if (message.session !== front) {
+					const stub = state.stubs[message.session];
+					if (stub === undefined) return state;
+					return { ...state, stubs: { ...state.stubs, [message.session]: { ...stub, version: message.version } } };
+				}
+				const previous = state.views[message.session];
 				if (previous === undefined) return state;
-				const merged: SessionView = { ...previous, ...message.patch };
-				return { ...state, views: { ...state.views, [message.session]: merged } };
+				return { ...state, views: { ...state.views, [message.session]: { ...previous, ...message.patch } } };
 			}
 			const view = message.view;
-			const grew = previous !== undefined && view.messages.length > previous.messages.length;
-			const unseen = grew && message.session !== state.attach && !state.unread.includes(message.session);
+			if (message.session === front) {
+				return { ...state, views: { [message.session]: view } };
+			}
+			// A background whole frame becomes a stub: the transcript is not kept.
+			const total = view.messages.length + (view.messagesBefore ?? 0);
+			const stub = state.stubs[message.session];
+			const stale = state.views[message.session];
+			const prevTotal =
+				stub?.messageCount ?? (stale === undefined ? 0 : stale.messages.length + (stale.messagesBefore ?? 0));
+			const unseen = total > prevTotal && !state.unread.includes(message.session);
+			const views = { ...state.views };
+			delete views[message.session];
 			return {
 				...state,
-				views: { ...state.views, [message.session]: view },
+				views,
+				stubs: { ...state.stubs, [message.session]: { version: message.version, messageCount: total } },
 				unread: unseen ? [...state.unread, message.session] : state.unread,
 			};
 		}
@@ -104,6 +124,7 @@ export function reduceEtaState(state: EtaState, message: ServerMessage): EtaStat
 				sessions: message.sessions,
 				attach: state.sessions.length > 0 ? state.attach : message.attach,
 				views: {},
+				stubs: {},
 				dev: {},
 				error: null,
 			};
@@ -216,15 +237,6 @@ export function etaStore(): EtaStore {
 }
 
 /**
- * Which session the UI shows: the focus pointer, else the first session. Same rule
- * `sessions-page.tsx` uses to pick what to render — the mirror has to agree with
- * it, or the panel waits for a frame that was only ever buffered.
- */
-function frontSession(state: EtaState): string | null {
-	return state.attach ?? state.sessions[0]?.name ?? null;
-}
-
-/**
  * The one mirror of the connection, built on first use. Every `useEta()` used to
  * create its own store and its own subscription, so a single frame was folded in
  * once per component reading state — eight on the sessions page, each walking the
@@ -239,46 +251,25 @@ function buildMirror(): EtaState {
 	const store = etaStore();
 	const first = store.snapshot();
 	let mirrored = frontSession(first);
-	/**
-	 * Newest frame of every session that is not in front, held as the parsed object
-	 * it arrived as. Reconciling a view walks every message in it, and a long
-	 * session's frame is megabytes: mirroring all four sessions made the ones you
-	 * are not looking at cost as much as the one you are, which is what made the
-	 * tab deaf to a click. These cost a map write, and get reconciled in — once —
-	 * when their session comes to the front.
-	 */
-	const buffered = new Map<string, SessionView>();
-	for (const [name, view] of Object.entries(first.views)) {
-		if (name === mirrored) continue;
-		buffered.set(name, view);
-	}
-	const frontView = mirrored === null ? undefined : first.views[mirrored];
+	let mirroredView = mirrored === null ? undefined : first.views[mirrored];
 	const [state, setState] = createStore<EtaState>({
 		...first,
-		views: frontView === undefined ? {} : { [mirrored!]: frontView },
+		views: mirroredView === undefined ? {} : { [mirrored!]: mirroredView },
 	});
+
 	/**
 	 * Fold a patch into the mirrored view, one field at a time: a frame that moved
 	 * `usage` alone notifies the usage row and nothing else, and the arrays inside
-	 * the patch keep their item identity.
-	 *
-	 * A patch is authoritative for every field except the transcript, so a field it
-	 * does not mention is gone — that is how `streaming` leaves when a run ends.
+	 * the patch keep their item identity. A patch is authoritative for every field
+	 * except the transcript, so a field it does not mention is gone.
 	 */
 	function applyPatch(session: string, patch: SessionViewPatch): void {
-		// Nothing to fold onto — the same rule the reducer applies: a patch is never
-		// allowed to stand in for a whole view, because half a view is a crash in
-		// whatever renders `view.messages` next.
+		// Nothing to fold onto: the transcript was evicted on the way out. Ask for
+		// the whole view rather than painting half a view over the components.
 		if (state.views[session] === undefined) {
-			// The patch assumes a transcript this mirror never received (a dropped
-			// frame, a session that went background mid-run): ask for the whole view
-			// rather than silently dropping the update and showing an empty session.
 			store.send({ op: "resync", session });
 			return;
 		}
-		// One mutation, not one per field: a half-applied patch must never be
-		// observable, and a path write that trips over a mid-frame mutation takes
-		// the whole subscribe loop — and every frame after it — down with it.
 		const heavy = HEAVY_VIEW_FIELDS as readonly string[];
 		setState(
 			"views",
@@ -294,7 +285,7 @@ function buildMirror(): EtaState {
 		);
 	}
 
-	/** Last snapshot folded in, kept raw so unchanged sessions can be skipped. */
+	/** Last snapshot folded in, kept raw so unchanged sessions and lists can be skipped. */
 	let applied = first;
 	store.subscribe((frame) => {
 		const next = store.snapshot();
@@ -302,40 +293,33 @@ function buildMirror(): EtaState {
 			frame !== undefined && "channel" in frame && frame.channel === "view" && "patch" in frame ? frame : undefined;
 		const front = frontSession(next);
 		if (front !== mirrored) {
-			// Leaving a session leaves its mirrored copy alone: keeping it costs nothing
-			// and coming back reconciles from where it stopped. Entering one jumps it to
-			// the newest frame that arrived while it sat in the background.
-			const fresh = front === null ? undefined : buffered.get(front);
-			if (front !== null && fresh !== undefined) {
-				setState("views", front, reconcile(fresh, { key: "entryId" }));
-				buffered.delete(front);
-			}
 			mirrored = front;
-			// The buffered copy may trail the server's patch baseline: whatever just
-			// came to the front, sign it off with a full frame.
+			mirroredView = front === null ? undefined : next.views[front];
+			// The session we leave is evicted; the one we enter is a stub until its
+			// whole frame lands, so ask for it now.
+			setState(
+				produce((draft) => {
+					draft.views = {};
+				}),
+			);
 			if (front !== null) store.send({ op: "resync", session: front });
 		}
-		if (next.views !== applied.views) {
-			for (const name of Object.keys(applied.views)) {
-				if (next.views[name] === undefined) {
-					setState(
-						produce((draft) => {
-							delete draft.views[name];
-						}),
-					);
-					buffered.delete(name);
-				}
+		const view = front === null ? undefined : next.views[front];
+		if (view !== mirroredView) {
+			if (view === undefined) {
+				// The front's whole view is gone (reconnect cleared it, or the session
+				// was deleted): drop whatever was mirrored rather than holding a stale one.
+				setState(
+					produce((draft) => {
+						draft.views = {};
+					}),
+				);
+			} else if (patched !== undefined && patched.session === front && mirroredView !== undefined) {
+				applyPatch(front, patched.patch);
+			} else {
+				setState("views", front as string, reconcile(view, { key: "entryId" }));
 			}
-			for (const [name, view] of Object.entries(next.views)) {
-				if (applied.views[name] === view) continue;
-				if (name !== mirrored) {
-					buffered.set(name, view);
-					continue;
-				}
-				if (patched !== undefined && patched.session === name) applyPatch(name, patched.patch);
-				else setState("views", name, reconcile(view, { key: "entryId" }));
-				buffered.delete(name);
-			}
+			mirroredView = view;
 		}
 		if (next.sessions !== applied.sessions) setState("sessions", reconcile(next.sessions, { key: "name" }));
 		if (next.dev !== applied.dev) {
@@ -355,7 +339,7 @@ function buildMirror(): EtaState {
 				setState("dev", name, reconcile(frames, { key: "id" }));
 			}
 		}
-		const { views: _views, sessions: _sessions, dev: _dev, ...rest } = next;
+		const { views: _views, sessions: _sessions, dev: _dev, stubs: _stubs, ...rest } = next;
 		setState(rest);
 		applied = next;
 	});

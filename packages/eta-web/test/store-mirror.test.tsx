@@ -72,37 +72,32 @@ describe("view mirror is only the session in front", () => {
 		vi.stubGlobal("fetch", () => Promise.resolve({ ok: false, json: () => Promise.resolve([]) } as Response));
 	});
 
-	it("reconciles the attached session and buffers the others", () => {
+	it("mirrors the front and stubs the rest", () => {
 		const { send } = mount();
 		send({ channel: "view", session: "a", view: view("FG") });
 		send({ channel: "view", session: "b", view: view("BG") });
+		// Only the session in front is mirrored; the background one is a stub.
 		expect(byId("mirrored").textContent).toBe("a");
 		expect(queryId("user-message")).not.toBeNull();
-
-		// Frames for the session behind still arrive — they just cost a map write
-		// instead of a walk over the whole transcript.
-		send({ channel: "view", session: "b", view: view("BG2") });
-		expect(byId("mirrored").textContent).toBe("a");
 	});
 
-	it("brings the buffered frame in when the session comes to the front", () => {
+	it("evicts and resyncs when the front changes", () => {
 		const { send } = mount();
 		send({ channel: "view", session: "a", view: view("FG") });
 		send({ channel: "view", session: "b", view: view("BG") });
 		expect(byId("user-message").textContent).toContain("FG");
 		flush(() => click("focus-b"));
-		expect(byId("mirrored").textContent).toBe("a,b");
-		// No extra round trip: the frame that arrived while b was in the background
-		// is what paints, the moment b is in front.
+		// The transcript of b was not held while it sat in the background: the
+		// mirror empties and asks for the whole view, which then lands as a frame.
+		expect(byId("mirrored").textContent).toBe("");
+		const sent = FakeSocket.sent.map((raw) => JSON.parse(raw) as { op: string; session?: string });
+		expect(sent).toContainEqual({ op: "resync", session: "b" });
+		send({ channel: "view", session: "b", view: view("BG") });
 		expect(byId("user-message").textContent).toContain("BG");
-		expect(FakeSocket.last()).toEqual({ op: "focus", session: "b" });
-
-		// And from here it is b that gets reconciled, a that gets buffered.
-		send({ channel: "view", session: "a", view: view("FG2") });
-		expect(byId("user-message").textContent).toContain("BG");
+		expect(byId("mirrored").textContent).toBe("b");
 	});
 
-	it("clears every mirror on a reconnect, stale buffers included", () => {
+	it("clears every mirror on a reconnect, stubs included", () => {
 		const { send } = mount();
 		send({ channel: "view", session: "a", view: view("FG") });
 		send({ channel: "view", session: "b", view: view("BG") });
