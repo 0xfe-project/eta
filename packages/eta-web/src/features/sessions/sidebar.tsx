@@ -60,7 +60,7 @@ export function Sidebar({ selected, termActive, onTerminal }: { selected: string
 	return (
 		<div className="flex h-full flex-col" data-testid="sidebar">
 			<div className="topbar gap-2 px-3">
-				<span className="mono text-sm font-bold text-accent">eta</span>
+				<img src="/Eta-Logo.svg" alt="eta" className="h-5 w-5 shrink-0" data-testid="logo" />
 				<div className="ml-auto flex gap-1">
 					<button
 						data-testid="term-toggle"

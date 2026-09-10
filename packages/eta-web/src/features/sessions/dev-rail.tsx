@@ -50,7 +50,7 @@ export function DevRail({ frames }: { frames: DevFrame[] }) {
 							className="flex min-w-0 gap-2 px-1 py-0.5 text-left hover:bg-overlay"
 						>
 							<span className="shrink-0 text-muted">{new Date(frame.ts).toLocaleTimeString()}</span>
-							<span className="shrink-0" style={{ color: CATEGORY_COLORS[frame.category] ?? "var(--muted)" }}>{frame.category}</span>
+							<span className="shrink-0" style={{ color: CATEGORY_COLORS[frame.category] ?? "green" }}>{frame.category}</span>
 							<span className="shrink-0">{frame.action}</span>
 							<span className="min-w-0 overflow-x-auto whitespace-nowrap text-muted">{JSON.stringify(frame.data)}</span>
 						</button>
