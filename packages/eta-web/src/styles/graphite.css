@@ -921,3 +921,12 @@ html.dark .markdown [data-streamdown="code-block-body"] span {
 	background: transparent;
 	overflow-x: auto;
 }
+
+/* ---- three-column top rails share one baseline ---- */
+.topbar {
+	display: flex;
+	align-items: center;
+	box-sizing: border-box;
+	height: 40px;
+	border-bottom: 1px solid var(--border);
+}

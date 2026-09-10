@@ -59,7 +59,7 @@ export function Sidebar({ selected, termActive, onTerminal }: { selected: string
 
 	return (
 		<div className="flex h-full flex-col" data-testid="sidebar">
-			<div className="flex items-center gap-2 border-b border-border p-3">
+			<div className="topbar gap-2 px-3">
 				<span className="mono text-sm font-bold text-accent">eta</span>
 				<div className="ml-auto flex gap-1">
 					<button

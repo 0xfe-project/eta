@@ -61,7 +61,7 @@ export function SessionsPage() {
 			sidebar={<Sidebar selected={selected} termActive={termOpen} onTerminal={() => setTermOpen((open) => !open)} />}
 			main={
 				<div className="flex min-h-0 flex-1 flex-col">
-					<header className="flex items-center gap-2 border-b border-border px-4 py-2">
+					<header className="topbar gap-2 px-4">
 						<span data-testid="active-session" className="truncate text-sm font-medium">{selected ?? t("app.title")}</span>
 						<span className="ml-auto flex items-center gap-1.5">
 							{view !== undefined ? (
@@ -92,7 +92,7 @@ export function SessionsPage() {
 			panel={
 				view === undefined ? null : (
 					<div className="flex h-full flex-col">
-						<div className="flex gap-1 border-b border-border p-2">
+						<div className="topbar gap-1 px-2">
 							<button
 								data-testid="tab-context"
 								onClick={() => setTab("context")}
