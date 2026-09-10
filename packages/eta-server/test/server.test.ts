@@ -68,8 +68,8 @@ class SocketReader {
 	}
 }
 
-async function connect(server: EtaServer): Promise<{ socket: WebSocket; reader: SocketReader }> {
-	const socket = new WebSocket(`ws://127.0.0.1:${server.port}/ws`);
+async function connect(server: EtaServer, viewPatch = false): Promise<{ socket: WebSocket; reader: SocketReader }> {
+	const socket = new WebSocket(`ws://127.0.0.1:${server.port}/ws${viewPatch ? "?viewPatch" : ""}`);
 	const reader = new SocketReader(socket);
 	await new Promise<void>((resolve, reject) => {
 		socket.addEventListener("open", () => resolve(), { once: true });
@@ -165,6 +165,34 @@ describe("ws protocol", () => {
 
 			a.socket.close();
 			b.socket.close();
+		});
+	});
+
+	it("patches wait until every connected tab declared the ability to fold them", async () => {
+		await withServer(async (server) => {
+			const modern = await connect(server, true);
+			await modern.reader.next();
+			send(modern.socket, { op: "session.create", name: "cap", personaId: "Thinker" });
+			await modern.reader.until(
+				(m): m is Extract<ServerMessage, { type: "created" }> => "type" in m && m.type === "created",
+			);
+			const legacy = await connect(server);
+			await legacy.reader.next();
+			// A rename moves no transcript, yet while the legacy tab is on the wire
+			// the frame must still carry the whole view: it reads view.messages.
+			send(legacy.socket, { op: "personaSet", session: "cap", personaId: "INSIGHTER" });
+			await modern.reader.until(
+				(m): m is Extract<ServerMessage, { channel: "view" }> =>
+					"channel" in m && m.channel === "view" && "view" in m,
+			);
+			legacy.socket.close();
+			await new Promise((resolve) => setTimeout(resolve, 50));
+			send(modern.socket, { op: "personaSet", session: "cap", personaId: "Thinker" });
+			await modern.reader.until(
+				(m): m is Extract<ServerMessage, { channel: "view" }> =>
+					"channel" in m && m.channel === "view" && "patch" in m && "personas" in m.patch,
+			);
+			modern.socket.close();
 		});
 	});
 

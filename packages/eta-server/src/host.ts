@@ -362,7 +362,7 @@ export class Host {
 				// messages because a socket's first view frame is always the whole one, sent
 				// in the same synchronous block that adds it to the fan-out set.
 				const next = viewFingerprint(view);
-				const unchanged = this.viewFingerprints.get(name) === next;
+				const unchanged = this.patchCapable && this.viewFingerprints.get(name) === next;
 				this.viewFingerprints.set(name, next);
 				pending = unchanged
 					? { channel: "view", session: name, patch: viewPatch(view) }
@@ -382,6 +382,23 @@ export class Host {
 	 * frames after it may be patches onto exactly that.
 	 */
 	private readonly viewFingerprints = new Map<string, string>();
+
+	/**
+	 * True while every connected tab can fold a patch frame; set by the
+	 * negotiation in server.ts. A stale tab reads `frame.view.messages` out of a
+	 * frame that has no `view` and wedges, so the transcript only ever leaves a
+	 * frame when every socket on the wire has asked for that.
+	 */
+	private patchCapable = false;
+
+	setPatchCapable(on: boolean): void {
+		if (this.patchCapable === on) return;
+		this.patchCapable = on;
+		// Flipping off invalidates the assumption that every socket holds the last
+		// transcript: the next frame must be a whole one. Flipping on needs no
+		// reset — while off, every frame carried the whole view anyway.
+		if (!on) this.viewFingerprints.clear();
+	}
 
 	/** Note that `view` was just sent to someone in full, so patches may follow it. */
 	rememberView(name: string, view: SessionView): void {

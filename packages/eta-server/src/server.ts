@@ -31,7 +31,7 @@ export interface EtaServer {
 	close(): void;
 }
 
-type Socket = ServerWebSocket<{ kind?: "ws" | "term"; socketId?: number; shell?: unknown }>;
+type Socket = ServerWebSocket<{ kind?: "ws" | "term"; socketId?: number; shell?: unknown; viewPatch?: boolean }>;
 
 const CONTENT_TYPES: Record<string, string> = {
 	".html": "text/html; charset=utf-8",
@@ -74,6 +74,17 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 
 	const sockets = new Set<Socket>();
 
+	/**
+	 * A patch frame is only cheaper than a whole one if the tab on the other end can
+	 * fold it: a tab still running the previous bundle reads `frame.view.messages`
+	 * out of a frame that has no `view`, and wedges. So patches wait until every
+	 * connected client asked for one — in practice the moment every tab reloaded —
+	 * and switch off again the second a stale tab appears.
+	 */
+	const syncPatchCapable = (): void => {
+		host.setPatchCapable(sockets.size > 0 && [...sockets].every((socket) => socket.data.viewPatch === true));
+	};
+
 	const unsubscribe = host.subscribe((frame, payload) => {
 		// The agent channel is per-token and the browser folds it into the view frame
 		// and ignores this one (see eta-web's reduceEtaState) — forwarding it measured
@@ -90,14 +101,19 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 	watchPersonaDirs(process.cwd(), () => {
 		for (const socket of sockets) send(socket, { type: "personas" });
 	});
-	const server = Bun.serve<{ kind?: "ws" | "term"; socketId?: number; shell?: unknown }>({
+	const server = Bun.serve<{ kind?: "ws" | "term"; socketId?: number; shell?: unknown; viewPatch?: boolean }>({
 		port: options.port ?? 3000,
 		hostname: options.hostname ?? "0.0.0.0",
 		reusePort: true,
 		async fetch(request, srv) {
 			const url = new URL(request.url);
 			if (url.pathname === "/ws") {
-				if (srv.upgrade(request, { data: { kind: "ws", socketId: nextSocketId++ } })) return;
+				if (
+					srv.upgrade(request, {
+						data: { kind: "ws", socketId: nextSocketId++, viewPatch: url.searchParams.has("viewPatch") },
+					})
+				)
+					return;
 				return new Response("upgrade failed", { status: 400 });
 			}
 			if (url.pathname === "/term") {
@@ -214,6 +230,7 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 					return;
 				}
 				sockets.add(socket);
+				syncPatchCapable();
 				send(socket, { type: "hello", sessions: host.sidebar(), attach: host.attachPointer });
 				for (const name of [...host.names()]) {
 					const view = host.viewOf(name);
@@ -233,6 +250,7 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 				}
 				sockets.delete(socket);
 				opTails.delete(socket);
+				syncPatchCapable();
 			},
 			async message(socket: Socket, raw: string | Buffer) {
 				if (socket.data.kind === "term") {

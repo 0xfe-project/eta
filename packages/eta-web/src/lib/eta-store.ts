@@ -207,7 +207,9 @@ export function etaStore(): EtaStore {
 	if (instance === undefined) {
 		const proto = typeof window !== "undefined" && window.location.protocol === "https:" ? "wss:" : "ws:";
 		const host = typeof window !== "undefined" ? window.location.host : "127.0.0.1:5173";
-		instance = new EtaStore(`${proto}//${host}/ws`);
+		// The query is the capability declaration the server's patch pacing reads:
+		// a tab on an older bundle that never sends it keeps getting whole views.
+		instance = new EtaStore(`${proto}//${host}/ws?viewPatch`);
 		instance.connect();
 	}
 	return instance;
@@ -255,9 +257,6 @@ function buildMirror(): EtaState {
 		...first,
 		views: frontView === undefined ? {} : { [mirrored!]: frontView },
 	});
-	/** Patch paths are computed at run time, which the typed setter cannot express. */
-	const write = setState as (path: unknown[], value: unknown) => void;
-
 	/**
 	 * Fold a patch into the mirrored view, one field at a time: a frame that moved
 	 * `usage` alone notifies the usage row and nothing else, and the arrays inside
@@ -277,16 +276,22 @@ function buildMirror(): EtaState {
 			store.send({ op: "resync", session });
 			return;
 		}
-		for (const [key, value] of Object.entries(patch)) {
-			write(["views", session, key], reconcile(value, { key: "entryId" }));
-		}
-		const entry = state.views[session] as unknown as Record<string, unknown> | undefined;
-		if (entry === undefined) return;
+		// One mutation, not one per field: a half-applied patch must never be
+		// observable, and a path write that trips over a mid-frame mutation takes
+		// the whole subscribe loop — and every frame after it — down with it.
 		const heavy = HEAVY_VIEW_FIELDS as readonly string[];
-		for (const key of Object.keys(entry)) {
-			if (key in patch || heavy.includes(key)) continue;
-			write(["views", session, key], undefined);
-		}
+		setState(
+			"views",
+			session,
+			produce((view: SessionView) => {
+				const row = view as unknown as Record<string, unknown>;
+				for (const [key, value] of Object.entries(patch)) row[key] = value;
+				for (const key of Object.keys(row)) {
+					if (key in patch || heavy.includes(key)) continue;
+					delete row[key];
+				}
+			}),
+		);
 	}
 
 	/** Last snapshot folded in, kept raw so unchanged sessions can be skipped. */
