@@ -84,6 +84,7 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 	const server = Bun.serve<{ kind?: "ws" | "term"; socketId?: number; shell?: unknown }>({
 		port: options.port ?? 3000,
 		hostname: options.hostname ?? "0.0.0.0",
+		reusePort: true,
 		async fetch(request, srv) {
 			const url = new URL(request.url);
 			if (url.pathname === "/ws") {
