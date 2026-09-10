@@ -4,6 +4,8 @@ import type { SessionView } from "@eta/core";
 import { byId, queryId } from "./dom.ts";
 import { click, render } from "./render.tsx";
 import { Timeline } from "../src/features/sessions/timeline.tsx";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 let scrolled: string[] = [];
 
@@ -166,5 +168,25 @@ describe("a turn that died", () => {
 	it("stays out of the way when the turn is fine", () => {
 		render(<Timeline view={failedView("stop")} session="s-1" />);
 		expect(queryId("message-error")).toBeNull();
+	});
+
+	it("keeps the line breaks the author typed in a user bubble", () => {
+		// jsdom runs no stylesheets, so the guard is the rule itself: the bubble is
+		// plain text, and the one thing the CSS owes it is the newlines it was given.
+		const relative = "src/styles/graphite.css";
+		let dir = process.cwd();
+		for (let depth = 0; depth < 4; depth++) {
+			for (const candidate of [relative, join("packages/eta-client", relative)]) {
+				const path = join(dir, candidate);
+				if (existsSync(path)) {
+					const css = readFileSync(path, "utf8");
+					const rule = css.slice(css.indexOf(".message.user .message-content {"));
+					expect(rule.slice(0, rule.indexOf("}"))).toMatch(/white-space:\s*pre-wrap/);
+					return;
+				}
+			}
+			dir = dirname(dir);
+		}
+		throw new Error(`${relative} 不在测试能找到的地方`);
 	});
 });

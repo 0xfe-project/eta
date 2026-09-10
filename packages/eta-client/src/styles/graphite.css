@@ -230,6 +230,10 @@ body {
 .message.user .message-content {
 	background: var(--bg);
 	color: var(--primary);
+	/* What you typed is what you said. The text arrives with its line breaks and the
+	   bubble is plain text — markdown would reinterpret a path with a * in it — so the
+	   one thing the CSS owes the author is to keep the breaks it was given. */
+	white-space: pre-wrap;
 }
 .message.user .message-content a {
 	color: inherit;
