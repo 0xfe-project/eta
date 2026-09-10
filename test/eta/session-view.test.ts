@@ -27,6 +27,22 @@ describe("SessionView projector", () => {
 		expect(view.prompt!.stableChars).toBeGreaterThanOrEqual("you are eta".length + "PILOT CARD TEXT".length);
 	});
 
+	it("contextShare splits the transcript by role and counts tool definitions", async () => {
+		const faux = fauxProvider();
+		faux.setResponses([fauxAssistantMessage([fauxText("ok")])]);
+		const models = createModels();
+		models.setProvider(faux.provider);
+		const session = new StorageBackedSession({ id: "eta-share", createdAt: Date.now(), storageVersion: 1 }, new MemoryStorage());
+		const agent = await EtaAgent.create({ session, models, model: faux.getModel(), baseSystemPrompt: "base", heartbeatMs: 0 }, CTX);
+		await agent.lane.prompt("hello user text", undefined, CTX);
+		await agent.lane.appendMessage({ role: "toolResult", toolCallId: "c1", toolName: "bash", content: [{ type: "text", text: "X".repeat(400) }], isError: false, timestamp: 1 } as never, CTX);
+		const view = await new SessionViewProjector(agent).snapshot(CTX);
+		expect(view.contextShare?.userChars).toBeGreaterThanOrEqual("hello user text".length);
+		expect(view.contextShare?.assistantChars).toBeGreaterThanOrEqual("ok".length);
+		expect(view.contextShare?.toolChars).toBeGreaterThanOrEqual(400);
+		expect(view.contextShare?.toolDefChars).toBeGreaterThan(1000);
+	});
+
 	it("applyPersona swaps the persona card and rebuilds prompt blocks mid-session", async () => {
 		const faux = fauxProvider();
 		faux.setResponses([fauxAssistantMessage([fauxText("one")]), fauxAssistantMessage([fauxText("two")])]);
