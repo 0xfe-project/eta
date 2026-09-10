@@ -161,6 +161,15 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 			if (url.pathname === "/api/sessions") {
 				return Response.json(host.sidebar());
 			}
+			if (url.pathname === "/api/history") {
+				const session = url.searchParams.get("session");
+				const before = Number(url.searchParams.get("before") ?? "0");
+				const limit = Math.min(500, Number(url.searchParams.get("limit") ?? "100") || 100);
+				if (session === null || !Number.isFinite(before) || before <= 0)
+					return new Response("bad request", { status: 400 });
+				const messages = await host.historyOf(session, before, limit);
+				return messages === undefined ? new Response("not found", { status: 404 }) : Response.json(messages);
+			}
 			if (url.pathname === "/api/models") {
 				const session = url.searchParams.get("session");
 				try {
