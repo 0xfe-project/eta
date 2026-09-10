@@ -362,13 +362,11 @@ export class Host {
 				// streaming token actually changes. Safe to assume every socket holds the same
 				// messages because a socket's first view frame is always the whole one, sent
 				// in the same synchronous block that adds it to the fan-out set.
-				const next = viewFingerprint(view);
-				const unchanged = this.patchCapable && this.viewFingerprints.get(name) === next;
-				this.viewFingerprints.set(name, next);
-				// The version is the frame's identity, not the transcript's: it moves on
-				// every published content change and is what a client tracks to notice it
-				// fell behind and must resync.
-				const version = this.viewVersion(name);
+				// A patch is safe while every tab can fold one and the transcript is the
+				// one the sockets were last handed; the version is the frame's identity,
+				// what a client tracks to notice it fell behind and must resync.
+				const unchanged = this.viewSync.patchSafe(name, view);
+				const version = this.viewSync.version(name);
 				pending = unchanged
 					? { channel: "view", session: name, version, patch: viewPatch(view) }
 					: { channel: "view", session: name, version, view };
@@ -381,46 +379,25 @@ export class Host {
 	}
 
 	/**
-	 * What the transcript half of each session's last published frame looked like.
-	 * Kept here rather than in the pacer's closure because a new connection has to
-	 * sign for the whole view it is handed: every socket is promised one, and the
-	 * frames after it may be patches onto exactly that.
+	 * The view channel's sync state machine — which transcript each socket is
+	 * assumed to hold, how far each session's content generation has moved, and
+	 * whether patch frames are on the table at all. See ViewSync.
 	 */
-	private readonly viewFingerprints = new Map<string, string>();
-
-	/**
-	 * Monotonic content generation of each session's view, bumped on every
-	 * published change. This is the number a client holds onto: receiving a frame
-	 * whose version is not the one after its own means it missed a frame and has
-	 * to resync, which a transcript fingerprint can never tell it.
-	 */
-	private readonly viewVersions = new Map<string, number>();
+	private readonly viewSync = new ViewSync();
 
 	/** The version of the newest published view of a session; 0 before any. */
 	viewVersion(name: string): number {
-		return this.viewVersions.get(name) ?? 0;
+		return this.viewSync.version(name);
 	}
 
-	/**
-	 * True while every connected tab can fold a patch frame; set by the
-	 * negotiation in server.ts. A stale tab reads `frame.view.messages` out of a
-	 * frame that has no `view` and wedges, so the transcript only ever leaves a
-	 * frame when every socket on the wire has asked for that.
-	 */
-	private patchCapable = false;
-
+	/** True while every connected tab can fold a patch frame; set by the negotiation in server.ts. */
 	setPatchCapable(on: boolean): void {
-		if (this.patchCapable === on) return;
-		this.patchCapable = on;
-		// Flipping off invalidates the assumption that every socket holds the last
-		// transcript: the next frame must be a whole one. Flipping on needs no
-		// reset — while off, every frame carried the whole view anyway.
-		if (!on) this.viewFingerprints.clear();
+		this.viewSync.setCapable(on);
 	}
 
 	/** Note that `view` was just sent to someone in full, so patches may follow it. */
 	rememberView(name: string, view: SessionView): void {
-		this.viewFingerprints.set(name, viewFingerprint(view));
+		this.viewSync.record(name, view);
 	}
 
 	/**
@@ -432,7 +409,7 @@ export class Host {
 	 * run — and a frame the user is waiting for is not traffic, so it goes out now.
 	 */
 	private publishView(name: string): void {
-		this.viewVersions.set(name, this.viewVersion(name) + 1);
+		this.viewSync.bump(name);
 		const entry = this.hosted.get(name);
 		if (entry === undefined) return;
 		if (entry.running) entry.pacer.markDirty();
@@ -463,7 +440,7 @@ export class Host {
 		}
 		this.hosted.delete(name);
 		entry.pacer.dispose();
-		this.viewFingerprints.delete(name);
+		this.viewSync.forget(name);
 		if (this.attachPointerValue === name) this.attachPointerValue = this.hosted.keys().next().value ?? null;
 	}
 
@@ -973,6 +950,61 @@ export class Host {
 
 	private emit(frame: ChannelFrame, payload?: string): void {
 		for (const listener of [...this.listeners]) listener(frame, payload);
+	}
+}
+
+/**
+ * The view channel's sync state, folded into one place: the transcript each
+ * socket is assumed to hold (so a frame may leave it out), the monotonic content
+ * generation (so a client notices it fell behind and resyncs), and the
+ * patch-capable flag negotiated with the sockets.
+ */
+class ViewSync {
+	/** Transcript signature last sent whole, per session — what a patch may omit. */
+	private readonly fingerprints = new Map<string, string>();
+	/** Monotonic content generation, bumped on every published change. */
+	private readonly versions = new Map<string, number>();
+	/** True while every connected tab can fold a patch frame. */
+	private capable = false;
+
+	version(name: string): number {
+		return this.versions.get(name) ?? 0;
+	}
+
+	/** Register a content change: the next published frame is a new generation. */
+	bump(name: string): void {
+		this.versions.set(name, this.version(name) + 1);
+	}
+
+	/**
+	 * Whether a frame for `name` may leave the transcript out — every tab must be
+	 * able to fold a patch, and the transcript must be the one the sockets were
+	 * last handed. Records the fingerprint either way.
+	 */
+	patchSafe(name: string, view: SessionView): boolean {
+		const next = viewFingerprint(view);
+		const unchanged = this.capable && this.fingerprints.get(name) === next;
+		this.fingerprints.set(name, next);
+		return unchanged;
+	}
+
+	/** Note that a whole view was just handed to a socket, so patches may follow it. */
+	record(name: string, view: SessionView): void {
+		this.fingerprints.set(name, viewFingerprint(view));
+	}
+
+	setCapable(on: boolean): void {
+		if (this.capable === on) return;
+		this.capable = on;
+		// Flipping off invalidates the assumption that every socket holds the last
+		// transcript: the next frame must be a whole one. Flipping on needs no
+		// reset — while off, every frame carried the whole view anyway.
+		if (!on) this.fingerprints.clear();
+	}
+
+	forget(name: string): void {
+		this.fingerprints.delete(name);
+		this.versions.delete(name);
 	}
 }
 
