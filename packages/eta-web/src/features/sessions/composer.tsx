@@ -298,22 +298,22 @@ export function Composer({
 								<button data-testid="attach-btw" className="border border-border px-2 py-1 text-xs uppercase tracking-[0.08em] hover:bg-overlay" onClick={() => { setToolboxOpen(false); store.send({ op: "btwOpen", session, kind: "tangent" }); }}>{t("composer.newBtw")}</button>
 							) : null}
 						</div>
-						{!createMode && session !== undefined ? (
-							<>
-								<p className="mono mb-1 text-[10px] uppercase tracking-[0.12em] text-muted">{t("composer.thinking")}</p>
-								<div data-testid="toolbox-thinking" className="mb-2 flex flex-wrap gap-1">
-									{THINKING_LEVELS.map((level) => (
-										<button key={level} data-testid={`toolbox-thinking-${level}`} onClick={() => store.send({ op: "thinkingLevel", session, level })} className={`mono border px-2 py-1 text-[10px] uppercase ${thinkingLevel === level ? "border-2 border-primary bg-primary text-primary-foreground" : "border-border text-muted hover:border-border-strong"}`}>{level}</button>
-									))}
-								</div>
-							</>
-						) : null}
 						{models.length > 0 ? (
 							<>
 								<p className="mono mb-1 text-[10px] uppercase tracking-[0.12em] text-muted">{t("composer.models")}</p>
 								<div data-testid="toolbox-models" className="mb-2 grid gap-0.5">
 									{models.map((model) => (
 										<button key={model.id} data-testid={`toolbox-model-${model.id}`} onClick={() => { if (session !== undefined) store.send({ op: "modelSet", session, modelId: model.id }); setPickedModel(model.id); setToolboxOpen(false); }} className={`mono truncate border px-2 py-1 text-left text-[11px] hover:bg-overlay ${pickedModel === model.id ? "border-2 border-primary" : "border-border"}`}>{model.label}</button>
+									))}
+								</div>
+							</>
+						) : null}
+						{!createMode && session !== undefined ? (
+							<>
+								<p className="mono mb-1 text-[10px] uppercase tracking-[0.12em] text-muted">{t("composer.thinking")}</p>
+								<div data-testid="toolbox-thinking" className="mb-2 flex flex-wrap gap-1">
+									{THINKING_LEVELS.map((level) => (
+										<button key={level} data-testid={`toolbox-thinking-${level}`} onClick={() => store.send({ op: "thinkingLevel", session, level })} className={`mono border px-2 py-1 text-[10px] uppercase ${thinkingLevel === level ? "border-2 border-primary bg-primary text-primary-foreground" : "border-border text-muted hover:border-border-strong"}`}>{level}</button>
 									))}
 								</div>
 							</>
