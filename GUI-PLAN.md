@@ -143,8 +143,13 @@ picot 右侧是 4 个可独立开合栏:文件树+Git tab(staged/changes/untrack
 - [x] X1 改名与骨架:`nav.dev` → `nav.log`(zh 日志 / en Log),新增 `nav.workspace`(zh 开发 / en Workspace),tab 顺序 上下文 / 开发 / 日志;`dev-rail.tsx` 与其测试 testid 同步(`tab-dev` → `tab-log`);locales 两文件同批改(i18n key 集相等测试会拦)。完成条件:三 tab 可切,老 devrail 测试全绿。已做:smoke 新增三 tab 切换用例,LogRail 更名同步。
 - [x] X2 server git 只读:新建 `eta-server/src/git.ts`,`gitStatus(cwd)` → `{branch, notGit, groups:{staged,changes,untracked,conflicted}, numstat}`(`status --porcelain=v2 -z` + `diff --numstat`),`gitDiff(cwd, path, staged)`。路由 `GET /api/git/status?session=`、`GET /api/git/diff?session=&path=&staged=`;Bun.spawn + 8s 超时 + 400KB 截断 + 非仓库 `{notGit:true}`(复用 refreshBranch 的吞异常风格)。完成条件:临时仓库造 staged/modified/untracked 三态,API 返回分组正确。已做:`git.test.ts` 6 例(分组/重命名/越界路径/notGit/HTTP 面)。
 - [x] X3 开发面板只读版:上半区改动文件列表(分组标题 + 状态徽章 M/A/D/?? + `+N -M` 计数),下半区 unified diff 自绘(hunk 头/+行/-行,样式进 `graphite.css`)。刷新:tab 打开时拉、view 帧到达防抖 800ms 重拉、手动刷新按钮。空态分 notGit / clean / loading。完成条件:agent 跑一轮 write/edit 后,不刷新页面能看到新改动与 diff。已做:临时 server + 真 session 手测,跑完一轮 prompt 后新未跟踪文件自动进列表(没点刷新);文件列表按内容高度收,不再顶出空白。
-- [ ] X4 编辑器:`@codemirror/{state,view,commands,language,lang-javascript,lang-json,lang-markdown,lang-python,lang-rust,legacy-modes,search}`(同 picot);`workspace/editor.tsx` + `file-language.ts`(扩展名→lang 纯函数,抄 picot 映射表,单测);开发 tab 顶部切 Diff / 文件两态,文件态是 `/api/files` 过滤输入框(fuzzy 打分从 composer 抽到 `lib/fuzzy.ts` 共用)。写回 `POST /api/file {text, baseMtime}` → mtime 不符 409 + 磁盘现文,web 弹冲突对话框(覆盖 / 丢弃我的改动);dirty 星号 + ⌘S。回合 file chip 改为在开发 tab 打开。完成条件:改一个文件保存,agent 下一轮 read 到新内容;外部改动时冲突对话框出现。
-- [ ] X5 git 写(用户已点头):协议加 `git.stage / git.unstage / git.discard / git.commit`(host 实现 + 写完回新 status)。面板选区 → 操作条。安全栏四条:discard 走 Dialog 二次确认;commit 前重拉 status 展示待提交清单再确认;只 `git add -- <选中 path>` 不用 `-A`;编辑器 dirty 时 discard 先提示保存。完成条件:stage→commit 端到端,`git log -1` 有这条;discard 后工作区干净。
-- [ ] X6 收尾:右栏上限 520 → 760,开发 tab 加「放大」按钮(临时 `min(900, 视口 60%)`,再点还原,存 localStorage);快捷键 ⌘⇧D 切右栏 tab;`bun run test` / `typecheck` / `build:web` 全绿。
+- ~~X4 编辑器~~ **用户决定不做**:文件交给 AI 改,GUI 不做编辑器;回合 file chip 的只读预览 Dialog 原样保留。
+- [ ] X5 git 写(用户已点头):协议加 `git.stage / git.unstage / git.discard / git.commit`(host 实现 + 写完回新 status)。面板选区 → 操作条。安全栏四条:discard 走 Dialog 二次确认;commit 前重拉 status 展示待提交清单再确认;只 `git add -- <选中 path>` 不用 `-A`;写操作只在 session 不 running 时允许(running 时按钮禁用,免得和 agent 抢同一个文件)。完成条件:stage→commit 端到端,`git log -1` 有这条;discard 后工作区干净。
+- [ ] X6 收尾:快捷键 ⌘⇧D 切右栏 tab;`bun run test` / `typecheck` / `build:web` 全绿。
 
-明确不做(本轮):文件树(过滤列表够用)、blame / 文件历史、多文件 tab(先单文件 + dirty 守卫)、AI commit message、hunk 级选择性暂存。
+明确不做(本轮):文件树(过滤列表够用)、blame / 文件历史、文件编辑器(见 X4)、AI commit message、hunk 级选择性暂存。
+
+### T6 追加(用户 2026-09-10 定:不做编辑器 / 右栏要能拖大 / 没 git 不许崩)
+
+- [x] X6a 右栏宽度:上限 520 → 1040;拖拽和渲染都按视口收(左栏 reserve 700、右栏 reserve 640,存过的大宽度换小窗口也不会吞掉 timeline)。开发面板用 ResizeObserver 实测自身宽度,≥600 时改成 文件列表(240) | diff 左右分栏,窄了仍上下堆叠 —— 手机抽屉里也是堆叠。完成条件:1280 窗口拖到 640 出现分栏,330 宽仍是上下;假 ResizeObserver 覆盖两态。
+- [x] X6b 没有 git 也不崩:`runGit` 显式带 `env: process.env`(Bun 默认按**启动时**的 PATH 解析可执行文件,测试里剥 PATH 根本测不出来)→ git 缺失 = spawn 抛错 = `notGit`。status 输出上限单独放到 4MB(仓库改动多不误截断,diff 仍 400KB)。新增测试:PATH 剥离、session 目录被删、仓库还没有 commit、web 端 fetch 非 2xx、fetch reject。

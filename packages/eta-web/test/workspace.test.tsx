@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { findId, queryId } from "./dom.ts";
+import { byId, findId, queryId } from "./dom.ts";
 import { click, render } from "./render.tsx";
 import { WorkspacePanel } from "../src/features/sessions/workspace-panel.tsx";
 
@@ -54,6 +54,46 @@ describe("workspace panel", () => {
 		stubFetch(EMPTY);
 		render(<WorkspacePanel session="s1" />);
 		expect((await findId("git-empty")).textContent).toContain("git");
+	});
+
+	it("shows an unreachable-git message instead of throwing, on a bad status or a dead fetch", async () => {
+		vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, json: async () => ({}) })));
+		render(<WorkspacePanel session="bad-status" />);
+		expect((await findId("git-empty")).textContent).toMatch(/git/i);
+
+		vi.stubGlobal("fetch", vi.fn(async () => {
+			throw new Error("server went away");
+		}));
+		render(<WorkspacePanel session="fetch-rejects" />);
+		expect((await findId("git-empty")).textContent).toMatch(/git/i);
+	});
+
+	it("splits file list and diff left/right once the panel is wide enough", async () => {
+		class FakeResizeObserver {
+			static instances: FakeResizeObserver[] = [];
+			private readonly callback: ResizeObserverCallback;
+
+			constructor(callback: ResizeObserverCallback) {
+				this.callback = callback;
+				FakeResizeObserver.instances.push(this);
+			}
+
+			observe(target: Element): void {
+				this.callback(
+					[{ target, contentRect: { width: 900 } } as unknown as ResizeObserverEntry],
+					this as unknown as ResizeObserver,
+				);
+			}
+
+			unobserve(): void {}
+
+			disconnect(): void {}
+		}
+		vi.stubGlobal("ResizeObserver", FakeResizeObserver);
+		render(<WorkspacePanel session="wide" />);
+		await findId("git-file-src/a.ts");
+		expect(byId("workspace-panel").getAttribute("data-wide")).toBe("1");
+		expect(byId("git-split").className).toContain("flex-row");
 	});
 
 	it("coalesces a burst of view frames into one refresh", async () => {

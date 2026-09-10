@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js";
 import type { TranslationKey } from "@eta/i18n";
+import { PANEL_WIDE_AT } from "../../app/app-shell.tsx";
 import { useAppI18n } from "../../i18n.ts";
 import type { GitDiff, GitDiffKind, GitFile, GitStatus } from "../../lib/protocol.ts";
 
@@ -124,8 +125,22 @@ export function WorkspacePanel(props: { session: string }) {
 		return shown().length === 0 ? "workspace.clean" : null;
 	});
 
+	// Measured, not inferred from the viewport: the same panel lives in a narrow
+	// drawer on a wide screen, and there the stacked layout is the honest one.
+	const [measured, setMeasured] = createSignal(0);
+	const measure = (node: HTMLDivElement): void => {
+		if (typeof ResizeObserver === "undefined") return;
+		const observer = new ResizeObserver((entries) => {
+			const entry = entries[0];
+			if (entry !== undefined) setMeasured(entry.contentRect.width);
+		});
+		observer.observe(node);
+		onCleanup(() => observer.disconnect());
+	};
+	const wide = createMemo(() => measured() >= PANEL_WIDE_AT);
+
 	return (
-		<div class="flex h-full min-h-0 flex-col" data-testid="workspace-panel">
+		<div ref={measure} data-testid="workspace-panel" data-wide={wide() ? "1" : "0"} class="flex h-full min-h-0 flex-col">
 			<div class="flex items-center gap-2 border-b border-border px-2 py-1">
 				<Show when={status()?.branch}>
 					{(branch) => <span class="header-chip mono max-w-[120px] truncate">{branch()}</span>}
@@ -143,7 +158,15 @@ export function WorkspacePanel(props: { session: string }) {
 				</button>
 			</div>
 
-			<div class="max-h-[46%] min-h-0 shrink-0 overflow-y-auto">
+			<div data-testid="git-split" class={`flex min-h-0 flex-1 ${wide() ? "flex-row" : "flex-col"}`}>
+				<div
+					data-testid="git-files"
+					class={
+						wide()
+							? "w-[240px] shrink-0 overflow-y-auto border-r border-dashed border-border"
+							: "max-h-[46%] min-h-0 shrink-0 overflow-y-auto"
+						}
+				>
 				<Show
 					when={emptyKey() === null}
 					fallback={
@@ -185,7 +208,10 @@ export function WorkspacePanel(props: { session: string }) {
 				</Show>
 			</div>
 
-			<div data-testid="git-diff" class="git-diff min-h-0 flex-1 overflow-auto border-t border-dashed border-border">
+				<div
+					data-testid="git-diff"
+					class={`git-diff min-h-0 flex-1 overflow-auto border-dashed border-border ${wide() ? "border-l" : "border-t"}`}
+				>
 				<Show
 					when={selected() !== null && diff() !== null}
 					fallback={
@@ -205,6 +231,7 @@ export function WorkspacePanel(props: { session: string }) {
 						</div>
 					</Show>
 				</Show>
+				</div>
 			</div>
 		</div>
 	);

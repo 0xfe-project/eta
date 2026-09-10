@@ -1,5 +1,26 @@
-import { Show, createContext, createSignal, onCleanup, useContext, type JSX } from "solid-js";
+import { Show, createContext, createSignal, onCleanup, useContext, type Accessor, type JSX } from "solid-js";
 import { useNavigate } from "@solidjs/router";
+
+// The right column doubles as the workspace panel, so it opens wide: the git
+// list and the diff split left/right once there is room for both. Reserves keep
+// the timeline readable no matter how far a column gets dragged.
+export const PANEL_MIN = 240;
+export const PANEL_MAX = 1040;
+export const PANEL_WIDE_AT = 600;
+const PANEL_RESERVE = 640;
+const SIDEBAR_MIN = 200;
+const SIDEBAR_MAX = 420;
+const SIDEBAR_RESERVE = 700;
+
+function useViewportWidth(): Accessor<number> {
+	const [width, setWidth] = createSignal(typeof window === "undefined" ? 1440 : window.innerWidth);
+	const onResize = (): void => {
+		setWidth(window.innerWidth);
+	};
+	window.addEventListener("resize", onResize);
+	onCleanup(() => window.removeEventListener("resize", onResize));
+	return width;
+}
 
 function storedFlag(key: string, fallback: boolean): boolean {
 	try {
@@ -27,7 +48,7 @@ function storedWidth(key: string, fallback: number, min: number, max: number): n
 	}
 }
 
-function Resizer(props: { grow: 1 | -1; storeKey: string; min: number; max: number }) {
+function Resizer(props: { grow: 1 | -1; storeKey: string; min: number; max: number; reserve: number }) {
 	const drag: { current: { x: number; width: number } | null } = { current: null };
 	const onPointerDown = (event: PointerEvent) => {
 		const current = storedWidth(props.storeKey, props.grow === 1 ? 260 : 320, props.min, props.max);
@@ -37,7 +58,8 @@ function Resizer(props: { grow: 1 | -1; storeKey: string; min: number; max: numb
 	const onPointerMove = (event: PointerEvent) => {
 		if (drag.current === null) return;
 		const next = drag.current.width + props.grow * (event.clientX - drag.current.x);
-		const clamped = Math.min(props.max, Math.max(props.min, next));
+		const cap = Math.max(props.min, Math.min(props.max, window.innerWidth - props.reserve));
+		const clamped = Math.min(cap, Math.max(props.min, next));
 		localStorage.setItem(props.storeKey, String(clamped));
 		window.dispatchEvent(new CustomEvent("eta:width", { detail: { key: props.storeKey, width: clamped } }));
 	};
@@ -90,8 +112,12 @@ function useColumnWidth(key: string, fallback: number, min: number, max: number)
 }
 
 export function AppShell(props: { sidebar: JSX.Element; main: JSX.Element; panel: JSX.Element; palette?: JSX.Element }) {
-	const leftWidth = useColumnWidth("eta.width.sidebar", 260, 200, 420);
-	const rightWidth = useColumnWidth("eta.width.panel", 320, 240, 520);
+	const leftWidth = useColumnWidth("eta.width.sidebar", 260, SIDEBAR_MIN, SIDEBAR_MAX);
+	const rightWidth = useColumnWidth("eta.width.panel", 320, PANEL_MIN, PANEL_MAX);
+	const viewport = useViewportWidth();
+	// A width stored on a big monitor must not swallow a smaller window later.
+	const left = () => Math.min(leftWidth(), Math.max(SIDEBAR_MIN, viewport() - SIDEBAR_RESERVE));
+	const right = () => Math.min(rightWidth(), Math.max(PANEL_MIN, viewport() - PANEL_RESERVE));
 	const [leftOpen, setLeftOpen] = createSignal(storedFlag("eta.drawer.sidebar", typeof window === "undefined" || window.innerWidth >= 768));
 	const [rightOpen, setRightOpen] = createSignal(storedFlag("eta.drawer.panel", typeof window === "undefined" || window.innerWidth >= 1024));
 	const [paletteOpen, setPaletteOpen] = createSignal(false);
@@ -151,18 +177,18 @@ export function AppShell(props: { sidebar: JSX.Element; main: JSX.Element; panel
 				<aside
 					data-testid="drawer-left"
 					data-open={leftOpen() ? "1" : "0"}
-					style={{ width: `${leftWidth()}px` }}
+					style={{ width: `${left()}px` }}
 					class={`shrink-0 border-r border-border bg-surface max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-30 max-md:w-[280px] max-md:shadow-[var(--shadow)] ${leftOpen() ? "" : "max-md:hidden"}`}
 				>
 					{props.sidebar}
 				</aside>
-				<Resizer grow={1} storeKey="eta.width.sidebar" min={200} max={420} />
+				<Resizer grow={1} storeKey="eta.width.sidebar" min={SIDEBAR_MIN} max={SIDEBAR_MAX} reserve={SIDEBAR_RESERVE} />
 				<main class="flex min-w-0 flex-1 flex-col">{props.main}</main>
-				<Resizer grow={-1} storeKey="eta.width.panel" min={240} max={520} />
+				<Resizer grow={-1} storeKey="eta.width.panel" min={PANEL_MIN} max={PANEL_MAX} reserve={PANEL_RESERVE} />
 				<aside
 					data-testid="drawer-right"
 					data-open={rightOpen() ? "1" : "0"}
-					style={{ width: `${rightWidth()}px` }}
+					style={{ width: `${right()}px` }}
 					class={`shrink-0 border-l border-border bg-surface max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-30 max-lg:w-[320px] max-lg:shadow-[var(--shadow)] ${rightOpen() ? "" : "max-lg:hidden"}`}
 				>
 					{props.panel}

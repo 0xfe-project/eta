@@ -39,6 +39,7 @@ export interface GitDiff {
 }
 
 const OUTPUT_CAP = 400_000;
+const STATUS_CAP = 4_000_000;
 const SNIFF_CAP = 200_000;
 const DEADLINE_MS = 8_000;
 
@@ -48,7 +49,7 @@ interface GitRun {
 	truncated: boolean;
 }
 
-async function readCapped(stream: ReadableStream<Uint8Array>): Promise<{ text: string; truncated: boolean }> {
+async function readCapped(stream: ReadableStream<Uint8Array>, cap: number): Promise<{ text: string; truncated: boolean }> {
 	const reader = stream.getReader();
 	const kept: Uint8Array[] = [];
 	let keptBytes = 0;
@@ -59,7 +60,7 @@ async function readCapped(stream: ReadableStream<Uint8Array>): Promise<{ text: s
 		const value = chunk.value;
 		if (value === undefined) continue;
 		if (truncated) continue;
-		if (keptBytes + value.byteLength > OUTPUT_CAP) {
+		if (keptBytes + value.byteLength > cap) {
 			truncated = true;
 			continue;
 		}
@@ -75,18 +76,21 @@ async function readCapped(stream: ReadableStream<Uint8Array>): Promise<{ text: s
 	return { text: new TextDecoder().decode(merged), truncated };
 }
 
-async function runGit(cwd: string, args: readonly string[]): Promise<GitRun> {
+async function runGit(cwd: string, args: readonly string[], cap = OUTPUT_CAP): Promise<GitRun> {
 	let child: ReturnType<typeof Bun.spawn>;
 	try {
 		child = Bun.spawn(["git", "--no-optional-locks", "-c", "core.quotepath=false", ...args], {
 			cwd,
 			stdout: "pipe",
 			stderr: "ignore",
+			// Resolve against the live PATH: a machine without git must fail here
+			// (caught below as `notGit`), not fall back to the launch-time snapshot.
+			env: process.env,
 		});
 	} catch {
 		return { ok: false, out: "", truncated: false };
 	}
-	const reading = readCapped(child.stdout as ReadableStream<Uint8Array>);
+	const reading = readCapped(child.stdout as ReadableStream<Uint8Array>, cap);
 	const timer = setTimeout(() => {
 		try {
 			child.kill();
@@ -155,7 +159,7 @@ async function untrackedCounts(cwd: string, path: string): Promise<{ added: numb
 }
 
 export async function gitStatus(cwd: string): Promise<GitStatus> {
-	const status = await runGit(cwd, ["status", "--porcelain=v2", "-z", "--untracked-files=all"]);
+	const status = await runGit(cwd, ["status", "--porcelain=v2", "-z", "--untracked-files=all"], STATUS_CAP);
 	if (!status.ok) return notGitStatus();
 	const branch = await runGit(cwd, ["rev-parse", "--abbrev-ref", "HEAD"]);
 	const name = branch.out.trim();

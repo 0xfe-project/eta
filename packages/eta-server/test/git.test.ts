@@ -139,3 +139,34 @@ describe("git http surface", () => {
 		});
 	});
 });
+
+describe("git is missing or barely started", () => {
+	it("answers notGit instead of throwing when the git binary cannot be spawned", async () => {
+		const dir = fixture();
+		const savedPath = process.env.PATH;
+		process.env.PATH = "/eta-test-no-git-here";
+		try {
+			const status = await gitStatus(dir);
+			expect(status).toMatchObject({ notGit: true, branch: null });
+			expect(status.groups.staged).toEqual([]);
+			expect(await gitDiff(dir, "keep.txt", "worktree")).toBeUndefined();
+		} finally {
+			process.env.PATH = savedPath;
+		}
+	});
+
+	it("treats a deleted session folder as not a repository", async () => {
+		const status = await gitStatus(join(tmpdir(), "eta-folder-does-not-exist"));
+		expect(status.notGit).toBe(true);
+	});
+
+	it("reads a repository that has no commit yet", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "eta-git-unborn-"));
+		git(dir, "init", "-q");
+		writeFileSync(join(dir, "fresh.txt"), "hi\n");
+		const status = await gitStatus(dir);
+		expect(status.notGit).toBe(false);
+		expect(status.branch).toBeNull();
+		expect(status.groups.untracked.map((entry) => `${entry.path}+${entry.added}`)).toEqual(["fresh.txt+1"]);
+	});
+});
