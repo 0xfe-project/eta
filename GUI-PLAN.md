@@ -133,3 +133,18 @@
 - [x] session.delete 真删盘(deleteSession → rm persistDir),重启不再复活
 - [x] 初始 view 快照与后续 refresh 同路径 stamp(cwd/queue/branch 不再首帧缺失)
 - [x] streaming 蹦字:projector 监听 message_start/update/end,in-flight 消息挂 `SessionView.streaming`;web 渲染 streaming-row,实测逐帧增量;commit 后清除
+
+## T6 右栏重做:上下文 / 开发 / 日志(2026-09-10 对照 picot 右侧栏)
+
+picot 右侧是 4 个可独立开合栏:文件树+Git tab(staged/changes/untracked/conflicted + stage/discard/commit + AI message)、文件预览面板(多 tab、预览/编辑/diff 三模式、CodeMirror 6、1500ms autosave、42% 宽 + 放大)、diff-sidebar、info 栏。
+我们右侧只有 Context + Dev rail,文件相关只有回合 file chip → 只读 `<pre>` Dialog。
+现有 Dev rail 内容本质是事件 tail,名不副实 → 改名「日志」,「开发」腾出来给工作区。
+
+- [x] X1 改名与骨架:`nav.dev` → `nav.log`(zh 日志 / en Log),新增 `nav.workspace`(zh 开发 / en Workspace),tab 顺序 上下文 / 开发 / 日志;`dev-rail.tsx` 与其测试 testid 同步(`tab-dev` → `tab-log`);locales 两文件同批改(i18n key 集相等测试会拦)。完成条件:三 tab 可切,老 devrail 测试全绿。已做:smoke 新增三 tab 切换用例,LogRail 更名同步。
+- [x] X2 server git 只读:新建 `eta-server/src/git.ts`,`gitStatus(cwd)` → `{branch, notGit, groups:{staged,changes,untracked,conflicted}, numstat}`(`status --porcelain=v2 -z` + `diff --numstat`),`gitDiff(cwd, path, staged)`。路由 `GET /api/git/status?session=`、`GET /api/git/diff?session=&path=&staged=`;Bun.spawn + 8s 超时 + 400KB 截断 + 非仓库 `{notGit:true}`(复用 refreshBranch 的吞异常风格)。完成条件:临时仓库造 staged/modified/untracked 三态,API 返回分组正确。已做:`git.test.ts` 6 例(分组/重命名/越界路径/notGit/HTTP 面)。
+- [x] X3 开发面板只读版:上半区改动文件列表(分组标题 + 状态徽章 M/A/D/?? + `+N -M` 计数),下半区 unified diff 自绘(hunk 头/+行/-行,样式进 `graphite.css`)。刷新:tab 打开时拉、view 帧到达防抖 800ms 重拉、手动刷新按钮。空态分 notGit / clean / loading。完成条件:agent 跑一轮 write/edit 后,不刷新页面能看到新改动与 diff。已做:临时 server + 真 session 手测,跑完一轮 prompt 后新未跟踪文件自动进列表(没点刷新);文件列表按内容高度收,不再顶出空白。
+- [ ] X4 编辑器:`@codemirror/{state,view,commands,language,lang-javascript,lang-json,lang-markdown,lang-python,lang-rust,legacy-modes,search}`(同 picot);`workspace/editor.tsx` + `file-language.ts`(扩展名→lang 纯函数,抄 picot 映射表,单测);开发 tab 顶部切 Diff / 文件两态,文件态是 `/api/files` 过滤输入框(fuzzy 打分从 composer 抽到 `lib/fuzzy.ts` 共用)。写回 `POST /api/file {text, baseMtime}` → mtime 不符 409 + 磁盘现文,web 弹冲突对话框(覆盖 / 丢弃我的改动);dirty 星号 + ⌘S。回合 file chip 改为在开发 tab 打开。完成条件:改一个文件保存,agent 下一轮 read 到新内容;外部改动时冲突对话框出现。
+- [ ] X5 git 写(用户已点头):协议加 `git.stage / git.unstage / git.discard / git.commit`(host 实现 + 写完回新 status)。面板选区 → 操作条。安全栏四条:discard 走 Dialog 二次确认;commit 前重拉 status 展示待提交清单再确认;只 `git add -- <选中 path>` 不用 `-A`;编辑器 dirty 时 discard 先提示保存。完成条件:stage→commit 端到端,`git log -1` 有这条;discard 后工作区干净。
+- [ ] X6 收尾:右栏上限 520 → 760,开发 tab 加「放大」按钮(临时 `min(900, 视口 60%)`,再点还原,存 localStorage);快捷键 ⌘⇧D 切右栏 tab;`bun run test` / `typecheck` / `build:web` 全绿。
+
+明确不做(本轮):文件树(过滤列表够用)、blame / 文件历史、多文件 tab(先单文件 + dirty 守卫)、AI commit message、hunk 级选择性暂存。

@@ -13,7 +13,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 	goal: "var(--success)",
 };
 
-export function DevRail(props: { frames: DevFrame[] }) {
+export function LogRail(props: { frames: DevFrame[] }) {
 	const i18n = useAppI18n();
 	const [filter, setFilter] = createSignal("");
 	const [paused, setPaused] = createSignal(false);
@@ -30,14 +30,14 @@ export function DevRail(props: { frames: DevFrame[] }) {
 	});
 
 	return (
-		<div class="flex h-full flex-col p-2" data-testid="dev-rail">
+		<div class="flex h-full flex-col p-2" data-testid="log-rail">
 			<div class="mb-2 flex gap-2">
-				<button data-testid="dev-pause" onClick={() => setPaused(!paused())} class="border border-border px-2 py-1 text-[10px] text-muted">
+				<button data-testid="log-pause" onClick={() => setPaused(!paused())} class="border border-border px-2 py-1 text-[10px] text-muted">
 					{paused() ? "resume" : "pause"}
 				</button>
 			</div>
 			<input
-				data-testid="dev-filter"
+				data-testid="log-filter"
 				value={filter()}
 				placeholder={i18n.t("panel.filter")}
 				onInput={(event) => setFilter(event.currentTarget.value)}
@@ -47,7 +47,7 @@ export function DevRail(props: { frames: DevFrame[] }) {
 				<For each={[...shown()].slice(-200).reverse()}>
 					{(frame) => (
 						<button
-							data-testid="dev-frame"
+							data-testid="log-frame"
 							onClick={() => setSelected(frame)}
 							class="flex min-w-0 gap-2 px-1 py-0.5 text-left hover:bg-overlay"
 						>
@@ -60,7 +60,7 @@ export function DevRail(props: { frames: DevFrame[] }) {
 				</For>
 			</div>
 			<Dialog open={selected() !== null} onOpenChange={(open) => !open && setSelected(null)}>
-				<DialogContent class="max-w-[720px]" data-testid="dev-frame-dialog">
+				<DialogContent class="max-w-[720px]" data-testid="log-frame-dialog">
 					<DialogHeader>
 						<DialogTitle class="mono text-[11px] uppercase tracking-[0.12em]">
 							{selected() === null ? "" : `${new Date(selected()!.ts).toLocaleTimeString()} · ${selected()!.category} · ${selected()!.action}`}

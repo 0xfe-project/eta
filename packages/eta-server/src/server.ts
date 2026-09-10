@@ -11,6 +11,7 @@ import { join, relative, resolve } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { encodeMessage, decodeClientMessage, type ClientMessage, type ServerMessage } from "./protocol.ts";
 import { Host } from "./host.ts";
+import { gitDiff, gitStatus, notGitStatus, type GitDiffKind } from "./git.ts";
 import { listPersonaSummaries, watchPersonaDirs } from "./personas.ts";
 import { UnknownPersonaError } from "./agent.ts";
 import { TermRegistry } from "./terminal.ts";
@@ -156,6 +157,22 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 					query: url.searchParams.get("q") ?? "",
 					hits: host.search(url.searchParams.get("q") ?? ""),
 				});
+			}
+			if (url.pathname === "/api/git/status") {
+				const session = url.searchParams.get("session");
+				const root = session === null ? undefined : host.cwdOf(session);
+				if (root === undefined) return Response.json(notGitStatus());
+				return Response.json(await gitStatus(root));
+			}
+			if (url.pathname === "/api/git/diff") {
+				const session = url.searchParams.get("session");
+				const root = session === null ? undefined : host.cwdOf(session);
+				const relPath = url.searchParams.get("path");
+				const kindParam = url.searchParams.get("kind");
+				const kind: GitDiffKind = kindParam === "index" || kindParam === "untracked" ? kindParam : "worktree";
+				if (root === undefined || relPath === null) return new Response("not found", { status: 404 });
+				const diff = await gitDiff(root, relPath, kind);
+				return diff === undefined ? new Response("not found", { status: 404 }) : Response.json(diff);
 			}
 			const fileSession = url.searchParams.get("session");
 			const filePath = url.searchParams.get("path");

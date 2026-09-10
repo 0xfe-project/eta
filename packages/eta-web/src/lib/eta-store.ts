@@ -14,7 +14,7 @@
  * reconciliation, which is what they want anyway.
  *
  * Everything else still replaces wholesale — `dev` included, so identity freeze
- * holds and DevRail pause can keep the previous `dev[]` snapshot.
+ * holds and LogRail pause can keep the previous `dev[]` snapshot.
  */
 
 import { onCleanup } from "solid-js";
@@ -122,6 +122,9 @@ export class EtaStore {
 		socket.addEventListener("message", (event) => {
 			const message = JSON.parse(String(event.data)) as ServerMessage;
 			this.state = reduceEtaState(this.state, message);
+			if ("channel" in message && message.channel === "view") {
+				window.dispatchEvent(new CustomEvent("eta:view", { detail: { session: message.session } }));
+			}
 			if ("type" in message && message.type === "personas") window.dispatchEvent(new CustomEvent("eta:personas"));
 			this.emit();
 		});

@@ -941,3 +941,83 @@ html.dark .markdown [data-streamdown="code-block-body"] span {
 	height: 40px;
 	border-bottom: 1px solid var(--border);
 }
+
+/* ---- workspace panel: git status list + read-only diff ---- */
+
+.git-group-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 6px 8px 2px;
+	font-size: 9px;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--fg-faint);
+}
+.git-file-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	padding: 2px 8px;
+	text-align: left;
+	cursor: pointer;
+}
+.git-file-row:hover {
+	background: var(--overlay-hover);
+}
+.git-file-row.active {
+	background: var(--overlay);
+	box-shadow: inset 2px 0 0 var(--primary);
+}
+.git-badge {
+	flex: 0 0 auto;
+	min-width: 18px;
+	border: 1px solid var(--border);
+	padding: 0 3px;
+	font-family: var(--font-mono);
+	font-size: 9px;
+	color: var(--fg-muted);
+}
+.git-badge.add {
+	color: var(--success);
+	border-color: var(--success);
+}
+.git-badge.del {
+	color: var(--danger);
+	border-color: var(--danger);
+}
+.git-badge.conf {
+	color: var(--warning);
+	border-color: var(--warning);
+}
+.git-add {
+	color: var(--success);
+}
+.git-del {
+	color: var(--danger);
+}
+.git-diff {
+	font-family: var(--font-mono);
+	font-size: 11px;
+	line-height: 1.5;
+	white-space: pre;
+}
+.git-diff-line {
+	padding: 0 8px;
+}
+.git-diff-line.add {
+	color: var(--success);
+	background: color-mix(in oklab, var(--success) 12%, transparent);
+}
+.git-diff-line.del {
+	color: var(--danger);
+	background: color-mix(in oklab, var(--danger) 12%, transparent);
+}
+.git-diff-line.hunk {
+	color: var(--chart-blue);
+	background: var(--overlay);
+}
+.git-diff-line.meta {
+	color: var(--fg-faint);
+}

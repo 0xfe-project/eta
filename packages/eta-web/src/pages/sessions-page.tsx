@@ -1,4 +1,4 @@
-import { Show, createEffect, createSignal, onMount, type Accessor, type Setter } from "solid-js";
+import { For, Show, createEffect, createSignal, onMount, type Accessor, type Setter } from "solid-js";
 import { useAppI18n } from "../i18n.ts";
 import { AppShell } from "../app/app-shell.tsx";
 import { useEta } from "../lib/eta-store.ts";
@@ -8,7 +8,8 @@ import { Composer } from "../features/sessions/composer.tsx";
 import { ContextBar } from "../features/sessions/context-bar.tsx";
 import { AskModal } from "../features/sessions/ask-modal.tsx";
 import { ContextPanel } from "../features/sessions/context-panel.tsx";
-import { DevRail } from "../features/sessions/dev-rail.tsx";
+import { LogRail } from "../features/sessions/log-rail.tsx";
+import { WorkspacePanel } from "../features/sessions/workspace-panel.tsx";
 import { CommandPalette } from "../features/sessions/command-palette.tsx";
 import { Welcome } from "../features/sessions/welcome.tsx";
 import { TerminalDrawer } from "../features/sessions/terminal-drawer.tsx";
@@ -147,39 +148,44 @@ function SessionContextBar() {
 function SessionsPanel() {
 	const i18n = useAppI18n();
 	const state = useEta();
-	const [tab, setTab] = createSignal<"context" | "dev">("context");
+	const [tab, setTab] = createSignal<"context" | "workspace" | "log">("context");
 	const selected = () => state.attach ?? state.sessions[0]?.name ?? null;
 	const view = () => {
 		const name = selected();
 		return name === null ? undefined : state.views[name];
 	};
+	const tabs = [
+		{ key: "context", label: "nav.context" },
+		{ key: "workspace", label: "nav.workspace" },
+		{ key: "log", label: "nav.log" },
+	] as const;
 
 	return (
 		<Show when={view()}>
 			{(current) => (
 				<div class="flex h-full flex-col">
 					<div class="topbar gap-1 px-2">
-						<button
-							data-testid="tab-context"
-							onClick={() => setTab("context")}
-							class={`px-3 py-1 text-xs ${tab() === "context" ? "bg-overlay font-medium" : "text-muted"}`}
-						>
-							{i18n.t("nav.context")}
-						</button>
-						<button
-							data-testid="tab-dev"
-							onClick={() => setTab("dev")}
-							class={`px-3 py-1 text-xs ${tab() === "dev" ? "bg-overlay font-medium" : "text-muted"}`}
-						>
-							{i18n.t("nav.dev")}
-						</button>
+						<For each={tabs}>
+							{(item) => (
+								<button
+									data-testid={`tab-${item.key}`}
+									onClick={() => setTab(item.key)}
+									class={`px-3 py-1 text-xs ${tab() === item.key ? "bg-overlay font-medium" : "text-muted"}`}
+								>
+									{i18n.t(item.label)}
+								</button>
+							)}
+						</For>
 					</div>
 					<div class="min-h-0 flex-1">
 						<Show when={tab() === "context"}>
 							<ContextPanel session={selected() ?? ""} view={current()} />
 						</Show>
-						<Show when={tab() === "dev"}>
-							<DevRail frames={selected() === null ? [] : state.dev[selected()!] ?? []} />
+						<Show when={tab() === "workspace"}>
+							<WorkspacePanel session={selected() ?? ""} />
+						</Show>
+						<Show when={tab() === "log"}>
+							<LogRail frames={selected() === null ? [] : state.dev[selected()!] ?? []} />
 						</Show>
 					</div>
 				</div>
