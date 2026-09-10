@@ -138,7 +138,23 @@ export function Composer({
 	};
 
 	const [pendingImages, setPendingImages] = useState<{ name: string; mime: string; dataBase64: string }[]>([]);
-	const [attachOpen, setAttachOpen] = useState(false);
+	const [toolboxOpen, setToolboxOpen] = useState(false);
+	const [toolFiles, setToolFiles] = useState<string[]>([]);
+	const [toolQuery, setToolQuery] = useState("");
+	const [models, setModels] = useState<{ id: string; label: string }[]>([]);
+	const thinkingLevel = (state.views[session ?? ""]?.thinkingLevel ?? "off") as (typeof THINKING_LEVELS)[number];
+	const openToolbox = () => {
+		const next = !toolboxOpen;
+		setToolboxOpen(next);
+		setToolQuery("");
+		if (!next || toolFiles.length > 0) return;
+		if (session !== undefined) void fetch(`/api/files?session=${encodeURIComponent(session)}`).then((r) => r.json() as Promise<string[]>).then(setToolFiles).catch(() => undefined);
+		void fetch(session === undefined ? "/api/models" : `/api/models?session=${encodeURIComponent(session)}`)
+			.then((r) => r.json() as Promise<{ models: { id: string; label: string }[] } | { id: string; label: string }[]>)
+			.then((body) => setModels(Array.isArray(body) ? body : body.models))
+			.catch(() => undefined);
+	};
+	const toolChoices = toolQuery.length === 0 ? toolFiles.slice(0, 12) : toolFiles.map((file) => ({ file, score: fuzzyScore(toolQuery, file) })).filter((entry) => entry.score >= 0).sort((a, b) => b.score - a.score).slice(0, 12).map((entry) => entry.file);
 	const fileInput = useRef<HTMLInputElement | null>(null);
 	const imageInput = useRef<HTMLInputElement | null>(null);
 
@@ -273,6 +289,55 @@ export function Composer({
 		<footer className="input-area" data-testid="composer">
 			<div className="input-outer">
 				{topSlot}
+				{toolboxOpen ? (
+					<div data-testid="composer-toolbox" className="absolute bottom-[calc(100%+6px)] left-0 right-0 z-30 max-h-[60vh] overflow-y-auto border-2 border-border-strong bg-elevated p-2 shadow-[4px_4px_0_0_var(--shadow)]">
+						<div className="mb-2 flex flex-wrap gap-1.5">
+							<button data-testid="attach-upload" className="border border-border px-2 py-1 text-xs uppercase tracking-[0.08em] hover:bg-overlay" onClick={() => fileInput.current?.click()}>{t("composer.uploadFile")}</button>
+							<button data-testid="attach-image" className="border border-border px-2 py-1 text-xs uppercase tracking-[0.08em] hover:bg-overlay" onClick={() => imageInput.current?.click()}>{t("composer.pickImage")}</button>
+							{session !== undefined && !createMode ? (
+								<button data-testid="attach-btw" className="border border-border px-2 py-1 text-xs uppercase tracking-[0.08em] hover:bg-overlay" onClick={() => { setToolboxOpen(false); store.send({ op: "btwOpen", session, kind: "tangent" }); }}>{t("composer.newBtw")}</button>
+							) : null}
+						</div>
+						{!createMode && session !== undefined ? (
+							<>
+								<p className="mono mb-1 text-[10px] uppercase tracking-[0.12em] text-muted">{t("composer.thinking")}</p>
+								<div data-testid="toolbox-thinking" className="mb-2 flex flex-wrap gap-1">
+									{THINKING_LEVELS.map((level) => (
+										<button key={level} data-testid={`toolbox-thinking-${level}`} onClick={() => store.send({ op: "thinkingLevel", session, level })} className={`mono border px-2 py-1 text-[10px] uppercase ${thinkingLevel === level ? "border-2 border-primary bg-primary text-primary-foreground" : "border-border text-muted hover:border-border-strong"}`}>{level}</button>
+									))}
+								</div>
+							</>
+						) : null}
+						{models.length > 0 ? (
+							<>
+								<p className="mono mb-1 text-[10px] uppercase tracking-[0.12em] text-muted">{t("composer.models")}</p>
+								<div data-testid="toolbox-models" className="mb-2 grid gap-0.5">
+									{models.map((model) => (
+										<button key={model.id} data-testid={`toolbox-model-${model.id}`} onClick={() => { if (session !== undefined) store.send({ op: "modelSet", session, modelId: model.id }); setPickedModel(model.id); setToolboxOpen(false); }} className={`mono truncate border px-2 py-1 text-left text-[11px] hover:bg-overlay ${pickedModel === model.id ? "border-2 border-primary" : "border-border"}`}>{model.label}</button>
+									))}
+								</div>
+							</>
+						) : null}
+						{!createMode && session !== undefined ? (
+							<>
+								<p className="mono mb-1 text-[10px] uppercase tracking-[0.12em] text-muted">{t("composer.files")}</p>
+								<input data-testid="toolbox-file-search" value={toolQuery} onChange={(event) => setToolQuery(event.target.value)} placeholder={t("composer.fileSearch")} className="mono mb-1 w-full border border-border bg-transparent px-2 py-1 text-[11px] outline-none focus:border-border-strong" />
+								<div data-testid="toolbox-files" className="mb-2 grid max-h-[30vh] gap-0.5 overflow-y-auto">
+									{toolChoices.length === 0 ? <p className="skill-slash-empty">{t("mention.empty")}</p> : null}
+									{toolChoices.map((file) => (
+										<button key={file} data-testid={`toolbox-file-${file}`} onClick={() => { setText((current) => `${current}${current.endsWith(" ") || current.length === 0 ? "" : " "}@${file} `); setToolboxOpen(false); }} className="mono truncate border border-border px-2 py-1 text-left text-[11px] hover:bg-overlay">@{file}</button>
+									))}
+								</div>
+							</>
+						) : null}
+						<p className="mono mb-1 text-[10px] uppercase tracking-[0.12em] text-muted">{t("composer.commands")}</p>
+						<div data-testid="toolbox-commands" className="grid gap-0.5">
+							{commands.map((command) => (
+								<button key={command.name} data-testid={`toolbox-command-${command.name}`} onClick={() => { command.run(""); setToolboxOpen(false); }} className="border border-border px-2 py-1 text-left text-xs hover:bg-overlay"><span className="mono">/{command.name}</span> <span className="text-muted">{command.description}</span></button>
+							))}
+						</div>
+					</div>
+				) : null}
 				{pendingImages.length > 0 ? (
 					<div data-testid="attach-chips" className="flex flex-wrap gap-1 pb-1">
 						{pendingImages.map((image, index) => (
@@ -355,54 +420,10 @@ export function Composer({
 										data-testid="composer-plus"
 										title={t("composer.attach")}
 										className="border border-border-strong px-2 py-1 text-xs font-bold uppercase hover:bg-foreground hover:text-background"
-										onClick={() => setAttachOpen((open) => !open)}
+										onClick={openToolbox}
 									>
 										+
 									</button>
-									{attachOpen ? (
-										<div data-testid="composer-attach-menu" className="absolute bottom-8 left-0 z-20 min-w-[150px] border-2 border-border-strong bg-elevated shadow-[4px_4px_0_0_var(--shadow)]">
-											<button
-												data-testid="attach-upload"
-												className="block w-full border-b border-border px-2 py-1.5 text-left text-xs hover:bg-overlay"
-												onClick={() => {
-													setAttachOpen(false);
-													fileInput.current?.click();
-												}}
-											>
-												{t("composer.uploadFile")}
-											</button>
-											<button
-												data-testid="attach-image"
-												className="block w-full border-b border-border px-2 py-1.5 text-left text-xs hover:bg-overlay"
-												onClick={() => {
-													setAttachOpen(false);
-													imageInput.current?.click();
-												}}
-											>
-												{t("composer.pickImage")}
-											</button>
-											<button
-												data-testid="attach-command"
-												className="block w-full border-b border-border px-2 py-1.5 text-left text-xs hover:bg-overlay"
-												onClick={() => {
-													setAttachOpen(false);
-													setText("/");
-												}}
-											>
-												{t("composer.runCommand")}
-											</button>
-											<button
-												data-testid="attach-btw"
-												className="block w-full px-2 py-1.5 text-left text-xs hover:bg-overlay"
-												onClick={() => {
-													setAttachOpen(false);
-													store.send({ op: "btwOpen", session, kind: "tangent" });
-												}}
-											>
-												{t("composer.newBtw")}
-											</button>
-										</div>
-									) : null}
 									<input
 										ref={fileInput}
 										type="file"
@@ -427,7 +448,7 @@ export function Composer({
 								</div>
 							) : null}
 							{createMode || session !== undefined ? (
-								<span className={createMode && !create.personaReady ? "opacity-60" : undefined}>
+								<span className={`max-md:hidden ${createMode && !create.personaReady ? "opacity-60" : ""}`}>
 									<ModelPicker {...(session === undefined ? {} : { session })} {...(createMode ? { onPick: setPickedModel } : {})} />
 								</span>
 							) : null}
@@ -441,7 +462,7 @@ export function Composer({
 									className="mono min-w-0 max-w-[180px] flex-1 border border-border bg-transparent px-1.5 py-0.5 text-[10px] text-muted outline-none focus:border-border-strong"
 								/>
 							) : null}
-							<span className="composer-toolbar-hints min-w-0 truncate">{running ? t("composer.runningHint") : t("composer.hint")}</span>
+							<span className="composer-toolbar-hints min-w-0 truncate max-md:hidden">{running ? t("composer.runningHint") : t("composer.hint")}</span>
 						</div>
 						<Button type="submit" variant="invert" data-testid="composer-submit" disabled={hasPendingAsk || (createMode && create !== undefined && !create.personaReady)}>
 							{text.trim().length > 0 || !running ? t("composer.send") : t("composer.stop")}
@@ -466,7 +487,7 @@ function ThinkingChip({ session }: { session: string }) {
 			data-testid="thinking-chip"
 			title={t("composer.thinkingHint")}
 			onClick={() => store.send({ op: "thinkingLevel", session, level: next })}
-			className={`mono shrink-0 border border-border-strong px-2 py-1 text-[10px] uppercase tracking-[0.1em] ${level === "off" ? "text-muted" : "text-foreground"}`}
+			className={`mono shrink-0 border border-border-strong px-2 py-1 text-[10px] uppercase tracking-[0.1em] max-md:hidden ${level === "off" ? "text-muted" : "text-foreground"}`}
 		>
 			{t("composer.thinking")}:{level}
 		</button>
