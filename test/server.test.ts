@@ -196,6 +196,28 @@ describe("ws protocol", () => {
 		});
 	});
 
+	it("stamps a monotonic version on every view frame", async () => {
+		await withServer(async (server) => {
+			const { socket, reader } = await connect(server, true);
+			await reader.next();
+			send(socket, { op: "session.create", name: "ver", personaId: "Thinker" });
+			await reader.until(
+				(m): m is Extract<ServerMessage, { type: "created" }> => "type" in m && m.type === "created",
+			);
+			const versions: number[] = [];
+			for (const personaId of ["INSIGHTER", "Thinker"]) {
+				send(socket, { op: "personaSet", session: "ver", personaId });
+				const frame = await reader.until(
+					(m): m is Extract<ServerMessage, { channel: "view" }> => "channel" in m && m.channel === "view",
+				);
+				versions.push(frame.version);
+			}
+			expect(versions[0]).toBeGreaterThanOrEqual(1);
+			expect(versions[1]).toBeGreaterThan(versions[0]);
+			socket.close();
+		});
+	});
+
 	it("background runs keep going with zero connected clients", async () => {
 		await withServer(async (server) => {
 			const a = await connect(server);
