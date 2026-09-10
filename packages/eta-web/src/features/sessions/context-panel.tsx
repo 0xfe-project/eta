@@ -423,9 +423,6 @@ function TasksSection({ session, tasks }: { session: string; tasks: { id: string
 			<button data-testid="tasks-toggle" onClick={() => setOpen((current) => !current)} className="mono flex w-full items-center gap-2 py-1 text-[9px] tracking-[0.18em] uppercase text-faint hover:text-foreground">
 				<span className={`thinking-block-chevron ${open ? "open" : ""}`}>▸</span>
 				{t("tasks.title")} {done}/{tasks.length}
-				<span className="ml-auto h-0.5 w-16 bg-border">
-					<span className="block h-full bg-primary" style={{ width: `${tasks.length === 0 ? 0 : Math.round((done / tasks.length) * 100)}%` }} />
-				</span>
 			</button>
 			{open ? (
 				<div className="flex flex-col gap-1 border-t border-border p-2">

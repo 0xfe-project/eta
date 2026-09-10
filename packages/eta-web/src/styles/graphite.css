@@ -850,3 +850,59 @@ details[open] > .tool-card-head .thinking-block-chevron {
 .task-row:hover .task-status-chip {
 	border-color: var(--foreground);
 }
+
+/* ---- streamdown code blocks: one flat layer, header row with inline actions ---- */
+.markdown [data-streamdown="code-block"] {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	margin: 10px 0;
+	padding: 0;
+	border: 1px solid var(--border-strong);
+	border-radius: 0;
+	background: var(--code-bg);
+}
+.markdown [data-streamdown="code-block-header"] {
+	display: flex;
+	align-items: center;
+	height: 22px;
+	padding: 0 60px 0 8px;
+	border-bottom: 1px solid var(--border);
+	background: var(--surface);
+	font-size: 10px;
+}
+.markdown [data-streamdown="code-block-header"] .font-mono {
+	font-size: 10px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+.markdown [data-streamdown="code-block-actions"] {
+	position: absolute;
+	top: 0;
+	right: 3px;
+	z-index: 2;
+	height: 22px;
+	margin: 0;
+	padding: 0;
+	gap: 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	backdrop-filter: none;
+}
+.markdown [data-streamdown="code-block-actions"] button {
+	padding: 2px 4px;
+}
+.markdown [data-streamdown="code-block-body"] {
+	border: 0;
+	padding: 0;
+	background: transparent;
+}
+.markdown [data-streamdown="code-block-body"] pre {
+	margin: 0;
+	padding: 8px 10px;
+	border: 0;
+	background: transparent;
+	overflow-x: auto;
+}
