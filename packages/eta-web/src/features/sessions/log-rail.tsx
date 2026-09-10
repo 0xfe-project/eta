@@ -1,6 +1,6 @@
 import { For, createEffect, createMemo, createSignal } from "solid-js";
 import { useAppI18n } from "../../i18n.ts";
-import type { DevFrame } from "../../lib/protocol.ts";
+import type { DevFrame } from "@eta/core";
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog.tsx";
 
 // Graphite rule: hue only where meaning demands it (failure/attention).

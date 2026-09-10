@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { initialEtaState, reduceEtaState } from "../src/lib/eta-store.ts";
-import type { DevFrame, ServerMessage } from "../src/lib/protocol.ts";
+import type { DevFrame, ServerMessage } from "@eta/core";
 
 const view = { marker: 1 } as never;
 
 function viewFrame(session: string, marker: number): ServerMessage {
-	return { channel: "view", session, view: { marker } as never };
+	return { channel: "view", session, version: 1, view: { marker } as never };
 }
 
 function devFrame(session: string, ts: number): DevFrame {
@@ -23,9 +23,15 @@ describe("eta store reducer", () => {
 		let state = reduceEtaState(initialEtaState, {
 			channel: "view",
 			session: "a",
+			version: 1,
 			view: { messages: [1], usage: { output: 1 }, streaming: { content: "hi" } } as never,
 		});
-		state = reduceEtaState(state, { channel: "view", session: "a", patch: { usage: { output: 2 } } as never });
+		state = reduceEtaState(state, {
+			channel: "view",
+			session: "a",
+			version: 2,
+			patch: { usage: { output: 2 } } as never,
+		});
 		const merged = state.views["a"] as unknown as {
 			messages: unknown[];
 			usage: { output: number };
@@ -43,7 +49,12 @@ describe("eta store reducer", () => {
 			sessions: [{ name: "b", badges: [], personas: [] }],
 			attach: "fg",
 		});
-		state = reduceEtaState(state, { channel: "view", session: "b", patch: { usage: { output: 9 } } as never });
+		state = reduceEtaState(state, {
+			channel: "view",
+			session: "b",
+			version: 1,
+			patch: { usage: { output: 9 } } as never,
+		});
 		expect(state.views["b"]).toBeUndefined();
 	});
 
@@ -88,11 +99,16 @@ describe("eta store reducer", () => {
 			sessions: [{ name: "bg", badges: [], personas: [] }],
 			attach: "fg",
 		});
-		state = reduceEtaState(state, { channel: "view", session: "bg", view: { messages: [] } as never });
+		state = reduceEtaState(state, { channel: "view", session: "bg", version: 1, view: { messages: [] } as never });
 		expect(state.unread).toEqual([]);
-		state = reduceEtaState(state, { channel: "view", session: "bg", view: { messages: [1] } as never });
+		state = reduceEtaState(state, { channel: "view", session: "bg", version: 2, view: { messages: [1] } as never });
 		expect(state.unread).toEqual(["bg"]);
-		state = reduceEtaState(state, { channel: "view", session: "bg", view: { messages: [1, 2] } as never });
+		state = reduceEtaState(state, {
+			channel: "view",
+			session: "bg",
+			version: 3,
+			view: { messages: [1, 2] } as never,
+		});
 		expect(state.unread).toEqual(["bg"]);
 	});
 

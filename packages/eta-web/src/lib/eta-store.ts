@@ -29,15 +29,15 @@
  */
 
 import { createStore, produce, reconcile } from "solid-js/store";
-import type { SessionView } from "@eta/core";
 import {
 	HEAVY_VIEW_FIELDS,
 	type ClientMessage,
 	type DevFrame,
 	type ServerMessage,
+	type SessionView,
 	type SessionViewPatch,
 	type SidebarSession,
-} from "./protocol.ts";
+} from "@eta/core";
 
 const DEV_CAP = 512;
 

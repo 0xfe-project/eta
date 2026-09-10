@@ -3,7 +3,7 @@ import { A, useNavigate } from "@solidjs/router";
 import { useAppI18n } from "../../i18n.ts";
 import { etaStore, useEta } from "../../lib/eta-store.ts";
 import { sidebarPrefs, type ProjectSort } from "../../lib/prefs.ts";
-import type { SidebarSession } from "../../lib/protocol.ts";
+import type { SidebarSession } from "@eta/core";
 
 // Graphite rule: saturation reserved for state (goal ok / ask needs attention / running).
 const BADGE_STYLES: Record<string, string> = {
