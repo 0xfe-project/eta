@@ -71,7 +71,10 @@ export async function renderSkillsBlock(env: ExecutionEnv, cwd: string, home = h
 	for (const skill of skills) {
 		if (skill.disableModelInvocation === true) continue;
 		const dir = dirname(skill.filePath);
-		const desc = (skill.description ?? "").replace(/[\r\n]+/g, " ").trim().slice(0, 100);
+		const desc = (skill.description ?? "")
+			.replace(/[\r\n]+/g, " ")
+			.trim()
+			.slice(0, 100);
 		const line = `- ${skill.name} ${desc} : ${dir}`;
 		if (seen.has(line)) continue;
 		seen.add(line);

@@ -62,7 +62,12 @@ export function configModels(cfg: EtaConfig): MutableModels | undefined {
 					apiKey: {
 						name: `${provider.id} key (eta config)`,
 						async resolve() {
-							return { auth: { apiKey: provider.apiKey && provider.apiKey.length > 0 ? provider.apiKey : "eta-no-key" }, source: "eta config" };
+							return {
+								auth: {
+									apiKey: provider.apiKey && provider.apiKey.length > 0 ? provider.apiKey : "eta-no-key",
+								},
+								source: "eta config",
+							};
 						},
 					},
 				},
@@ -76,7 +81,9 @@ export function configModels(cfg: EtaConfig): MutableModels | undefined {
 
 /** "provider:modelId" from defaultModel, else the first configured model. */
 export function configDefaultModel(cfg: EtaConfig): { provider: string; modelId: string } | undefined {
-	const first = (cfg.providers ?? []).flatMap((provider) => provider.models.map((model) => ({ provider: provider.id, modelId: model.id })))[0];
+	const first = (cfg.providers ?? []).flatMap((provider) =>
+		provider.models.map((model) => ({ provider: provider.id, modelId: model.id })),
+	)[0];
 	if (cfg.defaultModel === undefined) return first;
 	const split = cfg.defaultModel.indexOf(":");
 	if (split <= 0) return first;

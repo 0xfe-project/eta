@@ -12,7 +12,13 @@ import { complete } from "@earendil-works/pi-ai/compat";
 import { NodeEtaFs } from "./node-fs.ts";
 import { DEFAULT_SYSTEM_PROMPT } from "@eta/core/prompts";
 import { NodeExecutionEnv } from "@eta/core/node";
-import { createModels, fauxAssistantMessage, fauxProvider, type Context, type FauxProviderHandle } from "@earendil-works/pi-ai";
+import {
+	createModels,
+	fauxAssistantMessage,
+	fauxProvider,
+	type Context,
+	type FauxProviderHandle,
+} from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { MemoryStorage, StorageBackedSession } from "@eta/core";
 import { configDefaultModel, configModels, loadEtaConfig } from "./config.ts";
@@ -45,13 +51,18 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 	if (persona === undefined) throw new UnknownPersonaError(`unknown persona: ${cfg.personaId}`);
 	const etaConfig = loadEtaConfig(cfg.configPath) ?? {};
 	let models = configModels(etaConfig);
-	let model: ReturnType<typeof builtinModels>["getModel"] extends (p: string, id: string) => infer R ? R | undefined : never;
+	let model: ReturnType<typeof builtinModels>["getModel"] extends (p: string, id: string) => infer R
+		? R | undefined
+		: never;
 	if (models !== undefined) {
 		const wanted = cfg.modelId ?? "";
 		const split = wanted.indexOf(":");
 		const fallback = configDefaultModel(etaConfig);
 		if (split > 0) model = models.getModel(wanted.slice(0, split), wanted.slice(split + 1));
-		else if (fallback !== undefined) model = models.getModel(fallback.provider, cfg.modelId ?? fallback.modelId) ?? models.getModel(fallback.provider, fallback.modelId);
+		else if (fallback !== undefined)
+			model =
+				models.getModel(fallback.provider, cfg.modelId ?? fallback.modelId) ??
+				models.getModel(fallback.provider, fallback.modelId);
 		if (model === undefined) {
 			for (const provider of etaConfig.providers ?? []) {
 				model = models.getModel(provider.id, cfg.modelId ?? provider.models[0]?.id ?? "");
@@ -62,7 +73,8 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 	const anthropic = env.ANTHROPIC_API_KEY === undefined || env.ANTHROPIC_API_KEY === "" ? undefined : builtinModels();
 	if (model === undefined && models === undefined && anthropic !== undefined) {
 		models = anthropic;
-		model = anthropic.getModel("anthropic", cfg.modelId ?? "claude-sonnet-4-5") ?? anthropic.getModels("anthropic")[0];
+		model =
+			anthropic.getModel("anthropic", cfg.modelId ?? "claude-sonnet-4-5") ?? anthropic.getModels("anthropic")[0];
 	}
 	let faux: FauxProviderHandle | undefined;
 	if (model === undefined || models === undefined) {
@@ -70,10 +82,14 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 		model = faux.getModel();
 		faux.setResponses([echoResponder(cfg.personaId)]);
 	}
-	const storage = cfg.persistDir === undefined
-		? new MemoryStorage()
-		: await FileStorage.load({ path: join(cfg.persistDir, "journal.jsonl") }, BACKGROUND_CONTEXT);
-	const session = new StorageBackedSession({ id: cfg.name, createdAt: Date.now(), storageVersion: 1, cwd: cfg.cwd }, storage);
+	const storage =
+		cfg.persistDir === undefined
+			? new MemoryStorage()
+			: await FileStorage.load({ path: join(cfg.persistDir, "journal.jsonl") }, BACKGROUND_CONTEXT);
+	const session = new StorageBackedSession(
+		{ id: cfg.name, createdAt: Date.now(), storageVersion: 1, cwd: cfg.cwd },
+		storage,
+	);
 	const memoryCache = new MemoryCache(new NodeEtaFs(), homedir());
 	const judgeApiKey = providerApiKey(etaConfig, model.provider);
 	const execEnv = new NodeExecutionEnv({ cwd: cfg.cwd });
@@ -103,7 +119,8 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 								const verdict = await complete(
 									model,
 									{
-										systemPrompt: "You are a strict goal-completion judge. Reply with exactly ACHIEVED if the objective is fully satisfied by the shown work, otherwise CONTINUE.",
+										systemPrompt:
+											"You are a strict goal-completion judge. Reply with exactly ACHIEVED if the objective is fully satisfied by the shown work, otherwise CONTINUE.",
 										messages: [
 											{
 												role: "user",
@@ -137,7 +154,10 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 	let skillsTimer: ReturnType<typeof setTimeout> | undefined;
 	watchSkillDirs(discoverSkillDirs(cfg.cwd), () => {
 		clearTimeout(skillsTimer);
-		skillsTimer = setTimeout(() => void renderSkillsBlock(execEnv, cfg.cwd).then((block) => agent.applySkills(block)), 300);
+		skillsTimer = setTimeout(
+			() => void renderSkillsBlock(execEnv, cfg.cwd).then((block) => agent.applySkills(block)),
+			300,
+		);
 	});
 	return { agent, faux, memory: async () => memoryCache.load(cfg.cwd) };
 }
@@ -162,7 +182,11 @@ function lastUserText(messages: readonly { role: string; content: unknown }[]): 
 		if (typeof message.content === "string") return message.content;
 		if (Array.isArray(message.content)) {
 			return message.content
-				.map((part) => (typeof part === "object" && part !== null && "text" in part ? String((part as { text?: unknown }).text ?? "") : ""))
+				.map((part) =>
+					typeof part === "object" && part !== null && "text" in part
+						? String((part as { text?: unknown }).text ?? "")
+						: "",
+				)
 				.join(" ");
 		}
 	}

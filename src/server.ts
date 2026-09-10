@@ -44,7 +44,10 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 export async function startServer(options: EtaServerOptions = {}): Promise<EtaServer> {
-	const host = new Host({ ...(options.configPath === undefined ? {} : { configPath: options.configPath }), ...(options.dataDir === undefined ? {} : { dataDir: options.dataDir }) });
+	const host = new Host({
+		...(options.configPath === undefined ? {} : { configPath: options.configPath }),
+		...(options.dataDir === undefined ? {} : { dataDir: options.dataDir }),
+	});
 	await host.restoreSessions();
 	const cwd = options.cwd ?? process.cwd();
 	const webDist = options.webDist ?? resolve(import.meta.dir, "../../eta-web/dist");
@@ -149,18 +152,25 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 				return Response.json({ path });
 			}
 			if (url.pathname === "/api/search") {
-				return Response.json({ query: url.searchParams.get("q") ?? "", hits: host.search(url.searchParams.get("q") ?? "") });
+				return Response.json({
+					query: url.searchParams.get("q") ?? "",
+					hits: host.search(url.searchParams.get("q") ?? ""),
+				});
 			}
 			const fileSession = url.searchParams.get("session");
 			const filePath = url.searchParams.get("path");
 			if (url.pathname === "/api/file" && fileSession !== null && filePath !== null) {
 				const text = host.fileText(fileSession, filePath);
-				return text === undefined ? new Response("not found", { status: 404 }) : Response.json({ path: filePath, text });
+				return text === undefined
+					? new Response("not found", { status: 404 })
+					: Response.json({ path: filePath, text });
 			}
 			const distFile = resolve(webDist, `.${url.pathname === "/" ? "/index.html" : url.pathname}`);
 			if (distFile.startsWith(`${webDist}/`) && existsSync(distFile) && (await Bun.file(distFile).exists())) {
 				const ext = distFile.slice(distFile.lastIndexOf("."));
-				return new Response(Bun.file(distFile), { headers: { "content-type": CONTENT_TYPES[ext] ?? "application/octet-stream" } });
+				return new Response(Bun.file(distFile), {
+					headers: { "content-type": CONTENT_TYPES[ext] ?? "application/octet-stream" },
+				});
 			}
 			const index = `${webDist}/index.html`;
 			if (existsSync(index)) {
@@ -204,15 +214,16 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 				}
 				// Ops from one connection apply strictly in arrival order.
 				const run = async () => {
-				try {
-					await applyOp(host, message);
-					if (message.op === "session.create") send(socket, { type: "created", name: message.name });
-					if (message.op === "session.delete") send(socket, { type: "deleted", name: message.name });
-					send(socket, { type: "sessions", sessions: host.sidebar() });
-				} catch (error) {
-					const text = error instanceof UnknownPersonaError || error instanceof Error ? error.message : String(error);
-					send(socket, { type: "error", message: text });
-				}
+					try {
+						await applyOp(host, message);
+						if (message.op === "session.create") send(socket, { type: "created", name: message.name });
+						if (message.op === "session.delete") send(socket, { type: "deleted", name: message.name });
+						send(socket, { type: "sessions", sessions: host.sidebar() });
+					} catch (error) {
+						const text =
+							error instanceof UnknownPersonaError || error instanceof Error ? error.message : String(error);
+						send(socket, { type: "error", message: text });
+					}
 				};
 				const previous = opTails.get(socket) ?? Promise.resolve();
 				const chain = previous.then(run, run);
@@ -259,7 +270,10 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 			host.taskCreate(message.session, message.content, message.priority);
 			return;
 		case "taskUpdate":
-			host.taskUpdate(message.session, message.id, { ...(message.content === undefined ? {} : { content: message.content }), ...(message.priority === undefined ? {} : { priority: message.priority }) });
+			host.taskUpdate(message.session, message.id, {
+				...(message.content === undefined ? {} : { content: message.content }),
+				...(message.priority === undefined ? {} : { priority: message.priority }),
+			});
 			return;
 		case "taskRemove":
 			host.taskRemove(message.session, message.id);
@@ -328,8 +342,14 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 			return;
 		}
 		case "session.create":
-			await host.createSession(message.name, message.personaId, expandHome(message.cwd ?? process.cwd()), message.modelId);
-			if (message.prompt !== undefined && message.prompt.length > 0) host.queue(message.name, message.prompt, "queue");
+			await host.createSession(
+				message.name,
+				message.personaId,
+				expandHome(message.cwd ?? process.cwd()),
+				message.modelId,
+			);
+			if (message.prompt !== undefined && message.prompt.length > 0)
+				host.queue(message.name, message.prompt, "queue");
 			return;
 		case "session.delete":
 			await host.deleteSession(message.name);
@@ -368,5 +388,8 @@ export async function listWorkspaceFiles(root: string): Promise<string[]> {
 		}
 	};
 	await walk(root, 0);
-	return found.sort((a, b) => b.mtime - a.mtime).slice(0, 50).map((entry) => entry.path);
+	return found
+		.sort((a, b) => b.mtime - a.mtime)
+		.slice(0, 50)
+		.map((entry) => entry.path);
 }

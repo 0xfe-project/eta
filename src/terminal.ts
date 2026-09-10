@@ -38,7 +38,14 @@ export class TermRegistry {
 			const shell = process.env.SHELL ?? "/bin/zsh";
 			const handle: ShellHandle = { proc: undefined as unknown as BunShell, alive: true };
 			socket.data.shell = handle;
-			const requested = frame.cwd === undefined ? undefined : frame.cwd === "~" ? homedir() : frame.cwd.startsWith("~/") ? join(homedir(), frame.cwd.slice(2)) : frame.cwd;
+			const requested =
+				frame.cwd === undefined
+					? undefined
+					: frame.cwd === "~"
+						? homedir()
+						: frame.cwd.startsWith("~/")
+							? join(homedir(), frame.cwd.slice(2))
+							: frame.cwd;
 			const proc = Bun.spawn([shell, "-i"], {
 				cwd: requested !== undefined && directoryExists(requested) ? requested : homedir(),
 				env: { ...process.env, TERM: "xterm-256color" },

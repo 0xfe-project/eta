@@ -34,7 +34,13 @@ export interface SidebarSession {
 /** The full GUI write path; identical semantics to the v1 in-process GuiOps. */
 export type GuiOp =
 	| { op: "focus"; session: string }
-	| { op: "prompt"; session: string; text: string; mode?: "queue" | "steer"; images?: { mime: string; dataBase64: string }[] }
+	| {
+			op: "prompt";
+			session: string;
+			text: string;
+			mode?: "queue" | "steer";
+			images?: { mime: string; dataBase64: string }[];
+	  }
 	| { op: "goal"; session: string; action: "set" | "pause" | "resume" | "clear"; objective?: string }
 	| { op: "taskCreate"; session: string; content: string; priority?: "high" | "medium" | "low" }
 	| { op: "taskUpdate"; session: string; id: string; content?: string; priority?: "high" | "medium" | "low" }
@@ -65,8 +71,6 @@ export type ControlOp =
 	| { op: "session.pin"; session: string; pinned: boolean }
 	| { op: "session.archive"; session: string; archived: boolean }
 	| { op: "session.rename"; session: string; title: string };
-
-
 
 export type ClientMessage = GuiOp | ControlOp;
 
@@ -103,10 +107,14 @@ export class DevRing {
 	}
 
 	tail(filter?: string): DevFrame[] {
-		const ordered = this.filled ? [...this.frames.slice(this.next), ...this.frames.slice(0, this.next)] : this.frames.slice();
+		const ordered = this.filled
+			? [...this.frames.slice(this.next), ...this.frames.slice(0, this.next)]
+			: this.frames.slice();
 		const needle = filter?.trim().toLowerCase();
 		if (needle === undefined || needle === "") return ordered;
-		return ordered.filter((f) => f.category.toLowerCase().includes(needle) || f.action.toLowerCase().includes(needle));
+		return ordered.filter(
+			(f) => f.category.toLowerCase().includes(needle) || f.action.toLowerCase().includes(needle),
+		);
 	}
 }
 

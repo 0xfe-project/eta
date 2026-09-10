@@ -5,4 +5,6 @@ const server = await startServer({
 	hostname: process.env.ETA_HOST ?? "127.0.0.1",
 });
 
-console.log(`eta-server on http://${process.env.ETA_HOST ?? "127.0.0.1"}:${server.port} (model: ${process.env.ANTHROPIC_API_KEY ? "anthropic" : "faux echo"})`);
+console.log(
+	`eta-server on http://${process.env.ETA_HOST ?? "127.0.0.1"}:${server.port} (model: ${process.env.ANTHROPIC_API_KEY ? "anthropic" : "faux echo"})`,
+);
