@@ -26,8 +26,8 @@ export const HEAVY_VIEW_FIELDS = ["messages", "systems", "thinking"] as const;
 export type SessionViewPatch = Omit<SessionView, (typeof HEAVY_VIEW_FIELDS)[number]>;
 
 export type ChannelFrame =
-	| { channel: "view"; session: string; view: SessionView }
-	| { channel: "view"; session: string; patch: SessionViewPatch }
+	| { channel: "view"; session: string; version: number; view: SessionView }
+	| { channel: "view"; session: string; version: number; patch: SessionViewPatch }
 	| { channel: "agent"; session: string; event: HarnessEvent }
 	| { channel: "dev"; frame: DevFrame };
 

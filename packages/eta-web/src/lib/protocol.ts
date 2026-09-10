@@ -110,8 +110,8 @@ export type SessionViewPatch = Omit<SessionView, "messages" | "systems" | "think
 export const HEAVY_VIEW_FIELDS = ["messages", "systems", "thinking"] as const;
 
 export type ServerMessage =
-	| { channel: "view"; session: string; view: SessionView }
-	| { channel: "view"; session: string; patch: SessionViewPatch }
+	| { channel: "view"; session: string; version?: number; view: SessionView }
+	| { channel: "view"; session: string; version?: number; patch: SessionViewPatch }
 	| { channel: "agent"; session: string; event: HarnessEvent }
 	| { channel: "dev"; frame: DevFrame }
 	| { type: "hello"; sessions: SidebarSession[]; attach: string | null }

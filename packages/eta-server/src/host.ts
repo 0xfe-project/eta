@@ -364,9 +364,13 @@ export class Host {
 				const next = viewFingerprint(view);
 				const unchanged = this.patchCapable && this.viewFingerprints.get(name) === next;
 				this.viewFingerprints.set(name, next);
+				// The version is the frame's identity, not the transcript's: it moves on
+				// every published content change and is what a client tracks to notice it
+				// fell behind and must resync.
+				const version = this.viewVersion(name);
 				pending = unchanged
-					? { channel: "view", session: name, patch: viewPatch(view) }
-					: { channel: "view", session: name, view };
+					? { channel: "view", session: name, version, patch: viewPatch(view) }
+					: { channel: "view", session: name, version, view };
 				return encodeMessage(pending);
 			},
 			deliver: (payload) => {
@@ -382,6 +386,19 @@ export class Host {
 	 * frames after it may be patches onto exactly that.
 	 */
 	private readonly viewFingerprints = new Map<string, string>();
+
+	/**
+	 * Monotonic content generation of each session's view, bumped on every
+	 * published change. This is the number a client holds onto: receiving a frame
+	 * whose version is not the one after its own means it missed a frame and has
+	 * to resync, which a transcript fingerprint can never tell it.
+	 */
+	private readonly viewVersions = new Map<string, number>();
+
+	/** The version of the newest published view of a session; 0 before any. */
+	viewVersion(name: string): number {
+		return this.viewVersions.get(name) ?? 0;
+	}
 
 	/**
 	 * True while every connected tab can fold a patch frame; set by the
@@ -414,6 +431,7 @@ export class Host {
 	 * run — and a frame the user is waiting for is not traffic, so it goes out now.
 	 */
 	private publishView(name: string): void {
+		this.viewVersions.set(name, this.viewVersion(name) + 1);
 		const entry = this.hosted.get(name);
 		if (entry === undefined) return;
 		if (entry.running) entry.pacer.markDirty();

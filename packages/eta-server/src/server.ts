@@ -235,7 +235,7 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 				for (const name of [...host.names()]) {
 					const view = host.viewOf(name);
 					if (view !== undefined) {
-						send(socket, { channel: "view", session: name, view });
+						send(socket, { channel: "view", session: name, version: host.viewVersion(name), view });
 						// This socket now holds that exact transcript, so the frames that follow
 						// it are allowed to leave the transcript out.
 						host.rememberView(name, view);
@@ -270,7 +270,12 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 					const view = host.viewOf(message.session);
 					if (view !== undefined) {
 						host.rememberView(message.session, view);
-						send(socket, { channel: "view", session: message.session, view });
+						send(socket, {
+							channel: "view",
+							session: message.session,
+							version: host.viewVersion(message.session),
+							view,
+						});
 					}
 					return;
 				}
