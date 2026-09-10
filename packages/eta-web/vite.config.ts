@@ -16,6 +16,7 @@ export default defineConfig({
 		proxy: {
 			"/api": { target: serverUrl, changeOrigin: true },
 			"/ws": { target: serverUrl.replace(/^http/, "ws"), ws: true },
+			"/term": { target: serverUrl.replace(/^http/, "ws"), ws: true },
 		},
 	},
 	test: { environment: "jsdom", setupFiles: ["test/setup.ts"], include: ["test/**/*.test.{ts,tsx}"] },
