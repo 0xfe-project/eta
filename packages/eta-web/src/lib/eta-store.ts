@@ -2,13 +2,23 @@
  * The single connection: one WebSocket, one store. Reconnects with backoff;
  * the server's hello + per-session view frames are the whole resync path, so
  * view state is fully replaced on (re)connect. UI reads via a Solid store
- * that replaces each snapshot (mechanical stand-in for useSyncExternalStore).
- * Do not `reconcile`: it mutates arrays in place and breaks identity freeze
- * (DevRail pause holds the previous `dev[]` snapshot).
+ * (mechanical stand-in for useSyncExternalStore).
+ *
+ * Only `views` is reconciled, keyed by `entryId`. A view frame arrives once per
+ * streamed token as a fresh JSON.parse snapshot, and `<For>` keys rows on item
+ * *reference* — replacing the snapshot wholesale hands it a new reference for
+ * every row every frame, so the transcript is torn down and rebuilt per token.
+ * Reconciling keeps each message object alive across frames and only writes the
+ * fields that moved. Arrays inside a view whose items carry no `entryId`
+ * (thinking, loops, tasks, prompt sections) fall back to index-wise
+ * reconciliation, which is what they want anyway.
+ *
+ * Everything else still replaces wholesale — `dev` included, so identity freeze
+ * holds and DevRail pause can keep the previous `dev[]` snapshot.
  */
 
 import { onCleanup } from "solid-js";
-import { createStore } from "solid-js/store";
+import { createStore, produce, reconcile } from "solid-js/store";
 import type { SessionView } from "@eta/core";
 import type { ClientMessage, DevFrame, ServerMessage, SidebarSession } from "./protocol.ts";
 
@@ -167,9 +177,22 @@ export function etaStore(): EtaStore {
 
 export function useEta(): EtaState {
 	const store = etaStore();
-	const [state, setState] = createStore(store.snapshot());
+	const [state, setState] = createStore<EtaState>(store.snapshot());
+	/** Last snapshot folded in, kept raw so unchanged sessions can be skipped. */
+	let applied = store.snapshot();
 	const unsubscribe = store.subscribe(() => {
-		setState(store.snapshot());
+		const next = store.snapshot();
+		if (next.views !== applied.views) {
+			for (const name of Object.keys(applied.views)) {
+				if (next.views[name] === undefined) setState(produce((draft) => { delete draft.views[name]; }));
+			}
+			for (const [name, view] of Object.entries(next.views)) {
+				if (applied.views[name] !== view) setState("views", name, reconcile(view, { key: "entryId" }));
+			}
+		}
+		const { views: _views, ...rest } = next;
+		setState(rest);
+		applied = next;
 	});
 	onCleanup(unsubscribe);
 	return state;

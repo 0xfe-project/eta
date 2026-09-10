@@ -14,6 +14,7 @@ import { loopFollowUp } from "../prompts/index.ts";
 import { loopState, loopStateInventoryPrefix, taskState, type Value } from "./session/values.ts";
 import type { PendingEntry, StoredTask, TaskStatus } from "./session/types.ts";
 import { applyGoalEntries } from "./goal.ts";
+import { OutputRate } from "./output-rate.ts";
 import type { AgentHarnessTool, ExecutionEnv } from "./types.ts";
 import type { ThinkingLevel } from "../types.ts";
 import type { Session } from "./session/types.ts";
@@ -162,9 +163,8 @@ export class EtaAgent {
 		await this.promptRefresh?.();
 	}
 
-	/** Output tokens/sec over a sliding 2s window of observed output (usage events or streaming text). */
-	private outSamples: { out: number; at: number }[] = [];
-	private tokensPerSecValue = 0;
+	/** Output tokens/sec over a sliding window; see OutputRate for the one scale both feeds share. */
+	private readonly rate = new OutputRate();
 
 	/** Last known lane thinking level; mirrored from config_update so view assembly stays sync. */
 	private thinkingLevelValue: ThinkingLevel = "off";
@@ -178,30 +178,19 @@ export class EtaAgent {
 	}
 
 	get tokensPerSec(): number {
-		return this.tokensPerSecValue;
+		return this.rate.value;
 	}
 
-	trackUsage(totalsOut: number): void {
-		this.observeOut(totalsOut);
+	/** A usage event: the output of the message that just committed, not the session total. */
+	commitUsage(messageOut: number): void {
+		this.rate.commit(messageOut);
 	}
 
-	/** Feed a monotonically growing output-token estimate; the sliding window absorbs jumps. */
-	observeOut(totalsOut: number): void {
-		const now = Date.now();
-		const samples = this.outSamples;
-		if (samples.length === 0 || totalsOut < samples[samples.length - 1]!.out) {
-			samples.length = 0;
-			samples.push({ out: totalsOut, at: now });
-			return;
-		}
-		if (totalsOut === samples[samples.length - 1]!.out) return;
-		samples.push({ out: totalsOut, at: now });
-		while (samples.length > 2 && now - samples[0]!.at > 2_000) samples.shift();
-		const first = samples[0]!;
-		const last = samples[samples.length - 1]!;
-		const seconds = (last.at - first.at) / 1_000;
-		if (seconds >= 0.5) this.tokensPerSecValue = (last.out - first.out) / seconds;
+	/** One frame of the in-flight assistant message, measured against the same counter. */
+	observeInFlight(inFlightOut: number | undefined): void {
+		if (inFlightOut !== undefined) this.rate.inFlight(inFlightOut);
 	}
+
 	/** Size of the last <memory> block for the water level panel; undefined when no source. */
 	readonly memoryInfo: (() => Promise<{ chars: number }>) | undefined;
 	private readonly stopHeartbeat: (() => void) | undefined;
@@ -376,19 +365,14 @@ export class EtaAgent {
 		laneRef = lane;
 		loops.attach();
 
-		harness.events.on("usage", (event) =>
-			agentRef?.trackUsage((event as { totals?: { output?: number } }).totals?.output ?? 0),
-		);
+		harness.events.on("usage", (event) => agentRef?.commitUsage(event.row.usage.output));
 		harness.events.on("config_update", (event) => {
 			const update = event as { property?: string; value?: unknown };
 			if (update.property === "thinkingLevel" && typeof update.value === "string")
 				agentRef?.setThinkingLevelValue(update.value as ThinkingLevel);
 		});
 		harness.events.on("run_start", () => {
-			if (agentRef !== undefined) {
-				agentRef.outSamples.length = 0;
-				agentRef.tokensPerSecValue = 0;
-			}
+			agentRef?.rate.reset();
 		});
 		harness.hooks.on(
 			"before_run_end",

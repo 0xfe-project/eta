@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { queryId } from "./dom.ts";
+import { byId, queryId } from "./dom.ts";
 import { FakeSocket } from "./fake-socket.ts";
 import { click, flush, render } from "./render.tsx";
 import { Route } from "@solidjs/router";
@@ -8,7 +8,7 @@ import { MemoryRouter } from "./memory-router.tsx";
 import { SessionsPage } from "../src/pages/sessions-page.tsx";
 import { ThemeProvider } from "../src/app/theme.tsx";
 
-function view(session: string): unknown {
+function view(session: string, patch: Record<string, unknown> = {}): unknown {
 	return {
 		stateKeys: [],
 		messages: [{ entryId: "e1", seq: 1, at: 1, message: { role: "user", content: "hello", timestamp: 1 } }],
@@ -30,8 +30,23 @@ function view(session: string): unknown {
 		tokensPerSec: 0,
 		running: false,
 		kind: session,
+		...patch,
 	};
 }
+
+const userEntry = { entryId: "e1", seq: 1, at: 1, message: { role: "user", content: "hello", timestamp: 1 } };
+const toolCallEntry = {
+	entryId: "e2",
+	seq: 2,
+	at: 2,
+	message: { role: "assistant", content: [{ type: "toolCall", id: "c1", name: "read", arguments: { path: "src/a.ts" } }], timestamp: 2 },
+};
+const toolResultEntry = {
+	entryId: "e3",
+	seq: 3,
+	at: 3,
+	message: { role: "toolResult", toolCallId: "c1", toolName: "read", content: [{ type: "text", text: "FILE BODY" }], timestamp: 3 },
+};
 
 describe("sessions page smoke", () => {
 	beforeEach(() => {
@@ -90,5 +105,68 @@ describe("sessions page smoke", () => {
 		click("dev-pause");
 		expect(document.querySelectorAll('[data-testid="dev-frame"]')).toHaveLength(4);
 		expect(document.body.textContent).toContain("paused-out");
+	});
+
+	it("reuses transcript rows across view frames instead of rebuilding them", () => {
+		render(
+			<ThemeProvider>
+				<MemoryRouter>
+					<Route path="/" component={SessionsPage} />
+				</MemoryRouter>
+			</ThemeProvider>,
+		);
+		const socket = FakeSocket.instances[0]!;
+		flush(() => socket.fire("open", {}));
+		flush(() => socket.fire("message", { data: JSON.stringify({ type: "hello", sessions: [{ name: "s1", badges: [], personas: [] }], attach: "s1" }) }));
+		const frame = (patch: Record<string, unknown>) =>
+			flush(() => socket.fire("message", { data: JSON.stringify({ channel: "view", session: "s1", view: view("s1", patch) }) }));
+		/** The `<For>` row element itself — the thing that must survive a frame. */
+		const row = (entryId: string) => document.getElementById(`eta-msg-${entryId}`) as HTMLElement;
+
+		frame({ messages: [userEntry, toolCallEntry] });
+		const userRow = row("e1");
+		const badge = byId("tool-badge-c1");
+		expect(badge.className).toContain("running");
+		expect(queryId("streaming-row")).toBeNull();
+
+		// jsdom lays nothing out, so watch the writes: a frame that grows the
+		// transcript must still drive the follow-the-tail effect.
+		let scrolls = 0;
+		let scrollTop = 0;
+		const scroller = byId("timeline");
+		Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 1000 });
+		Object.defineProperty(scroller, "scrollTop", {
+			configurable: true,
+			get: () => scrollTop,
+			set: (next: number) => {
+				scrollTop = next;
+				scrolls += 1;
+			},
+		});
+
+		frame({ messages: [userEntry, toolCallEntry], streaming: { role: "assistant", content: "hel", timestamp: 2 } });
+		expect(scrolls).toBe(1);
+		const streamRow = byId("streaming-row");
+		expect(row("e1")).toBe(userRow);
+		const assistantRow = row("e2");
+		expect(assistantRow).not.toBeNull();
+		expect(byId("tool-badge-c1")).toBe(badge);
+
+		frame({ messages: [userEntry, toolCallEntry], streaming: { role: "assistant", content: "hello there", timestamp: 2 } });
+		expect(scrolls).toBe(2);
+		expect(row("e1")).toBe(userRow);
+		expect(row("e2")).toBe(assistantRow);
+		expect(byId("streaming-row")).toBe(streamRow);
+		expect(document.body.textContent).toContain("hello there");
+
+		// The result arrives as a new entry. The already-mounted tool card has to
+		// notice it on its own — re-mounting the row is not available as a fix.
+		frame({ messages: [userEntry, toolCallEntry, toolResultEntry] });
+		expect(scrolls).toBe(3);
+		expect(row("e1")).toBe(userRow);
+		expect(row("e2")).toBe(assistantRow);
+		expect(byId("tool-badge-c1")).toBe(badge);
+		expect(byId("tool-badge-c1").className).toContain("done");
+		expect(document.body.textContent).toContain("FILE BODY");
 	});
 });

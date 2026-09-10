@@ -1,4 +1,4 @@
-import { For, Index, Show, createEffect, createMemo, createSignal } from "solid-js";
+import { For, Index, Show, Match, Switch, createEffect, createMemo, createSignal } from "solid-js";
 import type { SessionView } from "@eta/core";
 import { useAppI18n } from "../../i18n.ts";
 import { MessageMarkdown } from "./message-markdown.tsx";
@@ -7,15 +7,41 @@ import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "..
 type ToolResultLike = { toolCallId: string; content: unknown; isError?: boolean };
 type ContentBlock = { type?: string; text?: unknown; thinking?: unknown; name?: unknown; id?: unknown; arguments?: unknown; args?: unknown };
 
+const EMPTY_RESULTS = new Map<string, ToolResultLike>();
+
+/** Cheap "did the transcript change shape" reading, for the follow-scroll effect. */
+function contentChars(message: { content?: unknown } | undefined): number {
+	const content = message?.content;
+	if (typeof content === "string") return content.length;
+	if (!Array.isArray(content)) return 0;
+	let total = 0;
+	for (const block of content as ContentBlock[]) {
+		total += String(block.text ?? "").length + String(block.thinking ?? "").length;
+	}
+	return total;
+}
+
 export function Timeline(props: { view: SessionView; session: string; running?: boolean }) {
 	const i18n = useAppI18n();
 	let scroller: HTMLDivElement | undefined;
 	const [pinned, setPinned] = createSignal(true);
 
+	// Follow the tail while pinned. Reconciled views keep the snapshot's object
+	// identity across frames, so nothing fires when a token only rewrites text:
+	// the trigger has to be the tail content itself, read in here.
+	const tail = createMemo(() => {
+		const messages = props.view.messages;
+		return (
+			messages.length +
+			props.view.systems.length +
+			contentChars(messages[messages.length - 1]?.message as { content?: unknown } | undefined) +
+			contentChars(props.view.streaming as { content?: unknown } | undefined)
+		);
+	});
+
 	createEffect(() => {
-		const _view = props.view;
 		if (!pinned()) return;
-		void _view;
+		tail();
 		const node = scroller;
 		if (node !== undefined) node.scrollTop = node.scrollHeight;
 	});
@@ -83,11 +109,14 @@ export function Timeline(props: { view: SessionView; session: string; running?: 
 						)}
 					</For>
 					<Show when={props.view.streaming}>
-						{(streaming) => (
-							<div data-testid="streaming-row">
-								<MessageRow role={streaming().role} message={streaming()} session={props.session} at={Date.now()} results={results()} streaming />
-							</div>
-						)}
+						{(streaming) => {
+							const startedAt = Date.now();
+							return (
+								<div data-testid="streaming-row">
+									<MessageRow role={streaming().role} message={streaming()} session={props.session} at={startedAt} results={results()} streaming />
+								</div>
+							);
+						}}
 					</Show>
 				</div>
 			</div>
@@ -133,11 +162,11 @@ function MessageRow(props: { role: string; message: unknown; session: string; st
 				session={props.session}
 				streaming={props.streaming === true}
 				at={props.at ?? 0}
-				results={props.results ?? new Map()}
+				results={props.results ?? EMPTY_RESULTS}
 			/>
 		);
 	}
-	if (props.role === "toolResult") return <OrphanToolResult message={props.message} results={props.results ?? new Map()} />;
+	if (props.role === "toolResult") return <OrphanToolResult message={props.message} results={props.results ?? EMPTY_RESULTS} />;
 	return null;
 }
 
@@ -220,40 +249,46 @@ function AssistantMessage(props: { message: unknown; session: string; streaming:
 	);
 }
 
+/**
+ * Branches on `type` reactively and reads `results` lazily: once the reconciled
+ * store stops re-creating rows, a row is built once and then only its
+ * expressions re-run, so anything captured into a const here would freeze at
+ * whatever it was when the block first appeared (a tool card stuck on
+ * "running" forever).
+ */
 function AssistantBlock(props: { block: ContentBlock; streaming: boolean; results: Map<string, ToolResultLike> }) {
 	const i18n = useAppI18n();
 	const block = () => props.block;
-	if (block().type === "text") {
-		return <MessageMarkdown content={String(block().text ?? "")} streaming={props.streaming} />;
-	}
-	if (block().type === "thinking") {
-		return (
-			<details class="thinking-block">
-				<summary class="thinking-block-header"><span class="thinking-block-chevron">▸</span>thinking</summary>
-				<pre class="thinking-block-content">{String(block().thinking ?? "")}</pre>
-			</details>
-		);
-	}
-	if (block().type === "toolCall") {
-		const callId = String(block().id ?? "");
-		const args = block().arguments ?? block().args ?? {};
-		const result = props.results.get(callId);
-		const toolState = result === undefined ? "running" : result.isError === true ? "failed" : "done";
-		return (
-			<details data-testid={`tool-row-${String(block().name ?? "")}`} class="tool-card">
-				<summary class="tool-card-head">
-					<span class="tool-card-label">{String(block().name ?? "?")}</span>
-					<span class="tool-card-status">{summarize(args)}</span>
-					<span class={`tool-badge ${toolState}`} data-testid={`tool-badge-${callId || String(block().name ?? "")}`}>{i18n.t(`timeline.tool.${toolState}`)}</span>
-				</summary>
-				<pre class="tool-card-block tool-card-block-content">{JSON.stringify(args, null, 2)}</pre>
-				<Show when={result}>
-					{(found) => <pre class="tool-card-block tool-card-block-content">{renderContent(found().content)}</pre>}
-				</Show>
-			</details>
-		);
-	}
-	return null;
+	const callId = () => String(block().id ?? "");
+	const args = () => (block().arguments ?? block().args ?? {}) as Record<string, unknown>;
+	const result = () => props.results.get(callId());
+	const toolState = () => (result() === undefined ? "running" : result()!.isError === true ? "failed" : "done");
+	return (
+		<Switch>
+			<Match when={block().type === "text"}>
+				<MessageMarkdown content={String(block().text ?? "")} streaming={props.streaming} />
+			</Match>
+			<Match when={block().type === "thinking"}>
+				<details class="thinking-block">
+					<summary class="thinking-block-header"><span class="thinking-block-chevron">▸</span>thinking</summary>
+					<pre class="thinking-block-content">{String(block().thinking ?? "")}</pre>
+				</details>
+			</Match>
+			<Match when={block().type === "toolCall"}>
+				<details data-testid={`tool-row-${String(block().name ?? "")}`} class="tool-card">
+					<summary class="tool-card-head">
+						<span class="tool-card-label">{String(block().name ?? "?")}</span>
+						<span class="tool-card-status">{summarize(args())}</span>
+						<span class={`tool-badge ${toolState()}`} data-testid={`tool-badge-${callId() || String(block().name ?? "")}`}>{i18n.t(`timeline.tool.${toolState()}`)}</span>
+					</summary>
+					<pre class="tool-card-block tool-card-block-content">{JSON.stringify(args(), null, 2)}</pre>
+					<Show when={result()}>
+						{(found) => <pre class="tool-card-block tool-card-block-content">{renderContent(found().content)}</pre>}
+					</Show>
+				</details>
+			</Match>
+		</Switch>
+	);
 }
 
 function OrphanToolResult(props: { message: unknown; results: Map<string, ToolResultLike> }) {

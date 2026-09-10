@@ -74,7 +74,7 @@ export interface SessionView {
 	prompt:
 		| { stableChars: number; adaptiveChars: number; sections: { name: string; stable: boolean; text: string }[] }
 		| undefined;
-	/** Output tokens/sec over the last usage delta; 0 until two usage events pass. */
+	/** Output tokens/sec over the current run's own output; 0 until the samples span 0.5s. */
 	tokensPerSec: number;
 	/** Configured model as "provider:modelId"; drives the composer model picker. */
 	model: string;
@@ -247,14 +247,12 @@ export class SessionViewProjector {
 				),
 			},
 			loops: loops.list().map(specView),
-			sideThread: btw
-				.list()
-				.map((thread) => ({
-					id: thread.id,
-					kind: thread.kind,
-					exchanges: thread.exchanges,
-					saveState: thread.saveState,
-				})),
+			sideThread: btw.list().map((thread) => ({
+				id: thread.id,
+				kind: thread.kind,
+				exchanges: thread.exchanges,
+				saveState: thread.saveState,
+			})),
 			usage: stats.usage,
 			cacheRate: cacheRate(stats.usage),
 			branch: { tipId: entries[entries.length - 1]?.id ?? null },
@@ -293,8 +291,7 @@ export class SessionViewProjector {
 			const message = (event as { message?: AgentMessage }).message;
 			if (message !== undefined && message.role === "assistant") {
 				this.inFlight = message;
-				const est = inFlightOutputTokens(message);
-				if (est !== undefined) this.agent.observeOut(est);
+				this.agent.observeInFlight(inFlightOutputTokens(message));
 			}
 			refresh();
 		};
@@ -319,9 +316,20 @@ function inFlightOutputTokens(message: AgentMessage): number | undefined {
 	if (usageOut > 0) return usageOut;
 	if (!Array.isArray(candidate.content)) return undefined;
 	let chars = 0;
-	for (const block of candidate.content as { type?: string; text?: string; partialJson?: string }[]) {
-		if (block.type === "text" || block.type === "thinking") chars += block.text?.length ?? 0;
-		else if (block.type === "toolCall") chars += block.partialJson?.length ?? 0;
+	for (const block of candidate.content as {
+		type?: string;
+		text?: string;
+		thinking?: string;
+		partialJson?: string;
+		arguments?: unknown;
+	}[]) {
+		// Field names matter here: thinking lives under `thinking`, not `text`, and a
+		// tool call only carries `partialJson` while it is still streaming.
+		if (block.type === "text") chars += block.text?.length ?? 0;
+		else if (block.type === "thinking") chars += block.thinking?.length ?? 0;
+		else if (block.type === "toolCall")
+			chars +=
+				block.partialJson?.length ?? (block.arguments === undefined ? 0 : JSON.stringify(block.arguments).length);
 	}
 	return chars > 0 ? Math.ceil(chars / 3) : undefined;
 }
