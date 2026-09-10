@@ -54,9 +54,9 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 	const webDist = options.webDist ?? resolve(import.meta.dir, "../../eta-web/dist");
 	const sessionsDirty = new WeakMap<Socket, boolean>();
 
-	const send = (socket: Socket, message: ServerMessage): void => {
+	const send = (socket: Socket, message: ServerMessage, payload?: string): void => {
 		try {
-			socket.send(encodeMessage(message));
+			socket.send(payload ?? encodeMessage(message));
 		} catch {
 			/* socket already gone */
 		}
@@ -74,9 +74,14 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 
 	const sockets = new Set<Socket>();
 
-	const unsubscribe = host.subscribe((frame) => {
+	const unsubscribe = host.subscribe((frame, payload) => {
+		// The agent channel is per-token and the browser folds it into the view frame
+		// and ignores this one (see eta-web's reduceEtaState) — forwarding it measured
+		// about 1MB/s of JSON each tab parses straight into the bin. Whoever wants raw
+		// harness events asks; the GUI does not.
+		if (frame.channel === "agent") return;
 		for (const socket of sockets) {
-			send(socket, frame);
+			send(socket, frame, payload);
 			flushSessions(socket);
 		}
 	});
@@ -129,6 +134,13 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 				const path = join(dir, `${Date.now().toString(36)}-${safeName}`);
 				await writeFile(path, new Uint8Array(await file.arrayBuffer()));
 				return Response.json({ path: `.eta-attachments/${path.slice(path.lastIndexOf("/") + 1)}`, absolute: path });
+			}
+			if (url.pathname === "/api/settings") {
+				if (request.method === "POST") {
+					const patch = (await request.json()) as Record<string, unknown>;
+					return Response.json(await host.saveSettings(patch));
+				}
+				return Response.json(host.settings());
 			}
 			if (url.pathname === "/api/sessions") {
 				return Response.json(host.sidebar());
@@ -205,7 +217,12 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 				send(socket, { type: "hello", sessions: host.sidebar(), attach: host.attachPointer });
 				for (const name of [...host.names()]) {
 					const view = host.viewOf(name);
-					if (view !== undefined) send(socket, { channel: "view", session: name, view });
+					if (view !== undefined) {
+						send(socket, { channel: "view", session: name, view });
+						// This socket now holds that exact transcript, so the frames that follow
+						// it are allowed to leave the transcript out.
+						host.rememberView(name, view);
+					}
 					for (const frame of host.ringOf(name)?.tail() ?? []) send(socket, { channel: "dev", frame });
 				}
 			},
@@ -227,6 +244,16 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 					message = decodeClientMessage(String(raw));
 				} catch {
 					send(socket, { type: "error", message: "bad frame" });
+					return;
+				}
+				// A resync is a read, not an op: answer it on this socket alone with
+				// the whole view and re-point the patch baseline at it.
+				if (message.op === "resync") {
+					const view = host.viewOf(message.session);
+					if (view !== undefined) {
+						host.rememberView(message.session, view);
+						send(socket, { channel: "view", session: message.session, view });
+					}
 					return;
 				}
 				// Ops from one connection apply strictly in arrival order.
@@ -267,6 +294,8 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 	switch (message.op) {
 		case "focus":
 			host.focus(message.session);
+			return;
+		case "resync":
 			return;
 		case "prompt":
 			host.queue(message.session, message.text, message.mode ?? "queue");

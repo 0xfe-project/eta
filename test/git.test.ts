@@ -8,11 +8,10 @@ import { startServer, type EtaServer } from "../src/server.ts";
 import type { ServerMessage } from "../src/protocol.ts";
 
 function git(cwd: string, ...args: string[]): void {
-	execFileSync(
-		"git",
-		["-c", "user.email=eta@test", "-c", "user.name=eta", "-c", "commit.gpgsign=false", ...args],
-		{ cwd, stdio: "ignore" },
-	);
+	execFileSync("git", ["-c", "user.email=eta@test", "-c", "user.name=eta", "-c", "commit.gpgsign=false", ...args], {
+		cwd,
+		stdio: "ignore",
+	});
 }
 
 /** One checkout with all three groups populated: index edit, worktree edit, untracked. */
@@ -35,15 +34,9 @@ describe("git status", () => {
 		const status = await gitStatus(fixture());
 		expect(status.notGit).toBe(false);
 		expect(status.branch).toBeTypeOf("string");
-		expect(status.groups.staged).toEqual([
-			{ path: "staged.txt", status: "M", added: 1, deleted: 0 },
-		]);
-		expect(status.groups.changes).toEqual([
-			{ path: "keep.txt", status: "M", added: 2, deleted: 1 },
-		]);
-		expect(status.groups.untracked).toEqual([
-			{ path: "loose.txt", status: "??", added: 2 },
-		]);
+		expect(status.groups.staged).toEqual([{ path: "staged.txt", status: "M", added: 1, deleted: 0 }]);
+		expect(status.groups.changes).toEqual([{ path: "keep.txt", status: "M", added: 2, deleted: 1 }]);
+		expect(status.groups.untracked).toEqual([{ path: "loose.txt", status: "??", added: 2 }]);
 	});
 
 	it("reports a plain directory as not a repository", async () => {

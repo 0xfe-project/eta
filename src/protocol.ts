@@ -15,10 +15,47 @@ export interface DevFrame {
 	data: unknown;
 }
 
+/**
+ * The parts of a view that only move when the journal does. Everything else in a
+ * view is either small or recomputed per token, so it rides every frame; these
+ * three are the transcript, and a long session's transcript is megabytes that do
+ * not change while the model is writing a sentence.
+ */
+export const HEAVY_VIEW_FIELDS = ["messages", "systems", "thinking"] as const;
+
+export type SessionViewPatch = Omit<SessionView, (typeof HEAVY_VIEW_FIELDS)[number]>;
+
 export type ChannelFrame =
 	| { channel: "view"; session: string; view: SessionView }
+	| { channel: "view"; session: string; patch: SessionViewPatch }
 	| { channel: "agent"; session: string; event: HarnessEvent }
 	| { channel: "dev"; frame: DevFrame };
+
+/**
+ * What the entry-derived halves of a view depend on, reduced to a handful of
+ * scalars: the branch tip, the compaction epoch, and how many rows each of the
+ * three heavy lists holds. A view whose fingerprint did not move carries the
+ * same transcript, so a frame may leave the transcript out entirely.
+ *
+ * Deliberately cheap: computing it must not cost what serializing the view costs.
+ */
+export function viewFingerprint(view: SessionView): string {
+	const tail = view.messages[view.messages.length - 1];
+	return [
+		view.branch?.tipId ?? "",
+		view.compactionEpoch,
+		view.messages.length,
+		view.systems.length,
+		view.thinking.length,
+		tail?.seq ?? 0,
+	].join("|");
+}
+
+/** The view without its transcript: everything a frame may carry after the first. */
+export function viewPatch(view: SessionView): SessionViewPatch {
+	const { messages: _messages, systems: _systems, thinking: _thinking, ...rest } = view;
+	return rest;
+}
 
 export interface SidebarSession {
 	name: string;
@@ -34,6 +71,7 @@ export interface SidebarSession {
 /** The full GUI write path; identical semantics to the v1 in-process GuiOps. */
 export type GuiOp =
 	| { op: "focus"; session: string }
+	| { op: "resync"; session: string }
 	| {
 			op: "prompt";
 			session: string;

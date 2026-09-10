@@ -140,11 +140,13 @@ describe("ws protocol", () => {
 
 			send(a.socket, { op: "prompt", session: "s1", text: "hello eta" });
 			const bView = await b.reader.until(
-				(m): m is Extract<ServerMessage, { channel: "view" }> =>
+				(m): m is Extract<ServerMessage, { channel: "view"; view: unknown }> =>
 					"channel" in m &&
 					m.channel === "view" &&
 					"session" in m &&
 					m.session === "s1" &&
+					// A patch frame carries no transcript; the echo rides the full one.
+					"view" in m &&
 					JSON.stringify(m.view).includes("[Thinker faux echo]"),
 			);
 			const painted = JSON.stringify(bView.view);
@@ -179,7 +181,7 @@ describe("ws protocol", () => {
 			const b = await connect(server);
 			await b.reader.next();
 			const view = await b.reader.until(
-				(m): m is Extract<ServerMessage, { channel: "view" }> =>
+				(m): m is Extract<ServerMessage, { channel: "view"; view: unknown }> =>
 					"channel" in m && m.channel === "view" && "session" in m && m.session === "bg",
 			);
 			expect(view.view.personas).toEqual(["Executor"]);
@@ -215,8 +217,9 @@ describe("sidebar ops", () => {
 					m.channel === "view" &&
 					"session" in m &&
 					m.session === "ops-1" &&
-					"personas" in m.view &&
-					m.view.personas.includes("INSIGHTER"),
+					// The pacer answers an op with a patch frame whenever the transcript
+					// did not move; the personas ride along in either frame shape.
+					("view" in m ? m.view : m.patch).personas.includes("INSIGHTER"),
 			);
 			socket.close();
 		});
