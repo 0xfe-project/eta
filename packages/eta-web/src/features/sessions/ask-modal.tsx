@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import type { SessionView } from "@eta/core";
 import { useAppI18n } from "../../i18n.ts";
 import { etaStore } from "../../lib/eta-store.ts";
@@ -12,105 +12,110 @@ interface AskLike {
 	multi?: boolean;
 }
 
-export function AskModal({ session, view, visible = true }: { session: string; view: SessionView; visible?: boolean }) {
-	const { t } = useAppI18n();
+export function AskModal(props: { session: string; view: SessionView; visible?: boolean }) {
+	const i18n = useAppI18n();
 	const store = etaStore();
-	const ask = view.pendingAsk as AskLike | undefined;
-	const [selected, setSelected] = useState<string[]>([]);
-	const [freeform, setFreeform] = useState("");
-	const [now, setNow] = useState(() => Date.now());
+	const ask = () => props.view.pendingAsk as AskLike | undefined;
+	const [selected, setSelected] = createSignal<string[]>([]);
+	const [freeform, setFreeform] = createSignal("");
+	const [now, setNow] = createSignal(Date.now());
 
-	useEffect(() => {
-		if (view.pendingAskDeadline === undefined) return;
+	createEffect(() => {
+		if (props.view.pendingAskDeadline === undefined) return;
 		const timer = setInterval(() => setNow(Date.now()), 1000);
-		return () => clearInterval(timer);
-	}, [view.pendingAskDeadline]);
+		onCleanup(() => clearInterval(timer));
+	});
 
-	const options = ask?.options ?? [];
-	const multi = ask?.multi === true;
-	const seconds = view.pendingAskDeadline === undefined ? undefined : Math.max(0, Math.ceil((view.pendingAskDeadline - now) / 1000));
+	const options = () => ask()?.options ?? [];
+	const multi = () => ask()?.multi === true;
+	const seconds = () => (props.view.pendingAskDeadline === undefined ? undefined : Math.max(0, Math.ceil((props.view.pendingAskDeadline - now()) / 1000)));
 
 	const answer = (response: Record<string, unknown>) => {
 		setSelected([]);
 		setFreeform("");
-		if (ask !== undefined) store.send({ op: "answer", session, questionId: ask.questionId, response });
+		const current = ask();
+		if (current !== undefined) store.send({ op: "answer", session: props.session, questionId: current.questionId, response });
 	};
 
 	const abort = () => {
-		if (ask !== undefined) store.send({ op: "askAbort", session, questionId: ask.questionId });
+		const current = ask();
+		if (current !== undefined) store.send({ op: "askAbort", session: props.session, questionId: current.questionId });
 	};
 
 	return (
-		<Dialog open={ask !== undefined && visible}>
-			<DialogContent className="max-w-[480px]" hideClose data-testid="ask-modal">
+		<Dialog open={ask() !== undefined && (props.visible ?? true)}>
+			<DialogContent class="max-w-[480px]" hideClose data-testid="ask-modal">
 				<DialogHeader>
-					<DialogTitle data-testid="ask-question" className="min-w-0 flex-1 normal-case">
-						{ask?.question}
+					<DialogTitle data-testid="ask-question" class="min-w-0 flex-1 normal-case">
+						{ask()?.question}
 					</DialogTitle>
 				</DialogHeader>
-				<div className="p-3">
-					{seconds !== undefined ? <p data-testid="ask-countdown" className="mb-2 font-mono text-[11px] text-warning">{t("ask.seconds", { seconds })}</p> : null}
-					{options.length > 0 ? (
-						<div className="mb-3 flex flex-wrap gap-2">
-							{options.map((option) => {
-								const on = selected.includes(option);
-								return (
-									<Button
-										key={option}
-										data-testid={`ask-option-${option}`}
-										variant={on ? "invert" : "outline"}
-										className="px-3 py-1.5 text-xs normal-case"
-										onClick={() => {
-											if (!multi) {
-												answer({ kind: "selection", selections: [option] });
-												return;
-											}
-											setSelected(on ? selected.filter((item) => item !== option) : [...selected, option]);
-										}}
-									>
-										{option}
-									</Button>
-								);
-							})}
+				<div class="p-3">
+					<Show when={seconds() !== undefined}>
+						<p data-testid="ask-countdown" class="mb-2 font-mono text-[11px] text-warning">{i18n.t("ask.seconds", { seconds: seconds() })}</p>
+					</Show>
+					<Show when={options().length > 0}>
+						<div class="mb-3 flex flex-wrap gap-2">
+							<For each={options()}>
+								{(option) => {
+									const on = () => selected().includes(option);
+									return (
+										<Button
+											data-testid={`ask-option-${option}`}
+											variant={on() ? "invert" : "outline"}
+											class="px-3 py-1.5 text-xs normal-case"
+											onClick={() => {
+												if (!multi()) {
+													answer({ kind: "selection", selections: [option] });
+													return;
+												}
+												setSelected(on() ? selected().filter((item) => item !== option) : [...selected(), option]);
+											}}
+										>
+											{option}
+										</Button>
+									);
+								}}
+							</For>
 						</div>
-					) : null}
-					<div className="flex gap-2">
+					</Show>
+					<div class="flex gap-2">
 						<input
 							data-testid="ask-freeform"
-							value={freeform}
-							placeholder={t("ask.freeform")}
-							onChange={(event) => setFreeform(event.target.value)}
+							value={freeform()}
+							placeholder={i18n.t("ask.freeform")}
+							onInput={(event) => setFreeform(event.currentTarget.value)}
 							onKeyDown={(event) => {
-								if (event.key === "Enter" && (selected.length > 0 || freeform.trim().length > 0)) {
-									if (selected.length > 0) answer({ kind: "selection", selections: selected, ...(freeform.trim().length > 0 ? { comment: freeform.trim() } : {}) });
-									else answer({ kind: "freeform", text: freeform.trim() });
+								if (event.key === "Enter" && (selected().length > 0 || freeform().trim().length > 0)) {
+									if (selected().length > 0) answer({ kind: "selection", selections: selected(), ...(freeform().trim().length > 0 ? { comment: freeform().trim() } : {}) });
+									else answer({ kind: "freeform", text: freeform().trim() });
 								}
 							}}
-							className="min-w-0 flex-1 border border-border bg-background px-2 py-1.5 text-sm outline-none focus:border-border-strong"
+							class="min-w-0 flex-1 border border-border bg-background px-2 py-1.5 text-sm outline-none focus:border-border-strong"
 						/>
 						<Button
 							data-testid="ask-answer"
 							variant="invert"
-							disabled={selected.length === 0 && freeform.trim().length === 0}
-							className="px-3 py-1.5 text-xs normal-case"
+							disabled={selected().length === 0 && freeform().trim().length === 0}
+							class="px-3 py-1.5 text-xs normal-case"
 							onClick={() => {
-								if (selected.length > 0) {
-									answer({ kind: "selection", selections: selected, ...(freeform.trim().length > 0 ? { comment: freeform.trim() } : {}) });
+								if (selected().length > 0) {
+									answer({ kind: "selection", selections: selected(), ...(freeform().trim().length > 0 ? { comment: freeform().trim() } : {}) });
 									return;
 								}
-								answer({ kind: "freeform", text: freeform.trim() });
+								answer({ kind: "freeform", text: freeform().trim() });
 							}}
 						>
-							{t("ask.answer")}
+							{i18n.t("ask.answer")}
 						</Button>
 						<Button
 							data-testid="ask-abort"
 							variant="outline"
-							title={t("ask.abortHint")}
-							className="border-2 border-danger px-3 py-1.5 text-xs font-bold normal-case text-danger hover:bg-danger hover:text-background"
+							title={i18n.t("ask.abortHint")}
+							class="border-2 border-danger px-3 py-1.5 text-xs font-bold normal-case text-danger hover:bg-danger hover:text-background"
 							onClick={abort}
 						>
-							{t("ask.abort")}
+							{i18n.t("ask.abort")}
 						</Button>
 					</div>
 				</div>

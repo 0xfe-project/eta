@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, createEffect, createSignal, onCleanup, useContext, type JSX } from "solid-js";
 
 export type ThemePreference = "dark" | "light" | "system";
 export type ResolvedTheme = "dark" | "light";
@@ -41,33 +41,28 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
-export function ThemeProvider({ children }: { children: ReactNode }) {
-	const [theme, setThemeState] = useState<ThemePreference>(() => storedPreference());
-	const [systemDark, setSystemDark] = useState(() => systemPrefersDark());
+export function ThemeProvider(props: { children: JSX.Element }) {
+	const [theme, setThemeState] = createSignal<ThemePreference>(storedPreference());
+	const [systemDark, setSystemDark] = createSignal(systemPrefersDark());
 
-	useEffect(() => {
-		const media = window.matchMedia("(prefers-color-scheme: dark)");
-		const onChange = (event: MediaQueryListEvent) => setSystemDark(event.matches);
-		media.addEventListener("change", onChange);
-		return () => media.removeEventListener("change", onChange);
-	}, []);
+	const media = window.matchMedia("(prefers-color-scheme: dark)");
+	const onMedia = (event: MediaQueryListEvent) => setSystemDark(event.matches);
+	media.addEventListener("change", onMedia);
+	onCleanup(() => media.removeEventListener("change", onMedia));
 
-	useEffect(() => {
-		applyTheme(resolveTheme(theme, systemDark));
-	}, [theme, systemDark]);
+	createEffect(() => {
+		applyTheme(resolveTheme(theme(), systemDark()));
+	});
 
-	useEffect(() => {
-		const onStorage = () => setThemeState(storedPreference());
-		const onCustom = () => setThemeState(storedPreference());
-		window.addEventListener("storage", onStorage);
-		window.addEventListener(themeChangeEvent, onCustom);
-		return () => {
-			window.removeEventListener("storage", onStorage);
-			window.removeEventListener(themeChangeEvent, onCustom);
-		};
-	}, []);
+	const onStorage = () => setThemeState(storedPreference());
+	window.addEventListener("storage", onStorage);
+	window.addEventListener(themeChangeEvent, onStorage);
+	onCleanup(() => {
+		window.removeEventListener("storage", onStorage);
+		window.removeEventListener(themeChangeEvent, onStorage);
+	});
 
-	const setTheme = useCallback((next: ThemePreference) => {
+	const setTheme = (next: ThemePreference) => {
 		try {
 			localStorage.setItem(themeStorageKey, next);
 		} catch {
@@ -75,13 +70,18 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 		}
 		setThemeState(next);
 		window.dispatchEvent(new CustomEvent(themeChangeEvent));
-	}, []);
+	};
 
-	const value = useMemo<ThemeContextValue>(
-		() => ({ theme, resolvedTheme: resolveTheme(theme, systemDark), setTheme }),
-		[theme, systemDark, setTheme],
-	);
-	return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+	const value: ThemeContextValue = {
+		get theme() {
+			return theme();
+		},
+		get resolvedTheme() {
+			return resolveTheme(theme(), systemDark());
+		},
+		setTheme,
+	};
+	return <ThemeContext.Provider value={value}>{props.children}</ThemeContext.Provider>;
 }
 
 export function useAppTheme(): ThemeContextValue {

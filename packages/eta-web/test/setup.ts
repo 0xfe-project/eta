@@ -1,9 +1,13 @@
 import { afterEach } from "vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup } from "./render.tsx";
+import { FakeSocket } from "./fake-socket.ts";
+import { resetEtaStoreForTests } from "../src/lib/eta-store.ts";
 
-if (typeof window !== "undefined") {
-	afterEach(cleanup);
-}
+afterEach(() => {
+	if (typeof window !== "undefined") cleanup();
+	FakeSocket.reset();
+	resetEtaStoreForTests();
+});
 
 if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
 	Object.defineProperty(window, "matchMedia", {

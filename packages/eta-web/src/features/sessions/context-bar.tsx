@@ -1,3 +1,4 @@
+import { For, Show } from "solid-js";
 import type { SessionView } from "@eta/core";
 import { useAppI18n } from "../../i18n.ts";
 import { etaStore } from "../../lib/eta-store.ts";
@@ -7,75 +8,83 @@ import { Button } from "../../components/ui/button.tsx";
  * The strip above the composer: real lane queue, loops, goal (only once set), tasks.
  * Ordering is fixed: queue → loops → goal → tasks.
  */
-export function ContextBar({ session, view }: { session: string; view: SessionView }) {
-	const { t } = useAppI18n();
+export function ContextBar(props: { session: string; view: SessionView }) {
+	const i18n = useAppI18n();
 	const store = etaStore();
 	const send = (op: Parameters<typeof store.send>[0]) => store.send(op);
-
-	const queue = view.queue ?? [];
-	if (queue.length === 0 && view.loops.length === 0 && view.goal == null && view.tasks.length === 0) return null;
+	const queue = () => props.view.queue ?? [];
+	const empty = () => queue().length === 0 && props.view.loops.length === 0 && props.view.goal == null && props.view.tasks.length === 0;
 
 	return (
-		<div className="flex flex-col gap-1" data-testid="context-bar">
-			{queue.length > 0 ? (
-				<div data-testid="queued-bar" className="queued-messages">
-					{queue.map((item) => (
-						<button
-							key={item.entryId}
-							data-testid={`queue-${item.entryId}`}
-							title={t("composer.queueCancel")}
-							onClick={() => send({ op: "queueRemove", session, entryId: item.entryId })}
-							className="queued-message-chip"
-						>
-							{t("composer.queued")} · {item.text} ×
-						</button>
-					))}
-				</div>
-			) : null}
-			{view.loops.map((loop) => (
-				<div key={loop.id} data-testid={`loop-row-${loop.id}`} className="flex items-center gap-2">
-					<span className="mono min-w-0 flex-1 truncate text-[11px] text-muted">
-						loop {loop.id} · {loop.note} · {loop.runCount}×
-					</span>
-					<Button size="sm" variant="ghost" onClick={() => send({ op: "loopToggle", session, id: loop.id, paused: !loop.paused })}>
-						{loop.paused ? t("panel.resume") : t("panel.pause")}
-					</Button>
-				</div>
-			))}
-			{view.goal != null ? (
-				<div data-testid="goal-card" data-goal-status={view.goal.status} className={`flex items-center gap-2 border px-2 py-1 ${view.goal.status === "achieved" ? "border-primary bg-overlay" : "border-border bg-overlay"}`}>
-					<span data-testid="goal-state" className="mono shrink-0 text-[11px]" style={{ color: view.goal.status === "achieved" ? "var(--primary)" : undefined }}>
-						{view.goal.status === "achieved" ? "✓" : view.goal.status === "paused" ? "⏸" : "◆"}
-					</span>
-					<span className={`mono min-w-0 flex-1 truncate text-[11px] text-muted ${view.goal.status === "achieved" ? "line-through" : ""}`}>{view.goal.objective}</span>
-					{view.goal.status === "achieved" ? (
-						<span data-testid="goal-achieved" className="mono shrink-0 border border-primary px-1.5 py-0.5 text-[9px] tracking-[0.12em] uppercase" style={{ color: "var(--primary)" }}>
-							{t("goal.achieved")}
-						</span>
-					) : (
-						<Button size="sm" variant="ghost" onClick={() => send({ op: "goal", session, action: view.goal?.status === "active" ? "pause" : "resume" })}>
-							{view.goal.status === "active" ? t("panel.pause") : t("panel.resume")}
-						</Button>
+		<Show when={!empty()}>
+			<div class="flex flex-col gap-1" data-testid="context-bar">
+				<Show when={queue().length > 0}>
+					<div data-testid="queued-bar" class="queued-messages">
+						<For each={queue()}>
+							{(item) => (
+								<button
+									data-testid={`queue-${item.entryId}`}
+									title={i18n.t("composer.queueCancel")}
+									onClick={() => send({ op: "queueRemove", session: props.session, entryId: item.entryId })}
+									class="queued-message-chip"
+								>
+									{i18n.t("composer.queued")} · {item.text} ×
+								</button>
+							)}
+						</For>
+					</div>
+				</Show>
+				<For each={props.view.loops}>
+					{(loop) => (
+						<div data-testid={`loop-row-${loop.id}`} class="flex items-center gap-2">
+							<span class="mono min-w-0 flex-1 truncate text-[11px] text-muted">
+								loop {loop.id} · {loop.note} · {loop.runCount}×
+							</span>
+							<Button size="sm" variant="ghost" onClick={() => send({ op: "loopToggle", session: props.session, id: loop.id, paused: !loop.paused })}>
+								{loop.paused ? i18n.t("panel.resume") : i18n.t("panel.pause")}
+							</Button>
+						</div>
 					)}
-					<Button size="sm" variant="ghost" onClick={() => send({ op: "goal", session, action: "clear" })}>
-						{t("panel.clear")}
-					</Button>
-				</div>
-			) : null}
-			{view.tasks.length > 0 ? (
-				<div data-testid="tasks-list" className="flex flex-wrap gap-x-3 gap-y-1">
-					{view.tasks.filter((task) => task.status !== "completed" && task.status !== "cancelled").map((task) => (
-						<button
-							key={task.id}
-							data-testid={`task-row-${task.id}`}
-							onClick={() => send({ op: "taskSet", session, id: task.id, status: task.status === "completed" ? "pending" : "completed" })}
-							className={`mono text-[11px] hover:text-foreground ${task.status === "completed" ? "text-muted line-through" : "text-muted"}`}
+				</For>
+				<Show when={props.view.goal != null}>
+					<div data-testid="goal-card" data-goal-status={props.view.goal?.status} class={`flex items-center gap-2 border px-2 py-1 ${props.view.goal?.status === "achieved" ? "border-primary bg-overlay" : "border-border bg-overlay"}`}>
+						<span data-testid="goal-state" class="mono shrink-0 text-[11px]" style={{ color: props.view.goal?.status === "achieved" ? "var(--primary)" : undefined }}>
+							{props.view.goal?.status === "achieved" ? "✓" : props.view.goal?.status === "paused" ? "⏸" : "◆"}
+						</span>
+						<span class={`mono min-w-0 flex-1 truncate text-[11px] text-muted ${props.view.goal?.status === "achieved" ? "line-through" : ""}`}>{props.view.goal?.objective}</span>
+						<Show
+							when={props.view.goal?.status === "achieved"}
+							fallback={
+								<Button size="sm" variant="ghost" onClick={() => send({ op: "goal", session: props.session, action: props.view.goal?.status === "active" ? "pause" : "resume" })}>
+									{props.view.goal?.status === "active" ? i18n.t("panel.pause") : i18n.t("panel.resume")}
+								</Button>
+							}
 						>
-							[{task.status === "completed" ? "x" : " "}] {task.content}
-						</button>
-					))}
-				</div>
-			) : null}
-		</div>
+							<span data-testid="goal-achieved" class="mono shrink-0 border border-primary px-1.5 py-0.5 text-[9px] tracking-[0.12em] uppercase" style={{ color: "var(--primary)" }}>
+								{i18n.t("goal.achieved")}
+							</span>
+						</Show>
+						<Button size="sm" variant="ghost" onClick={() => send({ op: "goal", session: props.session, action: "clear" })}>
+							{i18n.t("panel.clear")}
+						</Button>
+					</div>
+				</Show>
+				<Show when={props.view.tasks.length > 0}>
+					<div data-testid="tasks-list" class="flex flex-wrap gap-x-3 gap-y-1">
+						<For each={props.view.tasks.filter((task) => task.status !== "completed" && task.status !== "cancelled")}>
+							{(task) => (
+								<button
+									data-testid={`task-row-${task.id}`}
+									onClick={() => send({ op: "taskSet", session: props.session, id: task.id, status: task.status === "completed" ? "pending" : "completed" })}
+									class={`mono text-[11px] hover:text-foreground ${task.status === "completed" ? "text-muted line-through" : "text-muted"}`}
+								>
+									[{task.status === "completed" ? "x" : " "}] {task.content}
+								</button>
+							)}
+						</For>
+					</div>
+				</Show>
+			</div>
+		</Show>
 	);
 }

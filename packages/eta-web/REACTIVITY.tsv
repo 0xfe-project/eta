@@ -1,0 +1,95 @@
+file	symbol	kind	writes	reads	triggers_dom	cleanup	solid	risk	notes
+src/lib/eta-store.ts	EtaState	class field	reduceEtaState; patch; send(focus)	snapshot; useEta	yes — whole UI	dispose closes ws	keep class; emit → signal/store replace	high	Mechanical port keeps whole-snapshot notify. Do not slice fields this round.
+src/lib/eta-store.ts	listeners	Set	subscribe add/delete	emit	indirect	dispose does not clear	Set stays	low	Framework-free.
+src/lib/eta-store.ts	socket	WebSocket?	connect	send; dispose	no	dispose/close	same	low	
+src/lib/eta-store.ts	retryMs	number	open reset; close backoff	close timeout	no	n/a	same	low	
+src/lib/eta-store.ts	closed	boolean	dispose	connect guard	no	n/a	same	low	resetEtaStoreForTests dispose+undef instance
+src/lib/eta-store.ts	instance	module singleton	etaStore(); resetEtaStoreForTests	etaStore; useEta	yes	dispose	same	med	Tests reset after each case.
+src/lib/eta-store.ts	useEta	useSyncExternalStore	store.emit	all pages/features	yes	unsubscribe	from() or signal+subscribe; or createStore+reconcile whole snapshot	high	Component fn runs once. Trial file. Do not per-field subscribe.
+src/lib/eta-store.ts	useEtaOps	hook	n/a	unused	n/a	n/a	omit or port unused	low	No callers. Do not add deps for it.
+src/app/theme.tsx	theme	useState	storedPreference; setTheme; storage/eta:theme-change	context; applyTheme	yes	n/a	createSignal	med	Trial file. Must live in context as signal.
+src/app/theme.tsx	systemDark	useState	matchMedia change	resolveTheme	yes	removeListener	createSignal	med	
+src/app/theme.tsx	ThemeContext	object via useMemo	theme/systemDark/setTheme	useAppTheme	yes	n/a	context of signals not frozen object	high	Solid context is not reactive unless signals inside.
+src/app/theme.tsx	applyTheme effect	useEffect[theme,systemDark]	documentElement class/data-theme/colorScheme	n/a	yes	n/a	createEffect reading both signals	low	
+src/app/theme.tsx	media effect	useEffect[]	systemDark	n/a	yes	removeListener	onMount+onCleanup	low	
+src/app/theme.tsx	storage effect	useEffect[]	setThemeState(storedPreference)	n/a	yes	removeListener	onMount+onCleanup	low	
+src/app/app-shell.tsx	Resizer.drag	useRef	pointerdown/up	pointermove	indirect via CustomEvent	n/a	plain {current} box	low	Do not make a signal.
+src/app/app-shell.tsx	leftWidth/rightWidth	useState+eta:width	Resizer dispatch; storedWidth	aside style	yes	remove eta:width	createSignal + onMount listener	med	useColumnWidth: only update when detail.key matches.
+src/app/app-shell.tsx	leftOpen	useState	toggle; scrim; storedFlag	aside data-open; context	yes	persistFlag	createSignal	med	Put signal in ShellContext.
+src/app/app-shell.tsx	rightOpen	useState	toggle; scrim	aside; context	yes	persistFlag	createSignal	med	
+src/app/app-shell.tsx	paletteOpen	useState	⌘K; Escape; backdrop	palette slot; context	yes	n/a	createSignal	med	Composer help slash calls setPaletteOpen if shell present.
+src/app/app-shell.tsx	keydown	useEffect[toggles,navigate]	toggles; navigate; palette	n/a	yes	removeEventListener	onMount; read signals inside handler	med	Do not rebind every toggle identity change; handler reads current signals.
+src/app/app-shell.tsx	ShellContext	plain object each render	opens/setters	useShell; CommandPalette; Composer optional	yes	n/a	signals in context	high	
+src/pages/sessions-page.tsx	seen	useRef<Record>	effect on runningBySession	edge detect	no	n/a	plain {current} box	high	Falling edge was&&!running && name!==attach. Autotracking snapshot can miss or double-fire.
+src/pages/sessions-page.tsx	deepLink	useEffect[]	etaStore.send focus; replaceState	?session=	no	n/a	onMount	low	
+src/pages/sessions-page.tsx	tab	useState context|dev	tab buttons	panel child	yes	n/a	createSignal	low	
+src/pages/sessions-page.tsx	termOpen	useState	sidebar; composer slash; drawer onClose	TerminalDrawer mount	yes	n/a	createSignal	low	
+src/pages/sessions-page.tsx	selected/view/running	derived from useEta	store	header; Timeline; Composer; AskModal	yes	n/a	read useEta() reactively; do not destructure view once	high	
+src/pages/new-session-page.tsx	personas	useState	GET /api/personas; eta:personas	grid	yes	live=false; remove listener	createSignal + onMount	low	
+src/pages/new-session-page.tsx	personaId	useState	card click	selected; create disabled	yes	n/a	createSignal	low	
+src/pages/new-session-page.tsx	cwd/prompt	useState	inputs	create payload	yes	n/a	createSignal; onInput	low	
+src/pages/new-session-page.tsx	creating	useState	create()	button label/disabled	yes	n/a	createSignal	low	Stays true after navigate; keep that.
+src/pages/settings-page.tsx	notifyState	useState	Notification.permission; requestPermission	button	yes	n/a	createSignal	low	
+src/i18n.ts	i18n	i18next instance	init; persistLocale → changeLanguage	useAppI18n	yes	existing window listeners	keep instance; hook wraps language signal	med	Drop react-i18next. Subscribe to languageChanged.
+src/features/sessions/composer.tsx	text	useState	setField; draft load; pickFile; submit clear	textarea; slash/mention; localStorage	yes	n/a	createSignal; onInput	high	Trial file. Every keystroke.
+src/features/sessions/composer.tsx	draft load	useEffect[draftKey]	setText from localStorage	n/a	yes	n/a	on(() => draftKey) only — do not track text	high	Session switch reloads. Tracking text would fight typing.
+src/features/sessions/composer.tsx	draft save	useEffect[text,draftKey]	localStorage	n/a	no	n/a	createEffect ok	low	
+src/features/sessions/composer.tsx	files	useState	GET /api/files; upload refresh	mention list	yes	n/a	createSignal	med	
+src/features/sessions/composer.tsx	mention fetch	useEffect[mentionQuery!==null, session, files.length]	setFiles	mention popup	yes	n/a	keep boolean gate; do not track mentionQuery string	high	Would refetch every char if autotracked.
+src/features/sessions/composer.tsx	slashIndex/atIndex	useState	arrows	aria-selected	yes	n/a	createSignal	low	
+src/features/sessions/composer.tsx	menuClosed	useState	Escape; onInput reset	hide menus	yes	n/a	createSignal	low	
+src/features/sessions/composer.tsx	pickedModel	useState	toolbox; ModelPicker onPick	create onSend	yes	n/a	createSignal	low	
+src/features/sessions/composer.tsx	pendingImages	useState	attachFile; submit clear; chip drop	chips	yes	n/a	createSignal	low	
+src/features/sessions/composer.tsx	toolboxOpen	useState	plus; actions close	toolbox	yes	n/a	createSignal	low	
+src/features/sessions/composer.tsx	toolFiles/toolQuery/models	useState	openToolbox fetch; search	toolbox lists	yes	n/a	createSignal; search onInput	med	Fetch only when opening and list empty.
+src/features/sessions/composer.tsx	fileInput/imageInput	useRef DOM	hidden input click	n/a	no	n/a	Solid ref callback	low	
+src/features/sessions/composer.tsx	commands	rebuilt each render	t/locale/session/createMode	slash + toolbox	yes	n/a	createMemo reading i18n+session	med	Contains closures over store.send — fine.
+src/features/sessions/composer.tsx	slashMatches/atChoices/menuOpen	derived	text/files/commands	menus	yes	n/a	createMemo	med	
+src/features/sessions/composer.tsx	ThinkingChip.level	useEta view.thinkingLevel	store send	chip label	yes	n/a	read props/session via useEta reactively	med	Do not capture view once.
+src/features/sessions/timeline.tsx	scroller	useRef DOM	effect scrollTop; onScroll; new-activity	pin	no	n/a	Solid ref	low	
+src/features/sessions/timeline.tsx	pinned	useState true	onScroll >32px; new-activity	effect; button	yes	n/a	createSignal	high	
+src/features/sessions/timeline.tsx	pin effect	useEffect[view,pinned]	scrollTop=scrollHeight	n/a	yes	n/a	re-run when view identity OR pinned changes — same as today (whole view)	high	Do not narrow to messages.length only; current code uses whole view.
+src/features/sessions/timeline.tsx	results Map	IIFE each render	view.messages toolResults	MessageRow	yes	n/a	createMemo	med	
+src/features/sessions/timeline.tsx	messages list	.map key=entryId	view	rows	yes	n/a	<For> keyed by entryId; streaming key=streaming	high	.map remounts tree every token if not For.
+src/features/sessions/timeline.tsx	MessageRow.preview	useState	GET /api/file	Dialog	yes	n/a	createSignal per row	med	Row must stay mounted across stream updates (For).
+src/features/sessions/timeline.tsx	MessageFooter.copied	useState	clipboard then 1200ms	button text	yes	timeout implicit	createSignal + onCleanup timeout	low	
+src/features/sessions/context-panel.tsx	memory	useState	GET /api/memory; dialog close	memory dialog	yes	n/a	createSignal	low	
+src/features/sessions/context-panel.tsx	compacting	useState	compact click; epoch; 15s	button disabled/label	yes	clearTimeout	createSignal	med	
+src/features/sessions/context-panel.tsx	epochAtRequest	useState	compact click; clear on epoch/timeout	compare view.compactionEpoch	no	n/a	createSignal	high	Effect must compare epoch > request, not any view field.
+src/features/sessions/context-panel.tsx	promptOpen/toolsOpen/jsonOpen/btwOpen/personaPicker	useState	buttons	Dialogs	yes	n/a	createSignal	low	Dialog open={…} API unchanged.
+src/features/sessions/context-panel.tsx	contextWindow	useState	GET /api/models [session]	donut cap	yes	n/a	on(() => session)	med	
+src/features/sessions/context-panel.tsx	personaOptions	useState	GET /api/personas on picker open	switch dialog	yes	n/a	createSignal	low	
+src/features/sessions/context-panel.tsx	LoopForm.note/every	useState	inputs	loopCreate	yes	n/a	createSignal; onInput	low	
+src/features/sessions/context-panel.tsx	TasksSection.open	useState true	toggle	list	yes	n/a	createSignal	low	
+src/features/sessions/context-panel.tsx	TasksSection.draft/editing/editText	useState	inputs	task ops	yes	n/a	createSignal; onInput	low	
+src/features/sessions/sidebar.tsx	query	useState	search input	input	yes	n/a	createSignal; onInput	low	
+src/features/sessions/sidebar.tsx	hits	useState	GET /api/search if q>=2	hit list	yes	n/a	createSignal	med	null vs [] is empty vs hidden.
+src/features/sessions/sidebar.tsx	expanded	useState string[]	show more	group slice	yes	n/a	createSignal	low	
+src/features/sessions/sidebar.tsx	SessionRow.menuOpen	useState	⋯	menu	yes	n/a	createSignal	low	
+src/features/sessions/sidebar.tsx	session list	.map	useEta.sessions	rows	yes	n/a	<For> by session.name	high	
+src/features/sessions/terminal-drawer.tsx	tabs/nextId/active	useState	new; close	tab bar; TermTab mount	yes	n/a	createSignal	med	close last calls onClose.
+src/features/sessions/terminal-drawer.tsx	height	useState	pointermove; localStorage init	style.height	yes	n/a	createSignal	med	
+src/features/sessions/terminal-drawer.tsx	heightRef	useRef=height	render assign	pointerup persist	no	remove window listeners	plain box synced from height	low	Listeners added in pointerdown, not effect.
+src/features/sessions/terminal-drawer.tsx	TermTab.host	useRef DOM	xterm.open	n/a	no	term.dispose	Solid ref	high	
+src/features/sessions/terminal-drawer.tsx	TermTab.onExitRef	useRef	render assign	ws exit frame	no	n/a	plain box	high	Keeps effect deps at [cwd] only.
+src/features/sessions/terminal-drawer.tsx	xterm+ws	useEffect[cwd]	connect; write; resize	terminal	yes	disposed; clearTimeout; observer; ws; term	onMount-like; only redo when cwd changes	high	Invisible inactive tabs stay mounted (absolute+invisible). Keep that.
+src/features/sessions/command-palette.tsx	commands	useMemo	sessions; locale; t; navigate; theme; shell	Command.Item	yes	n/a	createMemo; no send/navigate inside memo body except closures	med	cmdk → hand-rolled list. data-testid palette-item-* stay.
+src/features/sessions/ask-modal.tsx	selected	useState	option click; answer reset	option invert	yes	n/a	createSignal	low	
+src/features/sessions/ask-modal.tsx	freeform	useState	input; answer reset	input	yes	n/a	createSignal; onInput	low	
+src/features/sessions/ask-modal.tsx	now	useState Date.now	setInterval 1s	countdown	yes	clearInterval	createSignal + onCleanup	med	Only when pendingAskDeadline defined.
+src/features/sessions/welcome.tsx	personas/personaId/cwd	useState	fetch; chips; composer create	chips; Composer create	yes	remove eta:personas	same as new-session	med	No shell: useShellOptional undefined.
+src/features/sessions/dev-rail.tsx	filter	useState	input	shown	yes	n/a	createSignal; onInput	low	
+src/features/sessions/dev-rail.tsx	paused	useState	button	held source	yes	n/a	createSignal	high	
+src/features/sessions/dev-rail.tsx	frozen	useRef; WRITE DURING RENDER if !paused	render	held when paused	indirect	n/a	createEffect: if (!paused()) frozen=frames; or held=paused()?frozen:frames	high	React render-time mutation. Solid fn runs once — must not copy only at create.
+src/features/sessions/dev-rail.tsx	selected	useState DevFrame|null	click; dialog close	dialog	yes	n/a	createSignal	low	
+src/features/sessions/btw-dialog.tsx	question	useState	input; ask clear	input; disabled	yes	n/a	createSignal; onInput	low	
+src/features/sessions/model-picker.tsx	info	useState	GET /api/models [session]	label; menu	yes	n/a	on(() => session); set undefined first	med	createMode has no session — fetch /api/models.
+src/features/sessions/context-bar.tsx	(none)	derived from view	store ops	queue/loops/goal/tasks	yes	n/a	read props.view reactively	med	Do not destructure view.
+src/features/sessions/message-markdown.tsx	(none)	props.content/streaming	n/a	Streamdown	yes	n/a	pass accessors; swap streamdown later as own slice	high	React-only lib. Do not island.
+src/features/sessions/message-markdown.tsx	plugins	module const	n/a	Streamdown	n/a	n/a	keep if API matches	med	code+math+katex css
+src/main.tsx	router	wouter Switch	n/a	3 routes	yes	n/a	@solidjs/router	low	
+src/components/ui/dialog.tsx	Radix open	props	onOpenChange	portal	yes	radix	hand-roll; same testids	med	ask-modal hideClose; overlay click closes.
+src/components/ui/dropdown-menu.tsx	Radix open	internal	trigger	portal	yes	radix	hand-roll	low	Only ModelPicker.
+src/components/ui/button.tsx	asChild/Slot	props	n/a	ModelPicker trigger	n/a	n/a	plain button; drop asChild	low	
+src/components/ui/badge.tsx	(none)	unused	n/a	n/a	n/a	n/a	omit	low	No callers.
+src/components/ui/tooltip.tsx	Radix	unused	n/a	n/a	n/a	n/a	omit	low	No callers. Do not add Kobalte.
