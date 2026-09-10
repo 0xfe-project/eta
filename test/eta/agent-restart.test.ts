@@ -4,6 +4,7 @@
  */
 
 import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { BACKGROUND_CONTEXT } from "../../src/harness/context.ts";
 import { EtaAgent } from "../../src/harness/agent.ts";
@@ -36,6 +37,55 @@ async function openAgent(storage: MemoryStorage, laneName: string): Promise<Open
 }
 
 describe("restart through storage", () => {
+	it("an operation running at kill time is adopted and re-driven by restore", async () => {
+		const storage = new MemoryStorage();
+		const faux = fauxProvider();
+		const models = createModels();
+		models.setProvider(faux.provider);
+		const schema = Type.Object({ value: Type.String() });
+		let echoCalls = 0;
+		let release: () => void = () => {};
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const echoTool = {
+			name: "echo",
+			label: "Echo",
+			description: "echo back",
+			parameters: schema,
+			async execute(): Promise<{ content: { type: "text"; text: string }[]; details: unknown }> {
+				echoCalls += 1;
+				if (echoCalls === 1) await gate;
+				return { content: [{ type: "text", text: "echoed" }], details: {} };
+			},
+		};
+		const session = new StorageBackedSession({ id: "eta-wedge", createdAt: Date.now(), storageVersion: 1 }, storage);
+		const first = await EtaAgent.create({ session, models, model: faux.getModel(), baseSystemPrompt: "x", heartbeatMs: 0, tools: [echoTool] as never }, CTX);
+		faux.setResponses([
+			fauxAssistantMessage([fauxToolCall("echo", { value: "hi" })] as never),
+			fauxAssistantMessage([fauxText("done after restart")] as never),
+		]);
+		void first.lane.prompt("go", undefined, CTX);
+		for (let attempt = 0; attempt < 400 && echoCalls === 0; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+		expect(echoCalls).toBe(1);
+
+		const second = await EtaAgent.create({ session, models, model: faux.getModel(), baseSystemPrompt: "x", heartbeatMs: 0, tools: [echoTool] as never }, CTX);
+		await second.restore(CTX);
+		release();
+		for (let attempt = 0; attempt < 400; attempt += 1) {
+			const entries = await second.lane.findEntries(undefined, CTX);
+			const texts = entries
+				.filter((entry) => entry.type === "message")
+				.flatMap((entry) => {
+					const content = (entry as { message?: { content?: unknown } }).message?.content;
+					return Array.isArray(content) ? (content as { type?: string; text?: string }[]).filter((block) => block.type === "text").map((block) => block.text ?? "") : [];
+				});
+			if (texts.includes("done after restart")) return;
+			await new Promise((resolve) => setTimeout(resolve, 10));
+		}
+		throw new Error(`re-drive never completed (echoCalls=${echoCalls})`);
+	});
+
 	it("a real answer is recorded as an answer entry", async () => {
 		const { agent, turn } = await openAgent(new MemoryStorage(), "eta-answer");
 		const asked = agent.ask.ask({ questionId: "q1", question: "which?", options: ["a", "b"] });

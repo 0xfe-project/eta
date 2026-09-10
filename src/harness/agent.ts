@@ -417,6 +417,9 @@ export class EtaAgent {
 			if (stored.value.disposed) continue;
 			this.loops.upsert(stored.value);
 		}
+		// An operation interrupted by a process restart stays durable in `running`; adopt and
+		// re-drive it, or the lane queue is wedged forever. NothingToResume (normal case) is fine.
+		void this.lane.resume(context).catch(() => undefined);
 	}
 
 	async close(context: Context): Promise<void> {
