@@ -1,0 +1,20 @@
+{
+	"name": "@eta/desktop",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"icons": "bun scripts/tray-icon.ts",
+		"prepare:sdk": "hutch electrobun prepare",
+		"client": "bun run --cwd ../eta-client build",
+		"dev": "bun run client && hutch electrobun dev --env=dev",
+		"build": "bun run client && hutch electrobun build --env=stable",
+		"typecheck": "if [ -d .hutch/devkit ]; then tsc --noEmit; else echo 'eta-desktop: skipped, run `hutch electrobun prepare`'; fi"
+	},
+	"dependencies": {
+		"electrobun": "2.0.1"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.2.0",
+		"typescript": "^5.8.0"
+	}
+}
