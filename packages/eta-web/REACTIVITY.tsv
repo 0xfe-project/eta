@@ -5,7 +5,7 @@ src/lib/eta-store.ts	socket	WebSocket?	connect	send; dispose	no	dispose/close	sa
 src/lib/eta-store.ts	retryMs	number	open reset; close backoff	close timeout	no	n/a	same	low	
 src/lib/eta-store.ts	closed	boolean	dispose	connect guard	no	n/a	same	low	resetEtaStoreForTests dispose+undef instance
 src/lib/eta-store.ts	instance	module singleton	etaStore(); resetEtaStoreForTests	etaStore; useEta	yes	dispose	same	med	Tests reset after each case.
-src/lib/eta-store.ts	useEta	useSyncExternalStore	store.emit	all pages/features	yes	unsubscribe	from() or signal+subscribe; or createStore+reconcile whole snapshot	high	Component fn runs once. Trial file. Do not per-field subscribe.
+src/lib/eta-store.ts	useEta	useSyncExternalStore	store.emit	all pages/features	yes	unsubscribe	from() or signal+subscribe; or createStore+replace snapshot (no reconcile)	high	Component fn runs once. Trial file. Do not per-field subscribe. reconcile mutates arrays and breaks DevRail pause.
 src/lib/eta-store.ts	useEtaOps	hook	n/a	unused	n/a	n/a	omit or port unused	low	No callers. Do not add deps for it.
 src/app/theme.tsx	theme	useState	storedPreference; setTheme; storage/eta:theme-change	context; applyTheme	yes	n/a	createSignal	med	Trial file. Must live in context as signal.
 src/app/theme.tsx	systemDark	useState	matchMedia change	resolveTheme	yes	removeListener	createSignal	med	

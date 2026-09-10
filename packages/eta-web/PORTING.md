@@ -82,7 +82,7 @@ export function useEta(): EtaState {
 
 或 `createSignal(store.snapshot())` + `store.subscribe(() => set(store.snapshot()))`。
 
-调用方写 `const state = useEta()` 之后，读字段必须追踪（`state.sessions` 若 `from` 返回 store 要按 Solid store 规则读）。机械阶段最稳：`from` 得到 accessor，页面里 `state().sessions`。若为了少改调用方，可把 `useEta` 做成返回一个 **store proxy**（`createStore` 包住 snapshot，subscribe 时 `reconcile` 整包替换）——行为仍是整包更新，只是 API 仍是 `state.sessions`。
+调用方写 `const state = useEta()` 之后，读字段必须追踪（`state.sessions` 若 `from` 返回 store 要按 Solid store 规则读）。机械阶段最稳：`from` 得到 accessor，页面里 `state().sessions`。若为了少改调用方，可把 `useEta` 做成返回一个 **store proxy**（`createStore` 包住 snapshot，subscribe 时 `setState(snapshot)` 整包替换顶层字段）——行为仍是整包更新，只是 API 仍是 `state.sessions`。**禁止 `reconcile`**：它就地改写 `dev[]` / `views`，DevRail `frozen.current = frames` 会握到活列表。
 
 **禁止**在机械阶段按字段切片订阅。
 

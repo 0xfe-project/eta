@@ -2,11 +2,13 @@
  * The single connection: one WebSocket, one store. Reconnects with backoff;
  * the server's hello + per-session view frames are the whole resync path, so
  * view state is fully replaced on (re)connect. UI reads via a Solid store
- * that reconciles each snapshot (mechanical stand-in for useSyncExternalStore).
+ * that replaces each snapshot (mechanical stand-in for useSyncExternalStore).
+ * Do not `reconcile`: it mutates arrays in place and breaks identity freeze
+ * (DevRail pause holds the previous `dev[]` snapshot).
  */
 
 import { onCleanup } from "solid-js";
-import { createStore, reconcile } from "solid-js/store";
+import { createStore } from "solid-js/store";
 import type { SessionView } from "@eta/core";
 import type { ClientMessage, DevFrame, ServerMessage, SidebarSession } from "./protocol.ts";
 
@@ -167,7 +169,7 @@ export function useEta(): EtaState {
 	const store = etaStore();
 	const [state, setState] = createStore(store.snapshot());
 	const unsubscribe = store.subscribe(() => {
-		setState(reconcile(store.snapshot()));
+		setState(store.snapshot());
 	});
 	onCleanup(unsubscribe);
 	return state;

@@ -182,7 +182,7 @@
 | I4 | Pass | 搜 `SOLID` 出 `search-hits` |
 | I5 | Pass | 删除 `eta-mtvcjs62` 后该行消失 |
 | J1–J3 | Pass | `dev-rail`、点帧出 JSON dialog、过滤 `zzzz-no-frame` → 0 条 |
-| J4 | Fail | 停在 `tab-dev` 点 pause（钮变 resume）后列表仍从 48 增到 53。`frozen.current = props.frames` 拿的是 store 同一份数组，Solid `reconcile` 会就地改写。切走 `tab-dev` 还会卸载 DevRail，pause 状态丢失 |
+| J4 | Pass | `useEta` 不再 `reconcile`；pause 握住上一帧 `dev[]` 身份。单测：`pauses the dev rail so later frames stay off the list`。切走 `tab-dev` 仍会卸 DevRail（pause 状态丢），那是 Show 互斥，不是这次的 freeze bug |
 | K1–K3 | Pass | 抽屉 + `term-host` + `terminal-tab-2` + hide 关掉 |
 | K4 | Pass | 带 cwd 的 session 显示 `/home/akrc/Developer/eta` |
 | L1 | Pass | `model-menu` 可见 `pro6000:qwen3.8-flash-next-uncensored` |
@@ -210,6 +210,6 @@
 - `window.prompt` 重命名要先点再 `dialog accept '新标题'`。
 - server 日志里的 `(model: faux echo)` 只看 `ANTHROPIC_API_KEY`，会误导；真模型以 `~/.eta/config.json` / UI picker 为准。
 
-### 唯一 Fail 的修复方向（未改代码）
+### J4 修法
 
-`packages/eta-web/src/features/sessions/dev-rail.tsx`：pause 时应 `frozen.current = props.frames.slice()`（拷贝），不要保存 store 数组引用。
+`useEta` 用 `setState(snapshot)` 整包替换，不要 `reconcile`。DevRail 继续握上一帧数组身份，不在组件里 `slice()`。
