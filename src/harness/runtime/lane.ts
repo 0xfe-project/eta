@@ -1133,13 +1133,17 @@ export class Lane<TContext extends object | undefined> implements AgentLane {
 							id: operation.meta.operationId,
 							kind: operation.meta.intent.kind,
 							status:
-								operation.state.control.status === "cancel_requested"
-									? ("aborting" as const)
-									: ("open" as const),
+								this.activeDrive !== undefined
+									? ("running" as const)
+									: operation.state.control.status === "cancel_requested"
+										? ("aborting" as const)
+										: ("open" as const),
 							startedAt: operation.meta.startedAt,
 							...(captured === undefined ? {} : { capturedModel: captured }),
 						};
 			return {
+				running: this.activeDrive !== undefined,
+				activeOperation: operation !== null,
 				lane: this.name,
 				tipId: state.tipId,
 				configuredModel: state.configuration.model,
