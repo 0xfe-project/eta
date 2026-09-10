@@ -7,7 +7,7 @@
 	"nav.context": "上下文",
 	"nav.workspace": "开发",
 	"nav.log": "日志",
-	"sidebar.noSessions": "还没有会话。",
+	"nav.terminal": "终端",	"sidebar.noSessions": "还没有会话。",
 	"sidebar.delete": "删除",
 	"sidebar.running": "运行中",
 	"sidebar.goal": "目标",

@@ -72,7 +72,7 @@ describe("sessions page smoke", () => {
 		expect(queryId("prompt-section-base")).not.toBeNull();
 	});
 
-	it("right panel offers context / workspace / log and switches between them", () => {
+	it("right panel offers context / workspace / terminal / log and keeps the terminal alive", () => {
 		render(
 			<ThemeProvider>
 				<MemoryRouter>
@@ -86,6 +86,7 @@ describe("sessions page smoke", () => {
 		flush(() => socket.fire("message", { data: JSON.stringify({ channel: "view", session: "s1", view: view("s1") }) }));
 		expect(queryId("tab-context")).not.toBeNull();
 		expect(queryId("tab-workspace")).not.toBeNull();
+		expect(queryId("tab-terminal")).not.toBeNull();
 		expect(queryId("tab-log")).not.toBeNull();
 		click("tab-workspace");
 		expect(queryId("workspace-panel")).not.toBeNull();
@@ -93,6 +94,14 @@ describe("sessions page smoke", () => {
 		expect(queryId("log-rail")).not.toBeNull();
 		click("tab-context");
 		expect(queryId("workspace-panel")).toBeNull();
+		// No terminal until it is asked for, then never unmounted again: a pty
+		// that dies on tab switch would take `vim` with it.
+		expect(queryId("panel-terminal")).toBeNull();
+		click("tab-terminal");
+		expect(byId("panel-terminal").getAttribute("data-active")).toBe("1");
+		expect(byId("terminal-host").getAttribute("data-variant")).toBe("panel");
+		click("tab-context");
+		expect(byId("panel-terminal").getAttribute("data-active")).toBe("0");
 	});
 
 	it("pauses the log rail so later frames stay off the list", () => {

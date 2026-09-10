@@ -12,7 +12,7 @@ import { LogRail } from "../features/sessions/log-rail.tsx";
 import { WorkspacePanel } from "../features/sessions/workspace-panel.tsx";
 import { CommandPalette } from "../features/sessions/command-palette.tsx";
 import { Welcome } from "../features/sessions/welcome.tsx";
-import { TerminalDrawer } from "../features/sessions/terminal-drawer.tsx";
+import { TerminalHost } from "../features/sessions/terminal-host.tsx";
 import { etaStore } from "../lib/eta-store.ts";
 
 function useRunNotifications() {
@@ -77,6 +77,9 @@ function SessionsMain(props: { termOpen: Accessor<boolean>; setTermOpen: Setter<
 		return name === null ? undefined : state.views[name];
 	};
 	const running = () => selected() === null ? false : (state.sessions.find((session) => session.name === selected())?.badges.includes("running") ?? false);
+	// The sidebar entry carries cwd from the hello frame; the view only gets it
+	// stamped on the next refresh, which would start the shell in $HOME.
+	const termCwd = () => state.sessions.find((session) => session.name === selected())?.cwd ?? view()?.cwd;
 
 	return (
 		<div class="flex min-h-0 flex-1 flex-col">
@@ -117,7 +120,7 @@ function SessionsMain(props: { termOpen: Accessor<boolean>; setTermOpen: Setter<
 									queue={current().queue}
 								/>
 								<Show when={props.termOpen() && view() !== undefined}>
-									<TerminalDrawer {...(current().cwd !== undefined ? { cwd: current().cwd } : {})} onClose={() => props.setTermOpen(false)} />
+									<TerminalHost variant="drawer" {...(termCwd() === undefined ? {} : { cwd: termCwd()! })} onClose={() => props.setTermOpen(false)} />
 								</Show>
 								<AskModal session={selected() ?? ""} view={current()} />
 							</>
@@ -148,15 +151,20 @@ function SessionContextBar() {
 function SessionsPanel() {
 	const i18n = useAppI18n();
 	const state = useEta();
-	const [tab, setTab] = createSignal<"context" | "workspace" | "log">("context");
+	const [tab, setTab] = createSignal<"context" | "workspace" | "terminal" | "log">("context");
+	// The terminal mounts on first use and is then only hidden: unmounting it
+	// would kill the pty, and `vim` with it.
+	const [terminalMounted, setTerminalMounted] = createSignal(false);
 	const selected = () => state.attach ?? state.sessions[0]?.name ?? null;
 	const view = () => {
 		const name = selected();
 		return name === null ? undefined : state.views[name];
 	};
+	const termCwd = () => state.sessions.find((session) => session.name === selected())?.cwd ?? view()?.cwd;
 	const tabs = [
 		{ key: "context", label: "nav.context" },
 		{ key: "workspace", label: "nav.workspace" },
+		{ key: "terminal", label: "nav.terminal" },
 		{ key: "log", label: "nav.log" },
 	] as const;
 
@@ -169,15 +177,18 @@ function SessionsPanel() {
 							{(item) => (
 								<button
 									data-testid={`tab-${item.key}`}
-									onClick={() => setTab(item.key)}
+									onClick={() => {
+										if (item.key === "terminal") setTerminalMounted(true);
+										setTab(item.key);
+									}}
 									class={`px-3 py-1 text-xs ${tab() === item.key ? "bg-overlay font-medium" : "text-muted"}`}
 								>
 									{i18n.t(item.label)}
 								</button>
-							)}
-						</For>
+								)}
+							</For>
 					</div>
-					<div class="min-h-0 flex-1">
+					<div class="relative min-h-0 flex-1">
 						<Show when={tab() === "context"}>
 							<ContextPanel session={selected() ?? ""} view={current()} />
 						</Show>
@@ -186,6 +197,15 @@ function SessionsPanel() {
 						</Show>
 						<Show when={tab() === "log"}>
 							<LogRail frames={selected() === null ? [] : state.dev[selected()!] ?? []} />
+						</Show>
+						<Show when={terminalMounted()}>
+							<div
+								data-testid="panel-terminal"
+								data-active={tab() === "terminal" ? "1" : "0"}
+								class={`absolute inset-0 ${tab() === "terminal" ? "" : "invisible"}`}
+							>
+								<TerminalHost variant="panel" {...(termCwd() === undefined ? {} : { cwd: termCwd()! })} onClose={() => setTerminalMounted(false)} />
+							</div>
 						</Show>
 					</div>
 				</div>

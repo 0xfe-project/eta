@@ -12,6 +12,10 @@ const SIDEBAR_MIN = 200;
 const SIDEBAR_MAX = 420;
 const SIDEBAR_RESERVE = 700;
 
+function insideTerminal(target: EventTarget | null): boolean {
+	return target instanceof Element && target.closest('[data-testid="term-host"]') !== null;
+}
+
 function useViewportWidth(): Accessor<number> {
 	const [width, setWidth] = createSignal(typeof window === "undefined" ? 1440 : window.innerWidth);
 	const onResize = (): void => {
@@ -137,6 +141,9 @@ export function AppShell(props: { sidebar: JSX.Element; main: JSX.Element; panel
 	};
 
 	const onKey = (event: KeyboardEvent) => {
+		// Keys typed into a terminal belong to the shell: vim's Ctrl+B must not
+		// read as "toggle sidebar".
+		if (insideTerminal(event.target)) return;
 		const meta = event.metaKey || event.ctrlKey;
 		if (!meta) return;
 		if (event.key === "b") {

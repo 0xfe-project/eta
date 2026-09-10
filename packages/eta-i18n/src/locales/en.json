@@ -7,7 +7,7 @@
 	"nav.context": "Context",
 	"nav.workspace": "Workspace",
 	"nav.log": "Log",
-	"sidebar.noSessions": "No sessions yet.",
+	"nav.terminal": "Terminal",	"sidebar.noSessions": "No sessions yet.",
 	"sidebar.delete": "Delete",
 	"sidebar.running": "running",
 	"sidebar.goal": "goal",

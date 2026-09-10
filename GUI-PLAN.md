@@ -153,3 +153,12 @@ picot 右侧是 4 个可独立开合栏:文件树+Git tab(staged/changes/untrack
 
 - [x] X6a 右栏宽度:上限 520 → 1040;拖拽和渲染都按视口收(左栏 reserve 700、右栏 reserve 640,存过的大宽度换小窗口也不会吞掉 timeline)。开发面板用 ResizeObserver 实测自身宽度,≥600 时改成 文件列表(240) | diff 左右分栏,窄了仍上下堆叠 —— 手机抽屉里也是堆叠。完成条件:1280 窗口拖到 640 出现分栏,330 宽仍是上下;假 ResizeObserver 覆盖两态。
 - [x] X6b 没有 git 也不崩:`runGit` 显式带 `env: process.env`(Bun 默认按**启动时**的 PATH 解析可执行文件,测试里剥 PATH 根本测不出来)→ git 缺失 = spawn 抛错 = `notGit`。status 输出上限单独放到 4MB(仓库改动多不误截断,diff 仍 400KB)。新增测试:PATH 剥离、session 目录被删、仓库还没有 commit、web 端 fetch 非 2xx、fetch reject。
+
+### T7 右栏终端 tab(2026-09-10,用户:右侧也来个终端,要能开 vim/nano)
+
+- [x] `terminal-drawer.tsx` → `terminal-host.tsx`,`variant="drawer" | "panel"` 共用同一套 xterm + `/term` 桥;右栏 tab 顺序 上下文 / 开发 / 终端 / 日志,panel 变体占满整栏(无高度拖拽条,✕ 只在抽屉变体出现)。
+  - **只挂一次**:tab 切走只加 `invisible`(visibility),不 unmount —— pty 不死,`vim` 不丢。首次点「终端」才挂载,之后常驻;`data-active` 属性给 smoke 断言。
+  - cwd 取侧栏 session 条目,不取 view:view 的 `cwd` 要等下一次 refresh 才被 stamp,新建 session 立刻开终端会起在 `$HOME`。
+  - 快捷键守卫:按键落在 `[data-testid="term-host"]` 里就不走全局 ⌘B/⌘K/⌘⇧O —— vim 的 Ctrl+B 不该开侧栏。
+  - 空闲连接:`TermRegistry.open` 里 `socket.timeout?.(0)` 主动关掉 Bun 的 120s 空闲计时器 —— 想思考两分钟再敲键的人不该被掐线。诚实记录:拿两个静默 socket 跑了 140s 的对照(一个 `timeout(0)` 一个默认),**两个都活着**,所以这次没复现到掉线;之前那只孤儿 `nano` 更可能是页面重载所致 —— `close` 只 kill shell 本身,它的子进程会变成孤儿继续挂着(已知毛刺,要干净得杀进程组)。客户端真重连时会在屏上写一行「shell restarted」,不装作无事发生。
+  - 实测:nano 在 320px 右栏里正常绘制;切走再切回编辑器还在;跨 tab 切换 DOM 节点与 pty 都不重建。

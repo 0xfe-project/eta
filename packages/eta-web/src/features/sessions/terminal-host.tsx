@@ -10,11 +10,13 @@ interface Tab {
 }
 
 /**
- * Bottom terminal drawer: one xterm.js per tab, each backed by a pty on /term.
- * Control frames are JSON; shell output arrives as binary.
+ * One xterm.js per tab, each backed by a pty on /term. Control frames are JSON;
+ * shell output arrives as binary. Two mounts share this component: the bottom
+ * drawer (resizable) and the right panel tab (full height, for `vim` and friends).
  */
-export function TerminalDrawer(props: { cwd?: string; onClose: () => void }) {
+export function TerminalHost(props: { cwd?: string; variant: "drawer" | "panel"; onClose?: () => void }) {
 	const i18n = useAppI18n();
+	const drawer = () => props.variant === "drawer";
 	const [tabs, setTabs] = createSignal<Tab[]>([{ id: 1 }]);
 	const [nextId, setNextId] = createSignal(2);
 	const [active, setActive] = createSignal(1);
@@ -45,15 +47,22 @@ export function TerminalDrawer(props: { cwd?: string; onClose: () => void }) {
 	const close = (id: number) => {
 		setTabs((current) => {
 			const kept = current.filter((tab) => tab.id !== id);
-			if (kept.length === 0) props.onClose();
+			if (kept.length === 0) props.onClose?.();
 			return kept;
 		});
 		setActive((current) => (current === id ? (tabs().find((tab) => tab.id !== id)?.id ?? 0) : current));
 	};
 
 	return (
-		<div data-testid="terminal-drawer" class="flex shrink-0 flex-col border-t-2 border-border bg-[#0a0a0a]" style={{ height: `${height()}px` }}>
-			<div data-testid="terminal-resize" onPointerDown={startDrag} class="h-[2px] shrink-0 cursor-row-resize bg-overlay hover:bg-border-strong" />
+		<div
+			data-testid="terminal-host"
+			data-variant={props.variant}
+			class={`flex flex-col bg-[#0a0a0a] ${drawer() ? "shrink-0 border-t-2 border-border" : "h-full"}`}
+			style={drawer() ? { height: `${height()}px` } : undefined}
+		>
+			<Show when={drawer()}>
+				<div data-testid="terminal-resize" onPointerDown={startDrag} class="h-[2px] shrink-0 cursor-row-resize bg-overlay hover:bg-border-strong" />
+			</Show>
 			<div class="flex items-stretch border-b border-border bg-surface">
 				<For each={tabs()}>
 					{(tab) => (
@@ -93,9 +102,11 @@ export function TerminalDrawer(props: { cwd?: string; onClose: () => void }) {
 				<Show when={props.cwd !== undefined} fallback={<span class="ml-auto" />}>
 					<span data-testid="terminal-cwd" class="mono ml-auto max-w-[220px] self-center truncate text-[9px] text-faint" title={props.cwd}>{props.cwd}</span>
 				</Show>
-				<button data-testid="terminal-hide" onClick={() => props.onClose()} class="mono px-3 text-[11px] text-muted hover:text-foreground">
-					✕
-				</button>
+				<Show when={drawer()}>
+					<button data-testid="terminal-hide" onClick={() => props.onClose?.()} class="mono px-3 text-[11px] text-muted hover:text-foreground">
+						✕
+					</button>
+				</Show>
 			</div>
 			<div class="relative min-h-0 flex-1">
 				<For each={tabs()}>
@@ -140,6 +151,7 @@ function TermTab(props: { cwd?: string; onExit: () => void }) {
 				const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
 				let ws: WebSocket;
 				let disposed = false;
+				let reconnects = 0;
 				let retry: ReturnType<typeof setTimeout> | undefined;
 				const send = (frame: Record<string, unknown>) => {
 					if (ws !== undefined && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(frame));
@@ -158,7 +170,11 @@ function TermTab(props: { cwd?: string; onExit: () => void }) {
 				const connect = () => {
 					ws = new WebSocket(`${scheme}//${window.location.host}/term`);
 					ws.binaryType = "arraybuffer";
-					ws.onopen = () => send({ op: "start", cols: term.cols, rows: term.rows, ...(cwd === undefined ? {} : { cwd }) });
+					ws.onopen = () => {
+						send({ op: "start", cols: term.cols, rows: term.rows, ...(cwd === undefined ? {} : { cwd }) });
+						// A restart throws away whatever the user had open in there, so say so.
+						if (reconnects++ > 0) term.write("\x1b[2m[terminal reconnected — the shell restarted]\x1b[0m\r\n");
+					};
 					ws.onmessage = onMessage;
 					ws.onclose = () => {
 						if (!disposed) retry = setTimeout(connect, 700);
@@ -170,13 +186,19 @@ function TermTab(props: { cwd?: string; onExit: () => void }) {
 					fit.fit();
 					send({ op: "resize", cols: term.cols, rows: term.rows });
 				};
-				const observer = new ResizeObserver(resize);
-				observer.observe(node);
+				let observer: ResizeObserver | undefined;
+				if (typeof ResizeObserver !== "undefined") {
+					observer = new ResizeObserver(resize);
+					observer.observe(node);
+				} else {
+					window.addEventListener("resize", resize);
+				}
 
 				onCleanup(() => {
 					disposed = true;
 					if (retry !== undefined) clearTimeout(retry);
-					observer.disconnect();
+					observer?.disconnect();
+					window.removeEventListener("resize", resize);
 					input.dispose();
 					ws.close();
 					term.dispose();
