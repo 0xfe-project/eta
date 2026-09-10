@@ -3,6 +3,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startServer, type EtaServer } from "../src/server.ts";
+import { discoverSkillDirs, renderSkillsBlock } from "../src/skills.ts";
+import { NodeExecutionEnv } from "@eta/core/node";
 import type { ServerMessage } from "../src/protocol.ts";
 
 async function withServer(run: (server: EtaServer) => Promise<void>): Promise<void> {
@@ -174,5 +176,44 @@ describe("sidebar ops", () => {
 			);
 			socket.close();
 		});
+	});
+});
+
+describe("skill discovery", () => {
+	it("walks up from cwd, adds home, git root, and submodule roots, deduped", () => {
+		const root = mkdtempSync(join(tmpdir(), "eta-skills-"));
+		const nested = join(root, "a", "b");
+		mkdirSync(join(nested, ".agents", "skills"), { recursive: true });
+		mkdirSync(join(root, ".git"));
+		mkdirSync(join(root, ".agents", "skills"), { recursive: true });
+		mkdirSync(join(root, "vendor", "lib", ".agents", "skills"), { recursive: true });
+		writeFileSync(join(root, ".gitmodules"), '[submodule "vendor/lib"]\n\tpath = vendor/lib\n');
+		const dirs = discoverSkillDirs(nested, join(root, "home"));
+		expect(dirs).toContain(join(nested, ".agents", "skills"));
+		expect(dirs).toContain(join(root, ".agents", "skills"));
+		expect(dirs).toContain(join(root, "vendor", "lib", ".agents", "skills"));
+		expect(dirs).toContain(join(root, "home", ".agents", "skills"));
+		expect(dirs.length).toBe(new Set(dirs).size);
+	});
+
+	it("renders the compact <skills> catalog block", async () => {
+		const root = mkdtempSync(join(tmpdir(), "eta-skills-render-"));
+		const home = join(root, "home");
+		const nested = join(root, "a", "b");
+		mkdirSync(nested, { recursive: true });
+		mkdirSync(join(home, ".agents", "skills", "demo"), { recursive: true });
+		writeFileSync(
+			join(home, ".agents", "skills", "demo", "SKILL.md"),
+			`---\nname: demo\ndescription: "Line one line two ${"x".repeat(150)}"\n---\nbody\n`,
+		);
+		const env = new NodeExecutionEnv({ cwd: nested });
+		const block = await renderSkillsBlock(env, nested, home);
+		expect(block.startsWith("<skills>\n")).toBe(true);
+		expect(block.endsWith("</skills>"));
+		expect(block).toContain("- demo Line one line two");
+		expect(block).toContain(join(home, ".agents", "skills", "demo"));
+		expect(block.includes("\n")).toBe(true);
+		const empty = await renderSkillsBlock(env, mkdtempSync(join(tmpdir(), "eta-skills-empty-")), join(root, "none"));
+		expect(empty).toBe("");
 	});
 });
