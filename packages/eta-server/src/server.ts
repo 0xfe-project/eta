@@ -327,13 +327,19 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 			return;
 		}
 		case "session.create":
-			await host.createSession(message.name, message.personaId, message.cwd ?? process.cwd(), message.modelId);
+			await host.createSession(message.name, message.personaId, expandHome(message.cwd ?? process.cwd()), message.modelId);
 			if (message.prompt !== undefined && message.prompt.length > 0) host.queue(message.name, message.prompt, "queue");
 			return;
 		case "session.delete":
 			await host.deleteSession(message.name);
 			return;
 	}
+}
+
+/** Accepts "~" and "~/..." from hand-typed cwd fields. */
+export function expandHome(path: string): string {
+	if (path === "~") return homedir();
+	return path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
 }
 
 const WALK_IGNORED = new Set(["node_modules", "dist", "target", "build", ".git"]);

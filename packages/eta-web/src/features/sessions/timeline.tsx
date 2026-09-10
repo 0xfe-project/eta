@@ -115,7 +115,7 @@ function MessageRow({ role, message, session, streaming = false, at = 0, results
 	if (role === "user") {
 		return (
 			<div className="message user my-2 flex justify-end" data-testid="user-message">
-				<div className="message-content max-w-[80%] bg-accent px-3 py-2 text-sm text-accent-foreground" style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}>
+				<div className="message-content max-w-[80%] px-3 py-2 text-sm text-accent-foreground">
 					{blocks.map((block, index) => (block.type === "text" ? <span key={index}>{String(block.text ?? "")}</span> : null))}
 					<MessageFooter at={at} blocks={blocks} />
 				</div>

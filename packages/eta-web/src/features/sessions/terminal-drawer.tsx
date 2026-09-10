@@ -128,13 +128,13 @@ function TermTab({ cwd, onExit }: { cwd?: string; onExit: () => void }) {
 		fit.fit();
 
 		const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
-		const ws = new WebSocket(`${scheme}//${window.location.host}/term`);
-		ws.binaryType = "arraybuffer";
+		let ws: WebSocket;
+		let disposed = false;
+		let retry: ReturnType<typeof setTimeout> | undefined;
 		const send = (frame: Record<string, unknown>) => {
-			if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(frame));
+			if (ws !== undefined && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(frame));
 		};
-		ws.onopen = () => send({ op: "start", cols: term.cols, rows: term.rows, ...(cwd === undefined ? {} : { cwd }) });
-		ws.onmessage = (event) => {
+		const onMessage = (event: MessageEvent) => {
 			if (typeof event.data === "string") {
 				try {
 					if (JSON.parse(event.data).event === "exit") onExitRef.current();
@@ -145,6 +145,16 @@ function TermTab({ cwd, onExit }: { cwd?: string; onExit: () => void }) {
 			}
 			term.write(new Uint8Array(event.data as ArrayBuffer));
 		};
+		const connect = () => {
+			ws = new WebSocket(`${scheme}//${window.location.host}/term`);
+			ws.binaryType = "arraybuffer";
+			ws.onopen = () => send({ op: "start", cols: term.cols, rows: term.rows, ...(cwd === undefined ? {} : { cwd }) });
+			ws.onmessage = onMessage;
+			ws.onclose = () => {
+				if (!disposed) retry = setTimeout(connect, 700);
+			};
+		};
+		connect();
 		const input = term.onData((data) => send({ op: "input", data }));
 		const resize = () => {
 			fit.fit();
@@ -154,6 +164,8 @@ function TermTab({ cwd, onExit }: { cwd?: string; onExit: () => void }) {
 		observer.observe(node);
 
 		return () => {
+			disposed = true;
+			if (retry !== undefined) clearTimeout(retry);
 			observer.disconnect();
 			input.dispose();
 			ws.close();
