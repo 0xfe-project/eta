@@ -16,9 +16,17 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 	const [jsonOpen, setJsonOpen] = useState(false);
 	const [btwOpen, setBtwOpen] = useState(false);
 	const [personaPicker, setPersonaPicker] = useState(false);
+	const [contextWindow, setContextWindow] = useState<number | null>(null);
 	const [personaOptions, setPersonaOptions] = useState<{ id: string; name: string; custom: boolean }[]>([]);
 	const [epochAtRequest, setEpochAtRequest] = useState<number | null>(null);
 	const send = (op: Parameters<typeof store.send>[0]) => store.send(op);
+
+	useEffect(() => {
+		void fetch(`/api/models?session=${encodeURIComponent(session)}`)
+			.then((response) => response.json() as Promise<{ models: { id: string; contextWindow?: number }[]; current: string }>)
+			.then((body) => setContextWindow(body.models.find((model) => model.id === body.current)?.contextWindow ?? null))
+			.catch(() => setContextWindow(null));
+	}, [session]);
 
 	useEffect(() => {
 		if (epochAtRequest !== null && view.compactionEpoch > epochAtRequest) {
@@ -39,30 +47,62 @@ export function ContextPanel({ session, view }: { session: string; view: Session
 	return (
 		<div className="flex h-full flex-col gap-4 overflow-y-auto p-3 text-sm" data-testid="context-panel">
 			<Section title={t("panel.usage")} testid="section-usage" right={<span className="text-[10px]">{(Math.round(view.tokensPerSec * 10) / 10).toFixed(1)} tok/s</span>}>
-				<p data-testid="usage-row" className="mono text-[11px] text-muted">
-					in {view.usage.input.toLocaleString()} / out {view.usage.output.toLocaleString()} / cache {(view.cacheRate * 100).toFixed(0)}% · epoch {view.compactionEpoch}
-				</p>
 				{(() => {
-					const usage = view.usage;
-					const parts = [
-						{ key: "in", value: usage.input, color: "var(--foreground)" },
-						{ key: "out", value: usage.output, color: "var(--accent)" },
-						{ key: "cr", value: usage.cacheRead, color: "var(--muted)" },
-						{ key: "cw", value: usage.cacheWrite, color: "var(--border-strong)" },
+					const share = view.contextShare ?? { userChars: 0, assistantChars: 0, toolChars: 0 };
+					const est = (chars: number) => Math.round(chars / 4);
+					const slices = [
+						{ label: t("usage.system"), tokens: est(view.prompt?.stableChars ?? 0), color: "var(--foreground)" },
+						{ label: t("usage.context"), tokens: est(Math.max(0, (view.prompt?.adaptiveChars ?? 0) - (view.prompt?.stableChars ?? 0))), color: "var(--accent)" },
+						{ label: t("usage.user"), tokens: est(share.userChars), color: "var(--primary)" },
+						{ label: t("usage.assistant"), tokens: est(share.assistantChars), color: "var(--warning)" },
+						{ label: t("usage.tool"), tokens: est(share.toolChars), color: "var(--border-strong)" },
 					];
-					const total = parts.reduce((sum, part) => sum + part.value, 0);
-					if (total === 0) return null;
+					const used = slices.reduce((sum, slice) => sum + slice.tokens, 0);
+					const ctx = contextWindow ?? 128_000;
+					const cap = Math.max(ctx, used, 1);
+					const r = 42;
+					const c = 2 * Math.PI * r;
+					let offset = 0;
 					return (
-						<div data-testid="usage-segments" className="mt-1 flex h-1 overflow-hidden bg-overlay">
-							{parts.map((part) => (
-								<div key={part.key} style={{ width: `${(part.value / total) * 100}%`, background: part.color }} />
-							))}
+						<div className="flex items-center gap-3">
+							<svg viewBox="0 0 120 120" className="h-[124px] w-[124px] shrink-0" data-testid="usage-donut">
+								<circle cx="60" cy="60" r={r} fill="none" stroke="var(--overlay)" strokeWidth="14" />
+								{slices.map((slice) => {
+									const dash = Math.max(0, (slice.tokens / cap) * c - 1.5);
+									const node = (
+										<circle key={slice.label} cx="60" cy="60" r={r} fill="none" stroke={slice.color} strokeWidth="14" strokeDasharray={`${dash} ${c - dash}`} strokeDashoffset={-offset} transform="rotate(-90 60 60)">
+											<title>{`${slice.label}: ~${slice.tokens.toLocaleString()} tokens`}</title>
+										</circle>
+										);
+									offset += (slice.tokens / cap) * c;
+									return node;
+								})}
+								<text x="60" y="57" textAnchor="middle" dominantBaseline="middle" fill="var(--foreground)" fontSize="17" fontWeight="700">{used.toLocaleString()}</text>
+								<text x="60" y="74" textAnchor="middle" dominantBaseline="middle" fill="var(--muted-foreground)" fontSize="9">{`ctx ${Math.round(ctx / 1000)}k · ${Math.min(999, Math.round((used / ctx) * 100))}%`}</text>
+							</svg>
+							<div className="grid min-w-0 flex-1 grid-cols-1 gap-0.5 text-[10px]">
+								{slices.map((slice) => (
+									<span key={slice.label} className="flex items-center gap-1.5 truncate text-muted">
+										<span className="h-2 w-2 shrink-0" style={{ background: slice.color }} />
+										<span className="truncate">{slice.label}</span>
+										<span className="mono ml-auto text-foreground">~{slice.tokens.toLocaleString()}</span>
+									</span>
+								))}
+								<span className="flex items-center gap-1.5 text-muted">
+									<span className="h-2 w-2 shrink-0 bg-overlay" />
+									<span className="truncate">{t("usage.remaining")}</span>
+									<span data-testid="usage-remaining" className="mono ml-auto text-foreground">~{Math.max(0, ctx - used).toLocaleString()}</span>
+								</span>
+							</div>
 						</div>
 					);
 				})()}
+				<p data-testid="usage-row" className="mono mt-1 text-[11px] text-muted">
+					in {view.usage.input.toLocaleString()} / out {view.usage.output.toLocaleString()} / cache {(view.cacheRate * 100).toFixed(0)}% · epoch {view.compactionEpoch}
+				</p>
 			</Section>
 
-			<Section
+<Section
 				title={t("panel.persona")}
 				testid="section-persona"
 				right={

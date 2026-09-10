@@ -145,5 +145,11 @@
 	"panel.persona": "persona",
 	"panel.noPersona": "no persona",
 	"ask.abort": "abort",
-	"ask.abortHint": "dismiss the question and stop this run"
+	"ask.abortHint": "dismiss the question and stop this run",
+	"usage.system": "system prompt",
+	"usage.context": "persona/goal/tasks",
+	"usage.user": "user",
+	"usage.assistant": "assistant",
+	"usage.tool": "tool io",
+	"usage.remaining": "remaining"
 }

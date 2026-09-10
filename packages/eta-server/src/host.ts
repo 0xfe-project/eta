@@ -552,24 +552,24 @@ export class Host {
 	}
 
 	/** Model catalog with no session context (welcome screen picker). */
-	modelCatalog(): { models: { id: string; label: string }[]; current: string } {
+	modelCatalog(): { models: { id: string; label: string; contextWindow: number }[]; current: string } {
 		return this.modelCatalogFrom(this.etaConfig(), false);
 	}
 
-	modelInfo(name: string): { models: { id: string; label: string }[]; current: string } {
+	modelInfo(name: string): { models: { id: string; label: string; contextWindow: number }[]; current: string } {
 		const faux = this.hosted.get(name)?.created.faux;
 		return this.modelCatalogFrom(this.etaConfig(), faux !== undefined, this.meta.get(name)?.modelId);
 	}
 
-	private modelCatalogFrom(cfg: EtaConfig, faux: boolean, currentOverride?: string): { models: { id: string; label: string }[]; current: string } {
+	private modelCatalogFrom(cfg: EtaConfig, faux: boolean, currentOverride?: string): { models: { id: string; label: string; contextWindow: number }[]; current: string } {
 		const configured = (cfg.providers ?? []).flatMap((provider) =>
-			provider.models.map((model) => ({ id: `${provider.id}:${model.id}`, label: model.name ?? model.id })),
+			provider.models.map((model) => ({ id: `${provider.id}:${model.id}`, label: model.name ?? model.id, contextWindow: model.contextWindow ?? 128_000 })),
 		);
 		const fallback = configDefaultModel(cfg);
 		const current = currentOverride ?? (configured.length > 0 ? fallback !== undefined ? `${fallback.provider}:${fallback.modelId}` : configured[0]!.id : undefined) ?? (faux ? "faux" : "claude-sonnet-4-5");
 		if (configured.length > 0) return { models: configured, current };
-		if (faux) return { models: [{ id: "faux", label: "faux echo" }], current };
-		return { models: ["claude-haiku-4-5", "claude-sonnet-4-5", "claude-opus-4-1"].map((id) => ({ id: `anthropic:${id}`, label: id })), current };
+		if (faux) return { models: [{ id: "faux", label: "faux echo", contextWindow: 128_000 }], current };
+		return { models: ["claude-haiku-4-5", "claude-sonnet-4-5", "claude-opus-4-1"].map((id) => ({ id: `anthropic:${id}`, label: id, contextWindow: 200_000 })), current };
 	}
 
 	btwSave(name: string, threadId: string): void {

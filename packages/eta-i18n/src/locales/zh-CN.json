@@ -145,5 +145,11 @@
 	"panel.persona": "persona",
 	"panel.noPersona": "未设置 persona",
 	"ask.abort": "中止",
-	"ask.abortHint": "放弃回答并中止当前回合"
+	"ask.abortHint": "放弃回答并中止当前回合",
+	"usage.system": "系统提示词",
+	"usage.context": "persona/目标/任务",
+	"usage.user": "用户",
+	"usage.assistant": "助手",
+	"usage.tool": "工具",
+	"usage.remaining": "剩余"
 }
