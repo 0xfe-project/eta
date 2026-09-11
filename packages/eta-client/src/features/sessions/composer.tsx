@@ -80,6 +80,9 @@ export function Composer(props: {
 	const [toolFiles, setToolFiles] = createSignal<string[]>([]);
 	const [toolQuery, setToolQuery] = createSignal("");
 	const [models, setModels] = createSignal<{ id: string; label: string }[]>([]);
+	/** Only while a file is actually over the box: the border is the whole answer to
+	 * "can I drop here", so it must not sit there permanently. */
+	const [dragOver, setDragOver] = createSignal(false);
 	let fileInput: HTMLInputElement | undefined;
 	let imageInput: HTMLInputElement | undefined;
 
@@ -271,24 +274,40 @@ export function Composer(props: {
 		submit(event.metaKey || event.ctrlKey ? "steer" : "queue");
 	};
 
+	/** One uploaded file becomes an `@path` at the caret; paste and drop share it. */
+	const uploadFiles = (uploaded: File[]): void => {
+		const session = props.session;
+		if (uploaded.length === 0 || session === undefined) return;
+		for (const file of uploaded) {
+			const form = new FormData();
+			form.append("file", file);
+			void apiFetch(`/api/upload?session=${encodeURIComponent(session)}`, { method: "POST", body: form })
+				.then((response) => response.json() as Promise<{ path?: string }>)
+				.then((body) => setText((current) => `${current}${current.endsWith(" ") || current.length === 0 ? "" : " "}${body.path ? `@${body.path}` : ""} `))
+				.catch(() => undefined);
+		}
+		void apiFetch(`/api/files?session=${encodeURIComponent(session)}`)
+			.then((response) => response.json() as Promise<string[]>)
+			.then(setFiles)
+			.catch(() => undefined);
+	};
+
+	/** A file dropped anywhere else on the page would navigate the browser to
+	 * `file:///…` and lose the draft; the global rule swallows it, here we answer it. */
+	const onDrop = (event: DragEvent) => {
+		event.preventDefault();
+		event.stopPropagation();
+		setDragOver(false);
+		uploadFiles(Array.from(event.dataTransfer?.files ?? []));
+	};
+
 	const onPaste = (event: ClipboardEvent) => {
 		const pastedFiles = Array.from(event.clipboardData?.files ?? []);
 		const session = props.session;
 		if (pastedFiles.length > 0) {
 			if (session === undefined) return;
 			event.preventDefault();
-			for (const file of pastedFiles) {
-				const form = new FormData();
-				form.append("file", file);
-				void apiFetch(`/api/upload?session=${encodeURIComponent(session)}`, { method: "POST", body: form })
-					.then((response) => response.json() as Promise<{ path?: string }>)
-					.then((body) => setText((current) => `${current}${current.endsWith(" ") || current.length === 0 ? "" : " "}${body.path ? `@${body.path}` : ""} `))
-					.catch(() => undefined);
-			}
-			void apiFetch(`/api/files?session=${encodeURIComponent(session)}`)
-				.then((response) => response.json() as Promise<string[]>)
-				.then(setFiles)
-				.catch(() => undefined);
+			uploadFiles(pastedFiles);
 			return;
 		}
 		const pasted = event.clipboardData?.getData("text") ?? "";
@@ -473,8 +492,16 @@ export function Composer(props: {
 					</div>
 				</Show>
 				<form
-					class="composer-card"
+					class={`composer-card${dragOver() ? " drag-over" : ""}`}
 					data-testid="composer-card"
+					onDragOver={(event: DragEvent) => {
+						if (props.session === undefined) return;
+						event.preventDefault();
+						event.stopPropagation();
+						setDragOver(true);
+					}}
+					onDragLeave={() => setDragOver(false)}
+					onDrop={onDrop}
 					onSubmit={(event) => {
 						event.preventDefault();
 						submit("queue");

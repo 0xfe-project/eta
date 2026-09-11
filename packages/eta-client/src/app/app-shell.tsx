@@ -1,6 +1,7 @@
 import { Show, createContext, createSignal, onCleanup, useContext, type Accessor, type JSX } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { NativeActions, onNativeActions } from "../lib/native.ts";
+import { insideTerminal, lockSelectionForDrag } from "../lib/app-behavior.ts";
 
 // The right column doubles as the workspace panel, so it opens wide: the git
 // list and the diff split left/right once there is room for both. Reserves keep
@@ -12,10 +13,6 @@ const PANEL_RESERVE = 640;
 const SIDEBAR_MIN = 260;
 const SIDEBAR_MAX = 420;
 const SIDEBAR_RESERVE = 700;
-
-function insideTerminal(target: EventTarget | null): boolean {
-	return target instanceof Element && target.closest('[data-testid="term-host"]') !== null;
-}
 
 function useViewportWidth(): Accessor<number> {
 	const [width, setWidth] = createSignal(typeof window === "undefined" ? 1440 : window.innerWidth);
@@ -54,10 +51,13 @@ function storedWidth(key: string, fallback: number, min: number, max: number): n
 }
 
 function Resizer(props: { grow: 1 | -1; storeKey: string; min: number; max: number; reserve: number }) {
-	const drag: { current: { x: number; width: number } | null } = { current: null };
+	const drag: { current: { x: number; width: number } | null; unlock?: () => void } = { current: null };
 	const onPointerDown = (event: PointerEvent) => {
 		const current = storedWidth(props.storeKey, props.grow === 1 ? 260 : 320, props.min, props.max);
 		drag.current = { x: event.clientX, width: current };
+		// Pointer capture keeps the moves coming to a 4px bar; without the lock the
+		// drag paints the whole window blue on the way past the timeline.
+		drag.unlock = lockSelectionForDrag();
 		(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
 	};
 	const onPointerMove = (event: PointerEvent) => {
@@ -70,6 +70,8 @@ function Resizer(props: { grow: 1 | -1; storeKey: string; min: number; max: numb
 	};
 	const onPointerUp = () => {
 		drag.current = null;
+		drag.unlock?.();
+		drag.unlock = undefined;
 	};
 	return (
 		<div
@@ -79,6 +81,7 @@ function Resizer(props: { grow: 1 | -1; storeKey: string; min: number; max: numb
 			onPointerDown={onPointerDown}
 			onPointerMove={onPointerMove}
 			onPointerUp={onPointerUp}
+			onPointerCancel={onPointerUp}
 			class="hidden w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-primary lg:block"
 		/>
 	);

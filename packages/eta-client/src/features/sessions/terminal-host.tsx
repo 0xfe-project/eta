@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 import { useAppI18n } from "../../i18n.ts";
+import { clipboardText, lockSelectionForDrag, openExternal } from "../../lib/app-behavior.ts";
 import { withToken, wsUrl } from "../../lib/host.ts";
 
 interface Tab {
@@ -31,10 +32,15 @@ export function TerminalHost(props: { cwd?: string; variant: "drawer" | "panel";
 		event.preventDefault();
 		const startY = event.clientY;
 		const startH = heightBox.current;
+		// Cancelling pointerdown already suppresses the compatibility mousedown, so no
+		// selection starts under the finger; the lock is for the drag that runs from a
+		// 2px bar across everything below it, where the browser may still rubber-band.
+		const unlock = lockSelectionForDrag();
 		const move = (ev: PointerEvent) => setHeight(Math.min(Math.max(startH + (startY - ev.clientY), 120), Math.round(window.innerHeight * 0.85)));
 		const up = () => {
 			window.removeEventListener("pointermove", move);
 			window.removeEventListener("pointerup", up);
+			unlock();
 			try {
 				localStorage.setItem("eta.height.terminal", String(heightBox.current));
 			} catch {
@@ -145,9 +151,50 @@ function TermTab(props: { cwd?: string; onExit: () => void }) {
 				});
 				const fit = new FitAddon();
 				term.loadAddon(fit);
-				term.loadAddon(new WebLinksAddon());
+				// A URL in `curl` output has to reach the real browser. On the addon's
+				// default it calls window.open, which in a `views://` webview opens a
+				// second eta window showing an https page.
+				term.loadAddon(new WebLinksAddon((_event, uri) => openExternal(uri)));
 				term.open(node);
 				fit.fit();
+
+				// Right-click pastes, like every other terminal. The global rule in
+				// lib/app-behavior.ts already skips this subtree — xterm listens for
+				// `paste` on the terminal element itself, and on macOS re-focuses its
+				// hidden textarea on a right-button mousedown — so the decision is ours
+				// here, and stopping propagation is what keeps the web menu from coming
+				// back up through the document.
+				const onContextMenu = (event: MouseEvent) => {
+					event.preventDefault();
+					event.stopPropagation();
+					void clipboardText().then((text) => {
+						if (text !== "") term.paste(text);
+					});
+				};
+				// Core xterm declares DRAG_OVER/DROP and never registers either, so a drop
+				// in here is the browser's: it navigates to `file:///…` and the session is
+				// gone. Answer it as a paste instead.
+				const onDragOver = (event: DragEvent) => {
+					event.preventDefault();
+					event.stopPropagation();
+				};
+				const onDrop = (event: DragEvent) => {
+					event.preventDefault();
+					event.stopPropagation();
+					const files = Array.from(event.dataTransfer?.files ?? []);
+					// Names, not paths: the web platform hides a dropped file's absolute
+					// path, so this is a `vim notes.md` convenience against the cwd the
+					// shell already has. Quoted, so spaces survive.
+					if (files.length > 0) {
+						term.paste(files.map((file) => `'${file.name.replaceAll("'", "'\\''")}'`).join(" "));
+						return;
+					}
+					const text = event.dataTransfer?.getData("text/plain") ?? "";
+					if (text !== "") term.paste(text);
+				};
+				node.addEventListener("contextmenu", onContextMenu);
+				node.addEventListener("dragover", onDragOver);
+				node.addEventListener("drop", onDrop);
 
 				let ws: WebSocket;
 				let disposed = false;
@@ -196,6 +243,9 @@ function TermTab(props: { cwd?: string; onExit: () => void }) {
 
 				onCleanup(() => {
 					disposed = true;
+					node.removeEventListener("contextmenu", onContextMenu);
+					node.removeEventListener("dragover", onDragOver);
+					node.removeEventListener("drop", onDrop);
 					if (retry !== undefined) clearTimeout(retry);
 					observer?.disconnect();
 					window.removeEventListener("resize", resize);
@@ -213,6 +263,8 @@ function TermTab(props: { cwd?: string; onExit: () => void }) {
 				host = node;
 			}}
 			data-testid="term-host"
+			/* The global context-menu rule looks for this: the handlers above own it. */
+			data-app-menu
 			class="h-full w-full"
 		/>
 	);

@@ -129,6 +129,66 @@ body {
 	color: var(--bg-solid);
 }
 
+/* ---- what is not text ---- */
+/* Chrome — buttons, labels, rails, dividers — is not a document, and watching it
+   rubber-band blue is how an app admits it is a web page. Selection is handed back
+   everywhere it is a feature: message bodies, code, inputs, and anything that opts
+   in with data-selectable. lib/app-behavior.ts is the JS half of the same rule.
+
+   The terminal is deliberately not in the restore list: xterm's own stylesheet sets
+   .xterm to user-select:none because it paints its own selection, so the rule above
+   is a no-op inside it and a well-meant user-select:text would give two selections. */
+body {
+	user-select: none;
+	-webkit-user-select: none;
+	-webkit-touch-callout: none;
+	-webkit-tap-highlight-color: transparent;
+}
+.message-content,
+.markdown,
+pre,
+code,
+input,
+textarea,
+select,
+[contenteditable="true"],
+[data-selectable],
+.selectable {
+	user-select: text;
+	-webkit-user-select: text;
+	-webkit-touch-callout: default;
+}
+button,
+[role="button"],
+[role="separator"],
+.markdown button,
+.markdown [role="button"],
+.message-content button {
+	user-select: none;
+	-webkit-user-select: none;
+}
+/* Icons, logos, thumbnails: the ghost image a browser paints while you meant to
+   click is the tell. Dragging selected text out of a reply still works — this is an
+   img rule, not a text rule. */
+img,
+svg,
+video {
+	-webkit-user-drag: none;
+	user-drag: none;
+}
+/* Spelled out rather than left to the import order of xterm.css, so that the next
+   person to widen the rule above has to say why the terminal is different. */
+.xterm,
+.xterm * {
+	user-select: none;
+	-webkit-user-select: none;
+}
+.xterm .xterm-helper-textarea,
+.xterm .xterm-accessibility-tree {
+	user-select: text;
+	-webkit-user-select: text;
+}
+
 ::-webkit-scrollbar {
 	width: 8px;
 	height: 8px;
@@ -464,6 +524,11 @@ details[open] > .tool-card-head .thinking-block-chevron {
 }
 .composer-card:focus-within {
 	border-color: var(--primary);
+}
+/* The one affordance a drop needs: the box says it will take the file. */
+.composer-card.drag-over {
+	border-color: var(--accent);
+	background: var(--overlay);
 }
 .composer-editor {
 	width: 100%;

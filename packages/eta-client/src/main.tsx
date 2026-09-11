@@ -4,6 +4,12 @@ import "./styles/graphite.css";
 import "./styles.css";
 import "./i18n.ts";
 import { host } from "./lib/host.ts";
+import { installAppBehavior } from "./lib/app-behavior.ts";
+
+// Right-click, drag, drop and zoom are browser behaviour until someone says
+// otherwise, so this runs before the first render rather than from a component:
+// the rules have to hold over content that has not mounted yet.
+installAppBehavior();
 
 // The shell and a browser tab want different chrome; CSS reads this.
 document.documentElement.dataset.host = host().kind;
