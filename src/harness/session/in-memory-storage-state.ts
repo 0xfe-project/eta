@@ -1,4 +1,4 @@
-import { addUsage, emptyUsage } from "../utils/usage.ts";
+import { addUsage, emptyUsage, subtractUsage } from "../utils/usage.ts";
 import { spliceMergedChain } from "./merge-splice.ts";
 import {
 	type CommittedListAppendWrite,
@@ -84,6 +84,14 @@ export class InMemoryStorageState {
 	private readonly usage: Map<string, UsageRow>;
 	private stats: SessionStats;
 	private nextSeq: number;
+	/**
+	 * Set when the state was rebuilt from a journal. A journal can name a parent it never
+	 * holds — the commit that would have carried it was rejected as a duplicate by a second
+	 * writer — and losing the whole chat over one hole is worse than showing the branch up
+	 * to it. Live writes still get the strict check.
+	 */
+	private brokenBranchesAllowed = false;
+	private reportedBrokenBranch = false;
 
 	constructor() {
 		this.entries = new Map();
@@ -99,6 +107,64 @@ export class InMemoryStorageState {
 		const prepared = prepareStorageCommit(writes, this.nextSeq, timestamp);
 		this.validateCommitted(prepared.writes);
 		return prepared;
+	}
+
+	/** Same sequencing as `prepareCommit`, without the duplicate-id rejection. */
+	prepareReplay(writes: Write[], timestamp: number): PreparedCommit {
+		return prepareStorageCommit(writes, this.nextSeq, timestamp);
+	}
+
+	/** Let a branch walk end at an entry whose parent the journal never held. */
+	allowBrokenBranches(): void {
+		this.brokenBranchesAllowed = true;
+	}
+
+	/**
+	 * Apply a commit the journal already accepted. A repeated entry/usage id overwrites
+	 * in place instead of throwing: the journal is append-only, so the later write is the
+	 * newer truth — a tool result first committed as an interruption placeholder and again
+	 * when the real output arrived. Refusing to replay would make the session unopenable
+	 * forever over one repeated id.
+	 */
+	applyReplay(writes: readonly CommittedWrite[]): SessionStats {
+		for (const write of writes) {
+			switch (write.kind) {
+				case "entry": {
+					const { kind: _kind, ...entry } = write;
+					const previous = this.entries.get(entry.id);
+					this.entries.set(entry.id, entry);
+					if (previous === undefined) {
+						this.entriesBySeq.push(entry);
+					} else {
+						const index = this.entriesBySeq.findIndex((candidate) => candidate.id === entry.id);
+						if (index >= 0) this.entriesBySeq[index] = entry;
+					}
+					if ((previous?.type === "message") !== (entry.type === "message")) {
+						this.stats = {
+							...this.stats,
+							messageCount: this.stats.messageCount + (entry.type === "message" ? 1 : -1),
+						};
+					}
+					break;
+				}
+				case "usage": {
+					const { kind: _kind, ...row } = write;
+					const previous = this.usage.get(row.id);
+					if (previous !== undefined) {
+						this.stats = { ...this.stats, usage: subtractUsage(this.stats.usage, previous.usage) };
+					}
+					this.usage.set(row.id, row);
+					this.stats = { ...this.stats, usage: addUsage(this.stats.usage, row.usage) };
+					break;
+				}
+				default:
+					// Values and list elements are already last-write-wins by sequence.
+					this.applyValidated([write]);
+					continue;
+				}
+				this.nextSeq = write.seq + 1;
+			}
+		return this.stats;
 	}
 
 	validateCommitted(writes: readonly CommittedWrite[]): void {
@@ -281,7 +347,16 @@ export class InMemoryStorageState {
 			path.push(entry);
 			if (entry.parentId === null) break;
 			entry = this.entries.get(entry.parentId);
-			if (entry === undefined) throw new Error("Corrupt branch: missing parent");
+			if (entry === undefined) {
+				if (!this.brokenBranchesAllowed) throw new Error("Corrupt branch: missing parent");
+				if (!this.reportedBrokenBranch) {
+					this.reportedBrokenBranch = true;
+					console.warn(
+						`[eta-journal] branch walk stopped at ${path[0]?.id ?? "?"}: parent ${path.at(-1)!.parentId} is not in the journal`,
+					);
+				}
+				break;
+			}
 		}
 		spliceMergedChain(path, (id) => this.entries.get(id));
 		if (query.order === "oldestFirst") path.reverse();

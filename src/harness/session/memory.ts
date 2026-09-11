@@ -59,6 +59,32 @@ export class MemoryStorage implements Storage {
 		return result;
 	}
 
+	/**
+	 * Rebuild state from writes an earlier process already accepted. Same ordering rules,
+	 * but a repeated entry/usage id overwrites instead of faulting the whole replay.
+	 */
+	async replay(writes: Write[], _context: Context): Promise<CommitResult> {
+		if (this.state !== "open") throw new Error("MemoryStorage is closed");
+		const result = this.commitQueue.then(() => {
+			const prepared = this.storageState.prepareReplay(writes, this.now());
+			const stats = this.storageState.applyReplay(prepared.writes);
+			return { ...prepared.result, stats };
+		});
+		this.commitQueue = result.then(
+			() => undefined,
+			() => undefined,
+		);
+		return result;
+	}
+
+	/**
+	 * Only a journal replay calls this: a branch naming a parent the file never holds ends
+	 * the walk there instead of faulting every read of the session.
+	 */
+	allowBrokenBranches(): void {
+		this.storageState.allowBrokenBranches();
+	}
+
 	getEntries(ids: string[], _context: Context): Promise<Map<string, Entry>> {
 		if (this.state !== "open") return Promise.reject(new Error("MemoryStorage is closed"));
 		return Promise.resolve(this.storageState.getEntries(ids));

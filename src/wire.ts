@@ -98,4 +98,15 @@ export type ServerMessage =
 	| { type: "search"; query: string; hits: { session: string; snippet: string }[] }
 	| { type: "created"; name: string }
 	| { type: "deleted"; name: string }
-	| { type: "error"; message: string };
+	| { type: "error"; message: string }
+	/**
+	 * Answer to a queueRemove. Needed because the chip disappearing means one of two
+	 * opposite things — we took it out, or the run drained it — and only the first
+	 * should put the text back in the composer or re-inject it as a steer.
+	 */
+	| { type: "queueAck"; session: string; entryId: string; outcome: QueueAckOutcome }
+	/** Native shell → client: a menu or tray item was clicked, an update changed state. */
+	| { type: "native"; kind: "menu" | "tray" | "update"; action: string; data?: unknown };
+
+/** The lane's own vocabulary, passed through rather than translated. */
+export type QueueAckOutcome = "cancelled" | "already_consumed" | "not_found";

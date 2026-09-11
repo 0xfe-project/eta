@@ -10,7 +10,8 @@
 		"./testing": "./src/harness/session/testing/index.ts",
 		"./node": "./src/node.ts",
 		"./eta": "./src/eta/index.ts",
-		"./prompts": "./src/prompts/index.ts"
+		"./prompts": "./src/prompts/index.ts",
+		"./wire": "./src/wire.ts"
 	},
 	"scripts": {
 		"test": "vitest --run",
