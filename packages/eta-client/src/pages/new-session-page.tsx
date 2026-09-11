@@ -3,7 +3,7 @@ import { useNavigate } from "@solidjs/router";
 import { useAppI18n } from "../i18n.ts";
 import { etaStore } from "../lib/eta-store.ts";
 import { apiFetch, host } from "../lib/host.ts";
-import { pickFolder } from "../lib/native.ts";
+import { NativeActions, onNativeActions, pickFolder } from "../lib/native.ts";
 
 interface PersonaSummary {
 	id: string;
@@ -67,6 +67,12 @@ export function NewSessionPage() {
 		const picked = await pickFolder(starting.length > 0 ? starting : undefined);
 		if (typeof picked === "string" && picked.length > 0) setCwd(picked);
 	};
+
+	/* ⌘O lives in the shell's menu bar, so it arrives as an action and not a click.
+	 * The item exists whether or not this page is on screen; answering it here, and
+	 * only here, is what keeps it from opening a dialog over some other view. */
+	const stopFolderAction = onNativeActions({ [NativeActions.openFolder]: () => void browse() });
+	onCleanup(stopFolderAction);
 
 	const create = () => {
 		const id = personaId();
