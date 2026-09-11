@@ -49,6 +49,16 @@ export interface SessionViewSubagent {
 	turns: number;
 }
 
+/**
+ * One btw thread as the panel sees it: `pending` while the side request is in
+ * flight, `error` when the last one did not answer. Both are what the panel
+ * shows instead of pretending a question was already answered.
+ */
+export type SessionViewBtwThread = Pick<
+	BtwThread,
+	"id" | "kind" | "exchanges" | "saveState" | "pending" | "error"
+>;
+
 export interface SessionView {
 	messages: SessionViewMessage[];
 	/** Messages older than the window in `messages`; set once the transcript is paged. */
@@ -63,7 +73,7 @@ export interface SessionView {
 	goal: GoalState | undefined;
 	tasks: StoredTask[];
 	loops: SessionViewLoop[];
-	sideThread: Pick<BtwThread, "id" | "kind" | "exchanges" | "saveState">[];
+	sideThread: SessionViewBtwThread[];
 	usage: Usage;
 	cacheRate: number;
 	branch: { tipId: string | null };
@@ -227,8 +237,11 @@ export class SessionViewProjector {
 			sideThread: btw.list().map((thread) => ({
 				id: thread.id,
 				kind: thread.kind,
-				exchanges: thread.exchanges,
+				// A copy: a published view must not keep watching the thread mutate.
+				exchanges: [...thread.exchanges],
 				saveState: thread.saveState,
+				...(thread.pending === undefined ? {} : { pending: thread.pending }),
+				...(thread.error === undefined ? {} : { error: thread.error }),
 			})),
 			usage: stats.usage,
 			cacheRate: cacheRate(stats.usage),

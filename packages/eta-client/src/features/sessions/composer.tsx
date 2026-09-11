@@ -1,11 +1,12 @@
-import { For, Show, createEffect, createMemo, createSignal, on, type JSX } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type JSX } from "solid-js";
 import { useAppI18n } from "../../i18n.ts";
 import { etaStore, useEta } from "../../lib/eta-store.ts";
 import { Button } from "../../components/ui/button.tsx";
 import { ModelPicker } from "./model-picker.tsx";
 import { themeStorageKey, themeChangeEvent } from "../../app/theme.tsx";
 import { useShellOptional } from "../../app/app-shell.tsx";
-import { apiFetch } from "../../lib/host.ts";
+import { apiFetch, goto } from "../../lib/host.ts";
+import { registerDraftSink } from "../../lib/queue-actions.ts";
 
 /** Subsequence fuzzy score: higher = better match; -1 = no match. */
 function fuzzyScore(query: string, target: string): number {
@@ -101,7 +102,7 @@ export function Composer(props: {
 						{ name: "thinking", description: t("cmd.thinking"), run: () => cycleThinking() },
 						{ name: "delete", description: t("cmd.delete"), run: () => store.send({ op: "session.delete", name: session }) },
 					]),
-			{ name: "new", description: t("cmd.new"), run: () => window.location.assign("/new") },
+			{ name: "new", description: t("cmd.new"), run: () => goto("/new") },
 			...(props.onToggleTerminal === undefined ? [] : [{ name: "terminal", description: t("cmd.terminal"), run: () => props.onToggleTerminal?.() }]),
 			{ name: "theme", description: t("cmd.theme"), run: () => toggleTheme() },
 			{ name: "lang", description: t("cmd.lang"), run: () => i18n.setLocale(i18n.locale === "en" ? "zh-CN" : "en") },
@@ -206,6 +207,23 @@ export function Composer(props: {
 			})
 			.catch(() => undefined);
 	};
+
+	/** The box itself, so a draft handed back by a queue chip can take the caret. */
+	let editor: HTMLTextAreaElement | undefined;
+
+	/**
+	 * Where「拉回」lands: *above* what is being typed, blank line between, so pulling an
+	 * entry back never swallows half a sentence and two pulls in a row land newest-first.
+	 * Registered rather than subscribed because two composers can be mounted at once (the
+	 * empty sessions page shows a welcome one) — see the note in lib/queue-actions.ts.
+	 */
+	onCleanup(
+		registerDraftSink((pulled) => {
+			setText((current) => (current.trim().length === 0 ? pulled : `${pulled}\n\n${current}`));
+			// It came back to be edited, so the caret goes where the editing happens.
+			editor?.focus();
+		}),
+	);
 
 	const submit = (mode: "queue" | "steer") => {
 		const value = text().trim();
@@ -545,6 +563,7 @@ export function Composer(props: {
 							ime.endedAt = performance.now();
 						}}
 						ref={(node) => {
+							editor = node;
 							if (node !== undefined) autoGrow(node);
 						}}
 						value={text()}

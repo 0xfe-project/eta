@@ -591,15 +591,32 @@ details[open] > .tool-card-head .thinking-block-chevron {
 	gap: 6px;
 }
 .queued-message-chip {
+	display: flex;
+	align-items: center;
+	gap: 6px;
 	max-width: 100%;
 	overflow: hidden;
 	border: 1px dashed var(--border-hover);
-	padding: 1px 8px;
+	padding: 1px 4px 1px 8px;
 	font-family: var(--font-mono);
 	font-size: 10px;
 	color: var(--fg-muted);
 	white-space: nowrap;
-	text-overflow: ellipsis;
+}
+/* Three verbs per row, so they read as part of the chip and not as a toolbar that
+   wandered in: same size, muted until hovered, and no focus ring eating the row. */
+.queued-message-chip button {
+	flex-shrink: 0;
+	border: 1px solid transparent;
+	padding: 0 4px;
+	font-family: var(--font-mono);
+	font-size: 10px;
+	color: var(--fg-muted);
+	white-space: nowrap;
+}
+.queued-message-chip button:hover {
+	border-color: var(--border-strong);
+	color: var(--fg);
 }
 
 /* ---- menus (slash / @) ---- */
@@ -1037,6 +1054,17 @@ html.dark .markdown [data-streamdown="code-block-body"] span {
 	border-bottom: 1px solid var(--border);
 }
 
+/* Same baseline as .topbar, minus the drag. This one holds buttons, and a press
+   in the titlebar band is answered by the window before the page sees it — so a
+   strip you must be able to click cannot be a strip you drag the window with. */
+.tabstrip {
+	display: flex;
+	align-items: center;
+	box-sizing: border-box;
+	height: 40px;
+	border-bottom: 1px solid var(--border);
+}
+
 /* ---- workspace panel: git status list + read-only diff ---- */
 
 .git-group-head {
@@ -1134,6 +1162,17 @@ html.dark .markdown [data-streamdown="code-block-body"] span {
 	app-region: no-drag;
 	--electrobun-app-region: no-drag;
 }
+/* The three traffic lights are painted over this corner by the window itself, so
+   the slot holds their width and the brand starts clear of them. A browser tab has
+   no lights, so the slot is not there at all. */
+.lights-slot {
+	display: none;
+	flex-shrink: 0;
+}
+html[data-host="desktop"] .lights-slot {
+	display: inline-block;
+	width: 68px;
+}
 .logo-slot {
 	display: inline-flex;
 	width: 20px;
@@ -1141,11 +1180,12 @@ html.dark .markdown [data-streamdown="code-block-body"] span {
 	flex-shrink: 0;
 	align-items: center;
 }
-/* In the shell the macOS traffic lights are painted over this corner by the
-   window itself, so the slot grows to cover them and the logo steps aside. */
-html[data-host="desktop"] .logo-slot {
-	width: 68px;
-}
-html[data-host="desktop"] .logo-slot img {
-	display: none;
+/* Logo and name, chrome rather than content: it never takes focus, never selects,
+   never drags out as a ghost image. */
+.brand {
+	font-size: 12px;
+	letter-spacing: 0.08em;
+	color: var(--fg-muted);
+	user-select: none;
+	-webkit-user-select: none;
 }

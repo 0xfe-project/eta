@@ -2,6 +2,7 @@ import { For, Show } from "solid-js";
 import type { SessionView } from "@eta/core";
 import { useAppI18n } from "../../i18n.ts";
 import { etaStore } from "../../lib/eta-store.ts";
+import { pullBackQueued, steerQueued } from "../../lib/queue-actions.ts";
 import { Button } from "../../components/ui/button.tsx";
 
 /**
@@ -22,14 +23,36 @@ export function ContextBar(props: { session: string; view: SessionView }) {
 					<div data-testid="queued-bar" class="queued-messages">
 						<For each={queue()}>
 							{(item) => (
-								<button
-									data-testid={`queue-${item.entryId}`}
-									title={i18n.t("composer.queueCancel")}
-									onClick={() => send({ op: "queueRemove", session: props.session, entryId: item.entryId })}
-									class="queued-message-chip"
-								>
-									{i18n.t("composer.queued")} · {item.text} ×
-								</button>
+								/* The chip used to be one button that removed the entry. It is now a
+								   row: the same text, and what can be done with it. */
+								<span data-testid={`queue-${item.entryId}`} class="queued-message-chip" title={item.text}>
+									<span class="min-w-0 truncate">{i18n.t("composer.queued")} · {item.text}</span>
+									{/* An entry already in the steering queue cannot be steered again —
+									    the button would be a lie, so only follow-ups get one. */}
+									<Show when={item.kind === "followUp"}>
+										<button
+											data-testid={`queue-steer-${item.entryId}`}
+											title={i18n.t("composer.queueSteer")}
+											onClick={() => void steerQueued(props.session, item)}
+										>
+											{i18n.t("composer.queueSteer")}
+										</button>
+									</Show>
+									<button
+										data-testid={`queue-return-${item.entryId}`}
+										title={i18n.t("composer.queueReturn")}
+										onClick={() => void pullBackQueued(props.session, item)}
+									>
+										{i18n.t("composer.queueReturn")}
+									</button>
+									<button
+										data-testid={`queue-drop-${item.entryId}`}
+										title={i18n.t("composer.queueCancel")}
+										onClick={() => send({ op: "queueRemove", session: props.session, entryId: item.entryId })}
+									>
+										×
+									</button>
+								</span>
 							)}
 						</For>
 					</div>

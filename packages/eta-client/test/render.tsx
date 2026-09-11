@@ -6,8 +6,8 @@ import { cleanup, fireEvent, render as renderTree } from "@solidjs/testing-libra
 import type { JSX } from "solid-js";
 import { byId } from "./dom.ts";
 
-export function render(node: JSX.Element) {
-	return renderTree(() => node);
+export function render(node: JSX.Element, options?: Parameters<typeof renderTree>[1]) {
+	return renderTree(() => node, options);
 }
 
 export function flush(run: () => void): void {

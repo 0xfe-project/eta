@@ -47,6 +47,14 @@ export function Sidebar(props: { selected: string | null; termActive: boolean; o
 	const state = useEta();
 	const store = etaStore();
 	const navigate = useNavigate();
+	/** The sidebar routes its own links. The router listens for anchor clicks at the
+	 *  document and drops any href whose origin is not the page's own — and in the
+	 *  shell the page is `views://eta/index.html`, so a plain <A> is a link that does
+	 *  nothing. The href stays: in a browser tab it is still a real link. */
+	const routeTo = (event: MouseEvent, path: string) => {
+		event.preventDefault();
+		void navigate(path);
+	};
 	const [query, setQuery] = createSignal("");
 	const [hits, setHits] = createSignal<{ session: string; snippet: string }[] | null>(null);
 	const collapsed = () => sidebarPrefs.collapsed;
@@ -113,35 +121,31 @@ export function Sidebar(props: { selected: string | null; termActive: boolean; o
 
 	return (
 		<div class="flex h-full flex-col" data-testid="sidebar">
+			{/* The window-drag strip. In the shell this band *is* the titlebar: a press
+			    in it moves the window, so nothing clickable belongs here — a button on a
+			    drag region is a button that eats the click. */}
 			<div class="topbar gap-2 px-3">
-				{/* In the desktop shell the traffic lights live in this slot; in a tab the logo does its job. */}
+				{/* In the shell the window paints the three lights over this slot; in a tab
+				    there are none and it collapses to nothing. */}
+				<span class="lights-slot" data-testid="lights-slot" />
 				<span class="logo-slot" data-testid="logo-slot">
 					<img src="/Eta-Logo.svg" alt="eta" class="h-5 w-5" data-testid="logo" />
 				</span>
-				<div class="ml-auto flex gap-1">
-					<button
-						data-testid="term-toggle"
-						onClick={() => props.onTerminal()}
-						title={i18n.t("term.title")}
-						class={`shrink-0 whitespace-nowrap border border-border-strong px-2 py-1 text-xs uppercase tracking-[0.12em] text-muted hover:bg-foreground hover:text-background ${props.termActive ? "bg-foreground text-background" : ""}`}
-					>
-						{i18n.t("term.open")}
-					</button>
-					<A href="/new" data-testid="nav-new" class="shrink-0 whitespace-nowrap bg-accent px-2 py-1 text-xs font-medium text-accent-foreground">
-						{i18n.t("nav.new")}
-					</A>
-					<A href="/settings" data-testid="nav-settings" class="shrink-0 whitespace-nowrap border border-border px-2 py-1 text-xs text-muted">
-						{i18n.t("nav.settings")}
-					</A>
-				</div>
+				<span class="brand" data-testid="brand">{i18n.t("app.name")}</span>
 			</div>
-			<input
-				data-testid="sidebar-search"
-				value={query()}
-				onInput={(event) => search(event.currentTarget.value)}
-				placeholder={i18n.t("sidebar.search")}
-				class="m-2 border border-border bg-elevated px-2 py-1 text-xs outline-none placeholder:text-muted"
-			/>
+			{/* New session rides with the search field: both are about the list. */}
+			<div class="flex shrink-0 items-center gap-1 px-2 pt-2">
+				<input
+					data-testid="sidebar-search"
+					value={query()}
+					onInput={(event) => search(event.currentTarget.value)}
+					placeholder={i18n.t("sidebar.search")}
+					class="min-w-0 flex-1 border border-border bg-elevated px-2 py-1 text-xs outline-none placeholder:text-muted"
+				/>
+				<A href="/new" data-testid="nav-new" onClick={(event) => routeTo(event, "/new")} class="shrink-0 whitespace-nowrap bg-accent px-2 py-1 text-xs font-medium text-accent-foreground">
+					{i18n.t("nav.new")}
+				</A>
+			</div>
 			<Show when={hits()}>
 				{(current) => (
 					<div data-testid="search-hits" class="max-h-[30%] overflow-y-auto border-b border-border">
@@ -218,6 +222,21 @@ export function Sidebar(props: { selected: string | null; termActive: boolean; o
 			<Show when={!state.connected}>
 				<p data-testid="connection-banner" class="border-t border-border bg-warning/10 p-2 text-xs text-warning">{i18n.t("connection.disconnected")}</p>
 			</Show>
+			{/* Pinned, under the scroll and out of the drag strip: the two ways out of
+			    the list. Every app keeps them here, so nobody has to look for them. */}
+			<div class="flex shrink-0 items-center gap-1 border-t border-border px-2 py-2" data-testid="sidebar-foot">
+				<A href="/settings" data-testid="nav-settings" onClick={(event) => routeTo(event, "/settings")} class="shrink-0 whitespace-nowrap border border-border px-2 py-1 text-xs text-muted hover:bg-foreground hover:text-background">
+					{i18n.t("nav.settings")}
+				</A>
+				<button
+					data-testid="term-toggle"
+					onClick={() => props.onTerminal()}
+					title={i18n.t("term.title")}
+					class={`ml-auto shrink-0 whitespace-nowrap border border-border-strong px-2 py-1 text-xs uppercase tracking-[0.12em] text-muted hover:bg-foreground hover:text-background ${props.termActive ? "bg-foreground text-background" : ""}`}
+				>
+					{i18n.t("term.open")}
+				</button>
+			</div>
 		</div>
 	);
 }

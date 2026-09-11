@@ -205,7 +205,14 @@ export function ContextPanel(props: { session: string; view: SessionView }) {
 								onKeyDown={(event) => event.key === "Enter" && setBtwOpen(true)}
 								class="mono flex cursor-pointer items-center gap-2 py-0.5 text-[11px] text-muted hover:text-foreground"
 							>
-								<span class="min-w-0 flex-1 truncate">{thread.id} · {thread.exchanges.length}x · {thread.saveState}</span>
+								<span class="min-w-0 flex-1 truncate">
+									{thread.id} · {thread.exchanges.length}x ·{" "}
+									{thread.error !== undefined
+										? i18n.t("btw.failed")
+										: thread.pending !== undefined
+											? i18n.t("btw.waiting")
+											: thread.saveState}
+								</span>
 								<button class="border border-border px-2 py-0.5 text-[10px]" onClick={(event) => { event.stopPropagation(); send({ op: "btwSave", session: props.session, threadId: thread.id }); }}>save</button>
 								<button class="border border-border px-2 py-0.5 text-[10px]" onClick={(event) => { event.stopPropagation(); send({ op: "btwClear", session: props.session, threadId: thread.id }); }}>×</button>
 							</div>

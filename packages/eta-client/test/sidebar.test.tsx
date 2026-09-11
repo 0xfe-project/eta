@@ -12,10 +12,10 @@ function session(name: string, patch: Record<string, unknown> = {}): unknown {
 	return { name, badges: [], personas: [], cwd: "/work/eta", updated: 1_700_000_000_000, ...patch };
 }
 
-function mount(sessions: unknown[] = [session("s1")]) {
+function mount(sessions: unknown[] = [session("s1")], onTerminal: () => void = () => undefined) {
 	render(
 		<MemoryRouter>
-			<Route path="/" component={() => <Sidebar selected="s1" termActive={false} onTerminal={() => undefined} />} />
+			<Route path="/" component={() => <Sidebar selected="s1" termActive={false} onTerminal={onTerminal} />} />
 		</MemoryRouter>,
 	);
 	const socket = FakeSocket.instances[0]!;
@@ -130,5 +130,44 @@ describe("sidebar session rows", () => {
 		keyDown("session-rename-input-s1", "Escape");
 		expect(queryId("session-rename-input-s1")).toBeNull();
 		expect(FakeSocket.sent.some((raw) => raw.includes("session.rename"))).toBe(false);
+	});
+
+	it("leaves the drag strip with nothing to click", () => {
+		mount();
+		// In the shell that band is the window's own titlebar: a press there moves the
+		// window and never reaches the page, so only the logo may live in it.
+		const strip = byId("logo-slot").parentElement as HTMLElement;
+		expect(strip.querySelector("button, a, input")).toBeNull();
+	});
+
+	it("puts new session beside the search field and pins the rest under the list", () => {
+		mount();
+		expect(byId("nav-new").parentElement).toBe(byId("sidebar-search").parentElement);
+		// The two ways out of the list share one bar under the scroll, where every app
+		// keeps them — and where a click is a click.
+		const foot = byId("sidebar-foot");
+		expect(foot.contains(byId("nav-settings"))).toBe(true);
+		expect(foot.contains(byId("term-toggle"))).toBe(true);
+	});
+
+	it("answers the pinned controls", () => {
+		let presses = 0;
+		mount([session("s1")], () => {
+			presses += 1;
+		});
+		click("term-toggle");
+		expect(presses).toBe(1);
+		// jsdom lets the router swallow a click — no spec in this file can watch a
+		// route change — so the links are checked where they can be seen: they point at
+		// the app's own routes, and the sidebar takes the click over instead of trusting
+		// the router's delegated anchor handler. That handler drops a `views://` href,
+		// which is what made these two do nothing in the shell.
+		for (const [testid, path] of [["nav-new", "/new"], ["nav-settings", "/settings"]] as const) {
+			const link = byId(testid);
+			expect(link.getAttribute("href")).toBe(path);
+			const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+			link.dispatchEvent(event);
+			expect(event.defaultPrevented).toBe(true);
+		}
 	});
 });

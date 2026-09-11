@@ -186,6 +186,15 @@ export class EtaStore {
 						detail: { kind: message.kind, action: message.action, data: message.data },
 					}),
 				);
+			// A queueRemove's answer: not state, and it belongs to whichever chip asked.
+			// The queue itself cannot say who removed the entry, so the waiters keep the
+			// distinction (see lib/queue-actions.ts).
+			if ("type" in message && message.type === "queueAck")
+				window.dispatchEvent(
+					new CustomEvent("eta:queue-ack", {
+						detail: { session: message.session, entryId: message.entryId, outcome: message.outcome },
+					}),
+				);
 			this.emit(message);
 		});
 	}

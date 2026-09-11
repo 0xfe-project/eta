@@ -14,7 +14,7 @@
  */
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { BrowserWindow, Tray, Utils } from "electrobun/main";
+import { ApplicationMenu, BrowserWindow, Tray, Utils, type ApplicationMenuItemConfig } from "electrobun/main";
 import { startServer, type EtaServer, type NativeHandlers } from "../../../eta-server/src/server.ts";
 
 const VERSION = "0.1.0";
@@ -65,7 +65,7 @@ const server: EtaServer = await startServer({
 
 const apiBase = `http://127.0.0.1:${String(server.port)}`;
 /** Carried to the page and back as `?token=`; the server stops accepting peers that
- * do not have it as soon as `startServer` grows the check (docs/DESKTOP-SERVER-TODO.md §3). */
+ * do not have it as soon as `startServer` grows the check. */
 const token = crypto.randomUUID().replaceAll("-", "");
 const health = await fetch(`${apiBase}/api/health`).then((response) => response.status).catch(() => 0);
 
@@ -108,15 +108,123 @@ tray.setMenu([
 	{ type: "separator" },
 	{ type: "normal", label: "退出 eta", action: ACTIONS.quit },
 ]);
+
+/**
+ * The menu bar, which on macOS is not decoration but the input system.
+ *
+ * Without an Edit menu, ⌘A/⌘C/⌘V/⌘X/⌘Z typed into eta's composer die in AppKit:
+ * those keys are dispatched as main-menu key equivalents into the responder chain
+ * (`selectAll:`, `copy:`, `paste:`, `cut:`, `undo:`), and the web content never sees
+ * a keydown at all — so nothing on the page can catch them. Hutch has the role →
+ * selector map; the only thing missing was somebody calling setApplicationMenu.
+ *
+ * Two things deliberately absent:
+ * - no ⌘↵ item: Cocoa binds ⌘↵ to `insertNewlineIgnoringFieldEditor:`, and the
+ *   composer needs that keydown to steer mid-turn;
+ * - no ⌘R: reloading is the page's own cmd+R, and a menu item would take it away
+ *   from a build whose devtools are how it gets debugged.
+ *
+ * Every item here has an answer on the other side, which is the test an item has to
+ * pass before it gets an accelerator — see the two notes inside for where the answer
+ * is conditional on the view.
+ */
+const APP_MENU: ApplicationMenuItemConfig[] = [
+	{
+		label: "eta",
+		submenu: [
+			{ role: "about", label: "关于 eta", accelerator: "" },
+			{ type: "divider" },
+			{ role: "hide", label: "隐藏 eta", accelerator: "CommandOrControl+H" },
+			{ role: "hideOthers", label: "隐藏其他", accelerator: "CommandOrControl+Option+H" },
+			{ role: "showAll", label: "全部显示", accelerator: "" },
+			{ type: "divider" },
+			{ role: "quit", label: "退出 eta", accelerator: "CommandOrControl+Q" },
+		],
+	},
+	{
+		label: "会话",
+		submenu: [
+			{ label: "新会话", action: ACTIONS.newSession, accelerator: "CommandOrControl+Shift+O" },
+			/* Answered by the new-session page, which owns a folder; from another view the
+			   item is inert rather than opening a dialog over something that cannot take it. */
+			{ label: "打开文件夹…", action: ACTIONS.openFolder, accelerator: "CommandOrControl+O" },
+			{ type: "divider" },
+			// ⌘. is macOS's cancel; aborting a turn is what cancel means here.
+			{ label: "中止回合", action: ACTIONS.abort, accelerator: "CommandOrControl+Period" },
+			{ label: "压缩上下文", action: ACTIONS.compact, accelerator: "CommandOrControl+Shift+C" },
+		],
+	},
+	{
+		label: "编辑",
+		submenu: [
+			{ role: "undo", label: "撤销", accelerator: "CommandOrControl+Z" },
+			{ role: "redo", label: "重做", accelerator: "CommandOrControl+Shift+Z" },
+			{ type: "divider" },
+			{ role: "cut", label: "剪切", accelerator: "CommandOrControl+X" },
+			{ role: "copy", label: "拷贝", accelerator: "CommandOrControl+C" },
+			{ role: "paste", label: "粘贴", accelerator: "CommandOrControl+V" },
+			{ role: "pasteAndMatchStyle", label: "粘贴并匹配样式", accelerator: "CommandOrControl+Shift+Option+V" },
+			{ role: "delete", label: "删除", accelerator: "CommandOrControl+Backspace" },
+			{ type: "divider" },
+			{ role: "selectAll", label: "全选", accelerator: "CommandOrControl+A" },
+		],
+	},
+	{
+		label: "视图",
+		submenu: [
+			{ label: "命令面板", action: ACTIONS.commandPalette, accelerator: "CommandOrControl+K" },
+			{ label: "切换侧栏", action: ACTIONS.toggleSidebar, accelerator: "CommandOrControl+B" },
+			{ label: "切换右栏", action: ACTIONS.togglePanel, accelerator: "CommandOrControl+Shift+B" },
+			{ type: "divider" },
+			{ role: "toggleFullScreen", label: "全屏幕", accelerator: "Control+Command+F" },
+		],
+	},
+	{
+		label: "窗口",
+		submenu: [
+			{ role: "minimize", label: "最小化", accelerator: "CommandOrControl+M" },
+			{ role: "zoom", label: "缩放", accelerator: "" },
+			{ type: "divider" },
+			{ role: "close", label: "关闭", accelerator: "CommandOrControl+W" },
+			{ role: "bringAllToFront", label: "全部置于前端", accelerator: "" },
+		],
+	},
+];
+
+/**
+ * Menu clicks arrive as `{action}`; the tray wraps the item's payload one level
+ * deeper, so both shapes are read rather than one of them assumed.
+ */
+function actionOf(event: unknown): string | undefined {
+	const data = (event as { data?: { action?: string; data?: { action?: string } } }).data;
+	return data?.action ?? data?.data?.action;
+}
+
+function runAction(action: string, kind: "menu" | "tray"): void {
+	if (action === ACTIONS.quit) {
+		process.exit(0);
+		return;
+	}
+	server.push({ type: "native", kind, action });
+}
+
+ApplicationMenu.setApplicationMenu(APP_MENU);
+ApplicationMenu.on("application-menu-clicked", (event) => {
+	const action = actionOf(event);
+	if (action !== undefined) runAction(action, "menu");
+});
+
 tray.on("tray-clicked", (event) => {
-	const action = (event as { data?: { action?: string } }).data?.action;
-	if (action === undefined) return;
-	if (action === ACTIONS.quit) process.exit(0);
-	server.push({ type: "native", kind: "tray", action });
+	const action = actionOf(event);
+	if (action !== undefined) runAction(action, "tray");
 });
 
 // `close()` stops the listener and kills every shell the terminal registry started;
-// without the exit hook an app quit leaves zsh processes behind.
+// without the exit hook an app quit leaves zsh processes behind. ⌘Q reaches us as a
+// signal rather than a call, so the same cleanup has to hang off that too.
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+	process.on(signal, () => process.exit(0));
+}
 process.on("exit", () => {
 	tray.remove();
 	server.close();

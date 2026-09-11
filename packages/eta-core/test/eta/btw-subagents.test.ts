@@ -25,9 +25,16 @@ describe("btw side channel", () => {
 		const mgr = new BtwManager(() => ({ messages: [] }));
 		const t = mgr.create("tangent");
 		mgr.answer(t.id, "which?", "b");
-		const msgs = mgr.messagesFor(t.id) as { role: string; content: string }[];
+		const msgs = mgr.messagesFor(t.id) as {
+			role: string;
+			content: { type: string; text: string }[];
+			stopReason?: string;
+		}[];
 		expect(msgs.map((m) => m.role)).toEqual(["user", "assistant"]);
-		expect(msgs[1].content).toBe("b");
+		// The replayed answer is a real assistant message, not a bare string: provider
+		// adapters read assistant content as blocks.
+		expect(msgs[1]?.content[0]?.text).toBe("b");
+		expect(msgs[1]?.stopReason).toBe("stop");
 	});
 	it("saving while the main run is busy queues, then flushes at the boundary", async () => {
 		const notes: string[] = [];
@@ -44,6 +51,46 @@ describe("btw side channel", () => {
 		expect(await mgr.flushQueued()).toBe(1);
 		expect(mgr.get(t.id)?.saveState).toBe("saved");
 		expect(notes.length).toBe(1);
+	});
+	it("a side question waits as pending, then becomes the answered exchange", async () => {
+		const asked: { question: string; messages: unknown[] }[] = [];
+		const mgr = new BtwManager(
+			() => ({ messages: [] }),
+			undefined,
+			undefined,
+			async (request) => {
+				asked.push({ question: request.question, messages: request.messages });
+				return "4";
+			},
+		);
+		const t = mgr.create("tangent");
+		const running = mgr.ask(t.id, "what is 2+2?");
+		expect(mgr.get(t.id)?.pending?.question).toBe("what is 2+2?");
+		expect(mgr.get(t.id)?.exchanges.length).toBe(0);
+		await running;
+		expect(mgr.get(t.id)?.pending).toBeUndefined();
+		expect(mgr.get(t.id)?.exchanges.map((e) => [e.question, e.answer])).toEqual([["what is 2+2?", "4"]]);
+		// The next question replays the answered pair, so the thread stays continuous
+		// (the request itself carries the new question on top of it).
+		await mgr.ask(t.id, "and 4+4?");
+		const replayed = asked[1]?.messages as { role: string; content: { text?: string }[] }[];
+		expect(replayed?.map((m) => [m.role, m.content[0]?.text])).toEqual([
+			["user", "what is 2+2?"],
+			["assistant", "4"],
+		]);
+	});
+	it("a failed side request leaves no exchange behind, only an error", async () => {
+		const mgr = new BtwManager(
+			() => ({ messages: [] }),
+			undefined,
+			undefined,
+			() => Promise.reject(new Error("provider down")),
+		);
+		const t = mgr.create("tangent");
+		await mgr.ask(t.id, "q");
+		expect(mgr.get(t.id)?.exchanges.length).toBe(0);
+		expect(mgr.get(t.id)?.pending).toBeUndefined();
+		expect(mgr.get(t.id)?.error).toBe("provider down");
 	});
 	it("override change rebuilds the child but keeps the thread", () => {
 		const mgr = new BtwManager(() => ({ messages: [] }));

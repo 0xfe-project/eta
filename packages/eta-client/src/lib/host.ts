@@ -100,3 +100,15 @@ export function withToken(path: string): string {
 	if (token === undefined) return path;
 	return `${path}${path.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
 }
+
+/**
+ * An app route, from code with no router handle in reach: a palette command, a
+ * callback handed to a button. Where the router is mounted, `useNavigate()` is
+ * the better call; this is for the rest. The shell routes by hash — the page is
+ * loaded from `views://eta/index.html`, so `location.assign("/new")` there asks
+ * the shell for a file that is not in the bundle and the window comes back blank.
+ */
+export function goto(path: string): void {
+	if (host().kind === "desktop") window.location.hash = `#${path}`;
+	else window.location.assign(path);
+}

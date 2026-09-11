@@ -55,6 +55,8 @@ export {
 	type CompactResult,
 	calculateContextTokens,
 	compact,
+	completeSimpleWithRetries,
+	createSummaryRequestOptions,
 	DEFAULT_COMPACTION_SETTINGS,
 	estimateContextTokens,
 	estimateTokens,
@@ -66,6 +68,7 @@ export {
 	prepareCompaction,
 	serializeConversation,
 	shouldCompact,
+	type SummaryRequest,
 } from "./harness/compaction/compaction.ts";
 export * from "./harness/context.ts";
 export * from "./harness/messages.ts";

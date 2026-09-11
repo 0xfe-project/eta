@@ -1,4 +1,5 @@
 import { For, Show, createEffect, createSignal, onMount, type Accessor, type Setter } from "solid-js";
+import { useNavigate } from "@solidjs/router";
 import { useAppI18n } from "../i18n.ts";
 import { AppShell } from "../app/app-shell.tsx";
 import { useEta } from "../lib/eta-store.ts";
@@ -50,13 +51,17 @@ function useDeepLink() {
 
 export function SessionsPage() {
 	const [termOpen, setTermOpen] = createSignal(false);
+	const navigate = useNavigate();
+	// An app route is a router navigation, never a `location.assign`: in the shell
+	// that asks `views://` for a file that is not in the bundle.
+	const goSettings = () => void navigate("/settings");
 	useRunNotifications();
 	useDeepLink();
 	return (
 		<AppShell
 			palette={<CommandPalette />}
 			sidebar={<SessionsSidebar termOpen={termOpen} onTerminal={() => setTermOpen((open) => !open)} />}
-			main={<SessionsMain termOpen={termOpen} setTermOpen={setTermOpen} />}
+			main={<SessionsMain termOpen={termOpen} setTermOpen={setTermOpen} onSettings={goSettings} />}
 			panel={<SessionsPanel />}
 		/>
 	);
@@ -68,7 +73,7 @@ function SessionsSidebar(props: { termOpen: Accessor<boolean>; onTerminal: () =>
 	return <Sidebar selected={selected()} termActive={props.termOpen()} onTerminal={props.onTerminal} />;
 }
 
-function SessionsMain(props: { termOpen: Accessor<boolean>; setTermOpen: Setter<boolean> }) {
+function SessionsMain(props: { termOpen: Accessor<boolean>; setTermOpen: Setter<boolean>; onSettings: () => void }) {
 	const i18n = useAppI18n();
 	const state = useEta();
 	const selected = () => state.attach ?? state.sessions[0]?.name ?? null;
@@ -115,7 +120,7 @@ function SessionsMain(props: { termOpen: Accessor<boolean>; setTermOpen: Setter<
 									running={running()}
 									hasPendingAsk={current().pendingAsk !== undefined}
 									topSlot={<SessionContextBar />}
-									onNavigateSettings={() => window.location.assign("/settings")}
+									onNavigateSettings={props.onSettings}
 									onToggleTerminal={() => props.setTermOpen((open) => !open)}
 									queue={current().queue}
 								/>
@@ -128,7 +133,7 @@ function SessionsMain(props: { termOpen: Accessor<boolean>; setTermOpen: Setter<
 					</Show>
 				}
 			>
-				<Welcome onCreated={() => undefined} onNavigateSettings={() => window.location.assign("/settings")} />
+				<Welcome onCreated={() => undefined} onNavigateSettings={props.onSettings} />
 			</Show>
 		</div>
 	);
@@ -172,7 +177,7 @@ function SessionsPanel() {
 		<Show when={view()}>
 			{(current) => (
 				<div class="flex h-full flex-col">
-					<div class="topbar gap-1 px-2">
+					<div class="tabstrip gap-1 px-2">
 						<For each={tabs}>
 							{(item) => (
 								<button

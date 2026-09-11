@@ -2,7 +2,7 @@ import { For, Show, createSignal, onMount, type JSX } from "solid-js";
 import { useAppI18n } from "../i18n.ts";
 import { useAppTheme, type ThemePreference } from "../app/theme.tsx";
 import { sidebarPrefs, type ProjectSort } from "../lib/prefs.ts";
-import { apiFetch } from "../lib/host.ts";
+import { apiFetch, goto } from "../lib/host.ts";
 
 /** Mirrors eta-server/src/host.ts SettingsFile. */
 interface SettingsFile {
@@ -85,7 +85,7 @@ export function SettingsPage() {
 				<button
 					data-testid="settings-close"
 					title={i18n.t("settings.close")}
-					onClick={() => (window.history.length > 1 ? window.history.back() : window.location.assign("/"))}
+					onClick={() => (window.history.length > 1 ? window.history.back() : goto("/"))}
 					class="mono ml-auto border border-border-strong px-3 py-1 text-xs text-muted hover:text-foreground"
 				>
 					✕ {i18n.t("settings.close")}

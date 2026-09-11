@@ -26,7 +26,7 @@ import {
 	type EtaPromptSection,
 } from "./composer.ts";
 import { AskRegistry, createAskUserTool, type HeadlessAsk } from "./ask.ts";
-import { BtwManager } from "./btw.ts";
+import { BtwManager, btwSideAsk } from "./btw.ts";
 import { answerEntry, askEntry, btwEntry, goalEntry, type GoalPayload } from "./entries.ts";
 import { GoalManager } from "./goal.ts";
 import { LoopScheduler, type LoopSpec } from "./loops.ts";
@@ -295,6 +295,13 @@ export class EtaAgent {
 			}),
 			(note) => writeEntry(btwEntry({ note })),
 			emit,
+			// Side answers ride the same provider registry as the lane, as one-off
+			// requests: no lane slot, so they land while the main run is busy.
+			btwSideAsk({
+				models: options.models,
+				currentModel: () => laneRef?.getModel(context) ?? Promise.resolve(undefined),
+				context,
+			}),
 		);
 		const subagentBus: SubagentBus = { emit: (type: SubagentBusEvent, payload) => emit("lifecycle", type, payload) };
 		const subagents = new SubagentManager(
