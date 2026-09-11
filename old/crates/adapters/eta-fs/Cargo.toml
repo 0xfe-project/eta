@@ -1,9 +1,0 @@
-[package]
-name = "eta-fs"
-version.workspace = true
-edition.workspace = true
-
-[dependencies]
-dirs.workspace = true
-notify.workspace = true
-tokio.workspace = true
