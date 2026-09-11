@@ -247,8 +247,31 @@ export function Composer(props: {
 		setText("");
 	};
 
+	/**
+	 * Is this Enter the IME finishing a word rather than the user sending?
+	 *
+	 * Three engines, three orders, so all three are answered — measured in a real
+	 * browser, not assumed:
+	 * - Chrome mid-composition flags the key: `isComposing`.
+	 * - WebKit reports nothing but the legacy `keyCode: 229`, with isComposing false.
+	 * - macOS Pinyin typed as ASCII commits the letters on Enter and closes the
+	 *   composition *before* it delivers the key, so the keydown looks ordinary.
+	 *
+	 * The window after compositionend is short on purpose: long enough to swallow the
+	 * Enter that committed the text, too short to eat a deliberate second press.
+	 */
+	const ime = { composing: false, endedAt: 0 };
+	const imeOwnedEnter = (event: KeyboardEvent): boolean =>
+		event.isComposing
+		|| event.keyCode === 229
+		|| ime.composing
+		|| performance.now() - ime.endedAt < 120;
+
 	const onKey = (event: KeyboardEvent) => {
-		if (menuOpen() && !menuClosed()) {
+		// ⌘⏎ means "send" whatever the menu is offering: steering a running turn must
+		// not depend on whether a slash menu happens to be open at that moment.
+		const forceSend = (event.metaKey || event.ctrlKey) && !event.shiftKey;
+		if (menuOpen() && !menuClosed() && !forceSend) {
 			if (event.key === "Escape") {
 				event.preventDefault();
 				setMenuClosed(true);
@@ -262,14 +285,14 @@ export function Composer(props: {
 				else setAtIndex((index) => (index + step + size) % size);
 				return;
 			}
-			if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+			if (event.key === "Enter" && !event.shiftKey && !imeOwnedEnter(event)) {
 				event.preventDefault();
 				if (slashMatches().length > 0) runCommand(slashMatches()[Math.min(slashIndex(), slashMatches().length - 1)]!, text().trim().split(/\s+/).slice(1).join(" "));
 				else if (atChoices().length > 0) pickFile(atChoices()[Math.min(atIndex(), atChoices().length - 1)]!);
 				return;
 			}
 		}
-		if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+		if (event.key !== "Enter" || event.shiftKey || imeOwnedEnter(event)) return;
 		event.preventDefault();
 		submit(event.metaKey || event.ctrlKey ? "steer" : "queue");
 	};
@@ -511,6 +534,16 @@ export function Composer(props: {
 						id="message-input"
 						data-testid="composer-input"
 						rows={2}
+						/* A chat box is not a document: the red squiggle under a filename
+						   or a pinyin transliteration is the loudest web-page tell there is. */
+						spellcheck={false}
+						onCompositionStart={() => {
+							ime.composing = true;
+						}}
+						onCompositionEnd={() => {
+							ime.composing = false;
+							ime.endedAt = performance.now();
+						}}
 						ref={(node) => {
 							if (node !== undefined) autoGrow(node);
 						}}
