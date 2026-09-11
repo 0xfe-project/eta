@@ -16,6 +16,13 @@ import { listPersonaSummaries, watchPersonaDirs } from "./personas.ts";
 import { UnknownPersonaError } from "./agent.ts";
 import { TermRegistry } from "./terminal.ts";
 
+export interface NativeHandlers {
+	folderDialog(input: { startingFolder?: string }): Promise<string | null>;
+	saveFile(input: { content: string; filename: string }): Promise<string | null>;
+	/** Returns immediately; the click result is reported by the shell via push(). */
+	contextMenu(input: { items: unknown[] }): void;
+}
+
 export interface EtaServerOptions {
 	port?: number;
 	hostname?: string;
@@ -23,11 +30,18 @@ export interface EtaServerOptions {
 	webDist?: string;
 	configPath?: string;
 	dataDir?: string;
+	/** Present only when embedded in a desktop shell; enables /api/native/*. */
+	native?: NativeHandlers;
+	reusePort?: boolean;
+	platform?: string;
+	appVersion?: string;
 }
 
 export interface EtaServer {
 	host: Host;
 	port: number;
+	/** Broadcast a frame to every connected /ws socket. */
+	push(message: ServerMessage): void;
 	close(): void;
 }
 
@@ -52,6 +66,19 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 	await host.restoreSessions();
 	const cwd = options.cwd ?? process.cwd();
 	const webDist = options.webDist ?? resolve(import.meta.dir, "../../eta-web/dist");
+	// The desktop webview's origin is views://eta, so every /api answer is
+	// cross-origin from the server's point of view: hand out a blanket allow.
+	const CORS_HEADERS: Record<string, string> = {
+		"access-control-allow-origin": "*",
+		"access-control-allow-headers": "*",
+		"access-control-allow-methods": "*",
+	};
+	const apiJson = (data: unknown, init: ResponseInit = {}): Response => {
+		const headers = new Headers(init.headers);
+		for (const [key, value] of Object.entries(CORS_HEADERS)) headers.set(key, value);
+		return Response.json(data, { status: init.status, headers });
+	};
+	const apiError = (message: string, status: number): Response => new Response(message, { status, headers: CORS_HEADERS });
 	const sessionsDirty = new WeakMap<Socket, boolean>();
 
 	const send = (socket: Socket, message: ServerMessage, payload?: string): void => {
@@ -90,7 +117,7 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 		// and ignores this one (see eta-web's reduceEtaState) — forwarding it measured
 		// about 1MB/s of JSON each tab parses straight into the bin. Whoever wants raw
 		// harness events asks; the GUI does not.
-		if (frame.channel === "agent") return;
+		if ("channel" in frame && frame.channel === "agent") return;
 		for (const socket of sockets) {
 			send(socket, frame, payload);
 			flushSessions(socket);
@@ -104,9 +131,13 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 	const server = Bun.serve<{ kind?: "ws" | "term"; socketId?: number; shell?: unknown; viewPatch?: boolean }>({
 		port: options.port ?? 3000,
 		hostname: options.hostname ?? "0.0.0.0",
-		reusePort: true,
+		// One writer per journal: with SO_REUSEPORT a second server happily binds the
+		// same port, opens the same session directories, and appends to journals it never
+		// read — which is how a tool result ends up committed twice. Fail the bind instead.
+		reusePort: options.reusePort ?? false,
 		async fetch(request, srv) {
 			const url = new URL(request.url);
+			if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS_HEADERS });
 			if (url.pathname === "/ws") {
 				if (
 					srv.upgrade(request, {
@@ -121,76 +152,76 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 				return new Response("upgrade failed", { status: 400 });
 			}
 			if (url.pathname === "/api/health") {
-				return Response.json({ ok: true });
+				return apiJson({ ok: true });
 			}
 			if (url.pathname === "/api/memory") {
 				const memorySession = url.searchParams.get("session");
 				const loader = memorySession === null ? undefined : host.memoryText(memorySession);
-				if (loader === undefined) return Response.json({ text: "", files: [] });
-				return Response.json(await loader);
+				if (loader === undefined) return apiJson({ text: "", files: [] });
+				return apiJson(await loader);
 			}
 			if (url.pathname === "/api/personas") {
-				return Response.json(await listPersonaSummaries(cwd));
+				return apiJson(await listPersonaSummaries(cwd));
 			}
 			if (url.pathname === "/api/files") {
 				const session = url.searchParams.get("session");
 				const root = session === null ? null : host.cwdOf(session);
-				return Response.json(root == null ? [] : await listWorkspaceFiles(root));
+				return apiJson(root == null ? [] : await listWorkspaceFiles(root));
 			}
 			if (url.pathname === "/api/upload" && request.method === "POST") {
 				const uploadSession = url.searchParams.get("session") ?? "";
 				const root = host.cwdOf(uploadSession);
-				if (root == null) return Response.json({ error: "no session" }, { status: 400 });
+				if (root == null) return apiJson({ error: "no session" }, { status: 400 });
 				const form = await request.formData();
 				const file = form.get("file");
-				if (!(file instanceof File)) return Response.json({ error: "no file" }, { status: 400 });
+				if (!(file instanceof File)) return apiJson({ error: "no file" }, { status: 400 });
 				const dir = join(root, ".eta-attachments");
 				await mkdir(dir, { recursive: true });
 				const safeName = file.name.replace(/[^\w.-]/g, "_").slice(-80) || "image.bin";
 				const path = join(dir, `${Date.now().toString(36)}-${safeName}`);
 				await writeFile(path, new Uint8Array(await file.arrayBuffer()));
-				return Response.json({ path: `.eta-attachments/${path.slice(path.lastIndexOf("/") + 1)}`, absolute: path });
+				return apiJson({ path: `.eta-attachments/${path.slice(path.lastIndexOf("/") + 1)}`, absolute: path });
 			}
 			if (url.pathname === "/api/settings") {
 				if (request.method === "POST") {
 					const patch = (await request.json()) as Record<string, unknown>;
-					return Response.json(await host.saveSettings(patch));
+					return apiJson(await host.saveSettings(patch));
 				}
-				return Response.json(host.settings());
+				return apiJson(host.settings());
 			}
 			if (url.pathname === "/api/sessions") {
-				return Response.json(host.sidebar());
+				return apiJson(host.sidebar());
 			}
 			if (url.pathname === "/api/history") {
 				const session = url.searchParams.get("session");
 				const before = Number(url.searchParams.get("before") ?? "0");
 				const limit = Math.min(500, Number(url.searchParams.get("limit") ?? "100") || 100);
 				if (session === null || !Number.isFinite(before) || before <= 0)
-					return new Response("bad request", { status: 400 });
+					return apiError("bad request", 400);
 				const messages = await host.historyOf(session, before, limit);
-				return messages === undefined ? new Response("not found", { status: 404 }) : Response.json(messages);
+				return messages === undefined ? apiError("not found", 404) : apiJson(messages);
 			}
 			if (url.pathname === "/api/models") {
 				const session = url.searchParams.get("session");
 				try {
-					return Response.json(session === null ? host.modelCatalog() : host.modelInfo(session));
+					return apiJson(session === null ? host.modelCatalog() : host.modelInfo(session));
 				} catch {
-					return Response.json({ models: [{ id: "faux", label: "faux echo" }], current: "faux" });
+					return apiJson({ models: [{ id: "faux", label: "faux echo" }], current: "faux" });
 				}
 			}
 			if (request.method === "POST" && url.pathname === "/api/paste") {
 				const session = url.searchParams.get("session") ?? "";
 				const body = (await request.json()) as { text?: string };
 				const text = body.text ?? "";
-				if (text.length <= 4096) return Response.json({ path: null });
+				if (text.length <= 4096) return apiJson({ path: null });
 				const cwd = host.cwdOf(session);
-				if (cwd === undefined) return new Response("no session", { status: 404 });
+				if (cwd === undefined) return apiError("no session", 404);
 				const path = `.eta-paste-${Date.now().toString(36)}.txt`;
 				await Bun.write(`${cwd}/${path}`, text);
-				return Response.json({ path });
+				return apiJson({ path });
 			}
 			if (url.pathname === "/api/search") {
-				return Response.json({
+				return apiJson({
 					query: url.searchParams.get("q") ?? "",
 					hits: host.search(url.searchParams.get("q") ?? ""),
 				});
@@ -198,8 +229,8 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 			if (url.pathname === "/api/git/status") {
 				const session = url.searchParams.get("session");
 				const root = session === null ? undefined : host.cwdOf(session);
-				if (root === undefined) return Response.json(notGitStatus());
-				return Response.json(await gitStatus(root));
+				if (root === undefined) return apiJson(notGitStatus());
+				return apiJson(await gitStatus(root));
 			}
 			if (url.pathname === "/api/git/diff") {
 				const session = url.searchParams.get("session");
@@ -207,17 +238,39 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 				const relPath = url.searchParams.get("path");
 				const kindParam = url.searchParams.get("kind");
 				const kind: GitDiffKind = kindParam === "index" || kindParam === "untracked" ? kindParam : "worktree";
-				if (root === undefined || relPath === null) return new Response("not found", { status: 404 });
+				if (root === undefined || relPath === null) return apiError("not found", 404);
 				const diff = await gitDiff(root, relPath, kind);
-				return diff === undefined ? new Response("not found", { status: 404 }) : Response.json(diff);
+				return diff === undefined ? apiError("not found", 404) : apiJson(diff);
 			}
 			const fileSession = url.searchParams.get("session");
 			const filePath = url.searchParams.get("path");
 			if (url.pathname === "/api/file" && fileSession !== null && filePath !== null) {
 				const text = host.fileText(fileSession, filePath);
 				return text === undefined
-					? new Response("not found", { status: 404 })
-					: Response.json({ path: filePath, text });
+					? apiError("not found", 404)
+					: apiJson({ path: filePath, text });
+			}
+			if (options.native !== undefined) {
+				if (url.pathname === "/api/native/info") {
+					return apiJson({
+						isDesktop: true,
+						platform: options.platform ?? process.platform,
+						appVersion: options.appVersion ?? "0.1.0",
+					});
+				}
+				if (url.pathname === "/api/native/folder-dialog" && request.method === "POST") {
+					const input = (await request.json()) as { startingFolder?: string };
+					return apiJson({ path: await options.native.folderDialog(input) });
+				}
+				if (url.pathname === "/api/native/save-file" && request.method === "POST") {
+					const input = (await request.json()) as { content: string; filename: string };
+					return apiJson({ path: await options.native.saveFile(input) });
+				}
+				if (url.pathname === "/api/native/context-menu" && request.method === "POST") {
+					const input = (await request.json()) as { items: unknown[] };
+					options.native.contextMenu(input);
+					return new Response(null, { status: 202, headers: CORS_HEADERS });
+				}
 			}
 			const distFile = resolve(webDist, `.${url.pathname === "/" ? "/index.html" : url.pathname}`);
 			if (distFile.startsWith(`${webDist}/`) && existsSync(distFile) && (await Bun.file(distFile).exists())) {
@@ -314,9 +367,13 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 	return {
 		host,
 		port: server.port as number,
+		push(message) {
+			for (const socket of sockets) send(socket, message);
+		},
 		close() {
 			unsubscribe();
 			server.stop();
+			terms.killAll();
 			void host.close();
 		},
 	};

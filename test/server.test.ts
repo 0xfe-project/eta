@@ -300,6 +300,26 @@ describe("sidebar ops", () => {
 	});
 });
 
+describe("queue ops", () => {
+	it("answers queueRemove with the lane's outcome", async () => {
+		await withServer(async (server) => {
+			const { socket, reader } = await connect(server);
+			await reader.next();
+			send(socket, { op: "session.create", name: "q-1", personaId: "Thinker" });
+			await reader.until((m): m is Extract<ServerMessage, { type: "created" }> => "type" in m && m.type === "created");
+			// Nothing was waiting, so the honest answer is `not_found`. What is being
+			// asserted is the answer itself: the chip leaves the screen either way, and
+			// the front end only re-injects or hands back text on `cancelled`.
+			send(socket, { op: "queueRemove", session: "q-1", entryId: "absent" });
+			const ack = await reader.until(
+				(m): m is Extract<ServerMessage, { type: "queueAck" }> => "type" in m && m.type === "queueAck",
+			);
+			expect(ack).toEqual({ type: "queueAck", session: "q-1", entryId: "absent", outcome: "not_found" });
+			socket.close();
+		});
+	});
+});
+
 describe("skill discovery", () => {
 	it("walks up from cwd, adds home, git root, and submodule roots, deduped", () => {
 		const root = mkdtempSync(join(tmpdir(), "eta-skills-"));
@@ -336,5 +356,62 @@ describe("skill discovery", () => {
 		expect(block.includes("\n")).toBe(true);
 		const empty = await renderSkillsBlock(env, mkdtempSync(join(tmpdir(), "eta-skills-empty-")), join(root, "none"));
 		expect(empty).toBe("");
+	});
+});
+
+describe("desktop native endpoints", () => {
+	it("serves /api/native/*, stamps CORS, and broadcasts push()", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "eta-native-"));
+		const server = await startServer({
+			port: 0,
+			cwd,
+			webDist: join(cwd, "no-dist"),
+			configPath: join(cwd, "no-config.json"),
+			dataDir: join(cwd, "sessions"),
+			native: {
+				folderDialog: async () => "/picked",
+				saveFile: async () => "/saved",
+				contextMenu: () => {},
+			},
+			platform: "darwin",
+			appVersion: "9.9.9",
+		});
+		try {
+			const base = `http://127.0.0.1:${server.port}`;
+			const info = (await (await fetch(`${base}/api/native/info`)).json()) as {
+				isDesktop: boolean;
+				platform: string;
+				appVersion: string;
+			};
+			expect(info).toEqual({ isDesktop: true, platform: "darwin", appVersion: "9.9.9" });
+			const folder = (await (
+				await fetch(`${base}/api/native/folder-dialog`, {
+					method: "POST",
+					body: "{}",
+					headers: { "content-type": "application/json" },
+				})
+			).json()) as { path: string | null };
+			expect(folder).toEqual({ path: "/picked" });
+
+			const health = await fetch(`${base}/api/health`);
+			expect(health.headers.get("access-control-allow-origin")).toBe("*");
+			expect(health.headers.get("access-control-allow-methods")).toBe("*");
+
+			const socket = new WebSocket(`ws://127.0.0.1:${server.port}/ws`);
+			const reader = new SocketReader(socket);
+			await new Promise<void>((resolve, reject) => {
+				socket.addEventListener("open", () => resolve(), { once: true });
+				socket.addEventListener("error", () => reject(new Error("ws error")), { once: true });
+			});
+			await reader.next();
+			server.push({ type: "native", kind: "menu", action: "view.toggle-sidebar" });
+			const frame = await reader.until(
+				(m): m is Extract<ServerMessage, { type: "native" }> => "type" in m && m.type === "native",
+			);
+			expect(frame.action).toBe("view.toggle-sidebar");
+			socket.close();
+		} finally {
+			server.close();
+		}
 	});
 });

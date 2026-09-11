@@ -21,6 +21,8 @@ type StartFrame = { op: "start"; cols: number; rows: number; cwd?: string };
  * as JSON text frames.
  */
 export class TermRegistry {
+	private readonly live = new Set<ShellHandle>();
+
 	open(socket: TermSocket): void {
 		socket.data.kind = "term";
 		// Bun's default `idleTimeout` is 120s of silence, and a terminal the user is
@@ -45,6 +47,7 @@ export class TermRegistry {
 			const shell = process.env.SHELL ?? "/bin/zsh";
 			const handle: ShellHandle = { proc: undefined as unknown as BunShell, alive: true };
 			socket.data.shell = handle;
+			this.live.add(handle);
 			const requested =
 				frame.cwd === undefined
 					? undefined
@@ -67,6 +70,7 @@ export class TermRegistry {
 			handle.proc = proc;
 			void proc.exited.then((code: number) => {
 				handle.alive = false;
+				this.live.delete(handle);
 				if (socket.readyState === 1) socket.send(JSON.stringify({ event: "exit", code }));
 			});
 			return;
@@ -89,11 +93,25 @@ export class TermRegistry {
 		if (shell === undefined) return;
 		socket.data.shell = undefined;
 		shell.alive = false;
+		this.live.delete(shell);
 		try {
 			shell.proc.kill();
 		} catch {
 			/* already gone */
 		}
+	}
+
+	/** Kill every shell still running, called from EtaServer.close(). */
+	killAll(): void {
+		for (const shell of this.live) {
+			shell.alive = false;
+			try {
+				shell.proc.kill();
+			} catch {
+				/* already gone */
+			}
+		}
+		this.live.clear();
 	}
 }
 

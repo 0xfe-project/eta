@@ -26,6 +26,7 @@ import {
 	viewPatch,
 	type ChannelFrame,
 	type DevFrame,
+	type ServerMessage,
 	type SidebarSession,
 } from "./protocol.ts";
 import { ViewPacer } from "./view-pacer.ts";
@@ -153,7 +154,7 @@ export class Host {
 	private etaConfig(): EtaConfig {
 		return loadEtaConfig(this.configPath) ?? {};
 	}
-	private readonly listeners = new Set<(frame: ChannelFrame, payload?: string) => void>();
+	private readonly listeners = new Set<(frame: ServerMessage, payload?: string) => void>();
 	private attachPointerValue: string | null = null;
 
 	get attachPointer(): string | null {
@@ -231,8 +232,13 @@ export class Host {
 						}),
 					{ cwd, persistDir, restore: true },
 				);
-			} catch {
-				/* a broken journal must not take the whole server down */
+			} catch (error) {
+				// A session that will not reopen must not take the server down, and it must not
+				// vanish without a trace either: from the sidebar it would look like the chat
+				// was deleted, when the journal on disk is what could not be read.
+				console.warn(
+					`[eta-host] session ${dir} did not reopen: ${error instanceof Error ? error.message : String(error)}`,
+				);
 			}
 		}
 	}
@@ -305,6 +311,11 @@ export class Host {
 				if (type === "run_end") {
 					entry.running = false;
 					entry.pacer.relax();
+					// Notes the user saved while the run was busy land here, at the boundary,
+					// so a side answer never lands in the middle of someone's turn.
+					void agent.btw.flushQueued().then((flushed) => {
+						if (flushed > 0) this.refreshView(name);
+					});
 				}
 				if (type === "queue_update") {
 					entry.queue = (event as { queues: LaneQueuedItem[] }).queues;
@@ -629,9 +640,14 @@ export class Host {
 	}
 
 	queueRemove(name: string, entryId: string): void {
+		// The outcome is the reason this call answers at all: the chip vanishes either
+		// way, and the composer only takes the text back (or re-injects it as a steer)
+		// when the cancel actually beat the run to it.
 		void this.must(name)
 			.lane.cancelQueued(entryId, BACKGROUND_CONTEXT)
-			.catch(() => undefined);
+			.then((result) => {
+				if (result.ok) this.emit({ type: "queueAck", session: name, entryId, outcome: result.value.kind });
+			}, () => undefined);
 	}
 
 	/** Lane queue items ride the view so the composer renders the real queue, not guesses. */
@@ -787,18 +803,22 @@ export class Host {
 		if (kind === "contextual") {
 			agent.btw.seedFrom(thread.id, await agent.lane.findEntries(undefined, BACKGROUND_CONTEXT), null);
 		}
+		this.refreshView(name);
 	}
 
 	btwAnswer(name: string, threadId: string, question: string, answer: string): void {
 		this.must(name).btw.answer(threadId, question, answer);
 	}
 
-	/** Side-thread question from the UI; the faux provider answers with an echo, real providers answer later. */
+	/**
+	 * A side question is answered by its own model request inside the manager:
+	 * no lane, no run, so it answers while the main agent is busy. Until it does,
+	 * the thread is `pending`, which is what the panel shows — not a placeholder
+	 * answer that would sit there forever.
+	 */
 	btwAsk(name: string, threadId: string, question: string): void {
 		const agent = this.must(name);
-		const faux = this.hosted.get(name)?.created.faux;
-		const answer = faux !== undefined ? `btw echo: ${question}` : "(awaiting model)";
-		agent.btw.answer(threadId, question, answer);
+		void agent.btw.ask(threadId, question).then(() => this.refreshView(name));
 	}
 
 	/** Hot-swap the configured model (real providers only) and remember the choice. */
@@ -890,11 +910,14 @@ export class Host {
 	}
 
 	btwSave(name: string, threadId: string): void {
-		this.must(name).btw.save(threadId, false);
+		// Saving mid-run queues the note; flushQueued writes it at the boundary.
+		this.must(name).btw.save(threadId, this.hosted.get(name)?.running ?? false);
+		this.refreshView(name);
 	}
 
 	btwClear(name: string, threadId: string): void {
 		this.must(name).btw.clear(threadId);
+		this.refreshView(name);
 	}
 
 	async compact(name: string): Promise<void> {
@@ -935,7 +958,7 @@ export class Host {
 	 * Channel subscribers. `payload` is the wire string for view frames — encoded
 	 * once for every socket, so a fan-out does not re-serialize a megabyte per tab.
 	 */
-	subscribe(listener: (frame: ChannelFrame, payload?: string) => void): () => void {
+	subscribe(listener: (frame: ServerMessage, payload?: string) => void): () => void {
 		this.listeners.add(listener);
 		return () => this.listeners.delete(listener);
 	}
@@ -948,7 +971,7 @@ export class Host {
 		this.hosted.clear();
 	}
 
-	private emit(frame: ChannelFrame, payload?: string): void {
+	private emit(frame: ServerMessage, payload?: string): void {
 		for (const listener of [...this.listeners]) listener(frame, payload);
 	}
 }
