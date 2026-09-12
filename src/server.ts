@@ -279,12 +279,22 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 			if (distFile.startsWith(`${webDist}/`) && existsSync(distFile) && (await Bun.file(distFile).exists())) {
 				const ext = distFile.slice(distFile.lastIndexOf("."));
 				return new Response(Bun.file(distFile), {
-					headers: { "content-type": CONTENT_TYPES[ext] ?? "application/octet-stream" },
+					headers: {
+						"content-type": CONTENT_TYPES[ext] ?? "application/octet-stream",
+						/* `assets/` is vite's content-hashed output: the name moves when the bytes do, so
+						   it can be pinned for a year. Everything beside it — index.html, the brand font,
+						   the tray icons — keeps its name across releases and has to be revalidated. A
+						   cached index.html is how a rebuilt client goes on painting last build's
+						   stylesheet, and a webview is the engine that does it. */
+						"cache-control": distFile.startsWith(`${webDist}/assets/`) ? "public, max-age=31536000, immutable" : "no-cache",
+					},
 				});
 			}
 			const index = `${webDist}/index.html`;
 			if (existsSync(index)) {
-				return new Response(Bun.file(index), { headers: { "content-type": CONTENT_TYPES[".html"]! } });
+				return new Response(Bun.file(index), {
+					headers: { "content-type": CONTENT_TYPES[".html"]!, "cache-control": "no-cache" },
+				});
 			}
 			return new Response("eta-server up; eta-web not built yet", { status: 503 });
 		},
