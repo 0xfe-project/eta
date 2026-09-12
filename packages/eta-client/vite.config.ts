@@ -27,6 +27,11 @@ export default Object.assign(defineConfig({
 	server: {
 		port: 5173,
 		strictPort: true,
+		/* Nothing a dev server hands out is worth caching — the whole point is that the bytes
+		   change under you. A response with no directive at all is exactly what WebKit will
+		   reuse on its own, which is how an edited stylesheet goes on painting last hour's rules
+		   in the desktop webview while curl and Chrome both show the new ones. */
+		headers: { "Cache-Control": "no-store" },
 		proxy: {
 			"/api": { target: serverUrl, changeOrigin: true },
 			"/ws": { target: serverUrl.replace(/^http/, "ws"), ws: true },

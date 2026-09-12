@@ -82,7 +82,7 @@ function Resizer(props: { grow: 1 | -1; storeKey: string; min: number; max: numb
 			onPointerMove={onPointerMove}
 			onPointerUp={onPointerUp}
 			onPointerCancel={onPointerUp}
-			class="hidden w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-primary lg:block"
+			class="column-resizer hidden w-1 shrink-0 cursor-col-resize lg:block"
 		/>
 	);
 }

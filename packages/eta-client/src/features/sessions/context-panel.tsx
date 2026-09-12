@@ -84,7 +84,7 @@ export function ContextPanel(props: { session: string; view: SessionView }) {
 			 * until now it lived only in the composer's toolbar — so a swap the harness refused
 			 * (an id the registry does not have) was invisible from the panel.
 			 */}
-			<div data-testid="section-model" class="flex flex-col gap-1 border-t-2 border-border pt-2">
+			<div data-testid="section-model" class="flex flex-col gap-1">
 				<div class="flex items-baseline gap-2">
 					<span class="mono text-[9px] uppercase tracking-[0.18em] text-faint">{i18n.t("panel.model")}</span>
 					<span data-testid="panel-model" class="mono min-w-0 truncate text-right text-[11px] text-foreground" title={props.view.model}>

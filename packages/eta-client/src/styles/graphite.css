@@ -13,6 +13,9 @@
 	--background: oklch(1 0 0);
 	--foreground: oklch(0.145 0 0);
 	--radius: 0px;
+	/* One shared height for every top rail, so the column gutters can end exactly where
+	   the band ends instead of guessing at 40px twice. */
+	--header-band: 40px;
 	--border-strong: rgba(24, 24, 24, 0.6);
 	--success: #2f8f4e;
 	--warning: #b47716;
@@ -1061,23 +1064,48 @@ html.dark .markdown [data-streamdown="code-block-body"] span {
 }
 
 /* ---- three-column top rails share one baseline ---- */
-.topbar {
-	display: flex;
-	align-items: center;
-	box-sizing: border-box;
-	height: 40px;
-	border-bottom: 1px solid var(--border);
-}
+/* The header band is one object, so it is one color: the sidebar header, the session
+   header and the panel tabstrip all paint --surface and sit above a --background content
+   field. The middle rail used to carry no background of its own, so it fell through to
+   the page — same color as the transcript underneath it, which made the strip holding the
+   session title read as more chat rather than as a title. One rule for both rails, so a
+   future column cannot forget it.
 
-/* Same baseline as .topbar, minus the drag. This one holds buttons, and a press
-   in the titlebar band is answered by the window before the page sees it — so a
-   strip you must be able to click cannot be a strip you drag the window with. */
+   .tabstrip shares the baseline but not the drag: it holds buttons, and a press in the
+   titlebar band is answered by the window before the page sees it — a strip you must be
+   able to click cannot be a strip you drag the window with. */
+.topbar,
 .tabstrip {
 	display: flex;
 	align-items: center;
 	box-sizing: border-box;
-	height: 40px;
+	height: var(--header-band);
 	border-bottom: 1px solid var(--border);
+	background: var(--surface);
+}
+
+/* The column gutters are real elements — drag them to resize, which is why they cannot
+   simply be removed. Painting them with the band was not enough on its own: each rail
+   draws its 1px rule inside its own box, so a gutter that wore the band but drew no rule
+   left a 4px gap in the line under the header — and a broken rule reads as a broken band
+   no matter how well the fills line up. So a gutter draws the same three layers a rail
+   does, at the same offsets: band, the rule in the band's last pixel, content field below.
+
+   Two background layers, not one, and not color-mix: a rail's border is *composited over*
+   --surface, which is 45,45,45 here, while a color-mix of the same two tokens *interpolates*
+   them and lands at 27,27,27 — measured, not guessed. Layering the semi-transparent rule
+   over an opaque band layer reproduces what a real border paints.
+
+   Hovering lights the whole strip anyway (the shorthand clears both layers): a drop target
+   nobody can find is worse than a slightly brighter seam. */
+.column-resizer {
+	background-color: var(--background);
+	background-image:
+		linear-gradient(to bottom, transparent 0 calc(var(--header-band) - 1px), var(--border) calc(var(--header-band) - 1px) var(--header-band), transparent var(--header-band)),
+		linear-gradient(to bottom, var(--surface) 0 var(--header-band), transparent var(--header-band));
+}
+.column-resizer:hover {
+	background: var(--primary);
 }
 
 /* ---- workspace panel: git status list + read-only diff ---- */

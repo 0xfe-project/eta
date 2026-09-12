@@ -208,7 +208,7 @@
 	"usage.tool": "工具调用",
 	"usage.tooldefs": "工具定义",
 	"usage.remaining": "剩余",
-	"panel.model": "正在用的模型",
+	"panel.model": "模型",
 	"panel.modelPending": "切换未生效",
 	"panel.memoryFrom": "读取自",
 	"panel.memoryNone": "这个文件夹还没有笔记 — 第一条会写到 {path}",
