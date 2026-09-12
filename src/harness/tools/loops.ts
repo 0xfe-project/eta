@@ -15,19 +15,18 @@ export function createLoopTools(scheduler: LoopScheduler): AgentHarnessTool<obje
 			name: "LoopCreate",
 			label: "LoopCreate",
 			description:
-				"Schedule recurring notes to yourself: every ('45s'/'5m'/'2h'), or a 6-field cron (sec min hour dom mon dow, UTC). onEvent fires once per matching bus event. expiresIn caps lifetime ('2d').",
+				"Schedule recurring notes to yourself: every ('45s'/'5m'/'2h'), or a 6-field cron (sec min hour dom mon dow, UTC). expiresIn caps lifetime ('2d').",
 			parameters: Type.Object({
 				id: Type.String({ description: "Stable name for this loop" }),
 				note: Type.String({ description: "What to do each time it fires" }),
 				every: Type.Optional(Type.String()),
 				cron: Type.Optional(Type.String()),
-				onEvent: Type.Optional(Type.String({ description: "Event type that fires this loop" })),
 				maxRuns: Type.Optional(Type.Number()),
 				expiresIn: Type.Optional(Type.String()),
 			}),
-			async execute(_id, { id, note, every, cron, onEvent, maxRuns, expiresIn }) {
-				if (every === undefined && cron === undefined && onEvent === undefined)
-					return withId("LoopCreate needs every, cron, or onEvent.", { error: true });
+			async execute(_id, { id, note, every, cron, maxRuns, expiresIn }) {
+				if (every === undefined && cron === undefined)
+					return withId("LoopCreate needs every or cron.", { error: true });
 				const spec = {
 					def: {
 						id,
@@ -36,7 +35,6 @@ export function createLoopTools(scheduler: LoopScheduler): AgentHarnessTool<obje
 						...(cron !== undefined ? { cron } : {}),
 						...(maxRuns !== undefined ? { maxRuns } : {}),
 					},
-					...(onEvent !== undefined ? { on: { type: onEvent } } : {}),
 					...(expiresIn !== undefined
 						? { expiresAt: new Date(Date.now() + parseEvery(expiresIn)).toISOString() }
 						: {}),
@@ -58,7 +56,7 @@ export function createLoopTools(scheduler: LoopScheduler): AgentHarnessTool<obje
 					.list()
 					.map(
 						(spec) =>
-							`${spec.def.id}: ${spec.def.note} [${spec.paused ? "paused" : (spec.def.cron ?? spec.def.every ?? "event")} x${spec.runCount}]`,
+							`${spec.def.id}: ${spec.def.note} [${spec.paused ? "paused" : (spec.def.cron ?? spec.def.every ?? "no trigger")} x${spec.runCount}]`,
 					);
 				return withId(rows.length === 0 ? "No loops." : rows.join("\n"), { count: rows.length });
 			},

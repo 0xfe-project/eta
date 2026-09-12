@@ -8,19 +8,19 @@
  * boundary the followUp goes back into the run, from the heartbeat it must
  * wake the session (S1) — a fire nobody consumes would only burn the count.
  * Every fire surfaces as a followUp, never as a mid-run interrupt.
+ *
+ * Event triggers are not wired to anything. `LoopDef.on` remains so old journals
+ * parse, but nothing matches it, because firing on a bus event needs two things
+ * this file does not have: a fixed vocabulary of event types to subscribe to, and
+ * a trace depth that survives the hop from the firing call through the inbox into
+ * the run it starts. Without the second, two loops that wake each other are a
+ * loop bomb with no cap. Re-add both together, or not at all.
  */
 
 import { nextCronAt, parseCron } from "./cron.ts";
 import type { LoopDef, LoopSpec } from "./session/types.ts";
 
 export type { LoopDef, LoopSpec } from "./session/types.ts";
-
-export interface LoopEvent {
-	type: string;
-	/** Flattened text used for substring / regex filters. */
-	text?: string;
-	payload?: Record<string, unknown>;
-}
 
 const EVERY_PATTERN = /^(\d+)(ms|s|m|h|d)?$/;
 
@@ -52,23 +52,6 @@ export function computeJitter(id: string, intervalMs: number): number {
 /** Default lifetime for loops without an explicit expiry (pi-loop parity). */
 export const DEFAULT_LOOP_TTL_MS = 7 * 86_400_000;
 
-/** True when a bus event should fire this loop. */
-export function eventMatches(spec: LoopSpec, event: LoopEvent): boolean {
-	const trigger = spec.on;
-	if (trigger === undefined || trigger.type !== event.type) return false;
-	if (trigger.contains !== undefined && !(event.text ?? "").includes(trigger.contains)) return false;
-	if (trigger.regex !== undefined && !new RegExp(trigger.regex).test(event.text ?? "")) return false;
-	if (trigger.equals !== undefined) {
-		for (const [key, want] of Object.entries(trigger.equals)) {
-			if (JSON.stringify(event.payload?.[key]) !== JSON.stringify(want)) return false;
-		}
-	}
-	return true;
-}
-
-/** Trace depth cap for loop-fired continuations (old B9 runaway guard). */
-export const MAX_TRACE_DEPTH = 8;
-
 export interface PumpResult {
 	fired: { spec: LoopSpec; followUp: string }[];
 	disposed: string[];
@@ -92,16 +75,10 @@ export interface LoopSchedulerOptions {
 
 export class LoopScheduler {
 	private loops = new Map<string, LoopSpec>();
-	/** Bumped whenever a session attaches so stale callbacks from the old session can't pump. */
-	generation = 0;
 	private readonly opts: LoopSchedulerOptions;
 
 	constructor(opts: LoopSchedulerOptions) {
 		this.opts = opts;
-	}
-
-	attach(): void {
-		this.generation += 1;
 	}
 
 	upsert(spec: LoopSpec): void {
@@ -216,14 +193,9 @@ export class LoopScheduler {
 		return this.deferred.shift();
 	}
 
-	/** Feed one bus event; matching loops fire immediately (subject to caps). */
-	public event(event: LoopEvent, traceDepth = 0): PumpResult {
-		return this.collect(traceDepth, (spec) => eventMatches(spec, event));
-	}
-
 	/** Run-boundary tick: fires interval loops that are due and sweeps expiry. */
 	public pump(now: number): PumpResult {
-		const result = this.collect(0, (spec) => {
+		const result = this.collect((spec) => {
 			if (spec.paused) return false;
 			if (spec.def.cron !== undefined) {
 				const dueAt = spec.nextDueAt ?? nextCronAt(parseCron(spec.def.cron), now);
@@ -261,17 +233,13 @@ export class LoopScheduler {
 		return result;
 	}
 
-	private collect(traceDepth: number, due: (spec: LoopSpec) => boolean): PumpResult {
+	private collect(due: (spec: LoopSpec) => boolean): PumpResult {
 		const fired: PumpResult["fired"] = [];
 		const paused: string[] = [];
 		const disposed: string[] = [];
 		for (const spec of this.loops.values()) {
 			if (spec.paused || spec.disposed) continue;
 			if (!due(spec)) continue;
-			if (traceDepth > MAX_TRACE_DEPTH) {
-				this.opts.observe?.("loop", "suppressed", { id: spec.def.id, reason: "trace_depth" });
-				continue;
-			}
 			spec.runCount += 1;
 			fired.push({ spec, followUp: this.opts.followUpFor(spec) });
 			this.opts.observe?.("loop", "fired", { id: spec.def.id, runCount: spec.runCount });
