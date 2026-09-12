@@ -94,17 +94,23 @@ export class HookRegistry implements Hooks {
 				await this.invokeAllFailClosed(name, event as HookInvocation<"before_drive">, context);
 				return undefined;
 			case "before_run_end": {
-				let followUp: string | undefined;
+				// More than one battery can want this run to keep going: a goal that is not
+				// achieved, a loop that came due, an answer that stopped with nothing in it.
+				// The boundary has room for one followUp, so the requests are joined in the
+				// order the handlers registered instead of the last one replacing the rest —
+				// an overwritten driver has already paid for its continuation (a round counted,
+				// a fire counted), and nothing would ever say that payment went unmatched.
+				const wanted: string[] = [];
 				await this.invokeAll(
 					name,
 					event,
 					(value) => {
 						const result = value as HookMap["before_run_end"]["result"];
-						if (result?.followUp !== undefined) followUp = result.followUp;
+						if (result?.followUp !== undefined) wanted.push(result.followUp);
 					},
 					context,
 				);
-				return followUp === undefined ? undefined : { followUp };
+				return wanted.length === 0 ? undefined : { followUp: wanted.join("\n\n") };
 			}
 			case "transform_context":
 				return this.transformContext(event as HookInvocation<"transform_context">, context);

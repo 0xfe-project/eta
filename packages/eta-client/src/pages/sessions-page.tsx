@@ -1,6 +1,5 @@
 import { For, Show, createEffect, createSignal, onCleanup, onMount, type Accessor, type Setter } from "solid-js";
 import { useNavigate } from "@solidjs/router";
-import { sessionTokenTotal } from "@eta/core";
 import { useAppI18n } from "../i18n.ts";
 import { AppShell } from "../app/app-shell.tsx";
 import { useEta } from "../lib/eta-store.ts";
@@ -92,22 +91,12 @@ function SessionsMain(props: { termOpen: Accessor<boolean>; setTermOpen: Setter<
 			<header class="topbar gap-2 px-4">
 				<span data-testid="active-session" class="truncate text-sm font-medium">{selected() ?? i18n.t("app.title")}</span>
 				<span class="ml-auto flex items-center gap-1.5">
-					<Show when={view()}>
-						{(current) => (
-							<>
-								{/* The same number the panel breaks down: everything the provider counted
-								    for this session. It used to be in+out only, which quietly ignored the
-								    30k of cache reads a warm session pays for on every single turn. */}
-								<span data-testid="header-tokens" class="header-chip">tok {sessionTokenTotal(current().usage).toLocaleString()}</span>
-								<span data-testid="header-cache" class="header-chip">cache {Math.round(current().cacheRate * 100)}%</span>
-								<Show when={current().gitBranch}>
-									{(branch) => <span data-testid="header-branch" class="header-chip" title="git branch"> {branch()}</span>}
-								</Show>
-								<Show when={current().cwd}>
-									{(cwd) => <span data-testid="header-cwd" class="header-chip max-w-[220px] truncate" title={cwd()}>{cwd()}</span>}
-								</Show>
-							</>
-						)}
+					{/* Only the folder. Tokens and cache rate live in the Context panel's usage section,
+					    where they are broken down rather than shrunk into two rounded chips, and the
+					    branch is already on the Workspace tab — a header reads as one fact, not a strip
+					    of gauges. */}
+					<Show when={view()?.cwd}>
+						{(cwd) => <span data-testid="header-cwd" class="header-chip max-w-[220px] truncate" title={cwd()}>{cwd()}</span>}
 					</Show>
 					<span data-testid="conn-dot" class={`conn-dot ${state.connected ? "on" : "off"}`} title={state.connected ? "" : i18n.t("connection.disconnected")} />
 				</span>

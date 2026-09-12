@@ -2,10 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
 	LoopScheduler,
 	computeJitter,
-	eventMatches,
 	parseEvery,
 	DEFAULT_LOOP_TTL_MS,
-	MAX_TRACE_DEPTH,
 } from "../../src/harness/loops.ts";
 import type { LoopSpec } from "../../src/harness/loops.ts";
 
@@ -96,22 +94,20 @@ describe("pump", () => {
 	});
 });
 
-describe("event triggers", () => {
-	it("matches substring, regex, and json equality", () => {
-		const withText: LoopSpec = spec({ id: "e1", on: { type: "turn_end", contains: "deploy" } });
-		expect(eventMatches(withText, { type: "turn_end", text: "we can deploy now" })).toBe(true);
-		expect(eventMatches(withText, { type: "turn_end", text: "we can retry now" })).toBe(false);
-		const withRe: LoopSpec = spec({ id: "e2", on: { type: "turn_end", regex: "^fix(ed)? " } });
-		expect(eventMatches(withRe, { type: "turn_end", text: "fixed the bug" })).toBe(true);
-		const withEq: LoopSpec = spec({ id: "e3", on: { type: "tasks_updated", equals: { status: "all-done" } } });
-		expect(eventMatches(withEq, { type: "tasks_updated", payload: { status: "all-done" } })).toBe(true);
-		expect(eventMatches(withEq, { type: "tasks_updated", payload: { status: "busy" } })).toBe(false);
-	});
-	it("fires immediately on bus events and honors the trace-depth cap", () => {
+/**
+ * The matcher that used to live here is gone. Nothing fed the scheduler a bus event, so
+ * `onEvent` was a parameter the model could write and a loop the user could see, sitting
+ * in the sidebar with a trigger that fired nothing. Event loops come back with an event
+ * vocabulary and a trace depth that outlives the call that fired them — the cap alone
+ * was decoration, since every caller passed a depth of zero.
+ */
+describe("an `on` trigger fires nothing", () => {
+	it("leaves an event-only loop armed but unserved, across pumps", () => {
 		const s = sched();
 		s.upsert(spec({ id: "ev", on: { type: "turn_end", contains: "go" } }));
-		expect(s.event({ type: "turn_end", text: "go" }, 0).fired.length).toBe(1);
-		expect(s.event({ type: "turn_end", text: "go" }, MAX_TRACE_DEPTH + 1).fired.length).toBe(0);
+		expect(s.pump(60_000).fired).toEqual([]);
+		expect(s.pump(10 * 60_000).fired).toEqual([]);
+		expect(s.list().map((l) => l.runCount)).toEqual([0]);
 	});
 	it("replay restores the registry after restart", () => {
 		const s = sched();

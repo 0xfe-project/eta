@@ -79,14 +79,6 @@ describe("batteries emit on the shared sink", () => {
 			paused: false,
 		});
 		scheduler.pump(now);
-		scheduler.upsert({
-			def: { id: "ev", note: "on turn" },
-			on: { type: "turn_end" },
-			runCount: 0,
-			createdAt: now,
-			paused: false,
-		});
-		scheduler.event({ type: "turn_end" }, 99);
 
 		const registry = new AskRegistry({ observe: c.emit });
 		const ask = registry.ask({ questionId: "q1", question: "which?" });
@@ -143,7 +135,6 @@ describe("batteries emit on the shared sink", () => {
 		expect(c.of("loop", "fired").map((e) => e.data.id)).toEqual(expect.arrayContaining(["tick", "capped"]));
 		expect(c.of("loop", "paused").length).toBe(1);
 		expect(c.of("loop", "expired").length).toBe(1);
-		expect(c.of("loop", "suppressed").length).toBe(1);
 		expect(c.of("ask_user", "asked").length).toBe(3);
 		expect(c.of("ask_user", "answered").length).toBe(1);
 		expect(c.of("ask_user", "expired").length).toBe(1);

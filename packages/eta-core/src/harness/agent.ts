@@ -389,7 +389,6 @@ export class EtaAgent {
 		);
 		const lane = await harness.lane(options.laneName ?? "main", context);
 		laneRef = lane;
-		loops.attach();
 
 		harness.events.on("usage", (event) => agentRef?.commitUsage(event.row.usage.output));
 		harness.events.on("config_update", (event) => {

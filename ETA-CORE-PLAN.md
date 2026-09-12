@@ -54,9 +54,11 @@
 
 ### C2 loop 调度器(built-in,抄 pi-loop 的语义不抄它的架构)
 
-- [x] Trigger:`event | interval | cron(6 段 UTC,`src/harness/cron.ts`)已落(`src/harness/loops.ts`:contains/regex:/equals filter 语义照抄);cron/dynamic 后续补。**event filter 语法原样抄** `trigger-system.ts:141-155`(substring / `regex:` / JSON 等值)。事件源 = 进程内 bus(`turn_end/tasks_updated/subagents:*`),对应它 `pi.events.on`。
-- [x] **pump 模型照抄**:调度器不自主定时,`pump(now)` 由 turn 边界 + **30s unref 心跳**驱动(session-runtime.ts:13 的注释就是理由:idle 时不 pump 的 loop 永不触发);**jitter** 抄 `loop-parse.computeJitter`;**session generation 计数器**防跨 session 陈旧回调。
-- [x] 生命周期语义:`expiresAt`(默认 7d `DEFAULT_LOOP_TTL_MS`)过期即 dispose;**fire 上限→pause**(controller_limit 语义);trace 深度 ≤8(`MAX_TRACE_DEPTH`)。完成条件:pump/jitter/expiry/cap/event 各一条测试(已达)。
+- [x] Trigger:`interval | cron(6 段 UTC,`src/harness/cron.ts`)已落(`src/harness/loops.ts`)。
+  - [ ] **event trigger 2026-09-12 删掉**(`LoopEvent` / `eventMatches` / `LoopCreate.onEvent` / `MAX_TRACE_DEPTH`):`scheduler.event()` 全仓零调用者 —— 模型能写出一个侧栏里看得见、但永远不点火的 loop。`LoopDef.on` 字段留着,旧 journal 还要解析。要补回来得一次做齐三件事:固定的事件类型词表(`turn_end` / `task/updated` / `subagent/*` 走 `emit(category, action, data)`)、fired 的投递走 wake 那条路、以及**能跨异步 hop 的 trace 深度**(旧的那个 `MAX_TRACE_DEPTH` 是装饰:每个调用者传进来的都是 0,永远触发不了;没有它,两个互相唤醒的 loop 就是没有上限的 loop 炸弹)。
+- [x] **pump 模型照抄**:调度器不自主定时,`pump(now)` 由 turn 边界 + 心跳驱动(session-runtime.ts:13 的注释就是理由:idle 时不 pump 的 loop 永不触发)。
+  - [x] 心跳**按 `scheduler.nextWakeAt()` 自排下一次**,不按固定网格(2026-09-12 改)。原来是 30s `setInterval`:`every: "5s"` 的 loop 干等 30s 才可能被看一眼,间隔写着 5s、实际是 30s —— 用户第一次实测就是这么发现"没反应"的。`heartbeatMs`(默认 30s)降级为兜底上限,只给纯事件型 loop 和过期清扫用;下限 50ms。**jitter** 抄 `loop-parse.computeJitter`;(原 `session generation 计数器` 已删:`attach()` 只自增一次、无人读,防陈旧回调靠的是 scheduler 与 session 一对一)。
+- [x] 生命周期语义:`expiresAt`(默认 7d `DEFAULT_LOOP_TTL_MS`)过期即 dispose;**fire 上限→pause**(controller_limit 语义)。完成条件:pump/jitter/expiry/cap 各一条测试(已达;event 那条随 event trigger 一起删)。
 - [x] 持久化**不抄它的 event-sourced reducer store(956 行)**:registry 进 session KV,纯函数 CRUD + 文件锁即可;`loop-events.ts` 的恢复语义(resume_event_stale)要有。完成条件:未 attach session 到点火、重启全恢复、过期/上限/去重各一条测试。
 
 ### C3 ask_user(built-in,读码结论:schema 抄、UI 丢、持久化我们补)

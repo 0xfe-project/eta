@@ -823,7 +823,15 @@ export class Host {
 		void this.reproject(name);
 	}
 
-	/** Projection requests in flight, per session: only the newest one may publish. */
+	/**
+	 * Projection requests in flight, per session: only the newest one may publish.
+	 *
+	 * Re-projecting the whole journal on every op looked like the wrong trade until it was
+	 * measured: a snapshot of a 2400-entry journal is 0.35ms, and a 200-entry one is 0.17ms
+	 * — the scan is linear at ~0.15µs an entry, and the view's transcript is windowed, so it
+	 * does not grow with the journal either. Against the 100ms floor a frame already buys
+	 * (see the view-frame budget above), an op paying for its own truth is free.
+	 */
 	private readonly reprojectSeq = new Map<string, number>();
 
 	/** Project now, publish what comes back, and drop it if a newer request overtook it. */
