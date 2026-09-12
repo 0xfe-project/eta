@@ -6,12 +6,12 @@
  */
 
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT, EtaAgent, FileStorage, MemoryCache, type MemoryLoaded } from "@eta/core";
+import { BACKGROUND_CONTEXT, EtaAgent, MemoryCache, type MemoryLoaded } from "@eta/core";
 import { homedir } from "node:os";
 import { complete } from "@earendil-works/pi-ai/compat";
 import { NodeEtaFs } from "./node-fs.ts";
 import { DEFAULT_SYSTEM_PROMPT } from "@eta/core/prompts";
-import { NodeExecutionEnv } from "@eta/core/node";
+import { FileStorage, NodeExecutionEnv } from "@eta/core/node";
 import {
 	createModels,
 	fauxAssistantMessage,
