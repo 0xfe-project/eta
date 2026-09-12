@@ -415,3 +415,50 @@ describe("desktop native endpoints", () => {
 		}
 	});
 });
+
+describe("btw handoff", () => {
+	// The thread is filled with `btwAnswer` so the test does not depend on a model:
+	// what is under test is that handing off starts a main run carrying the thread.
+	it("kicks a run carrying the thread when the lane is idle", async () => {
+		await withServer(async (server) => {
+			const { socket, reader } = await connect(server);
+			await reader.next();
+			send(socket, { op: "session.create", name: "s1", personaId: "Thinker" });
+			await reader.until((m): m is Extract<ServerMessage, { type: "created" }> => "type" in m && m.type === "created");
+			send(socket, { op: "btwOpen", session: "s1", kind: "tangent" });
+			send(socket, {
+				op: "btwAnswer",
+				session: "s1",
+				threadId: "btw-1",
+				question: "which editor?",
+				answer: "the one you already know",
+			});
+			send(socket, { op: "btwHandoff", session: "s1", threadId: "btw-1" });
+			const frame = await reader.until(
+				(m): m is Extract<ServerMessage, { channel: "view" }> =>
+					"channel" in m && m.channel === "view" && JSON.stringify(m).includes("results from the side conversation"),
+				8000,
+			);
+			// A patch frame carries no transcript, so assert on whatever the frame holds.
+			expect(JSON.stringify(frame)).toContain("A: the one you already know");
+			socket.close();
+		});
+	});
+
+	it("records a side answer's model/thinking override on the thread", async () => {
+		await withServer(async (server) => {
+			const { socket, reader } = await connect(server);
+			await reader.next();
+			send(socket, { op: "session.create", name: "s1", personaId: "Thinker" });
+			await reader.until((m): m is Extract<ServerMessage, { type: "created" }> => "type" in m && m.type === "created");
+			send(socket, { op: "btwOpen", session: "s1", kind: "tangent" });
+			send(socket, { op: "btwOverride", session: "s1", threadId: "btw-1", model: "faux", thinking: "low" });
+			const frame = await reader.until(
+				(m): m is Extract<ServerMessage, { channel: "view" }> =>
+					"channel" in m && m.channel === "view" && JSON.stringify(m).includes('"model":"faux"'),
+			);
+			expect(JSON.stringify(frame)).toContain('"thinking":"low"');
+			socket.close();
+		});
+	});
+});

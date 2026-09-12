@@ -6,7 +6,7 @@
  */
 
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT, EtaAgent, FileStorage, MemoryCache } from "@eta/core";
+import { BACKGROUND_CONTEXT, EtaAgent, FileStorage, MemoryCache, type MemoryLoaded } from "@eta/core";
 import { homedir } from "node:os";
 import { complete } from "@earendil-works/pi-ai/compat";
 import { NodeEtaFs } from "./node-fs.ts";
@@ -35,6 +35,8 @@ export interface SessionConfig {
 	configPath?: string;
 	/** Session journal lives here (append-only). In-memory when absent (tests). */
 	persistDir?: string;
+	/** Loop wake cadence; see HostOptions. */
+	heartbeatMs?: number;
 }
 
 export class UnknownPersonaError extends Error {}
@@ -42,7 +44,7 @@ export class UnknownPersonaError extends Error {}
 export interface CreatedSession {
 	agent: EtaAgent;
 	faux: FauxProviderHandle | undefined;
-	memory?: () => Promise<{ text: string; files: string[] }>;
+	memory?: () => Promise<MemoryLoaded>;
 }
 
 export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSession> {
@@ -69,6 +71,19 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 				if (model !== undefined) break;
 			}
 		}
+		// The asked-for id is not in the registry — a model that was renamed, a provider whose
+		// key went away. Falling back to the configured default keeps the session talking to a
+		// real model; going quiet on an echo instead would leave the panel naming a model the
+		// run never touched, which reads as the switch having worked.
+		if (model === undefined && wanted.length > 0) {
+			const substitute =
+				(fallback === undefined ? undefined : models.getModel(fallback.provider, fallback.modelId)) ??
+				(etaConfig.providers ?? []).flatMap((provider) => provider.models.map((entry) => models!.getModel(provider.id, entry.id)))[0];
+			if (substitute !== undefined) {
+				console.warn(`[eta-agent] ${cfg.name}: model "${wanted}" is not configured, running on ${substitute.provider}:${substitute.id} instead`);
+				model = substitute;
+			}
+		}
 	}
 	const anthropic = env.ANTHROPIC_API_KEY === undefined || env.ANTHROPIC_API_KEY === "" ? undefined : builtinModels();
 	if (model === undefined && models === undefined && anthropic !== undefined) {
@@ -90,7 +105,14 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 		{ id: cfg.name, createdAt: Date.now(), storageVersion: 1, cwd: cfg.cwd },
 		storage,
 	);
-	const memoryCache = new MemoryCache(new NodeEtaFs(), homedir());
+	const memoryFs = new NodeEtaFs();
+	const memoryCache = new MemoryCache(memoryFs, homedir());
+	// The project's own MEMORY.md — the nearest one if the tree keeps several, else
+	// `<projectRoot>/.eta/MEMORY.md`, which NodeEtaFs.writeFile creates on the first note.
+	// Memory is project-scoped: a session opened in another folder starts with a clean sheet
+	// there, and the notes it earns stay with that folder.
+	const memoryTarget = (await memoryCache.load(cfg.cwd)).target;
+	const extractionModel = model;
 	const judgeApiKey = providerApiKey(etaConfig, model.provider);
 	const execEnv = new NodeExecutionEnv({ cwd: cfg.cwd });
 	const skillsBlock = await renderSkillsBlock(execEnv, cfg.cwd);
@@ -103,8 +125,32 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 			executionEnv: execEnv,
 			skillsSection: skillsBlock === "" ? undefined : skillsBlock,
 			persona,
-			heartbeatMs: 0,
+			...(cfg.heartbeatMs === undefined ? {} : { heartbeatMs: cfg.heartbeatMs }),
 			memorySource: async () => (await memoryCache.load(cfg.cwd)).text,
+			// The faux provider answers from a queue the run itself consumes; an extraction
+			// call would eat a response and get an echo back, so no notes in a faux session.
+			...(faux === undefined
+				? {
+						memoryExtraction: {
+							fs: memoryFs,
+							target: memoryTarget,
+							call: async (systemPrompt: string, prompt: string) => {
+								const reply = await complete(
+									extractionModel,
+									{
+										systemPrompt,
+										messages: [{ role: "user", content: prompt, timestamp: Date.now() }],
+									},
+									{ apiKey: judgeApiKey },
+								);
+								return reply.content
+									.filter((block): block is { type: "text"; text: string } => block.type === "text")
+									.map((block) => block.text)
+									.join("");
+								},
+							},
+						}
+					: {}),
 			evaluateGoal:
 				faux !== undefined
 					? async () => false
