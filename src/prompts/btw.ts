@@ -1,6 +1,7 @@
 /**
  * Model-visible lines for the btw side channel: the system prompt the side
- * request runs under, and the handoff note injected when a side thread has results.
+ * request runs under, and the followUp injected when a side thread hands its
+ * results to the main run.
  */
 
 /**
@@ -19,6 +20,20 @@ export function btwSystemPrompt(kind: "contextual" | "tangent" = "contextual"): 
 		: BTW_SYSTEM_PROMPT_BASE;
 }
 
-export function btwHandoff(id: string): string {
-	return `[btw ${id}] side thread has results: fold them in or summarize for the user.`;
+export interface BtwHandoffExchange {
+	question: string;
+	answer: string;
+}
+
+/**
+ * What a handoff puts in front of the main agent: the thread itself, not a
+ * pointer to it. A line saying "the side thread has results" without the
+ * results would make the main agent ask about something it cannot read.
+ */
+export function btwHandoff(id: string, exchanges: readonly BtwHandoffExchange[]): string {
+	return [
+		`[btw ${id}] results from the side conversation:`,
+		exchanges.map((exchange) => `Q: ${exchange.question}\nA: ${exchange.answer}`).join("\n"),
+		"Fold these in or summarize them for the user.",
+	].join("\n");
 }

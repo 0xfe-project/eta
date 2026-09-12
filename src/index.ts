@@ -146,6 +146,7 @@ export {
 } from "./harness/types.ts";
 export { loadSkills, type SkillDiagnostic } from "./harness/skills.ts";
 export { applyShellOutputUpdate } from "./harness/utils/output-capture.ts";
+export { sessionTokenTotal } from "./harness/utils/usage.ts";
 export * from "./harness/utils/shell-output.ts";
 export * from "./harness/utils/truncate.ts";
 export * from "./proxy.ts";
