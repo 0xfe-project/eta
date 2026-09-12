@@ -58,3 +58,22 @@ export function addUsage(left: Usage, right: Usage): Usage {
 		},
 	};
 }
+
+/**
+ * Everything a session has been charged for, in tokens: the number a person reads as
+ * "what did this conversation cost".
+ *
+ * Two properties matter here, and both are easy to lose by accident. It is *cumulative over
+ * the session journal*, so a compaction — which only adds a summary entry and stops old
+ * messages from being sent — cannot shrink it; the summarizer's own call makes it grow. And
+ * it counts cache traffic, because a warm session pays ~30k cache reads on every turn and a
+ * total that ignores them reports a tenth of the bill as if it were the bill.
+ *
+ * `totalTokens` is the provider's own sum and is preferred; the fallback covers a provider
+ * (or an older journal) that filled in the parts but not the sum.
+ */
+export function sessionTokenTotal(usage: Usage | undefined): number {
+	if (usage === undefined) return 0;
+	const parts = usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
+	return usage.totalTokens > 0 ? usage.totalTokens : parts;
+}

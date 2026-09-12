@@ -30,6 +30,8 @@ export interface EtaServerOptions {
 	webDist?: string;
 	configPath?: string;
 	dataDir?: string;
+	/** Loop wake cadence, in ms; see HostOptions. */
+	heartbeatMs?: number;
 	/** Present only when embedded in a desktop shell; enables /api/native/*. */
 	native?: NativeHandlers;
 	reusePort?: boolean;
@@ -62,6 +64,7 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 	const host = new Host({
 		...(options.configPath === undefined ? {} : { configPath: options.configPath }),
 		...(options.dataDir === undefined ? {} : { dataDir: options.dataDir }),
+		...(options.heartbeatMs === undefined ? {} : { heartbeatMs: options.heartbeatMs }),
 	});
 	await host.restoreSessions();
 	const cwd = options.cwd ?? process.cwd();
@@ -399,7 +402,7 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 			host.loopToggle(message.session, message.id, message.paused);
 			return;
 		case "loopCreate":
-			host.loopCreate(message.session, message.id, message.note, message.every);
+			host.loopCreate(message.session, message.id, message.note, message.every, message.cron);
 			return;
 		case "taskCreate":
 			host.taskCreate(message.session, message.content, message.priority);
@@ -449,6 +452,15 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 			return;
 		case "btwSave":
 			host.btwSave(message.session, message.threadId);
+			return;
+		case "btwHandoff":
+			host.btwHandoff(message.session, message.threadId);
+			return;
+		case "btwOverride":
+			host.btwOverride(message.session, message.threadId, {
+				...(message.model === undefined ? {} : { model: message.model }),
+				...(message.thinking === undefined ? {} : { thinking: message.thinking }),
+			});
 			return;
 		case "btwClear":
 			host.btwClear(message.session, message.threadId);

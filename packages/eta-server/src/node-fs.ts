@@ -1,6 +1,7 @@
 /** EtaFs over node:fs — the persona/memory batteries' filesystem port. */
 
-import { readdir, readFile, stat, writeFile as fsWrite } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile as fsWrite } from "node:fs/promises";
+import { dirname } from "node:path";
 import type { EtaFs } from "@eta/core";
 
 export class NodeEtaFs implements EtaFs {
@@ -21,6 +22,8 @@ export class NodeEtaFs implements EtaFs {
 	}
 
 	async writeFile(path: string, content: string): Promise<void> {
+		// The memory battery creates its own file, and `.eta/` may not exist yet.
+		await mkdir(dirname(path), { recursive: true });
 		await fsWrite(path, content, "utf8");
 	}
 

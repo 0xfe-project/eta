@@ -12,7 +12,9 @@ export const MEMORY_EXTRACT_PROMPT = `Read the conversation. Extract what the us
 Ignore small talk. Only capture durable, reusable things.
 
 Output ONLY a JSON object:
-{"add_new_decision": ["..."], "add_new_preference": ["..."], "learn_new_lesson": ["..."], "remove_memory_ids": [0]}
+{"add_new_decision": ["..."], "add_new_preference": ["..."], "learn_new_lesson": ["..."], "remove_memory_ids": ["user#0"]}
+
+Notes are shown with an id like [user#1] or [eta-agent~9f3c#0]. Copy those ids into remove_memory_ids exactly as shown; an id from a file this call is not writing to is ignored.
 
 If nothing is worth keeping, output the same object with all empty arrays.`;
 

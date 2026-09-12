@@ -3,9 +3,11 @@
  * event-sourced store, just a pure registry persisted as session KV values.
  *
  * The scheduler never times itself into action on its own: pump(now) is
- * called at run boundaries (and by an unref'd heartbeat), so an unattached
- * session never burns work. Every fire surfaces as a followUp driver at the
- * run boundary (S1), never as a mid-run interrupt.
+ * called at run boundaries, and by a heartbeat that exists only while the
+ * registry is non-empty. Whoever pumps owns the `fired` list: at a run
+ * boundary the followUp goes back into the run, from the heartbeat it must
+ * wake the session (S1) — a fire nobody consumes would only burn the count.
+ * Every fire surfaces as a followUp, never as a mid-run interrupt.
  */
 
 import { nextCronAt, parseCron } from "./cron.ts";
@@ -80,6 +82,12 @@ export interface LoopSchedulerOptions {
 	persist?(spec: LoopSpec): void;
 	/** Observation emission on the main bus (category "loop"). */
 	observe?(category: string, action: string, data?: Record<string, unknown>): void;
+	/**
+	 * Registry size moved. The heartbeat listens: `0` means there is nothing left
+	 * to wake for and the timer should not exist, so an idle session with no loops
+	 * holds no timer at all, and the first loop created gets one without a restart.
+	 */
+	onRegistryChange?(count: number): void;
 }
 
 export class LoopScheduler {
@@ -97,12 +105,15 @@ export class LoopScheduler {
 	}
 
 	upsert(spec: LoopSpec): void {
-		if (spec.def.cron !== undefined) {
-			const schedule = parseCron(spec.def.cron);
-			spec.nextDueAt = nextCronAt(schedule, spec.createdAt);
-		}
+		const created = !this.loops.has(spec.def.id);
+		this.arm(spec);
 		this.loops.set(spec.def.id, spec);
 		this.opts.persist?.(spec);
+		// Created/updated is a state change the GUI shows and the projector must see:
+		// loops live outside the journal, so without this emission the view frame that
+		// follows a create still carries the registry from before it.
+		this.opts.observe?.("loop", created ? "created" : "updated", { id: spec.def.id });
+		this.changed();
 	}
 
 	remove(id: string): boolean {
@@ -112,6 +123,7 @@ export class LoopScheduler {
 		this.loops.delete(id);
 		this.opts.persist?.(spec);
 		this.opts.observe?.("loop", "removed", { id });
+		this.changed();
 		return true;
 	}
 
@@ -120,14 +132,88 @@ export class LoopScheduler {
 		if (spec === undefined) return;
 		spec.paused = paused;
 		this.opts.persist?.(spec);
+		this.opts.observe?.("loop", paused ? "paused" : "resumed", { id });
+		// The registry did not change size, but what it is waiting for did: a paused loop
+		// has no next wake, a resumed one has a new one.
+		this.changed();
 	}
 
 	list(): LoopSpec[] {
 		return [...this.loops.values()];
 	}
 
+	/**
+	 * Load a persisted registry after a restart. Deliberately not `upsert`: a replay
+	 * is not a state change, and re-emitting or re-persisting one entry per loop on
+	 * every reopen would fill the journal with the same news every time.
+	 */
 	replay(specs: LoopSpec[]): void {
-		for (const spec of specs) this.loops.set(spec.def.id, spec);
+		for (const spec of specs) {
+			this.arm(spec);
+			this.loops.set(spec.def.id, spec);
+		}
+		this.changed();
+	}
+
+	/**
+	 * When a schedule-triggered spec is next due, worked out at once. An interval loop
+	 * that leaves this blank until its first fire cannot tell the panel when it will go
+	 * off, which is the first thing somebody asks after creating it.
+	 */
+	private arm(spec: LoopSpec): void {
+		if (spec.nextDueAt !== undefined) return; // a restored loop keeps the due time it was saved with
+		if (spec.def.cron !== undefined) spec.nextDueAt = nextCronAt(parseCron(spec.def.cron), spec.createdAt);
+		else if (spec.def.every !== undefined)
+			spec.nextDueAt = spec.createdAt + parseEvery(spec.def.every) + computeJitter(spec.def.id, parseEvery(spec.def.every));
+	}
+
+	/** When a spec with a schedule trigger next becomes due, or undefined for an event-only one. */
+	private wakeTimeOf(spec: LoopSpec, now: number): number | undefined {
+		if (spec.nextDueAt !== undefined) return spec.nextDueAt;
+		if (spec.def.cron !== undefined) return nextCronAt(parseCron(spec.def.cron), now);
+		if (spec.def.every !== undefined) {
+			const everyMs = parseEvery(spec.def.every);
+			return spec.createdAt + everyMs + computeJitter(spec.def.id, everyMs);
+		}
+		return undefined;
+	}
+
+	/**
+	 * The earliest moment a `pump` could fire anything, or `undefined` when no loop has a
+	 * schedule to wait for. Whoever keeps a timer alive needs this: a fixed cadence is
+	 * silent for the whole of one cadence after a short loop comes due, which is exactly
+	 * when a `5s` loop was supposed to say something.
+	 */
+	nextWakeAt(now = Date.now()): number | undefined {
+		let earliest: number | undefined;
+		for (const spec of this.loops.values()) {
+			if (spec.paused || spec.disposed) continue;
+			const at = this.wakeTimeOf(spec, now);
+			if (at === undefined) continue;
+			if (earliest === undefined || at < earliest) earliest = at;
+		}
+		return earliest;
+	}
+
+	private changed(): void {
+		this.opts.onRegistryChange?.(this.loops.size);
+	}
+
+	/** FollowUps from loops that fired when the consumer could not take them all. */
+	private deferred: string[] = [];
+
+	/** Hand back followUps that fired but found no slot; the next boundary delivers them. */
+	defer(followUps: string[]): void {
+		this.deferred.push(...followUps);
+	}
+
+	/**
+	 * Take the oldest undelivered followUp. One per run boundary keeps a burst of
+	 * loops from arriving as one giant prompt; the rest wait for the next boundary
+	 * with their runCount already paid for.
+	 */
+	takeDeferred(): string | undefined {
+		return this.deferred.shift();
 	}
 
 	/** Feed one bus event; matching loops fire immediately (subject to caps). */
@@ -160,6 +246,7 @@ export class LoopScheduler {
 				this.opts.observe?.("loop", "expired", { id: spec.def.id });
 			}
 		}
+		if (result.disposed.length > 0) this.changed();
 		for (const fired of result.fired) {
 			const spec = this.loops.get(fired.spec.def.id);
 			if (spec === undefined) continue;

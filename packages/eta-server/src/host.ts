@@ -11,7 +11,9 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import {
 	BACKGROUND_CONTEXT,
+	parseEvery,
 	EtaAgent,
+	type MemoryLoaded,
 	SessionViewProjector,
 	type HarnessEvent,
 	type LaneQueuedItem,
@@ -101,6 +103,12 @@ export interface HostOptions {
 	configPath?: string;
 	/** Where per-session journals and meta.json live; defaults to ~/.eta/sessions. */
 	dataDir?: string;
+	/**
+	 * Loop heartbeat cadence in ms. A session with no loops holds no timer at all, so the
+	 * only cost of the default is one wake check per cadence in a session that has
+	 * something scheduled; tests shorten it to make a fired loop observable.
+	 */
+	heartbeatMs?: number;
 }
 
 /**
@@ -129,6 +137,13 @@ export interface SettingsFile {
 	modelId?: string;
 	thinkingLevel?: ThinkingLevel;
 	keepRecentTokens?: number;
+	/**
+	 * Folder new sessions start in. Without it a session with no folder falls back to
+	 * the server's own launch directory, which in the desktop shell is wherever the app
+	 * was started from — a folder nobody chose, and the one thing a person cannot tell
+	 * they were given until the memory and the git status look wrong.
+	 */
+	cwd?: string;
 }
 
 interface SessionMetaFile {
@@ -144,11 +159,13 @@ interface SessionMetaFile {
 export class Host {
 	readonly configPath: string;
 	readonly dataDir: string;
+	readonly heartbeatMs: number | undefined;
 	private readonly hosted = new Map<string, Hosted>();
 
 	constructor(options: HostOptions = {}) {
 		this.configPath = options.configPath ?? etaConfigPath;
 		this.dataDir = options.dataDir ?? join(homedir(), ".eta", "sessions");
+		this.heartbeatMs = options.heartbeatMs;
 	}
 
 	private etaConfig(): EtaConfig {
@@ -188,6 +205,7 @@ export class Host {
 					...(modelId === undefined ? {} : { modelId }),
 					configPath: this.configPath,
 					persistDir,
+					...(this.heartbeatMs === undefined ? {} : { heartbeatMs: this.heartbeatMs }),
 				}),
 			{ cwd, persistDir },
 		);
@@ -229,6 +247,7 @@ export class Host {
 							...(meta.modelId === undefined ? {} : { modelId: meta.modelId }),
 							configPath: this.configPath,
 							persistDir,
+							...(this.heartbeatMs === undefined ? {} : { heartbeatMs: this.heartbeatMs }),
 						}),
 					{ cwd, persistDir, restore: true },
 				);
@@ -339,6 +358,11 @@ export class Host {
 				void appendFile(join(entry.persistDir, "dev.jsonl"), `${JSON.stringify(frame)}\n`, "utf8").catch(
 					() => undefined,
 				);
+			// A loop came due while no run could take its followUp, and the scheduler said so
+			// on the bus as `wake`. Starting the run is the host's call, not the scheduler's:
+			// this is where the answer to "is one already in flight" lives.
+			if (frame.category === "loop" && frame.action === "wake")
+				this.deliver((frame.data as { followUp?: string }).followUp ?? "", name, false);
 		});
 		const attached = await projector.attach((view) => {
 			entry.view = this.stampView(entry, view);
@@ -452,6 +476,7 @@ export class Host {
 		this.hosted.delete(name);
 		entry.pacer.dispose();
 		this.viewSync.forget(name);
+		this.reprojectSeq.delete(name);
 		if (this.attachPointerValue === name) this.attachPointerValue = this.hosted.keys().next().value ?? null;
 	}
 
@@ -511,7 +536,7 @@ export class Host {
 	/** Merge a patch over the stored defaults, keep only known keys, persist, return all. */
 	async saveSettings(patch: Record<string, unknown>): Promise<SettingsFile> {
 		const next: SettingsFile = { ...this.settings() };
-		for (const key of ["personaId", "modelId"] as const) {
+		for (const key of ["personaId", "modelId", "cwd"] as const) {
 			const value = patch[key];
 			if (value === null) delete next[key];
 			else if (typeof value === "string" && value.trim().length > 0) next[key] = value.trim();
@@ -710,25 +735,37 @@ export class Host {
 		if (action === "pause") agent.goal.pause();
 		if (action === "resume") agent.goal.resume();
 		if (action === "clear") agent.goal.clear();
-		entry.view = this.stampView(entry);
-		this.publishView(name);
 		// Setting a goal means "go work on it": kick a run when the lane is idle.
 		if (action === "set" && objective !== undefined && !entry.running) {
 			void this.prompt(name, `Work toward the goal: ${objective}`).catch(() => undefined);
 		}
+		this.refreshView(name);
 	}
 
-	loopCreate(name: string, id: string, note: string, every?: string): void {
-		const entry = this.hosted.get(name);
-		if (entry === undefined) return;
-		entry.agent.loops.upsert({
-			def: { id, note, ...(every === undefined || every.length === 0 ? {} : { every }) },
+	loopCreate(name: string, id: string, note: string, every?: string, cron?: string): void {
+		const agent = this.must(name);
+		const interval = every?.trim() ?? "";
+		const schedule = cron?.trim() ?? "";
+		// The check the model's own LoopCreate has always made. A spec with no trigger is
+		// never due: pump has no interval to read and the event matcher has nothing to
+		// match, so it would sit in the panel, looking created, for its whole 7-day TTL.
+		if (interval.length === 0 && schedule.length === 0)
+			throw new Error(`loop ${id}: needs an interval ('45s', '5m', '2h') or a cron schedule`);
+		// A bad interval is the caller's mistake, not a state change: let it throw, so the
+		// op comes back as an error frame instead of a loop that silently never fires.
+		if (interval.length > 0) parseEvery(interval);
+		agent.loops.upsert({
+			def: {
+				id,
+				note,
+				...(interval.length === 0 ? {} : { every: interval }),
+				...(schedule.length === 0 ? {} : { cron: schedule }),
+			},
 			runCount: 0,
 			createdAt: Date.now(),
 			paused: false,
 		});
-		entry.view = this.stampView(entry);
-		this.publishView(name);
+		this.refreshView(name);
 	}
 
 	loopToggle(name: string, id: string, paused: boolean): void {
@@ -745,7 +782,7 @@ export class Host {
 		this.refreshView(name);
 	}
 
-	memoryText(name: string): Promise<{ text: string; files: string[] }> | undefined {
+	memoryText(name: string): Promise<MemoryLoaded> | undefined {
 		const loader = this.hosted.get(name)?.created.memory;
 		return loader === undefined ? undefined : loader();
 	}
@@ -778,7 +815,32 @@ export class Host {
 		const entry = this.hosted.get(name);
 		if (entry === undefined) return;
 		entry.updated = Date.now();
-		entry.view = this.stampView(entry);
+		// The batteries — goal, tasks, loops — live outside the journal, so the view from
+		// the last projection does not know what the op that just arrived did to them.
+		// Re-project instead of re-stamping the copy: a frame that presents itself as the
+		// current state has to have been read after the change, or the panel only catches
+		// up the next time the journal happens to move.
+		void this.reproject(name);
+	}
+
+	/** Projection requests in flight, per session: only the newest one may publish. */
+	private readonly reprojectSeq = new Map<string, number>();
+
+	/** Project now, publish what comes back, and drop it if a newer request overtook it. */
+	private async reproject(name: string): Promise<void> {
+		const entry = this.hosted.get(name);
+		if (entry === undefined) return;
+		const seq = (this.reprojectSeq.get(name) ?? 0) + 1;
+		this.reprojectSeq.set(name, seq);
+		let view: SessionView;
+		try {
+			view = await entry.projector.snapshot(BACKGROUND_CONTEXT);
+		} catch {
+			return;
+		}
+		const hosted = this.hosted.get(name);
+		if (hosted === undefined || this.reprojectSeq.get(name) !== seq) return;
+		hosted.view = this.stampView(hosted, view);
 		this.publishView(name);
 	}
 
@@ -798,12 +860,18 @@ export class Host {
 	}
 
 	async btwOpen(name: string, kind: "contextual" | "tangent"): Promise<void> {
-		const agent = this.must(name);
-		const thread = agent.btw.create(kind);
-		if (kind === "contextual") {
-			agent.btw.seedFrom(thread.id, await agent.lane.findEntries(undefined, BACKGROUND_CONTEXT), null);
-		}
+		const thread = this.must(name).btw.create(kind);
+		await this.reseedBtw(name, thread.id);
 		this.refreshView(name);
+	}
+
+	/**
+	 * Take the thread's seed from the session as it is now: everything visible
+	 * except the side chatter itself, so side answers never compound.
+	 */
+	private async reseedBtw(name: string, threadId: string): Promise<void> {
+		const agent = this.must(name);
+		agent.btw.seedFrom(threadId, await agent.lane.findEntries(undefined, BACKGROUND_CONTEXT), null);
 	}
 
 	btwAnswer(name: string, threadId: string, question: string, answer: string): void {
@@ -860,8 +928,14 @@ export class Host {
 					: { provider: "anthropic", modelId };
 			try {
 				await agent.lane.setModel(identity, BACKGROUND_CONTEXT);
-			} catch {
-				/* unknown id for this registry: keep the meta so it applies on next open */
+			} catch (error) {
+				/* Unknown id for this registry: the meta is kept so it applies on next open, but the
+				   swap did not happen now, and a panel that reads the live model will say so. */
+				console.warn(
+					`[eta-host] ${name} stayed on its current model, "${modelId}" is not in the registry: ${
+						error instanceof Error ? error.message : String(error)
+					}`,
+				);
 			}
 		}
 	}
@@ -912,6 +986,53 @@ export class Host {
 	btwSave(name: string, threadId: string): void {
 		// Saving mid-run queues the note; flushQueued writes it at the boundary.
 		this.must(name).btw.save(threadId, this.hosted.get(name)?.running ?? false);
+		this.refreshView(name);
+	}
+
+	/**
+	 * Hand a thread's results to the main run — the same driver goals and loops
+	 * use (a followUp), so the main agent folds them in at its next boundary.
+	 * With nothing running a followUp would sit unread, so a run is kicked
+	 * instead; that is what setting a goal does for the same reason.
+	 */
+	btwHandoff(name: string, threadId: string): void {
+		const agent = this.must(name);
+		const text = agent.btw.handoff(threadId);
+		if (text === undefined) return;
+		this.deliver(text, name, true);
+		this.refreshView(name);
+	}
+
+	/**
+	 * Hand text to a session in the one shape that cannot be lost: a followUp while a run
+	 * is in flight to fold it in, a run of its own when the lane is idle, because a
+	 * followUp with nothing running would sit unread. `focus` moves the attach pointer —
+	 * someone who handed off a thread should arrive at the session; a loop that came due
+	 * in the background should not steal the view they were looking at.
+	 */
+	private deliver(text: string, name: string, focus: boolean): void {
+		const entry = this.hosted.get(name);
+		if (entry === undefined || text.length === 0) return;
+		if (entry.running) {
+			void entry.agent.lane.followUp(text, undefined, BACKGROUND_CONTEXT).catch(() => undefined);
+			return;
+		}
+		if (focus) void this.prompt(name, text).catch(() => undefined);
+		else void entry.agent.lane.prompt(text, undefined, BACKGROUND_CONTEXT).catch(() => undefined);
+	}
+
+	/**
+	 * Per-thread model/thinking override. The side request is one-shot, so the
+	 * override takes effect on the next question; the seed is taken again because
+	 * the override rebuilds what that request is.
+	 */
+	btwOverride(
+		name: string,
+		threadId: string,
+		overrides: { model?: string | null; thinking?: "off" | "minimal" | "low" | "medium" | "high" | null },
+	): void {
+		this.must(name).btw.setOverride(threadId, overrides);
+		void this.reseedBtw(name, threadId);
 		this.refreshView(name);
 	}
 

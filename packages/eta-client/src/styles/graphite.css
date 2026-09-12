@@ -603,6 +603,21 @@ details[open] > .tool-card-head .thinking-block-chevron {
 	color: var(--fg-muted);
 	white-space: nowrap;
 }
+/* The row is text + up to three verbs. graphite has no utility classes, so the
+   shrinking has to be spelled out: without `min-width:0` the text refuses to give
+   way, the chip overflows, and `overflow:hidden` above eats the buttons — which is
+   what made 「立即转向」 look like it had disappeared. */
+.queued-message-chip-text {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.queued-message-chip-actions {
+	display: flex;
+	flex-shrink: 0;
+	gap: 2px;
+}
 /* Three verbs per row, so they read as part of the chip and not as a toolbar that
    wandered in: same size, muted until hovered, and no focus ring eating the row. */
 .queued-message-chip button {

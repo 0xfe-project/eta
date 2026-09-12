@@ -14,6 +14,15 @@ export function ContextBar(props: { session: string; view: SessionView }) {
 	const store = etaStore();
 	const send = (op: Parameters<typeof store.send>[0]) => store.send(op);
 	const queue = () => props.view.queue ?? [];
+	/** When the next one is due, as a wall-clock time: an absolute label stays true
+	 *  between frames, a countdown written once per frame would quietly go stale. */
+	const nextDue = () => {
+		const times = props.view.loops
+			.filter((loop) => !loop.paused && loop.nextDueAt !== undefined)
+			.map((loop) => loop.nextDueAt!);
+		if (times.length === 0) return undefined;
+		return new Date(Math.min(...times)).toTimeString().slice(0, 5);
+	};
 	const empty = () => queue().length === 0 && props.view.loops.length === 0 && props.view.goal == null && props.view.tasks.length === 0;
 
 	return (
@@ -26,9 +35,16 @@ export function ContextBar(props: { session: string; view: SessionView }) {
 								/* The chip used to be one button that removed the entry. It is now a
 								   row: the same text, and what can be done with it. */
 								<span data-testid={`queue-${item.entryId}`} class="queued-message-chip" title={item.text}>
-									<span class="min-w-0 truncate">{i18n.t("composer.queued")} · {item.text}</span>
-									{/* An entry already in the steering queue cannot be steered again —
-									    the button would be a lie, so only follow-ups get one. */}
+									{/* The prefix says which queue the entry is in, because that decides which
+									    buttons exist. Without it a ⌘⏎-queued entry (already a steer) looks like a
+									    chip with a missing button. */}
+									<span class="queued-message-chip-text">
+										{item.kind === "steer" ? i18n.t("composer.queuedAsSteer") : i18n.t("composer.queued")} · {item.text}
+									</span>
+									<span class="queued-message-chip-actions">
+									{/* An entry already in the steering queue cannot be steered again — pulling it
+									    out and pushing it back as a steer is the same state, so the button would
+									    be a lie; only follow-ups get one. */}
 									<Show when={item.kind === "followUp"}>
 										<button
 											data-testid={`queue-steer-${item.entryId}`}
@@ -52,23 +68,28 @@ export function ContextBar(props: { session: string; view: SessionView }) {
 									>
 										×
 									</button>
+									</span>
 								</span>
 							)}
 						</For>
 					</div>
 				</Show>
-				<For each={props.view.loops}>
-					{(loop) => (
-						<div data-testid={`loop-row-${loop.id}`} class="flex items-center gap-2">
-							<span class="mono min-w-0 flex-1 truncate text-[11px] text-muted">
-								loop {loop.id} · {loop.note} · {loop.runCount}×
-							</span>
-							<Button size="sm" variant="ghost" onClick={() => send({ op: "loopToggle", session: props.session, id: loop.id, paused: !loop.paused })}>
-								{loop.paused ? i18n.t("panel.resume") : i18n.t("panel.pause")}
-							</Button>
-						</div>
-					)}
-				</For>
+				{/* Loops are not queue traffic: the queue is what runs next, a loop is a
+				    cadence, and a row per loop with its own pause button does not belong
+				    above the composer. Say that something is scheduled and let the click go
+				    to the panel, which is where they are managed. */}
+				<Show when={props.view.loops.length > 0}>
+					<button
+						data-testid="loops-summary"
+						onClick={() => window.dispatchEvent(new CustomEvent("eta:show-loops"))}
+						class="mono flex items-center gap-2 self-start border border-border px-2 py-0.5 text-[11px] text-muted hover:text-foreground"
+					>
+						{i18n.t("panel.loops")} {props.view.loops.filter((loop) => !loop.paused).length}/{props.view.loops.length}
+						<Show when={nextDue() !== undefined}>
+							<span class="text-faint">→ {nextDue()}</span>
+						</Show>
+					</button>
+				</Show>
 				<Show when={props.view.goal != null}>
 					<div data-testid="goal-card" data-goal-status={props.view.goal?.status} class={`flex items-center gap-2 border px-2 py-1 ${props.view.goal?.status === "achieved" ? "border-primary bg-overlay" : "border-border bg-overlay"}`}>
 						<span data-testid="goal-state" class="mono shrink-0 text-[11px]" style={{ color: props.view.goal?.status === "achieved" ? "var(--primary)" : undefined }}>

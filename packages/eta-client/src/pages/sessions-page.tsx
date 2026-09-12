@@ -1,5 +1,6 @@
-import { For, Show, createEffect, createSignal, onMount, type Accessor, type Setter } from "solid-js";
+import { For, Show, createEffect, createSignal, onCleanup, onMount, type Accessor, type Setter } from "solid-js";
 import { useNavigate } from "@solidjs/router";
+import { sessionTokenTotal } from "@eta/core";
 import { useAppI18n } from "../i18n.ts";
 import { AppShell } from "../app/app-shell.tsx";
 import { useEta } from "../lib/eta-store.ts";
@@ -94,7 +95,10 @@ function SessionsMain(props: { termOpen: Accessor<boolean>; setTermOpen: Setter<
 					<Show when={view()}>
 						{(current) => (
 							<>
-								<span data-testid="header-tokens" class="header-chip">tok {(current().usage.input + current().usage.output).toLocaleString()}</span>
+								{/* The same number the panel breaks down: everything the provider counted
+								    for this session. It used to be in+out only, which quietly ignored the
+								    30k of cache reads a warm session pays for on every single turn. */}
+								<span data-testid="header-tokens" class="header-chip">tok {sessionTokenTotal(current().usage).toLocaleString()}</span>
 								<span data-testid="header-cache" class="header-chip">cache {Math.round(current().cacheRate * 100)}%</span>
 								<Show when={current().gitBranch}>
 									{(branch) => <span data-testid="header-branch" class="header-chip" title="git branch"> {branch()}</span>}
@@ -108,6 +112,7 @@ function SessionsMain(props: { termOpen: Accessor<boolean>; setTermOpen: Setter<
 					<span data-testid="conn-dot" class={`conn-dot ${state.connected ? "on" : "off"}`} title={state.connected ? "" : i18n.t("connection.disconnected")} />
 				</span>
 			</header>
+			<OpErrorStrip />
 			<Show
 				when={state.sessions.length === 0}
 				fallback={
@@ -139,6 +144,34 @@ function SessionsMain(props: { termOpen: Accessor<boolean>; setTermOpen: Setter<
 	);
 }
 
+/**
+ * The one place a refused op becomes visible. The store keeps the last message the
+ * server sent with `type: "error"` and clears it on the next hello, so the strip has to
+ * carry its own way out: a refused click should not shout over the session for the rest
+ * of the day. Without it, a rejected op looks exactly like one that worked.
+ */
+function OpErrorStrip() {
+	const i18n = useAppI18n();
+	const state = useEta();
+	const [dismissed, setDismissed] = createSignal<string | null>(null);
+	createEffect(() => {
+		if (state.error !== null) setDismissed(null);
+	});
+	const shown = () => (state.error === null || state.error === dismissed() ? null : state.error);
+	return (
+		<Show when={shown()}>
+			{(message) => (
+				<div data-testid="op-error" class="flex items-center gap-2 border-b-2 border-danger px-4 py-1">
+					<span class="mono min-w-0 flex-1 truncate text-[11px] text-danger">{message()}</span>
+					<button data-testid="op-error-dismiss" class="mono shrink-0 text-[10px] text-faint hover:text-foreground" onClick={() => setDismissed(state.error)}>
+						{i18n.t("error.dismiss")}
+					</button>
+				</div>
+			)}
+		</Show>
+	);
+}
+
 function SessionContextBar() {
 	const state = useEta();
 	const selected = () => state.attach ?? state.sessions[0]?.name ?? null;
@@ -157,6 +190,11 @@ function SessionsPanel() {
 	const i18n = useAppI18n();
 	const state = useEta();
 	const [tab, setTab] = createSignal<"context" | "workspace" | "terminal" | "log">("context");
+	// The loop chip above the composer points here: the panel is where loops are managed,
+	// so the click lands on the tab that holds them.
+	const showLoops = () => setTab("context");
+	window.addEventListener("eta:show-loops", showLoops);
+	onCleanup(() => window.removeEventListener("eta:show-loops", showLoops));
 	// The terminal mounts on first use and is then only hidden: unmounting it
 	// would kill the pty, and `vim` with it.
 	const [terminalMounted, setTerminalMounted] = createSignal(false);

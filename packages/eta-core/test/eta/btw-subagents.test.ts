@@ -1,11 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { BtwManager } from "../../src/harness/btw.ts";
+import { BACKGROUND_CONTEXT } from "../../src/harness/context.ts";
+import { BtwManager, btwSideAsk } from "../../src/harness/btw.ts";
 import { DEPTH_CAP, SubagentManager, type SubagentRecord, type SubagentBus } from "../../src/harness/subagent.ts";
 
 describe("btw side channel", () => {
 	const userMsg = { role: "user", content: [{ type: "text", text: "main" }], timestamp: 0 };
 	const btwMsg = { role: "custom", customType: "eta.btw", content: [], timestamp: 0 };
 	const entries = [userMsg, btwMsg];
+	const SIDE_USAGE = {
+		input: 5,
+		output: 2,
+		cacheRead: 0,
+		cacheWrite: 0,
+		totalTokens: 7,
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+	} as const;
 
 	it("contextual seed drops visible btw chatter", () => {
 		const mgr = new BtwManager(() => ({ messages: [userMsg, btwMsg] as never[] }));
@@ -60,7 +69,7 @@ describe("btw side channel", () => {
 			undefined,
 			async (request) => {
 				asked.push({ question: request.question, messages: request.messages });
-				return "4";
+				return { text: "4", usage: SIDE_USAGE };
 			},
 		);
 		const t = mgr.create("tangent");
@@ -117,12 +126,53 @@ describe("btw side channel", () => {
 		]);
 		expect(mgr.get("btw-9")?.saveState).toBe("saved");
 	});
-	it("handoff hands a followUp for threads with results", () => {
+	it("handoff hands the main run the thread itself, not a pointer to it", () => {
 		const mgr = new BtwManager(() => ({ messages: [] }));
 		const t = mgr.create("tangent");
 		expect(mgr.handoff(t.id)).toBeUndefined();
-		mgr.answer(t.id, "q", "a");
-		expect(mgr.handoff(t.id)).toContain("side thread has results");
+		mgr.answer(t.id, "which editor?", "the one you already know");
+		const text = mgr.handoff(t.id) ?? "";
+		expect(text).toContain(`[btw ${t.id}]`);
+		expect(text).toContain("Q: which editor?");
+		expect(text).toContain("A: the one you already know");
+	});
+	it("an override cleared with null goes back to inheriting the session", () => {
+		const mgr = new BtwManager(() => ({ messages: [] }));
+		const t = mgr.create("contextual", { model: "anthropic:claude-haiku-4-5", thinking: "low" });
+		const version = mgr.get(t.id)?.assemblyVersion ?? 0;
+		mgr.setOverride(t.id, { model: null, thinking: null });
+		expect(mgr.get(t.id)?.model).toBeUndefined();
+		expect(mgr.get(t.id)?.thinking).toBeUndefined();
+		expect(mgr.get(t.id)?.assemblyVersion).toBe(version + 1);
+	});
+	it("an override that changed nothing leaves the assembly alone", () => {
+		const mgr = new BtwManager(() => ({ messages: [] }));
+		const t = mgr.create("contextual", { model: "m" });
+		const version = mgr.get(t.id)?.assemblyVersion ?? 0;
+		mgr.setOverride(t.id, { model: "m" });
+		expect(mgr.get(t.id)?.assemblyVersion).toBe(version);
+	});
+	it("a side answer's usage is handed to the session ledger", async () => {
+		const recorded: { threadId: string; output: number }[] = [];
+		const ask = btwSideAsk({
+			models: {
+				getModels: () => [],
+				getModel: () => undefined,
+				completeSimple: async () =>
+					({
+						role: "assistant",
+						content: [{ type: "text", text: "4" }],
+						usage: SIDE_USAGE,
+						stopReason: "stop",
+					}) as never,
+			} as never,
+			currentModel: async () => ({ id: "fake" }) as never,
+			context: BACKGROUND_CONTEXT,
+			onUsage: (usage, threadId) => recorded.push({ threadId, output: usage.output }),
+		});
+		const answer = await ask({ threadId: "btw-1", kind: "tangent", question: "q", messages: [] });
+		expect(answer.text).toBe("4");
+		expect(recorded).toEqual([{ threadId: "btw-1", output: 2 }]);
 	});
 });
 

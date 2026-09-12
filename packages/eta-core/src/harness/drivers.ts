@@ -103,19 +103,78 @@ export function emptyResponseGuard(maxRetries = 2) {
 
 /**
  * before_run_end handler: pumps the loop scheduler at run boundaries and hands
- * the first due loop back as a followUp driver (one per boundary; the rest
- * wait for the next tick).
+ * one followUp back per boundary (the rest keep their place in the scheduler's
+ * queue and arrive at the boundaries after this one).
  */
 export function loopDriver(scheduler: import("./loops.ts").LoopScheduler) {
 	return (): { followUp?: string } | undefined => {
-		const first = scheduler.pump(Date.now()).fired[0];
-		return first === undefined ? undefined : { followUp: first.followUp };
+		scheduler.defer(scheduler.pump(Date.now()).fired.map((fired) => fired.followUp));
+		const next = scheduler.takeDeferred();
+		return next === undefined ? undefined : { followUp: next };
 	};
 }
 
-/** Idle-session heartbeat: pumps every interval (unref'd, stops on returned call). */
-export function startLoopHeartbeat(scheduler: import("./loops.ts").LoopScheduler, intervalMs = 30_000): () => void {
-	const timer = setInterval(() => scheduler.pump(Date.now()), intervalMs);
-	timer.unref?.();
-	return () => clearInterval(timer);
+export interface LoopHeartbeat {
+	/** Re-read the registry: what it is waiting for may have just moved. */
+	sync(count: number): void;
+	stop(): void;
+}
+
+/** A loop due every few ms must not turn the wake timer into a busy loop. */
+const WAKE_FLOOR_MS = 50;
+
+/**
+ * Idle-session wake. Two things it has to get right:
+ *
+ * - It arms for **when the earliest loop is due**, not on a fixed grid. A grid of 30s is
+ *   silent for up to a whole cadence after a `5s` loop comes due, which is exactly the
+ *   moment somebody asked it to say something.
+ * - It may not swallow what fired. With no run in flight there is no boundary to hand the
+ *   followUp to, so `onWake` is how a loop re-starts the agent; a heartbeat that pumped and
+ *   dropped the result would tick the loop's count and do nothing else, which is worse than
+ *   not firing — the loop looks alive in the UI.
+ *
+ * `cadenceMs` remains as the backstop: loops waiting on an event, and the sweep that
+ * retires expired ones, still need a tick even though nothing is scheduled for them.
+ */
+export function startLoopHeartbeat(
+	scheduler: import("./loops.ts").LoopScheduler,
+	cadenceMs = 30_000,
+	onWake?: (followUp: string, firedCount: number) => void,
+): LoopHeartbeat {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const clear = () => {
+		if (timer === undefined) return;
+		clearTimeout(timer);
+		timer = undefined;
+	};
+	const arm = (count: number) => {
+		clear();
+		const now = Date.now();
+		const dueAt = scheduler.nextWakeAt(now);
+		const wake = () => tick();
+		if (dueAt === undefined) {
+			// Nothing on a clock: keep a backstop tick only while the registry still holds
+			// something (an event-triggered loop, or one whose expiry has to be swept).
+			if (count === 0) return;
+			timer = setTimeout(wake, cadenceMs);
+		} else {
+			const wait = Math.min(Math.max(dueAt - now, 0), cadenceMs);
+			timer = setTimeout(wake, Math.max(wait, WAKE_FLOOR_MS));
+		}
+		timer.unref?.();
+	};
+	const tick = () => {
+		const fired = scheduler.pump(Date.now()).fired;
+		if (fired.length > 0) {
+			scheduler.defer(fired.map((entry) => entry.followUp));
+			const next = scheduler.takeDeferred();
+			if (next !== undefined) onWake?.(next, fired.length);
+		}
+		arm(scheduler.list().length);
+	};
+	return {
+		sync: (count) => arm(count),
+		stop: clear,
+	};
 }

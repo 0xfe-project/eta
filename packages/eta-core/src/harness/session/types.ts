@@ -1,6 +1,8 @@
 import type { JsonValue } from "@earendil-works/chord";
 import type { AssistantMessage, StopReason, Usage } from "@earendil-works/pi-ai";
 import type { AgentMessage, QueueMode, ThinkingLevel } from "../../types.ts";
+// Type-only on purpose: the economics live with the maths, and this file must stay a leaf for storage.
+import type { CompactionEconomics } from "../compaction/economics.ts";
 import type { Context } from "../context.ts";
 import type { AgentHarnessStreamOptions } from "../types.ts";
 import type { ListElement, ListReadOptions, ListWrite, StoredValue, Value, ValueList, ValueWrite } from "./values.ts";
@@ -30,6 +32,11 @@ export interface CompactionSettings {
 	enabled: boolean;
 	reserveTokens: number;
 	keepRecentTokens: number;
+	/**
+	 * Price model for deciding whether a cut earns its rewrite. Absent means
+	 * price-blind: compact on window pressure alone, the way this always did.
+	 */
+	economics?: CompactionEconomics;
 }
 
 /** Session entries staged for compaction, produced by the compaction battery. */

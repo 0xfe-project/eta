@@ -1,5 +1,5 @@
 import { For, Index, Show, createEffect, createSignal, on, onCleanup, type JSX } from "solid-js";
-import type { SessionView } from "@eta/core";
+import { sessionTokenTotal, type SessionView } from "@eta/core";
 import { useAppI18n } from "../../i18n.ts";
 import { etaStore } from "../../lib/eta-store.ts";
 import { Button } from "../../components/ui/button.tsx";
@@ -9,7 +9,7 @@ import { apiFetch } from "../../lib/host.ts";
 
 export function ContextPanel(props: { session: string; view: SessionView }) {
 	const i18n = useAppI18n();
-	const [memory, setMemory] = createSignal<{ text: string; files: string[] } | null>(null);
+	const [memory, setMemory] = createSignal<{ text: string; files: string[]; target?: { path: string } } | null>(null);
 	const store = etaStore();
 	const [compacting, setCompacting] = createSignal(false);
 	const [promptOpen, setPromptOpen] = createSignal(false);
@@ -18,6 +18,14 @@ export function ContextPanel(props: { session: string; view: SessionView }) {
 	const [btwOpen, setBtwOpen] = createSignal(false);
 	const [personaPicker, setPersonaPicker] = createSignal(false);
 	const [contextWindow, setContextWindow] = createSignal<number | null>(null);
+	/**
+	 * What the host *means* to run: the id in meta.json, else the configured default. The view
+	 * carries what it is actually running. They differ when a swap was refused (an id the
+	 * registry does not have), and saying so beats a panel that names a model no turn ever used.
+	 */
+	const [wanted, setWanted] = createSignal<string | undefined>(undefined);
+	const [memoryFiles, setMemoryFiles] = createSignal<string[]>([]);
+	const [memoryTargetInfo, setMemoryTargetInfo] = createSignal<{ path: string } | undefined>(undefined);
 	const [personaOptions, setPersonaOptions] = createSignal<{ id: string; name: string; custom: boolean }[]>([]);
 	const [epochAtRequest, setEpochAtRequest] = createSignal<number | null>(null);
 	const send = (op: Parameters<typeof store.send>[0]) => store.send(op);
@@ -28,11 +36,29 @@ export function ContextPanel(props: { session: string; view: SessionView }) {
 			(session) => {
 				void apiFetch(`/api/models?session=${encodeURIComponent(session)}`)
 					.then((response) => response.json() as Promise<{ models: { id: string; contextWindow?: number }[]; current: string }>)
-					.then((body) => setContextWindow(body.models.find((model) => model.id === body.current)?.contextWindow ?? null))
+					.then((body) => {
+						setWanted(body.current);
+						setContextWindow(body.models.find((model) => model.id === body.current)?.contextWindow ?? null);
+					})
 					.catch(() => setContextWindow(null));
+				// Which note files this session reads is the first thing a person asks once they
+				// moved the session to another folder, so it goes on the panel, not behind a click.
+				void apiFetch(`/api/memory?session=${encodeURIComponent(session)}`)
+					.then((response) => response.json() as Promise<{ files?: string[]; target?: { path: string } }>)
+					.then((body) => {
+						setMemoryFiles(Array.isArray(body.files) ? body.files : []);
+						setMemoryTargetInfo(body.target);
+					})
+					.catch(() => setMemoryFiles([]));
 			},
 		),
 	);
+
+	/** Where this project's notes live (or will, once there is one): `<projectRoot>/.eta/MEMORY.md`. */
+	const memoryTarget = () => (memory()?.target ?? memoryTargetInfo())?.path ?? "";
+
+	/** Everything the provider counted for this session, from the first turn to now. */
+	const totalTokens = () => sessionTokenTotal(props.view.usage);
 
 	createEffect(() => {
 		const requested = epochAtRequest();
@@ -53,11 +79,49 @@ export function ContextPanel(props: { session: string; view: SessionView }) {
 
 	return (
 		<div class="flex h-full flex-col gap-4 overflow-y-auto p-3 text-sm" data-testid="context-panel">
-			<Section title={i18n.t("panel.usage")} testid="section-usage" right={<span class="text-[10px]">{(Math.round(props.view.tokensPerSec * 10) / 10).toFixed(1)} tok/s</span>}>
+			{/*
+			 * Which model is answering. Every other number in this panel is read against it, and
+			 * until now it lived only in the composer's toolbar — so a swap the harness refused
+			 * (an id the registry does not have) was invisible from the panel.
+			 */}
+			<div data-testid="section-model" class="flex flex-col gap-1 border-t-2 border-border pt-2">
+				<div class="flex items-baseline gap-2">
+					<span class="mono text-[9px] uppercase tracking-[0.18em] text-faint">{i18n.t("panel.model")}</span>
+					<span data-testid="panel-model" class="mono min-w-0 truncate text-right text-[11px] text-foreground" title={props.view.model}>
+						{props.view.model}
+					</span>
+				</div>
+				<Show when={wanted() !== undefined && wanted() !== props.view.model}>
+					<p data-testid="panel-model-pending" class="mono text-[10px] text-warning">
+						{i18n.t("panel.modelPending")}: {wanted()}
+					</p>
+				</Show>
+			</div>
+
+			<Section
+				title={i18n.t("panel.usage")}
+				testid="section-usage"
+				right={
+					<span class="flex items-baseline gap-2 text-[10px]">
+						{/* The session's own bill: every token the provider counted, not the slice of
+						    context on screen — the donut below is that slice, and the two grow apart
+						    the moment a compaction or a long run happens. */}
+						<span data-testid="usage-total" class="text-[12px] text-foreground">
+							{i18n.t("usage.total")} {totalTokens().toLocaleString()}
+						</span>
+						<span class="text-muted">{(Math.round(props.view.tokensPerSec * 10) / 10).toFixed(1)} tok/s</span>
+					</span>
+				}
+			>
 				<UsageDonut view={props.view} contextWindow={contextWindow()} />
 				<p data-testid="usage-row" class="mono mt-1 text-[11px] text-muted">
-					in {props.view.usage.input.toLocaleString()} / out {props.view.usage.output.toLocaleString()} / cache {(props.view.cacheRate * 100).toFixed(0)}% · epoch {props.view.compactionEpoch}
+					in {props.view.usage.input.toLocaleString()} / out {props.view.usage.output.toLocaleString()} / cache read {props.view.usage.cacheRead.toLocaleString()} / cache write {props.view.usage.cacheWrite.toLocaleString()} · {(props.view.cacheRate * 100).toFixed(0)}% · epoch {props.view.compactionEpoch}
 				</p>
+				<Show when={props.view.usage.cost !== undefined && props.view.usage.cost.total > 0}>
+					<p data-testid="usage-cost" class="mono text-[10px] text-faint">
+						cost ${props.view.usage.cost.total.toFixed(4)}
+					</p>
+				</Show>
 			</Section>
 
 			<Section
@@ -147,7 +211,9 @@ export function ContextPanel(props: { session: string; view: SessionView }) {
 				<For each={props.view.loops}>
 					{(loop) => (
 						<div data-testid={`loop-row-${loop.id}`} class="mono flex items-center gap-2 py-0.5 text-[11px] text-muted">
-							<span class="min-w-0 flex-1 truncate">{loop.id} · {loop.note} · {loop.runCount}×</span>
+							{/* The trigger belongs on the row: "runs every 5m, fired 3 times" is the whole
+							    reason the row exists, and a count without a cadence cannot be read. */}
+							<span class="min-w-0 flex-1 truncate">{loop.id} · {loop.note} · {loop.cron ?? loop.every ?? "event"} · {loop.runCount}×</span>
 							<button class="border border-border px-2 py-0.5 text-[10px]" onClick={() => send({ op: "loopToggle", session: props.session, id: loop.id, paused: !loop.paused })}>
 								{loop.paused ? i18n.t("panel.resume") : i18n.t("panel.pause")}
 							</button>
@@ -169,8 +235,12 @@ export function ContextPanel(props: { session: string; view: SessionView }) {
 					data-testid="memory-open"
 					onClick={() => {
 						void apiFetch(`/api/memory?session=${encodeURIComponent(props.session)}`)
-							.then((response) => response.json() as Promise<{ text: string; files: string[] }>)
-							.then(setMemory)
+							.then((response) => response.json() as Promise<{ text: string; files: string[]; target?: { path: string } }>)
+							.then((body) => {
+								setMemory(body);
+								setMemoryFiles(body.files ?? []);
+								setMemoryTargetInfo(body.target);
+							})
 							.catch(() => undefined);
 					}}
 				>
@@ -178,6 +248,29 @@ export function ContextPanel(props: { session: string; view: SessionView }) {
 				</Button>
 			)}>
 				<p data-testid="memory-row" class="mono text-[11px] text-muted">{props.view.memory === undefined ? "—" : `${props.view.memory.chars} chars`}</p>
+				{/*
+				 * Memory is project-scoped, so the honest thing to show is the file: which project
+				 * notes this session reads, and where its first note will land when it has none.
+				 */}
+				<Show
+					when={memoryFiles().length > 0}
+					fallback={
+						<p data-testid="memory-none" class="mono mt-1 text-[10px] text-faint">
+							{i18n.t("panel.memoryNone", { path: memoryTarget() === "" ? "—" : memoryTarget() })}
+						</p>
+					}
+				>
+					<div class="mt-1 flex flex-col gap-0.5">
+						<span class="mono text-[9px] uppercase tracking-[0.18em] text-faint">{i18n.t("panel.memoryFrom")}</span>
+						<For each={memoryFiles()}>
+							{(file) => (
+								<span data-testid="memory-file" class="mono truncate text-[10px] text-muted" title={file}>
+									{file}
+								</span>
+							)}
+						</For>
+					</div>
+				</Show>
 			</Section>
 
 			<Show when={props.view.subagents.length > 0}>
@@ -446,14 +539,17 @@ function LoopForm(props: { session: string }) {
 				data-testid="loop-every"
 				value={every()}
 				placeholder={i18n.t("loop.every")}
+				title={i18n.t("loop.everyHint")}
 				onInput={(event) => setEvery(event.currentTarget.value)}
 				class="mono w-14 border border-border bg-transparent px-1.5 py-0.5 text-[10px] text-muted outline-none focus:border-border-strong"
 			/>
 			<button
 				data-testid="loop-add"
-				disabled={note().trim().length === 0}
+				/* No interval, no loop: the server rejects it because a spec with no trigger
+				   can never come due. Saying so here beats sending it and showing nothing. */
+				disabled={note().trim().length === 0 || every().trim().length === 0}
 				onClick={() => {
-					store.send({ op: "loopCreate", session: props.session, id: `ui-${Date.now().toString(36)}`, note: note().trim(), ...(every().trim().length > 0 ? { every: every().trim() } : {}) });
+					store.send({ op: "loopCreate", session: props.session, id: `ui-${Date.now().toString(36)}`, note: note().trim(), every: every().trim() });
 					setNote("");
 				}}
 				class="border border-border px-2 py-0.5 text-[10px] text-muted hover:text-foreground disabled:opacity-50"

@@ -41,6 +41,30 @@ export interface ComposerCreate {
 	onSend: (text: string, modelId?: string) => void;
 }
 
+/**
+ * `/loop 5m <note>`: a leading duration is the cadence and the rest is the note.
+ * A note with no cadence is still sent, because the server turns it down and says why —
+ * inventing a default interval here would schedule something the person did not ask for.
+ */
+function createLoop(session: string, args: string, setText: (text: string) => void): void {
+	const parts = args.trim().split(/\s+/);
+	const head = parts[0] ?? "";
+	const rest = parts.slice(1).join(" ").trim();
+	const every = /^\d+(ms|s|m|h|d)?$/i.test(head) && rest.length > 0 ? head : undefined;
+	const note = every === undefined ? args.trim() : rest;
+	if (note.length === 0) {
+		setText("/loop ");
+		return;
+	}
+	etaStore().send({
+		op: "loopCreate",
+		session,
+		id: `ui-${Date.now().toString(36)}`,
+		note,
+		...(every === undefined ? {} : { every }),
+	});
+}
+
 export function Composer(props: {
 	session?: string;
 	running?: boolean;
@@ -98,7 +122,7 @@ export function Composer(props: {
 						{ name: "abort", description: t("cmd.abort"), run: () => store.send({ op: "abort", session }) },
 						{ name: "btw", description: t("cmd.btw"), run: () => store.send({ op: "btwOpen", session, kind: "contextual" }) },
 						{ name: "goal", description: t("cmd.goal"), run: (args: string) => (args.length > 0 ? store.send({ op: "goal", session, action: "set", objective: args }) : setText("/goal ")) },
-						{ name: "loop", description: t("cmd.loop"), run: (args: string) => (args.length > 0 ? store.send({ op: "loopCreate", session, id: `ui-${Date.now().toString(36)}`, note: args }) : setText("/loop ")) },
+						{ name: "loop", description: t("cmd.loop"), run: (args: string) => createLoop(session, args, setText) },
 						{ name: "thinking", description: t("cmd.thinking"), run: () => cycleThinking() },
 						{ name: "delete", description: t("cmd.delete"), run: () => store.send({ op: "session.delete", name: session }) },
 					]),

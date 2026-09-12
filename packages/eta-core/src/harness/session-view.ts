@@ -56,7 +56,7 @@ export interface SessionViewSubagent {
  */
 export type SessionViewBtwThread = Pick<
 	BtwThread,
-	"id" | "kind" | "exchanges" | "saveState" | "pending" | "error"
+	"id" | "kind" | "exchanges" | "saveState" | "pending" | "error" | "model" | "thinking"
 >;
 
 export interface SessionView {
@@ -240,6 +240,8 @@ export class SessionViewProjector {
 				// A copy: a published view must not keep watching the thread mutate.
 				exchanges: [...thread.exchanges],
 				saveState: thread.saveState,
+				...(thread.model === undefined ? {} : { model: thread.model }),
+				...(thread.thinking === undefined ? {} : { thinking: thread.thinking }),
 				...(thread.pending === undefined ? {} : { pending: thread.pending }),
 				...(thread.error === undefined ? {} : { error: thread.error }),
 			})),

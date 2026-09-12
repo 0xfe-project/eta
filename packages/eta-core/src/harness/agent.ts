@@ -26,11 +26,12 @@ import {
 	type EtaPromptSection,
 } from "./composer.ts";
 import { AskRegistry, createAskUserTool, type HeadlessAsk } from "./ask.ts";
+import { memoryExtractionHook, type MemoryExtractionSource } from "./memory.ts";
 import { BtwManager, btwSideAsk } from "./btw.ts";
 import { answerEntry, askEntry, btwEntry, goalEntry, type GoalPayload } from "./entries.ts";
 import { GoalManager } from "./goal.ts";
 import { LoopScheduler, type LoopSpec } from "./loops.ts";
-import { emptyResponseGuard, goalDriver, loopDriver, startLoopHeartbeat } from "./drivers.ts";
+import { emptyResponseGuard, goalDriver, loopDriver, startLoopHeartbeat, type LoopHeartbeat } from "./drivers.ts";
 import { SubagentManager, type SubagentBus, type SubagentBusEvent, type SubagentRunner } from "./subagent.ts";
 import { TaskStore } from "./task-store.ts";
 import {
@@ -71,10 +72,16 @@ export interface EtaAgentOptions {
 	kv?: StateKV;
 	subagentRunner?: SubagentRunner;
 	poolSize?: number;
-	/** Loop heartbeat interval in ms; 0 disables. Default 30s. */
+	/**
+	 * Backstop cadence for the loop wake in ms; 0 disables it. A loop with a schedule is
+	 * waited on exactly until it is due; this is only the ceiling on that wait, which
+	 * covers loops waiting on an event and the sweep that retires expired ones.
+	 */
 	heartbeatMs?: number;
 	/** Stable <memory> block source (e.g. MemoryCache.load); re-injected every generation. */
 	memorySource?: () => string | Promise<string>;
+	/** Notes worth keeping are pulled out before compaction drops the history they came from. */
+	memoryExtraction?: MemoryExtractionSource;
 }
 
 const memoryKv = (): StateKV => {
@@ -277,10 +284,15 @@ export class EtaAgent {
 		goal.observe = emit;
 		goal.onChange = (change) => writeEntry(goalEntry(goalPayloadFor(change)));
 		const tasks = new TaskStore(() => persist(taskState, tasks.list()));
+		// Declared before the scheduler that reports to it: the registry callback may
+		// fire from the first `upsert`, and until the idle heartbeat exists that news is
+		// simply dropped.
+		let loopHeartbeat: LoopHeartbeat = { sync: () => {}, stop: () => {} };
 		const loops = new LoopScheduler({
 			followUpFor: (spec) => loopFollowUp(spec.def.id, spec.def.note),
 			persist: persistLoop,
 			observe: emit,
+			onRegistryChange: (count) => loopHeartbeat.sync(count),
 		});
 		const ask = new AskRegistry({
 			observe: emit,
@@ -301,6 +313,13 @@ export class EtaAgent {
 				models: options.models,
 				currentModel: () => laneRef?.getModel(context) ?? Promise.resolve(undefined),
 				context,
+				// A side answer is real spend, so it is recorded against the session —
+				// tagged, so the panel can tell it apart from run traffic.
+				onUsage: (usage, threadId) => {
+					void laneRef
+						?.recordUsage(usage, { details: { source: "btw", threadId } }, BACKGROUND_CONTEXT)
+						.catch(() => undefined);
+				},
 			}),
 		);
 		const subagentBus: SubagentBus = { emit: (type: SubagentBusEvent, payload) => emit("lifecycle", type, payload) };
@@ -394,8 +413,24 @@ export class EtaAgent {
 			id: "eta.reminder",
 		});
 		harness.hooks.on("transform_context", (event) => reminder.transformContext(event), { id: "eta.reminder" });
-		const stopHeartbeat =
-			options.heartbeatMs === 0 ? undefined : startLoopHeartbeat(loops, options.heartbeatMs ?? 30_000);
+		if (options.memoryExtraction !== undefined) {
+			harness.hooks.on(
+				"before_compaction",
+				memoryExtractionHook(options.memoryExtraction, (outcome) => emit("memory", "extract", outcome)),
+				{ id: "eta.memory" },
+			);
+		}
+		// Idle-session wake: the timer exists only while the registry holds a loop, so a
+		// session with nothing scheduled holds nothing, and creating the first loop starts
+		// it. A fired loop must reach somebody — with no run in flight there is no run
+		// boundary to take the followUp, so it goes out on the bus as `wake` and whoever
+		// owns the session starts a run with it.
+		if (options.heartbeatMs !== 0) {
+			loopHeartbeat = startLoopHeartbeat(loops, options.heartbeatMs ?? 30_000, (followUp, firedCount) =>
+				emit("loop", "wake", { followUp, fired: firedCount }),
+			);
+		}
+		const stopHeartbeat = loopHeartbeat.stop;
 		const agent = new EtaAgent(
 			harness,
 			lane,
@@ -444,10 +479,12 @@ export class EtaAgent {
 		this.btw.replay(changes);
 		const storedTasks = await this.lane.scanValues(taskState, context);
 		if (storedTasks[0] !== undefined) this.tasks.restore(storedTasks[0].value);
+		const replayed: LoopSpec[] = [];
 		for (const stored of await this.lane.scanValues(loopStateInventoryPrefix(), context)) {
 			if (stored.value.disposed) continue;
-			this.loops.upsert(stored.value);
+			replayed.push(stored.value);
 		}
+		this.loops.replay(replayed);
 		// An operation interrupted by a process restart stays durable in `running`; adopt and
 		// re-drive it, or the lane queue is wedged forever. NothingToResume (normal case) is fine.
 		void this.lane.resume(context).catch(() => undefined);

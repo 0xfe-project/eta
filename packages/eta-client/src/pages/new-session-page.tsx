@@ -1,7 +1,7 @@
 import { For, Show, createSignal, onCleanup, onMount } from "solid-js";
-import { useNavigate } from "@solidjs/router";
+import { useNavigate, useSearchParams } from "@solidjs/router";
 import { useAppI18n } from "../i18n.ts";
-import { etaStore } from "../lib/eta-store.ts";
+import { etaStore, useEta } from "../lib/eta-store.ts";
 import { apiFetch, host } from "../lib/host.ts";
 import { NativeActions, onNativeActions, pickFolder } from "../lib/native.ts";
 
@@ -15,14 +15,30 @@ interface PersonaSummary {
 export function NewSessionPage() {
 	const i18n = useAppI18n();
 	const store = etaStore();
+	const state = useEta();
 	const navigate = useNavigate();
+	const [params] = useSearchParams();
 	const [personas, setPersonas] = createSignal<PersonaSummary[]>([]);
 	const [personaId, setPersonaId] = createSignal<string | null>(null);
-	const [cwd, setCwd] = createSignal("");
+	/*
+	 * The folder a session is born into decides its memory, its skills and its git status,
+	 * so an empty box is not neutral: the server takes its own launch directory, and the
+	 * person gets a project they never picked. The box is therefore prefilled, in order of
+	 * how explicitly it was asked for — the group header's 「+」 (`/new?cwd=`), the configured
+	 * default folder, the folder of the session just open — and creating with it blank says
+	 * so on the way out rather than deciding in silence.
+	 */
+	const [cwd, setCwd] = createSignal(
+		[
+			typeof params.cwd === "string" ? params.cwd : "",
+			state.sessions.find((session) => session.cwd !== undefined)?.cwd ?? "",
+		].find((value) => value.trim().length > 0)?.trim() ?? "",
+	);
 	const [prompt, setPrompt] = createSignal("");
 	const [creating, setCreating] = createSignal(false);
+	const [remembered, setRemembered] = createSignal(false);
 	// The host's configured defaults, so a fresh browser doesn't start blank.
-	const [defaults, setDefaults] = createSignal<{ personaId?: string; modelId?: string }>({});
+	const [defaults, setDefaults] = createSignal<{ personaId?: string; modelId?: string; cwd?: string }>({});
 
 	// Nothing picked by hand yet — take the configured default when it actually exists.
 	const preselect = (list: PersonaSummary[]) => {
@@ -36,10 +52,15 @@ export function NewSessionPage() {
 		let live = true;
 		void apiFetch("/api/settings")
 			.then((response) => response.json())
-			.then((body: { personaId?: string; modelId?: string }) => {
+			.then((body: { personaId?: string; modelId?: string; cwd?: string }) => {
 				if (!live) return;
 				setDefaults(body ?? {});
 				preselect(personas());
+				// A folder in the URL is the sharper intent and wins; otherwise a configured
+				// default folder fills a box nothing else managed to fill.
+				const picked = typeof params.cwd === "string" ? params.cwd.trim() : "";
+				const stored = (body?.cwd ?? "").trim();
+				if (picked.length === 0 && stored.length > 0) setCwd((current) => (current.trim().length > 0 ? current : stored));
 			})
 			.catch(() => undefined);
 		const load = () => {
@@ -78,14 +99,17 @@ export function NewSessionPage() {
 		const id = personaId();
 		if (id === null) return;
 		setCreating(true);
+		const folder = cwd().trim();
 		store.send({
 			op: "session.create",
 			name: `eta-${Date.now().toString(36)}`,
 			personaId: id,
-			...(cwd().trim().length > 0 ? { cwd: cwd().trim() } : {}),
+			...(folder.length > 0 ? { cwd: folder } : {}),
 			...(prompt().trim().length > 0 ? { prompt: prompt().trim() } : {}),
 			...(defaults().modelId === undefined ? {} : { modelId: defaults().modelId }),
 		});
+		if (remembered() && folder.length > 0)
+			void apiFetch("/api/settings", { method: "POST", body: JSON.stringify({ cwd: folder }) }).catch(() => undefined);
 		void navigate("/");
 	};
 
@@ -137,6 +161,18 @@ export function NewSessionPage() {
 					</button>
 				</Show>
 			</div>
+			<p data-testid="cwd-hint" class="-mt-2 text-[11px] text-faint">
+				{cwd().trim().length > 0 ? i18n.t("new.cwdHint", { cwd: cwd().trim() }) : i18n.t("new.cwdBlank")}
+			</p>
+			<button
+				data-testid="cwd-remember"
+				aria-pressed={remembered() ? "true" : "false"}
+				onClick={() => setRemembered((current) => !current)}
+				class={`-mt-2 self-start border px-2 py-1 text-[11px] ${remembered() ? "border-primary text-primary" : "border-border text-muted hover:border-border-strong"}`}
+			>
+				{remembered() ? "✓ " : ""}
+				{i18n.t("new.cwdRemember")}
+			</button>
 			<textarea data-testid="prompt-input" rows={3} value={prompt()} placeholder={i18n.t("new.firstPrompt")} onInput={(event) => setPrompt(event.currentTarget.value)} class="border-2 border-border bg-background px-3 py-2 text-sm outline-none focus:border-border-strong" />
 			<div class="flex items-center gap-3">
 				<button

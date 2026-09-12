@@ -63,7 +63,7 @@ export type GuiOp =
 	| { op: "taskRemove"; session: string; id: string }
 	| { op: "loopRemove"; session: string; id: string }
 	| { op: "loopToggle"; session: string; id: string; paused: boolean }
-	| { op: "loopCreate"; session: string; id: string; note: string; every?: string }
+	| { op: "loopCreate"; session: string; id: string; note: string; every?: string; cron?: string }
 	| { op: "taskSet"; session: string; id: string; status: "pending" | "in_progress" | "completed" | "cancelled" }
 	| { op: "btwOpen"; session: string; kind: "contextual" | "tangent" }
 	| { op: "btwAsk"; session: string; threadId: string; question: string }
@@ -73,6 +73,15 @@ export type GuiOp =
 	| { op: "queueRemove"; session: string; entryId: string }
 	| { op: "btwAnswer"; session: string; threadId: string; question: string; answer: string }
 	| { op: "btwSave"; session: string; threadId: string }
+	| { op: "btwHandoff"; session: string; threadId: string }
+	| {
+			op: "btwOverride";
+			session: string;
+			threadId: string;
+			/** null clears the override back to the main session's setting. */
+			model?: string | null;
+			thinking?: "off" | "minimal" | "low" | "medium" | "high" | null;
+		  }
 	| { op: "btwClear"; session: string; threadId: string }
 	| { op: "stateDelete"; session: string; key: string }
 	| { op: "subagentStop"; session: string; id: string }

@@ -63,14 +63,22 @@ export interface BtwSideRequest {
 	thinking?: string;
 }
 
+/** What a side request gives back: the answer and what it cost. */
+export interface BtwSideAnswer {
+	text: string;
+	usage: Usage;
+}
+
 /** How a thread gets answered: one standalone model request, no lane, no run. */
-export type BtwSideAsk = (request: BtwSideRequest) => Promise<string>;
+export type BtwSideAsk = (request: BtwSideRequest) => Promise<BtwSideAnswer>;
 
 export interface BtwSideAskDeps {
 	models: Models;
 	/** The session's current model; a thread with no override inherits it. */
 	currentModel: () => Promise<Model<Api> | undefined>;
 	context: LaneContext;
+	/** A side answer is real spend; the agent records it against the session. */
+	onUsage?: (usage: Usage, threadId: string) => void;
 }
 
 /**
@@ -108,7 +116,9 @@ export function btwSideAsk(deps: BtwSideAskDeps): BtwSideAsk {
 		if (response.stopReason === "error" || text.length === 0) {
 			throw new Error(response.errorMessage ?? "the side request returned no text");
 		}
-		return text;
+		const usage = response.usage;
+		deps.onUsage?.(usage, request.threadId);
+		return { text, usage };
 	};
 }
 
@@ -287,7 +297,7 @@ export class BtwManager {
 			const answer = await sideAsk(request);
 			// The thread can be cleared while its request is in flight.
 			if (!this.threads.has(threadId)) return;
-			this.answer(threadId, question, answer);
+			this.answer(threadId, question, answer.text);
 		} catch (error) {
 			if (this.threads.has(threadId))
 				this.fail(threadId, error instanceof Error ? error.message : String(error));
@@ -362,22 +372,27 @@ export class BtwManager {
 		return had;
 	}
 
-	/** FollowUp text handed to the main run (handoff = S1 driver). */
+	/** FollowUp text handed to the main run (handoff = S1 driver), carrying the thread. */
 	handoff(threadId: string): string | undefined {
 		const thread = this.threads.get(threadId);
 		if (thread === undefined || thread.exchanges.length === 0) return undefined;
 		this.observe?.("btw", "summarized", { threadId });
-		return btwHandoff(thread.id);
+		return btwHandoff(thread.id, thread.exchanges);
 	}
 
-	/** Override changes rebuild the child session but never lose the thread. */
-	setOverride(threadId: string, overrides: { model?: string; thinking?: string }): void {
+	/**
+	 * Override changes rebuild the child request but never lose the thread.
+	 * `null` clears an override back to inheriting the main session.
+	 */
+	setOverride(threadId: string, overrides: { model?: string | null; thinking?: string | null }): void {
 		const thread = this.threads.get(threadId);
 		if (thread === undefined) return;
-		if (overrides.model !== undefined && overrides.model !== thread.model) thread.assemblyVersion += 1;
-		if (overrides.thinking !== undefined && overrides.thinking !== thread.thinking) thread.assemblyVersion += 1;
-		thread.model = overrides.model ?? thread.model;
-		thread.thinking = overrides.thinking ?? thread.thinking;
+		const model = overrides.model === null ? undefined : (overrides.model ?? thread.model);
+		const thinking = overrides.thinking === null ? undefined : (overrides.thinking ?? thread.thinking);
+		if (model !== thread.model || thinking !== thread.thinking) thread.assemblyVersion += 1;
+		thread.model = model;
+		thread.thinking = thinking;
+		this.observe?.("btw", "override", { threadId });
 	}
 
 	/** Re-register threads from a replayed `eta.btw` entry log. */
