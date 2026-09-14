@@ -1,4 +1,4 @@
-import { For, Show } from "solid-js";
+import { For, Show, createEffect } from "solid-js";
 import type { SessionView } from "@eta/core";
 import { useAppI18n } from "../../i18n.ts";
 import { etaStore } from "../../lib/eta-store.ts";
@@ -14,6 +14,24 @@ export function ContextBar(props: { session: string; view: SessionView }) {
 	const store = etaStore();
 	const send = (op: Parameters<typeof store.send>[0]) => store.send(op);
 	const queue = () => props.view.queue ?? [];
+	/** What a message can still move: done and dropped rows are the panel's business. */
+	const openTasks = () =>
+		props.view.tasks.filter((task) => task.status !== "completed" && task.status !== "cancelled");
+	/**
+	 * The plan is longer than the strip is tall, so the strip is a window onto it: three
+	 * rows (3 × 18px + the two 2px gaps = 58px), scrolling for the rest, and the window
+	 * sits on the newest rows — which is why the plan reads oldest-first and something has
+	 * to hold the bottom. It stays there only while the reader is already there: a new row
+	 * must not pull the window out of a plan someone scrolled up to read.
+	 */
+	let rows: HTMLDivElement | undefined;
+	let followNewest = true;
+	createEffect(() => {
+		openTasks().length;
+		if (followNewest && rows !== undefined) rows.scrollTop = rows.scrollHeight;
+	});
+	const atBottom = () =>
+		rows !== undefined && rows.scrollHeight - rows.scrollTop - rows.clientHeight < 8;
 	/** When the next one is due, as a wall-clock time: an absolute label stays true
 	 *  between frames, a countdown written once per frame would quietly go stale. */
 	const nextDue = () => {
@@ -23,7 +41,7 @@ export function ContextBar(props: { session: string; view: SessionView }) {
 		if (times.length === 0) return undefined;
 		return new Date(Math.min(...times)).toTimeString().slice(0, 5);
 	};
-	const empty = () => queue().length === 0 && props.view.loops.length === 0 && props.view.goal == null && props.view.tasks.length === 0;
+	const empty = () => queue().length === 0 && props.view.loops.length === 0 && props.view.goal == null && openTasks().length === 0;
 
 	return (
 		<Show when={!empty()}>
@@ -113,19 +131,35 @@ export function ContextBar(props: { session: string; view: SessionView }) {
 						</Button>
 					</div>
 				</Show>
-				<Show when={props.view.tasks.length > 0}>
-					<div data-testid="tasks-list" class="flex flex-wrap gap-x-3 gap-y-1">
-						<For each={props.view.tasks.filter((task) => task.status !== "completed" && task.status !== "cancelled")}>
-							{(task) => (
-								<button
-									data-testid={`task-row-${task.id}`}
-									onClick={() => send({ op: "taskSet", session: props.session, id: task.id, status: task.status === "completed" ? "pending" : "completed" })}
-									class={`mono text-[11px] hover:text-foreground ${task.status === "completed" ? "text-muted line-through" : "text-muted"}`}
-								>
-									[{task.status === "completed" ? "x" : " "}] {task.content}
-								</button>
-							)}
-						</For>
+				<Show when={openTasks().length > 0}>
+					<div data-testid="tasks-list" class="flex items-start">
+						{/* One row per open task, in plan order — nothing is hidden behind a count,
+						    because the box scrolls. The scroller is this div, so the ref and the
+						    scroll listener are on it and not on the wrapper. */}
+						<div
+							data-testid="tasks-strip-rows"
+							ref={rows}
+							onScroll={() => {
+								followNewest = atBottom();
+							}}
+							class="flex max-h-[58px] min-w-0 flex-1 flex-col gap-0.5 overflow-y-auto"
+						>
+							{/* One click marks a row done and it leaves the strip; anything else about a
+							    status (blocked, dropped, dependencies) is the panel's vocabulary. */}
+							<For each={openTasks()}>
+								{(task) => (
+									<button
+										data-testid={`task-row-${task.id}`}
+										title={task.content}
+										onClick={() => send({ op: "taskSet", session: props.session, id: task.id, status: "completed" })}
+										class="mono flex h-[18px] w-full shrink-0 items-center gap-1.5 text-left text-[11px] text-muted hover:text-foreground"
+									>
+										<span class="shrink-0 text-faint">{task.status === "in_progress" ? "[▸]" : "[ ]"}</span>
+										<span class="min-w-0 truncate">{task.content}</span>
+									</button>
+								)}
+							</For>
+						</div>
 					</div>
 				</Show>
 			</div>
