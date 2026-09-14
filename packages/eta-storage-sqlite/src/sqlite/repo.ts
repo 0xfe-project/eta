@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import type { Context, Entry, ForkOptions, SessionCreateOptions, StoredValue } from "@eta/core";
 import { branchTip, createForkSnapshot, StorageBackedSession } from "@eta/core";
 import { uuidv7 } from "@earendil-works/pi-ai";
-import { applyInitialSchema } from "./migrations.ts";
+import { applyMigrations, assertReadableSchema } from "./migrations.ts";
 import { appendEntryToBranchIndex, scanBranchEntries } from "./session/branch-entries.ts";
 import { decodeEntryRow, type EntryRow, EntryRowWriter } from "./session/entries.ts";
 import {
@@ -193,7 +193,7 @@ export class SqliteSessionRepo {
 			const activeDb = await this.databaseFactory.open(path);
 			db = activeDb;
 			configureWritableConnection(activeDb);
-			await applyInitialSchema(activeDb);
+			await applyMigrations(activeDb);
 			const canonicalPath = await realpath(path);
 			const metadata: SqliteSessionMetadata = {
 				id,
@@ -233,6 +233,7 @@ export class SqliteSessionRepo {
 			const activeDb = await this.databaseFactory.openExisting(path);
 			db = activeDb;
 			configureWritableConnection(activeDb);
+			await applyMigrations(activeDb);
 			const stored = metadataFromSessionRow(path, readSessionRow(activeDb, metadata.id), SQLITE_STORAGE_VERSION);
 			session = this.openStorageBackedSession(stored, activeDb);
 			return session;
@@ -271,6 +272,7 @@ export class SqliteSessionRepo {
 				const canonicalPath = await realpath(path);
 				db = await this.databaseFactory.openReadOnly(canonicalPath);
 				configureReadOnlyConnection(db);
+				await assertReadableSchema(db, true);
 				for (const row of readAllSessionRows(db)) {
 					sessions.push(metadataFromSessionRow(canonicalPath, row, SQLITE_STORAGE_VERSION));
 				}
@@ -292,6 +294,7 @@ export class SqliteSessionRepo {
 			const db = await this.databaseFactory.openExisting(path);
 			try {
 				configureWritableConnection(db);
+				await applyMigrations(db);
 				if (this.usesSharedDatabase()) {
 					db.transaction(() => {
 						metadataFromSessionRow(path, readSessionRow(db, metadata.id), SQLITE_STORAGE_VERSION);
@@ -338,7 +341,7 @@ export class SqliteSessionRepo {
 			const activeDb = await this.databaseFactory.open(path);
 			db = activeDb;
 			configureWritableConnection(activeDb);
-			await applyInitialSchema(activeDb);
+			await applyMigrations(activeDb);
 			const canonicalPath = await realpath(path);
 			const metadata: SqliteSessionMetadata = {
 				id,
@@ -390,6 +393,7 @@ export class SqliteSessionRepo {
 		const sourceDb = await this.databaseFactory.openReadOnly(path);
 		try {
 			configureReadOnlyConnection(sourceDb);
+			await assertReadableSchema(sourceDb);
 			return createSqliteForkSnapshot(sourceDb, { ...source, path }, options);
 		} finally {
 			sourceDb.close();
