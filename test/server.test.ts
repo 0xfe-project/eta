@@ -466,3 +466,54 @@ describe("btw handoff", () => {
 		});
 	});
 });
+
+describe("a persisted session whose persona card is gone", () => {
+	// A persona is one file; the session is its whole history. Losing the card to a rename or
+	// a delete must not quietly take the chat out of the sidebar.
+	it("reopens under the closest card it still has", async () => {
+		const root = mkdtempSync(join(tmpdir(), "eta-restore-"));
+		const persistDir = join(root, "sessions", "eta-old");
+		mkdirSync(join(root, "project"), { recursive: true });
+		mkdirSync(persistDir, { recursive: true });
+		writeFileSync(
+			join(persistDir, "meta.json"),
+			JSON.stringify({ personaId: "INSIGHTER", cwd: join(root, "project"), createdAt: Date.now() }),
+		);
+		writeFileSync(
+			join(persistDir, "journal.jsonl"),
+			`${JSON.stringify({
+				w: [
+					{
+						kind: "entry",
+						entry: {
+							id: "e1",
+							parentId: null,
+							type: "message",
+							message: { role: "user", content: [{ type: "text", text: "history that must survive" }], timestamp: 1 },
+						},
+					},
+				],
+				t: 1,
+			})}\n`,
+		);
+		const server = await startServer({
+			port: 0,
+			cwd: join(root, "project"),
+			webDist: join(root, "no-dist"),
+			configPath: join(root, "no-config.json"),
+			dataDir: join(root, "sessions"),
+		});
+		try {
+			const sessions = (await (await fetch(`http://127.0.0.1:${server.port}/api/sessions`)).json()) as {
+				name: string;
+				personas: string[];
+			}[];
+			const reopened = sessions.find((session) => session.name === "eta-old");
+			expect(reopened).toBeDefined();
+			// The built-in `Insighter` is the same card under the case the meta never learned.
+			expect(reopened?.personas).toEqual(["Insighter"]);
+		} finally {
+			server.close();
+		}
+	});
+});

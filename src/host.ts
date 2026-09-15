@@ -34,7 +34,7 @@ import {
 import { ViewPacer } from "./view-pacer.ts";
 import { configDefaultModel, etaConfigPath, loadEtaConfig, type EtaConfig } from "./config.ts";
 import { createSessionAgent, type CreatedSession } from "./agent.ts";
-import { renderPersonaFor } from "./personas.ts";
+import { renderPersonaFor, resolvePersonaId } from "./personas.ts";
 import { ProviderConfigStore, ProviderConfigError } from "./providers.ts";
 import { effectiveModel, modelDefaultThinking, modelThinkingLevels, type EtaModelConfig, type ProvidersView } from "@eta/core/provider-config";
 
@@ -243,6 +243,13 @@ export class Host {
 			if (meta.personaId === undefined) continue;
 			const cwd = meta.cwd ?? process.cwd();
 			const persistDir = join(this.dataDir, dir);
+			// A missing card is not a reason to lose a chat: the session reopens under the
+			// closest card it still has, and the warn below says which one that was.
+			const persona = await resolvePersonaId(cwd, meta.personaId!);
+			if (!persona.exact)
+				console.warn(
+					`[eta-host] session ${dir}: persona ${meta.personaId} is not a card any more, reopening it as ${persona.id}`,
+				);
 			this.meta.set(dir, {
 				...(meta.title === undefined ? {} : { title: meta.title }),
 				...(meta.pinned === true ? { pinned: true } : {}),
@@ -255,7 +262,7 @@ export class Host {
 					() =>
 						createSessionAgent({
 							name: dir,
-							personaId: meta.personaId!,
+							personaId: persona.id,
 							cwd,
 							...(meta.modelId === undefined ? {} : { modelId: meta.modelId }),
 							configPath: this.configPath,
