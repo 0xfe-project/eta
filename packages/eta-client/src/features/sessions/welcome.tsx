@@ -17,17 +17,26 @@ export function Welcome(props: { onCreated: (name: string) => void; onNavigateSe
 	const [personas, setPersonas] = createSignal<PersonaSummary[]>([]);
 	const [personaId, setPersonaId] = createSignal<string | null>(null);
 	const [cwd, setCwd] = createSignal("");
+	let personaPicked = false;
 
 	const load = () => {
-		void apiFetch("/api/personas")
-			.then((response) => response.json() as Promise<PersonaSummary[]>)
-			.then(setPersonas)
+		void Promise.all([
+			apiFetch("/api/personas").then(response => response.json() as Promise<PersonaSummary[]>),
+			apiFetch("/api/settings").then(response => response.json() as Promise<{ personaId?: string; cwd?: string }>).catch(() => ({} as { personaId?: string; cwd?: string })),
+		])
+			.then(([cards, defaults]) => {
+				if (!Array.isArray(cards)) return;
+				setPersonas(cards);
+				if (!personaPicked) setPersonaId(cards.some(card => card.id === defaults?.personaId) ? defaults.personaId! : null);
+				if (!cwd() && defaults?.cwd) setCwd(defaults.cwd);
+			})
 			.catch(() => undefined);
 	};
 	onMount(() => {
 		load();
 		window.addEventListener("eta:personas", load);
-		onCleanup(() => window.removeEventListener("eta:personas", load));
+		window.addEventListener("eta:settings", load);
+		onCleanup(() => { window.removeEventListener("eta:personas", load); window.removeEventListener("eta:settings", load); });
 	});
 
 	const create = {
@@ -54,7 +63,7 @@ export function Welcome(props: { onCreated: (name: string) => void; onNavigateSe
 					<button
 						data-testid={`persona-${persona.id}`}
 						title={persona.description}
-						onClick={() => setPersonaId(persona.id)}
+						onClick={() => { personaPicked = true; setPersonaId(persona.id); }}
 						class={`border px-2 py-0.5 font-mono text-[11px] tracking-[0.08em] uppercase ${personaId() === persona.id ? "border-2 border-primary bg-primary text-primary-foreground" : "border-border text-muted hover:border-border-strong"}`}
 					>
 						{persona.name}

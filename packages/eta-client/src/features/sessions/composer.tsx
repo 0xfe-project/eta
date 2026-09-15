@@ -6,6 +6,7 @@ import { ModelPicker } from "./model-picker.tsx";
 import { themeStorageKey, themeChangeEvent } from "../../app/theme.tsx";
 import { useShellOptional } from "../../app/app-shell.tsx";
 import { apiFetch, goto } from "../../lib/host.ts";
+import type { ThinkingLevel } from "@eta/core";
 import { registerDraftSink } from "../../lib/queue-actions.ts";
 
 /** Subsequence fuzzy score: higher = better match; -1 = no match. */
@@ -88,9 +89,12 @@ export function Composer(props: {
 	const shell = useShellOptional();
 	const store = etaStore();
 	const state = useEta();
+	const availableThinking = () => state.views[props.session ?? ""]?.supportedThinkingLevels ?? THINKING_LEVELS;
 	const cycleThinking = () => {
-		const level = (state.views[props.session ?? ""]?.thinkingLevel ?? "off") as (typeof THINKING_LEVELS)[number];
-		const next = THINKING_LEVELS[(THINKING_LEVELS.indexOf(level) + 1) % THINKING_LEVELS.length];
+		const level = state.views[props.session ?? ""]?.thinkingLevel ?? "off";
+		const levels = availableThinking();
+		if (levels.length < 2 || !props.session) return;
+		const next = levels[(levels.indexOf(level as ThinkingLevel) + 1) % levels.length];
 		store.send({ op: "thinkingLevel", session: props.session ?? "", level: next });
 	};
 
@@ -188,7 +192,7 @@ export function Composer(props: {
 		setText("");
 	};
 
-	const thinkingLevel = () => (state.views[props.session ?? ""]?.thinkingLevel ?? "off") as (typeof THINKING_LEVELS)[number];
+	const thinkingLevel = () => state.views[props.session ?? ""]?.thinkingLevel ?? "off";
 	const openToolbox = () => {
 		const next = !toolboxOpen();
 		setToolboxOpen(next);
@@ -442,7 +446,7 @@ export function Composer(props: {
 						<Show when={!createMode() && props.session !== undefined}>
 							<p class="mono mb-1 text-[10px] uppercase tracking-[0.12em] text-muted">{i18n.t("composer.thinking")}</p>
 							<div data-testid="toolbox-thinking" class="mb-2 flex flex-wrap gap-1">
-								<For each={[...THINKING_LEVELS]}>
+								<For each={[...availableThinking()]}>
 									{(level) => (
 										<button
 											data-testid={`toolbox-thinking-${level}`}
@@ -671,22 +675,24 @@ export function Composer(props: {
 	);
 }
 
-const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high"] as const;
+const THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high"];
 
 function ThinkingChip(props: { session: string }) {
 	const i18n = useAppI18n();
 	const store = etaStore();
 	const state = useEta();
-	const level = () => (state.views[props.session]?.thinkingLevel ?? "off") as (typeof THINKING_LEVELS)[number];
-	const next = () => THINKING_LEVELS[(THINKING_LEVELS.indexOf(level()) + 1) % THINKING_LEVELS.length];
+	const level = () => state.views[props.session]?.thinkingLevel ?? "off";
+	const levels = () => state.views[props.session]?.supportedThinkingLevels ?? THINKING_LEVELS;
+	const next = () => levels()[(levels().indexOf(level() as ThinkingLevel) + 1) % levels().length];
 	return (
 		<button
 			data-testid="thinking-chip"
+			disabled={levels().length < 2}
 			title={i18n.t("composer.thinkingHint")}
 			onClick={() => store.send({ op: "thinkingLevel", session: props.session, level: next() })}
 			class={`mono shrink-0 border border-border-strong px-2 py-1 text-[10px] uppercase tracking-[0.1em] max-md:hidden ${level() === "off" ? "text-muted" : "text-foreground"}`}
 		>
-			{i18n.t("composer.thinking")}:{level()}
+			{i18n.t("composer.thinking")}:{levels().length === 0 ? i18n.t("composer.providerThinking") : level()}
 		</button>
 	);
 }

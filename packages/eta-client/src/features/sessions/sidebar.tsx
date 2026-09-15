@@ -5,6 +5,7 @@ import { etaStore, useEta } from "../../lib/eta-store.ts";
 import { sidebarPrefs, type ProjectSort } from "../../lib/prefs.ts";
 import type { SidebarSession } from "@eta/core";
 import { apiFetch } from "../../lib/host.ts";
+import { openSettings } from "../../lib/settings.ts";
 
 // Graphite rule: saturation reserved for state (goal ok / ask needs attention / running).
 const BADGE_STYLES: Record<string, string> = {
@@ -53,7 +54,8 @@ export function Sidebar(props: { selected: string | null; termActive: boolean; o
 	 *  nothing. The href stays: in a browser tab it is still a real link. */
 	const routeTo = (event: MouseEvent, path: string) => {
 		event.preventDefault();
-		void navigate(path);
+		if (path === "/settings") openSettings();
+		else void navigate(path);
 	};
 	const [query, setQuery] = createSignal("");
 	const [hits, setHits] = createSignal<{ session: string; snippet: string }[] | null>(null);

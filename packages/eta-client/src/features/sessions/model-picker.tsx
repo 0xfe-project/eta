@@ -1,9 +1,10 @@
-import { For, Show, createSignal, on, createEffect } from "solid-js";
+import { For, Show, createSignal, on, createEffect, onMount, onCleanup } from "solid-js";
 import { etaStore, useEta } from "../../lib/eta-store.ts";
 import { useAppI18n } from "../../i18n.ts";
 import { Button } from "../../components/ui/button.tsx";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../components/ui/dropdown-menu.tsx";
 import { apiFetch } from "../../lib/host.ts";
+import { openSettings } from "../../lib/settings.ts";
 
 interface ModelInfo {
 	models: { id: string; label: string }[];
@@ -29,19 +30,26 @@ export function ModelPicker(props: { session?: string; onPick?: (modelId: string
 	/** Only for a session that does not exist yet: there, the pick is the truth. */
 	const [planned, setPlanned] = createSignal<string | undefined>(undefined);
 
-	createEffect(
-		on(
-			() => props.session,
-			(session) => {
-				setInfo(undefined);
-				setPlanned(undefined);
-				void apiFetch(session === undefined ? "/api/models" : `/api/models?session=${encodeURIComponent(session)}`)
-					.then((response) => (response.ok ? (response.json() as Promise<ModelInfo>) : undefined))
-					.then((body) => setInfo(body))
-					.catch(() => undefined);
-			},
-		),
-	);
+	let requestVersion = 0;
+	const refresh = (reset = false) => {
+		const request = ++requestVersion;
+		const session = props.session;
+		if (reset) { setInfo(undefined); setPlanned(undefined); }
+		void apiFetch(session === undefined ? "/api/models" : `/api/models?session=${encodeURIComponent(session)}`)
+			.then(response => response.ok ? response.json() as Promise<ModelInfo> : undefined)
+			.then(body => {
+				if (request !== requestVersion || !body || !Array.isArray(body.models)) return;
+				setInfo(body);
+				if (planned() && !body.models.some(model => model.id === planned())) { setPlanned(undefined); props.onPick?.(body.current); }
+			})
+			.catch(() => undefined);
+	};
+	createEffect(on(() => props.session, () => refresh(true)));
+	onMount(() => {
+		const changed = () => refresh();
+		window.addEventListener("eta:models", changed);
+		onCleanup(() => { requestVersion += 1; window.removeEventListener("eta:models", changed); });
+	});
 
 	const live = () => (props.session === undefined ? undefined : state.views[props.session]?.model);
 	const shown = () => live() ?? planned() ?? info()?.current;
@@ -56,6 +64,7 @@ export function ModelPicker(props: { session?: string; onPick?: (modelId: string
 	return (
 		<Show when={info() !== undefined || live() !== undefined} fallback={<span class="mono text-[10px] text-muted">…</span>}>
 			{(_ready) => (
+				<Show when={(info()?.models.length ?? 0) > 0} fallback={<Button variant="outline" size="sm" onClick={openSettings}>{i18n.t("providers.configureModels")}</Button>}>
 				<DropdownMenu>
 					<DropdownMenuTrigger>
 						<Button data-testid="model-picker" variant="outline" size="sm" class="mono gap-1 text-[10px] lowercase">
@@ -75,7 +84,7 @@ export function ModelPicker(props: { session?: string; onPick?: (modelId: string
 							{(model) => (
 								<DropdownMenuItem
 									data-testid={`model-${model.id}`}
-									disabled={model.id === shown()}
+									disabled={model.id === shown() || (props.session !== undefined && state.sessions.some(session => session.name === props.session && session.badges.includes("running")))}
 									onClick={() => {
 										if (props.session === undefined) setPlanned(model.id);
 										else store.send({ op: "modelSet", session: props.session, modelId: model.id });
@@ -91,6 +100,7 @@ export function ModelPicker(props: { session?: string; onPick?: (modelId: string
 						</For>
 					</DropdownMenuContent>
 				</DropdownMenu>
+				</Show>
 			)}
 		</Show>
 	);

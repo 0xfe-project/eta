@@ -1,0 +1,198 @@
+import { For, Index, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
+import {
+	effectiveModel, modelThinkingLevels, MODEL_THINKING_LEVELS, BUILTIN_PROVIDER_PRESETS, providerPreset,
+	type EtaModelConfig, type ModelCapabilities, type ProviderInput, type ProviderSummary, type ProvidersView, type ProviderKind,
+} from "@eta/core/provider-config";
+import { useAppI18n } from "../../i18n.ts";
+import { apiFetch } from "../../lib/host.ts";
+
+const BUILTIN_KINDS = Object.keys(BUILTIN_PROVIDER_PRESETS) as (keyof typeof BUILTIN_PROVIDER_PRESETS)[];
+
+async function providerRequest<T>(path: string, body?: unknown, method = "POST", signal?: AbortSignal): Promise<T> {
+	const response = await apiFetch(path, body === undefined
+		? { signal }
+		: { method, signal, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+	let result: unknown;
+	try { result = await response.json(); } catch { throw new Error("connection_failed"); }
+	if (!response.ok) throw new Error((result as { error?: string })?.error ?? "connection_failed");
+	return result as T;
+}
+
+export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; onBusyChange(busy: boolean): void }) {
+	const i18n = useAppI18n();
+	const [view, setView] = createSignal<ProvidersView>();
+	const [draft, setDraft] = createSignal<ProviderInput>();
+	const [baseline, setBaseline] = createSignal("");
+	const [hasKey, setHasKey] = createSignal(false);
+	const [busy, setBusy] = createSignal(false);
+	const [error, setError] = createSignal("");
+	const [status, setStatus] = createSignal<"" | "connected" | "saved">("");
+	const [deleteConfirm, setDeleteConfirm] = createSignal(false);
+	const [backConfirm, setBackConfirm] = createSignal(false);
+	let controller: AbortController | undefined;
+	let generation = 0;
+	const dirty = () => draft() !== undefined && JSON.stringify(draft()) !== baseline();
+	const editingExisting = () => view()?.providers.some(provider => provider.id === draft()?.id) ?? false;
+	createEffect(() => props.onDirtyChange(dirty()));
+	createEffect(() => props.onBusyChange(busy()));
+	onCleanup(() => { generation += 1; controller?.abort(); });
+
+	const message = () => {
+		const key = `providers.error.${error()}`;
+		const translated = i18n.t(key as "providers.error.connection_failed");
+		return translated === key ? i18n.t("providers.error.connection_failed") : translated;
+	};
+	const load = async () => {
+		try {
+			const result = await providerRequest<ProvidersView>("/api/providers");
+			if (!result || !Array.isArray(result.providers)) throw new Error("invalid_saved_config");
+			setView(result); setError("");
+		} catch (cause) { setError(cause instanceof Error ? cause.message : "connection_failed"); }
+	};
+	onMount(() => {
+		void load();
+		const changed = () => { if (!dirty() && !busy() && !draft()) void load(); };
+		window.addEventListener("eta:models", changed);
+		onCleanup(() => window.removeEventListener("eta:models", changed));
+	});
+	const changed = () => window.dispatchEvent(new Event("eta:models"));
+	const update = (patch: Partial<ProviderInput>) => {
+		setDraft(previous => previous ? { ...previous, ...patch } : previous);
+		setStatus(""); setDeleteConfirm(false);
+	};
+	const updateModel = (index: number, patch: Partial<EtaModelConfig>) => update({ models: draft()!.models.map((model, i) => i === index ? { ...model, ...patch } : model) });
+	const edit = (provider: ProviderSummary | ProviderKind) => {
+		generation += 1; controller?.abort();
+		let next: ProviderInput;
+		if (typeof provider === "string") {
+			const id = provider !== "openai-compatible" && !view()?.providers.some(item => item.id === provider)
+				? provider : `${provider === "openai-compatible" ? "custom" : provider}-${crypto.randomUUID().slice(0, 8)}`;
+			next = { id, kind: provider, baseUrl: providerPreset(provider)?.baseUrl ?? "", models: [] };
+			setHasKey(false);
+		} else {
+			next = { id: provider.id, kind: provider.kind, name: provider.name, baseUrl: provider.baseUrl, models: structuredClone(provider.models) };
+			setHasKey(provider.hasApiKey);
+		}
+		setDraft(next); setBaseline(JSON.stringify(next)); setError(""); setStatus(""); setDeleteConfirm(false); setBackConfirm(false);
+	};
+	const back = () => {
+		if (busy()) return;
+		if (dirty()) setBackConfirm(true);
+		else setDraft(undefined);
+	};
+	const discover = async () => {
+		if (!draft() || busy()) return;
+		const attempt = ++generation;
+		controller?.abort(); controller = new AbortController();
+		setBusy(true); setError(""); setStatus("");
+		try {
+			const result = await providerRequest<{ models: EtaModelConfig[] }>("/api/providers/discover", { provider: draft() }, "POST", controller.signal);
+			if (attempt !== generation) return;
+			if (!Array.isArray(result.models)) throw new Error("invalid_models_response");
+			update({ models: result.models }); setStatus("connected");
+		} catch (cause) {
+			if (attempt === generation) setError(cause instanceof Error ? cause.message : "connection_failed");
+		} finally { if (attempt === generation) setBusy(false); }
+	};
+	const accept = (result: ProvidersView) => {
+		setView(result);
+		const current = result.providers.find(provider => provider.id === draft()?.id);
+		if (current) edit(current); else setDraft(undefined);
+		setStatus("saved"); changed();
+	};
+	const save = async () => {
+		if (!draft() || !view() || busy()) return;
+		setBusy(true); setError("");
+		try { accept(await providerRequest<ProvidersView>("/api/providers", { revision: view()!.revision, provider: draft() })); }
+		catch (cause) { setError(cause instanceof Error ? cause.message : "save_failed"); }
+		finally { setBusy(false); }
+	};
+	const remove = async () => {
+		if (!draft() || !view() || busy()) return;
+		setBusy(true); setError("");
+		try { accept(await providerRequest<ProvidersView>(`/api/providers/${encodeURIComponent(draft()!.id)}`, { revision: view()!.revision }, "DELETE")); }
+		catch (cause) { setError(cause instanceof Error ? cause.message : "save_failed"); }
+		finally { setBusy(false); }
+	};
+	const defaultModel = async (value: string) => {
+		if (!view() || busy()) return;
+		setBusy(true); setError("");
+		try { setView(await providerRequest<ProvidersView>("/api/providers/default", { revision: view()!.revision, defaultModel: value || null })); changed(); }
+		catch (cause) { setError(cause instanceof Error ? cause.message : "save_failed"); }
+		finally { setBusy(false); }
+	};
+	const ErrorNotice = () => <Show when={error()}><div class="settings-error" data-testid="provider-error" role="alert">{message()}<Show when={!draft()}><button onClick={() => void load()}>{i18n.t("settings.retry")}</button></Show><Show when={error() === "config_changed"}><button disabled={busy()} onClick={async () => { await load(); setError("config_changed"); }}>{i18n.t("providers.reloadRevision")}</button></Show></div></Show>;
+	const title = (provider: ProviderSummary) => provider.name ?? (providerPreset(provider.kind)?.name ?? provider.id);
+	return <div data-testid="providers-settings">
+		<Show when={draft()} fallback={<>
+			<div class="settings-heading"><h2>{i18n.t("settings.providers")}</h2><p>{i18n.t("providers.description")}</p></div>
+			<Show when={view()} fallback={<Show when={!error()}><p class="settings-hint">{i18n.t("settings.loading")}</p></Show>}>
+				{current => <>
+					<label class="settings-default"><span>{i18n.t("settings.defaultModel")}</span><select data-testid="default-model" value={current().defaultModel ?? ""} disabled={busy()} onChange={event => void defaultModel(event.currentTarget.value)}><option value="">{i18n.t("providers.autoDefault")}</option><For each={current().providers}>{provider => <optgroup label={title(provider)}><For each={provider.models}>{model => <option value={`${provider.id}:${model.id}`}>{effectiveModel(model).name ?? model.id}</option>}</For></optgroup>}</For></select></label>
+					<Show when={current().providers.length > 0}><div class="settings-section-label">{i18n.t("providers.configured")}</div><For each={current().providers}>{provider => <button class="settings-provider" data-testid={`provider-${provider.id}`} onClick={() => edit(provider)}><ProviderLogo kind={provider.kind} /><span><strong>{title(provider)}</strong><small>{i18n.t("providers.modelCount", { n: provider.models.length })} · {provider.hasApiKey ? i18n.t("providers.keyConfigured") : i18n.t("providers.noKey")}</small></span><span class="settings-provider-action">{i18n.t("providers.configure")} →</span></button>}</For></Show>
+					<div class="settings-section-label">{i18n.t("providers.add")}</div>
+					<For each={BUILTIN_KINDS}>{kind => <Show when={!current().providers.some(provider => provider.kind === kind)}><button class="settings-provider" data-testid={`provider-add-${kind === "kimi-coding" ? "kimi" : kind}`} onClick={() => edit(kind)}><ProviderLogo kind={kind} /><span><strong>{providerPreset(kind)!.name}</strong><small>{i18n.t(kind === "kimi-coding" ? "providers.kimiDescription" : "providers.deepseekDescription")}</small></span><span class="settings-provider-action">{i18n.t("providers.connect")} →</span></button></Show>}</For>
+					<button class="settings-provider" data-testid="provider-add-custom" onClick={() => edit("openai-compatible")}><ProviderLogo kind="openai-compatible" /><span><strong>{i18n.t("providers.custom")}</strong><small>{i18n.t("providers.customDescription")}</small></span><span class="settings-provider-action">{i18n.t("providers.addAction")} →</span></button>
+				</>}
+			</Show>
+		</>}>
+			{current => <>
+				<button class="settings-back" disabled={busy()} onClick={back}>← {i18n.t("settings.providers")}</button>
+				<Show when={backConfirm()}><div class="settings-discard" role="alert"><span>{i18n.t("settings.unsaved")}</span><button onClick={() => setBackConfirm(false)}>{i18n.t("settings.keepEditing")}</button><button onClick={() => { setDraft(undefined); setBackConfirm(false); }}>{i18n.t("settings.discard")}</button></div></Show>
+				<div class="settings-heading settings-inline"><ProviderLogo kind={current().kind} /><div><h2>{providerPreset(current().kind)?.name ?? i18n.t("providers.custom")}</h2><p>{i18n.t(current().kind === "kimi-coding" ? "providers.kimiDescription" : current().kind === "deepseek" ? "providers.deepseekDescription" : "providers.customDescription")}</p></div></div>
+				<fieldset disabled={busy()}>
+					<Show when={current().kind === "openai-compatible"}><label class="settings-field">{i18n.t("providers.name")}<input data-testid="provider-name" value={current().name ?? ""} onInput={event => update({ name: event.currentTarget.value || undefined })} /></label><label class="settings-field">Base URL<input data-testid="provider-url" placeholder="https://example.com/v1" value={current().baseUrl} onInput={event => update({ baseUrl: event.currentTarget.value })} /></label></Show>
+					<label class="settings-field">API Key<input data-testid="provider-key" type="password" autocomplete="off" value={current().apiKey ?? ""} placeholder={hasKey() ? i18n.t("providers.keepKey") : i18n.t("providers.enterKey")} onInput={event => update({ apiKey: event.currentTarget.value || undefined })} /></label>
+					<Show when={hasKey() && current().kind === "openai-compatible"}><button class="settings-text-button" onClick={() => update({ apiKey: null })}>{current().apiKey === null ? i18n.t("providers.keyWillClear") : i18n.t("providers.clearKey")}</button></Show>
+					<div class="settings-inline"><button data-testid="provider-discover" class="settings-primary" onClick={() => void discover()}>{busy() ? i18n.t("providers.connecting") : current().models.length > 0 ? i18n.t("providers.refresh") : i18n.t("providers.connectModels")}</button><span class="settings-hint" aria-live="polite">{status() === "connected" ? i18n.t("providers.connected", { n: current().models.length }) : ""}</span></div>
+					<Show when={current().models.length > 0}><div class="settings-section-label">{i18n.t("providers.models")}</div></Show>
+					<Index each={current().models}>{(model, index) => <ModelEditor model={model()} custom={current().kind === "openai-compatible"} onUpdate={patch => updateModel(index, patch)} onRemove={() => update({ models: current().models.filter((_, i) => i !== index) })} />}</Index>
+					<Show when={current().kind === "openai-compatible"}><button data-testid="provider-add-model" class="settings-add-model" onClick={() => update({ models: [...current().models, { id: "", overrides: { contextWindow: 128000, maxTokens: 8192, input: ["text"], reasoning: false } }] })}>＋ {i18n.t("providers.addModel")}</button></Show>
+				</fieldset>
+				<div class="settings-provider-actions">
+					<Show when={deleteConfirm()} fallback={
+						<div class="settings-save"><Show when={editingExisting()}><button data-testid="provider-delete" class="settings-danger" disabled={busy()} onClick={() => { setError(""); setDeleteConfirm(true); }}>{i18n.t("providers.delete")}</button></Show><span role="status">{status() === "saved" ? i18n.t("settings.save.saved") : dirty() ? i18n.t("providers.unsaved") : ""}</span><button data-testid="provider-save" class="settings-primary" disabled={busy() || !dirty() || current().models.length === 0} onClick={() => void save()}>{busy() ? i18n.t("settings.save.saving") : i18n.t("providers.save")}</button></div>
+					}>
+						<div class="settings-delete-confirm" data-testid="provider-delete-confirm" role="alert">
+							<span>{i18n.t("providers.deleteConfirm")}</span>
+							<div class="settings-inline"><button data-testid="provider-delete-cancel" ref={element => queueMicrotask(() => { if (element.isConnected) element.focus(); })} disabled={busy()} onClick={() => setDeleteConfirm(false)}>{i18n.t("providers.cancel")}</button><button data-testid="provider-delete-submit" class="settings-danger" disabled={busy()} onClick={() => void remove()}>{busy() ? i18n.t("providers.deleting") : i18n.t("providers.delete")}</button></div>
+						</div>
+					</Show>
+					<ErrorNotice />
+				</div>
+			</>}
+		</Show>
+		<Show when={!draft()}><ErrorNotice /></Show>
+	</div>;
+}
+
+function ProviderLogo(props: { kind: ProviderInput["kind"] }) {
+	return <span class="settings-provider-mark" aria-hidden="true"><Show when={providerPreset(props.kind)} fallback={<span class="settings-plus" />}>{preset => <img class="provider-logo" classList={{ "provider-kimi-logo": props.kind === "kimi-coding" }} src={`/providers/${preset().logo}`} alt="" />}</Show></span>;
+}
+
+function ModelEditor(props: { model: EtaModelConfig; custom: boolean; onUpdate(patch: Partial<EtaModelConfig>): void; onRemove(): void }) {
+	const i18n = useAppI18n();
+	const [expanded, setExpanded] = createSignal(!props.model.id);
+	const effective = () => effectiveModel(props.model);
+	const levels = () => modelThinkingLevels(props.model);
+	const override = (patch: ModelCapabilities) => props.onUpdate({ overrides: { ...props.model.overrides, ...patch } });
+	return <div class="settings-model">
+		<div class="settings-model-title"><strong class="mono">{effective().name ?? (props.model.id || i18n.t("providers.newModel"))}</strong><button class="settings-text-button" aria-label={i18n.t("providers.removeModel", { id: props.model.id })} onClick={props.onRemove}>✕</button></div>
+		<Show when={effective().name && effective().name !== props.model.id}><p class="settings-hint mono">{props.model.id}</p></Show>
+		<div class="settings-model-meta"><span>{effective().contextWindow ? `${effective().contextWindow!.toLocaleString()} tokens` : i18n.t("providers.contextUnknown")}</span><Show when={effective().input?.includes("image")}><span>{i18n.t("providers.vision")}</span></Show><Show when={effective().reasoning}><span>{i18n.t("providers.reasoning")}</span></Show></div>
+		<label class="settings-row"><span>{i18n.t("providers.defaultThinking")}</span><select aria-label={`${i18n.t("providers.defaultThinking")} ${props.model.id}`} value={props.model.defaultThinking ?? ""} disabled={levels().length === 0 || (levels().length === 1 && levels()[0] === "off")} onChange={event => props.onUpdate({ defaultThinking: event.currentTarget.value === "" ? undefined : event.currentTarget.value as EtaModelConfig["defaultThinking"] })}><option value="">{i18n.t("providers.followProvider")}{effective().providerDefaultEffort ? ` (${effective().providerDefaultEffort})` : ""}</option><For each={levels()}>{level => <option value={level}>{level}</option>}</For></select></label>
+		<Show when={props.custom}><details open={expanded()} onToggle={event => setExpanded(event.currentTarget.open)}><summary>{i18n.t("providers.modelSettings")}</summary><div class="settings-model-fields">
+			<label class="settings-field">Model ID<input data-testid="custom-model-id" value={props.model.id} onInput={event => props.onUpdate({ id: event.currentTarget.value })} /></label>
+			<label class="settings-field">{i18n.t("providers.name")}<input value={effective().name ?? ""} onInput={event => override({ name: event.currentTarget.value || undefined })} /></label>
+			<label class="settings-field">{i18n.t("providers.contextWindow")}<input type="number" min="1" value={effective().contextWindow ?? ""} onInput={event => override({ contextWindow: event.currentTarget.value ? Number(event.currentTarget.value) : undefined })} /></label>
+			<label class="settings-field">{i18n.t("providers.maxTokens")}<input type="number" min="1" value={effective().maxTokens ?? ""} onInput={event => override({ maxTokens: event.currentTarget.value ? Number(event.currentTarget.value) : undefined })} /></label>
+			<label class="settings-check"><input type="checkbox" checked={effective().input?.includes("image") ?? false} onChange={event => override({ input: event.currentTarget.checked ? ["text", "image"] : ["text"] })} />{i18n.t("providers.vision")}</label>
+			<label class="settings-check"><input type="checkbox" checked={effective().reasoning ?? false} onChange={event => { override(event.currentTarget.checked ? { reasoning: true, thinkingMode: "both", reasoningEfforts: ["low", "medium", "high"], providerDefaultEffort: "high" } : { reasoning: false, thinkingMode: "no", reasoningEfforts: [], providerDefaultEffort: undefined }); props.onUpdate({ defaultThinking: undefined }); }} />{i18n.t("providers.reasoning")}</label>
+			<Show when={effective().reasoning}><label class="settings-check"><input type="checkbox" checked={effective().thinkingMode === "both"} onChange={event => { override({ thinkingMode: event.currentTarget.checked ? "both" : "only" }); props.onUpdate({ defaultThinking: undefined }); }} />{i18n.t("providers.canDisableThinking")}</label><div class="settings-field"><span>{i18n.t("providers.efforts")}</span><div class="settings-efforts"><For each={MODEL_THINKING_LEVELS.filter(level => level !== "off")}>{level => <label class="settings-check"><input type="checkbox" checked={effective().reasoningEfforts?.includes(level) ?? false} onChange={event => {
+				const next = event.currentTarget.checked ? [...(effective().reasoningEfforts ?? []), level] : (effective().reasoningEfforts ?? []).filter(item => item !== level);
+				override({ reasoningEfforts: next, providerDefaultEffort: next.includes(effective().providerDefaultEffort!) ? effective().providerDefaultEffort : next[0] }); props.onUpdate({ defaultThinking: undefined });
+			}} />{level}</label>}</For></div></div><label class="settings-field">{i18n.t("providers.providerDefault")}<select value={effective().providerDefaultEffort ?? ""} onChange={event => override({ providerDefaultEffort: event.currentTarget.value as ModelCapabilities["providerDefaultEffort"] })}><option value="">{i18n.t("providers.unknown")}</option><For each={effective().reasoningEfforts ?? []}>{level => <option value={level}>{level}</option>}</For></select></label></Show>
+			<p class="settings-hint">{i18n.t("providers.overridesNote")}</p>
+		</div></details></Show>
+	</div>;
+}

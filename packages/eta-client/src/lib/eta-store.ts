@@ -176,6 +176,7 @@ export class EtaStore {
 			if ("channel" in message && message.channel === "view") {
 				window.dispatchEvent(new CustomEvent("eta:view", { detail: { session: message.session } }));
 			}
+			if ("type" in message && message.type === "models_changed") window.dispatchEvent(new Event("eta:models"));
 			if ("type" in message && message.type === "personas") window.dispatchEvent(new CustomEvent("eta:personas"));
 			// A native menu/tray click is a command, not state: it rides out as a window
 			// event so the shell of the UI can act on it without the store knowing what

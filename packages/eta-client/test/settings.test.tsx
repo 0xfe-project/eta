@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { byId } from "./dom.ts";
-import { render, setField } from "./render.tsx";
+import { render, setField, click } from "./render.tsx";
 import { ThemeProvider } from "../src/app/theme.tsx";
 import { SettingsPage } from "../src/pages/settings-page.tsx";
 import "../src/i18n.ts";
@@ -46,6 +46,7 @@ describe("settings page", () => {
 			{ id: "reviewer", name: "Reviewer" },
 			{ id: "coach", name: "Coach" },
 		];
+		served["/api/providers"] = { revision: "1", providers: [] };
 		served["/api/models"] = { models: [{ id: "pro6000:kimi", label: "kimi" }], current: "pro6000:kimi" };
 		stubFetch();
 	});
@@ -56,9 +57,9 @@ describe("settings page", () => {
 				<SettingsPage />
 			</ThemeProvider>,
 		);
+		click("settings-tab-session");
 		await until(() => {
 			expect((byId("default-persona") as HTMLSelectElement).value).toBe("reviewer");
-			expect((byId("default-thinking") as HTMLSelectElement).value).toBe("low");
 			expect((byId("default-keep-recent") as HTMLInputElement).value).toBe("12000");
 		});
 		setField("default-persona", "coach");
@@ -76,12 +77,11 @@ describe("settings page", () => {
 				<SettingsPage />
 			</ThemeProvider>,
 		);
+		click("settings-tab-session");
+		await until(() => expect((byId("default-persona") as HTMLSelectElement).value).toBe("reviewer"));
+		setField("default-persona", "");
 		await until(() => {
-			expect((byId("default-thinking") as HTMLSelectElement).value).toBe("low");
-		});
-		setField("default-thinking", "");
-		await until(() => {
-			expect(posted.at(-1)).toEqual({ url: "/api/settings", body: { thinkingLevel: null } });
+			expect(posted.at(-1)).toEqual({ url: "/api/settings", body: { personaId: null } });
 		});
 	});
 });

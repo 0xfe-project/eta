@@ -1,5 +1,6 @@
+import { onMount } from "solid-js";
 import { render } from "solid-js/web";
-import { HashRouter, Route, Router } from "@solidjs/router";
+import { HashRouter, Route, Router, useNavigate } from "@solidjs/router";
 import "./styles/graphite.css";
 import "./styles.css";
 import "./i18n.ts";
@@ -19,7 +20,14 @@ document.documentElement.dataset.host = host().kind;
 import { ThemeProvider } from "./app/theme.tsx";
 import { SessionsPage } from "./pages/sessions-page.tsx";
 import { NewSessionPage } from "./pages/new-session-page.tsx";
-import { SettingsPage } from "./pages/settings-page.tsx";
+import { SettingsHost } from "./features/settings/settings-dialog.tsx";
+import { openSettings } from "./lib/settings.ts";
+
+function SettingsRoute() {
+	const navigate = useNavigate();
+	onMount(() => { openSettings(); void navigate("/", { replace: true }); });
+	return null;
+}
 
 function NotFound() {
 	return null;
@@ -35,7 +43,7 @@ const routes = (
 	<>
 		<Route path="/" component={SessionsPage} />
 		<Route path="/new" component={NewSessionPage} />
-		<Route path="/settings" component={SettingsPage} />
+		<Route path="/settings" component={SettingsRoute} />
 		<Route path="*404" component={NotFound} />
 	</>
 );
@@ -44,6 +52,7 @@ render(
 	() => (
 		<ThemeProvider>
 			{host().kind === "desktop" ? <HashRouter>{routes}</HashRouter> : <Router>{routes}</Router>}
+			<SettingsHost />
 		</ThemeProvider>
 	),
 	document.getElementById("root")!,
