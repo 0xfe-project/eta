@@ -95,5 +95,5 @@ never as a warning from above.
 `;
 
 export function builtinPersonas(): Record<string, string> {
-	return { Thinker: THINKER, INSIGHTER, Executor: EXECUTOR, Artist: ARTIST };
+	return { Thinker: THINKER, Insighter: INSIGHTER, Executor: EXECUTOR, Artist: ARTIST };
 }

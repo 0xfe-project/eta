@@ -99,7 +99,7 @@ describe("batteries emit on the shared sink", () => {
 		btw.answer(thread.id, "why?", "because");
 		const handedOff = btw.handoff(thread.id);
 		expect(handedOff).toContain("[btw");
-		expect(handedOff).toContain("A: because");
+		expect(handedOff).toContain("- why? -> because");
 		expect(btw.save(thread.id, true)).toBe("queued");
 		expect(await btw.flushQueued()).toBe(1);
 

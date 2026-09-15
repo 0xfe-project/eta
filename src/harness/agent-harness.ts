@@ -1,3 +1,7 @@
+import type { HookRegistry } from "./hooks.ts";
+import type { LaneRequestState } from "./runtime/types.ts";
+// Re-exported so a lane implementation can name the state it hands back.
+export type { LaneRequestState };
 import type { JsonRepresentation } from "@earendil-works/chord";
 import type {
 	Api,
@@ -587,6 +591,13 @@ export interface AgentLane {
 	waitForIdle(context: Context): Promise<void>;
 	runWhenIdle(callback: (context: Context) => void | Promise<void>, context: Context): Promise<void>;
 	getModel(context: Context): Promise<Model<Api> | undefined>;
+	/**
+	 * The request a run would send next, read now: model, thinking level, active tool
+	 * declarations, system prompt, stream options, retry policy. A request that runs
+	 * outside a lane (a btw side request) owns no configuration of its own, so it
+	 * inherits the session's by asking for this at the moment it is made.
+	 */
+	requestState(context: Context): Promise<LaneRequestState<object | undefined>>;
 	setModel(model: ModelIdentity, context: Context): Promise<void>;
 	getThinkingLevel(context: Context): Promise<ThinkingLevel>;
 	setThinkingLevel(level: ThinkingLevel, context: Context): Promise<void>;
@@ -623,7 +634,12 @@ export interface AgentHarness<TContext extends object | undefined = object | und
 	setSteeringMode(mode: QueueMode, context: Context): Promise<void>;
 	getFollowUpMode(context: Context): Promise<QueueMode>;
 	setFollowUpMode(mode: QueueMode, context: Context): Promise<void>;
-	readonly hooks: Hooks;
+	/**
+	 * The session's hook registry. The full registry, not just `on`: a request made
+	 * outside a drive still has to run the same aggregates, behind the same effect
+	 * gate, as one made inside it.
+	 */
+	readonly hooks: HookRegistry;
 	readonly events: Events;
 	close(context: Context): Promise<void>;
 }

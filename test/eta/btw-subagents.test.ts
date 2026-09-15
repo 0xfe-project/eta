@@ -1,21 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { BACKGROUND_CONTEXT } from "../../src/harness/context.ts";
-import { BtwManager, btwSideAsk } from "../../src/harness/btw.ts";
+import { BtwManager } from "../../src/harness/btw.ts";
 import { DEPTH_CAP, SubagentManager, type SubagentRecord, type SubagentBus } from "../../src/harness/subagent.ts";
 
 describe("btw side channel", () => {
 	const userMsg = { role: "user", content: [{ type: "text", text: "main" }], timestamp: 0 };
 	const btwMsg = { role: "custom", customType: "eta.btw", content: [], timestamp: 0 };
 	const entries = [userMsg, btwMsg];
-	const SIDE_USAGE = {
-		input: 5,
-		output: 2,
-		cacheRead: 0,
-		cacheWrite: 0,
-		totalTokens: 7,
-		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-	} as const;
-
 	it("contextual seed drops visible btw chatter", () => {
 		const mgr = new BtwManager(() => ({ messages: [userMsg, btwMsg] as never[] }));
 		const t = mgr.create("contextual");
@@ -61,54 +51,37 @@ describe("btw side channel", () => {
 		expect(mgr.get(t.id)?.saveState).toBe("saved");
 		expect(notes.length).toBe(1);
 	});
-	it("a side question waits as pending, then becomes the answered exchange", async () => {
-		const asked: { question: string; messages: unknown[] }[] = [];
-		const mgr = new BtwManager(
-			() => ({ messages: [] }),
-			undefined,
-			undefined,
-			async (request) => {
-				asked.push({ question: request.question, messages: request.messages });
-				return { text: "4", usage: SIDE_USAGE };
-			},
-		);
+	it("a recorded note becomes an exchange and replays into the thread", () => {
+		const mgr = new BtwManager(() => ({ messages: [] }));
 		const t = mgr.create("tangent");
-		const running = mgr.ask(t.id, "what is 2+2?");
-		expect(mgr.get(t.id)?.pending?.question).toBe("what is 2+2?");
-		expect(mgr.get(t.id)?.exchanges.length).toBe(0);
-		await running;
-		expect(mgr.get(t.id)?.pending).toBeUndefined();
+		mgr.answer(t.id, "what is 2+2?", "4");
 		expect(mgr.get(t.id)?.exchanges.map((e) => [e.question, e.answer])).toEqual([["what is 2+2?", "4"]]);
-		// The next question replays the answered pair, so the thread stays continuous
-		// (the request itself carries the new question on top of it).
-		await mgr.ask(t.id, "and 4+4?");
-		const replayed = asked[1]?.messages as { role: string; content: { text?: string }[] }[];
-		expect(replayed?.map((m) => [m.role, m.content[0]?.text])).toEqual([
+		// The next note goes out on top of the first, so the thread stays continuous.
+		mgr.answer(t.id, "and 4+4?", "8");
+		const replayed = mgr.messagesFor(t.id) as { role: string; content: { text?: string }[] }[];
+		expect(replayed.map((m) => [m.role, m.content[0]?.text])).toEqual([
 			["user", "what is 2+2?"],
 			["assistant", "4"],
+			["user", "and 4+4?"],
+			["assistant", "8"],
 		]);
 	});
-	it("a failed side request leaves no exchange behind, only an error", async () => {
-		const mgr = new BtwManager(
-			() => ({ messages: [] }),
-			undefined,
-			undefined,
-			() => Promise.reject(new Error("provider down")),
-		);
-		const t = mgr.create("tangent");
-		await mgr.ask(t.id, "q");
-		expect(mgr.get(t.id)?.exchanges.length).toBe(0);
-		expect(mgr.get(t.id)?.pending).toBeUndefined();
-		expect(mgr.get(t.id)?.error).toBe("provider down");
-	});
-	it("override change rebuilds the child but keeps the thread", () => {
+	it("a bare note is a note: no answer, still recorded and replayed", () => {
 		const mgr = new BtwManager(() => ({ messages: [] }));
-		const t = mgr.create("contextual");
-		mgr.answer(t.id, "q", "a");
-		const v = t.assemblyVersion;
-		mgr.setOverride(t.id, { model: "other" });
-		expect(mgr.get(t.id)?.assemblyVersion).toBe(v + 1);
-		expect(mgr.get(t.id)?.exchanges.length).toBe(1);
+		const t = mgr.create("tangent");
+		mgr.answer(t.id, "ping the vendor about the rate limit");
+		expect(mgr.get(t.id)?.exchanges.map((e) => e.answer)).toEqual([""]);
+		const replayed = mgr.messagesFor(t.id) as { role: string }[];
+		expect(replayed.map((m) => m.role)).toEqual(["user"]);
+	});
+	it("handoff carries every note, not only the pairs", () => {
+		const mgr = new BtwManager(() => ({ messages: [] }));
+		const t = mgr.create("tangent");
+		mgr.answer(t.id, "a", "b");
+		mgr.answer(t.id, "c");
+		const text = mgr.handoff(t.id) ?? "";
+		expect(text).toContain("a -> b");
+		expect(text).toContain("- c");
 	});
 	it("replay restores threads from eta.btw entries", () => {
 		const mgr = new BtwManager(() => ({ messages: [] }));
@@ -133,46 +106,7 @@ describe("btw side channel", () => {
 		mgr.answer(t.id, "which editor?", "the one you already know");
 		const text = mgr.handoff(t.id) ?? "";
 		expect(text).toContain(`[btw ${t.id}]`);
-		expect(text).toContain("Q: which editor?");
-		expect(text).toContain("A: the one you already know");
-	});
-	it("an override cleared with null goes back to inheriting the session", () => {
-		const mgr = new BtwManager(() => ({ messages: [] }));
-		const t = mgr.create("contextual", { model: "anthropic:claude-haiku-4-5", thinking: "low" });
-		const version = mgr.get(t.id)?.assemblyVersion ?? 0;
-		mgr.setOverride(t.id, { model: null, thinking: null });
-		expect(mgr.get(t.id)?.model).toBeUndefined();
-		expect(mgr.get(t.id)?.thinking).toBeUndefined();
-		expect(mgr.get(t.id)?.assemblyVersion).toBe(version + 1);
-	});
-	it("an override that changed nothing leaves the assembly alone", () => {
-		const mgr = new BtwManager(() => ({ messages: [] }));
-		const t = mgr.create("contextual", { model: "m" });
-		const version = mgr.get(t.id)?.assemblyVersion ?? 0;
-		mgr.setOverride(t.id, { model: "m" });
-		expect(mgr.get(t.id)?.assemblyVersion).toBe(version);
-	});
-	it("a side answer's usage is handed to the session ledger", async () => {
-		const recorded: { threadId: string; output: number }[] = [];
-		const ask = btwSideAsk({
-			models: {
-				getModels: () => [],
-				getModel: () => undefined,
-				completeSimple: async () =>
-					({
-						role: "assistant",
-						content: [{ type: "text", text: "4" }],
-						usage: SIDE_USAGE,
-						stopReason: "stop",
-					}) as never,
-			} as never,
-			currentModel: async () => ({ id: "fake" }) as never,
-			context: BACKGROUND_CONTEXT,
-			onUsage: (usage, threadId) => recorded.push({ threadId, output: usage.output }),
-		});
-		const answer = await ask({ threadId: "btw-1", kind: "tangent", question: "q", messages: [] });
-		expect(answer.text).toBe("4");
-		expect(recorded).toEqual([{ threadId: "btw-1", output: 2 }]);
+		expect(text).toContain("- which editor? -> the one you already know");
 	});
 });
 

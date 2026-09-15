@@ -1,5 +1,5 @@
-import type { RetryPolicy } from "@earendil-works/pi-ai";
-import type { QueueMode } from "../../types.ts";
+import type { Api, Model, RetryPolicy, Tool } from "@earendil-works/pi-ai";
+import type { QueueMode, ThinkingLevel } from "../../types.ts";
 import type { AgentHarnessOptions, DriveOptions, DriveOutcome, HarnessEvent, Resources } from "../agent-harness.ts";
 import type { CompactionSettings } from "../compaction/compaction.ts";
 import { type Context, withoutAbortSignal } from "../context.ts";
@@ -29,6 +29,33 @@ export interface Config<TContext extends object | undefined> {
 	readonly systemPrompt: AgentHarnessOptions<TContext>["systemPrompt"];
 	readonly toProviderMessages: NonNullable<AgentHarnessOptions<TContext>["toProviderMessages"]>;
 	readonly entryProjectors: Readonly<NonNullable<AgentHarnessOptions<TContext>["entryProjectors"]>>;
+}
+
+/**
+ * What a run would send next, read from lane state as it is now. A request that runs
+ * outside a drive — a btw side request — has no operation and captures no config of
+ * its own, so it builds from this instead. The lane is the single owner of what the
+ * session currently is, so asking it at the moment the request is made is what keeps a
+ * side request on the model, tools and prompt the user chose, including a model or
+ * thinking level they change while the request is in flight.
+ */
+export interface LaneRequestState<TContext extends object | undefined> {
+	/** The session's current model. Undefined when the selection names a model the resolvers do not have. */
+	readonly model: Model<Api> | undefined;
+	/** The session's current thinking level. */
+	readonly thinkingLevel: ThinkingLevel;
+	/** The active tools, as a provider sees them: name, description, parameter schema. */
+	readonly tools: Tool[];
+	/** Active names with no tool defined for them. A run fails on these; a side request skips them. */
+	readonly missingToolNames: string[];
+	/** The system prompt, resolved against the tool context below. */
+	readonly systemPrompt: string;
+	/** Provider request options, read the way a run reads them: no per-call options. */
+	readonly streamOptions?: AgentHarnessStreamOptions;
+	/** Transport retry policy, taken the way a run takes it. */
+	readonly retryPolicy?: RetryPolicy;
+	/** The tool context the prompt and the tools resolved against. */
+	readonly toolContext: TContext;
 }
 
 /** The current durable state owned by one lane. */
