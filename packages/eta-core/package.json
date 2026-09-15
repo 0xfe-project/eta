@@ -11,7 +11,8 @@
 		"./node": "./src/node.ts",
 		"./eta": "./src/eta/index.ts",
 		"./prompts": "./src/prompts/index.ts",
-		"./wire": "./src/wire.ts"
+		"./wire": "./src/wire.ts",
+		"./provider-config": "./src/provider-config.ts"
 	},
 	"scripts": {
 		"test": "vitest --run",

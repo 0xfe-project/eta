@@ -4,19 +4,17 @@ import { join } from "node:path";
 import { createModels, createProvider, type Model, type MutableModels } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 
-export interface EtaModelConfig {
-	id: string;
-	name?: string;
-	contextWindow?: number;
-	maxTokens?: number;
-	input?: ("text" | "image")[];
-}
+export type { EtaModelConfig } from "@eta/core/provider-config";
+import { effectiveModel, modelThinkingLevels, MODEL_THINKING_LEVELS, type EtaModelConfig, type ProviderKind } from "@eta/core/provider-config";
 
 export interface EtaProviderConfig {
 	id: string;
+	name?: string;
+	kind?: ProviderKind;
 	baseUrl: string;
 	apiKey?: string;
 	models: EtaModelConfig[];
+	lastRefreshedAt?: string;
 }
 
 export interface EtaConfig {
@@ -42,18 +40,47 @@ export function configModels(cfg: EtaConfig): MutableModels | undefined {
 	if (providers.length === 0) return undefined;
 	const models = createModels();
 	for (const provider of providers) {
-		const modelList: Model<"openai-completions">[] = provider.models.map((entry) => ({
+		const modelList: Model<"openai-completions">[] = provider.models.map((configured) => {
+			const entry = effectiveModel(configured);
+			const levels = modelThinkingLevels(entry);
+			return ({
 			id: entry.id,
 			name: entry.name ?? entry.id,
 			api: "openai-completions",
 			provider: provider.id,
 			baseUrl: provider.baseUrl,
-			reasoning: false,
+			reasoning: entry.reasoning ?? false,
+			...(entry.reasoning ? {
+				thinkingLevelMap: Object.fromEntries(MODEL_THINKING_LEVELS.map(level => [level, level === "off"
+					? (levels.includes("off") ? "none" : provider.kind === "deepseek" ? null : undefined)
+					: (levels.includes(level) ? level : null)])),
+				...(provider.kind === "deepseek" ? { thinkingLevelMap: {
+					off: levels.includes("off") ? "none" : null,
+					minimal: levels.includes("low") ? "low" : null,
+					low: levels.includes("low") ? "low" : null,
+					medium: levels.includes("high") ? "high" : null,
+					high: levels.includes("high") ? "high" : null,
+					xhigh: levels.includes("high") ? "high" : null,
+					max: levels.includes("max") ? "max" : null,
+				} } : {}),
+			} : {}),
+			compat: {
+				...(entry.reasoningEfforts?.length ? { supportsReasoningEffort: true } : {}),
+				...(provider.kind === "kimi-coding" || provider.kind === "deepseek" ? {
+				supportsDeveloperRole: false,
+				supportsStore: false,
+				supportsReasoningEffort: true,
+				maxTokensField: "max_tokens" as const,
+				requiresReasoningContentOnAssistantMessages: true,
+				...(provider.kind === "deepseek" ? { thinkingFormat: "deepseek" as const } : {}),
+				} : {}),
+			},
 			input: entry.input ?? ["text"],
 			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 			contextWindow: entry.contextWindow ?? 128_000,
-			maxTokens: entry.maxTokens ?? 8_192,
-		}));
+			maxTokens: entry.maxTokens ?? Math.min(8_192, entry.contextWindow ?? 128_000),
+		});
+		});
 		models.setProvider(
 			createProvider({
 				id: provider.id,

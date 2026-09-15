@@ -172,3 +172,4 @@ export * from "./harness/tasks.ts";
 export * from "./harness/events.ts";
 export * from "./harness/prompt-blocks.ts";
 export * from "./wire.ts";
+export * from "./provider-config.ts";
