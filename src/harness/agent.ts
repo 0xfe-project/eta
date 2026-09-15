@@ -453,6 +453,7 @@ export class EtaAgent {
 		agent.personaBox = personaBox;
 		agent.skillBox = skillBox;
 		agent.personas = personaBox.persona?.names ?? [];
+		agent.setThinkingLevelValue(await lane.getThinkingLevel(context));
 		return agent;
 	}
 
