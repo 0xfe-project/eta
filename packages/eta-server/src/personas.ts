@@ -28,6 +28,30 @@ export async function listPersonaSummaries(cwd: string, home = homedir()): Promi
 	}));
 }
 
+/** The card a session falls back to when its own card is gone; built-ins always hold it. */
+const FALLBACK_PERSONA = "Thinker";
+
+/**
+ * Which card a persisted session reopens under.
+ *
+ * A persona is one file; a session is its whole history. So a card that was deleted, or an
+ * id that was typed by hand before the built-in cards settled their casing, must not take the
+ * session out of the sidebar with it: the lookup widens from exact, to the same id under
+ * another case, to the fallback card. The caller says out loud when it fell back.
+ */
+export async function resolvePersonaId(
+	cwd: string,
+	personaId: string,
+	home = homedir(),
+): Promise<{ id: string; exact: boolean }> {
+	const cards = await discoverPersonas(new NodeEtaFs(), cwd, home);
+	if (personaId in cards) return { id: personaId, exact: true };
+	const wanted = personaId.toLowerCase();
+	const folded = Object.keys(cards).find((id) => id.toLowerCase() === wanted);
+	if (folded !== undefined) return { id: folded, exact: false };
+	return { id: FALLBACK_PERSONA, exact: false };
+}
+
 export async function renderPersonaFor(
 	cwd: string,
 	personaId: string,

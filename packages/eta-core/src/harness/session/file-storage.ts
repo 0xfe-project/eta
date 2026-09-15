@@ -251,7 +251,12 @@ export class FileStorage implements Storage {
 	 * differently; nothing persisted refers to a sequence number.
 	 */
 	async compact(context: Context): Promise<FileStorageCompaction> {
-		return this.rewrite(context, false);
+		const result = await this.rewrite(context, false);
+		if (result.rewritten)
+			console.warn(
+				`[eta-journal] ${this.path}: journal rebuilt from live state ${result.beforeBytes} → ${result.afterBytes} bytes`,
+			);
+		return result;
 	}
 
 	private async rewrite(context: Context, force: boolean): Promise<FileStorageCompaction> {
@@ -326,12 +331,7 @@ export class FileStorage implements Storage {
 					if (this.compactScheduled) arm(this.lastAppendAt);
 					return;
 				}
-				void this.compact(context).then((result) => {
-					if (result.rewritten)
-						console.warn(
-							`[eta-journal] ${this.path}: journal compacted ${result.beforeBytes} → ${result.afterBytes} bytes`,
-						);
-				});
+				void this.compact(context).catch(() => undefined);
 			}, this.compactQuietMs);
 			timer.unref?.();
 		};
