@@ -8,7 +8,6 @@
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT, EtaAgent, MemoryCache, type MemoryLoaded } from "@eta/core";
 import { homedir } from "node:os";
-import { complete } from "@earendil-works/pi-ai/compat";
 import { NodeEtaFs } from "./node-fs.ts";
 import { DEFAULT_SYSTEM_PROMPT } from "@eta/core/prompts";
 import { FileStorage, NodeExecutionEnv } from "@eta/core/node";
@@ -18,10 +17,11 @@ import {
 	fauxProvider,
 	type Context,
 	type FauxProviderHandle,
+	type MutableModels,
 } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { MemoryStorage, StorageBackedSession } from "@eta/core";
-import { configDefaultModel, configModels, loadEtaConfig } from "./config.ts";
+import { configDefaultModel, configModels, loadEtaConfig, type EtaConfig } from "./config.ts";
 import { renderPersonaFor } from "./personas.ts";
 import { discoverSkillDirs, renderSkillsBlock, watchSkillDirs } from "./skills.ts";
 
@@ -37,6 +37,7 @@ export interface SessionConfig {
 	persistDir?: string;
 	/** Loop wake cadence; see HostOptions. */
 	heartbeatMs?: number;
+	keepRecentTokens?: number;
 }
 
 export class UnknownPersonaError extends Error {}
@@ -44,7 +45,10 @@ export class UnknownPersonaError extends Error {}
 export interface CreatedSession {
 	agent: EtaAgent;
 	faux: FauxProviderHandle | undefined;
+	models?: MutableModels;
 	memory?: () => Promise<MemoryLoaded>;
+	/** Replace configured providers at an idle boundary without replacing the session. */
+	reloadModels?: (config: EtaConfig) => void;
 }
 
 export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSession> {
@@ -96,6 +100,8 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 		faux = fauxProvider();
 		model = faux.getModel();
 		faux.setResponses([echoResponder(cfg.personaId)]);
+		models ??= createModels();
+		models.setProvider(faux.provider);
 	}
 	const storage =
 		cfg.persistDir === undefined
@@ -112,14 +118,17 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 	// Memory is project-scoped: a session opened in another folder starts with a clean sheet
 	// there, and the notes it earns stay with that folder.
 	const memoryTarget = (await memoryCache.load(cfg.cwd)).target;
-	const extractionModel = model;
-	const judgeApiKey = providerApiKey(etaConfig, model.provider);
+	const registry = models ?? withFaux(faux!);
+	let configuredIds = (etaConfig.providers ?? []).map(provider => provider.id);
+	let agent: EtaAgent;
+	const selectedModel = async () => (await agent.lane.getModel(BACKGROUND_CONTEXT)) ?? model!;
+	const isFaux = async () => (await selectedModel()).provider === faux?.provider.id;
 	const execEnv = new NodeExecutionEnv({ cwd: cfg.cwd });
 	const skillsBlock = await renderSkillsBlock(execEnv, cfg.cwd);
-	const agent = await EtaAgent.create(
+	agent = await EtaAgent.create(
 		{
 			session,
-			models: models ?? withFaux(faux!),
+			models: registry,
 			model,
 			baseSystemPrompt: DEFAULT_SYSTEM_PROMPT,
 			executionEnv: execEnv,
@@ -127,34 +136,19 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 			persona,
 			...(cfg.heartbeatMs === undefined ? {} : { heartbeatMs: cfg.heartbeatMs }),
 			memorySource: async () => (await memoryCache.load(cfg.cwd)).text,
-			// The faux provider answers from a queue the run itself consumes; an extraction
-			// call would eat a response and get an echo back, so no notes in a faux session.
-			...(faux === undefined
-				? {
-						memoryExtraction: {
-							fs: memoryFs,
-							target: memoryTarget,
-							call: async (systemPrompt: string, prompt: string) => {
-								const reply = await complete(
-									extractionModel,
-									{
-										systemPrompt,
-										messages: [{ role: "user", content: prompt, timestamp: Date.now() }],
-									},
-									{ apiKey: judgeApiKey },
-								);
-								return reply.content
-									.filter((block): block is { type: "text"; text: string } => block.type === "text")
-									.map((block) => block.text)
-									.join("");
-								},
-							},
-						}
-					: {}),
-			evaluateGoal:
-				faux !== undefined
-					? async () => false
-					: async (objective, messages) => {
+			memoryExtraction: {
+				fs: memoryFs,
+				target: memoryTarget,
+				call: async (systemPrompt: string, prompt: string) => {
+					if (await isFaux()) return "";
+					const reply = await registry.completeSimple(await selectedModel(), {
+						systemPrompt, messages: [{ role: "user", content: prompt, timestamp: Date.now() }],
+					});
+					return reply.content.filter(block => block.type === "text").map(block => block.text).join("");
+				},
+			},
+			evaluateGoal: async (objective, messages) => {
+							if (await isFaux()) return false;
 							const tail = messages
 								.slice(-8)
 								.map((message) => transcriptText(message))
@@ -162,8 +156,8 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 								.join("\n---\n")
 								.slice(-2_400);
 							try {
-								const verdict = await complete(
-									model,
+								const verdict = await registry.completeSimple(
+									await selectedModel(),
 									{
 										systemPrompt:
 											"You are a strict goal-completion judge. Reply with exactly ACHIEVED if the objective is fully satisfied by the shown work, otherwise CONTINUE.",
@@ -175,7 +169,6 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 											},
 										],
 									},
-									{ apiKey: judgeApiKey },
 								);
 								const text = verdict.content
 									.filter((block): block is { type: "text"; text: string } => block.type === "text")
@@ -191,6 +184,10 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 		},
 		BACKGROUND_CONTEXT,
 	);
+	if (cfg.keepRecentTokens !== undefined) {
+		const compaction = await agent.harness.getCompactionSettings(BACKGROUND_CONTEXT);
+		await agent.harness.setCompactionSettings({ ...compaction, keepRecentTokens: cfg.keepRecentTokens }, BACKGROUND_CONTEXT);
+	}
 	if (faux !== undefined) {
 		const handle = faux;
 		agent.events.on("run_end", () => {
@@ -205,7 +202,15 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 			300,
 		);
 	});
-	return { agent, faux, memory: async () => memoryCache.load(cfg.cwd) };
+	return {
+		agent, faux, models: registry, memory: async () => memoryCache.load(cfg.cwd),
+		reloadModels(config) {
+			const next = configModels(config);
+			for (const id of configuredIds) registry.deleteProvider(id);
+			for (const provider of next?.getProviders() ?? []) registry.setProvider(provider);
+			configuredIds = (config.providers ?? []).map(provider => provider.id);
+		},
+	};
 }
 
 function withFaux(faux: FauxProviderHandle) {
@@ -237,11 +242,6 @@ function lastUserText(messages: readonly { role: string; content: unknown }[]): 
 		}
 	}
 	return "";
-}
-
-function providerApiKey(config: { providers?: { id: string; apiKey?: string }[] }, providerId: string): string {
-	const provider = (config.providers ?? []).find((entry) => entry.id === providerId);
-	return provider?.apiKey && provider.apiKey.length > 0 ? provider.apiKey : "eta-no-key";
 }
 
 function transcriptText(message: unknown): string {
