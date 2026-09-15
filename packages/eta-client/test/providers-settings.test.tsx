@@ -38,6 +38,7 @@ beforeEach(() => {
 });
 
 function mount() { return render(<ThemeProvider><SettingsPage /></ThemeProvider>); }
+const i18nSuppressed = /not sent|不发送/;
 async function openKimi() {
 	click("settings-tab-providers");
 	await vi.waitFor(() => expect(byId("provider-add-kimi")).toBeTruthy());
@@ -207,6 +208,34 @@ describe("provider settings", () => {
 		expect(byId("provider-error").closest(".settings-provider-actions")).not.toBeNull();
 		expect(byId("provider-delete-submit").hasAttribute("disabled")).toBe(false);
 		expect(catalog.providers).toHaveLength(1);
+	});
+
+	it("edits custom request headers as rows and round-trips them through the saved provider", async () => {
+		catalog = {
+			revision: "one",
+			providers: [{ id: "kimi-coding", kind: "kimi-coding", baseUrl: "https://api.kimi.com/coding/v1", hasApiKey: true, headers: { "User-Agent": "eta/0.9" }, models: [kimi] }],
+		};
+		mount();
+		click("settings-tab-providers");
+		await vi.waitFor(() => expect(byId("provider-kimi-coding")).toBeTruthy());
+		click("provider-kimi-coding");
+		expect((byId("provider-header-name-0") as HTMLInputElement).value).toBe("User-Agent");
+		setField("provider-header-value-0", "eta-agent/1");
+		click("provider-add-header");
+		setField("provider-header-name-1", "X-Title");
+		// An empty value is a decision, not a blank: the row says so.
+		expect(byId("provider-header-suppressed-1").textContent).toMatch(i18nSuppressed);
+		const idle = byId("provider-save").textContent!;
+		click("provider-save");
+		await vi.waitFor(() => expect(writes).toHaveLength(1));
+		expect(writes[0].provider.headers).toEqual({ "User-Agent": "eta-agent/1", "X-Title": null });
+		// The editor is re-seeded from the saved provider once the save settles, so the second
+		// write proves both the echo and that a suppressed header stays a row with an empty value.
+		await vi.waitFor(() => expect(byId("provider-save").textContent).toBe(idle));
+		click("provider-header-remove-0");
+		click("provider-save");
+		await vi.waitFor(() => expect(writes).toHaveLength(2));
+		expect(writes[1].provider.headers).toEqual({ "X-Title": null });
 	});
 
 	it("keeps the modal open for unsaved changes and closes cleanly after discarding", async () => {

@@ -105,38 +105,6 @@
         "vitest": "4.1.9",
       },
     },
-    "packages/eta-web": {
-      "name": "@eta/web",
-      "version": "0.0.1",
-      "dependencies": {
-        "@eta/core": "workspace:*",
-        "@eta/i18n": "workspace:*",
-        "@solidjs/router": "^0.15.3",
-        "@xterm/addon-fit": "^0.11.0",
-        "@xterm/addon-web-links": "^0.12.0",
-        "@xterm/xterm": "^6.0.0",
-        "class-variance-authority": "^0.7.1",
-        "clsx": "^2.1.1",
-        "i18next": "^25.6.0",
-        "katex": "^0.18.7",
-        "shiki": "^3.19.0",
-        "solid-js": "^1.9.9",
-        "solid-streamdown": "^1.0.1",
-        "tailwind-merge": "^3.6.0",
-      },
-      "devDependencies": {
-        "@solidjs/testing-library": "^0.8.10",
-        "@tailwindcss/typography": "^0.5.20",
-        "@tailwindcss/vite": "^4.3.0",
-        "@testing-library/dom": "^10.4.1",
-        "jsdom": "^27.0.0",
-        "tailwindcss": "^4.3.3",
-        "typescript": "^5.9.0",
-        "vite": "^8.0.0",
-        "vite-plugin-solid": "^2.11.10",
-        "vitest": "^4.1.0",
-      },
-    },
   },
   "packages": {
     "@acemir/cssom": ["@acemir/cssom@0.9.31", "", {}, "sha512-ZnR3GSaH+/vJ0YlHau21FjfLYjMpYVIzTD8M8vIEQvIGxeOXyXdzCI140rrCY862p/C/BbzWsjc1dgnM9mkoTA=="],
@@ -318,8 +286,6 @@
     "@eta/server": ["@eta/server@workspace:packages/eta-server"],
 
     "@eta/storage-sqlite": ["@eta/storage-sqlite@workspace:packages/eta-storage-sqlite"],
-
-    "@eta/web": ["@eta/web@workspace:packages/eta-web"],
 
     "@exodus/bytes": ["@exodus/bytes@1.15.1", "", { "peerDependencies": { "@noble/hashes": "^1.8.0 || ^2.0.0" }, "optionalPeers": ["@noble/hashes"] }, "sha512-S6mL0yNB/Abt9Ei4tq8gDhcczc4S3+vQ4ra7vxnAf+YHC02srtqxKKZghx2Dq6p0e66THKwR6r8N6P95wEty7Q=="],
 

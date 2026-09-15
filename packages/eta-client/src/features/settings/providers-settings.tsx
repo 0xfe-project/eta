@@ -1,12 +1,32 @@
 import { For, Index, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import {
 	effectiveModel, modelThinkingLevels, MODEL_THINKING_LEVELS, BUILTIN_PROVIDER_PRESETS, providerPreset,
-	type CodexLoginView, type EtaModelConfig, type ModelCapabilities, type ProviderInput, type ProviderSummary, type ProvidersView, type ProviderKind,
+	type CodexLoginView, type EtaModelConfig, type ModelCapabilities, type ProviderHeaders, type ProviderInput, type ProviderSummary, type ProvidersView, type ProviderKind,
 } from "@eta/core/provider-config";
 import { useAppI18n } from "../../i18n.ts";
 import { apiFetch } from "../../lib/host.ts";
 
 const BUILTIN_KINDS = Object.keys(BUILTIN_PROVIDER_PRESETS) as (keyof typeof BUILTIN_PROVIDER_PRESETS)[];
+
+/** Editor rows for custom request headers; an empty value is saved as null = “do not send”. */
+type HeaderRow = { name: string; value: string };
+
+function headerRowsFrom(headers: ProviderHeaders | undefined | null): HeaderRow[] {
+	return Object.entries(headers ?? {}).map(([name, value]) => ({ name, value: value ?? "" }));
+}
+
+function headersFromRows(rows: HeaderRow[]): ProviderHeaders | undefined {
+	const out: ProviderHeaders = {};
+	for (const row of rows) {
+		const name = row.name.trim();
+		if (name.length === 0) continue;
+		for (const saved of Object.keys(out)) {
+			if (saved.toLowerCase() === name.toLowerCase()) delete out[saved];
+		}
+		out[name] = row.value.trim().length === 0 ? null : row.value.trim();
+	}
+	return Object.keys(out).length > 0 ? out : undefined;
+}
 
 async function providerRequest<T>(path: string, body?: unknown, method = "POST", signal?: AbortSignal): Promise<T> {
 	const response = await apiFetch(path, body === undefined
@@ -25,6 +45,7 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 	const [draft, setDraft] = createSignal<ProviderInput>();
 	const [baseline, setBaseline] = createSignal("");
 	const [hasKey, setHasKey] = createSignal(false);
+	const [headerRows, setHeaderRows] = createSignal<HeaderRow[]>([]);
 	const [busy, setBusy] = createSignal(false);
 	const [error, setError] = createSignal("");
 	const [status, setStatus] = createSignal<"" | "connected" | "saved">("");
@@ -67,6 +88,10 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 		setStatus(""); setDeleteConfirm(false);
 	};
 	const updateModel = (index: number, patch: Partial<EtaModelConfig>) => update({ models: draft()!.models.map((model, i) => i === index ? { ...model, ...patch } : model) });
+	const editHeaders = (rows: HeaderRow[]) => { setHeaderRows(rows); update({ headers: headersFromRows(rows) }); };
+	const changeHeader = (index: number, patch: Partial<HeaderRow>) => editHeaders(headerRows().map((row, i) => i === index ? { ...row, ...patch } : row));
+	const removeHeader = (index: number) => editHeaders(headerRows().filter((_, i) => i !== index));
+	const addHeader = () => editHeaders([...headerRows(), { name: "", value: "" }]);
 	const edit = (provider: ProviderSummary | ProviderKind) => {
 		generation += 1; controller?.abort(); cancelLogin();
 		let next: ProviderInput;
@@ -75,9 +100,11 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 				? provider : `${provider === "openai-compatible" ? "custom" : provider}-${crypto.randomUUID().slice(0, 8)}`;
 			next = { id, kind: provider, baseUrl: providerPreset(provider)?.baseUrl ?? "", models: [] };
 			setHasKey(false);
+			setHeaderRows([]);
 		} else {
-			next = { id: provider.id, kind: provider.kind, name: provider.name, baseUrl: provider.baseUrl, models: structuredClone(provider.models) };
+			next = { id: provider.id, kind: provider.kind, name: provider.name, baseUrl: provider.baseUrl, headers: provider.headers, models: structuredClone(provider.models) };
 			setHasKey(provider.hasApiKey);
+			setHeaderRows(headerRowsFrom(provider.headers));
 		}
 		setDraft(next); setBaseline(JSON.stringify(next)); setError(""); setStatus(""); setDeleteConfirm(false); setBackConfirm(false);
 	};
@@ -199,6 +226,19 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 					<Show when={current().kind === "openai-compatible"}><label class="settings-field">{i18n.t("providers.name")}<input data-testid="provider-name" value={current().name ?? ""} onInput={event => update({ name: event.currentTarget.value || undefined })} /></label><label class="settings-field">Base URL<input data-testid="provider-url" placeholder="https://example.com/v1" value={current().baseUrl} onInput={event => update({ baseUrl: event.currentTarget.value })} /></label></Show>
 					<Show when={current().kind !== "openai-codex"}><label class="settings-field">API Key<input data-testid="provider-key" type="password" autocomplete="off" value={current().apiKey ?? ""} placeholder={hasKey() ? i18n.t("providers.keepKey") : i18n.t("providers.enterKey")} onInput={event => update({ apiKey: event.currentTarget.value || undefined })} /></label></Show>
 					<Show when={hasKey() && current().kind === "openai-compatible"}><button class="settings-text-button" onClick={() => update({ apiKey: null })}>{current().apiKey === null ? i18n.t("providers.keyWillClear") : i18n.t("providers.clearKey")}</button></Show>
+					<Show when={current().kind !== "openai-codex"}><details class="settings-headers" data-testid="provider-headers" open={headerRows().length > 0}>
+						<summary>{i18n.t("providers.headers")}</summary>
+						<Index each={headerRows()}>{(row, index) => <div class="settings-header-row">
+							<input data-testid={`provider-header-name-${index}`} class="mono" spellcheck={false} placeholder="User-Agent" aria-label={`${i18n.t("providers.headerName")} ${index + 1}`} value={row().name} onInput={event => changeHeader(index, { name: event.currentTarget.value })} />
+							<input data-testid={`provider-header-value-${index}`} class="mono" spellcheck={false} placeholder="eta-agent/1" aria-label={`${i18n.t("providers.headerValue")} ${index + 1}`} value={row().value} onInput={event => changeHeader(index, { value: event.currentTarget.value })} />
+							<span class="settings-header-tail">
+								<Show when={row().name.trim().length > 0 && row().value.trim().length === 0}><span class="settings-header-suppressed" data-testid={`provider-header-suppressed-${index}`}>{i18n.t("providers.headerSuppressed")}</span></Show>
+								<button class="settings-text-button" data-testid={`provider-header-remove-${index}`} aria-label={i18n.t("providers.removeHeader", { n: index + 1 })} onClick={() => removeHeader(index)}>✕</button>
+							</span>
+						</div>}</Index>
+						<button class="settings-add-header" data-testid="provider-add-header" onClick={addHeader}>＋ {i18n.t("providers.addHeader")}</button>
+						<p class="settings-hint">{i18n.t("providers.headersHint")}</p>
+					</details></Show>
 					<div class="settings-inline"><button data-testid="provider-discover" class="settings-primary" onClick={() => void discover()}>{busy() ? i18n.t("providers.connecting") : current().models.length > 0 ? i18n.t("providers.refresh") : i18n.t("providers.connectModels")}</button><span class="settings-hint" aria-live="polite">{status() === "connected" ? i18n.t("providers.connected", { n: current().models.length }) : ""}</span></div>
 					<Show when={current().models.length > 0}><div class="settings-section-label">{i18n.t("providers.models")}</div></Show>
 					<Index each={current().models}>{(model, index) => <ModelEditor model={model()} custom={current().kind === "openai-compatible"} onUpdate={patch => updateModel(index, patch)} onRemove={() => update({ models: current().models.filter((_, i) => i !== index) })} />}</Index>

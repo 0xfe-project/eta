@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ProviderConfigStore, discoverProviderModels, KIMI_CODING_BASE_URL, type ProviderFetch } from "../src/providers.ts";
-import { configModels } from "../src/config.ts";
+import { configModels, type EtaProviderConfig } from "../src/config.ts";
 import { Host } from "../src/host.ts";
 import { startServer } from "../src/server.ts";
 import { modelDefaultThinking, modelThinkingLevels } from "@eta/core/provider-config";
@@ -14,7 +14,7 @@ const model = {
 	supports_reasoning: true, supports_thinking_type: "both", supports_image_in: true,
 	think_efforts: { support: true, valid_efforts: ["low", "high", "max"], default_effort: "high" },
 };
-const provider = { id: "local", kind: "openai-compatible", baseUrl: "http://127.0.0.1:7777/v1", apiKey: "private-test-key", models: [{ id: "m", contextWindow: 128000 }] };
+const provider: EtaProviderConfig = { id: "local", kind: "openai-compatible", baseUrl: "http://127.0.0.1:7777/v1", apiKey: "private-test-key", models: [{ id: "m", contextWindow: 128000 }] };
 
 async function fixture(run: (store: ProviderConfigStore, directory: string) => Promise<void>) {
 	const directory = await mkdtemp(join(tmpdir(), "eta-providers-"));
@@ -69,6 +69,40 @@ describe("provider discovery and configuration", () => {
 		});
 	});
 
+	it("sends custom headers on model listing and lets a null value suppress built-in ones", async () => {
+		let seen: RequestInit | undefined;
+		const models = await discoverProviderModels({ ...provider, headers: { "X-Title": "eta-agent", "User-Agent": "eta-agent/1", Authorization: null } }, (async (_url, init) => {
+			seen = init;
+			return Response.json({ data: [model] });
+		}) as ProviderFetch);
+		const headers = new Headers(seen?.headers);
+		expect(headers.get("x-title")).toBe("eta-agent");
+		expect(headers.get("user-agent")).toBe("eta-agent/1");
+		expect(headers.get("accept")).toBe("application/json");
+		// A saved key must not leak to an endpoint that asked for a different auth header.
+		expect(headers.get("authorization")).toBeNull();
+		expect(models).toHaveLength(1);
+	});
+
+	it("stores and echoes custom headers, keeps them on unrelated edits, and rejects malformed ones", async () => {
+		await fixture(async store => {
+			let view = await store.save({ revision: (await store.view()).revision, provider: { ...provider, headers: { "X-Title": null, "User-Agent": "eta-agent/1" } } });
+			expect(view.providers[0]!.headers).toEqual({ "X-Title": null, "User-Agent": "eta-agent/1" });
+			expect(JSON.parse(await readFile(store.path, "utf8")).providers[0].headers).toEqual({ "X-Title": null, "User-Agent": "eta-agent/1" });
+			view = await store.save({ revision: view.revision, provider: { ...provider, name: "Renamed" } });
+			expect(view.providers[0]!.headers).toEqual({ "X-Title": null, "User-Agent": "eta-agent/1" });
+			// Names are HTTP header names: case-insensitive by definition, so one entry survives.
+			view = await store.save({ revision: view.revision, provider: { ...provider, headers: { "x-title": "first", "X-Title": "last" } } });
+			expect(view.providers[0]!.headers).toEqual({ "X-Title": "last" });
+			for (const headers of [{ "Bad Name": "x" }, { "X-Bad": "line\r\nbreak" }, { "X-Bad": 7 }, { "X-Bad": {} }]) {
+				await expect(store.save({ revision: view.revision, provider: { ...provider, headers } })).rejects.toThrow("invalid_header");
+			}
+			view = await store.save({ revision: view.revision, provider: { ...provider, headers: null } });
+			expect(view.providers[0]!.headers).toBeUndefined();
+			expect(JSON.parse(await readFile(store.path, "utf8")).providers[0].headers).toBeUndefined();
+		});
+	});
+
 	it("serializes competing saves and preserves other providers and top-level configuration", async () => {
 		await fixture(async store => {
 			await writeFile(store.path, JSON.stringify({ extra: "keep", providers: [provider] }));
@@ -117,8 +151,10 @@ describe("provider discovery and configuration", () => {
 
 function llmServer(toolCall = false) {
 	const payloads: Record<string, any>[] = [];
+	const headers: Headers[] = [];
 	const server = Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(request) {
 		if (new URL(request.url).pathname === "/v1/models") return Response.json({ data: [model] });
+		headers.push(request.headers);
 		const body = await request.json() as Record<string, any>;
 		payloads.push(body);
 		const needsTool = toolCall && !body.messages.some((message: { role: string }) => message.role === "tool");
@@ -128,7 +164,7 @@ function llmServer(toolCall = false) {
 		const chunk = { id: "test", object: "chat.completion.chunk", created: 1, model: body.model, choices: [{ index: 0, delta, finish_reason: needsTool ? "tool_calls" : "stop" }] };
 		return new Response(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`, { headers: { "content-type": "text/event-stream" } });
 	} });
-	return { server, payloads, url: `http://127.0.0.1:${server.port}/v1` };
+	return { server, payloads, headers, url: `http://127.0.0.1:${server.port}/v1` };
 }
 
 describe("provider runtime integration", () => {
@@ -182,6 +218,20 @@ describe("provider runtime integration", () => {
 			expect(upstream.payloads[0]!.model).toBe(model.id);
 			await registry.completeSimple(chosen, { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] });
 			expect(upstream.payloads[1]!.reasoning_effort).toBe("none");
+		} finally { upstream.server.stop(true); }
+	});
+
+	it("puts configured headers on the inference request, overriding the adapter defaults", async () => {
+		const upstream = llmServer();
+		try {
+			const [discovered] = await discoverProviderModels({ ...provider, kind: "kimi-coding" }, requestFake({ data: [model] }));
+			const registry = configModels({ providers: [{ ...provider, kind: "kimi-coding", baseUrl: upstream.url, headers: { "X-Title": "eta-agent", "User-Agent": "eta-agent/1" }, models: [discovered!] }] })!;
+			await registry.completeSimple(registry.getModel(provider.id, model.id)!, { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] });
+			expect(upstream.headers).toHaveLength(1);
+			expect(upstream.headers[0]!.get("x-title")).toBe("eta-agent");
+			// pi would send its own “pi (…)” User-Agent; the configured one must win.
+			expect(upstream.headers[0]!.get("user-agent")).toBe("eta-agent/1");
+			expect(upstream.headers[0]!.get("authorization")).toBe("Bearer private-test-key");
 		} finally { upstream.server.stop(true); }
 	});
 
