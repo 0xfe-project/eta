@@ -7,7 +7,7 @@ import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completio
 import { CodexCredentialStore, codexAuthPath, codexRuntimeProvider } from "./codex-auth.ts";
 
 export type { EtaModelConfig } from "@eta/core/provider-config";
-import { effectiveModel, modelThinkingLevels, MODEL_THINKING_LEVELS, type EtaModelConfig, type ProviderKind } from "@eta/core/provider-config";
+import { effectiveModel, modelThinkingLevels, MODEL_THINKING_LEVELS, type NetworkConfig, type EtaModelConfig, type ProviderKind } from "@eta/core/provider-config";
 
 export interface EtaProviderConfig {
 	id: string;
@@ -20,6 +20,7 @@ export interface EtaProviderConfig {
 }
 
 export interface EtaConfig {
+	network?: NetworkConfig;
 	providers?: EtaProviderConfig[];
 	/** "providerId:modelId"; first provider's first model when absent. */
 	defaultModel?: string;

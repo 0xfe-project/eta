@@ -145,7 +145,7 @@ async function readConfig(path: string): Promise<{ config: EtaConfig; revision: 
 
 function publicView(config: EtaConfig, revision: string): ProvidersView {
 	return {
-		revision, ...(config.defaultModel === undefined ? {} : { defaultModel: config.defaultModel }),
+		revision, network: config.network ?? { mode: "system" }, ...(config.defaultModel === undefined ? {} : { defaultModel: config.defaultModel }),
 		providers: (config.providers ?? []).map(provider => ({
 			id: provider.id, name: provider.name, kind: provider.kind ?? "openai-compatible",
 			baseUrl: provider.baseUrl, hasApiKey: !!provider.apiKey,
@@ -228,6 +228,22 @@ export class ProviderConfigStore {
 			if (input.defaultModel !== undefined) this.assignDefault(config, input.defaultModel);
 			this.removeStaleDefault(config);
 		});
+	}
+
+	setNetwork(body: unknown): Promise<ProvidersView> {
+		const input = record(body), network = record(input.network);
+		if (!["system", "manual", "direct"].includes(String(network.mode))) throw new ProviderConfigError("invalid_network");
+		let proxyUrl: string | undefined;
+		if (network.mode === "manual") {
+			try {
+				const url = new URL(shortText(network.proxyUrl, 2048) ?? "");
+				if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new Error();
+				proxyUrl = url.href;
+			} catch { throw new ProviderConfigError("invalid_network"); }
+		}
+		const noProxy = shortText(network.noProxy, 2048);
+		if (noProxy && /[\r\n]/.test(noProxy)) throw new ProviderConfigError("invalid_network");
+		return this.mutate(input.revision, config => { config.network = { mode: network.mode as "system" | "manual" | "direct", ...(proxyUrl ? { proxyUrl } : {}), ...(network.mode === "manual" && noProxy ? { noProxy } : {}) }; });
 	}
 
 	setDefault(body: unknown): Promise<ProvidersView> {
