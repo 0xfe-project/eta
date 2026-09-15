@@ -650,7 +650,7 @@ function ThinkingChip(props: { session: string }) {
 		<DropdownMenuTrigger data-testid="thinking-chip" class="composer-control composer-thinking-control" disabled={levels().length < 2} title={i18n.t("composer.thinkingHint")}>
 			<span class="composer-control-label">{label()}</span><DropdownMenuChevron />
 		</DropdownMenuTrigger>
-		<DropdownMenuContent side="top" align="start" data-testid="thinking-menu">
+		<DropdownMenuContent side="top" align="end" data-testid="thinking-menu">
 			<For each={levels()}>{choice => <DropdownMenuItem data-testid={`thinking-option-${choice}`} role="menuitemradio" aria-checked={choice === level()} onClick={() => {
 				if (choice !== level()) store.send({ op: "thinkingLevel", session: props.session, level: choice });
 			}}><span class="mono">{choice}</span><Show when={choice === level()}><span class="ml-auto" aria-hidden="true">✓</span></Show></DropdownMenuItem>}</For>
