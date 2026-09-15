@@ -24,6 +24,15 @@ silently replaced. API responses never include saved API keys. An omitted key
 keeps the saved one; `null` explicitly clears it. Editing an endpoint requires key
 re-entry before a saved credential can be sent to the new host.
 
+A provider may also declare `headers`: extra request headers sent both with model
+calls and with model discovery, so an endpoint that gates on them does not accept
+prompts while rejecting refreshes. A `null` value means “do not send this header”,
+which also drops one we would otherwise add — for example a saved `Authorization`
+when the endpoint wants a different scheme. Names are HTTP tokens compared
+case-insensitively with the last occurrence winning, up to 32 entries, and values
+may not contain line breaks. Header values are returned by `GET /api/providers`,
+unlike keys, so they are visible configuration rather than secrets.
+
 New sessions use the configured model and its default thinking preference. Saving
 refreshes client model menus and idle agent registries without recreating sessions.
 Active runs retain their registry until `run_end`. Existing sessions keep their
@@ -46,7 +55,8 @@ All endpoints below return JSON and `Cache-Control: no-store`:
   saving. Kimi reads `context_length`, reasoning/input flags and nested
   `think_efforts` metadata from `GET /models` using Bearer authentication.
 - `POST /api/providers`: `{ revision, provider }`; saves one provider. `provider`
-  contains `id`, `kind`, `baseUrl`, `models`, and optional `name` / `apiKey`.
+  contains `id`, `kind`, `baseUrl`, `models`, and optional `name` / `apiKey` /
+  `headers`.
 - `POST /api/providers/default`: `{ revision, defaultModel }`; a `provider:model`
   identity selects the default; `null` follows the first configured model.
 - `DELETE /api/providers/:id`: `{ revision }`; removes an unused provider.

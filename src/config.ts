@@ -7,7 +7,7 @@ import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completio
 import { CodexCredentialStore, codexAuthPath, codexRuntimeProvider } from "./codex-auth.ts";
 
 export type { EtaModelConfig } from "@eta/core/provider-config";
-import { effectiveModel, modelThinkingLevels, MODEL_THINKING_LEVELS, type NetworkConfig, type EtaModelConfig, type ProviderKind } from "@eta/core/provider-config";
+import { effectiveModel, modelThinkingLevels, MODEL_THINKING_LEVELS, sanitizeProviderHeaders, type EtaModelConfig, type NetworkConfig, type ProviderHeaders, type ProviderKind } from "@eta/core/provider-config";
 
 export interface EtaProviderConfig {
 	id: string;
@@ -15,6 +15,7 @@ export interface EtaProviderConfig {
 	kind?: ProviderKind;
 	baseUrl: string;
 	apiKey?: string;
+	headers?: ProviderHeaders;
 	models: EtaModelConfig[];
 	lastRefreshedAt?: string;
 }
@@ -43,6 +44,12 @@ export function configModels(cfg: EtaConfig, configPath = etaConfigPath): Mutabl
 	if (providers.length === 0) return undefined;
 	const models = createModels({ credentials: new CodexCredentialStore(codexAuthPath(configPath)) });
 	for (const provider of providers) {
+		// Only model-level headers reach the wire: the adapter spreads model.headers over its own
+		// defaults. A null entry means “send nothing”, so it is dropped before the request is built.
+		const configuredHeaders = sanitizeProviderHeaders(provider.headers);
+		const wireHeaders = configuredHeaders === undefined ? undefined : Object.fromEntries(
+			Object.entries(configuredHeaders).filter((entry): entry is [string, string] => entry[1] !== null),
+		);
 		if (provider.kind === "openai-codex") {
 			models.setProvider(codexRuntimeProvider(provider.models));
 			continue;
@@ -56,6 +63,7 @@ export function configModels(cfg: EtaConfig, configPath = etaConfigPath): Mutabl
 			api: "openai-completions",
 			provider: provider.id,
 			baseUrl: provider.baseUrl,
+			...(wireHeaders === undefined ? {} : { headers: wireHeaders }),
 			reasoning: entry.reasoning ?? false,
 			...(entry.reasoning ? {
 				thinkingLevelMap: Object.fromEntries(MODEL_THINKING_LEVELS.map(level => [level, level === "off"

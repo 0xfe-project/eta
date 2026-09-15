@@ -2,8 +2,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
-	MODEL_THINKING_LEVELS, effectiveModel, modelThinkingLevels, providerPreset,
-	type EtaModelConfig, type ModelCapabilities, type ProviderInput, type ProvidersView,
+	MODEL_THINKING_LEVELS, HEADER_NAME_PATTERN, MAX_HEADER_NAME_LENGTH, MAX_HEADER_VALUE_LENGTH,
+	MAX_PROVIDER_HEADERS, applyProviderHeaders, effectiveModel, modelThinkingLevels, providerPreset, sanitizeProviderHeaders,
+	type EtaModelConfig, type ModelCapabilities, type ProviderHeaders, type ProviderInput, type ProvidersView,
 } from "@eta/core/provider-config";
 import type { EtaConfig, EtaProviderConfig } from "./config.ts";
 import { createModels } from "@earendil-works/pi-ai";
@@ -106,6 +107,21 @@ function baseUrl(value: unknown): string {
 	}
 }
 
+/** Strict write-path check: a hand-typed header must fail loudly, not be silently dropped. */
+function parseProviderHeaders(value: unknown, previous?: ProviderHeaders): ProviderHeaders | undefined {
+	if (value === undefined) return previous;
+	if (value === null) return undefined;
+	const item = record(value);
+	const entries = Object.entries(item);
+	if (entries.length > MAX_PROVIDER_HEADERS) throw new ProviderConfigError("invalid_header");
+	for (const [rawName, raw] of entries) {
+		const name = rawName.trim();
+		if (!HEADER_NAME_PATTERN.test(name) || name.length > MAX_HEADER_NAME_LENGTH) throw new ProviderConfigError("invalid_header");
+		if (raw !== null && (typeof raw !== "string" || raw.length > MAX_HEADER_VALUE_LENGTH || /[\r\n]/.test(raw))) throw new ProviderConfigError("invalid_header");
+	}
+	return sanitizeProviderHeaders(item);
+}
+
 function normalizeProvider(value: unknown, previous?: EtaProviderConfig): EtaProviderConfig {
 	const item = record(value);
 	const id = shortText(item.id, 80);
@@ -120,9 +136,12 @@ function normalizeProvider(value: unknown, previous?: EtaProviderConfig): EtaPro
 	if (previous?.apiKey && item.apiKey === undefined && baseUrl(previous.baseUrl) !== url) throw new ProviderConfigError("key_required_for_url");
 	const apiKey = item.apiKey === null ? undefined : typeof item.apiKey === "string" ? item.apiKey.trim() || undefined : previous?.apiKey;
 	if (kind !== "openai-compatible" && kind !== "openai-codex" && !apiKey) throw new ProviderConfigError(kind === "deepseek" ? "deepseek_key_required" : "key_required");
+	const headers = parseProviderHeaders(item.headers, previous?.headers);
 	return {
 		id, kind, baseUrl: url, ...(name === undefined ? {} : { name }),
-		...(apiKey === undefined || kind === "openai-codex" ? {} : { apiKey }), models: normalizeModels(item.models ?? []),
+		...(apiKey === undefined || kind === "openai-codex" ? {} : { apiKey }),
+		...(headers === undefined ? {} : { headers }),
+		models: normalizeModels(item.models ?? []),
 		...(previous?.lastRefreshedAt === undefined ? {} : { lastRefreshedAt: previous.lastRefreshedAt }),
 	};
 }
@@ -146,11 +165,15 @@ async function readConfig(path: string): Promise<{ config: EtaConfig; revision: 
 function publicView(config: EtaConfig, revision: string): ProvidersView {
 	return {
 		revision, network: config.network ?? { mode: "system" }, ...(config.defaultModel === undefined ? {} : { defaultModel: config.defaultModel }),
-		providers: (config.providers ?? []).map(provider => ({
-			id: provider.id, name: provider.name, kind: provider.kind ?? "openai-compatible",
-			baseUrl: provider.baseUrl, hasApiKey: !!provider.apiKey,
-			models: normalizeModels(provider.models), lastRefreshedAt: provider.lastRefreshedAt,
-		})),
+		providers: (config.providers ?? []).map(provider => {
+			const headers = sanitizeProviderHeaders(provider.headers);
+			return {
+				id: provider.id, name: provider.name, kind: provider.kind ?? "openai-compatible",
+				baseUrl: provider.baseUrl, hasApiKey: !!provider.apiKey,
+				...(headers === undefined ? {} : { headers }),
+				models: normalizeModels(provider.models), lastRefreshedAt: provider.lastRefreshedAt,
+			};
+		}),
 	};
 }
 
@@ -306,7 +329,9 @@ export async function discoverProviderModels(provider: EtaProviderConfig, reques
 	let response: Response;
 	try {
 		response = await request(`${provider.baseUrl.replace(/\/+$/, "")}/models`, {
-			headers: { Accept: "application/json", ...(provider.apiKey ? { Authorization: `Bearer ${provider.apiKey}` } : {}) },
+			// Model listing must carry the same custom headers as inference, or a gated endpoint
+			// accepts the prompt and rejects the refresh.
+			headers: applyProviderHeaders({ Accept: "application/json", ...(provider.apiKey ? { Authorization: `Bearer ${provider.apiKey}` } : {}) }, sanitizeProviderHeaders(provider.headers)),
 			signal: AbortSignal.timeout(15_000), redirect: "error",
 		});
 	} catch { throw new ProviderConfigError("connection_failed", 502); }
