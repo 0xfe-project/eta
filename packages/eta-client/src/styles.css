@@ -24,6 +24,9 @@
 	--color-elevated: var(--elevated);
 	--color-muted: var(--muted-foreground);
 	--color-muted-bg: var(--muted);
+	/* `text-faint` had no token behind it, so twenty call sites silently
+	   inherited their parent's colour instead of dimming. */
+	--color-faint: var(--fg-faint);
 	--color-border: var(--border);
 	--color-border-strong: var(--border-strong);
 	--color-overlay: var(--overlay);

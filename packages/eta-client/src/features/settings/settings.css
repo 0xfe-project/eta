@@ -1,3 +1,9 @@
+/* Settings is a panel of this app, not a landing page in its own right: the same 11-13px
+   type, spacing on a small rhythm, six rows on screen without scrolling. It arrived with
+   80px headers, 20px row padding and 36px icons, which made every screen longer than the
+   window and made the dialog look like somebody else's product. Tighten from here, and
+   copy `.settings-row` rather than inventing a new number. */
+
 .settings-dialog {
 	position:fixed;
 	inset:0;
@@ -14,7 +20,7 @@
 	box-shadow:6px 6px 0 var(--shadow);
 	overflow:hidden;
 	font-family:var(--font-ui);
-	font-size:14px;
+	font-size:13px;
 }
 
 .settings-dialog[open] {
@@ -27,12 +33,12 @@
 }
 
 .settings-header {
-	height:80px;
+	height:52px;
 	flex-shrink:0;
 	display:flex;
 	align-items:center;
-	gap:18px;
-	padding:16px 24px;
+	gap:12px;
+	padding:8px 16px;
 	border-bottom:1px solid var(--border);
 }
 
@@ -43,15 +49,15 @@
 }
 
 .settings-header h1 {
-	font-size:19px;
+	font-size:15px;
 	line-height:1.2;
 	font-weight:500;
-	margin:4px 0 0;
+	margin:2px 0 0;
 }
 
 .settings-header>button {
-	width:30px;
-	height:30px;
+	width:26px;
+	height:26px;
 	color:var(--fg-muted);
 }
 
@@ -65,19 +71,19 @@
 .settings-layout nav {
 	background:var(--surface);
 	border-right:1px solid var(--border);
-	padding:20px 12px;
+	padding:10px 8px;
 	display:flex;
 	flex-direction:column;
-	gap:4px;
+	gap:2px;
 }
 
 .settings-layout nav button {
 	display:flex;
 	align-items:center;
-	gap:12px;
-	padding:12px 14px;
+	gap:8px;
+	padding:7px 10px;
 	text-align:left;
-	font-size:13px;
+	font-size:12px;
 	color:var(--fg-muted);
 	border-left:2px solid transparent;
 }
@@ -94,37 +100,37 @@
 }
 
 .settings-content {
-	padding:28px 32px;
+	padding:16px 20px;
 	overflow-y:auto;
 	min-width:0;
 }
 
 .settings-heading {
-	margin-bottom:24px;
+	margin-bottom:12px;
 }
 
 .settings-heading h2 {
-	font-size:20px;
+	font-size:16px;
 	font-weight:500;
-	margin:0 0 7px;
+	margin:0 0 4px;
 }
 
 .settings-heading p,.settings-hint {
 	font-size:12px;
 	color:var(--fg-muted);
-	line-height:1.65;
+	line-height:1.5;
 }
 
 .settings-hint {
-	margin:18px 0 0;
+	margin:10px 0 0;
 }
 
 .settings-row {
 	display:flex;
 	align-items:center;
 	justify-content:space-between;
-	gap:18px;
-	padding:20px 0;
+	gap:12px;
+	padding:10px 0;
 	border-bottom:1px solid var(--border);
 	font-size:13px;
 }
@@ -142,8 +148,8 @@
 	justify-content:center;
 	align-self:stretch;
 	gap:4px;
-	min-height:36px;
-	line-height:20px;
+	min-height:26px;
+	line-height:18px;
 }
 
 .settings-control {
@@ -158,7 +164,7 @@
 	background:var(--surface);
 	color:var(--foreground);
 	border-radius:0;
-	padding:8px 10px;
+	padding:5px 8px;
 	font-size:12px;
 	max-width:100%;
 }
@@ -170,7 +176,7 @@
 .settings-inline {
 	display:flex;
 	align-items:center;
-	gap:12px;
+	gap:8px;
 	flex-wrap:wrap;
 }
 
@@ -182,15 +188,15 @@
 	font-size:11px;
 	letter-spacing:.06em;
 	color:var(--fg-muted);
-	margin:26px 0 12px;
+	margin:14px 0 8px;
 }
 
 .settings-default {
 	display:flex;
 	justify-content:space-between;
-	gap:12px;
+	gap:8px;
 	font-size:12px;
-	padding:14px 16px;
+	padding:9px 12px;
 	background:var(--surface);
 	border:1px solid var(--border);
 }
@@ -201,14 +207,14 @@
 
 .settings-provider {
 	display:flex;
-	gap:14px;
+	gap:10px;
 	align-items:center;
 	width:100%;
 	border:1px solid var(--border);
 	background:var(--surface);
 	text-align:left;
-	padding:19px 16px;
-	margin-bottom:10px;
+	padding:9px 12px;
+	margin-bottom:6px;
 }
 
 .settings-provider:hover {
@@ -217,13 +223,13 @@
 }
 
 .settings-provider-mark {
-	width:36px;
-	height:36px;
+	width:26px;
+	height:26px;
 	display:grid;
 	place-items:center;
 	flex-shrink:0;
 	border:1px solid var(--border-strong);
-	font-size:20px;
+	font-size:15px;
 }
 
 .settings-provider strong {
@@ -236,7 +242,7 @@
 	font-size:11px;
 	color:var(--fg-muted);
 	display:block;
-	margin-top:5px;
+	margin-top:2px;
 }
 
 .settings-provider-action {
@@ -249,15 +255,15 @@
 .settings-back {
 	font-size:12px;
 	color:var(--fg-muted);
-	margin-bottom:18px;
+	margin-bottom:10px;
 }
 
 .settings-field {
 	display:flex;
 	flex-direction:column;
-	gap:8px;
+	gap:6px;
 	font-size:12px;
-	margin:16px 0;
+	margin:10px 0;
 }
 
 .settings-field input {
@@ -265,7 +271,7 @@
 }
 
 .settings-primary {
-	padding:8px 15px;
+	padding:6px 12px;
 	background:var(--foreground);
 	color:var(--background);
 	font-size:12px;
@@ -273,7 +279,7 @@
 
 .settings-model {
 	border:1px solid var(--border);
-	padding:16px;
+	padding:10px;
 	background:var(--surface);
 }
 
@@ -287,17 +293,17 @@
 .settings-check {
 	display:flex;
 	align-items:center;
-	gap:9px;
+	gap:6px;
 	font-size:12px;
-	margin-top:16px;
+	margin-top:8px;
 }
 
 .settings-save {
 	display:flex;
 	align-items:center;
 	justify-content:space-between;
-	gap:10px;
-	margin-top:20px;
+	gap:8px;
+	margin-top:10px;
 	font-size:11px;
 	color:var(--fg-muted);
 }
@@ -328,19 +334,19 @@
 	.settings-mobile {
 		display:block;
 		width:100%;
-		margin-bottom:24px;
+		margin-bottom:12px;
 	}
 	.settings-content {
-		padding:20px;
+		padding:12px;
 	}
 	.settings-header {
-		padding:14px 20px;
-		height:72px;
+		padding:10px 12px;
+		height:52px;
 	}
 	.settings-row {
 		align-items:flex-start;
 		flex-direction:column;
-		gap:12px;
+		gap:8px;
 	}
 	.settings-control {
 		max-width:100%;
@@ -353,7 +359,7 @@
 		font-size:16px;
 	}
 	.settings-provider {
-		padding:14px 12px;
+		padding:8px 10px;
 		gap:10px;
 	}
 	.settings-provider-action {
@@ -363,8 +369,8 @@
 		font-size:11px;
 	}
 	.settings-provider-mark {
-		width:30px;
-		height:30px;
+		width:26px;
+		height:26px;
 	}
 	.settings-default {
 		flex-wrap:wrap;
@@ -406,9 +412,9 @@
 .settings-error {
 	display:flex;
 	flex-wrap:wrap;
-	gap:10px;
-	margin:16px 0;
-	padding:12px;
+	gap:8px;
+	margin:10px 0;
+	padding:8px;
 	border:1px solid var(--danger);
 	color:var(--danger);
 	font-size:12px;
@@ -425,7 +431,7 @@
 	gap:10px;
 	align-items:center;
 	flex-wrap:wrap;
-	padding:14px 20px;
+	padding:8px 12px;
 	background:var(--surface);
 	border-top:1px solid var(--border);
 	font-size:12px;
@@ -438,7 +444,7 @@
 
 .settings-discard button {
 	border:1px solid var(--border-strong);
-	padding:6px 10px;
+	padding:5px 8px;
 }
 
 .settings-provider-mark {
@@ -464,14 +470,14 @@
 }
 
 .settings-model {
-	margin-bottom:12px;
+	margin-bottom:6px;
 }
 
 .settings-model-title {
 	display:flex;
 	align-items:center;
 	justify-content:space-between;
-	gap:12px;
+	gap:8px;
 }
 
 .settings-model-title strong {
@@ -483,15 +489,15 @@
 .settings-model-meta {
 	display:flex;
 	flex-wrap:wrap;
-	gap:10px;
+	gap:8px;
 	font-size:11px;
 	color:var(--fg-muted);
-	margin-top:8px;
+	margin-top:4px;
 }
 
 .settings-model details {
 	font-size:12px;
-	margin-top:14px;
+	margin-top:8px;
 }
 
 .settings-model summary {
@@ -501,7 +507,7 @@
 .settings-model-fields {
 	display:grid;
 	grid-template-columns:1fr 1fr;
-	gap:0 14px;
+	gap:0 10px;
 }
 
 .settings-model-fields>.settings-hint,.settings-model-fields>.settings-field:has(.settings-efforts) {
@@ -511,14 +517,14 @@
 .settings-text-button {
 	font-size:11px;
 	color:var(--fg-muted);
-	margin:6px 0;
+	margin:4px 0;
 }
 
 .settings-add-model {
 	border:1px solid var(--border);
-	padding:10px;
+	padding:6px;
 	width:100%;
-	margin:12px 0;
+	margin:8px 0;
 	font-size:12px;
 }
 
@@ -527,10 +533,11 @@
 }
 
 .settings-save {
-	padding:12px 0;
+	padding:8px 0;
 	background:var(--background);
 	position:sticky;
-	bottom:-28px;
+	/* the content column's bottom padding, so the bar sits flush */
+	bottom:-16px;
 	z-index:1;
 }
 
@@ -540,7 +547,7 @@
 
 .settings-efforts {
 	display:flex;
-	gap:10px;
+	gap:8px;
 	flex-wrap:wrap;
 }
 
@@ -579,7 +586,7 @@
 		width:100%;
 	}
 	.settings-save {
-		bottom:-20px;
+		bottom:-12px;
 	}
 	.settings-control .settings-inline {
 		gap:8px;
@@ -622,9 +629,9 @@
    a sticky Save/Delete row used to put them below the scroll viewport. */
 .settings-provider-actions {
 	position: sticky;
-	bottom: -28px;
+	bottom: -16px;
 	z-index: 2;
-	margin-top: 20px;
+	margin-top: 10px;
 	padding: 0;
 	background: var(--background);
 	border-top: 1px solid var(--border);
@@ -636,7 +643,7 @@
 }
 
 .settings-provider-actions .settings-error {
-	margin: 0 0 8px;
+	margin: 0 0 6px;
 }
 
 .settings-delete-confirm {
@@ -644,16 +651,16 @@
 	align-items: center;
 	justify-content: space-between;
 	flex-wrap: wrap;
-	gap: 12px;
-	padding: 12px 0;
+	gap: 8px;
+	padding: 8px 0;
 	font-size: 12px;
 }
 
 .settings-delete-confirm button {
 	border: 1px solid var(--border-strong);
-	padding: 6px 10px;
+	padding: 5px 8px;
 }
 
 @media (max-width: 680px) {
-	.settings-provider-actions { bottom: -20px; }
+	.settings-provider-actions { bottom: -12px; }
 }

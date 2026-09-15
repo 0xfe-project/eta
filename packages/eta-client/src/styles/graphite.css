@@ -865,7 +865,7 @@ details[open] > .tool-card-head .thinking-block-chevron {
 	text-transform: uppercase;
 }
 .tool-badge.running {
-	color: var(--warning, var(--muted));
+	color: var(--warning, var(--fg-muted));
 	border-color: var(--warning, var(--border-strong));
 }
 .tool-badge.done {
@@ -966,9 +966,12 @@ details[open] > .tool-card-head .thinking-block-chevron {
 	border-color: var(--primary);
 	background: var(--primary);
 }
+/* Struck through *and* dimmed: `--muted` would have been right in dark mode and is
+	   #FAFAFA in light, which is how a finished task turned invisible. `--fg-faint` is a
+	   percentage of `--foreground`, so it is dim in both. */
 .task-row[data-status="completed"] [data-testid^="task-content"] {
 	text-decoration: line-through;
-	color: var(--muted);
+	color: var(--fg-faint);
 }
 .task-row[data-status="cancelled"] .task-status-chip {
 	border-style: dashed;
@@ -977,7 +980,7 @@ details[open] > .tool-card-head .thinking-block-chevron {
 }
 .task-row[data-status="cancelled"] [data-testid^="task-content"] {
 	text-decoration: line-through;
-	color: var(--faint, var(--muted));
+	color: var(--fg-faint);
 }
 .task-row:hover .task-status-chip {
 	border-color: var(--foreground);
