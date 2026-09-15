@@ -31,6 +31,10 @@ bun run build:web   # 产出 packages/eta-client/dist
 2. 环境里有 `ANTHROPIC_API_KEY` → 内置 anthropic catalog,默认 `claude-sonnet-4-5`
 3. 都没有 → faux 回声流,零配置也能把整条协议链路跑通
 
+## 网络
+
+在「设置 → 通用 → 网络」选择跟随系统（默认,优先使用环境代理）、手动 HTTP/HTTPS 代理或直连,配置保存到 `~/.eta/config.json` 的 `network`,重启后端或桌面应用后生效,暂不支持 PAC 和 SOCKS 代理。
+
 ## 包
 
 | 包 | 作用 |

@@ -328,5 +328,21 @@
 	"providers.codexManualTitle": "授权后没有自动返回？",
 	"providers.codexManualHint": "粘贴浏览器中的完整回调地址，或授权码。",
 	"providers.codexContinue": "继续",
-	"providers.codexDeviceAlternative": "改用设备代码登录"
+	"providers.codexDeviceAlternative": "改用设备代码登录",
+	"network.title": "网络",
+	"network.description": "控制 Eta 后端的对外请求。跟随系统时，优先使用已有代理环境变量，再读取系统设置。",
+	"network.mode": "连接方式",
+	"network.system": "跟随系统",
+	"network.manual": "手动代理",
+	"network.direct": "直连",
+	"network.url": "HTTP / HTTPS 代理地址（不含用户名和密码）",
+	"network.bypass": "不走代理的地址（逗号分隔；本机回环地址始终直连）",
+	"network.restart": "修改后需重启后端或桌面应用。",
+	"network.saved": "已保存，重启后端或桌面应用后生效。",
+	"network.environment": "当前后端使用启动时继承的代理环境变量。",
+	"network.pac": "暂不支持 PAC 自动代理配置，如需代理请手动填写地址。",
+	"network.unavailable": "无法读取系统代理或当前类型不受支持，如需代理请手动填写地址。",
+	"network.loadFailed": "无法加载网络设置，请确认后端已更新并重启。",
+	"network.saveFailed": "保存失败，请检查代理地址后重试。",
+	"network.conflict": "配置已在其他位置发生变更，请重新加载后保存。"
 }

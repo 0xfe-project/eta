@@ -3,6 +3,7 @@ import { useAppI18n } from "../i18n.ts";
 import { useAppTheme, type ThemePreference } from "../app/theme.tsx";
 import { sidebarPrefs, type ProjectSort } from "../lib/prefs.ts";
 import { apiFetch } from "../lib/host.ts";
+import { NetworkSettings } from "../features/settings/network-settings.tsx";
 import { ProvidersSettings } from "../features/settings/providers-settings.tsx";
 import "../features/settings/settings.css";
 
@@ -23,6 +24,8 @@ export function SettingsPage(props: { onDirtyChange?: (dirty: boolean) => void; 
 	const [saveState, setSaveState] = createSignal<"idle" | "saving" | "saved" | "error">("idle");
 	const [loading, setLoading] = createSignal(true);
 	const [keepRecent, setKeepRecent] = createSignal("20000");
+	const [networkDirty, setNetworkDirty] = createSignal(false);
+	const [networkBusy, setNetworkBusy] = createSignal(false);
 	const [providersDirty, setProvidersDirty] = createSignal(false);
 	const [providersBusy, setProvidersBusy] = createSignal(false);
 	const sections = () => [
@@ -30,7 +33,7 @@ export function SettingsPage(props: { onDirtyChange?: (dirty: boolean) => void; 
 		{ id: "session" as const, label: i18n.t("settings.sessions"), icon: "≡" },
 		{ id: "providers" as const, label: i18n.t("settings.providers"), icon: "⌘" },
 	];
-	const reportBusy = () => props.onBusyChange?.(providersBusy() || saveState() === "saving");
+	const reportBusy = () => props.onBusyChange?.(networkBusy() || providersBusy() || saveState() === "saving");
 	const load = async () => {
 		setLoading(true);
 		try {
@@ -71,6 +74,7 @@ export function SettingsPage(props: { onDirtyChange?: (dirty: boolean) => void; 
 				<div class="settings-section-label">{i18n.t("settings.sidebar")}</div>
 				<SettingsRow label={i18n.t("settings.projectSort")}><select aria-label={i18n.t("settings.projectSort")} value={sidebarPrefs.sort} onChange={event => sidebarPrefs.setSort(event.currentTarget.value as ProjectSort)}><option value="recent">{i18n.t("sidebar.sortRecent")}</option><option value="name">{i18n.t("sidebar.sortName")}</option></select></SettingsRow>
 				<Show when={sidebarPrefs.collapsed.length > 0}><SettingsRow label={i18n.t("settings.projectGroups")}><button data-testid="sidebar-expand-all" onClick={() => sidebarPrefs.setCollapsed([])}>{i18n.t("settings.expandGroups", { n: sidebarPrefs.collapsed.length })}</button></SettingsRow></Show>
+				<NetworkSettings onDirtyChange={value => { setNetworkDirty(value); props.onDirtyChange?.(providersDirty() || networkDirty()); }} onBusyChange={value => { setNetworkBusy(value); reportBusy(); }} />
 			</section>
 			<section hidden={section() !== "session"}>
 				<div class="settings-heading"><h2>{i18n.t("settings.sessions")}</h2><p>{i18n.t("settings.sessionDescription")}</p></div>
@@ -87,7 +91,7 @@ export function SettingsPage(props: { onDirtyChange?: (dirty: boolean) => void; 
 				<Show when={saveState() === "error"}><button onClick={() => void load()}>{i18n.t("settings.retry")}</button></Show>
 			</section>
 			<section hidden={section() !== "providers"}>
-				<ProvidersSettings onDirtyChange={value => { setProvidersDirty(value); props.onDirtyChange?.(providersDirty()); }} onBusyChange={value => { setProvidersBusy(value); reportBusy(); }} />
+				<ProvidersSettings onDirtyChange={value => { setProvidersDirty(value); props.onDirtyChange?.(providersDirty() || networkDirty()); }} onBusyChange={value => { setProvidersBusy(value); reportBusy(); }} />
 			</section>
 		</main>
 	</div>;

@@ -43,7 +43,14 @@ export interface ProviderSummary {
 	lastRefreshedAt?: string;
 }
 
+export interface NetworkConfig {
+	mode: "system" | "manual" | "direct";
+	proxyUrl?: string;
+	noProxy?: string;
+}
+
 export interface ProvidersView {
+	network?: NetworkConfig;
 	providers: ProviderSummary[];
 	defaultModel?: string;
 	revision: string;

@@ -729,3 +729,5 @@
 .settings-codex-manual .settings-field { margin: 12px 0; }
 .settings-codex-manual button { border: 1px solid var(--border-strong); padding: 6px 10px; }
 .settings-codex-auth > .settings-text-button { margin-top: 12px; }
+
+.settings-network .settings-save { position: static; margin-top: 12px; }
