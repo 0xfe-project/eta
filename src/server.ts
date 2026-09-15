@@ -169,6 +169,10 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 					let body: unknown;
 					try { body = JSON.parse(text); } catch { return json({ error: "invalid_config" }, 400); }
 					if (request.method === "POST") {
+						if (url.pathname === "/api/providers/codex/login") return json(host.providers.startCodexLogin(body));
+						if (url.pathname === "/api/providers/codex/answer") return json(host.providers.answerCodexLogin(body));
+						if (url.pathname === "/api/providers/codex/status") return json(host.providers.codexLogin.status(String((body as { id?: unknown })?.id ?? "")));
+						if (url.pathname === "/api/providers/codex/cancel") { host.providers.codexLogin.cancel(String((body as { id?: unknown })?.id ?? "")); return json({ ok: true }); }
 						if (url.pathname === "/api/providers/discover") return json(await host.providers.discover(body));
 						if (url.pathname === "/api/providers/default") return json(await host.defaultProviderModel(body));
 						if (url.pathname === "/api/providers") return json(await host.saveProvider(body));

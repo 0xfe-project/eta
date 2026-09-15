@@ -9,11 +9,13 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
+		"@earendil-works/pi-ai": "0.85.1",
 		"@eta/core": "workspace:*",
-		"@earendil-works/pi-ai": "0.85.1"
+		"proper-lockfile": "^4.1.2"
 	},
 	"devDependencies": {
 		"@types/bun": "^1.2.0",
+		"@types/proper-lockfile": "^4.1.4",
 		"typescript": "^5.8.0"
 	}
 }

@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { createModels, createProvider, type Model, type MutableModels } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 
+import { CodexCredentialStore, codexAuthPath, codexRuntimeProvider } from "./codex-auth.ts";
+
 export type { EtaModelConfig } from "@eta/core/provider-config";
 import { effectiveModel, modelThinkingLevels, MODEL_THINKING_LEVELS, type EtaModelConfig, type ProviderKind } from "@eta/core/provider-config";
 
@@ -35,11 +37,15 @@ export function loadEtaConfig(path: string = etaConfigPath): EtaConfig | undefin
 }
 
 /** OpenAI-compatible endpoints from the config file, no environment variables involved. */
-export function configModels(cfg: EtaConfig): MutableModels | undefined {
+export function configModels(cfg: EtaConfig, configPath = etaConfigPath): MutableModels | undefined {
 	const providers = cfg.providers ?? [];
 	if (providers.length === 0) return undefined;
-	const models = createModels();
+	const models = createModels({ credentials: new CodexCredentialStore(codexAuthPath(configPath)) });
 	for (const provider of providers) {
+		if (provider.kind === "openai-codex") {
+			models.setProvider(codexRuntimeProvider(provider.models));
+			continue;
+		}
 		const modelList: Model<"openai-completions">[] = provider.models.map((configured) => {
 			const entry = effectiveModel(configured);
 			const levels = modelThinkingLevels(entry);
