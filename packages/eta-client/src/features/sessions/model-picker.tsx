@@ -2,7 +2,7 @@ import { For, Show, createSignal, on, createEffect, onMount, onCleanup } from "s
 import { etaStore, useEta } from "../../lib/eta-store.ts";
 import { useAppI18n } from "../../i18n.ts";
 import { Button } from "../../components/ui/button.tsx";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../components/ui/dropdown-menu.tsx";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuChevron } from "../../components/ui/dropdown-menu.tsx";
 import { apiFetch } from "../../lib/host.ts";
 import { openSettings } from "../../lib/settings.ts";
 
@@ -64,34 +64,31 @@ export function ModelPicker(props: { session?: string; onPick?: (modelId: string
 	return (
 		<Show when={info() !== undefined || live() !== undefined} fallback={<span class="mono text-[10px] text-muted">…</span>}>
 			{(_ready) => (
-				<Show when={(info()?.models.length ?? 0) > 0} fallback={<Button variant="outline" size="sm" onClick={openSettings}>{i18n.t("providers.configureModels")}</Button>}>
+				<Show when={(info()?.models.length ?? 0) > 0} fallback={<Button type="button" class="composer-control" onClick={openSettings}>{i18n.t("providers.configureModels")}</Button>}>
 				<DropdownMenu>
-					<DropdownMenuTrigger>
-						<Button data-testid="model-picker" variant="outline" size="sm" class="mono gap-1 text-[10px] lowercase">
-							{shown() === undefined ? "…" : labelOf(shown()!)}
+					<DropdownMenuTrigger data-testid="model-picker" class="composer-control composer-model-control" title={shown() ? labelOf(shown()!) : undefined}>
+							<span class="composer-control-label">{shown() === undefined ? "…" : labelOf(shown()!)}</span>
 							<Show when={pending() !== undefined}>
 								<span data-testid="model-pending" class="text-warning" title={`${i18n.t("panel.modelPending")}: ${pending()}`}>
 									⚠
 								</span>
 							</Show>
-							<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3">
-								<path d="m6 9 6 6 6-6" />
-							</svg>
-						</Button>
+							<DropdownMenuChevron />
 					</DropdownMenuTrigger>
-					<DropdownMenuContent align="start" data-testid="model-menu">
+					<DropdownMenuContent side="top" align="start" data-testid="model-menu">
 						<For each={info()?.models ?? []}>
 							{(model) => (
 								<DropdownMenuItem
 									data-testid={`model-${model.id}`}
+									role="menuitemradio" aria-checked={model.id === shown()}
 									disabled={model.id === shown() || (props.session !== undefined && state.sessions.some(session => session.name === props.session && session.badges.includes("running")))}
 									onClick={() => {
 										if (props.session === undefined) setPlanned(model.id);
-										else store.send({ op: "modelSet", session: props.session, modelId: model.id });
+										else { setInfo(previous => previous ? { ...previous, current: model.id } : previous); store.send({ op: "modelSet", session: props.session, modelId: model.id }); }
 										props.onPick?.(model.id);
 									}}
 								>
-									{model.label}
+									<span class="min-w-0 [overflow-wrap:anywhere]">{model.label}</span>
 									<Show when={model.id === live()}>
 										<span class="mono ml-1 text-[9px] text-faint">{i18n.t("panel.model")}</span>
 									</Show>

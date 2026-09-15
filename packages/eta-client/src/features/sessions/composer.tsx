@@ -3,6 +3,7 @@ import { useAppI18n } from "../../i18n.ts";
 import { etaStore, useEta } from "../../lib/eta-store.ts";
 import { Button } from "../../components/ui/button.tsx";
 import { ModelPicker } from "./model-picker.tsx";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuChevron } from "../../components/ui/dropdown-menu.tsx";
 import { themeStorageKey, themeChangeEvent } from "../../app/theme.tsx";
 import { useShellOptional } from "../../app/app-shell.tsx";
 import { apiFetch, goto } from "../../lib/host.ts";
@@ -108,7 +109,6 @@ export function Composer(props: {
 	const [toolboxOpen, setToolboxOpen] = createSignal(false);
 	const [toolFiles, setToolFiles] = createSignal<string[]>([]);
 	const [toolQuery, setToolQuery] = createSignal("");
-	const [models, setModels] = createSignal<{ id: string; label: string }[]>([]);
 	/** Only while a file is actually over the box: the border is the whole answer to
 	 * "can I drop here", so it must not sit there permanently. */
 	const [dragOver, setDragOver] = createSignal(false);
@@ -192,7 +192,6 @@ export function Composer(props: {
 		setText("");
 	};
 
-	const thinkingLevel = () => state.views[props.session ?? ""]?.thinkingLevel ?? "off";
 	const openToolbox = () => {
 		const next = !toolboxOpen();
 		setToolboxOpen(next);
@@ -200,10 +199,7 @@ export function Composer(props: {
 		if (!next || toolFiles().length > 0) return;
 		const session = props.session;
 		if (session !== undefined) void apiFetch(`/api/files?session=${encodeURIComponent(session)}`).then((r) => r.json() as Promise<string[]>).then(setToolFiles).catch(() => undefined);
-		void apiFetch(session === undefined ? "/api/models" : `/api/models?session=${encodeURIComponent(session)}`)
-			.then((r) => r.json() as Promise<{ models: { id: string; label: string }[] } | { id: string; label: string }[]>)
-			.then((body) => setModels(Array.isArray(body) ? body : body.models))
-			.catch(() => undefined);
+
 	};
 	const toolChoices = createMemo(() => {
 		const query = toolQuery();
@@ -423,41 +419,7 @@ export function Composer(props: {
 								</button>
 							</Show>
 						</div>
-						<Show when={models().length > 0}>
-							<p class="mono mb-1 text-[10px] uppercase tracking-[0.12em] text-muted">{i18n.t("composer.models")}</p>
-							<div data-testid="toolbox-models" class="mb-2 grid gap-0.5">
-								<For each={models()}>
-									{(model) => (
-										<button
-											data-testid={`toolbox-model-${model.id}`}
-											onClick={() => {
-												if (props.session !== undefined) store.send({ op: "modelSet", session: props.session, modelId: model.id });
-												setPickedModel(model.id);
-												setToolboxOpen(false);
-											}}
-											class={`mono truncate border px-2 py-1 text-left text-[11px] hover:bg-overlay ${pickedModel() === model.id ? "border-2 border-primary" : "border-border"}`}
-										>
-											{model.label}
-										</button>
-									)}
-								</For>
-							</div>
-						</Show>
 						<Show when={!createMode() && props.session !== undefined}>
-							<p class="mono mb-1 text-[10px] uppercase tracking-[0.12em] text-muted">{i18n.t("composer.thinking")}</p>
-							<div data-testid="toolbox-thinking" class="mb-2 flex flex-wrap gap-1">
-								<For each={[...availableThinking()]}>
-									{(level) => (
-										<button
-											data-testid={`toolbox-thinking-${level}`}
-											onClick={() => store.send({ op: "thinkingLevel", session: props.session ?? "", level })}
-											class={`mono border px-2 py-1 text-[10px] uppercase ${thinkingLevel() === level ? "border-2 border-primary bg-primary text-primary-foreground" : "border-border text-muted hover:border-border-strong"}`}
-										>
-											{level}
-										</button>
-									)}
-								</For>
-							</div>
 							<p class="mono mb-1 text-[10px] uppercase tracking-[0.12em] text-muted">{i18n.t("composer.files")}</p>
 							<input
 								data-testid="toolbox-file-search"
@@ -488,7 +450,7 @@ export function Composer(props: {
 						</Show>
 						<p class="mono mb-1 text-[10px] uppercase tracking-[0.12em] text-muted">{i18n.t("composer.commands")}</p>
 						<div data-testid="toolbox-commands" class="grid gap-0.5">
-							<For each={commands()}>
+							<For each={commands().filter(command => command.name !== "thinking")}>
 								{(command) => (
 									<button
 										data-testid={`toolbox-command-${command.name}`}
@@ -607,14 +569,14 @@ export function Composer(props: {
 						class="composer-editor"
 					/>
 					<div class="composer-toolbar">
-						<div class="flex min-w-0 items-center gap-2">
+						<div class="composer-controls flex min-w-0 items-center gap-2">
 							<Show when={!createMode() && props.session !== undefined}>
 								<div class="relative shrink-0">
 									<button
 										type="button"
 										data-testid="composer-plus"
 										title={i18n.t("composer.attach")}
-										class="border border-border-strong px-2 py-1 text-xs font-bold uppercase hover:bg-foreground hover:text-background"
+										class="composer-control composer-control-icon"
 										onClick={openToolbox}
 									>
 										+
@@ -647,7 +609,7 @@ export function Composer(props: {
 								</div>
 							</Show>
 							<Show when={createMode() || props.session !== undefined}>
-								<span class={`max-md:hidden ${createMode() && props.create !== undefined && !props.create.personaReady ? "opacity-60" : ""}`}>
+								<span class={`composer-model-container ${createMode() && props.create !== undefined && !props.create.personaReady ? "opacity-60" : ""}`}>
 									<ModelPicker {...(props.session === undefined ? {} : { session: props.session })} {...(createMode() ? { onPick: setPickedModel } : {})} />
 								</span>
 							</Show>
@@ -665,7 +627,7 @@ export function Composer(props: {
 							</Show>
 							<span class="composer-toolbar-hints min-w-0 truncate max-md:hidden">{props.running ? i18n.t("composer.runningHint") : i18n.t("composer.hint")}</span>
 						</div>
-						<Button type="submit" variant="invert" data-testid="composer-submit" disabled={props.hasPendingAsk === true || (createMode() && props.create !== undefined && !props.create.personaReady)}>
+						<Button type="submit" variant="invert" class="composer-control composer-submit-control" data-testid="composer-submit" disabled={props.hasPendingAsk === true || (createMode() && props.create !== undefined && !props.create.personaReady)}>
 							{text().trim().length > 0 || !props.running ? i18n.t("composer.send") : i18n.t("composer.stop")}
 						</Button>
 					</div>
@@ -683,16 +645,15 @@ function ThinkingChip(props: { session: string }) {
 	const state = useEta();
 	const level = () => state.views[props.session]?.thinkingLevel ?? "off";
 	const levels = () => state.views[props.session]?.supportedThinkingLevels ?? THINKING_LEVELS;
-	const next = () => levels()[(levels().indexOf(level() as ThinkingLevel) + 1) % levels().length];
-	return (
-		<button
-			data-testid="thinking-chip"
-			disabled={levels().length < 2}
-			title={i18n.t("composer.thinkingHint")}
-			onClick={() => store.send({ op: "thinkingLevel", session: props.session, level: next() })}
-			class={`mono shrink-0 border border-border-strong px-2 py-1 text-[10px] uppercase tracking-[0.1em] max-md:hidden ${level() === "off" ? "text-muted" : "text-foreground"}`}
-		>
-			{i18n.t("composer.thinking")}:{levels().length === 0 ? i18n.t("composer.providerThinking") : level()}
-		</button>
-	);
+	const label = () => `${i18n.t("composer.thinking")}:${levels().length === 0 ? i18n.t("composer.providerThinking") : level()}`;
+	return <DropdownMenu>
+		<DropdownMenuTrigger data-testid="thinking-chip" class="composer-control composer-thinking-control" disabled={levels().length < 2} title={i18n.t("composer.thinkingHint")}>
+			<span class="composer-control-label">{label()}</span><DropdownMenuChevron />
+		</DropdownMenuTrigger>
+		<DropdownMenuContent side="top" align="start" data-testid="thinking-menu">
+			<For each={levels()}>{choice => <DropdownMenuItem data-testid={`thinking-option-${choice}`} role="menuitemradio" aria-checked={choice === level()} onClick={() => {
+				if (choice !== level()) store.send({ op: "thinkingLevel", session: props.session, level: choice });
+			}}><span class="mono">{choice}</span><Show when={choice === level()}><span class="ml-auto" aria-hidden="true">✓</span></Show></DropdownMenuItem>}</For>
+		</DropdownMenuContent>
+	</DropdownMenu>;
 }

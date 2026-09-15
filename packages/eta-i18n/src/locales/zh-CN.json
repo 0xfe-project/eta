@@ -123,7 +123,7 @@
 	"cmd.help": "打开命令面板",
 	"cmd.settings": "打开设置",
 	"composer.thinking": "思考",
-	"composer.thinkingHint": "循环切换思考等级 off/minimal/low/medium/high",
+	"composer.thinkingHint": "选择思考等级",
 	"composer.hint": "Enter 发送 · Shift+Enter 换行 · / 命令 · @ 文件",
 	"panel.viewPrompt": "系统提示词",
 	"prompt.stable": "跨回合缓存",
