@@ -483,9 +483,6 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 		case "btwOpen":
 			await host.btwOpen(message.session, message.kind);
 			break;
-		case "btwAsk":
-			host.btwAsk(message.session, message.threadId, message.question);
-			break;
 		case "modelSet":
 			await host.modelSet(message.session, message.modelId);
 			break;
@@ -508,6 +505,9 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 			host.queueRemove(message.session, message.entryId);
 			break;
 			return;
+		case "btwAsk":
+			await host.btwAsk(message.session, message.threadId, message.question);
+			return;
 		case "btwAnswer":
 			host.btwAnswer(message.session, message.threadId, message.question, message.answer);
 			return;
@@ -516,12 +516,6 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 			return;
 		case "btwHandoff":
 			host.btwHandoff(message.session, message.threadId);
-			return;
-		case "btwOverride":
-			host.btwOverride(message.session, message.threadId, {
-				...(message.model === undefined ? {} : { model: message.model }),
-				...(message.thinking === undefined ? {} : { thinking: message.thinking }),
-			});
 			return;
 		case "btwClear":
 			host.btwClear(message.session, message.threadId);

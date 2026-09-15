@@ -379,6 +379,9 @@ export class Host {
 			// A loop came due while no run could take its followUp, and the scheduler said so
 			// on the bus as `wake`. Starting the run is the host's call, not the scheduler's:
 			// this is where the answer to "is one already in flight" lives.
+			// The btw panel reads threads out of the view, so a side request's progress —
+			// asking, answered, failed, saved — is only visible once the view is rebuilt.
+			if (frame.category === "btw") this.refreshView(name);
 			if (frame.category === "loop" && frame.action === "wake")
 				this.deliver((frame.data as { followUp?: string }).followUp ?? "", name, false);
 		});
@@ -902,19 +905,22 @@ export class Host {
 		agent.btw.seedFrom(threadId, await agent.lane.findEntries(undefined, BACKGROUND_CONTEXT), null);
 	}
 
-	btwAnswer(name: string, threadId: string, question: string, answer: string): void {
-		this.must(name).btw.answer(threadId, question, answer);
+	/**
+	 * Ask a thread. The wait belongs to the thread (`pending`), and the frame showing
+	 * it goes out before the answer does: a side request that takes seconds must not
+	 * look frozen. `ask` settles into an answer or an error and never rejects.
+	 */
+	async btwAsk(name: string, threadId: string, question: string): Promise<void> {
+		const agent = this.must(name);
+		const settled = agent.btw.ask(threadId, question);
+		this.refreshView(name);
+		await settled;
+		this.refreshView(name);
 	}
 
-	/**
-	 * A side question is answered by its own model request inside the manager:
-	 * no lane, no run, so it answers while the main agent is busy. Until it does,
-	 * the thread is `pending`, which is what the panel shows — not a placeholder
-	 * answer that would sit there forever.
-	 */
-	btwAsk(name: string, threadId: string, question: string): void {
-		const agent = this.must(name);
-		void agent.btw.ask(threadId, question).then(() => this.refreshView(name));
+	btwAnswer(name: string, threadId: string, question: string, answer: string): void {
+		this.must(name).btw.answer(threadId, question, answer);
+		this.refreshView(name);
 	}
 
 	/** Hot-swap the configured model (real providers only) and remember the choice. */
@@ -1094,21 +1100,6 @@ export class Host {
 		}
 		if (focus) void this.prompt(name, text).catch(() => undefined);
 		else void entry.agent.lane.prompt(text, undefined, BACKGROUND_CONTEXT).catch(() => undefined);
-	}
-
-	/**
-	 * Per-thread model/thinking override. The side request is one-shot, so the
-	 * override takes effect on the next question; the seed is taken again because
-	 * the override rebuilds what that request is.
-	 */
-	btwOverride(
-		name: string,
-		threadId: string,
-		overrides: { model?: string | null; thinking?: "off" | "minimal" | "low" | "medium" | "high" | null },
-	): void {
-		this.must(name).btw.setOverride(threadId, overrides);
-		void this.reseedBtw(name, threadId);
-		this.refreshView(name);
 	}
 
 	btwClear(name: string, threadId: string): void {
