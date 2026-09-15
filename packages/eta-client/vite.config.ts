@@ -38,5 +38,12 @@ export default Object.assign(defineConfig({
 			"/term": { target: serverUrl.replace(/^http/, "ws"), ws: true },
 		},
 	},
-	test: { environment: "jsdom", setupFiles: ["test/setup.ts"], include: ["test/**/*.test.{ts,tsx}"] },
+	test: {
+		environment: "jsdom",
+		setupFiles: ["test/setup.ts"],
+		include: ["test/**/*.test.{ts,tsx}"],
+		// Each DOM worker loads the full rendering/tooling graph. Bound concurrent
+		// transforms so a cold run on a laptop doesn't consume the assertion timeout.
+		maxWorkers: 2,
+	},
 }), { logger });
