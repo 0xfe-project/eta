@@ -29,7 +29,7 @@ export async function listPersonaSummaries(cwd: string, home = homedir()): Promi
 }
 
 /** The card a session falls back to when its own card is gone; built-ins always hold it. */
-const FALLBACK_PERSONA = "Thinker";
+export const FALLBACK_PERSONA = "Thinker";
 
 /**
  * Which card a persisted session reopens under.
@@ -62,7 +62,7 @@ export async function renderPersonaFor(
 	return { names: [personaId], text: renderPersonaBlock([personaId], cards).text };
 }
 
-function describeCard(text: string): string {
+export function describeCard(text: string): string {
 	for (const line of text.split("\n")) {
 		const clean = line
 			.replace(/^#+\s*/, "")
