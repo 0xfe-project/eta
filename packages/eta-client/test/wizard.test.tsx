@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Route } from "@solidjs/router";
 import { byId, findId, queryId } from "./dom.ts";
 import { FakeSocket } from "./fake-socket.ts";
-import { click, render } from "./render.tsx";
+import { click, render, setField } from "./render.tsx";
 import { MemoryRouter } from "./memory-router.tsx";
 
 async function mountWizard() {
@@ -48,6 +48,21 @@ describe("new session wizard", () => {
 
 		expect(FakeSocket.last()).toMatchObject({ op: "session.create", personaId: "Executor" });
 		expect(await findId("home")).toBeTruthy();
+	});
+
+	it("sends without a persona once a first message is typed, and lets the server pick", async () => {
+		await mountWizard();
+		await findId("persona-card-Thinker");
+		setField("prompt-input", "帮我把这个模块拆开");
+		expect((byId("create-session") as HTMLButtonElement).disabled).toBe(false);
+		expect(queryId("persona-required")).toBeNull();
+		expect(queryId("persona-auto")).not.toBeNull();
+
+		click("create-session");
+
+		const sent = FakeSocket.last() as Record<string, unknown>;
+		expect(sent).toMatchObject({ op: "session.create", prompt: "帮我把这个模块拆开" });
+		expect("personaId" in sent).toBe(false);
 	});
 
 	it("gives the transcript area back when closed", async () => {

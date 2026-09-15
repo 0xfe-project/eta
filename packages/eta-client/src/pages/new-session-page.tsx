@@ -97,15 +97,18 @@ export function NewSessionPage() {
 
 	const create = () => {
 		const id = personaId();
-		if (id === null) return;
+		const firstPrompt = prompt().trim();
+		// With neither a card nor a message there is nothing to infer a persona from, and a chat
+		// that opens on a card the model invented for an empty box is a coin flip, not a choice.
+		if (id === null && firstPrompt.length === 0) return;
 		setCreating(true);
 		const folder = cwd().trim();
 		store.send({
 			op: "session.create",
 			name: `eta-${Date.now().toString(36)}`,
-			personaId: id,
+			...(id === null ? {} : { personaId: id }),
 			...(folder.length > 0 ? { cwd: folder } : {}),
-			...(prompt().trim().length > 0 ? { prompt: prompt().trim() } : {}),
+			...(firstPrompt.length > 0 ? { prompt: firstPrompt } : {}),
 			...(defaults().modelId === undefined ? {} : { modelId: defaults().modelId }),
 		});
 		if (remembered() && folder.length > 0)
@@ -177,7 +180,7 @@ export function NewSessionPage() {
 			<div class="flex items-center gap-3">
 				<button
 					data-testid="create-session"
-					disabled={personaId() === null || creating()}
+					disabled={creating() || (personaId() === null && prompt().trim().length === 0)}
 					onClick={create}
 					class="border-2 border-primary bg-primary px-4 py-2 font-mono text-sm font-bold tracking-[0.12em] text-primary-foreground uppercase disabled:opacity-40"
 					style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
@@ -185,7 +188,9 @@ export function NewSessionPage() {
 					{creating() ? i18n.t("new.creating") : i18n.t("new.create")}
 				</button>
 				<Show when={personaId() === null}>
-					<span data-testid="persona-required" class="text-xs text-warning">{i18n.t("new.personaRequired")}</span>
+					<span data-testid={prompt().trim().length > 0 ? "persona-auto" : "persona-required"} class="text-xs text-warning">
+						{i18n.t(prompt().trim().length > 0 ? "new.personaAutoPick" : "new.personaRequired")}
+					</span>
 				</Show>
 			</div>
 		</main>

@@ -84,7 +84,19 @@ export type GuiOp =
 	| { op: "askAbort"; session: string; questionId: string };
 
 export type ControlOp =
-	| { op: "session.create"; name: string; personaId: string; cwd?: string; prompt?: string; modelId?: string }
+	| {
+			op: "session.create";
+			name: string;
+			/**
+			 * Omit it and the server asks the model this chat is about to run on to pick one for
+			 * `prompt` (eta-server/persona-autopick.ts), so sending straight from the welcome screen
+			 * starts the chat instead of bouncing.
+			 */
+			personaId?: string;
+			cwd?: string;
+			prompt?: string;
+			modelId?: string;
+	  }
 	| { op: "session.delete"; name: string }
 	| { op: "session.pin"; session: string; pinned: boolean }
 	| { op: "session.archive"; session: string; archived: boolean }
