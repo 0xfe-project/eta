@@ -1,5 +1,4 @@
 import { Show, createContext, createSignal, createUniqueId, onCleanup, onMount, splitProps, useContext, type JSX } from "solid-js";
-import { Portal } from "solid-js/web";
 import { cn } from "../../lib/utils";
 
 interface MenuCtx {
@@ -21,7 +20,7 @@ export function DropdownMenu(props: { children: JSX.Element }) {
 		focusLast: false,
 		close(restoreFocus = false) { setOpen(false); if (restoreFocus) trigger()?.focus(); },
 	};
-	return <MenuContext.Provider value={menu}>{props.children}</MenuContext.Provider>;
+	return <MenuContext.Provider value={menu}><div class="relative min-w-0">{props.children}</div></MenuContext.Provider>;
 }
 
 export function DropdownMenuTrigger(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) {
@@ -55,30 +54,14 @@ interface ContentProps {
 }
 
 export function DropdownMenuContent(props: ContentProps) {
-	return <Show when={useContext(MenuContext)?.open()}><Portal><MenuPopup {...props} /></Portal></Show>;
+	return <Show when={useContext(MenuContext)?.open()}><MenuPopup {...props} /></Show>;
 }
 
 function MenuPopup(props: ContentProps) {
 	const menu = useContext(MenuContext)!;
 	let content!: HTMLDivElement;
-	const [position, setPosition] = createSignal<JSX.CSSProperties>({ visibility: "hidden" });
 	const items = () => [...content.querySelectorAll<HTMLButtonElement>('button[role^="menuitem"]:not(:disabled)')];
-	const place = () => {
-		const anchor = menu.trigger();
-		if (!anchor) return;
-		const rect = anchor.getBoundingClientRect();
-		const width = Math.min(Math.max(180, rect.width), 300, window.innerWidth - 16);
-		const x = props.align === "end" ? rect.right - width : rect.left;
-		const top = props.side !== "bottom";
-		setPosition({
-			position: "fixed", visibility: "visible", width: `${width}px`,
-			left: `${Math.max(8, Math.min(x, window.innerWidth - width - 8))}px`,
-			...(top ? { bottom: `${window.innerHeight - rect.top + 6}px` } : { top: `${rect.bottom + 6}px` }),
-			"max-height": `${Math.max(0, Math.min(320, top ? rect.top - 14 : window.innerHeight - rect.bottom - 14))}px`,
-		});
-	};
 	onMount(() => {
-		place();
 		const available = items();
 		(menu.focusLast ? available.at(-1) : available[0])?.focus();
 		if (available.length === 0) content.focus();
@@ -87,20 +70,13 @@ function MenuPopup(props: ContentProps) {
 			if (target && !content.contains(target) && !menu.trigger()?.contains(target)) menu.close();
 		};
 		document.addEventListener("pointerdown", outside, true);
-		window.addEventListener("resize", place);
-		window.addEventListener("scroll", place, true);
-		const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(place);
-		if (menu.trigger()) observer?.observe(menu.trigger()!);
 		onCleanup(() => {
 			document.removeEventListener("pointerdown", outside, true);
-			window.removeEventListener("resize", place);
-			window.removeEventListener("scroll", place, true);
-			observer?.disconnect();
 		});
 	});
 	return <div ref={content} id={menu.id} role="menu" aria-labelledby={`${menu.id}-trigger`} tabindex="-1"
-		data-testid={props["data-testid"]} data-side={props.side ?? "top"} style={position()}
-		class={cn("z-50 overflow-y-auto overscroll-contain border-2 border-border-strong bg-popover text-popover-foreground shadow-[4px_4px_0_0_var(--shadow)]", props.class, props.className)}
+		data-testid={props["data-testid"]} data-side={props.side ?? "top"}
+		class={cn(props.side === "bottom" ? "top-[calc(100%+6px)]" : "bottom-[calc(100%+6px)]", props.align === "end" ? "right-0" : "left-0", "absolute w-max min-w-[180px] max-w-[min(300px,70vw)] max-h-[min(320px,50vh)] z-50 overflow-y-auto overscroll-contain border-2 border-border-strong bg-popover text-popover-foreground shadow-[4px_4px_0_0_var(--shadow)]", props.class, props.className)}
 		onKeyDown={event => {
 			event.stopPropagation();
 			if (event.key === "Escape") { event.preventDefault(); menu.close(true); return; }

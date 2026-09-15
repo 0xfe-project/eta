@@ -1160,6 +1160,7 @@ export class Host {
 	}
 
 	async close(): Promise<void> {
+		this.providers.codexLogin.cancel();
 		for (const entry of this.hosted.values()) {
 			entry.detach();
 			await entry.agent.harness.close(BACKGROUND_CONTEXT);

@@ -15,6 +15,8 @@ import { gitDiff, gitStatus, notGitStatus, type GitDiffKind } from "./git.ts";
 import { listPersonaSummaries, watchPersonaDirs } from "./personas.ts";
 import { UnknownPersonaError } from "./agent.ts";
 import { TermRegistry } from "./terminal.ts";
+import { initializeNetwork } from "./network.ts";
+import { etaConfigPath, loadEtaConfig } from "./config.ts";
 import { ProviderConfigError } from "./providers.ts";
 
 export interface NativeHandlers {
@@ -64,6 +66,7 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 export async function startServer(options: EtaServerOptions = {}): Promise<EtaServer> {
+	const networkStatus = await initializeNetwork(loadEtaConfig(options.configPath ?? etaConfigPath)?.network);
 	const host = new Host({
 		...(options.configPath === undefined ? {} : { configPath: options.configPath }),
 		...(options.dataDir === undefined ? {} : { dataDir: options.dataDir }),
@@ -161,6 +164,7 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 				if (desktop && request.headers.get("authorization") !== `Bearer ${options.settingsToken}`) return Response.json({ error: "authentication_failed" }, { status: 401, headers });
 				const json = (body: unknown, status = 200) => Response.json(body, { status, headers });
 				try {
+					if (request.method === "GET" && url.pathname === "/api/providers/network") { const view = await host.providers.view(); return json({ revision: view.revision, network: view.network, runtime: networkStatus }); }
 					if (request.method === "GET" && url.pathname === "/api/providers") return json(await host.providerView());
 					if (!["POST", "DELETE"].includes(request.method)) return json({ error: "method_not_allowed" }, 405);
 					if (!request.headers.get("content-type")?.startsWith("application/json")) return json({ error: "invalid_config" }, 415);
@@ -169,7 +173,12 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 					let body: unknown;
 					try { body = JSON.parse(text); } catch { return json({ error: "invalid_config" }, 400); }
 					if (request.method === "POST") {
+						if (url.pathname === "/api/providers/codex/login") return json(host.providers.startCodexLogin(body));
+						if (url.pathname === "/api/providers/codex/answer") return json(host.providers.answerCodexLogin(body));
+						if (url.pathname === "/api/providers/codex/status") return json(host.providers.codexLogin.status(String((body as { id?: unknown })?.id ?? "")));
+						if (url.pathname === "/api/providers/codex/cancel") { host.providers.codexLogin.cancel(String((body as { id?: unknown })?.id ?? "")); return json({ ok: true }); }
 						if (url.pathname === "/api/providers/discover") return json(await host.providers.discover(body));
+						if (url.pathname === "/api/providers/network") return json(await host.providers.setNetwork(body));
 						if (url.pathname === "/api/providers/default") return json(await host.defaultProviderModel(body));
 						if (url.pathname === "/api/providers") return json(await host.saveProvider(body));
 					}

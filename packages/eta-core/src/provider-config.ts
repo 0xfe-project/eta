@@ -1,9 +1,10 @@
 import type { ThinkingLevel } from "./types.ts";
 
 export const MODEL_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
-export type ProviderKind = "kimi-coding" | "deepseek" | "openai-compatible";
+export type ProviderKind = "kimi-coding" | "deepseek" | "openai-codex" | "openai-compatible";
 
 export const BUILTIN_PROVIDER_PRESETS = {
+	"openai-codex": { name: "Codex", baseUrl: "https://chatgpt.com/backend-api", logo: "openai.svg" },
 	"kimi-coding": { name: "Kimi for Coding", baseUrl: "https://api.kimi.com/coding/v1", logo: "kimi.svg" },
 	deepseek: { name: "DeepSeek", baseUrl: "https://api.deepseek.com", logo: "deepseek.svg" },
 } as const;
@@ -42,7 +43,14 @@ export interface ProviderSummary {
 	lastRefreshedAt?: string;
 }
 
+export interface NetworkConfig {
+	mode: "system" | "manual" | "direct";
+	proxyUrl?: string;
+	noProxy?: string;
+}
+
 export interface ProvidersView {
+	network?: NetworkConfig;
 	providers: ProviderSummary[];
 	defaultModel?: string;
 	revision: string;
@@ -82,4 +90,13 @@ export function modelDefaultThinking(input: EtaModelConfig): ThinkingLevel {
 	// "off" is the harness's no-parameter setting. The provider adapter only translates
 	// it to an explicit disable when modelThinkingLevels actually offers an off switch.
 	return "off";
+}
+
+export interface CodexLoginView {
+	id: string;
+	status: "pending" | "complete" | "failed";
+	method?: "browser" | "device_code";
+	manualPromptId?: string;
+	userCode?: string;
+	url?: string;
 }

@@ -664,3 +664,70 @@
 @media (max-width: 680px) {
 	.settings-provider-actions { bottom: -12px; }
 }
+
+/* Device login has a code, instructions and actions; it is not a one-line alert. */
+.settings-codex-auth {
+	margin-bottom: 24px;
+}
+.settings-codex-auth > .settings-hint {
+	margin-top: 10px;
+}
+.settings-codex-login {
+	display: grid;
+	gap: 14px;
+	margin-top: 16px;
+	padding: 16px;
+	border: 1px solid var(--border);
+	background: var(--surface);
+}
+.settings-codex-code {
+	display: grid;
+	gap: 6px;
+}
+.settings-codex-code code {
+	font-size: 20px;
+	font-weight: 600;
+	letter-spacing: .08em;
+	line-height: 1.4;
+	user-select: all;
+}
+.settings-codex-instructions {
+	margin: 0;
+	line-height: 1.7;
+}
+.settings-codex-actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+.settings-codex-actions a,
+.settings-codex-actions button {
+	padding: 7px 10px;
+	font-size: 12px;
+	line-height: 1.4;
+	border: 1px solid var(--border-strong);
+}
+.settings-codex-actions a {
+	background: var(--primary);
+	color: var(--primary-foreground);
+	text-decoration: none;
+}
+.settings-codex-actions button {
+	margin-left: auto;
+}
+@media (max-width: 680px) {
+	.settings-codex-login { padding: 14px; }
+}
+
+.settings-codex-manual {
+	border-top: 1px solid var(--border);
+	padding-top: 12px;
+	font-size: 12px;
+}
+.settings-codex-manual summary { cursor: pointer; color: var(--muted-foreground); }
+.settings-codex-manual .settings-field { margin: 12px 0; }
+.settings-codex-manual button { border: 1px solid var(--border-strong); padding: 6px 10px; }
+.settings-codex-auth > .settings-text-button { margin-top: 12px; }
+
+.settings-network .settings-save { position: static; margin-top: 12px; }

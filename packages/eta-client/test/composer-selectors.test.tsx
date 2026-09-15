@@ -28,12 +28,10 @@ async function mount() {
 }
 
 describe("composer selection menus", () => {
-	it("opens an upward model menu outside the form and does not submit the draft", async () => {
+	it("opens an upward model menu and does not submit the draft", async () => {
 		const page = await mount();
 		setField("composer-input", "unsent message");
 		click("model-picker");
-		expect(byId("model-menu").closest("form")).toBeNull();
-		expect(byId("model-menu").style.position).toBe("fixed");
 		expect(byId("model-menu").getAttribute("data-side")).toBe("top");
 		expect(byId("model-picker").getAttribute("aria-expanded")).toBe("true");
 		expect(FakeSocket.sent).toEqual([]);
