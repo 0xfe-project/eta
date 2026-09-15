@@ -39,6 +39,7 @@ export interface ProviderSummary {
 	kind: ProviderKind;
 	baseUrl: string;
 	hasApiKey: boolean;
+	headers?: ProviderHeaders;
 	models: EtaModelConfig[];
 	lastRefreshedAt?: string;
 }
@@ -63,7 +64,56 @@ export interface ProviderInput {
 	baseUrl: string;
 	/** Omitted keeps the saved key; null explicitly clears it. Never returned by GET. */
 	apiKey?: string | null;
+	/** Omitted keeps the saved headers; null clears them. Echoed by GET, unlike apiKey. */
+	headers?: ProviderHeaders | null;
 	models: EtaModelConfig[];
+}
+
+/**
+ * Extra request headers for one provider. A null value means “do not send this header”,
+ * which also suppresses a header the transport would add by itself (User-Agent, Authorization).
+ */
+export type ProviderHeaders = Record<string, string | null>;
+
+/** RFC 7230 token: the only names worth accepting from a settings form. */
+export const HEADER_NAME_PATTERN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+export const MAX_PROVIDER_HEADERS = 32;
+export const MAX_HEADER_NAME_LENGTH = 128;
+export const MAX_HEADER_VALUE_LENGTH = 8192;
+
+/**
+ * Read-path sanitising for a config file that may have been hand-edited: unusable entries are
+ * dropped instead of throwing. Names collapse case-insensitively, last occurrence wins.
+ */
+export function sanitizeProviderHeaders(value: unknown): ProviderHeaders | undefined {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+	const entries: [string, string | null][] = [];
+	for (const [rawName, raw] of Object.entries(value)) {
+		if (entries.length >= MAX_PROVIDER_HEADERS) break;
+		const name = rawName.trim();
+		if (!HEADER_NAME_PATTERN.test(name) || name.length > MAX_HEADER_NAME_LENGTH) continue;
+		if (raw !== null && (typeof raw !== "string" || raw.length > MAX_HEADER_VALUE_LENGTH || /[\r\n]/.test(raw))) continue;
+		const header = raw === null || raw.trim().length === 0 ? null : raw.trim();
+		for (let index = entries.length - 1; index >= 0; index -= 1) {
+			if (entries[index]![0].toLowerCase() === name.toLowerCase()) entries.splice(index, 1);
+		}
+		entries.push([name, header]);
+	}
+	return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+/** Provider overrides applied over transport defaults, case-insensitively; null removes a header. */
+export function applyProviderHeaders(base: Record<string, string>, headers?: ProviderHeaders): Record<string, string> {
+	const out: Record<string, string> = { ...base };
+	for (const [rawName, value] of Object.entries(headers ?? {})) {
+		const name = rawName.trim();
+		if (!HEADER_NAME_PATTERN.test(name)) continue;
+		for (const existing of Object.keys(out)) {
+			if (existing.toLowerCase() === name.toLowerCase()) delete out[existing];
+		}
+		if (value !== null) out[name] = value;
+	}
+	return out;
 }
 
 export function effectiveModel(model: EtaModelConfig): EtaModelConfig {
