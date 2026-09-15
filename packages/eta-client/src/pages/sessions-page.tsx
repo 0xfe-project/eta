@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createSignal, onCleanup, onMount, type Accessor, type Setter } from "solid-js";
-import { useNavigate } from "@solidjs/router";
+import { openSettings } from "../lib/settings.ts";
 import { useAppI18n } from "../i18n.ts";
 import { AppShell } from "../app/app-shell.tsx";
 import { useEta } from "../lib/eta-store.ts";
@@ -51,10 +51,9 @@ function useDeepLink() {
 
 export function SessionsPage() {
 	const [termOpen, setTermOpen] = createSignal(false);
-	const navigate = useNavigate();
 	// An app route is a router navigation, never a `location.assign`: in the shell
 	// that asks `views://` for a file that is not in the bundle.
-	const goSettings = () => void navigate("/settings");
+	const goSettings = openSettings;
 	useRunNotifications();
 	useDeepLink();
 	return (

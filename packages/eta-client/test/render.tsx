@@ -49,4 +49,4 @@ export function imeEnter(id: string, shape: { isComposing?: boolean; keyCode?: n
 	byId(id).dispatchEvent(event);
 }
 
-export { cleanup };
+export { cleanup, fireEvent };

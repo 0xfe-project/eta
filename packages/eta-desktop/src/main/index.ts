@@ -32,7 +32,10 @@ const ACTIONS = {
 	quit: "app.quit",
 } as const;
 
+const token = crypto.randomUUID().replaceAll("-", "");
+
 const server: EtaServer = await startServer({
+	settingsToken: token,
 	// Random port, loopback only: `dev:web` may already hold 3000 with SO_REUSEPORT,
 	// and the shell tells the page where it is through the preload anyway.
 	port: 0,
@@ -64,9 +67,8 @@ const server: EtaServer = await startServer({
 });
 
 const apiBase = `http://127.0.0.1:${String(server.port)}`;
-/** Carried to the page and back as `?token=`; the server stops accepting peers that
- * do not have it as soon as `startServer` grows the check. */
-const token = crypto.randomUUID().replaceAll("-", "");
+/** Settings requests carry the preload credential as an Authorization header. */
+
 const health = await fetch(`${apiBase}/api/health`).then((response) => response.status).catch(() => 0);
 
 /**

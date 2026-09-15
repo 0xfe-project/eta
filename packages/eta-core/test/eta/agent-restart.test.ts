@@ -5,7 +5,7 @@
 
 import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT } from "../../src/harness/context.ts";
 import { EtaAgent } from "../../src/harness/agent.ts";
 import { MemoryStorage } from "../../src/harness/session/memory.ts";
@@ -111,21 +111,32 @@ describe("restart through storage", () => {
 	});
 
 	it("a fired loop's registry value survives the restart", async () => {
-		const storage = new MemoryStorage();
-		const first = await openAgent(storage, "eta-loop");
-		first.agent.loops.upsert({
-			def: { id: "tick", note: "check ci", every: "10ms" },
-			runCount: 0,
-			createdAt: Date.now(),
-			nextDueAt: Date.now() - 1,
-			paused: false,
-		});
-		first.agent.loops.pump(Date.now() + 1);
-		await first.turn();
-		const second = await openAgent(storage, "eta-loop");
-		await second.agent.restore(CTX);
-		const specs = second.agent.loops.list();
-		expect(specs.map((spec) => [spec.def.id, spec.runCount])).toEqual([["tick", 1]]);
+		// The run-end driver also pumps. Storage recovery must not depend on a turn
+		// finishing in under 10ms on the machine running the suite.
+		const clock = vi.spyOn(Date, "now").mockReturnValue(Date.UTC(2026, 0, 1));
+		try {
+			const storage = new MemoryStorage();
+			const first = await openAgent(storage, "eta-loop");
+			first.agent.loops.upsert({
+				def: { id: "tick", note: "check ci", every: "10ms" },
+				runCount: 0,
+				createdAt: Date.now(),
+				nextDueAt: Date.now() - 1,
+				paused: false,
+			});
+			expect(first.agent.loops.pump(Date.now() + 1).fired).toHaveLength(1);
+			const nextDueAt = first.agent.loops.list()[0]!.nextDueAt!;
+			await first.turn();
+			const second = await openAgent(storage, "eta-loop");
+			await second.agent.restore(CTX);
+			const specs = second.agent.loops.list();
+			expect(specs.map((spec) => [spec.def.id, spec.runCount])).toEqual([["tick", 1]]);
+			expect(specs[0]!.nextDueAt).toBe(nextDueAt);
+			expect(second.agent.loops.pump(nextDueAt - 1).fired).toHaveLength(0);
+			expect(second.agent.loops.pump(nextDueAt).fired[0]!.spec.runCount).toBe(2);
+		} finally {
+			clock.mockRestore();
+		}
 	});
 
 	it("an ask pending at kill time re-surfaces from durable pending values", async () => {

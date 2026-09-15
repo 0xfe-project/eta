@@ -1,79 +1,130 @@
-import { Show, createContext, createSignal, onCleanup, splitProps, useContext, type JSX } from "solid-js";
+import { Show, createContext, createSignal, createUniqueId, onCleanup, onMount, splitProps, useContext, type JSX } from "solid-js";
+import { Portal } from "solid-js/web";
 import { cn } from "../../lib/utils";
 
 interface MenuCtx {
+	id: string;
 	open: () => boolean;
 	setOpen: (open: boolean) => void;
+	trigger: () => HTMLButtonElement | undefined;
+	setTrigger: (element: HTMLButtonElement) => void;
+	focusLast: boolean;
+	close: (restoreFocus?: boolean) => void;
 }
-
 const MenuContext = createContext<MenuCtx>();
 
 export function DropdownMenu(props: { children: JSX.Element }) {
 	const [open, setOpen] = createSignal(false);
-	return <MenuContext.Provider value={{ open, setOpen }}>{props.children}</MenuContext.Provider>;
-}
-
-export function DropdownMenuTrigger(props: { children: JSX.Element }) {
-	const menu = useContext(MenuContext);
-	if (menu === undefined) throw new Error("DropdownMenuTrigger outside DropdownMenu");
-	return (
-		<span
-			onClick={(event) => {
-				event.stopPropagation();
-				menu.setOpen(!menu.open());
-			}}
-		>
-			{props.children}
-		</span>
-	);
-}
-
-export function DropdownMenuContent(props: { class?: string; className?: string; align?: string; children?: JSX.Element; "data-testid"?: string }) {
-	const menu = useContext(MenuContext);
-	if (menu === undefined) throw new Error("DropdownMenuContent outside DropdownMenu");
-	const onDoc = (event: MouseEvent) => {
-		const target = event.target as Node | null;
-		if (target !== null && event.currentTarget instanceof Node) return;
-		menu.setOpen(false);
+	const [trigger, setTrigger] = createSignal<HTMLButtonElement>();
+	const menu: MenuCtx = {
+		id: createUniqueId(), open, setOpen, trigger, setTrigger,
+		focusLast: false,
+		close(restoreFocus = false) { setOpen(false); if (restoreFocus) trigger()?.focus(); },
 	};
-	document.addEventListener("click", onDoc);
-	onCleanup(() => document.removeEventListener("click", onDoc));
-	return (
-		<Show when={menu.open()}>
-			<div
-				data-testid={props["data-testid"]}
-				class={cn(
-					"z-50 min-w-[160px] border-2 border-border-strong bg-popover text-popover-foreground shadow-[4px_4px_0_0_var(--shadow)]",
-					props.class,
-					props.className,
-				)}
-			>
-				{props.children}
-			</div>
-		</Show>
-	);
+	return <MenuContext.Provider value={menu}>{props.children}</MenuContext.Provider>;
 }
 
-export function DropdownMenuItem(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { class?: string; className?: string }) {
+export function DropdownMenuTrigger(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) {
+	const menu = useContext(MenuContext);
+	if (!menu) throw new Error("DropdownMenuTrigger outside DropdownMenu");
+	return <button
+		{...props}
+		ref={element => menu.setTrigger(element)}
+		type="button"
+		id={`${menu.id}-trigger`}
+		aria-haspopup="menu"
+		aria-expanded={menu.open()}
+		aria-controls={menu.open() ? menu.id : undefined}
+		onClick={event => { event.stopPropagation(); menu.focusLast = false; menu.setOpen(!menu.open()); }}
+		onKeyDown={event => {
+			if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+			event.preventDefault(); event.stopPropagation();
+			menu.focusLast = event.key === "ArrowUp";
+			menu.setOpen(true);
+		}}
+	/>;
+}
+
+interface ContentProps {
+	class?: string;
+	className?: string;
+	align?: "start" | "end";
+	side?: "top" | "bottom";
+	children?: JSX.Element;
+	"data-testid"?: string;
+}
+
+export function DropdownMenuContent(props: ContentProps) {
+	return <Show when={useContext(MenuContext)?.open()}><Portal><MenuPopup {...props} /></Portal></Show>;
+}
+
+function MenuPopup(props: ContentProps) {
+	const menu = useContext(MenuContext)!;
+	let content!: HTMLDivElement;
+	const [position, setPosition] = createSignal<JSX.CSSProperties>({ visibility: "hidden" });
+	const items = () => [...content.querySelectorAll<HTMLButtonElement>('button[role^="menuitem"]:not(:disabled)')];
+	const place = () => {
+		const anchor = menu.trigger();
+		if (!anchor) return;
+		const rect = anchor.getBoundingClientRect();
+		const width = Math.min(Math.max(180, rect.width), 300, window.innerWidth - 16);
+		const x = props.align === "end" ? rect.right - width : rect.left;
+		const top = props.side !== "bottom";
+		setPosition({
+			position: "fixed", visibility: "visible", width: `${width}px`,
+			left: `${Math.max(8, Math.min(x, window.innerWidth - width - 8))}px`,
+			...(top ? { bottom: `${window.innerHeight - rect.top + 6}px` } : { top: `${rect.bottom + 6}px` }),
+			"max-height": `${Math.max(0, Math.min(320, top ? rect.top - 14 : window.innerHeight - rect.bottom - 14))}px`,
+		});
+	};
+	onMount(() => {
+		place();
+		const available = items();
+		(menu.focusLast ? available.at(-1) : available[0])?.focus();
+		if (available.length === 0) content.focus();
+		const outside = (event: PointerEvent) => {
+			const target = event.target as Node | null;
+			if (target && !content.contains(target) && !menu.trigger()?.contains(target)) menu.close();
+		};
+		document.addEventListener("pointerdown", outside, true);
+		window.addEventListener("resize", place);
+		window.addEventListener("scroll", place, true);
+		const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(place);
+		if (menu.trigger()) observer?.observe(menu.trigger()!);
+		onCleanup(() => {
+			document.removeEventListener("pointerdown", outside, true);
+			window.removeEventListener("resize", place);
+			window.removeEventListener("scroll", place, true);
+			observer?.disconnect();
+		});
+	});
+	return <div ref={content} id={menu.id} role="menu" aria-labelledby={`${menu.id}-trigger`} tabindex="-1"
+		data-testid={props["data-testid"]} data-side={props.side ?? "top"} style={position()}
+		class={cn("z-50 overflow-y-auto overscroll-contain border-2 border-border-strong bg-popover text-popover-foreground shadow-[4px_4px_0_0_var(--shadow)]", props.class, props.className)}
+		onKeyDown={event => {
+			event.stopPropagation();
+			if (event.key === "Escape") { event.preventDefault(); menu.close(true); return; }
+			if (event.key === "Tab") { menu.close(true); return; }
+			if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+			event.preventDefault();
+			const available = items();
+			const current = available.indexOf(document.activeElement as HTMLButtonElement);
+			const index = event.key === "Home" ? 0 : event.key === "End" ? available.length - 1
+				: (current + (event.key === "ArrowDown" ? 1 : -1) + available.length) % available.length;
+			available[index]?.focus();
+		}}>{props.children}</div>;
+}
+
+export function DropdownMenuItem(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { className?: string }) {
 	const menu = useContext(MenuContext);
 	const [local, rest] = splitProps(props, ["class", "className", "onClick"]);
-	return (
-		<button
-			type="button"
-			class={cn(
-				"flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[12px] outline-none select-none hover:bg-primary hover:text-primary-foreground disabled:opacity-40",
-				local.class,
-				local.className,
-			)}
-			onClick={(event) => {
-				if (typeof local.onClick === "function") local.onClick(event);
-				menu?.setOpen(false);
-			}}
-			{...rest}
-		/>
-	);
+	return <button {...rest} type="button" role={props.role ?? "menuitem"}
+		class={cn("flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[12px] whitespace-normal break-words select-none hover:bg-primary hover:text-primary-foreground focus-visible:bg-primary focus-visible:text-primary-foreground disabled:opacity-40", local.class, local.className)}
+		onClick={event => { if (typeof local.onClick === "function") local.onClick(event); menu?.close(true); }} />;
 }
 
-export function DropdownMenuSeparator() {
-	return <div class="my-1 h-px bg-border" />;
+export function DropdownMenuChevron() {
+	return <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 15 6-6 6 6" /></svg>;
 }
+
+export function DropdownMenuSeparator() { return <div class="my-1 h-px bg-border" />; }

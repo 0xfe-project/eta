@@ -2,229 +2,93 @@ import { For, Show, createSignal, onMount, type JSX } from "solid-js";
 import { useAppI18n } from "../i18n.ts";
 import { useAppTheme, type ThemePreference } from "../app/theme.tsx";
 import { sidebarPrefs, type ProjectSort } from "../lib/prefs.ts";
-import { apiFetch, goto } from "../lib/host.ts";
+import { apiFetch } from "../lib/host.ts";
+import { ProvidersSettings } from "../features/settings/providers-settings.tsx";
+import "../features/settings/settings.css";
 
-/** Mirrors eta-server/src/host.ts SettingsFile. */
-interface SettingsFile {
-	personaId?: string;
-	modelId?: string;
-	thinkingLevel?: string;
-	keepRecentTokens?: number;
+type SettingsSection = "general" | "session" | "providers";
+interface SettingsFile { personaId?: string; keepRecentTokens?: number }
+
+export function SettingsRow(props: { label: string; note?: string; children: JSX.Element }) {
+	return <div class="settings-row"><div class="settings-row-label"><div>{props.label}</div><Show when={props.note}><p>{props.note}</p></Show></div><div class="settings-control">{props.children}</div></div>;
 }
 
-// Same list the composer chip cycles through.
-const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high"] as const;
-
-type SaveState = "idle" | "saving" | "saved" | "error";
-
-/**
- * A select keeps whatever value was assigned when it was set, so a stored id
- * whose option list landed later would leave the box blank. Checking against the
- * list makes the binding depend on the options, so the selection lands late too.
- */
-function pick(list: { id: string }[], stored: string | undefined): string {
-	return stored !== undefined && list.some((entry) => entry.id === stored) ? stored : "";
-}
-
-export function SettingsPage() {
+export function SettingsPage(props: { onDirtyChange?: (dirty: boolean) => void; onBusyChange?: (busy: boolean) => void } = {}) {
 	const i18n = useAppI18n();
 	const theme = useAppTheme();
-	const [notifyState, setNotifyState] = createSignal(typeof Notification === "undefined" ? "unsupported" : Notification.permission);
+	const [section, setSection] = createSignal<SettingsSection>("general");
+	const [notify, setNotify] = createSignal(typeof Notification === "undefined" ? "unsupported" : Notification.permission);
 	const [settings, setSettings] = createSignal<SettingsFile>({});
 	const [personas, setPersonas] = createSignal<{ id: string; name: string }[]>([]);
-	const [models, setModels] = createSignal<{ id: string; label: string }[]>([]);
-	const [saveState, setSaveState] = createSignal<SaveState>("idle");
-
-	const themes = (): { value: ThemePreference; label: string }[] => [
-		{ value: "dark", label: i18n.t("theme.dark") },
-		{ value: "light", label: i18n.t("theme.light") },
-		{ value: "system", label: i18n.t("theme.system") },
+	const [saveState, setSaveState] = createSignal<"idle" | "saving" | "saved" | "error">("idle");
+	const [loading, setLoading] = createSignal(true);
+	const [keepRecent, setKeepRecent] = createSignal("20000");
+	const [providersDirty, setProvidersDirty] = createSignal(false);
+	const [providersBusy, setProvidersBusy] = createSignal(false);
+	const sections = () => [
+		{ id: "general" as const, label: i18n.t("settings.general"), icon: "◎" },
+		{ id: "session" as const, label: i18n.t("settings.sessions"), icon: "≡" },
+		{ id: "providers" as const, label: i18n.t("settings.providers"), icon: "⌘" },
 	];
-
-	const sorts = (): { value: ProjectSort; label: string }[] => [
-		{ value: "recent", label: i18n.t("sidebar.sortRecent") },
-		{ value: "name", label: i18n.t("sidebar.sortName") },
-	];
-
-	const get = async (url: string): Promise<unknown> => {
+	const reportBusy = () => props.onBusyChange?.(providersBusy() || saveState() === "saving");
+	const load = async () => {
+		setLoading(true);
 		try {
-			return await (await apiFetch(url)).json();
-		} catch {
-			return null;
-		}
+			const [settingsResponse, personasResponse] = await Promise.all([apiFetch("/api/settings"), apiFetch("/api/personas")]);
+			if (!settingsResponse.ok || !personasResponse.ok) throw new Error();
+			const body = await settingsResponse.json() as SettingsFile;
+			const cards = await personasResponse.json();
+			if (!body || typeof body !== "object" || !Array.isArray(cards)) throw new Error();
+			setSettings(body); setKeepRecent(String(body.keepRecentTokens ?? 20000)); setPersonas(cards);
+			setSaveState("idle");
+		} catch { setSaveState("error"); }
+		finally { setLoading(false); }
 	};
-
-	onMount(() => {
-		void get("/api/settings").then((body) => {
-			if (body !== null && typeof body === "object") setSettings(body as SettingsFile);
-		});
-		void get("/api/personas").then((body) => {
-			if (Array.isArray(body)) setPersonas(body as { id: string; name: string }[]);
-		});
-		void get("/api/models").then((body) => {
-			const list = (body as { models?: { id: string; label: string }[] } | null)?.models;
-			if (Array.isArray(list)) setModels(list);
-		});
-	});
-
+	onMount(() => void load());
+	let saveTail: Promise<void> = Promise.resolve();
 	const save = (patch: Record<string, unknown>) => {
-		setSaveState("saving");
-		void apiFetch("/api/settings", { method: "POST", body: JSON.stringify(patch) })
-			.then((response) => (response.ok ? (response.json() as Promise<SettingsFile>) : Promise.reject(new Error("save failed"))))
-			.then((next) => {
-				setSettings(next);
-				setSaveState("saved");
-			})
-			.catch(() => setSaveState("error"));
+		setSaveState("saving"); reportBusy();
+		saveTail = saveTail.then(async () => {
+			try {
+				const response = await apiFetch("/api/settings", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) });
+				if (!response.ok) throw new Error();
+				setSettings(await response.json() as SettingsFile); setSaveState("saved");
+				window.dispatchEvent(new Event("eta:settings"));
+			} catch { setSaveState("error"); }
+			finally { reportBusy(); }
+		});
 	};
-
-	return (
-		<main class="mx-auto flex w-full max-w-[520px] flex-col gap-6 p-6" data-testid="settings-page">
-			<header class="flex items-center gap-2">
-				<h1 class="text-lg font-semibold">{i18n.t("settings.title")}</h1>
-				<button
-					data-testid="settings-close"
-					title={i18n.t("settings.close")}
-					onClick={() => (window.history.length > 1 ? window.history.back() : goto("/"))}
-					class="mono ml-auto border border-border-strong px-3 py-1 text-xs text-muted hover:text-foreground"
-				>
-					✕ {i18n.t("settings.close")}
-				</button>
-			</header>
-			<section>
-				<h2 class="mb-2 text-sm text-muted">{i18n.t("settings.theme")}</h2>
-				<div class="flex gap-2">
-					<For each={themes()}>
-						{(option) => (
-							<button
-								data-testid={`theme-${option.value}`}
-								data-active={theme.theme === option.value ? "1" : "0"}
-								onClick={() => theme.setTheme(option.value)}
-								class={`border px-3 py-1.5 text-sm ${theme.theme === option.value ? "border-accent text-accent" : "border-border hover:bg-overlay"}`}
-							>
-								{option.label}
-							</button>
-						)}
-					</For>
-				</div>
+	return <div class="settings-layout" data-testid="settings-page">
+		<nav aria-label={i18n.t("settings.categories")}><For each={sections()}>{item => <button data-testid={`settings-tab-${item.id}`} aria-current={section() === item.id ? "page" : undefined} onClick={() => setSection(item.id)}><span aria-hidden="true">{item.icon}</span>{item.label}</button>}</For></nav>
+		<main class="settings-content">
+			<select class="settings-mobile" aria-label={i18n.t("settings.categories")} value={section()} onChange={event => setSection(event.currentTarget.value as SettingsSection)}><For each={sections()}>{item => <option value={item.id}>{item.label}</option>}</For></select>
+			<section hidden={section() !== "general"}>
+				<div class="settings-heading"><h2>{i18n.t("settings.general")}</h2><p>{i18n.t("settings.generalDescription")}</p></div>
+				<div class="settings-section-label">{i18n.t("settings.appearance")}</div>
+				<SettingsRow label={i18n.t("settings.theme")}><div class="settings-inline"><For each={["system", "light", "dark"] as const}>{value => <button data-testid={`theme-${value}`} aria-pressed={theme.theme === value} classList={{ "settings-selected": theme.theme === value }} onClick={() => theme.setTheme(value as ThemePreference)}>{i18n.t(`theme.${value}`)}</button>}</For></div></SettingsRow>
+				<SettingsRow label={i18n.t("settings.language")}><select aria-label={i18n.t("settings.language")} value={i18n.locale} onChange={event => i18n.setLocale(event.currentTarget.value as "en" | "zh-CN")}><option value="zh-CN">简体中文</option><option value="en">English</option></select></SettingsRow>
+				<SettingsRow label={i18n.t("settings.notifications")}><button data-testid="notify-enable" disabled={notify() !== "default"} onClick={() => { if (typeof Notification !== "undefined") void Notification.requestPermission().then(setNotify); }}>{i18n.t(`settings.notification.${notify()}` as "settings.notification.default")}</button></SettingsRow>
+				<div class="settings-section-label">{i18n.t("settings.sidebar")}</div>
+				<SettingsRow label={i18n.t("settings.projectSort")}><select aria-label={i18n.t("settings.projectSort")} value={sidebarPrefs.sort} onChange={event => sidebarPrefs.setSort(event.currentTarget.value as ProjectSort)}><option value="recent">{i18n.t("sidebar.sortRecent")}</option><option value="name">{i18n.t("sidebar.sortName")}</option></select></SettingsRow>
+				<Show when={sidebarPrefs.collapsed.length > 0}><SettingsRow label={i18n.t("settings.projectGroups")}><button data-testid="sidebar-expand-all" onClick={() => sidebarPrefs.setCollapsed([])}>{i18n.t("settings.expandGroups", { n: sidebarPrefs.collapsed.length })}</button></SettingsRow></Show>
 			</section>
-			<section>
-				<h2 class="mb-2 text-sm text-muted">{i18n.t("settings.language")}</h2>
-				<div class="flex gap-2">
-					<button data-testid="locale-zh-CN" data-active={i18n.locale === "zh-CN" ? "1" : "0"} onClick={() => i18n.setLocale("zh-CN")} class={`border px-3 py-1.5 text-sm ${i18n.locale === "zh-CN" ? "border-accent text-accent" : "border-border hover:bg-overlay"}`}>
-						中文
-					</button>
-					<button data-testid="locale-en" data-active={i18n.locale === "en" ? "1" : "0"} onClick={() => i18n.setLocale("en")} class={`border px-3 py-1.5 text-sm ${i18n.locale === "en" ? "border-accent text-accent" : "border-border hover:bg-overlay"}`}>
-						English
-					</button>
-				</div>
-			</section>
-			<section>
-				<h2 class="mb-2 text-sm text-muted">{i18n.t("settings.notifications")}</h2>
-				<button
-					data-testid="notify-enable"
-					disabled={notifyState() !== "default"}
-					onClick={() => {
-						if (typeof Notification !== "undefined") void Notification.requestPermission().then((permission) => setNotifyState(permission));
-					}}
-					class="border border-border px-3 py-1.5 text-sm hover:bg-overlay disabled:opacity-40"
-				>
-					{notifyState() === "granted" ? "✓" : notifyState() === "unsupported" ? "—" : "⌶"} {notifyState()}
-				</button>
-			</section>
-			<section data-testid="settings-section-sidebar">
-				<h2 class="mb-2 text-sm text-muted">{i18n.t("settings.sidebar")}</h2>
-				<div class="flex gap-2">
-					<For each={sorts()}>
-						{(option) => (
-							<button
-								data-testid={`sidebar-sort-${option.value}`}
-								data-active={sidebarPrefs.sort === option.value ? "1" : "0"}
-								onClick={() => sidebarPrefs.setSort(option.value)}
-								class={`border px-3 py-1.5 text-sm ${sidebarPrefs.sort === option.value ? "border-accent text-accent" : "border-border hover:bg-overlay"}`}
-							>
-								{option.label}
-							</button>
-						)}
-					</For>
-				</div>
-				<Show when={sidebarPrefs.collapsed.length > 0}>
-					<button
-						data-testid="sidebar-expand-all"
-						onClick={() => sidebarPrefs.setCollapsed([])}
-						class="mt-2 border border-border px-3 py-1.5 text-sm text-muted hover:bg-overlay"
-					>
-						{i18n.t("settings.expandGroups", { n: sidebarPrefs.collapsed.length })}
-					</button>
+			<section hidden={section() !== "session"}>
+				<div class="settings-heading"><h2>{i18n.t("settings.sessions")}</h2><p>{i18n.t("settings.sessionDescription")}</p></div>
+				<Show when={!loading()} fallback={<p class="settings-hint">{i18n.t("settings.loading")}</p>}>
+					<SettingsRow label={i18n.t("settings.defaultPersona")}><select data-testid="default-persona" aria-label={i18n.t("settings.defaultPersona")} value={personas().some(persona => persona.id === settings().personaId) ? settings().personaId : ""} onChange={event => save({ personaId: event.currentTarget.value || null })}><option value="">{i18n.t("settings.useBuiltin")}</option><For each={personas()}>{persona => <option value={persona.id}>{persona.name}</option>}</For></select></SettingsRow>
+					<SettingsRow label={i18n.t("settings.defaultKeepRecent")} note={i18n.t("settings.keepRecentNote")}><div class="settings-inline"><input data-testid="default-keep-recent" aria-label={i18n.t("settings.defaultKeepRecent")} type="number" min="1000" step="1000" value={keepRecent()} onInput={event => setKeepRecent(event.currentTarget.value)} onChange={() => {
+						const value = Number(keepRecent());
+						if (!Number.isSafeInteger(value) || value < 1000) { setSaveState("error"); return; }
+						save({ keepRecentTokens: value });
+					}} /><span class="mono">tokens</span></div></SettingsRow>
 				</Show>
+				<p class="settings-hint">{i18n.t("settings.defaultsNote")}</p>
+				<div data-testid="settings-save-state" class="settings-hint" role="status">{saveState() !== "idle" && i18n.t(`settings.save.${saveState()}` as "settings.save.saving" | "settings.save.saved" | "settings.save.error")}</div>
+				<Show when={saveState() === "error"}><button onClick={() => void load()}>{i18n.t("settings.retry")}</button></Show>
 			</section>
-			<section data-testid="settings-section-defaults">
-				<h2 class="flex items-center gap-2 text-sm text-muted">
-					{i18n.t("settings.sessionDefaults")}
-					<span data-testid="settings-save-state" class="mono text-[10px]">
-						{saveState() === "idle" ? "" : i18n.t(`settings.save.${saveState()}` as "settings.save.saving")}
-					</span>
-				</h2>
-				<div class="flex flex-col gap-2">
-					<Row label={i18n.t("settings.defaultPersona")}>
-						<select
-							data-testid="default-persona"
-							value={pick(personas(), settings().personaId)}
-							onChange={(event) => save({ personaId: event.currentTarget.value === "" ? null : event.currentTarget.value })}
-							class="mono border border-border bg-elevated px-2 py-1 text-sm outline-none"
-						>
-							<option value="">{i18n.t("settings.useBuiltin")}</option>
-							<For each={personas()}>{(persona) => <option value={persona.id}>{persona.name}</option>}</For>
-						</select>
-					</Row>
-					<Row label={i18n.t("settings.defaultModel")}>
-						<select
-							data-testid="default-model"
-							value={pick(models(), settings().modelId)}
-							onChange={(event) => save({ modelId: event.currentTarget.value === "" ? null : event.currentTarget.value })}
-							class="mono border border-border bg-elevated px-2 py-1 text-sm outline-none"
-						>
-							<option value="">{i18n.t("settings.useConfig")}</option>
-							<For each={models()}>{(model) => <option value={model.id}>{model.label}</option>}</For>
-						</select>
-					</Row>
-					<Row label={i18n.t("settings.defaultThinking")}>
-						<select
-							data-testid="default-thinking"
-							value={settings().thinkingLevel ?? ""}
-							onChange={(event) => save({ thinkingLevel: event.currentTarget.value === "" ? null : event.currentTarget.value })}
-							class="mono border border-border bg-elevated px-2 py-1 text-sm outline-none"
-						>
-							<option value="">{i18n.t("settings.useBuiltin")}</option>
-							<For each={THINKING_LEVELS}>{(level) => <option value={level}>{level}</option>}</For>
-						</select>
-					</Row>
-					<Row label={i18n.t("settings.defaultKeepRecent")}>
-						<input
-							data-testid="default-keep-recent"
-							type="number"
-							min="1000"
-							step="1000"
-							value={settings().keepRecentTokens ?? 20000}
-							onInput={(event) => {
-								const value = Number.parseInt(event.currentTarget.value, 10);
-								if (Number.isSafeInteger(value) && value > 0) save({ keepRecentTokens: value });
-							}}
-							class="mono w-[120px] border border-border bg-elevated px-2 py-1 text-sm outline-none"
-						/>
-					</Row>
-					<p data-testid="settings-defaults-note" class="text-[11px] text-faint">{i18n.t("settings.defaultsNote")}</p>
-				</div>
+			<section hidden={section() !== "providers"}>
+				<ProvidersSettings onDirtyChange={value => { setProvidersDirty(value); props.onDirtyChange?.(providersDirty()); }} onBusyChange={value => { setProvidersBusy(value); reportBusy(); }} />
 			</section>
 		</main>
-	);
-}
-
-function Row(props: { label: string; children: JSX.Element }) {
-	return (
-		<label class="flex items-center gap-2">
-			<span class="min-w-0 flex-1 truncate text-sm">{props.label}</span>
-			{props.children}
-		</label>
-	);
+	</div>;
 }

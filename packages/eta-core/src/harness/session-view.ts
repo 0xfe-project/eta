@@ -60,6 +60,8 @@ export type SessionViewBtwThread = Pick<
 >;
 
 export interface SessionView {
+	/** Provider-derived controls; [] means the model manages thinking itself. */
+	supportedThinkingLevels?: import("../types.ts").ThinkingLevel[];
 	messages: SessionViewMessage[];
 	/** Messages older than the window in `messages`; set once the transcript is paged. */
 	messagesBefore?: number;

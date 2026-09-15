@@ -15,6 +15,7 @@ import { gitDiff, gitStatus, notGitStatus, type GitDiffKind } from "./git.ts";
 import { listPersonaSummaries, watchPersonaDirs } from "./personas.ts";
 import { UnknownPersonaError } from "./agent.ts";
 import { TermRegistry } from "./terminal.ts";
+import { ProviderConfigError } from "./providers.ts";
 
 export interface NativeHandlers {
 	folderDialog(input: { startingFolder?: string }): Promise<string | null>;
@@ -37,6 +38,8 @@ export interface EtaServerOptions {
 	reusePort?: boolean;
 	platform?: string;
 	appVersion?: string;
+	/** Desktop credential for sensitive settings APIs from the opaque views:// origin. */
+	settingsToken?: string;
 }
 
 export interface EtaServer {
@@ -68,7 +71,7 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 	});
 	await host.restoreSessions();
 	const cwd = options.cwd ?? process.cwd();
-	const webDist = options.webDist ?? resolve(import.meta.dir, "../../eta-web/dist");
+	const webDist = options.webDist ?? resolve(import.meta.dir, "../../eta-client/dist");
 	// The desktop webview's origin is views://eta, so every /api answer is
 	// cross-origin from the server's point of view: hand out a blanket allow.
 	const CORS_HEADERS: Record<string, string> = {
@@ -140,6 +143,45 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 		reusePort: options.reusePort ?? false,
 		async fetch(request, srv) {
 			const url = new URL(request.url);
+			if (url.pathname === "/api/providers" || url.pathname.startsWith("/api/providers/")) {
+				const origin = request.headers.get("origin");
+				const localDevOrigins = new Set(["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174"]);
+				const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+				const desktopOrigin = origin === "null" || origin === "views://eta";
+				const desktop = desktopOrigin && options.native !== undefined && !!options.settingsToken;
+				const allowed = origin === null || origin === url.origin || (loopback && localDevOrigins.has(origin)) || desktop;
+				if (!allowed) return Response.json({ error: "origin_denied" }, { status: 403 });
+				const headers: Record<string, string> = {
+					...(origin ? { "access-control-allow-origin": origin, "vary": "Origin" } : {}),
+					"access-control-allow-headers": "content-type, authorization",
+					"access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
+					"cache-control": "no-store",
+				};
+				if (request.method === "OPTIONS") return new Response(null, { status: 204, headers });
+				if (desktop && request.headers.get("authorization") !== `Bearer ${options.settingsToken}`) return Response.json({ error: "authentication_failed" }, { status: 401, headers });
+				const json = (body: unknown, status = 200) => Response.json(body, { status, headers });
+				try {
+					if (request.method === "GET" && url.pathname === "/api/providers") return json(await host.providerView());
+					if (!["POST", "DELETE"].includes(request.method)) return json({ error: "method_not_allowed" }, 405);
+					if (!request.headers.get("content-type")?.startsWith("application/json")) return json({ error: "invalid_config" }, 415);
+					const text = await request.text();
+					if (text.length > 512_000) return json({ error: "invalid_config" }, 413);
+					let body: unknown;
+					try { body = JSON.parse(text); } catch { return json({ error: "invalid_config" }, 400); }
+					if (request.method === "POST") {
+						if (url.pathname === "/api/providers/discover") return json(await host.providers.discover(body));
+						if (url.pathname === "/api/providers/default") return json(await host.defaultProviderModel(body));
+						if (url.pathname === "/api/providers") return json(await host.saveProvider(body));
+					}
+					if (request.method === "DELETE") {
+						const id = decodeURIComponent(url.pathname.slice("/api/providers/".length));
+						return json(await host.deleteProvider(id, (body as { revision?: unknown })?.revision));
+					}
+					return json({ error: "not_found" }, 404);
+				} catch (error) {
+					return error instanceof ProviderConfigError ? json({ error: error.code }, error.status) : json({ error: "save_failed" }, 500);
+				}
+			}
 			if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS_HEADERS });
 			if (url.pathname === "/ws") {
 				if (

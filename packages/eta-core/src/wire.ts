@@ -6,6 +6,7 @@
  * the one constant the split depends on.
  */
 
+import type { ThinkingLevel } from "./types.ts";
 import type { HarnessEvent } from "./harness/agent-harness.ts";
 import type { SessionView } from "./harness/session-view.ts";
 
@@ -69,7 +70,7 @@ export type GuiOp =
 	| { op: "btwAsk"; session: string; threadId: string; question: string }
 	| { op: "modelSet"; session: string; modelId: string }
 	| { op: "personaSet"; session: string; personaId: string }
-	| { op: "thinkingLevel"; session: string; level: "off" | "minimal" | "low" | "medium" | "high" }
+	| { op: "thinkingLevel"; session: string; level: ThinkingLevel }
 	| { op: "queueRemove"; session: string; entryId: string }
 	| { op: "btwAnswer"; session: string; threadId: string; question: string; answer: string }
 	| { op: "btwSave"; session: string; threadId: string }
@@ -104,6 +105,7 @@ export type ServerMessage =
 	| { type: "hello"; sessions: SidebarSession[]; attach: string | null }
 	| { type: "sessions"; sessions: SidebarSession[] }
 	| { type: "personas" }
+	| { type: "models_changed" }
 	| { type: "search"; query: string; hits: { session: string; snippet: string }[] }
 	| { type: "created"; name: string }
 	| { type: "deleted"; name: string }

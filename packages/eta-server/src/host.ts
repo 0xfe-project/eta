@@ -35,6 +35,8 @@ import { ViewPacer } from "./view-pacer.ts";
 import { configDefaultModel, etaConfigPath, loadEtaConfig, type EtaConfig } from "./config.ts";
 import { createSessionAgent, type CreatedSession } from "./agent.ts";
 import { renderPersonaFor } from "./personas.ts";
+import { ProviderConfigStore, ProviderConfigError } from "./providers.ts";
+import { effectiveModel, modelDefaultThinking, modelThinkingLevels, type EtaModelConfig, type ProvidersView } from "@eta/core/provider-config";
 
 const AGENT_EVENT_TYPES = [
 	"run_start",
@@ -95,6 +97,7 @@ interface Hosted {
 	gitBranch?: string;
 	persistDir?: string;
 	created: CreatedSession;
+	pendingModels?: EtaConfig;
 	detach(): void;
 }
 
@@ -150,6 +153,7 @@ interface SessionMetaFile {
 	personaId?: string;
 	cwd?: string;
 	modelId?: string;
+	keepRecentTokens?: number;
 	title?: string;
 	pinned?: boolean;
 	archived?: boolean;
@@ -161,11 +165,13 @@ export class Host {
 	readonly dataDir: string;
 	readonly heartbeatMs: number | undefined;
 	private readonly hosted = new Map<string, Hosted>();
+	readonly providers: ProviderConfigStore;
 
 	constructor(options: HostOptions = {}) {
 		this.configPath = options.configPath ?? etaConfigPath;
 		this.dataDir = options.dataDir ?? join(homedir(), ".eta", "sessions");
 		this.heartbeatMs = options.heartbeatMs;
+		this.providers = new ProviderConfigStore(this.configPath);
 	}
 
 	private etaConfig(): EtaConfig {
@@ -188,11 +194,12 @@ export class Host {
 
 	async createSession(name: string, personaId: string, cwd: string, modelId?: string): Promise<void> {
 		if (this.hosted.has(name)) throw new Error(`session exists: ${name}`);
+		modelId ??= this.etaConfig().defaultModel ?? this.settings().modelId;
 		const persistDir = join(this.dataDir, name);
 		await mkdir(persistDir, { recursive: true });
 		await writeFile(
 			join(persistDir, "meta.json"),
-			JSON.stringify({ personaId, cwd, ...(modelId === undefined ? {} : { modelId }), createdAt: Date.now() }),
+			JSON.stringify({ personaId, cwd, ...(modelId === undefined ? {} : { modelId }), keepRecentTokens: this.settings().keepRecentTokens, createdAt: Date.now() }),
 			"utf8",
 		);
 		await this.open(
@@ -205,10 +212,16 @@ export class Host {
 					...(modelId === undefined ? {} : { modelId }),
 					configPath: this.configPath,
 					persistDir,
+					keepRecentTokens: this.settings().keepRecentTokens,
 					...(this.heartbeatMs === undefined ? {} : { heartbeatMs: this.heartbeatMs }),
 				}),
 			{ cwd, persistDir },
 		);
+		const entry = this.hosted.get(name)!;
+		const chosen = await entry.agent.lane.getModel(BACKGROUND_CONTEXT);
+		const definition = chosen ? this.configuredModel(`${chosen.provider}:${chosen.id}`) : undefined;
+		if (definition) await entry.agent.lane.setThinkingLevel(modelDefaultThinking(definition), BACKGROUND_CONTEXT);
+		else if (this.settings().thinkingLevel) await entry.agent.lane.setThinkingLevel(this.settings().thinkingLevel!, BACKGROUND_CONTEXT);
 	}
 
 	/** Reopen every persisted session so the sidebar and runs survive restarts. */
@@ -247,6 +260,7 @@ export class Host {
 							...(meta.modelId === undefined ? {} : { modelId: meta.modelId }),
 							configPath: this.configPath,
 							persistDir,
+							keepRecentTokens: meta.keepRecentTokens,
 							...(this.heartbeatMs === undefined ? {} : { heartbeatMs: this.heartbeatMs }),
 						}),
 					{ cwd, persistDir, restore: true },
@@ -330,6 +344,10 @@ export class Host {
 				if (type === "run_end") {
 					entry.running = false;
 					entry.pacer.relax();
+					if (entry.pendingModels) {
+						entry.created.reloadModels?.(entry.pendingModels);
+						entry.pendingModels = undefined;
+					}
 					// Notes the user saved while the run was busy land here, at the boundary,
 					// so a side answer never lands in the middle of someone's turn.
 					void agent.btw.flushQueued().then((flushed) => {
@@ -701,8 +719,10 @@ export class Host {
 	}
 
 	private stampView(entry: Hosted, view: SessionView = entry.view): SessionView {
+		const definition = view?.model ? this.configuredModel(view.model) : undefined;
 		return {
 			...view,
+			supportedThinkingLevels: definition ? modelThinkingLevels(definition) : undefined,
 			cwd: entry.cwd,
 			...(entry.gitBranch === undefined ? {} : { gitBranch: entry.gitBranch }),
 			queue: entry.queue.map((item) => ({
@@ -911,41 +931,85 @@ export class Host {
 		this.publishView(name);
 	}
 
-	async thinkingLevel(name: string, level: "off" | "minimal" | "low" | "medium" | "high"): Promise<void> {
-		await this.must(name).lane.setThinkingLevel(level, BACKGROUND_CONTEXT);
+	async thinkingLevel(name: string, level: ThinkingLevel): Promise<void> {
+		if (!THINKING_LEVELS.includes(level)) throw new ProviderConfigError("invalid_effort");
+		const agent = this.must(name);
+		const current = await agent.lane.getModel(BACKGROUND_CONTEXT);
+		const definition = current ? this.configuredModel(`${current.provider}:${current.id}`) : undefined;
+		if (definition && !modelThinkingLevels(definition).includes(level)) throw new ProviderConfigError("invalid_effort");
+		await agent.lane.setThinkingLevel(level, BACKGROUND_CONTEXT);
 		this.refreshView(name);
-		void this.hosted
-			.get(name)
-			?.projector.snapshot(BACKGROUND_CONTEXT)
-			.then((view) => {
-				const hosted = this.hosted.get(name);
-				if (hosted === undefined) return;
-				hosted.view = this.stampView(hosted, view);
-				this.publishView(name);
-			});
 	}
 
 	async modelSet(name: string, modelId: string): Promise<void> {
-		const agent = this.must(name);
+		const entry = this.hosted.get(name);
+		if (!entry) throw new Error(`no session ${name}`);
+		if (entry.running) throw new ProviderConfigError("session_busy", 409);
+		entry.created.reloadModels?.(this.etaConfig());
+		const split = modelId.indexOf(":");
+		const identity = split > 0 ? { provider: modelId.slice(0, split), modelId: modelId.slice(split + 1) } : { provider: "anthropic", modelId };
+		if (entry.created.models && !entry.created.models.getModel(identity.provider, identity.modelId)) throw new ProviderConfigError("model_unavailable", 400);
+		await entry.agent.lane.setModel(identity, BACKGROUND_CONTEXT);
+		const definition = this.configuredModel(modelId);
+		if (definition) await entry.agent.lane.setThinkingLevel(modelDefaultThinking(definition), BACKGROUND_CONTEXT);
 		this.setMeta(name, { modelId });
-		if (this.hosted.get(name)?.created.faux === undefined) {
-			const split = modelId.indexOf(":");
-			const identity =
-				split > 0
-					? { provider: modelId.slice(0, split), modelId: modelId.slice(split + 1) }
-					: { provider: "anthropic", modelId };
-			try {
-				await agent.lane.setModel(identity, BACKGROUND_CONTEXT);
-			} catch (error) {
-				/* Unknown id for this registry: the meta is kept so it applies on next open, but the
-				   swap did not happen now, and a panel that reads the live model will say so. */
-				console.warn(
-					`[eta-host] ${name} stayed on its current model, "${modelId}" is not in the registry: ${
-						error instanceof Error ? error.message : String(error)
-					}`,
-				);
-			}
+		this.refreshView(name);
+	}
+
+	private configuredModel(id: string): EtaModelConfig | undefined {
+		for (const provider of this.etaConfig().providers ?? []) {
+			const model = provider.models.find(model => `${provider.id}:${model.id}` === id);
+			if (model) return effectiveModel(model);
 		}
+		return undefined;
+	}
+
+	async providerView(): Promise<ProvidersView> {
+		const view = await this.providers.view();
+		return { ...view, defaultModel: view.defaultModel ?? this.settings().modelId };
+	}
+
+	async saveProvider(body: unknown): Promise<ProvidersView> {
+		const candidate = (body as { provider?: { id?: string; models?: { id?: string }[] } })?.provider;
+		if (candidate?.id && Array.isArray(candidate.models)) await this.assertModelsNotInUse(candidate.id, candidate.models.map(model => model.id ?? ""));
+		const view = await this.providers.save(body);
+		this.providersChanged();
+		return view;
+	}
+
+	async deleteProvider(id: string, revision: unknown): Promise<ProvidersView> {
+		await this.assertModelsNotInUse(id, []);
+		const view = await this.providers.delete(id, revision);
+		if (this.settings().modelId?.startsWith(`${id}:`)) {
+			await this.saveSettings({ modelId: null, thinkingLevel: null });
+		}
+		this.providersChanged();
+		return view;
+	}
+
+	async defaultProviderModel(body: unknown): Promise<ProvidersView> {
+		const view = await this.providers.setDefault(body);
+		// The provider config is now the sole default-model editor. Clearing an old
+		// session default keeps "follow configuration" from resurrecting it later.
+		await this.saveSettings({ modelId: null, thinkingLevel: null });
+		this.providersChanged();
+		return view;
+	}
+
+	private async assertModelsNotInUse(providerId: string, remaining: string[]): Promise<void> {
+		for (const entry of this.hosted.values()) {
+			const current = await entry.agent.lane.getModel(BACKGROUND_CONTEXT);
+			if (current?.provider === providerId && !remaining.includes(current.id)) throw new ProviderConfigError("provider_in_use", 409);
+		}
+	}
+
+	private providersChanged(): void {
+		const config = this.etaConfig();
+		for (const [name, entry] of this.hosted) {
+			if (entry.running) entry.pendingModels = config;
+			else { entry.created.reloadModels?.(config); this.refreshView(name); }
+		}
+		this.emit({ type: "models_changed" });
 	}
 
 	/** Model catalog with no session context (welcome screen picker). */
@@ -964,15 +1028,17 @@ export class Host {
 		currentOverride?: string,
 	): { models: { id: string; label: string; contextWindow: number }[]; current: string } {
 		const configured = (cfg.providers ?? []).flatMap((provider) =>
-			provider.models.map((model) => ({
+			provider.models.map(effectiveModel).map((model) => ({
 				id: `${provider.id}:${model.id}`,
 				label: model.name ?? model.id,
 				contextWindow: model.contextWindow ?? 128_000,
+				thinkingLevels: modelThinkingLevels(model),
+				defaultThinking: modelDefaultThinking(model),
 			})),
 		);
 		const fallback = configDefaultModel(cfg);
 		const current =
-			currentOverride ??
+			currentOverride ?? cfg.defaultModel ?? this.settings().modelId ??
 			(configured.length > 0
 				? fallback !== undefined
 					? `${fallback.provider}:${fallback.modelId}`
@@ -981,6 +1047,7 @@ export class Host {
 			(faux ? "faux" : "claude-sonnet-4-5");
 		if (configured.length > 0) return { models: configured, current };
 		if (faux) return { models: [{ id: "faux", label: "faux echo", contextWindow: 128_000 }], current };
+		if (!process.env.ANTHROPIC_API_KEY) return { models: [], current: currentOverride ?? "" };
 		return {
 			models: ["claude-haiku-4-5", "claude-sonnet-4-5", "claude-opus-4-1"].map((id) => ({
 				id: `anthropic:${id}`,
