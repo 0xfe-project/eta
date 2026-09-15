@@ -4,6 +4,7 @@ import {
 	type Model,
 	type Models,
 	reduceAssistantMessageFrames,
+	type Tool,
 	type Usage,
 } from "@earendil-works/pi-ai";
 import type { AgentMessage, ThinkingLevel } from "../../types.ts";
@@ -18,6 +19,7 @@ import type {
 	HarnessEvent,
 	LaneConfigEventPayload,
 	LaneExecutionInfo,
+	LaneRequestState,
 	LaneSnapshot,
 	ModelIdentity,
 	NavigationResult,
@@ -1690,6 +1692,46 @@ export class Lane<TContext extends object | undefined> implements AgentLane {
 	async getModel(_context: Context): Promise<Model<Api> | undefined> {
 		this.assertOpen();
 		return this.models.getModel(this.state.configuration.model.provider, this.state.configuration.model.modelId);
+	}
+
+	/**
+	 * The request a run would send next, assembled from state as it stands. Mirrors
+	 * what `prepareGeneration` builds from the configuration an operation captured;
+	 * this reads the live configuration instead, because a side request has no
+	 * operation of its own and must inherit whatever the main agent now has.
+	 */
+	async requestState(context: Context): Promise<LaneRequestState<TContext>> {
+		this.assertOpen();
+		const config = this.readConfig();
+		const configuration = this.state.configuration;
+		const toolContext = (typeof config.toolContext === "function"
+			? await config.toolContext(context)
+			: config.toolContext) as TContext;
+		const systemPrompt =
+			config.systemPrompt === undefined
+				? ""
+				: typeof config.systemPrompt === "string"
+					? config.systemPrompt
+					: await config.systemPrompt(toolContext, context);
+		const defined = new Map(config.tools.map((tool) => [tool.name, tool]));
+		return {
+			model: this.models.getModel(configuration.model.provider, configuration.model.modelId),
+			thinkingLevel: configuration.thinkingLevel,
+			tools: configuration.activeToolNames.flatMap((name) => {
+				const tool = defined.get(name);
+				if (tool === undefined) return [];
+				const declared = { name: tool.name, description: tool.description, parameters: tool.parameters } as Tool;
+				if (tool.constrainedSampling !== undefined) {
+					declared.constrainedSampling = tool.constrainedSampling as Tool["constrainedSampling"];
+				}
+				return [declared];
+			}),
+			missingToolNames: configuration.activeToolNames.filter((name) => !defined.has(name)),
+			systemPrompt,
+			streamOptions: config.streamOptions,
+			retryPolicy: config.retryPolicy,
+			toolContext,
+		};
 	}
 
 	setModel(model: ModelIdentity, context: Context): Promise<void> {

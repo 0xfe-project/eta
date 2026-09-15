@@ -6,16 +6,17 @@
  * HarnessEvent bus. There is no second bus, no bridge, no plugin surface.
  */
 
-import type { Api, Model, Models } from "@earendil-works/pi-ai";
-import type { AgentMessage } from "../types.ts";
+import type { Api, Model, Models, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { AgentMessage, AgentToolCall } from "../types.ts";
 import { BACKGROUND_CONTEXT, type Context } from "./context.ts";
 import { AgentHarness, type AgentLane } from "./agent-harness.ts";
+import type { HookRegistry } from "./hooks.ts";
 import { loopFollowUp } from "../prompts/index.ts";
 import { loopState, loopStateInventoryPrefix, taskState, type Value } from "./session/values.ts";
-import type { PendingEntry, StoredTask, TaskStatus } from "./session/types.ts";
+import type { JsonValue, PendingEntry, StoredTask, TaskStatus } from "./session/types.ts";
 import { applyGoalEntries } from "./goal.ts";
 import { OutputRate } from "./output-rate.ts";
-import type { AgentHarnessTool, ExecutionEnv } from "./types.ts";
+import type { AgentHarnessTool, AgentHarnessToolInvocation, ExecutionEnv } from "./types.ts";
 import type { ThinkingLevel } from "../types.ts";
 import type { Session } from "./session/types.ts";
 import type { EtaEmit } from "./events.ts";
@@ -28,6 +29,8 @@ import {
 import { AskRegistry, createAskUserTool, type HeadlessAsk } from "./ask.ts";
 import { memoryExtractionHook, type MemoryExtractionSource } from "./memory.ts";
 import { BtwManager, btwSideAsk } from "./btw.ts";
+import { applyBeforeToolDecision, createToolResultMessage, executeToolCall, finalizeToolCall, prepareToolCall } from "./execution/tools.ts";
+import { createGate, type Gate } from "./execution/effect-gate.ts";
 import { answerEntry, askEntry, btwEntry, goalEntry, type GoalPayload } from "./entries.ts";
 import { GoalManager } from "./goal.ts";
 import { LoopScheduler, type LoopSpec } from "./loops.ts";
@@ -113,6 +116,82 @@ const goalPayloadFor = (change: {
 				: { kind: "resume" };
 	}
 };
+
+/**
+ * Run one tool call for a side request: the same pipeline a run uses — argument
+ * preparation and validation, `before_tool`, the effect gate, `after_tool` — under a
+ * btw-scoped run id, so a tool cannot reach the workspace by bypassing the hooks that
+ * gate it mid-run. Invocation memos live in memory: a side turn is never replayed
+ * after a restart, so giving it a journal would cost the very cheapness that makes the
+ * channel worth having.
+ */
+async function runBtwToolCall(
+	tools: AgentHarnessTool<object | undefined>[],
+	hooks: HookRegistry,
+	gate: Gate,
+	laneName: string,
+	laneContext: Context,
+	call: AgentToolCall,
+	info: { threadId: string; toolContext: unknown; turn: number },
+): Promise<ToolResultMessage> {
+	const runId = `btw:${info.threadId}`;
+	const prepared = prepareToolCall(call, tools);
+	if ("kind" in prepared) return createToolResultMessage(prepared);
+	const decision = await hooks
+		.runToolWithGate(
+			"before_tool",
+			{
+				lane: laneName,
+				runId,
+				toolCallId: call.id,
+				toolName: call.name,
+				args: prepared.args,
+			},
+			gate,
+			laneContext,
+		)
+		.catch(() => undefined);
+	const cleared = applyBeforeToolDecision(prepared, decision);
+	if ("kind" in cleared) return createToolResultMessage(cleared);
+	const memos = new Map<string, JsonValue>();
+	const invocation: AgentHarnessToolInvocation = {
+		invocationId: call.id,
+		operationId: runId,
+		turnId: `${runId}-${info.turn}`,
+		getMemo: async (name) => memos.get(name),
+		setMemo: async (name, value) => {
+			if (value === undefined) memos.delete(name);
+			else memos.set(name, value);
+		},
+	};
+	const executed = await executeToolCall(
+		cleared,
+		gate,
+		() => undefined,
+		info.toolContext as object | undefined,
+		invocation,
+		laneContext,
+	);
+	const patch = await hooks
+		.runToolWithGate(
+			"after_tool",
+			{
+				lane: laneName,
+				runId,
+				toolCallId: cleared.toolCall.id,
+				toolName: cleared.toolCall.name,
+				args: cleared.args,
+				content: executed.result.content,
+				...(executed.result.details === undefined ? {} : { details: executed.result.details as JsonValue }),
+				isError: executed.isError,
+				...(executed.result.usage === undefined ? {} : { usage: executed.result.usage }),
+			},
+			gate,
+			laneContext,
+		)
+		.catch(() => undefined);
+	return createToolResultMessage(finalizeToolCall(cleared, executed, patch));
+}
 
 export class EtaAgent {
 	readonly harness: AgentHarness;
@@ -299,6 +378,9 @@ export class EtaAgent {
 			onAnswer: (payload) => writeEntry(answerEntry(payload)),
 			...(options.askHeadless === undefined ? {} : { headless: options.askHeadless }),
 		});
+		// A side request runs outside every drive, so it owns one gate: that is what admits
+		// its tool effects, and closing it is what stops them when the agent shuts down.
+		const sideGate = createGate();
 		const btw = new BtwManager(
 			(entries) => ({
 				messages: (entries as { message?: AgentMessage }[]).flatMap((entry) =>
@@ -307,11 +389,36 @@ export class EtaAgent {
 			}),
 			(note) => writeEntry(btwEntry({ note })),
 			emit,
-			// Side answers ride the same provider registry as the lane, as one-off
-			// requests: no lane slot, so they land while the main run is busy.
 			btwSideAsk({
 				models: options.models,
-				currentModel: () => laneRef?.getModel(context) ?? Promise.resolve(undefined),
+				// The thread inherits whatever the main agent would send next, read at ask
+				// time: model, thinking level, active tools, prompt, stream options.
+				requestState: async () =>
+					laneRef === undefined ? undefined : await laneRef.requestState(BACKGROUND_CONTEXT),
+				executeTool: (call, info) => {
+					const lane = laneRef;
+					if (lane === undefined)
+						return Promise.reject(new Error("no lane to run the side request's tools on"));
+					return runBtwToolCall(agentTools, harness.hooks, sideGate.gate, lane.name, context, call, info);
+				},
+				beforeRequest: async ({ threadId, turn, model, streamOptions }) => {
+					const lane = laneRef;
+					if (lane === undefined || model === undefined) return undefined;
+					const result = await harness.hooks.runWithGate(
+						"before_request",
+						{
+							lane: lane.name,
+							runId: `btw:${threadId}`,
+							model,
+							step: "assistant",
+							attempt: turn,
+							streamOptions: streamOptions ?? {},
+						},
+						sideGate.gate,
+						context,
+					);
+					return result?.streamOptions;
+				},
 				context,
 				// A side answer is real spend, so it is recorded against the session —
 				// tagged, so the panel can tell it apart from run traffic.
@@ -444,7 +551,12 @@ export class EtaAgent {
 			options.memorySource === undefined
 				? undefined
 				: async () => ({ chars: (await options.memorySource!()).length }),
-			stopHeartbeat,
+			// Shutting the agent down also closes the side requests' effect gate, so a tool
+			// mid-flight fails its ask instead of hanging a thread nobody can see.
+			() => {
+				stopHeartbeat();
+				sideGate.control.close(new Error("agent closed"));
+			},
 		);
 		agentRef = agent;
 		agent.bindPromptRefresh(async () => {

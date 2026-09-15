@@ -61,7 +61,7 @@ describe("persona and memory slots", () => {
 	});
 	it("built-in cards are byte-stable prose (no headings, no bullets)", () => {
 		const cards = builtinPersonas();
-		expect(Object.keys(cards).sort()).toEqual(["Artist", "Executor", "INSIGHTER", "Thinker"]);
+		expect(Object.keys(cards).sort()).toEqual(["Artist", "Executor", "Insighter", "Thinker"]);
 		for (const card of Object.values(cards)) {
 			expect(card).not.toMatch(/^#/m);
 			expect(card).not.toMatch(/^- /m);

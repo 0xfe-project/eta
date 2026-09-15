@@ -4,7 +4,7 @@ import { useAppI18n } from "../../i18n.ts";
 import { etaStore } from "../../lib/eta-store.ts";
 import { Button } from "../../components/ui/button.tsx";
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog.tsx";
-import { BtwDialog } from "./btw-dialog.tsx";
+import { setBtwDialogOpen } from "../../lib/btw.ts";
 import { apiFetch } from "../../lib/host.ts";
 
 export function ContextPanel(props: { session: string; view: SessionView }) {
@@ -15,7 +15,6 @@ export function ContextPanel(props: { session: string; view: SessionView }) {
 	const [promptOpen, setPromptOpen] = createSignal(false);
 	const [toolsOpen, setToolsOpen] = createSignal(false);
 	const [jsonOpen, setJsonOpen] = createSignal(false);
-	const [btwOpen, setBtwOpen] = createSignal(false);
 	const [personaPicker, setPersonaPicker] = createSignal(false);
 	const [contextWindow, setContextWindow] = createSignal<number | null>(null);
 	/**
@@ -294,17 +293,12 @@ export function ContextPanel(props: { session: string; view: SessionView }) {
 								data-testid={`btw-row-${thread.id}`}
 								role="button"
 								tabIndex={0}
-								onClick={() => setBtwOpen(true)}
-								onKeyDown={(event) => event.key === "Enter" && setBtwOpen(true)}
+								onClick={() => setBtwDialogOpen(true)}
+								onKeyDown={(event) => event.key === "Enter" && setBtwDialogOpen(true)}
 								class="mono flex cursor-pointer items-center gap-2 py-0.5 text-[11px] text-muted hover:text-foreground"
 							>
 								<span class="min-w-0 flex-1 truncate">
-									{thread.id} · {thread.exchanges.length}x ·{" "}
-									{thread.error !== undefined
-										? i18n.t("btw.failed")
-										: thread.pending !== undefined
-											? i18n.t("btw.waiting")
-											: thread.saveState}
+									{thread.id} · {thread.exchanges.length}x · {thread.saveState}
 								</span>
 								<button class="border border-border px-2 py-0.5 text-[10px]" onClick={(event) => { event.stopPropagation(); send({ op: "btwSave", session: props.session, threadId: thread.id }); }}>save</button>
 								<button class="border border-border px-2 py-0.5 text-[10px]" onClick={(event) => { event.stopPropagation(); send({ op: "btwClear", session: props.session, threadId: thread.id }); }}>×</button>
@@ -434,7 +428,7 @@ export function ContextPanel(props: { session: string; view: SessionView }) {
 					</DialogBody>
 				</DialogContent>
 			</Dialog>
-			<BtwDialog session={props.session} view={props.view} open={btwOpen()} onOpenChange={setBtwOpen} />
+
 		</div>
 	);
 }

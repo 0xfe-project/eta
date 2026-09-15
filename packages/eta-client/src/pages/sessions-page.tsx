@@ -8,6 +8,8 @@ import { Timeline } from "../features/sessions/timeline.tsx";
 import { Composer } from "../features/sessions/composer.tsx";
 import { ContextBar } from "../features/sessions/context-bar.tsx";
 import { AskModal } from "../features/sessions/ask-modal.tsx";
+import { BtwDialog } from "../features/sessions/btw-dialog.tsx";
+import { btwDialogOpen, setBtwDialogOpen } from "../lib/btw.ts";
 import { ContextPanel } from "../features/sessions/context-panel.tsx";
 import { LogRail } from "../features/sessions/log-rail.tsx";
 import { WorkspacePanel } from "../features/sessions/workspace-panel.tsx";
@@ -115,12 +117,15 @@ function SessionsMain(props: { termOpen: Accessor<boolean>; setTermOpen: Setter<
 									topSlot={<SessionContextBar />}
 									onNavigateSettings={props.onSettings}
 									onToggleTerminal={() => props.setTermOpen((open) => !open)}
+									onBtw={() => setBtwDialogOpen(true)}
 									queue={current().queue}
 								/>
 								<Show when={props.termOpen() && view() !== undefined}>
 									<TerminalHost variant="drawer" {...(termCwd() === undefined ? {} : { cwd: termCwd()! })} onClose={() => props.setTermOpen(false)} />
 								</Show>
 								<AskModal session={selected() ?? ""} view={current()} />
+								{/* Rendered here, not in the context panel: `/btw` is a request to answer now, so the dialog does not wait for whichever tab the right rail happens to be on. */}
+								<BtwDialog session={selected() ?? ""} view={current()} open={btwDialogOpen()} onOpenChange={setBtwDialogOpen} />
 							</>
 						)}
 					</Show>

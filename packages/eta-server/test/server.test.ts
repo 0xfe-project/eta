@@ -180,7 +180,7 @@ describe("ws protocol", () => {
 			await legacy.reader.next();
 			// A rename moves no transcript, yet while the legacy tab is on the wire
 			// the frame must still carry the whole view: it reads view.messages.
-			send(legacy.socket, { op: "personaSet", session: "cap", personaId: "INSIGHTER" });
+			send(legacy.socket, { op: "personaSet", session: "cap", personaId: "Insighter" });
 			await modern.reader.until(
 				(m): m is Extract<ServerMessage, { channel: "view" }> =>
 					"channel" in m && m.channel === "view" && "view" in m,
@@ -229,7 +229,7 @@ describe("ws protocol", () => {
 				(m): m is Extract<ServerMessage, { type: "created" }> => "type" in m && m.type === "created",
 			);
 			const versions: number[] = [];
-			for (const personaId of ["INSIGHTER", "Thinker"]) {
+			for (const personaId of ["Insighter", "Thinker"]) {
 				send(socket, { op: "personaSet", session: "ver", personaId });
 				const frame = await reader.until(
 					(m): m is Extract<ServerMessage, { channel: "view" }> => "channel" in m && m.channel === "view",
@@ -275,7 +275,7 @@ describe("sidebar ops", () => {
 			);
 			send(socket, { op: "session.rename", session: "ops-1", title: "Renamed" });
 			send(socket, { op: "session.pin", session: "ops-1", pinned: true });
-			send(socket, { op: "personaSet", session: "ops-1", personaId: "INSIGHTER" });
+			send(socket, { op: "personaSet", session: "ops-1", personaId: "Insighter" });
 			const sessions = await reader.until(
 				(m): m is Extract<ServerMessage, { type: "sessions" }> =>
 					"type" in m &&
@@ -293,7 +293,7 @@ describe("sidebar ops", () => {
 					m.session === "ops-1" &&
 					// The pacer answers an op with a patch frame whenever the transcript
 					// did not move; the personas ride along in either frame shape.
-					("view" in m ? m.view : m.patch).personas.includes("INSIGHTER"),
+					("view" in m ? m.view : m.patch).personas.includes("Insighter"),
 			);
 			socket.close();
 		});
@@ -445,19 +445,23 @@ describe("btw handoff", () => {
 		});
 	});
 
-	it("records a side answer's model/thinking override on the thread", async () => {
+	// Nothing is chosen per thread: a side request reads the session's own model at ask
+	// time. This server has no provider configured, which is the cheapest way to prove
+	// the request is really made — it comes back saying there is no model to ask, rather
+	// than the op vanishing or the thread waiting forever.
+	it("asks the session's model and reports a missing one on the thread", async () => {
 		await withServer(async (server) => {
 			const { socket, reader } = await connect(server);
 			await reader.next();
 			send(socket, { op: "session.create", name: "s1", personaId: "Thinker" });
 			await reader.until((m): m is Extract<ServerMessage, { type: "created" }> => "type" in m && m.type === "created");
 			send(socket, { op: "btwOpen", session: "s1", kind: "tangent" });
-			send(socket, { op: "btwOverride", session: "s1", threadId: "btw-1", model: "faux", thinking: "low" });
+			send(socket, { op: "btwAsk", session: "s1", threadId: "btw-1", question: "what is 2+2?" });
 			const frame = await reader.until(
 				(m): m is Extract<ServerMessage, { channel: "view" }> =>
-					"channel" in m && m.channel === "view" && JSON.stringify(m).includes('"model":"faux"'),
+					"channel" in m && m.channel === "view" && JSON.stringify(m).includes("no model configured"),
 			);
-			expect(JSON.stringify(frame)).toContain('"thinking":"low"');
+			expect(JSON.stringify(frame)).toContain('"error":"no model configured for this session"');
 			socket.close();
 		});
 	});

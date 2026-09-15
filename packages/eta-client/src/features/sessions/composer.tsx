@@ -76,6 +76,8 @@ export function Composer(props: {
 	create?: ComposerCreate;
 	onNavigateSettings?: () => void;
 	onToggleTerminal?: () => void;
+	/** Raise the btw dialog: `/btw` is answered by the dialog, not by a message. */
+	onBtw?: () => void;
 }) {
 	const i18n = useAppI18n();
 	const createMode = () => props.create !== undefined;
@@ -124,7 +126,7 @@ export function Composer(props: {
 				: [
 						{ name: "compact", description: t("cmd.compact"), run: () => store.send({ op: "compact", session }) },
 						{ name: "abort", description: t("cmd.abort"), run: () => store.send({ op: "abort", session }) },
-						{ name: "btw", description: t("cmd.btw"), run: () => store.send({ op: "btwOpen", session, kind: "contextual" }) },
+						{ name: "btw", description: t("cmd.btw"), run: () => props.onBtw?.() },
 						{ name: "goal", description: t("cmd.goal"), run: (args: string) => (args.length > 0 ? store.send({ op: "goal", session, action: "set", objective: args }) : setText("/goal ")) },
 						{ name: "loop", description: t("cmd.loop"), run: (args: string) => createLoop(session, args, setText) },
 						{ name: "thinking", description: t("cmd.thinking"), run: () => cycleThinking() },
