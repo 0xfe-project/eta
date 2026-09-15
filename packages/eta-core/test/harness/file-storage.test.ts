@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -32,6 +32,24 @@ describe("FileStorage conformance", () => {
 		it(`${testCase.group} > ${testCase.name}`, () => testCase.run());
 	}
 });
+
+
+const usage = (input: number) => ({
+	input,
+	output: 0,
+	cacheRead: 0,
+	cacheWrite: 0,
+	totalTokens: input,
+	cost: { input, output: 0, cacheRead: 0, cacheWrite: 0, total: input },
+});
+
+const messageEntry = (id: string, parentId: string | null, text: string) =>
+	sessionWrites.insertEntry({
+		id,
+		parentId,
+		type: "message",
+		message: { role: "user", content: text, timestamp: NOW },
+	});
 
 describe("FileStorage journal replay", () => {
 	it("reopens with identical entries, values and lists", async () => {
@@ -203,5 +221,132 @@ describe("FileStorage journal replay", () => {
 		const reopened = await FileStorage.load({ path }, BACKGROUND_CONTEXT);
 		expect((await reopened.getEntries(["e1", "e2"], BACKGROUND_CONTEXT)).size).toBe(2);
 		await reopened.close(BACKGROUND_CONTEXT);
+	});
+});
+
+describe("FileStorage journal repair and compaction", () => {
+	// The repair is only real once it is on the disk: an in-memory repair fails the next
+	// open exactly like the bytes it was meant to fix.
+	it("cuts a torn tail off the file itself", async () => {
+		const path = await freshPath();
+		const kept = `${JSON.stringify({ w: [messageEntry("e1", null, "kept")], t: NOW })}\n`;
+		await writeFile(path, `${kept}{"w":[{"kind":"entr`, "utf8");
+
+		const opened = await FileStorage.load({ path }, BACKGROUND_CONTEXT);
+		expect((await opened.getEntries(["e1"], BACKGROUND_CONTEXT)).size).toBe(1);
+		expect((await stat(path)).size).toBe(Buffer.byteLength(kept));
+		await opened.close(BACKGROUND_CONTEXT);
+	});
+
+	it("keeps the commits behind an unreadable line and rebuilds the journal without the hole", async () => {
+		// Two writers over one directory can cut a line in half without touching the lines
+		// around it. The history behind the hole was accepted like any other.
+		const path = await freshPath();
+		await writeFile(
+			path,
+			`${JSON.stringify({ w: [messageEntry("e1", null, "first")], t: NOW })}\nTHIS IS NO JOURNAL LINE AT ALL\n${JSON.stringify({ w: [messageEntry("e2", "e1", "behind the hole")], t: NOW })}\n`,
+			"utf8",
+		);
+
+		const opened = await FileStorage.load({ path }, BACKGROUND_CONTEXT);
+		expect((await opened.getEntries(["e1", "e2"], BACKGROUND_CONTEXT)).size).toBe(2);
+		expect(await readFile(path, "utf8")).not.toContain("THIS IS NO JOURNAL LINE");
+		await opened.close(BACKGROUND_CONTEXT);
+
+		const reopened = await FileStorage.load({ path }, BACKGROUND_CONTEXT);
+		expect((await reopened.getEntries(["e1", "e2"], BACKGROUND_CONTEXT)).size).toBe(2);
+		await reopened.close(BACKGROUND_CONTEXT);
+	});
+
+	it("rebuilds the journal from live state and comes back identical", async () => {
+		const path = await freshPath();
+		const opened = await FileStorage.load({ path, now: () => NOW }, BACKGROUND_CONTEXT);
+		const counter = storedValues.value<number>("test.counter");
+		const frames = storedValues.list<string>("test.frames");
+		await opened.commit(
+			[
+				messageEntry("e1", null, "hello"),
+				sessionWrites.insertUsage({ id: "u1", usage: usage(30), entryId: "e1", adjustment: false }),
+				storedValues.setValue(counter, 1),
+			],
+			BACKGROUND_CONTEXT,
+		);
+		// A response streaming: the frames are the journal's bulk and dead by the next commit.
+		for (let index = 0; index < 200; index += 1)
+			await opened.commit(
+				[storedValues.setValue(counter, index + 2), storedValues.appendList(frames, `frame ${index}`)],
+				BACKGROUND_CONTEXT,
+			);
+		await opened.commit([storedValues.deleteList(frames)], BACKGROUND_CONTEXT);
+		const beforeBytes = (await stat(path)).size;
+		// `seq` is a replay artifact on both sides of a rebuild, so the value is what has to match.
+		const liveCounter = await opened.getValue(counter, BACKGROUND_CONTEXT);
+		const liveStats = await opened.getStats(BACKGROUND_CONTEXT);
+
+		const result = await opened.compact(BACKGROUND_CONTEXT);
+		expect(result.rewritten).toBe(true);
+		expect(result.afterBytes).toBeLessThan(beforeBytes);
+		expect((await stat(path)).size).toBeLessThan(beforeBytes / 4);
+		await opened.close(BACKGROUND_CONTEXT);
+
+		const reopened = await FileStorage.load({ path }, BACKGROUND_CONTEXT);
+		expect(await reopened.getValue(counter, BACKGROUND_CONTEXT)).toEqual(liveCounter && { ...liveCounter, seq: (await reopened.getValue(counter, BACKGROUND_CONTEXT))?.seq });
+		expect(await reopened.readList(frames, undefined, BACKGROUND_CONTEXT)).toEqual([]);
+		expect(await reopened.getStats(BACKGROUND_CONTEXT)).toEqual(liveStats);
+		expect((await reopened.getEntries(["e1"], BACKGROUND_CONTEXT)).size).toBe(1);
+		expect((await reopened.scanUsage({ limit: 10 }, BACKGROUND_CONTEXT)).length).toBe(1);
+		await reopened.close(BACKGROUND_CONTEXT);
+	});
+
+	it("leaves the journal alone when another writer has grown it", async () => {
+		// The rewrite erases the log to rewrite it. Lines this instance never saw are not in
+		// the state it writes, so renaming would drop them without a word.
+		const path = await freshPath();
+		const opened = await FileStorage.load({ path, now: () => NOW }, BACKGROUND_CONTEXT);
+		await opened.commit([messageEntry("e1", null, "mine")], BACKGROUND_CONTEXT);
+		await appendFile(path, `${JSON.stringify({ w: [messageEntry("e2", "e1", "theirs")], t: NOW })}\n`, "utf8");
+
+		const result = await opened.compact(BACKGROUND_CONTEXT);
+		expect(result.rewritten).toBe(false);
+		expect(result.reason).toBe("concurrent-writer");
+		expect(await readFile(path, "utf8")).toContain("theirs");
+		await opened.close(BACKGROUND_CONTEXT);
+	});
+
+	it(
+		"rebuilds on its own once a long run goes quiet",
+		async () => {
+			const path = await freshPath();
+			const opened = await FileStorage.load(
+				{ path, now: () => NOW, compactGrowthBytes: 2_000, compactQuietMs: 10 },
+				BACKGROUND_CONTEXT,
+			);
+			const frames = storedValues.list<string>("test.frames");
+			for (let index = 0; index < 60; index += 1)
+				await opened.commit([storedValues.appendList(frames, `frame ${index} with some padding`)], BACKGROUND_CONTEXT);
+			await opened.commit([storedValues.deleteList(frames)], BACKGROUND_CONTEXT);
+			const beforeBytes = (await stat(path)).size;
+			// The rebuild waits for the session to go quiet, then notices the streaming
+			// history it no longer needs. Waits in real time because the wait is the behavior.
+			const deadline = Date.now() + 2_000;
+			let afterBytes = beforeBytes;
+			while (Date.now() < deadline && (afterBytes = (await stat(path)).size) >= beforeBytes)
+				await new Promise((tick) => setTimeout(tick, 20));
+			expect(afterBytes).toBeLessThan(beforeBytes);
+			await opened.close(BACKGROUND_CONTEXT);
+		},
+		10_000,
+	);
+
+	it("keeps a small journal as it is", async () => {
+		const path = await freshPath();
+		const opened = await FileStorage.load({ path, now: () => NOW }, BACKGROUND_CONTEXT);
+		await opened.commit([messageEntry("e1", null, "short and current")], BACKGROUND_CONTEXT);
+		const beforeBytes = (await stat(path)).size;
+		const result = await opened.compact(BACKGROUND_CONTEXT);
+		expect(result.rewritten).toBe(false);
+		expect(result.reason).toBe("not-worth-it");
+		expect((await stat(path)).size).toBe(beforeBytes);
+		await opened.close(BACKGROUND_CONTEXT);
 	});
 });

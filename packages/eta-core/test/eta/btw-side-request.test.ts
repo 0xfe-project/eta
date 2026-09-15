@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { AssistantMessage, Models, Usage } from "@earendil-works/pi-ai";
+import type { AssistantMessage, Models, ToolResultMessage, Usage } from "@earendil-works/pi-ai";
 import { btwSideAsk, BtwManager } from "../../src/harness/btw.ts";
 import { BACKGROUND_CONTEXT } from "../../src/harness/context.ts";
-import type { AgentToolCall, AgentToolResultMessage } from "../../src/types.ts";
+import type { AgentToolCall } from "../../src/types.ts";
 import type { LaneRequestState } from "../../src/harness/runtime/types.ts";
 
 function usage(totalTokens: number): Usage {
@@ -81,14 +81,21 @@ function requestState(overrides: Partial<LaneRequestState<object | undefined>> =
 		tools: [
 			{ name: "read", description: "read a file", parameters: { type: "object", properties: {} } },
 			{ name: "ask_user", description: "ask the user", parameters: { type: "object", properties: {} } },
-		],
+		] as never,
 		missingToolNames: [],
 		systemPrompt: "the main agent's prompt",
 		...overrides,
+		// Required, not optional: a prompt is always resolved against some tool context.
+		toolContext: overrides.toolContext ?? {},
 	};
 }
 
-function toolResult(call: AgentToolCall, text: string): AgentToolResultMessage {
+/** A tool call as the model's assistant content holds it. */
+function call(name: string): AgentToolCall {
+	return { type: "toolCall", id: `call-${Math.random()}`, name, arguments: {} };
+}
+
+function toolResult(call: AgentToolCall, text: string): ToolResultMessage {
 	return {
 		role: "toolResult",
 		toolCallId: call.id,
@@ -96,7 +103,7 @@ function toolResult(call: AgentToolCall, text: string): AgentToolResultMessage {
 		content: [{ type: "text", text }],
 		isError: false,
 		timestamp: 0,
-	} as AgentToolResultMessage;
+	} as unknown as ToolResultMessage;
 }
 
 describe("btw side request", () => {
@@ -112,7 +119,7 @@ describe("btw side request", () => {
 			btwSideAsk({
 				models,
 				requestState: async () => state,
-				executeTool: async () => toolResult({ id: "x", name: "read", arguments: {} }, "ok"),
+				executeTool: async () => toolResult(call("read"), "ok"),
 				context: BACKGROUND_CONTEXT,
 			}),
 		);
@@ -135,7 +142,7 @@ describe("btw side request", () => {
 			btwSideAsk({
 				models,
 				requestState: async () => requestState(),
-				executeTool: async () => toolResult({ id: "x", name: "read", arguments: {} }, "ok"),
+				executeTool: async () => toolResult(call("read"), "ok"),
 				context: BACKGROUND_CONTEXT,
 			}),
 		);
@@ -195,7 +202,7 @@ describe("btw side request", () => {
 			btwSideAsk({
 				models,
 				requestState: async () => requestState(),
-				executeTool: async () => toolResult({ id: "x", name: "read", arguments: {} }, "ok"),
+				executeTool: async () => toolResult(call("read"), "ok"),
 				context: BACKGROUND_CONTEXT,
 			}),
 		);
@@ -220,7 +227,7 @@ describe("btw side request", () => {
 			btwSideAsk({
 				models: fauxModels([errorAnswer("provider exploded")]).models,
 				requestState: async () => requestState(),
-				executeTool: async () => toolResult({ id: "x", name: "read", arguments: {} }, "ok"),
+				executeTool: async () => toolResult(call("read"), "ok"),
 				context: BACKGROUND_CONTEXT,
 			}),
 		);

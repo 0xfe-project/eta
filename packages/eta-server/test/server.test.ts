@@ -436,20 +436,20 @@ describe("btw handoff", () => {
 			send(socket, { op: "btwHandoff", session: "s1", threadId: "btw-1" });
 			const frame = await reader.until(
 				(m): m is Extract<ServerMessage, { channel: "view" }> =>
-					"channel" in m && m.channel === "view" && JSON.stringify(m).includes("results from the side conversation"),
+					"channel" in m && m.channel === "view" && JSON.stringify(m).includes("notes taken beside the run"),
 				8000,
 			);
 			// A patch frame carries no transcript, so assert on whatever the frame holds.
-			expect(JSON.stringify(frame)).toContain("A: the one you already know");
+			expect(JSON.stringify(frame)).toContain("which editor? -> the one you already know");
 			socket.close();
 		});
 	});
 
-	// Nothing is chosen per thread: a side request reads the session's own model at ask
-	// time. This server has no provider configured, which is the cheapest way to prove
-	// the request is really made — it comes back saying there is no model to ask, rather
-	// than the op vanishing or the thread waiting forever.
-	it("asks the session's model and reports a missing one on the thread", async () => {
+	// The op has to reach a model and come back through the view: with no provider in
+	// the test config, the session falls back to the built-in echo model, which answers
+	// in a way the frame can be recognized by. The wait and the answer both belong to the
+	// thread, so nothing here needs the main lane to be idle.
+	it("asks the session's model and answers on the thread", async () => {
 		await withServer(async (server) => {
 			const { socket, reader } = await connect(server);
 			await reader.next();
@@ -459,9 +459,9 @@ describe("btw handoff", () => {
 			send(socket, { op: "btwAsk", session: "s1", threadId: "btw-1", question: "what is 2+2?" });
 			const frame = await reader.until(
 				(m): m is Extract<ServerMessage, { channel: "view" }> =>
-					"channel" in m && m.channel === "view" && JSON.stringify(m).includes("no model configured"),
+					"channel" in m && m.channel === "view" && JSON.stringify(m).includes("faux echo"),
 			);
-			expect(JSON.stringify(frame)).toContain('"error":"no model configured for this session"');
+			expect(JSON.stringify(frame)).toContain("what is 2+2?");
 			socket.close();
 		});
 	});

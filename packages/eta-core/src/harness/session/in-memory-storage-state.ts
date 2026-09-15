@@ -26,6 +26,7 @@ import type {
 	EntryScan,
 	EntryStructure,
 	ForkOptions,
+	NewEntry,
 	SessionStats,
 	StorageBranchScan,
 	UsageRow,
@@ -45,6 +46,15 @@ import {
 	type ValueList,
 	value,
 } from "./values.ts";
+
+/** One line of a journal rebuilt from live state; `FileStorage` gives it its wire shape. */
+export interface StateJournalLine {
+	writes: Write[];
+	timestamp: number;
+}
+
+/** Live writes per rebuilt line: a session can hold millions of them in one list. */
+const REWRITE_LINE_WRITES = 512;
 
 interface StoredListSnapshot {
 	address: ValueList<unknown>;
@@ -112,6 +122,65 @@ export class InMemoryStorageState {
 	/** Same sequencing as `prepareCommit`, without the duplicate-id rejection. */
 	prepareReplay(writes: Write[], timestamp: number): PreparedCommit {
 		return prepareStorageCommit(writes, this.nextSeq, timestamp);
+	}
+
+	/**
+	 * The journal this state would need to be rebuilt from nothing: one line per moment an
+	 * entry was accepted, holding what was accepted then, and one tail of every value and
+	 * list element still alive. Deletes and superseded values are absent by construction —
+	 * a rebuild that carried them would be a copy of the file rather than a repair of it.
+	 *
+	 * Entries are emitted in sequence order, so a replay that assigns fresh sequence numbers
+	 * still walks parents before children. They are grouped by the timestamp they hold,
+	 * because a replay stamps an entry with its line's timestamp: a rewrite that flattened
+	 * those would date the whole chat to the moment it ran.
+	 */
+	journalFromState(): StateJournalLine[] {
+		const lines = new Map<number, Write[]>();
+		const lineAt = (timestamp: number): Write[] => {
+			let writes = lines.get(timestamp);
+			if (writes === undefined) {
+				writes = [];
+				lines.set(timestamp, writes);
+			}
+			return writes;
+		};
+		let newest = 0;
+		for (const entry of this.entriesBySeq) {
+			const { seq: _seq, timestamp, ...rest } = entry;
+			lineAt(timestamp).push({ kind: "entry", entry: rest as NewEntry });
+			newest = Math.max(newest, timestamp);
+		}
+		for (const row of this.usage.values()) {
+			// A usage row belongs with the message it was spent on; an adjustment or an orphan
+			// rides the newest line rather than inventing a moment of its own.
+			const owner = row.entryId === undefined ? undefined : this.entries.get(row.entryId);
+			const { seq: _seq, ...withoutSeq } = row;
+			lineAt(owner?.timestamp ?? newest).push({ kind: "usage", row: withoutSeq });
+		}
+		const alive: Write[] = [
+			...[...this.scalarValues.values()].map((stored) => ({
+				kind: "value" as const,
+				op: "set" as const,
+				namespace: stored.address.namespace,
+				key: stored.address.key,
+				value: stored.value,
+			})),
+			...[...this.listValues.values()].flatMap((snapshot) =>
+				snapshot.elements.map((element) => ({
+					kind: "list" as const,
+					op: "append" as const,
+					namespace: snapshot.address.namespace,
+					key: snapshot.address.key,
+					value: element.value,
+				})),
+			),
+		];
+		// A session can hold a million live list elements; one line per commit stays small.
+		for (let start = 0; start < alive.length; start += REWRITE_LINE_WRITES) {
+			lineAt(newest).push(...alive.slice(start, start + REWRITE_LINE_WRITES));
+		}
+		return [...lines].map(([timestamp, writes]) => ({ writes, timestamp }));
 	}
 
 	/** Let a branch walk end at an entry whose parent the journal never held. */

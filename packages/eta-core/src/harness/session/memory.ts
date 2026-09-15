@@ -1,6 +1,6 @@
 import { uuidv7 } from "@earendil-works/pi-ai/utils/uuid";
 import type { Context } from "../context.ts";
-import { InMemoryStorageState } from "./in-memory-storage-state.ts";
+import { InMemoryStorageState, type StateJournalLine } from "./in-memory-storage-state.ts";
 import { StorageBackedSession } from "./session.ts";
 import type {
 	Branch,
@@ -83,6 +83,16 @@ export class MemoryStorage implements Storage {
 	 */
 	allowBrokenBranches(): void {
 		this.storageState.allowBrokenBranches();
+	}
+
+	/**
+	 * What a compaction writes: the journal this state would need, with everything already
+	 * overwritten left behind. The commit queue is drained first so a rewrite never snapshots
+	 * state that a queued commit is about to change.
+	 */
+	async journalFromState(_context: Context): Promise<StateJournalLine[]> {
+		await this.commitQueue.catch(() => undefined);
+		return this.storageState.journalFromState();
 	}
 
 	getEntries(ids: string[], _context: Context): Promise<Map<string, Entry>> {
