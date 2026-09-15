@@ -313,5 +313,20 @@
 	"providers.configureModels": "Configure models",
 	"providers.deepseekDescription": "Connect the official DeepSeek API for models and thinking levels.",
 	"providers.error.deepseek_key_required": "Enter a DeepSeek API key.",
-	"providers.deleting": "Deleting…"
+	"providers.deleting": "Deleting…",
+	"providers.codexDescription": "Use your ChatGPT subscription with Codex.",
+	"providers.codexAccount": "ChatGPT account",
+	"providers.codexLogin": "Sign in with ChatGPT",
+	"providers.codexOpenLogin": "Open ChatGPT sign-in",
+	"providers.codexDeviceHint": "Enter this code on the sign-in page. Device code login must be enabled in your ChatGPT security settings.",
+	"providers.error.codex_login_required": "Sign in with ChatGPT to use Codex.",
+	"providers.error.codex_login_failed": "ChatGPT login failed or expired. Please try again.",
+	"providers.codexCatalogHint": "Available models depend on your ChatGPT account.",
+	"providers.error.codex_backend_outdated": "This backend does not support Codex login yet. Restart the Eta backend, then try again.",
+	"providers.codexCode": "Verification code",
+	"providers.codexBrowserHint": "Complete sign-in in your browser. This page will continue automatically when authorization finishes.",
+	"providers.codexManualTitle": "Authorization did not return automatically?",
+	"providers.codexManualHint": "Paste the full redirect URL from your browser, or the authorization code.",
+	"providers.codexContinue": "Continue",
+	"providers.codexDeviceAlternative": "Use device code login instead"
 }

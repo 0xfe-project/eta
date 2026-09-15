@@ -1,7 +1,7 @@
 import { For, Index, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import {
 	effectiveModel, modelThinkingLevels, MODEL_THINKING_LEVELS, BUILTIN_PROVIDER_PRESETS, providerPreset,
-	type EtaModelConfig, type ModelCapabilities, type ProviderInput, type ProviderSummary, type ProvidersView, type ProviderKind,
+	type CodexLoginView, type EtaModelConfig, type ModelCapabilities, type ProviderInput, type ProviderSummary, type ProvidersView, type ProviderKind,
 } from "@eta/core/provider-config";
 import { useAppI18n } from "../../i18n.ts";
 import { apiFetch } from "../../lib/host.ts";
@@ -12,6 +12,7 @@ async function providerRequest<T>(path: string, body?: unknown, method = "POST",
 	const response = await apiFetch(path, body === undefined
 		? { signal }
 		: { method, signal, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+	if (response.status === 404 && path.startsWith("/api/providers/codex/")) throw new Error("codex_backend_outdated");
 	let result: unknown;
 	try { result = await response.json(); } catch { throw new Error("connection_failed"); }
 	if (!response.ok) throw new Error((result as { error?: string })?.error ?? "connection_failed");
@@ -29,13 +30,18 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 	const [status, setStatus] = createSignal<"" | "connected" | "saved">("");
 	const [deleteConfirm, setDeleteConfirm] = createSignal(false);
 	const [backConfirm, setBackConfirm] = createSignal(false);
+	const [login, setLogin] = createSignal<CodexLoginView>();
+	const [loginAnswer, setLoginAnswer] = createSignal("");
+	const [answerBusy, setAnswerBusy] = createSignal(false);
+	let loginTimer: ReturnType<typeof setTimeout> | undefined;
+	const cancelLogin = () => { const id = login()?.id; clearTimeout(loginTimer); setLogin(undefined); setLoginAnswer(""); if (id) void providerRequest("/api/providers/codex/cancel", { id }).catch(() => {}); };
 	let controller: AbortController | undefined;
 	let generation = 0;
 	const dirty = () => draft() !== undefined && JSON.stringify(draft()) !== baseline();
 	const editingExisting = () => view()?.providers.some(provider => provider.id === draft()?.id) ?? false;
 	createEffect(() => props.onDirtyChange(dirty()));
 	createEffect(() => props.onBusyChange(busy()));
-	onCleanup(() => { generation += 1; controller?.abort(); });
+	onCleanup(() => { generation += 1; controller?.abort(); cancelLogin(); });
 
 	const message = () => {
 		const key = `providers.error.${error()}`;
@@ -62,7 +68,7 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 	};
 	const updateModel = (index: number, patch: Partial<EtaModelConfig>) => update({ models: draft()!.models.map((model, i) => i === index ? { ...model, ...patch } : model) });
 	const edit = (provider: ProviderSummary | ProviderKind) => {
-		generation += 1; controller?.abort();
+		generation += 1; controller?.abort(); cancelLogin();
 		let next: ProviderInput;
 		if (typeof provider === "string") {
 			const id = provider !== "openai-compatible" && !view()?.providers.some(item => item.id === provider)
@@ -77,6 +83,7 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 	};
 	const back = () => {
 		if (busy()) return;
+		cancelLogin();
 		if (dirty()) setBackConfirm(true);
 		else setDraft(undefined);
 	};
@@ -94,6 +101,41 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 			if (attempt === generation) setError(cause instanceof Error ? cause.message : "connection_failed");
 		} finally { if (attempt === generation) setBusy(false); }
 	};
+	const startLogin = async (method: "browser" | "device_code" = "browser") => {
+		if (!draft() || busy()) return;
+		cancelLogin(); setError(""); setBusy(true);
+		const attempt = generation;
+		try {
+			const started = await providerRequest<CodexLoginView>("/api/providers/codex/login", { providerId: draft()!.id, method });
+			if (attempt !== generation) { void providerRequest("/api/providers/codex/cancel", { id: started.id }); return; }
+			setLogin(started);
+			const poll = async () => {
+				try {
+					const current = await providerRequest<CodexLoginView>("/api/providers/codex/status", { id: started.id });
+					if (login()?.id !== started.id) return;
+					setLogin(current);
+					if (current.status === "complete") { setLogin(undefined); setLoginAnswer(""); await discover(); }
+					else if (current.status === "failed") { setLogin(undefined); setError("codex_login_failed"); }
+					else loginTimer = setTimeout(() => void poll(), 1500);
+				} catch (cause) { if (login()?.id === started.id) { cancelLogin(); setError(cause instanceof Error ? cause.message : "connection_failed"); } }
+			};
+			loginTimer = setTimeout(() => void poll(), 500);
+		} catch (cause) { setError(cause instanceof Error ? cause.message : "connection_failed"); }
+		finally { if (attempt === generation) setBusy(false); }
+	};
+
+	const answerLogin = async () => {
+		const flow = login();
+		if (!flow?.manualPromptId || !loginAnswer().trim() || answerBusy()) return;
+		const attempt = generation;
+		setAnswerBusy(true); setError("");
+		try {
+			await providerRequest("/api/providers/codex/answer", { id: flow.id, promptId: flow.manualPromptId, value: loginAnswer().trim() });
+			if (attempt === generation) setLoginAnswer("");
+		} catch (cause) { if (attempt === generation) setError(cause instanceof Error ? cause.message : "connection_failed"); }
+		finally { setAnswerBusy(false); }
+	};
+
 	const accept = (result: ProvidersView) => {
 		setView(result);
 		const current = result.providers.find(provider => provider.id === draft()?.id);
@@ -129,9 +171,9 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 			<Show when={view()} fallback={<Show when={!error()}><p class="settings-hint">{i18n.t("settings.loading")}</p></Show>}>
 				{current => <>
 					<label class="settings-default"><span>{i18n.t("settings.defaultModel")}</span><select data-testid="default-model" value={current().defaultModel ?? ""} disabled={busy()} onChange={event => void defaultModel(event.currentTarget.value)}><option value="">{i18n.t("providers.autoDefault")}</option><For each={current().providers}>{provider => <optgroup label={title(provider)}><For each={provider.models}>{model => <option value={`${provider.id}:${model.id}`}>{effectiveModel(model).name ?? model.id}</option>}</For></optgroup>}</For></select></label>
-					<Show when={current().providers.length > 0}><div class="settings-section-label">{i18n.t("providers.configured")}</div><For each={current().providers}>{provider => <button class="settings-provider" data-testid={`provider-${provider.id}`} onClick={() => edit(provider)}><ProviderLogo kind={provider.kind} /><span><strong>{title(provider)}</strong><small>{i18n.t("providers.modelCount", { n: provider.models.length })} · {provider.hasApiKey ? i18n.t("providers.keyConfigured") : i18n.t("providers.noKey")}</small></span><span class="settings-provider-action">{i18n.t("providers.configure")} →</span></button>}</For></Show>
+					<Show when={current().providers.length > 0}><div class="settings-section-label">{i18n.t("providers.configured")}</div><For each={current().providers}>{provider => <button class="settings-provider" data-testid={`provider-${provider.id}`} onClick={() => edit(provider)}><ProviderLogo kind={provider.kind} /><span><strong>{title(provider)}</strong><small>{i18n.t("providers.modelCount", { n: provider.models.length })} · {provider.kind === "openai-codex" ? i18n.t("providers.codexAccount") : provider.hasApiKey ? i18n.t("providers.keyConfigured") : i18n.t("providers.noKey")}</small></span><span class="settings-provider-action">{i18n.t("providers.configure")} →</span></button>}</For></Show>
 					<div class="settings-section-label">{i18n.t("providers.add")}</div>
-					<For each={BUILTIN_KINDS}>{kind => <Show when={!current().providers.some(provider => provider.kind === kind)}><button class="settings-provider" data-testid={`provider-add-${kind === "kimi-coding" ? "kimi" : kind}`} onClick={() => edit(kind)}><ProviderLogo kind={kind} /><span><strong>{providerPreset(kind)!.name}</strong><small>{i18n.t(kind === "kimi-coding" ? "providers.kimiDescription" : "providers.deepseekDescription")}</small></span><span class="settings-provider-action">{i18n.t("providers.connect")} →</span></button></Show>}</For>
+					<For each={BUILTIN_KINDS}>{kind => <Show when={!current().providers.some(provider => provider.kind === kind)}><button class="settings-provider" data-testid={`provider-add-${kind === "kimi-coding" ? "kimi" : kind}`} onClick={() => edit(kind)}><ProviderLogo kind={kind} /><span><strong>{providerPreset(kind)!.name}</strong><small>{i18n.t(kind === "openai-codex" ? "providers.codexDescription" : kind === "kimi-coding" ? "providers.kimiDescription" : "providers.deepseekDescription")}</small></span><span class="settings-provider-action">{i18n.t("providers.connect")} →</span></button></Show>}</For>
 					<button class="settings-provider" data-testid="provider-add-custom" onClick={() => edit("openai-compatible")}><ProviderLogo kind="openai-compatible" /><span><strong>{i18n.t("providers.custom")}</strong><small>{i18n.t("providers.customDescription")}</small></span><span class="settings-provider-action">{i18n.t("providers.addAction")} →</span></button>
 				</>}
 			</Show>
@@ -139,10 +181,23 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 			{current => <>
 				<button class="settings-back" disabled={busy()} onClick={back}>← {i18n.t("settings.providers")}</button>
 				<Show when={backConfirm()}><div class="settings-discard" role="alert"><span>{i18n.t("settings.unsaved")}</span><button onClick={() => setBackConfirm(false)}>{i18n.t("settings.keepEditing")}</button><button onClick={() => { setDraft(undefined); setBackConfirm(false); }}>{i18n.t("settings.discard")}</button></div></Show>
-				<div class="settings-heading settings-inline"><ProviderLogo kind={current().kind} /><div><h2>{providerPreset(current().kind)?.name ?? i18n.t("providers.custom")}</h2><p>{i18n.t(current().kind === "kimi-coding" ? "providers.kimiDescription" : current().kind === "deepseek" ? "providers.deepseekDescription" : "providers.customDescription")}</p></div></div>
-				<fieldset disabled={busy()}>
+				<div class="settings-heading settings-inline"><ProviderLogo kind={current().kind} /><div><h2>{providerPreset(current().kind)?.name ?? i18n.t("providers.custom")}</h2><p>{i18n.t(current().kind === "openai-codex" ? "providers.codexDescription" : current().kind === "kimi-coding" ? "providers.kimiDescription" : current().kind === "deepseek" ? "providers.deepseekDescription" : "providers.customDescription")}</p></div></div>
+				<Show when={current().kind === "openai-codex"}><section class="settings-codex-auth">
+					<div class="settings-row"><span>{i18n.t("providers.codexAccount")}</span><div class="settings-inline"><button data-testid="codex-login" disabled={busy() || !!login()} onClick={() => void startLogin()}>{i18n.t("providers.codexLogin")}</button></div></div>
+					<p class="settings-hint">{i18n.t("providers.codexCatalogHint")}</p>
+					<Show when={login()}>{flow => <div class="settings-codex-login" role="status">
+						<Show when={flow().url} fallback={<span class="settings-hint">{i18n.t("providers.connecting")}</span>}>
+							<Show when={flow().userCode}><div class="settings-codex-code"><span class="settings-hint">{i18n.t("providers.codexCode")}</span><code>{flow().userCode}</code></div></Show>
+							<p class="settings-hint settings-codex-instructions">{i18n.t(flow().method === "device_code" ? "providers.codexDeviceHint" : "providers.codexBrowserHint")}</p>
+						</Show>
+						<div class="settings-codex-actions"><Show when={flow().url}><a href={flow().url} target="_blank" rel="noopener noreferrer">{i18n.t("providers.codexOpenLogin")} ↗</a></Show><button onClick={cancelLogin}>{i18n.t("providers.cancel")}</button></div>
+						<Show when={flow().manualPromptId}><details class="settings-codex-manual"><summary>{i18n.t("providers.codexManualTitle")}</summary><label class="settings-field">{i18n.t("providers.codexManualHint")}<input data-testid="codex-login-answer" autocomplete="off" spellcheck={false} value={loginAnswer()} onInput={event => setLoginAnswer(event.currentTarget.value)} /></label><button disabled={answerBusy() || !loginAnswer().trim()} onClick={() => void answerLogin()}>{i18n.t("providers.codexContinue")}</button></details></Show>
+					</div>}</Show>
+					<Show when={!login()}><button class="settings-text-button" data-testid="codex-device-login" disabled={busy()} onClick={() => void startLogin("device_code")}>{i18n.t("providers.codexDeviceAlternative")}</button></Show>
+				</section></Show>
+				<fieldset disabled={busy() || !!login()}>
 					<Show when={current().kind === "openai-compatible"}><label class="settings-field">{i18n.t("providers.name")}<input data-testid="provider-name" value={current().name ?? ""} onInput={event => update({ name: event.currentTarget.value || undefined })} /></label><label class="settings-field">Base URL<input data-testid="provider-url" placeholder="https://example.com/v1" value={current().baseUrl} onInput={event => update({ baseUrl: event.currentTarget.value })} /></label></Show>
-					<label class="settings-field">API Key<input data-testid="provider-key" type="password" autocomplete="off" value={current().apiKey ?? ""} placeholder={hasKey() ? i18n.t("providers.keepKey") : i18n.t("providers.enterKey")} onInput={event => update({ apiKey: event.currentTarget.value || undefined })} /></label>
+					<Show when={current().kind !== "openai-codex"}><label class="settings-field">API Key<input data-testid="provider-key" type="password" autocomplete="off" value={current().apiKey ?? ""} placeholder={hasKey() ? i18n.t("providers.keepKey") : i18n.t("providers.enterKey")} onInput={event => update({ apiKey: event.currentTarget.value || undefined })} /></label></Show>
 					<Show when={hasKey() && current().kind === "openai-compatible"}><button class="settings-text-button" onClick={() => update({ apiKey: null })}>{current().apiKey === null ? i18n.t("providers.keyWillClear") : i18n.t("providers.clearKey")}</button></Show>
 					<div class="settings-inline"><button data-testid="provider-discover" class="settings-primary" onClick={() => void discover()}>{busy() ? i18n.t("providers.connecting") : current().models.length > 0 ? i18n.t("providers.refresh") : i18n.t("providers.connectModels")}</button><span class="settings-hint" aria-live="polite">{status() === "connected" ? i18n.t("providers.connected", { n: current().models.length }) : ""}</span></div>
 					<Show when={current().models.length > 0}><div class="settings-section-label">{i18n.t("providers.models")}</div></Show>
@@ -167,7 +222,7 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 }
 
 function ProviderLogo(props: { kind: ProviderInput["kind"] }) {
-	return <span class="settings-provider-mark" aria-hidden="true"><Show when={providerPreset(props.kind)} fallback={<span class="settings-plus" />}>{preset => <img class="provider-logo" classList={{ "provider-kimi-logo": props.kind === "kimi-coding" }} src={`/providers/${preset().logo}`} alt="" />}</Show></span>;
+	return <span class="settings-provider-mark" aria-hidden="true"><Show when={providerPreset(props.kind)?.logo} fallback={<span class="settings-plus" />}>{logo => <img class="provider-logo" classList={{ "provider-kimi-logo": props.kind === "kimi-coding" }} src={`/providers/${logo()}`} alt="" />}</Show></span>;
 }
 
 function ModelEditor(props: { model: EtaModelConfig; custom: boolean; onUpdate(patch: Partial<EtaModelConfig>): void; onRemove(): void }) {

@@ -45,6 +45,65 @@ async function openKimi() {
 }
 
 describe("provider settings", () => {
+	it("uses ChatGPT login for Codex without an API key or local token import", async () => {
+		const page = mount();
+		click("settings-tab-providers");
+		await vi.waitFor(() => expect(byId("provider-add-openai-codex")).toBeTruthy());
+		click("provider-add-openai-codex");
+		expect(page.queryByTestId("provider-key")).toBeNull();
+		expect(page.queryByTestId("codex-use-local")).toBeNull();
+		const original = vi.mocked(fetch).getMockImplementation()!;
+		vi.mocked(fetch).mockImplementation(async (url, init) => {
+			if (url === "/api/providers/codex/login") { expect(JSON.parse(String(init?.body)).method).toBe("browser"); return Response.json({ id: "login-attempt", status: "pending" }); }
+			if (url === "/api/providers/codex/status") return Response.json({ id: "login-attempt", status: "complete" });
+			if (url === "/api/providers/discover") return Response.json({ models: [{ ...kimi, id: "codex-test-model" }] });
+			return original(url, init);
+		});
+		click("codex-login");
+		await vi.waitFor(() => expect(page.queryByText("codex-test-model")).toBeTruthy());
+		click("provider-save");
+		await vi.waitFor(() => expect(writes).toHaveLength(1));
+		expect(writes[0].provider).toMatchObject({ id: "openai-codex", kind: "openai-codex" });
+		expect(writes[0].provider.apiKey).toBeUndefined();
+	});
+
+	it("offers browser authorization and submits the manual callback only when requested", async () => {
+		const page = mount();
+		click("settings-tab-providers");
+		await vi.waitFor(() => expect(byId("provider-add-openai-codex")).toBeTruthy());
+		click("provider-add-openai-codex");
+		const original = vi.mocked(fetch).getMockImplementation()!;
+		const pending = { id: "browser-attempt", status: "pending", method: "browser", url: "https://auth.openai.com/oauth/authorize?state=test", manualPromptId: "prompt" };
+		const answers: unknown[] = [];
+		vi.mocked(fetch).mockImplementation(async (url, init) => {
+			if (url === "/api/providers/codex/login" || url === "/api/providers/codex/status") return Response.json(pending);
+			if (url === "/api/providers/codex/answer") { answers.push(JSON.parse(String(init?.body))); return Response.json({ ok: true }); }
+			return original(url, init);
+		});
+		click("codex-login");
+		await vi.waitFor(() => expect(page.getByRole("link", { name: /打开 ChatGPT 登录页面|Open ChatGPT sign-in/ })).toBeTruthy());
+		expect(page.queryByText(/需在 ChatGPT 安全设置中启用设备代码登录/)).toBeNull();
+		fireEvent.click(page.getByText(/授权后没有自动返回|Authorization did not return automatically/));
+		setField("codex-login-answer", "http://localhost:1455/auth/callback?code=test&state=test");
+		expect(answers).toEqual([]);
+		fireEvent.click(page.getByRole("button", { name: /^(继续|Continue)$/ }));
+		await vi.waitFor(() => expect(answers).toEqual([{ id: "browser-attempt", promptId: "prompt", value: "http://localhost:1455/auth/callback?code=test&state=test" }]));
+		await vi.waitFor(() => expect((byId("codex-login-answer") as HTMLInputElement).value).toBe(""));
+	});
+
+	it("explains that the backend needs a restart when its login route is missing", async () => {
+		mount();
+		click("settings-tab-providers");
+		await vi.waitFor(() => expect(byId("provider-add-openai-codex")).toBeTruthy());
+		click("provider-add-openai-codex");
+		const original = vi.mocked(fetch).getMockImplementation()!;
+		vi.mocked(fetch).mockImplementation(async (url, init) => url === "/api/providers/codex/login"
+			? Response.json({ error: "not_found" }, { status: 404 }) : original(url, init));
+		click("codex-login");
+		await vi.waitFor(() => expect(byId("provider-error").textContent).toMatch(/重启 Eta 后端|Restart the Eta backend/));
+		expect(byId("provider-error").textContent).not.toMatch(/超时|expired/);
+	});
+
 	it("merges general and appearance, and keeps model configuration in providers", async () => {
 		const page = mount();
 		expect(page.getAllByRole("button", { name: /General|通用/ })).toHaveLength(1);

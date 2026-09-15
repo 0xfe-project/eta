@@ -27,7 +27,7 @@ bun run build:web   # 产出 packages/eta-client/dist
 
 按顺序往下落,前一个没有才用后一个:
 
-1. `~/.eta/config.json` 里的 openai-compatible provider:`providers[].{id,baseUrl,apiKey,models[]}` + `defaultModel: "providerId:modelId"`,不给 model 就用第一个 provider 的第一个 model
+1. 优先使用「设置 → 模型供应商」保存到 `~/.eta/config.json` 的 provider 和模型,由 eta 管理配置与选模、pi 提供供应商运行时（Codex 直接复用 pi 内置 provider 及认证流程）,按 `defaultModel: "providerId:modelId"` 选择默认模型,未指定则用第一个 provider 的第一个 model
 2. 环境里有 `ANTHROPIC_API_KEY` → 内置 anthropic catalog,默认 `claude-sonnet-4-5`
 3. 都没有 → faux 回声流,零配置也能把整条协议链路跑通
 

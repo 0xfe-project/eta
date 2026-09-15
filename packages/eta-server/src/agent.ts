@@ -56,7 +56,7 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 	const persona = await renderPersonaFor(cfg.cwd, cfg.personaId);
 	if (persona === undefined) throw new UnknownPersonaError(`unknown persona: ${cfg.personaId}`);
 	const etaConfig = loadEtaConfig(cfg.configPath) ?? {};
-	let models = configModels(etaConfig);
+	let models = configModels(etaConfig, cfg.configPath);
 	let model: ReturnType<typeof builtinModels>["getModel"] extends (p: string, id: string) => infer R
 		? R | undefined
 		: never;
@@ -205,7 +205,7 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 	return {
 		agent, faux, models: registry, memory: async () => memoryCache.load(cfg.cwd),
 		reloadModels(config) {
-			const next = configModels(config);
+			const next = configModels(config, cfg.configPath);
 			for (const id of configuredIds) registry.deleteProvider(id);
 			for (const provider of next?.getProviders() ?? []) registry.setProvider(provider);
 			configuredIds = (config.providers ?? []).map(provider => provider.id);

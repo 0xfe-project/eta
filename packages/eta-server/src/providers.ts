@@ -6,6 +6,8 @@ import {
 	type EtaModelConfig, type ModelCapabilities, type ProviderInput, type ProvidersView,
 } from "@eta/core/provider-config";
 import type { EtaConfig, EtaProviderConfig } from "./config.ts";
+import { createModels } from "@earendil-works/pi-ai";
+import { CodexCredentialStore, CodexLogin, codexAuthPath, codexRuntimeProvider, codexCatalog } from "./codex-auth.ts";
 import { deepSeekCapabilities } from "./provider-presets.ts";
 
 export const KIMI_CODING_BASE_URL = providerPreset("kimi-coding")!.baseUrl;
@@ -109,17 +111,18 @@ function normalizeProvider(value: unknown, previous?: EtaProviderConfig): EtaPro
 	const id = shortText(item.id, 80);
 	if (id === undefined || !/^[a-zA-Z0-9_-]+$/.test(id)) throw new ProviderConfigError("invalid_provider_id");
 	const kind = item.kind ?? previous?.kind ?? "openai-compatible";
-	if (kind !== "kimi-coding" && kind !== "deepseek" && kind !== "openai-compatible") throw new ProviderConfigError("invalid_provider");
+	if (kind !== "kimi-coding" && kind !== "deepseek" && kind !== "openai-codex" && kind !== "openai-compatible") throw new ProviderConfigError("invalid_provider");
+	if (kind === "openai-codex" && id !== "openai-codex") throw new ProviderConfigError("invalid_provider_id");
 	const url = providerPreset(kind)?.baseUrl ?? baseUrl(item.baseUrl);
 	const name = shortText(item.name);
 	if (item.apiKey !== undefined && item.apiKey !== null && (typeof item.apiKey !== "string" || item.apiKey.length > 8192 || /[\r\n]/.test(item.apiKey))) throw new ProviderConfigError("invalid_key");
 	// Never send a saved credential to a newly edited host without re-entry.
 	if (previous?.apiKey && item.apiKey === undefined && baseUrl(previous.baseUrl) !== url) throw new ProviderConfigError("key_required_for_url");
 	const apiKey = item.apiKey === null ? undefined : typeof item.apiKey === "string" ? item.apiKey.trim() || undefined : previous?.apiKey;
-	if (kind !== "openai-compatible" && !apiKey) throw new ProviderConfigError(kind === "deepseek" ? "deepseek_key_required" : "key_required");
+	if (kind !== "openai-compatible" && kind !== "openai-codex" && !apiKey) throw new ProviderConfigError(kind === "deepseek" ? "deepseek_key_required" : "key_required");
 	return {
 		id, kind, baseUrl: url, ...(name === undefined ? {} : { name }),
-		...(apiKey === undefined ? {} : { apiKey }), models: normalizeModels(item.models ?? []),
+		...(apiKey === undefined || kind === "openai-codex" ? {} : { apiKey }), models: normalizeModels(item.models ?? []),
 		...(previous?.lastRefreshedAt === undefined ? {} : { lastRefreshedAt: previous.lastRefreshedAt }),
 	};
 }
@@ -156,7 +159,24 @@ export class ProviderConfigStore {
 	private tail: Promise<unknown> = Promise.resolve();
 	readonly path: string;
 	private readonly request: ProviderFetch;
-	constructor(path: string, request: ProviderFetch = fetch) { this.path = path; this.request = request; }
+	readonly codexLogin: CodexLogin;
+	constructor(path: string, request: ProviderFetch = fetch) { this.path = path; this.request = request; this.codexLogin = new CodexLogin(new CodexCredentialStore(codexAuthPath(path))); }
+
+	startCodexLogin(body: unknown) {
+		const id = shortText(record(body).providerId, 80);
+		if (id !== "openai-codex") throw new ProviderConfigError("invalid_provider_id");
+		const method = record(body).method ?? "browser";
+		if (method !== "browser" && method !== "device_code") throw new ProviderConfigError("invalid_config");
+		return this.codexLogin.start(id, method);
+	}
+
+	answerCodexLogin(body: unknown) {
+		const input = record(body);
+		const id = shortText(input.id, 80), promptId = shortText(input.promptId, 80), value = shortText(input.value, 8192);
+		if (!id || !promptId || !value) throw new ProviderConfigError("invalid_config");
+		if (!this.codexLogin.answer(id, promptId, value)) throw new ProviderConfigError("codex_login_failed", 409);
+		return { ok: true };
+	}
 
 	async view(): Promise<ProvidersView> {
 		const { config, revision } = await readConfig(this.path);
@@ -186,14 +206,23 @@ export class ProviderConfigStore {
 		return run;
 	}
 
-	save(body: unknown): Promise<ProvidersView> {
+	async save(body: unknown): Promise<ProvidersView> {
 		const input = record(body);
+		if (record(input.provider).kind === "openai-codex") await this.discover(body);
 		return this.mutate(input.revision, config => {
 			const raw = record(input.provider);
 			const providers = config.providers ?? [];
 			const index = providers.findIndex(p => p.id === raw.id);
 			const provider = normalizeProvider(raw, index < 0 ? undefined : providers[index]);
 			if (provider.models.length === 0) throw new ProviderConfigError("models_required");
+			if (provider.kind === "openai-codex") {
+				const catalog = new Map(codexCatalog().map(model => [model.id, model]));
+				provider.models = provider.models.map(model => {
+					const known = catalog.get(model.id);
+					if (!known) throw new ProviderConfigError("invalid_model");
+					return { ...known, ...(model.defaultThinking !== undefined && modelThinkingLevels(known).includes(model.defaultThinking) ? { defaultThinking: model.defaultThinking } : {}) };
+				});
+			}
 			if (index < 0) providers.push(provider); else providers[index] = provider;
 			config.providers = providers;
 			if (input.defaultModel !== undefined) this.assignDefault(config, input.defaultModel);
@@ -206,11 +235,18 @@ export class ProviderConfigStore {
 		return this.mutate(input.revision, config => this.assignDefault(config, input.defaultModel));
 	}
 
-	delete(id: string, revision: unknown): Promise<ProvidersView> {
-		return this.mutate(revision, config => {
+	async delete(id: string, revision: unknown): Promise<ProvidersView> {
+		const view = await this.mutate(revision, config => {
 			config.providers = (config.providers ?? []).filter(p => p.id !== id);
 			this.removeStaleDefault(config);
 		});
+		if (id === "openai-codex") {
+			this.codexLogin.cancel();
+			const models = createModels({ credentials: new CodexCredentialStore(codexAuthPath(this.path)) });
+			models.setProvider(codexRuntimeProvider());
+			await models.logout(id);
+		}
+		return view;
 	}
 
 	private assignDefault(config: EtaConfig, value: unknown): void {
@@ -229,7 +265,17 @@ export class ProviderConfigStore {
 		const { config } = await readConfig(this.path);
 		const old = config.providers?.find(p => p.id === raw.id);
 		const provider = normalizeProvider(raw, old);
-		const models = await discoverProviderModels(provider, this.request);
+		let models: EtaModelConfig[];
+		if (provider.kind === "openai-codex") {
+			try {
+				const registry = createModels({ credentials: new CodexCredentialStore(codexAuthPath(this.path)) });
+				registry.setProvider(codexRuntimeProvider());
+				if (!await registry.getAuth(provider.id)) throw new Error("codex_login_required");
+			} catch (error) {
+				throw new ProviderConfigError("codex_login_required", 401);
+			}
+			models = codexCatalog();
+		} else models = await discoverProviderModels(provider, this.request);
 		const existing = new Map(provider.models.map(model => [model.id, model]));
 		return { models: models.map(model => {
 			const previous = existing.get(model.id);
