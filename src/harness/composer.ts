@@ -20,13 +20,15 @@ export interface EtaPromptState {
 	persona?: string;
 	/** Rendered <skills> catalog block; stable, appended after the persona. */
 	skills?: string;
+	/** Where the app's own files live, rendered by the server; stable, after skills. */
+	platform?: string;
 	/** Rendered <memory> block; always last, it changes most often. */
 	memory?: string;
 }
 
 /** One section pipeline: order and stable/adaptive tagging defined once. */
 export interface EtaPromptSection {
-	name: "base" | "persona" | "skills" | "goal" | "tasks" | "memory";
+	name: "base" | "persona" | "skills" | "platform" | "goal" | "tasks" | "memory";
 	stable: boolean;
 	text: string;
 }
@@ -37,6 +39,10 @@ function sections(base: string, state: EtaPromptState): EtaPromptSection[] {
 		out.push({ name: "persona", text: state.persona, stable: true });
 	if (state.skills !== undefined && state.skills.length > 0)
 		out.push({ name: "skills", text: state.skills, stable: true });
+	// The platform briefing describes the app, not the conversation, so it sits with the
+	// other blocks a provider cache is meant to keep.
+	if (state.platform !== undefined && state.platform.length > 0)
+		out.push({ name: "platform", text: state.platform, stable: true });
 	if (state.goal && state.goal.status === "active")
 		out.push({ name: "goal", text: goalPursuitGuidelines(state.goal.objective), stable: false });
 	if (state.tasks && state.tasks.length > 0)
