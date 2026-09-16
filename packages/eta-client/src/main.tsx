@@ -15,8 +15,9 @@ installAppBehavior();
 // Dev only, and only with ?keys: what the page was actually handed by the shell.
 installKeyProbe();
 
-// The shell and a browser tab want different chrome; CSS reads this.
+// The shell and a browser tab want different chrome; CSS reads these.
 document.documentElement.dataset.host = host().kind;
+if (host().platform !== undefined) document.documentElement.dataset.platform = host().platform;
 import { ThemeProvider } from "./app/theme.tsx";
 import { SessionsPage } from "./pages/sessions-page.tsx";
 import { NewSessionPage } from "./pages/new-session-page.tsx";

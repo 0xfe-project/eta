@@ -131,7 +131,7 @@ export function Sidebar(props: { selected: string | null; termActive: boolean; o
 				    there are none and it collapses to nothing. */}
 				<span class="lights-slot" data-testid="lights-slot" />
 				<span class="logo-slot" data-testid="logo-slot">
-					<img src="/Eta-Logo.svg" alt="eta" class="h-5 w-5" data-testid="logo" />
+					<img src="Eta-Logo.svg" alt="eta" class="h-5 w-5" data-testid="logo" />
 				</span>
 				<span class="brand" data-testid="brand">{i18n.t("app.name")}</span>
 			</div>

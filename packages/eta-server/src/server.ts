@@ -24,6 +24,7 @@ export interface NativeHandlers {
 	saveFile(input: { content: string; filename: string }): Promise<string | null>;
 	/** Returns immediately; the click result is reported by the shell via push(). */
 	contextMenu(input: { items: unknown[] }): void;
+	windowAction?(input: { action: "minimize" | "toggle-maximize" | "close" }): void;
 }
 
 export interface EtaServerOptions {
@@ -319,6 +320,11 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 				if (url.pathname === "/api/native/save-file" && request.method === "POST") {
 					const input = (await request.json()) as { content: string; filename: string };
 					return apiJson({ path: await options.native.saveFile(input) });
+				}
+				if (url.pathname === "/api/native/window-action" && request.method === "POST") {
+					const input = (await request.json()) as { action: "minimize" | "toggle-maximize" | "close" };
+					options.native.windowAction?.(input);
+					return new Response(null, { status: 202, headers: CORS_HEADERS });
 				}
 				if (url.pathname === "/api/native/context-menu" && request.method === "POST") {
 					const input = (await request.json()) as { items: unknown[] };

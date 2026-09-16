@@ -35,7 +35,7 @@ describe("Codex authentication", () => {
 		expect(refreshes).toBe(1);
 		const saved = await stores[0]!.read("openai-codex");
 		expect(saved?.type === "oauth" && saved.refresh).toBe("rotated");
-		expect((await stat(path)).mode & 0o777).toBe(0o600);
+		if (process.platform !== "win32") expect((await stat(path)).mode & 0o777).toBe(0o600);
 	}));
 
 	it("uses the pi Codex transport and never returns credentials in provider views", () => fixture(async directory => {

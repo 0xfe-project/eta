@@ -10,7 +10,7 @@ import { NodeExecutionEnv } from "../../src/harness/env/nodejs.ts";
 import { FileError, getOrThrow, type ShellExecOptions, type ShellOutputView } from "../../src/harness/types.ts";
 import { applyShellOutputUpdate } from "../../src/harness/utils/output-capture.ts";
 import { executeShellWithCapture } from "../../src/harness/utils/shell-output.ts";
-import { createTempDir } from "./session-test-utils.ts";
+import { createTempDir, gitBashPath } from "./session-test-utils.ts";
 
 const chmodRestorePaths: string[] = [];
 
@@ -334,7 +334,7 @@ describe("NodeExecutionEnv", () => {
 			BACKGROUND_CONTEXT,
 		);
 		const result = getOrThrow(collected.result);
-		expect(collected.output?.text).toBe(`${await realpath(root)}:ok`);
+		expect(collected.output?.text).toBe(`${gitBashPath(await realpath(root))}:ok`);
 		expect(result.exitCode).toBe(0);
 	});
 

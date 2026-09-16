@@ -15,13 +15,19 @@
  *   ETA_CLIENT_URL=http://localhost:5180 …   # or at a dev server you started yourself
  */
 import { spawn, type Subprocess } from "bun";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /** The same marker src/main/index.ts checks: a foreign app on this port answers 200
  * too, and a wrong UI that looks exactly like eta is the worse of the two failures. */
 const MARKER = "AKRDWGSCNFM-Regular.woff2";
 const devUrl = process.env["ETA_CLIENT_URL"] ?? "http://localhost:5173";
-const clientDir = new URL("../../eta-client", import.meta.url).pathname;
-const desktopDir = new URL("..", import.meta.url).pathname;
+const clientDir = fileURLToPath(new URL("../../eta-client", import.meta.url));
+const desktopDir = fileURLToPath(new URL("..", import.meta.url));
+/** Bun's child-process resolver does not consistently find `bun` by name on Windows. */
+const bun = process.execPath;
+const electrobun = ["x", "--bun", "electrobun"];
 /** vite is usually listening in well under a second; the rest of this is a cold tsc. */
 const readyTimeoutMs = 30_000;
 
@@ -42,7 +48,7 @@ if (reused) {
 	// The port goes to the script rather than being hardcoded here, so `dev` stays the
 	// one place that decides what vite runs.
 	const port = new URL(devUrl).port !== "" ? new URL(devUrl).port : "5173";
-	vite = spawn(["bun", "run", "dev", `--port=${port}`], { cwd: clientDir, stdout: "inherit", stderr: "inherit" });
+	vite = spawn([bun, "run", "dev", `--port=${port}`], { cwd: clientDir, stdout: "inherit", stderr: "inherit" });
 	log(`waiting for the dev server on ${devUrl}`);
 }
 
@@ -62,7 +68,7 @@ async function waitUntilReady(): Promise<boolean> {
 	return false;
 }
 
-const build = spawn(["bun", "run", "client"], { cwd: desktopDir, stdout: "inherit", stderr: "inherit" });
+const build = spawn([bun, "run", "client"], { cwd: desktopDir, stdout: "inherit", stderr: "inherit" });
 const [ready, buildExit] = await Promise.all([waitUntilReady(), build.exited]);
 
 if (buildExit !== 0) {
@@ -77,8 +83,18 @@ if (!ready) {
 		: "dev server exited — opening on views:// (no hot reload)");
 }
 
+if (!existsSync(join(desktopDir, ".hutch", "devkit", ".complete"))) {
+	log("preparing the Electrobun SDK");
+	const prepare = spawn([bun, ...electrobun, "prepare"], { cwd: desktopDir, stdout: "inherit", stderr: "inherit" });
+	const prepareExit = await prepare.exited;
+	if (prepareExit !== 0) {
+		stopVite();
+		process.exit(prepareExit ?? 1);
+	}
+}
+
 log("starting the shell");
-const shell = spawn(["hutch", "electrobun", "dev", "--env=dev"], {
+const shell = spawn([bun, ...electrobun, "dev", "--env=dev"], {
 	cwd: desktopDir,
 	stdout: "inherit",
 	stderr: "inherit",

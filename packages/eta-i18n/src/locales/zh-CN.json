@@ -59,6 +59,8 @@
 	"ask.answer": "回答",
 	"ask.freeform": "输入回答…",
 	"ask.seconds": "{seconds} 秒后自动应答",
+	"panel.empty.title": "还没有活动会话",
+	"panel.empty.body": "开始新会话后，这里会显示模型、用量、目标与任务。",
 	"panel.usage": "用量",
 	"panel.prompt": "系统提示词",
 	"panel.stable": "稳定块",

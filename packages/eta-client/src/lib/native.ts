@@ -77,6 +77,20 @@ export async function nativeInfo(): Promise<NativeInfo | null> {
 	}
 }
 
+export type NativeWindowAction = "minimize" | "toggle-maximize" | "close";
+
+/** Control the desktop window without exposing native APIs to a browser tab. */
+export async function windowAction(action: NativeWindowAction): Promise<void> {
+	try {
+		await apiFetch("/api/native/window-action", {
+			method: "POST",
+			body: JSON.stringify({ action }),
+			headers: { "content-type": "application/json" },
+		});
+	} catch {
+		// A browser tab has no native window to control.
+	}
+}
 /** Ask the shell for a folder; null means the user cancelled or there is no shell. */
 export async function pickFolder(startingFolder?: string): Promise<string | null> {
 	try {

@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, posix, relative, sep } from "node:path";
 import { afterEach } from "vitest";
 
 const tempDirs: string[] = [];
@@ -10,6 +10,16 @@ export function createTempDir(): string {
 	mkdirSync(dir, { recursive: true });
 	tempDirs.push(dir);
 	return dir;
+}
+
+/** Windows tests execute through Git Bash, whose /tmp view differs from the native path. */
+export function gitBashPath(path: string): string {
+	if (process.platform !== "win32") return path;
+	const canonical = realpathSync.native(path);
+	const temp = realpathSync.native(tmpdir());
+	const rel = relative(temp, canonical);
+	if (rel === "" || isAbsolute(rel) || rel.startsWith("..")) return canonical.replaceAll("\\", "/");
+	return posix.join("/tmp", ...rel.split(sep));
 }
 
 afterEach(() => {

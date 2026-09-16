@@ -179,6 +179,19 @@ function SessionContextBar() {
 	);
 }
 
+function EmptyPanel() {
+	const i18n = useAppI18n();
+	return (
+		<div data-testid="panel-empty" class="flex h-full items-center justify-center p-6 text-center">
+			<div class="max-w-[240px]">
+				<div class="mono text-[10px] uppercase tracking-[0.2em] text-muted">Eta</div>
+				<p class="mt-2 text-sm font-medium">{i18n.t("panel.empty.title")}</p>
+				<p class="mt-1 text-xs leading-relaxed text-muted">{i18n.t("panel.empty.body")}</p>
+			</div>
+		</div>
+	);
+}
+
 function SessionsPanel() {
 	const i18n = useAppI18n();
 	const state = useEta();
@@ -205,47 +218,52 @@ function SessionsPanel() {
 	] as const;
 
 	return (
-		<Show when={view()}>
-			{(current) => (
-				<div class="flex h-full flex-col">
-					<div class="tabstrip gap-1 px-2">
-						<For each={tabs}>
-							{(item) => (
-								<button
-									data-testid={`tab-${item.key}`}
-									onClick={() => {
-										if (item.key === "terminal") setTerminalMounted(true);
-										setTab(item.key);
-									}}
-									class={`px-3 py-1 text-xs ${tab() === item.key ? "bg-overlay font-medium" : "text-muted"}`}
-								>
-									{i18n.t(item.label)}
-								</button>
-								)}
-							</For>
+		<div class="flex h-full flex-col">
+			<div class="tabstrip gap-1 px-2">
+				<For each={tabs}>
+					{(item) => (
+						<button
+							data-testid={`tab-${item.key}`}
+							onClick={() => {
+								if (item.key === "terminal") setTerminalMounted(true);
+								setTab(item.key);
+							}}
+							class={`px-3 py-1 text-xs ${tab() === item.key ? "bg-overlay font-medium" : "text-muted"}`}
+						>
+							{i18n.t(item.label)}
+						</button>
+						)}
+					</For>
+			</div>
+			<div class="relative min-h-0 flex-1">
+				<Show when={view()}>
+					{(current) => (
+						<>
+							<Show when={tab() === "context"}>
+								<ContextPanel session={selected() ?? ""} view={current()} />
+							</Show>
+							<Show when={tab() === "workspace"}>
+								<WorkspacePanel session={selected() ?? ""} />
+							</Show>
+							<Show when={tab() === "log"}>
+								<LogRail frames={selected() === null ? [] : state.dev[selected()!] ?? []} />
+							</Show>
+						</>
+					)}
+				</Show>
+				<Show when={view() === undefined && tab() !== "terminal"}>
+					<EmptyPanel />
+				</Show>
+				<Show when={terminalMounted()}>
+					<div
+						data-testid="panel-terminal"
+						data-active={tab() === "terminal" ? "1" : "0"}
+						class={`absolute inset-0 ${tab() === "terminal" ? "" : "invisible"}`}
+					>
+						<TerminalHost variant="panel" {...(termCwd() === undefined ? {} : { cwd: termCwd()! })} onClose={() => setTerminalMounted(false)} />
 					</div>
-					<div class="relative min-h-0 flex-1">
-						<Show when={tab() === "context"}>
-							<ContextPanel session={selected() ?? ""} view={current()} />
-						</Show>
-						<Show when={tab() === "workspace"}>
-							<WorkspacePanel session={selected() ?? ""} />
-						</Show>
-						<Show when={tab() === "log"}>
-							<LogRail frames={selected() === null ? [] : state.dev[selected()!] ?? []} />
-						</Show>
-						<Show when={terminalMounted()}>
-							<div
-								data-testid="panel-terminal"
-								data-active={tab() === "terminal" ? "1" : "0"}
-								class={`absolute inset-0 ${tab() === "terminal" ? "" : "invisible"}`}
-							>
-								<TerminalHost variant="panel" {...(termCwd() === undefined ? {} : { cwd: termCwd()! })} onClose={() => setTerminalMounted(false)} />
-							</div>
-						</Show>
-					</div>
-				</div>
-			)}
-		</Show>
+				</Show>
+			</div>
+		</div>
 	);
 }
