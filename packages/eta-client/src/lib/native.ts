@@ -1,17 +1,14 @@
 /**
  * The native shell's way in.
  *
- * A menu item lives in the OS menu bar, so it cannot call a Solid action; the
- * shell pushes a `{type:"native"}` frame down the same WebSocket the browser
- * uses, the store turns it into an `eta:native` window event, and whatever
- * component can act on it listens here. Same shape as the existing `eta:view`
- * and `eta:personas` events, so a browser tab simply never fires them and needs
- * no branch.
+ * The desktop dispatches an `eta:native` event to its own webview. Menu clicks stay
+ * in that window even when several clients share the same backend. Native HTTP
+ * requests are routed by apiFetch to the window's own capability bridge.
  *
  * Actions are plain strings shared with the shell (`packages/eta-desktop`), not
  * an enum imported from it: the web build must not depend on electrobun.
  */
-import { apiFetch } from "./host.ts";
+import { apiFetch, nativeAvailable } from "./host.ts";
 
 export const NATIVE_EVENT = "eta:native";
 
@@ -79,6 +76,8 @@ export async function nativeInfo(): Promise<NativeInfo | null> {
 
 /** Ask the shell for a folder; null means the user cancelled or there is no shell. */
 export async function pickFolder(startingFolder?: string): Promise<string | null> {
+	// A browser without a native shell has no folder dialog to request.
+	if (!nativeAvailable()) return null;
 	try {
 		const response = await apiFetch("/api/native/folder-dialog", {
 			method: "POST",

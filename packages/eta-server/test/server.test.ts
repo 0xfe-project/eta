@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { startNativeBridge } from "../../eta-desktop/src/main/native-bridge.ts";
 import { startServer, type EtaServer } from "../src/server.ts";
 import { discoverSkillDirs, renderSkillsBlock } from "../src/skills.ts";
 import { NodeExecutionEnv } from "@eta/core/node";
@@ -388,6 +389,33 @@ describe("skill discovery", () => {
 });
 
 describe("desktop native endpoints", () => {
+	it("keeps native capabilities window-local and requires their own credential", async () => {
+		const picked: unknown[] = [];
+		const bridge = startNativeBridge({
+			async folderDialog(input) { picked.push(input); return "/workspace"; },
+			async saveFile() { return "/export"; },
+			contextMenu() {},
+		}, "test");
+		try {
+			for (const origin of ["null", "views://eta", "http://localhost:5173"]) {
+				const url = `${bridge.apiBase}/api/native/folder-dialog`;
+				const preflight = await fetch(url, { method: "OPTIONS", headers: { origin } });
+				expect(preflight.status).toBe(204);
+				for (const token of ["backend-token", bridge.token]) {
+					const response = await fetch(url, {
+						method: "POST", headers: { origin, authorization: `Bearer ${token}`, "content-type": "application/json" },
+						body: JSON.stringify({ startingFolder: "/start" }),
+					});
+					expect(response.status).toBe(token === bridge.token ? 200 : 401);
+					if (response.ok) expect(await response.json()).toEqual({ path: "/workspace" });
+				}
+			}
+			expect(picked).toHaveLength(3);
+			expect((await fetch(`${bridge.apiBase}/api/native/info`, { headers: { origin: "https://untrusted.example", authorization: `Bearer ${bridge.token}` } })).status).toBe(403);
+			expect((await fetch(`${bridge.apiBase}/api/sessions`, { headers: { authorization: `Bearer ${bridge.token}` } })).status).toBe(404);
+		} finally { bridge.close(); }
+	});
+
 	it("serves /api/native/*, stamps CORS, and broadcasts push()", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "eta-native-"));
 		const server = await startServer({
@@ -559,7 +587,7 @@ describe("the platform briefing reaches a session", () => {
 					"channel" in m && m.channel === "view" && JSON.stringify(m).includes('"name":"platform"'),
 				8000,
 			);
-			expect(JSON.stringify(frame)).toContain(".eta/config.json");
+			expect(JSON.stringify(frame)).toContain(join(serverCwds.get(server)!, "no-config.json"));
 			socket.close();
 		});
 	});

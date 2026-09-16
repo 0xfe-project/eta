@@ -1,6 +1,8 @@
 import { For, Show, createEffect, createSignal, onCleanup, type Accessor, type JSX, type Setter } from "solid-js";
 import { useAppI18n } from "../i18n.ts";
 import { useEta } from "../lib/eta-store.ts";
+import type { SidebarSession } from "@eta/core";
+import { parseRemoteSession } from "../lib/remotes.ts";
 import { AppShell } from "./app-shell.tsx";
 import { Sidebar } from "../features/sessions/sidebar.tsx";
 import { CommandPalette } from "../features/sessions/command-palette.tsx";
@@ -49,7 +51,7 @@ function SessionsSidebar(props: { termOpen: Accessor<boolean>; onTerminal: () =>
  * live in the Context panel's usage section, the branch on the Workspace tab; a header is
  * not a strip of gauges.
  */
-export function MainHeader(props: { title: string; cwd?: string; trailing?: JSX.Element }) {
+export function MainHeader(props: { title: string; cwd?: string; remote?: SidebarSession["remote"]; trailing?: JSX.Element }) {
 	const i18n = useAppI18n();
 	const state = useEta();
 	return (
@@ -57,6 +59,18 @@ export function MainHeader(props: { title: string; cwd?: string; trailing?: JSX.
 			<header class="topbar gap-2 px-4">
 				<span data-testid="active-session" class="truncate text-sm font-medium">{props.title}</span>
 				<span class="ml-auto flex items-center gap-1.5">
+					<Show when={props.remote}>
+						{(remote) => (
+							<span
+								data-testid="header-remote"
+								data-status={remote().status}
+								class={`header-chip border uppercase tracking-wider ${remote().status === "connected" ? "border-border-strong" : "border-warning text-warning"}`}
+								title={`${remote().label} · ${remote().host} · ${i18n.t(`remote.status.${remote().status}` as "remote.status.disconnected")}`}
+							>
+								{remote().label}
+							</span>
+						)}
+					</Show>
 					<Show when={props.cwd}>
 						{(cwd) => <span data-testid="header-cwd" class="header-chip max-w-[220px] truncate" title={cwd()}>{cwd()}</span>}
 					</Show>
@@ -158,7 +172,7 @@ function SessionsPanel() {
 								data-active={tab() === "terminal" ? "1" : "0"}
 								class={`absolute inset-0 ${tab() === "terminal" ? "" : "invisible"}`}
 							>
-								<TerminalHost variant="panel" {...(termCwd() === undefined ? {} : { cwd: termCwd()! })} onClose={() => setTerminalMounted(false)} />
+								<TerminalHost variant="panel" {...(termCwd() === undefined ? {} : { cwd: termCwd()! })} {...(parseRemoteSession(selected() ?? "") ? { remote: parseRemoteSession(selected() ?? "")!.connectionId } : {})} onClose={() => setTerminalMounted(false)} />
 							</div>
 						</Show>
 					</div>

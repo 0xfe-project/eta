@@ -1,9 +1,11 @@
-import { For, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
 import { useAppI18n } from "../../i18n.ts";
 import { etaStore } from "../../lib/eta-store.ts";
 import { Composer, type ComposerCreate } from "./composer.tsx";
-import { apiFetch, host } from "../../lib/host.ts";
+import { apiFetch, nativeAvailable } from "../../lib/host.ts";
 import { NativeActions, onNativeActions, pickFolder } from "../../lib/native.ts";
+import { remoteApiPath, remoteSessionName } from "../../lib/remotes.ts";
+import { WorkspaceTarget } from "./workspace-target.tsx";
 
 interface PersonaSummary {
 	id: string;
@@ -23,12 +25,14 @@ export function Welcome(props: {
 	onNavigateSettings: () => void;
 	/** Folder the caller already settled on — the group header's 「+」, or the session being left. */
 	initialCwd?: string;
+	initialRemoteId?: string;
 }) {
 	const i18n = useAppI18n();
 	const store = etaStore();
 	const [personas, setPersonas] = createSignal<PersonaSummary[]>([]);
 	const [personaId, setPersonaId] = createSignal<string | null>(null);
 	const [cwd, setCwd] = createSignal(props.initialCwd ?? "");
+	const [remoteId, setRemoteId] = createSignal<string | undefined>(props.initialRemoteId);
 	const [remembered, setRemembered] = createSignal(false);
 	const [creating, setCreating] = createSignal(false);
 	// The host's configured defaults: the folder a blank box should fall back to, and the
@@ -38,38 +42,69 @@ export function Welcome(props: {
 	// explains the pause before the first frame paints. It goes away with this view.
 	const [picking, setPicking] = createSignal(false);
 	let personaPicked = false;
-
-	const load = () => {
-		void Promise.all([
-			apiFetch("/api/personas").then(response => response.json() as Promise<PersonaSummary[]>),
-			apiFetch("/api/settings").then(response => response.json() as Promise<{ personaId?: string; modelId?: string; cwd?: string }>).catch(() => ({} as { personaId?: string; modelId?: string; cwd?: string })),
-		])
-			.then(([cards, settings]) => {
-				if (!Array.isArray(cards)) return;
-				setDefaults(settings ?? {});
+	let settingsVersion = 0;
+	let personasVersion = 0;
+	const preselect = (cards: PersonaSummary[]) => {
+		const preferred = defaults().personaId;
+		if (!personaPicked) setPersonaId(cards.some(card => card.id === preferred) ? preferred! : null);
+	};
+	const loadPersonas = () => {
+		const version = ++personasVersion;
+		const query = cwd().trim() ? `?cwd=${encodeURIComponent(cwd().trim())}` : "";
+		void apiFetch(remoteApiPath(`/api/personas${query}`, remoteId()))
+			.then(response => response.ok ? response.json() as Promise<PersonaSummary[]> : undefined)
+			.then(cards => {
+				if (version !== personasVersion || !Array.isArray(cards)) return;
 				setPersonas(cards);
-				if (!personaPicked) setPersonaId(cards.some(card => card.id === settings?.personaId) ? settings.personaId! : null);
+				preselect(cards);
+			})
+			.catch(() => undefined);
+	};
+	const loadSettings = () => {
+		const version = ++settingsVersion;
+		void apiFetch(remoteApiPath("/api/settings", remoteId()))
+			.then(response => response.ok ? response.json() as Promise<{ personaId?: string; modelId?: string; cwd?: string }> : undefined)
+			.then(settings => {
+				if (version !== settingsVersion || !settings) return;
+				setDefaults(settings);
+				preselect(personas());
 				// A folder from the caller is the sharper intent and wins; the configured default
 				// only fills a box nothing else managed to fill.
-				if (cwd().trim().length === 0 && (settings?.cwd ?? "").trim().length > 0) setCwd(settings!.cwd!.trim());
+				if (cwd().trim().length === 0 && (settings.cwd ?? "").trim().length > 0) setCwd(settings.cwd!.trim());
 			})
 			.catch(() => undefined);
 	};
 	onMount(() => {
-		load();
-		window.addEventListener("eta:personas", load);
-		window.addEventListener("eta:settings", load);
-		onCleanup(() => { window.removeEventListener("eta:personas", load); window.removeEventListener("eta:settings", load); });
+		window.addEventListener("eta:personas", loadPersonas);
+		window.addEventListener("eta:settings", loadSettings);
+		onCleanup(() => {
+			settingsVersion += 1; personasVersion += 1;
+			window.removeEventListener("eta:personas", loadPersonas);
+			window.removeEventListener("eta:settings", loadSettings);
+		});
 	});
+	createEffect(on(remoteId, () => {
+		personaPicked = false;
+		setPersonas([]);
+		setPersonaId(null);
+		setDefaults({});
+		setRemembered(false);
+		loadSettings();
+	}));
+	createEffect(loadPersonas);
 
 	// Already on `/new`, another project's 「+」 is the same route with a sharper folder in the
 	// url. Adopt a folder that actually changed — the person just named the project — and
 	// ignore the same folder arriving again because the session list refreshed underneath us.
 	let handed = (props.initialCwd ?? "").trim();
+	let handedRemote = props.initialRemoteId;
 	createEffect(() => {
 		const next = (props.initialCwd ?? "").trim();
-		if (next.length > 0 && next !== handed) {
+		const target = props.initialRemoteId;
+		if (target !== handedRemote || (next.length > 0 && next !== handed)) {
 			handed = next;
+			handedRemote = target;
+			setRemoteId(target);
 			setCwd(next);
 		}
 	});
@@ -77,6 +112,7 @@ export function Welcome(props: {
 	/** The shell's own folder picker; a browser tab has no equivalent, so the button
 	 * is not offered there rather than offered and dead. */
 	const browse = async () => {
+		if (remoteId()) return;
 		const starting = cwd().trim();
 		const picked = await pickFolder(starting.length > 0 ? starting : undefined);
 		if (typeof picked === "string" && picked.length > 0) setCwd(picked);
@@ -86,11 +122,12 @@ export function Welcome(props: {
 	onCleanup(onNativeActions({ [NativeActions.openFolder]: () => void browse() }));
 
 	const create = {
+		get remoteId() { return remoteId(); },
 		get cwd() {
 			return cwd();
 		},
 		onCwd: setCwd,
-		...(host().kind === "desktop" ? { onBrowse: () => void browse() } : {}),
+		...(nativeAvailable() ? { onBrowse: () => void browse() } : {}),
 		onSend: (text: string, modelId?: string) => send(text, modelId),
 	} satisfies ComposerCreate;
 
@@ -111,11 +148,12 @@ export function Welcome(props: {
 			...(folder.length > 0 ? { cwd: folder } : {}),
 			...(text === undefined || text.length === 0 ? {} : { prompt: text }),
 			...(modelId === undefined ? {} : { modelId }),
+			...(remoteId() === undefined ? {} : { remoteId: remoteId() }),
 		});
-		if (remembered() && folder.length > 0)
+		if (remembered() && folder.length > 0 && !remoteId())
 			void apiFetch("/api/settings", { method: "POST", body: JSON.stringify({ cwd: folder }) }).catch(() => undefined);
 		if (id === null && text !== undefined) setPicking(true);
-		props.onCreated(name);
+		props.onCreated(remoteId() ? remoteSessionName(remoteId()!, name) : name);
 	}
 
 	const chips = (
@@ -147,6 +185,9 @@ export function Welcome(props: {
 				<p data-testid="persona-hint" class="mb-2 text-center font-mono text-[11px] text-muted">
 					{personaId() === null ? i18n.t(picking() ? "new.personaPicking" : "new.personaAutoPick") : ""}
 				</p>
+				<div class="mb-3">
+					<WorkspaceTarget remoteId={remoteId()} cwd={cwd()} onRemoteId={setRemoteId} onCwd={setCwd} localDirectory={false} />
+				</div>
 				<Composer topSlot={chips} onNavigateSettings={props.onNavigateSettings} create={create} />
 				{/* The folder is in the composer's own bar; what is said about it sits here, where
 				    there is room for a sentence and for the two ways out. */}
@@ -167,7 +208,7 @@ export function Welcome(props: {
 						data-testid="create-session"
 						title={personaId() === null ? i18n.t("new.personaRequired") : undefined}
 						disabled={creating() || personaId() === null}
-						onClick={() => send(undefined, defaults().modelId)}
+						onClick={() => send(undefined, remoteId() ? undefined : defaults().modelId)}
 						class="shrink-0 border-2 border-primary px-3 py-1 font-mono text-[11px] font-bold tracking-[0.12em] uppercase disabled:opacity-40"
 						style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
 					>

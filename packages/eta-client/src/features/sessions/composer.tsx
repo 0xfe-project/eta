@@ -37,6 +37,7 @@ interface SlashCommand {
 }
 
 export interface ComposerCreate {
+	remoteId?: string;
 	cwd: string;
 	onCwd: (cwd: string) => void;
 	/** Offered only where a folder dialog exists to answer it — see `lib/native.ts`. */
@@ -106,6 +107,7 @@ export function Composer(props: {
 	const [text, setText] = createSignal("");
 	const [files, setFiles] = createSignal<string[]>([]);
 	const [pickedModel, setPickedModel] = createSignal<string | undefined>(undefined);
+	createEffect(on(() => props.create?.remoteId, () => setPickedModel(undefined)));
 	const [slashIndex, setSlashIndex] = createSignal(0);
 	const [atIndex, setAtIndex] = createSignal(0);
 	const [menuClosed, setMenuClosed] = createSignal(false);
@@ -614,13 +616,13 @@ export function Composer(props: {
 							</Show>
 							<Show when={createMode() || props.session !== undefined}>
 								<span class="composer-model-container">
-									<ModelPicker {...(props.session === undefined ? {} : { session: props.session })} {...(createMode() ? { onPick: setPickedModel } : {})} />
+									<ModelPicker remoteId={props.create?.remoteId} {...(props.session === undefined ? {} : { session: props.session })} {...(createMode() ? { onPick: setPickedModel } : {})} />
 								</span>
 							</Show>
 							<Show when={!createMode() && props.session !== undefined}>
 								<ThinkingChip session={props.session ?? ""} />
 							</Show>
-							<Show when={createMode() && props.create !== undefined}>
+							<Show when={createMode() && props.create !== undefined && !props.create.remoteId}>
 								<>
 									<input
 										data-testid="composer-cwd"

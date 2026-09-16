@@ -11,6 +11,7 @@ import { BtwDialog } from "../features/sessions/btw-dialog.tsx";
 import { btwDialogOpen, setBtwDialogOpen } from "../lib/btw.ts";
 import { TerminalHost } from "../features/sessions/terminal-host.tsx";
 import { Welcome } from "../features/sessions/welcome.tsx";
+import { parseRemoteSession } from "../lib/remotes.ts";
 
 function useRunNotifications() {
 	const state = useEta();
@@ -70,7 +71,7 @@ function SessionsMain(props: { termOpen: Accessor<boolean>; setTermOpen: Setter<
 
 	return (
 		<div class="flex min-h-0 flex-1 flex-col">
-			<MainHeader title={selected() ?? i18n.t("app.title")} {...(headerCwd() === undefined ? {} : { cwd: headerCwd() })} />
+			<MainHeader title={selected() ?? i18n.t("app.title")} remote={state.sessions.find((session) => session.name === selected())?.remote} {...(headerCwd() === undefined ? {} : { cwd: headerCwd() })} />
 			<Show
 				when={state.sessions.length === 0}
 				fallback={
@@ -89,7 +90,7 @@ function SessionsMain(props: { termOpen: Accessor<boolean>; setTermOpen: Setter<
 									queue={current().queue}
 								/>
 								<Show when={props.termOpen() && view() !== undefined}>
-									<TerminalHost variant="drawer" {...(termCwd() === undefined ? {} : { cwd: termCwd()! })} onClose={() => props.setTermOpen(false)} />
+									<TerminalHost variant="drawer" {...(termCwd() === undefined ? {} : { cwd: termCwd()! })} {...(parseRemoteSession(selected() ?? "") ? { remote: parseRemoteSession(selected() ?? "")!.connectionId } : {})} onClose={() => props.setTermOpen(false)} />
 								</Show>
 								<AskModal session={selected() ?? ""} view={current()} />
 								{/* Rendered here, not in the context panel: `/btw` is a request to answer now, so the dialog does not wait for whichever tab the right rail happens to be on. */}

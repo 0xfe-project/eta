@@ -19,12 +19,13 @@ export function NewSessionPage() {
 	const navigate = useNavigate();
 	const [params] = useSearchParams();
 	const state = useEta();
+	const handedRemote = () => typeof params.remote === "string" && params.remote.length > 0 ? params.remote : undefined;
 	/** Read at prop time, not once in this body: the group header's 「+」 can retarget the folder
 	 * while this page is already open, and `Welcome` listens for exactly that. */
 	const handedCwd = () =>
 		[
 			typeof params.cwd === "string" ? params.cwd : "",
-			state.sessions.find((session) => session.cwd !== undefined)?.cwd ?? "",
+			handedRemote() ? "" : state.sessions.find((session) => session.cwd !== undefined && !session.remote)?.cwd ?? "",
 		]
 			.find((value) => value.trim().length > 0)
 			?.trim() ?? "";
@@ -50,7 +51,7 @@ export function NewSessionPage() {
 							</button>
 						}
 					/>
-					<Welcome initialCwd={handedCwd()} onCreated={back} onNavigateSettings={openSettings} />
+					<Welcome initialCwd={handedCwd()} initialRemoteId={handedRemote()} onCreated={back} onNavigateSettings={openSettings} />
 				</div>
 			)}
 		/>

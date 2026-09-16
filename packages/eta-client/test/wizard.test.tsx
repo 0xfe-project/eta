@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Route } from "@solidjs/router";
+import { Welcome } from "../src/features/sessions/welcome.tsx";
 import { byId, findId, queryId } from "./dom.ts";
 import { FakeSocket } from "./fake-socket.ts";
-import { cleanup, click, flush, render, setField } from "./render.tsx";
+import { cleanup, click, flush, keyDown, render, setField } from "./render.tsx";
 import { MemoryRouter } from "./memory-router.tsx";
 
 /**
@@ -112,5 +113,152 @@ describe("new session surface", () => {
 		click("session-row-s1");
 		expect(FakeSocket.last()).toMatchObject({ op: "focus", session: "s1" });
 		expect(await findId("home")).toBeTruthy();
+	});
+});
+
+
+describe("remote session models", () => {
+	let remoteModels = true;
+	let preferredPersona: string | undefined = "Thinker";
+	let lateLocal: Promise<Response> | undefined;
+	beforeEach(() => {
+		remoteModels = true;
+		preferredPersona = "Thinker";
+		lateLocal = undefined;
+		vi.stubGlobal("WebSocket", FakeSocket);
+		vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+			const url = String(input);
+			const remote = url.startsWith("/api/remote/mini/");
+			if (url === "/api/models" && lateLocal) return lateLocal;
+			if (url.includes("/api/models")) return Response.json({ models: remote && !remoteModels ? [] : [1, 2].map((n) => ({ id: `${remote ? "remote" : "local"}:${n}`, label: `${remote ? "Remote" : "Local"} ${n}` })), current: `${remote ? "remote" : "local"}:1` });
+			if (url.includes("/api/settings")) return Response.json({ personaId: preferredPersona, modelId: `${remote ? "remote" : "local"}:1`, cwd: remote ? "/remote" : "/local" });
+			if (url.includes("/api/personas")) return Response.json([{ id: "Thinker", name: "Thinker", description: "test" }]);
+			if (url === "/api/remotes") return Response.json([{ id: "mini", name: "Mac mini", host: "mini", status: "connected", projects: ["/remote"] }]);
+			if (url.includes("/api/directories")) return Response.json({ path: new URL(url, "http://eta.test").searchParams.get("path") ?? "/remote", parent: "/", directories: [] });
+			return Response.json({});
+		}));
+	});
+
+	async function selectRemote() {
+		await vi.waitFor(() => expect(byId("workspace-host").querySelector('option[value="mini"]')).not.toBeNull());
+		setField("workspace-host", "mini");
+	}
+
+	it("keeps local directory edits without reloading the configured default", async () => {
+		render(<Welcome onCreated={() => undefined} onNavigateSettings={() => undefined} />);
+		await vi.waitFor(() => expect((byId("composer-cwd") as HTMLInputElement).value).toBe("/local"));
+		const settingsCalls = () => vi.mocked(fetch).mock.calls.filter(([input]) => String(input) === "/api/settings").length;
+		const count = settingsCalls();
+		setField("composer-cwd", "");
+		await vi.waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input) === "/api/personas")).toBe(true));
+		expect((byId("composer-cwd") as HTMLInputElement).value).toBe("");
+		expect(settingsCalls()).toBe(count);
+	});
+
+	it("keeps the unified surface and the remote target from the project link", async () => {
+		await mountWizard("/new?cwd=%2Fremote%2Fproject&remote=mini");
+		await findId("persona-Thinker");
+		await vi.waitFor(() => expect((byId("workspace-host") as HTMLSelectElement).value).toBe("mini"));
+		expect(queryId("sidebar")).not.toBeNull();
+		expect(queryId("drawer-right")).not.toBeNull();
+		expect(document.querySelectorAll('[data-testid="composer-input"]')).toHaveLength(1);
+		expect(queryId("composer-cwd")).toBeNull();
+		expect(queryId("cwd-input")).toBeNull();
+		expect(queryId("persona-grid")).toBeNull();
+		expect((byId("remote-directory-path") as HTMLInputElement).value).toBe("/remote/project");
+		click("cwd-remember");
+		click("create-session");
+		expect(FakeSocket.last()).toMatchObject({ op: "session.create", remoteId: "mini", cwd: "/remote/project" });
+		expect(vi.mocked(fetch).mock.calls.some(([input, init]) => String(input) === "/api/settings" && init?.method === "POST")).toBe(false);
+	});
+
+	it("retargets device and directory from sidebar groups while already on /new", async () => {
+		await mountWizard("/new?cwd=%2Fremote");
+		await findId("persona-Thinker");
+		const socket = FakeSocket.instances.at(-1)!;
+		const sessions = [
+			{ name: "local", badges: [], personas: [], cwd: "/remote" },
+			{ name: "remote:mini:r1", badges: [], personas: [], cwd: "/remote", remote: { connectionId: "mini", label: "Mac mini", host: "mini", status: "connected" } },
+		];
+		flush(() => socket.fire("open", {}));
+		flush(() => socket.fire("message", { data: JSON.stringify({ type: "hello", sessions, attach: "local" }) }));
+		click("project-new-remote-mini-remote");
+		await vi.waitFor(() => expect((byId("workspace-host") as HTMLSelectElement).value).toBe("mini"));
+		expect((byId("remote-directory-path") as HTMLInputElement).value).toBe("/remote");
+		setField("remote-directory-path", "/remote/custom");
+		await vi.waitFor(() => expect(byId("cwd-hint").textContent).toContain("/remote/custom"));
+		flush(() => socket.fire("message", { data: JSON.stringify({ type: "sessions", sessions }) }));
+		expect((byId("remote-directory-path") as HTMLInputElement).value).toBe("/remote/custom");
+		click("project-new-remote");
+		await vi.waitFor(() => expect((byId("workspace-host") as HTMLSelectElement).value).toBe(""));
+		expect((byId("composer-cwd") as HTMLInputElement).value).toBe("/remote");
+		expect(queryId("cwd-input")).toBeNull();
+		expect(queryId("remote-directory-path")).toBeNull();
+	});
+
+	it("lets the remote pick a persona when sending from welcome without a card", async () => {
+		preferredPersona = undefined;
+		const onCreated = vi.fn();
+		render(<Welcome onCreated={onCreated} onNavigateSettings={() => undefined} />);
+		await selectRemote();
+		await vi.waitFor(() => expect(byId("model-picker").textContent).toContain("Remote 1"));
+		setField("composer-input", "Refactor this module");
+		keyDown("composer-input", "Enter");
+		expect(FakeSocket.last()).toMatchObject({ op: "session.create", remoteId: "mini", cwd: "/remote", prompt: "Refactor this module" });
+		expect(FakeSocket.last()).not.toHaveProperty("personaId");
+		expect(onCreated).toHaveBeenCalledWith(expect.stringMatching(/^remote:mini:/));
+	});
+
+	it("lets the remote pick a persona from the new-session first message", async () => {
+		preferredPersona = undefined;
+		await mountWizard();
+		await selectRemote();
+		await findId("persona-Thinker");
+		setField("composer-input", "Refactor this module");
+		click("composer-submit");
+		expect(FakeSocket.last()).toMatchObject({ op: "session.create", remoteId: "mini", cwd: "/remote", prompt: "Refactor this module" });
+		expect(FakeSocket.last()).not.toHaveProperty("personaId");
+		expect(FakeSocket.last()).not.toHaveProperty("modelId");
+	});
+
+	it("drops a local model selection when creating on another machine", async () => {
+		render(<Welcome onCreated={() => undefined} onNavigateSettings={() => undefined} />);
+		await findId("model-picker");
+		click("model-picker");
+		click("model-local:2");
+		await selectRemote();
+		await vi.waitFor(() => expect(byId("model-picker").textContent).toContain("Remote 1"));
+		click("model-picker");
+		expect(queryId("model-local:1")).toBeNull();
+		click("model-remote:2");
+		await vi.waitFor(() => expect(byId("persona-Thinker")).toBeTruthy());
+		click("persona-Thinker");
+		setField("composer-input", "hello");
+		keyDown("composer-input", "Enter");
+		expect(FakeSocket.last()).toMatchObject({ op: "session.create", remoteId: "mini", modelId: "remote:2", cwd: "/remote" });
+	});
+
+	it("does not restore a late local catalog when the remote has no models", async () => {
+		let finish!: (response: Response) => void;
+		lateLocal = new Promise((resolve) => { finish = resolve; });
+		remoteModels = false;
+		render(<Welcome onCreated={() => undefined} onNavigateSettings={() => undefined} />);
+		await selectRemote();
+		await vi.waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url) === "/api/remote/mini/api/models")).toBe(true));
+		finish(Response.json({ models: [{ id: "local:2", label: "Local 2" }], current: "local:2" }));
+		await vi.waitFor(() => expect(document.body.textContent).toMatch(/Configure models|配置模型/));
+		expect(queryId("model-picker")).toBeNull();
+		expect(document.body.textContent).not.toContain("Local 2");
+	});
+
+	it("lets the remote server choose its default in the new-session page", async () => {
+		await mountWizard();
+		await findId("persona-Thinker");
+		await selectRemote();
+		await vi.waitFor(() => expect((byId("create-session") as HTMLButtonElement).disabled).toBe(false));
+		click("create-session");
+		expect(FakeSocket.last()).toMatchObject({ op: "session.create", remoteId: "mini", cwd: "/remote" });
+		expect(FakeSocket.last()).not.toHaveProperty("modelId");
+		expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url) === "/api/remote/mini/api/settings")).toBe(true);
 	});
 });

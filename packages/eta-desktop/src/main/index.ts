@@ -1,9 +1,8 @@
 /**
  * eta's desktop shell.
  *
- * The eta server runs inside this process and the webview loads the built
- * eta-client, so the shell adds exactly two things a browser tab cannot have:
- * the window chrome, and the native capabilities behind `/api/native/*`.
+ * The window connects to the machine's independent eta service. This process owns
+ * only window chrome and native capabilities; quitting it leaves sessions running.
  *
  * Three facts the P0 probe (/tmp/eta-p0) established, and this file depends on:
  * a page served from `views://` may open a WebSocket to `127.0.0.1`; `preload` is
@@ -14,11 +13,14 @@
  */
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { ApplicationMenu, BrowserWindow, Tray, Utils, type ApplicationMenuItemConfig } from "electrobun/main";
-import { startServer, type EtaServer, type NativeHandlers } from "../../../eta-server/src/server.ts";
+import type { BackendDescriptor } from "../../../eta-core/src/remote.ts";
+import { ApplicationMenu, BrowserWindow, PATHS, Tray, Utils, type ApplicationMenuItemConfig } from "electrobun/main";
+import { ensureBackend } from "../../../eta-server/src/service-launcher.ts";
+import { startNativeBridge } from "./native-bridge.ts";
 
 const VERSION = "0.1.0";
-const CLIENT_DIST = new URL("../../eta-client/dist", import.meta.url).pathname;
+const CLIENT_DIST = join(PATHS.VIEWS_FOLDER, "eta");
+const BACKEND = join(PATHS.VIEWS_FOLDER, "eta-backend", process.platform === "win32" ? "eta-server.exe" : "eta-server");
 
 /** The `action` strings the front-end answers; see eta-client/src/lib/native.ts. */
 const ACTIONS = {
@@ -32,44 +34,36 @@ const ACTIONS = {
 	quit: "app.quit",
 } as const;
 
-const token = crypto.randomUUID().replaceAll("-", "");
-
-const server: EtaServer = await startServer({
-	settingsToken: token,
-	// Random port, loopback only: `dev:web` may already hold 3000 with SO_REUSEPORT,
-	// and the shell tells the page where it is through the preload anyway.
-	port: 0,
-	hostname: "127.0.0.1",
-	reusePort: false,
-	webDist: CLIENT_DIST,
-	platform: process.platform,
-	appVersion: VERSION,
-	native: {
-		async folderDialog(input): Promise<string | null> {
-			const picked = await Utils.openFileDialog({
-				canChooseFiles: false,
-				canChooseDirectory: true,
-				allowsMultipleSelection: false,
-				...(input.startingFolder === undefined ? {} : { startingFolder: input.startingFolder }),
-			});
-			return picked[0] ?? null;
-		},
-		/** Hutch has no save dialog yet, so exports land somewhere findable. */
-		async saveFile({ content, filename }): Promise<string | null> {
-			const target = join(homedir(), ".eta", "exports", filename.replace(/[/\\]/g, "-"));
-			await Bun.write(target, content);
-			return target;
-		},
-		contextMenu({ items }): void {
-			console.log(`[eta-desktop] contextMenu(${String(items.length)} items) is not wired up yet`);
-		},
-	} satisfies NativeHandlers,
-});
-
-const apiBase = `http://127.0.0.1:${String(server.port)}`;
-/** Settings requests carry the preload credential as an Authorization header. */
-
-const health = await fetch(`${apiBase}/api/health`).then((response) => response.status).catch(() => 0);
+// The child is detached and claims its own lock; the window never owns sessions.
+let descriptor: BackendDescriptor | undefined;
+let serviceError: string | undefined;
+try {
+	descriptor = await ensureBackend({ command: [BACKEND, "serve"], webDist: CLIENT_DIST, version: VERSION });
+} catch (error) {
+	serviceError = error instanceof Error ? error.message : String(error);
+	console.error(`[eta-desktop] ${serviceError}`);
+}
+const apiBase = descriptor === undefined ? "" : `http://127.0.0.1:${String(descriptor.port)}`;
+const credential = descriptor?.token;
+const nativeBridge = startNativeBridge({
+	async folderDialog(input): Promise<string | null> {
+		const picked = await Utils.openFileDialog({
+			canChooseFiles: false,
+			canChooseDirectory: true,
+			allowsMultipleSelection: false,
+			...(input.startingFolder === undefined ? {} : { startingFolder: input.startingFolder }),
+		});
+		return picked[0] ?? null;
+	},
+	async saveFile({ content, filename }): Promise<string | null> {
+		const target = join(homedir(), ".eta", "exports", filename.replace(/[/\\]/g, "-"));
+		await Bun.write(target, content);
+		return target;
+	},
+	contextMenu({ items }): void {
+		console.log(`[eta-desktop] contextMenu(${String(items.length)} items) is not wired up yet`);
+	},
+}, VERSION);
 
 /**
  * In `dev:desk` the vite server is usually up and hot reload beats a rebuild loop.
@@ -84,7 +78,7 @@ const devIsOurs = await fetch(devUrl, { signal: AbortSignal.timeout(400) })
 	.catch(() => false);
 const pageUrl = devIsOurs ? devUrl : "views://eta/index.html";
 
-console.log(`[eta-desktop] server ${apiBase} health=${String(health)} page=${pageUrl}`);
+console.log(`[eta-desktop] backend ${apiBase} page=${pageUrl}`);
 
 const window = new BrowserWindow({
 	title: "eta",
@@ -98,7 +92,17 @@ const window = new BrowserWindow({
 	// of the window; 10 centres them in the 40px header. Overridable so nudging it
 	// is a relaunch, not a rebuild: ETA_LIGHT_Y=6 .../eta.app/Contents/MacOS/launcher
 	trafficLightOffset: { x: 14, y: Number(process.env["ETA_LIGHT_Y"] ?? 5) },
-	preload: `window.__ETA_HOST__=${JSON.stringify({ apiBase, token, platform: process.platform, appVersion: VERSION })};`,
+	preload: `window.__ETA_HOST__=${JSON.stringify({
+		apiBase,
+		token: credential,
+		platform: process.platform,
+		appVersion: VERSION,
+		native: true,
+		nativeApiBase: nativeBridge.apiBase,
+		nativeToken: nativeBridge.token,
+		role: descriptor?.role ?? "dev",
+		...(serviceError === undefined ? {} : { error: serviceError }),
+	})};`,
 });
 
 /** Menu-bar item; the same actions the window menu would carry. */
@@ -207,7 +211,8 @@ function runAction(action: string, kind: "menu" | "tray"): void {
 		process.exit(0);
 		return;
 	}
-	server.push({ type: "native", kind, action });
+	// Window actions belong to this client, not every subscriber of the shared backend.
+	window.webview.executeJavascript(`window.__etaNative?.(${JSON.stringify({ kind, action })})`);
 }
 
 ApplicationMenu.setApplicationMenu(APP_MENU);
@@ -221,13 +226,11 @@ tray.on("tray-clicked", (event) => {
 	if (action !== undefined) runAction(action, "tray");
 });
 
-// `close()` stops the listener and kills every shell the terminal registry started;
-// without the exit hook an app quit leaves zsh processes behind. ⌘Q reaches us as a
-// signal rather than a call, so the same cleanup has to hang off that too.
+// Only the window-local capability bridge stops here. The backend has its own PID.
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
 	process.on(signal, () => process.exit(0));
 }
 process.on("exit", () => {
 	tray.remove();
-	server.close();
+	nativeBridge.close();
 });

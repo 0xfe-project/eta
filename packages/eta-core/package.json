@@ -12,7 +12,8 @@
 		"./eta": "./src/eta/index.ts",
 		"./prompts": "./src/prompts/index.ts",
 		"./wire": "./src/wire.ts",
-		"./provider-config": "./src/provider-config.ts"
+		"./provider-config": "./src/provider-config.ts",
+		"./remote": "./src/remote.ts"
 	},
 	"scripts": {
 		"test": "vitest --run",

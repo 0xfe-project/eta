@@ -6,9 +6,11 @@
 		"icons": "bun scripts/tray-icon.ts",
 		"prepare:sdk": "hutch electrobun prepare",
 		"client": "bun run --cwd ../eta-client build",
+		"backend": "bun scripts/backend.ts",
+		"prepare:app": "bun run backend && bun run client",
 		"dev": "bun scripts/dev.ts",
-		"dev:views": "bun run client && hutch electrobun dev --env=dev",
-		"build": "bun run client && hutch electrobun build --env=stable",
+		"dev:views": "bun run prepare:app && hutch electrobun dev --env=dev",
+		"build": "bun run prepare:app && hutch electrobun build --env=stable",
 		"typecheck": "if [ -d .hutch/devkit ]; then tsc --noEmit; else echo 'eta-desktop: skipped, run `hutch electrobun prepare`'; fi"
 	},
 	"dependencies": {

@@ -16,7 +16,7 @@ interface Tab {
  * shell output arrives as binary. Two mounts share this component: the bottom
  * drawer (resizable) and the right panel tab (full height, for `vim` and friends).
  */
-export function TerminalHost(props: { cwd?: string; variant: "drawer" | "panel"; onClose?: () => void }) {
+export function TerminalHost(props: { cwd?: string; remote?: string; variant: "drawer" | "panel"; onClose?: () => void }) {
 	const i18n = useAppI18n();
 	const drawer = () => props.variant === "drawer";
 	const [tabs, setTabs] = createSignal<Tab[]>([{ id: 1 }]);
@@ -119,7 +119,7 @@ export function TerminalHost(props: { cwd?: string; variant: "drawer" | "panel";
 				<For each={tabs()}>
 					{(tab) => (
 						<div class={`absolute inset-0 ${active() === tab.id ? "" : "invisible"}`}>
-							<TermTab cwd={props.cwd} onExit={() => close(tab.id)} />
+							<TermTab cwd={props.cwd} remote={props.remote} onExit={() => close(tab.id)} />
 						</div>
 					)}
 				</For>
@@ -128,7 +128,7 @@ export function TerminalHost(props: { cwd?: string; variant: "drawer" | "panel";
 	);
 }
 
-function TermTab(props: { cwd?: string; onExit: () => void }) {
+function TermTab(props: { cwd?: string; remote?: string; onExit: () => void }) {
 	let host: HTMLDivElement | undefined;
 	const onExitRef: { current: () => void } = { current: props.onExit };
 	createEffect(() => {
@@ -137,8 +137,8 @@ function TermTab(props: { cwd?: string; onExit: () => void }) {
 
 	createEffect(
 		on(
-			() => props.cwd,
-			(cwd) => {
+			() => [props.cwd, props.remote] as const,
+			([cwd, remote]) => {
 				const node = host;
 				if (node === undefined) return undefined;
 				const term = new Terminal({
@@ -215,7 +215,7 @@ function TermTab(props: { cwd?: string; onExit: () => void }) {
 					term.write(new Uint8Array(event.data as ArrayBuffer));
 				};
 				const connect = () => {
-					ws = new WebSocket(withToken(wsUrl("/term")));
+					ws = new WebSocket(withToken(wsUrl(remote ? `/term?remote=${encodeURIComponent(remote)}` : "/term")));
 					ws.binaryType = "arraybuffer";
 					ws.onopen = () => {
 						send({ op: "start", cols: term.cols, rows: term.rows, ...(cwd === undefined ? {} : { cwd }) });
