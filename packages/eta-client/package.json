@@ -31,6 +31,7 @@
 		"@tailwindcss/vite": "^4.3.0",
 		"@testing-library/dom": "^10.4.1",
 		"jsdom": "^27.0.0",
+		"solid-grab": "^1.2.0",
 		"tailwindcss": "^4.3.3",
 		"typescript": "^5.9.0",
 		"vite": "^8.0.0",
