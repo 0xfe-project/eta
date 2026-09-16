@@ -9,6 +9,7 @@
 import type { ThinkingLevel } from "./types.ts";
 import type { HarnessEvent } from "./harness/agent-harness.ts";
 import type { SessionView } from "./harness/session-view.ts";
+import type { RemoteView, RemoteWorkspace } from "./remote.ts";
 
 export interface DevFrame {
 	/** Assigned by the client as a frame folds in, so a dev list reconciles by key. */
@@ -29,6 +30,8 @@ export interface SidebarSession {
 	updated?: number;
 	badges: string[];
 	personas: string[];
+	/** Set by the local host from persisted remote identity, never inferred from the path. */
+	remote?: RemoteWorkspace;
 }
 
 /**
@@ -84,7 +87,13 @@ export type GuiOp =
 	| { op: "askAbort"; session: string; questionId: string };
 
 export type ControlOp =
-	| { op: "session.create"; name: string; personaId: string; cwd?: string; prompt?: string; modelId?: string }
+	/**
+	 * A shell-side click (menu, tray) folded back into the frames every client already
+	 * listens to. The desktop app uses this when it is a client of the machine's own
+	 * backend rather than the process hosting it.
+	 */
+	| { op: "native"; kind: "menu" | "tray" | "update"; action: string; data?: unknown }
+	| { op: "session.create"; remoteId?: string; name: string; personaId: string; cwd?: string; prompt?: string; modelId?: string }
 	| { op: "session.delete"; name: string }
 	| { op: "session.pin"; session: string; pinned: boolean }
 	| { op: "session.archive"; session: string; archived: boolean }
@@ -98,6 +107,7 @@ export type ServerMessage =
 	| { type: "sessions"; sessions: SidebarSession[] }
 	| { type: "personas" }
 	| { type: "models_changed" }
+	| { type: "remotes"; remotes: RemoteView[] }
 	| { type: "search"; query: string; hits: { session: string; snippet: string }[] }
 	| { type: "created"; name: string }
 	| { type: "deleted"; name: string }
