@@ -39,6 +39,8 @@ interface SlashCommand {
 export interface ComposerCreate {
 	cwd: string;
 	onCwd: (cwd: string) => void;
+	/** Offered only where a folder dialog exists to answer it — see `lib/native.ts`. */
+	onBrowse?: () => void;
 	/** The server picks a persona when the person did not, so any non-empty text may send. */
 	onSend: (text: string, modelId?: string) => void;
 }
@@ -619,13 +621,26 @@ export function Composer(props: {
 								<ThinkingChip session={props.session ?? ""} />
 							</Show>
 							<Show when={createMode() && props.create !== undefined}>
-								<input
-									data-testid="composer-cwd"
-									value={props.create?.cwd ?? ""}
-									placeholder={i18n.t("new.cwd")}
-									onInput={(event) => props.create?.onCwd(event.currentTarget.value)}
-									class="mono min-w-0 max-w-[180px] flex-1 border border-border bg-transparent px-1.5 py-0.5 text-[10px] text-muted outline-none focus:border-border-strong"
-								/>
+								<>
+									<input
+										data-testid="composer-cwd"
+										value={props.create?.cwd ?? ""}
+										placeholder={i18n.t("new.cwd")}
+										onInput={(event) => props.create?.onCwd(event.currentTarget.value)}
+										class="mono min-w-0 max-w-[180px] flex-1 border border-border bg-transparent px-1.5 py-0.5 text-[10px] text-muted outline-none focus:border-border-strong"
+									/>
+									<Show when={props.create?.onBrowse !== undefined}>
+										<button
+											type="button"
+											data-testid="cwd-browse"
+											title={i18n.t("new.browse")}
+											onClick={() => props.create?.onBrowse?.()}
+											class="shrink-0 whitespace-nowrap border border-border px-1.5 py-0.5 text-[10px] text-muted hover:border-border-strong"
+										>
+											{i18n.t("new.browse")}
+										</button>
+									</Show>
+								</>
 							</Show>
 							<span class="composer-toolbar-hints min-w-0 truncate max-md:hidden">{props.running ? i18n.t("composer.runningHint") : i18n.t("composer.hint")}</span>
 						</div>
