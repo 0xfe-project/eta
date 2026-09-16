@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startServer, type EtaServer } from "../src/server.ts";
@@ -382,14 +382,17 @@ describe("skill discovery", () => {
 		expect(block).toContain("- demo Line one line two");
 		expect(block).toContain(join(home, ".agents", "skills", "demo"));
 		expect(block.includes("\n")).toBe(true);
-		const empty = await renderSkillsBlock(env, mkdtempSync(join(tmpdir(), "eta-skills-empty-")), join(root, "none"));
+		const emptyDir = mkdtempSync(join(process.cwd(), ".eta-skills-empty-"));
+		const empty = await renderSkillsBlock(env, emptyDir, join(root, "none"));
 		expect(empty).toBe("");
+		rmSync(emptyDir, { recursive: true, force: true });
 	});
 });
 
 describe("desktop native endpoints", () => {
 	it("serves /api/native/*, stamps CORS, and broadcasts push()", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "eta-native-"));
+		let windowAction: string | undefined;
 		const server = await startServer({
 			port: 0,
 			cwd,
@@ -400,6 +403,7 @@ describe("desktop native endpoints", () => {
 				folderDialog: async () => "/picked",
 				saveFile: async () => "/saved",
 				contextMenu: () => {},
+				windowAction: ({ action }) => { windowAction = action; },
 			},
 			platform: "darwin",
 			appVersion: "9.9.9",
@@ -420,6 +424,13 @@ describe("desktop native endpoints", () => {
 				})
 			).json()) as { path: string | null };
 			expect(folder).toEqual({ path: "/picked" });
+			const windowResponse = await fetch(`${base}/api/native/window-action`, {
+				method: "POST",
+				body: JSON.stringify({ action: "minimize" }),
+				headers: { "content-type": "application/json" },
+			});
+			expect(windowResponse.status).toBe(202);
+			expect(windowAction).toBe("minimize");
 
 			const health = await fetch(`${base}/api/health`);
 			expect(health.headers.get("access-control-allow-origin")).toBe("*");

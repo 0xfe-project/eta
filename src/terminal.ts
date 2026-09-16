@@ -44,7 +44,7 @@ export class TermRegistry {
 		}
 		if (frame.op === "start") {
 			this.kill(socket);
-			const shell = process.env.SHELL ?? "/bin/zsh";
+			const [shell, ...shellArgs] = defaultShellCommand();
 			const handle: ShellHandle = { proc: undefined as unknown as BunShell, alive: true };
 			socket.data.shell = handle;
 			this.live.add(handle);
@@ -56,7 +56,7 @@ export class TermRegistry {
 						: frame.cwd.startsWith("~/")
 							? join(homedir(), frame.cwd.slice(2))
 							: frame.cwd;
-			const proc = Bun.spawn([shell, "-i"], {
+			const proc = Bun.spawn([shell, ...shellArgs], {
 				cwd: requested !== undefined && directoryExists(requested) ? requested : homedir(),
 				env: { ...process.env, TERM: "xterm-256color" },
 				terminal: {
@@ -113,6 +113,12 @@ export class TermRegistry {
 		}
 		this.live.clear();
 	}
+}
+
+/** Interactive shell defaults per platform; command.com is not useful on Windows. */
+function defaultShellCommand(): string[] {
+	if (process.platform === "win32") return [process.env.SHELL ?? process.env.ComSpec ?? "cmd.exe"];
+	return [process.env.SHELL ?? "/bin/zsh", "-i"];
 }
 
 function directoryExists(path: string): boolean {
