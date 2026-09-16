@@ -545,3 +545,22 @@ describe("a persisted session whose persona card is gone", () => {
 		}
 	});
 });
+
+describe("the platform briefing reaches a session", () => {
+	// The app's own layout is told to the model as a prompt block, and the Context panel
+	// lists it by name — the block is only real if it shows up in what the client is shown.
+	it("appears in the view's prompt sections", async () => {
+		await withServer(async (server) => {
+			const { socket, reader } = await connect(server);
+			await reader.next();
+			send(socket, { op: "session.create", name: "s1", personaId: "Thinker" });
+			const frame = await reader.until(
+				(m): m is Extract<ServerMessage, { channel: "view" }> =>
+					"channel" in m && m.channel === "view" && JSON.stringify(m).includes('"name":"platform"'),
+				8000,
+			);
+			expect(JSON.stringify(frame)).toContain(".eta/config.json");
+			socket.close();
+		});
+	});
+});
