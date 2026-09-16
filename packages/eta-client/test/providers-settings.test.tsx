@@ -175,6 +175,32 @@ describe("provider settings", () => {
 		expect(writes[0].provider).toMatchObject({ kind: "openai-compatible", models: [{ id: "local-model" }] });
 	});
 
+	it("saves the Responses protocol chosen on a custom provider", async () => {
+		mount();
+		click("settings-tab-providers");
+		await vi.waitFor(() => expect(byId("provider-add-custom")).toBeTruthy());
+		click("provider-add-custom");
+		// Chat Completions stays the default; only the custom kinds expose the choice.
+		expect((byId("provider-protocol") as HTMLSelectElement).value).toBe("openai-compatible");
+		setField("provider-protocol", "openai-responses");
+		setField("provider-url", "https://example.com/v1");
+		click("provider-add-model");
+		setField("custom-model-id", "grok-4.6");
+		click("provider-save");
+		await vi.waitFor(() => expect(writes).toHaveLength(1));
+		expect(writes[0].provider).toMatchObject({ kind: "openai-responses", baseUrl: "https://example.com/v1", models: [{ id: "grok-4.6" }] });
+	});
+
+	it("offers the protocol choice only for custom providers", async () => {
+		catalog = { revision: "one", providers: [{ id: "kimi-coding", kind: "kimi-coding", baseUrl: "https://api.kimi.com/coding/v1", hasApiKey: true, models: [kimi] }] };
+		const page = mount();
+		click("settings-tab-providers");
+		await vi.waitFor(() => expect(byId("provider-kimi-coding")).toBeTruthy());
+		click("provider-kimi-coding");
+		expect(page.queryByTestId("provider-protocol")).toBeNull();
+		expect(page.queryByTestId("provider-url")).toBeNull();
+	});
+
 	it("keeps delete confirmation in the visible action area and supports cancellation", async () => {
 		catalog = { revision: "one", providers: [{ id: "kimi-coding", kind: "kimi-coding", baseUrl: "https://api.kimi.com/coding/v1", hasApiKey: true, models: [kimi] }] };
 		mount(); click("settings-tab-providers");

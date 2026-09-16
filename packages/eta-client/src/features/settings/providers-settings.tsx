@@ -1,6 +1,6 @@
 import { For, Index, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import {
-	effectiveModel, modelThinkingLevels, MODEL_THINKING_LEVELS, BUILTIN_PROVIDER_PRESETS, providerPreset,
+	effectiveModel, isCustomKind, modelThinkingLevels, MODEL_THINKING_LEVELS, BUILTIN_PROVIDER_PRESETS, providerPreset,
 	type CodexLoginView, type EtaModelConfig, type ModelCapabilities, type ProviderHeaders, type ProviderInput, type ProviderSummary, type ProvidersView, type ProviderKind,
 } from "@eta/core/provider-config";
 import { useAppI18n } from "../../i18n.ts";
@@ -96,8 +96,8 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 		generation += 1; controller?.abort(); cancelLogin();
 		let next: ProviderInput;
 		if (typeof provider === "string") {
-			const id = provider !== "openai-compatible" && !view()?.providers.some(item => item.id === provider)
-				? provider : `${provider === "openai-compatible" ? "custom" : provider}-${crypto.randomUUID().slice(0, 8)}`;
+			const id = !isCustomKind(provider) && !view()?.providers.some(item => item.id === provider)
+				? provider : `${isCustomKind(provider) ? "custom" : provider}-${crypto.randomUUID().slice(0, 8)}`;
 			next = { id, kind: provider, baseUrl: providerPreset(provider)?.baseUrl ?? "", models: [] };
 			setHasKey(false);
 			setHeaderRows([]);
@@ -223,9 +223,9 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 					<Show when={!login()}><button class="settings-text-button" data-testid="codex-device-login" disabled={busy()} onClick={() => void startLogin("device_code")}>{i18n.t("providers.codexDeviceAlternative")}</button></Show>
 				</section></Show>
 				<fieldset disabled={busy() || !!login()}>
-					<Show when={current().kind === "openai-compatible"}><label class="settings-field">{i18n.t("providers.name")}<input data-testid="provider-name" value={current().name ?? ""} onInput={event => update({ name: event.currentTarget.value || undefined })} /></label><label class="settings-field">Base URL<input data-testid="provider-url" placeholder="https://example.com/v1" value={current().baseUrl} onInput={event => update({ baseUrl: event.currentTarget.value })} /></label></Show>
+					<Show when={isCustomKind(current().kind)}><label class="settings-field">{i18n.t("providers.name")}<input data-testid="provider-name" value={current().name ?? ""} onInput={event => update({ name: event.currentTarget.value || undefined })} /></label><label class="settings-field">Base URL<input data-testid="provider-url" placeholder="https://example.com/v1" value={current().baseUrl} onInput={event => update({ baseUrl: event.currentTarget.value })} /></label><label class="settings-field">{i18n.t("providers.protocol")}<select data-testid="provider-protocol" value={current().kind} onChange={event => update({ kind: event.currentTarget.value as ProviderKind })}><option value="openai-compatible">{i18n.t("providers.protocolChatCompletions")}</option><option value="openai-responses">{i18n.t("providers.protocolResponses")}</option></select></label></Show>
 					<Show when={current().kind !== "openai-codex"}><label class="settings-field">API Key<input data-testid="provider-key" type="password" autocomplete="off" value={current().apiKey ?? ""} placeholder={hasKey() ? i18n.t("providers.keepKey") : i18n.t("providers.enterKey")} onInput={event => update({ apiKey: event.currentTarget.value || undefined })} /></label></Show>
-					<Show when={hasKey() && current().kind === "openai-compatible"}><button class="settings-text-button" onClick={() => update({ apiKey: null })}>{current().apiKey === null ? i18n.t("providers.keyWillClear") : i18n.t("providers.clearKey")}</button></Show>
+					<Show when={hasKey() && isCustomKind(current().kind)}><button class="settings-text-button" onClick={() => update({ apiKey: null })}>{current().apiKey === null ? i18n.t("providers.keyWillClear") : i18n.t("providers.clearKey")}</button></Show>
 					<Show when={current().kind !== "openai-codex"}><details class="settings-headers" data-testid="provider-headers" open={headerRows().length > 0}>
 						<summary>{i18n.t("providers.headers")}</summary>
 						<Index each={headerRows()}>{(row, index) => <div class="settings-header-row">
@@ -241,8 +241,8 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 					</details></Show>
 					<div class="settings-inline"><button data-testid="provider-discover" class="settings-primary" onClick={() => void discover()}>{busy() ? i18n.t("providers.connecting") : current().models.length > 0 ? i18n.t("providers.refresh") : i18n.t("providers.connectModels")}</button><span class="settings-hint" aria-live="polite">{status() === "connected" ? i18n.t("providers.connected", { n: current().models.length }) : ""}</span></div>
 					<Show when={current().models.length > 0}><div class="settings-section-label">{i18n.t("providers.models")}</div></Show>
-					<Index each={current().models}>{(model, index) => <ModelEditor model={model()} custom={current().kind === "openai-compatible"} onUpdate={patch => updateModel(index, patch)} onRemove={() => update({ models: current().models.filter((_, i) => i !== index) })} />}</Index>
-					<Show when={current().kind === "openai-compatible"}><button data-testid="provider-add-model" class="settings-add-model" onClick={() => update({ models: [...current().models, { id: "", overrides: { contextWindow: 128000, maxTokens: 8192, input: ["text"], reasoning: false } }] })}>＋ {i18n.t("providers.addModel")}</button></Show>
+					<Index each={current().models}>{(model, index) => <ModelEditor model={model()} custom={isCustomKind(current().kind)} onUpdate={patch => updateModel(index, patch)} onRemove={() => update({ models: current().models.filter((_, i) => i !== index) })} />}</Index>
+					<Show when={isCustomKind(current().kind)}><button data-testid="provider-add-model" class="settings-add-model" onClick={() => update({ models: [...current().models, { id: "", overrides: { contextWindow: 128000, maxTokens: 8192, input: ["text"], reasoning: false } }] })}>＋ {i18n.t("providers.addModel")}</button></Show>
 				</fieldset>
 				<div class="settings-provider-actions">
 					<Show when={deleteConfirm()} fallback={
