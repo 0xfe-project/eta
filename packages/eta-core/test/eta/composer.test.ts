@@ -29,6 +29,26 @@ describe("eta prompt composer", () => {
 		});
 		expect(etaPromptSections({})).toEqual([]);
 	});
+	it("platform briefing rides the stable block after skills", () => {
+		const platform = "<platform>\neta keeps its files in ~/.eta\n</platform>";
+		const state = {
+			skills: "<skills>\n- demo : /r/demo\n</skills>",
+			platform,
+			goal: { objective: "ship it", status: "active" as const },
+			memory: "MEMORY",
+		};
+		const s = composeEtaSystemPrompt("BASE", state);
+		expect(s.indexOf("</skills>")).toBeLessThan(s.indexOf("<platform>"));
+		expect(s.indexOf("</platform>")).toBeLessThan(s.indexOf("Goal: ship it"));
+		expect(etaPromptSectionsDetailed("BASE", state).find((section) => section.name === "platform")).toEqual({
+			name: "platform",
+			text: platform,
+			stable: true,
+		});
+		// A host app with nothing to say about its own layout gets the prompt it had before.
+		expect(composeEtaSystemPrompt("BASE", {})).toBe("BASE");
+	});
+
 	it("tasks append review prompt and rendered list", () => {
 		const s = composeEtaSystemPrompt("BASE", { tasks });
 		expect(s).toContain("<current_tasks>");

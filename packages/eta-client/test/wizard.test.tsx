@@ -51,6 +51,21 @@ describe("new session wizard", () => {
 		expect(await findId("home")).toBeTruthy();
 	});
 
+	it("sends without a persona once a first message is typed, and lets the server pick", async () => {
+		await mountWizard();
+		await findId("persona-card-Thinker");
+		setField("prompt-input", "帮我把这个模块拆开");
+		expect((byId("create-session") as HTMLButtonElement).disabled).toBe(false);
+		expect(queryId("persona-required")).toBeNull();
+		expect(queryId("persona-auto")).not.toBeNull();
+
+		click("create-session");
+
+		const sent = FakeSocket.last() as Record<string, unknown>;
+		expect(sent).toMatchObject({ op: "session.create", prompt: "帮我把这个模块拆开" });
+		expect("personaId" in sent).toBe(false);
+	});
+
 	it("gives the transcript area back when closed", async () => {
 		await mountWizard();
 		await findId("persona-card-Thinker");
@@ -64,9 +79,11 @@ describe("new session wizard", () => {
 
 describe("remote session models", () => {
 	let remoteModels = true;
+	let preferredPersona: string | undefined = "Thinker";
 	let lateLocal: Promise<Response> | undefined;
 	beforeEach(() => {
 		remoteModels = true;
+		preferredPersona = "Thinker";
 		lateLocal = undefined;
 		vi.stubGlobal("WebSocket", FakeSocket);
 		vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
@@ -74,7 +91,7 @@ describe("remote session models", () => {
 			const remote = url.startsWith("/api/remote/mini/");
 			if (url === "/api/models" && lateLocal) return lateLocal;
 			if (url.includes("/api/models")) return Response.json({ models: remote && !remoteModels ? [] : [1, 2].map((n) => ({ id: `${remote ? "remote" : "local"}:${n}`, label: `${remote ? "Remote" : "Local"} ${n}` })), current: `${remote ? "remote" : "local"}:1` });
-			if (url.includes("/api/settings")) return Response.json({ personaId: "Thinker", modelId: `${remote ? "remote" : "local"}:1`, cwd: remote ? "/remote" : "/local" });
+			if (url.includes("/api/settings")) return Response.json({ personaId: preferredPersona, modelId: `${remote ? "remote" : "local"}:1`, cwd: remote ? "/remote" : "/local" });
 			if (url.includes("/api/personas")) return Response.json([{ id: "Thinker", name: "Thinker", description: "test" }]);
 			if (url === "/api/remotes") return Response.json([{ id: "mini", name: "Mac mini", host: "mini", status: "connected", projects: ["/remote"] }]);
 			if (url.includes("/api/directories")) return Response.json({ path: "/remote", parent: "/", directories: [] });
@@ -86,6 +103,31 @@ describe("remote session models", () => {
 		await vi.waitFor(() => expect(byId("workspace-host").querySelector('option[value="mini"]')).not.toBeNull());
 		setField("workspace-host", "mini");
 	}
+
+	it("lets the remote pick a persona when sending from welcome without a card", async () => {
+		preferredPersona = undefined;
+		const onCreated = vi.fn();
+		render(<Welcome onCreated={onCreated} onNavigateSettings={() => undefined} />);
+		await selectRemote();
+		await vi.waitFor(() => expect(byId("model-picker").textContent).toContain("Remote 1"));
+		setField("composer-input", "Refactor this module");
+		keyDown("composer-input", "Enter");
+		expect(FakeSocket.last()).toMatchObject({ op: "session.create", remoteId: "mini", cwd: "/remote", prompt: "Refactor this module" });
+		expect(FakeSocket.last()).not.toHaveProperty("personaId");
+		expect(onCreated).toHaveBeenCalledWith(expect.stringMatching(/^remote:mini:/));
+	});
+
+	it("lets the remote pick a persona from the new-session first message", async () => {
+		preferredPersona = undefined;
+		await mountWizard();
+		await selectRemote();
+		await findId("persona-card-Thinker");
+		setField("prompt-input", "Refactor this module");
+		click("create-session");
+		expect(FakeSocket.last()).toMatchObject({ op: "session.create", remoteId: "mini", cwd: "/remote", prompt: "Refactor this module" });
+		expect(FakeSocket.last()).not.toHaveProperty("personaId");
+		expect(FakeSocket.last()).not.toHaveProperty("modelId");
+	});
 
 	it("drops a local model selection when creating on another machine", async () => {
 		render(<Welcome onCreated={() => undefined} onNavigateSettings={() => undefined} />);

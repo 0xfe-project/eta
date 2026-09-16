@@ -20,6 +20,9 @@ export function Welcome(props: { onCreated: (name: string) => void; onNavigateSe
 	const [personaId, setPersonaId] = createSignal<string | null>(null);
 	const [cwd, setCwd] = createSignal("");
 	const [remoteId, setRemoteId] = createSignal<string | undefined>();
+	// Set once the chat is on its way without a picked card, so the line under the composer
+	// explains the pause before the first frame paints. It goes away with this view.
+	const [picking, setPicking] = createSignal(false);
 	let personaPicked = false;
 	let loadVersion = 0;
 
@@ -47,18 +50,23 @@ export function Welcome(props: { onCreated: (name: string) => void; onNavigateSe
 
 	const create = {
 		get remoteId() { return remoteId(); },
-		get personaReady() {
-			return personaId() !== null;
-		},
 		get cwd() {
 			return cwd();
 		},
 		onCwd: setCwd,
 		onSend: (text: string, modelId?: string) => {
 			const id = personaId();
-			if (id === null) return;
 			const name = `s-${Date.now().toString(36)}`;
-			store.send({ op: "session.create", name, personaId: id, ...(cwd().trim().length > 0 ? { cwd: cwd().trim() } : {}), prompt: text, ...(modelId === undefined ? {} : { modelId }), ...(remoteId() === undefined ? {} : { remoteId: remoteId() }) });
+			store.send({
+				op: "session.create",
+				name,
+				...(id === null ? {} : { personaId: id }),
+				...(cwd().trim().length > 0 ? { cwd: cwd().trim() } : {}),
+				prompt: text,
+				...(modelId === undefined ? {} : { modelId }),
+				...(remoteId() === undefined ? {} : { remoteId: remoteId() }),
+			});
+			if (id === null) setPicking(true);
 			props.onCreated(remoteId() ? remoteSessionName(remoteId()!, name) : name);
 		},
 	};
@@ -90,7 +98,7 @@ export function Welcome(props: { onCreated: (name: string) => void; onNavigateSe
 			</div>
 			<div class="relative z-10 mt-[5vh] w-full max-w-[860px]">
 				<p data-testid="persona-hint" class="mb-2 text-center font-mono text-[11px] text-muted">
-					{personaId() === null ? i18n.t("new.pickPersona") : ""}
+					{personaId() === null ? i18n.t(picking() ? "new.personaPicking" : "new.personaAutoPick") : ""}
 				</p>
 				<div class="mb-3">
 					<WorkspaceTarget remoteId={remoteId()} cwd={cwd()} onRemoteId={setRemoteId} onCwd={setCwd} browse={false} />

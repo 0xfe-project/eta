@@ -38,9 +38,9 @@ interface SlashCommand {
 
 export interface ComposerCreate {
 	remoteId?: string;
-	personaReady: boolean;
 	cwd: string;
 	onCwd: (cwd: string) => void;
+	/** The server picks a persona when the person did not, so any non-empty text may send. */
 	onSend: (text: string, modelId?: string) => void;
 }
 
@@ -259,7 +259,7 @@ export function Composer(props: {
 		const create = props.create;
 		if (createMode() && create !== undefined) {
 			const plain = value.startsWith("//") ? value.slice(1) : value;
-			if (plain.length === 0 || !create.personaReady) return;
+			if (plain.length === 0) return;
 			create.onSend(plain, pickedModel());
 			setText("");
 			return;
@@ -613,7 +613,7 @@ export function Composer(props: {
 								</div>
 							</Show>
 							<Show when={createMode() || props.session !== undefined}>
-								<span class={`composer-model-container ${createMode() && props.create !== undefined && !props.create.personaReady ? "opacity-60" : ""}`}>
+								<span class="composer-model-container">
 									<ModelPicker remoteId={props.create?.remoteId} {...(props.session === undefined ? {} : { session: props.session })} {...(createMode() ? { onPick: setPickedModel } : {})} />
 								</span>
 							</Show>
@@ -631,7 +631,7 @@ export function Composer(props: {
 							</Show>
 							<span class="composer-toolbar-hints min-w-0 truncate max-md:hidden">{props.running ? i18n.t("composer.runningHint") : i18n.t("composer.hint")}</span>
 						</div>
-						<Button type="submit" variant="invert" class="composer-control composer-submit-control" data-testid="composer-submit" disabled={props.hasPendingAsk === true || (createMode() && props.create !== undefined && !props.create.personaReady)}>
+						<Button type="submit" variant="invert" class="composer-control composer-submit-control" data-testid="composer-submit" disabled={props.hasPendingAsk === true}>
 							{text().trim().length > 0 || !props.running ? i18n.t("composer.send") : i18n.t("composer.stop")}
 						</Button>
 					</div>

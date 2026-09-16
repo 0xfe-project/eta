@@ -63,6 +63,8 @@ export interface EtaAgentOptions {
 	persona?: { names: string[]; text: string };
 	/** Pre-rendered <skills> catalog block; watch-reloadable via applySkills. */
 	skillsSection?: string;
+	/** The `<platform>` briefing (where the app's files live), rendered by the host app. */
+	platformSection?: string;
 	/** Extra tools the caller owns (merged with the battery tools). */
 	tools?: readonly AgentHarnessTool<object | undefined>[];
 	/** Independent goal judge; true = achieved. */
@@ -461,6 +463,11 @@ export class EtaAgent {
 				? {}
 				: { skills: options.skillsSection }),
 		};
+		const platformBox: { platform?: string } = {
+			...(options.platformSection === undefined || options.platformSection.length === 0
+				? {}
+				: { platform: options.platformSection }),
+		};
 		const refreshBlocks = async (): Promise<string> => {
 			const memory = await options.memorySource?.();
 			const state = {
@@ -472,6 +479,7 @@ export class EtaAgent {
 					? {}
 					: { persona: personaBox.persona.text }),
 				...(skillBox.skills === undefined ? {} : { skills: skillBox.skills }),
+				...(platformBox.platform === undefined ? {} : { platform: platformBox.platform }),
 				...(memory === undefined || memory.length === 0 ? {} : { memory }),
 			};
 			const blocks = etaPromptBlockChars(options.baseSystemPrompt ?? "", state);

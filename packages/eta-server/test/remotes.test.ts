@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -214,6 +214,28 @@ describe("adopting the machine's backend", () => {
 			machine.server.close();
 		}
 	}, 20_000);
+
+	it("auto-picks an omitted persona on the remote backend", async () => {
+		const machine = await machineWithBackend();
+		const test = await harness({ descriptor: machine.descriptor });
+		const remotePick = spyOn(machine.server.host, "suggestPersona").mockResolvedValue("Executor");
+		const localPick = spyOn(test.local.host, "suggestPersona");
+		let socket: WebSocket | undefined;
+		try {
+			expect((await test.post("/connect")).status).toBe(200);
+			socket = await connect(test.local);
+			const reader = new SocketReader(socket);
+			socket.send(JSON.stringify({ op: "session.create", remoteId: test.id, name: "auto-persona", cwd: machine.home }));
+			let frame = await reader.next();
+			while (!("type" in frame && frame.type === "created")) frame = await reader.next();
+			expect(remotePick).toHaveBeenCalledWith("", machine.home, undefined);
+			expect(localPick).not.toHaveBeenCalled();
+			expect(machine.server.host.sidebar().find((session) => session.name === "auto-persona")?.personas).toContain("Executor");
+		} finally {
+			remotePick.mockRestore(); localPick.mockRestore();
+			socket?.close(); test.close(); await machine.server.close();
+		}
+	});
 
 	it("uses only the target catalog and rejects local-only model ids", async () => {
 		const machine = await machineWithBackend();

@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
+import solidGrab from "solid-grab/vite";
 import { createLogger } from "vite";
 import { defineConfig } from "vitest/config";
 import solid from "vite-plugin-solid";
@@ -66,7 +67,15 @@ function withCredential(options: { target: string; ws?: boolean }): Record<strin
 // server by sitting on the exported object, next to what defineConfig checked.
 export default Object.assign(defineConfig({
 	resolve: { alias: { "@": path.resolve(directory, "src") } },
-	plugins: [solid(), tailwindcss()],
+	plugins: [
+		// Maps a grabbed element back to its source line. Solid compiles components away, so the
+		// mapping is build-time attributes rather than a runtime tree — hence before solid(), which
+		// is what erases the JSX. `apply: "serve"`, and projectRoot lifts paths to the repo root so
+		// the copied context says packages/eta-client/src/…, not ../src/…
+		solidGrab({ projectRoot: "../.." }),
+		solid(),
+		tailwindcss(),
+	],
 	server: {
 		port: 5173,
 		strictPort: true,
