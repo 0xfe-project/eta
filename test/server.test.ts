@@ -169,6 +169,34 @@ describe("ws protocol", () => {
 		});
 	});
 
+	it("creates a chat sent with no persona on the fallback card and runs the prompt", async () => {
+		await withServer(async (server) => {
+			const a = await connect(server);
+			await a.reader.next();
+			// No config file in this server, so there is no model to ask and the pick lands on the
+			// fallback card — the point is that the send still goes through.
+			send(a.socket, { op: "session.create", name: "auto", prompt: "帮我看看这个仓库" });
+			const created = await a.reader.until(
+				(m): m is Extract<ServerMessage, { type: "created" }> => "type" in m && m.type === "created",
+			);
+			expect(created.name).toBe("auto");
+			const listed = await a.reader.until(
+				(m): m is Extract<ServerMessage, { type: "sessions" }> => "type" in m && m.type === "sessions",
+			);
+			expect(listed.sessions.find((session) => session.name === "auto")?.personas).toEqual(["Thinker"]);
+			await a.reader.until(
+				(m): m is Extract<ServerMessage, { channel: "view"; view: unknown }> =>
+					"channel" in m &&
+					m.channel === "view" &&
+					"session" in m &&
+					m.session === "auto" &&
+					"view" in m &&
+					JSON.stringify(m.view).includes("[Thinker faux echo]"),
+			);
+			a.socket.close();
+		});
+	});
+
 	it("patches wait until every connected tab declared the ability to fold them", async () => {
 		await withServer(async (server) => {
 			const modern = await connect(server, true);
@@ -543,5 +571,24 @@ describe("a persisted session whose persona card is gone", () => {
 		} finally {
 			server.close();
 		}
+	});
+});
+
+describe("the platform briefing reaches a session", () => {
+	// The app's own layout is told to the model as a prompt block, and the Context panel
+	// lists it by name — the block is only real if it shows up in what the client is shown.
+	it("appears in the view's prompt sections", async () => {
+		await withServer(async (server) => {
+			const { socket, reader } = await connect(server);
+			await reader.next();
+			send(socket, { op: "session.create", name: "s1", personaId: "Thinker" });
+			const frame = await reader.until(
+				(m): m is Extract<ServerMessage, { channel: "view" }> =>
+					"channel" in m && m.channel === "view" && JSON.stringify(m).includes('"name":"platform"'),
+				8000,
+			);
+			expect(JSON.stringify(frame)).toContain(join(serverCwds.get(server)!, "no-config.json"));
+			socket.close();
+		});
 	});
 });

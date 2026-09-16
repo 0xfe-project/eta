@@ -816,16 +816,18 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 			await host.abort(message.session);
 			return;
 		}
-		case "session.create":
-			await host.createSession(
-				message.name,
-				message.personaId,
-				expandHome(message.cwd ?? process.cwd()),
-				message.modelId,
-			);
+		case "session.create": {
+			const cwd = expandHome(message.cwd ?? process.cwd());
+			// No chip touched: ask the model this chat is about to run on for one card, then start.
+			// The `created` frame waits for that call, which is what lets the welcome screen send
+			// straight into a chat that already knows who it is.
+			const personaId =
+				message.personaId ?? (await host.suggestPersona(message.prompt ?? "", cwd, message.modelId));
+			await host.createSession(message.name, personaId, cwd, message.modelId);
 			if (message.prompt !== undefined && message.prompt.length > 0)
 				host.queue(message.name, message.prompt, "queue");
 			return;
+		}
 		case "session.delete":
 			await host.deleteSession(message.name);
 			return;
