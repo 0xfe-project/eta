@@ -178,6 +178,7 @@ export class EtaStore {
 			}
 			if ("type" in message && message.type === "models_changed") window.dispatchEvent(new Event("eta:models"));
 			if ("type" in message && message.type === "personas") window.dispatchEvent(new CustomEvent("eta:personas"));
+			if ("type" in message && message.type === "remotes") window.dispatchEvent(new Event("eta:remotes"));
 			// A native menu/tray click is a command, not state: it rides out as a window
 			// event so the shell of the UI can act on it without the store knowing what
 			// any of them mean (see lib/native.ts).

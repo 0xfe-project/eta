@@ -132,7 +132,7 @@ export function ContextPanel(props: { session: string; view: SessionView }) {
 						class="border border-border-strong px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] hover:bg-foreground hover:text-background"
 						onClick={() => {
 							setPersonaPicker(true);
-							void apiFetch("/api/personas")
+							void apiFetch(`/api/personas?session=${encodeURIComponent(props.session)}`)
 								.then((response) => response.json() as Promise<{ id: string; name: string; custom: boolean }[]>)
 								.then(setPersonaOptions)
 								.catch(() => undefined);

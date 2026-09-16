@@ -1,8 +1,10 @@
-import { For, Show, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import { useAppI18n } from "../../i18n.ts";
 import { etaStore } from "../../lib/eta-store.ts";
 import { Composer } from "./composer.tsx";
 import { apiFetch } from "../../lib/host.ts";
+import { remoteApiPath, remoteSessionName } from "../../lib/remotes.ts";
+import { WorkspaceTarget } from "./workspace-target.tsx";
 
 interface PersonaSummary {
 	id: string;
@@ -17,15 +19,19 @@ export function Welcome(props: { onCreated: (name: string) => void; onNavigateSe
 	const [personas, setPersonas] = createSignal<PersonaSummary[]>([]);
 	const [personaId, setPersonaId] = createSignal<string | null>(null);
 	const [cwd, setCwd] = createSignal("");
+	const [remoteId, setRemoteId] = createSignal<string | undefined>();
 	let personaPicked = false;
+	let loadVersion = 0;
 
 	const load = () => {
+		const version = ++loadVersion;
+		const target = remoteId();
 		void Promise.all([
-			apiFetch("/api/personas").then(response => response.json() as Promise<PersonaSummary[]>),
-			apiFetch("/api/settings").then(response => response.json() as Promise<{ personaId?: string; cwd?: string }>).catch(() => ({} as { personaId?: string; cwd?: string })),
+			apiFetch(remoteApiPath("/api/personas", target)).then(response => response.json() as Promise<PersonaSummary[]>),
+			apiFetch(remoteApiPath("/api/settings", target)).then(response => response.json() as Promise<{ personaId?: string; cwd?: string }>).catch(() => ({} as { personaId?: string; cwd?: string })),
 		])
 			.then(([cards, defaults]) => {
-				if (!Array.isArray(cards)) return;
+				if (version !== loadVersion || !Array.isArray(cards)) return;
 				setPersonas(cards);
 				if (!personaPicked) setPersonaId(cards.some(card => card.id === defaults?.personaId) ? defaults.personaId! : null);
 				if (!cwd() && defaults?.cwd) setCwd(defaults.cwd);
@@ -33,13 +39,14 @@ export function Welcome(props: { onCreated: (name: string) => void; onNavigateSe
 			.catch(() => undefined);
 	};
 	onMount(() => {
-		load();
 		window.addEventListener("eta:personas", load);
 		window.addEventListener("eta:settings", load);
-		onCleanup(() => { window.removeEventListener("eta:personas", load); window.removeEventListener("eta:settings", load); });
+		onCleanup(() => { loadVersion += 1; window.removeEventListener("eta:personas", load); window.removeEventListener("eta:settings", load); });
 	});
+	createEffect(() => { void remoteId(); personaPicked = false; setPersonas([]); setPersonaId(null); load(); });
 
 	const create = {
+		get remoteId() { return remoteId(); },
 		get personaReady() {
 			return personaId() !== null;
 		},
@@ -51,8 +58,8 @@ export function Welcome(props: { onCreated: (name: string) => void; onNavigateSe
 			const id = personaId();
 			if (id === null) return;
 			const name = `s-${Date.now().toString(36)}`;
-			store.send({ op: "session.create", name, personaId: id, ...(cwd().trim().length > 0 ? { cwd: cwd().trim() } : {}), prompt: text, ...(modelId === undefined ? {} : { modelId }) });
-			props.onCreated(name);
+			store.send({ op: "session.create", name, personaId: id, ...(cwd().trim().length > 0 ? { cwd: cwd().trim() } : {}), prompt: text, ...(modelId === undefined ? {} : { modelId }), ...(remoteId() === undefined ? {} : { remoteId: remoteId() }) });
+			props.onCreated(remoteId() ? remoteSessionName(remoteId()!, name) : name);
 		},
 	};
 
@@ -85,6 +92,9 @@ export function Welcome(props: { onCreated: (name: string) => void; onNavigateSe
 				<p data-testid="persona-hint" class="mb-2 text-center font-mono text-[11px] text-muted">
 					{personaId() === null ? i18n.t("new.pickPersona") : ""}
 				</p>
+				<div class="mb-3">
+					<WorkspaceTarget remoteId={remoteId()} cwd={cwd()} onRemoteId={setRemoteId} onCwd={setCwd} browse={false} />
+				</div>
 				<Composer topSlot={chips} onNavigateSettings={props.onNavigateSettings} create={create} />
 			</div>
 		</div>

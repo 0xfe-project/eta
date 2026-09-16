@@ -17,6 +17,7 @@ import { CommandPalette } from "../features/sessions/command-palette.tsx";
 import { Welcome } from "../features/sessions/welcome.tsx";
 import { TerminalHost } from "../features/sessions/terminal-host.tsx";
 import { etaStore } from "../lib/eta-store.ts";
+import { parseRemoteSession } from "../lib/remotes.ts";
 
 function useRunNotifications() {
 	const state = useEta();
@@ -96,6 +97,20 @@ function SessionsMain(props: { termOpen: Accessor<boolean>; setTermOpen: Setter<
 					    where they are broken down rather than shrunk into two rounded chips, and the
 					    branch is already on the Workspace tab — a header reads as one fact, not a strip
 					    of gauges. */}
+					{/* Which machine this session belongs to, and whether we can still reach it:
+					    the same absolute path exists on both sides, so the header has to say. */}
+					<Show when={state.sessions.find((session) => session.name === selected())?.remote}>
+						{(remote) => (
+							<span
+								data-testid="header-remote"
+								data-status={remote().status}
+								class={`header-chip border uppercase tracking-wider ${remote().status === "connected" ? "border-border-strong" : "border-warning text-warning"}`}
+								title={`${remote().label} · ${remote().host} · ${i18n.t(`remote.status.${remote().status}` as "remote.status.disconnected")}`}
+							>
+								{remote().label}
+							</span>
+						)}
+					</Show>
 					<Show when={view()?.cwd}>
 						{(cwd) => <span data-testid="header-cwd" class="header-chip max-w-[220px] truncate" title={cwd()}>{cwd()}</span>}
 					</Show>
@@ -121,7 +136,7 @@ function SessionsMain(props: { termOpen: Accessor<boolean>; setTermOpen: Setter<
 									queue={current().queue}
 								/>
 								<Show when={props.termOpen() && view() !== undefined}>
-									<TerminalHost variant="drawer" {...(termCwd() === undefined ? {} : { cwd: termCwd()! })} onClose={() => props.setTermOpen(false)} />
+									<TerminalHost variant="drawer" {...(termCwd() === undefined ? {} : { cwd: termCwd()! })} {...(parseRemoteSession(selected() ?? "") ? { remote: parseRemoteSession(selected() ?? "")!.connectionId } : {})} onClose={() => props.setTermOpen(false)} />
 								</Show>
 								<AskModal session={selected() ?? ""} view={current()} />
 								{/* Rendered here, not in the context panel: `/btw` is a request to answer now, so the dialog does not wait for whichever tab the right rail happens to be on. */}
@@ -240,7 +255,7 @@ function SessionsPanel() {
 								data-active={tab() === "terminal" ? "1" : "0"}
 								class={`absolute inset-0 ${tab() === "terminal" ? "" : "invisible"}`}
 							>
-								<TerminalHost variant="panel" {...(termCwd() === undefined ? {} : { cwd: termCwd()! })} onClose={() => setTerminalMounted(false)} />
+								<TerminalHost variant="panel" {...(termCwd() === undefined ? {} : { cwd: termCwd()! })} {...(parseRemoteSession(selected() ?? "") ? { remote: parseRemoteSession(selected() ?? "")!.connectionId } : {})} onClose={() => setTerminalMounted(false)} />
 							</div>
 						</Show>
 					</div>

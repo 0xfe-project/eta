@@ -1,9 +1,11 @@
-import { For, Show, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
 import { useNavigate, useSearchParams } from "@solidjs/router";
 import { useAppI18n } from "../i18n.ts";
 import { etaStore, useEta } from "../lib/eta-store.ts";
-import { apiFetch, host } from "../lib/host.ts";
+import { apiFetch } from "../lib/host.ts";
 import { NativeActions, onNativeActions, pickFolder } from "../lib/native.ts";
+import { remoteApiPath } from "../lib/remotes.ts";
+import { WorkspaceTarget } from "../features/sessions/workspace-target.tsx";
 
 interface PersonaSummary {
 	id: string;
@@ -28,10 +30,11 @@ export function NewSessionPage() {
 	 * default folder, the folder of the session just open — and creating with it blank says
 	 * so on the way out rather than deciding in silence.
 	 */
+	const [remoteId, setRemoteId] = createSignal<string | undefined>(typeof params.remote === "string" && params.remote.length > 0 ? params.remote : undefined);
 	const [cwd, setCwd] = createSignal(
 		[
 			typeof params.cwd === "string" ? params.cwd : "",
-			state.sessions.find((session) => session.cwd !== undefined)?.cwd ?? "",
+			remoteId() ? "" : state.sessions.find((session) => session.cwd !== undefined && !session.remote)?.cwd ?? "",
 		].find((value) => value.trim().length > 0)?.trim() ?? "",
 	);
 	const [prompt, setPrompt] = createSignal("");
@@ -48,42 +51,48 @@ export function NewSessionPage() {
 		}
 	};
 
-	onMount(() => {
-		let live = true;
-		void apiFetch("/api/settings")
-			.then((response) => response.json())
-			.then((body: { personaId?: string; modelId?: string; cwd?: string }) => {
-				if (!live) return;
-				setDefaults(body ?? {});
-				preselect(personas());
-				// A folder in the URL is the sharper intent and wins; otherwise a configured
-				// default folder fills a box nothing else managed to fill.
-				const picked = typeof params.cwd === "string" ? params.cwd.trim() : "";
-				const stored = (body?.cwd ?? "").trim();
-				if (picked.length === 0 && stored.length > 0) setCwd((current) => (current.trim().length > 0 ? current : stored));
+	let settingsVersion = 0;
+	let personasVersion = 0;
+	const loadPersonas = () => {
+		const version = ++personasVersion;
+		const query = cwd().trim() ? `?cwd=${encodeURIComponent(cwd().trim())}` : "";
+		void apiFetch(remoteApiPath(`/api/personas${query}`, remoteId()))
+			.then((response) => response.ok ? response.json() : undefined)
+			.then((body: PersonaSummary[] | undefined) => {
+				if (version !== personasVersion || !Array.isArray(body)) return;
+				setPersonas(body);
+				preselect(body);
 			})
 			.catch(() => undefined);
-		const load = () => {
-			void apiFetch("/api/personas")
-				.then((response) => response.json())
-				.then((body: PersonaSummary[]) => {
-					if (!live) return;
-					setPersonas(body);
-					preselect(body);
-				})
-				.catch(() => undefined);
-		};
-		load();
-		window.addEventListener("eta:personas", load);
-		onCleanup(() => {
-			live = false;
-			window.removeEventListener("eta:personas", load);
-		});
+	};
+	createEffect(on(remoteId, (target) => {
+		const version = ++settingsVersion;
+		setDefaults({});
+		setPersonaId(null);
+		setPersonas([]);
+		void apiFetch(remoteApiPath("/api/settings", target))
+			.then((response) => response.ok ? response.json() : undefined)
+			.then((body: { personaId?: string; modelId?: string; cwd?: string } | undefined) => {
+				if (version !== settingsVersion || !body) return;
+				setDefaults(body);
+				preselect(personas());
+				const picked = typeof params.cwd === "string" ? params.cwd.trim() : "";
+				const stored = (body.cwd ?? "").trim();
+				if (picked.length === 0 && stored.length > 0) setCwd((current) => current.trim() ? current : stored);
+			})
+			.catch(() => undefined);
+	}));
+	createEffect(loadPersonas);
+	onMount(() => {
+		window.addEventListener("eta:personas", loadPersonas);
+		onCleanup(() => window.removeEventListener("eta:personas", loadPersonas));
 	});
+	onCleanup(() => { settingsVersion += 1; personasVersion += 1; });
 
 	/** The shell's own folder picker; a browser tab has no equivalent, so the button
  * is not offered there rather than offered and dead. */
 	const browse = async () => {
+		if (remoteId()) return;
 		const starting = cwd().trim();
 		const picked = await pickFolder(starting.length > 0 ? starting : undefined);
 		if (typeof picked === "string" && picked.length > 0) setCwd(picked);
@@ -106,9 +115,10 @@ export function NewSessionPage() {
 			personaId: id,
 			...(folder.length > 0 ? { cwd: folder } : {}),
 			...(prompt().trim().length > 0 ? { prompt: prompt().trim() } : {}),
-			...(defaults().modelId === undefined ? {} : { modelId: defaults().modelId }),
+			...(!remoteId() && defaults().modelId !== undefined ? { modelId: defaults().modelId } : {}),
+			...(remoteId() === undefined ? {} : { remoteId: remoteId() }),
 		});
-		if (remembered() && folder.length > 0)
+		if (remembered() && folder.length > 0 && !remoteId())
 			void apiFetch("/api/settings", { method: "POST", body: JSON.stringify({ cwd: folder }) }).catch(() => undefined);
 		void navigate("/");
 	};
@@ -148,19 +158,7 @@ export function NewSessionPage() {
 					)}
 				</For>
 			</div>
-			<div class="flex items-center gap-2">
-				<input data-testid="cwd-input" value={cwd()} placeholder={i18n.t("new.cwd")} onInput={(event) => setCwd(event.currentTarget.value)} class="min-w-0 flex-1 border-2 border-border bg-background px-3 py-2 text-sm outline-none focus:border-border-strong" />
-				<Show when={host().kind === "desktop"}>
-					<button
-						data-testid="cwd-browse"
-						title={i18n.t("new.browse")}
-						onClick={() => void browse()}
-						class="shrink-0 whitespace-nowrap border-2 border-border bg-background px-3 py-2 text-sm text-muted hover:border-border-strong"
-					>
-						{i18n.t("new.browse")}
-					</button>
-				</Show>
-			</div>
+			<WorkspaceTarget remoteId={remoteId()} cwd={cwd()} onRemoteId={setRemoteId} onCwd={setCwd} />
 			<p data-testid="cwd-hint" class="-mt-2 text-[11px] text-faint">
 				{cwd().trim().length > 0 ? i18n.t("new.cwdHint", { cwd: cwd().trim() }) : i18n.t("new.cwdBlank")}
 			</p>

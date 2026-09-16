@@ -4,6 +4,7 @@ import { useAppI18n } from "../../i18n.ts";
 import { etaStore, useEta } from "../../lib/eta-store.ts";
 import { sidebarPrefs, type ProjectSort } from "../../lib/prefs.ts";
 import type { SidebarSession } from "@eta/core";
+import { parseRemoteSession } from "../../lib/remotes.ts";
 import { apiFetch } from "../../lib/host.ts";
 import { openSettings } from "../../lib/settings.ts";
 
@@ -32,6 +33,7 @@ interface Group {
 	sessions: SidebarSession[];
 	running: number;
 	unread: number;
+	remote?: SidebarSession["remote"];
 }
 
 function basenameOf(path: string): string {
@@ -81,20 +83,25 @@ export function Sidebar(props: { selected: string | null; termActive: boolean; o
 	const archived = createMemo(() => state.sessions.filter((session) => session.archived === true));
 	const pinned = createMemo(() => visible().filter((session) => session.pinned === true).sort(byUpdated));
 
+	const groupKeyOf = (session: SidebarSession) =>
+		session.remote ? `remote:${session.remote.connectionId}:${session.cwd ?? UNGROUPED}` : (session.cwd ?? UNGROUPED);
 	const groups = createMemo<Group[]>(() => {
-		const keys = [...new Set(visible().filter((session) => session.pinned !== true).map((session) => session.cwd ?? UNGROUPED))];
+		const keys = [...new Set(visible().filter((session) => session.pinned !== true).map(groupKeyOf))];
 		const built = keys.map((key) => {
 			const members = visible()
-				.filter((session) => session.pinned !== true && (session.cwd ?? UNGROUPED) === key)
+				.filter((session) => session.pinned !== true && groupKeyOf(session) === key)
 				.sort(byUpdated);
+			const remote = members[0]?.remote;
+			const path = members[0]?.cwd ?? UNGROUPED;
 			return {
 				key,
-				path: key,
-				label: key === UNGROUPED ? i18n.t("sidebar.ungrouped") : basenameOf(key),
+				path,
+				label: path === UNGROUPED ? i18n.t("sidebar.ungrouped") : basenameOf(path),
 				parent: "",
 				sessions: members,
 				running: members.filter((session) => session.badges.includes("running")).length,
 				unread: members.filter(isUnread).length,
+				...(remote === undefined ? {} : { remote }),
 			} satisfies Group;
 		});
 		const duplicated = new Set(built.map((group) => group.label).filter((label, index, all) => all.indexOf(label) !== index));
@@ -108,7 +115,10 @@ export function Sidebar(props: { selected: string | null; termActive: boolean; o
 
 	const toggleGroup = (key: string) => sidebarPrefs.toggleCollapsed(key);
 	const isOpen = (key: string) => !collapsed().includes(key);
-	const testKeyOf = (group: Group) => (group.path === UNGROUPED ? "ungrouped" : basenameOf(group.path));
+	const testKeyOf = (group: Group) => {
+		const base = group.path === UNGROUPED ? "ungrouped" : basenameOf(group.path);
+		return group.remote ? `remote-${group.remote.connectionId}-${base}` : base;
+	};
 
 	const rowProps = (session: SidebarSession) => ({
 		session,
@@ -196,8 +206,9 @@ export function Sidebar(props: { selected: string | null; termActive: boolean; o
 								count={group.sessions.length}
 								open={isOpen(group.key)}
 								onToggle={() => toggleGroup(group.key)}
+								remote={group.remote}
 								newTitle={i18n.t("sidebar.newInProject")}
-								onNew={group.path === UNGROUPED ? undefined : () => void navigate(`/new?cwd=${encodeURIComponent(group.path)}`)}
+								onNew={group.path === UNGROUPED ? undefined : () => void navigate(`/new?cwd=${encodeURIComponent(group.path)}${group.remote ? `&remote=${encodeURIComponent(group.remote.connectionId)}` : ""}`)}
 							>
 								<For each={shown()}>{(session) => <SessionRow {...rowProps(session)} />}</For>
 								<Show when={!showAll()}>
@@ -255,8 +266,10 @@ function Section(props: {
 	onToggle(): void;
 	newTitle?: string;
 	onNew?(): void;
+	remote?: SidebarSession["remote"];
 	children?: JSX.Element;
 }) {
+	const i18n = useAppI18n();
 	return (
 		<div class="mb-1" data-testid={props.testid}>
 			<div class="flex items-center gap-1 px-1 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted">
@@ -270,6 +283,11 @@ function Section(props: {
 					<span data-testid={props.testid.replace("group-", "project-name-")} class="truncate">{props.title}</span>
 					<Show when={(props.parent ?? "").length > 0}>
 						<span class="mono shrink-0 text-[9px] normal-case text-faint">/{props.parent}</span>
+					</Show>
+					<Show when={props.remote}>
+						<span data-testid={`${props.testid}-remote`} class="shrink-0 border border-border-strong px-1 text-[9px] font-semibold normal-case tracking-wider text-muted" title={`${props.remote!.label} · ${props.remote!.host}`}>
+							{i18n.t("sidebar.remote")}
+						</span>
 					</Show>
 				</button>
 				<Show when={(props.running ?? 0) > 0}>
@@ -358,7 +376,7 @@ function SessionRow(props: { session: SidebarSession; unread: boolean; selected:
 		});
 	});
 
-	const title = () => props.session.title ?? props.session.name;
+	const title = () => props.session.title ?? parseRemoteSession(props.session.name)?.session ?? props.session.name;
 	// Blur fires once more as the field unmounts; the cleared draft makes that a no-op.
 	const applyRename = (next: string) => {
 		if (draft() === null) return;
