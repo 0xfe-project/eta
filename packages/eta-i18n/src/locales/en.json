@@ -132,6 +132,7 @@
 	"prompt.adaptive": "rewritten each turn",
 	"prompt.base": "Base",
 	"prompt.persona": "Persona",
+	"prompt.platform": "Platform",
 	"prompt.goal": "Goal",
 	"prompt.tasks": "Tasks",
 	"prompt.memory": "Memory",

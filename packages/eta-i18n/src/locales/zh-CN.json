@@ -132,6 +132,7 @@
 	"prompt.adaptive": "每回合改写",
 	"prompt.base": "基础",
 	"prompt.persona": "人设",
+	"prompt.platform": "平台",
 	"prompt.goal": "目标",
 	"prompt.tasks": "任务",
 	"prompt.memory": "记忆",
