@@ -35,6 +35,7 @@ import { ViewPacer } from "./view-pacer.ts";
 import { configDefaultModel, etaConfigPath, loadEtaConfig, type EtaConfig } from "./config.ts";
 import { createSessionAgent, type CreatedSession } from "./agent.ts";
 import { renderPersonaFor, resolvePersonaId } from "./personas.ts";
+import { suggestPersonaId } from "./persona-autopick.ts";
 import { ProviderConfigStore, ProviderConfigError } from "./providers.ts";
 import { effectiveModel, modelDefaultThinking, modelThinkingLevels, type EtaModelConfig, type ProvidersView } from "@eta/core/provider-config";
 
@@ -222,6 +223,24 @@ export class Host {
 		const definition = chosen ? this.configuredModel(`${chosen.provider}:${chosen.id}`) : undefined;
 		if (definition) await entry.agent.lane.setThinkingLevel(modelDefaultThinking(definition), BACKGROUND_CONTEXT);
 		else if (this.settings().thinkingLevel) await entry.agent.lane.setThinkingLevel(this.settings().thinkingLevel!, BACKGROUND_CONTEXT);
+	}
+
+	/**
+	 * The card for a chat sent before one was picked: one capped call to the model that is about
+	 * to run, and a fallback card when that call has nothing useful to say. Never throws — a
+	 * person who typed a message should never learn about this step from a failed send.
+	 */
+	async suggestPersona(prompt: string, cwd: string, modelId?: string): Promise<string> {
+		const pick = await suggestPersonaId({
+			cwd,
+			prompt,
+			configPath: this.configPath,
+			...(modelId === undefined ? {} : { modelId }),
+			...(this.settings().personaId === undefined ? {} : { preferredId: this.settings().personaId }),
+		});
+		if (pick.source !== "model")
+			console.info(`[eta-host] no persona picked, opening the chat on ${pick.id} (${pick.source})`);
+		return pick.id;
 	}
 
 	/** Reopen every persisted session so the sidebar and runs survive restarts. */
