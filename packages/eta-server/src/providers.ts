@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
 	MODEL_THINKING_LEVELS, HEADER_NAME_PATTERN, MAX_HEADER_NAME_LENGTH, MAX_HEADER_VALUE_LENGTH,
-	MAX_PROVIDER_HEADERS, applyProviderHeaders, effectiveModel, modelThinkingLevels, providerPreset, sanitizeProviderHeaders,
+	MAX_PROVIDER_HEADERS, applyProviderHeaders, effectiveModel, isCustomKind, modelThinkingLevels, providerPreset, sanitizeProviderHeaders,
 	type EtaModelConfig, type ModelCapabilities, type ProviderHeaders, type ProviderInput, type ProvidersView,
 } from "@eta/core/provider-config";
 import type { EtaConfig, EtaProviderConfig } from "./config.ts";
@@ -127,7 +127,7 @@ function normalizeProvider(value: unknown, previous?: EtaProviderConfig): EtaPro
 	const id = shortText(item.id, 80);
 	if (id === undefined || !/^[a-zA-Z0-9_-]+$/.test(id)) throw new ProviderConfigError("invalid_provider_id");
 	const kind = item.kind ?? previous?.kind ?? "openai-compatible";
-	if (kind !== "kimi-coding" && kind !== "deepseek" && kind !== "openai-codex" && kind !== "openai-compatible") throw new ProviderConfigError("invalid_provider");
+	if (kind !== "kimi-coding" && kind !== "deepseek" && kind !== "openai-codex" && kind !== "openai-compatible" && kind !== "openai-responses") throw new ProviderConfigError("invalid_provider");
 	if (kind === "openai-codex" && id !== "openai-codex") throw new ProviderConfigError("invalid_provider_id");
 	const url = providerPreset(kind)?.baseUrl ?? baseUrl(item.baseUrl);
 	const name = shortText(item.name);
@@ -135,7 +135,7 @@ function normalizeProvider(value: unknown, previous?: EtaProviderConfig): EtaPro
 	// Never send a saved credential to a newly edited host without re-entry.
 	if (previous?.apiKey && item.apiKey === undefined && baseUrl(previous.baseUrl) !== url) throw new ProviderConfigError("key_required_for_url");
 	const apiKey = item.apiKey === null ? undefined : typeof item.apiKey === "string" ? item.apiKey.trim() || undefined : previous?.apiKey;
-	if (kind !== "openai-compatible" && kind !== "openai-codex" && !apiKey) throw new ProviderConfigError(kind === "deepseek" ? "deepseek_key_required" : "key_required");
+	if (!isCustomKind(kind) && kind !== "openai-codex" && !apiKey) throw new ProviderConfigError(kind === "deepseek" ? "deepseek_key_required" : "key_required");
 	const headers = parseProviderHeaders(item.headers, previous?.headers);
 	return {
 		id, kind, baseUrl: url, ...(name === undefined ? {} : { name }),
@@ -318,7 +318,7 @@ export class ProviderConfigStore {
 		const existing = new Map(provider.models.map(model => [model.id, model]));
 		return { models: models.map(model => {
 			const previous = existing.get(model.id);
-			const merged = { ...model, ...(provider.kind === "openai-compatible" && previous?.overrides ? { overrides: previous.overrides } : {}) };
+			const merged = { ...model, ...(isCustomKind(provider.kind) && previous?.overrides ? { overrides: previous.overrides } : {}) };
 			return previous?.defaultThinking !== undefined && modelThinkingLevels(merged).includes(previous.defaultThinking)
 				? { ...merged, defaultThinking: previous.defaultThinking } : merged;
 		}) };

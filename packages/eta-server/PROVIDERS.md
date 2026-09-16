@@ -4,15 +4,19 @@ Open Settings → Model providers. Kimi for Coding uses the OpenAI Chat Completi
 endpoint at `https://api.kimi.com/coding/v1`. Enter a Kimi Code API key, connect to
 discover models, then save. Custom OpenAI-compatible endpoints can discover models
 or use manually entered model definitions, including explicit capability overrides.
-Choose the default model on the provider list. Default thinking preferences belong
-to each model; supported levels and provider defaults come from discovery.
+A custom provider also picks its call protocol: **Chat Completions**
+(`/chat/completions`) or the **Responses API** (`/responses`). Choose the default
+model on the provider list. Default thinking preferences belong to each model;
+supported levels and provider defaults come from discovery.
 
 ## Persistence and compatibility
 
 Providers remain in `~/.eta/config.json`. Existing providers without `kind` are
 interpreted as `openai-compatible`, and models without reasoning metadata retain
 the old non-reasoning default. `kind: "kimi-coding"` selects Kimi's endpoint and
-compatibility options. Optional model fields are `reasoning`, `thinkingMode`,
+compatibility options. `kind: "openai-responses"` keeps the custom endpoint but
+sends the Responses protocol instead; both custom kinds leave the API key
+optional. Optional model fields are `reasoning`, `thinkingMode`,
 `reasoningEfforts`, `providerDefaultEffort`, `defaultThinking`, and `overrides`.
 Overrides belong to custom providers and survive discovery refreshes. Unknown
 capabilities are not treated as unsupported, nor are effort controls invented.
@@ -76,10 +80,45 @@ for a server-wide authentication system.
 
 `bun test test/providers.test.ts` (from this package) exercises discovery, key
 redaction, file permissions, revision conflicts, malformed config handling,
-refresh preservation and Chat Completions requests through a local HTTP fixture.
-Client tests cover model discovery, per-model effort selection, custom model
-editing, save errors and unsaved modal drafts. Real Kimi account access still
-requires a user-supplied key; the automated tests never contact Kimi.
+refresh preservation and Chat Completions requests through a local HTTP fixture,
+plus a Responses-provider round trip that asserts the request lands on
+`/responses` with `input` items. Client tests cover model discovery, per-model
+effort selection, custom model editing, the protocol choice, save errors and
+unsaved modal drafts. Real Kimi account access still requires a user-supplied key;
+the automated tests never contact Kimi.
+
+## Responses protocol
+
+`kind: "openai-responses"` selects pi's `openai-responses` transport for the same
+provider record shape: base URL, key, headers and model list are configured
+exactly as for a custom Chat Completions provider. The protocol choice belongs to
+the provider, not to a single model, because gateways commonly route by path.
+
+On the wire the two differ in more than the URL:
+
+- The request carries `input` items rather than chat `messages`, and names the
+  output allowance `max_output_tokens` instead of `max_tokens`.
+- Thinking levels map through the same `thinkingLevelMap` to `reasoning.effort`.
+- Streaming is a sequence of `response.*` events ending in `response.completed`;
+  there is no `[DONE]` sentinel.
+
+Chat Completions compatibility flags are not applied to this transport. Flags such
+as `maxTokensField: "max_tokens"`, `supportsDeveloperRole: false`,
+`requiresReasoningContentOnAssistantMessages` and DeepSeek's `thinkingFormat`
+describe Chat Completions request fields that this protocol does not have, so the
+Responses defaults stand: `developer` roles, `store: false` and the Responses
+cache parameters. Keep that in mind when adding a new preset kind — compatibility
+has to be chosen per API, not per provider.
+
+Two caveats are worth knowing before making such a model the default:
+
+- Model discovery always reads `{baseUrl}/models`, which the provider may answer
+  from a group other than the one that serves the chosen protocol. A gateway can
+  list models that only answer on `/chat/completions` while a model that only
+  answers on `/responses` is absent from the list. Add those models manually.
+- Capability metadata (context window, reasoning levels, vision) comes from the
+  same listing, so a manually added model starts with whatever you type into its
+  overrides.
 
 ## DeepSeek
 
