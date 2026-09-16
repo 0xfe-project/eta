@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { createModels, createProvider, type Model, type MutableModels } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
+import { openAIResponsesApi } from "@earendil-works/pi-ai/api/openai-responses.lazy";
 
 import { CodexCredentialStore, codexAuthPath, codexRuntimeProvider } from "./codex-auth.ts";
 
@@ -54,13 +55,18 @@ export function configModels(cfg: EtaConfig, configPath = etaConfigPath): Mutabl
 			models.setProvider(codexRuntimeProvider(provider.models));
 			continue;
 		}
-		const modelList: Model<"openai-completions">[] = provider.models.map((configured) => {
+		// The custom kinds pick one of OpenAI's two wire protocols. Chat Completions answers on
+		// `/chat/completions`, the Responses API on `/responses`; an endpoint may serve only one of
+		// them, so the choice belongs to the provider rather than to the individual model.
+		const responses = provider.kind === "openai-responses";
+		const api = responses ? "openai-responses" as const : "openai-completions" as const;
+		const modelList: Model<typeof api>[] = provider.models.map((configured) => {
 			const entry = effectiveModel(configured);
 			const levels = modelThinkingLevels(entry);
 			return ({
 			id: entry.id,
 			name: entry.name ?? entry.id,
-			api: "openai-completions",
+			api,
 			provider: provider.id,
 			baseUrl: provider.baseUrl,
 			...(wireHeaders === undefined ? {} : { headers: wireHeaders }),
@@ -79,7 +85,11 @@ export function configModels(cfg: EtaConfig, configPath = etaConfigPath): Mutabl
 					max: levels.includes("max") ? "max" : null,
 				} } : {}),
 			} : {}),
-			compat: {
+			// These flags name Chat Completions request fields — `max_tokens`, `reasoning_content`, an
+			// explicit `store` toggle — that the Responses API does not have: it takes
+			// `max_output_tokens`, `reasoning.effort` and always sends `store: false`. pi's Responses
+			// defaults already suit a generic endpoint, so none of them are set for this transport.
+			...(responses ? {} : { compat: {
 				...(entry.reasoningEfforts?.length ? { supportsReasoningEffort: true } : {}),
 				...(provider.kind === "kimi-coding" || provider.kind === "deepseek" ? {
 				supportsDeveloperRole: false,
@@ -89,7 +99,7 @@ export function configModels(cfg: EtaConfig, configPath = etaConfigPath): Mutabl
 				requiresReasoningContentOnAssistantMessages: true,
 				...(provider.kind === "deepseek" ? { thinkingFormat: "deepseek" as const } : {}),
 				} : {}),
-			},
+			} }),
 			input: entry.input ?? ["text"],
 			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 			contextWindow: entry.contextWindow ?? 128_000,
@@ -114,7 +124,7 @@ export function configModels(cfg: EtaConfig, configPath = etaConfigPath): Mutabl
 					},
 				},
 				models: modelList,
-				api: openAICompletionsApi(),
+				api: responses ? openAIResponsesApi() : openAICompletionsApi(),
 			}),
 		);
 	}
