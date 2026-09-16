@@ -45,7 +45,7 @@ function parentOf(path: string): string {
 	return parts.length < 2 ? "" : parts[parts.length - 2]!;
 }
 
-export function Sidebar(props: { selected: string | null; termActive: boolean; onTerminal: () => void }) {
+export function Sidebar(props: { selected: string | null; termActive: boolean; onTerminal: () => void; /** For the route that is not the transcript: `/new` has to give that space back once a session is picked. */ onSelected?: (session: string) => void }) {
 	const i18n = useAppI18n();
 	const state = useEta();
 	const store = etaStore();
@@ -120,11 +120,17 @@ export function Sidebar(props: { selected: string | null; termActive: boolean; o
 		return group.remote ? `remote-${group.remote.connectionId}-${base}` : base;
 	};
 
+	/** Pick a session. On `/new` that also means: stop being `/new`. */
+	const focus = (session: string) => {
+		store.send({ op: "focus", session });
+		props.onSelected?.(session);
+	};
+
 	const rowProps = (session: SidebarSession) => ({
 		session,
 		unread: isUnread(session),
 		selected: session.name === props.selected,
-		onSelect: () => store.send({ op: "focus", session: session.name }),
+		onSelect: () => focus(session.name),
 		onDelete: () => store.send({ op: "session.delete", name: session.name }),
 		onPin: () => store.send({ op: "session.pin", session: session.name, pinned: session.pinned !== true }),
 		onArchive: () => store.send({ op: "session.archive", session: session.name, archived: session.archived !== true }),
@@ -166,7 +172,7 @@ export function Sidebar(props: { selected: string | null; termActive: boolean; o
 						</Show>
 						<For each={current()}>
 							{(hit) => (
-								<button data-testid={`search-hit-${hit.session}`} onClick={() => store.send({ op: "focus", session: hit.session })} class="block w-full border-b border-border px-2 py-1 text-left text-xs hover:bg-overlay">
+								<button data-testid={`search-hit-${hit.session}`} onClick={() => focus(hit.session)} class="block w-full border-b border-border px-2 py-1 text-left text-xs hover:bg-overlay">
 									<span class="mono text-accent">{hit.session}</span>
 									<span class="ml-1 text-muted">{hit.snippet}</span>
 								</button>

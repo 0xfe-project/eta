@@ -12,6 +12,8 @@ export function WorkspaceTarget(props: {
 	onRemoteId(id: string | undefined): void;
 	onCwd(cwd: string): void;
 	browse?: boolean;
+	/** The unified composer already owns the local directory field. */
+	localDirectory?: boolean;
 }) {
 	const i18n = useAppI18n();
 	const [remotes, setRemotes] = createSignal<RemoteView[]>([]);
@@ -68,6 +70,7 @@ export function WorkspaceTarget(props: {
 			<Show
 				when={props.remoteId}
 				fallback={
+					<Show when={props.localDirectory !== false}>
 					<div class="flex items-center gap-2">
 						<input
 							data-testid="cwd-input"
@@ -87,6 +90,7 @@ export function WorkspaceTarget(props: {
 							</button>
 						</Show>
 					</div>
+					</Show>
 				}
 			>
 				<Show when={selected()?.projects.length}>
