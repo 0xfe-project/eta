@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { statSync } from "node:fs";
 
-export type TermSocket = ServerWebSocket<{ kind?: "ws" | "term"; socketId?: number; shell?: unknown }>;
+export type TermSocket = ServerWebSocket<{ kind?: "ws" | "term" | "remote-term"; socketId?: number; shell?: unknown }>;
 
 export interface ShellHandle {
 	proc: BunShell;
@@ -44,7 +44,7 @@ export class TermRegistry {
 		}
 		if (frame.op === "start") {
 			this.kill(socket);
-			const shell = process.env.SHELL ?? "/bin/zsh";
+			const shell = process.env.SHELL ?? "/bin/sh";
 			const handle: ShellHandle = { proc: undefined as unknown as BunShell, alive: true };
 			socket.data.shell = handle;
 			this.live.add(handle);

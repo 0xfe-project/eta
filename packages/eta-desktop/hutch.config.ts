@@ -4,7 +4,7 @@
  */
 export default {
 	scripts: {
-		start: "hutch electrobun prepare && hutch electrobun dev --env=dev",
+		start: "bun run prepare:app && hutch electrobun prepare && hutch electrobun dev --env=dev",
 	},
 	electrobun: {
 		version: "2.0.1",
