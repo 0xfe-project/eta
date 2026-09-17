@@ -161,7 +161,7 @@ export function Composer(props: {
 	});
 
 	const mentionQuery = createMemo(() => {
-		const mention = /(^|\s)@([\w./-]*)$/.exec(text());
+		const mention = /(^|\s)@([\p{L}\p{N}\p{M}_./-]*)$/u.exec(text());
 		return mention?.[2] ?? null;
 	});
 	const mentionOpen = createMemo(() => mentionQuery() !== null);
@@ -192,7 +192,7 @@ export function Composer(props: {
 	const menuOpen = createMemo(() => slashMatches().length > 0 || atChoices().length > 0);
 
 	const pickFile = (file: string) => {
-		setText((current) => current.replace(/(^|\s)@([\w./-]*)$/, (_match, lead: string) => `${lead}@${file} `));
+		setText((current) => current.replace(/(^|\s)@([\p{L}\p{N}\p{M}_./-]*)$/u, (_match, lead: string) => `${lead}@${file} `));
 	};
 
 	const runCommand = (command: SlashCommand, args = "") => {
