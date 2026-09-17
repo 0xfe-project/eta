@@ -363,7 +363,7 @@
 	"remote.add": "Add",
 	"remote.name": "Name",
 	"remote.host": "SSH host",
-	"remote.hostNote": "Prefer an alias from ~/.ssh/config. Unknown hosts must be accepted once with ssh <host> in a terminal (StrictHostKeyChecking=yes).",
+	"remote.hostNote": "Prefer an alias from ~/.ssh/config. First-time connections ask you to verify and trust the host fingerprint.",
 	"remote.user": "User",
 	"remote.port": "Port",
 	"remote.identity": "Identity file",
@@ -409,5 +409,12 @@
 	"remote.owns": "started by this connection",
 	"remote.installedBuild": "installed build {build}",
 	"remote.modelsOn": "Models on {name} ({host})",
-	"remote.modelsScope": "These providers and credentials live on that machine; this laptop's are not copied."
+	"remote.modelsScope": "These providers and credentials live on that machine; this laptop's are not copied.",
+	"remote.hostKeyTitle": "Trust this SSH host?",
+	"remote.hostKeyNote": "This host is not yet trusted. Compare this fingerprint with the one shown on the remote machine or provided by its administrator. Trusting it saves the key for future connections.",
+	"remote.hostKeyDetails": "SSH verification details",
+	"remote.hostKeyTrust": "Trust and continue",
+	"remote.hostKeyChanged": "The saved SSH host key has changed or been revoked. Verify the new fingerprint with the machine administrator and update the known_hosts record before reconnecting.",
+	"remote.status.awaiting-trust": "Awaiting trust",
+	"remote.trustPending": "First-time access needs host fingerprint confirmation. Choose Test or Connect to review it."
 }

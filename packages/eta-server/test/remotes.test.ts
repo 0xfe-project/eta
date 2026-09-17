@@ -128,6 +128,7 @@ describe("adopting the machine's backend", () => {
 		/** What the launch script finds after starting the installed build. */
 		launchDescriptor?: BackendDescriptor;
 		installed?: string;
+		confirmHost?: RemoteTransport["confirmHost"];
 		execOverride?: (script: string) => string | undefined;
 	}) {
 		const localDir = tmp();
@@ -135,6 +136,7 @@ describe("adopting the machine's backend", () => {
 		const scripts: string[] = [];
 		const hanging: ReturnType<typeof Bun.spawn>[] = [];
 		const transport: RemoteTransport = {
+			...(options.confirmHost ? { confirmHost: options.confirmHost } : {}),
 			exec: async (_connection, script) => {
 				scripts.push(script);
 				const override = options.execOverride?.(script);
@@ -318,6 +320,32 @@ describe("adopting the machine's backend", () => {
 			machine.server.close();
 		}
 	}, 20_000);
+
+	it("returns an SSH trust challenge and accepts only its confirmation over HTTP", async () => {
+		const prompt = "The authenticity of host 'devbox (192.0.2.1)' can't be established.\nED25519 key fingerprint is SHA256:abc123.\nAre you sure you want to continue connecting (yes/no/[fingerprint])? ";
+		let trusted = false;
+		const test = await harness({
+			execOverride: () => { throw new Error("Host key verification failed."); },
+			confirmHost: async (_connection, expected) => { if (expected === prompt) trusted = true; return prompt; },
+		});
+		try {
+			const response = await test.post("/connect");
+			expect(await response.json()).toMatchObject({ kind: "host-key" });
+			expect((await test.view()).status).toBe("awaiting-trust");
+			expect((await test.view()).error).toBeUndefined();
+			await test.post("/test");
+			expect((await test.view()).status).toBe("awaiting-trust");
+			expect((await test.view()).error).toBeUndefined();
+			const key = await (await test.post("/host-key")).json() as { challengeId: string; fingerprint: string };
+			expect(key.fingerprint).toBe("SHA256:abc123");
+			expect(trusted).toBe(false);
+			expect((await test.post("/trust-host", { challengeId: "wrong" })).status).toBe(400);
+			expect(trusted).toBe(false);
+			expect((await test.post("/trust-host", { challengeId: key.challengeId })).status).toBe(200);
+			expect(trusted).toBe(true);
+			expect((await test.post("/trust-host", { challengeId: key.challengeId })).status).toBe(400);
+		} finally { test.close(); }
+	});
 
 	it("bounds unreachable retries and gives a manual reconnect a fresh budget", async () => {
 		const delay = spyOn(RemoteManager.prototype as unknown as { retryDelay(attempt: number): number }, "retryDelay").mockReturnValue(10);

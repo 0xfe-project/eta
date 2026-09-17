@@ -363,7 +363,7 @@
 	"remote.add": "添加",
 	"remote.name": "名称",
 	"remote.host": "SSH 主机",
-	"remote.hostNote": "优先使用 ~/.ssh/config 里的别名。未知主机需先在终端执行 ssh <host> 接受指纹（StrictHostKeyChecking=yes）。",
+	"remote.hostNote": "推荐使用 ~/.ssh/config 中的别名。首次连接时会弹窗，请核对并确认信任主机指纹。",
 	"remote.user": "用户",
 	"remote.port": "端口",
 	"remote.identity": "私钥路径",
@@ -409,5 +409,12 @@
 	"remote.owns": "由本次连接启动",
 	"remote.installedBuild": "已安装构建 {build}",
 	"remote.modelsOn": "{name}（{host}）上的模型",
-	"remote.modelsScope": "这里的供应商与凭据属于那台机器，不会复制本机的配置。"
+	"remote.modelsScope": "这里的供应商与凭据属于那台机器，不会复制本机的配置。",
+	"remote.hostKeyTitle": "信任此 SSH 主机？",
+	"remote.hostKeyNote": "此主机尚未被信任。请与远端机器上显示的指纹或管理员提供的指纹核对；确认后将保存密钥，用于后续连接。",
+	"remote.hostKeyDetails": "SSH 校验详情",
+	"remote.hostKeyTrust": "信任并继续",
+	"remote.hostKeyChanged": "已保存的 SSH 主机密钥发生变化或已被吊销。请向机器管理员核实新指纹，并更新 known_hosts 记录后再连接。",
+	"remote.status.awaiting-trust": "待确认信任",
+	"remote.trustPending": "首次连接需要确认主机指纹。点击“测试”或“连接”进行确认。"
 }
