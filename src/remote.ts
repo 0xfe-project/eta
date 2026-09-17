@@ -20,7 +20,7 @@ export interface RemoteConnection {
 	forwards: { id: string; remotePort: number; localPort: number }[];
 }
 
-export type RemoteStatus = "disconnected" | "checking" | "installing" | "connecting" | "connected" | "reconnecting" | "error";
+export type RemoteStatus = "awaiting-trust" | "disconnected" | "checking" | "installing" | "connecting" | "connected" | "reconnecting" | "error";
 
 /** What the backend on the other side turned out to be. */
 export interface RemoteBackend {
@@ -130,4 +130,13 @@ export function parseRemoteSession(name: string): { connectionId: string; sessio
 	} catch {
 		return undefined;
 	}
+}
+
+/** One short-lived confirmation of the exact prompt supplied by OpenSSH. */
+export interface RemoteHostKey {
+	challengeId: string;
+	host: string;
+	algorithm: string;
+	fingerprint: string;
+	prompt: string;
 }
