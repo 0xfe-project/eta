@@ -263,7 +263,6 @@ export function Composer(props: {
 			const plain = value.startsWith("//") ? value.slice(1) : value;
 			if (plain.length === 0) return;
 			create.onSend(plain, pickedModel());
-			setText("");
 			return;
 		}
 		const session = props.session;
