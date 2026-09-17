@@ -391,9 +391,11 @@ describe("skill discovery", () => {
 describe("desktop native endpoints", () => {
 	it("keeps native capabilities window-local and requires their own credential", async () => {
 		const picked: unknown[] = [];
+		const opened: string[] = [];
 		const bridge = startNativeBridge({
 			async folderDialog(input) { picked.push(input); return "/workspace"; },
 			async saveFile() { return "/export"; },
+			openExternal({ url }) { opened.push(url); },
 			contextMenu() {},
 		}, "test");
 		try {
@@ -413,11 +415,21 @@ describe("desktop native endpoints", () => {
 			expect(picked).toHaveLength(3);
 			expect((await fetch(`${bridge.apiBase}/api/native/info`, { headers: { origin: "https://untrusted.example", authorization: `Bearer ${bridge.token}` } })).status).toBe(403);
 			expect((await fetch(`${bridge.apiBase}/api/sessions`, { headers: { authorization: `Bearer ${bridge.token}` } })).status).toBe(404);
+			// The webview cannot open a link itself: the shell is what turns it back into a
+			// browser tab, so the call has to reach the handler instead of 404-ing on it.
+			const external = await fetch(`${bridge.apiBase}/api/native/open-external`, {
+				method: "POST",
+				headers: { origin: "views://eta", authorization: `Bearer ${bridge.token}`, "content-type": "application/json" },
+				body: JSON.stringify({ url: "https://auth.example/login" }),
+			});
+			expect(external.status).toBe(202);
+			expect(opened).toEqual(["https://auth.example/login"]);
 		} finally { bridge.close(); }
 	});
 
 	it("serves /api/native/*, stamps CORS, and broadcasts push()", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "eta-native-"));
+		const opened: string[] = [];
 		const server = await startServer({
 			port: 0,
 			cwd,
@@ -427,6 +439,7 @@ describe("desktop native endpoints", () => {
 			native: {
 				folderDialog: async () => "/picked",
 				saveFile: async () => "/saved",
+				openExternal: ({ url }) => { opened.push(url); },
 				contextMenu: () => {},
 			},
 			platform: "darwin",
@@ -448,6 +461,13 @@ describe("desktop native endpoints", () => {
 				})
 			).json()) as { path: string | null };
 			expect(folder).toEqual({ path: "/picked" });
+			const external = await fetch(`${base}/api/native/open-external`, {
+				method: "POST",
+				body: JSON.stringify({ url: "https://auth.example/login" }),
+				headers: { "content-type": "application/json" },
+			});
+			expect(external.status).toBe(202);
+			expect(opened).toEqual(["https://auth.example/login"]);
 
 			const health = await fetch(`${base}/api/health`);
 			expect(health.headers.get("access-control-allow-origin")).toBe("*");
