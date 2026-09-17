@@ -57,9 +57,9 @@ export function classifyRemoteError(error: unknown): { kind: RemoteFailureKind; 
 	return { kind: "other", message };
 }
 
-/** Errors a retry cannot fix: they are reported, retried a few times, then left alone. */
+/** Errors that need user intervention rather than automatic retries. */
 const FATAL_KINDS: readonly RemoteFailureKind[] = ["auth", "not-installed", "protocol", "busy"];
-const FATAL_ATTEMPTS = 3;
+const MAX_RETRIES = 3;
 
 export interface RemoteTransport {
 	exec(connection: RemoteConnection, script: string, input?: Uint8Array, timeoutMs?: number): Promise<string>;
@@ -110,7 +110,6 @@ interface Live {
 	generation: number;
 	wanted: boolean;
 	attempt: number;
-	fatalAttempts: number;
 	retry?: ReturnType<typeof setTimeout>;
 	process?: Process;
 	base?: string;
@@ -210,7 +209,6 @@ export class RemoteManager {
 				generation: 0,
 				wanted: false,
 				attempt: 0,
-				fatalAttempts: 0,
 				sessions: [],
 				views: new Map(),
 				ports: new Map(),
@@ -391,13 +389,13 @@ export class RemoteManager {
 	/** A lost transport, or a connect that failed: same schedule, same ceiling. */
 	private scheduleRetry(id: string, live: Live, reason: RemoteFailureKind): void {
 		if (this.closed || !live.wanted) return;
-		if (FATAL_KINDS.includes(reason) && live.fatalAttempts >= FATAL_ATTEMPTS) {
-			this.notify(id, "error", `Giving up after ${String(live.fatalAttempts)} attempts: ${live.error ?? reason}. Reconnect when the problem is fixed.`);
+		if (FATAL_KINDS.includes(reason) || live.attempt >= MAX_RETRIES) {
+			live.wanted = false;
+			this.notify(id, "error", `Giving up after ${String(live.attempt)} retries: ${live.error ?? reason}. Reconnect when the problem is fixed.`);
 			return;
 		}
-		if (FATAL_KINDS.includes(reason)) live.fatalAttempts += 1;
 		this.notify(id, "reconnecting", `Retrying in ${String(Math.round(this.retryDelay(live.attempt) / 1000))}s (attempt ${String(live.attempt + 1)}, ${reason}).`);
-		live.retry = setTimeout(() => void this.connect(id).catch(() => {}), this.retryDelay(live.attempt));
+		live.retry = setTimeout(() => void this.connectAttempt(id, false).catch(() => {}), this.retryDelay(live.attempt));
 		live.attempt += 1;
 	}
 
@@ -414,10 +412,15 @@ export class RemoteManager {
 	}
 
 	async connect(id: string, install = false): Promise<void> {
+		return this.connectAttempt(id, install, true);
+	}
+
+	private async connectAttempt(id: string, install: boolean, manual = false): Promise<void> {
 		const connection = this.config(id);
 		const live = this.runtime(id);
 		if (["checking", "installing", "connecting"].includes(live.status)) throw new Error("Connection is busy");
 		if (live.status === "connected" && !install) return;
+		if (manual) live.attempt = 0;
 		live.wanted = true;
 		live.generation++;
 		const generation = live.generation;
@@ -474,7 +477,6 @@ export class RemoteManager {
 			if (descriptor === undefined) throw new RemoteError("other", `No eta backend is running on ${connection.host}.`);
 			const backend = descriptor;
 			live.attempt = 0;
-			live.fatalAttempts = 0;
 			this.notify(
 				id,
 				"connected",

@@ -1,15 +1,21 @@
-import { describe, expect, it, spyOn } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { afterAll, describe, expect, it, spyOn } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { backendRunFile, parseRemoteSession, remoteSessionName, type BackendDescriptor } from "@eta/core/remote";
 import { startServer, type EtaServer } from "../src/server.ts";
 import { discoverSshHosts, validHost } from "../src/remote-ssh.ts";
-import { classifyRemoteError, mapRemoteFrame, validateConnection, type RemoteTransport } from "../src/remotes.ts";
+import { RemoteManager, classifyRemoteError, mapRemoteFrame, validateConnection, type RemoteTransport } from "../src/remotes.ts";
 import type { ServerMessage } from "../src/protocol.ts";
 
-const tmp = (): string => mkdtempSync(join(tmpdir(), "eta-remote-"));
+const tempDirs: string[] = [];
+const tmp = (): string => {
+	const dir = mkdtempSync(join(tmpdir(), "eta-remote-"));
+	tempDirs.push(dir);
+	return dir;
+};
+afterAll(() => { for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true }); });
 
 async function plainServer(cwd: string, extra: Parameters<typeof startServer>[0] = {}): Promise<EtaServer> {
 	return startServer({
@@ -313,7 +319,35 @@ describe("adopting the machine's backend", () => {
 		}
 	}, 20_000);
 
-	it("keeps retrying an unreachable machine, and a manual disconnect stops it", async () => {
+	it("bounds unreachable retries and gives a manual reconnect a fresh budget", async () => {
+		const delay = spyOn(RemoteManager.prototype as unknown as { retryDelay(attempt: number): number }, "retryDelay").mockReturnValue(10);
+		let calls = 0;
+		const test = await harness({ execOverride: () => { calls++; throw new Error("Connection refused"); } });
+		try {
+			await test.post("/connect");
+			for (let i = 0; i < 100 && (await test.view()).status !== "error"; i++) await Bun.sleep(10);
+			expect((await test.view()).status).toBe("error");
+			expect(calls).toBe(4);
+			await Bun.sleep(50);
+			expect(calls).toBe(4);
+			await test.post("/connect");
+			for (let i = 0; i < 100 && (await test.view()).status !== "error"; i++) await Bun.sleep(10);
+			expect(calls).toBe(8);
+		} finally { test.close(); delay.mockRestore(); }
+	});
+
+	it("does not retry authentication failures", async () => {
+		let calls = 0;
+		const test = await harness({ execOverride: () => { calls++; throw new Error("Permission denied (publickey)"); } });
+		try {
+			await test.post("/connect");
+			expect((await test.view()).status).toBe("error");
+			await Bun.sleep(50);
+			expect(calls).toBe(1);
+		} finally { test.close(); }
+	});
+
+	it("retries an unreachable machine, and a manual disconnect stops it", async () => {
 		let calls = 0;
 		const test = await harness({
 			execOverride: (script) => {
