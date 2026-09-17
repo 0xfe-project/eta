@@ -15,7 +15,7 @@ import { TerminalHost } from "../features/sessions/terminal-host.tsx";
  * The chrome every session route wears: sidebar, right rail, palette, and the header strip
  * over the main column. It lives here because `/new` used to render none of it — ⌘N read as
  * leaving the app and coming back, and the drawers you had opened were gone with the route.
- * Starting another session changes what sits in the middle, nothing else.
+ * The new-session route keeps the layout but leaves session-specific contents blank.
  */
 export interface Chrome {
 	termOpen: Accessor<boolean>;
@@ -24,6 +24,8 @@ export interface Chrome {
 
 export function SessionChrome(props: {
 	main: (chrome: Chrome) => JSX.Element;
+	/** A creation draft has no active session to show in the rail or sidebar. */
+	newSession?: boolean;
 	/** Called after the sidebar picks a session. The route that replaces the transcript passes
 	 * it so a click on the list is also a way out; `/` leaves it alone — there is nowhere to go. */
 	onSelected?: (session: string) => void;
@@ -32,16 +34,16 @@ export function SessionChrome(props: {
 	return (
 		<AppShell
 			palette={<CommandPalette />}
-			sidebar={<SessionsSidebar termOpen={termOpen} onTerminal={() => setTermOpen((open) => !open)} {...(props.onSelected === undefined ? {} : { onSelected: props.onSelected })} />}
+			sidebar={<SessionsSidebar newSession={props.newSession} termOpen={termOpen} onTerminal={() => setTermOpen((open) => !open)} {...(props.onSelected === undefined ? {} : { onSelected: props.onSelected })} />}
 			main={props.main({ termOpen, setTermOpen })}
-			panel={<SessionsPanel />}
+			panel={<Show when={!props.newSession}><SessionsPanel /></Show>}
 		/>
 	);
 }
 
-function SessionsSidebar(props: { termOpen: Accessor<boolean>; onTerminal: () => void; onSelected?: (session: string) => void }) {
+function SessionsSidebar(props: { newSession?: boolean; termOpen: Accessor<boolean>; onTerminal: () => void; onSelected?: (session: string) => void }) {
 	const state = useEta();
-	const selected = () => state.attach ?? state.sessions[0]?.name ?? null;
+	const selected = () => props.newSession ? null : state.attach ?? state.sessions[0]?.name ?? null;
 	return <Sidebar selected={selected()} termActive={props.termOpen()} onTerminal={props.onTerminal} {...(props.onSelected === undefined ? {} : { onSelected: props.onSelected })} />;
 }
 

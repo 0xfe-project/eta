@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Route } from "@solidjs/router";
+import { etaStore } from "../src/lib/eta-store.ts";
 import { Welcome } from "../src/features/sessions/welcome.tsx";
 import { byId, findId, queryId } from "./dom.ts";
 import { FakeSocket } from "./fake-socket.ts";
-import { cleanup, click, flush, keyDown, render, setField } from "./render.tsx";
+import { cleanup, click, fireEvent, flush, keyDown, render, setField } from "./render.tsx";
 import { MemoryRouter } from "./memory-router.tsx";
 
 /**
@@ -53,6 +54,10 @@ describe("new session surface", () => {
 		click("create-session");
 
 		expect(FakeSocket.last()).toMatchObject({ op: "session.create", personaId: "Executor" });
+		expect(queryId("home")).toBeNull();
+		const name = FakeSocket.last().name;
+		flush(() => FakeSocket.instances.at(-1)!.fire("message", { data: JSON.stringify({ type: "created", name }) }));
+		expect(etaStore().snapshot().attach).toBe(name);
 		expect(await findId("home")).toBeTruthy();
 	});
 
@@ -67,6 +72,76 @@ describe("new session surface", () => {
 		const sent = FakeSocket.last() as Record<string, unknown>;
 		expect(sent).toMatchObject({ op: "session.create", prompt: "帮我把这个模块拆开" });
 		expect("personaId" in sent).toBe(false);
+	});
+
+	for (const text of ["", "请分析截图"]) {
+		it(`creates a session with a pasted image and ${text ? "text" : "no text"}`, async () => {
+			await mountWizard();
+			await findId("persona-Thinker");
+			setField("composer-input", text);
+			fireEvent.paste(byId("composer-input"), { clipboardData: { files: [new File(["image bytes"], "shot.png", { type: "image/png" })] } });
+			await findId("attach-chip-0");
+			expect((byId("composer-input") as HTMLTextAreaElement).value).toBe(text);
+			expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/api/upload"))).toBe(false);
+			click("composer-submit");
+			expect(FakeSocket.last()).toMatchObject({ op: "session.create", images: [{ mime: "image/png", dataBase64: btoa("image bytes") }] });
+			if (text) expect(FakeSocket.last().prompt).toBe(text);
+			// A failed creation must leave the image available for a retry.
+			flush(() => FakeSocket.instances.at(-1)!.fire("message", { data: JSON.stringify({ type: "error", message: "Try again" }) }));
+			expect(byId("attach-chip-0")).toBeTruthy();
+			click("composer-submit");
+			expect(FakeSocket.last()).toMatchObject({ op: "session.create", images: [{ mime: "image/png", dataBase64: btoa("image bytes") }] });
+		});
+	}
+
+	it("leaves the new-session rail blank while retaining the old session in the store", async () => {
+		await mountWizard();
+		await findId("persona-Thinker");
+		const socket = FakeSocket.instances.at(-1)!;
+		const receive = (frame: unknown) => flush(() => socket.fire("message", { data: JSON.stringify(frame) }));
+		receive({ type: "hello", sessions: [{ name: "old", badges: [], personas: [] }], attach: "old" });
+		receive({ channel: "view", session: "old", version: 1, view: {
+			messages: [], systems: [], thinking: [], queue: [], tasks: [], loops: [], subagents: [], sideThread: [], stateKeys: [],
+			compactionEpoch: 0, model: "old-model", tools: [], personas: [],
+		} });
+		expect(etaStore().snapshot().attach).toBe("old");
+		expect(queryId("drawer-right")).not.toBeNull();
+		expect(queryId("tab-context")).toBeNull();
+		expect(byId("drawer-right").textContent).not.toContain("old-model");
+		expect(byId("session-row-old").classList.contains("bg-overlay")).toBe(false);
+	});
+
+	it("keeps the old session until creation succeeds, then focuses the new first-prompt session", async () => {
+		await mountWizard();
+		await findId("persona-Thinker");
+		const socket = FakeSocket.instances.at(-1)!;
+		const receive = (frame: unknown) => flush(() => socket.fire("message", { data: JSON.stringify(frame) }));
+		receive({ type: "hello", sessions: [{ name: "old", badges: [], personas: [] }], attach: "old" });
+		setField("composer-input", "First prompt");
+		click("composer-submit");
+		const name = FakeSocket.last().name;
+		expect(etaStore().snapshot().attach).toBe("old");
+		expect(queryId("home")).toBeNull();
+		receive({ type: "created", name: "another-client" });
+		expect(etaStore().snapshot().attach).toBe("old");
+		receive({ type: "created", name });
+		expect(etaStore().snapshot().attach).toBe(name);
+		expect(FakeSocket.last()).toEqual({ op: "focus", session: name });
+		expect(await findId("home")).toBeTruthy();
+	});
+
+	it("stays on the new page and allows retry after a create error", async () => {
+		await mountWizard();
+		await findId("persona-Thinker");
+		click("persona-Thinker");
+		setField("composer-input", "Retry this prompt");
+		click("composer-submit");
+		flush(() => FakeSocket.instances.at(-1)!.fire("message", { data: JSON.stringify({ type: "error", message: "Creation failed" }) }));
+		expect(queryId("home")).toBeNull();
+		expect((byId("create-session") as HTMLButtonElement).disabled).toBe(false);
+		expect((byId("composer-input") as HTMLTextAreaElement).value).toBe("Retry this prompt");
+		click("composer-submit");
+		expect(FakeSocket.last()).toMatchObject({ op: "session.create", prompt: "Retry this prompt" });
 	});
 
 	it("sends the folder with the session, and writes it back as the default when asked", async () => {
@@ -206,7 +281,11 @@ describe("remote session models", () => {
 		keyDown("composer-input", "Enter");
 		expect(FakeSocket.last()).toMatchObject({ op: "session.create", remoteId: "mini", cwd: "/remote", prompt: "Refactor this module" });
 		expect(FakeSocket.last()).not.toHaveProperty("personaId");
-		expect(onCreated).toHaveBeenCalledWith(expect.stringMatching(/^remote:mini:/));
+		expect(onCreated).not.toHaveBeenCalled();
+		const name = `remote:mini:${FakeSocket.last().name}`;
+		flush(() => FakeSocket.instances.at(-1)!.fire("message", { data: JSON.stringify({ type: "created", name }) }));
+		expect(onCreated).toHaveBeenCalledWith(name);
+		expect(etaStore().snapshot().attach).toBe(name);
 	});
 
 	it("lets the remote pick a persona from the new-session first message", async () => {

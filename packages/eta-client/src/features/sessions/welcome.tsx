@@ -35,6 +35,20 @@ export function Welcome(props: {
 	const [remoteId, setRemoteId] = createSignal<string | undefined>(props.initialRemoteId);
 	const [remembered, setRemembered] = createSignal(false);
 	const [creating, setCreating] = createSignal(false);
+	let pendingName: string | undefined;
+	onCleanup(store.subscribe((frame) => {
+		if (!pendingName || !frame || !("type" in frame)) return;
+		if (frame.type === "created" && frame.name === pendingName) {
+			pendingName = undefined;
+			setCreating(false);
+			store.send({ op: "focus", session: frame.name });
+			props.onCreated(frame.name);
+		} else if (frame.type === "error") {
+			pendingName = undefined;
+			setCreating(false);
+			setPicking(false);
+		}
+	}));
 	// The host's configured defaults: the folder a blank box should fall back to, and the
 	// model a session started without touching the picker should get.
 	const [defaults, setDefaults] = createSignal<{ personaId?: string; modelId?: string; cwd?: string }>({});
@@ -128,7 +142,7 @@ export function Welcome(props: {
 		},
 		onCwd: setCwd,
 		...(nativeAvailable() ? { onBrowse: () => void browse() } : {}),
-		onSend: (text: string, modelId?: string) => send(text, modelId),
+		onSend: (text, modelId, images) => send(text, modelId, images),
 	} satisfies ComposerCreate;
 
 	/**
@@ -136,10 +150,12 @@ export function Welcome(props: {
 	 * button that opens the session empty. Empty is only honest once a card is picked — with
 	 * nothing to infer from, a persona chosen for you is a coin flip, not a choice.
 	 */
-	function send(text: string | undefined, modelId: string | undefined): void {
+	function send(text: string | undefined, modelId: string | undefined, images?: Parameters<ComposerCreate["onSend"]>[2]): void {
+		if (creating()) return;
 		const id = personaId();
 		const folder = cwd().trim();
 		const name = `eta-${Date.now().toString(36)}`;
+		pendingName = remoteId() ? remoteSessionName(remoteId()!, name) : name;
 		setCreating(true);
 		store.send({
 			op: "session.create",
@@ -147,13 +163,13 @@ export function Welcome(props: {
 			...(id === null ? {} : { personaId: id }),
 			...(folder.length > 0 ? { cwd: folder } : {}),
 			...(text === undefined || text.length === 0 ? {} : { prompt: text }),
+			...(images?.length ? { images } : {}),
 			...(modelId === undefined ? {} : { modelId }),
 			...(remoteId() === undefined ? {} : { remoteId: remoteId() }),
 		});
 		if (remembered() && folder.length > 0 && !remoteId())
 			void apiFetch("/api/settings", { method: "POST", body: JSON.stringify({ cwd: folder }) }).catch(() => undefined);
 		if (id === null && text !== undefined) setPicking(true);
-		props.onCreated(remoteId() ? remoteSessionName(remoteId()!, name) : name);
 	}
 
 	const chips = (

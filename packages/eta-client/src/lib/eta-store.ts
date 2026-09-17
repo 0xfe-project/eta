@@ -137,7 +137,9 @@ export function reduceEtaState(state: EtaState, message: ServerMessage): EtaStat
 }
 
 export class EtaStore {
-	private state: EtaState = initialEtaState;
+	// The Solid mirror can reconcile nested arrays in place. Each connection
+	// needs its own initial snapshot so later stores do not inherit old sessions.
+	private state: EtaState = structuredClone(initialEtaState);
 	private readonly listeners = new Set<(frame: ServerMessage | undefined) => void>();
 	private socket: WebSocket | undefined;
 	private retryMs = 500;

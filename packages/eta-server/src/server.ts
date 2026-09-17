@@ -277,7 +277,7 @@ async function startClaimedServer(
 					if (text.length > 0 && !request.headers.get("content-type")?.startsWith("application/json")) return apiError("JSON required", 415);
 					const body = text.length === 0 ? {} : JSON.parse(text);
 					if (url.pathname === "/api/remotes" && request.method === "POST") return apiJson(await remotes.upsert(body));
-					const match = /^\/api\/remotes\/([a-zA-Z0-9-]+)(?:\/(test|connect|install|disconnect|stop|projects|forwards))?$/.exec(url.pathname);
+					const match = /^\/api\/remotes\/([a-zA-Z0-9-]+)(?:\/(test|connect|install|disconnect|stop|projects|forwards|host-key|trust-host))?$/.exec(url.pathname);
 					if (!match) return apiError("not_found", 404);
 					const [, id, action] = match;
 					if (request.method === "DELETE") {
@@ -285,7 +285,9 @@ async function startClaimedServer(
 						else if (action === "projects") await remotes.removeProject(id!, body.path);
 						else if (!action) await remotes.remove(id!);
 						else return apiError("method_not_allowed", 405);
-					} else if (action === "test") return apiJson(await remotes.test(id!));
+					} else if (action === "host-key") return apiJson(await remotes.hostKey(id!));
+					else if (action === "trust-host") { await remotes.trustHost(id!, body.challengeId); return apiJson({ trusted: true }); }
+					else if (action === "test") return apiJson(await remotes.test(id!));
 					else if (action === "connect") await remotes.connect(id!);
 					else if (action === "install") { if (body.confirm !== true) return apiError("Installation consent required", 400); await remotes.connect(id!, true); }
 					else if (action === "disconnect") remotes.disconnect(id!);
@@ -724,7 +726,7 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 		case "resync":
 			return;
 		case "prompt":
-			host.queue(message.session, message.text, message.mode ?? "queue");
+			host.queue(message.session, message.text, message.mode ?? "queue", message.images);
 			return;
 		case "goal":
 			host.goal(message.session, message.action, message.objective);
@@ -824,8 +826,8 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 			const personaId =
 				message.personaId ?? (await host.suggestPersona(message.prompt ?? "", cwd, message.modelId));
 			await host.createSession(message.name, personaId, cwd, message.modelId);
-			if (message.prompt !== undefined && message.prompt.length > 0)
-				host.queue(message.name, message.prompt, "queue");
+			if ((message.prompt?.length ?? 0) > 0 || (message.images?.length ?? 0) > 0)
+				host.queue(message.name, message.prompt ?? "", "queue", message.images);
 			return;
 		}
 		case "session.delete":

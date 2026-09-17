@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import { Portal } from "solid-js/web";
 import { useAppI18n } from "../../i18n.ts";
-import { isRemoteViewList, remoteRequest, type RemoteView } from "../../lib/remotes.ts";
+import { isRemoteViewList, remoteRequest, RemoteRequestError, type RemoteHostKey, type RemoteView } from "../../lib/remotes.ts";
 import { ProvidersSettings } from "./providers-settings.tsx";
 import { RemoteDirectoryPicker } from "../sessions/remote-directory.tsx";
 
@@ -27,6 +27,8 @@ export function RemotesSettings(props: { onDirtyChange(dirty: boolean): void; on
 	const [providersDirty, setProvidersDirty] = createSignal(false);
 	const [openId, setOpenId] = createSignal<string | undefined>();
 	const [confirmInstall, setConfirmInstall] = createSignal<string>();
+	const [hostKey, setHostKey] = createSignal<{ id: string; key: RemoteHostKey; resume: () => Promise<unknown> }>();
+	const [trustError, setTrustError] = createSignal("");
 	const [confirmStop, setConfirmStop] = createSignal<string>();
 	const [forwardPort, setForwardPort] = createSignal("");
 	const [forwardLocal, setForwardLocal] = createSignal("");
@@ -68,6 +70,41 @@ export function RemotesSettings(props: { onDirtyChange(dirty: boolean): void; on
 			setBusy(false);
 		}
 	};
+	const connectAction = (id: string, action: "test" | "connect" | "install") => {
+		const work = () => remoteRequest(`/api/remotes/${id}/${action}`, action === "install" ? { confirm: true } : {});
+		void run(async () => {
+			try { return await work(); }
+			catch (cause) {
+				if (cause instanceof RemoteRequestError && cause.kind === "host-key") {
+					const key = await remoteRequest<RemoteHostKey>(`/api/remotes/${id}/host-key`, {});
+					setTrustError("");
+					setHostKey({ id, key, resume: work });
+					return;
+				}
+				if (cause instanceof RemoteRequestError && cause.kind === "host-key-changed")
+					throw new Error(i18n.t("remote.hostKeyChanged"));
+				throw cause;
+			}
+		});
+	};
+	const trust = async () => {
+		const pending = hostKey();
+		if (!pending || busy()) return;
+		setBusy(true);
+		setTrustError("");
+		try {
+			await remoteRequest(`/api/remotes/${pending.id}/trust-host`, { challengeId: pending.key.challengeId });
+			setHostKey(undefined);
+			const result = await pending.resume();
+			if (isRemoteViewList(result)) accept(result);
+			else await load();
+		} catch (cause) {
+			const message = cause instanceof Error ? cause.message : "connection_failed";
+			if (hostKey()) setTrustError(message);
+			else setError(message);
+		} finally { setBusy(false); }
+	};
+
 	const saveDraft = async (current: Draft) => {
 		setBusy(true);
 		setError("");
@@ -92,6 +129,10 @@ export function RemotesSettings(props: { onDirtyChange(dirty: boolean): void; on
 	};
 	return (
 		<div data-testid="remotes-settings">
+			<Show when={hostKey()}>{(pending) => <Portal>
+				<HostKeyDialog value={pending().key} busy={busy()} error={trustError()}
+					onCancel={() => { if (!busy()) setHostKey(undefined); }} onTrust={() => void trust()} />
+			</Portal>}</Show>
 			<div class="settings-heading">
 				<h2>{i18n.t("remote.title")}</h2>
 				<p>{i18n.t("remote.description")}</p>
@@ -131,11 +172,11 @@ export function RemotesSettings(props: { onDirtyChange(dirty: boolean): void; on
 							<span data-testid={`remote-status-${remote.id}`} class="border border-border-strong px-1 text-[10px] uppercase tracking-wider text-muted">
 								{i18n.t(`remote.status.${remote.status}` as "remote.status.disconnected")}
 							</span>
-							<button data-testid={`remote-test-${remote.id}`} disabled={busy()} class="border border-border px-2 py-1 text-[11px]" onClick={() => void run(() => remoteRequest(`/api/remotes/${remote.id}/test`, {}))}>
+							<button data-testid={`remote-test-${remote.id}`} disabled={busy()} class="border border-border px-2 py-1 text-[11px]" onClick={() => connectAction(remote.id, "test")}>
 								{i18n.t("remote.test")}
 							</button>
 							<Show when={remote.status !== "connected" && remote.status !== "connecting" && remote.status !== "checking" && remote.status !== "installing" && remote.status !== "reconnecting"}>
-								<button data-testid={`remote-connect-${remote.id}`} disabled={busy()} class="border border-border px-2 py-1 text-[11px]" onClick={() => void run(() => remoteRequest(`/api/remotes/${remote.id}/connect`, {}))}>
+								<button data-testid={`remote-connect-${remote.id}`} disabled={busy()} class="border border-border px-2 py-1 text-[11px]" onClick={() => connectAction(remote.id, "connect")}>
 									{i18n.t("remote.connect")}
 								</button>
 							</Show>
@@ -144,14 +185,17 @@ export function RemotesSettings(props: { onDirtyChange(dirty: boolean): void; on
 									{i18n.t("remote.disconnect")}
 								</button>
 							</Show>
-							<button data-testid={`remote-edit-${remote.id}`} disabled={busy() || (remote.status !== "disconnected" && remote.status !== "error")} class="border border-border px-2 py-1 text-[11px]" onClick={() => setDraft({ id: remote.id, name: remote.name, host: remote.host, user: remote.user ?? "", port: remote.port ? String(remote.port) : "", identityFile: remote.identityFile ?? "", autoConnect: remote.autoConnect })}>
+							<button data-testid={`remote-edit-${remote.id}`} disabled={busy() || (remote.status !== "disconnected" && remote.status !== "error" && remote.status !== "awaiting-trust")} class="border border-border px-2 py-1 text-[11px]" onClick={() => setDraft({ id: remote.id, name: remote.name, host: remote.host, user: remote.user ?? "", port: remote.port ? String(remote.port) : "", identityFile: remote.identityFile ?? "", autoConnect: remote.autoConnect })}>
 								{i18n.t("remote.edit")}
 							</button>
 							<button data-testid={`remote-delete-${remote.id}`} disabled={busy()} class="border border-border px-2 py-1 text-[11px] text-danger" onClick={() => void run(() => remoteRequest(`/api/remotes/${remote.id}`, {}, "DELETE"))}>
 								{i18n.t("remote.delete")}
 							</button>
 						</div>
-						<Show when={remote.error}>
+						<Show when={remote.status === "awaiting-trust"}>
+							<p class="px-2 pb-2 text-[11px] text-muted" data-testid={`remote-trust-pending-${remote.id}`}>{i18n.t("remote.trustPending")}</p>
+						</Show>
+						<Show when={remote.error && remote.status !== "awaiting-trust"}>
 							<p class="px-2 pb-2 text-[11px] text-danger">{remote.error}</p>
 						</Show>
 						<Show when={openId() === remote.id}>
@@ -172,7 +216,7 @@ export function RemotesSettings(props: { onDirtyChange(dirty: boolean): void; on
 											data-testid="remote-install-yes"
 											onClick={() => {
 												setConfirmInstall(undefined);
-												void run(() => remoteRequest(`/api/remotes/${remote.id}/install`, { confirm: true }));
+												connectAction(remote.id, "install");
 											}}
 										>
 											{i18n.t("remote.install")}
@@ -393,4 +437,30 @@ function RemoteDraftDialog(props: {
 			</div>
 		</dialog>
 	);
+}
+
+function HostKeyDialog(props: { value: RemoteHostKey; busy: boolean; error: string; onCancel(): void; onTrust(): void }) {
+	const i18n = useAppI18n();
+	let dialog!: HTMLDialogElement;
+	onMount(() => {
+		const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		try { dialog.showModal(); } catch { dialog.setAttribute("open", ""); }
+		dialog.querySelector<HTMLButtonElement>("button")?.focus();
+		onCleanup(() => { try { dialog.close(); } catch {} if (previous?.isConnected) previous.focus(); });
+	});
+	return <dialog ref={dialog} class="settings-dialog settings-subdialog" data-testid="remote-host-key" aria-labelledby="host-key-title"
+		onCancel={(event) => { event.preventDefault(); props.onCancel(); }} onKeyDown={(event) => event.stopPropagation()}>
+		<header class="settings-header"><h1 id="host-key-title">{i18n.t("remote.hostKeyTitle")}</h1></header>
+		<div class="min-h-0 overflow-y-auto p-4 space-y-3">
+			<p>{i18n.t("remote.hostKeyNote")}</p>
+			<p class="font-mono break-all">{props.value.host} · {props.value.algorithm}</p>
+			<p class="font-mono break-all select-text" data-testid="remote-host-fingerprint">{props.value.fingerprint}</p>
+			<details><summary>{i18n.t("remote.hostKeyDetails")}</summary><pre class="whitespace-pre-wrap break-all text-xs">{props.value.prompt}</pre></details>
+			<Show when={props.error}><p role="alert" class="text-danger">{props.error}</p></Show>
+			<div class="flex justify-end gap-3">
+				<button data-testid="remote-host-cancel" disabled={props.busy} onClick={props.onCancel}>{i18n.t("remote.cancel")}</button>
+				<button data-testid="remote-host-trust" disabled={props.busy} onClick={props.onTrust}>{i18n.t("remote.hostKeyTrust")}</button>
+			</div>
+		</div>
+	</dialog>;
 }

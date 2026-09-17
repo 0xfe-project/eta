@@ -23,11 +23,13 @@ import {
 	remoteSessionName,
 	type BackendDescriptor,
 	type RemoteBackend,
+	type RemoteHostKey,
 	type RemoteConnection,
 	type RemoteStatus,
 	type RemoteView,
 } from "@eta/core/remote";
 import type { ClientMessage, ServerMessage, SidebarSession } from "./protocol.ts";
+import { confirmSshHost, hostKeyFingerprint } from "./remote-host-key.ts";
 import { command, discoverSshHosts, freePort, remoteArtifact, ssh, sshArgs, validHost } from "./remote-ssh.ts";
 
 const RemoteWebSocket = WebSocket as unknown as {
@@ -37,7 +39,7 @@ const RemoteWebSocket = WebSocket as unknown as {
 type Process = ReturnType<typeof Bun.spawn>;
 
 /** What went wrong, in terms a person can act on. */
-export type RemoteFailureKind = "unreachable" | "auth" | "not-installed" | "protocol" | "busy" | "no-service" | "other";
+export type RemoteFailureKind = "unreachable" | "auth" | "not-installed" | "protocol" | "busy" | "no-service" | "host-key" | "host-key-changed" | "other";
 
 export class RemoteError extends Error {
 	readonly kind: RemoteFailureKind;
@@ -50,6 +52,8 @@ export class RemoteError extends Error {
 export function classifyRemoteError(error: unknown): { kind: RemoteFailureKind; message: string } {
 	if (error instanceof RemoteError) return { kind: error.kind, message: error.message };
 	const message = error instanceof Error ? error.message : String(error);
+	if (/REMOTE HOST IDENTIFICATION HAS CHANGED|REVOKED HOST KEY/i.test(message)) return { kind: "host-key-changed", message };
+	if (/host key verification failed|no .*host key is known/i.test(message)) return { kind: "host-key", message };
 	if (/permission denied|publickey|authentication failed|too many authentication failures/i.test(message))
 		return { kind: "auth", message };
 	if (/could not resolve hostname|no route to host|connection refused|connection timed out|operation timed out|network is unreachable|nodename nor servname/i.test(message))
@@ -57,11 +61,12 @@ export function classifyRemoteError(error: unknown): { kind: RemoteFailureKind; 
 	return { kind: "other", message };
 }
 
-/** Errors a retry cannot fix: they are reported, retried a few times, then left alone. */
-const FATAL_KINDS: readonly RemoteFailureKind[] = ["auth", "not-installed", "protocol", "busy"];
-const FATAL_ATTEMPTS = 3;
+/** Errors that need user intervention rather than automatic retries. */
+const FATAL_KINDS: readonly RemoteFailureKind[] = ["auth", "not-installed", "protocol", "busy", "host-key", "host-key-changed"];
+const MAX_RETRIES = 3;
 
 export interface RemoteTransport {
+	confirmHost?(connection: RemoteConnection, expected?: string): Promise<string>;
 	exec(connection: RemoteConnection, script: string, input?: Uint8Array, timeoutMs?: number): Promise<string>;
 	inspect(connection: RemoteConnection): Promise<{ hostname: string; user: string }>;
 	openTunnel(connection: RemoteConnection, remotePort: number, localPort?: number): Promise<{ localPort: number; process: Process }>;
@@ -69,6 +74,7 @@ export interface RemoteTransport {
 }
 
 export const defaultRemoteTransport: RemoteTransport = {
+	confirmHost: confirmSshHost,
 	exec: ssh,
 	async inspect(connection) {
 		const resolved = await command(["ssh", ...sshArgs(connection), "-G", "--", connection.host]);
@@ -110,7 +116,6 @@ interface Live {
 	generation: number;
 	wanted: boolean;
 	attempt: number;
-	fatalAttempts: number;
 	retry?: ReturnType<typeof setTimeout>;
 	process?: Process;
 	base?: string;
@@ -162,6 +167,7 @@ exit 1`;
 
 export class RemoteManager {
 	private connections: RemoteConnection[] = [];
+	private hostKeys = new Map<string, { view: RemoteHostKey; config: string; expires: number }>();
 	private live = new Map<string, Live>();
 	private saveTail = Promise.resolve();
 	private closed = false;
@@ -210,7 +216,6 @@ export class RemoteManager {
 				generation: 0,
 				wanted: false,
 				attempt: 0,
-				fatalAttempts: 0,
 				sessions: [],
 				views: new Map(),
 				ports: new Map(),
@@ -292,7 +297,7 @@ export class RemoteManager {
 	async upsert(input: unknown): Promise<RemoteView[]> {
 		const connection = validateConnection(input);
 		const old = this.connections.find((row) => row.id === connection.id);
-		if (old && !["disconnected", "error"].includes(this.runtime(old.id).status))
+		if (old && !["disconnected", "error", "awaiting-trust"].includes(this.runtime(old.id).status))
 			throw new Error("Disconnect before editing the SSH connection");
 		if (old) {
 			connection.projects = old.projects;
@@ -317,18 +322,59 @@ export class RemoteManager {
 		return discoverSshHosts();
 	}
 
-	async test(id: string): Promise<{ hostname: string; user: string; platform: string; backend?: RemoteBackend }> {
+	/** First contact is a pending decision, not a failed connection. */
+	private awaitHostTrust(id: string): void {
+		const live = this.runtime(id);
+		live.wanted = false;
+		live.generation++;
+		this.cleanup(live);
+		live.error = undefined;
+		live.errorKind = undefined;
+		this.notify(id, "awaiting-trust", "Waiting for host fingerprint confirmation. Choose Test or Connect to review it.");
+	}
+
+	async hostKey(id: string): Promise<RemoteHostKey> {
 		const connection = this.config(id);
-		const resolved = await this.transport.inspect(connection);
-		const inspect = await this.inspectRemote(connection);
-		const descriptor = await this.readDescriptor(connection);
-		return {
-			...resolved,
-			platform: `${inspect.platform} ${inspect.arch}`,
-			...(descriptor === undefined
-				? {}
-				: { backend: { version: descriptor.version, protocol: descriptor.protocol, pid: descriptor.pid, machineId: descriptor.machineId, reused: false, ...(inspect.installed === "" ? {} : { installed: inspect.installed }) } }),
-		};
+		const config = JSON.stringify(connection);
+		if (!this.transport.confirmHost) throw new Error("Host key confirmation unavailable");
+		const prompt = await this.transport.confirmHost(connection);
+		const fingerprint = hostKeyFingerprint(prompt);
+		if (!fingerprint) throw new Error("Could not read the SSH host fingerprint");
+		if (config !== JSON.stringify(this.config(id))) throw new Error("Connection settings changed; try again");
+		const host = /^The authenticity of host '([^']+)'/.exec(prompt)?.[1] ?? connection.host;
+		const view = { challengeId: crypto.randomUUID(), host, prompt, ...fingerprint };
+		this.hostKeys.set(id, { view, config, expires: Date.now() + 5 * 60_000 });
+		this.awaitHostTrust(id);
+		return view;
+	}
+
+	async trustHost(id: string, challengeId: unknown): Promise<void> {
+		const pending = this.hostKeys.get(id);
+		if (!pending || pending.view.challengeId !== challengeId || pending.expires < Date.now()
+			|| pending.config !== JSON.stringify(this.config(id))) throw new Error("Host key confirmation expired; test the connection again");
+		this.hostKeys.delete(id);
+		if (!this.transport.confirmHost) throw new Error("Host key confirmation unavailable");
+		await this.transport.confirmHost(this.config(id), pending.view.prompt);
+		this.notify(id, "disconnected", "Host fingerprint trusted. Ready to connect.");
+	}
+
+	async test(id: string): Promise<{ hostname: string; user: string; platform: string; backend?: RemoteBackend }> {
+		try {
+			const connection = this.config(id);
+			const resolved = await this.transport.inspect(connection);
+			const inspect = await this.inspectRemote(connection);
+			const descriptor = await this.readDescriptor(connection);
+			return {
+				...resolved,
+				platform: `${inspect.platform} ${inspect.arch}`,
+				...(descriptor === undefined
+					? {}
+					: { backend: { version: descriptor.version, protocol: descriptor.protocol, pid: descriptor.pid, machineId: descriptor.machineId, reused: false, ...(inspect.installed === "" ? {} : { installed: inspect.installed }) } }),
+			};
+		} catch (error) {
+			if (classifyRemoteError(error).kind === "host-key") this.awaitHostTrust(id);
+			throw error;
+		}
 	}
 
 	private async inspectRemote(connection: RemoteConnection): Promise<Inspect> {
@@ -391,13 +437,13 @@ export class RemoteManager {
 	/** A lost transport, or a connect that failed: same schedule, same ceiling. */
 	private scheduleRetry(id: string, live: Live, reason: RemoteFailureKind): void {
 		if (this.closed || !live.wanted) return;
-		if (FATAL_KINDS.includes(reason) && live.fatalAttempts >= FATAL_ATTEMPTS) {
-			this.notify(id, "error", `Giving up after ${String(live.fatalAttempts)} attempts: ${live.error ?? reason}. Reconnect when the problem is fixed.`);
+		if (FATAL_KINDS.includes(reason) || live.attempt >= MAX_RETRIES) {
+			live.wanted = false;
+			this.notify(id, "error", `Giving up after ${String(live.attempt)} retries: ${live.error ?? reason}. Reconnect when the problem is fixed.`);
 			return;
 		}
-		if (FATAL_KINDS.includes(reason)) live.fatalAttempts += 1;
 		this.notify(id, "reconnecting", `Retrying in ${String(Math.round(this.retryDelay(live.attempt) / 1000))}s (attempt ${String(live.attempt + 1)}, ${reason}).`);
-		live.retry = setTimeout(() => void this.connect(id).catch(() => {}), this.retryDelay(live.attempt));
+		live.retry = setTimeout(() => void this.connectAttempt(id, false).catch(() => {}), this.retryDelay(live.attempt));
 		live.attempt += 1;
 	}
 
@@ -414,10 +460,15 @@ export class RemoteManager {
 	}
 
 	async connect(id: string, install = false): Promise<void> {
+		return this.connectAttempt(id, install, true);
+	}
+
+	private async connectAttempt(id: string, install: boolean, manual = false): Promise<void> {
 		const connection = this.config(id);
 		const live = this.runtime(id);
 		if (["checking", "installing", "connecting"].includes(live.status)) throw new Error("Connection is busy");
 		if (live.status === "connected" && !install) return;
+		if (manual) live.attempt = 0;
 		live.wanted = true;
 		live.generation++;
 		const generation = live.generation;
@@ -474,7 +525,6 @@ export class RemoteManager {
 			if (descriptor === undefined) throw new RemoteError("other", `No eta backend is running on ${connection.host}.`);
 			const backend = descriptor;
 			live.attempt = 0;
-			live.fatalAttempts = 0;
 			this.notify(
 				id,
 				"connected",
@@ -491,6 +541,10 @@ export class RemoteManager {
 			if (live.generation !== generation) return;
 			this.cleanup(live);
 			const failure = classifyRemoteError(error);
+			if (failure.kind === "host-key") {
+				this.awaitHostTrust(id);
+				throw error;
+			}
 			live.error = failure.message;
 			live.errorKind = failure.kind;
 			this.notify(id, "error", failure.message);
