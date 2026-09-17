@@ -155,3 +155,48 @@ describe("shell shortcuts", () => {
 		}
 	});
 });
+
+/**
+ * The shell is the only thing that can open a link: a `views://` document has no browser to
+ * hand one to, and `window.open` there opens nothing. So a click has to come back out
+ * through the window's own capability bridge — and a shell that took it must not also get a
+ * `window.open` on top.
+ */
+describe("links in the shell", () => {
+	it("hands an external link to the shell rather than the webview", async () => {
+		vi.resetModules();
+		window.__ETA_HOST__ = {
+			apiBase: "http://127.0.0.1:5174",
+			token: "t",
+			platform: "darwin",
+			native: true,
+			nativeApiBase: "http://127.0.0.1:5175",
+			nativeToken: "n",
+		};
+		const calls: { url: string; init: RequestInit | undefined }[] = [];
+		const opened: string[] = [];
+		vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
+			calls.push({ url, init });
+			return Promise.resolve(new Response(null, { status: 202 }));
+		});
+		vi.stubGlobal("open", (url: string) => {
+			opened.push(url);
+			return null;
+		});
+		const fresh = await import("../src/lib/app-behavior.ts");
+		const stop = fresh.installAppBehavior();
+		try {
+			const node = mount('<p class="markdown"><a href="https://auth.example/login">登录</a></p>');
+			expect(fire(node.querySelector("a")!, "click", { button: 0 }).defaultPrevented).toBe(true);
+			expect(calls.map((call) => call.url)).toEqual(["http://127.0.0.1:5175/api/native/open-external"]);
+			// The window-local bridge has its own credential, not the backend's.
+			expect(new Headers(calls[0]!.init?.headers).get("authorization")).toBe("Bearer n");
+			expect(JSON.parse(String(calls[0]!.init?.body))).toEqual({ url: "https://auth.example/login" });
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(opened).toEqual([]);
+		} finally {
+			stop();
+			delete window.__ETA_HOST__;
+		}
+	});
+});

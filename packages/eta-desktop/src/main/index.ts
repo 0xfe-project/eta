@@ -60,6 +60,10 @@ const nativeBridge = startNativeBridge({
 		await Bun.write(target, content);
 		return target;
 	},
+	/** `views://` has no browser behind it: a link only opens if the shell opens it. */
+	openExternal({ url }): void {
+		Utils.openExternal(url);
+	},
 	contextMenu({ items }): void {
 		console.log(`[eta-desktop] contextMenu(${String(items.length)} items) is not wired up yet`);
 	},

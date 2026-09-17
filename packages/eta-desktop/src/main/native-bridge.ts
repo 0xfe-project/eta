@@ -31,6 +31,10 @@ export function startNativeBridge(native: NativeHandlers, appVersion: string) {
 			try {
 				if (path === "/api/native/folder-dialog") return json({ path: await native.folderDialog(await request.json()) });
 				if (path === "/api/native/save-file") return json({ path: await native.saveFile(await request.json()) });
+				if (path === "/api/native/open-external") {
+					native.openExternal(await request.json());
+					return new Response(null, { status: 202, headers });
+				}
 				if (path === "/api/native/context-menu") {
 					native.contextMenu(await request.json());
 					return new Response(null, { status: 202, headers });
