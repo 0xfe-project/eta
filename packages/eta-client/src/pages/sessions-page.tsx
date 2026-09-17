@@ -1,4 +1,5 @@
-import { Show, createEffect, onMount, type Accessor, type Setter } from "solid-js";
+import { useNavigate } from "@solidjs/router";
+import { Show, createEffect, onCleanup, onMount, type Accessor, type Setter } from "solid-js";
 import { openSettings } from "../lib/settings.ts";
 import { useAppI18n } from "../i18n.ts";
 import { etaStore, useEta } from "../lib/eta-store.ts";
@@ -46,12 +47,44 @@ function useDeepLink() {
 	});
 }
 
+/** Leave only after an authoritative list confirms the active session was removed
+ * or newly archived. Remember its workspace before the list drops that metadata. */
+function useSessionRemovalNavigation() {
+	const store = etaStore();
+	const navigate = useNavigate();
+	const active = () => {
+		const state = store.snapshot();
+		const name = state.attach ?? state.sessions[0]?.name;
+		const session = state.sessions.find((item) => item.name === name);
+		return session === undefined ? undefined : {
+			name: session.name,
+			cwd: session.cwd ?? state.views[session.name]?.cwd,
+			remoteId: session.remote?.connectionId ?? parseRemoteSession(session.name)?.connectionId,
+			archived: session.archived === true,
+		};
+	};
+	let previous = active();
+	onCleanup(store.subscribe((frame) => {
+		const leaving = previous;
+		previous = active();
+		if (leaving === undefined || frame === undefined || !("type" in frame) || frame.type !== "sessions") return;
+		const current = frame.sessions.find((session) => session.name === leaving.name);
+		if (current !== undefined && (current.archived !== true || leaving.archived)) return;
+		const params = new URLSearchParams();
+		if (leaving.cwd !== undefined) params.set("cwd", leaving.cwd);
+		if (leaving.remoteId !== undefined) params.set("remote", leaving.remoteId);
+		const query = params.toString();
+		void navigate(query ? `/new?${query}` : "/new", { replace: true });
+	}));
+}
+
 export function SessionsPage() {
 	// An app route is a router navigation, never a `location.assign`: in the shell
 	// that asks `views://` for a file that is not in the bundle.
 	const goSettings = openSettings;
 	useRunNotifications();
 	useDeepLink();
+	useSessionRemovalNavigation();
 	return <SessionChrome main={(chrome) => <SessionsMain {...chrome} onSettings={goSettings} />} />;
 }
 
