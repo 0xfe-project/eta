@@ -8,7 +8,8 @@ import { Welcome } from "../features/sessions/welcome.tsx";
 /**
  * `/new` is the welcome screen with a way back, wearing the same chrome as the session it
  * steps in front of: the sidebar, the right rail, the header strip all stay put, because
- * ⌘N should change one thing — what is in the middle. The route exists because a transcript
+ * the session-specific rail and selection are blank until a session is selected or created.
+ * The route exists because a transcript
  * cannot be a blank slate and a conversation at once.
  *
  * The folder worth starting in is handed to `Welcome`: the group header's 「+」 (`?cwd=`) or
@@ -35,6 +36,7 @@ export function NewSessionPage() {
 
 	return (
 		<SessionChrome
+			newSession
 			onSelected={back}
 			main={() => (
 				<div class="flex min-h-0 flex-1 flex-col">

@@ -94,6 +94,23 @@ describe("new session surface", () => {
 		});
 	}
 
+	it("leaves the new-session rail blank while retaining the old session in the store", async () => {
+		await mountWizard();
+		await findId("persona-Thinker");
+		const socket = FakeSocket.instances.at(-1)!;
+		const receive = (frame: unknown) => flush(() => socket.fire("message", { data: JSON.stringify(frame) }));
+		receive({ type: "hello", sessions: [{ name: "old", badges: [], personas: [] }], attach: "old" });
+		receive({ channel: "view", session: "old", version: 1, view: {
+			messages: [], systems: [], thinking: [], queue: [], tasks: [], loops: [], subagents: [], sideThread: [], stateKeys: [],
+			compactionEpoch: 0, model: "old-model", tools: [], personas: [],
+		} });
+		expect(etaStore().snapshot().attach).toBe("old");
+		expect(queryId("drawer-right")).not.toBeNull();
+		expect(queryId("tab-context")).toBeNull();
+		expect(byId("drawer-right").textContent).not.toContain("old-model");
+		expect(byId("session-row-old").classList.contains("bg-overlay")).toBe(false);
+	});
+
 	it("keeps the old session until creation succeeds, then focuses the new first-prompt session", async () => {
 		await mountWizard();
 		await findId("persona-Thinker");
