@@ -26,6 +26,9 @@ import { ProviderConfigError } from "./providers.ts";
 export interface NativeHandlers {
 	folderDialog(input: { startingFolder?: string }): Promise<string | null>;
 	saveFile(input: { content: string; filename: string }): Promise<string | null>;
+	/** Opens a URL with the OS. Only the shell can: the page has no browser to hand it
+	 * to, and `window.open` on a `views://` document opens nothing. */
+	openExternal(input: { url: string }): void;
 	/** Returns immediately; the click result is reported by the shell via push(). */
 	contextMenu(input: { items: unknown[] }): void;
 }
@@ -519,6 +522,11 @@ async function startClaimedServer(
 				if (url.pathname === "/api/native/save-file" && request.method === "POST") {
 					const input = (await request.json()) as { content: string; filename: string };
 					return apiJson({ path: await options.native.saveFile(input) });
+				}
+				if (url.pathname === "/api/native/open-external" && request.method === "POST") {
+					const input = (await request.json()) as { url: string };
+					options.native.openExternal(input);
+					return new Response(null, { status: 202, headers: CORS_HEADERS });
 				}
 				if (url.pathname === "/api/native/context-menu" && request.method === "POST") {
 					const input = (await request.json()) as { items: unknown[] };
