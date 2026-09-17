@@ -229,25 +229,19 @@ export function Composer(props: {
 				reader.onerror = () => reject(reader.error);
 				reader.readAsDataURL(file);
 			}) : undefined;
-			// A new session has no upload directory yet; keep the image in the draft
-			// and send it with session.create instead of borrowing another session.
-			if (session === undefined) {
-				if (dataBase64 === undefined || mime === undefined) throw new Error("No session for file upload");
+			if (props.session !== session) return;
+			if (dataBase64 !== undefined && mime !== undefined) {
 				setPendingImages((list) => [...list, { name: file.name, mime, dataBase64 }]);
 				return;
 			}
+			if (session === undefined) throw new Error("No session for file upload");
 			const form = new FormData();
 			form.append("file", file);
 			const response = await apiFetch(`/api/upload?session=${encodeURIComponent(session)}`, { method: "POST", body: form });
 			const body = await response.json() as { path?: string };
 			if (!response.ok || body.path === undefined) throw new Error("Upload failed");
 			if (props.session !== session) return;
-			const path = body.path;
-			if (dataBase64 !== undefined && mime !== undefined) {
-				setPendingImages((list) => [...list, { name: file.name, mime, dataBase64 }]);
-			} else {
-				setText((current) => `${current}${current.endsWith(" ") || current.length === 0 ? "" : " "}@${path} `);
-			}
+			setText((current) => `${current}${current.endsWith(" ") || current.length === 0 ? "" : " "}@${body.path} `);
 			void apiFetch(`/api/files?session=${encodeURIComponent(session)}`)
 				.then((response) => response.json() as Promise<string[]>)
 				.then(setFiles)

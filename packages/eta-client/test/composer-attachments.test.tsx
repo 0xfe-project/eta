@@ -27,6 +27,7 @@ describe("composer attachments", () => {
 				fireEvent.change(document.querySelector(selector)!, { target: { files: [file] } });
 			}
 			await findId("attach-chip-0");
+			expect(vi.mocked(fetch).mock.calls.some(([url]) => /\/api\/(upload|files)/.test(String(url)))).toBe(false);
 			expect((byId("composer-input") as HTMLTextAreaElement).value).toBe("inspect");
 			keyDown("composer-input", "Enter");
 			expect(FakeSocket.last()).toMatchObject({
@@ -48,10 +49,7 @@ describe("composer attachments", () => {
 		expect(document.querySelector('[data-testid="attach-chip-0"]')).toBeNull();
 	});
 
-	it("blocks sending until an upload finishes", async () => {
-		let finish!: (response: Response) => void;
-		vi.stubGlobal("fetch", vi.fn((url: string) => url.includes("/api/upload")
-			? new Promise<Response>((resolve) => { finish = resolve; }) : Promise.resolve(Response.json([]))));
+	it("blocks sending while the image is being read", async () => {
 		render(<Composer session="s1" />);
 		setField("composer-input", "inspect");
 		paste(screenshot());
@@ -59,8 +57,6 @@ describe("composer attachments", () => {
 		keyDown("composer-input", "Enter");
 		expect(FakeSocket.sent).toEqual([]);
 		expect((byId("composer-submit") as HTMLButtonElement).disabled).toBe(true);
-		await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
-		finish(Response.json({ path: ".eta-attachments/screenshot.png" }));
 		await findId("attach-chip-0");
 		expect((byId("composer-submit") as HTMLButtonElement).disabled).toBe(false);
 	});
@@ -101,8 +97,8 @@ describe("composer attachments", () => {
 		vi.stubGlobal("fetch", vi.fn(async (url: string) => url.includes("/api/upload")
 			? Response.json({ error: "failed" }, { status: 500 }) : Response.json([])));
 		render(<Composer session="s1" />);
-		paste(screenshot());
-		await vi.waitFor(() => expect(document.querySelector('[role="alert"]')?.textContent).toContain("screenshot.png"));
+		paste(new File(["notes"], "notes.txt", { type: "text/plain" }));
+		await vi.waitFor(() => expect(document.querySelector('[role="alert"]')?.textContent).toContain("notes.txt"));
 		expect((byId("composer-submit") as HTMLButtonElement).disabled).toBe(false);
 		expect(document.querySelector('[data-testid="attach-chip-0"]')).toBeNull();
 	});
