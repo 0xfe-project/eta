@@ -9,6 +9,7 @@ import { useShellOptional } from "../../app/app-shell.tsx";
 import { apiFetch, goto } from "../../lib/host.ts";
 import type { ThinkingLevel } from "@eta/core";
 import { registerDraftSink } from "../../lib/queue-actions.ts";
+import { createPresence } from "../../lib/presence.ts";
 
 /** Subsequence fuzzy score: higher = better match; -1 = no match. */
 function fuzzyScore(query: string, target: string): number {
@@ -109,6 +110,8 @@ export function Composer(props: {
 	const [menuClosed, setMenuClosed] = createSignal(false);
 	const [pendingImages, setPendingImages] = createSignal<{ name: string; mime: string; dataBase64: string }[]>([]);
 	const [toolboxOpen, setToolboxOpen] = createSignal(false);
+	/** The + panel animates both ways, so it outlives its own signal by one exit. */
+	const toolboxPresence = createPresence(toolboxOpen);
 	const [toolFiles, setToolFiles] = createSignal<string[]>([]);
 	const [toolQuery, setToolQuery] = createSignal("");
 	/** Only while a file is actually over the box: the border is the whole answer to
@@ -399,8 +402,8 @@ export function Composer(props: {
 		<footer class="input-area" data-testid="composer">
 			<div class="input-outer">
 				{props.topSlot}
-				<Show when={toolboxOpen()}>
-					<div data-testid="composer-toolbox" class="absolute bottom-[calc(100%+6px)] left-0 right-0 z-30 max-h-[60vh] overflow-y-auto border-2 border-border-strong bg-elevated p-2 shadow-[4px_4px_0_0_var(--shadow)]">
+				<Show when={toolboxPresence.mounted()}>
+					<div data-testid="composer-toolbox" data-state={toolboxPresence.closing() ? "closed" : "open"} class="popover-panel absolute bottom-[calc(100%+6px)] left-0 right-0 z-30 max-h-[60vh] overflow-y-auto border border-overlay-hover bg-elevated p-2 shadow-[4px_4px_0_0_var(--shadow)]">
 						<div class="mb-2 flex flex-wrap gap-1.5">
 							<button data-testid="attach-upload" class="border border-border px-2 py-1 text-xs uppercase tracking-[0.08em] hover:bg-overlay" onClick={() => fileInput?.click()}>
 								{i18n.t("composer.uploadFile")}

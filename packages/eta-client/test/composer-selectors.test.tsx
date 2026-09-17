@@ -37,7 +37,7 @@ describe("composer selection menus", () => {
 		expect(FakeSocket.sent).toEqual([]);
 		click("model-kimi:code");
 		expect(FakeSocket.last()).toEqual({ op: "modelSet", session: "s1", modelId: "kimi:code" });
-		expect(document.querySelector('[data-testid="model-menu"]')).toBeNull();
+		await vi.waitFor(() => expect(document.querySelector('[data-testid="model-menu"]')).toBeNull());
 		expect((byId("composer-input") as HTMLTextAreaElement).value).toBe("unsent message");
 		page.view("kimi:code");
 		expect(byId("model-picker").textContent).toContain("Kimi for Coding");
@@ -52,7 +52,7 @@ describe("composer selection menus", () => {
 		expect([...byId("thinking-menu").querySelectorAll('[role="menuitemradio"]')].map(node => node.textContent?.replace("✓", ""))).toEqual(["off", "low", "high", "max"]);
 		click("thinking-option-max");
 		expect(FakeSocket.last()).toEqual({ op: "thinkingLevel", session: "s1", level: "max" });
-		expect(document.querySelector('[data-testid="thinking-menu"]')).toBeNull();
+		await vi.waitFor(() => expect(document.querySelector('[data-testid="thinking-menu"]')).toBeNull());
 		expect(document.activeElement).toBe(byId("thinking-chip"));
 	});
 
@@ -61,11 +61,11 @@ describe("composer selection menus", () => {
 		keyDown("model-picker", "ArrowUp");
 		expect(document.activeElement).toBe(byId("model-kimi:code"));
 		keyDown("model-kimi:code", "Escape");
-		expect(document.querySelector('[data-testid="model-menu"]')).toBeNull();
+		await vi.waitFor(() => expect(document.querySelector('[data-testid="model-menu"]')).toBeNull());
 		expect(document.activeElement).toBe(byId("model-picker"));
 		click("model-picker");
 		fireEvent.pointerDown(document.body);
-		expect(document.querySelector('[data-testid="model-menu"]')).toBeNull();
+		await vi.waitFor(() => expect(document.querySelector('[data-testid="model-menu"]')).toBeNull());
 		expect(FakeSocket.sent).toEqual([]);
 	});
 

@@ -16,7 +16,7 @@
 	/* One shared height for every top rail, so the column gutters can end exactly where
 	   the band ends instead of guessing at 40px twice. */
 	--header-band: 40px;
-	--border-strong: rgba(24, 24, 24, 0.6);
+	--border-strong: rgba(24, 24, 24, 0.3);
 	--success: #2f8f4e;
 	--warning: #b47716;
 	--danger: #c0392b;
@@ -36,7 +36,7 @@
 	--foreground: oklch(0.145 0 0);
 	--card: #FAFAFA;
 	--card-foreground: oklch(0.145 0 0);
-	--popover: #FAFAFA;
+	--popover: color-mix(in srgb, #181818 9%, var(--background));
 	--popover-foreground: oklch(0.145 0 0);
 	--primary: oklch(0.40 0 0);
 	--primary-foreground: oklch(0.785 0 0);
@@ -61,7 +61,7 @@
 	--foreground: oklch(0.985 0 0);
 	--card: oklch(0.20 0 0);
 	--card-foreground: oklch(0.985 0 0);
-	--popover: oklch(0.40 0 0);
+	--popover: color-mix(in srgb, #ffffff 9%, var(--background));
 	--popover-foreground: oklch(0.985 0 0);
 	--primary: oklch(0.922 0 0);
 	--primary-foreground: oklch(0.40 0 0);
@@ -78,7 +78,7 @@
 	--sidebar: oklch(0.40 0 0);
 	--sidebar-foreground: oklch(0.985 0 0);
 	--sidebar-border: oklch(1 0 0 / 10%);
-	--border-strong: rgba(255, 255, 255, 0.6);
+	--border-strong: rgba(255, 255, 255, 0.28);
 	--success: #5cb87a;
 	--warning: #d9a441;
 	--danger: #e06a5a;
@@ -230,6 +230,18 @@ video {
 		transform: none;
 	}
 }
+
+@keyframes eta-unpop {
+	from {
+		opacity: 1;
+		transform: none;
+	}
+	to {
+		opacity: 0;
+		transform: translateY(4px);
+	}
+}
+
 @keyframes eta-fade {
 	from {
 		opacity: 0;
@@ -241,6 +253,26 @@ video {
 @keyframes eta-blink {
 	50% {
 		opacity: 0.35;
+	}
+}
+
+/* Popup panels enter and leave with the same two animations. Every dropdown menu and
+   the composer's + toolbox opt in by carrying this class. The exit only plays at all
+   because the component keeps the panel mounted for one animation past `open`; see
+   createPresence() in lib/presence.ts, which owns that delay. */
+.popover-panel {
+	animation: eta-pop 120ms ease-out;
+}
+.popover-panel[data-state="closed"] {
+	animation: eta-unpop 90ms ease-in forwards;
+	/* A panel on its way out is not a target: the click that closed it, or the next one
+	   already in flight, must not land on something that is about to disappear. */
+	pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+	.popover-panel,
+	.popover-panel[data-state="closed"] {
+		animation: none;
 	}
 }
 
@@ -1302,3 +1334,35 @@ html[data-host="desktop"] .lights-slot {
 .composer-thinking-control { text-transform: uppercase; }
 .composer-submit-control:hover { background: transparent; color: var(--fg); }
 .composer-controls .composer-toolbar-hints { flex: 1 1 0; }
+
+/* ---- platform: Windows type step ---- */
+
+/* Windows renders eta's greys tighter than macOS does at the same pixel size, and the
+   right panel carries the densest text in the window, so that is where it shows. The
+   panel steps one size up there and nowhere else — the rest of the window reads the same
+   on both platforms. Its sizes come from px utilities rather than from one root size, so
+   each step has to be named here; a root font-size would not reach any of them. */
+html[data-platform="win32"] .context-panel {
+	font-size: 15px;
+}
+html[data-platform="win32"] .context-panel .text-xs {
+	font-size: 13px;
+}
+html[data-platform="win32"] .context-panel .text-sm {
+	font-size: 15px;
+}
+html[data-platform="win32"] .context-panel .text-\[8px\] {
+	font-size: 9px;
+}
+html[data-platform="win32"] .context-panel .text-\[9px\] {
+	font-size: 10px;
+}
+html[data-platform="win32"] .context-panel .text-\[10px\] {
+	font-size: 11px;
+}
+html[data-platform="win32"] .context-panel .text-\[11px\] {
+	font-size: 12px;
+}
+html[data-platform="win32"] .context-panel .text-\[12px\] {
+	font-size: 13px;
+}

@@ -77,7 +77,7 @@ export function ContextPanel(props: { session: string; view: SessionView }) {
 	});
 
 	return (
-		<div class="flex h-full flex-col gap-4 overflow-y-auto p-3 text-sm" data-testid="context-panel">
+		<div class="context-panel flex h-full flex-col gap-4 overflow-y-auto p-3 text-sm" data-testid="context-panel">
 			{/*
 			 * Which model is answering. Every other number in this panel is read against it, and
 			 * until now it lived only in the composer's toolbar — so a swap the harness refused
@@ -129,7 +129,7 @@ export function ContextPanel(props: { session: string; view: SessionView }) {
 				right={
 					<button
 						data-testid="persona-switch-open"
-						class="border border-border-strong px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] hover:bg-foreground hover:text-background"
+						class="border border-border-strong px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] hover:bg-overlay-hover hover:text-foreground"
 						onClick={() => {
 							setPersonaPicker(true);
 							void apiFetch("/api/personas")
@@ -158,13 +158,13 @@ export function ContextPanel(props: { session: string; view: SessionView }) {
 
 			<Section title={i18n.t("panel.inspect")} testid="section-inspect">
 				<div class="grid grid-cols-3 gap-1">
-					<Button data-testid="prompt-open" size="sm" variant="outline" class="h-8 justify-start border-2 border-border-strong px-2 text-[11px] uppercase tracking-[0.12em] hover:bg-foreground hover:text-background" disabled={props.view.prompt === undefined} onClick={() => setPromptOpen(true)}>
+					<Button data-testid="prompt-open" size="sm" variant="outline" class="h-8 border border-border-strong px-2 text-[11px] uppercase tracking-[0.12em] hover:bg-overlay-hover hover:text-foreground" disabled={props.view.prompt === undefined} onClick={() => setPromptOpen(true)}>
 						{i18n.t("panel.viewPrompt")}
 					</Button>
-					<Button data-testid="tools-open" size="sm" variant="outline" class="h-8 justify-start border-2 border-border-strong px-2 text-[11px] uppercase tracking-[0.12em] hover:bg-foreground hover:text-background" onClick={() => setToolsOpen(true)}>
+					<Button data-testid="tools-open" size="sm" variant="outline" class="h-8 border border-border-strong px-2 text-[11px] uppercase tracking-[0.12em] hover:bg-overlay-hover hover:text-foreground" onClick={() => setToolsOpen(true)}>
 						{i18n.t("panel.tools")}
 					</Button>
-					<Button data-testid="json-open" size="sm" variant="outline" class="h-8 justify-start border-2 border-border-strong px-2 text-[11px] uppercase tracking-[0.12em] hover:bg-foreground hover:text-background" onClick={() => setJsonOpen(true)}>
+					<Button data-testid="json-open" size="sm" variant="outline" class="h-8 border border-border-strong px-2 text-[11px] uppercase tracking-[0.12em] hover:bg-overlay-hover hover:text-foreground" onClick={() => setJsonOpen(true)}>
 						{i18n.t("panel.viewJson")}
 					</Button>
 				</div>

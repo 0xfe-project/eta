@@ -133,8 +133,73 @@ function setWindowIcon(_target: BrowserWindow): void {
 		console.warn("[eta-desktop] failed to set the native window icon", error);
 	}
 }
+
+/**
+ * Windows has no way to resize a frameless window, and `titleBarStyle: "hidden"` — the
+ * style eta uses there — is plain `WS_POPUP`, which carries no `WS_THICKFRAME`. That bit
+ * is what Win32 hit-tests a window's edges against, so without it the window can be
+ * dragged by its header but its borders cannot be pulled. macOS has no such coupling:
+ * its resizable flag stands alone, which is why the same window resizes there.
+ *
+ * Electrobun's other frameless style, `hiddenInset`, does carry `WS_THICKFRAME`, but it
+ * gets there by keeping `WS_CAPTION` and clipping the caption away in `WM_NCCALCSIZE` —
+ * and the system still answers hit tests over that clipped band with `HTCAPTION`, which
+ * would turn the top of the window into a native drag strip and cut the page off from
+ * clicks on its own header. The popup plus this one bit keeps the header in the client
+ * area, where the page can still have it.
+ */
+function enableWindowResize(): void {
+	if (process.platform !== "win32") return;
+	try {
+		const user32 = dlopen("user32.dll", {
+			FindWindowA: { args: [FFIType.ptr, FFIType.cstring], returns: FFIType.ptr },
+			GetWindowLongPtrW: { args: [FFIType.ptr, FFIType.i32], returns: FFIType.i64 },
+			SetWindowLongPtrW: { args: [FFIType.ptr, FFIType.i32, FFIType.i64], returns: FFIType.i64 },
+			SetWindowPos: { args: [FFIType.ptr, FFIType.ptr, FFIType.i32, FFIType.i32, FFIType.i32, FFIType.i32, FFIType.u32], returns: FFIType.i32 },
+		});
+		const hwnd = user32.symbols.FindWindowA(null, Buffer.from("eta\0"));
+		if (!hwnd) return;
+		const GWL_STYLE = -16;
+		const WS_THICKFRAME = 0x00040000n;
+		const style = user32.symbols.GetWindowLongPtrW(hwnd, GWL_STYLE);
+		user32.symbols.SetWindowLongPtrW(hwnd, GWL_STYLE, style | WS_THICKFRAME);
+		// Keep the size, position, z-order and focus we were handed, and make Windows
+		// redo its frame calculation so the new borders exist before the next paint.
+		// SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED
+		user32.symbols.SetWindowPos(hwnd, null, 0, 0, 0, 0, 0x37);
+	} catch (error) {
+		console.warn("[eta-desktop] failed to make the window resizable", error);
+	}
+}
+
+/**
+ * A frame is also what makes Windows 11 round a window's corners, and the frame is
+ * exactly what the call above adds. eta's geometry is zero-radius, so the rounding is
+ * switched back off. Shells older than Windows 11 reject the attribute and nothing
+ * happens.
+ */
+function squareWindowCorners(): void {
+	if (process.platform !== "win32") return;
+	try {
+		const user32 = dlopen("user32.dll", {
+			FindWindowA: { args: [FFIType.ptr, FFIType.cstring], returns: FFIType.ptr },
+		});
+		const hwnd = user32.symbols.FindWindowA(null, Buffer.from("eta\0"));
+		if (!hwnd) return;
+		const dwmapi = dlopen("dwmapi.dll", {
+			DwmSetWindowAttribute: { args: [FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32], returns: FFIType.i32 },
+		});
+		// DWMWA_WINDOW_CORNER_PREFERENCE = 33, DWMWCP_DONOTROUND = 1.
+		dwmapi.symbols.DwmSetWindowAttribute(hwnd, 33, Buffer.from([1, 0, 0, 0]), 4);
+	} catch (error) {
+		console.warn("[eta-desktop] failed to square the window corners", error);
+	}
+}
+
 windowRef = window;
 setWindowIcon(window);
+enableWindowResize();
+squareWindowCorners();
 
 /** Menu-bar item; the same actions the window menu would carry. */
 const tray = isMac
