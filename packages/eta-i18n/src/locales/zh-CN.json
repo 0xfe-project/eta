@@ -187,6 +187,7 @@
 	"sidebar.sortName": "名称",
 	"sidebar.collapseAll": "全部折叠",
 	"sidebar.expandAll": "全部展开",
+	"composer.attachmentFailed": "附件添加失败",
 	"composer.attach": "附件",
 	"composer.models": "模型",
 	"composer.files": "文件",

@@ -27,6 +27,7 @@ import {
 	viewFingerprint,
 	viewPatch,
 	type ChannelFrame,
+	type GuiOp,
 	type DevFrame,
 	type ServerMessage,
 	type SidebarSession,
@@ -1148,16 +1149,17 @@ export class Host {
 	}
 
 	/** Composer send: steer mid-run, follow-up while running, plain prompt otherwise. */
-	queue(name: string, text: string, mode: "queue" | "steer"): void {
+	queue(name: string, text: string, mode: "queue" | "steer", attachments?: Extract<GuiOp, { op: "prompt" }>["images"]): void {
 		const entry = this.hosted.get(name);
 		if (entry === undefined) return;
 		this.attachPointerValue = name;
 		const lane = entry.agent.lane;
+		const images = attachments?.map(({ mime, dataBase64 }) => ({ type: "image" as const, mimeType: mime, data: dataBase64 }));
 		void (entry.running && mode === "steer"
-			? lane.steer(text, undefined, BACKGROUND_CONTEXT)
+			? lane.steer(text, images, BACKGROUND_CONTEXT)
 			: entry.running
-				? lane.followUp(text, undefined, BACKGROUND_CONTEXT)
-				: lane.prompt(text, undefined, BACKGROUND_CONTEXT));
+				? lane.followUp(text, images, BACKGROUND_CONTEXT)
+				: lane.prompt(text, images, BACKGROUND_CONTEXT));
 	}
 
 	async prompt(name: string, text: string): Promise<void> {

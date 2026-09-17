@@ -7,7 +7,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { themeStorageKey, themeChangeEvent } from "../../app/theme.tsx";
 import { useShellOptional } from "../../app/app-shell.tsx";
 import { apiFetch, goto } from "../../lib/host.ts";
-import type { ThinkingLevel } from "@eta/core";
+import type { ThinkingLevel, GuiOp } from "@eta/core";
 import { registerDraftSink } from "../../lib/queue-actions.ts";
 
 /** Subsequence fuzzy score: higher = better match; -1 = no match. */
@@ -42,8 +42,8 @@ export interface ComposerCreate {
 	onCwd: (cwd: string) => void;
 	/** Offered only where a folder dialog exists to answer it — see `lib/native.ts`. */
 	onBrowse?: () => void;
-	/** The server picks a persona when the person did not, so any non-empty text may send. */
-	onSend: (text: string, modelId?: string) => void;
+	/** The server picks a persona when the person did not, so text or image attachments may start a session. */
+	onSend: (text: string, modelId?: string, images?: Extract<GuiOp, { op: "prompt" }>["images"]) => void;
 }
 
 /**
@@ -111,6 +111,8 @@ export function Composer(props: {
 	const [slashIndex, setSlashIndex] = createSignal(0);
 	const [atIndex, setAtIndex] = createSignal(0);
 	const [menuClosed, setMenuClosed] = createSignal(false);
+	const [uploadsPending, setUploadsPending] = createSignal(0);
+	const [attachmentError, setAttachmentError] = createSignal("");
 	const [pendingImages, setPendingImages] = createSignal<{ name: string; mime: string; dataBase64: string }[]>([]);
 	const [toolboxOpen, setToolboxOpen] = createSignal(false);
 	const [toolFiles, setToolFiles] = createSignal<string[]>([]);
@@ -213,29 +215,48 @@ export function Composer(props: {
 		return query.length === 0 ? list.slice(0, 12) : list.map((file) => ({ file, score: fuzzyScore(query, file) })).filter((entry) => entry.score >= 0).sort((a, b) => b.score - a.score).slice(0, 12).map((entry) => entry.file);
 	});
 
-	const attachFile = (file: File, asImage: boolean) => {
+	const attachFile = async (file: File) => {
 		const session = props.session;
-		if (session === undefined) return;
-		const form = new FormData();
-		form.append("file", file);
-		void apiFetch(`/api/upload?session=${encodeURIComponent(session)}`, { method: "POST", body: form })
-			.then((response) => response.json() as Promise<{ path?: string }>)
-			.then((body) => {
-				if (body.path === undefined) return;
-				setText((textValue) => `${textValue}${textValue.endsWith(" ") || textValue.length === 0 ? "" : " "}@${body.path} `);
-				void apiFetch(`/api/files?session=${encodeURIComponent(session)}`)
-					.then((response) => response.json() as Promise<string[]>)
-					.then(setFiles)
-					.catch(() => undefined);
-				if (!asImage) return;
+		if (session === undefined && !createMode()) return;
+		setUploadsPending((count) => count + 1);
+		setAttachmentError("");
+		try {
+			const mime = file.type || ({ png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" } as Record<string, string>)[file.name.split(".").pop()?.toLowerCase() ?? ""];
+			const inline = mime !== undefined && ["image/png", "image/jpeg", "image/gif", "image/webp"].includes(mime);
+			const dataBase64 = inline ? await new Promise<string>((resolve, reject) => {
 				const reader = new FileReader();
-				reader.onload = () => {
-					const url = String(reader.result ?? "");
-					setPendingImages((list) => [...list, { name: file.name, mime: file.type || "application/octet-stream", dataBase64: url.slice(url.indexOf(",") + 1) }]);
-				};
+				reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+				reader.onerror = () => reject(reader.error);
 				reader.readAsDataURL(file);
-			})
-			.catch(() => undefined);
+			}) : undefined;
+			// A new session has no upload directory yet; keep the image in the draft
+			// and send it with session.create instead of borrowing another session.
+			if (session === undefined) {
+				if (dataBase64 === undefined || mime === undefined) throw new Error("No session for file upload");
+				setPendingImages((list) => [...list, { name: file.name, mime, dataBase64 }]);
+				return;
+			}
+			const form = new FormData();
+			form.append("file", file);
+			const response = await apiFetch(`/api/upload?session=${encodeURIComponent(session)}`, { method: "POST", body: form });
+			const body = await response.json() as { path?: string };
+			if (!response.ok || body.path === undefined) throw new Error("Upload failed");
+			if (props.session !== session) return;
+			const path = body.path;
+			if (dataBase64 !== undefined && mime !== undefined) {
+				setPendingImages((list) => [...list, { name: file.name, mime, dataBase64 }]);
+			} else {
+				setText((current) => `${current}${current.endsWith(" ") || current.length === 0 ? "" : " "}@${path} `);
+			}
+			void apiFetch(`/api/files?session=${encodeURIComponent(session)}`)
+				.then((response) => response.json() as Promise<string[]>)
+				.then(setFiles)
+				.catch(() => undefined);
+		} catch {
+			setAttachmentError(`${i18n.t("composer.attachmentFailed")}: ${file.name}`);
+		} finally {
+			setUploadsPending((count) => count - 1);
+		}
 	};
 
 	/** The box itself, so a draft handed back by a queue chip can take the caret. */
@@ -256,19 +277,20 @@ export function Composer(props: {
 	);
 
 	const submit = (mode: "queue" | "steer") => {
+		if (uploadsPending() > 0 || props.hasPendingAsk) return;
 		const value = text().trim();
 		const imagesPayload = pendingImages().length > 0 ? { images: pendingImages().map((image) => ({ mime: image.mime, dataBase64: image.dataBase64 })) } : {};
 		const create = props.create;
 		if (createMode() && create !== undefined) {
 			const plain = value.startsWith("//") ? value.slice(1) : value;
-			if (plain.length === 0) return;
-			create.onSend(plain, pickedModel());
+			if (plain.length === 0 && pendingImages().length === 0) return;
+			create.onSend(plain, pickedModel(), imagesPayload.images);
 			return;
 		}
 		const session = props.session;
 		if (session === undefined) return;
 		if (value.length === 0 && pendingImages().length > 0) {
-			store.send({ op: "prompt", session, text: "", ...imagesPayload });
+			store.send({ op: "prompt", session, text: "", ...(mode === "steer" ? { mode } : {}), ...imagesPayload });
 			setPendingImages([]);
 			return;
 		}
@@ -286,7 +308,7 @@ export function Composer(props: {
 				runCommand(command, args);
 				return;
 			}
-			store.send({ op: "prompt", session, text: value, ...(mode === "steer" ? { mode } : {}) });
+			store.send({ op: "prompt", session, text: value, ...(mode === "steer" ? { mode } : {}), ...imagesPayload });
 		} else {
 			store.send({ op: "prompt", session, text: value, ...(mode === "steer" ? { mode } : {}), ...imagesPayload });
 		}
@@ -344,22 +366,9 @@ export function Composer(props: {
 		submit(event.metaKey || event.ctrlKey ? "steer" : "queue");
 	};
 
-	/** One uploaded file becomes an `@path` at the caret; paste and drop share it. */
-	const uploadFiles = (uploaded: File[]): void => {
-		const session = props.session;
-		if (uploaded.length === 0 || session === undefined) return;
-		for (const file of uploaded) {
-			const form = new FormData();
-			form.append("file", file);
-			void apiFetch(`/api/upload?session=${encodeURIComponent(session)}`, { method: "POST", body: form })
-				.then((response) => response.json() as Promise<{ path?: string }>)
-				.then((body) => setText((current) => `${current}${current.endsWith(" ") || current.length === 0 ? "" : " "}${body.path ? `@${body.path}` : ""} `))
-				.catch(() => undefined);
-		}
-		void apiFetch(`/api/files?session=${encodeURIComponent(session)}`)
-			.then((response) => response.json() as Promise<string[]>)
-			.then(setFiles)
-			.catch(() => undefined);
+	/** File picker, clipboard and drop use the same attachment path. */
+	const uploadFiles = (uploaded: File[]) => {
+		for (const file of uploaded) void attachFile(file);
 	};
 
 	/** A file dropped anywhere else on the page would navigate the browser to
@@ -375,7 +384,7 @@ export function Composer(props: {
 		const pastedFiles = Array.from(event.clipboardData?.files ?? []);
 		const session = props.session;
 		if (pastedFiles.length > 0) {
-			if (session === undefined) return;
+			if (session === undefined && !createMode()) return;
 			event.preventDefault();
 			uploadFiles(pastedFiles);
 			return;
@@ -472,6 +481,7 @@ export function Composer(props: {
 						</div>
 					</div>
 				</Show>
+				<Show when={attachmentError()}><div role="alert" class="text-xs text-muted">{attachmentError()}</div></Show>
 				<Show when={pendingImages().length > 0}>
 					<div data-testid="attach-chips" class="flex flex-wrap gap-1 pb-1">
 						<For each={pendingImages()}>
@@ -479,7 +489,9 @@ export function Composer(props: {
 								<span data-testid={`attach-chip-${index()}`} class="flex items-center gap-1 border border-border-strong bg-elevated px-1.5 py-0.5 text-[10px]">
 									<img src={`data:${image.mime};base64,${image.dataBase64}`} alt="" class="h-5 w-5 object-cover" />
 									<span class="mono max-w-[120px] truncate">{image.name}</span>
-									<button data-testid={`attach-chip-drop-${index()}`} class="text-muted hover:text-foreground" onClick={() => setPendingImages((list) => list.filter((_, position) => position !== index()))}>
+									<button type="button" data-testid={`attach-chip-drop-${index()}`} class="text-muted hover:text-foreground" onClick={() => {
+										setPendingImages((list) => list.filter((_, position) => position !== index()));
+									}}>
 										×
 									</button>
 								</span>
@@ -594,7 +606,7 @@ export function Composer(props: {
 										class="hidden"
 										onChange={(event) => {
 											const file = event.currentTarget.files?.[0];
-											if (file !== undefined) attachFile(file, false);
+											if (file !== undefined) void attachFile(file);
 											event.currentTarget.value = "";
 										}}
 									/>
@@ -607,7 +619,7 @@ export function Composer(props: {
 										class="hidden"
 										onChange={(event) => {
 											const file = event.currentTarget.files?.[0];
-											if (file !== undefined) attachFile(file, true);
+											if (file !== undefined) void attachFile(file);
 											event.currentTarget.value = "";
 										}}
 									/>
@@ -645,8 +657,8 @@ export function Composer(props: {
 							</Show>
 							<span class="composer-toolbar-hints min-w-0 truncate max-md:hidden">{props.running ? i18n.t("composer.runningHint") : i18n.t("composer.hint")}</span>
 						</div>
-						<Button type="submit" variant="invert" class="composer-control composer-submit-control" data-testid="composer-submit" disabled={props.hasPendingAsk === true}>
-							{text().trim().length > 0 || !props.running ? i18n.t("composer.send") : i18n.t("composer.stop")}
+						<Button type="submit" variant="invert" class="composer-control composer-submit-control" data-testid="composer-submit" disabled={props.hasPendingAsk === true || uploadsPending() > 0}>
+							{text().trim().length > 0 || pendingImages().length > 0 || !props.running ? i18n.t("composer.send") : i18n.t("composer.stop")}
 						</Button>
 					</div>
 				</form>

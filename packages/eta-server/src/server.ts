@@ -726,7 +726,7 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 		case "resync":
 			return;
 		case "prompt":
-			host.queue(message.session, message.text, message.mode ?? "queue");
+			host.queue(message.session, message.text, message.mode ?? "queue", message.images);
 			return;
 		case "goal":
 			host.goal(message.session, message.action, message.objective);
@@ -826,8 +826,8 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 			const personaId =
 				message.personaId ?? (await host.suggestPersona(message.prompt ?? "", cwd, message.modelId));
 			await host.createSession(message.name, personaId, cwd, message.modelId);
-			if (message.prompt !== undefined && message.prompt.length > 0)
-				host.queue(message.name, message.prompt, "queue");
+			if ((message.prompt?.length ?? 0) > 0 || (message.images?.length ?? 0) > 0)
+				host.queue(message.name, message.prompt ?? "", "queue", message.images);
 			return;
 		}
 		case "session.delete":

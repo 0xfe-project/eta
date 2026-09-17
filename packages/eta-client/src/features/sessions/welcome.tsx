@@ -142,7 +142,7 @@ export function Welcome(props: {
 		},
 		onCwd: setCwd,
 		...(nativeAvailable() ? { onBrowse: () => void browse() } : {}),
-		onSend: (text: string, modelId?: string) => send(text, modelId),
+		onSend: (text, modelId, images) => send(text, modelId, images),
 	} satisfies ComposerCreate;
 
 	/**
@@ -150,7 +150,7 @@ export function Welcome(props: {
 	 * button that opens the session empty. Empty is only honest once a card is picked — with
 	 * nothing to infer from, a persona chosen for you is a coin flip, not a choice.
 	 */
-	function send(text: string | undefined, modelId: string | undefined): void {
+	function send(text: string | undefined, modelId: string | undefined, images?: Parameters<ComposerCreate["onSend"]>[2]): void {
 		if (creating()) return;
 		const id = personaId();
 		const folder = cwd().trim();
@@ -163,6 +163,7 @@ export function Welcome(props: {
 			...(id === null ? {} : { personaId: id }),
 			...(folder.length > 0 ? { cwd: folder } : {}),
 			...(text === undefined || text.length === 0 ? {} : { prompt: text }),
+			...(images?.length ? { images } : {}),
 			...(modelId === undefined ? {} : { modelId }),
 			...(remoteId() === undefined ? {} : { remoteId: remoteId() }),
 		});

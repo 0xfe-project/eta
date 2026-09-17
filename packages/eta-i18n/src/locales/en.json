@@ -187,6 +187,7 @@
 	"sidebar.sortName": "name",
 	"sidebar.collapseAll": "collapse all",
 	"sidebar.expandAll": "expand all",
+	"composer.attachmentFailed": "Attachment failed",
 	"composer.attach": "attach",
 	"composer.models": "model",
 	"composer.files": "files",

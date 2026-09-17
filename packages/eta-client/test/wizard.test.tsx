@@ -5,7 +5,7 @@ import { etaStore } from "../src/lib/eta-store.ts";
 import { Welcome } from "../src/features/sessions/welcome.tsx";
 import { byId, findId, queryId } from "./dom.ts";
 import { FakeSocket } from "./fake-socket.ts";
-import { cleanup, click, flush, keyDown, render, setField } from "./render.tsx";
+import { cleanup, click, fireEvent, flush, keyDown, render, setField } from "./render.tsx";
 import { MemoryRouter } from "./memory-router.tsx";
 
 /**
@@ -73,6 +73,26 @@ describe("new session surface", () => {
 		expect(sent).toMatchObject({ op: "session.create", prompt: "帮我把这个模块拆开" });
 		expect("personaId" in sent).toBe(false);
 	});
+
+	for (const text of ["", "请分析截图"]) {
+		it(`creates a session with a pasted image and ${text ? "text" : "no text"}`, async () => {
+			await mountWizard();
+			await findId("persona-Thinker");
+			setField("composer-input", text);
+			fireEvent.paste(byId("composer-input"), { clipboardData: { files: [new File(["image bytes"], "shot.png", { type: "image/png" })] } });
+			await findId("attach-chip-0");
+			expect((byId("composer-input") as HTMLTextAreaElement).value).toBe(text);
+			expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/api/upload"))).toBe(false);
+			click("composer-submit");
+			expect(FakeSocket.last()).toMatchObject({ op: "session.create", images: [{ mime: "image/png", dataBase64: btoa("image bytes") }] });
+			if (text) expect(FakeSocket.last().prompt).toBe(text);
+			// A failed creation must leave the image available for a retry.
+			flush(() => FakeSocket.instances.at(-1)!.fire("message", { data: JSON.stringify({ type: "error", message: "Try again" }) }));
+			expect(byId("attach-chip-0")).toBeTruthy();
+			click("composer-submit");
+			expect(FakeSocket.last()).toMatchObject({ op: "session.create", images: [{ mime: "image/png", dataBase64: btoa("image bytes") }] });
+		});
+	}
 
 	it("keeps the old session until creation succeeds, then focuses the new first-prompt session", async () => {
 		await mountWizard();
