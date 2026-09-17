@@ -14,8 +14,8 @@ export function sshArgs(connection: RemoteConnection): string[] {
 	return args;
 }
 export interface CommandResult { stdout: string; stderr: string; code: number }
-export async function command(args: string[], input?: Uint8Array, timeoutMs = 30_000): Promise<CommandResult> {
-	const proc = Bun.spawn(args, { stdin: input ? "pipe" : "ignore", stdout: "pipe", stderr: "pipe" });
+export async function command(args: string[], input?: Uint8Array, timeoutMs = 30_000, env?: NodeJS.ProcessEnv): Promise<CommandResult> {
+	const proc = Bun.spawn(args, { env, stdin: input ? "pipe" : "ignore", stdout: "pipe", stderr: "pipe" });
 	const timer = setTimeout(() => proc.kill(), timeoutMs);
 	try {
 		if (input && proc.stdin && typeof proc.stdin !== "number") { proc.stdin.write(input); await proc.stdin.end(); }
