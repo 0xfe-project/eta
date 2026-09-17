@@ -105,6 +105,7 @@ export type ControlOp =
 			personaId?: string;
 			cwd?: string;
 			prompt?: string;
+			images?: { mime: string; dataBase64: string }[];
 			modelId?: string;
 	  }
 	| { op: "session.delete"; name: string }
