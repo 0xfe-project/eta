@@ -17,8 +17,9 @@ bun run build:web   # 产出 packages/eta-client/dist
 | `bun run dev` + `bun run dev:web` | 前端热更新:vite :5173,`/api`、`/ws`、`/term` proxy 到 :3000 |
 | `bun run dev:desk` | 桌面壳,一条命令:自己拉 vite、等它就绪、再开 Electrobun 窗口 |
 
-桌面壳的 SDK 由本地 `electrobun` CLI 投影,第一次跑前先 `bun run --cwd packages/eta-desktop prepare:sdk`。
+桌面壳的 SDK 由跨平台的本地 `electrobun` CLI 投影（Windows 和 macOS 均可用）,第一次跑前先 `bun run --cwd packages/eta-desktop prepare:sdk`。
 `bun run prod:desk` 在 macOS 出 `.app`,在 Windows 出 `eta-Setup.exe` 和更新包,产物在 `packages/eta-desktop/artifacts/`(不进 git)。
+桌面启动时复用已有后端；没有时启动随应用打包的独立服务，日志在 `~/.eta/server.log`。退出桌面只关闭窗口和原生功能接口，后台任务继续运行。
 壳的窗口只在启动时认一次 vite;先开窗口再起 `dev:web` 的话,它会落到 `views://`(冷页面,无热更新),重开窗口即可。
 
 监听默认 `127.0.0.1`;`ETA_HOST=0.0.0.0 bun run dev` 才放同 WiFi 的手机进来(远程场景自己打隧道指向 loopback)。
@@ -31,9 +32,18 @@ bun run build:web   # 产出 packages/eta-client/dist
 2. 环境里有 `ANTHROPIC_API_KEY` → 内置 anthropic catalog,默认 `claude-sonnet-4-5`
 3. 都没有 → faux 回声流,零配置也能把整条协议链路跑通
 
+## SSH 远程工作区
+
+在「设置 → 远程」添加主机,选择远端项目目录:
+
+1. 支持 `~/.ssh/config` 别名,使用密钥或 ssh-agent 免密连接;首次先执行 `ssh <host>` 确认主机指纹
+2. 优先复用目标机器的 eta server,未安装时先点「安装 / 更新」;HTTP 和 WebSocket 走 SSH 隧道,与目标机器的桌面共用会话和配置
+3. 只用远端 server 的模型和凭据,不复制或回退到本机配置;远端未配置模型时,支持在「设置 → 远程 → <机器>」中配置
+4. 退出桌面或「断开连接」不影响后台任务;「停止机器上的服务」需确认,有会话运行时会被拒绝
+
 ## 网络
 
-在「设置 → 通用 → 网络」选择跟随系统（默认,优先使用环境代理）、手动 HTTP/HTTPS 代理或直连,配置保存到 `~/.eta/config.json` 的 `network`,重启后端或桌面应用后生效,暂不支持 PAC 和 SOCKS 代理。
+在「设置 → 通用 → 网络」选择跟随系统（默认,优先使用环境代理）、手动 HTTP/HTTPS 代理或直连,配置保存到 `~/.eta/config.json` 的 `network`,重启后端后生效（只重开桌面窗口不会重启后端）,暂不支持 PAC 和 SOCKS 代理。
 
 ## 包
 
@@ -44,7 +54,7 @@ bun run build:web   # 产出 packages/eta-client/dist
 | `packages/eta-server` | Bun HTTP+WS 托管 core:`/ws`(view/agent/dev 三通道帧)、`/term`(终端);`/api/{health,memory,personas,files,upload,settings,sessions,history,models,paste,search,git/status,git/diff,file,native/*}`;SPA 静态托管 |
 | `packages/eta-client` | SolidJS + Vite + Tailwind v4 单页(硬朗石墨:零圆角,高饱和只留给语义状态);`@xterm/xterm` 终端、katex/shiki 渲染 |
 | `packages/eta-i18n` | en / zh-CN 扁平 key 文案包(`keySeparator:false`) |
-| `packages/eta-desktop` | Electrobun 壳:eta-server 以随机 loopback 端口跑在壳进程内,页面走 vite dev 或 `views://eta/`,再补上浏览器没有的两样——窗口装饰,和 `/api/native/*` 背后的原生能力(托盘、文件夹选择、导出) |
+| `packages/eta-desktop` | Electrobun 壳:连接独立 eta-server,页面走 vite dev 或 `views://eta/`;窗口进程只提供菜单和独立认证的 `/api/native/*` 原生能力(文件夹选择、导出),退出不停止后台会话 |
 
 ## 验证
 

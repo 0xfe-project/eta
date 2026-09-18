@@ -68,7 +68,7 @@ async function waitUntilReady(): Promise<boolean> {
 	return false;
 }
 
-const build = spawn([bun, "run", "client"], { cwd: desktopDir, stdout: "inherit", stderr: "inherit" });
+const build = spawn([bun, "run", "prepare:app"], { cwd: desktopDir, stdout: "inherit", stderr: "inherit" });
 const [ready, buildExit] = await Promise.all([waitUntilReady(), build.exited]);
 
 if (buildExit !== 0) {

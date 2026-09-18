@@ -24,3 +24,6 @@ pibun/
 
 # project-scoped agent memory (agent notebook; delete this line to commit it instead)
 .eta/
+
+packages/eta-server/artifacts/
+*.bun-build

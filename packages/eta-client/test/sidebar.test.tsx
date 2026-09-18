@@ -170,4 +170,19 @@ describe("sidebar session rows", () => {
 			expect(event.defaultPrevented).toBe(true);
 		}
 	});
+
+	it("boxes a remote tag on the workspace group, not on the session rows", () => {
+		mount([
+			session("remote:abc1:eta1", {
+				cwd: "/home/me/app",
+				remote: { connectionId: "abc1", host: "devbox", label: "devbox", status: "connected" },
+			}),
+			session("local1", { cwd: "/home/me/app" }),
+		]);
+		expect(queryId("group-project-remote-abc1-app-remote")).not.toBeNull();
+		expect(queryId("group-project-app-remote")).toBeNull();
+		expect(queryId("group-project-app")).not.toBeNull();
+		// The path carries the tag; the row is just the session.
+		expect(byId("session-row-remote:abc1:eta1").textContent).not.toContain("remote");
+	});
 });

@@ -28,6 +28,12 @@
 	flex-direction:column;
 }
 
+.settings-subdialog {
+	width:min(520px,calc(100vw - 64px));
+	height:auto;
+	max-height:min(560px,calc(100dvh - 72px));
+}
+
 .settings-dialog::backdrop {
 	background:var(--backdrop);
 }

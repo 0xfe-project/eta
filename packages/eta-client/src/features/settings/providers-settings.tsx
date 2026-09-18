@@ -1,6 +1,6 @@
 import { For, Index, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import {
-	effectiveModel, modelThinkingLevels, MODEL_THINKING_LEVELS, BUILTIN_PROVIDER_PRESETS, providerPreset,
+	effectiveModel, isCustomKind, modelThinkingLevels, MODEL_THINKING_LEVELS, BUILTIN_PROVIDER_PRESETS, providerPreset,
 	type CodexLoginView, type EtaModelConfig, type ModelCapabilities, type ProviderHeaders, type ProviderInput, type ProviderSummary, type ProvidersView, type ProviderKind,
 } from "@eta/core/provider-config";
 import { useAppI18n } from "../../i18n.ts";
@@ -32,15 +32,16 @@ async function providerRequest<T>(path: string, body?: unknown, method = "POST",
 	const response = await apiFetch(path, body === undefined
 		? { signal }
 		: { method, signal, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-	if (response.status === 404 && path.startsWith("/api/providers/codex/")) throw new Error("codex_backend_outdated");
+	if (response.status === 404 && path.includes("/api/providers/codex/")) throw new Error("codex_backend_outdated");
 	let result: unknown;
 	try { result = await response.json(); } catch { throw new Error("connection_failed"); }
 	if (!response.ok) throw new Error((result as { error?: string })?.error ?? "connection_failed");
 	return result as T;
 }
 
-export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; onBusyChange(busy: boolean): void }) {
+export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; onBusyChange(busy: boolean): void; apiBase?: string }) {
 	const i18n = useAppI18n();
+	const api = (path: string) => `${props.apiBase ?? ""}${path}`;
 	const [view, setView] = createSignal<ProvidersView>();
 	const [draft, setDraft] = createSignal<ProviderInput>();
 	const [baseline, setBaseline] = createSignal("");
@@ -55,14 +56,14 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 	const [loginAnswer, setLoginAnswer] = createSignal("");
 	const [answerBusy, setAnswerBusy] = createSignal(false);
 	let loginTimer: ReturnType<typeof setTimeout> | undefined;
-	const cancelLogin = () => { const id = login()?.id; clearTimeout(loginTimer); setLogin(undefined); setLoginAnswer(""); if (id) void providerRequest("/api/providers/codex/cancel", { id }).catch(() => {}); };
+	const cancelLogin = () => { const id = login()?.id; clearTimeout(loginTimer); setLogin(undefined); setLoginAnswer(""); if (id) void providerRequest(api("/api/providers/codex/cancel"), { id }).catch(() => {}); };
 	let controller: AbortController | undefined;
 	let generation = 0;
 	const dirty = () => draft() !== undefined && JSON.stringify(draft()) !== baseline();
 	const editingExisting = () => view()?.providers.some(provider => provider.id === draft()?.id) ?? false;
 	createEffect(() => props.onDirtyChange(dirty()));
 	createEffect(() => props.onBusyChange(busy()));
-	onCleanup(() => { generation += 1; controller?.abort(); cancelLogin(); });
+	onCleanup(() => { generation += 1; controller?.abort(); cancelLogin(); props.onDirtyChange(false); });
 
 	const message = () => {
 		const key = `providers.error.${error()}`;
@@ -71,7 +72,7 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 	};
 	const load = async () => {
 		try {
-			const result = await providerRequest<ProvidersView>("/api/providers");
+			const result = await providerRequest<ProvidersView>(api("/api/providers"));
 			if (!result || !Array.isArray(result.providers)) throw new Error("invalid_saved_config");
 			setView(result); setError("");
 		} catch (cause) { setError(cause instanceof Error ? cause.message : "connection_failed"); }
@@ -96,8 +97,8 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 		generation += 1; controller?.abort(); cancelLogin();
 		let next: ProviderInput;
 		if (typeof provider === "string") {
-			const id = provider !== "openai-compatible" && !view()?.providers.some(item => item.id === provider)
-				? provider : `${provider === "openai-compatible" ? "custom" : provider}-${crypto.randomUUID().slice(0, 8)}`;
+			const id = !isCustomKind(provider) && !view()?.providers.some(item => item.id === provider)
+				? provider : `${isCustomKind(provider) ? "custom" : provider}-${crypto.randomUUID().slice(0, 8)}`;
 			next = { id, kind: provider, baseUrl: providerPreset(provider)?.baseUrl ?? "", models: [] };
 			setHasKey(false);
 			setHeaderRows([]);
@@ -120,7 +121,7 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 		controller?.abort(); controller = new AbortController();
 		setBusy(true); setError(""); setStatus("");
 		try {
-			const result = await providerRequest<{ models: EtaModelConfig[] }>("/api/providers/discover", { provider: draft() }, "POST", controller.signal);
+			const result = await providerRequest<{ models: EtaModelConfig[] }>(api("/api/providers/discover"), { provider: draft() }, "POST", controller.signal);
 			if (attempt !== generation) return;
 			if (!Array.isArray(result.models)) throw new Error("invalid_models_response");
 			update({ models: result.models }); setStatus("connected");
@@ -133,12 +134,12 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 		cancelLogin(); setError(""); setBusy(true);
 		const attempt = generation;
 		try {
-			const started = await providerRequest<CodexLoginView>("/api/providers/codex/login", { providerId: draft()!.id, method });
-			if (attempt !== generation) { void providerRequest("/api/providers/codex/cancel", { id: started.id }); return; }
+			const started = await providerRequest<CodexLoginView>(api("/api/providers/codex/login"), { providerId: draft()!.id, method });
+			if (attempt !== generation) { void providerRequest(api("/api/providers/codex/cancel"), { id: started.id }); return; }
 			setLogin(started);
 			const poll = async () => {
 				try {
-					const current = await providerRequest<CodexLoginView>("/api/providers/codex/status", { id: started.id });
+					const current = await providerRequest<CodexLoginView>(api("/api/providers/codex/status"), { id: started.id });
 					if (login()?.id !== started.id) return;
 					setLogin(current);
 					if (current.status === "complete") { setLogin(undefined); setLoginAnswer(""); await discover(); }
@@ -157,7 +158,7 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 		const attempt = generation;
 		setAnswerBusy(true); setError("");
 		try {
-			await providerRequest("/api/providers/codex/answer", { id: flow.id, promptId: flow.manualPromptId, value: loginAnswer().trim() });
+			await providerRequest(api("/api/providers/codex/answer"), { id: flow.id, promptId: flow.manualPromptId, value: loginAnswer().trim() });
 			if (attempt === generation) setLoginAnswer("");
 		} catch (cause) { if (attempt === generation) setError(cause instanceof Error ? cause.message : "connection_failed"); }
 		finally { setAnswerBusy(false); }
@@ -172,21 +173,21 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 	const save = async () => {
 		if (!draft() || !view() || busy()) return;
 		setBusy(true); setError("");
-		try { accept(await providerRequest<ProvidersView>("/api/providers", { revision: view()!.revision, provider: draft() })); }
+		try { accept(await providerRequest<ProvidersView>(api("/api/providers"), { revision: view()!.revision, provider: draft() })); }
 		catch (cause) { setError(cause instanceof Error ? cause.message : "save_failed"); }
 		finally { setBusy(false); }
 	};
 	const remove = async () => {
 		if (!draft() || !view() || busy()) return;
 		setBusy(true); setError("");
-		try { accept(await providerRequest<ProvidersView>(`/api/providers/${encodeURIComponent(draft()!.id)}`, { revision: view()!.revision }, "DELETE")); }
+		try { accept(await providerRequest<ProvidersView>(api(`/api/providers/${encodeURIComponent(draft()!.id)}`), { revision: view()!.revision }, "DELETE")); }
 		catch (cause) { setError(cause instanceof Error ? cause.message : "save_failed"); }
 		finally { setBusy(false); }
 	};
 	const defaultModel = async (value: string) => {
 		if (!view() || busy()) return;
 		setBusy(true); setError("");
-		try { setView(await providerRequest<ProvidersView>("/api/providers/default", { revision: view()!.revision, defaultModel: value || null })); changed(); }
+		try { setView(await providerRequest<ProvidersView>(api("/api/providers/default"), { revision: view()!.revision, defaultModel: value || null })); changed(); }
 		catch (cause) { setError(cause instanceof Error ? cause.message : "save_failed"); }
 		finally { setBusy(false); }
 	};
@@ -223,9 +224,9 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 					<Show when={!login()}><button class="settings-text-button" data-testid="codex-device-login" disabled={busy()} onClick={() => void startLogin("device_code")}>{i18n.t("providers.codexDeviceAlternative")}</button></Show>
 				</section></Show>
 				<fieldset disabled={busy() || !!login()}>
-					<Show when={current().kind === "openai-compatible"}><label class="settings-field">{i18n.t("providers.name")}<input data-testid="provider-name" value={current().name ?? ""} onInput={event => update({ name: event.currentTarget.value || undefined })} /></label><label class="settings-field">Base URL<input data-testid="provider-url" placeholder="https://example.com/v1" value={current().baseUrl} onInput={event => update({ baseUrl: event.currentTarget.value })} /></label></Show>
+					<Show when={isCustomKind(current().kind)}><label class="settings-field">{i18n.t("providers.name")}<input data-testid="provider-name" value={current().name ?? ""} onInput={event => update({ name: event.currentTarget.value || undefined })} /></label><label class="settings-field">Base URL<input data-testid="provider-url" placeholder="https://example.com/v1" value={current().baseUrl} onInput={event => update({ baseUrl: event.currentTarget.value })} /></label><label class="settings-field">{i18n.t("providers.protocol")}<select data-testid="provider-protocol" value={current().kind} onChange={event => update({ kind: event.currentTarget.value as ProviderKind })}><option value="openai-compatible">{i18n.t("providers.protocolChatCompletions")}</option><option value="openai-responses">{i18n.t("providers.protocolResponses")}</option></select></label></Show>
 					<Show when={current().kind !== "openai-codex"}><label class="settings-field">API Key<input data-testid="provider-key" type="password" autocomplete="off" value={current().apiKey ?? ""} placeholder={hasKey() ? i18n.t("providers.keepKey") : i18n.t("providers.enterKey")} onInput={event => update({ apiKey: event.currentTarget.value || undefined })} /></label></Show>
-					<Show when={hasKey() && current().kind === "openai-compatible"}><button class="settings-text-button" onClick={() => update({ apiKey: null })}>{current().apiKey === null ? i18n.t("providers.keyWillClear") : i18n.t("providers.clearKey")}</button></Show>
+					<Show when={hasKey() && isCustomKind(current().kind)}><button class="settings-text-button" onClick={() => update({ apiKey: null })}>{current().apiKey === null ? i18n.t("providers.keyWillClear") : i18n.t("providers.clearKey")}</button></Show>
 					<Show when={current().kind !== "openai-codex"}><details class="settings-headers" data-testid="provider-headers" open={headerRows().length > 0}>
 						<summary>{i18n.t("providers.headers")}</summary>
 						<Index each={headerRows()}>{(row, index) => <div class="settings-header-row">
@@ -241,8 +242,8 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 					</details></Show>
 					<div class="settings-inline"><button data-testid="provider-discover" class="settings-primary" onClick={() => void discover()}>{busy() ? i18n.t("providers.connecting") : current().models.length > 0 ? i18n.t("providers.refresh") : i18n.t("providers.connectModels")}</button><span class="settings-hint" aria-live="polite">{status() === "connected" ? i18n.t("providers.connected", { n: current().models.length }) : ""}</span></div>
 					<Show when={current().models.length > 0}><div class="settings-section-label">{i18n.t("providers.models")}</div></Show>
-					<Index each={current().models}>{(model, index) => <ModelEditor model={model()} custom={current().kind === "openai-compatible"} onUpdate={patch => updateModel(index, patch)} onRemove={() => update({ models: current().models.filter((_, i) => i !== index) })} />}</Index>
-					<Show when={current().kind === "openai-compatible"}><button data-testid="provider-add-model" class="settings-add-model" onClick={() => update({ models: [...current().models, { id: "", overrides: { contextWindow: 128000, maxTokens: 8192, input: ["text"], reasoning: false } }] })}>＋ {i18n.t("providers.addModel")}</button></Show>
+					<Index each={current().models}>{(model, index) => <ModelEditor model={model()} custom={isCustomKind(current().kind)} onUpdate={patch => updateModel(index, patch)} onRemove={() => update({ models: current().models.filter((_, i) => i !== index) })} />}</Index>
+					<Show when={isCustomKind(current().kind)}><button data-testid="provider-add-model" class="settings-add-model" onClick={() => update({ models: [...current().models, { id: "", overrides: { contextWindow: 128000, maxTokens: 8192, input: ["text"], reasoning: false } }] })}>＋ {i18n.t("providers.addModel")}</button></Show>
 				</fieldset>
 				<div class="settings-provider-actions">
 					<Show when={deleteConfirm()} fallback={

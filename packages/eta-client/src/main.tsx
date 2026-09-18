@@ -1,4 +1,4 @@
-import { onMount } from "solid-js";
+import { Show, onMount } from "solid-js";
 import { render } from "solid-js/web";
 import { HashRouter, Route, Router, useNavigate } from "@solidjs/router";
 import "./styles/graphite.css";
@@ -53,10 +53,22 @@ const routes = () => (
 	</>
 );
 
+/** Shown instead of the app when the shell has no backend to talk to at all. */
+function ServiceUnavailable(props: { message: string }) {
+	return (
+		<main class="flex h-full flex-col items-center justify-center gap-3 p-8" data-testid="service-unavailable">
+			<h1 class="text-sm font-medium">eta</h1>
+			<p class="max-w-[52ch] text-center font-mono text-[11px] leading-5 text-muted">{props.message}</p>
+		</main>
+	);
+}
+
 render(
 	() => (
 		<ThemeProvider>
-			{host().kind === "desktop" ? <HashRouter>{routes()}</HashRouter> : <Router>{routes()}</Router>}
+			<Show when={host().error} fallback={host().kind === "desktop" ? <HashRouter>{routes()}</HashRouter> : <Router>{routes()}</Router>}>
+				{(message) => <ServiceUnavailable message={message()} />}
+			</Show>
 			<SettingsHost />
 		</ThemeProvider>
 	),

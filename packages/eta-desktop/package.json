@@ -6,8 +6,10 @@
 		"icons": "bun scripts/tray-icon.ts",
 		"prepare:sdk": "bun x --bun electrobun prepare",
 		"client": "bun run --cwd ../eta-client build",
+		"backend": "bun scripts/backend.ts",
+		"prepare:app": "bun run backend && bun run client",
 		"dev": "bun scripts/dev.ts",
-		"dev:views": "bun run client && bun x --bun electrobun dev --env=dev",
+		"dev:views": "bun run prepare:app && bun x --bun electrobun dev --env=dev",
 		"build": "bun scripts/build.ts",
 		"typecheck": "bun scripts/typecheck.ts"
 	},

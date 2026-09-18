@@ -1,9 +1,8 @@
 /**
  * eta's desktop shell.
  *
- * The eta server runs inside this process and the webview loads the built
- * eta-client, so the shell adds exactly two things a browser tab cannot have:
- * the window chrome, and the native capabilities behind `/api/native/*`.
+ * The window connects to the machine's independent eta service. This process owns
+ * only window chrome and native capabilities; quitting it leaves sessions running.
  *
  * Three facts the P0 probe (/tmp/eta-p0) established, and this file depends on:
  * a page served from `views://` may open a WebSocket to `127.0.0.1`; `preload` is
@@ -12,17 +11,19 @@
  * alpha, which is why `scripts/tray-icon.ts` draws the mark rather than cropping
  * the logo PNG.
  */
-import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { dlopen, FFIType } from "bun:ffi";
+import { join } from "node:path";
 import { ApplicationMenu, BrowserWindow, PATHS, Tray, Utils, type ApplicationMenuItemConfig } from "electrobun/main";
-import { startServer, type EtaServer, type NativeHandlers } from "../../../eta-server/src/server.ts";
+import type { BackendDescriptor } from "../../../eta-core/src/remote.ts";
+import { ensureBackend } from "../../../eta-server/src/service-launcher.ts";
+import { startNativeBridge } from "./native-bridge.ts";
+import { configureWindowsWindow } from "./platform/windows/index.ts";
 
 const VERSION = "0.1.0";
-const CLIENT_DIST = fileURLToPath(new URL("../../eta-client/dist", import.meta.url));
+const CLIENT_DIST = join(PATHS.VIEWS_FOLDER, "eta");
+const BACKEND = join(PATHS.VIEWS_FOLDER, "eta-backend", process.platform === "win32" ? "eta-server.exe" : "eta-server");
 const isMac = process.platform === "darwin";
+let windowRef: BrowserWindow | undefined;
 
 /** The `action` strings the front-end answers; see eta-client/src/lib/native.ts. */
 const ACTIONS = {
@@ -36,52 +37,47 @@ const ACTIONS = {
 	quit: "app.quit",
 } as const;
 
-const token = crypto.randomUUID().replaceAll("-", "");
-let windowRef: BrowserWindow | undefined;
-
-const server: EtaServer = await startServer({
-	settingsToken: token,
-	// Random port, loopback only: `dev:web` may already hold 3000 with SO_REUSEPORT,
-	// and the shell tells the page where it is through the preload anyway.
-	port: 0,
-	hostname: "127.0.0.1",
-	reusePort: false,
-	webDist: CLIENT_DIST,
-	platform: process.platform,
-	appVersion: VERSION,
-	native: {
-		async folderDialog(input): Promise<string | null> {
-			const picked = await Utils.openFileDialog({
-				canChooseFiles: false,
-				canChooseDirectory: true,
-				allowsMultipleSelection: false,
-				...(input.startingFolder === undefined ? {} : { startingFolder: input.startingFolder }),
-			});
-			return picked[0] ?? null;
-		},
-		/** Hutch has no save dialog yet, so exports land somewhere findable. */
-		async saveFile({ content, filename }): Promise<string | null> {
-			const target = join(homedir(), ".eta", "exports", filename.replace(/[/\\]/g, "-"));
-			await Bun.write(target, content);
-			return target;
-		},
-		windowAction({ action }): void {
-			const current = windowRef;
-			if (current === undefined) return;
-			if (action === "minimize") current.minimize();
-			else if (action === "toggle-maximize") current.isMaximized() ? current.unmaximize() : current.maximize();
-			else current.close();
-		},
-		contextMenu({ items }): void {
-			console.log(`[eta-desktop] contextMenu(${String(items.length)} items) is not wired up yet`);
-		},
-	} satisfies NativeHandlers,
-});
-
-const apiBase = `http://127.0.0.1:${String(server.port)}`;
-/** Settings requests carry the preload credential as an Authorization header. */
-
-const health = await fetch(`${apiBase}/api/health`).then((response) => response.status).catch(() => 0);
+// The child is detached and claims its own lock; the window never owns sessions.
+let descriptor: BackendDescriptor | undefined;
+let serviceError: string | undefined;
+try {
+	descriptor = await ensureBackend({ command: [BACKEND, "serve"], webDist: CLIENT_DIST, version: VERSION });
+} catch (error) {
+	serviceError = error instanceof Error ? error.message : String(error);
+	console.error(`[eta-desktop] ${serviceError}`);
+}
+const apiBase = descriptor === undefined ? "" : `http://127.0.0.1:${String(descriptor.port)}`;
+const credential = descriptor?.token;
+const nativeBridge = startNativeBridge({
+	async folderDialog(input): Promise<string | null> {
+		const picked = await Utils.openFileDialog({
+			canChooseFiles: false,
+			canChooseDirectory: true,
+			allowsMultipleSelection: false,
+			...(input.startingFolder === undefined ? {} : { startingFolder: input.startingFolder }),
+		});
+		return picked[0] ?? null;
+	},
+	async saveFile({ content, filename }): Promise<string | null> {
+		const target = join(homedir(), ".eta", "exports", filename.replace(/[/\\]/g, "-"));
+		await Bun.write(target, content);
+		return target;
+	},
+	/** `views://` has no browser behind it: a link only opens if the shell opens it. */
+	openExternal({ url }): void {
+		Utils.openExternal(url);
+	},
+	contextMenu({ items }): void {
+		console.log(`[eta-desktop] contextMenu(${String(items.length)} items) is not wired up yet`);
+	},
+	windowAction({ action }): void {
+		const current = windowRef;
+		if (current === undefined) return;
+		if (action === "minimize") current.minimize();
+		else if (action === "toggle-maximize") current.isMaximized() ? current.unmaximize() : current.maximize();
+		else current.close();
+	},
+}, VERSION);
 
 /**
  * In `dev:desk` the vite server is usually up and hot reload beats a rebuild loop.
@@ -96,7 +92,7 @@ const devIsOurs = await fetch(devUrl, { signal: AbortSignal.timeout(400) })
 	.catch(() => false);
 const pageUrl = devIsOurs ? devUrl : "views://eta/index.html";
 
-console.log(`[eta-desktop] server ${apiBase} health=${String(health)} page=${pageUrl}`);
+console.log(`[eta-desktop] backend ${apiBase} page=${pageUrl}`);
 
 const window = new BrowserWindow({
 	title: "eta",
@@ -107,99 +103,21 @@ const window = new BrowserWindow({
 	// draws the three controls, so there is no native title bar or small icon.
 	titleBarStyle: isMac ? "hiddenInset" : "hidden",
 	...(isMac ? { trafficLightOffset: { x: 14, y: Number(process.env["ETA_LIGHT_Y"] ?? 5) } } : {}),
-	preload: `window.__ETA_HOST__=${JSON.stringify({ apiBase, token, platform: process.platform, appVersion: VERSION })};`,
+	preload: `window.__ETA_HOST__=${JSON.stringify({
+		apiBase,
+		token: credential,
+		platform: process.platform,
+		appVersion: VERSION,
+		native: true,
+		nativeApiBase: nativeBridge.apiBase,
+		nativeToken: nativeBridge.token,
+		role: descriptor?.role ?? "dev",
+		...(serviceError === undefined ? {} : { error: serviceError }),
+	})};`,
 });
-
-/** Set the HWND icon directly: Electrobun's wrapper does not reach this window. */
-function setWindowIcon(_target: BrowserWindow): void {
-	if (process.platform !== "win32") return;
-	const iconPath = join(PATHS.VIEWS_FOLDER, "eta", "Eta-Logo.ico");
-	if (!existsSync(iconPath)) return;
-	try {
-		const user32 = dlopen("user32.dll", {
-			FindWindowA: { args: [FFIType.ptr, FFIType.cstring], returns: FFIType.ptr },
-			LoadImageA: { args: [FFIType.ptr, FFIType.cstring, FFIType.u32, FFIType.i32, FFIType.i32, FFIType.u32], returns: FFIType.ptr },
-			SendMessageW: { args: [FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.ptr], returns: FFIType.ptr },
-		});
-		const title = Buffer.from("eta\0");
-		const icon = Buffer.from(`${iconPath}\0`);
-		const hwnd = user32.symbols.FindWindowA(null, title);
-		if (!hwnd) return;
-		const small = user32.symbols.LoadImageA(null, icon, 1, 16, 16, 0x10);
-		const large = user32.symbols.LoadImageA(null, icon, 1, 32, 32, 0x10);
-		if (small) user32.symbols.SendMessageW(hwnd, 0x0080, 0, small);
-		if (large) user32.symbols.SendMessageW(hwnd, 0x0080, 1, large);
-	} catch (error) {
-		console.warn("[eta-desktop] failed to set the native window icon", error);
-	}
-}
-
-/**
- * Windows has no way to resize a frameless window, and `titleBarStyle: "hidden"` — the
- * style eta uses there — is plain `WS_POPUP`, which carries no `WS_THICKFRAME`. That bit
- * is what Win32 hit-tests a window's edges against, so without it the window can be
- * dragged by its header but its borders cannot be pulled. macOS has no such coupling:
- * its resizable flag stands alone, which is why the same window resizes there.
- *
- * Electrobun's other frameless style, `hiddenInset`, does carry `WS_THICKFRAME`, but it
- * gets there by keeping `WS_CAPTION` and clipping the caption away in `WM_NCCALCSIZE` —
- * and the system still answers hit tests over that clipped band with `HTCAPTION`, which
- * would turn the top of the window into a native drag strip and cut the page off from
- * clicks on its own header. The popup plus this one bit keeps the header in the client
- * area, where the page can still have it.
- */
-function enableWindowResize(): void {
-	if (process.platform !== "win32") return;
-	try {
-		const user32 = dlopen("user32.dll", {
-			FindWindowA: { args: [FFIType.ptr, FFIType.cstring], returns: FFIType.ptr },
-			GetWindowLongPtrW: { args: [FFIType.ptr, FFIType.i32], returns: FFIType.i64 },
-			SetWindowLongPtrW: { args: [FFIType.ptr, FFIType.i32, FFIType.i64], returns: FFIType.i64 },
-			SetWindowPos: { args: [FFIType.ptr, FFIType.ptr, FFIType.i32, FFIType.i32, FFIType.i32, FFIType.i32, FFIType.u32], returns: FFIType.i32 },
-		});
-		const hwnd = user32.symbols.FindWindowA(null, Buffer.from("eta\0"));
-		if (!hwnd) return;
-		const GWL_STYLE = -16;
-		const WS_THICKFRAME = 0x00040000n;
-		const style = user32.symbols.GetWindowLongPtrW(hwnd, GWL_STYLE);
-		user32.symbols.SetWindowLongPtrW(hwnd, GWL_STYLE, style | WS_THICKFRAME);
-		// Keep the size, position, z-order and focus we were handed, and make Windows
-		// redo its frame calculation so the new borders exist before the next paint.
-		// SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED
-		user32.symbols.SetWindowPos(hwnd, null, 0, 0, 0, 0, 0x37);
-	} catch (error) {
-		console.warn("[eta-desktop] failed to make the window resizable", error);
-	}
-}
-
-/**
- * A frame is also what makes Windows 11 round a window's corners, and the frame is
- * exactly what the call above adds. eta's geometry is zero-radius, so the rounding is
- * switched back off. Shells older than Windows 11 reject the attribute and nothing
- * happens.
- */
-function squareWindowCorners(): void {
-	if (process.platform !== "win32") return;
-	try {
-		const user32 = dlopen("user32.dll", {
-			FindWindowA: { args: [FFIType.ptr, FFIType.cstring], returns: FFIType.ptr },
-		});
-		const hwnd = user32.symbols.FindWindowA(null, Buffer.from("eta\0"));
-		if (!hwnd) return;
-		const dwmapi = dlopen("dwmapi.dll", {
-			DwmSetWindowAttribute: { args: [FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32], returns: FFIType.i32 },
-		});
-		// DWMWA_WINDOW_CORNER_PREFERENCE = 33, DWMWCP_DONOTROUND = 1.
-		dwmapi.symbols.DwmSetWindowAttribute(hwnd, 33, Buffer.from([1, 0, 0, 0]), 4);
-	} catch (error) {
-		console.warn("[eta-desktop] failed to square the window corners", error);
-	}
-}
-
 windowRef = window;
-setWindowIcon(window);
-enableWindowResize();
-squareWindowCorners();
+
+if (process.platform === "win32") configureWindowsWindow(window);
 
 /** Menu-bar item; the same actions the window menu would carry. */
 const tray = isMac
@@ -310,7 +228,8 @@ function runAction(action: string, kind: "menu" | "tray"): void {
 		process.exit(0);
 		return;
 	}
-	server.push({ type: "native", kind, action });
+	// Window actions belong to this client, not every subscriber of the shared backend.
+	window.webview.executeJavascript(`window.__etaNative?.(${JSON.stringify({ kind, action })})`);
 }
 
 if (isMac) ApplicationMenu.setApplicationMenu(APP_MENU);
@@ -324,13 +243,11 @@ tray.on("tray-clicked", (event) => {
 	if (action !== undefined) runAction(action, "tray");
 });
 
-// `close()` stops the listener and kills every shell the terminal registry started;
-// without the exit hook an app quit leaves zsh processes behind. ⌘Q reaches us as a
-// signal rather than a call, so the same cleanup has to hang off that too.
+// Only the window-local capability bridge stops here. The backend has its own PID.
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
 	process.on(signal, () => process.exit(0));
 }
 process.on("exit", () => {
 	tray.remove();
-	server.close();
+	nativeBridge.close();
 });

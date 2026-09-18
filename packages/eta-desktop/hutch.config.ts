@@ -4,7 +4,7 @@
  */
 export default {
 	scripts: {
-		start: "bun x --bun electrobun prepare && bun x --bun electrobun dev --env=dev",
+		start: "bun run prepare:app && bun x --bun electrobun prepare && bun x --bun electrobun dev --env=dev",
 	},
 	electrobun: {
 		version: "2.0.1",

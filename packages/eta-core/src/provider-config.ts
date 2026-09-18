@@ -1,7 +1,7 @@
 import type { ThinkingLevel } from "./types.ts";
 
 export const MODEL_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
-export type ProviderKind = "kimi-coding" | "deepseek" | "openai-codex" | "openai-compatible";
+export type ProviderKind = "kimi-coding" | "deepseek" | "openai-codex" | "openai-compatible" | "openai-responses";
 
 export const BUILTIN_PROVIDER_PRESETS = {
 	"openai-codex": { name: "Codex", baseUrl: "https://chatgpt.com/backend-api", logo: "openai.svg" },
@@ -10,7 +10,18 @@ export const BUILTIN_PROVIDER_PRESETS = {
 } as const;
 
 export function providerPreset(kind: ProviderKind) {
-	return kind === "openai-compatible" ? undefined : BUILTIN_PROVIDER_PRESETS[kind];
+	return isCustomKind(kind) ? undefined : BUILTIN_PROVIDER_PRESETS[kind];
+}
+
+/**
+ * Kinds with no built-in endpoint: the user supplies the URL, the key and the model list.
+ * Both custom kinds speak OpenAI's wire protocols and differ only in the transport they pick:
+ * `openai-responses` posts to `/responses`, `openai-compatible` to `/chat/completions`.
+ */
+export function isCustomKind(kind: ProviderKind | undefined): kind is "openai-compatible" | "openai-responses" {
+	// A config entry written before kinds existed has none, and the historical reading of that
+	// is the custom Chat Completions endpoint — the same default `normalizeProvider` applies.
+	return kind === undefined || kind === "openai-compatible" || kind === "openai-responses";
 }
 
 /** Provider-owned capabilities. Missing metadata is unknown, not a negative claim. */

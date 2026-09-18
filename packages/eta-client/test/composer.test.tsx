@@ -86,6 +86,17 @@ describe("composer keyboard semantics", () => {
 		expect((byId("composer-input") as HTMLTextAreaElement).value).toContain("@package.json");
 	});
 
+	it("@ searches Chinese filenames and sends the selected reference", async () => {
+		vi.stubGlobal("fetch", vi.fn(async () => Response.json(["文档/需求.md"])));
+		const { Composer } = await import("../src/features/sessions/composer.tsx");
+		render(<Composer session="s1" />);
+		setField("composer-input", "看看 @需求");
+		expect(await findId("mention-文档/需求.md")).toBeTruthy();
+		keyDown("composer-input", "Enter");
+		keyDown("composer-input", "Enter");
+		expect(FakeSocket.last()).toEqual({ op: "prompt", session: "s1", text: "看看 @文档/需求.md" });
+	});
+
 	it("slash /ab lists commands and Enter runs abort", async () => {
 		const { Composer } = await import("../src/features/sessions/composer.tsx");
 		render(<Composer session="s1" running={false} hasPendingAsk={false} />);

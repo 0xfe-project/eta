@@ -5,9 +5,10 @@ import { sidebarPrefs, type ProjectSort } from "../lib/prefs.ts";
 import { apiFetch } from "../lib/host.ts";
 import { NetworkSettings } from "../features/settings/network-settings.tsx";
 import { ProvidersSettings } from "../features/settings/providers-settings.tsx";
+import { RemotesSettings } from "../features/settings/remotes-settings.tsx";
 import "../features/settings/settings.css";
 
-type SettingsSection = "general" | "session" | "providers";
+type SettingsSection = "general" | "session" | "providers" | "remotes";
 interface SettingsFile { personaId?: string; keepRecentTokens?: number }
 
 export function SettingsRow(props: { label: string; note?: string; children: JSX.Element }) {
@@ -28,12 +29,15 @@ export function SettingsPage(props: { onDirtyChange?: (dirty: boolean) => void; 
 	const [networkBusy, setNetworkBusy] = createSignal(false);
 	const [providersDirty, setProvidersDirty] = createSignal(false);
 	const [providersBusy, setProvidersBusy] = createSignal(false);
+	const [remotesDirty, setRemotesDirty] = createSignal(false);
+	const [remotesBusy, setRemotesBusy] = createSignal(false);
 	const sections = () => [
 		{ id: "general" as const, label: i18n.t("settings.general"), icon: "◎" },
 		{ id: "session" as const, label: i18n.t("settings.sessions"), icon: "≡" },
 		{ id: "providers" as const, label: i18n.t("settings.providers"), icon: "⌘" },
+		{ id: "remotes" as const, label: i18n.t("settings.remotes"), icon: "⌁" },
 	];
-	const reportBusy = () => props.onBusyChange?.(networkBusy() || providersBusy() || saveState() === "saving");
+	const reportBusy = () => props.onBusyChange?.(networkBusy() || providersBusy() || remotesBusy() || saveState() === "saving");
 	const load = async () => {
 		setLoading(true);
 		try {
@@ -74,7 +78,7 @@ export function SettingsPage(props: { onDirtyChange?: (dirty: boolean) => void; 
 				<div class="settings-section-label">{i18n.t("settings.sidebar")}</div>
 				<SettingsRow label={i18n.t("settings.projectSort")}><select aria-label={i18n.t("settings.projectSort")} value={sidebarPrefs.sort} onChange={event => sidebarPrefs.setSort(event.currentTarget.value as ProjectSort)}><option value="recent">{i18n.t("sidebar.sortRecent")}</option><option value="name">{i18n.t("sidebar.sortName")}</option></select></SettingsRow>
 				<Show when={sidebarPrefs.collapsed.length > 0}><SettingsRow label={i18n.t("settings.projectGroups")}><button data-testid="sidebar-expand-all" onClick={() => sidebarPrefs.setCollapsed([])}>{i18n.t("settings.expandGroups", { n: sidebarPrefs.collapsed.length })}</button></SettingsRow></Show>
-				<NetworkSettings onDirtyChange={value => { setNetworkDirty(value); props.onDirtyChange?.(providersDirty() || networkDirty()); }} onBusyChange={value => { setNetworkBusy(value); reportBusy(); }} />
+				<NetworkSettings onDirtyChange={value => { setNetworkDirty(value); props.onDirtyChange?.(providersDirty() || remotesDirty() || networkDirty()); }} onBusyChange={value => { setNetworkBusy(value); reportBusy(); }} />
 			</section>
 			<section hidden={section() !== "session"}>
 				<div class="settings-heading"><h2>{i18n.t("settings.sessions")}</h2><p>{i18n.t("settings.sessionDescription")}</p></div>
@@ -91,7 +95,10 @@ export function SettingsPage(props: { onDirtyChange?: (dirty: boolean) => void; 
 				<Show when={saveState() === "error"}><button onClick={() => void load()}>{i18n.t("settings.retry")}</button></Show>
 			</section>
 			<section hidden={section() !== "providers"}>
-				<ProvidersSettings onDirtyChange={value => { setProvidersDirty(value); props.onDirtyChange?.(providersDirty() || networkDirty()); }} onBusyChange={value => { setProvidersBusy(value); reportBusy(); }} />
+				<ProvidersSettings onDirtyChange={value => { setProvidersDirty(value); props.onDirtyChange?.(providersDirty() || remotesDirty() || networkDirty()); }} onBusyChange={value => { setProvidersBusy(value); reportBusy(); }} />
+			</section>
+			<section hidden={section() !== "remotes"}>
+				<RemotesSettings onDirtyChange={value => { setRemotesDirty(value); props.onDirtyChange?.(providersDirty() || remotesDirty() || networkDirty()); }} onBusyChange={value => { setRemotesBusy(value); reportBusy(); }} />
 			</section>
 		</main>
 	</div>;

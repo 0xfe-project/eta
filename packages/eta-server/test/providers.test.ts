@@ -151,6 +151,20 @@ describe("provider discovery and configuration", () => {
 		});
 	});
 
+	it("treats the Responses protocol as a custom endpoint and rejects unknown kinds", async () => {
+		await fixture(async store => {
+			// A custom kind needs no key, exactly like openai-compatible.
+			const custom = { ...provider, kind: "openai-responses" as const, apiKey: undefined, baseUrl: "https://example.com/v1", models: [{ id: "grok-4.6", overrides: { contextWindow: 2_000_000 } }] };
+			await store.save({ revision: (await store.view()).revision, provider: custom });
+			const view = await store.view();
+			expect(view.providers[0]!.kind).toBe("openai-responses");
+			expect(view.providers[0]!.hasApiKey).toBe(false);
+			const discovery = new ProviderConfigStore(store.path, requestFake({ data: [{ id: "grok-4.6" }] }));
+			expect((await discovery.discover({ provider: custom })).models[0]!.overrides?.contextWindow).toBe(2_000_000);
+			await expect(store.save({ revision: view.revision, provider: { ...custom, kind: "openai-nonsense" as never } })).rejects.toThrow("invalid_provider");
+		});
+	});
+
 	it("retains the saved catalog when refresh fails and sanitizes upstream errors", async () => {
 		await fixture(async store => {
 			const view = await store.save({ revision: (await store.view()).revision, provider });
@@ -177,6 +191,30 @@ function llmServer(toolCall = false) {
 		return new Response(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`, { headers: { "content-type": "text/event-stream" } });
 	} });
 	return { server, payloads, headers, url: `http://127.0.0.1:${server.port}/v1` };
+}
+
+/**
+ * Responses-API stand-in: the same JSON bodies, different event names and no `[DONE]` sentinel.
+ * Emits the smallest stream the adapter accepts — an item, a delta, and a terminal response.
+ */
+function responsesServer() {
+	const payloads: Record<string, any>[] = [];
+	const paths: string[] = [];
+	const server = Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(request) {
+		paths.push(new URL(request.url).pathname);
+		const body = await request.json() as Record<string, any>;
+		payloads.push(body);
+		const events = [
+			{ type: "response.created", response: { id: "resp_test" } },
+			{ type: "response.output_item.added", output_index: 0, item: { type: "message", id: "msg_test", role: "assistant" } },
+			{ type: "response.output_text.delta", output_index: 0, content_index: 0, item_id: "msg_test", delta: "connected" },
+			{ type: "response.completed", response: { id: "resp_test", status: "completed", output: [], usage: {
+				input_tokens: 11, output_tokens: 2, total_tokens: 13, input_tokens_details: { cached_tokens: 4 },
+			} } },
+		];
+		return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(""), { headers: { "content-type": "text/event-stream" } });
+	} });
+	return { server, payloads, paths, url: `http://127.0.0.1:${server.port}/v1` };
 }
 
 describe("provider runtime integration", () => {
@@ -230,6 +268,41 @@ describe("provider runtime integration", () => {
 			expect(upstream.payloads[0]!.model).toBe(model.id);
 			await registry.completeSimple(chosen, { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] });
 			expect(upstream.payloads[1]!.reasoning_effort).toBe("none");
+		} finally { upstream.server.stop(true); }
+	});
+
+	it("posts to /responses for the Responses protocol and parses its stream", async () => {
+		const upstream = responsesServer();
+		try {
+			const registry = configModels({ providers: [{ ...provider, kind: "openai-responses", baseUrl: upstream.url, models: [{ id: "grok-4.6" }] }] })!;
+			const chosen = registry.getModel(provider.id, "grok-4.6")!;
+			expect(chosen.api).toBe("openai-responses");
+			const result = await registry.completeSimple(chosen, { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] });
+			expect(result.stopReason).toBe("stop");
+			expect(result.content.filter((block): block is { type: "text"; text: string } => block.type === "text").map(block => block.text).join("")).toBe("connected");
+			expect(result.usage.input).toBe(7);
+			expect(result.usage.cacheRead).toBe(4);
+			// The transport is the whole point: same provider record, different endpoint.
+			expect(upstream.paths).toEqual(["/v1/responses"]);
+			expect(upstream.payloads[0]!.model).toBe("grok-4.6");
+			// Responses takes input items, and has no chat `messages` or `max_tokens` fields.
+			expect(Array.isArray(upstream.payloads[0]!.input)).toBe(true);
+			expect(upstream.payloads[0]!.messages).toBeUndefined();
+			expect(upstream.payloads[0]!.max_tokens).toBeUndefined();
+			expect(upstream.payloads[0]!.store).toBe(false);
+		} finally { upstream.server.stop(true); }
+	});
+
+	it("keeps Chat Completions flags off a Responses provider", async () => {
+		const upstream = responsesServer();
+		try {
+			const registry = configModels({ providers: [{ ...provider, kind: "openai-responses", baseUrl: upstream.url, models: [{ id: "grok-4.6", reasoning: true, thinkingMode: "both", reasoningEfforts: ["low", "high"], providerDefaultEffort: "high" }] }] })!;
+			await registry.completeSimple(registry.getModel(provider.id, "grok-4.6")!, { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] }, { reasoning: "high" });
+			const body = upstream.payloads[0]!;
+			// `max_output_tokens`, not the Chat Completions `max_tokens` the kimi/deepseek compat names.
+			expect(body.max_output_tokens).toBeDefined();
+			expect(body.reasoning_effort).toBeUndefined();
+			expect(body.reasoning).toMatchObject({ effort: "high" });
 		} finally { upstream.server.stop(true); }
 	});
 

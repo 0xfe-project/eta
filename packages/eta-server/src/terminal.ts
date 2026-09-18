@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { statSync } from "node:fs";
 
-export type TermSocket = ServerWebSocket<{ kind?: "ws" | "term"; socketId?: number; shell?: unknown }>;
+export type TermSocket = ServerWebSocket<{ kind?: "ws" | "term" | "remote-term"; socketId?: number; shell?: unknown }>;
 
 export interface ShellHandle {
 	proc: BunShell;

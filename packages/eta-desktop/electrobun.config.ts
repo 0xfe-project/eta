@@ -19,6 +19,7 @@ export default {
 			entrypoint: "src/main/index.ts",
 		},
 		copy: {
+			"../eta-server/artifacts/desktop": "views/eta-backend",
 			"../eta-client/dist/index.html": "views/eta/index.html",
 			"../eta-client/dist/assets": "views/eta/assets",
 			"../eta-client/dist/AKRDWGSCNFM-Regular.woff2": "views/eta/AKRDWGSCNFM-Regular.woff2",
