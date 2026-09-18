@@ -21,9 +21,10 @@ import {
 } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { MemoryStorage, StorageBackedSession } from "@eta/core";
-import { configDefaultModel, configModels, loadEtaConfig, type EtaConfig } from "./config.ts";
+import { configDefaultModel, configModels, etaConfigPath, loadEtaConfig, type EtaConfig } from "./config.ts";
 import { renderPersonaFor } from "./personas.ts";
 import { discoverSkillDirs, renderSkillsBlock, watchSkillDirs } from "./skills.ts";
+import { renderPlatformBlock } from "./platform-prompt.ts";
 
 export interface SessionConfig {
 	name: string;
@@ -117,7 +118,8 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 	// `<projectRoot>/.eta/MEMORY.md`, which NodeEtaFs.writeFile creates on the first note.
 	// Memory is project-scoped: a session opened in another folder starts with a clean sheet
 	// there, and the notes it earns stay with that folder.
-	const memoryTarget = (await memoryCache.load(cfg.cwd)).target;
+	const loadedMemory = await memoryCache.load(cfg.cwd);
+	const memoryTarget = loadedMemory.target;
 	const registry = models ?? withFaux(faux!);
 	let configuredIds = (etaConfig.providers ?? []).map(provider => provider.id);
 	let agent: EtaAgent;
@@ -125,6 +127,15 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 	const isFaux = async () => (await selectedModel()).provider === faux?.provider.id;
 	const execEnv = new NodeExecutionEnv({ cwd: cfg.cwd });
 	const skillsBlock = await renderSkillsBlock(execEnv, cfg.cwd);
+	// Where the app's own files live, in terms of this session: the agent is told the paths
+	// it would actually write to, not a description of a generic home directory.
+	const platformBlock = renderPlatformBlock({
+		cwd: cfg.cwd,
+		configPath: cfg.configPath ?? etaConfigPath,
+		...(cfg.persistDir === undefined ? {} : { sessionDir: cfg.persistDir }),
+		memoryTarget: memoryTarget.path,
+		memoryExists: loadedMemory.files.length > 0,
+	});
 	agent = await EtaAgent.create(
 		{
 			session,
@@ -133,6 +144,7 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 			baseSystemPrompt: DEFAULT_SYSTEM_PROMPT,
 			executionEnv: execEnv,
 			skillsSection: skillsBlock === "" ? undefined : skillsBlock,
+			platformSection: platformBlock,
 			persona,
 			...(cfg.heartbeatMs === undefined ? {} : { heartbeatMs: cfg.heartbeatMs }),
 			memorySource: async () => (await memoryCache.load(cfg.cwd)).text,
