@@ -97,7 +97,9 @@ describe("prompt image forwarding", () => {
 	}
 	it("keeps text file references intact without adding images", async () => {
 		await fixture(false, async (host, directory, payloads) => {
+			expect(host.modelCatalog().models[0]?.input).toEqual(["text", "image"]);
 			await host.createSession("s1", "Thinker", directory);
+			expect(host.viewOf("s1")?.modelInput).toEqual(["text", "image"]);
 			await applyOp(host, { op: "prompt", session: "s1", text: "read @README.md" });
 			await until(() => payloads.length === 1);
 			expect(payloads[0]!.messages.filter((message) => message.role === "user").at(-1)?.content).toEqual([{ type: "text", text: "read @README.md" }]);

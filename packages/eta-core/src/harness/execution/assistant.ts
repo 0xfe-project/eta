@@ -15,6 +15,25 @@ import type { SettledAssistantMessage } from "../session/types.ts";
 import type { AgentHarnessStreamOptions } from "../types.ts";
 import { AbortRequested } from "./effect-gate.ts";
 
+export function imageUnsupportedPlaceholder(index: number, mimeType: string): string {
+	return `[Image attachment #${index} omitted (${mimeType})]`;
+}
+
+/** Keep stored history intact while making one request safe for a text-only model. */
+function prepareProviderMessages(messages: Message[], model: Model<Api>): Message[] {
+	if (model.input.includes("image")) return messages;
+	let imageIndex = 0;
+	return messages.map(message => {
+		if (!("content" in message) || !Array.isArray(message.content) || !message.content.some(block => block.type === "image")) return message;
+		return {
+			...message,
+			content: message.content.map(block => block.type === "image"
+				? { type: "text" as const, text: imageUnsupportedPlaceholder(++imageIndex, block.mimeType) }
+				: block),
+		} as Message;
+	});
+}
+
 /** HTTP response metadata captured before the provider response body is consumed. */
 export interface AssistantResponseMetadata {
 	status?: number;
@@ -143,7 +162,7 @@ export async function streamHarnessAssistant(
 		requestContext = await config.transformContext(requestContext, context);
 	}
 
-	const providerMessages = await config.toProviderMessages(requestContext.messages, context);
+	const providerMessages = prepareProviderMessages(await config.toProviderMessages(requestContext.messages, context), config.model);
 	const aiContext: AiContext = {
 		systemPrompt: requestContext.systemPrompt,
 		messages: providerMessages,

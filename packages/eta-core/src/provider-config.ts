@@ -1,12 +1,15 @@
 import type { ThinkingLevel } from "./types.ts";
 
 export const MODEL_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
-export type ProviderKind = "kimi-coding" | "deepseek" | "openai-codex" | "openai-compatible" | "openai-responses";
+export type ProviderKind = "kimi-coding" | "deepseek" | "zai-coding-cn" | "zai" | "openai-codex" | "openai-compatible" | "openai-responses";
+export type ModelInput = "text" | "image";
 
 export const BUILTIN_PROVIDER_PRESETS = {
 	"openai-codex": { name: "Codex", baseUrl: "https://chatgpt.com/backend-api", logo: "openai.svg" },
 	"kimi-coding": { name: "Kimi for Coding", baseUrl: "https://api.kimi.com/coding/v1", logo: "kimi.svg" },
 	deepseek: { name: "DeepSeek", baseUrl: "https://api.deepseek.com", logo: "deepseek.svg" },
+	"zai-coding-cn": { name: "GLM Coding Plan (CN)", baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4", logo: "zai.svg" },
+	zai: { name: "GLM Coding Plan (Global)", baseUrl: "https://api.z.ai/api/coding/paas/v4", logo: "zai.svg" },
 } as const;
 
 export function providerPreset(kind: ProviderKind) {
@@ -29,7 +32,7 @@ export interface ModelCapabilities {
 	name?: string;
 	contextWindow?: number;
 	maxTokens?: number;
-	input?: ("text" | "image")[];
+	input?: ModelInput[];
 	reasoning?: boolean;
 	thinkingMode?: "only" | "both" | "no";
 	reasoningEfforts?: Exclude<ThinkingLevel, "off">[];
@@ -131,6 +134,11 @@ export function effectiveModel(model: EtaModelConfig): EtaModelConfig {
 	return { ...model, ...model.overrides };
 }
 
+/** Undefined means the provider did not publish input capabilities. */
+export function modelSupportsVision(model: ModelCapabilities): boolean | undefined {
+	return model.input === undefined ? undefined : model.input.includes("image");
+}
+
 export function modelThinkingLevels(input: EtaModelConfig): ThinkingLevel[] {
 	const model = effectiveModel(input);
 	if (model.thinkingMode === "no" || model.reasoning === false) return ["off"];
@@ -139,7 +147,7 @@ export function modelThinkingLevels(input: EtaModelConfig): ThinkingLevel[] {
 	// With no declared effort controls we leave the provider in charge. In particular,
 	// an always-thinking model must not acquire an invented off switch.
 	if (efforts.length === 0) return [];
-	const off = model.thinkingMode === "both" && model.providerDefaultEffort !== undefined;
+	const off = model.thinkingMode === "both";
 	return [...(off ? ["off" as const] : []), ...efforts];
 }
 

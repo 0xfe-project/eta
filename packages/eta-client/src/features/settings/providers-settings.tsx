@@ -1,12 +1,21 @@
 import { For, Index, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import {
-	effectiveModel, isCustomKind, modelThinkingLevels, MODEL_THINKING_LEVELS, BUILTIN_PROVIDER_PRESETS, providerPreset,
+	effectiveModel, isCustomKind, modelSupportsVision, modelThinkingLevels, MODEL_THINKING_LEVELS, BUILTIN_PROVIDER_PRESETS, providerPreset,
 	type CodexLoginView, type EtaModelConfig, type ModelCapabilities, type ProviderHeaders, type ProviderInput, type ProviderSummary, type ProvidersView, type ProviderKind,
 } from "@eta/core/provider-config";
 import { useAppI18n } from "../../i18n.ts";
 import { apiFetch } from "../../lib/host.ts";
 
 const BUILTIN_KINDS = Object.keys(BUILTIN_PROVIDER_PRESETS) as (keyof typeof BUILTIN_PROVIDER_PRESETS)[];
+
+function providerDescriptionKey(kind: ProviderKind) {
+	if (kind === "openai-codex") return "providers.codexDescription" as const;
+	if (kind === "kimi-coding") return "providers.kimiDescription" as const;
+	if (kind === "deepseek") return "providers.deepseekDescription" as const;
+	if (kind === "zai-coding-cn") return "providers.zaiCodingCnDescription" as const;
+	if (kind === "zai") return "providers.zaiDescription" as const;
+	return "providers.customDescription" as const;
+}
 
 /** Editor rows for custom request headers; an empty value is saved as null = “do not send”. */
 type HeaderRow = { name: string; value: string };
@@ -201,7 +210,7 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 					<label class="settings-default"><span>{i18n.t("settings.defaultModel")}</span><select data-testid="default-model" value={current().defaultModel ?? ""} disabled={busy()} onChange={event => void defaultModel(event.currentTarget.value)}><option value="">{i18n.t("providers.autoDefault")}</option><For each={current().providers}>{provider => <optgroup label={title(provider)}><For each={provider.models}>{model => <option value={`${provider.id}:${model.id}`}>{effectiveModel(model).name ?? model.id}</option>}</For></optgroup>}</For></select></label>
 					<Show when={current().providers.length > 0}><div class="settings-section-label">{i18n.t("providers.configured")}</div><For each={current().providers}>{provider => <button class="settings-provider" data-testid={`provider-${provider.id}`} onClick={() => edit(provider)}><ProviderLogo kind={provider.kind} /><span><strong>{title(provider)}</strong><small>{i18n.t("providers.modelCount", { n: provider.models.length })} · {provider.kind === "openai-codex" ? i18n.t("providers.codexAccount") : provider.hasApiKey ? i18n.t("providers.keyConfigured") : i18n.t("providers.noKey")}</small></span><span class="settings-provider-action">{i18n.t("providers.configure")} →</span></button>}</For></Show>
 					<div class="settings-section-label">{i18n.t("providers.add")}</div>
-					<For each={BUILTIN_KINDS}>{kind => <Show when={!current().providers.some(provider => provider.kind === kind)}><button class="settings-provider" data-testid={`provider-add-${kind === "kimi-coding" ? "kimi" : kind}`} onClick={() => edit(kind)}><ProviderLogo kind={kind} /><span><strong>{providerPreset(kind)!.name}</strong><small>{i18n.t(kind === "openai-codex" ? "providers.codexDescription" : kind === "kimi-coding" ? "providers.kimiDescription" : "providers.deepseekDescription")}</small></span><span class="settings-provider-action">{i18n.t("providers.connect")} →</span></button></Show>}</For>
+					<For each={BUILTIN_KINDS}>{kind => <Show when={!current().providers.some(provider => provider.kind === kind)}><button class="settings-provider" data-testid={`provider-add-${kind === "kimi-coding" ? "kimi" : kind}`} onClick={() => edit(kind)}><ProviderLogo kind={kind} /><span><strong>{providerPreset(kind)!.name}</strong><small>{i18n.t(providerDescriptionKey(kind))}</small></span><span class="settings-provider-action">{i18n.t("providers.connect")} →</span></button></Show>}</For>
 					<button class="settings-provider" data-testid="provider-add-custom" onClick={() => edit("openai-compatible")}><ProviderLogo kind="openai-compatible" /><span><strong>{i18n.t("providers.custom")}</strong><small>{i18n.t("providers.customDescription")}</small></span><span class="settings-provider-action">{i18n.t("providers.addAction")} →</span></button>
 				</>}
 			</Show>
@@ -209,7 +218,7 @@ export function ProvidersSettings(props: { onDirtyChange(dirty: boolean): void; 
 			{current => <>
 				<button class="settings-back" disabled={busy()} onClick={back}>← {i18n.t("settings.providers")}</button>
 				<Show when={backConfirm()}><div class="settings-discard" role="alert"><span>{i18n.t("settings.unsaved")}</span><button onClick={() => setBackConfirm(false)}>{i18n.t("settings.keepEditing")}</button><button onClick={() => { setDraft(undefined); setBackConfirm(false); }}>{i18n.t("settings.discard")}</button></div></Show>
-				<div class="settings-heading settings-inline"><ProviderLogo kind={current().kind} /><div><h2>{providerPreset(current().kind)?.name ?? i18n.t("providers.custom")}</h2><p>{i18n.t(current().kind === "openai-codex" ? "providers.codexDescription" : current().kind === "kimi-coding" ? "providers.kimiDescription" : current().kind === "deepseek" ? "providers.deepseekDescription" : "providers.customDescription")}</p></div></div>
+				<div class="settings-heading settings-inline"><ProviderLogo kind={current().kind} /><div><h2>{providerPreset(current().kind)?.name ?? i18n.t("providers.custom")}</h2><p>{i18n.t(providerDescriptionKey(current().kind))}</p></div></div>
 				<Show when={current().kind === "openai-codex"}><section class="settings-codex-auth">
 					<div class="settings-row"><span>{i18n.t("providers.codexAccount")}</span><div class="settings-inline"><button data-testid="codex-login" disabled={busy() || !!login()} onClick={() => void startLogin()}>{i18n.t("providers.codexLogin")}</button></div></div>
 					<p class="settings-hint">{i18n.t("providers.codexCatalogHint")}</p>
@@ -275,14 +284,14 @@ function ModelEditor(props: { model: EtaModelConfig; custom: boolean; onUpdate(p
 	return <div class="settings-model">
 		<div class="settings-model-title"><strong class="mono">{effective().name ?? (props.model.id || i18n.t("providers.newModel"))}</strong><button class="settings-text-button" aria-label={i18n.t("providers.removeModel", { id: props.model.id })} onClick={props.onRemove}>✕</button></div>
 		<Show when={effective().name && effective().name !== props.model.id}><p class="settings-hint mono">{props.model.id}</p></Show>
-		<div class="settings-model-meta"><span>{effective().contextWindow ? `${effective().contextWindow!.toLocaleString()} tokens` : i18n.t("providers.contextUnknown")}</span><Show when={effective().input?.includes("image")}><span>{i18n.t("providers.vision")}</span></Show><Show when={effective().reasoning}><span>{i18n.t("providers.reasoning")}</span></Show></div>
+		<div class="settings-model-meta"><span>{effective().contextWindow ? `${effective().contextWindow!.toLocaleString()} tokens` : i18n.t("providers.contextUnknown")}</span><Show when={modelSupportsVision(effective()) === true}><span>{i18n.t("providers.vision")}</span></Show><Show when={effective().reasoning}><span>{i18n.t("providers.reasoning")}</span></Show></div>
 		<label class="settings-row"><span>{i18n.t("providers.defaultThinking")}</span><select aria-label={`${i18n.t("providers.defaultThinking")} ${props.model.id}`} value={props.model.defaultThinking ?? ""} disabled={levels().length === 0 || (levels().length === 1 && levels()[0] === "off")} onChange={event => props.onUpdate({ defaultThinking: event.currentTarget.value === "" ? undefined : event.currentTarget.value as EtaModelConfig["defaultThinking"] })}><option value="">{i18n.t("providers.followProvider")}{effective().providerDefaultEffort ? ` (${effective().providerDefaultEffort})` : ""}</option><For each={levels()}>{level => <option value={level}>{level}</option>}</For></select></label>
 		<Show when={props.custom}><details open={expanded()} onToggle={event => setExpanded(event.currentTarget.open)}><summary>{i18n.t("providers.modelSettings")}</summary><div class="settings-model-fields">
 			<label class="settings-field">Model ID<input data-testid="custom-model-id" value={props.model.id} onInput={event => props.onUpdate({ id: event.currentTarget.value })} /></label>
 			<label class="settings-field">{i18n.t("providers.name")}<input value={effective().name ?? ""} onInput={event => override({ name: event.currentTarget.value || undefined })} /></label>
 			<label class="settings-field">{i18n.t("providers.contextWindow")}<input type="number" min="1" value={effective().contextWindow ?? ""} onInput={event => override({ contextWindow: event.currentTarget.value ? Number(event.currentTarget.value) : undefined })} /></label>
 			<label class="settings-field">{i18n.t("providers.maxTokens")}<input type="number" min="1" value={effective().maxTokens ?? ""} onInput={event => override({ maxTokens: event.currentTarget.value ? Number(event.currentTarget.value) : undefined })} /></label>
-			<label class="settings-check"><input type="checkbox" checked={effective().input?.includes("image") ?? false} onChange={event => override({ input: event.currentTarget.checked ? ["text", "image"] : ["text"] })} />{i18n.t("providers.vision")}</label>
+			<label class="settings-check"><input type="checkbox" checked={modelSupportsVision(effective()) ?? false} onChange={event => override({ input: event.currentTarget.checked ? ["text", "image"] : ["text"] })} />{i18n.t("providers.vision")}</label>
 			<label class="settings-check"><input type="checkbox" checked={effective().reasoning ?? false} onChange={event => { override(event.currentTarget.checked ? { reasoning: true, thinkingMode: "both", reasoningEfforts: ["low", "medium", "high"], providerDefaultEffort: "high" } : { reasoning: false, thinkingMode: "no", reasoningEfforts: [], providerDefaultEffort: undefined }); props.onUpdate({ defaultThinking: undefined }); }} />{i18n.t("providers.reasoning")}</label>
 			<Show when={effective().reasoning}><label class="settings-check"><input type="checkbox" checked={effective().thinkingMode === "both"} onChange={event => { override({ thinkingMode: event.currentTarget.checked ? "both" : "only" }); props.onUpdate({ defaultThinking: undefined }); }} />{i18n.t("providers.canDisableThinking")}</label><div class="settings-field"><span>{i18n.t("providers.efforts")}</span><div class="settings-efforts"><For each={MODEL_THINKING_LEVELS.filter(level => level !== "off")}>{level => <label class="settings-check"><input type="checkbox" checked={effective().reasoningEfforts?.includes(level) ?? false} onChange={event => {
 				const next = event.currentTarget.checked ? [...(effective().reasoningEfforts ?? []), level] : (effective().reasoningEfforts ?? []).filter(item => item !== level);

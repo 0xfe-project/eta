@@ -8,6 +8,7 @@
 
 import type { Usage } from "@earendil-works/pi-ai";
 import { BACKGROUND_CONTEXT, type Context } from "./context.ts";
+import type { ModelInput } from "../provider-config.ts";
 import type { AgentMessage } from "../types.ts";
 import type { AskPayload } from "./entries.ts";
 import type { EtaAgent } from "./agent.ts";
@@ -62,6 +63,8 @@ export type SessionViewBtwThread = Pick<
 export interface SessionView {
 	/** Provider-derived controls; [] means the model manages thinking itself. */
 	supportedThinkingLevels?: import("../types.ts").ThinkingLevel[];
+	/** Current model input modalities; undefined is unknown rather than a denial. */
+	modelInput?: ModelInput[];
 	messages: SessionViewMessage[];
 	/** Messages older than the window in `messages`; set once the transcript is paged. */
 	messagesBefore?: number;

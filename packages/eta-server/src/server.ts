@@ -462,7 +462,7 @@ async function startClaimedServer(
 				try {
 					return apiJson(session === null ? host.modelCatalog() : host.modelInfo(session));
 				} catch {
-					return apiJson({ models: [{ id: "faux", label: "faux echo" }], current: "faux" });
+					return apiJson({ models: [{ id: "faux", label: "faux echo", input: ["text", "image"] }], current: "faux" });
 				}
 			}
 			if (request.method === "POST" && url.pathname === "/api/paste") {

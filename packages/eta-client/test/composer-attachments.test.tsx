@@ -14,10 +14,21 @@ beforeEach(() => {
 const screenshot = () => new File(["image bytes"], "screenshot.png", { type: "image/png" });
 const paste = (file: File) => fireEvent.paste(byId("composer-input"), { clipboardData: { files: [file] } });
 
+function mountComposer(running = false) {
+	const page = render(<Composer session="s1" running={running} />);
+	const socket = FakeSocket.instances.at(-1);
+	socket?.fire("message", { data: JSON.stringify({ type: "hello", sessions: [{ name: "s1", personas: [], badges: [] }], attach: "s1" }) });
+	socket?.fire("message", { data: JSON.stringify({ channel: "view", session: "s1", version: 1, view: {
+		messages: [], systems: [], thinking: [], queue: [], tasks: [], loops: [], subagents: [], sideThread: [], stateKeys: [],
+		compactionEpoch: 0, model: "vision:test", modelInput: ["text", "image"], thinkingLevel: "off",
+	} }) });
+	return page;
+}
+
 describe("composer attachments", () => {
 	for (const source of ["paste", "drop", "image picker", "file picker"] as const) {
 		it(`${source} sends image bytes with the first prompt`, async () => {
-			render(<Composer session="s1" />);
+			mountComposer();
 			setField("composer-input", "inspect");
 			const file = screenshot();
 			if (source === "paste") paste(file);
@@ -38,7 +49,7 @@ describe("composer attachments", () => {
 	}
 
 	it("sends only an image while running without treating it as abort", async () => {
-		render(<Composer session="s1" running />);
+		mountComposer(true);
 		paste(screenshot());
 		await findId("attach-chip-0");
 		expect((byId("composer-input") as HTMLTextAreaElement).value).toBe("");
@@ -50,7 +61,7 @@ describe("composer attachments", () => {
 	});
 
 	it("blocks sending while the image is being read", async () => {
-		render(<Composer session="s1" />);
+		mountComposer();
 		setField("composer-input", "inspect");
 		paste(screenshot());
 		FakeSocket.sent = [];
@@ -62,7 +73,7 @@ describe("composer attachments", () => {
 	});
 
 	it("removing the image leaves the draft unchanged and removes the payload", async () => {
-		render(<Composer session="s1" />);
+		mountComposer();
 		setField("composer-input", "inspect");
 		paste(screenshot());
 		await findId("attach-chip-0");
@@ -72,7 +83,7 @@ describe("composer attachments", () => {
 	});
 
 	it("unknown slash prompts keep images when steering", async () => {
-		render(<Composer session="s1" running />);
+		mountComposer(true);
 		setField("composer-input", "/explain");
 		paste(screenshot());
 		await findId("attach-chip-0");
@@ -80,10 +91,26 @@ describe("composer attachments", () => {
 		expect(FakeSocket.last()).toMatchObject({ mode: "steer", images: [{ mime: "image/png", dataBase64: btoa("image bytes") }] });
 	});
 
+	it("blocks image pick, paste and drop for a known text-only model", async () => {
+		const page = mountComposer();
+		const socket = FakeSocket.instances.at(-1)!;
+		socket.fire("message", { data: JSON.stringify({ type: "hello", sessions: [{ name: "s1", personas: [], badges: [] }], attach: "s1" }) });
+		socket.fire("message", { data: JSON.stringify({ channel: "view", session: "s1", version: 1, view: {
+			messages: [], systems: [], thinking: [], queue: [], tasks: [], loops: [], subagents: [], sideThread: [], stateKeys: [],
+			compactionEpoch: 0, model: "deepseek:deepseek-v4-pro", modelInput: ["text"], thinkingLevel: "off",
+		} }) });
+		click("composer-plus");
+		await vi.waitFor(() => expect((byId("attach-image") as HTMLButtonElement).disabled).toBe(true));
+		paste(screenshot());
+		await vi.waitFor(() => expect(page.getByRole("alert").textContent).toMatch(/未声明图片输入能力|does not declare image input/));
+		expect(page.queryByTestId("attach-chip-0")).toBeNull();
+		expect(FakeSocket.sent.some(raw => JSON.parse(raw).op === "prompt")).toBe(false);
+	});
+
 	it("ordinary uploads and @ mentions remain references, not inline contents", async () => {
 		vi.stubGlobal("fetch", vi.fn(async (url: string) => Response.json(url.includes("/api/upload")
 			? { path: ".eta-attachments/notes.txt" } : ["README.md"])));
-		render(<Composer session="s1" />);
+		mountComposer();
 		setField("composer-input", "read @READ");
 		await findId("mention-README.md");
 		keyDown("composer-input", "Enter");
@@ -96,7 +123,7 @@ describe("composer attachments", () => {
 	it("failed uploads show an error and release the send button", async () => {
 		vi.stubGlobal("fetch", vi.fn(async (url: string) => url.includes("/api/upload")
 			? Response.json({ error: "failed" }, { status: 500 }) : Response.json([])));
-		render(<Composer session="s1" />);
+		mountComposer();
 		paste(new File(["notes"], "notes.txt", { type: "text/plain" }));
 		await vi.waitFor(() => expect(document.querySelector('[role="alert"]')?.textContent).toContain("notes.txt"));
 		expect((byId("composer-submit") as HTMLButtonElement).disabled).toBe(false);

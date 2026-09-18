@@ -7,6 +7,10 @@ import { render, click, setField, fireEvent } from "./render.tsx";
 import { byId } from "./dom.ts";
 
 const kimi = { id: "kimi-for-coding", contextWindow: 262144, reasoning: true, thinkingMode: "both", reasoningEfforts: ["low", "high", "max"], providerDefaultEffort: "high" };
+const glm = [
+	{ id: "glm-5.3", contextWindow: 1_000_000, maxTokens: 131_072, input: ["text"], reasoning: true, thinkingMode: "both", reasoningEfforts: ["low", "high", "max"] },
+	{ id: "glm-5.3-flash", contextWindow: 1_000_000, maxTokens: 131_072, input: ["text", "image"], reasoning: true, thinkingMode: "both", reasoningEfforts: ["low", "high", "max"] },
+];
 let catalog: any;
 let discoveryFails = false;
 let deleteFails = false;
@@ -26,7 +30,11 @@ beforeEach(() => {
 			catalog = { revision: "deleted", providers: [] };
 			return Response.json(catalog);
 		}
-		if (url === "/api/providers/discover") return Response.json(discoveryFails ? { error: "authentication_failed" } : { models: [{ ...kimi, id: data?.provider?.kind === "deepseek" ? "deepseek-flash" : kimi.id }] }, { status: discoveryFails ? 502 : 200 });
+		if (url === "/api/providers/discover") {
+			const kind = data?.provider?.kind;
+			const models = kind === "zai" || kind === "zai-coding-cn" ? glm : [{ ...kimi, id: kind === "deepseek" ? "deepseek-flash" : kimi.id }];
+			return Response.json(discoveryFails ? { error: "authentication_failed" } : { models }, { status: discoveryFails ? 502 : 200 });
+		}
 		if (url === "/api/providers" && data) {
 			writes.push(data);
 			const { apiKey, ...provider } = data.provider;
@@ -143,6 +151,26 @@ describe("provider settings", () => {
 		click("provider-save");
 		await vi.waitFor(() => expect(writes).toHaveLength(1));
 		expect(writes[0].provider).toMatchObject({ kind: "deepseek", baseUrl: "https://api.deepseek.com", models: [{ id: "deepseek-flash", defaultThinking: "max" }] });
+	});
+
+	it("offers both GLM regions and saves their provider-scoped model capabilities", async () => {
+		const page = mount();
+		click("settings-tab-providers");
+		await vi.waitFor(() => expect(byId("provider-add-zai-coding-cn")).toBeTruthy());
+		expect(byId("provider-add-zai")).toBeTruthy();
+		click("provider-add-zai-coding-cn");
+		setField("provider-key", "glm-test-key");
+		click("provider-discover");
+		await vi.waitFor(() => expect(page.getByText("glm-5.3-flash")).toBeTruthy());
+		const effort = page.getByRole("combobox", { name: /glm-5.3$/ }) as HTMLSelectElement;
+		expect([...effort.options].map(option => option.value)).toEqual(["", "off", "low", "high", "max"]);
+		expect(page.getAllByText(/Image input|图像输入/)).toHaveLength(1);
+		click("provider-save");
+		await vi.waitFor(() => expect(writes).toHaveLength(1));
+		expect(writes[0].provider).toMatchObject({
+			id: "zai-coding-cn", kind: "zai-coding-cn", baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4",
+			models: [{ id: "glm-5.3", input: ["text"] }, { id: "glm-5.3-flash", input: ["text", "image"] }],
+		});
 	});
 
 	it("keeps existing models and the draft when discovery fails", async () => {
