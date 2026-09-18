@@ -1,57 +1,122 @@
-# eta
+<p align="center">
+  <img src="public/Eta-Banner.png" alt="Eta" width="900" />
+</p>
 
-一个人机协作 agent:core 会话引擎 + Bun 服务 + Solid 前端 + Electrobun 桌面壳。
+<h2 align="center">
+  A battery-included coding agent for <strong>HACKERS</strong> who want the controls.
+</h2>
 
-## 快速开始
+<p align="center">
+  <a href="#why-eta">Why Eta</a>
+  <a href="#what-you-get">What you get</a> ·
+  <a href="#status">Status</a>
+</p>
 
-```sh
-bun install
-bun run build:web   # 产出 packages/eta-client/dist
-```
+<p align="center">
+  <img src="public/ui.png" alt="Eta workspace" width="900" />
+</p>
 
-三种跑法,按你要什么挑:
+## TL;DR! I don't want to listen to your bullshit
 
-| 命令 | 得到 |
-| --- | --- |
-| `bun run dev` | 只起 eta-server,`http://127.0.0.1:3000` 直接托管上面那份 dist |
-| `bun run dev` + `bun run dev:web` | 前端热更新:vite :5173,`/api`、`/ws`、`/term` proxy 到 :3000 |
-| `bun run dev:desk` | 桌面壳,一条命令:自己拉 vite、等它就绪、再开 Electrobun 窗口 |
+hmmf, fine, we are bunch of talented engineer whom spending around 120B token/month, we tried every fucking open source/closed source agent, in the end, we are building **Eta** to dog food ourselves.
 
-桌面壳的 SDK 由 hutch 投影,第一次跑前先 `bun run --cwd packages/eta-desktop prepare:sdk`。
-`bun run prod:desk` 出 `.app` 和更新包,产物在 `packages/eta-desktop/artifacts/`(不进 git)。
-壳的窗口只在启动时认一次 vite;先开窗口再起 `dev:web` 的话,它会落到 `views://`(冷页面,无热更新),重开窗口即可。
+> because we think **THEY ARE SHIT!**
 
-监听默认 `127.0.0.1`;`ETA_HOST=0.0.0.0 bun run dev` 才放同 WiFi 的手机进来(远程场景自己打隧道指向 loopback)。
+## Why We Are Building Eta
 
-## 模型
+Eta is the coding agent we wanted for ourselves: practical, open, and close to the metal with 🔋.
 
-按顺序往下落,前一个没有才用后一个:
+> pi no 🔋
 
-1. 优先使用「设置 → 模型供应商」保存到 `~/.eta/config.json` 的 provider 和模型,由 eta 管理配置与选模、pi 提供供应商运行时（Codex 直接复用 pi 内置 provider 及认证流程）,按 `defaultModel: "providerId:modelId"` 选择默认模型,未指定则用第一个 provider 的第一个 model
-2. 环境里有 `ANTHROPIC_API_KEY` → 内置 anthropic catalog,默认 `claude-sonnet-4-5`
-3. 都没有 → faux 回声流,零配置也能把整条协议链路跑通
+Most agent products make the same **shitty bargain**: 
+- hide the machinery ***(try to be your mom)***
+- make the decisions for you ***(or dad)***
+- polish the answer ***(or cheating on you)***
 
-## 网络
+**Since we don't have any mommy/daddy issues**
 
-在「设置 → 通用 → 网络」选择跟随系统（默认,优先使用环境代理）、手动 HTTP/HTTPS 代理或直连,配置保存到 `~/.eta/config.json` 的 `network`,重启后端或桌面应用后生效,暂不支持 PAC 和 SOCKS 代理。
+Eta refuses. The prompt, tools, model, context, session state, and memory are yours to inspect, understand, and change.
 
-## 包
+> TL;DR: **Eta is your honest DOG**
 
-| 包 | 作用 |
-| --- | --- |
-| `packages/eta-core` | 会话引擎(电池平铺在 `src/harness/`:lane/tree/loop/persona/goal/tasks/loops/btw/ask/memory/skills/compaction),外加 `wire.ts`:通道帧、`GuiOp`、`ControlOp` 全在这里定义一份 |
-| `packages/eta-storage-sqlite` | sqlite 存储后端 |
-| `packages/eta-server` | Bun HTTP+WS 托管 core:`/ws`(view/agent/dev 三通道帧)、`/term`(终端);`/api/{health,memory,personas,files,upload,settings,sessions,history,models,paste,search,git/status,git/diff,file,native/*}`;SPA 静态托管 |
-| `packages/eta-client` | SolidJS + Vite + Tailwind v4 单页(硬朗石墨:零圆角,高饱和只留给语义状态);`@xterm/xterm` 终端、katex/shiki 渲染 |
-| `packages/eta-i18n` | en / zh-CN 扁平 key 文案包(`keySeparator:false`) |
-| `packages/eta-desktop` | Electrobun 壳:eta-server 以随机 loopback 端口跑在壳进程内,页面走 vite dev 或 `views://eta/`,再补上浏览器没有的两样——窗口装饰,和 `/api/native/*` 背后的原生能力(托盘、文件夹选择、导出) |
+Eta is for hackers who want to:
 
-## 验证
+- see what the model actually receives;
+- understand token usage, cache behavior, and context pressure;
+- choose and configure their own providers;
+- control tools and permissions;
+- keep personas and project memory as ordinary files;
+- inspect, recover, and modify session state;
+- extend the runtime instead of waiting for a product decision.
 
-```sh
-bun run test        # core + storage + server + client
-bun run typecheck   # 全部 TS 包,含桌面壳
-bun run build:web
-```
+It is not trying to be the most autonomous agent in the room. It is trying to be the agent you can actually own.
 
-手测清单见 `GUI-PLAN.md`;规划中的东西在 `ETA-CORE-PLAN.md`。
+## What you get
+
+### Goal/Loop/Task it's 2026 C'OM 
+
+Our 1B-context goal-mode test completed **80 tasks autonomously**. 
+
+Eta keeps the list in view and keeps working against the goal instead of conveniently forgetting both.
+
+> OpenCode/Codex will happily ignore your task list. **Eta won't.**
+
+### A complete coding workspace
+
+Chat, terminal, files, workspace context, tools, tasks, goals, and model configuration live in one session instead of being scattered across disconnected windows.
+
+### Full runtime FKing **VISIBILITY**
+
+The context panel exposes the layers that usually disappear behind the UI:
+
+<p align="center">
+  <img src="public/dash.png" alt="Eta context and usage dashboard" width="820" />
+</p>
+
+Prompt sections, personas, tools, token counts, cache reads, context capacity, and session data are all inspectable.
+
+<p align="center">
+  <img src="public/transp.png" alt="Eta prompt inspection" width="820" />
+</p>
+
+### State that belongs to **YOU!!** 
+
+A certain company starting with `A\` against its own users as were thieves.
+
+Eta **forces memory** instead of treating it as a vague promise. Session state and memory are file-backed and inspectable, not trapped in a vendor database. Read them, version them, edit them, back them up, or delete them.
+
+<p align="center">
+  <img src="public/task_follow.png" alt="Eta tasks and follow-up work" width="820" />
+</p>
+
+Personas are markdown cards. Change the persona and you change the agent's voice, priorities, and working style. 
+
+Our system prompt is designed to give the model a spine without putting a leash on every sentence.
+
+Claude Code's preset prompt is optimized to keep the agent on task and out of trouble. 
+
+Sometimes that means it becomes a very expensive **yes-man**: cautious, constrained, and afraid to say what it actually thinks. Eta lets you choose the persona and the prompt instead of accepting one vendor-approved personality.
+
+### Built for changing your mind
+
+Use the model you want. Point Eta at the provider you want. Change the prompt. Add a skill. Modify the UI. Extend the protocol. If the runtime does not behave the way you need, the project is there to be changed.
+
+## The part where we disagree
+
+**Claude Code** Useful? Yes. Yours? Not really.
+
+**Codex** The prompt, state, context, and storage move around while you are expected to smile and trust the dashboard.
+
+**OpenCode** If the runtime ignores your plan, that is not autonomy.
+
+**PI** It's fucking RAW! maybe a skilled vet could still save it!
+
+**OpenClaw** WHO THE FUCK REMEMBER THIS SHIT? 🤣👉🦞 it's a random sentence generator with shell access that ate 100$/night for nothing 
+
+(yeah maybe sorting through memories counts as a task...).
+
+## Status
+
+Eta is an active, team-built project. It is already useful for real development, while the surface continues to evolve around the parts that matter most: control, observability, and a fast path from idea to code.
+
+If that sounds like your kind of tool, clone it, inspect it, and make it yours.
