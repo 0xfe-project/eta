@@ -18,7 +18,7 @@
 
 ## TL;DR! I don't want to listen to your bullshit
 
-hmmf, fine, we are bunch of talented engineer whom spending around 120B token/month, we tried every fucking open source/closed source agent, in the end, we are building **Eta** to dog food ourselves.
+hmmf, fine, we are bunch of talented engineer whom spending around 230B token/month, we tried every fucking open source/closed source agent, in the end, we are building **Eta** to dog food ourselves.
 
 > because we think **THEY ARE SHIT!**
 
