@@ -99,7 +99,12 @@ export interface SessionView {
 	/** Tools the harness will execute this session: name + description for the inspector. */
 	tools: { name: string; description: string }[];
 	/** Messages waiting in the lane queue (follow-up/steer); the host stamps these from lane events. */
-	queue: { entryId: string; kind: string; text: string }[];
+	queue: {
+		entryId: string;
+		kind: string;
+		text: string;
+		images?: { mime: string; dataBase64: string }[];
+	}[];
 	/** Working directory of the session; the host stamps it. */
 	cwd?: string;
 	/** Short git branch name of the session cwd, when it is a git checkout. */
