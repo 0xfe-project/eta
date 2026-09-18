@@ -570,6 +570,13 @@ export interface AgentLane {
 	skill(name: string, additionalInstructions: string | undefined, context: Context): Promise<RunResult>;
 	promptFromTemplate(name: string, args: string[] | undefined, context: Context): Promise<RunResult>;
 	compact(options: { customInstructions?: string } | undefined, context: Context): Promise<CompactionResult>;
+	/** Tokens the next request would carry: the branch since the newest compaction, projected. */
+	contextTokens(context: Context): Promise<number>;
+	/**
+	 * Summarize the history when the model now configured cannot hold it. Returns whether a
+	 * compaction ran, so a caller can tell a busy lane from a lane that already fits.
+	 */
+	compactForWindow(context: Context): Promise<boolean>
 	navigateTree(
 		targetId: string | null,
 		options: NavigateOptions | undefined,

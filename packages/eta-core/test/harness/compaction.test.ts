@@ -16,8 +16,10 @@ import {
 	type CompactionSettings,
 	calculateContextTokens,
 	compact,
+	compactWithRequest,
 	DEFAULT_COMPACTION_SETTINGS,
 	estimateContextTokens,
+	fitCompactionSettings,
 	estimateTokens,
 	findCutPoint,
 	findTurnStartIndex,
@@ -605,6 +607,96 @@ describe("harness compaction", () => {
 			BACKGROUND_CONTEXT,
 		);
 		expect(abortedResult).toMatchObject({ ok: false, error: { code: "aborted", message: "stopped" } });
+	});
+
+	it("folds a history larger than the target window into prompts that fit it", async () => {
+		// A session written on a big-window model, then switched down. The compaction that is
+		// supposed to make the smaller window usable cannot itself ask that smaller model to read
+		// the whole history in one prompt, which is what a 1M-token conversation switched to a
+		// 20k-token model used to do.
+		const history: AgentMessage[] = [];
+		for (let index = 0; index < 30; index += 1) history.push(createUserMessage(`${index}: ${"y".repeat(4000)}`));
+		const preparation: CompactionPreparation = {
+			messagesToSummarize: history,
+			turnPrefixMessages: [],
+			retainedTail: [],
+			isSplitTurn: false,
+			tokensBefore: 30_000,
+			fileOps: { read: new Set(), written: new Set(), edited: new Set() },
+			settings: { enabled: true, reserveTokens: 2000, keepRecentTokens: 20_000 },
+		};
+		const smallModel = {
+			id: "small",
+			name: "small",
+			api: "faux",
+			provider: "faux",
+			contextWindow: 12_000,
+			maxTokens: 4096,
+			reasoning: false,
+		} as unknown as Model<Api>;
+		const prompts: string[] = [];
+		const compacted = await compactWithRequest(
+			preparation,
+			{ model: smallModel },
+			async (aiContext) => {
+				const content = aiContext.messages[0]?.content;
+				const block = Array.isArray(content) ? content[0] : undefined;
+				prompts.push(block && block.type === "text" ? block.text : "");
+				return createAssistantMessage(`folded summary ${prompts.length}`);
+			},
+			BACKGROUND_CONTEXT,
+		);
+		const result = getOrThrow(compacted);
+		// The history is folded through the window a piece at a time instead of fired at it whole.
+		expect(prompts.length).toBeGreaterThan(2);
+		for (const prompt of prompts) expect(Math.ceil(prompt.length / 4)).toBeLessThanOrEqual(10_000);
+		// And each piece is told what the earlier ones already concluded.
+		expect(prompts[1]).toContain("<previous-summary>\nfolded summary 1\n</previous-summary>");
+		expect(result.summary).toBe(`folded summary ${prompts.length}`);
+	});
+
+	it("refuses a recent tail larger than the window it has to fit", () => {
+		const small = { contextWindow: 12_000 } as unknown as Model<Api>;
+		expect(fitCompactionSettings(DEFAULT_COMPACTION_SETTINGS, small).keepRecentTokens).toBe(4_000);
+		// A window the settings were written for is left exactly as configured.
+		const wide = { contextWindow: 200_000 } as unknown as Model<Api>;
+		expect(fitCompactionSettings(DEFAULT_COMPACTION_SETTINGS, wide)).toBe(DEFAULT_COMPACTION_SETTINGS);
+	});
+
+	it("keeps the previous summary when there is nothing new to add to it", async () => {
+		const preparation: CompactionPreparation = {
+			messagesToSummarize: [],
+			turnPrefixMessages: [],
+			retainedTail: [createUserMessage("the recent part")],
+			isSplitTurn: false,
+			tokensBefore: 400,
+			previousSummary: "OLD NOTES",
+			fileOps: { read: new Set(), written: new Set(), edited: new Set() },
+			settings: DEFAULT_COMPACTION_SETTINGS,
+		};
+		const smallModel = {
+			id: "small",
+			name: "small",
+			api: "faux",
+			provider: "faux",
+			contextWindow: 12_000,
+			maxTokens: 4096,
+			reasoning: false,
+		} as unknown as Model<Api>;
+		let asked = 0;
+		const result = getOrThrow(
+			await compactWithRequest(
+				preparation,
+				{ model: smallModel },
+				async () => {
+					asked += 1;
+					return createAssistantMessage("should not be asked");
+				},
+				BACKGROUND_CONTEXT,
+			),
+		);
+		expect(result.summary).toContain("OLD NOTES");
+		expect(asked).toBe(0);
 	});
 
 	it("clamps compaction summary maxTokens to the model output cap", async () => {

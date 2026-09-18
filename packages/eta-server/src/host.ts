@@ -1073,6 +1073,10 @@ export class Host {
 		const definition = this.configuredModel(modelId);
 		if (definition) await entry.agent.lane.setThinkingLevel(modelDefaultThinking(definition), BACKGROUND_CONTEXT);
 		this.setMeta(name, { modelId });
+		// A smaller window does not shrink the history written under the bigger one. The next run
+		// would compact at its first boundary anyway; doing it here is what keeps the switch from
+		// being the moment a history the new model cannot hold is sent to it.
+		await entry.agent.lane.compactForWindow(BACKGROUND_CONTEXT);
 		this.refreshView(name);
 	}
 
