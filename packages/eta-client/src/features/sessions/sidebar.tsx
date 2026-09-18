@@ -147,7 +147,7 @@ export function Sidebar(props: { selected: string | null; termActive: boolean; o
 				    there are none and it collapses to nothing. */}
 				<span class="lights-slot" data-testid="lights-slot" />
 				<span class="logo-slot" data-testid="logo-slot">
-					<img src="/Eta-Logo.svg" alt="eta" class="h-5 w-5" data-testid="logo" />
+					<img src="Eta-Logo.svg" alt="eta" class="h-5 w-5" data-testid="logo" />
 				</span>
 				<span class="brand" data-testid="brand">{i18n.t("app.name")}</span>
 			</div>
@@ -244,14 +244,14 @@ export function Sidebar(props: { selected: string | null; termActive: boolean; o
 			{/* Pinned, under the scroll and out of the drag strip: the two ways out of
 			    the list. Every app keeps them here, so nobody has to look for them. */}
 			<div class="flex shrink-0 items-center gap-1 border-t border-border px-2 py-2" data-testid="sidebar-foot">
-				<A href="/settings" data-testid="nav-settings" onClick={(event) => routeTo(event, "/settings")} class="shrink-0 whitespace-nowrap border border-border px-2 py-1 text-xs text-muted hover:bg-foreground hover:text-background">
+				<A href="/settings" data-testid="nav-settings" onClick={(event) => routeTo(event, "/settings")} class="shrink-0 whitespace-nowrap border border-border px-2 py-1 text-xs text-muted hover:bg-overlay-hover hover:text-foreground">
 					{i18n.t("nav.settings")}
 				</A>
 				<button
 					data-testid="term-toggle"
 					onClick={() => props.onTerminal()}
 					title={i18n.t("term.title")}
-					class={`ml-auto shrink-0 whitespace-nowrap border border-border-strong px-2 py-1 text-xs uppercase tracking-[0.12em] text-muted hover:bg-foreground hover:text-background ${props.termActive ? "bg-foreground text-background" : ""}`}
+					class={`ml-auto shrink-0 whitespace-nowrap border border-border-strong px-2 py-1 text-xs uppercase tracking-[0.12em] text-muted hover:bg-overlay-hover hover:text-foreground ${props.termActive ? "bg-foreground text-background" : ""}`}
 				>
 					{i18n.t("term.open")}
 				</button>
@@ -304,10 +304,12 @@ function Section(props: {
 				</Show>
 				<span class="bg-overlay px-1 text-[9px]">{props.count}</span>
 				<Show when={props.onNew !== undefined}>
+					{/* A plus in a square reads as a dot. The golden rectangle gives it a shape of its
+					    own — 1 : 0.618 against the height it already had — without making it a bar. */}
 					<button
 						data-testid={props.testid.replace("group-project-", "project-new-")}
 						title={props.newTitle}
-						class="ml-auto border border-border-strong px-1 text-[9px] hover:bg-foreground hover:text-background"
+						class="ml-auto h-[15px] w-[24.27px] border border-border-strong text-[9px] hover:bg-overlay-hover hover:text-foreground"
 						onClick={props.onNew}
 					>
 						+
@@ -433,7 +435,7 @@ function SessionRow(props: { session: SidebarSession; unread: boolean; selected:
 						⋯
 					</button>
 					<Show when={menuOpen()}>
-						<div data-testid={`session-menu-open-${props.session.name}`} class="absolute right-0 top-6 z-20 min-w-[120px] border-2 border-border-strong bg-elevated shadow-[4px_4px_0_0_var(--shadow)]">
+						<div data-testid={`session-menu-open-${props.session.name}`} class="absolute right-0 top-6 z-20 min-w-[120px] border border-overlay-hover bg-elevated shadow-[4px_4px_0_0_var(--shadow)]">
 							<button
 								data-testid={`session-rename-${props.session.name}`}
 								class="block w-full border-b border-border px-2 py-1 text-left text-xs hover:bg-overlay"

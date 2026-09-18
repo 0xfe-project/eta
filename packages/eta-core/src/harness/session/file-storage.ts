@@ -292,12 +292,15 @@ export class FileStorage implements Storage {
 			}
 			await rename(temp, this.path);
 			// The rename is only durable once the directory is synced too. macOS will not open a
-			// directory read-write, but a read-only handle fsyncs it fine.
-			const directory = await open(dirname(this.path), "r");
-			try {
-				await directory.sync();
-			} finally {
-				await directory.close();
+			// directory read-write, but a read-only handle fsyncs it fine. Windows cannot fsync a
+			// directory at all, so the rename remains the durability boundary there.
+			if (process.platform !== "win32") {
+				const directory = await open(dirname(this.path), "r");
+				try {
+					await directory.sync();
+				} finally {
+					await directory.close();
+				}
 			}
 			this.journalBytes = afterBytes;
 			this.bytesAtLastCompact = afterBytes;

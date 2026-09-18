@@ -13,14 +13,17 @@
  */
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { BackendDescriptor } from "../../../eta-core/src/remote.ts";
 import { ApplicationMenu, BrowserWindow, PATHS, Tray, Utils, type ApplicationMenuItemConfig } from "electrobun/main";
+import type { BackendDescriptor } from "../../../eta-core/src/remote.ts";
 import { ensureBackend } from "../../../eta-server/src/service-launcher.ts";
 import { startNativeBridge } from "./native-bridge.ts";
+import { configureWindowsWindow } from "./platform/windows/index.ts";
 
 const VERSION = "0.1.0";
 const CLIENT_DIST = join(PATHS.VIEWS_FOLDER, "eta");
 const BACKEND = join(PATHS.VIEWS_FOLDER, "eta-backend", process.platform === "win32" ? "eta-server.exe" : "eta-server");
+const isMac = process.platform === "darwin";
+let windowRef: BrowserWindow | undefined;
 
 /** The `action` strings the front-end answers; see eta-client/src/lib/native.ts. */
 const ACTIONS = {
@@ -67,6 +70,13 @@ const nativeBridge = startNativeBridge({
 	contextMenu({ items }): void {
 		console.log(`[eta-desktop] contextMenu(${String(items.length)} items) is not wired up yet`);
 	},
+	windowAction({ action }): void {
+		const current = windowRef;
+		if (current === undefined) return;
+		if (action === "minimize") current.minimize();
+		else if (action === "toggle-maximize") current.isMaximized() ? current.unmaximize() : current.maximize();
+		else current.close();
+	},
 }, VERSION);
 
 /**
@@ -89,13 +99,10 @@ const window = new BrowserWindow({
 	url: pageUrl,
 	frame: { width: 1240, height: 820 },
 	activate: true,
-	// Inset rather than hidden: the three lights stay, and CSS leaves room for them
-	// in the sidebar's logo slot — the WeChat arrangement.
-	titleBarStyle: "hiddenInset",
-	// The lights land in the sidebar's logo slot. `y` is measured down from the top
-	// of the window; 10 centres them in the 40px header. Overridable so nudging it
-	// is a relaunch, not a rebuild: ETA_LIGHT_Y=6 .../eta.app/Contents/MacOS/launcher
-	trafficLightOffset: { x: 14, y: Number(process.env["ETA_LIGHT_Y"] ?? 5) },
+	// macOS keeps its native inset controls. Windows is fully frameless: the page
+	// draws the three controls, so there is no native title bar or small icon.
+	titleBarStyle: isMac ? "hiddenInset" : "hidden",
+	...(isMac ? { trafficLightOffset: { x: 14, y: Number(process.env["ETA_LIGHT_Y"] ?? 5) } } : {}),
 	preload: `window.__ETA_HOST__=${JSON.stringify({
 		apiBase,
 		token: credential,
@@ -108,9 +115,14 @@ const window = new BrowserWindow({
 		...(serviceError === undefined ? {} : { error: serviceError }),
 	})};`,
 });
+windowRef = window;
+
+if (process.platform === "win32") configureWindowsWindow(window);
 
 /** Menu-bar item; the same actions the window menu would carry. */
-const tray = new Tray({ image: "views://eta/tray-18@2x.png", template: true, width: 18, height: 18 });
+const tray = isMac
+	? new Tray({ image: "views://eta/tray-18@2x.png", template: true, width: 18, height: 18 })
+	: new Tray({ image: "views://eta/Eta-Logo.ico", template: false, width: 16, height: 16 });
 tray.setMenu([
 	{ type: "normal", label: "新会话", action: ACTIONS.newSession },
 	{ type: "normal", label: "切换侧栏", action: ACTIONS.toggleSidebar },
@@ -138,19 +150,21 @@ tray.setMenu([
  * pass before it gets an accelerator — see the two notes inside for where the answer
  * is conditional on the view.
  */
+const macAppMenu: ApplicationMenuItemConfig = {
+	label: "eta",
+	submenu: [
+		{ role: "about", label: "关于 eta", accelerator: "" },
+		{ type: "divider" },
+		{ role: "hide", label: "隐藏 eta", accelerator: "CommandOrControl+H" },
+		{ role: "hideOthers", label: "隐藏其他", accelerator: "CommandOrControl+Option+H" },
+		{ role: "showAll", label: "全部显示", accelerator: "" },
+		{ type: "divider" },
+		{ role: "quit", label: "退出 eta", accelerator: "CommandOrControl+Q" },
+	],
+};
+
 const APP_MENU: ApplicationMenuItemConfig[] = [
-	{
-		label: "eta",
-		submenu: [
-			{ role: "about", label: "关于 eta", accelerator: "" },
-			{ type: "divider" },
-			{ role: "hide", label: "隐藏 eta", accelerator: "CommandOrControl+H" },
-			{ role: "hideOthers", label: "隐藏其他", accelerator: "CommandOrControl+Option+H" },
-			{ role: "showAll", label: "全部显示", accelerator: "" },
-			{ type: "divider" },
-			{ role: "quit", label: "退出 eta", accelerator: "CommandOrControl+Q" },
-		],
-	},
+	...(isMac ? [macAppMenu] : []),
 	{
 		label: "会话",
 		submenu: [
@@ -159,7 +173,6 @@ const APP_MENU: ApplicationMenuItemConfig[] = [
 			   item is inert rather than opening a dialog over something that cannot take it. */
 			{ label: "打开文件夹…", action: ACTIONS.openFolder, accelerator: "CommandOrControl+O" },
 			{ type: "divider" },
-			// ⌘. is macOS's cancel; aborting a turn is what cancel means here.
 			{ label: "中止回合", action: ACTIONS.abort, accelerator: "CommandOrControl+Period" },
 			{ label: "压缩上下文", action: ACTIONS.compact, accelerator: "CommandOrControl+Shift+C" },
 		],
@@ -173,7 +186,7 @@ const APP_MENU: ApplicationMenuItemConfig[] = [
 			{ role: "cut", label: "剪切", accelerator: "CommandOrControl+X" },
 			{ role: "copy", label: "拷贝", accelerator: "CommandOrControl+C" },
 			{ role: "paste", label: "粘贴", accelerator: "CommandOrControl+V" },
-			{ role: "pasteAndMatchStyle", label: "粘贴并匹配样式", accelerator: "CommandOrControl+Shift+Option+V" },
+			{ role: "pasteAndMatchStyle", label: "粘贴并匹配样式", accelerator: isMac ? "CommandOrControl+Shift+Option+V" : "CommandOrControl+Shift+V" },
 			{ role: "delete", label: "删除", accelerator: "CommandOrControl+Backspace" },
 			{ type: "divider" },
 			{ role: "selectAll", label: "全选", accelerator: "CommandOrControl+A" },
@@ -186,7 +199,7 @@ const APP_MENU: ApplicationMenuItemConfig[] = [
 			{ label: "切换侧栏", action: ACTIONS.toggleSidebar, accelerator: "CommandOrControl+B" },
 			{ label: "切换右栏", action: ACTIONS.togglePanel, accelerator: "CommandOrControl+Shift+B" },
 			{ type: "divider" },
-			{ role: "toggleFullScreen", label: "全屏幕", accelerator: "Control+Command+F" },
+			{ role: "toggleFullScreen", label: "全屏幕", accelerator: isMac ? "Control+Command+F" : "F11" },
 		],
 	},
 	{
@@ -196,7 +209,7 @@ const APP_MENU: ApplicationMenuItemConfig[] = [
 			{ role: "zoom", label: "缩放", accelerator: "" },
 			{ type: "divider" },
 			{ role: "close", label: "关闭", accelerator: "CommandOrControl+W" },
-			{ role: "bringAllToFront", label: "全部置于前端", accelerator: "" },
+			...(isMac ? [{ role: "bringAllToFront", label: "全部置于前端", accelerator: "" } satisfies ApplicationMenuItemConfig] : []),
 		],
 	},
 ];
@@ -219,7 +232,7 @@ function runAction(action: string, kind: "menu" | "tray"): void {
 	window.webview.executeJavascript(`window.__etaNative?.(${JSON.stringify({ kind, action })})`);
 }
 
-ApplicationMenu.setApplicationMenu(APP_MENU);
+if (isMac) ApplicationMenu.setApplicationMenu(APP_MENU);
 ApplicationMenu.on("application-menu-clicked", (event) => {
 	const action = actionOf(event);
 	if (action !== undefined) runAction(action, "menu");

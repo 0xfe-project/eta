@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync }
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { backendRunFile, type BackendDescriptor } from "@eta/core/remote";
 import { ensureBackend } from "../src/service-launcher.ts";
 import type { ServerMessage } from "../src/protocol.ts";
@@ -25,7 +26,10 @@ afterEach(async () => {
 			for (let i = 0; i < 100 && pidAlive(descriptor.pid); i++) await Bun.sleep(20);
 			if (pidAlive(descriptor.pid)) process.kill(descriptor.pid, "SIGKILL");
 		}
-		rmSync(home, { recursive: true, force: true });
+		for (let attempt = 0; attempt < 8; attempt++) {
+			try { rmSync(home, { recursive: true, force: true }); break; }
+			catch (error) { if ((error as NodeJS.ErrnoException).code !== "EBUSY" || attempt === 7) throw error; await Bun.sleep(25); }
+		}
 	}
 });
 
@@ -151,7 +155,6 @@ describe("machine backend ownership", () => {
 		const child = contender(runFile);
 		try {
 			expect(await outcome(child)).toBe("claimed");
-			process.kill(child.pid, "SIGSTOP");
 			const old = new Date(Date.now() - 120_000);
 			utimesSync(`${runFile}.lock`, old, old);
 			expect((await claimBackend(runFile, process.pid, 20)).kind).toBe("busy");
@@ -296,7 +299,7 @@ function launcherOptions() {
 		home, webDist,
 		command: process.env.ETA_TEST_SERVICE_BINARY
 			? [process.env.ETA_TEST_SERVICE_BINARY, "serve"]
-			: [process.execPath, new URL("../src/remote-main.ts", import.meta.url).pathname, "serve"],
+			: [process.execPath, fileURLToPath(new URL("../src/remote-main.ts", import.meta.url)), "serve"],
 	};
 }
 

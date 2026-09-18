@@ -14,7 +14,7 @@
  */
 
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import {
 	BACKEND_PROTOCOL,
 	isClaim,
@@ -757,7 +757,7 @@ export class RemoteManager {
 	}
 
 	async addProject(id: string, path: string): Promise<void> {
-		if (typeof path !== "string" || !path.startsWith("/") || path.length > 4096 || path.includes("\0"))
+		if (typeof path !== "string" || !isAbsolute(path) || path.length > 4096 || path.includes("\0"))
 			throw new Error("Choose an absolute directory on that machine");
 		const connection = this.config(id);
 		if (!connection.projects.includes(path)) {

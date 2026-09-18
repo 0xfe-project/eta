@@ -15,8 +15,9 @@ installAppBehavior();
 // Dev only, and only with ?keys: what the page was actually handed by the shell.
 installKeyProbe();
 
-// The shell and a browser tab want different chrome; CSS reads this.
+// The shell and a browser tab want different chrome; CSS reads these.
 document.documentElement.dataset.host = host().kind;
+if (host().platform !== undefined) document.documentElement.dataset.platform = host().platform;
 import { ThemeProvider } from "./app/theme.tsx";
 import { SessionsPage } from "./pages/sessions-page.tsx";
 import { NewSessionPage } from "./pages/new-session-page.tsx";
@@ -38,8 +39,12 @@ function NotFound() {
  * loads this page from `views://eta/index.html`, where the pathname is a file path
  * that matches no route, so it gets hash routing instead: the url stays the file
  * that is actually loaded, and a reload comes back to the same view.
+ *
+ * A function rather than a constant: `<Route>` builds a memo the moment it is called, so
+ * a tree built while the module loads has no owner to dispose it — and Solid says so
+ * once per route on startup. Built on the way into `render`, it is owned like the rest.
  */
-const routes = (
+const routes = () => (
 	<>
 		<Route path="/" component={SessionsPage} />
 		<Route path="/new" component={NewSessionPage} />
@@ -61,7 +66,7 @@ function ServiceUnavailable(props: { message: string }) {
 render(
 	() => (
 		<ThemeProvider>
-			<Show when={host().error} fallback={host().kind === "desktop" ? <HashRouter>{routes}</HashRouter> : <Router>{routes}</Router>}>
+			<Show when={host().error} fallback={host().kind === "desktop" ? <HashRouter>{routes()}</HashRouter> : <Router>{routes()}</Router>}>
 				{(message) => <ServiceUnavailable message={message()} />}
 			</Show>
 			<SettingsHost />

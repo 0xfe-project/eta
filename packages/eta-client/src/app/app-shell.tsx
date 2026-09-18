@@ -1,7 +1,8 @@
 import { Show, createContext, createSignal, onCleanup, useContext, type Accessor, type JSX } from "solid-js";
 import { useNavigate } from "@solidjs/router";
-import { NativeActions, onNativeActions } from "../lib/native.ts";
+import { NativeActions, onNativeActions, windowAction } from "../lib/native.ts";
 import { insideTerminal, lockSelectionForDrag } from "../lib/app-behavior.ts";
+import { host } from "../lib/host.ts";
 
 // The right column doubles as the workspace panel, so it opens wide: the git
 // list and the diff split left/right once there is room for both. Reserves keep
@@ -119,6 +120,18 @@ function useColumnWidth(key: string, fallback: number, min: number, max: number)
 	return width;
 }
 
+function WindowControls() {
+	return (
+		<Show when={host().kind === "desktop" && host().platform === "win32"}>
+			<div class="window-controls" data-testid="window-controls">
+				<button type="button" class="window-control-close" aria-label="关闭" title="关闭" onClick={() => void windowAction("close")} />
+				<button type="button" class="window-control-minimize" aria-label="最小化" title="最小化" onClick={() => void windowAction("minimize")} />
+				<button type="button" class="window-control-maximize" aria-label="最大化" title="最大化" onClick={() => void windowAction("toggle-maximize")} />
+			</div>
+		</Show>
+	);
+}
+
 export function AppShell(props: { sidebar: JSX.Element; main: JSX.Element; panel: JSX.Element; palette?: JSX.Element }) {
 	const leftWidth = useColumnWidth("eta.width.sidebar", 320, SIDEBAR_MIN, SIDEBAR_MAX);
 	const rightWidth = useColumnWidth("eta.width.panel", 320, PANEL_MIN, PANEL_MAX);
@@ -196,6 +209,7 @@ export function AppShell(props: { sidebar: JSX.Element; main: JSX.Element; panel
 
 	return (
 		<ShellContext.Provider value={value}>
+			<WindowControls />
 			<div class="flex h-full overflow-hidden" data-testid="shell">
 				<aside
 					data-testid="drawer-left"

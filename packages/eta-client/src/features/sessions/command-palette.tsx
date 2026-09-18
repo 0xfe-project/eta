@@ -90,7 +90,7 @@ export function CommandPalette() {
 	};
 
 	return (
-		<div data-testid="command-palette" class="border-2 border-border-strong bg-popover text-popover-foreground shadow-[6px_6px_0_0_var(--shadow)]">
+		<div data-testid="command-palette" class="border border-overlay-hover bg-popover text-popover-foreground shadow-[6px_6px_0_0_var(--shadow)]">
 			<div data-testid="command-root" class="bg-transparent">
 				<input
 					data-testid="palette-input"

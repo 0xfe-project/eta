@@ -24,12 +24,18 @@ export default {
 			"../eta-client/dist/assets": "views/eta/assets",
 			"../eta-client/dist/AKRDWGSCNFM-Regular.woff2": "views/eta/AKRDWGSCNFM-Regular.woff2",
 			"../eta-client/dist/Eta-Logo.svg": "views/eta/Eta-Logo.svg",
+			"../eta-client/dist/Eta-Logo.png": "views/eta/Eta-Logo.png",
+			"../eta-client/dist/Eta-Logo.ico": "views/eta/Eta-Logo.ico",
 			"../eta-client/dist/tray-16.png": "views/eta/tray-16.png",
 			"../eta-client/dist/tray-18@2x.png": "views/eta/tray-18@2x.png",
 		},
 		mac: {
 			bundleCEF: false,
 			icons: "icon.iconset",
+		},
+		win: {
+			bundleCEF: false,
+			icon: "../eta-client/public/Eta-Logo.ico",
 		},
 	},
 } satisfies ElectrobunConfig;

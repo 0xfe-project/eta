@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile, stat, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -15,7 +16,9 @@ export function sshArgs(connection: RemoteConnection): string[] {
 }
 export interface CommandResult { stdout: string; stderr: string; code: number }
 export async function command(args: string[], input?: Uint8Array, timeoutMs = 30_000, env?: NodeJS.ProcessEnv): Promise<CommandResult> {
-	const proc = Bun.spawn(args, { env, stdin: input ? "pipe" : "ignore", stdout: "pipe", stderr: "pipe" });
+	const helperScript = process.platform === "win32" && /\.(?:cmd|bat)$/i.test(args[0] ?? "") && existsSync(`${args[0]}.js`) ? `${args[0]}.js` : undefined;
+	const spawnArgs = helperScript === undefined ? args : [process.execPath, helperScript, ...args.slice(1)];
+	const proc = Bun.spawn(spawnArgs, { env, stdin: input ? "pipe" : "ignore", stdout: "pipe", stderr: "pipe" });
 	const timer = setTimeout(() => proc.kill(), timeoutMs);
 	try {
 		if (input && proc.stdin && typeof proc.stdin !== "number") { proc.stdin.write(input); await proc.stdin.end(); }

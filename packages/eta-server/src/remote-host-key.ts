@@ -11,7 +11,7 @@ export async function confirmSshHost(connection: RemoteConnection, expected?: st
 	try {
 		const prompt = join(directory, "prompt");
 		const accepted = join(directory, "accepted");
-		const helper = join(directory, "askpass");
+		const helper = join(directory, process.platform === "win32" ? "askpass.cmd" : "askpass");
 		const expectedFile = join(directory, "expected");
 		await writeFile(expectedFile, expected ?? "", { mode: 0o600 });
 		await writeFile(helper, `#!/bin/sh
@@ -23,7 +23,23 @@ printf '%s' "$1" > ${shellQuote(prompt)}
 ${expected === undefined ? "exit 1" : `cmp -s ${shellQuote(prompt)} ${shellQuote(expectedFile)} || exit 1
 printf yes > ${shellQuote(accepted)}
 printf 'yes\\n'`}
-`, { mode: 0o700 });
+		`, { mode: 0o700 });
+		if (process.platform === "win32") {
+			const script = `${helper}.js`;
+			const source = [
+				"const fs=require(\"node:fs\");",
+				"const p=process.argv[2]||\"\";",
+				"if(!p) process.exit(1);",
+				`fs.writeFileSync(${JSON.stringify(prompt)}, p);`,
+				expected === undefined ? "process.exit(1);" : [
+					`if(fs.readFileSync(${JSON.stringify(prompt)}, \"utf8\") !== fs.readFileSync(${JSON.stringify(expectedFile)}, \"utf8\")) process.exit(1);`,
+					`fs.writeFileSync(${JSON.stringify(accepted)}, \"yes\");`,
+					`process.stdout.write(\"yes\\n\");`,
+				].join(""),
+			].join("");
+			await writeFile(script, source);
+			await writeFile(helper, `@echo off\r\n"${process.execPath}" "${script}" %*\r\n`);
+		}
 		const result = await run([
 			"ssh", "-o", "BatchMode=no", "-o", "StrictHostKeyChecking=ask",
 			"-o", "PreferredAuthentications=none", "-o", "NumberOfPasswordPrompts=0",

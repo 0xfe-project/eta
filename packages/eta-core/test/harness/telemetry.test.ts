@@ -34,7 +34,7 @@ describe("agent telemetry schemas", () => {
 			"pi.harness.event_handler",
 			"pi.session.write",
 		]);
-		const actual = readFileSync(resolve(import.meta.dirname, "../../docs/telemetry-schema.md"), "utf8");
+		const actual = readFileSync(resolve(import.meta.dirname, "../../docs/telemetry-schema.md"), "utf8").replaceAll("\r\n", "\n");
 		expect(actual).toBe(renderAgentTelemetrySchemaMarkdown());
 	});
 

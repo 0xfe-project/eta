@@ -73,7 +73,7 @@ export default Object.assign(defineConfig({
 		// is what erases the JSX. `apply: "serve"`, and projectRoot lifts paths to the repo root so
 		// the copied context says packages/eta-client/src/…, not ../src/…
 		solidGrab({ projectRoot: "../.." }),
-		solid(),
+		solid({ hot: process.env.VITEST === undefined }),
 		tailwindcss(),
 	],
 	server: {

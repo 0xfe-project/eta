@@ -31,6 +31,7 @@ export interface NativeHandlers {
 	openExternal(input: { url: string }): void;
 	/** Returns immediately; the click result is reported by the shell via push(). */
 	contextMenu(input: { items: unknown[] }): void;
+	windowAction?(input: { action: "minimize" | "toggle-maximize" | "close" }): void;
 }
 
 /**
@@ -522,6 +523,11 @@ async function startClaimedServer(
 				if (url.pathname === "/api/native/save-file" && request.method === "POST") {
 					const input = (await request.json()) as { content: string; filename: string };
 					return apiJson({ path: await options.native.saveFile(input) });
+				}
+				if (url.pathname === "/api/native/window-action" && request.method === "POST") {
+					const input = (await request.json()) as { action: "minimize" | "toggle-maximize" | "close" };
+					options.native.windowAction?.(input);
+					return new Response(null, { status: 202, headers: CORS_HEADERS });
 				}
 				if (url.pathname === "/api/native/open-external" && request.method === "POST") {
 					const input = (await request.json()) as { url: string };

@@ -50,7 +50,13 @@ async function fixture(holdFirst: boolean, run: (host: Host, directory: string, 
 			});
 		} finally {
 			try { await host.close(); }
-			finally { upstream.stop(true); await rm(directory, { recursive: true, force: true }); }
+			finally {
+				upstream.stop(true);
+				for (let attempt = 0; attempt < 8; attempt++) {
+					try { await rm(directory, { recursive: true, force: true }); break; }
+					catch (error) { if ((error as NodeJS.ErrnoException).code !== "EBUSY" || attempt === 7) throw error; await Bun.sleep(25); }
+				}
+			}
 		}
 	}
 }

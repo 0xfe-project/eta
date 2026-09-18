@@ -39,6 +39,11 @@ export function startNativeBridge(native: NativeHandlers, appVersion: string) {
 					native.contextMenu(await request.json());
 					return new Response(null, { status: 202, headers });
 				}
+				if (path === "/api/native/window-action") {
+					if (native.windowAction === undefined) return new Response("not_found", { status: 404, headers });
+					native.windowAction(await request.json());
+					return new Response(null, { status: 202, headers });
+				}
 			} catch { return new Response("native_request_failed", { status: 400, headers }); }
 			return new Response("not_found", { status: 404, headers });
 		},

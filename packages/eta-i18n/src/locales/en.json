@@ -57,6 +57,8 @@
 	"ask.answer": "Answer",
 	"ask.freeform": "Type an answer…",
 	"ask.seconds": "auto-answer in {seconds}s",
+	"panel.empty.title": "No active session",
+	"panel.empty.body": "Start a session and this panel will show its model, usage, goals and tasks.",
 	"panel.usage": "usage",
 	"panel.prompt": "system prompt",
 	"panel.stable": "stable",

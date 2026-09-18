@@ -151,9 +151,9 @@ describe("adopting the machine's backend", () => {
 			},
 			inspect: async () => ({ hostname: "mac-mini", user: "avaca" }),
 			openTunnel: async (_connection, remotePort) => {
-				const process = Bun.spawn(["sleep", "60"], { stdout: "ignore", stderr: "ignore" });
-				hanging.push(process);
-				return { localPort: remotePort, process };
+			const child = Bun.spawn([globalThis.process.execPath, "-e", "setInterval(() => {}, 60_000)"], { stdout: "ignore", stderr: "ignore" });
+			hanging.push(child);
+			return { localPort: remotePort, process: child };
 			},
 			artifact: async () => {
 				throw new Error("artifact should not be built when nothing needs deploying");

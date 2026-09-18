@@ -17,8 +17,8 @@ bun run build:web   # 产出 packages/eta-client/dist
 | `bun run dev` + `bun run dev:web` | 前端热更新:vite :5173,`/api`、`/ws`、`/term` proxy 到 :3000 |
 | `bun run dev:desk` | 桌面壳,一条命令:自己拉 vite、等它就绪、再开 Electrobun 窗口 |
 
-桌面壳的 SDK 由 hutch 投影,第一次跑前先 `bun run --cwd packages/eta-desktop prepare:sdk`。
-`bun run prod:desk` 出 `.app` 和更新包,产物在 `packages/eta-desktop/artifacts/`(不进 git)。
+桌面壳的 SDK 由跨平台的本地 `electrobun` CLI 投影（Windows 和 macOS 均可用）,第一次跑前先 `bun run --cwd packages/eta-desktop prepare:sdk`。
+`bun run prod:desk` 在 macOS 出 `.app`,在 Windows 出 `eta-Setup.exe` 和更新包,产物在 `packages/eta-desktop/artifacts/`(不进 git)。
 桌面启动时复用已有后端；没有时启动随应用打包的独立服务，日志在 `~/.eta/server.log`。退出桌面只关闭窗口和原生功能接口，后台任务继续运行。
 壳的窗口只在启动时认一次 vite;先开窗口再起 `dev:web` 的话,它会落到 `views://`(冷页面,无热更新),重开窗口即可。
 
