@@ -9,6 +9,8 @@ import { Composer } from "../features/sessions/composer.tsx";
 import { ContextBar } from "../features/sessions/context-bar.tsx";
 import { AskModal } from "../features/sessions/ask-modal.tsx";
 import { BtwDialog } from "../features/sessions/btw-dialog.tsx";
+import { ForkDialog } from "../features/sessions/fork-dialog.tsx";
+import { forkDialogOpen, openForkDialog, setForkDialogOpen } from "../lib/fork.ts";
 import { btwDialogOpen, setBtwDialogOpen } from "../lib/btw.ts";
 import { TerminalHost } from "../features/sessions/terminal-host.tsx";
 import { Welcome } from "../features/sessions/welcome.tsx";
@@ -104,14 +106,28 @@ function SessionsMain(props: { termOpen: Accessor<boolean>; setTermOpen: Setter<
 
 	return (
 		<div class="flex min-h-0 flex-1 flex-col">
-			<MainHeader title={selected() ?? i18n.t("app.title")} remote={state.sessions.find((session) => session.name === selected())?.remote} {...(headerCwd() === undefined ? {} : { cwd: headerCwd() })} />
+			<MainHeader
+				title={selected() ?? i18n.t("app.title")}
+				remote={state.sessions.find((session) => session.name === selected())?.remote}
+				{...(headerCwd() === undefined ? {} : { cwd: headerCwd() })}
+				trailing={
+					<button
+						data-testid="header-fork"
+						title={i18n.t("cmd.fork")}
+						class="header-chip border uppercase tracking-wider"
+						onClick={() => openForkDialog()}
+					>
+						{i18n.t("fork.action")}
+					</button>
+				}
+			/>
 			<Show
 				when={state.sessions.length === 0}
 				fallback={
 					<Show when={view()} fallback={<p class="p-6 text-sm text-muted">{i18n.t("sidebar.noSessions")}</p>}>
 						{(current) => (
 							<>
-								<Timeline view={current()} session={selected() ?? ""} running={running()} />
+								<Timeline view={current()} session={selected() ?? ""} running={running()} onFork={(entryId) => openForkDialog(entryId)} />
 								<Composer
 									session={selected() ?? ""}
 									running={running()}
@@ -120,6 +136,7 @@ function SessionsMain(props: { termOpen: Accessor<boolean>; setTermOpen: Setter<
 									onNavigateSettings={props.onSettings}
 									onToggleTerminal={() => props.setTermOpen((open) => !open)}
 									onBtw={() => setBtwDialogOpen(true)}
+								onFork={() => openForkDialog()}
 									queue={current().queue}
 								/>
 								<Show when={props.termOpen() && view() !== undefined}>
@@ -128,6 +145,9 @@ function SessionsMain(props: { termOpen: Accessor<boolean>; setTermOpen: Setter<
 								<AskModal session={selected() ?? ""} view={current()} />
 								{/* Rendered here, not in the context panel: `/btw` is a request to answer now, so the dialog does not wait for whichever tab the right rail happens to be on. */}
 								<BtwDialog session={selected() ?? ""} view={current()} open={btwDialogOpen()} onOpenChange={setBtwDialogOpen} />
+								{/* The chooser sits over the transcript it is cutting, not over the right rail: the message
+								    you fork from is the one you were just reading. */}
+								<ForkDialog session={selected() ?? ""} view={current()} open={forkDialogOpen()} onOpenChange={setForkDialogOpen} />
 							</>
 						)}
 					</Show>

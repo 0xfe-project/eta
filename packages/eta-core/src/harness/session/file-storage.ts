@@ -1,7 +1,9 @@
 import { appendFile, mkdir, open, readFile, rename, stat } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { Context } from "../context.ts";
+import type { StateJournalLine } from "./in-memory-storage-state.ts";
 import { MemoryStorage } from "./memory.ts";
+import type { ForkOptions } from "./types.ts";
 import type {
 	CommitResult,
 	Entry,
@@ -47,6 +49,21 @@ export interface FileStorageCompaction {
 	afterBytes: number;
 	rewritten: boolean;
 	reason?: "concurrent-writer" | "not-worth-it";
+}
+
+export interface FileStorageFork {
+	/** Entries the destination journal holds. */
+	entries: number;
+	bytes: number;
+}
+
+/**
+ * The part of a session's persistence a host needs to branch it into a new session. Only a
+ * journal-backed session has one: a session that lives in memory alone has nothing to copy,
+ * and saying so beats pretending the fork worked.
+ */
+export interface SessionJournal {
+	forkInto(destinationPath: string, options: ForkOptions, context: Context): Promise<FileStorageFork>;
 }
 
 /** Below this the journal is small enough that a rewrite costs more than it saves. */
@@ -291,20 +308,61 @@ export class FileStorage implements Storage {
 				await handle.close();
 			}
 			await rename(temp, this.path);
-			// The rename is only durable once the directory is synced too. macOS will not open a
-			// directory read-write, but a read-only handle fsyncs it fine. Windows cannot fsync a
-			// directory at all, so the rename remains the durability boundary there.
-			if (process.platform !== "win32") {
-				const directory = await open(dirname(this.path), "r");
-				try {
-					await directory.sync();
-				} finally {
-					await directory.close();
-				}
-			}
+			// The rename is only durable once the directory is synced too.
+			await syncDirectory(this.path);
 			this.journalBytes = afterBytes;
 			this.bytesAtLastCompact = afterBytes;
 			return { beforeBytes, afterBytes, rewritten: true };
+		});
+		this.appendQueue = step.then(
+			() => undefined,
+			() => undefined,
+		);
+		return step;
+	}
+
+	/**
+	 * Copy this session up to one entry into a journal of its own. The destination is a second
+	 * file rather than a second reader of this one: a fork goes on living, and two writers
+	 * appending to one journal is the accident the replay's duplicate tolerance exists for, not
+	 * something to hand a user on purpose.
+	 *
+	 * The snapshot is taken with the append queue drained, so the copy is a state this session
+	 * genuinely held, and the file is fsynced before it is renamed in — a fork whose newest
+	 * message is still in the page cache is a fork that lost that message on the next boot.
+	 * In-flight operation state does not cross over: a fork inherits a past, not a tool call
+	 * another run is still waiting on.
+	 */
+	async forkInto(destinationPath: string, options: ForkOptions, context: Context): Promise<FileStorageFork> {
+		this.assertOpen();
+		const step = this.appendQueue.then(async () => {
+			const forked = await this.memory.fork(options);
+			let lines: StateJournalLine[];
+			try {
+				lines = await forked.journalFromState(context);
+			} finally {
+				await forked.close(context);
+			}
+			const payload = Buffer.from(
+				lines.map((line) => `${JSON.stringify({ w: line.writes, t: line.timestamp })}\n`).join(""),
+				"utf8",
+			);
+			await mkdir(dirname(destinationPath), { recursive: true });
+			const temp = `${destinationPath}.fork`;
+			const handle = await open(temp, "w");
+			try {
+				await handle.writeFile(payload);
+				await handle.sync();
+			} finally {
+				await handle.close();
+			}
+			await rename(temp, destinationPath);
+			await syncDirectory(destinationPath);
+			const entries = lines.reduce(
+				(total, line) => total + line.writes.filter((write) => write.kind === "entry").length,
+				0,
+			);
+			return { entries, bytes: payload.byteLength };
 		});
 		this.appendQueue = step.then(
 			() => undefined,
@@ -441,5 +499,20 @@ export class FileStorage implements Storage {
 
 	private assertOpen(): void {
 		if (this.state !== "open") throw new Error("FileStorage is closed");
+	}
+}
+
+/**
+ * A rename is only durable once the directory holding it is synced. macOS will not open a
+ * directory read-write, but a read-only handle fsyncs it fine; Windows cannot fsync a
+ * directory at all, so the rename stays the durability boundary there.
+ */
+async function syncDirectory(path: string): Promise<void> {
+	if (process.platform === "win32") return;
+	const directory = await open(dirname(path), "r");
+	try {
+		await directory.sync();
+	} finally {
+		await directory.close();
 	}
 }

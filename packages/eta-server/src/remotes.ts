@@ -690,7 +690,16 @@ export class RemoteManager {
 	}
 
 	async route(message: ClientMessage): Promise<boolean> {
-		const name = "session" in message ? message.session : "name" in message ? message.name : "";
+		// Which session this op is about: a fork names its source under `from`, and its own name is
+		// the one the other machine picks when the client did not.
+		const name =
+			"session" in message
+				? message.session
+				: message.op === "session.fork"
+					? message.from
+					: "name" in message && message.name !== undefined
+						? message.name
+						: "";
 		const remote = parseRemoteSession(name);
 		const id = message.op === "session.create" ? message.remoteId : remote?.connectionId;
 		if (!id) {
@@ -718,7 +727,10 @@ export class RemoteManager {
 		}
 		let outgoing: ClientMessage = message;
 		if (remote)
-			outgoing = { ...message, ...("session" in message ? { session: remote.session } : { name: remote.session }) } as ClientMessage;
+			outgoing =
+				message.op === "session.fork"
+					? { ...message, from: remote.session }
+					: ({ ...message, ...("session" in message ? { session: remote.session } : { name: remote.session }) } as ClientMessage);
 		if (outgoing.op === "session.create") {
 			const { remoteId: _, ...create } = outgoing;
 			if (!create.cwd?.trim()) throw new Error("Choose a workspace directory on that machine");

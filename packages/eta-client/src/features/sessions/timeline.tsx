@@ -25,7 +25,7 @@ function contentChars(message: { content?: unknown } | undefined): number {
 	return total;
 }
 
-export function Timeline(props: { view: SessionView; session: string; running?: boolean }) {
+export function Timeline(props: { view: SessionView; session: string; running?: boolean; onFork?: (entryId: string) => void }) {
 	const i18n = useAppI18n();
 	let scroller: HTMLDivElement | undefined;
 	let railWrap: HTMLDivElement | undefined;
@@ -216,6 +216,8 @@ export function Timeline(props: { view: SessionView; session: string; running?: 
 									results={results()}
 									isLast={false}
 									streaming={false}
+									entryId={entry.entryId}
+									{...(props.onFork === undefined ? {} : { onFork: props.onFork })}
 								/>
 							</div>
 						)}
@@ -241,6 +243,8 @@ export function Timeline(props: { view: SessionView; session: string; running?: 
 									results={results()}
 									isLast={index() === props.view.messages.length - 1 && props.view.streaming === undefined}
 									streaming={(props.running ?? false) && index() === props.view.messages.length - 1 && entry.message.role === "assistant"}
+									entryId={entry.entryId}
+									{...(props.onFork === undefined ? {} : { onFork: props.onFork })}
 								/>
 							</div>
 						)}
@@ -327,8 +331,16 @@ export function Timeline(props: { view: SessionView; session: string; running?: 
 	);
 }
 
-function MessageRow(props: { role: string; message: unknown; session: string; streaming?: boolean; at?: number; results?: Map<string, ToolResultLike>; isLast?: boolean }) {
-	if (props.role === "user") return <UserMessage message={props.message} at={props.at ?? 0} />;
+function MessageRow(props: { role: string; message: unknown; session: string; streaming?: boolean; at?: number; results?: Map<string, ToolResultLike>; isLast?: boolean; entryId?: string; onFork?: (entryId: string) => void }) {
+	if (props.role === "user")
+		return (
+			<UserMessage
+				message={props.message}
+				at={props.at ?? 0}
+				{...(props.entryId === undefined ? {} : { entryId: props.entryId })}
+				{...(props.onFork === undefined ? {} : { onFork: props.onFork })}
+			/>
+		);
 	if (props.role === "assistant") {
 		return (
 			<AssistantMessage
@@ -344,7 +356,7 @@ function MessageRow(props: { role: string; message: unknown; session: string; st
 	return null;
 }
 
-function UserMessage(props: { message: unknown; at: number }) {
+function UserMessage(props: { message: unknown; at: number; entryId?: string; onFork?: (entryId: string) => void }) {
 	const blocks = createMemo(() => contentBlocks((props.message as { content?: unknown }).content));
 	return (
 		<div class="message user my-2 flex justify-end" data-testid="user-message">
@@ -356,7 +368,13 @@ function UserMessage(props: { message: unknown; at: number }) {
 						</Show>
 					)}
 				</Index>
-				<MessageFooter at={props.at} blocks={blocks()} />
+				<MessageFooter
+					at={props.at}
+					blocks={blocks()}
+					{...(props.entryId === undefined || props.onFork === undefined
+						? {}
+						: { onFork: () => props.onFork!(props.entryId!) })}
+				/>
 			</div>
 		</div>
 	);
@@ -505,7 +523,7 @@ function contentBlocks(content: unknown): ContentBlock[] {
 	return [];
 }
 
-function MessageFooter(props: { at: number; blocks: { type?: string; text?: unknown }[] }) {
+function MessageFooter(props: { at: number; blocks: { type?: string; text?: unknown }[]; onFork?: () => void }) {
 	const i18n = useAppI18n();
 	const [copied, setCopied] = createSignal(false);
 	const text = () => props.blocks.filter((block) => block.type === "text").map((block) => String(block.text ?? "")).join("\n").trim();
@@ -525,6 +543,17 @@ function MessageFooter(props: { at: number; blocks: { type?: string; text?: unkn
 						class="border border-transparent px-1 hover:border-border hover:text-foreground"
 					>
 						{copied() ? "\u2713" : i18n.t("timeline.copy")}
+					</button>
+				</Show>
+				{/* One message is the whole argument for a branch: this answer went wrong from here. */}
+				<Show when={props.onFork !== undefined}>
+					<button
+						data-testid="msg-fork"
+						title={i18n.t("cmd.fork")}
+						class="border border-transparent px-1 hover:border-border hover:text-foreground"
+						onClick={props.onFork}
+					>
+						{i18n.t("fork.action")}
 					</button>
 				</Show>
 			</div>

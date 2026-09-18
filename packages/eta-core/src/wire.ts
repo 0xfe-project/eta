@@ -109,6 +109,14 @@ export type ControlOp =
 			modelId?: string;
 	  }
 	| { op: "session.delete"; name: string }
+	/**
+	 * Branch a session at one of its own messages. `entryId` is one the client read out of
+	 * `view.messages[]` — never an index into the list, since what a front end holds is a window
+	 * that older rows page into. `position` says whether the chosen message is the last thing the
+	 * branch keeps (the default) or the first thing it leaves out. The new session answers with a
+	 * `created` frame, so a client that follows creation already knows how to move to it.
+	 */
+	| { op: "session.fork"; from: string; entryId: string; position?: "at" | "before"; name?: string }
 	| { op: "session.pin"; session: string; pinned: boolean }
 	| { op: "session.archive"; session: string; archived: boolean }
 	| { op: "session.rename"; session: string; title: string };

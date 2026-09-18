@@ -6,6 +6,7 @@ import { BACKGROUND_CONTEXT } from "../../src/harness/context.ts";
 import * as sessionWrites from "../../src/harness/session/commit.ts";
 import { FileStorage } from "../../src/harness/session/file-storage.ts";
 import * as storedValues from "../../src/harness/session/values.ts";
+import type { LaneConfiguration, LaneState } from "../../src/harness/session/types.ts";
 import { createStorageConformance, type StorageFixture } from "../../src/harness/session/testing/index.ts";
 
 const NOW = 1_700_000_000_000;
@@ -348,5 +349,88 @@ describe("FileStorage journal repair and compaction", () => {
 		expect(result.reason).toBe("not-worth-it");
 		expect((await stat(path)).size).toBe(beforeBytes);
 		await opened.close(BACKGROUND_CONTEXT);
+	});
+});
+
+const laneConfiguration = {
+	model: { provider: "test", modelId: "test" },
+	thinkingLevel: "off",
+	activeToolNames: ["read"],
+} satisfies LaneConfiguration;
+const idleLane = { currentOperationId: null, lastOperationId: null, inbox: [] } satisfies LaneState;
+
+/** Three messages on one branch, with the lane rows a branch fork insists on seeing. */
+async function branchOfThree(): Promise<{ path: string; storage: FileStorage }> {
+	const path = await freshPath();
+	const storage = await FileStorage.load({ path, now: () => NOW }, BACKGROUND_CONTEXT);
+	await storage.commit(
+		[
+			messageEntry("e1", null, "first"),
+			storedValues.setValue(storedValues.laneConfig("main"), laneConfiguration),
+			storedValues.setValue(storedValues.laneState("main"), idleLane),
+			storedValues.setValue(storedValues.branchTip("main"), "e1"),
+		],
+		BACKGROUND_CONTEXT,
+	);
+	await storage.commit([messageEntry("e2", "e1", "second"), storedValues.setValue(storedValues.branchTip("main"), "e2")], BACKGROUND_CONTEXT);
+	await storage.commit([messageEntry("e3", "e2", "third"), storedValues.setValue(storedValues.branchTip("main"), "e3")], BACKGROUND_CONTEXT);
+	return { path, storage };
+}
+
+describe("FileStorage fork", () => {
+	it("copies the branch up to one entry into a journal of its own", async () => {
+		const { path, storage } = await branchOfThree();
+		const destination = join(path.replace(/journal\.jsonl$/, ""), "fork", "journal.jsonl");
+		const fork = await storage.forkInto(destination, { scope: "branch", branch: "main", entryId: "e2" }, BACKGROUND_CONTEXT);
+
+		expect(fork.entries).toBe(2);
+		// A journal the caller can open the moment the call returns is the whole promise: a
+		// fork whose newest message is still in the page cache lost that message.
+		expect((await stat(destination)).size).toBeGreaterThan(0);
+
+		const opened = await FileStorage.load({ path: destination }, BACKGROUND_CONTEXT);
+		expect((await opened.getEntries(["e1", "e2", "e3"], BACKGROUND_CONTEXT)).size).toBe(2);
+		expect(await opened.getValue(storedValues.branchTip("main"), BACKGROUND_CONTEXT)).toMatchObject({ value: "e2" });
+		// The copy starts idle whatever the parent had recorded: a fork inherits a past, not a
+		// run another session is still waiting on.
+		expect((await opened.getValue(storedValues.laneState("main"), BACKGROUND_CONTEXT))?.value).toEqual({
+			currentOperationId: null,
+			lastOperationId: null,
+			inbox: [],
+		});
+		await opened.close(BACKGROUND_CONTEXT);
+		await storage.close(BACKGROUND_CONTEXT);
+	});
+
+	it("cuts the chosen message out when the fork is asked to stop above it", async () => {
+		const { path, storage } = await branchOfThree();
+		const destination = join(path.replace(/journal\.jsonl$/, ""), "before", "journal.jsonl");
+		const fork = await storage.forkInto(
+			destination,
+			{ scope: "branch", branch: "main", entryId: "e2", position: "before" },
+			BACKGROUND_CONTEXT,
+		);
+		expect(fork.entries).toBe(1);
+		const opened = await FileStorage.load({ path: destination }, BACKGROUND_CONTEXT);
+		expect(await opened.getValue(storedValues.branchTip("main"), BACKGROUND_CONTEXT)).toMatchObject({ value: "e1" });
+		await opened.close(BACKGROUND_CONTEXT);
+		await storage.close(BACKGROUND_CONTEXT);
+	});
+
+	it("writes nothing at all when the entry is not on the branch, and keeps taking writes", async () => {
+		const { path, storage } = await branchOfThree();
+		const destination = join(path.replace(/journal\.jsonl$/, ""), "nope", "journal.jsonl");
+		await expect(
+			storage.forkInto(destination, { scope: "branch", branch: "main", entryId: "somewhere-else" }, BACKGROUND_CONTEXT),
+		).rejects.toThrow(/is not on source branch/);
+		await expect(stat(destination)).rejects.toThrow();
+
+		// The refusal is one call's failure, not the session's: the append queue behind it is
+		// still live, or a refused fork would quietly break the session that was asked for it.
+		await storage.commit([messageEntry("e4", "e3", "fourth"), storedValues.setValue(storedValues.branchTip("main"), "e4")], BACKGROUND_CONTEXT);
+		await storage.close(BACKGROUND_CONTEXT);
+		const reopened = await FileStorage.load({ path }, BACKGROUND_CONTEXT);
+		expect((await reopened.getStats(BACKGROUND_CONTEXT)).messageCount).toBe(4);
+		await reopened.close(BACKGROUND_CONTEXT);
 	});
 });
