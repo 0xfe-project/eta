@@ -668,8 +668,8 @@ async function startClaimedServer(
 				// Ops from one connection apply strictly in arrival order.
 				const run = async () => {
 					try {
-						await applyOp(host, message);
-						if (message.op === "session.create") send(socket, { type: "created", name: message.name });
+						const created = await applyOp(host, message);
+						if (created !== undefined) send(socket, { type: "created", name: created });
 						if (message.op === "session.delete") send(socket, { type: "deleted", name: message.name });
 						send(socket, { type: "sessions", sessions: sidebar() });
 					} catch (error) {
@@ -732,7 +732,12 @@ async function startClaimedServer(
 	};
 }
 
-export async function applyOp(host: Host, message: ClientMessage): Promise<void> {
+/**
+ * Apply one client op. Resolves to the name of the session the op brought into the world, when
+ * it did — a fork made without a name gets one from the host, so the answer cannot simply be the
+ * name the caller sent.
+ */
+export async function applyOp(host: Host, message: ClientMessage): Promise<string | undefined> {
 	switch (message.op) {
 		case "focus":
 			host.focus(message.session);
@@ -842,8 +847,15 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 			await host.createSession(message.name, personaId, cwd, message.modelId);
 			if ((message.prompt?.length ?? 0) > 0 || (message.images?.length ?? 0) > 0)
 				host.queue(message.name, message.prompt ?? "", "queue", message.images);
-			return;
+			return message.name;
 		}
+		case "session.fork":
+			return await host.forkSession({
+				...(message.name === undefined ? {} : { name: message.name }),
+				source: message.from,
+				entryId: message.entryId,
+				...(message.position === undefined ? {} : { position: message.position }),
+			});
 		case "session.delete":
 			await host.deleteSession(message.name);
 			return;

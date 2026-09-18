@@ -10,7 +10,7 @@ import { BACKGROUND_CONTEXT, EtaAgent, MemoryCache, type MemoryLoaded } from "@e
 import { homedir } from "node:os";
 import { NodeEtaFs } from "./node-fs.ts";
 import { DEFAULT_SYSTEM_PROMPT } from "@eta/core/prompts";
-import { FileStorage, NodeExecutionEnv } from "@eta/core/node";
+import { FileStorage, NodeExecutionEnv, type SessionJournal } from "@eta/core/node";
 import {
 	createModels,
 	fauxAssistantMessage,
@@ -50,6 +50,11 @@ export interface CreatedSession {
 	memory?: () => Promise<MemoryLoaded>;
 	/** Replace configured providers at an idle boundary without replacing the session. */
 	reloadModels?: (config: EtaConfig) => void;
+	/**
+	 * The journal this session writes, when it writes one — the only thing a fork can be made
+	 * from. Absent for the in-memory sessions tests run.
+	 */
+	journal?: SessionJournal;
 }
 
 export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSession> {
@@ -216,6 +221,7 @@ export async function createSessionAgent(cfg: SessionConfig): Promise<CreatedSes
 	});
 	return {
 		agent, faux, models: registry, memory: async () => memoryCache.load(cfg.cwd),
+		...(storage instanceof FileStorage ? { journal: storage } : {}),
 		reloadModels(config) {
 			const next = configModels(config, cfg.configPath);
 			for (const id of configuredIds) registry.deleteProvider(id);

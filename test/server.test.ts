@@ -329,6 +329,46 @@ describe("sidebar ops", () => {
 	});
 });
 
+describe("session fork", () => {
+	it("answers session.fork with a created frame and a session in the list", async () => {
+		await withServer(async (server) => {
+			const { socket, reader } = await connect(server);
+			await reader.next();
+			send(socket, { op: "session.create", name: "fork-src", personaId: "Thinker" });
+			await reader.until((m): m is Extract<ServerMessage, { type: "created" }> => "type" in m && m.type === "created");
+			send(socket, { op: "prompt", session: "fork-src", text: "cut here" });
+			// The entry id comes from the transcript the client is looking at, so this is the
+			// same request a click on a message makes — not a test reaching into the host.
+			const frame = await reader.until(
+				(m): m is Extract<ServerMessage, { channel: "view"; view: unknown }> =>
+					"channel" in m && m.channel === "view" && "view" in m && JSON.stringify(m).includes('"role":"user"'),
+			);
+			const cut = (frame.view as unknown as { messages: { entryId: string; message: { role: string } }[] }).messages.find(
+				(entry) => entry.message.role === "user",
+			)!;
+			send(socket, { op: "session.fork", from: "fork-src", entryId: cut.entryId, name: "fork-cut" });
+			const created = await reader.until((m): m is Extract<ServerMessage, { type: "created" }> => "type" in m && m.type === "created");
+			expect(created).toEqual({ type: "created", name: "fork-cut" });
+			const list = await reader.until((m): m is Extract<ServerMessage, { type: "sessions" }> => "type" in m && m.type === "sessions");
+			expect(list.sessions.map((session) => session.name)).toContain("fork-cut");
+			socket.close();
+		});
+	});
+
+	it("refuses a fork that asked for a message the session does not hold", async () => {
+		await withServer(async (server) => {
+			const { socket, reader } = await connect(server);
+			await reader.next();
+			send(socket, { op: "session.create", name: "fork-src", personaId: "Thinker" });
+			await reader.until((m): m is Extract<ServerMessage, { type: "created" }> => "type" in m && m.type === "created");
+			send(socket, { op: "session.fork", from: "fork-src", entryId: "no-such-entry", name: "fork-nope" });
+			const error = await reader.until((m): m is Extract<ServerMessage, { type: "error" }> => "type" in m && m.type === "error");
+			expect(error.message).toContain("is not on source branch");
+			socket.close();
+		});
+	});
+});
+
 describe("queue ops", () => {
 	it("answers queueRemove with the lane's outcome", async () => {
 		await withServer(async (server) => {

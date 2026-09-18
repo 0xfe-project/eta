@@ -227,6 +227,83 @@ export class Host {
 	}
 
 	/**
+	 * Branch a session at one of its own messages: a new session whose journal is the source's
+	 * history up to that entry and nothing after it.
+	 *
+	 * The copy is what earns the directory: an entry id that turns out to sit on another
+	 * session's branch (or on no branch at all) takes the directory back with it, so a refused
+	 * fork leaves no half-created session. The fork rules are core's — the host does not
+	 * re-derive ancestry from the transcript window it happens to be holding, and a window is not
+	 * the journal.
+	 *
+	 * What comes along is what the copy carries: the model, the thinking level and the tool set,
+	 * which are lane configuration, plus the workspace and the card, which are metadata. What
+	 * does not is the parent's schedule — loops and the task list are projected away, or a branch
+	 * would fire the parent's timers and do its work twice. A goal written into the journal comes
+	 * back exactly the way a reopened session replays one, which is the point: forking is
+	 * reopening somewhere else. No pointer back is kept — a fork is a session of its own.
+	 */
+	async forkSession(request: ForkRequest): Promise<string> {
+		const source = this.hosted.get(request.source);
+		if (source === undefined) throw new Error(`no such session: ${request.source}`);
+		const name = request.name ?? uniqueSessionName();
+		if (this.hosted.has(name)) throw new Error(`session exists: ${name}`);
+		const journal = source.created.journal;
+		if (journal === undefined)
+			throw new Error(`session ${request.source} holds no journal, so there is nothing to fork`);
+		const persisted = source.persistDir === undefined ? undefined : this.readMetaFile(source.persistDir);
+		const inherited = { ...persisted, ...this.meta.get(request.source) };
+		const personaId = inherited.personaId;
+		if (personaId === undefined)
+			throw new Error(`session ${request.source} has no card on record, refusing to fork it onto a default one`);
+		const cwd = inherited.cwd ?? source.cwd;
+		const persistDir = join(this.dataDir, name);
+		await mkdir(persistDir, { recursive: true });
+		try {
+			await journal.forkInto(
+				join(persistDir, "journal.jsonl"),
+				{
+					scope: "branch",
+					branch: source.agent.lane.name,
+					entryId: request.entryId,
+					position: request.position ?? "at",
+				},
+				BACKGROUND_CONTEXT,
+			);
+		} catch (error) {
+			await rm(persistDir, { recursive: true, force: true });
+			throw error;
+		}
+		await writeFile(
+			join(persistDir, "meta.json"),
+			JSON.stringify({
+				personaId,
+				cwd,
+				...(inherited.modelId === undefined ? {} : { modelId: inherited.modelId }),
+				keepRecentTokens: this.settings().keepRecentTokens,
+				createdAt: Date.now(),
+			}),
+			"utf8",
+		);
+		await this.open(
+			name,
+			() =>
+				createSessionAgent({
+					name,
+					personaId,
+					cwd,
+					...(inherited.modelId === undefined ? {} : { modelId: inherited.modelId }),
+					configPath: this.configPath,
+					persistDir,
+					keepRecentTokens: this.settings().keepRecentTokens,
+					...(this.heartbeatMs === undefined ? {} : { heartbeatMs: this.heartbeatMs }),
+				}),
+			{ cwd, persistDir, restore: true },
+		);
+		return name;
+	}
+
+	/**
 	 * The card for a chat sent before one was picked: one capped call to the model that is about
 	 * to run, and a fallback card when that call has nothing useful to say. Never throws — a
 	 * person who typed a message should never learn about this step from a failed send.
@@ -1265,4 +1342,23 @@ export function listWorkspace(cwd: string): string[] {
 	} catch {
 		return [];
 	}
+}
+
+/**
+ * Branch a session at one of its own transcript entries. The entry id comes from the client's
+ * view — `view.messages[].entryId` — never from a position in the list, because the transcript
+ * a front end is showing is a window that older rows can be paged into.
+ */
+export interface ForkRequest {
+	/** Destination session name; generated when the caller does not care what it is called. */
+	name?: string;
+	source: string;
+	entryId: string;
+	/** Include the chosen message (the default) or branch at its parent. */
+	position?: "at" | "before";
+}
+
+/** A name for a session nobody named, so two forks made in the same tick still differ. */
+function uniqueSessionName(): string {
+	return `eta-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 }
