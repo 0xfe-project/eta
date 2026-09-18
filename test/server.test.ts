@@ -379,11 +379,11 @@ describe("skill discovery", () => {
 		const env = new NodeExecutionEnv({ cwd: nested });
 		const block = await renderSkillsBlock(env, nested, home);
 		expect(block.startsWith("<skills>\n")).toBe(true);
-		expect(block.endsWith("</skills>"));
+		expect(block.endsWith("</skills>")).toBe(true);
 		expect(block).toContain("- demo Line one line two");
 		expect(block).toContain(join(home, ".agents", "skills", "demo"));
 		expect(block.includes("\n")).toBe(true);
-		const emptyDir = mkdtempSync(join(process.cwd(), ".eta-skills-empty-"));
+		const emptyDir = mkdtempSync(join(root, "empty-"));
 		const empty = await renderSkillsBlock(env, emptyDir, join(root, "none"));
 		expect(empty).toBe("");
 		rmSync(emptyDir, { recursive: true, force: true });
