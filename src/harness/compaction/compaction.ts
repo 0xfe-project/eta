@@ -14,6 +14,7 @@ import {
 	type Api,
 	type AssistantMessage,
 	contentText,
+	type Message,
 	type Model,
 	type Models,
 	type RetryCallbacks,
@@ -29,7 +30,7 @@ import { convertToLlm, createBranchSummaryMessage, createCompactionSummaryMessag
 import { buildContextEntries, sessionEntryToContextMessages } from "../session/context.ts";
 import type { CompactionEntry, Entry, JsonValue } from "../session/types.ts";
 import { CompactionError, err, ok, type Result } from "../types.ts";
-import { addUsage } from "../utils/usage.ts";
+import { addUsage, emptyUsage } from "../utils/usage.ts";
 import {
 	computeFileLists,
 	createFileOps,
@@ -418,6 +419,80 @@ export function findCutPoint(
 	};
 }
 
+/**
+ * One summarization request. The conversation crosses the wire as a single user message, which is
+ * what makes the model's own window the budget for it.
+ */
+async function sendSummaryRequest(
+	request: SummaryRequest,
+	promptText: string,
+	model: Model<Api>,
+	thinkingLevel: ThinkingLevel | undefined,
+	maxTokens: number,
+	context: Context,
+): Promise<AssistantMessage> {
+	const completionOptions =
+		model.reasoning && thinkingLevel && thinkingLevel !== "off"
+			? { maxTokens, reasoning: thinkingLevel }
+			: { maxTokens };
+	return request(
+		{
+			systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
+			messages: [
+				{
+					role: "user" as const,
+					content: [{ type: "text" as const, text: promptText }],
+					timestamp: Date.now(),
+				},
+			],
+		},
+		createSummaryRequestOptions(completionOptions, context),
+		context,
+	);
+}
+
+function summarizationPromptText(
+	conversation: Message[],
+	runningSummary: string | undefined,
+	instructions: string,
+): string {
+	let text = `<conversation>\n${serializeConversation(conversation)}\n</conversation>\n\n`;
+	if (runningSummary) text += `<previous-summary>\n${runningSummary}\n</previous-summary>\n\n`;
+	return text + instructions;
+}
+
+/**
+ * Compaction settings are written for a large window. A model with a small one cannot hold a
+ * recent tail as large as its own context, so a session switched down from a bigger model would
+ * compact into a history that still does not fit and overflow the very next request. The reserve
+ * is left alone: a reserve the window cannot afford pushes the threshold earlier, which asks for
+ * compaction sooner rather than letting an oversized history through, and the summarization request
+ * bounds its own prompt whatever the reserve says.
+ */
+export function fitCompactionSettings(settings: CompactionSettings, model: Model<Api>): CompactionSettings {
+	const windowTokens = model.contextWindow > 0 ? model.contextWindow : 128_000;
+	if (windowTokens > settings.keepRecentTokens) return settings;
+	return { ...settings, keepRecentTokens: Math.floor(windowTokens / 3) };
+}
+
+/** Serialized conversation, measured with the chars-per-token rate `estimateTokens` uses. */
+function serializedTokens(messages: Message[]): number {
+	return Math.ceil(serializeConversation(messages).length / 4);
+}
+
+/**
+ * How much of the window the conversation may occupy. The reserve is kept for the answer; a
+ * reserve larger than the window cannot be honored, so it is clamped to half of the window.
+ */
+function conversationRoom(model: Model<Api>, reserveTokens: number, promptText: string): number {
+	const windowTokens = model.contextWindow > 0 ? model.contextWindow : 128_000;
+	const reserve = Math.min(reserveTokens, Math.floor(windowTokens / 2));
+	return Math.max(1, windowTokens - reserve - Math.ceil(promptText.length / 4));
+}
+
+/** Beyond this many pieces a fold is not worth what it costs; the rest is digested mechanically. */
+const SUMMARY_FOLD_LIMIT = 12;
+
 /** Generate or update a conversation summary for compaction. */
 export async function generateSummary(
 	currentMessages: AgentMessage[],
@@ -488,73 +563,81 @@ export async function generateSummaryWithRequest(
 		Math.floor(0.8 * reserveTokens),
 		model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY,
 	);
-	let basePrompt = previousSummary ? UPDATE_SUMMARIZATION_PROMPT : SUMMARIZATION_PROMPT;
-	if (customInstructions) {
-		basePrompt = `${basePrompt}\n\nAdditional focus: ${customInstructions}`;
-	}
-	const llmMessages = convertToLlm(currentMessages);
-	const conversationText = serializeConversation(llmMessages);
-	let promptText = `<conversation>\n${conversationText}\n</conversation>\n\n`;
-	if (previousSummary) {
-		promptText += `<previous-summary>\n${previousSummary}\n</previous-summary>\n\n`;
-	}
-	promptText += basePrompt;
+	const instructions = (running: string | undefined): string => {
+		const base = running ? UPDATE_SUMMARIZATION_PROMPT : SUMMARIZATION_PROMPT;
+		return customInstructions ? `${base}\n\nAdditional focus: ${customInstructions}` : base;
+	};
+	const pairs = currentMessages
+		.map((message) => ({ agent: message, llm: convertToLlm([message])[0] }))
+		.filter((pair): pair is { agent: AgentMessage; llm: Message } => pair.llm !== undefined);
 
-	const summarizationMessages = [
-		{
-			role: "user" as const,
-			content: [{ type: "text" as const, text: promptText }],
-			timestamp: Date.now(),
-		},
-	];
-
-	const completionOptions =
-		model.reasoning && thinkingLevel && thinkingLevel !== "off"
-			? { maxTokens, reasoning: thinkingLevel }
-			: { maxTokens };
-
-	const response = await request(
-		{ systemPrompt: SUMMARIZATION_SYSTEM_PROMPT, messages: summarizationMessages },
-		createSummaryRequestOptions(completionOptions, context),
-		context,
-	);
-	if (response.stopReason === "aborted") {
-		return err(new CompactionError("aborted", response.errorMessage || "Summarization aborted"));
-	}
-	if (response.stopReason === "error") {
-		if (isRetryableAssistantError(response)) {
-			return err(
-				new CompactionError(
-					"summarization_failed",
-					`Summarization failed: ${response.errorMessage || "Unknown error"}`,
-				),
-			);
-		}
-		const fallback = untrustedFallback(currentMessages, maxTokens * 4);
-		if (fallback !== undefined) {
-			return ok({
-				text: fallback,
-				usage: {
-					input: 0,
-					output: 0,
-					cacheRead: 0,
-					cacheWrite: 0,
-					totalTokens: 0,
-					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-				},
-			});
-		}
-		return err(
+	// A history that grew under one model does not fit the window of a smaller one it was switched
+	// to, and the request meant to rescue that window would overflow it first. So the conversation
+	// is cut into pieces the window can hold and folded: each piece is summarized against what the
+	// earlier pieces already concluded, which is the update path an incremental compaction already
+	// uses, only asked for more than once. A history that fits stays one request, with the prompt
+	// it used to build.
+	const failure = (response: AssistantMessage): Result<never, CompactionError> =>
+		err(
 			new CompactionError(
 				"summarization_failed",
 				`Summarization failed: ${response.errorMessage || "Unknown error"}`,
 			),
 		);
-	}
+	// A refused piece falls back to a mechanical digest of everything still unsummarized: a worse
+	// compaction than the model would have written, and better than losing the turn's history.
+	const digestRest = (from: number): string | undefined =>
+		untrustedFallback(pairs.slice(from).map((pair) => pair.agent), maxTokens * 4);
+	const fold = (text: string | undefined): string => (summary ? `${summary}\n\n${text}` : text ?? "");
+	let summary = previousSummary;
+	let usage = emptyUsage();
+	let cursor = 0;
+	let folds = 0;
+	do {
+		const pieceStart = cursor;
+		const room = conversationRoom(
+			model,
+			reserveTokens,
+			summarizationPromptText([], summary, instructions(summary)),
+		);
+		const piece: Message[] = [];
+		let pieceTokens = 0;
+		while (cursor < pairs.length) {
+			const size = serializedTokens([pairs[cursor].llm]);
+			if (piece.length > 0 && pieceTokens + size > room) break;
+			piece.push(pairs[cursor].llm);
+			pieceTokens += size;
+			cursor += 1;
+		}
+		folds += 1;
+		if (cursor < pairs.length && folds >= SUMMARY_FOLD_LIMIT) {
+			const digest = digestRest(pieceStart);
+			if (digest === undefined)
+				return err(new CompactionError("summarization_failed", "Summarization left history without a summary"));
+			return ok({ text: fold(digest), usage });
+		}
+		const response = await sendSummaryRequest(
+			request,
+			summarizationPromptText(piece, summary, instructions(summary)),
+			model,
+			thinkingLevel,
+			maxTokens,
+			context,
+		);
+		if (response.stopReason === "aborted") {
+			return err(new CompactionError("aborted", response.errorMessage || "Summarization aborted"));
+		}
+		if (response.stopReason === "error") {
+			if (isRetryableAssistantError(response)) return failure(response);
+			const digest = digestRest(pieceStart);
+			if (digest !== undefined) return ok({ text: fold(digest), usage });
+			return failure(response);
+		}
+		summary = contentText(response.content);
+		usage = addUsage(usage, response.usage);
+	} while (cursor < pairs.length);
 
-	const textContent = contentText(response.content);
-
-	return ok({ text: textContent, usage: response.usage });
+	return ok({ text: summary ?? "", usage });
 }
 
 /** Prepared inputs for a compaction run. */
@@ -685,7 +768,13 @@ export async function compactWithRequest(
 	let summary: string;
 	let summaryUsage: Usage;
 
-	if (isSplitTurn && turnPrefixMessages.length > 0) {
+	if (messagesToSummarize.length === 0 && previousSummary !== undefined && turnPrefixMessages.length === 0) {
+		// Nothing happened that the notes do not already cover, so the notes stand. Asking the model
+		// to rewrite them costs a request and cannot change the answer, and a small window crosses
+		// the threshold often enough for that to become a tax on the conversation.
+		summary = previousSummary;
+		summaryUsage = emptyUsage();
+	} else if (isSplitTurn && turnPrefixMessages.length > 0) {
 		let historyText = "No prior history.";
 		let historyUsage: Usage | undefined;
 		if (messagesToSummarize.length > 0) {

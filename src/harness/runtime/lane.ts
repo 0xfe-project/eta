@@ -34,7 +34,13 @@ import type {
 	WatchHandle,
 } from "../agent-harness.ts";
 import { type BranchPreparation, prepareBranchEntries } from "../compaction/branch-summarization.ts";
-import { prepareCompaction } from "../compaction/compaction.ts";
+import {
+	estimateContextTokens,
+	fitCompactionSettings,
+	prepareCompaction,
+	shouldCompact,
+} from "../compaction/compaction.ts";
+import { buildSessionContext } from "../session/context.ts";
 import { awaitWithContext, type Context } from "../context.ts";
 import { toolResultFromMessage } from "../execution/tools.ts";
 import type { HookRegistry } from "../hooks.ts";
@@ -287,6 +293,22 @@ export class Lane<TContext extends object | undefined> implements AgentLane {
 	async getTipId(_context: Context): Promise<string | null> {
 		this.assertOpen();
 		return this.state.tipId;
+	}
+
+	/**
+	 * Tokens the next request would carry: the branch since the newest compaction, projected the
+	 * way a run projects it. A model switch asks this before it asks the model, because the
+	 * history was written under whatever window came before it.
+	 */
+	async contextTokens(context: Context): Promise<number> {
+		this.assertOpen();
+		const tipId = this.state.tipId;
+		if (tipId === null) return 0;
+		const path = (
+			await this.session.scanBranch({ start: tipId, stopAtType: "compaction", order: "newestFirst" }, context)
+		).reverse();
+		const messages = await buildSessionContext(path, { entryProjectors: this.readConfig().entryProjectors }, context);
+		return estimateContextTokens(messages).tokens;
 	}
 
 	async getResult(operationId: string, context: Context): Promise<OperationResultRecord | undefined> {
@@ -728,7 +750,13 @@ export class Lane<TContext extends object | undefined> implements AgentLane {
 								context,
 							)
 						).reverse();
-			const prepared = prepareCompaction(path, acceptanceConfig.compaction);
+			const identity = this.state.configuration.model;
+			const model = this.models.getModel(identity.provider, identity.modelId);
+			const settings =
+				model === undefined
+					? acceptanceConfig.compaction
+					: fitCompactionSettings(acceptanceConfig.compaction, model);
+			const prepared = prepareCompaction(path, settings);
 			if (!prepared.ok) throw prepared.error;
 			if (prepared.value === undefined) {
 				return {
@@ -1220,6 +1248,22 @@ export class Lane<TContext extends object | undefined> implements AgentLane {
 			new SessionInvariantError(`Run ${admission.value.operationId} returned an unwaited retry`),
 			context,
 		);
+	}
+
+	/**
+	 * Compact when the history no longer fits the window of the model that owns it now. A run
+	 * boundary makes this same check before its first request; asking it when the window changes is
+	 * what keeps a session written under a bigger model from being sent whole to a smaller one. A
+	 * lane with an operation in flight is left to that boundary and reports back as not compacted.
+	 */
+	async compactForWindow(context: Context): Promise<boolean> {
+		const identity = this.state.configuration.model;
+		const model = this.models.getModel(identity.provider, identity.modelId);
+		const settings = this.readConfig().compaction;
+		if (!settings.enabled || model === undefined) return false;
+		if (!shouldCompact(await this.contextTokens(context), model.contextWindow, fitCompactionSettings(settings, model)))
+			return false;
+		return (await this.compact(undefined, context)).ok;
 	}
 
 	async compact(options: { customInstructions?: string } | undefined, context: Context): Promise<CompactionResult> {

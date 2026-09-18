@@ -10,7 +10,7 @@ import type { HarnessEvent } from "../../agent-harness.ts";
 import type { BranchPreparation, BranchSummaryResult } from "../../compaction/branch-summarization.ts";
 import { generateBranchSummaryWithRequest } from "../../compaction/branch-summarization.ts";
 import type { CompactionPreparation, CompactResult, SummaryRequest } from "../../compaction/compaction.ts";
-import { compactWithRequest, prepareCompaction, shouldCompact } from "../../compaction/compaction.ts";
+import { compactWithRequest, fitCompactionSettings, prepareCompaction, shouldCompact } from "../../compaction/compaction.ts";
 import { type Context, getTelemetryContext, withAbortSignal } from "../../context.ts";
 import { AbortRequested } from "../../execution/effect-gate.ts";
 import { applyStreamOptionsPatch } from "../../hooks.ts";
@@ -1120,10 +1120,11 @@ export async function prepareCompactionThreshold<TContext extends object | undef
 	drive: Drive,
 	checkpoint: CheckpointOperation,
 ): Promise<ContinueOperationResult<{ taskId: string; preparation: DurableStructuralPreparation } | undefined>> {
-	const settings = checkpoint.settings.compaction;
 	const identity = lane.state.configuration.model;
 	const model = lane.models.getModel(identity.provider, identity.modelId);
-	if (!settings.enabled || model === undefined) return { kind: "result", value: undefined };
+	if (!checkpoint.settings.compaction.enabled || model === undefined)
+		return { kind: "result", value: undefined };
+	const settings = fitCompactionSettings(checkpoint.settings.compaction, model);
 	const path = await readBoundedEntries(lane, drive, checkpoint);
 	if (path.kind === "cancel_requested") return path;
 	const triggerIndex = path.value.findIndex((entry) => entry.id === checkpoint.triggerEntryId);
@@ -1158,9 +1159,17 @@ export async function prepareOverflowCompaction<TContext extends object | undefi
 	generation: AssistantEffectPendingOperation,
 ): Promise<{ taskId: string; preparation: DurableStructuralPreparation } | undefined> {
 	if (generation.generationContext.overflowRecoveryUsed) return undefined;
+	const identity = lane.state.configuration.model;
+	const model = lane.models.getModel(identity.provider, identity.modelId);
+	// Overflow recovery runs against the window the provider just refused, so the same
+	// window-fitting limits apply: compacting into a tail that is still too big recovers nothing.
+	const settings =
+		model === undefined
+			? generation.settings.compaction
+			: fitCompactionSettings(generation.settings.compaction, model);
 	const path = await readBoundedEntries(lane, drive, generation);
 	if (path.kind === "cancel_requested") return undefined;
-	const prepared = prepareCompaction(path.value, generation.settings.compaction);
+	const prepared = prepareCompaction(path.value, settings);
 	if (!prepared.ok) throw prepared.error;
 	if (prepared.value === undefined) return undefined;
 	return {
