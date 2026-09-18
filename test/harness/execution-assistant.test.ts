@@ -12,7 +12,7 @@ import {
 import { NOOP_TELEMETRY_CONTEXT } from "@earendil-works/pi-telemetry";
 import { describe, expect, it } from "vitest";
 import { BACKGROUND_CONTEXT, withAbortSignal } from "../../src/harness/context.ts";
-import { type AssistantResponseMetadata, streamHarnessAssistant } from "../../src/harness/execution/assistant.ts";
+import { imageUnsupportedPlaceholder, type AssistantResponseMetadata, streamHarnessAssistant } from "../../src/harness/execution/assistant.ts";
 import { AbortRequested } from "../../src/harness/execution/effect-gate.ts";
 import type { AgentMessage } from "../../src/types.ts";
 
@@ -201,6 +201,80 @@ describe("streamHarnessAssistant", () => {
 			"after_response",
 			"observer_end",
 		]);
+	});
+
+	it("replaces historical images with distinct labels only in a text model's request copy", async () => {
+		const image = { type: "image" as const, mimeType: "image/png", data: "aW1hZ2U=" };
+		const secondImage = { type: "image" as const, mimeType: "image/jpeg", data: "c2Vjb25k" };
+		const input: AgentMessage[] = [
+			{ role: "user", content: [{ type: "text", text: "inspect" }, image], timestamp: 1 },
+			{ role: "user", content: [{ type: "text", text: "compare" }, secondImage], timestamp: 2 },
+		];
+		let seen: Message[] = [];
+		await streamHarnessAssistant(
+			input,
+			{
+				model: model(),
+				systemPrompt: "system",
+				thinkingLevel: "off",
+				streamOptions: {},
+				toProviderMessages,
+				request: (context) => {
+					seen = context.messages;
+					const stream = createAssistantMessageEventStream();
+					queueMicrotask(() => {
+						const final = assistant("ok");
+						stream.push({ type: "start", partial: { ...final, content: [], stopReason: "pending" } });
+						stream.push({ type: "done", reason: "stop", message: final });
+					});
+					return stream;
+				},
+				observer: { start() {}, update() {}, end() {} },
+			},
+			BACKGROUND_CONTEXT,
+		);
+		expect(seen[0]?.content).toEqual([
+			{ type: "text", text: "inspect" },
+			{ type: "text", text: imageUnsupportedPlaceholder(1, "image/png") },
+		]);
+		expect(seen[1]?.content).toEqual([
+			{ type: "text", text: "compare" },
+			{ type: "text", text: imageUnsupportedPlaceholder(2, "image/jpeg") },
+		]);
+		expect(input).toMatchObject([
+			{ content: [{ type: "text", text: "inspect" }, image] },
+			{ content: [{ type: "text", text: "compare" }, secondImage] },
+		]);
+	});
+
+	it("keeps historical images for an image-capable model", async () => {
+		const requestModel = { ...model(), input: ["text", "image"] as ("text" | "image")[] };
+		const image = { type: "image" as const, mimeType: "image/png", data: "aW1hZ2U=" };
+		const input: AgentMessage[] = [{ role: "user", content: [image], timestamp: 1 }];
+		let seen: Message[] = [];
+		await streamHarnessAssistant(
+			input,
+			{
+				model: requestModel,
+				systemPrompt: "system",
+				thinkingLevel: "off",
+				streamOptions: {},
+				toProviderMessages,
+				request: (context) => {
+					seen = context.messages;
+					const stream = createAssistantMessageEventStream();
+					queueMicrotask(() => {
+						const final = assistant("ok");
+						stream.push({ type: "start", partial: { ...final, content: [], stopReason: "pending" } });
+						stream.push({ type: "done", reason: "stop", message: final });
+					});
+					return stream;
+				},
+				observer: { start() {}, update() {}, end() {} },
+			},
+			BACKGROUND_CONTEXT,
+		);
+		expect(seen[0]?.content).toEqual([image]);
 	});
 
 	it("runs against the faux provider request boundary", async () => {
