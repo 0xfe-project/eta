@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { apiUrl, apiFetch, host, wsUrl } from "../src/lib/host.ts";
 
 /**
@@ -36,5 +36,36 @@ describe("host resolution in a browser tab", () => {
 		await apiFetch("/api/sessions");
 		globalThis.fetch = real;
 		expect(calls).toEqual([{}]);
+	});
+});
+
+
+describe("desktop capability routing", () => {
+	it("routes native APIs to the window and sessions to the shared backend", async () => {
+		const previous = window.__ETA_HOST__;
+		vi.resetModules();
+		window.__ETA_HOST__ = {
+			apiBase: "http://127.0.0.1:31000", token: "backend-token", native: true,
+			nativeApiBase: "http://127.0.0.1:31001", nativeToken: "window-token",
+		};
+		try {
+			const { apiFetch, nativeAvailable } = await import("../src/lib/host.ts");
+			const mock = vi.fn(async () => new Response("{}"));
+			vi.stubGlobal("fetch", mock);
+			expect(nativeAvailable()).toBe(true);
+			await apiFetch("/api/native/folder-dialog", { method: "POST" });
+			await apiFetch("/api/sessions");
+			await apiFetch("/api/remote/mac-mini/api/providers");
+			const calls = mock.mock.calls as unknown as [string, RequestInit][];
+			expect(calls[0]![0]).toBe("http://127.0.0.1:31001/api/native/folder-dialog");
+			expect(new Headers(calls[0]![1].headers).get("authorization")).toBe("Bearer window-token");
+			expect(calls[1]![0]).toBe("http://127.0.0.1:31000/api/sessions");
+			expect(calls[2]![0]).toBe("http://127.0.0.1:31000/api/remote/mac-mini/api/providers");
+			for (const call of calls.slice(1)) expect(new Headers(call[1].headers).get("authorization")).toBe("Bearer backend-token");
+		} finally {
+			window.__ETA_HOST__ = previous;
+			vi.unstubAllGlobals();
+			vi.resetModules();
+		}
 	});
 });

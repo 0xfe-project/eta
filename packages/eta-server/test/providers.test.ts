@@ -16,10 +16,22 @@ const model = {
 };
 const provider: EtaProviderConfig = { id: "local", kind: "openai-compatible", baseUrl: "http://127.0.0.1:7777/v1", apiKey: "private-test-key", models: [{ id: "m", contextWindow: 128000 }] };
 
+async function removeWithRetry(path: string): Promise<void> {
+	for (let attempt = 0; ; attempt++) {
+		try {
+			await rm(path, { recursive: true, force: true });
+			return;
+		} catch (error) {
+			if (attempt >= 5 || (error as NodeJS.ErrnoException).code !== "EBUSY") throw error;
+			await new Promise((resolve) => setTimeout(resolve, 50));
+		}
+	}
+}
+
 async function fixture(run: (store: ProviderConfigStore, directory: string) => Promise<void>) {
 	const directory = await mkdtemp(join(tmpdir(), "eta-providers-"));
 	try { await run(new ProviderConfigStore(join(directory, "config.json")), directory); }
-	finally { await rm(directory, { recursive: true, force: true }); }
+	finally { await removeWithRetry(directory); }
 }
 
 function requestFake(body: unknown, status = 200): ProviderFetch {
@@ -55,7 +67,7 @@ describe("provider discovery and configuration", () => {
 			expect(view.providers[0]!.hasApiKey).toBe(true);
 			view = await store.save({ revision: view.revision, provider: { ...provider, apiKey: undefined, name: "Renamed" } });
 			expect(JSON.parse(await readFile(store.path, "utf8")).providers[0].apiKey).toBe("private-test-key");
-			expect((await stat(store.path)).mode & 0o777).toBe(0o600);
+			if (process.platform !== "win32") expect((await stat(store.path)).mode & 0o777).toBe(0o600);
 			view = await store.save({ revision: view.revision, provider: { ...provider, apiKey: null } });
 			expect(view.providers[0]!.hasApiKey).toBe(false);
 		});

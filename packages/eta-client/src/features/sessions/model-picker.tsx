@@ -4,6 +4,7 @@ import { useAppI18n } from "../../i18n.ts";
 import { Button } from "../../components/ui/button.tsx";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuChevron } from "../../components/ui/dropdown-menu.tsx";
 import { apiFetch } from "../../lib/host.ts";
+import { remoteApiPath } from "../../lib/remotes.ts";
 import { openSettings } from "../../lib/settings.ts";
 
 interface ModelInfo {
@@ -22,7 +23,7 @@ interface ModelInfo {
  * session with nothing to swap) would then read as "switched" forever. The desired id stays
  * visible as pending instead, and the chip changes when the harness does.
  */
-export function ModelPicker(props: { session?: string; onPick?: (modelId: string) => void }) {
+export function ModelPicker(props: { session?: string; remoteId?: string; onPick?: (modelId: string | undefined) => void }) {
 	const i18n = useAppI18n();
 	const store = etaStore();
 	const state = useEta();
@@ -34,17 +35,17 @@ export function ModelPicker(props: { session?: string; onPick?: (modelId: string
 	const refresh = (reset = false) => {
 		const request = ++requestVersion;
 		const session = props.session;
-		if (reset) { setInfo(undefined); setPlanned(undefined); }
-		void apiFetch(session === undefined ? "/api/models" : `/api/models?session=${encodeURIComponent(session)}`)
+		if (reset) { setInfo(undefined); setPlanned(undefined); props.onPick?.(undefined); }
+		void apiFetch(session === undefined ? remoteApiPath("/api/models", props.remoteId) : `/api/models?session=${encodeURIComponent(session)}`)
 			.then(response => response.ok ? response.json() as Promise<ModelInfo> : undefined)
 			.then(body => {
 				if (request !== requestVersion || !body || !Array.isArray(body.models)) return;
 				setInfo(body);
-				if (planned() && !body.models.some(model => model.id === planned())) { setPlanned(undefined); props.onPick?.(body.current); }
+				if (planned() && !body.models.some(model => model.id === planned())) { setPlanned(undefined); props.onPick?.(undefined); }
 			})
 			.catch(() => undefined);
 	};
-	createEffect(on(() => props.session, () => refresh(true)));
+	createEffect(on(() => [props.session, props.remoteId], () => refresh(true)));
 	onMount(() => {
 		const changed = () => refresh();
 		window.addEventListener("eta:models", changed);

@@ -5,6 +5,10 @@
  */
 
 import { existsSync } from "node:fs";
+import { timingSafeEqual } from "node:crypto";
+import { classifyRemoteError, RemoteManager, type RemoteTransport } from "./remotes.ts";
+import { BACKEND_PROTOCOL, backendRunFile, parseRemoteSession, remoteSessionName, type BackendDescriptor } from "@eta/core/remote";
+import { claimBackend, ensureMachineId, newToken, type ClaimHandle } from "./service.ts";
 import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative, resolve } from "node:path";
@@ -22,8 +26,37 @@ import { ProviderConfigError } from "./providers.ts";
 export interface NativeHandlers {
 	folderDialog(input: { startingFolder?: string }): Promise<string | null>;
 	saveFile(input: { content: string; filename: string }): Promise<string | null>;
+	/** Opens a URL with the OS. Only the shell can: the page has no browser to hand it
+	 * to, and `window.open` on a `views://` document opens nothing. */
+	openExternal(input: { url: string }): void;
 	/** Returns immediately; the click result is reported by the shell via push(). */
 	contextMenu(input: { items: unknown[] }): void;
+	windowAction?(input: { action: "minimize" | "toggle-maximize" | "close" }): void;
+}
+
+/**
+ * Unified-backend mode. The process owns this machine's session space (one writer per
+ * machine, see service.ts), publishes where it listens, and requires its token on every
+ * API route — including for the page it serves itself, which receives the credential in
+ * the HTML it is handed.
+ */
+export interface ServiceOptions {
+	/** Home whose ~/.eta holds the run file and machine id; tests point this at a tmpdir. */
+	home?: string;
+	runFile?: string;
+	role: BackendDescriptor["role"];
+	version: string;
+	/** Set when the caller already claimed the run file and wants this server to publish. */
+	claim?: ClaimHandle;
+}
+
+/** Thrown when another eta already owns the machine's session space. */
+export class BackendBusyError extends Error {
+	readonly descriptor: BackendDescriptor | undefined;
+	constructor(message: string, descriptor?: BackendDescriptor) {
+		super(message);
+		this.descriptor = descriptor;
+	}
 }
 
 export interface EtaServerOptions {
@@ -33,6 +66,8 @@ export interface EtaServerOptions {
 	webDist?: string;
 	configPath?: string;
 	dataDir?: string;
+	remoteToken?: string;
+	remoteTransport?: RemoteTransport;
 	/** Loop wake cadence, in ms; see HostOptions. */
 	heartbeatMs?: number;
 	/** Present only when embedded in a desktop shell; enables /api/native/*. */
@@ -42,17 +77,24 @@ export interface EtaServerOptions {
 	appVersion?: string;
 	/** Desktop credential for sensitive settings APIs from the opaque views:// origin. */
 	settingsToken?: string;
+	/** Loopback credential for the unified backend; also accepted as a query token on /ws and /term. */
+	token?: string;
+	service?: ServiceOptions;
 }
 
 export interface EtaServer {
 	host: Host;
 	port: number;
+	/** The credential this backend requires, when it has one. */
+	token?: string;
+	/** What this process published for its machine, when it owns the session space. */
+	descriptor?: BackendDescriptor;
 	/** Broadcast a frame to every connected /ws socket. */
 	push(message: ServerMessage): void;
-	close(): void;
+	close(): Promise<void>;
 }
 
-type Socket = ServerWebSocket<{ kind?: "ws" | "term"; socketId?: number; shell?: unknown; viewPatch?: boolean }>;
+type Socket = ServerWebSocket<{ kind?: "ws" | "term" | "remote-term"; remoteId?: string; upstream?: WebSocket; pending?: (string | Buffer)[]; socketId?: number; shell?: unknown; viewPatch?: boolean }>;
 
 const CONTENT_TYPES: Record<string, string> = {
 	".html": "text/html; charset=utf-8",
@@ -66,12 +108,49 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 export async function startServer(options: EtaServerOptions = {}): Promise<EtaServer> {
+	const service = options.service;
+	const token = options.token ?? options.remoteToken ?? options.settingsToken ?? (service === undefined ? undefined : newToken());
+	// Every route carries the credential in unified mode; the desktop keeps its own,
+	// narrower rule and a plain startServer (tests, embedding) stays open.
+	let claim: ClaimHandle | undefined = service?.claim;
+	if (service !== undefined) {
+		const runFile = service.runFile ?? backendRunFile(service.home ?? homedir());
+		if (claim === undefined) {
+			const outcome = await claimBackend(runFile, process.pid);
+			if (outcome.kind === "reused")
+				throw new BackendBusyError(`eta is already running on this machine (pid ${String(outcome.descriptor.pid)})`, outcome.descriptor);
+			if (outcome.kind === "busy")
+				throw new BackendBusyError(`another eta owns this machine's sessions (${outcome.reason})`, outcome.descriptor);
+			claim = outcome.handle;
+		}
+	}
+	const cleanup: (() => void | Promise<void>)[] = [];
+	try {
+		return await startClaimedServer(options, token, claim, cleanup);
+	} catch (error) {
+		// Retain ownership until every initialized writer has stopped.
+		for (const stop of cleanup.reverse()) await stop();
+		await claim?.release();
+		throw error;
+	}
+}
+
+async function startClaimedServer(
+	options: EtaServerOptions,
+	token: string | undefined,
+	claim: ClaimHandle | undefined,
+	cleanup: (() => void | Promise<void>)[],
+): Promise<EtaServer> {
+	const service = options.service;
+	const protectAll = service !== undefined;
+	const machineId = service === undefined ? undefined : await ensureMachineId(service.home ?? homedir());
 	const networkStatus = await initializeNetwork(loadEtaConfig(options.configPath ?? etaConfigPath)?.network);
 	const host = new Host({
 		...(options.configPath === undefined ? {} : { configPath: options.configPath }),
 		...(options.dataDir === undefined ? {} : { dataDir: options.dataDir }),
 		...(options.heartbeatMs === undefined ? {} : { heartbeatMs: options.heartbeatMs }),
 	});
+	cleanup.push(() => host.close());
 	await host.restoreSessions();
 	const cwd = options.cwd ?? process.cwd();
 	const webDist = options.webDist ?? resolve(import.meta.dir, "../../eta-client/dist");
@@ -104,11 +183,27 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 		queueMicrotask(() => {
 			if (sessionsDirty.get(socket) !== true) return;
 			sessionsDirty.set(socket, false);
-			send(socket, { type: "sessions", sessions: host.sidebar() });
+			send(socket, { type: "sessions", sessions: sidebar() });
 		});
 	};
 
 	const sockets = new Set<Socket>();
+	const sidebar = () => [...host.sidebar(), ...remotes.sidebar()];
+	const remotes: RemoteManager = new RemoteManager(
+				join(host.dataDir, "remotes.json"),
+				(message) => {
+					for (const socket of sockets) send(socket, message);
+				},
+				() => {
+					for (const socket of sockets) {
+						flushSessions(socket);
+						send(socket, { type: "remotes", remotes: remotes.list() });
+					}
+				},
+				options.remoteTransport,
+			);
+	cleanup.push(() => remotes.close());
+	await remotes.load();
 
 	/**
 	 * A patch frame is only cheaper than a whole one if the tab on the other end can
@@ -133,11 +228,13 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 		}
 	});
 
+	cleanup.push(unsubscribe);
 	const terms = new TermRegistry();
+	cleanup.push(() => terms.killAll());
 	watchPersonaDirs(process.cwd(), () => {
 		for (const socket of sockets) send(socket, { type: "personas" });
 	});
-	const server = Bun.serve<{ kind?: "ws" | "term"; socketId?: number; shell?: unknown; viewPatch?: boolean }>({
+	const server = Bun.serve<{ kind?: "ws" | "term" | "remote-term"; remoteId?: string; upstream?: WebSocket; pending?: (string | Buffer)[]; socketId?: number; shell?: unknown; viewPatch?: boolean }>({
 		port: options.port ?? 3000,
 		hostname: options.hostname ?? "0.0.0.0",
 		// One writer per journal: with SO_REUSEPORT a second server happily binds the
@@ -146,12 +243,85 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 		reusePort: options.reusePort ?? false,
 		async fetch(request, srv) {
 			const url = new URL(request.url);
+			const remoteSession = parseRemoteSession(url.searchParams.get("session") ?? "");
+			const explicitRemote = /^\/api\/remote\/([a-zA-Z0-9-]+)(\/api\/.*)$/.exec(url.pathname);
+			const protectedRoute =
+				url.pathname.startsWith("/api/remotes") ||
+				remoteSession !== undefined ||
+				explicitRemote !== null ||
+				url.pathname === "/ws" ||
+				url.pathname === "/term" ||
+				(protectAll && url.pathname.startsWith("/api/"));
+			if (protectedRoute) {
+				const origin = request.headers.get("origin");
+				const desktop = (origin === "null" || origin === "views://eta") && !!token && (protectAll || !!options.settingsToken);
+				const allowedOrigin = origin === null || origin === url.origin || ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174"].includes(origin) || desktop;
+				// Remote mode binds loopback and authenticates with a per-process token; a
+				// WebSocket client may still send an Origin, which is not a second principal.
+				if (!allowedOrigin) return new Response("origin_denied", { status: 403 });
+				if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { "access-control-allow-origin": origin ?? url.origin, "access-control-allow-headers": "content-type, authorization", "access-control-allow-methods": "GET, POST, DELETE, OPTIONS", "vary": "Origin" } });
+				const expected = protectAll || desktop ? token : undefined;
+				const supplied = request.headers.get("authorization")?.replace(/^Bearer /, "") ?? ((url.pathname === "/ws" || url.pathname === "/term") ? url.searchParams.get("token") : null) ?? "";
+				if (expected && !sameSecret(expected, supplied)) return new Response("authentication_failed", { status: 401 });
+			}
+			if (url.pathname === "/api/directories") {
+				const path = resolve(expandHome(url.searchParams.get("path") || "~"));
+				try {
+					const entries = await readdir(path, { withFileTypes: true });
+					return apiJson({ path, parent: resolve(path, ".."), directories: entries.filter(entry => entry.isDirectory() && !entry.name.startsWith(".")).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 1000).map(entry => ({ name: entry.name, path: join(path, entry.name) })) });
+				} catch { return apiError("Directory is not readable", 400); }
+			}
+			if (url.pathname.startsWith("/api/remotes")) {
+				try {
+					if (request.method === "GET" && url.pathname === "/api/remotes") return apiJson(remotes.list());
+					if (request.method === "GET" && url.pathname === "/api/remotes/discover") return apiJson(await remotes.discover());
+					if (!["POST", "DELETE"].includes(request.method)) return apiError("method_not_allowed", 405);
+					const text = await request.text();
+					if (text.length > 64_000) return apiError("Request too large", 413);
+					if (text.length > 0 && !request.headers.get("content-type")?.startsWith("application/json")) return apiError("JSON required", 415);
+					const body = text.length === 0 ? {} : JSON.parse(text);
+					if (url.pathname === "/api/remotes" && request.method === "POST") return apiJson(await remotes.upsert(body));
+					const match = /^\/api\/remotes\/([a-zA-Z0-9-]+)(?:\/(test|connect|install|disconnect|stop|projects|forwards|host-key|trust-host))?$/.exec(url.pathname);
+					if (!match) return apiError("not_found", 404);
+					const [, id, action] = match;
+					if (request.method === "DELETE") {
+						if (action === "forwards") await remotes.removeForward(id!, body.id);
+						else if (action === "projects") await remotes.removeProject(id!, body.path);
+						else if (!action) await remotes.remove(id!);
+						else return apiError("method_not_allowed", 405);
+					} else if (action === "host-key") return apiJson(await remotes.hostKey(id!));
+					else if (action === "trust-host") { await remotes.trustHost(id!, body.challengeId); return apiJson({ trusted: true }); }
+					else if (action === "test") return apiJson(await remotes.test(id!));
+					else if (action === "connect") await remotes.connect(id!);
+					else if (action === "install") { if (body.confirm !== true) return apiError("Installation consent required", 400); await remotes.connect(id!, true); }
+					else if (action === "disconnect") remotes.disconnect(id!);
+					else if (action === "stop") await remotes.stop(id!, body.confirm === true);
+					else if (action === "projects") await remotes.addProject(id!, body.path);
+					else if (action === "forwards") await remotes.forward(id!, body.remotePort, body.localPort);
+					else return apiError("not_found", 404);
+					return apiJson(remotes.list());
+				} catch (error) {
+					const failure = classifyRemoteError(error);
+					return apiJson({ error: failure.message, kind: failure.kind }, { status: 400 });
+				}
+			}
+			if (explicitRemote || remoteSession) {
+				try {
+					const id = explicitRemote?.[1] ?? remoteSession!.connectionId;
+					const path = explicitRemote?.[2] ?? url.pathname;
+					const query = new URLSearchParams(url.searchParams); query.delete("token");
+					if (remoteSession) query.set("session", remoteSession.session);
+					const response = await remotes.fetch(id, `${path}?${query}`, { method: request.method, headers: request.headers, ...(request.method === "GET" || request.method === "HEAD" ? {} : { body: await request.arrayBuffer() }) });
+					const headers = new Headers(response.headers); for (const [key, value] of Object.entries(CORS_HEADERS)) headers.set(key, value);
+					return new Response(response.body, { status: response.status, headers });
+				} catch (error) { return apiJson({ error: error instanceof Error ? error.message : String(error) }, { status: 503 }); }
+			}
 			if (url.pathname === "/api/providers" || url.pathname.startsWith("/api/providers/")) {
 				const origin = request.headers.get("origin");
 				const localDevOrigins = new Set(["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174"]);
 				const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
 				const desktopOrigin = origin === "null" || origin === "views://eta";
-				const desktop = desktopOrigin && options.native !== undefined && !!options.settingsToken;
+				const desktop = desktopOrigin && !!token && (protectAll || !!options.settingsToken);
 				const allowed = origin === null || origin === url.origin || (loopback && localDevOrigins.has(origin)) || desktop;
 				if (!allowed) return Response.json({ error: "origin_denied" }, { status: 403 });
 				const headers: Record<string, string> = {
@@ -161,7 +331,7 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 					"cache-control": "no-store",
 				};
 				if (request.method === "OPTIONS") return new Response(null, { status: 204, headers });
-				if (desktop && request.headers.get("authorization") !== `Bearer ${options.settingsToken}`) return Response.json({ error: "authentication_failed" }, { status: 401, headers });
+				if (desktop && !sameSecret(token!, request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "")) return Response.json({ error: "authentication_failed" }, { status: 401, headers });
 				const json = (body: unknown, status = 200) => Response.json(body, { status, headers });
 				try {
 					if (request.method === "GET" && url.pathname === "/api/providers/network") { const view = await host.providers.view(); return json({ revision: view.revision, network: view.network, runtime: networkStatus }); }
@@ -202,11 +372,35 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 				return new Response("upgrade failed", { status: 400 });
 			}
 			if (url.pathname === "/term") {
+				const remoteId = url.searchParams.get("remote");
+				if (remoteId) {
+					if (!remotes.list().some((remote) => remote.id === remoteId && remote.status === "connected")) return apiError("That machine is not connected", 503);
+					if (srv.upgrade(request, { data: { kind: "remote-term", remoteId, pending: [] } })) return;
+					return apiError("upgrade failed", 400);
+				}
 				if (srv.upgrade(request, { data: { kind: "term", socketId: nextSocketId++ } })) return;
 				return new Response("upgrade failed", { status: 400 });
 			}
-			if (url.pathname === "/api/health") {
+			if (service !== undefined && url.pathname === "/api/service/stop" && request.method === "POST") {
+				// Stopping the machine's backend is not "disconnect": refuse while work is
+				// in flight so a running turn is never cut off by a button.
+				if (host.sidebar().some(session => session.badges.includes("running")))
+					return apiError("Sessions are still running on this machine. Stop them before stopping the service.", 409);
+				setTimeout(() => process.kill(process.pid, "SIGTERM"), 200);
 				return apiJson({ ok: true });
+			}
+			if (url.pathname === "/api/health") {
+				return apiJson({
+					ok: true,
+					...(token === undefined
+						? {}
+						: {
+								protocol: BACKEND_PROTOCOL,
+								version: service?.version ?? options.appVersion ?? "0.1.0",
+								pid: process.pid,
+								...(machineId === undefined ? {} : { machineId }),
+							}),
+				});
 			}
 			if (url.pathname === "/api/memory") {
 				const memorySession = url.searchParams.get("session");
@@ -215,7 +409,15 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 				return apiJson(await loader);
 			}
 			if (url.pathname === "/api/personas") {
-				return apiJson(await listPersonaSummaries(cwd));
+				// The cards live next to the folder they belong to: the session's own cwd
+				// first (which, for a session on another machine, is resolved over there),
+				// then an explicit ?cwd=, then this process's directory.
+				const personaSession = url.searchParams.get("session");
+				const personaRoot =
+					url.searchParams.get("cwd") ??
+					(personaSession === null ? undefined : host.cwdOf(personaSession)) ??
+					cwd;
+				return apiJson(await listPersonaSummaries(expandHome(personaRoot)));
 			}
 			if (url.pathname === "/api/files") {
 				const session = url.searchParams.get("session");
@@ -244,7 +446,7 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 				return apiJson(host.settings());
 			}
 			if (url.pathname === "/api/sessions") {
-				return apiJson(host.sidebar());
+				return apiJson(sidebar());
 			}
 			if (url.pathname === "/api/history") {
 				const session = url.searchParams.get("session");
@@ -277,7 +479,9 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 			if (url.pathname === "/api/search") {
 				return apiJson({
 					query: url.searchParams.get("q") ?? "",
-					hits: host.search(url.searchParams.get("q") ?? ""),
+					hits: [...host.search(url.searchParams.get("q") ?? ""), ...(await Promise.all(remotes.list().filter((row) => row.status === "connected").map(async (row) => {
+						try { const response = await remotes.fetch(row.id, `/api/search?q=${encodeURIComponent(url.searchParams.get("q") ?? "")}`); const body = await response.json() as { hits: { session: string; snippet: string }[] }; return body.hits.map(hit => ({ ...hit, session: remoteSessionName(row.id, hit.session) })); } catch { return []; }
+					}))).flat()],
 				});
 			}
 			if (url.pathname === "/api/git/status") {
@@ -320,13 +524,47 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 					const input = (await request.json()) as { content: string; filename: string };
 					return apiJson({ path: await options.native.saveFile(input) });
 				}
+				if (url.pathname === "/api/native/window-action" && request.method === "POST") {
+					const input = (await request.json()) as { action: "minimize" | "toggle-maximize" | "close" };
+					options.native.windowAction?.(input);
+					return new Response(null, { status: 202, headers: CORS_HEADERS });
+				}
+				if (url.pathname === "/api/native/open-external" && request.method === "POST") {
+					const input = (await request.json()) as { url: string };
+					options.native.openExternal(input);
+					return new Response(null, { status: 202, headers: CORS_HEADERS });
+				}
 				if (url.pathname === "/api/native/context-menu" && request.method === "POST") {
 					const input = (await request.json()) as { items: unknown[] };
 					options.native.contextMenu(input);
 					return new Response(null, { status: 202, headers: CORS_HEADERS });
 				}
 			}
+			/**
+			 * The page this backend serves gets its credential in the document, the same way
+			 * the desktop shell hands one to the webview. A loopback service that also serves
+			 * a tunnel to another machine cannot leave its own UI unauthenticated just because
+			 * the request came from localhost.
+			 */
+			const serveIndex = async (): Promise<Response> => {
+				const path = `${webDist}/index.html`;
+				if (!existsSync(path)) return new Response("eta-server up; eta-web not built yet", { status: 503 });
+				let html = await Bun.file(path).text();
+				if (token !== undefined) {
+					const boot = {
+						apiBase: "",
+						token,
+						platform: options.platform ?? process.platform,
+						appVersion: options.appVersion ?? "0.1.0",
+						role: service?.role ?? "dev",
+						native: options.native !== undefined,
+					};
+					html = html.replace("</head>", `\t\t<script>window.__ETA_HOST__=${JSON.stringify(boot)};</script>\n\t</head>`);
+				}
+				return new Response(html, { headers: { "content-type": CONTENT_TYPES[".html"]!, "cache-control": "no-cache" } });
+			};
 			const distFile = resolve(webDist, `.${url.pathname === "/" ? "/index.html" : url.pathname}`);
+			if (distFile === `${webDist}/index.html` && existsSync(distFile)) return serveIndex();
 			if (distFile.startsWith(`${webDist}/`) && existsSync(distFile) && (await Bun.file(distFile).exists())) {
 				const ext = distFile.slice(distFile.lastIndexOf("."));
 				return new Response(Bun.file(distFile), {
@@ -341,23 +579,29 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 					},
 				});
 			}
-			const index = `${webDist}/index.html`;
-			if (existsSync(index)) {
-				return new Response(Bun.file(index), {
-					headers: { "content-type": CONTENT_TYPES[".html"]!, "cache-control": "no-cache" },
-				});
-			}
-			return new Response("eta-server up; eta-web not built yet", { status: 503 });
+			return serveIndex();
 		},
 		websocket: {
 			open(socket: Socket) {
+				if (socket.data.kind === "remote-term") {
+					try {
+						const upstream = remotes.terminal(socket.data.remoteId!); socket.data.upstream = upstream;
+						upstream.binaryType = "arraybuffer";
+						upstream.addEventListener("open", () => { for (const raw of socket.data.pending ?? []) upstream.send(raw); socket.data.pending = []; });
+						upstream.addEventListener("message", event => { if (socket.readyState === 1) socket.send(typeof event.data === "string" ? event.data : new Uint8Array(event.data)); });
+						upstream.addEventListener("close", () => socket.close(1011, "Remote terminal disconnected"));
+						upstream.addEventListener("error", () => { upstream.close(); socket.close(1011, "Remote terminal failed"); });
+					} catch { socket.close(1011, "Remote host is disconnected"); }
+					return;
+				}
 				if (socket.data.kind === "term") {
 					terms.open(socket);
 					return;
 				}
 				sockets.add(socket);
 				syncPatchCapable();
-				send(socket, { type: "hello", sessions: host.sidebar(), attach: host.attachPointer });
+				send(socket, { type: "hello", sessions: sidebar(), attach: host.attachPointer ?? remotes.sidebar()[0]?.name ?? null });
+				for (const frame of remotes.frames()) send(socket, frame);
 				for (const name of [...host.names()]) {
 					const view = host.viewOf(name);
 					if (view !== undefined) {
@@ -370,6 +614,7 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 				}
 			},
 			close(socket: Socket) {
+				if (socket.data.kind === "remote-term") { socket.data.upstream?.close(); return; }
 				if (socket.data.kind === "term") {
 					terms.close(socket);
 					return;
@@ -379,6 +624,12 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 				syncPatchCapable();
 			},
 			async message(socket: Socket, raw: string | Buffer) {
+				if (socket.data.kind === "remote-term") {
+					if (socket.data.upstream?.readyState === 1) socket.data.upstream.send(raw);
+					else if ((socket.data.pending?.length ?? 0) < 16 && raw.length < 64_000) socket.data.pending?.push(raw);
+					else socket.close(1009, "Terminal buffer full");
+					return;
+				}
 				if (socket.data.kind === "term") {
 					terms.message(socket, raw);
 					return;
@@ -390,6 +641,15 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 					send(socket, { type: "error", message: "bad frame" });
 					return;
 				}
+				if (message.op === "native") {
+					// A shell that is a client, not the host: its click rides the same fan-out
+					// every attached page already listens to.
+					for (const socket of sockets)
+						send(socket, { type: "native", kind: message.kind, action: message.action, ...(message.data === undefined ? {} : { data: message.data }) });
+					return;
+				}
+				try { if (await remotes.route(message)) return; }
+				catch (error) { send(socket, { type: "error", message: error instanceof Error ? error.message : String(error) }); return; }
 				// A resync is a read, not an op: answer it on this socket alone with
 				// the whole view and re-point the patch baseline at it.
 				if (message.op === "resync") {
@@ -411,7 +671,7 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 						await applyOp(host, message);
 						if (message.op === "session.create") send(socket, { type: "created", name: message.name });
 						if (message.op === "session.delete") send(socket, { type: "deleted", name: message.name });
-						send(socket, { type: "sessions", sessions: host.sidebar() });
+						send(socket, { type: "sessions", sessions: sidebar() });
 					} catch (error) {
 						const text =
 							error instanceof UnknownPersonaError || error instanceof Error ? error.message : String(error);
@@ -425,20 +685,49 @@ export async function startServer(options: EtaServerOptions = {}): Promise<EtaSe
 			},
 		},
 	});
+	cleanup.push(() => { server.stop(true); });
 	const opTails = new Map<Socket, Promise<void>>();
 	let nextSocketId = 1;
+	remotes.start();
+
+	const descriptor: BackendDescriptor | undefined =
+		service === undefined || token === undefined
+			? undefined
+			: {
+					protocol: BACKEND_PROTOCOL,
+					version: service.version,
+					pid: process.pid,
+					host: "127.0.0.1",
+					port: server.port as number,
+					token,
+					dataDir: host.dataDir,
+					configPath: options.configPath ?? etaConfigPath,
+					machineId: machineId ?? "unknown",
+					role: service.role,
+					native: options.native !== undefined,
+					startedAt: Date.now(),
+				};
+	await claim?.publish(descriptor!);
+	let closing: Promise<void> | undefined;
 
 	return {
 		host,
 		port: server.port as number,
+		...(token === undefined ? {} : { token }),
+		...(descriptor === undefined ? {} : { descriptor }),
 		push(message) {
 			for (const socket of sockets) send(socket, message);
 		},
 		close() {
-			unsubscribe();
-			server.stop();
-			terms.killAll();
-			void host.close();
+			return closing ??= (async () => {
+				unsubscribe();
+				remotes.close();
+				server.stop(true);
+				terms.killAll();
+				await Promise.allSettled(opTails.values());
+				await host.close();
+				await claim?.release();
+			})();
 		},
 	};
 }
@@ -451,7 +740,7 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 		case "resync":
 			return;
 		case "prompt":
-			host.queue(message.session, message.text, message.mode ?? "queue");
+			host.queue(message.session, message.text, message.mode ?? "queue", message.images);
 			return;
 		case "goal":
 			host.goal(message.session, message.action, message.objective);
@@ -551,8 +840,8 @@ export async function applyOp(host: Host, message: ClientMessage): Promise<void>
 			const personaId =
 				message.personaId ?? (await host.suggestPersona(message.prompt ?? "", cwd, message.modelId));
 			await host.createSession(message.name, personaId, cwd, message.modelId);
-			if (message.prompt !== undefined && message.prompt.length > 0)
-				host.queue(message.name, message.prompt, "queue");
+			if ((message.prompt?.length ?? 0) > 0 || (message.images?.length ?? 0) > 0)
+				host.queue(message.name, message.prompt ?? "", "queue", message.images);
 			return;
 		}
 		case "session.delete":
@@ -596,4 +885,9 @@ export async function listWorkspaceFiles(root: string): Promise<string[]> {
 		.sort((a, b) => b.mtime - a.mtime)
 		.slice(0, 50)
 		.map((entry) => entry.path);
+}
+
+function sameSecret(expected: string, actual: string): boolean {
+	const left = Buffer.from(expected), right = Buffer.from(actual);
+	return left.length === right.length && timingSafeEqual(left, right);
 }

@@ -17,10 +17,23 @@ export interface EtaHost {
 	apiBase: string;
 	/** `ws://host` — no path. */
 	wsBase: string;
-	/** Set by the desktop shell; the server rejects requests without it there. */
+	/**
+	 * Loopback credential. The desktop shell injects it, and a backend that owns its
+	 * machine's sessions injects it into the page it serves itself — the local UI is
+	 * authenticated exactly like a tunnelled one, not let in by an open route.
+	 */
 	token?: string;
 	platform?: string;
 	appVersion?: string;
+	/** Whether this window can access native capabilities. */
+	native?: boolean;
+	/** Window-local native APIs use a separate credential from the shared backend. */
+	nativeApiBase?: string;
+	nativeToken?: string;
+	/** What that backend is: the machine's service, a desktop window, a dev server. */
+	role?: "service" | "desktop" | "dev" | "remote";
+	/** Set when the shell could not reach any backend; the UI shows this instead. */
+	error?: string;
 }
 
 declare global {
@@ -42,7 +55,21 @@ function wsOriginOf(apiBase: string): string {
 }
 
 function resolveHost(injected: Partial<EtaHost> | undefined): EtaHost {
-	if (injected?.apiBase === undefined || !/^https?:\/\//.test(injected.apiBase)) return { kind: "browser", apiBase: "", wsBase: browserAuthority() };
+	if (injected?.apiBase === undefined || !/^https?:\/\//.test(injected.apiBase)) {
+		// Same-origin page: the base is the document's own origin, but the credential —
+		// and the note that this shell has no native side — still ride along.
+		return {
+			kind: "browser",
+			apiBase: "",
+			wsBase: browserAuthority(),
+			...(injected?.token === undefined ? {} : { token: injected.token }),
+			...(injected?.platform === undefined ? {} : { platform: injected.platform }),
+			...(injected?.appVersion === undefined ? {} : { appVersion: injected.appVersion }),
+			...(injected?.role === undefined ? {} : { role: injected.role }),
+			...(injected?.native === undefined ? {} : { native: injected.native }),
+			...(injected?.error === undefined ? {} : { error: injected.error }),
+		};
+	}
 	const apiBase = injected.apiBase.replace(/\/$/, "");
 	return {
 		kind: "desktop",
@@ -51,7 +78,18 @@ function resolveHost(injected: Partial<EtaHost> | undefined): EtaHost {
 		...(injected.token === undefined ? {} : { token: injected.token }),
 		...(injected.platform === undefined ? {} : { platform: injected.platform }),
 		...(injected.appVersion === undefined ? {} : { appVersion: injected.appVersion }),
+		...(injected.role === undefined ? {} : { role: injected.role }),
+		...(injected.native === undefined ? {} : { native: injected.native }),
+		...(injected.nativeApiBase === undefined ? {} : { nativeApiBase: injected.nativeApiBase }),
+		...(injected.nativeToken === undefined ? {} : { nativeToken: injected.nativeToken }),
+		...(injected.error === undefined ? {} : { error: injected.error }),
 	};
+}
+
+/** Whether this window has a native shell behind it (folder dialogs, menus, exports). */
+export function nativeAvailable(): boolean {
+	const current = host();
+	return current.native ?? current.kind === "desktop";
 }
 
 let resolved: EtaHost | undefined;
@@ -86,8 +124,10 @@ export function wsUrl(path: string): string {
  * `content-type` and its boundary.
  */
 export function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
-	const url = apiUrl(path);
-	const { token } = host();
+	const current = host();
+	const native = path.startsWith("/api/native/") && current.nativeApiBase !== undefined;
+	const url = native ? `${current.nativeApiBase}${path}` : apiUrl(path);
+	const token = native ? current.nativeToken : current.token;
 	if (token === undefined) return Object.keys(init).length === 0 ? fetch(url) : fetch(url, init);
 	const headers = new Headers(init.headers);
 	if (!headers.has("authorization")) headers.set("authorization", `Bearer ${token}`);

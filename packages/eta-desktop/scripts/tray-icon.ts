@@ -16,8 +16,9 @@
 import { deflateSync } from "node:zlib";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const here = dirname(new URL(import.meta.url).pathname);
+const here = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(here, "../../eta-client/public");
 const svg = await Bun.file(join(publicDir, "Eta-Logo.svg")).text();
 

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { startNativeBridge } from "../../eta-desktop/src/main/native-bridge.ts";
 import { startServer, type EtaServer } from "../src/server.ts";
 import { discoverSkillDirs, renderSkillsBlock } from "../src/skills.ts";
 import { NodeExecutionEnv } from "@eta/core/node";
@@ -382,14 +383,56 @@ describe("skill discovery", () => {
 		expect(block).toContain("- demo Line one line two");
 		expect(block).toContain(join(home, ".agents", "skills", "demo"));
 		expect(block.includes("\n")).toBe(true);
-		const empty = await renderSkillsBlock(env, mkdtempSync(join(tmpdir(), "eta-skills-empty-")), join(root, "none"));
+		const emptyDir = mkdtempSync(join(process.cwd(), ".eta-skills-empty-"));
+		const empty = await renderSkillsBlock(env, emptyDir, join(root, "none"));
 		expect(empty).toBe("");
+		rmSync(emptyDir, { recursive: true, force: true });
 	});
 });
 
 describe("desktop native endpoints", () => {
+	it("keeps native capabilities window-local and requires their own credential", async () => {
+		const picked: unknown[] = [];
+		const opened: string[] = [];
+		const bridge = startNativeBridge({
+			async folderDialog(input) { picked.push(input); return "/workspace"; },
+			async saveFile() { return "/export"; },
+			openExternal({ url }) { opened.push(url); },
+			contextMenu() {},
+		}, "test");
+		try {
+			for (const origin of ["null", "views://eta", "http://localhost:5173"]) {
+				const url = `${bridge.apiBase}/api/native/folder-dialog`;
+				const preflight = await fetch(url, { method: "OPTIONS", headers: { origin } });
+				expect(preflight.status).toBe(204);
+				for (const token of ["backend-token", bridge.token]) {
+					const response = await fetch(url, {
+						method: "POST", headers: { origin, authorization: `Bearer ${token}`, "content-type": "application/json" },
+						body: JSON.stringify({ startingFolder: "/start" }),
+					});
+					expect(response.status).toBe(token === bridge.token ? 200 : 401);
+					if (response.ok) expect(await response.json()).toEqual({ path: "/workspace" });
+				}
+			}
+			expect(picked).toHaveLength(3);
+			expect((await fetch(`${bridge.apiBase}/api/native/info`, { headers: { origin: "https://untrusted.example", authorization: `Bearer ${bridge.token}` } })).status).toBe(403);
+			expect((await fetch(`${bridge.apiBase}/api/sessions`, { headers: { authorization: `Bearer ${bridge.token}` } })).status).toBe(404);
+			// The webview cannot open a link itself: the shell is what turns it back into a
+			// browser tab, so the call has to reach the handler instead of 404-ing on it.
+			const external = await fetch(`${bridge.apiBase}/api/native/open-external`, {
+				method: "POST",
+				headers: { origin: "views://eta", authorization: `Bearer ${bridge.token}`, "content-type": "application/json" },
+				body: JSON.stringify({ url: "https://auth.example/login" }),
+			});
+			expect(external.status).toBe(202);
+			expect(opened).toEqual(["https://auth.example/login"]);
+		} finally { bridge.close(); }
+	});
+
 	it("serves /api/native/*, stamps CORS, and broadcasts push()", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "eta-native-"));
+		let windowAction: string | undefined;
+		const opened: string[] = [];
 		const server = await startServer({
 			port: 0,
 			cwd,
@@ -399,7 +442,9 @@ describe("desktop native endpoints", () => {
 			native: {
 				folderDialog: async () => "/picked",
 				saveFile: async () => "/saved",
+				openExternal: ({ url }) => { opened.push(url); },
 				contextMenu: () => {},
+				windowAction: ({ action }) => { windowAction = action; },
 			},
 			platform: "darwin",
 			appVersion: "9.9.9",
@@ -420,6 +465,20 @@ describe("desktop native endpoints", () => {
 				})
 			).json()) as { path: string | null };
 			expect(folder).toEqual({ path: "/picked" });
+			const windowResponse = await fetch(`${base}/api/native/window-action`, {
+				method: "POST",
+				body: JSON.stringify({ action: "minimize" }),
+				headers: { "content-type": "application/json" },
+			});
+			expect(windowResponse.status).toBe(202);
+			expect(windowAction).toBe("minimize");
+			const external = await fetch(`${base}/api/native/open-external`, {
+				method: "POST",
+				body: JSON.stringify({ url: "https://auth.example/login" }),
+				headers: { "content-type": "application/json" },
+			});
+			expect(external.status).toBe(202);
+			expect(opened).toEqual(["https://auth.example/login"]);
 
 			const health = await fetch(`${base}/api/health`);
 			expect(health.headers.get("access-control-allow-origin")).toBe("*");
@@ -559,7 +618,8 @@ describe("the platform briefing reaches a session", () => {
 					"channel" in m && m.channel === "view" && JSON.stringify(m).includes('"name":"platform"'),
 				8000,
 			);
-			expect(JSON.stringify(frame)).toContain(".eta/config.json");
+		const platformText = "view" in frame ? (frame.view.prompt?.sections.find((section: { name: string }) => section.name === "platform")?.text ?? "") : "";
+		expect(platformText).toContain(join(serverCwds.get(server)!, "no-config.json"));
 			socket.close();
 		});
 	});

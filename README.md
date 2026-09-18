@@ -22,7 +22,7 @@ hmmf, fine, we are bunch of talented engineer whom spending around 120B token/mo
 
 > because we think **THEY ARE SHIT!**
 
-## Why We Are Building Eta
+## Why Eta
 
 Eta is the coding agent we wanted for ourselves: practical, open, and close to the metal with 🔋.
 

@@ -18,7 +18,7 @@ import {
 	type ShellExecResult,
 } from "../../src/harness/types.ts";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, truncateTail } from "../../src/harness/utils/truncate.ts";
-import { createTempDir } from "./session-test-utils.ts";
+import { createTempDir, gitBashPath } from "./session-test-utils.ts";
 
 const noUpdate = () => {};
 
@@ -700,7 +700,7 @@ describe("AgentHarness tools", () => {
 			expect(receivedContext).toBe(context);
 			expect(receivedSignal).toBe(controller.signal);
 			expect(textOutput(result)).toBe(
-				`ready::explicit:${getOrThrow(await env.canonicalPath(context.workspace, BACKGROUND_CONTEXT))}`,
+				`ready::explicit:${gitBashPath(getOrThrow(await env.canonicalPath(context.workspace, BACKGROUND_CONTEXT)))}`,
 			);
 		});
 

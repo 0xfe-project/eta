@@ -4,6 +4,7 @@ import { useAppI18n } from "../../i18n.ts";
 import { etaStore, useEta } from "../../lib/eta-store.ts";
 import { sidebarPrefs, type ProjectSort } from "../../lib/prefs.ts";
 import type { SidebarSession } from "@eta/core";
+import { parseRemoteSession } from "../../lib/remotes.ts";
 import { apiFetch } from "../../lib/host.ts";
 import { openSettings } from "../../lib/settings.ts";
 
@@ -32,6 +33,7 @@ interface Group {
 	sessions: SidebarSession[];
 	running: number;
 	unread: number;
+	remote?: SidebarSession["remote"];
 }
 
 function basenameOf(path: string): string {
@@ -43,7 +45,7 @@ function parentOf(path: string): string {
 	return parts.length < 2 ? "" : parts[parts.length - 2]!;
 }
 
-export function Sidebar(props: { selected: string | null; termActive: boolean; onTerminal: () => void }) {
+export function Sidebar(props: { selected: string | null; termActive: boolean; onTerminal: () => void; /** For the route that is not the transcript: `/new` has to give that space back once a session is picked. */ onSelected?: (session: string) => void }) {
 	const i18n = useAppI18n();
 	const state = useEta();
 	const store = etaStore();
@@ -81,20 +83,25 @@ export function Sidebar(props: { selected: string | null; termActive: boolean; o
 	const archived = createMemo(() => state.sessions.filter((session) => session.archived === true));
 	const pinned = createMemo(() => visible().filter((session) => session.pinned === true).sort(byUpdated));
 
+	const groupKeyOf = (session: SidebarSession) =>
+		session.remote ? `remote:${session.remote.connectionId}:${session.cwd ?? UNGROUPED}` : (session.cwd ?? UNGROUPED);
 	const groups = createMemo<Group[]>(() => {
-		const keys = [...new Set(visible().filter((session) => session.pinned !== true).map((session) => session.cwd ?? UNGROUPED))];
+		const keys = [...new Set(visible().filter((session) => session.pinned !== true).map(groupKeyOf))];
 		const built = keys.map((key) => {
 			const members = visible()
-				.filter((session) => session.pinned !== true && (session.cwd ?? UNGROUPED) === key)
+				.filter((session) => session.pinned !== true && groupKeyOf(session) === key)
 				.sort(byUpdated);
+			const remote = members[0]?.remote;
+			const path = members[0]?.cwd ?? UNGROUPED;
 			return {
 				key,
-				path: key,
-				label: key === UNGROUPED ? i18n.t("sidebar.ungrouped") : basenameOf(key),
+				path,
+				label: path === UNGROUPED ? i18n.t("sidebar.ungrouped") : basenameOf(path),
 				parent: "",
 				sessions: members,
 				running: members.filter((session) => session.badges.includes("running")).length,
 				unread: members.filter(isUnread).length,
+				...(remote === undefined ? {} : { remote }),
 			} satisfies Group;
 		});
 		const duplicated = new Set(built.map((group) => group.label).filter((label, index, all) => all.indexOf(label) !== index));
@@ -108,13 +115,22 @@ export function Sidebar(props: { selected: string | null; termActive: boolean; o
 
 	const toggleGroup = (key: string) => sidebarPrefs.toggleCollapsed(key);
 	const isOpen = (key: string) => !collapsed().includes(key);
-	const testKeyOf = (group: Group) => (group.path === UNGROUPED ? "ungrouped" : basenameOf(group.path));
+	const testKeyOf = (group: Group) => {
+		const base = group.path === UNGROUPED ? "ungrouped" : basenameOf(group.path);
+		return group.remote ? `remote-${group.remote.connectionId}-${base}` : base;
+	};
+
+	/** Pick a session. On `/new` that also means: stop being `/new`. */
+	const focus = (session: string) => {
+		store.send({ op: "focus", session });
+		props.onSelected?.(session);
+	};
 
 	const rowProps = (session: SidebarSession) => ({
 		session,
 		unread: isUnread(session),
 		selected: session.name === props.selected,
-		onSelect: () => store.send({ op: "focus", session: session.name }),
+		onSelect: () => focus(session.name),
 		onDelete: () => store.send({ op: "session.delete", name: session.name }),
 		onPin: () => store.send({ op: "session.pin", session: session.name, pinned: session.pinned !== true }),
 		onArchive: () => store.send({ op: "session.archive", session: session.name, archived: session.archived !== true }),
@@ -131,7 +147,7 @@ export function Sidebar(props: { selected: string | null; termActive: boolean; o
 				    there are none and it collapses to nothing. */}
 				<span class="lights-slot" data-testid="lights-slot" />
 				<span class="logo-slot" data-testid="logo-slot">
-					<img src="/Eta-Logo.svg" alt="eta" class="h-5 w-5" data-testid="logo" />
+					<img src="Eta-Logo.svg" alt="eta" class="h-5 w-5" data-testid="logo" />
 				</span>
 				<span class="brand" data-testid="brand">{i18n.t("app.name")}</span>
 			</div>
@@ -156,7 +172,7 @@ export function Sidebar(props: { selected: string | null; termActive: boolean; o
 						</Show>
 						<For each={current()}>
 							{(hit) => (
-								<button data-testid={`search-hit-${hit.session}`} onClick={() => store.send({ op: "focus", session: hit.session })} class="block w-full border-b border-border px-2 py-1 text-left text-xs hover:bg-overlay">
+								<button data-testid={`search-hit-${hit.session}`} onClick={() => focus(hit.session)} class="block w-full border-b border-border px-2 py-1 text-left text-xs hover:bg-overlay">
 									<span class="mono text-accent">{hit.session}</span>
 									<span class="ml-1 text-muted">{hit.snippet}</span>
 								</button>
@@ -196,8 +212,9 @@ export function Sidebar(props: { selected: string | null; termActive: boolean; o
 								count={group.sessions.length}
 								open={isOpen(group.key)}
 								onToggle={() => toggleGroup(group.key)}
+								remote={group.remote}
 								newTitle={i18n.t("sidebar.newInProject")}
-								onNew={group.path === UNGROUPED ? undefined : () => void navigate(`/new?cwd=${encodeURIComponent(group.path)}`)}
+								onNew={group.path === UNGROUPED ? undefined : () => void navigate(`/new?cwd=${encodeURIComponent(group.path)}${group.remote ? `&remote=${encodeURIComponent(group.remote.connectionId)}` : ""}`)}
 							>
 								<For each={shown()}>{(session) => <SessionRow {...rowProps(session)} />}</For>
 								<Show when={!showAll()}>
@@ -227,14 +244,14 @@ export function Sidebar(props: { selected: string | null; termActive: boolean; o
 			{/* Pinned, under the scroll and out of the drag strip: the two ways out of
 			    the list. Every app keeps them here, so nobody has to look for them. */}
 			<div class="flex shrink-0 items-center gap-1 border-t border-border px-2 py-2" data-testid="sidebar-foot">
-				<A href="/settings" data-testid="nav-settings" onClick={(event) => routeTo(event, "/settings")} class="shrink-0 whitespace-nowrap border border-border px-2 py-1 text-xs text-muted hover:bg-foreground hover:text-background">
+				<A href="/settings" data-testid="nav-settings" onClick={(event) => routeTo(event, "/settings")} class="shrink-0 whitespace-nowrap border border-border px-2 py-1 text-xs text-muted hover:bg-overlay-hover hover:text-foreground">
 					{i18n.t("nav.settings")}
 				</A>
 				<button
 					data-testid="term-toggle"
 					onClick={() => props.onTerminal()}
 					title={i18n.t("term.title")}
-					class={`ml-auto shrink-0 whitespace-nowrap border border-border-strong px-2 py-1 text-xs uppercase tracking-[0.12em] text-muted hover:bg-foreground hover:text-background ${props.termActive ? "bg-foreground text-background" : ""}`}
+					class={`ml-auto shrink-0 whitespace-nowrap border border-border-strong px-2 py-1 text-xs uppercase tracking-[0.12em] text-muted hover:bg-overlay-hover hover:text-foreground ${props.termActive ? "bg-foreground text-background" : ""}`}
 				>
 					{i18n.t("term.open")}
 				</button>
@@ -255,8 +272,10 @@ function Section(props: {
 	onToggle(): void;
 	newTitle?: string;
 	onNew?(): void;
+	remote?: SidebarSession["remote"];
 	children?: JSX.Element;
 }) {
+	const i18n = useAppI18n();
 	return (
 		<div class="mb-1" data-testid={props.testid}>
 			<div class="flex items-center gap-1 px-1 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted">
@@ -271,6 +290,11 @@ function Section(props: {
 					<Show when={(props.parent ?? "").length > 0}>
 						<span class="mono shrink-0 text-[9px] normal-case text-faint">/{props.parent}</span>
 					</Show>
+					<Show when={props.remote}>
+						<span data-testid={`${props.testid}-remote`} class="shrink-0 border border-border-strong px-1 text-[9px] font-semibold normal-case tracking-wider text-muted" title={`${props.remote!.label} · ${props.remote!.host}`}>
+							{i18n.t("sidebar.remote")}
+						</span>
+					</Show>
 				</button>
 				<Show when={(props.running ?? 0) > 0}>
 					<span data-testid={`${props.testid}-running`} class="bg-accent px-1 text-[9px] text-accent-foreground">{props.running}</span>
@@ -280,10 +304,12 @@ function Section(props: {
 				</Show>
 				<span class="bg-overlay px-1 text-[9px]">{props.count}</span>
 				<Show when={props.onNew !== undefined}>
+					{/* A plus in a square reads as a dot. The golden rectangle gives it a shape of its
+					    own — 1 : 0.618 against the height it already had — without making it a bar. */}
 					<button
 						data-testid={props.testid.replace("group-project-", "project-new-")}
 						title={props.newTitle}
-						class="ml-auto border border-border-strong px-1 text-[9px] hover:bg-foreground hover:text-background"
+						class="ml-auto h-[15px] w-[24.27px] border border-border-strong text-[9px] hover:bg-overlay-hover hover:text-foreground"
 						onClick={props.onNew}
 					>
 						+
@@ -358,7 +384,7 @@ function SessionRow(props: { session: SidebarSession; unread: boolean; selected:
 		});
 	});
 
-	const title = () => props.session.title ?? props.session.name;
+	const title = () => props.session.title ?? parseRemoteSession(props.session.name)?.session ?? props.session.name;
 	// Blur fires once more as the field unmounts; the cleared draft makes that a no-op.
 	const applyRename = (next: string) => {
 		if (draft() === null) return;
@@ -409,7 +435,7 @@ function SessionRow(props: { session: SidebarSession; unread: boolean; selected:
 						⋯
 					</button>
 					<Show when={menuOpen()}>
-						<div data-testid={`session-menu-open-${props.session.name}`} class="absolute right-0 top-6 z-20 min-w-[120px] border-2 border-border-strong bg-elevated shadow-[4px_4px_0_0_var(--shadow)]">
+						<div data-testid={`session-menu-open-${props.session.name}`} class="absolute right-0 top-6 z-20 min-w-[120px] border border-overlay-hover bg-elevated shadow-[4px_4px_0_0_var(--shadow)]">
 							<button
 								data-testid={`session-rename-${props.session.name}`}
 								class="block w-full border-b border-border px-2 py-1 text-left text-xs hover:bg-overlay"

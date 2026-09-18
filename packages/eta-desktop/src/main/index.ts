@@ -1,9 +1,8 @@
 /**
  * eta's desktop shell.
  *
- * The eta server runs inside this process and the webview loads the built
- * eta-client, so the shell adds exactly two things a browser tab cannot have:
- * the window chrome, and the native capabilities behind `/api/native/*`.
+ * The window connects to the machine's independent eta service. This process owns
+ * only window chrome and native capabilities; quitting it leaves sessions running.
  *
  * Three facts the P0 probe (/tmp/eta-p0) established, and this file depends on:
  * a page served from `views://` may open a WebSocket to `127.0.0.1`; `preload` is
@@ -14,11 +13,17 @@
  */
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { ApplicationMenu, BrowserWindow, Tray, Utils, type ApplicationMenuItemConfig } from "electrobun/main";
-import { startServer, type EtaServer, type NativeHandlers } from "../../../eta-server/src/server.ts";
+import { ApplicationMenu, BrowserWindow, PATHS, Tray, Utils, type ApplicationMenuItemConfig } from "electrobun/main";
+import type { BackendDescriptor } from "../../../eta-core/src/remote.ts";
+import { ensureBackend } from "../../../eta-server/src/service-launcher.ts";
+import { startNativeBridge } from "./native-bridge.ts";
+import { configureWindowsWindow } from "./platform/windows/index.ts";
 
 const VERSION = "0.1.0";
-const CLIENT_DIST = new URL("../../eta-client/dist", import.meta.url).pathname;
+const CLIENT_DIST = join(PATHS.VIEWS_FOLDER, "eta");
+const BACKEND = join(PATHS.VIEWS_FOLDER, "eta-backend", process.platform === "win32" ? "eta-server.exe" : "eta-server");
+const isMac = process.platform === "darwin";
+let windowRef: BrowserWindow | undefined;
 
 /** The `action` strings the front-end answers; see eta-client/src/lib/native.ts. */
 const ACTIONS = {
@@ -32,44 +37,47 @@ const ACTIONS = {
 	quit: "app.quit",
 } as const;
 
-const token = crypto.randomUUID().replaceAll("-", "");
-
-const server: EtaServer = await startServer({
-	settingsToken: token,
-	// Random port, loopback only: `dev:web` may already hold 3000 with SO_REUSEPORT,
-	// and the shell tells the page where it is through the preload anyway.
-	port: 0,
-	hostname: "127.0.0.1",
-	reusePort: false,
-	webDist: CLIENT_DIST,
-	platform: process.platform,
-	appVersion: VERSION,
-	native: {
-		async folderDialog(input): Promise<string | null> {
-			const picked = await Utils.openFileDialog({
-				canChooseFiles: false,
-				canChooseDirectory: true,
-				allowsMultipleSelection: false,
-				...(input.startingFolder === undefined ? {} : { startingFolder: input.startingFolder }),
-			});
-			return picked[0] ?? null;
-		},
-		/** Hutch has no save dialog yet, so exports land somewhere findable. */
-		async saveFile({ content, filename }): Promise<string | null> {
-			const target = join(homedir(), ".eta", "exports", filename.replace(/[/\\]/g, "-"));
-			await Bun.write(target, content);
-			return target;
-		},
-		contextMenu({ items }): void {
-			console.log(`[eta-desktop] contextMenu(${String(items.length)} items) is not wired up yet`);
-		},
-	} satisfies NativeHandlers,
-});
-
-const apiBase = `http://127.0.0.1:${String(server.port)}`;
-/** Settings requests carry the preload credential as an Authorization header. */
-
-const health = await fetch(`${apiBase}/api/health`).then((response) => response.status).catch(() => 0);
+// The child is detached and claims its own lock; the window never owns sessions.
+let descriptor: BackendDescriptor | undefined;
+let serviceError: string | undefined;
+try {
+	descriptor = await ensureBackend({ command: [BACKEND, "serve"], webDist: CLIENT_DIST, version: VERSION });
+} catch (error) {
+	serviceError = error instanceof Error ? error.message : String(error);
+	console.error(`[eta-desktop] ${serviceError}`);
+}
+const apiBase = descriptor === undefined ? "" : `http://127.0.0.1:${String(descriptor.port)}`;
+const credential = descriptor?.token;
+const nativeBridge = startNativeBridge({
+	async folderDialog(input): Promise<string | null> {
+		const picked = await Utils.openFileDialog({
+			canChooseFiles: false,
+			canChooseDirectory: true,
+			allowsMultipleSelection: false,
+			...(input.startingFolder === undefined ? {} : { startingFolder: input.startingFolder }),
+		});
+		return picked[0] ?? null;
+	},
+	async saveFile({ content, filename }): Promise<string | null> {
+		const target = join(homedir(), ".eta", "exports", filename.replace(/[/\\]/g, "-"));
+		await Bun.write(target, content);
+		return target;
+	},
+	/** `views://` has no browser behind it: a link only opens if the shell opens it. */
+	openExternal({ url }): void {
+		Utils.openExternal(url);
+	},
+	contextMenu({ items }): void {
+		console.log(`[eta-desktop] contextMenu(${String(items.length)} items) is not wired up yet`);
+	},
+	windowAction({ action }): void {
+		const current = windowRef;
+		if (current === undefined) return;
+		if (action === "minimize") current.minimize();
+		else if (action === "toggle-maximize") current.isMaximized() ? current.unmaximize() : current.maximize();
+		else current.close();
+	},
+}, VERSION);
 
 /**
  * In `dev:desk` the vite server is usually up and hot reload beats a rebuild loop.
@@ -84,25 +92,37 @@ const devIsOurs = await fetch(devUrl, { signal: AbortSignal.timeout(400) })
 	.catch(() => false);
 const pageUrl = devIsOurs ? devUrl : "views://eta/index.html";
 
-console.log(`[eta-desktop] server ${apiBase} health=${String(health)} page=${pageUrl}`);
+console.log(`[eta-desktop] backend ${apiBase} page=${pageUrl}`);
 
 const window = new BrowserWindow({
 	title: "eta",
 	url: pageUrl,
 	frame: { width: 1240, height: 820 },
 	activate: true,
-	// Inset rather than hidden: the three lights stay, and CSS leaves room for them
-	// in the sidebar's logo slot — the WeChat arrangement.
-	titleBarStyle: "hiddenInset",
-	// The lights land in the sidebar's logo slot. `y` is measured down from the top
-	// of the window; 10 centres them in the 40px header. Overridable so nudging it
-	// is a relaunch, not a rebuild: ETA_LIGHT_Y=6 .../eta.app/Contents/MacOS/launcher
-	trafficLightOffset: { x: 14, y: Number(process.env["ETA_LIGHT_Y"] ?? 5) },
-	preload: `window.__ETA_HOST__=${JSON.stringify({ apiBase, token, platform: process.platform, appVersion: VERSION })};`,
+	// macOS keeps its native inset controls. Windows is fully frameless: the page
+	// draws the three controls, so there is no native title bar or small icon.
+	titleBarStyle: isMac ? "hiddenInset" : "hidden",
+	...(isMac ? { trafficLightOffset: { x: 14, y: Number(process.env["ETA_LIGHT_Y"] ?? 5) } } : {}),
+	preload: `window.__ETA_HOST__=${JSON.stringify({
+		apiBase,
+		token: credential,
+		platform: process.platform,
+		appVersion: VERSION,
+		native: true,
+		nativeApiBase: nativeBridge.apiBase,
+		nativeToken: nativeBridge.token,
+		role: descriptor?.role ?? "dev",
+		...(serviceError === undefined ? {} : { error: serviceError }),
+	})};`,
 });
+windowRef = window;
+
+if (process.platform === "win32") configureWindowsWindow(window);
 
 /** Menu-bar item; the same actions the window menu would carry. */
-const tray = new Tray({ image: "views://eta/tray-18@2x.png", template: true, width: 18, height: 18 });
+const tray = isMac
+	? new Tray({ image: "views://eta/tray-18@2x.png", template: true, width: 18, height: 18 })
+	: new Tray({ image: "views://eta/Eta-Logo.ico", template: false, width: 16, height: 16 });
 tray.setMenu([
 	{ type: "normal", label: "新会话", action: ACTIONS.newSession },
 	{ type: "normal", label: "切换侧栏", action: ACTIONS.toggleSidebar },
@@ -130,19 +150,21 @@ tray.setMenu([
  * pass before it gets an accelerator — see the two notes inside for where the answer
  * is conditional on the view.
  */
+const macAppMenu: ApplicationMenuItemConfig = {
+	label: "eta",
+	submenu: [
+		{ role: "about", label: "关于 eta", accelerator: "" },
+		{ type: "divider" },
+		{ role: "hide", label: "隐藏 eta", accelerator: "CommandOrControl+H" },
+		{ role: "hideOthers", label: "隐藏其他", accelerator: "CommandOrControl+Option+H" },
+		{ role: "showAll", label: "全部显示", accelerator: "" },
+		{ type: "divider" },
+		{ role: "quit", label: "退出 eta", accelerator: "CommandOrControl+Q" },
+	],
+};
+
 const APP_MENU: ApplicationMenuItemConfig[] = [
-	{
-		label: "eta",
-		submenu: [
-			{ role: "about", label: "关于 eta", accelerator: "" },
-			{ type: "divider" },
-			{ role: "hide", label: "隐藏 eta", accelerator: "CommandOrControl+H" },
-			{ role: "hideOthers", label: "隐藏其他", accelerator: "CommandOrControl+Option+H" },
-			{ role: "showAll", label: "全部显示", accelerator: "" },
-			{ type: "divider" },
-			{ role: "quit", label: "退出 eta", accelerator: "CommandOrControl+Q" },
-		],
-	},
+	...(isMac ? [macAppMenu] : []),
 	{
 		label: "会话",
 		submenu: [
@@ -151,7 +173,6 @@ const APP_MENU: ApplicationMenuItemConfig[] = [
 			   item is inert rather than opening a dialog over something that cannot take it. */
 			{ label: "打开文件夹…", action: ACTIONS.openFolder, accelerator: "CommandOrControl+O" },
 			{ type: "divider" },
-			// ⌘. is macOS's cancel; aborting a turn is what cancel means here.
 			{ label: "中止回合", action: ACTIONS.abort, accelerator: "CommandOrControl+Period" },
 			{ label: "压缩上下文", action: ACTIONS.compact, accelerator: "CommandOrControl+Shift+C" },
 		],
@@ -165,7 +186,7 @@ const APP_MENU: ApplicationMenuItemConfig[] = [
 			{ role: "cut", label: "剪切", accelerator: "CommandOrControl+X" },
 			{ role: "copy", label: "拷贝", accelerator: "CommandOrControl+C" },
 			{ role: "paste", label: "粘贴", accelerator: "CommandOrControl+V" },
-			{ role: "pasteAndMatchStyle", label: "粘贴并匹配样式", accelerator: "CommandOrControl+Shift+Option+V" },
+			{ role: "pasteAndMatchStyle", label: "粘贴并匹配样式", accelerator: isMac ? "CommandOrControl+Shift+Option+V" : "CommandOrControl+Shift+V" },
 			{ role: "delete", label: "删除", accelerator: "CommandOrControl+Backspace" },
 			{ type: "divider" },
 			{ role: "selectAll", label: "全选", accelerator: "CommandOrControl+A" },
@@ -178,7 +199,7 @@ const APP_MENU: ApplicationMenuItemConfig[] = [
 			{ label: "切换侧栏", action: ACTIONS.toggleSidebar, accelerator: "CommandOrControl+B" },
 			{ label: "切换右栏", action: ACTIONS.togglePanel, accelerator: "CommandOrControl+Shift+B" },
 			{ type: "divider" },
-			{ role: "toggleFullScreen", label: "全屏幕", accelerator: "Control+Command+F" },
+			{ role: "toggleFullScreen", label: "全屏幕", accelerator: isMac ? "Control+Command+F" : "F11" },
 		],
 	},
 	{
@@ -188,7 +209,7 @@ const APP_MENU: ApplicationMenuItemConfig[] = [
 			{ role: "zoom", label: "缩放", accelerator: "" },
 			{ type: "divider" },
 			{ role: "close", label: "关闭", accelerator: "CommandOrControl+W" },
-			{ role: "bringAllToFront", label: "全部置于前端", accelerator: "" },
+			...(isMac ? [{ role: "bringAllToFront", label: "全部置于前端", accelerator: "" } satisfies ApplicationMenuItemConfig] : []),
 		],
 	},
 ];
@@ -207,10 +228,11 @@ function runAction(action: string, kind: "menu" | "tray"): void {
 		process.exit(0);
 		return;
 	}
-	server.push({ type: "native", kind, action });
+	// Window actions belong to this client, not every subscriber of the shared backend.
+	window.webview.executeJavascript(`window.__etaNative?.(${JSON.stringify({ kind, action })})`);
 }
 
-ApplicationMenu.setApplicationMenu(APP_MENU);
+if (isMac) ApplicationMenu.setApplicationMenu(APP_MENU);
 ApplicationMenu.on("application-menu-clicked", (event) => {
 	const action = actionOf(event);
 	if (action !== undefined) runAction(action, "menu");
@@ -221,13 +243,11 @@ tray.on("tray-clicked", (event) => {
 	if (action !== undefined) runAction(action, "tray");
 });
 
-// `close()` stops the listener and kills every shell the terminal registry started;
-// without the exit hook an app quit leaves zsh processes behind. ⌘Q reaches us as a
-// signal rather than a call, so the same cleanup has to hang off that too.
+// Only the window-local capability bridge stops here. The backend has its own PID.
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
 	process.on(signal, () => process.exit(0));
 }
 process.on("exit", () => {
 	tray.remove();
-	server.close();
+	nativeBridge.close();
 });

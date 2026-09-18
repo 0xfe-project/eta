@@ -213,7 +213,8 @@ describe("EtaAgent integrates batteries on the main bus", () => {
 		expect(entries.some((e) => e.type === "goal")).toBe(true);
 
 		await agent.close(CTX);
-		void session.close(CTX);
+		await session.close(CTX);
+		db.close();
 	});
 });
 
@@ -276,6 +277,7 @@ describe("D3 durable re-injection", () => {
 		expect(last.indexOf("you are eta")).toBeLessThan(last.indexOf("use bun"));
 
 		await agent.close(CTX);
-		void session.close(CTX);
+		await session.close(CTX);
+		db.close();
 	});
 });
