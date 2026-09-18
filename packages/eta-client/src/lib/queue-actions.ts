@@ -24,6 +24,7 @@ export interface QueuedItem {
 	entryId: string;
 	kind: string;
 	text: string;
+	images?: { mime: string; dataBase64: string }[];
 }
 
 /** Long enough for a loopback round trip, short enough that a dead server reads as a
@@ -67,7 +68,7 @@ export async function steerQueued(session: string, item: QueuedItem): Promise<vo
 /** Put it back in the composer, for editing rather than for sending. */
 export async function pullBackQueued(session: string, item: QueuedItem): Promise<void> {
 	if (await cancelQueued(session, item.entryId) !== "cancelled") return;
-	returnToDraft(item.text);
+	returnToDraft({ text: item.text, ...(item.images === undefined ? {} : { images: item.images }) });
 }
 
 /**
@@ -85,7 +86,7 @@ export async function pullBackQueued(session: string, item: QueuedItem): Promise
  * between: pulling back must never swallow half a sentence, and pulling two in a row
  * has to land in an order you can predict (newest on top).
  */
-type DraftSink = (text: string) => void;
+type DraftSink = (draft: { text: string; images?: { mime: string; dataBase64: string }[] }) => void;
 
 /** Registration order, oldest first. A stack rather than "remember the previous one
  * and restore it on unmount": unmount order is not the reverse of mount order (a
@@ -107,9 +108,9 @@ export function registerDraftSink(receive: DraftSink): () => void {
 
 /** False when nothing is listening. The entry is cancelled either way, so a caller
  * that cares can say so; the text is not kept anywhere for later. */
-export function returnToDraft(text: string): boolean {
+export function returnToDraft(draft: { text: string; images?: { mime: string; dataBase64: string }[] }): boolean {
 	const target = sinks.at(-1);
 	if (target === undefined) return false;
-	target(text);
+	target(draft);
 	return true;
 }

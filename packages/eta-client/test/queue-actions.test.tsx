@@ -24,6 +24,7 @@ import {
  */
 
 const ITEM = { entryId: "e1", kind: "followUp", text: "先看 test" };
+const IMAGE_ITEM = { ...ITEM, images: [{ mime: "image/png", dataBase64: "abc123" }] };
 
 interface Mounted {
 	socket: FakeSocket;
@@ -136,6 +137,17 @@ describe("pulling an entry back into the composer", () => {
 		expect(target.box.value).toBe("先看 test");
 	});
 
+	it("restores queued images into the composer attachments", async () => {
+		const target = await mountComposer();
+		const done = pullBackQueued("s1", IMAGE_ITEM);
+		await settled();
+		ack(target, "cancelled");
+		await done;
+		await settled();
+		expect(target.box.value).toBe("先看 test");
+		expect(document.querySelector('[data-testid="attach-chips"] img')?.getAttribute("src")).toBe("data:image/png;base64,abc123");
+	});
+
 	it("keeps what was already being typed, below it and one line down", async () => {
 		const target = await mountComposer();
 		type(target.box, "我自己的半句话");
@@ -164,18 +176,18 @@ describe("pulling an entry back into the composer", () => {
 		// older composer unmounting must not hand the text to a component that has
 		// already gone away — the shape that broke when this was a restore-the-previous.
 		const received: string[] = [];
-		const offBehind = registerDraftSink((text) => received.push(`behind:${text}`));
-		const offFront = registerDraftSink((text) => received.push(`front:${text}`));
-		expect(returnToDraft("a")).toBe(true);
+		const offBehind = registerDraftSink((draft) => received.push(`behind:${draft.text}`));
+		const offFront = registerDraftSink((draft) => received.push(`front:${draft.text}`));
+		expect(returnToDraft({ text: "a" })).toBe(true);
 		expect(received).toEqual(["front:a"]);
 		offBehind();
-		returnToDraft("b");
+		returnToDraft({ text: "b" });
 		expect(received).toEqual(["front:a", "front:b"]);
 		offFront();
 		// Not "nobody received it": other tests leave composers mounted, and one of
 		// them is a legitimate sink. What matters is that neither of ours did.
 		const before = received.length;
-		returnToDraft("c");
+		returnToDraft({ text: "c" });
 		expect(received).toHaveLength(before);
 	});
 });

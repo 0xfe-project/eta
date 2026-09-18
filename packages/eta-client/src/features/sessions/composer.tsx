@@ -267,7 +267,12 @@ export function Composer(props: {
 	 */
 	onCleanup(
 		registerDraftSink((pulled) => {
-			setText((current) => (current.trim().length === 0 ? pulled : `${pulled}\n\n${current}`));
+			setText((current) => (current.trim().length === 0 ? pulled.text : `${pulled.text}\n\n${current}`));
+			if (pulled.images !== undefined && pulled.images.length > 0)
+				setPendingImages((current) => [
+					...pulled.images!.map((image, index) => ({ ...image, name: `queued-image-${index + 1}` })),
+					...current,
+				]);
 			// It came back to be edited, so the caret goes where the editing happens.
 			editor?.focus();
 		}),

@@ -755,14 +755,24 @@ export class Host {
 			supportedThinkingLevels: definition ? modelThinkingLevels(definition) : undefined,
 			cwd: entry.cwd,
 			...(entry.gitBranch === undefined ? {} : { gitBranch: entry.gitBranch }),
-			queue: entry.queue.map((item) => ({
-				entryId: item.entryId,
-				kind: item.kind,
-				text:
-					item.type === "message"
-						? userText(item.message as unknown as { role: string; content?: unknown; text?: string })
-						: String(item.customType),
-			})),
+			queue: entry.queue.map((item) => {
+				if (item.type !== "message") return { entryId: item.entryId, kind: item.kind, text: String(item.customType) };
+				const content = (item.message as { content?: unknown }).content;
+				const images = Array.isArray(content)
+					? content.flatMap((block) => {
+							const image = block as { type?: string; mimeType?: string; data?: string };
+							return image.type === "image" && image.mimeType !== undefined && image.data !== undefined
+								? [{ mime: image.mimeType, dataBase64: image.data }]
+								: [];
+						})
+					: [];
+				return {
+					entryId: item.entryId,
+					kind: item.kind,
+					text: userText(item.message as unknown as { role: string; content?: unknown; text?: string }),
+					...(images.length === 0 ? {} : { images }),
+				};
+			}),
 		};
 	}
 

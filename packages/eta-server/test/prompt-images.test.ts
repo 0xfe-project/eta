@@ -76,6 +76,9 @@ describe("prompt image forwarding", () => {
 					await until(() => payloads.length === 1);
 				}
 				await applyOp(host, { op: "prompt", session: "s1", text: "inspect image", mode: mode === "steer" ? "steer" : "queue", images });
+				if (mode === "queue") {
+					await until(() => host.viewOf("s1")?.queue.some((item) => item.images?.[0]?.dataBase64 === images[0]!.dataBase64) === true);
+				}
 				release();
 				await until(() => payloads.length === (mode === "prompt" ? 1 : 2));
 				expectImage(payloads.at(-1)!);
