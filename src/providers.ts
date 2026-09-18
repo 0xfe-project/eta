@@ -4,15 +4,20 @@ import { dirname } from "node:path";
 import {
 	MODEL_THINKING_LEVELS, HEADER_NAME_PATTERN, MAX_HEADER_NAME_LENGTH, MAX_HEADER_VALUE_LENGTH,
 	MAX_PROVIDER_HEADERS, applyProviderHeaders, effectiveModel, isCustomKind, modelThinkingLevels, providerPreset, sanitizeProviderHeaders,
-	type EtaModelConfig, type ModelCapabilities, type ProviderHeaders, type ProviderInput, type ProvidersView,
+	type EtaModelConfig, type ModelCapabilities, type ProviderHeaders, type ProviderInput, type ProviderKind, type ProvidersView,
 } from "@eta/core/provider-config";
 import type { EtaConfig, EtaProviderConfig } from "./config.ts";
 import { createModels } from "@earendil-works/pi-ai";
-import { CodexCredentialStore, CodexLogin, codexAuthPath, codexRuntimeProvider, codexCatalog } from "./codex-auth.ts";
-import { deepSeekCapabilities } from "./provider-presets.ts";
+import { CodexCredentialStore, CodexLogin, codexAuthPath, codexRuntimeProvider } from "./codex-auth.ts";
+import {
+	providerCatalogRestrictsModels, providerDefinitionForKind, providerModelCatalog, providerModelDefinition, resolveConfiguredModels,
+	type ProviderAuthDefinition, type ProviderDiscoveryDefinition,
+} from "./provider-model-catalog.ts";
 
 export const KIMI_CODING_BASE_URL = providerPreset("kimi-coding")!.baseUrl;
 export const DEEPSEEK_BASE_URL = providerPreset("deepseek")!.baseUrl;
+export const ZAI_CODING_CN_BASE_URL = providerPreset("zai-coding-cn")!.baseUrl;
+export const ZAI_BASE_URL = providerPreset("zai")!.baseUrl;
 export type ProviderFetch = (input: string, init?: RequestInit) => Promise<Response>;
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
@@ -126,20 +131,23 @@ function normalizeProvider(value: unknown, previous?: EtaProviderConfig): EtaPro
 	const item = record(value);
 	const id = shortText(item.id, 80);
 	if (id === undefined || !/^[a-zA-Z0-9_-]+$/.test(id)) throw new ProviderConfigError("invalid_provider_id");
-	const kind = item.kind ?? previous?.kind ?? "openai-compatible";
-	if (kind !== "kimi-coding" && kind !== "deepseek" && kind !== "openai-codex" && kind !== "openai-compatible" && kind !== "openai-responses") throw new ProviderConfigError("invalid_provider");
-	if (kind === "openai-codex" && id !== "openai-codex") throw new ProviderConfigError("invalid_provider_id");
+	const rawKind = item.kind ?? previous?.kind ?? "openai-compatible";
+	if (typeof rawKind !== "string") throw new ProviderConfigError("invalid_provider");
+	const kind = rawKind as ProviderKind;
+	const definition = providerDefinitionForKind(kind);
+	if (definition === undefined) throw new ProviderConfigError("invalid_provider");
+	if (definition.auth.adapter === "codex-oauth" && id !== definition.id) throw new ProviderConfigError("invalid_provider_id");
 	const url = providerPreset(kind)?.baseUrl ?? baseUrl(item.baseUrl);
 	const name = shortText(item.name);
 	if (item.apiKey !== undefined && item.apiKey !== null && (typeof item.apiKey !== "string" || item.apiKey.length > 8192 || /[\r\n]/.test(item.apiKey))) throw new ProviderConfigError("invalid_key");
 	// Never send a saved credential to a newly edited host without re-entry.
 	if (previous?.apiKey && item.apiKey === undefined && baseUrl(previous.baseUrl) !== url) throw new ProviderConfigError("key_required_for_url");
 	const apiKey = item.apiKey === null ? undefined : typeof item.apiKey === "string" ? item.apiKey.trim() || undefined : previous?.apiKey;
-	if (!isCustomKind(kind) && kind !== "openai-codex" && !apiKey) throw new ProviderConfigError(kind === "deepseek" ? "deepseek_key_required" : "key_required");
+	if (definition.auth.adapter === "api-key" && definition.auth.required && !apiKey) throw new ProviderConfigError(definition.auth.missingError ?? "key_required");
 	const headers = parseProviderHeaders(item.headers, previous?.headers);
 	return {
 		id, kind, baseUrl: url, ...(name === undefined ? {} : { name }),
-		...(apiKey === undefined || kind === "openai-codex" ? {} : { apiKey }),
+		...(apiKey === undefined || definition.auth.adapter !== "api-key" ? {} : { apiKey }),
 		...(headers === undefined ? {} : { headers }),
 		models: normalizeModels(item.models ?? []),
 		...(previous?.lastRefreshedAt === undefined ? {} : { lastRefreshedAt: previous.lastRefreshedAt }),
@@ -167,11 +175,12 @@ function publicView(config: EtaConfig, revision: string): ProvidersView {
 		revision, network: config.network ?? { mode: "system" }, ...(config.defaultModel === undefined ? {} : { defaultModel: config.defaultModel }),
 		providers: (config.providers ?? []).map(provider => {
 			const headers = sanitizeProviderHeaders(provider.headers);
+			const reference = { kind: provider.kind ?? "openai-compatible" as const, baseUrl: provider.baseUrl };
 			return {
-				id: provider.id, name: provider.name, kind: provider.kind ?? "openai-compatible",
+				id: provider.id, name: provider.name, kind: reference.kind,
 				baseUrl: provider.baseUrl, hasApiKey: !!provider.apiKey,
 				...(headers === undefined ? {} : { headers }),
-				models: normalizeModels(provider.models), lastRefreshedAt: provider.lastRefreshedAt,
+				models: resolveConfiguredModels(reference, normalizeModels(provider.models)), lastRefreshedAt: provider.lastRefreshedAt,
 			};
 		}),
 	};
@@ -231,19 +240,28 @@ export class ProviderConfigStore {
 
 	async save(body: unknown): Promise<ProvidersView> {
 		const input = record(body);
-		if (record(input.provider).kind === "openai-codex") await this.discover(body);
+		const rawKind = record(input.provider).kind;
+		if (typeof rawKind === "string" && providerDefinitionForKind(rawKind as ProviderKind)?.discovery.adapter === "catalog") await this.discover(body);
 		return this.mutate(input.revision, config => {
 			const raw = record(input.provider);
 			const providers = config.providers ?? [];
 			const index = providers.findIndex(p => p.id === raw.id);
 			const provider = normalizeProvider(raw, index < 0 ? undefined : providers[index]);
 			if (provider.models.length === 0) throw new ProviderConfigError("models_required");
-			if (provider.kind === "openai-codex") {
-				const catalog = new Map(codexCatalog().map(model => [model.id, model]));
+			const definition = providerDefinitionForKind(provider.kind)!;
+			if (definition.discovery.adapter === "catalog") {
 				provider.models = provider.models.map(model => {
-					const known = catalog.get(model.id);
+					const known = providerModelDefinition(provider, model.id);
 					if (!known) throw new ProviderConfigError("invalid_model");
 					return { ...known, ...(model.defaultThinking !== undefined && modelThinkingLevels(known).includes(model.defaultThinking) ? { defaultThinking: model.defaultThinking } : {}) };
+				});
+			} else if (providerCatalogRestrictsModels(provider)) {
+				provider.models = provider.models.map(model => {
+					const known = providerModelDefinition(provider, model.id);
+					if (!known) throw new ProviderConfigError("invalid_model");
+					const { defaultThinking, ...saved } = model;
+					const merged = { ...known, ...saved, id: model.id };
+					return { ...merged, ...(defaultThinking !== undefined && modelThinkingLevels(merged).includes(defaultThinking) ? { defaultThinking } : {}) };
 				});
 			}
 			if (index < 0) providers.push(provider); else providers[index] = provider;
@@ -304,17 +322,7 @@ export class ProviderConfigStore {
 		const { config } = await readConfig(this.path);
 		const old = config.providers?.find(p => p.id === raw.id);
 		const provider = normalizeProvider(raw, old);
-		let models: EtaModelConfig[];
-		if (provider.kind === "openai-codex") {
-			try {
-				const registry = createModels({ credentials: new CodexCredentialStore(codexAuthPath(this.path)) });
-				registry.setProvider(codexRuntimeProvider());
-				if (!await registry.getAuth(provider.id)) throw new Error("codex_login_required");
-			} catch (error) {
-				throw new ProviderConfigError("codex_login_required", 401);
-			}
-			models = codexCatalog();
-		} else models = await discoverProviderModels(provider, this.request);
+		const models = await discoverProviderModels(provider, this.request, this.path);
 		const existing = new Map(provider.models.map(model => [model.id, model]));
 		return { models: models.map(model => {
 			const previous = existing.get(model.id);
@@ -325,7 +333,11 @@ export class ProviderConfigStore {
 	}
 }
 
-export async function discoverProviderModels(provider: EtaProviderConfig, request: ProviderFetch = fetch): Promise<EtaModelConfig[]> {
+async function discoverOpenAIModels(
+	provider: EtaProviderConfig,
+	request: ProviderFetch,
+	discovery: ProviderDiscoveryDefinition,
+): Promise<EtaModelConfig[]> {
 	let response: Response;
 	try {
 		response = await request(`${provider.baseUrl.replace(/\/+$/, "")}/models`, {
@@ -362,18 +374,21 @@ export async function discoverProviderModels(provider: EtaProviderConfig, reques
 	if (!Array.isArray(data) || data.length > 500) throw new ProviderConfigError("invalid_models_response", 502);
 	const models: EtaModelConfig[] = [];
 	const ids = new Set<string>();
+	const restrictToCatalog = providerCatalogRestrictsModels(provider);
 	for (const raw of data) {
 		if (!raw || typeof raw !== "object" || typeof raw.id !== "string" || !raw.id.trim() || ids.has(raw.id)) continue;
 		ids.add(raw.id);
+		const catalog = providerModelDefinition(provider, raw.id);
+		if (restrictToCatalog && catalog === undefined) continue;
 		const effort = raw.think_efforts;
 		const reasoningEfforts = effort?.support === true && Array.isArray(effort.valid_efforts)
 			? MODEL_THINKING_LEVELS.filter(level => level !== "off" && effort.valid_efforts.includes(level)) as NonNullable<ModelCapabilities["reasoningEfforts"]> : undefined;
 		const thinkingMode = ["only", "no", "both"].includes(raw.supports_thinking_type) ? raw.supports_thinking_type as ModelCapabilities["thinkingMode"] : undefined;
 		const reasoning = thinkingMode ? thinkingMode !== "no" : typeof raw.supports_reasoning === "boolean" ? raw.supports_reasoning : undefined;
 		const context = Number(raw.context_length);
-		if (provider.kind === "kimi-coding" && (!Number.isSafeInteger(context) || context <= 0)) throw new ProviderConfigError("invalid_models_response", 502);
+		if (discovery.requireContextWindow && (!Number.isSafeInteger(context) || context <= 0)) throw new ProviderConfigError("invalid_models_response", 502);
 		const discovered: EtaModelConfig = {
-			...(provider.kind === "deepseek" ? deepSeekCapabilities(raw.id) : {}),
+			...catalog,
 			id: raw.id,
 			...(typeof raw.display_name === "string" ? { name: raw.display_name } : {}),
 			...(Number.isSafeInteger(context) && context > 0 ? { contextWindow: context } : {}),
@@ -383,10 +398,14 @@ export async function discoverProviderModels(provider: EtaProviderConfig, reques
 			...(reasoningEfforts === undefined ? {} : { reasoningEfforts }),
 			...(reasoningEfforts?.includes(effort?.default_effort) ? { providerDefaultEffort: effort.default_effort } : {}),
 		};
-		if (provider.kind === "deepseek" && effort && typeof effort.support === "boolean") {
+		if (effort && typeof effort.support === "boolean") {
 			discovered.reasoningEfforts = reasoningEfforts ?? [];
 			delete discovered.providerDefaultEffort;
 			if (reasoningEfforts?.includes(effort.default_effort)) discovered.providerDefaultEffort = effort.default_effort;
+		}
+		if (reasoning === false) {
+			discovered.reasoningEfforts = [];
+			delete discovered.providerDefaultEffort;
 		}
 		if (discovered.contextWindow !== undefined && discovered.maxTokens !== undefined) {
 			discovered.maxTokens = Math.min(discovered.maxTokens, discovered.contextWindow);
@@ -396,4 +415,48 @@ export async function discoverProviderModels(provider: EtaProviderConfig, reques
 	if (models.length === 0) throw new ProviderConfigError("no_models", 502);
 	try { return normalizeModels(models); }
 	catch { throw new ProviderConfigError("invalid_models_response", 502); }
+}
+
+interface DiscoveryContext {
+	request: ProviderFetch;
+	configPath?: string;
+}
+
+type AuthAdapter = (provider: EtaProviderConfig, context: DiscoveryContext) => Promise<void>;
+type DiscoveryAdapter = (
+	provider: EtaProviderConfig,
+	discovery: ProviderDiscoveryDefinition,
+	context: DiscoveryContext,
+) => Promise<EtaModelConfig[]>;
+
+const AUTH_ADAPTERS: Readonly<Record<ProviderAuthDefinition["adapter"], AuthAdapter>> = {
+	"api-key": async () => {},
+	"codex-oauth": async (provider, context) => {
+		if (context.configPath === undefined) throw new ProviderConfigError("codex_login_required", 401);
+		try {
+			const registry = createModels({ credentials: new CodexCredentialStore(codexAuthPath(context.configPath)) });
+			registry.setProvider(codexRuntimeProvider());
+			if (!await registry.getAuth(provider.id)) throw new Error("codex_login_required");
+		} catch {
+			throw new ProviderConfigError("codex_login_required", 401);
+		}
+	},
+};
+
+const DISCOVERY_ADAPTERS: Readonly<Record<ProviderDiscoveryDefinition["adapter"], DiscoveryAdapter>> = {
+	"openai-models": (provider, discovery, context) => discoverOpenAIModels(provider, context.request, discovery),
+	catalog: async provider => providerModelCatalog(provider),
+};
+
+/** Discover through the adapter declared by the provider catalog; callers never branch on kind. */
+export async function discoverProviderModels(
+	provider: EtaProviderConfig,
+	request: ProviderFetch = fetch,
+	configPath?: string,
+): Promise<EtaModelConfig[]> {
+	const definition = providerDefinitionForKind(provider.kind);
+	if (definition === undefined) throw new ProviderConfigError("invalid_provider");
+	const context = { request, configPath };
+	await AUTH_ADAPTERS[definition.auth.adapter](provider, context);
+	return DISCOVERY_ADAPTERS[definition.discovery.adapter](provider, definition.discovery, context);
 }
