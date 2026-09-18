@@ -8,6 +8,7 @@ import { Host } from "../src/host.ts";
 import { startServer } from "../src/server.ts";
 import { modelDefaultThinking, modelThinkingLevels } from "@eta/core/provider-config";
 import { BACKGROUND_CONTEXT } from "@eta/core";
+import { providerModelCatalog } from "../src/provider-model-catalog.ts";
 
 const model = {
 	id: "kimi-for-coding", context_length: 262144, display_name: "Kimi for Coding",
@@ -39,24 +40,38 @@ function requestFake(body: unknown, status = 200): ProviderFetch {
 }
 
 describe("provider discovery and configuration", () => {
+	it("keeps every supported Kimi model in the unified catalog", () => {
+		const models = providerModelCatalog({ kind: "kimi-coding", baseUrl: KIMI_CODING_BASE_URL });
+		expect(models.map(entry => entry.id)).toEqual(["kimi-for-coding", "kimi-for-coding-highspeed", "k3", "k3-256k"]);
+		expect(models.every(entry => entry.input?.includes("image"))).toBe(true);
+		expect(modelThinkingLevels(models[0]!)).toEqual(["low", "high", "max"]);
+		expect(modelThinkingLevels(models[1]!)).toEqual([]);
+		expect(modelDefaultThinking(models[2]!)).toBe("max");
+	});
+
 	it("discovers Kimi capabilities and effort levels from the endpoint", async () => {
 		let seen: { url: string; init?: RequestInit } | undefined;
 		const models = await discoverProviderModels({ ...provider, kind: "kimi-coding", baseUrl: KIMI_CODING_BASE_URL }, (async (url, init) => {
 			seen = { url: String(url), init };
-			return Response.json({ data: [model] });
+			return Response.json({ data: [model, { ...model, id: "unlisted-kimi-model" }] });
 		}) as ProviderFetch);
 		expect(seen?.url).toBe(`${KIMI_CODING_BASE_URL}/models`);
 		expect(new Headers(seen?.init?.headers).get("authorization")).toBe("Bearer private-test-key");
 		expect(seen?.init?.redirect).toBe("error");
+		expect(models).toHaveLength(1);
 		expect(models[0]).toMatchObject({ id: model.id, reasoning: true, contextWindow: 262144, input: ["text", "image"], reasoningEfforts: ["low", "high", "max"], providerDefaultEffort: "high" });
 		expect(modelThinkingLevels(models[0]!)).toEqual(["off", "low", "high", "max"]);
 		expect(modelDefaultThinking(models[0]!)).toBe("high");
 	});
 
+	it("enforces discovery requirements from the Kimi provider definition", async () => {
+		await expect(discoverProviderModels({ ...provider, kind: "kimi-coding" }, requestFake({ data: [{ ...model, context_length: undefined }] }))).rejects.toThrow("invalid_models_response");
+	});
+
 	it("does not invent effort controls or an off switch for always-thinking models", async () => {
 		const models = await discoverProviderModels({ ...provider, kind: "kimi-coding" }, requestFake({ data: [{ ...model, supports_thinking_type: "only", think_efforts: { support: false, valid_efforts: ["low"] } }] }));
 		expect(modelThinkingLevels(models[0]!)).toEqual([]);
-		expect(models[0]!.reasoningEfforts).toBeUndefined();
+		expect(models[0]!.reasoningEfforts).toEqual([]);
 	});
 
 	it("keeps API keys out of responses and preserves keys on blank edits", async () => {

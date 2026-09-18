@@ -2,10 +2,11 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import lockfile from "proper-lockfile";
-import { createModels, getSupportedThinkingLevels, type Credential, type CredentialStore, type AuthOperationOptions } from "@earendil-works/pi-ai";
+import { createModels, type Credential, type CredentialStore, type AuthOperationOptions } from "@earendil-works/pi-ai";
 import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
 import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
 import { type CodexLoginView, type EtaModelConfig } from "@eta/core/provider-config";
+import { providerModelCatalog } from "./provider-model-catalog.ts";
 
 // pi supplies static OAuth loaders for the bundled desktop server.
 registerBunOAuthFlows();
@@ -58,13 +59,7 @@ export function codexRuntimeProvider(configured?: EtaModelConfig[]) {
 }
 
 export function codexCatalog(): EtaModelConfig[] {
-	return openaiCodexProvider().getModels().map(model => {
-		const levels = getSupportedThinkingLevels(model);
-		const efforts = levels.filter(level => level !== "off");
-		return { id: model.id, name: model.name, input: [...model.input], contextWindow: model.contextWindow, maxTokens: model.maxTokens,
-			reasoning: model.reasoning, reasoningEfforts: efforts,
-		};
-	});
+	return providerModelCatalog({ kind: "openai-codex", baseUrl: "https://chatgpt.com/backend-api" });
 }
 
 /** A bounded, cancellable pi OAuth login. Public state contains no access/refresh tokens. */

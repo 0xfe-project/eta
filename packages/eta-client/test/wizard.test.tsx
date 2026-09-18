@@ -38,7 +38,9 @@ describe("new session surface", () => {
 			"fetch",
 			vi.fn(async (input: RequestInfo | URL) => ({
 				ok: true,
-				json: async () => personas,
+				json: async () => String(input).includes("/api/models")
+					? { models: [{ id: "anthropic:claude", label: "Claude", input: ["text", "image"] }], current: "anthropic:claude" }
+					: personas,
 			})),
 		);
 	});

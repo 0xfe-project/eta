@@ -24,15 +24,10 @@ describe("DeepSeek provider", () => {
 		expect(models[1]!.input).toEqual(["text"]);
 	});
 
-	it("handles documented Flash aliases, but does not guess future or retired model capabilities", async () => {
-		const ids = ["deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-future", "deepseek-reasoner"];
+	it("admits only deepseek-flash and deepseek-v4-pro", async () => {
+		const ids = ["deepseek-flash", "deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-future"];
 		const models = await discoverProviderModels(provider, response(ids.map(id => ({ id }))));
-		expect(modelThinkingLevels(models[0]!)).toEqual(["off", "low", "high", "max"]);
-		expect(modelThinkingLevels(models[1]!)).toEqual(["off", "low", "high", "max"]);
-		for (const model of models.slice(2)) {
-			expect(model.reasoning).toBeUndefined();
-			expect(modelThinkingLevels(model)).toEqual([]);
-		}
+		expect(models.map(model => model.id)).toEqual(modelIds);
 	});
 
 	it("lets explicit API metadata override the documented fallback", async () => {
@@ -44,6 +39,19 @@ describe("DeepSeek provider", () => {
 		expect(model!.input).toEqual(["text"]);
 		expect(modelThinkingLevels(model!)).toEqual(["off", "low", "max"]);
 		expect(modelDefaultThinking(model!)).toBe("max");
+	});
+
+	it("preserves explicit endpoint metadata when saving a restricted catalog", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "eta-deepseek-explicit-"));
+		const store = new ProviderConfigStore(join(directory, "config.json"), response([{
+			id: "deepseek-flash", context_length: 2000000, supports_image_in: false,
+			think_efforts: { support: true, valid_efforts: ["low", "max"], default_effort: "max" },
+		}]));
+		try {
+			const discovered = await store.discover({ provider });
+			const saved = await store.save({ revision: (await store.view()).revision, provider: { ...provider, models: discovered.models } });
+			expect(saved.providers[0]!.models[0]).toMatchObject({ contextWindow: 2000000, input: ["text"], reasoningEfforts: ["low", "max"], providerDefaultEffort: "max" });
+		} finally { await rm(directory, { recursive: true, force: true }); }
 	});
 
 	it("honors an explicit removal of effort controls and a smaller context", async () => {

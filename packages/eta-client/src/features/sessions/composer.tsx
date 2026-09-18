@@ -8,6 +8,7 @@ import { themeStorageKey, themeChangeEvent } from "../../app/theme.tsx";
 import { useShellOptional } from "../../app/app-shell.tsx";
 import { apiFetch, goto } from "../../lib/host.ts";
 import type { ThinkingLevel, GuiOp } from "@eta/core";
+import { modelSupportsVision, type ModelInput } from "@eta/core/provider-config";
 import { registerDraftSink } from "../../lib/queue-actions.ts";
 import { createPresence } from "../../lib/presence.ts";
 
@@ -108,13 +109,26 @@ export function Composer(props: {
 	const [text, setText] = createSignal("");
 	const [files, setFiles] = createSignal<string[]>([]);
 	const [pickedModel, setPickedModel] = createSignal<string | undefined>(undefined);
-	createEffect(on(() => props.create?.remoteId, () => setPickedModel(undefined)));
+	const [pickedModelInput, setPickedModelInput] = createSignal<ModelInput[] | undefined>(undefined);
+	createEffect(on(() => props.create?.remoteId, () => { setPickedModel(undefined); setPickedModelInput(undefined); }));
 	const [slashIndex, setSlashIndex] = createSignal(0);
 	const [atIndex, setAtIndex] = createSignal(0);
 	const [menuClosed, setMenuClosed] = createSignal(false);
 	const [uploadsPending, setUploadsPending] = createSignal(0);
 	const [attachmentError, setAttachmentError] = createSignal("");
 	const [pendingImages, setPendingImages] = createSignal<{ name: string; mime: string; dataBase64: string }[]>([]);
+	const modelInput = () => createMode() ? pickedModelInput() : state.views[props.session ?? ""]?.modelInput;
+	const supportsImages = () => modelSupportsVision({ input: modelInput() }) === true;
+	createEffect(() => {
+		const unsupported = i18n.t("composer.imageUnsupported");
+		if (supportsImages()) {
+			if (attachmentError() === unsupported) setAttachmentError("");
+			return;
+		}
+		if (pendingImages().length === 0) return;
+		setPendingImages([]);
+		setAttachmentError(unsupported);
+	});
 	const [toolboxOpen, setToolboxOpen] = createSignal(false);
 	/** The + panel animates both ways, so it outlives its own signal by one exit. */
 	const toolboxPresence = createPresence(toolboxOpen);
@@ -221,11 +235,15 @@ export function Composer(props: {
 	const attachFile = async (file: File) => {
 		const session = props.session;
 		if (session === undefined && !createMode()) return;
+		const mime = file.type || ({ png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" } as Record<string, string>)[file.name.split(".").pop()?.toLowerCase() ?? ""];
+		const inline = mime !== undefined && ["image/png", "image/jpeg", "image/gif", "image/webp"].includes(mime);
+		if (inline && !supportsImages()) {
+			setAttachmentError(i18n.t("composer.imageUnsupported"));
+			return;
+		}
 		setUploadsPending((count) => count + 1);
 		setAttachmentError("");
 		try {
-			const mime = file.type || ({ png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" } as Record<string, string>)[file.name.split(".").pop()?.toLowerCase() ?? ""];
-			const inline = mime !== undefined && ["image/png", "image/jpeg", "image/gif", "image/webp"].includes(mime);
 			const dataBase64 = inline ? await new Promise<string>((resolve, reject) => {
 				const reader = new FileReader();
 				reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
@@ -414,7 +432,7 @@ export function Composer(props: {
 							<button data-testid="attach-upload" class="border border-border px-2 py-1 text-xs uppercase tracking-[0.08em] hover:bg-overlay" onClick={() => fileInput?.click()}>
 								{i18n.t("composer.uploadFile")}
 							</button>
-							<button data-testid="attach-image" class="border border-border px-2 py-1 text-xs uppercase tracking-[0.08em] hover:bg-overlay" onClick={() => imageInput?.click()}>
+							<button data-testid="attach-image" disabled={!supportsImages()} title={supportsImages() ? undefined : i18n.t("composer.imageUnsupported")} class="border border-border px-2 py-1 text-xs uppercase tracking-[0.08em] hover:bg-overlay disabled:cursor-not-allowed disabled:opacity-50" onClick={() => imageInput?.click()}>
 								{i18n.t("composer.pickImage")}
 							</button>
 							<Show when={props.session !== undefined && !createMode()}>
@@ -613,6 +631,7 @@ export function Composer(props: {
 										}}
 										type="file"
 										accept="image/*"
+										disabled={!supportsImages()}
 										class="hidden"
 										onChange={(event) => {
 											const file = event.currentTarget.files?.[0];
@@ -624,7 +643,7 @@ export function Composer(props: {
 							</Show>
 							<Show when={createMode() || props.session !== undefined}>
 								<span class="composer-model-container">
-									<ModelPicker remoteId={props.create?.remoteId} {...(props.session === undefined ? {} : { session: props.session })} {...(createMode() ? { onPick: setPickedModel } : {})} />
+									<ModelPicker remoteId={props.create?.remoteId} {...(props.session === undefined ? {} : { session: props.session })} {...(createMode() ? { onPick: setPickedModel, onInput: setPickedModelInput } : {})} />
 								</span>
 							</Show>
 							<Show when={!createMode() && props.session !== undefined}>

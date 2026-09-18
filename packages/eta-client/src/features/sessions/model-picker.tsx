@@ -6,9 +6,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { apiFetch } from "../../lib/host.ts";
 import { remoteApiPath } from "../../lib/remotes.ts";
 import { openSettings } from "../../lib/settings.ts";
+import type { ModelInput } from "@eta/core/provider-config";
 
 interface ModelInfo {
-	models: { id: string; label: string }[];
+	models: { id: string; label: string; input?: ModelInput[] }[];
 	current: string;
 }
 
@@ -23,7 +24,7 @@ interface ModelInfo {
  * session with nothing to swap) would then read as "switched" forever. The desired id stays
  * visible as pending instead, and the chip changes when the harness does.
  */
-export function ModelPicker(props: { session?: string; remoteId?: string; onPick?: (modelId: string | undefined) => void }) {
+export function ModelPicker(props: { session?: string; remoteId?: string; onPick?: (modelId: string | undefined) => void; onInput?: (input: ModelInput[] | undefined) => void }) {
 	const i18n = useAppI18n();
 	const store = etaStore();
 	const state = useEta();
@@ -61,6 +62,10 @@ export function ModelPicker(props: { session?: string; remoteId?: string; onPick
 		return running !== undefined && wanted !== undefined && running !== wanted ? wanted : undefined;
 	};
 	const labelOf = (modelId: string) => info()?.models.find((model) => model.id === modelId)?.label ?? modelId;
+	createEffect(() => {
+		const current = shown();
+		props.onInput?.(current === undefined ? undefined : info()?.models.find(model => model.id === current)?.input);
+	});
 
 	return (
 		<Show when={info() !== undefined || live() !== undefined} fallback={<span class="mono text-[10px] text-muted">…</span>}>
