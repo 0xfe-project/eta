@@ -38,7 +38,7 @@ import { createSessionAgent, type CreatedSession } from "./agent.ts";
 import { renderPersonaFor, resolvePersonaId } from "./personas.ts";
 import { suggestPersonaId } from "./persona-autopick.ts";
 import { ProviderConfigStore, ProviderConfigError } from "./providers.ts";
-import { effectiveModel, modelDefaultThinking, modelThinkingLevels, type EtaModelConfig, type ProvidersView } from "@eta/core/provider-config";
+import { effectiveModel, modelDefaultThinking, modelThinkingLevels, type EtaModelConfig, type ModelInput, type ProvidersView } from "@eta/core/provider-config";
 
 const AGENT_EVENT_TYPES = [
 	"run_start",
@@ -750,9 +750,14 @@ export class Host {
 
 	private stampView(entry: Hosted, view: SessionView = entry.view): SessionView {
 		const definition = view?.model ? this.configuredModel(view.model) : undefined;
+		const separator = view?.model?.indexOf(":") ?? -1;
+		const runtimeModel = separator > 0
+			? entry.created.models?.getModel(view.model.slice(0, separator), view.model.slice(separator + 1))
+			: undefined;
 		return {
 			...view,
 			supportedThinkingLevels: definition ? modelThinkingLevels(definition) : undefined,
+			modelInput: definition?.input ?? runtimeModel?.input ?? (definition ? ["text"] : undefined),
 			cwd: entry.cwd,
 			...(entry.gitBranch === undefined ? {} : { gitBranch: entry.gitBranch }),
 			queue: entry.queue.map((item) => ({
@@ -1046,11 +1051,11 @@ export class Host {
 	}
 
 	/** Model catalog with no session context (welcome screen picker). */
-	modelCatalog(): { models: { id: string; label: string; contextWindow: number }[]; current: string } {
+	modelCatalog(): { models: { id: string; label: string; contextWindow: number; input?: ModelInput[] }[]; current: string } {
 		return this.modelCatalogFrom(this.etaConfig(), false);
 	}
 
-	modelInfo(name: string): { models: { id: string; label: string; contextWindow: number }[]; current: string } {
+	modelInfo(name: string): { models: { id: string; label: string; contextWindow: number; input?: ModelInput[] }[]; current: string } {
 		const faux = this.hosted.get(name)?.created.faux;
 		return this.modelCatalogFrom(this.etaConfig(), faux !== undefined, this.meta.get(name)?.modelId);
 	}
@@ -1059,12 +1064,13 @@ export class Host {
 		cfg: EtaConfig,
 		faux: boolean,
 		currentOverride?: string,
-	): { models: { id: string; label: string; contextWindow: number }[]; current: string } {
+	): { models: { id: string; label: string; contextWindow: number; input?: ModelInput[] }[]; current: string } {
 		const configured = (cfg.providers ?? []).flatMap((provider) =>
 			provider.models.map(effectiveModel).map((model) => ({
 				id: `${provider.id}:${model.id}`,
 				label: model.name ?? model.id,
 				contextWindow: model.contextWindow ?? 128_000,
+				input: model.input ?? ["text"],
 				thinkingLevels: modelThinkingLevels(model),
 				defaultThinking: modelDefaultThinking(model),
 			})),
@@ -1079,13 +1085,14 @@ export class Host {
 				: undefined) ??
 			(faux ? "faux" : "claude-sonnet-4-5");
 		if (configured.length > 0) return { models: configured, current };
-		if (faux) return { models: [{ id: "faux", label: "faux echo", contextWindow: 128_000 }], current };
+		if (faux) return { models: [{ id: "faux", label: "faux echo", contextWindow: 128_000, input: ["text", "image"] }], current };
 		if (!process.env.ANTHROPIC_API_KEY) return { models: [], current: currentOverride ?? "" };
 		return {
 			models: ["claude-haiku-4-5", "claude-sonnet-4-5", "claude-opus-4-1"].map((id) => ({
 				id: `anthropic:${id}`,
 				label: id,
 				contextWindow: 200_000,
+				input: ["text", "image"] as ModelInput[],
 			})),
 			current,
 		};
