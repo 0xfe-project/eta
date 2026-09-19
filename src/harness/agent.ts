@@ -6,7 +6,7 @@
  * HarnessEvent bus. There is no second bus, no bridge, no plugin surface.
  */
 
-import type { Api, Model, Models, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { Api, Message, Model, Models, ToolResultMessage } from "@earendil-works/pi-ai";
 import type { AgentMessage, AgentToolCall } from "../types.ts";
 import { BACKGROUND_CONTEXT, type Context } from "./context.ts";
 import { AgentHarness, type AgentLane } from "./agent-harness.ts";
@@ -431,12 +431,66 @@ export class EtaAgent {
 				},
 			}),
 		);
-		const subagentBus: SubagentBus = { emit: (type: SubagentBusEvent, payload) => emit("lifecycle", type, payload) };
-		const subagents = new SubagentManager(
-			subagentBus,
-			options.subagentRunner ?? (() => Promise.resolve({ input: 0, output: 0 })),
-			options.poolSize,
-		);
+	const subagentBus: SubagentBus = { emit: (type: SubagentBusEvent, payload) => emit("lifecycle", type, payload) };
+	// A subagent without an injected runner talks to a model using the session's current
+	// configuration — model, tools, system prompt — at the moment it runs. That is what makes
+	// "spawn a subagent" inherit everything without a separate config surface.
+	const harnessTools: AgentHarnessTool<object | undefined>[] = [];
+	const defaultRunner: SubagentRunner = async (record, api) => {
+		const lane = laneRef;
+		if (lane === undefined) return { input: 0, output: 0 };
+		const state = await lane.requestState(BACKGROUND_CONTEXT);
+		if (state.model === undefined) return { input: 0, output: 0 };
+		const systemPrompt = state.systemPrompt ?? "";
+		const toolMap = () => new Map(harnessTools.map((t) => [t.name, t]));
+		const toolDeclarations = state.tools;
+		const messages: Message[] = [{ role: "user", content: record.spec.prompt, timestamp: Date.now() }];
+		let input = 0;
+		let output = 0;
+		const maxTurns = record.spec.maxTurns ?? 8;
+		for (let turn = 0; turn < maxTurns; turn += 1) {
+			api.reportTurn(record.id);
+			const response = await options.models.completeSimple(
+				state.model,
+				{ systemPrompt, messages, tools: toolDeclarations },
+				{ ...(state.thinkingLevel !== "off" ? { reasoning: state.thinkingLevel } : {}) },
+			);
+			input += response.usage.input;
+			output += response.usage.output;
+			messages.push(response);
+			const calls = response.content.filter((block) => block.type === "toolCall") as { type: "toolCall"; id: string; name: string; arguments: Record<string, unknown> }[];
+			if (calls.length === 0) break;
+			for (const call of calls) {
+				const tool = toolMap().get(call.name) ?? null;
+				if (tool === null) {
+					messages.push({ role: "toolResult", toolCallId: call.id, toolName: call.name, isError: true, content: [{ type: "text", text: `unknown tool: ${call.name}` }], timestamp: Date.now() });
+					continue;
+				}
+				try {
+					const result = await tool.execute(
+						call.id,
+						call.arguments as Record<string, unknown>,
+						() => {},
+						state.toolContext as object,
+						{
+							invocationId: call.id,
+							operationId: record.id,
+							turnId: `${record.id}:t${turn}`,
+							getMemo: async () => undefined,
+							setMemo: async () => {},
+						},
+						BACKGROUND_CONTEXT,
+					);
+					messages.push({ role: "toolResult", toolCallId: call.id, toolName: call.name, isError: false, content: typeof result.content === "string" ? [{ type: "text", text: result.content }] : result.content, timestamp: Date.now() });
+				} catch (error) {
+					messages.push({ role: "toolResult", toolCallId: call.id, toolName: call.name, isError: true, content: [{ type: "text", text: `tool error: ${error instanceof Error ? error.message : String(error)}` }], timestamp: Date.now() });
+				}
+			}
+		}
+		return { input, output };
+	};
+	const subagents = new SubagentManager(subagentBus, options.subagentRunner ?? defaultRunner, options.poolSize);
+
 
 		const agentTools: AgentHarnessTool<object | undefined>[] = [
 			...createTaskTools(tasks, emit),
@@ -454,6 +508,7 @@ export class EtaAgent {
 			}),
 			...(options.tools ?? []),
 		];
+		harnessTools.push(...agentTools);
 
 		const personaBox: { persona?: { names: string[]; text: string } } = {
 			...(options.persona === undefined ? {} : { persona: options.persona }),
