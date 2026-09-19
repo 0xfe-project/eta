@@ -180,6 +180,28 @@ export function Timeline(props: { view: SessionView; session: string; running?: 
 		return rows;
 	});
 
+	type PromptRailRow = { index?: number; skipped: number };
+	const promptRailRows = createMemo<PromptRailRow[]>(() => {
+		const total = prompts().length;
+		if (total < 2) return [];
+		const all = prompts();
+		const at = all.findIndex((entry) => entry.entryId === activeEntry());
+		const focus = at === -1 ? total - 1 : at;
+		const picked = new Set<number>([0, total - 1]);
+		for (let step = 1; step < RAIL_ANCHORS - 1; step += 1) picked.add(Math.round((step * (total - 1)) / (RAIL_ANCHORS - 1)));
+		for (let index = focus - RAIL_WINDOW; index <= focus + RAIL_WINDOW; index += 1) {
+			if (index >= 0 && index < total) picked.add(index);
+		}
+		const rows: PromptRailRow[] = [];
+		let prev = -1;
+		for (const index of [...picked].sort((left, right) => left - right)) {
+			if (index - prev > 1) rows.push({ skipped: index - prev - 1 });
+			rows.push({ index, skipped: 0 });
+			prev = index;
+		}
+		return rows;
+	});
+
 	return (
 		<div class="relative min-h-0 flex-1">
 			<div
@@ -296,19 +318,26 @@ export function Timeline(props: { view: SessionView; session: string; running?: 
 					</Show>
 					<Show when={prompts().length > 1}>
 						<div data-testid="prompt-rail" class="no-scrollbar flex max-h-[60vh] flex-col items-end gap-[3px] overflow-y-auto overscroll-contain pb-1">
-							<For each={prompts()}>
-								{(entry, index) => (
-									<button
-										data-testid={`prompt-rail-${index() + 1}`}
-										data-entry={entry.entryId}
-										aria-current={activeEntry() === entry.entryId}
-										title={`${index() + 1} · ${previewOf(entry)}`}
-										onClick={() => jumpTo(index())}
-										class={`${RAIL_NUM} rounded-full border-border-strong ${activeEntry() === entry.entryId ? RAIL_ACTIVE : "text-foreground"}`}
-									>
-										{index() + 1}
-									</button>
-								)}
+							<For each={promptRailRows()}>
+								{(row) => {
+									if (row.index === undefined) {
+										return <span data-testid="prompt-rail-gap" title={`跳过 ${row.skipped} 条`} class="mono px-1 text-[8px] leading-4 text-muted">⋯</span>;
+									}
+									const entry = prompts()[row.index];
+									if (entry === undefined) return null;
+									return (
+										<button
+											data-testid={`prompt-rail-${row.index + 1}`}
+											data-entry={entry.entryId}
+											aria-current={activeEntry() === entry.entryId}
+											title={`${row.index + 1} · ${previewOf(entry)}`}
+											onClick={() => jumpTo(row.index!)}
+											class={`${RAIL_NUM} rounded-full border-border-strong ${activeEntry() === entry.entryId ? RAIL_ACTIVE : "text-foreground"}`}
+										>
+											{row.index + 1}
+										</button>
+									);
+								}}
 							</For>
 						</div>
 					</Show>

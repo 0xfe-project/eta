@@ -244,7 +244,6 @@ export class Host {
 	 * reopening somewhere else. No pointer back is kept — a fork is a session of its own.
 	 */
 	async forkSession(request: ForkRequest): Promise<string> {
-		console.error("[eta-host] forkSession", request);
 		const source = this.hosted.get(request.source);
 		if (source === undefined) throw new Error(`no such session: ${request.source}`);
 		const name = request.name ?? uniqueSessionName();
@@ -273,7 +272,6 @@ export class Host {
 			);
 		} catch (error) {
 			await rm(persistDir, { recursive: true, force: true }).catch(() => undefined);
-			console.error("[eta-host] forkSession failed:", error);
 			throw error;
 		}
 		await writeFile(
@@ -304,7 +302,6 @@ export class Host {
 				{ cwd, persistDir, restore: true },
 			);
 		} catch (error) {
-			console.error("[eta-host] forkSession open failed:", error);
 			await rm(persistDir, { recursive: true, force: true }).catch(() => undefined);
 			throw error;
 		}
@@ -700,18 +697,31 @@ export class Host {
 	}
 
 	/** Substring search across hosted sessions' visible timelines. */
+	/** Extract the readable text of a message for the sidebar search snippet. */
+	private messageText(message: unknown): string {
+		const content = (message as { content?: unknown }).content;
+		if (typeof content === "string") return content;
+		if (!Array.isArray(content)) return "";
+		return content
+			.flatMap((block: { type?: string; text?: unknown }) =>
+				block.type === "text" && typeof block.text === "string" ? [block.text] : [],
+			)
+			.join(" ")
+			.trim();
+	}
+
 	search(query: string): { session: string; snippet: string }[] {
 		const hits: { session: string; snippet: string }[] = [];
 		const needle = query.toLowerCase();
 		if (needle.length === 0) return hits;
 		for (const [name, hosted] of this.hosted) {
 			for (const entry of hosted.view.messages) {
-				const text = JSON.stringify(entry.message).toLowerCase();
-				const index = text.indexOf(needle);
+				const text = this.messageText(entry.message);
+				const index = text.toLowerCase().indexOf(needle);
 				if (index >= 0) {
 					hits.push({
 						session: name,
-						snippet: JSON.stringify(entry.message).slice(Math.max(0, index - 30), index + 60),
+						snippet: text.slice(Math.max(0, index - 30), index + 80),
 					});
 					break;
 				}
