@@ -244,6 +244,7 @@ export class Host {
 	 * reopening somewhere else. No pointer back is kept — a fork is a session of its own.
 	 */
 	async forkSession(request: ForkRequest): Promise<string> {
+		console.error("[eta-host] forkSession", request);
 		const source = this.hosted.get(request.source);
 		if (source === undefined) throw new Error(`no such session: ${request.source}`);
 		const name = request.name ?? uniqueSessionName();
@@ -271,7 +272,8 @@ export class Host {
 				BACKGROUND_CONTEXT,
 			);
 		} catch (error) {
-			await rm(persistDir, { recursive: true, force: true });
+			await rm(persistDir, { recursive: true, force: true }).catch(() => undefined);
+			console.error("[eta-host] forkSession failed:", error);
 			throw error;
 		}
 		await writeFile(
@@ -285,21 +287,27 @@ export class Host {
 			}),
 			"utf8",
 		);
-		await this.open(
-			name,
-			() =>
-				createSessionAgent({
-					name,
-					personaId,
-					cwd,
-					...(inherited.modelId === undefined ? {} : { modelId: inherited.modelId }),
-					configPath: this.configPath,
-					persistDir,
-					keepRecentTokens: this.settings().keepRecentTokens,
-					...(this.heartbeatMs === undefined ? {} : { heartbeatMs: this.heartbeatMs }),
-				}),
-			{ cwd, persistDir, restore: true },
-		);
+		try {
+			await this.open(
+				name,
+				() =>
+					createSessionAgent({
+						name,
+						personaId,
+						cwd,
+						...(inherited.modelId === undefined ? {} : { modelId: inherited.modelId }),
+						configPath: this.configPath,
+						persistDir,
+						keepRecentTokens: this.settings().keepRecentTokens,
+						...(this.heartbeatMs === undefined ? {} : { heartbeatMs: this.heartbeatMs }),
+					}),
+				{ cwd, persistDir, restore: true },
+			);
+		} catch (error) {
+			console.error("[eta-host] forkSession open failed:", error);
+			await rm(persistDir, { recursive: true, force: true }).catch(() => undefined);
+			throw error;
+		}
 		return name;
 	}
 
