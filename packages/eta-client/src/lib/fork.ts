@@ -26,6 +26,7 @@ export function openForkDialog(at?: string): void {
  * the person reading the same transcript they were reading, with the reason on the error strip.
  */
 export function forkFromMessage(source: string, entryId: string): void {
+	console.log("[fork] forkFromMessage called", { source, entryId });
 	const store = etaStore();
 	const name = `eta-${Date.now().toString(36)}`;
 	// A session on another machine forks on that machine, where its journal lives; the answer
@@ -41,5 +42,7 @@ export function forkFromMessage(source: string, entryId: string): void {
 			stop();
 		}
 	});
-	store.send({ op: "session.fork", from: source, entryId, name });
+	const msg = { op: "session.fork" as const, from: source, entryId, name };
+	console.log("[fork] sending", msg, "connected:", store.snapshot().connected);
+	store.send(msg);
 }
