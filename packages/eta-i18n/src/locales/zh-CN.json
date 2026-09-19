@@ -133,6 +133,7 @@
 	"composer.thinking": "思考",
 	"composer.thinkingHint": "选择思考等级",
 	"composer.hint": "Enter 发送 · Shift+Enter 换行 · / 命令 · @ 文件",
+	"composer.compacting": "压缩中，请稍候…",
 	"panel.viewPrompt": "系统提示词",
 	"prompt.stable": "跨回合缓存",
 	"prompt.adaptive": "每回合改写",

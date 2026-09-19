@@ -6,17 +6,24 @@ import { Button } from "../../components/ui/button.tsx";
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog.tsx";
 import { setBtwDialogOpen } from "../../lib/btw.ts";
 import { apiFetch } from "../../lib/host.ts";
+import { compacting, setCompacting, requestedAtEpoch, setRequestedAtEpoch } from "../../lib/compacting.ts";
 
 export function ContextPanel(props: { session: string; view: SessionView }) {
 	const i18n = useAppI18n();
 	const [memory, setMemory] = createSignal<{ text: string; files: string[]; target?: { path: string } } | null>(null);
 	const store = etaStore();
-	const [compacting, setCompacting] = createSignal(false);
 	const [promptOpen, setPromptOpen] = createSignal(false);
 	const [toolsOpen, setToolsOpen] = createSignal(false);
 	const [jsonOpen, setJsonOpen] = createSignal(false);
 	const [personaPicker, setPersonaPicker] = createSignal(false);
-	const [contextWindow, setContextWindow] = createSignal<number | null>(null);
+	/** Models catalog loaded for this session; updated on session change and on model pick. */
+	const [info, setInfo] = createSignal<{ models: { id: string; contextWindow?: number }[]; current: string } | undefined>(undefined);
+	/** Derived: recomputes whenever the running model changes. */
+	const contextWindow = () => {
+		const body = info();
+		if (body === undefined) return null;
+		return body.models.find((m) => m.id === props.view.model)?.contextWindow ?? null;
+	};
 	/**
 	 * What the host *means* to run: the id in meta.json, else the configured default. The view
 	 * carries what it is actually running. They differ when a swap was refused (an id the
@@ -26,7 +33,6 @@ export function ContextPanel(props: { session: string; view: SessionView }) {
 	const [memoryFiles, setMemoryFiles] = createSignal<string[]>([]);
 	const [memoryTargetInfo, setMemoryTargetInfo] = createSignal<{ path: string } | undefined>(undefined);
 	const [personaOptions, setPersonaOptions] = createSignal<{ id: string; name: string; custom: boolean }[]>([]);
-	const [epochAtRequest, setEpochAtRequest] = createSignal<number | null>(null);
 	const send = (op: Parameters<typeof store.send>[0]) => store.send(op);
 
 	createEffect(
@@ -37,9 +43,9 @@ export function ContextPanel(props: { session: string; view: SessionView }) {
 					.then((response) => response.json() as Promise<{ models: { id: string; contextWindow?: number }[]; current: string }>)
 					.then((body) => {
 						setWanted(body.current);
-						setContextWindow(body.models.find((model) => model.id === body.current)?.contextWindow ?? null);
+						setInfo(body);
 					})
-					.catch(() => setContextWindow(null));
+					.catch(() => setInfo(undefined));
 				// Which note files this session reads is the first thing a person asks once they
 				// moved the session to another folder, so it goes on the panel, not behind a click.
 				void apiFetch(`/api/memory?session=${encodeURIComponent(session)}`)
@@ -60,20 +66,11 @@ export function ContextPanel(props: { session: string; view: SessionView }) {
 	const totalTokens = () => sessionTokenTotal(props.view.usage);
 
 	createEffect(() => {
-		const requested = epochAtRequest();
+		const requested = requestedAtEpoch();
 		if (requested !== null && props.view.compactionEpoch > requested) {
 			setCompacting(false);
-			setEpochAtRequest(null);
+			setRequestedAtEpoch(null);
 		}
-	});
-
-	createEffect(() => {
-		if (!compacting()) return;
-		const timer = setTimeout(() => {
-			setCompacting(false);
-			setEpochAtRequest(null);
-		}, 15_000);
-		onCleanup(() => clearTimeout(timer));
 	});
 
 	return (
@@ -329,7 +326,7 @@ export function ContextPanel(props: { session: string; view: SessionView }) {
 					onClick={() => {
 						send({ op: "compact", session: props.session });
 						setCompacting(true);
-						setEpochAtRequest(props.view.compactionEpoch);
+						setRequestedAtEpoch(props.view.compactionEpoch);
 					}}
 				>
 					{compacting() ? i18n.t("panel.compacting") : i18n.t("panel.compact")}

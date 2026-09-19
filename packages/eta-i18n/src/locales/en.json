@@ -133,6 +133,7 @@
 	"composer.thinking": "think",
 	"composer.thinkingHint": "Choose thinking level",
 	"composer.hint": "Enter to send · Shift+Enter newline · / commands · @ files",
+	"composer.compacting": "compacting — please wait…",
 	"panel.viewPrompt": "system prompt",
 	"prompt.stable": "cached across turns",
 	"prompt.adaptive": "rewritten each turn",

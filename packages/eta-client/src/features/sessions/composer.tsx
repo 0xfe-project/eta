@@ -3,6 +3,7 @@ import { useAppI18n } from "../../i18n.ts";
 import { etaStore, useEta } from "../../lib/eta-store.ts";
 import { Button } from "../../components/ui/button.tsx";
 import { ModelPicker } from "./model-picker.tsx";
+import { compacting } from "../../lib/compacting.ts";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuChevron } from "../../components/ui/dropdown-menu.tsx";
 import { themeStorageKey, themeChangeEvent } from "../../app/theme.tsx";
 import { useShellOptional } from "../../app/app-shell.tsx";
@@ -679,9 +680,9 @@ export function Composer(props: {
 									</Show>
 								</>
 							</Show>
-							<span class="composer-toolbar-hints min-w-0 truncate max-md:hidden">{props.running ? i18n.t("composer.runningHint") : i18n.t("composer.hint")}</span>
+							<span class="composer-toolbar-hints min-w-0 truncate max-md:hidden">{compacting() ? i18n.t("composer.compacting") : props.running ? i18n.t("composer.runningHint") : i18n.t("composer.hint")}</span>
 						</div>
-						<Button type="submit" variant="invert" class="composer-control composer-submit-control" data-testid="composer-submit" disabled={props.hasPendingAsk === true || uploadsPending() > 0}>
+						<Button type="submit" variant="invert" class="composer-control composer-submit-control" data-testid="composer-submit" disabled={props.hasPendingAsk === true || uploadsPending() > 0 || compacting()}>
 							{text().trim().length > 0 || pendingImages().length > 0 || !props.running ? i18n.t("composer.send") : i18n.t("composer.stop")}
 						</Button>
 					</div>
