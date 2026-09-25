@@ -10,6 +10,7 @@
  * the journal to the last stable boundary and rerun the current turn".
  */
 import type { Api, AssistantMessage, Context, Message, Model, Tool as PiTool, ToolCall } from "@earendil-works/pi-ai";
+import type { SessionLog } from "../session/session-log.ts";
 import type { Emit } from "../types/events.ts";
 import { kernelEmit, kernelOn } from "../types/events.ts";
 import type { AgentMessage } from "../types/messages.ts";
@@ -38,6 +39,14 @@ export interface RunnerOptions {
 	/** Run-boundary decisions (REFACTOR.md §2.4 step 5); without it the boundary is a plain stop. */
 	boundary?: RunnerBoundaryOptions;
 	/**
+	 * History restored from a journal. It goes into the transcript without being
+	 * journaled again — the journal is where it came from.
+	 */
+	initialTranscript?: readonly AgentMessage[];
+	/** Optional journal: the runner persists what it appends, and the run
+	 * boundary becomes a durable stable point (REFACTOR.md §K5). */
+	journal?: SessionLog;
+	/**
 	 * When true, an inject arriving while the runner is idle immediately starts
 	 * a new run (REFACTOR.md §2.5). The server turns this on for live sessions;
 	 * one-shot callers (subagents) leave it off.
@@ -59,6 +68,7 @@ export class Runner {
 	private readonly goal: GoalService;
 	private readonly persona: PersonaService;
 	private readonly options: RunnerOptions;
+	private readonly journal: SessionLog | undefined;
 	private readonly emit: Emit;
 	private readonly transcript: AgentMessage[] = [];
 	private emptyStops = 0;
@@ -70,6 +80,8 @@ export class Runner {
 		this.kernel = kernel;
 		this.options = options;
 		this.emit = kernelEmit(kernel.ctx);
+		this.journal = options.journal;
+		if (options.initialTranscript !== undefined) this.transcript.push(...options.initialTranscript);
 		this.tools = kernel.tools;
 		this.goal = kernel.goal;
 		this.persona = kernel.persona;
@@ -111,8 +123,9 @@ export class Runner {
 	private async runLoop(): Promise<RunResult> {
 		let error: string | undefined;
 		this.pumping = true;
+		await this.journal?.beginRun();
 		for (;;) {
-			this.drainInjected();
+			await this.drainInjected();
 			const turn = this.kernel.turns + 1;
 			const assistant = await this.takeTurn(turn);
 			if (assistant === undefined) break;
@@ -140,8 +153,13 @@ export class Runner {
 			// The turn had tool work: keep looping. A message injected mid-run
 			// (tool or middleware) never interrupts; it opens the next turn via
 			// the drain at the top of the loop.
+			// Per-turn commits make the live journal readable mid-run; recovery
+			// still starts from the last boundary, not from here.
+			await this.journal?.commitTurn();
 		}
 		this.pumping = false;
+		if (error === undefined) await this.journal?.endRun();
+		else await this.journal?.commitTurn();
 		const result: RunResult = { turns: this.kernel.turns, error };
 		this.emit("turn:run-end", { turns: result.turns, usage: zeroUsage() });
 		if (this.options.autoPump && this.kernel.injectQueueDepth > 0 && error === undefined) {
@@ -161,7 +179,7 @@ export class Runner {
 		if (isEmptyStop(assistant)) {
 			if (this.emptyStops < emptyBudget) {
 				this.emptyStops += 1;
-				this.transcript.push(boundary.nudgeEmpty());
+				this.push(boundary.nudgeEmpty());
 				return true;
 			}
 			this.emptyStops = 0;
@@ -185,7 +203,7 @@ export class Runner {
 			return false;
 		}
 		this.goal.noteContinuation();
-		this.transcript.push(boundary.nudgeGoal());
+		this.push(boundary.nudgeGoal());
 		return true;
 	}
 
@@ -198,9 +216,16 @@ export class Runner {
 		return runUsedTools(messages);
 	}
 
-	private drainInjected(): void {
+	/** Add a message to the transcript and the journal, in step. */
+	private push(message: AgentMessage): void {
+		this.transcript.push(message);
+		this.journal?.stageMessage(message);
+	}
+
+	private async drainInjected(): Promise<void> {
 		for (const message of this.kernel.drainInjected()) {
 			this.transcript.push(message);
+			this.journal?.stageMessage(message);
 		}
 	}
 
@@ -211,6 +236,9 @@ export class Runner {
 			reasoning: this.options.thinkingLevel,
 		} as never);
 		this.transcript.push(assistant);
+		this.journal?.stageMessage(assistant);
+		// The assistant's intent is durable before its tools have side effects.
+		await this.journal?.commitTurn();
 		this.emit("turn:end", { turn, usage: assistant.usage, stopReason: assistant.stopReason });
 		return assistant;
 	}
@@ -223,14 +251,16 @@ export class Runner {
 		this.emit("tool:result", { name: call.name, result: raw, durationMs, turn });
 		const isError = typeof raw === "object" && raw !== null && "isError" in raw && raw.isError === true;
 		const text = typeof raw === "string" ? raw : JSON.stringify(raw);
-		this.transcript.push({
-			role: "toolResult",
+		const result = {
+			role: "toolResult" as const,
 			toolCallId: call.id,
 			toolName: call.name,
-			content: [{ type: "text", text }],
+			content: [{ type: "text" as const, text }],
 			isError,
 			timestamp: Date.now(),
-		} as AgentMessage);
+		} as AgentMessage;
+		this.transcript.push(result);
+		this.journal?.stageMessage(result);
 	}
 
 	private assembleContext(): Context {

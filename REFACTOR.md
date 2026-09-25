@@ -366,4 +366,12 @@ interface EtaPlugin {
 - [x] K2 三原语 + Kernel 装配（`kernel/goal.ts` `kernel/tasks.ts` `kernel/persona.ts` `kernel/kernel.ts`）
 - [x] K3 Runner（`kernel/runner.ts` `kernel/tools.ts` `kernel/providers.ts`；run boundary 直调、inject 队列 + autoPump）
 - [x] K4 session 语义（`session/graph.ts` `session/fork.ts` `session/merge.ts`）
-- [ ] K5 storage（`StorageService` 接口 + `@eta/storage-jsonl`）
+- [x] K5 storage（`storage/types.ts` `storage/memory.ts` `session/session-log.ts` + `@eta/storage-jsonl`）
+
+### K5 恢复规则（定了）
+
+**run 是工作单位，boundary 是稳定点。** 一次 run 写 `run.started` 标记，每个 turn 结束提交一次（活 journal 可被旁观者读），干净结束时写 boundary commit（带 `run.terminateEntryId`）。重放：从最后一个 boundary 之后的一切都属于没跑完的 run，丢掉；boundary 之后写的 KV 一并回滚（journal 自己的 marker 键除外）。
+
+- 不恢复半截 run：宿主重新驱动它。这就是删掉 durable-operation 状态机换来的东西——一条规则代替一本账
+- `SessionLog.load()` = 恢复语义（裁剪）；`SessionLog.view()` = 活视图（不裁剪），dashboard/第二窗口用它
+- per-turn 提交不为 resume 服务，只为"跑着的时候能被读"服务

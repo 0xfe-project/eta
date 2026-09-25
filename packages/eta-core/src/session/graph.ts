@@ -62,15 +62,20 @@ export class EntryGraph {
 	 * Append an entry on the current tip (or on `parentId` when given).
 	 * The tip advances to the new entry either way; a side-branch write is
 	 * followed by `setTip` to leave the branch view where it was.
+	 *
+	 * Sequence and timestamp are assigned unless the entry brings its own — a
+	 * replayed journal must rebuild the same order it was written in.
 	 */
 	append<T extends Entry>(entry: NewEntry<T>): T {
+		const supplied = entry as { id?: string; parentId?: string | null; seq?: number; timestamp?: number };
 		const full = {
 			...entry,
-			id: (entry as { id?: string }).id ?? nextId(),
-			parentId: (entry as { parentId?: string | null }).parentId ?? this.tipEntryId,
-			seq: ++this.seq,
-			timestamp: Date.now(),
+			id: supplied.id ?? nextId(),
+			parentId: supplied.parentId ?? this.tipEntryId,
+			seq: supplied.seq ?? ++this.seq,
+			timestamp: supplied.timestamp ?? Date.now(),
 		} as unknown as T;
+		this.seq = Math.max(this.seq, full.seq);
 		const parentId = full.parentId;
 		if (parentId !== null && !this.entries.has(parentId)) {
 			throw new Error(`append: unknown parent ${parentId}`);
