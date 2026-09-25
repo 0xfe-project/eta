@@ -3,25 +3,14 @@
 	"private": true,
 	"type": "module",
 	"workspaces": [
-		"packages/*"
+		"packages/eta-core",
+		"packages/eta-storage-jsonl"
 	],
 	"scripts": {
-		"test": "bun run --cwd packages/eta-core test && bun run --cwd packages/eta-storage-sqlite test && bun run --cwd packages/eta-server test && bun run --cwd packages/eta-client test",
-		"typecheck": "bun run --cwd packages/eta-core typecheck && bun run --cwd packages/eta-server typecheck && bun run --cwd packages/eta-client typecheck && bun run --cwd packages/eta-desktop typecheck",
-		"build:web": "bun run --cwd packages/eta-client build",
-		"dev": "bun packages/eta-server/src/main.ts",
-		"dev:web": "bun run --cwd packages/eta-client dev",
-		"dev:desk": "bun run --cwd packages/eta-desktop dev",
-		"prod:desk": "bun run --cwd packages/eta-desktop build"
+		"test": "bun run --cwd packages/eta-core test && bun run --cwd packages/eta-storage-jsonl test",
+		"typecheck": "bun run --cwd packages/eta-core typecheck && bun run --cwd packages/eta-storage-jsonl typecheck"
 	},
-	"dependencies": {
-		"@anthropic-ai/sdk": "0.124.0",
-		"@aws-sdk/client-bedrock-runtime": "3.1127.0",
-		"@google/genai": "2.21.0",
-		"@smithy/node-http-handler": "4.12.1",
-		"http-proxy-agent": "9.1.0",
-		"https-proxy-agent": "9.1.0",
-		"openai": "6.40.0",
-		"partial-json": "0.1.7"
+	"devDependencies": {
+		"@biomejs/biome": "2.3.5"
 	}
 }

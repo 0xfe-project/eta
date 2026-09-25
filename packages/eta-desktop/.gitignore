@@ -1,5 +1,0 @@
-# Hutch projects the Electrobun SDK into .hutch and builds the .app into build/.
-.hutch/
-build/
-.cottontail-tmp/
-artifacts/
