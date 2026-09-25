@@ -14,6 +14,7 @@ export {
 	lastMessageShowsIntent,
 	MAX_CONTINUATIONS,
 } from "./kernel/goal.ts";
+export { PersonaService, renderPersonaBlock } from "./kernel/persona.ts";
 export { renderCurrentTasks, TaskService } from "./kernel/tasks.ts";
 export * from "./types/entries.ts";
 export {
