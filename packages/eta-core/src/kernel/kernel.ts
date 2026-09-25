@@ -21,6 +21,7 @@ import type { GoalState } from "./goal.ts";
 import { GoalService } from "./goal.ts";
 import { PersonaService } from "./persona.ts";
 import { TaskService } from "./tasks.ts";
+import { ToolService } from "./tools.ts";
 
 export interface KernelOptions {
 	/** Upper bound on runner turns. `null` (default) runs until the turn loop settles. */
@@ -35,6 +36,7 @@ export interface KernelInspect {
 	budgetSpent: boolean;
 	goal: GoalState | undefined;
 	tasks: StoredTask[];
+	tools: string[];
 	personas: PersonaCard[];
 	activePersonaNames: string[];
 	injectQueueDepth: number;
@@ -45,6 +47,7 @@ export class Kernel {
 	readonly goal: GoalService;
 	readonly persona: PersonaService;
 	readonly tasks: TaskService;
+	readonly tools: ToolService;
 	readonly maxTurns: number | null;
 
 	private turnCount = 0;
@@ -58,6 +61,7 @@ export class Kernel {
 		this.goal = new GoalService(this.ctx);
 		this.persona = new PersonaService(this.ctx);
 		this.tasks = new TaskService(this.ctx);
+		this.tools = new ToolService(this.ctx);
 	}
 
 	static create(options: KernelOptions = {}): Kernel {
@@ -112,6 +116,7 @@ export class Kernel {
 			budgetSpent: this.budgetSpent,
 			goal: this.goal.current,
 			tasks: this.tasks.list(),
+			tools: this.tools.names(),
 			personas: this.persona.list(),
 			activePersonaNames: this.persona.activeNamesList(),
 			injectQueueDepth: this.injectQueue.length,
