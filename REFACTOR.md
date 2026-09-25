@@ -320,6 +320,8 @@ interface EtaPlugin {
 4. import 改写按"specifier 解析到目标文件再起名"，不做字符串匹配；改名按符号改，不 sed
 5. 无 hook：模型可见文案收敛到 prompts 插件，server/harness 不散落硬编码英文
 6. fork 不引 parentSessionId：fork 就是 fork，继承 lane config + meta，丢 loops 和 task list
+   - core 只拥有 entry 链选择（`session/fork.ts` selectBranchFork/forkChain，position at/before）；复制 lane config / meta、丢弃 loops+tasks 是**目的 session 的装配方**（未来的 server session repo）在做，core 不预留 values store
+   - `append` 一定推进 tip；写侧分支后要用 `setTip` 把分支视图移回去
 7. queue pull-back 必须保住 image blocks（mime/base64 进 view，回填 attachment chips，不当文字塞回）
 8. 每完成一个 task：打勾 + commit，工作树不留半成品
 

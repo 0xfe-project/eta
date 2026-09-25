@@ -58,7 +58,11 @@ export class EntryGraph {
 	private tipEntryId: string | null = null;
 	private seq = 0;
 
-	/** Append an entry on the current tip (or on `parentId` when given). */
+	/**
+	 * Append an entry on the current tip (or on `parentId` when given).
+	 * The tip advances to the new entry either way; a side-branch write is
+	 * followed by `setTip` to leave the branch view where it was.
+	 */
 	append<T extends Entry>(entry: NewEntry<T>): T {
 		const full = {
 			...entry,
