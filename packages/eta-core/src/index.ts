@@ -16,6 +16,7 @@ export {
 } from "./kernel/goal.ts";
 export { Kernel, type KernelInspect, type KernelOptions } from "./kernel/kernel.ts";
 export { PersonaService, renderPersonaBlock } from "./kernel/persona.ts";
+export { type ProviderSeam, piAiProviders } from "./kernel/providers.ts";
 export { renderCurrentTasks, TaskService } from "./kernel/tasks.ts";
 export {
 	type BeforeToolResult,
@@ -24,6 +25,7 @@ export {
 	type ToolMiddleware,
 	ToolService,
 } from "./kernel/tools.ts";
+export { assistantMessage, fakeProvider, type RecordedCall } from "./testing/fake-provider.ts";
 export * from "./types/entries.ts";
 export {
 	type ContextPartStats,
