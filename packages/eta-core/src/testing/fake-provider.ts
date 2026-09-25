@@ -11,7 +11,10 @@ export interface RecordedCall {
 	options?: SimpleStreamOptions;
 }
 
-export function fakeProvider(script: AssistantMessage[]): ProviderSeam & { calls: RecordedCall[] } {
+/** A scripted provider plus the record of what the runner asked it for. */
+export type FakeProvider = ProviderSeam & { calls: RecordedCall[] };
+
+export function fakeProvider(script: AssistantMessage[]): FakeProvider {
 	const calls: RecordedCall[] = [];
 	let i = 0;
 	return {
