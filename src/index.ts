@@ -17,6 +17,7 @@ export {
 export { Kernel, type KernelInspect, type KernelOptions } from "./kernel/kernel.ts";
 export { PersonaService, renderPersonaBlock } from "./kernel/persona.ts";
 export { type ProviderSeam, piAiProviders } from "./kernel/providers.ts";
+export { Runner, type RunnerOptions, type RunResult } from "./kernel/runner.ts";
 export { renderCurrentTasks, TaskService } from "./kernel/tasks.ts";
 export {
 	type BeforeToolResult,
