@@ -34,6 +34,7 @@ export {
 } from "./kernel/tools.ts";
 export { type ForkedChain, type ForkOptions, type ForkSelection, forkChain, selectBranchFork } from "./session/fork.ts";
 export { EntryGraph, type GraphNode, spliceMergedChain } from "./session/graph.ts";
+export { type MergeOptions, type MergeResult, mergeBranch, type RollbackResult, rollback } from "./session/merge.ts";
 export { assistantMessage, fakeProvider, type RecordedCall } from "./testing/fake-provider.ts";
 export * from "./types/entries.ts";
 export {

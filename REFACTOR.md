@@ -358,3 +358,12 @@ interface EtaPlugin {
 - **K5 storage**：StorageService 接口 + @eta/storage-jsonl（append+fsync、compactJournal、repairTornTail）；kill-restart 恢复验收
 
 后续阶段（server 插件批 / subagent / btw / transport / client）按 §6.2 清单推进，另行展开。
+
+### 进度（Kernel 阶段）
+
+- [x] K0 定稿清场
+- [x] K1 类型面 + bus 词汇（`types/entries.ts` `types/events.ts` `types/tasks.ts` `types/persona.ts`）
+- [x] K2 三原语 + Kernel 装配（`kernel/goal.ts` `kernel/tasks.ts` `kernel/persona.ts` `kernel/kernel.ts`）
+- [x] K3 Runner（`kernel/runner.ts` `kernel/tools.ts` `kernel/providers.ts`；run boundary 直调、inject 队列 + autoPump）
+- [x] K4 session 语义（`session/graph.ts` `session/fork.ts` `session/merge.ts`）
+- [ ] K5 storage（`StorageService` 接口 + `@eta/storage-jsonl`）
