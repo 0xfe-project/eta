@@ -19,12 +19,24 @@ import type { PersonaService } from "./persona.ts";
 import type { ProviderSeam } from "./providers.ts";
 import type { ToolService } from "./tools.ts";
 
+export interface RunnerBoundaryOptions {
+	/** Independent judgment call for goal continuation (tool-free request); true = achieved. */
+	evaluate: (objective: string, messages: readonly AgentMessage[]) => Promise<boolean>;
+	/** Model-visible nudge texts are policy: the prompts plugin supplies them. */
+	nudgeEmpty: () => AgentMessage;
+	nudgeGoal: () => AgentMessage;
+	/** Budget for re-nudging a well-formed-but-empty stop. Default 2. */
+	emptyBudget?: number;
+}
+
 export interface RunnerOptions {
 	providers: ProviderSeam;
 	model: Model<Api>;
 	/** Static system-prompt blocks (plugins contribute via persona/prompt seams later). */
 	systemPrompt?: string;
 	thinkingLevel?: string;
+	/** Run-boundary decisions (REFACTOR.md §2.4 step 5); without it the boundary is a plain stop. */
+	boundary?: RunnerBoundaryOptions;
 }
 
 export interface RunResult {
@@ -43,6 +55,7 @@ export class Runner {
 	private readonly options: RunnerOptions;
 	private readonly emit: Emit;
 	private readonly transcript: AgentMessage[] = [];
+	private emptyStops = 0;
 
 	constructor(kernel: Kernel, options: RunnerOptions) {
 		this.kernel = kernel;
@@ -75,17 +88,66 @@ export class Runner {
 			}
 			const toolCalls = assistant.content.filter((c): c is ToolCall => c.type === "toolCall");
 			if (toolCalls.length === 0) {
-				// Run boundary. t12 hangs goal.decide and the empty-response guard here.
-				break;
-			}
-			for (const call of toolCalls) {
-				await this.executeToolCall(call, turn);
+				// Run boundary: de-hooked (REFACTOR.md §2.4 step 5) — the runner asks
+				// the goal directly instead of waiting for a followUp hook slot.
+				if (!(await this.atRunBoundary(assistant))) break;
+			} else {
+				for (const call of toolCalls) {
+					await this.executeToolCall(call, turn);
+				}
 			}
 			if (!this.kernel.noteTurn()) break;
 		}
 		const result: RunResult = { turns: this.kernel.turns, error };
 		this.emit("turn:run-end", { turns: result.turns, usage: zeroUsage() });
 		return result;
+	}
+
+	/** True when the run should continue (a nudge went into the transcript). */
+	private async atRunBoundary(assistant: AssistantMessage): Promise<boolean> {
+		const boundary = this.options.boundary;
+		if (boundary === undefined) return false;
+
+		// Empty-response guard: a clean stop with nothing in it gets nudged back.
+		const emptyBudget = boundary.emptyBudget ?? 2;
+		if (isEmptyStop(assistant)) {
+			if (this.emptyStops < emptyBudget) {
+				this.emptyStops += 1;
+				this.transcript.push(boundary.nudgeEmpty());
+				return true;
+			}
+			this.emptyStops = 0;
+		} else {
+			this.emptyStops = 0;
+		}
+
+		// Goal continuation: anti-spin first, then the evaluator, then a nudge.
+		this.goal.recordTurnOutcome(this.currentRunUsedTools());
+		if (!this.goal.wantsContinuation()) {
+			const state = this.goal.current;
+			if (state !== undefined && state.status === "active" && state.roundCount >= this.goal.maxContinuations) {
+				this.goal.pause("max-continuations");
+			}
+			return false;
+		}
+		const objective = this.goal.current?.objective;
+		if (objective === undefined) return false;
+		if (await boundary.evaluate(objective, this.transcript)) {
+			this.goal.markAchieved();
+			return false;
+		}
+		this.goal.noteContinuation();
+		this.transcript.push(boundary.nudgeGoal());
+		return true;
+	}
+
+	/** Whether the run since the last user message involved any tool work. */
+	private currentRunUsedTools(): boolean {
+		const messages = this.transcript;
+		for (let i = messages.length - 1; i >= 0; i--) {
+			if (messages[i].role === "user") return runUsedTools(messages.slice(i));
+		}
+		return runUsedTools(messages);
 	}
 
 	private drainInjected(): void {
@@ -152,6 +214,25 @@ export class Runner {
 		// report it as its own part later.
 		return { system, persona: 0, user, assistant, toolDefs, total: system + user + assistant + toolDefs };
 	}
+}
+
+/** True when an assistant message stopped cleanly with nothing in it. */
+export function isEmptyStop(message: AgentMessage): boolean {
+	const m = message as { role?: string; stopReason?: string; content?: unknown };
+	if (m.role !== "assistant" || m.stopReason !== "stop") return false;
+	if (!Array.isArray(m.content) || m.content.length === 0) return true;
+	return m.content.every((p) => {
+		const part = p as { type?: string; text?: string };
+		return part.type === "text" && (part.text ?? "").trim() === "";
+	});
+}
+
+function runUsedTools(messages: readonly AgentMessage[]): boolean {
+	for (const m of messages) {
+		if (m.role === "toolResult") return true;
+		if (m.role === "assistant" && m.content.some((p) => p.type === "toolCall")) return true;
+	}
+	return false;
 }
 
 function isMessage(m: AgentMessage): m is Message {
