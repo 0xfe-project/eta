@@ -27,8 +27,6 @@ export interface EntryBase {
 export interface MessageEntry extends EntryBase {
 	type: "message";
 	message: AgentMessage;
-	/** Marks the stable boundary: a run ended cleanly here. */
-	terminate?: true;
 }
 
 export interface CompactionEntry extends EntryBase {

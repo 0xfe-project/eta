@@ -35,6 +35,13 @@ export {
 export { type ForkedChain, type ForkOptions, type ForkSelection, forkChain, selectBranchFork } from "./session/fork.ts";
 export { EntryGraph, type GraphNode, spliceMergedChain } from "./session/graph.ts";
 export { type MergeOptions, type MergeResult, mergeBranch, type RollbackResult, rollback } from "./session/merge.ts";
+export {
+	type RecoveryReport,
+	RUN_BOUNDARY,
+	RUN_STARTED,
+	recordGoalEntries,
+	SessionLog,
+} from "./session/session-log.ts";
 export { MemoryStorage } from "./storage/memory.ts";
 export {
 	type CompactResult,
