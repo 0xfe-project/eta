@@ -19,6 +19,7 @@
 		"vitest": "4.1.9"
 	},
 	"dependencies": {
+		"@earendil-works/pi-ai": "0.85.1",
 		"cordis": "^4.0.0-rc.10"
 	}
 }
