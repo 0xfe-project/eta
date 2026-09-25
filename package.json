@@ -1,37 +1,24 @@
 {
 	"name": "@eta/core",
 	"version": "0.1.0",
-	"description": "Battery-included agent core (fork of pi-agent-core) for eta",
+	"description": "Eta kernel: cordis bus, three privileged primitives (goal/persona/tasks), the runner, and the type surface.",
+	"private": true,
 	"type": "module",
 	"main": "./src/index.ts",
 	"types": "./src/index.ts",
 	"exports": {
-		".": "./src/index.ts",
-		"./testing": "./src/harness/session/testing/index.ts",
-		"./node": "./src/node.ts",
-		"./eta": "./src/eta/index.ts",
-		"./prompts": "./src/prompts/index.ts",
-		"./wire": "./src/wire.ts",
-		"./provider-config": "./src/provider-config.ts",
-		"./remote": "./src/remote.ts"
+		".": "./src/index.ts"
 	},
 	"scripts": {
-		"test": "vitest --run",
-		"test:harness": "vitest --run --config vitest.harness.config.ts",
+		"test": "vitest --run --passWithNoTests",
 		"typecheck": "tsc -p tsconfig.json --noEmit"
-	},
-	"dependencies": {
-		"@earendil-works/chord": "0.85.1",
-		"@earendil-works/pi-ai": "0.85.1",
-		"@earendil-works/pi-telemetry": "0.85.1",
-		"diff": "8.0.4",
-		"ignore": "7.0.8",
-		"typebox": "1.3.27",
-		"yaml": "2.9.0"
 	},
 	"devDependencies": {
 		"@types/node": "22.19.19",
 		"typescript": "5.9.3",
 		"vitest": "4.1.9"
+	},
+	"dependencies": {
+		"cordis": "^4.0.0-rc.10"
 	}
 }
