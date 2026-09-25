@@ -11,7 +11,7 @@
  */
 import type { Api, AssistantMessage, Context, Message, Model, Tool as PiTool, ToolCall } from "@earendil-works/pi-ai";
 import type { Emit } from "../types/events.ts";
-import { kernelEmit } from "../types/events.ts";
+import { kernelEmit, kernelOn } from "../types/events.ts";
 import type { AgentMessage } from "../types/messages.ts";
 import type { GoalService } from "./goal.ts";
 import type { Kernel } from "./kernel.ts";
@@ -37,6 +37,12 @@ export interface RunnerOptions {
 	thinkingLevel?: string;
 	/** Run-boundary decisions (REFACTOR.md §2.4 step 5); without it the boundary is a plain stop. */
 	boundary?: RunnerBoundaryOptions;
+	/**
+	 * When true, an inject arriving while the runner is idle immediately starts
+	 * a new run (REFACTOR.md §2.5). The server turns this on for live sessions;
+	 * one-shot callers (subagents) leave it off.
+	 */
+	autoPump?: boolean;
 }
 
 export interface RunResult {
@@ -56,6 +62,9 @@ export class Runner {
 	private readonly emit: Emit;
 	private readonly transcript: AgentMessage[] = [];
 	private emptyStops = 0;
+	private pumping = false;
+	private inFlight: Promise<RunResult> | undefined;
+	private autoPumpOff: (() => boolean) | undefined;
 
 	constructor(kernel: Kernel, options: RunnerOptions) {
 		this.kernel = kernel;
@@ -64,6 +73,19 @@ export class Runner {
 		this.tools = kernel.tools;
 		this.goal = kernel.goal;
 		this.persona = kernel.persona;
+		if (options.autoPump) {
+			this.autoPumpOff = kernelOnAuto(kernel.ctx, () => {
+				if (!this.pumping && this.kernel.injectQueueDepth > 0) {
+					void this.run();
+				}
+			});
+		}
+	}
+
+	/** Stop listening for idle injects (runner teardown). */
+	stopAutoPump(): void {
+		this.autoPumpOff?.();
+		this.autoPumpOff = undefined;
 	}
 
 	/** The messages the runner would send to the provider right now. */
@@ -76,7 +98,19 @@ export class Runner {
 	 * Injected messages are drained at every boundary.
 	 */
 	async run(): Promise<RunResult> {
+		// Concurrent run() calls (autoPump racing a host call) share one loop.
+		if (this.inFlight !== undefined) return this.inFlight;
+		this.inFlight = this.runLoop();
+		try {
+			return await this.inFlight;
+		} finally {
+			this.inFlight = undefined;
+		}
+	}
+
+	private async runLoop(): Promise<RunResult> {
 		let error: string | undefined;
+		this.pumping = true;
 		for (;;) {
 			this.drainInjected();
 			const turn = this.kernel.turns + 1;
@@ -90,16 +124,30 @@ export class Runner {
 			if (toolCalls.length === 0) {
 				// Run boundary: de-hooked (REFACTOR.md §2.4 step 5) — the runner asks
 				// the goal directly instead of waiting for a followUp hook slot.
-				if (!(await this.atRunBoundary(assistant))) break;
+				if (!(await this.atRunBoundary(assistant))) {
+					// A message may have arrived while the boundary was deciding
+					// (or during the evaluator's async call): it opens a new turn
+					// instead of ending the run underneath it.
+					if (this.kernel.injectQueueDepth > 0) continue;
+					break;
+				}
 			} else {
 				for (const call of toolCalls) {
 					await this.executeToolCall(call, turn);
 				}
 			}
 			if (!this.kernel.noteTurn()) break;
+			// The turn had tool work: keep looping. A message injected mid-run
+			// (tool or middleware) never interrupts; it opens the next turn via
+			// the drain at the top of the loop.
 		}
+		this.pumping = false;
 		const result: RunResult = { turns: this.kernel.turns, error };
 		this.emit("turn:run-end", { turns: result.turns, usage: zeroUsage() });
+		if (this.options.autoPump && this.kernel.injectQueueDepth > 0 && error === undefined) {
+			// An inject raced with the run-end above; pump it immediately.
+			return this.run();
+		}
 		return result;
 	}
 
@@ -233,6 +281,10 @@ function runUsedTools(messages: readonly AgentMessage[]): boolean {
 		if (m.role === "assistant" && m.content.some((p) => p.type === "toolCall")) return true;
 	}
 	return false;
+}
+
+function kernelOnAuto(ctx: Parameters<typeof kernelOn>[0], onInject: () => void): () => boolean {
+	return kernelOn(ctx)("inject:received", onInject);
 }
 
 function isMessage(m: AgentMessage): m is Message {
