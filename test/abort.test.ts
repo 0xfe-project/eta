@@ -22,10 +22,14 @@ describe("the effect gate", () => {
 	it("admits work while open and refuses it once aborting", async () => {
 		const { gate, control } = createGate();
 		let ran = 0;
-		expect(gate.admit(() => (ran += 1))).toBe(1);
+		const count = (): number => {
+			ran += 1;
+			return ran;
+		};
+		expect(gate.admit(count)).toBe(1);
 
 		control.beginAbort(Promise.resolve());
-		expect(() => gate.admit(() => (ran += 1))).toThrow(AbortRequested);
+		expect(() => gate.admit(count)).toThrow(AbortRequested);
 		expect(ran).toBe(1);
 	});
 

@@ -23,7 +23,7 @@ import type { JournalingService } from "../session/journaling";
 import type { Entry } from "../types/entries";
 import type { Emit } from "../types/events";
 import { kernelEmit } from "../types/events";
-import type { AgentMessage, ThinkingLevel, Usage } from "../types/messages";
+import type { AgentMessage, ThinkingLevel } from "../types/messages";
 import { estimateContextTokens } from "./compaction";
 import type { ConfigService } from "./config";
 import { AbortRequested, createGate, type Gate, type GateControl } from "./effect-gate";
@@ -33,7 +33,7 @@ import type { QueuedItem } from "./inbox";
 import type { Kernel } from "./kernel";
 import type { PersonaService } from "./persona";
 import type { KernelModels } from "./providers";
-import { type AgentRetryPolicy, normalizedRetryPolicy, retryDelayMs, retryNotBefore, waitUntil } from "./retry";
+import type { AgentRetryPolicy } from "./retry";
 import type { KernelTool, ToolService } from "./tools";
 import { isAbortError } from "./tools";
 
@@ -590,19 +590,13 @@ export class Runner {
 			const call = calls.find((candidate) => candidate.id === outcome.id)!;
 			const terminate = isTerminatingResult(outcome.result);
 			if (!terminate) allTerminate = false;
-			await this.recordToolResult(call, outcome.result, turn, started.get(outcome.id) ?? Date.now(), terminate);
+			await this.recordToolResult(call, outcome.result, started.get(outcome.id) ?? Date.now(), terminate);
 		}
 		return allTerminate;
 	}
 
 	/** Emit the result event and put the tool result into the transcript. */
-	private async recordToolResult(
-		call: ToolCall,
-		raw: unknown,
-		turn: number,
-		startedAt: number,
-		terminate: boolean,
-	): Promise<void> {
+	private async recordToolResult(call: ToolCall, raw: unknown, startedAt: number, terminate: boolean): Promise<void> {
 		const runId = this.currentRunId ?? "";
 		const turnId = this.currentTurnId ?? "";
 		const durationMs = Date.now() - startedAt;
@@ -696,14 +690,6 @@ function runUsedTools(messages: readonly AgentMessage[]): boolean {
 		if (m.role === "assistant" && m.content.some((p) => p.type === "toolCall")) return true;
 	}
 	return false;
-}
-
-let usageCounter = 0;
-
-/** A usage row id, unique within a session journal. */
-function usageId(): string {
-	usageCounter += 1;
-	return `usage-${usageCounter.toString(36)}-${Date.now().toString(36)}`;
 }
 
 /** Whether a tool result asks for the run to end after this turn. */
