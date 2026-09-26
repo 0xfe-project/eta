@@ -22,6 +22,7 @@ import type { StoredTask } from "../types/tasks.ts";
 import { ConfigService } from "./config.ts";
 import type { GoalState } from "./goal.ts";
 import { GoalService } from "./goal.ts";
+import { Inbox, type QueuedItem } from "./inbox.ts";
 import { PersonaService } from "./persona.ts";
 import { TaskService } from "./tasks.ts";
 import { ToolService } from "./tools.ts";
@@ -45,7 +46,7 @@ export interface KernelInspect {
 	tools: string[];
 	personas: PersonaCard[];
 	activePersonaNames: string[];
-	injectQueueDepth: number;
+	inboxDepth: number;
 }
 
 export class Kernel {
@@ -55,10 +56,11 @@ export class Kernel {
 	readonly tasks: TaskService;
 	readonly tools: ToolService;
 	readonly config: ConfigService;
+	/** How the outside world reaches the loop (steer / followUp / nextRun). */
+	readonly inbox = new Inbox();
 	readonly maxTurns: number | null;
 
 	private turnCount = 0;
-	private readonly injectQueue: AgentMessage[] = [];
 	private readonly emit: Emit;
 
 	private constructor(options: KernelOptions) {
@@ -96,21 +98,56 @@ export class Kernel {
 
 	/**
 	 * The one door into the turn loop (REFACTOR.md §2.5). User input, a server-
-	 * top-level wake, and a child agent's output all arrive here. The runner
-	 * drains the queue when it reaches a run boundary.
+	 * top-level wake, and a child agent's output all arrive here: they queue as
+	 * steering, so a run in flight changes course at its next boundary instead
+	 * of being interrupted mid-turn, and an idle kernel starts a run for them.
 	 */
-	inject(message: AgentMessage): void {
-		this.injectQueue.push(message);
-		this.emit("inject:received", { message });
+	inject(message: AgentMessage): QueuedItem {
+		const item = this.inbox.enqueue("steer", message);
+		this.emit("inject:received", { message: item.message });
+		return item;
 	}
 
-	/** FIFO drain; the runner consumes what it can start turns with. */
-	drainInjected(): AgentMessage[] {
-		return this.injectQueue.splice(0, this.injectQueue.length);
+	/** Queue an input for the next boundary of the run in flight. */
+	steer(message: string | AgentMessage, images?: Parameters<Inbox["enqueue"]>[2]): QueuedItem {
+		return this.inbox.enqueue("steer", message, images);
 	}
 
-	get injectQueueDepth(): number {
-		return this.injectQueue.length;
+	/** Queue an input for when the run would otherwise stop. */
+	followUp(message: string | AgentMessage, images?: Parameters<Inbox["enqueue"]>[2]): QueuedItem {
+		return this.inbox.enqueue("followUp", message, images);
+	}
+
+	/** Queue an input for the next run, whenever that is. */
+	nextRun(message: string | AgentMessage, images?: Parameters<Inbox["enqueue"]>[2]): QueuedItem {
+		return this.inbox.enqueue("nextRun", message, images);
+	}
+
+	/** Drop a queued input; false when it was already consumed. */
+	cancelQueued(entryId: string): boolean {
+		return this.inbox.cancel(entryId);
+	}
+
+	/** What a run takes when it starts (the modes come from the live config). */
+	acceptInbox(): QueuedItem[] {
+		this.inbox.configure({
+			steeringMode: this.config.read("steeringMode"),
+			followUpMode: this.config.read("followUpMode"),
+		});
+		return this.inbox.accept();
+	}
+
+	/** What a boundary takes: steering, then follow-ups when nothing else continues. */
+	takeAtBoundary(options: { followUpWhenNoTrigger: boolean }): { steers: QueuedItem[]; followUps: QueuedItem[] } {
+		this.inbox.configure({
+			steeringMode: this.config.read("steeringMode"),
+			followUpMode: this.config.read("followUpMode"),
+		});
+		return this.inbox.takeAtBoundary(options);
+	}
+
+	get inboxDepth(): number {
+		return this.inbox.depth;
 	}
 
 	async dispose(): Promise<void> {
@@ -128,7 +165,7 @@ export class Kernel {
 			tools: this.tools.names(),
 			personas: this.persona.list(),
 			activePersonaNames: this.persona.activeNamesList(),
-			injectQueueDepth: this.injectQueue.length,
+			inboxDepth: this.inbox.depth,
 		};
 	}
 }

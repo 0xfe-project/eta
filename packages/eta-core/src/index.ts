@@ -40,6 +40,15 @@ export {
 	lastMessageShowsIntent,
 	MAX_CONTINUATIONS,
 } from "./kernel/goal.ts";
+export {
+	Inbox,
+	type InboxOptions,
+	InvalidMessage,
+	type InvalidMessageReason,
+	normalizeQueuedInput,
+	type QueuedItem,
+	type QueueKind,
+} from "./kernel/inbox.ts";
 export { Kernel, type KernelInspect, type KernelOptions } from "./kernel/kernel.ts";
 export { OutputRate } from "./kernel/output-rate.ts";
 export { PersonaService, renderPersonaBlock } from "./kernel/persona.ts";

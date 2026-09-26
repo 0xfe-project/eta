@@ -13,7 +13,7 @@ describe("kernel assembly", () => {
 			turns: 0,
 			budgetSpent: false,
 			goal: undefined,
-			injectQueueDepth: 0,
+			inboxDepth: 0,
 		});
 		void kernel.dispose();
 	});
@@ -83,17 +83,18 @@ describe("kernel assembly", () => {
 		});
 		kernel.inject(msg("one"));
 		kernel.inject(msg("two"));
-		expect(kernel.injectQueueDepth).toBe(2);
+		expect(kernel.inboxDepth).toBe(2);
 		expect(received).toHaveLength(2);
-		const drained = kernel.drainInjected();
-		const texts = drained.map((m) => {
-			if (m.role !== "user" && m.role !== "assistant" && m.role !== "toolResult") return "";
-			return ((m.content as { text: string }[])[0] ?? { text: "" }).text;
+		const accepted = kernel.acceptInbox();
+		const texts = accepted.map((item) => {
+			const message = item.message;
+			if (message.role !== "user" && message.role !== "assistant" && message.role !== "toolResult") return "";
+			return ((message.content as { text: string }[])[0] ?? { text: "" }).text;
 		});
 		expect(texts).toEqual(["one", "two"]);
-		expect(kernel.injectQueueDepth).toBe(0);
-		// Draining again is empty, not an error.
-		expect(kernel.drainInjected()).toEqual([]);
+		expect(kernel.inboxDepth).toBe(0);
+		// Taking again is empty, not an error.
+		expect(kernel.acceptInbox()).toEqual([]);
 		off();
 		void kernel.dispose();
 	});

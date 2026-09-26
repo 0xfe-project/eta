@@ -26,6 +26,7 @@ import {
 } from "./compaction.ts";
 import type { ConfigService } from "./config.ts";
 import type { GoalService } from "./goal.ts";
+import type { QueuedItem } from "./inbox.ts";
 import type { Kernel } from "./kernel.ts";
 import { OutputRate } from "./output-rate.ts";
 import type { PersonaService } from "./persona.ts";
@@ -125,7 +126,7 @@ export class Runner {
 		this.persona = kernel.persona;
 		if (options.autoPump) {
 			this.autoPumpOff = kernelOnAuto(kernel.ctx, () => {
-				if (!this.pumping && this.kernel.injectQueueDepth > 0) {
+				if (!this.pumping && this.kernel.inboxDepth > 0) {
 					void this.run();
 				}
 			});
@@ -226,8 +227,10 @@ export class Runner {
 		// A new run starts the throughput window over: nothing has been produced yet.
 		this.rate.reset();
 		this.emit("turn:run-start", { runId, startedAt: Date.now() });
+		// What a run takes when it starts: next-run items always, steering and
+		// follow-ups per their modes. They become the run's opening transcript.
+		this.adopt(this.kernel.acceptInbox());
 		for (;;) {
-			await this.drainInjected();
 			// The model is resolved live: a run started on one model and switched
 			// mid-flight must send the next request to the new one (§2.4).
 			const identity = this.config.read("model");
@@ -249,19 +252,38 @@ export class Runner {
 			}
 			const toolCalls = assistant.content.filter((c): c is ToolCall => c.type === "toolCall");
 			if (toolCalls.length === 0) {
+				// A steer that arrived while this turn was being generated still gets
+				// the next request, not the following one.
+				const { steers: lateSteers } = this.kernel.takeAtBoundary({ followUpWhenNoTrigger: false });
+				if (lateSteers.length > 0) {
+					this.adopt(lateSteers);
+					continue;
+				}
 				// Run boundary: de-hooked (REFACTOR.md §2.4 step 5) — the runner asks
 				// the goal directly instead of waiting for a followUp hook slot.
 				if (!(await this.atRunBoundary(assistant))) {
-					// A message may have arrived while the boundary was deciding
-					// (or during the evaluator's async call): it opens a new turn
-					// instead of ending the run underneath it.
-					if (this.kernel.injectQueueDepth > 0) continue;
+					// Nothing else continues the run: a follow-up gets its chance.
+					const { followUps } = this.kernel.takeAtBoundary({ followUpWhenNoTrigger: true });
+					if (followUps.length > 0) {
+						this.adopt(followUps);
+						continue;
+					}
+					// A steer may have arrived while the boundary was deciding (or
+					// during the evaluator's async call): it opens a new turn instead
+					// of ending the run underneath it. A next-run item does not: it is
+					// for the run after this one.
+					if (this.kernel.inbox.list().some((item) => item.kind === "steer")) continue;
 					break;
 				}
 			} else {
 				for (const call of toolCalls) {
 					await this.executeToolCall(call, turn);
 				}
+				// The checkpoint after a tool batch: steering lands here, so the very
+				// next request carries it. Follow-ups wait for a boundary that could
+				// end the run.
+				const { steers: afterTools } = this.kernel.takeAtBoundary({ followUpWhenNoTrigger: false });
+				if (afterTools.length > 0) this.adopt(afterTools);
 			}
 			if (!this.kernel.noteTurn()) break;
 			// The turn had tool work: keep looping. A message injected mid-run
@@ -281,7 +303,7 @@ export class Runner {
 			status: error === undefined ? "completed" : "failed",
 			...(error === undefined ? {} : { error }),
 		});
-		if (this.options.autoPump && this.kernel.injectQueueDepth > 0 && error === undefined) {
+		if (this.options.autoPump && this.kernel.inboxDepth > 0 && error === undefined) {
 			// An inject raced with the run-end above; pump it immediately.
 			return this.run();
 		}
@@ -418,11 +440,13 @@ export class Runner {
 		this.journal?.recordMessage(message);
 	}
 
-	private async drainInjected(): Promise<void> {
-		for (const message of this.kernel.drainInjected()) {
-			this.transcript.push(message);
-			this.journal?.recordMessage(message);
+	/** Adopt accepted inbox items into the transcript and the journal. */
+	private adopt(items: readonly QueuedItem[]): void {
+		for (const item of items) {
+			this.transcript.push(item.message);
+			this.journal?.recordMessage(item.message);
 		}
+		if (items.length > 0) this.emit("queue:update", { queues: this.kernel.inbox.list() });
 	}
 
 	private async takeTurn(model: Model<Api>): Promise<AssistantMessage | undefined> {
