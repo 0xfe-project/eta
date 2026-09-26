@@ -361,12 +361,26 @@ interface EtaPlugin {
 
 ### 进度（Kernel 阶段）
 
+第一轮 K0–K5 交付的是"能跑通的最小骨架"：接口是我手写的简化形状，语义深度不够（没有流式、重试、overflow、队列模式、usage 记账、abort）。第二轮按"该抄的必须抄够"重做，全部对齐 eta-agent 的源语义：
+
 - [x] K0 定稿清场
 - [x] K1 类型面 + bus 词汇（`types/entries.ts` `types/events.ts` `types/tasks.ts` `types/persona.ts`）
 - [x] K2 三原语 + Kernel 装配（`kernel/goal.ts` `kernel/tasks.ts` `kernel/persona.ts` `kernel/kernel.ts`）
-- [x] K3 Runner（`kernel/runner.ts` `kernel/tools.ts` `kernel/providers.ts`；run boundary 直调、inject 队列 + autoPump）
+- [x] K3 Runner（`kernel/runner.ts` `kernel/tools.ts` `kernel/providers.ts`）
 - [x] K4 session 语义（`session/graph.ts` `session/fork.ts` `session/merge.ts`）
-- [x] K5 storage（`storage/types.ts` `storage/memory.ts` `session/session-log.ts` + `@eta/storage-jsonl`）
+- [x] K5 storage（`storage/types.ts` `storage/state.ts` `storage/memory.ts` `session/session-log.ts` + `@eta/storage-jsonl`）
+
+第二轮（纠偏 + 补齐，逐项对齐 eta-agent 源码）：
+
+- [x] A1 恢复语义改回"最后一条完整 entry"；A2 StorageService 用 eta-agent 的真实语义重定（commit 写批 / usage 行 / namespace KV / branch scan / stats，语义集中在 `InMemoryStorageState`）；A3 事件词汇对齐 `ETA_EVENT_CATEGORIES`
+- [x] B1 `KernelConfig`（+ `validateRetryPolicy`/`validateCompactionSettings`/`validateToolNames`）；B2 流式 generation（`AssistantStreamObserver` + `OutputRate`）；B3 retry（分类 + 指数退避 + abortable wait）；B4 overflow recovery（一次 compaction + 重试）；B5 队列（steer/followUp/nextRun + QueueMode + 边界消费规则 + `InvalidMessage`）；B6 `toolExecution` 并行/串行 + `MutationQueue`；B7 abort（effect-gate）；B8 usage 记账（UsageRow 与 entry 同 commit）；B9 compaction seam + 纯函数（含 #40 的 window-independent ceiling）；B10 `requestState()`；B11 解析链（systemPrompt/toolContext/toProviderMessages/entryProjectors）
+- [x] C1 Entry 保真（details / terminate 并真的生效）；C2 读 eta-agent 的 `{w,t}` journal（未知写入跳过并计数、orphan 断枝不失败）
+- [x] D1–D3 三原语逐行对照补测；E1 端到端综合测试（stream/usage/retry/overflow/queue/abort/goal/persona/落盘/重放）
+
+### 第二轮的两处刻意偏离（都写进代码注释）
+
+1. **不加 `fromHook`**：hook 机制已删，这个字段永远是 false——不留死字段。`customType`/`custom` entry 同理：插件显式扩 union，不搬 stringly-typed 后门（§6 裁决）。
+2. **`shouldCompact` 加绝对上限**：eta-agent 只看 `contextWindow - reserveTokens`，memory #40/#50 明确要求 window-independent ceiling（默认 64k，`settings.maxContextTokens` 可覆盖）。另外模型不报 window 时用 ceiling 兜底——否则 `Math.min(NaN, ceiling)` 会让压缩静默失效（测试抓到的）。
 
 ### K5 恢复规则（对齐 §4.2 原文）
 
