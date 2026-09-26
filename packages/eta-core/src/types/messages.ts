@@ -6,7 +6,17 @@
  */
 import type { Message } from "@earendil-works/pi-ai";
 
-export type { Api, AssistantMessage, Message, Model, StopReason, Tool, ToolCall, Usage } from "@earendil-works/pi-ai";
+export type {
+	Api,
+	AssistantMessage,
+	AssistantMessageEvent,
+	Message,
+	Model,
+	StopReason,
+	Tool,
+	ToolCall,
+	Usage,
+} from "@earendil-works/pi-ai";
 
 /** Model thinking-level knob, mirrored from the fork. */
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";

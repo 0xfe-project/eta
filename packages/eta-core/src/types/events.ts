@@ -18,7 +18,7 @@ import type { Context } from "cordis";
 import type { GoalStatus } from "../kernel/goal.ts";
 import type { UsageRow } from "../storage/types.ts";
 import type { Entry, GoalPayload } from "./entries.ts";
-import type { AgentMessage, AssistantMessage, Usage } from "./messages.ts";
+import type { AgentMessage, AssistantMessage, AssistantMessageEvent, Usage } from "./messages.ts";
 import type { PersonaCard } from "./persona.ts";
 import type { TaskChange } from "./tasks.ts";
 
@@ -102,8 +102,10 @@ export interface TurnEvents {
 }
 
 export interface MessageEvents {
-	/** A provider generation opened (streaming updates land with the stream machinery). */
+	/** A provider generation opened. */
 	"message:start": { runId: string; turnId: string };
+	/** One stream frame: the delta plus the message as it stands. Snapshots, not live refs. */
+	"message:update": { runId: string; turnId: string; message: AgentMessage; event: AssistantMessageEvent };
 	/** A message settled and was journaled. */
 	"message:end": { runId: string; message: AgentMessage; entryId: string };
 }
@@ -193,6 +195,7 @@ export const KERNEL_EVENT_NAMES = [
 	"inject:received",
 	"message:end",
 	"message:start",
+	"message:update",
 	"persona:loaded",
 	"persona:missing",
 	"persona:switched",

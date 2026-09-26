@@ -14,9 +14,11 @@ import type { SessionLog } from "../session/session-log.ts";
 import type { Emit } from "../types/events.ts";
 import { kernelEmit, kernelOn } from "../types/events.ts";
 import type { AgentMessage } from "../types/messages.ts";
+import { consumeAssistantStream } from "./assistant.ts";
 import type { ConfigService } from "./config.ts";
 import type { GoalService } from "./goal.ts";
 import type { Kernel } from "./kernel.ts";
+import { OutputRate } from "./output-rate.ts";
 import type { PersonaService } from "./persona.ts";
 import type { KernelModels } from "./providers.ts";
 import type { ToolService } from "./tools.ts";
@@ -81,6 +83,7 @@ export class Runner {
 	private currentTurnId: string | undefined;
 	private turnToolResults: AgentMessage[] = [];
 	private inFlight: Promise<RunResult> | undefined;
+	private readonly rate = new OutputRate();
 	private autoPumpOff: (() => boolean) | undefined;
 
 	constructor(kernel: Kernel, options: RunnerOptions) {
@@ -101,6 +104,11 @@ export class Runner {
 				}
 			});
 		}
+	}
+
+	/** Output tokens/sec for the run in progress (see OutputRate for the scale). */
+	get tokensPerSec(): number {
+		return this.rate.value;
 	}
 
 	/** Stop listening for idle injects (runner teardown). */
@@ -133,6 +141,8 @@ export class Runner {
 		let error: string | undefined;
 		this.pumping = true;
 		const runId = crypto.randomUUID();
+		// A new run starts the throughput window over: nothing has been produced yet.
+		this.rate.reset();
 		this.emit("turn:run-start", { runId, startedAt: Date.now() });
 		for (;;) {
 			await this.drainInjected();
@@ -266,13 +276,34 @@ export class Runner {
 			messages: context.messages.length,
 			attempt: 1,
 		});
-		this.emit("message:start", { runId, turnId });
 		const config = this.config.get();
-		const assistant = await this.models.completeSimple(model, context, {
-			...config.streamOptions,
-			// "off" is the kernel's spelling for "no reasoning field at all".
-			...(config.thinkingLevel === "off" ? {} : { reasoning: config.thinkingLevel }),
-		});
+		const assistant = await consumeAssistantStream(
+			this.models.streamSimple(model, context, {
+				...config.streamOptions,
+				// "off" is the kernel's spelling for "no reasoning field at all".
+				...(config.thinkingLevel === "off" ? {} : { reasoning: config.thinkingLevel }),
+			}),
+			{
+				start: () => {
+					this.emit("message:start", { runId, turnId });
+				},
+				update: (message, event) => {
+					// Every frame is a snapshot: nothing downstream may hold a live
+					// reference into the provider's in-flight message.
+					this.emit("message:update", {
+						runId,
+						turnId,
+						message: structuredClone(message),
+						event: structuredClone(event),
+					});
+					this.rate.inFlight(message.usage.output);
+				},
+				end: () => undefined,
+			},
+		);
+		// The provider's own count is what the rate commits; the streaming estimate
+		// only ever stands in until the message settles.
+		this.rate.commit(assistant.usage.output);
 		this.transcript.push(assistant);
 		const entry = this.journal?.recordMessage(assistant);
 		if (entry !== undefined) this.emit("message:end", { runId, message: assistant, entryId: entry.id });
