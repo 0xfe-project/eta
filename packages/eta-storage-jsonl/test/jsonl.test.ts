@@ -37,13 +37,11 @@ async function openStorage(path: string, options: JsonlStorageOptions = {}): Pro
 	return handle;
 }
 
-let seq = 0;
 function messageEntry(
 	id: string,
 	text: string,
 	parentId: string | null = null,
 ): Omit<MessageEntry, "seq" | "timestamp"> {
-	seq += 1;
 	return {
 		id,
 		parentId,

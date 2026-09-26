@@ -92,7 +92,7 @@ describe("RunPump", () => {
 	});
 
 	it("a stopped pump leaves the inbox alone", async () => {
-		const { kernel, runner, fake, dispose } = setup([answer("first")]);
+		const { kernel, fake, dispose } = setup([answer("first")]);
 		kernel.inject(userMsg("go"));
 		await settle();
 		expect(fake.calls).toHaveLength(0);
