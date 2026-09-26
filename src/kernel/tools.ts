@@ -15,6 +15,7 @@
 import type { Context } from "cordis";
 import { Service } from "cordis";
 import type { ToolExecution } from "../types/config.ts";
+import { AbortRequested } from "./effect-gate.ts";
 
 /** The minimal tool shape the seam requires. Plugin tools may carry more. */
 export interface KernelTool<TArgs = unknown, TResult = unknown> {
@@ -27,6 +28,8 @@ export interface KernelTool<TArgs = unknown, TResult = unknown> {
 export interface ToolCallInfo {
 	turn: number;
 	toolCallId: string;
+	/** Aborts when the run is cancelled; long-running tools should watch it. */
+	signal?: AbortSignal;
 }
 
 export type BeforeToolResult = { ok: true; args: unknown } | { ok: false; blockReason: string };
@@ -38,6 +41,9 @@ export interface ToolMiddleware {
 	/** Runs innermost-to-outermost on the way back. */
 	after?: (name: string, args: unknown, result: unknown, call: ToolCallInfo) => unknown | Promise<unknown>;
 }
+
+/** The result a call reports when the run was cancelled before it started. */
+const ABORTED_TOOL_RESULT = { isError: true, content: "Tool execution was cancelled before completion." };
 
 /** Whether an error is the run being cancelled rather than a tool failing. */
 export function isAbortError(error: unknown): boolean {
@@ -98,10 +104,34 @@ export class ToolService extends Service {
 	 */
 	async executeBatch(
 		calls: readonly { id: string; name: string; arguments: unknown }[],
-		options: { execution: ToolExecution; turn: number },
+		options: {
+			execution: ToolExecution;
+			turn: number;
+			signal?: AbortSignal;
+			/** Effect admission: a cancelled run stops starting new tool calls. */
+			admit?: <T>(work: () => T) => T;
+			/** Lets the caller wait for effects that already started. */
+			track?: <T>(work: Promise<T>) => Promise<T>;
+		},
 	): Promise<{ id: string; result: unknown }[]> {
-		const run = (call: { id: string; name: string; arguments: unknown }) =>
-			this.execute(call.name, call.arguments, { turn: options.turn, toolCallId: call.id });
+		const run = async (call: { id: string; name: string; arguments: unknown }) => {
+			const admit = options.admit ?? (<T>(work: () => T) => work());
+			try {
+				const admitted = admit(() =>
+					this.execute(call.name, call.arguments, {
+						turn: options.turn,
+						toolCallId: call.id,
+						...(options.signal === undefined ? {} : { signal: options.signal }),
+					}),
+				);
+				const tracked = options.track === undefined ? admitted : options.track(admitted);
+				return await tracked;
+			} catch (error) {
+				// Not admitted: the run was cancelled before this call started.
+				if (error instanceof AbortRequested) return ABORTED_TOOL_RESULT;
+				throw error;
+			}
+		};
 		if (options.execution === "sequential") {
 			const results: { id: string; result: unknown }[] = [];
 			for (const call of calls) results.push({ id: call.id, result: await run(call) });

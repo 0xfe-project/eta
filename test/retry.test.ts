@@ -235,7 +235,10 @@ describe("retrying generation", () => {
 		await vi.advanceTimersByTimeAsync(100);
 		expect(retries.map((r) => r.name)).toEqual(["retry:scheduled"]);
 		runner.abort();
-		await expect(run).rejects.toThrow("aborted");
+		const result = await run;
+		// Cancelling is not a failure: the run stops where it was.
+		expect(result.status).toBe("aborted");
+		expect(result.error).toBeUndefined();
 		dispose();
 	});
 });

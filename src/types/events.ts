@@ -91,12 +91,12 @@ export interface TurnEvents {
 		toolResults: AgentMessage[];
 		usage: Usage;
 	};
-	/** The run ended. */
+	/** The run ended: a clean stop, a failure, or the caller cancelling it. */
 	"turn:run-end": {
 		runId: string;
 		turns: number;
 		endedAt: number;
-		status: "completed" | "failed";
+		status: "completed" | "failed" | "aborted";
 		error?: string;
 	};
 }
