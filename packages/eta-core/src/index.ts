@@ -31,7 +31,11 @@ export {
 	type AgentRetryPolicy,
 	DEFAULT_MAX_AGENT_RETRY_DELAY_MS,
 	DEFAULT_RETRY_POLICY,
+	type NormalizedRetryPolicy,
+	normalizedRetryPolicy,
 	retryDelayMs,
+	retryNotBefore,
+	waitUntil,
 } from "./kernel/retry.ts";
 export {
 	isEmptyStop,

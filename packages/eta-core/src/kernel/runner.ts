@@ -10,6 +10,7 @@
  * the journal to the last stable boundary and rerun the current turn".
  */
 import type { Api, AssistantMessage, Context, Message, Model, Tool as PiTool, ToolCall } from "@earendil-works/pi-ai";
+import { isRetryableAssistantError } from "@earendil-works/pi-ai";
 import type { SessionLog } from "../session/session-log.ts";
 import type { Emit } from "../types/events.ts";
 import { kernelEmit, kernelOn } from "../types/events.ts";
@@ -21,6 +22,7 @@ import type { Kernel } from "./kernel.ts";
 import { OutputRate } from "./output-rate.ts";
 import type { PersonaService } from "./persona.ts";
 import type { KernelModels } from "./providers.ts";
+import { normalizedRetryPolicy, retryDelayMs, retryNotBefore, waitUntil } from "./retry.ts";
 import type { ToolService } from "./tools.ts";
 
 export interface RunnerBoundaryOptions {
@@ -84,6 +86,7 @@ export class Runner {
 	private turnToolResults: AgentMessage[] = [];
 	private inFlight: Promise<RunResult> | undefined;
 	private readonly rate = new OutputRate();
+	private runAbort: AbortController | undefined;
 	private autoPumpOff: (() => boolean) | undefined;
 
 	constructor(kernel: Kernel, options: RunnerOptions) {
@@ -104,6 +107,21 @@ export class Runner {
 				}
 			});
 		}
+	}
+
+	/**
+	 * Abort the run in flight: generation streams stop, a retry backoff gives up,
+	 * and the run ends as aborted rather than failed (REFACTOR.md §2.4). Tool
+	 * execution joins this signal in the tool-execution step.
+	 */
+	abort(reason: unknown = new DOMException("The operation was aborted", "AbortError")): void {
+		this.runAbort?.abort(reason);
+	}
+
+	/** The signal the current run passes to generation and its backoffs. */
+	private runSignal(): AbortSignal {
+		this.runAbort ??= new AbortController();
+		return this.runAbort.signal;
 	}
 
 	/** Output tokens/sec for the run in progress (see OutputRate for the scale). */
@@ -141,6 +159,7 @@ export class Runner {
 		let error: string | undefined;
 		this.pumping = true;
 		const runId = crypto.randomUUID();
+		this.runAbort = new AbortController();
 		// A new run starts the throughput window over: nothing has been produced yet.
 		this.rate.reset();
 		this.emit("turn:run-start", { runId, startedAt: Date.now() });
@@ -277,30 +296,71 @@ export class Runner {
 			attempt: 1,
 		});
 		const config = this.config.get();
-		const assistant = await consumeAssistantStream(
-			this.models.streamSimple(model, context, {
-				...config.streamOptions,
-				// "off" is the kernel's spelling for "no reasoning field at all".
-				...(config.thinkingLevel === "off" ? {} : { reasoning: config.thinkingLevel }),
-			}),
-			{
-				start: () => {
-					this.emit("message:start", { runId, turnId });
+		const policy = normalizedRetryPolicy(config.retryPolicy);
+		const signal = this.runSignal();
+		let attempt = 1;
+		let assistant: AssistantMessage;
+		for (;;) {
+			assistant = await consumeAssistantStream(
+				this.models.streamSimple(model, context, {
+					...config.streamOptions,
+					signal,
+					// "off" is the kernel's spelling for "no reasoning field at all".
+					...(config.thinkingLevel === "off" ? {} : { reasoning: config.thinkingLevel }),
+				}),
+				{
+					start: () => {
+						this.emit("message:start", { runId, turnId });
+					},
+					update: (message, event) => {
+						// Every frame is a snapshot: nothing downstream may hold a live
+						// reference into the provider's in-flight message.
+						this.emit("message:update", {
+							runId,
+							turnId,
+							message: structuredClone(message),
+							event: structuredClone(event),
+						});
+						this.rate.inFlight(message.usage.output);
+					},
+					end: () => undefined,
 				},
-				update: (message, event) => {
-					// Every frame is a snapshot: nothing downstream may hold a live
-					// reference into the provider's in-flight message.
-					this.emit("message:update", {
+			);
+
+			if (assistant.stopReason !== "error") {
+				if (attempt > 1) this.emit("retry:end", { runId, step: turnId, attempt, success: true });
+				break;
+			}
+			// A failed attempt is never journaled: it is not history, and it must
+			// not enter the context the next attempt sends. Retryable transport
+			// failures get another attempt; deterministic ones end the run.
+			const retryable = isRetryableAssistantError(assistant);
+			if (!retryable || attempt >= policy.maxAttempts) {
+				if (attempt > 1) {
+					this.emit("retry:end", {
 						runId,
-						turnId,
-						message: structuredClone(message),
-						event: structuredClone(event),
+						step: turnId,
+						attempt,
+						success: false,
+						finalError: assistant.errorMessage ?? `Assistant request ended with ${assistant.stopReason}`,
 					});
-					this.rate.inFlight(message.usage.output);
-				},
-				end: () => undefined,
-			},
-		);
+				}
+				break;
+			}
+			const notBefore = retryNotBefore(policy, attempt);
+			this.emit("retry:scheduled", {
+				runId,
+				step: turnId,
+				attempt: attempt + 1,
+				maxAttempts: policy.maxAttempts,
+				delayMs: retryDelayMs(policy, attempt),
+				notBefore,
+				errorMessage: assistant.errorMessage ?? "Assistant request failed",
+			});
+			await waitUntil(notBefore, signal);
+			attempt += 1;
+			this.emit("retry:start", { runId, step: turnId, attempt });
+		}
 		// The provider's own count is what the rate commits; the streaming estimate
 		// only ever stands in until the message settles.
 		this.rate.commit(assistant.usage.output);

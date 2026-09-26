@@ -130,6 +130,24 @@ export interface ToolEvents {
 	};
 }
 
+export interface RetryEvents {
+	/** A retryable failure scheduled another attempt, with the backoff that follows. */
+	"retry:scheduled": {
+		runId: string;
+		step: string;
+		/** The attempt that will run next (1-based). */
+		attempt: number;
+		maxAttempts: number;
+		delayMs: number;
+		notBefore: number;
+		errorMessage: string;
+	};
+	/** The backoff elapsed and the retried call is starting. */
+	"retry:start": { runId: string; step: string; attempt: number };
+	/** A retried call finished: success, or the failure that ended the run. */
+	"retry:end": { runId: string; step: string; attempt: number; success: boolean; finalError?: string };
+}
+
 export interface UsageEvents {
 	/** One usage measurement landed; totals are the session aggregate after it. */
 	"usage:recorded": { row: UsageRow; totals: Usage };
@@ -158,6 +176,7 @@ export interface KernelEvents
 		TurnEvents,
 		MessageEvents,
 		PromptEvents,
+		RetryEvents,
 		ToolEvents,
 		UsageEvents,
 		StateEvents,
@@ -200,6 +219,9 @@ export const KERNEL_EVENT_NAMES = [
 	"persona:missing",
 	"persona:switched",
 	"prompt:assembled",
+	"retry:end",
+	"retry:scheduled",
+	"retry:start",
 	"state:config-update",
 	"storage:appended",
 	"storage:compacted",
