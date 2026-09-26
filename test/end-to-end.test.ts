@@ -66,6 +66,18 @@ const overflow = () =>
 function session(script: AssistantMessage[], tools: KernelTool[] = []) {
 	const storage = new MemoryStorage();
 	const log = SessionLog.create(storage);
+	// The plugins a real deployment would supply.
+	const compactions: CompactionRequest[] = [];
+	const compaction = {
+		summarize: async (request: CompactionRequest) => {
+			compactions.push(request);
+			return {
+				summary: "everything before was about the migration",
+				retainedTail: [],
+				tokensBefore: request.estimatedTokens,
+			};
+		},
+	};
 	const kernel = Kernel.create({
 		config: {
 			model: { provider: "p", modelId: "m" },
@@ -73,6 +85,7 @@ function session(script: AssistantMessage[], tools: KernelTool[] = []) {
 			thinkingLevel: "low",
 			compaction: { enabled: true, reserveTokens: 1_000, keepRecentTokens: 500, maxContextTokens: 64_000 },
 		},
+		compaction,
 	});
 	for (const tool of tools) kernel.tools.register(tool);
 
@@ -86,18 +99,6 @@ function session(script: AssistantMessage[], tools: KernelTool[] = []) {
 			maxTokens: 8_192,
 		}) as never;
 
-	// The plugins a real deployment would supply.
-	const compactions: CompactionRequest[] = [];
-	const compaction = {
-		compact: async (request: CompactionRequest) => {
-			compactions.push(request);
-			return {
-				summary: "everything before was about the migration",
-				retainedTail: [],
-				tokensBefore: request.estimatedTokens,
-			};
-		},
-	};
 	const usageRows: UsageRow[] = [];
 	const runStatuses: string[] = [];
 	const on = kernelOn(kernel.ctx);
@@ -113,7 +114,6 @@ function session(script: AssistantMessage[], tools: KernelTool[] = []) {
 	const runner = new Runner(kernel, {
 		models: fake,
 		journal: log,
-		compaction,
 		systemPrompt: "You are Eta, a coding agent.",
 		toolContext: { workspace: "/w" },
 		entryProjectors: {},

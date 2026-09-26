@@ -19,7 +19,7 @@ export {
 	type CompactionOutcome,
 	type CompactionReason,
 	type CompactionRequest,
-	type CompactionService,
+	type CompactionSummarizer,
 	type ContextUsageEstimate,
 	type CutPointResult,
 	calculateContextTokens,

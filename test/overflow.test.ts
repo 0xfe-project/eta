@@ -13,7 +13,7 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
 import {
 	type CompactionRequest,
-	type CompactionService,
+	type CompactionSummarizer,
 	Kernel,
 	kernelOn,
 	MemoryStorage,
@@ -50,8 +50,26 @@ const lengthStop = (outputTokens: number): AssistantMessage =>
 const ok = (text: string): AssistantMessage =>
 	assistantMessage({ content: [{ type: "text", text }], stopReason: "stop" });
 
-function setup(script: AssistantMessage[], options: { compaction?: CompactionService } = {}) {
-	const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } } });
+function setup(script: AssistantMessage[], options: { compaction?: CompactionSummarizer } = {}) {
+	const requests: CompactionRequest[] = [];
+	const summarizer: CompactionSummarizer =
+		options.compaction ??
+		({
+			summarize: async (request: CompactionRequest) => ({
+				summary: "compacted history",
+				retainedTail: [],
+				tokensBefore: request.estimatedTokens,
+			}),
+		} satisfies CompactionSummarizer);
+	const kernel = Kernel.create({
+		config: { model: { provider: "p", modelId: "m" } },
+		compaction: {
+			summarize: async (request) => {
+				requests.push(request);
+				return summarizer.summarize(request);
+			},
+		},
+	});
 	const fake = fakeModels(script);
 	// A model with a window and an output budget, so both overflow signals work.
 	fake.getModel = () =>
@@ -63,25 +81,9 @@ function setup(script: AssistantMessage[], options: { compaction?: CompactionSer
 			maxTokens: 8_192,
 		}) as never;
 	const log = SessionLog.create(new MemoryStorage());
-	const requests: CompactionRequest[] = [];
-	const inner: CompactionService =
-		options.compaction ??
-		({
-			compact: async (request: CompactionRequest) => ({
-				summary: "compacted history",
-				retainedTail: [],
-				tokensBefore: request.estimatedTokens,
-			}),
-		} satisfies CompactionService);
 	const runner = new Runner(kernel, {
 		models: fake,
 		journal: log,
-		compaction: {
-			compact: async (request) => {
-				requests.push(request);
-				return inner.compact(request);
-			},
-		},
 		toProviderMessages: (messages) =>
 			messages.flatMap((message) =>
 				message.role === "compactionSummary"
@@ -162,7 +164,7 @@ describe("context overflow", () => {
 	});
 
 	it("fails when the compaction service declines", async () => {
-		const declining: CompactionService = { compact: async () => undefined };
+		const declining: CompactionSummarizer = { summarize: async () => undefined };
 		const { kernel, runner, requests, compactions, dispose } = setup([overflowError()], { compaction: declining });
 		kernel.inject(userMsg("go"));
 		const result = await runner.run();

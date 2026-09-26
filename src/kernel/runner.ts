@@ -36,13 +36,7 @@ import {
 	evaluateToolResult,
 	onTurnStart,
 } from "./cadence";
-import {
-	type CompactionOutcome,
-	type CompactionService,
-	estimateContextTokens,
-	fitCompactionSettings,
-	shouldCompact,
-} from "./compaction";
+import { estimateContextTokens } from "./compaction";
 import type { ConfigService } from "./config";
 import { AbortRequested, createGate, type Gate, type GateControl } from "./effect-gate";
 import type { GoalService } from "./goal";
@@ -85,11 +79,6 @@ export interface RunnerOptions {
 	 * is how an extension teaches the transcript about its own entries.
 	 */
 	entryProjectors?: Record<string, (entry: Entry) => AgentMessage | undefined>;
-	/**
-	 * Compaction, when a plugin provides one. The runner only calls it: at a run
-	 * boundary when the history no longer fits, and after a context overflow.
-	 */
-	compaction?: CompactionService;
 	/**
 	 * Project the transcript into provider messages. Required once the context
 	 * holds a message the provider has no vocabulary for — a compaction or branch
@@ -165,8 +154,6 @@ export class Runner {
 	private gate: { gate: Gate; control: GateControl } | undefined;
 	private readonly pendingEffects = new Set<Promise<unknown>>();
 	private readonly cadence = createCadenceState();
-	/** One overflow recovery per run: a second overflow is a real failure. */
-	private overflowRecoveryUsed = false;
 	private autoPumpOff: (() => boolean) | undefined;
 
 	constructor(kernel: Kernel, options: RunnerOptions) {
@@ -180,6 +167,34 @@ export class Runner {
 		this.tools = kernel.tools;
 		this.goal = kernel.goal;
 		this.persona = kernel.persona;
+		// The runner owns the context; compaction is the one service allowed to
+		// read and replace it (REFACTOR.md §3 ruling 4).
+		kernel.compaction.attach({
+			readContext: () => this.readContext(),
+			replaceContext: (summary, options) => this.replaceContext(summary, options),
+			recordCompaction: (input) => this.recordCompaction(input),
+			entries: () => this.journal?.graph.pathOldestFirst() ?? [],
+			request: () => {
+				const config = this.config.get();
+				const identity = config.model;
+				return {
+					model: this.models.getModel(identity.provider, identity.modelId),
+					thinkingLevel: config.thinkingLevel,
+					streamOptions: config.streamOptions,
+					signal: this.runSignal(),
+					runId: this.currentRunId ?? "",
+					ask: (prompt) =>
+						this.models.completeSimple(
+							this.models.getModel(identity.provider, identity.modelId)!,
+							{
+								...(prompt.systemPrompt === undefined ? {} : { systemPrompt: prompt.systemPrompt }),
+								messages: prompt.messages.filter(isMessage),
+							},
+							{ signal: this.runSignal() },
+						),
+				};
+			},
+		});
 		if (options.autoPump) {
 			this.autoPumpOff = kernelOnAuto(kernel.ctx, () => {
 				if (!this.pumping && this.kernel.inboxDepth > 0) {
@@ -236,8 +251,8 @@ export class Runner {
 	 */
 	replaceContext(
 		summary: string,
-		options: { retainedTail?: readonly AgentMessage[]; tokensBefore?: number; usage?: Usage } = {},
-	): CompactionEntry | undefined {
+		options: { retainedTail?: readonly AgentMessage[]; tokensBefore?: number } = {},
+	): void {
 		const retainedTail = [...(options.retainedTail ?? [])];
 		const tokensBefore = options.tokensBefore ?? estimateContextTokens(this.transcript).tokens;
 		this.transcript.length = 0;
@@ -248,14 +263,23 @@ export class Runner {
 			timestamp: Date.now(),
 		});
 		this.transcript.push(...retainedTail);
+	}
+
+	/** Journal a compaction; the service calls this after replacing the context. */
+	private recordCompaction(input: {
+		summary: string;
+		retainedTail: readonly AgentMessage[];
+		tokensBefore: number;
+		usage?: Usage;
+	}): CompactionEntry | undefined {
 		return this.journal?.record<CompactionEntry>({
 			id: `compaction-${Date.now().toString(36)}`,
 			parentId: null,
 			type: "compaction",
-			summary,
-			retainedTail,
-			tokensBefore,
-			...(options.usage === undefined ? {} : { usage: options.usage }),
+			summary: input.summary,
+			retainedTail: [...input.retainedTail],
+			tokensBefore: input.tokensBefore,
+			...(input.usage === undefined ? {} : { usage: input.usage }),
 		});
 	}
 
@@ -381,7 +405,6 @@ export class Runner {
 		const runId = crypto.randomUUID();
 		const { gate, control } = createGate();
 		this.gate = { gate, control };
-		this.overflowRecoveryUsed = false;
 		// A new run starts the throughput window over: nothing has been produced yet.
 		this.rate.reset();
 		this.emit("turn:run-start", { runId, startedAt: Date.now() });
@@ -413,7 +436,9 @@ export class Runner {
 				this.currentRunId = runId;
 				this.currentTurnId = crypto.randomUUID();
 				this.turnToolResults = [];
-				if (turn === 1) await this.compactForWindow(model, runId);
+				// Compaction's threshold decision belongs to the service; the runner
+				// only knows that a run is starting.
+				if (turn === 1) await this.kernel.compaction.threshold();
 				const assistant = await this.takeTurn(model);
 				if (assistant === undefined) break;
 				if (assistant.stopReason === "error") {
@@ -494,83 +519,6 @@ export class Runner {
 			return this.run();
 		}
 		return result;
-	}
-
-	/**
-	 * Compact before the first request when the history no longer fits the model
-	 * that owns it (eta-agent's `compactForWindow`). A session written under a
-	 * bigger model would otherwise be sent whole to a smaller one.
-	 */
-	private async compactForWindow(model: Model<Api>, runId: string): Promise<void> {
-		await this.runCompaction("threshold", model, runId);
-	}
-
-	/** Ask the compaction service to cut, then adopt what it produced. */
-	private async runCompaction(
-		reason: "threshold" | "overflow" | "manual",
-		model: Model<Api>,
-		runId: string,
-	): Promise<boolean> {
-		const compaction = this.options.compaction;
-		if (compaction === undefined) return false;
-		const config = this.config.get();
-		const settings = fitCompactionSettings(config.compaction, model);
-		const estimate = estimateContextTokens(this.transcript);
-		if (reason !== "overflow" && !shouldCompact(estimate.tokens, model.contextWindow, settings)) return false;
-
-		this.emit("compaction:start", { runId, reason, startedAt: Date.now() });
-		let outcome: CompactionOutcome | undefined;
-		try {
-			outcome = await compaction.compact({
-				reason,
-				messages: this.readContext(),
-				entries: this.journal?.graph.pathOldestFirst() ?? [],
-				settings,
-				contextWindow: model.contextWindow,
-				estimatedTokens: estimate.tokens,
-				model,
-				thinkingLevel: config.thinkingLevel,
-				streamOptions: config.streamOptions,
-				signal: this.runSignal(),
-				summarize: async (prompt) => {
-					const stream = await this.models.completeSimple(
-						model,
-						{
-							...(prompt.systemPrompt === undefined ? {} : { systemPrompt: prompt.systemPrompt }),
-							messages: prompt.messages.filter(isMessage),
-						},
-						{ signal: this.runSignal() },
-					);
-					return stream;
-				},
-			});
-		} catch (error) {
-			this.emit("compaction:end", {
-				runId,
-				reason,
-				endedAt: Date.now(),
-				status: "failed",
-				error: error instanceof Error ? error.message : String(error),
-			});
-			return false;
-		}
-		if (outcome === undefined) {
-			this.emit("compaction:end", { runId, reason, endedAt: Date.now(), status: "declined" });
-			return false;
-		}
-		const entry = this.replaceContext(outcome.summary, {
-			retainedTail: outcome.retainedTail,
-			tokensBefore: outcome.tokensBefore,
-			usage: outcome.usage,
-		});
-		this.emit("compaction:end", {
-			runId,
-			reason,
-			endedAt: Date.now(),
-			status: "completed",
-			...(entry === undefined ? {} : { entryId: entry.id }),
-		});
-		return true;
 	}
 
 	/** True when the run should continue (a nudge went into the transcript). */
@@ -696,9 +644,9 @@ export class Runner {
 			// waiting: the same request cannot fit until the context shrinks.
 			const overflow =
 				isContextOverflow(assistant, model.contextWindow) || isRecoverableLength(assistant, intendedOutputLimit);
-			if (overflow && !this.overflowRecoveryUsed) {
-				this.overflowRecoveryUsed = true;
-				if (await this.runCompaction("overflow", model, runId)) continue;
+			if (overflow) {
+				// One recovery per run, enforced by the service.
+				if (await this.kernel.compaction.overflow()) continue;
 				break;
 			}
 			if (assistant.stopReason !== "error") break;
