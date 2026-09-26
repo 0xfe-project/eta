@@ -26,14 +26,6 @@ import type { Emit } from "../types/events";
 import { kernelEmit, kernelOn } from "../types/events";
 import type { AgentMessage, ThinkingLevel, Usage } from "../types/messages";
 import { consumeAssistantStream } from "./assistant";
-import {
-	type CadenceState,
-	createCadenceState,
-	DEFAULT_REMINDER_INTERVAL,
-	DEFAULT_TASK_TOOL_NAMES,
-	evaluateToolResult,
-	onTurnStart,
-} from "./cadence";
 import { estimateContextTokens } from "./compaction";
 import type { ConfigService } from "./config";
 import { AbortRequested, createGate, type Gate, type GateControl } from "./effect-gate";
@@ -144,7 +136,6 @@ export class Runner {
 	private inFlight: Promise<RunResult> | undefined;
 	private gate: { gate: Gate; control: GateControl } | undefined;
 	private readonly pendingEffects = new Set<Promise<unknown>>();
-	private readonly cadence = createCadenceState();
 	private autoPumpOff: (() => boolean) | undefined;
 
 	constructor(kernel: Kernel, options: RunnerOptions) {
@@ -532,7 +523,6 @@ export class Runner {
 	private async takeTurn(model: Model<Api>): Promise<AssistantMessage | undefined> {
 		const runId = this.currentRunId ?? "";
 		const turnId = this.currentTurnId ?? "";
-		onTurnStart(this.cadence);
 		const toolContext = await this.resolveToolContext();
 		const systemPrompt = await this.resolveSystemPrompt(toolContext);
 		this.emit("turn:start", {
@@ -705,13 +695,6 @@ export class Runner {
 			terminate,
 			durationMs,
 		});
-		// The task-reminder cadence counts turns since the last task-tool call;
-		// the kernel reports the signal, the prompts plugin owns the text.
-		const due = evaluateToolResult(this.cadence, call.name, this.kernel.tasks.list().length > 0, {
-			reminderInterval: DEFAULT_REMINDER_INTERVAL,
-			taskToolNames: DEFAULT_TASK_TOOL_NAMES,
-		});
-		if (due.markDue) this.emit("task:reminder-due", { turn });
 		const text = typeof raw === "string" ? raw : JSON.stringify(raw);
 		const result = {
 			role: "toolResult" as const,
