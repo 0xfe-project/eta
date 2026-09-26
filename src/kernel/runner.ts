@@ -412,6 +412,8 @@ export class Runner {
 					break;
 				}
 				const toolCalls = assistant.content.filter((c): c is ToolCall => c.type === "toolCall");
+				// Set when every call in this turn's batch asked to end the run.
+				let allTerminate = false;
 				if (toolCalls.length === 0) {
 					// A steer that arrived while this turn was being generated still gets
 					// the next request, not the following one.
@@ -437,18 +439,23 @@ export class Runner {
 						break;
 					}
 				} else {
-					await this.executeToolBatch(toolCalls, turn);
-					// The checkpoint after a tool batch: steering lands here, so the very
-					// next request carries it. Follow-ups wait for a boundary that could
-					// end the run.
-					const { steers: afterTools } = this.kernel.takeAtBoundary({ followUpWhenNoTrigger: false });
-					if (afterTools.length > 0) this.adopt(afterTools);
+					allTerminate = await this.executeToolBatch(toolCalls, turn);
+					if (!allTerminate) {
+						// The checkpoint after a tool batch: steering lands here, so the
+						// very next request carries it. Follow-ups wait for a boundary
+						// that could end the run.
+						const { steers: afterTools } = this.kernel.takeAtBoundary({ followUpWhenNoTrigger: false });
+						if (afterTools.length > 0) this.adopt(afterTools);
+					}
 				}
 				if (!this.kernel.noteTurn()) break;
 				// The turn had tool work: keep looping. A message injected mid-run
 				// (tool or middleware) never interrupts; it opens the next turn via
 				// the drain at the top of the loop.
 				await this.journal?.commit();
+				// Every call in the batch asked to end the run (eta-agent's
+				// allTerminate checkpoint): the model is not asked again.
+				if (allTerminate) break;
 			}
 		} catch (caught) {
 			// Cancellation is expected control flow, not a failure: it unwinds the
@@ -756,7 +763,7 @@ export class Runner {
 	 * a failure in one call does not cancel its siblings — every call has to
 	 * produce a result, or the model is left with a call it never heard back on.
 	 */
-	private async executeToolBatch(calls: readonly ToolCall[], turn: number): Promise<void> {
+	private async executeToolBatch(calls: readonly ToolCall[], turn: number): Promise<boolean> {
 		const execution = this.config.read("toolExecution");
 		const runId = this.currentRunId ?? "";
 		const turnId = this.currentTurnId ?? "";
@@ -780,14 +787,24 @@ export class Runner {
 				track: <T>(work: Promise<T>) => this.track(work),
 			},
 		);
+		let allTerminate = outcomes.length > 0;
 		for (const outcome of outcomes) {
 			const call = calls.find((candidate) => candidate.id === outcome.id)!;
-			await this.recordToolResult(call, outcome.result, turn, started.get(outcome.id) ?? Date.now());
+			const terminate = isTerminatingResult(outcome.result);
+			if (!terminate) allTerminate = false;
+			await this.recordToolResult(call, outcome.result, turn, started.get(outcome.id) ?? Date.now(), terminate);
 		}
+		return allTerminate;
 	}
 
 	/** Emit the result event and put the tool result into the transcript. */
-	private async recordToolResult(call: ToolCall, raw: unknown, turn: number, startedAt: number): Promise<void> {
+	private async recordToolResult(
+		call: ToolCall,
+		raw: unknown,
+		turn: number,
+		startedAt: number,
+		terminate: boolean,
+	): Promise<void> {
 		const runId = this.currentRunId ?? "";
 		const turnId = this.currentTurnId ?? "";
 		const durationMs = Date.now() - startedAt;
@@ -799,7 +816,7 @@ export class Runner {
 			toolName: call.name,
 			result: raw,
 			isError,
-			terminate: false,
+			terminate,
 			durationMs,
 		});
 		const text = typeof raw === "string" ? raw : JSON.stringify(raw);
@@ -814,6 +831,9 @@ export class Runner {
 		this.transcript.push(result);
 		this.turnToolResults.push(result);
 		const entry = this.journal?.recordMessage(result);
+		// A tool that asked to terminate ends the run: the entry says so, and the
+		// loop stops after this batch instead of asking the model again.
+		if (terminate && entry !== undefined) entry.terminate = true;
 		if (entry !== undefined) this.emit("message:end", { runId, message: result, entryId: entry.id });
 	}
 
@@ -894,6 +914,11 @@ function usageId(): string {
 
 function kernelOnAuto(ctx: Parameters<typeof kernelOn>[0], onInject: () => void): () => boolean {
 	return kernelOn(ctx)("inject:received", onInject);
+}
+
+/** Whether a tool result asks for the run to end after this turn. */
+function isTerminatingResult(raw: unknown): boolean {
+	return typeof raw === "object" && raw !== null && (raw as { terminate?: unknown }).terminate === true;
 }
 
 function isMessage(m: AgentMessage): m is Message {
