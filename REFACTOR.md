@@ -390,6 +390,17 @@ runner 是 turn 循环，不是服务容器。这轮把四件事抽成 kernel se
 | 空闲唤醒 | `RunPump`：订阅 inject:received + turn:run-end，runner 空闲且有活就开 run；`runner.running` 是只读事实 | 零（runner 不再有 autoPump/pumping） |
 | generation 的 retry/overflow/backoff | `generateWithRetry()` 纯函数（不是 service：它需要调用方的 context 组装、observer、signal、compaction，包成 service 只是把四样东西再绕一遍 bus） | takeTurn 变成"组装 → 生成 → 记账" |
 
+**第四轮：session 的可恢复性补完**（本轮，四件事）
+
+| 补的东西 | 现在是什么 |
+|---|---|
+| session 语义落盘 | `SessionLog.merge/rollback/forkAt`：merge 是一条 entry（第二父），rollback 把分支 tip 写成 value（`eta.session.tip`，每次 tip 移动写一次），`load` 读它。之前这些操作只在内存里，reload 会把 rollback 撤销的东西又捞回来 |
+| 工具流式中间结果 | `ToolCallInfo.update` + `tool:update` 事件；channel 只在调用运行期间开放（settle/抛错/取消即关闭），partial 是克隆过的快照且永不落 journal |
+| config / tasks 值落盘 | `eta.session.config`（整个 KernelConfig）与 `eta.tasks.state`（StoredTask[]，与 eta-agent 真实 journal 同命名空间），订阅者整份写、last write wins |
+| session 装配 | `openSession({storage, models, config?})`：一条通路同时服务"新 session"和"重启"——重放 graph + tip、goal 从其 entries、ledger 从 value、config 从 value、transcript 从分支视图，并顺手接上 goal 的落盘订阅 |
+
+顺带修掉被发现的两个真 bug：`ConfigService.update` 先发事件后装状态（订阅者读到旧值）；`commit()` 空转早退导致 rollback 的 tip 写不进去。真实模型 smoke 现在整条走 `openSession`，并断言配置确实是从盘上恢复的。
+
 **真实模型验收**（`bun run smoke`，env 门控，不硬编码任何 provider/model）：
 - `test/smoke.e2e.test.ts`（eta-core，内存 storage）：真 provider 的 stream delta、真 usage、真工具调用、真落盘、重放后回答
 - `test/smoke.e2e.test.ts`（eta-storage-jsonl，真文件）：同一场景写进 jsonl，关掉重开仍完整（repairTornTail 报告零损坏）

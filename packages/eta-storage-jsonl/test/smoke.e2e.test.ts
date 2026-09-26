@@ -43,6 +43,7 @@ describe.skipIf(configPath === undefined)("real model smoke on disk", () => {
 			});
 			// The model decides how to phrase the note; the word has to be in it.
 			expect(report.notes.join(" ").toLowerCase()).toContain("kumquat");
+			expect(report.configRestored).toBe(true);
 			expect(report.entries).toBeGreaterThanOrEqual(4);
 			await storage.close();
 

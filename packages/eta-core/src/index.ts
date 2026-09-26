@@ -74,6 +74,7 @@ export {
 export { Kernel, type KernelInspect, type KernelOptions } from "./kernel/kernel";
 export { MetricsService } from "./kernel/metrics";
 export { MutationQueue } from "./kernel/mutation-queue";
+export { type OpenSession, type OpenSessionOptions, openSession } from "./kernel/open";
 export { OutputRate } from "./kernel/output-rate";
 export { PersonaService, renderPersonaBlock } from "./kernel/persona";
 export { type KernelModels, piAiModels } from "./kernel/providers";
