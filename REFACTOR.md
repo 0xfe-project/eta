@@ -368,10 +368,8 @@ interface EtaPlugin {
 - [x] K4 session 语义（`session/graph.ts` `session/fork.ts` `session/merge.ts`）
 - [x] K5 storage（`storage/types.ts` `storage/memory.ts` `session/session-log.ts` + `@eta/storage-jsonl`）
 
-### K5 恢复规则（定了）
+### K5 恢复规则（对齐 §4.2 原文）
 
-**run 是工作单位，boundary 是稳定点。** 一次 run 写 `run.started` 标记，每个 turn 结束提交一次（活 journal 可被旁观者读），干净结束时写 boundary commit（带 `run.terminateEntryId`）。重放：从最后一个 boundary 之后的一切都属于没跑完的 run，丢掉；boundary 之后写的 KV 一并回滚（journal 自己的 marker 键除外）。
+**replay 到最后一条完整 entry，半截 turn 丢弃，完好的 turn 保留。** 没有 run 标记、没有"丢弃整个 aborted run"：一个 commit 落盘即是状态，journal 里只有完整 turn（每 turn 一个原子 commit；半截 turn 根本没机会写进去——写一半的字节被 repairTornTail 裁掉）。重启后宿主重新驱动未完成的事（goal 续杯 / 用户重发），turn 幂等可重来。这就是删掉 drive/ 状态机换来的东西：一条规则代替一本账。
 
-- 不恢复半截 run：宿主重新驱动它。这就是删掉 durable-operation 状态机换来的东西——一条规则代替一本账
-- `SessionLog.load()` = 恢复语义（裁剪）；`SessionLog.view()` = 活视图（不裁剪），dashboard/第二窗口用它
-- per-turn 提交不为 resume 服务，只为"跑着的时候能被读"服务
+（上一版我擅自加了 run.started/boundary 值标记和整 run 丢弃 + KV 回滚，与 §4.2 冲突，已废弃。教训：语义级文档改动必须先提案后落盘。）

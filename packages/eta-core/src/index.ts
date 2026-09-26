@@ -33,25 +33,43 @@ export {
 	ToolService,
 } from "./kernel/tools.ts";
 export { type ForkedChain, type ForkOptions, type ForkSelection, forkChain, selectBranchFork } from "./session/fork.ts";
+export { recordGoalEntries } from "./session/goal-journal.ts";
 export { EntryGraph, type GraphNode, spliceMergedChain } from "./session/graph.ts";
 export { type MergeOptions, type MergeResult, mergeBranch, type RollbackResult, rollback } from "./session/merge.ts";
-export {
-	type RecoveryReport,
-	RUN_BOUNDARY,
-	RUN_STARTED,
-	recordGoalEntries,
-	SessionLog,
-} from "./session/session-log.ts";
+export { SessionLog } from "./session/session-log.ts";
 export { MemoryStorage } from "./storage/memory.ts";
+export { InMemoryStorageState } from "./storage/state.ts";
 export {
+	type BranchScan,
+	type CommitResult,
 	type CompactResult,
-	type JournalCommit,
+	deleteValue,
+	type EntryCursor,
+	type EntryScan,
 	type RepairResult,
+	type SessionStats,
 	STORAGE_METHODS,
+	type StorageBranchScan,
 	type StorageService,
+	type StorageWrite,
+	type StoredValue,
+	setValue,
+	type UsageRow,
+	type UsageScan,
+	type UsageWrite,
+	type Value,
+	type ValueDeleteWrite,
+	type ValueSetWrite,
+	type ValueWrite,
+	value,
 } from "./storage/types.ts";
-export { assistantMessage, fakeProvider, type RecordedCall } from "./testing/fake-provider.ts";
-export { type StorageContractHandle, type StorageFactory, storageContract } from "./testing/storage-contract.ts";
+export { assistantMessage, type FakeProvider, fakeProvider, type RecordedCall } from "./testing/fake-provider.ts";
+export {
+	type StorageContractHandle,
+	type StorageContractOptions,
+	type StorageFactory,
+	storageContract,
+} from "./testing/storage-contract.ts";
 export * from "./types/entries.ts";
 export {
 	type ContextPartStats,
@@ -70,6 +88,8 @@ export {
 	type ToolEvents,
 	type TurnEvents,
 } from "./types/events.ts";
+export type { JsonValue } from "./types/json.ts";
 export * from "./types/messages.ts";
 export * from "./types/persona.ts";
 export * from "./types/tasks.ts";
+export { addUsage, emptyUsage, sessionTokenTotal, subtractUsage } from "./types/usage.ts";

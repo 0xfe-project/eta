@@ -1,71 +1,82 @@
 /**
- * MemoryStorage — the in-process StorageService (REFACTOR.md §K5).
+ * MemoryStorage — the in-process StorageService (REFACTOR.md §4).
  *
- * Same contract as the file-backed one, without the disk: used by tests, by
- * throwaway sessions, and as the reference implementation other backends are
- * checked against. Apples-to-apples with a file journal: every write, entry or
- * KV, goes into the journal as a commit, so `readJournal` of a memory storage
- * replays into a fresh storage exactly like a file's would.
- *
- * Nothing here is durable by design — `flush` resolves immediately because the
- * journal already is the process's own memory.
+ * All semantics live in InMemoryStorageState; this class is the async seam
+ * around it. Used by tests, by throwaway sessions, and as the reference every
+ * other backend is checked against. Nothing here is durable by design.
  */
-import type { CompactResult, JournalCommit, RepairResult, StorageService } from "./types.ts";
-
-/** Rough size a backend would report; enough for compaction thresholds in tests. */
-const COMMIT_BYTES = 64;
-const ENTRY_BYTES = 32;
+import type { Entry } from "../types/entries.ts";
+import { InMemoryStorageState } from "./state.ts";
+import type {
+	CommitResult,
+	CompactResult,
+	EntryScan,
+	RepairResult,
+	SessionStats,
+	StorageBranchScan,
+	StorageService,
+	StorageWrite,
+	StoredValue,
+	UsageRow,
+	UsageScan,
+	Value,
+} from "./types.ts";
 
 export class MemoryStorage implements StorageService {
-	private commits: JournalCommit[] = [];
-	private readonly values = new Map<string, unknown>();
+	private readonly state = new InMemoryStorageState();
 	private closed = false;
+	private bytes = 0;
 
-	async append(commit: JournalCommit): Promise<void> {
+	/** Repeated entry/usage ids seen, forwarded from the shared state. */
+	get repeated(): number {
+		return this.state.repeated;
+	}
+
+	async commit(writes: StorageWrite[]): Promise<CommitResult> {
 		this.assertOpen();
-		this.commits.push(structuredClone(commit));
-		this.applyCommit(commit);
+		this.bytes += writes.length * 64;
+		return this.state.commit(writes);
 	}
 
-	async readJournal(): Promise<JournalCommit[]> {
-		return structuredClone(this.commits);
+	async getEntries(ids: string[]): Promise<Map<string, Entry>> {
+		return this.state.getEntries(ids);
 	}
 
-	/** Replace the journal with one commit holding what is still alive. */
+	async getValue<T>(address: Value<T>): Promise<StoredValue<T> | undefined> {
+		return this.state.getValue(address);
+	}
+
+	async listValues<T>(prefix: Value<T>): Promise<StoredValue<T>[]> {
+		return this.state.listValues(prefix);
+	}
+
+	async scanBranch(query: StorageBranchScan): Promise<Entry[]> {
+		return this.state.scanBranch(query);
+	}
+
+	async scanEntries(query: EntryScan): Promise<Entry[]> {
+		return this.state.scanEntries(query);
+	}
+
+	async scanUsage(query: UsageScan): Promise<UsageRow[]> {
+		return this.state.scanUsage(query);
+	}
+
+	async getStats(): Promise<SessionStats> {
+		return this.state.getStats();
+	}
+
 	async compactJournal(): Promise<CompactResult> {
 		this.assertOpen();
-		const entries = this.commits.flatMap((commit) => commit.entries);
-		const beforeBytes = this.journalBytes();
-		const kept: Record<string, unknown> = {};
-		for (const [key, value] of this.values) kept[key] = value;
-		this.commits =
-			entries.length > 0 || this.values.size > 0
-				? [{ entries, ...(Object.keys(kept).length > 0 ? { values: kept } : {}) }]
-				: [];
-		return { rewritten: true, beforeBytes, afterBytes: this.journalBytes() };
+		const beforeBytes = this.bytes;
+		const alive = this.state.currentWrites().length;
+		this.bytes = Math.max(1, alive * 48);
+		return { rewritten: true, beforeBytes, afterBytes: this.bytes };
 	}
 
 	/** Nothing tears in memory; the shape exists so backends stay interchangeable. */
 	async repairTornTail(): Promise<RepairResult> {
 		return { droppedBytes: 0, droppedRecords: 0, trailingOnly: true };
-	}
-
-	/** Copied out: a caller mutating a value must not rewrite stored state. */
-	async get(key: string): Promise<unknown | undefined> {
-		const value = this.values.get(key);
-		return value === undefined ? undefined : structuredClone(value);
-	}
-
-	async set(key: string, value: unknown): Promise<void> {
-		await this.append({ entries: [], values: { [key]: value } });
-	}
-
-	async remove(key: string): Promise<void> {
-		await this.append({ entries: [], deletes: [key] });
-	}
-
-	async keys(): Promise<string[]> {
-		return [...this.values.keys()];
 	}
 
 	async flush(): Promise<void> {}
@@ -75,21 +86,13 @@ export class MemoryStorage implements StorageService {
 	}
 
 	/** Bytes a real journal of this state would occupy. */
-	bytes(): number {
-		return this.journalBytes();
+	journalBytes(): number {
+		return this.bytes;
 	}
 
-	private journalBytes(): number {
-		return this.commits.reduce((total, commit) => total + COMMIT_BYTES + commit.entries.length * ENTRY_BYTES, 0);
-	}
-
-	private applyCommit(commit: JournalCommit): void {
-		if (commit.values !== undefined) {
-			for (const [key, value] of Object.entries(commit.values)) this.values.set(key, structuredClone(value));
-		}
-		if (commit.deletes !== undefined) {
-			for (const key of commit.deletes) this.values.delete(key);
-		}
+	/** The underlying state, for tests that need to inspect it directly. */
+	get internalState(): InMemoryStorageState {
+		return this.state;
 	}
 
 	private assertOpen(): void {

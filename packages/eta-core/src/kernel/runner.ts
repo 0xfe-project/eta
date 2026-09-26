@@ -43,8 +43,10 @@ export interface RunnerOptions {
 	 * journaled again — the journal is where it came from.
 	 */
 	initialTranscript?: readonly AgentMessage[];
-	/** Optional journal: the runner persists what it appends, and the run
-	 * boundary becomes a durable stable point (REFACTOR.md §K5). */
+	/**
+	 * Optional journal: the runner records what it appends and commits once per
+	 * turn, so the journal holds complete turns and nothing else (§K5).
+	 */
 	journal?: SessionLog;
 	/**
 	 * When true, an inject arriving while the runner is idle immediately starts
@@ -123,7 +125,6 @@ export class Runner {
 	private async runLoop(): Promise<RunResult> {
 		let error: string | undefined;
 		this.pumping = true;
-		await this.journal?.beginRun();
 		for (;;) {
 			await this.drainInjected();
 			const turn = this.kernel.turns + 1;
@@ -153,13 +154,12 @@ export class Runner {
 			// The turn had tool work: keep looping. A message injected mid-run
 			// (tool or middleware) never interrupts; it opens the next turn via
 			// the drain at the top of the loop.
-			// Per-turn commits make the live journal readable mid-run; recovery
-			// still starts from the last boundary, not from here.
-			await this.journal?.commitTurn();
+			await this.journal?.commit();
 		}
 		this.pumping = false;
-		if (error === undefined) await this.journal?.endRun();
-		else await this.journal?.commitTurn();
+		// Whatever is left staged (the final turn) lands as one commit, so the
+		// journal holds complete turns and nothing else.
+		await this.journal?.commit();
 		const result: RunResult = { turns: this.kernel.turns, error };
 		this.emit("turn:run-end", { turns: result.turns, usage: zeroUsage() });
 		if (this.options.autoPump && this.kernel.injectQueueDepth > 0 && error === undefined) {
@@ -219,13 +219,13 @@ export class Runner {
 	/** Add a message to the transcript and the journal, in step. */
 	private push(message: AgentMessage): void {
 		this.transcript.push(message);
-		this.journal?.stageMessage(message);
+		this.journal?.recordMessage(message);
 	}
 
 	private async drainInjected(): Promise<void> {
 		for (const message of this.kernel.drainInjected()) {
 			this.transcript.push(message);
-			this.journal?.stageMessage(message);
+			this.journal?.recordMessage(message);
 		}
 	}
 
@@ -236,9 +236,9 @@ export class Runner {
 			reasoning: this.options.thinkingLevel,
 		} as never);
 		this.transcript.push(assistant);
-		this.journal?.stageMessage(assistant);
+		this.journal?.recordMessage(assistant);
 		// The assistant's intent is durable before its tools have side effects.
-		await this.journal?.commitTurn();
+		await this.journal?.commit();
 		this.emit("turn:end", { turn, usage: assistant.usage, stopReason: assistant.stopReason });
 		return assistant;
 	}
@@ -260,7 +260,7 @@ export class Runner {
 			timestamp: Date.now(),
 		} as AgentMessage;
 		this.transcript.push(result);
-		this.journal?.stageMessage(result);
+		this.journal?.recordMessage(result);
 	}
 
 	private assembleContext(): Context {
