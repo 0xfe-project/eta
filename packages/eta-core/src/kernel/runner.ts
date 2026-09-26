@@ -10,7 +10,7 @@
  * the journal to the last stable boundary and rerun the current turn".
  */
 import type { Api, AssistantMessage, Context, Message, Model, Tool as PiTool, ToolCall } from "@earendil-works/pi-ai";
-import { isRetryableAssistantError } from "@earendil-works/pi-ai";
+import { isContextOverflow, isRecoverableLength, isRetryableAssistantError } from "@earendil-works/pi-ai";
 import type { SessionLog } from "../session/session-log.ts";
 import type { CompactionEntry } from "../types/entries.ts";
 import type { Emit } from "../types/events.ts";
@@ -108,6 +108,8 @@ export class Runner {
 	private inFlight: Promise<RunResult> | undefined;
 	private readonly rate = new OutputRate();
 	private runAbort: AbortController | undefined;
+	/** One overflow recovery per run: a second overflow is a real failure. */
+	private overflowRecoveryUsed = false;
 	private autoPumpOff: (() => boolean) | undefined;
 
 	constructor(kernel: Kernel, options: RunnerOptions) {
@@ -220,6 +222,7 @@ export class Runner {
 		this.pumping = true;
 		const runId = crypto.randomUUID();
 		this.runAbort = new AbortController();
+		this.overflowRecoveryUsed = false;
 		// A new run starts the throughput window over: nothing has been produced yet.
 		this.rate.reset();
 		this.emit("turn:run-start", { runId, startedAt: Date.now() });
@@ -423,22 +426,25 @@ export class Runner {
 	}
 
 	private async takeTurn(model: Model<Api>): Promise<AssistantMessage | undefined> {
-		const context = this.assembleContext();
 		const runId = this.currentRunId ?? "";
 		const turnId = this.currentTurnId ?? "";
-		this.emit("turn:start", { runId, turnId, contextParts: this.estimateParts(context) });
-		this.emit("prompt:assembled", {
-			runId,
-			systemPromptChars: (context.systemPrompt ?? "").length,
-			messages: context.messages.length,
-			attempt: 1,
-		});
+		this.emit("turn:start", { runId, turnId, contextParts: this.estimateParts(this.assembleContext()) });
 		const config = this.config.get();
 		const policy = normalizedRetryPolicy(config.retryPolicy);
 		const signal = this.runSignal();
+		const intendedOutputLimit = model.maxTokens ?? 0;
 		let attempt = 1;
 		let assistant: AssistantMessage;
 		for (;;) {
+			// Assembled per attempt: a compaction between attempts replaces the
+			// context the next request must carry.
+			const context = this.assembleContext();
+			this.emit("prompt:assembled", {
+				runId,
+				systemPromptChars: (context.systemPrompt ?? "").length,
+				messages: context.messages.length,
+				attempt,
+			});
 			assistant = await consumeAssistantStream(
 				this.models.streamSimple(model, context, {
 					...config.streamOptions,
@@ -465,10 +471,20 @@ export class Runner {
 				},
 			);
 
-			if (assistant.stopReason !== "error") {
+			if (assistant.stopReason !== "error" && assistant.stopReason !== "length") {
 				if (attempt > 1) this.emit("retry:end", { runId, step: turnId, attempt, success: true });
 				break;
 			}
+			// Context overflow is recovered by cutting the history once, not by
+			// waiting: the same request cannot fit until the context shrinks.
+			const overflow =
+				isContextOverflow(assistant, model.contextWindow) || isRecoverableLength(assistant, intendedOutputLimit);
+			if (overflow && !this.overflowRecoveryUsed) {
+				this.overflowRecoveryUsed = true;
+				if (await this.runCompaction("overflow", model, runId)) continue;
+				break;
+			}
+			if (assistant.stopReason !== "error") break;
 			// A failed attempt is never journaled: it is not history, and it must
 			// not enter the context the next attempt sends. Retryable transport
 			// failures get another attempt; deterministic ones end the run.
