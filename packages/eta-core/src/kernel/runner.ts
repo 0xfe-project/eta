@@ -75,6 +75,9 @@ export class Runner {
 	private readonly transcript: AgentMessage[] = [];
 	private emptyStops = 0;
 	private pumping = false;
+	private currentRunId: string | undefined;
+	private currentTurnId: string | undefined;
+	private turnToolResults: AgentMessage[] = [];
 	private inFlight: Promise<RunResult> | undefined;
 	private autoPumpOff: (() => boolean) | undefined;
 
@@ -125,9 +128,14 @@ export class Runner {
 	private async runLoop(): Promise<RunResult> {
 		let error: string | undefined;
 		this.pumping = true;
+		const runId = crypto.randomUUID();
+		this.emit("turn:run-start", { runId, startedAt: Date.now() });
 		for (;;) {
 			await this.drainInjected();
 			const turn = this.kernel.turns + 1;
+			this.currentRunId = runId;
+			this.currentTurnId = crypto.randomUUID();
+			this.turnToolResults = [];
 			const assistant = await this.takeTurn(turn);
 			if (assistant === undefined) break;
 			if (assistant.stopReason === "error") {
@@ -161,7 +169,13 @@ export class Runner {
 		// journal holds complete turns and nothing else.
 		await this.journal?.commit();
 		const result: RunResult = { turns: this.kernel.turns, error };
-		this.emit("turn:run-end", { turns: result.turns, usage: zeroUsage() });
+		this.emit("turn:run-end", {
+			runId,
+			turns: result.turns,
+			endedAt: Date.now(),
+			status: error === undefined ? "completed" : "failed",
+			...(error === undefined ? {} : { error }),
+		});
 		if (this.options.autoPump && this.kernel.injectQueueDepth > 0 && error === undefined) {
 			// An inject raced with the run-end above; pump it immediately.
 			return this.run();
@@ -231,25 +245,52 @@ export class Runner {
 
 	private async takeTurn(turn: number): Promise<AssistantMessage | undefined> {
 		const context = this.assembleContext();
-		this.emit("turn:start", { turn, contextParts: this.estimateParts(context) });
+		const runId = this.currentRunId ?? "";
+		const turnId = this.currentTurnId ?? "";
+		this.emit("turn:start", { runId, turnId, contextParts: this.estimateParts(context) });
+		this.emit("prompt:assembled", {
+			runId,
+			systemPromptChars: (context.systemPrompt ?? "").length,
+			messages: context.messages.length,
+			attempt: 1,
+		});
+		this.emit("message:start", { runId, turnId });
 		const assistant = await this.options.providers.complete(this.options.model, context, {
 			reasoning: this.options.thinkingLevel,
 		} as never);
 		this.transcript.push(assistant);
-		this.journal?.recordMessage(assistant);
+		const entry = this.journal?.recordMessage(assistant);
+		if (entry !== undefined) this.emit("message:end", { runId, message: assistant, entryId: entry.id });
 		// The assistant's intent is durable before its tools have side effects.
 		await this.journal?.commit();
-		this.emit("turn:end", { turn, usage: assistant.usage, stopReason: assistant.stopReason });
+		this.emit("turn:end", {
+			runId,
+			turnId,
+			message: assistant,
+			toolResults: this.turnToolResults,
+			usage: assistant.usage,
+		});
 		return assistant;
 	}
 
 	private async executeToolCall(call: ToolCall, turn: number): Promise<void> {
-		this.emit("tool:call", { name: call.name, args: call.arguments, turn });
+		const runId = this.currentRunId ?? "";
+		const turnId = this.currentTurnId ?? "";
+		this.emit("tool:start", { runId, turnId, toolCallId: call.id, toolName: call.name, args: call.arguments });
 		const started = Date.now();
 		const raw = await this.tools.execute(call.name, call.arguments, { turn, toolCallId: call.id });
 		const durationMs = Date.now() - started;
-		this.emit("tool:result", { name: call.name, result: raw, durationMs, turn });
 		const isError = typeof raw === "object" && raw !== null && "isError" in raw && raw.isError === true;
+		this.emit("tool:end", {
+			runId,
+			turnId,
+			toolCallId: call.id,
+			toolName: call.name,
+			result: raw,
+			isError,
+			terminate: false,
+			durationMs,
+		});
 		const text = typeof raw === "string" ? raw : JSON.stringify(raw);
 		const result = {
 			role: "toolResult" as const,
@@ -260,7 +301,9 @@ export class Runner {
 			timestamp: Date.now(),
 		} as AgentMessage;
 		this.transcript.push(result);
-		this.journal?.recordMessage(result);
+		this.turnToolResults.push(result);
+		const entry = this.journal?.recordMessage(result);
+		if (entry !== undefined) this.emit("message:end", { runId, message: result, entryId: entry.id });
 	}
 
 	private assembleContext(): Context {
@@ -319,15 +362,4 @@ function kernelOnAuto(ctx: Parameters<typeof kernelOn>[0], onInject: () => void)
 
 function isMessage(m: AgentMessage): m is Message {
 	return m.role === "user" || m.role === "assistant" || m.role === "toolResult";
-}
-
-function zeroUsage(): AssistantMessage["usage"] {
-	return {
-		input: 0,
-		output: 0,
-		cacheRead: 0,
-		cacheWrite: 0,
-		totalTokens: 0,
-		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-	};
 }

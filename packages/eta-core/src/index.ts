@@ -74,19 +74,25 @@ export * from "./types/entries.ts";
 export {
 	type ContextPartStats,
 	type Emit,
+	ETA_EVENT_CATEGORIES,
+	type EtaEventCategory,
 	type GoalEvents,
+	type GoalStatusName,
 	type InjectEvents,
 	KERNEL_EVENT_NAMES,
 	type KernelEventName,
 	type KernelEvents,
 	kernelEmit,
 	kernelOn,
+	type MessageEvents,
 	type On,
 	type PersonaEvents,
+	type PromptEvents,
 	type StorageEvents,
 	type TaskEvents,
 	type ToolEvents,
 	type TurnEvents,
+	type UsageEvents,
 } from "./types/events.ts";
 export type { JsonValue } from "./types/json.ts";
 export * from "./types/messages.ts";
