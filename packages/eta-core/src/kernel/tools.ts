@@ -14,8 +14,8 @@
 
 import type { Context } from "cordis";
 import { Service } from "cordis";
-import type { ToolExecution } from "../types/config.ts";
-import { AbortRequested } from "./effect-gate.ts";
+import type { ToolExecution } from "../types/config";
+import { AbortRequested } from "./effect-gate";
 
 /** The minimal tool shape the seam requires. Plugin tools may carry more. */
 export interface KernelTool<TArgs = unknown, TResult = unknown> {

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type MessageEntry, type StorageService, storageContract } from "@eta/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { JsonlStorage, type JsonlStorageOptions } from "../src/index.ts";
+import { JsonlStorage, type JsonlStorageOptions } from "../src/index";
 
 let dir = "";
 let counter = 0;

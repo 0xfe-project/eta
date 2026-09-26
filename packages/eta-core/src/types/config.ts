@@ -5,8 +5,8 @@
  * one lane, and the runner reads it live every turn.
  */
 import type { SimpleStreamOptions } from "@earendil-works/pi-ai";
-import { type AgentRetryPolicy, DEFAULT_RETRY_POLICY } from "../kernel/retry.ts";
-import type { ThinkingLevel } from "./messages.ts";
+import { type AgentRetryPolicy, DEFAULT_RETRY_POLICY } from "../kernel/retry";
+import type { ThinkingLevel } from "./messages";
 
 /** How an inbox drains at a run boundary. */
 export type QueueMode = "all" | "one-at-a-time";

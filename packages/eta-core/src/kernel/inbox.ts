@@ -13,8 +13,8 @@
  * keep several follow-ups in reserve while steering takes effect immediately.
  */
 import type { ImageContent } from "@earendil-works/pi-ai";
-import type { QueueMode } from "../types/config.ts";
-import type { AgentMessage } from "../types/messages.ts";
+import type { QueueMode } from "../types/config";
+import type { AgentMessage } from "../types/messages";
 
 export type QueueKind = "steer" | "followUp" | "nextRun";
 

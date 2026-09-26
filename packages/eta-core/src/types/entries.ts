@@ -10,8 +10,8 @@
  * so nothing here may import upward.
  */
 import type { AssistantMessage, StopReason, Usage } from "@earendil-works/pi-ai";
-import type { JsonValue } from "./json.ts";
-import type { AgentMessage } from "./messages.ts";
+import type { JsonValue } from "./json";
+import type { AgentMessage } from "./messages";
 
 /** All first-class entry kinds. New kinds join this union explicitly. */
 export type EntryType = "message" | "compaction" | "branch_summary" | "merge" | "goal" | "ask" | "answer" | "btw";

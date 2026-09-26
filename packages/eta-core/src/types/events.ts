@@ -15,12 +15,12 @@
  *   retry, and compaction events land with their runner machinery.
  */
 import type { Context } from "cordis";
-import type { GoalStatus } from "../kernel/goal.ts";
-import type { UsageRow } from "../storage/types.ts";
-import type { Entry, GoalPayload } from "./entries.ts";
-import type { AgentMessage, AssistantMessage, AssistantMessageEvent, Usage } from "./messages.ts";
-import type { PersonaCard } from "./persona.ts";
-import type { TaskChange } from "./tasks.ts";
+import type { GoalStatus } from "../kernel/goal";
+import type { UsageRow } from "../storage/types";
+import type { Entry, GoalPayload } from "./entries";
+import type { AgentMessage, AssistantMessage, AssistantMessageEvent, Usage } from "./messages";
+import type { PersonaCard } from "./persona";
+import type { TaskChange } from "./tasks";
 
 /** eta-agent's event categories, kept verbatim. */
 export const ETA_EVENT_CATEGORIES = [
@@ -66,6 +66,11 @@ export interface TaskEvents {
 	"task:completed": TaskChange;
 	/** Semantic alias, fires alongside `task:updated` on that transition. */
 	"task:cancelled": TaskChange;
+	/**
+	 * The cadence says a task reminder is due this turn; the prompts plugin
+	 * injects the text. Fires once per cycle, transient by design.
+	 */
+	"task:reminder-due": { turn: number };
 }
 
 /** Per-part token estimates for the context donut; runner reports, UI computes. */
@@ -251,6 +256,7 @@ export const KERNEL_EVENT_NAMES = [
 	"task:cancelled",
 	"task:completed",
 	"task:created",
+	"task:reminder-due",
 	"task:removed",
 	"task:updated",
 	"tool:end",

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { forkChain } from "../src/session/fork.ts";
-import { EntryGraph } from "../src/session/graph.ts";
-import { mergeBranch, rollback } from "../src/session/merge.ts";
-import type { MessageEntry, NewEntry } from "../src/types/entries.ts";
+import { forkChain } from "../src/session/fork";
+import { EntryGraph } from "../src/session/graph";
+import { mergeBranch, rollback } from "../src/session/merge";
+import type { MessageEntry, NewEntry } from "../src/types/entries";
 
 const msg = (text: string, parentId: string | null = null): NewEntry<MessageEntry> => ({
 	id: crypto.randomUUID(),

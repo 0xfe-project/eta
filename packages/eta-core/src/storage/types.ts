@@ -15,9 +15,9 @@
  *   of stopping at the first one.
  */
 
-import type { Entry, EntryType, NewEntry } from "../types/entries.ts";
-import type { JsonValue } from "../types/json.ts";
-import type { Usage } from "../types/messages.ts";
+import type { Entry, EntryType, NewEntry } from "../types/entries";
+import type { JsonValue } from "../types/json";
+import type { Usage } from "../types/messages";
 
 /* ------------------------------------------------------------------ */
 /* Writes                                                              */

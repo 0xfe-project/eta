@@ -1,10 +1,10 @@
 import { Context } from "cordis";
 import { describe, expect, it } from "vitest";
-import { Kernel, Runner } from "../src/index.ts";
-import { PersonaService, renderPersonaBlock } from "../src/kernel/persona.ts";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider.ts";
-import { kernelOn } from "../src/types/events.ts";
-import type { PersonaCard } from "../src/types/persona.ts";
+import { Kernel, Runner } from "../src/index";
+import { PersonaService, renderPersonaBlock } from "../src/kernel/persona";
+import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
+import { kernelOn } from "../src/types/events";
+import type { PersonaCard } from "../src/types/persona";
 
 function card(id: string, content = `${id} body`): PersonaCard {
 	return { id, name: id, content };

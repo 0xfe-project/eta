@@ -6,7 +6,7 @@
  * merge-splice.ts). Storage-agnostic: a StorageService replays entries into
  * this graph to rebuild state, and persists appends from it.
  */
-import type { Entry, NewEntry } from "../types/entries.ts";
+import type { Entry, NewEntry } from "../types/entries";
 
 let counter = 0;
 function nextId(): string {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { EntryGraph, spliceMergedChain } from "../src/session/graph.ts";
-import type { Entry, MessageEntry, NewEntry } from "../src/types/entries.ts";
+import { EntryGraph, spliceMergedChain } from "../src/session/graph";
+import type { Entry, MessageEntry, NewEntry } from "../src/types/entries";
 
 const msg = (text: string): NewEntry<MessageEntry> => ({
 	id: crypto.randomUUID(),

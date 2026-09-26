@@ -1,6 +1,6 @@
 import { Context } from "cordis";
 import { describe, expect, it } from "vitest";
-import { KERNEL_EVENT_NAMES, type KernelEvents, kernelEmit, kernelOn } from "../src/types/events.ts";
+import { KERNEL_EVENT_NAMES, type KernelEvents, kernelEmit, kernelOn } from "../src/types/events";
 
 describe("event vocabulary", () => {
 	it("names are pinned against drift", () => {
@@ -30,6 +30,7 @@ describe("event vocabulary", () => {
 			  "task:cancelled",
 			  "task:completed",
 			  "task:created",
+			  "task:reminder-due",
 			  "task:removed",
 			  "task:updated",
 			  "tool:end",

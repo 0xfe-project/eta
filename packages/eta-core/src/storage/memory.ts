@@ -5,8 +5,8 @@
  * around it. Used by tests, by throwaway sessions, and as the reference every
  * other backend is checked against. Nothing here is durable by design.
  */
-import type { Entry } from "../types/entries.ts";
-import { InMemoryStorageState } from "./state.ts";
+import type { Entry } from "../types/entries";
+import { InMemoryStorageState } from "./state";
 import type {
 	CommitResult,
 	CompactResult,
@@ -20,7 +20,7 @@ import type {
 	UsageRow,
 	UsageScan,
 	Value,
-} from "./types.ts";
+} from "./types";
 
 export class MemoryStorage implements StorageService {
 	private readonly state = new InMemoryStorageState();

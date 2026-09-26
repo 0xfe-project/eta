@@ -6,9 +6,9 @@ import {
 	GoalService,
 	lastMessageShowsIntent,
 	MAX_CONTINUATIONS,
-} from "../src/kernel/goal.ts";
-import type { GoalEntry } from "../src/types/entries.ts";
-import { kernelOn } from "../src/types/events.ts";
+} from "../src/kernel/goal";
+import type { GoalEntry } from "../src/types/entries";
+import { kernelOn } from "../src/types/events";
 
 function withGoal() {
 	const ctx = new Context();

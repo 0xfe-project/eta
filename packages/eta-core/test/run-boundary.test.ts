@@ -1,9 +1,9 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
-import { isEmptyStop, Kernel, Runner } from "../src/index.ts";
-import type { KernelTool } from "../src/kernel/tools.ts";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider.ts";
-import type { AgentMessage } from "../src/types/messages.ts";
+import { isEmptyStop, Kernel, Runner } from "../src/index";
+import type { KernelTool } from "../src/kernel/tools";
+import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
+import type { AgentMessage } from "../src/types/messages";
 
 const userMsg = (text: string) => ({ role: "user" as const, content: [{ type: "text" as const, text }], timestamp: 0 });
 const nudge = (kind: string) => (): AgentMessage => userMsg(`[${kind}]`);

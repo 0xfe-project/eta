@@ -1,7 +1,7 @@
 import { Context } from "cordis";
 import { describe, expect, it } from "vitest";
-import { GoalService, Kernel } from "../src/index.ts";
-import { kernelOn } from "../src/types/events.ts";
+import { GoalService, Kernel } from "../src/index";
+import { kernelOn } from "../src/types/events";
 
 describe("kernel assembly", () => {
 	it("creates a context with the three primitives attached", () => {

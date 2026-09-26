@@ -9,9 +9,9 @@
 
 import type { Context } from "cordis";
 import { Service } from "cordis";
-import type { Emit } from "../types/events.ts";
-import { kernelEmit } from "../types/events.ts";
-import type { PersonaCard } from "../types/persona.ts";
+import type { Emit } from "../types/events";
+import { kernelEmit } from "../types/events";
+import type { PersonaCard } from "../types/persona";
 
 /** Render requested names against a card table, in order; report misses. */
 export function renderPersonaBlock(

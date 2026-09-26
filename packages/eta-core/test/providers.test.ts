@@ -1,7 +1,7 @@
 import type { AssistantMessage, Model } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
-import { piAiModels } from "../src/kernel/providers.ts";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider.ts";
+import { piAiModels } from "../src/kernel/providers";
+import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
 
 describe("models seam", () => {
 	it("accepts a scripted fake and replays it in order, recording calls", async () => {

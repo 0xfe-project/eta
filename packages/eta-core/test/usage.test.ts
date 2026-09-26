@@ -9,8 +9,8 @@
  */
 import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
-import { Kernel, kernelOn, MemoryStorage, Runner, SessionLog, sessionTokenTotal, type UsageRow } from "../src/index.ts";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider.ts";
+import { Kernel, kernelOn, MemoryStorage, Runner, SessionLog, sessionTokenTotal, type UsageRow } from "../src/index";
+import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,

@@ -1,13 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import type {
-	AnswerEntry,
-	AskEntry,
-	BtwEntry,
-	Entry,
-	GoalEntry,
-	MergeEntry,
-	MessageEntry,
-} from "../src/types/entries.ts";
+import type { AnswerEntry, AskEntry, BtwEntry, Entry, GoalEntry, MergeEntry, MessageEntry } from "../src/types/entries";
 
 function base(overrides: Partial<{ id: string; parentId: string | null; seq: number; timestamp: number }> = {}) {
 	return { id: "e1", parentId: null, seq: 1, timestamp: 1_700_000_000_000, ...overrides };

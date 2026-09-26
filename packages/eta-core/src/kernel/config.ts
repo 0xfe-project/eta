@@ -14,9 +14,9 @@ import {
 	type ConfigProperty,
 	defaultKernelConfig,
 	type KernelConfig,
-} from "../types/config.ts";
-import { type Emit, kernelEmit } from "../types/events.ts";
-import { type AgentRetryPolicy, DEFAULT_RETRY_POLICY } from "./retry.ts";
+} from "../types/config";
+import { type Emit, kernelEmit } from "../types/events";
+import { type AgentRetryPolicy, DEFAULT_RETRY_POLICY } from "./retry";
 
 /** Duplicate tool names would make a call ambiguous; refuse them at the door. */
 export function validateToolNames(tools: readonly { name: string }[]): void {

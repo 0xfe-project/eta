@@ -7,9 +7,9 @@
  * once, so MemoryStorage and the JSONL journal cannot drift apart.
  */
 
-import { spliceMergedChain } from "../session/graph.ts";
-import type { Entry } from "../types/entries.ts";
-import { addUsage, emptyUsage, subtractUsage } from "../types/usage.ts";
+import { spliceMergedChain } from "../session/graph";
+import type { Entry } from "../types/entries";
+import { addUsage, emptyUsage, subtractUsage } from "../types/usage";
 import type {
 	CommitResult,
 	EntryScan,
@@ -20,7 +20,7 @@ import type {
 	UsageRow,
 	UsageScan,
 	Value,
-} from "./types.ts";
+} from "./types";
 
 function physicalKey(namespace: string, key: string): string {
 	return `${namespace}\u0000${key}`;

@@ -4,10 +4,10 @@ export {
 	type FakeModelsOptions,
 	fakeModels,
 	type RecordedCall,
-} from "./fake-provider.ts";
+} from "./fake-provider";
 export {
 	type StorageContractHandle,
 	type StorageContractOptions,
 	type StorageFactory,
 	storageContract,
-} from "./storage-contract.ts";
+} from "./storage-contract";

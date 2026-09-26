@@ -8,7 +8,7 @@
  * consumes, in tests as in production.
  */
 import type { AssistantMessage, AssistantMessageEvent, AssistantMessageEventStream } from "@earendil-works/pi-ai";
-import type { SettledAssistantMessage } from "../types/entries.ts";
+import type { SettledAssistantMessage } from "../types/entries";
 
 /** Process-local lifecycle observer for one assistant stream. */
 export interface AssistantStreamObserver {

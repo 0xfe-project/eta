@@ -10,8 +10,8 @@
  * history is not deleted, only unreachable from the new tip.
  */
 import type { Usage } from "@earendil-works/pi-ai";
-import type { MergeEntry, NewEntry } from "../types/entries.ts";
-import type { EntryGraph } from "./graph.ts";
+import type { MergeEntry, NewEntry } from "../types/entries";
+import type { EntryGraph } from "./graph";
 
 export interface MergeOptions {
 	/** Short human/model-readable description of what was merged. */
