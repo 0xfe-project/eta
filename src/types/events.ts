@@ -5,24 +5,51 @@
  * be a stable floor should not widen its dependency's interfaces. The cast
  * lives here, once, and every call site stays checked against `KernelEvents`.
  *
- * Vocabulary discipline: payloads are pure-data snapshots of observable state.
- * Nothing here hands out live objects from the runner or a service, and event
- * names are flat strings grouped by prefix (`goal:`, `task:`, `persona:`,
- * `turn:`, `tool:`, `storage:`) — the snapshot test pins the exact list.
+ * Vocabulary discipline, aligned with eta-agent's events.ts:
+ * - the category list is eta-agent's own (ETA_EVENT_CATEGORIES); the kernel
+ *   emits a subset, with names as `category:action`;
+ * - payloads mirror eta-agent's HarnessEventPayload shapes and are pure-data
+ *   snapshots — nothing here hands out live objects from the runner or a
+ *   service;
+ * - a name enters the pinned list only when something emits it; streaming,
+ *   retry, and compaction events land with their runner machinery.
  */
 import type { Context } from "cordis";
+import type { GoalStatus } from "../kernel/goal.ts";
+import type { UsageRow } from "../storage/types.ts";
 import type { Entry, GoalPayload } from "./entries.ts";
-import type { AgentMessage, Usage } from "./messages.ts";
+import type { AgentMessage, AssistantMessage, Usage } from "./messages.ts";
 import type { PersonaCard } from "./persona.ts";
 import type { TaskChange } from "./tasks.ts";
+
+/** eta-agent's event categories, kept verbatim. */
+export const ETA_EVENT_CATEGORIES = [
+	"lifecycle",
+	"turn",
+	"usage",
+	"prompt",
+	"compaction",
+	"loop",
+	"goal",
+	"memory",
+	"skill",
+	"task",
+	"state",
+	"tool",
+	"retry",
+	"ask_user",
+	"btw",
+] as const;
+
+export type EtaEventCategory = (typeof ETA_EVENT_CATEGORIES)[number];
+
+export type GoalStatusName = "none" | GoalStatus;
 
 export interface GoalEvents {
 	/** Fires with every transition; `payload.kind` carries the action. */
 	"goal:changed": GoalPayload & { statusBefore: GoalStatusName; roundCount: number };
 	"goal:cleared": { objective: string | undefined };
 }
-
-export type GoalStatusName = "none" | "active" | "paused" | "achieved";
 
 export interface PersonaEvents {
 	"persona:loaded": { card: PersonaCard };
@@ -41,15 +68,6 @@ export interface TaskEvents {
 	"task:cancelled": TaskChange;
 }
 
-export interface TurnEvents {
-	/** Emitted when a new turn starts, with the resolved context assembly stats. */
-	"turn:start": { turn: number; contextParts: ContextPartStats };
-	/** Emitted when a turn's provider generation settles. */
-	"turn:end": { turn: number; usage: Usage; stopReason: string };
-	/** Emitted when the run ends (no continuation this round). */
-	"turn:run-end": { turns: number; usage: Usage };
-}
-
 /** Per-part token estimates for the context donut; runner reports, UI computes. */
 export interface ContextPartStats {
 	system: number;
@@ -60,19 +78,62 @@ export interface ContextPartStats {
 	total: number;
 }
 
-export interface ToolEvents {
-	"tool:call": { name: string; args: unknown; turn: number };
-	"tool:result": {
-		name: string;
-		result: unknown;
-		/** Wall-clock ms of the call; middleware authors measure, not the runner. */
-		durationMs: number;
-		turn: number;
+export interface TurnEvents {
+	/** A run started. */
+	"turn:run-start": { runId: string; startedAt: number };
+	/** A turn started, with the resolved context assembly stats. */
+	"turn:start": { runId: string; turnId: string; contextParts: ContextPartStats };
+	/** A turn's provider generation settled. */
+	"turn:end": {
+		runId: string;
+		turnId: string;
+		message: AssistantMessage;
+		toolResults: AgentMessage[];
+		usage: Usage;
+	};
+	/** The run ended. */
+	"turn:run-end": {
+		runId: string;
+		turns: number;
+		endedAt: number;
+		status: "completed" | "failed";
+		error?: string;
 	};
 }
 
+export interface MessageEvents {
+	/** A provider generation opened (streaming updates land with the stream machinery). */
+	"message:start": { runId: string; turnId: string };
+	/** A message settled and was journaled. */
+	"message:end": { runId: string; message: AgentMessage; entryId: string };
+}
+
+export interface PromptEvents {
+	/** Emitted once the system prompt and context are assembled for a request. */
+	"prompt:assembled": { runId: string; systemPromptChars: number; messages: number; attempt: number };
+}
+
+export interface ToolEvents {
+	"tool:start": { runId: string; turnId: string; toolCallId: string; toolName: string; args: unknown };
+	"tool:end": {
+		runId: string;
+		turnId: string;
+		toolCallId: string;
+		toolName: string;
+		result: unknown;
+		isError: boolean;
+		terminate: boolean;
+		/** Wall-clock ms of the call; middleware authors measure, not the runner. */
+		durationMs: number;
+	};
+}
+
+export interface UsageEvents {
+	/** One usage measurement landed; totals are the session aggregate after it. */
+	"usage:recorded": { row: UsageRow; totals: Usage };
+}
+
 export interface StorageEvents {
-	"storage:changed": { key: string };
 	"storage:appended": { entry: Entry };
 	"storage:compacted": { before: number; after: number };
 	"storage:error": { op: string; error: string };
@@ -88,7 +149,10 @@ export interface KernelEvents
 		PersonaEvents,
 		TaskEvents,
 		TurnEvents,
+		MessageEvents,
+		PromptEvents,
 		ToolEvents,
+		UsageEvents,
 		StorageEvents,
 		InjectEvents {}
 
@@ -121,11 +185,13 @@ export const KERNEL_EVENT_NAMES = [
 	"goal:changed",
 	"goal:cleared",
 	"inject:received",
+	"message:end",
+	"message:start",
 	"persona:loaded",
 	"persona:missing",
 	"persona:switched",
+	"prompt:assembled",
 	"storage:appended",
-	"storage:changed",
 	"storage:compacted",
 	"storage:error",
 	"task:cancelled",
@@ -133,11 +199,13 @@ export const KERNEL_EVENT_NAMES = [
 	"task:created",
 	"task:removed",
 	"task:updated",
-	"tool:call",
-	"tool:result",
+	"tool:end",
+	"tool:start",
 	"turn:end",
 	"turn:run-end",
+	"turn:run-start",
 	"turn:start",
+	"usage:recorded",
 ] as const;
 
 export type KernelEventName = (typeof KERNEL_EVENT_NAMES)[number];

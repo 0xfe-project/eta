@@ -23,9 +23,18 @@ function setup(script: AssistantMessage[], tools: KernelTool[] = []) {
 	const runner = new Runner(kernel, { providers: fake, model: {} as never });
 	const events: { name: string; payload: Record<string, unknown> }[] = [];
 	const on = kernelOn(kernel.ctx);
-	const offs = (["turn:start", "turn:end", "turn:run-end", "tool:call", "tool:result"] as const).map((name) =>
-		on(name, (p) => events.push({ name, payload: p as unknown as Record<string, unknown> })),
-	);
+	const offs = (
+		[
+			"turn:run-start",
+			"turn:start",
+			"turn:end",
+			"turn:run-end",
+			"tool:start",
+			"tool:end",
+			"prompt:assembled",
+			"message:start",
+		] as const
+	).map((name) => on(name, (p) => events.push({ name, payload: p as unknown as Record<string, unknown> })));
 	return {
 		kernel,
 		runner,
@@ -45,7 +54,18 @@ describe("runner turn loop", () => {
 		const result = await runner.run();
 		expect(result).toEqual({ turns: 0, error: undefined });
 		expect(fake.calls).toHaveLength(1);
-		expect(events.map((e) => e.name)).toEqual(["turn:start", "turn:end", "turn:run-end"]);
+		expect(events.map((e) => e.name)).toEqual([
+			"turn:run-start",
+			"turn:start",
+			"prompt:assembled",
+			"message:start",
+			"turn:end",
+			"turn:run-end",
+		]);
+		// One runId threads the whole run; the run reports a clean completion.
+		const runIds = new Set(events.map((e) => e.payload.runId as string));
+		expect(runIds.size).toBe(1);
+		expect(events.at(-1)!.payload.status).toBe("completed");
 		// The provider saw the injected message.
 		expect(fake.calls[0].context.messages).toHaveLength(1);
 		dispose();
@@ -65,14 +85,24 @@ describe("runner turn loop", () => {
 		const second = fake.calls[1].context.messages;
 		expect(second.some((m) => m.role === "toolResult")).toBe(true);
 		expect(events.map((e) => e.name)).toEqual([
+			"turn:run-start",
 			"turn:start",
+			"prompt:assembled",
+			"message:start",
 			"turn:end",
-			"tool:call",
-			"tool:result",
+			"tool:start",
+			"tool:end",
 			"turn:start",
+			"prompt:assembled",
+			"message:start",
 			"turn:end",
 			"turn:run-end",
 		]);
+		// Tool events carry the aligned payload.
+		const toolStart = events.find((e) => e.name === "tool:start")!;
+		expect(toolStart.payload).toMatchObject({ toolCallId: "c1", toolName: "echo", args: { x: "1" } });
+		const toolEnd = events.find((e) => e.name === "tool:end")!;
+		expect(toolEnd.payload).toMatchObject({ toolCallId: "c1", toolName: "echo", isError: false, terminate: false });
 		dispose();
 	});
 

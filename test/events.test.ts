@@ -10,11 +10,13 @@ describe("event vocabulary", () => {
 			  "goal:changed",
 			  "goal:cleared",
 			  "inject:received",
+			  "message:end",
+			  "message:start",
 			  "persona:loaded",
 			  "persona:missing",
 			  "persona:switched",
+			  "prompt:assembled",
 			  "storage:appended",
-			  "storage:changed",
 			  "storage:compacted",
 			  "storage:error",
 			  "task:cancelled",
@@ -22,11 +24,13 @@ describe("event vocabulary", () => {
 			  "task:created",
 			  "task:removed",
 			  "task:updated",
-			  "tool:call",
-			  "tool:result",
+			  "tool:end",
+			  "tool:start",
 			  "turn:end",
 			  "turn:run-end",
+			  "turn:run-start",
 			  "turn:start",
+			  "usage:recorded",
 			]
 		`);
 		// The interface keys and the pinned names are the same set: assigning the
@@ -40,16 +44,34 @@ describe("event vocabulary", () => {
 	it("kernelEmit/kernelOn round-trip over a real cordis context", () => {
 		const ctx = new Context();
 		const seen: { name: string; payload: unknown }[] = [];
-		const off = kernelOn(ctx)("tool:result", (p) => {
-			seen.push({ name: "tool:result", payload: p });
+		const off = kernelOn(ctx)("tool:end", (p) => {
+			seen.push({ name: "tool:end", payload: p });
 		});
 		const emit = kernelEmit(ctx);
-		emit("tool:result", { name: "bash", result: { ok: true }, durationMs: 5, turn: 1 });
+		emit("tool:end", {
+			runId: "r1",
+			turnId: "t1",
+			toolCallId: "c1",
+			toolName: "bash",
+			result: { ok: true },
+			isError: false,
+			terminate: false,
+			durationMs: 5,
+		});
 		emit("task:created", { action: "created", task: { id: "t1", content: "c", status: "pending" } });
 		off();
-		emit("tool:result", { name: "bash", result: { ok: false }, durationMs: 1, turn: 2 });
+		emit("tool:end", {
+			runId: "r1",
+			turnId: "t2",
+			toolCallId: "c2",
+			toolName: "bash",
+			result: { ok: false },
+			isError: true,
+			terminate: false,
+			durationMs: 1,
+		});
 		expect(seen).toHaveLength(1);
-		expect(seen[0].payload).toMatchObject({ name: "bash", result: { ok: true } });
+		expect(seen[0].payload).toMatchObject({ toolName: "bash", result: { ok: true } });
 		void ctx.fiber.dispose();
 	});
 });
