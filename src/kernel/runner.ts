@@ -12,10 +12,18 @@
 import type { Api, AssistantMessage, Context, Message, Model, Tool as PiTool, ToolCall } from "@earendil-works/pi-ai";
 import { isRetryableAssistantError } from "@earendil-works/pi-ai";
 import type { SessionLog } from "../session/session-log.ts";
+import type { CompactionEntry } from "../types/entries.ts";
 import type { Emit } from "../types/events.ts";
 import { kernelEmit, kernelOn } from "../types/events.ts";
-import type { AgentMessage } from "../types/messages.ts";
+import type { AgentMessage, Usage } from "../types/messages.ts";
 import { consumeAssistantStream } from "./assistant.ts";
+import {
+	type CompactionOutcome,
+	type CompactionService,
+	estimateContextTokens,
+	fitCompactionSettings,
+	shouldCompact,
+} from "./compaction.ts";
 import type { ConfigService } from "./config.ts";
 import type { GoalService } from "./goal.ts";
 import type { Kernel } from "./kernel.ts";
@@ -40,6 +48,19 @@ export interface RunnerOptions {
 	models: KernelModels;
 	/** Static system-prompt blocks (plugins contribute via persona/prompt seams later). */
 	systemPrompt?: string;
+	/**
+	 * Compaction, when a plugin provides one. The runner only calls it: at a run
+	 * boundary when the history no longer fits, and after a context overflow.
+	 */
+	compaction?: CompactionService;
+	/**
+	 * Project the transcript into provider messages. Required once the context
+	 * holds a message the provider has no vocabulary for — a compaction or branch
+	 * summary. The kernel does not invent that text: the prompts plugin owns it
+	 * (§3 ruling 5), and a missing projection fails loudly instead of quietly
+	 * sending the model a context with the summary stripped out.
+	 */
+	toProviderMessages?: (messages: readonly AgentMessage[]) => Message[];
 	/** Run-boundary decisions (REFACTOR.md §2.4 step 5); without it the boundary is a plain stop. */
 	boundary?: RunnerBoundaryOptions;
 	/**
@@ -124,6 +145,45 @@ export class Runner {
 		return this.runAbort.signal;
 	}
 
+	/**
+	 * The messages the runner would send right now (§3 ruling 4). Handed to
+	 * compaction so it can estimate and cut; a copy, so a reader cannot edit the
+	 * transcript by accident.
+	 */
+	readContext(): AgentMessage[] {
+		return this.transcript.slice();
+	}
+
+	/**
+	 * Replace the context with a summary plus whatever tail is kept. The
+	 * compaction entry goes into the journal, so a replay rebuilds the same
+	 * transcript (SessionLog projects it the same way).
+	 */
+	replaceContext(
+		summary: string,
+		options: { retainedTail?: readonly AgentMessage[]; tokensBefore?: number; usage?: Usage } = {},
+	): CompactionEntry | undefined {
+		const retainedTail = [...(options.retainedTail ?? [])];
+		const tokensBefore = options.tokensBefore ?? estimateContextTokens(this.transcript).tokens;
+		this.transcript.length = 0;
+		this.transcript.push({
+			role: "compactionSummary",
+			summary,
+			tokensBefore,
+			timestamp: Date.now(),
+		});
+		this.transcript.push(...retainedTail);
+		return this.journal?.record<CompactionEntry>({
+			id: `compaction-${Date.now().toString(36)}`,
+			parentId: null,
+			type: "compaction",
+			summary,
+			retainedTail,
+			tokensBefore,
+			...(options.usage === undefined ? {} : { usage: options.usage }),
+		});
+	}
+
 	/** Output tokens/sec for the run in progress (see OutputRate for the scale). */
 	get tokensPerSec(): number {
 		return this.rate.value;
@@ -177,6 +237,7 @@ export class Runner {
 			this.currentRunId = runId;
 			this.currentTurnId = crypto.randomUUID();
 			this.turnToolResults = [];
+			if (turn === 1) await this.compactForWindow(model, runId);
 			const assistant = await this.takeTurn(model);
 			if (assistant === undefined) break;
 			if (assistant.stopReason === "error") {
@@ -222,6 +283,83 @@ export class Runner {
 			return this.run();
 		}
 		return result;
+	}
+
+	/**
+	 * Compact before the first request when the history no longer fits the model
+	 * that owns it (eta-agent's `compactForWindow`). A session written under a
+	 * bigger model would otherwise be sent whole to a smaller one.
+	 */
+	private async compactForWindow(model: Model<Api>, runId: string): Promise<void> {
+		await this.runCompaction("threshold", model, runId);
+	}
+
+	/** Ask the compaction service to cut, then adopt what it produced. */
+	private async runCompaction(
+		reason: "threshold" | "overflow" | "manual",
+		model: Model<Api>,
+		runId: string,
+	): Promise<boolean> {
+		const compaction = this.options.compaction;
+		if (compaction === undefined) return false;
+		const config = this.config.get();
+		const settings = fitCompactionSettings(config.compaction, model);
+		const estimate = estimateContextTokens(this.transcript);
+		if (reason !== "overflow" && !shouldCompact(estimate.tokens, model.contextWindow, settings)) return false;
+
+		this.emit("compaction:start", { runId, reason, startedAt: Date.now() });
+		let outcome: CompactionOutcome | undefined;
+		try {
+			outcome = await compaction.compact({
+				reason,
+				messages: this.readContext(),
+				entries: this.journal?.graph.pathOldestFirst() ?? [],
+				settings,
+				contextWindow: model.contextWindow,
+				estimatedTokens: estimate.tokens,
+				model,
+				thinkingLevel: config.thinkingLevel,
+				streamOptions: config.streamOptions,
+				signal: this.runSignal(),
+				summarize: async (prompt) => {
+					const stream = await this.models.completeSimple(
+						model,
+						{
+							...(prompt.systemPrompt === undefined ? {} : { systemPrompt: prompt.systemPrompt }),
+							messages: prompt.messages.filter(isMessage),
+						},
+						{ signal: this.runSignal() },
+					);
+					return stream;
+				},
+			});
+		} catch (error) {
+			this.emit("compaction:end", {
+				runId,
+				reason,
+				endedAt: Date.now(),
+				status: "failed",
+				error: error instanceof Error ? error.message : String(error),
+			});
+			return false;
+		}
+		if (outcome === undefined) {
+			this.emit("compaction:end", { runId, reason, endedAt: Date.now(), status: "declined" });
+			return false;
+		}
+		const entry = this.replaceContext(outcome.summary, {
+			retainedTail: outcome.retainedTail,
+			tokensBefore: outcome.tokensBefore,
+			usage: outcome.usage,
+		});
+		this.emit("compaction:end", {
+			runId,
+			reason,
+			endedAt: Date.now(),
+			status: "completed",
+			...(entry === undefined ? {} : { entryId: entry.id }),
+		});
+		return true;
 	}
 
 	/** True when the run should continue (a nudge went into the transcript). */
@@ -422,9 +560,24 @@ export class Runner {
 		}));
 		return {
 			...(systemPrompt.length > 0 ? { systemPrompt } : {}),
-			messages: this.transcript.filter(isMessage),
+			messages: this.projectMessages(this.transcript),
 			tools,
 		};
+	}
+
+	/** Transcript → provider messages, with the custom-message case made explicit. */
+	private projectMessages(messages: readonly AgentMessage[]): Message[] {
+		const hook = this.options.toProviderMessages;
+		if (hook !== undefined) return hook(messages);
+		const custom = messages.find(
+			(message) => message.role !== "user" && message.role !== "assistant" && message.role !== "toolResult",
+		);
+		if (custom !== undefined) {
+			throw new Error(
+				`toProviderMessages is required: the context holds a ${custom.role} message (a compaction or branch summary) and the kernel does not invent prompt text`,
+			);
+		}
+		return messages.filter(isMessage);
 	}
 
 	private estimateParts(context: Context): import("../types/events.ts").ContextPartStats {

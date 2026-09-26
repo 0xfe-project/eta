@@ -71,9 +71,13 @@ class Disk {
 function textsOf(entries: Entry[]): string[] {
 	return entries.flatMap((entry) => {
 		if (entry.type !== "message") return [];
-		const content = entry.message.content;
+		const message = entry.message;
+		if (message.role !== "user" && message.role !== "assistant" && message.role !== "toolResult") return [];
+		const content = message.content;
 		if (typeof content === "string") return [content];
-		return content.filter((part): part is { type: "text"; text: string } => part.type === "text").map((p) => p.text);
+		return content
+			.filter((part): part is { type: "text"; text: string } => part.type === "text")
+			.map((part) => part.text);
 	});
 }
 

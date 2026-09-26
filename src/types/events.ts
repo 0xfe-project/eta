@@ -130,6 +130,18 @@ export interface ToolEvents {
 	};
 }
 
+export interface CompactionEvents {
+	"compaction:start": { runId: string; reason: "manual" | "threshold" | "overflow"; startedAt: number };
+	"compaction:end": {
+		runId: string;
+		reason: "manual" | "threshold" | "overflow";
+		endedAt: number;
+		status: "completed" | "declined" | "failed";
+		entryId?: string;
+		error?: string;
+	};
+}
+
 export interface RetryEvents {
 	/** A retryable failure scheduled another attempt, with the backoff that follows. */
 	"retry:scheduled": {
@@ -170,7 +182,8 @@ export interface InjectEvents {
 }
 
 export interface KernelEvents
-	extends GoalEvents,
+	extends CompactionEvents,
+		GoalEvents,
 		PersonaEvents,
 		TaskEvents,
 		TurnEvents,
@@ -209,6 +222,8 @@ export function kernelOn(ctx: Context): On {
 
 /** Alphabetized event-name list, pinned by a snapshot test so the vocabulary cannot drift. */
 export const KERNEL_EVENT_NAMES = [
+	"compaction:end",
+	"compaction:start",
 	"goal:changed",
 	"goal:cleared",
 	"inject:received",

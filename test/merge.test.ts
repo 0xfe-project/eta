@@ -14,7 +14,9 @@ const msg = (text: string, parentId: string | null = null): NewEntry<MessageEntr
 const texts = (graph: EntryGraph): string[] =>
 	graph.pathOldestFirst().flatMap((entry) => {
 		if (entry.type !== "message") return [];
-		const content = (entry as MessageEntry).message.content;
+		const message = (entry as MessageEntry).message;
+		if (message.role !== "user" && message.role !== "assistant" && message.role !== "toolResult") return [];
+		const content = message.content;
 		return Array.isArray(content)
 			? content.filter((c): c is { type: "text"; text: string } => c.type === "text").map((c) => c.text)
 			: [];
