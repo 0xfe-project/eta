@@ -40,7 +40,6 @@ import { AbortRequested, createGate, type Gate, type GateControl } from "./effec
 import type { GoalService } from "./goal";
 import type { QueuedItem } from "./inbox";
 import type { Kernel } from "./kernel";
-import { OutputRate } from "./output-rate";
 import type { PersonaService } from "./persona";
 import type { KernelModels } from "./providers";
 import { type AgentRetryPolicy, normalizedRetryPolicy, retryDelayMs, retryNotBefore, waitUntil } from "./retry";
@@ -143,7 +142,6 @@ export class Runner {
 	private currentTurnId: string | undefined;
 	private turnToolResults: AgentMessage[] = [];
 	private inFlight: Promise<RunResult> | undefined;
-	private readonly rate = new OutputRate();
 	private gate: { gate: Gate; control: GateControl } | undefined;
 	private readonly pendingEffects = new Set<Promise<unknown>>();
 	private readonly cadence = createCadenceState();
@@ -257,11 +255,6 @@ export class Runner {
 		this.transcript.push(...retainedTail);
 	}
 
-	/** Output tokens/sec for the run in progress (see OutputRate for the scale). */
-	get tokensPerSec(): number {
-		return this.rate.value;
-	}
-
 	/** Stop listening for idle injects (runner teardown). */
 	stopAutoPump(): void {
 		this.autoPumpOff?.();
@@ -355,8 +348,6 @@ export class Runner {
 		const runId = crypto.randomUUID();
 		const { gate, control } = createGate();
 		this.gate = { gate, control };
-		// A new run starts the throughput window over: nothing has been produced yet.
-		this.rate.reset();
 		this.emit("turn:run-start", { runId, startedAt: Date.now() });
 		// What a run takes when it starts: next-run items always, steering and
 		// follow-ups per their modes. They become the run's opening transcript.
@@ -585,7 +576,6 @@ export class Runner {
 							message: structuredClone(message),
 							event: structuredClone(event),
 						});
-						this.rate.inFlight(message.usage.output);
 					},
 					end: () => undefined,
 				},
@@ -635,9 +625,6 @@ export class Runner {
 			attempt += 1;
 			this.emit("retry:start", { runId, step: turnId, attempt });
 		}
-		// The provider's own count is what the rate commits; the streaming estimate
-		// only ever stands in until the message settles.
-		this.rate.commit(assistant.usage.output);
 		// A failed generation is not history: eta-agent records no entry for it, and
 		// a failed message in the transcript would be sent back to the model.
 		if (assistant.stopReason !== "error" && assistant.stopReason !== "aborted") {

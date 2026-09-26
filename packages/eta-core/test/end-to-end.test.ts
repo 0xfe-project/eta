@@ -230,7 +230,7 @@ describe("one full session", () => {
 		expect(s.usageRows.every((row) => row.adjustment === false)).toBe(true);
 		expect(sessionTokenTotal((await s.storage.getStats()).usage)).toBeGreaterThan(0);
 		// Throughput is a number, not a placeholder.
-		expect(s.runner.tokensPerSec).toBeGreaterThanOrEqual(0);
+		expect(s.kernel.metrics.tokensPerSec).toBeGreaterThanOrEqual(0);
 		s.dispose();
 	});
 

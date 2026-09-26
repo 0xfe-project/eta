@@ -9,7 +9,7 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Kernel, kernelOn, MemoryStorage, Runner, SessionLog } from "../src/index";
+import { Kernel, kernelOn, MemoryStorage, OutputRate, Runner, SessionLog } from "../src/index";
 import { consumeAssistantStream } from "../src/kernel/assistant";
 import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
 
@@ -164,16 +164,17 @@ describe("usage and throughput", () => {
 		const { kernel, runner, dispose } = setup([settled], 100);
 		kernel.inject(userMsg("go"));
 		await runner.run();
-		expect(runner.tokensPerSec).toBeGreaterThan(0);
+		expect(kernel.metrics.tokensPerSec).toBeGreaterThan(0);
 		dispose();
 	});
 
 	it("starts the window over on a new run", async () => {
 		const { kernel, runner, dispose } = setup([assistantMessage()]);
-		const reset = vi.spyOn(Object.getPrototypeOf((runner as unknown as { rate: object }).rate), "reset");
+		const reset = vi.spyOn(OutputRate.prototype, "reset");
 		kernel.inject(userMsg("go"));
 		await runner.run();
 		expect(reset).toHaveBeenCalled();
+		reset.mockRestore();
 		dispose();
 	});
 });
