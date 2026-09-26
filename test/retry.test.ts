@@ -42,12 +42,13 @@ const ok = (text: string): AssistantMessage =>
 	assistantMessage({ content: [{ type: "text", text }], stopReason: "stop" });
 
 function setup(script: AssistantMessage[], retryPolicy = DEFAULT_RETRY_POLICY) {
+	const journal = SessionLog.create(new MemoryStorage());
 	const kernel = Kernel.create({
 		config: { model: { provider: "p", modelId: "m" }, retryPolicy: { ...retryPolicy } },
+		journal,
 	});
 	const fake = fakeModels(script);
-	const journal = SessionLog.create(new MemoryStorage());
-	const runner = new Runner(kernel, { models: fake, journal });
+	const runner = new Runner(kernel, { models: fake });
 	const retries: { name: string; payload: Record<string, unknown> }[] = [];
 	const on = kernelOn(kernel.ctx);
 	const offs = (["retry:scheduled", "retry:start", "retry:end"] as const).map((name) =>

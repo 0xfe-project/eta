@@ -86,6 +86,7 @@ function session(script: AssistantMessage[], tools: KernelTool[] = []) {
 			compaction: { enabled: true, reserveTokens: 1_000, keepRecentTokens: 500, maxContextTokens: 64_000 },
 		},
 		compaction,
+		journal: log,
 	});
 	for (const tool of tools) kernel.tools.register(tool);
 
@@ -113,7 +114,6 @@ function session(script: AssistantMessage[], tools: KernelTool[] = []) {
 	const goalRecorder = recordGoalEntries(log, on);
 	const runner = new Runner(kernel, {
 		models: fake,
-		journal: log,
 		systemPrompt: "You are Eta, a coding agent.",
 		toolContext: { workspace: "/w" },
 		entryProjectors: {},
@@ -262,6 +262,7 @@ describe("one full session", () => {
 
 		const restartedKernel = Kernel.create({
 			config: { model: { provider: "p", modelId: "m" }, activeToolNames: ["task"] },
+			journal: log,
 		});
 		restartedKernel.tools.register(taskTool(created));
 		const goalEntries = log.graph.pathOldestFirst().filter((entry): entry is GoalEntry => entry.type === "goal");
@@ -273,7 +274,6 @@ describe("one full session", () => {
 		const fake = fakeModels([answer("resumed")]);
 		const runner = new Runner(restartedKernel, {
 			models: fake,
-			journal: log,
 			initialTranscript: log.transcript(),
 		});
 		restartedKernel.inject(userMsg("continue"));
@@ -315,9 +315,12 @@ describe("one full session", () => {
 
 		// A fresh run over the replayed journal answers normally.
 		const log = await SessionLog.load(s.storage);
-		const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" }, activeToolNames: [] } });
+		const kernel = Kernel.create({
+			config: { model: { provider: "p", modelId: "m" }, activeToolNames: [] },
+			journal: log,
+		});
 		const fake = fakeModels([answer("clean run")]);
-		const runner = new Runner(kernel, { models: fake, journal: log, initialTranscript: log.transcript() });
+		const runner = new Runner(kernel, { models: fake, initialTranscript: log.transcript() });
 		kernel.inject(userMsg("try again"));
 		const second = await runner.run();
 		expect(second.status).toBe("completed");

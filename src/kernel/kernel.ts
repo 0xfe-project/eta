@@ -12,6 +12,8 @@
  * no continuation driver, and no spawn tool (REFACTOR.md §1.4).
  */
 import { Context } from "cordis";
+import { JournalingService } from "../session/journaling";
+import type { SessionLog } from "../session/session-log";
 import type { KernelConfig } from "../types/config";
 import { defaultKernelConfig } from "../types/config";
 import type { Emit } from "../types/events";
@@ -40,6 +42,12 @@ export interface KernelOptions {
 	compaction?: CompactionSummarizer;
 	/** Called when a summarizer throws; the run continues either way. */
 	warn?: (message: string) => void;
+	/**
+	 * The journal this session writes to. The kernel does not create it: the host
+	 * owns storage, and a session without one (a subagent, a throwaway) simply
+	 * keeps nothing.
+	 */
+	journal?: SessionLog;
 }
 
 export interface KernelInspect {
@@ -64,6 +72,8 @@ export class Kernel {
 	readonly config: ConfigService;
 	/** Compaction: manual / threshold / overflow, and the replacement context. */
 	readonly compaction: CompactionService;
+	/** Durability as a subscriber: entries, usage rows, compaction entries. */
+	readonly journaling: JournalingService;
 	/** How the outside world reaches the loop (steer / followUp / nextRun). */
 	readonly inbox = new Inbox();
 	readonly maxTurns: number | null;
@@ -80,6 +90,10 @@ export class Kernel {
 		this.tasks = new TaskService(this.ctx);
 		this.tools = new ToolService(this.ctx);
 		this.config = new ConfigService(this.ctx, defaultKernelConfig(options.config));
+		this.journaling = new JournalingService(this.ctx, {
+			...(options.journal === undefined ? {} : { journal: options.journal }),
+			...(options.warn === undefined ? {} : { warn: options.warn }),
+		});
 		this.compaction = new CompactionService(this.ctx, {
 			config: this.config,
 			...(options.compaction === undefined ? {} : { summarizer: options.compaction }),

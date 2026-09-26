@@ -152,15 +152,18 @@ describe("aborting a run", () => {
 	});
 
 	it("keeps what the run had already committed", async () => {
-		const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } } });
 		const log = SessionLog.create(new MemoryStorage());
+		const kernel = Kernel.create({
+			config: { model: { provider: "p", modelId: "m" } },
+			journal: log,
+		});
 		const fake = fakeModels([
 			assistantMessage({
 				stopReason: "toolUse",
 				content: [{ type: "toolCall", id: "c1", name: "slow", arguments: {} }],
 			}),
 		]);
-		const runner = new Runner(kernel, { models: fake, journal: log });
+		const runner = new Runner(kernel, { models: fake });
 		kernel.tools.register({
 			name: "slow",
 			execute: async () => {

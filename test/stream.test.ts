@@ -63,7 +63,9 @@ describe("streaming into the bus", () => {
 		kernel.inject(userMsg("go"));
 		await runner.run();
 
-		expect(names).toEqual(["start", ...Array.from({ length: 5 }, () => "update"), "end"]);
+		// The injected user message is journaled first, so its `end` opens the
+		// sequence; the assistant's stream follows.
+		expect(names).toEqual(["end", "start", ...Array.from({ length: 5 }, () => "update"), "end"]);
 		expect(updates.map((u) => u.event.type)).toEqual([
 			"text_start",
 			"text_delta",
@@ -109,7 +111,8 @@ describe("streaming into the bus", () => {
 		const { kernel, runner, names, dispose } = setup([settled], 3, { journal: true });
 		kernel.inject(userMsg("go"));
 		await runner.run();
-		expect(names.filter((name) => name === "end")).toHaveLength(1);
+		// One end for the user message, one for the assistant's settled answer.
+		expect(names.filter((name) => name === "end")).toHaveLength(2);
 		expect(names.at(-1)).toBe("end");
 		dispose();
 	});

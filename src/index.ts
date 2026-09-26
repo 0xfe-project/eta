@@ -101,8 +101,9 @@ export {
 export { type ForkedChain, type ForkOptions, type ForkSelection, forkChain, selectBranchFork } from "./session/fork";
 export { recordGoalEntries } from "./session/goal-journal";
 export { EntryGraph, type GraphNode, spliceMergedChain } from "./session/graph";
+export { JournalingService, type JournalingServiceOptions } from "./session/journaling";
 export { type MergeOptions, type MergeResult, mergeBranch, type RollbackResult, rollback } from "./session/merge";
-export { SessionLog } from "./session/session-log";
+export { type CommitOutcome, SessionLog } from "./session/session-log";
 export { MemoryStorage } from "./storage/memory";
 export { InMemoryStorageState } from "./storage/state";
 export {
@@ -162,6 +163,7 @@ export {
 	type CompactionEvents,
 	type ContextPartStats,
 	type Emit,
+	type EntryEvents,
 	ETA_EVENT_CATEGORIES,
 	type EtaEventCategory,
 	type GoalEvents,

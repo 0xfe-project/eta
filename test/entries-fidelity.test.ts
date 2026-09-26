@@ -22,10 +22,13 @@ const toolTurn = (id: string, name: string) =>
 
 describe("terminate ends the run", () => {
 	it("a terminating tool result stops the loop without another request", async () => {
-		const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } } });
 		const log = SessionLog.create(new MemoryStorage());
+		const kernel = Kernel.create({
+			config: { model: { provider: "p", modelId: "m" } },
+			journal: log,
+		});
 		const fake = fakeModels([toolTurn("c1", "finish")]);
-		const runner = new Runner(kernel, { models: fake, journal: log });
+		const runner = new Runner(kernel, { models: fake });
 		kernel.tools.register({ name: "finish", execute: () => ({ content: "all done", terminate: true }) });
 		kernel.inject(userMsg("go"));
 		const result = await runner.run();

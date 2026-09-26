@@ -111,8 +111,11 @@ export interface MessageEvents {
 	"message:start": { runId: string; turnId: string };
 	/** One stream frame: the delta plus the message as it stands. Snapshots, not live refs. */
 	"message:update": { runId: string; turnId: string; message: AgentMessage; event: AssistantMessageEvent };
-	/** A message settled and was journaled. */
-	"message:end": { runId: string; message: AgentMessage; entryId: string };
+	/**
+	 * A message became part of the transcript. The entry id does not exist yet:
+	 * the journaling subscriber assigns it and announces `entry:added`.
+	 */
+	"message:end": { runId?: string; message: AgentMessage; terminate?: true };
 }
 
 export interface PromptEvents {
@@ -142,7 +145,11 @@ export interface CompactionEvents {
 		reason: "manual" | "threshold" | "overflow";
 		endedAt: number;
 		status: "completed" | "declined" | "failed";
-		entryId?: string;
+		/** What the context was replaced with; the journaling subscriber writes it. */
+		summary?: string;
+		retainedTail?: AgentMessage[];
+		tokensBefore?: number;
+		usage?: Usage;
 		error?: string;
 	};
 }
@@ -163,6 +170,11 @@ export interface RetryEvents {
 	"retry:start": { runId: string; step: string; attempt: number };
 	/** A retried call finished: success, or the failure that ended the run. */
 	"retry:end": { runId: string; step: string; attempt: number; success: boolean; finalError?: string };
+}
+
+export interface EntryEvents {
+	/** A journaled entry, with the id the journal assigned it. */
+	"entry:added": { entry: Entry };
 }
 
 export interface UsageEvents {
@@ -193,6 +205,7 @@ export interface InjectEvents {
 
 export interface KernelEvents
 	extends CompactionEvents,
+		EntryEvents,
 		GoalEvents,
 		PersonaEvents,
 		TaskEvents,
@@ -235,6 +248,7 @@ export function kernelOn(ctx: Context): On {
 export const KERNEL_EVENT_NAMES = [
 	"compaction:end",
 	"compaction:start",
+	"entry:added",
 	"goal:changed",
 	"goal:cleared",
 	"inject:received",

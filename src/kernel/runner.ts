@@ -20,12 +20,10 @@ import type {
 	ToolCall,
 } from "@earendil-works/pi-ai";
 import { isContextOverflow, isRecoverableLength, isRetryableAssistantError } from "@earendil-works/pi-ai";
-import type { SessionLog } from "../session/session-log";
-import type { UsageRow } from "../storage/types";
-import type { CompactionEntry, Entry } from "../types/entries";
+import type { JournalingService } from "../session/journaling";
+import type { Entry } from "../types/entries";
 import type { Emit } from "../types/events";
 import { kernelEmit, kernelOn } from "../types/events";
-import type { JsonValue } from "../types/json";
 import type { AgentMessage, ThinkingLevel, Usage } from "../types/messages";
 import { consumeAssistantStream } from "./assistant";
 import {
@@ -95,11 +93,6 @@ export interface RunnerOptions {
 	 */
 	initialTranscript?: readonly AgentMessage[];
 	/**
-	 * Optional journal: the runner records what it appends and commits once per
-	 * turn, so the journal holds complete turns and nothing else (§K5).
-	 */
-	journal?: SessionLog;
-	/**
 	 * When true, an inject arriving while the runner is idle immediately starts
 	 * a new run (REFACTOR.md §2.5). The server turns this on for live sessions;
 	 * one-shot callers (subagents) leave it off.
@@ -141,7 +134,7 @@ export class Runner {
 	private readonly options: RunnerOptions;
 	private readonly config: ConfigService;
 	private readonly models: KernelModels;
-	private readonly journal: SessionLog | undefined;
+	private readonly journaling: JournalingService;
 	private readonly emit: Emit;
 	private readonly transcript: AgentMessage[] = [];
 	private emptyStops = 0;
@@ -160,8 +153,8 @@ export class Runner {
 		this.kernel = kernel;
 		this.options = options;
 		this.emit = kernelEmit(kernel.ctx);
-		this.journal = options.journal;
 		this.config = kernel.config;
+		this.journaling = kernel.journaling;
 		this.models = options.models;
 		if (options.initialTranscript !== undefined) this.transcript.push(...options.initialTranscript);
 		this.tools = kernel.tools;
@@ -172,8 +165,7 @@ export class Runner {
 		kernel.compaction.attach({
 			readContext: () => this.readContext(),
 			replaceContext: (summary, options) => this.replaceContext(summary, options),
-			recordCompaction: (input) => this.recordCompaction(input),
-			entries: () => this.journal?.graph.pathOldestFirst() ?? [],
+			entries: () => this.journaling.entries(),
 			request: () => {
 				const config = this.config.get();
 				const identity = config.model;
@@ -263,48 +255,6 @@ export class Runner {
 			timestamp: Date.now(),
 		});
 		this.transcript.push(...retainedTail);
-	}
-
-	/** Journal a compaction; the service calls this after replacing the context. */
-	private recordCompaction(input: {
-		summary: string;
-		retainedTail: readonly AgentMessage[];
-		tokensBefore: number;
-		usage?: Usage;
-	}): CompactionEntry | undefined {
-		return this.journal?.record<CompactionEntry>({
-			id: `compaction-${Date.now().toString(36)}`,
-			parentId: null,
-			type: "compaction",
-			summary: input.summary,
-			retainedTail: [...input.retainedTail],
-			tokensBefore: input.tokensBefore,
-			...(input.usage === undefined ? {} : { usage: input.usage }),
-		});
-	}
-
-	/**
-	 * Record a usage measurement outside generation (eta-agent's
-	 * `lane.recordUsage`): a correction, or what a side request cost. It is an
-	 * adjustment, and it lands in the journal with the totals after it.
-	 */
-	async recordUsage(
-		usage: Usage,
-		options: { entryId?: string; details?: JsonValue } = {},
-	): Promise<UsageRow | undefined> {
-		const journal = this.journal;
-		if (journal === undefined) return undefined;
-		journal.recordUsage({
-			id: usageId(),
-			usage,
-			adjustment: true,
-			...(options.entryId === undefined ? {} : { entryId: options.entryId }),
-			...(options.details === undefined ? {} : { details: options.details }),
-		});
-		const committed = await journal.commit();
-		const row = committed?.usage[0];
-		if (row !== undefined) this.emit("usage:recorded", { row, totals: committed!.result.stats.usage });
-		return row;
 	}
 
 	/** Output tokens/sec for the run in progress (see OutputRate for the scale). */
@@ -486,7 +436,6 @@ export class Runner {
 				// The turn had tool work: keep looping. A message injected mid-run
 				// (tool or middleware) never interrupts; it opens the next turn via
 				// the drain at the top of the loop.
-				await this.journal?.commit();
 				// Every call in the batch asked to end the run (eta-agent's
 				// allTerminate checkpoint): the model is not asked again.
 				if (allTerminate) break;
@@ -503,9 +452,11 @@ export class Runner {
 		}
 		this.pumping = false;
 		if (error !== undefined) status = "failed";
-		// Whatever is left staged (the final turn) lands as one commit, so the
-		// journal holds complete turns and nothing else.
-		await this.journal?.commit();
+		// The one place the loop waits for the disk: a finished run is a durable
+		// run. Commits were started as messages landed and are not awaited — the
+		// runner never blocks on storage (§3 ruling 6). This runs even when the
+		// run threw, so what was recorded before the fault is still written.
+		await this.journaling.flush().catch(() => undefined);
 		const result: RunResult = { turns: this.kernel.turns, status, ...(error === undefined ? {} : { error }) };
 		this.emit("turn:run-end", {
 			runId,
@@ -568,17 +519,21 @@ export class Runner {
 		return runUsedTools(messages);
 	}
 
-	/** Add a message to the transcript and the journal, in step. */
+	/**
+	 * Add a message to the transcript and tell the journal. The runner does not
+	 * write anything down itself (§3 ruling 6): the journaling subscriber does,
+	 * and announces the entry id once it has one.
+	 */
 	private push(message: AgentMessage): void {
 		this.transcript.push(message);
-		this.journal?.recordMessage(message);
+		this.emit("message:end", { message });
 	}
 
 	/** Adopt accepted inbox items into the transcript and the journal. */
 	private adopt(items: readonly QueuedItem[]): void {
 		for (const item of items) {
 			this.transcript.push(item.message);
-			this.journal?.recordMessage(item.message);
+			this.emit("message:end", { message: item.message });
 		}
 		if (items.length > 0) this.emit("queue:update", { queues: this.kernel.inbox.list() });
 	}
@@ -686,24 +641,10 @@ export class Runner {
 		// A failed generation is not history: eta-agent records no entry for it, and
 		// a failed message in the transcript would be sent back to the model.
 		if (assistant.stopReason !== "error" && assistant.stopReason !== "aborted") {
+			// The subscriber records this and writes the usage row for the turn; a
+			// failed generation is not history and is not announced at all.
 			this.transcript.push(assistant);
-			const entry = this.journal?.recordMessage(assistant);
-			if (entry !== undefined) {
-				this.emit("message:end", { runId, message: assistant, entryId: entry.id });
-				// The usage rides in the same commit as the entry it was spent on, so
-				// a replayed journal rebuilds the same totals.
-				this.journal?.recordUsage({
-					id: usageId(),
-					usage: assistant.usage,
-					entryId: entry.id,
-					adjustment: false,
-				});
-			}
-			// The assistant's intent is durable before its tools have side effects.
-			const committed = await this.journal?.commit();
-			for (const row of committed?.usage ?? []) {
-				this.emit("usage:recorded", { row, totals: committed!.result.stats.usage });
-			}
+			this.emit("message:end", { runId, message: assistant });
 		}
 		this.emit("turn:end", {
 			runId,
@@ -795,11 +736,7 @@ export class Runner {
 		} as AgentMessage;
 		this.transcript.push(result);
 		this.turnToolResults.push(result);
-		const entry = this.journal?.recordMessage(result);
-		// A tool that asked to terminate ends the run: the entry says so, and the
-		// loop stops after this batch instead of asking the model again.
-		if (terminate && entry !== undefined) entry.terminate = true;
-		if (entry !== undefined) this.emit("message:end", { runId, message: result, entryId: entry.id });
+		this.emit("message:end", { runId, message: result, ...(terminate ? { terminate: true as const } : {}) });
 	}
 
 	private assembleContext(toolContext: unknown, systemPrompt: string): Context {
