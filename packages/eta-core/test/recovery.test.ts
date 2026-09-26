@@ -25,7 +25,7 @@ import {
 	value,
 } from "../src/index.ts";
 import { Runner } from "../src/kernel/runner.ts";
-import { assistantMessage, fakeProvider } from "../src/testing/fake-provider.ts";
+import { assistantMessage, fakeModels } from "../src/testing/fake-provider.ts";
 
 class SimulatedCrash extends Error {}
 
@@ -81,8 +81,8 @@ function setup(disk: Disk, script: AssistantMessage[]) {
 	const storage = disk.connect();
 	const log = SessionLog.create(storage);
 	const kernel = Kernel.create();
-	const fake = fakeProvider(script);
-	const runner = new Runner(kernel, { providers: fake, model: {} as never, journal: log });
+	const fake = fakeModels(script);
+	const runner = new Runner(kernel, { models: fake, journal: log });
 	return { storage, log, kernel, runner, fake };
 }
 
@@ -171,10 +171,9 @@ describe("crash recovery — the kernel rebuilds from the journal", () => {
 		const log = await SessionLog.load(disk.restart());
 		const resumedAt = log.transcript().length;
 		const kernel = Kernel.create();
-		const fake = fakeProvider([answer("second answer")]);
+		const fake = fakeModels([answer("second answer")]);
 		const runner = new Runner(kernel, {
-			providers: fake,
-			model: {} as never,
+			models: fake,
 			journal: log,
 			initialTranscript: log.transcript(),
 		});

@@ -67,14 +67,18 @@ export type StorageWrite = EntryWrite | UsageWrite | ValueWrite;
 /* Addresses                                                           */
 /* ------------------------------------------------------------------ */
 
+declare const storedValueType: unique symbol;
+
 /**
  * A typed address for one key inside a namespace. Addresses exist so reads
- * carry their type with them and prefix scans stay honest.
+ * carry their type with them and prefix scans stay honest. The brand is
+ * phantom: it never exists at runtime (same trick as eta-agent's values.ts).
  */
 export interface Value<T> {
 	readonly kind: "value";
 	readonly namespace: string;
 	readonly key: string;
+	readonly [storedValueType]?: (value: T) => T;
 }
 
 export function value<T>(namespace: string, key = ""): Value<T> {

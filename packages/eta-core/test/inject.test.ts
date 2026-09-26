@@ -1,8 +1,7 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
 import { Kernel, Runner } from "../src/index.ts";
-import { assistantMessage, fakeProvider } from "../src/testing/fake-provider.ts";
-import type { AgentMessage } from "../src/types/messages.ts";
+import { assistantMessage, fakeModels } from "../src/testing/fake-provider.ts";
 
 const userMsg = (text: string) => ({ role: "user" as const, content: [{ type: "text" as const, text }], timestamp: 0 });
 const answer = (text: string): AssistantMessage =>
@@ -10,8 +9,8 @@ const answer = (text: string): AssistantMessage =>
 
 function setup(script: AssistantMessage[], autoPump = false) {
 	const kernel = Kernel.create();
-	const fake = fakeProvider(script);
-	const runner = new Runner(kernel, { providers: fake, model: {} as never, autoPump });
+	const fake = fakeModels(script);
+	const runner = new Runner(kernel, { models: fake, autoPump });
 	return { kernel, runner, fake, dispose: () => void kernel.dispose() };
 }
 

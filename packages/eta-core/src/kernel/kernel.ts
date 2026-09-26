@@ -12,11 +12,14 @@
  * no continuation driver, and no spawn tool (REFACTOR.md §1.4).
  */
 import { Context } from "cordis";
+import type { KernelConfig } from "../types/config.ts";
+import { defaultKernelConfig } from "../types/config.ts";
 import type { Emit } from "../types/events.ts";
 import { kernelEmit } from "../types/events.ts";
 import type { AgentMessage } from "../types/messages.ts";
 import type { PersonaCard } from "../types/persona.ts";
 import type { StoredTask } from "../types/tasks.ts";
+import { ConfigService } from "./config.ts";
 import type { GoalState } from "./goal.ts";
 import { GoalService } from "./goal.ts";
 import { PersonaService } from "./persona.ts";
@@ -28,9 +31,12 @@ export interface KernelOptions {
 	maxTurns?: number | null;
 	/** Parent context (the server's root). Defaults to a fresh root context. */
 	parent?: Context;
+	/** Initial configuration; the runner reads it live every turn. */
+	config?: Partial<KernelConfig>;
 }
 
 export interface KernelInspect {
+	config: KernelConfig;
 	maxTurns: number | null;
 	turns: number;
 	budgetSpent: boolean;
@@ -48,6 +54,7 @@ export class Kernel {
 	readonly persona: PersonaService;
 	readonly tasks: TaskService;
 	readonly tools: ToolService;
+	readonly config: ConfigService;
 	readonly maxTurns: number | null;
 
 	private turnCount = 0;
@@ -62,6 +69,7 @@ export class Kernel {
 		this.persona = new PersonaService(this.ctx);
 		this.tasks = new TaskService(this.ctx);
 		this.tools = new ToolService(this.ctx);
+		this.config = new ConfigService(this.ctx, defaultKernelConfig(options.config));
 	}
 
 	static create(options: KernelOptions = {}): Kernel {
@@ -111,6 +119,7 @@ export class Kernel {
 
 	inspect(): KernelInspect {
 		return {
+			config: structuredClone(this.config.get()) as KernelConfig,
 			maxTurns: this.maxTurns,
 			turns: this.turnCount,
 			budgetSpent: this.budgetSpent,

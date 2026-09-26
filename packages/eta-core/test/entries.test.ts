@@ -66,7 +66,7 @@ describe("entry union", () => {
 			{ ...base(), type: "answer", payload: { questionId: "q", answers: [] } },
 			{ ...base(), type: "btw", payload: { note: "n" } },
 		];
-		const kinds = entries.map((e) => {
+		const kinds: unknown[] = entries.map((e) => {
 			switch (e.type) {
 				case "message":
 					return e.message.role;
@@ -85,8 +85,9 @@ describe("entry union", () => {
 				case "btw":
 					return e.payload.note;
 			}
+			return undefined;
 		});
-		expect(kinds.every((k) => k !== undefined)).toBe(true);
+		expect(kinds.every((kind) => kind !== undefined)).toBe(true);
 		// If a variant were missing from the switch, TypeScript would flag `never`.
 		expectTypeOf<Entry["type"]>().toEqualTypeOf<
 			"message" | "compaction" | "branch_summary" | "merge" | "goal" | "ask" | "answer" | "btw"

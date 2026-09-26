@@ -1,5 +1,5 @@
 import { Context } from "cordis";
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { KERNEL_EVENT_NAMES, type KernelEvents, kernelEmit, kernelOn } from "../src/types/events.ts";
 
 describe("event vocabulary", () => {
@@ -16,6 +16,7 @@ describe("event vocabulary", () => {
 			  "persona:missing",
 			  "persona:switched",
 			  "prompt:assembled",
+			  "state:config-update",
 			  "storage:appended",
 			  "storage:compacted",
 			  "storage:error",

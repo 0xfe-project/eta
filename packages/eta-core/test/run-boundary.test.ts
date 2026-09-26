@@ -2,7 +2,7 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
 import { isEmptyStop, Kernel, Runner } from "../src/index.ts";
 import type { KernelTool } from "../src/kernel/tools.ts";
-import { assistantMessage, fakeProvider } from "../src/testing/fake-provider.ts";
+import { assistantMessage, fakeModels } from "../src/testing/fake-provider.ts";
 import type { AgentMessage } from "../src/types/messages.ts";
 
 const userMsg = (text: string) => ({ role: "user" as const, content: [{ type: "text" as const, text }], timestamp: 0 });
@@ -19,10 +19,9 @@ function setup(
 	} = {},
 ) {
 	const kernel = Kernel.create({ maxTurns: opts.maxTurns ?? 200 });
-	const fake = fakeProvider(script);
+	const fake = fakeModels(script);
 	const runner = new Runner(kernel, {
-		providers: fake,
-		model: {} as never,
+		models: fake,
 		boundary: {
 			evaluate: opts.evaluate ?? (async () => false),
 			nudgeEmpty: nudge("resume-empty"),
