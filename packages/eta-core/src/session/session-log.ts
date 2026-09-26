@@ -89,12 +89,45 @@ export class SessionLog {
 		]);
 	}
 
-	/** The transcript this journal holds on the branch view, oldest first. */
+	/**
+	 * The transcript this journal holds on the branch view, oldest first.
+	 *
+	 * A compaction entry stands in for the history it replaced: walking oldest
+	 * first, the accumulated messages are reset to [summary, ...retainedTail]
+	 * at that point. The messages before the cut stay in the journal — they are
+	 * history — but they are no longer what the model is sent.
+	 */
 	transcript(): AgentMessage[] {
-		return this.graph
-			.pathOldestFirst()
-			.filter((entry): entry is MessageEntry => entry.type === "message")
-			.map((entry) => entry.message);
+		let messages: AgentMessage[] = [];
+		for (const entry of this.graph.pathOldestFirst()) {
+			if (entry.type === "message") {
+				messages.push((entry as MessageEntry).message);
+				continue;
+			}
+			if (entry.type === "compaction") {
+				messages = [
+					{
+						role: "compactionSummary",
+						summary: entry.summary,
+						tokensBefore: entry.tokensBefore,
+						timestamp: entry.timestamp,
+					},
+					...entry.retainedTail,
+				];
+				continue;
+			}
+			if (entry.type === "branch_summary") {
+				messages = [
+					{
+						role: "branchSummary",
+						summary: entry.summary,
+						fromId: entry.fromId,
+						timestamp: entry.timestamp,
+					},
+				];
+			}
+		}
+		return messages;
 	}
 }
 

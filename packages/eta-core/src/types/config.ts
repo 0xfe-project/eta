@@ -44,6 +44,13 @@ export interface CompactionSettings {
 	enabled: boolean;
 	reserveTokens: number;
 	keepRecentTokens: number;
+	/**
+	 * Window-independent ceiling on how much history one request may carry
+	 * (REFACTOR.md, memory #40/#50). Defaults to 64k; raise it per provider when
+	 * a session genuinely needs more, but a 1M-token window is not a reason to
+	 * resend a million tokens.
+	 */
+	maxContextTokens?: number;
 	economics?: CompactionEconomics;
 }
 

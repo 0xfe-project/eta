@@ -86,7 +86,10 @@ describe("kernel assembly", () => {
 		expect(kernel.injectQueueDepth).toBe(2);
 		expect(received).toHaveLength(2);
 		const drained = kernel.drainInjected();
-		const texts = drained.map((m) => (m.content[0] as { text: string }).text);
+		const texts = drained.map((m) => {
+			if (m.role !== "user" && m.role !== "assistant" && m.role !== "toolResult") return "";
+			return ((m.content as { text: string }[])[0] ?? { text: "" }).text;
+		});
 		expect(texts).toEqual(["one", "two"]);
 		expect(kernel.injectQueueDepth).toBe(0);
 		// Draining again is empty, not an error.

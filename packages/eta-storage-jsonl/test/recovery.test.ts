@@ -89,13 +89,13 @@ describe("crash recovery on disk", () => {
 
 		const recovered = await SessionLog.load(reopened);
 		// Both committed turns are intact; the torn line never became an entry.
-		const texts = recovered
-			.transcript()
-			.flatMap((message) =>
-				(Array.isArray(message.content) ? message.content : [])
-					.filter((part): part is { type: "text"; text: string } => part.type === "text")
-					.map((part) => part.text),
-			);
+		const texts = recovered.transcript().flatMap((message) => {
+			if (message.role !== "user" && message.role !== "assistant" && message.role !== "toolResult") return [];
+			const content = message.content;
+			return (Array.isArray(content) ? content : [])
+				.filter((part): part is { type: "text"; text: string } => part.type === "text")
+				.map((part) => part.text);
+		});
 		expect(texts).toEqual(["settled question", "settled answer", "question the run was answering"]);
 		await recovered.storage.close();
 

@@ -92,7 +92,9 @@ describe("graph with a merge", () => {
 			.pathOldestFirst()
 			.filter((e) => e.type === "message")
 			.flatMap((e) => {
-				const content = (e as MessageEntry).message.content;
+				const message = (e as MessageEntry).message;
+				if (message.role !== "user" && message.role !== "assistant" && message.role !== "toolResult") return [];
+				const content = message.content;
 				return Array.isArray(content)
 					? content.filter((c): c is { type: "text"; text: string } => c.type === "text").map((c) => c.text)
 					: [];

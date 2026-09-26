@@ -12,7 +12,9 @@ const msg = (text: string, parentId: string | null = null): NewEntry<MessageEntr
 
 const textOf = (entry: Entry): string | undefined => {
 	if (entry.type !== "message") return undefined;
-	const content = (entry as MessageEntry).message.content;
+	const message = (entry as MessageEntry).message;
+	if (message.role !== "user" && message.role !== "assistant" && message.role !== "toolResult") return undefined;
+	const content = message.content;
 	return Array.isArray(content) ? (content[0] as { text: string }).text : undefined;
 };
 

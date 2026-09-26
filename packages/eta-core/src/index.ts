@@ -5,6 +5,23 @@
 
 export { type AssistantStreamObserver, consumeAssistantStream } from "./kernel/assistant.ts";
 export {
+	type CompactionOutcome,
+	type CompactionReason,
+	type CompactionRequest,
+	type CompactionService,
+	type ContextUsageEstimate,
+	type CutPointResult,
+	calculateContextTokens,
+	DEFAULT_MAX_CONTEXT_TOKENS,
+	estimateContextTokens,
+	estimateTokens,
+	findCutPoint,
+	findTurnStartIndex,
+	fitCompactionSettings,
+	getLastAssistantUsage,
+	shouldCompact,
+} from "./kernel/compaction.ts";
+export {
 	ConfigService,
 	RETRY_DEFAULTS,
 	validateCompactionSettings,
@@ -113,6 +130,7 @@ export {
 } from "./types/config.ts";
 export * from "./types/entries.ts";
 export {
+	type CompactionEvents,
 	type ContextPartStats,
 	type Emit,
 	ETA_EVENT_CATEGORIES,

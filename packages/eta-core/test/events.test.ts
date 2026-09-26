@@ -7,6 +7,8 @@ describe("event vocabulary", () => {
 		expect([...KERNEL_EVENT_NAMES].sort()).toEqual([...KERNEL_EVENT_NAMES]);
 		expect(KERNEL_EVENT_NAMES).toMatchInlineSnapshot(`
 			[
+			  "compaction:end",
+			  "compaction:start",
 			  "goal:changed",
 			  "goal:cleared",
 			  "inject:received",
