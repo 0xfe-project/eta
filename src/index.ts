@@ -1,30 +1,45 @@
 /**
- * JSONL session journal — the file-backed StorageService (REFACTOR.md §K5).
+ * JSONL session journal — the file-backed StorageService (REFACTOR.md §4).
  *
- * One commit per line, append-only. Three rules this file exists to enforce,
- * each learned from a real failure:
+ * One commit per line, in the same wire format eta-agent journals use:
+ * `{ "w": [...writes], "t": timestamp }`. An old journal reads as-is; the
+ * kernel vocabulary is a subset of the old one (no list writes, no op state),
+ * so the same line format carries both.
  *
- * 1. An append that resolved must survive a crash: write then fsync, so the
- *    repair is not just sitting in the page cache.
- * 2. A line that does not parse is a hole, not the end of the file. The repair
- *    scans the whole journal and skips bad lines; stopping at the first one
- *    would silently delete the history behind it.
- * 3. Compaction rebuilds the journal from the state it produced and swaps it
- *    in atomically — write beside, fsync, rename, fsync the directory — so a
- *    crash leaves either the whole old journal or the whole new one.
- *
- * The wire format is one JSON object per line: `{ entries, values?, deletes? }`.
+ * Three rules this file exists to enforce, each learned from a real failure:
+ * 1. A commit that resolved must survive a crash: write then fsync.
+ * 2. A line that does not parse is a hole, not the end of the file: the repair
+ *    scans the whole journal and skips bad lines instead of stopping at the
+ *    first one.
+ * 3. Compaction rebuilds the journal from live state and swaps it atomically —
+ *    write beside, fsync, rename, fsync the directory — so a crash leaves the
+ *    whole old journal or the whole new one.
  */
 import { open, rename, stat } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { CompactResult, JournalCommit, RepairResult, StorageService } from "@eta/core";
+import {
+	type CommitResult,
+	type CompactResult,
+	type Entry,
+	type EntryScan,
+	InMemoryStorageState,
+	type RepairResult,
+	type SessionStats,
+	type StorageBranchScan,
+	type StorageService,
+	type StorageWrite,
+	type StoredValue,
+	type UsageRow,
+	type UsageScan,
+	type Value,
+} from "@eta/core";
 
 export interface JsonlStorageOptions {
 	/**
-	 * fsync after every append. Default true; a caller that would rather lose
+	 * fsync after every commit. Default true; a caller that would rather lose
 	 * the last line than pay the syscall can turn it off and call `flush`.
 	 */
-	fsyncOnAppend?: boolean;
+	fsyncOnCommit?: boolean;
 	/** Compact during `open` once the journal passes `compactMinBytes`. */
 	compactOnLoad?: boolean;
 	/** Byte threshold for `compactOnLoad`. Default 256 KiB. */
@@ -35,24 +50,22 @@ export interface JsonlStorageOptions {
 
 const DEFAULT_COMPACT_MIN_BYTES = 256 * 1024;
 
+interface JournalLine {
+	w: StorageWrite[];
+	t: number;
+}
+
 export class JsonlStorage implements StorageService {
 	readonly path: string;
 
 	private readonly options: JsonlStorageOptions;
-	private commits: JournalCommit[] = [];
-	private readonly values = new Map<string, unknown>();
+	private readonly state = new InMemoryStorageState();
 	private handle: Awaited<ReturnType<typeof open>> | undefined;
 	private dirty = false;
 	private closed = false;
-	/** Bytes the journal had when it was last known-good on disk. */
 	private journalBytes = 0;
-	/** Damage seen at load, until `repairTornTail` makes the file match memory. */
-	private pendingRepair: { keptBytes: number; brokenBytes: number; brokenRecords: number; trailingOnly: boolean } = {
-		keptBytes: 0,
-		brokenBytes: 0,
-		brokenRecords: 0,
-		trailingOnly: true,
-	};
+	private pendingRepair = { keptBytes: 0, brokenBytes: 0, brokenRecords: 0, trailingOnly: true };
+
 	private constructor(path: string, options: JsonlStorageOptions) {
 		this.path = path;
 		this.options = options;
@@ -67,22 +80,15 @@ export class JsonlStorage implements StorageService {
 			raw = await readFileText(path);
 			size = (await stat(path)).size;
 		} catch (error) {
-			if (isNotFound(error)) {
-				storage.journalBytes = 0;
-				return storage;
-			}
+			if (isNotFound(error)) return storage;
 			throw error;
 		}
 
 		// Every line is examined: a hole in the middle costs nothing to step over,
 		// and the commits behind it are history somebody agreed to.
 		const parsed = parseLines(raw);
-		for (const commit of parsed.commits) storage.applyCommit(commit);
-		storage.commits = parsed.commits;
-		// The file's last line has no newline, so kept bytes are clamped to the
-		// size the read actually had.
+		for (const line of parsed.lines) storage.state.commit(line.w, line.t);
 		const keptBytes = Math.min(parsed.keptBytes, size);
-
 		storage.journalBytes = size;
 		storage.pendingRepair = {
 			keptBytes,
@@ -95,6 +101,11 @@ export class JsonlStorage implements StorageService {
 				`[eta-journal] ${path}: ${parsed.badLineIndexes.size} unreadable line(s), ${parsed.brokenBytes} byte(s) — call repairTornTail()`,
 			);
 		}
+		if (storage.state.repeated > 0) {
+			options.warn?.(
+				`[eta-journal] ${path}: ${storage.state.repeated} repeated entry/usage id(s), kept the last write of each`,
+			);
+		}
 		if (
 			options.compactOnLoad === true &&
 			parsed.badLineIndexes.size === 0 &&
@@ -105,23 +116,48 @@ export class JsonlStorage implements StorageService {
 		return storage;
 	}
 
-	async append(commit: JournalCommit): Promise<void> {
+	/** Apply one atomic batch: assign seqs, append one line, fsync. */
+	async commit(writes: StorageWrite[]): Promise<CommitResult> {
 		this.assertOpen();
-		const line = `${JSON.stringify(commit)}\n`;
+		const result = this.state.commit(writes);
+		const line = `${JSON.stringify({ w: writes, t: result.timestamp } satisfies JournalLine)}\n`;
 		const handle = await this.appendHandle();
 		await handle.write(line);
 		this.dirty = true;
-		if (this.options.fsyncOnAppend !== false) {
+		if (this.options.fsyncOnCommit !== false) {
 			await handle.sync();
 			this.dirty = false;
 		}
 		this.journalBytes += new TextEncoder().encode(line).length;
-		this.commits.push(commit);
-		this.applyCommit(commit);
+		return result;
 	}
 
-	async readJournal(): Promise<JournalCommit[]> {
-		return structuredClone(this.commits);
+	async getEntries(ids: string[]): Promise<Map<string, Entry>> {
+		return this.state.getEntries(ids);
+	}
+
+	async getValue<T>(address: Value<T>): Promise<StoredValue<T> | undefined> {
+		return this.state.getValue(address);
+	}
+
+	async listValues<T>(prefix: Value<T>): Promise<StoredValue<T>[]> {
+		return this.state.listValues(prefix);
+	}
+
+	async scanBranch(query: StorageBranchScan): Promise<Entry[]> {
+		return this.state.scanBranch(query);
+	}
+
+	async scanEntries(query: EntryScan): Promise<Entry[]> {
+		return this.state.scanEntries(query);
+	}
+
+	async scanUsage(query: UsageScan): Promise<UsageRow[]> {
+		return this.state.scanUsage(query);
+	}
+
+	async getStats(): Promise<SessionStats> {
+		return this.state.getStats();
 	}
 
 	/**
@@ -159,48 +195,28 @@ export class JsonlStorage implements StorageService {
 			return { droppedBytes: brokenBytes, droppedRecords: brokenRecords, trailingOnly: true };
 		}
 
-		// Damage sits between good commits: rewriting is the only repair that
-		// keeps what is behind it.
 		const compacted = await this.compactJournal();
 		this.pendingRepair = { keptBytes: compacted.afterBytes, brokenBytes: 0, brokenRecords: 0, trailingOnly: false };
 		return { droppedBytes: brokenBytes, droppedRecords: brokenRecords, trailingOnly: false };
 	}
 
 	/**
-	 * Replace the journal with one rebuilt from live state: the entries that
-	 * survived and the KV values as they stand now. Every superseded value and
-	 * every tombstone has nothing left to say.
+	 * Replace the journal with one rebuilt from live state: the entries and
+	 * usage rows still held, in sequence order, then the values that are still
+	 * alive. Everything superseded has nothing left to say.
 	 */
 	async compactJournal(): Promise<CompactResult> {
 		this.assertOpen();
 		const beforeBytes = this.journalBytes;
-		const content = this.renderJournal();
-		const afterBytes = new TextEncoder().encode(content).length;
-		if (content.length === 0 && beforeBytes === 0) {
+		const writes = this.state.currentWrites();
+		if (writes.length === 0 && beforeBytes === 0) {
 			return { rewritten: false, beforeBytes: 0, afterBytes: 0, reason: "empty journal" };
 		}
+		const content =
+			writes.length === 0 ? "" : `${JSON.stringify({ w: writes, t: Date.now() } satisfies JournalLine)}\n`;
+		const afterBytes = new TextEncoder().encode(content).length;
 		await this.writeAtomic(content);
-		// The journal on disk is now the journal: what it holds is what a replay
-		// would see, so the in-memory view adopts it.
-		this.commits = content.length === 0 ? [] : parseLines(content).commits;
 		return { rewritten: true, beforeBytes, afterBytes };
-	}
-
-	async get(key: string): Promise<unknown | undefined> {
-		const value = this.values.get(key);
-		return value === undefined ? undefined : structuredClone(value);
-	}
-
-	async set(key: string, value: unknown): Promise<void> {
-		await this.append({ entries: [], values: { [key]: value } });
-	}
-
-	async remove(key: string): Promise<void> {
-		await this.append({ entries: [], deletes: [key] });
-	}
-
-	async keys(): Promise<string[]> {
-		return [...this.values.keys()];
 	}
 
 	async flush(): Promise<void> {
@@ -226,26 +242,6 @@ export class JsonlStorage implements StorageService {
 		return JsonlStorage.open(this.path, options);
 	}
 
-	/**
-	 * The compacted journal: every entry still held, in order, one line per
-	 * commit that carries entries — and one final line holding the KV state as
-	 * it stands. Values that were overwritten or deleted have nothing left to
-	 * say, so their commits drop out entirely.
-	 */
-	private renderJournal(): string {
-		const lines: string[] = [];
-		for (const commit of this.commits) {
-			if (commit.entries.length === 0) continue;
-			lines.push(JSON.stringify({ entries: commit.entries }));
-		}
-		if (this.values.size > 0) {
-			const alive: Record<string, unknown> = {};
-			for (const [key, value] of this.values) alive[key] = value;
-			lines.push(JSON.stringify({ entries: [], values: alive }));
-		}
-		return lines.length === 0 ? "" : `${lines.join("\n")}\n`;
-	}
-
 	private async writeAtomic(content: string): Promise<void> {
 		await this.closeHandle();
 		const tempPath = `${this.path}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
@@ -258,8 +254,7 @@ export class JsonlStorage implements StorageService {
 		}
 		await rename(tempPath, this.path);
 		await syncDirectory(dirname(this.path));
-		const size = content.length === 0 ? 0 : new TextEncoder().encode(content).length;
-		this.journalBytes = size;
+		this.journalBytes = content.length === 0 ? 0 : new TextEncoder().encode(content).length;
 	}
 
 	private async appendHandle(): Promise<Awaited<ReturnType<typeof open>>> {
@@ -277,78 +272,78 @@ export class JsonlStorage implements StorageService {
 		this.handle = undefined;
 	}
 
-	private applyCommit(commit: JournalCommit): void {
-		if (commit.values !== undefined) {
-			for (const [key, value] of Object.entries(commit.values)) this.values.set(key, value);
-		}
-		if (commit.deletes !== undefined) {
-			for (const key of commit.deletes) this.values.delete(key);
-		}
-	}
-
 	private assertOpen(): void {
 		if (this.closed) throw new Error("JsonlStorage: closed");
 	}
 }
 
 interface ParsedJournal {
-	commits: JournalCommit[];
-	/** Indexes of lines that did not parse, in the original file. */
+	lines: JournalLine[];
 	badLineIndexes: Set<number>;
-	/** Bytes up through the last line that parsed. */
 	keptBytes: number;
 	brokenBytes: number;
-	/** Damage sits after the last good line — the common crash-mid-append shape. */
 	trailingOnly: boolean;
 }
 
 /** Parse a journal body, stepping over holes instead of stopping at them. */
 function parseLines(raw: string): ParsedJournal {
 	const encoder = new TextEncoder();
-	const commits: JournalCommit[] = [];
+	const lines: JournalLine[] = [];
 	const badLineIndexes = new Set<number>();
 	let keptBytes = 0;
 	let brokenBytes = 0;
 	let lastGoodLine = -1;
 	let lastBrokenLine = -1;
-	const lines = raw.split("\n");
-	for (let index = 0; index < lines.length; index += 1) {
-		const line = lines[index]!;
+	const split = raw.split("\n");
+	for (let index = 0; index < split.length; index += 1) {
+		const line = split[index]!;
 		const trimmed = line.trim();
 		if (trimmed.length === 0) continue;
 		// Counted with the newline that ended it; the file's last line has none.
-		const lineBytes = encoder.encode(line).length + (index === lines.length - 1 ? 0 : 1);
-		let commit: unknown;
+		const lineBytes = encoder.encode(line).length + (index === split.length - 1 ? 0 : 1);
+		let parsedLine: unknown;
 		try {
-			commit = JSON.parse(trimmed);
+			parsedLine = JSON.parse(trimmed);
 		} catch {
 			badLineIndexes.add(index);
 			brokenBytes += lineBytes;
 			lastBrokenLine = index;
 			continue;
 		}
-		if (!isJournalCommit(commit)) {
+		if (!isJournalLine(parsedLine)) {
 			badLineIndexes.add(index);
 			brokenBytes += lineBytes;
 			lastBrokenLine = index;
 			continue;
 		}
 		lastGoodLine = index;
-		commits.push(commit);
+		lines.push(parsedLine);
 		keptBytes += lineBytes;
 	}
-	return { commits, badLineIndexes, keptBytes, brokenBytes, trailingOnly: lastBrokenLine > lastGoodLine };
+	return { lines, badLineIndexes, keptBytes, brokenBytes, trailingOnly: lastBrokenLine > lastGoodLine };
 }
 
-function isJournalCommit(value: unknown): value is JournalCommit {
-	return (
-		typeof value === "object" &&
-		value !== null &&
-		Array.isArray((value as { entries?: unknown }).entries) &&
-		(value as JournalCommit).entries.every(
-			(entry) => typeof entry === "object" && entry !== null && typeof (entry as { id?: unknown }).id === "string",
-		)
-	);
+function isJournalLine(value: unknown): value is JournalLine {
+	if (typeof value !== "object" || value === null) return false;
+	const line = value as { w?: unknown };
+	if (!Array.isArray(line.w)) return false;
+	return line.w.every((write) => {
+		if (typeof write !== "object" || write === null) return false;
+		const kind = (write as { kind?: unknown }).kind;
+		if (kind === "entry") {
+			const entry = (write as { entry?: { id?: unknown } }).entry;
+			return typeof entry === "object" && entry !== null && typeof entry.id === "string";
+		}
+		if (kind === "usage") {
+			const row = (write as { row?: { id?: unknown } }).row;
+			return typeof row === "object" && row !== null && typeof row.id === "string";
+		}
+		if (kind === "value") {
+			const op = (write as { op?: unknown }).op;
+			return op === "set" || op === "delete";
+		}
+		return false;
+	});
 }
 
 function isNotFound(error: unknown): boolean {

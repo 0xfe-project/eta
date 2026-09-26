@@ -38,14 +38,16 @@ async function openStorage(path: string, options: JsonlStorageOptions = {}): Pro
 }
 
 let seq = 0;
-function messageEntry(id: string, text: string, parentId: string | null = null): MessageEntry {
+function messageEntry(
+	id: string,
+	text: string,
+	parentId: string | null = null,
+): Omit<MessageEntry, "seq" | "timestamp"> {
 	seq += 1;
 	return {
 		id,
 		parentId,
 		type: "message",
-		seq,
-		timestamp: 0,
 		message: { role: "user", content: [{ type: "text", text }], timestamp: 0 },
 	};
 }
@@ -55,7 +57,7 @@ const jsonLines = (raw: string) =>
 	raw
 		.split("\n")
 		.filter((line) => line.trim().length > 0)
-		.map((line) => JSON.parse(line) as { entries: { id: string }[]; values?: Record<string, unknown> });
+		.map((line) => JSON.parse(line) as { w: { kind: string; entry?: { id: string } }[]; t: number });
 
 describe("JsonlStorage — the shared contract", () => {
 	storageContract(
@@ -76,35 +78,41 @@ describe("JsonlStorage — the shared contract", () => {
 });
 
 describe("JsonlStorage — the journal on disk", () => {
-	it("writes one inspectable JSON line per commit", async () => {
+	it("writes eta-agent journal lines: one {w, t} object per commit", async () => {
 		const path = nextPath("lines");
 		const { storage, dispose } = await openStorage(path);
-		await storage.append({ entries: [messageEntry("a", "first")] });
-		await storage.append({ entries: [messageEntry("b", "second", "a")], values: { "session.model": "k3" } });
+		await storage.commit([{ kind: "entry", entry: messageEntry("a", "first") }]);
+		await storage.commit([
+			{ kind: "entry", entry: messageEntry("b", "second", "a") },
+			{ kind: "value", op: "set", namespace: "session.model", key: "", value: "k3" },
+		]);
 		await dispose();
 
 		const lines = jsonLines(await readText(path));
 		expect(lines).toHaveLength(2);
-		expect(lines[0]!.entries.map((entry) => entry.id)).toEqual(["a"]);
-		expect(lines[1]!.entries.map((entry) => entry.id)).toEqual(["b"]);
-		expect(await readText(path)).toContain("\n");
+		expect(lines[0]!.w[0]!.kind).toBe("entry");
+		expect(lines[0]!.w[0]!.entry!.id).toBe("a");
+		expect(lines[1]!.w.map((w) => w.kind)).toEqual(["entry", "value"]);
+		expect(lines.every((line) => typeof line.t === "number")).toBe(true);
 	});
 
-	it("appends survive a reopen in the exact order they were made", async () => {
+	it("commits survive a reopen in the exact order they were made", async () => {
 		const path = nextPath("order");
 		const first = await openStorage(path);
-		await first.storage.append({ entries: [messageEntry("a", "one")] });
-		await first.storage.append({ entries: [messageEntry("b", "two", "a")] });
+		await first.storage.commit([{ kind: "entry", entry: messageEntry("a", "one") }]);
+		await first.storage.commit([{ kind: "entry", entry: messageEntry("b", "two", "a") }]);
 		await first.dispose();
 
 		const second = await openStorage(path);
-		await second.storage.append({ entries: [messageEntry("c", "three", "b")] });
+		await second.storage.commit([{ kind: "entry", entry: messageEntry("c", "three", "b") }]);
 		await second.dispose();
 
 		const third = await openStorage(path);
-		const ids = (await third.storage.readJournal()).flatMap((commit) => commit.entries.map((entry) => entry.id));
-		expect(ids).toEqual(["a", "b", "c"]);
-		expect(await third.storage.get("nothing")).toBeUndefined();
+		const entries = await third.storage.scanEntries({});
+		expect(entries.map((entry) => entry.id)).toEqual(["a", "b", "c"]);
+		// Sequence numbers are rebuilt in the same relative order.
+		expect(entries[0]!.seq).toBeLessThan(entries[1]!.seq);
+		expect(entries[1]!.seq).toBeLessThan(entries[2]!.seq);
 		await third.dispose();
 	});
 });
@@ -112,17 +120,16 @@ describe("JsonlStorage — the journal on disk", () => {
 describe("JsonlStorage — torn tail repair", () => {
 	it("cuts a half-written last line and the cut reaches the disk", async () => {
 		const path = nextPath("torn");
-		const good = `${JSON.stringify({ entries: [messageEntry("a", "committed")] })}\n`;
+		const good = `${JSON.stringify({ w: [{ kind: "entry", entry: messageEntry("a", "committed") }], t: 1 })}\n`;
 		// A process died with a third of a line in flight.
-		const torn = `{"entries":[{"id":"b","par`;
+		const torn = `{"w":[{"kind":"entry","entry":{"id":"b"`;
 		await writeFile(path, `${good}${torn}`, "utf8");
 
 		const warnings: string[] = [];
 		const handle = await openStorage(path, { warn: (message) => warnings.push(message) });
 		expect(warnings.join(" ")).toContain("1 unreadable line(s)");
 		// Loading reports the damage; it does not silently drop the good part.
-		const ids = (await handle.storage.readJournal()).flatMap((commit) => commit.entries.map((e) => e.id));
-		expect(ids).toEqual(["a"]);
+		expect((await handle.storage.scanEntries({})).map((entry) => entry.id)).toEqual(["a"]);
 
 		const repaired = await handle.storage.repairTornTail();
 		expect(repaired).toEqual({ droppedBytes: torn.length, droppedRecords: 1, trailingOnly: true });
@@ -132,30 +139,26 @@ describe("JsonlStorage — torn tail repair", () => {
 		// journal continues from there.
 		const again = await handle.reopen();
 		expect((await again.storage.repairTornTail()).droppedRecords).toBe(0);
-		await again.storage.append({ entries: [messageEntry("c", "after repair", "a")] });
+		await again.storage.commit([{ kind: "entry", entry: messageEntry("c", "after repair", "a") }]);
 		await again.dispose();
 
 		const third = await openStorage(path);
-		expect((await third.storage.readJournal()).flatMap((commit) => commit.entries.map((entry) => entry.id))).toEqual([
-			"a",
-			"c",
-		]);
+		expect((await third.storage.scanEntries({})).map((entry) => entry.id)).toEqual(["a", "c"]);
 		await third.dispose();
 	});
 
 	it("steps over a hole in the middle instead of deleting the history behind it", async () => {
 		const path = nextPath("hole");
 		const lines = [
-			JSON.stringify({ entries: [messageEntry("a", "before")] }),
+			JSON.stringify({ w: [{ kind: "entry", entry: messageEntry("a", "before") }], t: 1 }),
 			`{{{ not json`,
-			JSON.stringify({ entries: [messageEntry("b", "after")] }),
+			JSON.stringify({ w: [{ kind: "entry", entry: messageEntry("b", "after") }], t: 2 }),
 		].join("\n");
 		await writeFile(path, `${lines}\n`, "utf8");
 
 		const handle = await openStorage(path);
 		// Everything that parses is replayed, including what sits behind the hole.
-		const ids = (await handle.storage.readJournal()).flatMap((commit) => commit.entries.map((e) => e.id));
-		expect(ids).toEqual(["a", "b"]);
+		expect((await handle.storage.scanEntries({})).map((entry) => entry.id)).toEqual(["a", "b"]);
 
 		const repaired = await handle.storage.repairTornTail();
 		expect(repaired.trailingOnly).toBe(false);
@@ -165,26 +168,27 @@ describe("JsonlStorage — torn tail repair", () => {
 		expect(raw).toContain('"a"');
 		expect(raw).toContain('"b"');
 		expect(raw).not.toContain("not json");
-		expect(jsonLines(raw).flatMap((commit) => commit.entries.map((entry) => entry.id))).toEqual(["a", "b"]);
 		await handle.dispose();
 	});
 
-	it("treats a parsed line without a usable entries array as damage", async () => {
+	it("treats a parsed line without usable writes as damage", async () => {
 		const path = nextPath("shape");
-		await writeFile(path, `{"entries":"nope"}\n${JSON.stringify({ entries: [messageEntry("a", "ok")] })}\n`, "utf8");
+		await writeFile(
+			path,
+			`{"w":"nope","t":1}\n${JSON.stringify({ w: [{ kind: "entry", entry: messageEntry("a", "ok") }], t: 2 })}\n`,
+			"utf8",
+		);
 		const handle = await openStorage(path);
 		const repaired = await handle.storage.repairTornTail();
 		expect(repaired.droppedRecords).toBe(1);
 		expect(repaired.trailingOnly).toBe(false);
-		expect((await handle.storage.readJournal()).flatMap((commit) => commit.entries.map((entry) => entry.id))).toEqual(
-			["a"],
-		);
+		expect((await handle.storage.scanEntries({})).map((entry) => entry.id)).toEqual(["a"]);
 		await handle.dispose();
 	});
 
 	it("leaves an unreadable tail alone when another writer is already past it", async () => {
 		const path = nextPath("concurrent");
-		const good = `${JSON.stringify({ entries: [messageEntry("a", "committed")] })}\n`;
+		const good = `${JSON.stringify({ w: [{ kind: "entry", entry: messageEntry("a", "committed") }], t: 1 })}\n`;
 		await writeFile(path, `${good}garbage`, "utf8");
 		const handle = await openStorage(path);
 		// Someone else grew the file between the read and the repair.
@@ -211,48 +215,46 @@ describe("JsonlStorage — compaction", () => {
 	it("rewrites the journal so a replay yields exactly the same state", async () => {
 		const path = nextPath("compact");
 		const handle = await openStorage(path);
-		await handle.storage.append({ entries: [messageEntry("a", "one")] });
-		await handle.storage.append({ entries: [messageEntry("b", "two", "a")] });
-		await handle.storage.set("model", "first");
-		await handle.storage.set("model", "second");
-		await handle.storage.set("temp", "gone soon");
-		await handle.storage.remove("temp");
-
-		const before = await handle.storage.readJournal();
-		const beforeIds = before.flatMap((commit) => commit.entries.map((entry) => entry.id));
+		await handle.storage.commit([{ kind: "entry", entry: messageEntry("a", "one") }]);
+		await handle.storage.commit([{ kind: "entry", entry: messageEntry("b", "two", "a") }]);
+		await handle.storage.commit([
+			{ kind: "usage", row: { id: "u1", usage: usageOf(10, 5), adjustment: false } },
+			{ kind: "value", op: "set", namespace: "model", key: "", value: "first" },
+		]);
+		await handle.storage.commit([{ kind: "value", op: "set", namespace: "model", key: "", value: "second" }]);
+		await handle.storage.commit([{ kind: "value", op: "set", namespace: "temp", key: "", value: "gone soon" }]);
+		await handle.storage.commit([{ kind: "value", op: "delete", namespace: "temp", key: "" }]);
 
 		const result = await handle.storage.compactJournal();
 		expect(result.rewritten).toBe(true);
 		expect(result.afterBytes).toBeLessThan(result.beforeBytes);
 
 		const raw = await readText(path);
-		expect(raw).not.toContain("first");
+		expect(raw).not.toContain('"first"');
 		expect(raw).not.toContain("gone soon");
+		expect(raw).not.toContain('"temp"');
 		const lines = jsonLines(raw);
-		expect(lines.flatMap((commit) => commit.entries.map((entry) => entry.id))).toEqual(beforeIds);
-		expect(lines[lines.length - 1]!.values).toEqual({ model: "second" });
+		expect(lines).toHaveLength(1);
+		expect(lines[0]!.w.map((w) => w.kind)).toEqual(["entry", "entry", "usage", "value"]);
 		await handle.dispose();
 
 		// And the compacted file replays identically from a cold start.
 		const again = await openStorage(path);
-		expect((await again.storage.readJournal()).flatMap((commit) => commit.entries.map((entry) => entry.id))).toEqual(
-			beforeIds,
-		);
-		expect(await again.storage.get("model")).toBe("second");
-		expect(await again.storage.keys()).toEqual(["model"]);
+		expect((await again.storage.scanEntries({})).map((entry) => entry.id)).toEqual(["a", "b"]);
+		expect((await again.storage.getStats()).usage.totalTokens).toBe(15);
+		expect((await again.storage.getValue({ kind: "value", namespace: "model", key: "" }))?.value).toBe("second");
 		await again.dispose();
 	});
 
 	it("swaps atomically and leaves no temp files behind", async () => {
 		const path = nextPath("atomic");
 		const handle = await openStorage(path);
-		await handle.storage.append({ entries: [messageEntry("a", "one")] });
-		await handle.storage.set("k", "v");
+		await handle.storage.commit([{ kind: "entry", entry: messageEntry("a", "one") }]);
+		await handle.storage.commit([{ kind: "value", op: "set", namespace: "k", key: "", value: "v" }]);
 		await handle.storage.compactJournal();
 		await handle.dispose();
 
 		const siblings = await readdir(dir);
-		expect(siblings.filter((name) => name.startsWith(`${path.split("/").pop()}tmp`))).toEqual([]);
 		expect(siblings.filter((name) => name.includes(".tmp-"))).toEqual([]);
 	});
 
@@ -260,8 +262,15 @@ describe("JsonlStorage — compaction", () => {
 		const path = nextPath("compact-load");
 		const lines: string[] = [];
 		for (let i = 0; i < 40; i += 1) {
-			lines.push(JSON.stringify({ entries: [messageEntry(`m${i}`, `message ${i}`.repeat(20))] }));
-			lines.push(JSON.stringify({ entries: [], values: { churn: `${i}${"x".repeat(200)}` } }));
+			lines.push(
+				JSON.stringify({ w: [{ kind: "entry", entry: messageEntry(`m${i}`, `message ${i}`.repeat(20)) }], t: i }),
+			);
+			lines.push(
+				JSON.stringify({
+					w: [{ kind: "value", op: "set", namespace: "churn", key: "", value: `${i}${"x".repeat(200)}` }],
+					t: i,
+				}),
+			);
 		}
 		const before = `${lines.join("\n")}\n`;
 		await writeFile(path, before, "utf8");
@@ -270,10 +279,12 @@ describe("JsonlStorage — compaction", () => {
 		const after = await readText(path);
 		expect(after.length).toBeLessThan(before.length);
 		// Values collapse to the one that is alive.
-		expect(((await handle.storage.get("churn")) as string).startsWith("39")).toBe(true);
 		expect(
-			(await handle.storage.readJournal()).flatMap((commit) => commit.entries.map((entry) => entry.id)),
-		).toHaveLength(40);
+			((await handle.storage.getValue({ kind: "value", namespace: "churn", key: "" }))?.value as string).startsWith(
+				"39",
+			),
+		).toBe(true);
+		expect(await handle.storage.scanEntries({})).toHaveLength(40);
 		await handle.dispose();
 	});
 
@@ -285,6 +296,17 @@ describe("JsonlStorage — compaction", () => {
 		await handle.dispose();
 	});
 });
+
+function usageOf(input: number, output: number) {
+	return {
+		input,
+		output,
+		cacheRead: 0,
+		cacheWrite: 0,
+		totalTokens: input + output,
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+	};
+}
 
 describe("JsonlStorage — fsync discipline", () => {
 	/**
@@ -310,17 +332,17 @@ describe("JsonlStorage — fsync discipline", () => {
 		}
 	}
 
-	it("fsyncs every append by default", async () => {
+	it("fsyncs every commit by default", async () => {
 		const path = nextPath("sync-append");
 		await withSyncCounting(async (syncs) => {
 			const handle = await openStorage(path);
 			const before = syncs();
-			await handle.storage.append({ entries: [messageEntry("a", "durable")] });
+			await handle.storage.commit([{ kind: "entry", entry: messageEntry("a", "durable") }]);
 			expect(syncs()).toBeGreaterThan(before);
 			// Buffered mode is the caller's bet, and then flush() pays for it.
-			const buffered = await openStorage(nextPath("sync-buffered"), { fsyncOnAppend: false });
+			const buffered = await openStorage(nextPath("sync-buffered"), { fsyncOnCommit: false });
 			const beforeBuffered = syncs();
-			await buffered.storage.append({ entries: [messageEntry("b", "maybe lost")] });
+			await buffered.storage.commit([{ kind: "entry", entry: messageEntry("b", "maybe lost") }]);
 			expect(syncs()).toBe(beforeBuffered);
 			await buffered.storage.flush();
 			expect(syncs()).toBeGreaterThan(beforeBuffered);
@@ -331,7 +353,7 @@ describe("JsonlStorage — fsync discipline", () => {
 
 	it("fsyncs the torn-tail cut, so the next boot sees a clean journal", async () => {
 		const path = nextPath("sync-repair");
-		const good = `${JSON.stringify({ entries: [messageEntry("a", "committed")] })}\n`;
+		const good = `${JSON.stringify({ w: [{ kind: "entry", entry: messageEntry("a", "committed") }], t: 1 })}\n`;
 		await writeFile(path, `${good}torn`, "utf8");
 		await withSyncCounting(async (syncs) => {
 			const handle = await openStorage(path);
@@ -346,8 +368,8 @@ describe("JsonlStorage — fsync discipline", () => {
 		const path = nextPath("sync-compact");
 		await withSyncCounting(async (syncs) => {
 			const handle = await openStorage(path);
-			await handle.storage.append({ entries: [messageEntry("a", "one")] });
-			await handle.storage.set("k", "v");
+			await handle.storage.commit([{ kind: "entry", entry: messageEntry("a", "one") }]);
+			await handle.storage.commit([{ kind: "value", op: "set", namespace: "k", key: "", value: "v" }]);
 			const before = syncs();
 			await handle.storage.compactJournal();
 			// Once for the temp journal, once for the directory holding the rename.
@@ -362,15 +384,14 @@ describe("JsonlStorage — lifecycle", () => {
 		const handle = await openStorage(nextPath("closed"));
 		await handle.storage.close();
 		await handle.storage.close();
-		await expect(handle.storage.append({ entries: [] })).rejects.toThrow("closed");
-		await expect(handle.storage.set("k", 1)).rejects.toThrow("closed");
+		await expect(handle.storage.commit([])).rejects.toThrow("closed");
 	});
 
 	it("starts a journal that does not exist yet", async () => {
 		const path = nextPath("fresh");
 		const handle = await openStorage(path);
 		expect(await handle.storage.repairTornTail()).toEqual({ droppedBytes: 0, droppedRecords: 0, trailingOnly: true });
-		await handle.storage.append({ entries: [messageEntry("a", "first")] });
+		await handle.storage.commit([{ kind: "entry", entry: messageEntry("a", "first") }]);
 		await handle.dispose();
 		expect(jsonLines(await readText(path))).toHaveLength(1);
 	});
