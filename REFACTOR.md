@@ -390,6 +390,13 @@ runner 是 turn 循环，不是服务容器。这轮把四件事抽成 kernel se
 | 空闲唤醒 | `RunPump`：订阅 inject:received + turn:run-end，runner 空闲且有活就开 run；`runner.running` 是只读事实 | 零（runner 不再有 autoPump/pumping） |
 | generation 的 retry/overflow/backoff | `generateWithRetry()` 纯函数（不是 service：它需要调用方的 context 组装、observer、signal、compaction，包成 service 只是把四样东西再绕一遍 bus） | takeTurn 变成"组装 → 生成 → 记账" |
 
+**真实模型验收**（`bun run smoke`，env 门控，不硬编码任何 provider/model）：
+- `test/smoke.e2e.test.ts`（eta-core，内存 storage）：真 provider 的 stream delta、真 usage、真工具调用、真落盘、重放后回答
+- `test/smoke.e2e.test.ts`（eta-storage-jsonl，真文件）：同一场景写进 jsonl，关掉重开仍完整（repairTornTail 报告零损坏）
+- reader 读 `~/.eta/config.json`（`ETA_SMOKE_CONFIG` 可换路径，`ETA_SMOKE_MODEL` 可换模型，默认用文件里的 `defaultModel`）
+
+首次真实跑通时抓出两个真 bug（已修，见下）：turn 计数漏掉干净收尾的 turn；threshold compaction 只在 kernel 的第一个 turn 检查。
+
 **刻意留在 runner 里的**（抽了就是回到 hook 地狱）：goal 续杯（裁决 1 的窄接口 `decide`）、inbox 消费时序（checkpoint / terminal boundary）、tool batch 与 allTerminate、maxTurns、effect-gate 准入、context 组装与投影、empty-response guard 的机制（文案仍在 prompts 插件）。
 
 这轮的三个自定裁决（都写进代码注释）：

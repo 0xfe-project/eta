@@ -8,7 +8,8 @@
 	],
 	"scripts": {
 		"test": "bun run --cwd packages/eta-core test && bun run --cwd packages/eta-storage-jsonl test",
-		"typecheck": "bun run --cwd packages/eta-core typecheck && bun run --cwd packages/eta-storage-jsonl typecheck"
+		"typecheck": "bun run --cwd packages/eta-core typecheck && bun run --cwd packages/eta-storage-jsonl typecheck",
+		"smoke": "bun run --cwd packages/eta-core smoke && bun run --cwd packages/eta-storage-jsonl smoke"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.3.5"

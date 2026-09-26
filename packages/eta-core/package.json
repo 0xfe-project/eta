@@ -12,7 +12,8 @@
 	},
 	"scripts": {
 		"test": "vitest --run --passWithNoTests",
-		"typecheck": "tsc -p tsconfig.json --noEmit"
+		"typecheck": "tsc -p tsconfig.json --noEmit",
+		"smoke": "ETA_SMOKE_CONFIG=\"${ETA_SMOKE_CONFIG:-$HOME/.eta/config.json}\" vitest --run test/smoke.e2e.test.ts"
 	},
 	"devDependencies": {
 		"@types/node": "22.19.19",
