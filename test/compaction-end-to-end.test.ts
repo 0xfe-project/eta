@@ -77,38 +77,6 @@ describe("the kernel's compaction seam, with the real summarizer", () => {
 				maxTokens: 8_192,
 			}) as never;
 
-		const kernel = Kernel.create({
-			config: {
-				model: { provider: "p", modelId: "m" },
-				// A ceiling low enough that the seeded history crosses it.
-				compaction: {
-					...DEFAULT_COMPACTION_SETTINGS,
-					maxContextTokens: 400,
-					reserveTokens: 200,
-					keepRecentTokens: 300,
-				},
-			},
-			compaction: etaCompaction(),
-			journal: log,
-		});
-		const runner = new Runner(kernel, {
-			models: fake,
-			// The summary stands in for the history, so the transcript must be
-			// projected for the provider (a plugin's job in a deployment).
-			toProviderMessages: (messages) =>
-				messages.flatMap((message) =>
-					message.role === "compactionSummary"
-						? [
-								{
-									role: "user" as const,
-									content: [{ type: "text" as const, text: `<summary>${message.summary}</summary>` }],
-									timestamp: 0,
-								},
-							]
-						: [message as never],
-				),
-		});
-
 		// History the kernel will find already there: a few turns of real size, with
 		// the usage a provider would have reported for them (the estimate comes from
 		// that number, not from counting characters).
@@ -187,7 +155,6 @@ describe("the kernel's compaction seam, with the real summarizer", () => {
 		const again = await SessionLog.load(storage);
 		expect(again.transcript()[0]!.role).toBe("compactionSummary");
 		expect(JSON.stringify(again.transcript())).toContain("port the storage layer");
-		void kernel.dispose();
 		void resumed.dispose();
 	});
 
