@@ -12,9 +12,21 @@
  * never holds half an entry. `load` replays the full journal into the graph.
  */
 import type { CommitResult, StorageService, UsageRow, ValueWrite } from "../storage/types";
-import type { Entry, MessageEntry, NewEntry } from "../types/entries";
+import { setValue, value } from "../storage/types";
+import type { Entry, MergeEntry, MessageEntry, NewEntry } from "../types/entries";
 import type { AgentMessage } from "../types/messages";
+import { type ForkedChain, type ForkOptions, forkChain } from "./fork";
 import { EntryGraph } from "./graph";
+import { type MergeOptions, mergeTip, type RollbackResult, rollback } from "./merge";
+
+/**
+ * Where the branch tip lives in the journal.
+ *
+ * The tip is not always "the newest entry": a rollback moves it backwards, and
+ * without this value a reload would rebuild the tip the rollback undid. Appends
+ * do not need it (the new entry is the newest), rollbacks do.
+ */
+export const SESSION_TIP = value<string | null>("eta.session.tip");
 
 export interface CommitOutcome {
 	result: CommitResult;
@@ -30,6 +42,8 @@ export class SessionLog {
 
 	private staged: Entry[] = [];
 	private stagedUsage: Omit<UsageRow, "seq">[] = [];
+	/** The tip the journal last heard about; undefined until the first commit. */
+	private writtenTip: string | null | undefined;
 
 	private constructor(storage: StorageService, graph: EntryGraph) {
 		this.storage = storage;
@@ -55,7 +69,44 @@ export class SessionLog {
 			if (entry.parentId !== null && !known.has(entry.parentId)) log.orphans += 1;
 			log.graph.append(entry, { allowMissingParent: true });
 		}
+		// The branch view the session left behind: a rollback moved the tip, and
+		// replaying entries alone would put it back at the newest one.
+		const tip = await storage.getValue(SESSION_TIP);
+		if (tip !== undefined && tip.value !== null && log.graph.has(tip.value)) {
+			log.graph.setTip(tip.value);
+			// The journal already says this: the next commit need not repeat it.
+			log.writtenTip = tip.value;
+		}
 		return log;
+	}
+
+	/**
+	 * Move the branch view back to an entry (eta-agent's rollback), durably. The
+	 * entries after it leave the path but stay in the journal, and the new tip is
+	 * written as a value so a reload resumes exactly here.
+	 */
+	async rollback(entryId: string): Promise<RollbackResult> {
+		const result = rollback(this.graph, entryId);
+		if (!result.ok) return result;
+		// The commit carries the tip, exactly like any other.
+		await this.commit();
+		return result;
+	}
+
+	/**
+	 * Merge a tip this journal already holds: one merge entry, whose second
+	 * parent makes the side chain part of the branch path.
+	 */
+	async merge(mergedTipId: string, options: MergeOptions): Promise<MergeEntry> {
+		const entry = mergeTip(this.graph, mergedTipId, options);
+		this.staged.push(entry);
+		await this.commit();
+		return entry;
+	}
+
+	/** The chain a destination adopts when it forks from this journal. */
+	forkAt(entryId?: string, options: Omit<ForkOptions, "entryId"> = {}): ForkedChain {
+		return forkChain(this.graph, { ...options, ...(entryId === undefined ? {} : { entryId }) });
 	}
 
 	/** Entries whose parent the journal does not hold; their branch ends there. */
@@ -98,16 +149,27 @@ export class SessionLog {
 	 * journal then holds complete turns and nothing else.
 	 */
 	async commit(values: ValueWrite[] = []): Promise<CommitOutcome | undefined> {
-		if (this.staged.length === 0 && this.stagedUsage.length === 0 && values.length === 0) return undefined;
+		// Where the branch view stands after this commit, whenever it moved: a
+		// rollback moves the tip backwards and an append after a rollback moves it
+		// forward again, so the journal has to say which — otherwise a reload picks
+		// the newest entry and resurrects what a rollback undid. One row per
+		// movement; compaction keeps only the newest.
+		const tip = this.graph.tipId();
+		const tipMoved = tip !== this.writtenTip;
+		if (this.staged.length === 0 && this.stagedUsage.length === 0 && values.length === 0 && !tipMoved) {
+			return undefined;
+		}
 		const entries = this.staged;
 		const usage = this.stagedUsage;
 		this.staged = [];
 		this.stagedUsage = [];
+		const writes: ValueWrite[] = tipMoved ? [setValue(SESSION_TIP, tip), ...values] : values;
 		const result = await this.storage.commit([
 			...entries.map((entry) => ({ kind: "entry" as const, entry })),
 			...usage.map((row) => ({ kind: "usage" as const, row })),
-			...values,
+			...writes,
 		]);
+		this.writtenTip = tip;
 		// Seqs arrive in write order, so the committed rows can be handed back with
 		// the sequence they actually landed on.
 		return {

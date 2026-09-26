@@ -83,6 +83,31 @@ export function mergeBranch(target: EntryGraph, side: EntryGraph, options: Merge
 	return { entry, copiedIds, commonAncestorId };
 }
 
+/**
+ * Merge a tip that is already in this graph.
+ *
+ * `mergeBranch` exists for the cross-journal case (adopting a fork's chain);
+ * this is the same-journal one, where the side chain is already here and only
+ * the merge entry is missing. The splice walks this graph for both parents, so
+ * nothing needs copying — which is exactly why a session that keeps one journal
+ * can merge a branch it wrote earlier.
+ */
+export function mergeTip(graph: EntryGraph, mergedTipId: string, options: MergeOptions): MergeEntry {
+	if (!graph.has(mergedTipId)) throw new Error(`merge: entry ${mergedTipId} is not in this journal`);
+	if (mergedTipId === graph.tipId()) throw new Error("merge: a branch cannot merge into itself");
+	const visible = new Set(graph.path().map((entry) => entry.id));
+	if (visible.has(mergedTipId)) throw new Error("merge: that branch is already part of this history");
+	const parentId = graph.tipId();
+	return graph.append({
+		...(options.id === undefined ? {} : { id: options.id }),
+		type: "merge",
+		parentId,
+		mergedParentId: mergedTipId,
+		summary: options.summary,
+		...(options.usage === undefined ? {} : { usage: options.usage }),
+	} as NewEntry<MergeEntry>);
+}
+
 export type RollbackResult = { ok: true; entryId: string; droppedIds: string[] } | { ok: false; reason: string };
 
 /**
