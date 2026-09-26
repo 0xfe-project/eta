@@ -25,6 +25,7 @@ import {
 	shouldCompact,
 } from "./compaction.ts";
 import type { ConfigService } from "./config.ts";
+import { AbortRequested, createGate, type Gate, type GateControl } from "./effect-gate.ts";
 import type { GoalService } from "./goal.ts";
 import type { QueuedItem } from "./inbox.ts";
 import type { Kernel } from "./kernel.ts";
@@ -33,6 +34,7 @@ import type { PersonaService } from "./persona.ts";
 import type { KernelModels } from "./providers.ts";
 import { normalizedRetryPolicy, retryDelayMs, retryNotBefore, waitUntil } from "./retry.ts";
 import type { ToolService } from "./tools.ts";
+import { isAbortError } from "./tools.ts";
 
 export interface RunnerBoundaryOptions {
 	/** Independent judgment call for goal continuation (tool-free request); true = achieved. */
@@ -84,6 +86,11 @@ export interface RunnerOptions {
 
 export interface RunResult {
 	turns: number;
+	/**
+	 * How the run ended: a clean stop, a failure, or the caller cancelling it.
+	 * An abort is not a failure — the work simply stopped where it was.
+	 */
+	status: "completed" | "failed" | "aborted";
 	/** Set when the run ended on a provider error rather than a clean stop. */
 	error?: string;
 }
@@ -108,7 +115,8 @@ export class Runner {
 	private turnToolResults: AgentMessage[] = [];
 	private inFlight: Promise<RunResult> | undefined;
 	private readonly rate = new OutputRate();
-	private runAbort: AbortController | undefined;
+	private gate: { gate: Gate; control: GateControl } | undefined;
+	private readonly pendingEffects = new Set<Promise<unknown>>();
 	/** One overflow recovery per run: a second overflow is a real failure. */
 	private overflowRecoveryUsed = false;
 	private autoPumpOff: (() => boolean) | undefined;
@@ -138,14 +146,30 @@ export class Runner {
 	 * and the run ends as aborted rather than failed (REFACTOR.md §2.4). Tool
 	 * execution joins this signal in the tool-execution step.
 	 */
-	abort(reason: unknown = new DOMException("The operation was aborted", "AbortError")): void {
-		this.runAbort?.abort(reason);
+	abort(): void {
+		const gate = this.gate;
+		if (gate === undefined) return;
+		// Stop admitting new effects first, then abort the signal the running ones
+		// observe; `cancellation()` is what the caller's AbortRequested carries.
+		gate.control.beginAbort(this.cancellation());
+		gate.control.signalAbort();
 	}
 
-	/** The signal the current run passes to generation and its backoffs. */
+	/** Resolves when every effect that already started has settled. */
+	private cancellation(): Promise<void> {
+		return Promise.allSettled([...this.pendingEffects]).then(() => undefined);
+	}
+
+	/** Track an effect so an abort can wait for it. */
+	private track<T>(work: Promise<T>): Promise<T> {
+		this.pendingEffects.add(work);
+		void work.finally(() => this.pendingEffects.delete(work)).catch(() => undefined);
+		return work;
+	}
+
+	/** The signal the current run passes to generation, tools, and its backoffs. */
 	private runSignal(): AbortSignal {
-		this.runAbort ??= new AbortController();
-		return this.runAbort.signal;
+		return this.gate?.gate.signal ?? new AbortController().signal;
 	}
 
 	/**
@@ -220,9 +244,11 @@ export class Runner {
 
 	private async runLoop(): Promise<RunResult> {
 		let error: string | undefined;
+		let status: RunResult["status"] = "completed";
 		this.pumping = true;
 		const runId = crypto.randomUUID();
-		this.runAbort = new AbortController();
+		const { gate, control } = createGate();
+		this.gate = { gate, control };
 		this.overflowRecoveryUsed = false;
 		// A new run starts the throughput window over: nothing has been produced yet.
 		this.rate.reset();
@@ -230,75 +256,90 @@ export class Runner {
 		// What a run takes when it starts: next-run items always, steering and
 		// follow-ups per their modes. They become the run's opening transcript.
 		this.adopt(this.kernel.acceptInbox());
-		for (;;) {
-			// The model is resolved live: a run started on one model and switched
-			// mid-flight must send the next request to the new one (§2.4).
-			const identity = this.config.read("model");
-			const model = this.models.getModel(identity.provider, identity.modelId);
-			if (model === undefined) {
-				error = `model_unavailable: ${identity.provider}/${identity.modelId}`;
-				break;
-			}
-			const turn = this.kernel.turns + 1;
-			this.currentRunId = runId;
-			this.currentTurnId = crypto.randomUUID();
-			this.turnToolResults = [];
-			if (turn === 1) await this.compactForWindow(model, runId);
-			const assistant = await this.takeTurn(model);
-			if (assistant === undefined) break;
-			if (assistant.stopReason === "error") {
-				error = assistant.errorMessage ?? "provider error";
-				break;
-			}
-			const toolCalls = assistant.content.filter((c): c is ToolCall => c.type === "toolCall");
-			if (toolCalls.length === 0) {
-				// A steer that arrived while this turn was being generated still gets
-				// the next request, not the following one.
-				const { steers: lateSteers } = this.kernel.takeAtBoundary({ followUpWhenNoTrigger: false });
-				if (lateSteers.length > 0) {
-					this.adopt(lateSteers);
-					continue;
-				}
-				// Run boundary: de-hooked (REFACTOR.md §2.4 step 5) — the runner asks
-				// the goal directly instead of waiting for a followUp hook slot.
-				if (!(await this.atRunBoundary(assistant))) {
-					// Nothing else continues the run: a follow-up gets its chance.
-					const { followUps } = this.kernel.takeAtBoundary({ followUpWhenNoTrigger: true });
-					if (followUps.length > 0) {
-						this.adopt(followUps);
-						continue;
-					}
-					// A steer may have arrived while the boundary was deciding (or
-					// during the evaluator's async call): it opens a new turn instead
-					// of ending the run underneath it. A next-run item does not: it is
-					// for the run after this one.
-					if (this.kernel.inbox.list().some((item) => item.kind === "steer")) continue;
+		try {
+			for (;;) {
+				// Each step is an effect: a cancelled run does not start another one.
+				// The gate throws AbortRequested here, which unwinds to the catch.
+				gate.admit(() => undefined);
+				// The model is resolved live: a run started on one model and switched
+				// mid-flight must send the next request to the new one (§2.4).
+				const identity = this.config.read("model");
+				const model = this.models.getModel(identity.provider, identity.modelId);
+				if (model === undefined) {
+					error = `model_unavailable: ${identity.provider}/${identity.modelId}`;
 					break;
 				}
-			} else {
-				await this.executeToolBatch(toolCalls, turn);
-				// The checkpoint after a tool batch: steering lands here, so the very
-				// next request carries it. Follow-ups wait for a boundary that could
-				// end the run.
-				const { steers: afterTools } = this.kernel.takeAtBoundary({ followUpWhenNoTrigger: false });
-				if (afterTools.length > 0) this.adopt(afterTools);
+				const turn = this.kernel.turns + 1;
+				this.currentRunId = runId;
+				this.currentTurnId = crypto.randomUUID();
+				this.turnToolResults = [];
+				if (turn === 1) await this.compactForWindow(model, runId);
+				const assistant = await this.takeTurn(model);
+				if (assistant === undefined) break;
+				if (assistant.stopReason === "error") {
+					error = assistant.errorMessage ?? "provider error";
+					break;
+				}
+				const toolCalls = assistant.content.filter((c): c is ToolCall => c.type === "toolCall");
+				if (toolCalls.length === 0) {
+					// A steer that arrived while this turn was being generated still gets
+					// the next request, not the following one.
+					const { steers: lateSteers } = this.kernel.takeAtBoundary({ followUpWhenNoTrigger: false });
+					if (lateSteers.length > 0) {
+						this.adopt(lateSteers);
+						continue;
+					}
+					// Run boundary: de-hooked (REFACTOR.md §2.4 step 5) — the runner asks
+					// the goal directly instead of waiting for a followUp hook slot.
+					if (!(await this.atRunBoundary(assistant))) {
+						// Nothing else continues the run: a follow-up gets its chance.
+						const { followUps } = this.kernel.takeAtBoundary({ followUpWhenNoTrigger: true });
+						if (followUps.length > 0) {
+							this.adopt(followUps);
+							continue;
+						}
+						// A steer may have arrived while the boundary was deciding (or
+						// during the evaluator's async call): it opens a new turn instead
+						// of ending the run underneath it. A next-run item does not: it is
+						// for the run after this one.
+						if (this.kernel.inbox.list().some((item) => item.kind === "steer")) continue;
+						break;
+					}
+				} else {
+					await this.executeToolBatch(toolCalls, turn);
+					// The checkpoint after a tool batch: steering lands here, so the very
+					// next request carries it. Follow-ups wait for a boundary that could
+					// end the run.
+					const { steers: afterTools } = this.kernel.takeAtBoundary({ followUpWhenNoTrigger: false });
+					if (afterTools.length > 0) this.adopt(afterTools);
+				}
+				if (!this.kernel.noteTurn()) break;
+				// The turn had tool work: keep looping. A message injected mid-run
+				// (tool or middleware) never interrupts; it opens the next turn via
+				// the drain at the top of the loop.
+				await this.journal?.commit();
 			}
-			if (!this.kernel.noteTurn()) break;
-			// The turn had tool work: keep looping. A message injected mid-run
-			// (tool or middleware) never interrupts; it opens the next turn via
-			// the drain at the top of the loop.
-			await this.journal?.commit();
+		} catch (caught) {
+			// Cancellation is expected control flow, not a failure: it unwinds the
+			// loop, waits for the effects that already started, and reports aborted.
+			if (caught instanceof AbortRequested || isAbortError(caught)) {
+				status = "aborted";
+				await (caught instanceof AbortRequested ? caught.cancellation : this.cancellation());
+			} else {
+				throw caught;
+			}
 		}
 		this.pumping = false;
+		if (error !== undefined) status = "failed";
 		// Whatever is left staged (the final turn) lands as one commit, so the
 		// journal holds complete turns and nothing else.
 		await this.journal?.commit();
-		const result: RunResult = { turns: this.kernel.turns, error };
+		const result: RunResult = { turns: this.kernel.turns, status, ...(error === undefined ? {} : { error }) };
 		this.emit("turn:run-end", {
 			runId,
 			turns: result.turns,
 			endedAt: Date.now(),
-			status: error === undefined ? "completed" : "failed",
+			status,
 			...(error === undefined ? {} : { error }),
 		});
 		if (this.options.autoPump && this.kernel.inboxDepth > 0 && error === undefined) {
@@ -570,9 +611,19 @@ export class Runner {
 		}
 		const started = new Map<string, number>();
 		for (const call of calls) started.set(call.id, Date.now());
+		const gate = this.gate?.gate;
+		const signal = this.runSignal();
 		const outcomes = await this.tools.executeBatch(
 			calls.map((call) => ({ id: call.id, name: call.name, arguments: call.arguments })),
-			{ execution, turn },
+			{
+				execution,
+				turn,
+				signal,
+				// Every tool call is an effect: once the run is aborting, no new one
+				// is admitted, and the call reports the cancellation instead of running.
+				admit: gate === undefined ? <T>(work: () => T) => work() : <T>(work: () => T) => gate.admit(work),
+				track: <T>(work: Promise<T>) => this.track(work),
+			},
 		);
 		for (const outcome of outcomes) {
 			const call = calls.find((candidate) => candidate.id === outcome.id)!;

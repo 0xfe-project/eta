@@ -30,6 +30,12 @@ export {
 	validateToolNames,
 } from "./kernel/config.ts";
 export {
+	AbortRequested,
+	createGate,
+	type Gate,
+	type GateControl,
+} from "./kernel/effect-gate.ts";
+export {
 	ANTI_SPIN_LIMIT,
 	applyGoalEntries,
 	type GoalBlockedReason,
@@ -74,6 +80,7 @@ export {
 export { renderCurrentTasks, TaskService } from "./kernel/tasks.ts";
 export {
 	type BeforeToolResult,
+	isAbortError,
 	type KernelTool,
 	type ToolCallInfo,
 	type ToolMiddleware,

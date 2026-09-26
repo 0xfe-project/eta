@@ -52,7 +52,7 @@ describe("runner turn loop", () => {
 		const { kernel, runner, fake, events, dispose } = setup([assistantMessage()]);
 		kernel.inject(userMsg("hello"));
 		const result = await runner.run();
-		expect(result).toEqual({ turns: 0, error: undefined });
+		expect(result).toEqual({ turns: 0, status: "completed" });
 		expect(fake.calls).toHaveLength(1);
 		expect(events.map((e) => e.name)).toEqual([
 			"turn:run-start",
