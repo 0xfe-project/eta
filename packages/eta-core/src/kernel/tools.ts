@@ -14,6 +14,7 @@
 
 import type { Context } from "cordis";
 import { Service } from "cordis";
+import type { ToolExecution } from "../types/config.ts";
 
 /** The minimal tool shape the seam requires. Plugin tools may carry more. */
 export interface KernelTool<TArgs = unknown, TResult = unknown> {
@@ -36,6 +37,12 @@ export interface ToolMiddleware {
 	before?: (name: string, args: unknown, call: ToolCallInfo) => BeforeToolResult | Promise<BeforeToolResult>;
 	/** Runs innermost-to-outermost on the way back. */
 	after?: (name: string, args: unknown, result: unknown, call: ToolCallInfo) => unknown | Promise<unknown>;
+}
+
+/** Whether an error is the run being cancelled rather than a tool failing. */
+export function isAbortError(error: unknown): boolean {
+	if (typeof error !== "object" || error === null) return false;
+	return (error as { name?: string }).name === "AbortError";
 }
 
 export class ToolService extends Service {
@@ -83,6 +90,27 @@ export class ToolService extends Service {
 		};
 	}
 
+	/**
+	 * Execute a batch of calls the way the session is configured (eta-agent's
+	 * runSequential/runParallel). Results always come back in call order, so the
+	 * transcript reads the same either way; parallel only changes when the work
+	 * happens, never what order it is recorded in.
+	 */
+	async executeBatch(
+		calls: readonly { id: string; name: string; arguments: unknown }[],
+		options: { execution: ToolExecution; turn: number },
+	): Promise<{ id: string; result: unknown }[]> {
+		const run = (call: { id: string; name: string; arguments: unknown }) =>
+			this.execute(call.name, call.arguments, { turn: options.turn, toolCallId: call.id });
+		if (options.execution === "sequential") {
+			const results: { id: string; result: unknown }[] = [];
+			for (const call of calls) results.push({ id: call.id, result: await run(call) });
+			return results;
+		}
+		const settled = await Promise.all(calls.map(run));
+		return calls.map((call, index) => ({ id: call.id, result: settled[index] }));
+	}
+
 	/** Execute a call through the full chain: before (outer→inner) → tool → after (inner→outer). */
 	async execute(name: string, args: unknown, call: ToolCallInfo): Promise<unknown> {
 		const tool = this.tools.get(name);
@@ -96,7 +124,16 @@ export class ToolService extends Service {
 			if (!verdict.ok) return { isError: true, content: `blocked by ${m.name}: ${verdict.blockReason}` };
 			currentArgs = verdict.args;
 		}
-		let result: unknown = await tool.execute(currentArgs, call);
+		let result: unknown;
+		try {
+			result = await tool.execute(currentArgs, call);
+		} catch (error) {
+			// An abort is not a tool outcome — it stops the run. Everything else a
+			// tool throws is a result the model has to read (eta-agent's
+			// executeToolCall converts the same way).
+			if (isAbortError(error)) throw error;
+			return { isError: true, content: error instanceof Error ? error.message : String(error) };
+		}
 		for (const m of [...this.middlewares].reverse()) {
 			if (m.after === undefined) continue;
 			result = await m.after(name, currentArgs, result, call);
