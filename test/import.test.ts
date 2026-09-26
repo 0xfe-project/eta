@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SessionLog, value } from "@eta/core";
 import { describe, expect, it } from "vitest";
-import { JsonlStorage } from "../src/index.ts";
+import { JsonlStorage } from "../src/index";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const fixture = (name: string) => join(here, "fixtures", name);

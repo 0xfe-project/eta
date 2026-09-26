@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { type AssistantMessage, Kernel, Runner, SessionLog } from "@eta/core";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { JsonlStorage } from "../src/index.ts";
+import { JsonlStorage } from "../src/index";
 
 let dir = "";
 let counter = 0;
