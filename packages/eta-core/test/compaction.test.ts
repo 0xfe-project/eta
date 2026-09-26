@@ -278,6 +278,7 @@ function session(
 			},
 		},
 		...(options.summarizer === undefined ? {} : { compaction: options.summarizer }),
+		journal: log,
 		warn: () => undefined,
 	});
 	const fake = fakeModels(script);
@@ -291,7 +292,6 @@ function session(
 		}) as never;
 	const runner = new Runner(kernel, {
 		models: fake,
-		journal: log,
 		toProviderMessages: projection as never,
 		...(options.initialTranscript === undefined ? {} : { initialTranscript: options.initialTranscript }),
 	});

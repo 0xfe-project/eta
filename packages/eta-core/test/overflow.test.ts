@@ -61,8 +61,10 @@ function setup(script: AssistantMessage[], options: { compaction?: CompactionSum
 				tokensBefore: request.estimatedTokens,
 			}),
 		} satisfies CompactionSummarizer);
+	const log = SessionLog.create(new MemoryStorage());
 	const kernel = Kernel.create({
 		config: { model: { provider: "p", modelId: "m" } },
+		journal: log,
 		compaction: {
 			summarize: async (request) => {
 				requests.push(request);
@@ -80,10 +82,8 @@ function setup(script: AssistantMessage[], options: { compaction?: CompactionSum
 			contextWindow: 200_000,
 			maxTokens: 8_192,
 		}) as never;
-	const log = SessionLog.create(new MemoryStorage());
 	const runner = new Runner(kernel, {
 		models: fake,
-		journal: log,
 		toProviderMessages: (messages) =>
 			messages.flatMap((message) =>
 				message.role === "compactionSummary"

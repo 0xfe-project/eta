@@ -54,13 +54,6 @@ export interface CompactionHost {
 	readContext(): AgentMessage[];
 	/** Swap the context for a summary plus the tail that is kept. */
 	replaceContext(summary: string, options: { retainedTail?: readonly AgentMessage[]; tokensBefore?: number }): void;
-	/** Journal the compaction entry; undefined when the session keeps no journal. */
-	recordCompaction(input: {
-		summary: string;
-		retainedTail: readonly AgentMessage[];
-		tokensBefore: number;
-		usage?: CompactionOutcome["usage"];
-	}): Entry | undefined;
 	/** The branch entries behind the context, for cut-point selection. */
 	entries(): readonly Entry[];
 	/** What this run's request would carry, read live. */
@@ -177,18 +170,17 @@ export class CompactionService extends Service {
 			retainedTail: outcome.retainedTail,
 			tokensBefore: outcome.tokensBefore,
 		});
-		const entry = host.recordCompaction({
-			summary: outcome.summary,
-			retainedTail: outcome.retainedTail,
-			tokensBefore: outcome.tokensBefore,
-			...(outcome.usage === undefined ? {} : { usage: outcome.usage }),
-		});
+		// The journaling subscriber writes the entry from this payload, which is
+		// why the event carries the summary rather than an id it cannot know.
 		this.emit("compaction:end", {
 			runId,
 			reason,
 			endedAt: Date.now(),
 			status: "completed",
-			...(entry === undefined ? {} : { entryId: entry.id }),
+			summary: outcome.summary,
+			retainedTail: [...outcome.retainedTail],
+			tokensBefore: outcome.tokensBefore,
+			...(outcome.usage === undefined ? {} : { usage: outcome.usage }),
 		});
 		return true;
 	}

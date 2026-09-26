@@ -28,10 +28,10 @@ const usageOf = (input: number, output: number, cacheRead = 0): Usage => ({
 });
 
 function setup(script: AssistantMessage[]) {
-	const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } } });
-	const fake = fakeModels(script);
 	const log = SessionLog.create(new MemoryStorage());
-	const runner = new Runner(kernel, { models: fake, journal: log });
+	const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } }, journal: log });
+	const fake = fakeModels(script);
+	const runner = new Runner(kernel, { models: fake });
 	const recorded: { row: UsageRow; totals: Usage }[] = [];
 	const off = kernelOn(kernel.ctx)("usage:recorded", (event) => {
 		recorded.push(event as never);
@@ -122,7 +122,7 @@ describe("usage rows", () => {
 			(candidate) => candidate.type === "message" && candidate.message.role === "assistant",
 		)!;
 		// The provider restates what the request cost.
-		const row = await runner.recordUsage(usageOf(120, 20), { entryId: entry.id });
+		const row = await kernel.journaling.recordUsage(usageOf(120, 20), { entryId: entry.id });
 		expect(row?.adjustment).toBe(true);
 
 		const after = await log.storage.getStats();

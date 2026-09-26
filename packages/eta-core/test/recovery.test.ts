@@ -82,9 +82,9 @@ function textsOf(entries: Entry[]): string[] {
 function setup(disk: Disk, script: AssistantMessage[]) {
 	const storage = disk.connect();
 	const log = SessionLog.create(storage);
-	const kernel = Kernel.create();
+	const kernel = Kernel.create({ journal: log });
 	const fake = fakeModels(script);
-	const runner = new Runner(kernel, { models: fake, journal: log });
+	const runner = new Runner(kernel, { models: fake });
 	return { storage, log, kernel, runner, fake };
 }
 
@@ -165,11 +165,10 @@ describe("crash recovery — the kernel rebuilds from the journal", () => {
 
 		const log = await SessionLog.load(disk.restart());
 		const resumedAt = log.transcript().length;
-		const kernel = Kernel.create();
+		const kernel = Kernel.create({ journal: log });
 		const fake = fakeModels([answer("second answer")]);
 		const runner = new Runner(kernel, {
 			models: fake,
-			journal: log,
 			initialTranscript: log.transcript(),
 		});
 		kernel.inject(userMsg("second question"));
