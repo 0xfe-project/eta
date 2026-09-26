@@ -155,14 +155,24 @@ export class Runner {
 					streamOptions: config.streamOptions,
 					signal: this.runSignal(),
 					runId: this.currentRunId ?? "",
-					ask: (prompt) =>
+					ask: (prompt, askOptions) =>
 						this.models.completeSimple(
 							this.models.getModel(identity.provider, identity.modelId)!,
 							{
 								...(prompt.systemPrompt === undefined ? {} : { systemPrompt: prompt.systemPrompt }),
 								messages: prompt.messages.filter(isMessage),
 							},
-							{ signal: this.runSignal() },
+							{
+								signal: this.runSignal(),
+								// A summary request is not the conversation: it gets its own
+								// token budget, and caching it would spend what it saves.
+								cacheRetention: "none",
+								...(askOptions?.maxTokens === undefined ? {} : { maxTokens: askOptions.maxTokens }),
+								// "off" means no reasoning field at all, as everywhere else.
+								...(askOptions?.reasoning === undefined || askOptions.reasoning === "off"
+									? {}
+									: { reasoning: askOptions.reasoning }),
+							},
 						),
 				};
 			},

@@ -18,6 +18,7 @@ import type { Context } from "cordis";
 import type { GoalStatus } from "../kernel/goal";
 import type { UsageRow } from "../storage/types";
 import type { Entry, GoalPayload } from "./entries";
+import type { JsonValue } from "./json";
 import type { AgentMessage, AssistantMessage, AssistantMessageEvent, Usage } from "./messages";
 import type { PersonaCard } from "./persona";
 import type { TaskChange } from "./tasks";
@@ -160,6 +161,7 @@ export interface CompactionEvents {
 		summary?: string;
 		retainedTail?: AgentMessage[];
 		tokensBefore?: number;
+		details?: JsonValue;
 		usage?: Usage;
 		error?: string;
 	};

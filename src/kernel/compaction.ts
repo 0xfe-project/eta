@@ -10,6 +10,7 @@
 import type { Api, AssistantMessage, Model, SimpleStreamOptions, Usage } from "@earendil-works/pi-ai";
 import type { CompactionSettings } from "../types/config";
 import type { Entry, MessageEntry } from "../types/entries";
+import type { JsonValue } from "../types/json";
 import type { AgentMessage, ThinkingLevel } from "../types/messages";
 
 /**
@@ -255,6 +256,8 @@ export type CompactionReason = "manual" | "threshold" | "overflow";
  */
 export interface CompactionRequest {
 	reason: CompactionReason;
+	/** Extra focus for a manual compaction (`/compact <instructions>`). */
+	customInstructions?: string | undefined;
 	/** The messages the runner would send right now. */
 	messages: readonly AgentMessage[];
 	/** The branch entries behind them; cut points are indices into this list. */
@@ -269,11 +272,16 @@ export interface CompactionRequest {
 	/** Aborts the summarization request with the run. */
 	signal: AbortSignal;
 	/** The model call, wired by whoever owns the models seam. */
-	ask: (prompt: { systemPrompt?: string; messages: AgentMessage[] }) => Promise<AssistantMessage>;
+	ask: (
+		prompt: { systemPrompt?: string; messages: AgentMessage[] },
+		options?: { maxTokens?: number; reasoning?: ThinkingLevel },
+	) => Promise<AssistantMessage>;
 }
 
 export interface CompactionOutcome {
 	summary: string;
+	/** Whatever the summarizer wants kept alongside the summary (file lists, strategy). */
+	details?: JsonValue | undefined;
 	/** Messages kept verbatim after the cut. */
 	retainedTail: AgentMessage[];
 	/** Context tokens before the cut. */
