@@ -27,6 +27,7 @@ import { ConfigService } from "./config";
 import type { GoalState } from "./goal";
 import { GoalService } from "./goal";
 import { Inbox, type QueuedItem } from "./inbox";
+import { MetricsService } from "./metrics";
 import { PersonaService } from "./persona";
 import { TaskService } from "./tasks";
 import { ToolService } from "./tools";
@@ -74,6 +75,8 @@ export class Kernel {
 	readonly compaction: CompactionService;
 	/** Durability as a subscriber: entries, usage rows, compaction entries. */
 	readonly journaling: JournalingService;
+	/** Observable numbers: tokens/sec, computed from the bus. */
+	readonly metrics: MetricsService;
 	/** How the outside world reaches the loop (steer / followUp / nextRun). */
 	readonly inbox = new Inbox();
 	readonly maxTurns: number | null;
@@ -90,6 +93,7 @@ export class Kernel {
 		this.tasks = new TaskService(this.ctx);
 		this.tools = new ToolService(this.ctx);
 		this.config = new ConfigService(this.ctx, defaultKernelConfig(options.config));
+		this.metrics = new MetricsService(this.ctx);
 		this.journaling = new JournalingService(this.ctx, {
 			...(options.journal === undefined ? {} : { journal: options.journal }),
 			...(options.warn === undefined ? {} : { warn: options.warn }),
