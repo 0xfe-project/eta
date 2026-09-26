@@ -57,8 +57,10 @@ describe.skipIf(configPath === undefined)("real model smoke", () => {
 			// user, assistant(tool call), tool result, assistant(reply)
 			expect(report.entries).toBeGreaterThanOrEqual(4);
 			expect(report.stats.messageCount).toBeGreaterThanOrEqual(4);
-			// The reloaded transcript is what the second answer came from.
+			// The reloaded transcript is what the second answer came from, and the
+			// configuration the first session left came back with it.
 			expect(report.recalled.toLowerCase()).toContain("kumquat");
+			expect(report.configRestored).toBe(true);
 		},
 		TIMEOUT_MS,
 	);

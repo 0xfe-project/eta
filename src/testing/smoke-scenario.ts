@@ -7,7 +7,7 @@
  * from the restored history. The caller supplies the models (real) and the
  * storage (memory or a file); nothing here knows either.
  */
-import { Kernel, type KernelTool, kernelOn, Runner, RunPump, SessionLog } from "../index";
+import { type Kernel, type KernelTool, kernelOn, openSession, type Runner, RunPump } from "../index";
 import type { KernelModels } from "../kernel/providers";
 import type { StorageService } from "../storage/types";
 
@@ -40,6 +40,8 @@ export interface SmokeReport {
 	events: string[];
 	/** Stats the storage rebuilt from the journal. */
 	stats: { messageCount: number; input: number; output: number; totalTokens: number };
+	/** Whether the second open found the configuration the first one left. */
+	configRestored: boolean;
 }
 
 const PROMPT_REMEMBER = "Please remember the word: kumquat. Then say done.";
@@ -70,11 +72,23 @@ async function waitForIdle(runner: Runner, kernel: Kernel, timeoutMs: number): P
 
 export async function runSmokeScenario(options: SmokeOptions): Promise<SmokeReport> {
 	const log = options.log ?? ((line: string) => console.log(line));
-	const session = SessionLog.create(options.storage);
-	const kernel = Kernel.create({
+	// The same call a host makes for a new session and for a restart: everything
+	// below comes back from the journal (empty on the first run).
+	const opened = await openSession({
+		storage: options.storage,
+		models: options.models,
 		config: { model: { provider: options.provider, modelId: options.modelId }, activeToolNames: ["note"] },
-		journal: session,
+		runner: {
+			systemPrompt:
+				"A terse test agent. When asked to remember something, call the note tool exactly once, then reply with one short sentence.",
+		},
 	});
+	const { kernel, runner } = opened;
+
+	// A configuration the default does not carry, so the second open proves it
+	// came off disk rather than out of this function's arguments.
+	kernel.config.update({ thinkingLevel: "low" });
+	await kernel.journaling.flush();
 
 	const notes: string[] = [];
 	const note = {
@@ -92,12 +106,6 @@ export async function runSmokeScenario(options: SmokeOptions): Promise<SmokeRepo
 		},
 	} as KernelTool;
 	kernel.tools.register(note);
-
-	const runner = new Runner(kernel, {
-		models: options.models,
-		systemPrompt:
-			"A terse test agent. When asked to remember something, call the note tool exactly once, then reply with one short sentence.",
-	});
 	const pump = new RunPump(kernel, runner);
 	pump.start();
 
@@ -138,21 +146,20 @@ export async function runSmokeScenario(options: SmokeOptions): Promise<SmokeRepo
 	}
 	const firstAnswer = textsOf(runner.getTranscript() as never);
 
-	// The transcript must survive a reload, and the model must answer from it.
-	const reloaded = await SessionLog.load(options.storage);
-	const resumedKernel = Kernel.create({
-		config: { model: { provider: options.provider, modelId: options.modelId }, activeToolNames: ["note"] },
-		journal: reloaded,
-	});
-	resumedKernel.tools.register(note);
-	const resumedRunner = new Runner(resumedKernel, {
+	// The transcript must survive a reload, and the model must answer from it —
+	// through the same call, over the journal the first run just wrote.
+	const resumed = await openSession({
+		storage: options.storage,
 		models: options.models,
-		initialTranscript: reloaded.transcript(),
+		config: { model: { provider: options.provider, modelId: options.modelId }, activeToolNames: ["note"] },
 	});
-	resumedKernel.inject({ role: "user", content: [{ type: "text", text: PROMPT_RECALL }], timestamp: Date.now() });
+	const resumedRunner: Runner = resumed.runner;
+	resumed.kernel.tools.register(note);
+	resumed.kernel.inject({ role: "user", content: [{ type: "text", text: PROMPT_RECALL }], timestamp: Date.now() });
 	await resumedRunner.run();
 	const recalled = textsOf(resumedRunner.getTranscript() as never);
 
+	// The config and the ledger are on disk too, which is what a restart needs.
 	const stats = await options.storage.getStats();
 	const entries = await options.storage.scanEntries({});
 	const report: SmokeReport = {
@@ -170,6 +177,7 @@ export async function runSmokeScenario(options: SmokeOptions): Promise<SmokeRepo
 			output: stats.usage.output,
 			totalTokens: stats.usage.totalTokens,
 		},
+		configRestored: resumed.configRestored && resumed.config.thinkingLevel === "low",
 	};
 	log(
 		[
@@ -180,12 +188,15 @@ export async function runSmokeScenario(options: SmokeOptions): Promise<SmokeRepo
 			`smoke: firstAnswer=${JSON.stringify(firstAnswer)}`,
 			`smoke: recalled=${JSON.stringify(recalled)}`,
 			`smoke: events=${events.join(",")}`,
+			`smoke: configRestored=${resumed.configRestored} tasks=${JSON.stringify(resumed.tasks)}`,
 		].join("\n"),
 	);
 
 	for (const off of offs) off();
 	pump.stop();
+	opened.stop();
+	resumed.stop();
 	void kernel.dispose();
-	void resumedKernel.dispose();
+	void resumed.kernel.dispose();
 	return report;
 }
