@@ -10,6 +10,7 @@
  * so nothing here may import upward.
  */
 import type { AssistantMessage, StopReason, Usage } from "@earendil-works/pi-ai";
+import type { JsonValue } from "./json.ts";
 import type { AgentMessage } from "./messages.ts";
 
 /** All first-class entry kinds. New kinds join this union explicitly. */
@@ -27,6 +28,11 @@ export interface EntryBase {
 export interface MessageEntry extends EntryBase {
 	type: "message";
 	message: AgentMessage;
+	/**
+	 * The run ended here: a tool asked to terminate, so no further assistant
+	 * request follows this entry (eta-agent's terminate marker).
+	 */
+	terminate?: true;
 }
 
 export interface CompactionEntry extends EntryBase {
@@ -34,6 +40,8 @@ export interface CompactionEntry extends EntryBase {
 	summary: string;
 	retainedTail: AgentMessage[];
 	tokensBefore: number;
+	/** Whatever the compaction plugin wants to keep alongside the summary. */
+	details?: JsonValue;
 	usage?: Usage;
 }
 
@@ -41,6 +49,7 @@ export interface BranchSummaryEntry extends EntryBase {
 	type: "branch_summary";
 	fromId: string | null;
 	summary: string;
+	details?: JsonValue;
 	usage?: Usage;
 }
 
@@ -49,6 +58,7 @@ export interface MergeEntry extends EntryBase {
 	/** Second parent: tip of the branch being merged in; its chain joins here. */
 	mergedParentId: string;
 	summary: string;
+	details?: JsonValue;
 	usage?: Usage;
 }
 

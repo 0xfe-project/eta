@@ -60,13 +60,18 @@ export class EntryGraph {
 
 	/**
 	 * Append an entry on the current tip (or on `parentId` when given).
+	 *
+	 * `allowMissingParent` is the replay path: a journal can hold an entry whose
+	 * parent is not in the file (a slice, a truncated tail), and eta-agent's
+	 * answer was to let the branch end there rather than refuse to open the
+	 * session. The chain walk already stops at a missing parent.
 	 * The tip advances to the new entry either way; a side-branch write is
 	 * followed by `setTip` to leave the branch view where it was.
 	 *
 	 * Sequence and timestamp are assigned unless the entry brings its own — a
 	 * replayed journal must rebuild the same order it was written in.
 	 */
-	append<T extends Entry>(entry: NewEntry<T>): T {
+	append<T extends Entry>(entry: NewEntry<T>, options: { allowMissingParent?: boolean } = {}): T {
 		const supplied = entry as { id?: string; parentId?: string | null; seq?: number; timestamp?: number };
 		const full = {
 			...entry,
@@ -77,7 +82,7 @@ export class EntryGraph {
 		} as unknown as T;
 		this.seq = Math.max(this.seq, full.seq);
 		const parentId = full.parentId;
-		if (parentId !== null && !this.entries.has(parentId)) {
+		if (parentId !== null && !this.entries.has(parentId) && options.allowMissingParent !== true) {
 			throw new Error(`append: unknown parent ${parentId}`);
 		}
 		this.entries.set(full.id, full);

@@ -46,12 +46,20 @@ export class SessionLog {
 	 * already cut torn bytes, so what arrives here is complete entries only.
 	 */
 	static async load(storage: StorageService): Promise<SessionLog> {
-		const graph = new EntryGraph();
-		for (const entry of await storage.scanEntries({ order: "asc" })) {
-			graph.append(entry);
+		const log = new SessionLog(storage, new EntryGraph());
+		const entries = await storage.scanEntries({ order: "asc" });
+		const known = new Set(entries.map((entry) => entry.id));
+		for (const entry of entries) {
+			// An entry whose parent is not in the journal ends the branch there
+			// instead of failing the open (eta-agent's allowBrokenBranches).
+			if (entry.parentId !== null && !known.has(entry.parentId)) log.orphans += 1;
+			log.graph.append(entry, { allowMissingParent: true });
 		}
-		return new SessionLog(storage, graph);
+		return log;
 	}
+
+	/** Entries whose parent the journal does not hold; their branch ends there. */
+	orphans = 0;
 
 	/** Entries staged but not yet committed (the turn in flight). */
 	get pending(): readonly Entry[] {
