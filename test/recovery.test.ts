@@ -43,9 +43,9 @@ const answer = (text: string): AssistantMessage =>
 async function processRun(path: string, script: AssistantMessage[], prompt: string) {
 	const storage = await JsonlStorage.open(path);
 	const log = SessionLog.create(storage);
-	const kernel = Kernel.create();
+	const kernel = Kernel.create({ journal: log });
 	const fake = fakeModels(script);
-	const runner = new Runner(kernel, { models: fake, journal: log });
+	const runner = new Runner(kernel, { models: fake });
 	kernel.inject(userMsg(prompt));
 	const result = await runner.run();
 	kernel.dispose();
