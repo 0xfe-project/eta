@@ -299,7 +299,7 @@ interface EtaPlugin {
 | ask | harness/ask.ts | eta.ask/answer entry 持久化、replay、timeout/abort→none、kill-restart-answer |
 | prompts | prompts/ | friend-voice 模板库；模型可见文案唯一出处 |
 | skills | harness/skills.ts | 向上扫 .agents/skills（cwd+home+git root+submodule，去重）、fs.watch 热重载、注入 system prompt |
-| compaction | harness/compaction/ | 增量摘要、max-min-fair fallback、25% tool-pair drop、prompt budget reducer、**绝对 token ceiling（默认 ~64k，可按 provider 配）**——不许只看 contextWindow-reserve |
+| compaction | harness/compaction/ | ✅ **已完成**：`@eta/compaction`（`etaCompaction()`）——切点（tool pair 不拆）、25% tool-pair drop、按窗口折叠的增量摘要（每片都是对已有 notes 的 update）、max-min-fair digest 回退（永不返回空）、split turn 前缀摘要、`<read-files>`/`<modified-files>` 落进 compaction entry 的 details。ceiling 在 kernel 的 `shouldCompact`。**未搬**：`reducePromptBudget`（eta-agent 里只有它自己的测试调用，死代码）、`economics.decideCompaction`（全仓无调用点） |
 | drift | harness drift | doom/tail/similar 检测，订阅 bus |
 | memory | harness/memory.ts | scan/cache/幂等 extraction、注入 composer、压缩存活 |
 | btw | harness/btw.ts | seed filter、Q/A replay、save 状态机、handoff、快照 |
@@ -400,6 +400,8 @@ runner 是 turn 循环，不是服务容器。这轮把四件事抽成 kernel se
 | session 装配 | `openSession({storage, models, config?})`：一条通路同时服务"新 session"和"重启"——重放 graph + tip、goal 从其 entries、ledger 从 value、config 从 value、transcript 从分支视图，并顺手接上 goal 的落盘订阅 |
 
 顺带修掉被发现的两个真 bug：`ConfigService.update` 先发事件后装状态（订阅者读到旧值）；`commit()` 空转早退导致 rollback 的 tip 写不进去。真实模型 smoke 现在整条走 `openSession`，并断言配置确实是从盘上恢复的。
+
+**compaction 插件（@eta/compaction）**：kernel 侧只有 seam 与"何时"（threshold/overflow/manual 三信号），摘要本身（prompt、切点、折叠、digest）全在这个包里，所以 kernel 里没有任何模型可见文案。真实模型验证：`test/smoke-compaction.e2e.test.ts`（env 门控）用真 provider 对一段真历史做 manual compaction——模型按格式写出 notes（Goal/Constraints/Progress…），关键事实（项目代号 KUMQUAT-7）穿过切点保留，压缩后继续提问仍能答出它。
 
 **真实模型验收**（`bun run smoke`，env 门控，不硬编码任何 provider/model）：
 - `test/smoke.e2e.test.ts`（eta-core，内存 storage）：真 provider 的 stream delta、真 usage、真工具调用、真落盘、重放后回答

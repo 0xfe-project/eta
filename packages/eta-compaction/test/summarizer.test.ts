@@ -7,7 +7,7 @@
  * summarizer refuses, and what a split turn does. The prompts are asserted by
  * contract (the format the next reader depends on), not by wording.
  */
-import type { AgentMessage, AssistantMessage, CompactionRequest, CompactionSummarizer, Entry, Usage } from "@eta/core";
+import type { AgentMessage, AssistantMessage, CompactionRequest, Entry, Usage } from "@eta/core";
 import { describe, expect, it } from "vitest";
 import {
 	etaCompaction,
@@ -17,7 +17,6 @@ import {
 	SUMMARY_FOLD_LIMIT,
 	TURN_PREFIX_SUMMARIZATION_PROMPT,
 	UNTRUSTED_SUMMARY_NOTE,
-	UPDATE_SUMMARIZATION_PROMPT,
 } from "../src/index";
 
 const user = (text: string, timestamp = 0): AgentMessage =>
