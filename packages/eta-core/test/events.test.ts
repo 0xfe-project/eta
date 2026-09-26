@@ -36,6 +36,7 @@ describe("event vocabulary", () => {
 			  "task:updated",
 			  "tool:end",
 			  "tool:start",
+			  "tool:update",
 			  "turn:end",
 			  "turn:run-end",
 			  "turn:run-start",

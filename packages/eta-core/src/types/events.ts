@@ -125,6 +125,17 @@ export interface PromptEvents {
 
 export interface ToolEvents {
 	"tool:start": { runId: string; turnId: string; toolCallId: string; toolName: string; args: unknown };
+	/**
+	 * One progress report from a running tool (a streamed command's output, an
+	 * edit's progress). Transient by design: partial results are never journaled.
+	 */
+	"tool:update": {
+		runId: string;
+		turnId: string;
+		toolCallId: string;
+		toolName: string;
+		partialResult: unknown;
+	};
 	"tool:end": {
 		runId: string;
 		turnId: string;
@@ -275,6 +286,7 @@ export const KERNEL_EVENT_NAMES = [
 	"task:updated",
 	"tool:end",
 	"tool:start",
+	"tool:update",
 	"turn:end",
 	"turn:run-end",
 	"turn:run-start",

@@ -32,6 +32,13 @@ export interface ToolCallInfo {
 	signal?: AbortSignal;
 	/** What the tool sees about its environment, resolved at request time. */
 	toolContext?: unknown;
+	/**
+	 * Report progress mid-call. Updates are only accepted while the call is
+	 * running: once it settles (or fails, or is cancelled) they are dropped, so
+	 * a tool that keeps streaming cannot publish into a finished call
+	 * (eta-agent's acceptingUpdates rule).
+	 */
+	update?: (partial: unknown) => void;
 }
 
 export type BeforeToolResult = { ok: true; args: unknown } | { ok: false; blockReason: string };
@@ -115,10 +122,16 @@ export class ToolService extends Service {
 			admit?: <T>(work: () => T) => T;
 			/** Lets the caller wait for effects that already started. */
 			track?: <T>(work: Promise<T>) => Promise<T>;
+			/** Receives a running tool's progress; called only while it runs. */
+			onUpdate?: (call: { id: string; name: string }, partial: unknown) => void;
 		},
 	): Promise<{ id: string; result: unknown }[]> {
 		const run = async (call: { id: string; name: string; arguments: unknown }) => {
 			const admit = options.admit ?? (<T>(work: () => T) => work());
+			// The call owns its update channel: open while it runs, closed the moment
+			// it settles, whichever way that happens.
+			let accepting = true;
+			const onUpdate = options.onUpdate;
 			try {
 				const admitted = admit(() =>
 					this.execute(call.name, call.arguments, {
@@ -126,6 +139,13 @@ export class ToolService extends Service {
 						toolCallId: call.id,
 						...(options.signal === undefined ? {} : { signal: options.signal }),
 						...(options.toolContext === undefined ? {} : { toolContext: options.toolContext }),
+						...(onUpdate === undefined
+							? {}
+							: {
+									update: (partial: unknown) => {
+										if (accepting) onUpdate({ id: call.id, name: call.name }, partial);
+									},
+								}),
 					}),
 				);
 				const tracked = options.track === undefined ? admitted : options.track(admitted);
@@ -134,6 +154,8 @@ export class ToolService extends Service {
 				// Not admitted: the run was cancelled before this call started.
 				if (error instanceof AbortRequested) return ABORTED_TOOL_RESULT;
 				throw error;
+			} finally {
+				accepting = false;
 			}
 		};
 		if (options.execution === "sequential") {
