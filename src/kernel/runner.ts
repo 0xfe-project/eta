@@ -241,6 +241,15 @@ export class Runner {
 	}
 
 	/**
+	 * Add history the runner did not generate itself (a restored log, a host's
+	 * prepended context). It is part of the transcript and the journal, exactly
+	 * like a message the loop pushed.
+	 */
+	adoptTranscript(messages: readonly AgentMessage[]): void {
+		for (const message of messages) this.push(message);
+	}
+
+	/**
 	 * What a request would look like right now (eta-agent's LaneRequestState):
 	 * model, thinking level, tools, prompt, stream options, retry policy, all
 	 * read live. A side request — a btw thread, a subagent — builds from this
@@ -325,11 +334,18 @@ export class Runner {
 		// What a run takes when it starts: next-run items always, steering and
 		// follow-ups per their modes. They become the run's opening transcript.
 		this.adopt(this.kernel.acceptInbox());
+		// Compaction's threshold check belongs to the first turn of every run, not
+		// to the first turn this kernel ever ran: a session can grow past the
+		// ceiling between two runs, and the second one must still notice.
+		let firstTurnOfRun = true;
 		try {
 			for (;;) {
 				// Each step is an effect: a cancelled run does not start another one.
 				// The gate throws AbortRequested here, which unwinds to the catch.
 				gate.admit(() => undefined);
+				// The budget is checked before a turn is started, so `turns` is the
+				// number of turns actually taken.
+				if (this.kernel.budgetSpent) break;
 				// The model is resolved live: a run started on one model and switched
 				// mid-flight must send the next request to the new one (§2.4).
 				const identity = this.config.read("model");
@@ -350,10 +366,15 @@ export class Runner {
 				this.currentRunId = runId;
 				this.currentTurnId = crypto.randomUUID();
 				this.turnToolResults = [];
-				// Compaction's threshold decision belongs to the service; the runner
-				// only knows that a run is starting.
-				if (turn === 1) await this.kernel.compaction.threshold();
+				if (firstTurnOfRun) {
+					firstTurnOfRun = false;
+					// Compaction's threshold decision belongs to the service; the runner
+					// only knows that a run is starting.
+					await this.kernel.compaction.threshold();
+				}
 				const assistant = await this.takeTurn(model);
+				// Every turn the loop takes counts, including one that ends the run.
+				this.kernel.noteTurn();
 				if (assistant === undefined) break;
 				if (assistant.stopReason === "error") {
 					error = assistant.errorMessage ?? "provider error";
@@ -396,12 +417,10 @@ export class Runner {
 						if (afterTools.length > 0) this.adopt(afterTools);
 					}
 				}
-				if (!this.kernel.noteTurn()) break;
-				// The turn had tool work: keep looping. A message injected mid-run
-				// (tool or middleware) never interrupts; it opens the next turn via
-				// the drain at the top of the loop.
-				// Every call in the batch asked to end the run (eta-agent's
-				// allTerminate checkpoint): the model is not asked again.
+				// The turn had tool work: keep looping unless the batch asked to end
+				// the run (eta-agent's allTerminate checkpoint). A message injected
+				// mid-run never interrupts; it opens the next turn via the drain at
+				// the top of the loop.
 				if (allTerminate) break;
 			}
 		} catch (caught) {

@@ -52,7 +52,8 @@ describe("runner turn loop", () => {
 		const { kernel, runner, fake, events, dispose } = setup([assistantMessage()]);
 		kernel.inject(userMsg("hello"));
 		const result = await runner.run();
-		expect(result).toEqual({ turns: 0, status: "completed" });
+		// One provider request is one turn, and it counts even though it ended the run.
+		expect(result).toEqual({ turns: 1, status: "completed" });
 		expect(fake.calls).toHaveLength(1);
 		expect(events.map((e) => e.name)).toEqual([
 			"turn:run-start",
@@ -80,6 +81,9 @@ describe("runner turn loop", () => {
 		kernel.inject(userMsg("go"));
 		const result = await runner.run();
 		expect(result.error).toBeUndefined();
+		// Two provider requests: the tool turn and the answer that ended the run.
+		expect(result.turns).toBe(2);
+		expect(kernel.turns).toBe(2);
 		expect(fake.calls).toHaveLength(2);
 		// Second turn's context contains the tool result.
 		const second = fake.calls[1].context.messages;
