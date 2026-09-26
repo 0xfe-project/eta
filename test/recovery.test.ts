@@ -27,8 +27,6 @@ import {
 import { Runner } from "../src/kernel/runner.ts";
 import { assistantMessage, fakeModels } from "../src/testing/fake-provider.ts";
 
-class SimulatedCrash extends Error {}
-
 const userMsg = (text: string) => ({
 	role: "user" as const,
 	content: [{ type: "text" as const, text }],
@@ -118,26 +116,19 @@ describe("crash recovery — the half turn is dropped, the committed turns stay"
 		await first.storage.close();
 		const settledWrites = disk.writes.length;
 
-		// A second process gets a turn in, then dies inside the next tool call.
-		const second = setup(disk, [toolCall("c1", "read"), toolCall("c2", "explode")]);
+		// A second process gets a turn in, then dies: the provider never answers
+		// the turn after its tool batch.
+		const second = setup(disk, [toolCall("c1", "read")]);
 		second.kernel.tools.register({ name: "read", execute: () => "file contents" });
-		second.kernel.tools.register({
-			name: "explode",
-			execute: () => {
-				throw new SimulatedCrash("the process died here");
-			},
-		});
 		second.kernel.inject(userMsg("keep going"));
-		await expect(second.runner.run()).rejects.toBeInstanceOf(SimulatedCrash);
+		await expect(second.runner.run()).rejects.toThrow("script exhausted");
 
-		// The crash happened mid-turn: the exploding tool's result never reached
-		// the journal, but the first turn of the run did.
+		// The crash happened between turns: everything the first turn produced is
+		// durable — the message, the assistant's call, and the tool result.
 		expect(disk.writes.length).toBeGreaterThan(settledWrites);
 
 		const log = await SessionLog.load(disk.restart());
 		const texts = textsOf(log.graph.pathOldestFirst());
-		// Everything that was committed is intact — including the crashed run's
-		// completed first turn. Only the half turn is gone.
 		expect(texts).toEqual(["earlier question", "settled", "keep going", "file contents"]);
 		expect(log.transcript().length).toBeGreaterThanOrEqual(4);
 	});

@@ -276,9 +276,7 @@ export class Runner {
 					break;
 				}
 			} else {
-				for (const call of toolCalls) {
-					await this.executeToolCall(call, turn);
-				}
+				await this.executeToolBatch(toolCalls, turn);
 				// The checkpoint after a tool batch: steering lands here, so the very
 				// next request carries it. Follow-ups wait for a boundary that could
 				// end the run.
@@ -557,13 +555,36 @@ export class Runner {
 		return assistant;
 	}
 
-	private async executeToolCall(call: ToolCall, turn: number): Promise<void> {
+	/**
+	 * Run a turn's tool calls and record the results in call order. Sequential or
+	 * parallel comes from the live config (eta-agent's run.settings.toolExecution);
+	 * a failure in one call does not cancel its siblings — every call has to
+	 * produce a result, or the model is left with a call it never heard back on.
+	 */
+	private async executeToolBatch(calls: readonly ToolCall[], turn: number): Promise<void> {
+		const execution = this.config.read("toolExecution");
 		const runId = this.currentRunId ?? "";
 		const turnId = this.currentTurnId ?? "";
-		this.emit("tool:start", { runId, turnId, toolCallId: call.id, toolName: call.name, args: call.arguments });
-		const started = Date.now();
-		const raw = await this.tools.execute(call.name, call.arguments, { turn, toolCallId: call.id });
-		const durationMs = Date.now() - started;
+		for (const call of calls) {
+			this.emit("tool:start", { runId, turnId, toolCallId: call.id, toolName: call.name, args: call.arguments });
+		}
+		const started = new Map<string, number>();
+		for (const call of calls) started.set(call.id, Date.now());
+		const outcomes = await this.tools.executeBatch(
+			calls.map((call) => ({ id: call.id, name: call.name, arguments: call.arguments })),
+			{ execution, turn },
+		);
+		for (const outcome of outcomes) {
+			const call = calls.find((candidate) => candidate.id === outcome.id)!;
+			await this.recordToolResult(call, outcome.result, turn, started.get(outcome.id) ?? Date.now());
+		}
+	}
+
+	/** Emit the result event and put the tool result into the transcript. */
+	private async recordToolResult(call: ToolCall, raw: unknown, turn: number, startedAt: number): Promise<void> {
+		const runId = this.currentRunId ?? "";
+		const turnId = this.currentTurnId ?? "";
+		const durationMs = Date.now() - startedAt;
 		const isError = typeof raw === "object" && raw !== null && "isError" in raw && raw.isError === true;
 		this.emit("tool:end", {
 			runId,
