@@ -10,7 +10,7 @@ import { appendFile, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AssistantMessage, Kernel, Runner, SessionLog } from "@eta/core";
-import { assistantMessage, fakeProvider } from "@eta/core/testing";
+import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { JsonlStorage } from "../src/index.ts";
 
@@ -44,8 +44,8 @@ async function processRun(path: string, script: AssistantMessage[], prompt: stri
 	const storage = await JsonlStorage.open(path);
 	const log = SessionLog.create(storage);
 	const kernel = Kernel.create();
-	const fake = fakeProvider(script);
-	const runner = new Runner(kernel, { providers: fake, model: {} as never, journal: log });
+	const fake = fakeModels(script);
+	const runner = new Runner(kernel, { models: fake, journal: log });
 	kernel.inject(userMsg(prompt));
 	const result = await runner.run();
 	kernel.dispose();
