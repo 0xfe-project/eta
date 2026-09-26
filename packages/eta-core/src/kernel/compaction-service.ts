@@ -45,7 +45,10 @@ export interface CompactionRequestState {
 	signal: AbortSignal;
 	runId: string;
 	/** The model call, wired by whoever owns the models seam. */
-	ask: (prompt: { systemPrompt?: string; messages: AgentMessage[] }) => Promise<AssistantMessage>;
+	ask: (
+		prompt: { systemPrompt?: string; messages: AgentMessage[] },
+		options?: { maxTokens?: number; reasoning?: ThinkingLevel },
+	) => Promise<AssistantMessage>;
 }
 
 /** What the service needs from the run in flight; the runner implements it. */
@@ -103,8 +106,8 @@ export class CompactionService extends Service {
 	}
 
 	/** Someone asked for a compaction; do it regardless of the threshold. */
-	async manual(): Promise<boolean> {
-		return this.run("manual", { force: true });
+	async manual(instructions?: string): Promise<boolean> {
+		return this.run("manual", { force: true, ...(instructions === undefined ? {} : { instructions }) });
 	}
 
 	/** Compact when the history no longer fits the model that owns it. */
@@ -119,7 +122,7 @@ export class CompactionService extends Service {
 		return this.run("overflow", { force: true });
 	}
 
-	private async run(reason: CompactionReason, options: { force: boolean }): Promise<boolean> {
+	private async run(reason: CompactionReason, options: { force: boolean; instructions?: string }): Promise<boolean> {
 		const host = this.host;
 		const summarizer = this.summarizer;
 		if (host === undefined || summarizer === undefined) return false;
@@ -137,6 +140,7 @@ export class CompactionService extends Service {
 		try {
 			outcome = await summarizer.summarize({
 				reason,
+				...(options.instructions === undefined ? {} : { customInstructions: options.instructions }),
 				messages: host.readContext(),
 				entries: host.entries(),
 				settings,
@@ -178,6 +182,7 @@ export class CompactionService extends Service {
 			endedAt: Date.now(),
 			status: "completed",
 			summary: outcome.summary,
+			...(outcome.details === undefined ? {} : { details: outcome.details }),
 			retainedTail: [...outcome.retainedTail],
 			tokensBefore: outcome.tokensBefore,
 			...(outcome.usage === undefined ? {} : { usage: outcome.usage }),

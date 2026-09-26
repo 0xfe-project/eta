@@ -220,6 +220,7 @@ export class JournalingService extends Service {
 		summary?: string;
 		retainedTail?: readonly AgentMessage[];
 		tokensBefore?: number;
+		details?: JsonValue;
 		usage?: Usage;
 	}): void {
 		const log = this.log;
@@ -231,6 +232,7 @@ export class JournalingService extends Service {
 			summary: event.summary,
 			retainedTail: [...(event.retainedTail ?? [])],
 			tokensBefore: event.tokensBefore,
+			...(event.details === undefined ? {} : { details: event.details }),
 			...(event.usage === undefined ? {} : { usage: event.usage }),
 		} as NewEntry<Entry>);
 		this.emit("entry:added", { entry });
