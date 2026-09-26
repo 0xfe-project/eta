@@ -69,7 +69,13 @@ describe("tool service", () => {
 	it("middleware before can block a call and the tool never runs", async () => {
 		const { tools, dispose } = withTools();
 		let ran = false;
-		tools.register({ name: "danger", execute: () => (ran = true) });
+		tools.register({
+			name: "danger",
+			execute: () => {
+				ran = true;
+				return "ran";
+			},
+		});
 		tools.use({ name: "gate", before: () => ({ ok: false, blockReason: "not today" }) });
 		const out = await tools.execute("danger", {}, { turn: 1, toolCallId: "c1" });
 		expect(out).toMatchObject({ isError: true, content: "blocked by gate: not today" });
@@ -83,13 +89,23 @@ describe("tool service", () => {
 		tools.register({ name: "t", execute: () => order.push("tool") });
 		tools.use({
 			name: "outer",
-			before: () => (order.push("outer:before"), { ok: true, args: {} }),
-			after: () => (order.push("outer:after"), undefined),
+			before: () => {
+				order.push("outer:before");
+				return { ok: true, args: {} };
+			},
+			after: () => {
+				order.push("outer:after");
+			},
 		});
 		tools.use({
 			name: "inner",
-			before: () => (order.push("inner:before"), { ok: true, args: {} }),
-			after: () => (order.push("inner:after"), undefined),
+			before: () => {
+				order.push("inner:before");
+				return { ok: true, args: {} };
+			},
+			after: () => {
+				order.push("inner:after");
+			},
 		});
 		await tools.execute("t", {}, { turn: 1, toolCallId: "c1" });
 		expect(order).toEqual(["outer:before", "inner:before", "tool", "inner:after", "outer:after"]);

@@ -133,6 +133,11 @@ export interface UsageEvents {
 	"usage:recorded": { row: UsageRow; totals: Usage };
 }
 
+export interface StateEvents {
+	/** A configuration property changed; the runner reads config live, so this is how a UI learns. */
+	"state:config-update": { property: string; value: unknown; previous: unknown };
+}
+
 export interface StorageEvents {
 	"storage:appended": { entry: Entry };
 	"storage:compacted": { before: number; after: number };
@@ -153,6 +158,7 @@ export interface KernelEvents
 		PromptEvents,
 		ToolEvents,
 		UsageEvents,
+		StateEvents,
 		StorageEvents,
 		InjectEvents {}
 
@@ -191,6 +197,7 @@ export const KERNEL_EVENT_NAMES = [
 	"persona:missing",
 	"persona:switched",
 	"prompt:assembled",
+	"state:config-update",
 	"storage:appended",
 	"storage:compacted",
 	"storage:error",

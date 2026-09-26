@@ -2,7 +2,7 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
 import { Kernel, Runner } from "../src/index.ts";
 import type { KernelTool } from "../src/kernel/tools.ts";
-import { assistantMessage, fakeProvider } from "../src/testing/fake-provider.ts";
+import { assistantMessage, fakeModels } from "../src/testing/fake-provider.ts";
 import { kernelOn } from "../src/types/events.ts";
 
 const userMsg = (text: string) => ({ role: "user" as const, content: [{ type: "text" as const, text }], timestamp: 0 });
@@ -19,8 +19,8 @@ function setup(script: AssistantMessage[], tools: KernelTool[] = []) {
 	for (const t of tools) {
 		(kernel.ctx as unknown as { tools: { register(t: KernelTool): void } }).tools.register(t);
 	}
-	const fake = fakeProvider(script);
-	const runner = new Runner(kernel, { providers: fake, model: {} as never });
+	const fake = fakeModels(script);
+	const runner = new Runner(kernel, { models: fake });
 	const events: { name: string; payload: Record<string, unknown> }[] = [];
 	const on = kernelOn(kernel.ctx);
 	const offs = (
@@ -122,16 +122,16 @@ describe("runner turn loop", () => {
 	it("maxTurns caps the loop even when the provider keeps asking for tools", async () => {
 		const echo: KernelTool = { name: "echo", execute: () => "x" };
 		const script = Array.from({ length: 10 }, (_, i) => toolCallMsg([{ id: `c${i}`, name: "echo" }]));
-		const { kernel, runner, fake, dispose } = setup(script, [echo]);
+		const { dispose: disposeUncapped } = setup(script, [echo]);
 		const capped = Kernel.create({ maxTurns: 2 });
 		// Rebuild runner against the capped kernel.
-		const cappedFake = fakeProvider(script);
-		const cappedRunner = new Runner(capped, { providers: cappedFake, model: {} as never });
+		const cappedFake = fakeModels(script);
+		const cappedRunner = new Runner(capped, { models: cappedFake });
 		capped.inject(userMsg("go"));
 		await cappedRunner.run();
 		expect(cappedFake.calls.length).toBeLessThanOrEqual(3);
 		expect(capped.budgetSpent).toBe(true);
-		void kernel.dispose();
+		disposeUncapped();
 		void capped.dispose();
 	});
 

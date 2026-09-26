@@ -14,10 +14,11 @@ import type { SessionLog } from "../session/session-log.ts";
 import type { Emit } from "../types/events.ts";
 import { kernelEmit, kernelOn } from "../types/events.ts";
 import type { AgentMessage } from "../types/messages.ts";
+import type { ConfigService } from "./config.ts";
 import type { GoalService } from "./goal.ts";
 import type { Kernel } from "./kernel.ts";
 import type { PersonaService } from "./persona.ts";
-import type { ProviderSeam } from "./providers.ts";
+import type { KernelModels } from "./providers.ts";
 import type { ToolService } from "./tools.ts";
 
 export interface RunnerBoundaryOptions {
@@ -31,11 +32,10 @@ export interface RunnerBoundaryOptions {
 }
 
 export interface RunnerOptions {
-	providers: ProviderSeam;
-	model: Model<Api>;
+	/** The model layer: resolve the configured model, then generate. */
+	models: KernelModels;
 	/** Static system-prompt blocks (plugins contribute via persona/prompt seams later). */
 	systemPrompt?: string;
-	thinkingLevel?: string;
 	/** Run-boundary decisions (REFACTOR.md §2.4 step 5); without it the boundary is a plain stop. */
 	boundary?: RunnerBoundaryOptions;
 	/**
@@ -70,6 +70,8 @@ export class Runner {
 	private readonly goal: GoalService;
 	private readonly persona: PersonaService;
 	private readonly options: RunnerOptions;
+	private readonly config: ConfigService;
+	private readonly models: KernelModels;
 	private readonly journal: SessionLog | undefined;
 	private readonly emit: Emit;
 	private readonly transcript: AgentMessage[] = [];
@@ -86,6 +88,8 @@ export class Runner {
 		this.options = options;
 		this.emit = kernelEmit(kernel.ctx);
 		this.journal = options.journal;
+		this.config = kernel.config;
+		this.models = options.models;
 		if (options.initialTranscript !== undefined) this.transcript.push(...options.initialTranscript);
 		this.tools = kernel.tools;
 		this.goal = kernel.goal;
@@ -132,11 +136,19 @@ export class Runner {
 		this.emit("turn:run-start", { runId, startedAt: Date.now() });
 		for (;;) {
 			await this.drainInjected();
+			// The model is resolved live: a run started on one model and switched
+			// mid-flight must send the next request to the new one (§2.4).
+			const identity = this.config.read("model");
+			const model = this.models.getModel(identity.provider, identity.modelId);
+			if (model === undefined) {
+				error = `model_unavailable: ${identity.provider}/${identity.modelId}`;
+				break;
+			}
 			const turn = this.kernel.turns + 1;
 			this.currentRunId = runId;
 			this.currentTurnId = crypto.randomUUID();
 			this.turnToolResults = [];
-			const assistant = await this.takeTurn(turn);
+			const assistant = await this.takeTurn(model);
 			if (assistant === undefined) break;
 			if (assistant.stopReason === "error") {
 				error = assistant.errorMessage ?? "provider error";
@@ -243,7 +255,7 @@ export class Runner {
 		}
 	}
 
-	private async takeTurn(turn: number): Promise<AssistantMessage | undefined> {
+	private async takeTurn(model: Model<Api>): Promise<AssistantMessage | undefined> {
 		const context = this.assembleContext();
 		const runId = this.currentRunId ?? "";
 		const turnId = this.currentTurnId ?? "";
@@ -255,9 +267,12 @@ export class Runner {
 			attempt: 1,
 		});
 		this.emit("message:start", { runId, turnId });
-		const assistant = await this.options.providers.complete(this.options.model, context, {
-			reasoning: this.options.thinkingLevel,
-		} as never);
+		const config = this.config.get();
+		const assistant = await this.models.completeSimple(model, context, {
+			...config.streamOptions,
+			// "off" is the kernel's spelling for "no reasoning field at all".
+			...(config.thinkingLevel === "off" ? {} : { reasoning: config.thinkingLevel }),
+		});
 		this.transcript.push(assistant);
 		const entry = this.journal?.recordMessage(assistant);
 		if (entry !== undefined) this.emit("message:end", { runId, message: assistant, entryId: entry.id });

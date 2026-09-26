@@ -4,6 +4,14 @@
  */
 
 export {
+	ConfigService,
+	RETRY_DEFAULTS,
+	validateCompactionSettings,
+	validateKernelConfig,
+	validateRetryPolicy,
+	validateToolNames,
+} from "./kernel/config.ts";
+export {
 	ANTI_SPIN_LIMIT,
 	applyGoalEntries,
 	type GoalBlockedReason,
@@ -16,7 +24,13 @@ export {
 } from "./kernel/goal.ts";
 export { Kernel, type KernelInspect, type KernelOptions } from "./kernel/kernel.ts";
 export { PersonaService, renderPersonaBlock } from "./kernel/persona.ts";
-export { type ProviderSeam, piAiProviders } from "./kernel/providers.ts";
+export { type KernelModels, piAiModels } from "./kernel/providers.ts";
+export {
+	type AgentRetryPolicy,
+	DEFAULT_MAX_AGENT_RETRY_DELAY_MS,
+	DEFAULT_RETRY_POLICY,
+	retryDelayMs,
+} from "./kernel/retry.ts";
 export {
 	isEmptyStop,
 	Runner,
@@ -63,13 +77,34 @@ export {
 	type ValueWrite,
 	value,
 } from "./storage/types.ts";
-export { assistantMessage, type FakeProvider, fakeProvider, type RecordedCall } from "./testing/fake-provider.ts";
+export {
+	assistantMessage,
+	type FakeModels,
+	type FakeModelsOptions,
+	fakeModels,
+	type RecordedCall,
+} from "./testing/fake-provider.ts";
 export {
 	type StorageContractHandle,
 	type StorageContractOptions,
 	type StorageFactory,
 	storageContract,
 } from "./testing/storage-contract.ts";
+export {
+	CONFIG_PROPERTIES,
+	type CompactionEconomics,
+	type CompactionSettings,
+	type ConfigProperty,
+	DEFAULT_COMPACTION_ECONOMICS,
+	DEFAULT_COMPACTION_SETTINGS,
+	defaultKernelConfig,
+	type KernelConfig,
+	type ModelConfig,
+	type ModelIdentity,
+	type QueueMode,
+	type RuntimeConfig,
+	type ToolExecution,
+} from "./types/config.ts";
 export * from "./types/entries.ts";
 export {
 	type ContextPartStats,
@@ -88,6 +123,7 @@ export {
 	type On,
 	type PersonaEvents,
 	type PromptEvents,
+	type StateEvents,
 	type StorageEvents,
 	type TaskEvents,
 	type ToolEvents,
