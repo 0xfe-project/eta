@@ -11,7 +11,8 @@
 	},
 	"scripts": {
 		"test": "vitest --run --passWithNoTests",
-		"typecheck": "tsc -p tsconfig.json --noEmit"
+		"typecheck": "tsc -p tsconfig.json --noEmit",
+		"smoke": "bun run --cwd ../eta-core smoke"
 	},
 	"devDependencies": {
 		"@types/node": "22.19.19",
