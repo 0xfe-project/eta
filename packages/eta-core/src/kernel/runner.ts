@@ -19,16 +19,15 @@ import type {
 	SimpleStreamOptions,
 	ToolCall,
 } from "@earendil-works/pi-ai";
-import { isContextOverflow, isRecoverableLength, isRetryableAssistantError } from "@earendil-works/pi-ai";
 import type { JournalingService } from "../session/journaling";
 import type { Entry } from "../types/entries";
 import type { Emit } from "../types/events";
 import { kernelEmit } from "../types/events";
 import type { AgentMessage, ThinkingLevel, Usage } from "../types/messages";
-import { consumeAssistantStream } from "./assistant";
 import { estimateContextTokens } from "./compaction";
 import type { ConfigService } from "./config";
 import { AbortRequested, createGate, type Gate, type GateControl } from "./effect-gate";
+import { generateWithRetry } from "./generation";
 import type { GoalService } from "./goal";
 import type { QueuedItem } from "./inbox";
 import type { Kernel } from "./kernel";
@@ -508,96 +507,41 @@ export class Runner {
 			turnId,
 			contextParts: this.estimateParts(this.assembleContext(toolContext, systemPrompt)),
 		});
-		const config = this.config.get();
-		const policy = normalizedRetryPolicy(config.retryPolicy);
-		const signal = this.runSignal();
-		const intendedOutputLimit = model.maxTokens ?? 0;
-		let attempt = 1;
-		let assistant: AssistantMessage;
-		for (;;) {
-			// Assembled per attempt: a compaction between attempts replaces the
-			// context the next request must carry.
-			const context = this.assembleContext(toolContext, systemPrompt);
-			this.emit("prompt:assembled", {
-				runId,
-				systemPromptChars: (context.systemPrompt ?? "").length,
-				messages: context.messages.length,
-				attempt,
-			});
-			assistant = await consumeAssistantStream(
-				this.models.streamSimple(model, context, {
-					...config.streamOptions,
-					signal,
-					// "off" is the kernel's spelling for "no reasoning field at all".
-					...(config.thinkingLevel === "off" ? {} : { reasoning: config.thinkingLevel }),
-				}),
-				{
-					start: () => {
-						this.emit("message:start", { runId, turnId });
-					},
-					update: (message, event) => {
-						// Every frame is a snapshot: nothing downstream may hold a live
-						// reference into the provider's in-flight message.
-						this.emit("message:update", {
-							runId,
-							turnId,
-							message: structuredClone(message),
-							event: structuredClone(event),
-						});
-					},
-					end: () => undefined,
-				},
-			);
 
-			if (assistant.stopReason !== "error" && assistant.stopReason !== "length") {
-				if (attempt > 1) this.emit("retry:end", { runId, step: turnId, attempt, success: true });
-				break;
-			}
-			// Context overflow is recovered by cutting the history once, not by
-			// waiting: the same request cannot fit until the context shrinks.
-			const overflow =
-				isContextOverflow(assistant, model.contextWindow) || isRecoverableLength(assistant, intendedOutputLimit);
-			if (overflow) {
-				// One recovery per run, enforced by the service.
-				if (await this.kernel.compaction.overflow()) continue;
-				break;
-			}
-			if (assistant.stopReason !== "error") break;
-			// A failed attempt is never journaled: it is not history, and it must
-			// not enter the context the next attempt sends. Retryable transport
-			// failures get another attempt; deterministic ones end the run.
-			const retryable = isRetryableAssistantError(assistant);
-			if (!retryable || attempt >= policy.maxAttempts) {
-				if (attempt > 1) {
-					this.emit("retry:end", {
+		const config = this.config.get();
+		// Everything that can go wrong mid-generation is generateWithRetry's
+		// business; the loop below only sees the message that settled it.
+		const assistant = await generateWithRetry({
+			models: this.models,
+			model,
+			streamOptions: config.streamOptions,
+			thinkingLevel: config.thinkingLevel,
+			signal: this.runSignal(),
+			retryPolicy: config.retryPolicy,
+			runId,
+			turnId,
+			intendedOutputLimit: model.maxTokens ?? 0,
+			contextFor: () => this.assembleContext(toolContext, systemPrompt),
+			emit: this.emit,
+			observer: {
+				update: (message, event) => {
+					// Every frame is a snapshot: nothing downstream may hold a live
+					// reference into the provider's in-flight message.
+					this.emit("message:update", {
 						runId,
-						step: turnId,
-						attempt,
-						success: false,
-						finalError: assistant.errorMessage ?? `Assistant request ended with ${assistant.stopReason}`,
+						turnId,
+						message: structuredClone(message),
+						event: structuredClone(event),
 					});
-				}
-				break;
-			}
-			const notBefore = retryNotBefore(policy, attempt);
-			this.emit("retry:scheduled", {
-				runId,
-				step: turnId,
-				attempt: attempt + 1,
-				maxAttempts: policy.maxAttempts,
-				delayMs: retryDelayMs(policy, attempt),
-				notBefore,
-				errorMessage: assistant.errorMessage ?? "Assistant request failed",
-			});
-			await waitUntil(notBefore, signal);
-			attempt += 1;
-			this.emit("retry:start", { runId, step: turnId, attempt });
-		}
+				},
+			},
+			recoverOverflow: () => this.kernel.compaction.overflow(),
+		});
+
 		// A failed generation is not history: eta-agent records no entry for it, and
 		// a failed message in the transcript would be sent back to the model.
 		if (assistant.stopReason !== "error" && assistant.stopReason !== "aborted") {
-			// The subscriber records this and writes the usage row for the turn; a
-			// failed generation is not history and is not announced at all.
+			// The subscriber records this and writes the usage row for the turn.
 			this.transcript.push(assistant);
 			this.emit("message:end", { runId, message: assistant });
 		}

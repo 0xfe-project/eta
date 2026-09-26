@@ -47,6 +47,11 @@ export {
 	type GateControl,
 } from "./kernel/effect-gate";
 export {
+	type GenerateOptions,
+	type GenerationObserver,
+	generateWithRetry,
+} from "./kernel/generation";
+export {
 	ANTI_SPIN_LIMIT,
 	applyGoalEntries,
 	type GoalBlockedReason,
