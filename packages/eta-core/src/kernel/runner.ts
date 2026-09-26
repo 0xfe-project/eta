@@ -23,7 +23,7 @@ import { isContextOverflow, isRecoverableLength, isRetryableAssistantError } fro
 import type { JournalingService } from "../session/journaling";
 import type { Entry } from "../types/entries";
 import type { Emit } from "../types/events";
-import { kernelEmit, kernelOn } from "../types/events";
+import { kernelEmit } from "../types/events";
 import type { AgentMessage, ThinkingLevel, Usage } from "../types/messages";
 import { consumeAssistantStream } from "./assistant";
 import { estimateContextTokens } from "./compaction";
@@ -83,12 +83,6 @@ export interface RunnerOptions {
 	 * journaled again — the journal is where it came from.
 	 */
 	initialTranscript?: readonly AgentMessage[];
-	/**
-	 * When true, an inject arriving while the runner is idle immediately starts
-	 * a new run (REFACTOR.md §2.5). The server turns this on for live sessions;
-	 * one-shot callers (subagents) leave it off.
-	 */
-	autoPump?: boolean;
 }
 
 /** What a request would carry right now (eta-agent's LaneRequestState). */
@@ -129,14 +123,12 @@ export class Runner {
 	private readonly emit: Emit;
 	private readonly transcript: AgentMessage[] = [];
 	private emptyStops = 0;
-	private pumping = false;
 	private currentRunId: string | undefined;
 	private currentTurnId: string | undefined;
 	private turnToolResults: AgentMessage[] = [];
 	private inFlight: Promise<RunResult> | undefined;
 	private gate: { gate: Gate; control: GateControl } | undefined;
 	private readonly pendingEffects = new Set<Promise<unknown>>();
-	private autoPumpOff: (() => boolean) | undefined;
 
 	constructor(kernel: Kernel, options: RunnerOptions) {
 		this.kernel = kernel;
@@ -176,13 +168,6 @@ export class Runner {
 				};
 			},
 		});
-		if (options.autoPump) {
-			this.autoPumpOff = kernelOnAuto(kernel.ctx, () => {
-				if (!this.pumping && this.kernel.inboxDepth > 0) {
-					void this.run();
-				}
-			});
-		}
 	}
 
 	/**
@@ -246,10 +231,9 @@ export class Runner {
 		this.transcript.push(...retainedTail);
 	}
 
-	/** Stop listening for idle injects (runner teardown). */
-	stopAutoPump(): void {
-		this.autoPumpOff?.();
-		this.autoPumpOff = undefined;
+	/** Whether a run is in flight (RunPump's guard, a dashboard's fact). */
+	get running(): boolean {
+		return this.inFlight !== undefined;
 	}
 
 	/** The messages the runner would send to the provider right now. */
@@ -322,7 +306,7 @@ export class Runner {
 	 * Injected messages are drained at every boundary.
 	 */
 	async run(): Promise<RunResult> {
-		// Concurrent run() calls (autoPump racing a host call) share one loop.
+		// Concurrent run() calls (a pumped run racing a host call) share one loop.
 		if (this.inFlight !== undefined) return this.inFlight;
 		this.inFlight = this.runLoop();
 		try {
@@ -335,7 +319,6 @@ export class Runner {
 	private async runLoop(): Promise<RunResult> {
 		let error: string | undefined;
 		let status: RunResult["status"] = "completed";
-		this.pumping = true;
 		const runId = crypto.randomUUID();
 		const { gate, control } = createGate();
 		this.gate = { gate, control };
@@ -432,7 +415,6 @@ export class Runner {
 				throw caught;
 			}
 		}
-		this.pumping = false;
 		if (error !== undefined) status = "failed";
 		// The one place the loop waits for the disk: a finished run is a durable
 		// run. Commits were started as messages landed and are not awaited — the
@@ -447,10 +429,6 @@ export class Runner {
 			status,
 			...(error === undefined ? {} : { error }),
 		});
-		if (this.options.autoPump && this.kernel.inboxDepth > 0 && error === undefined) {
-			// An inject raced with the run-end above; pump it immediately.
-			return this.run();
-		}
 		return result;
 	}
 
@@ -782,10 +760,6 @@ let usageCounter = 0;
 function usageId(): string {
 	usageCounter += 1;
 	return `usage-${usageCounter.toString(36)}-${Date.now().toString(36)}`;
-}
-
-function kernelOnAuto(ctx: Parameters<typeof kernelOn>[0], onInject: () => void): () => boolean {
-	return kernelOn(ctx)("inject:received", onInject);
 }
 
 /** Whether a tool result asks for the run to end after this turn. */
