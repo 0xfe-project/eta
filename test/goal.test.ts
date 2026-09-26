@@ -163,3 +163,118 @@ describe("intent detection", () => {
 		expect(lastMessageShowsIntent("Done. The tests pass.")).toBe(false);
 	});
 });
+
+// Every point below is a line of eta-agent's GoalManager, checked one by one.
+describe("goal fidelity against eta-agent's GoalManager", () => {
+	it("blockedReason survives a pause and is cleared by resume", () => {
+		const { goal, dispose } = withGoal();
+		goal.set("wait for an answer");
+		goal.setBlockedReason("question-pending");
+		expect(goal.current?.blockedReason).toBe("question-pending");
+
+		goal.pause();
+		expect(goal.current?.blockedReason).toBe("question-pending");
+
+		goal.resume();
+		expect(goal.current?.blockedReason).toBeUndefined();
+		expect(goal.current?.idleWithoutTools).toBe(0);
+		dispose();
+	});
+
+	it("setting a new goal replaces the old one's bookkeeping", () => {
+		const { goal, dispose } = withGoal();
+		goal.set("first");
+		goal.noteContinuation();
+		goal.recordTurnOutcome(false);
+		expect(goal.current?.roundCount).toBe(1);
+		expect(goal.current?.idleWithoutTools).toBe(1);
+
+		goal.set("second");
+		expect(goal.current?.objective).toBe("second");
+		expect(goal.current?.roundCount).toBe(0);
+		expect(goal.current?.idleWithoutTools).toBe(0);
+		dispose();
+	});
+
+	it("every transition with no goal is a no-op", () => {
+		const { goal, events, dispose } = withGoal();
+		goal.pause();
+		goal.resume();
+		goal.markAchieved();
+		goal.clear();
+		goal.setBlockedReason("question-pending");
+		goal.recordTurnOutcome(false);
+		expect(goal.current).toBeUndefined();
+		expect(events).toEqual([]);
+		dispose();
+	});
+
+	it("pausing an already paused goal still reports the transition", () => {
+		const { goal, events, dispose } = withGoal();
+		goal.set("x");
+		goal.pause("first reason");
+		goal.pause("second reason");
+		const pauses = events.filter((event) => (event.payload as { kind: string }).kind === "pause");
+		expect(pauses).toHaveLength(2);
+		expect(pauses.map((event) => (event.payload as { reason?: string }).reason)).toEqual([
+			"first reason",
+			"second reason",
+		]);
+		dispose();
+	});
+
+	it("recordTurnOutcome does nothing unless the goal is active", () => {
+		const { goal, dispose } = withGoal();
+		goal.set("x");
+		goal.pause();
+		goal.recordTurnOutcome(false);
+		goal.recordTurnOutcome(false);
+		goal.recordTurnOutcome(false);
+		expect(goal.current?.status).toBe("paused");
+		expect(goal.current?.idleWithoutTools).toBe(0);
+
+		goal.markAchieved();
+		goal.recordTurnOutcome(false);
+		expect(goal.current?.status).toBe("achieved");
+		dispose();
+	});
+
+	it("the gate can be switched without disturbing the goal", () => {
+		const { goal, dispose } = withGoal();
+		goal.set("x");
+		expect(goal.wantsContinuation()).toBe(true);
+
+		goal.gate = "delegated";
+		expect(goal.wantsContinuation()).toBe(false);
+		expect(goal.current?.status).toBe("active");
+
+		goal.gate = "auto";
+		expect(goal.wantsContinuation()).toBe(true);
+		dispose();
+	});
+
+	it("reaching the round cap stops continuation without achieving the goal", () => {
+		const { goal, dispose } = withGoal();
+		goal.set("x");
+		goal.maxContinuations = 2;
+		goal.noteContinuation();
+		goal.noteContinuation();
+		expect(goal.wantsContinuation()).toBe(false);
+		expect(goal.current?.status).toBe("active");
+		expect(goal.current?.roundCount).toBe(2);
+		dispose();
+	});
+
+	it("replay ignores unknown payload kinds and applies the known ones in order", () => {
+		const { goal, dispose } = withGoal();
+		applyGoalEntries(goal, [
+			{ id: "1", parentId: null, seq: 1, timestamp: 0, type: "goal", payload: { kind: "set", objective: "a" } },
+			{ id: "2", parentId: "1", seq: 2, timestamp: 0, type: "goal", payload: { kind: "pause", reason: "spin" } },
+			{ id: "3", parentId: "2", seq: 3, timestamp: 0, type: "goal", payload: { kind: "resume" } },
+			{ id: "4", parentId: "3", seq: 4, timestamp: 0, type: "goal", payload: { kind: "achieved" } },
+			{ id: "5", parentId: "4", seq: 5, timestamp: 0, type: "goal", payload: { kind: "cleared" } },
+		]);
+		expect(goal.current).toBeUndefined();
+		dispose();
+	});
+});

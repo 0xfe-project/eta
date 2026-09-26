@@ -1,6 +1,8 @@
 import { Context } from "cordis";
 import { describe, expect, it } from "vitest";
+import { Kernel, Runner } from "../src/index.ts";
 import { PersonaService, renderPersonaBlock } from "../src/kernel/persona.ts";
+import { assistantMessage, fakeModels } from "../src/testing/fake-provider.ts";
 import { kernelOn } from "../src/types/events.ts";
 import type { PersonaCard } from "../src/types/persona.ts";
 
@@ -84,5 +86,55 @@ describe("persona service", () => {
 		]);
 		expect(renderPersonaBlock(["y", "x", "z"], cards)).toEqual({ text: "why\n\nex", missing: ["z"] });
 		expect(renderPersonaBlock([], cards)).toEqual({ text: "", missing: [] });
+	});
+});
+
+// Every point below is a line of eta-agent's persona.ts, checked one by one.
+describe("persona fidelity against eta-agent's persona.ts", () => {
+	it("trims each card and joins the block with a blank line", () => {
+		const cards = new Map([
+			["a", card("a", "  first card  ")],
+			["b", card("b", "\nsecond card\n")],
+		]);
+		expect(renderPersonaBlock(["a", "b"], cards)).toEqual({ text: "first card\n\nsecond card", missing: [] });
+	});
+
+	it("reports misses in the requested order and renders nothing for them", () => {
+		const cards = new Map([["a", card("a", "A")]]);
+		expect(renderPersonaBlock(["x", "a", "y"], cards)).toEqual({ text: "A", missing: ["x", "y"] });
+	});
+
+	it("an empty name list renders nothing and reports nothing", () => {
+		expect(renderPersonaBlock([], new Map())).toEqual({ text: "", missing: [] });
+	});
+
+	it("the active persona reaches the provider's system prompt", async () => {
+		const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } } });
+		const fake = fakeModels([assistantMessage()]);
+		kernel.persona.loadCards([card("Executor", "You are the executor."), card("Other", "You are someone else.")]);
+		kernel.persona.setActive(["Executor"]);
+		const runner = new Runner(kernel, { models: fake, systemPrompt: "base prompt" });
+		kernel.inject({ role: "user", content: [{ type: "text", text: "go" }], timestamp: 0 });
+		await runner.run();
+
+		const systemPrompt = fake.calls[0]!.context.systemPrompt ?? "";
+		expect(systemPrompt).toContain("base prompt");
+		expect(systemPrompt).toContain("You are the executor.");
+		expect(systemPrompt).not.toContain("You are someone else.");
+		// The block is appended after the base prompt, separated by a blank line.
+		expect(systemPrompt).toBe("base prompt\n\nYou are the executor.");
+		void kernel.dispose();
+	});
+
+	it("a missing active persona still leaves the rest of the prompt intact", async () => {
+		const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } } });
+		const fake = fakeModels([assistantMessage()]);
+		kernel.persona.loadCards([card("Executor", "still here")]);
+		kernel.persona.setActive(["Ghost", "Executor"]);
+		const runner = new Runner(kernel, { models: fake, systemPrompt: "base" });
+		kernel.inject({ role: "user", content: [{ type: "text", text: "go" }], timestamp: 0 });
+		await runner.run();
+		expect(fake.calls[0]!.context.systemPrompt).toBe("base\n\nstill here");
+		void kernel.dispose();
 	});
 });

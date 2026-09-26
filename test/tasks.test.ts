@@ -142,3 +142,76 @@ describe("renderCurrentTasks", () => {
 		dispose();
 	});
 });
+
+// Every point below is a line of eta-agent's TaskStore, checked one by one.
+describe("task store fidelity against eta-agent's TaskStore", () => {
+	it("keeps a self-dependency and warns about it", () => {
+		const { tasks, dispose } = withTasks();
+		const { task, warnings } = tasks.create("self", { deps: ["t1"] });
+		// The edge is kept, and both checks fire: the self-dependency and the
+		// cycle it forms (eta-agent's setDeps does not stop at the first warning).
+		expect(task.dependsOn).toEqual(["t1"]);
+		expect(warnings).toContain("task t1 depends on itself");
+		expect(warnings.join(" ")).toContain("dependency cycle");
+		dispose();
+	});
+
+	it("detects a cycle through a chain, not just a direct loop", () => {
+		const { tasks, dispose } = withTasks();
+		tasks.create("a");
+		tasks.create("b", { deps: ["t1"] });
+		const updated = tasks.update("t1", { deps: ["t2"] });
+		expect(updated).toBeDefined();
+		if (updated === undefined) throw new Error("unreachable");
+		expect(updated.warnings.join(" ")).toContain("dependency cycle");
+		// The edge is kept: a cycle is reported, not silently broken.
+		expect(tasks.get("t1")?.dependsOn).toEqual(["t2"]);
+		dispose();
+	});
+
+	it("rewriting deps prunes the old reverse edges", () => {
+		const { tasks, dispose } = withTasks();
+		tasks.create("a");
+		tasks.create("b");
+		tasks.update("t2", { deps: ["t1"] });
+		expect(tasks.get("t1")?.blocks).toEqual(["t2"]);
+
+		tasks.update("t2", { deps: [] });
+		expect(tasks.get("t2")?.dependsOn).toEqual([]);
+		expect(tasks.get("t1")?.blocks).toEqual([]);
+		dispose();
+	});
+
+	it("an unknown status warns and leaves the status alone", () => {
+		const { tasks, dispose } = withTasks();
+		tasks.create("a");
+		const result = tasks.update("t1", { status: "nonsense" as never });
+		expect(result).toBeDefined();
+		if (result === undefined) throw new Error("unreachable");
+		expect(result.warnings).toEqual(["unknown status nonsense"]);
+		expect(result.task.status).toBe("pending");
+		dispose();
+	});
+
+	it("updating an unknown task is undefined, not a throw", () => {
+		const { tasks, dispose } = withTasks();
+		expect(tasks.update("t404", { content: "x" })).toBeUndefined();
+		expect(tasks.remove("t404")).toBe(false);
+		dispose();
+	});
+
+	it("restore keeps the good rows beside the malformed ones", () => {
+		const { tasks, dispose } = withTasks();
+		const result = tasks.restore([
+			{ id: "t1", content: "good", status: "pending", dependsOn: [], blocks: [] },
+			{ id: "t2", content: 42, status: "pending" },
+			{ id: "t3", content: "also good", status: "cancelled", dependsOn: ["t1", 7], blocks: [] },
+		]);
+		expect(result.kept).toBe(2);
+		expect(result.dropped).toEqual(["t2"]);
+		expect(tasks.get("t3")?.dependsOn).toEqual(["t1"]);
+		// Auto-ids continue past the highest restored id.
+		expect(tasks.create("next").task.id).toBe("t4");
+		dispose();
+	});
+});
