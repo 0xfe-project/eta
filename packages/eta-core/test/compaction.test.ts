@@ -10,8 +10,9 @@
 import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
 import {
+	type AgentMessage,
 	type CompactionRequest,
-	type CompactionService,
+	type CompactionSummarizer,
 	calculateContextTokens,
 	DEFAULT_COMPACTION_SETTINGS,
 	DEFAULT_MAX_CONTEXT_TOKENS,
@@ -237,110 +238,197 @@ describe("where the cut falls", () => {
 });
 
 /* ------------------------------------------------------------------ */
-/* The seam                                                            */
+/* The service: three signals, one seam                                */
 /* ------------------------------------------------------------------ */
 
-function fakeCompaction(outcome?: (request: CompactionRequest) => { summary: string; retainedTail: unknown[] }) {
+function fakeSummarizer(outcome?: (request: CompactionRequest) => { summary: string; retainedTail?: AgentMessage[] }) {
 	const requests: CompactionRequest[] = [];
-	const service: CompactionService = {
-		compact: async (request) => {
+	const summarizer: CompactionSummarizer = {
+		summarize: async (request) => {
 			requests.push(request);
 			if (outcome === undefined) return undefined;
 			const produced = outcome(request);
 			return {
 				summary: produced.summary,
-				retainedTail: produced.retainedTail as never,
+				retainedTail: produced.retainedTail ?? [],
 				tokensBefore: request.estimatedTokens,
 			};
 		},
 	};
-	return { service, requests };
+	return { summarizer, requests };
 }
 
-describe("the runner's compaction seam", () => {
-	it("compacts before the first request when the history no longer fits", async () => {
-		const kernel = Kernel.create({
-			config: {
-				model: { provider: "p", modelId: "m" },
-				compaction: { ...DEFAULT_COMPACTION_SETTINGS, maxContextTokens: 100 },
+/** A kernel with a scripted model that reports a window, and a journal. */
+function session(
+	script: AssistantMessage[],
+	options: {
+		summarizer?: CompactionSummarizer;
+		maxContextTokens?: number;
+		initialTranscript?: AgentMessage[];
+	} = {},
+) {
+	const storage = new MemoryStorage();
+	const log = SessionLog.create(storage);
+	const kernel = Kernel.create({
+		config: {
+			model: { provider: "p", modelId: "m" },
+			compaction: {
+				...DEFAULT_COMPACTION_SETTINGS,
+				...(options.maxContextTokens === undefined ? {} : { maxContextTokens: options.maxContextTokens }),
 			},
-		});
-		const fake = fakeModels([assistantMessage({ content: [{ type: "text", text: "after compaction" }] })]);
-		const log = SessionLog.create(new MemoryStorage());
-		const { service, requests } = fakeCompaction(() => ({
-			summary: "everything before was about widgets",
-			retainedTail: [],
-		}));
-		const runner = new Runner(kernel, {
-			models: fake,
-			journal: log,
-			compaction: service,
-			toProviderMessages: projection as never,
-		});
+		},
+		...(options.summarizer === undefined ? {} : { compaction: options.summarizer }),
+		warn: () => undefined,
+	});
+	const fake = fakeModels(script);
+	fake.getModel = () =>
+		({
+			provider: "fake",
+			id: "fake-model",
+			api: "openai-completions",
+			contextWindow: 200_000,
+			maxTokens: 8_192,
+		}) as never;
+	const runner = new Runner(kernel, {
+		models: fake,
+		journal: log,
+		toProviderMessages: projection as never,
+		...(options.initialTranscript === undefined ? {} : { initialTranscript: options.initialTranscript }),
+	});
+	return { kernel, runner, fake, log, storage, dispose: () => void kernel.dispose() };
+}
 
-		// A history well past the ceiling.
-		for (const message of log.transcript()) void message;
-		const big = "x".repeat(2_000);
-		log.recordMessage(userMsg(big));
-		await log.commit();
-		const seeded = await SessionLog.load(log.storage);
-		const resumed = new Runner(kernel, {
-			models: fake,
-			journal: seeded,
-			compaction: service,
-			toProviderMessages: projection as never,
-			initialTranscript: seeded.transcript(),
+describe("CompactionService signals", () => {
+	it("threshold() decides: it compacts only when the history no longer fits", async () => {
+		const { summarizer, requests } = fakeSummarizer(() => ({ summary: "cut down" }));
+		const small = session([assistantMessage({ content: [{ type: "text", text: "after" }] })], {
+			summarizer,
+			maxContextTokens: 100_000,
 		});
-		kernel.inject(userMsg("carry on"));
+		small.kernel.inject(userMsg("short"));
+		await small.runner.run();
+		expect(requests).toEqual([]);
+		small.dispose();
 
+		const big = session([assistantMessage({ content: [{ type: "text", text: "after" }] })], {
+			summarizer,
+			maxContextTokens: 10,
+			initialTranscript: [userMsg("x".repeat(2_000))],
+		});
+		big.kernel.inject(userMsg("carry on"));
 		const events: string[] = [];
-		const off = kernelOn(kernel.ctx)("compaction:end", (event) => {
-			events.push(event.status);
+		const off = kernelOn(big.kernel.ctx)("compaction:end", (event) => {
+			events.push(`${event.reason}:${event.status}`);
 		});
-		await resumed.run();
+		await big.runner.run();
 		off();
 
 		expect(requests.map((request) => request.reason)).toEqual(["threshold"]);
-		expect(events).toEqual(["completed"]);
+		expect(events).toEqual(["threshold:completed"]);
 		// The provider saw the summary, not the wall of text.
-		const sent = JSON.stringify(fake.calls.at(-1)!.context.messages);
-		expect(sent).toContain("everything before was about widgets");
-		expect(sent).not.toContain(big);
-		expect(runner).toBeDefined();
-		void kernel.dispose();
+		const sent = JSON.stringify(big.fake.calls.at(-1)!.context.messages);
+		expect(sent).toContain("cut down");
+		expect(sent).not.toContain("x".repeat(2_000));
+		big.dispose();
 	});
 
-	it("does not compact while the history still fits", async () => {
-		const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } } });
-		const fake = fakeModels([assistantMessage()]);
-		const { service, requests } = fakeCompaction(() => ({ summary: "s", retainedTail: [] }));
-		const runner = new Runner(kernel, { models: fake, compaction: service });
-		kernel.inject(userMsg("short"));
-		await runner.run();
-		expect(requests).toEqual([]);
-		void kernel.dispose();
-	});
-
-	it("a declining service leaves the context alone", async () => {
-		const kernel = Kernel.create({
-			config: {
-				model: { provider: "p", modelId: "m" },
-				compaction: { ...DEFAULT_COMPACTION_SETTINGS, maxContextTokens: 1 },
-			},
-		});
-		const fake = fakeModels([assistantMessage()]);
-		const { service } = fakeCompaction(undefined);
-		const runner = new Runner(kernel, { models: fake, compaction: service });
+	it("manual() compacts even when the history fits", async () => {
+		const { summarizer, requests } = fakeSummarizer(() => ({ summary: "asked for it" }));
+		const s = session([assistantMessage({ content: [{ type: "text", text: "after" }] })], { summarizer });
+		s.kernel.inject(userMsg("short"));
 		const statuses: string[] = [];
-		const off = kernelOn(kernel.ctx)("compaction:end", (event) => {
+		const off = kernelOn(s.kernel.ctx)("compaction:end", (event) => {
+			statuses.push(`${event.reason}:${event.status}`);
+		});
+		// The host asks, e.g. a /compact command.
+		const compacted = await s.kernel.compaction.manual();
+		off();
+		expect(compacted).toBe(true);
+		expect(requests.map((request) => request.reason)).toEqual(["manual"]);
+		expect(statuses).toEqual(["manual:completed"]);
+		s.dispose();
+	});
+
+	it("without a summarizer every signal declines", async () => {
+		const s = session([assistantMessage()]);
+		expect(s.kernel.compaction.available).toBe(false);
+		expect(await s.kernel.compaction.manual()).toBe(false);
+		expect(await s.kernel.compaction.threshold()).toBe(false);
+		expect(await s.kernel.compaction.overflow()).toBe(false);
+		s.dispose();
+	});
+
+	it("overflow() recovers once per run, and a new run restores the budget", async () => {
+		const { summarizer, requests } = fakeSummarizer(() => ({ summary: "recovered" }));
+		const s = session([assistantMessage({ content: [{ type: "text", text: "ran" }] })], { summarizer });
+		// No run started yet: the budget is per run, so the first call works.
+		expect(await s.kernel.compaction.overflow()).toBe(true);
+		expect(await s.kernel.compaction.overflow()).toBe(false);
+		expect(requests.map((request) => request.reason)).toEqual(["overflow"]);
+
+		// A run start restores it (the service subscribes; the runner never tells it).
+		s.kernel.inject(userMsg("go"));
+		await s.runner.run();
+		expect(await s.kernel.compaction.overflow()).toBe(true);
+		expect(requests.map((request) => request.reason)).toEqual(["overflow", "overflow"]);
+		s.dispose();
+	});
+
+	it("a failing summarizer is reported, and the run continues", async () => {
+		const summarizer: CompactionSummarizer = {
+			summarize: () => Promise.reject(new Error("summarizer exploded")),
+		};
+		const s = session([assistantMessage({ content: [{ type: "text", text: "still ran" }] })], {
+			summarizer,
+			maxContextTokens: 1,
+		});
+		const failures: string[] = [];
+		const off = kernelOn(s.kernel.ctx)("compaction:end", (event) => {
+			if (event.status === "failed") failures.push(event.error ?? "");
+		});
+		s.kernel.inject(userMsg("long enough to be past one token"));
+		const result = await s.runner.run();
+		off();
+		expect(failures).toEqual(["summarizer exploded"]);
+		expect(result.error).toBeUndefined();
+		s.dispose();
+	});
+
+	it("a declining summarizer leaves the context alone", async () => {
+		const { summarizer } = fakeSummarizer(undefined);
+		const s = session([assistantMessage()], { summarizer, maxContextTokens: 1 });
+		const statuses: string[] = [];
+		const off = kernelOn(s.kernel.ctx)("compaction:end", (event) => {
 			statuses.push(event.status);
 		});
-		kernel.inject(userMsg("long enough to be past one token"));
-		await runner.run();
+		s.kernel.inject(userMsg("long enough to be past one token"));
+		await s.runner.run();
 		off();
 		expect(statuses).toEqual(["declined"]);
-		expect(runner.readContext().length).toBe(2); // the user message and the answer
-		void kernel.dispose();
+		expect(s.runner.readContext().length).toBe(2); // the user message and the answer
+		s.dispose();
+	});
+
+	it("replaceContext swaps the transcript; the service journals the entry", async () => {
+		const { summarizer } = fakeSummarizer(() => ({
+			summary: "summary of the above",
+			retainedTail: [userMsg("kept")],
+		}));
+		const s = session([], { summarizer });
+		s.runner.replaceContext("summary of the above", { retainedTail: [userMsg("kept")] });
+		expect(s.runner.readContext().map((message) => message.role)).toEqual(["compactionSummary", "user"]);
+
+		// Through the service: the context is replaced and the entry is journalled.
+		expect(await s.kernel.compaction.manual()).toBe(true);
+		expect(s.runner.readContext().map((message) => message.role)).toEqual(["compactionSummary", "user"]);
+		await s.log.commit();
+
+		// A replay rebuilds the same context, not the pre-compaction history.
+		const reloaded = await SessionLog.load(s.storage);
+		expect(reloaded.transcript().map((message) => message.role)).toEqual(["compactionSummary", "user"]);
+		expect(JSON.stringify(reloaded.transcript())).toContain("summary of the above");
+		expect(reloaded.graph.pathOldestFirst().some((entry) => entry.type === "compaction")).toBe(true);
+		s.dispose();
 	});
 
 	it("a missing projection fails loudly rather than dropping the summary", async () => {
@@ -350,51 +438,6 @@ describe("the runner's compaction seam", () => {
 		runner.replaceContext("summary");
 		kernel.inject(userMsg("go"));
 		await expect(runner.run()).rejects.toThrow("toProviderMessages is required");
-		void kernel.dispose();
-	});
-
-	it("replaceContext swaps the transcript and journals the compaction", async () => {
-		const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } } });
-		const log = SessionLog.create(new MemoryStorage());
-		const fake = fakeModels([]);
-		const runner = new Runner(kernel, { models: fake, journal: log });
-		kernel.inject(userMsg("first"));
-		// Nothing is in the context until a run drains the injected message.
-		expect(runner.readContext()).toEqual([]);
-
-		const entry = runner.replaceContext("summary of the above", { retainedTail: [userMsg("kept")] });
-		expect(entry?.type).toBe("compaction");
-		expect(runner.readContext().map((message) => message.role)).toEqual(["compactionSummary", "user"]);
-		await log.commit();
-
-		// A replay rebuilds the same context, not the pre-compaction history.
-		const reloaded = await SessionLog.load(log.storage);
-		expect(reloaded.transcript().map((message) => message.role)).toEqual(["compactionSummary", "user"]);
-		expect(JSON.stringify(reloaded.transcript())).toContain("summary of the above");
-		void kernel.dispose();
-	});
-
-	it("a failing service reports the failure and keeps the run going", async () => {
-		const kernel = Kernel.create({
-			config: {
-				model: { provider: "p", modelId: "m" },
-				compaction: { ...DEFAULT_COMPACTION_SETTINGS, maxContextTokens: 1 },
-			},
-		});
-		const fake = fakeModels([assistantMessage({ content: [{ type: "text", text: "still ran" }] })]);
-		const service: CompactionService = {
-			compact: () => Promise.reject(new Error("summarizer exploded")),
-		};
-		const runner = new Runner(kernel, { models: fake, compaction: service });
-		const failures: string[] = [];
-		const off = kernelOn(kernel.ctx)("compaction:end", (event) => {
-			if (event.status === "failed") failures.push(event.error ?? "");
-		});
-		kernel.inject(userMsg("long enough to be past one token"));
-		const result = await runner.run();
-		off();
-		expect(failures).toEqual(["summarizer exploded"]);
-		expect(result.error).toBeUndefined();
 		void kernel.dispose();
 	});
 });

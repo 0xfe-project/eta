@@ -268,8 +268,8 @@ export interface CompactionRequest {
 	streamOptions?: SimpleStreamOptions | undefined;
 	/** Aborts the summarization request with the run. */
 	signal: AbortSignal;
-	/** Ask the model something; the service owns the prompt, the kernel the request. */
-	summarize: (prompt: { systemPrompt?: string; messages: AgentMessage[] }) => Promise<AssistantMessage>;
+	/** The model call, wired by whoever owns the models seam. */
+	ask: (prompt: { systemPrompt?: string; messages: AgentMessage[] }) => Promise<AssistantMessage>;
 }
 
 export interface CompactionOutcome {
@@ -285,10 +285,10 @@ export interface CompactionOutcome {
 }
 
 /**
- * Compaction, as the runner sees it: one call that either produces a
- * replacement context or declines. The default implementation is a built-in
- * plugin; the kernel only calls it at a boundary or after an overflow.
+ * Compaction, as a plugin implements it: one call that either produces a
+ * replacement context or declines. The kernel's `CompactionService` owns when
+ * to ask (threshold/overflow/manual); this seam owns how to summarize.
  */
-export interface CompactionService {
-	compact(request: CompactionRequest): Promise<CompactionOutcome | undefined>;
+export interface CompactionSummarizer {
+	summarize(request: CompactionRequest): Promise<CompactionOutcome | undefined>;
 }
