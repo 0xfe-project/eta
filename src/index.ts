@@ -3,6 +3,7 @@
  * See REFACTOR.md: cordis bus, three primitives, the runner, and shared types.
  */
 
+export { type AssistantStreamObserver, consumeAssistantStream } from "./kernel/assistant.ts";
 export {
 	ConfigService,
 	RETRY_DEFAULTS,
@@ -23,6 +24,7 @@ export {
 	MAX_CONTINUATIONS,
 } from "./kernel/goal.ts";
 export { Kernel, type KernelInspect, type KernelOptions } from "./kernel/kernel.ts";
+export { OutputRate } from "./kernel/output-rate.ts";
 export { PersonaService, renderPersonaBlock } from "./kernel/persona.ts";
 export { type KernelModels, piAiModels } from "./kernel/providers.ts";
 export {

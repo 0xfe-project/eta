@@ -54,35 +54,50 @@ function chunk(text: string, size: number): string[] {
 	return parts;
 }
 
+/** Tokens a provider would estimate for text it has not been billed for yet. */
+function estimateStreamedTokens(chars: number): number {
+	return Math.ceil(chars / 4);
+}
+
 /** The event sequence one settled message streams as. */
 function eventsFor(message: AssistantMessage, chunkSize: number): AssistantMessageEventStream {
 	const stream = new AssistantMessageEventStream();
+	// Like a real provider: the partial's usage grows as tokens stream, and the
+	// settled message replaces it with the count the provider actually charged.
+	let streamedChars = 0;
 	const partial: AssistantMessage = { ...message, stopReason: "pending" };
-	stream.push({ type: "start", partial });
+	const withEstimate = (): AssistantMessage => ({
+		...partial,
+		usage: { ...partial.usage, output: estimateStreamedTokens(streamedChars) },
+	});
+	stream.push({ type: "start", partial: withEstimate() });
 
 	message.content.forEach((part, contentIndex) => {
 		if (part.type === "text") {
-			stream.push({ type: "text_start", contentIndex, partial });
+			stream.push({ type: "text_start", contentIndex, partial: withEstimate() });
 			for (const delta of chunk(part.text, chunkSize)) {
-				stream.push({ type: "text_delta", contentIndex, delta, partial });
+				streamedChars += delta.length;
+				stream.push({ type: "text_delta", contentIndex, delta, partial: withEstimate() });
 			}
-			stream.push({ type: "text_end", contentIndex, content: part.text, partial });
+			stream.push({ type: "text_end", contentIndex, content: part.text, partial: withEstimate() });
 			return;
 		}
 		if (part.type === "thinking") {
-			stream.push({ type: "thinking_start", contentIndex, partial });
+			stream.push({ type: "thinking_start", contentIndex, partial: withEstimate() });
 			for (const delta of chunk(part.thinking, chunkSize)) {
-				stream.push({ type: "thinking_delta", contentIndex, delta, partial });
+				streamedChars += delta.length;
+				stream.push({ type: "thinking_delta", contentIndex, delta, partial: withEstimate() });
 			}
-			stream.push({ type: "thinking_end", contentIndex, content: part.thinking, partial });
+			stream.push({ type: "thinking_end", contentIndex, content: part.thinking, partial: withEstimate() });
 			return;
 		}
 		if (part.type === "toolCall") {
-			stream.push({ type: "toolcall_start", contentIndex, partial });
+			stream.push({ type: "toolcall_start", contentIndex, partial: withEstimate() });
 			for (const delta of chunk(JSON.stringify(part.arguments), chunkSize)) {
-				stream.push({ type: "toolcall_delta", contentIndex, delta, partial });
+				streamedChars += delta.length;
+				stream.push({ type: "toolcall_delta", contentIndex, delta, partial: withEstimate() });
 			}
-			stream.push({ type: "toolcall_end", contentIndex, toolCall: part, partial });
+			stream.push({ type: "toolcall_end", contentIndex, toolCall: part, partial: withEstimate() });
 		}
 	});
 

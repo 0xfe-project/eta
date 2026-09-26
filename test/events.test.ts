@@ -12,6 +12,7 @@ describe("event vocabulary", () => {
 			  "inject:received",
 			  "message:end",
 			  "message:start",
+			  "message:update",
 			  "persona:loaded",
 			  "persona:missing",
 			  "persona:switched",
