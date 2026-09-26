@@ -377,6 +377,27 @@ interface EtaPlugin {
 - [x] C1 Entry 保真（details / terminate 并真的生效）；C2 读 eta-agent 的 `{w,t}` journal（未知写入跳过并计数、orphan 断枝不失败）
 - [x] D1–D3 三原语逐行对照补测；E1 端到端综合测试（stream/usage/retry/overflow/queue/abort/goal/persona/落盘/重放）
 
+### 第三轮：把不该在 runner 里的东西拿出去（按你的 review）
+
+runner 是 turn 循环，不是服务容器。这轮把四件事抽成 kernel service / 纯函数，并给 compaction 三个信号：
+
+| 抽出的东西 | 现在的形状 | runner 剩下的耦合 |
+|---|---|---|
+| compaction 的 when/how | `CompactionService`（provide `compaction`）：`manual()` / `threshold()` / `overflow()`；host seam 只有 readContext/replaceContext/entries/request；每 run 一次 overflow 恢复由服务自己订阅 `turn:run-start` 重置 | 两行：run 首个 turn 前 `await threshold()`、overflow 分支 `await overflow()` |
+| 落盘 | `JournalingService`（provide `journaling`）：订阅 message:end / turn:end / compaction:end / turn:run-end 驱动 SessionLog，发 `entry:added`（带 id）与 `usage:recorded`；commit 串行、不阻塞循环，只有 run 边界 `flush()` 等盘 | 零：runner 只发事件，不 import SessionLog |
+| tokens/sec | `MetricsService`（provide `metrics`）：订阅 turn:run-start / message:update / message:end，`kernel.metrics.tokensPerSec` | 零 |
+| task reminder cadence | `TaskReminderService`（provide `taskReminder`）：订阅 turn:start / tool:end 维护 CadenceState，due 时发 `task:reminder-due`；`drain()` 给 prompts 插件取 | 零（cadence.ts 仍是纯函数） |
+| 空闲唤醒 | `RunPump`：订阅 inject:received + turn:run-end，runner 空闲且有活就开 run；`runner.running` 是只读事实 | 零（runner 不再有 autoPump/pumping） |
+| generation 的 retry/overflow/backoff | `generateWithRetry()` 纯函数（不是 service：它需要调用方的 context 组装、observer、signal、compaction，包成 service 只是把四样东西再绕一遍 bus） | takeTurn 变成"组装 → 生成 → 记账" |
+
+**刻意留在 runner 里的**（抽了就是回到 hook 地狱）：goal 续杯（裁决 1 的窄接口 `decide`）、inbox 消费时序（checkpoint / terminal boundary）、tool batch 与 allTerminate、maxTurns、effect-gate 准入、context 组装与投影、empty-response guard 的机制（文案仍在 prompts 插件）。
+
+这轮的三个自定裁决（都写进代码注释）：
+
+1. **`message:end` 不再带 entryId**，改为订阅者落盘后发 `entry:added {entry}`（eta-agent 的 message_end 带可选 entryId；但 id 在写下去之前不存在）。
+2. **commit 粒度是 message**（不是 turn），串行、循环不等 ack；只有 **run 边界 flush 等盘**——所以"run 结束"就等于"已落盘"，崩溃/抛错路径也走同一个 flush。
+3. **compaction 的每-run-once 恢复预算归服务**（eta-agent 把它放在 durable operation 状态里）。
+
 ### 第二轮的两处刻意偏离（都写进代码注释）
 
 1. **不加 `fromHook`**：hook 机制已删，这个字段永远是 false——不留死字段。`customType`/`custom` entry 同理：插件显式扩 union，不搬 stringly-typed 后门（§6 裁决）。
