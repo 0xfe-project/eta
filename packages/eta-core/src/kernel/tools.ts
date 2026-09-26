@@ -30,6 +30,8 @@ export interface ToolCallInfo {
 	toolCallId: string;
 	/** Aborts when the run is cancelled; long-running tools should watch it. */
 	signal?: AbortSignal;
+	/** What the tool sees about its environment, resolved at request time. */
+	toolContext?: unknown;
 }
 
 export type BeforeToolResult = { ok: true; args: unknown } | { ok: false; blockReason: string };
@@ -108,6 +110,7 @@ export class ToolService extends Service {
 			execution: ToolExecution;
 			turn: number;
 			signal?: AbortSignal;
+			toolContext?: unknown;
 			/** Effect admission: a cancelled run stops starting new tool calls. */
 			admit?: <T>(work: () => T) => T;
 			/** Lets the caller wait for effects that already started. */
@@ -122,6 +125,7 @@ export class ToolService extends Service {
 						turn: options.turn,
 						toolCallId: call.id,
 						...(options.signal === undefined ? {} : { signal: options.signal }),
+						...(options.toolContext === undefined ? {} : { toolContext: options.toolContext }),
 					}),
 				);
 				const tracked = options.track === undefined ? admitted : options.track(admitted);

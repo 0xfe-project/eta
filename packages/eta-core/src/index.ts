@@ -72,6 +72,7 @@ export {
 } from "./kernel/retry.ts";
 export {
 	isEmptyStop,
+	type RequestState,
 	Runner,
 	type RunnerBoundaryOptions,
 	type RunnerOptions,
