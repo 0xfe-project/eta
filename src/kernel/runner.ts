@@ -9,15 +9,24 @@
  * The durable-operation state machine is gone: crash semantics are "replay
  * the journal to the last stable boundary and rerun the current turn".
  */
-import type { Api, AssistantMessage, Context, Message, Model, Tool as PiTool, ToolCall } from "@earendil-works/pi-ai";
+import type {
+	Api,
+	AssistantMessage,
+	Context,
+	Message,
+	Model,
+	Tool as PiTool,
+	SimpleStreamOptions,
+	ToolCall,
+} from "@earendil-works/pi-ai";
 import { isContextOverflow, isRecoverableLength, isRetryableAssistantError } from "@earendil-works/pi-ai";
 import type { SessionLog } from "../session/session-log.ts";
 import type { UsageRow } from "../storage/types.ts";
-import type { CompactionEntry } from "../types/entries.ts";
+import type { CompactionEntry, Entry } from "../types/entries.ts";
 import type { Emit } from "../types/events.ts";
 import { kernelEmit, kernelOn } from "../types/events.ts";
 import type { JsonValue } from "../types/json.ts";
-import type { AgentMessage, Usage } from "../types/messages.ts";
+import type { AgentMessage, ThinkingLevel, Usage } from "../types/messages.ts";
 import { consumeAssistantStream } from "./assistant.ts";
 import {
 	type CompactionOutcome,
@@ -34,8 +43,8 @@ import type { Kernel } from "./kernel.ts";
 import { OutputRate } from "./output-rate.ts";
 import type { PersonaService } from "./persona.ts";
 import type { KernelModels } from "./providers.ts";
-import { normalizedRetryPolicy, retryDelayMs, retryNotBefore, waitUntil } from "./retry.ts";
-import type { ToolService } from "./tools.ts";
+import { type AgentRetryPolicy, normalizedRetryPolicy, retryDelayMs, retryNotBefore, waitUntil } from "./retry.ts";
+import type { KernelTool, ToolService } from "./tools.ts";
 import { isAbortError } from "./tools.ts";
 
 export interface RunnerBoundaryOptions {
@@ -51,8 +60,23 @@ export interface RunnerBoundaryOptions {
 export interface RunnerOptions {
 	/** The model layer: resolve the configured model, then generate. */
 	models: KernelModels;
-	/** Static system-prompt blocks (plugins contribute via persona/prompt seams later). */
-	systemPrompt?: string;
+	/**
+	 * The system prompt: a string, or a resolver that reads the tool context
+	 * (eta-agent's `Config.systemPrompt`). The prompts plugin contributes through
+	 * the resolver form; the kernel ships no prompt text of its own.
+	 */
+	systemPrompt?: string | ((toolContext: unknown) => string | Promise<string>);
+	/**
+	 * What tools see about their environment: a value, or a resolver read at
+	 * request time (eta-agent's `Config.toolContext`).
+	 */
+	toolContext?: unknown | (() => unknown | Promise<unknown>);
+	/**
+	 * Project plugin-added entry kinds into messages when replaying a journal
+	 * (eta-agent's `entryProjectors`). The kernel's own kinds are built in; this
+	 * is how an extension teaches the transcript about its own entries.
+	 */
+	entryProjectors?: Record<string, (entry: Entry) => AgentMessage | undefined>;
 	/**
 	 * Compaction, when a plugin provides one. The runner only calls it: at a run
 	 * boundary when the history no longer fits, and after a context overflow.
@@ -84,6 +108,19 @@ export interface RunnerOptions {
 	 * one-shot callers (subagents) leave it off.
 	 */
 	autoPump?: boolean;
+}
+
+/** What a request would carry right now (eta-agent's LaneRequestState). */
+export interface RequestState {
+	model: Model<Api> | undefined;
+	thinkingLevel: ThinkingLevel;
+	tools: PiTool[];
+	/** Selected tool names with nothing registered under them. */
+	missingToolNames: string[];
+	systemPrompt: string;
+	streamOptions?: SimpleStreamOptions | undefined;
+	retryPolicy?: AgentRetryPolicy | undefined;
+	toolContext: unknown;
 }
 
 export interface RunResult {
@@ -254,6 +291,66 @@ export class Runner {
 	}
 
 	/**
+	 * What a request would look like right now (eta-agent's LaneRequestState):
+	 * model, thinking level, tools, prompt, stream options, retry policy, all
+	 * read live. A side request — a btw thread, a subagent — builds from this
+	 * instead of capturing the run's configuration, so it follows whatever the
+	 * user has chosen since.
+	 */
+	async requestState(): Promise<RequestState> {
+		const config = this.config.get();
+		const toolContext = await this.resolveToolContext();
+		const { tools, missing } = this.activeTools();
+		return {
+			model: this.models.getModel(config.model.provider, config.model.modelId),
+			thinkingLevel: config.thinkingLevel,
+			tools: tools.map((tool) => ({
+				name: tool.name,
+				description: tool.description ?? "",
+				parameters:
+					(tool as unknown as { parameters?: PiTool["parameters"] }).parameters ?? ({} as PiTool["parameters"]),
+			})),
+			missingToolNames: missing,
+			systemPrompt: await this.resolveSystemPrompt(toolContext),
+			streamOptions: config.streamOptions,
+			retryPolicy: config.retryPolicy,
+			toolContext,
+		};
+	}
+
+	/** Resolve the tool context: a value, or a resolver read now. */
+	private async resolveToolContext(): Promise<unknown> {
+		const source = this.options.toolContext;
+		return typeof source === "function" ? await (source as () => unknown | Promise<unknown>)() : source;
+	}
+
+	/** Resolve the system prompt: a string, or a resolver given the tool context. */
+	private async resolveSystemPrompt(toolContext: unknown): Promise<string> {
+		const source = this.options.systemPrompt;
+		if (source === undefined) return "";
+		return typeof source === "string" ? source : await source(toolContext);
+	}
+
+	/**
+	 * The tools this request offers: the configured selection when there is one,
+	 * otherwise everything registered. A selected name with no tool is reported,
+	 * not silently dropped (eta-agent fails the run on it).
+	 */
+	private activeTools(): { tools: KernelTool[]; missing: string[] } {
+		const active = this.config.read("activeToolNames");
+		if (active.length === 0) return { tools: this.tools.list(), missing: [] };
+		const registered = new Map(this.tools.list().map((tool) => [tool.name, tool]));
+		const tools: KernelTool[] = [];
+		const missing: string[] = [];
+		for (const name of active) {
+			const tool = registered.get(name);
+			if (tool === undefined) missing.push(name);
+			else tools.push(tool);
+		}
+		return { tools, missing };
+	}
+
+	/**
 	 * One run: turns until no tool calls, budget spent, or a provider error.
 	 * Injected messages are drained at every boundary.
 	 */
@@ -293,6 +390,14 @@ export class Runner {
 				const model = this.models.getModel(identity.provider, identity.modelId);
 				if (model === undefined) {
 					error = `model_unavailable: ${identity.provider}/${identity.modelId}`;
+					break;
+				}
+				// A selected tool with no implementation is a configuration failure,
+				// not a silent omission: the run would otherwise answer with a toolset
+				// the user did not choose (eta-agent's configured_tools_unavailable).
+				const { missing } = this.activeTools();
+				if (missing.length > 0) {
+					error = `configured_tools_unavailable: ${missing.join(", ")}`;
 					break;
 				}
 				const turn = this.kernel.turns + 1;
@@ -517,7 +622,13 @@ export class Runner {
 	private async takeTurn(model: Model<Api>): Promise<AssistantMessage | undefined> {
 		const runId = this.currentRunId ?? "";
 		const turnId = this.currentTurnId ?? "";
-		this.emit("turn:start", { runId, turnId, contextParts: this.estimateParts(this.assembleContext()) });
+		const toolContext = await this.resolveToolContext();
+		const systemPrompt = await this.resolveSystemPrompt(toolContext);
+		this.emit("turn:start", {
+			runId,
+			turnId,
+			contextParts: this.estimateParts(this.assembleContext(toolContext, systemPrompt)),
+		});
 		const config = this.config.get();
 		const policy = normalizedRetryPolicy(config.retryPolicy);
 		const signal = this.runSignal();
@@ -527,7 +638,7 @@ export class Runner {
 		for (;;) {
 			// Assembled per attempt: a compaction between attempts replaces the
 			// context the next request must carry.
-			const context = this.assembleContext();
+			const context = this.assembleContext(toolContext, systemPrompt);
 			this.emit("prompt:assembled", {
 				runId,
 				systemPromptChars: (context.systemPrompt ?? "").length,
@@ -662,6 +773,7 @@ export class Runner {
 				execution,
 				turn,
 				signal,
+				toolContext: await this.resolveToolContext(),
 				// Every tool call is an effect: once the run is aborting, no new one
 				// is admitted, and the call reports the cancellation instead of running.
 				admit: gate === undefined ? <T>(work: () => T) => work() : <T>(work: () => T) => gate.admit(work),
@@ -705,16 +817,18 @@ export class Runner {
 		if (entry !== undefined) this.emit("message:end", { runId, message: result, entryId: entry.id });
 	}
 
-	private assembleContext(): Context {
+	private assembleContext(toolContext: unknown, systemPrompt: string): Context {
 		const personaBlock = this.persona.renderActive().text;
-		const systemPrompt = [this.options.systemPrompt ?? "", personaBlock].filter((s) => s.length > 0).join("\n\n");
-		const tools: PiTool[] = this.tools.list().map((t) => ({
-			name: t.name,
-			description: t.description ?? "",
-			parameters: (t as unknown as { parameters?: PiTool["parameters"] }).parameters ?? ({} as PiTool["parameters"]),
+		const prompt = [systemPrompt, personaBlock].filter((part) => part.length > 0).join("\n\n");
+		const tools: PiTool[] = this.activeTools().tools.map((tool) => ({
+			name: tool.name,
+			description: tool.description ?? "",
+			parameters:
+				(tool as unknown as { parameters?: PiTool["parameters"] }).parameters ?? ({} as PiTool["parameters"]),
 		}));
+		void toolContext;
 		return {
-			...(systemPrompt.length > 0 ? { systemPrompt } : {}),
+			...(prompt.length > 0 ? { systemPrompt: prompt } : {}),
 			messages: this.projectMessages(this.transcript),
 			tools,
 		};

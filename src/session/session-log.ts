@@ -117,7 +117,7 @@ export class SessionLog {
 	 * at that point. The messages before the cut stay in the journal — they are
 	 * history — but they are no longer what the model is sent.
 	 */
-	transcript(): AgentMessage[] {
+	transcript(projectors?: Record<string, (entry: Entry) => AgentMessage | undefined>): AgentMessage[] {
 		let messages: AgentMessage[] = [];
 		for (const entry of this.graph.pathOldestFirst()) {
 			if (entry.type === "message") {
@@ -145,6 +145,14 @@ export class SessionLog {
 						timestamp: entry.timestamp,
 					},
 				];
+				continue;
+			}
+			// A plugin's own entry kind: it taught the transcript about it through a
+			// projector, so the history reads the way that plugin defined it.
+			const projector = projectors?.[entry.type];
+			if (projector !== undefined) {
+				const projected = projector(entry);
+				if (projected !== undefined) messages.push(projected);
 			}
 		}
 		return messages;
