@@ -1,93 +1,203 @@
 /**
- * StorageService — the durability seam (REFACTOR.md §K5).
+ * StorageService — the durability seam (REFACTOR.md §4).
  *
- * The runner emits ordered events; a storage subscriber persists them here
- * without blocking the loop. Everything crossing this seam is plain data:
- * core knows nothing about files, paths, or line formats, and a backend is
- * free to be a database, a socket, or a test array.
+ * The write vocabulary is eta-agent's, scoped to the kernel: a commit is an
+ * atomic batch of entry / usage / value writes, exactly like the old
+ * `{w: [...], t: ...}` journal lines — an old journal file reads as-is.
+ * What is deliberately not here: lanes, durable operations, and pending-frame
+ * lists. Those were drive/-era transient state; the kernel journals only what
+ * a replay should rebuild from.
  *
- * Durability rules the implementation owes the caller (learned the hard way,
- * REFACTOR.md §7 / memory):
- * - an append that resolves must survive a crash: fsync, not page cache;
- * - `compactJournal` rebuilds the journal from the state the journal produced
- *   and swaps it atomically, so a crash leaves either the whole old file or
- *   the whole new one;
- * - `repairTornTail` scans the whole journal and skips bad lines instead of
- *   stopping at the first one, so damage in the middle does not silently
- *   delete the history behind it.
+ * Durability rules every implementation owes the caller:
+ * - a commit that resolves must survive a crash (fsync, not page cache);
+ * - `compactJournal` rebuilds from live state and swaps atomically;
+ * - `repairTornTail` scans the whole journal, stepping over bad lines instead
+ *   of stopping at the first one.
  */
-import type { Entry } from "../types/entries.ts";
 
-/** One atomic unit of history: entries plus the state writes that came with them. */
-export interface JournalCommit {
-	/** Entries in causal order — every parent appears before its child. */
-	entries: Entry[];
-	/** Key/value writes applied in the same commit (last write wins). */
-	values?: Record<string, unknown> | undefined;
-	/** Keys removed by this commit. */
-	deletes?: string[] | undefined;
+import type { Entry, EntryType, NewEntry } from "../types/entries.ts";
+import type { JsonValue } from "../types/json.ts";
+import type { Usage } from "../types/messages.ts";
+
+/* ------------------------------------------------------------------ */
+/* Writes                                                              */
+/* ------------------------------------------------------------------ */
+
+/** One committed entry. Storage assigns seq and the commit timestamp. */
+export interface EntryWrite {
+	kind: "entry";
+	entry: NewEntry;
 }
 
-/** Result of `compactJournal`; `rewritten: false` means the backend declined. */
+export interface UsageRow {
+	id: string;
+	seq: number;
+	usage: Usage;
+	entryId?: string;
+	/** True for corrections (e.g. a provider restated usage after the fact). */
+	adjustment: boolean;
+	details?: JsonValue;
+}
+
+/** One usage measurement, usually per assistant entry. */
+export interface UsageWrite {
+	kind: "usage";
+	row: Omit<UsageRow, "seq">;
+}
+
+export interface ValueSetWrite {
+	kind: "value";
+	op: "set";
+	namespace: string;
+	key: string;
+	value: unknown;
+}
+
+export interface ValueDeleteWrite {
+	kind: "value";
+	op: "delete";
+	namespace: string;
+	key: string;
+}
+
+export type ValueWrite = ValueSetWrite | ValueDeleteWrite;
+export type StorageWrite = EntryWrite | UsageWrite | ValueWrite;
+
+/* ------------------------------------------------------------------ */
+/* Addresses                                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A typed address for one key inside a namespace. Addresses exist so reads
+ * carry their type with them and prefix scans stay honest.
+ */
+export interface Value<T> {
+	readonly kind: "value";
+	readonly namespace: string;
+	readonly key: string;
+}
+
+export function value<T>(namespace: string, key = ""): Value<T> {
+	return { kind: "value", namespace, key };
+}
+
+export function setValue<T>(address: Value<T>, next: T): ValueSetWrite {
+	return { kind: "value", op: "set", namespace: address.namespace, key: address.key, value: next };
+}
+
+export function deleteValue<T>(address: Value<T>): ValueDeleteWrite {
+	return { kind: "value", op: "delete", namespace: address.namespace, key: address.key };
+}
+
+export interface StoredValue<T> {
+	address: Value<T>;
+	value: T;
+	seq: number;
+}
+
+/* ------------------------------------------------------------------ */
+/* Reads                                                               */
+/* ------------------------------------------------------------------ */
+
+export interface SessionStats {
+	messageCount: number;
+	usage: Usage;
+}
+
+export interface CommitResult {
+	firstSeq: number;
+	seqs: number[];
+	timestamp: number;
+	/** Session totals immediately after this commit was applied. */
+	stats: SessionStats;
+}
+
+export interface EntryCursor {
+	seq: number;
+}
+
+export interface BranchScan {
+	start?: string;
+	stopAtType?: EntryType;
+	stopAtId?: string;
+	type?: EntryType;
+	order?: "newestFirst" | "oldestFirst";
+	limit?: number;
+	cursor?: EntryCursor;
+}
+
+export type StorageBranchScan = BranchScan & { start: string };
+
+export interface EntryScan {
+	type?: EntryType;
+	fromSeq?: number;
+	toSeq?: number;
+	order?: "asc" | "desc";
+	limit?: number;
+}
+
+export interface UsageScan {
+	fromSeq?: number;
+	toSeq?: number;
+	order?: "asc" | "desc";
+	limit?: number;
+}
+
+/* ------------------------------------------------------------------ */
+/* Maintenance results                                                 */
+/* ------------------------------------------------------------------ */
+
 export interface CompactResult {
 	rewritten: boolean;
 	beforeBytes: number;
 	afterBytes: number;
-	/** Why a compaction did not happen, when it did not. */
 	reason?: string | undefined;
 }
 
-/** Result of `repairTornTail`; the repair must be durable before it resolves. */
 export interface RepairResult {
-	/** Bytes removed from the journal. */
 	droppedBytes: number;
-	/** Lines that did not parse, anywhere in the journal. */
 	droppedRecords: number;
-	/** True when the damage was only at the end (a crash mid-append). */
 	trailingOnly: boolean;
 }
 
-/** The durability contract a backend implements. */
+/* ------------------------------------------------------------------ */
+/* The seam                                                            */
+/* ------------------------------------------------------------------ */
+
 export interface StorageService {
-	/** Append a commit. Resolves once it is durable (or queued ahead of `flush`). */
-	append(commit: JournalCommit): Promise<void>;
+	/** Apply one atomic batch. Resolves when the batch is durable. */
+	commit(writes: StorageWrite[]): Promise<CommitResult>;
 
-	/** Every commit still held, in append order, for replay into live state. */
-	readJournal(): Promise<JournalCommit[]>;
+	getEntries(ids: string[]): Promise<Map<string, Entry>>;
+	getValue<T>(address: Value<T>): Promise<StoredValue<T> | undefined>;
+	/** Every value whose address starts with the given namespace (+ key prefix). */
+	listValues<T>(prefix: Value<T>): Promise<StoredValue<T>[]>;
+	/** Walk a branch from an explicit entry; merge entries splice their chains in. */
+	scanBranch(query: StorageBranchScan): Promise<Entry[]>;
+	scanEntries(query: EntryScan): Promise<Entry[]>;
+	scanUsage(query: UsageScan): Promise<UsageRow[]>;
+	getStats(): Promise<SessionStats>;
 
-	/** Rewrite the journal from the state it produced, atomically. */
 	compactJournal(): Promise<CompactResult>;
-
-	/** Remove bytes that no longer parse, so a torn tail cannot block startup. */
 	repairTornTail(): Promise<RepairResult>;
-
-	/** Current value for a key, or undefined. */
-	get(key: string): Promise<unknown | undefined>;
-	/** Store a value. Applied to the read view immediately, durable at `flush`. */
-	set(key: string, value: unknown): Promise<void>;
-	/** Remove a key. */
-	remove(key: string): Promise<void>;
-	/** Keys currently held. */
-	keys(): Promise<string[]>;
-
-	/** Block until everything appended or set is durable. */
 	flush(): Promise<void>;
-	/** Flush and release the backend. Idempotent. */
 	close(): Promise<void>;
 }
 
 /** The method surface, asserted in tests so the seam cannot drift silently. */
 export const STORAGE_METHODS = [
-	"append",
-	"close",
+	"commit",
+	"getEntries",
+	"getValue",
+	"listValues",
+	"scanBranch",
+	"scanEntries",
+	"scanUsage",
+	"getStats",
 	"compactJournal",
-	"flush",
-	"get",
-	"keys",
-	"readJournal",
-	"remove",
 	"repairTornTail",
-	"set",
+	"flush",
+	"close",
 ] as const satisfies readonly (keyof StorageService)[];
 
 /** Compile-time completeness: every StorageService method is listed above. */
