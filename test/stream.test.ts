@@ -9,9 +9,9 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Kernel, kernelOn, MemoryStorage, Runner, SessionLog } from "../src/index.ts";
-import { consumeAssistantStream } from "../src/kernel/assistant.ts";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider.ts";
+import { Kernel, kernelOn, MemoryStorage, Runner, SessionLog } from "../src/index";
+import { consumeAssistantStream } from "../src/kernel/assistant";
+import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,

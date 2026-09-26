@@ -20,32 +20,40 @@ import type {
 	ToolCall,
 } from "@earendil-works/pi-ai";
 import { isContextOverflow, isRecoverableLength, isRetryableAssistantError } from "@earendil-works/pi-ai";
-import type { SessionLog } from "../session/session-log.ts";
-import type { UsageRow } from "../storage/types.ts";
-import type { CompactionEntry, Entry } from "../types/entries.ts";
-import type { Emit } from "../types/events.ts";
-import { kernelEmit, kernelOn } from "../types/events.ts";
-import type { JsonValue } from "../types/json.ts";
-import type { AgentMessage, ThinkingLevel, Usage } from "../types/messages.ts";
-import { consumeAssistantStream } from "./assistant.ts";
+import type { SessionLog } from "../session/session-log";
+import type { UsageRow } from "../storage/types";
+import type { CompactionEntry, Entry } from "../types/entries";
+import type { Emit } from "../types/events";
+import { kernelEmit, kernelOn } from "../types/events";
+import type { JsonValue } from "../types/json";
+import type { AgentMessage, ThinkingLevel, Usage } from "../types/messages";
+import { consumeAssistantStream } from "./assistant";
+import {
+	type CadenceState,
+	createCadenceState,
+	DEFAULT_REMINDER_INTERVAL,
+	DEFAULT_TASK_TOOL_NAMES,
+	evaluateToolResult,
+	onTurnStart,
+} from "./cadence";
 import {
 	type CompactionOutcome,
 	type CompactionService,
 	estimateContextTokens,
 	fitCompactionSettings,
 	shouldCompact,
-} from "./compaction.ts";
-import type { ConfigService } from "./config.ts";
-import { AbortRequested, createGate, type Gate, type GateControl } from "./effect-gate.ts";
-import type { GoalService } from "./goal.ts";
-import type { QueuedItem } from "./inbox.ts";
-import type { Kernel } from "./kernel.ts";
-import { OutputRate } from "./output-rate.ts";
-import type { PersonaService } from "./persona.ts";
-import type { KernelModels } from "./providers.ts";
-import { type AgentRetryPolicy, normalizedRetryPolicy, retryDelayMs, retryNotBefore, waitUntil } from "./retry.ts";
-import type { KernelTool, ToolService } from "./tools.ts";
-import { isAbortError } from "./tools.ts";
+} from "./compaction";
+import type { ConfigService } from "./config";
+import { AbortRequested, createGate, type Gate, type GateControl } from "./effect-gate";
+import type { GoalService } from "./goal";
+import type { QueuedItem } from "./inbox";
+import type { Kernel } from "./kernel";
+import { OutputRate } from "./output-rate";
+import type { PersonaService } from "./persona";
+import type { KernelModels } from "./providers";
+import { type AgentRetryPolicy, normalizedRetryPolicy, retryDelayMs, retryNotBefore, waitUntil } from "./retry";
+import type { KernelTool, ToolService } from "./tools";
+import { isAbortError } from "./tools";
 
 export interface RunnerBoundaryOptions {
 	/** Independent judgment call for goal continuation (tool-free request); true = achieved. */
@@ -156,6 +164,7 @@ export class Runner {
 	private readonly rate = new OutputRate();
 	private gate: { gate: Gate; control: GateControl } | undefined;
 	private readonly pendingEffects = new Set<Promise<unknown>>();
+	private readonly cadence = createCadenceState();
 	/** One overflow recovery per run: a second overflow is a real failure. */
 	private overflowRecoveryUsed = false;
 	private autoPumpOff: (() => boolean) | undefined;
@@ -629,6 +638,7 @@ export class Runner {
 	private async takeTurn(model: Model<Api>): Promise<AssistantMessage | undefined> {
 		const runId = this.currentRunId ?? "";
 		const turnId = this.currentTurnId ?? "";
+		onTurnStart(this.cadence);
 		const toolContext = await this.resolveToolContext();
 		const systemPrompt = await this.resolveSystemPrompt(toolContext);
 		this.emit("turn:start", {
@@ -819,6 +829,13 @@ export class Runner {
 			terminate,
 			durationMs,
 		});
+		// The task-reminder cadence counts turns since the last task-tool call;
+		// the kernel reports the signal, the prompts plugin owns the text.
+		const due = evaluateToolResult(this.cadence, call.name, this.kernel.tasks.list().length > 0, {
+			reminderInterval: DEFAULT_REMINDER_INTERVAL,
+			taskToolNames: DEFAULT_TASK_TOOL_NAMES,
+		});
+		if (due.markDue) this.emit("task:reminder-due", { turn });
 		const text = typeof raw === "string" ? raw : JSON.stringify(raw);
 		const result = {
 			role: "toolResult" as const,

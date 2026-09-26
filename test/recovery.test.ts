@@ -23,9 +23,9 @@ import {
 	type StorageWrite,
 	setValue,
 	value,
-} from "../src/index.ts";
-import { Runner } from "../src/kernel/runner.ts";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider.ts";
+} from "../src/index";
+import { Runner } from "../src/kernel/runner";
+import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,

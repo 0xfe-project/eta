@@ -1,7 +1,7 @@
 /**
  * Usage arithmetic — ported from eta-agent's harness/utils/usage.ts, unchanged.
  */
-import type { Usage } from "./messages.ts";
+import type { Usage } from "./messages";
 
 export function emptyUsage(): Usage {
 	return {

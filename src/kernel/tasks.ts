@@ -13,9 +13,9 @@
 
 import type { Context } from "cordis";
 import { Service } from "cordis";
-import type { Emit } from "../types/events.ts";
-import { kernelEmit } from "../types/events.ts";
-import type { StoredTask, Task, TaskStatus } from "../types/tasks.ts";
+import type { Emit } from "../types/events";
+import { kernelEmit } from "../types/events";
+import type { StoredTask, Task, TaskStatus } from "../types/tasks";
 
 const STATUSES: readonly TaskStatus[] = ["pending", "in_progress", "completed", "cancelled"];
 

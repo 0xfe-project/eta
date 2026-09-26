@@ -10,7 +10,7 @@
  */
 import type { Api, AssistantMessage, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
-import type { KernelModels } from "../kernel/providers.ts";
+import type { KernelModels } from "../kernel/providers";
 
 export interface RecordedCall {
 	model: Model<Api>;

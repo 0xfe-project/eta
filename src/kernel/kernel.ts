@@ -12,20 +12,20 @@
  * no continuation driver, and no spawn tool (REFACTOR.md §1.4).
  */
 import { Context } from "cordis";
-import type { KernelConfig } from "../types/config.ts";
-import { defaultKernelConfig } from "../types/config.ts";
-import type { Emit } from "../types/events.ts";
-import { kernelEmit } from "../types/events.ts";
-import type { AgentMessage } from "../types/messages.ts";
-import type { PersonaCard } from "../types/persona.ts";
-import type { StoredTask } from "../types/tasks.ts";
-import { ConfigService } from "./config.ts";
-import type { GoalState } from "./goal.ts";
-import { GoalService } from "./goal.ts";
-import { Inbox, type QueuedItem } from "./inbox.ts";
-import { PersonaService } from "./persona.ts";
-import { TaskService } from "./tasks.ts";
-import { ToolService } from "./tools.ts";
+import type { KernelConfig } from "../types/config";
+import { defaultKernelConfig } from "../types/config";
+import type { Emit } from "../types/events";
+import { kernelEmit } from "../types/events";
+import type { AgentMessage } from "../types/messages";
+import type { PersonaCard } from "../types/persona";
+import type { StoredTask } from "../types/tasks";
+import { ConfigService } from "./config";
+import type { GoalState } from "./goal";
+import { GoalService } from "./goal";
+import { Inbox, type QueuedItem } from "./inbox";
+import { PersonaService } from "./persona";
+import { TaskService } from "./tasks";
+import { ToolService } from "./tools";
 
 export interface KernelOptions {
 	/** Upper bound on runner turns. `null` (default) runs until the turn loop settles. */

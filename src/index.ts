@@ -3,7 +3,18 @@
  * See REFACTOR.md: cordis bus, three primitives, the runner, and shared types.
  */
 
-export { type AssistantStreamObserver, consumeAssistantStream } from "./kernel/assistant.ts";
+export { type AssistantStreamObserver, consumeAssistantStream } from "./kernel/assistant";
+export {
+	type CadenceConfig,
+	type CadenceState,
+	createCadenceState,
+	DEFAULT_REMINDER_INTERVAL,
+	DEFAULT_TASK_TOOL_NAMES,
+	drainReminderForContext,
+	evaluateToolResult,
+	onTurnStart,
+	resetCadenceState,
+} from "./kernel/cadence";
 export {
 	type CompactionOutcome,
 	type CompactionReason,
@@ -20,7 +31,7 @@ export {
 	fitCompactionSettings,
 	getLastAssistantUsage,
 	shouldCompact,
-} from "./kernel/compaction.ts";
+} from "./kernel/compaction";
 export {
 	ConfigService,
 	RETRY_DEFAULTS,
@@ -28,13 +39,13 @@ export {
 	validateKernelConfig,
 	validateRetryPolicy,
 	validateToolNames,
-} from "./kernel/config.ts";
+} from "./kernel/config";
 export {
 	AbortRequested,
 	createGate,
 	type Gate,
 	type GateControl,
-} from "./kernel/effect-gate.ts";
+} from "./kernel/effect-gate";
 export {
 	ANTI_SPIN_LIMIT,
 	applyGoalEntries,
@@ -45,7 +56,7 @@ export {
 	type GoalStatus,
 	lastMessageShowsIntent,
 	MAX_CONTINUATIONS,
-} from "./kernel/goal.ts";
+} from "./kernel/goal";
 export {
 	Inbox,
 	type InboxOptions,
@@ -54,12 +65,12 @@ export {
 	normalizeQueuedInput,
 	type QueuedItem,
 	type QueueKind,
-} from "./kernel/inbox.ts";
-export { Kernel, type KernelInspect, type KernelOptions } from "./kernel/kernel.ts";
-export { MutationQueue } from "./kernel/mutation-queue.ts";
-export { OutputRate } from "./kernel/output-rate.ts";
-export { PersonaService, renderPersonaBlock } from "./kernel/persona.ts";
-export { type KernelModels, piAiModels } from "./kernel/providers.ts";
+} from "./kernel/inbox";
+export { Kernel, type KernelInspect, type KernelOptions } from "./kernel/kernel";
+export { MutationQueue } from "./kernel/mutation-queue";
+export { OutputRate } from "./kernel/output-rate";
+export { PersonaService, renderPersonaBlock } from "./kernel/persona";
+export { type KernelModels, piAiModels } from "./kernel/providers";
 export {
 	type AgentRetryPolicy,
 	DEFAULT_MAX_AGENT_RETRY_DELAY_MS,
@@ -69,7 +80,7 @@ export {
 	retryDelayMs,
 	retryNotBefore,
 	waitUntil,
-} from "./kernel/retry.ts";
+} from "./kernel/retry";
 export {
 	isEmptyStop,
 	type RequestState,
@@ -77,8 +88,8 @@ export {
 	type RunnerBoundaryOptions,
 	type RunnerOptions,
 	type RunResult,
-} from "./kernel/runner.ts";
-export { renderCurrentTasks, TaskService } from "./kernel/tasks.ts";
+} from "./kernel/runner";
+export { renderCurrentTasks, TaskService } from "./kernel/tasks";
 export {
 	type BeforeToolResult,
 	isAbortError,
@@ -86,14 +97,14 @@ export {
 	type ToolCallInfo,
 	type ToolMiddleware,
 	ToolService,
-} from "./kernel/tools.ts";
-export { type ForkedChain, type ForkOptions, type ForkSelection, forkChain, selectBranchFork } from "./session/fork.ts";
-export { recordGoalEntries } from "./session/goal-journal.ts";
-export { EntryGraph, type GraphNode, spliceMergedChain } from "./session/graph.ts";
-export { type MergeOptions, type MergeResult, mergeBranch, type RollbackResult, rollback } from "./session/merge.ts";
-export { SessionLog } from "./session/session-log.ts";
-export { MemoryStorage } from "./storage/memory.ts";
-export { InMemoryStorageState } from "./storage/state.ts";
+} from "./kernel/tools";
+export { type ForkedChain, type ForkOptions, type ForkSelection, forkChain, selectBranchFork } from "./session/fork";
+export { recordGoalEntries } from "./session/goal-journal";
+export { EntryGraph, type GraphNode, spliceMergedChain } from "./session/graph";
+export { type MergeOptions, type MergeResult, mergeBranch, type RollbackResult, rollback } from "./session/merge";
+export { SessionLog } from "./session/session-log";
+export { MemoryStorage } from "./storage/memory";
+export { InMemoryStorageState } from "./storage/state";
 export {
 	type BranchScan,
 	type CommitResult,
@@ -117,20 +128,20 @@ export {
 	type ValueSetWrite,
 	type ValueWrite,
 	value,
-} from "./storage/types.ts";
+} from "./storage/types";
 export {
 	assistantMessage,
 	type FakeModels,
 	type FakeModelsOptions,
 	fakeModels,
 	type RecordedCall,
-} from "./testing/fake-provider.ts";
+} from "./testing/fake-provider";
 export {
 	type StorageContractHandle,
 	type StorageContractOptions,
 	type StorageFactory,
 	storageContract,
-} from "./testing/storage-contract.ts";
+} from "./testing/storage-contract";
 export {
 	CONFIG_PROPERTIES,
 	type CompactionEconomics,
@@ -145,8 +156,8 @@ export {
 	type QueueMode,
 	type RuntimeConfig,
 	type ToolExecution,
-} from "./types/config.ts";
-export * from "./types/entries.ts";
+} from "./types/config";
+export * from "./types/entries";
 export {
 	type CompactionEvents,
 	type ContextPartStats,
@@ -171,9 +182,9 @@ export {
 	type ToolEvents,
 	type TurnEvents,
 	type UsageEvents,
-} from "./types/events.ts";
-export type { JsonValue } from "./types/json.ts";
-export * from "./types/messages.ts";
-export * from "./types/persona.ts";
-export * from "./types/tasks.ts";
-export { addUsage, emptyUsage, sessionTokenTotal, subtractUsage } from "./types/usage.ts";
+} from "./types/events";
+export type { JsonValue } from "./types/json";
+export * from "./types/messages";
+export * from "./types/persona";
+export * from "./types/tasks";
+export { addUsage, emptyUsage, sessionTokenTotal, subtractUsage } from "./types/usage";

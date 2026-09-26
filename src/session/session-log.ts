@@ -11,10 +11,10 @@
  * Writes stage in memory and land as one atomic commit per turn, so the file
  * never holds half an entry. `load` replays the full journal into the graph.
  */
-import type { CommitResult, StorageService, UsageRow, ValueWrite } from "../storage/types.ts";
-import type { Entry, MessageEntry, NewEntry } from "../types/entries.ts";
-import type { AgentMessage } from "../types/messages.ts";
-import { EntryGraph } from "./graph.ts";
+import type { CommitResult, StorageService, UsageRow, ValueWrite } from "../storage/types";
+import type { Entry, MessageEntry, NewEntry } from "../types/entries";
+import type { AgentMessage } from "../types/messages";
+import { EntryGraph } from "./graph";
 
 export interface CommitOutcome {
 	result: CommitResult;

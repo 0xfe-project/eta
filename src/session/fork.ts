@@ -9,8 +9,8 @@
  * store on the server side; this module owns only the entry-chain selection.
  * There is deliberately no parentSessionId: a fork is a new session (§7).
  */
-import type { Entry } from "../types/entries.ts";
-import type { EntryGraph } from "./graph.ts";
+import type { Entry } from "../types/entries";
+import type { EntryGraph } from "./graph";
 
 export interface ForkOptions {
 	/** Entry on the tip's ancestry to fork from. Defaults to the current tip. */

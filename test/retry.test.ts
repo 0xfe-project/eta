@@ -21,8 +21,8 @@ import {
 	retryNotBefore,
 	SessionLog,
 	waitUntil,
-} from "../src/index.ts";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider.ts";
+} from "../src/index";
+import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,

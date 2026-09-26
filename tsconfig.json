@@ -2,7 +2,9 @@
 	"compilerOptions": {
 		"target": "ES2022",
 		"module": "ESNext",
-		"lib": ["ES2022"],
+		"lib": [
+			"ES2022"
+		],
 		"strict": true,
 		"erasableSyntaxOnly": true,
 		"esModuleInterop": true,
@@ -10,15 +12,21 @@
 		"forceConsistentCasingInFileNames": true,
 		"moduleResolution": "Bundler",
 		"resolveJsonModule": true,
-		"allowImportingTsExtensions": true,
 		"verbatimModuleSyntax": true,
 		"experimentalDecorators": true,
 		"emitDecoratorMetadata": true,
 		"useDefineForClassFields": false,
-		"types": ["node"],
+		"types": [
+			"node"
+		],
 		"paths": {
-			"@eta/core": ["./src/index.ts"]
+			"@eta/core": [
+				"./src/index.ts"
+			]
 		}
 	},
-	"include": ["src/**/*.ts", "test/**/*.ts"]
+	"include": [
+		"src/**/*.ts",
+		"test/**/*.ts"
+	]
 }

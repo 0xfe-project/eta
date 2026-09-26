@@ -1,6 +1,6 @@
 import { Context } from "cordis";
 import { describe, expect, it } from "vitest";
-import { type KernelTool, ToolService } from "../src/kernel/tools.ts";
+import { type KernelTool, ToolService } from "../src/kernel/tools";
 
 function withTools() {
 	const ctx = new Context();

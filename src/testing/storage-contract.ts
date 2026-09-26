@@ -6,10 +6,10 @@
  * tails) add their own suites on top; they do not get to skip these.
  */
 import { describe, expect, it } from "vitest";
-import { type StorageService, type StorageWrite, setValue, value } from "../storage/types.ts";
-import type { MessageEntry } from "../types/entries.ts";
-import type { Usage } from "../types/messages.ts";
-import { emptyUsage } from "../types/usage.ts";
+import { type StorageService, type StorageWrite, setValue, value } from "../storage/types";
+import type { MessageEntry } from "../types/entries";
+import type { Usage } from "../types/messages";
+import { emptyUsage } from "../types/usage";
 
 export interface StorageContractHandle {
 	storage: StorageService;

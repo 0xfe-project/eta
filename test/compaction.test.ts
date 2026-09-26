@@ -28,8 +28,8 @@ import {
 	Runner,
 	SessionLog,
 	shouldCompact,
-} from "../src/index.ts";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider.ts";
+} from "../src/index";
+import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
 
 /**
  * What the prompts plugin will supply: the kernel's projection hook. Kept in

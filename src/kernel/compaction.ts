@@ -8,9 +8,9 @@
  * a context costs, where a cut may fall, and when a cut is due.
  */
 import type { Api, AssistantMessage, Model, SimpleStreamOptions, Usage } from "@earendil-works/pi-ai";
-import type { CompactionSettings } from "../types/config.ts";
-import type { Entry, MessageEntry } from "../types/entries.ts";
-import type { AgentMessage, ThinkingLevel } from "../types/messages.ts";
+import type { CompactionSettings } from "../types/config";
+import type { Entry, MessageEntry } from "../types/entries";
+import type { AgentMessage, ThinkingLevel } from "../types/messages";
 
 /**
  * The window-independent ceiling (REFACTOR.md, memory #40/#50).

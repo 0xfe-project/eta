@@ -8,16 +8,8 @@
  */
 import type { ImageContent } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
-import {
-	Inbox,
-	InvalidMessage,
-	Kernel,
-	kernelOn,
-	normalizeQueuedInput,
-	type QueuedItem,
-	Runner,
-} from "../src/index.ts";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider.ts";
+import { Inbox, InvalidMessage, Kernel, kernelOn, normalizeQueuedInput, type QueuedItem, Runner } from "../src/index";
+import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,

@@ -4,9 +4,9 @@
  * emits; this writes; replay restores via `applyGoalEntries`.
  */
 
-import type { GoalEntry, NewEntry } from "../types/entries.ts";
-import type { kernelOn } from "../types/events.ts";
-import type { SessionLog } from "./session-log.ts";
+import type { GoalEntry, NewEntry } from "../types/entries";
+import type { kernelOn } from "../types/events";
+import type { SessionLog } from "./session-log";
 
 let counter = 0;
 function goalEntryId(): string {

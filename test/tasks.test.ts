@@ -1,7 +1,7 @@
 import { Context } from "cordis";
 import { describe, expect, it } from "vitest";
-import { renderCurrentTasks, TaskService } from "../src/kernel/tasks.ts";
-import { kernelOn } from "../src/types/events.ts";
+import { renderCurrentTasks, TaskService } from "../src/kernel/tasks";
+import { kernelOn } from "../src/types/events";
 
 function withTasks() {
 	const ctx = new Context();

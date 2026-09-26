@@ -14,9 +14,9 @@
 
 import type { Context } from "cordis";
 import { Service } from "cordis";
-import type { GoalEntry, GoalPayload } from "../types/entries.ts";
-import type { Emit } from "../types/events.ts";
-import { kernelEmit } from "../types/events.ts";
+import type { GoalEntry, GoalPayload } from "../types/entries";
+import type { Emit } from "../types/events";
+import { kernelEmit } from "../types/events";
 
 export type GoalStatus = "active" | "paused" | "achieved";
 export type GoalBlockedReason = "question-pending" | undefined;

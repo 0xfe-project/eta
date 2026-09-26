@@ -1,9 +1,9 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
-import { Kernel, Runner } from "../src/index.ts";
-import type { KernelTool } from "../src/kernel/tools.ts";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider.ts";
-import { kernelOn } from "../src/types/events.ts";
+import { Kernel, Runner } from "../src/index";
+import type { KernelTool } from "../src/kernel/tools";
+import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
+import { kernelOn } from "../src/types/events";
 
 const userMsg = (text: string) => ({ role: "user" as const, content: [{ type: "text" as const, text }], timestamp: 0 });
 
