@@ -20,17 +20,38 @@
  * learns it.
  */
 import { type Context, Service } from "cordis";
-import type { UsageRow } from "../storage/types";
+import type { ConfigService } from "../kernel/config";
+import type { TaskService } from "../kernel/tasks";
+import { setValue, type UsageRow, type ValueWrite, value } from "../storage/types";
+import type { KernelConfig } from "../types/config";
 import type { Entry, MessageEntry, NewEntry } from "../types/entries";
 import type { Emit } from "../types/events";
 import { kernelEmit, kernelOn } from "../types/events";
 import type { JsonValue } from "../types/json";
 import type { AgentMessage, Usage } from "../types/messages";
+import type { StoredTask } from "../types/tasks";
 import type { CommitOutcome, SessionLog } from "./session-log";
+
+/**
+ * The session's configuration, as a value. Namespaced outside `pi.*` on purpose:
+ * that range belonged to the old journal's lanes and operations, and an importer
+ * is right to skip it.
+ */
+export const SESSION_CONFIG = value<KernelConfig>("eta.session.config");
+
+/**
+ * The task ledger, as a value — the same namespace eta-agent wrote, so an old
+ * session's tasks load into this one.
+ */
+export const TASKS_STATE = value<StoredTask[]>("eta.tasks.state");
 
 export interface JournalingServiceOptions {
 	/** The log this session writes to. Without one, nothing is persisted. */
 	journal?: SessionLog;
+	/** Watched for configuration changes to persist. */
+	config?: ConfigService;
+	/** Watched for task changes to persist. */
+	tasks?: TaskService;
 	/** Called when a commit fails; the run continues (the next commit retries). */
 	warn?: (message: string) => void;
 }
@@ -54,6 +75,10 @@ export class JournalingService extends Service {
 	static readonly provide = "journaling";
 
 	readonly log: SessionLog | undefined;
+	/** The configuration the journal last heard about. */
+	private readonly config: ConfigService | undefined;
+	/** The task ledger the journal last heard about. */
+	private readonly tasks: TaskService | undefined;
 	private readonly warn: (message: string) => void;
 	private readonly emit: Emit;
 	/** The entry each just-recorded message landed on, keyed by the message object. */
@@ -65,6 +90,8 @@ export class JournalingService extends Service {
 	constructor(ctx: Context, options: JournalingServiceOptions = {}) {
 		super(ctx, "journaling");
 		this.log = options.journal;
+		this.config = options.config;
+		this.tasks = options.tasks;
 		this.warn = options.warn ?? (() => undefined);
 		this.emit = kernelEmit(ctx);
 		const on = kernelOn(ctx);
@@ -85,7 +112,43 @@ export class JournalingService extends Service {
 			on("turn:run-end", () => {
 				void this.enqueueCommit();
 			}),
+			// Session state that outlives the process: the configuration a session
+			// was left on, and the ledger it was working through. Both are written
+			// whole (last write wins), so a reload cannot read a half-applied state.
+			on("state:config-update", () => {
+				this.persistConfig();
+			}),
+			on("task:created", () => {
+				this.persistTasks();
+			}),
+			on("task:updated", () => {
+				this.persistTasks();
+			}),
+			on("task:removed", () => {
+				this.persistTasks();
+			}),
 		);
+	}
+
+	/** Write the whole configuration, so a reload comes back on the same one. */
+	private persistConfig(): void {
+		if (this.log === undefined || this.config === undefined) return;
+		void this.enqueueValues([setValue(SESSION_CONFIG, structuredClone(this.config.get()) as KernelConfig)]);
+	}
+
+	/** Write the whole task ledger; ids are never reused, so a reload restores it. */
+	private persistTasks(): void {
+		if (this.log === undefined || this.tasks === undefined) return;
+		void this.enqueueValues([setValue(TASKS_STATE, structuredClone(this.tasks.list()) as StoredTask[])]);
+	}
+
+	/** Commit bare value writes, ordered behind whatever the loop already queued. */
+	private async enqueueValues(values: ValueWrite[]): Promise<void> {
+		const log = this.log;
+		if (log === undefined) return;
+		const next = this.tail.then(() => log.commit(values).catch(() => undefined));
+		this.tail = next;
+		await next;
 	}
 
 	/** Every entry this session holds, oldest first. */
