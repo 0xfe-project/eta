@@ -100,6 +100,8 @@ export class Kernel {
 		this.taskReminder = new TaskReminderService(this.ctx, { tasks: this.tasks });
 		this.journaling = new JournalingService(this.ctx, {
 			...(options.journal === undefined ? {} : { journal: options.journal }),
+			config: this.config,
+			tasks: this.tasks,
 			...(options.warn === undefined ? {} : { warn: options.warn }),
 		});
 		this.compaction = new CompactionService(this.ctx, {

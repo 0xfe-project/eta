@@ -109,7 +109,12 @@ export {
 export { type ForkedChain, type ForkOptions, type ForkSelection, forkChain, selectBranchFork } from "./session/fork";
 export { recordGoalEntries } from "./session/goal-journal";
 export { EntryGraph, type GraphNode, spliceMergedChain } from "./session/graph";
-export { JournalingService, type JournalingServiceOptions } from "./session/journaling";
+export {
+	JournalingService,
+	type JournalingServiceOptions,
+	SESSION_CONFIG,
+	TASKS_STATE,
+} from "./session/journaling";
 export {
 	type MergeOptions,
 	type MergeResult,

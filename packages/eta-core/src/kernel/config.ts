@@ -93,14 +93,18 @@ export class ConfigService extends Service {
 	update(patch: Partial<KernelConfig>): void {
 		const next: KernelConfig = { ...this.config, ...patch };
 		validateKernelConfig(next);
+		const previous = this.config;
+		// The new configuration is in place before anyone hears about it: a
+		// subscriber that reacts by reading the config must see what it was told,
+		// not the state it just replaced.
+		this.config = next;
 		for (const property of CONFIG_PROPERTIES) {
 			if (!(property in patch)) continue;
-			const previous = this.config[property];
+			const before = previous[property];
 			const value = next[property];
-			if (Object.is(previous, value)) continue;
-			this.emit("state:config-update", { property, value, previous });
+			if (Object.is(before, value)) continue;
+			this.emit("state:config-update", { property, value, previous: before });
 		}
-		this.config = next;
 	}
 
 	/** Convenience for the most common change. */
