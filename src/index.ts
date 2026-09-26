@@ -110,8 +110,15 @@ export { type ForkedChain, type ForkOptions, type ForkSelection, forkChain, sele
 export { recordGoalEntries } from "./session/goal-journal";
 export { EntryGraph, type GraphNode, spliceMergedChain } from "./session/graph";
 export { JournalingService, type JournalingServiceOptions } from "./session/journaling";
-export { type MergeOptions, type MergeResult, mergeBranch, type RollbackResult, rollback } from "./session/merge";
-export { type CommitOutcome, SessionLog } from "./session/session-log";
+export {
+	type MergeOptions,
+	type MergeResult,
+	mergeBranch,
+	mergeTip,
+	type RollbackResult,
+	rollback,
+} from "./session/merge";
+export { type CommitOutcome, SESSION_TIP, SessionLog } from "./session/session-log";
 export { MemoryStorage } from "./storage/memory";
 export { InMemoryStorageState } from "./storage/state";
 export {
