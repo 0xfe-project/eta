@@ -332,6 +332,37 @@ describe("CompactionService signals", () => {
 		big.dispose();
 	});
 
+	it("checks the threshold at the start of every run, not just the first", async () => {
+		const { summarizer, requests } = fakeSummarizer(() => ({ summary: "cut down" }));
+		// A ceiling tight enough that a short history fits but a long one does not.
+		const s = session(
+			[
+				assistantMessage({
+					stopReason: "toolUse",
+					content: [{ type: "toolCall", id: "c1", name: "echo", arguments: {} }],
+				}),
+				assistantMessage({ content: [{ type: "text", text: "first done" }] }),
+				assistantMessage({ content: [{ type: "text", text: "second done" }] }),
+			],
+			{ summarizer, maxContextTokens: 10 },
+		);
+		s.kernel.tools.register({ name: "echo", execute: () => "ok" });
+
+		// The first run does tool work (so it advances the turn counter) and its
+		// history still fits: nothing to compact.
+		s.kernel.inject(userMsg("short"));
+		await s.runner.run();
+		expect(requests).toEqual([]);
+		expect(s.kernel.turns).toBeGreaterThan(0);
+
+		// The session then grows past the ceiling, and the second run must notice.
+		s.runner.adoptTranscript([userMsg("x".repeat(2_000))]);
+		s.kernel.inject(userMsg("carry on"));
+		await s.runner.run();
+		expect(requests.map((request) => request.reason)).toEqual(["threshold"]);
+		s.dispose();
+	});
+
 	it("manual() compacts even when the history fits", async () => {
 		const { summarizer, requests } = fakeSummarizer(() => ({ summary: "asked for it" }));
 		const s = session([assistantMessage({ content: [{ type: "text", text: "after" }] })], { summarizer });
