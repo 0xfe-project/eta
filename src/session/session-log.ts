@@ -16,6 +16,14 @@ import type { Entry, MessageEntry, NewEntry } from "../types/entries.ts";
 import type { AgentMessage } from "../types/messages.ts";
 import { EntryGraph } from "./graph.ts";
 
+export interface CommitOutcome {
+	result: CommitResult;
+	/** The entries as committed, with the sequence each landed on. */
+	entries: Entry[];
+	/** The usage rows as committed, with their sequence. */
+	usage: UsageRow[];
+}
+
 export class SessionLog {
 	readonly storage: StorageService;
 	readonly graph: EntryGraph;
@@ -72,21 +80,33 @@ export class SessionLog {
 		this.stagedUsage.push(row);
 	}
 
+	/** Usage rows staged but not yet committed. */
+	get pendingUsage(): readonly Omit<UsageRow, "seq">[] {
+		return this.stagedUsage;
+	}
+
 	/**
 	 * Make everything staged durable, atomically. Call once per turn: the
 	 * journal then holds complete turns and nothing else.
 	 */
-	async commit(values: ValueWrite[] = []): Promise<CommitResult | undefined> {
+	async commit(values: ValueWrite[] = []): Promise<CommitOutcome | undefined> {
 		if (this.staged.length === 0 && this.stagedUsage.length === 0 && values.length === 0) return undefined;
 		const entries = this.staged;
 		const usage = this.stagedUsage;
 		this.staged = [];
 		this.stagedUsage = [];
-		return this.storage.commit([
+		const result = await this.storage.commit([
 			...entries.map((entry) => ({ kind: "entry" as const, entry })),
 			...usage.map((row) => ({ kind: "usage" as const, row })),
 			...values,
 		]);
+		// Seqs arrive in write order, so the committed rows can be handed back with
+		// the sequence they actually landed on.
+		return {
+			result,
+			entries: entries.map((entry, index) => ({ ...entry, seq: result.seqs[index]! }) as Entry),
+			usage: usage.map((row, index) => ({ ...row, seq: result.seqs[entries.length + index]! })),
+		};
 	}
 
 	/**

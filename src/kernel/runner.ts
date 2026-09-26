@@ -12,9 +12,11 @@
 import type { Api, AssistantMessage, Context, Message, Model, Tool as PiTool, ToolCall } from "@earendil-works/pi-ai";
 import { isContextOverflow, isRecoverableLength, isRetryableAssistantError } from "@earendil-works/pi-ai";
 import type { SessionLog } from "../session/session-log.ts";
+import type { UsageRow } from "../storage/types.ts";
 import type { CompactionEntry } from "../types/entries.ts";
 import type { Emit } from "../types/events.ts";
 import { kernelEmit, kernelOn } from "../types/events.ts";
+import type { JsonValue } from "../types/json.ts";
 import type { AgentMessage, Usage } from "../types/messages.ts";
 import { consumeAssistantStream } from "./assistant.ts";
 import {
@@ -209,6 +211,30 @@ export class Runner {
 			tokensBefore,
 			...(options.usage === undefined ? {} : { usage: options.usage }),
 		});
+	}
+
+	/**
+	 * Record a usage measurement outside generation (eta-agent's
+	 * `lane.recordUsage`): a correction, or what a side request cost. It is an
+	 * adjustment, and it lands in the journal with the totals after it.
+	 */
+	async recordUsage(
+		usage: Usage,
+		options: { entryId?: string; details?: JsonValue } = {},
+	): Promise<UsageRow | undefined> {
+		const journal = this.journal;
+		if (journal === undefined) return undefined;
+		journal.recordUsage({
+			id: usageId(),
+			usage,
+			adjustment: true,
+			...(options.entryId === undefined ? {} : { entryId: options.entryId }),
+			...(options.details === undefined ? {} : { details: options.details }),
+		});
+		const committed = await journal.commit();
+		const row = committed?.usage[0];
+		if (row !== undefined) this.emit("usage:recorded", { row, totals: committed!.result.stats.usage });
+		return row;
 	}
 
 	/** Output tokens/sec for the run in progress (see OutputRate for the scale). */
@@ -581,11 +607,28 @@ export class Runner {
 		// The provider's own count is what the rate commits; the streaming estimate
 		// only ever stands in until the message settles.
 		this.rate.commit(assistant.usage.output);
-		this.transcript.push(assistant);
-		const entry = this.journal?.recordMessage(assistant);
-		if (entry !== undefined) this.emit("message:end", { runId, message: assistant, entryId: entry.id });
-		// The assistant's intent is durable before its tools have side effects.
-		await this.journal?.commit();
+		// A failed generation is not history: eta-agent records no entry for it, and
+		// a failed message in the transcript would be sent back to the model.
+		if (assistant.stopReason !== "error" && assistant.stopReason !== "aborted") {
+			this.transcript.push(assistant);
+			const entry = this.journal?.recordMessage(assistant);
+			if (entry !== undefined) {
+				this.emit("message:end", { runId, message: assistant, entryId: entry.id });
+				// The usage rides in the same commit as the entry it was spent on, so
+				// a replayed journal rebuilds the same totals.
+				this.journal?.recordUsage({
+					id: usageId(),
+					usage: assistant.usage,
+					entryId: entry.id,
+					adjustment: false,
+				});
+			}
+			// The assistant's intent is durable before its tools have side effects.
+			const committed = await this.journal?.commit();
+			for (const row of committed?.usage ?? []) {
+				this.emit("usage:recorded", { row, totals: committed!.result.stats.usage });
+			}
+		}
 		this.emit("turn:end", {
 			runId,
 			turnId,
@@ -725,6 +768,14 @@ function runUsedTools(messages: readonly AgentMessage[]): boolean {
 		if (m.role === "assistant" && m.content.some((p) => p.type === "toolCall")) return true;
 	}
 	return false;
+}
+
+let usageCounter = 0;
+
+/** A usage row id, unique within a session journal. */
+function usageId(): string {
+	usageCounter += 1;
+	return `usage-${usageCounter.toString(36)}-${Date.now().toString(36)}`;
 }
 
 function kernelOnAuto(ctx: Parameters<typeof kernelOn>[0], onInject: () => void): () => boolean {
