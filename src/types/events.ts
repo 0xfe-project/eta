@@ -176,6 +176,11 @@ export interface StorageEvents {
 	"storage:error": { op: string; error: string };
 }
 
+export interface QueueEvents {
+	/** The inbox changed; the runner reports what is left after taking its share. */
+	"queue:update": { queues: { entryId: string; kind: string }[] };
+}
+
 export interface InjectEvents {
 	/** A message entered the kernel through `inject()`. */
 	"inject:received": { message: AgentMessage };
@@ -189,6 +194,7 @@ export interface KernelEvents
 		TurnEvents,
 		MessageEvents,
 		PromptEvents,
+		QueueEvents,
 		RetryEvents,
 		ToolEvents,
 		UsageEvents,
@@ -234,6 +240,7 @@ export const KERNEL_EVENT_NAMES = [
 	"persona:missing",
 	"persona:switched",
 	"prompt:assembled",
+	"queue:update",
 	"retry:end",
 	"retry:scheduled",
 	"retry:start",

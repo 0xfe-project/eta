@@ -19,6 +19,7 @@ describe("event vocabulary", () => {
 			  "persona:missing",
 			  "persona:switched",
 			  "prompt:assembled",
+			  "queue:update",
 			  "retry:end",
 			  "retry:scheduled",
 			  "retry:start",
