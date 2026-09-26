@@ -50,8 +50,15 @@ export interface JsonlStorageOptions {
 
 const DEFAULT_COMPACT_MIN_BYTES = 256 * 1024;
 
+/** One journal line on disk: the writes, and the commit timestamp. */
 interface JournalLine {
 	w: StorageWrite[];
+	t: number;
+}
+
+/** A parsed line, narrowed to the writes this kernel understands. */
+interface ParsedLine {
+	writes: StorageWrite[];
 	t: number;
 }
 
@@ -87,7 +94,13 @@ export class JsonlStorage implements StorageService {
 		// Every line is examined: a hole in the middle costs nothing to step over,
 		// and the commits behind it are history somebody agreed to.
 		const parsed = parseLines(raw);
-		for (const line of parsed.lines) storage.state.commit(line.w, line.t);
+		for (const line of parsed.lines) {
+			if (line.writes.length === 0) continue;
+			storage.state.commit(line.writes, line.t);
+		}
+		for (const [what, count] of Object.entries(parsed.skipped)) {
+			options.warn?.(`[eta-journal] ${path}: skipped ${count} write(s) this kernel does not use (${what})`);
+		}
 		const keptBytes = Math.min(parsed.keptBytes, size);
 		storage.journalBytes = size;
 		storage.pendingRepair = {
@@ -278,8 +291,10 @@ export class JsonlStorage implements StorageService {
 }
 
 interface ParsedJournal {
-	lines: JournalLine[];
+	lines: ParsedLine[];
 	badLineIndexes: Set<number>;
+	/** Writes present in the file but not part of a kernel session. */
+	skipped: Record<string, number>;
 	keptBytes: number;
 	brokenBytes: number;
 	trailingOnly: boolean;
@@ -288,8 +303,9 @@ interface ParsedJournal {
 /** Parse a journal body, stepping over holes instead of stopping at them. */
 function parseLines(raw: string): ParsedJournal {
 	const encoder = new TextEncoder();
-	const lines: JournalLine[] = [];
+	const lines: ParsedLine[] = [];
 	const badLineIndexes = new Set<number>();
+	const skipped: Record<string, number> = {};
 	let keptBytes = 0;
 	let brokenBytes = 0;
 	let lastGoodLine = -1;
@@ -310,40 +326,97 @@ function parseLines(raw: string): ParsedJournal {
 			lastBrokenLine = index;
 			continue;
 		}
-		if (!isJournalLine(parsedLine)) {
+		const parsedLineSplit = splitLine(parsedLine);
+		if (parsedLineSplit === undefined) {
 			badLineIndexes.add(index);
 			brokenBytes += lineBytes;
 			lastBrokenLine = index;
 			continue;
 		}
+		for (const [what, count] of Object.entries(parsedLineSplit.skipped)) {
+			skipped[what] = (skipped[what] ?? 0) + count;
+		}
 		lastGoodLine = index;
-		lines.push(parsedLine);
+		lines.push(parsedLineSplit.line);
 		keptBytes += lineBytes;
 	}
-	return { lines, badLineIndexes, keptBytes, brokenBytes, trailingOnly: lastBrokenLine > lastGoodLine };
+	return { lines, badLineIndexes, skipped, keptBytes, brokenBytes, trailingOnly: lastBrokenLine > lastGoodLine };
 }
 
-function isJournalLine(value: unknown): value is JournalLine {
-	if (typeof value !== "object" || value === null) return false;
-	const line = value as { w?: unknown };
-	if (!Array.isArray(line.w)) return false;
-	return line.w.every((write) => {
-		if (typeof write !== "object" || write === null) return false;
+/**
+ * Value namespaces a kernel session keeps. eta-agent's own state (`eta.*`) and
+ * the two session-level addresses are data; everything else under `pi.` was
+ * drive- or lane-era bookkeeping (operation state, pending frames, branch
+ * tips) that this design does not have and must not resurrect on import.
+ */
+const KEPT_VALUE_NAMESPACES = ["pi.entry.label", "pi.session.name"];
+
+function keepsValue(namespace: string): boolean {
+	// Not a reserved address: it belongs to whoever wrote it (a session, a
+	// plugin, the battery's own `eta.*` state).
+	if (!namespace.startsWith("pi.")) return true;
+	return KEPT_VALUE_NAMESPACES.includes(namespace);
+}
+
+/**
+ * Split one journal line into the writes a kernel session understands.
+ *
+ * A line is damage only when it does not parse at all or `w` is not an array.
+ * A write whose kind or namespace belongs to machinery this design deleted is
+ * skipped and counted: an old journal must stay readable, and one unknown write
+ * must not cost the entries sitting beside it on the same line.
+ */
+function splitLine(value: unknown): { line: ParsedLine; skipped: Record<string, number> } | undefined {
+	if (typeof value !== "object" || value === null) return undefined;
+	const raw = value as { w?: unknown; t?: unknown };
+	if (!Array.isArray(raw.w)) return undefined;
+	const writes: StorageWrite[] = [];
+	const skipped: Record<string, number> = {};
+	const skip = (what: string): void => {
+		skipped[what] = (skipped[what] ?? 0) + 1;
+	};
+	for (const write of raw.w) {
+		if (typeof write !== "object" || write === null) {
+			skip("malformed");
+			continue;
+		}
 		const kind = (write as { kind?: unknown }).kind;
 		if (kind === "entry") {
 			const entry = (write as { entry?: { id?: unknown } }).entry;
-			return typeof entry === "object" && entry !== null && typeof entry.id === "string";
+			if (typeof entry === "object" && entry !== null && typeof entry.id === "string") {
+				writes.push(write as StorageWrite);
+			} else {
+				skip("malformed entry");
+			}
+			continue;
 		}
 		if (kind === "usage") {
 			const row = (write as { row?: { id?: unknown } }).row;
-			return typeof row === "object" && row !== null && typeof row.id === "string";
+			if (typeof row === "object" && row !== null && typeof row.id === "string") {
+				writes.push(write as StorageWrite);
+			} else {
+				skip("malformed usage");
+			}
+			continue;
 		}
 		if (kind === "value") {
 			const op = (write as { op?: unknown }).op;
-			return op === "set" || op === "delete";
+			const namespace = (write as { namespace?: unknown }).namespace;
+			if (op !== "set" && op !== "delete") {
+				skip("malformed value");
+				continue;
+			}
+			if (typeof namespace !== "string" || !keepsValue(namespace)) {
+				skip(`value:${typeof namespace === "string" ? namespace : "unknown"}`);
+				continue;
+			}
+			writes.push(write as StorageWrite);
+			continue;
 		}
-		return false;
-	});
+		// `list` writes and anything else a future journal adds.
+		skip(typeof kind === "string" ? kind : "unknown write");
+	}
+	return { line: { writes, t: typeof raw.t === "number" ? raw.t : 0 }, skipped };
 }
 
 function isNotFound(error: unknown): boolean {
