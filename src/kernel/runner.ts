@@ -598,6 +598,17 @@ export class Runner {
 				turn,
 				signal,
 				toolContext: await this.resolveToolContext(),
+				onUpdate: (updated, partial) => {
+					// A progress report is a snapshot, like every other payload: the
+					// clone keeps a mutable partial out of the bus.
+					this.emit("tool:update", {
+						runId,
+						turnId,
+						toolCallId: updated.id,
+						toolName: updated.name,
+						partialResult: structuredClone(partial),
+					});
+				},
 				// Every tool call is an effect: once the run is aborting, no new one
 				// is admitted, and the call reports the cancellation instead of running.
 				admit: gate === undefined ? <T>(work: () => T) => work() : <T>(work: () => T) => gate.admit(work),
