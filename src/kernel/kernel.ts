@@ -24,7 +24,6 @@ import type { GoalState } from "./goal";
 import { GoalService } from "./goal";
 import { Inbox, type QueuedItem } from "./inbox";
 import { PersonaService } from "./persona";
-import { TaskReminderService } from "./reminder";
 import { TaskService } from "./tasks";
 import { ToolService } from "./tools";
 
@@ -59,8 +58,6 @@ export class Kernel {
 	readonly tasks: TaskService;
 	readonly tools: ToolService;
 	readonly config: ConfigService;
-	/** The task-reminder cadence, watching the bus for turns and tool use. */
-	readonly taskReminder: TaskReminderService;
 	/** How the outside world reaches the loop (steer / followUp / nextRun). */
 	readonly inbox = new Inbox();
 	readonly maxTurns: number | null;
@@ -77,7 +74,6 @@ export class Kernel {
 		this.tasks = new TaskService(this.ctx);
 		this.tools = new ToolService(this.ctx);
 		this.config = new ConfigService(this.ctx, defaultKernelConfig(options.config));
-		this.taskReminder = new TaskReminderService(this.ctx, { tasks: this.tasks });
 	}
 
 	static create(options: KernelOptions = {}): Kernel {
