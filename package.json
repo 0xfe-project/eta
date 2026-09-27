@@ -11,15 +11,18 @@
 	},
 	"scripts": {
 		"test": "vitest --run --passWithNoTests",
-		"typecheck": "tsc -p tsconfig.json --noEmit"
+		"typecheck": "tsc -p tsconfig.json --noEmit",
+		"smoke": "ETA_SMOKE_CONFIG=\"${ETA_SMOKE_CONFIG:-$HOME/.eta/config.json}\" vitest --run test/smoke-compaction.e2e.test.ts"
 	},
 	"devDependencies": {
 		"@types/node": "22.19.19",
+		"@eta/compaction": "*",
 		"typescript": "5.9.3",
 		"vitest": "4.1.9"
 	},
 	"dependencies": {
 		"@eta/core": "*",
-		"@earendil-works/pi-ai": "0.85.1"
+		"@earendil-works/pi-ai": "0.85.1",
+		"cordis": "^4.0.0-rc.10"
 	}
 }
