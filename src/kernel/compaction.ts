@@ -59,6 +59,10 @@ export interface CompactionHost {
  * `threshold()` before its first request of every run and `overflow()` when a
  * request came back too large. A missing driver means no compaction at all —
  * the runner has no fallback arithmetic and no opinion about history size.
+ *
+ * `false` means "no compaction needed" or "the driver decided not to". A driver
+ * that cannot do its job throws: the runner does not catch it, so a half-wired
+ * session dies at its first turn instead of running unbounded.
  */
 export interface CompactionDriver {
 	/** The runner hands over the context it owns, once, before the first run. */
