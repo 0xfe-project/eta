@@ -1,6 +1,9 @@
 /**
  * The smoke scenario against a real file (REFACTOR.md §2.2 + §K5).
  *
+ * The scenario itself lives in @eta/harness/testing; what this file proves is
+ * the storage half: the same run, written through the real JSONL journal.
+ *
  * Same env gate as the core smoke test, one level down: a real provider's
  * stream, journaled through the real JSONL journal, then reopened from disk.
  * What it adds over the memory variant is the part only a file can prove —
@@ -12,7 +15,8 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { realModels, runSmokeScenario, selectProvider } from "@eta/core/testing";
+import { realModels, selectProvider } from "@eta/core/testing";
+import { runSmokeScenario } from "@eta/harness/testing";
 import { afterAll, describe, expect, it } from "vitest";
 import { JsonlStorage } from "../src/index";
 
