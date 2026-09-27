@@ -7,9 +7,11 @@
  * What is kept is everything a reader of the journal needs — including the
  * terminate marker, which is a real behaviour: a tool can end a run.
  */
+
+import { type Entry, Kernel, kernelOn, MemoryStorage, type MessageEntry, Runner, SessionLog } from "@eta/core";
+import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import { type Entry, Kernel, kernelOn, MemoryStorage, type MessageEntry, Runner, SessionLog } from "../src/index";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
+import { journaledKernel } from "../src/testing";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,
@@ -23,10 +25,9 @@ const toolTurn = (id: string, name: string) =>
 describe("terminate ends the run", () => {
 	it("a terminating tool result stops the loop without another request", async () => {
 		const log = SessionLog.create(new MemoryStorage());
-		const kernel = Kernel.create({
-			config: { model: { provider: "p", modelId: "m" } },
-			journal: log,
-		});
+		// Entries land in the graph as they are recorded, so this test needs the
+		// journaling service but not the runner's disk wait.
+		const { kernel } = journaledKernel(log, { config: { model: { provider: "p", modelId: "m" } } });
 		const fake = fakeModels([toolTurn("c1", "finish")]);
 		const runner = new Runner(kernel, { models: fake });
 		kernel.tools.register({ name: "finish", execute: () => ({ content: "all done", terminate: true }) });

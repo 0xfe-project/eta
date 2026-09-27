@@ -15,7 +15,6 @@ import {
 	type CompactionRequest,
 	type CompactionSummarizer,
 	DEFAULT_COMPACTION_SETTINGS,
-	Kernel,
 	kernelOn,
 	MemoryStorage,
 	Runner,
@@ -24,6 +23,7 @@ import {
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { CompactionMisconfigured, CompactionService } from "../src/index";
+import { journaledKernel } from "../src/testing";
 
 /**
  * What the prompts plugin will supply: the kernel's projection hook. Kept in
@@ -80,7 +80,7 @@ function session(
 ) {
 	const storage = new MemoryStorage();
 	const log = SessionLog.create(storage);
-	const kernel = Kernel.create({
+	const { kernel, journaling } = journaledKernel(log, {
 		config: {
 			model: { provider: "p", modelId: "m" },
 			compaction: {
@@ -88,7 +88,6 @@ function session(
 				...(options.maxContextTokens === undefined ? {} : { maxContextTokens: options.maxContextTokens }),
 			},
 		},
-		journal: log,
 		warn: () => undefined,
 	});
 	const fake = fakeModels(script);
@@ -102,6 +101,7 @@ function session(
 		}) as never;
 	const runner = new Runner(kernel, {
 		models: fake,
+		journal: journaling,
 		toProviderMessages: projection as never,
 		...(options.initialTranscript === undefined ? {} : { initialTranscript: options.initialTranscript }),
 	});
@@ -110,12 +110,12 @@ function session(
 	// harness owns it).
 	const compaction = new CompactionService(kernel.ctx, {
 		config: kernel.config,
-		journaling: kernel.journaling,
+		journaling,
 		...(options.summarizer === undefined ? {} : { summarizer: options.summarizer }),
 		warn: () => undefined,
 	});
 	runner.attachCompaction(compaction);
-	return { kernel, runner, compaction, fake, log, storage, dispose: () => void kernel.dispose() };
+	return { kernel, runner, compaction, journaling, fake, log, storage, dispose: () => void kernel.dispose() };
 }
 
 describe("CompactionService signals", () => {
@@ -223,10 +223,10 @@ describe("CompactionService signals", () => {
 	it("a signal from a service nobody attached also throws", async () => {
 		const storage = new MemoryStorage();
 		const log = SessionLog.create(storage);
-		const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } }, journal: log });
+		const { kernel, journaling } = journaledKernel(log);
 		const orphan = new CompactionService(kernel.ctx, {
 			config: kernel.config,
-			journaling: kernel.journaling,
+			journaling,
 			summarizer: { summarize: async () => undefined },
 		});
 		await expect(orphan.threshold()).rejects.toThrow(/no run is attached/);
@@ -314,9 +314,9 @@ describe("CompactionService signals", () => {
 	});
 
 	it("a missing projection fails loudly rather than dropping the summary", async () => {
-		const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } } });
+		const { kernel, journaling } = journaledKernel(SessionLog.create(new MemoryStorage()));
 		const fake = fakeModels([]);
-		const runner = new Runner(kernel, { models: fake });
+		const runner = new Runner(kernel, { models: fake, journal: journaling });
 		runner.replaceContext("summary", { tokensBefore: 0 });
 		kernel.inject(userMsg("go"));
 		await expect(runner.run()).rejects.toThrow("toProviderMessages is required");

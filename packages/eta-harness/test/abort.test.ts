@@ -6,9 +6,11 @@
  * for them to drain. The run reports `aborted`, which is not a failure: the
  * work stopped where it was, and what it had already committed stands.
  */
+
+import { AbortRequested, createGate, Kernel, kernelOn, MemoryStorage, Runner, SessionLog } from "@eta/core";
+import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import { AbortRequested, createGate, Kernel, kernelOn, MemoryStorage, Runner, SessionLog } from "../src/index";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
+import { journaledKernel } from "../src/testing";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,
@@ -157,17 +159,14 @@ describe("aborting a run", () => {
 
 	it("keeps what the run had already committed", async () => {
 		const log = SessionLog.create(new MemoryStorage());
-		const kernel = Kernel.create({
-			config: { model: { provider: "p", modelId: "m" } },
-			journal: log,
-		});
+		const { kernel, journaling } = journaledKernel(log, { config: { model: { provider: "p", modelId: "m" } } });
 		const fake = fakeModels([
 			assistantMessage({
 				stopReason: "toolUse",
 				content: [{ type: "toolCall", id: "c1", name: "slow", arguments: {} }],
 			}),
 		]);
-		const runner = new Runner(kernel, { models: fake });
+		const runner = new Runner(kernel, { models: fake, journal: journaling });
 		kernel.tools.register({
 			name: "slow",
 			execute: async () => {

@@ -14,7 +14,7 @@ import {
 	type AgentMessage,
 	type CompactionSummarizer,
 	DEFAULT_COMPACTION_SETTINGS,
-	Kernel,
+	type Kernel,
 	kernelOn,
 	MemoryStorage,
 	Runner,
@@ -22,16 +22,22 @@ import {
 } from "@eta/core";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import { CompactionService } from "../src/index";
+import { type CompactionEntrySource, CompactionService } from "../src/index";
+import { journaledKernel } from "../src/testing";
 
 /**
  * What a session assembler does: build the harness's compaction service over the
  * journal's entries, and hand the runner its driver. The kernel knows neither.
  */
-function attachCompaction(kernel: Kernel, runner: Runner, summarizer: CompactionSummarizer): CompactionService {
+function attachCompaction(
+	kernel: Kernel,
+	runner: Runner,
+	journaling: CompactionEntrySource,
+	summarizer: CompactionSummarizer,
+): CompactionService {
 	const service = new CompactionService(kernel.ctx, {
 		config: kernel.config,
-		journaling: kernel.journaling,
+		journaling,
 		summarizer,
 	});
 	runner.attachCompaction(service);
@@ -107,7 +113,7 @@ describe("the kernel's compaction seam, with the real summarizer", () => {
 		}
 		await log.commit();
 		const reloaded = await SessionLog.load(storage);
-		const resumed = Kernel.create({
+		const { kernel: resumed, journaling: resumedJournaling } = journaledKernel(reloaded, {
 			config: {
 				model: { provider: "p", modelId: "m" },
 				compaction: {
@@ -117,10 +123,10 @@ describe("the kernel's compaction seam, with the real summarizer", () => {
 					keepRecentTokens: 300,
 				},
 			},
-			journal: reloaded,
 		});
 		const resumedRunner = new Runner(resumed, {
 			models: fake,
+			journal: resumedJournaling,
 			initialTranscript: reloaded.transcript(),
 			toProviderMessages: (messages) =>
 				messages.flatMap((message) =>
@@ -135,7 +141,7 @@ describe("the kernel's compaction seam, with the real summarizer", () => {
 						: [message as never],
 				),
 		});
-		attachCompaction(resumed, resumedRunner, etaCompaction());
+		attachCompaction(resumed, resumedRunner, resumedJournaling, etaCompaction());
 
 		const statuses: { reason: string; status: string }[] = [];
 		const off = kernelOn(resumed.ctx)("compaction:end", (event) => {
@@ -189,29 +195,28 @@ describe("the kernel's compaction seam, with the real summarizer", () => {
 				contextWindow: 200_000,
 				maxTokens: 8_192,
 			}) as never;
-		const kernel = Kernel.create({
+		const { kernel, journaling } = journaledKernel(log, {
 			// A keep budget of one token: the cut leaves the question to summarize,
 			// which is what a manual compaction is for.
 			config: {
 				model: { provider: "p", modelId: "m" },
 				compaction: { ...DEFAULT_COMPACTION_SETTINGS, reserveTokens: 200, keepRecentTokens: 1 },
 			},
-			journal: log,
 		});
 		// The context compaction replaces belongs to a runner, so the session needs
 		// one even when nothing runs.
-		const runner = new Runner(kernel, { models: fake });
+		const runner = new Runner(kernel, { models: fake, journal: journaling });
 		log.recordMessage(userMsg("a short question"));
 		log.recordMessage(
 			assistantMessage({ content: [{ type: "text", text: "a short answer" }], usage: usageOf(10, 5) }) as never,
 		);
 		await log.commit();
 		runner.adoptTranscript(await (async () => (await SessionLog.load(storage)).transcript())());
-		const compaction = attachCompaction(kernel, runner, etaCompaction());
+		const compaction = attachCompaction(kernel, runner, journaling, etaCompaction());
 
 		const compacted = await compaction.manual("focus on the migration plan");
 		expect(compacted).toBe(true);
-		await kernel.journaling.flush();
+		await journaling.flush();
 		expect(JSON.stringify(summaryCalls[0]!.messages)).toContain("Additional focus: focus on the migration plan");
 		// The manual cut is in the journal like any other.
 		const entries = await storage.scanEntries({});
@@ -236,7 +241,7 @@ describe("the kernel's compaction seam, with the real summarizer", () => {
 		fake.completeSimple = async () => {
 			throw new Error("the summarizer exploded");
 		};
-		const kernel = Kernel.create({
+		const { kernel, journaling } = journaledKernel(log, {
 			config: {
 				model: { provider: "p", modelId: "m" },
 				// Past the ceiling, and with a keep budget of one token so there is
@@ -248,10 +253,9 @@ describe("the kernel's compaction seam, with the real summarizer", () => {
 					keepRecentTokens: 1,
 				},
 			},
-			journal: log,
 		});
-		const runner = new Runner(kernel, { models: fake });
-		attachCompaction(kernel, runner, etaCompaction());
+		const runner = new Runner(kernel, { models: fake, journal: journaling });
+		attachCompaction(kernel, runner, journaling, etaCompaction());
 		const failures: string[] = [];
 		const off = kernelOn(kernel.ctx)("compaction:end", (event) => {
 			if (event.status === "failed") failures.push(event.error ?? "");

@@ -9,7 +9,6 @@
  */
 
 import type { Usage } from "@earendil-works/pi-ai";
-import { describe, expect, it } from "vitest";
 import {
 	type Entry,
 	Kernel,
@@ -22,8 +21,11 @@ import {
 	type StorageService,
 	type StorageWrite,
 	type UsageRow,
-} from "../src/index";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
+} from "@eta/core";
+import { assistantMessage, fakeModels } from "@eta/core/testing";
+import { describe, expect, it } from "vitest";
+import { JournalingService } from "../src/index";
+import { journaledKernel } from "../src/testing";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,
@@ -42,7 +44,7 @@ const usageOf = (input: number, output: number): Usage => ({
 
 function session(storage: StorageService = new MemoryStorage()) {
 	const log = SessionLog.create(storage);
-	const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } }, journal: log });
+	const { kernel, journaling } = journaledKernel(log, { config: { model: { provider: "p", modelId: "m" } } });
 	const added: Entry[] = [];
 	const usage: { row: UsageRow; totals: Usage }[] = [];
 	const on = kernelOn(kernel.ctx);
@@ -57,6 +59,7 @@ function session(storage: StorageService = new MemoryStorage()) {
 	return {
 		kernel,
 		log,
+		journaling,
 		added,
 		usage,
 		dispose: () => {
@@ -72,14 +75,14 @@ describe("entries from events", () => {
 		const emit = kernelEmit(s.kernel.ctx);
 		emit("message:end", { message: userMsg("first") });
 		emit("message:end", { message: userMsg("second") });
-		await s.kernel.journaling.flush();
+		await s.journaling.flush();
 
 		expect(s.added).toHaveLength(2);
 		const [first, second] = s.added as MessageEntry[];
 		expect(first.id).toBeDefined();
 		expect(second.parentId).toBe(first.id);
 		// The journal holds the same chain, in order.
-		const entries = s.kernel.journaling.entries();
+		const entries = s.journaling.entries();
 		expect(entries.map((entry) => entry.id)).toEqual([first.id, second.id]);
 		s.dispose();
 	});
@@ -95,7 +98,7 @@ describe("entries from events", () => {
 			timestamp: 0,
 		};
 		kernelEmit(s.kernel.ctx)("message:end", { message: toolResult, terminate: true });
-		await s.kernel.journaling.flush();
+		await s.journaling.flush();
 		expect((s.added[0] as MessageEntry).terminate).toBe(true);
 		s.dispose();
 	});
@@ -118,9 +121,9 @@ describe("entries from events", () => {
 			retainedTail: [userMsg("kept")],
 			tokensBefore: 100,
 		});
-		await s.kernel.journaling.flush();
+		await s.journaling.flush();
 
-		const entries = s.kernel.journaling.entries();
+		const entries = s.journaling.entries();
 		expect(entries).toHaveLength(1);
 		const compaction = entries[0]!;
 		expect(compaction.type).toBe("compaction");
@@ -128,21 +131,23 @@ describe("entries from events", () => {
 		expect(compaction.summary).toBe("everything before");
 		expect(compaction.tokensBefore).toBe(100);
 		// And the transcript a replay builds stands for the history it replaced.
-		expect(s.kernel.journaling.transcript().map((message) => message.role)).toEqual(["compactionSummary", "user"]);
+		expect(s.journaling.transcript().map((message) => message.role)).toEqual(["compactionSummary", "user"]);
 		s.dispose();
 	});
 
-	it("a session without a journal keeps nothing, and says nothing", async () => {
+	it("a journaling service without a journal keeps nothing, and says nothing", async () => {
 		const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } } });
+		// No log behind it: the service is wired, but there is nowhere to write.
+		const journaling = new JournalingService(kernel.ctx, {});
 		const added: Entry[] = [];
 		const off = kernelOn(kernel.ctx)("entry:added", (event) => {
 			added.push(event.entry);
 		});
 		kernelEmit(kernel.ctx)("message:end", { message: userMsg("dropped") });
-		await kernel.journaling.flush();
+		await journaling.flush();
 		expect(added).toEqual([]);
-		expect(kernel.journaling.entries()).toEqual([]);
-		expect(await kernel.journaling.recordUsage(usageOf(1, 1))).toBeUndefined();
+		expect(journaling.entries()).toEqual([]);
+		expect(await journaling.recordUsage(usageOf(1, 1))).toBeUndefined();
 		off();
 		void kernel.dispose();
 	});
@@ -161,7 +166,7 @@ describe("usage rows", () => {
 			toolResults: [],
 			usage: assistant.usage,
 		});
-		await s.kernel.journaling.flush();
+		await s.journaling.flush();
 
 		expect(s.usage).toHaveLength(1);
 		const { row, totals } = s.usage[0]!;
@@ -183,7 +188,7 @@ describe("usage rows", () => {
 			toolResults: [],
 			usage: stranger.usage,
 		});
-		await s.kernel.journaling.flush();
+		await s.journaling.flush();
 		expect(s.usage).toEqual([]);
 		expect(await s.log.storage.scanUsage({})).toEqual([]);
 		s.dispose();
@@ -201,10 +206,10 @@ describe("usage rows", () => {
 			toolResults: [],
 			usage: assistant.usage,
 		});
-		await s.kernel.journaling.flush();
+		await s.journaling.flush();
 
 		const entryId = (s.added[0] as MessageEntry).id;
-		const row = await s.kernel.journaling.recordUsage(usageOf(120, 20), { entryId });
+		const row = await s.journaling.recordUsage(usageOf(120, 20), { entryId });
 		expect(row?.adjustment).toBe(true);
 		const stats = await s.log.storage.getStats();
 		expect(stats.usage.input).toBe(220);
@@ -230,12 +235,12 @@ describe("commit discipline", () => {
 		const s = session(storage);
 		const emit = kernelEmit(s.kernel.ctx);
 		emit("message:end", { message: userMsg("one") });
-		await s.kernel.journaling.flush();
+		await s.journaling.flush();
 		emit("message:end", { message: userMsg("two") });
 		emit("message:end", { message: userMsg("three") });
-		await s.kernel.journaling.flush();
+		await s.journaling.flush();
 
-		const order = s.kernel.journaling.entries().map((entry) => entry.id);
+		const order = s.journaling.entries().map((entry) => entry.id);
 		expect(order).toHaveLength(3);
 		// Whatever the batching, the journal received them in event order.
 		expect(committed).toEqual(order);
@@ -257,16 +262,15 @@ describe("commit discipline", () => {
 			return commit(writes);
 		};
 		const log = SessionLog.create(storage);
-		const kernel = Kernel.create({
+		const { kernel, journaling } = journaledKernel(log, {
 			config: { model: { provider: "p", modelId: "m" } },
-			journal: log,
 			warn: (message) => warnings.push(message),
 		});
 		const emit = kernelEmit(kernel.ctx);
 		emit("message:end", { message: userMsg("first") });
-		await kernel.journaling.flush();
+		await journaling.flush();
 		emit("message:end", { message: userMsg("second") });
-		await kernel.journaling.flush();
+		await journaling.flush();
 		expect(warnings.join(" ")).toContain("disk on fire");
 		expect(await log.storage.scanEntries({})).toHaveLength(1);
 		void kernel.dispose();
@@ -275,9 +279,9 @@ describe("commit discipline", () => {
 	it("the run boundary waits for the disk, so a finished run is durable", async () => {
 		const storage = new MemoryStorage();
 		const log = SessionLog.create(storage);
-		const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } }, journal: log });
+		const { kernel, journaling } = journaledKernel(log, { config: { model: { provider: "p", modelId: "m" } } });
 		const fake = fakeModels([assistantMessage({ content: [{ type: "text", text: "done" }] })]);
-		const runner = new Runner(kernel, { models: fake });
+		const runner = new Runner(kernel, { models: fake, journal: journaling });
 		kernel.inject(userMsg("go"));
 		await runner.run();
 		// No explicit flush in the test: the runner's run end already did it.

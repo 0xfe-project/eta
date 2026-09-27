@@ -116,7 +116,7 @@ describe.skipIf(configPath === undefined)("real model compaction", () => {
 			if (opened.compaction === undefined) throw new Error("the smoke opened a session without compaction");
 			const compacted = await opened.compaction.manual();
 			off();
-			await opened.kernel.journaling.flush();
+			await opened.journaling.flush();
 			expect(events).toEqual(["manual:completed"]);
 			expect(compacted).toBe(true);
 

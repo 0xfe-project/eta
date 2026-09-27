@@ -9,7 +9,6 @@
  */
 
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import { describe, expect, it } from "vitest";
 import {
 	applyGoalEntries,
 	type Entry,
@@ -17,15 +16,17 @@ import {
 	Kernel,
 	kernelOn,
 	MemoryStorage,
+	Runner,
 	recordGoalEntries,
 	SessionLog,
 	type StorageService,
 	type StorageWrite,
 	setValue,
 	value,
-} from "../src/index";
-import { Runner } from "../src/kernel/runner";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
+} from "@eta/core";
+import { assistantMessage, fakeModels } from "@eta/core/testing";
+import { describe, expect, it } from "vitest";
+import { journaledKernel } from "../src/testing";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,
@@ -82,9 +83,9 @@ function textsOf(entries: Entry[]): string[] {
 function setup(disk: Disk, script: AssistantMessage[]) {
 	const storage = disk.connect();
 	const log = SessionLog.create(storage);
-	const kernel = Kernel.create({ journal: log });
+	const { kernel, journaling } = journaledKernel(log);
 	const fake = fakeModels(script);
-	const runner = new Runner(kernel, { models: fake });
+	const runner = new Runner(kernel, { models: fake, journal: journaling });
 	return { storage, log, kernel, runner, fake };
 }
 
@@ -165,10 +166,11 @@ describe("crash recovery — the kernel rebuilds from the journal", () => {
 
 		const log = await SessionLog.load(disk.restart());
 		const resumedAt = log.transcript().length;
-		const kernel = Kernel.create({ journal: log });
+		const { kernel, journaling } = journaledKernel(log);
 		const fake = fakeModels([answer("second answer")]);
 		const runner = new Runner(kernel, {
 			models: fake,
+			journal: journaling,
 			initialTranscript: log.transcript(),
 		});
 		kernel.inject(userMsg("second question"));

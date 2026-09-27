@@ -15,7 +15,7 @@
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
-import { Kernel, MemoryStorage, Runner, SessionLog } from "../src/index";
+import { Kernel, Runner } from "../src/index";
 import { type FakeCompaction, fakeCompaction } from "../src/testing/fake-compaction";
 import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
 
@@ -52,11 +52,7 @@ function setup(script: AssistantMessage[], options: { compacts?: { overflow?: bo
 		summary: "compacted history",
 		...(options.compacts === undefined ? {} : { compacts: options.compacts }),
 	});
-	const log = SessionLog.create(new MemoryStorage());
-	const kernel = Kernel.create({
-		config: { model: { provider: "p", modelId: "m" } },
-		journal: log,
-	});
+	const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } } });
 	const fake = fakeModels(script);
 	// A model with a window and an output budget, so both overflow signals work.
 	fake.getModel = () =>
@@ -87,7 +83,6 @@ function setup(script: AssistantMessage[], options: { compacts?: { overflow?: bo
 		kernel,
 		runner,
 		fake,
-		log,
 		driver,
 		dispose: () => void kernel.dispose(),
 	};

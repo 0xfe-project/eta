@@ -9,7 +9,7 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Kernel, kernelOn, MemoryStorage, OutputRate, Runner, SessionLog } from "../src/index";
+import { Kernel, kernelOn, OutputRate, Runner } from "../src/index";
 import { consumeAssistantStream } from "../src/kernel/assistant";
 import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
 
@@ -19,11 +19,10 @@ const userMsg = (text: string) => ({
 	timestamp: 0,
 });
 
-function setup(script: AssistantMessage[], chunkSize?: number, options: { journal?: boolean } = {}) {
+function setup(script: AssistantMessage[], chunkSize?: number) {
 	const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } } });
 	const fake = fakeModels(script, chunkSize === undefined ? {} : { chunkSize });
-	const journal = options.journal === true ? SessionLog.create(new MemoryStorage()) : undefined;
-	const runner = new Runner(kernel, { models: fake, ...(journal === undefined ? {} : { journal }) });
+	const runner = new Runner(kernel, { models: fake });
 	const updates: { message: unknown; event: { type: string; delta?: string } }[] = [];
 	const names: string[] = [];
 	const on = kernelOn(kernel.ctx);
@@ -59,12 +58,12 @@ afterEach(() => {
 describe("streaming into the bus", () => {
 	it("emits one update per frame, in order, with the delta and the message so far", async () => {
 		const settled = assistantMessage({ content: [{ type: "text", text: "hello" }] });
-		const { kernel, runner, updates, names, dispose } = setup([settled], 2, { journal: true });
+		const { kernel, runner, updates, names, dispose } = setup([settled], 2);
 		kernel.inject(userMsg("go"));
 		await runner.run();
 
-		// The injected user message is journaled first, so its `end` opens the
-		// sequence; the assistant's stream follows.
+		// The injected user message settles first, so its `end` opens the sequence;
+		// the assistant's stream follows.
 		expect(names).toEqual(["end", "start", ...Array.from({ length: 5 }, () => "update"), "end"]);
 		expect(updates.map((u) => u.event.type)).toEqual([
 			"text_start",
@@ -108,7 +107,7 @@ describe("streaming into the bus", () => {
 
 	it("records the settled message once, after the stream ends", async () => {
 		const settled = assistantMessage({ content: [{ type: "text", text: "answer" }] });
-		const { kernel, runner, names, dispose } = setup([settled], 3, { journal: true });
+		const { kernel, runner, names, dispose } = setup([settled], 3);
 		kernel.inject(userMsg("go"));
 		await runner.run();
 		// One end for the user message, one for the assistant's settled answer.

@@ -89,7 +89,7 @@ export async function runSmokeScenario(options: SmokeOptions): Promise<SmokeRepo
 	// A configuration the default does not carry, so the second open proves it
 	// came off disk rather than out of this function's arguments.
 	kernel.config.update({ thinkingLevel: "low" });
-	await kernel.journaling.flush();
+	await opened.journaling.flush();
 
 	const notes: string[] = [];
 	const note = {

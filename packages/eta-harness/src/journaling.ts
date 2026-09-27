@@ -2,6 +2,12 @@
  * JournalingService — durability as a subscriber (REFACTOR.md §3 ruling 6,
  * §K5).
  *
+ * The journal's owner: one service per session writes the entries, the usage
+ * rows, and the session state, and everyone else asks it. The kernel is not in
+ * this business — it counts nothing and writes nothing; the runner hands it a
+ * `journal` seam so a finished run can be a durable run, and that is the whole
+ * of the kernel's interest in storage.
+ *
  * The runner emits what happened; this service writes it down. Same session,
  * same order (cordis dispatches synchronously), but the runner never waits for
  * the disk: a per-turn commit is started when the turn ends and lands while the
@@ -19,18 +25,28 @@
  * an id exists once it has been written, and `entry:added` is where a consumer
  * learns it.
  */
+import {
+	type AgentMessage,
+	type CommitOutcome,
+	type ConfigService,
+	type Emit,
+	type Entry,
+	type JsonValue,
+	type KernelConfig,
+	kernelEmit,
+	kernelOn,
+	type MessageEntry,
+	type NewEntry,
+	type SessionLog,
+	type StoredTask,
+	setValue,
+	type TaskService,
+	type Usage,
+	type UsageRow,
+	type ValueWrite,
+	value,
+} from "@eta/core";
 import { type Context, Service } from "cordis";
-import type { ConfigService } from "../kernel/config";
-import type { TaskService } from "../kernel/tasks";
-import { setValue, type UsageRow, type ValueWrite, value } from "../storage/types";
-import type { KernelConfig } from "../types/config";
-import type { Entry, MessageEntry, NewEntry } from "../types/entries";
-import type { Emit } from "../types/events";
-import { kernelEmit, kernelOn } from "../types/events";
-import type { JsonValue } from "../types/json";
-import type { AgentMessage, Usage } from "../types/messages";
-import type { StoredTask } from "../types/tasks";
-import type { CommitOutcome, SessionLog } from "./session-log";
 
 /**
  * The session's configuration, as a value. Namespaced outside `pi.*` on purpose:

@@ -8,9 +8,10 @@
  * never billed because it is never history.
  */
 import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
+import { kernelOn, MemoryStorage, Runner, SessionLog, sessionTokenTotal, type UsageRow } from "@eta/core";
+import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import { Kernel, kernelOn, MemoryStorage, Runner, SessionLog, sessionTokenTotal, type UsageRow } from "../src/index";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
+import { journaledKernel } from "../src/testing";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,
@@ -29,9 +30,9 @@ const usageOf = (input: number, output: number, cacheRead = 0): Usage => ({
 
 function setup(script: AssistantMessage[]) {
 	const log = SessionLog.create(new MemoryStorage());
-	const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } }, journal: log });
+	const { kernel, journaling } = journaledKernel(log, { config: { model: { provider: "p", modelId: "m" } } });
 	const fake = fakeModels(script);
-	const runner = new Runner(kernel, { models: fake });
+	const runner = new Runner(kernel, { models: fake, journal: journaling });
 	const recorded: { row: UsageRow; totals: Usage }[] = [];
 	const off = kernelOn(kernel.ctx)("usage:recorded", (event) => {
 		recorded.push(event as never);
@@ -41,6 +42,7 @@ function setup(script: AssistantMessage[]) {
 		runner,
 		fake,
 		log,
+		journaling,
 		recorded,
 		dispose: () => {
 			off();
@@ -111,7 +113,7 @@ describe("usage rows", () => {
 	});
 
 	it("a correction adjusts the totals instead of charging twice", async () => {
-		const { kernel, runner, log, dispose } = setup([
+		const { kernel, runner, log, journaling, dispose } = setup([
 			assistantMessage({ content: [{ type: "text", text: "answer" }], usage: usageOf(100, 20) }),
 		]);
 		kernel.inject(userMsg("go"));
@@ -122,7 +124,7 @@ describe("usage rows", () => {
 			(candidate) => candidate.type === "message" && candidate.message.role === "assistant",
 		)!;
 		// The provider restates what the request cost.
-		const row = await kernel.journaling.recordUsage(usageOf(120, 20), { entryId: entry.id });
+		const row = await journaling.recordUsage(usageOf(120, 20), { entryId: entry.id });
 		expect(row?.adjustment).toBe(true);
 
 		const after = await log.storage.getStats();

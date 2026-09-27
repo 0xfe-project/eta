@@ -8,9 +8,10 @@
  * must not publish into a finished call (eta-agent's acceptingUpdates).
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
+import { type KernelTool, kernelOn, MemoryStorage, Runner, SessionLog, type ToolCallInfo } from "@eta/core";
+import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import { Kernel, type KernelTool, kernelOn, MemoryStorage, Runner, SessionLog, type ToolCallInfo } from "../src/index";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
+import { journaledKernel } from "../src/testing";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,
@@ -25,9 +26,9 @@ const toolTurn = (calls: { id: string; name: string }[]): AssistantMessage =>
 	});
 
 function setup(script: AssistantMessage[], tools: KernelTool[]) {
-	const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } } });
+	const { kernel, journaling } = journaledKernel(SessionLog.create(new MemoryStorage()));
 	const fake = fakeModels(script);
-	const runner = new Runner(kernel, { models: fake });
+	const runner = new Runner(kernel, { models: fake, journal: journaling });
 	for (const tool of tools) kernel.tools.register(tool);
 	const updates: { toolCallId: string; toolName: string; partialResult: unknown }[] = [];
 	const names: string[] = [];
@@ -200,12 +201,12 @@ describe("tool:update", () => {
 	it("partial results never reach the journal", async () => {
 		const storage = new MemoryStorage();
 		const log = SessionLog.create(storage);
-		const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } }, journal: log });
+		const { kernel, journaling } = journaledKernel(log, { config: { model: { provider: "p", modelId: "m" } } });
 		const fake = fakeModels([
 			toolTurn([{ id: "c1", name: "run" }]),
 			assistantMessage({ content: [{ type: "text", text: "ok" }] }),
 		]);
-		const runner = new Runner(kernel, { models: fake });
+		const runner = new Runner(kernel, { models: fake, journal: journaling });
 		kernel.tools.register({
 			name: "run",
 			execute: (_args, call: ToolCallInfo) => {

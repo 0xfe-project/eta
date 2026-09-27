@@ -9,11 +9,9 @@
  */
 
 import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	applyGoalEntries,
 	type GoalEntry,
-	Kernel,
 	type KernelTool,
 	kernelOn,
 	MemoryStorage,
@@ -22,9 +20,10 @@ import {
 	SessionLog,
 	sessionTokenTotal,
 	type UsageRow,
-} from "../src/index";
-import { type FakeCompaction, fakeCompaction } from "../src/testing/fake-compaction";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
+} from "@eta/core";
+import { assistantMessage, type FakeCompaction, fakeCompaction, fakeModels } from "@eta/core/testing";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { journaledKernel } from "../src/testing";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,
@@ -71,14 +70,13 @@ function session(script: AssistantMessage[], tools: KernelTool[] = []) {
 	const compaction: FakeCompaction = fakeCompaction({
 		summary: "everything before was about the migration",
 	});
-	const kernel = Kernel.create({
+	const { kernel, journaling } = journaledKernel(log, {
 		config: {
 			model: { provider: "p", modelId: "m" },
 			activeToolNames: tools.map((tool) => tool.name),
 			thinkingLevel: "low",
 			compaction: { enabled: true, reserveTokens: 1_000, keepRecentTokens: 500, maxContextTokens: 64_000 },
 		},
-		journal: log,
 	});
 	for (const tool of tools) kernel.tools.register(tool);
 
@@ -106,6 +104,7 @@ function session(script: AssistantMessage[], tools: KernelTool[] = []) {
 	const goalRecorder = recordGoalEntries(log, on);
 	const runner = new Runner(kernel, {
 		models: fake,
+		journal: journaling,
 		compaction,
 		systemPrompt: "You are Eta, a coding agent.",
 		toolContext: { workspace: "/w" },
@@ -253,9 +252,8 @@ describe("one full session", () => {
 		expect(log.transcript().length).toBe(4); // goal entries are not messages
 		expect(await s.storage.getStats()).toEqual(stats);
 
-		const restartedKernel = Kernel.create({
+		const { kernel: restartedKernel, journaling: restartedJournaling } = journaledKernel(log, {
 			config: { model: { provider: "p", modelId: "m" }, activeToolNames: ["task"] },
-			journal: log,
 		});
 		restartedKernel.tools.register(taskTool(created));
 		const goalEntries = log.graph.pathOldestFirst().filter((entry): entry is GoalEntry => entry.type === "goal");
@@ -266,6 +264,7 @@ describe("one full session", () => {
 		// And it keeps going, appending to the same journal.
 		const fake = fakeModels([answer("resumed")]);
 		const runner = new Runner(restartedKernel, {
+			journal: restartedJournaling,
 			models: fake,
 			initialTranscript: log.transcript(),
 		});
@@ -308,12 +307,11 @@ describe("one full session", () => {
 
 		// A fresh run over the replayed journal answers normally.
 		const log = await SessionLog.load(s.storage);
-		const kernel = Kernel.create({
+		const { kernel, journaling } = journaledKernel(log, {
 			config: { model: { provider: "p", modelId: "m" }, activeToolNames: [] },
-			journal: log,
 		});
 		const fake = fakeModels([answer("clean run")]);
-		const runner = new Runner(kernel, { models: fake, initialTranscript: log.transcript() });
+		const runner = new Runner(kernel, { models: fake, journal: journaling, initialTranscript: log.transcript() });
 		kernel.inject(userMsg("try again"));
 		const second = await runner.run();
 		expect(second.status).toBe("completed");

@@ -19,7 +19,6 @@ import type {
 	SimpleStreamOptions,
 	ToolCall,
 } from "@earendil-works/pi-ai";
-import type { JournalingService } from "../session/journaling";
 import type { Entry } from "../types/entries";
 import type { Emit } from "../types/events";
 import { kernelEmit } from "../types/events";
@@ -35,6 +34,18 @@ import type { PersonaService } from "./persona";
 import type { KernelModels } from "./providers";
 import type { AgentRetryPolicy } from "./retry";
 import type { KernelTool, ToolService } from "./tools";
+
+/**
+ * What the runner needs from durability (REFACTOR.md §3 ruling 6): the run
+ * boundary waits for the disk, so "the run finished" means "the run is durable".
+ * Everything else about the journal — what is written, when, and in what order —
+ * belongs to the journaling service, which the runner never sees.
+ */
+export interface RunnerJournal {
+	/** Resolve once everything written so far is on disk. */
+	flush(): Promise<void>;
+}
+
 import { isAbortError } from "./tools";
 
 export interface RunnerBoundaryOptions {
@@ -84,6 +95,12 @@ export interface RunnerOptions {
 	/** Run-boundary decisions (REFACTOR.md §2.4 step 5); without it the boundary is a plain stop. */
 	boundary?: RunnerBoundaryOptions;
 	/**
+	 * The session's durability, for the one thing the runner does about it: wait
+	 * at the run boundary. Without one, a run finishes in memory only (a subagent
+	 * or a throwaway session).
+	 */
+	journal?: RunnerJournal;
+	/**
 	 * History restored from a journal. It goes into the transcript without being
 	 * journaled again — the journal is where it came from.
 	 */
@@ -124,10 +141,11 @@ export class Runner {
 	private readonly options: RunnerOptions;
 	private readonly config: ConfigService;
 	private readonly models: KernelModels;
-	private readonly journaling: JournalingService;
 	private readonly emit: Emit;
 	/** The compaction driver, when the host supplied one (the kernel owns none). */
 	private compaction: CompactionDriver | undefined;
+	/** Durability, for the one wait at the run boundary (the kernel owns no journal). */
+	private readonly journal: RunnerJournal | undefined;
 	private readonly transcript: AgentMessage[] = [];
 	private emptyStops = 0;
 	private currentRunId: string | undefined;
@@ -142,8 +160,8 @@ export class Runner {
 		this.options = options;
 		this.emit = kernelEmit(kernel.ctx);
 		this.config = kernel.config;
-		this.journaling = kernel.journaling;
 		this.models = options.models;
+		this.journal = options.journal;
 		if (options.initialTranscript !== undefined) this.transcript.push(...options.initialTranscript);
 		this.tools = kernel.tools;
 		this.goal = kernel.goal;
@@ -465,7 +483,7 @@ export class Runner {
 		// run. Commits were started as messages landed and are not awaited — the
 		// runner never blocks on storage (§3 ruling 6). This runs even when the
 		// run threw, so what was recorded before the fault is still written.
-		await this.journaling.flush().catch(() => undefined);
+		await this.journal?.flush().catch(() => undefined);
 		const result: RunResult = { turns: this.kernel.turns, status, ...(error === undefined ? {} : { error }) };
 		this.emit("turn:run-end", {
 			runId,

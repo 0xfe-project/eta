@@ -8,11 +8,9 @@
  * journaled, so it cannot leak into the context the next attempt sends.
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	DEFAULT_MAX_AGENT_RETRY_DELAY_MS,
 	DEFAULT_RETRY_POLICY,
-	Kernel,
 	kernelOn,
 	MemoryStorage,
 	normalizedRetryPolicy,
@@ -21,8 +19,10 @@ import {
 	retryNotBefore,
 	SessionLog,
 	waitUntil,
-} from "../src/index";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
+} from "@eta/core";
+import { assistantMessage, fakeModels } from "@eta/core/testing";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { journaledKernel } from "../src/testing";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,
@@ -42,13 +42,12 @@ const ok = (text: string): AssistantMessage =>
 	assistantMessage({ content: [{ type: "text", text }], stopReason: "stop" });
 
 function setup(script: AssistantMessage[], retryPolicy = DEFAULT_RETRY_POLICY) {
-	const journal = SessionLog.create(new MemoryStorage());
-	const kernel = Kernel.create({
+	const log = SessionLog.create(new MemoryStorage());
+	const { kernel, journaling } = journaledKernel(log, {
 		config: { model: { provider: "p", modelId: "m" }, retryPolicy: { ...retryPolicy } },
-		journal,
 	});
 	const fake = fakeModels(script);
-	const runner = new Runner(kernel, { models: fake });
+	const runner = new Runner(kernel, { models: fake, journal: journaling });
 	const retries: { name: string; payload: Record<string, unknown> }[] = [];
 	const on = kernelOn(kernel.ctx);
 	const offs = (["retry:scheduled", "retry:start", "retry:end"] as const).map((name) =>
@@ -60,7 +59,7 @@ function setup(script: AssistantMessage[], retryPolicy = DEFAULT_RETRY_POLICY) {
 		kernel,
 		runner,
 		fake,
-		journal,
+		journal: journaling,
 		retries,
 		dispose: () => {
 			for (const off of offs) off();
@@ -151,7 +150,7 @@ describe("retrying generation", () => {
 	});
 
 	it("retries a transient failure and succeeds, reporting the backoff", async () => {
-		const { kernel, runner, fake, retries, journal, dispose } = setup([transient(), ok("recovered")]);
+		const { kernel, runner, fake, retries, journal: journaling, dispose } = setup([transient(), ok("recovered")]);
 		kernel.inject(userMsg("go"));
 		const run = runner.run();
 		await vi.advanceTimersByTimeAsync(5_000);
@@ -169,7 +168,7 @@ describe("retrying generation", () => {
 		expect(retries[2]!.payload).toMatchObject({ attempt: 2, success: true });
 
 		// Only the successful attempt is history.
-		const transcript = journal.transcript();
+		const transcript = journaling.transcript();
 		expect(transcript.filter((message) => message.role === "assistant")).toHaveLength(1);
 		expect(JSON.stringify(transcript)).toContain("recovered");
 		expect(JSON.stringify(transcript)).not.toContain("500");
