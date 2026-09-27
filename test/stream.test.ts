@@ -9,7 +9,7 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Kernel, kernelOn, OutputRate, Runner } from "../src/index";
+import { Kernel, kernelOn, Runner } from "../src/index";
 import { consumeAssistantStream } from "../src/kernel/assistant";
 import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
 
@@ -138,42 +138,6 @@ describe("usage and throughput", () => {
 		const transcript = runner.getTranscript();
 		const assistant = transcript.find((message) => message.role === "assistant")!;
 		expect((assistant as AssistantMessage).usage.output).toBe(3);
-		dispose();
-	});
-
-	it("tracks output tokens per second over the run", async () => {
-		// Time advances with each clock read, so the rate window sees a real span
-		// without the test sleeping.
-		let clock = 0;
-		vi.spyOn(Date, "now").mockImplementation(() => {
-			clock += 250;
-			return clock;
-		});
-		const settled = assistantMessage({
-			content: [{ type: "text", text: "x".repeat(400) }],
-			usage: {
-				input: 10,
-				output: 100,
-				cacheRead: 0,
-				cacheWrite: 0,
-				totalTokens: 110,
-				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-			},
-		});
-		const { kernel, runner, dispose } = setup([settled], 100);
-		kernel.inject(userMsg("go"));
-		await runner.run();
-		expect(kernel.metrics.tokensPerSec).toBeGreaterThan(0);
-		dispose();
-	});
-
-	it("starts the window over on a new run", async () => {
-		const { kernel, runner, dispose } = setup([assistantMessage()]);
-		const reset = vi.spyOn(OutputRate.prototype, "reset");
-		kernel.inject(userMsg("go"));
-		await runner.run();
-		expect(reset).toHaveBeenCalled();
-		reset.mockRestore();
 		dispose();
 	});
 });

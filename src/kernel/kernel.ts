@@ -23,7 +23,6 @@ import { ConfigService } from "./config";
 import type { GoalState } from "./goal";
 import { GoalService } from "./goal";
 import { Inbox, type QueuedItem } from "./inbox";
-import { MetricsService } from "./metrics";
 import { PersonaService } from "./persona";
 import { TaskReminderService } from "./reminder";
 import { TaskService } from "./tasks";
@@ -60,8 +59,6 @@ export class Kernel {
 	readonly tasks: TaskService;
 	readonly tools: ToolService;
 	readonly config: ConfigService;
-	/** Observable numbers: tokens/sec, computed from the bus. */
-	readonly metrics: MetricsService;
 	/** The task-reminder cadence, watching the bus for turns and tool use. */
 	readonly taskReminder: TaskReminderService;
 	/** How the outside world reaches the loop (steer / followUp / nextRun). */
@@ -80,7 +77,6 @@ export class Kernel {
 		this.tasks = new TaskService(this.ctx);
 		this.tools = new ToolService(this.ctx);
 		this.config = new ConfigService(this.ctx, defaultKernelConfig(options.config));
-		this.metrics = new MetricsService(this.ctx);
 		this.taskReminder = new TaskReminderService(this.ctx, { tasks: this.tasks });
 	}
 
