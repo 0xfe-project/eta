@@ -21,18 +21,26 @@
 ### 1.1 依赖方向
 
 ```
-eta-core (kernel)
-  │  提供：cordis Context + runner(纯 turn 循环) + 三原语 + 类型面 + service 接口
-  │  不知道：磁盘、网络、插件加载、多 session、prompt 文案
-  │  一个实例 = 一个 session 的完整运行时
+@eta/core (kernel)                        —— 地板
+  │  提供：cordis Context + runner(纯 turn 循环) + 三原语 + 类型面
+  │        + seam：StorageService / ToolService / Providers /
+  │                CompactionDriver(attach/threshold/overflow) /
+  │                RunnerOptions.journal{flush}
+  │  不知道：磁盘、网络、插件加载、多 session、prompt 文案、token 算术
+  │  一个实例 = 一个 session 的运行时；零 service、零模型可见文案
   ▼
-eta-server (harness)
-  │  多 kernel 宿主：创建/销毁 kernel、注入 StorageService、加载插件
-  │  磁盘 IO、WS transport、HTTP、全局配置、provider registry、SSH remote
-  │  subagent / btw（都是"在父 session 旁边新建 kernel 实例"）
+@eta/harness (默认最小运行合集)            —— 装就装全套
+  │  JournalingService（journal 的唯一主人）· CompactionService（算术在 estimation）
+  │  MetricsService · TaskReminderService · RunPump
+  │  openSession：把 journal→kernel→journaling→compaction→runner 装配成一个 session
+  │  依赖方向单向：harness → core
   ▼
-eta-client (view)
-  │  消费 transport 推送；渲染 UI 与插件 iframe
+@eta/plugins（内置插件：能力缺席在这里表达）
+  │  @eta/compaction = summarizer（用 harness 的算术）
+  │  后续：tools / prompts / ask / memory / skills / btw / subagent / SSH env
+  │  插件 → harness → core（无环）
+  ▼
+@eta/server（多 session 宿主）→ @eta/client（视图）
 ```
 
 ### 1.2 核心模型
@@ -102,11 +110,17 @@ cordis 的父子 Context 继承正好表达"共享层插件全局一份、sessio
 - cordis child Context（bus + service DI + fiber 生命周期）
 - **Runner**：纯 turn 循环（§2.4）
 - **GoalService / PersonaService / TaskService**：cordis Service 直挂（`Service` 子类走 reflect.provide，**不进 plugin registry**，`registry.delete()` 对它们天然 no-op —— 这就是"特权"的表达方式，不加标志位）
-- `inject(message)` 入口：外部世界（用户输入、server 顶层唤醒、子 agent 输出）进入 turn 循环的唯一门
+- **ConfigService**（配置读写 + 校验）
+- `inject(message)` 入口：外部世界（用户输入、顶层唤醒、子 agent 输出）进入 turn 循环的唯一门
 - `maxTurns: number | null`
-- 类型面 + service 接口（StorageService / ToolService / Providers / Compaction）
+- 纯件：`OutputRate`、`cadence`、`MutationQueue`、`retry`、`effect-gate`、`generation`
+- 会话语义：`SessionLog` / `EntryGraph` / `fork` / `merge` / `rollback`、`StorageService` seam 与 `InMemoryStorageState`
+- 类型面 + seam：`StorageService` / `ToolService` / `Providers` / `CompactionDriver`(+host/request/outcome) / `RunnerOptions.journal{flush}`
+- `testing/`：`fakeModels`、`fakeCompaction`、`realModels`、`eta-config`、`storage-contract`
 
-不提供：文件系统、网络、插件加载、持久化实现、prompt 文案、多 session。
+不提供（**全部在 harness 或插件**）：文件系统、网络、插件加载、持久化实现、prompt 文案、多 session、五个服务、token 算术。
+
+判断标准只有一条：**runner 是否直接消费**。直接消费 = core；只是"订阅 bus 或装配" = harness。
 
 ### 2.2 导出
 
@@ -118,10 +132,13 @@ cordis 的父子 Context 继承正好表达"共享层插件全局一份、sessio
   ├── GoalService             §2.3.1
   ├── PersonaService          §2.3.2
   ├── TaskService             §2.3.3
+  ├── ConfigService           配置读写 + 校验（compaction 设置也在里面）
   ├── ToolService             接口；插件注册工具，runner 每轮现读
-  ├── StorageService          接口；server 注入实现（§4）
+  ├── StorageService          接口；harness/server 注入实现（§4）
   ├── Providers               = pi-ai Models 形状（不是新接口）
-  ├── CompactionService       接口；默认实现是内置插件
+  ├── CompactionDriver        窄 seam（attach/threshold/overflow）+ Host/Request/Outcome/Summarizer 类型
+  ├── RunnerOptions.journal   { flush() }：run 边界等盘（§5.3）
+  ├── SessionLog / EntryGraph / fork / merge / rollback / InMemoryStorageState
   └── types/
         ├── entries.ts        Entry union：goal/ask/answer/btw/merge 一等类型
         ├── messages.ts       AgentMessage 等
@@ -238,23 +255,53 @@ abstract class StorageService extends Service {
 
 ---
 
-## 5. eta-server（Harness）
+## 5. eta-harness（默认最小运行合集）
 
-### 5.1 职责与启动
+### 5.1 定位（与 server 的区别）
+
+`eta-server` 之于 harness 是**宿主**，不是同一个东西：harness 是"一个 session 跑起来最少需要什么"，server 是"同时管很多 session 的进程"。harness 先落地（本阶段），server 后做（§9）。
+
+装必须装全套：harness 的服务不按需裁剪；某个**能力**缺席（没有 summarizer、没有 tools 插件、没有 memory）表达在插件层，不表达为"少装一个 harness 服务"。
+
+### 5.2 内容
+
+```
+@eta/harness
+  ├── compaction-service.ts   CompactionService（实现 CompactionDriver；entries 取自 journaling）
+  ├── estimation.ts           compaction 算术：estimate*/shouldCompact/findCutPoint/fitSettings/ceiling
+  ├── journaling.ts           JournalingService（journal 唯一主人）+ SESSION_CONFIG/TASKS_STATE
+  ├── metrics.ts              MetricsService（tokensPerSec）
+  ├── reminder.ts             TaskReminderService（cadence 的 bus 订阅面）
+  ├── pump.ts                 RunPump（宿主驱动的 idle waker）
+  ├── open.ts                 openSession：journal → kernel → journaling → compaction → runner
+  └── testing/                journaledKernel（openSession 的 journaling 那一半）、smoke 场景
+```
+
+### 5.3 三条接线纪律（踩过才写下来）
+
+1. **runner 的两个 seam 都是 `RunnerOptions` 字段**：`compaction?: CompactionDriver` 与 `journal?: {flush()}`。缺 compaction = 没有压缩（静默缺席，裸 kernel 合法）；缺 journal = 只在内存里结束（子 agent/一次性 session 合法）。装配器必须显式接——**忘了接，"跑完 = 落盘"就不成立**。
+2. **driver 存在就必须能用**：接了 CompactionDriver 却没有 summarizer → 任何 signal 抛 `CompactionMisconfigured`；`false` 只表示"历史还放得下"或"summarizer 决定不压"。
+3. **openSession 必须与服务同批或更早搬出 core**：装配器留在 core 时，每搬一个服务都会让 core 造不出它需要的东西（compaction 与 journaling 都撞过这个墙）。
+
+## 5b. eta-server（多 session 宿主）
+
+### 5b.1 职责与启动
 
 root cordis Context。启动序列：config → provider registry → 插件扫描缓存 → HTTP/WS transport → SessionManager（恢复 session 列表，逐 session 起 child kernel）→ 热重载 watcher。
 
-### 5.2 创建一个 session
+### 5b.2 创建一个 session
 
 ```
 1. 分配 ~/.eta/sessions/<id>/
-2. Kernel.create({ maxTurns })           ← child Context + runner + 三原语
-3. new JsonlStorageService(kernel.ctx)   ← 注入
-4. 装 session 插件：tools · ask · skills · compaction · drift · memory · prompts
-5. 注入全局引用（providers/remote，闭包传参）
+2. openSession({ storage, models, compaction: summarizer, kernel: {maxTurns}, pump: {...} })
+   ← @eta/harness 的装配器：journal 重放 → kernel → journaling → compaction → runner
+   返回 { kernel, runner, log, journaling, metrics, taskReminder, pump, compaction }
+3. 装 session 插件：tools · ask · skills · prompts · memory（compaction 已由 summarizer 选项装配）
+4. 注入全局引用（providers/remote，闭包传参）
+5. host 决定是否 pump.start()（idle waker 是策略，不是默认行为）
 ```
 
-### 5.3 Subagent
+### 5b.3 Subagent
 
 - `spawn` = server.createSession，**与创建任何 session 完全同路径**，区别：maxTurns=N、插件集无 subagent/goal 续杯
 - 返回 handle；handle 只有两个操作：`abort`、`peek`
@@ -262,13 +309,13 @@ root cordis Context。启动序列：config → provider registry → 插件扫�
 - 父死 → 子 cascade delete；子不知父，父不知子内部
 - "只允许一层"：子 kernel 没装 subagent 插件，spawn 工具不存在
 
-### 5.4 BTW
+### 5b.4 BTW
 
 - 同为 createSession；**spawn 时刻快照**父 lane requestState（model/thinking/tools 配置），排除 ask_user
 - 快速非阻塞；完成 → note `inject()` 进父消息流
 - 遵守树形生命周期
 
-### 5.5 跨 session 通信
+### 5b.5 跨 session 通信
 
 bus 不跨 session。仅两条 server 中转通道：父→子 = 创建时写入初始 task；子→父 = 完成时 inject 输出。transport 推送是观察通道，不是 session 间通道。
 
@@ -292,6 +339,8 @@ interface EtaPlugin {
 - 热重载：dispose 旧 fiber → 重载；正在运行的 turn 不受影响
 
 ### 6.2 内置插件清单（全部从 eta-agent 搬语义 + 测试）
+
+- ✅ `@eta/compaction`：summarizer（cut / drop tool noise / fold / digest），用 harness 的算术；`openSession({ compaction })` 注入。
 
 | 插件 | 来源（eta-agent） | 语义要点 |
 |---|---|---|
@@ -417,6 +466,25 @@ runner 是 turn 循环，不是服务容器。这轮把四件事抽成 kernel se
 1. **`message:end` 不再带 entryId**，改为订阅者落盘后发 `entry:added {entry}`（eta-agent 的 message_end 带可选 entryId；但 id 在写下去之前不存在）。
 2. **commit 粒度是 message**（不是 turn），串行、循环不等 ack；只有 **run 边界 flush 等盘**——所以"run 结束"就等于"已落盘"，崩溃/抛错路径也走同一个 flush。
 3. **compaction 的每-run-once 恢复预算归服务**（eta-agent 把它放在 durable operation 状态里）。
+
+### 第四轮：harness 分层（H1–H7）
+
+| 刀 | 内容 | 提交 |
+|---|---|---|
+| H1 | `@eta/harness` 骨架，workspace 纳入第四包 | `cd799b5` |
+| H2 | compaction 离开 core：算术 → `estimation.ts`，服务 → harness；core 只留 seam 类型 + `CompactionDriver`；`replaceContext` 不再自己估 tokens | `39fa9cf` |
+| H3 | 半接的 driver 响亮死掉：无 summarizer / 无 run / 无 model → 抛 `CompactionMisconfigured`（`false` 只留两个诚实答案） | `d4b7c68` |
+| H8 | `openSession` 搬 harness + summarizer 作为注入选项 + smoke 场景与三条真 smoke 跟过去 | `ee519d0` |
+| H4 | `JournalingService` 搬 harness（journal 唯一主人）；kernel 去掉 `journal` 选项与字段；runner 换成 `journal?: {flush()}` seam | `f1a5af2` |
+| H5 | `MetricsService` 搬 harness（`OpenSession.metrics`） | `9506cdb` |
+| H6 | `TaskReminderService` 搬 harness（`OpenSession.taskReminder`） | `4eec4f6` |
+| H7 | `RunPump` 搬 harness（`OpenSession.pump`，宿主决定 start） | `fa884f6` |
+
+顺序上唯一改了计划的地方：**H8 提前到 H4 之前**。原因是原子的——装配器必须和服务住在一起，否则每搬一个服务都会在 core 里留下"造不出来"的洞（H2 与 H4 各撞一次）。
+
+H4 还顺手抓出一个真 bug：把落盘等待从"kernel 隐式提供"改成显式 seam 后，测试里没接 journal 的会话在 run 结束后立刻 `recordUsage`，会与仍在排队的 commit 抢同一个 staged row，静默丢行。
+
+**H 之后的 core（纯地板）**：零 service、零 compaction 算术、零模型可见文案；五个服务名在 core 里 grep 不到。
 
 ### 第二轮的两处刻意偏离（都写进代码注释）
 
