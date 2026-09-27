@@ -8,10 +8,10 @@
  * nothing in the library.
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import { type KernelConfig, MemoryStorage, RunPump, SessionLog, type StorageService, setValue, value } from "@eta/core";
+import { type KernelConfig, MemoryStorage, SessionLog, type StorageService, setValue, value } from "@eta/core";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import { openSession } from "../src/index";
+import { openSession, RunPump } from "../src/index";
 import { SESSION_CONFIG, TASKS_STATE } from "../src/testing";
 
 const userMsg = (text: string) => ({
