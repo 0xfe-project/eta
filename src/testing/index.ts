@@ -1,5 +1,10 @@
 export { type SelectedProvider, selectProvider } from "./eta-config";
 export {
+	type FakeCompaction,
+	type FakeCompactionOptions,
+	fakeCompaction,
+} from "./fake-compaction";
+export {
 	assistantMessage,
 	type FakeModels,
 	type FakeModelsOptions,

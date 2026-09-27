@@ -21,8 +21,6 @@ import { kernelEmit } from "../types/events";
 import type { AgentMessage } from "../types/messages";
 import type { PersonaCard } from "../types/persona";
 import type { StoredTask } from "../types/tasks";
-import type { CompactionSummarizer } from "./compaction";
-import { CompactionService } from "./compaction-service";
 import { ConfigService } from "./config";
 import type { GoalState } from "./goal";
 import { GoalService } from "./goal";
@@ -40,8 +38,6 @@ export interface KernelOptions {
 	parent?: Context;
 	/** Initial configuration; the runner reads it live every turn. */
 	config?: Partial<KernelConfig>;
-	/** The summarizer behind compaction: a plugin, or nothing (every signal declines). */
-	compaction?: CompactionSummarizer;
 	/** Called when a summarizer throws; the run continues either way. */
 	warn?: (message: string) => void;
 	/**
@@ -72,8 +68,6 @@ export class Kernel {
 	readonly tasks: TaskService;
 	readonly tools: ToolService;
 	readonly config: ConfigService;
-	/** Compaction: manual / threshold / overflow, and the replacement context. */
-	readonly compaction: CompactionService;
 	/** Durability as a subscriber: entries, usage rows, compaction entries. */
 	readonly journaling: JournalingService;
 	/** Observable numbers: tokens/sec, computed from the bus. */
@@ -102,11 +96,6 @@ export class Kernel {
 			...(options.journal === undefined ? {} : { journal: options.journal }),
 			config: this.config,
 			tasks: this.tasks,
-			...(options.warn === undefined ? {} : { warn: options.warn }),
-		});
-		this.compaction = new CompactionService(this.ctx, {
-			config: this.config,
-			...(options.compaction === undefined ? {} : { summarizer: options.compaction }),
 			...(options.warn === undefined ? {} : { warn: options.warn }),
 		});
 	}

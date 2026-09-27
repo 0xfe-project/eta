@@ -13,13 +13,12 @@
 	"scripts": {
 		"test": "vitest --run --passWithNoTests",
 		"typecheck": "tsc -p tsconfig.json --noEmit",
-		"smoke": "ETA_SMOKE_CONFIG=\"${ETA_SMOKE_CONFIG:-$HOME/.eta/config.json}\" vitest --run test/smoke.e2e.test.ts test/smoke-compaction.e2e.test.ts"
+		"smoke": "ETA_SMOKE_CONFIG=\"${ETA_SMOKE_CONFIG:-$HOME/.eta/config.json}\" vitest --run test/smoke.e2e.test.ts"
 	},
 	"devDependencies": {
 		"@types/node": "22.19.19",
 		"typescript": "5.9.3",
-		"vitest": "4.1.9",
-		"@eta/compaction": "*"
+		"vitest": "4.1.9"
 	},
 	"dependencies": {
 		"@earendil-works/pi-ai": "0.85.1",

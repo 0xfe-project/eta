@@ -29,7 +29,6 @@ import type { GoalEntry } from "../types/entries";
 import { kernelOn } from "../types/events";
 import type { AgentMessage } from "../types/messages";
 import type { StoredTask } from "../types/tasks";
-import type { CompactionSummarizer } from "./compaction";
 import { applyGoalEntries } from "./goal";
 import { Kernel, type KernelOptions } from "./kernel";
 import type { KernelModels } from "./providers";
@@ -39,11 +38,6 @@ export interface OpenSessionOptions {
 	storage: StorageService;
 	/** The model layer the runner generates through. */
 	models: KernelModels;
-	/**
-	 * The summarizer this session compacts with. A session without one still
-	 * runs: compaction declines every signal rather than failing.
-	 */
-	compaction?: CompactionSummarizer;
 	/**
 	 * Everything a kernel takes, except the config and the journal: those come
 	 * from the journal, or from `config` when it holds none.
@@ -70,7 +64,9 @@ export interface OpenSession {
 	configRestored: boolean;
 	/** What the task restore kept, when the journal held a ledger. */
 	tasks: { kept: number; dropped: string[] } | undefined;
-	/** Stop the journaling this assembly wired (the host may want to take over). */
+	/**
+	 * Stop the journaling this assembly wired (the host may want to take over).
+	 */
 	stop: () => void;
 }
 
@@ -85,7 +81,6 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 
 	const kernel = Kernel.create({
 		...options.kernel,
-		...(options.compaction === undefined ? {} : { compaction: options.compaction }),
 		config,
 		journal: log,
 	});
