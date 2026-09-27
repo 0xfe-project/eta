@@ -23,7 +23,7 @@ import {
 } from "@eta/core";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import { CompactionService } from "../src/index";
+import { CompactionMisconfigured, CompactionService } from "../src/index";
 
 /**
  * What the prompts plugin will supply: the kernel's projection hook. Kept in
@@ -200,12 +200,43 @@ describe("CompactionService signals", () => {
 		s.dispose();
 	});
 
-	it("without a summarizer every signal declines", async () => {
+	it("without a summarizer every signal throws instead of declining", async () => {
+		// A driver with nothing to summarize with is a wiring bug, and a silent
+		// decline would let a session resend a history nobody keeps in bounds.
 		const s = session([assistantMessage()]);
 		expect(s.compaction.available).toBe(false);
-		expect(await s.compaction.manual()).toBe(false);
-		expect(await s.compaction.threshold()).toBe(false);
-		expect(await s.compaction.overflow()).toBe(false);
+		for (const signal of [s.compaction.manual(), s.compaction.threshold(), s.compaction.overflow()]) {
+			await expect(signal).rejects.toThrow(CompactionMisconfigured);
+			await expect(signal).rejects.toThrow(/no summarizer is wired/);
+		}
+		s.dispose();
+	});
+
+	it("a half-wired session dies at its first run rather than overflowing quietly", async () => {
+		const s = session([assistantMessage({ content: [{ type: "text", text: "never asked" }] })]);
+		s.kernel.inject(userMsg("go"));
+		// The threshold check runs before the first request, so the run dies there.
+		await expect(s.runner.run()).rejects.toThrow(/compaction_misconfigured: threshold\(\) was asked to compact/);
+		s.dispose();
+	});
+
+	it("a signal from a service nobody attached also throws", async () => {
+		const storage = new MemoryStorage();
+		const log = SessionLog.create(storage);
+		const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } }, journal: log });
+		const orphan = new CompactionService(kernel.ctx, {
+			config: kernel.config,
+			journaling: kernel.journaling,
+			summarizer: { summarize: async () => undefined },
+		});
+		await expect(orphan.threshold()).rejects.toThrow(/no run is attached/);
+		void kernel.dispose();
+	});
+
+	it("a model that does not resolve is a misconfiguration too", async () => {
+		const s = session([assistantMessage()], { summarizer: { summarize: async () => undefined } });
+		s.fake.getModel = () => undefined as never;
+		await expect(s.compaction.manual()).rejects.toThrow(/model does not resolve/);
 		s.dispose();
 	});
 

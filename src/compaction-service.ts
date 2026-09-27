@@ -25,6 +25,13 @@
  *
  * The summarization itself (prompt, model call, incremental summaries) is a
  * plugin behind `CompactionSummarizer`; the harness ships no summary text.
+ *
+ * Failure semantics: a driver that was attached and then has nothing to
+ * summarize *with* is a wiring bug, not a quiet no-op. Missing summarizer,
+ * missing run, missing model — each throws. `false` means one of two honest
+ * answers: "the history still fits" (threshold) or "the summarizer looked and
+ * declined" (a summarizer that returns nothing), and "this run already spent
+ * its one overflow recovery". Silence is never an answer.
  */
 import {
 	type CompactionDriver,
@@ -50,11 +57,29 @@ export interface CompactionEntrySource {
 	entries(): readonly Entry[];
 }
 
+/**
+ * A compaction signal arrived and nothing can handle it: no summarizer, no run
+ * attached, or no model to summarize with. Thrown rather than declined, so a
+ * half-wired session dies where the mistake is instead of resending a history
+ * nobody is keeping in bounds.
+ */
+export class CompactionMisconfigured extends Error {
+	readonly code = "compaction_misconfigured";
+
+	constructor(reason: string) {
+		super(`compaction_misconfigured: ${reason}`);
+		this.name = "CompactionMisconfigured";
+	}
+}
+
 export interface CompactionServiceOptions {
 	config: ConfigService;
 	/** The journal's owner; cut points are indices into its entries. */
 	journaling: CompactionEntrySource;
-	/** The summarizer plugin. Without one, every signal declines. */
+	/**
+	 * The summarizer plugin. Optional only so an assembly can build the service
+	 * before deciding; a signal without one throws (see the class docs).
+	 */
 	summarizer?: CompactionSummarizer;
 	/** Called when a summarizer throws; the run continues either way. */
 	warn?: (message: string) => void;
@@ -91,7 +116,7 @@ export class CompactionService extends Service implements CompactionDriver {
 		this.host = host;
 	}
 
-	/** Whether a summarizer is available at all. */
+	/** Whether this service can compact at all: a summarizer and a run behind it. */
 	get available(): boolean {
 		return this.summarizer !== undefined && this.host !== undefined;
 	}
@@ -108,18 +133,31 @@ export class CompactionService extends Service implements CompactionDriver {
 
 	/** A request overflowed: cut the history once, then let the caller retry. */
 	async overflow(): Promise<boolean> {
-		if (!this.available || this.overflowRecoveryUsed) return false;
+		// The spent budget is a real answer, not a misconfiguration: the run has
+		// already used its one recovery and a second overflow is a genuine failure.
+		if (this.overflowRecoveryUsed) return false;
 		this.overflowRecoveryUsed = true;
 		return this.run("overflow", { force: true });
 	}
 
 	private async run(reason: CompactionReason, options: { force: boolean; instructions?: string }): Promise<boolean> {
-		const host = this.host;
 		const summarizer = this.summarizer;
-		if (host === undefined || summarizer === undefined) return false;
+		if (summarizer === undefined) {
+			throw new CompactionMisconfigured(
+				`${reason}() was asked to compact, but no summarizer is wired: install one (for instance @eta/compaction) or leave the driver off`,
+			);
+		}
+		const host = this.host;
+		if (host === undefined) {
+			throw new CompactionMisconfigured(`${reason}() was asked to compact, but no run is attached to this service`);
+		}
 		const request = host.request();
 		const model = request.model;
-		if (model === undefined) return false;
+		if (model === undefined) {
+			throw new CompactionMisconfigured(
+				`${reason}() was asked to compact, but the session's model does not resolve`,
+			);
+		}
 
 		const settings = fitCompactionSettings(this.config.read("compaction"), model);
 		const estimate = estimateContextTokens(host.readContext());
