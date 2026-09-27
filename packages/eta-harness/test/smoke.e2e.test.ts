@@ -4,7 +4,7 @@
  * Skipped unless a configuration file is named, so the normal suite stays
  * offline and deterministic:
  *
- *   ETA_SMOKE_CONFIG=~/.eta/config.json bun run test test/smoke.e2e.test.ts
+ *   ETA_SMOKE_CONFIG=~/.eta/config.json bun run --cwd packages/eta-harness smoke
  *   ETA_SMOKE_MODEL=provider:model   (defaults to the file's own defaultModel)
  *
  * Nothing about the endpoint is hardcoded: provider, base URL, key, and model
@@ -13,11 +13,11 @@
  * real model satisfy the contract the runner expects, and that a real
  * transcript survives a reload.
  */
+
+import { MemoryStorage } from "@eta/core";
+import { realModels, selectProvider } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import { MemoryStorage } from "../src/index";
-import { selectProvider } from "../src/testing/eta-config";
-import { realModels } from "../src/testing/real-models";
-import { runSmokeScenario } from "../src/testing/smoke-scenario";
+import { runSmokeScenario } from "../src/testing";
 
 const configPath = process.env.ETA_SMOKE_CONFIG;
 const modelSelector = process.env.ETA_SMOKE_MODEL;

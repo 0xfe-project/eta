@@ -57,6 +57,7 @@
         "@eta/core": "*",
       },
       "devDependencies": {
+        "@eta/harness": "*",
         "@types/node": "22.19.19",
         "typescript": "5.9.3",
         "vitest": "4.1.9",

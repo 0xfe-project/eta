@@ -7,9 +7,10 @@
  * from the restored history. The caller supplies the models (real) and the
  * storage (memory or a file); nothing here knows either.
  */
-import { type Kernel, type KernelTool, kernelOn, openSession, type Runner, RunPump } from "../index";
-import type { KernelModels } from "../kernel/providers";
-import type { StorageService } from "../storage/types";
+
+import type { StorageService } from "@eta/core";
+import { type Kernel, type KernelModels, type KernelTool, kernelOn, type Runner, RunPump } from "@eta/core";
+import { openSession } from "../open";
 
 export interface SmokeOptions {
 	models: KernelModels;

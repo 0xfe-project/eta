@@ -33,3 +33,4 @@ export {
 	getLastAssistantUsage,
 	shouldCompact,
 } from "./estimation";
+export { type OpenSession, type OpenSessionOptions, openSession } from "./open";

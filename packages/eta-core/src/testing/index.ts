@@ -12,7 +12,6 @@ export {
 	type RecordedCall,
 } from "./fake-provider";
 export { type ModelSpec, type ProviderSpec, realModels } from "./real-models";
-export { runSmokeScenario, type SmokeOptions, type SmokeReport } from "./smoke-scenario";
 export {
 	type StorageContractHandle,
 	type StorageContractOptions,

@@ -12,10 +12,10 @@
  */
 
 import { etaCompaction } from "@eta/compaction";
-import { type AssistantMessage, kernelOn, MemoryStorage, openSession, RunPump, SessionLog } from "@eta/core";
+import { type AssistantMessage, kernelOn, MemoryStorage, RunPump, SessionLog } from "@eta/core";
 import { assistantMessage, realModels, selectProvider } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import { CompactionService } from "../src/index";
+import { openSession } from "../src/index";
 
 const configPath = process.env.ETA_SMOKE_CONFIG;
 const modelSelector = process.env.ETA_SMOKE_MODEL;
@@ -81,6 +81,7 @@ describe.skipIf(configPath === undefined)("real model compaction", () => {
 			const opened = await openSession({
 				storage,
 				models,
+				compaction: etaCompaction(),
 				config: {
 					model: { provider: selected.spec.id, modelId: selected.modelId },
 					compaction: { enabled: true, reserveTokens: 2_000, keepRecentTokens: 60, maxContextTokens: 4_000 },
@@ -106,21 +107,14 @@ describe.skipIf(configPath === undefined)("real model compaction", () => {
 				},
 			});
 
-			// The harness's service over the journal, as a session assembler builds it.
-			const compaction = new CompactionService(opened.kernel.ctx, {
-				config: opened.kernel.config,
-				journaling: opened.kernel.journaling,
-				summarizer: etaCompaction(),
-			});
-			opened.runner.attachCompaction(compaction);
-
 			const events: string[] = [];
 			const off = kernelOn(opened.kernel.ctx)("compaction:end", (event) => {
 				events.push(`${event.reason}:${event.status}`);
 			});
 
 			// The host asks for it, the way a /compact command would.
-			const compacted = await compaction.manual();
+			if (opened.compaction === undefined) throw new Error("the smoke opened a session without compaction");
+			const compacted = await opened.compaction.manual();
 			off();
 			await opened.kernel.journaling.flush();
 			expect(events).toEqual(["manual:completed"]);

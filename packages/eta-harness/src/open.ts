@@ -17,43 +17,69 @@
  * It also wires the goal's journaling, because a goal that is only in memory is
  * a goal a restart loses: the primitive emits, this subscribes, the journal
  * keeps it.
+ *
+ * This is the harness's job rather than the kernel's: assembling a session means
+ * knowing the services, and the services live here.
+ *
+ * Compaction arrives as a summarizer plugin. Passing one installs the driver;
+ * passing none opens a session with no bound on its history, which is what "that
+ * plugin is not installed" means. The two are different states on purpose: a
+ * driver that exists always works, and one that cannot summarize throws
+ * (`CompactionMisconfigured`) rather than acting like a history that fits.
  */
 
-import { recordGoalEntries } from "../session/goal-journal";
-import { SESSION_CONFIG, TASKS_STATE } from "../session/journaling";
-import { SessionLog } from "../session/session-log";
-import type { StorageService } from "../storage/types";
-import type { KernelConfig } from "../types/config";
-import { defaultKernelConfig } from "../types/config";
-import type { GoalEntry } from "../types/entries";
-import { kernelOn } from "../types/events";
-import type { AgentMessage } from "../types/messages";
-import type { StoredTask } from "../types/tasks";
-import { applyGoalEntries } from "./goal";
-import { Kernel, type KernelOptions } from "./kernel";
-import type { KernelModels } from "./providers";
-import { Runner, type RunnerOptions } from "./runner";
+import type { CompactionSummarizer } from "@eta/core";
+import {
+	type AgentMessage,
+	applyGoalEntries,
+	defaultKernelConfig,
+	type GoalEntry,
+	Kernel,
+	type KernelConfig,
+	type KernelModels,
+	type KernelOptions,
+	kernelOn,
+	Runner,
+	type RunnerOptions,
+	recordGoalEntries,
+	SESSION_CONFIG,
+	SessionLog,
+	type StorageService,
+	type StoredTask,
+	TASKS_STATE,
+} from "@eta/core";
+import { CompactionService } from "./compaction-service";
 
 export interface OpenSessionOptions {
 	storage: StorageService;
 	/** The model layer the runner generates through. */
 	models: KernelModels;
 	/**
+	 * The summarizer this session compacts with, behind the harness's compaction
+	 * service. Omit it for a session with no compaction at all — no driver, no
+	 * threshold check, nothing between the history and the provider's window.
+	 */
+	compaction?: CompactionSummarizer;
+	/**
 	 * Everything a kernel takes, except the config and the journal: those come
 	 * from the journal, or from `config` when it holds none.
 	 */
 	kernel?: Omit<KernelOptions, "journal" | "config">;
-	/** The one tool registry, when the host keeps a per-session service. */
 	/** What a brand-new session starts as. Ignored when the journal has a config. */
 	config?: Partial<KernelConfig>;
 	/** Runner options, minus the two this assembly supplies. */
-	runner?: Omit<RunnerOptions, "models" | "initialTranscript">;
+	runner?: Omit<RunnerOptions, "models" | "initialTranscript" | "compaction">;
 }
 
 export interface OpenSession {
 	kernel: Kernel;
 	runner: Runner;
 	log: SessionLog;
+	/**
+	 * The compaction driver this session runs with; the host asks it to compact
+	 * (`/compact`). Undefined when the session was opened without a summarizer.
+	 */
+	compaction: CompactionService | undefined;
 	/** The transcript the journal replayed into, oldest first. */
 	transcript: AgentMessage[];
 	/** Entries whose parent the journal does not hold; their branch ends there. */
@@ -64,9 +90,7 @@ export interface OpenSession {
 	configRestored: boolean;
 	/** What the task restore kept, when the journal held a ledger. */
 	tasks: { kept: number; dropped: string[] } | undefined;
-	/**
-	 * Stop the journaling this assembly wired (the host may want to take over).
-	 */
+	/** Stop the journaling this assembly wired (the host may want to take over). */
 	stop: () => void;
 }
 
@@ -97,10 +121,24 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 	// with the session, so every transition lands as an entry.
 	const { stop } = recordGoalEntries(log, kernelOn(kernel.ctx));
 
+	// Compaction: the service decides, the runner only asks. The cut is taken on
+	// the journal's entries, which the journaling service owns. No summarizer, no
+	// driver: a session without the plugin runs unbound rather than pretending.
+	const compaction =
+		options.compaction === undefined
+			? undefined
+			: new CompactionService(kernel.ctx, {
+					config: kernel.config,
+					journaling: kernel.journaling,
+					summarizer: options.compaction,
+					...(options.kernel?.warn === undefined ? {} : { warn: options.kernel.warn }),
+				});
+
 	const transcript = log.transcript();
 	const runner = new Runner(kernel, {
 		...options.runner,
 		models: options.models,
+		...(compaction === undefined ? {} : { compaction }),
 		initialTranscript: transcript,
 	});
 
@@ -108,6 +146,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		kernel,
 		runner,
 		log,
+		compaction,
 		transcript,
 		orphans: log.orphans,
 		config,

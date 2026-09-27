@@ -8,11 +8,9 @@
  * nothing in the library.
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import { describe, expect, it } from "vitest";
 import {
 	type KernelConfig,
 	MemoryStorage,
-	openSession,
 	RunPump,
 	SESSION_CONFIG,
 	SessionLog,
@@ -20,8 +18,10 @@ import {
 	setValue,
 	TASKS_STATE,
 	value,
-} from "../src/index";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
+} from "@eta/core";
+import { assistantMessage, fakeModels } from "@eta/core/testing";
+import { describe, expect, it } from "vitest";
+import { openSession } from "../src/index";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,
