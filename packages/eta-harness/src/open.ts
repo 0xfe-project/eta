@@ -48,6 +48,7 @@ import {
 } from "@eta/core";
 import { CompactionService } from "./compaction-service";
 import { JournalingService, SESSION_CONFIG, TASKS_STATE } from "./journaling";
+import { MetricsService } from "./metrics";
 
 export interface OpenSessionOptions {
 	storage: StorageService;
@@ -76,6 +77,8 @@ export interface OpenSession {
 	log: SessionLog;
 	/** The journal's owner: what wrote the entries this session replayed. */
 	journaling: JournalingService;
+	/** Observable numbers for this session (tokens/sec, and what they are made of). */
+	metrics: MetricsService;
 	/**
 	 * The compaction driver this session runs with; the host asks it to compact
 	 * (`/compact`). Undefined when the session was opened without a summarizer.
@@ -143,6 +146,8 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 					...(options.kernel?.warn === undefined ? {} : { warn: options.kernel.warn }),
 				});
 
+	const metrics = new MetricsService(kernel.ctx);
+
 	const transcript = log.transcript();
 	const runner = new Runner(kernel, {
 		...options.runner,
@@ -157,6 +162,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		runner,
 		log,
 		journaling,
+		metrics,
 		compaction,
 		transcript,
 		orphans: log.orphans,

@@ -23,6 +23,7 @@ import {
 } from "@eta/core";
 import { assistantMessage, type FakeCompaction, fakeCompaction, fakeModels } from "@eta/core/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MetricsService } from "../src/index";
 import { journaledKernel } from "../src/testing";
 
 const userMsg = (text: string) => ({
@@ -122,6 +123,7 @@ function session(script: AssistantMessage[], tools: KernelTool[] = []) {
 					: [message as never],
 			),
 	});
+	const metrics = new MetricsService(kernel.ctx);
 	kernel.persona.loadCards([{ id: "Executor", name: "Executor", content: "Ship it." }]);
 	kernel.persona.setActive(["Executor"]);
 
@@ -129,6 +131,7 @@ function session(script: AssistantMessage[], tools: KernelTool[] = []) {
 		kernel,
 		runner,
 		compaction,
+		metrics,
 		fake,
 		storage,
 		log,
@@ -222,7 +225,7 @@ describe("one full session", () => {
 		expect(s.usageRows.every((row) => row.adjustment === false)).toBe(true);
 		expect(sessionTokenTotal((await s.storage.getStats()).usage)).toBeGreaterThan(0);
 		// Throughput is a number, not a placeholder.
-		expect(s.kernel.metrics.tokensPerSec).toBeGreaterThanOrEqual(0);
+		expect(s.metrics.tokensPerSec).toBeGreaterThanOrEqual(0);
 		s.dispose();
 	});
 

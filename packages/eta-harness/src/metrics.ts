@@ -7,15 +7,17 @@
  * numbers a dashboard shows. Nothing here is a seam the loop has to feed: a
  * subscriber that fails or is absent cannot slow a turn down.
  *
+ * It lives in the harness: the numbers are not something the floor has an
+ * opinion about, and the kernel ships no services beyond its primitives.
+ *
  * `tokensPerSec` uses OutputRate's one scale: what this run has produced, the
  * committed count plus the in-flight message's share of it. The two feeds
  * differ by orders of magnitude if you mix them — the usage event carries the
  * session total while a frame can only see the message being written — which is
  * exactly the bug the class was written to prevent.
  */
+import { kernelOn, OutputRate } from "@eta/core";
 import { type Context, Service } from "cordis";
-import { kernelOn } from "../types/events";
-import { OutputRate } from "./output-rate";
 
 export class MetricsService extends Service {
 	static readonly provide = "metrics";

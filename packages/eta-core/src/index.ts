@@ -64,7 +64,6 @@ export {
 	type QueueKind,
 } from "./kernel/inbox";
 export { Kernel, type KernelInspect, type KernelOptions } from "./kernel/kernel";
-export { MetricsService } from "./kernel/metrics";
 export { MutationQueue } from "./kernel/mutation-queue";
 export { OutputRate } from "./kernel/output-rate";
 export { PersonaService, renderPersonaBlock } from "./kernel/persona";
