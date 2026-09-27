@@ -12,8 +12,6 @@
  * no continuation driver, and no spawn tool (REFACTOR.md §1.4).
  */
 import { Context } from "cordis";
-import { JournalingService } from "../session/journaling";
-import type { SessionLog } from "../session/session-log";
 import type { KernelConfig } from "../types/config";
 import { defaultKernelConfig } from "../types/config";
 import type { Emit } from "../types/events";
@@ -40,12 +38,6 @@ export interface KernelOptions {
 	config?: Partial<KernelConfig>;
 	/** Called when a summarizer throws; the run continues either way. */
 	warn?: (message: string) => void;
-	/**
-	 * The journal this session writes to. The kernel does not create it: the host
-	 * owns storage, and a session without one (a subagent, a throwaway) simply
-	 * keeps nothing.
-	 */
-	journal?: SessionLog;
 }
 
 export interface KernelInspect {
@@ -68,8 +60,6 @@ export class Kernel {
 	readonly tasks: TaskService;
 	readonly tools: ToolService;
 	readonly config: ConfigService;
-	/** Durability as a subscriber: entries, usage rows, compaction entries. */
-	readonly journaling: JournalingService;
 	/** Observable numbers: tokens/sec, computed from the bus. */
 	readonly metrics: MetricsService;
 	/** The task-reminder cadence, watching the bus for turns and tool use. */
@@ -92,12 +82,6 @@ export class Kernel {
 		this.config = new ConfigService(this.ctx, defaultKernelConfig(options.config));
 		this.metrics = new MetricsService(this.ctx);
 		this.taskReminder = new TaskReminderService(this.ctx, { tasks: this.tasks });
-		this.journaling = new JournalingService(this.ctx, {
-			...(options.journal === undefined ? {} : { journal: options.journal }),
-			config: this.config,
-			tasks: this.tasks,
-			...(options.warn === undefined ? {} : { warn: options.warn }),
-		});
 	}
 
 	static create(options: KernelOptions = {}): Kernel {
