@@ -275,7 +275,7 @@ export class Runner {
 		this.transcript.push(...retainedTail);
 	}
 
-	/** Whether a run is in flight (RunPump's guard, a dashboard's fact). */
+	/** Whether a run is in flight (an idle waker's guard, a dashboard's fact). */
 	get running(): boolean {
 		return this.inFlight !== undefined;
 	}
