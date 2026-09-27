@@ -4,12 +4,13 @@
 	"type": "module",
 	"workspaces": [
 		"packages/eta-core",
+		"packages/eta-harness",
 		"packages/eta-storage-jsonl",
 		"packages/eta-compaction"
 	],
 	"scripts": {
-		"test": "bun run --cwd packages/eta-core test && bun run --cwd packages/eta-storage-jsonl test && bun run --cwd packages/eta-compaction test",
-		"typecheck": "bun run --cwd packages/eta-core typecheck && bun run --cwd packages/eta-storage-jsonl typecheck && bun run --cwd packages/eta-compaction typecheck",
+		"test": "bun run --cwd packages/eta-core test && bun run --cwd packages/eta-harness test && bun run --cwd packages/eta-storage-jsonl test && bun run --cwd packages/eta-compaction test",
+		"typecheck": "bun run --cwd packages/eta-core typecheck && bun run --cwd packages/eta-harness typecheck && bun run --cwd packages/eta-storage-jsonl typecheck && bun run --cwd packages/eta-compaction typecheck",
 		"smoke": "bun run --cwd packages/eta-core smoke && bun run --cwd packages/eta-storage-jsonl smoke"
 	},
 	"devDependencies": {

@@ -35,6 +35,19 @@
         "vitest": "4.1.9",
       },
     },
+    "packages/eta-harness": {
+      "name": "@eta/harness",
+      "version": "0.1.0",
+      "dependencies": {
+        "@earendil-works/pi-ai": "0.85.1",
+        "@eta/core": "*",
+      },
+      "devDependencies": {
+        "@types/node": "22.19.19",
+        "typescript": "5.9.3",
+        "vitest": "4.1.9",
+      },
+    },
     "packages/eta-storage-jsonl": {
       "name": "@eta/storage-jsonl",
       "version": "0.1.0",
@@ -126,6 +139,8 @@
     "@eta/compaction": ["@eta/compaction@workspace:packages/eta-compaction"],
 
     "@eta/core": ["@eta/core@workspace:packages/eta-core"],
+
+    "@eta/harness": ["@eta/harness@workspace:packages/eta-harness"],
 
     "@eta/storage-jsonl": ["@eta/storage-jsonl@workspace:packages/eta-storage-jsonl"],
 
