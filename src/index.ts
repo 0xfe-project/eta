@@ -36,3 +36,4 @@ export {
 export { JournalingService, type JournalingServiceOptions, SESSION_CONFIG, TASKS_STATE } from "./journaling";
 export { MetricsService } from "./metrics";
 export { type OpenSession, type OpenSessionOptions, openSession } from "./open";
+export { TaskReminderService, type TaskReminderServiceOptions } from "./reminder";
