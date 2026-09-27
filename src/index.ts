@@ -33,4 +33,5 @@ export {
 	getLastAssistantUsage,
 	shouldCompact,
 } from "./estimation";
+export { JournalingService, type JournalingServiceOptions, SESSION_CONFIG, TASKS_STATE } from "./journaling";
 export { type OpenSession, type OpenSessionOptions, openSession } from "./open";

@@ -42,13 +42,12 @@ import {
 	Runner,
 	type RunnerOptions,
 	recordGoalEntries,
-	SESSION_CONFIG,
 	SessionLog,
 	type StorageService,
 	type StoredTask,
-	TASKS_STATE,
 } from "@eta/core";
 import { CompactionService } from "./compaction-service";
+import { JournalingService, SESSION_CONFIG, TASKS_STATE } from "./journaling";
 
 export interface OpenSessionOptions {
 	storage: StorageService;
@@ -75,6 +74,8 @@ export interface OpenSession {
 	kernel: Kernel;
 	runner: Runner;
 	log: SessionLog;
+	/** The journal's owner: what wrote the entries this session replayed. */
+	journaling: JournalingService;
 	/**
 	 * The compaction driver this session runs with; the host asks it to compact
 	 * (`/compact`). Undefined when the session was opened without a summarizer.
@@ -106,7 +107,15 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 	const kernel = Kernel.create({
 		...options.kernel,
 		config,
+	});
+
+	// The journal's owner: one service per session, wired to the log this
+	// assembly just replayed.
+	const journaling = new JournalingService(kernel.ctx, {
 		journal: log,
+		config: kernel.config,
+		tasks: kernel.tasks,
+		...(options.kernel?.warn === undefined ? {} : { warn: options.kernel.warn }),
 	});
 
 	// The goal comes back from its entries, in order.
@@ -129,7 +138,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 			? undefined
 			: new CompactionService(kernel.ctx, {
 					config: kernel.config,
-					journaling: kernel.journaling,
+					journaling,
 					summarizer: options.compaction,
 					...(options.kernel?.warn === undefined ? {} : { warn: options.kernel.warn }),
 				});
@@ -138,6 +147,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 	const runner = new Runner(kernel, {
 		...options.runner,
 		models: options.models,
+		journal: journaling,
 		...(compaction === undefined ? {} : { compaction }),
 		initialTranscript: transcript,
 	});
@@ -146,6 +156,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		kernel,
 		runner,
 		log,
+		journaling,
 		compaction,
 		transcript,
 		orphans: log.orphans,

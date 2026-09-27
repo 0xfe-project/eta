@@ -8,20 +8,11 @@
  * nothing in the library.
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import {
-	type KernelConfig,
-	MemoryStorage,
-	RunPump,
-	SESSION_CONFIG,
-	SessionLog,
-	type StorageService,
-	setValue,
-	TASKS_STATE,
-	value,
-} from "@eta/core";
+import { type KernelConfig, MemoryStorage, RunPump, SessionLog, type StorageService, setValue, value } from "@eta/core";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { openSession } from "../src/index";
+import { SESSION_CONFIG, TASKS_STATE } from "../src/testing";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,
@@ -75,7 +66,7 @@ async function livedSession(storage: StorageService) {
 	opened.kernel.tasks.create("test the assembly", { deps: ["t1"] });
 	opened.kernel.tasks.update("t2", { status: "in_progress" });
 	opened.kernel.config.update({ thinkingLevel: "high", activeToolNames: [] });
-	await opened.kernel.journaling.flush();
+	await opened.journaling.flush();
 
 	// A side branch, merged, then rolled back — the branch view moves and the
 	// journal has to remember where it stopped.
@@ -158,7 +149,7 @@ describe("openSession", () => {
 		});
 		opened.kernel.goal.set("record me");
 		opened.kernel.goal.pause("waiting");
-		await opened.kernel.journaling.flush();
+		await opened.journaling.flush();
 		opened.stop();
 
 		const again = await openSession({
@@ -254,7 +245,7 @@ describe("openSession", () => {
 			config: { model: { provider: "p", modelId: "m" } },
 		});
 		opened.kernel.config.update({ thinkingLevel: "low" });
-		await opened.kernel.journaling.flush();
+		await opened.journaling.flush();
 		const written = (await storage.getValue(value<KernelConfig>("eta.session.config")))!.value;
 		// Everything KernelConfig carries is there: a partial write would come back
 		// as a session with defaults it never had.
