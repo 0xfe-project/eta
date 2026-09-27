@@ -1,36 +1,29 @@
 /**
- * Compaction (REFACTOR.md §2.4 / §3 ruling 4).
+ * The compaction service: three signals, one seam (REFACTOR.md §2.4, §3 ruling
+ * 4).
  *
- * The kernel owns the arithmetic and the two-method seam; the summarization
- * itself is a plugin. What is pinned here: how tokens are counted, where a cut
- * may fall, when a cut is due — including the window-independent ceiling that
- * stops a million-token window from resending a million tokens — and that the
- * runner adopts a replacement context without losing what the journal holds.
+ * The service lives in the harness — deciding takes arithmetic — and what it
+ * exposes is the `CompactionDriver` the runner awaits. What is pinned here: the
+ * threshold respects the window's reserve and the absolute ceiling, the check
+ * happens at the start of every run, `manual()` ignores the threshold, an
+ * overflow is recovered once per run, and a replacement context reaches the
+ * journal so a replay rebuilds the same transcript.
  */
-import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
-import { describe, expect, it } from "vitest";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
 import {
 	type AgentMessage,
 	type CompactionRequest,
 	type CompactionSummarizer,
-	calculateContextTokens,
 	DEFAULT_COMPACTION_SETTINGS,
-	DEFAULT_MAX_CONTEXT_TOKENS,
-	type Entry,
-	estimateContextTokens,
-	estimateTokens,
-	findCutPoint,
-	findTurnStartIndex,
-	fitCompactionSettings,
-	getLastAssistantUsage,
 	Kernel,
 	kernelOn,
 	MemoryStorage,
 	Runner,
 	SessionLog,
-	shouldCompact,
-} from "../src/index";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
+} from "@eta/core";
+import { assistantMessage, fakeModels } from "@eta/core/testing";
+import { describe, expect, it } from "vitest";
+import { CompactionService } from "../src/index";
 
 /**
  * What the prompts plugin will supply: the kernel's projection hook. Kept in
@@ -58,188 +51,6 @@ const userMsg = (text: string) => ({
 	content: [{ type: "text" as const, text }],
 	timestamp: 0,
 });
-
-const usageOf = (input: number, output: number): Usage => ({
-	input,
-	output,
-	cacheRead: 0,
-	cacheWrite: 0,
-	totalTokens: input + output,
-	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-});
-
-let seq = 0;
-function messageEntry(text: string, parentId: string | null = null) {
-	seq += 1;
-	return {
-		id: `e${seq}`,
-		parentId,
-		type: "message" as const,
-		message: userMsg(text),
-	};
-}
-
-function assistantEntry(id: string, text: string, usage: Usage, parentId: string | null) {
-	return {
-		id,
-		parentId,
-		type: "message" as const,
-		message: assistantMessage({ content: [{ type: "text", text }], usage }),
-	};
-}
-
-describe("token arithmetic", () => {
-	it("prefers the provider's total and falls back to the parts", () => {
-		expect(calculateContextTokens(usageOf(10, 5))).toBe(15);
-		expect(calculateContextTokens({ ...usageOf(10, 5), totalTokens: 99 })).toBe(99);
-	});
-
-	it("estimates a message at chars/4, counting thinking and tool arguments", () => {
-		expect(estimateTokens(userMsg("12345678"))).toBe(2);
-		expect(estimateTokens(assistantMessage({ content: [{ type: "text", text: "1234" }] }))).toBe(1);
-		expect(
-			estimateTokens(
-				assistantMessage({
-					content: [
-						{ type: "thinking", thinking: "1234", thinkingSignature: "s" },
-						{ type: "toolCall", id: "c", name: "bash", arguments: { command: "ls" } },
-					],
-				}),
-			),
-		).toBeGreaterThan(3);
-	});
-
-	it("counts a compaction summary as its own text", () => {
-		expect(estimateTokens({ role: "compactionSummary", summary: "12345678", tokensBefore: 1, timestamp: 0 })).toBe(2);
-	});
-
-	it("uses the last assistant usage plus an estimate for what followed", () => {
-		const messages = [
-			userMsg("a".repeat(400)),
-			assistantMessage({ usage: usageOf(100, 20) }),
-			userMsg("b".repeat(40)),
-		];
-		const estimate = estimateContextTokens(messages);
-		expect(estimate.usageTokens).toBe(120);
-		expect(estimate.trailingTokens).toBe(10);
-		expect(estimate.tokens).toBe(130);
-		expect(estimate.lastUsageIndex).toBe(1);
-	});
-
-	it("ignores usage from errored or aborted turns", () => {
-		const entries = [
-			{ id: "e", parentId: null, seq: 1, timestamp: 0, type: "message", message: userMsg("x") },
-			{
-				id: "a",
-				parentId: "e",
-				seq: 2,
-				timestamp: 0,
-				type: "message",
-				message: assistantMessage({ stopReason: "error", errorMessage: "boom", usage: usageOf(10, 10) }),
-			},
-		] as Entry[];
-		expect(getLastAssistantUsage(entries)).toBeUndefined();
-	});
-});
-
-describe("when to compact", () => {
-	it("fires on the window's reserve", () => {
-		const settings = { ...DEFAULT_COMPACTION_SETTINGS, maxContextTokens: 1_000_000 };
-		expect(shouldCompact(100_000, 128_000, settings)).toBe(false);
-		expect(shouldCompact(112_000, 128_000, settings)).toBe(true); // 128k - 16k reserve
-	});
-
-	it("fires on the window-independent ceiling for a huge window", () => {
-		// The point of the ceiling: a 1M-token window must not become a licence to
-		// resend a million tokens.
-		const settings = { ...DEFAULT_COMPACTION_SETTINGS };
-		expect(settings.maxContextTokens).toBeUndefined();
-		expect(shouldCompact(DEFAULT_MAX_CONTEXT_TOKENS - 1, 1_000_000, settings)).toBe(false);
-		expect(shouldCompact(DEFAULT_MAX_CONTEXT_TOKENS + 1, 1_000_000, settings)).toBe(true);
-		// …and a provider that genuinely needs more can say so.
-		expect(shouldCompact(200_000, 1_000_000, { ...settings, maxContextTokens: 256_000 })).toBe(false);
-		expect(shouldCompact(300_000, 1_000_000, { ...settings, maxContextTokens: 256_000 })).toBe(true);
-	});
-
-	it("falls back to the ceiling when the model reports no window", () => {
-		// A missing window must not silently switch compaction off.
-		expect(shouldCompact(1_000, undefined, DEFAULT_COMPACTION_SETTINGS)).toBe(false);
-		expect(shouldCompact(DEFAULT_MAX_CONTEXT_TOKENS + 1, undefined, DEFAULT_COMPACTION_SETTINGS)).toBe(true);
-	});
-
-	it("stays quiet when compaction is disabled", () => {
-		expect(shouldCompact(10_000_000, 128_000, { ...DEFAULT_COMPACTION_SETTINGS, enabled: false })).toBe(false);
-	});
-
-	it("fits the kept tail to a small model's window", () => {
-		const big = fitCompactionSettings(DEFAULT_COMPACTION_SETTINGS, { contextWindow: 1_000_000 });
-		expect(big.keepRecentTokens).toBe(DEFAULT_COMPACTION_SETTINGS.keepRecentTokens);
-		const small = fitCompactionSettings(DEFAULT_COMPACTION_SETTINGS, { contextWindow: 15_000 });
-		expect(small.keepRecentTokens).toBe(5_000);
-		// The reserve is left alone on purpose: it pushes the threshold earlier
-		// instead of letting an oversized history through.
-		expect(small.reserveTokens).toBe(DEFAULT_COMPACTION_SETTINGS.reserveTokens);
-	});
-});
-
-describe("where the cut falls", () => {
-	it("keeps roughly the requested recent budget and lands on a message boundary", () => {
-		const entries: Entry[] = [
-			{ ...messageEntry("u1".repeat(50)) },
-			{ ...assistantEntry("a1", "x".repeat(200), usageOf(10, 10), "e1") },
-			{ ...messageEntry("u2".repeat(50), "a1") },
-			{ ...assistantEntry("a2", "y".repeat(200), usageOf(10, 10), "e2") },
-		] as Entry[];
-		const cut = findCutPoint(entries, 0, entries.length, 60);
-		// The recent budget is ~60 tokens, so the cut lands at the later turn.
-		expect(cut.firstKeptEntryIndex).toBe(2);
-		expect(cut.isSplitTurn).toBe(false);
-	});
-
-	it("never cuts between an assistant call and its tool result", () => {
-		const entries: Entry[] = [
-			{ ...messageEntry("old".repeat(60)) },
-			{ ...assistantEntry("a1", "x".repeat(400), usageOf(1, 1), "e1") },
-			{
-				id: "t1",
-				parentId: "a1",
-				seq: 99,
-				timestamp: 0,
-				type: "message",
-				message: {
-					role: "toolResult",
-					toolCallId: "c1",
-					toolName: "bash",
-					content: [{ type: "text", text: "out".repeat(100) }],
-					isError: false,
-					timestamp: 0,
-				},
-			} as Entry,
-		] as Entry[];
-		// Whatever recent budget is asked for, the cut never lands on the result.
-		for (const budget of [1, 5, 50, 200]) {
-			const cut = findCutPoint(entries, 0, entries.length, budget);
-			const atCut = entries[cut.firstKeptEntryIndex]!;
-			expect(atCut.type).toBe("message");
-			if (atCut.type !== "message") throw new Error("unreachable");
-			expect(["user", "assistant"]).toContain(atCut.message.role);
-		}
-	});
-
-	it("reports the turn start when the cut splits a turn", () => {
-		const entries: Entry[] = [
-			{ ...messageEntry("u1".repeat(50)) },
-			{ ...assistantEntry("a1", "x".repeat(200), usageOf(1, 1), "e1") },
-			{ ...messageEntry("u2".repeat(50), "a1") },
-		] as Entry[];
-		expect(findTurnStartIndex(entries, 2, 0)).toBe(2);
-		expect(findTurnStartIndex(entries, 1, 0)).toBe(0);
-	});
-});
-
-/* ------------------------------------------------------------------ */
-/* The service: three signals, one seam                                */
-/* ------------------------------------------------------------------ */
 
 function fakeSummarizer(outcome?: (request: CompactionRequest) => { summary: string; retainedTail?: AgentMessage[] }) {
 	const requests: CompactionRequest[] = [];
@@ -277,7 +88,6 @@ function session(
 				...(options.maxContextTokens === undefined ? {} : { maxContextTokens: options.maxContextTokens }),
 			},
 		},
-		...(options.summarizer === undefined ? {} : { compaction: options.summarizer }),
 		journal: log,
 		warn: () => undefined,
 	});
@@ -295,7 +105,17 @@ function session(
 		toProviderMessages: projection as never,
 		...(options.initialTranscript === undefined ? {} : { initialTranscript: options.initialTranscript }),
 	});
-	return { kernel, runner, fake, log, storage, dispose: () => void kernel.dispose() };
+	// The service is a harness piece, so the test builds it and hands it to the
+	// runner — exactly what a session assembler does (openSession, once the
+	// harness owns it).
+	const compaction = new CompactionService(kernel.ctx, {
+		config: kernel.config,
+		journaling: kernel.journaling,
+		...(options.summarizer === undefined ? {} : { summarizer: options.summarizer }),
+		warn: () => undefined,
+	});
+	runner.attachCompaction(compaction);
+	return { kernel, runner, compaction, fake, log, storage, dispose: () => void kernel.dispose() };
 }
 
 describe("CompactionService signals", () => {
@@ -372,7 +192,7 @@ describe("CompactionService signals", () => {
 			statuses.push(`${event.reason}:${event.status}`);
 		});
 		// The host asks, e.g. a /compact command.
-		const compacted = await s.kernel.compaction.manual();
+		const compacted = await s.compaction.manual();
 		off();
 		expect(compacted).toBe(true);
 		expect(requests.map((request) => request.reason)).toEqual(["manual"]);
@@ -382,10 +202,10 @@ describe("CompactionService signals", () => {
 
 	it("without a summarizer every signal declines", async () => {
 		const s = session([assistantMessage()]);
-		expect(s.kernel.compaction.available).toBe(false);
-		expect(await s.kernel.compaction.manual()).toBe(false);
-		expect(await s.kernel.compaction.threshold()).toBe(false);
-		expect(await s.kernel.compaction.overflow()).toBe(false);
+		expect(s.compaction.available).toBe(false);
+		expect(await s.compaction.manual()).toBe(false);
+		expect(await s.compaction.threshold()).toBe(false);
+		expect(await s.compaction.overflow()).toBe(false);
 		s.dispose();
 	});
 
@@ -393,14 +213,14 @@ describe("CompactionService signals", () => {
 		const { summarizer, requests } = fakeSummarizer(() => ({ summary: "recovered" }));
 		const s = session([assistantMessage({ content: [{ type: "text", text: "ran" }] })], { summarizer });
 		// No run started yet: the budget is per run, so the first call works.
-		expect(await s.kernel.compaction.overflow()).toBe(true);
-		expect(await s.kernel.compaction.overflow()).toBe(false);
+		expect(await s.compaction.overflow()).toBe(true);
+		expect(await s.compaction.overflow()).toBe(false);
 		expect(requests.map((request) => request.reason)).toEqual(["overflow"]);
 
 		// A run start restores it (the service subscribes; the runner never tells it).
 		s.kernel.inject(userMsg("go"));
 		await s.runner.run();
-		expect(await s.kernel.compaction.overflow()).toBe(true);
+		expect(await s.compaction.overflow()).toBe(true);
 		expect(requests.map((request) => request.reason)).toEqual(["overflow", "overflow"]);
 		s.dispose();
 	});
@@ -446,11 +266,11 @@ describe("CompactionService signals", () => {
 			retainedTail: [userMsg("kept")],
 		}));
 		const s = session([], { summarizer });
-		s.runner.replaceContext("summary of the above", { retainedTail: [userMsg("kept")] });
+		s.runner.replaceContext("summary of the above", { retainedTail: [userMsg("kept")], tokensBefore: 0 });
 		expect(s.runner.readContext().map((message) => message.role)).toEqual(["compactionSummary", "user"]);
 
 		// Through the service: the context is replaced and the entry is journalled.
-		expect(await s.kernel.compaction.manual()).toBe(true);
+		expect(await s.compaction.manual()).toBe(true);
 		expect(s.runner.readContext().map((message) => message.role)).toEqual(["compactionSummary", "user"]);
 		await s.log.commit();
 
@@ -466,7 +286,7 @@ describe("CompactionService signals", () => {
 		const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } } });
 		const fake = fakeModels([]);
 		const runner = new Runner(kernel, { models: fake });
-		runner.replaceContext("summary");
+		runner.replaceContext("summary", { tokensBefore: 0 });
 		kernel.inject(userMsg("go"));
 		await expect(runner.run()).rejects.toThrow("toProviderMessages is required");
 		void kernel.dispose();

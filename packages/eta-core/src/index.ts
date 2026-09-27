@@ -15,22 +15,14 @@ export {
 	onTurnStart,
 	resetCadenceState,
 } from "./kernel/cadence";
-export {
-	type CompactionOutcome,
-	type CompactionReason,
-	type CompactionRequest,
-	type CompactionSummarizer,
-	type ContextUsageEstimate,
-	type CutPointResult,
-	calculateContextTokens,
-	DEFAULT_MAX_CONTEXT_TOKENS,
-	estimateContextTokens,
-	estimateTokens,
-	findCutPoint,
-	findTurnStartIndex,
-	fitCompactionSettings,
-	getLastAssistantUsage,
-	shouldCompact,
+export type {
+	CompactionDriver,
+	CompactionHost,
+	CompactionOutcome,
+	CompactionReason,
+	CompactionRequest,
+	CompactionRequestState,
+	CompactionSummarizer,
 } from "./kernel/compaction";
 export {
 	ConfigService,

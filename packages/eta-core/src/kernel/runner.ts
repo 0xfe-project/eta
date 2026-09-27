@@ -24,7 +24,7 @@ import type { Entry } from "../types/entries";
 import type { Emit } from "../types/events";
 import { kernelEmit } from "../types/events";
 import type { AgentMessage, ThinkingLevel } from "../types/messages";
-import { estimateContextTokens } from "./compaction";
+import type { CompactionDriver } from "./compaction";
 import type { ConfigService } from "./config";
 import { AbortRequested, createGate, type Gate, type GateControl } from "./effect-gate";
 import { generateWithRetry } from "./generation";
@@ -75,6 +75,12 @@ export interface RunnerOptions {
 	 * sending the model a context with the summary stripped out.
 	 */
 	toProviderMessages?: (messages: readonly AgentMessage[]) => Message[];
+	/**
+	 * The compaction driver this run may ask to shrink its history (REFACTOR.md
+	 * §2.4). The runner knows the seam and nothing else: no arithmetic, no
+	 * summary, no journal. Without a driver there is no compaction at all.
+	 */
+	compaction?: CompactionDriver;
 	/** Run-boundary decisions (REFACTOR.md §2.4 step 5); without it the boundary is a plain stop. */
 	boundary?: RunnerBoundaryOptions;
 	/**
@@ -120,6 +126,8 @@ export class Runner {
 	private readonly models: KernelModels;
 	private readonly journaling: JournalingService;
 	private readonly emit: Emit;
+	/** The compaction driver, when the host supplied one (the kernel owns none). */
+	private compaction: CompactionDriver | undefined;
 	private readonly transcript: AgentMessage[] = [];
 	private emptyStops = 0;
 	private currentRunId: string | undefined;
@@ -140,12 +148,21 @@ export class Runner {
 		this.tools = kernel.tools;
 		this.goal = kernel.goal;
 		this.persona = kernel.persona;
-		// The runner owns the context; compaction is the one service allowed to
-		// read and replace it (REFACTOR.md §3 ruling 4).
-		kernel.compaction.attach({
+		this.attachCompaction(options.compaction);
+	}
+
+	/**
+	 * Hand a compaction driver the context it may replace (REFACTOR.md §3 ruling
+	 * 4). Called with the run's options, or by a host that builds the driver only
+	 * once it holds the runner (a session assembler). Either way: before the
+	 * first run, and the last driver wins.
+	 */
+	attachCompaction(driver: CompactionDriver | undefined): void {
+		this.compaction = driver;
+		if (driver === undefined) return;
+		driver.attach({
 			readContext: () => this.readContext(),
 			replaceContext: (summary, options) => this.replaceContext(summary, options),
-			entries: () => this.journaling.entries(),
 			request: () => {
 				const config = this.config.get();
 				const identity = config.model;
@@ -224,12 +241,12 @@ export class Runner {
 	 * compaction entry goes into the journal, so a replay rebuilds the same
 	 * transcript (SessionLog projects it the same way).
 	 */
-	replaceContext(
-		summary: string,
-		options: { retainedTail?: readonly AgentMessage[]; tokensBefore?: number } = {},
-	): void {
+	replaceContext(summary: string, options: { retainedTail?: readonly AgentMessage[]; tokensBefore: number }): void {
 		const retainedTail = [...(options.retainedTail ?? [])];
-		const tokensBefore = options.tokensBefore ?? estimateContextTokens(this.transcript).tokens;
+		// What the history cost is the summarizer's fact, not the runner's: the
+		// runner counts no tokens (a fallback here would be arithmetic the kernel
+		// does not own, and a wrong number in the entry when it guessed).
+		const tokensBefore = options.tokensBefore;
 		this.transcript.length = 0;
 		this.transcript.push({
 			role: "compactionSummary",
@@ -380,7 +397,7 @@ export class Runner {
 					firstTurnOfRun = false;
 					// Compaction's threshold decision belongs to the service; the runner
 					// only knows that a run is starting.
-					await this.kernel.compaction.threshold();
+					await this.compaction?.threshold();
 				}
 				const assistant = await this.takeTurn(model);
 				// Every turn the loop takes counts, including one that ends the run.
@@ -564,7 +581,7 @@ export class Runner {
 					});
 				},
 			},
-			recoverOverflow: () => this.kernel.compaction.overflow(),
+			recoverOverflow: () => this.compaction?.overflow() ?? Promise.resolve(false),
 		});
 
 		// A failed generation is not history: eta-agent records no entry for it, and

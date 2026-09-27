@@ -3,7 +3,7 @@
  *
  * Everything below runs through the seams the kernel actually exposes — a
  * streamed model, tools with middleware, the inbox, the goal, the persona, a
- * compaction service, the journal — in the order a real run hits them. The
+ * compaction driver, the journal — in the order a real run hits them. The
  * scripted provider fails, overflows, and gets steered mid-run on purpose: a
  * happy path proves little about machinery whose job is to survive the rest.
  */
@@ -12,7 +12,6 @@ import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	applyGoalEntries,
-	type CompactionRequest,
 	type GoalEntry,
 	Kernel,
 	type KernelTool,
@@ -24,6 +23,7 @@ import {
 	sessionTokenTotal,
 	type UsageRow,
 } from "../src/index";
+import { type FakeCompaction, fakeCompaction } from "../src/testing/fake-compaction";
 import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
 
 const userMsg = (text: string) => ({
@@ -66,18 +66,11 @@ const overflow = () =>
 function session(script: AssistantMessage[], tools: KernelTool[] = []) {
 	const storage = new MemoryStorage();
 	const log = SessionLog.create(storage);
-	// The plugins a real deployment would supply.
-	const compactions: CompactionRequest[] = [];
-	const compaction = {
-		summarize: async (request: CompactionRequest) => {
-			compactions.push(request);
-			return {
-				summary: "everything before was about the migration",
-				retainedTail: [],
-				tokensBefore: request.estimatedTokens,
-			};
-		},
-	};
+	// The one plugin this test needs: a compaction driver, so the overflow step
+	// below has something to recover with. A real one is the harness's service.
+	const compaction: FakeCompaction = fakeCompaction({
+		summary: "everything before was about the migration",
+	});
 	const kernel = Kernel.create({
 		config: {
 			model: { provider: "p", modelId: "m" },
@@ -85,7 +78,6 @@ function session(script: AssistantMessage[], tools: KernelTool[] = []) {
 			thinkingLevel: "low",
 			compaction: { enabled: true, reserveTokens: 1_000, keepRecentTokens: 500, maxContextTokens: 64_000 },
 		},
-		compaction,
 		journal: log,
 	});
 	for (const tool of tools) kernel.tools.register(tool);
@@ -114,6 +106,7 @@ function session(script: AssistantMessage[], tools: KernelTool[] = []) {
 	const goalRecorder = recordGoalEntries(log, on);
 	const runner = new Runner(kernel, {
 		models: fake,
+		compaction,
 		systemPrompt: "You are Eta, a coding agent.",
 		toolContext: { workspace: "/w" },
 		entryProjectors: {},
@@ -136,10 +129,10 @@ function session(script: AssistantMessage[], tools: KernelTool[] = []) {
 	return {
 		kernel,
 		runner,
+		compaction,
 		fake,
 		storage,
 		log,
-		compactions,
 		usageRows,
 		runStatuses,
 		stopGoalRecorder: () => goalRecorder.stop(),
@@ -213,7 +206,7 @@ describe("one full session", () => {
 		// The tool ran; the failure was retried; the overflow was compacted away.
 		expect(created).toEqual(["port the storage layer"]);
 		expect(seenCalls).toEqual(["task"]);
-		expect(s.compactions.map((request) => request.reason)).toEqual(["overflow"]);
+		expect(s.compaction.compactions).toEqual(["overflow"]);
 		expect(s.runStatuses).toEqual(["completed"]);
 
 		// The provider saw the persona in its prompt and a compacted context.

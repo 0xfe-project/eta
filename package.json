@@ -11,7 +11,7 @@
 	"scripts": {
 		"test": "bun run --cwd packages/eta-core test && bun run --cwd packages/eta-harness test && bun run --cwd packages/eta-storage-jsonl test && bun run --cwd packages/eta-compaction test",
 		"typecheck": "bun run --cwd packages/eta-core typecheck && bun run --cwd packages/eta-harness typecheck && bun run --cwd packages/eta-storage-jsonl typecheck && bun run --cwd packages/eta-compaction typecheck",
-		"smoke": "bun run --cwd packages/eta-core smoke && bun run --cwd packages/eta-storage-jsonl smoke"
+		"smoke": "bun run --cwd packages/eta-core smoke && bun run --cwd packages/eta-harness smoke && bun run --cwd packages/eta-storage-jsonl smoke"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.3.5"

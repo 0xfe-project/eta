@@ -34,7 +34,8 @@ import type {
 	MessageEntry,
 	Usage,
 } from "@eta/core";
-import { addUsage, emptyUsage, estimateContextTokens, findCutPoint, fitCompactionSettings } from "@eta/core";
+import { addUsage, emptyUsage } from "@eta/core";
+import { estimateContextTokens, findCutPoint, fitCompactionSettings } from "@eta/harness";
 import { digestContext, dropToolPairs } from "./deterministic";
 import {
 	SUMMARIZATION_PROMPT,

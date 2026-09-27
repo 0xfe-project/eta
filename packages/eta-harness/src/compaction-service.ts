@@ -11,70 +11,60 @@
  * - `overflow()` — a request just failed because it was too large. One recovery
  *                   per run, enforced here, so the runner cannot forget it.
  *
- * What stays in the runner is the seam (§3 ruling 4): `readContext()` and
+ * It lives in the harness rather than the kernel because deciding takes
+ * arithmetic (`estimation.ts`), and the kernel counts no tokens. What the
+ * kernel's runner sees is only the `CompactionDriver` seam: `attach()`,
+ * `threshold()`, `overflow()`.
+ *
+ * What the runner keeps is the context seam (§3 ruling 4): `readContext()` and
  * `replaceContext()`. The service reads the context, decides, asks the
- * summarizer plugin for a summary, and hands the replacement back. The runner
- * keeps two lines — a threshold check before its first request, an overflow
- * recovery in its retry loop — and knows nothing else about compaction.
+ * summarizer plugin for a summary, and hands the replacement back.
+ *
+ * The entries a cut is taken on come from the journaling service — the journal
+ * has exactly one owner, and this is not it.
  *
  * The summarization itself (prompt, model call, incremental summaries) is a
- * plugin behind `CompactionSummarizer`; the kernel ships no summary text.
+ * plugin behind `CompactionSummarizer`; the harness ships no summary text.
  */
-import type { Api, AssistantMessage, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
-import { type Context, Service } from "cordis";
-import type { Entry } from "../types/entries";
-import type { Emit } from "../types/events";
-import { kernelEmit, kernelOn } from "../types/events";
-import type { AgentMessage, ThinkingLevel } from "../types/messages";
 import {
+	type CompactionDriver,
+	type CompactionHost,
 	type CompactionOutcome,
 	type CompactionReason,
 	type CompactionSummarizer,
-	estimateContextTokens,
-	fitCompactionSettings,
-	shouldCompact,
-} from "./compaction";
-import type { ConfigService } from "./config";
+	type ConfigService,
+	type Emit,
+	type Entry,
+	kernelEmit,
+	kernelOn,
+} from "@eta/core";
+import { type Context, Service } from "cordis";
+import { estimateContextTokens, fitCompactionSettings, shouldCompact } from "./estimation";
 
-/** The run's facts, as the compaction service needs them; the runner provides them. */
-export interface CompactionRequestState {
-	model: Model<Api> | undefined;
-	thinkingLevel: ThinkingLevel;
-	streamOptions?: SimpleStreamOptions | undefined;
-	/** Aborts the summarization with the run. */
-	signal: AbortSignal;
-	runId: string;
-	/** The model call, wired by whoever owns the models seam. */
-	ask: (
-		prompt: { systemPrompt?: string; messages: AgentMessage[] },
-		options?: { maxTokens?: number; reasoning?: ThinkingLevel },
-	) => Promise<AssistantMessage>;
-}
-
-/** What the service needs from the run in flight; the runner implements it. */
-export interface CompactionHost {
-	/** The messages a request would carry right now (a copy). */
-	readContext(): AgentMessage[];
-	/** Swap the context for a summary plus the tail that is kept. */
-	replaceContext(summary: string, options: { retainedTail?: readonly AgentMessage[]; tokensBefore?: number }): void;
-	/** The branch entries behind the context, for cut-point selection. */
+/**
+ * Where a compaction service reads the branch from — the journaling service,
+ * which owns the journal (REFACTOR.md §2.4). Structural on purpose: the
+ * service needs entries, not the journal.
+ */
+export interface CompactionEntrySource {
 	entries(): readonly Entry[];
-	/** What this run's request would carry, read live. */
-	request(): CompactionRequestState;
 }
 
 export interface CompactionServiceOptions {
 	config: ConfigService;
+	/** The journal's owner; cut points are indices into its entries. */
+	journaling: CompactionEntrySource;
 	/** The summarizer plugin. Without one, every signal declines. */
 	summarizer?: CompactionSummarizer;
 	/** Called when a summarizer throws; the run continues either way. */
 	warn?: (message: string) => void;
 }
 
-export class CompactionService extends Service {
+export class CompactionService extends Service implements CompactionDriver {
 	static readonly provide = "compaction";
 
 	private readonly config: ConfigService;
+	private readonly journaling: CompactionEntrySource;
 	private readonly summarizer: CompactionSummarizer | undefined;
 	private readonly warn: (message: string) => void;
 	private readonly emit: Emit;
@@ -85,6 +75,7 @@ export class CompactionService extends Service {
 	constructor(ctx: Context, options: CompactionServiceOptions) {
 		super(ctx, "compaction");
 		this.config = options.config;
+		this.journaling = options.journaling;
 		this.summarizer = options.summarizer;
 		this.warn = options.warn ?? (() => undefined);
 		this.emit = kernelEmit(ctx);
@@ -142,7 +133,7 @@ export class CompactionService extends Service {
 				reason,
 				...(options.instructions === undefined ? {} : { customInstructions: options.instructions }),
 				messages: host.readContext(),
-				entries: host.entries(),
+				entries: this.journaling.entries(),
 				settings,
 				contextWindow: model.contextWindow,
 				estimatedTokens: estimate.tokens,

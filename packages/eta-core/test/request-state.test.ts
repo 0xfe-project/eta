@@ -171,7 +171,7 @@ describe("the resolution chain", () => {
 		const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } } });
 		const fake = fakeModels([]);
 		const runner = new Runner(kernel, { models: fake });
-		runner.replaceContext("summary");
+		runner.replaceContext("summary", { tokensBefore: 0 });
 		kernel.inject(userMsg("go"));
 		await expect(runner.run()).rejects.toThrow("toProviderMessages is required");
 		void kernel.dispose();

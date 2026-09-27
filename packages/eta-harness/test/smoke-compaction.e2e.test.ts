@@ -12,11 +12,10 @@
  */
 
 import { etaCompaction } from "@eta/compaction";
+import { type AssistantMessage, kernelOn, MemoryStorage, openSession, RunPump, SessionLog } from "@eta/core";
+import { assistantMessage, realModels, selectProvider } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import { type AssistantMessage, kernelOn, MemoryStorage, openSession, RunPump, SessionLog } from "../src/index";
-import { selectProvider } from "../src/testing/eta-config";
-import { assistantMessage } from "../src/testing/fake-provider";
-import { realModels } from "../src/testing/real-models";
+import { CompactionService } from "../src/index";
 
 const configPath = process.env.ETA_SMOKE_CONFIG;
 const modelSelector = process.env.ETA_SMOKE_MODEL;
@@ -82,7 +81,6 @@ describe.skipIf(configPath === undefined)("real model compaction", () => {
 			const opened = await openSession({
 				storage,
 				models,
-				compaction: etaCompaction(),
 				config: {
 					model: { provider: selected.spec.id, modelId: selected.modelId },
 					compaction: { enabled: true, reserveTokens: 2_000, keepRecentTokens: 60, maxContextTokens: 4_000 },
@@ -108,13 +106,21 @@ describe.skipIf(configPath === undefined)("real model compaction", () => {
 				},
 			});
 
+			// The harness's service over the journal, as a session assembler builds it.
+			const compaction = new CompactionService(opened.kernel.ctx, {
+				config: opened.kernel.config,
+				journaling: opened.kernel.journaling,
+				summarizer: etaCompaction(),
+			});
+			opened.runner.attachCompaction(compaction);
+
 			const events: string[] = [];
 			const off = kernelOn(opened.kernel.ctx)("compaction:end", (event) => {
 				events.push(`${event.reason}:${event.status}`);
 			});
 
 			// The host asks for it, the way a /compact command would.
-			const compacted = await opened.kernel.compaction.manual();
+			const compacted = await compaction.manual();
 			off();
 			await opened.kernel.journaling.flush();
 			expect(events).toEqual(["manual:completed"]);
@@ -140,36 +146,51 @@ describe.skipIf(configPath === undefined)("real model compaction", () => {
 			expect(entry.tokensBefore).toBeGreaterThan(0);
 
 			// And the session keeps working: a question about the summarized work is
-			// answered from the notes.
+			// answered from the notes. The deterministic half — the notes carry the
+			// codename into the next request — is asserted above; reading them back is
+			// a real model's job on a free endpoint, so it gets a second try before
+			// the smoke calls it a failure.
+			const ask = async (question: string): Promise<string> => {
+				opened.kernel.inject(userMsg(question));
+				await new Promise<void>((resolve) => {
+					const timer = setInterval(() => {
+						if (!opened.runner.running && opened.kernel.inboxDepth === 0) {
+							clearInterval(timer);
+							resolve();
+						}
+					}, 100);
+					setTimeout(() => {
+						clearInterval(timer);
+						resolve();
+					}, TIMEOUT_MS);
+				});
+				return opened.runner
+					.getTranscript()
+					.slice(-1)
+					.flatMap((message) => {
+						const content = (message as { content?: unknown }).content;
+						if (!Array.isArray(content)) return [];
+						return (content as { type?: string; text?: string }[])
+							.filter((part) => part.type === "text")
+							.map((part) => part.text ?? "");
+					})
+					.join(" ");
+			};
+
 			const pump = new RunPump(opened.kernel, opened.runner);
 			pump.start();
 			opened.kernel.config.update({ activeToolNames: [] });
-			opened.kernel.inject(userMsg("What is the project codename? Answer with just the codename."));
-			await new Promise<void>((resolve) => {
-				const timer = setInterval(() => {
-					if (!opened.runner.running && opened.kernel.inboxDepth === 0) {
-						clearInterval(timer);
-						resolve();
-					}
-				}, 100);
-				setTimeout(() => {
-					clearInterval(timer);
-					resolve();
-				}, TIMEOUT_MS);
-			});
-			const answer = opened.runner
-				.getTranscript()
-				.slice(-1)
-				.flatMap((message) => {
-					const content = (message as { content?: unknown }).content;
-					if (!Array.isArray(content)) return [];
-					return (content as { type?: string; text?: string }[])
-						.filter((part) => part.type === "text")
-						.map((part) => part.text ?? "");
-				})
-				.join(" ");
-			console.log(`smoke(compaction): recalled=${JSON.stringify(answer.slice(0, 200))}`);
-			expect(answer.toUpperCase()).toContain("KUMQUAT-7");
+			let recalled = await ask("What is the project codename? Answer with just the codename.");
+			if (!recalled.toUpperCase().includes("KUMQUAT-7")) {
+				console.warn(
+					`smoke(compaction): first recall missed (${JSON.stringify(recalled.slice(0, 80))}); asking again`,
+				);
+				recalled = await ask(
+					"The notes at the start of this session name the project codename. Answer with just that codename.",
+				);
+			}
+			console.log(`smoke(compaction): recalled=${JSON.stringify(recalled.slice(0, 200))}`);
+			expect(recalled.toUpperCase()).toContain("KUMQUAT-7");
 
 			pump.stop();
 			opened.stop();

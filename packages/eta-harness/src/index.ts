@@ -14,4 +14,21 @@
  * out: installing the harness installs all of it.
  */
 
-export {};
+export {
+	type CompactionEntrySource,
+	CompactionService,
+	type CompactionServiceOptions,
+} from "./compaction-service";
+export {
+	type ContextUsageEstimate,
+	type CutPointResult,
+	calculateContextTokens,
+	DEFAULT_MAX_CONTEXT_TOKENS,
+	estimateContextTokens,
+	estimateTokens,
+	findCutPoint,
+	findTurnStartIndex,
+	fitCompactionSettings,
+	getLastAssistantUsage,
+	shouldCompact,
+} from "./estimation";
