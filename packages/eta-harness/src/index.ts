@@ -16,6 +16,7 @@
 
 export {
 	type CompactionEntrySource,
+	CompactionMisconfigured,
 	CompactionService,
 	type CompactionServiceOptions,
 } from "./compaction-service";
