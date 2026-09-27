@@ -49,6 +49,7 @@ import {
 import { CompactionService } from "./compaction-service";
 import { JournalingService, SESSION_CONFIG, TASKS_STATE } from "./journaling";
 import { MetricsService } from "./metrics";
+import { RunPump, type RunPumpOptions } from "./pump";
 import { TaskReminderService } from "./reminder";
 
 export interface OpenSessionOptions {
@@ -68,8 +69,10 @@ export interface OpenSessionOptions {
 	kernel?: Omit<KernelOptions, "journal" | "config">;
 	/** What a brand-new session starts as. Ignored when the journal has a config. */
 	config?: Partial<KernelConfig>;
-	/** Runner options, minus the two this assembly supplies. */
-	runner?: Omit<RunnerOptions, "models" | "initialTranscript" | "compaction">;
+	/** Runner options, minus the ones this assembly supplies. */
+	runner?: Omit<RunnerOptions, "models" | "initialTranscript" | "compaction" | "journal">;
+	/** How the idle waker reports a run it started that then failed. */
+	pump?: RunPumpOptions;
 }
 
 export interface OpenSession {
@@ -82,6 +85,11 @@ export interface OpenSession {
 	metrics: MetricsService;
 	/** The task-reminder cadence; the prompts plugin reads its signal. */
 	taskReminder: TaskReminderService;
+	/**
+	 * The idle waker, built and not started: whether an inject should become a run
+	 * is the host's policy, so the host calls `start()`.
+	 */
+	pump: RunPump;
 	/**
 	 * The compaction driver this session runs with; the host asks it to compact
 	 * (`/compact`). Undefined when the session was opened without a summarizer.
@@ -161,6 +169,8 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		initialTranscript: transcript,
 	});
 
+	const pump = new RunPump(kernel, runner, options.pump);
+
 	return {
 		kernel,
 		runner,
@@ -168,6 +178,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		journaling,
 		metrics,
 		taskReminder,
+		pump,
 		compaction,
 		transcript,
 		orphans: log.orphans,

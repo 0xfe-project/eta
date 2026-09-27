@@ -12,10 +12,10 @@
  */
 
 import { etaCompaction } from "@eta/compaction";
-import { type AssistantMessage, kernelOn, MemoryStorage, RunPump, SessionLog } from "@eta/core";
+import { type AssistantMessage, kernelOn, MemoryStorage, SessionLog } from "@eta/core";
 import { assistantMessage, realModels, selectProvider } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import { openSession } from "../src/index";
+import { openSession, RunPump } from "../src/index";
 
 const configPath = process.env.ETA_SMOKE_CONFIG;
 const modelSelector = process.env.ETA_SMOKE_MODEL;

@@ -9,8 +9,9 @@
  */
 
 import type { StorageService } from "@eta/core";
-import { type Kernel, type KernelModels, type KernelTool, kernelOn, type Runner, RunPump } from "@eta/core";
+import { type Kernel, type KernelModels, type KernelTool, kernelOn, type Runner } from "@eta/core";
 import { openSession } from "../open";
+import { RunPump } from "../pump";
 
 export interface SmokeOptions {
 	models: KernelModels;

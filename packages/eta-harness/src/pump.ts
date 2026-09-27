@@ -13,12 +13,11 @@
  *   that is ending does not see it, so the pump starts the next one.
  *
  * A host that wants a different policy (one session per keystroke, say, or a
- * manual-only mode) simply does not start the pump.
+ * manual-only mode) simply does not start the pump — which is why this is a
+ * class the host drives rather than a service that wires itself.
  */
 
-import { kernelOn } from "../types/events";
-import type { Kernel } from "./kernel";
-import type { Runner } from "./runner";
+import { type Kernel, kernelOn, type Runner } from "@eta/core";
 
 export interface RunPumpOptions {
 	/**
