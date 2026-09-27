@@ -49,6 +49,7 @@ import {
 import { CompactionService } from "./compaction-service";
 import { JournalingService, SESSION_CONFIG, TASKS_STATE } from "./journaling";
 import { MetricsService } from "./metrics";
+import { TaskReminderService } from "./reminder";
 
 export interface OpenSessionOptions {
 	storage: StorageService;
@@ -79,6 +80,8 @@ export interface OpenSession {
 	journaling: JournalingService;
 	/** Observable numbers for this session (tokens/sec, and what they are made of). */
 	metrics: MetricsService;
+	/** The task-reminder cadence; the prompts plugin reads its signal. */
+	taskReminder: TaskReminderService;
 	/**
 	 * The compaction driver this session runs with; the host asks it to compact
 	 * (`/compact`). Undefined when the session was opened without a summarizer.
@@ -147,6 +150,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 				});
 
 	const metrics = new MetricsService(kernel.ctx);
+	const taskReminder = new TaskReminderService(kernel.ctx, { tasks: kernel.tasks });
 
 	const transcript = log.transcript();
 	const runner = new Runner(kernel, {
@@ -163,6 +167,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		log,
 		journaling,
 		metrics,
+		taskReminder,
 		compaction,
 		transcript,
 		orphans: log.orphans,

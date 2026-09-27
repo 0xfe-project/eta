@@ -7,13 +7,11 @@
  * about it belongs in the turn loop — the runner counts turns for its own
  * reasons, not for this.
  *
- * The kernel owns the signal (`task:reminder-due`); the prompts plugin owns
- * the text and the injection. Nothing here lands in the transcript: a reminder
- * is transient by design, so the cache prefix stays intact.
+ * The signal (`task:reminder-due`) is the kernel's event; the text and the
+ * injection belong to the prompts plugin, and the service itself lives in the
+ * harness with the rest of the battery. Nothing here lands in the transcript: a
+ * reminder is transient by design, so the cache prefix stays intact.
  */
-import { type Context, Service } from "cordis";
-import type { Emit } from "../types/events";
-import { kernelEmit, kernelOn } from "../types/events";
 import {
 	type CadenceConfig,
 	type CadenceState,
@@ -21,10 +19,14 @@ import {
 	DEFAULT_REMINDER_INTERVAL,
 	DEFAULT_TASK_TOOL_NAMES,
 	drainReminderForContext,
+	type Emit,
 	evaluateToolResult,
+	kernelEmit,
+	kernelOn,
 	onTurnStart,
-} from "./cadence";
-import type { TaskService } from "./tasks";
+	type TaskService,
+} from "@eta/core";
+import { type Context, Service } from "cordis";
 
 export interface TaskReminderServiceOptions {
 	/** The task ledger: a reminder is only due when there is something to review. */

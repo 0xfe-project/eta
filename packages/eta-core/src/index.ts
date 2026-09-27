@@ -69,7 +69,6 @@ export { OutputRate } from "./kernel/output-rate";
 export { PersonaService, renderPersonaBlock } from "./kernel/persona";
 export { type KernelModels, piAiModels } from "./kernel/providers";
 export { RunPump, type RunPumpOptions } from "./kernel/pump";
-export { TaskReminderService, type TaskReminderServiceOptions } from "./kernel/reminder";
 export {
 	type AgentRetryPolicy,
 	DEFAULT_MAX_AGENT_RETRY_DELAY_MS,
