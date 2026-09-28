@@ -63,7 +63,7 @@ export {
 	type QueuedItem,
 	type QueueKind,
 } from "./kernel/inbox";
-export { Kernel, type KernelInspect, type KernelOptions } from "./kernel/kernel";
+export { KERNEL_SERVICE_NAMES, Kernel, type KernelInspect, type KernelOptions, sessionScope } from "./kernel/kernel";
 export { MutationQueue } from "./kernel/mutation-queue";
 export { OutputRate } from "./kernel/output-rate";
 export { PersonaService, renderPersonaBlock } from "./kernel/persona";

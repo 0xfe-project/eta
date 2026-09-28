@@ -12,6 +12,26 @@
  * no continuation driver, and no spawn tool (REFACTOR.md §1.4).
  */
 import { Context } from "cordis";
+
+/**
+ * The service names one kernel registers. Two sessions under one root must not
+ * collide on them: cordis scopes a provided name to the root unless the context
+ * isolates it, and two sessions in one process are two sessions, not two halves
+ * of one.
+ */
+export const KERNEL_SERVICE_NAMES = ["config", "goal", "persona", "tasks", "tools"] as const;
+
+/**
+ * A context whose session-scoped names do not collide with a sibling's: the same
+ * tree, a separate scope for each name. Anything that provides a session-scoped
+ * service under a shared root goes through this.
+ */
+export function sessionScope(parent: Context, names: readonly string[]): Context {
+	let scope = parent;
+	for (const name of names) scope = scope.isolate(name);
+	return scope;
+}
+
 import type { KernelConfig } from "../types/config";
 import { defaultKernelConfig } from "../types/config";
 import type { Emit } from "../types/events";
@@ -31,6 +51,13 @@ export interface KernelOptions {
 	/** Upper bound on runner turns. `null` (default) runs until the turn loop settles. */
 	maxTurns?: number | null;
 	/** Parent context (the server's root). Defaults to a fresh root context. */
+	/**
+	 * A parent context to hang this kernel off. Service *names* are scoped to the
+	 * kernel, so a sibling under the same parent does not collide with it — but
+	 * cordis dispatches events across the whole tree, so two kernels under one root
+	 * share a bus. Give each session its own root when their events must not mix
+	 * (the server does).
+	 */
 	parent?: Context;
 	/** Initial configuration; the runner reads it live every turn. */
 	config?: Partial<KernelConfig>;
@@ -66,7 +93,9 @@ export class Kernel {
 	private readonly emit: Emit;
 
 	private constructor(options: KernelOptions) {
-		this.ctx = options.parent ? options.parent.extend() : new Context();
+		// A session's services live in their own scope: a second session under the
+		// same root would otherwise collide on the first one's names.
+		this.ctx = options.parent === undefined ? new Context() : sessionScope(options.parent, KERNEL_SERVICE_NAMES);
 		this.maxTurns = options.maxTurns ?? null;
 		this.emit = kernelEmit(this.ctx);
 		this.goal = new GoalService(this.ctx);

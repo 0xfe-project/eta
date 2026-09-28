@@ -18,18 +18,21 @@ describe("kernel assembly", () => {
 		void kernel.dispose();
 	});
 
-	it("honours a parent context: services on the child are visible from it, not vice versa", () => {
+	it("scopes service names under a parent, so two kernels can hang off one root", () => {
 		const root = new Context();
-		const kernel = Kernel.create({ parent: root });
-		// Child services are resolvable through the parent's view.
-		const viaRoot = (root as unknown as { goal: { current?: { objective?: string } } }).goal;
-		kernel.goal.set("visible from root");
-		expect(viaRoot.current?.objective).toBe("visible from root");
-		// A sibling child context exists and stays independent.
-		const sibling = root.extend();
-		expect(sibling).not.toBe(kernel.ctx);
-		void kernel.dispose();
-		void sibling.fiber.dispose();
+		const first = Kernel.create({ parent: root });
+		const second = Kernel.create({ parent: root });
+		// Sharing a root is not sharing state: two kernels, two of everything.
+		expect(first.ctx).not.toBe(second.ctx);
+		first.goal.set("the first kernel's goal");
+		expect(first.goal.current?.objective).toBe("the first kernel's goal");
+		expect(second.goal.current).toBeUndefined();
+		second.tasks.create("the second kernel's task");
+		expect(first.tasks.list()).toEqual([]);
+		// The names belong to each kernel's scope, not to the parent.
+		expect((root as unknown as { goal?: unknown }).goal).toBeUndefined();
+		void first.dispose();
+		void second.dispose();
 		void root.fiber.dispose();
 	});
 
