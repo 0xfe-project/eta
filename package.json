@@ -8,7 +8,8 @@
 	"types": "./src/index.ts",
 	"exports": {
 		".": "./src/index.ts",
-		"./testing": "./src/testing/index.ts"
+		"./testing": "./src/testing/index.ts",
+		"./env": "./src/env/types.ts"
 	},
 	"scripts": {
 		"test": "vitest --run --passWithNoTests",
