@@ -73,7 +73,7 @@ describe("read", () => {
 		const result = await createReadTool().execute({ path: "one-line.txt" }, run());
 		expect(textOutput(result)).toContain("[Line 1 is ");
 		expect(textOutput(result)).toContain("Use bash: sed -n '1p' one-line.txt");
-		expect(result.details?.truncation.firstLineExceedsLimit).toBe(true);
+		expect(result.details?.truncation?.firstLineExceedsLimit).toBe(true);
 	});
 
 	it("rejects an offset beyond the file", async () => {
