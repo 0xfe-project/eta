@@ -9,6 +9,8 @@
  */
 import { describe, expect, it } from "vitest";
 import { DEPTH_CAP, SubagentManager, type SubagentRecord, type SubagentUsage } from "../src/subagent";
+import { createSubagentTools } from "../src/tools/subagents";
+import type { ToolResult } from "../src/tools/tool";
 
 const usage = (input: number, output: number): SubagentUsage => ({ input, output });
 
@@ -153,5 +155,79 @@ describe("the pool", () => {
 		await Promise.resolve();
 		expect(manager.get(second.id)?.status).toBe("running");
 		expect(manager.runningCount).toBe(1);
+	});
+});
+
+describe("the subagent tools", () => {
+	/** A pool whose children settle when the test says so. */
+	function tools(poolSize = 10) {
+		const settlers = new Map<string, (usage: SubagentUsage) => void>();
+		const manager = new SubagentManager(
+			{ emit: () => undefined },
+			async (record) =>
+				await new Promise<SubagentUsage>((resolve) => {
+					settlers.set(record.id, resolve);
+				}),
+			poolSize,
+		);
+		// The root agent's tools carry no owner: the root is the one agent that may
+		// reach anywhere in the tree. A child's tools carry its own record id.
+		const [agent, result, steer] = createSubagentTools(manager);
+		return {
+			manager,
+			agent,
+			result,
+			steer,
+			settle: async (id: string, used: SubagentUsage) => {
+				settlers.get(id)!(used);
+				await Promise.resolve();
+				await Promise.resolve();
+			},
+		};
+	}
+
+	const textOf = (result: ToolResult<unknown>): string =>
+		result.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n");
+
+	it("spawns in the background, and reports status and rolled-up usage", async () => {
+		const { agent, result, manager, settle } = tools();
+		const spawned = await agent.execute({ task: "look into it", background: true }, undefined as never);
+		expect(textOf(spawned)).toContain("sub-1 running");
+		await Promise.resolve();
+		const id = manager.list()[0]!.id;
+		await settle(id, usage(30, 10));
+		expect(textOf(await result.execute({ id }, undefined as never))).toContain("sub-1 done (in 30/out 10)");
+	});
+
+	it("waits for a blocking spawn, and reports a child that is not there", async () => {
+		const { manager, agent } = tools();
+		const blocking = Promise.resolve(agent.execute({ task: "answer me", background: false }, undefined as never));
+		await Promise.resolve();
+		const id = manager.list()[0]!.id;
+		// The spawn has not resolved: a blocking child is waited for.
+		let settled = false;
+		void blocking.then(() => {
+			settled = true;
+		});
+		await Promise.resolve();
+		expect(settled).toBe(false);
+		manager.settle(id, usage(5, 5));
+		await Promise.resolve();
+		expect(textOf(await blocking)).toContain("sub-1 done");
+	});
+
+	it("refuses to steer a child that is not the caller's", async () => {
+		const { manager, agent, steer } = tools();
+		await agent.execute({ task: "mine", background: true }, undefined as never);
+		const mine = manager.list()[0]!.id;
+		expect(textOf(await steer.execute({ id: mine, note: "shorten" }, undefined as never))).toBe(`Steered ${mine}.`);
+
+		// Another parent's tools see the same pool but not the same rights: an
+		// owner id that is not the child's parent cannot steer it.
+		const parent = manager.spawn({ prompt: "another parent" });
+		const other = createSubagentTools(manager, parent.id);
+		expect(textOf(await other[2]!.execute({ id: mine, note: "hijack" }, undefined as never))).toContain(
+			"Can't steer",
+		);
 	});
 });
