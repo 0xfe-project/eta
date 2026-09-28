@@ -429,12 +429,15 @@ export class NodeShell implements Shell {
 					stdoutBuffer?.finish();
 					stderrBuffer?.finish();
 					await spillWrites;
+					// What was printed before the kill is still worth reporting: a
+					// command that times out has usually said something first.
+					const partial = combined?.snapshot().text;
 					if (timedOut) {
-						settle(err(new ExecutionErrorClass("timeout", `timeout:${options?.timeout}`)));
+						settle(err(new ExecutionErrorClass("timeout", `timeout:${options?.timeout}`, undefined, partial)));
 						return;
 					}
 					if (signal?.aborted === true) {
-						settle(err(new ExecutionErrorClass("aborted", "the command was aborted")));
+						settle(err(new ExecutionErrorClass("aborted", "the command was aborted", undefined, partial)));
 						return;
 					}
 					// A process killed by a signal has no exit code; 128 + signal is the
