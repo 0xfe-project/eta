@@ -171,6 +171,10 @@ export interface FileSystem {
 export interface ShellExecOptions {
 	/** Working directory; relative paths resolve against {@link FileSystem.cwd}. Defaults to it. */
 	cwd?: string | undefined;
+	/** Extra environment variables, layered over the inherited ones. */
+	env?: Record<string, string> | undefined;
+	/** Whether to inherit the environment's own variables. Defaults to true. */
+	inheritEnv?: boolean | undefined;
 	/** Kill the command after this many seconds, reporting a timeout. */
 	timeout?: number | undefined;
 	/** Aborts the command with the run. */
