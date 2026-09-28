@@ -88,6 +88,7 @@ export {
 	toKernelTools,
 	toolError,
 } from "./tools/tool";
+export { createWriteTool, type WriteToolInput, writeSchema } from "./tools/write";
 export {
 	DEFAULT_MAX_BYTES,
 	DEFAULT_MAX_LINES,
