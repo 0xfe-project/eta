@@ -686,13 +686,19 @@ export class Runner {
 			terminate,
 			durationMs,
 		});
-		const text = typeof raw === "string" ? raw : JSON.stringify(raw);
+		// A tool may answer with text, or with the structured result a harness tool
+		// produces: content blocks (text and images alike) plus details. Anything
+		// else is stringified — a plugin that returns a bare object gets its JSON
+		// seen by the model rather than a silently empty result.
+		const structured = isStructuredToolResult(raw);
 		const result = {
 			role: "toolResult" as const,
 			toolCallId: call.id,
 			toolName: call.name,
-			content: [{ type: "text" as const, text }],
-			isError,
+			content:
+				structured === undefined ? [{ type: "text" as const, text: stringifyToolResult(raw) }] : structured.content,
+			...(structured?.details === undefined ? {} : { details: structured.details }),
+			isError: structured?.isError ?? isError,
 			timestamp: Date.now(),
 		} as AgentMessage;
 		this.transcript.push(result);
@@ -768,6 +774,36 @@ function runUsedTools(messages: readonly AgentMessage[]): boolean {
 }
 
 /** Whether a tool result asks for the run to end after this turn. */
+/** A tool result with content blocks: what harness tools produce (text, images). */
+interface StructuredToolResult {
+	content: { type: string }[];
+	details?: unknown;
+	isError?: boolean;
+}
+
+/** Read a structured tool result, or `undefined` for anything else. */
+function isStructuredToolResult(raw: unknown): StructuredToolResult | undefined {
+	if (typeof raw !== "object" || raw === null) return undefined;
+	const candidate = raw as { content?: unknown };
+	if (!Array.isArray(candidate.content)) return undefined;
+	const blocks = candidate.content.filter(
+		(block): block is { type: string } =>
+			typeof block === "object" && block !== null && typeof (block as { type?: unknown }).type === "string",
+	);
+	if (blocks.length === 0) return undefined;
+	return raw as StructuredToolResult;
+}
+
+/** What the model sees for a tool that answered with something unstructured. */
+function stringifyToolResult(raw: unknown): string {
+	if (typeof raw === "string") return raw;
+	try {
+		return JSON.stringify(raw) ?? "";
+	} catch {
+		return String(raw);
+	}
+}
+
 function isTerminatingResult(raw: unknown): boolean {
 	return typeof raw === "object" && raw !== null && (raw as { terminate?: unknown }).terminate === true;
 }

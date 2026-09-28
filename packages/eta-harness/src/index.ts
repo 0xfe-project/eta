@@ -65,6 +65,17 @@ export { type OpenSession, type OpenSessionOptions, openSession } from "./open";
 export { OutputBuffer, type OutputBufferOptions } from "./output-capture";
 export { RunPump, type RunPumpOptions } from "./pump";
 export { TaskReminderService, type TaskReminderServiceOptions } from "./reminder";
+export { type ExecutionToolContext, executionContext } from "./tools/context";
+export {
+	defineTool,
+	type HarnessTool,
+	type ToolResult,
+	type ToolRun,
+	text,
+	toKernelTool,
+	toKernelTools,
+	toolError,
+} from "./tools/tool";
 export {
 	DEFAULT_MAX_BYTES,
 	DEFAULT_MAX_LINES,
