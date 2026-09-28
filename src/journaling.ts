@@ -27,6 +27,7 @@
  */
 import {
 	type AgentMessage,
+	type BtwEntry,
 	type CommitOutcome,
 	type ConfigService,
 	type Emit,
@@ -75,6 +76,13 @@ export interface JournalingServiceOptions {
 let usageCounter = 0;
 
 /** A usage row id, unique within a session journal. */
+let btwCounter = 0;
+
+function btwId(): string {
+	btwCounter += 1;
+	return `btw-entry-${btwCounter.toString(36)}-${Date.now().toString(36)}`;
+}
+
 function usageId(): string {
 	usageCounter += 1;
 	return `usage-${usageCounter.toString(36)}-${Date.now().toString(36)}`;
@@ -175,6 +183,25 @@ export class JournalingService extends Service {
 	async writeValues(values: ValueWrite[]): Promise<void> {
 		await this.enqueueValues(values);
 		await this.tail;
+	}
+
+	/**
+	 * Record a visible side note as a `btw` entry. The thread panel's history is the
+	 * journal's: a note that was saved is durable, and one that was not never
+	 * existed to anyone but the panel.
+	 */
+	async recordNote(note: string): Promise<Entry | undefined> {
+		const log = this.log;
+		if (log === undefined) return undefined;
+		const entry = log.record<BtwEntry>({
+			id: btwId(),
+			parentId: null,
+			type: "btw",
+			payload: { note },
+		} as NewEntry<BtwEntry>);
+		this.emit("entry:added", { entry });
+		await this.enqueueCommit();
+		return entry;
 	}
 
 	/** Every entry this session holds, oldest first. */

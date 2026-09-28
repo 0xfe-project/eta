@@ -38,6 +38,7 @@ import {
 	type KernelConfig,
 	type KernelModels,
 	type KernelOptions,
+	kernelEmit,
 	kernelOn,
 	Runner,
 	type RunnerOptions,
@@ -46,7 +47,9 @@ import {
 	type StorageService,
 	type StoredTask,
 	sessionScope,
+	toToolResultMessage,
 } from "@eta/core";
+import { BtwManager, btwSideAsk } from "./btw";
 import { CompactionService } from "./compaction-service";
 import { JournalingService, SESSION_CONFIG, TASKS_STATE } from "./journaling";
 import { MetricsService } from "./metrics";
@@ -91,6 +94,8 @@ export interface OpenSession {
 	 * is the host's policy, so the host calls `start()`.
 	 */
 	pump: RunPump;
+	/** The side threads asked beside the run; their saved notes are journal entries. */
+	btw: BtwManager;
 	/**
 	 * The compaction driver this session runs with; the host asks it to compact
 	 * (`/compact`). Undefined when the session was opened without a summarizer.
@@ -176,6 +181,38 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 
 	const pump = new RunPump(kernel, runner, options.pump);
 
+	// Side threads. What they inherit is the run's own request state, read per
+	// question; what they leave behind is a note in the journal, never a message in
+	// the transcript. Their tools go through the kernel's own chain, so a side
+	// request cannot reach anything the run could not.
+	const btw = new BtwManager({
+		buildContext: (entries) => ({
+			messages: entries.flatMap((entry) => (entry.type === "message" ? [entry.message] : [])),
+		}),
+		onVisibleNote: async (note) => {
+			await journaling.recordNote(note);
+		},
+		observe: kernelEmit(kernel.ctx),
+		sideAsk: btwSideAsk({
+			models: options.models,
+			requestState: () => runner.requestState(),
+			executeTool: async (call, info) =>
+				toToolResultMessage(
+					call,
+					await kernel.tools.execute(call.name, call.arguments, {
+						turn: info.turn,
+						toolCallId: call.id,
+						...(info.toolContext === undefined ? {} : { toolContext: info.toolContext }),
+					}),
+				),
+			onUsage: (usage, threadId) => {
+				void journaling.recordUsage(usage, { details: { source: "btw", threadId } }).catch(() => undefined);
+			},
+		}),
+	});
+	// Threads the journal still speaks for: a saved note comes back as a thread.
+	btw.replay(log.graph.pathOldestFirst());
+
 	return {
 		kernel,
 		runner,
@@ -184,6 +221,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		metrics,
 		taskReminder,
 		pump,
+		btw,
 		compaction,
 		transcript,
 		orphans: log.orphans,
