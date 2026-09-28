@@ -10,5 +10,6 @@ export * from "./base";
 export * from "./composer";
 export * from "./goal";
 export * from "./persona";
+export * from "./platform";
 export * from "./skills-block";
 export * from "./tasks";
