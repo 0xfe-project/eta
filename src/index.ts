@@ -15,6 +15,17 @@
  */
 
 export {
+	type AskObserver,
+	AskRegistry,
+	type AskResponse,
+	type AskUserToolDeps,
+	askResponseText,
+	askSchema,
+	createAskUserTool,
+	type HeadlessAsk,
+	normalizeAskOptions,
+} from "./ask";
+export {
 	type CompactionEntrySource,
 	CompactionMisconfigured,
 	CompactionService,
