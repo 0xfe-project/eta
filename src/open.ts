@@ -45,6 +45,7 @@ import {
 	SessionLog,
 	type StorageService,
 	type StoredTask,
+	sessionScope,
 } from "@eta/core";
 import { CompactionService } from "./compaction-service";
 import { JournalingService, SESSION_CONFIG, TASKS_STATE } from "./journaling";
@@ -123,9 +124,13 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		config,
 	});
 
+	// The harness's own services live in their own scope too, for the same reason
+	// the kernel's do: two sessions under one root are two sessions.
+	const servicesCtx = sessionScope(kernel.ctx, ["compaction", "journaling", "metrics", "taskReminder"]);
+
 	// The journal's owner: one service per session, wired to the log this
 	// assembly just replayed.
-	const journaling = new JournalingService(kernel.ctx, {
+	const journaling = new JournalingService(servicesCtx, {
 		journal: log,
 		config: kernel.config,
 		tasks: kernel.tasks,
@@ -150,15 +155,15 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 	const compaction =
 		options.compaction === undefined
 			? undefined
-			: new CompactionService(kernel.ctx, {
+			: new CompactionService(servicesCtx, {
 					config: kernel.config,
 					journaling,
 					summarizer: options.compaction,
 					...(options.kernel?.warn === undefined ? {} : { warn: options.kernel.warn }),
 				});
 
-	const metrics = new MetricsService(kernel.ctx);
-	const taskReminder = new TaskReminderService(kernel.ctx, { tasks: kernel.tasks });
+	const metrics = new MetricsService(servicesCtx);
+	const taskReminder = new TaskReminderService(servicesCtx, { tasks: kernel.tasks });
 
 	const transcript = log.transcript();
 	const runner = new Runner(kernel, {
