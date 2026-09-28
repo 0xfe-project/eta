@@ -86,11 +86,18 @@ export type ExecutionErrorCode = "aborted" | "timeout" | "shell_unavailable" | "
 export class ExecutionError extends Error {
 	/** Backend-independent error code. */
 	readonly code: ExecutionErrorCode;
+	/**
+	 * What the command had printed before it was killed (a timeout or an abort).
+	 * eta-agent carries this through its live output view; carrying it on the
+	 * error is the same information for a caller that only sees the result.
+	 */
+	readonly output: string | undefined;
 
-	constructor(code: ExecutionErrorCode, message: string, cause?: Error) {
+	constructor(code: ExecutionErrorCode, message: string, cause?: Error, output?: string) {
 		super(message, cause === undefined ? undefined : { cause });
 		this.name = "ExecutionError";
 		this.code = code;
+		this.output = output;
 	}
 }
 

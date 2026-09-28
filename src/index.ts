@@ -65,6 +65,15 @@ export { type OpenSession, type OpenSessionOptions, openSession } from "./open";
 export { OutputBuffer, type OutputBufferOptions } from "./output-capture";
 export { RunPump, type RunPumpOptions } from "./pump";
 export { TaskReminderService, type TaskReminderServiceOptions } from "./reminder";
+export {
+	type BashExecution,
+	type BashPrepare,
+	type BashToolDetails,
+	type BashToolInput,
+	type BashToolOptions,
+	bashSchema,
+	createBashTool,
+} from "./tools/bash";
 export { type ExecutionToolContext, executionContext } from "./tools/context";
 export {
 	createEditTool,
