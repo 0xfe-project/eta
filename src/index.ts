@@ -66,6 +66,18 @@ export { OutputBuffer, type OutputBufferOptions } from "./output-capture";
 export { RunPump, type RunPumpOptions } from "./pump";
 export { TaskReminderService, type TaskReminderServiceOptions } from "./reminder";
 export { type ExecutionToolContext, executionContext } from "./tools/context";
+export { withFileMutationQueue } from "./tools/file-mutation-queue";
+export { detectSupportedImageMimeType, encodeBase64 } from "./tools/image";
+export { resolveReadToolPath, resolveToolPath } from "./tools/path-utils";
+export {
+	createReadTool,
+	type ReadImageProcessor,
+	type ReadImageProcessorResult,
+	type ReadToolDetails,
+	type ReadToolInput,
+	type ReadToolOptions,
+	readSchema,
+} from "./tools/read";
 export {
 	defineTool,
 	type HarnessTool,
