@@ -185,16 +185,22 @@ export interface ShellExecOptions {
 	spill?: boolean | undefined;
 }
 
-/** Where the middle of a long output went. */
+/** How a bounded output was cut (the shape `output-capture.ts` reports). */
 export interface ShellTruncation {
 	truncated: boolean;
-	truncatedBy?: "lines" | "bytes" | undefined;
+	truncatedBy: "lines" | "bytes" | null;
 	totalLines: number;
-	outputLines: number;
 	totalBytes: number;
+	outputLines: number;
 	outputBytes: number;
-	/** The last kept line was cut mid-line. */
+	/** The last kept line was cut mid-line (a single long tail line). */
 	lastLinePartial: boolean;
+	/** A head cut where the first line alone exceeded the byte limit. */
+	firstLineExceedsLimit: boolean;
+	maxLines: number;
+	maxBytes: number;
+	/** For a tail cut: how long the line that was cut was, in bytes. */
+	lastLineBytes?: number | undefined;
 }
 
 /** Bounded output: at most `maxLines` lines and `maxBytes` bytes, keeping the tail. */
@@ -208,11 +214,19 @@ export interface ShellOutputLimits {
 /** What a command did. */
 export interface ShellExecResult {
 	exitCode: number;
+	/** The stdout bytes, bounded when `limits` were given. */
 	stdout: string;
+	/** The stderr bytes, bounded when `limits` were given. */
 	stderr: string;
-	/** Set when the output crossed the limits. */
+	/**
+	 * The two streams interleaved in arrival order, bounded — what a model should
+	 * see, since a terminal shows one stream. Present only when `limits` were
+	 * given: without them the caller asked for the whole truth.
+	 */
+	output?: string | undefined;
+	/** How `output` was cut, when `limits` were given. */
 	truncation?: ShellTruncation | undefined;
-	/** Where the whole output went, when the caller asked it to spill. */
+	/** Where the whole output went, when `spill` was asked for and a file could be made. */
 	spillPath?: string | undefined;
 }
 

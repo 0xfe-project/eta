@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 import { NodeEnvironment } from "../src/env/node-shell";
 import { getOrThrow } from "../src/env/types";
 import { envContract } from "../src/testing";
+import { truncateHead } from "../src/truncate";
 
 envContract("node environment", async () => {
 	const cwd = await mkdtemp(join(tmpdir(), "eta-shell-"));
@@ -123,6 +124,64 @@ describe("NodeShell specifics", () => {
 		const bad = await env.exec("echo hi", { timeout: -1 });
 		expect(bad.ok).toBe(false);
 		expect(bad.ok ? "" : bad.error.code).toBe("timeout");
+		await env.cleanup();
+		await rm(cwd, { recursive: true, force: true });
+	});
+});
+
+describe("bounded command output", () => {
+	it("keeps the tail, reports the cut, and spills the whole output", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "eta-shell-"));
+		const env = new NodeEnvironment({ cwd });
+		const result = getOrThrow(
+			await env.exec("seq 1 5000", {
+				limits: { maxBytes: 4 * 1024, maxLines: 50, retain: "tail" },
+				spill: true,
+			}),
+		);
+		expect(result.truncation?.truncated).toBe(true);
+		expect(result.truncation?.truncatedBy).toBe("lines");
+		expect(result.truncation?.totalLines).toBe(5000);
+		expect(result.output?.split("\n").length).toBeLessThanOrEqual(51);
+		// The tail is what a model needs: the last lines, not the first.
+		expect(result.output?.trimEnd().endsWith("5000")).toBe(true);
+		// The whole output is on disk, mine to read back.
+		expect(result.spillPath).toBeDefined();
+		const full = getOrThrow(await env.readTextFile(result.spillPath!));
+		expect(full.startsWith("1\n2\n")).toBe(true);
+		expect(full.trimEnd().endsWith("5000")).toBe(true);
+		await env.cleanup();
+		await rm(cwd, { recursive: true, force: true });
+	});
+
+	it("does not spill unless asked, and does not spill when nothing was cut", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "eta-shell-"));
+		const env = new NodeEnvironment({ cwd });
+		const small = getOrThrow(
+			await env.exec("echo hello", { limits: { maxBytes: 4 * 1024, maxLines: 50 }, spill: true }),
+		);
+		expect(small.truncation?.truncated).toBe(false);
+		expect(small.spillPath).toBeUndefined();
+		expect(small.output?.trim()).toBe("hello");
+
+		const big = getOrThrow(await env.exec("seq 1 5000", { limits: { maxBytes: 4 * 1024, maxLines: 50 } }));
+		expect(big.truncation?.truncated).toBe(true);
+		expect(big.spillPath).toBeUndefined();
+		await env.cleanup();
+		await rm(cwd, { recursive: true, force: true });
+	});
+
+	it("keeps a head cut for reads, with its own marker", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "eta-shell-"));
+		const env = new NodeEnvironment({ cwd });
+		await env.writeFile("long.txt", Array.from({ length: 500 }, (_v, i) => `line ${i}`).join("\n"));
+		const text = getOrThrow(await env.readTextFile("long.txt"));
+		const cut = truncateHead(text, { maxBytes: 1024, maxLines: 10 });
+		expect(cut.truncated).toBe(true);
+		expect(cut.truncatedBy).toBe("lines");
+		expect(cut.outputLines).toBe(10);
+		expect(cut.content.startsWith("line 0\n")).toBe(true);
+		expect(cut.content.split("\n")).toHaveLength(10);
 		await env.cleanup();
 		await rm(cwd, { recursive: true, force: true });
 	});
