@@ -37,19 +37,25 @@ const textOf = (result: ToolResult<unknown>): string =>
 
 /** A write that blocks until the test lets it go. */
 class BlockingWriteEnv extends NodeEnvironment {
-	firstWriteStarted: Promise<void>;
-	private started = (): void => {};
-	readonly waitToFinish: Promise<void>;
+	readonly firstWriteStarted: Promise<void>;
+	readonly stillWriting: Promise<void>;
 	secondWriteStarted = false;
+	private releaseWrite: () => void = () => {};
+	private noteStarted: () => void = () => {};
 
 	constructor(options: { cwd: string }) {
 		super(options);
 		this.firstWriteStarted = new Promise<void>((resolve) => {
-			this.started = resolve;
+			this.noteStarted = resolve;
 		});
-		this.waitToFinish = new Promise<void>((resolve) => {
-			this.finish = resolve;
+		this.stillWriting = new Promise<void>((resolve) => {
+			this.releaseWrite = resolve;
 		});
+	}
+
+	/** Let the blocked write finish. */
+	letGo(): void {
+		this.releaseWrite();
 	}
 
 	override async writeFile(
@@ -58,8 +64,8 @@ class BlockingWriteEnv extends NodeEnvironment {
 		options?: { signal?: AbortSignal },
 	): Promise<Result<void, FileError>> {
 		if (this.secondWriteStarted) throw new Error("a second write started before the first settled");
-		this.started();
-		await this.waitToFinish;
+		this.noteStarted();
+		await this.stillWriting;
 		return await super.writeFile(path, content, options);
 	}
 }
@@ -117,7 +123,7 @@ describe("write", () => {
 		);
 		await new Promise((resolve) => setTimeout(resolve, 20));
 		expect(blocking.secondWriteStarted).toBe(false);
-		blocking.finish();
+		blocking.letGo();
 		await expect(first).rejects.toThrow();
 		await second;
 		expect(getOrThrow(await blocking.readTextFile("shared.txt"))).toBe("second\n");

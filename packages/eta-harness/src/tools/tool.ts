@@ -41,6 +41,12 @@ export interface HarnessTool<TContext, TParameters extends TSchema = TSchema, TD
 	label?: string | undefined;
 	description: string;
 	parameters: TParameters;
+	/**
+	 * Normalize what the model sent before it is validated — a JSON string where
+	 * an array belongs, a single object where a list belongs, a legacy field name.
+	 * Models send what they send; the tool absorbs it or says why it cannot.
+	 */
+	prepareArguments?: ((args: unknown) => unknown) | undefined;
 	execute(args: Static<TParameters>, run: ToolRun<TContext>): Promise<ToolResult<TDetails>> | ToolResult<TDetails>;
 }
 
@@ -74,7 +80,7 @@ export function toolError(message: string): ToolResult {
 export function toKernelTool<TContext, TParameters extends TSchema, TDetails>(
 	tool: HarnessTool<TContext, TParameters, TDetails>,
 	contextOf: (toolContext: unknown) => TContext,
-): KernelTool & { parameters: TParameters } {
+): KernelTool<Static<TParameters>, ToolResult<TDetails>> & { parameters: TParameters } {
 	// Compiled once per tool: the validator is what makes a checked call cheap
 	// enough to do on every one of them.
 	const validator = Compile(tool.parameters);
@@ -82,7 +88,8 @@ export function toKernelTool<TContext, TParameters extends TSchema, TDetails>(
 		name: tool.name,
 		description: tool.description,
 		parameters: tool.parameters,
-		async execute(args: unknown, call: ToolCallInfo): Promise<ToolResult<TDetails>> {
+		async execute(rawArgs: unknown, call: ToolCallInfo): Promise<ToolResult<TDetails>> {
+			const args = tool.prepareArguments === undefined ? rawArgs : tool.prepareArguments(rawArgs);
 			if (!validator.Check(args)) {
 				const problems = validator
 					.Errors(args)
@@ -105,6 +112,6 @@ export function toKernelTool<TContext, TParameters extends TSchema, TDetails>(
 export function toKernelTools<TContext>(
 	tools: readonly HarnessTool<TContext, TSchema, unknown>[],
 	contextOf: (toolContext: unknown) => TContext,
-): (KernelTool & { parameters: TSchema })[] {
+): (KernelTool<unknown, ToolResult<unknown>> & { parameters: TSchema })[] {
 	return tools.map((tool) => toKernelTool(tool, contextOf));
 }

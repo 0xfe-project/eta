@@ -66,6 +66,19 @@ export { OutputBuffer, type OutputBufferOptions } from "./output-capture";
 export { RunPump, type RunPumpOptions } from "./pump";
 export { TaskReminderService, type TaskReminderServiceOptions } from "./reminder";
 export { type ExecutionToolContext, executionContext } from "./tools/context";
+export {
+	createEditTool,
+	type EditToolDetails,
+	type EditToolInput,
+	editSchema,
+	prepareEditArguments,
+} from "./tools/edit";
+export {
+	applyEditsToNormalizedContent,
+	type Edit,
+	generateDiffString,
+	generateUnifiedPatch,
+} from "./tools/edit-diff";
 export { withFileMutationQueue } from "./tools/file-mutation-queue";
 export { detectSupportedImageMimeType, encodeBase64 } from "./tools/image";
 export { resolveReadToolPath, resolveToolPath } from "./tools/path-utils";
