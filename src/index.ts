@@ -20,6 +20,30 @@ export {
 	CompactionService,
 	type CompactionServiceOptions,
 } from "./compaction-service";
+export { MemoryEnvironment, type MemoryEnvironmentOptions, type MemoryShellCall } from "./env/memory";
+export {
+	type EnvCallOptions,
+	type ExecutionEnv,
+	ExecutionError,
+	type ExecutionErrorCode,
+	err,
+	FileError,
+	type FileErrorCode,
+	type FileInfo,
+	type FileKind,
+	type FileSystem,
+	getOrThrow,
+	getOrUndefined,
+	ok,
+	type Result,
+	type Shell,
+	type ShellExecOptions,
+	type ShellExecResult,
+	type ShellOutputLimits,
+	type ShellTruncation,
+	type TextLine,
+	type TextLineReader,
+} from "./env/types";
 export {
 	type ContextUsageEstimate,
 	type CutPointResult,
