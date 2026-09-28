@@ -60,8 +60,12 @@ describe.skipIf(configPath === undefined)("a real session through the manager", 
 			expect(stats.messageCount).toBeGreaterThanOrEqual(2);
 			expect(stats.usage.input).toBeGreaterThan(0);
 			expect(stats.usage.totalTokens).toBeGreaterThan(0);
+			// The session now installs tools, so a real model may take a few turns (it is
+			// free to write a task note before answering): what has to hold is that both
+			// sides of the conversation are there, in order, and that it holds the word.
 			const transcript = created.session.log.transcript();
-			expect(transcript).toHaveLength(2);
+			expect(transcript.length).toBeGreaterThanOrEqual(2);
+			expect(transcript[0]?.role).toBe("user");
 			expect(JSON.stringify(transcript)).toContain(secret);
 
 			// Close the session and ask for it again: the manager assembles a fresh
@@ -70,7 +74,10 @@ describe.skipIf(configPath === undefined)("a real session through the manager", 
 			await sessions.close(id);
 			const reopened = await sessions.session(id);
 			expect(reopened).toBeDefined();
-			expect(reopened!.session.log.transcript()).toHaveLength(2);
+			// The replay is the transcript: same messages, same order, same count.
+			expect(reopened!.session.log.transcript().map((message) => message.role)).toEqual(
+				transcript.map((message) => message.role),
+			);
 			expect(JSON.stringify(reopened!.session.log.transcript())).toContain(secret);
 
 			// And it keeps working: a second turn continues the same conversation.
