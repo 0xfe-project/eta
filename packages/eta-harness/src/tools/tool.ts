@@ -52,11 +52,11 @@ export function defineTool<TContext, TParameters extends TSchema, TDetails = unk
 }
 
 /** Text-only result. */
-export function text(content: string, details?: unknown): ToolResult {
+export function text<TDetails = undefined>(content: string, details?: TDetails): ToolResult<TDetails> {
 	return {
 		content: [{ type: "text", text: content }],
 		...(details === undefined ? {} : { details }),
-	};
+	} as ToolResult<TDetails>;
 }
 
 /** A result the model should read as a failure. */
