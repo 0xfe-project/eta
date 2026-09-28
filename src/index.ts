@@ -21,6 +21,7 @@
  * read is listed *with its reason* — a session must never silently disappear.
  */
 
+export { FileSessionStore, type FileSessionStoreOptions, JOURNAL_FILE, META_FILE } from "./file-store";
 export {
 	type CreateSessionOptions,
 	type ManagedSession,

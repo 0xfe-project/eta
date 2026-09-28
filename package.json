@@ -22,6 +22,7 @@
 	},
 	"dependencies": {
 		"@eta/core": "*",
-		"@eta/harness": "*"
+		"@eta/harness": "*",
+		"@eta/storage-jsonl": "*"
 	}
 }
