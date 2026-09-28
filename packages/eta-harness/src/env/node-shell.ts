@@ -27,6 +27,7 @@ import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import { constants as osConstants } from "node:os";
 import { join } from "node:path";
+import { OutputBuffer } from "../output-capture";
 import { NodeFileSystem, pathExists, resolveEnvPath } from "./node-fs";
 import {
 	type EnvCallOptions,
@@ -34,6 +35,7 @@ import {
 	type ExecutionError,
 	ExecutionError as ExecutionErrorClass,
 	err,
+	type FileSystem,
 	ok,
 	type Result,
 	type Shell,
@@ -255,12 +257,20 @@ export class NodeShell implements Shell {
 	private readonly cwdProvider: () => string;
 	private readonly shellPath: string | undefined;
 	private readonly shellEnvBase: NodeJS.ProcessEnv | undefined;
+	/** Where a spilled output goes. Without one, `spill` is ignored. */
+	private readonly fileSystem: FileSystem | undefined;
 	private readonly activeChildPids = new Set<number>();
 
-	constructor(options: { cwd: string | (() => string); shellPath?: string; shellEnv?: NodeJS.ProcessEnv }) {
+	constructor(options: {
+		cwd: string | (() => string);
+		shellPath?: string;
+		shellEnv?: NodeJS.ProcessEnv;
+		fileSystem?: FileSystem;
+	}) {
 		this.cwdProvider = typeof options.cwd === "function" ? options.cwd : () => options.cwd as string;
 		this.shellPath = options.shellPath;
 		this.shellEnvBase = options.shellEnv;
+		this.fileSystem = options.fileSystem;
 	}
 
 	async exec(command: string, options?: ShellExecOptions): Promise<Result<ShellExecResult, ExecutionError>> {
@@ -290,8 +300,51 @@ export class NodeShell implements Shell {
 			let timedOut = false;
 			let child: ReturnType<typeof spawn> | undefined;
 			let timeoutId: ReturnType<typeof setTimeout> | undefined;
+			// Bounded capture: what the model sees is cut before it is ever
+			// concatenated, so a chatty command cannot grow the transcript's memory.
+			const limits = options?.limits;
+			const wantsSpill = options?.spill === true && this.fileSystem !== undefined;
+			const bounded =
+				limits === undefined
+					? undefined
+					: () =>
+							new OutputBuffer({
+								maxBytes: limits.maxBytes,
+								maxLines: limits.maxLines,
+								retain: limits.retain === "head" ? "head" : "tail",
+							});
+			const combined = bounded?.();
+			const stdoutBuffer = bounded?.();
+			const stderrBuffer = bounded?.();
+			// Without limits the caller asked for the whole truth, so it is kept whole.
 			let stdout = "";
 			let stderr = "";
+			const toSpill = this.fileSystem;
+			let spillPath: string | undefined;
+			let spillPrefix = "";
+			let spilling = false;
+			let spillWrites: Promise<void> = Promise.resolve();
+			const spillChunk = (text: string): void => {
+				const fileSystem = toSpill;
+				const path = spillPath;
+				if (fileSystem === undefined || path === undefined) return;
+				spillWrites = spillWrites.then(async () => {
+					await fileSystem.appendFile(path, text);
+				});
+			};
+			const startSpill = (): void => {
+				const fileSystem = toSpill;
+				if (spilling || fileSystem === undefined) return;
+				spilling = true;
+				const prefix = spillPrefix;
+				spillPrefix = "";
+				spillWrites = spillWrites.then(async () => {
+					const created = await fileSystem.createTempFile({ prefix: "eta-output-", suffix: ".log" });
+					if (!created.ok) return;
+					spillPath = created.value;
+					await fileSystem.writeFile(created.value, prefix);
+				});
+			};
 
 			const onAbort = (): void => {
 				if (child?.pid !== undefined) killProcessTree(child.pid);
@@ -350,15 +403,32 @@ export class NodeShell implements Shell {
 
 			child.stdout?.setEncoding("utf8");
 			child.stderr?.setEncoding("utf8");
-			child.stdout?.on("data", (chunk: string) => {
-				stdout += chunk;
-			});
-			child.stderr?.on("data", (chunk: string) => {
-				stderr += chunk;
-			});
+			const feed = (chunk: string, stream: "stdout" | "stderr"): void => {
+				if (combined === undefined) {
+					if (stream === "stdout") stdout += chunk;
+					else stderr += chunk;
+				} else {
+					combined.push(chunk);
+					if (stream === "stdout") stdoutBuffer?.push(chunk);
+					else stderrBuffer?.push(chunk);
+				}
+				if (!wantsSpill) return;
+				if (spilling) {
+					spillChunk(chunk);
+					return;
+				}
+				spillPrefix += chunk;
+				if (combined?.truncated === true) startSpill();
+			};
+			child.stdout?.on("data", (chunk: string) => feed(chunk, "stdout"));
+			child.stderr?.on("data", (chunk: string) => feed(chunk, "stderr"));
 
 			void waitForChildProcess(child).then(
-				({ code, signal: exitSignal }) => {
+				async ({ code, signal: exitSignal }) => {
+					combined?.finish();
+					stdoutBuffer?.finish();
+					stderrBuffer?.finish();
+					await spillWrites;
 					if (timedOut) {
 						settle(err(new ExecutionErrorClass("timeout", `timeout:${options?.timeout}`)));
 						return;
@@ -370,7 +440,18 @@ export class NodeShell implements Shell {
 					// A process killed by a signal has no exit code; 128 + signal is the
 					// conventional reading, so nobody mistakes it for a clean exit.
 					const exitCode = code ?? (exitSignal !== null ? 128 + (osConstants.signals[exitSignal] ?? 0) : 1);
-					settle(ok({ exitCode, stdout, stderr }));
+					const boundedOutput = combined?.snapshot();
+					settle(
+						ok({
+							exitCode,
+							stdout: stdoutBuffer?.snapshot().text ?? stdout,
+							stderr: stderrBuffer?.snapshot().text ?? stderr,
+							...(boundedOutput === undefined
+								? {}
+								: { output: boundedOutput.text, truncation: boundedOutput.truncation }),
+							...(spillPath === undefined ? {} : { spillPath }),
+						}),
+					);
 				},
 				(error: Error) => settle(err(new ExecutionErrorClass("spawn_error", error.message, error))),
 			);
@@ -394,6 +475,7 @@ export class NodeEnvironment extends NodeFileSystem implements ExecutionEnv {
 		super(options);
 		this.shell = new NodeShell({
 			cwd: () => this.cwd,
+			fileSystem: this,
 			...(options.shellPath === undefined ? {} : { shellPath: options.shellPath }),
 			...(options.shellEnv === undefined ? {} : { shellEnv: options.shellEnv }),
 		});

@@ -62,5 +62,18 @@ export {
 export { JournalingService, type JournalingServiceOptions, SESSION_CONFIG, TASKS_STATE } from "./journaling";
 export { MetricsService } from "./metrics";
 export { type OpenSession, type OpenSessionOptions, openSession } from "./open";
+export { OutputBuffer, type OutputBufferOptions } from "./output-capture";
 export { RunPump, type RunPumpOptions } from "./pump";
 export { TaskReminderService, type TaskReminderServiceOptions } from "./reminder";
+export {
+	DEFAULT_MAX_BYTES,
+	DEFAULT_MAX_LINES,
+	formatSize,
+	GREP_MAX_LINE_LENGTH,
+	type TruncationOptions,
+	type TruncationResult,
+	truncateHead,
+	truncateLine,
+	truncateTail,
+	utf8ByteLength,
+} from "./truncate";
