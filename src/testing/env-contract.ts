@@ -9,29 +9,29 @@
  * another.
  */
 import { describe, expect, it } from "vitest";
-import { type ExecutionEnv, type FileError, getOrThrow } from "../env/types";
+import { type FileError, type FileSystem, getOrThrow, type Shell } from "../env/types";
 
 export interface EnvContractHandle {
-	env: ExecutionEnv;
+	/** The filesystem half — every backend has one. */
+	env: FileSystem;
 	/** Release the handle (temp dirs, handles). */
 	dispose: () => Promise<void>;
 	/**
-	 * How to ask a real shell to print to stdout, and to fail with a code. Only
-	 * needed together with `capabilities.shell`.
+	 * The shell half, when this backend runs real commands. A filesystem-only
+	 * backend leaves it out, and the contract says so instead of guessing.
 	 */
 	shell?: {
+		run: Shell["exec"];
 		echo: (text: string) => string;
 		/** A command that writes to stderr and exits with this code. */
 		fail: (code: number, text: string) => string;
 	};
-	capabilities?: {
-		/**
-		 * `exec` runs real commands: real exit codes, real streams, real timeouts.
-		 * A scripted shell (the memory backend's) is not this, and does not claim
-		 * it — its own tests cover what it answers.
-		 */
-		shell?: boolean;
-	};
+	/**
+	 * What this backend runs commands with. Omitted when there is no shell (a
+	 * filesystem-only backend, or the memory backend's scripted stand-in: what it
+	 * answers is covered by its own tests, not claimed here).
+	 */
+	capabilities?: { shell?: boolean };
 }
 
 export type EnvFactory = () => Promise<EnvContractHandle> | EnvContractHandle;
@@ -178,15 +178,15 @@ export function envContract(name: string, factory: EnvFactory): void {
 		it("runs commands, reporting exit codes and both streams", async () => {
 			const handle = await factory();
 			const { env, dispose } = handle;
-			if (handle.shell === undefined || handle.capabilities?.shell !== true) {
+			if (handle.shell === undefined) {
 				await dispose();
 				return;
 			}
-			const okResult = getOrThrow(await env.exec(handle.shell.echo("hi")));
+			const okResult = getOrThrow(await handle.shell.run(handle.shell.echo("hi")));
 			expect(okResult.exitCode).toBe(0);
 			expect(okResult.stdout.trim()).toBe("hi");
 			// A non-zero exit is a result, not an error: the tool reports it.
-			const failed = getOrThrow(await env.exec(handle.shell.fail(3, "boom")));
+			const failed = getOrThrow(await handle.shell.run(handle.shell.fail(3, "boom")));
 			expect(failed.exitCode).toBe(3);
 			expect(failed.stderr).toContain("boom");
 			await dispose();
@@ -195,16 +195,17 @@ export function envContract(name: string, factory: EnvFactory): void {
 		it("reports a timeout and an abort as execution errors", async () => {
 			const handle = await factory();
 			const { env, dispose } = handle;
-			if (handle.capabilities?.shell !== true) {
+			if (handle.shell === undefined) {
 				await dispose();
 				return;
 			}
-			const timeout = await env.exec("sleep 5", { timeout: 0.05 });
+			const run = handle.shell.run;
+			const timeout = await run("sleep 5", { timeout: 0.05 });
 			expect(timeout.ok).toBe(false);
 			expect(timeout.ok ? "" : timeout.error.code).toBe("timeout");
 
 			const controller = new AbortController();
-			const running = env.exec("sleep 5", { signal: controller.signal });
+			const running = run("sleep 5", { signal: controller.signal });
 			controller.abort();
 			const aborted = await running;
 			expect(aborted.ok).toBe(false);
