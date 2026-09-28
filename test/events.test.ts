@@ -7,6 +7,13 @@ describe("event vocabulary", () => {
 		expect([...KERNEL_EVENT_NAMES].sort()).toEqual([...KERNEL_EVENT_NAMES]);
 		expect(KERNEL_EVENT_NAMES).toMatchInlineSnapshot(`
 			[
+			  "btw:asking",
+			  "btw:cleared",
+			  "btw:failed",
+			  "btw:injected",
+			  "btw:opened",
+			  "btw:saved",
+			  "btw:summarized",
 			  "compaction:end",
 			  "compaction:start",
 			  "entry:added",

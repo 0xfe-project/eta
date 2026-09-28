@@ -187,6 +187,22 @@ export interface RetryEvents {
 	"retry:end": { runId: string; step: string; attempt: number; success: boolean; finalError?: string };
 }
 
+export interface BtwEvents {
+	/** A side thread was opened; its kind decides whether it inherits the run's context. */
+	"btw:opened": { threadId: string; kind: "contextual" | "tangent" };
+	/** A question went out to the side model. */
+	"btw:asking": { threadId: string };
+	/** An exchange was recorded in the thread (eta-agent's action name for it). */
+	"btw:injected": { threadId: string };
+	/** The side request failed; no exchange was recorded, so no fake answer replays. */
+	"btw:failed": { threadId: string; message: string };
+	/** The thread's notes were written to the main session. */
+	"btw:saved": { threadId: string };
+	"btw:cleared": { threadId: string };
+	/** A handoff text was handed to the main run. */
+	"btw:summarized": { threadId: string };
+}
+
 export interface EntryEvents {
 	/** A journaled entry, with the id the journal assigned it. */
 	"entry:added": { entry: Entry };
@@ -219,7 +235,8 @@ export interface InjectEvents {
 }
 
 export interface KernelEvents
-	extends CompactionEvents,
+	extends BtwEvents,
+		CompactionEvents,
 		EntryEvents,
 		GoalEvents,
 		PersonaEvents,
@@ -261,6 +278,13 @@ export function kernelOn(ctx: Context): On {
 
 /** Alphabetized event-name list, pinned by a snapshot test so the vocabulary cannot drift. */
 export const KERNEL_EVENT_NAMES = [
+	"btw:asking",
+	"btw:cleared",
+	"btw:failed",
+	"btw:injected",
+	"btw:opened",
+	"btw:saved",
+	"btw:summarized",
 	"compaction:end",
 	"compaction:start",
 	"entry:added",

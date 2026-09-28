@@ -86,6 +86,7 @@ export {
 	type RunnerJournal,
 	type RunnerOptions,
 	type RunResult,
+	toToolResultMessage,
 } from "./kernel/runner";
 export { renderCurrentTasks, TaskService } from "./kernel/tasks";
 export {

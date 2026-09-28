@@ -687,21 +687,7 @@ export class Runner {
 			terminate,
 			durationMs,
 		});
-		// A tool may answer with text, or with the structured result a harness tool
-		// produces: content blocks (text and images alike) plus details. Anything
-		// else is stringified — a plugin that returns a bare object gets its JSON
-		// seen by the model rather than a silently empty result.
-		const structured = isStructuredToolResult(raw);
-		const result = {
-			role: "toolResult" as const,
-			toolCallId: call.id,
-			toolName: call.name,
-			content:
-				structured === undefined ? [{ type: "text" as const, text: stringifyToolResult(raw) }] : structured.content,
-			...(structured?.details === undefined ? {} : { details: structured.details }),
-			isError: structured?.isError ?? isError,
-			timestamp: Date.now(),
-		} as AgentMessage;
+		const result = toToolResultMessage(call, raw);
 		this.transcript.push(result);
 		this.turnToolResults.push(result);
 		this.emit("message:end", { runId, message: result, ...(terminate ? { terminate: true as const } : {}) });
@@ -811,4 +797,28 @@ function isTerminatingResult(raw: unknown): boolean {
 
 function isMessage(m: AgentMessage): m is Message {
 	return m.role === "user" || m.role === "assistant" || m.role === "toolResult";
+}
+
+/**
+ * A tool's return value as the transcript message a model reads.
+ *
+ * A tool may answer with text, or with the structured result a harness tool
+ * produces: content blocks (text and images alike) plus details. Anything else is
+ * stringified — a plugin that returns a bare object gets its JSON seen by the
+ * model rather than a silently empty result. Shared with the side-request path,
+ * so a tool result looks the same whether a run or a side ask produced it.
+ */
+export function toToolResultMessage(call: { id: string; name: string }, raw: unknown): AgentMessage {
+	const isError = typeof raw === "object" && raw !== null && "isError" in raw && raw.isError === true;
+	const structured = isStructuredToolResult(raw);
+	return {
+		role: "toolResult" as const,
+		toolCallId: call.id,
+		toolName: call.name,
+		content:
+			structured === undefined ? [{ type: "text" as const, text: stringifyToolResult(raw) }] : structured.content,
+		...(structured?.details === undefined ? {} : { details: structured.details }),
+		isError: structured?.isError ?? isError,
+		timestamp: Date.now(),
+	} as AgentMessage;
 }
