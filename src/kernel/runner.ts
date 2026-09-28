@@ -104,6 +104,16 @@ export interface RunnerOptions {
 	 * journaled again — the journal is where it came from.
 	 */
 	initialTranscript?: readonly AgentMessage[];
+	/**
+	 * Messages one request carries and the next one may not (eta-agent's
+	 * `transform_context`): appended after the transcript, never added to it, never
+	 * journalled. A reminder is the usual one — it belongs in the request it was due
+	 * for, and the transcript should not remember that the model was nagged, nor
+	 * should a compaction preserve the nag.
+	 *
+	 * Read once per turn, so a request that is not sent does not consume anything.
+	 */
+	transientMessages?: () => AgentMessage | readonly AgentMessage[] | undefined;
 }
 
 /** What a request would carry right now (eta-agent's LaneRequestState). */
@@ -563,10 +573,15 @@ export class Runner {
 		const turnId = this.currentTurnId ?? "";
 		const toolContext = await this.resolveToolContext();
 		const systemPrompt = await this.resolveSystemPrompt(toolContext);
+		// Resolved once per turn: the context is assembled twice (once to estimate what
+		// it will cost, once to send it), and a transient message is one turn's worth of
+		// state — reading the seam twice would let the estimate consume a reminder that
+		// then never reaches the model.
+		const transient = this.resolveTransientMessages();
 		this.emit("turn:start", {
 			runId,
 			turnId,
-			contextParts: this.estimateParts(this.assembleContext(toolContext, systemPrompt)),
+			contextParts: this.estimateParts(this.assembleContext(toolContext, systemPrompt, transient)),
 		});
 
 		const config = this.config.get();
@@ -582,7 +597,7 @@ export class Runner {
 			runId,
 			turnId,
 			intendedOutputLimit: model.maxTokens ?? 0,
-			contextFor: () => this.assembleContext(toolContext, systemPrompt),
+			contextFor: () => this.assembleContext(toolContext, systemPrompt, transient),
 			emit: this.emit,
 			observer: {
 				update: (message, event) => {
@@ -700,7 +715,14 @@ export class Runner {
 	 * and where it cannot be duplicated). `kernel.persona.renderActive()` is the
 	 * block for that composer to use; `systemPrompt` here is used verbatim.
 	 */
-	private assembleContext(toolContext: unknown, systemPrompt: string): Context {
+	/** The transient messages for this turn, read once (see `takeTurn`). */
+	private resolveTransientMessages(): AgentMessage[] {
+		const resolved = this.options.transientMessages?.();
+		if (resolved === undefined) return [];
+		return Array.isArray(resolved) ? [...(resolved as AgentMessage[])] : [resolved as AgentMessage];
+	}
+
+	private assembleContext(toolContext: unknown, systemPrompt: string, transient: readonly AgentMessage[]): Context {
 		const prompt = systemPrompt;
 		const tools: PiTool[] = this.activeTools().tools.map((tool) => ({
 			name: tool.name,
@@ -709,9 +731,11 @@ export class Runner {
 				(tool as unknown as { parameters?: PiTool["parameters"] }).parameters ?? ({} as PiTool["parameters"]),
 		}));
 		void toolContext;
+		// Transient messages ride after the transcript: they are the newest thing the
+		// model should read, and they exist for this request only.
 		return {
 			...(prompt.length > 0 ? { systemPrompt: prompt } : {}),
-			messages: this.projectMessages(this.transcript),
+			messages: [...this.projectMessages(this.transcript), ...this.projectMessages(transient)],
 			tools,
 		};
 	}
