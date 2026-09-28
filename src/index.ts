@@ -21,7 +21,8 @@ export {
 	type CompactionServiceOptions,
 } from "./compaction-service";
 export { MemoryEnvironment, type MemoryEnvironmentOptions, type MemoryShellCall } from "./env/memory";
-export { NodeFileSystem, pathExists } from "./env/node-fs";
+export { NodeFileSystem, pathExists, resolveEnvPath, toFileError } from "./env/node-fs";
+export { killProcessTree, NodeEnvironment, NodeShell, resolveShellConfig, resolveTimeoutMs } from "./env/node-shell";
 export {
 	type EnvCallOptions,
 	type ExecutionEnv,
