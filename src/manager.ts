@@ -9,9 +9,11 @@
  * - **Which sessions are open right now.** Opening is a decision with a cost (a
  *   journal replay, a kernel, its services), so it happens once per session and
  *   the handle is reused until the session is closed.
- * - **Sessions do not share anything.** Each one is a separate `openSession`:
- *   its own kernel, bus, journal, usage and task ledger. Two sessions in the
- *   same directory are still two sessions.
+ * - **Sessions do not share anything.** Each one is a separate `openSession` and
+ *   its own cordis root: its own kernel, bus, journal, usage and task ledger. Two
+ *   sessions in the same directory are still two sessions, and one cannot hear the
+ *   other's events (cordis dispatches a tree's events tree-wide, so sharing a root
+ *   is exactly how two sessions would start writing into each other's journal).
  *
  * The harness does the assembly; this layer decides *when* to assemble, and what
  * to do with the result. The model layer is injected as a factory because
@@ -137,6 +139,8 @@ export class SessionManager {
 			config: {
 				...(meta.model === undefined ? {} : { model: splitModel(meta.model) }),
 			},
+			// No shared root: each session is its own cordis scope, so its bus,
+			// journaling, usage and goals cannot hear another session's events.
 			kernel: { warn: this.warn },
 		});
 		if (meta.persona !== undefined) session.kernel.persona.setActive([meta.persona]);
