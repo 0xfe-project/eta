@@ -127,6 +127,19 @@ export {
 } from "./skills";
 export { MODEL_STATE, type StateKV, sessionStateKV } from "./state";
 export {
+	DEFAULT_POOL_SIZE,
+	DEPTH_CAP,
+	type SubagentApi,
+	type SubagentBus,
+	type SubagentEventName,
+	SubagentManager,
+	type SubagentRecord,
+	type SubagentRunner,
+	type SubagentSpec,
+	type SubagentStatus,
+	type SubagentUsage,
+} from "./subagent";
+export {
 	type BashExecution,
 	type BashPrepare,
 	type BashToolDetails,
