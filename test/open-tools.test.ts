@@ -84,13 +84,38 @@ describe("what a session installs", () => {
 	});
 
 	it("installs the ask tool when the session has an ask channel", async () => {
-		const registry = new AskRegistry();
 		const session = await openSession({
 			storage: new MemoryStorage(),
 			models: fakeModels([]) as never,
-			ask: registry,
+			ask: true,
 		});
 		expect(registered(session)).toContain("ask_user");
+		expect(session.ask).toBeDefined();
+		await session.kernel.dispose();
+		session.stop();
+	});
+
+	it("records the answer, so a replayed question that was answered is not asked again", async () => {
+		const storage = new MemoryStorage();
+		const models = fakeModels([toolCallTurn("ask_user", { question: "which port?" }), stopTurn()]);
+		const session = await openSession({ storage, models: models as never, ask: true, askTimeoutMs: 5_000 });
+		session.kernel.inject(userMsg("go"));
+		const run = session.runner.run();
+		// The UI answers while the tool waits.
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		const [waiting] = session.ask!.pendingAsks();
+		expect(waiting?.question).toBe("which port?");
+		expect(session.ask!.answer(waiting!.questionId, { kind: "freeform", text: "8080" })).toBe(true);
+		await run;
+		await session.journaling.flush();
+
+		const entries = await storage.scanEntries({});
+		expect(entries.some((entry) => entry.type === "ask")).toBe(true);
+		expect(entries.some((entry) => entry.type === "answer")).toBe(true);
+		// Both halves are on disk, so a restart knows this question is settled.
+		const replaying = new AskRegistry();
+		replaying.replay((await SessionLog.load(storage)).graph.pathOldestFirst());
+		expect(replaying.pendingAsks()).toEqual([]);
 		await session.kernel.dispose();
 		session.stop();
 	});
@@ -169,7 +194,6 @@ describe("the tools against a real environment", () => {
 
 	it("records a question before it waits, so a replay still finds it", async () => {
 		const storage = new MemoryStorage();
-		const registry = new AskRegistry();
 		const models = fakeModels([
 			toolCallTurn("ask_user", { question: "which port?", options: [{ title: "8080" }] }),
 			stopTurn(),
@@ -177,9 +201,10 @@ describe("the tools against a real environment", () => {
 		const session = await openSession({
 			storage,
 			models: models as never,
-			ask: registry,
+			ask: true,
 			askTimeoutMs: 50,
 		});
+		expect(session.ask).toBeDefined();
 		session.kernel.inject(userMsg("go"));
 		await session.runner.run();
 		await session.journaling.flush();

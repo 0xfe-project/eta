@@ -57,7 +57,7 @@ import {
 	toToolResultMessage,
 } from "@eta/core";
 import type { TSchema } from "typebox";
-import { type AskRegistry, createAskUserTool } from "./ask";
+import { AskRegistry, createAskUserTool } from "./ask";
 import { BtwManager, btwSideAsk } from "./btw";
 import { CompactionService } from "./compaction-service";
 import type { ExecutionEnv } from "./env/types";
@@ -146,13 +146,12 @@ export interface OpenSessionOptions {
 	 */
 	env?: ExecutionEnv | undefined;
 	/**
-	 * The ask channel. With one, `ask_user` is installed and a question is written to
-	 * the journal *before* it waits, so a process killed while a human is thinking
-	 * still has the question when it comes back. The answer side is the caller's (it
-	 * constructs the registry, so it owns `onAnswer`).
+	 * The ask channel. `true` installs `ask_user` with the session owning the
+	 * registry (see `OpenSession.ask`); passing a registry the host built keeps the
+	 * host's own answer policy, but then the host is also the one recording answers.
 	 */
-	ask?: AskRegistry | undefined;
-	/** How long `ask_user` waits for a human. Defaults to the registry's own policy. */
+	ask?: boolean | AskRegistry | undefined;
+	/** How long `ask_user` waits for a human. Defaults to no timeout. */
 	askTimeoutMs?: number | undefined;
 	/** The subagent pool. With one, a session can spawn children; without it, it cannot. */
 	subagents?: SubagentManager | undefined;
@@ -199,6 +198,13 @@ export interface OpenSession {
 	 * to when the journal did not already say.
 	 */
 	tools: string[];
+	/**
+	 * The ask channel: what a UI answers through (`answer(questionId, response)`,
+	 * `pendingAsks()`), and what a restart re-surfaces questions from. Present when the
+	 * session was opened with `ask`; the session records both halves of the exchange,
+	 * so a replay can tell what is still waiting.
+	 */
+	ask: AskRegistry | undefined;
 	runner: Runner;
 	log: SessionLog;
 	/** The journal's owner: what wrote the entries this session replayed. */
@@ -275,6 +281,20 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 	// every host because "a session" means the same set of capabilities everywhere —
 	// and what is *absent* is expressed by what was passed in (no env, no file tools;
 	// no pool, no children), not by leaving pieces of the battery out.
+	// The ask channel: one registry per session, recording both halves of the
+	// exchange — the question before it waits (so a killed process still has it) and
+	// the answer when it lands (so a replay never re-surfaces a settled question).
+	const ask =
+		options.ask === true
+			? new AskRegistry({
+					onAnswer: (payload) => {
+						void journaling.recordAnswer(payload);
+					},
+				})
+			: options.ask === undefined || options.ask === false
+				? undefined
+				: options.ask;
+
 	const installedTools: HarnessTool<ExecutionToolContext, TSchema, unknown>[] = [
 		...(createTaskTools(kernel.tasks) as HarnessTool<ExecutionToolContext, TSchema, unknown>[]),
 		...(options.env === undefined
@@ -289,11 +309,11 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		...(options.subagents === undefined
 			? []
 			: (createSubagentTools(options.subagents) as HarnessTool<ExecutionToolContext, TSchema, unknown>[])),
-		...(options.ask === undefined
+		...(ask === undefined
 			? []
 			: [
 					createAskUserTool({
-						registry: options.ask,
+						registry: ask,
 						// The entry lands before the wait: that is what makes a question
 						// survive the process that asked it.
 						onAsk: async (payload) => {
@@ -311,7 +331,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		);
 	}
 	// A question that was waiting when the process died is waiting again.
-	options.ask?.replay(log.graph.pathOldestFirst());
+	ask?.replay(log.graph.pathOldestFirst());
 
 	// What the model may call. A session whose journal already chose a set keeps it —
 	// a narrower toolset is a decision somebody made, not something to overwrite — and
@@ -485,6 +505,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		btw,
 		memory,
 		tools: installedTools.map((tool) => tool.name),
+		ask,
 		promptSections,
 		compaction,
 		transcript,
