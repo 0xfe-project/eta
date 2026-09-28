@@ -108,33 +108,46 @@ describe("persona fidelity against eta-agent's persona.ts", () => {
 		expect(renderPersonaBlock([], new Map())).toEqual({ text: "", missing: [] });
 	});
 
-	it("the active persona reaches the provider's system prompt", async () => {
+	it("the active persona is the block the prompt owner composes with", async () => {
 		const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } } });
 		const fake = fakeModels([assistantMessage()]);
 		kernel.persona.loadCards([card("Executor", "You are the executor."), card("Other", "You are someone else.")]);
 		kernel.persona.setActive(["Executor"]);
-		const runner = new Runner(kernel, { models: fake, systemPrompt: "base prompt" });
+		// The runner puts this in the request verbatim; composing it into a prompt is
+		// the prompt layer's job (the harness's composer puts persona right after the
+		// base prompt, where a provider cache keeps it).
+		const block = kernel.persona.renderActive().text;
+		expect(block).toContain("You are the executor.");
+		expect(block).not.toContain("You are someone else.");
+		const runner = new Runner(kernel, { models: fake, systemPrompt: `base prompt\n\n${block}` });
 		kernel.inject({ role: "user", content: [{ type: "text", text: "go" }], timestamp: 0 });
 		await runner.run();
 
-		const systemPrompt = fake.calls[0]!.context.systemPrompt ?? "";
-		expect(systemPrompt).toContain("base prompt");
-		expect(systemPrompt).toContain("You are the executor.");
-		expect(systemPrompt).not.toContain("You are someone else.");
-		// The block is appended after the base prompt, separated by a blank line.
-		expect(systemPrompt).toBe("base prompt\n\nYou are the executor.");
+		expect(fake.calls[0]!.context.systemPrompt).toBe(`base prompt\n\n${block}`);
 		void kernel.dispose();
 	});
 
-	it("a missing active persona still leaves the rest of the prompt intact", async () => {
+	it("a missing active persona is reported, and the rest of the block stays", () => {
 		const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } } });
-		const fake = fakeModels([assistantMessage()]);
 		kernel.persona.loadCards([card("Executor", "still here")]);
 		kernel.persona.setActive(["Ghost", "Executor"]);
+		const rendered = kernel.persona.renderActive();
+		expect(rendered.missing).toEqual(["Ghost"]);
+		expect(rendered.text).toContain("still here");
+		void kernel.dispose();
+	});
+
+	it("the runner adds no prompt text of its own", async () => {
+		const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } } });
+		const fake = fakeModels([assistantMessage()]);
+		kernel.persona.loadCards([card("Executor", "persona text")]);
+		kernel.persona.setActive(["Executor"]);
 		const runner = new Runner(kernel, { models: fake, systemPrompt: "base" });
 		kernel.inject({ role: "user", content: [{ type: "text", text: "go" }], timestamp: 0 });
 		await runner.run();
-		expect(fake.calls[0]!.context.systemPrompt).toBe("base\n\nstill here");
+		// Core owns no model-visible words, persona included: what the caller passed is
+		// exactly what the provider sees.
+		expect(fake.calls[0]!.context.systemPrompt).toBe("base");
 		void kernel.dispose();
 	});
 });

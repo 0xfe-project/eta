@@ -30,7 +30,6 @@ import { generateWithRetry } from "./generation";
 import type { GoalService } from "./goal";
 import type { QueuedItem } from "./inbox";
 import type { Kernel } from "./kernel";
-import type { PersonaService } from "./persona";
 import type { KernelModels } from "./providers";
 import type { AgentRetryPolicy } from "./retry";
 import type { KernelTool, ToolService } from "./tools";
@@ -137,7 +136,6 @@ export class Runner {
 	private readonly kernel: Kernel;
 	private readonly tools: ToolService;
 	private readonly goal: GoalService;
-	private readonly persona: PersonaService;
 	private readonly options: RunnerOptions;
 	private readonly config: ConfigService;
 	private readonly models: KernelModels;
@@ -165,7 +163,6 @@ export class Runner {
 		if (options.initialTranscript !== undefined) this.transcript.push(...options.initialTranscript);
 		this.tools = kernel.tools;
 		this.goal = kernel.goal;
-		this.persona = kernel.persona;
 		this.attachCompaction(options.compaction);
 	}
 
@@ -693,9 +690,18 @@ export class Runner {
 		this.emit("message:end", { runId, message: result, ...(terminate ? { terminate: true as const } : {}) });
 	}
 
+	/**
+	 * One provider request: the prompt the caller composed, the transcript, and the
+	 * tools this turn offers.
+	 *
+	 * The runner adds no prompt text of its own — not even the persona. Persona is
+	 * *content*, and content belongs to whoever composes the prompt (the harness's
+	 * composer puts it right after the base prompt, where a provider cache keeps it
+	 * and where it cannot be duplicated). `kernel.persona.renderActive()` is the
+	 * block for that composer to use; `systemPrompt` here is used verbatim.
+	 */
 	private assembleContext(toolContext: unknown, systemPrompt: string): Context {
-		const personaBlock = this.persona.renderActive().text;
-		const prompt = [systemPrompt, personaBlock].filter((part) => part.length > 0).join("\n\n");
+		const prompt = systemPrompt;
 		const tools: PiTool[] = this.activeTools().tools.map((tool) => ({
 			name: tool.name,
 			description: tool.description ?? "",
@@ -735,8 +741,8 @@ export class Runner {
 			else assistant += charsToTokens(text);
 		}
 		const toolDefs = charsToTokens(JSON.stringify(context.tools ?? []));
-		// Persona is currently folded into systemPrompt; the prompts seam will
-		// report it as its own part later.
+		// `system` is the composed prompt as a whole; the prompt layer reports its own
+		// per-block split (`etaPromptSectionsDetailed`), which is what a panel shows.
 		return { system, persona: 0, user, assistant, toolDefs, total: system + user + assistant + toolDefs };
 	}
 }
