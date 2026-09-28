@@ -177,7 +177,7 @@ export function envContract(name: string, factory: EnvFactory): void {
 
 		it("runs commands, reporting exit codes and both streams", async () => {
 			const handle = await factory();
-			const { env, dispose } = handle;
+			const { dispose } = handle;
 			if (handle.shell === undefined) {
 				await dispose();
 				return;
@@ -194,7 +194,7 @@ export function envContract(name: string, factory: EnvFactory): void {
 
 		it("reports a timeout and an abort as execution errors", async () => {
 			const handle = await factory();
-			const { env, dispose } = handle;
+			const { dispose } = handle;
 			if (handle.shell === undefined) {
 				await dispose();
 				return;
