@@ -23,7 +23,7 @@ import {
 } from "@eta/core";
 import { assistantMessage, type FakeCompaction, fakeCompaction, fakeModels } from "@eta/core/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MetricsService } from "../src/index";
+import { composeEtaSystemPrompt, MetricsService } from "../src/index";
 import { journaledKernel } from "../src/testing";
 
 const userMsg = (text: string) => ({
@@ -107,7 +107,10 @@ function session(script: AssistantMessage[], tools: KernelTool[] = []) {
 		models: fake,
 		journal: journaling,
 		compaction,
-		systemPrompt: "You are Eta, a coding agent.",
+		// Composed the way the assembler composes it: base prompt, then the persona
+		// block the primitive renders. The runner adds no prompt text of its own.
+		systemPrompt: () =>
+			composeEtaSystemPrompt("You are Eta, a coding agent.", { persona: kernel.persona.renderActive().text }),
 		toolContext: { workspace: "/w" },
 		entryProjectors: {},
 		toProviderMessages: (messages) =>

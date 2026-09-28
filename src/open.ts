@@ -21,6 +21,13 @@
  * This is the harness's job rather than the kernel's: assembling a session means
  * knowing the services, and the services live here.
  *
+ * The system prompt is assembled here too, from the harness's own composer: the
+ * base prompt, the active persona, the skills catalog, the platform briefing, and
+ * the adaptive blocks (goal, tasks, memory) that are rewritten every generation.
+ * The order is the cache's order — stable blocks first — and the adaptive ones are
+ * re-read per request, so a note written a second ago is in the next prompt. A
+ * caller that passes its own `runner.systemPrompt` overrides all of it.
+ *
  * Compaction arrives as a summarizer plugin. Passing one installs the driver;
  * passing none opens a session with no bound on its history, which is what "that
  * plugin is not installed" means. The two are different states on purpose: a
@@ -53,6 +60,16 @@ import { BtwManager, btwSideAsk } from "./btw";
 import { CompactionService } from "./compaction-service";
 import { JournalingService, SESSION_CONFIG, TASKS_STATE } from "./journaling";
 import { MetricsService } from "./metrics";
+import {
+	composeEtaSystemPrompt,
+	DEFAULT_SYSTEM_PROMPT,
+	type EtaPromptSection,
+	type EtaPromptState,
+	etaPromptBlockChars,
+	etaPromptSectionsDetailed,
+	type PlatformPromptInfo,
+	renderPlatformBlock,
+} from "./prompts";
 import { RunPump, type RunPumpOptions } from "./pump";
 import { TaskReminderService } from "./reminder";
 
@@ -75,6 +92,31 @@ export interface OpenSessionOptions {
 	config?: Partial<KernelConfig>;
 	/** Runner options, minus the ones this assembly supplies. */
 	runner?: Omit<RunnerOptions, "models" | "initialTranscript" | "compaction" | "journal">;
+	/**
+	 * The base prompt the composed system prompt starts from. Defaults to the
+	 * harness's own (`DEFAULT_SYSTEM_PROMPT`); a product with its own voice passes
+	 * its own, and nothing else changes about the assembly.
+	 */
+	baseSystemPrompt?: string | undefined;
+	/**
+	 * Facts for the platform briefing — **paths only**: the words live in
+	 * `prompts/platform.ts`, and only the app knows where its config, session
+	 * directories and project memory are. Rendered per generation, so a caller that
+	 * learns something new about the session (memory now exists) can say so.
+	 */
+	platform?: PlatformPromptInfo | undefined;
+	/**
+	 * The rendered `<skills>` catalog block. Skill *discovery* is the app's (it knows
+	 * the cwd, the home directory and the git roots); this is the block a session
+	 * shows the model, and it is stable for the session.
+	 */
+	skillsSection?: string | undefined;
+	/**
+	 * The memory block, re-read per generation. The caller owns where memory comes
+	 * from (`MemoryCache` over `.eta/MEMORY.md` is the usual answer) so a session can
+	 * run without any memory at all.
+	 */
+	memorySource?: (() => string | undefined | Promise<string | undefined>) | undefined;
 	/** How the idle waker reports a run it started that then failed. */
 	pump?: RunPumpOptions;
 }
@@ -111,6 +153,11 @@ export interface OpenSession {
 	configRestored: boolean;
 	/** What the task restore kept, when the journal held a ledger. */
 	tasks: { kept: number; dropped: string[] } | undefined;
+	/**
+	 * The prompt as it stands right now: its named blocks, and how many characters
+	 * are cacheable against rewritten. What a prompt panel reads.
+	 */
+	promptSections: () => Promise<{ sections: EtaPromptSection[]; stableChars: number; adaptiveChars: number }>;
 	/** Stop the journaling this assembly wired (the host may want to take over). */
 	stop: () => void;
 }
@@ -172,12 +219,43 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 
 	const transcript = log.transcript();
 	const runner = new Runner(kernel, {
+		// The caller's runner options come first, so an explicit `systemPrompt` from
+		// the host wins over the assembly below.
 		...options.runner,
 		models: options.models,
 		journal: journaling,
 		...(compaction === undefined ? {} : { compaction }),
 		initialTranscript: transcript,
+		...(options.runner?.systemPrompt === undefined
+			? { systemPrompt: async () => composeEtaSystemPrompt(base, await promptState()) }
+			: {}),
 	});
+
+	// The prompt: composed per request so the adaptive blocks are current, in the
+	// order a provider cache wants (stable first). A caller's own runner prompt
+	// overrides this entirely — the harness supplies a default, not a policy.
+	const base = options.baseSystemPrompt ?? DEFAULT_SYSTEM_PROMPT;
+	const promptState = async (): Promise<EtaPromptState> => {
+		const persona = kernel.persona.renderActive().text;
+		const memory = options.memorySource === undefined ? undefined : await options.memorySource();
+		return {
+			...(kernel.goal.current === undefined
+				? {}
+				: { goal: { objective: kernel.goal.current.objective, status: kernel.goal.current.status } }),
+			tasks: kernel.tasks.list(),
+			...(persona.length === 0 ? {} : { persona }),
+			...(options.skillsSection === undefined || options.skillsSection.length === 0
+				? {}
+				: { skills: options.skillsSection }),
+			...(options.platform === undefined ? {} : { platform: renderPlatformBlock(options.platform) }),
+			...(memory === undefined || memory.length === 0 ? {} : { memory }),
+		};
+	};
+	const promptSections = async () => {
+		const state = await promptState();
+		const blocks = etaPromptBlockChars(base, state);
+		return { sections: etaPromptSectionsDetailed(base, state), ...blocks };
+	};
 
 	const pump = new RunPump(kernel, runner, options.pump);
 
@@ -222,6 +300,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		taskReminder,
 		pump,
 		btw,
+		promptSections,
 		compaction,
 		transcript,
 		orphans: log.orphans,
