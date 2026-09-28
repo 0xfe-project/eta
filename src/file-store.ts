@@ -37,6 +37,8 @@ export class FileSessionStore implements SessionStore {
 	private readonly root: string;
 	private readonly warn: (message: string) => void;
 	private readonly storageOptions: FileSessionStoreOptions["storage"];
+	/** Journals this store opened, so it can close them rather than leaving them to the collector. */
+	private readonly openStorages = new Map<string, StorageService>();
 	private closed = false;
 
 	constructor(options: FileSessionStoreOptions) {
@@ -58,6 +60,7 @@ export class FileSessionStore implements SessionStore {
 		await writeFile(temporary, `${JSON.stringify(meta, null, "\t")}\n`, "utf8");
 		await rename(temporary, join(directory, META_FILE));
 		const storage = await this.openStorage(directory, meta.id);
+		this.openStorages.set(meta.id, storage);
 		return { meta, storage };
 	}
 
@@ -73,7 +76,13 @@ export class FileSessionStore implements SessionStore {
 			// reason; opening it is the caller's error.
 			throw new Error(`session ${id} has no readable meta.json in ${directory}`);
 		}
-		return { meta, storage: await this.openStorage(directory, id) };
+		// One journal per session per store: opening it twice would mean two
+		// independent replays of the same file and two handles nobody closes.
+		const existing = this.openStorages.get(id);
+		if (existing !== undefined) return { meta, storage: existing };
+		const storage = await this.openStorage(directory, id);
+		this.openStorages.set(id, storage);
+		return { meta, storage };
 	}
 
 	async list(): Promise<SessionListing[]> {
@@ -101,12 +110,19 @@ export class FileSessionStore implements SessionStore {
 		const directory = this.directoryOf(id);
 		const before = await stat(directory).catch(() => undefined);
 		if (before === undefined) return false;
+		// Close the journal before deleting the directory under it: an open handle to
+		// a removed file is a leak the runtime reports as an error later, far from here.
+		await this.openStorages.get(id)?.close();
+		this.openStorages.delete(id);
 		await rm(directory, { recursive: true, force: true });
 		return true;
 	}
 
 	async close(): Promise<void> {
 		this.closed = true;
+		const open = [...this.openStorages.values()];
+		this.openStorages.clear();
+		for (const storage of open) await storage.close();
 	}
 
 	/** A journal for one session's directory, replayed and ready to write. */

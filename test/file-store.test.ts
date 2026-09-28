@@ -44,6 +44,8 @@ describe("what only a real directory tree gives", () => {
 		const store = new FileSessionStore({ root });
 		const meta = { id: "eta-abc", createdAt: 1_700_000_000_000, cwd: "/work", title: "layout" };
 		const created = await store.create(meta);
+		// (This store is closed at the end of the test: a journal left open is a
+		// handle the runtime reports as an error, far from here.)
 
 		expect(await readdir(root)).toEqual(["eta-abc"]);
 		// Metadata is written when the session is created; the journal appears on the
@@ -67,13 +69,16 @@ describe("what only a real directory tree gives", () => {
 		const reopened = new FileSessionStore({ root });
 		const opened = await reopened.open("eta-abc");
 		expect((await opened!.storage.getStats()).messageCount).toBe(1);
+		// Opening the same session twice is the same journal, not a second handle.
+		expect((await reopened.open("eta-abc"))!.storage).toBe(opened!.storage);
+		await reopened.close();
 	});
 
 	it("survives a restart: a new store over the same root finds the same sessions", async () => {
 		const root = await tempRoot();
 		const first = new FileSessionStore({ root });
 		const created = await first.create({ id: "eta-one", createdAt: 10, cwd: "/work/one", persona: "Executor" });
-		created.storage; // the journal exists from the moment the session is created
+		expect(created.meta.persona).toBe("Executor");
 		await first.close();
 
 		// A different process would do exactly this.
@@ -98,6 +103,7 @@ describe("what only a real directory tree gives", () => {
 		const replayed = await SessionLog.load(again!.storage);
 		expect(replayed.transcript()).toHaveLength(1);
 		expect(JSON.stringify(replayed.transcript())).toContain("written before the restart");
+		await third.close();
 	});
 
 	it("keeps a session whose metadata is damaged, with a reason instead of a disappearance", async () => {
