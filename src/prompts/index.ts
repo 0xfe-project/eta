@@ -9,6 +9,7 @@
 export * from "./base";
 export * from "./composer";
 export * from "./goal";
+export * from "./memory";
 export * from "./persona";
 export * from "./platform";
 export * from "./skills-block";
