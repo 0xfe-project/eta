@@ -78,10 +78,17 @@ export const DEFAULT_POOL_SIZE = 10;
 
 const NO_USAGE: SubagentUsage = { input: 0, output: 0 };
 
+/** Whether a status is an end state: nothing more will happen to this record. */
+function isTerminal(status: SubagentStatus): boolean {
+	return status === "done" || status === "failed" || status === "stopped";
+}
+
 export class SubagentManager {
 	private readonly records = new Map<string, SubagentRecord>();
 	private readonly bus: SubagentBus;
 	private readonly runner: SubagentRunner;
+	/** Callers waiting for a record to reach a terminal state. */
+	private readonly waiters = new Map<string, ((record: SubagentRecord) => void)[]>();
 	private sequence = 0;
 	private running = 0;
 	readonly poolSize: number;
@@ -134,6 +141,21 @@ export class SubagentManager {
 	/** How many children are running right now (the pool's own bookkeeping). */
 	get runningCount(): number {
 		return this.running;
+	}
+
+	/**
+	 * Wait for a record to reach a terminal state (or return at once if it is
+	 * already there). Thinking is nobody's but the caller's, so every form of
+	 * settling — done, failed, stopped — resolves it.
+	 */
+	async wait(id: string): Promise<SubagentRecord | undefined> {
+		const record = this.records.get(id);
+		if (record === undefined || isTerminal(record.status)) return record;
+		return await new Promise<SubagentRecord>((resolve) => {
+			const waiting = this.waiters.get(id) ?? [];
+			waiting.push(resolve);
+			this.waiters.set(id, waiting);
+		});
 	}
 
 	/** A child reports a finished turn; the turn budget is enforced here, not by the child. */
@@ -211,6 +233,8 @@ export class SubagentManager {
 			id: record.id,
 			parentId: record.parentId,
 		});
+		for (const resolve of this.waiters.get(record.id) ?? []) resolve(record);
+		this.waiters.delete(record.id);
 		// Nothing is orphaned: a terminal parent takes its descendants with it.
 		if (status === "done" || status === "failed" || status === "stopped") {
 			for (const childId of record.children) {

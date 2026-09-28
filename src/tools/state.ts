@@ -5,7 +5,7 @@
  * back, list the keys. `null` deletes. The store lives in the journal, so what a
  * model writes down here is there after a restart.
  */
-import { Type } from "typebox";
+import { type TSchema, Type } from "typebox";
 import type { StateKV } from "../state";
 import type { HarnessTool, ToolResult } from "./tool";
 
@@ -16,9 +16,7 @@ export const stateToolSchemas = {
 };
 
 /** The three state tools over a session KV. */
-export function createStateTools(
-	kv: StateKV,
-): HarnessTool<object | undefined, typeof stateToolSchemas.update, unknown>[] {
+export function createStateTools(kv: StateKV): HarnessTool<object | undefined, TSchema, unknown>[] {
 	return [
 		{
 			name: "update_state",
@@ -59,5 +57,5 @@ export function createStateTools(
 				};
 			},
 		},
-	] as unknown as HarnessTool<object | undefined, typeof stateToolSchemas.update, unknown>[];
+	];
 }

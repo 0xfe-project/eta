@@ -175,6 +175,7 @@ export {
 	readSchema,
 } from "./tools/read";
 export { createStateTools, stateToolSchemas } from "./tools/state";
+export { createSubagentTools, SUBAGENT_TOOL_NAMES } from "./tools/subagents";
 export { createTaskTools, TASK_TOOL_NAMES, type TaskStatus } from "./tools/tasks";
 export {
 	defineTool,
