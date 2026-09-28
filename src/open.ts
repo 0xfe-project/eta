@@ -69,6 +69,7 @@ import {
 	etaPromptSectionsDetailed,
 	type PlatformPromptInfo,
 	renderPlatformBlock,
+	taskReminderMessage,
 } from "./prompts";
 import { RunPump, type RunPumpOptions } from "./pump";
 import { TaskReminderService } from "./reminder";
@@ -119,6 +120,8 @@ export interface OpenSessionOptions {
 	memorySource?: (() => string | undefined | Promise<string | undefined>) | undefined;
 	/** How the idle waker reports a run it started that then failed. */
 	pump?: RunPumpOptions;
+	/** Turns without a task-tool call before the reminder nudge is due. */
+	reminderInterval?: number | undefined;
 }
 
 export interface OpenSession {
@@ -215,7 +218,10 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 				});
 
 	const metrics = new MetricsService(servicesCtx);
-	const taskReminder = new TaskReminderService(servicesCtx, { tasks: kernel.tasks });
+	const taskReminder = new TaskReminderService(servicesCtx, {
+		tasks: kernel.tasks,
+		...(options.reminderInterval === undefined ? {} : { reminderInterval: options.reminderInterval }),
+	});
 
 	const transcript = log.transcript();
 	const runner = new Runner(kernel, {
@@ -229,6 +235,11 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		...(options.runner?.systemPrompt === undefined
 			? { systemPrompt: async () => composeEtaSystemPrompt(base, await promptState()) }
 			: {}),
+		// The cadence's nudge rides with the request it was due for: drained once, so a
+		// turn that is never sent does not spend it, and never written to the transcript
+		// (which is what keeps it out of the journal, out of compaction's view, and out
+		// of the cacheable prefix).
+		transientMessages: () => (taskReminder.drain() ? taskReminderMessage() : undefined),
 	});
 
 	// The prompt: composed per request so the adaptive blocks are current, in the
