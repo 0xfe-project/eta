@@ -167,6 +167,16 @@ export class JournalingService extends Service {
 		await next;
 	}
 
+	/**
+	 * Commit value writes, ordered behind whatever the loop already queued, and
+	 * wait for them. This is the door the state tools use: a key the model stores
+	 * has to be on disk before the turn that stored it ends.
+	 */
+	async writeValues(values: ValueWrite[]): Promise<void> {
+		await this.enqueueValues(values);
+		await this.tail;
+	}
+
 	/** Every entry this session holds, oldest first. */
 	entries(): readonly Entry[] {
 		return this.log?.graph.pathOldestFirst() ?? [];
