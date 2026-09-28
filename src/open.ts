@@ -35,7 +35,7 @@
  * (`CompactionMisconfigured`) rather than acting like a history that fits.
  */
 
-import type { CompactionSummarizer } from "@eta/core";
+import type { CompactionSummarizer, KernelTool } from "@eta/core";
 import {
 	type AgentMessage,
 	applyGoalEntries,
@@ -56,8 +56,11 @@ import {
 	sessionScope,
 	toToolResultMessage,
 } from "@eta/core";
+import type { TSchema } from "typebox";
+import { type AskRegistry, createAskUserTool } from "./ask";
 import { BtwManager, btwSideAsk } from "./btw";
 import { CompactionService } from "./compaction-service";
+import type { ExecutionEnv } from "./env/types";
 import { JournalingService, SESSION_CONFIG, TASKS_STATE } from "./journaling";
 import {
 	extractMemoryAtRunEnd,
@@ -80,6 +83,17 @@ import {
 } from "./prompts";
 import { RunPump, type RunPumpOptions } from "./pump";
 import { TaskReminderService } from "./reminder";
+import { sessionStateKV } from "./state";
+import type { SubagentManager } from "./subagent";
+import { createBashTool } from "./tools/bash";
+import type { ExecutionToolContext } from "./tools/context";
+import { createEditTool } from "./tools/edit";
+import { createReadTool } from "./tools/read";
+import { createStateTools } from "./tools/state";
+import { createSubagentTools } from "./tools/subagents";
+import { createTaskTools } from "./tools/tasks";
+import { type HarnessTool, type ToolResult, toKernelTool } from "./tools/tool";
+import { createWriteTool } from "./tools/write";
 
 export interface OpenSessionOptions {
 	storage: StorageService;
@@ -126,6 +140,28 @@ export interface OpenSessionOptions {
 	 */
 	memorySource?: (() => string | undefined | Promise<string | undefined>) | undefined;
 	/**
+	 * The execution environment to install the file and shell tools for. Without one
+	 * a session has no read/write/edit/bash — there is nothing to run them against —
+	 * and that is a legitimate session (a subagent, a sandbox, a side thread).
+	 */
+	env?: ExecutionEnv | undefined;
+	/**
+	 * The ask channel. With one, `ask_user` is installed and a question is written to
+	 * the journal *before* it waits, so a process killed while a human is thinking
+	 * still has the question when it comes back. The answer side is the caller's (it
+	 * constructs the registry, so it owns `onAnswer`).
+	 */
+	ask?: AskRegistry | undefined;
+	/** How long `ask_user` waits for a human. Defaults to the registry's own policy. */
+	askTimeoutMs?: number | undefined;
+	/** The subagent pool. With one, a session can spawn children; without it, it cannot. */
+	subagents?: SubagentManager | undefined;
+	/**
+	 * Extra tools, appended after the standard set and installed the same way. A
+	 * deployment that adds a tool does not have to assemble the standard ones itself.
+	 */
+	tools?: readonly HarnessTool<ExecutionToolContext, TSchema, unknown>[] | undefined;
+	/**
 	 * The project's memory, wired end to end: the block is read (and re-read when a
 	 * file changes), and what is worth keeping is asked for at the end of a run.
 	 * Supplying this replaces `memorySource`.
@@ -158,6 +194,11 @@ export interface SessionMemoryOptions {
 
 export interface OpenSession {
 	kernel: Kernel;
+	/**
+	 * The tools this assembly installed, by name — what `activeToolNames` was pinned
+	 * to when the journal did not already say.
+	 */
+	tools: string[];
 	runner: Runner;
 	log: SessionLog;
 	/** The journal's owner: what wrote the entries this session replayed. */
@@ -182,7 +223,7 @@ export interface OpenSession {
 	transcript: AgentMessage[];
 	/** Entries whose parent the journal does not hold; their branch ends there. */
 	orphans: number;
-	/** The configuration the session resumes on. */
+	/** The configuration the session is on right now (a live read, not a snapshot). */
 	config: KernelConfig;
 	/** False when the journal held none and the caller's default was used. */
 	configRestored: boolean;
@@ -230,6 +271,65 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 	const goalEntries = log.graph.pathOldestFirst().filter((entry): entry is GoalEntry => entry.type === "goal");
 	if (goalEntries.length > 0) applyGoalEntries(kernel.goal, goalEntries);
 
+	// The standard battery: what a session is for. It is assembled here rather than by
+	// every host because "a session" means the same set of capabilities everywhere —
+	// and what is *absent* is expressed by what was passed in (no env, no file tools;
+	// no pool, no children), not by leaving pieces of the battery out.
+	const installedTools: HarnessTool<ExecutionToolContext, TSchema, unknown>[] = [
+		...(createTaskTools(kernel.tasks) as HarnessTool<ExecutionToolContext, TSchema, unknown>[]),
+		...(options.env === undefined
+			? []
+			: [
+					createReadTool() as HarnessTool<ExecutionToolContext, TSchema, unknown>,
+					createWriteTool() as HarnessTool<ExecutionToolContext, TSchema, unknown>,
+					createEditTool() as HarnessTool<ExecutionToolContext, TSchema, unknown>,
+					createBashTool() as HarnessTool<ExecutionToolContext, TSchema, unknown>,
+				]),
+		...(createStateTools(sessionStateKV(log, journaling)) as HarnessTool<ExecutionToolContext, TSchema, unknown>[]),
+		...(options.subagents === undefined
+			? []
+			: (createSubagentTools(options.subagents) as HarnessTool<ExecutionToolContext, TSchema, unknown>[])),
+		...(options.ask === undefined
+			? []
+			: [
+					createAskUserTool({
+						registry: options.ask,
+						// The entry lands before the wait: that is what makes a question
+						// survive the process that asked it.
+						onAsk: async (payload) => {
+							await journaling.recordAsk(payload);
+						},
+						...(options.askTimeoutMs === undefined ? {} : { timeoutMs: options.askTimeoutMs }),
+					}) as HarnessTool<ExecutionToolContext, TSchema, unknown>,
+				]),
+		...(options.tools ?? []),
+	];
+	const env = options.env;
+	for (const tool of installedTools) {
+		kernel.tools.register(
+			toKernelTool(tool, () => ({ env }) as ExecutionToolContext) as KernelTool<unknown, ToolResult<unknown>>,
+		);
+	}
+	// A question that was waiting when the process died is waiting again.
+	options.ask?.replay(log.graph.pathOldestFirst());
+
+	// What the model may call. A session whose journal already chose a set keeps it —
+	// a narrower toolset is a decision somebody made, not something to overwrite — and
+	// a name that is not installed is reported rather than silently dropped.
+	const installedNames = installedTools.map((tool) => tool.name);
+	if (kernel.config.read("activeToolNames").length === 0) {
+		kernel.config.update({ activeToolNames: installedNames });
+	} else {
+		const missing = kernel.config.read("activeToolNames").filter((name) => !installedNames.includes(name));
+		if (missing.length > 0) {
+			// Not an error: the session may have been configured by a deployment that had
+			// more (or other) tools. The run reports the gap when it builds its request.
+			options.kernel?.warn?.(
+				`[eta-harness] tools this session was configured for are not installed: ${missing.join(", ")}`,
+			);
+		}
+	}
+
 	// The ledger comes back from its value, malformed rows and all.
 	const storedTasks = (await options.storage.getValue(TASKS_STATE))?.value as StoredTask[] | undefined;
 	const tasks = storedTasks === undefined ? undefined : kernel.tasks.restore(storedTasks);
@@ -274,6 +374,11 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		// (which is what keeps it out of the journal, out of compaction's view, and out
 		// of the cacheable prefix).
 		transientMessages: () => (taskReminder.drain() ? taskReminderMessage() : undefined),
+		// What the built-in tools see: the environment this session runs on. A caller
+		// that supplies its own resolution keeps it.
+		...(options.env === undefined || options.runner?.toolContext !== undefined
+			? {}
+			: { toolContext: () => ({ env: options.env }) as ExecutionToolContext }),
 	});
 
 	// Memory: one cache per session, so the block is re-read when a file changes and
@@ -379,11 +484,12 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		pump,
 		btw,
 		memory,
+		tools: installedTools.map((tool) => tool.name),
 		promptSections,
 		compaction,
 		transcript,
 		orphans: log.orphans,
-		config,
+		config: kernel.config.get(),
 		configRestored: storedConfig !== undefined,
 		tasks,
 		stop: () => {

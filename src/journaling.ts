@@ -27,6 +27,10 @@
  */
 import {
 	type AgentMessage,
+	type AnswerEntry,
+	type AnswerPayload,
+	type AskEntry,
+	type AskPayload,
 	type BtwEntry,
 	type CommitOutcome,
 	type ConfigService,
@@ -76,6 +80,13 @@ export interface JournalingServiceOptions {
 let usageCounter = 0;
 
 /** A usage row id, unique within a session journal. */
+let payloadCounter = 0;
+
+function payloadEntryId(): string {
+	payloadCounter += 1;
+	return `entry-${payloadCounter.toString(36)}-${Date.now().toString(36)}`;
+}
+
 let btwCounter = 0;
 
 function btwId(): string {
@@ -186,6 +197,20 @@ export class JournalingService extends Service {
 	}
 
 	/**
+	 * Record the question before the tool waits (eta-agent's `onAsk`): a process
+	 * killed while a human thinks is a process whose question is still answerable
+	 * after a restart, because the entry is already there.
+	 */
+	async recordAsk(payload: AskPayload): Promise<Entry | undefined> {
+		return await this.recordPayload<AskEntry>("ask", payload as unknown as Record<string, unknown>);
+	}
+
+	/** Record a human's answer (or a dismissal), so a replay never re-surfaces it. */
+	async recordAnswer(payload: AnswerPayload): Promise<Entry | undefined> {
+		return await this.recordPayload<AnswerEntry>("answer", payload as unknown as Record<string, unknown>);
+	}
+
+	/**
 	 * Record a visible side note as a `btw` entry. The thread panel's history is the
 	 * journal's: a note that was saved is durable, and one that was not never
 	 * existed to anyone but the panel.
@@ -199,6 +224,24 @@ export class JournalingService extends Service {
 			type: "btw",
 			payload: { note },
 		} as NewEntry<BtwEntry>);
+		this.emit("entry:added", { entry });
+		await this.enqueueCommit();
+		return entry;
+	}
+
+	/** One entry of a kind whose payload is data rather than a message. */
+	private async recordPayload<T extends Entry>(
+		type: T["type"],
+		payload: Record<string, unknown>,
+	): Promise<Entry | undefined> {
+		const log = this.log;
+		if (log === undefined) return undefined;
+		const entry = log.record<T>({
+			id: payloadEntryId(),
+			parentId: null,
+			type,
+			payload,
+		} as unknown as NewEntry<T>);
 		this.emit("entry:added", { entry });
 		await this.enqueueCommit();
 		return entry;
