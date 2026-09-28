@@ -71,6 +71,34 @@ export {
 	shouldCompact,
 } from "./estimation";
 export { JournalingService, type JournalingServiceOptions, SESSION_CONFIG, TASKS_STATE } from "./journaling";
+export {
+	applyExtraction,
+	envMemoryFs,
+	extractionTranscript,
+	extractMemory,
+	extractMemoryAtRunEnd,
+	MEMORY_CAP,
+	MEMORY_FILE,
+	MEMORY_SECTIONS,
+	MEMORY_TRANSCRIPT_CAP,
+	type MemoryCache,
+	type MemoryEntry,
+	type MemoryExtraction,
+	type MemoryExtractionOutcome,
+	type MemoryExtractionSource,
+	type MemoryFile,
+	type MemoryFs,
+	type MemoryLoaded,
+	type MemoryScan,
+	type MemorySection,
+	memoryFileLabel,
+	parseMemory,
+	renderMemory,
+	renderMemoryBlock,
+	scanMemory,
+	scanMemoryPaths,
+	type TranscriptLike,
+} from "./memory";
 export { MetricsService } from "./metrics";
 export { type OpenSession, type OpenSessionOptions, openSession } from "./open";
 export { OutputBuffer, type OutputBufferOptions } from "./output-capture";
