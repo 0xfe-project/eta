@@ -63,8 +63,10 @@ export { JournalingService, type JournalingServiceOptions, SESSION_CONFIG, TASKS
 export { MetricsService } from "./metrics";
 export { type OpenSession, type OpenSessionOptions, openSession } from "./open";
 export { OutputBuffer, type OutputBufferOptions } from "./output-capture";
+export { TASK_REVIEW_PROMPT, TASK_UPDATE_SUCCESS } from "./prompts/tasks";
 export { RunPump, type RunPumpOptions } from "./pump";
 export { TaskReminderService, type TaskReminderServiceOptions } from "./reminder";
+export { MODEL_STATE, type StateKV, sessionStateKV } from "./state";
 export {
 	type BashExecution,
 	type BashPrepare,
@@ -100,6 +102,8 @@ export {
 	type ReadToolOptions,
 	readSchema,
 } from "./tools/read";
+export { createStateTools, stateToolSchemas } from "./tools/state";
+export { createTaskTools, TASK_TOOL_NAMES, type TaskStatus } from "./tools/tasks";
 export {
 	defineTool,
 	type HarnessTool,
