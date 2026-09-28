@@ -21,6 +21,13 @@
  * read is listed *with its reason* — a session must never silently disappear.
  */
 
+export {
+	type CreateSessionOptions,
+	type ManagedSession,
+	newSessionId,
+	SessionManager,
+	type SessionManagerOptions,
+} from "./manager";
 export { MemorySessionStore, type SessionStorageFactory } from "./memory-store";
 export type {
 	SessionListing,
