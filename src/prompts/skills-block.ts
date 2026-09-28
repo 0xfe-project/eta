@@ -6,7 +6,7 @@
  * agentskills.io suggests. A skill can opt out of the listing
  * (`disableModelInvocation`) while still being usable when a user names it.
  */
-/** A skill as the catalog needs it: what it is called, when to use it, and where it lives. */
+/** The catalog needs a name, a description and a location — the loader's `Skill` has all three. */
 export interface CatalogSkill {
 	name: string;
 	description: string;

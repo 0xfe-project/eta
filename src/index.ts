@@ -102,9 +102,17 @@ export {
 export { MetricsService } from "./metrics";
 export { type OpenSession, type OpenSessionOptions, openSession } from "./open";
 export { OutputBuffer, type OutputBufferOptions } from "./output-capture";
+export { dirnameEnvPath, formatSkillInvocation } from "./prompt-blocks";
 export * from "./prompts";
 export { RunPump, type RunPumpOptions } from "./pump";
 export { TaskReminderService, type TaskReminderServiceOptions } from "./reminder";
+export {
+	loadSkills,
+	loadSourcedSkills,
+	type Skill,
+	type SkillDiagnostic,
+	type SkillDiagnosticCode,
+} from "./skills";
 export { MODEL_STATE, type StateKV, sessionStateKV } from "./state";
 export {
 	type BashExecution,
