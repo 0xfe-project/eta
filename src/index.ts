@@ -120,7 +120,7 @@ export {
 	type TranscriptLike,
 } from "./memory";
 export { MetricsService } from "./metrics";
-export { type OpenSession, type OpenSessionOptions, openSession } from "./open";
+export { type OpenSession, type OpenSessionOptions, openSession, type SessionMemoryOptions } from "./open";
 export {
 	applyShellOutputUpdate,
 	LiveOutput,

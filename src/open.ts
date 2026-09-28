@@ -59,6 +59,13 @@ import {
 import { BtwManager, btwSideAsk } from "./btw";
 import { CompactionService } from "./compaction-service";
 import { JournalingService, SESSION_CONFIG, TASKS_STATE } from "./journaling";
+import {
+	extractMemoryAtRunEnd,
+	MemoryCache,
+	type MemoryExtractionOutcome,
+	type MemoryFile,
+	type MemoryFs,
+} from "./memory";
 import { MetricsService } from "./metrics";
 import {
 	composeEtaSystemPrompt,
@@ -118,10 +125,35 @@ export interface OpenSessionOptions {
 	 * run without any memory at all.
 	 */
 	memorySource?: (() => string | undefined | Promise<string | undefined>) | undefined;
+	/**
+	 * The project's memory, wired end to end: the block is read (and re-read when a
+	 * file changes), and what is worth keeping is asked for at the end of a run.
+	 * Supplying this replaces `memorySource`.
+	 */
+	memory?: SessionMemoryOptions | undefined;
 	/** How the idle waker reports a run it started that then failed. */
 	pump?: RunPumpOptions;
 	/** Turns without a task-tool call before the reminder nudge is due. */
 	reminderInterval?: number | undefined;
+}
+
+/** The project's memory, as a session needs it: where it is, and how to write it. */
+export interface SessionMemoryOptions {
+	/** How memory is reached: `envMemoryFs(env)` for a session with an environment. */
+	fs: MemoryFs;
+	/** The project's working directory; memory is scanned up from here. */
+	cwd: string;
+	/** The agent's home, for the `~/.eta` label. Optional. */
+	home?: string | undefined;
+	/**
+	 * The one-shot call the extraction makes. Without it memory is read and never
+	 * written — a session without a model that may spend tokens on notes.
+	 */
+	call?: ((systemPrompt: string, prompt: string) => Promise<string>) | undefined;
+	/** Under this many characters of conversation, no extraction is attempted. */
+	minTranscriptChars?: number | undefined;
+	/** Where an extraction's outcome is reported (a log line, a panel). */
+	onExtraction?: ((outcome: MemoryExtractionOutcome) => void) | undefined;
 }
 
 export interface OpenSession {
@@ -161,6 +193,8 @@ export interface OpenSession {
 	 * are cacheable against rewritten. What a prompt panel reads.
 	 */
 	promptSections: () => Promise<{ sections: EtaPromptSection[]; stableChars: number; adaptiveChars: number }>;
+	/** The project's memory, when the session was opened with one. */
+	memory: MemoryCache | undefined;
 	/** Stop the journaling this assembly wired (the host may want to take over). */
 	stop: () => void;
 }
@@ -202,7 +236,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 
 	// A goal that is only in memory is a goal a restart loses: wire its journaling
 	// with the session, so every transition lands as an entry.
-	const { stop } = recordGoalEntries(log, kernelOn(kernel.ctx));
+	const { stop: stopGoalEntries } = recordGoalEntries(log, kernelOn(kernel.ctx));
 
 	// Compaction: the service decides, the runner only asks. The cut is taken on
 	// the journal's entries, which the journaling service owns. No summarizer, no
@@ -242,13 +276,22 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		transientMessages: () => (taskReminder.drain() ? taskReminderMessage() : undefined),
 	});
 
+	// Memory: one cache per session, so the block is re-read when a file changes and
+	// the extraction writes exactly where the block reads. The cache is the only
+	// reader — a note written a moment ago has to be in the next prompt.
+	const memory =
+		options.memory === undefined ? undefined : new MemoryCache(options.memory.fs, options.memory.home ?? "");
+	const memoryTarget: MemoryFile | undefined =
+		options.memory === undefined ? undefined : (await memory!.load(options.memory.cwd)).target;
+
 	// The prompt: composed per request so the adaptive blocks are current, in the
 	// order a provider cache wants (stable first). A caller's own runner prompt
-	// overrides this entirely — the harness supplies a default, not a policy.
+	// overrides the whole thing — the harness supplies a default, not a policy.
 	const base = options.baseSystemPrompt ?? DEFAULT_SYSTEM_PROMPT;
 	const promptState = async (): Promise<EtaPromptState> => {
 		const persona = kernel.persona.renderActive().text;
-		const memory = options.memorySource === undefined ? undefined : await options.memorySource();
+		const memoryBlock =
+			memory === undefined ? await options.memorySource?.() : (await memory.load(options.memory!.cwd)).text;
 		return {
 			...(kernel.goal.current === undefined
 				? {}
@@ -259,7 +302,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 				? {}
 				: { skills: options.skillsSection }),
 			...(options.platform === undefined ? {} : { platform: renderPlatformBlock(options.platform) }),
-			...(memory === undefined || memory.length === 0 ? {} : { memory }),
+			...(memoryBlock === undefined || memoryBlock.length === 0 ? {} : { memory: memoryBlock }),
 		};
 	};
 	const promptSections = async () => {
@@ -267,6 +310,30 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		const blocks = etaPromptBlockChars(base, state);
 		return { sections: etaPromptSectionsDetailed(base, state), ...blocks };
 	};
+
+	// The end of a run is when a stretch of work stops being read: ask what was worth
+	// keeping. Off the run's critical path (the boundary does not wait for it) and
+	// never fatal — a provider that is down costs a note, not a turn.
+	const memoryOptions = options.memory;
+	const stopExtraction =
+		memoryOptions?.call === undefined || memoryTarget === undefined
+			? undefined
+			: kernelOn(kernel.ctx)("turn:run-end", () => {
+					void extractMemoryAtRunEnd(
+						{
+							fs: memoryOptions.fs,
+							target: memoryTarget,
+							call: memoryOptions.call!,
+							...(memoryOptions.minTranscriptChars === undefined
+								? {}
+								: { minTranscriptChars: memoryOptions.minTranscriptChars }),
+						},
+						// The journal is the transcript of record: what a run wrote is what
+						// the extraction reads, whether or not the host kept its own copy.
+						journaling.transcript(),
+						memoryOptions.onExtraction,
+					);
+				});
 
 	const pump = new RunPump(kernel, runner, options.pump);
 
@@ -311,6 +378,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		taskReminder,
 		pump,
 		btw,
+		memory,
 		promptSections,
 		compaction,
 		transcript,
@@ -318,6 +386,9 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		config,
 		configRestored: storedConfig !== undefined,
 		tasks,
-		stop,
+		stop: () => {
+			stopExtraction?.();
+			stopGoalEntries();
+		},
 	};
 }
