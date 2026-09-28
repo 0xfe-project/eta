@@ -12,6 +12,14 @@ import { FileSessionStore, JOURNAL_FILE, META_FILE } from "../src/file-store";
 import { sessionStoreContract } from "../src/testing";
 
 const roots: string[] = [];
+const stores: FileSessionStore[] = [];
+
+/** A store the test file will close afterwards: an open journal is a leak the runtime reports later. */
+function fileStore(options: ConstructorParameters<typeof FileSessionStore>[0]): FileSessionStore {
+	const store = new FileSessionStore(options);
+	stores.push(store);
+	return store;
+}
 
 async function tempRoot(): Promise<string> {
 	const root = await mkdtemp(join(tmpdir(), "eta-sessions-"));
@@ -20,12 +28,13 @@ async function tempRoot(): Promise<string> {
 }
 
 afterEach(async () => {
+	for (const store of stores.splice(0)) await store.close();
 	for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 
 sessionStoreContract("FileSessionStore", async () => {
 	const root = await tempRoot();
-	const store = new FileSessionStore({ root });
+	const store = fileStore({ root });
 	return {
 		store,
 		// The one backend-specific hook: a session whose metadata cannot be read.
@@ -41,7 +50,7 @@ sessionStoreContract("FileSessionStore", async () => {
 describe("what only a real directory tree gives", () => {
 	it("lays a session out as a directory with metadata beside its journal", async () => {
 		const root = await tempRoot();
-		const store = new FileSessionStore({ root });
+		const store = fileStore({ root });
 		const meta = { id: "eta-abc", createdAt: 1_700_000_000_000, cwd: "/work", title: "layout" };
 		const created = await store.create(meta);
 		// (This store is closed at the end of the test: a journal left open is a
@@ -66,23 +75,22 @@ describe("what only a real directory tree gives", () => {
 			},
 		]);
 		expect((await readdir(join(root, "eta-abc"))).sort()).toEqual([JOURNAL_FILE, META_FILE]);
-		const reopened = new FileSessionStore({ root });
+		const reopened = fileStore({ root });
 		const opened = await reopened.open("eta-abc");
 		expect((await opened!.storage.getStats()).messageCount).toBe(1);
 		// Opening the same session twice is the same journal, not a second handle.
 		expect((await reopened.open("eta-abc"))!.storage).toBe(opened!.storage);
-		await reopened.close();
 	});
 
 	it("survives a restart: a new store over the same root finds the same sessions", async () => {
 		const root = await tempRoot();
-		const first = new FileSessionStore({ root });
+		const first = fileStore({ root });
 		const created = await first.create({ id: "eta-one", createdAt: 10, cwd: "/work/one", persona: "Executor" });
 		expect(created.meta.persona).toBe("Executor");
 		await first.close();
 
 		// A different process would do exactly this.
-		const restarted = new FileSessionStore({ root });
+		const restarted = fileStore({ root });
 		const listed = await restarted.list();
 		expect(listed).toHaveLength(1);
 		const opened = await restarted.open("eta-one");
@@ -98,7 +106,7 @@ describe("what only a real directory tree gives", () => {
 		await log.commit();
 		await restarted.close();
 
-		const third = new FileSessionStore({ root });
+		const third = fileStore({ root });
 		const again = await third.open("eta-one");
 		const replayed = await SessionLog.load(again!.storage);
 		expect(replayed.transcript()).toHaveLength(1);
@@ -108,7 +116,7 @@ describe("what only a real directory tree gives", () => {
 
 	it("keeps a session whose metadata is damaged, with a reason instead of a disappearance", async () => {
 		const root = await tempRoot();
-		const store = new FileSessionStore({ root });
+		const store = fileStore({ root });
 		await store.create({ id: "eta-good", createdAt: 20, cwd: "/work" });
 		await mkdir(join(root, "eta-broken"));
 		await writeFile(join(root, "eta-broken", META_FILE), '{"id": "eta-broken"', "utf8");
@@ -133,7 +141,7 @@ describe("what only a real directory tree gives", () => {
 
 	it("refuses an id that would leave the session directory, and a duplicate", async () => {
 		const root = await tempRoot();
-		const store = new FileSessionStore({ root });
+		const store = fileStore({ root });
 		await expect(store.create({ id: "../escape", createdAt: 0, cwd: "/" })).rejects.toThrow(/invalid session id/);
 		await store.create({ id: "eta-dup", createdAt: 0, cwd: "/work" });
 		await expect(store.create({ id: "eta-dup", createdAt: 1, cwd: "/work" })).rejects.toThrow();
@@ -142,7 +150,7 @@ describe("what only a real directory tree gives", () => {
 
 	it("removes a session's whole directory, and forgets it", async () => {
 		const root = await tempRoot();
-		const store = new FileSessionStore({ root });
+		const store = fileStore({ root });
 		await store.create({ id: "eta-gone", createdAt: 0, cwd: "/work" });
 		expect(await store.remove("eta-gone")).toBe(true);
 		expect(await store.remove("eta-gone")).toBe(false);
