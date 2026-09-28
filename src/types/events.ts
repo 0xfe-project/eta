@@ -136,6 +136,8 @@ export interface ToolEvents {
 		toolCallId: string;
 		toolName: string;
 		partialResult: unknown;
+		/** The tool marked this update as one worth keeping (bash does, every 2s). */
+		checkpoint?: boolean;
 	};
 	"tool:end": {
 		runId: string;

@@ -37,8 +37,18 @@ export interface ToolCallInfo {
 	 * running: once it settles (or fails, or is cancelled) they are dropped, so
 	 * a tool that keeps streaming cannot publish into a finished call
 	 * (eta-agent's acceptingUpdates rule).
+	 *
+	 * `options.checkpoint` marks an update a client should persist rather than
+	 * treat as a frame to drop — a long command's output at a moment worth
+	 * keeping.
 	 */
-	update?: (partial: unknown) => void;
+	update?: (partial: unknown, options?: ToolUpdateOptions) => void;
+}
+
+/** What a tool says about one progress update beyond the partial itself. */
+export interface ToolUpdateOptions {
+	/** A point a consumer may keep: not a transient frame. */
+	checkpoint?: boolean;
 }
 
 export type BeforeToolResult = { ok: true; args: unknown } | { ok: false; blockReason: string };
@@ -123,7 +133,7 @@ export class ToolService extends Service {
 			/** Lets the caller wait for effects that already started. */
 			track?: <T>(work: Promise<T>) => Promise<T>;
 			/** Receives a running tool's progress; called only while it runs. */
-			onUpdate?: (call: { id: string; name: string }, partial: unknown) => void;
+			onUpdate?: (call: { id: string; name: string }, partial: unknown, options?: ToolUpdateOptions) => void;
 		},
 	): Promise<{ id: string; result: unknown }[]> {
 		const run = async (call: { id: string; name: string; arguments: unknown }) => {
@@ -142,8 +152,8 @@ export class ToolService extends Service {
 						...(onUpdate === undefined
 							? {}
 							: {
-									update: (partial: unknown) => {
-										if (accepting) onUpdate({ id: call.id, name: call.name }, partial);
+									update: (partial: unknown, updateOptions?: ToolUpdateOptions) => {
+										if (accepting) onUpdate({ id: call.id, name: call.name }, partial, updateOptions);
 									},
 								}),
 					}),

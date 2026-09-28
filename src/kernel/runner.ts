@@ -643,7 +643,7 @@ export class Runner {
 				turn,
 				signal,
 				toolContext: await this.resolveToolContext(),
-				onUpdate: (updated, partial) => {
+				onUpdate: (updated, partial, updateOptions) => {
 					// A progress report is a snapshot, like every other payload: the
 					// clone keeps a mutable partial out of the bus.
 					this.emit("tool:update", {
@@ -652,6 +652,7 @@ export class Runner {
 						toolCallId: updated.id,
 						toolName: updated.name,
 						partialResult: structuredClone(partial),
+						...(updateOptions?.checkpoint === true ? { checkpoint: true } : {}),
 					});
 				},
 				// Every tool call is an effect: once the run is aborting, no new one

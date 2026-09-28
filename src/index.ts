@@ -95,6 +95,7 @@ export {
 	type ToolCallInfo,
 	type ToolMiddleware,
 	ToolService,
+	type ToolUpdateOptions,
 } from "./kernel/tools";
 export { type ForkedChain, type ForkOptions, type ForkSelection, forkChain, selectBranchFork } from "./session/fork";
 export { recordGoalEntries } from "./session/goal-journal";
