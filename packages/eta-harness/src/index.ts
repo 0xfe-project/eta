@@ -26,6 +26,18 @@ export {
 	normalizeAskOptions,
 } from "./ask";
 export {
+	type BtwSideAnswer,
+	type BtwSideAsk,
+	type BtwSideAskDeps,
+	type BtwSideRequest,
+	type BtwToolStep,
+	btwSideAsk,
+	SIDE_EXCLUDED_TOOLS,
+	SIDE_MAX_TOKENS,
+	SIDE_MAX_TOOL_TURNS,
+	SIDE_TOKEN_BUDGET,
+} from "./btw";
+export {
 	type CompactionEntrySource,
 	CompactionMisconfigured,
 	CompactionService,
