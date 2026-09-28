@@ -190,7 +190,39 @@ export interface ShellExecOptions {
 	limits?: ShellOutputLimits | undefined;
 	/** Write the full output to a temporary file once the limits are crossed. */
 	spill?: boolean | undefined;
+	/**
+	 * Called with rate-limited live views of the bounded output while the command
+	 * runs. Only meaningful with `limits`: an unbounded capture has no window to
+	 * publish. The deltas are the shape {@link applyShellOutputUpdate} applies, so
+	 * a consumer can keep one view without ever holding the whole output.
+	 */
+	onUpdate?: ((update: ShellOutputUpdate) => void) | undefined;
 }
+
+/** Metadata that rides with a bounded shell output view. */
+export interface ShellOutputMetadata {
+	truncation: ShellTruncation;
+	/** Where the whole output went, once it was cut. */
+	spillPath?: string | undefined;
+	/** A tail view whose last kept line was cut: how long that line is. */
+	lastLineBytes?: number | undefined;
+}
+
+/** A complete bounded view of one command's output. */
+export interface ShellOutputView extends ShellOutputMetadata {
+	text: string;
+}
+
+/**
+ * An incremental change to one view. `append` and `slide` carry only what is new,
+ * so a fast command does not resend the window it already sent; `metadata` says
+ * something changed about the cut or the spill but not the text.
+ */
+export type ShellOutputUpdate =
+	| { kind: "replace"; output: ShellOutputView }
+	| { kind: "append"; text: string; metadata: ShellOutputMetadata }
+	| { kind: "slide"; drop: number; text: string; metadata: ShellOutputMetadata }
+	| { kind: "metadata"; metadata: ShellOutputMetadata };
 
 /** How a bounded output was cut (the shape `output-capture.ts` reports). */
 export interface ShellTruncation {

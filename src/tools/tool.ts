@@ -31,7 +31,7 @@ export interface ToolRun<TContext> {
 	/** The context this run resolved for tools (`ExecutionToolContext` for the built-ins). */
 	context: TContext;
 	/** Report progress; only accepted while the call is still running. */
-	update: (partial: ToolResult) => void;
+	update: (partial: ToolResult, options?: { checkpoint?: boolean }) => void;
 }
 
 /** A tool as the harness writes it. */
@@ -102,7 +102,7 @@ export function toKernelTool<TContext, TParameters extends TSchema, TDetails>(
 			return await tool.execute(args as Static<TParameters>, {
 				call,
 				context,
-				update: (partial: ToolResult) => call.update?.(partial),
+				update: (partial: ToolResult, options?: { checkpoint?: boolean }) => call.update?.(partial, options),
 			});
 		},
 	};

@@ -1,6 +1,6 @@
 /**
- * OutputBuffer — bounded capture of one command's output (the memory discipline
- * behind eta-agent's `harness/utils/output-capture.ts`).
+ * Bounded capture of one command's output (the memory discipline behind
+ * eta-agent's `harness/utils/output-capture.ts`).
  *
  * A command may print gigabytes. What the model gets is bounded before it is
  * ever concatenated: the buffer keeps only a window of `maxBytes * 2`, counts
@@ -8,13 +8,17 @@
  * time. The full text is available to *spill* to a file, and only until it has
  * been spilled — after that the file owns it.
  *
- * What eta does beyond this — rate-limited live updates of the window to the
- * running tool call — belongs to the bash tool, where a model actually watches
- * output arrive; it is not needed to keep memory in bounds, and this is where
- * the bounds live.
+ * `LiveOutput` is the other half: it publishes that window as it fills, through
+ * the adaptive publisher, so a client can watch a long command talk without ever
+ * holding its output. `applyShellOutputUpdate` applies the deltas on the far side.
  */
-import type { ShellTruncation } from "./env/types";
+import { AdaptivePublisher } from "./adaptive-publisher";
+import type { ShellOutputMetadata, ShellOutputUpdate, ShellOutputView, ShellTruncation } from "./env/types";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, truncateHead, truncateTail, utf8ByteLength } from "./truncate";
+
+/** The floor between two live updates, and the size budget they share. */
+export const OUTPUT_MIN_EMIT_INTERVAL_MS = 100;
+export const OUTPUT_TARGET_BYTES_PER_SECOND = 100 * 1024;
 
 /** What one buffer is allowed to keep. */
 export interface OutputBufferOptions {
@@ -156,4 +160,163 @@ function trimToFirstUtf8Bytes(text: string, maxBytes: number): string {
 	let end = maxBytes;
 	while (end > 0 && ((bytes[end] ?? 0) & 0xc0) === 0x80) end -= 1;
 	return textDecoder.decode(bytes.subarray(0, end));
+}
+
+/** What a live view needs to publish, and where the published updates go. */
+export interface LiveOutputOptions {
+	buffer: OutputBuffer;
+	onUpdate: (update: ShellOutputUpdate) => void;
+	onError: (error: unknown) => void;
+	/** Where the whole output went, once it has been spilled. */
+	spillPath?: string | undefined;
+	minIntervalMs?: number | undefined;
+	targetBytesPerSecond?: number | undefined;
+}
+
+/**
+ * Publishes one buffer's window while it fills.
+ *
+ * Writes received while publication is rate-limited collapse into the latest view
+ * — the publisher's snapshot is the buffer, so nothing is queued and nothing is
+ * lost. The first update after idle and the final flush are immediate.
+ */
+export class LiveOutput {
+	private readonly buffer: OutputBuffer;
+	private readonly publisher: AdaptivePublisher<ShellOutputView, ShellOutputUpdate>;
+	private spillPath: string | undefined;
+	private disposed = false;
+
+	constructor(options: LiveOutputOptions) {
+		this.buffer = options.buffer;
+		this.spillPath = options.spillPath;
+		this.publisher = new AdaptivePublisher({
+			snapshot: () => this.view(),
+			update: updateFrom,
+			measure: (update) => utf8ByteLength(JSON.stringify(update)),
+			publish: options.onUpdate,
+			onError: options.onError,
+			minIntervalMs: options.minIntervalMs ?? OUTPUT_MIN_EMIT_INTERVAL_MS,
+			targetBytesPerSecond: options.targetBytesPerSecond ?? OUTPUT_TARGET_BYTES_PER_SECOND,
+		});
+	}
+
+	/** One chunk arrived. */
+	push(chunk: string | Uint8Array): void {
+		if (this.disposed) return;
+		this.buffer.push(chunk);
+		this.publisher.markDirty();
+	}
+
+	/** The stream ended: flush the decoder and publish what is left. */
+	finish(): void {
+		if (this.disposed) return;
+		this.buffer.finish();
+		this.flush();
+	}
+
+	/** The full output now lives in a file; say so at once, not at the next chunk. */
+	setSpillPath(path: string): void {
+		if (this.disposed || this.spillPath === path) return;
+		this.spillPath = path;
+		this.publisher.markDirty();
+		this.flush();
+	}
+
+	flush(): void {
+		if (this.disposed) return;
+		this.publisher.flush(true);
+	}
+
+	dispose(): void {
+		this.publisher.dispose();
+		this.disposed = true;
+	}
+
+	/** The current view: the buffer's bounded text, plus where the rest of it went. */
+	view(): ShellOutputView {
+		const { text, truncation } = this.buffer.snapshot();
+		return {
+			text: sanitizeShellOutput(text),
+			truncation,
+			...(this.spillPath === undefined ? {} : { spillPath: this.spillPath }),
+			...(truncation.lastLineBytes === undefined ? {} : { lastLineBytes: truncation.lastLineBytes }),
+		};
+	}
+}
+
+/**
+ * Apply one delta to the view a consumer holds. The inverse of what the publisher
+ * sends: a client that keeps one `ShellOutputView` and applies everything it
+ * receives ends with exactly the view the producer had.
+ */
+export function applyShellOutputUpdate(
+	current: ShellOutputView | undefined,
+	update: ShellOutputUpdate,
+): ShellOutputView {
+	switch (update.kind) {
+		case "replace":
+			return update.output;
+		case "append":
+			return { text: `${current?.text ?? ""}${update.text}`, ...update.metadata };
+		case "slide":
+			return { text: `${current?.text.slice(update.drop) ?? ""}${update.text}`, ...update.metadata };
+		case "metadata":
+			return { text: current?.text ?? "", ...update.metadata };
+	}
+}
+
+/**
+ * The smallest delta that turns one view into the next: nothing new is sent twice.
+ * A window that turned over entirely has no shared text and is replaced outright.
+ */
+function updateFrom(previous: ShellOutputView | undefined, current: ShellOutputView): ShellOutputUpdate {
+	if (previous === undefined) return { kind: "replace", output: current };
+	const metadata: ShellOutputMetadata = {
+		truncation: current.truncation,
+		...(current.spillPath === undefined ? {} : { spillPath: current.spillPath }),
+		...(current.lastLineBytes === undefined ? {} : { lastLineBytes: current.lastLineBytes }),
+	};
+	if (current.text === previous.text) return { kind: "metadata", metadata };
+	if (current.text.length > previous.text.length && current.text.startsWith(previous.text)) {
+		return { kind: "append", text: current.text.slice(previous.text.length), metadata };
+	}
+	const shared = suffixPrefixOverlap(
+		previous.text,
+		current.text,
+		Math.min(previous.text.length, current.text.length, current.truncation.maxBytes * 2),
+	);
+	if (shared > 0) {
+		return { kind: "slide", drop: previous.text.length - shared, text: current.text.slice(shared), metadata };
+	}
+	return { kind: "replace", output: current };
+}
+
+/**
+ * How much of the end of `before` is the start of `after`: what a window that
+ * scrolled can keep. Probes the first bytes of the new text rather than every
+ * suffix, so the cost does not grow with the window.
+ */
+function suffixPrefixOverlap(before: string, after: string, scan: number): number {
+	if (before.length === 0 || after.length === 0 || scan === 0) return 0;
+	const tail = before.length > scan ? before.slice(before.length - scan) : before;
+	for (const probeLength of [Math.min(64, after.length), 1]) {
+		const probe = after.slice(0, probeLength);
+		let candidates = 0;
+		for (let index = tail.indexOf(probe); index !== -1; index = tail.indexOf(probe, index + 1)) {
+			if (++candidates > 8) break;
+			const overlapLength = tail.length - index;
+			if (overlapLength <= after.length && tail.slice(index) === after.slice(0, overlapLength)) {
+				return overlapLength;
+			}
+		}
+		if (probeLength === 1) break;
+	}
+	return 0;
+}
+
+/** Control characters a terminal would eat; a view is text, not a terminal stream. */
+const INVALID_SHELL_OUTPUT = /[\x00-\x08\x0b-\x1f\ufff9-\ufffb]/g;
+
+export function sanitizeShellOutput(text: string): string {
+	return text.replace(INVALID_SHELL_OUTPUT, "");
 }

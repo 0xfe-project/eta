@@ -17,19 +17,23 @@
  * the command, cwd, or environment before it runs) — that is how a remote
  * backend says "run this over there" without this tool knowing.
  *
- * Not ported yet: eta-agent streams a rate-limited live view of the output into
- * the running tool call (`tool:update` while the command talks). That needs the
- * adaptive publisher to be respectable; it is tracked as its own slice rather
- * than faked here.
+ * While the command talks, a rate-limited view of its output goes out as
+ * `tool:update` (eta-agent's live view): the caller keeps one view and applies
+ * deltas, and every couple of seconds the update is marked as a *checkpoint* —
+ * a frame worth keeping rather than one to drop when the next arrives. A command
+ * that floods without ever pausing still ends with a full final frame.
  */
 import type { Static } from "typebox";
 import { Type } from "typebox";
-import type { EnvCallOptions, ShellTruncation } from "../env/types";
+import type { EnvCallOptions, ShellOutputUpdate, ShellOutputView, ShellTruncation } from "../env/types";
+import { applyShellOutputUpdate } from "../output-capture";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize } from "../truncate";
 import type { ExecutionToolContext } from "./context";
 import type { HarnessTool, ToolResult } from "./tool";
 
 const MAX_TIMEOUT_SECONDS = 2_147_483_647 / 1000;
+/** How often a live update is marked as more than a transient frame. */
+const BASH_CHECKPOINT_INTERVAL_MS = 2_000;
 
 export const bashSchema = Type.Object({
 	command: Type.String({ description: "Bash command to execute" }),
@@ -106,6 +110,30 @@ export function createBashTool<TContext extends ExecutionToolContext = Execution
 			};
 			await options.prepare?.(execution, run.context);
 
+			// The live view the caller keeps, and the bookkeeping that decides which
+			// update is a checkpoint.
+			let view: ShellOutputView | undefined;
+			let lastCheckpointAt = Date.now();
+			let lastCheckpoint: string | undefined;
+			let acceptingUpdates = true;
+			const onUpdate = (update: ShellOutputUpdate): void => {
+				if (!acceptingUpdates) return;
+				view = applyShellOutputUpdate(view, update);
+				const partial = partialResultOf(view);
+				const now = Date.now();
+				const encoded = JSON.stringify(partial);
+				const checkpoint = now - lastCheckpointAt >= BASH_CHECKPOINT_INTERVAL_MS && encoded !== lastCheckpoint;
+				run.update(partial, checkpoint ? { checkpoint: true } : undefined);
+				if (checkpoint) {
+					lastCheckpointAt = now;
+					lastCheckpoint = encoded;
+				}
+			};
+
+			// An immediate first frame: the client shows the call as started before the
+			// command has said anything.
+			run.update({ content: [], details: undefined });
+
 			const call: EnvCallOptions = run.call.signal === undefined ? {} : { signal: run.call.signal };
 			const result = await env.exec(execution.command, {
 				cwd: execution.cwd,
@@ -114,12 +142,16 @@ export function createBashTool<TContext extends ExecutionToolContext = Execution
 				...(args.timeout === undefined ? {} : { timeout: args.timeout }),
 				limits: { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES, retain: "tail" },
 				spill: true,
+				onUpdate,
 				...call,
 			});
+			acceptingUpdates = false;
 
 			if (!result.ok) {
 				// Whatever the command printed before it was killed, then why.
-				const text = result.error.output ?? "";
+				// What the command printed: the live view if it has one (the same text,
+				// with the spill path the result may not carry), else what the error holds.
+				const text = result.error.output ?? view?.text ?? "";
 				const status =
 					result.error.code === "timeout"
 						? `Command timed out after ${args.timeout} seconds`
@@ -129,11 +161,13 @@ export function createBashTool<TContext extends ExecutionToolContext = Execution
 				throw new Error(text.length > 0 ? `${text}\n\n${status}` : status, { cause: result.error });
 			}
 
-			let outputText = result.value.output ?? "";
+			let outputText = result.value.output ?? view?.text ?? "";
 			let details: BashToolDetails | undefined;
-			if (result.value.truncation?.truncated === true) {
-				details = { truncation: result.value.truncation, fullOutputPath: result.value.spillPath };
-				outputText += truncationNotice(result.value.truncation, result.value.spillPath);
+			const truncation = result.value.truncation ?? view?.truncation;
+			const spillPath = result.value.spillPath ?? view?.spillPath;
+			if (truncation?.truncated === true) {
+				details = { truncation, fullOutputPath: spillPath };
+				outputText += truncationNotice(truncation, spillPath);
 			}
 			if (result.value.exitCode !== 0) {
 				throw new Error(
@@ -142,5 +176,19 @@ export function createBashTool<TContext extends ExecutionToolContext = Execution
 			}
 			return { content: [{ type: "text", text: outputText || "(no output)" }], details };
 		},
+	};
+}
+
+/** The partial a live update carries: the same shape the final result reports. */
+function partialResultOf(view: ShellOutputView): ToolResult<BashToolDetails | undefined> {
+	return {
+		content: [{ type: "text", text: view.text }],
+		details:
+			view.truncation.truncated || view.spillPath !== undefined
+				? {
+						truncation: view.truncation.truncated ? view.truncation : undefined,
+						fullOutputPath: view.spillPath,
+					}
+				: undefined,
 	};
 }

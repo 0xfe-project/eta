@@ -14,6 +14,7 @@
  * out: installing the harness installs all of it.
  */
 
+export { AdaptivePublisher, type AdaptivePublisherOptions } from "./adaptive-publisher";
 export {
 	type AskObserver,
 	AskRegistry,
@@ -113,7 +114,16 @@ export {
 } from "./memory";
 export { MetricsService } from "./metrics";
 export { type OpenSession, type OpenSessionOptions, openSession } from "./open";
-export { OutputBuffer, type OutputBufferOptions } from "./output-capture";
+export {
+	applyShellOutputUpdate,
+	LiveOutput,
+	type LiveOutputOptions,
+	OUTPUT_MIN_EMIT_INTERVAL_MS,
+	OUTPUT_TARGET_BYTES_PER_SECOND,
+	OutputBuffer,
+	type OutputBufferOptions,
+	sanitizeShellOutput,
+} from "./output-capture";
 export { dirnameEnvPath, formatSkillInvocation } from "./prompt-blocks";
 export * from "./prompts";
 export { RunPump, type RunPumpOptions } from "./pump";

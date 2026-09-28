@@ -27,7 +27,7 @@ import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import { constants as osConstants } from "node:os";
 import { join } from "node:path";
-import { OutputBuffer } from "../output-capture";
+import { LiveOutput, OutputBuffer } from "../output-capture";
 import { NodeFileSystem, pathExists, resolveEnvPath } from "./node-fs";
 import {
 	type EnvCallOptions,
@@ -316,6 +316,17 @@ export class NodeShell implements Shell {
 			const combined = bounded?.();
 			const stdoutBuffer = bounded?.();
 			const stderrBuffer = bounded?.();
+			// The live view: the same combined window, published as it fills. Only a
+			// caller that asked for updates and a bounded window gets one — there is
+			// nothing to publish otherwise.
+			const live =
+				combined === undefined || options?.onUpdate === undefined
+					? undefined
+					: new LiveOutput({
+							buffer: combined,
+							onUpdate: options.onUpdate,
+							onError: () => undefined,
+						});
 			// Without limits the caller asked for the whole truth, so it is kept whole.
 			let stdout = "";
 			let stderr = "";
@@ -343,6 +354,9 @@ export class NodeShell implements Shell {
 					if (!created.ok) return;
 					spillPath = created.value;
 					await fileSystem.writeFile(created.value, prefix);
+					// The window now has a second home: say so, now, rather than at the
+					// next chunk (a command can go quiet right after it floods).
+					live?.setSpillPath(created.value);
 				});
 			};
 
@@ -407,8 +421,14 @@ export class NodeShell implements Shell {
 				if (combined === undefined) {
 					if (stream === "stdout") stdout += chunk;
 					else stderr += chunk;
-				} else {
+				} else if (live === undefined) {
 					combined.push(chunk);
+					if (stream === "stdout") stdoutBuffer?.push(chunk);
+					else stderrBuffer?.push(chunk);
+				} else {
+					// One push through the live view, which is what feeds the combined
+					// window; the per-stream buffers are only needed for the final split.
+					live.push(chunk);
 					if (stream === "stdout") stdoutBuffer?.push(chunk);
 					else stderrBuffer?.push(chunk);
 				}
@@ -425,6 +445,9 @@ export class NodeShell implements Shell {
 
 			void waitForChildProcess(child).then(
 				async ({ code, signal: exitSignal }) => {
+					// The last frame is the one that matters: a view cut by the rate limit
+					// would leave a client showing less than the command printed.
+					live?.finish();
 					combined?.finish();
 					stdoutBuffer?.finish();
 					stderrBuffer?.finish();

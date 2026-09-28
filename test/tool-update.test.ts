@@ -30,7 +30,7 @@ function setup(script: AssistantMessage[], tools: KernelTool[]) {
 	const fake = fakeModels(script);
 	const runner = new Runner(kernel, { models: fake, journal: journaling });
 	for (const tool of tools) kernel.tools.register(tool);
-	const updates: { toolCallId: string; toolName: string; partialResult: unknown }[] = [];
+	const updates: { toolCallId: string; toolName: string; partialResult: unknown; checkpoint?: boolean }[] = [];
 	const names: string[] = [];
 	const on = kernelOn(kernel.ctx);
 	const offs = [
@@ -59,6 +59,26 @@ function setup(script: AssistantMessage[], tools: KernelTool[]) {
 }
 
 describe("tool:update", () => {
+	it("carries a checkpoint flag through the update channel", async () => {
+		const marking: KernelTool = {
+			name: "marking",
+			execute: async (_args, call: ToolCallInfo) => {
+				call.update?.("halfway", { checkpoint: true });
+				call.update?.("just a frame");
+				return "done";
+			},
+		};
+		const context = setup(
+			[toolTurn([{ id: "c1", name: "marking" }]), assistantMessage({ content: [{ type: "text", text: "ok" }] })],
+			[marking],
+		);
+		context.kernel.inject(userMsg("go"));
+		await context.runner.run();
+		expect(context.updates.map((update) => update.checkpoint === true)).toEqual([true, false]);
+		expect(context.updates[0]?.partialResult).toBe("halfway");
+		context.dispose();
+	});
+
 	it("reports progress in order, between tool:start and tool:end", async () => {
 		const streaming: KernelTool = {
 			name: "run",
