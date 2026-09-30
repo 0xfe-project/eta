@@ -53,10 +53,17 @@ export interface CallFrame {
 	requestId?: string;
 }
 
-/** Subscribe to a target's state and events (idempotent). */
+/**
+ * Subscribe to a target's state and events (idempotent).
+ *
+ * `filter` narrows the *events* a subscriber receives (a substring of the event name, so
+ * `tool` catches the `tool:*` family); state is never filtered, because a panel that asked for
+ * a target's state asked for the whole of it. Absent means everything.
+ */
 export interface SubscribeFrame {
 	op: "subscribe";
 	target: string;
+	filter?: string;
 }
 
 export interface UnsubscribeFrame {
