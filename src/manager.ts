@@ -96,6 +96,12 @@ export interface SessionManagerOptions {
 	 * card when a reload finds it gone. Absent means personas are the caller's business entirely.
 	 */
 	personasFor?: ((meta: SessionMeta) => Promise<PersonaCard[]>) | undefined;
+	/**
+	 * The rendered `<skills>` block for a session's working directory — discovery is the app's
+	 * (it knows the cwd, the home and the git roots); the block is the harness's. Read when the
+	 * session opens, and stable for its life, which is where the prompt layer wants it.
+	 */
+	skillsFor?: ((meta: SessionMeta) => Promise<string>) | undefined;
 	/** Where the app's files live, for the memory a session reads and writes. */
 	memoryFor?: ((meta: SessionMeta) => SessionMemoryWiring | undefined) | undefined;
 	/** Called when a session cannot be opened; the list keeps its row either way. */
@@ -154,6 +160,7 @@ export class SessionManager {
 	private readonly envFor: SessionManagerOptions["envFor"];
 	private readonly platformFor: SessionManagerOptions["platformFor"];
 	private readonly personasFor: SessionManagerOptions["personasFor"];
+	private readonly skillsFor: SessionManagerOptions["skillsFor"];
 	private readonly memoryFor: SessionManagerOptions["memoryFor"];
 	private readonly subagents: SessionManagerOptions["subagents"];
 	private readonly warn: (message: string) => void;
@@ -169,6 +176,7 @@ export class SessionManager {
 		this.envFor = options.envFor;
 		this.platformFor = options.platformFor;
 		this.personasFor = options.personasFor;
+		this.skillsFor = options.skillsFor;
 		this.memoryFor = options.memoryFor;
 		this.warn = options.warn ?? (() => undefined);
 	}
@@ -318,6 +326,7 @@ export class SessionManager {
 					};
 		const environment = this.envFor?.(meta);
 		const wiring = this.memoryFor?.(meta);
+		const skills = await this.skillsFor?.(meta);
 		const memory: SessionMemoryOptions | undefined =
 			wiring === undefined
 				? undefined
@@ -339,6 +348,7 @@ export class SessionManager {
 			...(environment === undefined ? {} : { env: environment.env }),
 			// The app's own facts: the words are the harness's, the paths are this app's.
 			...(platform === undefined ? {} : { platform }),
+			...(skills === undefined || skills.length === 0 ? {} : { skillsSection: skills }),
 			...(memory === undefined ? {} : { memory }),
 			// Subagents: a session joins the pool of the tree that spawned it, or — when it is a
 			// root — gets a runner, and the pool is built around it during assembly.

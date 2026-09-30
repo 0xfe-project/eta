@@ -17,6 +17,7 @@ import { type ExecutionEnv, MemoryEnvironment, NodeEnvironment } from "@eta/harn
 import { afterEach, describe, expect, it } from "vitest";
 import { SessionManager, type SessionManagerOptions } from "../src/manager";
 import { MemorySessionStore } from "../src/memory-store";
+import { renderSkillsBlock } from "../src/skills";
 
 const roots: string[] = [];
 
@@ -126,5 +127,39 @@ describe("the environment a session runs in", () => {
 		const without = manager();
 		const bare = await without.create({ cwd: root });
 		expect(bare.session.tools).not.toContain("bash");
+	});
+});
+
+describe("skills", () => {
+	it("gives a session the catalog block for its own directory", async () => {
+		const root = await scratch();
+		const project = join(root, "project");
+		const skillsDir = join(project, ".agents", "skills", "porting");
+		await mkdir(skillsDir, { recursive: true });
+		await writeFile(
+			join(skillsDir, "SKILL.md"),
+			"---\nname: porting\ndescription: How to port faithfully.\n---\n\nRead the source.\n",
+			"utf8",
+		);
+
+		const sessions = manager({
+			envFor: () => ({ env: new NodeEnvironment({ cwd: project }) as unknown as ExecutionEnv }),
+			skillsFor: (meta) =>
+				renderSkillsBlock({ env: new NodeEnvironment({ cwd: meta.cwd }), cwd: meta.cwd, home: root }),
+		});
+		const created = await sessions.create({ cwd: project });
+		const prompt = await created.session.promptSections();
+		const skills = prompt.sections.find((section) => section.name === "skills");
+		expect(skills?.text).toContain("<name>porting</name>");
+		// The location is what lets the model read the file when a task matches.
+		expect(skills?.text).toContain(join(skillsDir, "SKILL.md"));
+	});
+
+	it("has no skills block when nothing applies", async () => {
+		const root = await scratch();
+		const sessions = manager({ skillsFor: async () => "" });
+		const created = await sessions.create({ cwd: root });
+		const prompt = await created.session.promptSections();
+		expect(prompt.sections.some((section) => section.name === "skills")).toBe(false);
 	});
 });

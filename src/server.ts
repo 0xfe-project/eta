@@ -30,7 +30,7 @@ import { providersPlugin } from "./bundled/providers";
 import { sessionsPlugin } from "./bundled/sessions";
 import { settingsPlugin } from "./bundled/settings";
 import { FileSessionStore } from "./file-store";
-import { SessionManager } from "./manager";
+import { SessionManager, type SessionManagerOptions } from "./manager";
 import { discoverPersonas } from "./personas";
 import { PluginManager } from "./plugins";
 import type { EtaProviderConfig } from "./providers/config-types";
@@ -61,6 +61,11 @@ export interface AssembleOptions {
 	pluginWatchIntervalMs?: number | undefined;
 	/** The agent's home, for `~/.eta/persona`. Defaults to the real one. */
 	home?: string | undefined;
+	/**
+	 * How a session's environment is decided — the file and shell tools it runs, and where its
+	 * memory lives. Passed straight to the manager; the server itself never builds one.
+	 */
+	envFor?: SessionManagerOptions["envFor"] | undefined;
 	warn?: ((message: string) => void) | undefined;
 }
 
@@ -174,7 +179,9 @@ export async function assembleServer(options: AssembleOptions): Promise<Assemble
 	};
 
 	const store = new FileSessionStore({ root: join(options.dataDir, "sessions"), warn });
+	const envFor = options.envFor;
 	const sessions = new SessionManager({
+		...(envFor === undefined ? {} : { envFor }),
 		store,
 		modelsFor: () => kernelModels,
 		settings: () => settings.read(),
