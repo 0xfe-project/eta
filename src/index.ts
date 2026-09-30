@@ -30,9 +30,16 @@
 import type { MountedPlugin, SessionViewSections, ViewDiagnostics } from "./types";
 
 export type {
+	EtaModelConfig,
+	ModelCapabilities,
 	MountedPlugin,
+	NetworkConfig,
 	PluginPanelDescriptor,
 	PluginSlot,
+	ProviderHeaders,
+	ProviderKind,
+	ProviderSummary,
+	ProvidersView,
 	SectionName,
 	SessionState,
 	SessionViewSections,

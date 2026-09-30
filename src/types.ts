@@ -136,3 +136,66 @@ export interface SidebarSession {
 	/** Why this session cannot be read, when it cannot (the store keeps the row). */
 	broken?: string | undefined;
 }
+
+/* ------------------------------------------------------------------ providers */
+
+/** Kinds with a built-in endpoint; the rest take one from the user. */
+export type ProviderKind =
+	| "kimi-coding"
+	| "deepseek"
+	| "zai-coding-cn"
+	| "zai"
+	| "openai-codex"
+	| "openai-compatible"
+	| "openai-responses";
+
+/**
+ * Extra request headers for one provider. A `null` value means "do not send this header", which
+ * also suppresses one the transport would add by itself (User-Agent, Authorization).
+ */
+export type ProviderHeaders = Record<string, string | null>;
+
+/** What a model can do. Missing metadata is unknown, not a negative claim. */
+export interface ModelCapabilities {
+	name?: string;
+	contextWindow?: number;
+	maxTokens?: number;
+	input?: ("text" | "image")[];
+	reasoning?: boolean;
+	thinkingMode?: "only" | "both" | "no";
+	reasoningEfforts?: ("minimal" | "low" | "medium" | "high" | "xhigh" | "max")[];
+	providerDefaultEffort?: "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+}
+
+export interface EtaModelConfig extends ModelCapabilities {
+	id: string;
+	defaultThinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+	overrides?: ModelCapabilities;
+}
+
+/** One provider as a client sees it: the key is a boolean, never the secret. */
+export interface ProviderSummary {
+	id: string;
+	name?: string;
+	kind: ProviderKind;
+	baseUrl: string;
+	hasApiKey: boolean;
+	headers?: ProviderHeaders;
+	models: EtaModelConfig[];
+	lastRefreshedAt?: string;
+}
+
+export interface NetworkConfig {
+	mode: "system" | "manual" | "direct";
+	proxyUrl?: string;
+	noProxy?: string;
+}
+
+/** The providers target's state: what a settings page renders, and the revision it holds. */
+export interface ProvidersView {
+	network?: NetworkConfig;
+	providers: ProviderSummary[];
+	defaultModel?: string;
+	/** The config file's content hash: a write carries the revision it read. */
+	revision: string;
+}
