@@ -616,3 +616,129 @@ describe("stopping a child", () => {
 		await h.unload();
 	});
 });
+
+describe("the state a session carries between turns", () => {
+	it("sets, pauses, resumes and clears the goal, and starts the work when one is set", async () => {
+		const models = fakeModels([assistantMessage({ content: [{ type: "text", text: "on it" }] })]);
+		const h = await harness(models);
+		await h.load();
+		const { session } = (await h.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
+		const goalOf = () =>
+			h.state(`sessions.${session}`)?.sections.goal as { objective: string; status: string } | undefined;
+
+		expect(goalOf()).toBeUndefined();
+		// A goal with no objective is refused rather than stored empty.
+		await expect(h.call("sessions", "goal", { session, action: "set" })).rejects.toThrow(/needs an objective/);
+		await expect(h.call("sessions", "goal", { session, action: "wander" })).rejects.toThrow(
+			/set, pause, resume or clear/,
+		);
+
+		await h.call("sessions", "goal", { session, action: "set", objective: "port the server" });
+		expect(goalOf()).toMatchObject({ objective: "port the server", status: "active" });
+		// The goal is durable state, not a field on a frame: it is in the journal.
+		const log = () => h.manager.openSessions().find((open) => open.meta.id === session)?.session.log;
+		expect(
+			log()
+				?.graph.pathOldestFirst()
+				.some((entry) => entry.type === "goal"),
+		).toBe(true);
+		// Setting it started the work, because "work on this" is an instruction.
+		await until(() => models.calls.length > 0);
+		await until(
+			() => h.manager.openSessions().find((open) => open.meta.id === session)?.session.runner.running === false,
+		);
+
+		await h.call("sessions", "goal", { session, action: "pause" });
+		expect(goalOf()?.status).toBe("paused");
+		await h.call("sessions", "goal", { session, action: "resume" });
+		expect(goalOf()?.status).toBe("active");
+		await h.call("sessions", "goal", { session, action: "clear" });
+		expect(goalOf()).toBeUndefined();
+		await h.unload();
+	});
+
+	it("creates, updates, sets and removes tasks", async () => {
+		const h = await harness();
+		await h.load();
+		const { session } = (await h.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
+		const tasks = () =>
+			h.state(`sessions.${session}`)?.sections.tasks as { id: string; content: string; status: string }[];
+
+		const created = (await h.call("sessions", "taskCreate", {
+			session,
+			content: "port the wire",
+			priority: "high",
+		})) as {
+			task: { id: string };
+		};
+		expect(created.task.id).toBe("t1");
+		expect(tasks()).toEqual([expect.objectContaining({ id: "t1", content: "port the wire", status: "pending" })]);
+
+		await h.call("sessions", "taskUpdate", { session, id: "t1", content: "port the wire, then the floor" });
+		expect(tasks()[0]?.content).toBe("port the wire, then the floor");
+		await h.call("sessions", "taskSet", { session, id: "t1", status: "in_progress" });
+		expect(tasks()[0]?.status).toBe("in_progress");
+		await h.call("sessions", "taskSet", { session, id: "t1", status: "completed" });
+		expect(tasks()[0]?.status).toBe("completed");
+
+		// A task that is not there is named as such, not silently nothing.
+		await expect(h.call("sessions", "taskSet", { session, id: "t9", status: "completed" })).rejects.toThrow(
+			/no such task/,
+		);
+		expect(await h.call("sessions", "taskRemove", { session, id: "t1" })).toEqual({ removed: true });
+		expect(tasks()).toEqual([]);
+		await expect(h.call("sessions", "taskRemove", { session })).rejects.toThrow(/needs a session and an id/);
+		await h.unload();
+	});
+
+	it("deletes a key of the model's own state, and answers a pending question", async () => {
+		const h = await harness();
+		await h.load();
+		const { session } = (await h.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
+		const open = () => h.manager.openSessions().find((entry) => entry.meta.id === session)?.session;
+		const stateKeys = () => (h.state(`sessions.${session}`)?.sections.state as { keys: string[] }).keys;
+
+		await h.call("sessions", "resync", { session });
+		expect(stateKeys()).toEqual([]);
+		await open()?.journaling.writeValues([
+			{ kind: "value", op: "set", namespace: "eta.model-state", key: "plan", value: "x" },
+		]);
+		await h.call("sessions", "resync", { session });
+		expect(stateKeys()).toEqual(["plan"]);
+		// Deleting it is the same door the model's own state tools use.
+		await h.call("sessions", "stateDelete", { session, key: "plan" });
+		await h.call("sessions", "resync", { session });
+		expect(stateKeys()).toEqual([]);
+
+		// A question waiting for a human is answered (or dropped) through the wire.
+		const asked = open()?.ask?.ask(
+			{ questionId: "q1", question: "which wire?", options: [], askedAt: Date.now() } as never,
+			{ timeoutMs: 5_000 },
+		);
+		await until(() => (open()?.ask?.pendingAsks() ?? []).length > 0);
+		expect(
+			await h.call("sessions", "answer", {
+				session,
+				questionId: "q1",
+				response: { kind: "freeform", text: "this one" },
+			}),
+		).toEqual({ answered: true });
+		expect(await asked).toEqual({ kind: "freeform", text: "this one" });
+		// An answer for something nobody is waiting on is a `false`, not an invention.
+		expect(await h.call("sessions", "answer", { session, questionId: "q1", response: { kind: "none" } })).toEqual({
+			answered: false,
+		});
+
+		const waiting = open()?.ask?.ask(
+			{ questionId: "q2", question: "still there?", options: [], askedAt: Date.now() } as never,
+			{ timeoutMs: 5_000 },
+		);
+		await until(() => (open()?.ask?.pendingAsks() ?? []).length > 0);
+		// Dropping the question also gives up the run that was waiting on it: a turn nobody can
+		// answer must not hang.
+		expect(await h.call("sessions", "askAbort", { session, questionId: "q2" })).toEqual({ aborted: true });
+		expect(await waiting).toEqual({ kind: "none" });
+		expect(open()?.ask?.pendingAsks()).toEqual([]);
+		await h.unload();
+	});
+});

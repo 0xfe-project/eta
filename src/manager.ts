@@ -251,6 +251,10 @@ export class SessionManager {
 			config: {
 				...(meta.model === undefined ? {} : { model: splitModel(meta.model) }),
 			},
+			// The ask channel is part of a session here: questions are answered over the
+			// wire (`sessions.answer`), and without a registry the model's own ask tool is
+			// not installed at all.
+			ask: true,
 			// No shared root: each session is its own cordis scope, so its bus,
 			// journaling, usage and goals cannot hear another session's events.
 			kernel: { warn: this.warn },

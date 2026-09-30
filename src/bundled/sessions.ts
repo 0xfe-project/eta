@@ -23,8 +23,8 @@
  * (the store). Policy stays where it already is; this file is wiring.
  */
 import type { SidebarSession } from "@eta/client-wire-proto";
-import type { ImageContent } from "@eta/core";
-import type { BtwSaveState, BtwThread } from "@eta/harness";
+import type { GoalState, ImageContent, StoredTask, Task, TaskStatus } from "@eta/core";
+import { type AskResponse, type BtwSaveState, type BtwThread, sessionStateKV } from "@eta/harness";
 import { Service } from "cordis";
 import type { CreateSessionOptions, ForkSessionOptions, ManagedSession, SessionManager } from "../manager";
 import type { SessionMeta } from "../store";
@@ -50,6 +50,14 @@ export const SESSION_ACTIONS = [
 	"btwHandoff",
 	"btwClear",
 	"subagentStop",
+	"goal",
+	"taskCreate",
+	"taskUpdate",
+	"taskSet",
+	"taskRemove",
+	"stateDelete",
+	"answer",
+	"askAbort",
 ] as const;
 export type SessionAction = (typeof SESSION_ACTIONS)[number];
 
@@ -336,6 +344,97 @@ export class SessionsService extends Service {
 		else attached.managed.session.kernel.nextRun(text);
 		attached.managed.session.pump.pump();
 		return true;
+	}
+
+	/**
+	 * Set, pause, resume or clear the goal — and, when a goal is set on an idle session,
+	 * start the work: saying "work on this" and then waiting to be asked twice would make
+	 * the op a note rather than an instruction (eta-agent's rule, kept).
+	 */
+	async goal(
+		id: string,
+		action: "set" | "pause" | "resume" | "clear",
+		objective?: string,
+	): Promise<GoalState | undefined> {
+		const attached = await this.open(id);
+		const goal = attached.managed.session.kernel.goal;
+		if (action === "set") {
+			if (objective === undefined || objective.trim().length === 0) {
+				throw new Error("sessions.goal with action 'set' needs an objective");
+			}
+			goal.set(objective);
+		} else if (action === "pause") goal.pause();
+		else if (action === "resume") goal.resume();
+		else goal.clear();
+		this.wire.push(`sessions.${id}`);
+		// Setting a goal means "start working on it": an idle session gets the first push here
+		// (the continuation prompt after that is the loop's own business).
+		if (action === "set" && !attached.running) await this.prompt(id, { text: `Work toward the goal: ${objective}` });
+		return goal.current;
+	}
+
+	/** A task on the session's ledger. The ledger lives in the journal, so this is durable. */
+	async taskCreate(id: string, content: string, priority?: Task["priority"]): Promise<StoredTask> {
+		const attached = await this.open(id);
+		const task = attached.managed.session.kernel.tasks.create(
+			content,
+			priority === undefined ? {} : { priority },
+		).task;
+		this.wire.push(`sessions.${id}`);
+		return task;
+	}
+
+	/** Rename, reprioritise, re-status or re-wire a task's dependencies. */
+	async taskUpdate(
+		id: string,
+		taskId: string,
+		patch: { content?: string; status?: TaskStatus; deps?: string[]; priority?: Task["priority"] },
+	): Promise<StoredTask> {
+		const attached = await this.open(id);
+		const updated = attached.managed.session.kernel.tasks.update(taskId, patch);
+		if (updated === undefined) throw new Error(`no such task: ${taskId}`);
+		this.wire.push(`sessions.${id}`);
+		return updated.task;
+	}
+
+	async taskRemove(id: string, taskId: string): Promise<boolean> {
+		const attached = await this.open(id);
+		const removed = attached.managed.session.kernel.tasks.remove(taskId);
+		this.wire.push(`sessions.${id}`);
+		return removed;
+	}
+
+	/** Forget one key of the model's own state (`update_state`) — the delete half of it. */
+	async stateDelete(id: string, key: string): Promise<void> {
+		const attached = await this.open(id);
+		await sessionStateKV(attached.managed.session.log, attached.managed.session.journaling).set(key, null);
+		this.wire.push(`sessions.${id}`);
+	}
+
+	/**
+	 * Answer the question a session is waiting on. The response shape is the ask channel's
+	 * own (`selection` / `freeform` / `none`); an answer for something that is not waiting is
+	 * a `false`, which the caller may or may not care about — the op reports it.
+	 */
+	async answer(id: string, questionId: string, response: unknown): Promise<boolean> {
+		const attached = await this.open(id);
+		const ask = attached.managed.session.ask;
+		if (ask === undefined) throw new Error(`session ${id} has no ask channel`);
+		const answered = ask.answer(questionId, response as AskResponse);
+		this.wire.push(`sessions.${id}`);
+		return answered;
+	}
+
+	/**
+	 * Drop a pending question, and the run waiting on it: a question nobody will answer must
+	 * not leave a turn hanging, and the run is what is doing the waiting.
+	 */
+	async askAbort(id: string, questionId: string): Promise<boolean> {
+		const attached = await this.open(id);
+		const aborted = attached.managed.session.ask?.abort(questionId) ?? false;
+		await this.abort(id);
+		this.wire.push(`sessions.${id}`);
+		return aborted;
 	}
 
 	/**
@@ -662,6 +761,104 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 						}
 						await service.subagentStop(session, id);
 						return { result: { session, id } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "goal", async (call) => {
+						const { session, action, objective } = (call.args ?? {}) as {
+							session?: string;
+							action?: "set" | "pause" | "resume" | "clear";
+							objective?: string;
+						};
+						if (session === undefined) throw new Error("sessions.goal needs a session");
+						if (action !== "set" && action !== "pause" && action !== "resume" && action !== "clear") {
+							throw new Error("sessions.goal needs action: set, pause, resume or clear");
+						}
+						const goal = await service.goal(session, action, objective);
+						return { result: { session, action, goal: goal ?? null } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "taskCreate", async (call) => {
+						const { session, content, priority } = (call.args ?? {}) as {
+							session?: string;
+							content?: string;
+							priority?: Task["priority"];
+						};
+						if (session === undefined || content === undefined) {
+							throw new Error("sessions.taskCreate needs a session and a content");
+						}
+						return { result: { task: await service.taskCreate(session, content, priority) } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "taskUpdate", async (call) => {
+						const { session, id, ...patch } = (call.args ?? {}) as {
+							session?: string;
+							id?: string;
+							content?: string;
+							status?: TaskStatus;
+							deps?: string[];
+							priority?: Task["priority"];
+						};
+						if (session === undefined || id === undefined) {
+							throw new Error("sessions.taskUpdate needs a session and an id");
+						}
+						return { result: { task: await service.taskUpdate(session, id, patch) } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "taskSet", async (call) => {
+						const { session, id, status } = (call.args ?? {}) as {
+							session?: string;
+							id?: string;
+							status?: TaskStatus;
+						};
+						if (session === undefined || id === undefined || status === undefined) {
+							throw new Error("sessions.taskSet needs a session, an id and a status");
+						}
+						return { result: { task: await service.taskUpdate(session, id, { status }) } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "taskRemove", async (call) => {
+						const { session, id } = (call.args ?? {}) as { session?: string; id?: string };
+						if (session === undefined || id === undefined) {
+							throw new Error("sessions.taskRemove needs a session and an id");
+						}
+						return { result: { removed: await service.taskRemove(session, id) } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "stateDelete", async (call) => {
+						const { session, key } = (call.args ?? {}) as { session?: string; key?: string };
+						if (session === undefined || key === undefined) {
+							throw new Error("sessions.stateDelete needs a session and a key");
+						}
+						await service.stateDelete(session, key);
+						return { result: { session, key } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "answer", async (call) => {
+						const { session, questionId, response } = (call.args ?? {}) as {
+							session?: string;
+							questionId?: string;
+							response?: unknown;
+						};
+						if (session === undefined || questionId === undefined) {
+							throw new Error("sessions.answer needs a session and a questionId");
+						}
+						return { result: { answered: await service.answer(session, questionId, response) } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "askAbort", async (call) => {
+						const { session, questionId } = (call.args ?? {}) as { session?: string; questionId?: string };
+						if (session === undefined || questionId === undefined) {
+							throw new Error("sessions.askAbort needs a session and a questionId");
+						}
+						return { result: { aborted: await service.askAbort(session, questionId) } };
 					}),
 				);
 				registrations.push(
