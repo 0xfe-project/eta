@@ -229,3 +229,64 @@ describe("the config over the wire", () => {
 		await h.unload();
 	});
 });
+
+describe("refreshing a provider's model list", () => {
+	it("asks the endpoint and writes down what it found", async () => {
+		const calls: string[] = [];
+		const send = (async (url: string) => {
+			calls.push(String(url));
+			return new Response(
+				JSON.stringify({ data: [{ id: "discovered", context_window: 200_000, max_tokens: 8_000 }] }),
+				{
+					status: 200,
+				},
+			);
+		}) as unknown as typeof fetch;
+		const root = await mkdtemp(join(tmpdir(), "eta-providers-refresh-"));
+		roots.push(root);
+		const ctx = new Context();
+		const wire = new WireService(ctx);
+		const frames: { target?: string; frame: ServerFrame }[] = [];
+		wire.attachSink((addressed) => frames.push(addressed));
+		const store = new ProviderConfigStore({ path: join(root, "config.json") });
+		const fiber = ctx.plugin(providersPlugin({ store, fetch: send }) as never, undefined as never);
+		await fiber;
+		await until(() => (wire.snapshot("providers")?.sections.config as ProvidersView | undefined) !== undefined);
+
+		const view = wire.snapshot("providers")?.sections.config as ProvidersView;
+		await wire.dispatch(
+			{
+				op: "call",
+				target: "providers",
+				action: "save",
+				args: {
+					revision: view.revision,
+					provider: {
+						id: "local",
+						kind: "openai-compatible",
+						baseUrl: "https://local.test/v1",
+						apiKey: "sk-test",
+						models: [{ id: "m1" }],
+					},
+				},
+			},
+			{ reply: () => undefined } as never,
+		);
+
+		await wire.dispatch({ op: "call", target: "providers", action: "refresh", args: { id: "local" } }, {
+			reply: () => undefined,
+		} as never);
+		expect(calls).toEqual(["https://local.test/v1/models"]);
+		const refreshed = wire.snapshot("providers")?.sections.config as ProvidersView;
+		expect(refreshed.providers[0]?.models.map((model) => model.id)).toContain("discovered");
+		expect(refreshed.providers[0]?.lastRefreshedAt).toBeDefined();
+
+		// Refreshing something that is not configured is named as such.
+		await expect(
+			wire.dispatch({ op: "call", target: "providers", action: "refresh", args: { id: "nope" } }, {
+				reply: () => undefined,
+			} as never),
+		).rejects.toThrow(/no such provider/);
+		await (fiber as unknown as { dispose(): Promise<void> }).dispose();
+	});
+});

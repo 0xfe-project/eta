@@ -25,6 +25,7 @@
 		"@eta/core": "*",
 		"@eta/harness": "*",
 		"@eta/storage-jsonl": "*",
-		"@eta/client-wire-proto": "*"
+		"@eta/client-wire-proto": "*",
+		"@earendil-works/pi-ai": "0.85.1"
 	}
 }

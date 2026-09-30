@@ -16,14 +16,20 @@
  */
 import type { ProvidersView } from "@eta/client-wire-proto";
 import { Service } from "cordis";
+import { discoverModels } from "../providers/discovery";
 import type { ProviderConfigStore } from "../providers/store";
 import type { WireService } from "../wire-service";
 
 /** The actions this target has. One list, so the wire and the plugin cannot disagree. */
-export const PROVIDER_ACTIONS = ["save", "delete", "setDefault", "setNetwork", "reload"] as const;
+export const PROVIDER_ACTIONS = ["save", "delete", "setDefault", "setNetwork", "reload", "refresh"] as const;
 
 export interface ProvidersPluginOptions {
 	store: ProviderConfigStore;
+	/**
+	 * The HTTP client discovery uses. A test supplies one; production uses `fetch`, which is what
+	 * makes the refresh path the same client the requests go through.
+	 */
+	fetch?: typeof fetch | undefined;
 	/** Diagnostics. */
 	warn?: ((message: string) => void) | undefined;
 }
@@ -123,6 +129,26 @@ export function providersPlugin(options: ProvidersPluginOptions) {
 						latest = view;
 						wire.pushNow("providers");
 						return { result: { revision: view.revision, network: view.network ?? null } };
+					}),
+					wire.handle("providers", "refresh", async (call) => {
+						const { id } = (call.args ?? {}) as { id?: string };
+						if (id === undefined) throw new Error("providers.refresh needs an id");
+						const view = await options.store.view();
+						const provider = (view.providers ?? []).find((entry) => entry.id === id);
+						if (provider === undefined) throw new Error(`no such provider: ${id}`);
+						const discovered = await discoverModels({
+							reference: { kind: provider.kind, baseUrl: provider.baseUrl },
+							headers: provider.headers,
+							...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+						});
+						if (discovered.error !== undefined) throw new Error(discovered.error);
+						// The refresh writes what it found, at the revision it read: a config that
+						// changed while the request was in flight is refused rather than overwritten
+						// with a list that is already stale.
+						const updated = await options.store.markRefreshed(id, discovered.models, new Date().toISOString());
+						latest = updated ?? (await refresh());
+						wire.pushNow("providers");
+						return { result: { revision: latest.revision, models: discovered.models.length } };
 					}),
 					wire.handle("providers", "reload", async () => {
 						// A client asking "did anything change?" — the answer is the state, and the
