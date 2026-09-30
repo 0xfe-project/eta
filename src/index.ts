@@ -34,9 +34,12 @@ export type {
 	PluginPanelDescriptor,
 	PluginSlot,
 	SectionName,
+	SessionState,
 	SessionViewSections,
+	SidebarSession,
 	ViewCore,
 	ViewDiagnostics,
+	ViewMessageRow,
 } from "./types";
 
 // ------------------------------------------------------------------- the client's side
