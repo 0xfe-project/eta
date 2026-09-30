@@ -229,6 +229,16 @@ export interface QueueEvents {
 	"queue:update": { queues: { entryId: string; kind: string }[] };
 }
 
+/**
+ * What a subagent pool announces. Only transitions, and only the ones a panel needs:
+ * a spawn is already visible as the tool call that caused it.
+ */
+export interface SubagentEvents {
+	"subagents:completed": { id: string; parentId: string | undefined };
+	"subagents:failed": { id: string; parentId: string | undefined };
+	"subagents:steered": { id: string; parentId: string | undefined; note: string };
+}
+
 export interface InjectEvents {
 	/** A message entered the kernel through `inject()`. */
 	"inject:received": { message: AgentMessage };
@@ -250,6 +260,7 @@ export interface KernelEvents
 		UsageEvents,
 		StateEvents,
 		StorageEvents,
+		SubagentEvents,
 		InjectEvents {}
 
 /** A bus emit that is checked against the kernel's own vocabulary. */

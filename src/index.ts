@@ -186,6 +186,7 @@ export {
 	type PromptEvents,
 	type StateEvents,
 	type StorageEvents,
+	type SubagentEvents,
 	type TaskEvents,
 	type ToolEvents,
 	type TurnEvents,
