@@ -21,10 +21,11 @@
  * hand `openSession` something that can generate.
  */
 import type { CompactionSummarizer, KernelModels } from "@eta/core";
-import { forkChain } from "@eta/core";
+import { DEFAULT_COMPACTION_SETTINGS, forkChain } from "@eta/core";
 import { type OpenSession, openSession, type SubagentManager } from "@eta/harness";
 import { forkWrites } from "./fork";
 import { parseModelId } from "./model-id";
+import type { Settings } from "./settings";
 import type { SessionListing, SessionMeta, SessionStore } from "./store";
 import { sessionSubagentRunner } from "./subagent";
 
@@ -52,6 +53,15 @@ export interface SessionManagerOptions {
 	subagents?: { poolSize?: number | undefined } | false | undefined;
 	/** What a new session's metadata starts as, beyond the id and the time. */
 	defaults?: Partial<Pick<SessionMeta, "persona" | "model" | "title">> | undefined;
+	/**
+	 * What a new session starts as, read at the moment one is created.
+	 *
+	 * A function, not a value: the point of settings is that the *next* session gets what the
+	 * user just chose, and a snapshot taken when the manager was built would freeze the first
+	 * answer forever. Read here rather than in the plugin so every path that creates a session
+	 * inherits them — including a subagent's, which is created by the runner.
+	 */
+	settings?: (() => Promise<Settings>) | undefined;
 	/** Called when a session cannot be opened; the list keeps its row either way. */
 	warn?: ((message: string) => void) | undefined;
 }
@@ -87,6 +97,7 @@ export class SessionManager {
 	private readonly modelsFor: SessionManagerOptions["modelsFor"];
 	private readonly compaction: CompactionSummarizer | undefined;
 	private readonly defaults: SessionManagerOptions["defaults"];
+	private readonly settings: (() => Promise<Settings>) | undefined;
 	private readonly subagents: SessionManagerOptions["subagents"];
 	private readonly warn: (message: string) => void;
 	private readonly open = new Map<string, ManagedSession>();
@@ -97,27 +108,27 @@ export class SessionManager {
 		this.compaction = options.compaction;
 		this.subagents = options.subagents;
 		this.defaults = options.defaults;
+		this.settings = options.settings;
 		this.warn = options.warn ?? (() => undefined);
 	}
 
-	/** Start a session and open it. */
+	/** Start a session and open it, on whatever the settings say today. */
 	async create(options: CreateSessionOptions = {}): Promise<ManagedSession> {
+		const settings = (await this.settings?.()) ?? {};
+		const persona = options.persona ?? this.defaults?.persona ?? settings.persona;
+		const model = options.model ?? this.defaults?.model ?? settings.model;
 		const meta: SessionMeta = {
 			id: newSessionId(),
 			createdAt: Date.now(),
-			cwd: options.cwd ?? process.cwd(),
+			cwd: options.cwd ?? settings.cwd ?? process.cwd(),
 			...((options.title ?? this.defaults?.title) === undefined
 				? {}
 				: { title: (options.title ?? this.defaults?.title) as string }),
-			...((options.persona ?? this.defaults?.persona) === undefined
-				? {}
-				: { persona: options.persona ?? this.defaults?.persona }),
-			...((options.model ?? this.defaults?.model) === undefined
-				? {}
-				: { model: options.model ?? this.defaults?.model }),
+			...(persona === undefined ? {} : { persona }),
+			...(model === undefined ? {} : { model }),
 		};
 		await this.store.create(meta);
-		return await this.openSession(meta, options.subagentOwner, options.subagents);
+		return await this.openSession(meta, options.subagentOwner, options.subagents, settings);
 	}
 
 	/**
@@ -222,6 +233,7 @@ export class SessionManager {
 		meta: SessionMeta,
 		subagentOwner?: string,
 		joined?: SubagentManager,
+		settings: Settings = {},
 	): Promise<ManagedSession> {
 		const models = await this.modelsFor(meta);
 		// The pool a session runs its children through. A child joins its tree's; a root is
@@ -251,6 +263,14 @@ export class SessionManager {
 			...(this.compaction === undefined ? {} : { compaction: this.compaction }),
 			config: {
 				...(meta.model === undefined ? {} : { model: parseModelId(meta.model) }),
+				// The settings a session was created with, for the parts that are kernel
+				// configuration rather than metadata. They are written into the journal's config
+				// during assembly, which is what makes them the session's own from then on: a
+				// later change to settings reaches the next session, not this one.
+				...(settings.thinkingLevel === undefined ? {} : { thinkingLevel: settings.thinkingLevel }),
+				...(settings.keepRecentTokens === undefined
+					? {}
+					: { compaction: { ...DEFAULT_COMPACTION_SETTINGS, keepRecentTokens: settings.keepRecentTokens } }),
 			},
 			// The ask channel is part of a session here: questions are answered over the
 			// wire (`sessions.answer`), and without a registry the model's own ask tool is
