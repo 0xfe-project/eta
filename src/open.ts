@@ -84,7 +84,7 @@ import {
 import { convertToLlm } from "./prompts/summaries";
 import { RunPump, type RunPumpOptions } from "./pump";
 import { TaskReminderService } from "./reminder";
-import { sessionStateKV } from "./state";
+import { MODEL_STATE, sessionStateKV } from "./state";
 import { SubagentManager, type SubagentRunner } from "./subagent";
 import { createBashTool } from "./tools/bash";
 import type { ExecutionToolContext } from "./tools/context";
@@ -591,7 +591,9 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		config: () => kernel.config.get(),
 		queue: () => kernel.inbox.list(),
 		tools: () => kernel.tools.list(),
-		stateKeys: () => journaling.valueNames(),
+		// The model's own state, not the journal's bookkeeping: the config and the branch tip
+		// are values too, and a panel that listed them would be showing plumbing as state.
+		stateKeys: () => journaling.valueNames(MODEL_STATE),
 		tokensPerSec: () => metrics.tokensPerSec,
 		ask: () =>
 			ask === undefined

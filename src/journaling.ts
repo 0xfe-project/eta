@@ -128,7 +128,13 @@ export class JournalingService extends Service {
 	/** The last totals the journal heard, mirrored so a view can read them synchronously. */
 	private usageTotals: Usage = emptyUsage();
 	/** KV keys this session has written (the state panel's list, read without I/O). */
-	private readonly valueKeys = new Set<string>();
+	/**
+	 * The keys written, *by namespace*. The journal writes values for its own bookkeeping
+	 * (the session config, the branch tip) as well as for whoever used the value store, and a
+	 * panel that lists "the state" wants the latter — so keeping the namespace is what lets
+	 * the question be asked precisely.
+	 */
+	private readonly valueKeys = new Map<string, Set<string>>();
 	private readonly offs: (() => boolean)[] = [];
 
 	constructor(ctx: Context, options: JournalingServiceOptions = {}) {
@@ -224,22 +230,37 @@ export class JournalingService extends Service {
 		return this.usageTotals;
 	}
 
-	/** KV keys this session has written, plus whatever the caller loaded at open. */
-	valueNames(): string[] {
-		return [...this.valueKeys].sort();
+	/**
+	 * KV keys this session has written, plus whatever the caller loaded at open — every
+	 * namespace, or one of them when a `namespace` is named.
+	 */
+	valueNames(namespace?: string): string[] {
+		if (namespace !== undefined) return [...(this.valueKeys.get(namespace) ?? [])].sort();
+		const all = new Set<string>();
+		for (const keys of this.valueKeys.values()) for (const key of keys) all.add(key);
+		return [...all].sort();
 	}
 
 	/** Seed the key list at open, so a session that wrote keys in an earlier life shows them. */
-	seedValueNames(keys: readonly string[]): void {
-		for (const key of keys) this.valueKeys.add(key);
+	seedValueNames(keys: readonly string[], namespace?: string): void {
+		for (const key of keys) this.keysIn(namespace ?? "").add(key);
 	}
 
 	private noteWrites(values: readonly ValueWrite[]): void {
 		for (const write of values) {
 			if (write.kind !== "value") continue;
-			if (write.op === "set") this.valueKeys.add(write.key);
-			else this.valueKeys.delete(write.key);
+			const keys = this.keysIn(write.namespace);
+			if (write.op === "set") keys.add(write.key);
+			else keys.delete(write.key);
 		}
+	}
+
+	private keysIn(namespace: string): Set<string> {
+		const existing = this.valueKeys.get(namespace);
+		if (existing !== undefined) return existing;
+		const created = new Set<string>();
+		this.valueKeys.set(namespace, created);
+		return created;
 	}
 
 	/**
