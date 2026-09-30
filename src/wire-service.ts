@@ -10,7 +10,7 @@
  * state still work (a test can drive them directly) and pushes go nowhere, which is the
  * honest behaviour for a server that has not opened its port yet.
  */
-import type { CallFrame, OpDescriptor, ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
+import type { CallFrame, EventFrame, OpDescriptor, ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
 import { type Context, Service } from "cordis";
 import { BACKGROUND_INTERVAL_MS, FOCUSED_INTERVAL_MS, FramePacer } from "./pacer";
 import type {
@@ -23,6 +23,7 @@ import type {
 	TargetSummary,
 } from "./registry";
 import { createTargetRegistry } from "./registry";
+import { createEventRing, type EventRing, matchesFilter } from "./ring";
 import type { StateSender } from "./state-sender";
 import { createStateSender } from "./state-sender";
 
@@ -87,7 +88,7 @@ export class WireService extends Service {
 	readonly descriptors: () => OpDescriptor[];
 	readonly targets: () => TargetSummary[];
 	readonly snapshot: (target: string) => StateSnapshot | undefined;
-	readonly subscribe: (socketId: number, target: string) => void;
+	readonly subscribe: (socketId: number, target: string, filter?: string) => void;
 	/**
 	 * Say which targets someone is looking at. A focused target streams tightly; everything
 	 * else settles for a few updates a second. The server does not know what "focused" means
@@ -101,6 +102,11 @@ export class WireService extends Service {
 	readonly attachSink: (sink: FrameSink | undefined) => void;
 	/** Forget a socket: its subscriptions and its pacers. */
 	readonly dropSocket: (socketId: number) => void;
+	/**
+	 * The events a target has sent lately — what a client that just attached is owed, so a
+	 * panel can say what happened before it arrived instead of starting blank.
+	 */
+	readonly ringOf: (target: string, filter?: string) => EventFrame[];
 
 	constructor(ctx: Context, options: WireServiceOptions = {}) {
 		super(ctx, "wire");
@@ -109,6 +115,15 @@ export class WireService extends Service {
 		const state = createStateSender({ snapshot: (target) => registry.snapshot(target), warn });
 		let sink: FrameSink | undefined;
 		const focused = new Set<string>();
+		/** One ring per target: the events it sent, so a late subscriber can catch up. */
+		const rings = new Map<string, EventRing>();
+		const ringFor = (target: string): EventRing => {
+			const existing = rings.get(target);
+			if (existing !== undefined) return existing;
+			const created = createEventRing();
+			rings.set(target, created);
+			return created;
+		};
 		/** One pacer per socket per target: pacing is per subscriber, because floors are. */
 		const pacers = new Map<string, FramePacer>();
 		const pacerKey = (socketId: number, target: string): string => `${socketId}\u0000${target}`;
@@ -157,34 +172,52 @@ export class WireService extends Service {
 		// moment each subscriber's floor allows one, which is what bounds the wire instead of
 		// the session's length (see pacer.ts).
 		this.push = (target) => {
-			for (const socketId of state.watchersOf(target)) pacerFor(socketId, target).mark();
+			for (const watcher of state.watchersOf(target)) pacerFor(watcher.socketId, target).mark();
 		};
 		this.pushNow = (target) => {
-			for (const socketId of state.watchersOf(target)) pacerFor(socketId, target).flush();
+			for (const watcher of state.watchersOf(target)) pacerFor(watcher.socketId, target).flush();
 		};
 		this.focus = (targets) => {
 			focused.clear();
 			for (const target of targets) focused.add(target);
 			// A target that just came into focus should not wait out a background floor.
 			for (const target of targets) {
-				for (const socketId of state.watchersOf(target)) pacerFor(socketId, target).relax();
+				for (const watcher of state.watchersOf(target)) pacerFor(watcher.socketId, target).relax();
 			}
 		};
 		this.event = (target, name, data) => {
-			sink?.({ target, frame: { type: "event", target, name, data } });
+			const frame: EventFrame = { type: "event", target, name, data };
+			// The ring keeps it whether or not anyone is listening: an event is a fact that
+			// happened, and the client that attaches a second later still needs to know.
+			ringFor(target).push(frame);
+			for (const watcher of state.watchersOf(target)) {
+				if (!matchesFilter(name, watcher.filter)) continue;
+				sink?.({ frame, target, socketId: watcher.socketId });
+			}
 		};
+		this.ringOf = (target, filter) => ringFor(target).tail(filter);
 		this.descriptors = () => registry.descriptors();
 		this.targets = () => registry.targets();
 		this.snapshot = (target) => registry.snapshot(target);
 		// Subscribing is one path for everybody — a real socket, a test with a made-up id:
 		// the sender decides what is owed, and the pipe is told where to put it.
-		this.subscribe = (socketId, target) => {
+		this.subscribe = (socketId, target, filter) => {
+			// Asking again, the same way, is idempotent: no second snapshot, and no second replay
+			// of the ring. A *changed* filter is a different question and does re-replay.
+			const replay = !state.watches(socketId, target) || state.filterOf(socketId, target) !== filter;
 			// A client that holds nothing gets the snapshot *now*: there is no floor to respect
 			// when the alternative is an empty panel. It still counts against the budget, so a
 			// client that just arrived does not immediately collect a burst behind it.
-			for (const owed of state.subscribe(socketId, target)) {
-				sink?.({ frame: owed, socketId });
+			for (const owed of state.subscribe(socketId, target, filter)) {
+				sink?.({ frame: owed, socketId, target });
 				pacerFor(socketId, target).spent(JSON.stringify(owed).length);
+			}
+			// Then the ring: what this target did before the client arrived. State is what is
+			// true now, events are what happened — a panel needs the second one to be readable
+			// the moment it opens, and there is no later frame that carries it.
+			if (!replay) return;
+			for (const frame of ringFor(target).tail(filter)) {
+				sink?.({ frame, socketId, target });
 			}
 		};
 		this.unsubscribe = (socketId, target) => {

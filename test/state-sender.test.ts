@@ -65,10 +65,10 @@ describe("subscribing", () => {
 		const { sender, subscribe } = harness();
 		subscribe(1, "sessions");
 		expect(sender.subscriptions(1)).toEqual(["sessions"]);
-		expect(sender.watchers("sessions")).toBe(1);
+		expect(sender.watcherCount("sessions")).toBe(1);
 		sender.unsubscribe(1, "sessions");
 		expect(sender.subscriptions(1)).toEqual([]);
-		expect(sender.watchers("sessions")).toBe(0);
+		expect(sender.watcherCount("sessions")).toBe(0);
 	});
 });
 
@@ -130,7 +130,7 @@ describe("unsubscribing", () => {
 		push("sessions");
 		expect(framesOf(1)).toHaveLength(1);
 		expect(framesOf(2)).toHaveLength(1);
-		expect(sender.watchers("sessions")).toBe(0);
+		expect(sender.watcherCount("sessions")).toBe(0);
 		expect(sender.subscriptions(1)).toEqual([]);
 	});
 

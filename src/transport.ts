@@ -102,7 +102,7 @@ export function createConnection(socket: Socket, deps: TransportDeps): Connectio
 		if (frame.op === "subscribe") {
 			// The service decides what this socket is owed; the sink (installed by the pipe)
 			// puts it on this socket.
-			deps.wire.subscribe(socket.id, frame.target);
+			deps.wire.subscribe(socket.id, frame.target, frame.filter);
 			return;
 		}
 		if (frame.op === "unsubscribe") {

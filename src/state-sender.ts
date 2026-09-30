@@ -14,6 +14,8 @@ import { type ServerFrame, type StatePatch, type StateSnapshot, stateDiff } from
 /** What one subscriber holds, as far as this sender knows. */
 interface Baseline {
 	revisions: Record<string, string> | undefined;
+	/** The event-name filter this subscriber asked for, if any. */
+	filter?: string | undefined;
 }
 
 export interface StateSenderOptions {
@@ -34,7 +36,11 @@ export interface StateSender {
 	 * A socket wants a target's state. Returns what to send it now (a full snapshot, or
 	 * nothing when it was already current), and from then on `push` keeps it up to date.
 	 */
-	subscribe(socketId: number, target: string): ServerFrame[];
+	subscribe(socketId: number, target: string, filter?: string): ServerFrame[];
+	/** The event filter a socket asked for on a target. */
+	filterOf(socketId: number, target: string): string | undefined;
+	/** Whether this socket is already subscribed to this target. */
+	watches(socketId: number, target: string): boolean;
 	unsubscribe(socketId: number, target: string): void;
 	/** Which targets one socket is subscribed to. */
 	subscriptions(socketId: number): string[];
@@ -46,12 +52,18 @@ export interface StateSender {
 	 * seam a frame budget sits on: pacing decides *when* to ask, this decides *what*.
 	 */
 	pending(socketId: number, target: string): AddressedFrame | undefined;
-	/** Every socket watching a target. */
-	watchersOf(target: string): number[];
+	/** Every socket watching a target, with the event filter each one asked for. */
+	watchersOf(target: string): { socketId: number; filter?: string | undefined }[];
+	/**
+	 * How many sockets are watching a target.
+	 *
+	 * Deliberately separate from `watchersOf`, which returns the sockets *with their filters*:
+	 * delivery needs the filter (to decide whether this subscriber wants this event), while
+	 * "is anybody watching" needs a number.
+	 */
+	watcherCount(target: string): number;
 	/** Forget a socket (it disconnected). */
 	drop(socketId: number): void;
-	/** How many sockets are watching a target. */
-	watchers(target: string): number;
 }
 
 export function createStateSender(options: StateSenderOptions): StateSender {
@@ -76,12 +88,18 @@ export function createStateSender(options: StateSenderOptions): StateSender {
 	};
 
 	return {
-		subscribe(socketId, target): ServerFrame[] {
+		subscribe(socketId, target, filter): ServerFrame[] {
 			const held = subscriptions.get(socketId) ?? new Map<string, Baseline>();
 			subscriptions.set(socketId, held);
-			// Already watching: the client is current by construction, so nothing is owed.
-			if (held.has(target)) return [];
-			const baseline: Baseline = { revisions: undefined };
+			// Already watching: the client is current by construction, so nothing is owed. A
+			// filter that changed is worth re-reading, though — it is a different question.
+			const watching = held.get(target);
+			if (watching !== undefined) {
+				if (watching.filter === filter) return [];
+				watching.filter = filter;
+				return [];
+			}
+			const baseline: Baseline = { revisions: undefined, ...(filter === undefined ? {} : { filter }) };
 			held.set(target, baseline);
 			const snapshot = options.snapshot(target);
 			if (snapshot === undefined) {
@@ -96,6 +114,14 @@ export function createStateSender(options: StateSenderOptions): StateSender {
 			const held = subscriptions.get(socketId);
 			held?.delete(target);
 			if (held?.size === 0) subscriptions.delete(socketId);
+		},
+
+		watches(socketId, target): boolean {
+			return subscriptions.get(socketId)?.has(target) === true;
+		},
+
+		filterOf(socketId, target): string | undefined {
+			return subscriptions.get(socketId)?.get(target)?.filter;
 		},
 
 		subscriptions(socketId): string[] {
@@ -126,17 +152,21 @@ export function createStateSender(options: StateSenderOptions): StateSender {
 			return frameFor(socketId, target, 1, snapshot, baseline);
 		},
 
-		watchersOf(target): number[] {
-			const out: number[] = [];
-			for (const [socketId, targets] of subscriptions) if (targets.has(target)) out.push(socketId);
-			return out.sort((left, right) => left - right);
+		watchersOf(target): { socketId: number; filter?: string | undefined }[] {
+			const out: { socketId: number; filter?: string | undefined }[] = [];
+			for (const [socketId, targets] of subscriptions) {
+				const baseline = targets.get(target);
+				if (baseline === undefined) continue;
+				out.push({ socketId, ...(baseline.filter === undefined ? {} : { filter: baseline.filter }) });
+			}
+			return out.sort((left, right) => left.socketId - right.socketId);
 		},
 
 		drop(socketId): void {
 			subscriptions.delete(socketId);
 		},
 
-		watchers(target): number {
+		watcherCount(target): number {
 			let count = 0;
 			for (const targets of subscriptions.values()) if (targets.has(target)) count += 1;
 			return count;
