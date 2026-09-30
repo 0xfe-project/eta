@@ -22,7 +22,17 @@
  */
 import type { CompactionSummarizer, KernelModels } from "@eta/core";
 import { DEFAULT_COMPACTION_SETTINGS, forkChain } from "@eta/core";
-import { type OpenSession, openSession, type SubagentManager } from "@eta/harness";
+import {
+	type ExecutionEnv,
+	envMemoryFs,
+	type MemoryExtractionOutcome,
+	type MemoryFs,
+	type OpenSession,
+	openSession,
+	type PlatformPromptInfo,
+	type SessionMemoryOptions,
+	type SubagentManager,
+} from "@eta/harness";
 import { forkWrites } from "./fork";
 import { parseModelId } from "./model-id";
 import type { Settings } from "./settings";
@@ -62,8 +72,44 @@ export interface SessionManagerOptions {
 	 * inherits them — including a subagent's, which is created by the runner.
 	 */
 	settings?: (() => Promise<Settings>) | undefined;
+	/**
+	 * How a session's environment is decided — the file and shell tools it runs, and where its
+	 * memory lives.
+	 *
+	 * A function of the session's metadata, because the answer is per session: a session in a
+	 * remote workspace runs its tools over SSH, and one in a local directory runs them here. The
+	 * manager does not know what an environment *is*; it asks, and hands the answer to the
+	 * harness. Absent means no environment at all — a session with no read/write/edit/bash, which
+	 * is a legitimate session (a side thread, a sandbox).
+	 */
+	envFor?: ((meta: SessionMeta) => SessionEnvironment | undefined) | undefined;
+	/**
+	 * The app's own facts for the platform briefing — paths only, per the harness's split. Absent
+	 * means the session is told nothing about the app around it, which is what a bare embedding
+	 * gets.
+	 */
+	platformFor?: ((meta: SessionMeta) => PlatformPromptInfo | undefined) | undefined;
+	/** Where the app's files live, for the memory a session reads and writes. */
+	memoryFor?: ((meta: SessionMeta) => SessionMemoryWiring | undefined) | undefined;
 	/** Called when a session cannot be opened; the list keeps its row either way. */
 	warn?: ((message: string) => void) | undefined;
+}
+
+/**
+ * The environment one session runs in: the harness's seam, plus what the manager needs to wire
+ * memory through it. Kept structural so this file does not depend on a backend.
+ */
+export interface SessionEnvironment {
+	env: ExecutionEnv;
+	/** How memory is reached through that environment; defaults to the environment's own files. */
+	memoryFs?: MemoryFs | undefined;
+}
+
+/** Where a session's memory is, and how an extraction reaches a model. */
+export interface SessionMemoryWiring {
+	home?: string | undefined;
+	call?: ((systemPrompt: string, prompt: string) => Promise<string>) | undefined;
+	onExtraction?: ((outcome: MemoryExtractionOutcome) => void) | undefined;
 }
 
 /** What a caller supplies to branch a session off another one. */
@@ -98,6 +144,9 @@ export class SessionManager {
 	private readonly compaction: CompactionSummarizer | undefined;
 	private readonly defaults: SessionManagerOptions["defaults"];
 	private readonly settings: (() => Promise<Settings>) | undefined;
+	private readonly envFor: SessionManagerOptions["envFor"];
+	private readonly platformFor: SessionManagerOptions["platformFor"];
+	private readonly memoryFor: SessionManagerOptions["memoryFor"];
 	private readonly subagents: SessionManagerOptions["subagents"];
 	private readonly warn: (message: string) => void;
 	private readonly open = new Map<string, ManagedSession>();
@@ -109,6 +158,9 @@ export class SessionManager {
 		this.subagents = options.subagents;
 		this.defaults = options.defaults;
 		this.settings = options.settings;
+		this.envFor = options.envFor;
+		this.platformFor = options.platformFor;
+		this.memoryFor = options.memoryFor;
 		this.warn = options.warn ?? (() => undefined);
 	}
 
@@ -239,6 +291,7 @@ export class SessionManager {
 		// The pool a session runs its children through. A child joins its tree's; a root is
 		// given a runner and the pool is built around it during assembly — which is why the
 		// runner reads the pool lazily, through this box.
+		const platform = this.platformFor?.(meta);
 		const box: { pool?: SubagentManager } = {};
 		const poolSize = this.subagents === false ? undefined : this.subagents?.poolSize;
 		const subagentOptions: Record<string, unknown> =
@@ -254,9 +307,30 @@ export class SessionManager {
 						...(subagentOwner === undefined ? {} : { subagentOwner }),
 						...(poolSize === undefined ? {} : { poolSize }),
 					};
+		const environment = this.envFor?.(meta);
+		const wiring = this.memoryFor?.(meta);
+		const memory: SessionMemoryOptions | undefined =
+			wiring === undefined
+				? undefined
+				: {
+						// The environment's files, when there is one: memory belongs to the project, and a
+						// session in a remote workspace reads *that* project's memory.
+						fs: (environment?.memoryFs ?? memoryFsFrom(environment?.env)) as MemoryFs,
+						cwd: meta.cwd,
+						...(wiring.home === undefined ? {} : { home: wiring.home }),
+						...(wiring.call === undefined ? {} : { call: wiring.call }),
+						...(wiring.onExtraction === undefined ? {} : { onExtraction: wiring.onExtraction }),
+					};
 		const session = await openSession({
 			storage: (await this.store.open(meta.id))!.storage,
 			models,
+			// The environment: what a session's tools run against, and where its memory lives. The
+			// harness's tools were written against the seam, so a session across the room runs the
+			// same read/write/edit/bash as one here.
+			...(environment === undefined ? {} : { env: environment.env }),
+			// The app's own facts: the words are the harness's, the paths are this app's.
+			...(platform === undefined ? {} : { platform }),
+			...(memory === undefined ? {} : { memory }),
 			// Subagents: a session joins the pool of the tree that spawned it, or — when it is a
 			// root — gets a runner, and the pool is built around it during assembly.
 			...(this.subagents === false ? {} : subagentOptions),
@@ -312,6 +386,24 @@ export class SessionManager {
 		managed.session.stop();
 		await managed.session.kernel.dispose();
 	}
+}
+
+/**
+ * Memory through an environment.
+ *
+ * `envMemoryFs` is the harness's adapter, and it needs an `ExecutionEnv`; a session with no
+ * environment has no memory to read, which the caller expresses by not asking for any.
+ */
+function memoryFsFrom(env: ExecutionEnv | undefined): MemoryFs {
+	if (env === undefined) {
+		return {
+			readFile: async () => undefined,
+			mtime: async () => undefined,
+			writeFile: async () => undefined,
+			listFileNames: async () => [],
+		};
+	}
+	return envMemoryFs(env);
 }
 
 /** The title a fork gets when the caller did not choose one. */
