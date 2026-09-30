@@ -9,7 +9,7 @@
  * The models are scripted (a fake `KernelModels`) because the subject is the floor, not a
  * provider; the socket, the frames and the plugins are all real.
  */
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ClientFrame, ServerFrame } from "@eta/client-wire-proto";
@@ -217,6 +217,55 @@ describe("a server started the way main starts it", () => {
 		const hello = client.frames.find((frame) => frame.type === "hello") as Extract<ServerFrame, { type: "hello" }>;
 		expect(hello.ops.map((op) => op.name)).toEqual(["settings.reload", "settings.save"]);
 		expect(hello.mounted).toEqual([{ name: "settings", source: "bundled" }]);
+		client.close();
+	});
+});
+
+describe("plugins from the user's directories", () => {
+	it("loads one at startup, and its target is in hello", async () => {
+		const root = await mkdtemp(join(tmpdir(), "eta-scanned-"));
+		roots.push(root);
+		await mkdir(join(root, "plugins", "greeter"), { recursive: true });
+		await writeFile(
+			join(root, "plugins", "greeter", "package.json"),
+			JSON.stringify({ name: "greeter", "eta-plugin": true }),
+		);
+		await writeFile(
+			join(root, "plugins", "greeter", "index.ts"),
+			`export default {
+				name: "greeter",
+				inject: ["wire"],
+				apply(ctx) {
+					ctx.wire.handle("greeter", "hello", () => ({ result: { text: "hi from a scanned plugin" } }));
+				},
+			};`,
+			"utf8",
+		);
+		// A broken one beside it: the floor serves either way, and `hello` says which is which.
+		await mkdir(join(root, "plugins", "broken"), { recursive: true });
+		await writeFile(
+			join(root, "plugins", "broken", "package.json"),
+			JSON.stringify({ name: "broken", "eta-plugin": true }),
+		);
+		await writeFile(join(root, "plugins", "broken", "index.ts"), `throw new Error("nope");`, "utf8");
+
+		const server = await assembleServer({
+			dataDir: root,
+			configPath: join(root, "no-such-config.json"),
+			models: fakeModels([]) as never,
+		});
+		servers.push(server);
+		const client = await connect(server.server.port);
+		await until(() => client.frames.some((frame) => frame.type === "hello"));
+		const hello = client.frames.find((frame) => frame.type === "hello") as Extract<ServerFrame, { type: "hello" }>;
+		expect(hello.ops.map((op) => op.name)).toContain("greeter.hello");
+		const greeter = hello.mounted.find((plugin) => plugin.name === "greeter");
+		expect(greeter).toMatchObject({ source: "user" });
+		expect(greeter?.error).toBeUndefined();
+		const broken = hello.mounted.find((plugin) => plugin.name === "broken");
+		expect(broken?.error).toContain("nope");
+		// And the call really works over the socket.
+		expect(await client.call("greeter", "hello", {})).toEqual({ text: "hi from a scanned plugin" });
 		client.close();
 	});
 });

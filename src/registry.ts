@@ -69,6 +69,14 @@ export interface TargetRegistry {
 	handle(target: string, action: string, handler: OpHandler, meta?: OpMeta): () => void;
 	/** Register one target's state. */
 	state(target: string, projector: StateProjector): () => void;
+	/**
+	 * Take an action away, whoever registered it. For the floor's own use: a plugin that forgets
+	 * to unregister (a user plugin, not ours) must not leave a target behind that answers calls
+	 * with a dead handler. Returns whether anything was there.
+	 */
+	unregister(target: string, action: string): boolean;
+	/** Take a target's state away, whoever registered it. */
+	unregisterState(target: string): boolean;
 	/** Route one call. Throws `UnknownOpError` when nobody claims it. */
 	dispatch(call: CallFrame, context: OpContext): Promise<DispatchOutcome>;
 	/** Everything callable, as `hello` publishes it. */
@@ -124,6 +132,14 @@ export function createTargetRegistry(): TargetRegistry {
 			return () => {
 				if (states.get(target) === projector) states.delete(target);
 			};
+		},
+
+		unregister(target, action): boolean {
+			return actions.delete(key(target, action));
+		},
+
+		unregisterState(target): boolean {
+			return states.delete(target);
 		},
 
 		async dispatch(call, context): Promise<DispatchOutcome> {

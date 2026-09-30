@@ -30,6 +30,7 @@ import { sessionsPlugin } from "./bundled/sessions";
 import { settingsPlugin } from "./bundled/settings";
 import { FileSessionStore } from "./file-store";
 import { SessionManager } from "./manager";
+import { PluginManager } from "./plugins";
 import type { EtaProviderConfig } from "./providers/config-types";
 import { buildModels } from "./providers/runtime";
 import { defaultConfigPath, ProviderConfigStore } from "./providers/store";
@@ -59,11 +60,18 @@ export interface AssembleOptions {
 
 export type BundledPluginName = "sessions" | "providers" | "settings";
 
+/** The plugin directories, as the layout in SERVER-REFACTOR.md §10 names them. */
+export function pluginDirs(dataDir: string): { modules: string; plugins: string } {
+	return { modules: join(dataDir, "modules"), plugins: join(dataDir, "plugins") };
+}
+
 export interface AssembledServer {
 	readonly ctx: Context;
 	readonly wire: WireService;
 	readonly sessions: SessionManager;
 	readonly server: WireServer;
+	/** The scanned plugins: what is loaded, and what became of the ones that are not. */
+	readonly manager: PluginManager;
 	/** Every plugin mounted, and whatever stopped it. */
 	mounted(): MountedPlugin[];
 	/** Stop listening, close the sessions, and let go of the files. */
@@ -162,22 +170,33 @@ export async function assembleServer(options: AssembleOptions): Promise<Assemble
 	});
 
 	const wanted = options.plugins ?? (["sessions", "providers", "settings"] as const);
-	const { mounted, fibers } = mountBundled(ctx, wanted, { manager: sessions, providers, settings });
+	const bundled = mountBundled(ctx, wanted, { manager: sessions, providers, settings });
 
-	const server = serveWire({ wire, mounted: () => mounted, warn }, { port: options.port ?? 0 });
+	// The scanned plugins: official ones from `modules/`, the user's from `plugins/`. Loaded
+	// through the same `ctx.plugin` as the bundled ones — the only difference is who shipped
+	// them, and whether they can be reloaded without a restart.
+	const dirs = pluginDirs(options.dataDir);
+	const manager = new PluginManager({ modulesDir: dirs.modules, pluginsDir: dirs.plugins, warn });
+	const _scanned = await manager.loadAll(ctx);
+
+	// `mounted` is read live: a plugin loaded later (or reloaded) shows up in the next `hello`.
+	const listMounted = (): MountedPlugin[] => [...bundled.mounted, ...manager.mounted()];
+	const server = serveWire({ wire, mounted: listMounted, warn }, { port: options.port ?? 0 });
 
 	return {
 		ctx,
 		wire,
 		sessions,
 		server,
-		mounted: () => mounted,
+		manager,
+		mounted: listMounted,
 		async close() {
 			server.stop();
 			providers.stop();
 			// The plugins first: their effects are what hold subscriptions and state targets, and
 			// unloading them is what leaves the rest of the shutdown nothing to unwind.
-			for (const fiber of fibers.splice(0)) await fiber.dispose();
+			await manager.dispose();
+			for (const fiber of bundled.fibers.splice(0)) await fiber.dispose();
 			await sessions.closeAll();
 			await store.close();
 		},
