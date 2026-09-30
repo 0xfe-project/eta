@@ -118,6 +118,16 @@ export class SessionManager {
 		return await this.store.list();
 	}
 
+	/**
+	 * Forget a session: close it if it is open, then take its row and its directory away.
+	 * Closing first matters — deleting a journal out from under an open handle is a leak the
+	 * runtime reports much later, far from here.
+	 */
+	async remove(id: string): Promise<boolean> {
+		await this.close(id);
+		return await this.store.remove(id);
+	}
+
 	/** The sessions that are open right now. */
 	openSessions(): ManagedSession[] {
 		return [...this.open.values()];

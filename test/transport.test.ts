@@ -10,10 +10,10 @@
  */
 
 import type { ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
+import { Context } from "cordis";
 import { afterEach, describe, expect, it } from "vitest";
-import { createTargetRegistry, type TargetRegistry } from "../src/registry";
-import { createStateSender } from "../src/state-sender";
 import { createConnection, type Socket, serveWire, type TransportDeps } from "../src/transport";
+import { WireService } from "../src/wire-service";
 
 const SESSIONS_STATE: StateSnapshot = {
 	sections: { list: [{ id: "s1" }] },
@@ -22,38 +22,36 @@ const SESSIONS_STATE: StateSnapshot = {
 
 function harness(overrides: Partial<TransportDeps> = {}) {
 	const frames: ServerFrame[] = [];
-	const broadcast: ServerFrame[] = [];
 	const socket: Socket = { id: 7, send: (frame) => frames.push(frame) };
 	const order: string[] = [];
-	const registry = createTargetRegistry();
-	registry.state("sessions", { project: () => SESSIONS_STATE, eager: true });
-	registry.handle("sessions", "prompt", async (call) => {
+	// The wire service is what the pipe talks to; a test uses the same object a plugin would.
+	const wire = new WireService(new Context());
+	wire.attachSink((addressed) => {
+		// A frame addressed to a socket goes to that socket; a fan-out or a target push goes to
+		// this connection (it is the only one, and the test's assertions are about content).
+		if (addressed.socketId === undefined || addressed.socketId === socket.id) frames.push(addressed.frame);
+	});
+	wire.stateOf("sessions", { project: () => SESSIONS_STATE, eager: true });
+	wire.handle("sessions", "prompt", async (call) => {
 		order.push(`start:${call.action}`);
 		// An op that takes a while: a later op must still wait for it.
 		await new Promise((resolve) => setTimeout(resolve, 20));
 		order.push(`end:${call.action}`);
 		return { result: { queued: true } };
 	});
-	registry.handle("sessions", "abort", () => {
+	wire.handle("sessions", "abort", () => {
 		order.push("abort");
 		return {};
 	});
-	registry.handle("sessions", "boom", () => {
+	wire.handle("sessions", "boom", () => {
 		throw new Error("nothing to compact");
 	});
-	const snapshots: Record<string, StateSnapshot> = { sessions: SESSIONS_STATE };
-	const state = createStateSender({
-		snapshot: (target) => snapshots[target],
-		warn: () => undefined,
-	});
 	const deps: TransportDeps = {
-		registry: registry as TargetRegistry,
-		state,
+		wire,
 		mounted: () => [{ name: "git", source: "bundled" as const }],
-		broadcast: (frame) => broadcast.push(frame),
 		...overrides,
 	};
-	return { socket, frames, broadcast, order, registry, state, deps, connection: createConnection(socket, deps) };
+	return { socket, frames, order, wire, deps, connection: createConnection(socket, deps) };
 }
 
 const hellos = (frames: ServerFrame[]) => frames.filter((frame) => frame.type === "hello");
@@ -118,14 +116,14 @@ describe("calls", () => {
 
 describe("subscriptions", () => {
 	it("hands a subscription to the state sender, in place", async () => {
-		const { connection, frames, state } = harness();
+		const { connection, frames, wire } = harness();
 		await connection.handle(JSON.stringify({ op: "subscribe", target: "sessions" }));
-		expect(state.subscriptions(7)).toEqual(["sessions"]);
+		expect(wire.state.subscriptions(7)).toEqual(["sessions"]);
 		// The sender answered, so this socket already has the state.
 		expect(frames.at(-1)).toMatchObject({ type: "state", target: "sessions", snapshot: SESSIONS_STATE });
 
 		await connection.handle(JSON.stringify({ op: "unsubscribe", target: "sessions" }));
-		expect(state.subscriptions(7)).toEqual([]);
+		expect(wire.state.subscriptions(7)).toEqual([]);
 	});
 });
 
@@ -139,20 +137,24 @@ describe("frames the pipe sends on its own", () => {
 	});
 
 	it("fans a native frame out as an event on the native target", async () => {
-		const { connection, broadcast, frames } = harness();
-		const before = frames.length;
+		const { connection, frames } = harness();
 		await connection.handle(JSON.stringify({ op: "native", kind: "menu", action: "new-session" }));
-		expect(broadcast).toEqual([{ type: "event", target: "native", name: "new-session", data: { kind: "menu" } }]);
-		expect(frames.length).toBe(before);
+		// A fan-out reaches this connection too: it is a client like any other.
+		expect(frames.at(-1)).toEqual({
+			type: "event",
+			target: "native",
+			name: "new-session",
+			data: { kind: "menu" },
+		});
 	});
 
 	it("stops sending once the connection is closed, and drops the subscription", () => {
-		const { connection, frames, state } = harness();
-		void state.subscribe(7, "sessions");
+		const { connection, frames, wire } = harness();
+		wire.subscribe(7, "sessions");
 		connection.close();
 		connection.send({ type: "error", message: "later" });
 		expect(frames.some((frame) => frame.type === "error")).toBe(false);
-		expect(state.subscriptions(7)).toEqual([]);
+		expect(wire.state.subscriptions(7)).toEqual([]);
 	});
 });
 
@@ -170,7 +172,7 @@ describe("the Bun binding", () => {
 	it("serves one endpoint and says hello over a real socket", async () => {
 		const { serveWire: serve } = await import("../src/transport");
 		const { deps } = harness();
-		const wire = serve({ registry: deps.registry, state: deps.state, mounted: deps.mounted }, { port: 0 });
+		const wire = serve({ wire: deps.wire, mounted: deps.mounted }, { port: 0 });
 		server = wire;
 		expect(wire.port).toBeGreaterThan(0);
 
@@ -202,7 +204,7 @@ describe("the Bun binding", () => {
 	it("answers 404 for anything that is not the socket, or a mounted route", async () => {
 		const { deps } = harness();
 		const wire = serveWire(
-			{ registry: deps.registry, state: deps.state, mounted: deps.mounted },
+			{ wire: deps.wire, mounted: deps.mounted },
 			{ port: 0, staticRoutes: { "/": () => new Response("ui") } },
 		);
 		server = wire;

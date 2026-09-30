@@ -30,8 +30,8 @@ import {
 	type OpDescriptor,
 	type ServerFrame,
 } from "@eta/client-wire-proto";
-import { type DispatchOutcome, type OpContext, type TargetRegistry, UnknownOpError } from "./registry";
-import type { StateSender } from "./state-sender";
+import { type DispatchOutcome, type OpContext, UnknownOpError } from "./registry";
+import type { WireService } from "./wire-service";
 
 /** What one connected client looks like to this file. */
 export interface Socket {
@@ -39,14 +39,13 @@ export interface Socket {
 	send(frame: ServerFrame): void;
 }
 
-/** What the transport needs from the host it belongs to. */
+/**
+ * What the pipe needs: the wire service (registry + state + routing decisions) and the two
+ * things only the pipe can answer — who is connected, and what plugins exist.
+ */
 export interface TransportDeps {
-	registry: TargetRegistry;
-	state: StateSender;
-	/** Every plugin the server has, as `hello` reports it. */
+	wire: WireService;
 	mounted(): import("@eta/client-wire-proto").MountedPlugin[];
-	/** Send this frame to every connected client. */
-	broadcast(frame: ServerFrame): void;
 	/** Diagnostics. */
 	warn?(message: string): void;
 }
@@ -76,14 +75,15 @@ export function createConnection(socket: Socket, deps: TransportDeps): Connectio
 	// hello first: a client that has not been told what exists cannot assemble itself.
 	const hello: ServerFrame = {
 		type: "hello",
-		ops: deps.registry.descriptors(),
+		ops: deps.wire.descriptors(),
 		mounted: deps.mounted(),
+		// Every eager target's state, so a client that just connected draws without asking.
 		state: Object.fromEntries(
-			deps.registry
+			deps.wire.registry
 				.eagerTargets()
-				.map((target) => [target, deps.registry.snapshot(target)])
+				.map((target: string) => [target, deps.wire.snapshot(target)] as const)
 				.filter(
-					(entry): entry is [string, NonNullable<ReturnType<TargetRegistry["snapshot"]>>] =>
+					(entry): entry is readonly [string, NonNullable<ReturnType<WireService["snapshot"]>>] =>
 						entry[1] !== undefined,
 				),
 		),
@@ -100,19 +100,20 @@ export function createConnection(socket: Socket, deps: TransportDeps): Connectio
 
 	const applyOne = async (frame: ClientFrame): Promise<void> => {
 		if (frame.op === "subscribe") {
-			// The sender decides what this socket is owed; the pipe delivers it.
-			for (const owed of deps.state.subscribe(socket.id, frame.target)) send(owed);
+			// The service decides what this socket is owed; the sink (installed by the pipe)
+			// puts it on this socket.
+			deps.wire.subscribe(socket.id, frame.target);
 			return;
 		}
 		if (frame.op === "unsubscribe") {
-			deps.state.unsubscribe(socket.id, frame.target);
+			deps.wire.unsubscribe(socket.id, frame.target);
 			return;
 		}
 		if (frame.op === "native") {
-			// The shell that clicked is a client like any other: every attached page sees it.
-			// A native frame is an event on the `native` target: the shell's click is not a
-			// different kind of server frame, it is the same fan-out as everything else.
-			deps.broadcast({
+			// The shell that clicked is a client like any other: a native frame is an event on
+			// the `native` target, which is the same fan-out as everything else — no privileged
+			// server frame, and no target of its own that a subscription could filter.
+			deps.wire.broadcast({
 				type: "event",
 				target: "native",
 				name: frame.action,
@@ -122,8 +123,8 @@ export function createConnection(socket: Socket, deps: TransportDeps): Connectio
 		}
 		const requestId = frame.requestId;
 		try {
-			const outcome: DispatchOutcome = await deps.registry.dispatch(frame, context(frame));
-			if (outcome.broadcast !== undefined) deps.broadcast(outcome.broadcast);
+			const outcome: DispatchOutcome = await deps.wire.dispatch(frame, context(frame));
+			if (outcome.broadcast !== undefined) send(outcome.broadcast);
 			if (requestId !== undefined) {
 				send({
 					type: "reply",
@@ -161,7 +162,7 @@ export function createConnection(socket: Socket, deps: TransportDeps): Connectio
 		send,
 		close(): void {
 			closed = true;
-			deps.state.drop(socket.id);
+			deps.wire.state.drop(socket.id);
 		},
 	};
 }
@@ -188,13 +189,28 @@ export interface WireServer {
 	stop(): void;
 }
 
-export function serveWire(deps: Omit<TransportDeps, "broadcast">, options: WireServerOptions): WireServer {
+export function serveWire(deps: TransportDeps, options: WireServerOptions): WireServer {
 	const connections = new Map<number, Connection>();
 	let nextId = 1;
 
-	const push = (frame: ServerFrame): void => {
-		for (const connection of connections.values()) connection.send(frame);
-	};
+	/**
+	 * The sink: the one place that knows which sockets exist. A frame with a `socketId` goes to
+	 * that client, a frame with only a `target` goes to whoever subscribed to it, and a frame
+	 * with neither is a fan-out (the shell's native relay).
+	 */
+	deps.wire.attachSink((addressed) => {
+		if (addressed.socketId !== undefined) {
+			connections.get(addressed.socketId)?.send(addressed.frame);
+			return;
+		}
+		for (const [id, connection] of connections) {
+			if (addressed.target === undefined) {
+				connection.send(addressed.frame);
+				continue;
+			}
+			if (deps.wire.state.subscriptions(id).includes(addressed.target)) connection.send(addressed.frame);
+		}
+	});
 
 	const server = Bun.serve<{ socketId: number }>({
 		port: options.port,
@@ -213,7 +229,7 @@ export function serveWire(deps: Omit<TransportDeps, "broadcast">, options: WireS
 				// every callback, so this is how a frame finds its connection.
 				raw.data.socketId = id;
 				const socket: Socket = { id, send: (frame) => raw.send(encodeFrame(frame)) };
-				connections.set(id, createConnection(socket, { ...deps, broadcast: push }));
+				connections.set(id, createConnection(socket, deps));
 			},
 			async message(raw, body) {
 				const connection = connections.get(raw.data.socketId);
@@ -231,12 +247,10 @@ export function serveWire(deps: Omit<TransportDeps, "broadcast">, options: WireS
 
 	return {
 		port: server.port ?? options.port,
-		broadcast: push,
-		pushState(target: string): void {
-			for (const addressed of deps.state.push(target)) {
-				connections.get(addressed.socketId)?.send(addressed.frame);
-			}
+		broadcast: (frame) => {
+			for (const connection of connections.values()) connection.send(frame);
 		},
+		pushState: (target) => deps.wire.push(target),
 		get clients(): number {
 			return connections.size;
 		},
