@@ -20,7 +20,7 @@
  * resolving a provider is the application's business — the manager only needs to
  * hand `openSession` something that can generate.
  */
-import type { CompactionSummarizer, KernelModels } from "@eta/core";
+import type { CompactionSummarizer, KernelModels, PersonaCard } from "@eta/core";
 import { DEFAULT_COMPACTION_SETTINGS, forkChain } from "@eta/core";
 import {
 	type ExecutionEnv,
@@ -35,6 +35,7 @@ import {
 } from "@eta/harness";
 import { forkWrites } from "./fork";
 import { parseModelId } from "./model-id";
+import { resolvePersona } from "./personas";
 import type { Settings } from "./settings";
 import type { SessionListing, SessionMeta, SessionStore } from "./store";
 import { sessionSubagentRunner } from "./subagent";
@@ -89,6 +90,12 @@ export interface SessionManagerOptions {
 	 * gets.
 	 */
 	platformFor?: ((meta: SessionMeta) => PlatformPromptInfo | undefined) | undefined;
+	/**
+	 * The persona cards that apply to a session's working directory. The manager loads them into
+	 * the session (so the card's text is what the model reads) and re-resolves the session's own
+	 * card when a reload finds it gone. Absent means personas are the caller's business entirely.
+	 */
+	personasFor?: ((meta: SessionMeta) => Promise<PersonaCard[]>) | undefined;
 	/** Where the app's files live, for the memory a session reads and writes. */
 	memoryFor?: ((meta: SessionMeta) => SessionMemoryWiring | undefined) | undefined;
 	/** Called when a session cannot be opened; the list keeps its row either way. */
@@ -146,6 +153,7 @@ export class SessionManager {
 	private readonly settings: (() => Promise<Settings>) | undefined;
 	private readonly envFor: SessionManagerOptions["envFor"];
 	private readonly platformFor: SessionManagerOptions["platformFor"];
+	private readonly personasFor: SessionManagerOptions["personasFor"];
 	private readonly memoryFor: SessionManagerOptions["memoryFor"];
 	private readonly subagents: SessionManagerOptions["subagents"];
 	private readonly warn: (message: string) => void;
@@ -160,6 +168,7 @@ export class SessionManager {
 		this.settings = options.settings;
 		this.envFor = options.envFor;
 		this.platformFor = options.platformFor;
+		this.personasFor = options.personasFor;
 		this.memoryFor = options.memoryFor;
 		this.warn = options.warn ?? (() => undefined);
 	}
@@ -354,7 +363,21 @@ export class SessionManager {
 			// journaling, usage and goals cannot hear another session's events.
 			kernel: { warn: this.warn },
 		});
-		if (meta.persona !== undefined) session.kernel.persona.setActive([meta.persona]);
+		// The persona cards that apply here, and the one this session is on. A card that is gone
+		// resolves to the fallback rather than leaving the session without one — the session keeps
+		// its history either way, and a persona is one file.
+		if (this.personasFor !== undefined) {
+			const cards = await this.personasFor(meta);
+			session.kernel.persona.loadCards(cards);
+			if (meta.persona !== undefined) {
+				const resolved = resolvePersona(new Map(cards.map((card) => [card.id, card])), meta.persona);
+				if (!resolved.exact)
+					this.warn(`[eta-server] session ${meta.id}: persona ${meta.persona} is gone; using ${resolved.id}`);
+				session.kernel.persona.setActive([resolved.id]);
+			}
+		} else if (meta.persona !== undefined) {
+			session.kernel.persona.setActive([meta.persona]);
+		}
 		box.pool = session.subagents;
 		// A session the host opened is a session whose inbox becomes runs: the pump is what
 		// decides that, and leaving it off would make "prompt a session nobody attached yet"

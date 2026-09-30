@@ -25,11 +25,13 @@ import { join } from "node:path";
 import type { MountedPlugin } from "@eta/client-wire-proto";
 import type { CompactionSummarizer, KernelModels } from "@eta/core";
 import { Context } from "cordis";
+import { personasPlugin } from "./bundled/personas";
 import { providersPlugin } from "./bundled/providers";
 import { sessionsPlugin } from "./bundled/sessions";
 import { settingsPlugin } from "./bundled/settings";
 import { FileSessionStore } from "./file-store";
 import { SessionManager } from "./manager";
+import { discoverPersonas } from "./personas";
 import { PluginManager } from "./plugins";
 import type { EtaProviderConfig } from "./providers/config-types";
 import { buildModels } from "./providers/runtime";
@@ -57,10 +59,12 @@ export interface AssembleOptions {
 	plugins?: readonly BundledPluginName[];
 	/** How often to check the user's plugin directory for edits. Zero disables watching. */
 	pluginWatchIntervalMs?: number | undefined;
+	/** The agent's home, for `~/.eta/persona`. Defaults to the real one. */
+	home?: string | undefined;
 	warn?: ((message: string) => void) | undefined;
 }
 
-export type BundledPluginName = "sessions" | "providers" | "settings";
+export type BundledPluginName = "sessions" | "providers" | "settings" | "personas";
 
 /** The plugin directories, as the layout in SERVER-REFACTOR.md §10 names them. */
 export function pluginDirs(dataDir: string): { modules: string; plugins: string } {
@@ -84,7 +88,13 @@ export interface AssembledServer {
 function mountBundled(
 	ctx: Context,
 	names: readonly BundledPluginName[],
-	deps: { manager: SessionManager; providers: ProviderConfigStore; settings: SettingsStore; fetch?: typeof fetch },
+	deps: {
+		manager: SessionManager;
+		providers: ProviderConfigStore;
+		settings: SettingsStore;
+		home: string;
+		fetch?: typeof fetch;
+	},
 ): { mounted: MountedPlugin[]; fibers: { dispose(): Promise<void> }[] } {
 	const mounted: MountedPlugin[] = [];
 	const fibers: { dispose(): Promise<void> }[] = [];
@@ -111,6 +121,7 @@ function mountBundled(
 		);
 	}
 	if (names.includes("settings")) load("settings", settingsPlugin({ store: deps.settings }));
+	if (names.includes("personas")) load("personas", personasPlugin({ manager: deps.manager, home: deps.home }));
 	return { mounted, fibers };
 }
 
@@ -167,12 +178,23 @@ export async function assembleServer(options: AssembleOptions): Promise<Assemble
 		store,
 		modelsFor: () => kernelModels,
 		settings: () => settings.read(),
+		// The cards that apply to a session's directory, read when it opens: a card written by hand
+		// is picked up by the next session, and a card that is gone resolves to the fallback.
+		personasFor: (meta) =>
+			discoverPersonas({ cwd: meta.cwd, home: options.home ?? homedir(), warn }).then((cards) => [
+				...cards.values(),
+			]),
 		...(options.compaction === undefined ? {} : { compaction: options.compaction }),
 		warn,
 	});
 
-	const wanted = options.plugins ?? (["sessions", "providers", "settings"] as const);
-	const bundled = mountBundled(ctx, wanted, { manager: sessions, providers, settings });
+	const wanted = options.plugins ?? (["sessions", "providers", "settings", "personas"] as const);
+	const bundled = mountBundled(ctx, wanted, {
+		manager: sessions,
+		providers,
+		settings,
+		home: options.home ?? homedir(),
+	});
 
 	// The scanned plugins: official ones from `modules/`, the user's from `plugins/`. Loaded
 	// through the same `ctx.plugin` as the bundled ones — the only difference is who shipped

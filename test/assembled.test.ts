@@ -117,9 +117,14 @@ describe("a server started the way main starts it", () => {
 		expect(names).toContain("providers.save");
 		expect(names).toContain("settings.save");
 		// Every plugin the server has, as `hello` reports it.
-		expect(hello.mounted.map((plugin) => plugin.name).sort()).toEqual(["providers", "sessions", "settings"]);
+		expect(hello.mounted.map((plugin) => plugin.name).sort()).toEqual([
+			"personas",
+			"providers",
+			"sessions",
+			"settings",
+		]);
 		// And the eager state: a settings page and a sidebar draw from `hello` without asking.
-		expect(Object.keys(hello.state).sort()).toEqual(["providers", "sessions", "settings"]);
+		expect(Object.keys(hello.state).sort()).toEqual(["personas", "providers", "sessions", "settings"]);
 		client.close();
 	});
 
