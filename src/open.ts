@@ -224,6 +224,11 @@ export interface SessionMemoryOptions {
 export interface OpenSession {
 	kernel: Kernel;
 	/**
+	 * The model layer this session generates through — what `modelSet` resolves a choice
+	 * against before it becomes the session's configuration.
+	 */
+	models: KernelModels;
+	/**
 	 * The tools this assembly installed, by name — what `activeToolNames` was pinned
 	 * to when the journal did not already say.
 	 */
@@ -264,8 +269,8 @@ export interface OpenSession {
 	transcript: AgentMessage[];
 	/** Entries whose parent the journal does not hold; their branch ends there. */
 	orphans: number;
-	/** The configuration the session is on right now (a live read, not a snapshot). */
-	config: KernelConfig;
+	/** The configuration the session is on right now — a live read, not a snapshot. */
+	readonly config: KernelConfig;
 	/** False when the journal held none and the caller's default was used. */
 	configRestored: boolean;
 	/** What the task restore kept, when the journal held a ledger. */
@@ -619,6 +624,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 
 	return {
 		kernel,
+		models: options.models,
 		runner,
 		log,
 		journaling,
@@ -635,7 +641,16 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		compaction,
 		transcript,
 		orphans: log.orphans,
-		config: kernel.config.get(),
+		// A live read, not a copy: a session's configuration changes during its life (the model,
+		// the thinking level, the tool set), and a snapshot here is how a caller ends up holding
+		// a session's settings from the moment it was opened while believing it holds the truth.
+		config: new Proxy({} as KernelConfig, {
+			get: (_target, property: string) => kernel.config.get()[property as keyof KernelConfig],
+			has: (_target, property: string) => property in kernel.config.get(),
+			ownKeys: () => Reflect.ownKeys(kernel.config.get()),
+			getOwnPropertyDescriptor: (_target, property: string) =>
+				Reflect.getOwnPropertyDescriptor(kernel.config.get(), property),
+		}),
 		configRestored: storedConfig !== undefined,
 		tasks,
 		stop: () => {
