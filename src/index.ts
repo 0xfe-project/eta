@@ -67,7 +67,7 @@ export { KERNEL_SERVICE_NAMES, Kernel, type KernelInspect, type KernelOptions, s
 export { MutationQueue } from "./kernel/mutation-queue";
 export { OutputRate } from "./kernel/output-rate";
 export { PersonaService, renderPersonaBlock } from "./kernel/persona";
-export { type KernelModels, piAiModels } from "./kernel/providers";
+export { type KernelModels, piAiModels, THINKING_LEVELS, thinkingLevelsFor } from "./kernel/providers";
 export {
 	type AgentRetryPolicy,
 	DEFAULT_MAX_AGENT_RETRY_DELAY_MS,

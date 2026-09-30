@@ -131,7 +131,14 @@ export function fakeModels(script: AssistantMessage[], options: FakeModelsOption
 		}
 		return message;
 	};
-	const model = { provider: "fake", id: "fake-model", api: "openai-completions" } as unknown as Model<Api>;
+	// A fake that reasons: the battery under test (compaction, thinking levels, effort) should
+	// exercise the capable path, and a test that wants a model which cannot think says so.
+	const model = {
+		provider: "fake",
+		id: "fake-model",
+		api: "openai-completions",
+		reasoning: true,
+	} as unknown as Model<Api>;
 	return {
 		calls,
 		getModel: () => model,
