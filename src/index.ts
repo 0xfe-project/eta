@@ -242,3 +242,19 @@ export {
 	truncateTail,
 	utf8ByteLength,
 } from "./truncate";
+export {
+	builtinViewContributions,
+	queuedText,
+	SYSTEM_ROW_KINDS,
+	type SystemRowKind,
+	signatureOf,
+	streamingBox,
+	thinkingRows,
+	VIEW_MESSAGE_WINDOW,
+	type ViewContribution,
+	type ViewCore,
+	type ViewMessageRow,
+	ViewService,
+	type ViewServiceOptions,
+	type ViewSources,
+} from "./view";

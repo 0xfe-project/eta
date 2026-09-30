@@ -94,6 +94,7 @@ import { createSubagentTools } from "./tools/subagents";
 import { createTaskTools } from "./tools/tasks";
 import { type HarnessTool, type ToolResult, toKernelTool } from "./tools/tool";
 import { createWriteTool } from "./tools/write";
+import { builtinViewContributions, signatureOf, streamingBox, ViewService } from "./view";
 
 export interface OpenSessionOptions {
 	storage: StorageService;
@@ -168,6 +169,10 @@ export interface OpenSessionOptions {
 	memory?: SessionMemoryOptions | undefined;
 	/** How the idle waker reports a run it started that then failed. */
 	pump?: RunPumpOptions;
+	/** The session's id, for the view's core. The store knows it; the assembler passes it. */
+	sessionId?: string | undefined;
+	/** The project this session works in, for the view's core. */
+	cwd?: string | undefined;
 	/** Turns without a task-tool call before the reminder nudge is due. */
 	reminderInterval?: number | undefined;
 }
@@ -242,6 +247,12 @@ export interface OpenSession {
 	promptSections: () => Promise<{ sections: EtaPromptSection[]; stableChars: number; adaptiveChars: number }>;
 	/** The project's memory, when the session was opened with one. */
 	memory: MemoryCache | undefined;
+	/**
+	 * The view: what a UI can see about this session, assembled from whatever its
+	 * services and plugins contributed. The server maps it to the wire; the harness
+	 * knows nothing about frames.
+	 */
+	view: ViewService;
 	/** Stop the journaling this assembly wired (the host may want to take over). */
 	stop: () => void;
 }
@@ -417,6 +428,10 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		const persona = kernel.persona.renderActive().text;
 		const memoryBlock =
 			memory === undefined ? await options.memorySource?.() : (await memory.load(options.memory!.cwd)).text;
+		// What the view shows the Context panel: the last blocks a generation used, and
+		// the size of what memory said. Both are reads of what already happened, so the
+		// frame never waits on I/O.
+		memoryBox.chars = memoryBlock?.length ?? 0;
 		return {
 			...(kernel.goal.current === undefined
 				? {}
@@ -433,7 +448,9 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 	const promptSections = async () => {
 		const state = await promptState();
 		const blocks = etaPromptBlockChars(base, state);
-		return { sections: etaPromptSectionsDetailed(base, state), ...blocks };
+		const sections = etaPromptSectionsDetailed(base, state);
+		promptBox.value = { sections, ...blocks };
+		return { sections, ...blocks };
 	};
 
 	// The end of a run is when a stretch of work stops being read: ask what was worth
@@ -494,6 +511,64 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 	// Threads the journal still speaks for: a saved note comes back as a thread.
 	btw.replay(log.graph.pathOldestFirst());
 
+	// The view: a container plus every section its owner contributes. Nothing here
+	// enumerates the sections the way a struct would — a plugin that wants a panel adds
+	// one, and the frame that carries it is the same frame as everything else.
+	const streaming = streamingBox(kernel.ctx);
+	const promptBox: {
+		value?:
+			| { stableChars: number; adaptiveChars: number; sections: { name: string; stable: boolean; text: string }[] }
+			| undefined;
+	} = {};
+	const memoryBox: { chars?: number } = {};
+	const view = new ViewService(servicesCtx, {
+		core: () => ({
+			session: options.sessionId ?? "",
+			...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+			running: runner.running,
+			...(streaming.current() === undefined ? {} : { streaming: streaming.current() }),
+		}),
+		...(options.kernel?.warn === undefined ? {} : { warn: options.kernel.warn }),
+	});
+	for (const contribution of builtinViewContributions({
+		session: options.sessionId ?? "",
+		cwd: options.cwd,
+		running: () => runner.running,
+		streaming: () => streaming.current(),
+		entries: () => journaling.entries(),
+		entryVersion: () => journaling.version,
+		branch: () => ({ tipId: log.graph.tipId(), compactionEpoch: journaling.compactionEpoch }),
+		usage: () => journaling.usage,
+		goal: () => kernel.goal.current,
+		tasks: () => kernel.tasks.list(),
+		personaNames: () => kernel.persona.activeNamesList(),
+		config: () => kernel.config.get(),
+		queue: () => kernel.inbox.list(),
+		tools: () => kernel.tools.list(),
+		stateKeys: () => journaling.valueNames(),
+		tokensPerSec: () => metrics.tokensPerSec,
+		ask: () =>
+			ask === undefined
+				? undefined
+				: { ...(ask.pendingAsks()[0] === undefined ? {} : { pending: ask.pendingAsks()[0] }) },
+		sideThread: () => btw.list(),
+		subagents: () => options.subagents?.list() ?? [],
+	})) {
+		view.contribute(contribution);
+	}
+	// The two sections whose sources are async: their owners hand the view what they last
+	// read, so a frame never waits on I/O.
+	view.contribute({
+		name: "prompt",
+		project: () => promptBox.value,
+		revision: () => signatureOf(promptBox.value ?? null),
+	});
+	view.contribute({
+		name: "memory",
+		project: () => ({ chars: memoryBox.chars ?? 0 }),
+		revision: () => String(memoryBox.chars ?? -1),
+	});
+
 	return {
 		kernel,
 		runner,
@@ -504,6 +579,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		pump,
 		btw,
 		memory,
+		view,
 		tools: installedTools.map((tool) => tool.name),
 		ask,
 		promptSections,

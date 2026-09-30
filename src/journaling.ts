@@ -36,6 +36,7 @@ import {
 	type ConfigService,
 	type Emit,
 	type Entry,
+	emptyUsage,
 	type JsonValue,
 	type KernelConfig,
 	kernelEmit,
@@ -120,6 +121,14 @@ export class JournalingService extends Service {
 	private readonly entryOf = new WeakMap<object, MessageEntry>();
 	/** Serializes commits so the journal order is the event order. */
 	private tail: Promise<unknown> = Promise.resolve();
+	/** Bumped when the journal gains an *entry*: the transcript's change signature. */
+	private entryVersion = 0;
+	/** How many compactions this branch has been through. */
+	private compactionEpochValue = 0;
+	/** The last totals the journal heard, mirrored so a view can read them synchronously. */
+	private usageTotals: Usage = emptyUsage();
+	/** KV keys this session has written (the state panel's list, read without I/O). */
+	private readonly valueKeys = new Set<string>();
 	private readonly offs: (() => boolean)[] = [];
 
 	constructor(ctx: Context, options: JournalingServiceOptions = {}) {
@@ -181,6 +190,7 @@ export class JournalingService extends Service {
 	private async enqueueValues(values: ValueWrite[]): Promise<void> {
 		const log = this.log;
 		if (log === undefined) return;
+		this.noteWrites(values);
 		const next = this.tail.then(() => log.commit(values).catch(() => undefined));
 		this.tail = next;
 		await next;
@@ -192,8 +202,44 @@ export class JournalingService extends Service {
 	 * has to be on disk before the turn that stored it ends.
 	 */
 	async writeValues(values: ValueWrite[]): Promise<void> {
+		// The one door value writes go through: tracking names here is what lets the
+		// view's state section be a synchronous read.
+		this.noteWrites(values);
 		await this.enqueueValues(values);
 		await this.tail;
+	}
+
+	/** A signature for "the entries changed" — not a count of anything a caller can use. */
+	get version(): number {
+		return this.entryVersion;
+	}
+
+	/** How many compactions stand between the history and now. */
+	get compactionEpoch(): number {
+		return this.compactionEpochValue;
+	}
+
+	/** The session totals the journal last committed (synchronous, for the view). */
+	get usage(): Usage {
+		return this.usageTotals;
+	}
+
+	/** KV keys this session has written, plus whatever the caller loaded at open. */
+	valueNames(): string[] {
+		return [...this.valueKeys].sort();
+	}
+
+	/** Seed the key list at open, so a session that wrote keys in an earlier life shows them. */
+	seedValueNames(keys: readonly string[]): void {
+		for (const key of keys) this.valueKeys.add(key);
+	}
+
+	private noteWrites(values: readonly ValueWrite[]): void {
+		for (const write of values) {
+			if (write.kind !== "value") continue;
+			if (write.op === "set") this.valueKeys.add(write.key);
+			else this.valueKeys.delete(write.key);
+		}
 	}
 
 	/**
@@ -236,6 +282,7 @@ export class JournalingService extends Service {
 	): Promise<Entry | undefined> {
 		const log = this.log;
 		if (log === undefined) return undefined;
+		this.entryVersion += 1;
 		const entry = log.record<T>({
 			id: payloadEntryId(),
 			parentId: null,
@@ -276,7 +323,10 @@ export class JournalingService extends Service {
 		});
 		const outcome = await this.enqueueCommit();
 		const row = outcome?.usage[0];
-		if (row !== undefined) this.emit("usage:recorded", { row, totals: outcome!.result.stats.usage });
+		if (row !== undefined) {
+			this.usageTotals = outcome!.result.stats.usage;
+			this.emit("usage:recorded", { row, totals: outcome!.result.stats.usage });
+		}
 		return row;
 	}
 
@@ -293,6 +343,7 @@ export class JournalingService extends Service {
 	private record(message: AgentMessage, terminate = false): MessageEntry | undefined {
 		const log = this.log;
 		if (log === undefined) return undefined;
+		this.entryVersion += 1;
 		const entry = log.recordMessage(message);
 		// A tool that ended the run says so on the entry; that marker is what a
 		// replay uses to know the branch stopped there.
@@ -321,6 +372,8 @@ export class JournalingService extends Service {
 	}): void {
 		const log = this.log;
 		if (log === undefined || event.summary === undefined || event.tokensBefore === undefined) return;
+		this.entryVersion += 1;
+		this.compactionEpochValue += 1;
 		const entry = log.record<Entry>({
 			id: compactionId(),
 			parentId: null,
@@ -346,6 +399,7 @@ export class JournalingService extends Service {
 			try {
 				const outcome = await log.commit();
 				for (const row of outcome?.usage ?? []) {
+					this.usageTotals = outcome!.result.stats.usage;
 					this.emit("usage:recorded", { row, totals: outcome!.result.stats.usage });
 				}
 				return outcome;
