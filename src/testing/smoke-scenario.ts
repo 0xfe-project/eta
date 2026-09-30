@@ -48,6 +48,15 @@ export interface SmokeReport {
 
 const PROMPT_REMEMBER = "Please remember the word: kumquat. Then say done.";
 const PROMPT_RECALL = "What word did I ask you to remember? Answer with just the word.";
+/**
+ * What is asked when a model answers without calling the tool it was told to call.
+ *
+ * The scenario is about the mechanism — a tool call that streams, journals and survives a reload —
+ * not about a model's willingness on any one turn. A real model occasionally just answers, and a
+ * smoke that fails for that reason is a coin flip, not a signal; one nudge costs one turn and puts
+ * the question back to the model. If it still will not call the tool, that is worth failing over.
+ */
+const PROMPT_NUDGE = "You did not call the note tool. Call it now, then reply with one short sentence.";
 
 function textsOf(messages: readonly { role?: string; content?: unknown }[]): string {
 	return messages
@@ -144,6 +153,11 @@ export async function runSmokeScenario(options: SmokeOptions): Promise<SmokeRepo
 	await waitForIdle(runner, kernel, options.timeoutMs);
 	// The pump stops the loop between runs; the events above already settled it.
 	if (!ended) {
+		await new Promise((resolve) => setTimeout(resolve, 250));
+	}
+	if (!events.includes("tool:end")) {
+		kernel.inject({ role: "user", content: [{ type: "text", text: PROMPT_NUDGE }], timestamp: Date.now() });
+		await waitForIdle(runner, kernel, options.timeoutMs);
 		await new Promise((resolve) => setTimeout(resolve, 250));
 	}
 	const firstAnswer = textsOf(runner.getTranscript() as never);
