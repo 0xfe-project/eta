@@ -13,6 +13,14 @@ import { MemorySessionStore } from "../src/memory-store";
 
 const userMsg = (text: string) => ({ role: "user" as const, content: [{ type: "text" as const, text }], timestamp: 0 });
 
+async function until(predicate: () => boolean, timeoutMs = 2_000): Promise<void> {
+	const started = Date.now();
+	while (!predicate()) {
+		if (Date.now() - started > timeoutMs) throw new Error("timed out waiting for the run");
+		await new Promise((resolve) => setTimeout(resolve, 5));
+	}
+}
+
 function manager(options: { models?: unknown } = {}) {
 	const store = new MemorySessionStore();
 	const warnings: string[] = [];
@@ -100,9 +108,11 @@ describe("sessions are their own", () => {
 		const still = await sessions.session(second.meta.id);
 		expect(still?.session).toBe(second.session);
 		expect(second.session.kernel.inboxDepth).toBe(0);
+		// A session the manager opened is alive: an inject becomes a run of its own (the pump
+		// is started on open), which is what makes closing the first one a local event.
 		second.session.kernel.inject(userMsg("still here"));
-		expect(second.session.kernel.inboxDepth).toBe(1);
-		expect(second.session.log.transcript()).toHaveLength(0);
+		await until(() => second.session.log.transcript().length === 2);
+		expect(second.session.log.transcript()[1]).toMatchObject({ role: "assistant" });
 		await sessions.closeAll();
 	});
 

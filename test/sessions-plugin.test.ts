@@ -34,7 +34,7 @@ interface Harness {
 
 async function harness(
 	models = fakeModels([assistantMessage({ content: [{ type: "text", text: "an answer" }] })]),
-	options: { compaction?: CompactionSummarizer } = {},
+	options: { compaction?: CompactionSummarizer; modelsFor?: (meta: { title?: string }) => unknown } = {},
 ): Promise<Harness> {
 	const ctx = new Context();
 	const wire = new WireService(ctx);
@@ -42,7 +42,7 @@ async function harness(
 	wire.attachSink((addressed) => frames.push(addressed));
 	const manager = new SessionManager({
 		store: new MemorySessionStore(),
-		modelsFor: () => models as never,
+		modelsFor: (meta) => (options.modelsFor === undefined ? models : options.modelsFor(meta)) as never,
 		compaction: options.compaction,
 	});
 	let unload: (() => Promise<void>) | undefined;
@@ -404,6 +404,215 @@ describe("compacting on demand", () => {
 		const { session: plain } = (await bare.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
 		await expect(bare.call("sessions", "compact", { session: plain })).rejects.toThrow(/no compaction configured/);
 		await bare.unload();
+		await h.unload();
+	});
+});
+
+describe("subagents, as sessions of their own", () => {
+	it("spawns a child session and reports it back to the parent", async () => {
+		const models = fakeModels([
+			// The parent asks for a child, waits for it, and then answers.
+			assistantMessage({
+				stopReason: "toolUse",
+				content: [{ type: "toolCall", id: "c1", name: "Agent", arguments: { task: "look into the wire" } }],
+			}),
+			// The child's own run: it answers and is done.
+			assistantMessage({ content: [{ type: "text", text: "the wire is four words" }] }),
+			assistantMessage({ content: [{ type: "text", text: "the child says the wire is four words" }] }),
+		]);
+		const h = await harness(models);
+		await h.load();
+		const { session } = (await h.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
+		await h.call("sessions", "prompt", { session, text: "what does the wire look like?" });
+		const parent = () => h.manager.openSessions().find((open) => open.meta.id === session);
+		await until(() => parent()?.session.runner.running === false);
+		await until(() => (h.state(`sessions.${session}`)?.sections.subagents as unknown[])?.length > 0);
+
+		// The pool says the child is done, and the parent's transcript carries its report.
+		const rows = h.state(`sessions.${session}`)?.sections.subagents as { id: string; status: string }[];
+		expect(rows).toEqual([expect.objectContaining({ id: "sub-1", status: "done" })]);
+		const transcript = JSON.stringify(h.state(`sessions.${session}`)?.sections.transcript);
+		expect(transcript).toContain("sub-1 done");
+
+		// And the child is a session: it has its own row, its own journal, its own answer.
+		const listings = await h.manager.list();
+		const child = listings.find((listing) => listing.ok && listing.id !== session);
+		expect(child?.ok === true ? child.meta.title : undefined).toContain("subagent sub-1");
+		expect(child?.ok === true ? child.meta.cwd : undefined).toBe("/work/eta");
+		const childTranscript = JSON.stringify(h.state(`sessions.${child!.id}`)?.sections.transcript ?? null);
+		expect(childTranscript === "null" || childTranscript.includes("the wire is four words")).toBe(true);
+
+		// Stopping a child the pool does not know is named as such.
+		await expect(h.call("sessions", "subagentStop", { session, id: "sub-9" })).rejects.toThrow(/unknown agent/);
+		await expect(h.call("sessions", "subagentStop", { session })).rejects.toThrow(/needs a session and an id/);
+		// A child that already settled is not "stopped": nothing is running, and nothing throws.
+		await h.call("sessions", "subagentStop", { session, id: "sub-1" });
+		await h.unload();
+	});
+
+	it("marks a child failed when its run did not complete", async () => {
+		const models = fakeModels([
+			assistantMessage({
+				stopReason: "toolUse",
+				content: [{ type: "toolCall", id: "c1", name: "Agent", arguments: { task: "do something impossible" } }],
+			}),
+			assistantMessage({ content: [{ type: "text", text: "the parent carries on" }] }),
+		]);
+		// A subagent whose model does not resolve cannot run at all: its run ends failed at
+		// once (no provider conversation to retry), which must not read as "done".
+		const noModel = {
+			getModel: () => undefined,
+			streamSimple: () => undefined,
+			completeSimple: async () => undefined,
+		};
+		const h = await harness(models, {
+			modelsFor: (meta) => (meta.title?.startsWith("subagent") === true ? noModel : models),
+		});
+		await h.load();
+		const { session } = (await h.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
+		await h.call("sessions", "prompt", { session, text: "try it" });
+		await until(
+			() => h.manager.openSessions().find((open) => open.meta.id === session)?.session.runner.running === false,
+		);
+		await until(() => (h.state(`sessions.${session}`)?.sections.subagents as unknown[])?.length > 0);
+		const rows = h.state(`sessions.${session}`)?.sections.subagents as { id: string; status: string }[];
+
+		expect(rows[0]?.status).toBe("failed");
+		// What the parent was told says so, rather than reporting a child that produced nothing.
+		expect(JSON.stringify(h.state(`sessions.${session}`)?.sections.transcript)).toContain("sub-1 failed");
+		await h.unload();
+	});
+});
+
+describe("a session that is only in the store", () => {
+	it("opens on demand: an action on it works after a restart, not only after a create", async () => {
+		const models = fakeModels([assistantMessage({ content: [{ type: "text", text: "an answer" }] })]);
+		const h = await harness(models);
+		await h.load();
+		const { session } = (await h.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
+		// What a restart looks like: the row is in the store, and the plugin holds nothing.
+		await h.manager.closeAll();
+		expect(h.manager.openSessions()).toEqual([]);
+
+		await h.call("sessions", "prompt", { session, text: "are you still there?" });
+		const running = () =>
+			h.manager.openSessions().find((open) => open.meta.id === session)?.session.runner.running === false;
+		await until(running);
+		// Opened, attached (its state target exists) and focused, just as if it had been created.
+		expect(h.wire.targets().map((target) => target.name)).toContain(`sessions.${session}`);
+		expect(h.manager.session(session).then((open) => open !== undefined)).toBeInstanceOf(Promise);
+		await h.unload();
+	});
+});
+
+describe("stopping a child", () => {
+	/**
+	 * A provider that accepts the request and then says nothing — and, like a real one, stops
+	 * waiting when the run is aborted. A stream that ignored the abort signal could not be
+	 * killed by anyone, which would make the test assert the wrong thing.
+	 */
+	const hanging = () => ({
+		getModel: () => ({ provider: "fake", id: "fake-model", api: "openai-completions" }),
+		streamSimple: (_model: unknown, _context: unknown, streamOptions?: { signal?: AbortSignal }) => {
+			const signal = streamOptions?.signal;
+			return {
+				[Symbol.asyncIterator]: () => ({
+					next: async () => {
+						await new Promise((_resolve, reject) => {
+							if (signal?.aborted === true) {
+								reject(new Error("aborted"));
+								return;
+							}
+							signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+						});
+						return { done: true, value: undefined };
+					},
+				}),
+			};
+		},
+		completeSimple: () => new Promise(() => undefined),
+		calls: [],
+	});
+
+	it("stops a child that is mid-turn, and stops it with its parent", async () => {
+		const models = fakeModels([
+			assistantMessage({
+				stopReason: "toolUse",
+				content: [
+					{
+						type: "toolCall",
+						id: "c1",
+						name: "Agent",
+						// background: the parent does not wait, so the child is still running after it.
+						arguments: { task: "think forever", background: true },
+					},
+				],
+			}),
+			assistantMessage({ content: [{ type: "text", text: "the parent is done" }] }),
+		]);
+		const h = await harness(models, {
+			modelsFor: (meta) => (meta.title?.startsWith("subagent") === true ? hanging() : models),
+		});
+		await h.load();
+		const { session } = (await h.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
+		await h.call("sessions", "prompt", { session, text: "start a child and move on" });
+		const childSession = async () => {
+			const listings = await h.manager.list();
+			const child = listings.find((listing) => listing.ok && listing.id !== session);
+			return child === undefined ? undefined : await h.manager.session(child.id);
+		};
+		await until(() => h.state(`sessions.${session}`)?.sections.subagents !== undefined);
+		await until(() => (h.state(`sessions.${session}`)?.sections.subagents as unknown[])?.length > 0);
+		const child = await childSession();
+		await until(() => child?.session.runner.running === true);
+
+		// The user stops it: the pool marks the record, and the child's run gives up even
+		// though it is stuck inside a turn that would never come back.
+		await h.call("sessions", "subagentStop", { session, id: "sub-1" });
+		await until(() => child?.session.runner.running === false);
+		expect((h.state(`sessions.${session}`)?.sections.subagents as { status: string }[])[0]?.status).toBe("stopped");
+
+		// And closing the parent stops what it spawned: nothing outlives the thing that was
+		// going to read its answer.
+		await h.call("sessions", "prompt", { session, text: "one more child" });
+		await h.call("sessions", "delete", { session });
+		await until(() => child?.session.runner.running === false);
+		await h.unload();
+	});
+
+	it("stops what a deleted parent spawned", async () => {
+		const models = fakeModels([
+			assistantMessage({
+				stopReason: "toolUse",
+				content: [
+					{ type: "toolCall", id: "c1", name: "Agent", arguments: { task: "wait for orders", background: true } },
+				],
+			}),
+			assistantMessage({ content: [{ type: "text", text: "started" }] }),
+		]);
+		const h = await harness(models, {
+			modelsFor: (meta) => (meta.title?.startsWith("subagent") === true ? hanging() : models),
+		});
+		await h.load();
+		const { session } = (await h.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
+		await h.call("sessions", "prompt", { session, text: "spawn one" });
+		const childOf = async () => {
+			const listings = await h.manager.list();
+			const child = listings.find((listing) => listing.ok && listing.id !== session);
+			return child === undefined ? undefined : await h.manager.session(child.id);
+		};
+		await until(() =>
+			h.manager.openSessions().some((open) => open.meta.id !== session && open.session.runner.running),
+		);
+		const child = await childOf();
+		expect(child?.meta.title).toContain("subagent sub-1");
+
+		// Deleting the parent takes its children with it: the child's run is aborted, and
+		// nothing is left running behind a session that is gone.
+		expect(await h.call("sessions", "delete", { session })).toEqual({ removed: true });
+		await until(() => child?.session.runner.running === false);
+		// The child session stays (its transcript is evidence); it is simply no longer running.
+		expect((await h.manager.list()).some((listing) => listing.ok && listing.id === child?.meta.id)).toBe(true);
 		await h.unload();
 	});
 });

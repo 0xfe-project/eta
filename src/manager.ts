@@ -22,9 +22,10 @@
  */
 import type { CompactionSummarizer, KernelModels } from "@eta/core";
 import { forkChain } from "@eta/core";
-import { type OpenSession, openSession } from "@eta/harness";
+import { type OpenSession, openSession, type SubagentManager } from "@eta/harness";
 import { forkWrites } from "./fork";
 import type { SessionListing, SessionMeta, SessionStore } from "./store";
+import { sessionSubagentRunner } from "./subagent";
 
 /** A session the manager has open. */
 export interface ManagedSession {
@@ -42,6 +43,12 @@ export interface SessionManagerOptions {
 	modelsFor: (meta: SessionMeta) => KernelModels | Promise<KernelModels>;
 	/** The summarizer a session compacts with; without one, a session runs unbound. */
 	compaction?: CompactionSummarizer | undefined;
+	/**
+	 * Whether a session can spawn subagents. On by default: a subagent is a session of its
+	 * own here, so the capability costs nothing new to explain. `false` means the subagent
+	 * tools are not installed at all — absent, not disabled.
+	 */
+	subagents?: { poolSize?: number | undefined } | false | undefined;
 	/** What a new session's metadata starts as, beyond the id and the time. */
 	defaults?: Partial<Pick<SessionMeta, "persona" | "model" | "title">> | undefined;
 	/** Called when a session cannot be opened; the list keeps its row either way. */
@@ -65,6 +72,13 @@ export interface CreateSessionOptions {
 	title?: string | undefined;
 	persona?: string | undefined;
 	model?: string | undefined;
+	/**
+	 * The subagent record this session's own pool acts as. Omitted for a root session; a
+	 * subagent passes its record id, which is what files a grandchild under it.
+	 */
+	subagentOwner?: string | undefined;
+	/** A pool to join: set by a subagent, which belongs to the tree that spawned it. */
+	subagents?: SubagentManager | undefined;
 }
 
 export class SessionManager {
@@ -72,6 +86,7 @@ export class SessionManager {
 	private readonly modelsFor: SessionManagerOptions["modelsFor"];
 	private readonly compaction: CompactionSummarizer | undefined;
 	private readonly defaults: SessionManagerOptions["defaults"];
+	private readonly subagents: SessionManagerOptions["subagents"];
 	private readonly warn: (message: string) => void;
 	private readonly open = new Map<string, ManagedSession>();
 
@@ -79,6 +94,7 @@ export class SessionManager {
 		this.store = options.store;
 		this.modelsFor = options.modelsFor;
 		this.compaction = options.compaction;
+		this.subagents = options.subagents;
 		this.defaults = options.defaults;
 		this.warn = options.warn ?? (() => undefined);
 	}
@@ -100,7 +116,7 @@ export class SessionManager {
 				: { model: options.model ?? this.defaults?.model }),
 		};
 		await this.store.create(meta);
-		return await this.openSession(meta);
+		return await this.openSession(meta, options.subagentOwner, options.subagents);
 	}
 
 	/**
@@ -201,11 +217,36 @@ export class SessionManager {
 		for (const session of managed) await this.disposeSession(session);
 	}
 
-	private async openSession(meta: SessionMeta): Promise<ManagedSession> {
+	private async openSession(
+		meta: SessionMeta,
+		subagentOwner?: string,
+		joined?: SubagentManager,
+	): Promise<ManagedSession> {
 		const models = await this.modelsFor(meta);
+		// The pool a session runs its children through. A child joins its tree's; a root is
+		// given a runner and the pool is built around it during assembly — which is why the
+		// runner reads the pool lazily, through this box.
+		const box: { pool?: SubagentManager } = {};
+		const poolSize = this.subagents === false ? undefined : this.subagents?.poolSize;
+		const subagentOptions: Record<string, unknown> =
+			joined !== undefined
+				? { subagents: joined, ...(subagentOwner === undefined ? {} : { subagentOwner }) }
+				: {
+						subagentRunner: sessionSubagentRunner({
+							manager: this,
+							parent: meta,
+							parentPool: () => box.pool,
+							warn: this.warn,
+						}),
+						...(subagentOwner === undefined ? {} : { subagentOwner }),
+						...(poolSize === undefined ? {} : { poolSize }),
+					};
 		const session = await openSession({
 			storage: (await this.store.open(meta.id))!.storage,
 			models,
+			// Subagents: a session joins the pool of the tree that spawned it, or — when it is a
+			// root — gets a runner, and the pool is built around it during assembly.
+			...(this.subagents === false ? {} : subagentOptions),
 			...(this.compaction === undefined ? {} : { compaction: this.compaction }),
 			config: {
 				...(meta.model === undefined ? {} : { model: splitModel(meta.model) }),
@@ -215,12 +256,29 @@ export class SessionManager {
 			kernel: { warn: this.warn },
 		});
 		if (meta.persona !== undefined) session.kernel.persona.setActive([meta.persona]);
+		box.pool = session.subagents;
+		// A session the host opened is a session whose inbox becomes runs: the pump is what
+		// decides that, and leaving it off would make "prompt a session nobody attached yet"
+		// (a subagent's own run, a session from the store) quietly do nothing.
+		session.pump.start();
 		const managed: ManagedSession = { meta, session };
 		this.open.set(meta.id, managed);
 		return managed;
 	}
 
 	private async disposeSession(managed: ManagedSession): Promise<void> {
+		// A closing session stops what it spawned: nothing is orphaned when the thing that was
+		// going to read the answer is gone — the same rule the pool applies to a parent that
+		// settles on its own.
+		for (const record of managed.session.subagents?.list() ?? []) {
+			if (record.status !== "running" && record.status !== "queued") continue;
+			try {
+				managed.session.subagents?.stop(record.id, undefined);
+			} catch (error) {
+				this.warn(`[eta-server] could not stop ${record.id}: ${String(error)}`);
+			}
+		}
+		managed.session.pump.stop();
 		try {
 			await managed.session.journaling.flush();
 		} catch (error) {

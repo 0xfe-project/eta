@@ -11,7 +11,7 @@
  * - **the actions**: create / delete / focus / resync / prompt / abort, the ones that move a
  *   session's row (rename / pin / archive), the one that branches it (fork), the one that compacts
  *   it on demand (compact), and the six that drive a side thread (btwOpen / btwAsk / btwAnswer /
- *   btwSave / btwHandoff / btwClear);
+ *   btwSave / btwHandoff / btwClear), and the one that stops a subagent (subagentStop);
  * - **the states**: `sessions` (the sidebar, eager, so a fresh client draws it from `hello`)
  *   and `sessions.<id>` (one session's view, registered when it opens, gone when it closes);
  * - **the traffic around a turn**: every kernel event on a session's bus becomes an `event`
@@ -49,6 +49,7 @@ export const SESSION_ACTIONS = [
 	"btwSave",
 	"btwHandoff",
 	"btwClear",
+	"subagentStop",
 ] as const;
 export type SessionAction = (typeof SESSION_ACTIONS)[number];
 
@@ -100,6 +101,9 @@ const FORWARDED_EVENTS = [
 	"compaction:end",
 	"retry:scheduled",
 	"retry:end",
+	"subagents:completed",
+	"subagents:failed",
+	"subagents:steered",
 	"state:config-update",
 	"queue:update",
 ] as const;
@@ -155,9 +159,15 @@ export class SessionsService extends Service {
 		);
 		// An open session the store has not listed (created this instant) is still in the
 		// sidebar: it is what the user is looking at.
-		for (const id of this.open()) {
+		for (const id of this.heldIds()) {
 			if (this.cached.some((entry) => entry.id === id)) continue;
 			this.cached.push({ id, meta: this.held.get(id)?.managed.meta });
+		}
+		// A session that is no longer open cannot produce frames: its kernel is gone. Dropping
+		// its wire presence here is what keeps a state target from outliving what it showed.
+		for (const id of this.heldIds()) {
+			if (this.manager.openSessions().some((open) => open.meta.id === id)) continue;
+			await this.detach(id);
 		}
 		this.wire.push("sessions");
 		return this.sidebar();
@@ -170,12 +180,13 @@ export class SessionsService extends Service {
 		return managed.meta.id;
 	}
 
-	open(): string[] {
+	/** The sessions this plugin holds a wire presence for, by id. */
+	heldIds(): string[] {
 		return [...this.held.keys()].sort();
 	}
 
-	focus(id: string): void {
-		if (!this.held.has(id)) throw new Error(`no such session: ${id}`);
+	async focus(id: string): Promise<void> {
+		await this.open(id);
 		this.focusedId = id;
 		this.wire.push("sessions");
 	}
@@ -185,8 +196,8 @@ export class SessionsService extends Service {
 	}
 
 	/** Queue an input, then let the harness pump decide that it starts a run. */
-	prompt(id: string, input: PromptInput): void {
-		const attached = this.require(id);
+	async prompt(id: string, input: PromptInput): Promise<void> {
+		const attached = await this.open(id);
 		const kernel = attached.managed.session.kernel;
 		const images = (input.images ?? []).map(toImageContent);
 		const attachedImages = images.length === 0 ? undefined : images;
@@ -203,8 +214,8 @@ export class SessionsService extends Service {
 		attached.managed.session.pump.pump();
 	}
 
-	abort(id: string): void {
-		this.require(id).managed.session.runner.abort();
+	async abort(id: string): Promise<void> {
+		(await this.open(id)).managed.session.runner.abort();
 	}
 
 	/** Close a session: its directory stays, its slot and its wire presence go. */
@@ -258,7 +269,7 @@ export class SessionsService extends Service {
 	 * pretending it did nothing.
 	 */
 	async compact(id: string, instructions?: string): Promise<boolean> {
-		const compaction = this.require(id).managed.session.compaction;
+		const compaction = (await this.open(id)).managed.session.compaction;
 		if (compaction === undefined) throw new Error(`session ${id} has no compaction configured`);
 		const compacted = await compaction.manual(instructions);
 		this.wire.push(`sessions.${id}`);
@@ -270,8 +281,8 @@ export class SessionsService extends Service {
 	 * thread is seeded with the session as it stands now (everything visible except the
 	 * side chatter itself, so answers never compound), a `tangent` one starts empty.
 	 */
-	btwOpen(id: string, kind: BtwThread["kind"]): BtwThread {
-		const attached = this.require(id);
+	async btwOpen(id: string, kind: BtwThread["kind"]): Promise<BtwThread> {
+		const attached = await this.open(id);
 		const thread = attached.managed.session.btw.create(kind);
 		const graph = attached.managed.session.log.graph;
 		attached.managed.session.btw.seedFrom(thread.id, graph.pathOldestFirst(), graph.tipId());
@@ -285,7 +296,7 @@ export class SessionsService extends Service {
 	 * must not look frozen. `ask` settles into an answer or an error, never a rejection.
 	 */
 	async btwAsk(id: string, threadId: string, question: string): Promise<void> {
-		const attached = this.require(id);
+		const attached = await this.open(id);
 		this.requireThread(attached, threadId);
 		const settled = attached.managed.session.btw.ask(threadId, question);
 		this.wire.push(`sessions.${id}`);
@@ -294,8 +305,8 @@ export class SessionsService extends Service {
 	}
 
 	/** Record an exchange without asking a model (a note, a question the user answered). */
-	btwAnswer(id: string, threadId: string, question: string, answer: string): void {
-		const attached = this.require(id);
+	async btwAnswer(id: string, threadId: string, question: string, answer: string): Promise<void> {
+		const attached = await this.open(id);
 		this.requireThread(attached, threadId);
 		attached.managed.session.btw.answer(threadId, question, answer);
 		this.wire.push(`sessions.${id}`);
@@ -303,7 +314,7 @@ export class SessionsService extends Service {
 
 	/** Save a thread's notes as a visible note; mid-run they queue for the boundary. */
 	async btwSave(id: string, threadId: string): Promise<BtwSaveState> {
-		const attached = this.require(id);
+		const attached = await this.open(id);
 		this.requireThread(attached, threadId);
 		const state = await attached.managed.session.btw.save(threadId, attached.running);
 		this.wire.push(`sessions.${id}`);
@@ -315,8 +326,8 @@ export class SessionsService extends Service {
 	 * follow-up it folds in at its next boundary; with nothing running they *are* the
 	 * next run — a follow-up with nothing to attach to would sit unread.
 	 */
-	btwHandoff(id: string, threadId: string): boolean {
-		const attached = this.require(id);
+	async btwHandoff(id: string, threadId: string): Promise<boolean> {
+		const attached = await this.open(id);
 		this.requireThread(attached, threadId);
 		const text = attached.managed.session.btw.handoff(threadId);
 		this.wire.push(`sessions.${id}`);
@@ -327,9 +338,24 @@ export class SessionsService extends Service {
 		return true;
 	}
 
+	/**
+	 * Stop one subagent — and, with it, everything it spawned.
+	 *
+	 * The pool refuses an id it does not know, and the wire op acts as the root (`byId`
+	 * undefined), which is the only agent allowed to reach the whole tree: the user is not
+	 * a sibling.
+	 */
+	async subagentStop(id: string, subagentId: string): Promise<void> {
+		const attached = await this.open(id);
+		const pool = attached.managed.session.subagents;
+		if (pool === undefined) throw new Error(`session ${id} cannot spawn subagents`);
+		pool.stop(subagentId, undefined);
+		this.wire.push(`sessions.${id}`);
+	}
+
 	/** Drop a thread from the panel; notes already written to the journal stay. */
-	btwClear(id: string, threadId: string): boolean {
-		const attached = this.require(id);
+	async btwClear(id: string, threadId: string): Promise<boolean> {
+		const attached = await this.open(id);
 		this.requireThread(attached, threadId);
 		const cleared = attached.managed.session.btw.clear(threadId);
 		this.wire.push(`sessions.${id}`);
@@ -395,9 +421,26 @@ export class SessionsService extends Service {
 		};
 	}
 
-	private require(id: string): Attached {
+	/**
+	 * The session behind an id, whether this plugin is holding it or not.
+	 *
+	 * The store is the truth: a session exists because it has a row, and being *held* is
+	 * just "its wire presence has been set up". So an action on a session that is not open
+	 * yet opens it — the alternative is a server where only sessions created in this run
+	 * can be used, which is every session after a restart.
+	 */
+	async open(id: string): Promise<Attached> {
+		// The manager is the truth about what is open: asking it every time is what makes a
+		// session closed behind this plugin's back (a shutdown, a restart's worth of state
+		// that was never held) stop being a session this plugin thinks it can act on.
+		const opened = await this.manager.session(id);
+		if (opened === undefined) throw new Error(`no such session: ${id}`);
+		const held = this.held.get(id);
+		if (held !== undefined && held.managed === opened) return held;
+		if (held !== undefined) await this.detach(id);
+		this.attach(opened);
 		const attached = this.held.get(id);
-		if (attached === undefined) throw new Error(`no such session: ${id}`);
+		if (attached === undefined) throw new Error(`session ${id} could not be attached`);
 		return attached;
 	}
 
@@ -447,7 +490,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 					}),
 				);
 				registrations.push(
-					wire.handle("sessions", "prompt", (call) => {
+					wire.handle("sessions", "prompt", async (call) => {
 						const args = (call.args ?? {}) as {
 							session?: string;
 							text?: string;
@@ -457,7 +500,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 						if (args.session === undefined || args.text === undefined) {
 							throw new Error("sessions.prompt needs a session and a text");
 						}
-						service.prompt(args.session, {
+						await service.prompt(args.session, {
 							text: args.text,
 							...(args.mode === undefined ? {} : { mode: args.mode }),
 							...(args.images === undefined ? {} : { images: args.images }),
@@ -466,18 +509,18 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 					}),
 				);
 				registrations.push(
-					wire.handle("sessions", "abort", (call) => {
+					wire.handle("sessions", "abort", async (call) => {
 						const { session } = (call.args ?? {}) as { session?: string };
 						if (session === undefined) throw new Error("sessions.abort needs a session");
-						service.abort(session);
+						await service.abort(session);
 						return {};
 					}),
 				);
 				registrations.push(
-					wire.handle("sessions", "focus", (call) => {
+					wire.handle("sessions", "focus", async (call) => {
 						const { session } = (call.args ?? {}) as { session?: string };
 						if (session === undefined) throw new Error("sessions.focus needs a session");
-						service.focus(session);
+						await service.focus(session);
 						return {};
 					}),
 				);
@@ -545,13 +588,13 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 					}),
 				);
 				registrations.push(
-					wire.handle("sessions", "btwOpen", (call) => {
+					wire.handle("sessions", "btwOpen", async (call) => {
 						const { session, kind } = (call.args ?? {}) as { session?: string; kind?: BtwThread["kind"] };
 						if (session === undefined) throw new Error("sessions.btwOpen needs a session");
 						if (kind !== "contextual" && kind !== "tangent") {
 							throw new Error("sessions.btwOpen needs kind: contextual or tangent");
 						}
-						const thread = service.btwOpen(session, kind);
+						const thread = await service.btwOpen(session, kind);
 						return { result: { session, thread } };
 					}),
 				);
@@ -570,7 +613,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 					}),
 				);
 				registrations.push(
-					wire.handle("sessions", "btwAnswer", (call) => {
+					wire.handle("sessions", "btwAnswer", async (call) => {
 						const { session, threadId, question, answer } = (call.args ?? {}) as {
 							session?: string;
 							threadId?: string;
@@ -580,7 +623,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 						if (session === undefined || threadId === undefined || question === undefined) {
 							throw new Error("sessions.btwAnswer needs a session, a threadId and a question");
 						}
-						service.btwAnswer(session, threadId, question, answer ?? "");
+						await service.btwAnswer(session, threadId, question, answer ?? "");
 						return { result: { session, threadId } };
 					}),
 				);
@@ -594,30 +637,42 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 					}),
 				);
 				registrations.push(
-					wire.handle("sessions", "btwHandoff", (call) => {
+					wire.handle("sessions", "btwHandoff", async (call) => {
 						const { session, threadId } = (call.args ?? {}) as { session?: string; threadId?: string };
 						if (session === undefined || threadId === undefined) {
 							throw new Error("sessions.btwHandoff needs a session and a threadId");
 						}
-						return { result: { delivered: service.btwHandoff(session, threadId) } };
+						return { result: { delivered: await service.btwHandoff(session, threadId) } };
 					}),
 				);
 				registrations.push(
-					wire.handle("sessions", "btwClear", (call) => {
+					wire.handle("sessions", "btwClear", async (call) => {
 						const { session, threadId } = (call.args ?? {}) as { session?: string; threadId?: string };
 						if (session === undefined || threadId === undefined) {
 							throw new Error("sessions.btwClear needs a session and a threadId");
 						}
-						return { result: { cleared: service.btwClear(session, threadId) } };
+						return { result: { cleared: await service.btwClear(session, threadId) } };
 					}),
 				);
 				registrations.push(
-					wire.handle("sessions", "resync", (call) => {
+					wire.handle("sessions", "subagentStop", async (call) => {
+						const { session, id } = (call.args ?? {}) as { session?: string; id?: string };
+						if (session === undefined || id === undefined) {
+							throw new Error("sessions.subagentStop needs a session and an id");
+						}
+						await service.subagentStop(session, id);
+						return { result: { session, id } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "resync", async (call) => {
 						// A resync is a read: it answers with the current state of one session's target.
+						// It opens the session when nobody holds it yet — the client is asking to be
+						// caught up, and "it is not open" is not an answer to that.
 						const { session } = (call.args ?? {}) as { session?: string };
 						if (session === undefined) throw new Error("sessions.resync needs a session");
-						const state =
-							service.session(session) === undefined ? undefined : wire.snapshot(`sessions.${session}`);
+						await service.open(session);
+						const state = wire.snapshot(`sessions.${session}`);
 						if (state === undefined) throw new Error(`no such session: ${session}`);
 						return { result: { session, state } };
 					}),
