@@ -24,6 +24,7 @@ import type { CompactionSummarizer, KernelModels } from "@eta/core";
 import { forkChain } from "@eta/core";
 import { type OpenSession, openSession, type SubagentManager } from "@eta/harness";
 import { forkWrites } from "./fork";
+import { parseModelId } from "./model-id";
 import type { SessionListing, SessionMeta, SessionStore } from "./store";
 import { sessionSubagentRunner } from "./subagent";
 
@@ -249,7 +250,7 @@ export class SessionManager {
 			...(this.subagents === false ? {} : subagentOptions),
 			...(this.compaction === undefined ? {} : { compaction: this.compaction }),
 			config: {
-				...(meta.model === undefined ? {} : { model: splitModel(meta.model) }),
+				...(meta.model === undefined ? {} : { model: parseModelId(meta.model) }),
 			},
 			// The ask channel is part of a session here: questions are answered over the
 			// wire (`sessions.answer`), and without a registry the model's own ask tool is
@@ -302,11 +303,4 @@ function titleForFork(title: string | undefined): string {
 export function newSessionId(): string {
 	const random = Math.random().toString(36).slice(2, 8);
 	return `eta-${Date.now().toString(36)}${random}`;
-}
-
-/** `provider:modelId` back into the two halves a session config takes. */
-function splitModel(model: string): { provider: string; modelId: string } {
-	const separator = model.indexOf(":");
-	if (separator === -1) return { provider: model, modelId: model };
-	return { provider: model.slice(0, separator), modelId: model.slice(separator + 1) };
 }

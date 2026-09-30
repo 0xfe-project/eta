@@ -742,3 +742,116 @@ describe("the state a session carries between turns", () => {
 		await h.unload();
 	});
 });
+
+describe("choosing how the next turn is generated", () => {
+	it("switches the model, and refuses while the session is busy", async () => {
+		const models = fakeModels([assistantMessage({ content: [{ type: "text", text: "an answer" }] })]);
+		// A models layer that serves exactly one identity, the way a real one serves what its
+		// providers hold: anything else has to be refused.
+		const serves = models.getModel.bind(models);
+		models.getModel = (provider, id) =>
+			provider === "fake" && id === "fake-model" ? serves(provider, id) : undefined;
+		const h = await harness(models);
+		await h.load();
+		const { session } = (await h.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
+		const open = () => h.manager.openSessions().find((entry) => entry.meta.id === session)?.session;
+
+		// A model nobody serves is named now, not a minute later when a run fails.
+		await expect(h.call("sessions", "modelSet", { session, model: "pro6000:nothing" })).rejects.toThrow(
+			/model_unavailable/,
+		);
+		// Nothing changed: a refused switch leaves the session exactly where it was.
+		expect(open()?.config.model).toEqual({ provider: "unknown", modelId: "unknown" });
+
+		// The fake models layer serves exactly one identity, so ask for that one.
+		const switched = await h.call("sessions", "modelSet", { session, model: "fake:fake-model" });
+		expect(switched).toEqual({ model: "fake:fake-model", thinkingLevel: "off" });
+		expect(open()?.config.model).toEqual({ provider: "fake", modelId: "fake-model" });
+		// Written where a restart reads it: the row and the journal's config both say so.
+		const row = (await h.manager.list()).find((listing) => listing.id === session);
+		expect(row?.ok === true ? row.meta.model : undefined).toBe("fake:fake-model");
+		// The journal holds the configuration now, so a replay comes back on this model rather
+		// than on whatever the caller would default to.
+		const journaled = await h.manager.list();
+		expect(journaled.some((listing) => listing.id === session)).toBe(true);
+		const reopened = (await h.manager.session(session))?.session;
+		expect(reopened?.config.model).toEqual({ provider: "fake", modelId: "fake-model" });
+
+		// And it refuses to change under a run that already assembled its request.
+		await h.call("sessions", "prompt", { session, text: "slow down" });
+		await h.call("sessions", "modelSet", { session, model: "fake:fake-model" }).then(
+			() => {
+				throw new Error("a busy session accepted a model change");
+			},
+			(error: Error) => expect(error.message).toContain("busy"),
+		);
+		await until(() => open()?.runner.running === false);
+		await h.unload();
+	});
+
+	it("sets the thinking level the model accepts", async () => {
+		const models = fakeModels([assistantMessage({ content: [{ type: "text", text: "an answer" }] })]);
+		const h = await harness(models);
+		await h.load();
+		const { session } = (await h.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
+		const open = () => h.manager.openSessions().find((entry) => entry.meta.id === session)?.session;
+
+		expect(await h.call("sessions", "thinkingLevel", { session, level: "high" })).toEqual({ session, level: "high" });
+		expect(open()?.config.thinkingLevel).toBe("high");
+		// A level that does not exist is refused before it reaches the configuration.
+		await expect(h.call("sessions", "thinkingLevel", { session, level: "galaxy" })).rejects.toThrow(
+			/unknown thinking level/,
+		);
+		// The fake model does not reason, so anything but "off" is refused rather than sent.
+		const reasoning = fakeModels([]);
+		reasoning.getModel = () =>
+			({ provider: "fake", id: "fake-model", api: "openai-completions", reasoning: false }) as never;
+		const plain = await harness(reasoning);
+		await plain.load();
+		const { session: other } = (await plain.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
+		await expect(plain.call("sessions", "thinkingLevel", { session: other, level: "high" })).rejects.toThrow(
+			/does not support thinking level high/,
+		);
+		await plain.unload();
+		await h.unload();
+	});
+
+	it("takes a queued input back, and says which of the three things happened", async () => {
+		const models = fakeModels([
+			assistantMessage({
+				stopReason: "toolUse",
+				content: [{ type: "toolCall", id: "c1", name: "TaskList", arguments: {} }],
+			}),
+			assistantMessage({ content: [{ type: "text", text: "done" }] }),
+		]);
+		const h = await harness(models);
+		await h.load();
+		const { session } = (await h.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
+		const open = () => h.manager.openSessions().find((entry) => entry.meta.id === session)?.session;
+
+		// An id nothing has seen: never there.
+		expect(await h.call("sessions", "queueRemove", { session, entryId: "never" })).toEqual({
+			entryId: "never",
+			outcome: "not_found",
+		});
+
+		// Queue one behind a run that is in flight, then take it back.
+		await h.call("sessions", "prompt", { session, text: "start something" });
+		await until(() => open()?.runner.running === true);
+		await h.call("sessions", "prompt", { session, text: "and then this" });
+		const queued = open()?.kernel.inbox.list() ?? [];
+		expect(queued).toHaveLength(1);
+		const entryId = queued[0]?.entryId as string;
+		expect(await h.call("sessions", "queueRemove", { session, entryId })).toEqual({ entryId, outcome: "cancelled" });
+		expect(open()?.kernel.inbox.list()).toEqual([]);
+
+		// One the run already took: the journal holds it, so it was consumed, not cancelled.
+		await until(() => open()?.runner.running === false);
+		const consumed = open()?.log.graph.pathOldestFirst()[0]?.id as string;
+		expect(await h.call("sessions", "queueRemove", { session, entryId: consumed })).toEqual({
+			entryId: consumed,
+			outcome: "already_consumed",
+		});
+		await h.unload();
+	});
+});

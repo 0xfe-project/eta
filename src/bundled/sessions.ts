@@ -23,10 +23,12 @@
  * (the store). Policy stays where it already is; this file is wiring.
  */
 import type { SidebarSession } from "@eta/client-wire-proto";
-import type { GoalState, ImageContent, StoredTask, Task, TaskStatus } from "@eta/core";
+import type { GoalState, ImageContent, StoredTask, Task, TaskStatus, ThinkingLevel } from "@eta/core";
+import { THINKING_LEVELS, thinkingLevelsFor } from "@eta/core";
 import { type AskResponse, type BtwSaveState, type BtwThread, sessionStateKV } from "@eta/harness";
 import { Service } from "cordis";
 import type { CreateSessionOptions, ForkSessionOptions, ManagedSession, SessionManager } from "../manager";
+import { formatModelId, parseModelId } from "../model-id";
 import type { SessionMeta } from "../store";
 import type { WireService } from "../wire-service";
 
@@ -58,6 +60,9 @@ export const SESSION_ACTIONS = [
 	"stateDelete",
 	"answer",
 	"askAbort",
+	"modelSet",
+	"thinkingLevel",
+	"queueRemove",
 ] as const;
 export type SessionAction = (typeof SESSION_ACTIONS)[number];
 
@@ -344,6 +349,76 @@ export class SessionsService extends Service {
 		else attached.managed.session.kernel.nextRun(text);
 		attached.managed.session.pump.pump();
 		return true;
+	}
+
+	/**
+	 * Switch the model.
+	 *
+	 * A session reads its configuration every turn, so the next run uses the new model and a
+	 * replay comes back on it (the choice is written to the journal's config and to the row).
+	 * Three things make this more than an assignment:
+	 *
+	 * - **Not while it is running.** The run in flight assembled its request with the old
+	 *   model; switching under it would leave the transcript claiming one model and the next
+	 *   request using another.
+	 * - **The model has to resolve.** A name nobody serves is `model_unavailable` now, rather
+	 *   than a run that fails a minute later.
+	 * - **The history is re-measured.** A smaller window does not shrink what was written
+	 *   under a bigger one, so the switch compacts when the history no longer fits — that is
+	 *   the one moment the session knows the window changed.
+	 */
+	async modelSet(id: string, model: string): Promise<{ model: string; thinkingLevel: ThinkingLevel }> {
+		const attached = await this.open(id);
+		if (attached.running) throw new Error(`session ${id} is busy: the model cannot change mid-run`);
+		const identity = parseModelId(model);
+		const resolved = attached.managed.session.models.getModel(identity.provider, identity.modelId);
+		if (resolved === undefined) throw new Error(`model_unavailable: ${model}`);
+		// A model that cannot think cannot be asked to: clamp instead of sending a level it does
+		// not have (and keep the level otherwise — the choice was the user's, not the model's).
+		const supported = thinkingLevelsFor(resolved);
+		const current = attached.managed.session.kernel.config.read("thinkingLevel");
+		const level: ThinkingLevel = supported.includes(current) ? current : "off";
+		attached.managed.session.kernel.config.update({
+			model: identity,
+			...(level === current ? {} : { thinkingLevel: level }),
+		});
+		await this.manager.setMeta(id, { model: formatModelId(identity) });
+		await attached.managed.session.compaction?.threshold().catch(() => false);
+		await this.refresh();
+		return { model: formatModelId(identity), thinkingLevel: level };
+	}
+
+	/** How much thinking the model should do — checked against what this model accepts. */
+	async thinkingLevel(id: string, level: ThinkingLevel): Promise<ThinkingLevel> {
+		const attached = await this.open(id);
+		const identity = attached.managed.session.kernel.config.read("model");
+		const supported = thinkingLevelsFor(
+			attached.managed.session.models.getModel(identity.provider, identity.modelId),
+		);
+		if (!supported.includes(level)) {
+			throw new Error(`${identity.provider}:${identity.modelId} does not support thinking level ${level}`);
+		}
+		attached.managed.session.kernel.config.update({ thinkingLevel: level });
+		this.wire.push(`sessions.${id}`);
+		return level;
+	}
+
+	/**
+	 * Take a queued input back out of the inbox.
+	 *
+	 * The outcome is the reason this answers at all: the chip disappears from the composer
+	 * either way, but only a cancel that beat the run lets the client hand the text back —
+	 * an entry the journal already holds was consumed, and one the journal has never seen was
+	 * never there.
+	 */
+	async queueRemove(id: string, entryId: string): Promise<"cancelled" | "already_consumed" | "not_found"> {
+		const attached = await this.open(id);
+		if (attached.managed.session.kernel.inbox.cancel(entryId)) {
+			this.wire.push(`sessions.${id}`);
+			return "cancelled";
+		}
+		const stored = await attached.managed.session.log.storage.getEntries([entryId]);
+		return stored.has(entryId) ? "already_consumed" : "not_found";
 	}
 
 	/**
@@ -859,6 +934,34 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 							throw new Error("sessions.askAbort needs a session and a questionId");
 						}
 						return { result: { aborted: await service.askAbort(session, questionId) } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "modelSet", async (call) => {
+						const { session, model } = (call.args ?? {}) as { session?: string; model?: string };
+						if (session === undefined || model === undefined) {
+							throw new Error("sessions.modelSet needs a session and a model");
+						}
+						return { result: await service.modelSet(session, model) };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "thinkingLevel", async (call) => {
+						const { session, level } = (call.args ?? {}) as { session?: string; level?: ThinkingLevel };
+						if (session === undefined || level === undefined) {
+							throw new Error("sessions.thinkingLevel needs a session and a level");
+						}
+						if (!THINKING_LEVELS.includes(level)) throw new Error(`unknown thinking level: ${level}`);
+						return { result: { session, level: await service.thinkingLevel(session, level) } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "queueRemove", async (call) => {
+						const { session, entryId } = (call.args ?? {}) as { session?: string; entryId?: string };
+						if (session === undefined || entryId === undefined) {
+							throw new Error("sessions.queueRemove needs a session and an entryId");
+						}
+						return { result: { entryId, outcome: await service.queueRemove(session, entryId) } };
 					}),
 				);
 				registrations.push(
