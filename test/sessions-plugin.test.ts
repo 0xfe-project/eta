@@ -132,6 +132,9 @@ describe("a turn, seen from the pipe", () => {
 		// holds a whole state from the first frame it gets.
 		h.wire.subscribe(1, "sessions");
 		h.wire.subscribe(1, `sessions.${session}`);
+		// And the client is looking at the session it just prompted: a focused target streams
+		// tightly, which is the floor this test is asserting against.
+		h.wire.focus([`sessions.${session}`]);
 		const stateFrames = (): { frame: { snapshot?: unknown; patch?: unknown }; target?: string }[] =>
 			h.frames.filter((entry) => entry.frame.type === "state") as never;
 		expect(stateFrames()[0]?.frame).toHaveProperty("snapshot");
@@ -147,8 +150,9 @@ describe("a turn, seen from the pipe", () => {
 		expect(transcript.messages.length).toBeGreaterThanOrEqual(2);
 
 		// Every frame after the turn is a patch, not another snapshot: the client is current, so
-		// only what moved is sent.
-		expect(stateFrames().some((entry) => "patch" in entry.frame)).toBe(true);
+		// only what moved is sent. Run traffic is paced, so this arrives on the floor rather than
+		// on the instant — which is the point of the budget.
+		await until(() => stateFrames().some((entry) => "patch" in entry.frame));
 		expect(stateFrames().filter((entry) => "snapshot" in entry.frame)).toHaveLength(2);
 
 		// Events for that session's target were emitted (the agent channel, target-scoped), and

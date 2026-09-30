@@ -40,6 +40,14 @@ export interface StateSender {
 	subscriptions(socketId: number): string[];
 	/** Say that a target's state may have moved: whoever is behind gets what it is missing. */
 	push(target: string): AddressedFrame[];
+	/**
+	 * What one socket is owed for one target, right now — the same decision `push` makes,
+	 * for one subscriber. `undefined` when it is current (or not subscribed). This is the
+	 * seam a frame budget sits on: pacing decides *when* to ask, this decides *what*.
+	 */
+	pending(socketId: number, target: string): AddressedFrame | undefined;
+	/** Every socket watching a target. */
+	watchersOf(target: string): number[];
 	/** Forget a socket (it disconnected). */
 	drop(socketId: number): void;
 	/** How many sockets are watching a target. */
@@ -108,6 +116,20 @@ export function createStateSender(options: StateSenderOptions): StateSender {
 				if (addressed !== undefined) out.push(addressed);
 			}
 			return out;
+		},
+
+		pending(socketId, target): AddressedFrame | undefined {
+			const baseline = subscriptions.get(socketId)?.get(target);
+			if (baseline === undefined) return undefined;
+			const snapshot = options.snapshot(target);
+			if (snapshot === undefined) return undefined;
+			return frameFor(socketId, target, 1, snapshot, baseline);
+		},
+
+		watchersOf(target): number[] {
+			const out: number[] = [];
+			for (const [socketId, targets] of subscriptions) if (targets.has(target)) out.push(socketId);
+			return out.sort((left, right) => left - right);
 		},
 
 		drop(socketId): void {

@@ -162,7 +162,7 @@ export function createConnection(socket: Socket, deps: TransportDeps): Connectio
 		send,
 		close(): void {
 			closed = true;
-			deps.wire.state.drop(socket.id);
+			deps.wire.dropSocket(socket.id);
 		},
 	};
 }

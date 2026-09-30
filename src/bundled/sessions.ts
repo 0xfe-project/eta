@@ -164,7 +164,12 @@ export class SessionsService extends Service {
 		return this.cached.map((entry) => this.row(entry));
 	}
 
-	/** Ask the store what exists (asynchronous), then tell subscribers the sidebar moved. */
+	/**
+	 * Ask the store what exists (asynchronous), then tell subscribers the sidebar moved.
+	 *
+	 * Immediate, not paced: a sidebar that appears 600ms after the session was created reads as
+	 * a broken button, and the store answered *now* — there is nothing left to coalesce.
+	 */
 	async refresh(): Promise<SidebarSession[]> {
 		const listings = await this.manager.list();
 		this.cached = listings.map((listing) =>
@@ -182,7 +187,7 @@ export class SessionsService extends Service {
 			if (this.manager.openSessions().some((open) => open.meta.id === id)) continue;
 			await this.detach(id);
 		}
-		this.wire.push("sessions");
+		this.wire.pushNow("sessions");
 		return this.sidebar();
 	}
 
@@ -201,7 +206,7 @@ export class SessionsService extends Service {
 	async focus(id: string): Promise<void> {
 		await this.open(id);
 		this.focusedId = id;
-		this.wire.push("sessions");
+		this.wire.pushNow("sessions");
 	}
 
 	focused(): string | undefined {
@@ -220,7 +225,7 @@ export class SessionsService extends Service {
 		else if (attached.running) kernel.followUp(input.text, attachedImages);
 		else kernel.nextRun(input.text, attachedImages);
 		attached.updated = Date.now();
-		this.wire.push("sessions");
+		this.wire.pushNow("sessions");
 		// Enqueueing through steer/followUp/nextRun does not announce itself on the bus (only
 		// `inject` does), so the run start is this plugin's job to kick: the pump is what
 		// decides whether a run is owed.
@@ -285,7 +290,7 @@ export class SessionsService extends Service {
 		const compaction = (await this.open(id)).managed.session.compaction;
 		if (compaction === undefined) throw new Error(`session ${id} has no compaction configured`);
 		const compacted = await compaction.manual(instructions);
-		this.wire.push(`sessions.${id}`);
+		this.wire.pushNow(`sessions.${id}`);
 		return compacted;
 	}
 
@@ -299,7 +304,7 @@ export class SessionsService extends Service {
 		const thread = attached.managed.session.btw.create(kind);
 		const graph = attached.managed.session.log.graph;
 		attached.managed.session.btw.seedFrom(thread.id, graph.pathOldestFirst(), graph.tipId());
-		this.wire.push(`sessions.${id}`);
+		this.wire.pushNow(`sessions.${id}`);
 		return thread;
 	}
 
@@ -312,9 +317,9 @@ export class SessionsService extends Service {
 		const attached = await this.open(id);
 		this.requireThread(attached, threadId);
 		const settled = attached.managed.session.btw.ask(threadId, question);
-		this.wire.push(`sessions.${id}`);
+		this.wire.pushNow(`sessions.${id}`);
 		await settled;
-		this.wire.push(`sessions.${id}`);
+		this.wire.pushNow(`sessions.${id}`);
 	}
 
 	/** Record an exchange without asking a model (a note, a question the user answered). */
@@ -322,7 +327,7 @@ export class SessionsService extends Service {
 		const attached = await this.open(id);
 		this.requireThread(attached, threadId);
 		attached.managed.session.btw.answer(threadId, question, answer);
-		this.wire.push(`sessions.${id}`);
+		this.wire.pushNow(`sessions.${id}`);
 	}
 
 	/** Save a thread's notes as a visible note; mid-run they queue for the boundary. */
@@ -330,7 +335,7 @@ export class SessionsService extends Service {
 		const attached = await this.open(id);
 		this.requireThread(attached, threadId);
 		const state = await attached.managed.session.btw.save(threadId, attached.running);
-		this.wire.push(`sessions.${id}`);
+		this.wire.pushNow(`sessions.${id}`);
 		return state;
 	}
 
@@ -343,7 +348,7 @@ export class SessionsService extends Service {
 		const attached = await this.open(id);
 		this.requireThread(attached, threadId);
 		const text = attached.managed.session.btw.handoff(threadId);
-		this.wire.push(`sessions.${id}`);
+		this.wire.pushNow(`sessions.${id}`);
 		if (text === undefined) return false;
 		if (attached.running) attached.managed.session.kernel.followUp(text);
 		else attached.managed.session.kernel.nextRun(text);
@@ -399,7 +404,7 @@ export class SessionsService extends Service {
 			throw new Error(`${identity.provider}:${identity.modelId} does not support thinking level ${level}`);
 		}
 		attached.managed.session.kernel.config.update({ thinkingLevel: level });
-		this.wire.push(`sessions.${id}`);
+		this.wire.pushNow(`sessions.${id}`);
 		return level;
 	}
 
@@ -414,7 +419,7 @@ export class SessionsService extends Service {
 	async queueRemove(id: string, entryId: string): Promise<"cancelled" | "already_consumed" | "not_found"> {
 		const attached = await this.open(id);
 		if (attached.managed.session.kernel.inbox.cancel(entryId)) {
-			this.wire.push(`sessions.${id}`);
+			this.wire.pushNow(`sessions.${id}`);
 			return "cancelled";
 		}
 		const stored = await attached.managed.session.log.storage.getEntries([entryId]);
@@ -441,7 +446,7 @@ export class SessionsService extends Service {
 		} else if (action === "pause") goal.pause();
 		else if (action === "resume") goal.resume();
 		else goal.clear();
-		this.wire.push(`sessions.${id}`);
+		this.wire.pushNow(`sessions.${id}`);
 		// Setting a goal means "start working on it": an idle session gets the first push here
 		// (the continuation prompt after that is the loop's own business).
 		if (action === "set" && !attached.running) await this.prompt(id, { text: `Work toward the goal: ${objective}` });
@@ -455,7 +460,7 @@ export class SessionsService extends Service {
 			content,
 			priority === undefined ? {} : { priority },
 		).task;
-		this.wire.push(`sessions.${id}`);
+		this.wire.pushNow(`sessions.${id}`);
 		return task;
 	}
 
@@ -468,14 +473,14 @@ export class SessionsService extends Service {
 		const attached = await this.open(id);
 		const updated = attached.managed.session.kernel.tasks.update(taskId, patch);
 		if (updated === undefined) throw new Error(`no such task: ${taskId}`);
-		this.wire.push(`sessions.${id}`);
+		this.wire.pushNow(`sessions.${id}`);
 		return updated.task;
 	}
 
 	async taskRemove(id: string, taskId: string): Promise<boolean> {
 		const attached = await this.open(id);
 		const removed = attached.managed.session.kernel.tasks.remove(taskId);
-		this.wire.push(`sessions.${id}`);
+		this.wire.pushNow(`sessions.${id}`);
 		return removed;
 	}
 
@@ -483,7 +488,7 @@ export class SessionsService extends Service {
 	async stateDelete(id: string, key: string): Promise<void> {
 		const attached = await this.open(id);
 		await sessionStateKV(attached.managed.session.log, attached.managed.session.journaling).set(key, null);
-		this.wire.push(`sessions.${id}`);
+		this.wire.pushNow(`sessions.${id}`);
 	}
 
 	/**
@@ -496,7 +501,7 @@ export class SessionsService extends Service {
 		const ask = attached.managed.session.ask;
 		if (ask === undefined) throw new Error(`session ${id} has no ask channel`);
 		const answered = ask.answer(questionId, response as AskResponse);
-		this.wire.push(`sessions.${id}`);
+		this.wire.pushNow(`sessions.${id}`);
 		return answered;
 	}
 
@@ -508,7 +513,7 @@ export class SessionsService extends Service {
 		const attached = await this.open(id);
 		const aborted = attached.managed.session.ask?.abort(questionId) ?? false;
 		await this.abort(id);
-		this.wire.push(`sessions.${id}`);
+		this.wire.pushNow(`sessions.${id}`);
 		return aborted;
 	}
 
@@ -524,7 +529,7 @@ export class SessionsService extends Service {
 		const pool = attached.managed.session.subagents;
 		if (pool === undefined) throw new Error(`session ${id} cannot spawn subagents`);
 		pool.stop(subagentId, undefined);
-		this.wire.push(`sessions.${id}`);
+		this.wire.pushNow(`sessions.${id}`);
 	}
 
 	/** Drop a thread from the panel; notes already written to the journal stay. */
@@ -532,7 +537,7 @@ export class SessionsService extends Service {
 		const attached = await this.open(id);
 		this.requireThread(attached, threadId);
 		const cleared = attached.managed.session.btw.clear(threadId);
-		this.wire.push(`sessions.${id}`);
+		this.wire.pushNow(`sessions.${id}`);
 		return cleared;
 	}
 
@@ -556,6 +561,8 @@ export class SessionsService extends Service {
 				if (name === "turn:run-end") attached.running = false;
 				attached.updated = Date.now();
 				this.wire.event(`sessions.${id}`, name, payload);
+				// Paced, not immediate: this is run traffic (a streamed token is an event), and
+				// it is exactly what the budget exists for.
 				this.wire.push(`sessions.${id}`);
 				this.wire.push("sessions");
 			}),
