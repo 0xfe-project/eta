@@ -97,6 +97,24 @@ export function sessionStoreContract(name: string, factory: SessionStoreFactory)
 			await dispose();
 		});
 
+		it("updates a row in place, and says so when there is nothing to update", async () => {
+			const { store, dispose } = await factory();
+			const created = await store.create({ ...metaOf("s1", 1_000), title: "first name" });
+			// The same row, with a new name and a pin: the journal and the storage must not move.
+			expect(await store.save({ ...created.meta, title: "renamed", pinned: true })).toBe(true);
+			const opened = await store.open("s1");
+			expect(opened?.meta.title).toBe("renamed");
+			expect(opened?.meta.pinned).toBe(true);
+			// `createdAt` is identity for a listing; a rename must not reorder the sidebar.
+			expect(opened?.meta.createdAt).toBe(1_000);
+			const listed = (await store.list()).find((listing) => listing.id === "s1");
+			expect(listed?.ok === true ? listed.meta.title : undefined).toBe("renamed");
+			// Saving a session that is not there is an answer, not a resurrection.
+			expect(await store.save(metaOf("ghost", 2_000))).toBe(false);
+			expect(idsOf(await store.list())).toEqual(["s1"]);
+			await dispose();
+		});
+
 		it("keeps a session it cannot read, and says why", async () => {
 			const handle = await factory();
 			const { store, dispose } = handle;

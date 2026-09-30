@@ -8,7 +8,8 @@
  *
  * It owns three things:
  *
- * - **the actions**: create / delete / focus / resync / prompt / abort;
+ * - **the actions**: create / delete / focus / resync / prompt / abort, plus the ones that move a
+ *   session's row (rename / pin / archive) and the one that branches it (fork);
  * - **the states**: `sessions` (the sidebar, eager, so a fresh client draws it from `hello`)
  *   and `sessions.<id>` (one session's view, registered when it opens, gone when it closes);
  * - **the traffic around a turn**: every kernel event on a session's bus becomes an `event`
@@ -22,12 +23,23 @@
 import type { SidebarSession } from "@eta/client-wire-proto";
 import type { ImageContent } from "@eta/core";
 import { Service } from "cordis";
-import type { CreateSessionOptions, ManagedSession, SessionManager } from "../manager";
+import type { CreateSessionOptions, ForkSessionOptions, ManagedSession, SessionManager } from "../manager";
 import type { SessionMeta } from "../store";
 import type { WireService } from "../wire-service";
 
 /** The actions this target has. One list, so the wire and the plugin cannot disagree. */
-export const SESSION_ACTIONS = ["create", "delete", "focus", "resync", "prompt", "abort"] as const;
+export const SESSION_ACTIONS = [
+	"create",
+	"delete",
+	"focus",
+	"resync",
+	"prompt",
+	"abort",
+	"rename",
+	"pin",
+	"archive",
+	"fork",
+] as const;
 export type SessionAction = (typeof SESSION_ACTIONS)[number];
 
 export interface PromptImage {
@@ -203,6 +215,33 @@ export class SessionsService extends Service {
 		return removed;
 	}
 
+	/**
+	 * Change what the sidebar says about a session — its name, whether it is pinned or
+	 * archived. Only the row moves; the running session is left exactly as it is.
+	 */
+	async setMeta(id: string, patch: Partial<Omit<SessionMeta, "id" | "createdAt" | "cwd">>): Promise<SessionMeta> {
+		const meta = await this.manager.setMeta(id, patch);
+		if (meta === undefined) throw new Error(`no such session: ${id}`);
+		const attached = this.held.get(id);
+		if (attached !== undefined) attached.managed.meta = meta;
+		await this.refresh();
+		return meta;
+	}
+
+	/** Branch a session off another one, and put the new one in front of the user. */
+	async fork(sourceId: string, options: ForkSessionOptions): Promise<string> {
+		if (!this.held.has(sourceId)) {
+			const opened = await this.manager.session(sourceId);
+			if (opened === undefined) throw new Error(`no such session: ${sourceId}`);
+			this.attach(opened);
+		}
+		const forked = await this.manager.fork(sourceId, options);
+		this.attach(forked);
+		this.focusedId = forked.meta.id;
+		await this.refresh();
+		return forked.meta.id;
+	}
+
 	session(id: string): ManagedSession | undefined {
 		return this.held.get(id)?.managed;
 	}
@@ -253,6 +292,8 @@ export class SessionsService extends Service {
 			...(meta?.title === undefined ? {} : { title: meta.title }),
 			...(meta?.cwd === undefined ? {} : { cwd: meta.cwd }),
 			...(meta?.createdAt === undefined ? {} : { createdAt: meta.createdAt }),
+			...(meta?.pinned === true ? { pinned: true } : {}),
+			...(meta?.archived === true ? { archived: true } : {}),
 			...(attached === undefined ? {} : { updated: attached.updated }),
 			...(entry.broken === undefined || entry.broken.length === 0 ? {} : { broken: entry.broken }),
 			badges: attached?.running === true ? ["running"] : [],
@@ -344,6 +385,54 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 						const { session } = (call.args ?? {}) as { session?: string };
 						if (session === undefined) throw new Error("sessions.delete needs a session");
 						return { result: { removed: await service.remove(session) } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "rename", async (call) => {
+						const { session, title } = (call.args ?? {}) as { session?: string; title?: string };
+						if (session === undefined) throw new Error("sessions.rename needs a session");
+						// An empty title is a clear, not a rename to "" — the sidebar shows the cwd then.
+						const meta = await service.setMeta(session, {
+							title: title === undefined || title.trim() === "" ? undefined : title,
+						});
+						return { result: { session, title: meta.title ?? null } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "pin", async (call) => {
+						const { session, pinned } = (call.args ?? {}) as { session?: string; pinned?: boolean };
+						if (session === undefined) throw new Error("sessions.pin needs a session");
+						if (typeof pinned !== "boolean") throw new Error("sessions.pin needs pinned: true or false");
+						await service.setMeta(session, { pinned });
+						return { result: { session, pinned } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "archive", async (call) => {
+						const { session, archived } = (call.args ?? {}) as { session?: string; archived?: boolean };
+						if (session === undefined) throw new Error("sessions.archive needs a session");
+						if (typeof archived !== "boolean") {
+							throw new Error("sessions.archive needs archived: true or false");
+						}
+						await service.setMeta(session, { archived });
+						return { result: { session, archived } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "fork", async (call) => {
+						const args = (call.args ?? {}) as {
+							session?: string;
+							entryId?: string;
+							position?: "at" | "before";
+							title?: string;
+						};
+						if (args.session === undefined) throw new Error("sessions.fork needs a session");
+						const session = await service.fork(args.session, {
+							...(args.entryId === undefined ? {} : { entryId: args.entryId }),
+							...(args.position === undefined ? {} : { position: args.position }),
+							...(args.title === undefined ? {} : { title: args.title }),
+						});
+						return { result: { session } };
 					}),
 				);
 				registrations.push(

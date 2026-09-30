@@ -60,6 +60,15 @@ export class MemorySessionStore implements SessionStore {
 		return rows.sort((left, right) => right.createdAt - left.createdAt).map((entry) => entry.row);
 	}
 
+	async save(meta: SessionMeta): Promise<boolean> {
+		if (this.closed) throw new Error("the session store is closed");
+		const existing = this.sessions.get(meta.id);
+		// The storage is the session's; only the row changes.
+		if (existing === undefined) return false;
+		this.sessions.set(meta.id, { meta, storage: existing.storage });
+		return true;
+	}
+
 	/**
 	 * Mark one session unreadable, as a real backend does when its metadata will
 	 * not parse. The session keeps its row in `list()` and loses everything else.

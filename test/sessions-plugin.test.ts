@@ -14,7 +14,7 @@ import type { ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { Context } from "cordis";
 import { describe, expect, it } from "vitest";
-import { sessionsPlugin } from "../src/bundled/sessions";
+import { SESSION_ACTIONS, sessionsPlugin } from "../src/bundled/sessions";
 import { SessionManager } from "../src/manager";
 import { MemorySessionStore } from "../src/memory-store";
 import { UnknownOpError } from "../src/registry";
@@ -82,14 +82,13 @@ describe("what the plugin puts on the pipe", () => {
 	it("registers its actions, and they show up as descriptors", async () => {
 		const h = await harness();
 		await h.load();
-		expect(h.wire.descriptors().map((op) => op.name)).toEqual([
-			"sessions.abort",
-			"sessions.create",
-			"sessions.delete",
-			"sessions.focus",
-			"sessions.prompt",
-			"sessions.resync",
-		]);
+		// The descriptor list is the plugin's own action list, not a second copy of it.
+		expect(
+			h.wire
+				.descriptors()
+				.map((op) => op.name)
+				.sort(),
+		).toEqual([...SESSION_ACTIONS].map((action) => `sessions.${action}`).sort());
 		await h.unload();
 	});
 
@@ -207,7 +206,12 @@ describe("unloading", () => {
 		const h = await harness();
 		await h.load();
 		const { session } = (await h.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
-		expect(h.wire.descriptors()).toHaveLength(6);
+		expect(
+			h.wire
+				.descriptors()
+				.map((descriptor) => `${descriptor.target}.${descriptor.action}`)
+				.sort(),
+		).toEqual([...SESSION_ACTIONS].map((action) => `sessions.${action}`).sort());
 
 		await h.unload();
 		expect(h.wire.descriptors()).toEqual([]);
@@ -216,5 +220,70 @@ describe("unloading", () => {
 		// The session itself is untouched: the plugin owned its *wire presence*, not its life.
 		expect(h.manager.openSessions()).toHaveLength(1);
 		await h.manager.closeAll();
+	});
+});
+
+describe("the row a session keeps", () => {
+	it("renames, pins and archives, and the sidebar says so", async () => {
+		const h = await harness();
+		await h.load();
+		const { session } = (await h.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
+
+		const renamed = await h.call("sessions", "rename", { session, title: "porting the wire" });
+		expect(renamed).toEqual({ session, title: "porting the wire" });
+		await h.call("sessions", "pin", { session, pinned: true });
+		await h.call("sessions", "archive", { session, archived: true });
+
+		const row = (h.state("sessions")?.sections.list as { id: string }[]).find((entry) => entry.id === session);
+		expect(row).toMatchObject({ title: "porting the wire", pinned: true, archived: true });
+
+		// The row is the store's, not a copy the plugin keeps in a state of its own.
+		const listed = (await h.manager.list()).find((listing) => listing.id === session);
+		expect(listed?.ok === true ? listed.meta : undefined).toMatchObject({ title: "porting the wire", pinned: true });
+
+		// An empty title clears it; a session that is not there is named as such.
+		const cleared = await h.call("sessions", "rename", { session, title: "" });
+		expect(cleared).toEqual({ session, title: null });
+		await expect(h.call("sessions", "pin", { session: "nope", pinned: true })).rejects.toThrow(/no such session/);
+		await expect(h.call("sessions", "archive", { session })).rejects.toThrow(/archived: true or false/);
+		await h.unload();
+	});
+
+	it("forks a session into a second one, focused, holding the history it copied", async () => {
+		const h = await harness(fakeModels([assistantMessage({ content: [{ type: "text", text: "first answer" }] })]));
+		await h.load();
+		const { session: source } = (await h.call("sessions", "create", { cwd: "/work/eta", title: "the source" })) as {
+			session: string;
+		};
+		await h.call("sessions", "prompt", { session: source, text: "the first question" });
+		await until(() => h.manager.openSessions()[0]?.session.runner.running === false);
+		const before = (h.state(`sessions.${source}`)?.sections.transcript as { messages: unknown[] }).messages.length;
+
+		const { session: forked } = (await h.call("sessions", "fork", { session: source })) as { session: string };
+		expect(forked).not.toBe(source);
+		// The fork is on the wire the moment it exists: its own state target, and in front.
+		expect(h.wire.targets().map((target) => target.name)).toContain(`sessions.${forked}`);
+		expect(h.wire.snapshot(`sessions.${forked}`)).toBeDefined();
+		expect(h.state("sessions")?.sections.focused).toBe(forked);
+		const rows = h.state("sessions")?.sections.list as { id: string; title?: string }[];
+		expect(rows.map((row) => row.id)).toContain(forked);
+		expect(rows.find((row) => row.id === forked)?.title).toBe("the source (fork)");
+
+		// It inherited the history prefix, and the source kept all of it.
+		const inherited = (h.state(`sessions.${forked}`)?.sections.transcript as { messages: unknown[] }).messages;
+		expect(inherited).toHaveLength(before);
+		expect(h.state(`sessions.${source}`)?.sections.transcript).toMatchObject({ messages: { length: before } });
+
+		// A fork is a new session: what happens in it does not go back to the one it came from.
+		await h.call("sessions", "prompt", { session: forked, text: "a question only the fork asks" });
+		await until(
+			() => h.manager.session(forked).then((open) => open?.session.runner.running === false) instanceof Promise,
+		);
+		await until(() => h.state(`sessions.${forked}`)?.sections.transcript !== undefined);
+		const sourceText = JSON.stringify(h.state(`sessions.${source}`)?.sections.transcript);
+		expect(sourceText).not.toContain("only the fork asks");
+
+		await expect(h.call("sessions", "fork", { session: "nope" })).rejects.toThrow(/no such session/);
+		await h.unload();
 	});
 });

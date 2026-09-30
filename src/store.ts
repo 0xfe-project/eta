@@ -26,6 +26,10 @@ export interface SessionMeta {
 	persona?: string | undefined;
 	/** The model it was left on, as `provider:modelId`. */
 	model?: string | undefined;
+	/** Kept at the top of the sidebar. */
+	pinned?: boolean | undefined;
+	/** Put out of the way without being deleted. */
+	archived?: boolean | undefined;
 }
 
 /** A session the store can open: its metadata and the journal it writes to. */
@@ -47,6 +51,14 @@ export interface SessionStore {
 	open(id: string): Promise<StoredSession | undefined>;
 	/** Every session, newest first, including the ones that cannot be read. */
 	list(): Promise<SessionListing[]>;
+	/**
+	 * Update a session's row — a rename, a pin, an archive. `false` when there is no
+	 * such session: a caller saving metadata for a session that is gone has raced a
+	 * deletion, and that is an answer rather than an exception.
+	 *
+	 * The journal is untouched: this is what a sidebar reads, and it must stay cheap.
+	 */
+	save(meta: SessionMeta): Promise<boolean>;
 	/** Forget a session and everything it held. */
 	remove(id: string): Promise<boolean>;
 	/** Stop holding anything open. */

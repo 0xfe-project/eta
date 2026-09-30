@@ -54,11 +54,7 @@ export class FileSessionStore implements SessionStore {
 		// `mkdir` without `recursive` is the duplicate check: a session id that is
 		// already there is an error, not a silent overwrite of someone's history.
 		await mkdir(directory);
-		// Write the metadata beside the journal, atomically: a listing must never
-		// read a half-written file (it would look like a broken session).
-		const temporary = join(directory, `${META_FILE}.tmp`);
-		await writeFile(temporary, `${JSON.stringify(meta, null, "\t")}\n`, "utf8");
-		await rename(temporary, join(directory, META_FILE));
+		await this.writeMeta(directory, meta);
 		const storage = await this.openStorage(directory, meta.id);
 		this.openStorages.set(meta.id, storage);
 		return { meta, storage };
@@ -105,6 +101,14 @@ export class FileSessionStore implements SessionStore {
 		return listings.sort((a, b) => listingTime(b) - listingTime(a));
 	}
 
+	async save(meta: SessionMeta): Promise<boolean> {
+		this.assertOpen();
+		const directory = this.directoryOf(meta.id);
+		if ((await stat(directory).catch(() => undefined)) === undefined) return false;
+		await this.writeMeta(directory, meta);
+		return true;
+	}
+
 	async remove(id: string): Promise<boolean> {
 		this.assertOpen();
 		const directory = this.directoryOf(id);
@@ -123,6 +127,17 @@ export class FileSessionStore implements SessionStore {
 		const open = [...this.openStorages.values()];
 		this.openStorages.clear();
 		for (const storage of open) await storage.close();
+	}
+
+	/**
+	 * Write the metadata beside the journal, atomically: a listing must never read a
+	 * half-written file (it would look like a broken session), and it must never read
+	 * the old row either — a rename is one event, not two.
+	 */
+	private async writeMeta(directory: string, meta: SessionMeta): Promise<void> {
+		const temporary = join(directory, `${META_FILE}.tmp`);
+		await writeFile(temporary, `${JSON.stringify(meta, null, "\t")}\n`, "utf8");
+		await rename(temporary, join(directory, META_FILE));
 	}
 
 	/** A journal for one session's directory, replayed and ready to write. */
@@ -195,6 +210,8 @@ function isSessionMeta(value: unknown): value is SessionMeta {
 		typeof meta.cwd === "string" &&
 		(meta.title === undefined || typeof meta.title === "string") &&
 		(meta.persona === undefined || typeof meta.persona === "string") &&
-		(meta.model === undefined || typeof meta.model === "string")
+		(meta.model === undefined || typeof meta.model === "string") &&
+		(meta.pinned === undefined || typeof meta.pinned === "boolean") &&
+		(meta.archived === undefined || typeof meta.archived === "boolean")
 	);
 }

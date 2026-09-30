@@ -21,7 +21,9 @@
  * hand `openSession` something that can generate.
  */
 import type { CompactionSummarizer, KernelModels } from "@eta/core";
+import { forkChain } from "@eta/core";
 import { type OpenSession, openSession } from "@eta/harness";
+import { forkWrites } from "./fork";
 import type { SessionListing, SessionMeta, SessionStore } from "./store";
 
 /** A session the manager has open. */
@@ -44,6 +46,16 @@ export interface SessionManagerOptions {
 	defaults?: Partial<Pick<SessionMeta, "persona" | "model" | "title">> | undefined;
 	/** Called when a session cannot be opened; the list keeps its row either way. */
 	warn?: ((message: string) => void) | undefined;
+}
+
+/** What a caller supplies to branch a session off another one. */
+export interface ForkSessionOptions {
+	/** The entry to fork from; defaults to the source's tip. */
+	entryId?: string | undefined;
+	/** Whether the selected entry is part of the fork (default) or excluded. */
+	position?: "before" | "at" | undefined;
+	/** The destination's title; defaults to the source's, marked as a fork. */
+	title?: string | undefined;
 }
 
 /** What a caller supplies to start a session. */
@@ -119,6 +131,55 @@ export class SessionManager {
 	}
 
 	/**
+	 * Change what a session's row says — its title, whether it is pinned, whether it is
+	 * archived. `undefined` when there is no such session.
+	 *
+	 * Only the row moves: a running session keeps the model, tools and persona it is
+	 * already running with, because a rename is not a reconfiguration.
+	 */
+	async setMeta(
+		id: string,
+		patch: Partial<Omit<SessionMeta, "id" | "createdAt" | "cwd">>,
+	): Promise<SessionMeta | undefined> {
+		const live = this.open.get(id);
+		const current = live?.meta ?? (await this.store.open(id))?.meta;
+		if (current === undefined) return undefined;
+		const next: SessionMeta = { ...current, ...patch };
+		if (!(await this.store.save(next))) return undefined;
+		// Keep the open handle's copy honest: `list()` and every state projection read it.
+		if (live !== undefined) live.meta = next;
+		return next;
+	}
+
+	/**
+	 * Branch a session off another one and open the result.
+	 *
+	 * The copied part is the source's history up to the chosen entry (the entry itself,
+	 * or its parent) plus the lane configuration it was left on. A fork is a new
+	 * session: it does not point back at the source, and it drops the source's task
+	 * list — see `fork.ts` for why those two in particular.
+	 */
+	async fork(sourceId: string, options: ForkSessionOptions = {}): Promise<ManagedSession> {
+		const source = await this.session(sourceId);
+		if (source === undefined) throw new Error(`no such session: ${sourceId}`);
+		const chain = forkChain(source.session.log.graph, {
+			...(options.entryId === undefined ? {} : { entryId: options.entryId }),
+			position: options.position ?? "at",
+		});
+		const meta: SessionMeta = {
+			id: newSessionId(),
+			createdAt: Date.now(),
+			cwd: source.meta.cwd,
+			title: options.title ?? titleForFork(source.meta.title),
+			...(source.meta.persona === undefined ? {} : { persona: source.meta.persona }),
+			...(source.meta.model === undefined ? {} : { model: source.meta.model }),
+		};
+		const created = await this.store.create(meta);
+		await created.storage.commit(await forkWrites(source.session.log.storage, chain));
+		return await this.openSession(meta);
+	}
+
+	/**
 	 * Forget a session: close it if it is open, then take its row and its directory away.
 	 * Closing first matters — deleting a journal out from under an open handle is a leak the
 	 * runtime reports much later, far from here.
@@ -168,6 +229,11 @@ export class SessionManager {
 		managed.session.stop();
 		await managed.session.kernel.dispose();
 	}
+}
+
+/** The title a fork gets when the caller did not choose one. */
+function titleForFork(title: string | undefined): string {
+	return title === undefined || title.length === 0 ? "forked session" : `${title} (fork)`;
 }
 
 /** A fresh session id in the shape the app has always used. */
