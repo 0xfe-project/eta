@@ -16,15 +16,29 @@
  */
 import type { ProvidersView } from "@eta/client-wire-proto";
 import { Service } from "cordis";
+import { CodexCredentialStore, CodexLogin, codexAuthPath, piCodexLogin } from "../codex-auth";
 import { discoverModels } from "../providers/discovery";
 import type { ProviderConfigStore } from "../providers/store";
 import type { WireService } from "../wire-service";
 
 /** The actions this target has. One list, so the wire and the plugin cannot disagree. */
-export const PROVIDER_ACTIONS = ["save", "delete", "setDefault", "setNetwork", "reload", "refresh"] as const;
+export const PROVIDER_ACTIONS = [
+	"save",
+	"delete",
+	"setDefault",
+	"setNetwork",
+	"reload",
+	"refresh",
+	"codexLogin",
+	"codexAnswer",
+	"codexStatus",
+	"codexCancel",
+] as const;
 
 export interface ProvidersPluginOptions {
 	store: ProviderConfigStore;
+	/** How long a codex login may stay pending. Zero-ish values are for tests. */
+	loginTimeoutMs?: number | undefined;
 	/**
 	 * The HTTP client discovery uses. A test supplies one; production uses `fetch`, which is what
 	 * makes the refresh path the same client the requests go through.
@@ -58,6 +72,16 @@ export function providersPlugin(options: ProvidersPluginOptions) {
 				effect(execute: () => () => unknown): unknown;
 			};
 			const wire = context.wire;
+			// The codex login: a second target's worth of state, kept on this one because it is
+			// about the same subject (which providers exist and whether they are usable). The
+			// credentials live beside the config file, and the flow is pi-ai's.
+			const credentials = new CodexCredentialStore(codexAuthPath(options.store.path));
+			const codex = new CodexLogin({
+				credentials,
+				login: piCodexLogin(credentials),
+				...(options.loginTimeoutMs === undefined ? {} : { timeoutMs: options.loginTimeoutMs }),
+			});
+
 			return context.effect(() => {
 				// What the section shows: the last read, plus the revision a write must carry.
 				// Kept as a box because the state projector must be synchronous while reading the
@@ -149,6 +173,37 @@ export function providersPlugin(options: ProvidersPluginOptions) {
 						latest = updated ?? (await refresh());
 						wire.pushNow("providers");
 						return { result: { revision: latest.revision, models: discovered.models.length } };
+					}),
+					wire.handle("providers", "codexLogin", (call) => {
+						const { method } = (call.args ?? {}) as { method?: "browser" | "device_code" };
+						if (method !== undefined && method !== "browser" && method !== "device_code") {
+							throw new Error("providers.codexLogin needs method: browser or device_code");
+						}
+						// The view carries no token: it is what a UI renders and what the wire carries.
+						return { result: { login: codex.start(method ?? "browser") } };
+					}),
+					wire.handle("providers", "codexAnswer", (call) => {
+						const { id, promptId, value } = (call.args ?? {}) as {
+							id?: string;
+							promptId?: string;
+							value?: string;
+						};
+						if (id === undefined || promptId === undefined || value === undefined) {
+							throw new Error("providers.codexAnswer needs an id, a promptId and a value");
+						}
+						const accepted = codex.answer(id, promptId, value);
+						if (!accepted) throw new Error("codex_login_failed: that prompt is not waiting");
+						return { result: { accepted } };
+					}),
+					wire.handle("providers", "codexStatus", (call) => {
+						const { id } = (call.args ?? {}) as { id?: string };
+						if (id === undefined) throw new Error("providers.codexStatus needs an id");
+						return { result: { login: codex.status(id) } };
+					}),
+					wire.handle("providers", "codexCancel", (call) => {
+						const { id } = (call.args ?? {}) as { id?: string };
+						codex.cancel(id);
+						return { result: { cancelled: true, ...(id === undefined ? {} : { login: codex.status(id) }) } };
 					}),
 					wire.handle("providers", "reload", async () => {
 						// A client asking "did anything change?" — the answer is the state, and the

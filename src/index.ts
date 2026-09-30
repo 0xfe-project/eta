@@ -40,6 +40,7 @@ export type {
 
 /* ------------------------------------------------------------------ the floor */
 
+export { PERSONA_ACTIONS, type PersonasPluginOptions, personasPlugin } from "./bundled/personas";
 /**
  * The server's parts, as parts. `assembleServer` is the one place they are put together: the
  * transport, the target registry, the plugin manager and `hello`, with every feature — including
@@ -48,9 +49,55 @@ export type {
 export { PROVIDER_ACTIONS, type ProvidersPluginOptions, providersPlugin } from "./bundled/providers";
 export { SESSION_ACTIONS, type SessionsPluginOptions, sessionsPlugin } from "./bundled/sessions";
 export { SETTINGS_ACTIONS, type SettingsPluginOptions, settingsPlugin } from "./bundled/settings";
+export {
+	CODEX_PROVIDER_ID,
+	CodexCredentialStore,
+	CodexLogin,
+	type CodexLoginRunner,
+	type CodexLoginView,
+	codexAuthPath,
+	LOGIN_TIMEOUT_MS,
+	piCodexLogin,
+} from "./codex-auth";
+export { codexCatalog, codexRuntimeProvider } from "./codex-provider";
 export { forkWrites } from "./fork";
 export { DEFAULT_PROVIDER, formatModelId, type ModelIdentity, parseModelId } from "./model-id";
+export {
+	initializeNetwork,
+	type NetworkCommand,
+	type NetworkStatus,
+	PROXY_KEYS,
+	parseLinuxProxy,
+	parseMacProxy,
+	parseWindowsProxy,
+	readSystemProxy,
+	type SystemProxy,
+} from "./network";
 export { FramePacer, type PacerOptions } from "./pacer";
+export {
+	AUTOPICK_MAX_TOKENS,
+	type AutopickModel,
+	describeCard,
+	discoverPersonas,
+	FALLBACK_PERSONA,
+	fallbackPersona,
+	type PersonaPick,
+	type PersonaPickSource,
+	PICKER_SYSTEM_PROMPT,
+	parsePersonaAnswer,
+	personaDirs,
+	resolvePersona,
+	suggestPersonaId,
+	summarize,
+} from "./personas";
+export {
+	type LoadedPlugin,
+	PLUGIN_MANIFEST_KEY,
+	PluginManager,
+	type PluginManagerOptions,
+	type PluginManifest,
+	pickPlugin,
+} from "./plugins";
 export {
 	catalogModelsFor,
 	type ProviderCatalogEntry,
@@ -104,8 +151,16 @@ export {
 	UnknownOpError,
 } from "./registry";
 export { createEventRing, DEFAULT_RING_CAPACITY, type EventRing, matchesFilter } from "./ring";
-export { type AssembledServer, type AssembleOptions, assembleServer, type BundledPluginName } from "./server";
+export { branchMessages, firstHit, type HistoryRow, historyOf, messageText, type SearchHit } from "./search";
+export {
+	type AssembledServer,
+	type AssembleOptions,
+	assembleServer,
+	type BundledPluginName,
+	pluginDirs,
+} from "./server";
 export { type Settings, SettingsStore, type SettingsStoreOptions, settingsPath } from "./settings";
+export { discoverSkillDirs, gitRepoChain, type RenderSkillsOptions, renderSkillsBlock } from "./skills";
 export {
 	type AddressedFrame,
 	createStateSender,
