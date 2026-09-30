@@ -11,6 +11,7 @@
  * state sender and the sink — the same three doors a client uses.
  */
 import type { ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
+import type { CompactionSummarizer } from "@eta/core";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { Context } from "cordis";
 import { describe, expect, it } from "vitest";
@@ -33,6 +34,7 @@ interface Harness {
 
 async function harness(
 	models = fakeModels([assistantMessage({ content: [{ type: "text", text: "an answer" }] })]),
+	options: { compaction?: CompactionSummarizer } = {},
 ): Promise<Harness> {
 	const ctx = new Context();
 	const wire = new WireService(ctx);
@@ -41,6 +43,7 @@ async function harness(
 	const manager = new SessionManager({
 		store: new MemorySessionStore(),
 		modelsFor: () => models as never,
+		compaction: options.compaction,
 	});
 	let unload: (() => Promise<void>) | undefined;
 	const plugin = sessionsPlugin({ manager });
@@ -284,6 +287,123 @@ describe("the row a session keeps", () => {
 		expect(sourceText).not.toContain("only the fork asks");
 
 		await expect(h.call("sessions", "fork", { session: "nope" })).rejects.toThrow(/no such session/);
+		await h.unload();
+	});
+});
+
+describe("the side threads a session keeps", () => {
+	it("opens a thread, asks it, saves its notes, and clears it", async () => {
+		const models = fakeModels([
+			assistantMessage({ content: [{ type: "text", text: "the side answer" }] }),
+			assistantMessage({ content: [{ type: "text", text: "the main answer" }] }),
+		]);
+		const h = await harness(models);
+		await h.load();
+		const { session } = (await h.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
+		const seen = () => (h.state(`sessions.${session}`)?.sections.sideThread as { id: string }[]) ?? [];
+
+		// A client that is watching already holds the session's state, so opening a thread
+		// arrives as a push rather than as a read the client has to ask for.
+		h.wire.subscribe(1, `sessions.${session}`);
+		h.frames.length = 0;
+
+		// A contextual thread is seeded from the session as it stands now.
+		const opened = (await h.call("sessions", "btwOpen", { session, kind: "contextual" })) as {
+			thread: { id: string; kind: string };
+		};
+		expect(opened.thread).toMatchObject({ id: "btw-1", kind: "contextual" });
+		expect(seen().map((thread) => thread.id)).toEqual(["btw-1"]);
+		expect(h.frames.some((entry) => entry.target === `sessions.${session}` && entry.frame.type === "state")).toBe(
+			true,
+		);
+
+		// A question goes to the side model and lands as an answered exchange.
+		await h.call("sessions", "btwAsk", { session, threadId: "btw-1", question: "what does the wire look like?" });
+		const asked = seen()[0] as unknown as { exchanges: { question: string; answer: string }[] };
+		expect(asked.exchanges).toHaveLength(1);
+		expect(asked.exchanges[0]).toMatchObject({
+			question: "what does the wire look like?",
+			answer: "the side answer",
+		});
+
+		// A note can be recorded without a model at all.
+		await h.call("sessions", "btwAnswer", { session, threadId: "btw-1", question: "coffee?", answer: "later" });
+		expect((seen()[0] as unknown as { exchanges: unknown[] }).exchanges).toHaveLength(2);
+
+		// Saving writes the notes into the journal — the thread's history is the journal's.
+		expect(await h.call("sessions", "btwSave", { session, threadId: "btw-1" })).toEqual({ state: "saved" });
+		const log = h.manager.openSessions().find((open) => open.meta.id === session)?.session.log;
+		expect(log?.graph.pathOldestFirst().some((entry) => entry.type === "btw")).toBe(true);
+
+		// Handing off is a real run when the session is idle: the notes arrive as the next input.
+		const callsBefore = models.calls.length;
+		expect(await h.call("sessions", "btwHandoff", { session, threadId: "btw-1" })).toEqual({ delivered: true });
+		await until(() => models.calls.length > callsBefore);
+		await until(
+			() => h.manager.openSessions().find((open) => open.meta.id === session)?.session.runner.running === false,
+		);
+		const transcript = JSON.stringify(h.state(`sessions.${session}`)?.sections.transcript);
+		expect(transcript).toContain("notes taken beside the run");
+
+		// Clearing drops it from the panel; the notes already written stay in the journal.
+		expect(await h.call("sessions", "btwClear", { session, threadId: "btw-1" })).toEqual({ cleared: true });
+		expect(seen()).toEqual([]);
+		expect(log?.graph.pathOldestFirst().some((entry) => entry.type === "btw")).toBe(true);
+
+		// A thread id that is not there is named as such, not quietly ignored.
+		await expect(h.call("sessions", "btwAsk", { session, threadId: "btw-9", question: "hello?" })).rejects.toThrow(
+			/no such side thread/,
+		);
+		await expect(h.call("sessions", "btwOpen", { session, kind: "sideways" })).rejects.toThrow(
+			/kind: contextual or tangent/,
+		);
+		await h.unload();
+	});
+});
+
+describe("compacting on demand", () => {
+	it("compacts when asked, and refuses when the session has no summarizer", async () => {
+		const requests: number[] = [];
+		const summarizer: CompactionSummarizer = {
+			summarize: async (request) => {
+				requests.push(request.estimatedTokens);
+				return { summary: "everything so far, briefly", retainedTail: [], tokensBefore: request.estimatedTokens };
+			},
+		};
+		const models = fakeModels([
+			...[1, 2, 3, 4].map((turn) => assistantMessage({ content: [{ type: "text", text: `answer ${turn}` }] })),
+		]);
+		const h = await harness(models, { compaction: summarizer });
+		await h.load();
+		const { session } = (await h.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
+		const running = () => h.manager.openSessions().find((open) => open.meta.id === session)?.session.runner.running;
+		for (const question of ["first", "second", "third"]) {
+			await h.call("sessions", "prompt", { session, text: question });
+			await until(() => running() === false);
+		}
+
+		expect(await h.call("sessions", "compact", { session })).toEqual({ session, compacted: true });
+		expect(requests).toHaveLength(1);
+		// The journal keeps the whole conversation (it is history), and the compaction is a
+		// row of its own — what changed is what the *model* is sent next.
+		const systems = h.state(`sessions.${session}`)?.sections.systems as { rows: { kind: string }[] };
+		expect(systems.rows.filter((row) => row.kind === "compaction")).toHaveLength(1);
+		expect(JSON.stringify(h.state(`sessions.${session}`)?.sections.transcript)).toContain("first");
+
+		const callsBefore = models.calls.length;
+		await h.call("sessions", "prompt", { session, text: "after the compaction" });
+		await until(() => models.calls.length > callsBefore);
+		await until(() => running() === false);
+		const sent = JSON.stringify(models.calls.at(-1)?.context.messages);
+		expect(sent).toContain("everything so far, briefly");
+		expect(sent).not.toContain("first");
+
+		// Without a summarizer the session says so instead of pretending nothing happened.
+		const bare = await harness(models);
+		await bare.load();
+		const { session: plain } = (await bare.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
+		await expect(bare.call("sessions", "compact", { session: plain })).rejects.toThrow(/no compaction configured/);
+		await bare.unload();
 		await h.unload();
 	});
 });

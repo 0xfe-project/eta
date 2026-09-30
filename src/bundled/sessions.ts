@@ -8,8 +8,10 @@
  *
  * It owns three things:
  *
- * - **the actions**: create / delete / focus / resync / prompt / abort, plus the ones that move a
- *   session's row (rename / pin / archive) and the one that branches it (fork);
+ * - **the actions**: create / delete / focus / resync / prompt / abort, the ones that move a
+ *   session's row (rename / pin / archive), the one that branches it (fork), the one that compacts
+ *   it on demand (compact), and the six that drive a side thread (btwOpen / btwAsk / btwAnswer /
+ *   btwSave / btwHandoff / btwClear);
  * - **the states**: `sessions` (the sidebar, eager, so a fresh client draws it from `hello`)
  *   and `sessions.<id>` (one session's view, registered when it opens, gone when it closes);
  * - **the traffic around a turn**: every kernel event on a session's bus becomes an `event`
@@ -22,6 +24,7 @@
  */
 import type { SidebarSession } from "@eta/client-wire-proto";
 import type { ImageContent } from "@eta/core";
+import type { BtwSaveState, BtwThread } from "@eta/harness";
 import { Service } from "cordis";
 import type { CreateSessionOptions, ForkSessionOptions, ManagedSession, SessionManager } from "../manager";
 import type { SessionMeta } from "../store";
@@ -39,6 +42,13 @@ export const SESSION_ACTIONS = [
 	"pin",
 	"archive",
 	"fork",
+	"compact",
+	"btwOpen",
+	"btwAsk",
+	"btwAnswer",
+	"btwSave",
+	"btwHandoff",
+	"btwClear",
 ] as const;
 export type SessionAction = (typeof SESSION_ACTIONS)[number];
 
@@ -242,6 +252,90 @@ export class SessionsService extends Service {
 		return forked.meta.id;
 	}
 
+	/**
+	 * Compact a session on demand — `/compact`. Takes it out of the threshold's hands
+	 * and does it now; a session assembled without a summarizer says so rather than
+	 * pretending it did nothing.
+	 */
+	async compact(id: string, instructions?: string): Promise<boolean> {
+		const compaction = this.require(id).managed.session.compaction;
+		if (compaction === undefined) throw new Error(`session ${id} has no compaction configured`);
+		const compacted = await compaction.manual(instructions);
+		this.wire.push(`sessions.${id}`);
+		return compacted;
+	}
+
+	/**
+	 * Open a side thread. The two kinds differ in what they start from: a `contextual`
+	 * thread is seeded with the session as it stands now (everything visible except the
+	 * side chatter itself, so answers never compound), a `tangent` one starts empty.
+	 */
+	btwOpen(id: string, kind: BtwThread["kind"]): BtwThread {
+		const attached = this.require(id);
+		const thread = attached.managed.session.btw.create(kind);
+		const graph = attached.managed.session.log.graph;
+		attached.managed.session.btw.seedFrom(thread.id, graph.pathOldestFirst(), graph.tipId());
+		this.wire.push(`sessions.${id}`);
+		return thread;
+	}
+
+	/**
+	 * Ask a side thread. The wait belongs to the thread (`pending`), and the frame
+	 * showing that goes out before the answer does: a side request that takes seconds
+	 * must not look frozen. `ask` settles into an answer or an error, never a rejection.
+	 */
+	async btwAsk(id: string, threadId: string, question: string): Promise<void> {
+		const attached = this.require(id);
+		this.requireThread(attached, threadId);
+		const settled = attached.managed.session.btw.ask(threadId, question);
+		this.wire.push(`sessions.${id}`);
+		await settled;
+		this.wire.push(`sessions.${id}`);
+	}
+
+	/** Record an exchange without asking a model (a note, a question the user answered). */
+	btwAnswer(id: string, threadId: string, question: string, answer: string): void {
+		const attached = this.require(id);
+		this.requireThread(attached, threadId);
+		attached.managed.session.btw.answer(threadId, question, answer);
+		this.wire.push(`sessions.${id}`);
+	}
+
+	/** Save a thread's notes as a visible note; mid-run they queue for the boundary. */
+	async btwSave(id: string, threadId: string): Promise<BtwSaveState> {
+		const attached = this.require(id);
+		this.requireThread(attached, threadId);
+		const state = await attached.managed.session.btw.save(threadId, attached.running);
+		this.wire.push(`sessions.${id}`);
+		return state;
+	}
+
+	/**
+	 * Hand a thread's notes to the main run. While a run is in flight they arrive as a
+	 * follow-up it folds in at its next boundary; with nothing running they *are* the
+	 * next run — a follow-up with nothing to attach to would sit unread.
+	 */
+	btwHandoff(id: string, threadId: string): boolean {
+		const attached = this.require(id);
+		this.requireThread(attached, threadId);
+		const text = attached.managed.session.btw.handoff(threadId);
+		this.wire.push(`sessions.${id}`);
+		if (text === undefined) return false;
+		if (attached.running) attached.managed.session.kernel.followUp(text);
+		else attached.managed.session.kernel.nextRun(text);
+		attached.managed.session.pump.pump();
+		return true;
+	}
+
+	/** Drop a thread from the panel; notes already written to the journal stay. */
+	btwClear(id: string, threadId: string): boolean {
+		const attached = this.require(id);
+		this.requireThread(attached, threadId);
+		const cleared = attached.managed.session.btw.clear(threadId);
+		this.wire.push(`sessions.${id}`);
+		return cleared;
+	}
+
 	session(id: string): ManagedSession | undefined {
 		return this.held.get(id)?.managed;
 	}
@@ -305,6 +399,13 @@ export class SessionsService extends Service {
 		const attached = this.held.get(id);
 		if (attached === undefined) throw new Error(`no such session: ${id}`);
 		return attached;
+	}
+
+	/** A thread id that is not in the panel is an error, not an operation that quietly does nothing. */
+	private requireThread(attached: Attached, threadId: string): void {
+		if (attached.managed.session.btw.get(threadId) === undefined) {
+			throw new Error(`no such side thread: ${threadId}`);
+		}
 	}
 
 	private async detach(id: string): Promise<void> {
@@ -433,6 +534,81 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 							...(args.title === undefined ? {} : { title: args.title }),
 						});
 						return { result: { session } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "compact", async (call) => {
+						const { session, instructions } = (call.args ?? {}) as { session?: string; instructions?: string };
+						if (session === undefined) throw new Error("sessions.compact needs a session");
+						const compacted = await service.compact(session, instructions);
+						return { result: { session, compacted } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "btwOpen", (call) => {
+						const { session, kind } = (call.args ?? {}) as { session?: string; kind?: BtwThread["kind"] };
+						if (session === undefined) throw new Error("sessions.btwOpen needs a session");
+						if (kind !== "contextual" && kind !== "tangent") {
+							throw new Error("sessions.btwOpen needs kind: contextual or tangent");
+						}
+						const thread = service.btwOpen(session, kind);
+						return { result: { session, thread } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "btwAsk", async (call) => {
+						const { session, threadId, question } = (call.args ?? {}) as {
+							session?: string;
+							threadId?: string;
+							question?: string;
+						};
+						if (session === undefined || threadId === undefined || question === undefined) {
+							throw new Error("sessions.btwAsk needs a session, a threadId and a question");
+						}
+						await service.btwAsk(session, threadId, question);
+						return { result: { session, threadId } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "btwAnswer", (call) => {
+						const { session, threadId, question, answer } = (call.args ?? {}) as {
+							session?: string;
+							threadId?: string;
+							question?: string;
+							answer?: string;
+						};
+						if (session === undefined || threadId === undefined || question === undefined) {
+							throw new Error("sessions.btwAnswer needs a session, a threadId and a question");
+						}
+						service.btwAnswer(session, threadId, question, answer ?? "");
+						return { result: { session, threadId } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "btwSave", async (call) => {
+						const { session, threadId } = (call.args ?? {}) as { session?: string; threadId?: string };
+						if (session === undefined || threadId === undefined) {
+							throw new Error("sessions.btwSave needs a session and a threadId");
+						}
+						return { result: { state: await service.btwSave(session, threadId) } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "btwHandoff", (call) => {
+						const { session, threadId } = (call.args ?? {}) as { session?: string; threadId?: string };
+						if (session === undefined || threadId === undefined) {
+							throw new Error("sessions.btwHandoff needs a session and a threadId");
+						}
+						return { result: { delivered: service.btwHandoff(session, threadId) } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "btwClear", (call) => {
+						const { session, threadId } = (call.args ?? {}) as { session?: string; threadId?: string };
+						if (session === undefined || threadId === undefined) {
+							throw new Error("sessions.btwClear needs a session and a threadId");
+						}
+						return { result: { cleared: service.btwClear(session, threadId) } };
 					}),
 				);
 				registrations.push(
