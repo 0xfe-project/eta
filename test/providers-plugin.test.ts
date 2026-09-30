@@ -196,7 +196,8 @@ describe("the config over the wire", () => {
 			noProxy: "localhost",
 		});
 		expect(network.ok).toBe(true);
-		expect(h.config()?.network).toEqual({ mode: "manual", proxyUrl: "http://127.0.0.1:7890", noProxy: "localhost" });
+		// Normalised through `URL`, which is what a client parsing it would see.
+		expect(h.config()?.network).toEqual({ mode: "manual", proxyUrl: "http://127.0.0.1:7890/", noProxy: "localhost" });
 
 		// A mode nobody implements is refused, rather than stored and ignored.
 		const bad = await callResult(h, "setNetwork", { revision: h.config()?.revision, mode: "telepathy" });

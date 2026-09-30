@@ -205,3 +205,35 @@ describe("watching the file", () => {
 		expect(changes).toEqual([]);
 	});
 });
+
+describe("the proxy a settings page writes", () => {
+	it("normalises a URL, and refuses one that would put a password in the file", async () => {
+		const root = await scratch();
+		const path = join(root, "config.json");
+		const store = new ProviderConfigStore({ path });
+		const view = await store.setNetwork({ mode: "manual", proxyUrl: " http://localhost:1082 " }, revisionOf(""));
+		// Stored as the URL a client would parse, not as the string that was typed: trimmed, and in
+		// the canonical form `URL` produces.
+		expect(view.network?.proxyUrl).toBe("http://localhost:1082/");
+		expect(JSON.parse(await readFile(path, "utf8")).network.proxyUrl).toBe("http://localhost:1082/");
+
+		// Credentials belong in the environment, not in a file the UI renders back.
+		await expect(
+			store.setNetwork({ mode: "manual", proxyUrl: "http://user:secret@localhost:1082" }, view.revision),
+		).rejects.toThrow(/invalid_network/);
+		// And a string that is not a URL is refused now, not discovered later. A scheme-less
+		// `host:port` is in this group on purpose: `URL` reads `localhost:1082` as the scheme
+		// `localhost:`, and inventing one is how a proxy ends up pointing somewhere unexpected.
+		await expect(store.setNetwork({ mode: "manual", proxyUrl: "not a url" }, view.revision)).rejects.toThrow(
+			/invalid_network/,
+		);
+		await expect(store.setNetwork({ mode: "manual", proxyUrl: "localhost:1082" }, view.revision)).rejects.toThrow(
+			/invalid_network/,
+		);
+		await expect(store.setNetwork({ mode: "manual", proxyUrl: "ftp://x:1" }, view.revision)).rejects.toThrow(
+			/invalid_network/,
+		);
+		// The refusal changed nothing.
+		expect((await store.view()).network?.proxyUrl).toBe("http://localhost:1082/");
+	});
+});

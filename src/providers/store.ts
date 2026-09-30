@@ -163,11 +163,11 @@ export class ProviderConfigStore {
 			if (input.mode !== "system" && input.mode !== "manual" && input.mode !== "direct") {
 				throw new ProviderConfigError("invalid_config");
 			}
-			const proxyUrl = input.proxyUrl?.trim() ?? "";
+			const proxyUrl = normalizeProxyUrl(input.proxyUrl);
 			const noProxy = input.noProxy?.trim() ?? "";
 			config.network = {
 				mode: input.mode,
-				...(proxyUrl.length === 0 ? {} : { proxyUrl }),
+				...(proxyUrl === undefined ? {} : { proxyUrl }),
 				...(input.mode === "manual" && noProxy.length > 0 ? { noProxy } : {}),
 			};
 		});
@@ -281,6 +281,34 @@ export class ProviderConfigStore {
 		);
 		if (!exists) config.defaultModel = undefined;
 	}
+}
+
+/**
+ * A proxy URL, or a refusal.
+ *
+ * Two rules, and both are about what would end up in a plain-text file:
+ *
+ * - **No credentials in the URL.** `http://user:pass@host` is a password written to disk in a file
+ *   this app reads back and a settings page renders. Proxy authentication belongs in the
+ *   environment (or the client's own credential store), not in a config the UI shows.
+ * - **It has to be a URL.** A scheme the resolver cannot use, or a string that is not a URL at all,
+ *   is refused now rather than becoming a proxy that silently does not work.
+ *
+ * Normalised through `URL` so the stored value is the one a client would parse: `localhost:1082`
+ * becomes `http://localhost:1082/`.
+ */
+function normalizeProxyUrl(value: string | undefined): string | undefined {
+	const text = value?.trim() ?? "";
+	if (text.length === 0) return undefined;
+	let url: URL;
+	try {
+		url = new URL(text);
+	} catch {
+		throw new ProviderConfigError("invalid_network");
+	}
+	if (url.protocol !== "http:" && url.protocol !== "https:") throw new ProviderConfigError("invalid_network");
+	if (url.username.length > 0 || url.password.length > 0) throw new ProviderConfigError("invalid_network");
+	return url.href;
 }
 
 /** The client's view of a config: the key becomes a boolean, everything else stays. */

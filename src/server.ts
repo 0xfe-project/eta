@@ -20,6 +20,7 @@
  * still starts, still serves, still answers `hello` — with one fewer target. That is the test
  * that the floor is a floor and not a session host with plugins bolted on.
  */
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { MountedPlugin } from "@eta/client-wire-proto";
@@ -31,12 +32,16 @@ import { sessionsPlugin } from "./bundled/sessions";
 import { settingsPlugin } from "./bundled/settings";
 import { FileSessionStore } from "./file-store";
 import { SessionManager, type SessionManagerOptions } from "./manager";
+import { parseModelId } from "./model-id";
+import { initializeNetwork } from "./network";
 import { discoverPersonas } from "./personas";
 import { PluginManager } from "./plugins";
 import type { EtaProviderConfig } from "./providers/config-types";
 import { buildModels } from "./providers/runtime";
 import { defaultConfigPath, ProviderConfigStore } from "./providers/store";
+import { messageText } from "./search";
 import { SettingsStore, settingsPath } from "./settings";
+import { renderSkillsBlock } from "./skills";
 import { serveWire, type WireServer } from "./transport";
 import { WireService } from "./wire-service";
 
@@ -47,6 +52,12 @@ export interface AssembleOptions {
 	configPath?: string;
 	/** The port to listen on. Zero means "any free one". */
 	port?: number;
+	/**
+	 * Whether to apply the config's network settings to the environment at startup. `false` leaves
+	 * the environment exactly as the process was started with — what a test wants, and what a
+	 * caller that manages its own proxy wants.
+	 */
+	network?: boolean | undefined;
 	/** The summarizer sessions compact with. Without one they run unbound. */
 	compaction?: CompactionSummarizer;
 	/**
@@ -178,6 +189,21 @@ export async function assembleServer(options: AssembleOptions): Promise<Assemble
 		},
 	};
 
+	// The network settings in force, put into the environment *before* anything builds a client:
+	// whatever the provider layer uses later picks them up the way any Node process would. The
+	// status it returns is what a settings page shows, including the warning that a configured
+	// proxy (a PAC file, a SOCKS-only system proxy) is not being used — the one thing a user cannot
+	// find out any other way.
+	if (options.network !== false) {
+		try {
+			const { config } = await providers.read();
+			const status = await initializeNetwork(config.network ?? { mode: "system" });
+			if (status.warning !== undefined) warn(`[eta-server] network: ${status.warning} (source: ${status.source})`);
+		} catch (error) {
+			warn(`[eta-server] could not apply network settings: ${String(error)}`);
+		}
+	}
+
 	const store = new FileSessionStore({ root: join(options.dataDir, "sessions"), warn });
 	const envFor = options.envFor;
 	const sessions = new SessionManager({
@@ -191,6 +217,61 @@ export async function assembleServer(options: AssembleOptions): Promise<Assemble
 			discoverPersonas({ cwd: meta.cwd, home: options.home ?? homedir(), warn }).then((cards) => [
 				...cards.values(),
 			]),
+		// The skills that apply to a session's directory, rendered once at open. Discovery needs a
+		// filesystem, and the session's own is the right one: a skill on the far side of an SSH
+		// session is a skill that machine has.
+		skillsFor: async (meta) => {
+			const environment = envFor?.(meta);
+			if (environment === undefined) return "";
+			return await renderSkillsBlock({
+				env: environment.env,
+				cwd: meta.cwd,
+				home: options.home ?? homedir(),
+				warn,
+			});
+		},
+		// The platform briefing: the words are the harness's, these are this app's paths. It is what
+		// lets the agent change its own setup instead of asking a human where things go.
+		platformFor: (meta) => {
+			const home = options.home ?? homedir();
+			return {
+				cwd: meta.cwd,
+				home,
+				configPath,
+				sessionDir: join(options.dataDir, "sessions", meta.id),
+				memoryTarget: join(meta.cwd, ".eta", "MEMORY.md"),
+				// A synchronous stat: the briefing is rendered per generation and a fact about
+				// whether a file exists is cheap enough to read then.
+				memoryExists: existsSync(join(meta.cwd, ".eta", "MEMORY.md")),
+			};
+		},
+		// The project's memory, read and written through the session's own filesystem, and the
+		// extraction call it makes at a run boundary. The call is the session's own model: notes
+		// that cost tokens are notes the session pays for.
+		memoryFor: (meta) => ({
+			home: options.home ?? homedir(),
+			call: async (systemPrompt, prompt) => {
+				const identity = meta.model === undefined ? undefined : parseModelId(meta.model);
+				const model =
+					identity === undefined ? undefined : kernelModels.getModel(identity.provider, identity.modelId);
+				if (model === undefined) {
+					// No model to ask: a throw here is a declined extraction, which is the honest
+					// outcome — inventing notes would be worse.
+					throw new Error(`model_unavailable: ${meta.model ?? "unknown"}`);
+				}
+				const reply = await kernelModels.completeSimple(
+					model,
+					{
+						systemPrompt,
+						messages: [
+							{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() } as never,
+						],
+					},
+					{},
+				);
+				return messageText(reply);
+			},
+		}),
 		...(options.compaction === undefined ? {} : { compaction: options.compaction }),
 		warn,
 	});
