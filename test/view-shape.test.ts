@@ -6,11 +6,12 @@
  * runtime sanity check on top: if either side quietly grows a required field, this stops
  * building, which is cheaper than a client that receives frames it cannot read.
  */
+
+import type { StatePatch, StateSnapshot } from "@eta/client-wire-proto";
+import { stateDiff, stateSection } from "@eta/client-wire-proto";
 import { MemoryStorage } from "@eta/core";
 import { fakeModels } from "@eta/core/testing";
 import { openSession } from "@eta/harness";
-import type { SessionView, SessionViewPatch } from "@eta/wire";
-import { viewDiff, viewSection } from "@eta/wire";
 import { describe, expect, it } from "vitest";
 
 describe("the harness snapshot is what the wire says a view is", () => {
@@ -22,25 +23,25 @@ describe("the harness snapshot is what the wire says a view is", () => {
 			cwd: "/work",
 		});
 		// No cast: the shapes have to line up on their own.
-		const snapshot: SessionView = session.view.snapshot();
-		expect(snapshot.core.session).toBe("eta-seam");
-		expect(snapshot.core.cwd).toBe("/work");
+		const snapshot: StateSnapshot = session.view.snapshot();
+		expect(stateSection(snapshot, "core")?.session).toBe("eta-seam");
+		expect(stateSection(snapshot, "core")?.cwd).toBe("/work");
 		expect(Object.keys(snapshot.revisions).length).toBeGreaterThan(0);
 
-		// A client that holds nothing gets the whole view; one that is current gets nothing.
-		expect(viewDiff(undefined, snapshot)).toBe("full");
-		expect(viewDiff(snapshot.revisions, session.view.snapshot())).toBeUndefined();
+		// A client that holds nothing gets the whole state; one that is current gets nothing.
+		expect(stateDiff(undefined, snapshot)).toBe("full");
+		expect(stateDiff(snapshot.revisions, session.view.snapshot())).toBeUndefined();
 
 		// Reading a section by name is typed and admits absence.
-		expect(viewSection(snapshot, "transcript")?.messages).toEqual([]);
-		expect(viewSection(snapshot, "goal")).toBeUndefined();
+		expect(stateSection(snapshot, "transcript")?.messages).toEqual([]);
+		expect(stateSection(snapshot, "goal")).toBeUndefined();
 
-		// And a patch is what the wire would send for a change.
+		// And a patch is what the pipe would send for a change.
 		session.kernel.tasks.create("a task worth showing");
 		const changed = session.view.snapshot();
-		const patch = viewDiff(snapshot.revisions, changed);
+		const patch = stateDiff(snapshot.revisions, changed);
 		expect(patch).not.toBe("full");
-		const typed = patch as SessionViewPatch;
+		const typed = patch as StatePatch;
 		expect(Object.keys(typed.sections)).toEqual(["tasks"]);
 
 		await session.kernel.dispose();

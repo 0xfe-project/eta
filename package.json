@@ -25,6 +25,6 @@
 		"@eta/core": "*",
 		"@eta/harness": "*",
 		"@eta/storage-jsonl": "*",
-		"@eta/wire": "*"
+		"@eta/client-wire-proto": "*"
 	}
 }

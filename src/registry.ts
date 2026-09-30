@@ -1,144 +1,186 @@
 /**
- * The op registry: ops are registered, not switched (SERVER-REFACTOR.md §3).
+ * The target registry: what can be asked, and what can be watched (SERVER-REFACTOR.md §3/§4).
  *
- * The floor's own modules register their ops at startup (`handle("session.pin", …)`),
- * and a plugin registers through `handlePlugin(name, action, …)` — the registry owns the
- * namespace, so a plugin's actions are reachable only as `plugin.call {plugin, action}`
- * and can never collide with a built-in op or with another plugin's.
+ * A *target* is a name a client addresses — `sessions`, `sessions.<id>`, `git`, `ssh`.
+ * A target owns two optional things:
  *
- * Three consequences worth naming, because each one is a bug the switch-table version
- * had:
+ * - **actions**: `handle("sessions", "prompt", handler, { schema, description })` makes
+ *   `sessions.prompt` callable;
+ * - **state**: `state("sessions", project, { eager })` makes it subscribable, and (with
+ *   `eager`) part of `hello` so a fresh client can draw before asking for anything.
  *
- * - **Adding an op does not touch the router.** A plugin that adds `git.status` needs a
- *   registry entry, not a branch in a dispatch function that every other plugin shares.
- * - **An unknown op is an error, not a no-op.** The client is told which op it sent that
- *   nobody claimed; silence is how a typo becomes "the button does nothing".
- * - **Unloading a plugin removes exactly its ops.** Every registration returns a
- *   disposer, so a plugin's failure or removal takes its routes with it while its
- *   neighbours keep working.
+ * Nothing here knows a feature name. The floor does not register anything; bundled plugins
+ * register `sessions.*`, user plugins register their own, and the difference between them is
+ * only which way they were loaded. That is what makes the server a pipe.
+ *
+ * Two rules keep it predictable:
+ *
+ * - **An unknown call is an error naming what was asked for** (`unknown op: sessions.promt`),
+ *   because with no shared vocabulary a typo has to fail loudly somewhere.
+ * - **A registration is an effect**: every `handle`/`state` returns a disposer, so unloading
+ *   a plugin takes its actions and its state with it — and a client learns that the panel is
+ *   gone because the target's state stops moving and disappears from `hello`.
  */
-import type { ClientMessage, GuiOp, PluginOp } from "@eta/wire";
-import type { DispatchOutcome, Socket } from "./transport";
+import type { CallFrame, OpDescriptor, StateSnapshot } from "@eta/client-wire-proto";
 
-/** What a handler is given besides the op itself. */
+/** What a handler is given besides the call. */
 export interface OpContext {
-	/** The socket that asked: a resync answers it alone, a subscribe belongs to it. */
-	readonly socket: Socket;
-	/** Send a frame to that socket (the handler's own answer, if it has one). */
-	reply(message: import("@eta/wire").ServerMessage): void;
+	/** Send a frame to the client that called. */
+	reply(frame: import("@eta/client-wire-proto").ServerFrame): void;
 }
 
-/** One registered op: what it is called, and who owns it. */
-export interface OpRegistration {
-	/** The wire spelling: a built-in's op name, or `plugin.<name>.<action>` for a plugin. */
+/** What an action did, beyond what it returns. */
+export interface DispatchOutcome {
+	/** A frame the handler wants sent to every client (a fan-out, a native relay). */
+	broadcast?: import("@eta/client-wire-proto").ServerFrame | undefined;
+	/** What the call produced, for the reply frame. */
+	result?: unknown | undefined;
+	/** The handler answered for itself: the pipe adds nothing. */
+	silent?: boolean | undefined;
+}
+
+export type OpHandler = (
+	call: CallFrame,
+	context: OpContext,
+) => Promise<DispatchOutcome | undefined> | DispatchOutcome | undefined;
+
+export interface OpMeta {
+	description?: string | undefined;
+	/** A JSON schema for `args`, published in `hello.ops` for clients that want to check. */
+	schema?: unknown | undefined;
+}
+
+/** A target's state: what it shows, and when. */
+export interface StateProjector {
+	project(): StateSnapshot;
+	/** Include this target's state in `hello`, so a new client draws immediately. */
+	eager?: boolean | undefined;
+}
+
+export interface TargetSummary {
 	name: string;
-	/** The plugin that owns it, when a plugin does. */
-	plugin?: string | undefined;
+	hasState: boolean;
+	eager: boolean;
+	actions: string[];
 }
 
-export type OpHandler = (op: never, context: OpContext) => Promise<DispatchOutcome> | DispatchOutcome;
-
-export interface OpRegistry {
-	/** Register one of the floor's own ops. Duplicate names are refused. */
-	handle(op: GuiOp["op"] | PluginOp["op"], handler: OpHandler): () => void;
-	/** Register a plugin's action; the registry owns the namespace and the prefix. */
-	handlePlugin(plugin: string, action: string, handler: OpHandler): () => void;
-	/** Route one message. Throws `UnknownOpError` when nobody claims it. */
-	dispatch(message: ClientMessage, context: OpContext): Promise<DispatchOutcome>;
-	/** Every registered op name, built-ins and plugin actions alike (for `hello`/dev). */
-	names(): string[];
-	/** The actions one plugin registered. */
-	pluginNames(plugin: string): string[];
-	/** How many ops a plugin still owns (the manager checks nothing was left behind). */
-	pluginSize(plugin: string): number;
+export interface TargetRegistry {
+	/** Register one action a target can be asked to perform. */
+	handle(target: string, action: string, handler: OpHandler, meta?: OpMeta): () => void;
+	/** Register one target's state. */
+	state(target: string, projector: StateProjector): () => void;
+	/** Route one call. Throws `UnknownOpError` when nobody claims it. */
+	dispatch(call: CallFrame, context: OpContext): Promise<DispatchOutcome>;
+	/** Everything callable, as `hello` publishes it. */
+	descriptors(): OpDescriptor[];
+	/** Every target and what it offers. */
+	targets(): TargetSummary[];
+	hasState(target: string): boolean;
+	/** One target's current state, or undefined when the target shows nothing. */
+	snapshot(target: string): StateSnapshot | undefined;
+	/** The targets a new client should be given up front. */
+	eagerTargets(): string[];
 }
 
-/** The error a client gets when it asks for an op nobody registered. */
 export class UnknownOpError extends Error {
-	readonly op: string;
-	constructor(op: string) {
-		super(`unknown op: ${op}`);
+	readonly target: string;
+	readonly action: string;
+	constructor(target: string, action: string) {
+		super(`unknown op: ${target}.${action}`);
 		this.name = "UnknownOpError";
-		this.op = op;
+		this.target = target;
+		this.action = action;
 	}
 }
 
 const NAME_PATTERN = /^[a-z0-9][a-z0-9._-]*$/i;
 
-export interface OpRegistryOptions {
-	warn?: ((message: string) => void) | undefined;
-}
+export function createTargetRegistry(): TargetRegistry {
+	const actions = new Map<string, { target: string; action: string; handler: OpHandler; meta: OpMeta }>();
+	const states = new Map<string, StateProjector>();
 
-export function createOpRegistry(options: OpRegistryOptions = {}): OpRegistry {
-	const builtins = new Map<string, OpHandler>();
-	const plugins = new Map<string, Map<string, OpHandler>>();
-	const _warn = options.warn ?? (() => undefined);
-
-	const claimName = (name: string): void => {
-		if (!NAME_PATTERN.test(name)) throw new Error(`invalid op name: ${JSON.stringify(name)}`);
-		if (builtins.has(name)) throw new Error(`op already registered: ${name}`);
+	const key = (target: string, action: string): string => `${target}.${action}`;
+	const claim = (target: string, action: string): string => {
+		if (!NAME_PATTERN.test(target)) throw new Error(`invalid target name: ${JSON.stringify(target)}`);
+		if (!NAME_PATTERN.test(action)) throw new Error(`invalid action name: ${JSON.stringify(action)}`);
+		const name = key(target, action);
+		if (actions.has(name)) throw new Error(`op already registered: ${name}`);
+		return name;
 	};
 
 	return {
-		handle(op, handler): () => void {
-			claimName(op);
-			builtins.set(op, handler as OpHandler);
+		handle(target, action, handler, meta = {}): () => void {
+			const name = claim(target, action);
+			actions.set(name, { target, action, handler, meta });
 			return () => {
-				if (builtins.get(op) === (handler as OpHandler)) builtins.delete(op);
+				if (actions.get(name)?.handler === handler) actions.delete(name);
 			};
 		},
 
-		handlePlugin(plugin, action, handler): () => void {
-			if (!NAME_PATTERN.test(plugin)) throw new Error(`invalid plugin name: ${JSON.stringify(plugin)}`);
-			if (!NAME_PATTERN.test(action)) {
-				throw new Error(`invalid action for plugin ${plugin}: ${JSON.stringify(action)}`);
-			}
-			const owned = plugins.get(plugin) ?? new Map<string, OpHandler>();
-			if (owned.has(action)) throw new Error(`plugin ${plugin} already registered ${action}`);
-			owned.set(action, handler as OpHandler);
-			plugins.set(plugin, owned);
+		state(target, projector): () => void {
+			if (!NAME_PATTERN.test(target)) throw new Error(`invalid target name: ${JSON.stringify(target)}`);
+			if (states.has(target)) throw new Error(`state already registered: ${target}`);
+			states.set(target, projector);
 			return () => {
-				if (owned.get(action) === (handler as OpHandler)) owned.delete(action);
-				if (owned.size === 0) plugins.delete(plugin);
+				if (states.get(target) === projector) states.delete(target);
 			};
 		},
 
-		async dispatch(message: ClientMessage, context: OpContext): Promise<DispatchOutcome> {
-			if (message.op === "plugin.call") {
-				const owned = plugins.get(message.plugin);
-				const handler = owned?.get(message.action);
-				if (handler === undefined) {
-					throw new UnknownOpError(`plugin.${message.plugin}.${message.action}`);
-				}
-				return await handler(message as never, context);
+		async dispatch(call, context): Promise<DispatchOutcome> {
+			const entry = actions.get(key(call.target, call.action));
+			if (entry === undefined) throw new UnknownOpError(call.target, call.action);
+			return (await entry.handler(call, context)) ?? {};
+		},
+
+		descriptors(): OpDescriptor[] {
+			return [...actions.entries()]
+				.map(([name, entry]) => {
+					return {
+						name,
+						target: entry.target,
+						action: entry.action,
+						...(entry.meta.description === undefined ? {} : { description: entry.meta.description }),
+						...(entry.meta.schema === undefined ? {} : { schema: entry.meta.schema }),
+					};
+				})
+				.sort((a, b) => a.name.localeCompare(b.name));
+		},
+
+		targets(): TargetSummary[] {
+			const names = new Set<string>([...states.keys(), ...[...actions.values()].map((entry) => entry.target)]);
+			return [...names].sort().map((name) => ({
+				name,
+				hasState: states.has(name),
+				eager: states.get(name)?.eager === true,
+				actions: [...actions.values()]
+					.filter((entry) => entry.target === name)
+					.map((entry) => entry.action)
+					.sort(),
+			}));
+		},
+
+		hasState(target): boolean {
+			return states.has(target);
+		},
+
+		snapshot(target): StateSnapshot | undefined {
+			// A projector that throws does not take the pipe down: the client gets a state
+			// whose section says what broke, and everything else keeps working.
+			try {
+				return states.get(target)?.project();
+			} catch (error) {
+				return {
+					sections: { error: { message: error instanceof Error ? error.message : String(error) } },
+					revisions: { error: String(error) },
+				};
 			}
-			if (message.op === "plugin.subscribe" || message.op === "plugin.unsubscribe") {
-				// Subscription is the wire's own facility: the manager installs one handler
-				// for both, and a plugin that needs anything else registers an action.
-				const handler = builtins.get(message.op);
-				if (handler === undefined) throw new UnknownOpError(message.op);
-				return await handler(message as never, context);
-			}
-			const handler = builtins.get(message.op);
-			if (handler === undefined) throw new UnknownOpError(message.op);
-			return await handler(message as never, context);
 		},
 
-		names(): string[] {
-			return [
-				...builtins.keys(),
-				...[...plugins].flatMap(([plugin, actions]) =>
-					[...actions.keys()].map((action) => `plugin.${plugin}.${action}`),
-				),
-			].sort();
-		},
-
-		pluginNames(plugin): string[] {
-			return [...(plugins.get(plugin)?.keys() ?? [])].sort();
-		},
-
-		pluginSize(plugin): number {
-			return plugins.get(plugin)?.size ?? 0;
+		eagerTargets(): string[] {
+			return [...states.entries()]
+				.filter(([, projector]) => projector.eager === true)
+				.map(([name]) => name)
+				.sort();
 		},
 	};
 }
