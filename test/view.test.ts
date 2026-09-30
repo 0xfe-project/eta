@@ -28,14 +28,18 @@ describe("the container", () => {
 		service.contribute({ name: "one", project: () => 1, revision: () => "a" });
 		service.contribute({ name: "two", project: () => ({ x: 2 }), revision: () => "b" });
 		const snapshot = service.snapshot();
-		expect(snapshot.core).toEqual({ session: "s1", running: false });
-		expect(snapshot.sections).toEqual({ one: 1, two: { x: 2 } });
-		expect(snapshot.revisions).toEqual({ one: "a", two: "b" });
-		expect(service.names()).toEqual(["one", "two"]);
+		// The core is a section like any other: the container knows no fields at all.
+		expect(snapshot.sections.core).toEqual({ session: "s1", running: false });
+		expect(snapshot.sections).toMatchObject({ one: 1, two: { x: 2 } });
+		expect(snapshot.revisions).toMatchObject({ one: "a", two: "b" });
+		expect(service.names()).toEqual(["core", "one", "two"]);
 	});
 
-	it("refuses two contributions with one name", () => {
+	it("refuses two contributions with one name, the core included", () => {
 		const service = new ViewService(new Context(), { core: () => ({ session: "s1", running: false }) });
+		expect(() => service.contribute({ name: "core", project: () => ({}), revision: () => "1" })).toThrow(
+			/already contributed: core/,
+		);
 		service.contribute({ name: "git", project: () => ({}), revision: () => "1" });
 		expect(() => service.contribute({ name: "git", project: () => ({}), revision: () => "2" })).toThrow(
 			/already contributed: git/,
@@ -107,9 +111,9 @@ describe("the built-in sections a session contributes", () => {
 		expect(names).not.toContain("ask");
 
 		const before = session.view.snapshot();
-		expect(before.core.session).toBe("eta-1");
-		expect(before.core.cwd).toBe("/work/eta");
-		expect(before.core.running).toBe(false);
+		expect((before.sections.core as { session: string }).session).toBe("eta-1");
+		expect((before.sections.core as { cwd?: string }).cwd).toBe("/work/eta");
+		expect((before.sections.core as { running: boolean }).running).toBe(false);
 		expect(before.sections.goal).toBeUndefined();
 		expect(before.sections.tasks).toEqual([]);
 		// No model was configured for this session: the section says so rather than
@@ -139,8 +143,8 @@ describe("the built-in sections a session contributes", () => {
 		expect(after.revisions.transcript).not.toBe(empty.revisions.transcript);
 		expect(after.sections.goal).toMatchObject({ objective: "finish the port" });
 		expect((after.sections.tasks as { content: string }[])[0]?.content).toBe("keep it green");
-		// The core is not a section: it changes on its own (a streaming frame, a run start).
-		expect(after.revisions).not.toHaveProperty("core");
+		// The core is a section too, and it moves when the run starts and stops.
+		expect(after.revisions).toHaveProperty("core");
 
 		await session.kernel.dispose();
 		session.stop();
@@ -172,8 +176,8 @@ describe("the built-in sections a session contributes", () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		await run;
 		const settled = session.view.snapshot();
-		expect(settled.core.running).toBe(false);
-		expect(settled.core.streaming).toBeUndefined();
+		expect((settled.sections.core as { running: boolean }).running).toBe(false);
+		expect((settled.sections.core as { streaming?: unknown }).streaming).toBeUndefined();
 		await session.kernel.dispose();
 		session.stop();
 	});

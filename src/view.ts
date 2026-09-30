@@ -45,9 +45,12 @@ export interface ViewContribution<T = unknown> {
 	revision(): string;
 }
 
-/** The container, structurally what `@eta/wire`'s `SessionView` is. */
+/**
+ * The container, structurally what the protocol's state snapshot is: sections and their
+ * revisions, and nothing else. Even the session's own "core" is a section here — a field
+ * the container has to know about would be a privilege, and the point is that there are none.
+ */
 export interface SessionViewSnapshot {
-	core: ViewCore;
 	sections: Record<string, unknown>;
 	revisions: Record<string, string>;
 }
@@ -67,13 +70,22 @@ export class ViewService extends Service {
 	static readonly provide = "view";
 
 	private readonly contributions = new Map<string, ViewContribution>();
-	private readonly coreOf: () => ViewCore;
 	private readonly warn: (message: string) => void;
 
 	constructor(ctx: Context, options: ViewServiceOptions) {
 		super(ctx, "view");
-		this.coreOf = options.core;
 		this.warn = options.warn ?? (() => undefined);
+		// The session's own identity is a section like any other. It changes on its own (a run
+		// starting, a message streaming), so its revision is its own signature, not a counter
+		// somebody has to remember to bump.
+		this.contribute({
+			name: "core",
+			project: options.core,
+			revision: () => {
+				const core = options.core();
+				return `${core.session}|${core.running ? 1 : 0}|${core.streaming === undefined ? "" : "1"}`;
+			},
+		});
 	}
 
 	/**
@@ -118,7 +130,7 @@ export class ViewService extends Service {
 				revisions[contribution.name] = `error:${String(error)}`;
 			}
 		}
-		return { core: this.coreOf(), sections, revisions };
+		return { sections, revisions };
 	}
 }
 
