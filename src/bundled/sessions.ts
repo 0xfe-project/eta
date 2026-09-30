@@ -83,6 +83,30 @@ export interface SessionsPluginOptions {
 	warn?: ((message: string) => void) | undefined;
 }
 
+/**
+ * What the `sessions` plugin announces, and how another plugin hears it.
+ *
+ * A plugin that wants to show a fact *about* a session (its git branch, its remote host) needs to
+ * know which sessions exist and when one of them moves. Handing it the `SessionManager` would be
+ * handing it the whole host; these four events are the seam that lets it be a plugin — and it
+ * reaches them the way a plugin reaches anything else, by injecting the `sessions` service.
+ */
+export interface SessionsListener {
+	opened(session: SessionFacts): void;
+	closed(id: string): void;
+	focused(id: string | undefined): void;
+	/** A session's own state moved (its run ended, its directory changed). */
+	changed(session: SessionFacts): void;
+}
+
+/** The facts a plugin can act on without the manager: enough for a sidebar badge, no more. */
+export interface SessionFacts {
+	id: string;
+	cwd: string;
+	title?: string | undefined;
+	running: boolean;
+}
+
 /** One open session, as this plugin tracks it. */
 interface Attached {
 	managed: ManagedSession;
@@ -136,6 +160,8 @@ export class SessionsService extends Service {
 	private cached: { id: string; meta?: SessionMeta; broken?: string }[] = [];
 	private focusedId: string | undefined;
 	private offs: (() => void)[] = [];
+
+	private readonly listeners = new Set<SessionsListener>();
 
 	constructor(ctx: ConstructorParameters<typeof Service>[0], deps: { manager: SessionManager; wire: WireService }) {
 		super(ctx, "sessions");
@@ -204,9 +230,13 @@ export class SessionsService extends Service {
 	}
 
 	async focus(id: string): Promise<void> {
-		await this.open(id);
+		const attached = await this.open(id);
 		this.focusedId = id;
+		for (const listener of this.listeners) listener.focused(id);
 		this.wire.pushNow("sessions");
+		// A plugin watching one session (a panel for the one in front) needs to know it is now the
+		// one in front — and it needs the session to exist on its side before that.
+		this.announce(attached);
 	}
 
 	focused(): string | undefined {
@@ -551,6 +581,7 @@ export class SessionsService extends Service {
 		const id = managed.meta.id;
 		const attached: Attached = { managed, disposers: [], running: false, updated: Date.now() };
 		this.held.set(id, attached);
+		for (const listener of this.listeners) listener.opened(factsOf(attached));
 		// Whether an inject becomes a run is the host's policy, and this host's answer is yes.
 		managed.session.pump.start();
 
@@ -560,6 +591,7 @@ export class SessionsService extends Service {
 				if (name === "turn:run-start") attached.running = true;
 				if (name === "turn:run-end") attached.running = false;
 				attached.updated = Date.now();
+				this.announce(attached);
 				this.wire.event(`sessions.${id}`, name, payload);
 				// Paced, not immediate: this is run traffic (a streamed token is an event), and
 				// it is exactly what the budget exists for.
@@ -632,7 +664,27 @@ export class SessionsService extends Service {
 		}
 	}
 
+	/**
+	 * Listen for what happens to sessions. The returned function stops listening, which is what a
+	 * plugin's effect returns.
+	 */
+	subscribe(listener: SessionsListener): () => void {
+		this.listeners.add(listener);
+		// A plugin that subscribes late is told what already exists: "who is there" is a fact, not
+		// an event, and a plugin that missed the opening would otherwise never hear about it.
+		for (const attached of this.held.values()) listener.opened(factsOf(attached));
+		return () => {
+			this.listeners.delete(listener);
+		};
+	}
+
+	private announce(attached: Attached): void {
+		const facts = factsOf(attached);
+		for (const listener of this.listeners) listener.changed(facts);
+	}
+
 	private async detach(id: string): Promise<void> {
+		for (const listener of this.listeners) listener.closed(id);
 		const attached = this.held.get(id);
 		if (attached === undefined) return;
 		this.held.delete(id);
@@ -1002,6 +1054,16 @@ function subscribeBus(managed: ManagedSession, onEvent: (name: string, payload: 
 	const offs = FORWARDED_EVENTS.map((name) => ctx.on(name, (payload) => onEvent(name, payload)));
 	return () => {
 		for (const off of offs) off();
+	};
+}
+
+/** What a plugin needs to know about a session: where it works, and whether it is busy. */
+function factsOf(attached: Attached): SessionFacts {
+	return {
+		id: attached.managed.meta.id,
+		cwd: attached.managed.meta.cwd,
+		...(attached.managed.meta.title === undefined ? {} : { title: attached.managed.meta.title }),
+		running: attached.running,
 	};
 }
 

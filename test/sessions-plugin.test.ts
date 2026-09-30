@@ -859,3 +859,43 @@ describe("choosing how the next turn is generated", () => {
 		await h.unload();
 	});
 });
+
+describe("what other plugins hear", () => {
+	it("announces sessions appearing, moving and going away", async () => {
+		const h = await harness();
+		await h.load();
+		const seen: string[] = [];
+		// The service is reached the way a plugin reaches it: through the context it injected.
+		const sessions = (
+			h.ctx as unknown as {
+				sessions: {
+					subscribe(listener: {
+						opened(session: { id: string; cwd: string }): void;
+						closed(id: string): void;
+						focused(id: string | undefined): void;
+						changed(session: { id: string; cwd: string }): void;
+					}): () => void;
+				};
+			}
+		).sessions;
+		const off = sessions.subscribe({
+			opened: (session) => seen.push(`opened:${session.id}`),
+			closed: (id) => seen.push(`closed:${id}`),
+			focused: (id) => seen.push(`focused:${id ?? "none"}`),
+			changed: (session) => seen.push(`changed:${session.id}`),
+		});
+		const { session } = (await h.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
+		await h.call("sessions", "focus", { session });
+		await h.call("sessions", "delete", { session });
+		expect(seen).toContain(`opened:${session}`);
+		expect(seen).toContain(`focused:${session}`);
+		expect(seen).toContain(`closed:${session}`);
+		// Unsubscribing stops the announcements.
+		off();
+		const after = seen.length;
+		const second = (await h.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
+		expect(seen.length).toBe(after);
+		void second;
+		await h.unload();
+	});
+});

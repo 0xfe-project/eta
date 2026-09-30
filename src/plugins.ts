@@ -470,17 +470,29 @@ export class PluginManager {
 /**
  * What a plugin module exports.
  *
- * A function is a plugin. An object with an `apply` is a plugin. A module that exports several
- * things is a plugin when exactly one of them looks like one — and `default` wins when it is
- * there, because that is what a TypeScript `export default` compiles to.
+ * In order of preference:
+ *
+ * 1. `default` — what a TypeScript `export default` compiles to, and the conventional shape for a
+ *    distributed plugin;
+ * 2. an export named `plugin` — the same thing without the default-export convention;
+ * 3. the module itself, when it is a plugin (an object with `apply`, or a function);
+ * 4. exactly one export that looks like a plugin.
+ *
+ * Step 4 is deliberately the last resort: a package that also exports a service class, a factory
+ * and a constant has several things that *could* be a plugin, and guessing between them is how the
+ * wrong thing loads. (Found the honest way: this plugin's own package exports a factory and a
+ * service class, and the loader refused to guess — which is what made it export a default.)
  */
 export function pickPlugin(module: unknown): unknown {
 	if (typeof module === "function") return module;
 	if (typeof module !== "object" || module === null) return undefined;
 	const record = module as Record<string, unknown>;
 	if (isPluginShape(record.default)) return record.default;
+	if (isPluginShape(record.plugin)) return record.plugin;
 	if (isPluginShape(record)) return record;
-	const candidates = Object.entries(record).filter(([key]) => key !== "default" && isPluginShape(record[key]));
+	const candidates = Object.entries(record).filter(
+		([key]) => key !== "default" && key !== "plugin" && isPluginShape(record[key]),
+	);
 	return candidates.length === 1 ? candidates[0]?.[1] : undefined;
 }
 
