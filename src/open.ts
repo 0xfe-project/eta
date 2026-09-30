@@ -81,6 +81,7 @@ import {
 	renderPlatformBlock,
 	taskReminderMessage,
 } from "./prompts";
+import { convertToLlm } from "./prompts/summaries";
 import { RunPump, type RunPumpOptions } from "./pump";
 import { TaskReminderService } from "./reminder";
 import { sessionStateKV } from "./state";
@@ -394,6 +395,9 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		// the host wins over the assembly below.
 		...options.runner,
 		models: options.models,
+		// A summary standing in for history becomes text here; without it a session that
+		// compacts could never run again (the kernel refuses to invent prompt text).
+		...(options.runner?.toProviderMessages === undefined ? { toProviderMessages: convertToLlm } : {}),
 		journal: journaling,
 		...(compaction === undefined ? {} : { compaction }),
 		initialTranscript: transcript,

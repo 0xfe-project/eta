@@ -440,16 +440,18 @@ export class BtwManager {
 
 	/**
 	 * Save the thread's notes as a visible note in the main session. While the run
-	 * is busy the note queues and flushes at run end.
+	 * is busy the note queues and flushes at run end; otherwise it is written now and
+	 * the answer is the state it settled into — a caller told "saved" has a note in the
+	 * journal, not a write in flight.
 	 */
-	save(threadId: string, running: boolean): BtwSaveState {
+	async save(threadId: string, running: boolean): Promise<BtwSaveState> {
 		const thread = this.threads.get(threadId);
 		if (thread === undefined) return "not-saved";
 		if (running) {
 			thread.saveState = "queued";
 			return thread.saveState;
 		}
-		void this.flushNote(thread);
+		await this.flushNote(thread);
 		return thread.saveState;
 	}
 

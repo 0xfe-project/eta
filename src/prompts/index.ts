@@ -13,4 +13,5 @@ export * from "./memory";
 export * from "./persona";
 export * from "./platform";
 export * from "./skills-block";
+export * from "./summaries";
 export * from "./tasks";

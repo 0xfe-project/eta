@@ -136,7 +136,7 @@ describe("saving a thread's notes", () => {
 		btw.answer(thread.id, "why is this slow?", "the index is missing");
 
 		// Busy: the note waits, because injecting mid-run would steer it.
-		expect(btw.save(thread.id, true)).toBe("queued");
+		expect(await btw.save(thread.id, true)).toBe("queued");
 		expect(notes).toEqual([]);
 		// Two flushes racing at a run boundary still write each note once.
 		expect(btw.flushQueued()).resolves.toBe(1);
@@ -148,7 +148,7 @@ describe("saving a thread's notes", () => {
 		// Idle: it goes straight out.
 		const second = btw.create("tangent");
 		btw.answer(second.id, "anything else?");
-		btw.save(second.id, false);
+		await btw.save(second.id, false);
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		expect(notes).toEqual(["btw btw-1: why is this slow? -> the index is missing", "btw btw-2: anything else?"]);
 	});
@@ -168,7 +168,7 @@ describe("saving a thread's notes", () => {
 		const { btw, notes } = manager();
 		const thread = btw.create("tangent");
 		btw.answer(thread.id, "a question", "an answer");
-		btw.save(thread.id, false);
+		await btw.save(thread.id, false);
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		expect(btw.clear(thread.id)).toBe(true);
 		expect(btw.clear(thread.id)).toBe(false);
@@ -196,7 +196,7 @@ describe("through a real session", () => {
 		expect(session.log.transcript()).toHaveLength(before);
 		expect(JSON.stringify(session.log.transcript())).not.toContain("a side answer");
 
-		session.btw.save(thread.id, false);
+		await session.btw.save(thread.id, false);
 		await session.journaling.flush();
 		const entries = await storage.scanEntries({});
 		const btwEntries = entries.filter((entry) => entry.type === "btw");
@@ -213,7 +213,7 @@ describe("through a real session", () => {
 		const first = await openSession({ storage, models: fakeModels([]) as never });
 		const thread = first.btw.create("tangent");
 		first.btw.answer(thread.id, "remember this?", "yes: POMELO");
-		first.btw.save(thread.id, false);
+		await first.btw.save(thread.id, false);
 		await first.journaling.flush();
 		await first.kernel.dispose();
 		first.stop();
