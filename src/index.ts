@@ -37,3 +37,81 @@ export type {
 	SessionStore,
 	StoredSession,
 } from "./store";
+
+/* ------------------------------------------------------------------ the floor */
+
+/**
+ * The server's parts, as parts. `assembleServer` is the one place they are put together: the
+ * transport, the target registry, the plugin manager and `hello`, with every feature — including
+ * sessions — arriving as a plugin.
+ */
+export { PROVIDER_ACTIONS, type ProvidersPluginOptions, providersPlugin } from "./bundled/providers";
+export { SESSION_ACTIONS, type SessionsPluginOptions, sessionsPlugin } from "./bundled/sessions";
+export { SETTINGS_ACTIONS, type SettingsPluginOptions, settingsPlugin } from "./bundled/settings";
+export { forkWrites } from "./fork";
+export { DEFAULT_PROVIDER, formatModelId, type ModelIdentity, parseModelId } from "./model-id";
+export { FramePacer, type PacerOptions } from "./pacer";
+export {
+	catalogModelsFor,
+	type ProviderCatalogEntry,
+	type ProviderReference,
+	parseProviderModelCatalog,
+	providerCatalogRestrictsModels,
+	providerDefinitionForKind,
+	providerModelCatalog,
+	providerModelDefinition,
+	resolveConfiguredModels,
+} from "./providers/catalog";
+export {
+	applyProviderHeaders,
+	configDefaultModel,
+	type EtaConfig,
+	type EtaModelConfig,
+	type EtaProviderConfig,
+	effectiveModel,
+	isCustomKind,
+	type ModelCapabilities,
+	modelDefaultThinking,
+	modelSupportsVision,
+	modelThinkingLevels,
+	providerPreset,
+	providerSummary,
+	sanitizeProviderHeaders,
+} from "./providers/config-types";
+export { type DiscoveryOptions, type DiscoveryResult, discoverModels, discoversModels } from "./providers/discovery";
+export {
+	type BuildModelsResult,
+	buildModels,
+	buildProvider,
+	type ProviderBuildFailure,
+} from "./providers/runtime";
+export {
+	defaultConfigPath,
+	ProviderConfigError,
+	ProviderConfigStore,
+	type ProviderConfigStoreOptions,
+	publicView,
+	revisionOf,
+} from "./providers/store";
+export {
+	createTargetRegistry,
+	type OpContext,
+	type OpHandler,
+	type OpMeta,
+	type StateProjector,
+	type TargetRegistry,
+	type TargetSummary,
+	UnknownOpError,
+} from "./registry";
+export { createEventRing, DEFAULT_RING_CAPACITY, type EventRing, matchesFilter } from "./ring";
+export { type AssembledServer, type AssembleOptions, assembleServer, type BundledPluginName } from "./server";
+export { type Settings, SettingsStore, type SettingsStoreOptions, settingsPath } from "./settings";
+export {
+	type AddressedFrame,
+	createStateSender,
+	type StateSender,
+	type StateSenderOptions,
+} from "./state-sender";
+export { type SessionSubagentOptions, SubagentFailed, sessionSubagentRunner } from "./subagent";
+export { type Socket, serveWire, type TransportDeps, type WireServer, type WireServerOptions } from "./transport";
+export { type FrameSink, WireService, type WireServiceOptions } from "./wire-service";
