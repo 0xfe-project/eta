@@ -25,7 +25,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { MountedPlugin } from "@eta/client-wire-proto";
+import type { MountedPlugin, PluginPanelDescriptor } from "@eta/client-wire-proto";
 import type { Context } from "cordis";
 
 /** What a plugin's `package.json` says about itself. */
@@ -34,6 +34,14 @@ export interface PluginManifest {
 	version?: string;
 	/** The entry point, relative to the plugin directory. Defaults to `index.js`/`index.ts`. */
 	main?: string;
+	/**
+	 * The front-end panel this plugin contributes, as data.
+	 *
+	 * The server never renders it and never runs client code: the descriptor says where the client
+	 * loads it from and which state target feeds it, and the client decides what to do with that.
+	 * A plugin with no front-end omits this and is still a plugin — most of them are.
+	 */
+	panel?: PluginPanelDescriptor;
 }
 
 /** One plugin the manager found, and what became of it. */
@@ -116,6 +124,30 @@ interface WireServiceLike {
 	descriptors(): { name: string; target: string; action: string }[];
 	targets(): { name: string; hasState: boolean }[];
 	registry: { unregister(target: string, action: string): boolean; unregisterState(target: string): boolean };
+}
+
+/** Whether a manifest's `panel` field is a panel descriptor at all. */
+function isPanel(value: unknown): value is PluginPanelDescriptor {
+	if (typeof value !== "object" || value === null) return false;
+	const panel = value as Record<string, unknown>;
+	return (
+		typeof panel.title === "string" &&
+		["sidebar", "panel", "overlay", "statusbar"].includes(String(panel.slot)) &&
+		(panel.entry === undefined || typeof panel.entry === "string") &&
+		(panel.state === undefined || typeof panel.state === "string")
+	);
+}
+
+/** What a plugin may register: its own name, or anything under `name.`. */
+function trespassOf(added: WireSnapshot, name: string): string | undefined {
+	const allowed = (target: string): boolean => target === name || target.startsWith(`${name}.`);
+	for (const action of added.actions) {
+		// Action names are `target.action`; the target is everything before the first dot.
+		const target = action.split(".")[0] ?? action;
+		if (!allowed(target)) return action;
+	}
+	for (const target of added.states) if (!allowed(target)) return target;
+	return undefined;
 }
 
 /** A short, stable hash of a fingerprint: the import URL's cache-busting token. */
@@ -277,8 +309,9 @@ export class PluginManager {
 	 * Load one plugin directory.
 	 *
 	 * Never throws: every way this can fail (no manifest, a manifest that will not parse, an
-	 * import that fails, a module that exports nothing callable, an `apply` that throws) becomes
-	 * a `mounted` entry carrying the reason.
+	 * import that fails, a module that exports nothing callable, an `apply` that throws, a
+	 * registration outside the plugin's own namespace) becomes a `mounted` entry carrying the
+	 * reason.
 	 */
 	async loadOne(ctx: Context, directory: string, source: "bundled" | "user"): Promise<LoadedPlugin> {
 		const fallbackName = directory.split("/").pop() ?? directory;
@@ -286,13 +319,22 @@ export class PluginManager {
 		// broken plugin that gets fixed is a *change*, and a failure path that recorded nothing
 		// would make the fix look like the state it was already in.
 		const fingerprint = await this.fingerprint(directory);
+		// A plugin that fails to load may still have a front-end worth reporting: the descriptor is
+		// read from the manifest, and the reason it is not running is what `error` says.
+		let panel: PluginPanelDescriptor | undefined;
 		const failed = (name: string, error: string, version?: string): LoadedPlugin => {
 			this.warn(`[eta-server] plugin ${name} is not running: ${error}`);
 			const plugin: LoadedPlugin = {
 				directory,
 				source,
 				fingerprint,
-				entry: { name, source, ...(version === undefined ? {} : { version }), error },
+				entry: {
+					name,
+					source,
+					...(version === undefined ? {} : { version }),
+					...(panel === undefined ? {} : { descriptor: panel }),
+					error,
+				},
 				dispose: async () => undefined,
 			};
 			this.loaded.push(plugin);
@@ -301,6 +343,7 @@ export class PluginManager {
 
 		const manifest = await this.readManifest(directory);
 		if (manifest === undefined) return failed(fallbackName, "no eta-plugin manifest in package.json");
+		panel = manifest.panel;
 
 		const entryFile = await this.resolveEntry(directory, manifest.main);
 		if (entryFile === undefined) return failed(manifest.name, "no entry point (main/module/index)");
@@ -327,7 +370,9 @@ export class PluginManager {
 		const before = wireSnapshot(ctx);
 
 		try {
-			const fiber = ctx.plugin(plugin as never, undefined as never) as unknown as { dispose(): Promise<void> };
+			const fiber = ctx.plugin(plugin as never, undefined as never) as unknown as {
+				dispose(): Promise<void>;
+			};
 			// `await fiber` is what makes a load failure *this* plugin's: cordis reports an `apply`
 			// that threw by rejecting the fiber, and awaiting it here is how the reason reaches
 			// `mounted` instead of an unhandled rejection.
@@ -335,6 +380,16 @@ export class PluginManager {
 			// Computed here, not at dispose: a plugin loaded later must not look like this one's
 			// doing, and only the moment right after this load can tell the two apart.
 			const added = addedBetween(before, wireSnapshot(ctx));
+			// A scanned plugin lives in its own namespace. The check is after the fact because a
+			// plugin registers through the same door everything else does — but a plugin that
+			// claims someone else's name is a plugin that will fight another one for it, and the
+			// refusal is worth more than the tolerance.
+			const trespass = trespassOf(added, manifest.name);
+			if (trespass !== undefined) {
+				await fiber.dispose().catch(() => undefined);
+				sweepWire(ctx, added);
+				return failed(manifest.name, `registered outside its namespace: ${trespass}`, manifest.version);
+			}
 			const loaded: LoadedPlugin = {
 				directory,
 				source,
@@ -342,6 +397,7 @@ export class PluginManager {
 					name: manifest.name,
 					source,
 					...(manifest.version === undefined ? {} : { version: manifest.version }),
+					...(manifest.panel === undefined ? {} : { descriptor: manifest.panel }),
 				},
 				// Recorded at load, so the first watch tick sees no change and does not reload.
 				fingerprint,
@@ -393,6 +449,7 @@ export class PluginManager {
 			name: name.trim(),
 			...(typeof parsed.version === "string" ? { version: parsed.version } : {}),
 			...(typeof declared.main === "string" ? { main: declared.main } : {}),
+			...(isPanel(declared.panel) ? { panel: declared.panel } : {}),
 		};
 	}
 

@@ -231,3 +231,112 @@ describe("a plugin that registers without cleaning up", () => {
 		expect(wire.descriptors().map((descriptor) => descriptor.name)).toEqual(["keeper.ping"]);
 	});
 });
+
+describe("a plugin's namespace", () => {
+	it("refuses a plugin that registers under someone else's name", async () => {
+		const dirs = await scratch();
+		// A plugin calling itself `mine` that claims `sessions.prompt`: the target it wants is
+		// another plugin's, and letting it register means the two fight for one name.
+		await writePlugin(dirs.plugins, "mine", {
+			code: `export default {
+				name: "mine",
+				inject: ["wire"],
+				apply(ctx) {
+					ctx.wire.handle("mine", "ping", () => ({}));
+					ctx.wire.handle("sessions", "prompt", () => ({}));
+				},
+			};`,
+		});
+		const { ctx, wire } = harness();
+		const manager = new PluginManager({ modulesDir: dirs.modules, pluginsDir: dirs.plugins });
+		const mounted = await manager.loadAll(ctx);
+		expect(mounted[0]?.error).toContain("registered outside its namespace: sessions.prompt");
+		// And nothing it registered is left behind — not even the part that was legal.
+		expect(wire.descriptors()).toEqual([]);
+	});
+
+	it("allows a plugin's own name and anything under it", async () => {
+		const dirs = await scratch();
+		await writePlugin(dirs.plugins, "git", {
+			code: `export default {
+				name: "git",
+				inject: ["wire"],
+				apply(ctx) {
+					ctx.wire.handle("git", "status", () => ({}));
+					ctx.wire.handle("git", "diff", () => ({}));
+					ctx.wire.stateOf("git", { project: () => ({ sections: {}, revisions: {} }) });
+					ctx.wire.stateOf("git.branch", { project: () => ({ sections: {}, revisions: {} }) });
+				},
+			};`,
+		});
+		const { ctx, wire } = harness();
+		const manager = new PluginManager({ modulesDir: dirs.modules, pluginsDir: dirs.plugins });
+		expect(await manager.loadAll(ctx)).toEqual([{ name: "git", source: "user" }]);
+		expect(
+			wire
+				.descriptors()
+				.map((descriptor) => descriptor.name)
+				.sort(),
+		).toEqual(["git.diff", "git.status"]);
+		expect(
+			wire
+				.targets()
+				.map((target) => target.name)
+				.sort(),
+		).toEqual(["git", "git.branch"]);
+	});
+
+	it("catches a state target claimed under another name", async () => {
+		const dirs = await scratch();
+		await writePlugin(dirs.plugins, "sneaky", {
+			code: `export default {
+				name: "sneaky",
+				inject: ["wire"],
+				apply(ctx) { ctx.wire.stateOf("sessions", { project: () => ({ sections: {}, revisions: {} }) }); },
+			};`,
+		});
+		const { ctx, wire } = harness();
+		const manager = new PluginManager({ modulesDir: dirs.modules, pluginsDir: dirs.plugins });
+		const mounted = await manager.loadAll(ctx);
+		expect(mounted[0]?.error).toContain("registered outside its namespace: sessions");
+		expect(wire.targets()).toEqual([]);
+	});
+});
+
+describe("a plugin with a front-end", () => {
+	it("publishes the panel descriptor its manifest declares", async () => {
+		const dirs = await scratch();
+		await writePlugin(dirs.plugins, "git", {
+			manifest: {
+				name: "git",
+				version: "1.2.3",
+				"eta-plugin": {
+					panel: { title: "Git", slot: "sidebar", entry: "./ui.js", state: "git" },
+				},
+			},
+			code: `export default { name: "git", apply() {} };`,
+		});
+		const { ctx } = harness();
+		const manager = new PluginManager({ modulesDir: dirs.modules, pluginsDir: dirs.plugins });
+		await manager.loadAll(ctx);
+		expect(manager.mounted()[0]).toEqual({
+			name: "git",
+			source: "user",
+			version: "1.2.3",
+			descriptor: { title: "Git", slot: "sidebar", entry: "./ui.js", state: "git" },
+		});
+	});
+
+	it("ignores a panel that is not a descriptor, rather than publishing nonsense", async () => {
+		const dirs = await scratch();
+		await writePlugin(dirs.plugins, "vague", {
+			manifest: { name: "vague", "eta-plugin": { panel: { title: "Vague" } } },
+			code: `export default { name: "vague", apply() {} };`,
+		});
+		const { ctx } = harness();
+		const manager = new PluginManager({ modulesDir: dirs.modules, pluginsDir: dirs.plugins });
+		await manager.loadAll(ctx);
+		// No slot, no panel: a descriptor the client cannot place is worse than none.
+		expect(manager.mounted()[0]).toEqual({ name: "vague", source: "user" });
+	});
+});
