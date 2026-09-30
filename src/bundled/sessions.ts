@@ -29,6 +29,7 @@ import { type AskResponse, type BtwSaveState, type BtwThread, sessionStateKV } f
 import { Service } from "cordis";
 import type { CreateSessionOptions, ForkSessionOptions, ManagedSession, SessionManager } from "../manager";
 import { formatModelId, parseModelId } from "../model-id";
+import { firstHit, type HistoryRow, historyOf, type SearchHit } from "../search";
 import type { SessionMeta } from "../store";
 import type { WireService } from "../wire-service";
 
@@ -52,6 +53,8 @@ export const SESSION_ACTIONS = [
 	"btwHandoff",
 	"btwClear",
 	"subagentStop",
+	"history",
+	"search",
 	"goal",
 	"taskCreate",
 	"taskUpdate",
@@ -562,6 +565,44 @@ export class SessionsService extends Service {
 		this.wire.pushNow(`sessions.${id}`);
 	}
 
+	/**
+	 * A page of one session's transcript, oldest-first, ending just before `beforeSeq`.
+	 *
+	 * The page comes from the session's own *branch* — the journal it replayed — rather than from
+	 * the windowed view a client holds: a client that scrolled past what it has asks for what came
+	 * before a sequence number, and the answer is the conversation, not the window.
+	 */
+	async history(id: string, options: { beforeSeq?: number; limit?: number } = {}): Promise<HistoryRow[]> {
+		const attached = await this.open(id);
+		const limit = Math.max(1, Math.min(500, options.limit ?? 100));
+		return historyOf(attached.managed.session.log.graph.pathOldestFirst(), {
+			...(options.beforeSeq === undefined ? {} : { beforeSeq: options.beforeSeq }),
+			limit,
+		});
+	}
+
+	/**
+	 * Which sessions mention something.
+	 *
+	 * The search walks every session this plugin holds open, one hit each: the answer a search box
+	 * gives is "this session has it, and here is roughly where", and twenty matches inside one long
+	 * conversation are not more useful than the conversation.
+	 *
+	 * A session that is not open is not searched — opening every session to answer a keystroke is
+	 * the cost this deliberately does not pay, and `list` plus `focus` are how a client reaches one
+	 * it has not opened.
+	 */
+	search(query: string): SearchHit[] {
+		const hits: SearchHit[] = [];
+		for (const id of this.heldIds()) {
+			const attached = this.held.get(id);
+			if (attached === undefined) continue;
+			const hit = firstHit(id, attached.managed.session.log.graph.pathOldestFirst(), query);
+			if (hit !== undefined) hits.push(hit);
+		}
+		return hits;
+	}
+
 	/** Drop a thread from the panel; notes already written to the journal stay. */
 	async btwClear(id: string, threadId: string): Promise<boolean> {
 		const attached = await this.open(id);
@@ -1021,6 +1062,26 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 							throw new Error("sessions.queueRemove needs a session and an entryId");
 						}
 						return { result: { entryId, outcome: await service.queueRemove(session, entryId) } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "history", async (call) => {
+						const args = (call.args ?? {}) as { session?: string; beforeSeq?: number; limit?: number };
+						if (args.session === undefined) throw new Error("sessions.history needs a session");
+						const rows = await service.history(args.session, {
+							...(args.beforeSeq === undefined ? {} : { beforeSeq: args.beforeSeq }),
+							...(args.limit === undefined ? {} : { limit: args.limit }),
+						});
+						return { result: { session: args.session, rows } };
+					}),
+				);
+				registrations.push(
+					wire.handle("sessions", "search", (call) => {
+						const { query } = (call.args ?? {}) as { query?: string };
+						if (query === undefined) throw new Error("sessions.search needs a query");
+						// A read, not a subscription: the hits are the answer to this question, and a
+						// search box asks it again when the query changes.
+						return { result: { query, hits: service.search(query) } };
 					}),
 				);
 				registrations.push(

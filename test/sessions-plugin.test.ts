@@ -899,3 +899,92 @@ describe("what other plugins hear", () => {
 		await h.unload();
 	});
 });
+
+describe("history and search", () => {
+	it("pages a transcript by sequence, oldest-first, without repeating a row", async () => {
+		const models = fakeModels([
+			assistantMessage({ content: [{ type: "text", text: "answer one" }] }),
+			assistantMessage({ content: [{ type: "text", text: "answer two" }] }),
+			assistantMessage({ content: [{ type: "text", text: "answer three" }] }),
+		]);
+		const h = await harness(models);
+		await h.load();
+		const { session } = (await h.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
+		for (const question of ["first question", "second question", "third question"]) {
+			await h.call("sessions", "prompt", { session, text: question });
+			await until(
+				() => h.manager.openSessions().find((open) => open.meta.id === session)?.session.runner.running === false,
+			);
+		}
+
+		// The newest page, and then the page before it, by cursor.
+		const newest = (await h.call("sessions", "history", { session, limit: 3 })) as {
+			rows: { seq: number; message: { role: string } }[];
+		};
+		expect(newest.rows.length).toBeGreaterThan(0);
+		const oldestSeq = newest.rows[0]?.seq as number;
+		const older = (await h.call("sessions", "history", { session, beforeSeq: oldestSeq, limit: 3 })) as {
+			rows: { seq: number }[];
+		};
+		// The cursor is exclusive: nothing in the older page is in the newer one.
+		const overlap = older.rows.filter((row) => row.seq >= oldestSeq);
+		expect(overlap).toEqual([]);
+		expect(older.rows.length).toBeGreaterThan(0);
+
+		// Paging all the way back sees every message exactly once, in order.
+		const seen: number[] = [];
+		let cursor: number | undefined;
+		for (;;) {
+			const page = (await h.call("sessions", "history", {
+				session,
+				limit: 2,
+				...(cursor === undefined ? {} : { beforeSeq: cursor }),
+			})) as {
+				rows: { seq: number }[];
+			};
+			if (page.rows.length === 0) break;
+			seen.unshift(...page.rows.map((row) => row.seq));
+			cursor = page.rows[0]?.seq;
+			if (page.rows.length < 2) break;
+		}
+		expect(seen).toEqual([...seen].sort((left, right) => left - right));
+		expect(new Set(seen).size).toBe(seen.length);
+
+		// A session that is not there is named as such.
+		await expect(h.call("sessions", "history", { session: "nope" })).rejects.toThrow(/no such session/);
+		await h.unload();
+	});
+
+	it("finds which sessions mention something, one hit each", async () => {
+		const models = fakeModels([
+			assistantMessage({ content: [{ type: "text", text: "the wire is four words" }] }),
+			assistantMessage({ content: [{ type: "text", text: "nothing about that here" }] }),
+		]);
+		const h = await harness(models);
+		await h.load();
+		const { session: first } = (await h.call("sessions", "create", { cwd: "/work/one" })) as { session: string };
+		const { session: second } = (await h.call("sessions", "create", { cwd: "/work/two" })) as { session: string };
+		await h.call("sessions", "prompt", { session: first, text: "what does the wire look like?" });
+		await until(
+			() => h.manager.openSessions().find((open) => open.meta.id === first)?.session.runner.running === false,
+		);
+
+		const hits = (await h.call("sessions", "search", { query: "wire" })) as {
+			hits: { session: string; snippet: string }[];
+		};
+		expect(hits.hits.map((hit) => hit.session)).toEqual([first]);
+		expect(hits.hits[0]?.snippet).toContain("wire");
+
+		// A query nobody says finds nothing; an empty one is not a search at all.
+		expect(
+			((await h.call("sessions", "search", { query: "nothing like this" })) as { hits: unknown[] }).hits,
+		).toEqual([]);
+		expect(((await h.call("sessions", "search", { query: "   " })) as { hits: unknown[] }).hits).toEqual([]);
+
+		// A session that was never opened is not searched: a search is over what this plugin holds.
+		await h.manager.close(second);
+		const afterClose = (await h.call("sessions", "search", { query: "wire" })) as { hits: { session: string }[] };
+		expect(afterClose.hits.map((hit) => hit.session)).not.toContain(second);
+		await h.unload();
+	});
+});
