@@ -55,6 +55,8 @@ export interface AssembleOptions {
 	models?: KernelModels | undefined;
 	/** Which bundled plugins to mount. Default: all of them. */
 	plugins?: readonly BundledPluginName[];
+	/** How often to check the user's plugin directory for edits. Zero disables watching. */
+	pluginWatchIntervalMs?: number | undefined;
 	warn?: ((message: string) => void) | undefined;
 }
 
@@ -195,6 +197,7 @@ export async function assembleServer(options: AssembleOptions): Promise<Assemble
 			providers.stop();
 			// The plugins first: their effects are what hold subscriptions and state targets, and
 			// unloading them is what leaves the rest of the shutdown nothing to unwind.
+			manager.stop();
 			await manager.dispose();
 			for (const fiber of bundled.fibers.splice(0)) await fiber.dispose();
 			await sessions.closeAll();

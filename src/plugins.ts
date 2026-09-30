@@ -41,6 +41,8 @@ export interface LoadedPlugin {
 	/** The directory it came from. */
 	directory: string;
 	source: "bundled" | "user";
+	/** A content hash of the directory, for the watch; absent until the first check. */
+	fingerprint?: string | undefined;
 	/** What `mounted` reports. `error` set means it is not running. */
 	entry: MountedPlugin;
 	/** Unload this plugin: every effect it registered, gone. */
@@ -54,6 +56,14 @@ export interface PluginManagerOptions {
 	pluginsDir: string;
 	/** Diagnostics. */
 	warn?: ((message: string) => void) | undefined;
+	/**
+	 * How often to check the user's plugin directory for changes, in milliseconds. Zero disables
+	 * watching. Official plugins are not watched: they ship with the server, and reloading them
+	 * under a running process is a way to have two versions of the same thing loaded.
+	 */
+	watchIntervalMs?: number | undefined;
+	/** Called after a reload, with what became of the plugin. */
+	onReload?: ((plugin: MountedPlugin) => void) | undefined;
 }
 
 /** What the wire held at one moment: the names, so a plugin's own additions can be told apart. */
@@ -108,6 +118,16 @@ interface WireServiceLike {
 	registry: { unregister(target: string, action: string): boolean; unregisterState(target: string): boolean };
 }
 
+/** A short, stable hash of a fingerprint: the import URL's cache-busting token. */
+function hash(value: string): string {
+	let h = 2166136261;
+	for (let index = 0; index < value.length; index += 1) {
+		h ^= value.charCodeAt(index);
+		h = Math.imul(h, 16777619);
+	}
+	return (h >>> 0).toString(36);
+}
+
 /** The manifest key that marks a directory as a plugin. */
 export const PLUGIN_MANIFEST_KEY = "eta-plugin";
 
@@ -116,11 +136,104 @@ export class PluginManager {
 	private readonly pluginsDir: string;
 	private readonly warn: (message: string) => void;
 	private readonly loaded: LoadedPlugin[] = [];
+	private readonly watchIntervalMs: number;
+	private readonly onReload: ((plugin: MountedPlugin) => void) | undefined;
+	private watcher: ReturnType<typeof setInterval> | undefined;
 
 	constructor(options: PluginManagerOptions) {
 		this.modulesDir = options.modulesDir;
 		this.pluginsDir = options.pluginsDir;
 		this.warn = options.warn ?? (() => undefined);
+		this.watchIntervalMs = options.watchIntervalMs ?? 0;
+		this.onReload = options.onReload;
+	}
+
+	/**
+	 * Start noticing edits to the user's plugins.
+	 *
+	 * A plugin file's *content* is the trigger, not its timestamp: an editor that writes the same
+	 * bytes (a save with no change, a formatter that decided nothing needed formatting) must not
+	 * cause a reload, because a reload tears down live state and rebuilds it. Comparing content
+	 * also means the check is correct across a `git checkout` that restores an older mtime.
+	 */
+	watch(ctx: Context): void {
+		if (this.watchIntervalMs <= 0 || this.watcher !== undefined) return;
+		this.watcher = setInterval(() => {
+			void this.pollForChanges(ctx).catch((error: unknown) =>
+				this.warn(`[eta-server] plugin watch: ${String(error)}`),
+			);
+		}, this.watchIntervalMs);
+		(this.watcher as { unref?: () => void }).unref?.();
+	}
+
+	stop(): void {
+		if (this.watcher === undefined) return;
+		clearInterval(this.watcher);
+		this.watcher = undefined;
+	}
+
+	/** Reload every user plugin whose files changed. Returns the plugins that were reloaded. */
+	async reloadChanged(ctx: Context): Promise<LoadedPlugin[]> {
+		const reloaded: LoadedPlugin[] = [];
+		for (const plugin of [...this.loaded]) {
+			if (plugin.source !== "user") continue;
+			const fingerprint = await this.fingerprint(plugin.directory);
+			if (fingerprint === plugin.fingerprint) continue;
+			reloaded.push(await this.reload(ctx, plugin));
+		}
+		return reloaded;
+	}
+
+	/**
+	 * Unload a plugin and load it again from disk.
+	 *
+	 * The order is what makes this safe: the old instance is disposed (every effect it registered
+	 * runs, and anything it left behind is swept) *before* the new one is loaded. A reload that
+	 * loaded first would have two instances registering the same target, and the second one's
+	 * registration would be refused — which reads as "the plugin broke on reload".
+	 */
+	async reload(ctx: Context, plugin: LoadedPlugin): Promise<LoadedPlugin> {
+		const index = this.loaded.indexOf(plugin);
+		if (index >= 0) this.loaded.splice(index, 1);
+		await plugin.dispose().catch((error: unknown) => {
+			this.warn(`[eta-server] plugin ${plugin.entry.name} did not unload cleanly: ${String(error)}`);
+		});
+		const loaded = await this.loadOne(ctx, plugin.directory, plugin.source);
+		this.onReload?.(loaded.entry);
+		return loaded;
+	}
+
+	/** A content hash of everything in a plugin directory: the reload trigger. */
+	private async fingerprint(directory: string): Promise<string> {
+		const files: string[] = [];
+		const walk = async (current: string): Promise<void> => {
+			const entries = await readdir(current, { withFileTypes: true }).catch(() => []);
+			for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+				// `node_modules` is not the plugin's code, and a lockfile churns without meaning
+				// anything changed.
+				if (entry.name === "node_modules") continue;
+				const path = join(current, entry.name);
+				if (entry.isDirectory()) {
+					await walk(path);
+					continue;
+				}
+				if (!/\.[cm]?[jt]s$|package\.json$/.test(entry.name)) continue;
+				const content = await readFile(path, "utf8").catch(() => "");
+				files.push(`${path}\u0000${content}`);
+			}
+		};
+		await walk(directory);
+		return files.join("\u0001");
+	}
+
+	private async pollForChanges(ctx: Context): Promise<void> {
+		// First tick only records what is there: a plugin that was never fingerprinted is not a
+		// change, it is the state the manager started in.
+		for (const plugin of this.loaded) {
+			if (plugin.source !== "user" || plugin.fingerprint !== undefined) continue;
+			plugin.fingerprint = await this.fingerprint(plugin.directory);
+		}
+		await this.reloadChanged(ctx);
 	}
 
 	/** Everything loaded so far, as `hello.mounted` reports it. */
@@ -169,11 +282,16 @@ export class PluginManager {
 	 */
 	async loadOne(ctx: Context, directory: string, source: "bundled" | "user"): Promise<LoadedPlugin> {
 		const fallbackName = directory.split("/").pop() ?? directory;
+		// The fingerprint is taken first, and even a plugin that fails to load records it: a
+		// broken plugin that gets fixed is a *change*, and a failure path that recorded nothing
+		// would make the fix look like the state it was already in.
+		const fingerprint = await this.fingerprint(directory);
 		const failed = (name: string, error: string, version?: string): LoadedPlugin => {
 			this.warn(`[eta-server] plugin ${name} is not running: ${error}`);
 			const plugin: LoadedPlugin = {
 				directory,
 				source,
+				fingerprint,
 				entry: { name, source, ...(version === undefined ? {} : { version }), error },
 				dispose: async () => undefined,
 			};
@@ -187,9 +305,13 @@ export class PluginManager {
 		const entryFile = await this.resolveEntry(directory, manifest.main);
 		if (entryFile === undefined) return failed(manifest.name, "no entry point (main/module/index)");
 
+		// A fresh module every time the code changes: the import cache is keyed by URL, so a
+		// reload of the *same path* hands back the module that was already loaded — the old code,
+		// silently. The content hash makes the URL a different one exactly when the code is.
+		const importUrl = `${pathToFileURL(entryFile).href}?v=${hash(fingerprint)}`;
 		let module: unknown;
 		try {
-			module = await import(pathToFileURL(entryFile).href);
+			module = await import(importUrl);
 		} catch (error) {
 			return failed(manifest.name, error instanceof Error ? error.message : String(error), manifest.version);
 		}
@@ -221,6 +343,8 @@ export class PluginManager {
 					source,
 					...(manifest.version === undefined ? {} : { version: manifest.version }),
 				},
+				// Recorded at load, so the first watch tick sees no change and does not reload.
+				fingerprint,
 				dispose: async () => {
 					await fiber.dispose();
 					// The plugin's own effects ran; anything it registered without one is swept up
