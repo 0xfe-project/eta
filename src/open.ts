@@ -85,7 +85,7 @@ import { convertToLlm } from "./prompts/summaries";
 import { RunPump, type RunPumpOptions } from "./pump";
 import { TaskReminderService } from "./reminder";
 import { sessionStateKV } from "./state";
-import type { SubagentManager } from "./subagent";
+import { SubagentManager, type SubagentRunner } from "./subagent";
 import { createBashTool } from "./tools/bash";
 import type { ExecutionToolContext } from "./tools/context";
 import { createEditTool } from "./tools/edit";
@@ -155,8 +155,32 @@ export interface OpenSessionOptions {
 	ask?: boolean | AskRegistry | undefined;
 	/** How long `ask_user` waits for a human. Defaults to no timeout. */
 	askTimeoutMs?: number | undefined;
-	/** The subagent pool. With one, a session can spawn children; without it, it cannot. */
+	/**
+	 * How a subagent runs. Given one, the session gets a pool of its own — `Agent`,
+	 * `get_subagent_result`, `steer_subagent` — whose bus is the session's own bus, so a
+	 * panel sees a spawn the way it sees a turn. Without one a session cannot spawn
+	 * children and the tools are simply not there: the capability is absent, not disabled.
+	 *
+	 * The pool is built *here* rather than handed in because it belongs to the session: a
+	 * pool built by the caller would have to be given this kernel's bus, which does not
+	 * exist until the assembly is done.
+	 */
+	subagentRunner?: SubagentRunner | undefined;
+	/**
+	 * A pool to join instead of building one. A subagent runs as a session of its own, but it
+	 * belongs to the *tree* that spawned it: the cap on nesting depth, "only your own
+	 * children", and usage rolling up the chain all need one pool to count in. So the root
+	 * brings a runner, and every child it spawns joins the pool it was made by.
+	 */
 	subagents?: SubagentManager | undefined;
+	/**
+	 * The record this session's pool acts as. `undefined` is the root agent — the only one
+	 * that may stop or steer anything in the pool; a nested child passes its own record id,
+	 * which is what keeps a subagent's reach to its own children.
+	 */
+	subagentOwner?: string | undefined;
+	/** How many top-level subagents may run at once. Nested children never take a slot. */
+	poolSize?: number | undefined;
 	/**
 	 * Extra tools, appended after the standard set and installed the same way. A
 	 * deployment that adds a tool does not have to assemble the standard ones itself.
@@ -226,6 +250,11 @@ export interface OpenSession {
 	pump: RunPump;
 	/** The side threads asked beside the run; their saved notes are journal entries. */
 	btw: BtwManager;
+	/**
+	 * The subagents this session spawned, when it was opened with a runner. This is where
+	 * `sessions.subagentStop` reaches, and what the `subagents` section projects.
+	 */
+	subagents: SubagentManager | undefined;
 	/**
 	 * The compaction driver this session runs with; the host asks it to compact
 	 * (`/compact`). Undefined when the session was opened without a summarizer.
@@ -307,6 +336,15 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 				? undefined
 				: options.ask;
 
+	// The subagent pool: this session's own, with the caller's runner saying what a child is
+	// (in the server, a session of its own).
+	// A child joins the pool it was spawned into; a root brings the runner and gets one.
+	const subagents =
+		options.subagents ??
+		(options.subagentRunner === undefined
+			? undefined
+			: new SubagentManager({ emit: kernelEmit(kernel.ctx) }, options.subagentRunner, options.poolSize));
+
 	const installedTools: HarnessTool<ExecutionToolContext, TSchema, unknown>[] = [
 		...(createTaskTools(kernel.tasks) as HarnessTool<ExecutionToolContext, TSchema, unknown>[]),
 		...(options.env === undefined
@@ -318,9 +356,13 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 					createBashTool() as HarnessTool<ExecutionToolContext, TSchema, unknown>,
 				]),
 		...(createStateTools(sessionStateKV(log, journaling)) as HarnessTool<ExecutionToolContext, TSchema, unknown>[]),
-		...(options.subagents === undefined
+		...(subagents === undefined
 			? []
-			: (createSubagentTools(options.subagents) as HarnessTool<ExecutionToolContext, TSchema, unknown>[])),
+			: (createSubagentTools(subagents, options.subagentOwner) as HarnessTool<
+					ExecutionToolContext,
+					TSchema,
+					unknown
+				>[])),
 		...(ask === undefined
 			? []
 			: [
@@ -556,7 +598,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 				? undefined
 				: { ...(ask.pendingAsks()[0] === undefined ? {} : { pending: ask.pendingAsks()[0] }) },
 		sideThread: () => btw.list(),
-		subagents: () => options.subagents?.list() ?? [],
+		subagents: () => subagents?.list() ?? [],
 	})) {
 		view.contribute(contribution);
 	}
@@ -582,6 +624,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		taskReminder,
 		pump,
 		btw,
+		subagents,
 		memory,
 		view,
 		tools: installedTools.map((tool) => tool.name),

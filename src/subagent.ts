@@ -24,6 +24,8 @@
  * one. That is what lets the pool be tested without a session manager existing
  * yet.
  */
+import type { SubagentEvents } from "@eta/core";
+
 export interface SubagentUsage {
 	input: number;
 	output: number;
@@ -58,9 +60,9 @@ export interface SubagentRecord {
 
 export type SubagentEventName = "subagents:completed" | "subagents:failed" | "subagents:steered";
 
-/** Where the pool announces what it did; the host bridges it to whatever it watches. */
+/** Where the pool announces what it did; the session's bus is the usual answer. */
 export interface SubagentBus {
-	emit(type: SubagentEventName, payload: Record<string, unknown>): void;
+	emit(type: SubagentEventName, payload: SubagentEvents[SubagentEventName]): void;
 }
 
 /** What a running child is handed: report turns, take notes. */

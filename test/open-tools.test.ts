@@ -120,24 +120,31 @@ describe("what a session installs", () => {
 		session.stop();
 	});
 
-	it("installs the subagent tools when a pool is supplied", async () => {
+	it("installs the subagent tools, and builds a pool, when a runner is supplied", async () => {
 		const spawned: string[] = [];
 		const session = await openSession({
 			storage: new MemoryStorage(),
 			models: fakeModels([]) as never,
-			subagents: {
-				spawnAndWait: (spec: { prompt: string }) => {
-					spawned.push(spec.prompt);
-					return { id: "sub-1" };
-				},
-				get: () => undefined,
-				wait: async () => ({ id: "sub-1", status: "done" }),
-				list: () => [],
-			} as never,
+			subagentRunner: async (record) => {
+				spawned.push(record.spec.prompt);
+				return { input: 1, output: 2 };
+			},
 		});
 		expect(registered(session)).toContain("Agent");
 		expect(registered(session)).toContain("get_subagent_result");
 		expect(registered(session)).toContain("steer_subagent");
+		// The pool is the session's own: spawning through it reaches the caller's runner, and
+		// the record is visible where a panel looks for it.
+		const record = session.subagents?.spawnAndWait({ prompt: "look into the wire" });
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(spawned).toEqual(["look into the wire"]);
+		expect(session.subagents?.get(record!.id)?.status).toBe("done");
+		// Without a runner there is no pool, and no subagent tools at all.
+		const bare = await openSession({ storage: new MemoryStorage(), models: fakeModels([]) as never });
+		expect(bare.subagents).toBeUndefined();
+		expect(registered(bare)).not.toContain("Agent");
+		await bare.kernel.dispose();
+		bare.stop();
 		await session.kernel.dispose();
 		session.stop();
 	});
