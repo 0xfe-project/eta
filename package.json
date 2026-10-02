@@ -18,16 +18,15 @@
 	},
 	"devDependencies": {
 		"@types/node": "22.19.19",
-		"@eta/client-wire-proto": "*",
 		"@eta/core": "*",
-		"@eta/harness": "*",
 		"@eta/server": "*",
 		"bun-types": "1.4.2",
 		"typescript": "5.9.3",
-		"vitest": "4.1.9"
+		"vitest": "4.1.9",
+		"cordis": "4.0.0-rc.10"
 	},
 	"dependencies": {
 		"@eta/ssh": "*",
-		"cordis": "4.0.0-rc.10"
+		"@eta/client-wire-proto": "*"
 	}
 }
