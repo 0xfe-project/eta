@@ -17,8 +17,8 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { MemoryStorage } from "@eta/core";
 import { realModels, selectProvider } from "@eta/core/testing";
+import { NodeEnvironment } from "@eta/execution-node";
 import { describe, expect, it } from "vitest";
-import { NodeEnvironment } from "../src/env/node-shell";
 import { envMemoryFs } from "../src/memory";
 import { openSession } from "../src/open";
 

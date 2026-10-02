@@ -11,8 +11,8 @@
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { NodeEnvironment } from "@eta/execution-node";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { NodeEnvironment } from "../src/env/node-shell";
 import { formatSkillInvocation } from "../src/prompt-blocks";
 import { loadSkills, loadSourcedSkills } from "../src/skills";
 

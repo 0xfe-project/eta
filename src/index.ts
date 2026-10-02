@@ -14,7 +14,51 @@
  * out: installing the harness installs all of it.
  */
 
-export { AdaptivePublisher, type AdaptivePublisherOptions } from "@eta/execution/output";
+export {
+	type EnvCallOptions,
+	type ExecutionEnv,
+	ExecutionError,
+	type ExecutionErrorCode,
+	err,
+	FileError,
+	type FileErrorCode,
+	type FileInfo,
+	type FileKind,
+	type FileSystem,
+	getOrThrow,
+	getOrUndefined,
+	ok,
+	type Result,
+	type Shell,
+	type ShellExecOptions,
+	type ShellExecResult,
+	type ShellOutputLimits,
+	type ShellTruncation,
+	type TextLine,
+	type TextLineReader,
+} from "@eta/execution";
+export {
+	AdaptivePublisher,
+	type AdaptivePublisherOptions,
+	applyShellOutputUpdate,
+	DEFAULT_MAX_BYTES,
+	DEFAULT_MAX_LINES,
+	formatSize,
+	GREP_MAX_LINE_LENGTH,
+	LiveOutput,
+	type LiveOutputOptions,
+	OUTPUT_MIN_EMIT_INTERVAL_MS,
+	OUTPUT_TARGET_BYTES_PER_SECOND,
+	OutputBuffer,
+	type OutputBufferOptions,
+	sanitizeShellOutput,
+	type TruncationOptions,
+	type TruncationResult,
+	truncateHead,
+	truncateLine,
+	truncateTail,
+	utf8ByteLength,
+} from "@eta/execution/output";
 export {
 	type AskObserver,
 	AskRegistry,
@@ -52,31 +96,6 @@ export {
 	type CompactionServiceOptions,
 } from "./compaction-service";
 export { MemoryEnvironment, type MemoryEnvironmentOptions, type MemoryShellCall } from "./env/memory";
-export { NodeFileSystem, pathExists, resolveEnvPath, toFileError } from "./env/node-fs";
-export { killProcessTree, NodeEnvironment, NodeShell, resolveShellConfig, resolveTimeoutMs } from "./env/node-shell";
-export {
-	type EnvCallOptions,
-	type ExecutionEnv,
-	ExecutionError,
-	type ExecutionErrorCode,
-	err,
-	FileError,
-	type FileErrorCode,
-	type FileInfo,
-	type FileKind,
-	type FileSystem,
-	getOrThrow,
-	getOrUndefined,
-	ok,
-	type Result,
-	type Shell,
-	type ShellExecOptions,
-	type ShellExecResult,
-	type ShellOutputLimits,
-	type ShellTruncation,
-	type TextLine,
-	type TextLineReader,
-} from "@eta/execution";
 export {
 	type ContextUsageEstimate,
 	type CutPointResult,
@@ -121,16 +140,6 @@ export {
 } from "./memory";
 export { MetricsService } from "./metrics";
 export { type OpenSession, type OpenSessionOptions, openSession, type SessionMemoryOptions } from "./open";
-export {
-	applyShellOutputUpdate,
-	LiveOutput,
-	type LiveOutputOptions,
-	OUTPUT_MIN_EMIT_INTERVAL_MS,
-	OUTPUT_TARGET_BYTES_PER_SECOND,
-	OutputBuffer,
-	type OutputBufferOptions,
-	sanitizeShellOutput,
-} from "@eta/execution/output";
 export { dirnameEnvPath, formatSkillInvocation } from "./prompt-blocks";
 export * from "./prompts";
 export { RunPump, type RunPumpOptions } from "./pump";
@@ -230,18 +239,6 @@ export {
 	toolError,
 } from "./tools/tool";
 export { createWriteTool, type WriteToolInput, writeSchema } from "./tools/write";
-export {
-	DEFAULT_MAX_BYTES,
-	DEFAULT_MAX_LINES,
-	formatSize,
-	GREP_MAX_LINE_LENGTH,
-	type TruncationOptions,
-	type TruncationResult,
-	truncateHead,
-	truncateLine,
-	truncateTail,
-	utf8ByteLength,
-} from "@eta/execution/output";
 export {
 	builtinViewContributions,
 	queuedText,

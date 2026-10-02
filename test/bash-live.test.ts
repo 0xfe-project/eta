@@ -10,11 +10,11 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-import { NodeEnvironment } from "../src/env/node-shell";
 import type { ShellOutputUpdate, ShellOutputView } from "@eta/execution";
 import { getOrThrow } from "@eta/execution";
 import { applyShellOutputUpdate, OUTPUT_MIN_EMIT_INTERVAL_MS } from "@eta/execution/output";
+import { NodeEnvironment } from "@eta/execution-node";
+import { describe, expect, it } from "vitest";
 import { createBashTool } from "../src/tools/bash";
 import type { ExecutionToolContext } from "../src/tools/context";
 import type { ToolResult } from "../src/tools/tool";

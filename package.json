@@ -20,7 +20,8 @@
 		"@types/node": "22.19.19",
 		"@eta/compaction": "*",
 		"typescript": "5.9.3",
-		"vitest": "4.1.9"
+		"vitest": "4.1.9",
+		"@eta/execution-node": "*"
 	},
 	"dependencies": {
 		"@earendil-works/pi-ai": "0.85.1",

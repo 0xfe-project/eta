@@ -9,13 +9,13 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ToolCallInfo } from "@eta/core";
-import { beforeAll, describe, expect, it } from "vitest";
-import { NodeEnvironment } from "../src/env/node-shell";
 import { getOrThrow } from "@eta/execution";
+import { DEFAULT_MAX_LINES } from "@eta/execution/output";
+import { NodeEnvironment } from "@eta/execution-node";
+import { beforeAll, describe, expect, it } from "vitest";
 import { createBashTool } from "../src/tools/bash";
 import type { ExecutionToolContext } from "../src/tools/context";
 import type { ToolResult } from "../src/tools/tool";
-import { DEFAULT_MAX_LINES } from "@eta/execution/output";
 
 let directory = "";
 let env: NodeEnvironment;

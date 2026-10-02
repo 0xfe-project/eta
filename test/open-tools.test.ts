@@ -12,11 +12,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MemoryStorage, SessionLog } from "@eta/core";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
+import { NodeEnvironment } from "@eta/execution-node";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { AskRegistry } from "../src/ask";
 import { MemoryEnvironment } from "../src/env/memory";
-import { NodeEnvironment } from "../src/env/node-shell";
 import { openSession } from "../src/open";
 import { defineTool } from "../src/tools/tool";
 
