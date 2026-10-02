@@ -6,7 +6,7 @@
  * prompts module owns the words, so a deployment can review what its agent says
  * in one place.
  */
-import type { AgentMessage } from "@eta/core";
+import type { AgentMessage, Task, TaskStatus } from "@eta/core";
 
 /** What the task tools answer with after a write. */
 export const TASK_UPDATE_SUCCESS = "Updated TODOs. FOLLOW and update your TODO list as you progress.";
@@ -35,4 +35,16 @@ export function taskReminderMessage(text: string = TASK_REVIEW_PROMPT): AgentMes
 		content: `<system-reminder>\n${text}\n</system-reminder>`,
 		timestamp: Date.now(),
 	} as AgentMessage;
+}
+
+/** Render the live task list into the system prompt block. */
+export function renderCurrentTasks(tasks: readonly Task[]): string {
+	const marks: Record<TaskStatus, string> = {
+		pending: "[ ]",
+		in_progress: "[~]",
+		completed: "[x]",
+		cancelled: "[-]",
+	};
+	const body = tasks.map((t) => `${marks[t.status] ?? "[ ]"} ${t.id}: ${t.content}`).join("\n");
+	return `<current_tasks>\n${body}\n</current_tasks>`;
 }

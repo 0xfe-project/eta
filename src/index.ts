@@ -139,10 +139,22 @@ export {
 	type TranscriptLike,
 } from "./memory";
 export { MetricsService } from "./metrics";
+export { OutputRate } from "./metrics/output-rate";
 export { type OpenSession, type OpenSessionOptions, openSession, type SessionMemoryOptions } from "./open";
 export { dirnameEnvPath, formatSkillInvocation } from "./prompt-blocks";
 export * from "./prompts";
 export { RunPump, type RunPumpOptions } from "./pump";
+export {
+	type CadenceConfig,
+	type CadenceState,
+	createCadenceState,
+	DEFAULT_REMINDER_INTERVAL,
+	DEFAULT_TASK_TOOL_NAMES,
+	drainReminderForContext,
+	evaluateToolResult,
+	onTurnStart,
+	resetCadenceState,
+} from "./reminder/cadence";
 export { TaskReminderService, type TaskReminderServiceOptions } from "./reminder";
 export {
 	loadSkills,

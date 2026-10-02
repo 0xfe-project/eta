@@ -18,7 +18,7 @@
  */
 import type { Task } from "@eta/core";
 import { goalPursuitGuidelines } from "./goal";
-import { TASK_REVIEW_PROMPT } from "./tasks";
+import { renderCurrentTasks, TASK_REVIEW_PROMPT } from "./tasks";
 
 export interface EtaPromptState {
 	goal?: { objective: string; status: string } | undefined;
@@ -57,7 +57,7 @@ function sections(base: string, state: EtaPromptState): EtaPromptSection[] {
 		out.push({ name: "goal", text: goalPursuitGuidelines(state.goal.objective), stable: false });
 	}
 	if (state.tasks !== undefined && state.tasks.length > 0) {
-		out.push({ name: "tasks", text: `${TASK_REVIEW_PROMPT}\n\n${renderTasks(state.tasks)}`, stable: false });
+		out.push({ name: "tasks", text: `${TASK_REVIEW_PROMPT}\n\n${renderCurrentTasks(state.tasks)}`, stable: false });
 	}
 	if (state.memory !== undefined && state.memory.length > 0) {
 		out.push({ name: "memory", text: state.memory, stable: false });
@@ -99,11 +99,4 @@ export function composeEtaSystemPrompt(base: string, state: EtaPromptState): str
 	return sections(base, state)
 		.map((section) => section.text)
 		.join("\n\n");
-}
-
-/** The task list block, in the shape the base prompt refers to. */
-function renderTasks(tasks: readonly Task[]): string {
-	const marks: Record<string, string> = { pending: "[ ]", in_progress: "[~]", completed: "[x]", cancelled: "[-]" };
-	const body = tasks.map((task) => `${marks[task.status] ?? "[ ]"} ${task.id}: ${task.content}`).join("\n");
-	return `<current_tasks>\n${body}\n</current_tasks>`;
 }

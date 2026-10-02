@@ -1,9 +1,8 @@
-import { homedir } from "node:os";
-
 export interface PlatformPromptInfo {
 	/** The session's working directory — the project the agent is acting on. */
 	cwd: string;
-	home?: string;
+	/** Host-owned persona directory home; supplied explicitly, including for remote sessions. */
+	home: string;
 	/** The eta config file the GUI edits: providers, models, headers. */
 	configPath: string;
 	/** The session's own directory, when the session is persisted. */
@@ -32,7 +31,7 @@ export interface PlatformPromptInfo {
  * "create .eta/MEMORY.md" is only useful next to a directory the agent is standing in.
  */
 export function renderPlatformBlock(info: PlatformPromptInfo): string {
-	const home = info.home ?? homedir();
+	const home = info.home;
 	const cwd = info.cwd;
 	const lines: string[] = [
 		"<platform>",

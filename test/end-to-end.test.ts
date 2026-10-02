@@ -8,6 +8,7 @@
  * happy path proves little about machinery whose job is to survive the rest.
  */
 
+import { renderActivePersona } from "../src/prompts/persona";
 import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
 import { applyGoalEntries, type KernelTool, kernelOn, Runner } from "@eta/core";
 import { type GoalEntry, recordGoalEntries, SessionLog } from "@eta/core/session";
@@ -101,7 +102,7 @@ function session(script: AssistantMessage[], tools: KernelTool[] = []) {
 		// Composed the way the assembler composes it: base prompt, then the persona
 		// block the primitive renders. The runner adds no prompt text of its own.
 		systemPrompt: () =>
-			composeEtaSystemPrompt("You are Eta, a coding agent.", { persona: kernel.persona.renderActive().text }),
+			composeEtaSystemPrompt("You are Eta, a coding agent.", { persona: renderActivePersona(kernel.persona).text }),
 		toolContext: { workspace: "/w" },
 		entryProjectors: {},
 		toProviderMessages: (messages) =>

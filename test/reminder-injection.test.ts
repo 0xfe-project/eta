@@ -81,7 +81,13 @@ describe("the reminder reaching a request", () => {
 			storage: new MemoryStorage(),
 			models: models as never,
 			reminderInterval: 1,
-			platform: { cwd: "/work", configPath: "/cfg", memoryTarget: "/work/.eta/MEMORY.md", memoryExists: false },
+			platform: {
+				home: "/home/u",
+				cwd: "/work",
+				configPath: "/cfg",
+				memoryTarget: "/work/.eta/MEMORY.md",
+				memoryExists: false,
+			},
 		});
 		session.kernel.tools.register(plainTool);
 		session.kernel.tasks.create("a task");

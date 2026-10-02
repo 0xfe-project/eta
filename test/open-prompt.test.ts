@@ -46,6 +46,7 @@ describe("the default system prompt", () => {
 			storage: new MemoryStorage(),
 			models: models as never,
 			platform: {
+				home: "/home/u",
 				cwd: "/work/eta",
 				configPath: "/home/u/.eta/config.json",
 				memoryTarget: "/work/eta/.eta/MEMORY.md",
@@ -109,7 +110,13 @@ describe("the default system prompt", () => {
 		const session = await sessionWith({
 			storage: new MemoryStorage(),
 			models: models as never,
-			platform: { cwd: "/work", configPath: "/cfg", memoryTarget: "/work/.eta/MEMORY.md", memoryExists: true },
+			platform: {
+				home: "/home/u",
+				cwd: "/work",
+				configPath: "/cfg",
+				memoryTarget: "/work/.eta/MEMORY.md",
+				memoryExists: true,
+			},
 			memorySource: () => memory,
 		});
 		session.kernel.inject(userMsg("one"));

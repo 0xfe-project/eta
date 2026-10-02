@@ -62,3 +62,20 @@ describe("the platform briefing", () => {
 		expect(text).not.toContain("journal.jsonl");
 	});
 });
+
+describe("host-supplied platform facts", () => {
+	it("uses the supplied remote home verbatim without substituting the process home", () => {
+		const text = renderPlatformBlock({
+			...base,
+			home: "/remote/home",
+			cwd: "/remote/work",
+			memoryTarget: "/remote/work/.eta/MEMORY.md",
+			memoryExists: false,
+		});
+		expect(text).toContain("/remote/home/.eta/persona");
+		expect(text).toContain("/remote/work/.eta/persona");
+		expect(text).toContain("/remote/work/.eta/MEMORY.md");
+		expect(text).not.toContain(`${base.home}/.eta/persona`);
+		expect(text).toContain(base.configPath);
+	});
+});

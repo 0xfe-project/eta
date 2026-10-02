@@ -8,7 +8,8 @@
  * the readout land in the tens of thousands of tokens per second.
  */
 import type { Usage } from "@earendil-works/pi-ai";
-import { Kernel, kernelEmit, OutputRate, Runner } from "@eta/core";
+import { OutputRate } from "../src/metrics/output-rate";
+import { Kernel, kernelEmit, Runner } from "@eta/core";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MetricsService } from "../src/index";

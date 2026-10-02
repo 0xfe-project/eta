@@ -1,13 +1,15 @@
 /**
  * Built-in persona presets (verbatim port of eta-agent's `prompts/persona.ts`,
  * itself persona.rs). They live in the harness because they are model-visible
- * text, and core holds none: the kernel's PersonaService renders the cards it is
+ * text, and core holds none: the kernel's PersonaService stores the cards it is
  * given, and what cards exist is the harness's and the deployment's business.
  *
  * Custom `*.persona.md` cards share this namespace and override by name.
  * Cards are first-person prose without headings or bullets on purpose:
  * they should read like a person, not a spec.
  */
+
+import type { PersonaCard, PersonaService } from "@eta/core";
 
 const THINKER = `
 You are an INTP. you are the THINKER.
@@ -100,4 +102,24 @@ never as a warning from above.
 
 export function builtinPersonas(): Record<string, string> {
 	return { Thinker: THINKER, Insighter: INSIGHTER, Executor: EXECUTOR, Artist: ARTIST };
+}
+
+/** Render requested names against a card table, in order; report misses. */
+export function renderPersonaBlock(
+	names: string[],
+	cards: ReadonlyMap<string, PersonaCard>,
+): { text: string; missing: string[] } {
+	const missing: string[] = [];
+	const parts: string[] = [];
+	for (const name of names) {
+		const card = cards.get(name);
+		if (card === undefined) missing.push(name);
+		else parts.push(card.content.trim());
+	}
+	return { text: parts.join("\n\n"), missing };
+}
+
+/** Render the service's current snapshot without mutating state or emitting events. */
+export function renderActivePersona(persona: PersonaService): { text: string; missing: string[] } {
+	return renderPersonaBlock(persona.activeNamesList(), new Map(persona.list().map((card) => [card.id, card])));
 }

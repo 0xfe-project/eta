@@ -75,6 +75,7 @@ import {
 	type EtaPromptState,
 	etaPromptBlockChars,
 	etaPromptSectionsDetailed,
+	renderActivePersona,
 	type PlatformPromptInfo,
 	renderPlatformBlock,
 	taskReminderMessage,
@@ -474,7 +475,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 	// overrides the whole thing — the harness supplies a default, not a policy.
 	const base = options.baseSystemPrompt ?? DEFAULT_SYSTEM_PROMPT;
 	const promptState = async (): Promise<EtaPromptState> => {
-		const persona = kernel.persona.renderActive().text;
+		const persona = renderActivePersona(kernel.persona).text;
 		const memoryBlock =
 			memory === undefined ? await options.memorySource?.() : (await memory.load(options.memory!.cwd)).text;
 		// What the view shows the Context panel: the last blocks a generation used, and

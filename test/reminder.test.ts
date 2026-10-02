@@ -1,15 +1,15 @@
 /**
  * TaskReminderService (ported from eta-agent's createReminderHooks + cadence.ts).
  *
- * The cadence arithmetic is core's (and tested there); what is pinned here is
+ * The cadence arithmetic lives beside the harness service (and is tested separately); what is pinned here is
  * the service: it counts turns from the bus, resets on a task-tool call, reports
  * a due reminder once per cycle, and never reminds without tasks. The service
  * lives in the harness, so the test wires it the way an assembler does.
  */
-import { type AssistantMessage, DEFAULT_REMINDER_INTERVAL, Kernel, kernelEmit, kernelOn, Runner } from "@eta/core";
+import { type AssistantMessage, Kernel, kernelEmit, kernelOn, Runner } from "@eta/core";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import { TaskReminderService } from "../src/index";
+import { DEFAULT_REMINDER_INTERVAL, TaskReminderService } from "../src/index";
 
 /** What the runner reports for a context: no parts, all zeroes. */
 const EMPTY_PARTS = { system: 0, persona: 0, user: 0, assistant: 0, toolDefs: 0, total: 0 };
