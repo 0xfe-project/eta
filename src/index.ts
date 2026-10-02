@@ -30,11 +30,10 @@ import type {
 	CompactionOutcome,
 	CompactionRequest,
 	CompactionSummarizer,
-	Entry,
-	MessageEntry,
-	Usage,
 } from "@eta/core";
-import { addUsage, emptyUsage } from "@eta/core";
+import type { Entry, MessageEntry } from "@eta/core/session";
+import type { Usage } from "@eta/core/storage";
+import { addUsage, emptyUsage } from "@eta/core/storage";
 import { estimateContextTokens, findCutPoint, fitCompactionSettings } from "@eta/harness";
 import { digestContext, dropToolPairs } from "./deterministic";
 import {

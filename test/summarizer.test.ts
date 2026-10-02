@@ -7,7 +7,9 @@
  * summarizer refuses, and what a split turn does. The prompts are asserted by
  * contract (the format the next reader depends on), not by wording.
  */
-import type { AgentMessage, AssistantMessage, CompactionRequest, Entry, Usage } from "@eta/core";
+import type { AgentMessage, AssistantMessage, CompactionRequest } from "@eta/core";
+import type { Entry } from "@eta/core/session";
+import type { Usage } from "@eta/core/storage";
 import { describe, expect, it } from "vitest";
 import {
 	etaCompaction,
