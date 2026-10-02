@@ -45,6 +45,7 @@ describe("the platform briefing", () => {
 		const root = await scratch();
 		const sessions = manager({
 			platformFor: (meta) => ({
+				home: root,
 				cwd: meta.cwd,
 				configPath: join(root, "config.json"),
 				sessionDir: join(root, "sessions", meta.id),
@@ -57,6 +58,7 @@ describe("the platform briefing", () => {
 		const platform = prompt.sections.find((section) => section.name === "platform");
 		expect(platform?.text).toContain(join(root, "config.json"));
 		expect(platform?.text).toContain(join(root, "sessions", created.meta.id));
+		expect(platform?.text).toContain(`${root}/.eta/persona`);
 		// The words are the harness's: this is a briefing about eta, rendered from this app's paths.
 		expect(platform?.text).toContain("<platform>");
 	});
