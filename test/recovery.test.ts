@@ -9,7 +9,8 @@
 import { appendFile, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AssistantMessage, Runner, SessionLog } from "@eta/core";
+import { type AssistantMessage, Runner } from "@eta/core";
+import { SessionLog } from "@eta/core/session";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { journaledKernel } from "@eta/harness/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

@@ -32,7 +32,7 @@ import {
 	type UsageRow,
 	type UsageScan,
 	type Value,
-} from "@eta/core";
+} from "@eta/core/storage";
 
 export interface JsonlStorageOptions {
 	/**

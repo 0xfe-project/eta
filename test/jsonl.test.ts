@@ -1,7 +1,8 @@
 import { mkdtemp, open, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { MessageEntry, StorageService } from "@eta/core";
+import type { MessageEntry } from "@eta/core/session";
+import type { StorageService } from "@eta/core/storage";
 import { storageContract } from "@eta/core/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { JsonlStorage, type JsonlStorageOptions } from "../src/index";
