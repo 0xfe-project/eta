@@ -19,7 +19,6 @@
 		"vitest": "4.1.9"
 	},
 	"dependencies": {
-		"@earendil-works/pi-ai": "0.85.1",
 		"@eta/core": "*",
 		"@eta/harness": "*"
 	}
