@@ -18,30 +18,10 @@
  *   would refuse it otherwise, which is the point of having the rule.
  */
 import type { StateSnapshot } from "@eta/client-wire-proto";
+import type { Plugin, SessionPluginContext } from "@eta/plugin-sdk";
 import { type GitDiffKind, gitDiff, gitStatus } from "./git";
 
-/** What the `sessions` plugin announces; this plugin's whole view of the session space. */
-export interface SessionsListener {
-	opened(session: { id: string; cwd: string }): void;
-	closed(id: string): void;
-	focused(id: string | undefined): void;
-	changed(session: { id: string; cwd: string }): void;
-}
-
-/**
- * What this plugin needs from the shell: the `wire` service, structurally.
- *
- * Deliberately not `import type { WireService } from "@eta/server"`: a plugin's contract with the
- * floor is the four things below, and depending on the server package to name them would make a
- * plugin depend on the shell's internals — which is the line this architecture draws (plugins
- * depend on the harness; the floor gives them the wire).
- */
-interface Wire {
-	handle(target: string, action: string, handler: (call: { args?: unknown }) => unknown): () => void;
-	stateOf(target: string, projector: { project(): StateSnapshot; eager?: boolean }): () => void;
-	push(target: string): void;
-	pushNow(target: string): void;
-}
+export type { SessionsListener } from "@eta/plugin-sdk";
 
 /** The actions this target has. One list, so the wire and the plugin cannot disagree. */
 export const GIT_ACTIONS = ["status", "diff", "refresh"] as const;
@@ -81,16 +61,9 @@ export interface GitPluginOptions {
 export const gitPlugin = {
 	name: "git",
 	inject: ["wire", "sessions"],
-	apply(ctx: unknown): unknown {
-		const context = ctx as {
-			wire: Wire;
-			sessions: { subscribe(listener: SessionsListener): () => void };
-			effect(execute: () => () => unknown): unknown;
-			/** The host's diagnostics channel, when it has one. */
-			warn?: ((message: string) => void) | undefined;
-		};
-
+	apply(context: SessionPluginContext): unknown {
 		return context.effect(() => {
+			let active = true;
 			/** What the plugin knows, keyed by session: the last read, which is what state shows. */
 			const facts = new Map<string, GitFacts>();
 			/** Reads in flight, so a burst of events does not spawn a dozen `git status` processes. */
@@ -102,6 +75,7 @@ export const gitPlugin = {
 				const work = (async () => {
 					try {
 						const status = await gitStatus(cwd);
+						if (!active) return;
 						facts.set(session, {
 							session,
 							cwd,
@@ -124,6 +98,7 @@ export const gitPlugin = {
 			};
 
 			const push = (immediate: boolean): void => {
+				if (!active) return;
 				if (immediate) context.wire.pushNow("git");
 				else context.wire.push("git");
 			};
@@ -173,13 +148,15 @@ export const gitPlugin = {
 				},
 			});
 
-			return () => {
+			return async () => {
+				active = false;
 				unsubscribe();
 				for (const off of registrations.splice(0)) off();
+				await Promise.all(reading.values());
 			};
 		});
 	},
-};
+} satisfies Plugin<SessionPluginContext>;
 
 /** One section of the plugin's state: what it knows, in a stable order. */
 function section(facts: Map<string, GitFacts>): StateSnapshot {
