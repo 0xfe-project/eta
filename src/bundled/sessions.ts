@@ -26,6 +26,7 @@ import type { SidebarSession } from "@eta/client-wire-proto";
 import type { GoalState, ImageContent, StoredTask, Task, TaskStatus, ThinkingLevel } from "@eta/core";
 import { THINKING_LEVELS, thinkingLevelsFor } from "@eta/core";
 import { type AskResponse, type BtwSaveState, type BtwThread, sessionStateKV } from "@eta/harness";
+import type { SessionFacts, SessionsApi, SessionsListener } from "@eta/plugin-sdk";
 import { Service } from "cordis";
 import type { CreateSessionOptions, ForkSessionOptions, ManagedSession, SessionManager } from "../manager";
 import { formatModelId, parseModelId } from "../model-id";
@@ -86,29 +87,7 @@ export interface SessionsPluginOptions {
 	warn?: ((message: string) => void) | undefined;
 }
 
-/**
- * What the `sessions` plugin announces, and how another plugin hears it.
- *
- * A plugin that wants to show a fact *about* a session (its git branch, its remote host) needs to
- * know which sessions exist and when one of them moves. Handing it the `SessionManager` would be
- * handing it the whole host; these four events are the seam that lets it be a plugin — and it
- * reaches them the way a plugin reaches anything else, by injecting the `sessions` service.
- */
-export interface SessionsListener {
-	opened(session: SessionFacts): void;
-	closed(id: string): void;
-	focused(id: string | undefined): void;
-	/** A session's own state moved (its run ended, its directory changed). */
-	changed(session: SessionFacts): void;
-}
-
-/** The facts a plugin can act on without the manager: enough for a sidebar badge, no more. */
-export interface SessionFacts {
-	id: string;
-	cwd: string;
-	title?: string | undefined;
-	running: boolean;
-}
+export type { SessionFacts, SessionsListener } from "@eta/plugin-sdk";
 
 /** One open session, as this plugin tracks it. */
 interface Attached {
@@ -149,7 +128,7 @@ const FORWARDED_EVENTS = [
 ] as const;
 
 /** The session host, as a service other plugins inject (`ctx.sessions`). */
-export class SessionsService extends Service {
+export class SessionsService extends Service implements SessionsApi {
 	static readonly provide = "sessions";
 
 	private readonly manager: SessionManager;

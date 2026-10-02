@@ -33,6 +33,7 @@ import {
 	type SessionMemoryOptions,
 	type SubagentManager,
 } from "@eta/harness";
+import type { SessionEnvironment } from "@eta/plugin-sdk";
 import { forkWrites } from "./fork";
 import { parseModelId } from "./model-id";
 import { resolvePersona } from "./personas";
@@ -108,15 +109,7 @@ export interface SessionManagerOptions {
 	warn?: ((message: string) => void) | undefined;
 }
 
-/**
- * The environment one session runs in: the harness's seam, plus what the manager needs to wire
- * memory through it. Kept structural so this file does not depend on a backend.
- */
-export interface SessionEnvironment {
-	env: ExecutionEnv;
-	/** How memory is reached through that environment; defaults to the environment's own files. */
-	memoryFs?: MemoryFs | undefined;
-}
+export type { SessionEnvironment } from "@eta/plugin-sdk";
 
 /** Where a session's memory is, and how an extraction reaches a model. */
 export interface SessionMemoryWiring {

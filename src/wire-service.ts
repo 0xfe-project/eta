@@ -11,6 +11,7 @@
  * honest behaviour for a server that has not opened its port yet.
  */
 import type { CallFrame, EventFrame, OpDescriptor, ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
+import type { WireApi } from "@eta/plugin-sdk";
 import { type Context, Service } from "cordis";
 import { BACKGROUND_INTERVAL_MS, FOCUSED_INTERVAL_MS, FramePacer } from "./pacer";
 import type {
@@ -56,7 +57,7 @@ export interface WireServiceOptions {
 	unschedule?: ((timer: ReturnType<typeof setTimeout>) => void) | undefined;
 }
 
-export class WireService extends Service {
+export class WireService extends Service implements WireApi {
 	static readonly provide = "wire";
 
 	/** The registries, for the few callers that need the raw shape (the pipe, tests). */

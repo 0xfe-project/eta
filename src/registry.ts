@@ -23,39 +23,9 @@
  */
 import type { CallFrame, OpDescriptor, StateSnapshot } from "@eta/client-wire-proto";
 
-/** What a handler is given besides the call. */
-export interface OpContext {
-	/** Send a frame to the client that called. */
-	reply(frame: import("@eta/client-wire-proto").ServerFrame): void;
-}
+import type { DispatchOutcome, OpContext, OpHandler, OpMeta, StateProjector } from "@eta/plugin-sdk";
 
-/** What an action did, beyond what it returns. */
-export interface DispatchOutcome {
-	/** A frame the handler wants sent to every client (a fan-out, a native relay). */
-	broadcast?: import("@eta/client-wire-proto").ServerFrame | undefined;
-	/** What the call produced, for the reply frame. */
-	result?: unknown | undefined;
-	/** The handler answered for itself: the pipe adds nothing. */
-	silent?: boolean | undefined;
-}
-
-export type OpHandler = (
-	call: CallFrame,
-	context: OpContext,
-) => Promise<DispatchOutcome | undefined> | DispatchOutcome | undefined;
-
-export interface OpMeta {
-	description?: string | undefined;
-	/** A JSON schema for `args`, published in `hello.ops` for clients that want to check. */
-	schema?: unknown | undefined;
-}
-
-/** A target's state: what it shows, and when. */
-export interface StateProjector {
-	project(): StateSnapshot;
-	/** Include this target's state in `hello`, so a new client draws immediately. */
-	eager?: boolean | undefined;
-}
+export type { DispatchOutcome, OpContext, OpHandler, OpMeta, StateProjector } from "@eta/plugin-sdk";
 
 export interface TargetSummary {
 	name: string;
