@@ -27,7 +27,7 @@ import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import { constants as osConstants } from "node:os";
 import { join } from "node:path";
-import { LiveOutput, OutputBuffer } from "../output-capture";
+import { LiveOutput, OutputBuffer } from "@eta/execution/output";
 import { NodeFileSystem, pathExists, resolveEnvPath } from "./node-fs";
 import {
 	type EnvCallOptions,
@@ -41,7 +41,7 @@ import {
 	type Shell,
 	type ShellExecOptions,
 	type ShellExecResult,
-} from "./types";
+} from "@eta/execution";
 
 const MAX_TIMEOUT_MS = 2_147_483_647;
 const MAX_TIMEOUT_SECONDS = MAX_TIMEOUT_MS / 1000;

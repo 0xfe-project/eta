@@ -8,7 +8,7 @@
  * locale-specific spellings of a path before giving up — a file that exists is
  * a file the model asked for.
  */
-import { type EnvCallOptions, type ExecutionEnv, getOrThrow } from "../env/types";
+import { type EnvCallOptions, type ExecutionEnv, getOrThrow } from "@eta/execution";
 
 const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
 const NARROW_NO_BREAK_SPACE = "\u202F";

@@ -25,9 +25,9 @@
  */
 import type { Static } from "typebox";
 import { Type } from "typebox";
-import type { EnvCallOptions, ShellOutputUpdate, ShellOutputView, ShellTruncation } from "../env/types";
-import { applyShellOutputUpdate } from "../output-capture";
-import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize } from "../truncate";
+import type { EnvCallOptions, ShellOutputUpdate, ShellOutputView, ShellTruncation } from "@eta/execution";
+import { applyShellOutputUpdate } from "@eta/execution/output";
+import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize } from "@eta/execution/output";
 import type { ExecutionToolContext } from "./context";
 import type { HarnessTool, ToolResult } from "./tool";
 

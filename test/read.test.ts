@@ -12,11 +12,11 @@ import { join } from "node:path";
 import type { ToolCallInfo } from "@eta/core";
 import { beforeAll, describe, expect, it } from "vitest";
 import { NodeEnvironment } from "../src/env/node-shell";
-import { getOrThrow } from "../src/env/types";
+import { getOrThrow } from "@eta/execution";
 import type { ExecutionToolContext } from "../src/tools/context";
 import { createReadTool } from "../src/tools/read";
 import type { ToolResult } from "../src/tools/tool";
-import { DEFAULT_MAX_LINES } from "../src/truncate";
+import { DEFAULT_MAX_LINES } from "@eta/execution/output";
 
 let directory = "";
 let env: NodeEnvironment;

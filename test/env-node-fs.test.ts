@@ -10,8 +10,8 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { NodeFileSystem } from "../src/env/node-fs";
-import { getOrThrow } from "../src/env/types";
-import { envContract } from "../src/testing";
+import { getOrThrow } from "@eta/execution";
+import { envContract } from "@eta/execution/testing";
 
 envContract("node filesystem", async () => {
 	const cwd = await mkdtemp(join(tmpdir(), "eta-env-"));

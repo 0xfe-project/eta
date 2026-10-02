@@ -6,8 +6,8 @@
  */
 import { describe, expect, it } from "vitest";
 import { MemoryEnvironment } from "../src/env/memory";
-import { getOrThrow } from "../src/env/types";
-import { envContract } from "../src/testing";
+import { getOrThrow } from "@eta/execution";
+import { envContract } from "@eta/execution/testing";
 
 envContract("memory", () => {
 	// No `capabilities.shell`: this backend answers a scripted vocabulary, not

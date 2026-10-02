@@ -16,8 +16,8 @@
 import type { ImageContent, TextContent } from "@eta/core";
 import type { Static } from "typebox";
 import { Type } from "typebox";
-import { type EnvCallOptions, getOrThrow } from "../env/types";
-import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, type TruncationResult, truncateHead } from "../truncate";
+import { type EnvCallOptions, getOrThrow } from "@eta/execution";
+import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, type TruncationResult, truncateHead } from "@eta/execution/output";
 import type { ExecutionToolContext } from "./context";
 import { detectSupportedImageMimeType, encodeBase64 } from "./image";
 import { resolveReadToolPath } from "./path-utils";

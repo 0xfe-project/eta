@@ -60,7 +60,7 @@ import type { TSchema } from "typebox";
 import { AskRegistry, createAskUserTool } from "./ask";
 import { BtwManager, btwSideAsk } from "./btw";
 import { CompactionService } from "./compaction-service";
-import type { ExecutionEnv } from "./env/types";
+import type { ExecutionEnv } from "@eta/execution";
 import { JournalingService, SESSION_CONFIG, TASKS_STATE } from "./journaling";
 import {
 	extractMemoryAtRunEnd,

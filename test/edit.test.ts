@@ -13,7 +13,7 @@ import type { ToolCallInfo } from "@eta/core";
 import { applyPatch } from "diff";
 import { beforeAll, describe, expect, it } from "vitest";
 import { NodeEnvironment } from "../src/env/node-shell";
-import { getOrThrow } from "../src/env/types";
+import { getOrThrow } from "@eta/execution";
 import type { ExecutionToolContext } from "../src/tools/context";
 import { createEditTool } from "../src/tools/edit";
 import { type ToolResult, toKernelTool } from "../src/tools/tool";

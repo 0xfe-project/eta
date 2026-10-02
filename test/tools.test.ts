@@ -14,7 +14,7 @@ import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { NodeEnvironment } from "../src/env/node-shell";
-import { getOrThrow } from "../src/env/types";
+import { getOrThrow } from "@eta/execution";
 import { journaledKernel } from "../src/testing";
 import { type ExecutionToolContext, executionContext } from "../src/tools/context";
 import { defineTool, toKernelTool } from "../src/tools/tool";

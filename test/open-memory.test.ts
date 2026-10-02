@@ -13,7 +13,7 @@ import { type KernelModels, MemoryStorage } from "@eta/core";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { MemoryEnvironment } from "../src/env/memory";
-import type { ExecutionEnv } from "../src/env/types";
+import type { ExecutionEnv } from "@eta/execution";
 import { envMemoryFs, type MemoryExtractionOutcome } from "../src/memory";
 import { openSession } from "../src/open";
 

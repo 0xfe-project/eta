@@ -13,7 +13,7 @@
  */
 import type { Static } from "typebox";
 import { Type } from "typebox";
-import { type EnvCallOptions, getOrThrow } from "../env/types";
+import { type EnvCallOptions, getOrThrow } from "@eta/execution";
 import type { ExecutionToolContext } from "./context";
 import { withFileMutationQueue } from "./file-mutation-queue";
 import { resolveToolPath } from "./path-utils";

@@ -18,7 +18,7 @@
  */
 import type { Static } from "typebox";
 import { Type } from "typebox";
-import { type EnvCallOptions, type FileError, getOrThrow } from "../env/types";
+import { type EnvCallOptions, type FileError, getOrThrow } from "@eta/execution";
 import type { ExecutionToolContext } from "./context";
 import {
 	applyEditsToNormalizedContent,

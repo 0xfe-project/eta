@@ -9,9 +9,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { NodeEnvironment } from "../src/env/node-shell";
-import { getOrThrow } from "../src/env/types";
-import { envContract } from "../src/testing";
-import { truncateHead } from "../src/truncate";
+import { getOrThrow } from "@eta/execution";
+import { envContract } from "@eta/execution/testing";
+import { truncateHead } from "@eta/execution/output";
 
 envContract("node environment", async () => {
 	const cwd = await mkdtemp(join(tmpdir(), "eta-shell-"));

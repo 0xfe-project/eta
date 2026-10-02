@@ -5,7 +5,7 @@
  * an opaque `toolContext`; the harness decides that its tools get a filesystem
  * and a shell, and a plugin can put more in a context of its own.
  */
-import type { ExecutionEnv } from "../env/types";
+import type { ExecutionEnv } from "@eta/execution";
 
 /** Filesystem and shell for the built-in execution tools. */
 export interface ExecutionToolContext {

@@ -30,7 +30,7 @@ import {
 	type ShellExecResult,
 	type TextLine,
 	type TextLineReader,
-} from "./types";
+} from "@eta/execution";
 
 interface MemoryNode {
 	kind: FileKind;

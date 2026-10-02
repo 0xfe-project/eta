@@ -16,7 +16,7 @@
  */
 import ignore from "ignore";
 import { parse } from "yaml";
-import type { EnvCallOptions, ExecutionEnv, FileInfo, Result } from "./env/types";
+import type { EnvCallOptions, ExecutionEnv, FileInfo, Result } from "@eta/execution";
 
 export { formatSkillInvocation } from "./prompt-blocks";
 

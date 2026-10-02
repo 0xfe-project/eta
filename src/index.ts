@@ -14,7 +14,7 @@
  * out: installing the harness installs all of it.
  */
 
-export { AdaptivePublisher, type AdaptivePublisherOptions } from "./adaptive-publisher";
+export { AdaptivePublisher, type AdaptivePublisherOptions } from "@eta/execution/output";
 export {
 	type AskObserver,
 	AskRegistry,
@@ -76,7 +76,7 @@ export {
 	type ShellTruncation,
 	type TextLine,
 	type TextLineReader,
-} from "./env/types";
+} from "@eta/execution";
 export {
 	type ContextUsageEstimate,
 	type CutPointResult,
@@ -130,7 +130,7 @@ export {
 	OutputBuffer,
 	type OutputBufferOptions,
 	sanitizeShellOutput,
-} from "./output-capture";
+} from "@eta/execution/output";
 export { dirnameEnvPath, formatSkillInvocation } from "./prompt-blocks";
 export * from "./prompts";
 export { RunPump, type RunPumpOptions } from "./pump";
@@ -241,7 +241,7 @@ export {
 	truncateLine,
 	truncateTail,
 	utf8ByteLength,
-} from "./truncate";
+} from "@eta/execution/output";
 export {
 	builtinViewContributions,
 	queuedText,

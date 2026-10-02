@@ -47,7 +47,7 @@ import {
 	type Result,
 	type TextLine,
 	type TextLineReader,
-} from "./types";
+} from "@eta/execution";
 
 /** Turn an unknown failure into a coded `FileError`. */
 export function toFileError(error: unknown, fallbackPath?: string): FileError {

@@ -16,7 +16,7 @@
  * "remove something in the other file", which it ignores rather than guessing.
  */
 
-import type { ExecutionEnv } from "./env/types";
+import type { ExecutionEnv } from "@eta/execution";
 import { MEMORY_EXTRACT_PROMPT, MEMORY_EXTRACT_SYSTEM_PROMPT } from "./prompts/memory";
 
 /**
