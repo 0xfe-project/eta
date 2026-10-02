@@ -5,6 +5,8 @@
  * The kernel owns the signal — when a reminder is due — and the prompts
  * plugin owns the text. Transient by design: nothing lands in the transcript.
  */
+
+import { assistantMessage } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import {
 	type CadenceConfig,
@@ -17,7 +19,6 @@ import {
 	onTurnStart,
 	resetCadenceState,
 } from "../src/index";
-import { assistantMessage } from "@eta/core/testing";
 
 const config: CadenceConfig = { reminderInterval: 5, taskToolNames: DEFAULT_TASK_TOOL_NAMES };
 

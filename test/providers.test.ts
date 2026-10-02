@@ -1,7 +1,7 @@
 import type { AssistantMessage, Model } from "@earendil-works/pi-ai";
+import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { piAiModels, THINKING_LEVELS, thinkingLevelsFor } from "../src/kernel/providers";
-import { assistantMessage, fakeModels } from "@eta/core/testing";
 
 describe("models seam", () => {
 	it("accepts a scripted fake and replays it in order, recording calls", async () => {

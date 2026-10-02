@@ -14,10 +14,9 @@
  * the kernel's side — when it asks, and what it does with the answer.
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
+import { assistantMessage, type FakeCompaction, fakeCompaction, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { Kernel, Runner } from "../src/index";
-import { type FakeCompaction, fakeCompaction } from "@eta/core/testing";
-import { assistantMessage, fakeModels } from "@eta/core/testing";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,

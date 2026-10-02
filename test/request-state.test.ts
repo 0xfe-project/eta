@@ -9,9 +9,10 @@
  * plugins own their text and their environment while the kernel stays empty of
  * both.
  */
+
+import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { type Entry, Kernel, MemoryStorage, Runner, SessionLog } from "../src/index";
-import { assistantMessage, fakeModels } from "@eta/core/testing";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,

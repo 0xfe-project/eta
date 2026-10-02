@@ -6,6 +6,7 @@
  * — without a session around it.
  */
 import type { AssistantMessage, Context, Model, Usage } from "@earendil-works/pi-ai";
+import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it, vi } from "vitest";
 import {
 	DEFAULT_RETRY_POLICY,
@@ -15,7 +16,6 @@ import {
 	Kernel,
 	kernelEmit,
 } from "../src/index";
-import { assistantMessage, fakeModels } from "@eta/core/testing";
 
 const usageOf = (input: number, output: number): Usage => ({
 	input,

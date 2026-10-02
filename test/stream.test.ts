@@ -8,10 +8,10 @@
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
+import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Kernel, kernelOn, Runner } from "../src/index";
 import { consumeAssistantStream } from "../src/kernel/assistant";
-import { assistantMessage, fakeModels } from "@eta/core/testing";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,

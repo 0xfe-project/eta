@@ -1,8 +1,8 @@
+import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { Context } from "cordis";
 import { describe, expect, it } from "vitest";
 import { Kernel, Runner } from "../src/index";
 import { PersonaService, renderPersonaBlock } from "../src/kernel/persona";
-import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { kernelOn } from "../src/types/events";
 import type { PersonaCard } from "../src/types/persona";
 

@@ -1,3 +1,4 @@
+import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import {
 	ConfigService,
@@ -12,7 +13,6 @@ import {
 	validateRetryPolicy,
 	validateToolNames,
 } from "../src/index";
-import { assistantMessage, fakeModels } from "@eta/core/testing";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,

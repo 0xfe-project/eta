@@ -7,9 +7,9 @@
  * apply per kind, so follow-ups can be held in reserve while steering lands.
  */
 import type { ImageContent } from "@earendil-works/pi-ai";
+import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { Inbox, InvalidMessage, Kernel, kernelOn, normalizeQueuedInput, type QueuedItem, Runner } from "../src/index";
-import { assistantMessage, fakeModels } from "@eta/core/testing";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,
