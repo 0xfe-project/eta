@@ -1,3 +1,4 @@
+/** Test-only entry: fakes, storage contracts, and real-model smoke/config helpers. */
 export { type SelectedProvider, selectProvider } from "./eta-config";
 export {
 	type FakeCompaction,

@@ -15,7 +15,7 @@ import {
 	Kernel,
 	kernelEmit,
 } from "../src/index";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
+import { assistantMessage, fakeModels } from "@eta/core/testing";
 
 const usageOf = (input: number, output: number): Usage => ({
 	input,

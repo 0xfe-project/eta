@@ -137,19 +137,6 @@ export {
 	value,
 } from "./storage/types";
 export {
-	assistantMessage,
-	type FakeModels,
-	type FakeModelsOptions,
-	fakeModels,
-	type RecordedCall,
-} from "./testing/fake-provider";
-export {
-	type StorageContractHandle,
-	type StorageContractOptions,
-	type StorageFactory,
-	storageContract,
-} from "./testing/storage-contract";
-export {
 	CONFIG_PROPERTIES,
 	type CompactionEconomics,
 	type CompactionSettings,

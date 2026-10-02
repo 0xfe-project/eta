@@ -9,7 +9,7 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
 import { Kernel, Runner } from "../src/index";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
+import { assistantMessage, fakeModels } from "@eta/core/testing";
 
 const userMsg = (text: string) => ({ role: "user" as const, content: [{ type: "text" as const, text }], timestamp: 0 });
 const answer = (text: string): AssistantMessage =>

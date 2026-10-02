@@ -17,7 +17,7 @@ import {
 	onTurnStart,
 	resetCadenceState,
 } from "../src/index";
-import { assistantMessage } from "../src/testing/fake-provider";
+import { assistantMessage } from "@eta/core/testing";
 
 const config: CadenceConfig = { reminderInterval: 5, taskToolNames: DEFAULT_TASK_TOOL_NAMES };
 

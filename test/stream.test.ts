@@ -11,7 +11,7 @@ import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-s
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Kernel, kernelOn, Runner } from "../src/index";
 import { consumeAssistantStream } from "../src/kernel/assistant";
-import { assistantMessage, fakeModels } from "../src/testing/fake-provider";
+import { assistantMessage, fakeModels } from "@eta/core/testing";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,
