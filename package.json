@@ -9,22 +9,23 @@
 	"exports": {
 		".": "./src/index.ts"
 	},
-	"eta-plugin": { "name": "git" },
+	"eta-plugin": {
+		"name": "git"
+	},
 	"scripts": {
 		"test": "vitest --run --passWithNoTests",
 		"typecheck": "tsc -p tsconfig.json --noEmit"
 	},
 	"devDependencies": {
 		"@types/node": "22.19.19",
-		"@eta/client-wire-proto": "*",
 		"@eta/server": "*",
 		"typescript": "5.9.3",
 		"vitest": "4.1.9",
 		"bun-types": "1.4.2",
 		"@eta/core": "*",
-		"@eta/harness": "*"
+		"cordis": "4.0.0-rc.10"
 	},
 	"dependencies": {
-		"cordis": "4.0.0-rc.10"
+		"@eta/client-wire-proto": "*"
 	}
 }
