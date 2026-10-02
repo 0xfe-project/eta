@@ -1,8 +1,6 @@
-import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { Context } from "cordis";
 import { describe, expect, it } from "vitest";
-import { Kernel, Runner } from "../src/index";
-import { PersonaService, renderPersonaBlock } from "../src/kernel/persona";
+import { PersonaService } from "../src/kernel/persona";
 import { kernelOn } from "../src/types/events";
 import type { PersonaCard } from "../src/types/persona";
 
@@ -40,13 +38,13 @@ describe("persona service", () => {
 		dispose();
 	});
 
-	it("switch activates in order and renders the joined block", () => {
+	it("switch activates cards in order", () => {
 		const { persona, dispose } = withPersona();
 		persona.loadCards([card("a", "alpha"), card("b", "beta")]);
 		const { active, missing } = persona.setActive(["b", "a"]);
 		expect(active.map((c) => c.id)).toEqual(["b", "a"]);
 		expect(missing).toEqual([]);
-		expect(persona.renderActive().text).toBe("beta\n\nalpha");
+		expect(persona.active().map((c) => c.content)).toEqual(["beta", "alpha"]);
 		dispose();
 	});
 
@@ -57,7 +55,7 @@ describe("persona service", () => {
 		// The session survives: found card stays active, ghost is reported.
 		expect(active.map((c) => c.id)).toEqual(["a"]);
 		expect(missing).toEqual(["Ghost"]);
-		expect(persona.renderActive().text).toBe("alpha");
+		expect(persona.active().map((c) => c.content)).toEqual(["alpha"]);
 		expect(events.filter((e) => e.name === "persona:missing")).toEqual([
 			{ name: "persona:missing", payload: { id: "Ghost" } },
 		]);
@@ -72,82 +70,10 @@ describe("persona service", () => {
 		persona.loadCards([card("a")]);
 		persona.setActive(["Ghost"]);
 		persona.loadCards([card("a"), card("Ghost", "now real")]);
-		expect(persona.renderActive().text).toBe("now real");
+		expect(persona.active().map((c) => c.content)).toEqual(["now real"]);
 		expect(persona.activeNamesList()).toEqual(["Ghost"]);
 		// No stale missing warning from the reload path.
 		expect(events.filter((e) => e.name === "persona:missing")).toHaveLength(1);
 		dispose();
-	});
-
-	it("renderPersonaBlock is pure and reports misses in order", () => {
-		const cards = new Map([
-			["x", card("x", "ex")],
-			["y", card("y", "why")],
-		]);
-		expect(renderPersonaBlock(["y", "x", "z"], cards)).toEqual({ text: "why\n\nex", missing: ["z"] });
-		expect(renderPersonaBlock([], cards)).toEqual({ text: "", missing: [] });
-	});
-});
-
-// Every point below is a line of eta-agent's persona.ts, checked one by one.
-describe("persona fidelity against eta-agent's persona.ts", () => {
-	it("trims each card and joins the block with a blank line", () => {
-		const cards = new Map([
-			["a", card("a", "  first card  ")],
-			["b", card("b", "\nsecond card\n")],
-		]);
-		expect(renderPersonaBlock(["a", "b"], cards)).toEqual({ text: "first card\n\nsecond card", missing: [] });
-	});
-
-	it("reports misses in the requested order and renders nothing for them", () => {
-		const cards = new Map([["a", card("a", "A")]]);
-		expect(renderPersonaBlock(["x", "a", "y"], cards)).toEqual({ text: "A", missing: ["x", "y"] });
-	});
-
-	it("an empty name list renders nothing and reports nothing", () => {
-		expect(renderPersonaBlock([], new Map())).toEqual({ text: "", missing: [] });
-	});
-
-	it("the active persona is the block the prompt owner composes with", async () => {
-		const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } } });
-		const fake = fakeModels([assistantMessage()]);
-		kernel.persona.loadCards([card("Executor", "You are the executor."), card("Other", "You are someone else.")]);
-		kernel.persona.setActive(["Executor"]);
-		// The runner puts this in the request verbatim; composing it into a prompt is
-		// the prompt layer's job (the harness's composer puts persona right after the
-		// base prompt, where a provider cache keeps it).
-		const block = kernel.persona.renderActive().text;
-		expect(block).toContain("You are the executor.");
-		expect(block).not.toContain("You are someone else.");
-		const runner = new Runner(kernel, { models: fake, systemPrompt: `base prompt\n\n${block}` });
-		kernel.inject({ role: "user", content: [{ type: "text", text: "go" }], timestamp: 0 });
-		await runner.run();
-
-		expect(fake.calls[0]!.context.systemPrompt).toBe(`base prompt\n\n${block}`);
-		void kernel.dispose();
-	});
-
-	it("a missing active persona is reported, and the rest of the block stays", () => {
-		const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } } });
-		kernel.persona.loadCards([card("Executor", "still here")]);
-		kernel.persona.setActive(["Ghost", "Executor"]);
-		const rendered = kernel.persona.renderActive();
-		expect(rendered.missing).toEqual(["Ghost"]);
-		expect(rendered.text).toContain("still here");
-		void kernel.dispose();
-	});
-
-	it("the runner adds no prompt text of its own", async () => {
-		const kernel = Kernel.create({ config: { model: { provider: "p", modelId: "m" } } });
-		const fake = fakeModels([assistantMessage()]);
-		kernel.persona.loadCards([card("Executor", "persona text")]);
-		kernel.persona.setActive(["Executor"]);
-		const runner = new Runner(kernel, { models: fake, systemPrompt: "base" });
-		kernel.inject({ role: "user", content: [{ type: "text", text: "go" }], timestamp: 0 });
-		await runner.run();
-		// Core owns no model-visible words, persona included: what the caller passed is
-		// exactly what the provider sees.
-		expect(fake.calls[0]!.context.systemPrompt).toBe("base");
-		void kernel.dispose();
 	});
 });

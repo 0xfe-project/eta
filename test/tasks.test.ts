@@ -1,6 +1,6 @@
 import { Context } from "cordis";
 import { describe, expect, it } from "vitest";
-import { renderCurrentTasks, TaskService } from "../src/kernel/tasks";
+import { TaskService } from "../src/kernel/tasks";
 import { kernelOn } from "../src/types/events";
 
 function withTasks() {
@@ -121,24 +121,6 @@ describe("task bus events", () => {
 		tasks.update(a.task.id, { status: "completed" });
 		const aliases = events.filter((e) => e.name === "task:completed");
 		expect(aliases).toHaveLength(1);
-		dispose();
-	});
-});
-
-describe("renderCurrentTasks", () => {
-	it("renders all four states with marks", () => {
-		const { tasks, dispose } = withTasks();
-		const a = tasks.create("pending task");
-		const b = tasks.create("doing task");
-		tasks.update(b.task.id, { status: "in_progress" });
-		const c = tasks.create("done task");
-		tasks.update(c.task.id, { status: "completed" });
-		const d = tasks.create("killed task");
-		tasks.update(d.task.id, { status: "cancelled" });
-		const out = renderCurrentTasks(tasks.list());
-		expect(out).toBe(
-			`<current_tasks>\n[ ] ${a.task.id}: pending task\n[~] ${b.task.id}: doing task\n[x] ${c.task.id}: done task\n[-] ${d.task.id}: killed task\n</current_tasks>`,
-		);
 		dispose();
 	});
 });

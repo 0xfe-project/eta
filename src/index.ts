@@ -4,17 +4,6 @@
  */
 
 export { type AssistantStreamObserver, consumeAssistantStream } from "./kernel/assistant";
-export {
-	type CadenceConfig,
-	type CadenceState,
-	createCadenceState,
-	DEFAULT_REMINDER_INTERVAL,
-	DEFAULT_TASK_TOOL_NAMES,
-	drainReminderForContext,
-	evaluateToolResult,
-	onTurnStart,
-	resetCadenceState,
-} from "./kernel/cadence";
 export type {
 	CompactionDriver,
 	CompactionHost,
@@ -64,9 +53,7 @@ export {
 	type QueueKind,
 } from "./kernel/inbox";
 export { KERNEL_SERVICE_NAMES, Kernel, type KernelInspect, type KernelOptions, sessionScope } from "./kernel/kernel";
-export { MutationQueue } from "./kernel/mutation-queue";
-export { OutputRate } from "./kernel/output-rate";
-export { PersonaService, renderPersonaBlock } from "./kernel/persona";
+export { PersonaService } from "./kernel/persona";
 export { type KernelModels, piAiModels, THINKING_LEVELS, thinkingLevelsFor } from "./kernel/providers";
 export {
 	type AgentRetryPolicy,
@@ -88,7 +75,7 @@ export {
 	type RunResult,
 	toToolResultMessage,
 } from "./kernel/runner";
-export { renderCurrentTasks, TaskService } from "./kernel/tasks";
+export { TaskService } from "./kernel/tasks";
 export {
 	type BeforeToolResult,
 	isAbortError,

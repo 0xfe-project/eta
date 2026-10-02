@@ -165,15 +165,3 @@ export class TaskService extends Service {
 		return { kept, dropped };
 	}
 }
-
-/** Render the live task list into the system prompt block. */
-export function renderCurrentTasks(tasks: Task[]): string {
-	const marks: Record<TaskStatus, string> = {
-		pending: "[ ]",
-		in_progress: "[~]",
-		completed: "[x]",
-		cancelled: "[-]",
-	};
-	const body = tasks.map((t) => `${marks[t.status]} ${t.id}: ${t.content}`).join("\n");
-	return `<current_tasks>\n${body}\n</current_tasks>`;
-}

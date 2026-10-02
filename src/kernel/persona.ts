@@ -13,21 +13,6 @@ import type { Emit } from "../types/events";
 import { kernelEmit } from "../types/events";
 import type { PersonaCard } from "../types/persona";
 
-/** Render requested names against a card table, in order; report misses. */
-export function renderPersonaBlock(
-	names: string[],
-	cards: ReadonlyMap<string, PersonaCard>,
-): { text: string; missing: string[] } {
-	const missing: string[] = [];
-	const parts: string[] = [];
-	for (const name of names) {
-		const card = cards.get(name);
-		if (card === undefined) missing.push(name);
-		else parts.push(card.content.trim());
-	}
-	return { text: parts.join("\n\n"), missing };
-}
-
 export class PersonaService extends Service {
 	static readonly provide = "persona";
 
@@ -83,10 +68,5 @@ export class PersonaService extends Service {
 		for (const id of missing) this.emit("persona:missing", { id });
 		this.emit("persona:switched", { active, missing });
 		return { active, missing };
-	}
-
-	/** Render the active personas into the stable prompt block text. */
-	renderActive(): { text: string; missing: string[] } {
-		return renderPersonaBlock(this.activeNames, this.cards);
 	}
 }

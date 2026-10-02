@@ -10,7 +10,7 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import { Kernel, type KernelTool, MutationQueue, Runner } from "../src/index";
+import { Kernel, type KernelTool, Runner } from "../src/index";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,
@@ -172,75 +172,5 @@ describe("execution modes", () => {
 		expect(JSON.stringify(results[0])).toContain("kaboom");
 		expect(JSON.stringify(results[1])).toContain("fine result");
 		dispose();
-	});
-});
-
-describe("MutationQueue", () => {
-	it("serializes work on one key and lets different keys run together", async () => {
-		const queue = new MutationQueue();
-		const order: string[] = [];
-		const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-		const a = queue.run("file-a", async () => {
-			order.push("a:start");
-			await sleep(20);
-			order.push("a:end");
-		});
-		const b = queue.run("file-a", async () => {
-			order.push("b:start");
-			await sleep(1);
-			order.push("b:end");
-		});
-		const c = queue.run("file-b", async () => {
-			order.push("c:start");
-		});
-		await Promise.all([a, b, c]);
-
-		// Same key: never interleaved. Different key: it started before a finished.
-		expect(order.indexOf("a:end")).toBeLessThan(order.indexOf("b:start"));
-		expect(order.indexOf("c:start")).toBeLessThan(order.indexOf("a:end"));
-	});
-
-	it("keeps call order when the keys are resolved asynchronously", async () => {
-		const queue = new MutationQueue();
-		const ran: string[] = [];
-		const resolveKey = async (ms: number, key: string) => {
-			await new Promise((resolve) => setTimeout(resolve, ms));
-			return key;
-		};
-		// The first caller resolves its key slowly; it must still queue first.
-		const first = queue.run(resolveKey(20, "same"), async () => {
-			ran.push("first");
-		});
-		const second = queue.run(resolveKey(1, "same"), async () => {
-			ran.push("second");
-		});
-		await Promise.all([first, second]);
-		expect(ran).toEqual(["first", "second"]);
-	});
-
-	it("drops keys once their queue drains", async () => {
-		const queue = new MutationQueue();
-		await queue.run("a", async () => "x");
-		expect(queue.depth).toBe(0);
-		// A failure releases the queue rather than wedging it.
-		await expect(queue.run("a", async () => Promise.reject(new Error("nope")))).rejects.toThrow("nope");
-		expect(queue.depth).toBe(0);
-		await expect(queue.run("a", async () => "after the failure")).resolves.toBe("after the failure");
-	});
-
-	it("two edits of one file in a parallel batch land in order", async () => {
-		const queue = new MutationQueue();
-		const file = { content: "start" };
-		const edit = (suffix: string) =>
-			queue.run("canonical:/tmp/one-file", async () => {
-				// Read-modify-write: without the queue the second edit would read the
-				// original content and lose the first edit.
-				await new Promise((resolve) => setTimeout(resolve, 5));
-				file.content = `${file.content}+${suffix}`;
-			});
-
-		await Promise.all([edit("first"), edit("second"), edit("third")]);
-		expect(file.content).toBe("start+first+second+third");
 	});
 });

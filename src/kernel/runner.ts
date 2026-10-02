@@ -712,8 +712,8 @@ export class Runner {
 	 * The runner adds no prompt text of its own — not even the persona. Persona is
 	 * *content*, and content belongs to whoever composes the prompt (the harness's
 	 * composer puts it right after the base prompt, where a provider cache keeps it
-	 * and where it cannot be duplicated). `kernel.persona.renderActive()` is the
-	 * block for that composer to use; `systemPrompt` here is used verbatim.
+	 * and where it cannot be duplicated). The harness renders the persona snapshot;
+	 * `systemPrompt` here is used verbatim.
 	 */
 	/** The transient messages for this turn, read once (see `takeTurn`). */
 	private resolveTransientMessages(): AgentMessage[] {
