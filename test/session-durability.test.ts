@@ -8,7 +8,8 @@
  * where the session was — including the new tip a later run hangs off.
  */
 import { describe, expect, it } from "vitest";
-import { MemoryStorage, SESSION_TIP, SessionLog, type StorageService, setValue, value } from "../src/index";
+import { SESSION_TIP, SessionLog } from "@eta/core/session";
+import { MemoryStorage, type StorageService, setValue, value } from "@eta/core/storage";
 
 const userMsg = (text: string) => ({
 	role: "user" as const,

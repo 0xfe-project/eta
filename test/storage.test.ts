@@ -1,6 +1,7 @@
 import { storageContract } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import { MemoryStorage, type MessageEntry, STORAGE_METHODS, setValue, value } from "../src/index";
+import { type MessageEntry } from "@eta/core/session";
+import { MemoryStorage, STORAGE_METHODS, setValue, value } from "@eta/core/storage";
 
 describe("StorageService interface shape", () => {
 	it("exposes exactly the agreed method surface", () => {

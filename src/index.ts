@@ -98,44 +98,9 @@ export {
 	ToolService,
 	type ToolUpdateOptions,
 } from "./kernel/tools";
-export { type ForkedChain, type ForkOptions, type ForkSelection, forkChain, selectBranchFork } from "./session/fork";
-export { recordGoalEntries } from "./session/goal-journal";
-export { EntryGraph, type GraphNode, spliceMergedChain } from "./session/graph";
-export {
-	type MergeOptions,
-	type MergeResult,
-	mergeBranch,
-	mergeTip,
-	type RollbackResult,
-	rollback,
-} from "./session/merge";
-export { type CommitOutcome, SESSION_TIP, SessionLog } from "./session/session-log";
-export { MemoryStorage } from "./storage/memory";
-export { InMemoryStorageState } from "./storage/state";
-export {
-	type BranchScan,
-	type CommitResult,
-	type CompactResult,
-	deleteValue,
-	type EntryCursor,
-	type EntryScan,
-	type RepairResult,
-	type SessionStats,
-	STORAGE_METHODS,
-	type StorageBranchScan,
-	type StorageService,
-	type StorageWrite,
-	type StoredValue,
-	setValue,
-	type UsageRow,
-	type UsageScan,
-	type UsageWrite,
-	type Value,
-	type ValueDeleteWrite,
-	type ValueSetWrite,
-	type ValueWrite,
-	value,
-} from "./storage/types";
+// Compatibility exports; new consumers should use the focused subpaths.
+export * from "./session/index";
+export * from "./storage/index";
 export {
 	CONFIG_PROPERTIES,
 	type CompactionEconomics,

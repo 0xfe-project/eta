@@ -8,3 +8,12 @@ it("imports the production entry without test dependencies", () => {
 	});
 	expect(output).toContain("Production import smoke passed");
 });
+
+it.each(["@eta/core/session", "@eta/core/storage"])("imports %s without kernel or model runtime", (entry) => {
+	const output = execFileSync(
+		"bun",
+		[fileURLToPath(new URL("./session-storage-import.smoke.mjs", import.meta.url)), entry],
+		{ encoding: "utf8" },
+	);
+	expect(output).toContain("Focused entry import passed");
+});

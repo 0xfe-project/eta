@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { EntryGraph, spliceMergedChain } from "../src/session/graph";
-import type { Entry, MessageEntry, NewEntry } from "../src/types/entries";
+import { EntryGraph, spliceMergedChain } from "@eta/core/session";
+import type { Entry, MessageEntry, NewEntry } from "@eta/core/session";
 
 const msg = (text: string): NewEntry<MessageEntry> => ({
 	id: crypto.randomUUID(),

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { forkChain, selectBranchFork } from "../src/session/fork";
-import { EntryGraph } from "../src/session/graph";
-import type { Entry, MessageEntry, NewEntry } from "../src/types/entries";
+import { forkChain, selectBranchFork } from "@eta/core/session";
+import { EntryGraph } from "@eta/core/session";
+import type { Entry, MessageEntry, NewEntry } from "@eta/core/session";
 
 const msg = (text: string, parentId: string | null = null): NewEntry<MessageEntry> => ({
 	id: crypto.randomUUID(),

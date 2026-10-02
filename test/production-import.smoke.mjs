@@ -18,3 +18,8 @@ for (const name of ["fakeModels", "assistantMessage", "storageContract", "realMo
 	assert.equal(name in core, false, `${name} must stay in @eta/core/testing`);
 }
 console.log("Production import smoke passed");
+
+for (const path of ["@eta/core/session", "@eta/core/storage"]) {
+ const focused = await import(path);
+ for (const [name, value] of Object.entries(focused)) assert.equal(core[name], value, `${name} root compatibility`);
+}
