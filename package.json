@@ -21,7 +21,6 @@
 	},
 	"dependencies": {
 		"@eta/core": "*",
-		"@eta/harness": "*",
-		"@earendil-works/pi-ai": "0.85.1"
+		"@eta/harness": "*"
 	}
 }
