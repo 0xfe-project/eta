@@ -12,7 +12,7 @@
  * `list()` answers with rows that are either a session or a reason, and never
  * silently omits one.
  */
-import type { StorageService } from "@eta/core";
+import type { StorageService } from "@eta/core/storage";
 
 /** What a sidebar needs about a session without opening it. */
 export interface SessionMeta {

@@ -17,7 +17,7 @@
  */
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { StorageService } from "@eta/core";
+import type { StorageService } from "@eta/core/storage";
 import { JsonlStorage, type JsonlStorageOptions } from "@eta/storage-jsonl";
 import type { SessionListing, SessionMeta, SessionStore, StoredSession } from "./store";
 

@@ -6,7 +6,7 @@
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SessionLog } from "@eta/core";
+import { SessionLog } from "@eta/core/session";
 import { afterEach, describe, expect, it } from "vitest";
 import { FileSessionStore, JOURNAL_FILE, META_FILE } from "../src/file-store";
 import { sessionStoreContract } from "../src/testing";

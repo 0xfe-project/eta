@@ -5,7 +5,7 @@
  * genuinely its own (its own kernel, journal, usage, ledger), listing does not
  * require opening, and closing one leaves the others alone.
  */
-import { SessionLog } from "@eta/core";
+import { SessionLog } from "@eta/core/session";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { SessionManager } from "../src/manager";

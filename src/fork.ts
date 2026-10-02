@@ -20,8 +20,10 @@
  *   would report a bill it never ran up.
  */
 
-import type { Entry, ForkedChain, NewEntry, StorageService, StorageWrite } from "@eta/core";
-import { SESSION_TIP, setValue } from "@eta/core";
+import type { Entry, ForkedChain, NewEntry } from "@eta/core/session";
+import type { StorageService, StorageWrite } from "@eta/core/storage";
+import { SESSION_TIP } from "@eta/core/session";
+import { setValue } from "@eta/core/storage";
 import { SESSION_CONFIG } from "@eta/harness";
 
 /** The writes that turn an empty session into a copy of a forked chain. */

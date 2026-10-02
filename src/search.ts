@@ -16,7 +16,8 @@
  * something the session does not say any more. The branch is what a session's own `SessionLog`
  * already holds, so both take entries rather than reaching for storage.
  */
-import type { AgentMessage, Entry } from "@eta/core";
+import type { AgentMessage } from "@eta/core";
+import type { Entry } from "@eta/core/session";
 
 /** One row of a transcript page. */
 export interface HistoryRow {

@@ -8,7 +8,7 @@
  * and a page has to be the `limit` messages *before* it. An off-by-one there shows a duplicate row
  * at every page boundary, which is the kind of bug a reader notices and cannot explain.
  */
-import type { Entry } from "@eta/core";
+import type { Entry } from "@eta/core/session";
 import { describe, expect, it } from "vitest";
 import { branchMessages, firstHit, historyOf, messageText } from "../src/search";
 

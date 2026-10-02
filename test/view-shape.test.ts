@@ -17,7 +17,8 @@ import {
 	type StoredTask,
 	stateSection,
 } from "@eta/client-contracts";
-import { type GoalState as RuntimeGoal, type StoredTask as RuntimeTask, MemoryStorage } from "@eta/core";
+import { type GoalState as RuntimeGoal, type StoredTask as RuntimeTask } from "@eta/core";
+import { MemoryStorage } from "@eta/core/storage";
 import { fakeModels } from "@eta/core/testing";
 import { type BtwThread, type SubagentRecord, openSession } from "@eta/harness";
 import { describe, expect, it } from "vitest";

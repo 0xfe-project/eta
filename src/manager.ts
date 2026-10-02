@@ -21,7 +21,8 @@
  * hand `openSession` something that can generate.
  */
 import type { CompactionSummarizer, KernelModels, PersonaCard } from "@eta/core";
-import { DEFAULT_COMPACTION_SETTINGS, forkChain } from "@eta/core";
+import { DEFAULT_COMPACTION_SETTINGS } from "@eta/core";
+import { forkChain } from "@eta/core/session";
 import {
 	type ExecutionEnv,
 	envMemoryFs,
