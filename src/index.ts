@@ -27,28 +27,6 @@
  * `reply { ok: false, error: "unknown op: sessions.promt" }` instead of a compile error —
  * the price of a server that knows no feature names, paid with a published contract.
  */
-import type { MountedPlugin, SessionViewSections, ViewDiagnostics } from "./types";
-
-export type {
-	EtaModelConfig,
-	ModelCapabilities,
-	MountedPlugin,
-	NetworkConfig,
-	PluginPanelDescriptor,
-	PluginSlot,
-	ProviderHeaders,
-	ProviderKind,
-	ProviderSummary,
-	ProvidersView,
-	SectionName,
-	SessionState,
-	SessionViewSections,
-	SidebarSession,
-	ViewCore,
-	ViewDiagnostics,
-	ViewMessageRow,
-} from "./types";
-
 // ------------------------------------------------------------------- the client's side
 
 /** One request. `requestId` is how the reply finds its way back; omitted means fire-and-forget. */
@@ -119,16 +97,16 @@ export interface StatePatch {
 	revisions: Record<string, string>;
 }
 
-export interface HelloFrame {
+export interface HelloFrame<Mounted = unknown, Diagnostics = unknown> {
 	type: "hello";
 	/** Everything callable right now, with the contract each owner declared. */
 	ops: OpDescriptor[];
 	/** Every plugin the server has, with its front-end descriptor or the error that stopped it. */
-	mounted: MountedPlugin[];
+	mounted: Mounted[];
 	/** The state of every eager target: a client that just connected can draw immediately. */
 	state: Record<string, StateSnapshot>;
 	/** What the prompt layer last reported, when the server has one (a panel reads it). */
-	diagnostics?: ViewDiagnostics | undefined;
+	diagnostics?: Diagnostics | undefined;
 }
 
 export interface ReplyFrame {
@@ -204,15 +182,6 @@ export function stateDiff(
 		moved = true;
 	}
 	return moved ? { sections, revisions: snapshot.revisions } : undefined;
-}
-
-/** Read one section with its type, admitting that it may be absent. */
-export function stateSection<K extends keyof SessionViewSections>(
-	state: StateSnapshot | StatePatch,
-	name: K,
-): SessionViewSections[K] | undefined {
-	const sections: Record<string, unknown> = { ...state.sections };
-	return sections[name as string] as SessionViewSections[K] | undefined;
 }
 
 // ------------------------------------------------------------------- codec

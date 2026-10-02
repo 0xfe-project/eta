@@ -7,7 +7,6 @@
  * move is not sent, a section that went away is reported by its absence, and a client that
  * holds nothing gets everything.
  */
-import type { AgentMessage } from "@eta/core";
 import { describe, expect, it } from "vitest";
 import {
 	CLIENT_OP_NAMES,
@@ -18,11 +17,9 @@ import {
 	type ServerFrame,
 	type StateSnapshot,
 	stateDiff,
-	stateSection,
 } from "../src/index";
 
-const message = (text: string): AgentMessage =>
-	({ role: "user", content: [{ type: "text", text }], timestamp: 0 }) as AgentMessage;
+const message = (text: string) => ({ role: "user", content: [{ type: "text", text }], timestamp: 0 });
 
 const snapshot = (overrides: Partial<StateSnapshot> = {}): StateSnapshot => ({
 	sections: {
@@ -123,15 +120,5 @@ describe("the state diff", () => {
 		const patch = stateDiff(before.revisions, after);
 		if (patch === undefined || patch === "full") throw new Error("expected a patch");
 		expect(patch.sections["ssh.host"]).toBe("build-box");
-	});
-});
-
-describe("reading a section", () => {
-	it("types the sections a session is known to have, and admits they may be absent", () => {
-		const state = snapshot();
-		expect(stateSection(state, "transcript")?.messages).toHaveLength(1);
-		expect(stateSection(state, "goal")).toBeUndefined();
-		// A session target's core is a section like any other — no special case.
-		expect(stateSection(state, "core")?.session).toBe("s1");
 	});
 });
