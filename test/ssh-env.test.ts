@@ -11,7 +11,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { envContract } from "@eta/harness/testing";
+import { envContract } from "@eta/execution/testing";
 import { describe, expect, it } from "vitest";
 import { SshEnvironment } from "../src/env";
 import { LocalTransport } from "../src/local-transport";

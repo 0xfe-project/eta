@@ -19,7 +19,7 @@
  * - **Spill files land on the machine the commands run on**, so the agent's own
  *   `read` tool — which goes through this same environment — can open them.
  */
-import { LiveOutput, OutputBuffer } from "@eta/harness";
+import { LiveOutput, OutputBuffer } from "@eta/execution/output";
 import {
 	type EnvCallOptions,
 	type ExecutionEnv,
@@ -34,7 +34,7 @@ import {
 	type ShellOutputLimits,
 	type TextLine,
 	type TextLineReader,
-} from "@eta/harness/env";
+} from "@eta/execution";
 import { type SshResult, type SshRunOptions, type SshTransport, shellQuote } from "./transport";
 
 /** The exit codes the scripts below use; each one maps to a stable error code. */

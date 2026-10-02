@@ -12,7 +12,7 @@
  * rather than a check that ssh happens to trust the host already.
  */
 
-import { envContract } from "@eta/harness/testing";
+import { envContract } from "@eta/execution/testing";
 import { describe, expect, it } from "vitest";
 import { SshEnvironment } from "../src/env";
 import { SshCommandTransport } from "../src/transport";
