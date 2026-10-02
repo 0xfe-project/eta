@@ -11,6 +11,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
+import type { SessionEnvironments } from "@eta/plugin-sdk";
 import { type AssembledServer, assembleServer } from "@eta/server";
 import { LocalTransport } from "@eta/ssh";
 import { afterEach, describe, expect, it } from "vitest";
@@ -91,7 +92,8 @@ describe("a session bound to a remote target", () => {
 			{ reply: () => undefined } as never,
 		);
 		plugin.bind("session-remote", "box");
-		const environment = await plugin.environments.for("session-remote");
+		const environments: SessionEnvironments = plugin.environments;
+		const environment = await environments.for("session-remote");
 		expect(environment).toBeDefined();
 
 		// The session itself, opened with that environment: its tools are the harness's, and they

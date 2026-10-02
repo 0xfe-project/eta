@@ -27,6 +27,7 @@
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { StateSnapshot } from "@eta/client-wire-proto";
+import type { Plugin, PluginContext, SessionEnvironments, WireApi } from "@eta/plugin-sdk";
 import { SshCommandTransport, SshEnvironment, type SshTarget, type SshTransport } from "@eta/ssh";
 
 /** The actions this target has. One list, so the wire and the plugin cannot disagree. */
@@ -67,18 +68,13 @@ export interface SshPluginOptions {
 }
 
 /** What the manager needs from this plugin: the environment for one session. */
-export interface SshEnvironments {
-	/** The environment for a session, when that session is bound to a target. */
+export interface SshEnvironments extends SessionEnvironments<{ env: SshEnvironment; memoryFs: undefined }> {
 	for(session: string): Promise<{ env: SshEnvironment; memoryFs: undefined } | undefined>;
 }
 
-export interface SshPlugin {
-	name: string;
-	inject: string[];
-	apply(ctx: unknown): unknown;
-	/** How a host tells this plugin which machine a session runs on. */
+export interface SshPlugin extends Plugin {
+	/** Bind a session before resolving its environment. */
 	bind(session: string, targetId: string): void;
-	/** The manager's `envFor`: the environment for a session, or `undefined` when it is local. */
 	environments: SshEnvironments;
 }
 
@@ -99,7 +95,7 @@ export function sshPlugin(options: SshPluginOptions): SshPlugin {
 	/** One connection per target, reused: a session's tools should not pay for a handshake each. */
 	const connections = new Map<string, Promise<SshTransport>>();
 	let loaded = false;
-	let wire: SshWire | undefined;
+	let wire: WireApi | undefined;
 
 	const load = async (): Promise<void> => {
 		if (loaded) return;
@@ -206,14 +202,13 @@ export function sshPlugin(options: SshPluginOptions): SshPlugin {
 				return { env, memoryFs: undefined };
 			},
 		},
-		apply(ctx: unknown): unknown {
-			const context = ctx as {
-				wire: SshWire;
-				effect(execute: () => () => unknown): unknown;
-			};
+		apply(context: PluginContext): unknown {
+			let active = true;
 			wire = context.wire;
 			void load().then(
-				() => wire?.pushNow("ssh"),
+				() => {
+					if (active) context.wire.pushNow("ssh");
+				},
 				(error: unknown) => options.warn?.(`[eta-ssh] could not read ${options.path}: ${String(error)}`),
 			);
 
@@ -286,26 +281,24 @@ export function sshPlugin(options: SshPluginOptions): SshPlugin {
 						return { result: { target: record } };
 					}),
 				];
-				return () => {
-					for (const off of registrations.splice(0)) off();
-					for (const pending of connections.values())
-						void pending.then(
-							(transport) => transport.close(),
-							() => undefined,
-						);
-					connections.clear();
+				return async () => {
+					active = false;
 					wire = undefined;
+					for (const off of registrations.splice(0)) off();
+					const pending = [...connections.values()];
+					connections.clear();
+					await Promise.all(
+						pending.map((opening) =>
+							opening.then(
+								(transport) => transport.close(),
+								() => undefined,
+							),
+						),
+					);
 				};
 			});
 		},
 	};
-}
-
-/** What this plugin needs from the shell: the wire service, structurally. */
-interface SshWire {
-	handle(target: string, action: string, handler: (call: { args?: unknown }) => unknown): () => void;
-	stateOf(target: string, projector: { project(): StateSnapshot; eager?: boolean }): () => void;
-	pushNow(target: string): void;
 }
 
 /** Where the plugin remembers its targets. */

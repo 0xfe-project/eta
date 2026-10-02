@@ -183,3 +183,56 @@ describe("a target that is not there", () => {
 		await expect(call(wire, "save", { target: { id: "x" } })).rejects.toThrow(/needs a target with an id and a host/);
 	});
 });
+
+it("unload waits for a pending connection to close, then can remount once", async () => {
+	const root = await scratch();
+	const ctx = new Context();
+	const wire = new WireService(ctx);
+	let resolveOpening!: (transport: LocalTransport) => void;
+	const opening = new Promise<LocalTransport>((resolve) => {
+		resolveOpening = resolve;
+	});
+	let releaseClose!: () => void;
+	const closing = new Promise<void>((resolve) => {
+		releaseClose = resolve;
+	});
+	let closeStarted = false;
+	const transport = new LocalTransport({ home: root });
+	transport.close = async () => {
+		closeStarted = true;
+		await closing;
+	};
+	const plugin = sshPlugin({ path: join(root, "ssh.json"), transportFor: () => opening });
+	const fiber = ctx.plugin(plugin as never, undefined as never);
+	await until(() => wire.descriptors().length > 0);
+	await call(wire, "save", { target: { id: "box", host: "box.example" } });
+	const connecting = call(wire, "connect", { id: "box" });
+	// Let connect record its opening promise before disposing the plugin.
+	await Promise.resolve();
+	let disposed = false;
+	const disposal = fiber.dispose().then(() => {
+		disposed = true;
+	});
+	try {
+		await until(() => wire.descriptors().length === 0);
+		expect(wire.snapshot("ssh")).toBeUndefined();
+		expect(disposed).toBe(false);
+		resolveOpening(transport);
+		await connecting;
+		await until(() => closeStarted);
+		expect(disposed).toBe(false);
+		releaseClose();
+		await disposal;
+		const replacement = ctx.plugin(plugin as never, undefined as never);
+		await until(() => wire.descriptors().length > 0);
+		expect(wire.descriptors()).toHaveLength(SSH_ACTIONS.length);
+		await replacement.dispose();
+		expect(wire.descriptors()).toEqual([]);
+	} finally {
+		resolveOpening(transport);
+		releaseClose();
+		await connecting;
+		await disposal;
+		await ctx.fiber.dispose();
+	}
+});

@@ -27,6 +27,7 @@
 	},
 	"dependencies": {
 		"@eta/ssh": "*",
-		"@eta/client-wire-proto": "*"
+		"@eta/client-wire-proto": "*",
+		"@eta/plugin-sdk": "*"
 	}
 }
