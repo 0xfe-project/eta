@@ -30,15 +30,13 @@ import type { Api, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import {
 	type AgentMessage,
 	type AssistantMessage,
-	addUsage,
-	emptyUsage,
 	type KernelModels,
 	type Message,
 	type Model,
 	type RequestState,
 	type ToolCall,
-	type Usage,
 } from "@eta/core";
+import { addUsage, emptyUsage, type Usage } from "@eta/core/storage";
 
 /** Output cap per request and across one question: turns add up, so the budget is shared. */
 export const SIDE_MAX_TOKENS = 1024;
@@ -239,7 +237,8 @@ async function complete(
  *   that were never saved are panel state, and `replay` rebuilds what the entries
  *   say about them.
  */
-import type { Emit, Entry } from "@eta/core";
+import type { Emit } from "@eta/core";
+import type { Entry } from "@eta/core/session";
 
 export type BtwSaveState = "not-saved" | "queued" | "saved";
 

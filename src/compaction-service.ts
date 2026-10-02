@@ -41,10 +41,10 @@ import {
 	type CompactionSummarizer,
 	type ConfigService,
 	type Emit,
-	type Entry,
 	kernelEmit,
 	kernelOn,
 } from "@eta/core";
+import { type Entry } from "@eta/core/session";
 import { type Context, Service } from "cordis";
 import { estimateContextTokens, fitCompactionSettings, shouldCompact } from "./estimation";
 

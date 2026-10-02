@@ -21,7 +21,7 @@
  *   question twice.
  */
 
-import type { AnswerPayload, AskPayload } from "@eta/core";
+import type { AnswerPayload, AskPayload } from "@eta/core/session";
 import { Type } from "typebox";
 import type { HarnessTool, ToolResult } from "./tools/tool";
 

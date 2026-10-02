@@ -9,19 +9,9 @@
  */
 
 import type { Usage } from "@earendil-works/pi-ai";
-import {
-	type Entry,
-	Kernel,
-	kernelEmit,
-	kernelOn,
-	MemoryStorage,
-	type MessageEntry,
-	Runner,
-	SessionLog,
-	type StorageService,
-	type StorageWrite,
-	type UsageRow,
-} from "@eta/core";
+import { Kernel, kernelEmit, kernelOn, Runner } from "@eta/core";
+import { type Entry, type MessageEntry, SessionLog } from "@eta/core/session";
+import { MemoryStorage, type StorageService, type StorageWrite, type UsageRow } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { JournalingService } from "../src/index";

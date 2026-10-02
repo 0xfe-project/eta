@@ -7,7 +7,9 @@
  * parts change. This test drives a real run and compares the system prompt the
  * provider was handed on turn one with the one it was handed on turn two.
  */
-import { MemoryStorage, Runner, SessionLog } from "@eta/core";
+import { Runner } from "@eta/core";
+import { SessionLog } from "@eta/core/session";
+import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SYSTEM_PROMPT } from "../src/prompts";

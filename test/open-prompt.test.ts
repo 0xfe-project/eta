@@ -6,7 +6,7 @@
  * which blocks appear, in which order, that the stable prefix does not move between
  * generations while the adaptive tail does, and that a host's own prompt still wins.
  */
-import { MemoryStorage } from "@eta/core";
+import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { openSession } from "../src/open";

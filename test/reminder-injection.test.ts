@@ -7,7 +7,8 @@
  * it as a transient `<system-reminder>` message, and it leaves nothing behind:
  * not in the transcript, not in the journal, not in the cacheable prefix.
  */
-import { type KernelTool, MemoryStorage } from "@eta/core";
+import { type KernelTool } from "@eta/core";
+import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { openSession } from "../src/open";

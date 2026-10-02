@@ -7,7 +7,9 @@
  * work stopped where it was, and what it had already committed stands.
  */
 
-import { AbortRequested, createGate, Kernel, kernelOn, MemoryStorage, Runner, SessionLog } from "@eta/core";
+import { AbortRequested, createGate, Kernel, kernelOn, Runner } from "@eta/core";
+import { SessionLog } from "@eta/core/session";
+import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { journaledKernel } from "../src/testing";

@@ -15,7 +15,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { MemoryStorage } from "@eta/core";
+import { MemoryStorage } from "@eta/core/storage";
 import { realModels, selectProvider } from "@eta/core/testing";
 import { NodeEnvironment } from "@eta/execution-node";
 import { describe, expect, it } from "vitest";

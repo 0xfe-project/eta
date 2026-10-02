@@ -13,7 +13,8 @@
  */
 
 import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
-import type { AgentMessage, CompactionSettings, Entry, MessageEntry } from "@eta/core";
+import type { AgentMessage, CompactionSettings } from "@eta/core";
+import type { Entry, MessageEntry } from "@eta/core/session";
 
 /**
  * The window-independent ceiling (REFACTOR.md, memory #40/#50).

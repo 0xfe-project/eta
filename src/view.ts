@@ -23,7 +23,8 @@
  * This file returns plain data — no wire types, no frame shapes. The server maps it to
  * the wire, and a structural test there keeps the two honest.
  */
-import { type AgentMessage, type Entry, type GoalState, type KernelConfig, kernelOn, type StoredTask } from "@eta/core";
+import { type AgentMessage, type GoalState, type KernelConfig, kernelOn, type StoredTask } from "@eta/core";
+import { type Entry } from "@eta/core/session";
 import { type Context, Service } from "cordis";
 
 /** The session's own slice: who it is, and whether something is happening right now. */

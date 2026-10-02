@@ -6,7 +6,9 @@
  * switch applies at once), it must not inherit the tool that would steal the
  * user's attention, and it must not run forever.
  */
-import { type AgentMessage, MemoryStorage, Runner, SessionLog, type ToolCall } from "@eta/core";
+import { type AgentMessage, Runner, type ToolCall } from "@eta/core";
+import { SessionLog } from "@eta/core/session";
+import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { btwSideAsk, SIDE_MAX_TOOL_TURNS } from "../src/btw";

@@ -11,7 +11,8 @@
  * Reads come from the storage (committed truth), writes go through the
  * journaling service, which orders them behind whatever the loop already queued.
  */
-import { deleteValue, type SessionLog, type StorageService, setValue, value } from "@eta/core";
+import { type SessionLog } from "@eta/core/session";
+import { deleteValue, type StorageService, setValue, value } from "@eta/core/storage";
 import type { JournalingService } from "./journaling";
 
 /** The namespace the model's own keys live in. */

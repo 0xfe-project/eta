@@ -8,7 +8,9 @@
  * something to say, its revision moves only when its state does, a withdrawn
  * contribution leaves no trace, and a broken contribution does not take the frame down.
  */
-import { MemoryStorage, Runner, SessionLog } from "@eta/core";
+import { Runner } from "@eta/core";
+import { SessionLog } from "@eta/core/session";
+import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { Context } from "cordis";
 import { describe, expect, it } from "vitest";

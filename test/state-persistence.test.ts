@@ -13,10 +13,10 @@ import {
 	DEFAULT_RETRY_POLICY,
 	Kernel,
 	type KernelConfig,
-	MemoryStorage,
-	SessionLog,
 	type StoredTask,
 } from "@eta/core";
+import { SessionLog } from "@eta/core/session";
+import { MemoryStorage } from "@eta/core/storage";
 import { describe, expect, it } from "vitest";
 import { JournalingService } from "../src/index";
 import { journaledKernel, SESSION_CONFIG, TASKS_STATE } from "../src/testing";

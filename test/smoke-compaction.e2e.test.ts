@@ -12,7 +12,9 @@
  */
 
 import { etaCompaction } from "@eta/compaction";
-import { type AssistantMessage, kernelOn, MemoryStorage, SessionLog } from "@eta/core";
+import { type AssistantMessage, kernelOn } from "@eta/core";
+import { SessionLog } from "@eta/core/session";
+import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, realModels, selectProvider } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { openSession, RunPump } from "../src/index";

@@ -14,7 +14,7 @@
  * transcript survives a reload.
  */
 
-import { MemoryStorage } from "@eta/core";
+import { MemoryStorage } from "@eta/core/storage";
 import { realModels, selectProvider } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { runSmokeScenario } from "../src/testing";

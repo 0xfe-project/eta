@@ -6,7 +6,8 @@
  * are thin over the kernel's ledger and the journal's KV — that thinness is what
  * makes "it is still there" a real assertion rather than an echo.
  */
-import { MemoryStorage, SessionLog } from "@eta/core";
+import { SessionLog } from "@eta/core/session";
+import { MemoryStorage } from "@eta/core/storage";
 import { fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { openSession } from "../src/open";

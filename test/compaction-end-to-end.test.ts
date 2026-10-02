@@ -16,10 +16,10 @@ import {
 	DEFAULT_COMPACTION_SETTINGS,
 	type Kernel,
 	kernelOn,
-	MemoryStorage,
 	Runner,
-	SessionLog,
 } from "@eta/core";
+import { SessionLog } from "@eta/core/session";
+import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { type CompactionEntrySource, CompactionService } from "../src/index";

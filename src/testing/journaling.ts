@@ -6,7 +6,8 @@
  * and the runner on top. Tests that need the journal but not the whole session
  * use this, so they are wired like a real one instead of like a special case.
  */
-import { Kernel, type KernelConfig, type SessionLog } from "@eta/core";
+import { Kernel, type KernelConfig } from "@eta/core";
+import { type SessionLog } from "@eta/core/session";
 import { JournalingService } from "../journaling";
 
 export interface JournaledKernel {

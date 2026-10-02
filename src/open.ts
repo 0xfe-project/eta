@@ -40,7 +40,6 @@ import {
 	type AgentMessage,
 	applyGoalEntries,
 	defaultKernelConfig,
-	type GoalEntry,
 	Kernel,
 	type KernelConfig,
 	type KernelModels,
@@ -49,13 +48,12 @@ import {
 	kernelOn,
 	Runner,
 	type RunnerOptions,
-	recordGoalEntries,
-	SessionLog,
-	type StorageService,
 	type StoredTask,
 	sessionScope,
 	toToolResultMessage,
 } from "@eta/core";
+import { type GoalEntry, recordGoalEntries, SessionLog } from "@eta/core/session";
+import { type StorageService } from "@eta/core/storage";
 import type { TSchema } from "typebox";
 import { AskRegistry, createAskUserTool } from "./ask";
 import { BtwManager, btwSideAsk } from "./btw";

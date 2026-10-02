@@ -9,21 +9,9 @@
  */
 
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import {
-	applyGoalEntries,
-	type Entry,
-	type GoalEntry,
-	Kernel,
-	kernelOn,
-	MemoryStorage,
-	Runner,
-	recordGoalEntries,
-	SessionLog,
-	type StorageService,
-	type StorageWrite,
-	setValue,
-	value,
-} from "@eta/core";
+import { applyGoalEntries, Kernel, kernelOn, Runner } from "@eta/core";
+import { type Entry, type GoalEntry, recordGoalEntries, SessionLog } from "@eta/core/session";
+import { MemoryStorage, type StorageService, type StorageWrite, setValue, value } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { journaledKernel } from "../src/testing";

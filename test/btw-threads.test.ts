@@ -12,7 +12,7 @@
  * - a saved note is durable, and a failed question leaves nothing behind that could
  *   later replay as something the model said.
  */
-import { MemoryStorage } from "@eta/core";
+import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { BtwManager, type BtwSideAsk } from "../src/btw";

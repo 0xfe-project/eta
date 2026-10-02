@@ -9,7 +9,9 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MemoryStorage, Runner, SessionLog, type ToolCallInfo } from "@eta/core";
+import { Runner, type ToolCallInfo } from "@eta/core";
+import { SessionLog } from "@eta/core/session";
+import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { getOrThrow } from "@eta/execution";
 import { NodeEnvironment } from "@eta/execution-node";

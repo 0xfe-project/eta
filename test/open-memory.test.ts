@@ -9,7 +9,8 @@
  * picked up, and no extraction failure ever costs a turn.
  */
 
-import { type KernelModels, MemoryStorage } from "@eta/core";
+import { type KernelModels } from "@eta/core";
+import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { MemoryEnvironment } from "../src/env/memory";

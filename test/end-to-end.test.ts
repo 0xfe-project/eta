@@ -9,18 +9,9 @@
  */
 
 import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
-import {
-	applyGoalEntries,
-	type GoalEntry,
-	type KernelTool,
-	kernelOn,
-	MemoryStorage,
-	Runner,
-	recordGoalEntries,
-	SessionLog,
-	sessionTokenTotal,
-	type UsageRow,
-} from "@eta/core";
+import { applyGoalEntries, type KernelTool, kernelOn, Runner } from "@eta/core";
+import { type GoalEntry, recordGoalEntries, SessionLog } from "@eta/core/session";
+import { MemoryStorage, sessionTokenTotal, type UsageRow } from "@eta/core/storage";
 import { assistantMessage, type FakeCompaction, fakeCompaction, fakeModels } from "@eta/core/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { composeEtaSystemPrompt, MetricsService } from "../src/index";

@@ -12,14 +12,14 @@ import {
 	DEFAULT_MAX_AGENT_RETRY_DELAY_MS,
 	DEFAULT_RETRY_POLICY,
 	kernelOn,
-	MemoryStorage,
 	normalizedRetryPolicy,
 	Runner,
 	retryDelayMs,
 	retryNotBefore,
-	SessionLog,
 	waitUntil,
 } from "@eta/core";
+import { SessionLog } from "@eta/core/session";
+import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { journaledKernel } from "../src/testing";
