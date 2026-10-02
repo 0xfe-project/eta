@@ -25,7 +25,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { MountedPlugin, PluginPanelDescriptor } from "@eta/client-wire-proto";
+import type { MountedPlugin, PluginPanelDescriptor } from "@eta/client-contracts";
 import type { Context } from "cordis";
 
 /** What a plugin's `package.json` says about itself. */

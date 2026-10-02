@@ -23,7 +23,7 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { MountedPlugin } from "@eta/client-wire-proto";
+import type { MountedPlugin } from "@eta/client-contracts";
 import type { CompactionSummarizer, KernelModels } from "@eta/core";
 import { Context } from "cordis";
 import { personasPlugin } from "./bundled/personas";

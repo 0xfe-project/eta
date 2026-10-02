@@ -8,10 +8,18 @@
  */
 
 import type { StatePatch, StateSnapshot } from "@eta/client-wire-proto";
-import { stateDiff, stateSection } from "@eta/client-wire-proto";
-import { MemoryStorage } from "@eta/core";
+
+import { stateDiff } from "@eta/client-wire-proto";
+import {
+	type SessionViewBtwThread,
+	type SessionViewSubagent,
+	type GoalState,
+	type StoredTask,
+	stateSection,
+} from "@eta/client-contracts";
+import { type GoalState as RuntimeGoal, type StoredTask as RuntimeTask, MemoryStorage } from "@eta/core";
 import { fakeModels } from "@eta/core/testing";
-import { openSession } from "@eta/harness";
+import { type BtwThread, type SubagentRecord, openSession } from "@eta/harness";
 import { describe, expect, it } from "vitest";
 
 describe("the harness snapshot is what the wire says a view is", () => {
@@ -43,8 +51,19 @@ describe("the harness snapshot is what the wire says a view is", () => {
 		expect(patch).not.toBe("full");
 		const typed = patch as StatePatch;
 		expect(Object.keys(typed.sections)).toEqual(["tasks"]);
+		const received: StateSnapshot = JSON.parse(JSON.stringify(changed));
+		expect(stateSection(received, "tasks")?.[0]?.content).toBe("a task worth showing");
+		expect(stateSection(received, "core")).toEqual(stateSection(changed, "core"));
 
 		await session.kernel.dispose();
 		session.stop();
 	});
 });
+
+// These DTOs must remain structurally compatible with their runtime producers,
+// while the client builds with neither producer nor its dependencies installed.
+const btwDto = (value: BtwThread): SessionViewBtwThread => value;
+const subagentDto = (value: SubagentRecord): SessionViewSubagent => value;
+const goalDto = (value: RuntimeGoal): GoalState => value;
+const taskDto = (value: RuntimeTask): StoredTask => value;
+void [btwDto, subagentDto, goalDto, taskDto];

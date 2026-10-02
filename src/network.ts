@@ -26,7 +26,7 @@
  */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { NetworkConfig } from "@eta/client-wire-proto";
+import type { NetworkConfig } from "@eta/client-contracts";
 
 const exec = promisify(execFile);
 type Environment = Record<string, string | undefined>;

@@ -22,7 +22,7 @@
  * a run ends (the runner), whether an inject starts a run (the harness pump), or durability
  * (the store). Policy stays where it already is; this file is wiring.
  */
-import type { SidebarSession } from "@eta/client-wire-proto";
+import type { SidebarSession, SessionArgs, PromptImage, PromptInput } from "@eta/client-contracts";
 import type { GoalState, ImageContent, StoredTask, Task, TaskStatus, ThinkingLevel } from "@eta/core";
 import { THINKING_LEVELS, thinkingLevelsFor } from "@eta/core";
 import { type AskResponse, type BtwSaveState, type BtwThread, sessionStateKV } from "@eta/harness";
@@ -34,52 +34,7 @@ import { firstHit, type HistoryRow, historyOf, type SearchHit } from "../search"
 import type { SessionMeta } from "../store";
 import type { WireService } from "../wire-service";
 
-/** The actions this target has. One list, so the wire and the plugin cannot disagree. */
-export const SESSION_ACTIONS = [
-	"create",
-	"delete",
-	"focus",
-	"resync",
-	"prompt",
-	"abort",
-	"rename",
-	"pin",
-	"archive",
-	"fork",
-	"compact",
-	"btwOpen",
-	"btwAsk",
-	"btwAnswer",
-	"btwSave",
-	"btwHandoff",
-	"btwClear",
-	"subagentStop",
-	"history",
-	"search",
-	"goal",
-	"taskCreate",
-	"taskUpdate",
-	"taskSet",
-	"taskRemove",
-	"stateDelete",
-	"answer",
-	"askAbort",
-	"modelSet",
-	"thinkingLevel",
-	"queueRemove",
-] as const;
-export type SessionAction = (typeof SESSION_ACTIONS)[number];
-
-export interface PromptImage {
-	mime: string;
-	dataBase64: string;
-}
-
-export interface PromptInput {
-	text: string;
-	mode?: "queue" | "steer" | undefined;
-	images?: PromptImage[] | undefined;
-}
+export { SESSION_ACTIONS, type SessionAction, type PromptImage, type PromptInput } from "@eta/client-contracts";
 
 export interface SessionsPluginOptions {
 	manager: SessionManager;
@@ -737,19 +692,14 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				// only reason they live here rather than in a privileged API surface.
 				registrations.push(
 					wire.handle("sessions", "create", async (call) => {
-						const args = (call.args ?? {}) as CreateSessionOptions;
+						const args = (call.args ?? {}) as Partial<SessionArgs["create"]>;
 						const session = await service.create({ ...args, cwd: args.cwd ?? process.cwd() });
 						return { result: { session } };
 					}),
 				);
 				registrations.push(
 					wire.handle("sessions", "prompt", async (call) => {
-						const args = (call.args ?? {}) as {
-							session?: string;
-							text?: string;
-							mode?: "queue" | "steer";
-							images?: PromptImage[];
-						};
+						const args = (call.args ?? {}) as Partial<SessionArgs["prompt"]>;
 						if (args.session === undefined || args.text === undefined) {
 							throw new Error("sessions.prompt needs a session and a text");
 						}
@@ -763,7 +713,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "abort", async (call) => {
-						const { session } = (call.args ?? {}) as { session?: string };
+						const { session } = (call.args ?? {}) as Partial<SessionArgs["abort"]>;
 						if (session === undefined) throw new Error("sessions.abort needs a session");
 						await service.abort(session);
 						return {};
@@ -771,7 +721,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "focus", async (call) => {
-						const { session } = (call.args ?? {}) as { session?: string };
+						const { session } = (call.args ?? {}) as Partial<SessionArgs["focus"]>;
 						if (session === undefined) throw new Error("sessions.focus needs a session");
 						await service.focus(session);
 						return {};
@@ -779,14 +729,14 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "delete", async (call) => {
-						const { session } = (call.args ?? {}) as { session?: string };
+						const { session } = (call.args ?? {}) as Partial<SessionArgs["delete"]>;
 						if (session === undefined) throw new Error("sessions.delete needs a session");
 						return { result: { removed: await service.remove(session) } };
 					}),
 				);
 				registrations.push(
 					wire.handle("sessions", "rename", async (call) => {
-						const { session, title } = (call.args ?? {}) as { session?: string; title?: string };
+						const { session, title } = (call.args ?? {}) as Partial<SessionArgs["rename"]>;
 						if (session === undefined) throw new Error("sessions.rename needs a session");
 						// An empty title is a clear, not a rename to "" — the sidebar shows the cwd then.
 						const meta = await service.setMeta(session, {
@@ -797,7 +747,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "pin", async (call) => {
-						const { session, pinned } = (call.args ?? {}) as { session?: string; pinned?: boolean };
+						const { session, pinned } = (call.args ?? {}) as Partial<SessionArgs["pin"]>;
 						if (session === undefined) throw new Error("sessions.pin needs a session");
 						if (typeof pinned !== "boolean") throw new Error("sessions.pin needs pinned: true or false");
 						await service.setMeta(session, { pinned });
@@ -806,7 +756,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "archive", async (call) => {
-						const { session, archived } = (call.args ?? {}) as { session?: string; archived?: boolean };
+						const { session, archived } = (call.args ?? {}) as Partial<SessionArgs["archive"]>;
 						if (session === undefined) throw new Error("sessions.archive needs a session");
 						if (typeof archived !== "boolean") {
 							throw new Error("sessions.archive needs archived: true or false");
@@ -817,12 +767,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "fork", async (call) => {
-						const args = (call.args ?? {}) as {
-							session?: string;
-							entryId?: string;
-							position?: "at" | "before";
-							title?: string;
-						};
+						const args = (call.args ?? {}) as Partial<SessionArgs["fork"]>;
 						if (args.session === undefined) throw new Error("sessions.fork needs a session");
 						const session = await service.fork(args.session, {
 							...(args.entryId === undefined ? {} : { entryId: args.entryId }),
@@ -834,7 +779,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "compact", async (call) => {
-						const { session, instructions } = (call.args ?? {}) as { session?: string; instructions?: string };
+						const { session, instructions } = (call.args ?? {}) as Partial<SessionArgs["compact"]>;
 						if (session === undefined) throw new Error("sessions.compact needs a session");
 						const compacted = await service.compact(session, instructions);
 						return { result: { session, compacted } };
@@ -842,7 +787,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "btwOpen", async (call) => {
-						const { session, kind } = (call.args ?? {}) as { session?: string; kind?: BtwThread["kind"] };
+						const { session, kind } = (call.args ?? {}) as Partial<SessionArgs["btwOpen"]>;
 						if (session === undefined) throw new Error("sessions.btwOpen needs a session");
 						if (kind !== "contextual" && kind !== "tangent") {
 							throw new Error("sessions.btwOpen needs kind: contextual or tangent");
@@ -853,11 +798,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "btwAsk", async (call) => {
-						const { session, threadId, question } = (call.args ?? {}) as {
-							session?: string;
-							threadId?: string;
-							question?: string;
-						};
+						const { session, threadId, question } = (call.args ?? {}) as Partial<SessionArgs["btwAsk"]>;
 						if (session === undefined || threadId === undefined || question === undefined) {
 							throw new Error("sessions.btwAsk needs a session, a threadId and a question");
 						}
@@ -867,12 +808,9 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "btwAnswer", async (call) => {
-						const { session, threadId, question, answer } = (call.args ?? {}) as {
-							session?: string;
-							threadId?: string;
-							question?: string;
-							answer?: string;
-						};
+						const { session, threadId, question, answer } = (call.args ?? {}) as Partial<
+							SessionArgs["btwAnswer"]
+						>;
 						if (session === undefined || threadId === undefined || question === undefined) {
 							throw new Error("sessions.btwAnswer needs a session, a threadId and a question");
 						}
@@ -882,7 +820,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "btwSave", async (call) => {
-						const { session, threadId } = (call.args ?? {}) as { session?: string; threadId?: string };
+						const { session, threadId } = (call.args ?? {}) as Partial<SessionArgs["btwSave"]>;
 						if (session === undefined || threadId === undefined) {
 							throw new Error("sessions.btwSave needs a session and a threadId");
 						}
@@ -891,7 +829,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "btwHandoff", async (call) => {
-						const { session, threadId } = (call.args ?? {}) as { session?: string; threadId?: string };
+						const { session, threadId } = (call.args ?? {}) as Partial<SessionArgs["btwHandoff"]>;
 						if (session === undefined || threadId === undefined) {
 							throw new Error("sessions.btwHandoff needs a session and a threadId");
 						}
@@ -900,7 +838,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "btwClear", async (call) => {
-						const { session, threadId } = (call.args ?? {}) as { session?: string; threadId?: string };
+						const { session, threadId } = (call.args ?? {}) as Partial<SessionArgs["btwClear"]>;
 						if (session === undefined || threadId === undefined) {
 							throw new Error("sessions.btwClear needs a session and a threadId");
 						}
@@ -909,7 +847,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "subagentStop", async (call) => {
-						const { session, id } = (call.args ?? {}) as { session?: string; id?: string };
+						const { session, id } = (call.args ?? {}) as Partial<SessionArgs["subagentStop"]>;
 						if (session === undefined || id === undefined) {
 							throw new Error("sessions.subagentStop needs a session and an id");
 						}
@@ -919,11 +857,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "goal", async (call) => {
-						const { session, action, objective } = (call.args ?? {}) as {
-							session?: string;
-							action?: "set" | "pause" | "resume" | "clear";
-							objective?: string;
-						};
+						const { session, action, objective } = (call.args ?? {}) as Partial<SessionArgs["goal"]>;
 						if (session === undefined) throw new Error("sessions.goal needs a session");
 						if (action !== "set" && action !== "pause" && action !== "resume" && action !== "clear") {
 							throw new Error("sessions.goal needs action: set, pause, resume or clear");
@@ -934,11 +868,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "taskCreate", async (call) => {
-						const { session, content, priority } = (call.args ?? {}) as {
-							session?: string;
-							content?: string;
-							priority?: Task["priority"];
-						};
+						const { session, content, priority } = (call.args ?? {}) as Partial<SessionArgs["taskCreate"]>;
 						if (session === undefined || content === undefined) {
 							throw new Error("sessions.taskCreate needs a session and a content");
 						}
@@ -947,14 +877,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "taskUpdate", async (call) => {
-						const { session, id, ...patch } = (call.args ?? {}) as {
-							session?: string;
-							id?: string;
-							content?: string;
-							status?: TaskStatus;
-							deps?: string[];
-							priority?: Task["priority"];
-						};
+						const { session, id, ...patch } = (call.args ?? {}) as Partial<SessionArgs["taskUpdate"]>;
 						if (session === undefined || id === undefined) {
 							throw new Error("sessions.taskUpdate needs a session and an id");
 						}
@@ -963,11 +886,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "taskSet", async (call) => {
-						const { session, id, status } = (call.args ?? {}) as {
-							session?: string;
-							id?: string;
-							status?: TaskStatus;
-						};
+						const { session, id, status } = (call.args ?? {}) as Partial<SessionArgs["taskSet"]>;
 						if (session === undefined || id === undefined || status === undefined) {
 							throw new Error("sessions.taskSet needs a session, an id and a status");
 						}
@@ -976,7 +895,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "taskRemove", async (call) => {
-						const { session, id } = (call.args ?? {}) as { session?: string; id?: string };
+						const { session, id } = (call.args ?? {}) as Partial<SessionArgs["taskRemove"]>;
 						if (session === undefined || id === undefined) {
 							throw new Error("sessions.taskRemove needs a session and an id");
 						}
@@ -985,7 +904,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "stateDelete", async (call) => {
-						const { session, key } = (call.args ?? {}) as { session?: string; key?: string };
+						const { session, key } = (call.args ?? {}) as Partial<SessionArgs["stateDelete"]>;
 						if (session === undefined || key === undefined) {
 							throw new Error("sessions.stateDelete needs a session and a key");
 						}
@@ -995,11 +914,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "answer", async (call) => {
-						const { session, questionId, response } = (call.args ?? {}) as {
-							session?: string;
-							questionId?: string;
-							response?: unknown;
-						};
+						const { session, questionId, response } = (call.args ?? {}) as Partial<SessionArgs["answer"]>;
 						if (session === undefined || questionId === undefined) {
 							throw new Error("sessions.answer needs a session and a questionId");
 						}
@@ -1008,7 +923,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "askAbort", async (call) => {
-						const { session, questionId } = (call.args ?? {}) as { session?: string; questionId?: string };
+						const { session, questionId } = (call.args ?? {}) as Partial<SessionArgs["askAbort"]>;
 						if (session === undefined || questionId === undefined) {
 							throw new Error("sessions.askAbort needs a session and a questionId");
 						}
@@ -1017,7 +932,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "modelSet", async (call) => {
-						const { session, model } = (call.args ?? {}) as { session?: string; model?: string };
+						const { session, model } = (call.args ?? {}) as Partial<SessionArgs["modelSet"]>;
 						if (session === undefined || model === undefined) {
 							throw new Error("sessions.modelSet needs a session and a model");
 						}
@@ -1026,7 +941,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "thinkingLevel", async (call) => {
-						const { session, level } = (call.args ?? {}) as { session?: string; level?: ThinkingLevel };
+						const { session, level } = (call.args ?? {}) as Partial<SessionArgs["thinkingLevel"]>;
 						if (session === undefined || level === undefined) {
 							throw new Error("sessions.thinkingLevel needs a session and a level");
 						}
@@ -1036,7 +951,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "queueRemove", async (call) => {
-						const { session, entryId } = (call.args ?? {}) as { session?: string; entryId?: string };
+						const { session, entryId } = (call.args ?? {}) as Partial<SessionArgs["queueRemove"]>;
 						if (session === undefined || entryId === undefined) {
 							throw new Error("sessions.queueRemove needs a session and an entryId");
 						}
@@ -1045,7 +960,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "history", async (call) => {
-						const args = (call.args ?? {}) as { session?: string; beforeSeq?: number; limit?: number };
+						const args = (call.args ?? {}) as Partial<SessionArgs["history"]>;
 						if (args.session === undefined) throw new Error("sessions.history needs a session");
 						const rows = await service.history(args.session, {
 							...(args.beforeSeq === undefined ? {} : { beforeSeq: args.beforeSeq }),
@@ -1056,7 +971,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 				);
 				registrations.push(
 					wire.handle("sessions", "search", (call) => {
-						const { query } = (call.args ?? {}) as { query?: string };
+						const { query } = (call.args ?? {}) as Partial<SessionArgs["search"]>;
 						if (query === undefined) throw new Error("sessions.search needs a query");
 						// A read, not a subscription: the hits are the answer to this question, and a
 						// search box asks it again when the query changes.
@@ -1068,7 +983,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 						// A resync is a read: it answers with the current state of one session's target.
 						// It opens the session when nobody holds it yet — the client is asking to be
 						// caught up, and "it is not open" is not an answer to that.
-						const { session } = (call.args ?? {}) as { session?: string };
+						const { session } = (call.args ?? {}) as Partial<SessionArgs["resync"]>;
 						if (session === undefined) throw new Error("sessions.resync needs a session");
 						await service.open(session);
 						const state = wire.snapshot(`sessions.${session}`);

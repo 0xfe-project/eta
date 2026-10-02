@@ -30,6 +30,7 @@ import {
 	type OpDescriptor,
 	type ServerFrame,
 } from "@eta/client-wire-proto";
+
 import { type DispatchOutcome, type OpContext, UnknownOpError } from "./registry";
 import type { WireService } from "./wire-service";
 
@@ -45,7 +46,7 @@ export interface Socket {
  */
 export interface TransportDeps {
 	wire: WireService;
-	mounted(): import("@eta/client-wire-proto").MountedPlugin[];
+	mounted(): import("@eta/client-contracts").MountedPlugin[];
 	/** Diagnostics. */
 	warn?(message: string): void;
 }

@@ -8,7 +8,8 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ProvidersView, ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
+import type { ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
+import type { ProvidersView } from "@eta/client-contracts";
 import { Context } from "cordis";
 import { afterEach, describe, expect, it } from "vitest";
 import { PROVIDER_ACTIONS, providersPlugin } from "../src/bundled/providers";

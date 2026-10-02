@@ -15,7 +15,7 @@
  *   keeps its name, its `defaultThinking`, its overrides, and its headers; what discovery adds is
  *   the capability metadata the endpoint knows and the config file does not.
  */
-import type { ProviderHeaders } from "@eta/client-wire-proto";
+import type { ProviderHeaders } from "@eta/client-contracts";
 import { type ProviderReference, providerDefinitionForKind, resolveConfiguredModels } from "./catalog";
 import { type EtaModelConfig, sanitizeProviderHeaders } from "./config-types";
 

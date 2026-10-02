@@ -14,26 +14,14 @@
  * "unknown op" while the rest of the server keeps running (sessions then run on whatever models
  * the host injected, or fail honestly with `model_unavailable`).
  */
-import type { ProvidersView } from "@eta/client-wire-proto";
+import type { ProvidersView, ProviderArgs } from "@eta/client-contracts";
 import { Service } from "cordis";
 import { CodexCredentialStore, CodexLogin, codexAuthPath, piCodexLogin } from "../codex-auth";
 import { discoverModels } from "../providers/discovery";
 import type { ProviderConfigStore } from "../providers/store";
 import type { WireService } from "../wire-service";
 
-/** The actions this target has. One list, so the wire and the plugin cannot disagree. */
-export const PROVIDER_ACTIONS = [
-	"save",
-	"delete",
-	"setDefault",
-	"setNetwork",
-	"reload",
-	"refresh",
-	"codexLogin",
-	"codexAnswer",
-	"codexStatus",
-	"codexCancel",
-] as const;
+export { PROVIDER_ACTIONS } from "@eta/client-contracts";
 
 export interface ProvidersPluginOptions {
 	store: ProviderConfigStore;
@@ -109,10 +97,7 @@ export function providersPlugin(options: ProvidersPluginOptions) {
 						project: () => (latest === undefined ? { sections: {}, revisions: {} } : section(latest)),
 					}),
 					wire.handle("providers", "save", async (call) => {
-						const args = (call.args ?? {}) as {
-							revision?: unknown;
-							provider?: Parameters<ProviderConfigStore["save"]>[0]["provider"];
-						};
+						const args = (call.args ?? {}) as Partial<ProviderArgs["save"]>;
 						if (args.provider === undefined) throw new Error("providers.save needs a provider");
 						const view = await options.store.save({ revision: args.revision, provider: args.provider });
 						latest = view;
@@ -120,7 +105,7 @@ export function providersPlugin(options: ProvidersPluginOptions) {
 						return { result: { revision: view.revision } };
 					}),
 					wire.handle("providers", "delete", async (call) => {
-						const args = (call.args ?? {}) as { revision?: unknown; id?: unknown };
+						const args = (call.args ?? {}) as Partial<ProviderArgs["delete"]>;
 						if (typeof args.id !== "string") throw new Error("providers.delete needs an id");
 						const view = await options.store.delete(args.id, args.revision);
 						latest = view;
@@ -128,19 +113,14 @@ export function providersPlugin(options: ProvidersPluginOptions) {
 						return { result: { revision: view.revision } };
 					}),
 					wire.handle("providers", "setDefault", async (call) => {
-						const args = (call.args ?? {}) as { revision?: unknown; defaultModel?: unknown };
+						const args = (call.args ?? {}) as Partial<ProviderArgs["setDefault"]>;
 						const view = await options.store.setDefault(args.defaultModel ?? null, args.revision);
 						latest = view;
 						wire.pushNow("providers");
 						return { result: { revision: view.revision, defaultModel: view.defaultModel ?? null } };
 					}),
 					wire.handle("providers", "setNetwork", async (call) => {
-						const args = (call.args ?? {}) as {
-							revision?: unknown;
-							mode?: unknown;
-							proxyUrl?: string;
-							noProxy?: string;
-						};
+						const args = (call.args ?? {}) as Partial<ProviderArgs["setNetwork"]>;
 						if (typeof args.mode !== "string") throw new Error("providers.setNetwork needs a mode");
 						const view = await options.store.setNetwork(
 							{
@@ -155,7 +135,7 @@ export function providersPlugin(options: ProvidersPluginOptions) {
 						return { result: { revision: view.revision, network: view.network ?? null } };
 					}),
 					wire.handle("providers", "refresh", async (call) => {
-						const { id } = (call.args ?? {}) as { id?: string };
+						const { id } = (call.args ?? {}) as Partial<ProviderArgs["refresh"]>;
 						if (id === undefined) throw new Error("providers.refresh needs an id");
 						const view = await options.store.view();
 						const provider = (view.providers ?? []).find((entry) => entry.id === id);
@@ -175,7 +155,7 @@ export function providersPlugin(options: ProvidersPluginOptions) {
 						return { result: { revision: latest.revision, models: discovered.models.length } };
 					}),
 					wire.handle("providers", "codexLogin", (call) => {
-						const { method } = (call.args ?? {}) as { method?: "browser" | "device_code" };
+						const { method } = (call.args ?? {}) as Partial<ProviderArgs["codexLogin"]>;
 						if (method !== undefined && method !== "browser" && method !== "device_code") {
 							throw new Error("providers.codexLogin needs method: browser or device_code");
 						}
@@ -183,11 +163,7 @@ export function providersPlugin(options: ProvidersPluginOptions) {
 						return { result: { login: codex.start(method ?? "browser") } };
 					}),
 					wire.handle("providers", "codexAnswer", (call) => {
-						const { id, promptId, value } = (call.args ?? {}) as {
-							id?: string;
-							promptId?: string;
-							value?: string;
-						};
+						const { id, promptId, value } = (call.args ?? {}) as Partial<ProviderArgs["codexAnswer"]>;
 						if (id === undefined || promptId === undefined || value === undefined) {
 							throw new Error("providers.codexAnswer needs an id, a promptId and a value");
 						}
@@ -196,12 +172,12 @@ export function providersPlugin(options: ProvidersPluginOptions) {
 						return { result: { accepted } };
 					}),
 					wire.handle("providers", "codexStatus", (call) => {
-						const { id } = (call.args ?? {}) as { id?: string };
+						const { id } = (call.args ?? {}) as Partial<ProviderArgs["codexStatus"]>;
 						if (id === undefined) throw new Error("providers.codexStatus needs an id");
 						return { result: { login: codex.status(id) } };
 					}),
 					wire.handle("providers", "codexCancel", (call) => {
-						const { id } = (call.args ?? {}) as { id?: string };
+						const { id } = (call.args ?? {}) as Partial<ProviderArgs["codexCancel"]>;
 						codex.cancel(id);
 						return { result: { cancelled: true, ...(id === undefined ? {} : { login: codex.status(id) }) } };
 					}),

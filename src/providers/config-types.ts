@@ -9,7 +9,7 @@
  * hand-edited config file safe to read — both worth testing without a file at all.
  */
 
-import type { ProviderHeaders, ProviderKind, ProviderSummary } from "@eta/client-wire-proto";
+import type { ProviderHeaders, ProviderKind, ProviderSummary } from "@eta/client-contracts";
 import type { ThinkingLevel } from "@eta/core";
 
 export const MODEL_THINKING_LEVELS = [

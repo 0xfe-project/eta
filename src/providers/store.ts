@@ -22,7 +22,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { ProvidersView } from "@eta/client-wire-proto";
+import type { ProvidersView } from "@eta/client-contracts";
 import { type EtaConfig, type EtaProviderConfig, providerSummary } from "./config-types";
 
 /** A caller's mistake, with the name the client shows. */

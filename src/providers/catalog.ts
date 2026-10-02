@@ -21,7 +21,7 @@ import { kimiCodingProvider } from "@earendil-works/pi-ai/providers/kimi-coding"
 import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
 import { zaiProvider } from "@earendil-works/pi-ai/providers/zai";
 import { zaiCodingCnProvider } from "@earendil-works/pi-ai/providers/zai-coding-cn";
-import type { ProviderKind } from "@eta/client-wire-proto";
+import type { ProviderKind } from "@eta/client-contracts";
 import rawCatalog from "./catalog.json";
 import {
 	BUILTIN_PROVIDER_PRESETS,
