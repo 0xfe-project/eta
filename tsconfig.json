@@ -1,0 +1,23 @@
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "ESNext",
+		"lib": [
+			"ES2022",
+			"DOM"
+		],
+		"strict": true,
+		"erasableSyntaxOnly": true,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"forceConsistentCasingInFileNames": true,
+		"moduleResolution": "Bundler",
+		"resolveJsonModule": true,
+		"verbatimModuleSyntax": true,
+		"types": []
+	},
+	"include": [
+		"src/**/*.ts",
+		"test/**/*.ts"
+	]
+}
