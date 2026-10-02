@@ -23,7 +23,8 @@
 		"vitest": "4.1.9",
 		"bun-types": "1.4.2",
 		"@eta/core": "*",
-		"cordis": "4.0.0-rc.10"
+		"cordis": "4.0.0-rc.10",
+		"@eta/client-contracts": "*"
 	},
 	"dependencies": {
 		"@eta/client-wire-proto": "*",

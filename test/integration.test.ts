@@ -14,7 +14,7 @@ import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ServerFrame } from "@eta/client-wire-proto";
+import type { ServerFrame } from "@eta/client-contracts";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { type AssembledServer, assembleServer } from "@eta/server";
 import { afterEach, describe, expect, it } from "vitest";
