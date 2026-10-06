@@ -10,10 +10,10 @@ import {
 import { z } from "zod";
 import { toast } from "sonner";
 const storageKey = "axp.workspace.v1";
+// Local UI state only. Chat history lives in the control plane; older saved
+// messages are dropped rather than uploaded.
 const workspaceSchema = z.object({
-  messages: z.array(
-    z.object({ id: z.string(), content: z.string().max(10_000) }),
-  ),
+  selectedAgentId: z.string().max(64).optional(),
   tasks: z.array(
     z.object({ id: z.string(), title: z.string().max(200), done: z.boolean() }),
   ),
@@ -21,13 +21,19 @@ const workspaceSchema = z.object({
   sessionTheme: z.enum(["claude", "codex", "grok"]).default("claude"),
 });
 const initialWorkspace: z.infer<typeof workspaceSchema> = {
-  messages: [],
   tasks: [],
   memory: "",
   sessionTheme: "claude",
 };
 
 type WorkspaceState = z.infer<typeof workspaceSchema>;
+export type SettingsSection = "agents" | "appearance";
+export type SettingsState = {
+  open: boolean;
+  section: SettingsSection;
+  /** Open the new-agent form when the agents section shows. */
+  creating: boolean;
+};
 const WorkspaceContext = createContext<{
   workspace: WorkspaceState;
   setWorkspace: Dispatch<SetStateAction<WorkspaceState>>;
@@ -35,12 +41,19 @@ const WorkspaceContext = createContext<{
   setDraft: Dispatch<SetStateAction<string>>;
   mobilePanel: "chat" | "workspace";
   setMobilePanel: Dispatch<SetStateAction<"chat" | "workspace">>;
+  settings: SettingsState;
+  setSettings: Dispatch<SetStateAction<SettingsState>>;
 } | null>(null);
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [workspace, setWorkspace] = useState(initialWorkspace);
   const [loaded, setLoaded] = useState(false);
   const [draft, setDraft] = useState("");
   const [mobilePanel, setMobilePanel] = useState<"chat" | "workspace">("chat");
+  const [settings, setSettings] = useState<SettingsState>({
+    open: false,
+    section: "agents",
+    creating: false,
+  });
   useEffect(() => {
     try {
       const saved = localStorage.getItem(storageKey);
@@ -58,9 +71,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     try {
       localStorage.setItem(storageKey, JSON.stringify(workspace));
     } catch {
-      toast.error(
-        "无法保存到当前浏览器，请保持页面打开以保留内容。",
-      );
+      toast.error("无法保存到当前浏览器，请保持页面打开以保留内容。");
     }
   }, [workspace, loaded]);
 
@@ -73,6 +84,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         setDraft,
         mobilePanel,
         setMobilePanel,
+        settings,
+        setSettings,
       }}
     >
       {children}
