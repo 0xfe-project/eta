@@ -71,7 +71,7 @@ export function Workspace({
   const onError = (error: Error) => toast.error(error.message);
 
   return (
-    <div className="mx-auto flex h-dvh w-full min-h-0 flex-col bg-background lg:max-w-[64rem]">
+    <div className="mx-auto flex h-dvh w-full min-h-0 flex-col bg-background px-4 pb-4 sm:px-6 lg:max-w-[calc(64rem+3rem)]">
       <header className="flex h-14 shrink-0 items-center justify-between gap-2">
         <h1 className="text-xl font-semibold tracking-tight">axp.</h1>
         <div className="flex items-center gap-1">
