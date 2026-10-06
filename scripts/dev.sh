@@ -17,12 +17,25 @@ if [[ ! -f node_modules/concurrently/dist/bin/concurrently.js || ! -d apps/contr
   exit 1
 fi
 
-# Keep the empty agent runtime alive in Node.js watch mode. Stop every process
-# on Ctrl+C or when any process exits, including a startup failure.
-exec node node_modules/concurrently/dist/bin/concurrently.js \
-  --kill-others \
-  --names control-plane,web,agent-runtime \
-  --prefix-colors blue,green,magenta \
+# AXP_RUNTIME_MODE=docker runs real agent containers (Codex via the Python
+# SDK): the internal runtime API and the controller. The default "fake" mode
+# answers with a scripted worker and needs neither Docker nor credentials.
+# Every process stops on Ctrl+C or when any of them exits.
+concurrently=(node node_modules/concurrently/dist/bin/concurrently.js --kill-others)
+if [[ "${AXP_RUNTIME_MODE:-fake}" == "docker" ]]; then
+  command -v docker >/dev/null 2>&1 || { echo "Missing required command: docker" >&2; exit 1; }
+  uv run --project apps/control-plane python apps/control-plane/manage.py ensure_runtime_network
+  exec "${concurrently[@]}" \
+    --names control-plane,internal,controller,web \
+    --prefix-colors blue,yellow,cyan,green \
+    "bun run dev:control-plane" \
+    "bun run dev:internal" \
+    "bun run dev:controller" \
+    "bun run dev:web"
+fi
+exec "${concurrently[@]}" \
+  --names control-plane,fake-runtime,web \
+  --prefix-colors blue,cyan,green \
   "bun run dev:control-plane" \
-  "bun run dev:web" \
-  "bun run dev:agent-runtime"
+  "bun run dev:fake-runtime" \
+  "bun run dev:web"

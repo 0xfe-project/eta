@@ -1,0 +1,107 @@
+"""Runtime settings, injected by the controller through environment variables."""
+
+import json
+import os
+import shlex
+from dataclasses import dataclass, field
+from pathlib import Path
+
+PROTOCOL_VERSION = "1"
+
+
+@dataclass(frozen=True)
+class McpModule:
+    module_key: str
+    revision: str
+    required: bool
+    allowed_tools: list[str]
+    command: str
+    args: list[str]
+    env: dict[str, str]
+    config: dict
+
+
+@dataclass(frozen=True)
+class Settings:
+    agent_id: str
+    instance_id: str
+    generation: int
+    token: str
+    control_plane_url: str
+    listen_host: str
+    listen_port: int
+    workspace_dir: Path
+    state_dir: Path
+    known_thread_id: str | None
+    model: str | None
+    sandbox: str
+    approval_policy: str
+    mcp_modules: list[McpModule] = field(default_factory=list)
+    mcp_config_version: int = 0
+    restore: dict | None = None
+    # Overrides the Codex launch command; used to run a scripted app-server.
+    codex_launch: list[str] | None = None
+    heartbeat_seconds: float = 5.0
+    mcp_ready_timeout: float = 30.0
+    auth_file: Path | None = None
+
+    @property
+    def codex_home(self) -> Path:
+        return self.state_dir / "codex"
+
+    @property
+    def ledger_path(self) -> Path:
+        return self.state_dir / "runtime.sqlite3"
+
+
+def _require(name: str) -> str:
+    value = os.environ.get(name, "")
+    if not value:
+        raise SystemExit(f"{name} is required")
+    return value
+
+
+def _json(name: str, default):
+    raw = os.environ.get(name)
+    return json.loads(raw) if raw else default
+
+
+def load_settings() -> Settings:
+    codex = _json("AXP_CODEX_SETTINGS", {})
+    modules = [
+        McpModule(
+            module_key=item["module_key"],
+            revision=str(item["revision"]),
+            required=bool(item.get("required", False)),
+            allowed_tools=list(item.get("allowed_tools") or []),
+            command=item["launch"]["command"],
+            args=list(item["launch"].get("args") or []),
+            env=dict(item["launch"].get("env") or {}),
+            config=dict(item.get("config") or {}),
+        )
+        for item in _json("AXP_MCP_SNAPSHOT", [])
+    ]
+    launch = os.environ.get("AXP_CODEX_LAUNCH")
+    auth_file = os.environ.get("AXP_CODEX_AUTH_FILE")
+    return Settings(
+        agent_id=_require("AXP_AGENT_ID"),
+        instance_id=_require("AXP_INSTANCE_ID"),
+        generation=int(_require("AXP_GENERATION")),
+        token=_require("AXP_RUNTIME_TOKEN"),
+        control_plane_url=_require("AXP_CONTROL_PLANE_URL").rstrip("/"),
+        listen_host=os.environ.get("AXP_LISTEN_HOST", "0.0.0.0"),
+        listen_port=int(os.environ.get("AXP_LISTEN_PORT", "8080")),
+        workspace_dir=Path(os.environ.get("AXP_WORKSPACE_DIR", "/workspace")),
+        state_dir=Path(os.environ.get("AXP_STATE_DIR", "/state")),
+        known_thread_id=os.environ.get("AXP_THREAD_ID") or None,
+        model=codex.get("model"),
+        sandbox=codex.get("sandbox", "workspace-write"),
+        approval_policy=codex.get("approval_policy", "on-request"),
+        mcp_modules=modules,
+        mcp_config_version=int(os.environ.get("AXP_MCP_CONFIG_VERSION", "0")),
+        restore=_json("AXP_RESTORE", None),
+        codex_launch=shlex.split(launch) if launch else None,
+        heartbeat_seconds=float(os.environ.get("AXP_HEARTBEAT_SECONDS", "5")),
+        mcp_ready_timeout=float(os.environ.get("AXP_MCP_READY_TIMEOUT", "30")),
+        auth_file=Path(auth_file) if auth_file else None,
+    )

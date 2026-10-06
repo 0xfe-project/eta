@@ -1,6 +1,8 @@
 import os
+import socket
 from pathlib import Path
 
+import dj_database_url
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -13,56 +15,89 @@ if not SECRET_KEY:
     SECRET_KEY = "django-insecure-local-development-only"
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 INSTALLED_APPS = [
-    "django.contrib.admin",
-    "django.contrib.auth",
-    "django.contrib.contenttypes",
-    "django.contrib.sessions",
-    "django.contrib.messages",
     "django.contrib.staticfiles",
     "ninja",
+    "chat",
 ]
 MIDDLEWARE = [
+    "chat.middleware.RequestIdMiddleware",
     "django.middleware.security.SecurityMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
-    "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
-ROOT_URLCONF = "config.urls"
+# The internal runtime API runs as a separate process with its own URLconf.
+ROOT_URLCONF = os.getenv("AXP_URLCONF", "config.urls")
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [],
         "APP_DIRS": True,
         "OPTIONS": {
-            "context_processors": [
-                "django.template.context_processors.request",
-                "django.contrib.auth.context_processors.auth",
-                "django.contrib.messages.context_processors.messages",
-            ]
+            "context_processors": ["django.template.context_processors.request"]
         },
     }
 ]
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
+# PostgreSQL via DATABASE_URL; SQLite remains the zero-config local default.
 DATABASES = {
-    "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}
+    "default": dj_database_url.config(
+        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}", conn_max_age=60
+    )
 }
-AUTH_PASSWORD_VALIDATORS = [
-    {
-        "NAME": (
-            "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
-        )
-    },
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
-    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
-    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
-]
+if DATABASES["default"]["ENGINE"] == "django.db.backends.sqlite3":
+    # The API server and the runtime worker write concurrently.
+    DATABASES["default"]["CONN_MAX_AGE"] = 0
+    DATABASES["default"]["OPTIONS"] = {"timeout": 20, "transaction_mode": "IMMEDIATE"}
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+CHAT_MAX_QUEUED_PER_AGENT = int(os.getenv("CHAT_MAX_QUEUED_PER_AGENT", "20"))
+CHAT_STREAM_POLL_SECONDS = float(os.getenv("CHAT_STREAM_POLL_SECONDS", "0.5"))
+CHAT_STREAM_HEARTBEAT_SECONDS = 15.0
+
+# --- Agent runtime orchestration (internal; see chat/control) ---------------
+AXP_HOST_ID = os.getenv("AXP_HOST_ID", socket.gethostname())
+AXP_RUNTIME_IMAGE = os.getenv("AXP_RUNTIME_IMAGE", "axp-agent-runtime:dev")
+AXP_RUNTIME_NETWORK = os.getenv("AXP_RUNTIME_NETWORK", "axp-runtime")
+AXP_RUNTIME_SUBNET = os.getenv("AXP_RUNTIME_SUBNET", "172.30.0.0/24")
+# Where runtimes reach the internal API (served by a separate process).
+AXP_INTERNAL_URL = os.getenv("AXP_INTERNAL_URL", "http://172.30.0.1:8001")
+AXP_RUNTIME_LEASE_SECONDS = float(os.getenv("AXP_RUNTIME_LEASE_SECONDS", "30"))
+AXP_RUNTIME_START_TIMEOUT = float(os.getenv("AXP_RUNTIME_START_TIMEOUT", "120"))
+AXP_RUNTIME_IDLE_SECONDS = float(os.getenv("AXP_RUNTIME_IDLE_SECONDS", "600"))
+AXP_RUNTIME_RETRY_SECONDS = float(os.getenv("AXP_RUNTIME_RETRY_SECONDS", "30"))
+AXP_DISPATCH_TIMEOUT = float(os.getenv("AXP_DISPATCH_TIMEOUT", "120"))
+AXP_RUNTIME_MEMORY = os.getenv("AXP_RUNTIME_MEMORY", "2g")
+AXP_RUNTIME_CPUS = float(os.getenv("AXP_RUNTIME_CPUS", "1"))
+# Host environment variables forwarded to runtimes, e.g. model credentials.
+AXP_RUNTIME_ENV_PASSTHROUGH = [
+    name
+    for name in os.getenv("AXP_RUNTIME_ENV_PASSTHROUGH", "OPENAI_API_KEY").split(",")
+    if name
+]
+# Optional Codex auth.json copied into each new agent's state on first start.
+AXP_CODEX_AUTH_FILE = os.getenv("AXP_CODEX_AUTH_FILE") or None
+# Overrides the Codex command inside runtimes (e.g. the scripted fake server).
+AXP_CODEX_LAUNCH = os.getenv("AXP_CODEX_LAUNCH") or None
+AXP_CODEX_MODEL = os.getenv("AXP_CODEX_MODEL") or None
+# The per-agent container is the isolation boundary.
+AXP_CODEX_SANDBOX = os.getenv("AXP_CODEX_SANDBOX", "danger-full-access")
+AXP_CODEX_APPROVAL_POLICY = os.getenv("AXP_CODEX_APPROVAL_POLICY", "on-request")
+AXP_WORKSPACE_BACKEND = os.getenv("AXP_WORKSPACE_BACKEND", "volume")
+AXP_S3_ENDPOINT = os.getenv("AXP_S3_ENDPOINT", "")
+AXP_S3_REGION = os.getenv("AXP_S3_REGION", "us-east-1")
+AXP_S3_ACCESS_KEY_ID = os.getenv("AXP_S3_ACCESS_KEY_ID", "")
+AXP_S3_SECRET_ACCESS_KEY = os.getenv("AXP_S3_SECRET_ACCESS_KEY", "")
+AXP_S3_WORKSPACE_BUCKET = os.getenv("AXP_S3_WORKSPACE_BUCKET", "axp-workspaces")
+AXP_OBJECT_STORE = os.getenv("AXP_OBJECT_STORE", "filesystem")
+AXP_OBJECT_DIR = Path(os.getenv("AXP_OBJECT_DIR", BASE_DIR / "var" / "objects"))
+AXP_S3_CHECKPOINT_BUCKET = os.getenv("AXP_S3_CHECKPOINT_BUCKET", "axp-checkpoints")
+AXP_CHECKPOINT_AFTER_TURNS = int(os.getenv("AXP_CHECKPOINT_AFTER_TURNS", "5"))
+CHAT_DEFAULT_MCP_MODULES = [
+    key for key in os.getenv("CHAT_DEFAULT_MCP_MODULES", "tasks").split(",") if key
+]

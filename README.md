@@ -1,17 +1,19 @@
 # AXP
 
-Monorepo 初始配置：Bun workspaces 管理 JavaScript 项目，uv 管理 Python 项目。
+Monorepo：Bun workspaces 管理 Web，uv 管理 Python 项目。
 
 ```text
 apps/
-  control-plane/   Django 5.2 + Django Ninja，SQLite 本地数据库
+  control-plane/   Django 5.2 + Django Ninja：产品 API、内部运行协议、controller
   web/             TanStack Start + React + Vite + TypeScript
-  agent-runtime/   Node.js + TypeScript 空包
+  agent-runtime/   每个 Agent 一个容器的运行时，基于官方 Codex Python SDK
 ```
+
+设计见 [RFC #1](https://github.com/akarachen/axp/issues/1)，实现说明见 [聊天与运行时架构](docs/architecture/chat-runtime.md)。
 
 ## 环境与初始化
 
-需要 Node.js 24、Bun 1.3.14 和 uv。control plane 使用 Python 3.13，uv 会按 `.python-version` 自动获取。
+需要 Node.js 24、Bun 1.3.14 和 uv。Python 项目使用 3.13，uv 会按 `.python-version` 自动获取。真实运行时还需要 Docker。
 
 在仓库根目录执行：
 
@@ -20,9 +22,14 @@ bun run setup
 bun run dev
 ```
 
-`bun run dev` 调用 `scripts/dev.sh`，也可以直接执行 `./scripts/dev.sh`。脚本会自动定位仓库根目录，检查依赖，并为三个进程显示带名称的日志。按 Ctrl+C 或任意进程退出时，会关闭其他进程。agent runtime 当前为空包，启动的是 Node.js watch 进程，没有 HTTP 服务。
+打开 http://localhost:3000 ，新建智能体后即可对话。AXP 是单用户服务：智能体在设置的“智能体”中创建、切换、重命名和删除，顶栏可快速切换。
 
-`setup` 会安装 JS/Python 依赖并执行 Django migrations。仓库已生成 `bun.lock` 和 `apps/control-plane/uv.lock`，应一起提交到版本控制。
+`bun run dev` 有两种运行时模式：
+
+- 默认 `fake`：启动 Django、Web 和开发用模拟 worker（`run_fake_runtime`）。不需要 Docker 和模型凭据，回复是固定文本；消息包含“确认”时会先发起一次确认。
+- `AXP_RUNTIME_MODE=docker bun run dev`：启动 Django、内部运行协议服务、controller 和 Web。controller 为每个 Agent 启动一个 runtime 容器。首次使用先执行 `bun run runtime:build`，并提供 Codex 凭据：设置 `OPENAI_API_KEY`（默认转发进容器），或用 `AXP_CODEX_AUTH_FILE` 指向一个 `auth.json`（首次启动时复制进该 Agent 的状态卷）。不想消耗模型额度时，可设 `AXP_CODEX_LAUNCH="python -m axp_runtime.testing.fake_app_server"` 用脚本化 app-server 跑通整条链路。
+
+`setup` 安装 JS/Python 依赖并执行 Django migrations。锁文件（`bun.lock`、两个 `uv.lock`）应一起提交。
 
 默认开发配置无需复制环境文件。需要自定义时：
 
@@ -35,40 +42,39 @@ cp apps/web/.env.example apps/web/.env
 
 - Web：http://localhost:3000
 - API 健康检查：http://127.0.0.1:8000/api/health
-- OpenAPI 文档：http://127.0.0.1:8000/api/docs
-- Django Admin：http://127.0.0.1:8000/admin/
+- 公共 OpenAPI 文档：http://127.0.0.1:8000/api/docs
+- 内部运行协议文档（docker 模式）：http://172.30.0.1:8001/internal/docs
 
-Web 开发服务器将浏览器的 `/api` 请求代理到 `CONTROL_PLANE_URL`（默认 `http://127.0.0.1:8000`），可用 `fetch('/api/health')` 调用后端。该代理仅用于开发；生产环境需要反向代理配置。SSR 服务端调用后端时使用绝对 URL。
+Web 开发服务器将 `/api` 代理到 `CONTROL_PLANE_URL`（默认 `http://127.0.0.1:8000`）。该代理仅用于开发；生产环境需要反向代理配置。
 
 Web 已配置 Query、nuqs、Phosphor Icons、表单校验、通知、Markdown 和 Tailwind，使用方式见 [Web 开发说明](apps/web/README.md)。
 
 ## 命令
 
-| 根目录命令                  | 用途                                                      |
-| --------------------------- | --------------------------------------------------------- |
-| `bun run dev`               | 同时启动 Django、Web 和 agent runtime，退出时关闭所有进程 |
-| `bun run dev:control-plane` | 单独启动 Django                                           |
-| `bun run dev:web`           | 单独启动 Web                                              |
-| `bun run dev:agent-runtime` | 使用 Node.js watch 执行空 runtime 入口                    |
-| `bun run db:migrate`        | 执行数据库迁移                                            |
-| `bun run build`             | 构建 Web 和 runtime                                       |
-| `bun run check`             | 构建、TS 类型检查、Django 系统检查、Ruff lint             |
-| `bun run format`            | Prettier 格式化 JS/TS/JSON/Markdown，Ruff 格式化 Python   |
+| 根目录命令                   | 用途                                                       |
+| ---------------------------- | ---------------------------------------------------------- |
+| `bun run dev`                | 启动开发环境（见上文两种模式），任一进程退出时关闭所有进程 |
+| `bun run dev:control-plane`  | 单独启动 Django（公共 API）                                |
+| `bun run dev:fake-runtime`   | 单独启动开发用模拟 worker                                  |
+| `bun run dev:internal`       | 单独启动内部运行协议服务（runtime 网络网关地址）           |
+| `bun run dev:controller`     | 单独启动 runtime controller（需要 Docker）                 |
+| `bun run dev:web`            | 单独启动 Web                                               |
+| `bun run runtime:build`      | 构建 runtime 镜像 `axp-agent-runtime:dev`                  |
+| `bun run db:migrate`         | 执行数据库迁移                                             |
+| `bun run build`              | 构建 Web                                                   |
+| `bun run check`              | 构建、类型检查、Django 系统检查、Ruff lint、全部后端测试   |
+| `bun run test:control-plane` | 运行 control plane 测试                                    |
+| `bun run test:agent-runtime` | 运行 runtime 测试（使用脚本化 app-server，无需凭据）       |
+| `bun run format`             | Prettier 格式化 JS/TS/JSON/Markdown，Ruff 格式化 Python    |
 
 TanStack 的 `src/routeTree.gen.ts` 由 `dev` 或 `build` 自动生成；`check` 会先执行构建，因此可在全新安装后直接执行。
 
-创建 Django 管理员：
+## 数据库与存储
 
-```sh
-uv run --project apps/control-plane python apps/control-plane/manage.py createsuperuser
-```
+数据库默认使用 SQLite。设置 `DATABASE_URL=postgres://…` 后改用 PostgreSQL，这是 RFC 的目标数据库；复合外键只在 PostgreSQL 上创建，测试可在两者上运行。
 
-Agent runtime 目前只有 `src/index.ts` 空入口和 TypeScript 构建配置，没有业务逻辑或运行时依赖。构建后可用 `bun run --cwd apps/agent-runtime start` 执行。
+工作区默认是每个 Agent 一个 Docker 卷。设置 `AXP_WORKSPACE_BACKEND=s3` 及 `AXP_S3_*` 后，runtime 容器用 rclone 把 S3 前缀挂载为工作区。检查点默认存放在 `apps/control-plane/var/objects`，设置 `AXP_OBJECT_STORE=s3` 后改用 S3 预签名 URL。全部配置项见 `apps/control-plane/config/settings.py` 末尾和 `.env.example`。
 
-生产环境应设置 `DJANGO_DEBUG=false`、独立的 `DJANGO_SECRET_KEY` 和 `DJANGO_ALLOWED_HOSTS`，并配置数据库、静态资源和 ASGI/WSGI 服务。当前 SQLite 和 `runserver` 配置面向本地开发。
+生产环境应设置 `DJANGO_DEBUG=false`、独立的 `DJANGO_SECRET_KEY` 和 `DJANGO_ALLOWED_HOSTS`，并配置数据库、静态资源和 ASGI/WSGI 服务。当前 `runserver` 配置面向本地开发。
 
-## 当前验证状态
-
-依赖已安装，两个锁文件已生成，Django migrations 已执行。Web 与 runtime 构建、TypeScript 类型检查、Django 系统检查、Ruff lint，以及 API 健康检查与 OpenAPI schema 验证均已通过。
-
-配置参考：[TanStack Start 官方初始化指南](https://tanstack.com/start/latest/docs/framework/react/build-from-scratch)、[Django Ninja 官方教程](https://django-ninja.dev/tutorial/)。
+配置参考：[TanStack Start 官方初始化指南](https://tanstack.com/start/latest/docs/framework/react/build-from-scratch)、[Django Ninja 官方教程](https://django-ninja.dev/tutorial/)、[Codex Python SDK](https://github.com/openai/codex/tree/main/sdk/python)。

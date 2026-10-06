@@ -9,14 +9,6 @@
         "prettier": "^3.6.2",
       },
     },
-    "apps/agent-runtime": {
-      "name": "@axp/agent-runtime",
-      "version": "0.1.0",
-      "devDependencies": {
-        "@types/node": "^24.0.0",
-        "typescript": "^5.9.0",
-      },
-    },
     "apps/web": {
       "name": "@axp/web",
       "dependencies": {
@@ -58,8 +50,6 @@
     },
   },
   "packages": {
-    "@axp/agent-runtime": ["@axp/agent-runtime@workspace:apps/agent-runtime"],
-
     "@axp/web": ["@axp/web@workspace:apps/web"],
 
     "@babel/code-frame": ["@babel/code-frame@7.29.7", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.29.7", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw=="],

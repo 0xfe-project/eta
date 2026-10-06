@@ -1,0 +1,304 @@
+"""Durable runtime state on the agent's state volume.
+
+The ledger records a command before Codex sees it, keeps the agent/thread
+mapping, pending approvals, and an ordered outbox of events for the control
+plane. Outbox sequences are scoped to a runtime instance.
+"""
+
+import json
+import sqlite3
+import threading
+import time
+import uuid
+from contextlib import contextmanager
+from pathlib import Path
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS commands (
+    command_id TEXT PRIMARY KEY,
+    agent_sequence INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    request_hash TEXT NOT NULL,
+    status TEXT NOT NULL,
+    turn_id TEXT,
+    error_code TEXT,
+    generation INTEGER NOT NULL,
+    interrupt_requested INTEGER NOT NULL DEFAULT 0,
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS approvals (
+    approval_id TEXT PRIMARY KEY,
+    command_id TEXT NOT NULL,
+    generation INTEGER NOT NULL,
+    method TEXT NOT NULL,
+    status TEXT NOT NULL,
+    decision TEXT,
+    created_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS outbox (
+    instance_id TEXT NOT NULL,
+    source_seq INTEGER NOT NULL,
+    event_id TEXT NOT NULL UNIQUE,
+    type TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    acked INTEGER NOT NULL DEFAULT 0,
+    created_at REAL NOT NULL,
+    PRIMARY KEY (instance_id, source_seq)
+);
+"""
+
+# Command statuses. "starting" covers the window between recording intent and
+# learning the Codex turn id; a crash there leaves the outcome unknown.
+ACCEPTED = "accepted"
+STARTING = "starting"
+RUNNING = "running"
+TERMINAL = {"succeeded", "failed", "interrupted", "outcome_unknown"}
+
+
+class Ledger:
+    def __init__(self, path: Path, instance_id: str):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self.path = path
+        self.instance_id = instance_id
+        self._lock = threading.RLock()
+        self._db = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
+        self._db.row_factory = sqlite3.Row
+        self._db.execute("PRAGMA journal_mode=WAL")
+        self._db.execute("PRAGMA synchronous=FULL")
+        self._db.executescript(SCHEMA)
+
+    @contextmanager
+    def tx(self):
+        with self._lock:
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                yield self._db
+            except BaseException:
+                self._db.execute("ROLLBACK")
+                raise
+            self._db.execute("COMMIT")
+
+    def close(self) -> None:
+        with self._lock:
+            self._db.close()
+
+    def backup_to(self, target: Path) -> None:
+        with self._lock:
+            dest = sqlite3.connect(target)
+            try:
+                self._db.backup(dest)
+            finally:
+                dest.close()
+
+    # --- meta ---------------------------------------------------------------
+
+    def get_meta(self, key: str) -> str | None:
+        with self._lock:
+            row = self._db.execute(
+                "SELECT value FROM meta WHERE key=?", (key,)
+            ).fetchone()
+        return row["value"] if row else None
+
+    def set_meta(self, key: str, value: str) -> None:
+        with self.tx() as db:
+            db.execute(
+                "INSERT INTO meta(key, value) VALUES(?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (key, value),
+            )
+
+    # --- commands -----------------------------------------------------------
+
+    def get_command(self, command_id: str) -> dict | None:
+        with self._lock:
+            row = self._db.execute(
+                "SELECT * FROM commands WHERE command_id=?", (command_id,)
+            ).fetchone()
+        return _command(row) if row else None
+
+    def has_commands(self) -> bool:
+        with self._lock:
+            return (
+                self._db.execute("SELECT 1 FROM commands LIMIT 1").fetchone()
+                is not None
+            )
+
+    def accept_command(
+        self,
+        command_id: str,
+        *,
+        agent_sequence: int,
+        kind: str,
+        payload: dict,
+        request_hash: str,
+        generation: int,
+    ) -> tuple[dict, bool]:
+        """Record a command. Returns (command, created); raises on conflicts."""
+        now = time.time()
+        with self.tx() as db:
+            row = db.execute(
+                "SELECT * FROM commands WHERE command_id=?", (command_id,)
+            ).fetchone()
+            if row:
+                if row["request_hash"] != request_hash:
+                    raise CommandConflict(command_id)
+                if row["generation"] != generation and row["status"] == ACCEPTED:
+                    db.execute(
+                        "UPDATE commands SET generation=?, updated_at=? "
+                        "WHERE command_id=?",
+                        (generation, now, command_id),
+                    )
+                return _command(row), False
+            db.execute(
+                "INSERT INTO commands(command_id, agent_sequence, kind, payload, "
+                "request_hash, status, generation, created_at, updated_at) "
+                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    command_id,
+                    agent_sequence,
+                    kind,
+                    json.dumps(payload),
+                    request_hash,
+                    ACCEPTED,
+                    generation,
+                    now,
+                    now,
+                ),
+            )
+        return self.get_command(command_id), True
+
+    def update_command(self, command_id: str, **fields) -> None:
+        fields["updated_at"] = time.time()
+        assignments = ", ".join(f"{name}=?" for name in fields)
+        with self.tx() as db:
+            db.execute(
+                f"UPDATE commands SET {assignments} WHERE command_id=?",
+                (*fields.values(), command_id),
+            )
+
+    def next_accepted(self) -> dict | None:
+        with self._lock:
+            row = self._db.execute(
+                "SELECT * FROM commands WHERE status=? ORDER BY agent_sequence LIMIT 1",
+                (ACCEPTED,),
+            ).fetchone()
+        return _command(row) if row else None
+
+    def commands_with_status(self, *statuses: str) -> list[dict]:
+        marks = ",".join("?" for _ in statuses)
+        with self._lock:
+            rows = self._db.execute(
+                f"SELECT * FROM commands WHERE status IN ({marks}) "
+                "ORDER BY agent_sequence",
+                statuses,
+            ).fetchall()
+        return [_command(row) for row in rows]
+
+    # --- approvals ----------------------------------------------------------
+
+    def add_approval(self, approval_id, command_id, generation, method) -> None:
+        with self.tx() as db:
+            db.execute(
+                "INSERT INTO approvals(approval_id, command_id, generation, method, "
+                "status, created_at) VALUES(?, ?, ?, ?, 'pending', ?)",
+                (approval_id, command_id, generation, method, time.time()),
+            )
+
+    def get_approval(self, approval_id: str) -> dict | None:
+        with self._lock:
+            row = self._db.execute(
+                "SELECT * FROM approvals WHERE approval_id=?", (approval_id,)
+            ).fetchone()
+        return dict(row) if row else None
+
+    def set_approval(self, approval_id: str, status: str, decision=None) -> None:
+        with self.tx() as db:
+            db.execute(
+                "UPDATE approvals SET status=?, decision=COALESCE(?, decision) "
+                "WHERE approval_id=?",
+                (status, decision, approval_id),
+            )
+
+    def pending_approvals(self) -> list[dict]:
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT * FROM approvals WHERE status IN ('pending', 'decided')"
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    # --- outbox -------------------------------------------------------------
+
+    def emit(self, type_: str, payload: dict) -> int:
+        with self.tx() as db:
+            row = db.execute(
+                "SELECT COALESCE(MAX(source_seq), 0) AS seq FROM outbox "
+                "WHERE instance_id=?",
+                (self.instance_id,),
+            ).fetchone()
+            seq = row["seq"] + 1
+            db.execute(
+                "INSERT INTO outbox(instance_id, source_seq, event_id, type, payload, "
+                "created_at) VALUES(?, ?, ?, ?, ?, ?)",
+                (
+                    self.instance_id,
+                    seq,
+                    str(uuid.uuid4()),
+                    type_,
+                    json.dumps(payload, ensure_ascii=False),
+                    time.time(),
+                ),
+            )
+        return seq
+
+    def unacked(self, limit: int, max_bytes: int) -> list[dict]:
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT * FROM outbox WHERE instance_id=? AND acked=0 "
+                "ORDER BY source_seq LIMIT ?",
+                (self.instance_id, limit),
+            ).fetchall()
+        batch, size = [], 0
+        for row in rows:
+            size += len(row["payload"]) + 200
+            if batch and size > max_bytes:
+                break
+            batch.append(
+                {
+                    "source_seq": row["source_seq"],
+                    "source_event_id": row["event_id"],
+                    "type": row["type"],
+                    "payload": json.loads(row["payload"]),
+                }
+            )
+        return batch
+
+    def ack_through(self, source_seq: int) -> None:
+        with self.tx() as db:
+            db.execute(
+                "UPDATE outbox SET acked=1 WHERE instance_id=? AND source_seq<=?",
+                (self.instance_id, source_seq),
+            )
+
+    def all_acked(self) -> bool:
+        with self._lock:
+            return (
+                self._db.execute(
+                    "SELECT 1 FROM outbox WHERE instance_id=? AND acked=0 LIMIT 1",
+                    (self.instance_id,),
+                ).fetchone()
+                is None
+            )
+
+
+class CommandConflict(Exception):
+    pass
+
+
+def _command(row) -> dict:
+    data = dict(row)
+    data["payload"] = json.loads(data["payload"])
+    data["interrupt_requested"] = bool(data["interrupt_requested"])
+    return data
