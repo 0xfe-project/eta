@@ -1,0 +1,27 @@
+{
+  "name": "axp",
+  "private": true,
+  "packageManager": "bun@1.3.14",
+  "workspaces": [
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "setup": "bun install && bun run setup:control-plane",
+    "setup:control-plane": "uv sync --project apps/control-plane --dev && bun run db:migrate",
+    "dev": "bash scripts/dev.sh",
+    "dev:control-plane": "uv run --project apps/control-plane python apps/control-plane/manage.py runserver 127.0.0.1:8000",
+    "dev:web": "bun run --cwd apps/web dev",
+    "dev:agent-runtime": "bun run --cwd apps/agent-runtime dev",
+    "db:migrate": "uv run --project apps/control-plane python apps/control-plane/manage.py migrate",
+    "build": "bun run --cwd apps/web build && bun run --cwd apps/agent-runtime build",
+    "check": "bun run build && bun run --cwd apps/web typecheck && bun run --cwd apps/agent-runtime typecheck && uv run --project apps/control-plane python apps/control-plane/manage.py check && uv run --project apps/control-plane ruff check apps/control-plane",
+    "format": "prettier --write . && uv run --project apps/control-plane ruff format apps/control-plane"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "prettier": "^3.6.2"
+  }
+}

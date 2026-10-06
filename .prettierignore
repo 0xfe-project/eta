@@ -1,0 +1,8 @@
+bun.lock
+uv.lock
+apps/control-plane/
+**/routeTree.gen.ts
+node_modules/
+dist/
+.output/
+.tanstack/
