@@ -1,6 +1,5 @@
 import { CheckIcon } from "@phosphor-icons/react/Check";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
-import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { TrashIcon } from "@phosphor-icons/react/Trash";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -9,7 +8,6 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -31,15 +29,12 @@ export function AddTask({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant={variant}>
-          <PlusIcon aria-hidden="true" /> New task
+          <PlusIcon aria-hidden="true" /> 新建任务
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader>
-          <DialogTitle>Add a task</DialogTitle>
-          <DialogDescription>
-            A small next step is a good place to start.
-          </DialogDescription>
+          <DialogTitle>添加任务</DialogTitle>
         </DialogHeader>
         <form
           className="space-y-5"
@@ -52,19 +47,18 @@ export function AddTask({
           }}
         >
           <div className="space-y-2">
-            <Label htmlFor="task-title">Task</Label>
+            <Label htmlFor="task-title">任务</Label>
             <Input
               id="task-title"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              placeholder="What needs to happen?"
               maxLength={200}
               required
             />
           </div>
           <DialogFooter>
             <Button type="submit" disabled={!title.trim()}>
-              Add task
+              添加任务
             </Button>
           </DialogFooter>
         </form>
@@ -85,28 +79,20 @@ export function TaskList({
   onAdd: (title: string) => void;
 }) {
   return (
-    <section className="border border-border bg-background">
-      <header className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
-        <h3 className="flex items-center gap-2 text-sm font-medium">
-          <ListChecksIcon className="size-4" aria-hidden="true" /> Tasks{" "}
-          <span className="ml-1 font-mono text-xs text-muted-foreground">
-            {tasks.filter((task) => !task.done).length}
-          </span>
-        </h3>
+    <section>
+      <header className="flex items-center justify-between gap-2 py-1">
+        <h2 className="text-sm font-medium">任务</h2>
         <AddTask onAdd={onAdd} variant="ghost" />
       </header>
       {tasks.length ? (
         <ul className="divide-y divide-border">
           {tasks.map((task) => (
-            <li
-              key={task.id}
-              className="group flex items-center gap-3 px-5 py-4"
-            >
+            <li key={task.id} className="group flex items-center gap-2 py-2">
               <button
                 type="button"
                 role="checkbox"
                 aria-checked={task.done}
-                aria-label={`Complete ${task.title}`}
+                aria-label={`完成 ${task.title}`}
                 onClick={() => onToggle(task.id)}
                 className={cn(
                   "flex size-4 shrink-0 items-center justify-center border border-input",
@@ -129,7 +115,7 @@ export function TaskList({
               <Button
                 variant="ghost"
                 size="icon-xs"
-                aria-label={`Delete ${task.title}`}
+                aria-label={`删除 ${task.title}`}
                 onClick={() => onDelete(task.id)}
               >
                 <TrashIcon
@@ -141,18 +127,7 @@ export function TaskList({
           ))}
         </ul>
       ) : (
-        <div className="px-6 py-12 text-center">
-          <ListChecksIcon
-            className="mx-auto mb-4 size-7 text-muted-foreground"
-            weight="light"
-            aria-hidden="true"
-          />
-          <p className="text-sm font-medium">A clear list. A fresh start.</p>
-          <p className="mx-auto mt-2 max-w-64 text-sm leading-6 text-muted-foreground">
-            Add your next step here. Small tasks make room for the bigger
-            picture.
-          </p>
-        </div>
+        <p className="py-2 text-sm text-muted-foreground">暂无任务</p>
       )}
     </section>
   );

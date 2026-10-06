@@ -1,41 +1,38 @@
-import { ArrowUpIcon } from "@phosphor-icons/react/ArrowUp";
-import { ArrowUpRightIcon } from "@phosphor-icons/react/ArrowUpRight";
-import { PlusIcon } from "@phosphor-icons/react/Plus";
-import { ChatCircleIcon } from "@phosphor-icons/react/ChatCircle";
-import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Markdown } from "@/components/markdown";
+import { ClaudeHeader } from "@/components/brainless/claude/claude-header";
+import { CodexHeader } from "@/components/brainless/codex/codex-header";
+import { GrokHeader } from "@/components/brainless/grok/grok-header";
+import { useEffect, useRef } from "react";
+import { ClaudeMessage } from "@/components/brainless/claude/claude-message";
+import { ClaudePrompt } from "@/components/brainless/claude/claude-prompt";
+import { CodexMessage } from "@/components/brainless/codex/codex-message";
+import { CodexPrompt } from "@/components/brainless/codex/codex-prompt";
+import { GrokMessage } from "@/components/brainless/grok/grok-message";
+import { GrokPrompt } from "@/components/brainless/grok/grok-prompt";
 import type { Message } from "./types";
 
-const suggestions = [
-  {
-    title: "Make a plan",
-    prompt: "Help me turn my next project into a clear, actionable plan.",
-  },
-  {
-    title: "Explore an idea",
-    prompt: "I'd like to think through an idea with you.",
-  },
-  {
-    title: "Organize my work",
-    prompt:
-      "Help me organize what I'm working on and decide what to focus on next.",
-  },
-];
+export type SessionTheme = "claude" | "codex" | "grok";
+const messageComponents = {
+  claude: ClaudeMessage,
+  codex: CodexMessage,
+  grok: GrokMessage,
+};
 
 export function ChatPanel({
   messages,
+  draft,
+  onDraftChange: setDraft,
   onSend,
-  onNewChat,
+  theme,
 }: {
   messages: Message[];
+  draft: string;
+  onDraftChange: (value: string) => void;
   onSend: (content: string) => void;
-  onNewChat: () => void;
+  theme: SessionTheme;
 }) {
-  const [draft, setDraft] = useState("");
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const SessionMessage = messageComponents[theme];
   useEffect(() => {
     if (messages.length) endRef.current?.scrollIntoView({ block: "nearest" });
   }, [messages.length]);
@@ -45,142 +42,83 @@ export function ChatPanel({
     if (!content) return;
     onSend(content);
     setDraft("");
-    inputRef.current?.focus();
+    formRef.current?.querySelector("input")?.focus();
   }
+  const promptProps = {
+    value: draft,
+    onChange: (event: React.ChangeEvent<HTMLInputElement>) =>
+      setDraft(event.target.value),
+    onKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (
+        event.key === "Enter" &&
+        !event.shiftKey &&
+        !event.nativeEvent.isComposing
+      ) {
+        event.preventDefault();
+        send();
+      }
+    },
+    placeholder: "输入消息…",
+  };
 
   return (
     <section
-      aria-label="Chat"
-      className="flex h-full min-h-0 flex-col bg-background"
+      aria-label="对话"
+      data-session-theme={theme}
+      className="flex h-full min-h-0 flex-col bg-[var(--terminal-background)]"
     >
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-6">
-        <div className="flex items-center gap-2.5 text-sm font-medium">
-          <ChatCircleIcon className="size-4" aria-hidden="true" /> Conversation
-        </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="New conversation"
-          title="New conversation"
-          onClick={() => {
-            onNewChat();
-            setDraft("");
-            inputRef.current?.focus();
-          }}
-        >
-          <PlusIcon aria-hidden="true" />
-        </Button>
-      </header>
-      <div
-        className="min-h-0 flex-1 overflow-y-auto px-6 py-8"
-        role="log"
-        aria-label="Conversation messages"
-        aria-live="polite"
-      >
-        <div
-          className="mb-8 flex size-9 items-center justify-center border border-foreground text-sm font-medium"
-          aria-hidden="true"
-        >
-          a.
-        </div>
-        <h2 className="text-2xl font-medium leading-tight tracking-tight">
-          A little space
-          <br />
-          to think things through.
-        </h2>
-        <p className="mt-4 max-w-xs text-sm leading-6 text-muted-foreground">
-          Hi Eric. Bring an idea, a question, or a messy to-do list. Start
-          wherever you are.
-        </p>
-        {messages.length === 0 ? (
-          <div className="mt-8 space-y-2">
-            <p className="mb-3 text-xs text-muted-foreground">
-              A few places to start
-            </p>
-            {suggestions.map(({ title, prompt }) => (
-              <button
-                key={title}
-                onClick={() => {
-                  setDraft(prompt);
-                  inputRef.current?.focus();
-                }}
-                className="flex w-full items-center justify-between border border-border px-3.5 py-3 text-left text-sm transition-colors hover:bg-muted"
-              >
-                {title}
-                <ArrowUpRightIcon
-                  className="size-4 text-muted-foreground"
-                  aria-hidden="true"
-                />
-              </button>
-            ))}
-          </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {theme === "claude" ? (
+          <ClaudeHeader
+            user="Eric"
+            version=""
+            model="未连接"
+            org="AXP"
+            cwd="axp"
+            tips={[]}
+            whatsNew={[]}
+          />
+        ) : theme === "codex" ? (
+          <CodexHeader version="" model="未连接" directory="axp" />
         ) : (
-          <div className="mt-8 space-y-5">
-            {messages.map((message) => (
-              <article
-                key={message.id}
-                className="border-l-2 border-foreground bg-muted/50 px-4 py-3"
-              >
-                <p className="mb-1 text-xs font-medium text-muted-foreground">
-                  You
-                </p>
-                <Markdown>{message.content}</Markdown>
-              </article>
-            ))}
-            <p className="text-xs leading-5 text-muted-foreground">
-              Your message is saved in this preview. Agent replies will be
-              available once a runtime is connected.
-            </p>
-          </div>
+          <GrokHeader version="" headline="AXP" subhead="未连接" />
         )}
+        <div
+          className="space-y-3 pt-3"
+          role="log"
+          aria-label="对话消息"
+          aria-live="polite"
+        >
+          {messages.map((message) => (
+            <SessionMessage key={message.id} role="user">
+              <span className="sr-only">你：</span>
+              <span className="whitespace-pre-wrap">{message.content}</span>
+            </SessionMessage>
+          ))}
+        </div>
         <div ref={endRef} />
       </div>
-      <div className="shrink-0 p-4 pt-2 sm:p-5 sm:pt-2">
-        <form
-          className="border border-input bg-background transition-colors focus-within:border-foreground/50"
-          onSubmit={(event) => {
-            event.preventDefault();
-            send();
-          }}
-        >
-          <label htmlFor="message" className="sr-only">
-            Message
-          </label>
-          <Textarea
-            id="message"
-            ref={inputRef}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (
-                event.key === "Enter" &&
-                !event.shiftKey &&
-                !event.nativeEvent.isComposing
-              ) {
-                event.preventDefault();
-                send();
-              }
-            }}
-            placeholder="Ask anything, or think out loud…"
-            maxLength={10_000}
-            className="min-h-24 max-h-48 resize-none border-0 bg-transparent px-3 py-3 text-sm focus-visible:ring-0 dark:bg-transparent md:text-sm"
+      <form
+        ref={formRef}
+        className="shrink-0"
+        onSubmit={(event) => {
+          event.preventDefault();
+          send();
+        }}
+      >
+        {theme === "claude" ? (
+          <ClaudePrompt {...promptProps} mode="manual" effort={false} />
+        ) : theme === "codex" ? (
+          <CodexPrompt {...promptProps} model="未连接" directory="axp" />
+        ) : (
+          <GrokPrompt
+            {...promptProps}
+            model="未连接"
+            mode="normal"
+            showShortcuts={false}
           />
-          <div className="flex items-center justify-between px-3 pb-3">
-            <span className="text-xs text-muted-foreground">Local preview</span>
-            <Button
-              type="submit"
-              size="icon"
-              disabled={!draft.trim()}
-              aria-label="Send message"
-            >
-              <ArrowUpIcon aria-hidden="true" />
-            </Button>
-          </div>
-        </form>
-        <p className="mt-2.5 text-center text-[11px] text-muted-foreground">
-          Enter to send · Shift + Enter for a new line
-        </p>
-      </div>
+        )}
+      </form>
     </section>
   );
 }

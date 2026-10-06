@@ -3,6 +3,7 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist-mono";
+@import "./components/brainless/theme.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -72,6 +73,14 @@
 }
 
 @theme inline {
+  --default-transition-duration: 60ms;
+  --default-transition-timing-function: linear;
+  --ease-in: linear;
+  --ease-out: linear;
+  --ease-in-out: linear;
+  --animate-in: enter 60ms linear;
+  --animate-out: exit 60ms linear;
+  --spacing: 0.225rem;
   --font-heading: var(--font-sans);
   --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, monospace;
