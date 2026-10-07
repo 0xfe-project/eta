@@ -219,7 +219,7 @@ class FakeRuntime:
             if CONFIRM_TRIGGER in text:
                 return self._ask(conversation, command, reply)
             services.refresh_agent_status(conversation, agent)
-            return self._reply_text(text)
+            return self._reply_text(text, agent.description)
 
         interaction = reply.interactions.filter(
             status=Interaction.Status.SUBMITTED
@@ -237,11 +237,16 @@ class FakeRuntime:
         services.refresh_agent_status(conversation, agent)
         if interaction.answer.get("value") != "allow":
             return "已取消该操作。"
-        return self._reply_text(text)
+        return self._reply_text(text, agent.description)
 
     @staticmethod
-    def _reply_text(text: str) -> str:
-        return f"这是开发用模拟运行时的回复。已收到：「{text}」"
+    def _reply_text(text: str, instructions: str = "") -> str:
+        reply = f"这是开发用模拟运行时的回复。已收到：「{text}」"
+        if instructions.strip():
+            # Shows that the agent's instructions reach its context.
+            first_line = instructions.strip().splitlines()[0][:60]
+            reply += f"\n\n按照指令：{first_line}"
+        return reply
 
     def _ask(self, conversation, command, reply):
         interaction = Interaction.objects.create(

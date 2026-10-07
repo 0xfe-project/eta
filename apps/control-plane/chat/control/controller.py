@@ -70,6 +70,7 @@ class Controller:
         for step in (
             self.expire_runtimes,
             self.fail_stale_queued,
+            self.restart_outdated,
             self.ensure_runtimes,
             self.reconcile_unknown,
             self.dispatch,
@@ -227,7 +228,7 @@ class Controller:
                 lease_expires_at=timezone.now()
                 + _seconds(settings.AXP_RUNTIME_START_TIMEOUT),
                 mcp_snapshot=snapshot or [],
-                mcp_config_version=agent.mcp_config_version,
+                config_version=agent.config_version,
                 restored_checkpoint=restore,
             )
             agent.status = (
@@ -323,10 +324,11 @@ class Controller:
                     "model": agent.model,
                     "sandbox": settings.AXP_CODEX_SANDBOX,
                     "approval_policy": settings.AXP_CODEX_APPROVAL_POLICY,
+                    "developer_instructions": agent.description,
                 }
             ),
             "AXP_MCP_SNAPSHOT": json.dumps(instance.mcp_snapshot),
-            "AXP_MCP_CONFIG_VERSION": str(instance.mcp_config_version),
+            "AXP_CONFIG_VERSION": str(instance.config_version),
             "AXP_WORKSPACE_BACKEND": storage.workspace_backend,
             "AXP_HEARTBEAT_SECONDS": str(
                 max(1, settings.AXP_RUNTIME_LEASE_SECONDS / 4)
@@ -393,6 +395,25 @@ class Controller:
                 continue
             self.driver.stop(instance.container_id)
             self.end_instance(instance, "IDLE", RuntimeInstance.Status.STOPPED)
+
+    def restart_outdated(self) -> None:
+        """Restart runtimes started with old instructions or MCP bindings.
+
+        Only between turns, so a turn never sees its configuration change; the
+        replacement resumes the same thread with the new configuration.
+        """
+        for instance in RuntimeInstance.objects.filter(
+            ended_at__isnull=True, status__in=READY
+        ).select_related("agent"):
+            agent = instance.agent
+            if instance.config_version >= agent.config_version:
+                continue
+            if agent.commands.filter(status__in=ACTIVE).exists():
+                continue
+            self.driver.stop(instance.container_id)
+            self.end_instance(
+                instance, "CONFIG_CHANGED", RuntimeInstance.Status.STOPPED
+            )
 
     def stop_deleted(self) -> None:
         """Stop runtimes of deleted agents once their interrupted work settles."""

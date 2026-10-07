@@ -1,4 +1,3 @@
-import { useCallback } from "react";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { PaletteIcon } from "@phosphor-icons/react/Palette";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
@@ -12,7 +11,6 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { AgentSettings } from "./agent-settings";
-import { useAgents } from "./use-agents";
 import { useWorkspace, type SettingsSection } from "./workspace-state";
 
 const sessionThemes = ["claude", "codex", "grok"] as const;
@@ -74,19 +72,11 @@ function AppearanceSettings() {
 
 export function SettingsDialog() {
   const { settings, setSettings } = useWorkspace();
-  const { agents, current, select } = useAgents();
-  const setCreating = useCallback(
-    (creating: boolean) => setSettings((state) => ({ ...state, creating })),
-    [setSettings],
-  );
 
   return (
     <Dialog
       open={settings.open}
-      // Closing abandons an unfinished new-agent form.
-      onOpenChange={(open) =>
-        setSettings((state) => ({ ...state, open, creating: false }))
-      }
+      onOpenChange={(open) => setSettings((state) => ({ ...state, open }))}
     >
       <DialogTrigger asChild>
         <Button variant="ghost" size="icon" aria-label="设置" title="设置">
@@ -111,11 +101,7 @@ export function SettingsDialog() {
                 type="button"
                 aria-current={settings.section === value ? "page" : undefined}
                 onClick={() =>
-                  setSettings((state) => ({
-                    ...state,
-                    section: value,
-                    creating: false,
-                  }))
+                  setSettings((state) => ({ ...state, section: value }))
                 }
                 className={cn(
                   "flex items-center gap-2 px-2 py-2 text-sm text-muted-foreground transition-colors duration-[60ms] ease-linear outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring",
@@ -125,23 +111,12 @@ export function SettingsDialog() {
               >
                 <Icon aria-hidden="true" className="size-4" />
                 {label}
-                {value === "agents" && agents.length ? (
-                  <span className="ml-auto text-xs tabular-nums text-muted-foreground">
-                    {agents.length}
-                  </span>
-                ) : null}
               </button>
             ))}
           </nav>
           <section className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4">
             {settings.section === "agents" ? (
-              <AgentSettings
-                agents={agents}
-                currentId={current?.id}
-                creating={settings.creating}
-                onCreatingChange={setCreating}
-                onSelect={select}
-              />
+              <AgentSettings />
             ) : (
               <AppearanceSettings />
             )}

@@ -81,6 +81,8 @@ class Agent(models.Model):
         Conversation, on_delete=models.PROTECT, related_name="agents"
     )
     name = models.CharField(max_length=100)
+    # User-authored instructions injected into the agent's context.
+    description = models.TextField(blank=True, default="")
     # Server-controlled; never accepted from the web.
     model = models.CharField(max_length=100, null=True, blank=True)
     desired_state = models.CharField(
@@ -91,7 +93,9 @@ class Agent(models.Model):
     )
     # Incremented for every runtime instance; fences stale runtimes.
     generation = models.BigIntegerField(default=0)
-    mcp_config_version = models.BigIntegerField(default=0)
+    # Bumped when anything a runtime is started with changes (instructions,
+    # MCP bindings). Runtimes pick it up the next time they start.
+    config_version = models.BigIntegerField(default=0)
     last_active_at = models.DateTimeField(null=True, blank=True)
     # Deleted agents keep their history but are hidden and never run again.
     deleted_at = models.DateTimeField(null=True, blank=True)
@@ -128,7 +132,7 @@ class Agent(models.Model):
                     product_revision__gte=1,
                     last_command_seq__gte=0,
                     generation__gte=0,
-                    mcp_config_version__gte=0,
+                    config_version__gte=0,
                 ),
                 name="agent_counters_valid",
             ),
@@ -534,8 +538,8 @@ class RuntimeInstance(models.Model):
     controller_id = models.CharField(max_length=100)
     lease_expires_at = models.DateTimeField()
     last_heartbeat_at = models.DateTimeField(null=True, blank=True)
-    # Immutable MCP configuration this instance was started with.
-    mcp_config_version = models.BigIntegerField(default=0)
+    # Immutable configuration this instance was started with.
+    config_version = models.BigIntegerField(default=0)
     mcp_snapshot = models.JSONField(default=list)
     mcp_status = models.JSONField(default=dict)
     last_source_seq = models.BigIntegerField(default=0)

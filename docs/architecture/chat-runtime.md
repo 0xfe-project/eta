@@ -27,9 +27,13 @@
 
 确认：runtime 用 SDK 的审批回调接住 `commandExecution` / `fileChange` 审批请求，生成 `approval.requested`；控制面建 `approval` 与 choice `interaction`。用户回答后审批变为 `decided`，controller 送达，runtime 回调返回后发出 `approval.applied`，交互才显示 `resolved`。等待中被停止时回调以 `cancel` 结束，同时中断该 turn。其他服务端请求（权限扩展、MCP elicitation 等）一律保守拒绝。
 
-## 智能体管理
+## 智能体
 
-AXP 是单用户服务，所有智能体属于唯一的默认对话（`conversation.is_default`），首次创建智能体时建立。除 RFC 第 3 节的接口外，公开 API 还提供 `PATCH /agents/{id}`（改名）和 `DELETE /agents/{id}`。删除不抹掉数据：智能体被标记为已删除并从列表中隐藏，排队消息取消、进行中的回复被中断，历史消息保留；controller 等执行停下后停止并移除其容器，之后不再启动。工作区与状态卷保留在 Docker 中。删除通过 `agent.deleted` 事件（`{agent_id}`）通知前端。
+AXP 是单用户服务，所有智能体属于唯一的默认对话（`conversation.is_default`），首次创建智能体时建立。
+
+智能体目前有名称和 `description`（指令）。指令原样作为 Codex 的 `developerInstructions` 在 `thread/start` 和 `thread/resume` 时注入。运行时启动所用的一切配置（指令、MCP 绑定）都由 `agent.config_version` 版本化：修改后版本递增；controller 在该智能体没有进行中的执行时停止旧实例（`CONFIG_CHANGED`），下一个实例用新配置恢复同一 thread，因此配置不会在 turn 中途改变。以后给智能体增加的、影响运行时的设置应走同一条路径。
+
+除 RFC 第 3 节的接口外，公开 API 提供 `POST /agents`（`name`、`description`）、`PATCH /agents/{id}`（部分更新）和 `DELETE /agents/{id}`。删除不抹掉数据：智能体被标记为已删除并从列表中隐藏，排队消息取消、进行中的回复被中断，历史消息保留；controller 等执行停下后停止并移除其容器，之后不再启动。工作区与状态卷保留在 Docker 中。删除通过 `agent.deleted` 事件（`{agent_id}`）通知前端。
 
 ## 恢复与隔离
 
@@ -48,7 +52,7 @@ AXP 是单用户服务，所有智能体属于唯一的默认对话（`conversat
 
 ## MCP
 
-`mcp_module_revision` 由部署方注册（`manage.py mcp_register spec.json`，内置 `tasks` 模块由迁移注册），只接受 `command`/`args`/`env`，修订不可变。`agent_mcp_binding` 的配置按模块的 JSON Schema 校验，密钥只存 `env:NAME` 引用（`manage.py mcp_bind`）。新 Agent 默认绑定 `CHAT_DEFAULT_MCP_MODULES`。绑定变更递增 `mcp_config_version`，只在下次启动实例时生成不可变快照，不会在 turn 中途改变工具。runtime 把快照转换为 Codex 的 `mcp_servers.*` 配置，并依据 `mcpServer/startupStatus/updated` 判断必需模块是否就绪。
+`mcp_module_revision` 由部署方注册（`manage.py mcp_register spec.json`，内置 `tasks` 模块由迁移注册），只接受 `command`/`args`/`env`，修订不可变。`agent_mcp_binding` 的配置按模块的 JSON Schema 校验，密钥只存 `env:NAME` 引用（`manage.py mcp_bind`）。新 Agent 默认绑定 `CHAT_DEFAULT_MCP_MODULES`。绑定变更同样递增 `config_version`，按上文规则在空闲时换新实例并生成不可变快照，不会在 turn 中途改变工具。runtime 把快照转换为 Codex 的 `mcp_servers.*` 配置，并依据 `mcpServer/startupStatus/updated` 判断必需模块是否就绪。
 
 ## 工作区存储
 

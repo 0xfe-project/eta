@@ -11,7 +11,7 @@ from .idempotency import run_idempotent
 from .schemas import (
     AgentCreateIn,
     AgentOut,
-    AgentRenameIn,
+    AgentUpdateIn,
     ChatSnapshotOut,
     ErrorOut,
     InteractionAnswerIn,
@@ -53,16 +53,17 @@ def list_messages(
 @router.post("/agents", response={201: AgentOut, **_ERRORS})
 def create_agent(request: HttpRequest, body: AgentCreateIn):
     def handler():
-        agent = services.create_agent(body.name)
+        agent = services.create_agent(body.name, body.description)
         return 201, services.agent_public(agent), str(agent.id)
 
     return run_idempotent(request, body.model_dump(), handler)
 
 
 @router.patch("/agents/{agent_id}", response={200: AgentOut, **_ERRORS})
-def rename_agent(request: HttpRequest, agent_id: str, body: AgentRenameIn):
+def update_agent(request: HttpRequest, agent_id: str, body: AgentUpdateIn):
+    changes = body.model_dump(exclude_unset=True, exclude_none=True)
     with transaction.atomic():
-        agent = services.rename_agent(agent_id, body.name)
+        agent = services.update_agent(agent_id, changes)
     return services.agent_public(agent)
 
 

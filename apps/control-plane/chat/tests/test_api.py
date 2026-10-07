@@ -107,7 +107,9 @@ class AgentTests(TestCase):
 
     def test_create_agent_returns_product_fields_only(self):
         agent = self.chat.create_agent("  开发助手  ")
-        self.assertEqual(set(agent), {"id", "name", "status", "revision"})
+        self.assertEqual(
+            set(agent), {"id", "name", "description", "status", "revision"}
+        )
         self.assertEqual(agent["name"], "开发助手")
         self.assertEqual(agent["status"], "idle")
 
@@ -132,6 +134,32 @@ class AgentManagementTests(TestCase):
     def setUp(self):
         self.chat = ChatClient()
         self.agent = self.chat.create_agent("旧名字")
+
+    def test_create_with_description(self):
+        instructions = "你是代码审查员。\n  只指出真实问题。"
+        response = self.chat.post(
+            "/agents", {"name": "审查", "description": instructions}
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["description"], instructions)
+        self.assertEqual(self.agent["description"], "")
+        too_long = {"name": "x", "description": "x" * 10_001}
+        self.assertEqual(self.chat.post("/agents", too_long).status_code, 422)
+
+    def test_update_description_bumps_config_version(self):
+        before = Agent.objects.get(pk=self.agent["id"]).config_version
+        response = self.chat.patch(
+            f"/agents/{self.agent['id']}", {"description": "只用中文回答。"}
+        )
+        self.assertEqual(response.json()["description"], "只用中文回答。")
+        self.assertEqual(response.json()["name"], "旧名字")
+        agent = Agent.objects.get(pk=self.agent["id"])
+        self.assertEqual(agent.config_version, before + 1)
+        # Renaming alone does not touch runtime configuration.
+        self.chat.patch(f"/agents/{self.agent['id']}", {"name": "新"})
+        self.assertEqual(Agent.objects.get().config_version, before + 1)
+        unknown = self.chat.patch(f"/agents/{self.agent['id']}", {"model": "x"})
+        self.assertEqual(unknown.status_code, 422)
 
     def test_rename(self):
         response = self.chat.patch(f"/agents/{self.agent['id']}", {"name": " 新名字 "})

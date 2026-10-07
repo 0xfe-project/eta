@@ -19,20 +19,33 @@ class StrictInput(Schema):
 # --- Inputs -----------------------------------------------------------------
 
 
+AGENT_DESCRIPTION_MAX = 10_000
+
+
+def _clean_name(value: str | None) -> str | None:
+    if value is None:
+        return None
+    value = value.strip()
+    if not value:
+        raise ValueError("名称不能为空")
+    return value
+
+
 class AgentCreateIn(StrictInput):
     name: str = Field(min_length=1, max_length=100)
+    # Instructions injected into the agent's context; kept verbatim.
+    description: str = Field("", max_length=AGENT_DESCRIPTION_MAX)
 
-    @field_validator("name")
-    @classmethod
-    def strip_name(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise ValueError("名称不能为空")
-        return value
+    _name = field_validator("name")(_clean_name)
 
 
-class AgentRenameIn(AgentCreateIn):
-    pass
+class AgentUpdateIn(StrictInput):
+    """Partial update: only fields that are sent change."""
+
+    name: str | None = Field(None, min_length=1, max_length=100)
+    description: str | None = Field(None, max_length=AGENT_DESCRIPTION_MAX)
+
+    _name = field_validator("name")(_clean_name)
 
 
 class MessageCreateIn(StrictInput):
@@ -79,6 +92,7 @@ class Failure(Schema):
 class AgentOut(Schema):
     id: str
     name: str
+    description: str
     status: Literal["idle", "working", "waiting_for_input", "unavailable"]
     revision: int
 

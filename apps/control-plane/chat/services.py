@@ -49,6 +49,7 @@ def agent_public(agent: Agent) -> dict:
         AgentOut(
             id=str(agent.id),
             name=agent.name,
+            description=agent.description,
             status=agent.product_status,
             revision=agent.product_revision,
         )
@@ -386,25 +387,38 @@ def _agent(conversation: Conversation, agent_id: str) -> Agent:
     return agent
 
 
-def create_agent(name: str) -> Agent:
+def create_agent(name: str, description: str = "") -> Agent:
     conversation = lock_conversation(ensure_default_conversation())
     # Model, tools and mounts come from server configuration, not the request.
     agent = Agent.objects.create(
-        conversation=conversation, name=name, model=settings.AXP_CODEX_MODEL
+        conversation=conversation,
+        name=name,
+        description=description,
+        model=settings.AXP_CODEX_MODEL,
     )
     bind_defaults(agent)
     emit_agent(conversation, agent)
     return agent
 
 
-def rename_agent(agent_id: str, name: str) -> Agent:
+def update_agent(agent_id: str, changes: dict) -> Agent:
     conversation = _locked_default()
     agent = _agent(conversation, agent_id)
-    if agent.name != name:
-        agent.name = name
-        agent.product_revision += 1
-        agent.save(update_fields=["name", "product_revision", "updated_at"])
-        emit_agent(conversation, agent)
+    changed = [
+        field for field, value in changes.items() if getattr(agent, field) != value
+    ]
+    if not changed:
+        return agent
+    for field in changed:
+        setattr(agent, field, changes[field])
+    if "description" in changed:
+        # Runtimes receive instructions at start; the controller restarts an
+        # idle runtime so the next turn uses them.
+        agent.config_version += 1
+        changed.append("config_version")
+    agent.product_revision += 1
+    agent.save(update_fields=[*changed, "product_revision", "updated_at"])
+    emit_agent(conversation, agent)
     return agent
 
 

@@ -94,9 +94,7 @@ def bind(
             },
         )
         # Running instances keep their snapshot until the next start.
-        Agent.objects.filter(pk=agent.pk).update(
-            mcp_config_version=F("mcp_config_version") + 1
-        )
+        Agent.objects.filter(pk=agent.pk).update(config_version=F("config_version") + 1)
     return binding
 
 

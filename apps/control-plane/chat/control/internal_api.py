@@ -41,7 +41,7 @@ class HeartbeatIn(Strict):
     error_code: str | None = None
     current_command_id: str | None = None
     thread_id: str | None = None
-    mcp_config_version: int = 0
+    config_version: int = 0
     protocol_version: str = "1"
     sdk_version: str | None = None
     runtime_version: str | None = None

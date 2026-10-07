@@ -278,6 +278,8 @@ class Runtime:
         }
         if self.settings.model:
             params["model"] = self.settings.model
+        if self.settings.developer_instructions:
+            params["developerInstructions"] = self.settings.developer_instructions
         return params
 
     def _open_thread(self) -> None:
@@ -776,7 +778,7 @@ class Runtime:
             "error_code": self.error_code,
             "current_command_id": self.current_command_id,
             "thread_id": self.thread_id,
-            "mcp_config_version": self.settings.mcp_config_version,
+            "config_version": self.settings.config_version,
             "protocol_version": PROTOCOL_VERSION,
             "sdk_version": SDK_VERSION,
             "runtime_version": self.codex_version,

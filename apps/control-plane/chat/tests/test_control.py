@@ -693,6 +693,39 @@ class DeletionTests(ControlTestCase):
         self.assertEqual(len(self.driver.started), 1)
 
 
+class ConfigChangeTests(ControlTestCase):
+    def test_instructions_are_passed_and_applied_between_turns(self):
+        self.chat.patch(f"/agents/{self.agent['id']}", {"description": "第一版指令"})
+        sent = self.chat.send(self.agent["id"])
+        runtime = self.start_runtime()
+        settings = json.loads(self.driver.started[0].env["AXP_CODEX_SETTINGS"])
+        self.assertEqual(settings["developer_instructions"], "第一版指令")
+        self.controller.tick()
+        command = self.command_for(sent["reply"]["id"])
+        runtime.events(
+            ("turn.started", {"command_id": str(command.pk), "turn_id": "t"})
+        )
+        old = self.instance()
+
+        self.chat.patch(f"/agents/{self.agent['id']}", {"description": "第二版指令"})
+        self.controller.tick()
+        # A turn is running: the runtime keeps going until it settles.
+        self.assertNotIn(old.container_id, self.driver.stopped)
+        runtime.events(
+            ("turn.completed", {"command_id": str(command.pk), "status": "completed"})
+        )
+        self.controller.tick()
+        self.assertIn(old.container_id, self.driver.stopped)
+        old.refresh_from_db()
+        self.assertEqual(old.end_reason, "CONFIG_CHANGED")
+        # The next message starts a runtime with the new instructions.
+        self.chat.send(self.agent["id"], "新指令下")
+        self.controller.tick()
+        settings = json.loads(self.driver.started[-1].env["AXP_CODEX_SETTINGS"])
+        self.assertEqual(settings["developer_instructions"], "第二版指令")
+        self.assertEqual(self.driver.started[-1].env["AXP_THREAD_ID"], "thread-1")
+
+
 class McpTests(TestCase):
     def setUp(self):
         self.agent_data = ChatClient().create_agent()
@@ -701,7 +734,7 @@ class McpTests(TestCase):
     def test_builtin_tasks_module_bound_by_default(self):
         binding = self.agent.mcp_bindings.get()
         self.assertEqual(binding.module_key, "tasks")
-        self.assertEqual(self.agent.mcp_config_version, 1)
+        self.assertEqual(self.agent.config_version, 1)
 
     def test_config_is_validated_against_schema(self):
         revision = McpModuleRevision.objects.get(module_key="tasks")

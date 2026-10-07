@@ -193,14 +193,21 @@ def handle(message: dict) -> None:
     if method == "thread/start":
         thread_id = str(uuid.uuid4())
         threads = load()
-        threads[thread_id] = {"turns": []}
+        threads[thread_id] = {
+            "turns": [],
+            "instructions": params.get("developerInstructions"),
+        }
         save(threads)
         reply({"thread": {"id": thread_id}})
         return report_mcp(thread_id)
     if method == "thread/resume":
         thread_id = params.get("threadId")
-        if thread_id not in load():
+        threads = load()
+        if thread_id not in threads:
             return reply(error={"code": -32600, "message": "thread not found"})
+        # Resume applies the current instructions, as Codex does.
+        threads[thread_id]["instructions"] = params.get("developerInstructions")
+        save(threads)
         reply({"thread": {"id": thread_id}})
         return report_mcp(thread_id)
     if method == "thread/read":

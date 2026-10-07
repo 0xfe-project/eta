@@ -36,8 +36,10 @@ class Settings:
     model: str | None
     sandbox: str
     approval_policy: str
+    # The agent's description, injected as Codex developer instructions.
+    developer_instructions: str = ""
     mcp_modules: list[McpModule] = field(default_factory=list)
-    mcp_config_version: int = 0
+    config_version: int = 0
     restore: dict | None = None
     # Overrides the Codex launch command; used to run a scripted app-server.
     codex_launch: list[str] | None = None
@@ -97,8 +99,9 @@ def load_settings() -> Settings:
         model=codex.get("model"),
         sandbox=codex.get("sandbox", "workspace-write"),
         approval_policy=codex.get("approval_policy", "on-request"),
+        developer_instructions=codex.get("developer_instructions") or "",
         mcp_modules=modules,
-        mcp_config_version=int(os.environ.get("AXP_MCP_CONFIG_VERSION", "0")),
+        config_version=int(os.environ.get("AXP_CONFIG_VERSION", "0")),
         restore=_json("AXP_RESTORE", None),
         codex_launch=shlex.split(launch) if launch else None,
         heartbeat_seconds=float(os.environ.get("AXP_HEARTBEAT_SECONDS", "5")),

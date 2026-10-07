@@ -1,4 +1,3 @@
-import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -8,43 +7,14 @@ import {
   useSendMessage,
   useStopReply,
 } from "@/queries/chat";
-import { AgentSwitcher } from "./agent-switcher";
+import { AgentBar } from "./agent-bar";
+import { AgentEditor } from "./agent-editor";
 import { ChatPanel } from "./chat-panel";
 import { SettingsDialog } from "./settings-dialog";
 import { useAgents } from "./use-agents";
 import { WorkspacePanel } from "./workspace-panel";
 import { useWorkspace } from "./workspace-state";
 import type { WorkspaceView } from "./types";
-
-function ChatNotice({
-  error,
-  empty,
-  onCreate,
-}: {
-  error: Error | null;
-  empty: boolean;
-  onCreate: () => void;
-}) {
-  if (error)
-    return (
-      <p
-        role="alert"
-        className="px-1 pt-3 font-mono text-[13px] text-[var(--terminal-error)]"
-      >
-        无法加载对话：{error.message}
-      </p>
-    );
-  if (!empty) return null;
-  return (
-    <div className="flex flex-col items-start gap-2 px-1 pt-4 font-mono text-[13px] text-[var(--terminal-muted)]">
-      <p>还没有智能体。新建一个，就可以开始对话。</p>
-      <Button size="sm" onClick={onCreate}>
-        <PlusIcon aria-hidden="true" data-icon="inline-start" />
-        新建智能体
-      </Button>
-    </div>
-  );
-}
 
 export function Workspace({
   view,
@@ -53,31 +23,20 @@ export function Workspace({
   view: WorkspaceView;
   onViewChange: (view: WorkspaceView) => void;
 }) {
-  const {
-    workspace,
-    draft,
-    setDraft,
-    mobilePanel,
-    setMobilePanel,
-    setSettings,
-  } = useWorkspace();
+  const { workspace, draft, setDraft, mobilePanel, setMobilePanel } =
+    useWorkspace();
   const chat = useChat();
-  const { agents, current: selected } = useAgents();
+  const { current: selected, openEditor } = useAgents();
   const sendMessage = useSendMessage();
   const stopReply = useStopReply();
   const answer = useAnswerInteraction();
-  const createAgent = () =>
-    setSettings({ open: true, section: "agents", creating: true });
   const onError = (error: Error) => toast.error(error.message);
 
   return (
     <div className="mx-auto flex h-dvh w-full min-h-0 flex-col bg-background px-4 pb-4 sm:px-6 lg:max-w-[calc(64rem+3rem)]">
       <header className="flex h-14 shrink-0 items-center justify-between gap-2">
         <h1 className="text-xl font-semibold tracking-tight">axp.</h1>
-        <div className="flex items-center gap-1">
-          <AgentSwitcher />
-          <SettingsDialog />
-        </div>
+        <SettingsDialog />
       </header>
       <div className="grid grid-cols-2 md:hidden" aria-label="工作区面板">
         <Button
@@ -109,22 +68,20 @@ export function Workspace({
         >
           <ChatPanel
             theme={workspace.sessionTheme}
-            agents={agents}
             agentName={selected?.name}
-            messages={chat.data?.messages ?? []}
+            messages={(chat.data?.messages ?? []).filter(
+              (message) => message.agent_id === selected?.id,
+            )}
             interactions={chat.data?.interactions ?? []}
-            notice={
-              <ChatNotice
-                error={chat.error}
-                empty={chat.isSuccess && agents.length === 0}
-                onCreate={createAgent}
-              />
+            head={<AgentBar />}
+            error={
+              chat.error ? `无法加载对话：${chat.error.message}` : undefined
             }
             draft={draft}
             onDraftChange={setDraft}
             onSend={(text) => {
               if (!selected) {
-                createAgent();
+                openEditor();
                 return;
               }
               sendMessage.mutate(
@@ -142,6 +99,7 @@ export function Workspace({
           className={mobilePanel === "chat" ? "hidden md:flex" : undefined}
         />
       </main>
+      <AgentEditor />
     </div>
   );
 }

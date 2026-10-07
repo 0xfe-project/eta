@@ -148,6 +148,18 @@ class BootTests(RuntimeTestCase):
         self.assertEqual(second.thread_id, thread_id)
         self.assertTrue(cp.sessions[0]["resumed"])
 
+    def test_instructions_reach_codex_on_start_and_resume(self):
+        store = self.settings.codex_home / "fake_threads.json"
+        first, _ = self.start(developer_instructions="你是代码审查员。")
+        threads = json.loads(store.read_text())
+        self.assertEqual(threads[first.thread_id]["instructions"], "你是代码审查员。")
+        first.shutdown()
+        second, _ = self.start(
+            developer_instructions="只用中文回答。", instance_id="i2", generation=2
+        )
+        threads = json.loads(store.read_text())
+        self.assertEqual(threads[second.thread_id]["instructions"], "只用中文回答。")
+
     def test_lost_state_never_creates_replacement_thread(self):
         runtime, cp = self.start(known_thread_id="thread-from-control-plane")
         self.assertEqual(runtime.status, "recovery_failed")

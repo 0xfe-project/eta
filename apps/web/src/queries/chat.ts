@@ -12,6 +12,8 @@ import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
 const agentSchema = z.object({
   id: z.string(),
   name: z.string(),
+  // Instructions injected into the agent's context.
+  description: z.string(),
   status: z.enum(["idle", "working", "waiting_for_input", "unavailable"]),
   revision: z.number(),
 });
@@ -66,6 +68,8 @@ const snapshotSchema = z.object({
 });
 
 export type Agent = z.infer<typeof agentSchema>;
+/** Editable agent fields; grows as agents gain settings. */
+export type AgentDraft = Pick<Agent, "name" | "description">;
 export type ChatMessage = z.infer<typeof messageSchema>;
 export type Block = z.infer<typeof blockSchema>;
 export type Interaction = z.infer<typeof interactionSchema>;
@@ -188,8 +192,8 @@ export function useChat() {
 export function useCreateAgent() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (name: string) =>
-      agentSchema.parse(await apiPost("/agents", { name })),
+    mutationFn: async (draft: AgentDraft) =>
+      agentSchema.parse(await apiPost("/agents", draft)),
     onSuccess: (agent) =>
       update(queryClient, (s) => ({ ...s, agents: upsert(s.agents, agent) })),
   });
@@ -239,13 +243,14 @@ export function useAnswerInteraction() {
   });
 }
 
-export function useRenameAgent() {
+export function useUpdateAgent() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { id: string; name: string }) =>
-      agentSchema.parse(
-        await apiPatch(`/agents/${input.id}`, { name: input.name }),
-      ),
+    mutationFn: async ({
+      id,
+      ...changes
+    }: { id: string } & Partial<AgentDraft>) =>
+      agentSchema.parse(await apiPatch(`/agents/${id}`, changes)),
     onSuccess: (agent) =>
       update(queryClient, (s) => ({ ...s, agents: upsert(s.agents, agent) })),
   });

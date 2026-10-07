@@ -28,12 +28,9 @@ const initialWorkspace: z.infer<typeof workspaceSchema> = {
 
 type WorkspaceState = z.infer<typeof workspaceSchema>;
 export type SettingsSection = "agents" | "appearance";
-export type SettingsState = {
-  open: boolean;
-  section: SettingsSection;
-  /** Open the new-agent form when the agents section shows. */
-  creating: boolean;
-};
+export type SettingsState = { open: boolean; section: SettingsSection };
+/** The agent editor: closed, creating (agentId null) or editing an agent. */
+export type AgentEditorState = { open: boolean; agentId: string | null };
 const WorkspaceContext = createContext<{
   workspace: WorkspaceState;
   setWorkspace: Dispatch<SetStateAction<WorkspaceState>>;
@@ -43,6 +40,8 @@ const WorkspaceContext = createContext<{
   setMobilePanel: Dispatch<SetStateAction<"chat" | "workspace">>;
   settings: SettingsState;
   setSettings: Dispatch<SetStateAction<SettingsState>>;
+  agentEditor: AgentEditorState;
+  setAgentEditor: Dispatch<SetStateAction<AgentEditorState>>;
 } | null>(null);
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [workspace, setWorkspace] = useState(initialWorkspace);
@@ -52,7 +51,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<SettingsState>({
     open: false,
     section: "agents",
-    creating: false,
+  });
+  const [agentEditor, setAgentEditor] = useState<AgentEditorState>({
+    open: false,
+    agentId: null,
   });
   useEffect(() => {
     try {
@@ -86,6 +88,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         setMobilePanel,
         settings,
         setSettings,
+        agentEditor,
+        setAgentEditor,
       }}
     >
       {children}
