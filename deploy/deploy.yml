@@ -1,8 +1,11 @@
 # Kamal production deployment onto the machine that runs it. Use
 # deploy/deploy.sh, which prepares SSH, the registry, secrets, the runtime
 # network and image, and passes the per-machine values this file reads.
-<% host = ENV.fetch("AXP_DEPLOY_HOST", "127.0.0.1") %>
-<% public_host = ENV["AXP_PUBLIC_HOST"].to_s %>
+#
+# ERB statement tags sit inside YAML comments: ERB still runs them (tags in
+# comments are code too), and the template stays valid YAML for dprint.
+# <% host = ENV.fetch("AXP_DEPLOY_HOST", "127.0.0.1") %>
+# <% public_host = ENV["AXP_PUBLIC_HOST"].to_s %>
 service: axp
 image: axp
 secrets_path: deploy/secrets
@@ -79,14 +82,13 @@ servers:
 primary_role: gateway
 
 proxy:
-<% if public_host.empty? %>
-  ssl: false
-<% else %>
+  # <% unless public_host.empty? %>
   host: <%= public_host %>
-  ssl: <%= ENV.fetch("AXP_PROXY_SSL", "false") %>
-<% end %>
+  # <% end %>
+  ssl: <%= !public_host.empty? && ENV.fetch("AXP_PROXY_SSL", "false") %>
   run:
-    bind_ips: [<%= ENV.fetch("AXP_PROXY_BIND", "127.0.0.1") %>]
+    bind_ips:
+      - <%= ENV.fetch("AXP_PROXY_BIND", "127.0.0.1") %>
     http_port: <%= ENV.fetch("AXP_PROD_HTTP_PORT") %>
     https_port: <%= ENV.fetch("AXP_PROD_HTTPS_PORT") %>
 
@@ -125,10 +127,10 @@ env:
     AXP_OBJECT_DIR: /data/objects
     AXP_LLM_GATEWAY_URL: http://axp-llm:8317
     AXP_LLM_RUNTIME_BASE_URL: http://llm-gateway:8317/v1
-<% if ENV["AXP_CODEX_AUTH_FILE"].to_s != "" %>
+    # <% if ENV["AXP_CODEX_AUTH_FILE"].to_s != "" %>
     # Host path; the controller bind-mounts it into each runtime.
     AXP_CODEX_AUTH_FILE: <%= ENV["AXP_CODEX_AUTH_FILE"] %>
-<% end %>
+    # <% end %>
   secret:
     - DJANGO_SECRET_KEY
     - DATABASE_URL
