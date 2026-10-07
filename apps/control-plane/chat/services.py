@@ -407,8 +407,8 @@ def update_agent(agent_id: str, changes: dict) -> Agent:
         return agent
     for field in changed:
         setattr(agent, field, changes[field])
-    if "description" in changed or "model" in changed:
-        # Runtimes receive instructions and the model at start; the
+    if {"name", "description", "model"} & set(changed):
+        # Runtimes receive the name, instructions and model at start; the
         # controller restarts an idle runtime so the next turn uses them.
         agent.config_version += 1
         changed.append("config_version")

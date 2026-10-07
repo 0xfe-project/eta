@@ -255,7 +255,7 @@ class TestAgentManagement:
         too_long = {"name": "x", "description": "x" * 10_001}
         assert chat.post("/agents", too_long).status_code == 422
 
-    def test_update_description_bumps_config_version(self, chat, agent):
+    def test_update_name_or_description_bumps_config_version(self, chat, agent):
         before = Agent.objects.get(pk=agent["id"]).config_version
         response = chat.patch(
             f"/agents/{agent['id']}", {"description": "只用中文回答。"}
@@ -264,9 +264,9 @@ class TestAgentManagement:
             description="只用中文回答。", name="旧名字"
         )
         assert Agent.objects.get().config_version == before + 1
-        # Renaming alone does not touch runtime configuration.
+        # The name is part of the runtime's instructions too.
         chat.patch(f"/agents/{agent['id']}", {"name": "新"})
-        assert Agent.objects.get().config_version == before + 1
+        assert Agent.objects.get().config_version == before + 2
 
     def test_rename(self, chat, agent):
         response = chat.patch(f"/agents/{agent['id']}", {"name": " 新名字 "})
