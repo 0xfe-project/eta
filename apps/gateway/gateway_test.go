@@ -188,3 +188,28 @@ func TestUp(t *testing.T) {
 		t.Fatalf("/up = %q", b)
 	}
 }
+
+func TestLogsAPIRequestsAndFailuresOnly(t *testing.T) {
+	var logs strings.Builder
+	got := make(chan seen, 10)
+	gw := New(Config{
+		Routes: []Route{
+			{Name: "web", Prefix: "/", Upstream: newUpstream(t, "web", got)},
+			{Name: "api", Prefix: "/api/", Upstream: newUpstream(t, "api", got)},
+		},
+		Logger: slog.New(slog.NewTextHandler(&logs, nil)),
+	})
+	srv := httptest.NewServer(gw)
+	t.Cleanup(srv.Close)
+
+	for _, path := range []string{"/src/main.tsx", "/api/health"} {
+		resp, err := http.Get(srv.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+	}
+	if out := logs.String(); strings.Contains(out, "/src/main.tsx") || !strings.Contains(out, "path=/api/health") {
+		t.Fatalf("want only the API request logged, got:\n%s", out)
+	}
+}

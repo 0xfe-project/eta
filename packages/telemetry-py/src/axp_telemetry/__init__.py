@@ -10,6 +10,8 @@ added.
 
 import logging
 import os
+import sys
+import threading
 
 from opentelemetry._logs import set_logger_provider
 from opentelemetry.instrumentation.logging.handler import LoggingHandler
@@ -80,6 +82,28 @@ def setup(service: str) -> None:
         root.removeHandler(existing)
     root.addHandler(otel)
     root.setLevel(os.environ.get("AXP_LOG_LEVEL", "INFO").upper())
+    _log_uncaught_exceptions()
+
+
+def _log_uncaught_exceptions() -> None:
+    """Log uncaught exceptions (main and other threads) instead of printing."""
+    logger = logging.getLogger("axp.uncaught")
+
+    def excepthook(exc_type, exc, tb):
+        logger.critical("uncaught exception", exc_info=(exc_type, exc, tb))
+
+    def thread_excepthook(args):
+        if args.exc_type is SystemExit:
+            return
+        name = args.thread.name if args.thread else "?"
+        logger.error(
+            "uncaught exception in thread %s",
+            name,
+            exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+        )
+
+    sys.excepthook = excepthook
+    threading.excepthook = thread_excepthook
 
 
 # Attributes of every LogRecord; the rest came from ``extra``.

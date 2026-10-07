@@ -140,6 +140,11 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// A hijacked connection never reports its status here.
 		rec.status = http.StatusSwitchingProtocols
 	}
+	// Page and asset loads are not worth a record each (in development every
+	// Vite module is one); API calls and failures are.
+	if upstream == "web" && rec.status < http.StatusBadRequest {
+		return
+	}
 	g.logger.Info("request",
 		"method", r.Method,
 		"path", r.URL.Path,

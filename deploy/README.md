@@ -54,7 +54,7 @@ web、api、llm 不经过 kamal-proxy，重新部署时会有几秒中断（单�
 
 数据库是 Kamal accessory `axp-postgres`（卷 `axp-postgres`），检查点存放在卷 `axp-objects`。数据都在本机卷里，换机器不会自动迁移。
 
-日志由 Kamal accessory `axp-openobserve`（[OpenObserve](https://openobserve.ai)，卷 `axp-openobserve`）收集：各角色通过 OTLP 发送，`OTEL_SERVICE_NAME` 区分来源（`gateway`、`web`、`llm-gateway`、`control-plane-api`、`control-plane-internal`、`control-plane-controller`）。agent runtime 容器运行智能体执行的代码、不持有任何凭据，因此只输出到容器日志，不发送 OTLP。root 账号是 `root@axp.local`，密码 `AXP_OBSERVE_PASSWORD` 由 `deploy.sh` 首次需要时写入 `production.env`；已有的机器在下一次部署前会自动启动这个 accessory。
+日志由 Kamal accessory `axp-openobserve`（[OpenObserve](https://openobserve.ai)，卷 `axp-openobserve`）收集：各角色通过 OTLP 发送，`OTEL_SERVICE_NAME` 区分来源（`gateway`、`web`、`llm-gateway`、`control-plane-api`、`control-plane-internal`、`control-plane-controller`）。agent runtime 容器运行智能体执行的代码、不持有任何凭据：它们把日志、trace 和指标（包括 Codex 原生的 OpenTelemetry 数据，日志事件含 prompt）发给 accessory `axp-otel-collector`（runtime 网络上的 `otel-collector:4318`，配置见 `otel-collector.yaml`），由它带上凭据转发到 OpenObserve，记录带有 `axp.agent.id`、`axp.runtime.instance.id`。Codex 每收到一段流式输出都会产生一条日志和几个 span（约每两个字一条），Collector 会过滤掉这部分，只保留回合级的事件和 span；Collector 不保存状态，每次部署都会重启以应用配置变更。root 账号是 `root@axp.local`，密码 `AXP_OBSERVE_PASSWORD` 由 `deploy.sh` 首次需要时写入 `production.env`；已有的机器在下一次部署前会自动启动这个 accessory。
 
 ## 端口与访问
 

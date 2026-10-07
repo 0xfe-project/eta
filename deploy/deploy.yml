@@ -80,6 +80,7 @@ servers:
     env:
       clear:
         OTEL_SERVICE_NAME: control-plane-controller
+        AXP_RUNTIME_OTLP_ENDPOINT: http://otel-collector:4318
     options:
       network: axp-prod-runtime
       volume:
@@ -175,3 +176,18 @@ accessories:
         - ZO_ROOT_USER_PASSWORD
     volumes:
       - axp-openobserve:/data
+  # Receives OTLP from agent runtimes, which hold no credentials, on the
+  # runtime network as otel-collector:4318 and forwards it to OpenObserve.
+  otel-collector:
+    # contrib: has the filter processor (otel-collector.yaml).
+    image: otel/opentelemetry-collector-contrib:0.162.0
+    host: <%= host %>
+    files:
+      - deploy/otel-collector.yaml:/etc/otelcol/config.yaml
+    env:
+      clear:
+        OPENOBSERVE_ENDPOINT: http://axp-openobserve:5080/api/default
+      secret:
+        - OPENOBSERVE_AUTHORIZATION
+    options:
+      network: name=axp-prod-runtime,alias=otel-collector

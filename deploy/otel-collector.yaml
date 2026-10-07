@@ -1,0 +1,54 @@
+# OpenTelemetry Collector for agent runtimes (production accessory and dev's
+# docker mode). Runtimes run agent code and hold no secrets, so they send OTLP
+# here without credentials; the collector adds OpenObserve's.
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+  batch: {}
+  # Codex records one log event and several spans per streamed chunk (about
+  # one per two characters of output). The turn's own events and spans, and
+  # the stored chat, already cover what they say.
+  filter/codex-chunks:
+    error_mode: ignore
+    logs:
+      log_record:
+        - IsMatch(attributes["event.kind"], "\\.delta$")
+    traces:
+      span:
+        - name == "append_items"
+        - name == "persist_rollout_items"
+        - name == "auth"
+        - name == "realtime_conversation.running_state"
+        - name == "handle_responses"
+        - name == "receiving"
+
+exporters:
+  otlp_http/openobserve:
+    endpoint: ${env:OPENOBSERVE_ENDPOINT}
+    headers:
+      Authorization: ${env:OPENOBSERVE_AUTHORIZATION}
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, filter/codex-chunks, batch]
+      exporters: [otlp_http/openobserve]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, filter/codex-chunks, batch]
+      exporters: [otlp_http/openobserve]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_http/openobserve]
+  telemetry:
+    logs:
+      level: warn

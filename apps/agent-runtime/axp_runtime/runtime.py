@@ -296,6 +296,7 @@ class Runtime:
             overrides.append(
                 f"model_context_window={_toml(self.settings.model_context_window)}"
             )
+        overrides += _otel_overrides()
         env = {
             "CODEX_HOME": str(self.settings.codex_home),
             "AXP_WORKSPACE_DIR": str(self.settings.workspace_dir),
@@ -903,6 +904,36 @@ class Runtime:
                 logger.warning("Event delivery failed: %s", exc)
                 self._halt.wait(backoff)
                 backoff = min(backoff * 2, 5)
+
+
+def _otel_overrides() -> list[str]:
+    """Codex's own OpenTelemetry export, to the runtime's OTLP endpoint.
+
+    Codex reads OTEL_RESOURCE_ATTRIBUTES from the inherited environment, so
+    its records carry the agent and runtime ids; prompts are included.
+    """
+    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").rstrip("/")
+    if not endpoint:
+        return []
+
+    def exporter(signal: str) -> str:
+        return _toml(
+            {"otlp-http": {"endpoint": f"{endpoint}/v1/{signal}", "protocol": "binary"}}
+        )
+
+    attributes = dict(
+        item.split("=", 1)
+        for item in os.environ.get("OTEL_RESOURCE_ATTRIBUTES", "").split(",")
+        if "=" in item
+    )
+    environment = attributes.get("deployment.environment.name", "dev")
+    return [
+        f"otel.environment={_toml(environment)}",
+        f"otel.log_user_prompt={_toml(True)}",
+        f"otel.exporter={exporter('logs')}",
+        f"otel.trace_exporter={exporter('traces')}",
+        f"otel.metrics_exporter={exporter('metrics')}",
+    ]
 
 
 def _close_client(client: CodexClient) -> None:

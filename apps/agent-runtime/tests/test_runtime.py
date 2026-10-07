@@ -160,6 +160,31 @@ class TestLlmGateway:
         assert not any(o.startswith("model_provider") for o in overrides)
 
 
+class TestTelemetry:
+    def overrides(self, settings):
+        return Runtime(settings, StubControlPlane())._codex_config().config_overrides
+
+    def test_codex_exports_to_the_runtime_endpoint(self, rt, monkeypatch):
+        monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-collector:4318/")
+        monkeypatch.setenv(
+            "OTEL_RESOURCE_ATTRIBUTES",
+            "deployment.environment.name=production,axp.agent.id=a1",
+        )
+        overrides = set(self.overrides(rt.settings))
+        assert {
+            'otel.environment="production"',
+            "otel.log_user_prompt=true",
+            'otel.exporter={"otlp-http" = {"endpoint" = '
+            '"http://otel-collector:4318/v1/logs", "protocol" = "binary"}}',
+            'otel.trace_exporter={"otlp-http" = {"endpoint" = '
+            '"http://otel-collector:4318/v1/traces", "protocol" = "binary"}}',
+        } <= overrides
+
+    def test_no_export_without_an_endpoint(self, rt, monkeypatch):
+        monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+        assert not any(o.startswith("otel.") for o in self.overrides(rt.settings))
+
+
 class TestBoot:
     def test_first_boot_creates_and_registers_thread(self, rt):
         runtime, cp = rt.start()

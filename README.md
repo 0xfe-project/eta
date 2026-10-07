@@ -108,6 +108,8 @@ TanStack 的 `src/routeTree.gen.ts` 由 `dev` 或 `build` 自动生成；`check`
 
 `bun run dev` 会在本机启动一个共享的 OpenObserve（容器 `axp-dev-openobserve`，默认 http://localhost:5080 ，账号见启动输出），所有实例的日志都发到这里，`axp.dev.port` 区分不同实例；需要 Docker，`AXP_DEV_OBSERVE=0` 只输出到终端。生产见 `deploy/README.md`。
 
+agent runtime 容器运行智能体执行的代码、不持有凭据，它们把 OTLP 发给 runtime 网络里的 OpenTelemetry Collector（`deploy/otel-collector.yaml`，别名 `otel-collector`），由 Collector 带上凭据转发；controller 通过 `AXP_RUNTIME_OTLP_ENDPOINT` 传入地址，并附上 `axp.agent.id` 等资源属性。runtime 自己的日志和 Codex 原生的 OpenTelemetry（日志事件含 prompt、trace、指标）都走这条路。dev 的 docker 模式会启动 `axp-dev-otel-collector`。
+
 浏览器端通过 `POST /telemetry/logs` 上报（`apps/web/src/lib/report.ts`）：未捕获的错误和未处理的 Promise rejection 自动上报，其他内容调用 `reportLog()`；每分钟最多 30 条，服务端以 `web.browser` 记录。
 
 配置使用 OpenTelemetry 的标准环境变量（`OTEL_SERVICE_NAME`、`OTEL_RESOURCE_ATTRIBUTES`、`OTEL_EXPORTER_OTLP_*`），日志级别用 `AXP_LOG_LEVEL`（`debug`、`info`、`warn`、`error`）。

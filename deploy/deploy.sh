@@ -184,9 +184,17 @@ kamal() {
     "$KAMAL_IMAGE" "$@" -c deploy/deploy.yml
 }
 
-# `kamal setup` boots every accessory; on machines set up before OpenObserve
-# was added, boot it before the first deploy that logs to it.
-if [[ "$1" == "deploy" ]] && ! docker container inspect axp-openobserve >/dev/null 2>&1; then
-  kamal accessory boot openobserve
+# `kamal setup` boots every accessory; on machines set up before one was
+# added, boot it before the first deploy that uses it. The collector holds no
+# state and is rebooted on every deploy so config changes take effect.
+if [[ "$1" == "deploy" ]]; then
+  if ! docker container inspect axp-openobserve >/dev/null 2>&1; then
+    kamal accessory boot openobserve
+  fi
+  if docker container inspect axp-otel-collector >/dev/null 2>&1; then
+    kamal accessory reboot otel-collector
+  else
+    kamal accessory boot otel-collector
+  fi
 fi
 kamal "$@"

@@ -40,11 +40,15 @@ def format_line(record) -> str:
     timestamp = record.timestamp or record.observed_timestamp
     when = datetime.fromtimestamp(timestamp / 1e9, UTC).strftime("%H:%M:%S.%f")[:-3]
     parts = [f"{when} {_level(record.severity_number):<5} {record.body}"]
-    for key, value in (record.attributes or {}).items():
+    attributes = dict(record.attributes or {})
+    # A traceback reads better as itself, below the line.
+    stacktrace = attributes.pop("exception.stacktrace", None)
+    for key, value in attributes.items():
         parts.append(f"{key}={_value(value)}")
     if record.trace_id:
         parts.append(f"trace={record.trace_id:032x}"[:14])
-    return " ".join(parts) + "\n"
+    line = " ".join(parts) + "\n"
+    return line + stacktrace.rstrip("\n") + "\n" if stacktrace else line
 
 
 def _level(severity: SeverityNumber | None) -> str:

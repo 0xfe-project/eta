@@ -191,9 +191,37 @@ else
     sleep 0.5
   done
   observe_url="http://localhost:$observe_port"
+  observe_basic="$(printf '%s' "$OBSERVE_USER:$OBSERVE_PASSWORD" | base64 | tr -d '\n')"
   export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:$observe_port/api/default"
-  export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic%20$(printf '%s' "$OBSERVE_USER:$OBSERVE_PASSWORD" | base64 | tr -d '\n')"
+  export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic%20$observe_basic"
   export OTEL_RESOURCE_ATTRIBUTES="deployment.environment.name=development,axp.dev.port=$web_port"
+
+  if [[ "$runtime_mode" == "docker" ]]; then
+    # Runtimes export without credentials to a collector on their network
+    # (as in production); OpenObserve joins that network for it. The config
+    # is passed by value so the container outlives this checkout.
+    runtime_network="${AXP_RUNTIME_NETWORK:-axp-runtime}"
+    if ! docker inspect -f '{{json .NetworkSettings.Networks}}' "$OBSERVE_CONTAINER" | grep -q "\"$runtime_network\""; then
+      docker network connect "$runtime_network" "$OBSERVE_CONTAINER"
+    fi
+    collector_image=otel/opentelemetry-collector-contrib:0.162.0
+    collector_config="$(cat deploy/otel-collector.yaml)"
+    # Recreated when its config or image changes.
+    collector_hash="$(printf '%s\n%s' "$collector_image" "$collector_config" | sha256sum | cut -c1-12)"
+    running_hash="$(docker inspect -f '{{index .Config.Labels "axp.config"}}' axp-dev-otel-collector 2>/dev/null || true)"
+    if [[ "$running_hash" != "$collector_hash" ]]; then
+      docker rm -f axp-dev-otel-collector >/dev/null 2>&1 || true
+      docker run -d --name axp-dev-otel-collector --restart unless-stopped \
+        --label "axp.config=$collector_hash" \
+        --network "$runtime_network" --network-alias otel-collector \
+        -e OTELCOL_CONFIG="$collector_config" \
+        -e OPENOBSERVE_ENDPOINT="http://$OBSERVE_CONTAINER:5080/api/default" \
+        -e OPENOBSERVE_AUTHORIZATION="Basic $observe_basic" \
+        "$collector_image" --config=env:OTELCOL_CONFIG >/dev/null
+    fi
+    docker start axp-dev-otel-collector >/dev/null
+    export AXP_RUNTIME_OTLP_ENDPOINT=http://otel-collector:4318
+  fi
 fi
 exec 9>&-
 

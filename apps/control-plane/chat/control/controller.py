@@ -357,6 +357,20 @@ class Controller:
             )
         if settings.AXP_CODEX_LAUNCH:
             env["AXP_CODEX_LAUNCH"] = settings.AXP_CODEX_LAUNCH
+        if settings.AXP_RUNTIME_OTLP_ENDPOINT:
+            # The runtime and Codex export without credentials; the collector
+            # holds them. Resource attributes tie records to the agent.
+            attributes = [
+                os.environ.get("OTEL_RESOURCE_ATTRIBUTES", ""),
+                f"axp.agent.id={agent.pk}",
+                f"axp.runtime.instance.id={instance.pk}",
+                f"axp.runtime.generation={instance.generation}",
+            ]
+            env.update(
+                OTEL_EXPORTER_OTLP_ENDPOINT=settings.AXP_RUNTIME_OTLP_ENDPOINT,
+                OTEL_SERVICE_NAME="agent-runtime",
+                OTEL_RESOURCE_ATTRIBUTES=",".join(a for a in attributes if a),
+            )
         binds = {}
         if settings.AXP_LLM_RUNTIME_BASE_URL:
             # Model requests go through the LLM gateway; provider credentials

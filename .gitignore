@@ -16,3 +16,4 @@ apps/web/src/routeTree.gen.ts
 var/
 out/
 .turbo/
+.claude/settings.local.json

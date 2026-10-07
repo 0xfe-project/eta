@@ -55,3 +55,27 @@ def test_service_name_from_environment(monkeypatch):
     axp_telemetry.handler("control-plane")
     resource = axp_telemetry._provider.resource
     assert resource.attributes["service.name"] == "control-plane-api"
+
+
+def test_uncaught_thread_exceptions_are_logged(monkeypatch, capsys):
+    import threading
+
+    import axp_telemetry
+
+    monkeypatch.setattr(axp_telemetry, "_provider", None)
+    monkeypatch.setattr(axp_telemetry, "_handler", None)
+    monkeypatch.setattr(threading, "excepthook", threading.excepthook)
+    axp_telemetry.setup("t")
+
+    def boom():
+        raise RuntimeError("worker failed")
+
+    thread = threading.Thread(target=boom, name="worker")
+    thread.start()
+    thread.join()
+    axp_telemetry.shutdown()
+
+    err = capsys.readouterr().err
+    assert "ERROR uncaught exception in thread worker" in err
+    assert "exception.type=RuntimeError" in err
+    assert "\nTraceback (most recent call last):\n" in err

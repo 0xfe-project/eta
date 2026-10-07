@@ -108,6 +108,9 @@ AXP_DEFAULT_MODEL = (
 AXP_LLM_GATEWAY_URL = os.getenv("AXP_LLM_GATEWAY_URL", "")
 AXP_LLM_RUNTIME_BASE_URL = os.getenv("AXP_LLM_RUNTIME_BASE_URL", "")
 AXP_LLM_API_KEY = os.getenv("AXP_LLM_API_KEY", "")
+# OTLP endpoint runtimes send logs, traces and metrics to (the runtime
+# network's OpenTelemetry Collector). Empty: runtimes only log to stderr.
+AXP_RUNTIME_OTLP_ENDPOINT = os.getenv("AXP_RUNTIME_OTLP_ENDPOINT", "")
 # The per-agent container is the isolation boundary.
 AXP_CODEX_SANDBOX = os.getenv("AXP_CODEX_SANDBOX", "danger-full-access")
 AXP_CODEX_APPROVAL_POLICY = os.getenv("AXP_CODEX_APPROVAL_POLICY", "on-request")

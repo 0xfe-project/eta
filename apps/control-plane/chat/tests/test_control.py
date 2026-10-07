@@ -663,6 +663,26 @@ class TestConfigChange:
         assert "OPENAI_API_KEY" not in env
         assert "AXP_CODEX_AUTH_FILE" not in env
 
+    def test_runtimes_export_telemetry_without_credentials(self, ctl, settings):
+        settings.AXP_RUNTIME_OTLP_ENDPOINT = "http://otel-collector:4318"
+        ctl.send()
+        with mock.patch.dict(
+            "os.environ",
+            {
+                "OTEL_RESOURCE_ATTRIBUTES": "deployment.environment.name=production",
+                "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=Basic%20secret",
+            },
+        ):
+            ctl.start_runtime()
+        env = ctl.driver.started[0].env
+        assert env["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://otel-collector:4318"
+        assert env["OTEL_RESOURCE_ATTRIBUTES"] == (
+            "deployment.environment.name=production,"
+            f"axp.agent.id={ctl.agent['id']},"
+            f"axp.runtime.instance.id={ctl.instance().pk},axp.runtime.generation=1"
+        )
+        assert "OTEL_EXPORTER_OTLP_HEADERS" not in env
+
 
 class TestMcp:
     @pytest.fixture
