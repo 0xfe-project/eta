@@ -1,4 +1,4 @@
-import type { SettingsSection } from "./workspace-store";
+import type { SettingsSection, WorkspaceState } from "./workspace-store";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
 import { ChartLineIcon } from "@phosphor-icons/react/ChartLine";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
@@ -13,6 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useNeedsAttention } from "@/queries/llm";
 import { AgentSettings } from "./agent-settings";
@@ -20,6 +21,14 @@ import { ProviderSettings } from "./provider-settings";
 import { useWorkspaceStore } from "./workspace-store";
 
 const sessionThemes = ["claude", "codex", "grok"] as const;
+const fontFields = [
+  { key: "fontSans", label: "界面字体", placeholder: "Geist" },
+  { key: "fontMono", label: "等宽字体", placeholder: "Geist Mono" },
+] as const satisfies {
+  key: keyof WorkspaceState;
+  label: string;
+  placeholder: string;
+}[];
 const sections: {
   value: SettingsSection;
   label: string;
@@ -53,7 +62,8 @@ function LogSettings() {
 }
 
 function AppearanceSettings() {
-  const sessionTheme = useWorkspaceStore((s) => s.workspace.sessionTheme);
+  const workspace = useWorkspaceStore((s) => s.workspace);
+  const { sessionTheme } = workspace;
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   return (
     <div className="space-y-3">
@@ -96,6 +106,29 @@ function AppearanceSettings() {
           </div>
         </div>
       </fieldset>
+      {fontFields.map(({ key, label, placeholder }) => (
+        <div
+          key={key}
+          className="grid min-w-0 gap-2 lg:grid-cols-[minmax(0,1fr)_16rem] lg:items-center"
+        >
+          <label htmlFor={key} className="text-sm font-medium">
+            {label}
+          </label>
+          <Input
+            id={key}
+            value={workspace[key] ?? ""}
+            placeholder={placeholder}
+            maxLength={200}
+            spellCheck={false}
+            onChange={(e) =>
+              setWorkspace((state) => ({
+                ...state,
+                [key]: e.target.value || undefined,
+              }))
+            }
+          />
+        </div>
+      ))}
     </div>
   );
 }

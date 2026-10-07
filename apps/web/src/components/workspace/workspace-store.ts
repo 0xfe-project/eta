@@ -15,6 +15,9 @@ const workspaceSchema = z.object({
   ),
   memory: z.string().max(10_000),
   sessionTheme: z.enum(["claude", "codex", "grok"]).default("claude"),
+  // CSS font-family lists for UI and code text; unset uses Geist.
+  fontSans: z.string().max(200).optional(),
+  fontMono: z.string().max(200).optional(),
   // Preselected model for new agents.
   lastModel: z.string().max(100).optional(),
 });

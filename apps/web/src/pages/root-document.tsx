@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { AppProviders } from "@/components/providers";
@@ -9,8 +10,14 @@ export function RootDocument() {
   useEffect(() => {
     void useWorkspaceStore.persist.rehydrate();
   }, []);
+  const fontSans = useWorkspaceStore((s) => s.workspace.fontSans);
+  const fontMono = useWorkspaceStore((s) => s.workspace.fontMono);
+  const fonts = {
+    "--user-font-sans": fontSans,
+    "--user-font-mono": fontMono,
+  } as CSSProperties;
   return (
-    <html lang="zh-CN" suppressHydrationWarning>
+    <html lang="zh-CN" style={fonts} suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
