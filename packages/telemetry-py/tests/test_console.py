@@ -33,6 +33,7 @@ def test_setup_drops_attributes_otel_cannot_hold(monkeypatch, capsys):
     import axp_telemetry
 
     monkeypatch.setattr(axp_telemetry, "_provider", None)
+    monkeypatch.setattr(axp_telemetry, "_handler", None)
     axp_telemetry.setup("t")
     logging.getLogger("setup_test").warning(
         "request done", extra={"request": object(), "status_code": 404}
@@ -42,3 +43,15 @@ def test_setup_drops_attributes_otel_cannot_hold(monkeypatch, capsys):
     err = capsys.readouterr().err
     assert re.search(r"WARN  request done status_code=404\n$", err)
     assert "recursive" not in err
+
+
+def test_service_name_from_environment(monkeypatch):
+    import axp_telemetry
+
+    monkeypatch.setattr(axp_telemetry, "_provider", None)
+    monkeypatch.setattr(axp_telemetry, "_handler", None)
+    monkeypatch.setenv("OTEL_SERVICE_NAME", "control-plane-api")
+    monkeypatch.setenv("AXP_LOG_CONSOLE", "0")
+    axp_telemetry.handler("control-plane")
+    resource = axp_telemetry._provider.resource
+    assert resource.attributes["service.name"] == "control-plane-api"

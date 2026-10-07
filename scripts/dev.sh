@@ -17,6 +17,10 @@ worktree or agent is running) the next free block in steps of 10 is used, so
 any number of instances can start in parallel.
 
 AXP_RUNTIME_MODE=docker runs real agent containers instead of the fake worker.
+
+Logs also go to a local OpenObserve (one per machine, shared by every
+instance) at http://localhost:${AXP_DEV_OBSERVE_PORT:-5080}. It needs Docker;
+AXP_DEV_OBSERVE=0 keeps logs in the terminal only.
 EOF
 }
 
@@ -159,6 +163,38 @@ if [[ "$runtime_mode" == "docker" ]]; then
     bun run runtime:build
   fi
 fi
+
+# --- OpenObserve ---------------------------------------------------------------
+# One container per machine, left running between sessions like the runtime
+# network. Dev-only credentials; it listens on loopback only.
+OBSERVE_CONTAINER=axp-dev-openobserve
+OBSERVE_PORT="${AXP_DEV_OBSERVE_PORT:-5080}"
+OBSERVE_USER=root@axp.local
+OBSERVE_PASSWORD=Axp-dev-observe-1
+observe_url=""
+if [[ "${AXP_DEV_OBSERVE:-1}" == "0" ]]; then
+  :
+elif ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+  echo "Docker is not available; logs stay in the terminal (AXP_DEV_OBSERVE=0 hides this)." >&2
+else
+  if ! docker container inspect "$OBSERVE_CONTAINER" >/dev/null 2>&1; then
+    docker run -d --name "$OBSERVE_CONTAINER" --restart unless-stopped \
+      -p "127.0.0.1:$OBSERVE_PORT:5080" -v axp-dev-openobserve:/data \
+      -e ZO_DATA_DIR=/data -e ZO_ROOT_USER_EMAIL="$OBSERVE_USER" \
+      -e ZO_ROOT_USER_PASSWORD="$OBSERVE_PASSWORD" \
+      public.ecr.aws/zinclabs/openobserve:v1.0.4 >/dev/null
+  fi
+  docker start "$OBSERVE_CONTAINER" >/dev/null
+  observe_port="$(docker port "$OBSERVE_CONTAINER" 5080/tcp | head -n1 | sed 's/.*://')"
+  for _ in $(seq 1 60); do
+    curl -sf "http://127.0.0.1:$observe_port/healthz" >/dev/null && break
+    sleep 0.5
+  done
+  observe_url="http://localhost:$observe_port"
+  export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:$observe_port/api/default"
+  export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic%20$(printf '%s' "$OBSERVE_USER:$OBSERVE_PASSWORD" | base64 | tr -d '\n')"
+  export OTEL_RESOURCE_ATTRIBUTES="deployment.environment.name=development,axp.dev.port=$web_port"
+fi
 exec 9>&-
 
 cat <<EOF
@@ -167,6 +203,7 @@ AXP dev ($runtime_mode runtime) in $ROOT_DIR
   API:      http://localhost:$AXP_GATEWAY_PORT/api/health
 EOF
 [[ "$runtime_mode" == "docker" ]] && echo "  Internal: $AXP_INTERNAL_URL/internal/docs"
+[[ -n "$observe_url" ]] && echo "  Logs:     $observe_url ($OBSERVE_USER / $OBSERVE_PASSWORD)"
 
 # The fake mode answers with a scripted worker and needs neither Docker nor
 # credentials. Every process stops on Ctrl+C or when any of them exits.
@@ -176,9 +213,9 @@ if [[ "$runtime_mode" == "docker" ]]; then
     --names gateway,control-plane,internal,controller,llm,web \
     --prefix-colors gray,blue,yellow,cyan,magenta,green \
     "bun run dev:gateway" \
-    "bun run dev:control-plane" \
-    "bun run dev:internal" \
-    "bun run dev:controller" \
+    "OTEL_SERVICE_NAME=control-plane-api bun run dev:control-plane" \
+    "OTEL_SERVICE_NAME=control-plane-internal bun run dev:internal" \
+    "OTEL_SERVICE_NAME=control-plane-controller bun run dev:controller" \
     "bun run dev:llm-gateway" \
     "bun run dev:web"
 fi
@@ -186,7 +223,7 @@ exec "${concurrently[@]}" \
   --names gateway,control-plane,fake-runtime,llm,web \
   --prefix-colors gray,blue,cyan,magenta,green \
   "bun run dev:gateway" \
-  "bun run dev:control-plane" \
-  "bun run dev:fake-runtime" \
+  "OTEL_SERVICE_NAME=control-plane-api bun run dev:control-plane" \
+  "OTEL_SERVICE_NAME=control-plane-fake-runtime bun run dev:fake-runtime" \
   "bun run dev:llm-gateway" \
   "bun run dev:web"

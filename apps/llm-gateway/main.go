@@ -21,6 +21,7 @@ import (
 	"github.com/akarachen/axp/packages/telemetry-go"
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy"
+	"github.com/sirupsen/logrus"
 )
 
 func main() {
@@ -29,11 +30,20 @@ func main() {
 		fmt.Fprintln(os.Stderr, "telemetry:", err)
 		os.Exit(1)
 	}
+	// CLIProxyAPI prints and logs (logrus) on its own; route both through
+	// OpenTelemetry. logrus starts out on stderr, so point it at stdout.
+	restoreStdout, err := telemetry.RedirectStdout(logger.With("library", "cliproxy"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "telemetry:", err)
+		os.Exit(1)
+	}
+	logrus.SetOutput(os.Stdout)
 	err = run(logger)
 	failed := err != nil && !errors.Is(err, context.Canceled)
 	if failed {
 		logger.Error("llm-gateway stopped", "error", err)
 	}
+	restoreStdout()
 	flush(shutdown)
 	if failed {
 		os.Exit(1)

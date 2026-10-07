@@ -5,15 +5,27 @@
  * Server-only; the browser does not report logs yet.
  */
 import type { LogLevel, Sink } from "@logtape/logtape";
+import type { LoggerProvider as ApiLoggerProvider } from "@opentelemetry/api-logs";
 import process from "node:process";
 import {
   configure,
   dispose,
+  getConfig,
   getConsoleSink,
   getLogger,
   getTextFormatter,
 } from "@logtape/logtape";
 import { getOpenTelemetrySink } from "@logtape/otel";
+import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
+import {
+  detectResources,
+  envDetector,
+  resourceFromAttributes,
+} from "@opentelemetry/resources";
+import {
+  BatchLogRecordProcessor,
+  LoggerProvider,
+} from "@opentelemetry/sdk-logs";
 
 export const log = getLogger("web");
 
@@ -25,6 +37,7 @@ const levels: Record<string, LogLevel> = {
 };
 
 export async function setupTelemetry(service: string): Promise<void> {
+  if (getConfig()) return; // already set up in this process
   const sinks: Record<string, Sink> = {};
   if (process.env.AXP_LOG_CONSOLE !== "0") {
     sinks.console = getConsoleSink({
@@ -43,7 +56,7 @@ export async function setupTelemetry(service: string): Promise<void> {
     process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
   ) {
     sinks.otel = getOpenTelemetrySink({
-      serviceName: process.env.OTEL_SERVICE_NAME ?? service,
+      loggerProvider: otlpProvider(service),
     });
   }
   await configure({
@@ -57,6 +70,38 @@ export async function setupTelemetry(service: string): Promise<void> {
       { category: ["logtape", "meta"], sinks: [], lowestLevel: "warning" },
     ],
   });
+}
+
+/**
+ * Batches records to OTLP (the sink's own provider sends each record in its
+ * own request) and names levels like the Go and Python services: LogTape's
+ * "info" and "warning" become "INFO" and "WARN".
+ */
+function otlpProvider(service: string): ApiLoggerProvider {
+  const provider = new LoggerProvider({
+    // OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES override the defaults.
+    resource: resourceFromAttributes({ "service.name": service }).merge(
+      detectResources({ detectors: [envDetector] }),
+    ),
+    processors: [new BatchLogRecordProcessor(new OTLPLogExporter())],
+  });
+  return {
+    getLogger: (...args) => {
+      const logger = provider.getLogger(...args);
+      return {
+        emit: (record) =>
+          logger.emit({
+            ...record,
+            severityText:
+              record.severityText === "warning"
+                ? "WARN"
+                : record.severityText?.toUpperCase(),
+          }),
+      };
+    },
+    // LogTape's dispose() flushes the sink through this.
+    shutdown: () => provider.shutdown(),
+  } as ApiLoggerProvider;
 }
 
 /** Flush pending records; call before the process exits. */

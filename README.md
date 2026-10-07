@@ -101,12 +101,16 @@ TanStack 的 `src/routeTree.gen.ts` 由 `dev` 或 `build` 自动生成；`check`
 
 ## 日志
 
-三种语言的服务都走 OpenTelemetry：Go 用 `log/slog`（`packages/telemetry-go`），Python 用标准库 `logging`（`packages/telemetry-py`），Web 服务端用 LogTape（`apps/web/src/server/telemetry.ts`）。每条日志同时：
+三种语言的服务都走 OpenTelemetry：Go 用 `log/slog`（`packages/telemetry-go`），Python 用标准库 `logging`（`packages/telemetry-py`，gunicorn 自身的日志经 `apps/control-plane/gunicorn.conf.py` 接入），Web 服务端用 LogTape（`apps/web/src/server/telemetry.ts`）。llm-gateway 内嵌的 CLIProxyAPI 会自己打印到 stdout，这些行也被逐行转成日志（`library=cliproxy`）。每条日志同时：
 
-- 在 stderr 输出一行可读格式 `15:04:05.000 INFO  消息 key=value`（`AXP_LOG_CONSOLE=0` 关闭），开发时直接在终端里看；
-- 设置 `OTEL_EXPORTER_OTLP_ENDPOINT` 后通过 OTLP 发送（生产发往 OpenObserve，见 `deploy/README.md`）。
+- 在 stderr 输出一行可读格式 `15:04:05.000 INFO  消息 key=value`（UTC；`AXP_LOG_CONSOLE=0` 关闭）；
+- 设置 `OTEL_EXPORTER_OTLP_ENDPOINT` 后通过 OTLP 发往 [OpenObserve](https://openobserve.ai)。
 
-配置使用 OpenTelemetry 的标准环境变量（`OTEL_SERVICE_NAME`、`OTEL_RESOURCE_ATTRIBUTES`、`OTEL_EXPORTER_OTLP_*`），日志级别用 `AXP_LOG_LEVEL`（`debug`、`info`、`warn`、`error`）。浏览器端暂不上报。
+`bun run dev` 会在本机启动一个共享的 OpenObserve（容器 `axp-dev-openobserve`，默认 http://localhost:5080 ，账号见启动输出），所有实例的日志都发到这里，`axp.dev.port` 区分不同实例；需要 Docker，`AXP_DEV_OBSERVE=0` 只输出到终端。生产见 `deploy/README.md`。
+
+浏览器端通过 `POST /telemetry/logs` 上报（`apps/web/src/lib/report.ts`）：未捕获的错误和未处理的 Promise rejection 自动上报，其他内容调用 `reportLog()`；每分钟最多 30 条，服务端以 `web.browser` 记录。
+
+配置使用 OpenTelemetry 的标准环境变量（`OTEL_SERVICE_NAME`、`OTEL_RESOURCE_ATTRIBUTES`、`OTEL_EXPORTER_OTLP_*`），日志级别用 `AXP_LOG_LEVEL`（`debug`、`info`、`warn`、`error`）。
 
 ## 数据库与存储
 

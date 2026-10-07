@@ -17,7 +17,7 @@ COPY apps/gateway/out/${TARGETOS}-${TARGETARCH}/axp-gateway /usr/local/bin/
 # Self-contained server bundle plus client assets; no node_modules.
 COPY apps/web/out/ /app/apps/web/
 WORKDIR /app/apps/control-plane
-COPY apps/control-plane/manage.py ./
+COPY apps/control-plane/manage.py apps/control-plane/gunicorn.conf.py ./
 COPY apps/control-plane/config config/
 COPY apps/control-plane/chat chat/
 

@@ -99,11 +99,11 @@ function LoginDialog({
   const status = useLoginStatus(start.data?.id);
   const login = status.data ?? start.data;
   const [now, setNow] = useState(() => Date.now());
-  const started = useRef(false);
+  const startedRef = useRef(false);
 
   useEffect(() => {
-    if (open && !started.current) {
-      started.current = true;
+    if (open && !startedRef.current) {
+      startedRef.current = true;
       start.mutate(connector.id);
     }
   }, [open, connector.id, start]);

@@ -22,21 +22,26 @@ from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 
 from .console import ConsoleExporter
 
-__all__ = ["setup", "shutdown"]
+__all__ = ["handler", "setup", "shutdown"]
 
 _provider: LoggerProvider | None = None
+_handler: logging.Handler | None = None
 
 
-def setup(service: str) -> None:
-    """Route the root logger through OpenTelemetry for ``service``.
+def handler(service: str) -> logging.Handler:
+    """The OpenTelemetry logging handler for ``service``, created once.
 
-    OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES override the defaults.
-    Calling it again is a no-op.
+    Usable from logging.config.dictConfig as ``{"()": "axp_telemetry.handler",
+    "service": ...}``. OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES override
+    the defaults.
     """
-    global _provider
-    if _provider is not None:
-        return
-    provider = LoggerProvider(resource=Resource.create({SERVICE_NAME: service}))
+    global _provider, _handler
+    if _handler is not None:
+        return _handler
+    # Attributes passed to Resource.create win over the environment, so the
+    # default name only applies without OTEL_SERVICE_NAME (as in Go and JS).
+    name = os.environ.get("OTEL_SERVICE_NAME") or service
+    provider = LoggerProvider(resource=Resource.create({SERVICE_NAME: name}))
     if os.environ.get("AXP_LOG_CONSOLE") != "0":
         provider.add_log_record_processor(SimpleLogRecordProcessor(ConsoleExporter()))
     if os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") or os.environ.get(
@@ -55,14 +60,26 @@ def setup(service: str) -> None:
     sdk_logger.propagate = False
     sdk_logger.addHandler(logging.StreamHandler())
 
-    handler = LoggingHandler(logger_provider=provider)
-    handler.addFilter(_keep_valid_attributes)
+    _handler = LoggingHandler(logger_provider=provider)
+    _handler.addFilter(_keep_valid_attributes)
+    _provider = provider
+    return _handler
+
+
+def setup(service: str) -> None:
+    """Route the root logger through OpenTelemetry for ``service``.
+
+    A no-op when the root logger already uses the handler (for example when
+    gunicorn configured logging before Django loaded).
+    """
+    otel = handler(service)
     root = logging.getLogger()
+    if otel in root.handlers:
+        return
     for existing in list(root.handlers):
         root.removeHandler(existing)
-    root.addHandler(handler)
+    root.addHandler(otel)
     root.setLevel(os.environ.get("AXP_LOG_LEVEL", "INFO").upper())
-    _provider = provider
 
 
 # Attributes of every LogRecord; the rest came from ``extra``.
