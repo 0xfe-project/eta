@@ -18,12 +18,8 @@ export default defineConfig(({ mode }) => {
     server: {
       port: Number(env.AXP_WEB_PORT || 3000),
       strictPort: true,
-      proxy: {
-        "/api": {
-          target: env.CONTROL_PLANE_URL || "http://127.0.0.1:8000",
-          changeOrigin: true,
-        },
-      },
+      // /api is served through the edge gateway (apps/gateway), which is the
+      // address to open in development as well.
     },
   };
 });

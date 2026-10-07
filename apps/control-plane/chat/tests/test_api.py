@@ -40,6 +40,25 @@ class ErrorTests(TestCase):
         self.assertEqual(response.json()["error"]["code"], "BAD_REQUEST")
 
 
+@override_settings(AXP_EDGE_SECRET="s3cret")
+class EdgeSecretTests(TestCase):
+    def test_requires_gateway_secret(self):
+        response = self.client.get("/api/v1/chat")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["error"]["code"], "FORBIDDEN")
+        response = self.client.get("/api/v1/chat", HTTP_X_AXP_EDGE_SECRET="wrong")
+        self.assertEqual(response.status_code, 403)
+        response = self.client.get("/api/v1/chat", HTTP_X_AXP_EDGE_SECRET="s3cret")
+        self.assertEqual(response.status_code, 200)
+
+    def test_health_stays_open(self):
+        self.assertEqual(self.client.get("/api/health").status_code, 200)
+
+    def test_keeps_gateway_request_id(self):
+        response = self.client.get("/api/health", HTTP_X_REQUEST_ID="gateway-request-1")
+        self.assertEqual(response["X-Request-ID"], "gateway-request-1")
+
+
 class SnapshotTests(TestCase):
     def setUp(self):
         self.chat = ChatClient()

@@ -21,10 +21,13 @@ INSTALLED_APPS = [
 ]
 MIDDLEWARE = [
     "chat.middleware.RequestIdMiddleware",
+    "chat.middleware.EdgeSecretMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+# Shared with the edge gateway; public requests without it are rejected.
+AXP_EDGE_SECRET = os.getenv("AXP_EDGE_SECRET", "")
 # The internal runtime API runs as a separate process with its own URLconf.
 ROOT_URLCONF = os.getenv("AXP_URLCONF", "config.urls")
 TEMPLATES = [

@@ -1,5 +1,5 @@
 // Production server (Bun): built client assets plus the TanStack Start SSR
-// handler. /api is routed to the control plane by kamal-proxy, not here.
+// handler. /api is routed by the edge gateway (apps/gateway), not here.
 import { join, normalize } from "node:path";
 import handler from "./dist/server/server.js";
 

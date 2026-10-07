@@ -61,6 +61,15 @@ EOF
   )
   echo "Created $ENV_FILE with fresh secrets."
 fi
+# Secrets added after a machine was set up are generated on the next deploy.
+ensure_secret() {
+  if ! grep -q "^$1=" "$ENV_FILE"; then
+    echo "$1=$(openssl rand -hex "$2")" >>"$ENV_FILE"
+    echo "Added $1 to $ENV_FILE."
+  fi
+}
+ensure_secret AXP_EDGE_SECRET 32
+
 set -a
 # shellcheck disable=SC1090
 source "$ENV_FILE"

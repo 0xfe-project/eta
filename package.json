@@ -9,23 +9,27 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "setup": "bun install && bun run setup:control-plane && bun run setup:agent-runtime",
+    "setup": "bun install && bun run setup:control-plane && bun run setup:agent-runtime && bun run setup:go",
     "setup:control-plane": "uv sync --project apps/control-plane --dev && bun run db:migrate",
     "setup:agent-runtime": "uv sync --project apps/agent-runtime --dev",
+    "setup:go": "go -C apps/gateway mod download && go -C apps/llm-gateway mod download",
     "dev": "bash scripts/dev.sh",
+    "dev:gateway": "go run ./apps/gateway",
     "deploy": "bash deploy/deploy.sh",
     "dev:control-plane": "uv run --project apps/control-plane python apps/control-plane/manage.py runserver 127.0.0.1:${AXP_API_PORT:-8000}",
     "dev:fake-runtime": "uv run --project apps/control-plane python apps/control-plane/manage.py run_fake_runtime",
     "dev:internal": "AXP_URLCONF=config.internal_urls DJANGO_ALLOWED_HOSTS=${AXP_INTERNAL_HOST:-172.30.0.1} uv run --project apps/control-plane python apps/control-plane/manage.py runserver ${AXP_INTERNAL_HOST:-172.30.0.1}:${AXP_INTERNAL_PORT:-8001}",
     "dev:controller": "uv run --project apps/control-plane python apps/control-plane/manage.py run_controller",
+    "dev:llm-gateway": "go run ./apps/llm-gateway",
     "dev:web": "bun run --cwd apps/web dev",
     "db:migrate": "uv run --project apps/control-plane python apps/control-plane/manage.py migrate",
     "runtime:build": "docker build -t axp-agent-runtime:dev apps/agent-runtime",
     "build": "bun run --cwd apps/web build",
-    "check": "bun run build && bun run --cwd apps/web typecheck && uv run --project apps/control-plane python apps/control-plane/manage.py check && uv run --project apps/control-plane ruff check apps/control-plane && uv run --project apps/agent-runtime ruff check apps/agent-runtime && bun run test:control-plane && bun run test:agent-runtime",
+    "check": "bun run build && bun run --cwd apps/web typecheck && uv run --project apps/control-plane python apps/control-plane/manage.py check && uv run --project apps/control-plane ruff check apps/control-plane && uv run --project apps/agent-runtime ruff check apps/agent-runtime && bun run check:go && bun run test:control-plane && bun run test:agent-runtime",
     "test:control-plane": "uv run --project apps/control-plane python apps/control-plane/manage.py test chat",
     "test:agent-runtime": "cd apps/agent-runtime && uv run python -W ignore -m unittest discover -s tests",
-    "format": "prettier --write . && uv run --project apps/control-plane ruff format apps/control-plane && uv run --project apps/agent-runtime ruff format apps/agent-runtime"
+    "format": "prettier --write . && uv run --project apps/control-plane ruff format apps/control-plane && uv run --project apps/agent-runtime ruff format apps/agent-runtime && gofmt -w apps/gateway apps/llm-gateway",
+    "check:go": "test -z \"$(gofmt -l apps/gateway apps/llm-gateway)\" && go vet ./apps/gateway/... ./apps/llm-gateway/... && go test ./apps/gateway/... ./apps/llm-gateway/..."
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

@@ -5,10 +5,12 @@ usage() {
   cat <<'EOF'
 Usage: scripts/dev.sh [--port PORT]
 
-Starts the development stack. Each instance uses three consecutive ports:
-web PORT, control plane PORT+1, internal runtime API PORT+2 (docker mode).
+Starts the development stack. Each instance uses a block of consecutive
+ports: edge gateway PORT (open this one), control plane PORT+1, internal
+runtime API PORT+2 (docker mode), web PORT+3, LLM gateway PORT+4 and its
+runtime-facing API PORT+5 (docker mode).
 
-  --port PORT   Use exactly this web port; fail if it or PORT+1/PORT+2 is taken.
+  --port PORT   Use exactly this gateway port; fail if any port of its block is taken.
                 Also settable as AXP_DEV_PORT.
 
 Without --port the default is 3000. When that block is taken (another checkout,
@@ -37,7 +39,7 @@ if [[ -n "$requested_port" && ! "$requested_port" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 
-for command in bun node uv; do
+for command in bun node uv go; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "Missing required command: $command" >&2
     exit 1
@@ -88,9 +90,11 @@ port_reserved() {
 source deploy/ports.env
 production_ports=" $AXP_PROD_HTTP_PORT $AXP_PROD_HTTPS_PORT $AXP_PROD_REGISTRY_PORT "
 
+BLOCK_SIZE=6
+
 block_free() {
   local port
-  for port in "$1" "$(($1 + 1))" "$(($1 + 2))"; do
+  for ((port = $1; port < $1 + BLOCK_SIZE; port++)); do
     if [[ "$production_ports" == *" $port "* ]] || port_listening "$port" || port_reserved "$port"; then
       return 1
     fi
@@ -100,7 +104,7 @@ block_free() {
 if [[ -n "$requested_port" ]]; then
   web_port="$requested_port"
   if ! block_free "$web_port"; then
-    echo "Ports $web_port-$((web_port + 2)) are not all free (or reserved for production in deploy/ports.env)." >&2
+    echo "Ports $web_port-$((web_port + BLOCK_SIZE - 1)) are not all free (or reserved for production in deploy/ports.env)." >&2
     exit 1
   fi
 else
@@ -113,14 +117,24 @@ else
     fi
   done
 fi
-for port in "$web_port" "$((web_port + 1))" "$((web_port + 2))"; do
+for ((port = web_port; port < web_port + BLOCK_SIZE; port++)); do
   echo "$$" >"$STATE_DIR/$port.pid"
 done
 
-export AXP_WEB_PORT="$web_port"
+export AXP_GATEWAY_PORT="$web_port"
 export AXP_API_PORT="$((web_port + 1))"
 export AXP_INTERNAL_PORT="$((web_port + 2))"
+export AXP_WEB_PORT="$((web_port + 3))"
+export AXP_LLM_PORT="$((web_port + 4))"
+export AXP_LLM_RUNTIME_PORT="$((web_port + 5))"
 export CONTROL_PLANE_URL="http://127.0.0.1:$AXP_API_PORT"
+# Everything the browser uses goes through the edge gateway, as in production.
+export AXP_GATEWAY_ADDR="127.0.0.1:$AXP_GATEWAY_PORT"
+export AXP_GATEWAY_UPSTREAM_WEB="http://127.0.0.1:$AXP_WEB_PORT"
+export AXP_GATEWAY_UPSTREAM_API="$CONTROL_PLANE_URL"
+export AXP_GATEWAY_UPSTREAM_LLM="http://127.0.0.1:$AXP_LLM_PORT"
+export AXP_LLM_ADDR="127.0.0.1:$AXP_LLM_PORT"
+export AXP_EDGE_SECRET="${AXP_EDGE_SECRET:-dev-edge-$(id -u)-$web_port}"
 export AXP_INTERNAL_HOST="${AXP_INTERNAL_HOST:-172.30.0.1}"
 export AXP_INTERNAL_URL="http://$AXP_INTERNAL_HOST:$AXP_INTERNAL_PORT"
 
@@ -135,8 +149,8 @@ exec 9>&-
 
 cat <<EOF
 AXP dev ($runtime_mode runtime) in $ROOT_DIR
-  Web:      http://localhost:$AXP_WEB_PORT
-  API:      $CONTROL_PLANE_URL/api/health
+  Web:      http://localhost:$AXP_GATEWAY_PORT
+  API:      http://localhost:$AXP_GATEWAY_PORT/api/health
 EOF
 [[ "$runtime_mode" == "docker" ]] && echo "  Internal: $AXP_INTERNAL_URL/internal/docs"
 
@@ -145,16 +159,20 @@ EOF
 concurrently=(node node_modules/concurrently/dist/bin/concurrently.js --kill-others)
 if [[ "$runtime_mode" == "docker" ]]; then
   exec "${concurrently[@]}" \
-    --names control-plane,internal,controller,web \
-    --prefix-colors blue,yellow,cyan,green \
+    --names gateway,control-plane,internal,controller,llm,web \
+    --prefix-colors gray,blue,yellow,cyan,magenta,green \
+    "bun run dev:gateway" \
     "bun run dev:control-plane" \
     "bun run dev:internal" \
     "bun run dev:controller" \
+    "bun run dev:llm-gateway" \
     "bun run dev:web"
 fi
 exec "${concurrently[@]}" \
-  --names control-plane,fake-runtime,web \
-  --prefix-colors blue,cyan,green \
+  --names gateway,control-plane,fake-runtime,llm,web \
+  --prefix-colors gray,blue,cyan,magenta,green \
+  "bun run dev:gateway" \
   "bun run dev:control-plane" \
   "bun run dev:fake-runtime" \
+  "bun run dev:llm-gateway" \
   "bun run dev:web"

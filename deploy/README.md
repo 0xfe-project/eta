@@ -41,12 +41,16 @@ deploy/deploy.sh rollback <version>
 
 同一个镜像按角色运行：
 
-| 角色         | 进程                             | 说明                                                                             |
-| ------------ | -------------------------------- | -------------------------------------------------------------------------------- |
-| `web`        | Bun 运行 `apps/web/server.js`    | SSR 与静态资源                                                                   |
-| `api`        | gunicorn（gthread）              | 公共 API；启动前执行 migrations；kamal-proxy 将 `/api` 路由到这里                |
-| `internal`   | gunicorn，`config.internal_urls` | 不对外；runtime 在 `axp-prod-runtime` 网络上通过 `http://axp-internal:8001` 访问 |
-| `controller` | `run_controller`                 | 挂载 Docker socket；用 PostgreSQL advisory lock 保证同一时刻只有一个在运行       |
+| 角色         | 进程                             | 说明                                                                              |
+| ------------ | -------------------------------- | --------------------------------------------------------------------------------- |
+| `gateway`    | `axp-gateway`（Go）              | 唯一由 kamal-proxy 代理的角色；按路径转发到 llm、api、web，附加 `AXP_EDGE_SECRET` |
+| `web`        | Bun 运行 `apps/web/server.js`    | SSR 与静态资源；网络别名 `axp-web`                                                |
+| `api`        | gunicorn（gthread）              | 公共 API；启动前执行 migrations；网络别名 `axp-api`                               |
+| `llm`        | `axp-llm-gateway`（Go）          | LLM 连接与模型目录；网络别名 `axp-llm`                                            |
+| `internal`   | gunicorn，`config.internal_urls` | 不对外；runtime 在 `axp-prod-runtime` 网络上通过 `http://axp-internal:8001` 访问  |
+| `controller` | `run_controller`                 | 挂载 Docker socket；用 PostgreSQL advisory lock 保证同一时刻只有一个在运行        |
+
+web、api、llm 不经过 kamal-proxy，重新部署时会有几秒中断（单用户场景可接受）。`AXP_EDGE_SECRET` 由 `deploy.sh` 首次需要时自动写入 `production.env`。
 
 数据库是 Kamal accessory `axp-postgres`（卷 `axp-postgres`），检查点存放在卷 `axp-objects`。数据都在本机卷里，换机器不会自动迁移。
 

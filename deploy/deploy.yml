@@ -8,28 +8,47 @@ image: axp
 secrets_path: deploy/secrets
 
 servers:
-  # TanStack Start SSR and static assets.
-  web:
+  # Edge gateway: the only role behind kamal-proxy. It routes /api/llm to the
+  # LLM gateway, /api to the control plane and everything else to web, and
+  # signs each request with AXP_EDGE_SECRET.
+  gateway:
     hosts: [<%= host %>]
-    cmd: bun /app/apps/web/server.js
+    cmd: axp-gateway
+    env:
+      clear:
+        AXP_GATEWAY_ADDR: ":8080"
+        AXP_GATEWAY_UPSTREAM_WEB: http://axp-web:3000
+        AXP_GATEWAY_UPSTREAM_API: http://axp-api:8000
+        AXP_GATEWAY_UPSTREAM_LLM: http://axp-llm:8317
     proxy:
-      app_port: 3000
-      healthcheck:
-        path: /up
-  # Public API (Django). kamal-proxy sends /api here and everything else to web.
-  api:
-    hosts: [<%= host %>]
-    cmd: sh -c "python manage.py migrate --noinput && exec gunicorn config.wsgi --bind 0.0.0.0:8000 --worker-class gthread --workers 2 --threads 32"
-    proxy:
-      app_port: 8000
-      path_prefix: /api
-      strip_path_prefix: false
+      app_port: 8080
       # SSE: stream responses through and allow long-lived connections.
       response_timeout: 3600
       buffering:
         responses: false
       healthcheck:
-        path: /api/health
+        path: /up
+  # TanStack Start SSR and static assets; reached only through the gateway.
+  web:
+    hosts: [<%= host %>]
+    cmd: bun /app/apps/web/server.js
+    options:
+      network-alias: axp-web
+  # Public API (Django); reached only through the gateway.
+  api:
+    hosts: [<%= host %>]
+    cmd: sh -c "python manage.py migrate --noinput && exec gunicorn config.wsgi --bind 0.0.0.0:8000 --worker-class gthread --workers 2 --threads 32"
+    options:
+      network-alias: axp-api
+  # LLM gateway: connections and model catalog behind the gateway.
+  llm:
+    hosts: [<%= host %>]
+    cmd: axp-llm-gateway
+    env:
+      clear:
+        AXP_LLM_ADDR: ":8317"
+    options:
+      network-alias: axp-llm
   # Internal runtime API. Runtimes reach it as http://axp-internal:8001 on the
   # runtime network; it is never published or proxied.
   internal:
@@ -51,7 +70,7 @@ servers:
         - axp-objects:/data/objects
         - /var/run/docker.sock:/var/run/docker.sock
 
-primary_role: api
+primary_role: gateway
 
 proxy:
 <% if public_host.empty? %>
@@ -102,6 +121,7 @@ env:
   secret:
     - DJANGO_SECRET_KEY
     - DATABASE_URL
+    - AXP_EDGE_SECRET
     - OPENAI_API_KEY
 
 accessories:
