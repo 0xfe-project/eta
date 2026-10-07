@@ -5,6 +5,7 @@ import tempfile
 import uuid
 from datetime import timedelta
 from pathlib import Path
+from unittest import mock
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -724,6 +725,22 @@ class ConfigChangeTests(ControlTestCase):
         settings = json.loads(self.driver.started[-1].env["AXP_CODEX_SETTINGS"])
         self.assertEqual(settings["developer_instructions"], "第二版指令")
         self.assertEqual(self.driver.started[-1].env["AXP_THREAD_ID"], "thread-1")
+
+    @override_settings(
+        AXP_LLM_RUNTIME_BASE_URL="http://llm-gateway:8317/v1",
+        AXP_LLM_API_KEY="runtime-key",
+        AXP_RUNTIME_ENV_PASSTHROUGH=["OPENAI_API_KEY"],
+        AXP_CODEX_AUTH_FILE="/host/auth.json",
+    )
+    def test_gateway_mode_keeps_provider_credentials_out(self):
+        self.chat.send(self.agent["id"])
+        with mock.patch.dict("os.environ", {"OPENAI_API_KEY": "sk-real"}):
+            self.start_runtime()
+        spec = self.driver.started[0]
+        self.assertEqual(spec.env["AXP_LLM_BASE_URL"], "http://llm-gateway:8317/v1")
+        self.assertEqual(spec.env["AXP_LLM_API_KEY"], "runtime-key")
+        self.assertNotIn("OPENAI_API_KEY", spec.env)
+        self.assertNotIn("AXP_CODEX_AUTH_FILE", spec.env)
 
 
 class McpTests(TestCase):

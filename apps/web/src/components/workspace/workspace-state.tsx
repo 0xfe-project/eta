@@ -19,6 +19,8 @@ const workspaceSchema = z.object({
   ),
   memory: z.string().max(10_000),
   sessionTheme: z.enum(["claude", "codex", "grok"]).default("claude"),
+  // Preselected model for new agents.
+  lastModel: z.string().max(100).optional(),
 });
 const initialWorkspace: z.infer<typeof workspaceSchema> = {
   tasks: [],
@@ -27,7 +29,7 @@ const initialWorkspace: z.infer<typeof workspaceSchema> = {
 };
 
 type WorkspaceState = z.infer<typeof workspaceSchema>;
-export type SettingsSection = "agents" | "appearance";
+export type SettingsSection = "agents" | "providers" | "appearance";
 export type SettingsState = { open: boolean; section: SettingsSection };
 /** The agent editor: closed, creating (agentId null) or editing an agent. */
 export type AgentEditorState = { open: boolean; agentId: string | null };

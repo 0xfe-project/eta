@@ -53,7 +53,7 @@ def list_messages(
 @router.post("/agents", response={201: AgentOut, **_ERRORS})
 def create_agent(request: HttpRequest, body: AgentCreateIn):
     def handler():
-        agent = services.create_agent(body.name, body.description)
+        agent = services.create_agent(body.name, body.description, body.model)
         return 201, services.agent_public(agent), str(agent.id)
 
     return run_idempotent(request, body.model_dump(), handler)

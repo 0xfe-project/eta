@@ -31,6 +31,8 @@ from .control_plane import ControlPlane, ControlPlaneError, Fenced
 logger = logging.getLogger(__name__)
 
 THREAD_KEY = "thread_id"
+# Codex model provider id for the LLM gateway.
+LLM_PROVIDER = "axp"
 APPROVAL_METHODS = {
     "item/commandExecution/requestApproval": "command",
     "item/fileChange/requestApproval": "file_change",
@@ -227,6 +229,20 @@ class Runtime:
                 overrides.append(
                     f"{prefix}.enabled_tools={_toml(module.allowed_tools)}"
                 )
+        if self.settings.llm_base_url:
+            # Every model request goes through the LLM gateway; the container
+            # holds no provider credentials.
+            overrides += [
+                f"model_provider={_toml(LLM_PROVIDER)}",
+                f"model_providers.{LLM_PROVIDER}.name={_toml('AXP LLM Gateway')}",
+                f"model_providers.{LLM_PROVIDER}.base_url={_toml(self.settings.llm_base_url)}",
+                f"model_providers.{LLM_PROVIDER}.wire_api={_toml('responses')}",
+                f"model_providers.{LLM_PROVIDER}.env_key={_toml('AXP_LLM_API_KEY')}",
+            ]
+        if self.settings.model_context_window:
+            overrides.append(
+                f"model_context_window={_toml(self.settings.model_context_window)}"
+            )
         env = {
             "CODEX_HOME": str(self.settings.codex_home),
             "AXP_WORKSPACE_DIR": str(self.settings.workspace_dir),
@@ -259,7 +275,7 @@ class Runtime:
             info.userAgent
         )
         api_key = os.environ.get("OPENAI_API_KEY")
-        if api_key:
+        if api_key and not self.settings.llm_base_url:
             client.account_login_start({"type": "apiKey", "apiKey": api_key})
         self.client = client
         self._spawn(self._drain_global, "codex-global")

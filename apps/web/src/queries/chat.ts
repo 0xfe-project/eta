@@ -7,13 +7,16 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import { z } from "zod";
-import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
+import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
+import { refreshLlm } from "@/queries/llm";
 
 const agentSchema = z.object({
   id: z.string(),
   name: z.string(),
   // Instructions injected into the agent's context.
   description: z.string(),
+  // Model id from the LLM gateway catalog; null until one is chosen.
+  model: z.string().nullable(),
   status: z.enum(["idle", "working", "waiting_for_input", "unavailable"]),
   revision: z.number(),
 });
@@ -65,11 +68,15 @@ const snapshotSchema = z.object({
   interactions: z.array(interactionSchema),
   history_cursor: z.string().nullable(),
   event_cursor: z.string(),
+  // False when no LLM gateway is configured (scripted development runtime).
+  model_required: z.boolean(),
 });
 
 export type Agent = z.infer<typeof agentSchema>;
 /** Editable agent fields; grows as agents gain settings. */
-export type AgentDraft = Pick<Agent, "name" | "description">;
+export type AgentDraft = Pick<Agent, "name" | "description"> & {
+  model?: string;
+};
 export type ChatMessage = z.infer<typeof messageSchema>;
 export type Block = z.infer<typeof blockSchema>;
 export type Interaction = z.infer<typeof interactionSchema>;
@@ -213,6 +220,11 @@ export function useSendMessage() {
       update(queryClient, (s) =>
         upsertMessage(upsertMessage(s, message), reply),
       ),
+    // The model became unusable since the catalog was last loaded.
+    onError: (error) => {
+      if (error instanceof ApiError && error.code.startsWith("MODEL_"))
+        void refreshLlm(queryClient);
+    },
   });
 }
 

@@ -132,6 +132,31 @@ class RuntimeTestCase(unittest.TestCase):
         )["payload"]
 
 
+class LlmGatewayTests(RuntimeTestCase):
+    def test_codex_uses_gateway_as_model_provider(self):
+        settings = replace(
+            self.settings,
+            llm_base_url="http://llm-gateway:8317/v1",
+            model_context_window=256000,
+        )
+        overrides = (
+            Runtime(settings, StubControlPlane())._codex_config().config_overrides
+        )
+        self.assertIn('model_provider="axp"', overrides)
+        self.assertIn(
+            'model_providers.axp.base_url="http://llm-gateway:8317/v1"', overrides
+        )
+        self.assertIn('model_providers.axp.wire_api="responses"', overrides)
+        self.assertIn('model_providers.axp.env_key="AXP_LLM_API_KEY"', overrides)
+        self.assertIn("model_context_window=256000", overrides)
+
+    def test_without_gateway_codex_keeps_its_own_provider(self):
+        overrides = (
+            Runtime(self.settings, StubControlPlane())._codex_config().config_overrides
+        )
+        self.assertFalse(any(o.startswith("model_provider") for o in overrides))
+
+
 class BootTests(RuntimeTestCase):
     def test_first_boot_creates_and_registers_thread(self):
         runtime, cp = self.start()

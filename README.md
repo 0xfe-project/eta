@@ -11,7 +11,7 @@ apps/
   agent-runtime/   每个 Agent 一个容器的运行时，基于官方 Codex Python SDK
 ```
 
-设计见 [RFC #1](https://github.com/akarachen/axp/issues/1)，实现说明见 [聊天与运行时架构](docs/architecture/chat-runtime.md) 与 [统一入口网关](docs/architecture/gateway.md)。
+设计见 [RFC #1](https://github.com/akarachen/axp/issues/1)，实现说明见 [聊天与运行时架构](docs/architecture/chat-runtime.md)、[统一入口网关](docs/architecture/gateway.md) 与 [LLM 网关](docs/architecture/llm-gateway.md)。
 
 ## 环境与初始化
 
@@ -24,14 +24,16 @@ bun run setup
 bun run dev
 ```
 
-打开脚本输出的 Web 地址（默认 http://localhost:3000 ），新建智能体后即可对话。AXP 是单用户服务。对话区顶部显示当前智能体，点击可切换、新建或进入管理；每个智能体有名称和指令（注入其上下文的系统提示），可在编辑器或设置的“智能体”中修改和删除。
+打开脚本输出的 Web 地址（默认 http://localhost:3000 ），新建智能体后即可对话。AXP 是单用户服务。对话区顶部显示当前智能体，点击可切换、新建或进入管理；每个智能体有名称、模型和指令（注入其上下文的系统提示），可在编辑器或设置的“智能体”中修改和删除。
+
+模型来自 llm-gateway：在设置的“模型服务”中用设备码绑定 Codex（ChatGPT）或 Grok（xAI）账号，每个服务可以绑定多个账号并自动轮换。账号登录失效、额度用尽等状态会显示在那里；智能体的模型不可用时不能发送消息，绑定或重新登录后自动恢复。详见 [LLM 网关](docs/architecture/llm-gateway.md)。
 
 `bun run dev` 有两种运行时模式：
 
 - 默认 `fake`：启动 Django、Web 和开发用模拟 worker（`run_fake_runtime`）。不需要 Docker 和模型凭据，回复是固定文本；消息包含“确认”时会先发起一次确认。
-- `AXP_RUNTIME_MODE=docker bun run dev`：启动 Django、内部运行协议服务、controller 和 Web。controller 为每个 Agent 启动一个 runtime 容器。首次使用先执行 `bun run runtime:build`，并提供 Codex 凭据：设置 `OPENAI_API_KEY`（默认转发进容器），或用 `AXP_CODEX_AUTH_FILE` 指向一个 `auth.json`（首次启动时复制进该 Agent 的状态卷）。不想消耗模型额度时，可设 `AXP_CODEX_LAUNCH="python -m axp_runtime.testing.fake_app_server"` 用脚本化 app-server 跑通整条链路。
+- `AXP_RUNTIME_MODE=docker bun run dev`：启动 Django、内部运行协议服务、controller、llm-gateway 和 Web。controller 为每个 Agent 启动一个 runtime 容器，容器内的 Codex 把所有模型请求发给 llm-gateway，不持有任何账号凭据。首次使用先执行 `bun run runtime:build`，再在“模型服务”中绑定账号（开发凭据保存在 `apps/llm-gateway/var`）。不想消耗模型额度时，可设 `AXP_CODEX_LAUNCH="python -m axp_runtime.testing.fake_app_server"` 用脚本化 app-server 跑通整条链路。
 
-`bun run dev` 每个实例占用六个连续端口：网关 `P`（浏览器打开的地址）、API `P+1`、内部运行协议 `P+2`、Web `P+3`、llm-gateway `P+4` 及其面向 runtime 的接口 `P+5`，默认 `P=3000`。被占用时（其他 checkout、worktree 或 agent 已在运行）自动顺延到下一个空闲端口块（3010、3020……），并用文件锁避免并行启动抢到同一端口，因此可以同时运行任意多个实例。用 `bun run dev --port 4000`（或 `AXP_DEV_PORT=4000`）指定端口，被占用或与生产端口（`deploy/ports.env`）重叠时直接报错。新的 worktree 首次运行会自动安装依赖并执行 migrations。
+`bun run dev` 每个实例占用五个连续端口：网关 `P`（浏览器打开的地址）、API `P+1`、内部运行协议 `P+2`、Web `P+3`、llm-gateway `P+4`（docker 模式下监听 runtime 网络的网关地址），默认 `P=3000`。被占用时（其他 checkout、worktree 或 agent 已在运行）自动顺延到下一个空闲端口块（3010、3020……），并用文件锁避免并行启动抢到同一端口，因此可以同时运行任意多个实例。用 `bun run dev --port 4000`（或 `AXP_DEV_PORT=4000`）指定端口，被占用或与生产端口（`deploy/ports.env`）重叠时直接报错。新的 worktree 首次运行会自动安装依赖并执行 migrations。
 
 `setup` 安装 JS/Python 依赖并执行 Django migrations。锁文件（`bun.lock`、两个 `uv.lock`）应一起提交。
 
@@ -48,6 +50,7 @@ cp apps/web/.env.example apps/web/.env
 - API 健康检查：http://localhost:3000/api/health
 - 公共 OpenAPI 文档：http://localhost:3000/api/docs
 - 内部运行协议文档（docker 模式）：http://172.30.0.1:3002/internal/docs
+- runtime 使用的 OpenAI 兼容接口（docker 模式）：http://172.30.0.1:3004/v1
 
 浏览器只访问网关（`apps/gateway`），开发和生产使用同一套路由：`/api/llm/` → llm-gateway，`/api/` → control-plane，其余 → Web。网关为每个请求生成 `X-Request-Id`、输出 JSON 访问日志、透传 SSE 与 WebSocket，并附上 `AXP_EDGE_SECRET`；control-plane 与 llm-gateway 拒绝不带该密钥的公开请求（健康检查除外），因此绕过网关直接访问服务端口会得到 403。
 

@@ -134,6 +134,31 @@ const sessions = {
   },
 };
 
+/** Why the composer is disabled, with up to two ways out. */
+export function ComposerNotice({
+  message,
+  actions,
+}: {
+  message: string;
+  actions: { label: string; onClick: () => void }[];
+}) {
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <Warning>{message}</Warning>
+      {actions.map((action) => (
+        <button
+          key={action.label}
+          type="button"
+          onClick={action.onClick}
+          className="underline underline-offset-2 outline-none hover:text-[var(--terminal-foreground)] focus-visible:ring-1 focus-visible:ring-ring"
+        >
+          {action.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** The blocks' warning line (`⚠ …`). */
 function Warning({ children }: { children: React.ReactNode }) {
   return (
@@ -163,6 +188,8 @@ export function ChatPanel({
   onAnswer,
   head,
   error,
+  model: modelLabel,
+  blocked,
 }: {
   theme: SessionTheme;
   agentName: string | undefined;
@@ -177,6 +204,10 @@ export function ChatPanel({
   /** Shows and switches the agent being talked to. */
   head?: React.ReactNode;
   error?: string;
+  /** The agent's model, shown where the session blocks show one. */
+  model?: string;
+  /** Why the composer is disabled, with the way out. */
+  blocked?: React.ReactNode;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -196,7 +227,7 @@ export function ChatPanel({
   }, [last?.id, last?.revision, last]);
 
   function send() {
-    if (!draft.trim()) return;
+    if (blocked || !draft.trim()) return;
     onSend(draft);
     formRef.current?.querySelector("input")?.focus();
   }
@@ -221,7 +252,7 @@ export function ChatPanel({
     },
     placeholder: agentName ? `发消息给 ${agentName}…` : "先创建智能体",
   };
-  const model = agentName ?? "未选择智能体";
+  const model = modelLabel ?? agentName ?? "未选择智能体";
 
   return (
     <section
@@ -319,19 +350,23 @@ export function ChatPanel({
           send();
         }}
       >
-        {theme === "claude" ? (
-          <ClaudePrompt {...promptProps} mode="manual" effort={false} />
-        ) : theme === "codex" ? (
-          <CodexPrompt {...promptProps} model={model} directory="workspace" />
-        ) : (
-          <GrokPrompt
-            {...promptProps}
-            model={model}
-            mode="normal"
-            busy={Boolean(active)}
-            showShortcuts={false}
-          />
-        )}
+        {blocked ? <div className="px-[1ch] pb-[1lh]">{blocked}</div> : null}
+        {/* A disabled fieldset disables the session's own input. */}
+        <fieldset disabled={Boolean(blocked)} className="contents">
+          {theme === "claude" ? (
+            <ClaudePrompt {...promptProps} mode="manual" effort={false} />
+          ) : theme === "codex" ? (
+            <CodexPrompt {...promptProps} model={model} directory="workspace" />
+          ) : (
+            <GrokPrompt
+              {...promptProps}
+              model={model}
+              mode="normal"
+              busy={Boolean(active)}
+              showShortcuts={false}
+            />
+          )}
+        </fieldset>
       </form>
     </section>
   );

@@ -35,6 +35,8 @@ class AgentCreateIn(StrictInput):
     name: str = Field(min_length=1, max_length=100)
     # Instructions injected into the agent's context; kept verbatim.
     description: str = Field("", max_length=AGENT_DESCRIPTION_MAX)
+    # A model id from the LLM gateway's catalog (GET /api/llm/v1/models).
+    model: str | None = Field(None, min_length=1, max_length=100)
 
     _name = field_validator("name")(_clean_name)
 
@@ -44,6 +46,7 @@ class AgentUpdateIn(StrictInput):
 
     name: str | None = Field(None, min_length=1, max_length=100)
     description: str | None = Field(None, max_length=AGENT_DESCRIPTION_MAX)
+    model: str | None = Field(None, min_length=1, max_length=100)
 
     _name = field_validator("name")(_clean_name)
 
@@ -93,6 +96,8 @@ class AgentOut(Schema):
     id: str
     name: str
     description: str
+    # Model id from the LLM gateway catalog; null until one is chosen.
+    model: str | None
     status: Literal["idle", "working", "waiting_for_input", "unavailable"]
     revision: int
 
@@ -139,6 +144,9 @@ class ChatSnapshotOut(Schema):
     interactions: list[InteractionOut]
     history_cursor: str | None
     event_cursor: str
+    # Whether chatting needs an available model (false when no LLM gateway
+    # is configured, e.g. the scripted development runtime).
+    model_required: bool
 
 
 class MessagePageOut(Schema):

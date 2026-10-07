@@ -69,6 +69,7 @@ ensure_secret() {
   fi
 }
 ensure_secret AXP_EDGE_SECRET 32
+ensure_secret AXP_LLM_API_KEY 32
 
 set -a
 # shellcheck disable=SC1090

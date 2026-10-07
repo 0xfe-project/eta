@@ -46,6 +46,11 @@ class Settings:
     heartbeat_seconds: float = 5.0
     mcp_ready_timeout: float = 30.0
     auth_file: Path | None = None
+    # OpenAI-compatible endpoint of the LLM gateway. When set, Codex uses it
+    # as its model provider with the key in AXP_LLM_API_KEY.
+    llm_base_url: str | None = None
+    # Context window of models Codex does not know (e.g. Grok).
+    model_context_window: int | None = None
 
     @property
     def codex_home(self) -> Path:
@@ -107,4 +112,6 @@ def load_settings() -> Settings:
         heartbeat_seconds=float(os.environ.get("AXP_HEARTBEAT_SECONDS", "5")),
         mcp_ready_timeout=float(os.environ.get("AXP_MCP_READY_TIMEOUT", "30")),
         auth_file=Path(auth_file) if auth_file else None,
+        llm_base_url=os.environ.get("AXP_LLM_BASE_URL") or None,
+        model_context_window=codex.get("model_context_window") or None,
     )

@@ -1,5 +1,6 @@
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { PaletteIcon } from "@phosphor-icons/react/Palette";
+import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,7 +11,9 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useNeedsAttention } from "@/queries/llm";
 import { AgentSettings } from "./agent-settings";
+import { ProviderSettings } from "./provider-settings";
 import { useWorkspace, type SettingsSection } from "./workspace-state";
 
 const sessionThemes = ["claude", "codex", "grok"] as const;
@@ -20,6 +23,7 @@ const sections: {
   icon: typeof RobotIcon;
 }[] = [
   { value: "agents", label: "智能体", icon: RobotIcon },
+  { value: "providers", label: "模型服务", icon: PlugsConnectedIcon },
   { value: "appearance", label: "外观", icon: PaletteIcon },
 ];
 
@@ -70,8 +74,19 @@ function AppearanceSettings() {
   );
 }
 
+/** Marks places that lead to accounts the user has to act on. */
+function AttentionDot({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn("size-1.5 shrink-0 bg-destructive", className)}
+    />
+  );
+}
+
 export function SettingsDialog() {
   const { settings, setSettings } = useWorkspace();
+  const attention = useNeedsAttention();
 
   return (
     <Dialog
@@ -79,8 +94,17 @@ export function SettingsDialog() {
       onOpenChange={(open) => setSettings((state) => ({ ...state, open }))}
     >
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="设置" title="设置">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={attention ? "设置（有账号需要处理）" : "设置"}
+          title="设置"
+          className="relative"
+        >
           <GearSixIcon aria-hidden="true" />
+          {attention ? (
+            <AttentionDot className="absolute top-1.5 right-1.5" />
+          ) : null}
         </Button>
       </DialogTrigger>
       <DialogContent
@@ -111,12 +135,20 @@ export function SettingsDialog() {
               >
                 <Icon aria-hidden="true" className="size-4" />
                 {label}
+                {value === "providers" && attention ? (
+                  <>
+                    <AttentionDot className="ml-auto" />
+                    <span className="sr-only">（有账号需要处理）</span>
+                  </>
+                ) : null}
               </button>
             ))}
           </nav>
           <section className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4">
             {settings.section === "agents" ? (
               <AgentSettings />
+            ) : settings.section === "providers" ? (
+              <ProviderSettings />
             ) : (
               <AppearanceSettings />
             )}

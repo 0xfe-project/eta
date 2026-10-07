@@ -1,52 +1,96 @@
-// Command llm-gateway serves AXP's LLM connections and model catalog.
+// Command llm-gateway serves AXP's LLM connections, model catalog and the
+// OpenAI-compatible API agent runtimes call. It embeds CLIProxyAPI.
 package main
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"log/slog"
-	"net/http"
+	"net"
 	"os"
-	"time"
+	"os/signal"
+	"path/filepath"
+	"strconv"
+	"syscall"
 
-	"github.com/akarachen/axp/apps/llm-gateway/internal/edge"
+	"github.com/akarachen/axp/apps/llm-gateway/internal/connectors"
+	"github.com/akarachen/axp/apps/llm-gateway/internal/cpa"
+	"github.com/akarachen/axp/apps/llm-gateway/internal/llm"
+	"github.com/gin-gonic/gin"
+	"github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	addr := os.Getenv("AXP_LLM_ADDR")
-	if addr == "" {
-		addr = ":8317"
-	}
-	server := &http.Server{
-		Addr:              addr,
-		Handler:           newHandler(os.Getenv("AXP_EDGE_SECRET")),
-		ReadHeaderTimeout: 10 * time.Second,
-	}
-	logger.Info("llm-gateway listening", "addr", addr)
-	if err := server.ListenAndServe(); err != nil {
+	if err := run(logger); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("llm-gateway stopped", "error", err)
 		os.Exit(1)
 	}
 }
 
-func newHandler(secret string) http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/llm/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok","service":"llm-gateway"}`))
+func run(logger *slog.Logger) error {
+	host, port, err := splitAddr(envOr("AXP_LLM_ADDR", ":8317"))
+	if err != nil {
+		return err
+	}
+	stateDir, err := filepath.Abs(envOr("AXP_LLM_STATE_DIR", "var/llm-gateway"))
+	if err != nil {
+		return err
+	}
+	apiKey := os.Getenv("AXP_LLM_API_KEY")
+	if apiKey == "" {
+		return errors.New("AXP_LLM_API_KEY is required (agent runtimes authenticate with it)")
+	}
+	edgeSecret := os.Getenv("AXP_EDGE_SECRET")
+
+	var service *llm.Service
+	proxy, err := cpa.New(cpa.Options{
+		Host:          host,
+		Port:          port,
+		StateDir:      stateDir,
+		RuntimeAPIKey: apiKey,
+		Mount: func(e *gin.Engine) {
+			llm.Mount(e, service, edgeSecret, logger)
+		},
 	})
-	mux.Handle("/api/llm/", requireEdge(secret, http.NotFoundHandler()))
-	return mux
+	if err != nil {
+		return err
+	}
+	mgmt := proxy.Management()
+	service = llm.NewService(llm.Config{
+		Connectors: []llm.Connector{
+			&connectors.Codex{Management: mgmt, ManagementURL: cpa.ManagementURL, Logger: logger},
+			&connectors.XAI{Management: mgmt, ManagementURL: cpa.ManagementURL},
+		},
+		Auths:         proxy.Auths,
+		Registry:      cliproxy.GlobalModelRegistry(),
+		Management:    mgmt,
+		ManagementURL: cpa.ManagementURL,
+		CatalogPath:   filepath.Join(stateDir, "models.json"),
+	})
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	logger.Info("llm-gateway starting", "addr", net.JoinHostPort(host, strconv.Itoa(port)), "state_dir", stateDir)
+	return proxy.Run(ctx)
 }
 
-// requireEdge rejects requests that did not come through the edge gateway.
-func requireEdge(secret string, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !edge.Valid(r, secret) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusForbidden)
-			_, _ = w.Write([]byte(edge.Forbidden))
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+func splitAddr(addr string) (string, int, error) {
+	host, rawPort, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "", 0, fmt.Errorf("AXP_LLM_ADDR: %w", err)
+	}
+	port, err := strconv.Atoi(rawPort)
+	if err != nil {
+		return "", 0, fmt.Errorf("AXP_LLM_ADDR: invalid port %q", rawPort)
+	}
+	return host, port, nil
+}
+
+func envOr(name, fallback string) string {
+	if v := os.Getenv(name); v != "" {
+		return v
+	}
+	return fallback
 }

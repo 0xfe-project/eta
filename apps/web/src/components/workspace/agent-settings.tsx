@@ -5,6 +5,7 @@ import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { TrashIcon } from "@phosphor-icons/react/Trash";
+import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,14 +17,20 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import type { Agent } from "@/queries/chat";
+import { useModelAvailability } from "@/queries/llm";
 import { DeleteAgentDialog } from "./agent-editor";
 import { AgentMonogram, AgentStatus } from "./agent-identity";
 import { useAgents } from "./use-agents";
 
 function AgentRow({ agent, current }: { agent: Agent; current: boolean }) {
-  const { select, openEditor } = useAgents();
+  const { select, openEditor, modelRequired } = useAgents();
   const [confirming, setConfirming] = useState(false);
   const instructions = agent.description.trim();
+  const availability = useModelAvailability(agent, modelRequired);
+  const modelName =
+    availability.state === "not_set"
+      ? "未选择模型"
+      : (availability.model?.display_name ?? agent.model);
 
   return (
     <li
@@ -49,6 +56,29 @@ function AgentRow({ agent, current }: { agent: Agent; current: boolean }) {
             <AgentStatus status={agent.status} />
           </span>
         </span>
+        {modelName ? (
+          <span
+            className={cn(
+              "inline-flex max-w-full items-center gap-1 text-xs",
+              availability.state === "ok"
+                ? "text-muted-foreground"
+                : "text-destructive",
+            )}
+            title={
+              availability.state === "unavailable"
+                ? availability.message
+                : undefined
+            }
+          >
+            {availability.state !== "ok" ? (
+              <WarningIcon aria-hidden="true" className="size-3.5 shrink-0" />
+            ) : null}
+            <span className="truncate">{modelName}</span>
+            {availability.state === "unavailable" ? (
+              <span className="sr-only">：{availability.message}</span>
+            ) : null}
+          </span>
+        ) : null}
         <span
           className={cn(
             "line-clamp-2 text-xs text-muted-foreground",

@@ -22,7 +22,7 @@ deploy/deploy.sh          # 首次执行 kamal setup
 
 首次运行会：
 
-- 生成 `~/.config/axp/production.env`（Django 密钥、Postgres 密码等，每台机器独立，不入库）。填写 `OPENAI_API_KEY` 或 `AXP_CODEX_AUTH_FILE` 后重新部署，智能体才能调用模型。
+- 生成 `~/.config/axp/production.env`（Django 密钥、Postgres 密码、`AXP_EDGE_SECRET`、`AXP_LLM_API_KEY` 等，每台机器独立，不入库；后来新增的密钥会在下次部署时自动补上）。模型账号不在这里配置：部署后在 Web 设置的“模型服务”中绑定，凭据保存在 llm 角色的卷 `axp-llm`。
 - 生成 `~/.config/axp/kamal_ed25519` 并加入 `~/.ssh/authorized_keys`，限制为只能从 `127.0.0.1`/`::1` 登录。sshd 不在 22 端口时在 `production.env` 设 `AXP_SSH_PORT`。
 - 启动本地镜像仓库 `axp-registry`，创建 runtime 网络 `axp-prod-runtime`（子网由 Docker 选空闲的；需要固定时设 `AXP_RUNTIME_SUBNET`），并从 HEAD 构建 `axp-agent-runtime:production`。
 - 按本机 CPU 架构构建镜像。保留端口被其他服务占用、Docker 不可用或 SSH 不通时，会在部署前报错。
@@ -41,14 +41,14 @@ deploy/deploy.sh rollback <version>
 
 同一个镜像按角色运行：
 
-| 角色         | 进程                             | 说明                                                                              |
-| ------------ | -------------------------------- | --------------------------------------------------------------------------------- |
-| `gateway`    | `axp-gateway`（Go）              | 唯一由 kamal-proxy 代理的角色；按路径转发到 llm、api、web，附加 `AXP_EDGE_SECRET` |
-| `web`        | Bun 运行 `apps/web/server.js`    | SSR 与静态资源；网络别名 `axp-web`                                                |
-| `api`        | gunicorn（gthread）              | 公共 API；启动前执行 migrations；网络别名 `axp-api`                               |
-| `llm`        | `axp-llm-gateway`（Go）          | LLM 连接与模型目录；网络别名 `axp-llm`                                            |
-| `internal`   | gunicorn，`config.internal_urls` | 不对外；runtime 在 `axp-prod-runtime` 网络上通过 `http://axp-internal:8001` 访问  |
-| `controller` | `run_controller`                 | 挂载 Docker socket；用 PostgreSQL advisory lock 保证同一时刻只有一个在运行        |
+| 角色         | 进程                             | 说明                                                                                                                    |
+| ------------ | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `gateway`    | `axp-gateway`（Go）              | 唯一由 kamal-proxy 代理的角色；按路径转发到 llm、api、web，附加 `AXP_EDGE_SECRET`                                       |
+| `web`        | Bun 运行 `apps/web/server.js`    | SSR 与静态资源；网络别名 `axp-web`                                                                                      |
+| `api`        | gunicorn（gthread）              | 公共 API；启动前执行 migrations；网络别名 `axp-api`                                                                     |
+| `llm`        | `axp-llm-gateway`（Go）          | 嵌入 CLIProxyAPI；网关经 `axp-llm` 访问其管理接口，runtime 经 `http://llm-gateway:8317/v1` 调用模型；凭据在卷 `axp-llm` |
+| `internal`   | gunicorn，`config.internal_urls` | 不对外；runtime 在 `axp-prod-runtime` 网络上通过 `http://axp-internal:8001` 访问                                        |
+| `controller` | `run_controller`                 | 挂载 Docker socket；用 PostgreSQL advisory lock 保证同一时刻只有一个在运行                                              |
 
 web、api、llm 不经过 kamal-proxy，重新部署时会有几秒中断（单用户场景可接受）。`AXP_EDGE_SECRET` 由 `deploy.sh` 首次需要时自动写入 `production.env`。
 

@@ -25,6 +25,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  NativeSelect,
+  NativeSelectOptGroup,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   useCreateAgent,
@@ -32,6 +37,7 @@ import {
   useUpdateAgent,
   type Agent,
 } from "@/queries/chat";
+import { useConnectors, useModels, type Model } from "@/queries/llm";
 import { AgentMonogram } from "./agent-identity";
 import { useAgents } from "./use-agents";
 import { useWorkspace } from "./workspace-state";
@@ -51,6 +57,8 @@ const agentFormSchema = z.object({
       DESCRIPTION_MAX,
       `指令最多 ${DESCRIPTION_MAX.toLocaleString()} 个字符。`,
     ),
+  // "" until a model is chosen.
+  model: z.string(),
 });
 type AgentForm = z.infer<typeof agentFormSchema>;
 
@@ -97,6 +105,61 @@ export function DeleteAgentDialog({
   );
 }
 
+/** Models grouped by service; unusable ones stay visible but disabled. */
+function ModelSelect({
+  value,
+  models,
+  invalid,
+  ...props
+}: Omit<React.ComponentProps<typeof NativeSelect>, "children"> & {
+  value: string;
+  models: Model[];
+  invalid?: boolean;
+}) {
+  const { data: connectors } = useConnectors();
+  const groups = (connectors ?? []).map((connector) => ({
+    connector,
+    models: models.filter((model) => model.connector === connector.id),
+  }));
+  const known = models.some((model) => model.id === value);
+  return (
+    <NativeSelect
+      className="w-full"
+      aria-invalid={invalid}
+      value={value}
+      {...props}
+    >
+      <NativeSelectOption value="" disabled>
+        选择模型
+      </NativeSelectOption>
+      {value && !known ? (
+        <NativeSelectOption value={value} disabled>
+          {value}（已不存在）
+        </NativeSelectOption>
+      ) : null}
+      {groups
+        .filter((group) => group.models.length)
+        .map(({ connector, models }) => (
+          <NativeSelectOptGroup
+            key={connector.id}
+            label={connector.display_name}
+          >
+            {models.map((model) => (
+              <NativeSelectOption
+                key={model.id}
+                value={model.id}
+                disabled={!model.available && model.id !== value}
+              >
+                {model.display_name}
+                {model.available ? "" : "（不可用）"}
+              </NativeSelectOption>
+            ))}
+          </NativeSelectOptGroup>
+        ))}
+    </NativeSelect>
+  );
+}
+
 function AgentEditorForm({
   agent,
   onDone,
@@ -105,6 +168,9 @@ function AgentEditorForm({
   onDone: () => void;
 }) {
   const { select } = useAgents();
+  const { workspace, setWorkspace, setSettings } = useWorkspace();
+  const { data: models } = useModels();
+  const usable = (models ?? []).filter((model) => model.available);
   const create = useCreateAgent();
   const updateAgent = useUpdateAgent();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -112,19 +178,40 @@ function AgentEditorForm({
     register,
     handleSubmit,
     watch,
+    setValue,
+    setError,
     formState: { errors, isDirty },
   } = useForm<AgentForm>({
     resolver: zodResolver(agentFormSchema),
     defaultValues: {
       name: agent?.name ?? "",
       description: agent?.description ?? "",
+      model: agent?.model ?? "",
     },
   });
   const description = watch("description");
+  const model = watch("model");
+  // New agents start with the last used model, or the first usable one.
+  const preferred =
+    usable.find((item) => item.id === workspace.lastModel) ?? usable[0];
+  useEffect(() => {
+    if (!agent && !model && preferred) setValue("model", preferred.id);
+  }, [agent, model, preferred, setValue]);
+  const openProviders = () => {
+    onDone();
+    setSettings({ open: true, section: "providers" });
+  };
   const pending = create.isPending || updateAgent.isPending;
   const onError = (error: Error) => toast.error(error.message);
 
-  const save = handleSubmit((draft) => {
+  const save = handleSubmit(({ model, ...fields }) => {
+    // Agents can be created before any account is connected, not after.
+    if (!model && usable.length) {
+      setError("model", { message: "请选择模型。" });
+      return;
+    }
+    const draft = { ...fields, ...(model ? { model } : {}) };
+    if (model) setWorkspace((state) => ({ ...state, lastModel: model }));
     if (agent) {
       updateAgent.mutate(
         { id: agent.id, ...draft },
@@ -168,6 +255,48 @@ function AgentEditorForm({
               className="text-xs text-destructive"
             >
               {errors.name.message}
+            </p>
+          ) : null}
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="agent-model">模型</Label>
+          <ModelSelect
+            id="agent-model"
+            value={model}
+            models={models ?? []}
+            invalid={Boolean(errors.model)}
+            aria-describedby={
+              errors.model || !usable.length ? "agent-model-hint" : undefined
+            }
+            onChange={(event) =>
+              setValue("model", event.target.value, {
+                shouldDirty: true,
+                shouldValidate: true,
+              })
+            }
+          />
+          {errors.model || !usable.length ? (
+            <p
+              id="agent-model-hint"
+              role={errors.model ? "alert" : undefined}
+              className={
+                errors.model
+                  ? "text-xs text-destructive"
+                  : "text-xs text-muted-foreground"
+              }
+            >
+              {errors.model?.message ?? "暂无可用模型。"}
+              {!usable.length ? (
+                <Button
+                  type="button"
+                  variant="link"
+                  size="xs"
+                  className="h-auto px-1"
+                  onClick={openProviders}
+                >
+                  前往模型服务
+                </Button>
+              ) : null}
             </p>
           ) : null}
         </div>

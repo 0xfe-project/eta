@@ -87,7 +87,17 @@ AXP_RUNTIME_ENV_PASSTHROUGH = [
 AXP_CODEX_AUTH_FILE = os.getenv("AXP_CODEX_AUTH_FILE") or None
 # Overrides the Codex command inside runtimes (e.g. the scripted fake server).
 AXP_CODEX_LAUNCH = os.getenv("AXP_CODEX_LAUNCH") or None
-AXP_CODEX_MODEL = os.getenv("AXP_CODEX_MODEL") or None
+# Model for agents created without one (falls back to the old name).
+AXP_DEFAULT_MODEL = (
+    os.getenv("AXP_DEFAULT_MODEL") or os.getenv("AXP_CODEX_MODEL") or None
+)
+# LLM gateway (apps/llm-gateway). With a URL set, agents need an available
+# gateway model to chat and runtimes send every model request to
+# AXP_LLM_RUNTIME_BASE_URL with AXP_LLM_API_KEY instead of holding provider
+# credentials.
+AXP_LLM_GATEWAY_URL = os.getenv("AXP_LLM_GATEWAY_URL", "")
+AXP_LLM_RUNTIME_BASE_URL = os.getenv("AXP_LLM_RUNTIME_BASE_URL", "")
+AXP_LLM_API_KEY = os.getenv("AXP_LLM_API_KEY", "")
 # The per-agent container is the isolation boundary.
 AXP_CODEX_SANDBOX = os.getenv("AXP_CODEX_SANDBOX", "danger-full-access")
 AXP_CODEX_APPROVAL_POLICY = os.getenv("AXP_CODEX_APPROVAL_POLICY", "on-request")

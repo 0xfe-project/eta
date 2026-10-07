@@ -40,15 +40,21 @@ servers:
     cmd: sh -c "python manage.py migrate --noinput && exec gunicorn config.wsgi --bind 0.0.0.0:8000 --worker-class gthread --workers 2 --threads 32"
     options:
       network-alias: axp-api
-  # LLM gateway: connections and model catalog behind the gateway.
+  # LLM gateway (embedded CLIProxyAPI): connections and model catalog behind
+  # the gateway as axp-llm; runtimes call its OpenAI-compatible API as
+  # http://llm-gateway:8317/v1 on the runtime network. Credentials live in
+  # the axp-llm volume.
   llm:
     hosts: [<%= host %>]
     cmd: axp-llm-gateway
     env:
       clear:
         AXP_LLM_ADDR: ":8317"
+        AXP_LLM_STATE_DIR: /data/llm
     options:
       network-alias: axp-llm
+      network: name=axp-prod-runtime,alias=llm-gateway
+      volume: axp-llm:/data/llm
   # Internal runtime API. Runtimes reach it as http://axp-internal:8001 on the
   # runtime network; it is never published or proxied.
   internal:
@@ -114,6 +120,8 @@ env:
     AXP_RUNTIME_NETWORK: axp-prod-runtime
     AXP_INTERNAL_URL: http://axp-internal:8001
     AXP_OBJECT_DIR: /data/objects
+    AXP_LLM_GATEWAY_URL: http://axp-llm:8317
+    AXP_LLM_RUNTIME_BASE_URL: http://llm-gateway:8317/v1
 <% if ENV["AXP_CODEX_AUTH_FILE"].to_s != "" %>
     # Host path; the controller bind-mounts it into each runtime.
     AXP_CODEX_AUTH_FILE: <%= ENV["AXP_CODEX_AUTH_FILE"] %>
@@ -122,6 +130,7 @@ env:
     - DJANGO_SECRET_KEY
     - DATABASE_URL
     - AXP_EDGE_SECRET
+    - AXP_LLM_API_KEY
     - OPENAI_API_KEY
 
 accessories:

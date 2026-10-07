@@ -1,0 +1,209 @@
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
+import { z } from "zod";
+import { llmApi } from "@/lib/api";
+import type { Agent } from "@/queries/chat";
+
+// The LLM gateway's public API (/api/llm/v1): model services, accounts and
+// the model catalog. See apps/llm-gateway.
+
+const reasonSchema = z.object({ code: z.string(), message: z.string() });
+
+const connectorSchema = z.object({
+  id: z.string(),
+  display_name: z.string(),
+  flow: z.string(),
+  hint: z.string().optional(),
+});
+
+const connectionSchema = z.object({
+  id: z.string(),
+  connector: z.string(),
+  label: z.string(),
+  plan: z.string().optional(),
+  state: z.enum(["active", "disabled", "needs_login", "rate_limited", "error"]),
+  error: reasonSchema.optional(),
+  retry_at: z.string().optional(),
+  created_at: z.string(),
+});
+
+const modelSchema = z.object({
+  id: z.string(),
+  connector: z.string(),
+  display_name: z.string(),
+  context_window: z.number().optional(),
+  available: z.boolean(),
+  unavailable_reason: reasonSchema.optional(),
+});
+
+const loginSchema = z.object({
+  id: z.string(),
+  connector: z.string(),
+  flow: z.string(),
+  status: z.enum(["pending", "succeeded", "failed", "expired"]),
+  url: z.string().optional(),
+  user_code: z.string().optional(),
+  expires_at: z.string(),
+  error: z.string().optional(),
+});
+
+export type Connector = z.infer<typeof connectorSchema>;
+export type Connection = z.infer<typeof connectionSchema>;
+export type Model = z.infer<typeof modelSchema>;
+export type Login = z.infer<typeof loginSchema>;
+
+const keys = {
+  connectors: ["llm", "connectors"] as const,
+  connections: ["llm", "connections"] as const,
+  models: ["llm", "models"] as const,
+  login: (id: string) => ["llm", "login", id] as const,
+};
+
+// Account state changes without any action here (tokens expire, quotas
+// recover), so connections and models are polled.
+const POLL_MS = 30_000;
+
+export function useConnectors() {
+  return useQuery({
+    queryKey: keys.connectors,
+    queryFn: async ({ signal }) =>
+      z.array(connectorSchema).parse(await llmApi.get("/connectors", signal)),
+    staleTime: Infinity,
+  });
+}
+
+export function useConnections() {
+  return useQuery({
+    queryKey: keys.connections,
+    queryFn: async ({ signal }) =>
+      z.array(connectionSchema).parse(await llmApi.get("/connections", signal)),
+    refetchInterval: POLL_MS,
+  });
+}
+
+export function useModels() {
+  return useQuery({
+    queryKey: keys.models,
+    queryFn: async ({ signal }) =>
+      z.array(modelSchema).parse(await llmApi.get("/models", signal)),
+    refetchInterval: POLL_MS,
+  });
+}
+
+export function refreshLlm(queryClient: QueryClient) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: keys.connections }),
+    queryClient.invalidateQueries({ queryKey: keys.models }),
+  ]);
+}
+
+/** Accounts the user has to act on (re-login, or an error that will not clear). */
+export const NEEDS_ACTION = new Set<Connection["state"]>([
+  "needs_login",
+  "error",
+]);
+
+export function useNeedsAttention() {
+  const { data } = useConnections();
+  return (data ?? []).some((connection) => NEEDS_ACTION.has(connection.state));
+}
+
+export function useStartLogin() {
+  return useMutation({
+    mutationFn: async (connector: string) =>
+      loginSchema.parse(await llmApi.post("/logins", { connector })),
+  });
+}
+
+/** Polls a login until it finishes; refreshes accounts when it succeeds. */
+export function useLoginStatus(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useQuery({
+    queryKey: keys.login(id ?? ""),
+    enabled: Boolean(id),
+    queryFn: async ({ signal }) => {
+      const login = loginSchema.parse(
+        await llmApi.get(`/logins/${id}`, signal),
+      );
+      if (login.status === "succeeded") void refreshLlm(queryClient);
+      return login;
+    },
+    refetchInterval: (query) =>
+      query.state.data && query.state.data.status !== "pending" ? false : 2000,
+    refetchIntervalInBackground: true,
+  });
+}
+
+export function useCancelLogin() {
+  return useMutation({
+    mutationFn: (id: string) => llmApi.delete(`/logins/${id}`),
+  });
+}
+
+export function useSetConnectionEnabled() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string; enabled: boolean }) =>
+      connectionSchema.parse(
+        await llmApi.patch(`/connections/${encodeURIComponent(input.id)}`, {
+          enabled: input.enabled,
+        }),
+      ),
+    onSettled: () => refreshLlm(queryClient),
+  });
+}
+
+export function useDeleteConnection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      llmApi.delete(`/connections/${encodeURIComponent(id)}`),
+    onSettled: () => refreshLlm(queryClient),
+  });
+}
+
+export type ModelAvailability =
+  | { state: "ok"; model: Model | undefined }
+  | { state: "not_set" }
+  | { state: "unavailable"; model: Model | undefined; message: string };
+
+/**
+ * Whether an agent can chat with its model. The control plane enforces the
+ * same rule; this only keeps the UI ahead of it.
+ */
+export function modelAvailability(
+  agent: Pick<Agent, "model"> | undefined,
+  models: Model[] | undefined,
+  required: boolean,
+): ModelAvailability {
+  const model = models?.find((item) => item.id === agent?.model);
+  if (!required) return { state: "ok", model };
+  if (!agent?.model) return { state: "not_set" };
+  // Unknown until the catalog loads; the server still checks on send.
+  if (!models) return { state: "ok", model };
+  if (!model)
+    return {
+      state: "unavailable",
+      model,
+      message: `${agent.model} 已不存在，请更换模型。`,
+    };
+  if (!model.available)
+    return {
+      state: "unavailable",
+      model,
+      message: `${model.display_name} 暂不可用：${model.unavailable_reason?.message ?? "请检查模型服务中的账号。"}`,
+    };
+  return { state: "ok", model };
+}
+
+export function useModelAvailability(
+  agent: Pick<Agent, "model"> | undefined,
+  required: boolean,
+) {
+  const { data } = useModels();
+  return modelAvailability(agent, data, required);
+}

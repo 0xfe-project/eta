@@ -7,8 +7,7 @@ Usage: scripts/dev.sh [--port PORT]
 
 Starts the development stack. Each instance uses a block of consecutive
 ports: edge gateway PORT (open this one), control plane PORT+1, internal
-runtime API PORT+2 (docker mode), web PORT+3, LLM gateway PORT+4 and its
-runtime-facing API PORT+5 (docker mode).
+runtime API PORT+2 (docker mode), web PORT+3 and LLM gateway PORT+4.
 
   --port PORT   Use exactly this gateway port; fail if any port of its block is taken.
                 Also settable as AXP_DEV_PORT.
@@ -90,7 +89,7 @@ port_reserved() {
 source deploy/ports.env
 production_ports=" $AXP_PROD_HTTP_PORT $AXP_PROD_HTTPS_PORT $AXP_PROD_REGISTRY_PORT "
 
-BLOCK_SIZE=6
+BLOCK_SIZE=5
 
 block_free() {
   local port
@@ -126,17 +125,29 @@ export AXP_API_PORT="$((web_port + 1))"
 export AXP_INTERNAL_PORT="$((web_port + 2))"
 export AXP_WEB_PORT="$((web_port + 3))"
 export AXP_LLM_PORT="$((web_port + 4))"
-export AXP_LLM_RUNTIME_PORT="$((web_port + 5))"
 export CONTROL_PLANE_URL="http://127.0.0.1:$AXP_API_PORT"
 # Everything the browser uses goes through the edge gateway, as in production.
 export AXP_GATEWAY_ADDR="127.0.0.1:$AXP_GATEWAY_PORT"
 export AXP_GATEWAY_UPSTREAM_WEB="http://127.0.0.1:$AXP_WEB_PORT"
 export AXP_GATEWAY_UPSTREAM_API="$CONTROL_PLANE_URL"
-export AXP_GATEWAY_UPSTREAM_LLM="http://127.0.0.1:$AXP_LLM_PORT"
-export AXP_LLM_ADDR="127.0.0.1:$AXP_LLM_PORT"
 export AXP_EDGE_SECRET="${AXP_EDGE_SECRET:-dev-edge-$(id -u)-$web_port}"
 export AXP_INTERNAL_HOST="${AXP_INTERNAL_HOST:-172.30.0.1}"
 export AXP_INTERNAL_URL="http://$AXP_INTERNAL_HOST:$AXP_INTERNAL_PORT"
+# The LLM gateway keeps credentials under apps/llm-gateway/var, shared by
+# every instance of this checkout. Runtime containers reach it on the
+# runtime network's gateway address, so in docker mode it listens there.
+export AXP_LLM_STATE_DIR="${AXP_LLM_STATE_DIR:-$ROOT_DIR/apps/llm-gateway/var}"
+export AXP_LLM_API_KEY="${AXP_LLM_API_KEY:-dev-llm-$(id -u)}"
+if [[ "$runtime_mode" == "docker" ]]; then
+  llm_host="$AXP_INTERNAL_HOST"
+  # Agents need a connected model to chat, as in production.
+  export AXP_LLM_GATEWAY_URL="http://$llm_host:$AXP_LLM_PORT"
+  export AXP_LLM_RUNTIME_BASE_URL="http://$llm_host:$AXP_LLM_PORT/v1"
+else
+  llm_host=127.0.0.1
+fi
+export AXP_LLM_ADDR="$llm_host:$AXP_LLM_PORT"
+export AXP_GATEWAY_UPSTREAM_LLM="http://$llm_host:$AXP_LLM_PORT"
 
 if [[ "$runtime_mode" == "docker" ]]; then
   # Instances share the runtime network; only the internal API port differs.

@@ -1,11 +1,19 @@
 import uuid
+from unittest import mock
 
 from django.core.signals import request_finished
 from django.db import close_old_connections
 from django.test import TestCase, override_settings
 
-from chat import cursors
-from chat.models import Agent, AgentCommand, ApiIdempotency, Conversation, UiEvent
+from chat import cursors, llm
+from chat.models import (
+    Agent,
+    AgentCommand,
+    ApiIdempotency,
+    Conversation,
+    Message,
+    UiEvent,
+)
 from chat.stream import event_stream
 
 from .helpers import ChatClient, assert_no_internal_fields
@@ -127,7 +135,7 @@ class AgentTests(TestCase):
     def test_create_agent_returns_product_fields_only(self):
         agent = self.chat.create_agent("  开发助手  ")
         self.assertEqual(
-            set(agent), {"id", "name", "description", "status", "revision"}
+            set(agent), {"id", "name", "description", "model", "status", "revision"}
         )
         self.assertEqual(agent["name"], "开发助手")
         self.assertEqual(agent["status"], "idle")
@@ -142,11 +150,125 @@ class AgentTests(TestCase):
         for body in (
             {"name": "   "},
             {"name": "x" * 101},
-            {"name": "a", "model": "x"},
+            {"name": "a", "model": ""},
+            {"name": "a", "engine": "x"},
             {},
         ):
             with self.subTest(body=body):
                 self.assertEqual(self.chat.post("/agents", body).status_code, 422)
+
+
+CATALOG = [
+    {
+        "id": "gpt-5.5",
+        "connector": "codex",
+        "display_name": "GPT 5.5",
+        "context_window": 272000,
+        "available": True,
+    },
+    {
+        "id": "grok-4",
+        "connector": "xai",
+        "display_name": "Grok 4",
+        "available": False,
+        "unavailable_reason": {
+            "code": "AUTH_EXPIRED",
+            "message": "Grok 账号登录已失效，请重新登录。",
+        },
+    },
+]
+
+
+@override_settings(AXP_LLM_GATEWAY_URL="http://llm.test")
+class ModelTests(TestCase):
+    def setUp(self):
+        llm.clear_cache()
+        self.addCleanup(llm.clear_cache)
+        self.catalog = list(CATALOG)
+        patcher = mock.patch("chat.llm._fetch", side_effect=self.fetch)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.chat = ChatClient()
+
+    def fetch(self):
+        if self.catalog is None:
+            raise llm.GatewayUnavailable("down")
+        return {
+            m["id"]: llm.Model(
+                id=m["id"],
+                connector=m["connector"],
+                display_name=m["display_name"],
+                context_window=m.get("context_window"),
+                available=m["available"],
+                unavailable_message=(m.get("unavailable_reason") or {}).get("message"),
+            )
+            for m in self.catalog
+        }
+
+    def create(self, **body):
+        return self.chat.post("/agents", {"name": "a", **body})
+
+    def test_create_and_change_model(self):
+        response = self.create(model="gpt-5.5")
+        self.assertEqual(response.status_code, 201)
+        agent = response.json()
+        self.assertEqual(agent["model"], "gpt-5.5")
+        before = Agent.objects.get(pk=agent["id"]).config_version
+        response = self.chat.patch(f"/agents/{agent['id']}", {"model": "grok-4"})
+        self.assertEqual(response.json()["model"], "grok-4")
+        # The runtime restarts with the new model.
+        self.assertEqual(Agent.objects.get(pk=agent["id"]).config_version, before + 1)
+
+    def test_unknown_model_is_rejected(self):
+        response = self.create(model="nope")
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["error"]["code"], "MODEL_NOT_FOUND")
+        agent = self.chat.create_agent()
+        response = self.chat.patch(f"/agents/{agent['id']}", {"model": "nope"})
+        self.assertEqual(response.status_code, 422)
+
+    def test_chat_needs_an_available_model(self):
+        agent = self.chat.create_agent()
+        body = {"agent_id": agent["id"], "text": "hi"}
+        response = self.chat.post("/chat/messages", body)
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["error"]["code"], "MODEL_NOT_SET")
+
+        self.chat.patch(f"/agents/{agent['id']}", {"model": "grok-4"})
+        response = self.chat.post("/chat/messages", body)
+        self.assertEqual(response.status_code, 409)
+        error = response.json()["error"]
+        self.assertEqual(error["code"], "MODEL_UNAVAILABLE")
+        self.assertIn("重新登录", error["message"])
+        self.assertFalse(Message.objects.exists())
+
+        # Reconnecting the account makes the same model usable again.
+        self.catalog[1] = {**self.catalog[1], "available": True}
+        llm.clear_cache()
+        self.assertEqual(self.chat.post("/chat/messages", body).status_code, 202)
+
+    def test_gateway_down_blocks_chat(self):
+        agent = self.create(model="gpt-5.5").json()
+        self.catalog = None
+        llm.clear_cache()
+        response = self.chat.post(
+            "/chat/messages", {"agent_id": agent["id"], "text": "hi"}
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["error"]["code"], "MODEL_UNAVAILABLE")
+
+    def test_unknown_agent_is_still_404(self):
+        response = self.chat.post(
+            "/chat/messages", {"agent_id": str(uuid.uuid4()), "text": "hi"}
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_snapshot_says_model_is_required(self):
+        self.assertTrue(self.chat.client.get("/api/v1/chat").json()["model_required"])
+        with override_settings(AXP_LLM_GATEWAY_URL=""):
+            self.assertFalse(
+                self.chat.client.get("/api/v1/chat").json()["model_required"]
+            )
 
 
 class AgentManagementTests(TestCase):
@@ -177,8 +299,6 @@ class AgentManagementTests(TestCase):
         # Renaming alone does not touch runtime configuration.
         self.chat.patch(f"/agents/{self.agent['id']}", {"name": "新"})
         self.assertEqual(Agent.objects.get().config_version, before + 1)
-        unknown = self.chat.patch(f"/agents/{self.agent['id']}", {"model": "x"})
-        self.assertEqual(unknown.status_code, 422)
 
     def test_rename(self):
         response = self.chat.patch(f"/agents/{self.agent['id']}", {"name": " 新名字 "})

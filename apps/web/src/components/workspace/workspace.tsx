@@ -9,7 +9,8 @@ import {
 } from "@/queries/chat";
 import { AgentBar } from "./agent-bar";
 import { AgentEditor } from "./agent-editor";
-import { ChatPanel } from "./chat-panel";
+import { useModelAvailability } from "@/queries/llm";
+import { ChatPanel, ComposerNotice } from "./chat-panel";
 import { SettingsDialog } from "./settings-dialog";
 import { useAgents } from "./use-agents";
 import { WorkspacePanel } from "./workspace-panel";
@@ -23,10 +24,38 @@ export function Workspace({
   view: WorkspaceView;
   onViewChange: (view: WorkspaceView) => void;
 }) {
-  const { workspace, draft, setDraft, mobilePanel, setMobilePanel } =
-    useWorkspace();
+  const {
+    workspace,
+    draft,
+    setDraft,
+    mobilePanel,
+    setMobilePanel,
+    setSettings,
+  } = useWorkspace();
   const chat = useChat();
-  const { current: selected, openEditor } = useAgents();
+  const { current: selected, openEditor, modelRequired } = useAgents();
+  const availability = useModelAvailability(selected, modelRequired);
+  const changeModel = {
+    label: "更换模型",
+    onClick: () => selected && openEditor(selected.id),
+  };
+  const blocked = !selected ? undefined : availability.state === "not_set" ? (
+    <ComposerNotice
+      message="这个智能体还没有选择模型。"
+      actions={[{ ...changeModel, label: "选择模型" }]}
+    />
+  ) : availability.state === "unavailable" ? (
+    <ComposerNotice
+      message={availability.message}
+      actions={[
+        {
+          label: "前往模型服务",
+          onClick: () => setSettings({ open: true, section: "providers" }),
+        },
+        changeModel,
+      ]}
+    />
+  ) : undefined;
   const sendMessage = useSendMessage();
   const stopReply = useStopReply();
   const answer = useAnswerInteraction();
@@ -69,6 +98,14 @@ export function Workspace({
           <ChatPanel
             theme={workspace.sessionTheme}
             agentName={selected?.name}
+            model={
+              availability.state === "ok"
+                ? (availability.model?.display_name ??
+                  selected?.model ??
+                  undefined)
+                : undefined
+            }
+            blocked={blocked}
             messages={(chat.data?.messages ?? []).filter(
               (message) => message.agent_id === selected?.id,
             )}

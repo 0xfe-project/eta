@@ -17,7 +17,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from .. import services
+from .. import llm, services
 from ..models import (
     Agent,
     AgentCheckpoint,
@@ -322,6 +322,7 @@ class Controller:
             "AXP_CODEX_SETTINGS": json.dumps(
                 {
                     "model": agent.model,
+                    "model_context_window": llm.context_window(agent.model),
                     "sandbox": settings.AXP_CODEX_SANDBOX,
                     "approval_policy": settings.AXP_CODEX_APPROVAL_POLICY,
                     "developer_instructions": agent.description,
@@ -356,11 +357,17 @@ class Controller:
             )
         if settings.AXP_CODEX_LAUNCH:
             env["AXP_CODEX_LAUNCH"] = settings.AXP_CODEX_LAUNCH
-        for name in settings.AXP_RUNTIME_ENV_PASSTHROUGH:
-            if os.environ.get(name):
-                env[name] = os.environ[name]
         binds = {}
-        if settings.AXP_CODEX_AUTH_FILE:
+        if settings.AXP_LLM_RUNTIME_BASE_URL:
+            # Model requests go through the LLM gateway; provider credentials
+            # never enter the container.
+            env["AXP_LLM_BASE_URL"] = settings.AXP_LLM_RUNTIME_BASE_URL
+            env["AXP_LLM_API_KEY"] = settings.AXP_LLM_API_KEY
+        else:
+            for name in settings.AXP_RUNTIME_ENV_PASSTHROUGH:
+                if os.environ.get(name):
+                    env[name] = os.environ[name]
+        if settings.AXP_CODEX_AUTH_FILE and not settings.AXP_LLM_RUNTIME_BASE_URL:
             binds[settings.AXP_CODEX_AUTH_FILE] = {
                 "bind": "/run/axp/codex-auth.json",
                 "mode": "ro",

@@ -18,7 +18,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.utils import timezone
 
-from . import cursors
+from . import cursors, llm
 from .control.mcp import bind_defaults
 from .errors import ApiError, not_found
 from .models import (
@@ -50,6 +50,7 @@ def agent_public(agent: Agent) -> dict:
             id=str(agent.id),
             name=agent.name,
             description=agent.description,
+            model=agent.model,
             status=agent.product_status,
             revision=agent.product_revision,
         )
@@ -312,6 +313,7 @@ def get_snapshot() -> dict:
             "interactions": [],
             "history_cursor": None,
             "event_cursor": cursors.encode_event_cursor(0),
+            "model_required": llm.enabled(),
         }
     # Read the cursor before the objects. Anything committed in between is
     # replayed over SSE and dropped client-side by revision, so nothing is lost.
@@ -346,6 +348,7 @@ def get_snapshot() -> dict:
             cursors.encode_history_cursor(recent[0].seq) if has_more else None
         ),
         "event_cursor": cursors.encode_event_cursor(event_seq),
+        "model_required": llm.enabled(),
     }
 
 
@@ -387,14 +390,16 @@ def _agent(conversation: Conversation, agent_id: str) -> Agent:
     return agent
 
 
-def create_agent(name: str, description: str = "") -> Agent:
+def create_agent(name: str, description: str = "", model: str | None = None) -> Agent:
+    if model:
+        llm.validate_model(model)
     conversation = lock_conversation(ensure_default_conversation())
     # Model, tools and mounts come from server configuration, not the request.
     agent = Agent.objects.create(
         conversation=conversation,
         name=name,
         description=description,
-        model=settings.AXP_CODEX_MODEL,
+        model=model or settings.AXP_DEFAULT_MODEL,
     )
     bind_defaults(agent)
     emit_agent(conversation, agent)
@@ -402,6 +407,9 @@ def create_agent(name: str, description: str = "") -> Agent:
 
 
 def update_agent(agent_id: str, changes: dict) -> Agent:
+    if changes.get("model"):
+        # Network call: before taking the conversation lock.
+        llm.validate_model(changes["model"])
     conversation = _locked_default()
     agent = _agent(conversation, agent_id)
     changed = [
@@ -411,9 +419,9 @@ def update_agent(agent_id: str, changes: dict) -> Agent:
         return agent
     for field in changed:
         setattr(agent, field, changes[field])
-    if "description" in changed:
-        # Runtimes receive instructions at start; the controller restarts an
-        # idle runtime so the next turn uses them.
+    if "description" in changed or "model" in changed:
+        # Runtimes receive instructions and the model at start; the
+        # controller restarts an idle runtime so the next turn uses them.
         agent.config_version += 1
         changed.append("config_version")
     agent.product_revision += 1
@@ -443,6 +451,15 @@ def delete_agent(agent_id: str) -> None:
 
 
 def send_message(agent_id: str, text: str) -> tuple[Message, Message]:
+    if llm.enabled():
+        # Network call: before taking the conversation lock.
+        found = list(
+            Agent.objects.filter(
+                id=_parse_uuid(agent_id), deleted_at__isnull=True
+            ).values_list("model", flat=True)[:1]
+        )
+        if found:
+            llm.ensure_usable(found[0])
     conversation = _locked_default()
     agent = _agent(conversation, agent_id)
 
