@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 /**
  * GrokPrompt — Grok CLI's rounded composer box.
  *
- * CSS border (no box-drawing glyphs) around a real text input. The model · mode
+ * CSS border (no box-drawing glyphs) around a real textarea. The model · mode
  * legend sits on the bottom edge like a fieldset legend. Plan mode tints the ❯
  * yellow; legend mode text stays muted gray.
  */
@@ -48,8 +48,8 @@ export function GrokPrompt({
 }: {
   value?: string;
   defaultValue?: string;
-  onChange?: React.ChangeEventHandler<HTMLInputElement>;
-  onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
+  onChange?: React.ChangeEventHandler<HTMLTextAreaElement>;
+  onKeyDown?: React.KeyboardEventHandler<HTMLTextAreaElement>;
   placeholder?: string;
   mode?: GrokMode;
   model?: string;
@@ -58,8 +58,8 @@ export function GrokPrompt({
   busy?: boolean;
   className?: string;
   inputClassName?: string;
-  /** Extra attributes for the input, e.g. combobox semantics. */
-  inputProps?: React.InputHTMLAttributes<HTMLInputElement>;
+  /** Extra attributes for the textarea, e.g. combobox semantics. */
+  inputProps?: React.TextareaHTMLAttributes<HTMLTextAreaElement>;
 }) {
   const controlled = value !== undefined;
   const modeLabel = MODE_LABEL[mode];
@@ -74,19 +74,23 @@ export function GrokPrompt({
         className="relative min-w-0 rounded-sm border px-2 py-1.5"
         style={{ borderColor: BORDER, background: SURFACE }}
       >
-        <div className="flex min-w-0 items-center gap-0">
-          <span aria-hidden className="shrink-0" style={{ color: caretColor }}>
+        <div className="flex min-w-0 items-start gap-0">
+          <span
+            aria-hidden
+            className="shrink-0 py-0.5"
+            style={{ color: caretColor }}
+          >
             ❯
           </span>
-          <input
-            type="text"
+          <textarea
+            rows={1}
             aria-label="消息"
             placeholder={placeholder}
             onKeyDown={onKeyDown}
             {...(controlled ? { value, onChange } : { defaultValue, onChange })}
             {...inputProps}
             className={cn(
-              "term-input min-w-0 flex-1 bg-transparent py-0.5 pl-[1ch] outline-none placeholder:text-[var(--terminal-muted)]",
+              "term-input max-h-[40vh] min-w-0 flex-1 resize-none bg-transparent [field-sizing:content] py-0.5 pl-[1ch] outline-none placeholder:text-[var(--terminal-muted)]",
               inputClassName,
             )}
             style={

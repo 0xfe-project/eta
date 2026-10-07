@@ -282,16 +282,16 @@ export function ChatPanel({
     const command = SLASH_COMMANDS.find((c) => c.name === name);
     if (command) run(command.name, text);
     else onSend(draft, "queue");
-    formRef.current?.querySelector("input")?.focus();
+    formRef.current?.querySelector("textarea")?.focus();
   }
   const promptProps = {
     value: draft,
-    onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
+    onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => {
       setDraft(event.target.value);
       setMenuIndex(0);
       setMenuDismissed(false);
     },
-    onKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => {
+    onKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (event.nativeEvent.isComposing) return;
       if (menuOpen) {
         const step = { ArrowDown: 1, ArrowUp: -1 }[event.key];
@@ -331,7 +331,7 @@ export function ChatPanel({
       "aria-expanded": menuOpen,
       "aria-controls": menuOpen ? listId : undefined,
       "aria-activedescendant": menuOpen ? `${listId}-${menuActive}` : undefined,
-    } satisfies React.InputHTMLAttributes<HTMLInputElement>,
+    } satisfies React.TextareaHTMLAttributes<HTMLTextAreaElement>,
   };
   const slashMenu = menuOpen ? (
     <SlashMenu
