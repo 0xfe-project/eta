@@ -92,6 +92,7 @@ export function ClaudePrompt({
   effort = "xhigh",
   className,
   inputClassName,
+  inputProps,
 }: {
   value?: string;
   defaultValue?: string;
@@ -103,6 +104,8 @@ export function ClaudePrompt({
   effort?: ClaudeEffort | false;
   className?: string;
   inputClassName?: string;
+  /** Extra attributes for the input, e.g. combobox semantics. */
+  inputProps?: React.InputHTMLAttributes<HTMLInputElement>;
 }) {
   const m = MODES[mode];
   const e = effort === false ? null : EFFORTS[effort];
@@ -148,6 +151,7 @@ export function ClaudePrompt({
           placeholder={placeholder}
           onKeyDown={onKeyDown}
           {...(controlled ? { value, onChange } : { defaultValue, onChange })}
+          {...inputProps}
           className={cn(
             "term-input min-w-0 flex-1 bg-transparent py-0.5 pl-[1ch] outline-none placeholder:text-[var(--terminal-muted)]",
             inputClassName,

@@ -7,6 +7,7 @@ markers in the user's text:
   [slow]     stream slowly so the turn can be interrupted
   [fail]     finish the turn as failed
   [crash]    exit the process after the turn starts
+  [steer]    wait for a turn/steer before finishing, then answer it
 
 Threads persist under CODEX_HOME so resume works across restarts. MCP servers
 passed as ``--config mcp_servers.<name>.command=...`` report ready, unless the
@@ -27,6 +28,9 @@ _write_lock = threading.Lock()
 _pending: dict[str, dict] = {}
 _pending_cond = threading.Condition()
 _interrupts: set[str] = set()
+# Running turn id -> steers not yet taken in.
+_steers: dict[str, list[dict]] = {}
+_steers_cond = threading.Condition()
 
 
 def send(message: dict) -> None:
@@ -158,11 +162,42 @@ def run_turn(thread_id: str, turn_id: str, text: str) -> None:
             thread_id, turn_id, reply * (10 if "[slow]" in text else 1), delay
         ):
             status = "interrupted"
+    if status == "completed" and "[steer]" in text:
+        with _steers_cond:
+            _steers_cond.wait_for(lambda: _steers[turn_id], timeout=5)
+    with _steers_cond:
+        steers = _steers.pop(turn_id)
+    for steer in steers if status == "completed" else []:
+        item = {
+            "id": f"user-{uuid.uuid4().hex[:8]}",
+            "type": "userMessage",
+            "content": steer["input"],
+            "clientId": steer.get("clientUserMessageId"),
+        }
+        notify("item/started", {**base, "item": item, "startedAtMs": 0})
+        notify("item/completed", {**base, "item": item, "completedAtMs": 0})
+        said = "".join(i.get("text", "") for i in steer["input"])
+        stream_message(thread_id, turn_id, f"收到插话：{said}", 0.01)
     if "[fail]" in text:
         status = "failed"
     turn = {"id": turn_id, "items": [], "status": status}
     if status == "failed":
         turn["error"] = {"message": "scripted failure"}
+    set_turn(thread_id, turn)
+    notify("turn/completed", {"threadId": thread_id, "turn": turn})
+
+
+def run_compaction(thread_id: str) -> None:
+    time.sleep(0.05)  # Codex answers the request before the turn starts.
+    turn_id = str(uuid.uuid4())
+    base = {"threadId": thread_id, "turnId": turn_id}
+    turn = {"id": turn_id, "items": [], "status": "inProgress"}
+    set_turn(thread_id, turn)
+    notify("turn/started", {"threadId": thread_id, "turn": turn})
+    item = {"id": f"compact-{uuid.uuid4().hex[:8]}", "type": "contextCompaction"}
+    notify("item/started", {**base, "item": item, "startedAtMs": 0})
+    notify("item/completed", {**base, "item": item, "completedAtMs": 0})
+    turn = {"id": turn_id, "items": [], "status": "completed"}
     set_turn(thread_id, turn)
     notify("turn/completed", {"threadId": thread_id, "turn": turn})
 
@@ -219,9 +254,25 @@ def handle(message: dict) -> None:
         thread_id = params["threadId"]
         text = "".join(i.get("text", "") for i in params.get("input") or [])
         turn_id = str(uuid.uuid4())
+        with _steers_cond:
+            _steers[turn_id] = []
         reply({"turn": {"id": turn_id, "items": [], "status": "inProgress"}})
         threading.Thread(
             target=run_turn, args=(thread_id, turn_id, text), daemon=True
+        ).start()
+        return
+    if method == "turn/steer":
+        turn_id = params.get("expectedTurnId")
+        with _steers_cond:
+            if turn_id not in _steers:
+                return reply(error={"code": -32600, "message": "no active turn"})
+            _steers[turn_id].append(params)
+            _steers_cond.notify_all()
+        return reply({"turnId": turn_id})
+    if method == "thread/compact/start":
+        reply({})
+        threading.Thread(
+            target=run_compaction, args=(params["threadId"],), daemon=True
         ).start()
         return
     if method == "turn/interrupt":

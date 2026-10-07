@@ -55,6 +55,8 @@ class MessageCreateIn(StrictInput):
     agent_id: str = Field(min_length=1, max_length=64)
     # Kept verbatim so code indentation survives.
     text: str = Field(min_length=1, max_length=10_000)
+    # "queue" waits for the agent's current turn; "steer" joins it.
+    mode: Literal["queue", "steer"] = "queue"
 
     @field_validator("text")
     @classmethod

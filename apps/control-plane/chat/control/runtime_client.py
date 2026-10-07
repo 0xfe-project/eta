@@ -81,6 +81,19 @@ class RuntimeClient:
                 return None
             raise
 
+    def steer(self, target, command) -> None:
+        """Add a steer command to the turn running ``target``."""
+        self._call(
+            "POST",
+            f"/commands/{target.id}/steer",
+            {
+                "generation": self.instance.generation,
+                "command_id": str(command.id),
+                "agent_sequence": command.agent_sequence,
+                "text": command.input["text"],
+            },
+        )
+
     def decide(self, approval) -> None:
         self._call(
             "PUT",

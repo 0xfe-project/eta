@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 COMMAND = re.compile(r"^/internal/v1/commands/([\w-]+)$")
 INTERRUPT = re.compile(r"^/internal/v1/commands/([\w-]+)/interrupt$")
+STEER = re.compile(r"^/internal/v1/commands/([\w-]+)/steer$")
 DECISION = re.compile(r"^/internal/v1/approvals/([\w-]+)/decision$")
 DECISIONS = {"accept", "decline"}
 
@@ -98,7 +99,7 @@ def make_handler(runtime: Runtime):
                     return self._error(409, "AGENT_MISMATCH")
                 if runtime.status not in ("ready", "busy"):
                     return self._error(503, "NOT_READY")
-                if body.get("kind") not in ("turn", "checkpoint"):
+                if body.get("kind") not in ("turn", "compact", "checkpoint"):
                     return self._error(400, "BAD_REQUEST")
                 try:
                     view = runtime.accept(match.group(1), body)
@@ -128,6 +129,23 @@ def make_handler(runtime: Runtime):
                     return self._error(503, "NOT_READY")
                 view = runtime.interrupt(match.group(1))
                 return self._send(202, view) if view else self._error(404, "NOT_FOUND")
+            if match := STEER.match(self.path):
+                if not self._generation_ok(body):
+                    return
+                if runtime.ledger is None:
+                    return self._error(503, "NOT_READY")
+                if not (
+                    isinstance(body.get("command_id"), str)
+                    and isinstance(body.get("agent_sequence"), int)
+                    and isinstance(body.get("text"), str)
+                ):
+                    return self._error(400, "BAD_REQUEST")
+                result = runtime.steer(match.group(1), body)
+                if result == "not_found":
+                    return self._error(404, "NOT_FOUND")
+                if result == "not_running":
+                    return self._error(409, "TURN_NOT_RUNNING")
+                return self._send(202, {"command_id": body["command_id"]})
             self._error(404, "NOT_FOUND")
 
     return Handler

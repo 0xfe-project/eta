@@ -30,6 +30,7 @@ ACTIVITY_LABELS = {
     "web_search": "搜索网页",
     "agent": "协作子智能体",
     "image": "生成图片",
+    "compaction": "压缩上下文",
 }
 ACTIVITY_STATUSES = {"running", "completed", "failed"}
 MAX_BATCH = 100
@@ -303,6 +304,41 @@ def turn_completed(conversation, agent, instance, command, payload):
     _touch(agent)
 
 
+def turn_steered(conversation, agent, instance, command, payload):
+    """The running turn took a steer in: the rest of it answers the steer."""
+    if command is not None:
+        services.finish_command(conversation, command, "succeeded")
+    steer = _command(agent, payload.get("steer_command_id"))
+    if steer is None or steer.status in services.TERMINAL_COMMAND_STATUSES:
+        return
+    now = timezone.now()
+    steer.status = AgentCommand.Status.RUNNING
+    steer.runtime_instance = instance
+    steer.dispatch_generation = instance.generation
+    steer.codex_turn_id = payload.get("turn_id")
+    steer.started_at = now
+    if command is not None and command.interrupt_requested_at:
+        # Stopping the turn's first part stops all of it.
+        steer.interrupt_requested_at = steer.interrupt_requested_at or now
+    steer.save(
+        update_fields=[
+            "status",
+            "runtime_instance",
+            "dispatch_generation",
+            "codex_turn_id",
+            "started_at",
+            "interrupt_requested_at",
+        ]
+    )
+    agent.status = Agent.Status.BUSY
+    agent.save(update_fields=["status", "updated_at"])
+    reply = _reply(steer)
+    if reply and reply.status == Message.Status.QUEUED:
+        services.save_message(conversation, reply, status=Message.Status.RESPONDING)
+    services.refresh_agent_status(conversation, agent)
+    _touch(agent)
+
+
 def outcome_unknown(conversation, agent, instance, command, payload):
     # The runtime could not prove the turn did not run: never replay it.
     if command is not None:
@@ -398,7 +434,7 @@ def mark_runtime_failed(conversation, agent, instance, code: str) -> None:
     )
     waiting = AgentCommand.objects.select_related("agent").filter(
         agent=agent,
-        kind=AgentCommand.Kind.TURN,
+        kind__in=AgentCommand.USER_KINDS,
         status__in=[AgentCommand.Status.QUEUED, AgentCommand.Status.DISPATCHING],
     )
     for waiting_command in waiting:
@@ -413,6 +449,7 @@ HANDLERS = {
     "approval.applied": approval_applied,
     "approval.expired": approval_expired,
     "turn.completed": turn_completed,
+    "turn.steered": turn_steered,
     "command.outcome_unknown": outcome_unknown,
     "checkpoint.started": checkpoint_started,
     "checkpoint.completed": checkpoint_completed,

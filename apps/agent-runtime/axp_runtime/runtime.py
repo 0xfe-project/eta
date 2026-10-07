@@ -21,6 +21,7 @@ from openai_codex import CodexConfig
 from openai_codex import __version__ as SDK_VERSION
 from openai_codex.client import CodexClient
 from openai_codex.errors import CodexError, JsonRpcError, TransportClosedError
+from openai_codex.generated.v2_all import TurnSteerResponse
 from openai_codex.models import UnknownNotification
 from pydantic import BaseModel, ConfigDict
 
@@ -55,9 +56,12 @@ ITEM_KINDS = {
     "webSearch": "web_search",
     "collabAgentToolCall": "agent",
     "imageGeneration": "image",
+    "contextCompaction": "compaction",
 }
 FAILED_ITEM_STATUSES = {"failed", "declined", "error"}
 FLUSH_SECONDS = 0.3
+# thread/compact/start answers before its turn starts.
+COMPACT_START_SECONDS = 30
 
 
 class RecoveryFailed(Exception):
@@ -116,6 +120,9 @@ class Runtime:
         self.mcp_status: dict[str, dict] = {}
         self._mcp_changed = threading.Condition()
         self._approvals: dict[str, _ApprovalWaiter] = {}
+        # Steer command id -> its command, from turn/steer until the running
+        # turn takes it in.
+        self._steers: dict[str, dict] = {}
         self._lock = threading.RLock()
         self._wake = threading.Event()
         # stopping: take no new work. _halt: stop the background loops, once
@@ -517,6 +524,67 @@ class Runtime:
                 ).start()
         return self.command_view(command_id)
 
+    def steer(self, command_id: str, body: dict) -> str:
+        """Add a steer to the running command's turn.
+
+        Returns "accepted", "not_found" or "not_running"; a steer that is not
+        accepted stays queued in the control plane and runs as its own turn.
+        """
+        steer_id = body["command_id"]
+        if steer_id in self._steers or self.ledger.get_command(steer_id):
+            return "accepted"
+        command = self.ledger.get_command(command_id)
+        if command is None:
+            return "not_found"
+        client = self.client
+        if (
+            client is None
+            or command["status"] != L.RUNNING
+            or command["kind"] != "turn"
+            or command["interrupt_requested"]
+            or not command["turn_id"]
+        ):
+            return "not_running"
+        text = body.get("text") or ""
+        payload = {"text": text}
+        canonical = json.dumps(
+            {
+                "kind": "turn",
+                "agent_sequence": body["agent_sequence"],
+                "payload": payload,
+            },
+            sort_keys=True,
+        )
+        with self._lock:
+            # Registered first: Codex may echo the steer before it answers.
+            self._steers[steer_id] = {
+                "turn_id": command["turn_id"],
+                "record": {
+                    "agent_sequence": int(body["agent_sequence"]),
+                    "kind": "turn",
+                    "payload": payload,
+                    "request_hash": hashlib.sha256(canonical.encode()).hexdigest(),
+                    "generation": self.settings.generation,
+                },
+            }
+        try:
+            client.request(
+                "turn/steer",
+                {
+                    "threadId": self.thread_id,
+                    "expectedTurnId": command["turn_id"],
+                    "input": [{"type": "text", "text": text}],
+                    "clientUserMessageId": steer_id,
+                },
+                response_model=TurnSteerResponse,
+            )
+        except (CodexError, JsonRpcError) as exc:
+            logger.info("turn/steer rejected: %s", exc)
+            with self._lock:
+                self._steers.pop(steer_id, None)
+            return "not_running"
+        return "accepted"
+
     def _interrupt_turn(self, turn_id: str) -> None:
         client = self.client
         if client is None:
@@ -599,15 +667,31 @@ class Runtime:
             try:
                 if command["kind"] == "checkpoint":
                     self._run_checkpoint(command)
+                elif command["kind"] == "compact":
+                    self._run_turn(
+                        command,
+                        lambda client: _start_compaction(client, self.thread_id),
+                    )
                 else:
-                    self._run_turn(command)
+                    text = command["payload"].get("text", "")
+                    self._run_turn(
+                        command,
+                        lambda client: (
+                            client.turn_start(
+                                self.thread_id, [{"type": "text", "text": text}]
+                            ).turn.id
+                        ),
+                    )
             except (TransportClosedError, RecoveryFailed):
                 if self.stopping.is_set():
                     # Stopped on purpose: what ran is reconciled by the next
                     # instance from the ledger and the Codex thread.
                     return
                 logger.exception("Codex transport closed")
-                latest = self.ledger.get_command(command["command_id"])
+                # A steered turn ends under the steer's command.
+                latest = self.ledger.get_command(
+                    self.current_command_id or command["command_id"]
+                )
                 if latest["status"] in (L.STARTING, L.RUNNING):
                     self._finish_unknown(latest)
                 self.status = "error"
@@ -621,23 +705,21 @@ class Runtime:
             if self.status == "busy":
                 self.status = "ready"
 
-    def _run_turn(self, command: dict) -> None:
+    def _run_turn(self, command: dict, start) -> None:
+        """Start a turn with ``start(client) -> turn id`` and stream it."""
         command_id = command["command_id"]
-        text = command["payload"].get("text", "")
         with self._codex_lock:
             client = self.client
             if client is None or self.stopping.is_set():
                 return  # shutting down; it stays accepted
             self.ledger.update_command(command_id, status=L.STARTING)
             try:
-                started = client.turn_start(
-                    self.thread_id, [{"type": "text", "text": text}]
-                )
+                turn_id = start(client)
             except TransportClosedError:
                 raise
-            except (CodexError, JsonRpcError) as exc:
+            except (CodexError, JsonRpcError, TimeoutError) as exc:
                 # Rejected before starting: nothing ran.
-                logger.warning("turn/start rejected: %s", exc)
+                logger.warning("%s rejected: %s", command["kind"], exc)
                 self.ledger.update_command(
                     command_id, status="failed", error_code="TURN_REJECTED"
                 )
@@ -646,7 +728,6 @@ class Runtime:
                     {"command_id": command_id, "turn_id": None, "status": "failed"},
                 )
                 return
-            turn_id = started.turn.id
             self.ledger.update_command(command_id, status=L.RUNNING, turn_id=turn_id)
         self.ledger.emit("turn.started", {"command_id": command_id, "turn_id": turn_id})
         if self.ledger.get_command(command_id)["interrupt_requested"]:
@@ -658,6 +739,8 @@ class Runtime:
         dirty: set[str] = set()
         buffer_lock = threading.Lock()
         done = threading.Event()
+        # The command the turn's output belongs to; a taken-in steer takes over.
+        owner = command_id
 
         def flush():
             with buffer_lock:
@@ -665,7 +748,7 @@ class Runtime:
                 dirty.clear()
             for item_id, text in pending:
                 self._emit_item(
-                    command_id,
+                    owner,
                     {"id": item_id, "type": "agentMessage", "text": text},
                     completed=False,
                 )
@@ -692,17 +775,41 @@ class Runtime:
                         with buffer_lock:
                             dirty.discard(item["id"])
                     flush()
-                    self._emit_item(
-                        command_id, item, completed=method == "item/completed"
-                    )
+                    steer_id = item.get("clientId")
+                    if item.get("type") == "userMessage" and steer_id in self._steers:
+                        # Codex took the steer in: what follows answers it.
+                        owner = self._take_steer(owner, steer_id, turn_id)
+                    self._emit_item(owner, item, completed=method == "item/completed")
                 elif method == "turn/completed":
                     flush()
-                    self._finish_turn(command_id, payload.get("turn") or {})
+                    # Steers Codex accepted but never echoed still went to
+                    # this turn; never run them again.
+                    for steer_id in [
+                        key
+                        for key, steer in list(self._steers.items())
+                        if steer["turn_id"] == turn_id
+                    ]:
+                        owner = self._take_steer(owner, steer_id, turn_id)
+                    self._finish_turn(owner, payload.get("turn") or {})
                     return
         finally:
             done.set()
             flusher_thread.join()
             client.unregister_turn_notifications(turn_id)
+
+    def _take_steer(self, previous: str, steer_id: str, turn_id: str) -> str:
+        """Hand the running turn from ``previous`` to the steer command."""
+        with self._lock:
+            steer = self._steers.pop(steer_id)
+        self.ledger.accept_command(steer_id, **steer["record"])
+        self.ledger.update_command(steer_id, status=L.RUNNING, turn_id=turn_id)
+        self.ledger.update_command(previous, status="succeeded")
+        self.ledger.emit(
+            "turn.steered",
+            {"command_id": previous, "steer_command_id": steer_id, "turn_id": turn_id},
+        )
+        self.current_command_id = steer_id
+        return steer_id
 
     def _emit_item(self, command_id: str, item: dict, *, completed: bool) -> None:
         kind = ITEM_KINDS.get(item.get("type"))
@@ -885,6 +992,42 @@ class Runtime:
                 logger.warning("Event delivery failed: %s", exc)
                 self._halt.wait(backoff)
                 backoff = min(backoff * 2, 5)
+
+
+def _start_compaction(client: CodexClient, thread_id: str) -> str:
+    """Start compacting the thread; returns the compaction turn's id.
+
+    thread/compact/start answers before the turn exists, so its id comes from
+    turn/started. Like turn/start, the SDK router buffers the thread's turn
+    events meanwhile; the default consumer is attached from the first one.
+    """
+    router = client._router
+    with client._thread_start_lock(thread_id), router.pending_turn(thread_id) as seen:
+        client.thread_compact(thread_id)
+        deadline = time.monotonic() + COMPACT_START_SECONDS
+        with router._turn_condition:
+            while True:
+                if isinstance(
+                    error := router._pending_turn_requests.get(thread_id),
+                    BaseException,
+                ):
+                    raise error
+                turn_id = next(
+                    (
+                        state.id
+                        for state in router._turn_states.values()
+                        if state.thread_id == thread_id and state.id not in seen
+                    ),
+                    None,
+                )
+                if turn_id:
+                    break
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("compaction turn never started")
+                router._turn_condition.wait(remaining)
+        router.prepare_turn(turn_id, thread_id, seen, for_handle=False)
+    return turn_id
 
 
 def _otel_overrides() -> list[str]:

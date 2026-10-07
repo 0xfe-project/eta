@@ -303,6 +303,49 @@ class TestTurns:
         assert cp.wait_for("approval.applied")["decision"] == "cancel"
         assert cp.completed(command_id)["status"] == "interrupted"
 
+    def test_compact_runs_as_a_turn(self, rt):
+        runtime, cp = rt.start()
+        command_id = send(runtime, "", kind="compact", payload={})
+        assert cp.completed(command_id)["status"] == "completed"
+        item = cp.wait_for("item.updated", command_id=command_id)["item"]
+        assert item == IsPartialDict(kind="compaction")
+        assert runtime.command_view(command_id)["status"] == "succeeded"
+
+    def steer(self, runtime, target, text="改用中文", seq=2):
+        steer_id = str(uuid.uuid4())
+        body = {"command_id": steer_id, "agent_sequence": seq, "text": text}
+        return steer_id, runtime.steer(target, body)
+
+    def test_steer_hands_the_turn_to_the_steer(self, rt):
+        runtime, cp = rt.start()
+        first = send(runtime, "[steer]", seq=1)
+        cp.wait_for("turn.started", command_id=first)
+        steer_id, result = self.steer(runtime, first)
+        assert result == "accepted"
+        # Repeated delivery is a no-op.
+        assert runtime.steer(first, {"command_id": steer_id}) == "accepted"
+        steered = cp.wait_for("turn.steered", command_id=first)
+        assert steered["steer_command_id"] == steer_id
+        assert cp.completed(steer_id)["status"] == "completed"
+        texts = {
+            e["payload"]["command_id"]: e["payload"]["item"].get("text")
+            for e in cp.events
+            if e["type"] == "item.updated"
+        }
+        assert texts == {first: "收到：[steer]", steer_id: "收到插话：改用中文"}
+        assert runtime.command_view(first)["status"] == "succeeded"
+        assert runtime.command_view(steer_id)["status"] == "succeeded"
+        assert "turn.completed" not in [
+            e["type"] for e in cp.events if e["payload"].get("command_id") == first
+        ]
+
+    def test_steer_needs_a_running_turn(self, rt):
+        runtime, cp = rt.start()
+        done = send(runtime, "你好")
+        cp.completed(done)
+        assert self.steer(runtime, done)[1] == "not_running"
+        assert self.steer(runtime, "missing")[1] == "not_found"
+
     def test_codex_crash_marks_outcome_unknown_and_restart_keeps_it(self, rt):
         runtime, cp = rt.start()
         command_id = send(runtime, "[crash]")

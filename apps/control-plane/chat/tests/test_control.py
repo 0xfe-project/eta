@@ -93,6 +93,9 @@ class FakeClients:
             def decide(self, approval):
                 clients._record("decide", instance, approval.decision)
 
+            def steer(self, target, command):
+                clients._record("steer", instance, f"{target.pk}:{command.pk}")
+
         return Client()
 
     def _record(self, kind, instance, arg):
@@ -462,6 +465,100 @@ class TestExecution:
         assert Interaction.objects.get().status == "resolved"
         assert Approval.objects.get().status == "applied"
         assert ctl.reply(sent).status == "responding"
+
+
+class TestSlashCommands:
+    def steer(self, ctl, text="改用中文"):
+        response = ctl.chat.post(
+            "/chat/messages",
+            {"agent_id": ctl.agent["id"], "text": text, "mode": "steer"},
+        )
+        assert response.status_code == 202, response.content
+        return response.json()
+
+    def test_compact_runs_as_its_own_command(self, ctl):
+        response = ctl.chat.post(f"/agents/{ctl.agent['id']}/compact")
+        assert response.status_code == 202, response.content
+        sent = response.json()
+        assert sent["message"]["blocks"][0]["text"] == "/compact"
+        assert_no_internal_fields(sent)
+        runtime = ctl.start_runtime()
+        ctl.tick()
+        command = ctl.command(sent)
+        assert (command.kind, command.status) == ("compact", "dispatching")
+        runtime.turn_started(command)
+        runtime.events(item(str(command.pk), id="k1", kind="compaction"))
+        runtime.turn_completed(command)
+        reply = ctl.reply(sent)
+        assert reply.status == "completed"
+        assert [b["label"] for b in reply.content] == ["压缩上下文"]
+
+    def test_steer_joins_the_running_turn(self, ctl, running):
+        sent, runtime, command = running
+        runtime.turn_started(command)
+        steered = self.steer(ctl)
+        steer = ctl.command(steered)
+        ctl.tick()
+        assert ctl.clients.of("steer") == [("steer", 1, f"{command.pk}:{steer.pk}")]
+        ctl.tick()  # not resent right away
+        assert len(ctl.clients.of("steer")) == 1
+        steer.refresh_from_db()
+        assert steer.status == "queued"
+        runtime.events(
+            (
+                "turn.steered",
+                {
+                    "command_id": str(command.pk),
+                    "steer_command_id": str(steer.pk),
+                    "turn_id": "t",
+                },
+            ),
+            item(str(steer.pk), id="m2", kind="agent_message", text="好的"),
+        )
+        assert ctl.reply(sent).status == "completed"
+        steer.refresh_from_db()
+        assert (steer.status, steer.codex_turn_id) == ("running", "t")
+        assert ctl.reply(steered).status == "responding"
+        assert ctl.agent_status() == "working"
+        runtime.turn_completed(steer)
+        assert ctl.reply(steered).content[0]["text"] == "好的"
+        assert ctl.agent_status() == "idle"
+        assert len(ctl.clients.of("put")) == 1
+
+    def test_steer_without_running_turn_waits_its_turn(self, ctl, running):
+        _, runtime, command = running
+        steered = self.steer(ctl)
+        ctl.tick()  # the first turn has not started yet
+        assert ctl.clients.of("steer") == []
+        runtime.turn_started(command)
+        runtime.turn_completed(command)
+        ctl.tick()
+        assert ctl.command(steered).status == "dispatching"
+        assert ctl.clients.of("steer") == []
+
+    def test_stopping_a_delivered_steer_interrupts_it(self, ctl, running):
+        _, runtime, command = running
+        runtime.turn_started(command)
+        steered = self.steer(ctl)
+        ctl.tick()
+        stop = ctl.chat.post(f"/chat/messages/{steered['reply']['id']}/stop")
+        assert stop.json()["status"] == "stopping"
+        steer = ctl.command(steered)
+        assert steer.status == "queued"
+        runtime.events(
+            (
+                "turn.steered",
+                {
+                    "command_id": str(command.pk),
+                    "steer_command_id": str(steer.pk),
+                    "turn_id": "t",
+                },
+            )
+        )
+        ctl.tick()
+        assert ("interrupt", 1, str(steer.pk)) in ctl.clients.of("interrupt")
+        runtime.turn_completed(steer, "interrupted")
+        assert ctl.reply(steered).status == "stopped"
 
 
 class TestRecovery:

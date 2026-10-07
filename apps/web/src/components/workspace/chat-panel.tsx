@@ -1,9 +1,10 @@
-import type { Block, ChatMessage, Interaction } from "@/queries/chat";
-import { useEffect, useRef } from "react";
+import type { Block, ChatMessage, Interaction, SendMode } from "@/queries/chat";
+import { useEffect, useId, useRef, useState } from "react";
 import { ClaudeHeader } from "@/components/brainless/claude/claude-header";
 import { ClaudeMessage } from "@/components/brainless/claude/claude-message";
 import { ClaudePermission } from "@/components/brainless/claude/claude-permission";
 import { ClaudePrompt } from "@/components/brainless/claude/claude-prompt";
+import { ClaudeSlashMenu } from "@/components/brainless/claude/claude-slash-menu";
 import { ClaudeThinking } from "@/components/brainless/claude/claude-thinking";
 import { ClaudeToolCall } from "@/components/brainless/claude/claude-tool-call";
 import { CodexExec } from "@/components/brainless/codex/codex-exec";
@@ -11,11 +12,13 @@ import { CodexHeader } from "@/components/brainless/codex/codex-header";
 import { CodexMessage } from "@/components/brainless/codex/codex-message";
 import { CodexPermissions } from "@/components/brainless/codex/codex-permissions";
 import { CodexPrompt } from "@/components/brainless/codex/codex-prompt";
+import { CodexSlashMenu } from "@/components/brainless/codex/codex-slash-menu";
 import { CodexWorking } from "@/components/brainless/codex/codex-working";
 import { GrokHeader } from "@/components/brainless/grok/grok-header";
 import { GrokMessage } from "@/components/brainless/grok/grok-message";
 import { GrokPermission } from "@/components/brainless/grok/grok-permission";
 import { GrokPrompt } from "@/components/brainless/grok/grok-prompt";
+import { GrokSlashMenu } from "@/components/brainless/grok/grok-slash-menu";
 import { GrokThinking } from "@/components/brainless/grok/grok-thinking";
 import { GrokTool } from "@/components/brainless/grok/grok-tool";
 import { Markdown } from "@/components/markdown";
@@ -35,6 +38,20 @@ interface ChoiceProps {
   labels: string[];
   onChoose: (index: number) => void;
 }
+
+type SlashName = "/stop" | "/queue" | "/steer" | "/compact";
+interface SlashCommand {
+  name: SlashName;
+  description: string;
+  /** Completes to `name ` for the message to follow. */
+  takesText?: boolean;
+}
+const SLASH_COMMANDS: SlashCommand[] = [
+  { name: "/stop", description: "停止当前回复" },
+  { name: "/queue", description: "当前回复结束后发送", takesText: true },
+  { name: "/steer", description: "插入当前回复", takesText: true },
+  { name: "/compact", description: "压缩上下文" },
+];
 
 const activityText = { running: "进行中", completed: "完成", failed: "失败" };
 const workingLabel: Partial<Record<ChatMessage["status"], string>> = {
@@ -77,6 +94,8 @@ const sessions = {
     Working: ({ label }: { label: string }) => (
       <ClaudeThinking verbs={[label]} showTokens={false} />
     ),
+    SlashMenu: ClaudeSlashMenu,
+    slashMenuBelow: false,
   },
   codex: {
     Message: ({ role, children }: MessageProps) => (
@@ -105,6 +124,8 @@ const sessions = {
       />
     ),
     Working: ({ label }: { label: string }) => <CodexWorking label={label} />,
+    SlashMenu: CodexSlashMenu,
+    slashMenuBelow: true,
   },
   grok: {
     Message: ({ role, time, children }: MessageProps) => (
@@ -127,6 +148,8 @@ const sessions = {
       />
     ),
     Working: ({ label }: { label: string }) => <GrokThinking verbs={[label]} />,
+    SlashMenu: GrokSlashMenu,
+    slashMenuBelow: false,
   },
 };
 
@@ -180,6 +203,7 @@ export function ChatPanel({
   draft,
   onDraftChange: setDraft,
   onSend,
+  onCompact,
   onStop,
   onAnswer,
   head,
@@ -194,7 +218,8 @@ export function ChatPanel({
   interactions: Interaction[];
   draft: string;
   onDraftChange: (value: string) => void;
-  onSend: (content: string) => void;
+  onSend: (content: string, mode: SendMode) => void;
+  onCompact: () => void;
   onStop: (replyId: string) => void;
   onAnswer: (interactionId: string, value: string) => void;
   /** Shows and switches the agent being talked to. */
@@ -208,31 +233,84 @@ export function ChatPanel({
   const formRef = useRef<HTMLFormElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const session = sessions[theme];
-  const { Message, Activity, Choice, Working } = session;
+  const { Message, Activity, Choice, Working, SlashMenu } = session;
   const last = messages.at(-1);
-  const active = [...messages]
-    .reverse()
-    .find(
-      (message) =>
-        message.role === "assistant" &&
-        ACTIVE_STATUSES.has(message.status) &&
-        message.status !== "stopping",
-    );
+  // The reply in progress; later ones wait behind it.
+  const active = messages.find(
+    (message) =>
+      message.role === "assistant" &&
+      ACTIVE_STATUSES.has(message.status) &&
+      message.status !== "stopping",
+  );
   useEffect(() => {
     if (last) endRef.current?.scrollIntoView({ block: "nearest" });
   }, [last?.id, last?.revision, last]);
 
+  const listId = useId();
+  const [menuIndex, setMenuIndex] = useState(0);
+  const [menuDismissed, setMenuDismissed] = useState(false);
+  // The menu offers commands while the draft is a bare `/name`.
+  const query = /^\/\S*$/.test(draft) ? draft.slice(1).toLowerCase() : null;
+  const matches =
+    query === null || menuDismissed || blocked
+      ? []
+      : SLASH_COMMANDS.filter((command) =>
+          command.name.slice(1).startsWith(query),
+        );
+  const menuOpen = matches.length > 0;
+  const menuActive = Math.min(menuIndex, matches.length - 1);
+
+  function run(name: SlashName, text: string) {
+    if (name === "/stop") {
+      if (active) onStop(active.id);
+      setDraft("");
+    } else if (name === "/compact") {
+      onCompact();
+    } else if (text.trim()) {
+      onSend(text, name === "/steer" ? "steer" : "queue");
+    }
+  }
+  function choose(command: SlashCommand) {
+    if (command.takesText) setDraft(`${command.name} `);
+    else run(command.name, "");
+  }
   function send() {
     if (blocked || !draft.trim()) return;
-    onSend(draft);
+    const space = draft.search(/\s/);
+    const name = space === -1 ? draft : draft.slice(0, space);
+    const text = space === -1 ? "" : draft.slice(space).trimStart();
+    const command = SLASH_COMMANDS.find((c) => c.name === name);
+    if (command) run(command.name, text);
+    else onSend(draft, "queue");
     formRef.current?.querySelector("input")?.focus();
   }
   const promptProps = {
     value: draft,
-    onChange: (event: React.ChangeEvent<HTMLInputElement>) =>
-      setDraft(event.target.value),
+    onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
+      setDraft(event.target.value);
+      setMenuIndex(0);
+      setMenuDismissed(false);
+    },
     onKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => {
       if (event.nativeEvent.isComposing) return;
+      if (menuOpen) {
+        const step = { ArrowDown: 1, ArrowUp: -1 }[event.key];
+        if (step) {
+          event.preventDefault();
+          setMenuIndex((menuActive + step + matches.length) % matches.length);
+          return;
+        }
+        if (event.key === "Tab" || (event.key === "Enter" && !event.shiftKey)) {
+          event.preventDefault();
+          choose(matches[menuActive]);
+          return;
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          setMenuDismissed(true);
+          return;
+        }
+      }
       // The CLIs' interrupt keys, as their working lines advertise.
       const interrupt =
         theme === "grok"
@@ -247,7 +325,23 @@ export function ChatPanel({
       }
     },
     placeholder: agentName ? `发消息给 ${agentName}…` : "先创建智能体",
+    inputProps: {
+      role: "combobox",
+      "aria-autocomplete": "list",
+      "aria-expanded": menuOpen,
+      "aria-controls": menuOpen ? listId : undefined,
+      "aria-activedescendant": menuOpen ? `${listId}-${menuActive}` : undefined,
+    } satisfies React.InputHTMLAttributes<HTMLInputElement>,
   };
+  const slashMenu = menuOpen ? (
+    <SlashMenu
+      id={listId}
+      commands={matches}
+      active={menuActive}
+      onActiveChange={setMenuIndex}
+      onChoose={(command) => choose(command as SlashCommand)}
+    />
+  ) : null;
   const model = modelLabel ?? agentName ?? "未选择智能体";
 
   return (
@@ -349,6 +443,7 @@ export function ChatPanel({
         {blocked ? <div className="px-[1ch] pb-[1lh]">{blocked}</div> : null}
         {/* A disabled fieldset disables the session's own input. */}
         <fieldset disabled={Boolean(blocked)} className="contents">
+          {session.slashMenuBelow ? null : slashMenu}
           {theme === "claude" ? (
             <ClaudePrompt {...promptProps} mode="manual" effort={false} />
           ) : theme === "codex" ? (
@@ -362,6 +457,7 @@ export function ChatPanel({
               showShortcuts={false}
             />
           )}
+          {session.slashMenuBelow ? slashMenu : null}
         </fieldset>
       </form>
     </section>

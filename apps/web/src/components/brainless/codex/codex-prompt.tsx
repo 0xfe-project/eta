@@ -32,6 +32,7 @@ export function CodexPrompt({
   directory = "~/dev/brainless",
   className,
   inputClassName,
+  inputProps,
 }: {
   value?: string;
   defaultValue?: string;
@@ -43,6 +44,8 @@ export function CodexPrompt({
   directory?: string;
   className?: string;
   inputClassName?: string;
+  /** Extra attributes for the input, e.g. combobox semantics. */
+  inputProps?: React.InputHTMLAttributes<HTMLInputElement>;
 }) {
   const controlled = value !== undefined;
   const displayModel =
@@ -68,6 +71,7 @@ export function CodexPrompt({
             placeholder={placeholder}
             onKeyDown={onKeyDown}
             {...(controlled ? { value, onChange } : { defaultValue, onChange })}
+            {...inputProps}
             className={cn(
               "term-input min-w-0 flex-1 bg-transparent outline-none placeholder:text-[var(--terminal-muted)]",
               inputClassName,

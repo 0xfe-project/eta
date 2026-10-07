@@ -438,7 +438,24 @@ def delete_agent(agent_id: str) -> None:
     _emit(conversation, UiEvent.Type.AGENT_DELETED, {"agent_id": str(agent.id)})
 
 
-def send_message(agent_id: str, text: str) -> tuple[Message, Message]:
+def send_message(
+    agent_id: str, text: str, *, steer: bool = False
+) -> tuple[Message, Message]:
+    """Queue a turn. A steer joins the agent's running turn instead, once
+    the controller delivers it; with no running turn it waits like any turn."""
+    return _enqueue(
+        agent_id, text, {"text": text, **({"steer": True} if steer else {})}
+    )
+
+
+def compact(agent_id: str) -> tuple[Message, Message]:
+    """Queue a compaction of the agent's context, shown as ``/compact``."""
+    return _enqueue(agent_id, "/compact", {}, AgentCommand.Kind.COMPACT)
+
+
+def _enqueue(
+    agent_id: str, text: str, input: dict, kind=AgentCommand.Kind.TURN
+) -> tuple[Message, Message]:
     # Network call: before taking the conversation lock.
     found = list(
         Agent.objects.filter(
@@ -459,7 +476,7 @@ def send_message(agent_id: str, text: str) -> tuple[Message, Message]:
     Agent.objects.filter(pk=agent.pk).update(last_command_seq=F("last_command_seq") + 1)
     agent.refresh_from_db(fields=["last_command_seq"])
     command = AgentCommand.objects.create(
-        agent=agent, agent_sequence=agent.last_command_seq, input={"text": text}
+        agent=agent, agent_sequence=agent.last_command_seq, kind=kind, input=input
     )
 
     now = timezone.now()
@@ -494,7 +511,9 @@ def send_message(agent_id: str, text: str) -> tuple[Message, Message]:
 
 def _request_stop(conversation: Conversation, reply: Message) -> None:
     command = reply.command
-    if command.status == AgentCommand.Status.QUEUED:
+    # A delivered steer may already be in the running turn.
+    delivered_steer = command.input.get("steer") and command.dispatched_at
+    if command.status == AgentCommand.Status.QUEUED and not delivered_steer:
         # Not yet handed to a runtime: cancel outright.
         finish_command(conversation, command, "cancelled")
     elif reply.status in (

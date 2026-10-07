@@ -141,6 +141,8 @@ class Agent(models.Model):
 
 class AgentCommandKind(models.TextChoices):
     TURN = "turn"
+    # Compacts the thread's context; a turn without user input.
+    COMPACT = "compact"
     CHECKPOINT = "checkpoint"
 
 
@@ -159,6 +161,9 @@ class AgentCommandStatus(models.TextChoices):
 class AgentCommand(models.Model):
     Kind = AgentCommandKind
     Status = AgentCommandStatus
+
+    # Kinds the user asked for; each has a user message and a reply.
+    USER_KINDS = (Kind.TURN, Kind.COMPACT)
 
     # Statuses that hold the per-agent execution slot.
     ACTIVE_STATUSES = (
@@ -213,7 +218,7 @@ class AgentCommand(models.Model):
             models.UniqueConstraint(
                 fields=["agent"],
                 condition=Q(
-                    kind__in=["turn", "checkpoint"],
+                    kind__in=["turn", "compact", "checkpoint"],
                     status__in=[
                         "dispatching",
                         "running",

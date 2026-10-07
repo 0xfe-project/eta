@@ -44,6 +44,7 @@ export function GrokPrompt({
   busy = false,
   className,
   inputClassName,
+  inputProps,
 }: {
   value?: string;
   defaultValue?: string;
@@ -57,6 +58,8 @@ export function GrokPrompt({
   busy?: boolean;
   className?: string;
   inputClassName?: string;
+  /** Extra attributes for the input, e.g. combobox semantics. */
+  inputProps?: React.InputHTMLAttributes<HTMLInputElement>;
 }) {
   const controlled = value !== undefined;
   const modeLabel = MODE_LABEL[mode];
@@ -81,6 +84,7 @@ export function GrokPrompt({
             placeholder={placeholder}
             onKeyDown={onKeyDown}
             {...(controlled ? { value, onChange } : { defaultValue, onChange })}
+            {...inputProps}
             className={cn(
               "term-input min-w-0 flex-1 bg-transparent py-0.5 pl-[1ch] outline-none placeholder:text-[var(--terminal-muted)]",
               inputClassName,

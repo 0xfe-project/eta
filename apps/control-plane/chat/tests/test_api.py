@@ -466,6 +466,7 @@ def test_public_schema_has_no_internal_fields():
         "/api/v1/chat",
         "/api/v1/agents",
         "/api/v1/agents/{agent_id}",
+        "/api/v1/agents/{agent_id}/compact",
         "/api/v1/chat/messages",
         "/api/v1/chat/stream",
         "/api/v1/chat/messages/{message_id}/stop",

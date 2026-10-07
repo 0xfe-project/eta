@@ -88,6 +88,7 @@ class Controller:
             self.reconcile_unknown,
             self.dispatch,
             self.deliver_interrupts,
+            self.deliver_steers,
             self.deliver_decisions,
             self.schedule_checkpoints,
             self.stop_idle,
@@ -110,7 +111,7 @@ class Controller:
                 instance.status == RuntimeInstance.Status.FAILED
                 and AgentCommand.objects.filter(
                     agent=instance.agent,
-                    kind=AgentCommand.Kind.TURN,
+                    kind__in=AgentCommand.USER_KINDS,
                     status=AgentCommand.Status.QUEUED,
                 ).exists()
             )
@@ -261,7 +262,7 @@ class Controller:
                         "commands": [
                             str(pk)
                             for pk in agent.commands.filter(
-                                kind=AgentCommand.Kind.TURN,
+                                kind__in=AgentCommand.USER_KINDS,
                                 finished_at__gt=restore.completed_at,
                             ).values_list("pk", flat=True)
                         ],
@@ -427,7 +428,7 @@ class Controller:
     def fail_stale_queued(self) -> None:
         cutoff = timezone.now() - _seconds(DISPATCH_TIMEOUT_SECONDS)
         stale = AgentCommand.objects.filter(
-            kind=AgentCommand.Kind.TURN,
+            kind__in=AgentCommand.USER_KINDS,
             status=AgentCommand.Status.QUEUED,
             created_at__lt=cutoff,
         ).select_related("agent")
@@ -488,7 +489,7 @@ class Controller:
                     "attempt_count",
                 ]
             )
-            if command.kind == AgentCommand.Kind.TURN:
+            if command.kind in AgentCommand.USER_KINDS:
                 agent.last_active_at = timezone.now()
                 agent.save(update_fields=["last_active_at", "updated_at"])
             return command
@@ -616,6 +617,49 @@ class Controller:
                 interrupt_sent_at=timezone.now()
             )
 
+    def deliver_steers(self) -> None:
+        """Hand queued steers to their agent's running turn.
+
+        A steer stays queued until the runtime reports the turn took it in;
+        if the turn ends first, it is claimed and runs as its own turn.
+        """
+        resend_before = timezone.now() - _seconds(REDISPATCH_SECONDS)
+        steers = (
+            AgentCommand.objects.filter(
+                kind=AgentCommand.Kind.TURN,
+                status=AgentCommand.Status.QUEUED,
+                input__steer=True,
+                interrupt_requested_at__isnull=True,
+            )
+            .filter(Q(dispatched_at__isnull=True) | Q(dispatched_at__lt=resend_before))
+            .order_by("agent_sequence")
+        )
+        for steer in steers:
+            target = (
+                AgentCommand.objects.filter(
+                    agent_id=steer.agent_id,
+                    kind=AgentCommand.Kind.TURN,
+                    status__in=[
+                        AgentCommand.Status.RUNNING,
+                        AgentCommand.Status.WAITING_APPROVAL,
+                    ],
+                    codex_turn_id__isnull=False,
+                    interrupt_requested_at__isnull=True,
+                    runtime_instance__ended_at__isnull=True,
+                )
+                .select_related("runtime_instance")
+                .first()
+            )
+            if target is None:
+                continue
+            AgentCommand.objects.filter(pk=steer.pk).update(
+                dispatched_at=timezone.now()
+            )
+            try:
+                self.client(target.runtime_instance).steer(target, steer)
+            except (RuntimeHttpError, RuntimeUnavailable) as exc:
+                logger.info("Steer %s not taken: %s", steer.pk, exc)
+
     def deliver_decisions(self) -> None:
         decided = Approval.objects.filter(
             status=Approval.Status.DECIDED,
@@ -668,7 +712,7 @@ class Controller:
             return False
         since = latest.created_at if latest else None
         turns = agent.commands.filter(
-            kind=AgentCommand.Kind.TURN, status=AgentCommand.Status.SUCCEEDED
+            kind__in=AgentCommand.USER_KINDS, status=AgentCommand.Status.SUCCEEDED
         )
         if since:
             turns = turns.filter(finished_at__gt=since)

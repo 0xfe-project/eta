@@ -77,14 +77,25 @@ def delete_agent(request: HttpRequest, agent_id: str):
 @router.post("/chat/messages", response={202: SendMessageOut, **_ERRORS})
 def send_message(request: HttpRequest, body: MessageCreateIn):
     def handler():
-        message, reply = services.send_message(body.agent_id, body.text)
-        payload = {
-            "message": services.message_public(message),
-            "reply": services.message_public(reply),
-        }
-        return Status(202, payload), str(reply.id)
+        return _sent(
+            services.send_message(body.agent_id, body.text, steer=body.mode == "steer")
+        )
 
     return run_idempotent(request, body.model_dump(), handler)
+
+
+@router.post("/agents/{agent_id}/compact", response={202: SendMessageOut, **_ERRORS})
+def compact_agent(request: HttpRequest, agent_id: str):
+    return run_idempotent(request, {}, lambda: _sent(services.compact(agent_id)))
+
+
+def _sent(sent):
+    message, reply = sent
+    payload = {
+        "message": services.message_public(message),
+        "reply": services.message_public(reply),
+    }
+    return Status(202, payload), str(reply.id)
 
 
 @router.post("/chat/messages/{message_id}/stop", response={200: MessageOut, **_ERRORS})

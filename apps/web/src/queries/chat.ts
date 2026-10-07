@@ -207,25 +207,47 @@ export function useCreateAgent() {
   });
 }
 
+/** "queue" waits for the agent's current reply; "steer" joins it. */
+export type SendMode = "queue" | "steer";
+const sentSchema = z.object({ message: messageSchema, reply: messageSchema });
+
+function addSent(queryClient: QueryClient, sent: z.infer<typeof sentSchema>) {
+  update(queryClient, (s) =>
+    upsertMessage(upsertMessage(s, sent.message), sent.reply),
+  );
+}
+
 export function useSendMessage() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { agentId: string; text: string }) =>
-      z.object({ message: messageSchema, reply: messageSchema }).parse(
+    mutationFn: async (input: {
+      agentId: string;
+      text: string;
+      mode?: SendMode;
+    }) =>
+      sentSchema.parse(
         await apiPost("/chat/messages", {
           agent_id: input.agentId,
           text: input.text,
+          mode: input.mode ?? "queue",
         }),
       ),
-    onSuccess: ({ message, reply }) =>
-      update(queryClient, (s) =>
-        upsertMessage(upsertMessage(s, message), reply),
-      ),
+    onSuccess: (sent) => addSent(queryClient, sent),
     // The model became unusable since the catalog was last loaded.
     onError: (error) => {
       if (error instanceof ApiError && error.code.startsWith("MODEL_"))
         void refreshLlm(queryClient);
     },
+  });
+}
+
+/** Compact the agent's context; shows as a `/compact` turn. */
+export function useCompact() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (agentId: string) =>
+      sentSchema.parse(await apiPost(`/agents/${agentId}/compact`)),
+    onSuccess: (sent) => addSent(queryClient, sent),
   });
 }
 

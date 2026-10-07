@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import {
   useAnswerInteraction,
   useChat,
+  useCompact,
   useSendMessage,
   useStopReply,
 } from "@/queries/chat";
@@ -55,6 +56,7 @@ export function Workspace({
     />
   ) : undefined;
   const sendMessage = useSendMessage();
+  const compact = useCompact();
   const stopReply = useStopReply();
   const answer = useAnswerInteraction();
   const onError = (error: Error) => toast.error(error.message);
@@ -114,15 +116,25 @@ export function Workspace({
             }
             draft={draft}
             onDraftChange={setDraft}
-            onSend={(text) => {
+            onSend={(text, mode) => {
               if (!selected) {
                 openEditor();
                 return;
               }
               sendMessage.mutate(
-                { agentId: selected.id, text },
+                { agentId: selected.id, text, mode },
                 { onSuccess: () => setDraft(""), onError },
               );
+            }}
+            onCompact={() => {
+              if (!selected) {
+                openEditor();
+                return;
+              }
+              compact.mutate(selected.id, {
+                onSuccess: () => setDraft(""),
+                onError,
+              });
             }}
             onStop={(id) => stopReply.mutate(id, { onError })}
             onAnswer={(id, value) => answer.mutate({ id, value }, { onError })}
