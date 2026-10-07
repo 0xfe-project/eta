@@ -16,7 +16,10 @@ Without --port the default is 3000. When that block is taken (another checkout,
 worktree or agent is running) the next free block in steps of 10 is used, so
 any number of instances can start in parallel.
 
-AXP_RUNTIME_MODE=docker runs real agent containers instead of the fake worker.
+Agents run in containers started by the controller from the runtime image,
+rebuilt on every start. AXP_CODEX_LAUNCH="python -m
+axp_runtime.testing.fake_app_server" replaces Codex with a scripted
+app-server that needs no model.
 
 Needs Docker. One set of supporting containers per machine, shared by every
 instance and kept running between sessions: OpenObserve for logs (opened
@@ -54,7 +57,6 @@ if ! docker info >/dev/null 2>&1; then
   echo "Cannot talk to Docker; is it running and are you in the docker group?" >&2
   exit 1
 fi
-runtime_mode="${AXP_RUNTIME_MODE:-fake}"
 # Development settings, development's runtime network and storage.
 export DJANGO_DEBUG=true
 
@@ -150,11 +152,9 @@ export AXP_EDGE_SECRET
 # Instances share the runtime network; only their ports differ.
 uv run --project apps/control-plane python apps/control-plane/manage.py ensure_runtime_network
 runtime_network=axp-runtime
-if [[ "$runtime_mode" == "docker" ]]; then
-  # Rebuilt on every start so runtime changes are never stale; with Turbo and
-  # Docker's layer cache an unchanged image takes about a second.
-  bun run runtime:build
-fi
+# Rebuilt on every start so runtime changes are never stale; with Turbo and
+# Docker's layer cache an unchanged image takes about a second.
+bun run runtime:build
 
 # dev_container NAME IMAGE DOCKER_RUN_ARGS... -- COMMAND...
 # Starts a per-machine container, recreating it (volumes kept) when its image
@@ -219,32 +219,20 @@ dev_container axp-dev-otel-collector otel/opentelemetry-collector-contrib:0.162.
 exec 9>&-
 
 cat <<EOF
-AXP dev ($runtime_mode runtime) in $ROOT_DIR
+AXP dev in $ROOT_DIR
   Web:      http://localhost:$AXP_GATEWAY_PORT
   API:      http://localhost:$AXP_GATEWAY_PORT/api/health
+  Internal: $AXP_INTERNAL_URL/internal/docs
+  Logs:     http://localhost:$AXP_GATEWAY_PORT/observe/ ($OBSERVE_USER / $OBSERVE_PASSWORD)
 EOF
-[[ "$runtime_mode" == "docker" ]] && echo "  Internal: $AXP_INTERNAL_URL/internal/docs"
-echo "  Logs:     http://localhost:$AXP_GATEWAY_PORT/observe/ ($OBSERVE_USER / $OBSERVE_PASSWORD)"
 
-# The fake mode answers with a scripted worker instead of agent containers.
 # Every process stops on Ctrl+C or when any of them exits.
-concurrently=(node node_modules/concurrently/dist/bin/concurrently.js --kill-others)
-if [[ "$runtime_mode" == "docker" ]]; then
-  exec "${concurrently[@]}" \
-    --names gateway,control-plane,internal,controller,llm,web \
-    --prefix-colors gray,blue,yellow,cyan,magenta,green \
-    "bun run dev:gateway" \
-    "OTEL_SERVICE_NAME=control-plane-api bun run dev:control-plane" \
-    "OTEL_SERVICE_NAME=control-plane-internal bun run dev:internal" \
-    "OTEL_SERVICE_NAME=control-plane-controller bun run dev:controller" \
-    "bun run dev:llm-gateway" \
-    "bun run dev:web"
-fi
-exec "${concurrently[@]}" \
-  --names gateway,control-plane,fake-runtime,llm,web \
-  --prefix-colors gray,blue,cyan,magenta,green \
+exec node node_modules/concurrently/dist/bin/concurrently.js --kill-others \
+  --names gateway,control-plane,internal,controller,llm,web \
+  --prefix-colors gray,blue,yellow,cyan,magenta,green \
   "bun run dev:gateway" \
   "OTEL_SERVICE_NAME=control-plane-api bun run dev:control-plane" \
-  "OTEL_SERVICE_NAME=control-plane-fake-runtime bun run dev:fake-runtime" \
+  "OTEL_SERVICE_NAME=control-plane-internal bun run dev:internal" \
+  "OTEL_SERVICE_NAME=control-plane-controller bun run dev:controller" \
   "bun run dev:llm-gateway" \
   "bun run dev:web"

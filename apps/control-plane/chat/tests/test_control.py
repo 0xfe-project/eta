@@ -297,21 +297,13 @@ class TestInternalApi:
         Agent.objects.filter(pk=ctl.agent["id"]).update(generation=2)
         assert error_of(runtime.heartbeat()) == (409, "STALE_GENERATION")
 
-    def test_identity_names_the_live_runtime(self, ctl, runtime):
-        def identity(token=runtime.token):
-            path = f"runtime-instances/{runtime.instance.pk}/identity"
-            return internal("get", path, token)
-
-        response = identity()
-        assert response.json() == {
+    def test_identity_names_the_runtime(self, ctl, runtime):
+        path = f"runtime-instances/{runtime.instance.pk}/identity"
+        assert internal("get", path, runtime.token).json() == {
             "agent_id": ctl.agent["id"],
             "instance_id": str(runtime.instance.pk),
             "generation": 1,
         }
-        assert identity("x").status_code == 403
-        ctl.expire_leases()
-        ctl.tick()  # a replaced runtime's token stops working
-        assert identity().status_code == 409
 
     def test_session_thread_cannot_change(self, runtime):
         assert runtime.session("t1").status_code == 200

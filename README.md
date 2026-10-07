@@ -15,7 +15,7 @@ apps/
 
 ## 环境与初始化
 
-需要 Node.js 24、Bun 1.3.14、uv 和 Go（`go.work` 要求 1.26，较旧的 go 会自动下载对应工具链）。Python 项目使用 3.13，uv 会按 `.python-version` 自动获取。真实运行时还需要 Docker。
+需要 Node.js 24、Bun 1.3.14、uv 和 Go（`go.work` 要求 1.26，较旧的 go 会自动下载对应工具链）。Python 项目使用 3.13，uv 会按 `.python-version` 自动获取。还需要 Docker。
 
 在仓库根目录执行：
 
@@ -28,12 +28,9 @@ bun run dev
 
 模型来自 llm-gateway：在设置的“模型服务”中用设备码绑定 Codex（ChatGPT）或 Grok（xAI）账号，每个服务可以绑定多个账号并自动轮换。账号登录失效、额度用尽等状态会显示在那里；智能体的模型不可用时不能发送消息，绑定或重新登录后自动恢复。详见 [LLM 网关](docs/architecture/llm-gateway.md)。
 
-`bun run dev` 有两种运行时模式：
+`bun run dev` 启动网关、Django、内部运行协议服务、controller、llm-gateway 和 Web，与生产相同。controller 为每个 Agent 启动一个 runtime 容器，容器内的 Codex 把所有模型请求发给 llm-gateway，不持有任何账号凭据。runtime 镜像在每次启动时自动重建（没有变化时约 1 秒）。不想消耗模型额度时，可设 `AXP_CODEX_LAUNCH="python -m axp_runtime.testing.fake_app_server"` 用脚本化 app-server 跑通整条链路。
 
-- 默认 `fake`：启动 Django、llm-gateway、Web 和开发用模拟 worker（`run_fake_runtime`）。回复是固定文本，不调用模型；消息包含“确认”时会先发起一次确认。
-- `AXP_RUNTIME_MODE=docker bun run dev`：另外启动内部运行协议服务和 controller。controller 为每个 Agent 启动一个 runtime 容器，容器内的 Codex 把所有模型请求发给 llm-gateway，不持有任何账号凭据。runtime 镜像在每次启动时自动重建（没有变化时约 1 秒）。不想消耗模型额度时，可设 `AXP_CODEX_LAUNCH="python -m axp_runtime.testing.fake_app_server"` 用脚本化 app-server 跑通整条链路。
-
-两种模式下，智能体都要选一个可用的模型才能对话：首次使用在“模型服务”中绑定账号（开发凭据保存在仓库根目录的 `var/llm-gateway`）。`bun run dev` 需要 Docker：它在本机启动一组所有实例共享、名为 `axp-dev-*` 的容器（日志、工作区存储），与生产的容器、卷和网络互不相干。
+智能体要选一个可用的模型才能对话：首次使用在“模型服务”中绑定账号（开发凭据保存在仓库根目录的 `var/llm-gateway`）。`bun run dev` 需要 Docker：它在本机启动一组所有实例共享、名为 `axp-dev-*` 的容器（日志、工作区存储），与生产的容器、卷和网络互不相干。
 
 `bun run dev` 每个实例占用五个连续端口：网关 `P`（浏览器打开的地址）、API `P+1`、内部运行协议 `P+2`、Web `P+3`、llm-gateway `P+4`（内部运行协议和 llm-gateway 监听 runtime 网络的网关地址 `172.30.0.1`），默认 `P=3000`。被占用时（其他 checkout、worktree 或 agent 已在运行）自动顺延到下一个空闲端口块（3010、3020……），并用文件锁避免并行启动抢到同一端口，因此可以同时运行任意多个实例。用 `bun run dev --port 4000`（或 `AXP_DEV_PORT=4000`）指定端口，被占用或与生产端口（`deploy/ports.env`）重叠时直接报错。新的 worktree 首次运行会自动安装依赖并执行 migrations。
 
@@ -46,7 +43,7 @@ bun run dev
 - Web：http://localhost:3000
 - API 健康检查：http://localhost:3000/api/health
 - 公共 OpenAPI 文档：http://localhost:3000/api/docs
-- 内部运行协议文档（docker 模式）：http://172.30.0.1:3002/internal/docs
+- 内部运行协议文档：http://172.30.0.1:3002/internal/docs
 - runtime 使用的 OpenAI 兼容接口：http://172.30.0.1:3004/v1
 
 浏览器只访问网关（`apps/gateway`），开发和生产使用同一套路由：`/api/llm/` → llm-gateway，`/api/` → control-plane，其余 → Web。网关为每个请求生成 `X-Request-Id`、输出 JSON 访问日志、透传 SSE 与 WebSocket，并附上边缘密钥（`AXP_EDGE_SECRET`，由 `bun run dev` 每次随机生成，生产由部署脚本生成）；control-plane 与 llm-gateway 拒绝不带该密钥的公开请求（健康检查除外），因此绕过网关直接访问服务端口会得到 403。
@@ -57,12 +54,11 @@ Web 已配置 Query、nuqs、Phosphor Icons、表单校验、通知、Markdown �
 
 | 根目录命令                   | 用途                                                         |
 | ---------------------------- | ------------------------------------------------------------ |
-| `bun run dev`                | 启动开发环境（见上文两种模式），任一进程退出时关闭所有进程   |
+| `bun run dev`                | 启动开发环境，任一进程退出时关闭所有进程                     |
 | `bun run deploy`             | 用 Kamal 把工作区部署到本机（见 `deploy/README.md`）         |
 | `bun run dev:gateway`        | 单独启动网关                                                 |
 | `bun run dev:llm-gateway`    | 单独启动 llm-gateway                                         |
 | `bun run dev:control-plane`  | 单独启动 Django（公共 API）                                  |
-| `bun run dev:fake-runtime`   | 单独启动开发用模拟 worker                                    |
 | `bun run dev:internal`       | 单独启动内部运行协议服务（runtime 网络网关地址）             |
 | `bun run dev:controller`     | 单独启动 runtime controller（需要 Docker）                   |
 | `bun run dev:web`            | 单独启动 Web                                                 |

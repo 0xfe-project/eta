@@ -7,10 +7,9 @@
 | 进程                   | 代码                              | 职责                                                                          |
 | ---------------------- | --------------------------------- | ----------------------------------------------------------------------------- |
 | 公共 API（Django）     | `chat/api.py`、`chat/services.py` | 7 个产品接口、SSE、幂等、产品投影与 `ui_event`                                |
-| 内部运行协议（Django） | `chat/control/internal_api.py`    | runtime → 控制面：心跳、会话注册、事件批次、检查点对象。独立进程与 URLconf    |
+| 内部运行协议（Django） | `chat/control/internal_api.py`    | runtime → 控制面：心跳、会话注册、事件批次、runtime 身份。独立进程与 URLconf  |
 | controller             | `chat/control/controller.py`      | 唯一持有 Docker socket：启动/隔离容器、派发命令、中断、审批送达、对账、检查点 |
 | agent runtime（容器）  | `apps/agent-runtime/axp_runtime`  | 一个 Agent 一个容器；官方 Codex Python SDK 驱动一个持久 thread                |
-| 模拟 worker（开发）    | `chat/fake_runtime.py`            | 无 Docker/凭据时代替 controller + runtime                                     |
 
 公共服务的 URLconf（`config.urls`）不包含任何 `/internal` 路由；内部服务以 `AXP_URLCONF=config.internal_urls` 启动，只监听 runtime 网络的网关地址（默认 `172.30.0.1:8001`），有单独的 OpenAPI。公共响应、SSE 与前端类型只来自 `chat/schemas.py` 的手写允许列表，测试会检查其中不出现 command、thread、runtime、generation 等内部字段。
 

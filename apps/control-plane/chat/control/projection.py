@@ -16,7 +16,6 @@ from ..models import (
     AgentEvent,
     AgentSession,
     Approval,
-    Conversation,
     Interaction,
     Message,
     RuntimeInstance,
@@ -421,7 +420,3 @@ HANDLERS = {
     "mcp.status": mcp_status,
     "runtime.failed": runtime_failed,
 }
-
-
-def lock_for_instance(instance: RuntimeInstance) -> Conversation:
-    return services.lock_conversation(instance.agent.conversation_id)

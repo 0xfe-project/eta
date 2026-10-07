@@ -199,15 +199,11 @@ func TestLogsAPIRequestsAndFailuresOnly(t *testing.T) {
 		},
 		Logger: slog.New(slog.NewTextHandler(&logs, nil)),
 	})
-	srv := httptest.NewServer(gw)
-	t.Cleanup(srv.Close)
-
+	// ServeHTTP writes the record after the response; calling it directly
+	// waits for both.
 	for _, path := range []string{"/src/main.tsx", "/api/health"} {
-		resp, err := http.Get(srv.URL + path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_ = resp.Body.Close()
+		gw.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", path, nil))
+		<-got
 	}
 	if out := logs.String(); strings.Contains(out, "/src/main.tsx") || !strings.Contains(out, "path=/api/health") {
 		t.Fatalf("want only the API request logged, got:\n%s", out)

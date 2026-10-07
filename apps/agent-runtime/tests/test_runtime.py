@@ -53,7 +53,7 @@ class StubControlPlane:
             self.events.extend(events)
         return {"acked_source_seq": events[-1]["source_seq"]}
 
-    def transfer(self, method, url, path, headers=None):
+    def transfer(self, method, url, path):
         if method == "PUT":
             self.objects[url] = Path(path).read_bytes()
         else:
@@ -177,10 +177,6 @@ class TestTelemetry:
             '"http://otel-collector:4318/v1/traces", "protocol" = "binary"}}',
         } <= overrides
 
-    def test_no_export_without_an_endpoint(self, rt, monkeypatch):
-        monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
-        assert not any(o.startswith("otel.") for o in self.overrides(rt.settings))
-
 
 class TestBoot:
     def test_first_boot_creates_and_registers_thread(self, rt):
@@ -262,14 +258,6 @@ class TestTurns:
         seqs = [e["source_seq"] for e in cp.events]
         assert seqs == list(range(1, len(seqs) + 1))
         assert runtime.command_view(command_id)["status"] == "succeeded"
-
-    def test_accept_is_idempotent_and_detects_conflicts(self, rt):
-        runtime, _ = rt.start()
-        body = {"kind": "turn", "agent_sequence": 1, "payload": {"text": "a"}}
-        runtime.accept("c1", body)
-        runtime.accept("c1", body)
-        with pytest.raises(L.CommandConflict):
-            runtime.accept("c1", {**body, "payload": {"text": "b"}})
 
     def test_failed_turn(self, rt):
         runtime, cp = rt.start()

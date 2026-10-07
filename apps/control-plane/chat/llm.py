@@ -76,12 +76,6 @@ def models(refresh: bool = False) -> dict[str, Model]:
     return catalog
 
 
-def clear_cache() -> None:
-    global _cache
-    with _lock:
-        _cache = None
-
-
 def validate_model(model_id: str) -> None:
     """Reject model ids the gateway has never offered."""
     try:

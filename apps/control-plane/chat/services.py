@@ -226,17 +226,7 @@ def finish_command(
     command.status = command_status
     command.finished_at = timezone.now()
     command.error_code = failure_code
-    command.claimed_by = None
-    command.claim_until = None
-    command.save(
-        update_fields=[
-            "status",
-            "finished_at",
-            "error_code",
-            "claimed_by",
-            "claim_until",
-        ]
-    )
+    command.save(update_fields=["status", "finished_at", "error_code"])
     Approval.objects.filter(
         command=command,
         status__in=[Approval.Status.PENDING, Approval.Status.DECIDED],

@@ -188,10 +188,7 @@ class AgentCommand(models.Model):
     dispatched_at = models.DateTimeField(null=True, blank=True)
     interrupt_requested_at = models.DateTimeField(null=True, blank=True)
     interrupt_sent_at = models.DateTimeField(null=True, blank=True)
-    claimed_by = models.CharField(max_length=100, null=True, blank=True)
-    claim_until = models.DateTimeField(null=True, blank=True)
     attempt_count = models.IntegerField(default=0)
-    not_before = models.DateTimeField(default=timezone.now)
     created_at = models.DateTimeField(default=timezone.now)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
@@ -201,7 +198,7 @@ class AgentCommand(models.Model):
         db_table = "agent_command"
         indexes = [
             models.Index(
-                fields=["status", "not_before", "created_at"],
+                fields=["status", "created_at"],
                 name="agent_command_queue_idx",
             )
         ]

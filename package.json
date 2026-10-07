@@ -16,7 +16,6 @@
     "dev": "bash scripts/dev.sh",
     "dev:gateway": "go run ./apps/gateway",
     "dev:control-plane": "uv run --project apps/control-plane python apps/control-plane/manage.py runserver 127.0.0.1:${AXP_API_PORT:-8000}",
-    "dev:fake-runtime": "uv run --project apps/control-plane python apps/control-plane/manage.py run_fake_runtime",
     "dev:internal": "AXP_URLCONF=config.internal_urls uv run --project apps/control-plane python apps/control-plane/manage.py runserver ${AXP_INTERNAL_HOST:-172.30.0.1}:${AXP_INTERNAL_PORT:-8001}",
     "dev:controller": "uv run --project apps/control-plane python apps/control-plane/manage.py run_controller",
     "dev:llm-gateway": "go run ./apps/llm-gateway",

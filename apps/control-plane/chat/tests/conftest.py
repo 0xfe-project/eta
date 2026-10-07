@@ -8,8 +8,12 @@ from .helpers import TEST_MODEL, ChatClient
 
 
 @pytest.fixture(autouse=True)
-def llm_catalog():
-    """Every chat goes through the LLM gateway; offer one available model."""
+def llm_catalog(monkeypatch):
+    """Every chat goes through the LLM gateway; offer one available model.
+
+    The catalog is fetched on every use, so tests see changes immediately.
+    """
+    monkeypatch.setattr(llm, "CACHE_SECONDS", 0)
     catalog = {
         TEST_MODEL: llm.Model(
             id=TEST_MODEL,
@@ -20,10 +24,8 @@ def llm_catalog():
             unavailable_message=None,
         )
     }
-    llm.clear_cache()
     with mock.patch("chat.llm._fetch", return_value=catalog):
         yield
-    llm.clear_cache()
 
 
 @pytest.fixture

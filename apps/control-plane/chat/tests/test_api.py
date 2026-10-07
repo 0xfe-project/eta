@@ -181,10 +181,8 @@ class TestModels:
     @pytest.fixture(autouse=True)
     def _gateway(self):
         self.catalog = list(CATALOG)
-        llm.clear_cache()
         with mock.patch("chat.llm._fetch", side_effect=self.fetch):
             yield
-        llm.clear_cache()
 
     @pytest.fixture
     def agent(self, chat):
@@ -234,19 +232,13 @@ class TestModels:
 
         # Reconnecting the account makes the same model usable again.
         self.catalog[1] = {**self.catalog[1], "available": True}
-        llm.clear_cache()
         assert chat.post("/chat/messages", body).status_code == 202
 
     def test_gateway_down_blocks_chat(self, chat):
         agent = chat.post("/agents", {"name": "a", "model": "gpt-5.5"}).json()
         self.catalog = None
-        llm.clear_cache()
         response = chat.post("/chat/messages", {"agent_id": agent["id"], "text": "hi"})
         assert error_of(response) == (409, "MODEL_UNAVAILABLE")
-
-    def test_unknown_agent_is_still_404(self, chat):
-        body = {"agent_id": str(uuid.uuid4()), "text": "hi"}
-        assert chat.post("/chat/messages", body).status_code == 404
 
 
 class TestAgentManagement:

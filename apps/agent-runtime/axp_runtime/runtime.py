@@ -894,8 +894,6 @@ def _otel_overrides() -> list[str]:
     its records carry the agent and runtime ids; prompts are included.
     """
     endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").rstrip("/")
-    if not endpoint:
-        return []
 
     def exporter(signal: str) -> str:
         return _toml(
