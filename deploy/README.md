@@ -52,7 +52,7 @@ deploy/deploy.sh rollback <version>
 
 web、api、llm 不经过 kamal-proxy，重新部署时会有几秒中断（单用户场景可接受）。`AXP_EDGE_SECRET` 由 `deploy.sh` 首次需要时自动写入 `production.env`。
 
-数据库是 Kamal accessory `axp-postgres`（卷 `axp-postgres`）。智能体的工作区是 JuiceFS：数据在 accessory `axp-s3`（SeaweedFS，卷 `axp-s3`），元数据在 accessory `axp-juicefs-meta`（Redis，开启 AOF，卷 `axp-juicefs-meta`），两者只在 runtime 网络上可达、不发布端口；检查点也存放在 `axp-s3`。controller 启动时格式化（已格式化则跳过）文件系统并创建检查点桶。数据都在本机卷里，换机器不会自动迁移；开发环境的 `axp-dev-*` 容器和卷与这些完全分开。
+数据库是 Kamal accessory `axp-postgres`（卷 `axp-postgres`）。智能体的工作区是 JuiceFS：数据在 accessory `axp-s3`（SeaweedFS，卷 `axp-s3`），元数据在 accessory `axp-juicefs-meta`（Redis，开启 AOF，卷 `axp-juicefs-meta`），两者在 Kamal 网络和 runtime 网络上可达、不发布端口，Redis 设有密码；检查点也存放在 `axp-s3`。controller 启动时格式化（已格式化则跳过）文件系统并创建检查点桶。数据都在本机卷里，换机器不会自动迁移；开发环境的 `axp-dev-*` 容器和卷与这些完全分开。
 
 日志由 Kamal accessory `axp-openobserve`（[OpenObserve](https://openobserve.ai)，卷 `axp-openobserve`）收集：各角色通过 OTLP 发送，`OTEL_SERVICE_NAME` 区分来源（`gateway`、`web`、`llm-gateway`、`control-plane-api`、`control-plane-internal`、`control-plane-controller`）。agent runtime 容器运行智能体执行的代码、不持有任何凭据：它们把日志、trace 和指标（包括 Codex 原生的 OpenTelemetry 数据，日志事件含 prompt）发给 accessory `axp-otel-collector`（runtime 网络上的 `otel-collector:4318`，配置见 `otel-collector.yaml`），由它带上凭据转发到 OpenObserve，记录带有 `axp.agent.id`、`axp.runtime.instance.id`。Codex 每收到一段流式输出都会产生一条日志和几个 span（约每两个字一条），Collector 会过滤掉这部分，只保留回合级的事件和 span；Collector 不保存状态，每次部署都会重启以应用配置变更。root 账号是 `root@axp.local`，密码 `AXP_OBSERVE_PASSWORD` 由 `deploy.sh` 首次需要时写入 `production.env`；已有的机器在下一次部署前会自动启动这个 accessory。
 

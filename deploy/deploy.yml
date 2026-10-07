@@ -147,7 +147,7 @@ accessories:
     volumes:
       - axp-postgres:/var/lib/postgresql/data
   # Agent workspaces (JuiceFS data) and checkpoints, over S3 on the runtime
-  # network as axp-s3. Never published.
+  # network as axp-s3. Never published (Kamal also attaches it to its own network).
   s3:
     image: chrislusf/seaweedfs:4.48
     host: <%= host %>
