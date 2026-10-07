@@ -1,11 +1,13 @@
 import type { QueryClient } from "@tanstack/react-query";
 import {
+  infiniteQueryOptions,
   queryOptions,
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { z } from "zod";
 import { apiDelete, ApiError, apiGet, apiPatch, apiPost } from "@/lib/api";
 import { refreshLlm } from "@/queries/llm";
@@ -63,11 +65,14 @@ const interactionSchema = z.object({
 
 const snapshotSchema = z.object({
   agents: z.array(agentSchema),
-  messages: z.array(messageSchema),
   active_replies: z.array(messageSchema),
   interactions: z.array(interactionSchema),
-  history_cursor: z.string().nullable(),
   event_cursor: z.string(),
+});
+
+const messagePageSchema = z.object({
+  items: z.array(messageSchema),
+  next_cursor: z.string().nullable(),
 });
 
 export type Agent = z.infer<typeof agentSchema>;
@@ -78,7 +83,12 @@ export type AgentDraft = Pick<Agent, "name" | "description"> & {
 export type ChatMessage = z.infer<typeof messageSchema>;
 export type Block = z.infer<typeof blockSchema>;
 export type Interaction = z.infer<typeof interactionSchema>;
-type Snapshot = z.infer<typeof snapshotSchema>;
+/**
+ * The snapshot plus `messages`: every message seen since it was taken (over
+ * SSE or from our own writes), starting with the active replies. History
+ * pages fill in the rest; see useAgentMessages.
+ */
+type Snapshot = z.infer<typeof snapshotSchema> & { messages: ChatMessage[] };
 
 export const ACTIVE_STATUSES = new Set<ChatMessage["status"]>([
   "queued",
@@ -95,8 +105,10 @@ export function chatQueryOptions() {
     queryKey: chatKey,
     queryFn: async ({ signal }) => {
       const snapshot = snapshotSchema.parse(await apiGet("/chat", signal));
-      // Active replies may be older than the newest page; merge them in.
-      return snapshot.active_replies.reduce(upsertMessage, snapshot);
+      return {
+        ...snapshot,
+        messages: sortMessages([...snapshot.active_replies]),
+      };
     },
     // Live updates arrive over SSE; refetching would only reset the stream.
     staleTime: Infinity,
@@ -115,16 +127,19 @@ function upsert<T extends { id: string; revision: number }>(
   return items.map((existing, i) => (i === index ? item : existing));
 }
 
-function upsertMessage(snapshot: Snapshot, message: ChatMessage): Snapshot {
-  const messages = upsert(snapshot.messages, message);
-  if (messages === snapshot.messages) return snapshot;
-  // Keep the timeline in send order; a reply sorts after its user message.
-  messages.sort(
+// Send order; a reply sorts after its user message.
+function sortMessages(messages: ChatMessage[]) {
+  return messages.sort(
     (a, b) =>
       a.created_at.localeCompare(b.created_at) ||
       (a.role === b.role ? 0 : a.role === "user" ? -1 : 1),
   );
-  return { ...snapshot, messages };
+}
+
+function upsertMessage(snapshot: Snapshot, message: ChatMessage): Snapshot {
+  const messages = upsert(snapshot.messages, message);
+  if (messages === snapshot.messages) return snapshot;
+  return { ...snapshot, messages: sortMessages(messages) };
 }
 
 function removeAgent(snapshot: Snapshot, agentId: string): Snapshot {
@@ -195,6 +210,61 @@ export function useChat() {
   const query = useQuery(chatQueryOptions());
   useChatStream(query.data?.event_cursor);
   return query;
+}
+
+// Under chatKey, so reloading the snapshot reloads history with it.
+function messagesQueryOptions(agentId: string) {
+  return infiniteQueryOptions({
+    queryKey: [...chatKey, "messages", agentId],
+    queryFn: async ({ pageParam, signal }) => {
+      const params = new URLSearchParams();
+      if (pageParam) params.set("before", pageParam);
+      return messagePageSchema.parse(
+        await apiGet(`/agents/${agentId}/messages?${params}`, signal),
+      );
+    },
+    initialPageParam: null as string | null,
+    // Pages go back in time; the "next" page is the older one.
+    getNextPageParam: (page) => page.next_cursor,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+}
+
+/**
+ * One agent's timeline: history pages merged with the messages seen since
+ * the snapshot, by revision.
+ */
+export function useAgentMessages(agentId: string | undefined) {
+  const { data: snapshot } = useQuery(chatQueryOptions());
+  // History read after the snapshot leaves no gap before the live messages.
+  const history = useInfiniteQuery({
+    ...messagesQueryOptions(agentId ?? ""),
+    enabled: Boolean(agentId && snapshot),
+  });
+  const pages = history.data?.pages;
+  const live = snapshot?.messages;
+  const messages = useMemo(() => {
+    const byId = new Map<string, ChatMessage>();
+    for (const page of pages ?? [])
+      for (const message of page.items) byId.set(message.id, message);
+    for (const message of live ?? []) {
+      if (message.agent_id !== agentId) continue;
+      const known = byId.get(message.id);
+      if (!known || known.revision < message.revision)
+        byId.set(message.id, message);
+    }
+    return sortMessages([...byId.values()]);
+  }, [agentId, live, pages]);
+  return {
+    messages,
+    loading: history.isPending && Boolean(agentId),
+    error: history.error,
+    hasOlder: history.hasNextPage,
+    loadingOlder: history.isFetchingNextPage,
+    loadOlder: history.fetchNextPage,
+  };
 }
 
 export function useCreateAgent() {

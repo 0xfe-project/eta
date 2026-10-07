@@ -1,5 +1,5 @@
 import type { Block, ChatMessage, Interaction, SendMode } from "@/queries/chat";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { ClaudeHeader } from "@/components/brainless/claude/claude-header";
 import { ClaudeMessage } from "@/components/brainless/claude/claude-message";
 import { ClaudePermission } from "@/components/brainless/claude/claude-permission";
@@ -188,6 +188,81 @@ function Warning({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Scrolls the transcript like a terminal: it opens at the bottom and follows
+ * new output while the reader is there. Older messages added above keep the
+ * view where it was, and come in as the top is approached.
+ */
+function useTranscriptScroll({
+  agentId,
+  firstId,
+  hasOlder,
+  loadingOlder,
+  onLoadOlder,
+}: {
+  agentId: string | undefined;
+  firstId: string | undefined;
+  hasOlder: boolean;
+  loadingOlder: boolean;
+  onLoadOlder: () => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const topRef = useRef<HTMLDivElement>(null);
+  const atBottomRef = useRef(true);
+  // scrollHeight - scrollTop as of the last layout, to restore after a prepend.
+  const fromBottomRef = useRef(0);
+
+  function remember() {
+    const el = scrollRef.current;
+    if (!el) return;
+    atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 32;
+    fromBottomRef.current = el.scrollHeight - el.scrollTop;
+  }
+  function toBottom() {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+    atBottomRef.current = true;
+  }
+
+  // A new agent's transcript opens at its end.
+  useLayoutEffect(toBottom, [agentId]);
+  // Older messages arrived above: keep the same distance from the bottom.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (el && !atBottomRef.current)
+      el.scrollTop = el.scrollHeight - fromBottomRef.current;
+  }, [firstId]);
+  // Streaming output, new turns, a resized panel: follow while at the bottom.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const content = contentRef.current;
+    if (!el || !content) return;
+    const observer = new ResizeObserver(() => {
+      if (atBottomRef.current) toBottom();
+      remember();
+    });
+    observer.observe(el);
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, []);
+  // Observed afresh after each page, so a top still in view loads the next.
+  useEffect(() => {
+    const top = topRef.current;
+    if (!top || !hasOlder || loadingOlder) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) onLoadOlder();
+      },
+      { root: scrollRef.current, rootMargin: "600px 0px 0px 0px" },
+    );
+    observer.observe(top);
+    return () => observer.disconnect();
+  }, [hasOlder, loadingOlder, onLoadOlder]);
+
+  return { scrollRef, contentRef, topRef, onScroll: remember, toBottom };
+}
+
 function time(iso: string) {
   return new Date(iso).toLocaleTimeString("zh-CN", {
     hour: "2-digit",
@@ -197,8 +272,12 @@ function time(iso: string) {
 
 export function ChatPanel({
   theme,
+  agentId,
   agentName,
   messages,
+  hasOlder,
+  loadingOlder,
+  onLoadOlder,
   interactions,
   draft,
   onDraftChange: setDraft,
@@ -212,9 +291,14 @@ export function ChatPanel({
   blocked,
 }: {
   theme: SessionTheme;
+  agentId: string | undefined;
   agentName: string | undefined;
-  /** The conversation with the current agent. */
+  /** The conversation with the current agent, as far back as loaded. */
   messages: ChatMessage[];
+  /** Earlier messages exist; onLoadOlder fetches the next page of them. */
+  hasOlder: boolean;
+  loadingOlder: boolean;
+  onLoadOlder: () => void;
   interactions: Interaction[];
   draft: string;
   onDraftChange: (value: string) => void;
@@ -231,10 +315,8 @@ export function ChatPanel({
   blocked?: React.ReactNode;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
-  const endRef = useRef<HTMLDivElement>(null);
   const session = sessions[theme];
   const { Message, Activity, Choice, Working, SlashMenu } = session;
-  const last = messages.at(-1);
   // The reply in progress; later ones wait behind it.
   const active = messages.find(
     (message) =>
@@ -242,9 +324,13 @@ export function ChatPanel({
       ACTIVE_STATUSES.has(message.status) &&
       message.status !== "stopping",
   );
-  useEffect(() => {
-    if (last) endRef.current?.scrollIntoView({ block: "nearest" });
-  }, [last?.id, last?.revision, last]);
+  const transcript = useTranscriptScroll({
+    agentId,
+    firstId: messages[0]?.id,
+    hasOlder,
+    loadingOlder,
+    onLoadOlder,
+  });
 
   const listId = useId();
   const [menuIndex, setMenuIndex] = useState(0);
@@ -282,6 +368,8 @@ export function ChatPanel({
     const command = SLASH_COMMANDS.find((c) => c.name === name);
     if (command) run(command.name, text);
     else onSend(draft, "queue");
+    // Sending jumps back to the live end, as in a terminal.
+    transcript.toBottom();
     formRef.current?.querySelector("textarea")?.focus();
   }
   const promptProps = {
@@ -353,84 +441,101 @@ export function ChatPanel({
       {head}
       {/* Top padding keeps the floating agent card off the first lines. */}
       <div
-        className={`min-h-0 flex-1 space-y-3 overflow-y-auto pt-14 font-mono text-[13px] leading-[1.6] ${session.textClass}`}
+        ref={transcript.scrollRef}
+        onScroll={transcript.onScroll}
+        className={`min-h-0 flex-1 overflow-y-auto pt-14 font-mono text-[13px] leading-[1.6] ${session.textClass}`}
       >
-        {theme === "claude" ? (
-          <ClaudeHeader
-            user="Eric"
-            version=""
-            model={model}
-            org="AXP"
-            cwd="workspace"
-            tips={[]}
-            whatsNew={[]}
-          />
-        ) : theme === "codex" ? (
-          <CodexHeader version="" model={model} directory="workspace" />
-        ) : (
-          <GrokHeader version="" headline="AXP" subhead={model} />
-        )}
-        {error ? <Warning>{error}</Warning> : null}
-        <div
-          className={session.turnClass}
-          role="log"
-          aria-label="对话消息"
-          aria-live="polite"
-        >
-          {messages.map((message) => {
-            const timeLabel =
-              theme === "grok" ? time(message.created_at) : undefined;
-            if (message.role === "user")
-              return (
-                <Message key={message.id} role="user" time={timeLabel}>
-                  <span className="whitespace-pre-wrap">
-                    {message.blocks.map((block) =>
-                      block.type === "text" ? block.text : null,
-                    )}
-                  </span>
-                </Message>
+        <div ref={transcript.contentRef} className="space-y-3">
+          {/* Stays put while a page loads, so nothing shifts until it lands. */}
+          {hasOlder ? (
+            <div
+              ref={transcript.topRef}
+              className="text-[var(--terminal-muted)]"
+            >
+              加载更早的消息…
+            </div>
+          ) : theme === "claude" ? (
+            <ClaudeHeader
+              user="Eric"
+              version=""
+              model={model}
+              org="AXP"
+              cwd="workspace"
+              tips={[]}
+              whatsNew={[]}
+            />
+          ) : theme === "codex" ? (
+            <CodexHeader version="" model={model} directory="workspace" />
+          ) : (
+            <GrokHeader version="" headline="AXP" subhead={model} />
+          )}
+          {error ? <Warning>{error}</Warning> : null}
+          {/* Off-screen turns skip rendering; `auto` remembers their size. */}
+          <div
+            className={`${session.turnClass} *:[contain-intrinsic-size:auto_120px] *:[content-visibility:auto]`}
+            role="log"
+            aria-label="对话消息"
+            aria-live="polite"
+          >
+            {messages.map((message) => {
+              const timeLabel =
+                theme === "grok" ? time(message.created_at) : undefined;
+              if (message.role === "user")
+                return (
+                  <Message key={message.id} role="user" time={timeLabel}>
+                    <span className="whitespace-pre-wrap">
+                      {message.blocks.map((block) =>
+                        block.type === "text" ? block.text : null,
+                      )}
+                    </span>
+                  </Message>
+                );
+              const pending = interactions.filter(
+                (interaction) =>
+                  interaction.message_id === message.id &&
+                  interaction.status === "pending",
               );
-            const pending = interactions.filter(
-              (interaction) =>
-                interaction.message_id === message.id &&
-                interaction.status === "pending",
-            );
-            const working = workingLabel[message.status];
-            return (
-              <div key={message.id} className={session.turnClass}>
-                {message.blocks.map((block) =>
-                  block.type === "text" ? (
-                    <Message key={block.id} time={timeLabel}>
-                      <Markdown>{block.text}</Markdown>
-                    </Message>
-                  ) : (
-                    <Activity key={block.id} block={block} />
-                  ),
-                )}
-                {pending.map((interaction) => (
-                  <Choice
-                    key={interaction.id}
-                    prompt={interaction.prompt}
-                    labels={interaction.options.map((option) => option.label)}
-                    onChoose={(index) =>
-                      onAnswer(interaction.id, interaction.options[index].value)
-                    }
-                  />
-                ))}
-                {working && pending.length === 0 ? (
-                  <Working label={working} />
-                ) : null}
-                {message.status === "stopped" ? (
-                  <Warning>已停止</Warning>
-                ) : null}
-                {message.status === "failed" ? (
-                  <Warning>{message.failure?.message ?? "回复失败。"}</Warning>
-                ) : null}
-              </div>
-            );
-          })}
+              const working = workingLabel[message.status];
+              return (
+                <div key={message.id} className={session.turnClass}>
+                  {message.blocks.map((block) =>
+                    block.type === "text" ? (
+                      <Message key={block.id} time={timeLabel}>
+                        <Markdown>{block.text}</Markdown>
+                      </Message>
+                    ) : (
+                      <Activity key={block.id} block={block} />
+                    ),
+                  )}
+                  {pending.map((interaction) => (
+                    <Choice
+                      key={interaction.id}
+                      prompt={interaction.prompt}
+                      labels={interaction.options.map((option) => option.label)}
+                      onChoose={(index) =>
+                        onAnswer(
+                          interaction.id,
+                          interaction.options[index].value,
+                        )
+                      }
+                    />
+                  ))}
+                  {working && pending.length === 0 ? (
+                    <Working label={working} />
+                  ) : null}
+                  {message.status === "stopped" ? (
+                    <Warning>已停止</Warning>
+                  ) : null}
+                  {message.status === "failed" ? (
+                    <Warning>
+                      {message.failure?.message ?? "回复失败。"}
+                    </Warning>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
         </div>
-        <div ref={endRef} />
       </div>
       <form
         ref={formRef}

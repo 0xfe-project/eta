@@ -39,15 +39,16 @@ def get_chat(request: HttpRequest):
     return services.get_snapshot()
 
 
-@router.get("/chat/messages", response={200: MessagePageOut, **_ERRORS})
+@router.get("/agents/{agent_id}/messages", response={200: MessagePageOut, **_ERRORS})
 def list_messages(
     request: HttpRequest,
+    agent_id: str,
     before: str | None = None,
     limit: int = Query(
         services.HISTORY_PAGE_SIZE, ge=1, le=services.MAX_HISTORY_PAGE_SIZE
     ),
 ):
-    return services.get_history(before, limit)
+    return services.get_history(agent_id, before, limit)
 
 
 @router.post("/agents", response={201: AgentOut, **_ERRORS})

@@ -67,51 +67,65 @@ class TestSnapshot:
         assert response.status_code == 200
         assert response.json() == IsPartialDict(
             agents=[],
-            messages=[],
-            history_cursor=None,
+            active_replies=[],
             event_cursor=IsStr(min_length=1),
         )
         assert not Conversation.objects.exists()
 
-    def test_snapshot_contains_agents_messages_and_active_replies(self, chat, agent):
+    def test_snapshot_contains_agents_and_active_replies(self, chat, agent):
         sent = chat.send(agent["id"])
         body = chat.get("/chat").json()
         assert [(a["id"], a["status"]) for a in body["agents"]] == [
             (agent["id"], "working")
         ]
-        assert [m["id"] for m in body["messages"]] == [
-            sent["message"]["id"],
-            sent["reply"]["id"],
-        ]
         assert [m["id"] for m in body["active_replies"]] == [sent["reply"]["id"]]
+        assert "messages" not in body
         assert_no_internal_fields(body)
 
-    def test_history_pagination(self, chat, agent, monkeypatch):
+
+class TestHistory:
+    def test_pages_backwards_in_send_order(self, chat, agent, monkeypatch):
         monkeypatch.setattr(services, "MAX_QUEUED_PER_AGENT", 100)
         for i in range(30):
             chat.send(agent["id"], f"m{i}")  # 60 messages
-        snapshot = chat.get("/chat").json()
-        assert len(snapshot["messages"]) == 50
-        assert snapshot["history_cursor"] is not None
-        page = chat.get(
-            "/chat/messages", data={"before": snapshot["history_cursor"]}
-        ).json()
+        path = f"/agents/{agent['id']}/messages"
+        latest = chat.get(path).json()
+        assert len(latest["items"]) == 50
+        assert first_text(latest) == "m5"
+        assert latest["items"][1]["role"] == "assistant"
+        page = chat.get(path, data={"before": latest["next_cursor"]}).json()
         assert len(page["items"]) == 10
         assert page["next_cursor"] is None
         assert first_text(page) == "m0"
+        assert_no_internal_fields(latest)
 
-        small = chat.get("/chat/messages", data={"limit": 4}).json()
-        assert len(small["items"]) == 4
-        older = chat.get(
-            "/chat/messages", data={"limit": 4, "before": small["next_cursor"]}
-        ).json()
+        small = chat.get(path, data={"limit": 4}).json()
+        older = chat.get(path, data={"limit": 4, "before": small["next_cursor"]}).json()
         assert first_text(small) == "m28"
         assert first_text(older) == "m26"
-        assert chat.get("/chat/messages", data={"limit": 101}).status_code == 422
+        assert chat.get(path, data={"limit": 101}).status_code == 422
 
-    def test_tampered_history_cursor_rejected(self, chat):
+    def test_only_that_agents_messages(self, chat, agent):
+        other = chat.create_agent("其他")
+        mine = chat.send(agent["id"], "mine")
+        chat.send(other["id"], "theirs")
+        page = chat.get(f"/agents/{agent['id']}/messages").json()
+        assert [m["id"] for m in page["items"]] == [
+            mine["message"]["id"],
+            mine["reply"]["id"],
+        ]
+        assert page["next_cursor"] is None
+
+    def test_unknown_or_deleted_agent_is_404(self, chat, agent):
+        assert chat.get(f"/agents/{uuid.uuid4()}/messages").status_code == 404
+        assert chat.get("/agents/not-a-uuid/messages").status_code == 404
+        chat.delete(f"/agents/{agent['id']}")
+        assert chat.get(f"/agents/{agent['id']}/messages").status_code == 404
+
+    def test_tampered_cursor_rejected(self, chat, agent):
         cursor = cursors.encode_history_cursor(10) + "x"
-        assert chat.get("/chat/messages", data={"before": cursor}).status_code == 400
+        response = chat.get(f"/agents/{agent['id']}/messages", data={"before": cursor})
+        assert response.status_code == 400
 
 
 class TestAgents:
@@ -271,9 +285,9 @@ class TestAgentManagement:
         assert chat.delete(f"/agents/{agent['id']}").status_code == 204
         snapshot = chat.get("/chat").json()
         assert snapshot["agents"] == []
-        statuses = {m["id"]: m["status"] for m in snapshot["messages"]}
-        assert statuses[sent["reply"]["id"]] == "stopped"
-        assert sent["message"]["id"] in statuses
+        statuses = dict(Message.objects.values_list("id", "status"))
+        assert statuses[uuid.UUID(sent["reply"]["id"])] == "stopped"
+        assert uuid.UUID(sent["message"]["id"]) in statuses
         event = UiEvent.objects.order_by("-seq").first()
         assert (event.type, event.payload) == (
             "agent.deleted",
@@ -392,7 +406,8 @@ class TestStop:
     def test_stop_targets_only_that_reply(self, chat, agent, sent):
         second = chat.send(agent["id"])
         chat.post(f"/chat/messages/{sent['reply']['id']}/stop")
-        replies = {m["id"]: m["status"] for m in chat.get("/chat").json()["messages"]}
+        page = chat.get(f"/agents/{agent['id']}/messages").json()
+        replies = {m["id"]: m["status"] for m in page["items"]}
         assert replies[second["reply"]["id"]] == "queued"
 
 
@@ -451,6 +466,7 @@ def test_public_schema_has_no_internal_fields():
     assert {p for p in schema["paths"] if p.startswith("/api/v1")} == {
         "/api/v1/chat",
         "/api/v1/agents",
+        "/api/v1/agents/{agent_id}/messages",
         "/api/v1/agents/{agent_id}",
         "/api/v1/agents/{agent_id}/compact",
         "/api/v1/chat/messages",

@@ -276,7 +276,9 @@ class Message(models.Model):
             models.Index(
                 fields=["conversation", "role", "status"],
                 name="message_active_idx",
-            )
+            ),
+            # One agent's history, paged backwards by seq.
+            models.Index(fields=["agent", "seq"], name="message_agent_seq_idx"),
         ]
         constraints = [
             models.UniqueConstraint(
