@@ -1,0 +1,118 @@
+# Kamal production deployment onto the machine that runs it. Use
+# deploy/deploy.sh, which prepares SSH, the registry, secrets, the runtime
+# network and image, and passes the per-machine values this file reads.
+<% host = ENV.fetch("AXP_DEPLOY_HOST", "127.0.0.1") %>
+<% public_host = ENV["AXP_PUBLIC_HOST"].to_s %>
+service: axp
+image: axp
+secrets_path: deploy/secrets
+
+servers:
+  # TanStack Start SSR and static assets.
+  web:
+    hosts: [<%= host %>]
+    cmd: bun /app/apps/web/server.js
+    proxy:
+      app_port: 3000
+      healthcheck:
+        path: /up
+  # Public API (Django). kamal-proxy sends /api here and everything else to web.
+  api:
+    hosts: [<%= host %>]
+    cmd: sh -c "python manage.py migrate --noinput && exec gunicorn config.wsgi --bind 0.0.0.0:8000 --worker-class gthread --workers 2 --threads 32"
+    proxy:
+      app_port: 8000
+      path_prefix: /api
+      strip_path_prefix: false
+      # SSE: stream responses through and allow long-lived connections.
+      response_timeout: 3600
+      buffering:
+        responses: false
+      healthcheck:
+        path: /api/health
+  # Internal runtime API. Runtimes reach it as http://axp-internal:8001 on the
+  # runtime network; it is never published or proxied.
+  internal:
+    hosts: [<%= host %>]
+    cmd: gunicorn config.wsgi --bind 0.0.0.0:8001 --worker-class gthread --workers 2 --threads 16
+    env:
+      clear:
+        AXP_URLCONF: config.internal_urls
+    options:
+      network: name=axp-prod-runtime,alias=axp-internal
+      volume: axp-objects:/data/objects
+  # Starts and stops agent runtime containers through the host Docker socket.
+  controller:
+    hosts: [<%= host %>]
+    cmd: python manage.py run_controller
+    options:
+      network: axp-prod-runtime
+      volume:
+        - axp-objects:/data/objects
+        - /var/run/docker.sock:/var/run/docker.sock
+
+primary_role: api
+
+proxy:
+<% if public_host.empty? %>
+  ssl: false
+<% else %>
+  host: <%= public_host %>
+  ssl: <%= ENV.fetch("AXP_PROXY_SSL", "false") %>
+<% end %>
+  run:
+    bind_ips: [<%= ENV.fetch("AXP_PROXY_BIND", "127.0.0.1") %>]
+    http_port: <%= ENV.fetch("AXP_PROD_HTTP_PORT") %>
+    https_port: <%= ENV.fetch("AXP_PROD_HTTPS_PORT") %>
+
+registry:
+  # A plain registry container on this machine, started by deploy/deploy.sh.
+  # Ports come from deploy/ports.env.
+  # Kamal's built-in localhost registry tunnels over SSH, which collides with
+  # itself when the deploy machine and the server are the same host.
+  server: 127.0.0.1:<%= ENV.fetch("AXP_PROD_REGISTRY_PORT") %>
+  username: axp
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+builder:
+  arch: <%= ENV.fetch("AXP_BUILD_ARCH") %>
+  driver: docker
+  dockerfile: deploy/Dockerfile
+
+ssh:
+  user: <%= ENV.fetch("AXP_DEPLOY_USER") %>
+  port: <%= ENV.fetch("AXP_SSH_PORT", "22") %>
+  keys_only: true
+  keys: [/kamal/ssh/id_ed25519]
+
+env:
+  clear:
+    DJANGO_DEBUG: "false"
+    DJANGO_ALLOWED_HOSTS: "*"
+    AXP_HOST_ID: <%= ENV.fetch("AXP_HOST_ID", "axp") %>
+    AXP_RUNTIME_IMAGE: axp-agent-runtime:production
+    AXP_RUNTIME_NETWORK: axp-prod-runtime
+    AXP_INTERNAL_URL: http://axp-internal:8001
+    AXP_OBJECT_DIR: /data/objects
+<% if ENV["AXP_CODEX_AUTH_FILE"].to_s != "" %>
+    # Host path; the controller bind-mounts it into each runtime.
+    AXP_CODEX_AUTH_FILE: <%= ENV["AXP_CODEX_AUTH_FILE"] %>
+<% end %>
+  secret:
+    - DJANGO_SECRET_KEY
+    - DATABASE_URL
+    - OPENAI_API_KEY
+
+accessories:
+  postgres:
+    image: postgres:17
+    host: <%= host %>
+    env:
+      clear:
+        POSTGRES_USER: axp
+        POSTGRES_DB: axp
+      secret:
+        - POSTGRES_PASSWORD
+    volumes:
+      - axp-postgres:/var/lib/postgresql/data

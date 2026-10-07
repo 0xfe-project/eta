@@ -6,3 +6,4 @@ node_modules/
 dist/
 .output/
 .tanstack/
+deploy/deploy.yml

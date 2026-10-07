@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => {
       react(),
     ],
     server: {
-      port: 3000,
+      port: Number(env.AXP_WEB_PORT || 3000),
       strictPort: true,
       proxy: {
         "/api": {

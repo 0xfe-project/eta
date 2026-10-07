@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: deploy/deploy.sh [KAMAL_COMMAND...]
+
+Deploys the committed HEAD to the machine this runs on with Kamal
+(deploy/deploy.yml). Without arguments it runs `kamal setup` the first time and
+`kamal deploy` afterwards. Anything else is passed to Kamal, for example:
+
+  deploy/deploy.sh app logs -r api -f
+  deploy/deploy.sh app details
+  deploy/deploy.sh rollback <version>
+
+Needs Linux, Docker usable without sudo, git, openssl and an SSH server on this
+machine. See deploy/README.md.
+EOF
+}
+
+case "${1:-}" in -h | --help) usage; exit 0 ;; esac
+
+DEPLOY_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(dirname -- "$DEPLOY_DIR")"
+cd "$ROOT_DIR"
+
+fail() { echo "deploy: $*" >&2; exit 1; }
+
+[[ "$(uname -s)" == "Linux" ]] || fail "the deploy target must be Linux (this is $(uname -s))."
+for command in docker git openssl ssh ssh-keygen; do
+  command -v "$command" >/dev/null 2>&1 || fail "missing required command: $command"
+done
+docker info >/dev/null 2>&1 || fail "cannot talk to Docker; is it running and is $(id -un) in the docker group?"
+
+KAMAL_IMAGE="ghcr.io/basecamp/kamal:v2.12.0"
+CONFIG_DIR="${AXP_CONFIG_DIR:-$HOME/.config/axp}"
+ENV_FILE="$CONFIG_DIR/production.env"
+KEY_FILE="$CONFIG_DIR/kamal_ed25519"
+REGISTRY_CONTAINER=axp-registry
+RUNTIME_NETWORK=axp-prod-runtime
+
+mkdir -p "$CONFIG_DIR"
+chmod 700 "$CONFIG_DIR"
+
+# --- Per-machine secrets and settings ----------------------------------------
+if [[ ! -f "$ENV_FILE" ]]; then
+  (
+    umask 077
+    cat >"$ENV_FILE" <<EOF
+# AXP production settings for deploy/deploy.sh on this machine. Keep private.
+DJANGO_SECRET_KEY=$(openssl rand -hex 32)
+POSTGRES_PASSWORD=$(openssl rand -hex 24)
+# The local registry has no auth; Kamal still requires a password.
+KAMAL_REGISTRY_PASSWORD=local
+OPENAI_API_KEY=
+# AXP_CODEX_AUTH_FILE=/home/you/.codex/auth.json
+# AXP_PUBLIC_HOST=axp.example.com
+AXP_PROXY_BIND=127.0.0.1
+# AXP_SSH_PORT=22
+EOF
+  )
+  echo "Created $ENV_FILE with fresh secrets."
+fi
+set -a
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+# Loaded last so the reserved production ports always win.
+source "$DEPLOY_DIR/ports.env"
+set +a
+export AXP_DEPLOY_USER="${AXP_DEPLOY_USER:-$(id -un)}"
+export AXP_HOST_ID="${AXP_HOST_ID:-$(hostname)}"
+export AXP_SSH_PORT="${AXP_SSH_PORT:-22}"
+case "$(uname -m)" in
+  x86_64 | amd64) export AXP_BUILD_ARCH=amd64 ;;
+  aarch64 | arm64) export AXP_BUILD_ARCH=arm64 ;;
+  *) fail "unsupported CPU architecture: $(uname -m)" ;;
+esac
+
+# --- SSH from the Kamal container back to this machine -------------------------
+# A dedicated key, accepted only from loopback.
+if [[ ! -f "$KEY_FILE" ]]; then
+  ssh-keygen -q -t ed25519 -N "" -C "axp-kamal@$(hostname)" -f "$KEY_FILE"
+fi
+mkdir -p "$HOME/.ssh"
+chmod 700 "$HOME/.ssh"
+public_key="$(cut -d' ' -f1,2 "$KEY_FILE.pub")"
+if ! grep -qF "$public_key" "$HOME/.ssh/authorized_keys" 2>/dev/null; then
+  echo "from=\"127.0.0.1,::1\" $(cat "$KEY_FILE.pub")" >>"$HOME/.ssh/authorized_keys"
+  chmod 600 "$HOME/.ssh/authorized_keys"
+  echo "Authorized $KEY_FILE.pub for loopback SSH."
+fi
+ssh -i "$KEY_FILE" -p "$AXP_SSH_PORT" -o BatchMode=yes -o IdentitiesOnly=yes \
+  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+  -o ConnectTimeout=5 "$AXP_DEPLOY_USER@127.0.0.1" true ||
+  fail "cannot SSH to $AXP_DEPLOY_USER@127.0.0.1:$AXP_SSH_PORT with $KEY_FILE; Kamal needs a running sshd that accepts public keys."
+
+# --- Machine prerequisites ------------------------------------------------------
+# Reserved ports must be free unless our own containers hold them.
+ours="$(docker ps --filter name='^(kamal-proxy|axp-registry)$' --format '{{.Ports}}')"
+for port in "$AXP_PROD_HTTP_PORT" "$AXP_PROD_HTTPS_PORT" "$AXP_PROD_REGISTRY_PORT"; do
+  if [[ "$ours" != *":$port->"* ]] && ss -Htln "sport = :$port" 2>/dev/null | grep -q .; then
+    fail "port $port (deploy/ports.env) is taken by another service on this machine."
+  fi
+done
+
+registry_binding="$(docker container inspect -f '{{(index (index .HostConfig.PortBindings "5000/tcp") 0).HostPort}}' "$REGISTRY_CONTAINER" 2>/dev/null || true)"
+if [[ -n "$registry_binding" && "$registry_binding" != "$AXP_PROD_REGISTRY_PORT" ]]; then
+  docker rm -f "$REGISTRY_CONTAINER" >/dev/null # moved port; images live in the volume
+fi
+if ! docker container inspect "$REGISTRY_CONTAINER" >/dev/null 2>&1; then
+  docker run -d --name "$REGISTRY_CONTAINER" --restart unless-stopped \
+    -p "127.0.0.1:$AXP_PROD_REGISTRY_PORT:5000" -v axp-registry:/var/lib/registry registry:3 >/dev/null
+fi
+docker start "$REGISTRY_CONTAINER" >/dev/null
+
+# Runtimes and the internal API share this network; the internal role attaches
+# to it on boot. Docker picks a subnet that is free on this machine.
+if ! docker network inspect "$RUNTIME_NETWORK" >/dev/null 2>&1; then
+  docker network create --driver bridge --label dev.axp.runtime=network \
+    ${AXP_RUNTIME_SUBNET:+--subnet "$AXP_RUNTIME_SUBNET"} "$RUNTIME_NETWORK" >/dev/null
+fi
+
+# Kamal deploys the committed HEAD; build the runtime image from it as well.
+if [[ -n "$(git status --porcelain)" ]]; then
+  echo "Warning: uncommitted changes are not deployed (deploying $(git rev-parse --short HEAD))." >&2
+fi
+
+# --- Kamal ----------------------------------------------------------------------
+if [[ $# -eq 0 ]]; then
+  if docker container inspect axp-postgres >/dev/null 2>&1; then
+    set -- deploy
+  else
+    set -- setup
+  fi
+fi
+if [[ "$1" == "setup" || "$1" == "deploy" ]]; then
+  git archive HEAD:apps/agent-runtime |
+    docker build -q -t axp-agent-runtime:production - >/dev/null
+  echo "Built axp-agent-runtime:production from $(git rev-parse --short HEAD)."
+fi
+
+# The repository is mounted at its host path; a worktree also needs the shared
+# git directory.
+mounts=(-v "$ROOT_DIR:$ROOT_DIR")
+git_common_dir="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
+if [[ "$git_common_dir" != "$ROOT_DIR"/* ]]; then
+  mounts+=(-v "$git_common_dir:$git_common_dir")
+fi
+tty_flags=(-i)
+[[ -t 0 && -t 1 ]] && tty_flags=(-it)
+
+exec docker run --rm "${tty_flags[@]}" --network host \
+  "${mounts[@]}" -w "$ROOT_DIR" \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v "$KEY_FILE:/kamal/ssh/id_ed25519:ro" \
+  --env-file "$ENV_FILE" \
+  -e AXP_DEPLOY_USER -e AXP_HOST_ID -e AXP_SSH_PORT -e AXP_BUILD_ARCH \
+  -e AXP_PROD_HTTP_PORT -e AXP_PROD_HTTPS_PORT -e AXP_PROD_REGISTRY_PORT \
+  -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0='*' \
+  "$KAMAL_IMAGE" "$@" -c deploy/deploy.yml
