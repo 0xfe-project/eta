@@ -1,7 +1,6 @@
 """Composite foreign keys that keep denormalized columns consistent (RFC §5).
 
-Django cannot express these, and SQLite cannot add them after table creation,
-so they are applied on PostgreSQL only. Service-layer checks cover SQLite dev.
+Django cannot express these.
 """
 
 from django.db import migrations
@@ -74,24 +73,14 @@ CONSTRAINTS = [
 ]
 
 
-def add_constraints(apps, schema_editor):
-    if schema_editor.connection.vendor != "postgresql":
-        return
-    for table, name, columns, target in CONSTRAINTS:
-        schema_editor.execute(
-            f"ALTER TABLE {table} ADD CONSTRAINT {name} "
-            f"FOREIGN KEY {columns} REFERENCES {target} DEFERRABLE INITIALLY DEFERRED"
-        )
-
-
-def drop_constraints(apps, schema_editor):
-    if schema_editor.connection.vendor != "postgresql":
-        return
-    for table, name, *_ in CONSTRAINTS:
-        schema_editor.execute(f"ALTER TABLE {table} DROP CONSTRAINT {name}")
-
-
 class Migration(migrations.Migration):
     dependencies = [("chat", "0001_initial")]
 
-    operations = [migrations.RunPython(add_constraints, drop_constraints)]
+    operations = [
+        migrations.RunSQL(
+            f"ALTER TABLE {table} ADD CONSTRAINT {name} "
+            f"FOREIGN KEY {columns} REFERENCES {target} DEFERRABLE INITIALLY DEFERRED",
+            f"ALTER TABLE {table} DROP CONSTRAINT {name}",
+        )
+        for table, name, columns, target in CONSTRAINTS
+    ]

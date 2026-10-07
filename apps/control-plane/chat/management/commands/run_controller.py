@@ -27,14 +27,13 @@ class Command(BaseCommand):
         stop = threading.Event()
         for signum in (signal.SIGTERM, signal.SIGINT):
             signal.signal(signum, lambda *_: stop.set())
-        # Deploys briefly run the old and new controller side by side. On
-        # PostgreSQL a session lock on a dedicated connection makes the new
-        # one wait until the old one exits.
+        # Deploys briefly run the old and new controller side by side. A
+        # session lock on a dedicated connection makes the new one wait until
+        # the old one exits.
         lock = connections.create_connection("default")
-        if lock.vendor == "postgresql":
-            logger.info("Waiting for the controller lock")
-            with lock.cursor() as cursor:
-                cursor.execute("SELECT pg_advisory_lock(%s)", [CONTROLLER_LOCK_KEY])
+        logger.info("Waiting for the controller lock")
+        with lock.cursor() as cursor:
+            cursor.execute("SELECT pg_advisory_lock(%s)", [CONTROLLER_LOCK_KEY])
         driver = DockerDriver()
         driver.ensure_network()
         driver.ensure_storage()

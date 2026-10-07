@@ -21,7 +21,7 @@
     "dev:llm-gateway": "go run ./apps/llm-gateway",
     "dev:web": "bun run --cwd apps/web dev",
     "deploy": "bash deploy/deploy.sh",
-    "db:migrate": "uv run --project apps/control-plane python apps/control-plane/manage.py migrate",
+    "db:migrate": "bash scripts/dev-postgres.sh && uv run --project apps/control-plane python apps/control-plane/manage.py migrate",
     "runtime:build": "bash scripts/build/runtime-image.sh axp-agent-runtime:dev",
     "build": "turbo run build build:linux-amd64 build:linux-arm64",
     "image:linux-amd64": "bash scripts/build/image.sh app linux amd64",

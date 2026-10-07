@@ -23,7 +23,7 @@
         ".python-version"
       ]
     },
-    // Settings load .env; tests run SQLite or PostgreSQL by DATABASE_URL.
+    // Settings load .env, which can override DATABASE_URL.
     "lint": {
       "inputs": [
         "$TURBO_DEFAULT$",

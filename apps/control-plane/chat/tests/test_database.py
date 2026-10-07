@@ -6,13 +6,7 @@ from django.db import IntegrityError, connection, transaction
 from chat import services
 from chat.models import AgentCommand, Conversation, Message
 
-pytestmark = [
-    pytest.mark.django_db,
-    pytest.mark.skipif(
-        connection.vendor != "postgresql",
-        reason="composite constraints are PostgreSQL-only",
-    ),
-]
+pytestmark = pytest.mark.django_db
 
 
 def test_message_agent_must_share_conversation(chat, agent):

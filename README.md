@@ -30,13 +30,13 @@ bun run dev
 
 `bun run dev` 启动网关、Django、内部运行协议服务、controller、llm-gateway 和 Web，与生产相同。controller 为每个 Agent 启动一个 runtime 容器，容器内的 Codex 把所有模型请求发给 llm-gateway，不持有任何账号凭据。runtime 镜像在每次启动时自动重建（没有变化时约 1 秒）。不想消耗模型额度时，可设 `AXP_CODEX_LAUNCH="python -m axp_runtime.testing.fake_app_server"` 用脚本化 app-server 跑通整条链路。
 
-智能体要选一个可用的模型才能对话：首次使用在“模型服务”中绑定账号（开发凭据保存在仓库根目录的 `var/llm-gateway`）。`bun run dev` 需要 Docker：它在本机启动一组所有实例共享、名为 `axp-dev-*` 的容器（日志、工作区存储），与生产的容器、卷和网络互不相干。
+智能体要选一个可用的模型才能对话：首次使用在“模型服务”中绑定账号（开发凭据保存在仓库根目录的 `var/llm-gateway`）。`bun run dev` 需要 Docker：它在本机启动一组所有实例共享、名为 `axp-dev-*` 的容器（数据库、日志、工作区存储），与生产的容器、卷和网络互不相干。
 
 `bun run dev` 每个实例占用五个连续端口：网关 `P`（浏览器打开的地址）、API `P+1`、内部运行协议 `P+2`、Web `P+3`、llm-gateway `P+4`（内部运行协议和 llm-gateway 监听 runtime 网络的网关地址 `172.30.0.1`），默认 `P=3000`。被占用时（其他 checkout、worktree 或 agent 已在运行）自动顺延到下一个空闲端口块（3010、3020……），并用文件锁避免并行启动抢到同一端口，因此可以同时运行任意多个实例。用 `bun run dev --port 4000`（或 `AXP_DEV_PORT=4000`）指定端口，被占用或与生产端口（`deploy/ports.env`）重叠时直接报错。新的 worktree 首次运行会自动安装依赖并执行 migrations。
 
 `setup` 安装 JS/Python 依赖并执行 Django migrations。锁文件（`bun.lock`、两个 `uv.lock`）应一起提交。
 
-开发无需任何环境文件：所有服务地址由 `bun run dev` 设定，其余都是代码里的固定值。要让开发用 PostgreSQL，参照 `apps/control-plane/.env.example` 设置 `DATABASE_URL`。
+开发无需任何环境文件：所有服务地址由 `bun run dev` 设定，其余都是代码里的固定值。
 
 访问（默认端口块）：
 
@@ -109,7 +109,7 @@ agent runtime 容器运行智能体执行的代码、不持有凭据，它们把
 
 ## 数据库与存储
 
-数据库默认使用 SQLite。设置 `DATABASE_URL=postgres://…` 后改用 PostgreSQL，这是 RFC 的目标数据库；复合外键只在 PostgreSQL 上创建，测试可在两者上运行。
+数据库是 PostgreSQL，由 `DATABASE_URL` 指定。开发和测试默认连本机共享的 `axp-dev-postgres` 容器（`127.0.0.1:15432`，`scripts/dev-postgres.sh` 启动它，`bun run dev`、`db:migrate` 和控制面测试会自动调用）；生产用 Kamal accessory `postgres`。
 
 每个 Agent 的工作区是 [JuiceFS](https://juicefs.com) 文件系统中的一个目录（`agents/<id>/workspace`），数据存在 [SeaweedFS](https://github.com/seaweedfs/seaweedfs) 的 S3 接口，元数据存在 Redis；runtime 容器启动时挂载它。检查点是同一个 SeaweedFS 中的对象，runtime 通过预签名 URL 上传下载。开发用本机共享的 `axp-dev-s3`、`axp-dev-juicefs-meta` 容器，生产用 Kamal accessory `s3`、`juicefs-meta`，两者的数据卷与网络完全分开。详见 [对话与运行时](docs/architecture/chat-runtime.md)。
 

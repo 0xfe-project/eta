@@ -64,16 +64,12 @@ TEMPLATES = [
 ]
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
-# PostgreSQL via DATABASE_URL; SQLite remains the zero-config local default.
+# Defaults to development's axp-dev-postgres (scripts/dev-postgres.sh).
 DATABASES = {
     "default": dj_database_url.config(
-        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}", conn_max_age=60
+        default="postgres://axp:axp@127.0.0.1:15432/axp", conn_max_age=60
     )
 }
-if DATABASES["default"]["ENGINE"] == "django.db.backends.sqlite3":
-    # The API server and the runtime worker write concurrently.
-    DATABASES["default"]["CONN_MAX_AGE"] = 0
-    DATABASES["default"]["OPTIONS"] = {"timeout": 20, "transaction_mode": "IMMEDIATE"}
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_I18N = True
