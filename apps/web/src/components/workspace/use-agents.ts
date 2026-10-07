@@ -15,8 +15,6 @@ export function useAgents() {
     agents,
     current,
     loaded: data !== undefined,
-    /** Agents need an available model to chat (an LLM gateway is configured). */
-    modelRequired: data?.model_required ?? false,
     select: (id: string) =>
       setWorkspace((state) => ({ ...state, selectedAgentId: id })),
     /** Edit an agent, or create one when called without an id. */

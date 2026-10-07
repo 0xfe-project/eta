@@ -1,12 +1,10 @@
 # Loaded by gunicorn from the working directory. Its own logs (worker boots,
 # timeouts, crashes) go through OpenTelemetry like the application's.
-import os
-
 logconfig_dict = {
     "version": 1,
     "disable_existing_loggers": False,
     "root": {
-        "level": os.environ.get("AXP_LOG_LEVEL", "INFO").upper(),
+        "level": "INFO",
         "handlers": ["otel"],
     },
     "loggers": {

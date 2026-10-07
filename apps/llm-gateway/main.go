@@ -18,6 +18,7 @@ import (
 	"github.com/akarachen/axp/apps/llm-gateway/internal/connectors"
 	"github.com/akarachen/axp/apps/llm-gateway/internal/cpa"
 	"github.com/akarachen/axp/apps/llm-gateway/internal/llm"
+	"github.com/akarachen/axp/apps/llm-gateway/internal/runtimeauth"
 	"github.com/akarachen/axp/packages/telemetry-go"
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy"
@@ -64,22 +65,21 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	stateDir, err := filepath.Abs(envOr("AXP_LLM_STATE_DIR", "var/llm-gateway"))
+	// Connection credentials, CPA's generated config and the model catalog.
+	stateDir, err := filepath.Abs("var/llm-gateway")
 	if err != nil {
 		return err
 	}
-	apiKey := os.Getenv("AXP_LLM_API_KEY")
-	if apiKey == "" {
-		return errors.New("AXP_LLM_API_KEY is required (agent runtimes authenticate with it)")
-	}
 	edgeSecret := os.Getenv("AXP_EDGE_SECRET")
+	// Runtimes reach the internal API (and this gateway) on their network.
+	internalURL := envOr("AXP_INTERNAL_URL", "http://axp-internal:8001")
 
 	var service *llm.Service
 	proxy, err := cpa.New(cpa.Options{
-		Host:          host,
-		Port:          port,
-		StateDir:      stateDir,
-		RuntimeAPIKey: apiKey,
+		Host:     host,
+		Port:     port,
+		StateDir: stateDir,
+		Access:   runtimeauth.New(internalURL),
 		Mount: func(e *gin.Engine) {
 			llm.Mount(e, service, edgeSecret, logger)
 		},

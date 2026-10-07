@@ -36,6 +36,8 @@ class Settings:
     model: str | None
     sandbox: str
     approval_policy: str
+    # OpenAI-compatible endpoint of the LLM gateway, Codex's model provider.
+    llm_base_url: str
     # The agent's description, injected as Codex developer instructions.
     developer_instructions: str = ""
     mcp_modules: list[McpModule] = field(default_factory=list)
@@ -45,10 +47,6 @@ class Settings:
     codex_launch: list[str] | None = None
     heartbeat_seconds: float = 5.0
     mcp_ready_timeout: float = 30.0
-    auth_file: Path | None = None
-    # OpenAI-compatible endpoint of the LLM gateway. When set, Codex uses it
-    # as its model provider with the key in AXP_LLM_API_KEY.
-    llm_base_url: str | None = None
     # Context window of models Codex does not know (e.g. Grok).
     model_context_window: int | None = None
 
@@ -89,7 +87,6 @@ def load_settings() -> Settings:
         for item in _json("AXP_MCP_SNAPSHOT", [])
     ]
     launch = os.environ.get("AXP_CODEX_LAUNCH")
-    auth_file = os.environ.get("AXP_CODEX_AUTH_FILE")
     return Settings(
         agent_id=_require("AXP_AGENT_ID"),
         instance_id=_require("AXP_INSTANCE_ID"),
@@ -98,7 +95,7 @@ def load_settings() -> Settings:
         control_plane_url=_require("AXP_CONTROL_PLANE_URL").rstrip("/"),
         listen_host=os.environ.get("AXP_LISTEN_HOST", "0.0.0.0"),
         listen_port=int(os.environ.get("AXP_LISTEN_PORT", "8080")),
-        workspace_dir=Path(os.environ.get("AXP_WORKSPACE_DIR", "/workspace")),
+        workspace_dir=Path(os.environ.get("AXP_WORKSPACE_DIR", "/mnt/workspace")),
         state_dir=Path(os.environ.get("AXP_STATE_DIR", "/state")),
         known_thread_id=os.environ.get("AXP_THREAD_ID") or None,
         model=codex.get("model"),
@@ -111,7 +108,6 @@ def load_settings() -> Settings:
         codex_launch=shlex.split(launch) if launch else None,
         heartbeat_seconds=float(os.environ.get("AXP_HEARTBEAT_SECONDS", "5")),
         mcp_ready_timeout=float(os.environ.get("AXP_MCP_READY_TIMEOUT", "30")),
-        auth_file=Path(auth_file) if auth_file else None,
-        llm_base_url=os.environ.get("AXP_LLM_BASE_URL") or None,
+        llm_base_url=_require("AXP_LLM_BASE_URL"),
         model_context_window=codex.get("model_context_window") or None,
     )

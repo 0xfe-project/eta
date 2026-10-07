@@ -7,11 +7,13 @@ schema-validated config; secrets are referenced, never stored.
 import os
 
 import jsonschema
-from django.conf import settings
 from django.db import transaction
 from django.db.models import F
 
 from ..models import Agent, AgentMcpBinding, McpModuleRevision
+
+# Modules bound to every new agent.
+DEFAULT_MODULES = ("tasks",)
 
 
 class McpConfigError(Exception):
@@ -99,8 +101,8 @@ def bind(
 
 
 def bind_defaults(agent: Agent) -> None:
-    """Bind the deployment's default modules to a new agent."""
-    for key in settings.CHAT_DEFAULT_MCP_MODULES:
+    """Bind the default modules to a new agent."""
+    for key in DEFAULT_MODULES:
         revision = (
             McpModuleRevision.objects.filter(module_key=key, enabled=True)
             .order_by("-created_at")

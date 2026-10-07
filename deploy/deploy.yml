@@ -48,20 +48,18 @@ servers:
     options:
       network-alias: axp-api
   # LLM gateway (embedded CLIProxyAPI): connections and model catalog behind
-  # the gateway as axp-llm; runtimes call its OpenAI-compatible API as
-  # http://llm-gateway:8317/v1 on the runtime network. Credentials live in
-  # the axp-llm volume.
+  # the gateway; runtimes call its OpenAI-compatible API on the runtime
+  # network. Both reach it as axp-llm. Credentials live in the axp-llm volume.
   llm:
     hosts: [<%= host %>]
     cmd: axp-llm-gateway
     env:
       clear:
         AXP_LLM_ADDR: ":8317"
-        AXP_LLM_STATE_DIR: /data/llm
     options:
       network-alias: axp-llm
-      network: name=axp-prod-runtime,alias=llm-gateway
-      volume: axp-llm:/data/llm
+      network: name=axp-prod-runtime,alias=axp-llm
+      volume: axp-llm:/app/apps/control-plane/var/llm-gateway
   # Internal runtime API. Runtimes reach it as http://axp-internal:8001 on the
   # runtime network; it is never published or proxied.
   internal:
@@ -73,7 +71,6 @@ servers:
         OTEL_SERVICE_NAME: control-plane-internal
     options:
       network: name=axp-prod-runtime,alias=axp-internal
-      volume: axp-objects:/data/objects
   # Starts and stops agent runtime containers through the host Docker socket.
   controller:
     hosts: [<%= host %>]
@@ -81,12 +78,9 @@ servers:
     env:
       clear:
         OTEL_SERVICE_NAME: control-plane-controller
-        AXP_RUNTIME_OTLP_ENDPOINT: http://otel-collector:4318
     options:
       network: axp-prod-runtime
-      volume:
-        - axp-objects:/data/objects
-        - /var/run/docker.sock:/var/run/docker.sock
+      volume: /var/run/docker.sock:/var/run/docker.sock
 
 primary_role: gateway
 
@@ -127,29 +121,17 @@ ssh:
 
 env:
   clear:
-    DJANGO_DEBUG: "false"
-    DJANGO_ALLOWED_HOSTS: "*"
-    AXP_HOST_ID: <%= ENV.fetch("AXP_HOST_ID", "axp") %>
-    AXP_RUNTIME_IMAGE: axp-agent-runtime:production
-    AXP_RUNTIME_NETWORK: axp-prod-runtime
-    AXP_INTERNAL_URL: http://axp-internal:8001
-    AXP_OBJECT_DIR: /data/objects
-    AXP_LLM_GATEWAY_URL: http://axp-llm:8317
-    AXP_LLM_RUNTIME_BASE_URL: http://llm-gateway:8317/v1
-    # Logs (and later traces) go to the OpenObserve accessory. Runtime
-    # containers do not get these: they run agent code and hold no secrets.
+    # Logs and traces go to the OpenObserve accessory. Runtime containers do
+    # not get these: they run agent code and hold no secrets.
     OTEL_EXPORTER_OTLP_ENDPOINT: http://axp-openobserve:5080/observe/api/default
     OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=production
-    # <% if ENV["AXP_CODEX_AUTH_FILE"].to_s != "" %>
-    # Host path; the controller bind-mounts it into each runtime.
-    AXP_CODEX_AUTH_FILE: <%= ENV["AXP_CODEX_AUTH_FILE"] %>
-    # <% end %>
   secret:
     - DJANGO_SECRET_KEY
     - DATABASE_URL
     - AXP_EDGE_SECRET
-    - AXP_LLM_API_KEY
-    - OPENAI_API_KEY
+    - AXP_S3_ACCESS_KEY_ID
+    - AXP_S3_SECRET_ACCESS_KEY
+    - AXP_JUICEFS_META_URL
     - OTEL_EXPORTER_OTLP_HEADERS
 
 accessories:
@@ -164,6 +146,32 @@ accessories:
         - POSTGRES_PASSWORD
     volumes:
       - axp-postgres:/var/lib/postgresql/data
+  # Agent workspaces (JuiceFS data) and checkpoints, over S3 on the runtime
+  # network as axp-s3. Never published.
+  s3:
+    image: chrislusf/seaweedfs:4.48
+    host: <%= host %>
+    cmd: mini -dir=/data
+    env:
+      secret:
+        - AWS_ACCESS_KEY_ID
+        - AWS_SECRET_ACCESS_KEY
+    volumes:
+      - axp-s3:/data
+    options:
+      network: name=axp-prod-runtime,alias=axp-s3
+  # JuiceFS metadata, on the runtime network as axp-juicefs-meta.
+  juicefs-meta:
+    image: redis:7.4-alpine
+    host: <%= host %>
+    cmd: sh -c 'exec redis-server --appendonly yes --requirepass "$REDIS_PASSWORD"'
+    env:
+      secret:
+        - REDIS_PASSWORD
+    volumes:
+      - axp-juicefs-meta:/data
+    options:
+      network: name=axp-prod-runtime,alias=axp-juicefs-meta
   # Logs and traces (OTLP), with its UI on 127.0.0.1:AXP_PROD_OBSERVE_PORT.
   openobserve:
     image: public.ecr.aws/zinclabs/openobserve:v1.0.4

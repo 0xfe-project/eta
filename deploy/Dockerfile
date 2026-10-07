@@ -21,7 +21,6 @@ COPY apps/control-plane/manage.py apps/control-plane/gunicorn.conf.py ./
 COPY apps/control-plane/config config/
 COPY apps/control-plane/chat chat/
 
-ENV PYTHONUNBUFFERED=1 \
-    DJANGO_DEBUG=false
+ENV PYTHONUNBUFFERED=1
 EXPOSE 3000 8000 8001 8080 8317
 CMD ["bun", "/app/apps/web/server.js"]

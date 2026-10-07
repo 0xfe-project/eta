@@ -55,18 +55,14 @@ class ControlPlane:
     def post_events(self, events: list[dict]) -> dict:
         return self._request("POST", f"{self.base}/events", {"events": events})
 
-    def transfer(self, method: str, url: str, path, headers: dict | None = None):
-        """Upload a file to, or download it from, a checkpoint object URL."""
+    def transfer(self, method: str, url: str, path):
+        """Upload a file to, or download it from, a presigned checkpoint URL."""
         if method == "PUT":
             with open(path, "rb") as handle:
                 data = handle.read()
         else:
             data = None
         request = urllib.request.Request(url, data=data, method=method)
-        for name, value in (headers or {}).items():
-            request.add_header(name, value)
-        if url.startswith(self.settings.control_plane_url):
-            request.add_header("Authorization", f"Bearer {self.settings.token}")
         with urllib.request.urlopen(request, timeout=300) as response:
             if method == "GET":
                 with open(path, "wb") as handle:

@@ -223,10 +223,6 @@ class Runtime:
 
     def _verify_workspace(self) -> None:
         workspace = self.settings.workspace_dir
-        if os.environ.get("AXP_WORKSPACE_BACKEND") == "s3" and not os.path.ismount(
-            workspace
-        ):
-            raise RecoveryFailed("MOUNT_FAILED", "workspace is not mounted")
         try:
             probe = workspace / ".axp" / "probe"
             probe.parent.mkdir(parents=True, exist_ok=True)
@@ -244,7 +240,7 @@ class Runtime:
         with tempfile.TemporaryDirectory() as tmp:
             archive = Path(tmp) / "checkpoint.tar.gz"
             try:
-                self.cp.transfer("GET", restore["url"], archive, restore.get("headers"))
+                self.cp.transfer("GET", restore["url"], archive)
             except Exception as exc:
                 raise RecoveryFailed("RECOVERY_DOWNLOAD_FAILED", str(exc)) from exc
             if _sha256(archive) != restore["checksum"]:
@@ -252,14 +248,6 @@ class Runtime:
             with tarfile.open(archive) as tar:
                 tar.extractall(state, filter="data")
         logger.info("Restored state from checkpoint %s", restore["checkpoint_id"])
-
-    def _install_auth(self) -> None:
-        home = self.settings.codex_home
-        home.mkdir(parents=True, exist_ok=True)
-        auth = self.settings.auth_file
-        if auth and auth.exists() and not (home / "auth.json").exists():
-            shutil.copyfile(auth, home / "auth.json")
-            (home / "auth.json").chmod(0o600)
 
     # --- Codex --------------------------------------------------------------
 
@@ -282,16 +270,15 @@ class Runtime:
                 overrides.append(
                     f"{prefix}.enabled_tools={_toml(module.allowed_tools)}"
                 )
-        if self.settings.llm_base_url:
-            # Every model request goes through the LLM gateway; the container
-            # holds no provider credentials.
-            overrides += [
-                f"model_provider={_toml(LLM_PROVIDER)}",
-                f"model_providers.{LLM_PROVIDER}.name={_toml('AXP LLM Gateway')}",
-                f"model_providers.{LLM_PROVIDER}.base_url={_toml(self.settings.llm_base_url)}",
-                f"model_providers.{LLM_PROVIDER}.wire_api={_toml('responses')}",
-                f"model_providers.{LLM_PROVIDER}.env_key={_toml('AXP_LLM_API_KEY')}",
-            ]
+        # Every model request goes through the LLM gateway, authenticated as
+        # this runtime instance; the container holds no provider credentials.
+        overrides += [
+            f"model_provider={_toml(LLM_PROVIDER)}",
+            f"model_providers.{LLM_PROVIDER}.name={_toml('AXP LLM Gateway')}",
+            f"model_providers.{LLM_PROVIDER}.base_url={_toml(self.settings.llm_base_url)}",
+            f"model_providers.{LLM_PROVIDER}.wire_api={_toml('responses')}",
+            f"model_providers.{LLM_PROVIDER}.env_key={_toml('AXP_RUNTIME_LLM_KEY')}",
+        ]
         if self.settings.model_context_window:
             overrides.append(
                 f"model_context_window={_toml(self.settings.model_context_window)}"
@@ -300,6 +287,7 @@ class Runtime:
         env = {
             "CODEX_HOME": str(self.settings.codex_home),
             "AXP_WORKSPACE_DIR": str(self.settings.workspace_dir),
+            "AXP_RUNTIME_LLM_KEY": f"{self.settings.instance_id}.{self.settings.token}",
         }
         launch = None
         if self.settings.codex_launch:
@@ -317,7 +305,7 @@ class Runtime:
         )
 
     def _start_codex(self) -> None:
-        self._install_auth()
+        self.settings.codex_home.mkdir(parents=True, exist_ok=True)
         client = CodexClient(self._codex_config(), approval_handler=self._on_request)
         try:
             client.start()
@@ -328,9 +316,6 @@ class Runtime:
         self.codex_version = (info.serverInfo.version if info.serverInfo else None) or (
             info.userAgent
         )
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if api_key and not self.settings.llm_base_url:
-            client.account_login_start({"type": "apiKey", "apiKey": api_key})
         with self._codex_lock:
             if self.stopping.is_set():
                 _close_client(client)
@@ -777,8 +762,7 @@ class Runtime:
                     Path(tmp), checkpoint_id, last_seq
                 )
                 checksum = _sha256(archive)
-                upload = payload["upload"]
-                self.cp.transfer("PUT", upload["url"], archive, upload.get("headers"))
+                self.cp.transfer("PUT", payload["upload_url"], archive)
                 size = archive.stat().st_size
         except Exception as exc:
             logger.exception("Checkpoint failed")
@@ -828,7 +812,7 @@ class Runtime:
             shutil.copytree(
                 home,
                 state / "codex",
-                ignore=shutil.ignore_patterns("auth.json", "*.lock", "tmp"),
+                ignore=shutil.ignore_patterns("*.lock", "tmp"),
             )
         manifest = {
             "checkpoint_id": checkpoint_id,
@@ -840,11 +824,8 @@ class Runtime:
             "source_instance_id": self.settings.instance_id,
             "last_source_seq": last_seq,
             "created_at": time.time(),
-            # The workspace is referenced, not copied: it lives on its own storage.
-            "workspace": {
-                "backend": os.environ.get("AXP_WORKSPACE_BACKEND", "volume"),
-                "included": False,
-            },
+            # The workspace is not copied: it lives on JuiceFS.
+            "workspace": {"included": False},
             "files": sum(1 for p in state.rglob("*") if p.is_file()),
         }
         (state / "manifest.json").write_text(json.dumps(manifest))

@@ -463,11 +463,6 @@ class AgentSession(models.Model):
         ]
 
 
-class WorkspaceBackend(models.TextChoices):
-    VOLUME = "volume"
-    S3 = "s3"
-
-
 class StorageStatus(models.TextChoices):
     UNPROVISIONED = "unprovisioned"
     MOUNTING = "mounting"
@@ -476,18 +471,13 @@ class StorageStatus(models.TextChoices):
 
 
 class AgentStorage(models.Model):
-    Backend = WorkspaceBackend
     Status = StorageStatus
 
     agent = models.OneToOneField(
         Agent, primary_key=True, on_delete=models.CASCADE, related_name="storage"
     )
-    workspace_backend = models.CharField(
-        max_length=16, choices=WorkspaceBackend.choices
-    )
-    # Docker volume name, or S3 bucket.
-    volume_ref = models.CharField(max_length=200)
-    subpath = models.CharField(max_length=300, blank=True)
+    # The agent's workspace: a directory of the JuiceFS filesystem.
+    workspace_path = models.CharField(max_length=300, unique=True)
     state_volume_ref = models.CharField(max_length=200, unique=True)
     host_id = models.CharField(max_length=100, null=True, blank=True)
     status = models.CharField(
@@ -500,12 +490,6 @@ class AgentStorage(models.Model):
     class Meta:
         db_table = "agent_storage"
         constraints = [
-            models.UniqueConstraint(
-                fields=["volume_ref", "subpath"], name="agent_storage_workspace_uniq"
-            ),
-            _choices_check(
-                "workspace_backend", WorkspaceBackend, "agent_storage_backend_valid"
-            ),
             _choices_check("status", StorageStatus, "agent_storage_status_valid"),
         ]
 

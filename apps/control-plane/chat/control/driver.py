@@ -1,12 +1,19 @@
 """Container driver. Only the controller holds the Docker socket."""
 
 import ipaddress
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from django.conf import settings
 
 RUNTIME_PORT = 8080
 LABEL = "dev.axp.runtime"
+MEMORY = "2g"
+CPUS = 1
+# Fixed in development, where host processes listen on its gateway address
+# (172.30.0.1); deploy/deploy.sh creates production's.
+DEV_SUBNET = "172.30.0.0/24"
+JUICEFS_NAME = "axp"
+WORKSPACE_BUCKET = "axp-workspaces"
 
 
 @dataclass
@@ -16,10 +23,7 @@ class RuntimeSpec:
     generation: int
     name: str
     env: dict[str, str]
-    workspace_volume: str | None
     state_volume: str
-    s3_workspace: bool = False
-    binds: dict[str, dict] = field(default_factory=dict)
 
 
 @dataclass
@@ -30,25 +34,63 @@ class StartedRuntime:
 
 
 class DockerDriver:
+    """Runs runtimes on this machine's Docker.
+
+    Development and production share the daemon; their networks, images and
+    names never overlap.
+    """
+
     def __init__(self):
         import docker
 
         self.docker = docker
         self.client = docker.from_env()
+        dev = settings.DEBUG
+        self.network = "axp-runtime" if dev else "axp-prod-runtime"
+        self.image = f"axp-agent-runtime:{'dev' if dev else 'production'}"
+
+    @staticmethod
+    def name(suffix: str) -> str:
+        return f"axp-dev-{suffix}" if settings.DEBUG else f"axp-{suffix}"
 
     def ensure_network(self) -> None:
-        name = settings.AXP_RUNTIME_NETWORK
-        if self.client.networks.list(names=[name]):
+        if self.client.networks.list(names=[self.network]):
             return
-        subnet = ipaddress.ip_network(settings.AXP_RUNTIME_SUBNET)
+        subnet = ipaddress.ip_network(DEV_SUBNET)
         pool = self.docker.types.IPAMPool(
             subnet=str(subnet), gateway=str(next(subnet.hosts()))
         )
         self.client.networks.create(
-            name,
+            self.network,
             driver="bridge",
             ipam=self.docker.types.IPAMConfig(pool_configs=[pool]),
             labels={LABEL: "network"},
+        )
+
+    def ensure_storage(self) -> None:
+        """Format the workspace filesystem once; later runs only check it.
+
+        JuiceFS keeps the S3 credentials in its metadata, so runtimes mount
+        with the metadata URL alone.
+        """
+        self.client.containers.run(
+            self.image,
+            [
+                "juicefs",
+                "format",
+                "--storage=s3",
+                f"--bucket={settings.AXP_S3_ENDPOINT}/{WORKSPACE_BUCKET}",
+                "--no-update",
+                settings.AXP_JUICEFS_META_URL,
+                JUICEFS_NAME,
+            ],
+            entrypoint=[],
+            environment={
+                "ACCESS_KEY": settings.AXP_S3_ACCESS_KEY_ID,
+                "SECRET_KEY": settings.AXP_S3_SECRET_ACCESS_KEY,
+            },
+            network=self.network,
+            remove=True,
         )
 
     def volume_exists(self, name: str) -> bool:
@@ -64,39 +106,29 @@ class DockerDriver:
 
     def start(self, spec: RuntimeSpec) -> StartedRuntime:
         self.ensure_network()
-        volumes = {spec.state_volume: {"bind": "/state", "mode": "rw"}, **spec.binds}
-        kwargs = {}
-        if spec.s3_workspace:
-            # rclone mounts the S3 workspace through FUSE inside the container.
-            kwargs.update(
-                devices=["/dev/fuse"],
-                cap_add=["SYS_ADMIN"],
-                security_opt=["apparmor:unconfined"],
-            )
-        else:
-            volumes[spec.workspace_volume] = {"bind": "/workspace", "mode": "rw"}
         container = self.client.containers.run(
-            settings.AXP_RUNTIME_IMAGE,
+            self.image,
             name=spec.name,
             detach=True,
             environment=spec.env,
-            volumes=volumes,
-            network=settings.AXP_RUNTIME_NETWORK,
+            volumes={spec.state_volume: {"bind": "/state", "mode": "rw"}},
+            network=self.network,
             labels={
                 LABEL: "runtime",
                 f"{LABEL}.agent": spec.agent_id,
                 f"{LABEL}.instance": spec.instance_id,
                 f"{LABEL}.generation": str(spec.generation),
             },
-            mem_limit=settings.AXP_RUNTIME_MEMORY,
-            nano_cpus=int(settings.AXP_RUNTIME_CPUS * 1e9),
+            mem_limit=MEMORY,
+            nano_cpus=int(CPUS * 1e9),
             restart_policy={"Name": "no"},
-            **kwargs,
+            # JuiceFS mounts the workspace through FUSE inside the container.
+            devices=["/dev/fuse"],
+            cap_add=["SYS_ADMIN"],
+            security_opt=["apparmor:unconfined"],
         )
         container.reload()
-        network = container.attrs["NetworkSettings"]["Networks"][
-            settings.AXP_RUNTIME_NETWORK
-        ]
+        network = container.attrs["NetworkSettings"]["Networks"][self.network]
         return StartedRuntime(
             container_id=container.id,
             endpoint=f"http://{network['IPAddress']}:{RUNTIME_PORT}",

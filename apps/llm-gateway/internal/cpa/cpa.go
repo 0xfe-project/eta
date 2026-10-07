@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 
 	"github.com/gin-gonic/gin"
+	sdkaccess "github.com/router-for-me/CLIProxyAPI/v7/sdk/access"
 	sdkapi "github.com/router-for-me/CLIProxyAPI/v7/sdk/api"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/api/handlers"
 	sdkauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/auth"
@@ -35,8 +36,8 @@ type Options struct {
 	Port int
 	// StateDir holds the generated config.yaml and the auths/ directory.
 	StateDir string
-	// RuntimeAPIKey authenticates agent runtimes on the OpenAI-compatible /v1 API.
-	RuntimeAPIKey string
+	// Access authenticates agent runtimes on the OpenAI-compatible /v1 API.
+	Access sdkaccess.Provider
 	// Mount adds AXP's own routes to CPA's gin engine.
 	Mount func(*gin.Engine)
 }
@@ -66,7 +67,6 @@ func New(opts Options) (*Proxy, error) {
 		"host":                     opts.Host,
 		"port":                     opts.Port,
 		"auth-dir":                 authDir,
-		"api-keys":                 []string{opts.RuntimeAPIKey},
 		"debug":                    false,
 		"logging-to-file":          false,
 		"usage-statistics-enabled": false,
@@ -88,6 +88,12 @@ func New(opts Options) (*Proxy, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load CPA config: %w", err)
 	}
+
+	// The only access provider: without one, CPA serves /v1 unauthenticated.
+	if opts.Access == nil {
+		return nil, fmt.Errorf("an access provider is required")
+	}
+	sdkaccess.RegisterProvider(opts.Access.Identifier(), opts.Access)
 
 	// CPA reads the management password from the environment.
 	pw := randomHex(24)

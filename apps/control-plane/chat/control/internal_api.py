@@ -9,17 +9,16 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
-from django.http import FileResponse, HttpRequest, HttpResponse
+from django.http import HttpRequest
 from django.utils import timezone
 from ninja import NinjaAPI, Schema
 from pydantic import ConfigDict, Field
 
 from .. import services
 from ..errors import ApiError, install_error_handlers
-from ..models import Agent, AgentCheckpoint, AgentSession, RuntimeInstance
+from ..models import Agent, AgentSession, RuntimeInstance
 from . import projection
 from .auth import token_matches
-from .objects import FilesystemStore, object_store
 
 api = NinjaAPI(
     title="AXP Internal Runtime Protocol",
@@ -29,6 +28,8 @@ api = NinjaAPI(
 )
 install_error_handlers(api)
 
+# Runtimes heartbeat four times per lease (controller.py).
+LEASE_SECONDS = 30
 RUNTIME_STATUSES = {"starting", "ready", "busy", "recovery_failed", "error"}
 
 
@@ -107,9 +108,7 @@ def heartbeat(request: HttpRequest, instance_id: str, body: HeartbeatIn):
             raise _fenced()
         agent = instance.agent
         instance.last_heartbeat_at = now
-        instance.lease_expires_at = now + timedelta(
-            seconds=settings.AXP_RUNTIME_LEASE_SECONDS
-        )
+        instance.lease_expires_at = now + timedelta(seconds=LEASE_SECONDS)
         status = body.status if body.status in RUNTIME_STATUSES else "starting"
         if status in ("recovery_failed", "error"):
             if instance.status != RuntimeInstance.Status.FAILED:
@@ -170,49 +169,12 @@ def post_events(request: HttpRequest, instance_id: str, body: EventsIn):
     return {"acked_source_seq": acked}
 
 
-def _checkpoint_for(request, checkpoint_id) -> AgentCheckpoint:
-    checkpoint = (
-        AgentCheckpoint.objects.select_related("agent").filter(pk=checkpoint_id).first()
-        if _is_uuid(checkpoint_id)
-        else None
-    )
-    if checkpoint is None:
-        raise ApiError(404, "NOT_FOUND", "资源不存在。")
-    instance = (
-        RuntimeInstance.objects.filter(agent=checkpoint.agent, ended_at__isnull=True)
-        .select_related("agent")
-        .first()
-    )
-    if instance is None or not token_matches(request, instance):
-        raise ApiError(403, "INVALID_RUNTIME_TOKEN", "运行实例令牌无效。")
-    return checkpoint
-
-
-@api.put("/v1/checkpoints/{checkpoint_id}/object", auth=None)
-def upload_checkpoint(request: HttpRequest, checkpoint_id: str):
-    store = object_store()
-    if not isinstance(store, FilesystemStore):
-        raise ApiError(404, "NOT_FOUND", "资源不存在。")
-    checkpoint = _checkpoint_for(request, checkpoint_id)
-    if checkpoint.status not in (
-        AgentCheckpoint.Status.PENDING,
-        AgentCheckpoint.Status.CREATING,
-    ):
-        raise ApiError(409, "CHECKPOINT_CLOSED", "检查点不可写入。")
-    # Stream the body; checkpoints exceed Django's in-memory body limit.
-    store.write(checkpoint.state_object_key, request)
-    return HttpResponse(status=204)
-
-
-@api.get("/v1/checkpoints/{checkpoint_id}/object", auth=None)
-def download_checkpoint(request: HttpRequest, checkpoint_id: str):
-    store = object_store()
-    checkpoint = _checkpoint_for(request, checkpoint_id)
-    if not isinstance(store, FilesystemStore) or (
-        checkpoint.status != AgentCheckpoint.Status.AVAILABLE
-    ):
-        raise ApiError(404, "NOT_FOUND", "资源不存在。")
-    # FileResponse streams the file and closes it with the response.
-    return FileResponse(
-        store.open(checkpoint.state_object_key), content_type="application/gzip"
-    )
+@api.get("/v1/runtime-instances/{instance_id}/identity", auth=None)
+def identity(request: HttpRequest, instance_id: str):
+    """Who holds this token; the LLM gateway authenticates runtimes with it."""
+    instance = _instance(request, instance_id)
+    return {
+        "agent_id": str(instance.agent_id),
+        "instance_id": str(instance.pk),
+        "generation": instance.generation,
+    }

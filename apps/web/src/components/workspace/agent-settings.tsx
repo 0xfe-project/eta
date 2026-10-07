@@ -23,10 +23,10 @@ import { AgentMonogram, AgentStatus } from "./agent-identity";
 import { useAgents } from "./use-agents";
 
 function AgentRow({ agent, current }: { agent: Agent; current: boolean }) {
-  const { select, openEditor, modelRequired } = useAgents();
+  const { select, openEditor } = useAgents();
   const [confirming, setConfirming] = useState(false);
   const instructions = agent.description.trim();
-  const availability = useModelAvailability(agent, modelRequired);
+  const availability = useModelAvailability(agent);
   const modelName =
     availability.state === "not_set"
       ? "未选择模型"

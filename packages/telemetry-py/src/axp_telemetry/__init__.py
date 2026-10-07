@@ -2,10 +2,10 @@
 
 Services log through the standard ``logging`` module. Every record goes
 through the OpenTelemetry log pipeline to two exporters: a readable line on
-stderr (on unless AXP_LOG_CONSOLE=0) and OTLP, when OTEL_EXPORTER_OTLP_ENDPOINT
-or OTEL_EXPORTER_OTLP_LOGS_ENDPOINT is set. Everything else uses the standard
-OTEL_* variables. Records logged inside a span carry its trace once tracing is
-added.
+stderr and OTLP, to OTEL_EXPORTER_OTLP_ENDPOINT or
+OTEL_EXPORTER_OTLP_LOGS_ENDPOINT (unset only in tests). Everything else uses
+the standard OTEL_* variables. Records logged inside a span carry its trace
+once tracing is added.
 """
 
 import logging
@@ -44,8 +44,7 @@ def handler(service: str) -> logging.Handler:
     # default name only applies without OTEL_SERVICE_NAME (as in Go and JS).
     name = os.environ.get("OTEL_SERVICE_NAME") or service
     provider = LoggerProvider(resource=Resource.create({SERVICE_NAME: name}))
-    if os.environ.get("AXP_LOG_CONSOLE") != "0":
-        provider.add_log_record_processor(SimpleLogRecordProcessor(ConsoleExporter()))
+    provider.add_log_record_processor(SimpleLogRecordProcessor(ConsoleExporter()))
     if os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") or os.environ.get(
         "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"
     ):
@@ -81,7 +80,7 @@ def setup(service: str) -> None:
     for existing in list(root.handlers):
         root.removeHandler(existing)
     root.addHandler(otel)
-    root.setLevel(os.environ.get("AXP_LOG_LEVEL", "INFO").upper())
+    root.setLevel(logging.INFO)
     _log_uncaught_exceptions()
 
 

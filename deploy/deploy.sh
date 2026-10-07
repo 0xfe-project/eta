@@ -53,8 +53,6 @@ DJANGO_SECRET_KEY=$(openssl rand -hex 32)
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
 # The local registry has no auth; Kamal still requires a password.
 KAMAL_REGISTRY_PASSWORD=local
-OPENAI_API_KEY=
-# AXP_CODEX_AUTH_FILE=/home/you/.codex/auth.json
 # AXP_PUBLIC_HOST=axp.example.com
 AXP_PROXY_BIND=127.0.0.1
 # AXP_SSH_PORT=22
@@ -70,7 +68,8 @@ ensure_secret() {
   fi
 }
 ensure_secret AXP_EDGE_SECRET 32
-ensure_secret AXP_LLM_API_KEY 32
+ensure_secret AXP_S3_SECRET_ACCESS_KEY 32
+ensure_secret AXP_JUICEFS_META_PASSWORD 32
 # OpenObserve requires upper and lower case letters, a digit and a symbol.
 if ! grep -q "^AXP_OBSERVE_PASSWORD=" "$ENV_FILE"; then
   echo "AXP_OBSERVE_PASSWORD=Axp-$(openssl rand -hex 16)" >>"$ENV_FILE"
@@ -87,7 +86,6 @@ export AXP_DEPLOY_USER="${AXP_DEPLOY_USER:-$(id -un)}"
 # Services send OTLP to OpenObserve as its root user (deploy/secrets).
 AXP_OBSERVE_BASIC="$(printf '%s' "$OBSERVE_USER:$AXP_OBSERVE_PASSWORD" | base64 -w0)"
 export AXP_OBSERVE_BASIC
-export AXP_HOST_ID="${AXP_HOST_ID:-$(hostname)}"
 export AXP_SSH_PORT="${AXP_SSH_PORT:-22}"
 case "$(uname -m)" in
   x86_64 | amd64) export AXP_BUILD_ARCH=amd64 ;;
@@ -136,7 +134,7 @@ docker start "$REGISTRY_CONTAINER" >/dev/null
 # to it on boot. Docker picks a subnet that is free on this machine.
 if ! docker network inspect "$RUNTIME_NETWORK" >/dev/null 2>&1; then
   docker network create --driver bridge --label dev.axp.runtime=network \
-    ${AXP_RUNTIME_SUBNET:+--subnet "$AXP_RUNTIME_SUBNET"} "$RUNTIME_NETWORK" >/dev/null
+    "$RUNTIME_NETWORK" >/dev/null
 fi
 
 # Images are built from the working tree, so uncommitted changes ship too.
@@ -177,7 +175,7 @@ kamal() {
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v "$KEY_FILE:/kamal/ssh/id_ed25519:ro" \
     --env-file "$ENV_FILE" \
-    -e AXP_DEPLOY_USER -e AXP_HOST_ID -e AXP_SSH_PORT -e AXP_BUILD_ARCH \
+    -e AXP_DEPLOY_USER -e AXP_SSH_PORT -e AXP_BUILD_ARCH \
     -e AXP_PROD_HTTP_PORT -e AXP_PROD_HTTPS_PORT -e AXP_PROD_REGISTRY_PORT \
     -e AXP_PROD_OBSERVE_PORT -e AXP_OBSERVE_BASIC \
     -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0='*' \
@@ -188,6 +186,9 @@ kamal() {
 # added, boot it before the first deploy that uses it. The collector holds no
 # state and is rebooted on every deploy so config changes take effect.
 if [[ "$1" == "deploy" ]]; then
+  for accessory in s3 juicefs-meta; do
+    docker container inspect "axp-$accessory" >/dev/null 2>&1 || kamal accessory boot "$accessory"
+  done
   if ! docker container inspect axp-openobserve >/dev/null 2>&1; then
     kamal accessory boot openobserve
   elif ! docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' axp-openobserve | grep -qx 'ZO_BASE_URI=/observe'; then

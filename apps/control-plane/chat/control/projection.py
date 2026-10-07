@@ -21,7 +21,7 @@ from ..models import (
     Message,
     RuntimeInstance,
 )
-from .objects import object_store
+from . import objects
 
 ACTIVITY_LABELS = {
     "command": "运行命令",
@@ -326,7 +326,7 @@ def checkpoint_completed(conversation, agent, instance, command, payload):
         return
     checksum = str(payload.get("checksum") or "")
     # Only a verified object makes the checkpoint usable.
-    if not checksum or not object_store().verify(checkpoint.state_object_key, checksum):
+    if not checksum or not objects.verify(checkpoint.state_object_key, checksum):
         checkpoint.status = AgentCheckpoint.Status.FAILED
         checkpoint.save(update_fields=["status"])
         _finish_checkpoint_command(checkpoint.command, "failed")

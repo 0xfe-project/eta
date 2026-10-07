@@ -8,6 +8,7 @@ API, so the controller and request handlers never deadlock.
 import json
 import logging
 import os
+import socket
 import time
 import uuid
 from datetime import timedelta
@@ -29,10 +30,10 @@ from ..models import (
     Message,
     RuntimeInstance,
 )
-from . import mcp
+from . import mcp, objects
 from .auth import runtime_token
 from .driver import RuntimeSpec
-from .objects import checkpoint_key, object_store
+from .internal_api import LEASE_SECONDS
 from .projection import mark_runtime_failed
 from .runtime_client import RuntimeClient, RuntimeHttpError, RuntimeUnavailable
 
@@ -46,6 +47,18 @@ LIVE_EXECUTION = (
 )
 READY = (RuntimeInstance.Status.READY, RuntimeInstance.Status.BUSY)
 REDISPATCH_SECONDS = 3
+HOST_ID = socket.gethostname()
+START_TIMEOUT_SECONDS = 120
+IDLE_SECONDS = 600
+# A runtime that never came up is retried after this long.
+RETRY_SECONDS = 30
+DISPATCH_TIMEOUT_SECONDS = 120
+CHECKPOINT_AFTER_TURNS = 5
+# The per-agent container is the isolation boundary.
+CODEX_SANDBOX = "danger-full-access"
+CODEX_APPROVAL_POLICY = "on-request"
+# The OpenTelemetry Collector on the runtime network.
+RUNTIME_OTLP_ENDPOINT = "http://otel-collector:4318"
 
 
 def _seconds(value: float) -> timedelta:
@@ -174,7 +187,7 @@ class Controller:
             | Q(desired_state=Agent.DesiredState.RUNNING),
             deleted_at__isnull=True,
         ).distinct()
-        retry_after = timezone.now() - _seconds(settings.AXP_RUNTIME_RETRY_SECONDS)
+        retry_after = timezone.now() - _seconds(RETRY_SECONDS)
         for agent in wanted:
             if agent.runtimes.filter(ended_at__isnull=True).exists():
                 continue
@@ -192,9 +205,13 @@ class Controller:
     def provision(self, agent: Agent) -> RuntimeInstance | None:
         storage = self._storage(agent)
         session, _ = AgentSession.objects.get_or_create(agent=agent)
-        # Check before creating volumes: a missing state volume means lost state.
+        # Check before creating it: a missing state volume means lost state.
         state_missing = not self.driver.volume_exists(storage.state_volume_ref)
-        self._ensure_volumes(storage)
+        self.driver.ensure_volume(storage.state_volume_ref)
+        if storage.status != AgentStorage.Status.READY:
+            AgentStorage.objects.filter(pk=storage.pk).update(
+                status=AgentStorage.Status.READY
+            )
         restore = None
         if state_missing and session.thread_id:
             restore = (
@@ -218,15 +235,14 @@ class Controller:
             instance = RuntimeInstance.objects.create(
                 agent=agent,
                 generation=agent.generation,
-                host_id=settings.AXP_HOST_ID,
+                host_id=HOST_ID,
                 controller_id=self.controller_id,
                 status=(
                     RuntimeInstance.Status.RECOVERING
                     if recovering
                     else RuntimeInstance.Status.PROVISIONING
                 ),
-                lease_expires_at=timezone.now()
-                + _seconds(settings.AXP_RUNTIME_START_TIMEOUT),
+                lease_expires_at=timezone.now() + _seconds(START_TIMEOUT_SECONDS),
                 mcp_snapshot=snapshot or [],
                 config_version=agent.config_version,
                 restored_checkpoint=restore,
@@ -285,124 +301,79 @@ class Controller:
         return instance
 
     def _storage(self, agent: Agent) -> AgentStorage:
-        s3 = settings.AXP_WORKSPACE_BACKEND == "s3"
         storage, _ = AgentStorage.objects.get_or_create(
             agent=agent,
             defaults={
-                "workspace_backend": (
-                    AgentStorage.Backend.S3 if s3 else AgentStorage.Backend.VOLUME
-                ),
-                "volume_ref": (
-                    settings.AXP_S3_WORKSPACE_BUCKET if s3 else f"axp-ws-{agent.pk}"
-                ),
-                "subpath": f"agents/{agent.pk}/workspace" if s3 else "",
-                "state_volume_ref": f"axp-state-{agent.pk}",
-                "host_id": settings.AXP_HOST_ID,
+                "workspace_path": f"agents/{agent.pk}/workspace",
+                "state_volume_ref": self.driver.name(f"state-{agent.pk}"),
+                "host_id": HOST_ID,
             },
         )
         return storage
 
-    def _ensure_volumes(self, storage: AgentStorage) -> None:
-        self.driver.ensure_volume(storage.state_volume_ref)
-        if storage.workspace_backend == AgentStorage.Backend.VOLUME:
-            self.driver.ensure_volume(storage.volume_ref)
-        if storage.status != AgentStorage.Status.READY:
-            AgentStorage.objects.filter(pk=storage.pk).update(
-                status=AgentStorage.Status.READY
-            )
-
     def _spec(self, agent, instance, storage, session, restore) -> RuntimeSpec:
+        token = runtime_token(instance.pk, instance.generation)
         env = {
             "AXP_AGENT_ID": str(agent.pk),
             "AXP_INSTANCE_ID": str(instance.pk),
             "AXP_GENERATION": str(instance.generation),
-            "AXP_RUNTIME_TOKEN": runtime_token(instance.pk, instance.generation),
+            "AXP_RUNTIME_TOKEN": token,
             "AXP_CONTROL_PLANE_URL": settings.AXP_INTERNAL_URL,
+            # Model requests go through the LLM gateway, which checks the
+            # runtime's token with the internal API; provider credentials
+            # never enter the container.
+            "AXP_LLM_BASE_URL": settings.AXP_LLM_GATEWAY_URL.rstrip("/") + "/v1",
             "AXP_THREAD_ID": session.thread_id or "",
             "AXP_CODEX_SETTINGS": json.dumps(
                 {
                     "model": agent.model,
                     "model_context_window": llm.context_window(agent.model),
-                    "sandbox": settings.AXP_CODEX_SANDBOX,
-                    "approval_policy": settings.AXP_CODEX_APPROVAL_POLICY,
+                    "sandbox": CODEX_SANDBOX,
+                    "approval_policy": CODEX_APPROVAL_POLICY,
                     "developer_instructions": agent.description,
                 }
             ),
             "AXP_MCP_SNAPSHOT": json.dumps(instance.mcp_snapshot),
             "AXP_CONFIG_VERSION": str(instance.config_version),
-            "AXP_WORKSPACE_BACKEND": storage.workspace_backend,
-            "AXP_HEARTBEAT_SECONDS": str(
-                max(1, settings.AXP_RUNTIME_LEASE_SECONDS / 4)
+            "AXP_HEARTBEAT_SECONDS": str(LEASE_SECONDS / 4),
+            "AXP_JUICEFS_META_URL": settings.AXP_JUICEFS_META_URL,
+            "AXP_WORKSPACE_PATH": storage.workspace_path,
+            # The runtime and Codex export without credentials; the collector
+            # holds them. Resource attributes tie records to the agent.
+            "OTEL_EXPORTER_OTLP_ENDPOINT": RUNTIME_OTLP_ENDPOINT,
+            "OTEL_SERVICE_NAME": "agent-runtime",
+            "OTEL_RESOURCE_ATTRIBUTES": ",".join(
+                a
+                for a in (
+                    os.environ.get("OTEL_RESOURCE_ATTRIBUTES", ""),
+                    f"axp.agent.id={agent.pk}",
+                    f"axp.runtime.instance.id={instance.pk}",
+                    f"axp.runtime.generation={instance.generation}",
+                )
+                if a
             ),
         }
         if restore:
-            target = object_store().download_target(
-                restore.state_object_key, restore.pk
-            )
             env["AXP_RESTORE"] = json.dumps(
                 {
                     "checkpoint_id": str(restore.pk),
                     "checksum": restore.checksum,
-                    **target,
+                    "url": objects.download_url(restore.state_object_key),
                 }
-            )
-        if storage.workspace_backend == AgentStorage.Backend.S3:
-            env.update(
-                AXP_S3_BUCKET=storage.volume_ref,
-                AXP_S3_PREFIX=storage.subpath,
-                AXP_S3_ENDPOINT=settings.AXP_S3_ENDPOINT,
-                AXP_S3_REGION=settings.AXP_S3_REGION,
-                AWS_ACCESS_KEY_ID=settings.AXP_S3_ACCESS_KEY_ID,
-                AWS_SECRET_ACCESS_KEY=settings.AXP_S3_SECRET_ACCESS_KEY,
             )
         if settings.AXP_CODEX_LAUNCH:
             env["AXP_CODEX_LAUNCH"] = settings.AXP_CODEX_LAUNCH
-        if settings.AXP_RUNTIME_OTLP_ENDPOINT:
-            # The runtime and Codex export without credentials; the collector
-            # holds them. Resource attributes tie records to the agent.
-            attributes = [
-                os.environ.get("OTEL_RESOURCE_ATTRIBUTES", ""),
-                f"axp.agent.id={agent.pk}",
-                f"axp.runtime.instance.id={instance.pk}",
-                f"axp.runtime.generation={instance.generation}",
-            ]
-            env.update(
-                OTEL_EXPORTER_OTLP_ENDPOINT=settings.AXP_RUNTIME_OTLP_ENDPOINT,
-                OTEL_SERVICE_NAME="agent-runtime",
-                OTEL_RESOURCE_ATTRIBUTES=",".join(a for a in attributes if a),
-            )
-        binds = {}
-        if settings.AXP_LLM_RUNTIME_BASE_URL:
-            # Model requests go through the LLM gateway; provider credentials
-            # never enter the container.
-            env["AXP_LLM_BASE_URL"] = settings.AXP_LLM_RUNTIME_BASE_URL
-            env["AXP_LLM_API_KEY"] = settings.AXP_LLM_API_KEY
-        else:
-            for name in settings.AXP_RUNTIME_ENV_PASSTHROUGH:
-                if os.environ.get(name):
-                    env[name] = os.environ[name]
-        if settings.AXP_CODEX_AUTH_FILE and not settings.AXP_LLM_RUNTIME_BASE_URL:
-            binds[settings.AXP_CODEX_AUTH_FILE] = {
-                "bind": "/run/axp/codex-auth.json",
-                "mode": "ro",
-            }
-            env["AXP_CODEX_AUTH_FILE"] = "/run/axp/codex-auth.json"
         return RuntimeSpec(
             agent_id=str(agent.pk),
             instance_id=str(instance.pk),
             generation=instance.generation,
-            name=f"axp-agent-{agent.pk}-g{instance.generation}",
+            name=self.driver.name(f"agent-{agent.pk}-g{instance.generation}"),
             env=env,
-            workspace_volume=storage.volume_ref
-            if storage.workspace_backend == AgentStorage.Backend.VOLUME
-            else None,
             state_volume=storage.state_volume_ref,
-            s3_workspace=storage.workspace_backend == AgentStorage.Backend.S3,
-            binds=binds,
         )
 
     def stop_idle(self) -> None:
-        idle_before = timezone.now() - _seconds(settings.AXP_RUNTIME_IDLE_SECONDS)
+        idle_before = timezone.now() - _seconds(IDLE_SECONDS)
         for instance in RuntimeInstance.objects.filter(
             ended_at__isnull=True, status=RuntimeInstance.Status.READY
         ).select_related("agent"):
@@ -454,7 +425,7 @@ class Controller:
         ).exists()
 
     def fail_stale_queued(self) -> None:
-        cutoff = timezone.now() - _seconds(settings.AXP_DISPATCH_TIMEOUT)
+        cutoff = timezone.now() - _seconds(DISPATCH_TIMEOUT_SECONDS)
         stale = AgentCommand.objects.filter(
             kind=AgentCommand.Kind.TURN,
             status=AgentCommand.Status.QUEUED,
@@ -683,7 +654,7 @@ class Controller:
     # --- checkpoints ----------------------------------------------------------
 
     def _checkpoint_due(self, agent: Agent, minimum_turns: int) -> bool:
-        if settings.AXP_CHECKPOINT_AFTER_TURNS <= 0:
+        if CHECKPOINT_AFTER_TURNS <= 0:
             return False
         if not AgentSession.objects.filter(
             agent=agent, thread_id__isnull=False
@@ -705,7 +676,7 @@ class Controller:
         if (
             latest
             and latest.status == AgentCheckpoint.Status.FAILED
-            and count < (settings.AXP_CHECKPOINT_AFTER_TURNS)
+            and count < CHECKPOINT_AFTER_TURNS
         ):
             # Do not retry a failed checkpoint until enough new work accrues.
             return False
@@ -717,13 +688,13 @@ class Controller:
         ).select_related("agent"):
             agent = instance.agent
             if not self._busy(agent) and self._checkpoint_due(
-                agent, settings.AXP_CHECKPOINT_AFTER_TURNS
+                agent, CHECKPOINT_AFTER_TURNS
             ):
                 self.enqueue_checkpoint(agent)
 
     def enqueue_checkpoint(self, agent: Agent) -> AgentCheckpoint:
         checkpoint_id = uuid.uuid4()
-        key = checkpoint_key(agent.pk, checkpoint_id)
+        key = objects.checkpoint_key(agent.pk, checkpoint_id)
         with transaction.atomic():
             services.lock_conversation(agent.conversation_id)
             agent = Agent.objects.select_for_update().get(pk=agent.pk)
@@ -735,7 +706,7 @@ class Controller:
                 kind=AgentCommand.Kind.CHECKPOINT,
                 input={
                     "checkpoint_id": str(checkpoint_id),
-                    "upload": object_store().upload_target(key, checkpoint_id),
+                    "upload_url": objects.upload_url(key),
                 },
             )
             return AgentCheckpoint.objects.create(

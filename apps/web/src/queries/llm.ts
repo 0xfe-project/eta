@@ -174,10 +174,8 @@ export type ModelAvailability =
 export function modelAvailability(
   agent: Pick<Agent, "model"> | undefined,
   models: Model[] | undefined,
-  required: boolean,
 ): ModelAvailability {
   const model = models?.find((item) => item.id === agent?.model);
-  if (!required) return { state: "ok", model };
   if (!agent?.model) return { state: "not_set" };
   // Unknown until the catalog loads; the server still checks on send.
   if (!models) return { state: "ok", model };
@@ -196,10 +194,7 @@ export function modelAvailability(
   return { state: "ok", model };
 }
 
-export function useModelAvailability(
-  agent: Pick<Agent, "model"> | undefined,
-  required: boolean,
-) {
+export function useModelAvailability(agent: Pick<Agent, "model"> | undefined) {
   const { data } = useModels();
-  return modelAvailability(agent, data, required);
+  return modelAvailability(agent, data);
 }

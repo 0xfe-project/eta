@@ -68,8 +68,6 @@ const snapshotSchema = z.object({
   interactions: z.array(interactionSchema),
   history_cursor: z.string().nullable(),
   event_cursor: z.string(),
-  // False when no LLM gateway is configured (scripted development runtime).
-  model_required: z.boolean(),
 });
 
 export type Agent = z.infer<typeof agentSchema>;

@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -41,16 +40,13 @@ func flush(shutdown func(context.Context) error) {
 	}
 }
 
+// maxBodyBytes caps request bodies.
+const maxBodyBytes = 32 << 20
+
 func run(logger *slog.Logger) error {
 	routes, err := routesFromEnv()
 	if err != nil {
 		return err
-	}
-	maxBody := int64(32 << 20)
-	if v := os.Getenv("AXP_GATEWAY_MAX_BODY_BYTES"); v != "" {
-		if maxBody, err = strconv.ParseInt(v, 10, 64); err != nil {
-			return fmt.Errorf("AXP_GATEWAY_MAX_BODY_BYTES: %w", err)
-		}
 	}
 	secret := os.Getenv("AXP_EDGE_SECRET")
 	if secret == "" {
@@ -60,7 +56,7 @@ func run(logger *slog.Logger) error {
 	addr := envOr("AXP_GATEWAY_ADDR", ":8080")
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           New(Config{Routes: routes, EdgeSecret: secret, MaxBodyBytes: maxBody, Logger: logger}),
+		Handler:           New(Config{Routes: routes, EdgeSecret: secret, MaxBodyBytes: maxBodyBytes, Logger: logger}),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 		// No read or write timeout: chat streams stay open for a long time.

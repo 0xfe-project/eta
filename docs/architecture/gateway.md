@@ -22,7 +22,7 @@
 - **请求标识**：沿用客户端传入的合法 `X-Request-Id`（8–128 位 `[A-Za-z0-9._-]`），否则生成一个；转发给上游并写回响应。control-plane 的错误体 `request_id` 与之一致。
 - **访问日志**：每个请求一行 JSON（方法、路径、上游、状态、字节数、耗时、request id）。
 - **edge secret**：删除客户端发来的所有 `X-AXP-*` 头，再加上 `X-AXP-Edge-Secret`。control-plane（`EdgeSecretMiddleware`）和 llm-gateway 对公开接口校验该头，`/api/health`、`/api/llm/health` 除外；内部运行协议服务不校验。密钥为空时不校验（测试与临时运行）。
-- **错误**：上游不可达返回 502 `UPSTREAM_UNAVAILABLE`，请求体超过 `AXP_GATEWAY_MAX_BODY_BYTES`（默认 32 MiB）返回 413 `PAYLOAD_TOO_LARGE`，未匹配返回 404；错误体与 control-plane 相同：`{"error": {"code", "message", "request_id"}}`。
+- **错误**：上游不可达返回 502 `UPSTREAM_UNAVAILABLE`，请求体超过 32 MiB 返回 413 `PAYLOAD_TOO_LARGE`，未匹配返回 404；错误体与 control-plane 相同：`{"error": {"code", "message", "request_id"}}`。
 - **转发头**：保留浏览器的 `Host`，设置 `X-Forwarded-For/Host/Proto`。
 
 不做鉴权（生产由 Cloudflare Access 负责）、CORS（同源）和限流。

@@ -51,7 +51,6 @@ def test_service_name_from_environment(monkeypatch):
     monkeypatch.setattr(axp_telemetry, "_provider", None)
     monkeypatch.setattr(axp_telemetry, "_handler", None)
     monkeypatch.setenv("OTEL_SERVICE_NAME", "control-plane-api")
-    monkeypatch.setenv("AXP_LOG_CONSOLE", "0")
     axp_telemetry.handler("control-plane")
     resource = axp_telemetry._provider.resource
     assert resource.attributes["service.name"] == "control-plane-api"

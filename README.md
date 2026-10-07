@@ -30,19 +30,16 @@ bun run dev
 
 `bun run dev` 有两种运行时模式：
 
-- 默认 `fake`：启动 Django、Web 和开发用模拟 worker（`run_fake_runtime`）。不需要 Docker 和模型凭据，回复是固定文本；消息包含“确认”时会先发起一次确认。
-- `AXP_RUNTIME_MODE=docker bun run dev`：启动 Django、内部运行协议服务、controller、llm-gateway 和 Web。controller 为每个 Agent 启动一个 runtime 容器，容器内的 Codex 把所有模型请求发给 llm-gateway，不持有任何账号凭据。runtime 镜像在每次启动时自动重建（没有变化时约 1 秒），首次使用在“模型服务”中绑定账号（开发凭据保存在 `apps/llm-gateway/var`）。不想消耗模型额度时，可设 `AXP_CODEX_LAUNCH="python -m axp_runtime.testing.fake_app_server"` 用脚本化 app-server 跑通整条链路。
+- 默认 `fake`：启动 Django、llm-gateway、Web 和开发用模拟 worker（`run_fake_runtime`）。回复是固定文本，不调用模型；消息包含“确认”时会先发起一次确认。
+- `AXP_RUNTIME_MODE=docker bun run dev`：另外启动内部运行协议服务和 controller。controller 为每个 Agent 启动一个 runtime 容器，容器内的 Codex 把所有模型请求发给 llm-gateway，不持有任何账号凭据。runtime 镜像在每次启动时自动重建（没有变化时约 1 秒）。不想消耗模型额度时，可设 `AXP_CODEX_LAUNCH="python -m axp_runtime.testing.fake_app_server"` 用脚本化 app-server 跑通整条链路。
 
-`bun run dev` 每个实例占用五个连续端口：网关 `P`（浏览器打开的地址）、API `P+1`、内部运行协议 `P+2`、Web `P+3`、llm-gateway `P+4`（docker 模式下监听 runtime 网络的网关地址），默认 `P=3000`。被占用时（其他 checkout、worktree 或 agent 已在运行）自动顺延到下一个空闲端口块（3010、3020……），并用文件锁避免并行启动抢到同一端口，因此可以同时运行任意多个实例。用 `bun run dev --port 4000`（或 `AXP_DEV_PORT=4000`）指定端口，被占用或与生产端口（`deploy/ports.env`）重叠时直接报错。新的 worktree 首次运行会自动安装依赖并执行 migrations。
+两种模式下，智能体都要选一个可用的模型才能对话：首次使用在“模型服务”中绑定账号（开发凭据保存在仓库根目录的 `var/llm-gateway`）。`bun run dev` 需要 Docker：它在本机启动一组所有实例共享、名为 `axp-dev-*` 的容器（日志、工作区存储），与生产的容器、卷和网络互不相干。
+
+`bun run dev` 每个实例占用五个连续端口：网关 `P`（浏览器打开的地址）、API `P+1`、内部运行协议 `P+2`、Web `P+3`、llm-gateway `P+4`（内部运行协议和 llm-gateway 监听 runtime 网络的网关地址 `172.30.0.1`），默认 `P=3000`。被占用时（其他 checkout、worktree 或 agent 已在运行）自动顺延到下一个空闲端口块（3010、3020……），并用文件锁避免并行启动抢到同一端口，因此可以同时运行任意多个实例。用 `bun run dev --port 4000`（或 `AXP_DEV_PORT=4000`）指定端口，被占用或与生产端口（`deploy/ports.env`）重叠时直接报错。新的 worktree 首次运行会自动安装依赖并执行 migrations。
 
 `setup` 安装 JS/Python 依赖并执行 Django migrations。锁文件（`bun.lock`、两个 `uv.lock`）应一起提交。
 
-默认开发配置无需复制环境文件。需要自定义时：
-
-```sh
-cp apps/control-plane/.env.example apps/control-plane/.env
-cp apps/web/.env.example apps/web/.env
-```
+开发无需任何环境文件：所有服务地址由 `bun run dev` 设定，其余都是代码里的固定值。要让开发用 PostgreSQL，参照 `apps/control-plane/.env.example` 设置 `DATABASE_URL`。
 
 访问（默认端口块）：
 
@@ -50,9 +47,9 @@ cp apps/web/.env.example apps/web/.env
 - API 健康检查：http://localhost:3000/api/health
 - 公共 OpenAPI 文档：http://localhost:3000/api/docs
 - 内部运行协议文档（docker 模式）：http://172.30.0.1:3002/internal/docs
-- runtime 使用的 OpenAI 兼容接口（docker 模式）：http://172.30.0.1:3004/v1
+- runtime 使用的 OpenAI 兼容接口：http://172.30.0.1:3004/v1
 
-浏览器只访问网关（`apps/gateway`），开发和生产使用同一套路由：`/api/llm/` → llm-gateway，`/api/` → control-plane，其余 → Web。网关为每个请求生成 `X-Request-Id`、输出 JSON 访问日志、透传 SSE 与 WebSocket，并附上 `AXP_EDGE_SECRET`；control-plane 与 llm-gateway 拒绝不带该密钥的公开请求（健康检查除外），因此绕过网关直接访问服务端口会得到 403。
+浏览器只访问网关（`apps/gateway`），开发和生产使用同一套路由：`/api/llm/` → llm-gateway，`/api/` → control-plane，其余 → Web。网关为每个请求生成 `X-Request-Id`、输出 JSON 访问日志、透传 SSE 与 WebSocket，并附上边缘密钥（`AXP_EDGE_SECRET`，由 `bun run dev` 每次随机生成，生产由部署脚本生成）；control-plane 与 llm-gateway 拒绝不带该密钥的公开请求（健康检查除外），因此绕过网关直接访问服务端口会得到 403。
 
 Web 已配置 Query、nuqs、Phosphor Icons、表单校验、通知、Markdown 和 Tailwind，使用方式见 [Web 开发说明](apps/web/README.md)。
 
@@ -103,22 +100,22 @@ TanStack 的 `src/routeTree.gen.ts` 由 `dev` 或 `build` 自动生成；`check`
 
 三种语言的服务都走 OpenTelemetry：Go 用 `log/slog`（`packages/telemetry-go`），Python 用标准库 `logging`（`packages/telemetry-py`，gunicorn 自身的日志经 `apps/control-plane/gunicorn.conf.py` 接入），Web 服务端用 LogTape（`apps/web/src/server/telemetry.ts`）。llm-gateway 内嵌的 CLIProxyAPI 会自己打印到 stdout，这些行也被逐行转成日志（`library=cliproxy`）。每条日志同时：
 
-- 在 stderr 输出一行可读格式 `15:04:05.000 INFO  消息 key=value`（UTC；`AXP_LOG_CONSOLE=0` 关闭）；
-- 设置 `OTEL_EXPORTER_OTLP_ENDPOINT` 后通过 OTLP 发往 [OpenObserve](https://openobserve.ai)。
+- 在 stderr 输出一行可读格式 `15:04:05.000 INFO  消息 key=value`（UTC，`INFO` 及以上）；
+- 通过 OTLP 发往 [OpenObserve](https://openobserve.ai)。
 
-`bun run dev` 会在本机启动一个共享的 OpenObserve（容器 `axp-dev-openobserve`，默认 http://localhost:5080 ，账号见启动输出），所有实例的日志都发到这里，`axp.dev.port` 区分不同实例；需要 Docker，`AXP_DEV_OBSERVE=0` 只输出到终端。生产见 `deploy/README.md`。
+`bun run dev` 会在本机启动一个共享的 OpenObserve（容器 `axp-dev-openobserve`，经网关在 `/observe/` 打开，账号见启动输出），所有实例的日志都发到这里，`axp.dev.port` 区分不同实例。生产见 `deploy/README.md`。
 
-agent runtime 容器运行智能体执行的代码、不持有凭据，它们把 OTLP 发给 runtime 网络里的 OpenTelemetry Collector（`deploy/otel-collector.yaml`，别名 `otel-collector`），由 Collector 带上凭据转发；controller 通过 `AXP_RUNTIME_OTLP_ENDPOINT` 传入地址，并附上 `axp.agent.id` 等资源属性。runtime 自己的日志和 Codex 原生的 OpenTelemetry（日志事件含 prompt、trace、指标）都走这条路。dev 的 docker 模式会启动 `axp-dev-otel-collector`。
+agent runtime 容器运行智能体执行的代码、不持有凭据，它们把 OTLP 发给 runtime 网络里的 OpenTelemetry Collector（`deploy/otel-collector.yaml`，别名 `otel-collector`），由 Collector 带上凭据转发；controller 给每个 runtime 附上 `axp.agent.id` 等资源属性。runtime 自己的日志和 Codex 原生的 OpenTelemetry（日志事件含 prompt、trace、指标）都走这条路。开发时这个 Collector 是 `axp-dev-otel-collector`。
 
 浏览器端通过 `POST /telemetry/logs` 上报（`apps/web/src/lib/report.ts`）：未捕获的错误和未处理的 Promise rejection 自动上报，其他内容调用 `reportLog()`；每分钟最多 30 条，服务端以 `web.browser` 记录。
 
-配置使用 OpenTelemetry 的标准环境变量（`OTEL_SERVICE_NAME`、`OTEL_RESOURCE_ATTRIBUTES`、`OTEL_EXPORTER_OTLP_*`），日志级别用 `AXP_LOG_LEVEL`（`debug`、`info`、`warn`、`error`）。
+导出地址与资源属性使用 OpenTelemetry 的标准环境变量（`OTEL_SERVICE_NAME`、`OTEL_RESOURCE_ATTRIBUTES`、`OTEL_EXPORTER_OTLP_*`），由 `bun run dev` 和部署配置设定。
 
 ## 数据库与存储
 
 数据库默认使用 SQLite。设置 `DATABASE_URL=postgres://…` 后改用 PostgreSQL，这是 RFC 的目标数据库；复合外键只在 PostgreSQL 上创建，测试可在两者上运行。
 
-工作区默认是每个 Agent 一个 Docker 卷。设置 `AXP_WORKSPACE_BACKEND=s3` 及 `AXP_S3_*` 后，runtime 容器用 rclone 把 S3 前缀挂载为工作区。检查点默认存放在 `apps/control-plane/var/objects`，设置 `AXP_OBJECT_STORE=s3` 后改用 S3 预签名 URL。全部配置项见 `apps/control-plane/config/settings.py` 末尾和 `.env.example`。
+每个 Agent 的工作区是 [JuiceFS](https://juicefs.com) 文件系统中的一个目录（`agents/<id>/workspace`），数据存在 [SeaweedFS](https://github.com/seaweedfs/seaweedfs) 的 S3 接口，元数据存在 Redis；runtime 容器启动时挂载它。检查点是同一个 SeaweedFS 中的对象，runtime 通过预签名 URL 上传下载。开发用本机共享的 `axp-dev-s3`、`axp-dev-juicefs-meta` 容器，生产用 Kamal accessory `s3`、`juicefs-meta`，两者的数据卷与网络完全分开。详见 [对话与运行时](docs/architecture/chat-runtime.md)。
 
 ## 生产部署
 

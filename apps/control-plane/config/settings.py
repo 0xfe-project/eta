@@ -1,5 +1,5 @@
 import os
-import socket
+import secrets
 from pathlib import Path
 
 import dj_database_url
@@ -7,13 +7,25 @@ from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
-DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() == "true"
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "")
-if not SECRET_KEY:
-    if not DEBUG:
-        raise RuntimeError("DJANGO_SECRET_KEY is required when DEBUG is false")
-    SECRET_KEY = "django-insecure-local-development-only"
-ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+# Only scripts/dev.sh turns this on.
+DEBUG = os.getenv("DJANGO_DEBUG", "false").lower() == "true"
+
+
+def _local_secret_key() -> str:
+    """A key generated once per checkout, for runs without DJANGO_SECRET_KEY."""
+    path = BASE_DIR / "var" / "secret_key"
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch(mode=0o600)
+        path.write_text(secrets.token_hex(32))
+    return path.read_text().strip()
+
+
+# Production sets it (deploy/deploy.sh generates one); runtime tokens derive
+# from it, so every control plane process must share it.
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY") or _local_secret_key()
+# Every request arrives through the edge gateway or on the runtime network.
+ALLOWED_HOSTS = ["*"]
 INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "ninja",
@@ -69,61 +81,32 @@ USE_TZ = True
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-CHAT_MAX_QUEUED_PER_AGENT = int(os.getenv("CHAT_MAX_QUEUED_PER_AGENT", "20"))
-CHAT_STREAM_POLL_SECONDS = float(os.getenv("CHAT_STREAM_POLL_SECONDS", "0.5"))
-CHAT_STREAM_HEARTBEAT_SECONDS = 15.0
-
-# --- Agent runtime orchestration (internal; see chat/control) ---------------
-AXP_HOST_ID = os.getenv("AXP_HOST_ID", socket.gethostname())
-AXP_RUNTIME_IMAGE = os.getenv("AXP_RUNTIME_IMAGE", "axp-agent-runtime:dev")
-AXP_RUNTIME_NETWORK = os.getenv("AXP_RUNTIME_NETWORK", "axp-runtime")
-AXP_RUNTIME_SUBNET = os.getenv("AXP_RUNTIME_SUBNET", "172.30.0.0/24")
+# Service addresses and credentials. The defaults are development's (fixed
+# addresses on the runtime network's gateway, 172.30.0.1) and production's
+# (Kamal network aliases); scripts/dev.sh sets the ones that move with its
+# port block, deploy/deploy.yml the production credentials.
 # Where runtimes reach the internal API (served by a separate process).
-AXP_INTERNAL_URL = os.getenv("AXP_INTERNAL_URL", "http://172.30.0.1:8001")
-AXP_RUNTIME_LEASE_SECONDS = float(os.getenv("AXP_RUNTIME_LEASE_SECONDS", "30"))
-AXP_RUNTIME_START_TIMEOUT = float(os.getenv("AXP_RUNTIME_START_TIMEOUT", "120"))
-AXP_RUNTIME_IDLE_SECONDS = float(os.getenv("AXP_RUNTIME_IDLE_SECONDS", "600"))
-AXP_RUNTIME_RETRY_SECONDS = float(os.getenv("AXP_RUNTIME_RETRY_SECONDS", "30"))
-AXP_DISPATCH_TIMEOUT = float(os.getenv("AXP_DISPATCH_TIMEOUT", "120"))
-AXP_RUNTIME_MEMORY = os.getenv("AXP_RUNTIME_MEMORY", "2g")
-AXP_RUNTIME_CPUS = float(os.getenv("AXP_RUNTIME_CPUS", "1"))
-# Host environment variables forwarded to runtimes, e.g. model credentials.
-AXP_RUNTIME_ENV_PASSTHROUGH = [
-    name
-    for name in os.getenv("AXP_RUNTIME_ENV_PASSTHROUGH", "OPENAI_API_KEY").split(",")
-    if name
-]
-# Optional Codex auth.json copied into each new agent's state on first start.
-AXP_CODEX_AUTH_FILE = os.getenv("AXP_CODEX_AUTH_FILE") or None
-# Overrides the Codex command inside runtimes (e.g. the scripted fake server).
-AXP_CODEX_LAUNCH = os.getenv("AXP_CODEX_LAUNCH") or None
-# Model for agents created without one (falls back to the old name).
-AXP_DEFAULT_MODEL = (
-    os.getenv("AXP_DEFAULT_MODEL") or os.getenv("AXP_CODEX_MODEL") or None
+AXP_INTERNAL_URL = os.getenv(
+    "AXP_INTERNAL_URL",
+    "http://172.30.0.1:8001" if DEBUG else "http://axp-internal:8001",
 )
-# LLM gateway (apps/llm-gateway). With a URL set, agents need an available
-# gateway model to chat and runtimes send every model request to
-# AXP_LLM_RUNTIME_BASE_URL with AXP_LLM_API_KEY instead of holding provider
-# credentials.
-AXP_LLM_GATEWAY_URL = os.getenv("AXP_LLM_GATEWAY_URL", "")
-AXP_LLM_RUNTIME_BASE_URL = os.getenv("AXP_LLM_RUNTIME_BASE_URL", "")
-AXP_LLM_API_KEY = os.getenv("AXP_LLM_API_KEY", "")
-# OTLP endpoint runtimes send logs, traces and metrics to (the runtime
-# network's OpenTelemetry Collector). Empty: runtimes only log to stderr.
-AXP_RUNTIME_OTLP_ENDPOINT = os.getenv("AXP_RUNTIME_OTLP_ENDPOINT", "")
-# The per-agent container is the isolation boundary.
-AXP_CODEX_SANDBOX = os.getenv("AXP_CODEX_SANDBOX", "danger-full-access")
-AXP_CODEX_APPROVAL_POLICY = os.getenv("AXP_CODEX_APPROVAL_POLICY", "on-request")
-AXP_WORKSPACE_BACKEND = os.getenv("AXP_WORKSPACE_BACKEND", "volume")
-AXP_S3_ENDPOINT = os.getenv("AXP_S3_ENDPOINT", "")
-AXP_S3_REGION = os.getenv("AXP_S3_REGION", "us-east-1")
-AXP_S3_ACCESS_KEY_ID = os.getenv("AXP_S3_ACCESS_KEY_ID", "")
-AXP_S3_SECRET_ACCESS_KEY = os.getenv("AXP_S3_SECRET_ACCESS_KEY", "")
-AXP_S3_WORKSPACE_BUCKET = os.getenv("AXP_S3_WORKSPACE_BUCKET", "axp-workspaces")
-AXP_OBJECT_STORE = os.getenv("AXP_OBJECT_STORE", "filesystem")
-AXP_OBJECT_DIR = Path(os.getenv("AXP_OBJECT_DIR", BASE_DIR / "var" / "objects"))
-AXP_S3_CHECKPOINT_BUCKET = os.getenv("AXP_S3_CHECKPOINT_BUCKET", "axp-checkpoints")
-AXP_CHECKPOINT_AFTER_TURNS = int(os.getenv("AXP_CHECKPOINT_AFTER_TURNS", "5"))
-CHAT_DEFAULT_MCP_MODULES = [
-    key for key in os.getenv("CHAT_DEFAULT_MCP_MODULES", "tasks").split(",") if key
-]
+# The LLM gateway (apps/llm-gateway). Runtimes send every model request
+# there; the control plane reads its model catalog.
+AXP_LLM_GATEWAY_URL = os.getenv(
+    "AXP_LLM_GATEWAY_URL", "http://172.30.0.1:8317" if DEBUG else "http://axp-llm:8317"
+)
+# SeaweedFS's S3 API: JuiceFS keeps workspace data there, checkpoints are
+# objects. Runtimes reach it at the same address.
+AXP_S3_ENDPOINT = os.getenv(
+    "AXP_S3_ENDPOINT", "http://172.30.0.1:8333" if DEBUG else "http://axp-s3:8333"
+)
+AXP_S3_ACCESS_KEY_ID = os.getenv("AXP_S3_ACCESS_KEY_ID", "axp-dev" if DEBUG else "")
+AXP_S3_SECRET_ACCESS_KEY = os.getenv(
+    "AXP_S3_SECRET_ACCESS_KEY", "axp-dev-secret" if DEBUG else ""
+)
+# JuiceFS metadata (Redis on the runtime network).
+AXP_JUICEFS_META_URL = os.getenv(
+    "AXP_JUICEFS_META_URL", "redis://axp-dev-juicefs-meta:6379/1" if DEBUG else ""
+)
+# Test hook: runtimes run this instead of the Codex app-server.
+AXP_CODEX_LAUNCH = os.getenv("AXP_CODEX_LAUNCH") or None

@@ -3,6 +3,7 @@ import logging
 from django.core.management.base import BaseCommand
 from django.db import connections
 
+from chat.control import objects
 from chat.control.controller import Controller
 from chat.control.driver import DockerDriver
 
@@ -29,4 +30,6 @@ class Command(BaseCommand):
                 cursor.execute("SELECT pg_advisory_lock(%s)", [CONTROLLER_LOCK_KEY])
         driver = DockerDriver()
         driver.ensure_network()
+        driver.ensure_storage()
+        objects.ensure_bucket()
         Controller(driver).run_forever(interval=interval)

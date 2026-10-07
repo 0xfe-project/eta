@@ -144,9 +144,6 @@ class ChatSnapshotOut(Schema):
     interactions: list[InteractionOut]
     history_cursor: str | None
     event_cursor: str
-    # Whether chatting needs an available model (false when no LLM gateway
-    # is configured, e.g. the scripted development runtime).
-    model_required: bool
 
 
 class MessagePageOut(Schema):

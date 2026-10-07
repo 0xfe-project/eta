@@ -3,6 +3,9 @@ import uuid
 
 from django.test import Client
 
+# The model tests/conftest.py's gateway catalog offers.
+TEST_MODEL = "test-model"
+
 # Fields that must never reach the browser (RFC §10).
 INTERNAL_MARKERS = (
     "command",
@@ -49,8 +52,9 @@ class ChatClient:
     def delete(self, path):
         return self.client.delete(f"/api/v1{path}")
 
-    def create_agent(self, name="开发助手"):
-        response = self.post("/agents", {"name": name})
+    def create_agent(self, name="开发助手", model: str | None = TEST_MODEL):
+        body = {"name": name, **({"model": model} if model else {})}
+        response = self.post("/agents", body)
         assert response.status_code == 201, response.content
         return response.json()
 

@@ -9,16 +9,20 @@
 | 路径               | 调用方                                      | 鉴权                       |
 | ------------------ | ------------------------------------------- | -------------------------- |
 | `/api/llm/v1/*`    | 浏览器（经统一网关）、control-plane（直连） | `X-AXP-Edge-Secret`        |
-| `/v1/*`            | runtime 中的 Codex（runtime 网络）          | `AXP_LLM_API_KEY`          |
+| `/v1/*`            | runtime 中的 Codex（runtime 网络）          | runtime 实例令牌           |
 | `/v0/management/*` | 仅进程内回环调用                            | 每次启动随机生成的管理密码 |
 
-CPA 负责 token 刷新、按模型名在账号间轮换、协议转换。凭据只存在 llm-gateway 的状态目录（`AXP_LLM_STATE_DIR/auths`，生产为卷 `axp-llm`）；runtime 容器只拿到 `AXP_LLM_BASE_URL` 和 `AXP_LLM_API_KEY`。
+CPA 负责 token 刷新、按模型名在账号间轮换、协议转换。凭据只存在 llm-gateway 的状态目录（工作目录下的 `var/llm-gateway/auths`，生产为卷 `axp-llm`）；runtime 容器只拿到网关地址和自己的实例令牌。
+
+### runtime 鉴权
+
+每个 runtime 实例本来就有 control-plane 签发的令牌（由实例 ID 和代数派生，换代即失效），runtime 用 `<实例 ID>.<令牌>` 作为调用 `/v1` 的 API key。llm-gateway 向 CPA 注册唯一的访问提供者（`internal/runtimeauth`），对每个 key 调用内部运行协议的 `GET /internal/v1/runtime-instances/{id}/identity` 确认身份并缓存 30 秒；请求因此带有所属 Agent，被替换的实例最多 30 秒后无法再调用模型。llm-gateway 和内部运行协议都在 runtime 网络上（开发时在其网关地址 `172.30.0.1`）。
 
 ### 与 CPA 的边界
 
-只使用 SDK 导出的包（`sdk/cliproxy`、`sdk/cliproxy/auth`、`sdk/api`、`sdk/config`、`sdk/translator/builtin`）和 CPA 的管理 HTTP API，不导入 `internal/`。`config.yaml` 由环境变量在启动时生成。管理 API 通过 `MANAGEMENT_PASSWORD` 开启、`allow-remote: false`，并由 `cpa.Proxy.Management()` 在进程内直接调用 gin 引擎，不经过网络。
+只使用 SDK 导出的包（`sdk/cliproxy`、`sdk/cliproxy/auth`、`sdk/access`、`sdk/api`、`sdk/config`、`sdk/translator/builtin`）和 CPA 的管理 HTTP API，不导入 `internal/`。`config.yaml` 在每次启动时生成。管理 API 通过 `MANAGEMENT_PASSWORD` 开启、`allow-remote: false`，并由 `cpa.Proxy.Management()` 在进程内直接调用 gin 引擎，不经过网络。
 
-`contract_test.go` 守住依赖的 CPA 行为：通过管理 API 上传 CPA 格式的 codex 凭据后，auth manager 能列出它、模型进入注册表和 `/v1/models`，停用和删除生效。升级 CPA 时必须通过。
+`contract_test.go` 守住依赖的 CPA 行为：`/v1` 只接受访问提供者认可的 key，通过管理 API 上传 CPA 格式的 codex 凭据后，auth manager 能列出它、模型进入注册表和 `/v1/models`，停用和删除生效。升级 CPA 时必须通过。
 
 ## 接入方式（Connector）
 
@@ -47,9 +51,9 @@ Connector 只负责“凭据怎么进来”；连接列表、启停、删除统�
 ## control-plane 与 runtime
 
 - `Agent.model` 存目录中的模型 ID；创建、修改时校验存在性，修改模型与修改指令一样递增 `config_version`，空闲时重启 runtime。
-- 配置了 `AXP_LLM_GATEWAY_URL` 时，`POST /chat/messages` 在加锁前检查模型：未设置返回 409 `MODEL_NOT_SET`，不可用（或网关不可达）返回 409 `MODEL_UNAVAILABLE`。目录在进程内缓存 10 秒。快照中的 `model_required` 告诉前端是否需要这项检查（开发用模拟 worker 不需要）。
-- controller 在 `AXP_LLM_RUNTIME_BASE_URL` 存在时注入 `AXP_LLM_BASE_URL`、`AXP_LLM_API_KEY` 和模型的上下文窗口，不再转发 `OPENAI_API_KEY`、不再挂载 `auth.json`。
-- runtime 给 Codex 加上 `model_provider = "axp"` 及 `model_providers.axp.{base_url, wire_api = "responses", env_key = "AXP_LLM_API_KEY"}`，并在需要时设置 `model_context_window`。
+- `POST /chat/messages` 在加锁前检查模型：未设置返回 409 `MODEL_NOT_SET`，不可用（或网关不可达）返回 409 `MODEL_UNAVAILABLE`。目录在进程内缓存 10 秒。
+- controller 给 runtime 注入网关的 `/v1` 地址（`AXP_LLM_BASE_URL`）和模型的上下文窗口。
+- runtime 给 Codex 加上 `model_provider = "axp"` 及 `model_providers.axp.{base_url, wire_api = "responses", env_key = "AXP_RUNTIME_LLM_KEY"}`，并在需要时设置 `model_context_window`；Codex 进程的 `AXP_RUNTIME_LLM_KEY` 就是上面的实例 key。
 
 ## 前端
 

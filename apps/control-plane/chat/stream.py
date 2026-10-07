@@ -8,14 +8,14 @@ import json
 import time
 from collections.abc import Iterator
 
-from django.conf import settings
-
 from . import cursors
 from .errors import ApiError
 from .models import Conversation, UiEvent
 from .services import default_conversation_id
 
 BATCH_SIZE = 100
+POLL_SECONDS = 0.5
+HEARTBEAT_SECONDS = 15.0
 
 
 def resolve_start_seq(cursor: str) -> int:
@@ -46,8 +46,8 @@ def event_stream(
     heartbeat_interval: float | None = None,
     max_idle_polls: int | None = None,
 ) -> Iterator[str]:
-    poll_interval = poll_interval or settings.CHAT_STREAM_POLL_SECONDS
-    heartbeat_interval = heartbeat_interval or settings.CHAT_STREAM_HEARTBEAT_SECONDS
+    poll_interval = poll_interval or POLL_SECONDS
+    heartbeat_interval = heartbeat_interval or HEARTBEAT_SECONDS
     conversation_id = None
     last_write = time.monotonic()
     idle_polls = 0

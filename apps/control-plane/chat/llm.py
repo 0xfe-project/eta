@@ -42,11 +42,6 @@ _lock = threading.Lock()
 _cache: tuple[float, dict[str, Model]] | None = None
 
 
-def enabled() -> bool:
-    """Whether agents need a gateway model to chat."""
-    return bool(settings.AXP_LLM_GATEWAY_URL)
-
-
 def _fetch() -> dict[str, Model]:
     request = urllib.request.Request(
         settings.AXP_LLM_GATEWAY_URL.rstrip("/") + "/api/llm/v1/models",
@@ -89,8 +84,6 @@ def clear_cache() -> None:
 
 def validate_model(model_id: str) -> None:
     """Reject model ids the gateway has never offered."""
-    if not enabled():
-        return
     try:
         catalog = models()
         if model_id not in catalog:
@@ -106,8 +99,6 @@ def validate_model(model_id: str) -> None:
 
 def ensure_usable(model_id: str | None) -> None:
     """Refuse to start a turn the agent's model cannot serve."""
-    if not enabled():
-        return
     if not model_id:
         raise ApiError(409, "MODEL_NOT_SET", "这个智能体还没有选择模型。")
     try:
@@ -129,7 +120,7 @@ def ensure_usable(model_id: str | None) -> None:
 
 
 def context_window(model_id: str | None) -> int | None:
-    if not enabled() or not model_id:
+    if not model_id:
         return None
     try:
         model = models().get(model_id)

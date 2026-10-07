@@ -1,7 +1,6 @@
 import hashlib
 import json
 import uuid
-from contextlib import closing
 from datetime import timedelta
 from unittest import mock
 
@@ -11,11 +10,10 @@ from django.core.management.base import CommandError
 from django.test import Client, override_settings
 from django.utils import timezone
 
-from chat.control import mcp
+from chat.control import controller, mcp, objects
 from chat.control.auth import runtime_token
 from chat.control.controller import Controller
 from chat.control.driver import StartedRuntime
-from chat.control.objects import object_store
 from chat.control.runtime_client import RuntimeUnavailable
 from chat.models import (
     Agent,
@@ -41,6 +39,10 @@ class FakeDriver:
         self.volumes = set()
         self.states = {}
         self.fail_start = False
+
+    @staticmethod
+    def name(suffix):
+        return f"axp-{suffix}"
 
     def volume_exists(self, name):
         return name in self.volumes
@@ -200,14 +202,36 @@ class Control:
         )
 
 
+class FakeS3:
+    """Checkpoint objects in memory, behind presigned-looking URLs."""
+
+    def __init__(self):
+        self.objects = {}
+
+    def upload_url(self, key):
+        return f"http://s3.test/put/{key}"
+
+    def download_url(self, key):
+        return f"http://s3.test/get/{key}"
+
+    def verify(self, key, checksum):
+        return key in self.objects and sha256(self.objects[key]) == checksum
+
+
 @pytest.fixture
-def ctl(chat, settings, tmp_path):
-    settings.AXP_OBJECT_DIR = tmp_path
-    settings.AXP_CHECKPOINT_AFTER_TURNS = 0
+def s3(monkeypatch):
+    fake = FakeS3()
+    for name in ("upload_url", "download_url", "verify"):
+        monkeypatch.setattr(objects, name, getattr(fake, name))
+    return fake
+
+
+@pytest.fixture
+def ctl(chat, settings, s3, monkeypatch):
+    monkeypatch.setattr(controller, "CHECKPOINT_AFTER_TURNS", 0)
     settings.AXP_INTERNAL_URL = "http://cp.internal:8001"
-    object_store.cache_clear()
-    yield Control(chat)
-    object_store.cache_clear()
+    settings.AXP_LLM_GATEWAY_URL = "http://llm-gateway:8317"
+    return Control(chat)
 
 
 @pytest.fixture
@@ -247,8 +271,8 @@ class TestProvisioning:
         assert reply.failure["code"] == "AGENT_UNAVAILABLE"
         assert ctl.agent_status() == "unavailable"
 
-    def test_dispatch_timeout_without_ready_runtime(self, ctl, settings):
-        settings.AXP_DISPATCH_TIMEOUT = 0
+    def test_dispatch_timeout_without_ready_runtime(self, ctl, monkeypatch):
+        monkeypatch.setattr(controller, "DISPATCH_TIMEOUT_SECONDS", 0)
         sent = ctl.send()
         ctl.tick()  # provisions; never becomes ready
         ctl.controller.fail_stale_queued()
@@ -272,6 +296,22 @@ class TestInternalApi:
         assert bad.status_code == 403
         Agent.objects.filter(pk=ctl.agent["id"]).update(generation=2)
         assert error_of(runtime.heartbeat()) == (409, "STALE_GENERATION")
+
+    def test_identity_names_the_live_runtime(self, ctl, runtime):
+        def identity(token=runtime.token):
+            path = f"runtime-instances/{runtime.instance.pk}/identity"
+            return internal("get", path, token)
+
+        response = identity()
+        assert response.json() == {
+            "agent_id": ctl.agent["id"],
+            "instance_id": str(runtime.instance.pk),
+            "generation": 1,
+        }
+        assert identity("x").status_code == 403
+        ctl.expire_leases()
+        ctl.tick()  # a replaced runtime's token stops working
+        assert identity().status_code == 409
 
     def test_session_thread_cannot_change(self, runtime):
         assert runtime.session("t1").status_code == 200
@@ -501,8 +541,8 @@ def sha256(data):
 
 class TestCheckpoint:
     @pytest.fixture
-    def runtime(self, ctl, settings):
-        settings.AXP_CHECKPOINT_AFTER_TURNS = 1
+    def runtime(self, ctl, monkeypatch):
+        monkeypatch.setattr(controller, "CHECKPOINT_AFTER_TURNS", 1)
         sent = ctl.send()
         runtime = ctl.start_runtime()
         ctl.tick()
@@ -514,35 +554,29 @@ class TestCheckpoint:
         ctl.tick()
         return AgentCheckpoint.objects.get()
 
-    def upload(self, runtime, checkpoint, data: bytes):
-        return internal(
-            "put",
-            f"checkpoints/{checkpoint.pk}/object",
-            runtime.token,
-            data=data,
-            content_type="application/gzip",
-        )
+    def upload(self, s3, checkpoint, data: bytes):
+        s3.objects[checkpoint.state_object_key] = data
 
     def complete(self, runtime, checkpoint, checksum, **extra):
         payload = {"checkpoint_id": str(checkpoint.pk), "checksum": checksum, **extra}
         runtime.events(("checkpoint.completed", payload))
 
     def test_checkpoint_is_scheduled_uploaded_and_verified(
-        self, ctl, runtime, checkpoint
+        self, ctl, s3, runtime, checkpoint
     ):
         command = checkpoint.command
         assert command.kind == "checkpoint"
         ctl.tick()
         command.refresh_from_db()
         assert command.status == "dispatching"
-        assert command.input["upload"]["url"].endswith(f"/{checkpoint.pk}/object")
+        assert command.input["upload_url"] == s3.upload_url(checkpoint.state_object_key)
         # Normal turns wait behind the checkpoint.
         later = ctl.send("之后")
         ctl.tick()
         assert ctl.command(later).status == "queued"
 
         data = b"checkpoint-bytes"
-        assert self.upload(runtime, checkpoint, data).status_code == 204
+        self.upload(s3, checkpoint, data)
         runtime.events(("checkpoint.started", {"checkpoint_id": str(checkpoint.pk)}))
         self.complete(
             runtime,
@@ -553,20 +587,20 @@ class TestCheckpoint:
         )
         checkpoint.refresh_from_db()
         assert (checkpoint.status, checkpoint.sdk_version) == ("available", "0.160.1")
-        # Uploads are closed once the checkpoint is final.
-        assert self.upload(runtime, checkpoint, b"x").status_code == 409
         ctl.tick()
         assert ctl.command(later).status == "dispatching"
 
-    def test_unverified_checkpoint_is_not_available(self, runtime, checkpoint):
-        self.upload(runtime, checkpoint, b"data")
+    def test_unverified_checkpoint_is_not_available(self, s3, runtime, checkpoint):
+        self.upload(s3, checkpoint, b"data")
         self.complete(runtime, checkpoint, "0" * 64)
         checkpoint.refresh_from_db()
         assert checkpoint.status == "failed"
 
-    def test_lost_state_restores_from_latest_checkpoint(self, ctl, runtime, checkpoint):
+    def test_lost_state_restores_from_latest_checkpoint(
+        self, ctl, s3, runtime, checkpoint
+    ):
         data = b"state"
-        self.upload(runtime, checkpoint, data)
+        self.upload(s3, checkpoint, data)
         self.complete(runtime, checkpoint, sha256(data))
         # A turn after the checkpoint, then the host and its volume are lost.
         after = ctl.send("检查点之后")
@@ -579,18 +613,13 @@ class TestCheckpoint:
         restore = json.loads(ctl.driver.started[-1].env["AXP_RESTORE"])
         assert restore["checkpoint_id"] == str(checkpoint.pk)
         assert restore["checksum"] == sha256(data)
+        assert restore["url"] == s3.download_url(checkpoint.state_object_key)
         gap = AgentSession.objects.get().recovery_gap
         assert gap["commands"] == [str(ctl.command(after).pk)]
-        # The restored runtime can download it.
-        new = RuntimeHarness(ctl.instance())
-        download = internal("get", f"checkpoints/{checkpoint.pk}/object", new.token)
-        # A WSGI server closes the response; the test client leaves it to us.
-        with closing(download):
-            assert b"".join(download.streaming_content) == data
 
 
-def test_idle_runtime_is_stopped(ctl, running, settings):
-    settings.AXP_RUNTIME_IDLE_SECONDS = 0
+def test_idle_runtime_is_stopped(ctl, running, monkeypatch):
+    monkeypatch.setattr(controller, "IDLE_SECONDS", 0)
     _, runtime, command = running
     runtime.turn_completed(command)
     Agent.objects.update(last_active_at=timezone.now() - timedelta(seconds=5))
@@ -649,22 +678,7 @@ class TestConfigChange:
         assert self.instructions(ctl.driver.started[-1]) == "第二版指令"
         assert ctl.driver.started[-1].env["AXP_THREAD_ID"] == "thread-1"
 
-    def test_gateway_mode_keeps_provider_credentials_out(self, ctl, settings):
-        settings.AXP_LLM_RUNTIME_BASE_URL = "http://llm-gateway:8317/v1"
-        settings.AXP_LLM_API_KEY = "runtime-key"
-        settings.AXP_RUNTIME_ENV_PASSTHROUGH = ["OPENAI_API_KEY"]
-        settings.AXP_CODEX_AUTH_FILE = "/host/auth.json"
-        ctl.send()
-        with mock.patch.dict("os.environ", {"OPENAI_API_KEY": "sk-real"}):
-            ctl.start_runtime()
-        env = ctl.driver.started[0].env
-        assert env["AXP_LLM_BASE_URL"] == "http://llm-gateway:8317/v1"
-        assert env["AXP_LLM_API_KEY"] == "runtime-key"
-        assert "OPENAI_API_KEY" not in env
-        assert "AXP_CODEX_AUTH_FILE" not in env
-
-    def test_runtimes_export_telemetry_without_credentials(self, ctl, settings):
-        settings.AXP_RUNTIME_OTLP_ENDPOINT = "http://otel-collector:4318"
+    def test_runtime_reaches_models_and_storage_without_credentials(self, ctl):
         ctl.send()
         with mock.patch.dict(
             "os.environ",
@@ -675,6 +689,9 @@ class TestConfigChange:
         ):
             ctl.start_runtime()
         env = ctl.driver.started[0].env
+        assert env["AXP_LLM_BASE_URL"] == "http://llm-gateway:8317/v1"
+        assert env["AXP_WORKSPACE_PATH"] == f"agents/{ctl.agent['id']}/workspace"
+        assert "AXP_S3_ACCESS_KEY_ID" not in env
         assert env["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://otel-collector:4318"
         assert env["OTEL_RESOURCE_ATTRIBUTES"] == (
             "deployment.environment.name=production,"

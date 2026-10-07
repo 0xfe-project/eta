@@ -5,9 +5,8 @@ import pytest
 from dirty_equals import IsPartialDict, IsStr
 from django.core.signals import request_finished
 from django.db import close_old_connections
-from django.test import override_settings
 
-from chat import cursors, llm
+from chat import cursors, llm, services
 from chat.models import (
     Agent,
     AgentCommand,
@@ -101,8 +100,8 @@ class TestSnapshot:
         assert [m["id"] for m in body["active_replies"]] == [sent["reply"]["id"]]
         assert_no_internal_fields(body)
 
-    def test_history_pagination(self, chat, agent, settings):
-        settings.CHAT_MAX_QUEUED_PER_AGENT = 100
+    def test_history_pagination(self, chat, agent, monkeypatch):
+        monkeypatch.setattr(services, "MAX_QUEUED_PER_AGENT", 100)
         for i in range(30):
             chat.send(agent["id"], f"m{i}")  # 60 messages
         snapshot = chat.get("/chat").json()
@@ -136,7 +135,7 @@ class TestAgents:
             "id": IsStr,
             "name": "开发助手",
             "description": "",
-            "model": None,
+            "model": "test-model",
             "status": "idle",
             "revision": 1,
         }
@@ -180,13 +179,16 @@ CATALOG = [
 
 class TestModels:
     @pytest.fixture(autouse=True)
-    def _gateway(self, settings):
-        settings.AXP_LLM_GATEWAY_URL = "http://llm.test"
+    def _gateway(self):
         self.catalog = list(CATALOG)
         llm.clear_cache()
         with mock.patch("chat.llm._fetch", side_effect=self.fetch):
             yield
         llm.clear_cache()
+
+    @pytest.fixture
+    def agent(self, chat):
+        return chat.create_agent(model=None)
 
     def fetch(self):
         if self.catalog is None:
@@ -245,11 +247,6 @@ class TestModels:
     def test_unknown_agent_is_still_404(self, chat):
         body = {"agent_id": str(uuid.uuid4()), "text": "hi"}
         assert chat.post("/chat/messages", body).status_code == 404
-
-    def test_snapshot_says_model_is_required(self, chat):
-        assert chat.get("/chat").json()["model_required"]
-        with override_settings(AXP_LLM_GATEWAY_URL=""):
-            assert not chat.get("/chat").json()["model_required"]
 
 
 class TestAgentManagement:
@@ -373,8 +370,8 @@ class TestSendMessage:
         body = {"agent_id": agent_id, "text": "hi"}
         assert chat.post("/chat/messages", body).status_code == 404
 
-    def test_queue_full_is_429(self, chat, agent, settings):
-        settings.CHAT_MAX_QUEUED_PER_AGENT = 2
+    def test_queue_full_is_429(self, chat, agent, monkeypatch):
+        monkeypatch.setattr(services, "MAX_QUEUED_PER_AGENT", 2)
         chat.send(agent["id"])
         chat.send(agent["id"])
         response = chat.post("/chat/messages", {"agent_id": agent["id"], "text": "hi"})

@@ -102,6 +102,7 @@ class Harness:
             sandbox="workspace-write",
             approval_policy="on-request",
             codex_launch=FAKE,
+            llm_base_url="http://llm-gateway:8317/v1",
             heartbeat_seconds=0.05,
             mcp_ready_timeout=5,
         )
@@ -142,22 +143,18 @@ class TestLlmGateway:
         return Runtime(settings, StubControlPlane())._codex_config().config_overrides
 
     def test_codex_uses_gateway_as_model_provider(self, rt):
-        settings = replace(
-            rt.settings,
-            llm_base_url="http://llm-gateway:8317/v1",
-            model_context_window=256000,
-        )
+        settings = replace(rt.settings, model_context_window=256000)
         assert {
             'model_provider="axp"',
             'model_providers.axp.base_url="http://llm-gateway:8317/v1"',
             'model_providers.axp.wire_api="responses"',
-            'model_providers.axp.env_key="AXP_LLM_API_KEY"',
+            'model_providers.axp.env_key="AXP_RUNTIME_LLM_KEY"',
             "model_context_window=256000",
         } <= set(self.overrides(settings))
 
-    def test_without_gateway_codex_keeps_its_own_provider(self, rt):
-        overrides = self.overrides(rt.settings)
-        assert not any(o.startswith("model_provider") for o in overrides)
+    def test_codex_authenticates_as_the_runtime_instance(self, rt):
+        env = Runtime(rt.settings, StubControlPlane())._codex_config().env
+        assert env["AXP_RUNTIME_LLM_KEY"] == f"{rt.settings.instance_id}.secret"
 
 
 class TestTelemetry:
@@ -370,7 +367,7 @@ class TestRecovery:
             runtime,
             "",
             kind="checkpoint",
-            payload={"checkpoint_id": "ckpt-1", "upload": {"url": url}},
+            payload={"checkpoint_id": "ckpt-1", "upload_url": url},
         )
         done = cp.wait_for("checkpoint.completed")
         assert done["command_id"] == command_id

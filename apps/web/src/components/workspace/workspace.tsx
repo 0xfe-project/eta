@@ -31,8 +31,8 @@ export function Workspace({
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const chat = useChat();
-  const { current: selected, openEditor, modelRequired } = useAgents();
-  const availability = useModelAvailability(selected, modelRequired);
+  const { current: selected, openEditor } = useAgents();
+  const availability = useModelAvailability(selected);
   const changeModel = {
     label: "更换模型",
     onClick: () => selected && openEditor(selected.id),

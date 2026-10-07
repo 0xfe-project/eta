@@ -1,10 +1,9 @@
 // Package telemetry sets up OpenTelemetry for AXP's Go services.
 //
 // Services log through log/slog. Every record goes through the OpenTelemetry
-// log pipeline to two exporters: a readable line on stderr (on unless
-// AXP_LOG_CONSOLE=0) and OTLP, when OTEL_EXPORTER_OTLP_ENDPOINT or
-// OTEL_EXPORTER_OTLP_LOGS_ENDPOINT is set. Everything else uses the standard
-// OTEL_* variables. Logging with a context (slog.InfoContext) attaches the
+// log pipeline to two exporters: a readable line on stderr and OTLP, to
+// OTEL_EXPORTER_OTLP_ENDPOINT or OTEL_EXPORTER_OTLP_LOGS_ENDPOINT (unset only
+// in tests). Everything else uses the standard OTEL_* variables. Logging with a context (slog.InfoContext) attaches the
 // active trace once tracing is added.
 package telemetry
 
@@ -13,7 +12,6 @@ import (
 	"errors"
 	"log/slog"
 	"os"
-	"strings"
 
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel/attribute"
@@ -34,9 +32,9 @@ func Setup(ctx context.Context, service string) (*slog.Logger, func(context.Cont
 	if err != nil {
 		return nil, nil, err
 	}
-	opts := []sdklog.LoggerProviderOption{sdklog.WithResource(res)}
-	if os.Getenv("AXP_LOG_CONSOLE") != "0" {
-		opts = append(opts, sdklog.WithProcessor(sdklog.NewSimpleProcessor(newConsoleExporter(os.Stderr))))
+	opts := []sdklog.LoggerProviderOption{
+		sdklog.WithResource(res),
+		sdklog.WithProcessor(sdklog.NewSimpleProcessor(newConsoleExporter(os.Stderr))),
 	}
 	if os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != "" || os.Getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT") != "" {
 		exporter, err := otlploghttp.New(ctx)
@@ -49,36 +47,24 @@ func Setup(ctx context.Context, service string) (*slog.Logger, func(context.Cont
 	global.SetLoggerProvider(provider)
 
 	handler := otelslog.NewHandler(service, otelslog.WithLoggerProvider(provider))
-	logger := slog.New(levelHandler{Handler: handler, min: levelFromEnv()})
+	logger := slog.New(levelHandler{handler})
 	slog.SetDefault(logger)
 	return logger, provider.Shutdown, nil
 }
 
-// levelFromEnv reads AXP_LOG_LEVEL (debug, info, warn, error); default info.
-func levelFromEnv() slog.Level {
-	var level slog.Level
-	if err := level.UnmarshalText([]byte(strings.TrimSpace(os.Getenv("AXP_LOG_LEVEL")))); err != nil {
-		return slog.LevelInfo
-	}
-	return level
-}
-
-// levelHandler drops records below min before they reach OpenTelemetry.
-type levelHandler struct {
-	slog.Handler
-	min slog.Level
-}
+// levelHandler drops debug records before they reach OpenTelemetry.
+type levelHandler struct{ slog.Handler }
 
 func (h levelHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	return level >= h.min && h.Handler.Enabled(ctx, level)
+	return level >= slog.LevelInfo && h.Handler.Enabled(ctx, level)
 }
 
 func (h levelHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return levelHandler{Handler: h.Handler.WithAttrs(attrs), min: h.min}
+	return levelHandler{h.Handler.WithAttrs(attrs)}
 }
 
 func (h levelHandler) WithGroup(name string) slog.Handler {
-	return levelHandler{Handler: h.Handler.WithGroup(name), min: h.min}
+	return levelHandler{h.Handler.WithGroup(name)}
 }
 
 // Shutdown runs a shutdown function from Setup, ignoring a cancelled context.

@@ -16,7 +16,7 @@ func TestConsoleLine(t *testing.T) {
 	provider := sdklog.NewLoggerProvider(
 		sdklog.WithProcessor(sdklog.NewSimpleProcessor(newConsoleExporter(&out))),
 	)
-	logger := slog.New(levelHandler{Handler: otelslog.NewHandler("t", otelslog.WithLoggerProvider(provider)), min: slog.LevelInfo})
+	logger := slog.New(levelHandler{otelslog.NewHandler("t", otelslog.WithLoggerProvider(provider))})
 
 	logger.Debug("hidden")
 	logger.Warn("gateway listening", "addr", ":8080", "note", "two words", "n", 3)

@@ -12,7 +12,6 @@ conversation and avoids lock-order deadlocks with the runtime worker.
 import json
 import uuid
 
-from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import IntegrityError, transaction
 from django.db.models import F
@@ -34,6 +33,7 @@ from .schemas import AgentOut, InteractionOut, MessageOut
 
 HISTORY_PAGE_SIZE = 50
 MAX_HISTORY_PAGE_SIZE = 100
+MAX_QUEUED_PER_AGENT = 20
 
 
 # --- Public projections -----------------------------------------------------
@@ -313,7 +313,6 @@ def get_snapshot() -> dict:
             "interactions": [],
             "history_cursor": None,
             "event_cursor": cursors.encode_event_cursor(0),
-            "model_required": llm.enabled(),
         }
     # Read the cursor before the objects. Anything committed in between is
     # replayed over SSE and dropped client-side by revision, so nothing is lost.
@@ -348,7 +347,6 @@ def get_snapshot() -> dict:
             cursors.encode_history_cursor(recent[0].seq) if has_more else None
         ),
         "event_cursor": cursors.encode_event_cursor(event_seq),
-        "model_required": llm.enabled(),
     }
 
 
@@ -399,7 +397,7 @@ def create_agent(name: str, description: str = "", model: str | None = None) -> 
         conversation=conversation,
         name=name,
         description=description,
-        model=model or settings.AXP_DEFAULT_MODEL,
+        model=model or None,
     )
     bind_defaults(agent)
     emit_agent(conversation, agent)
@@ -451,22 +449,21 @@ def delete_agent(agent_id: str) -> None:
 
 
 def send_message(agent_id: str, text: str) -> tuple[Message, Message]:
-    if llm.enabled():
-        # Network call: before taking the conversation lock.
-        found = list(
-            Agent.objects.filter(
-                id=_parse_uuid(agent_id), deleted_at__isnull=True
-            ).values_list("model", flat=True)[:1]
-        )
-        if found:
-            llm.ensure_usable(found[0])
+    # Network call: before taking the conversation lock.
+    found = list(
+        Agent.objects.filter(
+            id=_parse_uuid(agent_id), deleted_at__isnull=True
+        ).values_list("model", flat=True)[:1]
+    )
+    if found:
+        llm.ensure_usable(found[0])
     conversation = _locked_default()
     agent = _agent(conversation, agent_id)
 
     queued = AgentCommand.objects.filter(
         agent=agent, status=AgentCommand.Status.QUEUED
     ).count()
-    if queued >= settings.CHAT_MAX_QUEUED_PER_AGENT:
+    if queued >= MAX_QUEUED_PER_AGENT:
         raise ApiError(429, "QUEUE_FULL", "该智能体待处理的消息过多，请稍后再发送。")
 
     Agent.objects.filter(pk=agent.pk).update(last_command_seq=F("last_command_seq") + 1)
