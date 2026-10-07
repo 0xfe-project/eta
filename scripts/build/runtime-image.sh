@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Builds the agent runtime image for this machine's architecture from the
-# Turbo-cached site-packages: scripts/build/runtime-image.sh <tag>.
+# Builds the agent runtime image for this machine's architecture through
+# Turbo, which restores or builds its site-packages first:
+# scripts/build/runtime-image.sh <tag>.
 set -euo pipefail
 cd "$(dirname -- "${BASH_SOURCE[0]}")/../.."
 case "$(uname -m)" in
@@ -8,5 +9,5 @@ case "$(uname -m)" in
   aarch64 | arm64) arch=arm64 ;;
   *) echo "unsupported CPU architecture: $(uname -m)" >&2; exit 1 ;;
 esac
-bunx turbo run "build:linux-$arch" --filter=@axp/agent-runtime --output-logs=errors-only
-docker buildx build --load -q -t "$1" apps/agent-runtime >/dev/null
+AXP_RUNTIME_IMAGE="$1" bunx turbo run "image:linux-$arch" \
+  --filter=@axp/agent-runtime --output-logs=errors-only

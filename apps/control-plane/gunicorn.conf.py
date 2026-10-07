@@ -16,3 +16,7 @@ logconfig_dict = {
         "otel": {"()": "axp_telemetry.handler", "service": "control-plane"},
     },
 }
+
+# On SIGTERM, wait this long for requests to finish. Chat streams (SSE) never
+# do; the browser reconnects with Last-Event-ID, so deploys need not wait.
+graceful_timeout = 1

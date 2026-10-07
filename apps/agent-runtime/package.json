@@ -4,6 +4,8 @@
   "scripts": {
     "build:linux-amd64": "bash ../../scripts/build/python.sh linux amd64",
     "build:linux-arm64": "bash ../../scripts/build/python.sh linux arm64",
+    "image:linux-amd64": "bash ../../scripts/build/image.sh runtime linux amd64",
+    "image:linux-arm64": "bash ../../scripts/build/image.sh runtime linux arm64",
     "lint": "uv run ruff check .",
     "test": "uv run pytest"
   }

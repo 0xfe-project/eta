@@ -1,4 +1,6 @@
 import logging
+import signal
+import threading
 
 from django.core.management.base import BaseCommand
 from django.db import connections
@@ -20,6 +22,11 @@ class Command(BaseCommand):
         parser.add_argument("--interval", type=float, default=0.5)
 
     def handle(self, *args, interval, **options):
+        # As a container's PID 1 the process ignores SIGTERM unless it handles
+        # it; without this, every deploy waits out the stop timeout.
+        stop = threading.Event()
+        for signum in (signal.SIGTERM, signal.SIGINT):
+            signal.signal(signum, lambda *_: stop.set())
         # Deploys briefly run the old and new controller side by side. On
         # PostgreSQL a session lock on a dedicated connection makes the new
         # one wait until the old one exits.
@@ -32,4 +39,4 @@ class Command(BaseCommand):
         driver.ensure_network()
         driver.ensure_storage()
         objects.ensure_bucket()
-        Controller(driver).run_forever(interval=interval)
+        Controller(driver).run_forever(interval=interval, stop=stop)

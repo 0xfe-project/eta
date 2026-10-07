@@ -9,7 +9,7 @@ import json
 import logging
 import os
 import socket
-import time
+import threading
 import uuid
 from datetime import timedelta
 
@@ -73,11 +73,16 @@ class Controller:
         self.controller_id = controller_id or f"controller-{uuid.uuid4().hex[:8]}"
         self.client = client
 
-    def run_forever(self, interval: float = 0.5) -> None:
+    def run_forever(
+        self, interval: float = 0.5, stop: threading.Event | None = None
+    ) -> None:
+        """Tick until ``stop`` is set; a tick in progress always finishes."""
+        stop = stop or threading.Event()
         logger.info("Controller %s started", self.controller_id)
-        while True:
+        while not stop.is_set():
             self.tick()
-            time.sleep(interval)
+            stop.wait(interval)
+        logger.info("Controller %s stopped", self.controller_id)
 
     def tick(self) -> None:
         for step in (

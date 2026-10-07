@@ -10,6 +10,26 @@ service: axp
 image: axp
 secrets_path: deploy/secrets
 
+# Readiness: every role has a Docker health check, polled quickly while the
+# container starts, and Kamal waits on it instead of a fixed delay. Python is
+# in the image; a role is ready once it answers HTTP at all.
+# <% ready = ->(port, path = "/") { %(python -c "import http.client as h; c = h.HTTPConnection('127.0.0.1', #{port}, timeout=1); c.request('GET', '#{path}'); c.getresponse()") } %>
+x-health: &health
+  health-interval: 30s
+  health-start-period: 60s
+  health-start-interval: 500ms
+  health-retries: 3
+
+# The other roles boot together once the gateway is healthy.
+boot:
+  parallel_roles: true
+# Kamal also polls the health checks above, so no fixed delay is needed.
+readiness_delay: 0
+# Chat streams (SSE) never finish by themselves; browsers reconnect with
+# Last-Event-ID, so old containers are not waited on for long. This is also
+# the stop timeout of the unproxied roles (gunicorn's graceful_timeout fits).
+drain_timeout: 2
+
 servers:
   # Edge gateway: the only role behind kamal-proxy. It routes /api/llm to the
   # LLM gateway, /api to the control plane and everything else to web, and
@@ -38,15 +58,20 @@ servers:
     cmd: bun /app/apps/web/server.js
     options:
       network-alias: axp-web
+      <<: *health
+      health-cmd: <%= ready.(3000) %>
   # Public API (Django); reached only through the gateway.
   api:
     hosts: [<%= host %>]
-    cmd: sh -c "python manage.py migrate --noinput && exec python -m gunicorn config.wsgi --bind 0.0.0.0:8000 --worker-class gthread --workers 2 --threads 32"
+    # deploy/deploy.sh migrates with the new image before the roles boot.
+    cmd: python -m gunicorn config.wsgi --bind 0.0.0.0:8000 --worker-class gthread --workers 2 --threads 32
     env:
       clear:
         OTEL_SERVICE_NAME: control-plane-api
     options:
       network-alias: axp-api
+      <<: *health
+      health-cmd: <%= ready.(8000, "/api/health") %>
   # LLM gateway (embedded CLIProxyAPI): connections and model catalog behind
   # the gateway; runtimes call its OpenAI-compatible API on the runtime
   # network. Both reach it as axp-llm. Credentials live in the axp-llm volume.
@@ -60,6 +85,8 @@ servers:
       network-alias: axp-llm
       network: name=axp-prod-runtime,alias=axp-llm
       volume: axp-llm:/app/apps/control-plane/var/llm-gateway
+      <<: *health
+      health-cmd: <%= ready.(8317) %>
   # Internal runtime API. Runtimes reach it as http://axp-internal:8001 on the
   # runtime network; it is never published or proxied.
   internal:
@@ -71,6 +98,8 @@ servers:
         OTEL_SERVICE_NAME: control-plane-internal
     options:
       network: name=axp-prod-runtime,alias=axp-internal
+      <<: *health
+      health-cmd: <%= ready.(8001) %>
   # Starts and stops agent runtime containers through the host Docker socket.
   controller:
     hosts: [<%= host %>]
@@ -78,9 +107,15 @@ servers:
     env:
       clear:
         OTEL_SERVICE_NAME: control-plane-controller
+    # It exits after the tick in progress, which may be stopping a runtime.
+    stop_timeout: 30
     options:
       network: axp-prod-runtime
       volume: /var/run/docker.sock:/var/run/docker.sock
+      # No port: the process running is ready. A new controller waits for the
+      # old one's lock, which is released only after this passes.
+      <<: *health
+      health-cmd: "true"
 
 primary_role: gateway
 

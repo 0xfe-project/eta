@@ -150,14 +150,6 @@ if [[ $# -eq 0 ]]; then
     set -- setup
   fi
 fi
-if [[ "$1" == "setup" || "$1" == "deploy" ]]; then
-  # Turbo builds (or restores from its cache) the artifacts the images copy;
-  # Kamal then builds deploy/Dockerfile from the working tree.
-  docker buildx version >/dev/null 2>&1 || fail "missing docker buildx (the images need BuildKit)."
-  bunx turbo run build "build:linux-$AXP_BUILD_ARCH" --output-logs=errors-only
-  bash scripts/build/runtime-image.sh axp-agent-runtime:production
-  echo "Built axp-agent-runtime:production."
-fi
 
 # The repository is mounted at its host path; a worktree also needs the shared
 # git directory.
@@ -185,7 +177,7 @@ kamal() {
 # `kamal setup` boots every accessory; on machines set up before one was
 # added, boot it before the first deploy that uses it. The collector holds no
 # state and is rebooted on every deploy so config changes take effect.
-if [[ "$1" == "deploy" ]]; then
+prepare_accessories() {
   for accessory in s3 juicefs-meta; do
     docker container inspect "axp-$accessory" >/dev/null 2>&1 || kamal accessory boot "$accessory"
   done
@@ -200,5 +192,48 @@ if [[ "$1" == "deploy" ]]; then
   else
     kamal accessory boot otel-collector
   fi
+}
+
+migrate() {
+  kamal app exec --roles api --version "$version" --quiet \
+    "python manage.py migrate --noinput"
+}
+
+if [[ "$1" == "setup" || "$1" == "deploy" ]]; then
+  docker buildx version >/dev/null 2>&1 || fail "missing docker buildx (the images need BuildKit)."
+  # Kamal deploys the image Turbo builds and pushes, under this version.
+  version="$(git rev-parse HEAD)"
+  [[ -z "$(git status --porcelain)" ]] || version+="_uncommitted_$(openssl rand -hex 8)"
+  app_image="127.0.0.1:$AXP_PROD_REGISTRY_PORT/axp:$version"
+
+  # Accessories need no build: prepare them meanwhile, without the terminal.
+  if [[ "$1" == "deploy" ]]; then
+    accessories_log="$(mktemp)"
+    trap 'rm -f "$accessories_log"' EXIT
+    (tty_flags=() && prepare_accessories) </dev/null >"$accessories_log" 2>&1 &
+    accessories_pid=$!
+  fi
+
+  # One Turbo run builds (or restores) every artifact in parallel, then each
+  # image as soon as its own artifacts are ready.
+  AXP_APP_IMAGE="$app_image" AXP_RUNTIME_IMAGE=axp-agent-runtime:production \
+    bunx turbo run "image:linux-$AXP_BUILD_ARCH" --output-logs=errors-only
+  echo "Built $app_image and axp-agent-runtime:production."
+
+  if [[ "$1" == "deploy" ]]; then
+    # Migrate before the roles boot together, so none runs on an old schema.
+    # Unlike the accessories, this takes no deploy lock: it runs alongside.
+    migrate
+    if ! wait "$accessories_pid"; then
+      cat "$accessories_log" >&2
+      fail "preparing the accessories failed."
+    fi
+    echo "Accessories ready."
+  fi
+  command="$1"
+  kamal "$command" --skip-push --version "$version" "${@:2}"
+  # A first setup has no database until Kamal boots it.
+  [[ "$command" == "deploy" ]] || migrate
+else
+  kamal "$@"
 fi
-kamal "$@"
