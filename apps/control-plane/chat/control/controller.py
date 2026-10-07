@@ -61,6 +61,12 @@ def _seconds(value: float) -> timedelta:
     return timedelta(seconds=value)
 
 
+def _instructions(agent: Agent) -> str:
+    """The agent's identity, then the user's instructions."""
+    identity = f"你的名字是{agent.name}。"
+    return f"{identity}\n\n{agent.description}" if agent.description else identity
+
+
 class Controller:
     def __init__(
         self, driver, *, controller_id: str | None = None, client=RuntimeClient
@@ -278,7 +284,7 @@ class Controller:
                     "model_context_window": llm.context_window(agent.model),
                     "sandbox": CODEX_SANDBOX,
                     "approval_policy": CODEX_APPROVAL_POLICY,
-                    "developer_instructions": agent.description,
+                    "developer_instructions": _instructions(agent),
                 }
             ),
             "AXP_MCP_SNAPSHOT": json.dumps(instance.mcp_snapshot),

@@ -673,13 +673,15 @@ class TestConfigChange:
         ctl.chat.patch(agent_path, {"description": "第一版指令"})
         sent = ctl.send()
         runtime = ctl.start_runtime()
-        assert self.instructions(ctl.driver.started[0]) == "第一版指令"
+        assert self.instructions(ctl.driver.started[0]) == (
+            "你的名字是开发助手。\n\n第一版指令"
+        )
         ctl.tick()
         command = ctl.command(sent)
         runtime.turn_started(command)
         old = ctl.instance()
 
-        ctl.chat.patch(agent_path, {"description": "第二版指令"})
+        ctl.chat.patch(agent_path, {"name": "审查员", "description": "第二版指令"})
         ctl.tick()
         # A turn is running: the runtime keeps going until it settles.
         assert old.container_id not in ctl.driver.stopped
@@ -691,7 +693,9 @@ class TestConfigChange:
         # The next message starts a runtime with the new instructions.
         ctl.send("新指令下")
         ctl.tick()
-        assert self.instructions(ctl.driver.started[-1]) == "第二版指令"
+        assert self.instructions(ctl.driver.started[-1]) == (
+            "你的名字是审查员。\n\n第二版指令"
+        )
         assert ctl.driver.started[-1].env["AXP_THREAD_ID"] == "thread-1"
 
     def test_runtime_reaches_models_and_storage_without_credentials(self, ctl):
