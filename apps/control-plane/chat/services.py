@@ -298,10 +298,8 @@ def get_snapshot() -> dict:
     if conversation_id is None:
         return {
             "agents": [],
-            "messages": [],
             "active_replies": [],
             "interactions": [],
-            "history_cursor": None,
             "event_cursor": cursors.encode_event_cursor(0),
         }
     # Read the cursor before the objects. Anything committed in between is
@@ -312,13 +310,6 @@ def get_snapshot() -> dict:
     agents = Agent.objects.filter(
         conversation_id=conversation_id, deleted_at__isnull=True
     ).order_by("created_at", "id")
-    recent = list(
-        Message.objects.filter(conversation_id=conversation_id).order_by("-seq")[
-            : HISTORY_PAGE_SIZE + 1
-        ]
-    )
-    has_more = len(recent) > HISTORY_PAGE_SIZE
-    recent = list(reversed(recent[:HISTORY_PAGE_SIZE]))
     active = Message.objects.filter(
         conversation_id=conversation_id,
         role=Message.Role.ASSISTANT,
@@ -330,22 +321,26 @@ def get_snapshot() -> dict:
     ).order_by("created_at", "id")
     return {
         "agents": [agent_public(a) for a in agents],
-        "messages": [message_public(m) for m in recent],
         "active_replies": [message_public(m) for m in active],
         "interactions": [interaction_public(i) for i in interactions],
-        "history_cursor": (
-            cursors.encode_history_cursor(recent[0].seq) if has_more else None
-        ),
         "event_cursor": cursors.encode_event_cursor(event_seq),
     }
 
 
-def get_history(before: str | None, limit: int) -> dict:
+def get_history(agent_id: str, before: str | None, limit: int) -> dict:
+    """One agent's messages, newest page first; each page in send order."""
     before_seq = cursors.decode_history_cursor(before) if before else None
     conversation_id = default_conversation_id()
     if conversation_id is None:
-        return {"items": [], "next_cursor": None}
-    query = Message.objects.filter(conversation_id=conversation_id)
+        raise not_found()
+    agent = Agent.objects.filter(
+        id=_parse_uuid(agent_id),
+        conversation_id=conversation_id,
+        deleted_at__isnull=True,
+    ).first()
+    if agent is None:
+        raise not_found()
+    query = Message.objects.filter(agent=agent)
     if before_seq is not None:
         query = query.filter(seq__lt=before_seq)
     page = list(query.order_by("-seq")[: limit + 1])

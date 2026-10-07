@@ -38,6 +38,12 @@ AXP 是单用户服务，所有智能体属于唯一的默认对话（`conversat
 
 除 RFC 第 3 节的接口外，公开 API 提供 `POST /agents`（`name`、`description`）、`PATCH /agents/{id}`（部分更新）和 `DELETE /agents/{id}`。删除不抹掉数据：智能体被标记为已删除并从列表中隐藏，排队消息取消、进行中的回复被中断，历史消息保留；controller 等执行停下后停止并移除其容器，之后不再启动。快照保留。删除通过 `agent.deleted` 事件（`{agent_id}`）通知前端。
 
+## 消息历史
+
+历史按智能体分页：`GET /agents/{id}/messages?before=&limit=` 从最新一页往回翻（默认 50 条，最多 100），每页按发送顺序排列，`next_cursor` 是指向更早消息的签名游标，走 `(agent_id, seq)` 索引。`GET /chat` 快照不再带消息，只带智能体、进行中的回复、待处理交互和事件游标。
+
+前端分两层合成一个智能体的时间线：快照之后经 SSE 和写接口到达的消息叠在 `["chat"]` 缓存里（起点是进行中的回复），历史页在 `["chat", "messages", agentId]` 无限查询里；渲染时按 id 去重、取较高 revision。历史页总是在快照之后读取，与叠加层之间不会有缺口；SSE 断开后重拉快照时，同一前缀下的历史查询一起失效重拉。
+
 ## 恢复与隔离
 
 - 心跳续租（默认 30 秒）。租约过期时 controller 先停止并移除旧容器，再结束实例；之后旧实例的任何请求都得到 `409 STALE_GENERATION`，runtime 收到后立即退出。

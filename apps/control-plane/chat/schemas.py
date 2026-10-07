@@ -141,10 +141,8 @@ class InteractionOut(Schema):
 
 class ChatSnapshotOut(Schema):
     agents: list[AgentOut]
-    messages: list[MessageOut]
     active_replies: list[MessageOut]
     interactions: list[InteractionOut]
-    history_cursor: str | None
     event_cursor: str
 
 

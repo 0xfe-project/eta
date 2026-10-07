@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
+  useAgentMessages,
   useAnswerInteraction,
   useChat,
   useCompact,
@@ -33,6 +34,7 @@ export function Workspace({
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const chat = useChat();
   const { current: selected, openEditor } = useAgents();
+  const history = useAgentMessages(selected?.id);
   const availability = useModelAvailability(selected);
   const changeModel = {
     label: "更换模型",
@@ -97,6 +99,7 @@ export function Workspace({
         >
           <ChatPanel
             theme={sessionTheme}
+            agentId={selected?.id}
             agentName={selected?.name}
             model={
               availability.state === "ok"
@@ -106,13 +109,16 @@ export function Workspace({
                 : undefined
             }
             blocked={blocked}
-            messages={(chat.data?.messages ?? []).filter(
-              (message) => message.agent_id === selected?.id,
-            )}
+            messages={history.messages}
+            hasOlder={history.hasOlder}
+            loadingOlder={history.loadingOlder}
+            onLoadOlder={history.loadOlder}
             interactions={chat.data?.interactions ?? []}
             head={<AgentBar />}
             error={
-              chat.error ? `无法加载对话：${chat.error.message}` : undefined
+              (chat.error ?? history.error)
+                ? `无法加载对话：${(chat.error ?? history.error)?.message}`
+                : undefined
             }
             draft={draft}
             onDraftChange={setDraft}
