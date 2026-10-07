@@ -1,4 +1,6 @@
-.venv
-__pycache__
-*.pyc
-node_modules
+*
+!out/
+!axp_runtime/
+!docker-entrypoint.sh
+**/__pycache__
+**/*.py[cod]

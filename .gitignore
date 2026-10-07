@@ -14,3 +14,5 @@ dist/
 .DS_Store
 apps/web/src/routeTree.gen.ts
 var/
+out/
+.turbo/

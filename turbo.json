@@ -1,0 +1,31 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "tasks": {
+    "build": {
+      "outputs": ["dist/**", "out/**"]
+    },
+    "typecheck": {
+      "dependsOn": ["build"],
+      "outputs": []
+    },
+    "lint": {
+      "outputs": []
+    },
+    "test": {
+      "outputs": []
+    },
+    // Per-platform artifacts that images copy. The target platform is part of
+    // the task name, so the cache key and output directory never depend on the
+    // host that builds them. Packages narrow the inputs in their turbo.json.
+    "build:linux-amd64": {
+      "outputs": ["out/linux-amd64/**"]
+    },
+    "build:linux-arm64": {
+      "outputs": ["out/linux-arm64/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    }
+  }
+}

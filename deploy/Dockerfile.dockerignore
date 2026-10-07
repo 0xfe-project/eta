@@ -1,15 +1,11 @@
-.git
-**/node_modules
-**/.venv
+# Only the prebuilt artifacts and the control plane source are sent to Docker.
+*
+!apps/control-plane/out/
+!apps/llm-gateway/out/
+!apps/gateway/out/
+!apps/web/out/
+!apps/control-plane/manage.py
+!apps/control-plane/config/
+!apps/control-plane/chat/
 **/__pycache__
 **/*.py[cod]
-**/.env
-**/.env.*
-**/*.sqlite3*
-**/var
-.ruff_cache
-.kamal
-apps/web/dist
-apps/web/.output
-apps/web/.tanstack
-apps/agent-runtime

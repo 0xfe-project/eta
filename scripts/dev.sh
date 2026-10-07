@@ -152,7 +152,10 @@ export AXP_GATEWAY_UPSTREAM_LLM="http://$llm_host:$AXP_LLM_PORT"
 if [[ "$runtime_mode" == "docker" ]]; then
   # Instances share the runtime network; only the internal API port differs.
   uv run --project apps/control-plane python apps/control-plane/manage.py ensure_runtime_network
-  if ! docker image inspect "${AXP_RUNTIME_IMAGE:-axp-agent-runtime:dev}" >/dev/null 2>&1; then
+  # Rebuilt on every start so runtime changes are never stale; with Turbo and
+  # Docker's layer cache an unchanged image takes about a second. A custom
+  # AXP_RUNTIME_IMAGE is used as is.
+  if [[ -z "${AXP_RUNTIME_IMAGE:-}" ]]; then
     bun run runtime:build
   fi
 fi

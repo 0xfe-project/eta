@@ -1,0 +1,10 @@
+{
+  "name": "@axp/agent-runtime",
+  "private": true,
+  "scripts": {
+    "build:linux-amd64": "bash ../../scripts/build/python.sh linux amd64",
+    "build:linux-arm64": "bash ../../scripts/build/python.sh linux arm64",
+    "lint": "uv run ruff check .",
+    "test": "uv run python -W ignore -m unittest discover -s tests"
+  }
+}

@@ -1,6 +1,6 @@
 # 生产部署
 
-用 [Kamal](https://kamal-deploy.org) 把**已提交的 HEAD** 部署到运行脚本的这台机器。Kamal 相关文件都在本目录，任何一台满足条件的机器克隆仓库后都能直接拉起：
+用 [Kamal](https://kamal-deploy.org) 把**当前工作区**部署到运行脚本的这台机器。Kamal 相关文件都在本目录，任何一台满足条件的机器克隆仓库后都能直接拉起：
 
 | 文件                      | 作用                                                                |
 | ------------------------- | ------------------------------------------------------------------- |
@@ -8,7 +8,7 @@
 | `deploy.sh`               | 入口：检查环境、准备 SSH/仓库/网络/runtime 镜像，再以容器运行 Kamal |
 | `ports.env`               | 生产保留端口，所有机器一致                                          |
 | `secrets`                 | Kamal secrets 映射，只引用环境变量，不含密钥                        |
-| `Dockerfile`              | 应用镜像（构建上下文是仓库根目录）                                  |
+| `Dockerfile`              | 应用镜像，只复制 Turbo 构建的产物（构建上下文是仓库根目录）         |
 | `Dockerfile.dockerignore` | 该 Dockerfile 专用的 ignore 规则                                    |
 
 ## 新机器上拉起
@@ -24,7 +24,7 @@ deploy/deploy.sh          # 首次执行 kamal setup
 
 - 生成 `~/.config/axp/production.env`（Django 密钥、Postgres 密码、`AXP_EDGE_SECRET`、`AXP_LLM_API_KEY` 等，每台机器独立，不入库；后来新增的密钥会在下次部署时自动补上）。模型账号不在这里配置：部署后在 Web 设置的“模型服务”中绑定，凭据保存在 llm 角色的卷 `axp-llm`。
 - 生成 `~/.config/axp/kamal_ed25519` 并加入 `~/.ssh/authorized_keys`，限制为只能从 `127.0.0.1`/`::1` 登录。sshd 不在 22 端口时在 `production.env` 设 `AXP_SSH_PORT`。
-- 启动本地镜像仓库 `axp-registry`，创建 runtime 网络 `axp-prod-runtime`（子网由 Docker 选空闲的；需要固定时设 `AXP_RUNTIME_SUBNET`），并从 HEAD 构建 `axp-agent-runtime:production`。
+- 启动本地镜像仓库 `axp-registry`，创建 runtime 网络 `axp-prod-runtime`（子网由 Docker 选空闲的；需要固定时设 `AXP_RUNTIME_SUBNET`），用 Turbo 构建（或从缓存恢复）镜像产物，并构建 `axp-agent-runtime:production`。
 - 按本机 CPU 架构构建镜像。保留端口被其他服务占用、Docker 不可用或 SSH 不通时，会在部署前报错。
 
 之后：

@@ -5,7 +5,7 @@ usage() {
   cat <<'EOF'
 Usage: deploy/deploy.sh [KAMAL_COMMAND...]
 
-Deploys the committed HEAD to the machine this runs on with Kamal
+Deploys the working tree to the machine this runs on with Kamal
 (deploy/deploy.yml). Without arguments it runs `kamal setup` the first time and
 `kamal deploy` afterwards. Anything else is passed to Kamal, for example:
 
@@ -27,7 +27,7 @@ cd "$ROOT_DIR"
 fail() { echo "deploy: $*" >&2; exit 1; }
 
 [[ "$(uname -s)" == "Linux" ]] || fail "the deploy target must be Linux (this is $(uname -s))."
-for command in docker git openssl ssh ssh-keygen; do
+for command in bun docker git openssl ssh ssh-keygen; do
   command -v "$command" >/dev/null 2>&1 || fail "missing required command: $command"
 done
 docker info >/dev/null 2>&1 || fail "cannot talk to Docker; is it running and is $(id -un) in the docker group?"
@@ -130,9 +130,9 @@ if ! docker network inspect "$RUNTIME_NETWORK" >/dev/null 2>&1; then
     ${AXP_RUNTIME_SUBNET:+--subnet "$AXP_RUNTIME_SUBNET"} "$RUNTIME_NETWORK" >/dev/null
 fi
 
-# Kamal deploys the committed HEAD; build the runtime image from it as well.
+# Images are built from the working tree, so uncommitted changes ship too.
 if [[ -n "$(git status --porcelain)" ]]; then
-  echo "Warning: uncommitted changes are not deployed (deploying $(git rev-parse --short HEAD))." >&2
+  echo "Warning: deploying uncommitted changes on top of $(git rev-parse --short HEAD)." >&2
 fi
 
 # --- Kamal ----------------------------------------------------------------------
@@ -144,9 +144,12 @@ if [[ $# -eq 0 ]]; then
   fi
 fi
 if [[ "$1" == "setup" || "$1" == "deploy" ]]; then
-  git archive HEAD:apps/agent-runtime |
-    docker build -q -t axp-agent-runtime:production - >/dev/null
-  echo "Built axp-agent-runtime:production from $(git rev-parse --short HEAD)."
+  # Turbo builds (or restores from its cache) the artifacts the images copy;
+  # Kamal then builds deploy/Dockerfile from the working tree.
+  docker buildx version >/dev/null 2>&1 || fail "missing docker buildx (the images need BuildKit)."
+  bunx turbo run build "build:linux-$AXP_BUILD_ARCH" --output-logs=errors-only
+  bash scripts/build/runtime-image.sh axp-agent-runtime:production
+  echo "Built axp-agent-runtime:production."
 fi
 
 # The repository is mounted at its host path; a worktree also needs the shared

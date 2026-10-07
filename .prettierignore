@@ -7,3 +7,5 @@ dist/
 .output/
 .tanstack/
 deploy/deploy.yml
+out/
+.turbo/

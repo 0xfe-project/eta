@@ -31,7 +31,7 @@ bun run dev
 `bun run dev` 有两种运行时模式：
 
 - 默认 `fake`：启动 Django、Web 和开发用模拟 worker（`run_fake_runtime`）。不需要 Docker 和模型凭据，回复是固定文本；消息包含“确认”时会先发起一次确认。
-- `AXP_RUNTIME_MODE=docker bun run dev`：启动 Django、内部运行协议服务、controller、llm-gateway 和 Web。controller 为每个 Agent 启动一个 runtime 容器，容器内的 Codex 把所有模型请求发给 llm-gateway，不持有任何账号凭据。首次使用先执行 `bun run runtime:build`，再在“模型服务”中绑定账号（开发凭据保存在 `apps/llm-gateway/var`）。不想消耗模型额度时，可设 `AXP_CODEX_LAUNCH="python -m axp_runtime.testing.fake_app_server"` 用脚本化 app-server 跑通整条链路。
+- `AXP_RUNTIME_MODE=docker bun run dev`：启动 Django、内部运行协议服务、controller、llm-gateway 和 Web。controller 为每个 Agent 启动一个 runtime 容器，容器内的 Codex 把所有模型请求发给 llm-gateway，不持有任何账号凭据。runtime 镜像在每次启动时自动重建（没有变化时约 1 秒），首次使用在“模型服务”中绑定账号（开发凭据保存在 `apps/llm-gateway/var`）。不想消耗模型额度时，可设 `AXP_CODEX_LAUNCH="python -m axp_runtime.testing.fake_app_server"` 用脚本化 app-server 跑通整条链路。
 
 `bun run dev` 每个实例占用五个连续端口：网关 `P`（浏览器打开的地址）、API `P+1`、内部运行协议 `P+2`、Web `P+3`、llm-gateway `P+4`（docker 模式下监听 runtime 网络的网关地址），默认 `P=3000`。被占用时（其他 checkout、worktree 或 agent 已在运行）自动顺延到下一个空闲端口块（3010、3020……），并用文件锁避免并行启动抢到同一端口，因此可以同时运行任意多个实例。用 `bun run dev --port 4000`（或 `AXP_DEV_PORT=4000`）指定端口，被占用或与生产端口（`deploy/ports.env`）重叠时直接报错。新的 worktree 首次运行会自动安装依赖并执行 migrations。
 
@@ -61,7 +61,7 @@ Web 已配置 Query、nuqs、Phosphor Icons、表单校验、通知、Markdown �
 | 根目录命令                   | 用途                                                              |
 | ---------------------------- | ----------------------------------------------------------------- |
 | `bun run dev`                | 启动开发环境（见上文两种模式），任一进程退出时关闭所有进程        |
-| `bun run deploy`             | 用 Kamal 部署已提交的 HEAD 到本机（见 `deploy/README.md`）        |
+| `bun run deploy`             | 用 Kamal 把工作区部署到本机（见 `deploy/README.md`）              |
 | `bun run dev:gateway`        | 单独启动网关                                                      |
 | `bun run dev:llm-gateway`    | 单独启动 llm-gateway                                              |
 | `bun run dev:control-plane`  | 单独启动 Django（公共 API）                                       |
@@ -69,15 +69,23 @@ Web 已配置 Query、nuqs、Phosphor Icons、表单校验、通知、Markdown �
 | `bun run dev:internal`       | 单独启动内部运行协议服务（runtime 网络网关地址）                  |
 | `bun run dev:controller`     | 单独启动 runtime controller（需要 Docker）                        |
 | `bun run dev:web`            | 单独启动 Web                                                      |
-| `bun run runtime:build`      | 构建 runtime 镜像 `axp-agent-runtime:dev`                         |
+| `bun run runtime:build`      | 构建本机架构的 runtime 镜像 `axp-agent-runtime:dev`               |
 | `bun run db:migrate`         | 执行数据库迁移                                                    |
-| `bun run build`              | 构建 Web                                                          |
+| `bun run build`              | 用 Turbo 构建 Web 与各平台的镜像产物（见下文）                    |
 | `bun run check`              | 构建、类型检查、Django 系统检查、Ruff lint、Go 检查与全部后端测试 |
 | `bun run test:control-plane` | 运行 control plane 测试                                           |
 | `bun run test:agent-runtime` | 运行 runtime 测试（使用脚本化 app-server，无需凭据）              |
 | `bun run format`             | Prettier、Ruff 与 gofmt 格式化                                    |
 
 TanStack 的 `src/routeTree.gen.ts` 由 `dev` 或 `build` 自动生成；`check` 会先执行构建，因此可在全新安装后直接执行。
+
+构建、检查和测试都通过 [Turborepo](https://turborepo.com) 运行，结果缓存在 `.turbo/cache`，输入没变的任务直接复用。镜像所需的产物在 Docker 之外构建，输出到各应用的 `out/`：
+
+- Web：`out/server.js`（打包了全部依赖的 SSR 服务）和 `out/dist/client`，与平台无关。
+- Go：`out/<平台>/` 下的静态二进制，交叉编译。
+- Python：`out/<平台>/site-packages`，只用目标平台的 wheel 安装锁定的依赖。
+
+目标平台写在任务名里（`build:linux-amd64`、`build:linux-arm64`），在哪台机器上构建都得到同一份缓存。Dockerfile 只复制这些产物，产物逐字节不变时 Docker 复用对应的层。镜像构建需要 `docker buildx`。
 
 ## 数据库与存储
 

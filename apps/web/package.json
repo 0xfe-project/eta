@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && bun run bundle",
+    "bundle": "rm -rf out && bun build server.js --target=bun --outdir out --define process.env.NODE_ENV='\"production\"' && mkdir -p out/dist && cp -r dist/client out/dist/",
     "preview": "vite preview --port 3000",
     "typecheck": "tsc --noEmit"
   },

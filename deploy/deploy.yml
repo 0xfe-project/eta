@@ -37,7 +37,7 @@ servers:
   # Public API (Django); reached only through the gateway.
   api:
     hosts: [<%= host %>]
-    cmd: sh -c "python manage.py migrate --noinput && exec gunicorn config.wsgi --bind 0.0.0.0:8000 --worker-class gthread --workers 2 --threads 32"
+    cmd: sh -c "python manage.py migrate --noinput && exec python -m gunicorn config.wsgi --bind 0.0.0.0:8000 --worker-class gthread --workers 2 --threads 32"
     options:
       network-alias: axp-api
   # LLM gateway (embedded CLIProxyAPI): connections and model catalog behind
@@ -59,7 +59,7 @@ servers:
   # runtime network; it is never published or proxied.
   internal:
     hosts: [<%= host %>]
-    cmd: gunicorn config.wsgi --bind 0.0.0.0:8001 --worker-class gthread --workers 2 --threads 16
+    cmd: python -m gunicorn config.wsgi --bind 0.0.0.0:8001 --worker-class gthread --workers 2 --threads 16
     env:
       clear:
         AXP_URLCONF: config.internal_urls
@@ -103,6 +103,9 @@ registry:
 builder:
   arch: <%= ENV.fetch("AXP_BUILD_ARCH") %>
   driver: docker
+  # Build from the working tree: the image copies artifacts that deploy.sh
+  # builds with Turbo and that are not committed.
+  context: .
   dockerfile: deploy/Dockerfile
 
 ssh:
