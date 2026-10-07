@@ -69,7 +69,6 @@ ensure_secret() {
 }
 ensure_secret AXP_EDGE_SECRET 32
 ensure_secret AXP_S3_SECRET_ACCESS_KEY 32
-ensure_secret AXP_JUICEFS_META_PASSWORD 32
 # OpenObserve requires upper and lower case letters, a digit and a symbol.
 if ! grep -q "^AXP_OBSERVE_PASSWORD=" "$ENV_FILE"; then
   echo "AXP_OBSERVE_PASSWORD=Axp-$(openssl rand -hex 16)" >>"$ENV_FILE"
@@ -178,9 +177,7 @@ kamal() {
 # added, boot it before the first deploy that uses it. The collector holds no
 # state and is rebooted on every deploy so config changes take effect.
 prepare_accessories() {
-  for accessory in s3 juicefs-meta; do
-    docker container inspect "axp-$accessory" >/dev/null 2>&1 || kamal accessory boot "$accessory"
-  done
+  docker container inspect axp-s3 >/dev/null 2>&1 || kamal accessory boot s3
   if ! docker container inspect axp-openobserve >/dev/null 2>&1; then
     kamal accessory boot openobserve
   elif ! docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' axp-openobserve | grep -qx 'ZO_BASE_URI=/observe'; then

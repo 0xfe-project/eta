@@ -428,8 +428,6 @@ def delete_agent(agent_id: str) -> None:
     commands = AgentCommand.objects.select_related("agent").filter(agent=agent)
     for command in commands.filter(status=AgentCommand.Status.QUEUED):
         finish_command(conversation, command, "cancelled")
-    for command in commands.filter(status=AgentCommand.Status.OUTCOME_UNKNOWN):
-        finish_command(conversation, command, "failed", "REPLY_INTERRUPTED")
     # Running work is interrupted by the runtime; the controller then stops it.
     for reply in Message.objects.filter(
         agent=agent, role=Message.Role.ASSISTANT, status__in=Message.ACTIVE_STATUSES

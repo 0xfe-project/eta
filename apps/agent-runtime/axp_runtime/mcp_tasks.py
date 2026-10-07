@@ -13,7 +13,9 @@ from mcp.server.fastmcp import FastMCP
 
 CONFIG = json.loads(os.environ.get("AXP_MCP_CONFIG") or "{}")
 STORE = (
-    Path(os.environ.get("AXP_WORKSPACE_DIR", "/mnt/workspace")) / ".axp" / "tasks.json"
+    Path(os.environ.get("AXP_WORKSPACE_DIR", "/agent/workspace"))
+    / ".axp"
+    / "tasks.json"
 )
 MAX_TASKS = int(CONFIG.get("max_tasks", 200))
 

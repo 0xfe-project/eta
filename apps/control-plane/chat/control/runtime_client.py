@@ -61,14 +61,6 @@ class RuntimeClient:
             },
         )
 
-    def get_command(self, command_id) -> dict | None:
-        try:
-            return self._call("GET", f"/commands/{command_id}")
-        except RuntimeHttpError as exc:
-            if exc.status == 404:
-                return None
-            raise
-
     def interrupt(self, command_id) -> dict | None:
         try:
             return self._call(

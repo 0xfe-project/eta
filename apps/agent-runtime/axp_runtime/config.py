@@ -30,8 +30,8 @@ class Settings:
     control_plane_url: str
     listen_host: str
     listen_port: int
-    workspace_dir: Path
-    state_dir: Path
+    # Everything the agent keeps; its snapshot is exactly this directory.
+    home_dir: Path
     known_thread_id: str | None
     model: str | None
     sandbox: str
@@ -42,7 +42,8 @@ class Settings:
     developer_instructions: str = ""
     mcp_modules: list[McpModule] = field(default_factory=list)
     config_version: int = 0
-    restore: dict | None = None
+    # Presigned download of the agent's latest snapshot, if it has one.
+    snapshot_url: str | None = None
     # Overrides the Codex launch command; used to run a scripted app-server.
     codex_launch: list[str] | None = None
     heartbeat_seconds: float = 5.0
@@ -51,12 +52,12 @@ class Settings:
     model_context_window: int | None = None
 
     @property
-    def codex_home(self) -> Path:
-        return self.state_dir / "codex"
+    def workspace_dir(self) -> Path:
+        return self.home_dir / "workspace"
 
     @property
-    def ledger_path(self) -> Path:
-        return self.state_dir / "runtime.sqlite3"
+    def codex_home(self) -> Path:
+        return self.home_dir / "codex"
 
 
 def _require(name: str) -> str:
@@ -95,8 +96,7 @@ def load_settings() -> Settings:
         control_plane_url=_require("AXP_CONTROL_PLANE_URL").rstrip("/"),
         listen_host=os.environ.get("AXP_LISTEN_HOST", "0.0.0.0"),
         listen_port=int(os.environ.get("AXP_LISTEN_PORT", "8080")),
-        workspace_dir=Path(os.environ.get("AXP_WORKSPACE_DIR", "/mnt/workspace")),
-        state_dir=Path(os.environ.get("AXP_STATE_DIR", "/state")),
+        home_dir=Path(os.environ.get("AXP_HOME", "/agent")),
         known_thread_id=os.environ.get("AXP_THREAD_ID") or None,
         model=codex.get("model"),
         sandbox=codex.get("sandbox", "workspace-write"),
@@ -104,7 +104,7 @@ def load_settings() -> Settings:
         developer_instructions=codex.get("developer_instructions") or "",
         mcp_modules=modules,
         config_version=int(os.environ.get("AXP_CONFIG_VERSION", "0")),
-        restore=_json("AXP_RESTORE", None),
+        snapshot_url=os.environ.get("AXP_SNAPSHOT_URL") or None,
         codex_launch=shlex.split(launch) if launch else None,
         heartbeat_seconds=float(os.environ.get("AXP_HEARTBEAT_SECONDS", "5")),
         mcp_ready_timeout=float(os.environ.get("AXP_MCP_READY_TIMEOUT", "30")),

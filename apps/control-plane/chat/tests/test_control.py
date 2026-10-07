@@ -1,4 +1,3 @@
-import hashlib
 import json
 import uuid
 from datetime import timedelta
@@ -17,7 +16,6 @@ from chat.control.driver import StartedRuntime
 from chat.control.runtime_client import RuntimeUnavailable
 from chat.models import (
     Agent,
-    AgentCheckpoint,
     AgentCommand,
     AgentSession,
     Approval,
@@ -36,19 +34,12 @@ class FakeDriver:
     def __init__(self):
         self.started = []
         self.stopped = []
-        self.volumes = set()
         self.states = {}
         self.fail_start = False
 
     @staticmethod
     def name(suffix):
         return f"axp-{suffix}"
-
-    def volume_exists(self, name):
-        return name in self.volumes
-
-    def ensure_volume(self, name):
-        self.volumes.add(name)
 
     def start(self, spec):
         if self.fail_start:
@@ -81,10 +72,6 @@ class FakeClients:
             def put_command(self, command):
                 clients._record("put", instance, str(command.pk))
                 return {"status": "accepted"}
-
-            def get_command(self, command_id):
-                clients._record("get", instance, str(command_id))
-                return clients.commands.get(str(command_id))
 
             def interrupt(self, command_id):
                 clients._record("interrupt", instance, str(command_id))
@@ -206,32 +193,31 @@ class Control:
 
 
 class FakeS3:
-    """Checkpoint objects in memory, behind presigned-looking URLs."""
+    """Agent snapshots, by agent id, behind presigned-looking URLs."""
 
     def __init__(self):
-        self.objects = {}
+        self.snapshots = set()
 
-    def upload_url(self, key):
-        return f"http://s3.test/put/{key}"
+    def snapshot_exists(self, agent_id):
+        return str(agent_id) in self.snapshots
 
-    def download_url(self, key):
-        return f"http://s3.test/get/{key}"
+    def upload_url(self, agent_id):
+        return f"http://s3.test/put/{agent_id}"
 
-    def verify(self, key, checksum):
-        return key in self.objects and sha256(self.objects[key]) == checksum
+    def download_url(self, agent_id):
+        return f"http://s3.test/get/{agent_id}"
 
 
 @pytest.fixture
 def s3(monkeypatch):
     fake = FakeS3()
-    for name in ("upload_url", "download_url", "verify"):
+    for name in ("snapshot_exists", "upload_url", "download_url"):
         monkeypatch.setattr(objects, name, getattr(fake, name))
     return fake
 
 
 @pytest.fixture
-def ctl(chat, settings, s3, monkeypatch):
-    monkeypatch.setattr(controller, "CHECKPOINT_AFTER_TURNS", 0)
+def ctl(chat, settings, s3):
     settings.AXP_INTERNAL_URL = "http://cp.internal:8001"
     settings.AXP_LLM_GATEWAY_URL = "http://llm-gateway:8317"
     return Control(chat)
@@ -257,7 +243,8 @@ class TestProvisioning:
         assert env["AXP_CONTROL_PLANE_URL"] == "http://cp.internal:8001"
         snapshot = json.loads(env["AXP_MCP_SNAPSHOT"])
         assert [m["module_key"] for m in snapshot] == ["tasks"]
-        assert f"axp-state-{ctl.agent['id']}" in ctl.driver.volumes
+        # A new agent has nothing to restore.
+        assert "AXP_SNAPSHOT_URL" not in env
         # Starting a runtime is invisible to the product: the reply is queued.
         assert ctl.reply(sent).status == "queued"
         assert ctl.agent_status() == "working"
@@ -568,42 +555,41 @@ class TestRecovery:
         runtime.turn_started(command)
         return running
 
-    def test_lost_runtime_is_fenced_then_replaced(self, ctl, started):
-        _, runtime, command = started
+    def test_lost_runtime_is_fenced_then_replaced(self, ctl, s3, started):
+        sent, runtime, command = started
+        s3.snapshots.add(ctl.agent["id"])
         old = ctl.instance()
         ctl.expire_leases()
         ctl.tick()
         assert old.container_id in ctl.driver.stopped
         old.refresh_from_db()
         assert old.ended_at is not None
+        # Its work went with the container and is never replayed.
         command.refresh_from_db()
-        assert command.status == "outcome_unknown"
-        # Replacement uses a new generation and the known thread.
+        assert command.status == "failed"
+        assert ctl.reply(sent).failure["code"] == "REPLY_INTERRUPTED"
+        ctl.send("继续")
+        ctl.tick()
+        # The replacement restores the snapshot and resumes the same thread.
         assert ctl.instance().generation == 2
-        assert ctl.driver.started[-1].env["AXP_THREAD_ID"] == "thread-1"
+        env = ctl.driver.started[-1].env
+        assert env["AXP_THREAD_ID"] == "thread-1"
+        assert env["AXP_SNAPSHOT_URL"] == f"http://s3.test/get/{ctl.agent['id']}"
         # The old runtime is rejected from now on.
         assert runtime.heartbeat().status_code == 409
 
-    def test_reconcile_uses_new_runtime_ledger(self, ctl, started):
-        sent, _, command = started
+    def test_command_never_seen_to_start_is_queued_again(self, ctl, running):
+        sent, _, command = running
+        assert command.status == "dispatching"
         ctl.expire_leases()
         ctl.tick()
-        RuntimeHarness(ctl.instance()).ready()
-        ctl.clients.commands[str(command.pk)] = {"status": "succeeded"}
-        ctl.tick()
-        command.refresh_from_db()
-        assert command.status == "succeeded"
-        assert ctl.reply(sent).status == "completed"
-
-    def test_unknown_to_shared_ledger_is_requeued(self, ctl, started):
-        _, _, command = started
-        ctl.expire_leases()
-        ctl.tick()
-        RuntimeHarness(ctl.instance()).ready()
-        ctl.clients.commands[str(command.pk)] = None
-        ctl.controller.reconcile_unknown()
         command.refresh_from_db()
         assert command.status == "queued"
+        assert ctl.reply(sent).status == "queued"
+        assert ctl.clients.of("put") == [("put", 1, str(command.pk))]
+        RuntimeHarness(ctl.instance()).ready()
+        ctl.tick()
+        assert ctl.clients.of("put")[-1] == ("put", 2, str(command.pk))
 
     def test_runtime_failure_marks_agent_unavailable(self, ctl, started):
         _, runtime, _ = started
@@ -624,87 +610,24 @@ class TestRecovery:
         assert (session.status, session.thread_id) == ("recovery_failed", "thread-1")
 
 
-def sha256(data):
-    return hashlib.sha256(data).hexdigest()
-
-
-class TestCheckpoint:
-    @pytest.fixture
-    def runtime(self, ctl, monkeypatch):
-        monkeypatch.setattr(controller, "CHECKPOINT_AFTER_TURNS", 1)
-        sent = ctl.send()
-        runtime = ctl.start_runtime()
-        ctl.tick()
-        runtime.turn_completed(ctl.command(sent))
-        return runtime
-
-    @pytest.fixture
-    def checkpoint(self, ctl, runtime):
-        ctl.tick()
-        return AgentCheckpoint.objects.get()
-
-    def upload(self, s3, checkpoint, data: bytes):
-        s3.objects[checkpoint.state_object_key] = data
-
-    def complete(self, runtime, checkpoint, checksum, **extra):
-        payload = {"checkpoint_id": str(checkpoint.pk), "checksum": checksum, **extra}
-        runtime.events(("checkpoint.completed", payload))
-
-    def test_checkpoint_is_scheduled_uploaded_and_verified(
-        self, ctl, s3, runtime, checkpoint
-    ):
-        command = checkpoint.command
-        assert command.kind == "checkpoint"
-        ctl.tick()
-        command.refresh_from_db()
-        assert command.status == "dispatching"
-        assert command.input["upload_url"] == s3.upload_url(checkpoint.state_object_key)
-        # Normal turns wait behind the checkpoint.
-        later = ctl.send("之后")
-        ctl.tick()
-        assert ctl.command(later).status == "queued"
-
-        data = b"checkpoint-bytes"
-        self.upload(s3, checkpoint, data)
-        runtime.events(("checkpoint.started", {"checkpoint_id": str(checkpoint.pk)}))
-        self.complete(
-            runtime,
-            checkpoint,
-            sha256(data),
-            size=len(data),
-            manifest={"thread_id": "thread-1", "sdk_version": "0.160.1"},
-        )
-        checkpoint.refresh_from_db()
-        assert (checkpoint.status, checkpoint.sdk_version) == ("available", "0.160.1")
-        ctl.tick()
-        assert ctl.command(later).status == "dispatching"
-
-    def test_unverified_checkpoint_is_not_available(self, s3, runtime, checkpoint):
-        self.upload(s3, checkpoint, b"data")
-        self.complete(runtime, checkpoint, "0" * 64)
-        checkpoint.refresh_from_db()
-        assert checkpoint.status == "failed"
-
-    def test_lost_state_restores_from_latest_checkpoint(
-        self, ctl, s3, runtime, checkpoint
-    ):
-        data = b"state"
-        self.upload(s3, checkpoint, data)
-        self.complete(runtime, checkpoint, sha256(data))
-        # A turn after the checkpoint, then the host and its volume are lost.
-        after = ctl.send("检查点之后")
-        ctl.tick()
-        runtime.turn_completed(ctl.command(after))
-        ctl.driver.volumes.clear()
+class TestSnapshots:
+    def test_runtime_gets_an_upload_url_for_its_own_agent_only(self, ctl, running):
+        _, runtime, _ = running
+        response = runtime.call("post", "snapshot")
+        assert response.json() == {
+            "upload_url": f"http://s3.test/put/{ctl.agent['id']}"
+        }
+        # A fenced instance gets nothing.
         ctl.expire_leases()
-        ctl.send("恢复后")
         ctl.tick()
-        restore = json.loads(ctl.driver.started[-1].env["AXP_RESTORE"])
-        assert restore["checkpoint_id"] == str(checkpoint.pk)
-        assert restore["checksum"] == sha256(data)
-        assert restore["url"] == s3.download_url(checkpoint.state_object_key)
-        gap = AgentSession.objects.get().recovery_gap
-        assert gap["commands"] == [str(ctl.command(after).pk)]
+        assert runtime.call("post", "snapshot").status_code == 409
+
+    def test_failed_snapshot_is_recorded_until_one_succeeds(self, running):
+        _, runtime, _ = running
+        runtime.events(("snapshot.failed", {"reason": "SNAPSHOT_TOO_LARGE"}))
+        assert AgentSession.objects.get().last_error == "SNAPSHOT_TOO_LARGE"
+        runtime.events(("snapshot.saved", {"size": 1}))
+        assert AgentSession.objects.get().last_error is None
 
 
 def test_idle_runtime_is_stopped(ctl, running, monkeypatch):
@@ -779,8 +702,7 @@ class TestConfigChange:
             ctl.start_runtime()
         env = ctl.driver.started[0].env
         assert env["AXP_LLM_BASE_URL"] == "http://llm-gateway:8317/v1"
-        assert env["AXP_WORKSPACE_PATH"] == f"agents/{ctl.agent['id']}/workspace"
-        assert "AXP_S3_ACCESS_KEY_ID" not in env
+        assert not {k for k in env if k.startswith("AXP_S3")}
         assert env["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://otel-collector:4318"
         assert env["OTEL_RESOURCE_ATTRIBUTES"] == (
             "deployment.environment.name=production,"

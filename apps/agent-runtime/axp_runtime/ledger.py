@@ -1,8 +1,8 @@
-"""Durable runtime state on the agent's state volume.
+"""The runtime instance's own bookkeeping, in memory.
 
-The ledger records a command before Codex sees it, keeps the agent/thread
-mapping, pending approvals, and an ordered outbox of events for the control
-plane. Outbox sequences are scoped to a runtime instance.
+The ledger records a command before Codex sees it, pending approvals, and an
+ordered outbox of events for the control plane. It lives and dies with the
+instance: what outlives it is the agent's snapshot.
 """
 
 import json
@@ -11,10 +11,8 @@ import threading
 import time
 import uuid
 from contextlib import contextmanager
-from pathlib import Path
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS commands (
     command_id TEXT PRIMARY KEY,
     agent_sequence INTEGER NOT NULL,
@@ -39,19 +37,17 @@ CREATE TABLE IF NOT EXISTS approvals (
     created_at REAL NOT NULL
 );
 CREATE TABLE IF NOT EXISTS outbox (
-    instance_id TEXT NOT NULL,
-    source_seq INTEGER NOT NULL,
+    source_seq INTEGER PRIMARY KEY,
     event_id TEXT NOT NULL UNIQUE,
     type TEXT NOT NULL,
     payload TEXT NOT NULL,
     acked INTEGER NOT NULL DEFAULT 0,
-    created_at REAL NOT NULL,
-    PRIMARY KEY (instance_id, source_seq)
+    created_at REAL NOT NULL
 );
 """
 
 # Command statuses. "starting" covers the window between recording intent and
-# learning the Codex turn id; a crash there leaves the outcome unknown.
+# learning the Codex turn id.
 ACCEPTED = "accepted"
 STARTING = "starting"
 RUNNING = "running"
@@ -59,15 +55,12 @@ TERMINAL = {"succeeded", "failed", "interrupted", "outcome_unknown"}
 
 
 class Ledger:
-    def __init__(self, path: Path, instance_id: str):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        self.path = path
-        self.instance_id = instance_id
+    def __init__(self):
         self._lock = threading.RLock()
-        self._db = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
+        self._db = sqlite3.connect(
+            ":memory:", check_same_thread=False, isolation_level=None
+        )
         self._db.row_factory = sqlite3.Row
-        self._db.execute("PRAGMA journal_mode=WAL")
-        self._db.execute("PRAGMA synchronous=FULL")
         self._db.executescript(SCHEMA)
 
     @contextmanager
@@ -85,31 +78,6 @@ class Ledger:
         with self._lock:
             self._db.close()
 
-    def backup_to(self, target: Path) -> None:
-        with self._lock:
-            dest = sqlite3.connect(target)
-            try:
-                self._db.backup(dest)
-            finally:
-                dest.close()
-
-    # --- meta ---------------------------------------------------------------
-
-    def get_meta(self, key: str) -> str | None:
-        with self._lock:
-            row = self._db.execute(
-                "SELECT value FROM meta WHERE key=?", (key,)
-            ).fetchone()
-        return row["value"] if row else None
-
-    def set_meta(self, key: str, value: str) -> None:
-        with self.tx() as db:
-            db.execute(
-                "INSERT INTO meta(key, value) VALUES(?, ?) "
-                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                (key, value),
-            )
-
     # --- commands -----------------------------------------------------------
 
     def get_command(self, command_id: str) -> dict | None:
@@ -118,13 +86,6 @@ class Ledger:
                 "SELECT * FROM commands WHERE command_id=?", (command_id,)
             ).fetchone()
         return _command(row) if row else None
-
-    def has_commands(self) -> bool:
-        with self._lock:
-            return (
-                self._db.execute("SELECT 1 FROM commands LIMIT 1").fetchone()
-                is not None
-            )
 
     def accept_command(
         self,
@@ -234,16 +195,13 @@ class Ledger:
     def emit(self, type_: str, payload: dict) -> int:
         with self.tx() as db:
             row = db.execute(
-                "SELECT COALESCE(MAX(source_seq), 0) AS seq FROM outbox "
-                "WHERE instance_id=?",
-                (self.instance_id,),
+                "SELECT COALESCE(MAX(source_seq), 0) AS seq FROM outbox"
             ).fetchone()
             seq = row["seq"] + 1
             db.execute(
-                "INSERT INTO outbox(instance_id, source_seq, event_id, type, payload, "
-                "created_at) VALUES(?, ?, ?, ?, ?, ?)",
+                "INSERT INTO outbox(source_seq, event_id, type, payload, created_at) "
+                "VALUES(?, ?, ?, ?, ?)",
                 (
-                    self.instance_id,
                     seq,
                     str(uuid.uuid4()),
                     type_,
@@ -256,9 +214,8 @@ class Ledger:
     def unacked(self, limit: int, max_bytes: int) -> list[dict]:
         with self._lock:
             rows = self._db.execute(
-                "SELECT * FROM outbox WHERE instance_id=? AND acked=0 "
-                "ORDER BY source_seq LIMIT ?",
-                (self.instance_id, limit),
+                "SELECT * FROM outbox WHERE acked=0 ORDER BY source_seq LIMIT ?",
+                (limit,),
             ).fetchall()
         batch, size = [], 0
         for row in rows:
@@ -277,17 +234,13 @@ class Ledger:
 
     def ack_through(self, source_seq: int) -> None:
         with self.tx() as db:
-            db.execute(
-                "UPDATE outbox SET acked=1 WHERE instance_id=? AND source_seq<=?",
-                (self.instance_id, source_seq),
-            )
+            db.execute("UPDATE outbox SET acked=1 WHERE source_seq<=?", (source_seq,))
 
     def all_acked(self) -> bool:
         with self._lock:
             return (
                 self._db.execute(
-                    "SELECT 1 FROM outbox WHERE instance_id=? AND acked=0 LIMIT 1",
-                    (self.instance_id,),
+                    "SELECT 1 FROM outbox WHERE acked=0 LIMIT 1"
                 ).fetchone()
                 is None
             )

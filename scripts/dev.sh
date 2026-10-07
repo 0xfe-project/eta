@@ -24,8 +24,8 @@ app-server that needs no model.
 Needs Docker. One set of supporting containers per machine, shared by every
 instance and kept running between sessions: PostgreSQL, OpenObserve for
 logs (opened through the gateway at /observe/) with an OpenTelemetry Collector
-for runtimes, and SeaweedFS plus Redis for agent workspaces (JuiceFS) and
-checkpoints. They are named axp-dev-* and never touch production's.
+for runtimes, and SeaweedFS for agent snapshots. They are named axp-dev-* and
+never touch production's.
 EOF
 }
 
@@ -159,16 +159,13 @@ runtime_network=axp-runtime
 bun run runtime:build
 
 # --- Storage --------------------------------------------------------------------
-# SeaweedFS's S3 API on the runtime network's gateway address, so host
-# processes and runtimes use one URL (presigned checkpoint URLs name it);
-# Redis holds JuiceFS's metadata and is reached only from that network.
+# Agent snapshots live in SeaweedFS. Its S3 API is on the runtime network's
+# gateway address, so host processes and runtimes use one URL (presigned
+# snapshot URLs name it).
 dev_container axp-dev-s3 chrislusf/seaweedfs:4.48 \
   --network "$runtime_network" -p "$AXP_INTERNAL_HOST:8333:8333" -v axp-dev-s3:/data \
   -e AWS_ACCESS_KEY_ID=axp-dev -e AWS_SECRET_ACCESS_KEY=axp-dev-secret \
   -- mini -dir=/data
-dev_container axp-dev-juicefs-meta redis:7.4-alpine \
-  --network "$runtime_network" -v axp-dev-juicefs-meta:/data \
-  -- redis-server --appendonly yes
 
 # --- OpenObserve ----------------------------------------------------------------
 # Dev-only credentials; it listens on loopback only.

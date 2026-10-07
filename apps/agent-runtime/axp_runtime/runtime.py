@@ -1,16 +1,15 @@
 """Agent runtime: one persistent Codex thread driven through the Python SDK.
 
-Startup: verify mounts -> restore state if asked -> start Codex -> resume the
-recorded thread (or create it once) -> wait for required MCP modules ->
-reconcile unfinished commands and approvals -> report ready.
+Startup: restore the agent's snapshot -> start Codex -> resume the agent's
+thread (or create it once) -> wait for required MCP modules -> report ready.
+Every turn ends by uploading a new snapshot of the agent's home.
 """
 
 import hashlib
 import json
 import logging
 import os
-import shutil
-import tarfile
+import subprocess
 import tempfile
 import threading
 import time
@@ -27,11 +26,16 @@ from pydantic import BaseModel, ConfigDict
 
 from . import ledger as L
 from .config import PROTOCOL_VERSION, Settings
-from .control_plane import ControlPlane, ControlPlaneError, Fenced
+from .control_plane import ControlPlane, ControlPlaneError, Fenced, download, upload
 
 logger = logging.getLogger(__name__)
 
-THREAD_KEY = "thread_id"
+# Snapshots run after every turn: GNU tar with multithreaded zstd packs a
+# workspace with tens of thousands of files in about a second.
+SNAPSHOT_COMPRESSOR = "zstd -T0"
+# Codex's locks and scratch files are left out.
+SNAPSHOT_EXCLUDES = ("./codex/tmp", "./codex/*/tmp", "./codex/*.lock")
+SNAPSHOT_MAX_BYTES = 2 << 30
 # Codex model provider id for the LLM gateway.
 LLM_PROVIDER = "axp"
 APPROVAL_METHODS = {
@@ -141,15 +145,12 @@ class Runtime:
         """Bring the runtime to ready, or record why it cannot be."""
         try:
             self._spawn(self._heartbeat_loop, "heartbeat")
-            self._verify_workspace()
-            self._restore_if_needed()
-            self.ledger = L.Ledger(self.settings.ledger_path, self.settings.instance_id)
+            self._prepare_home()
+            self.ledger = L.Ledger()
             self._spawn(self._outbox_loop, "outbox")
-            self._reconcile_before_codex()
             self._start_codex()
             self._open_thread()
             self._wait_for_mcp()
-            self._reconcile_turns()
         except RecoveryFailed as exc:
             logger.error("Runtime not ready: %s", exc)
             self.error_code = exc.code
@@ -169,8 +170,6 @@ class Runtime:
 
         Takes no new work, cancels pending approvals, stops Codex, lets the
         worker finish, delivers pending events, then closes the ledger.
-        Unfinished commands stay in the ledger; the next instance reconciles
-        them against the Codex thread.
         """
         if not self._shutdown_lock.acquire(blocking=False):
             return  # already shutting down
@@ -226,35 +225,63 @@ class Runtime:
             if not names or t.name in names
         )
 
-    # --- state preparation --------------------------------------------------
+    # --- the agent's home ------------------------------------------------------
 
-    def _verify_workspace(self) -> None:
-        workspace = self.settings.workspace_dir
+    def _prepare_home(self) -> None:
+        home = self.settings.home_dir
+        home.mkdir(parents=True, exist_ok=True)
+        if self.settings.snapshot_url:
+            started = time.monotonic()
+            with tempfile.TemporaryDirectory() as tmp:
+                archive = Path(tmp) / "snapshot.tar.zst"
+                try:
+                    download(self.settings.snapshot_url, archive)
+                except Exception as exc:
+                    raise RecoveryFailed("RECOVERY_DOWNLOAD_FAILED", str(exc)) from exc
+                tar = _tar("-x", "-f", archive, "-C", home)
+                if tar.returncode != 0:
+                    raise RecoveryFailed("RECOVERY_SNAPSHOT_INVALID", tar.stderr)
+            logger.info(
+                "Restored the agent's snapshot in %.1fs", time.monotonic() - started
+            )
+        self.settings.workspace_dir.mkdir(exist_ok=True)
+        self.settings.codex_home.mkdir(exist_ok=True)
+
+    def _save_snapshot(self) -> None:
+        """Upload the agent's home. A failure is reported, never fatal: the
+        next snapshot carries everything since."""
+        started = time.monotonic()
         try:
-            probe = workspace / ".axp" / "probe"
-            probe.parent.mkdir(parents=True, exist_ok=True)
-            probe.write_text(str(time.time()))
-            probe.unlink()
-        except OSError as exc:
-            raise RecoveryFailed("MOUNT_FAILED", str(exc)) from exc
-        self.settings.state_dir.mkdir(parents=True, exist_ok=True)
-
-    def _restore_if_needed(self) -> None:
-        restore = self.settings.restore
-        state = self.settings.state_dir
-        if not restore or self.settings.ledger_path.exists():
-            return
-        with tempfile.TemporaryDirectory() as tmp:
-            archive = Path(tmp) / "checkpoint.tar.gz"
-            try:
-                self.cp.transfer("GET", restore["url"], archive)
-            except Exception as exc:
-                raise RecoveryFailed("RECOVERY_DOWNLOAD_FAILED", str(exc)) from exc
-            if _sha256(archive) != restore["checksum"]:
-                raise RecoveryFailed("RECOVERY_CHECKSUM_MISMATCH")
-            with tarfile.open(archive) as tar:
-                tar.extractall(state, filter="data")
-        logger.info("Restored state from checkpoint %s", restore["checkpoint_id"])
+            with tempfile.TemporaryDirectory() as tmp:
+                archive = Path(tmp) / "snapshot.tar.zst"
+                excludes = [f"--exclude={pattern}" for pattern in SNAPSHOT_EXCLUDES]
+                tar = _tar(
+                    "-c", "-f", archive, *excludes, "-C", self.settings.home_dir, "."
+                )
+                # 1: files changed while being read, e.g. by a background job.
+                if tar.returncode not in (0, 1):
+                    raise OSError(tar.stderr)
+                size = archive.stat().st_size
+                if size > SNAPSHOT_MAX_BYTES:
+                    logger.error("Snapshot of %d bytes is over the limit", size)
+                    reason = "SNAPSHOT_TOO_LARGE"
+                else:
+                    upload(self.cp.snapshot_upload_url(), archive)
+                    reason = None
+        except Fenced:
+            self.fence()
+        except Exception:
+            logger.exception("Snapshot failed")
+            reason = "SNAPSHOT_FAILED"
+        if reason:
+            self.ledger.emit("snapshot.failed", {"reason": reason})
+        else:
+            logger.info(
+                "Saved a snapshot of %d bytes in %.1fs",
+                size,
+                time.monotonic() - started,
+            )
+            self.ledger.emit("snapshot.saved", {"size": size})
 
     # --- Codex --------------------------------------------------------------
 
@@ -312,7 +339,6 @@ class Runtime:
         )
 
     def _start_codex(self) -> None:
-        self.settings.codex_home.mkdir(parents=True, exist_ok=True)
         client = CodexClient(self._codex_config(), approval_handler=self._on_request)
         try:
             client.start()
@@ -349,11 +375,7 @@ class Runtime:
         return params
 
     def _open_thread(self) -> None:
-        recorded = self.ledger.get_meta(THREAD_KEY)
-        known = self.settings.known_thread_id
-        if recorded and known and recorded != known:
-            raise RecoveryFailed("RECOVERY_THREAD_MISMATCH")
-        thread_id = recorded or known
+        thread_id = self.settings.known_thread_id
         if thread_id:
             try:
                 self.client.request(
@@ -366,16 +388,11 @@ class Runtime:
                 raise RecoveryFailed("RECOVERY_RESUME_FAILED", str(exc)) from exc
             resumed = True
         else:
-            if self.ledger.has_commands():
-                raise RecoveryFailed("RECOVERY_STATE_LOST")
             started = self.client.request(
                 "thread/start", self._thread_params(), response_model=_ThreadResponse
             )
             thread_id = started.thread["id"]
-            self.ledger.set_meta(THREAD_KEY, thread_id)
             resumed = False
-        if not recorded:
-            self.ledger.set_meta(THREAD_KEY, thread_id)
         self.thread_id = thread_id
         try:
             self.cp.register_session(
@@ -430,42 +447,6 @@ class Runtime:
                 if remaining <= 0:
                     raise RecoveryFailed("MCP_REQUIRED_TIMEOUT", ",".join(required))
                 self._mcp_changed.wait(remaining)
-
-    # --- reconciliation -----------------------------------------------------
-
-    def _reconcile_before_codex(self) -> None:
-        # A crash between recording intent and learning the turn id cannot be
-        # proven harmless, so it is never replayed.
-        for command in self.ledger.commands_with_status(L.STARTING):
-            self._finish_unknown(command)
-        for approval in self.ledger.pending_approvals():
-            if approval["generation"] != self.settings.generation:
-                self.ledger.set_approval(approval["approval_id"], "expired")
-                self.ledger.emit(
-                    "approval.expired", {"approval_id": approval["approval_id"]}
-                )
-
-    def _reconcile_turns(self) -> None:
-        running = self.ledger.commands_with_status(L.RUNNING)
-        if not running:
-            return
-        thread = self.client.request(
-            "thread/read",
-            {"threadId": self.thread_id, "includeTurns": True},
-            response_model=_ThreadResponse,
-        ).thread
-        turns = {turn.get("id"): turn for turn in thread.get("turns") or []}
-        for command in running:
-            turn = turns.get(command["turn_id"])
-            status = (turn or {}).get("status")
-            if command["kind"] == "checkpoint":
-                self.ledger.update_command(command["command_id"], status="failed")
-            elif status in ("completed", "failed", "interrupted"):
-                for item in turn.get("items") or []:
-                    self._emit_item(command["command_id"], item, completed=True)
-                self._finish_turn(command["command_id"], turn)
-            else:
-                self._finish_unknown(command)
 
     def _finish_unknown(self, command: dict) -> None:
         self.ledger.update_command(command["command_id"], status="outcome_unknown")
@@ -588,7 +569,7 @@ class Runtime:
     def _interrupt_turn(self, turn_id: str) -> None:
         client = self.client
         if client is None:
-            return  # stopping; the next instance reconciles the turn
+            return  # stopping
         try:
             client.turn_interrupt(self.thread_id, turn_id)
         except Exception:
@@ -661,13 +642,11 @@ class Runtime:
                 self._wake.clear()
                 continue
             if self.stopping.is_set() or self.client is None:
-                return  # leave it accepted for the next instance
+                return
             self.current_command_id = command["command_id"]
             self.status = "busy"
             try:
-                if command["kind"] == "checkpoint":
-                    self._run_checkpoint(command)
-                elif command["kind"] == "compact":
+                if command["kind"] == "compact":
                     self._run_turn(
                         command,
                         lambda client: _start_compaction(client, self.thread_id),
@@ -684,8 +663,6 @@ class Runtime:
                     )
             except (TransportClosedError, RecoveryFailed):
                 if self.stopping.is_set():
-                    # Stopped on purpose: what ran is reconciled by the next
-                    # instance from the ledger and the Codex thread.
                     return
                 logger.exception("Codex transport closed")
                 # A steered turn ends under the steer's command.
@@ -830,6 +807,9 @@ class Runtime:
         self.ledger.emit("item.updated", {"command_id": command_id, "item": view})
 
     def _finish_turn(self, command_id: str, turn: dict) -> None:
+        # Saved before the turn is reported finished, so the control plane
+        # never stops this instance while a snapshot is still uploading.
+        self._save_snapshot()
         raw = turn.get("status")
         status = {"completed": "succeeded", "interrupted": "interrupted"}.get(
             raw, "failed"
@@ -848,99 +828,12 @@ class Runtime:
             },
         )
 
-    # --- checkpoints ----------------------------------------------------------
-
-    def _run_checkpoint(self, command: dict) -> None:
-        command_id = command["command_id"]
-        payload = command["payload"]
-        checkpoint_id = payload["checkpoint_id"]
-        self.ledger.update_command(command_id, status=L.RUNNING)
-        try:
-            self._wait_outbox_drained(30)
-            last_seq = self.ledger.emit(
-                "checkpoint.started", {"checkpoint_id": checkpoint_id}
-            )
-            self._wait_outbox_drained(30)
-            # Pause Codex so its state files are consistent.
-            self._stop_codex()
-            self.ledger.update_command(command_id, status="succeeded")
-            with tempfile.TemporaryDirectory() as tmp:
-                archive, manifest = self._build_archive(
-                    Path(tmp), checkpoint_id, last_seq
-                )
-                checksum = _sha256(archive)
-                self.cp.transfer("PUT", payload["upload_url"], archive)
-                size = archive.stat().st_size
-        except Exception as exc:
-            logger.exception("Checkpoint failed")
-            self.ledger.update_command(
-                command_id, status="failed", error_code="CHECKPOINT_FAILED"
-            )
-            self.ledger.emit(
-                "checkpoint.failed",
-                {
-                    "checkpoint_id": checkpoint_id,
-                    "command_id": command_id,
-                    "reason": type(exc).__name__,
-                },
-            )
-            self._resume_after_checkpoint()
-            return
-        self._resume_after_checkpoint()
-        self.ledger.emit(
-            "checkpoint.completed",
-            {
-                "checkpoint_id": checkpoint_id,
-                "command_id": command_id,
-                "checksum": checksum,
-                "size": size,
-                "manifest": manifest,
-            },
-        )
-
-    def _resume_after_checkpoint(self) -> None:
-        if self.client is None and not self.stopping.is_set():
-            self._start_codex()
-            self._open_thread()
-
     def _wait_outbox_drained(self, timeout: float) -> None:
         deadline = time.monotonic() + timeout
         while not self.ledger.all_acked():
             if time.monotonic() > deadline:
                 raise TimeoutError("outbox not drained")
             time.sleep(0.1)
-
-    def _build_archive(self, tmp: Path, checkpoint_id: str, last_seq: int):
-        state = tmp / "state"
-        state.mkdir()
-        self.ledger.backup_to(state / "runtime.sqlite3")
-        home = self.settings.codex_home
-        if home.exists():
-            shutil.copytree(
-                home,
-                state / "codex",
-                ignore=shutil.ignore_patterns("*.lock", "tmp"),
-            )
-        manifest = {
-            "checkpoint_id": checkpoint_id,
-            "agent_id": self.settings.agent_id,
-            "thread_id": self.thread_id,
-            "sdk_version": SDK_VERSION,
-            "runtime_version": self.codex_version,
-            "protocol_version": PROTOCOL_VERSION,
-            "source_instance_id": self.settings.instance_id,
-            "last_source_seq": last_seq,
-            "created_at": time.time(),
-            # The workspace is not copied: it lives on JuiceFS.
-            "workspace": {"included": False},
-            "files": sum(1 for p in state.rglob("*") if p.is_file()),
-        }
-        (state / "manifest.json").write_text(json.dumps(manifest))
-        archive = tmp / "checkpoint.tar.gz"
-        with tarfile.open(archive, "w:gz") as tar:
-            for path in sorted(state.iterdir()):
-                tar.add(path, arcname=path.name)
-        return archive, manifest
 
     # --- background loops ------------------------------------------------------
 
@@ -1094,9 +987,9 @@ def _approval_summary(kind: str, params: dict) -> dict:
     return summary
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        while chunk := handle.read(1 << 20):
-            digest.update(chunk)
-    return digest.hexdigest()
+def _tar(*args) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["tar", f"--use-compress-program={SNAPSHOT_COMPRESSOR}", *map(str, args)],
+        capture_output=True,
+        text=True,
+    )

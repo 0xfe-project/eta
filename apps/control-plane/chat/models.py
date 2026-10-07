@@ -143,7 +143,6 @@ class AgentCommandKind(models.TextChoices):
     TURN = "turn"
     # Compacts the thread's context; a turn without user input.
     COMPACT = "compact"
-    CHECKPOINT = "checkpoint"
 
 
 class AgentCommandStatus(models.TextChoices):
@@ -155,22 +154,17 @@ class AgentCommandStatus(models.TextChoices):
     FAILED = "failed"
     CANCELLED = "cancelled"
     INTERRUPTED = "interrupted"
-    OUTCOME_UNKNOWN = "outcome_unknown"
 
 
 class AgentCommand(models.Model):
     Kind = AgentCommandKind
     Status = AgentCommandStatus
 
-    # Kinds the user asked for; each has a user message and a reply.
-    USER_KINDS = (Kind.TURN, Kind.COMPACT)
-
     # Statuses that hold the per-agent execution slot.
     ACTIVE_STATUSES = (
         Status.DISPATCHING,
         Status.RUNNING,
         Status.WAITING_APPROVAL,
-        Status.OUTCOME_UNKNOWN,
     )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -217,15 +211,7 @@ class AgentCommand(models.Model):
             ),
             models.UniqueConstraint(
                 fields=["agent"],
-                condition=Q(
-                    kind__in=["turn", "compact", "checkpoint"],
-                    status__in=[
-                        "dispatching",
-                        "running",
-                        "waiting_approval",
-                        "outcome_unknown",
-                    ],
-                ),
+                condition=Q(status__in=["dispatching", "running", "waiting_approval"]),
                 name="one_active_execution_per_agent",
             ),
             _choices_check("kind", AgentCommandKind, "agent_command_kind_valid"),
@@ -455,44 +441,11 @@ class AgentSession(models.Model):
     last_turn_id = models.CharField(max_length=100, null=True, blank=True)
     last_resume_at = models.DateTimeField(null=True, blank=True)
     last_error = models.CharField(max_length=100, null=True, blank=True)
-    # Commands the restored Codex state does not know about (RFC §7).
-    recovery_gap = models.JSONField(null=True, blank=True)
 
     class Meta:
         db_table = "agent_session"
         constraints = [
             _choices_check("status", SessionStatus, "agent_session_status_valid")
-        ]
-
-
-class StorageStatus(models.TextChoices):
-    UNPROVISIONED = "unprovisioned"
-    MOUNTING = "mounting"
-    READY = "ready"
-    ERROR = "error"
-
-
-class AgentStorage(models.Model):
-    Status = StorageStatus
-
-    agent = models.OneToOneField(
-        Agent, primary_key=True, on_delete=models.CASCADE, related_name="storage"
-    )
-    # The agent's workspace: a directory of the JuiceFS filesystem.
-    workspace_path = models.CharField(max_length=300, unique=True)
-    state_volume_ref = models.CharField(max_length=200, unique=True)
-    host_id = models.CharField(max_length=100, null=True, blank=True)
-    status = models.CharField(
-        max_length=16,
-        choices=StorageStatus.choices,
-        default=StorageStatus.UNPROVISIONED,
-    )
-    quota_bytes = models.BigIntegerField(null=True, blank=True)
-
-    class Meta:
-        db_table = "agent_storage"
-        constraints = [
-            _choices_check("status", StorageStatus, "agent_storage_status_valid"),
         ]
 
 
@@ -529,13 +482,6 @@ class RuntimeInstance(models.Model):
     mcp_snapshot = models.JSONField(default=list)
     mcp_status = models.JSONField(default=dict)
     last_source_seq = models.BigIntegerField(default=0)
-    restored_checkpoint = models.ForeignKey(
-        "AgentCheckpoint",
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="+",
-    )
     end_reason = models.CharField(max_length=64, null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
@@ -613,7 +559,6 @@ class ApprovalStatus(models.TextChoices):
     DECIDED = "decided"
     APPLIED = "applied"
     EXPIRED = "expired"
-    DELIVERY_UNKNOWN = "delivery_unknown"
 
 
 class Approval(models.Model):
@@ -709,54 +654,4 @@ class AgentMcpBinding(models.Model):
             models.UniqueConstraint(
                 fields=["agent", "module_key"], name="agent_mcp_binding_key_uniq"
             )
-        ]
-
-
-class CheckpointStatus(models.TextChoices):
-    PENDING = "pending"
-    CREATING = "creating"
-    AVAILABLE = "available"
-    FAILED = "failed"
-
-
-class AgentCheckpoint(models.Model):
-    Status = CheckpointStatus
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    agent = models.ForeignKey(
-        Agent, on_delete=models.PROTECT, related_name="checkpoints"
-    )
-    command = models.OneToOneField(
-        AgentCommand, on_delete=models.PROTECT, related_name="checkpoint"
-    )
-    thread_id = models.CharField(max_length=100)
-    storage_manifest = models.JSONField(default=dict)
-    state_object_key = models.CharField(max_length=300, null=True, blank=True)
-    checksum = models.CharField(max_length=64, null=True, blank=True)
-    size_bytes = models.BigIntegerField(null=True, blank=True)
-    sdk_version = models.CharField(max_length=50, blank=True)
-    runtime_version = models.CharField(max_length=100, blank=True)
-    # Control-plane event position the checkpoint corresponds to.
-    last_event_seq = models.BigIntegerField(default=0)
-    status = models.CharField(
-        max_length=16,
-        choices=CheckpointStatus.choices,
-        default=CheckpointStatus.PENDING,
-    )
-    created_at = models.DateTimeField(default=timezone.now)
-    completed_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        db_table = "agent_checkpoint"
-        indexes = [
-            models.Index(fields=["agent", "created_at"], name="checkpoint_agent_idx")
-        ]
-        constraints = [
-            _choices_check("status", CheckpointStatus, "checkpoint_status_valid"),
-            # "available" requires a verified object; existence alone is not enough.
-            models.CheckConstraint(
-                condition=~Q(status="available")
-                | Q(state_object_key__isnull=False, checksum__isnull=False),
-                name="checkpoint_available_has_object",
-            ),
         ]

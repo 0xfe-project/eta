@@ -111,7 +111,7 @@ agent runtime 容器运行智能体执行的代码、不持有凭据，它们把
 
 数据库是 PostgreSQL，由 `DATABASE_URL` 指定。开发和测试默认连本机共享的 `axp-dev-postgres` 容器（`127.0.0.1:15432`，`scripts/dev-postgres.sh` 启动它，`bun run dev`、`db:migrate` 和控制面测试会自动调用）；生产用 Kamal accessory `postgres`。
 
-每个 Agent 的工作区是 [JuiceFS](https://juicefs.com) 文件系统中的一个目录（`agents/<id>/workspace`），数据存在 [SeaweedFS](https://github.com/seaweedfs/seaweedfs) 的 S3 接口，元数据存在 Redis；runtime 容器启动时挂载它。检查点是同一个 SeaweedFS 中的对象，runtime 通过预签名 URL 上传下载。开发用本机共享的 `axp-dev-s3`、`axp-dev-juicefs-meta` 容器，生产用 Kamal accessory `s3`、`juicefs-meta`，两者的数据卷与网络完全分开。详见 [对话与运行时](docs/architecture/chat-runtime.md)。
+每个 Agent 的全部状态（工作区和 Codex 会话）是 [SeaweedFS](https://github.com/seaweedfs/seaweedfs) 里的一个快照对象：runtime 容器启动时下载并解开它，每个 turn 结束后上传新的快照，用的都是控制面签发的预签名 URL，容器不挂载任何卷、不持有存储凭据。开发用本机共享的 `axp-dev-s3` 容器，生产用 Kamal accessory `s3`，两者的数据卷与网络完全分开。详见 [对话与运行时](docs/architecture/chat-runtime.md)。
 
 ## 生产部署
 

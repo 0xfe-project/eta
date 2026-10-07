@@ -1,4 +1,3 @@
-import hashlib
 import json
 import logging
 import os
@@ -14,7 +13,7 @@ from pathlib import Path
 import pytest
 from dirty_equals import IsPartialDict
 
-from axp_runtime import ledger as L
+from axp_runtime import runtime as runtime_module
 from axp_runtime.config import McpModule, Settings
 from axp_runtime.control_plane import ControlPlaneError
 from axp_runtime.runtime import Runtime
@@ -27,6 +26,9 @@ logging.disable(logging.CRITICAL)
 os.environ["PYTHONPATH"] = str(Path(__file__).resolve().parent.parent)
 
 
+SNAPSHOT_URL = "http://objects.invalid/agents/agent-1/snapshot.tar.zst"
+
+
 class StubControlPlane:
     """Records what the runtime reports; acks every event batch."""
 
@@ -34,7 +36,6 @@ class StubControlPlane:
         self.events: list[dict] = []
         self.sessions: list[dict] = []
         self.heartbeats: list[dict] = []
-        self.objects: dict[str, bytes] = {}
         self.thread_conflict = thread_conflict
         self.lock = threading.Lock()
 
@@ -53,11 +54,8 @@ class StubControlPlane:
             self.events.extend(events)
         return {"acked_source_seq": events[-1]["source_seq"]}
 
-    def transfer(self, method, url, path):
-        if method == "PUT":
-            self.objects[url] = Path(path).read_bytes()
-        else:
-            Path(path).write_bytes(self.objects[url])
+    def snapshot_upload_url(self):
+        return SNAPSHOT_URL
 
     def types(self):
         with self.lock:
@@ -83,10 +81,16 @@ class StubControlPlane:
 
 
 class Harness:
-    """Starts runtimes against stub control planes; shuts them all down."""
+    """Starts runtimes against stub control planes; shuts them all down.
 
-    def __init__(self, tmp: Path):
+    Presigned URLs resolve to ``objects``, an in-memory object store.
+    """
+
+    def __init__(self, tmp: Path, monkeypatch):
         self.tmp = tmp
+        self.objects: dict[str, bytes] = {}
+        monkeypatch.setattr(runtime_module, "upload", self._upload)
+        monkeypatch.setattr(runtime_module, "download", self._download)
         self.settings = Settings(
             agent_id="agent-1",
             instance_id=str(uuid.uuid4()),
@@ -95,8 +99,7 @@ class Harness:
             control_plane_url="http://cp.invalid",
             listen_host="127.0.0.1",
             listen_port=0,
-            workspace_dir=tmp / "workspace",
-            state_dir=tmp / "state",
+            home_dir=tmp / "home",
             known_thread_id=None,
             model=None,
             sandbox="workspace-write",
@@ -106,7 +109,6 @@ class Harness:
             heartbeat_seconds=0.05,
             mcp_ready_timeout=5,
         )
-        self.settings.workspace_dir.mkdir()
         self.runtimes: list[Runtime] = []
 
     def start(self, cp=None, **changes) -> tuple[Runtime, StubControlPlane]:
@@ -116,10 +118,18 @@ class Harness:
         runtime.boot()
         return runtime, cp
 
+    def _upload(self, url, path):
+        self.objects[url] = Path(path).read_bytes()
+
+    def _download(self, url, path):
+        if url not in self.objects:
+            raise OSError("404")
+        Path(path).write_bytes(self.objects[url])
+
 
 @pytest.fixture
-def rt(tmp_path):
-    harness = Harness(tmp_path)
+def rt(tmp_path, monkeypatch):
+    harness = Harness(tmp_path, monkeypatch)
     yield harness
     for runtime in harness.runtimes:
         runtime.shutdown()
@@ -189,7 +199,9 @@ class TestBoot:
     def test_restart_resumes_same_thread(self, rt):
         first, _ = rt.start()
         first.shutdown()
-        second, cp = rt.start(instance_id=str(uuid.uuid4()), generation=2)
+        second, cp = rt.start(
+            known_thread_id=first.thread_id, instance_id="i2", generation=2
+        )
         assert second.status == "ready"
         assert second.thread_id == first.thread_id
         assert cp.sessions[0]["resumed"]
@@ -204,7 +216,10 @@ class TestBoot:
         assert instructions(first) == "你是代码审查员。"
         first.shutdown()
         second, _ = rt.start(
-            developer_instructions="只用中文回答。", instance_id="i2", generation=2
+            developer_instructions="只用中文回答。",
+            known_thread_id=first.thread_id,
+            instance_id="i2",
+            generation=2,
         )
         assert instructions(second) == "只用中文回答。"
 
@@ -215,12 +230,6 @@ class TestBoot:
             "RECOVERY_RESUME_FAILED",
         )
         assert cp.sessions == []
-
-    def test_recorded_thread_must_match_control_plane(self, rt):
-        first, _ = rt.start()
-        first.shutdown()
-        runtime, _ = rt.start(known_thread_id="other", instance_id="i2")
-        assert runtime.error_code == "RECOVERY_THREAD_MISMATCH"
 
     def test_control_plane_thread_conflict(self, rt):
         runtime, _ = rt.start(cp=StubControlPlane(thread_conflict=True))
@@ -234,12 +243,6 @@ class TestBoot:
         monkeypatch.setenv("FAKE_MCP_FAIL", "tasks")
         failed, _ = rt.start(mcp_modules=[module], instance_id="i3")
         assert (failed.status, failed.error_code) == ("error", "MCP_REQUIRED_FAILED")
-
-    def test_unusable_workspace_is_not_ready(self, rt):
-        blocked = rt.tmp / "blocked"
-        blocked.write_text("not a directory")
-        runtime, _ = rt.start(workspace_dir=blocked)
-        assert (runtime.status, runtime.error_code) == ("error", "MOUNT_FAILED")
 
 
 class TestTurns:
@@ -346,89 +349,81 @@ class TestTurns:
         assert self.steer(runtime, done)[1] == "not_running"
         assert self.steer(runtime, "missing")[1] == "not_found"
 
-    def test_codex_crash_marks_outcome_unknown_and_restart_keeps_it(self, rt):
+    def test_codex_crash_marks_outcome_unknown(self, rt):
         runtime, cp = rt.start()
         command_id = send(runtime, "[crash]")
         cp.wait_for("command.outcome_unknown", command_id=command_id)
         assert runtime.status == "error"
-        runtime.shutdown()
-        restarted, _ = rt.start(instance_id="i2", generation=2)
-        assert restarted.status == "ready"
-        assert restarted.command_view(command_id)["status"] == "outcome_unknown"
 
 
-class TestRecovery:
-    def test_reconcile_completed_running_turn_and_unknown_start(self, rt):
+class TestSnapshots:
+    def test_every_turn_saves_a_snapshot_before_completing(self, rt):
         runtime, cp = rt.start()
-        done = send(runtime, "hello")
-        cp.completed(done)
-        thread_id = runtime.thread_id
-        runtime.shutdown()
-        # Simulate a crash: the ledger still thinks one turn runs and another
-        # was being started.
-        ledger = L.Ledger(rt.settings.ledger_path, "x")
-        ledger.update_command(done, status=L.RUNNING)
-        ledger.accept_command(
-            "starting",
-            agent_sequence=99,
-            kind="turn",
-            payload={},
-            request_hash="h",
-            generation=1,
-        )
-        ledger.update_command("starting", status=L.STARTING)
-        ledger.add_approval(
-            "old-approval", done, 1, "item/commandExecution/requestApproval"
-        )
-        ledger.close()
+        command_id = send(runtime, "你好")
+        cp.completed(command_id)
+        types = cp.types()
+        assert types.index("snapshot.saved") < types.index("turn.completed")
+        assert SNAPSHOT_URL in rt.objects
 
-        restarted, cp2 = rt.start(instance_id="i2", generation=2)
-        assert restarted.thread_id == thread_id
-        assert cp2.completed(done)["status"] == "completed"
-        cp2.wait_for("command.outcome_unknown", command_id="starting")
-        cp2.wait_for("approval.expired")
-        # Outbox sequences restart per instance.
-        assert cp2.events[0]["source_seq"] == 1
-
-    def test_checkpoint_round_trip(self, rt):
+    def test_new_instance_restores_the_snapshot(self, rt):
         runtime, cp = rt.start()
-        cp.completed(send(runtime, "before checkpoint"))
-        url = "http://objects.invalid/ckpt-1"
-        command_id = send(
-            runtime,
-            "",
-            kind="checkpoint",
-            payload={"checkpoint_id": "ckpt-1", "upload_url": url},
-        )
-        done = cp.wait_for("checkpoint.completed")
-        assert done["command_id"] == command_id
-        assert done["checksum"] == hashlib.sha256(cp.objects[url]).hexdigest()
-        assert done["manifest"]["thread_id"] == runtime.thread_id
-        assert not done["manifest"]["workspace"]["included"]
-        # The runtime is usable again after the pause.
-        assert cp.completed(send(runtime, "after"))["status"] == "completed"
+        (runtime.settings.workspace_dir / "notes.md").write_text("记得这个")
+        cp.completed(send(runtime, "hello"))
         thread_id = runtime.thread_id
         runtime.shutdown()
 
-        # A new host with empty state restores from the checkpoint.
-        restore = {"checkpoint_id": "ckpt-1", "url": url, "checksum": done["checksum"]}
+        # A new container starts with an empty home.
         restored, _ = rt.start(
-            cp=cp,
-            state_dir=rt.tmp / "state-2",
-            restore=restore,
+            home_dir=rt.tmp / "home-2",
+            snapshot_url=SNAPSHOT_URL,
             known_thread_id=thread_id,
-            instance_id="i5",
-            generation=3,
+            instance_id="i2",
+            generation=2,
         )
         assert (restored.status, restored.thread_id) == ("ready", thread_id)
+        notes = restored.settings.workspace_dir / "notes.md"
+        assert notes.read_text() == "记得这个"
 
-    def test_restore_rejects_bad_checksum(self, rt):
-        cp = StubControlPlane()
-        cp.objects["u"] = b"garbage"
-        runtime, _ = rt.start(
-            cp=cp, restore={"checkpoint_id": "c", "url": "u", "checksum": "0" * 64}
+    def test_codex_scratch_files_are_left_out(self, rt):
+        runtime, cp = rt.start()
+        (runtime.settings.codex_home / "tmp").mkdir()
+        (runtime.settings.codex_home / "tmp" / "scratch").write_text("x")
+        (runtime.settings.codex_home / "state.lock").write_text("x")
+        cp.completed(send(runtime, "hello"))
+        runtime.shutdown()
+        restored, _ = rt.start(
+            home_dir=rt.tmp / "home-2",
+            snapshot_url=SNAPSHOT_URL,
+            known_thread_id=runtime.thread_id,
+            instance_id="i2",
         )
-        assert runtime.error_code == "RECOVERY_CHECKSUM_MISMATCH"
+        home = restored.settings.codex_home
+        assert not (home / "tmp").exists()
+        assert not (home / "state.lock").exists()
+
+    def test_failed_upload_is_reported_and_the_turn_still_completes(
+        self, rt, monkeypatch
+    ):
+        def broken(url, path):
+            raise OSError("S3 unavailable")
+
+        monkeypatch.setattr(runtime_module, "upload", broken)
+        runtime, cp = rt.start()
+        command_id = send(runtime, "你好")
+        assert cp.completed(command_id)["status"] == "completed"
+        assert cp.wait_for("snapshot.failed") == {"reason": "SNAPSHOT_FAILED"}
+
+    def test_unreadable_snapshot_fails_recovery(self, rt):
+        rt.objects[SNAPSHOT_URL] = b"garbage"
+        runtime, _ = rt.start(snapshot_url=SNAPSHOT_URL)
+        assert (runtime.status, runtime.error_code) == (
+            "recovery_failed",
+            "RECOVERY_SNAPSHOT_INVALID",
+        )
+
+    def test_missing_snapshot_fails_recovery(self, rt):
+        runtime, _ = rt.start(snapshot_url=SNAPSHOT_URL)
+        assert runtime.error_code == "RECOVERY_DOWNLOAD_FAILED"
 
 
 class TestServer:
@@ -479,8 +474,6 @@ class TestServer:
         conflict = {**body, "payload": {"text": "other"}}
         assert self.status("PUT", "/commands/c1", conflict) == 409
         self.cp.completed("c1")
-        assert self.call("GET", "/commands/c1")[1]["status"] == "succeeded"
-        assert self.status("GET", "/commands/nope") == 404
         interrupt = {"generation": 1}
         assert self.status("POST", "/commands/c1/interrupt", interrupt) == 202
         decision = "/approvals/x/decision"

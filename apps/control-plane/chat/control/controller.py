@@ -21,13 +21,10 @@ from django.utils import timezone
 from .. import llm, services
 from ..models import (
     Agent,
-    AgentCheckpoint,
     AgentCommand,
     AgentSession,
-    AgentStorage,
     Approval,
     Interaction,
-    Message,
     RuntimeInstance,
 )
 from . import mcp, objects
@@ -53,7 +50,6 @@ IDLE_SECONDS = 600
 # A runtime that never came up is retried after this long.
 RETRY_SECONDS = 30
 DISPATCH_TIMEOUT_SECONDS = 120
-CHECKPOINT_AFTER_TURNS = 5
 # The per-agent container is the isolation boundary.
 CODEX_SANDBOX = "danger-full-access"
 CODEX_APPROVAL_POLICY = "on-request"
@@ -90,12 +86,10 @@ class Controller:
             self.fail_stale_queued,
             self.restart_outdated,
             self.ensure_runtimes,
-            self.reconcile_unknown,
             self.dispatch,
             self.deliver_interrupts,
             self.deliver_steers,
             self.deliver_decisions,
-            self.schedule_checkpoints,
             self.stop_idle,
             self.stop_deleted,
         ):
@@ -115,9 +109,7 @@ class Controller:
             retry_failed = (
                 instance.status == RuntimeInstance.Status.FAILED
                 and AgentCommand.objects.filter(
-                    agent=instance.agent,
-                    kind__in=AgentCommand.USER_KINDS,
-                    status=AgentCommand.Status.QUEUED,
+                    agent=instance.agent, status=AgentCommand.Status.QUEUED
                 ).exists()
             )
             if instance.lease_expires_at < now:
@@ -127,7 +119,7 @@ class Controller:
                 reason = "RETRY"
             else:
                 continue
-            # Fence physically before a replacement may write the state volume.
+            # Fence physically before a replacement starts.
             self.driver.stop(instance.container_id)
             self.end_instance(
                 instance,
@@ -149,33 +141,31 @@ class Controller:
             instance.status = status
             instance.end_reason = reason
             instance.save(update_fields=["ended_at", "status", "end_reason"])
-            # Whatever ran there may or may not have happened: hold the slot
-            # until the next runtime reconciles it.
-            instance.commands.filter(status__in=LIVE_EXECUTION).update(
-                status=AgentCommand.Status.OUTCOME_UNKNOWN
-            )
-            approvals = instance.approvals.filter(
-                status__in=[Approval.Status.PENDING, Approval.Status.DECIDED]
-            )
-            approvals.filter(status=Approval.Status.DECIDED).update(
-                status=Approval.Status.DELIVERY_UNKNOWN
-            )
-            approvals.update(status=Approval.Status.EXPIRED, resolved_at=timezone.now())
-            for interaction in Interaction.objects.filter(
-                approval__runtime_instance=instance,
-                status__in=[Interaction.Status.PENDING, Interaction.Status.SUBMITTED],
+            # Its container, and whatever ran there since the last snapshot,
+            # is gone. A command never seen to start is queued again; one
+            # that started is never replayed.
+            for command in instance.commands.select_related("agent").filter(
+                status__in=LIVE_EXECUTION
             ):
-                services.save_interaction(
-                    conversation, interaction, status=Interaction.Status.EXPIRED
-                )
-            for reply in Message.objects.filter(
-                command__runtime_instance=instance,
-                role=Message.Role.ASSISTANT,
-                status=Message.Status.WAITING_FOR_INPUT,
-            ):
-                services.save_message(
-                    conversation, reply, status=Message.Status.RESPONDING
-                )
+                if command.interrupt_requested_at:
+                    services.finish_command(conversation, command, "cancelled")
+                elif command.status == AgentCommand.Status.DISPATCHING:
+                    command.status = AgentCommand.Status.QUEUED
+                    command.runtime_instance = None
+                    command.dispatch_generation = None
+                    command.dispatched_at = None
+                    command.save(
+                        update_fields=[
+                            "status",
+                            "runtime_instance",
+                            "dispatch_generation",
+                            "dispatched_at",
+                        ]
+                    )
+                else:
+                    services.finish_command(
+                        conversation, command, "failed", "REPLY_INTERRUPTED"
+                    )
             agent = instance.agent
             if agent.status not in (Agent.Status.ERROR, Agent.Status.RECOVERY_FAILED):
                 agent.status = Agent.Status.STOPPED
@@ -184,12 +174,7 @@ class Controller:
 
     def ensure_runtimes(self) -> None:
         wanted = Agent.objects.filter(
-            Q(
-                commands__status__in=[
-                    AgentCommand.Status.QUEUED,
-                    AgentCommand.Status.OUTCOME_UNKNOWN,
-                ]
-            )
+            Q(commands__status=AgentCommand.Status.QUEUED)
             | Q(desired_state=Agent.DesiredState.RUNNING),
             deleted_at__isnull=True,
         ).distinct()
@@ -209,27 +194,14 @@ class Controller:
             self.provision(agent)
 
     def provision(self, agent: Agent) -> RuntimeInstance | None:
-        storage = self._storage(agent)
         session, _ = AgentSession.objects.get_or_create(agent=agent)
-        # Check before creating it: a missing state volume means lost state.
-        state_missing = not self.driver.volume_exists(storage.state_volume_ref)
-        self.driver.ensure_volume(storage.state_volume_ref)
-        if storage.status != AgentStorage.Status.READY:
-            AgentStorage.objects.filter(pk=storage.pk).update(
-                status=AgentStorage.Status.READY
-            )
-        restore = None
-        if state_missing and session.thread_id:
-            restore = (
-                agent.checkpoints.filter(status=AgentCheckpoint.Status.AVAILABLE)
-                .order_by("-created_at")
-                .first()
-            )
+        # Every container starts empty; the agent's home comes from its snapshot.
+        restore = objects.snapshot_exists(agent.pk)
         try:
-            snapshot = mcp.snapshot(agent)
+            mcp_config = mcp.snapshot(agent)
         except mcp.McpConfigError:
             logger.exception("Invalid MCP configuration for agent %s", agent.pk)
-            snapshot = None
+            mcp_config = None
 
         with transaction.atomic():
             conversation = services.lock_conversation(agent.conversation_id)
@@ -249,34 +221,18 @@ class Controller:
                     else RuntimeInstance.Status.PROVISIONING
                 ),
                 lease_expires_at=timezone.now() + _seconds(START_TIMEOUT_SECONDS),
-                mcp_snapshot=snapshot or [],
+                mcp_snapshot=mcp_config or [],
                 config_version=agent.config_version,
-                restored_checkpoint=restore,
             )
             agent.status = (
                 Agent.Status.RECOVERING if recovering else Agent.Status.PROVISIONING
             )
             agent.save(update_fields=["generation", "status", "updated_at"])
             if recovering:
-                gap = None
-                if restore:
-                    # Turns after the checkpoint are not in the restored Codex
-                    # state. Record the gap; never re-run them.
-                    gap = {
-                        "checkpoint_id": str(restore.id),
-                        "commands": [
-                            str(pk)
-                            for pk in agent.commands.filter(
-                                kind__in=AgentCommand.USER_KINDS,
-                                finished_at__gt=restore.completed_at,
-                            ).values_list("pk", flat=True)
-                        ],
-                    }
                 AgentSession.objects.filter(agent=agent).update(
-                    status=AgentSession.Status.RECOVERING,
-                    **({"recovery_gap": gap} if restore else {}),
+                    status=AgentSession.Status.RECOVERING
                 )
-            if snapshot is None:
+            if mcp_config is None:
                 instance.status = RuntimeInstance.Status.FAILED
                 mark_runtime_failed(conversation, agent, instance, "MCP_CONFIG_INVALID")
                 instance.ended_at = timezone.now()
@@ -286,9 +242,7 @@ class Controller:
             services.refresh_agent_status(conversation, agent)
 
         try:
-            started = self.driver.start(
-                self._spec(agent, instance, storage, session, restore)
-            )
+            started = self.driver.start(self._spec(agent, instance, session, restore))
         except Exception:
             logger.exception("Failed to start runtime for agent %s", agent.pk)
             with transaction.atomic():
@@ -306,18 +260,7 @@ class Controller:
         instance.refresh_from_db()
         return instance
 
-    def _storage(self, agent: Agent) -> AgentStorage:
-        storage, _ = AgentStorage.objects.get_or_create(
-            agent=agent,
-            defaults={
-                "workspace_path": f"agents/{agent.pk}/workspace",
-                "state_volume_ref": self.driver.name(f"state-{agent.pk}"),
-                "host_id": HOST_ID,
-            },
-        )
-        return storage
-
-    def _spec(self, agent, instance, storage, session, restore) -> RuntimeSpec:
+    def _spec(self, agent, instance, session, restore: bool) -> RuntimeSpec:
         token = runtime_token(instance.pk, instance.generation)
         env = {
             "AXP_AGENT_ID": str(agent.pk),
@@ -342,8 +285,6 @@ class Controller:
             "AXP_MCP_SNAPSHOT": json.dumps(instance.mcp_snapshot),
             "AXP_CONFIG_VERSION": str(instance.config_version),
             "AXP_HEARTBEAT_SECONDS": str(LEASE_SECONDS / 4),
-            "AXP_JUICEFS_META_URL": settings.AXP_JUICEFS_META_URL,
-            "AXP_WORKSPACE_PATH": storage.workspace_path,
             # The runtime and Codex export without credentials; the collector
             # holds them. Resource attributes tie records to the agent.
             "OTEL_EXPORTER_OTLP_ENDPOINT": RUNTIME_OTLP_ENDPOINT,
@@ -360,13 +301,7 @@ class Controller:
             ),
         }
         if restore:
-            env["AXP_RESTORE"] = json.dumps(
-                {
-                    "checkpoint_id": str(restore.pk),
-                    "checksum": restore.checksum,
-                    "url": objects.download_url(restore.state_object_key),
-                }
-            )
+            env["AXP_SNAPSHOT_URL"] = objects.download_url(agent.pk)
         if settings.AXP_CODEX_LAUNCH:
             env["AXP_CODEX_LAUNCH"] = settings.AXP_CODEX_LAUNCH
         return RuntimeSpec(
@@ -375,7 +310,6 @@ class Controller:
             generation=instance.generation,
             name=self.driver.name(f"agent-{agent.pk}-g{instance.generation}"),
             env=env,
-            state_volume=storage.state_volume_ref,
         )
 
     def stop_idle(self) -> None:
@@ -387,9 +321,6 @@ class Controller:
             if agent.desired_state == Agent.DesiredState.RUNNING or self._busy(agent):
                 continue
             if (agent.last_active_at or instance.created_at) > idle_before:
-                continue
-            if self._checkpoint_due(agent, minimum_turns=1):
-                self.enqueue_checkpoint(agent)
                 continue
             self.driver.stop(instance.container_id)
             self.end_instance(instance, "IDLE", RuntimeInstance.Status.STOPPED)
@@ -433,7 +364,6 @@ class Controller:
     def fail_stale_queued(self) -> None:
         cutoff = timezone.now() - _seconds(DISPATCH_TIMEOUT_SECONDS)
         stale = AgentCommand.objects.filter(
-            kind__in=AgentCommand.USER_KINDS,
             status=AgentCommand.Status.QUEUED,
             created_at__lt=cutoff,
         ).select_related("agent")
@@ -494,9 +424,8 @@ class Controller:
                     "attempt_count",
                 ]
             )
-            if command.kind in AgentCommand.USER_KINDS:
-                agent.last_active_at = timezone.now()
-                agent.save(update_fields=["last_active_at", "updated_at"])
+            agent.last_active_at = timezone.now()
+            agent.save(update_fields=["last_active_at", "updated_at"])
             return command
 
     def _send(self, client, command: AgentCommand) -> None:
@@ -515,83 +444,7 @@ class Controller:
         with transaction.atomic():
             conversation = services.lock_conversation(command.agent.conversation_id)
             command = AgentCommand.objects.select_related("agent").get(pk=command.pk)
-            if command.kind == AgentCommand.Kind.CHECKPOINT:
-                command.status = AgentCommand.Status.FAILED
-                command.finished_at = timezone.now()
-                command.save(update_fields=["status", "finished_at"])
-                AgentCheckpoint.objects.filter(command=command).exclude(
-                    status=AgentCheckpoint.Status.AVAILABLE
-                ).update(status=AgentCheckpoint.Status.FAILED)
-            else:
-                services.finish_command(conversation, command, "failed", code)
-
-    def reconcile_unknown(self) -> None:
-        unknown = AgentCommand.objects.filter(
-            status=AgentCommand.Status.OUTCOME_UNKNOWN
-        ).select_related("agent")
-        for command in unknown:
-            instance = command.agent.runtimes.filter(
-                ended_at__isnull=True, status__in=READY
-            ).first()
-            if instance is None:
-                continue
-            try:
-                view = self.client(instance).get_command(command.pk)
-            except (RuntimeHttpError, RuntimeUnavailable):
-                continue
-            status = (view or {}).get("status")
-            with transaction.atomic():
-                conversation = services.lock_conversation(command.agent.conversation_id)
-                command = AgentCommand.objects.select_related("agent").get(
-                    pk=command.pk
-                )
-                if command.status != AgentCommand.Status.OUTCOME_UNKNOWN:
-                    continue
-                if status in ("accepted", "starting", "running"):
-                    # The shared ledger kept it; this runtime carries it on.
-                    command.status = AgentCommand.Status.RUNNING
-                    command.runtime_instance = instance
-                    command.dispatch_generation = instance.generation
-                    command.save(
-                        update_fields=[
-                            "status",
-                            "runtime_instance",
-                            "dispatch_generation",
-                        ]
-                    )
-                elif command.kind == AgentCommand.Kind.CHECKPOINT:
-                    command.status = AgentCommand.Status.FAILED
-                    command.finished_at = timezone.now()
-                    command.save(update_fields=["status", "finished_at"])
-                    AgentCheckpoint.objects.filter(command=command).exclude(
-                        status=AgentCheckpoint.Status.AVAILABLE
-                    ).update(status=AgentCheckpoint.Status.FAILED)
-                elif status == "succeeded":
-                    services.finish_command(conversation, command, "succeeded")
-                elif status == "interrupted":
-                    services.finish_command(conversation, command, "interrupted")
-                elif status == "failed":
-                    services.finish_command(
-                        conversation, command, "failed", "TURN_FAILED"
-                    )
-                elif view is None and instance.restored_checkpoint_id is None:
-                    # The ledger never recorded it, so it never ran: queue again.
-                    command.status = AgentCommand.Status.QUEUED
-                    command.runtime_instance = None
-                    command.dispatch_generation = None
-                    command.dispatched_at = None
-                    command.save(
-                        update_fields=[
-                            "status",
-                            "runtime_instance",
-                            "dispatch_generation",
-                            "dispatched_at",
-                        ]
-                    )
-                else:
-                    services.finish_command(
-                        conversation, command, "failed", "REPLY_INTERRUPTED"
-                    )
+            services.finish_command(conversation, command, "failed", code)
 
     # --- control channel ------------------------------------------------------
 
@@ -698,70 +551,4 @@ class Controller:
                 continue
             Approval.objects.filter(pk=approval.pk).update(
                 delivery_attempted_at=timezone.now()
-            )
-
-    # --- checkpoints ----------------------------------------------------------
-
-    def _checkpoint_due(self, agent: Agent, minimum_turns: int) -> bool:
-        if CHECKPOINT_AFTER_TURNS <= 0:
-            return False
-        if not AgentSession.objects.filter(
-            agent=agent, thread_id__isnull=False
-        ).exists():
-            return False
-        latest = agent.checkpoints.order_by("-created_at").first()
-        if latest and latest.status in (
-            AgentCheckpoint.Status.PENDING,
-            AgentCheckpoint.Status.CREATING,
-        ):
-            return False
-        since = latest.created_at if latest else None
-        turns = agent.commands.filter(
-            kind__in=AgentCommand.USER_KINDS, status=AgentCommand.Status.SUCCEEDED
-        )
-        if since:
-            turns = turns.filter(finished_at__gt=since)
-        count = turns.count()
-        if (
-            latest
-            and latest.status == AgentCheckpoint.Status.FAILED
-            and count < CHECKPOINT_AFTER_TURNS
-        ):
-            # Do not retry a failed checkpoint until enough new work accrues.
-            return False
-        return count >= minimum_turns
-
-    def schedule_checkpoints(self) -> None:
-        for instance in RuntimeInstance.objects.filter(
-            ended_at__isnull=True, status=RuntimeInstance.Status.READY
-        ).select_related("agent"):
-            agent = instance.agent
-            if not self._busy(agent) and self._checkpoint_due(
-                agent, CHECKPOINT_AFTER_TURNS
-            ):
-                self.enqueue_checkpoint(agent)
-
-    def enqueue_checkpoint(self, agent: Agent) -> AgentCheckpoint:
-        checkpoint_id = uuid.uuid4()
-        key = objects.checkpoint_key(agent.pk, checkpoint_id)
-        with transaction.atomic():
-            services.lock_conversation(agent.conversation_id)
-            agent = Agent.objects.select_for_update().get(pk=agent.pk)
-            agent.last_command_seq += 1
-            agent.save(update_fields=["last_command_seq", "updated_at"])
-            command = AgentCommand.objects.create(
-                agent=agent,
-                agent_sequence=agent.last_command_seq,
-                kind=AgentCommand.Kind.CHECKPOINT,
-                input={
-                    "checkpoint_id": str(checkpoint_id),
-                    "upload_url": objects.upload_url(key),
-                },
-            )
-            return AgentCheckpoint.objects.create(
-                id=checkpoint_id,
-                agent=agent,
-                command=command,
-                thread_id=agent.session.thread_id,
-                state_object_key=key,
             )

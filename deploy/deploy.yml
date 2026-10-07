@@ -166,7 +166,6 @@ env:
     - AXP_EDGE_SECRET
     - AXP_S3_ACCESS_KEY_ID
     - AXP_S3_SECRET_ACCESS_KEY
-    - AXP_JUICEFS_META_URL
     - OTEL_EXPORTER_OTLP_HEADERS
 
 accessories:
@@ -181,8 +180,8 @@ accessories:
         - POSTGRES_PASSWORD
     volumes:
       - axp-postgres:/var/lib/postgresql/data
-  # Agent workspaces (JuiceFS data) and checkpoints, over S3 on the runtime
-  # network as axp-s3. Never published (Kamal also attaches it to its own network).
+  # Agent snapshots, over S3 on the runtime network as axp-s3. Never
+  # published (Kamal also attaches it to its own network).
   s3:
     image: chrislusf/seaweedfs:4.48
     host: <%= host %>
@@ -195,18 +194,6 @@ accessories:
       - axp-s3:/data
     options:
       network: name=axp-prod-runtime,alias=axp-s3
-  # JuiceFS metadata, on the runtime network as axp-juicefs-meta.
-  juicefs-meta:
-    image: redis:7.4-alpine
-    host: <%= host %>
-    cmd: sh -c 'exec redis-server --appendonly yes --requirepass "$REDIS_PASSWORD"'
-    env:
-      secret:
-        - REDIS_PASSWORD
-    volumes:
-      - axp-juicefs-meta:/data
-    options:
-      network: name=axp-prod-runtime,alias=axp-juicefs-meta
   # Logs and traces (OTLP), with its UI on 127.0.0.1:AXP_PROD_OBSERVE_PORT.
   openobserve:
     image: public.ecr.aws/zinclabs/openobserve:v1.0.4

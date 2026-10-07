@@ -17,7 +17,7 @@ from pydantic import ConfigDict, Field
 from .. import services
 from ..errors import ApiError, install_error_handlers
 from ..models import Agent, AgentSession, RuntimeInstance
-from . import projection
+from . import objects, projection
 from .auth import token_matches
 
 api = NinjaAPI(
@@ -167,6 +167,13 @@ def post_events(request: HttpRequest, instance_id: str, body: EventsIn):
     with transaction.atomic():
         acked = projection.import_events(instance, events)
     return {"acked_source_seq": acked}
+
+
+@api.post("/v1/runtime-instances/{instance_id}/snapshot", auth=None)
+def snapshot(request: HttpRequest, instance_id: str):
+    """Where to upload the agent's next snapshot; only its own agent's."""
+    instance = _instance(request, instance_id)
+    return {"upload_url": objects.upload_url(instance.agent_id)}
 
 
 @api.get("/v1/runtime-instances/{instance_id}/identity", auth=None)

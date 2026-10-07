@@ -1,14 +1,14 @@
-"""Checkpoint objects in S3.
+"""Agent snapshots in S3: one object per agent, replaced after every turn.
 
-Runtimes never hold storage credentials: they get short-lived presigned URLs.
+Runtimes never hold storage credentials: they get short-lived presigned URLs
+for their own agent's object only.
 """
 
-import hashlib
 from functools import cache
 
 from django.conf import settings
 
-BUCKET = "axp-checkpoints"
+BUCKET = "axp-agents"
 URL_SECONDS = 3600
 
 
@@ -36,33 +36,30 @@ def ensure_bucket() -> None:
         client.create_bucket(Bucket=BUCKET)
 
 
-def _presign(method: str, key: str) -> str:
+def _key(agent_id) -> str:
+    return f"agents/{agent_id}/snapshot.tar.zst"
+
+
+def _presign(method: str, agent_id) -> str:
     return _client().generate_presigned_url(
-        method, Params={"Bucket": BUCKET, "Key": key}, ExpiresIn=URL_SECONDS
+        method, Params={"Bucket": BUCKET, "Key": _key(agent_id)}, ExpiresIn=URL_SECONDS
     )
 
 
-def upload_url(key: str) -> str:
-    return _presign("put_object", key)
-
-
-def download_url(key: str) -> str:
-    return _presign("get_object", key)
-
-
-def verify(key: str | None, checksum: str) -> bool:
-    if not key:
-        return False
+def snapshot_exists(agent_id) -> bool:
     client = _client()
     try:
-        body = client.get_object(Bucket=BUCKET, Key=key)["Body"]
-    except client.exceptions.NoSuchKey:
-        return False
-    digest = hashlib.sha256()
-    for chunk in iter(lambda: body.read(1 << 20), b""):
-        digest.update(chunk)
-    return digest.hexdigest() == checksum
+        client.head_object(Bucket=BUCKET, Key=_key(agent_id))
+    except client.exceptions.ClientError as exc:
+        if exc.response["Error"]["Code"] in ("404", "NoSuchKey"):
+            return False
+        raise
+    return True
 
 
-def checkpoint_key(agent_id, checkpoint_id) -> str:
-    return f"agents/{agent_id}/checkpoints/{checkpoint_id}.tar.gz"
+def upload_url(agent_id) -> str:
+    return _presign("put_object", agent_id)
+
+
+def download_url(agent_id) -> str:
+    return _presign("get_object", agent_id)

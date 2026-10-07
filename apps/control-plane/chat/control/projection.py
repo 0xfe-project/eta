@@ -11,7 +11,6 @@ from .. import services
 from ..errors import ApiError
 from ..models import (
     Agent,
-    AgentCheckpoint,
     AgentCommand,
     AgentEvent,
     AgentSession,
@@ -20,7 +19,6 @@ from ..models import (
     Message,
     RuntimeInstance,
 )
-from . import objects
 
 ACTIVITY_LABELS = {
     "command": "运行命令",
@@ -345,60 +343,16 @@ def outcome_unknown(conversation, agent, instance, command, payload):
         services.finish_command(conversation, command, "failed", "REPLY_INTERRUPTED")
 
 
-def checkpoint_started(conversation, agent, instance, command, payload):
-    AgentCheckpoint.objects.filter(
-        pk=payload.get("checkpoint_id"),
-        agent=agent,
-        status=AgentCheckpoint.Status.PENDING,
-    ).update(status=AgentCheckpoint.Status.CREATING)
-
-
-def checkpoint_completed(conversation, agent, instance, command, payload):
-    checkpoint = AgentCheckpoint.objects.filter(
-        pk=payload.get("checkpoint_id"), agent=agent
-    ).first()
-    if checkpoint is None or checkpoint.status == AgentCheckpoint.Status.AVAILABLE:
-        return
-    checksum = str(payload.get("checksum") or "")
-    # Only a verified object makes the checkpoint usable.
-    if not checksum or not objects.verify(checkpoint.state_object_key, checksum):
-        checkpoint.status = AgentCheckpoint.Status.FAILED
-        checkpoint.save(update_fields=["status"])
-        _finish_checkpoint_command(checkpoint.command, "failed")
-        return
-    manifest = payload.get("manifest") or {}
-    checkpoint.status = AgentCheckpoint.Status.AVAILABLE
-    checkpoint.checksum = checksum
-    checkpoint.size_bytes = payload.get("size")
-    checkpoint.storage_manifest = manifest
-    checkpoint.sdk_version = str(manifest.get("sdk_version") or "")[:50]
-    checkpoint.runtime_version = str(manifest.get("runtime_version") or "")[:100]
-    checkpoint.last_event_seq = conversation.last_event_seq
-    checkpoint.completed_at = timezone.now()
-    checkpoint.save()
-    _finish_checkpoint_command(checkpoint.command, "succeeded")
-
-
-def checkpoint_failed(conversation, agent, instance, command, payload):
-    checkpoint = AgentCheckpoint.objects.filter(
-        pk=payload.get("checkpoint_id"), agent=agent
-    ).first()
-    if checkpoint and checkpoint.status != AgentCheckpoint.Status.AVAILABLE:
-        checkpoint.status = AgentCheckpoint.Status.FAILED
-        checkpoint.save(update_fields=["status"])
-        _finish_checkpoint_command(checkpoint.command, "failed")
-
-
-def _finish_checkpoint_command(command: AgentCommand, outcome: str) -> None:
-    if command.status in services.TERMINAL_COMMAND_STATUSES:
-        return
-    command.status = (
-        AgentCommand.Status.SUCCEEDED
-        if outcome == "succeeded"
-        else AgentCommand.Status.FAILED
+def snapshot_saved(conversation, agent, instance, command, payload):
+    AgentSession.objects.filter(agent=agent, last_error__startswith="SNAPSHOT").update(
+        last_error=None
     )
-    command.finished_at = timezone.now()
-    command.save(update_fields=["status", "finished_at"])
+
+
+def snapshot_failed(conversation, agent, instance, command, payload):
+    # Work since the last good snapshot would be lost with the container.
+    reason = str(payload.get("reason") or "SNAPSHOT_FAILED")[:100]
+    AgentSession.objects.filter(agent=agent).update(last_error=reason)
 
 
 def mcp_status(conversation, agent, instance, command, payload):
@@ -434,7 +388,6 @@ def mark_runtime_failed(conversation, agent, instance, code: str) -> None:
     )
     waiting = AgentCommand.objects.select_related("agent").filter(
         agent=agent,
-        kind__in=AgentCommand.USER_KINDS,
         status__in=[AgentCommand.Status.QUEUED, AgentCommand.Status.DISPATCHING],
     )
     for waiting_command in waiting:
@@ -451,9 +404,8 @@ HANDLERS = {
     "turn.completed": turn_completed,
     "turn.steered": turn_steered,
     "command.outcome_unknown": outcome_unknown,
-    "checkpoint.started": checkpoint_started,
-    "checkpoint.completed": checkpoint_completed,
-    "checkpoint.failed": checkpoint_failed,
+    "snapshot.saved": snapshot_saved,
+    "snapshot.failed": snapshot_failed,
     "mcp.status": mcp_status,
     "runtime.failed": runtime_failed,
 }

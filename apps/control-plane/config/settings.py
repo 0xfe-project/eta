@@ -91,18 +91,14 @@ AXP_INTERNAL_URL = os.getenv(
 AXP_LLM_GATEWAY_URL = os.getenv(
     "AXP_LLM_GATEWAY_URL", "http://172.30.0.1:8317" if DEBUG else "http://axp-llm:8317"
 )
-# SeaweedFS's S3 API: JuiceFS keeps workspace data there, checkpoints are
-# objects. Runtimes reach it at the same address.
+# SeaweedFS's S3 API, holding agent snapshots. Runtimes reach it at the same
+# address through presigned URLs.
 AXP_S3_ENDPOINT = os.getenv(
     "AXP_S3_ENDPOINT", "http://172.30.0.1:8333" if DEBUG else "http://axp-s3:8333"
 )
 AXP_S3_ACCESS_KEY_ID = os.getenv("AXP_S3_ACCESS_KEY_ID", "axp-dev" if DEBUG else "")
 AXP_S3_SECRET_ACCESS_KEY = os.getenv(
     "AXP_S3_SECRET_ACCESS_KEY", "axp-dev-secret" if DEBUG else ""
-)
-# JuiceFS metadata (Redis on the runtime network).
-AXP_JUICEFS_META_URL = os.getenv(
-    "AXP_JUICEFS_META_URL", "redis://axp-dev-juicefs-meta:6379/1" if DEBUG else ""
 )
 # Test hook: runtimes run this instead of the Codex app-server.
 AXP_CODEX_LAUNCH = os.getenv("AXP_CODEX_LAUNCH") or None

@@ -82,11 +82,6 @@ def make_handler(runtime: Runtime):
                         "runtime_version": runtime.codex_version,
                     },
                 )
-            if match := COMMAND.match(self.path):
-                if runtime.ledger is None:
-                    return self._error(503, "NOT_READY")
-                view = runtime.command_view(match.group(1))
-                return self._send(200, view) if view else self._error(404, "NOT_FOUND")
             self._error(404, "NOT_FOUND")
 
         def do_PUT(self):
@@ -99,7 +94,7 @@ def make_handler(runtime: Runtime):
                     return self._error(409, "AGENT_MISMATCH")
                 if runtime.status not in ("ready", "busy"):
                     return self._error(503, "NOT_READY")
-                if body.get("kind") not in ("turn", "compact", "checkpoint"):
+                if body.get("kind") not in ("turn", "compact"):
                     return self._error(400, "BAD_REQUEST")
                 try:
                     view = runtime.accept(match.group(1), body)

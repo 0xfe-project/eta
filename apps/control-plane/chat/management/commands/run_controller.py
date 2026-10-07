@@ -36,6 +36,5 @@ class Command(BaseCommand):
             cursor.execute("SELECT pg_advisory_lock(%s)", [CONTROLLER_LOCK_KEY])
         driver = DockerDriver()
         driver.ensure_network()
-        driver.ensure_storage()
         objects.ensure_bucket()
         Controller(driver).run_forever(interval=interval, stop=stop)

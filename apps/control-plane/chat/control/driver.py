@@ -12,8 +12,6 @@ CPUS = 1
 # Fixed in development, where host processes listen on its gateway address
 # (172.30.0.1); deploy/deploy.sh creates production's.
 DEV_SUBNET = "172.30.0.0/24"
-JUICEFS_NAME = "axp"
-WORKSPACE_BUCKET = "axp-workspaces"
 
 
 @dataclass
@@ -23,7 +21,6 @@ class RuntimeSpec:
     generation: int
     name: str
     env: dict[str, str]
-    state_volume: str
 
 
 @dataclass
@@ -67,43 +64,6 @@ class DockerDriver:
             labels={LABEL: "network"},
         )
 
-    def ensure_storage(self) -> None:
-        """Format the workspace filesystem once; later runs only check it.
-
-        JuiceFS keeps the S3 credentials in its metadata, so runtimes mount
-        with the metadata URL alone.
-        """
-        self.client.containers.run(
-            self.image,
-            [
-                "juicefs",
-                "format",
-                "--storage=s3",
-                f"--bucket={settings.AXP_S3_ENDPOINT}/{WORKSPACE_BUCKET}",
-                "--no-update",
-                settings.AXP_JUICEFS_META_URL,
-                JUICEFS_NAME,
-            ],
-            entrypoint=[],
-            environment={
-                "ACCESS_KEY": settings.AXP_S3_ACCESS_KEY_ID,
-                "SECRET_KEY": settings.AXP_S3_SECRET_ACCESS_KEY,
-            },
-            network=self.network,
-            remove=True,
-        )
-
-    def volume_exists(self, name: str) -> bool:
-        try:
-            self.client.volumes.get(name)
-            return True
-        except self.docker.errors.NotFound:
-            return False
-
-    def ensure_volume(self, name: str) -> None:
-        if not self.volume_exists(name):
-            self.client.volumes.create(name, labels={LABEL: "volume"})
-
     def start(self, spec: RuntimeSpec) -> StartedRuntime:
         self.ensure_network()
         container = self.client.containers.run(
@@ -111,7 +71,6 @@ class DockerDriver:
             name=spec.name,
             detach=True,
             environment=spec.env,
-            volumes={spec.state_volume: {"bind": "/state", "mode": "rw"}},
             network=self.network,
             labels={
                 LABEL: "runtime",
@@ -122,10 +81,6 @@ class DockerDriver:
             mem_limit=MEMORY,
             nano_cpus=int(CPUS * 1e9),
             restart_policy={"Name": "no"},
-            # JuiceFS mounts the workspace through FUSE inside the container.
-            devices=["/dev/fuse"],
-            cap_add=["SYS_ADMIN"],
-            security_opt=["apparmor:unconfined"],
         )
         container.reload()
         network = container.attrs["NetworkSettings"]["Networks"][self.network]

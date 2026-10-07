@@ -55,16 +55,22 @@ class ControlPlane:
     def post_events(self, events: list[dict]) -> dict:
         return self._request("POST", f"{self.base}/events", {"events": events})
 
-    def transfer(self, method: str, url: str, path):
-        """Upload a file to, or download it from, a presigned checkpoint URL."""
-        if method == "PUT":
-            with open(path, "rb") as handle:
-                data = handle.read()
-        else:
-            data = None
-        request = urllib.request.Request(url, data=data, method=method)
-        with urllib.request.urlopen(request, timeout=300) as response:
-            if method == "GET":
-                with open(path, "wb") as handle:
-                    while chunk := response.read(1 << 20):
-                        handle.write(chunk)
+    def snapshot_upload_url(self) -> str:
+        return self._request("POST", f"{self.base}/snapshot")["upload_url"]
+
+
+def upload(url: str, path) -> None:
+    """PUT a file to a presigned URL."""
+    with open(path, "rb") as handle:
+        request = urllib.request.Request(url, data=handle, method="PUT")
+        request.add_header("Content-Length", str(path.stat().st_size))
+        with urllib.request.urlopen(request, timeout=300):
+            pass
+
+
+def download(url: str, path) -> None:
+    """GET a presigned URL into a file."""
+    with urllib.request.urlopen(url, timeout=300) as response:
+        with open(path, "wb") as handle:
+            while chunk := response.read(1 << 20):
+                handle.write(chunk)

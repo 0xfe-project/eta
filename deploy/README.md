@@ -22,7 +22,7 @@ deploy/deploy.sh          # 首次执行 kamal setup
 
 首次运行会：
 
-- 生成 `~/.config/axp/production.env`（Django 密钥、Postgres、SeaweedFS 和 JuiceFS 元数据的密码、`AXP_EDGE_SECRET` 等，每台机器独立，不入库；后来新增的密钥会在下次部署时自动补上）。模型账号不在这里配置：部署后在 Web 设置的“模型服务”中绑定，凭据保存在 llm 角色的卷 `axp-llm`。
+- 生成 `~/.config/axp/production.env`（Django 密钥、Postgres 和 SeaweedFS 的密码、`AXP_EDGE_SECRET` 等，每台机器独立，不入库；后来新增的密钥会在下次部署时自动补上）。模型账号不在这里配置：部署后在 Web 设置的“模型服务”中绑定，凭据保存在 llm 角色的卷 `axp-llm`。
 - 生成 `~/.config/axp/kamal_ed25519` 并加入 `~/.ssh/authorized_keys`，限制为只能从 `127.0.0.1`/`::1` 登录。sshd 不在 22 端口时在 `production.env` 设 `AXP_SSH_PORT`。
 - 启动本地镜像仓库 `axp-registry`，创建 runtime 网络 `axp-prod-runtime`（子网由 Docker 选空闲的），用 Turbo 构建（或从缓存恢复）镜像产物和两个镜像（见下文“一次部署做什么”）。
 - 按本机 CPU 架构构建镜像。保留端口被其他服务占用、Docker 不可用或 SSH 不通时，会在部署前报错。
@@ -60,7 +60,7 @@ web、api、llm 不经过 kamal-proxy，重新部署时会有几秒中断（单�
 
 等待都由检查完成，不靠固定时长：每个角色都有 Docker 健康检查（启动期每 0.5 秒一次，能响应 HTTP 即就绪；controller 进程在即就绪），Kamal 据此判断就绪（`readiness_delay: 0`）。旧容器最多等 2 秒（`drain_timeout`）：聊天 SSE 连接不会自己结束，浏览器断开后会带 `Last-Event-ID` 自动续上；gunicorn 的 `graceful_timeout` 与之匹配。controller 收到 SIGTERM 后跑完当前一轮即退出（停止时限 30 秒，留给正在进行的 Docker 操作）。`AXP_EDGE_SECRET` 由 `deploy.sh` 首次需要时自动写入 `production.env`。
 
-数据库是 Kamal accessory `axp-postgres`（卷 `axp-postgres`）。智能体的工作区是 JuiceFS：数据在 accessory `axp-s3`（SeaweedFS，卷 `axp-s3`），元数据在 accessory `axp-juicefs-meta`（Redis，开启 AOF，卷 `axp-juicefs-meta`），两者在 Kamal 网络和 runtime 网络上可达、不发布端口，Redis 设有密码；检查点也存放在 `axp-s3`。controller 启动时格式化（已格式化则跳过）文件系统并创建检查点桶。数据都在本机卷里，换机器不会自动迁移；开发环境的 `axp-dev-*` 容器和卷与这些完全分开。
+数据库是 Kamal accessory `axp-postgres`（卷 `axp-postgres`）。每个智能体的全部状态（工作区和 Codex 会话）是 accessory `axp-s3`（SeaweedFS，卷 `axp-s3`）里的一个快照对象，在 Kamal 网络和 runtime 网络上可达、不发布端口；controller 启动时创建桶 `axp-agents`。runtime 容器不挂载任何卷。数据都在本机卷里，换机器不会自动迁移；开发环境的 `axp-dev-*` 容器和卷与这些完全分开。
 
 日志由 Kamal accessory `axp-openobserve`（[OpenObserve](https://openobserve.ai)，卷 `axp-openobserve`）收集：各角色通过 OTLP 发送，`OTEL_SERVICE_NAME` 区分来源（`gateway`、`web`、`llm-gateway`、`control-plane-api`、`control-plane-internal`、`control-plane-controller`）。agent runtime 容器运行智能体执行的代码、不持有任何凭据：它们把日志、trace 和指标（包括 Codex 原生的 OpenTelemetry 数据，日志事件含 prompt）发给 accessory `axp-otel-collector`（runtime 网络上的 `otel-collector:4318`，配置见 `otel-collector.yaml`），由它带上凭据转发到 OpenObserve，记录带有 `axp.agent.id`、`axp.runtime.instance.id`。Codex 每收到一段流式输出都会产生一条日志和几个 span（约每两个字一条），Collector 会过滤掉这部分，只保留回合级的事件和 span；Collector 不保存状态，每次部署都会重启以应用配置变更。root 账号是 `root@axp.local`，密码 `AXP_OBSERVE_PASSWORD` 由 `deploy.sh` 首次需要时写入 `production.env`；已有的机器在下一次部署前会自动启动这个 accessory。
 
