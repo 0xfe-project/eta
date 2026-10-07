@@ -141,8 +141,9 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		rec.status = http.StatusSwitchingProtocols
 	}
 	// Page and asset loads are not worth a record each (in development every
-	// Vite module is one); API calls and failures are.
-	if upstream == "web" && rec.status < http.StatusBadRequest {
+	// Vite module is one; OpenObserve's UI polls its API); API calls and
+	// failures are.
+	if (upstream == "web" || upstream == "observe") && rec.status < http.StatusBadRequest {
 		return
 	}
 	g.logger.Info("request",

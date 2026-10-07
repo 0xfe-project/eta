@@ -93,6 +93,8 @@ func run(logger *slog.Logger) error {
 func routesFromEnv() ([]Route, error) {
 	specs := []struct{ name, prefix, env string }{
 		{"llm", "/api/llm/", "AXP_GATEWAY_UPSTREAM_LLM"},
+		// OpenObserve's UI and API, served under /observe (ZO_BASE_URI).
+		{"observe", "/observe/", "AXP_GATEWAY_UPSTREAM_OBSERVE"},
 		{"api", "/api/", "AXP_GATEWAY_UPSTREAM_API"},
 		{"web", "/", "AXP_GATEWAY_UPSTREAM_WEB"},
 	}

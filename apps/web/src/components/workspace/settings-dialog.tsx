@@ -1,4 +1,6 @@
 import type { SettingsSection } from "./workspace-store";
+import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
+import { ChartLineIcon } from "@phosphor-icons/react/ChartLine";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { PaletteIcon } from "@phosphor-icons/react/Palette";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
@@ -26,7 +28,29 @@ const sections: {
   { value: "agents", label: "智能体", icon: RobotIcon },
   { value: "providers", label: "模型服务", icon: PlugsConnectedIcon },
   { value: "appearance", label: "外观", icon: PaletteIcon },
+  { value: "logs", label: "日志", icon: ChartLineIcon },
 ];
+
+/** OpenObserve, proxied by the edge gateway under /observe. */
+function LogSettings() {
+  return (
+    <div className="space-y-3">
+      <h2 className="text-sm font-semibold">日志</h2>
+      <div className="grid min-w-0 gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        <div className="min-w-0 text-sm">
+          <p className="font-medium">OpenObserve</p>
+          <p className="text-muted-foreground">登录账号 root@axp.local</p>
+        </div>
+        <Button asChild variant="outline" size="sm" className="w-fit">
+          <a href="/observe/web/" target="_blank" rel="noreferrer">
+            打开
+            <ArrowSquareOutIcon aria-hidden="true" />
+          </a>
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 function AppearanceSettings() {
   const sessionTheme = useWorkspaceStore((s) => s.workspace.sessionTheme);
@@ -152,6 +176,8 @@ export function SettingsDialog() {
               <AgentSettings />
             ) : settings.section === "providers" ? (
               <ProviderSettings />
+            ) : settings.section === "logs" ? (
+              <LogSettings />
             ) : (
               <AppearanceSettings />
             )}

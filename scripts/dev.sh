@@ -19,7 +19,7 @@ any number of instances can start in parallel.
 AXP_RUNTIME_MODE=docker runs real agent containers instead of the fake worker.
 
 Logs also go to a local OpenObserve (one per machine, shared by every
-instance) at http://localhost:${AXP_DEV_OBSERVE_PORT:-5080}. It needs Docker;
+instance), opened through the gateway at /observe/. It needs Docker;
 AXP_DEV_OBSERVE=0 keeps logs in the terminal only.
 EOF
 }
@@ -177,22 +177,30 @@ if [[ "${AXP_DEV_OBSERVE:-1}" == "0" ]]; then
 elif ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
   echo "Docker is not available; logs stay in the terminal (AXP_DEV_OBSERVE=0 hides this)." >&2
 else
-  if ! docker container inspect "$OBSERVE_CONTAINER" >/dev/null 2>&1; then
+  # Served under /observe so the gateway proxies it as in production.
+  # Recreated (data kept in the volume) when its image or settings change.
+  observe_image=public.ecr.aws/zinclabs/openobserve:v1.0.4
+  observe_hash="$(printf '%s\n%s' "$observe_image" /observe | sha256sum | cut -c1-12)"
+  if [[ "$(docker inspect -f '{{index .Config.Labels "axp.config"}}' "$OBSERVE_CONTAINER" 2>/dev/null || true)" != "$observe_hash" ]]; then
+    docker rm -f "$OBSERVE_CONTAINER" >/dev/null 2>&1 || true
     docker run -d --name "$OBSERVE_CONTAINER" --restart unless-stopped \
+      --label "axp.config=$observe_hash" \
       -p "127.0.0.1:$OBSERVE_PORT:5080" -v axp-dev-openobserve:/data \
-      -e ZO_DATA_DIR=/data -e ZO_ROOT_USER_EMAIL="$OBSERVE_USER" \
+      -e ZO_DATA_DIR=/data -e ZO_BASE_URI=/observe \
+      -e ZO_ROOT_USER_EMAIL="$OBSERVE_USER" \
       -e ZO_ROOT_USER_PASSWORD="$OBSERVE_PASSWORD" \
-      public.ecr.aws/zinclabs/openobserve:v1.0.4 >/dev/null
+      "$observe_image" >/dev/null
   fi
   docker start "$OBSERVE_CONTAINER" >/dev/null
   observe_port="$(docker port "$OBSERVE_CONTAINER" 5080/tcp | head -n1 | sed 's/.*://')"
   for _ in $(seq 1 60); do
-    curl -sf "http://127.0.0.1:$observe_port/healthz" >/dev/null && break
+    curl -sf "http://127.0.0.1:$observe_port/observe/healthz" >/dev/null && break
     sleep 0.5
   done
-  observe_url="http://localhost:$observe_port"
+  observe_url="http://localhost:$AXP_GATEWAY_PORT/observe/"
   observe_basic="$(printf '%s' "$OBSERVE_USER:$OBSERVE_PASSWORD" | base64 | tr -d '\n')"
-  export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:$observe_port/api/default"
+  export AXP_GATEWAY_UPSTREAM_OBSERVE="http://127.0.0.1:$observe_port"
+  export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:$observe_port/observe/api/default"
   export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic%20$observe_basic"
   export OTEL_RESOURCE_ATTRIBUTES="deployment.environment.name=development,axp.dev.port=$web_port"
 
@@ -207,7 +215,8 @@ else
     collector_image=otel/opentelemetry-collector-contrib:0.162.0
     collector_config="$(cat deploy/otel-collector.yaml)"
     # Recreated when its config or image changes.
-    collector_hash="$(printf '%s\n%s' "$collector_image" "$collector_config" | sha256sum | cut -c1-12)"
+    collector_endpoint="http://$OBSERVE_CONTAINER:5080/observe/api/default"
+    collector_hash="$(printf '%s\n%s\n%s' "$collector_image" "$collector_endpoint" "$collector_config" | sha256sum | cut -c1-12)"
     running_hash="$(docker inspect -f '{{index .Config.Labels "axp.config"}}' axp-dev-otel-collector 2>/dev/null || true)"
     if [[ "$running_hash" != "$collector_hash" ]]; then
       docker rm -f axp-dev-otel-collector >/dev/null 2>&1 || true
@@ -215,7 +224,7 @@ else
         --label "axp.config=$collector_hash" \
         --network "$runtime_network" --network-alias otel-collector \
         -e OTELCOL_CONFIG="$collector_config" \
-        -e OPENOBSERVE_ENDPOINT="http://$OBSERVE_CONTAINER:5080/api/default" \
+        -e OPENOBSERVE_ENDPOINT="$collector_endpoint" \
         -e OPENOBSERVE_AUTHORIZATION="Basic $observe_basic" \
         "$collector_image" --config=env:OTELCOL_CONFIG >/dev/null
     fi

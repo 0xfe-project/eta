@@ -23,6 +23,7 @@ servers:
         AXP_GATEWAY_UPSTREAM_WEB: http://axp-web:3000
         AXP_GATEWAY_UPSTREAM_API: http://axp-api:8000
         AXP_GATEWAY_UPSTREAM_LLM: http://axp-llm:8317
+        AXP_GATEWAY_UPSTREAM_OBSERVE: http://axp-openobserve:5080
     proxy:
       app_port: 8080
       # SSE: stream responses through and allow long-lived connections.
@@ -137,7 +138,7 @@ env:
     AXP_LLM_RUNTIME_BASE_URL: http://llm-gateway:8317/v1
     # Logs (and later traces) go to the OpenObserve accessory. Runtime
     # containers do not get these: they run agent code and hold no secrets.
-    OTEL_EXPORTER_OTLP_ENDPOINT: http://axp-openobserve:5080/api/default
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://axp-openobserve:5080/observe/api/default
     OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=production
     # <% if ENV["AXP_CODEX_AUTH_FILE"].to_s != "" %>
     # Host path; the controller bind-mounts it into each runtime.
@@ -172,6 +173,9 @@ accessories:
       clear:
         ZO_ROOT_USER_EMAIL: root@axp.local
         ZO_DATA_DIR: /data
+        # Served under /observe so the gateway can proxy it (deploy.sh
+        # reboots the accessory when this is missing).
+        ZO_BASE_URI: /observe
       secret:
         - ZO_ROOT_USER_PASSWORD
     volumes:
@@ -183,10 +187,11 @@ accessories:
     image: otel/opentelemetry-collector-contrib:0.162.0
     host: <%= host %>
     files:
-      - deploy/otel-collector.yaml:/etc/otelcol/config.yaml
+      # The contrib image reads /etc/otelcol-contrib/config.yaml.
+      - deploy/otel-collector.yaml:/etc/otelcol-contrib/config.yaml
     env:
       clear:
-        OPENOBSERVE_ENDPOINT: http://axp-openobserve:5080/api/default
+        OPENOBSERVE_ENDPOINT: http://axp-openobserve:5080/observe/api/default
       secret:
         - OPENOBSERVE_AUTHORIZATION
     options:

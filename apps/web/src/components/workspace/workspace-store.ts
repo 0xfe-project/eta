@@ -20,7 +20,7 @@ const workspaceSchema = z.object({
 });
 
 export type WorkspaceState = z.infer<typeof workspaceSchema>;
-export type SettingsSection = "agents" | "providers" | "appearance";
+export type SettingsSection = "agents" | "providers" | "appearance" | "logs";
 export interface SettingsState {
   open: boolean;
   section: SettingsSection;

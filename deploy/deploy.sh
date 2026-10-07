@@ -190,6 +190,9 @@ kamal() {
 if [[ "$1" == "deploy" ]]; then
   if ! docker container inspect axp-openobserve >/dev/null 2>&1; then
     kamal accessory boot openobserve
+  elif ! docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' axp-openobserve | grep -qx 'ZO_BASE_URI=/observe'; then
+    # Booted before it moved under /observe; its data stays in the volume.
+    kamal accessory reboot openobserve
   fi
   if docker container inspect axp-otel-collector >/dev/null 2>&1; then
     kamal accessory reboot otel-collector
