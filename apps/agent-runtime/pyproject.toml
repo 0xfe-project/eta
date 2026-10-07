@@ -3,7 +3,7 @@ name = "axp-agent-runtime"
 version = "0.1.0"
 description = "Per-agent runtime that drives Codex through the official Python SDK."
 requires-python = ">=3.13,<3.14"
-dependencies = ["mcp>=1.20,<2", "openai-codex==0.160.1"]
+dependencies = ["axp-telemetry", "mcp>=1.20,<2", "openai-codex==0.160.1"]
 
 [dependency-groups]
 dev = [
@@ -15,9 +15,10 @@ dev = [
 [tool.uv]
 package = false
 
+[tool.uv.sources]
+axp-telemetry = { path = "../../packages/telemetry-py", editable = true }
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-# The Codex SDK's pydantic models warn on serialization; not test failures.
-filterwarnings = ["ignore:Pydantic serializer warnings:UserWarning"]
 addopts = "-p no:cacheprovider"

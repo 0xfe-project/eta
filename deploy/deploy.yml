@@ -41,6 +41,9 @@ servers:
   api:
     hosts: [<%= host %>]
     cmd: sh -c "python manage.py migrate --noinput && exec python -m gunicorn config.wsgi --bind 0.0.0.0:8000 --worker-class gthread --workers 2 --threads 32"
+    env:
+      clear:
+        OTEL_SERVICE_NAME: control-plane-api
     options:
       network-alias: axp-api
   # LLM gateway (embedded CLIProxyAPI): connections and model catalog behind
@@ -66,6 +69,7 @@ servers:
     env:
       clear:
         AXP_URLCONF: config.internal_urls
+        OTEL_SERVICE_NAME: control-plane-internal
     options:
       network: name=axp-prod-runtime,alias=axp-internal
       volume: axp-objects:/data/objects
@@ -73,6 +77,9 @@ servers:
   controller:
     hosts: [<%= host %>]
     cmd: python manage.py run_controller
+    env:
+      clear:
+        OTEL_SERVICE_NAME: control-plane-controller
     options:
       network: axp-prod-runtime
       volume:
@@ -127,6 +134,10 @@ env:
     AXP_OBJECT_DIR: /data/objects
     AXP_LLM_GATEWAY_URL: http://axp-llm:8317
     AXP_LLM_RUNTIME_BASE_URL: http://llm-gateway:8317/v1
+    # Logs (and later traces) go to the OpenObserve accessory. Runtime
+    # containers do not get these: they run agent code and hold no secrets.
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://axp-openobserve:5080/api/default
+    OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=production
     # <% if ENV["AXP_CODEX_AUTH_FILE"].to_s != "" %>
     # Host path; the controller bind-mounts it into each runtime.
     AXP_CODEX_AUTH_FILE: <%= ENV["AXP_CODEX_AUTH_FILE"] %>
@@ -137,6 +148,7 @@ env:
     - AXP_EDGE_SECRET
     - AXP_LLM_API_KEY
     - OPENAI_API_KEY
+    - OTEL_EXPORTER_OTLP_HEADERS
 
 accessories:
   postgres:
@@ -150,3 +162,16 @@ accessories:
         - POSTGRES_PASSWORD
     volumes:
       - axp-postgres:/var/lib/postgresql/data
+  # Logs and traces (OTLP), with its UI on 127.0.0.1:AXP_PROD_OBSERVE_PORT.
+  openobserve:
+    image: public.ecr.aws/zinclabs/openobserve:v1.0.4
+    host: <%= host %>
+    port: '127.0.0.1:<%= ENV.fetch("AXP_PROD_OBSERVE_PORT") %>:5080'
+    env:
+      clear:
+        ZO_ROOT_USER_EMAIL: root@axp.local
+        ZO_DATA_DIR: /data
+      secret:
+        - ZO_ROOT_USER_PASSWORD
+    volumes:
+      - axp-openobserve:/data

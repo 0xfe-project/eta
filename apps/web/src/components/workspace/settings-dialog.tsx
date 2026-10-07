@@ -1,4 +1,4 @@
-import type { SettingsSection } from "./workspace-state";
+import type { SettingsSection } from "./workspace-store";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { PaletteIcon } from "@phosphor-icons/react/Palette";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { useNeedsAttention } from "@/queries/llm";
 import { AgentSettings } from "./agent-settings";
 import { ProviderSettings } from "./provider-settings";
-import { useWorkspace } from "./workspace-state";
+import { useWorkspaceStore } from "./workspace-store";
 
 const sessionThemes = ["claude", "codex", "grok"] as const;
 const sections: {
@@ -29,7 +29,8 @@ const sections: {
 ];
 
 function AppearanceSettings() {
-  const { workspace, setWorkspace } = useWorkspace();
+  const sessionTheme = useWorkspaceStore((s) => s.workspace.sessionTheme);
+  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   return (
     <div className="space-y-3">
       <h2 className="text-sm font-semibold">外观</h2>
@@ -44,7 +45,7 @@ function AppearanceSettings() {
               aria-hidden="true"
               className="pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-background shadow-xs transition-transform motion-reduce:transition-none"
               style={{
-                transform: `translateX(${sessionThemes.indexOf(workspace.sessionTheme) * 100}%)`,
+                transform: `translateX(${sessionThemes.indexOf(sessionTheme) * 100}%)`,
               }}
             />
             {sessionThemes.map((theme) => (
@@ -56,7 +57,7 @@ function AppearanceSettings() {
                   type="radio"
                   name="session-theme"
                   value={theme}
-                  checked={workspace.sessionTheme === theme}
+                  checked={sessionTheme === theme}
                   onChange={() =>
                     setWorkspace((state) => ({
                       ...state,
@@ -86,7 +87,8 @@ function AttentionDot({ className }: { className?: string }) {
 }
 
 export function SettingsDialog() {
-  const { settings, setSettings } = useWorkspace();
+  const settings = useWorkspaceStore((s) => s.settings);
+  const setSettings = useWorkspaceStore((s) => s.setSettings);
   const attention = useNeedsAttention();
 
   return (

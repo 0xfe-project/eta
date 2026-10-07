@@ -17,10 +17,10 @@ export function AppProviders({ children }: { children: ReactNode }) {
       disableTransitionOnChange
     >
       <NuqsAdapter>
-        <IconContext.Provider value={iconDefaults}>
+        <IconContext value={iconDefaults}>
           <TooltipProvider>{children}</TooltipProvider>
           <Toaster closeButton />
-        </IconContext.Provider>
+        </IconContext>
       </NuqsAdapter>
     </ThemeProvider>
   );

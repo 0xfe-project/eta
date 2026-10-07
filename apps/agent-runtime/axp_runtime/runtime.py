@@ -86,7 +86,11 @@ def _payload(notification) -> dict:
     if isinstance(payload, UnknownNotification):
         return payload.params
     if isinstance(payload, BaseModel):
-        return payload.model_dump(mode="json", by_alias=True, exclude_none=True)
+        # The SDK's generated unions do not always match the item they hold,
+        # so pydantic warns while serializing; the JSON is still complete.
+        return payload.model_dump(
+            mode="json", by_alias=True, exclude_none=True, warnings=False
+        )
     return {}
 
 
@@ -114,7 +118,14 @@ class Runtime:
         self._approvals: dict[str, _ApprovalWaiter] = {}
         self._lock = threading.RLock()
         self._wake = threading.Event()
+        # stopping: take no new work. _halt: stop the background loops, once
+        # shutdown has let them deliver what is pending.
         self.stopping = threading.Event()
+        self._halt = threading.Event()
+        self._shutdown_lock = threading.Lock()
+        # Held while a turn starts and while Codex stops, so a turn is either
+        # fully started (and recorded) or not started at all.
+        self._codex_lock = threading.Lock()
         self._threads: list[threading.Thread] = []
 
     # --- lifecycle ----------------------------------------------------------
@@ -146,25 +157,67 @@ class Runtime:
         self.status = "ready"
         self._spawn(self._worker_loop, "worker")
 
-    def shutdown(self) -> None:
+    def shutdown(self, timeout: float = 8) -> None:
+        """Stop gracefully within ``timeout`` seconds.
+
+        Takes no new work, cancels pending approvals, stops Codex, lets the
+        worker finish, delivers pending events, then closes the ledger.
+        Unfinished commands stay in the ledger; the next instance reconciles
+        them against the Codex thread.
+        """
+        if not self._shutdown_lock.acquire(blocking=False):
+            return  # already shutting down
+        deadline = time.monotonic() + timeout
         self.stopping.set()
         self._wake.set()
-        with self._lock:
-            for waiter in self._approvals.values():
-                waiter.decision = waiter.decision or "cancel"
-                waiter.event.set()
-        self._stop_codex()
+        self._cancel_approvals()
+        with self._codex_lock:
+            self._stop_codex()
+        self._join(deadline, "worker", "codex-global")
+        if self.ledger:
+            try:
+                self._wait_outbox_drained(max(0.0, deadline - time.monotonic()))
+            except TimeoutError:
+                logger.warning("Stopping with undelivered events")
+        self._halt.set()
+        if self._join(deadline) and self.ledger:
+            self.ledger.close()
+        elif self.ledger:
+            logger.warning("Background threads still running; ledger left open")
 
     def fence(self) -> None:
         """Stop doing anything as soon as the control plane rejects us."""
         logger.error("Fenced by the control plane; exiting")
-        self.shutdown()
+        self.stopping.set()
+        self._halt.set()
+        self._cancel_approvals()
+        with self._codex_lock:
+            self._stop_codex()
         os._exit(3)
+
+    def _cancel_approvals(self) -> None:
+        with self._lock:
+            for waiter in self._approvals.values():
+                waiter.decision = waiter.decision or "cancel"
+                waiter.event.set()
 
     def _spawn(self, target, name: str) -> None:
         thread = threading.Thread(target=target, name=name, daemon=True)
         thread.start()
         self._threads.append(thread)
+
+    def _join(self, deadline: float, *names: str) -> bool:
+        """Wait for our threads (or the named ones); True if all stopped."""
+        current = threading.current_thread()
+        for thread in self._threads:
+            if thread is current or (names and thread.name not in names):
+                continue
+            thread.join(max(0.0, deadline - time.monotonic()))
+        return not any(
+            t.is_alive() and t is not current
+            for t in self._threads
+            if not names or t.name in names
+        )
 
     # --- state preparation --------------------------------------------------
 
@@ -269,7 +322,7 @@ class Runtime:
             client.start()
             info = client.initialize()
         except Exception as exc:
-            client.close()
+            _close_client(client)
             raise RecoveryFailed("CODEX_START_FAILED", str(exc)) from exc
         self.codex_version = (info.serverInfo.version if info.serverInfo else None) or (
             info.userAgent
@@ -277,13 +330,17 @@ class Runtime:
         api_key = os.environ.get("OPENAI_API_KEY")
         if api_key and not self.settings.llm_base_url:
             client.account_login_start({"type": "apiKey", "apiKey": api_key})
-        self.client = client
+        with self._codex_lock:
+            if self.stopping.is_set():
+                _close_client(client)
+                raise RecoveryFailed("SHUTTING_DOWN")
+            self.client = client
         self._spawn(self._drain_global, "codex-global")
 
     def _stop_codex(self) -> None:
         client, self.client = self.client, None
         if client:
-            client.close()
+            _close_client(client)
 
     def _thread_params(self) -> dict:
         params = {
@@ -475,8 +532,11 @@ class Runtime:
         return self.command_view(command_id)
 
     def _interrupt_turn(self, turn_id: str) -> None:
+        client = self.client
+        if client is None:
+            return  # stopping; the next instance reconciles the turn
         try:
-            self.client.turn_interrupt(self.thread_id, turn_id)
+            client.turn_interrupt(self.thread_id, turn_id)
         except Exception:
             logger.exception("turn/interrupt failed")
 
@@ -555,7 +615,11 @@ class Runtime:
                     self._run_checkpoint(command)
                 else:
                     self._run_turn(command)
-            except TransportClosedError:
+            except (TransportClosedError, RecoveryFailed):
+                if self.stopping.is_set():
+                    # Stopped on purpose: what ran is reconciled by the next
+                    # instance from the ledger and the Codex thread.
+                    return
                 logger.exception("Codex transport closed")
                 latest = self.ledger.get_command(command["command_id"])
                 if latest["status"] in (L.STARTING, L.RUNNING):
@@ -573,36 +637,37 @@ class Runtime:
 
     def _run_turn(self, command: dict) -> None:
         command_id = command["command_id"]
-        client = self.client
-        if client is None:
-            return  # shutting down; it stays accepted
-        self.ledger.update_command(command_id, status=L.STARTING)
         text = command["payload"].get("text", "")
-        try:
-            started = client.turn_start(
-                self.thread_id, [{"type": "text", "text": text}]
-            )
-        except TransportClosedError:
-            raise
-        except (CodexError, JsonRpcError) as exc:
-            # Rejected before starting: nothing ran.
-            logger.warning("turn/start rejected: %s", exc)
-            self.ledger.update_command(
-                command_id, status="failed", error_code="TURN_REJECTED"
-            )
-            self.ledger.emit(
-                "turn.completed",
-                {"command_id": command_id, "turn_id": None, "status": "failed"},
-            )
-            return
-        turn_id = started.turn.id
-        self.ledger.update_command(command_id, status=L.RUNNING, turn_id=turn_id)
+        with self._codex_lock:
+            client = self.client
+            if client is None or self.stopping.is_set():
+                return  # shutting down; it stays accepted
+            self.ledger.update_command(command_id, status=L.STARTING)
+            try:
+                started = client.turn_start(
+                    self.thread_id, [{"type": "text", "text": text}]
+                )
+            except TransportClosedError:
+                raise
+            except (CodexError, JsonRpcError) as exc:
+                # Rejected before starting: nothing ran.
+                logger.warning("turn/start rejected: %s", exc)
+                self.ledger.update_command(
+                    command_id, status="failed", error_code="TURN_REJECTED"
+                )
+                self.ledger.emit(
+                    "turn.completed",
+                    {"command_id": command_id, "turn_id": None, "status": "failed"},
+                )
+                return
+            turn_id = started.turn.id
+            self.ledger.update_command(command_id, status=L.RUNNING, turn_id=turn_id)
         self.ledger.emit("turn.started", {"command_id": command_id, "turn_id": turn_id})
         if self.ledger.get_command(command_id)["interrupt_requested"]:
             self._interrupt_turn(turn_id)
-        self._stream_turn(command_id, turn_id)
+        self._stream_turn(client, command_id, turn_id)
 
-    def _stream_turn(self, command_id: str, turn_id: str) -> None:
+    def _stream_turn(self, client: CodexClient, command_id: str, turn_id: str) -> None:
         texts: dict[str, str] = {}
         dirty: set[str] = set()
         buffer_lock = threading.Lock()
@@ -623,10 +688,11 @@ class Runtime:
             while not done.wait(FLUSH_SECONDS):
                 flush()
 
-        threading.Thread(target=flusher, daemon=True).start()
+        flusher_thread = threading.Thread(target=flusher, daemon=True)
+        flusher_thread.start()
         try:
             while True:
-                notification = self.client.next_turn_notification(turn_id)
+                notification = client.next_turn_notification(turn_id)
                 method = notification.method
                 payload = _payload(notification)
                 if method == "item/agentMessage/delta":
@@ -649,7 +715,8 @@ class Runtime:
                     return
         finally:
             done.set()
-            self.client.unregister_turn_notifications(turn_id)
+            flusher_thread.join()
+            client.unregister_turn_notifications(turn_id)
 
     def _emit_item(self, command_id: str, item: dict, *, completed: bool) -> None:
         kind = ITEM_KINDS.get(item.get("type"))
@@ -740,7 +807,7 @@ class Runtime:
         )
 
     def _resume_after_checkpoint(self) -> None:
-        if self.client is None:
+        if self.client is None and not self.stopping.is_set():
             self._start_codex()
             self._open_thread()
 
@@ -801,21 +868,21 @@ class Runtime:
         }
 
     def _heartbeat_loop(self) -> None:
-        while not self.stopping.is_set():
+        while not self._halt.is_set():
             try:
                 self.cp.heartbeat(self.heartbeat_body())
             except Fenced:
                 self.fence()
             except Exception as exc:
                 logger.warning("Heartbeat failed: %s", exc)
-            self.stopping.wait(self.settings.heartbeat_seconds)
+            self._halt.wait(self.settings.heartbeat_seconds)
 
     def _outbox_loop(self) -> None:
         backoff = 0.2
-        while not self.stopping.is_set():
+        while not self._halt.is_set():
             batch = self.ledger.unacked(limit=100, max_bytes=256 * 1024)
             if not batch:
-                self.stopping.wait(0.1)
+                self._halt.wait(0.1)
                 continue
             try:
                 result = self.cp.post_events(batch)
@@ -830,12 +897,32 @@ class Runtime:
                     self.ledger.ack_through(expected - 1)
                     continue
                 logger.warning("Event delivery rejected: %s", exc)
-                self.stopping.wait(backoff)
+                self._halt.wait(backoff)
                 backoff = min(backoff * 2, 5)
             except Exception as exc:
                 logger.warning("Event delivery failed: %s", exc)
-                self.stopping.wait(backoff)
+                self._halt.wait(backoff)
                 backoff = min(backoff * 2, 5)
+
+
+def _close_client(client: CodexClient) -> None:
+    """Close the SDK client and the app-server pipes it leaves open.
+
+    CodexClient.close() closes stdin and waits for the process, but never
+    closes stdout and stderr. They are closed here once the SDK's reader
+    threads have finished with them.
+    """
+    proc = client._proc
+    readers = (client._reader_thread, client._stderr_thread)
+    client.close()
+    if proc is None:
+        return
+    if any(reader and reader.is_alive() for reader in readers):
+        logger.warning("Codex output still being read; leaving its pipes open")
+        return
+    for stream in (proc.stdout, proc.stderr):
+        if stream:
+            stream.close()
 
 
 def _command_view(command: dict) -> dict:

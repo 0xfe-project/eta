@@ -37,7 +37,7 @@ import { useCreateAgent, useDeleteAgent, useUpdateAgent } from "@/queries/chat";
 import { useConnectors, useModels } from "@/queries/llm";
 import { AgentMonogram } from "./agent-identity";
 import { useAgents } from "./use-agents";
-import { useWorkspace } from "./workspace-state";
+import { useWorkspaceStore } from "./workspace-store";
 
 const DESCRIPTION_MAX = 10_000;
 
@@ -165,7 +165,9 @@ function AgentEditorForm({
   onDone: () => void;
 }) {
   const { select } = useAgents();
-  const { workspace, setWorkspace, setSettings } = useWorkspace();
+  const lastModel = useWorkspaceStore((s) => s.workspace.lastModel);
+  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
+  const setSettings = useWorkspaceStore((s) => s.setSettings);
   const { data: models } = useModels();
   const usable = (models ?? []).filter((model) => model.available);
   const create = useCreateAgent();
@@ -189,8 +191,7 @@ function AgentEditorForm({
   const description = watch("description");
   const model = watch("model");
   // New agents start with the last used model, or the first usable one.
-  const preferred =
-    usable.find((item) => item.id === workspace.lastModel) ?? usable[0];
+  const preferred = usable.find((item) => item.id === lastModel) ?? usable[0];
   useEffect(() => {
     if (!agent && !model && preferred) setValue("model", preferred.id);
   }, [agent, model, preferred, setValue]);
@@ -368,7 +369,8 @@ function AgentEditorForm({
 
 /** Create or edit an agent; opened from the chat head, settings or empty state. */
 export function AgentEditor() {
-  const { agentEditor, setAgentEditor } = useWorkspace();
+  const agentEditor = useWorkspaceStore((s) => s.agentEditor);
+  const setAgentEditor = useWorkspaceStore((s) => s.setAgentEditor);
   const { agents } = useAgents();
   const agent = agents.find((item) => item.id === agentEditor.agentId);
   const close = () => setAgentEditor((state) => ({ ...state, open: false }));

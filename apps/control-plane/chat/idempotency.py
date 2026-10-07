@@ -11,6 +11,7 @@ from collections.abc import Callable
 
 from django.db import IntegrityError, transaction
 from django.http import HttpRequest
+from ninja import Status
 
 from .errors import ApiError
 from .models import ApiIdempotency
@@ -18,8 +19,8 @@ from .models import ApiIdempotency
 HEADER = "Idempotency-Key"
 MAX_KEY_LENGTH = 255
 
-# (status, json body, resource id)
-HandlerResult = tuple[int, dict, str | None]
+# The response and the id of the resource it is about.
+HandlerResult = tuple[Status[dict], str | None]
 
 
 def _request_hash(payload: dict) -> str:
@@ -33,17 +34,17 @@ def _lookup(request: HttpRequest, key: str) -> ApiIdempotency | None:
     ).first()
 
 
-def _replay(record: ApiIdempotency, request_hash: str) -> tuple[int, dict]:
+def _replay(record: ApiIdempotency, request_hash: str) -> Status[dict]:
     if record.request_hash != request_hash:
         raise ApiError(
             409, "IDEMPOTENCY_KEY_REUSED", "Idempotency-Key 已用于不同的请求。"
         )
-    return record.response_status, record.response_body
+    return Status(record.response_status, record.response_body)
 
 
 def run_idempotent(
     request: HttpRequest, payload: dict, handler: Callable[[], HandlerResult]
-) -> tuple[int, dict]:
+) -> Status[dict]:
     key = request.headers.get(HEADER, "").strip()
     if not key or len(key) > MAX_KEY_LENGTH:
         raise ApiError(
@@ -57,14 +58,14 @@ def run_idempotent(
 
     try:
         with transaction.atomic():
-            status, body, resource_id = handler()
+            response, resource_id = handler()
             ApiIdempotency.objects.create(
                 method=request.method,
                 canonical_path=request.path,
                 key=key,
                 request_hash=request_hash,
-                response_status=status,
-                response_body=body,
+                response_status=response.status_code,
+                response_body=response.value,
                 resource_id=resource_id,
             )
     except IntegrityError:
@@ -73,4 +74,4 @@ def run_idempotent(
         if existing is None:
             raise
         return _replay(existing, request_hash)
-    return status, body
+    return response

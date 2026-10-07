@@ -1,12 +1,6 @@
 import type { RouterContext } from "@/lib/query-client";
-import {
-  createRootRouteWithContext,
-  HeadContent,
-  Outlet,
-  Scripts,
-} from "@tanstack/react-router";
-import { AppProviders } from "@/components/providers";
-import { WorkspaceProvider } from "@/components/workspace/workspace-state";
+import { createRootRouteWithContext } from "@tanstack/react-router";
+import { RootDocument } from "@/pages/root-document";
 import stylesheet from "@/styles.css?url";
 
 export const Route = createRootRouteWithContext<RouterContext>()({
@@ -31,29 +25,5 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
     ],
   }),
-  component: Root,
+  component: RootDocument,
 });
-
-function Root() {
-  return (
-    <html lang="zh-CN" suppressHydrationWarning>
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        <AppProviders>
-          <a
-            href="#main"
-            className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:bg-background focus:p-3 focus:text-foreground"
-          >
-            跳转到内容
-          </a>
-          <WorkspaceProvider>
-            <Outlet />
-          </WorkspaceProvider>
-        </AppProviders>
-        <Scripts />
-      </body>
-    </html>
-  );
-}

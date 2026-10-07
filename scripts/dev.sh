@@ -87,7 +87,7 @@ port_reserved() {
 
 # Production's ports are never used, even when they happen to be free.
 source deploy/ports.env
-production_ports=" $AXP_PROD_HTTP_PORT $AXP_PROD_HTTPS_PORT $AXP_PROD_REGISTRY_PORT "
+production_ports=" $AXP_PROD_HTTP_PORT $AXP_PROD_HTTPS_PORT $AXP_PROD_REGISTRY_PORT $AXP_PROD_OBSERVE_PORT "
 
 BLOCK_SIZE=5
 

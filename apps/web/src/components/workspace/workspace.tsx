@@ -15,7 +15,7 @@ import { ChatPanel, ComposerNotice } from "./chat-panel";
 import { SettingsDialog } from "./settings-dialog";
 import { useAgents } from "./use-agents";
 import { WorkspacePanel } from "./workspace-panel";
-import { useWorkspace } from "./workspace-state";
+import { useWorkspaceStore } from "./workspace-store";
 
 export function Workspace({
   view,
@@ -24,14 +24,12 @@ export function Workspace({
   view: WorkspaceView;
   onViewChange: (view: WorkspaceView) => void;
 }) {
-  const {
-    workspace,
-    draft,
-    setDraft,
-    mobilePanel,
-    setMobilePanel,
-    setSettings,
-  } = useWorkspace();
+  const sessionTheme = useWorkspaceStore((s) => s.workspace.sessionTheme);
+  const draft = useWorkspaceStore((s) => s.draft);
+  const setDraft = useWorkspaceStore((s) => s.setDraft);
+  const mobilePanel = useWorkspaceStore((s) => s.mobilePanel);
+  const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
+  const setSettings = useWorkspaceStore((s) => s.setSettings);
   const chat = useChat();
   const { current: selected, openEditor, modelRequired } = useAgents();
   const availability = useModelAvailability(selected, modelRequired);
@@ -96,7 +94,7 @@ export function Workspace({
           )}
         >
           <ChatPanel
-            theme={workspace.sessionTheme}
+            theme={sessionTheme}
             agentName={selected?.name}
             model={
               availability.state === "ok"

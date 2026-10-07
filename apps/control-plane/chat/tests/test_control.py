@@ -1,6 +1,7 @@
 import hashlib
 import json
 import uuid
+from contextlib import closing
 from datetime import timedelta
 from unittest import mock
 
@@ -583,7 +584,9 @@ class TestCheckpoint:
         # The restored runtime can download it.
         new = RuntimeHarness(ctl.instance())
         download = internal("get", f"checkpoints/{checkpoint.pk}/object", new.token)
-        assert b"".join(download.streaming_content) == data
+        # A WSGI server closes the response; the test client leaves it to us.
+        with closing(download):
+            assert b"".join(download.streaming_content) == data
 
 
 def test_idle_runtime_is_stopped(ctl, running, settings):

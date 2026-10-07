@@ -12,13 +12,32 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+
+	"github.com/akarachen/axp/packages/telemetry-go"
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	if err := run(logger); err != nil {
-		logger.Error("gateway stopped", "error", err)
+	logger, shutdown, err := telemetry.Setup(context.Background(), "gateway")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "telemetry:", err)
 		os.Exit(1)
+	}
+	err = run(logger)
+	if err != nil {
+		logger.Error("gateway stopped", "error", err)
+	}
+	flush(shutdown)
+	if err != nil {
+		os.Exit(1)
+	}
+}
+
+// flush delivers pending log records before the process exits.
+func flush(shutdown func(context.Context) error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := telemetry.Shutdown(ctx, shutdown); err != nil {
+		fmt.Fprintln(os.Stderr, "telemetry:", err)
 	}
 }
 

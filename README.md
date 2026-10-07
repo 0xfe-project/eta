@@ -99,6 +99,15 @@ TanStack 的 `src/routeTree.gen.ts` 由 `dev` 或 `build` 自动生成；`check`
 2. dprint 格式化暂存的文件并重新暂存。
 3. Turbo 运行构建、类型检查、lint 和测试，没变的部分直接用缓存。
 
+## 日志
+
+三种语言的服务都走 OpenTelemetry：Go 用 `log/slog`（`packages/telemetry-go`），Python 用标准库 `logging`（`packages/telemetry-py`），Web 服务端用 LogTape（`apps/web/src/server/telemetry.ts`）。每条日志同时：
+
+- 在 stderr 输出一行可读格式 `15:04:05.000 INFO  消息 key=value`（`AXP_LOG_CONSOLE=0` 关闭），开发时直接在终端里看；
+- 设置 `OTEL_EXPORTER_OTLP_ENDPOINT` 后通过 OTLP 发送（生产发往 OpenObserve，见 `deploy/README.md`）。
+
+配置使用 OpenTelemetry 的标准环境变量（`OTEL_SERVICE_NAME`、`OTEL_RESOURCE_ATTRIBUTES`、`OTEL_EXPORTER_OTLP_*`），日志级别用 `AXP_LOG_LEVEL`（`debug`、`info`、`warn`、`error`）。浏览器端暂不上报。
+
 ## 数据库与存储
 
 数据库默认使用 SQLite。设置 `DATABASE_URL=postgres://…` 后改用 PostgreSQL，这是 RFC 的目标数据库；复合外键只在 PostgreSQL 上创建，测试可在两者上运行。

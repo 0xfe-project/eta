@@ -30,6 +30,16 @@ MIDDLEWARE = [
 AXP_EDGE_SECRET = os.getenv("AXP_EDGE_SECRET", "")
 # The internal runtime API runs as a separate process with its own URLconf.
 ROOT_URLCONF = os.getenv("AXP_URLCONF", "config.urls")
+# Records go through OpenTelemetry from the root logger (axp_telemetry, set up
+# in chat.apps). Django's own loggers hand theirs up instead of printing.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "loggers": {
+        name: {"handlers": [], "level": "INFO", "propagate": True}
+        for name in ("django", "django.server")
+    },
+}
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",

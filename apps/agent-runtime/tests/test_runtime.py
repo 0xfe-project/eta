@@ -387,6 +387,7 @@ class TestServer:
         self.base = f"http://127.0.0.1:{server.server_address[1]}/internal/v1"
         yield
         server.shutdown()
+        server.server_close()
 
     def call(self, method, path, body=None, token="secret"):
         request = urllib.request.Request(

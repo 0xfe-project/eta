@@ -12,6 +12,7 @@ dependencies = [
   "jsonschema>=4.25,<5",
   "psycopg[binary]>=3.2,<4",
   "python-dotenv>=1.1,<2",
+  "axp-telemetry",
 ]
 
 [dependency-groups]
@@ -25,9 +26,10 @@ dev = [
 [tool.uv]
 package = false
 
+[tool.uv.sources]
+axp-telemetry = { path = "../../packages/telemetry-py", editable = true }
+
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings"
 testpaths = ["chat/tests"]
 addopts = "-p no:cacheprovider"
-# django-ninja deprecations in our tuple responses; not test failures.
-filterwarnings = ["ignore::DeprecationWarning:ninja.*"]

@@ -19,7 +19,6 @@ class Command(BaseCommand):
         parser.add_argument("--interval", type=float, default=0.5)
 
     def handle(self, *args, interval, **options):
-        logging.basicConfig(level=logging.INFO)
         # Deploys briefly run the old and new controller side by side. On
         # PostgreSQL a session lock on a dedicated connection makes the new
         # one wait until the old one exits.

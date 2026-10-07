@@ -1,26 +1,26 @@
 import antfu from "@antfu/eslint-config";
 import globals from "globals";
 
-// Formatting belongs to dprint (Biome), so stylistic rules stay off; JSON,
-// YAML and Markdown are only formatted, not linted.
+// One config for the repository. Formatting belongs to dprint, so stylistic
+// rules stay off; JSON is linted for validity and sorted package.json and
+// tsconfig keys. Generated code is not linted.
 export default antfu(
   {
+    typescript: true,
     react: true,
     stylistic: false,
-    jsonc: false,
+    jsonc: true,
     yaml: false,
     markdown: false,
     toml: false,
-    ignores: ["dist/**", "out/**", "src/routeTree.gen.ts"],
-  },
-  {
-    // Fast refresh hints are advice, not errors. TanStack route files must
-    // export `Route`, and shadcn components export their variants.
-    rules: { "react-refresh/only-export-components": "warn" },
-  },
-  {
-    files: ["src/routes/**", "src/components/ui/**"],
-    rules: { "react-refresh/only-export-components": "off" },
+    ignores: [
+      "**/routeTree.gen.ts",
+      // Generated from the shadcn and brainless registries.
+      "apps/web/src/components/ui/**",
+      "apps/web/src/components/brainless/**",
+      "**/.venv/**",
+      "**/out/**",
+    ],
   },
   {
     // The typescript-eslint based rule misreads plain JS scopes and reports
@@ -35,14 +35,14 @@ export default antfu(
     },
   },
   {
-    files: ["public/sw.js"],
+    files: ["apps/web/public/sw.js"],
     languageOptions: { globals: globals.serviceworker },
     rules: { "no-restricted-globals": "off" },
   },
   {
     // Production server, run by Bun next to the built dist/.
-    files: ["server.js"],
-    languageOptions: { globals: { Bun: "readonly" } },
-    rules: { "antfu/no-import-dist": "off", "no-console": "off" },
+    files: ["apps/web/server.js"],
+    languageOptions: { globals: globals.bunBuiltin },
+    rules: { "antfu/no-import-dist": "off" },
   },
 );

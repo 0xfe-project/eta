@@ -1,0 +1,7 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "lint": { "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/ruff.toml"] }
+  }
+}

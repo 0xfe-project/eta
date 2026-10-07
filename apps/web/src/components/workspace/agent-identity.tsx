@@ -1,12 +1,6 @@
 import type { Agent } from "@/queries/chat";
 import { cn } from "@/lib/utils";
-
-export const agentStatusLabels: Record<Agent["status"], string> = {
-  idle: "空闲",
-  working: "工作中",
-  waiting_for_input: "等待确认",
-  unavailable: "不可用",
-};
+import { agentStatusLabels } from "./agent-status";
 
 /** Square monogram; the theme is monochrome, so status lives in the dot. */
 export function AgentMonogram({

@@ -7,11 +7,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  AgentMonogram,
-  AgentStatusDot,
-  agentStatusLabels,
-} from "./agent-identity";
+import { AgentMonogram, AgentStatusDot } from "./agent-identity";
+import { agentStatusLabels } from "./agent-status";
 import { useAgents } from "./use-agents";
 
 const card =

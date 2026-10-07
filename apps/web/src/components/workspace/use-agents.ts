@@ -1,15 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { chatQueryOptions } from "@/queries/chat";
-import { useWorkspace } from "./workspace-state";
+import { useWorkspaceStore } from "./workspace-store";
 
 /** Agents plus the locally remembered current one (newest by default). */
 export function useAgents() {
   const { data } = useQuery(chatQueryOptions());
-  const { workspace, setWorkspace, setAgentEditor } = useWorkspace();
+  const selectedAgentId = useWorkspaceStore((s) => s.workspace.selectedAgentId);
+  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
+  const setAgentEditor = useWorkspaceStore((s) => s.setAgentEditor);
   const agents = data?.agents ?? [];
   const current =
-    agents.find((agent) => agent.id === workspace.selectedAgentId) ??
-    agents.at(-1);
+    agents.find((agent) => agent.id === selectedAgentId) ?? agents.at(-1);
   return {
     agents,
     current,

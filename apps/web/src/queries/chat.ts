@@ -186,7 +186,10 @@ export function useChatStream(cursor: string | undefined) {
       if (source.readyState === EventSource.CLOSED)
         void queryClient.invalidateQueries({ queryKey: chatKey });
     };
-    return () => source.close();
+    return () => {
+      types.forEach((type) => source.removeEventListener(type, listener));
+      source.close();
+    };
   }, [cursor, queryClient]);
 }
 

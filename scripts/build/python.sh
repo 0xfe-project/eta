@@ -14,9 +14,20 @@ esac
 out="out/$os-$arch"
 rm -rf "$out"
 mkdir -p "$out"
-uv export --frozen --no-dev --no-emit-project --quiet -o "$out/requirements.txt"
-uv pip install --quiet --no-deps --only-binary :all: \
-  --python-platform "$platform" --python-version "$(cat .python-version)" \
-  --target "$out/site-packages" -r "$out/requirements.txt"
+target=(--python-platform "$platform" --python-version "$(cat .python-version)"
+  --target "$out/site-packages")
+uv export --frozen --no-dev --no-emit-project --no-emit-local --quiet \
+  -o "$out/requirements.txt"
+uv pip install --quiet --no-deps --only-binary :all: "${target[@]}" \
+  -r "$out/requirements.txt"
+# Local packages (packages/*) are pure Python, built here from source. Their
+# direct_url.json records this checkout's absolute path; drop it so the tree
+# is the same wherever it is built.
+local=$(uv export --frozen --no-dev --no-emit-project --quiet | sed -n 's/^-e //p')
+if [[ -n "$local" ]]; then
+  # shellcheck disable=SC2086
+  uv pip install --quiet --no-deps "${target[@]}" $local
+  rm -f "$out"/site-packages/*.dist-info/direct_url.json
+fi
 # Console scripts carry this host's interpreter path; images use `python -m`.
 rm -rf "$out/site-packages/bin"

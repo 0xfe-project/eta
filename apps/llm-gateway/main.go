@@ -13,19 +13,39 @@ import (
 	"path/filepath"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/akarachen/axp/apps/llm-gateway/internal/connectors"
 	"github.com/akarachen/axp/apps/llm-gateway/internal/cpa"
 	"github.com/akarachen/axp/apps/llm-gateway/internal/llm"
+	"github.com/akarachen/axp/packages/telemetry-go"
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy"
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	if err := run(logger); err != nil && !errors.Is(err, context.Canceled) {
-		logger.Error("llm-gateway stopped", "error", err)
+	logger, shutdown, err := telemetry.Setup(context.Background(), "llm-gateway")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "telemetry:", err)
 		os.Exit(1)
+	}
+	err = run(logger)
+	failed := err != nil && !errors.Is(err, context.Canceled)
+	if failed {
+		logger.Error("llm-gateway stopped", "error", err)
+	}
+	flush(shutdown)
+	if failed {
+		os.Exit(1)
+	}
+}
+
+// flush delivers pending log records before the process exits.
+func flush(shutdown func(context.Context) error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := telemetry.Shutdown(ctx, shutdown); err != nil {
+		fmt.Fprintln(os.Stderr, "telemetry:", err)
 	}
 }
 

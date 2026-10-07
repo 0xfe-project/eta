@@ -3,7 +3,7 @@ web client may call."""
 
 from django.db import transaction
 from django.http import HttpRequest, HttpResponse, StreamingHttpResponse
-from ninja import Header, Query, Router
+from ninja import Header, Query, Router, Status
 
 from . import services, stream
 from .errors import ApiError
@@ -54,7 +54,7 @@ def list_messages(
 def create_agent(request: HttpRequest, body: AgentCreateIn):
     def handler():
         agent = services.create_agent(body.name, body.description, body.model)
-        return 201, services.agent_public(agent), str(agent.id)
+        return Status(201, services.agent_public(agent)), str(agent.id)
 
     return run_idempotent(request, body.model_dump(), handler)
 
@@ -82,7 +82,7 @@ def send_message(request: HttpRequest, body: MessageCreateIn):
             "message": services.message_public(message),
             "reply": services.message_public(reply),
         }
-        return 202, payload, str(reply.id)
+        return Status(202, payload), str(reply.id)
 
     return run_idempotent(request, body.model_dump(), handler)
 
@@ -91,7 +91,7 @@ def send_message(request: HttpRequest, body: MessageCreateIn):
 def stop_message(request: HttpRequest, message_id: str):
     def handler():
         reply = services.stop_reply(message_id)
-        return 200, services.message_public(reply), str(reply.id)
+        return Status(200, services.message_public(reply)), str(reply.id)
 
     return run_idempotent(request, {}, handler)
 
@@ -105,7 +105,8 @@ def answer_interaction(
 ):
     def handler():
         interaction = services.answer_interaction(interaction_id, body.value)
-        return 202, services.interaction_public(interaction), str(interaction.id)
+        answered = services.interaction_public(interaction)
+        return Status(202, answered), str(interaction.id)
 
     return run_idempotent(request, body.model_dump(), handler)
 

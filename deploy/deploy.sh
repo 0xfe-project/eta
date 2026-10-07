@@ -33,6 +33,7 @@ done
 docker info >/dev/null 2>&1 || fail "cannot talk to Docker; is it running and is $(id -un) in the docker group?"
 
 KAMAL_IMAGE="ghcr.io/basecamp/kamal:v2.12.0"
+OBSERVE_USER=root@axp.local
 CONFIG_DIR="${AXP_CONFIG_DIR:-$HOME/.config/axp}"
 ENV_FILE="$CONFIG_DIR/production.env"
 KEY_FILE="$CONFIG_DIR/kamal_ed25519"
@@ -70,6 +71,11 @@ ensure_secret() {
 }
 ensure_secret AXP_EDGE_SECRET 32
 ensure_secret AXP_LLM_API_KEY 32
+# OpenObserve requires upper and lower case letters, a digit and a symbol.
+if ! grep -q "^AXP_OBSERVE_PASSWORD=" "$ENV_FILE"; then
+  echo "AXP_OBSERVE_PASSWORD=Axp-$(openssl rand -hex 16)" >>"$ENV_FILE"
+  echo "Added AXP_OBSERVE_PASSWORD to $ENV_FILE."
+fi
 
 set -a
 # shellcheck disable=SC1090
@@ -78,6 +84,9 @@ source "$ENV_FILE"
 source "$DEPLOY_DIR/ports.env"
 set +a
 export AXP_DEPLOY_USER="${AXP_DEPLOY_USER:-$(id -un)}"
+# Services send OTLP to OpenObserve as its root user (deploy/secrets).
+AXP_OBSERVE_BASIC="$(printf '%s' "$OBSERVE_USER:$AXP_OBSERVE_PASSWORD" | base64 -w0)"
+export AXP_OBSERVE_BASIC
 export AXP_HOST_ID="${AXP_HOST_ID:-$(hostname)}"
 export AXP_SSH_PORT="${AXP_SSH_PORT:-22}"
 case "$(uname -m)" in
@@ -106,8 +115,8 @@ ssh -i "$KEY_FILE" -p "$AXP_SSH_PORT" -o BatchMode=yes -o IdentitiesOnly=yes \
 
 # --- Machine prerequisites ------------------------------------------------------
 # Reserved ports must be free unless our own containers hold them.
-ours="$(docker ps --filter name='^(kamal-proxy|axp-registry)$' --format '{{.Ports}}')"
-for port in "$AXP_PROD_HTTP_PORT" "$AXP_PROD_HTTPS_PORT" "$AXP_PROD_REGISTRY_PORT"; do
+ours="$(docker ps --filter name='^(kamal-proxy|axp-registry|axp-openobserve)$' --format '{{.Ports}}')"
+for port in "$AXP_PROD_HTTP_PORT" "$AXP_PROD_HTTPS_PORT" "$AXP_PROD_REGISTRY_PORT" "$AXP_PROD_OBSERVE_PORT"; do
   if [[ "$ours" != *":$port->"* ]] && ss -Htln "sport = :$port" 2>/dev/null | grep -q .; then
     fail "port $port (deploy/ports.env) is taken by another service on this machine."
   fi
@@ -162,12 +171,22 @@ fi
 tty_flags=(-i)
 [[ -t 0 && -t 1 ]] && tty_flags=(-it)
 
-exec docker run --rm "${tty_flags[@]}" --network host \
-  "${mounts[@]}" -w "$ROOT_DIR" \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -v "$KEY_FILE:/kamal/ssh/id_ed25519:ro" \
-  --env-file "$ENV_FILE" \
-  -e AXP_DEPLOY_USER -e AXP_HOST_ID -e AXP_SSH_PORT -e AXP_BUILD_ARCH \
-  -e AXP_PROD_HTTP_PORT -e AXP_PROD_HTTPS_PORT -e AXP_PROD_REGISTRY_PORT \
-  -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0='*' \
-  "$KAMAL_IMAGE" "$@" -c deploy/deploy.yml
+kamal() {
+  docker run --rm "${tty_flags[@]}" --network host \
+    "${mounts[@]}" -w "$ROOT_DIR" \
+    -v /var/run/docker.sock:/var/run/docker.sock \
+    -v "$KEY_FILE:/kamal/ssh/id_ed25519:ro" \
+    --env-file "$ENV_FILE" \
+    -e AXP_DEPLOY_USER -e AXP_HOST_ID -e AXP_SSH_PORT -e AXP_BUILD_ARCH \
+    -e AXP_PROD_HTTP_PORT -e AXP_PROD_HTTPS_PORT -e AXP_PROD_REGISTRY_PORT \
+    -e AXP_PROD_OBSERVE_PORT -e AXP_OBSERVE_BASIC \
+    -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0='*' \
+    "$KAMAL_IMAGE" "$@" -c deploy/deploy.yml
+}
+
+# `kamal setup` boots every accessory; on machines set up before OpenObserve
+# was added, boot it before the first deploy that logs to it.
+if [[ "$1" == "deploy" ]] && ! docker container inspect axp-openobserve >/dev/null 2>&1; then
+  kamal accessory boot openobserve
+fi
+kamal "$@"

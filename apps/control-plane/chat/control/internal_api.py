@@ -9,7 +9,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
-from django.http import HttpRequest, HttpResponse, StreamingHttpResponse
+from django.http import FileResponse, HttpRequest, HttpResponse
 from django.utils import timezone
 from ninja import NinjaAPI, Schema
 from pydantic import ConfigDict, Field
@@ -212,8 +212,7 @@ def download_checkpoint(request: HttpRequest, checkpoint_id: str):
         checkpoint.status != AgentCheckpoint.Status.AVAILABLE
     ):
         raise ApiError(404, "NOT_FOUND", "资源不存在。")
-    handle = store.open(checkpoint.state_object_key)
-    return StreamingHttpResponse(
-        iter(lambda: handle.read(1 << 20), b""),
-        content_type="application/gzip",
+    # FileResponse streams the file and closes it with the response.
+    return FileResponse(
+        store.open(checkpoint.state_object_key), content_type="application/gzip"
     )
