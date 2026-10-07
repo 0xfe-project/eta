@@ -2,9 +2,6 @@
   "name": "@axp/gateway",
   "private": true,
   "scripts": {
-    "build:linux-amd64": "bash ../../scripts/build/go.sh axp-gateway linux amd64",
-    "build:linux-arm64": "bash ../../scripts/build/go.sh axp-gateway linux arm64",
-    "lint": "test -z \"$(gofmt -l .)\" && go vet ./...",
-    "test": "go test ./..."
+    "lint": "docker run --rm -v \"$PWD:/etc/axp-gateway:ro\" -w /etc/axp-gateway caddy:2.11.7-alpine sh -c 'for f in Caddyfile *.caddy; do caddy fmt --diff \"$f\" >/dev/null || exit 1; done; out=$(caddy validate --config Caddyfile 2>&1) || { echo \"$out\"; exit 1; }'"
   }
 }

@@ -31,19 +31,15 @@ readiness_delay: 0
 drain_timeout: 2
 
 servers:
-  # Edge gateway: the only role behind kamal-proxy. It routes /api/llm to the
-  # LLM gateway, /api to the control plane and everything else to web, and
-  # signs each request with AXP_EDGE_SECRET.
+  # The browser's gateway (apps/gateway/public.caddy): the only role behind
+  # kamal-proxy. It routes /api/llm to the LLM gateway, /api to the control
+  # plane and everything else to web.
   gateway:
     hosts: [<%= host %>]
-    cmd: axp-gateway
+    cmd: caddy run --config /app/apps/gateway/Caddyfile
     env:
       clear:
-        AXP_GATEWAY_ADDR: ":8080"
-        AXP_GATEWAY_UPSTREAM_WEB: http://axp-web:3000
-        AXP_GATEWAY_UPSTREAM_API: http://axp-api:8000
-        AXP_GATEWAY_UPSTREAM_LLM: http://axp-llm:8317
-        AXP_GATEWAY_UPSTREAM_OBSERVE: http://axp-openobserve:5080
+        AXP_GATEWAY_SITES: public.caddy
     proxy:
       app_port: 8080
       # SSE: stream responses through and allow long-lived connections.
@@ -52,6 +48,19 @@ servers:
         responses: false
       healthcheck:
         path: /up
+  # Runtimes' gateway (apps/gateway/runtime.caddy), on their network as
+  # axp-runtime-gateway:8090: their only route to the internal API and the LLM
+  # gateway, which it authenticates them for.
+  runtime-gateway:
+    hosts: [<%= host %>]
+    cmd: caddy run --config /app/apps/gateway/Caddyfile
+    env:
+      clear:
+        AXP_GATEWAY_SITES: runtime.caddy
+    options:
+      network: name=axp-prod-runtime,alias=axp-runtime-gateway
+      <<: *health
+      health-cmd: <%= ready.(8090) %>
   # TanStack Start SSR and static assets; reached only through the gateway.
   web:
     hosts: [<%= host %>]
@@ -73,8 +82,8 @@ servers:
       <<: *health
       health-cmd: <%= ready.(8000, "/api/health") %>
   # LLM gateway (embedded CLIProxyAPI): connections and model catalog behind
-  # the gateway; runtimes call its OpenAI-compatible API on the runtime
-  # network. Both reach it as axp-llm. Credentials live in the axp-llm volume.
+  # the gateway, its OpenAI-compatible API behind the runtime gateway. Both
+  # reach it as axp-llm. Credentials live in the axp-llm volume.
   llm:
     hosts: [<%= host %>]
     cmd: axp-llm-gateway
@@ -83,12 +92,10 @@ servers:
         AXP_LLM_ADDR: ":8317"
     options:
       network-alias: axp-llm
-      network: name=axp-prod-runtime,alias=axp-llm
       volume: axp-llm:/app/apps/control-plane/var/llm-gateway
       <<: *health
       health-cmd: <%= ready.(8317) %>
-  # Internal runtime API. Runtimes reach it as http://axp-internal:8001 on the
-  # runtime network; it is never published or proxied.
+  # Internal runtime API, reached by runtimes only through the runtime gateway.
   internal:
     hosts: [<%= host %>]
     cmd: python -m gunicorn config.wsgi --bind 0.0.0.0:8001 --worker-class gthread --workers 2 --threads 16
@@ -97,7 +104,7 @@ servers:
         AXP_URLCONF: config.internal_urls
         OTEL_SERVICE_NAME: control-plane-internal
     options:
-      network: name=axp-prod-runtime,alias=axp-internal
+      network-alias: axp-internal
       <<: *health
       health-cmd: <%= ready.(8001) %>
   # Starts and stops agent runtime containers through the host Docker socket.
@@ -163,7 +170,6 @@ env:
   secret:
     - DJANGO_SECRET_KEY
     - DATABASE_URL
-    - AXP_EDGE_SECRET
     - AXP_S3_ACCESS_KEY_ID
     - AXP_S3_SECRET_ACCESS_KEY
     - OTEL_EXPORTER_OTLP_HEADERS

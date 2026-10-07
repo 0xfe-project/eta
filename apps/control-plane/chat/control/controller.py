@@ -267,11 +267,10 @@ class Controller:
             "AXP_INSTANCE_ID": str(instance.pk),
             "AXP_GENERATION": str(instance.generation),
             "AXP_RUNTIME_TOKEN": token,
-            "AXP_CONTROL_PLANE_URL": settings.AXP_INTERNAL_URL,
-            # Model requests go through the LLM gateway, which checks the
-            # runtime's token with the internal API; provider credentials
-            # never enter the container.
-            "AXP_LLM_BASE_URL": settings.AXP_LLM_GATEWAY_URL.rstrip("/") + "/v1",
+            # The runtime's only route out: the internal API and, for model
+            # requests, the LLM gateway. Provider credentials never enter the
+            # container.
+            "AXP_GATEWAY_URL": settings.AXP_RUNTIME_GATEWAY_URL,
             "AXP_THREAD_ID": session.thread_id or "",
             "AXP_CODEX_SETTINGS": json.dumps(
                 {

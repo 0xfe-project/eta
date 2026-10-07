@@ -36,8 +36,6 @@ type Options struct {
 	Port int
 	// StateDir holds the generated config.yaml and the auths/ directory.
 	StateDir string
-	// Access authenticates agent runtimes on the OpenAI-compatible /v1 API.
-	Access sdkaccess.Provider
 	// Mount adds AXP's own routes to CPA's gin engine.
 	Mount func(*gin.Engine)
 }
@@ -90,10 +88,7 @@ func New(opts Options) (*Proxy, error) {
 	}
 
 	// The only access provider: without one, CPA serves /v1 unauthenticated.
-	if opts.Access == nil {
-		return nil, fmt.Errorf("an access provider is required")
-	}
-	sdkaccess.RegisterProvider(opts.Access.Identifier(), opts.Access)
+	sdkaccess.RegisterProvider(agentHeader{}.Identifier(), agentHeader{})
 
 	// CPA reads the management password from the environment.
 	pw := randomHex(24)
@@ -158,6 +153,23 @@ func (t engineTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	res := rec.Result()
 	res.Request = req
 	return res, nil
+}
+
+// AgentHeader names the agent a /v1 request comes from. Only the runtime
+// gateway reaches /v1 (runtimes have no route to this service); it sets the
+// header after authenticating the runtime, replacing any the runtime sent.
+const AgentHeader = "X-AXP-Agent-Id"
+
+type agentHeader struct{}
+
+func (agentHeader) Identifier() string { return "axp-agent" }
+
+func (agentHeader) Authenticate(_ context.Context, r *http.Request) (*sdkaccess.Result, *sdkaccess.AuthError) {
+	agent := r.Header.Get(AgentHeader)
+	if agent == "" {
+		return nil, sdkaccess.NewNoCredentialsError()
+	}
+	return &sdkaccess.Result{Provider: "axp-agent", Principal: agent}, nil
 }
 
 func randomHex(n int) string {

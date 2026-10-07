@@ -1,0 +1,43 @@
+# The browser's entry: by longest prefix, /api/llm to the LLM gateway,
+# /observe to OpenObserve, /api to the control plane, everything else to web.
+# Paths are not rewritten and the browser's Host is kept.
+http://:{$AXP_GATEWAY_PORT:8080} {
+	bind {$AXP_GATEWAY_BIND:0.0.0.0}
+	import access_log
+
+	# Nothing a client sends under X-AXP-* reaches a service.
+	request_header -X-AXP-*
+	request_header X-Request-Id {http.request.uuid}
+	header >X-Request-Id {http.request.uuid}
+	request_body {
+		max_size 32MB
+	}
+
+	# kamal-proxy's health check.
+	handle /up {
+		log_skip
+		respond "ok"
+	}
+	handle /api/llm/* {
+		reverse_proxy {$AXP_UPSTREAM_LLM:axp-llm:8317}
+	}
+	# OpenObserve's UI and API, served under /observe (ZO_BASE_URI).
+	handle /observe/* {
+		log_skip
+		reverse_proxy {$AXP_UPSTREAM_OBSERVE:axp-openobserve:5080}
+	}
+	handle /api/* {
+		# Chat streams (SSE) pass through as they are written.
+		reverse_proxy {$AXP_UPSTREAM_API:axp-api:8000} {
+			flush_interval -1
+		}
+	}
+	# Pages and assets are not worth a log record each (in development every
+	# Vite module is one).
+	handle {
+		log_skip
+		reverse_proxy {$AXP_UPSTREAM_WEB:axp-web:3000}
+	}
+
+	import errors
+}

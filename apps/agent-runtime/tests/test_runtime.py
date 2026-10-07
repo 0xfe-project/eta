@@ -96,7 +96,7 @@ class Harness:
             instance_id=str(uuid.uuid4()),
             generation=1,
             token="secret",
-            control_plane_url="http://cp.invalid",
+            gateway_url="http://gateway.invalid",
             listen_host="127.0.0.1",
             listen_port=0,
             home_dir=tmp / "home",
@@ -105,7 +105,6 @@ class Harness:
             sandbox="workspace-write",
             approval_policy="on-request",
             codex_launch=FAKE,
-            llm_base_url="http://llm-gateway:8317/v1",
             heartbeat_seconds=0.05,
             mcp_ready_timeout=5,
         )
@@ -156,7 +155,7 @@ class TestLlmGateway:
         settings = replace(rt.settings, model_context_window=256000)
         assert {
             'model_provider="axp"',
-            'model_providers.axp.base_url="http://llm-gateway:8317/v1"',
+            'model_providers.axp.base_url="http://gateway.invalid/v1"',
             'model_providers.axp.wire_api="responses"',
             'model_providers.axp.env_key="AXP_RUNTIME_LLM_KEY"',
             "model_context_window=256000",

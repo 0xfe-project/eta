@@ -218,8 +218,7 @@ def s3(monkeypatch):
 
 @pytest.fixture
 def ctl(chat, settings, s3):
-    settings.AXP_INTERNAL_URL = "http://cp.internal:8001"
-    settings.AXP_LLM_GATEWAY_URL = "http://llm-gateway:8317"
+    settings.AXP_RUNTIME_GATEWAY_URL = "http://runtime-gateway:8090"
     return Control(chat)
 
 
@@ -240,7 +239,7 @@ class TestProvisioning:
         assert (instance.generation, instance.status) == (1, "provisioning")
         env = ctl.driver.started[0].env
         assert env["AXP_RUNTIME_TOKEN"] == runtime_token(instance.pk, 1)
-        assert env["AXP_CONTROL_PLANE_URL"] == "http://cp.internal:8001"
+        assert env["AXP_GATEWAY_URL"] == "http://runtime-gateway:8090"
         snapshot = json.loads(env["AXP_MCP_SNAPSHOT"])
         assert [m["module_key"] for m in snapshot] == ["tasks"]
         # A new agent has nothing to restore.
@@ -287,13 +286,18 @@ class TestInternalApi:
         Agent.objects.filter(pk=ctl.agent["id"]).update(generation=2)
         assert error_of(runtime.heartbeat()) == (409, "STALE_GENERATION")
 
-    def test_identity_names_the_runtime(self, ctl, runtime):
-        path = f"runtime-instances/{runtime.instance.pk}/identity"
-        assert internal("get", path, runtime.token).json() == {
-            "agent_id": ctl.agent["id"],
-            "instance_id": str(runtime.instance.pk),
-            "generation": 1,
-        }
+    def test_runtime_auth_names_the_agent(self, ctl, runtime):
+        key = f"{runtime.instance.pk}.{runtime.token}"
+        response = internal("get", "runtime-auth", key)
+        assert response.status_code == 204
+        assert response["X-AXP-Agent-Id"] == ctl.agent["id"]
+        for bad in (f"{runtime.instance.pk}.x", runtime.token, ""):
+            assert internal("get", "runtime-auth", bad).status_code == 403
+        Agent.objects.filter(pk=ctl.agent["id"]).update(generation=2)
+        assert error_of(internal("get", "runtime-auth", key)) == (
+            409,
+            "STALE_GENERATION",
+        )
 
     def test_session_thread_cannot_change(self, runtime):
         assert runtime.session("t1").status_code == 200
@@ -701,7 +705,6 @@ class TestConfigChange:
         ):
             ctl.start_runtime()
         env = ctl.driver.started[0].env
-        assert env["AXP_LLM_BASE_URL"] == "http://llm-gateway:8317/v1"
         assert not {k for k in env if k.startswith("AXP_S3")}
         assert env["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://otel-collector:4318"
         assert env["OTEL_RESOURCE_ATTRIBUTES"] == (

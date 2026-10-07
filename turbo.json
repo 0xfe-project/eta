@@ -41,7 +41,6 @@
       "dependsOn": [
         "@axp/web#build",
         "@axp/control-plane#build:linux-amd64",
-        "@axp/gateway#build:linux-amd64",
         "@axp/llm-gateway#build:linux-amd64"
       ],
       "cache": false,
@@ -51,7 +50,6 @@
       "dependsOn": [
         "@axp/web#build",
         "@axp/control-plane#build:linux-arm64",
-        "@axp/gateway#build:linux-arm64",
         "@axp/llm-gateway#build:linux-arm64"
       ],
       "cache": false,

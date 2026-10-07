@@ -24,7 +24,7 @@ def _local_secret_key() -> str:
 # Production sets it (deploy/deploy.sh generates one); runtime tokens derive
 # from it, so every control plane process must share it.
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY") or _local_secret_key()
-# Every request arrives through the edge gateway or on the runtime network.
+# Every request arrives through the gateway.
 ALLOWED_HOSTS = ["*"]
 INSTALLED_APPS = [
     "django.contrib.staticfiles",
@@ -33,13 +33,10 @@ INSTALLED_APPS = [
 ]
 MIDDLEWARE = [
     "chat.middleware.RequestIdMiddleware",
-    "chat.middleware.EdgeSecretMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
-# Shared with the edge gateway; public requests without it are rejected.
-AXP_EDGE_SECRET = os.getenv("AXP_EDGE_SECRET", "")
 # The internal runtime API runs as a separate process with its own URLconf.
 ROOT_URLCONF = os.getenv("AXP_URLCONF", "config.urls")
 # Records go through OpenTelemetry from the root logger (axp_telemetry, set up
@@ -78,18 +75,18 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Service addresses and credentials. The defaults are development's (fixed
-# addresses on the runtime network's gateway, 172.30.0.1) and production's
-# (Kamal network aliases); scripts/dev.sh sets the ones that move with its
-# port block, deploy/deploy.yml the production credentials.
-# Where runtimes reach the internal API (served by a separate process).
-AXP_INTERNAL_URL = os.getenv(
-    "AXP_INTERNAL_URL",
-    "http://172.30.0.1:8001" if DEBUG else "http://axp-internal:8001",
+# addresses on the runtime network's gateway, 172.30.0.1, or loopback) and
+# production's (Kamal network aliases); scripts/dev.sh sets the ones that move
+# with its port block, deploy/deploy.yml the production credentials.
+# The runtime gateway (apps/gateway): runtimes' only route to the internal API
+# and the LLM gateway.
+AXP_RUNTIME_GATEWAY_URL = os.getenv(
+    "AXP_RUNTIME_GATEWAY_URL",
+    "http://172.30.0.1:8090" if DEBUG else "http://axp-runtime-gateway:8090",
 )
-# The LLM gateway (apps/llm-gateway). Runtimes send every model request
-# there; the control plane reads its model catalog.
+# The LLM gateway (apps/llm-gateway), for its model catalog.
 AXP_LLM_GATEWAY_URL = os.getenv(
-    "AXP_LLM_GATEWAY_URL", "http://172.30.0.1:8317" if DEBUG else "http://axp-llm:8317"
+    "AXP_LLM_GATEWAY_URL", "http://127.0.0.1:8317" if DEBUG else "http://axp-llm:8317"
 )
 # SeaweedFS's S3 API, holding agent snapshots. Runtimes reach it at the same
 # address through presigned URLs.

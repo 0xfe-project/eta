@@ -55,21 +55,7 @@ class TestErrors:
         assert error_of(response) == (400, "BAD_REQUEST")
 
 
-class TestEdgeSecret:
-    @pytest.fixture(autouse=True)
-    def _secret(self, settings):
-        settings.AXP_EDGE_SECRET = "s3cret"
-
-    def test_requires_gateway_secret(self, client):
-        assert error_of(client.get("/api/v1/chat")) == (403, "FORBIDDEN")
-        wrong = client.get("/api/v1/chat", HTTP_X_AXP_EDGE_SECRET="wrong")
-        assert wrong.status_code == 403
-        ok = client.get("/api/v1/chat", HTTP_X_AXP_EDGE_SECRET="s3cret")
-        assert ok.status_code == 200
-
-    def test_health_stays_open(self, client):
-        assert client.get("/api/health").status_code == 200
-
+class TestRequestId:
     def test_keeps_gateway_request_id(self, client):
         response = client.get("/api/health", HTTP_X_REQUEST_ID="gateway-request-1")
         assert response["X-Request-ID"] == "gateway-request-1"

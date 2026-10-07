@@ -5,25 +5,18 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/akarachen/axp/apps/llm-gateway/internal/edge"
 	"github.com/gin-gonic/gin"
 )
 
 // Mount registers the public API under /api/llm. The gateway forwards it to
-// the browser; the control plane calls it directly with the same secret.
-func Mount(e *gin.Engine, s *Service, edgeSecret string, logger *slog.Logger) {
+// the browser; the control plane calls it directly.
+func Mount(e *gin.Engine, s *Service, logger *slog.Logger) {
 	e.GET("/api/llm/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "service": "llm-gateway"})
 	})
 
 	h := handler{s: s, logger: logger}
-	v1 := e.Group("/api/llm/v1", func(c *gin.Context) {
-		if !edge.Valid(c.Request, edgeSecret) {
-			h.fail(c, http.StatusForbidden, "FORBIDDEN", "请求被拒绝。")
-			return
-		}
-		c.Next()
-	})
+	v1 := e.Group("/api/llm/v1")
 	v1.GET("/connectors", func(c *gin.Context) { c.JSON(http.StatusOK, s.Connectors()) })
 	v1.GET("/connections", func(c *gin.Context) { c.JSON(http.StatusOK, nonNil(s.Connections())) })
 	v1.PATCH("/connections/:id", h.patchConnection)

@@ -21,6 +21,6 @@ def bearer(request) -> str:
     return header[7:] if header.startswith("Bearer ") else ""
 
 
-def token_matches(request, instance) -> bool:
+def token_matches(token: str, instance) -> bool:
     expected = runtime_token(instance.id, instance.generation)
-    return hmac.compare_digest(bearer(request).encode(), expected.encode())
+    return hmac.compare_digest(token.encode(), expected.encode())

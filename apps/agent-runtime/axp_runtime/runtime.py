@@ -304,12 +304,14 @@ class Runtime:
                 overrides.append(
                     f"{prefix}.enabled_tools={_toml(module.allowed_tools)}"
                 )
-        # Every model request goes through the LLM gateway, authenticated as
-        # this runtime instance; the container holds no provider credentials.
+        # Every model request goes through the runtime gateway, which
+        # authenticates this runtime instance; the container holds no provider
+        # credentials.
+        llm_base_url = f"{self.settings.gateway_url}/v1"
         overrides += [
             f"model_provider={_toml(LLM_PROVIDER)}",
             f"model_providers.{LLM_PROVIDER}.name={_toml('AXP LLM Gateway')}",
-            f"model_providers.{LLM_PROVIDER}.base_url={_toml(self.settings.llm_base_url)}",
+            f"model_providers.{LLM_PROVIDER}.base_url={_toml(llm_base_url)}",
             f"model_providers.{LLM_PROVIDER}.wire_api={_toml('responses')}",
             f"model_providers.{LLM_PROVIDER}.env_key={_toml('AXP_RUNTIME_LLM_KEY')}",
         ]

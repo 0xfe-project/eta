@@ -32,7 +32,7 @@ bun run dev
 
 智能体要选一个可用的模型才能对话：首次使用在“模型服务”中绑定账号（开发凭据保存在仓库根目录的 `var/llm-gateway`）。`bun run dev` 需要 Docker：它在本机启动一组所有实例共享、名为 `axp-dev-*` 的容器（数据库、日志、工作区存储），与生产的容器、卷和网络互不相干。
 
-`bun run dev` 每个实例占用五个连续端口：网关 `P`（浏览器打开的地址）、API `P+1`、内部运行协议 `P+2`、Web `P+3`、llm-gateway `P+4`（内部运行协议和 llm-gateway 监听 runtime 网络的网关地址 `172.30.0.1`），默认 `P=3000`。被占用时（其他 checkout、worktree 或 agent 已在运行）自动顺延到下一个空闲端口块（3010、3020……），并用文件锁避免并行启动抢到同一端口，因此可以同时运行任意多个实例。用 `bun run dev --port 4000`（或 `AXP_DEV_PORT=4000`）指定端口，被占用或与生产端口（`deploy/ports.env`）重叠时直接报错。新的 worktree 首次运行会自动安装依赖并执行 migrations。
+`bun run dev` 每个实例占用六个连续端口：网关 `P`（浏览器打开的地址）、API `P+1`、内部运行协议 `P+2`、Web `P+3`、llm-gateway `P+4`、runtime 网关 `P+5`（监听 runtime 网络的网关地址 `172.30.0.1`，其余都只监听 loopback），默认 `P=3000`。被占用时（其他 checkout、worktree 或 agent 已在运行）自动顺延到下一个空闲端口块（3010、3020……），并用文件锁避免并行启动抢到同一端口，因此可以同时运行任意多个实例。用 `bun run dev --port 4000`（或 `AXP_DEV_PORT=4000`）指定端口，被占用或与生产端口（`deploy/ports.env`）重叠时直接报错。新的 worktree 首次运行会自动安装依赖并执行 migrations。
 
 `setup` 安装 JS/Python 依赖并执行 Django migrations。锁文件（`bun.lock`、两个 `uv.lock`）应一起提交。
 
@@ -43,10 +43,10 @@ bun run dev
 - Web：http://localhost:3000
 - API 健康检查：http://localhost:3000/api/health
 - 公共 OpenAPI 文档：http://localhost:3000/api/docs
-- 内部运行协议文档：http://172.30.0.1:3002/internal/docs
-- runtime 使用的 OpenAI 兼容接口：http://172.30.0.1:3004/v1
+- 内部运行协议文档：http://127.0.0.1:3002/internal/docs
+- runtime 的入口（内部运行协议与 OpenAI 兼容接口）：http://172.30.0.1:3005
 
-浏览器只访问网关（`apps/gateway`），开发和生产使用同一套路由：`/api/llm/` → llm-gateway，`/api/` → control-plane，其余 → Web。网关为每个请求生成 `X-Request-Id`、输出 JSON 访问日志、透传 SSE 与 WebSocket，并附上边缘密钥（`AXP_EDGE_SECRET`，由 `bun run dev` 每次随机生成，生产由部署脚本生成）；control-plane 与 llm-gateway 拒绝不带该密钥的公开请求（健康检查除外），因此绕过网关直接访问服务端口会得到 403。
+浏览器只访问网关，runtime 只访问 runtime 网关（`apps/gateway`，Caddy 配置），开发和生产使用同一套路由：`/api/llm/` → llm-gateway，`/api/` → control-plane，其余 → Web。服务之间没有共享密钥，信任边界由网络划定：服务只监听 loopback（生产中不在 runtime 网络上），runtime 网关替所有服务认证 runtime。详见[网关](docs/architecture/gateway.md)。
 
 Web 已配置 Query、nuqs、Phosphor Icons、表单校验、通知、Markdown 和 Tailwind，使用方式见 [Web 开发说明](apps/web/README.md)。
 
@@ -56,10 +56,9 @@ Web 已配置 Query、nuqs、Phosphor Icons、表单校验、通知、Markdown �
 | ---------------------------- | ------------------------------------------------------------ |
 | `bun run dev`                | 启动开发环境，任一进程退出时关闭所有进程                     |
 | `bun run deploy`             | 用 Kamal 把工作区部署到本机（见 `deploy/README.md`）         |
-| `bun run dev:gateway`        | 单独启动网关                                                 |
 | `bun run dev:llm-gateway`    | 单独启动 llm-gateway                                         |
 | `bun run dev:control-plane`  | 单独启动 Django（公共 API）                                  |
-| `bun run dev:internal`       | 单独启动内部运行协议服务（runtime 网络网关地址）             |
+| `bun run dev:internal`       | 单独启动内部运行协议服务                                     |
 | `bun run dev:controller`     | 单独启动 runtime controller（需要 Docker）                   |
 | `bun run dev:web`            | 单独启动 Web                                                 |
 | `bun run runtime:build`      | 构建本机架构的 runtime 镜像 `axp-agent-runtime:dev`          |

@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
@@ -17,7 +16,6 @@ import (
 	"github.com/akarachen/axp/apps/llm-gateway/internal/connectors"
 	"github.com/akarachen/axp/apps/llm-gateway/internal/cpa"
 	"github.com/akarachen/axp/apps/llm-gateway/internal/llm"
-	"github.com/akarachen/axp/apps/llm-gateway/internal/runtimeauth"
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy"
 )
@@ -45,20 +43,11 @@ func freePort(t *testing.T) int {
 // It must pass on every CPA upgrade.
 func TestCPAContract(t *testing.T) {
 	port := freePort(t)
-	// The control plane's internal API knows one runtime, "inst.token".
-	internal := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer token" {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-		_, _ = w.Write([]byte(`{"agent_id":"agent","instance_id":"inst","generation":1}`))
-	}))
-	t.Cleanup(internal.Close)
 	var service *llm.Service
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	proxy, err := cpa.New(cpa.Options{
-		Host: "127.0.0.1", Port: port, StateDir: t.TempDir(), Access: runtimeauth.New(internal.URL),
-		Mount: func(e *gin.Engine) { llm.Mount(e, service, "edge", logger) },
+		Host: "127.0.0.1", Port: port, StateDir: t.TempDir(),
+		Mount: func(e *gin.Engine) { llm.Mount(e, service, logger) },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -131,23 +120,24 @@ func TestCPAContract(t *testing.T) {
 		t.Logf("model %s %q ctx=%d", m.ID, m.DisplayName, m.ContextWindow)
 	}
 
-	listModels := func(key string) *http.Response {
+	// /v1 serves only requests the runtime gateway attributed to an agent.
+	listModels := func(agent string) *http.Response {
 		req, _ := http.NewRequest("GET", base+"/v1/models", nil)
-		req.Header.Set("Authorization", "Bearer "+key)
+		if agent != "" {
+			req.Header.Set(cpa.AgentHeader, agent)
+		}
 		res, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
 		return res
 	}
-	for _, key := range []string{"", "inst.wrong"} {
-		res := listModels(key)
-		res.Body.Close()
-		if res.StatusCode != http.StatusUnauthorized {
-			t.Fatalf("/v1/models with key %q: %d", key, res.StatusCode)
-		}
+	unattributed := listModels("")
+	unattributed.Body.Close()
+	if unattributed.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("/v1/models without an agent: %d", unattributed.StatusCode)
 	}
-	res := listModels("inst.token")
+	res := listModels("agent")
 	var list struct {
 		Data []struct{ ID string } `json:"data"`
 	}

@@ -6,17 +6,17 @@
 
 `apps/llm-gateway` 是一个 Go 进程，按 CLIProxyAPI（CPA）的 [SDK 用法](https://github.com/router-for-me/CLIProxyAPI/blob/main/docs/sdk-usage.md) 嵌入 `cliproxy.Service`，并在 CPA 的 gin 引擎上挂载 AXP 自己的路由：
 
-| 路径               | 调用方                                      | 鉴权                       |
-| ------------------ | ------------------------------------------- | -------------------------- |
-| `/api/llm/v1/*`    | 浏览器（经统一网关）、control-plane（直连） | `X-AXP-Edge-Secret`        |
-| `/v1/*`            | runtime 中的 Codex（runtime 网络）          | runtime 实例令牌           |
-| `/v0/management/*` | 仅进程内回环调用                            | 每次启动随机生成的管理密码 |
+| 路径               | 调用方                                        | 鉴权                                         |
+| ------------------ | --------------------------------------------- | -------------------------------------------- |
+| `/api/llm/v1/*`    | 浏览器（经 `gateway`）、control-plane（直连） | 无：只有这两者连得到（见[网关](gateway.md)） |
+| `/v1/*`            | runtime 中的 Codex（经 `runtime-gateway`）    | 网关注入的 `X-AXP-Agent-Id`                  |
+| `/v0/management/*` | 仅进程内回环调用                              | 每次启动随机生成的管理密码                   |
 
-CPA 负责 token 刷新、按模型名在账号间轮换、协议转换。凭据只存在 llm-gateway 的状态目录（工作目录下的 `var/llm-gateway/auths`，生产为卷 `axp-llm`）；runtime 容器只拿到网关地址和自己的实例令牌。
+CPA 负责 token 刷新、按模型名在账号间轮换、协议转换。凭据只存在 llm-gateway 的状态目录（工作目录下的 `var/llm-gateway/auths`，生产为卷 `axp-llm`）；runtime 容器只拿到 runtime 网关的地址和自己的实例令牌。
 
 ### runtime 鉴权
 
-每个 runtime 实例本来就有 control-plane 签发的令牌（由实例 ID 和代数派生，换代即失效），runtime 用 `<实例 ID>.<令牌>` 作为调用 `/v1` 的 API key。llm-gateway 向 CPA 注册唯一的访问提供者（`internal/runtimeauth`），对每个 key 调用内部运行协议的 `GET /internal/v1/runtime-instances/{id}/identity` 确认身份并缓存 30 秒；请求因此带有所属 Agent，被替换的实例最多 30 秒后无法再调用模型。llm-gateway 和内部运行协议都在 runtime 网络上（开发时在其网关地址 `172.30.0.1`）。
+runtime 用 `<实例 ID>.<令牌>`（control-plane 签发，换代即失效）作为调用 `/v1` 的 API key。runtime 网关逐个请求向内部运行协议确认这个 key，再以 `X-AXP-Agent-Id` 把所属 Agent 交给 llm-gateway；被替换的实例立即无法再调用模型。llm-gateway 向 CPA 注册的唯一访问提供者只读这个头（`cpa.AgentHeader`），没有它的请求一律 401。
 
 ### 与 CPA 的边界
 

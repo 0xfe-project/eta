@@ -27,7 +27,9 @@ class Settings:
     instance_id: str
     generation: int
     token: str
-    control_plane_url: str
+    # The runtime gateway: the internal API under /internal, the LLM gateway's
+    # OpenAI-compatible API (Codex's model provider) under /v1.
+    gateway_url: str
     listen_host: str
     listen_port: int
     # Everything the agent keeps; its snapshot is exactly this directory.
@@ -36,8 +38,6 @@ class Settings:
     model: str | None
     sandbox: str
     approval_policy: str
-    # OpenAI-compatible endpoint of the LLM gateway, Codex's model provider.
-    llm_base_url: str
     # The agent's description, injected as Codex developer instructions.
     developer_instructions: str = ""
     mcp_modules: list[McpModule] = field(default_factory=list)
@@ -93,7 +93,7 @@ def load_settings() -> Settings:
         instance_id=_require("AXP_INSTANCE_ID"),
         generation=int(_require("AXP_GENERATION")),
         token=_require("AXP_RUNTIME_TOKEN"),
-        control_plane_url=_require("AXP_CONTROL_PLANE_URL").rstrip("/"),
+        gateway_url=_require("AXP_GATEWAY_URL").rstrip("/"),
         listen_host=os.environ.get("AXP_LISTEN_HOST", "0.0.0.0"),
         listen_port=int(os.environ.get("AXP_LISTEN_PORT", "8080")),
         home_dir=Path(os.environ.get("AXP_HOME", "/agent")),
@@ -108,6 +108,5 @@ def load_settings() -> Settings:
         codex_launch=shlex.split(launch) if launch else None,
         heartbeat_seconds=float(os.environ.get("AXP_HEARTBEAT_SECONDS", "5")),
         mcp_ready_timeout=float(os.environ.get("AXP_MCP_READY_TIMEOUT", "30")),
-        llm_base_url=_require("AXP_LLM_BASE_URL"),
         model_context_window=codex.get("model_context_window") or None,
     )

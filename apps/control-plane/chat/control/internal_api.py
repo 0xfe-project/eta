@@ -9,7 +9,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
-from django.http import HttpRequest
+from django.http import HttpRequest, HttpResponse
 from django.utils import timezone
 from ninja import NinjaAPI, Schema
 from pydantic import ConfigDict, Field
@@ -18,7 +18,7 @@ from .. import services
 from ..errors import ApiError, install_error_handlers
 from ..models import Agent, AgentSession, RuntimeInstance
 from . import objects, projection
-from .auth import token_matches
+from .auth import bearer, token_matches
 
 api = NinjaAPI(
     title="AXP Internal Runtime Protocol",
@@ -70,18 +70,20 @@ def _fenced() -> ApiError:
     return ApiError(409, "STALE_GENERATION", "运行实例已失效。")
 
 
-def _instance(
-    request: HttpRequest, instance_id, *, live: bool = True
-) -> RuntimeInstance:
+def _instance(request: HttpRequest, instance_id) -> RuntimeInstance:
     """Authenticate a runtime by its instance-bound token."""
+    return _authenticate(instance_id, bearer(request))
+
+
+def _authenticate(instance_id, token: str) -> RuntimeInstance:
     instance = (
         RuntimeInstance.objects.select_related("agent").filter(pk=instance_id).first()
         if _is_uuid(instance_id)
         else None
     )
-    if instance is None or not token_matches(request, instance):
+    if instance is None or not token_matches(token, instance):
         raise ApiError(403, "INVALID_RUNTIME_TOKEN", "运行实例令牌无效。")
-    if live and (
+    if (
         instance.ended_at is not None
         or instance.generation != instance.agent.generation
     ):
@@ -176,12 +178,13 @@ def snapshot(request: HttpRequest, instance_id: str):
     return {"upload_url": objects.upload_url(instance.agent_id)}
 
 
-@api.get("/v1/runtime-instances/{instance_id}/identity", auth=None)
-def identity(request: HttpRequest, instance_id: str):
-    """Who holds this token; the LLM gateway authenticates runtimes with it."""
-    instance = _instance(request, instance_id)
-    return {
-        "agent_id": str(instance.agent_id),
-        "instance_id": str(instance.pk),
-        "generation": instance.generation,
-    }
+@api.get("/v1/runtime-auth", auth=None)
+def runtime_auth(request: HttpRequest):
+    """The runtime gateway's forward auth: which agent holds this runtime key.
+
+    The key is ``<instance id>.<token>``; the gateway hands the agent id to the
+    service it routes the request to.
+    """
+    instance_id, _, token = bearer(request).partition(".")
+    instance = _authenticate(instance_id, token)
+    return HttpResponse(status=204, headers={"X-AXP-Agent-Id": str(instance.agent_id)})

@@ -6,8 +6,8 @@ usage() {
 Usage: scripts/dev.sh [--port PORT]
 
 Starts the development stack. Each instance uses a block of consecutive
-ports: edge gateway PORT (open this one), control plane PORT+1, internal
-runtime API PORT+2 (docker mode), web PORT+3 and LLM gateway PORT+4.
+ports: gateway PORT (open this one), control plane PORT+1, internal runtime
+API PORT+2, web PORT+3, LLM gateway PORT+4 and runtime gateway PORT+5.
 
   --port PORT   Use exactly this gateway port; fail if any port of its block is taken.
                 Also settable as AXP_DEV_PORT.
@@ -101,7 +101,7 @@ port_reserved() {
 source deploy/ports.env
 production_ports=" $AXP_PROD_HTTP_PORT $AXP_PROD_HTTPS_PORT $AXP_PROD_REGISTRY_PORT $AXP_PROD_OBSERVE_PORT "
 
-BLOCK_SIZE=5
+BLOCK_SIZE=6
 
 block_free() {
   local port
@@ -137,19 +137,20 @@ export AXP_API_PORT="$((web_port + 1))"
 export AXP_INTERNAL_PORT="$((web_port + 2))"
 export AXP_WEB_PORT="$((web_port + 3))"
 export AXP_LLM_PORT="$((web_port + 4))"
-# Host processes that runtime containers call listen on the runtime network's
-# gateway address (its subnet is fixed in development).
-export AXP_INTERNAL_HOST=172.30.0.1
-export AXP_INTERNAL_URL="http://$AXP_INTERNAL_HOST:$AXP_INTERNAL_PORT"
-export AXP_LLM_ADDR="$AXP_INTERNAL_HOST:$AXP_LLM_PORT"
+export AXP_RUNTIME_GATEWAY_PORT="$((web_port + 5))"
+# Services listen on loopback, which runtime containers cannot reach; the
+# runtime gateway alone listens on the runtime network's gateway address (its
+# subnet is fixed in development). As in production, the browser and runtimes
+# each reach the services only through their gateway (apps/gateway).
+export AXP_GATEWAY_BIND=127.0.0.1
+export AXP_RUNTIME_GATEWAY_BIND=172.30.0.1
+export AXP_RUNTIME_GATEWAY_URL="http://$AXP_RUNTIME_GATEWAY_BIND:$AXP_RUNTIME_GATEWAY_PORT"
+export AXP_LLM_ADDR="127.0.0.1:$AXP_LLM_PORT"
 export AXP_LLM_GATEWAY_URL="http://$AXP_LLM_ADDR"
-# Everything the browser uses goes through the edge gateway, as in production.
-export AXP_GATEWAY_ADDR="127.0.0.1:$AXP_GATEWAY_PORT"
-export AXP_GATEWAY_UPSTREAM_WEB="http://127.0.0.1:$AXP_WEB_PORT"
-export AXP_GATEWAY_UPSTREAM_API="http://127.0.0.1:$AXP_API_PORT"
-export AXP_GATEWAY_UPSTREAM_LLM="$AXP_LLM_GATEWAY_URL"
-AXP_EDGE_SECRET="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
-export AXP_EDGE_SECRET
+export AXP_UPSTREAM_WEB="127.0.0.1:$AXP_WEB_PORT"
+export AXP_UPSTREAM_API="127.0.0.1:$AXP_API_PORT"
+export AXP_UPSTREAM_INTERNAL="127.0.0.1:$AXP_INTERNAL_PORT"
+export AXP_UPSTREAM_LLM="$AXP_LLM_ADDR"
 
 # Instances share the runtime network; only their ports differ.
 uv run --project apps/control-plane python apps/control-plane/manage.py ensure_runtime_network
@@ -163,7 +164,7 @@ bun run runtime:build
 # gateway address, so host processes and runtimes use one URL (presigned
 # snapshot URLs name it).
 dev_container axp-dev-s3 chrislusf/seaweedfs:4.48 \
-  --network "$runtime_network" -p "$AXP_INTERNAL_HOST:8333:8333" -v axp-dev-s3:/data \
+  --network "$runtime_network" -p "$AXP_RUNTIME_GATEWAY_BIND:8333:8333" -v axp-dev-s3:/data \
   -e AWS_ACCESS_KEY_ID=axp-dev -e AWS_SECRET_ACCESS_KEY=axp-dev-secret \
   -- mini -dir=/data
 
@@ -183,7 +184,7 @@ for _ in $(seq 1 60); do
   curl -sf "http://127.0.0.1:$observe_port/observe/healthz" >/dev/null && break
   sleep 0.5
 done
-export AXP_GATEWAY_UPSTREAM_OBSERVE="http://127.0.0.1:$observe_port"
+export AXP_UPSTREAM_OBSERVE="127.0.0.1:$observe_port"
 export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:$observe_port/observe/api/default"
 export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic%20$observe_basic"
 export OTEL_RESOURCE_ATTRIBUTES="deployment.environment.name=development,axp.dev.port=$web_port"
@@ -202,15 +203,25 @@ cat <<EOF
 AXP dev in $ROOT_DIR
   Web:      http://localhost:$AXP_GATEWAY_PORT
   API:      http://localhost:$AXP_GATEWAY_PORT/api/health
-  Internal: $AXP_INTERNAL_URL/internal/docs
+  Internal: http://127.0.0.1:$AXP_INTERNAL_PORT/internal/docs
   Logs:     http://localhost:$AXP_GATEWAY_PORT/observe/ ($OBSERVE_USER / $OBSERVE_PASSWORD)
 EOF
+
+# Both gateways (production's two roles) in one Caddy on the host network, so
+# it binds the addresses above; the configuration is read from this checkout.
+gateway=axp-dev-gateway-$web_port
+docker rm -f "$gateway" >/dev/null 2>&1 || true
+gateway_env=""
+for name in AXP_GATEWAY_BIND AXP_GATEWAY_PORT AXP_RUNTIME_GATEWAY_BIND AXP_RUNTIME_GATEWAY_PORT \
+  AXP_UPSTREAM_WEB AXP_UPSTREAM_API AXP_UPSTREAM_INTERNAL AXP_UPSTREAM_LLM AXP_UPSTREAM_OBSERVE; do
+  gateway_env+=" -e $name"
+done
 
 # Every process stops on Ctrl+C or when any of them exits.
 exec node node_modules/concurrently/dist/bin/concurrently.js --kill-others \
   --names gateway,control-plane,internal,controller,llm,web \
   --prefix-colors gray,blue,yellow,cyan,magenta,green \
-  "bun run dev:gateway" \
+  "docker run --rm --name $gateway --network host$gateway_env -v $ROOT_DIR/apps/gateway:/etc/axp-gateway:ro caddy:2.11.7-alpine caddy run --config /etc/axp-gateway/Caddyfile" \
   "OTEL_SERVICE_NAME=control-plane-api bun run dev:control-plane" \
   "OTEL_SERVICE_NAME=control-plane-internal bun run dev:internal" \
   "OTEL_SERVICE_NAME=control-plane-controller bun run dev:controller" \

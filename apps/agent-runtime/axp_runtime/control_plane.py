@@ -23,7 +23,7 @@ class ControlPlane:
         self.settings = settings
         self.timeout = timeout
         self.base = (
-            f"{settings.control_plane_url}/internal/v1/runtime-instances/"
+            f"{settings.gateway_url}/internal/v1/runtime-instances/"
             f"{settings.instance_id}"
         )
 

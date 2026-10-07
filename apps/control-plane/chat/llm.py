@@ -1,9 +1,8 @@
 """Client for the LLM gateway's model catalog (apps/llm-gateway).
 
-The control plane calls the gateway directly (not through the edge gateway)
-with the shared edge secret. It only needs the catalog: to validate an
-agent's model, to refuse chats whose model is unusable, and to tell runtimes
-a model's context window.
+The control plane calls the LLM gateway directly. It only needs the catalog:
+to validate an agent's model, to refuse chats whose model is unusable, and to
+tell runtimes a model's context window.
 """
 
 import json
@@ -43,12 +42,9 @@ _cache: tuple[float, dict[str, Model]] | None = None
 
 
 def _fetch() -> dict[str, Model]:
-    request = urllib.request.Request(
-        settings.AXP_LLM_GATEWAY_URL.rstrip("/") + "/api/llm/v1/models",
-        headers={"X-AXP-Edge-Secret": settings.AXP_EDGE_SECRET},
-    )
+    url = settings.AXP_LLM_GATEWAY_URL.rstrip("/") + "/api/llm/v1/models"
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+        with urllib.request.urlopen(url, timeout=TIMEOUT_SECONDS) as response:
             items = json.load(response)
     except (OSError, urllib.error.URLError, ValueError) as exc:
         raise GatewayUnavailable(str(exc)) from exc

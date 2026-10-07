@@ -67,7 +67,6 @@ ensure_secret() {
     echo "Added $1 to $ENV_FILE."
   fi
 }
-ensure_secret AXP_EDGE_SECRET 32
 ensure_secret AXP_S3_SECRET_ACCESS_KEY 32
 # OpenObserve requires upper and lower case letters, a digit and a symbol.
 if ! grep -q "^AXP_OBSERVE_PASSWORD=" "$ENV_FILE"; then
@@ -129,8 +128,8 @@ if ! docker container inspect "$REGISTRY_CONTAINER" >/dev/null 2>&1; then
 fi
 docker start "$REGISTRY_CONTAINER" >/dev/null
 
-# Runtimes and the internal API share this network; the internal role attaches
-# to it on boot. Docker picks a subnet that is free on this machine.
+# Runtimes' network; the runtime gateway attaches to it on boot. Docker picks a
+# subnet that is free on this machine.
 if ! docker network inspect "$RUNTIME_NETWORK" >/dev/null 2>&1; then
   docker network create --driver bridge --label dev.axp.runtime=network \
     "$RUNTIME_NETWORK" >/dev/null

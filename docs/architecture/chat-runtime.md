@@ -11,7 +11,7 @@
 | controller             | `chat/control/controller.py`      | 唯一持有 Docker socket：启动/隔离容器、派发命令、中断、审批送达                            |
 | agent runtime（容器）  | `apps/agent-runtime/axp_runtime`  | 一个 Agent 一个容器；官方 Codex Python SDK 驱动一个持久 thread                             |
 
-公共服务的 URLconf（`config.urls`）不包含任何 `/internal` 路由；内部服务以 `AXP_URLCONF=config.internal_urls` 启动，只监听 runtime 网络的网关地址（默认 `172.30.0.1:8001`），有单独的 OpenAPI。公共响应、SSE 与前端类型只来自 `chat/schemas.py` 的手写允许列表，测试会检查其中不出现 command、thread、runtime、generation 等内部字段。
+公共服务的 URLconf（`config.urls`）不包含任何 `/internal` 路由；内部服务以 `AXP_URLCONF=config.internal_urls` 启动，runtime 只能经 [runtime 网关](gateway.md) 访问它，有单独的 OpenAPI。公共响应、SSE 与前端类型只来自 `chat/schemas.py` 的手写允许列表，测试会检查其中不出现 command、thread、runtime、generation 等内部字段。
 
 ## 一条消息的路径
 
