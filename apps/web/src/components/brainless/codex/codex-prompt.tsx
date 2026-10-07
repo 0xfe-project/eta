@@ -51,7 +51,9 @@ export function CodexPrompt({
       : model;
 
   return (
-    <div className={cn("min-w-0 font-mono text-[13px] leading-[1.6]", className)}>
+    <div
+      className={cn("min-w-0 font-mono text-[13px] leading-[1.6]", className)}
+    >
       <div
         className="min-w-0 py-[1lh] pr-[1ch]"
         style={{ background: INPUT_BG, color: FG }}
@@ -65,9 +67,7 @@ export function CodexPrompt({
             aria-label="消息"
             placeholder={placeholder}
             onKeyDown={onKeyDown}
-            {...(controlled
-              ? { value, onChange }
-              : { defaultValue, onChange })}
+            {...(controlled ? { value, onChange } : { defaultValue, onChange })}
             className={cn(
               "term-input min-w-0 flex-1 bg-transparent outline-none placeholder:text-[var(--terminal-muted)]",
               inputClassName,

@@ -1,11 +1,11 @@
-import { Link } from "@tanstack/react-router";
-import { ArrowsOutIcon } from "@phosphor-icons/react/ArrowsOut";
+import type { WorkspaceView } from "./types";
 import { ArrowsInIcon } from "@phosphor-icons/react/ArrowsIn";
+import { ArrowsOutIcon } from "@phosphor-icons/react/ArrowsOut";
+import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { views } from "./workspace-search";
-import type { WorkspaceView } from "./types";
 export function WorkspacePanel({
   view,
   onViewChange,
@@ -30,11 +30,7 @@ export function WorkspacePanel({
     >
       <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-1 px-3 pt-3">
         <span aria-hidden="true" />
-        <TabsList
-          variant="default"
-          aria-label="工作区标签"
-          className="gap-1"
-        >
+        <TabsList variant="default" aria-label="工作区标签" className="gap-1">
           {views.map(({ value, label }) => (
             <TabsTrigger
               key={value}

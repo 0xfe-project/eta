@@ -1,0 +1,11 @@
+# Shared by every Python project in the repository. Formatting runs through
+# dprint (dprint.json); this file configures `ruff check`.
+target-version = "py313"
+line-length = 88
+src = ["apps/control-plane", "apps/agent-runtime"]
+
+[lint]
+select = ["E", "F", "I", "PT"]
+
+[lint.per-file-ignores]
+"**/migrations/*" = ["E501"]

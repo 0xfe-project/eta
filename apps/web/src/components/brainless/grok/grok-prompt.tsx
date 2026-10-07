@@ -64,17 +64,15 @@ export function GrokPrompt({
   const legend = modeLabel ? `${model} · ${modeLabel}` : model;
 
   return (
-    <div className={cn("min-w-0 font-mono text-[13px] leading-[1.5]", className)}>
+    <div
+      className={cn("min-w-0 font-mono text-[13px] leading-[1.5]", className)}
+    >
       <div
         className="relative min-w-0 rounded-sm border px-2 py-1.5"
         style={{ borderColor: BORDER, background: SURFACE }}
       >
         <div className="flex min-w-0 items-center gap-0">
-          <span
-            aria-hidden
-            className="shrink-0"
-            style={{ color: caretColor }}
-          >
+          <span aria-hidden className="shrink-0" style={{ color: caretColor }}>
             ❯
           </span>
           <input
@@ -82,9 +80,7 @@ export function GrokPrompt({
             aria-label="消息"
             placeholder={placeholder}
             onKeyDown={onKeyDown}
-            {...(controlled
-              ? { value, onChange }
-              : { defaultValue, onChange })}
+            {...(controlled ? { value, onChange } : { defaultValue, onChange })}
             className={cn(
               "term-input min-w-0 flex-1 bg-transparent py-0.5 pl-[1ch] outline-none placeholder:text-[var(--terminal-muted)]",
               inputClassName,
@@ -116,7 +112,10 @@ export function GrokPrompt({
       </div>
 
       {showShortcuts ? (
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px]" style={{ color: MUTED }}>
+        <div
+          className="mt-3 flex flex-wrap items-center gap-2 text-[12px]"
+          style={{ color: MUTED }}
+        >
           <span>
             <span className="font-semibold" style={{ color: FG }}>
               Shift+Tab

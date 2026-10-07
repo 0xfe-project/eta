@@ -47,10 +47,18 @@ export function CodexExec({
         <span aria-hidden className="shrink-0" style={{ color: DOT[status] }}>
           •
         </span>
-        <span className="min-w-0 break-words text-[var(--terminal-link)]">{command}</span>
-        {result ? <span className="shrink-0 text-[var(--terminal-muted)]">{result}</span> : null}
+        <span className="min-w-0 break-words text-[var(--terminal-link)]">
+          {command}
+        </span>
+        {result ? (
+          <span className="shrink-0 text-[var(--terminal-muted)]">
+            {result}
+          </span>
+        ) : null}
         {expandable ? (
-          <span className="shrink-0 text-[var(--terminal-muted)] group-open:hidden">▸</span>
+          <span className="shrink-0 text-[var(--terminal-muted)] group-open:hidden">
+            ▸
+          </span>
         ) : null}
       </summary>
       {expandable ? (

@@ -15,17 +15,19 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["ruff>=0.14,<1"]
+dev = [
+  "dirty-equals>=0.11",
+  "pytest>=9.1.1",
+  "pytest-django>=4.14.0",
+  "ruff>=0.14,<1",
+]
 
 [tool.uv]
 package = false
 
-[tool.ruff]
-target-version = "py313"
-line-length = 88
-
-[tool.ruff.lint]
-select = ["E", "F", "I"]
-
-[tool.ruff.lint.per-file-ignores]
-"*/migrations/*" = ["E501"]
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+testpaths = ["chat/tests"]
+addopts = "-p no:cacheprovider"
+# django-ninja deprecations in our tuple responses; not test failures.
+filterwarnings = ["ignore::DeprecationWarning:ninja.*"]

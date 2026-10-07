@@ -1,11 +1,11 @@
+import { ClaudeDiff } from "@/components/brainless/claude/claude-diff";
 import { ClaudeHeader } from "@/components/brainless/claude/claude-header";
 import { ClaudeMessage } from "@/components/brainless/claude/claude-message";
+import { ClaudePermission } from "@/components/brainless/claude/claude-permission";
+import { ClaudePrompt } from "@/components/brainless/claude/claude-prompt";
+import { ClaudeThinking } from "@/components/brainless/claude/claude-thinking";
 import { ClaudeTodoList } from "@/components/brainless/claude/claude-todo-list";
 import { ClaudeToolCall } from "@/components/brainless/claude/claude-tool-call";
-import { ClaudeDiff } from "@/components/brainless/claude/claude-diff";
-import { ClaudePermission } from "@/components/brainless/claude/claude-permission";
-import { ClaudeThinking } from "@/components/brainless/claude/claude-thinking";
-import { ClaudePrompt } from "@/components/brainless/claude/claude-prompt";
 
 /**
  * ClaudeSession — a complete Claude Code screen: welcome header, a full turn
@@ -27,8 +27,8 @@ export function ClaudeSession() {
         </ClaudeMessage>
 
         <ClaudeMessage>
-          I&apos;ll add the toggle, wire it into the theme provider, then run the
-          suite.
+          I&apos;ll add the toggle, wire it into the theme provider, then run
+          the suite.
         </ClaudeMessage>
 
         <ClaudeTodoList
@@ -39,7 +39,11 @@ export function ClaudeSession() {
           ]}
         />
 
-        <ClaudeToolCall tool="Read" arg="app/settings/page.tsx" result="Read 48 lines" />
+        <ClaudeToolCall
+          tool="Read"
+          arg="app/settings/page.tsx"
+          result="Read 48 lines"
+        />
 
         <ClaudeDiff
           file="app/settings/page.tsx"
@@ -48,7 +52,11 @@ export function ClaudeSession() {
             { type: "ctx", n: 11, text: "export function Settings() {" },
             { type: "del", n: 12, text: "  return <Panel>{sections}</Panel>" },
             { type: "add", n: 12, text: "  return (" },
-            { type: "add", n: 13, text: "    <Panel header={<ThemeToggle />}>" },
+            {
+              type: "add",
+              n: 13,
+              text: "    <Panel header={<ThemeToggle />}>",
+            },
             { type: "add", n: 14, text: "      {sections}" },
             { type: "ctx", n: 15, text: "    </Panel>" },
           ]}

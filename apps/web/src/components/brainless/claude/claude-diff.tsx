@@ -6,11 +6,11 @@ import { cn } from "@/lib/utils";
  * +/- lines). Added/removed rows carry semantic tinted backgrounds and an
  * off-screen "added"/"removed" label so the diff is legible without color.
  */
-export type DiffLine = {
+export interface DiffLine {
   type: "add" | "del" | "ctx";
   n?: number;
   text: string;
-};
+}
 
 const GREEN = "var(--terminal-success)";
 
@@ -26,7 +26,9 @@ export function ClaudeDiff({
   className?: string;
 }) {
   return (
-    <div className={cn("min-w-0 font-mono text-[13px] leading-[1.55]", className)}>
+    <div
+      className={cn("min-w-0 font-mono text-[13px] leading-[1.55]", className)}
+    >
       <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
         <span aria-hidden className="shrink-0" style={{ color: GREEN }}>
           ⏺
@@ -44,7 +46,11 @@ export function ClaudeDiff({
           <span aria-hidden className="invisible shrink-0">
             ⏺
           </span>
-          <span aria-hidden className="shrink-0" style={{ color: "var(--terminal-muted)" }}>
+          <span
+            aria-hidden
+            className="shrink-0"
+            style={{ color: "var(--terminal-muted)" }}
+          >
             ⎿
           </span>
           <span className="min-w-0 break-words">{summary}</span>
@@ -61,7 +67,11 @@ export function ClaudeDiff({
                 : "transparent";
           const mark = l.type === "add" ? "+" : l.type === "del" ? "-" : " ";
           const markColor =
-            l.type === "add" ? GREEN : l.type === "del" ? "var(--terminal-error)" : "var(--terminal-muted)";
+            l.type === "add"
+              ? GREEN
+              : l.type === "del"
+                ? "var(--terminal-error)"
+                : "var(--terminal-muted)";
           return (
             <div key={i} className="flex min-w-0" style={{ background: bg }}>
               <span
@@ -70,13 +80,19 @@ export function ClaudeDiff({
               >
                 {l.n ?? ""}
               </span>
-              <span className="w-3 shrink-0 select-none" style={{ color: markColor }}>
+              <span
+                className="w-3 shrink-0 select-none"
+                style={{ color: markColor }}
+              >
                 {mark}
               </span>
               <span
                 className="min-w-0 break-all"
                 style={{
-                  color: l.type === "ctx" ? "var(--terminal-muted)" : "var(--terminal-claude-foreground)",
+                  color:
+                    l.type === "ctx"
+                      ? "var(--terminal-muted)"
+                      : "var(--terminal-claude-foreground)",
                 }}
               >
                 {l.type !== "ctx" ? (

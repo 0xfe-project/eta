@@ -1,3 +1,4 @@
+import type { WorkspaceView } from "./types";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -7,15 +8,14 @@ import {
   useSendMessage,
   useStopReply,
 } from "@/queries/chat";
+import { useModelAvailability } from "@/queries/llm";
 import { AgentBar } from "./agent-bar";
 import { AgentEditor } from "./agent-editor";
-import { useModelAvailability } from "@/queries/llm";
 import { ChatPanel, ComposerNotice } from "./chat-panel";
 import { SettingsDialog } from "./settings-dialog";
 import { useAgents } from "./use-agents";
 import { WorkspacePanel } from "./workspace-panel";
 import { useWorkspace } from "./workspace-state";
-import type { WorkspaceView } from "./types";
 
 export function Workspace({
   view,

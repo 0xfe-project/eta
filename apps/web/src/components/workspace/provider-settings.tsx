@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import type { Connection, Connector } from "@/queries/llm";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
 import { CopyIcon } from "@phosphor-icons/react/Copy";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { WarningIcon } from "@phosphor-icons/react/Warning";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -43,8 +44,6 @@ import {
   useModels,
   useSetConnectionEnabled,
   useStartLogin,
-  type Connection,
-  type Connector,
 } from "@/queries/llm";
 import { useAgents } from "./use-agents";
 

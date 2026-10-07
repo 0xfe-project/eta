@@ -2,38 +2,41 @@
   "name": "axp",
   "private": true,
   "packageManager": "bun@1.3.14",
-  "workspaces": [
-    "apps/*"
-  ],
+  "workspaces": ["apps/*"],
   "engines": {
     "node": ">=22.12.0"
   },
   "scripts": {
+    "prepare": "lefthook install",
     "setup": "bun install && bun run setup:control-plane && bun run setup:agent-runtime && bun run setup:go",
     "setup:control-plane": "uv sync --project apps/control-plane --dev && bun run db:migrate",
     "setup:agent-runtime": "uv sync --project apps/agent-runtime --dev",
     "setup:go": "go -C apps/gateway mod download && go -C apps/llm-gateway mod download",
     "dev": "bash scripts/dev.sh",
     "dev:gateway": "go run ./apps/gateway",
-    "deploy": "bash deploy/deploy.sh",
     "dev:control-plane": "uv run --project apps/control-plane python apps/control-plane/manage.py runserver 127.0.0.1:${AXP_API_PORT:-8000}",
     "dev:fake-runtime": "uv run --project apps/control-plane python apps/control-plane/manage.py run_fake_runtime",
     "dev:internal": "AXP_URLCONF=config.internal_urls DJANGO_ALLOWED_HOSTS=${AXP_INTERNAL_HOST:-172.30.0.1} uv run --project apps/control-plane python apps/control-plane/manage.py runserver ${AXP_INTERNAL_HOST:-172.30.0.1}:${AXP_INTERNAL_PORT:-8001}",
     "dev:controller": "uv run --project apps/control-plane python apps/control-plane/manage.py run_controller",
     "dev:llm-gateway": "go run ./apps/llm-gateway",
     "dev:web": "bun run --cwd apps/web dev",
+    "deploy": "bash deploy/deploy.sh",
     "db:migrate": "uv run --project apps/control-plane python apps/control-plane/manage.py migrate",
     "runtime:build": "bash scripts/build/runtime-image.sh axp-agent-runtime:dev",
     "build": "turbo run build build:linux-amd64 build:linux-arm64",
-    "check": "turbo run build typecheck lint test",
+    "check": "dprint check && turbo run build typecheck lint test",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
     "test:control-plane": "turbo run test --filter=@axp/control-plane",
     "test:agent-runtime": "turbo run test --filter=@axp/agent-runtime",
-    "format": "prettier --write . && uv run --project apps/control-plane ruff format apps/control-plane && uv run --project apps/agent-runtime ruff format apps/agent-runtime && gofmt -w apps/gateway apps/llm-gateway",
-    "check:go": "turbo run lint test --filter=@axp/gateway --filter=@axp/llm-gateway"
+    "check:go": "turbo run lint test --filter=@axp/gateway --filter=@axp/llm-gateway",
+    "format": "dprint fmt",
+    "format:check": "dprint check"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
-    "prettier": "^3.6.2",
+    "dprint": "^0.60.1",
+    "lefthook": "^2.1.17",
     "turbo": "^2.11.7"
   }
 }

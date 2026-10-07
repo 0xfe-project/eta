@@ -72,7 +72,11 @@ def collect_keys(value, keys=None):
     return keys
 
 
-def assert_no_internal_fields(testcase, payload):
-    for key in collect_keys(payload):
-        for marker in INTERNAL_MARKERS:
-            testcase.assertNotIn(marker, key, f"internal field leaked: {key}")
+def assert_no_internal_fields(payload):
+    leaked = {k for k in collect_keys(payload) for m in INTERNAL_MARKERS if m in k}
+    assert not leaked, f"internal fields leaked: {leaked}"
+
+
+def error_of(response):
+    """(status, error code) of an error envelope, for one-line assertions."""
+    return response.status_code, response.json()["error"]["code"]

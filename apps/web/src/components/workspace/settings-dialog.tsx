@@ -1,3 +1,4 @@
+import type { SettingsSection } from "./workspace-state";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { PaletteIcon } from "@phosphor-icons/react/Palette";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
@@ -14,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { useNeedsAttention } from "@/queries/llm";
 import { AgentSettings } from "./agent-settings";
 import { ProviderSettings } from "./provider-settings";
-import { useWorkspace, type SettingsSection } from "./workspace-state";
+import { useWorkspace } from "./workspace-state";
 
 const sessionThemes = ["claude", "codex", "grok"] as const;
 const sections: {

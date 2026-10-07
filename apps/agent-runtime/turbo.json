@@ -18,6 +18,7 @@
         "uv.lock",
         ".python-version"
       ]
-    }
+    },
+    "lint": { "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/ruff.toml"] }
   }
 }

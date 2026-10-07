@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { WorkspacePanel } from "@/components/workspace/workspace-panel";
 import {
-  validateWorkspaceSearch,
   useWorkspaceView,
+  validateWorkspaceSearch,
 } from "@/components/workspace/workspace-search";
 export const Route = createFileRoute("/workspace")({
   validateSearch: validateWorkspaceSearch,

@@ -1,15 +1,13 @@
 import hashlib
 import json
-import shutil
-import tempfile
 import uuid
 from datetime import timedelta
-from pathlib import Path
 from unittest import mock
 
+import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import Client, TestCase, override_settings
+from django.test import Client, override_settings
 from django.utils import timezone
 
 from chat.control import mcp
@@ -30,7 +28,9 @@ from chat.models import (
     RuntimeInstance,
 )
 
-from .helpers import ChatClient, assert_no_internal_fields
+from .helpers import assert_no_internal_fields, error_of
+
+pytestmark = pytest.mark.django_db
 
 
 class FakeDriver:
@@ -76,34 +76,36 @@ class FakeClients:
 
         class Client:
             def put_command(self, command):
-                clients._check()
-                clients.calls.append(("put", instance.generation, str(command.pk)))
+                clients._record("put", instance, str(command.pk))
                 return {"status": "accepted"}
 
             def get_command(self, command_id):
-                clients._check()
-                clients.calls.append(("get", instance.generation, str(command_id)))
+                clients._record("get", instance, str(command_id))
                 return clients.commands.get(str(command_id))
 
             def interrupt(self, command_id):
-                clients._check()
-                clients.calls.append(
-                    ("interrupt", instance.generation, str(command_id))
-                )
+                clients._record("interrupt", instance, str(command_id))
                 return clients.commands.get(str(command_id), {"status": "running"})
 
             def decide(self, approval):
-                clients._check()
-                clients.calls.append(("decide", instance.generation, approval.decision))
+                clients._record("decide", instance, approval.decision)
 
         return Client()
 
-    def _check(self):
+    def _record(self, kind, instance, arg):
         if self.unavailable:
             raise RuntimeUnavailable("down")
+        self.calls.append((kind, instance.generation, arg))
 
     def of(self, kind):
         return [call for call in self.calls if call[0] == kind]
+
+
+def internal(method, path, token, **kwargs):
+    with override_settings(ROOT_URLCONF="config.internal_urls"):
+        return getattr(Client(), method)(
+            f"/internal/v1/{path}", HTTP_AUTHORIZATION=f"Bearer {token}", **kwargs
+        )
 
 
 class RuntimeHarness:
@@ -111,24 +113,23 @@ class RuntimeHarness:
 
     def __init__(self, instance: RuntimeInstance):
         self.instance = instance
-        self.client = Client()
         self.seq = 0
         self.token = runtime_token(instance.pk, instance.generation)
 
-    def _call(self, method, path, body=None, token=None):
-        with override_settings(ROOT_URLCONF="config.internal_urls"):
-            return getattr(self.client, method)(
-                f"/internal/v1/runtime-instances/{self.instance.pk}/{path}",
-                data=json.dumps(body or {}),
-                content_type="application/json",
-                HTTP_AUTHORIZATION=f"Bearer {token or self.token}",
-            )
+    def call(self, method, path, body=None, token=None):
+        return internal(
+            method,
+            f"runtime-instances/{self.instance.pk}/{path}",
+            token or self.token,
+            data=json.dumps(body or {}),
+            content_type="application/json",
+        )
 
     def heartbeat(self, status="ready", **extra):
-        return self._call("post", "heartbeat", {"status": status, **extra})
+        return self.call("post", "heartbeat", {"status": status, **extra})
 
     def session(self, thread_id="thread-1"):
-        return self._call("put", "session", {"thread_id": thread_id})
+        return self.call("put", "session", {"thread_id": thread_id})
 
     def events(self, *events, seq_start=None):
         batch = []
@@ -143,31 +144,34 @@ class RuntimeHarness:
                     "payload": payload,
                 }
             )
-        return self._call("post", "events", {"events": batch})
+        return self.call("post", "events", {"events": batch})
+
+    def turn_started(self, command, turn_id="t"):
+        payload = {"command_id": str(command.pk), "turn_id": turn_id}
+        return self.events(("turn.started", payload))
+
+    def turn_completed(self, command, status="completed"):
+        payload = {"command_id": str(command.pk), "status": status}
+        return self.events(("turn.completed", payload))
 
     def ready(self, thread_id="thread-1"):
         assert self.session(thread_id).status_code == 200
         assert self.heartbeat().status_code == 200
 
 
-class ControlTestCase(TestCase):
-    def setUp(self):
-        self.objects = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, self.objects, ignore_errors=True)
-        override = override_settings(
-            AXP_OBJECT_DIR=self.objects,
-            AXP_CHECKPOINT_AFTER_TURNS=0,
-            AXP_INTERNAL_URL="http://cp.internal:8001",
-        )
-        override.enable()
-        self.addCleanup(override.disable)
-        object_store.cache_clear()
-        self.addCleanup(object_store.cache_clear)
+class Control:
+    """A controller with fake Docker and runtime clients, plus one agent."""
+
+    def __init__(self, chat):
         self.driver = FakeDriver()
         self.clients = FakeClients()
         self.controller = Controller(self.driver, client=self.clients)
-        self.chat = ChatClient()
-        self.agent = self.chat.create_agent()
+        self.chat = chat
+        self.agent = chat.create_agent()
+        self.tick = self.controller.tick
+
+    def send(self, text="检查项目结构"):
+        return self.chat.send(self.agent["id"], text)
 
     def instance(self) -> RuntimeInstance:
         return RuntimeInstance.objects.get(
@@ -175,171 +179,161 @@ class ControlTestCase(TestCase):
         )
 
     def start_runtime(self, thread_id="thread-1") -> RuntimeHarness:
-        self.controller.tick()
+        self.tick()
         runtime = RuntimeHarness(self.instance())
         runtime.ready(thread_id)
         return runtime
 
-    def reply(self, reply_id):
-        return Message.objects.get(pk=reply_id)
+    def reply(self, sent) -> Message:
+        return Message.objects.get(pk=sent["reply"]["id"])
 
-    def command_for(self, reply_id) -> AgentCommand:
-        return self.reply(reply_id).command
+    def command(self, sent) -> AgentCommand:
+        return self.reply(sent).command
+
+    def agent_status(self):
+        return self.chat.get("/chat").json()["agents"][0]["status"]
+
+    def expire_leases(self):
+        RuntimeInstance.objects.filter(ended_at__isnull=True).update(
+            lease_expires_at=timezone.now() - timedelta(seconds=1)
+        )
 
 
-class ProvisioningTests(ControlTestCase):
-    def test_message_provisions_runtime_with_snapshot(self):
-        sent = self.chat.send(self.agent["id"])
-        self.controller.tick()
-        instance = self.instance()
-        self.assertEqual(instance.generation, 1)
-        self.assertEqual(instance.status, "provisioning")
-        spec = self.driver.started[0]
-        self.assertEqual(spec.env["AXP_RUNTIME_TOKEN"], runtime_token(instance.pk, 1))
-        self.assertEqual(spec.env["AXP_CONTROL_PLANE_URL"], "http://cp.internal:8001")
-        snapshot = json.loads(spec.env["AXP_MCP_SNAPSHOT"])
-        self.assertEqual([m["module_key"] for m in snapshot], ["tasks"])
-        self.assertIn(f"axp-state-{self.agent['id']}", self.driver.volumes)
+@pytest.fixture
+def ctl(chat, settings, tmp_path):
+    settings.AXP_OBJECT_DIR = tmp_path
+    settings.AXP_CHECKPOINT_AFTER_TURNS = 0
+    settings.AXP_INTERNAL_URL = "http://cp.internal:8001"
+    object_store.cache_clear()
+    yield Control(chat)
+    object_store.cache_clear()
+
+
+@pytest.fixture
+def running(ctl):
+    """One message dispatched to a ready runtime: (sent, runtime, command)."""
+    sent = ctl.send()
+    runtime = ctl.start_runtime()
+    ctl.tick()
+    return sent, runtime, ctl.command(sent)
+
+
+class TestProvisioning:
+    def test_message_provisions_runtime_with_snapshot(self, ctl):
+        sent = ctl.send()
+        ctl.tick()
+        instance = ctl.instance()
+        assert (instance.generation, instance.status) == (1, "provisioning")
+        env = ctl.driver.started[0].env
+        assert env["AXP_RUNTIME_TOKEN"] == runtime_token(instance.pk, 1)
+        assert env["AXP_CONTROL_PLANE_URL"] == "http://cp.internal:8001"
+        snapshot = json.loads(env["AXP_MCP_SNAPSHOT"])
+        assert [m["module_key"] for m in snapshot] == ["tasks"]
+        assert f"axp-state-{ctl.agent['id']}" in ctl.driver.volumes
         # Starting a runtime is invisible to the product: the reply is queued.
-        self.assertEqual(self.reply(sent["reply"]["id"]).status, "queued")
-        self.assertEqual(
-            self.chat.get("/chat").json()["agents"][0]["status"], "working"
-        )
+        assert ctl.reply(sent).status == "queued"
+        assert ctl.agent_status() == "working"
         # No second runtime while one is live.
-        self.controller.tick()
-        self.assertEqual(len(self.driver.started), 1)
+        ctl.tick()
+        assert len(ctl.driver.started) == 1
 
-    def test_start_failure_fails_waiting_replies(self):
-        self.driver.fail_start = True
-        sent = self.chat.send(self.agent["id"])
-        self.controller.tick()
-        reply = self.reply(sent["reply"]["id"])
-        self.assertEqual(reply.status, "failed")
-        self.assertEqual(reply.failure["code"], "AGENT_UNAVAILABLE")
-        self.assertEqual(
-            self.chat.get("/chat").json()["agents"][0]["status"], "unavailable"
-        )
+    def test_start_failure_fails_waiting_replies(self, ctl):
+        ctl.driver.fail_start = True
+        sent = ctl.send()
+        ctl.tick()
+        reply = ctl.reply(sent)
+        assert reply.status == "failed"
+        assert reply.failure["code"] == "AGENT_UNAVAILABLE"
+        assert ctl.agent_status() == "unavailable"
 
-    @override_settings(AXP_DISPATCH_TIMEOUT=0)
-    def test_dispatch_timeout_without_ready_runtime(self):
-        sent = self.chat.send(self.agent["id"])
-        self.controller.tick()  # provisions; never becomes ready
-        self.controller.fail_stale_queued()
-        self.assertEqual(
-            self.reply(sent["reply"]["id"]).failure["code"], "DISPATCH_TIMEOUT"
-        )
+    def test_dispatch_timeout_without_ready_runtime(self, ctl, settings):
+        settings.AXP_DISPATCH_TIMEOUT = 0
+        sent = ctl.send()
+        ctl.tick()  # provisions; never becomes ready
+        ctl.controller.fail_stale_queued()
+        assert ctl.reply(sent).failure["code"] == "DISPATCH_TIMEOUT"
 
 
-class InternalApiTests(ControlTestCase):
-    def setUp(self):
-        super().setUp()
-        self.chat.send(self.agent["id"])
-        self.controller.tick()
-        self.runtime = RuntimeHarness(self.instance())
+class TestInternalApi:
+    @pytest.fixture
+    def runtime(self, ctl):
+        ctl.send()
+        ctl.tick()
+        return RuntimeHarness(ctl.instance())
 
-    def test_public_server_does_not_route_internal_api(self):
-        response = Client().post(
-            f"/internal/v1/runtime-instances/{self.runtime.instance.pk}/heartbeat"
-        )
-        self.assertEqual(response.status_code, 404)
+    def test_public_server_does_not_route_internal_api(self, runtime):
+        path = f"/internal/v1/runtime-instances/{runtime.instance.pk}/heartbeat"
+        assert Client().post(path).status_code == 404
 
-    def test_token_is_bound_to_instance_and_generation(self):
-        self.assertEqual(self.runtime.heartbeat().status_code, 200)
-        bad = self.runtime._call("post", "heartbeat", {"status": "ready"}, token="x")
-        self.assertEqual(bad.status_code, 403)
-        Agent.objects.filter(pk=self.agent["id"]).update(generation=2)
-        stale = self.runtime.heartbeat()
-        self.assertEqual(stale.status_code, 409)
-        self.assertEqual(stale.json()["error"]["code"], "STALE_GENERATION")
+    def test_token_is_bound_to_instance_and_generation(self, ctl, runtime):
+        assert runtime.heartbeat().status_code == 200
+        bad = runtime.call("post", "heartbeat", {"status": "ready"}, token="x")
+        assert bad.status_code == 403
+        Agent.objects.filter(pk=ctl.agent["id"]).update(generation=2)
+        assert error_of(runtime.heartbeat()) == (409, "STALE_GENERATION")
 
-    def test_session_thread_cannot_change(self):
-        self.assertEqual(self.runtime.session("t1").status_code, 200)
-        self.assertEqual(self.runtime.session("t1").status_code, 200)
-        conflict = self.runtime.session("t2")
-        self.assertEqual(conflict.status_code, 409)
-        self.assertEqual(AgentSession.objects.get().thread_id, "t1")
+    def test_session_thread_cannot_change(self, runtime):
+        assert runtime.session("t1").status_code == 200
+        assert runtime.session("t1").status_code == 200
+        assert runtime.session("t2").status_code == 409
+        assert AgentSession.objects.get().thread_id == "t1"
 
-    def test_heartbeat_marks_ready_and_extends_lease(self):
-        before = self.runtime.instance.lease_expires_at
-        self.runtime.ready()
-        instance = self.instance()
-        self.assertEqual(instance.status, "ready")
-        self.assertNotEqual(instance.lease_expires_at, before)
-        self.assertEqual(Agent.objects.get().status, "ready")
+    def test_heartbeat_marks_ready_and_extends_lease(self, ctl, runtime):
+        before = runtime.instance.lease_expires_at
+        runtime.ready()
+        instance = ctl.instance()
+        assert instance.status == "ready"
+        assert instance.lease_expires_at != before
+        assert Agent.objects.get().status == "ready"
 
-    def test_event_ordering(self):
-        self.runtime.ready()
-        ok = self.runtime.events(
-            ("mcp.status", {"module_key": "tasks", "status": "ready"})
-        )
-        self.assertEqual(ok.json(), {"acked_source_seq": 1})
-        gap = self.runtime.events(("mcp.status", {}), seq_start=5)
-        self.assertEqual(gap.status_code, 409)
-        self.assertEqual(gap.json()["next_expected_source_seq"], 2)
+    def test_event_ordering(self, ctl, runtime):
+        runtime.ready()
+        status = ("mcp.status", {"module_key": "tasks", "status": "ready"})
+        assert runtime.events(status).json() == {"acked_source_seq": 1}
+        gap = runtime.events(("mcp.status", {}), seq_start=5)
+        assert gap.status_code == 409
+        assert gap.json()["next_expected_source_seq"] == 2
         # Re-sending an acked event is harmless; changing it is a conflict.
-        self.runtime.seq = 0
-        again = self.runtime.events(
-            ("mcp.status", {"module_key": "tasks", "status": "ready"})
-        )
-        self.assertEqual(again.json(), {"acked_source_seq": 1})
-        self.runtime.seq = 0
-        conflict = self.runtime.events(("mcp.status", {"module_key": "x"}))
-        self.assertEqual(conflict.status_code, 409)
-        self.assertEqual(self.instance().mcp_status, {"tasks": "ready"})
+        runtime.seq = 0
+        assert runtime.events(status).json() == {"acked_source_seq": 1}
+        runtime.seq = 0
+        conflict = runtime.events(("mcp.status", {"module_key": "x"}))
+        assert conflict.status_code == 409
+        assert ctl.instance().mcp_status == {"tasks": "ready"}
 
 
-class ExecutionTests(ControlTestCase):
-    def setUp(self):
-        super().setUp()
-        self.sent = self.chat.send(self.agent["id"], "检查项目结构")
-        self.runtime = self.start_runtime()
-        self.controller.tick()
-        self.command = self.command_for(self.sent["reply"]["id"])
+def item(command_id, **fields):
+    return ("item.updated", {"command_id": command_id, "item": fields})
 
-    def test_dispatch_stream_and_complete(self):
-        self.assertEqual(self.command.status, "dispatching")
-        self.assertEqual(self.clients.of("put"), [("put", 1, str(self.command.pk))])
-        command_id = str(self.command.pk)
-        self.runtime.events(
-            ("turn.started", {"command_id": command_id, "turn_id": "turn-1"}),
-            (
-                "item.updated",
-                {
-                    "command_id": command_id,
-                    "item": {"id": "c1", "kind": "command", "status": "running"},
-                },
-            ),
-            (
-                "item.updated",
-                {
-                    "command_id": command_id,
-                    "item": {
-                        "id": "m1",
-                        "kind": "agent_message",
-                        "status": "running",
-                        "text": "正在",
-                    },
-                },
+
+class TestExecution:
+    def test_dispatch_stream_and_complete(self, ctl, running):
+        sent, runtime, command = running
+        assert command.status == "dispatching"
+        assert ctl.clients.of("put") == [("put", 1, str(command.pk))]
+        command_id = str(command.pk)
+        runtime.turn_started(command, "turn-1")
+        runtime.events(
+            item(command_id, id="c1", kind="command", status="running"),
+            item(
+                command_id, id="m1", kind="agent_message", status="running", text="正在"
             ),
         )
-        reply = self.reply(self.sent["reply"]["id"])
-        self.assertEqual(reply.status, "responding")
-        self.assertEqual(
-            [(b["type"], b.get("label") or b.get("text")) for b in reply.content],
-            [("activity", "运行命令"), ("text", "正在")],
-        )
-        self.runtime.events(
-            (
-                "item.updated",
-                {
-                    "command_id": command_id,
-                    "item": {
-                        "id": "m1",
-                        "kind": "agent_message",
-                        "status": "completed",
-                        "text": "正在检查。",
-                    },
-                },
+        reply = ctl.reply(sent)
+        assert reply.status == "responding"
+        assert [
+            (b["type"], b.get("label") or b.get("text")) for b in reply.content
+        ] == [
+            ("activity", "运行命令"),
+            ("text", "正在"),
+        ]
+        runtime.events(
+            item(
+                command_id,
+                id="m1",
+                kind="agent_message",
+                status="completed",
+                text="正在检查。",
             ),
             (
                 "turn.completed",
@@ -347,433 +341,356 @@ class ExecutionTests(ControlTestCase):
             ),
         )
         reply.refresh_from_db()
-        self.assertEqual(reply.status, "completed")
-        self.assertEqual(reply.content[0]["status"], "completed")
-        self.assertEqual(reply.content[1]["text"], "正在检查。")
-        self.command.refresh_from_db()
-        self.assertEqual(self.command.status, "succeeded")
-        self.assertEqual(self.command.codex_turn_id, "turn-1")
-        snapshot = self.chat.get("/chat").json()
-        self.assertEqual(snapshot["agents"][0]["status"], "idle")
-        assert_no_internal_fields(self, snapshot)
+        assert reply.status == "completed"
+        assert reply.content[0]["status"] == "completed"
+        assert reply.content[1]["text"] == "正在检查。"
+        command.refresh_from_db()
+        assert (command.status, command.codex_turn_id) == ("succeeded", "turn-1")
+        snapshot = ctl.chat.get("/chat").json()
+        assert snapshot["agents"][0]["status"] == "idle"
+        assert_no_internal_fields(snapshot)
 
-    def test_same_agent_runs_one_command_at_a_time(self):
-        second = self.chat.send(self.agent["id"], "第二条")
-        self.controller.tick()
-        self.assertEqual(self.command_for(second["reply"]["id"]).status, "queued")
-        self.runtime.events(
-            (
-                "turn.completed",
-                {"command_id": str(self.command.pk), "status": "completed"},
-            )
-        )
-        self.controller.tick()
-        self.assertEqual(self.command_for(second["reply"]["id"]).status, "dispatching")
+    def test_same_agent_runs_one_command_at_a_time(self, ctl, running):
+        _, runtime, command = running
+        second = ctl.send("第二条")
+        ctl.tick()
+        assert ctl.command(second).status == "queued"
+        runtime.turn_completed(command)
+        ctl.tick()
+        assert ctl.command(second).status == "dispatching"
 
-    def test_failed_turn_has_product_reason(self):
-        self.runtime.events(
-            ("turn.completed", {"command_id": str(self.command.pk), "status": "failed"})
-        )
-        reply = self.reply(self.sent["reply"]["id"])
-        self.assertEqual(reply.status, "failed")
-        self.assertEqual(
-            reply.failure,
-            {"code": "TURN_FAILED", "message": "智能体执行失败，请稍后再试。"},
-        )
+    def test_failed_turn_has_product_reason(self, ctl, running):
+        sent, runtime, command = running
+        runtime.turn_completed(command, "failed")
+        reply = ctl.reply(sent)
+        assert reply.status == "failed"
+        assert reply.failure == {
+            "code": "TURN_FAILED",
+            "message": "智能体执行失败，请稍后再试。",
+        }
 
-    def test_outcome_unknown_is_not_replayed(self):
-        self.runtime.events(
-            ("command.outcome_unknown", {"command_id": str(self.command.pk)})
-        )
-        reply = self.reply(self.sent["reply"]["id"])
-        self.assertEqual(reply.failure["code"], "REPLY_INTERRUPTED")
-        self.controller.tick()
-        self.assertEqual(len(self.clients.of("put")), 1)
+    def test_outcome_unknown_is_not_replayed(self, ctl, running):
+        sent, runtime, command = running
+        runtime.events(("command.outcome_unknown", {"command_id": str(command.pk)}))
+        assert ctl.reply(sent).failure["code"] == "REPLY_INTERRUPTED"
+        ctl.tick()
+        assert len(ctl.clients.of("put")) == 1
 
-    def test_stop_sends_interrupt_and_runtime_confirms(self):
-        command_id = str(self.command.pk)
-        self.runtime.events(
-            ("turn.started", {"command_id": command_id, "turn_id": "t"})
-        )
-        reply_id = self.sent["reply"]["id"]
-        self.assertEqual(
-            self.chat.post(f"/chat/messages/{reply_id}/stop").json()["status"],
-            "stopping",
-        )
-        self.controller.tick()
-        self.controller.tick()
-        self.assertEqual(self.clients.of("interrupt"), [("interrupt", 1, command_id)])
-        self.runtime.events(
-            ("turn.completed", {"command_id": command_id, "status": "interrupted"})
-        )
-        self.assertEqual(self.reply(reply_id).status, "stopped")
+    def test_stop_sends_interrupt_and_runtime_confirms(self, ctl, running):
+        sent, runtime, command = running
+        runtime.turn_started(command)
+        stop = ctl.chat.post(f"/chat/messages/{sent['reply']['id']}/stop")
+        assert stop.json()["status"] == "stopping"
+        ctl.tick()
+        ctl.tick()
+        assert ctl.clients.of("interrupt") == [("interrupt", 1, str(command.pk))]
+        runtime.turn_completed(command, "interrupted")
+        assert ctl.reply(sent).status == "stopped"
 
-    def test_stop_before_runtime_accepts_cancels_locally(self):
-        self.clients.commands[str(self.command.pk)] = None
-        reply_id = self.sent["reply"]["id"]
-        self.chat.post(f"/chat/messages/{reply_id}/stop")
-        self.controller.deliver_interrupts()
-        self.assertEqual(self.reply(reply_id).status, "stopped")
-        self.command.refresh_from_db()
-        self.assertEqual(self.command.status, "cancelled")
+    def test_stop_before_runtime_accepts_cancels_locally(self, ctl, running):
+        sent, _, command = running
+        ctl.clients.commands[str(command.pk)] = None
+        ctl.chat.post(f"/chat/messages/{sent['reply']['id']}/stop")
+        ctl.controller.deliver_interrupts()
+        assert ctl.reply(sent).status == "stopped"
+        command.refresh_from_db()
+        assert command.status == "cancelled"
 
-    def test_approval_round_trip(self):
-        command_id = str(self.command.pk)
-        self.runtime.events(
-            ("turn.started", {"command_id": command_id, "turn_id": "t"}),
+    def test_approval_round_trip(self, ctl, running):
+        sent, runtime, command = running
+        runtime.turn_started(command)
+        summary = {"command": "rm -rf build", "reason": "清理构建产物"}
+        runtime.events(
             (
                 "approval.requested",
                 {
                     "approval_id": "sdk-1",
-                    "command_id": command_id,
+                    "command_id": str(command.pk),
                     "kind": "command",
-                    "summary": {"command": "rm -rf build", "reason": "清理构建产物"},
+                    "summary": summary,
                 },
             ),
         )
-        snapshot = self.chat.get("/chat").json()
+        snapshot = ctl.chat.get("/chat").json()
         [interaction] = snapshot["interactions"]
-        self.assertIn("rm -rf build", interaction["prompt"])
-        self.assertEqual(snapshot["agents"][0]["status"], "waiting_for_input")
-        assert_no_internal_fields(self, interaction)
-        answer = self.chat.post(
+        assert "rm -rf build" in interaction["prompt"]
+        assert snapshot["agents"][0]["status"] == "waiting_for_input"
+        assert_no_internal_fields(interaction)
+        answer = ctl.chat.post(
             f"/chat/interactions/{interaction['id']}/answer", {"value": "allow"}
         )
-        self.assertEqual(answer.json()["status"], "submitted")
-        self.assertEqual(Approval.objects.get().status, "decided")
-        self.controller.tick()
-        self.assertEqual(self.clients.of("decide"), [("decide", 1, "accept")])
-        self.runtime.events(
+        assert answer.json()["status"] == "submitted"
+        assert Approval.objects.get().status == "decided"
+        ctl.tick()
+        assert ctl.clients.of("decide") == [("decide", 1, "accept")]
+        runtime.events(
             ("approval.applied", {"approval_id": "sdk-1", "decision": "accept"})
         )
-        self.assertEqual(Interaction.objects.get().status, "resolved")
-        self.assertEqual(Approval.objects.get().status, "applied")
-        self.assertEqual(self.reply(self.sent["reply"]["id"]).status, "responding")
+        assert Interaction.objects.get().status == "resolved"
+        assert Approval.objects.get().status == "applied"
+        assert ctl.reply(sent).status == "responding"
 
 
-class RecoveryTests(ControlTestCase):
-    def setUp(self):
-        super().setUp()
-        self.sent = self.chat.send(self.agent["id"])
-        self.runtime = self.start_runtime()
-        self.controller.tick()
-        self.command = self.command_for(self.sent["reply"]["id"])
-        self.runtime.events(
-            ("turn.started", {"command_id": str(self.command.pk), "turn_id": "t"})
-        )
+class TestRecovery:
+    @pytest.fixture
+    def started(self, running):
+        sent, runtime, command = running
+        runtime.turn_started(command)
+        return running
 
-    def expire(self):
-        RuntimeInstance.objects.filter(ended_at__isnull=True).update(
-            lease_expires_at=timezone.now() - timedelta(seconds=1)
-        )
-
-    def test_lost_runtime_is_fenced_then_replaced(self):
-        old = self.instance()
-        self.expire()
-        self.controller.tick()
-        self.assertIn(old.container_id, self.driver.stopped)
+    def test_lost_runtime_is_fenced_then_replaced(self, ctl, started):
+        _, runtime, command = started
+        old = ctl.instance()
+        ctl.expire_leases()
+        ctl.tick()
+        assert old.container_id in ctl.driver.stopped
         old.refresh_from_db()
-        self.assertIsNotNone(old.ended_at)
-        self.command.refresh_from_db()
-        self.assertEqual(self.command.status, "outcome_unknown")
-        # Replacement uses a new generation and the known thread.
-        new = self.instance()
-        self.assertEqual(new.generation, 2)
-        self.assertEqual(self.driver.started[-1].env["AXP_THREAD_ID"], "thread-1")
-        # The old runtime is rejected from now on.
-        self.assertEqual(self.runtime.heartbeat().status_code, 409)
-
-    def test_reconcile_uses_new_runtime_ledger(self):
-        self.expire()
-        self.controller.tick()
-        RuntimeHarness(self.instance()).ready()
-        self.clients.commands[str(self.command.pk)] = {"status": "succeeded"}
-        self.controller.tick()
-        self.command.refresh_from_db()
-        self.assertEqual(self.command.status, "succeeded")
-        self.assertEqual(self.reply(self.sent["reply"]["id"]).status, "completed")
-
-    def test_unknown_to_shared_ledger_is_requeued(self):
-        self.expire()
-        self.controller.tick()
-        RuntimeHarness(self.instance()).ready()
-        self.clients.commands[str(self.command.pk)] = None
-        self.controller.reconcile_unknown()
-        self.command.refresh_from_db()
-        self.assertEqual(self.command.status, "queued")
-
-    def test_runtime_failure_marks_agent_unavailable(self):
-        queued = self.chat.send(self.agent["id"], "排队中")
-        self.runtime.heartbeat("error", error_code="MCP_REQUIRED_FAILED")
-        reply = self.reply(queued["reply"]["id"])
-        self.assertEqual(reply.failure["code"], "AGENT_EXTENSION_FAILED")
-        self.assertEqual(
-            self.chat.get("/chat").json()["agents"][0]["status"], "unavailable"
-        )
-        # A new message retries with a fresh runtime.
-        self.chat.send(self.agent["id"], "再试一次")
-        self.controller.tick()
-        self.assertEqual(self.instance().generation, 2)
-
-    def test_recovery_failed_never_replaces_thread(self):
-        self.runtime.heartbeat("recovery_failed", error_code="RECOVERY_RESUME_FAILED")
-        self.assertEqual(Agent.objects.get().status, "recovery_failed")
-        self.assertEqual(AgentSession.objects.get().status, "recovery_failed")
-        self.assertEqual(AgentSession.objects.get().thread_id, "thread-1")
-
-
-class CheckpointTests(ControlTestCase):
-    def setUp(self):
-        super().setUp()
-        override = override_settings(AXP_CHECKPOINT_AFTER_TURNS=1)
-        override.enable()
-        self.addCleanup(override.disable)
-        self.sent = self.chat.send(self.agent["id"])
-        self.runtime = self.start_runtime()
-        self.controller.tick()
-        command = self.command_for(self.sent["reply"]["id"])
-        self.runtime.events(
-            ("turn.completed", {"command_id": str(command.pk), "status": "completed"})
-        )
-
-    def upload(self, checkpoint, data: bytes):
-        with override_settings(ROOT_URLCONF="config.internal_urls"):
-            return Client().put(
-                f"/internal/v1/checkpoints/{checkpoint.pk}/object",
-                data=data,
-                content_type="application/gzip",
-                HTTP_AUTHORIZATION=f"Bearer {self.runtime.token}",
-            )
-
-    def test_checkpoint_is_scheduled_uploaded_and_verified(self):
-        self.controller.tick()
-        checkpoint = AgentCheckpoint.objects.get()
-        command = checkpoint.command
-        self.assertEqual(command.kind, "checkpoint")
-        self.controller.tick()
+        assert old.ended_at is not None
         command.refresh_from_db()
-        self.assertEqual(command.status, "dispatching")
-        self.assertTrue(
-            command.input["upload"]["url"].endswith(f"/{checkpoint.pk}/object")
+        assert command.status == "outcome_unknown"
+        # Replacement uses a new generation and the known thread.
+        assert ctl.instance().generation == 2
+        assert ctl.driver.started[-1].env["AXP_THREAD_ID"] == "thread-1"
+        # The old runtime is rejected from now on.
+        assert runtime.heartbeat().status_code == 409
+
+    def test_reconcile_uses_new_runtime_ledger(self, ctl, started):
+        sent, _, command = started
+        ctl.expire_leases()
+        ctl.tick()
+        RuntimeHarness(ctl.instance()).ready()
+        ctl.clients.commands[str(command.pk)] = {"status": "succeeded"}
+        ctl.tick()
+        command.refresh_from_db()
+        assert command.status == "succeeded"
+        assert ctl.reply(sent).status == "completed"
+
+    def test_unknown_to_shared_ledger_is_requeued(self, ctl, started):
+        _, _, command = started
+        ctl.expire_leases()
+        ctl.tick()
+        RuntimeHarness(ctl.instance()).ready()
+        ctl.clients.commands[str(command.pk)] = None
+        ctl.controller.reconcile_unknown()
+        command.refresh_from_db()
+        assert command.status == "queued"
+
+    def test_runtime_failure_marks_agent_unavailable(self, ctl, started):
+        _, runtime, _ = started
+        queued = ctl.send("排队中")
+        runtime.heartbeat("error", error_code="MCP_REQUIRED_FAILED")
+        assert ctl.reply(queued).failure["code"] == "AGENT_EXTENSION_FAILED"
+        assert ctl.agent_status() == "unavailable"
+        # A new message retries with a fresh runtime.
+        ctl.send("再试一次")
+        ctl.tick()
+        assert ctl.instance().generation == 2
+
+    def test_recovery_failed_never_replaces_thread(self, started):
+        _, runtime, _ = started
+        runtime.heartbeat("recovery_failed", error_code="RECOVERY_RESUME_FAILED")
+        assert Agent.objects.get().status == "recovery_failed"
+        session = AgentSession.objects.get()
+        assert (session.status, session.thread_id) == ("recovery_failed", "thread-1")
+
+
+def sha256(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+class TestCheckpoint:
+    @pytest.fixture
+    def runtime(self, ctl, settings):
+        settings.AXP_CHECKPOINT_AFTER_TURNS = 1
+        sent = ctl.send()
+        runtime = ctl.start_runtime()
+        ctl.tick()
+        runtime.turn_completed(ctl.command(sent))
+        return runtime
+
+    @pytest.fixture
+    def checkpoint(self, ctl, runtime):
+        ctl.tick()
+        return AgentCheckpoint.objects.get()
+
+    def upload(self, runtime, checkpoint, data: bytes):
+        return internal(
+            "put",
+            f"checkpoints/{checkpoint.pk}/object",
+            runtime.token,
+            data=data,
+            content_type="application/gzip",
         )
+
+    def complete(self, runtime, checkpoint, checksum, **extra):
+        payload = {"checkpoint_id": str(checkpoint.pk), "checksum": checksum, **extra}
+        runtime.events(("checkpoint.completed", payload))
+
+    def test_checkpoint_is_scheduled_uploaded_and_verified(
+        self, ctl, runtime, checkpoint
+    ):
+        command = checkpoint.command
+        assert command.kind == "checkpoint"
+        ctl.tick()
+        command.refresh_from_db()
+        assert command.status == "dispatching"
+        assert command.input["upload"]["url"].endswith(f"/{checkpoint.pk}/object")
         # Normal turns wait behind the checkpoint.
-        later = self.chat.send(self.agent["id"], "之后")
-        self.controller.tick()
-        self.assertEqual(self.command_for(later["reply"]["id"]).status, "queued")
+        later = ctl.send("之后")
+        ctl.tick()
+        assert ctl.command(later).status == "queued"
 
         data = b"checkpoint-bytes"
-        self.assertEqual(self.upload(checkpoint, data).status_code, 204)
-        self.runtime.events(
-            ("checkpoint.started", {"checkpoint_id": str(checkpoint.pk)}),
-            (
-                "checkpoint.completed",
-                {
-                    "checkpoint_id": str(checkpoint.pk),
-                    "checksum": hashlib.sha256(data).hexdigest(),
-                    "size": len(data),
-                    "manifest": {"thread_id": "thread-1", "sdk_version": "0.160.1"},
-                },
-            ),
+        assert self.upload(runtime, checkpoint, data).status_code == 204
+        runtime.events(("checkpoint.started", {"checkpoint_id": str(checkpoint.pk)}))
+        self.complete(
+            runtime,
+            checkpoint,
+            sha256(data),
+            size=len(data),
+            manifest={"thread_id": "thread-1", "sdk_version": "0.160.1"},
         )
         checkpoint.refresh_from_db()
-        self.assertEqual(checkpoint.status, "available")
-        self.assertEqual(checkpoint.sdk_version, "0.160.1")
+        assert (checkpoint.status, checkpoint.sdk_version) == ("available", "0.160.1")
         # Uploads are closed once the checkpoint is final.
-        self.assertEqual(self.upload(checkpoint, b"x").status_code, 409)
-        self.controller.tick()
-        self.assertEqual(self.command_for(later["reply"]["id"]).status, "dispatching")
+        assert self.upload(runtime, checkpoint, b"x").status_code == 409
+        ctl.tick()
+        assert ctl.command(later).status == "dispatching"
 
-    def test_unverified_checkpoint_is_not_available(self):
-        self.controller.tick()
-        checkpoint = AgentCheckpoint.objects.get()
-        self.upload(checkpoint, b"data")
-        self.runtime.events(
-            (
-                "checkpoint.completed",
-                {"checkpoint_id": str(checkpoint.pk), "checksum": "0" * 64},
-            )
-        )
+    def test_unverified_checkpoint_is_not_available(self, runtime, checkpoint):
+        self.upload(runtime, checkpoint, b"data")
+        self.complete(runtime, checkpoint, "0" * 64)
         checkpoint.refresh_from_db()
-        self.assertEqual(checkpoint.status, "failed")
+        assert checkpoint.status == "failed"
 
-    def test_lost_state_restores_from_latest_checkpoint(self):
-        self.controller.tick()
-        checkpoint = AgentCheckpoint.objects.get()
+    def test_lost_state_restores_from_latest_checkpoint(self, ctl, runtime, checkpoint):
         data = b"state"
-        self.upload(checkpoint, data)
-        self.runtime.events(
-            (
-                "checkpoint.completed",
-                {
-                    "checkpoint_id": str(checkpoint.pk),
-                    "checksum": hashlib.sha256(data).hexdigest(),
-                },
-            )
-        )
+        self.upload(runtime, checkpoint, data)
+        self.complete(runtime, checkpoint, sha256(data))
         # A turn after the checkpoint, then the host and its volume are lost.
-        after = self.chat.send(self.agent["id"], "检查点之后")
-        self.controller.tick()
-        self.runtime.events(
-            (
-                "turn.completed",
-                {
-                    "command_id": str(self.command_for(after["reply"]["id"]).pk),
-                    "status": "completed",
-                },
-            )
-        )
-        self.driver.volumes.clear()
-        RuntimeInstance.objects.filter(ended_at__isnull=True).update(
-            lease_expires_at=timezone.now() - timedelta(seconds=1)
-        )
-        self.chat.send(self.agent["id"], "恢复后")
-        self.controller.tick()
-        spec = self.driver.started[-1]
-        restore = json.loads(spec.env["AXP_RESTORE"])
-        self.assertEqual(restore["checkpoint_id"], str(checkpoint.pk))
-        self.assertEqual(restore["checksum"], hashlib.sha256(data).hexdigest())
+        after = ctl.send("检查点之后")
+        ctl.tick()
+        runtime.turn_completed(ctl.command(after))
+        ctl.driver.volumes.clear()
+        ctl.expire_leases()
+        ctl.send("恢复后")
+        ctl.tick()
+        restore = json.loads(ctl.driver.started[-1].env["AXP_RESTORE"])
+        assert restore["checkpoint_id"] == str(checkpoint.pk)
+        assert restore["checksum"] == sha256(data)
         gap = AgentSession.objects.get().recovery_gap
-        self.assertEqual(
-            gap["commands"], [str(self.command_for(after["reply"]["id"]).pk)]
-        )
+        assert gap["commands"] == [str(ctl.command(after).pk)]
         # The restored runtime can download it.
-        new = RuntimeHarness(self.instance())
-        with override_settings(ROOT_URLCONF="config.internal_urls"):
-            download = Client().get(
-                f"/internal/v1/checkpoints/{checkpoint.pk}/object",
-                HTTP_AUTHORIZATION=f"Bearer {new.token}",
-            )
-        self.assertEqual(b"".join(download.streaming_content), data)
+        new = RuntimeHarness(ctl.instance())
+        download = internal("get", f"checkpoints/{checkpoint.pk}/object", new.token)
+        assert b"".join(download.streaming_content) == data
 
 
-class IdleTests(ControlTestCase):
-    @override_settings(AXP_RUNTIME_IDLE_SECONDS=0)
-    def test_idle_runtime_is_stopped(self):
-        sent = self.chat.send(self.agent["id"])
-        runtime = self.start_runtime()
-        self.controller.tick()
-        command = self.command_for(sent["reply"]["id"])
-        runtime.events(
-            ("turn.completed", {"command_id": str(command.pk), "status": "completed"})
-        )
-        Agent.objects.update(last_active_at=timezone.now() - timedelta(seconds=5))
-        container = self.instance().container_id
-        self.controller.stop_idle()
-        self.assertIn(container, self.driver.stopped)
-        self.assertFalse(RuntimeInstance.objects.filter(ended_at__isnull=True).exists())
-        self.assertEqual(self.chat.get("/chat").json()["agents"][0]["status"], "idle")
+def test_idle_runtime_is_stopped(ctl, running, settings):
+    settings.AXP_RUNTIME_IDLE_SECONDS = 0
+    _, runtime, command = running
+    runtime.turn_completed(command)
+    Agent.objects.update(last_active_at=timezone.now() - timedelta(seconds=5))
+    container = ctl.instance().container_id
+    ctl.controller.stop_idle()
+    assert container in ctl.driver.stopped
+    assert not RuntimeInstance.objects.filter(ended_at__isnull=True).exists()
+    assert ctl.agent_status() == "idle"
 
 
-class DeletionTests(ControlTestCase):
-    def test_deleted_agent_is_interrupted_then_stopped(self):
-        sent = self.chat.send(self.agent["id"])
-        runtime = self.start_runtime()
-        self.controller.tick()
-        command = self.command_for(sent["reply"]["id"])
-        runtime.events(
-            ("turn.started", {"command_id": str(command.pk), "turn_id": "t"})
-        )
-        container = self.instance().container_id
-        self.assertEqual(
-            self.chat.delete(f"/agents/{self.agent['id']}").status_code, 204
-        )
-        self.controller.tick()
-        # Still running: interrupted first, not killed mid-turn.
-        self.assertEqual(
-            self.clients.of("interrupt"), [("interrupt", 1, str(command.pk))]
-        )
-        self.assertNotIn(container, self.driver.stopped)
-        runtime.events(
-            ("turn.completed", {"command_id": str(command.pk), "status": "interrupted"})
-        )
-        self.controller.tick()
-        self.assertIn(container, self.driver.stopped)
-        self.assertFalse(RuntimeInstance.objects.filter(ended_at__isnull=True).exists())
-        # Nothing restarts it.
-        self.controller.tick()
-        self.assertEqual(len(self.driver.started), 1)
+def test_deleted_agent_is_interrupted_then_stopped(ctl, running):
+    _, runtime, command = running
+    runtime.turn_started(command)
+    container = ctl.instance().container_id
+    assert ctl.chat.delete(f"/agents/{ctl.agent['id']}").status_code == 204
+    ctl.tick()
+    # Still running: interrupted first, not killed mid-turn.
+    assert ctl.clients.of("interrupt") == [("interrupt", 1, str(command.pk))]
+    assert container not in ctl.driver.stopped
+    runtime.turn_completed(command, "interrupted")
+    ctl.tick()
+    assert container in ctl.driver.stopped
+    assert not RuntimeInstance.objects.filter(ended_at__isnull=True).exists()
+    # Nothing restarts it.
+    ctl.tick()
+    assert len(ctl.driver.started) == 1
 
 
-class ConfigChangeTests(ControlTestCase):
-    def test_instructions_are_passed_and_applied_between_turns(self):
-        self.chat.patch(f"/agents/{self.agent['id']}", {"description": "第一版指令"})
-        sent = self.chat.send(self.agent["id"])
-        runtime = self.start_runtime()
-        settings = json.loads(self.driver.started[0].env["AXP_CODEX_SETTINGS"])
-        self.assertEqual(settings["developer_instructions"], "第一版指令")
-        self.controller.tick()
-        command = self.command_for(sent["reply"]["id"])
-        runtime.events(
-            ("turn.started", {"command_id": str(command.pk), "turn_id": "t"})
-        )
-        old = self.instance()
+class TestConfigChange:
+    def instructions(self, spec):
+        return json.loads(spec.env["AXP_CODEX_SETTINGS"])["developer_instructions"]
 
-        self.chat.patch(f"/agents/{self.agent['id']}", {"description": "第二版指令"})
-        self.controller.tick()
+    def test_instructions_are_passed_and_applied_between_turns(self, ctl):
+        agent_path = f"/agents/{ctl.agent['id']}"
+        ctl.chat.patch(agent_path, {"description": "第一版指令"})
+        sent = ctl.send()
+        runtime = ctl.start_runtime()
+        assert self.instructions(ctl.driver.started[0]) == "第一版指令"
+        ctl.tick()
+        command = ctl.command(sent)
+        runtime.turn_started(command)
+        old = ctl.instance()
+
+        ctl.chat.patch(agent_path, {"description": "第二版指令"})
+        ctl.tick()
         # A turn is running: the runtime keeps going until it settles.
-        self.assertNotIn(old.container_id, self.driver.stopped)
-        runtime.events(
-            ("turn.completed", {"command_id": str(command.pk), "status": "completed"})
-        )
-        self.controller.tick()
-        self.assertIn(old.container_id, self.driver.stopped)
+        assert old.container_id not in ctl.driver.stopped
+        runtime.turn_completed(command)
+        ctl.tick()
+        assert old.container_id in ctl.driver.stopped
         old.refresh_from_db()
-        self.assertEqual(old.end_reason, "CONFIG_CHANGED")
+        assert old.end_reason == "CONFIG_CHANGED"
         # The next message starts a runtime with the new instructions.
-        self.chat.send(self.agent["id"], "新指令下")
-        self.controller.tick()
-        settings = json.loads(self.driver.started[-1].env["AXP_CODEX_SETTINGS"])
-        self.assertEqual(settings["developer_instructions"], "第二版指令")
-        self.assertEqual(self.driver.started[-1].env["AXP_THREAD_ID"], "thread-1")
+        ctl.send("新指令下")
+        ctl.tick()
+        assert self.instructions(ctl.driver.started[-1]) == "第二版指令"
+        assert ctl.driver.started[-1].env["AXP_THREAD_ID"] == "thread-1"
 
-    @override_settings(
-        AXP_LLM_RUNTIME_BASE_URL="http://llm-gateway:8317/v1",
-        AXP_LLM_API_KEY="runtime-key",
-        AXP_RUNTIME_ENV_PASSTHROUGH=["OPENAI_API_KEY"],
-        AXP_CODEX_AUTH_FILE="/host/auth.json",
-    )
-    def test_gateway_mode_keeps_provider_credentials_out(self):
-        self.chat.send(self.agent["id"])
+    def test_gateway_mode_keeps_provider_credentials_out(self, ctl, settings):
+        settings.AXP_LLM_RUNTIME_BASE_URL = "http://llm-gateway:8317/v1"
+        settings.AXP_LLM_API_KEY = "runtime-key"
+        settings.AXP_RUNTIME_ENV_PASSTHROUGH = ["OPENAI_API_KEY"]
+        settings.AXP_CODEX_AUTH_FILE = "/host/auth.json"
+        ctl.send()
         with mock.patch.dict("os.environ", {"OPENAI_API_KEY": "sk-real"}):
-            self.start_runtime()
-        spec = self.driver.started[0]
-        self.assertEqual(spec.env["AXP_LLM_BASE_URL"], "http://llm-gateway:8317/v1")
-        self.assertEqual(spec.env["AXP_LLM_API_KEY"], "runtime-key")
-        self.assertNotIn("OPENAI_API_KEY", spec.env)
-        self.assertNotIn("AXP_CODEX_AUTH_FILE", spec.env)
+            ctl.start_runtime()
+        env = ctl.driver.started[0].env
+        assert env["AXP_LLM_BASE_URL"] == "http://llm-gateway:8317/v1"
+        assert env["AXP_LLM_API_KEY"] == "runtime-key"
+        assert "OPENAI_API_KEY" not in env
+        assert "AXP_CODEX_AUTH_FILE" not in env
 
 
-class McpTests(TestCase):
-    def setUp(self):
-        self.agent_data = ChatClient().create_agent()
-        self.agent = Agent.objects.get(pk=self.agent_data["id"])
+class TestMcp:
+    @pytest.fixture
+    def agent(self, agent):
+        return Agent.objects.get(pk=agent["id"])
 
-    def test_builtin_tasks_module_bound_by_default(self):
-        binding = self.agent.mcp_bindings.get()
-        self.assertEqual(binding.module_key, "tasks")
-        self.assertEqual(self.agent.config_version, 1)
+    def test_builtin_tasks_module_bound_by_default(self, agent):
+        assert agent.mcp_bindings.get().module_key == "tasks"
+        assert agent.config_version == 1
 
-    def test_config_is_validated_against_schema(self):
+    def test_config_is_validated_against_schema(self, agent):
         revision = McpModuleRevision.objects.get(module_key="tasks")
-        with self.assertRaises(mcp.McpConfigError):
-            mcp.bind(self.agent, revision, config={"max_tasks": "many"})
-        with self.assertRaises(mcp.McpConfigError):
-            mcp.bind(self.agent, revision, secret_ref="plain-secret")
-        mcp.bind(self.agent, revision, config={"max_tasks": 5}, required=True)
-        [module] = mcp.snapshot(self.agent)
-        self.assertEqual(module["config"], {"max_tasks": 5})
-        self.assertTrue(module["required"])
+        with pytest.raises(mcp.McpConfigError):
+            mcp.bind(agent, revision, config={"max_tasks": "many"})
+        with pytest.raises(mcp.McpConfigError):
+            mcp.bind(agent, revision, secret_ref="plain-secret")
+        mcp.bind(agent, revision, config={"max_tasks": 5}, required=True)
+        [module] = mcp.snapshot(agent)
+        assert module["config"] == {"max_tasks": 5}
+        assert module["required"]
 
     def test_launch_spec_rules_and_immutability(self):
-        with self.assertRaises(mcp.McpConfigError):
+        with pytest.raises(mcp.McpConfigError):
             mcp.register_revision("x", "1", {"command": "sh", "cwd": "/host"}, {})
         mcp.register_revision("x", "1", {"command": "x-server"}, {})
         mcp.register_revision("x", "1", {"command": "x-server"}, {})
-        with self.assertRaises(mcp.McpConfigError):
+        with pytest.raises(mcp.McpConfigError):
             mcp.register_revision("x", "1", {"command": "other"}, {})
 
-    def test_management_commands(self):
-        spec = Path(tempfile.mkdtemp()) / "spec.json"
+    def test_management_commands(self, agent, tmp_path):
+        spec = tmp_path / "spec.json"
         spec.write_text(
             json.dumps(
                 {
@@ -785,8 +702,8 @@ class McpTests(TestCase):
             )
         )
         call_command("mcp_register", str(spec))
-        call_command("mcp_bind", str(self.agent.pk), "notes", "--tools", "read,write")
-        binding = self.agent.mcp_bindings.get(module_key="notes")
-        self.assertEqual(binding.allowed_tools, ["read", "write"])
-        with self.assertRaises(CommandError):
-            call_command("mcp_bind", str(self.agent.pk), "missing")
+        call_command("mcp_bind", str(agent.pk), "notes", "--tools", "read,write")
+        binding = agent.mcp_bindings.get(module_key="notes")
+        assert binding.allowed_tools == ["read", "write"]
+        with pytest.raises(CommandError):
+            call_command("mcp_bind", str(agent.pk), "missing")

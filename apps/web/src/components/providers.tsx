@@ -1,9 +1,9 @@
-import { IconContext } from "@phosphor-icons/react/dist/lib/context";
 import type { ReactNode } from "react";
-import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
+import { IconContext } from "@phosphor-icons/react/dist/lib/context";
 import { ThemeProvider } from "next-themes";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const iconDefaults = { size: 20, weight: "regular" } as const;
 

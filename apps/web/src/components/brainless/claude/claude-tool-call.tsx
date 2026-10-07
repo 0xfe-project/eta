@@ -51,11 +51,17 @@ export function ClaudeToolCall({
         )}
       >
         <span className="flex min-w-0 items-baseline gap-2">
-          <span aria-hidden className="shrink-0" style={{ color: STATUS_COLOR[status] }}>
+          <span
+            aria-hidden
+            className="shrink-0"
+            style={{ color: STATUS_COLOR[status] }}
+          >
             ⏺
           </span>
           <span className="min-w-0 break-words">
-            <span className="text-[var(--terminal-claude-foreground)]">{tool}</span>
+            <span className="text-[var(--terminal-claude-foreground)]">
+              {tool}
+            </span>
             {arg !== undefined ? (
               <>
                 <span className="text-[var(--terminal-muted)]">(</span>

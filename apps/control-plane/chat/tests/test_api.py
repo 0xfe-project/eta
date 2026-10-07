@@ -1,9 +1,11 @@
 import uuid
 from unittest import mock
 
+import pytest
+from dirty_equals import IsPartialDict, IsStr
 from django.core.signals import request_finished
 from django.db import close_old_connections
-from django.test import TestCase, override_settings
+from django.test import override_settings
 
 from chat import cursors, llm
 from chat.models import (
@@ -16,7 +18,9 @@ from chat.models import (
 )
 from chat.stream import event_stream
 
-from .helpers import ChatClient, assert_no_internal_fields
+from .helpers import ChatClient, assert_no_internal_fields, error_of
+
+pytestmark = pytest.mark.django_db
 
 
 def close_stream(response):
@@ -28,134 +32,132 @@ def close_stream(response):
         request_finished.connect(close_old_connections)
 
 
-class ErrorTests(TestCase):
-    def test_error_envelope(self):
-        response = ChatClient().post("/chat/messages/not-a-reply/stop")
-        self.assertEqual(response.status_code, 404)
-        error = response.json()["error"]
-        self.assertEqual(error["code"], "NOT_FOUND")
-        self.assertEqual(error["request_id"], response["X-Request-ID"])
-        self.assertEqual(set(error), {"code", "message", "request_id"})
+def first_text(page):
+    return page["items"][0]["blocks"][0]["text"]
 
-    def test_malformed_json_is_400(self):
-        response = ChatClient().client.post(
+
+class TestErrors:
+    def test_error_envelope(self, chat):
+        response = chat.post("/chat/messages/not-a-reply/stop")
+        assert response.status_code == 404
+        assert response.json()["error"] == {
+            "code": "NOT_FOUND",
+            "message": IsStr,
+            "request_id": response["X-Request-ID"],
+        }
+
+    def test_malformed_json_is_400(self, chat):
+        response = chat.client.post(
             "/api/v1/agents",
             data="{",
             content_type="application/json",
             HTTP_IDEMPOTENCY_KEY="k",
         )
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["error"]["code"], "BAD_REQUEST")
+        assert error_of(response) == (400, "BAD_REQUEST")
 
 
-@override_settings(AXP_EDGE_SECRET="s3cret")
-class EdgeSecretTests(TestCase):
-    def test_requires_gateway_secret(self):
-        response = self.client.get("/api/v1/chat")
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json()["error"]["code"], "FORBIDDEN")
-        response = self.client.get("/api/v1/chat", HTTP_X_AXP_EDGE_SECRET="wrong")
-        self.assertEqual(response.status_code, 403)
-        response = self.client.get("/api/v1/chat", HTTP_X_AXP_EDGE_SECRET="s3cret")
-        self.assertEqual(response.status_code, 200)
+class TestEdgeSecret:
+    @pytest.fixture(autouse=True)
+    def _secret(self, settings):
+        settings.AXP_EDGE_SECRET = "s3cret"
 
-    def test_health_stays_open(self):
-        self.assertEqual(self.client.get("/api/health").status_code, 200)
+    def test_requires_gateway_secret(self, client):
+        assert error_of(client.get("/api/v1/chat")) == (403, "FORBIDDEN")
+        wrong = client.get("/api/v1/chat", HTTP_X_AXP_EDGE_SECRET="wrong")
+        assert wrong.status_code == 403
+        ok = client.get("/api/v1/chat", HTTP_X_AXP_EDGE_SECRET="s3cret")
+        assert ok.status_code == 200
 
-    def test_keeps_gateway_request_id(self):
-        response = self.client.get("/api/health", HTTP_X_REQUEST_ID="gateway-request-1")
-        self.assertEqual(response["X-Request-ID"], "gateway-request-1")
+    def test_health_stays_open(self, client):
+        assert client.get("/api/health").status_code == 200
+
+    def test_keeps_gateway_request_id(self, client):
+        response = client.get("/api/health", HTTP_X_REQUEST_ID="gateway-request-1")
+        assert response["X-Request-ID"] == "gateway-request-1"
 
 
-class SnapshotTests(TestCase):
-    def setUp(self):
-        self.chat = ChatClient()
-
-    def test_empty_snapshot_has_no_side_effects(self):
-        response = self.chat.get("/chat")
-        self.assertEqual(response.status_code, 200)
-        body = response.json()
-        self.assertEqual(body["agents"], [])
-        self.assertEqual(body["messages"], [])
-        self.assertIsNone(body["history_cursor"])
-        self.assertTrue(body["event_cursor"])
-        self.assertFalse(Conversation.objects.exists())
-
-    def test_snapshot_contains_agents_messages_and_active_replies(self):
-        agent = self.chat.create_agent()
-        sent = self.chat.send(agent["id"])
-        body = self.chat.get("/chat").json()
-        self.assertEqual([a["id"] for a in body["agents"]], [agent["id"]])
-        self.assertEqual(body["agents"][0]["status"], "working")
-        self.assertEqual(
-            [m["id"] for m in body["messages"]],
-            [sent["message"]["id"], sent["reply"]["id"]],
+class TestSnapshot:
+    def test_empty_snapshot_has_no_side_effects(self, chat):
+        response = chat.get("/chat")
+        assert response.status_code == 200
+        assert response.json() == IsPartialDict(
+            agents=[],
+            messages=[],
+            history_cursor=None,
+            event_cursor=IsStr(min_length=1),
         )
-        self.assertEqual(
-            [m["id"] for m in body["active_replies"]], [sent["reply"]["id"]]
-        )
-        assert_no_internal_fields(self, body)
+        assert not Conversation.objects.exists()
 
-    @override_settings(CHAT_MAX_QUEUED_PER_AGENT=100)
-    def test_history_pagination(self):
-        agent = self.chat.create_agent()
+    def test_snapshot_contains_agents_messages_and_active_replies(self, chat, agent):
+        sent = chat.send(agent["id"])
+        body = chat.get("/chat").json()
+        assert [(a["id"], a["status"]) for a in body["agents"]] == [
+            (agent["id"], "working")
+        ]
+        assert [m["id"] for m in body["messages"]] == [
+            sent["message"]["id"],
+            sent["reply"]["id"],
+        ]
+        assert [m["id"] for m in body["active_replies"]] == [sent["reply"]["id"]]
+        assert_no_internal_fields(body)
+
+    def test_history_pagination(self, chat, agent, settings):
+        settings.CHAT_MAX_QUEUED_PER_AGENT = 100
         for i in range(30):
-            self.chat.send(agent["id"], f"m{i}")  # 60 messages
-        snapshot = self.chat.get("/chat").json()
-        self.assertEqual(len(snapshot["messages"]), 50)
-        self.assertIsNotNone(snapshot["history_cursor"])
-        page = self.chat.get(
+            chat.send(agent["id"], f"m{i}")  # 60 messages
+        snapshot = chat.get("/chat").json()
+        assert len(snapshot["messages"]) == 50
+        assert snapshot["history_cursor"] is not None
+        page = chat.get(
             "/chat/messages", data={"before": snapshot["history_cursor"]}
         ).json()
-        self.assertEqual(len(page["items"]), 10)
-        self.assertIsNone(page["next_cursor"])
-        self.assertEqual(page["items"][0]["blocks"][0]["text"], "m0")
+        assert len(page["items"]) == 10
+        assert page["next_cursor"] is None
+        assert first_text(page) == "m0"
 
-        small = self.chat.get("/chat/messages", data={"limit": 4}).json()
-        self.assertEqual(len(small["items"]), 4)
-        older = self.chat.get(
+        small = chat.get("/chat/messages", data={"limit": 4}).json()
+        assert len(small["items"]) == 4
+        older = chat.get(
             "/chat/messages", data={"limit": 4, "before": small["next_cursor"]}
         ).json()
-        self.assertEqual(small["items"][0]["blocks"][0]["text"], "m28")
-        self.assertEqual(older["items"][0]["blocks"][0]["text"], "m26")
-        self.assertEqual(
-            self.chat.get("/chat/messages", data={"limit": 101}).status_code, 422
-        )
+        assert first_text(small) == "m28"
+        assert first_text(older) == "m26"
+        assert chat.get("/chat/messages", data={"limit": 101}).status_code == 422
 
-    def test_tampered_history_cursor_rejected(self):
+    def test_tampered_history_cursor_rejected(self, chat):
         cursor = cursors.encode_history_cursor(10) + "x"
-        response = self.chat.get("/chat/messages", data={"before": cursor})
-        self.assertEqual(response.status_code, 400)
+        assert chat.get("/chat/messages", data={"before": cursor}).status_code == 400
 
 
-class AgentTests(TestCase):
-    def setUp(self):
-        self.chat = ChatClient()
+class TestAgents:
+    def test_create_agent_returns_product_fields_only(self, chat):
+        agent = chat.create_agent("  开发助手  ")
+        assert agent == {
+            "id": IsStr,
+            "name": "开发助手",
+            "description": "",
+            "model": None,
+            "status": "idle",
+            "revision": 1,
+        }
 
-    def test_create_agent_returns_product_fields_only(self):
-        agent = self.chat.create_agent("  开发助手  ")
-        self.assertEqual(
-            set(agent), {"id", "name", "description", "model", "status", "revision"}
-        )
-        self.assertEqual(agent["name"], "开发助手")
-        self.assertEqual(agent["status"], "idle")
+    def test_agents_share_one_default_conversation(self, chat):
+        chat.create_agent("a")
+        chat.create_agent("b")
+        assert Conversation.objects.get().is_default
 
-    def test_agents_share_one_default_conversation(self):
-        self.chat.create_agent("a")
-        self.chat.create_agent("b")
-        self.assertEqual(Conversation.objects.count(), 1)
-        self.assertTrue(Conversation.objects.get().is_default)
-
-    def test_validation(self):
-        for body in (
+    @pytest.mark.parametrize(
+        "body",
+        [
             {"name": "   "},
             {"name": "x" * 101},
             {"name": "a", "model": ""},
             {"name": "a", "engine": "x"},
             {},
-        ):
-            with self.subTest(body=body):
-                self.assertEqual(self.chat.post("/agents", body).status_code, 422)
+        ],
+    )
+    def test_validation(self, chat, body):
+        assert chat.post("/agents", body).status_code == 422
 
 
 CATALOG = [
@@ -171,24 +173,20 @@ CATALOG = [
         "connector": "xai",
         "display_name": "Grok 4",
         "available": False,
-        "unavailable_reason": {
-            "code": "AUTH_EXPIRED",
-            "message": "Grok 账号登录已失效，请重新登录。",
-        },
+        "unavailable_message": "Grok 账号登录已失效，请重新登录。",
     },
 ]
 
 
-@override_settings(AXP_LLM_GATEWAY_URL="http://llm.test")
-class ModelTests(TestCase):
-    def setUp(self):
-        llm.clear_cache()
-        self.addCleanup(llm.clear_cache)
+class TestModels:
+    @pytest.fixture(autouse=True)
+    def _gateway(self, settings):
+        settings.AXP_LLM_GATEWAY_URL = "http://llm.test"
         self.catalog = list(CATALOG)
-        patcher = mock.patch("chat.llm._fetch", side_effect=self.fetch)
-        patcher.start()
-        self.addCleanup(patcher.stop)
-        self.chat = ChatClient()
+        llm.clear_cache()
+        with mock.patch("chat.llm._fetch", side_effect=self.fetch):
+            yield
+        llm.clear_cache()
 
     def fetch(self):
         if self.catalog is None:
@@ -200,363 +198,291 @@ class ModelTests(TestCase):
                 display_name=m["display_name"],
                 context_window=m.get("context_window"),
                 available=m["available"],
-                unavailable_message=(m.get("unavailable_reason") or {}).get("message"),
+                unavailable_message=m.get("unavailable_message"),
             )
             for m in self.catalog
         }
 
-    def create(self, **body):
-        return self.chat.post("/agents", {"name": "a", **body})
-
-    def test_create_and_change_model(self):
-        response = self.create(model="gpt-5.5")
-        self.assertEqual(response.status_code, 201)
+    def test_create_and_change_model(self, chat):
+        response = chat.post("/agents", {"name": "a", "model": "gpt-5.5"})
+        assert response.status_code == 201
         agent = response.json()
-        self.assertEqual(agent["model"], "gpt-5.5")
+        assert agent["model"] == "gpt-5.5"
         before = Agent.objects.get(pk=agent["id"]).config_version
-        response = self.chat.patch(f"/agents/{agent['id']}", {"model": "grok-4"})
-        self.assertEqual(response.json()["model"], "grok-4")
+        response = chat.patch(f"/agents/{agent['id']}", {"model": "grok-4"})
+        assert response.json()["model"] == "grok-4"
         # The runtime restarts with the new model.
-        self.assertEqual(Agent.objects.get(pk=agent["id"]).config_version, before + 1)
+        assert Agent.objects.get(pk=agent["id"]).config_version == before + 1
 
-    def test_unknown_model_is_rejected(self):
-        response = self.create(model="nope")
-        self.assertEqual(response.status_code, 422)
-        self.assertEqual(response.json()["error"]["code"], "MODEL_NOT_FOUND")
-        agent = self.chat.create_agent()
-        response = self.chat.patch(f"/agents/{agent['id']}", {"model": "nope"})
-        self.assertEqual(response.status_code, 422)
+    def test_unknown_model_is_rejected(self, chat, agent):
+        response = chat.post("/agents", {"name": "a", "model": "nope"})
+        assert error_of(response) == (422, "MODEL_NOT_FOUND")
+        response = chat.patch(f"/agents/{agent['id']}", {"model": "nope"})
+        assert response.status_code == 422
 
-    def test_chat_needs_an_available_model(self):
-        agent = self.chat.create_agent()
+    def test_chat_needs_an_available_model(self, chat, agent):
         body = {"agent_id": agent["id"], "text": "hi"}
-        response = self.chat.post("/chat/messages", body)
-        self.assertEqual(response.status_code, 409)
-        self.assertEqual(response.json()["error"]["code"], "MODEL_NOT_SET")
+        assert error_of(chat.post("/chat/messages", body)) == (409, "MODEL_NOT_SET")
 
-        self.chat.patch(f"/agents/{agent['id']}", {"model": "grok-4"})
-        response = self.chat.post("/chat/messages", body)
-        self.assertEqual(response.status_code, 409)
-        error = response.json()["error"]
-        self.assertEqual(error["code"], "MODEL_UNAVAILABLE")
-        self.assertIn("重新登录", error["message"])
-        self.assertFalse(Message.objects.exists())
+        chat.patch(f"/agents/{agent['id']}", {"model": "grok-4"})
+        response = chat.post("/chat/messages", body)
+        assert error_of(response) == (409, "MODEL_UNAVAILABLE")
+        assert "重新登录" in response.json()["error"]["message"]
+        assert not Message.objects.exists()
 
         # Reconnecting the account makes the same model usable again.
         self.catalog[1] = {**self.catalog[1], "available": True}
         llm.clear_cache()
-        self.assertEqual(self.chat.post("/chat/messages", body).status_code, 202)
+        assert chat.post("/chat/messages", body).status_code == 202
 
-    def test_gateway_down_blocks_chat(self):
-        agent = self.create(model="gpt-5.5").json()
+    def test_gateway_down_blocks_chat(self, chat):
+        agent = chat.post("/agents", {"name": "a", "model": "gpt-5.5"}).json()
         self.catalog = None
         llm.clear_cache()
-        response = self.chat.post(
-            "/chat/messages", {"agent_id": agent["id"], "text": "hi"}
-        )
-        self.assertEqual(response.status_code, 409)
-        self.assertEqual(response.json()["error"]["code"], "MODEL_UNAVAILABLE")
+        response = chat.post("/chat/messages", {"agent_id": agent["id"], "text": "hi"})
+        assert error_of(response) == (409, "MODEL_UNAVAILABLE")
 
-    def test_unknown_agent_is_still_404(self):
-        response = self.chat.post(
-            "/chat/messages", {"agent_id": str(uuid.uuid4()), "text": "hi"}
-        )
-        self.assertEqual(response.status_code, 404)
+    def test_unknown_agent_is_still_404(self, chat):
+        body = {"agent_id": str(uuid.uuid4()), "text": "hi"}
+        assert chat.post("/chat/messages", body).status_code == 404
 
-    def test_snapshot_says_model_is_required(self):
-        self.assertTrue(self.chat.client.get("/api/v1/chat").json()["model_required"])
+    def test_snapshot_says_model_is_required(self, chat):
+        assert chat.get("/chat").json()["model_required"]
         with override_settings(AXP_LLM_GATEWAY_URL=""):
-            self.assertFalse(
-                self.chat.client.get("/api/v1/chat").json()["model_required"]
-            )
+            assert not chat.get("/chat").json()["model_required"]
 
 
-class AgentManagementTests(TestCase):
-    def setUp(self):
-        self.chat = ChatClient()
-        self.agent = self.chat.create_agent("旧名字")
+class TestAgentManagement:
+    @pytest.fixture
+    def agent(self, chat):
+        return chat.create_agent("旧名字")
 
-    def test_create_with_description(self):
+    def test_create_with_description(self, chat, agent):
         instructions = "你是代码审查员。\n  只指出真实问题。"
-        response = self.chat.post(
-            "/agents", {"name": "审查", "description": instructions}
-        )
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.json()["description"], instructions)
-        self.assertEqual(self.agent["description"], "")
+        response = chat.post("/agents", {"name": "审查", "description": instructions})
+        assert response.status_code == 201
+        assert response.json()["description"] == instructions
+        assert agent["description"] == ""
         too_long = {"name": "x", "description": "x" * 10_001}
-        self.assertEqual(self.chat.post("/agents", too_long).status_code, 422)
+        assert chat.post("/agents", too_long).status_code == 422
 
-    def test_update_description_bumps_config_version(self):
-        before = Agent.objects.get(pk=self.agent["id"]).config_version
-        response = self.chat.patch(
-            f"/agents/{self.agent['id']}", {"description": "只用中文回答。"}
+    def test_update_description_bumps_config_version(self, chat, agent):
+        before = Agent.objects.get(pk=agent["id"]).config_version
+        response = chat.patch(
+            f"/agents/{agent['id']}", {"description": "只用中文回答。"}
         )
-        self.assertEqual(response.json()["description"], "只用中文回答。")
-        self.assertEqual(response.json()["name"], "旧名字")
-        agent = Agent.objects.get(pk=self.agent["id"])
-        self.assertEqual(agent.config_version, before + 1)
+        assert response.json() == IsPartialDict(
+            description="只用中文回答。", name="旧名字"
+        )
+        assert Agent.objects.get().config_version == before + 1
         # Renaming alone does not touch runtime configuration.
-        self.chat.patch(f"/agents/{self.agent['id']}", {"name": "新"})
-        self.assertEqual(Agent.objects.get().config_version, before + 1)
+        chat.patch(f"/agents/{agent['id']}", {"name": "新"})
+        assert Agent.objects.get().config_version == before + 1
 
-    def test_rename(self):
-        response = self.chat.patch(f"/agents/{self.agent['id']}", {"name": " 新名字 "})
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["name"], "新名字")
-        self.assertEqual(response.json()["revision"], self.agent["revision"] + 1)
-        event = UiEvent.objects.order_by("-seq").first()
-        self.assertEqual(event.payload["agent"]["name"], "新名字")
-        self.assertEqual(
-            self.chat.patch(f"/agents/{self.agent['id']}", {"name": ""}).status_code,
-            422,
+    def test_rename(self, chat, agent):
+        response = chat.patch(f"/agents/{agent['id']}", {"name": " 新名字 "})
+        assert response.status_code == 200
+        assert response.json() == IsPartialDict(
+            name="新名字", revision=agent["revision"] + 1
         )
-        missing = self.chat.patch(f"/agents/{uuid.uuid4()}", {"name": "x"})
-        self.assertEqual(missing.status_code, 404)
+        event = UiEvent.objects.order_by("-seq").first()
+        assert event.payload["agent"]["name"] == "新名字"
+        assert chat.patch(f"/agents/{agent['id']}", {"name": ""}).status_code == 422
+        missing = chat.patch(f"/agents/{uuid.uuid4()}", {"name": "x"})
+        assert missing.status_code == 404
 
-    def test_delete_hides_agent_keeps_history_and_stops_work(self):
-        sent = self.chat.send(self.agent["id"])
-        response = self.chat.delete(f"/agents/{self.agent['id']}")
-        self.assertEqual(response.status_code, 204)
-        snapshot = self.chat.get("/chat").json()
-        self.assertEqual(snapshot["agents"], [])
+    def test_delete_hides_agent_keeps_history_and_stops_work(self, chat, agent):
+        sent = chat.send(agent["id"])
+        assert chat.delete(f"/agents/{agent['id']}").status_code == 204
+        snapshot = chat.get("/chat").json()
+        assert snapshot["agents"] == []
         statuses = {m["id"]: m["status"] for m in snapshot["messages"]}
-        self.assertEqual(statuses[sent["reply"]["id"]], "stopped")
-        self.assertIn(sent["message"]["id"], statuses)
+        assert statuses[sent["reply"]["id"]] == "stopped"
+        assert sent["message"]["id"] in statuses
         event = UiEvent.objects.order_by("-seq").first()
-        self.assertEqual(event.type, "agent.deleted")
-        self.assertEqual(event.payload, {"agent_id": self.agent["id"]})
-        self.assertIsNotNone(Agent.objects.get().deleted_at)
+        assert (event.type, event.payload) == (
+            "agent.deleted",
+            {"agent_id": agent["id"]},
+        )
+        assert Agent.objects.get().deleted_at is not None
         # A deleted agent cannot be used, renamed or deleted again.
-        body = {"agent_id": self.agent["id"], "text": "hi"}
-        self.assertEqual(self.chat.post("/chat/messages", body).status_code, 404)
-        self.assertEqual(
-            self.chat.patch(f"/agents/{self.agent['id']}", {"name": "x"}).status_code,
-            404,
-        )
-        self.assertEqual(
-            self.chat.delete(f"/agents/{self.agent['id']}").status_code, 404
-        )
-
-
-class IdempotencyTests(TestCase):
-    def setUp(self):
-        self.chat = ChatClient()
-
-    def test_same_key_replays_original_response(self):
-        first = self.chat.post("/agents", {"name": "a"}, key="k1")
-        second = self.chat.post("/agents", {"name": "a"}, key="k1")
-        self.assertEqual(second.status_code, 201)
-        self.assertEqual(first.json(), second.json())
-        self.assertEqual(Conversation.objects.get().agents.count(), 1)
-
-    def test_same_key_different_body_conflicts(self):
-        self.chat.post("/agents", {"name": "a"}, key="k1")
-        response = self.chat.post("/agents", {"name": "b"}, key="k1")
-        self.assertEqual(response.status_code, 409)
-        self.assertEqual(response.json()["error"]["code"], "IDEMPOTENCY_KEY_REUSED")
-
-    def test_key_is_scoped_by_path(self):
-        agent = self.chat.create_agent()
-        self.chat.post("/agents", {"name": "a"}, key="k1")
         body = {"agent_id": agent["id"], "text": "hi"}
-        self.assertEqual(
-            self.chat.post("/chat/messages", body, key="k1").status_code, 202
-        )
+        assert chat.post("/chat/messages", body).status_code == 404
+        assert chat.patch(f"/agents/{agent['id']}", {"name": "x"}).status_code == 404
+        assert chat.delete(f"/agents/{agent['id']}").status_code == 404
 
-    def test_key_required(self):
-        response = self.chat.post("/agents", {"name": "a"}, key=None)
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["error"]["code"], "IDEMPOTENCY_KEY_REQUIRED")
 
-    def test_failures_do_not_consume_key(self):
-        self.assertEqual(
-            self.chat.post("/agents", {"name": ""}, key="k1").status_code, 422
-        )
+class TestIdempotency:
+    def test_same_key_replays_original_response(self, chat):
+        first = chat.post("/agents", {"name": "a"}, key="k1")
+        second = chat.post("/agents", {"name": "a"}, key="k1")
+        assert second.status_code == 201
+        assert first.json() == second.json()
+        assert Conversation.objects.get().agents.count() == 1
+
+    def test_same_key_different_body_conflicts(self, chat):
+        chat.post("/agents", {"name": "a"}, key="k1")
+        response = chat.post("/agents", {"name": "b"}, key="k1")
+        assert error_of(response) == (409, "IDEMPOTENCY_KEY_REUSED")
+
+    def test_key_is_scoped_by_path(self, chat, agent):
+        chat.post("/agents", {"name": "a"}, key="k1")
+        body = {"agent_id": agent["id"], "text": "hi"}
+        assert chat.post("/chat/messages", body, key="k1").status_code == 202
+
+    def test_key_required(self, chat):
+        response = chat.post("/agents", {"name": "a"}, key=None)
+        assert error_of(response) == (400, "IDEMPOTENCY_KEY_REQUIRED")
+
+    def test_failures_do_not_consume_key(self, chat):
+        assert chat.post("/agents", {"name": ""}, key="k1").status_code == 422
         missing = {"agent_id": str(uuid.uuid4()), "text": "hi"}
-        self.assertEqual(
-            self.chat.post("/chat/messages", missing, key="k2").status_code, 404
-        )
-        self.assertFalse(ApiIdempotency.objects.exists())
-        self.assertEqual(
-            self.chat.post("/agents", {"name": "a"}, key="k1").status_code, 201
-        )
+        assert chat.post("/chat/messages", missing, key="k2").status_code == 404
+        assert not ApiIdempotency.objects.exists()
+        assert chat.post("/agents", {"name": "a"}, key="k1").status_code == 201
 
-    def test_send_retry_returns_same_messages(self):
-        agent = self.chat.create_agent()
+    def test_send_retry_returns_same_messages(self, chat, agent):
         body = {"agent_id": agent["id"], "text": "hi"}
-        first = self.chat.post("/chat/messages", body, key="send-1").json()
-        second = self.chat.post("/chat/messages", body, key="send-1").json()
-        self.assertEqual(first, second)
-        self.assertEqual(AgentCommand.objects.count(), 1)
+        first = chat.post("/chat/messages", body, key="send-1").json()
+        second = chat.post("/chat/messages", body, key="send-1").json()
+        assert first == second
+        assert AgentCommand.objects.count() == 1
 
 
-class SendMessageTests(TestCase):
-    def setUp(self):
-        self.chat = ChatClient()
-        self.agent = self.chat.create_agent()
-
-    def test_send_returns_message_and_reply_placeholder(self):
+class TestSendMessage:
+    def test_send_returns_message_and_reply_placeholder(self, chat, agent):
         text = "  def f():\n      return 1"
-        body = self.chat.send(self.agent["id"], text)
+        body = chat.send(agent["id"], text)
         message, reply = body["message"], body["reply"]
-        self.assertEqual(message["role"], "user")
-        self.assertEqual(message["status"], "completed")
-        self.assertIsNone(message["reply_to_id"])
-        self.assertEqual(message["blocks"][0]["text"], text)  # indentation kept
-        self.assertEqual(reply["role"], "assistant")
-        self.assertEqual(reply["status"], "queued")
-        self.assertEqual(reply["reply_to_id"], message["id"])
-        self.assertEqual(reply["blocks"], [])
-        assert_no_internal_fields(self, body)
-
-    def test_text_validation(self):
-        for text in ("", "   \n\t", "x" * 10_001):
-            with self.subTest(text=text[:5]):
-                response = self.chat.post(
-                    "/chat/messages", {"agent_id": self.agent["id"], "text": text}
-                )
-                self.assertEqual(response.status_code, 422)
-
-    def test_unknown_agent_is_404(self):
-        missing = {"agent_id": str(uuid.uuid4()), "text": "hi"}
-        self.assertEqual(self.chat.post("/chat/messages", missing).status_code, 404)
-        bad = self.chat.post("/chat/messages", {"agent_id": "not-a-uuid", "text": "hi"})
-        self.assertEqual(bad.status_code, 404)
-
-    @override_settings(CHAT_MAX_QUEUED_PER_AGENT=2)
-    def test_queue_full_is_429(self):
-        self.chat.send(self.agent["id"])
-        self.chat.send(self.agent["id"])
-        response = self.chat.post(
-            "/chat/messages", {"agent_id": self.agent["id"], "text": "hi"}
+        assert message == IsPartialDict(
+            role="user", status="completed", reply_to_id=None
         )
-        self.assertEqual(response.status_code, 429)
-        self.assertEqual(response.json()["error"]["code"], "QUEUE_FULL")
+        assert message["blocks"][0]["text"] == text  # indentation kept
+        assert reply == IsPartialDict(
+            role="assistant", status="queued", reply_to_id=message["id"], blocks=[]
+        )
+        assert_no_internal_fields(body)
 
-    def test_events_are_written_with_projection(self):
-        sent = self.chat.send(self.agent["id"])
+    @pytest.mark.parametrize("text", ["", "   \n\t", "x" * 10_001])
+    def test_text_validation(self, chat, agent, text):
+        body = {"agent_id": agent["id"], "text": text}
+        assert chat.post("/chat/messages", body).status_code == 422
+
+    @pytest.mark.parametrize("agent_id", [str(uuid.uuid4()), "not-a-uuid"])
+    def test_unknown_agent_is_404(self, chat, agent_id):
+        body = {"agent_id": agent_id, "text": "hi"}
+        assert chat.post("/chat/messages", body).status_code == 404
+
+    def test_queue_full_is_429(self, chat, agent, settings):
+        settings.CHAT_MAX_QUEUED_PER_AGENT = 2
+        chat.send(agent["id"])
+        chat.send(agent["id"])
+        response = chat.post("/chat/messages", {"agent_id": agent["id"], "text": "hi"})
+        assert error_of(response) == (429, "QUEUE_FULL")
+
+    def test_events_are_written_with_projection(self, chat, agent):
+        sent = chat.send(agent["id"])
         events = list(UiEvent.objects.order_by("seq").values_list("type", "payload"))
-        types = [t for t, _ in events]
-        self.assertEqual(
-            types,
-            ["agent.updated", "message.updated", "message.updated", "agent.updated"],
-        )
-        self.assertEqual(events[2][1]["message"], sent["reply"])
-        self.assertEqual(events[3][1]["agent"]["status"], "working")
+        assert [t for t, _ in events] == [
+            "agent.updated",
+            "message.updated",
+            "message.updated",
+            "agent.updated",
+        ]
+        assert events[2][1]["message"] == sent["reply"]
+        assert events[3][1]["agent"]["status"] == "working"
         for _, payload in events:
-            assert_no_internal_fields(self, payload)
+            assert_no_internal_fields(payload)
 
 
-class StopTests(TestCase):
-    def setUp(self):
-        self.chat = ChatClient()
-        self.agent = self.chat.create_agent()
-        self.sent = self.chat.send(self.agent["id"])
+class TestStop:
+    @pytest.fixture
+    def sent(self, chat, agent):
+        return chat.send(agent["id"])
 
-    def test_stop_queued_reply_cancels(self):
-        reply_id = self.sent["reply"]["id"]
-        response = self.chat.post(f"/chat/messages/{reply_id}/stop")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["status"], "stopped")
-        self.assertEqual(AgentCommand.objects.get().status, "cancelled")
+    def test_stop_queued_reply_cancels(self, chat, sent):
+        reply_id = sent["reply"]["id"]
+        response = chat.post(f"/chat/messages/{reply_id}/stop")
+        assert response.status_code == 200
+        assert response.json()["status"] == "stopped"
+        assert AgentCommand.objects.get().status == "cancelled"
         # Repeating is a no-op with a fresh key.
-        again = self.chat.post(f"/chat/messages/{reply_id}/stop").json()
-        self.assertEqual(again, response.json())
-        agent = self.chat.get("/chat").json()["agents"][0]
-        self.assertEqual(agent["status"], "idle")
+        assert chat.post(f"/chat/messages/{reply_id}/stop").json() == response.json()
+        assert chat.get("/chat").json()["agents"][0]["status"] == "idle"
 
-    def test_stop_only_targets_assistant_replies(self):
-        message_id = self.sent["message"]["id"]
-        self.assertEqual(
-            self.chat.post(f"/chat/messages/{message_id}/stop").status_code, 404
-        )
+    def test_stop_only_targets_assistant_replies(self, chat, sent):
+        message_id = sent["message"]["id"]
+        assert chat.post(f"/chat/messages/{message_id}/stop").status_code == 404
 
-    def test_stop_targets_only_that_reply(self):
-        second = self.chat.send(self.agent["id"])
-        self.chat.post(f"/chat/messages/{self.sent['reply']['id']}/stop")
-        replies = {
-            m["id"]: m["status"] for m in self.chat.get("/chat").json()["messages"]
-        }
-        self.assertEqual(replies[second["reply"]["id"]], "queued")
+    def test_stop_targets_only_that_reply(self, chat, agent, sent):
+        second = chat.send(agent["id"])
+        chat.post(f"/chat/messages/{sent['reply']['id']}/stop")
+        replies = {m["id"]: m["status"] for m in chat.get("/chat").json()["messages"]}
+        assert replies[second["reply"]["id"]] == "queued"
 
 
-class StreamTests(TestCase):
-    def setUp(self):
-        self.chat = ChatClient()
+def drain(seq):
+    return "".join(event_stream(seq, poll_interval=0.001, max_idle_polls=1))
 
-    def _drain(self, seq):
-        return "".join(event_stream(seq, poll_interval=0.001, max_idle_polls=1))
 
-    def test_initial_cursor_resumes_after_first_agent(self):
-        cursor = self.chat.get("/chat").json()["event_cursor"]
-        agent = self.chat.create_agent()
-        response = self.chat.get("/chat/stream", data={"cursor": cursor})
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response["Content-Type"], "text/event-stream")
-        self.assertEqual(response["Cache-Control"], "no-cache")
+class TestStream:
+    def test_initial_cursor_resumes_after_first_agent(self, chat):
+        cursor = chat.get("/chat").json()["event_cursor"]
+        agent = chat.create_agent()
+        response = chat.get("/chat/stream", data={"cursor": cursor})
+        assert response.status_code == 200
+        assert response["Content-Type"] == "text/event-stream"
+        assert response["Cache-Control"] == "no-cache"
         close_stream(response)
-        output = self._drain(cursors.decode_event_cursor(cursor))
-        self.assertIn("event: agent.updated", output)
-        self.assertIn(agent["id"], output)
+        output = drain(cursors.decode_event_cursor(cursor))
+        assert "event: agent.updated" in output
+        assert agent["id"] in output
 
-    def test_resume_from_last_event_id(self):
-        agent = self.chat.create_agent()
-        self.chat.send(agent["id"])
-        output = self._drain(0)
+    def test_resume_from_last_event_id(self, chat, agent):
+        chat.send(agent["id"])
+        output = drain(0)
         ids = [line[4:] for line in output.splitlines() if line.startswith("id: ")]
-        self.assertEqual(len(ids), 4)
-        rest = self._drain(cursors.decode_event_cursor(ids[1]))
-        self.assertEqual(rest.count("event: "), 2)
-        self.assertNotIn(": heartbeat", rest)
+        assert len(ids) == 4
+        rest = drain(cursors.decode_event_cursor(ids[1]))
+        assert rest.count("event: ") == 2
+        assert ": heartbeat" not in rest
 
-    def test_header_takes_precedence_and_cursor_checks(self):
-        self.chat.create_agent()
+    def test_header_takes_precedence_and_cursor_checks(self, chat, agent):
         tampered = cursors.encode_event_cursor(0) + "x"
-        response = self.chat.get("/chat/stream", data={"cursor": tampered})
-        self.assertEqual(response.status_code, 400)
+        assert chat.get("/chat/stream", data={"cursor": tampered}).status_code == 400
         future = cursors.encode_event_cursor(999)
-        response = self.chat.get("/chat/stream", data={"cursor": future})
-        self.assertEqual(response.status_code, 410)
-        self.assertEqual(response.json()["error"]["code"], "CURSOR_EXPIRED")
+        response = chat.get("/chat/stream", data={"cursor": future})
+        assert error_of(response) == (410, "CURSOR_EXPIRED")
         valid = cursors.encode_event_cursor(0)
-        response = self.chat.get(
+        response = chat.get(
             "/chat/stream", data={"cursor": future}, HTTP_LAST_EVENT_ID=valid
         )
-        self.assertEqual(response.status_code, 200)
+        assert response.status_code == 200
         close_stream(response)
-        self.assertEqual(self.chat.get("/chat/stream").status_code, 400)
+        assert chat.get("/chat/stream").status_code == 400
 
     def test_heartbeat_has_no_id(self):
         output = "".join(
             event_stream(
-                0,
-                poll_interval=0.001,
-                heartbeat_interval=0.0001,
-                max_idle_polls=2,
+                0, poll_interval=0.001, heartbeat_interval=0.0001, max_idle_polls=2
             )
         )
-        self.assertIn(": heartbeat\n\n", output)
-        self.assertNotIn("id:", output)
+        assert ": heartbeat\n\n" in output
+        assert "id:" not in output
 
 
-class OpenApiTests(TestCase):
-    def test_public_schema_has_no_internal_fields(self):
-        schema = ChatClient().client.get("/api/openapi.json").json()
-        paths = {p for p in schema["paths"] if p.startswith("/api/v1")}
-        self.assertEqual(
-            paths,
-            {
-                "/api/v1/chat",
-                "/api/v1/agents",
-                "/api/v1/agents/{agent_id}",
-                "/api/v1/chat/messages",
-                "/api/v1/chat/stream",
-                "/api/v1/chat/messages/{message_id}/stop",
-                "/api/v1/chat/interactions/{interaction_id}/answer",
-            },
-        )
-        properties = set()
-        for component in schema["components"]["schemas"].values():
-            properties |= set(component.get("properties", {}))
-        assert_no_internal_fields(self, {key: None for key in properties})
+def test_public_schema_has_no_internal_fields():
+    schema = ChatClient().client.get("/api/openapi.json").json()
+    assert {p for p in schema["paths"] if p.startswith("/api/v1")} == {
+        "/api/v1/chat",
+        "/api/v1/agents",
+        "/api/v1/agents/{agent_id}",
+        "/api/v1/chat/messages",
+        "/api/v1/chat/stream",
+        "/api/v1/chat/messages/{message_id}/stop",
+        "/api/v1/chat/interactions/{interaction_id}/answer",
+    }
+    properties = set()
+    for component in schema["components"]["schemas"].values():
+        properties |= set(component.get("properties", {}))
+    assert_no_internal_fields(dict.fromkeys(properties))

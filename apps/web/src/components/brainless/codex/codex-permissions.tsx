@@ -14,11 +14,11 @@ const FG = "#ededed";
 const DIM = "#7a7a7a";
 const ACCENT = "#f6e2b7";
 
-export type CodexPermissionOption = {
+export interface CodexPermissionOption {
   label: string;
   description: string;
   current?: boolean;
-};
+}
 
 const DEFAULT_OPTIONS: CodexPermissionOption[] = [
   {

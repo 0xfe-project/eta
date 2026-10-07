@@ -1,5 +1,5 @@
-import { cn } from "@/lib/utils";
 import type { Agent } from "@/queries/chat";
+import { cn } from "@/lib/utils";
 
 export const agentStatusLabels: Record<Agent["status"], string> = {
   idle: "空闲",

@@ -1,3 +1,4 @@
+import type { RouterContext } from "@/lib/query-client";
 import {
   createRootRouteWithContext,
   HeadContent,
@@ -5,7 +6,6 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { AppProviders } from "@/components/providers";
-import type { RouterContext } from "@/lib/query-client";
 import { WorkspaceProvider } from "@/components/workspace/workspace-state";
 import stylesheet from "@/styles.css?url";
 

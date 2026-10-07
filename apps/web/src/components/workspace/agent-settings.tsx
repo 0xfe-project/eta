@@ -1,4 +1,4 @@
-import { useState } from "react";
+import type { Agent } from "@/queries/chat";
 import { CheckIcon } from "@phosphor-icons/react/Check";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
@@ -6,6 +6,7 @@ import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { TrashIcon } from "@phosphor-icons/react/Trash";
 import { WarningIcon } from "@phosphor-icons/react/Warning";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +17,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import type { Agent } from "@/queries/chat";
 import { useModelAvailability } from "@/queries/llm";
 import { DeleteAgentDialog } from "./agent-editor";
 import { AgentMonogram, AgentStatus } from "./agent-identity";

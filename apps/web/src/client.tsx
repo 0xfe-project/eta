@@ -1,6 +1,6 @@
-import { StrictMode, startTransition } from "react";
-import { hydrateRoot } from "react-dom/client";
 import { StartClient } from "@tanstack/react-start/client";
+import { startTransition, StrictMode } from "react";
+import { hydrateRoot } from "react-dom/client";
 
 async function start() {
   // Makes the app installable from the browser's own install UI.

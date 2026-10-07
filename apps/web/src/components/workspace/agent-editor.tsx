@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import type { Agent } from "@/queries/chat";
+import type { Model } from "@/queries/llm";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { TrashIcon } from "@phosphor-icons/react/Trash";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -31,13 +33,8 @@ import {
   NativeSelectOption,
 } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  useCreateAgent,
-  useDeleteAgent,
-  useUpdateAgent,
-  type Agent,
-} from "@/queries/chat";
-import { useConnectors, useModels, type Model } from "@/queries/llm";
+import { useCreateAgent, useDeleteAgent, useUpdateAgent } from "@/queries/chat";
+import { useConnectors, useModels } from "@/queries/llm";
 import { AgentMonogram } from "./agent-identity";
 import { useAgents } from "./use-agents";
 import { useWorkspace } from "./workspace-state";

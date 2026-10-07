@@ -58,24 +58,26 @@ Web 已配置 Query、nuqs、Phosphor Icons、表单校验、通知、Markdown �
 
 ## 命令
 
-| 根目录命令                   | 用途                                                              |
-| ---------------------------- | ----------------------------------------------------------------- |
-| `bun run dev`                | 启动开发环境（见上文两种模式），任一进程退出时关闭所有进程        |
-| `bun run deploy`             | 用 Kamal 把工作区部署到本机（见 `deploy/README.md`）              |
-| `bun run dev:gateway`        | 单独启动网关                                                      |
-| `bun run dev:llm-gateway`    | 单独启动 llm-gateway                                              |
-| `bun run dev:control-plane`  | 单独启动 Django（公共 API）                                       |
-| `bun run dev:fake-runtime`   | 单独启动开发用模拟 worker                                         |
-| `bun run dev:internal`       | 单独启动内部运行协议服务（runtime 网络网关地址）                  |
-| `bun run dev:controller`     | 单独启动 runtime controller（需要 Docker）                        |
-| `bun run dev:web`            | 单独启动 Web                                                      |
-| `bun run runtime:build`      | 构建本机架构的 runtime 镜像 `axp-agent-runtime:dev`               |
-| `bun run db:migrate`         | 执行数据库迁移                                                    |
-| `bun run build`              | 用 Turbo 构建 Web 与各平台的镜像产物（见下文）                    |
-| `bun run check`              | 构建、类型检查、Django 系统检查、Ruff lint、Go 检查与全部后端测试 |
-| `bun run test:control-plane` | 运行 control plane 测试                                           |
-| `bun run test:agent-runtime` | 运行 runtime 测试（使用脚本化 app-server，无需凭据）              |
-| `bun run format`             | Prettier、Ruff 与 gofmt 格式化                                    |
+| 根目录命令                   | 用途                                                         |
+| ---------------------------- | ------------------------------------------------------------ |
+| `bun run dev`                | 启动开发环境（见上文两种模式），任一进程退出时关闭所有进程   |
+| `bun run deploy`             | 用 Kamal 把工作区部署到本机（见 `deploy/README.md`）         |
+| `bun run dev:gateway`        | 单独启动网关                                                 |
+| `bun run dev:llm-gateway`    | 单独启动 llm-gateway                                         |
+| `bun run dev:control-plane`  | 单独启动 Django（公共 API）                                  |
+| `bun run dev:fake-runtime`   | 单独启动开发用模拟 worker                                    |
+| `bun run dev:internal`       | 单独启动内部运行协议服务（runtime 网络网关地址）             |
+| `bun run dev:controller`     | 单独启动 runtime controller（需要 Docker）                   |
+| `bun run dev:web`            | 单独启动 Web                                                 |
+| `bun run runtime:build`      | 构建本机架构的 runtime 镜像 `axp-agent-runtime:dev`          |
+| `bun run db:migrate`         | 执行数据库迁移                                               |
+| `bun run build`              | 用 Turbo 构建 Web 与各平台的镜像产物（见下文）               |
+| `bun run check`              | 格式检查，再构建、类型检查、lint 与全部测试                  |
+| `bun run lint`               | ESLint、Ruff、Django 系统检查与 Go 检查                      |
+| `bun run test`               | 全部测试（Web 用 Rstest，Python 用 pytest，Go 用 `go test`） |
+| `bun run test:control-plane` | 运行 control plane 测试                                      |
+| `bun run test:agent-runtime` | 运行 runtime 测试（使用脚本化 app-server，无需凭据）         |
+| `bun run format`             | 用 dprint 格式化整个仓库（`format:check` 只检查）            |
 
 TanStack 的 `src/routeTree.gen.ts` 由 `dev` 或 `build` 自动生成；`check` 会先执行构建，因此可在全新安装后直接执行。
 
@@ -86,6 +88,16 @@ TanStack 的 `src/routeTree.gen.ts` 由 `dev` 或 `build` 自动生成；`check`
 - Python：`out/<平台>/site-packages`，只用目标平台的 wheel 安装锁定的依赖。
 
 目标平台写在任务名里（`build:linux-amd64`、`build:linux-arm64`），在哪台机器上构建都得到同一份缓存。Dockerfile 只复制这些产物，产物逐字节不变时 Docker 复用对应的层。镜像构建需要 `docker buildx`。
+
+## 格式化、lint 与提交检查
+
+`dprint.json` 统一格式化整个仓库：JS/TS/CSS 用 Biome，Python 用 Ruff，Go 用 gofmt，JSON、Markdown、TOML、YAML 和 Dockerfile 用 dprint 自带插件。lint 由各自的工具负责：Web 用 `@antfu/eslint-config`（格式类规则关闭，交给 dprint），Python 用 Ruff（配置在根目录 `ruff.toml`），Go 暂时只有 `gofmt` 检查和 `go vet`。
+
+`bun install` 会通过 Lefthook 安装 pre-commit 钩子（`lefthook.yml`），提交前依次：
+
+1. ESLint 和 Ruff 对暂存的文件应用安全修复并重新暂存；修不掉的问题（包括只有不安全修复的）会拦下提交。
+2. dprint 格式化暂存的文件并重新暂存。
+3. Turbo 运行构建、类型检查、lint 和测试，没变的部分直接用缓存。
 
 ## 数据库与存储
 

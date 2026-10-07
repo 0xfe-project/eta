@@ -2,17 +2,17 @@ import hashlib
 import json
 import logging
 import os
-import shutil
 import sys
-import tempfile
 import threading
 import time
-import unittest
 import urllib.error
 import urllib.request
 import uuid
 from dataclasses import replace
 from pathlib import Path
+
+import pytest
+from dirty_equals import IsPartialDict
 
 from axp_runtime import ledger as L
 from axp_runtime.config import McpModule, Settings
@@ -63,21 +63,30 @@ class StubControlPlane:
         with self.lock:
             return [e["type"] for e in self.events]
 
-    def wait_for(self, predicate, timeout=10):
+    def wait_for(self, type_, timeout=10, **payload):
+        """First event of this type whose payload contains these fields."""
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             with self.lock:
-                found = [e for e in self.events if predicate(e)]
+                found = [
+                    e["payload"]
+                    for e in self.events
+                    if e["type"] == type_ and e["payload"] == IsPartialDict(payload)
+                ]
             if found:
                 return found[0]
             time.sleep(0.02)
-        raise AssertionError(f"event not seen; got {self.types()}")
+        raise AssertionError(f"{type_} not seen; got {self.types()}")
+
+    def completed(self, command_id):
+        return self.wait_for("turn.completed", command_id=command_id)
 
 
-class RuntimeTestCase(unittest.TestCase):
-    def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+class Harness:
+    """Starts runtimes against stub control planes; shuts them all down."""
+
+    def __init__(self, tmp: Path):
+        self.tmp = tmp
         self.settings = Settings(
             agent_id="agent-1",
             instance_id=str(uuid.uuid4()),
@@ -86,8 +95,8 @@ class RuntimeTestCase(unittest.TestCase):
             control_plane_url="http://cp.invalid",
             listen_host="127.0.0.1",
             listen_port=0,
-            workspace_dir=self.tmp / "workspace",
-            state_dir=self.tmp / "state",
+            workspace_dir=tmp / "workspace",
+            state_dir=tmp / "state",
             known_thread_id=None,
             model=None,
             sandbox="workspace-write",
@@ -99,233 +108,212 @@ class RuntimeTestCase(unittest.TestCase):
         self.settings.workspace_dir.mkdir()
         self.runtimes: list[Runtime] = []
 
-    def tearDown(self):
-        for runtime in self.runtimes:
-            runtime.shutdown()
-
     def start(self, cp=None, **changes) -> tuple[Runtime, StubControlPlane]:
         cp = cp or StubControlPlane()
-        settings = replace(self.settings, **changes)
-        runtime = Runtime(settings, cp)
+        runtime = Runtime(replace(self.settings, **changes), cp)
         self.runtimes.append(runtime)
         runtime.boot()
         return runtime, cp
 
-    def send(self, runtime, text, kind="turn", payload=None, seq=None):
-        command_id = str(uuid.uuid4())
-        runtime.accept(
-            command_id,
-            {
-                "kind": kind,
-                "agent_sequence": seq or int(time.time() * 1000),
-                "payload": payload or {"text": text},
-            },
-        )
-        return command_id
 
-    def completed(self, cp, command_id):
-        return cp.wait_for(
-            lambda e: (
-                e["type"] == "turn.completed"
-                and e["payload"]["command_id"] == command_id
-            )
-        )["payload"]
+@pytest.fixture
+def rt(tmp_path):
+    harness = Harness(tmp_path)
+    yield harness
+    for runtime in harness.runtimes:
+        runtime.shutdown()
 
 
-class LlmGatewayTests(RuntimeTestCase):
-    def test_codex_uses_gateway_as_model_provider(self):
+def send(runtime, text, kind="turn", payload=None, seq=None):
+    command_id = str(uuid.uuid4())
+    runtime.accept(
+        command_id,
+        {
+            "kind": kind,
+            "agent_sequence": seq or int(time.time() * 1000),
+            "payload": payload or {"text": text},
+        },
+    )
+    return command_id
+
+
+class TestLlmGateway:
+    def overrides(self, settings):
+        return Runtime(settings, StubControlPlane())._codex_config().config_overrides
+
+    def test_codex_uses_gateway_as_model_provider(self, rt):
         settings = replace(
-            self.settings,
+            rt.settings,
             llm_base_url="http://llm-gateway:8317/v1",
             model_context_window=256000,
         )
-        overrides = (
-            Runtime(settings, StubControlPlane())._codex_config().config_overrides
+        assert {
+            'model_provider="axp"',
+            'model_providers.axp.base_url="http://llm-gateway:8317/v1"',
+            'model_providers.axp.wire_api="responses"',
+            'model_providers.axp.env_key="AXP_LLM_API_KEY"',
+            "model_context_window=256000",
+        } <= set(self.overrides(settings))
+
+    def test_without_gateway_codex_keeps_its_own_provider(self, rt):
+        overrides = self.overrides(rt.settings)
+        assert not any(o.startswith("model_provider") for o in overrides)
+
+
+class TestBoot:
+    def test_first_boot_creates_and_registers_thread(self, rt):
+        runtime, cp = rt.start()
+        assert runtime.status == "ready"
+        assert cp.sessions[0] == IsPartialDict(
+            thread_id=runtime.thread_id, resumed=False
         )
-        self.assertIn('model_provider="axp"', overrides)
-        self.assertIn(
-            'model_providers.axp.base_url="http://llm-gateway:8317/v1"', overrides
-        )
-        self.assertIn('model_providers.axp.wire_api="responses"', overrides)
-        self.assertIn('model_providers.axp.env_key="AXP_LLM_API_KEY"', overrides)
-        self.assertIn("model_context_window=256000", overrides)
 
-    def test_without_gateway_codex_keeps_its_own_provider(self):
-        overrides = (
-            Runtime(self.settings, StubControlPlane())._codex_config().config_overrides
-        )
-        self.assertFalse(any(o.startswith("model_provider") for o in overrides))
-
-
-class BootTests(RuntimeTestCase):
-    def test_first_boot_creates_and_registers_thread(self):
-        runtime, cp = self.start()
-        self.assertEqual(runtime.status, "ready")
-        self.assertEqual(cp.sessions[0]["thread_id"], runtime.thread_id)
-        self.assertFalse(cp.sessions[0]["resumed"])
-
-    def test_restart_resumes_same_thread(self):
-        first, _ = self.start()
-        thread_id = first.thread_id
+    def test_restart_resumes_same_thread(self, rt):
+        first, _ = rt.start()
         first.shutdown()
-        second, cp = self.start(instance_id=str(uuid.uuid4()), generation=2)
-        self.assertEqual(second.status, "ready")
-        self.assertEqual(second.thread_id, thread_id)
-        self.assertTrue(cp.sessions[0]["resumed"])
+        second, cp = rt.start(instance_id=str(uuid.uuid4()), generation=2)
+        assert second.status == "ready"
+        assert second.thread_id == first.thread_id
+        assert cp.sessions[0]["resumed"]
 
-    def test_instructions_reach_codex_on_start_and_resume(self):
-        store = self.settings.codex_home / "fake_threads.json"
-        first, _ = self.start(developer_instructions="你是代码审查员。")
-        threads = json.loads(store.read_text())
-        self.assertEqual(threads[first.thread_id]["instructions"], "你是代码审查员。")
+    def test_instructions_reach_codex_on_start_and_resume(self, rt):
+        store = rt.settings.codex_home / "fake_threads.json"
+
+        def instructions(runtime):
+            return json.loads(store.read_text())[runtime.thread_id]["instructions"]
+
+        first, _ = rt.start(developer_instructions="你是代码审查员。")
+        assert instructions(first) == "你是代码审查员。"
         first.shutdown()
-        second, _ = self.start(
+        second, _ = rt.start(
             developer_instructions="只用中文回答。", instance_id="i2", generation=2
         )
-        threads = json.loads(store.read_text())
-        self.assertEqual(threads[second.thread_id]["instructions"], "只用中文回答。")
+        assert instructions(second) == "只用中文回答。"
 
-    def test_lost_state_never_creates_replacement_thread(self):
-        runtime, cp = self.start(known_thread_id="thread-from-control-plane")
-        self.assertEqual(runtime.status, "recovery_failed")
-        self.assertEqual(runtime.error_code, "RECOVERY_RESUME_FAILED")
-        self.assertEqual(cp.sessions, [])
+    def test_lost_state_never_creates_replacement_thread(self, rt):
+        runtime, cp = rt.start(known_thread_id="thread-from-control-plane")
+        assert (runtime.status, runtime.error_code) == (
+            "recovery_failed",
+            "RECOVERY_RESUME_FAILED",
+        )
+        assert cp.sessions == []
 
-    def test_recorded_thread_must_match_control_plane(self):
-        first, _ = self.start()
+    def test_recorded_thread_must_match_control_plane(self, rt):
+        first, _ = rt.start()
         first.shutdown()
-        runtime, _ = self.start(known_thread_id="other", instance_id="i2")
-        self.assertEqual(runtime.error_code, "RECOVERY_THREAD_MISMATCH")
+        runtime, _ = rt.start(known_thread_id="other", instance_id="i2")
+        assert runtime.error_code == "RECOVERY_THREAD_MISMATCH"
 
-    def test_control_plane_thread_conflict(self):
-        runtime, _ = self.start(cp=StubControlPlane(thread_conflict=True))
-        self.assertEqual(runtime.error_code, "RECOVERY_THREAD_MISMATCH")
+    def test_control_plane_thread_conflict(self, rt):
+        runtime, _ = rt.start(cp=StubControlPlane(thread_conflict=True))
+        assert runtime.error_code == "RECOVERY_THREAD_MISMATCH"
 
-    def test_required_mcp_module_must_start(self):
+    def test_required_mcp_module_must_start(self, rt, monkeypatch):
         module = McpModule("tasks", "1", True, [], "python3", [], {}, {})
-        ok, _ = self.start(mcp_modules=[module])
-        self.assertEqual(ok.status, "ready")
+        ok, _ = rt.start(mcp_modules=[module])
+        assert ok.status == "ready"
         ok.shutdown()
-        os.environ["FAKE_MCP_FAIL"] = "tasks"
-        self.addCleanup(os.environ.pop, "FAKE_MCP_FAIL")
-        failed, cp = self.start(mcp_modules=[module], instance_id="i3")
-        self.assertEqual(failed.status, "error")
-        self.assertEqual(failed.error_code, "MCP_REQUIRED_FAILED")
+        monkeypatch.setenv("FAKE_MCP_FAIL", "tasks")
+        failed, _ = rt.start(mcp_modules=[module], instance_id="i3")
+        assert (failed.status, failed.error_code) == ("error", "MCP_REQUIRED_FAILED")
 
-    def test_unusable_workspace_is_not_ready(self):
-        blocked = self.tmp / "blocked"
+    def test_unusable_workspace_is_not_ready(self, rt):
+        blocked = rt.tmp / "blocked"
         blocked.write_text("not a directory")
-        runtime, _ = self.start(workspace_dir=blocked)
-        self.assertEqual(runtime.status, "error")
-        self.assertEqual(runtime.error_code, "MOUNT_FAILED")
+        runtime, _ = rt.start(workspace_dir=blocked)
+        assert (runtime.status, runtime.error_code) == ("error", "MOUNT_FAILED")
 
 
-class TurnTests(RuntimeTestCase):
-    def test_turn_streams_items_and_completes(self):
-        runtime, cp = self.start()
-        command_id = self.send(runtime, "你好")
-        result = self.completed(cp, command_id)
-        self.assertEqual(result["status"], "completed")
+class TestTurns:
+    def test_turn_streams_items_and_completes(self, rt):
+        runtime, cp = rt.start()
+        command_id = send(runtime, "你好")
+        assert cp.completed(command_id)["status"] == "completed"
         items = [
             e["payload"]["item"]
             for e in cp.events
             if e["type"] == "item.updated" and e["payload"]["command_id"] == command_id
         ]
-        self.assertEqual(items[-1]["kind"], "agent_message")
-        self.assertEqual(items[-1]["status"], "completed")
-        self.assertEqual(items[-1]["text"], "收到：你好")
+        assert items[-1] == IsPartialDict(
+            kind="agent_message", status="completed", text="收到：你好"
+        )
         seqs = [e["source_seq"] for e in cp.events]
-        self.assertEqual(seqs, list(range(1, len(seqs) + 1)))
-        self.assertEqual(runtime.command_view(command_id)["status"], "succeeded")
+        assert seqs == list(range(1, len(seqs) + 1))
+        assert runtime.command_view(command_id)["status"] == "succeeded"
 
-    def test_accept_is_idempotent_and_detects_conflicts(self):
-        runtime, _ = self.start()
+    def test_accept_is_idempotent_and_detects_conflicts(self, rt):
+        runtime, _ = rt.start()
         body = {"kind": "turn", "agent_sequence": 1, "payload": {"text": "a"}}
         runtime.accept("c1", body)
         runtime.accept("c1", body)
-        with self.assertRaises(L.CommandConflict):
+        with pytest.raises(L.CommandConflict):
             runtime.accept("c1", {**body, "payload": {"text": "b"}})
 
-    def test_failed_turn(self):
-        runtime, cp = self.start()
-        command_id = self.send(runtime, "[fail]")
-        self.assertEqual(self.completed(cp, command_id)["status"], "failed")
+    def test_failed_turn(self, rt):
+        runtime, cp = rt.start()
+        assert cp.completed(send(runtime, "[fail]"))["status"] == "failed"
 
-    def test_interrupt_running_turn(self):
-        runtime, cp = self.start()
-        command_id = self.send(runtime, "[slow]")
-        cp.wait_for(lambda e: e["type"] == "turn.started")
+    def test_interrupt_running_turn(self, rt):
+        runtime, cp = rt.start()
+        command_id = send(runtime, "[slow]")
+        cp.wait_for("turn.started")
         runtime.interrupt(command_id)
-        self.assertEqual(self.completed(cp, command_id)["status"], "interrupted")
+        assert cp.completed(command_id)["status"] == "interrupted"
 
-    def test_interrupt_queued_command(self):
-        runtime, cp = self.start()
-        first = self.send(runtime, "[slow]", seq=1)
-        second = self.send(runtime, "later", seq=2)
+    def test_interrupt_queued_command(self, rt):
+        runtime, cp = rt.start()
+        first = send(runtime, "[slow]", seq=1)
+        second = send(runtime, "later", seq=2)
         runtime.interrupt(second)
-        self.assertEqual(self.completed(cp, second)["status"], "interrupted")
+        assert cp.completed(second)["status"] == "interrupted"
         runtime.interrupt(first)
-        self.completed(cp, first)
-        self.assertEqual(runtime.command_view(second)["status"], "interrupted")
+        cp.completed(first)
+        assert runtime.command_view(second)["status"] == "interrupted"
 
-    def test_approval_accept(self):
-        runtime, cp = self.start()
-        command_id = self.send(runtime, "[approve]")
-        request = cp.wait_for(lambda e: e["type"] == "approval.requested")["payload"]
-        self.assertEqual(request["kind"], "command")
-        self.assertEqual(request["summary"]["command"], "touch approved.txt")
-        self.assertEqual(runtime.decide(request["approval_id"], "accept", 2), "stale")
-        self.assertEqual(
-            runtime.decide(request["approval_id"], "accept", 1), "accepted"
-        )
-        applied = cp.wait_for(lambda e: e["type"] == "approval.applied")["payload"]
-        self.assertEqual(applied["decision"], "accept")
-        self.assertEqual(self.completed(cp, command_id)["status"], "completed")
+    def test_approval_accept(self, rt):
+        runtime, cp = rt.start()
+        command_id = send(runtime, "[approve]")
+        request = cp.wait_for("approval.requested")
+        assert request["kind"] == "command"
+        assert request["summary"]["command"] == "touch approved.txt"
+        approval_id = request["approval_id"]
+        assert runtime.decide(approval_id, "accept", 2) == "stale"
+        assert runtime.decide(approval_id, "accept", 1) == "accepted"
+        assert cp.wait_for("approval.applied")["decision"] == "accept"
+        assert cp.completed(command_id)["status"] == "completed"
         # Repeating the same decision is fine; a different one is not.
-        self.assertEqual(
-            runtime.decide(request["approval_id"], "accept", 1), "accepted"
-        )
-        self.assertEqual(
-            runtime.decide(request["approval_id"], "decline", 1), "not_pending"
-        )
+        assert runtime.decide(approval_id, "accept", 1) == "accepted"
+        assert runtime.decide(approval_id, "decline", 1) == "not_pending"
 
-    def test_interrupt_while_waiting_for_approval(self):
-        runtime, cp = self.start()
-        command_id = self.send(runtime, "[approve]")
-        cp.wait_for(lambda e: e["type"] == "approval.requested")
+    def test_interrupt_while_waiting_for_approval(self, rt):
+        runtime, cp = rt.start()
+        command_id = send(runtime, "[approve]")
+        cp.wait_for("approval.requested")
         runtime.interrupt(command_id)
-        applied = cp.wait_for(lambda e: e["type"] == "approval.applied")["payload"]
-        self.assertEqual(applied["decision"], "cancel")
-        self.assertEqual(self.completed(cp, command_id)["status"], "interrupted")
+        assert cp.wait_for("approval.applied")["decision"] == "cancel"
+        assert cp.completed(command_id)["status"] == "interrupted"
 
-    def test_codex_crash_marks_outcome_unknown_and_restart_keeps_it(self):
-        runtime, cp = self.start()
-        command_id = self.send(runtime, "[crash]")
-        cp.wait_for(
-            lambda e: (
-                e["type"] == "command.outcome_unknown"
-                and e["payload"]["command_id"] == command_id
-            )
-        )
-        self.assertEqual(runtime.status, "error")
+    def test_codex_crash_marks_outcome_unknown_and_restart_keeps_it(self, rt):
+        runtime, cp = rt.start()
+        command_id = send(runtime, "[crash]")
+        cp.wait_for("command.outcome_unknown", command_id=command_id)
+        assert runtime.status == "error"
         runtime.shutdown()
-        restarted, _ = self.start(instance_id="i2", generation=2)
-        self.assertEqual(restarted.status, "ready")
-        self.assertEqual(
-            restarted.command_view(command_id)["status"], "outcome_unknown"
-        )
+        restarted, _ = rt.start(instance_id="i2", generation=2)
+        assert restarted.status == "ready"
+        assert restarted.command_view(command_id)["status"] == "outcome_unknown"
 
 
-class RecoveryTests(RuntimeTestCase):
-    def test_reconcile_completed_running_turn_and_unknown_start(self):
-        runtime, cp = self.start()
-        done = self.send(runtime, "hello")
-        self.completed(cp, done)
+class TestRecovery:
+    def test_reconcile_completed_running_turn_and_unknown_start(self, rt):
+        runtime, cp = rt.start()
+        done = send(runtime, "hello")
+        cp.completed(done)
         thread_id = runtime.thread_id
         runtime.shutdown()
         # Simulate a crash: the ledger still thinks one turn runs and another
         # was being started.
-        ledger = L.Ledger(self.settings.ledger_path, "x")
+        ledger = L.Ledger(rt.settings.ledger_path, "x")
         ledger.update_command(done, status=L.RUNNING)
         ledger.accept_command(
             "starting",
@@ -341,72 +329,64 @@ class RecoveryTests(RuntimeTestCase):
         )
         ledger.close()
 
-        restarted, cp2 = self.start(instance_id="i2", generation=2)
-        self.assertEqual(restarted.thread_id, thread_id)
-        self.assertEqual(self.completed(cp2, done)["status"], "completed")
-        cp2.wait_for(
-            lambda e: (
-                e["type"] == "command.outcome_unknown"
-                and e["payload"]["command_id"] == "starting"
-            )
-        )
-        cp2.wait_for(lambda e: e["type"] == "approval.expired")
+        restarted, cp2 = rt.start(instance_id="i2", generation=2)
+        assert restarted.thread_id == thread_id
+        assert cp2.completed(done)["status"] == "completed"
+        cp2.wait_for("command.outcome_unknown", command_id="starting")
+        cp2.wait_for("approval.expired")
         # Outbox sequences restart per instance.
-        self.assertEqual(cp2.events[0]["source_seq"], 1)
+        assert cp2.events[0]["source_seq"] == 1
 
-    def test_checkpoint_round_trip(self):
-        runtime, cp = self.start()
-        self.completed(cp, self.send(runtime, "before checkpoint"))
+    def test_checkpoint_round_trip(self, rt):
+        runtime, cp = rt.start()
+        cp.completed(send(runtime, "before checkpoint"))
         url = "http://objects.invalid/ckpt-1"
-        command_id = self.send(
+        command_id = send(
             runtime,
             "",
             kind="checkpoint",
             payload={"checkpoint_id": "ckpt-1", "upload": {"url": url}},
         )
-        done = cp.wait_for(lambda e: e["type"] == "checkpoint.completed")["payload"]
-        self.assertEqual(done["command_id"], command_id)
-        archive = cp.objects[url]
-        self.assertEqual(done["checksum"], hashlib.sha256(archive).hexdigest())
-        self.assertEqual(done["manifest"]["thread_id"], runtime.thread_id)
-        self.assertFalse(done["manifest"]["workspace"]["included"])
+        done = cp.wait_for("checkpoint.completed")
+        assert done["command_id"] == command_id
+        assert done["checksum"] == hashlib.sha256(cp.objects[url]).hexdigest()
+        assert done["manifest"]["thread_id"] == runtime.thread_id
+        assert not done["manifest"]["workspace"]["included"]
         # The runtime is usable again after the pause.
-        self.assertEqual(
-            self.completed(cp, self.send(runtime, "after"))["status"], "completed"
-        )
+        assert cp.completed(send(runtime, "after"))["status"] == "completed"
         thread_id = runtime.thread_id
         runtime.shutdown()
 
         # A new host with empty state restores from the checkpoint.
         restore = {"checkpoint_id": "ckpt-1", "url": url, "checksum": done["checksum"]}
-        restored, cp2 = self.start(
+        restored, _ = rt.start(
             cp=cp,
-            state_dir=self.tmp / "state-2",
+            state_dir=rt.tmp / "state-2",
             restore=restore,
             known_thread_id=thread_id,
             instance_id="i5",
             generation=3,
         )
-        self.assertEqual(restored.status, "ready")
-        self.assertEqual(restored.thread_id, thread_id)
+        assert (restored.status, restored.thread_id) == ("ready", thread_id)
 
-    def test_restore_rejects_bad_checksum(self):
+    def test_restore_rejects_bad_checksum(self, rt):
         cp = StubControlPlane()
         cp.objects["u"] = b"garbage"
-        runtime, _ = self.start(
+        runtime, _ = rt.start(
             cp=cp, restore={"checkpoint_id": "c", "url": "u", "checksum": "0" * 64}
         )
-        self.assertEqual(runtime.error_code, "RECOVERY_CHECKSUM_MISMATCH")
+        assert runtime.error_code == "RECOVERY_CHECKSUM_MISMATCH"
 
 
-class ServerTests(RuntimeTestCase):
-    def setUp(self):
-        super().setUp()
-        self.runtime, self.cp = self.start()
-        self.server = serve(self.runtime)
-        threading.Thread(target=self.server.serve_forever, daemon=True).start()
-        self.addCleanup(self.server.shutdown)
-        self.base = f"http://127.0.0.1:{self.server.server_address[1]}/internal/v1"
+class TestServer:
+    @pytest.fixture(autouse=True)
+    def _serve(self, rt):
+        self.runtime, self.cp = rt.start()
+        server = serve(self.runtime)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.base = f"http://127.0.0.1:{server.server_address[1]}/internal/v1"
+        yield
+        server.shutdown()
 
     def call(self, method, path, body=None, token="secret"):
         request = urllib.request.Request(
@@ -421,11 +401,14 @@ class ServerTests(RuntimeTestCase):
         except urllib.error.HTTPError as exc:
             return exc.code, json.loads(exc.read())
 
+    def status(self, method, path, body=None):
+        return self.call(method, path, body)[0]
+
     def test_auth_and_status(self):
-        self.assertEqual(self.call("GET", "/status", token="wrong")[0], 403)
+        assert self.call("GET", "/status", token="wrong")[0] == 403
         status, body = self.call("GET", "/status")
-        self.assertEqual(status, 200)
-        self.assertEqual(body["thread_id"], self.runtime.thread_id)
+        assert status == 200
+        assert body["thread_id"] == self.runtime.thread_id
 
     def test_command_lifecycle_over_http(self):
         body = {
@@ -435,33 +418,19 @@ class ServerTests(RuntimeTestCase):
             "agent_sequence": 1,
             "payload": {"text": "hi"},
         }
-        self.assertEqual(
-            self.call("PUT", "/commands/c1", {**body, "generation": 9})[0], 409
-        )
-        self.assertEqual(
-            self.call("PUT", "/commands/c1", {**body, "agent_id": "x"})[0], 409
-        )
-        status, view = self.call("PUT", "/commands/c1", body)
-        self.assertEqual(status, 202)
-        self.assertEqual(self.call("PUT", "/commands/c1", body)[0], 202)
+        assert self.status("PUT", "/commands/c1", {**body, "generation": 9}) == 409
+        assert self.status("PUT", "/commands/c1", {**body, "agent_id": "x"}) == 409
+        assert self.status("PUT", "/commands/c1", body) == 202
+        assert self.status("PUT", "/commands/c1", body) == 202
         conflict = {**body, "payload": {"text": "other"}}
-        self.assertEqual(self.call("PUT", "/commands/c1", conflict)[0], 409)
-        self.completed(self.cp, "c1")
-        status, view = self.call("GET", "/commands/c1")
-        self.assertEqual(view["status"], "succeeded")
-        self.assertEqual(self.call("GET", "/commands/nope")[0], 404)
-        status, _ = self.call("POST", "/commands/c1/interrupt", {"generation": 1})
-        self.assertEqual(status, 202)
-        self.assertEqual(
-            self.call("PUT", "/approvals/x/decision", {"decision": "maybe"})[0], 400
+        assert self.status("PUT", "/commands/c1", conflict) == 409
+        self.cp.completed("c1")
+        assert self.call("GET", "/commands/c1")[1]["status"] == "succeeded"
+        assert self.status("GET", "/commands/nope") == 404
+        interrupt = {"generation": 1}
+        assert self.status("POST", "/commands/c1/interrupt", interrupt) == 202
+        decision = "/approvals/x/decision"
+        assert self.status("PUT", decision, {"decision": "maybe"}) == 400
+        assert (
+            self.status("PUT", decision, {"decision": "accept", "generation": 1}) == 409
         )
-        self.assertEqual(
-            self.call(
-                "PUT", "/approvals/x/decision", {"decision": "accept", "generation": 1}
-            )[0],
-            409,
-        )
-
-
-if __name__ == "__main__":
-    unittest.main()

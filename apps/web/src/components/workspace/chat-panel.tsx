@@ -1,3 +1,4 @@
+import type { Block, ChatMessage, Interaction } from "@/queries/chat";
 import { useEffect, useRef } from "react";
 import { ClaudeHeader } from "@/components/brainless/claude/claude-header";
 import { ClaudeMessage } from "@/components/brainless/claude/claude-message";
@@ -18,27 +19,22 @@ import { GrokPrompt } from "@/components/brainless/grok/grok-prompt";
 import { GrokThinking } from "@/components/brainless/grok/grok-thinking";
 import { GrokTool } from "@/components/brainless/grok/grok-tool";
 import { Markdown } from "@/components/markdown";
-import {
-  ACTIVE_STATUSES,
-  type Block,
-  type ChatMessage,
-  type Interaction,
-} from "@/queries/chat";
+import { ACTIVE_STATUSES } from "@/queries/chat";
 
 // Each theme is laid out like its brainless session block
 // (components/brainless/blocks): header, turn, working line, composer.
 export type SessionTheme = "claude" | "codex" | "grok";
 type Activity = Extract<Block, { type: "activity" }>;
-type MessageProps = {
+interface MessageProps {
   role?: "user" | "assistant";
   time?: string;
   children: React.ReactNode;
-};
-type ChoiceProps = {
+}
+interface ChoiceProps {
   prompt: string;
   labels: string[];
   onChoose: (index: number) => void;
-};
+}
 
 const activityText = { running: "进行中", completed: "完成", failed: "失败" };
 const workingLabel: Partial<Record<ChatMessage["status"], string>> = {

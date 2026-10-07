@@ -63,7 +63,9 @@ export function ClaudePermission({
         {title}
       </legend>
       <div className="text-[var(--terminal-claude-foreground)]">{command}</div>
-      <div className="mb-1.5 mt-2 text-[var(--terminal-claude-foreground)]">{question}</div>
+      <div className="mb-1.5 mt-2 text-[var(--terminal-claude-foreground)]">
+        {question}
+      </div>
       <div role="radiogroup" aria-label={question}>
         {options.map((opt, i) => {
           const active = sel === i;
@@ -79,7 +81,11 @@ export function ClaudePermission({
                 onChoose?.(i);
               }}
               className="flex cursor-pointer items-baseline gap-2 rounded px-1 py-0.5 outline-none focus-visible:ring-1 focus-visible:ring-[var(--terminal-link)]/60"
-              style={{ background: active ? `color-mix(in srgb, ${ROSE} 12%, transparent)` : "transparent" }}
+              style={{
+                background: active
+                  ? `color-mix(in srgb, ${ROSE} 12%, transparent)`
+                  : "transparent",
+              }}
             >
               <span
                 aria-hidden
@@ -88,7 +94,11 @@ export function ClaudePermission({
                 ❯
               </span>
               <span
-                style={{ color: active ? "var(--terminal-claude-foreground)" : "var(--terminal-muted)" }}
+                style={{
+                  color: active
+                    ? "var(--terminal-claude-foreground)"
+                    : "var(--terminal-muted)",
+                }}
                 className={active ? "font-semibold" : undefined}
               >
                 {i + 1}. {opt}

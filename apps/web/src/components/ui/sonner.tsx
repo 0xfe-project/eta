@@ -1,12 +1,13 @@
 "use client";
 
-import { useTheme } from "next-themes";
-import { Toaster as Sonner, type ToasterProps } from "sonner";
+import type { ToasterProps } from "sonner";
 import { CheckCircleIcon } from "@phosphor-icons/react/CheckCircle";
 import { InfoIcon } from "@phosphor-icons/react/Info";
+import { SpinnerIcon } from "@phosphor-icons/react/Spinner";
 import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { XCircleIcon } from "@phosphor-icons/react/XCircle";
-import { SpinnerIcon } from "@phosphor-icons/react/Spinner";
+import { useTheme } from "next-themes";
+import { Toaster as Sonner } from "sonner";
 
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = "system", forcedTheme } = useTheme();

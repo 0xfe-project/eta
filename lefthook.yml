@@ -1,0 +1,30 @@
+# Git hooks, installed by `bun install` (the root `prepare` script).
+#
+# pre-commit runs in order and stops at the first failure:
+# 1. Linters apply their safe fixes to the staged files and re-stage them.
+#    Whatever is left (including problems only an unsafe fix would solve)
+#    fails the commit. ESLint fixes are safe by design; its riskier changes
+#    are suggestions and never applied. Ruff applies safe fixes only.
+# 2. dprint formats the staged files and re-stages them.
+# 3. Turbo builds, typechecks, lints and tests the repository; unchanged
+#    packages come from the cache.
+pre-commit:
+  piped: true
+  jobs:
+    - name: eslint
+      root: apps/web/
+      glob: "*.{js,jsx,ts,tsx}"
+      run: bunx eslint --fix --no-warn-ignored {staged_files}
+      stage_fixed: true
+
+    - name: ruff
+      glob: "*.py"
+      run: uv run --project apps/control-plane ruff check --fix --force-exclude {staged_files}
+      stage_fixed: true
+
+    - name: format
+      run: bunx dprint fmt --allow-no-files {staged_files}
+      stage_fixed: true
+
+    - name: verify
+      run: bunx turbo run build typecheck lint test --output-logs=errors-only

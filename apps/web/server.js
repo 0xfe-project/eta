@@ -1,6 +1,7 @@
 // Production server (Bun): built client assets plus the TanStack Start SSR
 // handler. /api is routed by the edge gateway (apps/gateway), not here.
 import { join, normalize } from "node:path";
+import process from "node:process";
 import handler from "./dist/server/server.js";
 
 const clientDir = join(import.meta.dir, "dist/client");

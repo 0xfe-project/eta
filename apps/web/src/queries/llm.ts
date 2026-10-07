@@ -1,12 +1,8 @@
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-  type QueryClient,
-} from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
+import type { Agent } from "@/queries/chat";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { llmApi } from "@/lib/api";
-import type { Agent } from "@/queries/chat";
 
 // The LLM gateway's public API (/api/llm/v1): model services, accounts and
 // the model catalog. See apps/llm-gateway.

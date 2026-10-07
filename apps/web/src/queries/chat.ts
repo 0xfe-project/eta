@@ -1,13 +1,13 @@
-import { useEffect } from "react";
+import type { QueryClient } from "@tanstack/react-query";
 import {
   queryOptions,
   useMutation,
   useQuery,
   useQueryClient,
-  type QueryClient,
 } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { z } from "zod";
-import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
+import { apiDelete, ApiError, apiGet, apiPatch, apiPost } from "@/lib/api";
 import { refreshLlm } from "@/queries/llm";
 
 const agentSchema = z.object({

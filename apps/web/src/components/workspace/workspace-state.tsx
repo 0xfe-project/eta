@@ -1,14 +1,7 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-  type Dispatch,
-  type SetStateAction,
-} from "react";
-import { z } from "zod";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
 const storageKey = "axp.workspace.v1";
 // Local UI state only. Chat history lives in the control plane; older saved
 // messages are dropped rather than uploaded.
@@ -30,9 +23,15 @@ const initialWorkspace: z.infer<typeof workspaceSchema> = {
 
 type WorkspaceState = z.infer<typeof workspaceSchema>;
 export type SettingsSection = "agents" | "providers" | "appearance";
-export type SettingsState = { open: boolean; section: SettingsSection };
+export interface SettingsState {
+  open: boolean;
+  section: SettingsSection;
+}
 /** The agent editor: closed, creating (agentId null) or editing an agent. */
-export type AgentEditorState = { open: boolean; agentId: string | null };
+export interface AgentEditorState {
+  open: boolean;
+  agentId: string | null;
+}
 const WorkspaceContext = createContext<{
   workspace: WorkspaceState;
   setWorkspace: Dispatch<SetStateAction<WorkspaceState>>;

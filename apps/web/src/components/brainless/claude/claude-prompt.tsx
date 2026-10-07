@@ -76,7 +76,8 @@ const EFFORTS: Record<
   max: { glyph: "◈", label: "max · /effort" },
   ultracode: {
     glyph: "✦",
-    label: "ultracode · xhigh effort + dynamic workflows for maximum thoroughness",
+    label:
+      "ultracode · xhigh effort + dynamic workflows for maximum thoroughness",
     rainbow: true,
   },
 };
@@ -109,7 +110,9 @@ export function ClaudePrompt({
   const rainbow = Boolean(e?.rainbow);
 
   return (
-    <div className={cn("min-w-0 font-mono text-[13px] leading-[1.6]", className)}>
+    <div
+      className={cn("min-w-0 font-mono text-[13px] leading-[1.6]", className)}
+    >
       {e ? (
         <div
           className="flex justify-end px-1 pb-1 text-[12px]"
@@ -144,14 +147,18 @@ export function ClaudePrompt({
           aria-label="消息"
           placeholder={placeholder}
           onKeyDown={onKeyDown}
-          {...(controlled
-            ? { value, onChange }
-            : { defaultValue, onChange })}
+          {...(controlled ? { value, onChange } : { defaultValue, onChange })}
           className={cn(
             "term-input min-w-0 flex-1 bg-transparent py-0.5 pl-[1ch] outline-none placeholder:text-[var(--terminal-muted)]",
             inputClassName,
           )}
-          style={{ color: FG, caretColor: FG, caretShape: "block" } as React.CSSProperties}
+          style={
+            {
+              color: FG,
+              caretColor: FG,
+              caretShape: "block",
+            } as React.CSSProperties
+          }
         />
       </div>
 
