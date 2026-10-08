@@ -273,6 +273,8 @@ class TestBoot:
         config = (runtime.settings.codex_home / "config.toml").read_text()
         assert '[plugins."tasks@axp"]' in config
         assert '[plugins."memory@axp"]' in config
+        # Routine runs' own tools are never an agent's.
+        assert not (runtime.settings.codex_home / "plugins/cache/axp/routine").exists()
 
     def test_installs_only_the_agents_plugins(self, rt):
         runtime, _ = rt.start(plugins=("tasks",))

@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "ninja",
     "chat",
+    "routines",
 ]
 MIDDLEWARE = [
     "chat.middleware.RequestIdMiddleware",

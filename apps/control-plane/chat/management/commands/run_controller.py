@@ -9,6 +9,7 @@ from chat import queue
 from chat.control import objects
 from chat.control.controller import Controller
 from chat.control.driver import DockerDriver
+from routines import runner as routines
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ class Command(BaseCommand):
         driver.ensure_network()
         objects.ensure_bucket()
         queue.ensure_stream()
+        routines.sync_schedules()
         Controller(driver).run_forever(
             interval=interval, stop=stop, before_tick=hold_lock
         )

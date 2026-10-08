@@ -20,6 +20,8 @@ class RuntimeSpec:
     generation: int
     name: str
     env: dict[str, str]
+    # Instead of the image's command (an agent's runtime).
+    command: list[str] | None = None
 
 
 @dataclass
@@ -66,6 +68,7 @@ class DockerDriver:
         self.ensure_network()
         container = self.client.containers.run(
             self.image,
+            command=spec.command,
             name=spec.name,
             detach=True,
             environment=spec.env,

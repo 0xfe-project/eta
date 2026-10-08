@@ -3,10 +3,12 @@ from ninja import NinjaAPI, Schema
 
 from chat.api import router as chat_router
 from chat.errors import install_error_handlers
+from routines.api import router as routines_router
 
 api = NinjaAPI(title="AXP Control Plane", version="0.1.0")
 install_error_handlers(api)
 api.add_router("/v1", chat_router)
+api.add_router("/v1", routines_router)
 
 
 class HealthResponse(Schema):

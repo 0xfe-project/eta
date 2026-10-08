@@ -111,7 +111,7 @@ export function DeleteAgentDialog({
 }
 
 /** Models grouped by service; unusable ones stay visible but disabled. */
-function ModelSelect({
+export function ModelSelect({
   value,
   models,
   invalid,

@@ -280,6 +280,9 @@ class TestAgentManagement:
         assert created.json()["plugins"] == ["grok", "tasks"]
         unknown = chat.post("/agents", {"name": "a", "plugins": ["nope"]})
         assert error_of(unknown) == (422, "PLUGIN_NOT_FOUND")
+        # Routine runs' own tools are not an agent's to choose.
+        routine = chat.post("/agents", {"name": "a", "plugins": ["routine"]})
+        assert error_of(routine) == (422, "PLUGIN_NOT_FOUND")
 
     def test_changing_plugins_bumps_config_version(self, chat, agent):
         before = Agent.objects.get(pk=agent["id"]).config_version
@@ -494,6 +497,11 @@ def test_public_schema_has_no_internal_fields():
         "/api/v1/chat/stream",
         "/api/v1/chat/messages/{message_id}/stop",
         "/api/v1/chat/interactions/{interaction_id}/answer",
+        "/api/v1/routines",
+        "/api/v1/routines/{routine_id}",
+        "/api/v1/routines/{routine_id}/run",
+        "/api/v1/routines/{routine_id}/briefs/{version}/restore",
+        "/api/v1/routines/{routine_id}/runs/{run_id}/feedback",
     }
     properties = set()
     for component in schema["components"]["schemas"].values():

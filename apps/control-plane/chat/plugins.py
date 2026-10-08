@@ -13,6 +13,9 @@ from django.conf import settings
 
 from .errors import ApiError
 
+# Routine runs' own tools (routines/runner.py); never an agent's.
+ROUTINE_ONLY = {"routine"}
+
 
 @cache
 def catalog() -> list[dict]:
@@ -24,6 +27,7 @@ def catalog() -> list[dict]:
             "description": json.loads(manifest.read_text()).get("description", ""),
         }
         for manifest in manifests
+        if manifest.parent.parent.name not in ROUTINE_ONLY
     ]
 
 

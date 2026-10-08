@@ -14,6 +14,9 @@ from django.utils import timezone
 from ninja import NinjaAPI, Schema
 from pydantic import ConfigDict, Field
 
+from routines.internal import router as routine_runs
+from routines.internal import run_for
+
 from .. import services
 from ..errors import ApiError, install_error_handlers
 from ..models import Agent, AgentSession, RuntimeInstance
@@ -27,6 +30,7 @@ api = NinjaAPI(
     docs_url="/docs" if settings.DEBUG else None,
 )
 install_error_handlers(api)
+api.add_router("/v1/routine-runs", routine_runs)
 
 # Runtimes heartbeat four times per lease (controller.py).
 LEASE_SECONDS = 30
@@ -186,5 +190,10 @@ def runtime_auth(request: HttpRequest):
     service it routes the request to.
     """
     instance_id, _, token = bearer(request).partition(".")
-    instance = _authenticate(instance_id, token)
-    return HttpResponse(status=204, headers={"X-AXP-Agent-Id": str(instance.agent_id)})
+    # Routine runs use the gateway too; their usage is the routine's.
+    run = run_for(instance_id, token)
+    if run is not None:
+        agent = f"routine-{run.routine_id}"
+    else:
+        agent = str(_authenticate(instance_id, token).agent_id)
+    return HttpResponse(status=204, headers={"X-AXP-Agent-Id": agent})

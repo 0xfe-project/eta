@@ -20,6 +20,9 @@ class FakeQueue:
         # Whether a running turn takes steers.
         self.steering = False
         self.down = False
+        # Routine id -> (cron, timezone).
+        self.schedules: dict[str, tuple[str, str]] = {}
+        self.fires: list[tuple[str, bool]] = []
 
     def enqueue(self, agent_id, body):
         if self.down:
@@ -57,6 +60,21 @@ class FakeQueue:
     def ask(self, agent_id, body):
         self.asked.append(body)
         return {"accepted": self.steering}
+
+    def schedule_routine(self, routine_id, cron, timezone):
+        if self.down:
+            raise ConnectionError("nats down")
+        self.schedules[str(routine_id)] = (cron, timezone)
+
+    def unschedule_routine(self, routine_id):
+        self.schedules.pop(str(routine_id), None)
+
+    def fire_routine(self, routine_id):
+        self.fires.append((str(routine_id), True))
+
+    def take_fires(self):
+        fires, self.fires = self.fires, []
+        return fires
 
     # --- for tests ------------------------------------------------------
 
@@ -114,6 +132,10 @@ def nats(monkeypatch):
         "forget",
         "tell",
         "ask",
+        "schedule_routine",
+        "unschedule_routine",
+        "fire_routine",
+        "take_fires",
     ):
         monkeypatch.setattr(queue, name, getattr(fake, name))
     return fake

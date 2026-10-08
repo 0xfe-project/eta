@@ -149,7 +149,12 @@ class TestBuild:
         root, _ = built
         catalog = json.loads((root / ".agents/plugins/marketplace.json").read_text())
         assert catalog["name"] == "axp"
-        assert [p["name"] for p in catalog["plugins"]] == ["grok", "memory", "tasks"]
+        assert [p["name"] for p in catalog["plugins"]] == [
+            "grok",
+            "memory",
+            "routine",
+            "tasks",
+        ]
         for plugin in catalog["plugins"]:
             assert (root / plugin["source"]["path"] / ".codex-plugin").is_dir()
 
@@ -164,6 +169,7 @@ class TestBuild:
         assert servers == {
             "grok@axp": ["grok"],
             "memory@axp": ["memory"],
+            "routine@axp": ["routine"],
             "tasks@axp": ["tasks"],
         }
         for settings in config["plugins"].values():
