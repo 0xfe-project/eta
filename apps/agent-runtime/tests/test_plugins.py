@@ -150,6 +150,7 @@ class TestBuild:
         catalog = json.loads((root / ".agents/plugins/marketplace.json").read_text())
         assert catalog["name"] == "axp"
         assert [p["name"] for p in catalog["plugins"]] == [
+            "approval",
             "grok",
             "memory",
             "routine",
@@ -167,6 +168,7 @@ class TestBuild:
             for plugin, settings in config["plugins"].items()
         }
         assert servers == {
+            "approval@axp": ["approval"],
             "grok@axp": ["grok"],
             "memory@axp": ["memory"],
             "routine@axp": ["routine"],

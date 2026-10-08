@@ -1,0 +1,5 @@
+{
+  "name": "approval",
+  "version": "1.0.0",
+  "description": "Asks the user to approve a command an AXP rule held back."
+}
