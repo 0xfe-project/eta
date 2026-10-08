@@ -167,8 +167,6 @@ type interactionRow struct {
 const (
 	ApprovalPending = "pending"
 	ApprovalDecided = "decided"
-	ApprovalApplied = "applied"
-	ApprovalExpired = "expired"
 )
 
 type approvalRow struct {
@@ -187,13 +185,6 @@ type approvalRow struct {
 	CreatedAt    time.Time      `db:"created_at"`
 	ResolvedAt   *time.Time     `db:"resolved_at"`
 }
-
-const (
-	SessionNew            = "new"
-	SessionRecovering     = "recovering"
-	SessionReady          = "ready"
-	SessionRecoveryFailed = "recovery_failed"
-)
 
 // SessionRecord is the agent's single persistent Codex thread.
 type SessionRecord struct {

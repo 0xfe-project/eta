@@ -10,11 +10,7 @@ import (
 )
 
 // Login flows a connector can run.
-const (
-	FlowDevice        = "oauth_device"
-	FlowRedirectPaste = "oauth_redirect"
-	FlowAPIKey        = "api_key"
-)
+const FlowDevice = "oauth_device"
 
 // Login session states.
 const (
@@ -36,13 +32,6 @@ type ConnectorInfo struct {
 	Hint string `json:"hint,omitempty"`
 }
 
-// LoginInput carries user-supplied values for StartLogin/SubmitLogin.
-type LoginInput struct {
-	CallbackURL string `json:"callback_url,omitempty"`
-	APIKey      string `json:"api_key,omitempty"`
-	BaseURL     string `json:"base_url,omitempty"`
-}
-
 // LoginSession is one login attempt.
 type LoginSession struct {
 	ID        string    `json:"id"`
@@ -60,17 +49,13 @@ type LoginSession struct {
 // connector registers an auth the same way.
 type Connector interface {
 	Info() ConnectorInfo
-	StartLogin(ctx context.Context, in LoginInput) (*LoginSession, error)
+	StartLogin(ctx context.Context) (*LoginSession, error)
 	PollLogin(ctx context.Context, id string) (*LoginSession, error)
-	SubmitLogin(ctx context.Context, id string, in LoginInput) error
 	CancelLogin(ctx context.Context, id string) error
 }
 
 // ErrNotFound is returned for unknown connectors, connections or logins.
 var ErrNotFound = errors.New("not found")
-
-// ErrUnsupported is returned when a connector does not support an operation.
-var ErrUnsupported = errors.New("unsupported")
 
 // UserError carries a message safe to show to the user.
 type UserError struct {

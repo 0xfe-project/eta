@@ -19,11 +19,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const (
-	HistoryPageSize    = 50
-	MaxHistoryPageSize = 100
-)
-
 type Service struct {
 	Queue   queue.Queue
 	Models  llm.Catalog

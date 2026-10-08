@@ -35,7 +35,7 @@ func (x *XAI) Info() llm.ConnectorInfo {
 	}
 }
 
-func (x *XAI) StartLogin(ctx context.Context, _ llm.LoginInput) (*llm.LoginSession, error) {
+func (x *XAI) StartLogin(ctx context.Context) (*llm.LoginSession, error) {
 	var res struct {
 		URL       string `json:"url"`
 		State     string `json:"state"`
@@ -114,8 +114,6 @@ func (x *XAI) finish(sess *llm.LoginSession, status, msg string) {
 	sess.Status = status
 	sess.Error = msg
 }
-
-func (x *XAI) SubmitLogin(context.Context, string, llm.LoginInput) error { return llm.ErrUnsupported }
 
 func (x *XAI) CancelLogin(ctx context.Context, id string) error {
 	x.mu.Lock()

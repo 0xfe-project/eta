@@ -29,9 +29,8 @@ runtime 用 `<实例 ID>.<令牌>`（control-plane 签发，换代即失效）�
 ```go
 type Connector interface {
     Info() ConnectorInfo
-    StartLogin(ctx, LoginInput) (*LoginSession, error)
+    StartLogin(ctx) (*LoginSession, error)
     PollLogin(ctx, id) (*LoginSession, error)
-    SubmitLogin(ctx, id, LoginInput) error
     CancelLogin(ctx, id) error
 }
 ```
@@ -40,7 +39,7 @@ Connector 只负责“凭据怎么进来”；连接列表、启停、删除统�
 
 - **Grok（xAI）**：回环调用管理 API 的 `xai-auth-url` / `get-auth-status` / `oauth-session`，CPA 自己保存凭据。
 - **Codex**：OpenAI 的设备码流程（`/api/accounts/deviceauth/usercode` → 轮询 `/deviceauth/token` → `/oauth/token`，`redirect_uri` 为 OpenAI 自己的 `deviceauth/callback`），不依赖 localhost 回调。CPA 只在 CLI 中实现了这一流程（验证码打印到标准输出），因此在 Connector 中实现协议，得到的 token 按 CPA 的 codex 凭据文件格式通过 `POST /v0/management/auth-files` 交给 CPA。
-- 以后的 raw API key：新增 Connector，在 `SubmitLogin` 中注册 Auth（或经管理 API 写入 `codex-api-key` / `openai-compatibility`），数据面和 control-plane 不用改。
+- 两者都是设备码流程，登录不需要用户输入。以后接入 raw API key 时再给 Connector 加上提交输入的方法，在其中注册 Auth（或经管理 API 写入 `codex-api-key` / `openai-compatibility`），数据面和 control-plane 不用改。
 
 ## 状态与模型目录
 

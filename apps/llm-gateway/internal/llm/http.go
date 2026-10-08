@@ -25,7 +25,6 @@ func Mount(e *gin.Engine, s *Service, logger *slog.Logger) {
 	v1.GET("/models", func(c *gin.Context) { c.JSON(http.StatusOK, s.Models()) })
 	v1.POST("/logins", h.startLogin)
 	v1.GET("/logins/:id", h.pollLogin)
-	v1.POST("/logins/:id/input", h.submitLogin)
 	v1.DELETE("/logins/:id", h.cancelLogin)
 }
 
@@ -61,13 +60,12 @@ func (h handler) deleteConnection(c *gin.Context) {
 func (h handler) startLogin(c *gin.Context) {
 	var body struct {
 		Connector string `json:"connector"`
-		LoginInput
 	}
 	if c.ShouldBindJSON(&body) != nil || body.Connector == "" {
 		h.fail(c, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "请求参数无效。")
 		return
 	}
-	sess, err := h.s.StartLogin(c.Request.Context(), body.Connector, body.LoginInput)
+	sess, err := h.s.StartLogin(c.Request.Context(), body.Connector)
 	if err != nil {
 		h.error(c, err)
 		return
@@ -84,19 +82,6 @@ func (h handler) pollLogin(c *gin.Context) {
 	c.JSON(http.StatusOK, sess)
 }
 
-func (h handler) submitLogin(c *gin.Context) {
-	var in LoginInput
-	if c.ShouldBindJSON(&in) != nil {
-		h.fail(c, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "请求参数无效。")
-		return
-	}
-	if err := h.s.SubmitLogin(c.Request.Context(), c.Param("id"), in); err != nil {
-		h.error(c, err)
-		return
-	}
-	h.pollLogin(c)
-}
-
 func (h handler) cancelLogin(c *gin.Context) {
 	if err := h.s.CancelLogin(c.Request.Context(), c.Param("id")); err != nil && !errors.Is(err, ErrNotFound) {
 		h.error(c, err)
@@ -110,8 +95,6 @@ func (h handler) error(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, ErrNotFound):
 		h.fail(c, http.StatusNotFound, "NOT_FOUND", "资源不存在。")
-	case errors.Is(err, ErrUnsupported):
-		h.fail(c, http.StatusConflict, "UNSUPPORTED", "该连接方式不支持此操作。")
 	case errors.As(err, &ue):
 		h.logger.Warn("llm request failed", "path", c.Request.URL.Path, "error", err)
 		h.fail(c, http.StatusBadGateway, ue.Code, ue.Message)

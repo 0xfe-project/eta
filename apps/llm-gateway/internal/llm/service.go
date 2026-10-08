@@ -272,12 +272,12 @@ func (s *Service) saveCatalogLocked() {
 
 // --- Logins ------------------------------------------------------------------
 
-func (s *Service) StartLogin(ctx context.Context, connectorID string, in LoginInput) (*LoginSession, error) {
+func (s *Service) StartLogin(ctx context.Context, connectorID string) (*LoginSession, error) {
 	c, ok := s.byID[connectorID]
 	if !ok {
 		return nil, ErrNotFound
 	}
-	sess, err := c.StartLogin(ctx, in)
+	sess, err := c.StartLogin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -309,14 +309,6 @@ func (s *Service) PollLogin(ctx context.Context, id string) (*LoginSession, erro
 		return nil, err
 	}
 	return c.PollLogin(ctx, id)
-}
-
-func (s *Service) SubmitLogin(ctx context.Context, id string, in LoginInput) error {
-	c, err := s.login(id)
-	if err != nil {
-		return err
-	}
-	return c.SubmitLogin(ctx, id, in)
 }
 
 func (s *Service) CancelLogin(ctx context.Context, id string) error {

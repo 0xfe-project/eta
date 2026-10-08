@@ -71,7 +71,7 @@ func TestCodexDeviceLogin(t *testing.T) {
 		ManagementURL: func(p string) string { return "http://cpa" + p },
 		Issuer:        openai.URL,
 	}
-	sess, err := c.StartLogin(context.Background(), llm.LoginInput{})
+	sess, err := c.StartLogin(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -51,7 +51,6 @@ var handlers = map[string]handler{
 	"item.updated":            (*projection).itemUpdated,
 	"approval.requested":      (*projection).approvalRequested,
 	"approval.applied":        (*projection).approvalApplied,
-	"approval.expired":        (*projection).approvalExpired,
 	"turn.completed":          (*projection).turnCompleted,
 	"turn.steered":            (*projection).turnSteered,
 	"command.outcome_unknown": (*projection).outcomeUnknown,
@@ -490,22 +489,6 @@ func (p *projection) approvalApplied(ctx context.Context, _ *CommandRecord, payl
 		}
 	}
 	return RefreshAgentStatus(ctx, p.tx, p.agentID)
-}
-
-func (p *projection) approvalExpired(ctx context.Context, _ *CommandRecord, payload map[string]any) error {
-	approval, interaction, err := p.approval(ctx, payload)
-	if err != nil || approval == nil || approval.Status == ApprovalApplied {
-		return err
-	}
-	if _, err := p.tx.Exec(ctx, "UPDATE approval SET status = 'expired', resolved_at = $2 WHERE id = $1",
-		approval.ID, Now()); err != nil {
-		return err
-	}
-	if interaction != nil && (interaction.Status == InteractionPending || interaction.Status == InteractionSubmitted) {
-		interaction.Status = InteractionExpired
-		return saveInteraction(ctx, p.tx, interaction)
-	}
-	return nil
 }
 
 func (p *projection) turnCompleted(ctx context.Context, command *CommandRecord, payload map[string]any) error {

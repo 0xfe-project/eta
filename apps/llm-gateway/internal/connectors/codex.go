@@ -82,7 +82,7 @@ func (c *Codex) logger() *slog.Logger {
 	return slog.Default()
 }
 
-func (c *Codex) StartLogin(ctx context.Context, _ llm.LoginInput) (*llm.LoginSession, error) {
+func (c *Codex) StartLogin(ctx context.Context) (*llm.LoginSession, error) {
 	var code struct {
 		DeviceAuthID string          `json:"device_auth_id"`
 		UserCode     string          `json:"user_code"`
@@ -264,8 +264,6 @@ func (c *Codex) PollLogin(_ context.Context, id string) (*llm.LoginSession, erro
 	copy := sess.LoginSession
 	return &copy, nil
 }
-
-func (c *Codex) SubmitLogin(context.Context, string, llm.LoginInput) error { return llm.ErrUnsupported }
 
 func (c *Codex) CancelLogin(_ context.Context, id string) error {
 	c.mu.Lock()
