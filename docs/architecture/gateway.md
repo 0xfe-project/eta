@@ -38,9 +38,9 @@
 ## runtime 站点
 
 - `/internal/*` 原样转发给内部运行协议，由它自己认证 runtime：令牌由它签发，换代后的旧实例也由它拒绝（`409 STALE_GENERATION`）。
-- 其余路由（目前是 llm-gateway 的 `/v1/*`）先用 `forward_auth` 问内部运行协议 `GET /internal/v1/runtime-auth`：runtime 的 key 是 `<实例 ID>.<令牌>`，有效时返回 204 和 `X-AXP-Agent-Id`。网关用这个值替换请求里的同名头（runtime 自己设的会被覆盖），删掉 `Authorization` 后转发；无效时把 403/409 原样返回给 runtime。
+- 其余路由（llm-gateway 的 `/v1/*` 和 memory-service 的 `/memory/*`）先用 `forward_auth` 问内部运行协议 `GET /internal/v1/runtime-auth`：runtime 的 key 是 `<实例 ID>.<令牌>`，有效时返回 204 和 `X-AXP-Agent-Id`。网关用这个值替换请求里的同名头（runtime 自己设的会被覆盖），删掉 `Authorization` 后转发；无效时把 403/409 原样返回给 runtime。
 - 后面的服务只读 `X-AXP-Agent-Id`，自己不持有任何凭据；新增一个给 runtime 用的服务只是在 `runtime.caddy` 里加一条路由。
 
 ## 配置与检查
 
-所有地址都有生产默认值（Kamal 网络别名），`scripts/dev.sh` 用环境变量覆盖：`AXP_GATEWAY_BIND`/`PORT`、`AXP_RUNTIME_GATEWAY_BIND`/`PORT`、`AXP_UPSTREAM_{WEB,API,LLM,OBSERVE,INTERNAL}`；`AXP_GATEWAY_SITES` 选择加载的站点（默认全部）。Caddy 的版本在 `deploy/Dockerfile`、`scripts/dev.sh` 和 `apps/gateway/package.json` 中保持一致。`bun run lint` 用这个版本检查格式（`caddy fmt`）并校验配置（`caddy validate`）。
+所有地址都有生产默认值（Kamal 网络别名），`scripts/dev.sh` 用环境变量覆盖：`AXP_GATEWAY_BIND`/`PORT`、`AXP_RUNTIME_GATEWAY_BIND`/`PORT`、`AXP_UPSTREAM_{WEB,API,LLM,MEMORY,OBSERVE,INTERNAL}`；`AXP_GATEWAY_SITES` 选择加载的站点（默认全部）。Caddy 的版本在 `deploy/Dockerfile`、`scripts/dev.sh` 和 `apps/gateway/package.json` 中保持一致。`bun run lint` 用这个版本检查格式（`caddy fmt`）并校验配置（`caddy validate`）。

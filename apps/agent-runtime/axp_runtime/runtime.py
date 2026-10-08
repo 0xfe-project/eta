@@ -18,7 +18,7 @@ import time
 import uuid
 from pathlib import Path
 
-from codex_cli_bin import bundled_codex_path, bundled_path_dir
+from codex_cli_bin import bundled_codex_path
 from openai_codex import CodexConfig
 from openai_codex import __version__ as SDK_VERSION
 from openai_codex.client import CodexClient
@@ -36,10 +36,12 @@ logger = logging.getLogger(__name__)
 # Snapshots run after every turn: GNU tar with multithreaded zstd packs a
 # workspace with tens of thousands of files in about a second.
 SNAPSHOT_COMPRESSOR = "zstd -T0"
-# Codex's locks and scratch files are left out, and so are installed plugins:
-# every start installs them from the image.
+# Codex's locks, scratch files and caches (.tmp holds its copy of OpenAI's
+# plugin catalog) are left out, and so are installed plugins: every start
+# installs them from the image.
 SNAPSHOT_EXCLUDES = (
     "./codex/tmp",
+    "./codex/.tmp",
     "./codex/*/tmp",
     "./codex/*.lock",
     "./codex/plugins/cache",
@@ -135,6 +137,8 @@ class Runtime:
         self.current_command_id: str | None = None
         # Marketplace name and directory of the installed plugins.
         self.marketplace: tuple[str, Path] | None = None
+        # (plugin id, server name) of the plugins' MCP servers.
+        self.plugin_mcp_servers: list[tuple[str, str]] = []
         self._approvals: dict[str, _ApprovalWaiter] = {}
         # Steer command id -> its command, from turn/steer until the running
         # turn takes it in.
@@ -162,6 +166,7 @@ class Runtime:
             self._spawn(self._outbox_loop, "outbox")
             self._install_plugins()
             self._start_codex()
+            self._trust_plugin_hooks()
             self._open_thread()
         except RecoveryFailed as exc:
             logger.error("Runtime not ready: %s", exc)
@@ -313,15 +318,18 @@ class Runtime:
             "AXP_GATEWAY_URL": self.settings.gateway_url,
             "AXP_WORKSPACE_DIR": str(self.settings.workspace_dir),
         }
-        for path in directory.rglob(".mcp.json"):
-            path.write_text(
-                PLUGIN_VARIABLES.sub(lambda m: values[m[1]], path.read_text())
-            )
         self.marketplace = (catalog["name"], directory)
         for plugin in catalog["plugins"]:
             name = f"{plugin['name']}@{catalog['name']}"
+            mcp = directory / plugin["source"]["path"] / ".mcp.json"
+            if mcp.is_file():
+                text = PLUGIN_VARIABLES.sub(lambda m: values[m[1]], mcp.read_text())
+                mcp.write_text(text)
+                self.plugin_mcp_servers += [
+                    (name, server) for server in json.loads(text)["mcpServers"]
+                ]
             args = [str(bundled_codex_path())]
-            for override in self._marketplace_overrides():
+            for override in self._plugin_overrides():
                 args += ["--config", override]
             try:
                 subprocess.run(
@@ -339,14 +347,54 @@ class Runtime:
                 ) from exc
             logger.info("Installed plugin %s", name)
 
-    def _marketplace_overrides(self) -> list[str]:
+    def _trust_plugin_hooks(self) -> None:
+        """Trust the hooks of the image's plugins, and only those.
+
+        Codex runs a hook only once its current definition is trusted, which
+        is recorded in config.toml; nobody is there to review them, and hooks
+        the agent writes itself stay untrusted.
+        """
+        name, _ = self.marketplace
+        try:
+            listed = self.client.request(
+                "hooks/list",
+                {"cwds": [str(self.settings.workspace_dir)]},
+                response_model=_Lenient,
+            )
+            edits = [
+                {
+                    "keyPath": f"hooks.state.{json.dumps(hook['key'])}.trusted_hash",
+                    "mergeStrategy": "upsert",
+                    "value": hook["currentHash"],
+                }
+                for entry in getattr(listed, "data", [])
+                for hook in entry["hooks"]
+                if (hook.get("pluginId") or "").endswith(f"@{name}")
+                and hook.get("trustStatus") != "trusted"
+            ]
+            if edits:
+                self.client.request(
+                    "config/batchWrite", {"edits": edits}, response_model=_Lenient
+                )
+        except (CodexError, JsonRpcError) as exc:
+            raise RecoveryFailed("PLUGIN_TRUST_FAILED", str(exc)) from exc
+
+    def _plugin_overrides(self) -> list[str]:
         if self.marketplace is None:
             return []
         name, directory = self.marketplace
-        return [
+        overrides = [
             f"marketplaces.{name}.source_type={_toml('local')}",
             f"marketplaces.{name}.source={_toml(str(directory))}",
         ]
+        # Like their hooks, the plugins' tools are trusted: Codex would
+        # otherwise ask for every call, and nobody is there to answer.
+        for plugin, server in self.plugin_mcp_servers:
+            overrides.append(
+                f"plugins.{plugin}.mcp_servers.{server}"
+                f".default_tools_approval_mode={_toml('approve')}"
+            )
+        return overrides
 
     # --- Codex --------------------------------------------------------------
 
@@ -359,14 +407,10 @@ class Runtime:
             "AXP_GATEWAY_URL": self.settings.gateway_url,
             "AXP_RUNTIME_LLM_KEY": f"{self.settings.instance_id}.{self.settings.token}",
         }
-        # Helper binaries Codex ships next to itself (the SDK adds these when
-        # it launches Codex itself).
-        if path_dir := bundled_path_dir():
-            env["PATH"] = f"{path_dir}{os.pathsep}{os.environ.get('PATH', '')}"
         return env
 
     def _codex_config(self) -> CodexConfig:
-        overrides = self._marketplace_overrides()
+        overrides = self._plugin_overrides()
         # Every model request goes through the runtime gateway, which
         # authenticates this runtime instance; the container holds no provider
         # credentials.
@@ -383,19 +427,14 @@ class Runtime:
                 f"model_context_window={_toml(self.settings.model_context_window)}"
             )
         overrides += _otel_overrides()
+        launch = None
         if self.settings.codex_launch:
+            # A custom launcher gets the same overrides the SDK would pass.
             launch = [*self.settings.codex_launch]
-        else:
-            # Plugin hooks run only once trusted, and nobody is there to trust
-            # them; they come from the image, and the container is the
-            # isolation boundary anyway.
-            launch = [str(bundled_codex_path()), "--dangerously-bypass-hook-trust"]
-        for override in overrides:
-            launch += ["--config", override]
-        if not self.settings.codex_launch:
-            launch += ["app-server", "--listen", "stdio://"]
+            for override in overrides:
+                launch += ["--config", override]
         return CodexConfig(
-            launch_args_override=tuple(launch),
+            launch_args_override=tuple(launch) if launch else None,
             config_overrides=tuple(overrides),
             cwd=str(self.settings.workspace_dir),
             env=self._codex_env(),

@@ -1,8 +1,9 @@
 # AXP's gateways (Caddy). Two sites, each its own Kamal role in production:
 #
 #   public.caddy   the browser's single same-origin entry
-#   runtime.caddy  agent runtimes' only route to the internal API and the LLM
-#                  gateway; it authenticates each runtime once for them
+#   runtime.caddy  agent runtimes' only route to the internal API, the LLM
+#                  gateway and the memory service; it authenticates each
+#                  runtime once for them
 #
 # Upstreams trust the network instead of a shared secret: only the public
 # gateway reaches web, api and llm, and runtimes (on their own network) reach

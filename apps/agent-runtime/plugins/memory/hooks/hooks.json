@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$PLUGIN_ROOT/hooks/memory.py\" recall",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$PLUGIN_ROOT/hooks/memory.py\" capture",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -30,6 +30,9 @@
     "apps/llm-gateway": {
       "name": "@axp/llm-gateway",
     },
+    "apps/memory-service": {
+      "name": "@axp/memory-service",
+    },
     "apps/web": {
       "name": "@axp/web",
       "dependencies": {
@@ -97,6 +100,8 @@
     "@axp/gateway": ["@axp/gateway@workspace:apps/gateway"],
 
     "@axp/llm-gateway": ["@axp/llm-gateway@workspace:apps/llm-gateway"],
+
+    "@axp/memory-service": ["@axp/memory-service@workspace:apps/memory-service"],
 
     "@axp/telemetry-go": ["@axp/telemetry-go@workspace:packages/telemetry-go"],
 
