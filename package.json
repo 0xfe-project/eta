@@ -25,7 +25,7 @@
     "build": "turbo run build build:linux-amd64 build:linux-arm64",
     "image:linux-amd64": "bash scripts/build/image.sh app linux amd64",
     "image:linux-arm64": "bash scripts/build/image.sh app linux arm64",
-    "check": "dprint check && bun run lint:repo && turbo run build typecheck lint test",
+    "check": "dprint check && bun run lint:repo && turbo run build typecheck lint test knip",
     "lint": "turbo run lint && bun run lint:repo",
     "test": "turbo run test",
     "test:control-plane": "turbo run test --filter=@axp/control-plane",
@@ -33,6 +33,7 @@
     "check:go": "turbo run lint test --filter=@axp/llm-gateway",
     "format": "dprint fmt",
     "format:check": "dprint check",
+    "knip": "knip",
     "lint:repo": "eslint . --ignore-pattern 'apps/web/**'"
   },
   "devDependencies": {
@@ -41,9 +42,9 @@
     "concurrently": "^9.2.1",
     "dprint": "^0.60.1",
     "eslint": "^10.12.0",
-    "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^17.13.0",
+    "knip": "^6.40.0",
     "lefthook": "^2.1.17",
     "turbo": "^2.11.7",
     "typescript": "5.9.3"

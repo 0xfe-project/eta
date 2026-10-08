@@ -50,7 +50,6 @@ const loginSchema = z.object({
 export type Connector = z.infer<typeof connectorSchema>;
 export type Connection = z.infer<typeof connectionSchema>;
 export type Model = z.infer<typeof modelSchema>;
-export type Login = z.infer<typeof loginSchema>;
 
 const keys = {
   connectors: ["llm", "connectors"] as const,
@@ -171,7 +170,7 @@ export type ModelAvailability =
  * Whether an agent can chat with its model. The control plane enforces the
  * same rule; this only keeps the UI ahead of it.
  */
-export function modelAvailability(
+function modelAvailability(
   agent: Pick<Agent, "model"> | undefined,
   models: Model[] | undefined,
 ): ModelAvailability {

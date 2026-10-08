@@ -24,12 +24,12 @@ const workspaceSchema = z.object({
 
 export type WorkspaceState = z.infer<typeof workspaceSchema>;
 export type SettingsSection = "agents" | "providers" | "appearance" | "logs";
-export interface SettingsState {
+interface SettingsState {
   open: boolean;
   section: SettingsSection;
 }
 /** The agent editor: closed, creating (agentId null) or editing an agent. */
-export interface AgentEditorState {
+interface AgentEditorState {
   open: boolean;
   agentId: string | null;
 }

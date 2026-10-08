@@ -1,7 +1,6 @@
 /**
  * Sends browser logs to the web server (POST /telemetry/logs), which forwards
- * them to OpenTelemetry. Uncaught errors and unhandled rejections are
- * reported automatically; call `reportLog` for anything else.
+ * them to OpenTelemetry: uncaught errors and unhandled rejections.
  */
 type Level = "debug" | "info" | "warn" | "error";
 type Attributes = Record<string, string | number | boolean>;
@@ -14,11 +13,7 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 let windowStart = 0;
 let sentInWindow = 0;
 
-export function reportLog(
-  level: Level,
-  message: string,
-  attributes?: Attributes,
-) {
+function reportLog(level: Level, message: string, attributes?: Attributes) {
   const now = Date.now();
   if (now - windowStart > 60_000) {
     windowStart = now;
