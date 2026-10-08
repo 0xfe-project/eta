@@ -8,13 +8,13 @@ export const connectionStateLabels: Record<Connection["state"], string> = {
   error: "出错",
 };
 
-export function untilText(iso: string | undefined) {
+export function untilText(iso: string | undefined, verb = "恢复") {
   if (!iso) return "";
   const minutes = Math.ceil((new Date(iso).getTime() - Date.now()) / 60_000);
   if (minutes <= 0) return "";
-  if (minutes < 60) return `约 ${minutes} 分钟后恢复`;
+  if (minutes < 60) return `约 ${minutes} 分钟后${verb}`;
   const hours = Math.round(minutes / 60);
   return hours < 48
-    ? `约 ${hours} 小时后恢复`
-    : `约 ${Math.round(hours / 24)} 天后恢复`;
+    ? `约 ${hours} 小时后${verb}`
+    : `约 ${Math.round(hours / 24)} 天后${verb}`;
 }

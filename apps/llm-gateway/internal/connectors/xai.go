@@ -18,6 +18,8 @@ import (
 type XAI struct {
 	Management    *http.Client
 	ManagementURL func(string) string
+	// HTTP talks to Grok; nil uses a client with a 30s timeout.
+	HTTP *http.Client
 
 	mu       sync.Mutex
 	sessions map[string]*llm.LoginSession
