@@ -9,19 +9,21 @@
 
 维护时只改规则文件。代码只负责“怎么匹配”和“怎么问用户”，与具体规则无关。
 
+规则对每个 agent 都生效，不随它选择的插件变化。`approval` 是普通插件，可以在智能体编辑器里关掉；关掉后需要确认的操作（例如推送 `main`）会一直被拦，agent 只能告诉用户。
+
 ## 能防什么，不能防什么
 
 hook 在容器里运行，而容器对 agent 完全开放：agent 可以把命令写进脚本、编码后执行，也可以改掉规则或伪造授权。因此 hook 是**防止 agent 误操作的护栏**，不是安全边界。绝对不允许的事只能靠凭据：容器里的凭据没有某个权限，就做不了那件事（例如 GitHub App 不申请 `workflows`，见[代码托管](forge.md)）。
 
 ## 组成
 
-| 部分             | 位置                                                               | 作用                                                                                                                       |
-| ---------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| akhook           | `vendor/akhook`（submodule），镜像里是 `/usr/local/bin/akhook`     | 规则引擎。Codex 的受管 `PreToolUse` hook（`/etc/codex/requirements.toml`，匹配 `Bash` 与 `apply_patch`）在每次执行前调用它 |
-| 规则             | `apps/agent-runtime/hooks/akhook.yml` → `/etc/akhook/akhook.yml`   | 镜像通过 `AKHOOK_ADDITIONAL_CONFIG_PATH` 加载。工作区仓库自带的 `.akhook.yml` 可以追加规则，但关不掉、也替换不了这些规则   |
-| `push-target`    | `apps/agent-runtime/hooks/push-target` → `/etc/akhook/push-target` | 推送规则的 `decide` 脚本，判断这次 `git push` 是否到达受保护分支                                                           |
-| `approval` 插件  | `apps/agent-runtime/plugins/approval`                              | MCP 工具 `request_approval`：读出请求，用 elicitation 问用户，同意后授权                                                   |
-| runtime / 控制面 | `runtime.py`、`projection.py`                                      | 把“只需确认”的 elicitation 当作审批，复用现有的确认卡片                                                                    |
+| 部分             | 位置                                                               | 作用                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| akhook           | `vendor/akhook`（submodule），镜像里是 `/usr/local/bin/akhook`     | 规则引擎。Codex 的受管 `PreToolUse` hook（`/etc/codex/requirements.toml`，不设 matcher）在每次工具调用前调用它，不认识的工具直接放行 |
+| 规则             | `apps/agent-runtime/hooks/akhook.yml` → `/etc/akhook/akhook.yml`   | 镜像通过 `AKHOOK_ADDITIONAL_CONFIG_PATH` 加载。工作区仓库自带的 `.akhook.yml` 可以追加规则，但关不掉、也替换不了这些规则             |
+| `push-target`    | `apps/agent-runtime/hooks/push-target` → `/etc/akhook/push-target` | 推送规则的 `decide` 脚本，判断这次 `git push` 是否到达受保护分支                                                                     |
+| `approval` 插件  | `apps/agent-runtime/plugins/approval`                              | MCP 工具 `request_approval`：读出请求，用 elicitation 问用户，同意后授权                                                             |
+| runtime / 控制面 | `runtime.py`、`projection.py`                                      | 把“只需确认”的 elicitation 当作审批，复用现有的确认卡片                                                                              |
 
 镜像构建时，akhook 由 `rust` 构建阶段从 submodule 编译（`scripts/build/image.sh` 以 `akhook-src` 构建上下文传入，submodule 缺失时先初始化）。镜像里还装了 `gh`。
 
