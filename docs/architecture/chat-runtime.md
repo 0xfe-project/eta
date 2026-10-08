@@ -35,9 +35,9 @@
 
 AXP 是单用户服务，所有智能体属于唯一的默认对话（`conversation.is_default`），首次创建智能体时建立。
 
-智能体目前有名称和 `description`（指令）。指令原样作为 Codex 的 `developerInstructions` 在 `thread/start` 和 `thread/resume` 时注入。运行时启动所用的一切配置（模型、指令）都由 `agent.config_version` 版本化：修改后版本递增；controller 在该智能体没有进行中的执行时停止旧实例（`CONFIG_CHANGED`），下一个实例用新配置恢复同一 thread，因此配置不会在 turn 中途改变。以后给智能体增加的、影响运行时的设置应走同一条路径。重启（`POST /agents/{id}/restart`，设置里的“重启”）也走这条路径：递增 `config_version` 并停止该智能体所有进行中的回复，中断确认后旧实例即被替换。
+智能体有名称、`description`（指令）、模型和 `plugins`（启用的 plugin 名，见下文 [Plugin](#plugin)）。指令原样作为 Codex 的 `developerInstructions` 在 `thread/start` 和 `thread/resume` 时注入。运行时启动所用的一切配置（模型、指令、plugin）都由 `agent.config_version` 版本化：修改后版本递增；controller 在该智能体没有进行中的执行时停止旧实例（`CONFIG_CHANGED`），下一个实例用新配置恢复同一 thread，因此配置不会在 turn 中途改变。以后给智能体增加的、影响运行时的设置应走同一条路径。重启（`POST /agents/{id}/restart`，设置里的“重启”）也走这条路径：递增 `config_version` 并停止该智能体所有进行中的回复，中断确认后旧实例即被替换。
 
-除 RFC 第 3 节的接口外，公开 API 提供 `POST /agents`（`name`、`description`）、`PATCH /agents/{id}`（部分更新）和 `DELETE /agents/{id}`。删除不抹掉数据：智能体被标记为已删除并从列表中隐藏，排队消息取消、进行中的回复被中断，历史消息保留；controller 等执行停下后停止并移除其容器，之后不再启动。快照保留。删除通过 `agent.deleted` 事件（`{agent_id}`）通知前端。
+除 RFC 第 3 节的接口外，公开 API 提供 `GET /plugins`（镜像的 plugin 目录，控制面从生产镜像里一同复制的 `apps/agent-runtime/plugins` 读出）、`POST /agents`（`name`、`description`、`model`、`plugins`，省略 `plugins` 即全部）、`PATCH /agents/{id}`（部分更新）和 `DELETE /agents/{id}`。删除不抹掉数据：智能体被标记为已删除并从列表中隐藏，排队消息取消、进行中的回复被中断，历史消息保留；controller 等执行停下后停止并移除其容器，之后不再启动。快照保留。删除通过 `agent.deleted` 事件（`{agent_id}`）通知前端。
 
 ## 消息历史
 
@@ -67,14 +67,14 @@ AXP 是单用户服务，所有智能体属于唯一的默认对话（`conversat
 
 ## Plugin
 
-智能体的扩展（MCP、skill、hook）一律是 Codex plugin，所有智能体都装同一套，没有按智能体的开关。runtime 镜像里的 `/opt/axp/plugins`（源码在 `apps/agent-runtime/plugins`）是一个本地 marketplace `axp`：`.agents/plugins/marketplace.json` 列出各 plugin，每个 plugin 是一个目录，有 `.codex-plugin/plugin.json`，可选 `.mcp.json` 和 `skills/`。
+智能体的扩展（MCP、skill、hook）一律是 Codex plugin，每个智能体从镜像里的同一套中选择要装哪些（`agent.plugins`，默认全部）。runtime 镜像里的 `/opt/axp/plugins`（源码在 `apps/agent-runtime/plugins`）是一个本地 marketplace `axp`：`.agents/plugins/marketplace.json` 列出各 plugin，每个 plugin 是一个目录，有 `.codex-plugin/plugin.json`，可选 `.mcp.json` 和 `skills/`。
 
-runtime 每次启动、在 Codex 之前对每个 plugin 执行 `codex plugin add <name>@axp`（marketplace 用 `--config marketplaces.axp.*` 指向镜像目录）。Codex 只加载装进 `CODEX_HOME/plugins/cache` 的副本，仅在配置里启用不生效；已安装的副本不进快照，每次都以镜像为准。安装后在副本的 `.mcp.json` 里填入本实例的 `${AXP_GATEWAY_URL}` 和 `${AXP_WORKSPACE_DIR}`：Codex 不展开其中的变量，而网关地址在开发和生产中不同。plugin 的 stdio MCP 只拿到 `.mcp.json` 里写明的环境变量（`env`，或用 `env_vars` 从 Codex 的环境透传，实例 key 只能这样传，不能写进会进快照的文件），`cwd: "."` 指 plugin 目录。MCP 启动失败只记日志，不影响 runtime 就绪。
+runtime 每次启动、在 Codex 之前对选中的每个 plugin 执行 `codex plugin add <name>@axp`（marketplace 用 `--config marketplaces.axp.*` 指向镜像目录）。Codex 只加载装进 `CODEX_HOME/plugins/cache` 的副本，仅在配置里启用不生效；已安装的副本不进快照，每次都以镜像为准；但快照里的 Codex 配置仍记着上次启用的 plugin，没选中却仍启用的会用 `codex plugin remove` 卸掉。安装后在副本的 `.mcp.json` 里填入本实例的 `${AXP_GATEWAY_URL}` 和 `${AXP_WORKSPACE_DIR}`：Codex 不展开其中的变量，而网关地址在开发和生产中不同。plugin 的 stdio MCP 只拿到 `.mcp.json` 里写明的环境变量（`env`，或用 `env_vars` 从 Codex 的环境透传，实例 key 只能这样传，不能写进会进快照的文件），`cwd: "."` 指 plugin 目录。MCP 启动失败只记日志，不影响 runtime 就绪。
 
 其余都是镜像里的静态 Codex 配置（源码 `apps/agent-runtime/codex`，装在 `/etc/codex`）：
 
 - `config.toml`：容器是隔离边界，Codex 不再用沙盒（`danger-full-access`）；命令和文件改动仍经产品请用户确认（`on-request`）。镜像 plugin 的 MCP 工具免确认（`plugins."<plugin>".mcp_servers.<server>.default_tools_approval_mode = "approve"`），否则每次调用都会被 runtime 以“无人应答”拒绝。
-- `requirements.toml`：hook 在这里声明，而不是放在 plugin 里。Codex 只执行经过信任的 hook，plugin 的 hook 要有人审核，而 managed hook 按策略可信；`allow_managed_hooks_only` 让其他来源的 hook（包括智能体自己写的）一律不执行。hook 与 Codex 共享环境变量，用 `AXP_GATEWAY_URL` 和 `AXP_RUNTIME_LLM_KEY` 经 runtime 网关访问服务。
+- `requirements.toml`：hook 在这里声明，而不是放在 plugin 里。Codex 只执行经过信任的 hook，plugin 的 hook 要有人审核，而 managed hook 按策略可信；`allow_managed_hooks_only` 让其他来源的 hook（包括智能体自己写的）一律不执行。managed hook 对所有智能体都执行，所以 hook 脚本要自己检查所属 plugin 是否装在 `CODEX_HOME/plugins/cache/axp/<plugin>`，没装就什么也不做。hook 与 Codex 共享环境变量，用 `AXP_GATEWAY_URL` 和 `AXP_RUNTIME_LLM_KEY` 经 runtime 网关访问服务。
 
 新增 plugin 的 MCP 服务器时要在 `config.toml` 里免确认，新增 hook 时在 `requirements.toml` 里声明，测试会检查两者与 plugin 一致。
 

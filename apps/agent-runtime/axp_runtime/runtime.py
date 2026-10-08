@@ -1,6 +1,6 @@
 """Agent runtime: one persistent Codex thread driven through the Python SDK.
 
-Startup: restore the agent's snapshot -> install the image's Codex plugins ->
+Startup: restore the agent's snapshot -> install the agent's Codex plugins ->
 start Codex -> resume the agent's thread (or create it once) -> report ready
 -> run commands from the agent's queue, one at a time. Every turn ends by
 uploading a new snapshot of the agent's home.
@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import tomllib
 import uuid
 from pathlib import Path
 
@@ -349,35 +350,46 @@ class Runtime:
     # --- plugins --------------------------------------------------------------
 
     def _install_plugins(self) -> None:
-        """Install every plugin of the image's marketplace into CODEX_HOME.
+        """Install the agent's plugins of the image's marketplace into CODEX_HOME.
 
         Codex only loads installed copies; their MCP configs then get this
-        instance's values. Everything else about them (hooks, tool approval)
-        is static Codex configuration in the image (/etc/codex).
+        instance's values. Plugins the agent no longer runs with are removed,
+        since the snapshot's Codex config still enables them. Everything else
+        about them (hooks, tool approval) is static Codex configuration in the
+        image (/etc/codex).
         """
         source = self.settings.plugins_dir
         catalog = json.loads(
             (source / ".agents" / "plugins" / "marketplace.json").read_text()
         )
         marketplace = catalog["name"]
-        install = [
+        codex = [
             str(bundled_codex_path()),
             "--config",
             f"marketplaces.{marketplace}.source_type={_toml('local')}",
             "--config",
             f"marketplaces.{marketplace}.source={_toml(str(source))}",
             "plugin",
-            "add",
         ]
         values = {
             "AXP_GATEWAY_URL": self.settings.gateway_url,
             "AXP_WORKSPACE_DIR": str(self.settings.workspace_dir),
         }
+        config = self.settings.codex_home / "config.toml"
+        enabled = (
+            tomllib.loads(config.read_text()).get("plugins", {})
+            if config.exists()
+            else {}
+        )
+        chosen = self.settings.plugins
         for plugin in catalog["plugins"]:
             name = f"{plugin['name']}@{marketplace}"
+            wanted = chosen is None or plugin["name"] in chosen
+            if not wanted and name not in enabled:
+                continue
             try:
                 subprocess.run(
-                    [*install, name],
+                    [*codex, "add" if wanted else "remove", name],
                     env={**os.environ, **self._codex_env()},
                     capture_output=True,
                     text=True,
@@ -389,6 +401,9 @@ class Runtime:
                 raise RecoveryFailed(
                     "PLUGIN_INSTALL_FAILED", f"{name}: {detail}"
                 ) from exc
+            if not wanted:
+                logger.info("Removed plugin %s", name)
+                continue
             installed = self.settings.codex_home / "plugins/cache" / marketplace
             for path in (installed / plugin["name"]).glob("*/.mcp.json"):
                 path.write_text(

@@ -1,7 +1,8 @@
 """The memory plugin's hooks: ``memory.py recall`` and ``memory.py capture``.
 
 They are declared in the image's managed Codex requirements
-(codex/requirements.toml), not in the plugin, so they run without review.
+(codex/requirements.toml), not in the plugin, so they run without review, and
+for every agent: they do nothing where the plugin is not installed.
 
 recall (UserPromptSubmit) adds the memories relevant to the prompt to the
 turn's context. capture (Stop) sends the finished turn, its prompts and final
@@ -33,6 +34,10 @@ def post(path: str, body: dict) -> bytes:
     )
     with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
         return response.read()
+
+
+def installed() -> bool:
+    return (Path(os.environ["CODEX_HOME"]) / "plugins/cache/axp/memory").is_dir()
 
 
 def pending(turn_id: str) -> Path:
@@ -88,7 +93,8 @@ def main() -> None:
     output = {}
     try:
         event = json.load(sys.stdin)
-        output = {"recall": recall, "capture": capture}[sys.argv[1]](event)
+        if installed():
+            output = {"recall": recall, "capture": capture}[sys.argv[1]](event)
     except Exception as exc:
         print(f"memory hook skipped: {exc}", file=sys.stderr)
     print(json.dumps(output))

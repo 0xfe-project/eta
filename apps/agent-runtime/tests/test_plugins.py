@@ -57,7 +57,14 @@ def service():
 
 
 @pytest.fixture
-def hook(service, tmp_path):
+def codex_home(tmp_path):
+    home = tmp_path / "codex"
+    (home / "plugins/cache/axp/memory/1.0.0").mkdir(parents=True)
+    return home
+
+
+@pytest.fixture
+def hook(service, codex_home):
     def run(mode: str, event: dict, url: str | None = None) -> dict:
         result = subprocess.run(
             [sys.executable, str(MEMORY_HOOK), mode],
@@ -69,7 +76,7 @@ def hook(service, tmp_path):
                 **os.environ,
                 "AXP_GATEWAY_URL": url or service.url,
                 "AXP_RUNTIME_LLM_KEY": "instance.token",
-                "CODEX_HOME": str(tmp_path / "codex"),
+                "CODEX_HOME": str(codex_home),
             },
         )
         return json.loads(result.stdout)
@@ -121,6 +128,14 @@ class TestMemoryHooks:
             "recall", {"turn_id": "t2", "prompt": "hi"}, url="http://127.0.0.1:9"
         )
         assert output == {}
+
+    def test_agent_without_the_plugin_is_left_alone(self, hook, service, codex_home):
+        # The hooks are managed, so they run for every agent.
+        (codex_home / "plugins/cache/axp/memory/1.0.0").rmdir()
+        (codex_home / "plugins/cache/axp/memory").rmdir()
+        service.memories = [{"id": "m1", "text": "x", "score": 0.4}]
+        assert hook("recall", {"turn_id": "t1", "prompt": "hi"}) == {}
+        assert service.requests == []
 
 
 class TestCodexConfig:

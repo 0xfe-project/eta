@@ -19,9 +19,13 @@ const agentSchema = z.object({
   description: z.string(),
   // Model id from the LLM gateway catalog; null until one is chosen.
   model: z.string().nullable(),
+  // Names of the plugins it runs with, in catalog order.
+  plugins: z.array(z.string()),
   status: z.enum(["idle", "working", "waiting_for_input", "unavailable"]),
   revision: z.number(),
 });
+
+const pluginSchema = z.object({ name: z.string(), description: z.string() });
 
 const blockSchema = z.discriminatedUnion("type", [
   z.object({ id: z.string(), type: z.literal("text"), text: z.string() }),
@@ -84,7 +88,10 @@ export type Agent = z.infer<typeof agentSchema>;
 /** Editable agent fields; grows as agents gain settings. */
 export type AgentDraft = Pick<Agent, "name" | "description"> & {
   model?: string;
+  // Every plugin when left out.
+  plugins?: string[];
 };
+export type Plugin = z.infer<typeof pluginSchema>;
 export type ChatMessage = z.infer<typeof messageSchema>;
 export type Block = z.infer<typeof blockSchema>;
 export type Interaction = z.infer<typeof interactionSchema>;
@@ -278,6 +285,16 @@ export function useAgentMessages(agentId: string | undefined) {
     loadingOlder: history.isFetchingNextPage,
     loadOlder: history.fetchNextPage,
   };
+}
+
+/** The runtime image's plugins agents choose from; fixed per deploy. */
+export function usePlugins() {
+  return useQuery({
+    queryKey: ["plugins"],
+    queryFn: async ({ signal }) =>
+      z.array(pluginSchema).parse(await apiGet("/plugins", signal)),
+    staleTime: Infinity,
+  });
 }
 
 export function useCreateAgent() {

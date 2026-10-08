@@ -22,6 +22,8 @@ COPY apps/llm-gateway/out/${TARGETOS}-${TARGETARCH}/axp-llm-gateway /usr/local/b
 COPY apps/web/out/ /app/apps/web/
 COPY apps/gateway/Caddyfile apps/gateway/*.caddy /app/apps/gateway/
 COPY apps/memory-service/axp_memory /app/apps/memory-service/axp_memory/
+# The runtime image's plugins: the catalog agents choose from.
+COPY apps/agent-runtime/plugins /app/apps/agent-runtime/plugins/
 WORKDIR /app/apps/control-plane
 COPY apps/control-plane/manage.py apps/control-plane/gunicorn.conf.py ./
 COPY apps/control-plane/config config/

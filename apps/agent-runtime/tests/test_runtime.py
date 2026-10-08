@@ -264,6 +264,25 @@ class TestBoot:
         assert '[plugins."tasks@axp"]' in config
         assert '[plugins."memory@axp"]' in config
 
+    def test_installs_only_the_agents_plugins(self, rt):
+        runtime, _ = rt.start(plugins=("tasks",))
+        assert runtime.status == "ready"
+        cache = runtime.settings.codex_home / "plugins/cache/axp"
+        assert [p.name for p in cache.iterdir()] == ["tasks"]
+        config = (runtime.settings.codex_home / "config.toml").read_text()
+        assert '[plugins."memory@axp"]' not in config
+
+    def test_removes_plugins_the_agent_no_longer_runs_with(self, rt):
+        runtime, _ = rt.start()
+        runtime.shutdown()
+        # The next instance starts from the same home, as from its snapshot.
+        runtime, _ = rt.start(plugins=("tasks",))
+        assert runtime.status == "ready"
+        config = (runtime.settings.codex_home / "config.toml").read_text()
+        assert '[plugins."tasks@axp"]' in config
+        assert '[plugins."memory@axp"]' not in config
+        assert '[plugins."grok@axp"]' not in config
+
     def test_broken_plugin_fails_startup(self, rt, tmp_path):
         plugins = tmp_path / "plugins"
         catalog = plugins / ".agents" / "plugins"

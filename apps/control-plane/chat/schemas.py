@@ -37,6 +37,8 @@ class AgentCreateIn(StrictInput):
     description: str = Field("", max_length=AGENT_DESCRIPTION_MAX)
     # A model id from the LLM gateway's catalog (GET /api/llm/v1/models).
     model: str | None = Field(None, min_length=1, max_length=100)
+    # Names from GET /plugins; every plugin when left out.
+    plugins: list[str] | None = Field(None, max_length=50)
 
     _name = field_validator("name")(_clean_name)
 
@@ -47,6 +49,7 @@ class AgentUpdateIn(StrictInput):
     name: str | None = Field(None, min_length=1, max_length=100)
     description: str | None = Field(None, max_length=AGENT_DESCRIPTION_MAX)
     model: str | None = Field(None, min_length=1, max_length=100)
+    plugins: list[str] | None = Field(None, max_length=50)
 
     _name = field_validator("name")(_clean_name)
 
@@ -103,8 +106,17 @@ class AgentOut(Schema):
     description: str
     # Model id from the LLM gateway catalog; null until one is chosen.
     model: str | None
+    # The plugins it runs with, in catalog order.
+    plugins: list[str]
     status: Literal["idle", "working", "waiting_for_input", "unavailable"]
     revision: int
+
+
+class PluginOut(Schema):
+    """A Codex plugin of the runtime image an agent can run with."""
+
+    name: str
+    description: str
 
 
 class MessageOut(Schema):

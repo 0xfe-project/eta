@@ -1,5 +1,5 @@
-# Only the prebuilt artifacts, the control plane and memory service sources
-# and the gateway configuration are sent to Docker.
+# Only the prebuilt artifacts, the control plane and memory service sources,
+# the runtime's plugins and the gateway configuration are sent to Docker.
 *
 !apps/control-plane/out/
 !apps/llm-gateway/out/
@@ -12,5 +12,6 @@
 !apps/control-plane/chat/
 !apps/memory-service/out/
 !apps/memory-service/axp_memory/
+!apps/agent-runtime/plugins/
 **/__pycache__
 **/*.py[cod]
