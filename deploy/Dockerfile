@@ -1,5 +1,5 @@
 # Production image for every Kamal role (gateway, runtime-gateway, web, api,
-# internal, controller, llm, memory); the roles differ only in their command. Build
+# internal, controller, llm, memory, forge); the roles differ only in their command. Build
 # context is the repository root. Agent runtimes use apps/agent-runtime.
 #
 # Nothing is compiled or installed here: `bun run build` (Turbo) produces the
@@ -18,6 +18,7 @@ COPY apps/control-plane/out/${TARGETOS}-${TARGETARCH}/site-packages/ /usr/local/
 COPY apps/memory-service/out/${TARGETOS}-${TARGETARCH}/site-packages/ /app/apps/memory-service/site-packages/
 COPY apps/memory-service/out/models/ /app/apps/memory-service/models/
 COPY apps/llm-gateway/out/${TARGETOS}-${TARGETARCH}/axp-llm-gateway /usr/local/bin/
+COPY apps/forge-service/out/${TARGETOS}-${TARGETARCH}/axp-forge /usr/local/bin/
 # Self-contained server bundle plus client assets; no node_modules.
 COPY apps/web/out/ /app/apps/web/
 COPY apps/gateway/Caddyfile apps/gateway/*.caddy /app/apps/gateway/
@@ -30,5 +31,5 @@ COPY apps/control-plane/config config/
 COPY apps/control-plane/chat chat/
 
 ENV PYTHONUNBUFFERED=1
-EXPOSE 3000 8000 8001 8080 8090 8317 8320
+EXPOSE 3000 8000 8001 8080 8090 8317 8320 8330
 CMD ["bun", "/app/apps/web/server.js"]
