@@ -1,4 +1,5 @@
 import type { Memory } from "@/queries/memory";
+import { ArrowClockwiseIcon } from "@phosphor-icons/react/ArrowClockwise";
 import { BrainIcon } from "@phosphor-icons/react/Brain";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/MagnifyingGlass";
 import { TrashIcon } from "@phosphor-icons/react/Trash";
@@ -108,7 +109,10 @@ export function MemoryView() {
   const { current, loaded } = useAgents();
   const [search, setSearch] = useState("");
   const query = useDebounced(search.trim());
-  const { data, error, isPending } = useMemories(current?.id, query);
+  const { data, error, isPending, isFetching, refetch } = useMemories(
+    current?.id,
+    query,
+  );
 
   if (!current)
     return loaded ? (
@@ -128,19 +132,34 @@ export function MemoryView() {
             </span>
           ) : null}
         </h2>
-        <div className="relative w-48 shrink-0">
-          <MagnifyingGlassIcon
-            aria-hidden="true"
-            className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
-            type="search"
-            aria-label="搜索记忆"
-            placeholder="搜索"
-            value={search}
-            className="pl-7"
-            onChange={(e) => setSearch(e.target.value)}
-          />
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="刷新记忆列表"
+            title="刷新"
+            disabled={isFetching}
+            onClick={() => void refetch()}
+          >
+            <ArrowClockwiseIcon
+              aria-hidden="true"
+              className={isFetching ? "animate-spin" : undefined}
+            />
+          </Button>
+          <div className="relative w-48">
+            <MagnifyingGlassIcon
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              type="search"
+              aria-label="搜索记忆"
+              placeholder="搜索"
+              value={search}
+              className="pl-7"
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
         </div>
       </div>
       <RememberForm agentId={current.id} />
