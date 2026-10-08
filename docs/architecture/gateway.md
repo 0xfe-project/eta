@@ -21,12 +21,13 @@
 
 按最长前缀匹配，不改写路径，保留浏览器的 `Host`：
 
-| 前缀        | 上游          |
-| ----------- | ------------- |
-| `/api/llm/` | llm-gateway   |
-| `/observe/` | OpenObserve   |
-| `/api/`     | control-plane |
-| `/`         | web           |
+| 前缀           | 上游           |
+| -------------- | -------------- |
+| `/api/llm/`    | llm-gateway    |
+| `/api/memory/` | memory-service |
+| `/observe/`    | OpenObserve    |
+| `/api/`        | control-plane  |
+| `/`            | web            |
 
 - 删除客户端发来的所有 `X-AXP-*` 头。
 - 每个请求生成新的 `X-Request-Id`，转发给上游并写回响应；control-plane 的错误体 `request_id` 与之一致。

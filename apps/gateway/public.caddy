@@ -1,5 +1,6 @@
 # The browser's entry: by longest prefix, /api/llm to the LLM gateway,
-# /observe to OpenObserve, /api to the control plane, everything else to web.
+# /api/memory to the memory service, /observe to OpenObserve, /api to the
+# control plane, everything else to web.
 # Paths are not rewritten and the browser's Host is kept.
 http://:{$AXP_GATEWAY_PORT:8080} {
 	bind {$AXP_GATEWAY_BIND:0.0.0.0}
@@ -20,6 +21,10 @@ http://:{$AXP_GATEWAY_PORT:8080} {
 	}
 	handle /api/llm/* {
 		reverse_proxy {$AXP_UPSTREAM_LLM:axp-llm:8317}
+	}
+	# Agents' memories, for the user to see and edit.
+	handle /api/memory/* {
+		reverse_proxy {$AXP_UPSTREAM_MEMORY:axp-memory:8320}
 	}
 	# OpenObserve's UI and API, served under /observe (ZO_BASE_URI).
 	handle /observe/* {

@@ -13,7 +13,6 @@ const workspaceSchema = z.object({
   tasks: z.array(
     z.object({ id: z.string(), title: z.string().max(200), done: z.boolean() }),
   ),
-  memory: z.string().max(10_000),
   sessionTheme: z.enum(["claude", "codex", "grok"]).default("claude"),
   // CSS font-family lists for UI and code text; unset uses Geist.
   fontSans: z.string().max(200).optional(),
@@ -86,7 +85,7 @@ const storage: PersistStorage<Persisted> = {
 export const useWorkspaceStore = create<WorkspaceStore>()(
   persist(
     (set) => ({
-      workspace: { tasks: [], memory: "", sessionTheme: "claude" },
+      workspace: { tasks: [], sessionTheme: "claude" },
       draft: "",
       mobilePanel: "chat",
       settings: { open: false, section: "agents" },
