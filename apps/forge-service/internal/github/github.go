@@ -3,22 +3,20 @@
 //
 // The App is created from a manifest (the browser posts it to GitHub, GitHub
 // sends a one-time code back) and its credentials stay in the state
-// directory: github.json and the private key github.pem. Every call to
-// GitHub uses either a JWT signed with that key or an installation token
-// minted from it with only the permissions its purpose needs; tokens are
-// cached until close to expiry. Nothing here is per agent: every agent acts
-// as the App.
+// directory: github.json and the private key github.pem. Calls go through
+// go-github, as the App (with a JWT signed by that key) or with an
+// installation token minted with only the permissions its purpose needs;
+// tokens are cached until close to expiry. Nothing here is per agent: every
+// agent acts as the App.
 package github
 
 import (
-	"bytes"
+	"context"
 	"crypto/rand"
-	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"maps"
 	"net/http"
@@ -26,60 +24,52 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"strconv"
+
 	"github.com/golang-jwt/jwt/v5"
+	gh "github.com/google/go-github/v92/github"
 )
 
 const (
-	APIURL = "https://api.github.com"
 	WebURL = "https://github.com"
 
-	manifestTTL       = time.Hour
-	tokenMargin       = 10 * time.Minute
-	installationsTTL  = 30 * time.Second
-	repositoriesShown = 100
+	manifestTTL      = time.Hour
+	tokenMargin      = 10 * time.Minute
+	installationsTTL = 30 * time.Second
 )
 
 var (
 	// GitHub App names are global on GitHub and at most 34 characters.
 	appName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._-]{0,33}$`)
 	account = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{0,38}$`)
-)
 
-// Permissions maps a GitHub App permission to "read" or "write".
-type Permissions map[string]string
-
-var (
 	// What the App may ever do. Workflows are left out: agents cannot
 	// change CI.
-	appPermissions = Permissions{
-		"contents":      "write",
-		"pull_requests": "write",
-		"issues":        "read",
-		"actions":       "read",
-		"checks":        "read",
-		"statuses":      "read",
-		"metadata":      "read",
+	appPermissions = map[string]string{
+		"contents": "write", "pull_requests": "write", "issues": "read", "actions": "read",
+		"checks": "read", "statuses": "read", "metadata": "read",
 	}
-	// What each use gets of it.
-	readOnly    = readAll(appPermissions)
-	push        = Permissions{"contents": "write", "metadata": "read"}
-	pullRequest = Permissions{"pull_requests": "write", "contents": "read", "metadata": "read"}
-	metadata    = Permissions{"metadata": "read"}
 )
 
-func readAll(p Permissions) Permissions {
-	read := Permissions{}
-	for name := range p {
-		read[name] = "read"
-	}
-	return read
+// What each use of a token gets of the App's permissions.
+type purpose struct {
+	name        string
+	permissions gh.InstallationPermissions
 }
+
+var (
+	r, w     = gh.Ptr("read"), gh.Ptr("write") // permission levels
+	readOnly = purpose{"read", gh.InstallationPermissions{
+		Contents: r, PullRequests: r, Issues: r, Actions: r, Checks: r, Statuses: r, Metadata: r,
+	}}
+	push        = purpose{"push", gh.InstallationPermissions{Contents: w, Metadata: r}}
+	pullRequest = purpose{"pull-request", gh.InstallationPermissions{PullRequests: w, Contents: r, Metadata: r}}
+	listing     = purpose{"listing", gh.InstallationPermissions{Metadata: r}}
+)
 
 // Error is an answer for the user or the agent, with the HTTP status it
 // travels with.
@@ -91,19 +81,42 @@ type Error struct {
 
 func (e *Error) Error() string { return e.Message }
 
-func newError(code, message string, status int) *Error {
-	return &Error{Code: code, Message: message, Status: status}
+func newError(code string, status int, format string, args ...any) *Error {
+	return &Error{Code: code, Message: fmt.Sprintf(format, args...), Status: status}
 }
 
 func notConnected() *Error {
-	return newError("GITHUB_NOT_CONNECTED",
-		"GitHub 还没有连接。请让用户在 AXP 工作区的“能力”页按向导连接 GitHub。", http.StatusConflict)
+	return newError("GITHUB_NOT_CONNECTED", http.StatusConflict,
+		"GitHub 还没有连接。请让用户在 AXP 工作区的“能力”页按向导连接 GitHub。")
 }
 
-func notInstalled(owner string) *Error {
-	return newError("GITHUB_NOT_INSTALLED", fmt.Sprintf(
-		"AXP 的 GitHub App 没有安装到 %s。请让用户在 AXP 工作区的“能力”页把 App 安装到这个账号或组织，并授权需要的仓库。",
-		owner), http.StatusConflict)
+// fromGitHub turns a failed call into an answer naming GitHub's reasons.
+func fromGitHub(err error) error {
+	var resp *gh.ErrorResponse
+	if !errors.As(err, &resp) {
+		return newError("GITHUB_UNREACHABLE", http.StatusBadGateway, "暂时连不上 GitHub。")
+	}
+	return newError("GITHUB_ERROR", http.StatusBadGateway, "GitHub 返回 %d：%s", statusOf(err), reasons(err))
+}
+
+func statusOf(err error) int {
+	var resp *gh.ErrorResponse
+	if errors.As(err, &resp) && resp.Response != nil {
+		return resp.Response.StatusCode
+	}
+	return 0
+}
+
+func reasons(err error) string {
+	var resp *gh.ErrorResponse
+	if !errors.As(err, &resp) {
+		return err.Error()
+	}
+	parts := []string{resp.Message}
+	for _, e := range resp.Errors {
+		parts = append(parts, e.Message)
+	}
+	return strings.Trim(strings.Join(parts, "；"), "；")
 }
 
 // App is the GitHub App as saved in github.json.
@@ -111,11 +124,10 @@ type App struct {
 	ID        int64  `json:"id"`
 	Slug      string `json:"slug"`
 	Name      string `json:"name"`
-	ClientID  string `json:"client_id"`
 	HTMLURL   string `json:"html_url"`
 	Owner     string `json:"owner"`
 	OwnerType string `json:"owner_type"` // "User" or "Organization"
-	BotID     *int64 `json:"bot_id,omitempty"`
+	BotID     int64  `json:"bot_id,omitempty"`
 }
 
 func (a *App) SettingsURL() string {
@@ -129,20 +141,6 @@ func (a *App) InstallURL() string {
 	return fmt.Sprintf("%s/apps/%s/installations/new", WebURL, a.Slug)
 }
 
-// Identity is a git author.
-type Identity struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
-}
-
-func (a *App) identity() *Identity {
-	if a.BotID == nil {
-		return nil
-	}
-	bot := a.Slug + "[bot]"
-	return &Identity{Name: bot, Email: fmt.Sprintf("%d+%s@users.noreply.github.com", *a.BotID, bot)}
-}
-
 // ParseRepository returns owner and name from "owner/name" or a GitHub
 // remote URL.
 func ParseRepository(value string) (string, string, error) {
@@ -152,26 +150,15 @@ func ParseRepository(value string) (string, string, error) {
 	} else if strings.Contains(text, "://") {
 		u, err := url.Parse(text)
 		if err != nil || u.Hostname() != "github.com" {
-			return "", "", newError("NOT_GITHUB", value+" 不是 GitHub 仓库。", http.StatusBadRequest)
+			return "", "", newError("NOT_GITHUB", http.StatusBadRequest, "%s 不是 GitHub 仓库。", value)
 		}
 		text = u.Path
 	}
-	parts := strings.Split(strings.TrimSuffix(strings.Trim(text, "/"), ".git"), "/")
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", newError("INVALID_REPOSITORY",
-			"无法识别仓库 "+value+"，请写成 owner/name。", http.StatusBadRequest)
+	owner, name, ok := strings.Cut(strings.TrimSuffix(strings.Trim(text, "/"), ".git"), "/")
+	if !ok || owner == "" || name == "" || strings.Contains(name, "/") {
+		return "", "", newError("INVALID_REPOSITORY", http.StatusBadRequest, "无法识别仓库 %s，请写成 owner/name。", value)
 	}
-	return parts[0], parts[1], nil
-}
-
-type installation struct {
-	ID      int64 `json:"id"`
-	Account struct {
-		Login string `json:"login"`
-		Type  string `json:"type"`
-	} `json:"account"`
-	RepositorySelection string `json:"repository_selection"`
-	HTMLURL             string `json:"html_url"`
+	return owner, name, nil
 }
 
 type token struct {
@@ -182,22 +169,78 @@ type token struct {
 // GitHub is the App: its credentials on disk and its calls to GitHub.
 type GitHub struct {
 	StateDir string
-	APIURL   string
-	Client   *http.Client
+	APIURL   string // empty for api.github.com
 	Now      func() time.Time
 
 	mu            sync.Mutex
 	tokens        map[string]token
-	installations []installation
+	installations []*gh.Installation
 	listedAt      time.Time
 }
 
 // New keeps the App's state in stateDir and calls the real GitHub.
 func New(stateDir string) *GitHub {
-	return &GitHub{StateDir: stateDir, APIURL: APIURL, Client: &http.Client{Timeout: 20 * time.Second}, Now: time.Now}
+	return &GitHub{StateDir: stateDir, Now: time.Now}
 }
 
 func (g *GitHub) path(name string) string { return filepath.Join(g.StateDir, name) }
+
+func (g *GitHub) client(opts ...gh.ClientOptionsFunc) *gh.Client {
+	opts = append([]gh.ClientOptionsFunc{gh.WithTimeout(20 * time.Second), gh.WithUserAgent("axp-forge")}, opts...)
+	if g.APIURL != "" {
+		base := strings.TrimSuffix(g.APIURL, "/") + "/"
+		opts = append(opts, gh.WithURLs(&base, &base))
+	}
+	client, err := gh.NewClient(opts...)
+	if err != nil {
+		panic(err) // only for options this package never passes
+	}
+	return client
+}
+
+// asApp is a client authenticated as the App.
+func (g *GitHub) asApp() (*gh.Client, error) {
+	app, err := g.require()
+	if err != nil {
+		return nil, err
+	}
+	pem, err := os.ReadFile(g.path("github.pem"))
+	if err != nil {
+		return nil, err
+	}
+	key, err := jwt.ParseRSAPrivateKeyFromPEM(pem)
+	if err != nil {
+		return nil, err
+	}
+	return g.client(gh.WithTransport(roundTripper(func(r *http.Request) (*http.Response, error) {
+		now := g.Now()
+		signed, err := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.RegisteredClaims{
+			IssuedAt:  jwt.NewNumericDate(now.Add(-time.Minute)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(9 * time.Minute)),
+			Issuer:    strconv.FormatInt(app.ID, 10),
+		}).SignedString(key)
+		if err != nil {
+			return nil, err
+		}
+		r = r.Clone(r.Context())
+		r.Header.Set("Authorization", "Bearer "+signed)
+		return http.DefaultTransport.RoundTrip(r)
+	}))), nil
+}
+
+type roundTripper func(*http.Request) (*http.Response, error)
+
+func (f roundTripper) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// appCall wraps errors of calls made as the App: GitHub not knowing the App
+// any more is worth its own answer.
+func appCall(err error) error {
+	if statusOf(err) == http.StatusUnauthorized {
+		return newError("GITHUB_APP_GONE", http.StatusBadGateway,
+			"GitHub 不认这个 App 了（可能已在 GitHub 上删除）。请断开后重新连接。")
+	}
+	return fromGitHub(err)
+}
 
 // App returns the connected App, or nil before one is created.
 func (g *GitHub) App() (*App, error) {
@@ -220,12 +263,7 @@ func (g *GitHub) require() (*App, error) {
 	return app, err
 }
 
-func (g *GitHub) save(app *App, pem string) error {
-	if pem != "" {
-		if err := write(g.path("github.pem"), []byte(pem), 0o600); err != nil {
-			return err
-		}
-	}
+func (g *GitHub) save(app *App) error {
 	data, err := json.MarshalIndent(app, "", "  ")
 	if err != nil {
 		return err
@@ -244,23 +282,31 @@ type ManifestForm struct {
 func (g *GitHub) StartManifest(name, organization, origin string) (*ManifestForm, error) {
 	name = strings.TrimSpace(name)
 	if !appName.MatchString(name) {
-		return nil, newError("INVALID_NAME",
-			"App 名称为 1 到 34 个字符，可用字母、数字、空格、点、下划线和连字符。", http.StatusBadRequest)
+		return nil, newError("INVALID_NAME", http.StatusBadRequest,
+			"App 名称为 1 到 34 个字符，可用字母、数字、空格、点、下划线和连字符。")
 	}
 	if organization != "" && !account.MatchString(organization) {
-		return nil, newError("INVALID_ORGANIZATION", "组织名称无效。", http.StatusBadRequest)
+		return nil, newError("INVALID_ORGANIZATION", http.StatusBadRequest, "组织名称无效。")
 	}
-	if app, err := g.App(); err != nil {
+	if app, err := g.App(); err != nil || app != nil {
+		if err == nil {
+			err = newError("GITHUB_ALREADY_CONNECTED", http.StatusConflict, "已经连接了一个 GitHub App。")
+		}
 		return nil, err
-	} else if app != nil {
-		return nil, newError("GITHUB_ALREADY_CONNECTED", "已经连接了一个 GitHub App。", http.StatusConflict)
 	}
 	u, err := url.Parse(origin)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return nil, newError("INVALID_ORIGIN", "无法确定 AXP 的访问地址。", http.StatusBadRequest)
+		return nil, newError("INVALID_ORIGIN", http.StatusBadRequest, "无法确定 AXP 的访问地址。")
 	}
 	origin = u.Scheme + "://" + u.Host
-	state := randomState()
+	random := make([]byte, 24)
+	_, _ = rand.Read(random)
+	state := base64.RawURLEncoding.EncodeToString(random)
+	path := "/settings/apps/new"
+	if organization != "" {
+		path = "/organizations/" + url.PathEscape(organization) + path
+	}
+	form := &ManifestForm{Action: WebURL + path + "?state=" + state}
 	g.mu.Lock()
 	pending := g.pending()
 	pending[state] = g.Now().Unix()
@@ -269,7 +315,7 @@ func (g *GitHub) StartManifest(name, organization, origin string) (*ManifestForm
 	if err != nil {
 		return nil, err
 	}
-	manifest, err := marshal(map[string]any{
+	manifest, err := json.Marshal(map[string]any{
 		"name":        name,
 		"url":         origin,
 		"description": "AXP 的智能体以这个 App 的身份读取仓库、推送分支和打开 PR。",
@@ -282,20 +328,8 @@ func (g *GitHub) StartManifest(name, organization, origin string) (*ManifestForm
 		"default_permissions": appPermissions,
 		"default_events":      []string{},
 	})
-	if err != nil {
-		return nil, err
-	}
-	base := WebURL + "/settings/apps/new"
-	if organization != "" {
-		base = WebURL + "/organizations/" + url.PathEscape(organization) + "/settings/apps/new"
-	}
-	return &ManifestForm{Action: base + "?state=" + state, Manifest: string(manifest)}, nil
-}
-
-func randomState() string {
-	b := make([]byte, 24)
-	_, _ = rand.Read(b)
-	return base64.RawURLEncoding.EncodeToString(b)
+	form.Manifest = string(manifest)
+	return form, err
 }
 
 // pending returns the manifests still waiting for GitHub; g.mu is held.
@@ -304,9 +338,8 @@ func (g *GitHub) pending() map[string]int64 {
 	if data, err := os.ReadFile(g.path("pending.json")); err == nil {
 		_ = json.Unmarshal(data, &pending)
 	}
-	now := g.Now()
 	maps.DeleteFunc(pending, func(_ string, at int64) bool {
-		return now.Sub(time.Unix(at, 0)) >= manifestTTL
+		return g.Now().Sub(time.Unix(at, 0)) >= manifestTTL
 	})
 	return pending
 }
@@ -319,9 +352,9 @@ func (g *GitHub) savePending(pending map[string]int64) error {
 	return write(g.path("pending.json"), data, 0o600)
 }
 
-// FinishManifest handles GitHub's redirect after the App was created:
-// it exchanges the code for the App's credentials.
-func (g *GitHub) FinishManifest(code, state string) (*App, error) {
+// FinishManifest handles GitHub's redirect after the App was created: it
+// exchanges the code for the App's credentials.
+func (g *GitHub) FinishManifest(ctx context.Context, code, state string) (*App, error) {
 	g.mu.Lock()
 	pending := g.pending()
 	_, ok := pending[state]
@@ -329,43 +362,33 @@ func (g *GitHub) FinishManifest(code, state string) (*App, error) {
 	err := g.savePending(pending)
 	g.mu.Unlock()
 	if !ok {
-		return nil, newError("MANIFEST_EXPIRED", "这次创建已失效，请回到 AXP 重新开始。", http.StatusBadRequest)
+		return nil, newError("MANIFEST_EXPIRED", http.StatusBadRequest, "这次创建已失效，请回到 AXP 重新开始。")
 	}
 	if err != nil {
 		return nil, err
 	}
-	var data struct {
-		ID       int64  `json:"id"`
-		Slug     string `json:"slug"`
-		Name     string `json:"name"`
-		ClientID string `json:"client_id"`
-		HTMLURL  string `json:"html_url"`
-		PEM      string `json:"pem"`
-		Owner    struct {
-			Login string `json:"login"`
-			Type  string `json:"type"`
-		} `json:"owner"`
-	}
-	status, err := g.call(http.MethodPost, "/app-manifests/"+url.PathEscape(code)+"/conversions", "", nil, &data)
+	created, _, err := g.client().Apps.CompleteAppManifest(ctx, code)
 	if err != nil {
-		return nil, err
-	}
-	if status != http.StatusCreated {
-		return nil, newError("MANIFEST_FAILED",
-			fmt.Sprintf("GitHub 没有返回 App 的凭据（%d），请重新创建。", status), http.StatusBadGateway)
-	}
-	ownerType := data.Owner.Type
-	if ownerType == "" {
-		ownerType = "User"
+		if statusOf(err) == 0 {
+			return nil, fromGitHub(err)
+		}
+		return nil, newError("MANIFEST_FAILED", http.StatusBadGateway,
+			"GitHub 没有返回 App 的凭据（%d），请重新创建。", statusOf(err))
 	}
 	app := &App{
-		ID: data.ID, Slug: data.Slug, Name: data.Name, ClientID: data.ClientID,
-		HTMLURL: data.HTMLURL, Owner: data.Owner.Login, OwnerType: ownerType,
+		ID: created.GetID(), Slug: created.GetSlug(), Name: created.GetName(), HTMLURL: created.GetHTMLURL(),
+		Owner: created.GetOwner().GetLogin(), OwnerType: created.GetOwner().GetType(),
 	}
-	if err := g.save(app, data.PEM); err != nil {
+	if app.OwnerType == "" {
+		app.OwnerType = "User"
+	}
+	if err := write(g.path("github.pem"), []byte(created.GetPEM()), 0o600); err != nil {
 		return nil, err
 	}
-	g.botID(app)
+	if err := g.save(app); err != nil {
+		return nil, err
+	}
+	g.botID(ctx, app)
 	return app, nil
 }
 
@@ -378,176 +401,55 @@ func (g *GitHub) Forget() error {
 			return err
 		}
 	}
-	g.tokens = nil
-	g.installations = nil
+	g.tokens, g.installations = nil, nil
 	return nil
 }
 
 // botID looks up and remembers the App's bot user, for commits; best effort.
-func (g *GitHub) botID(app *App) {
-	if app.BotID != nil {
+func (g *GitHub) botID(ctx context.Context, app *App) {
+	if app.BotID != 0 {
 		return
 	}
-	var user struct {
-		ID int64 `json:"id"`
-	}
-	if status, err := g.call(http.MethodGet, "/users/"+url.PathEscape(app.Slug)+"%5Bbot%5D", "", nil, &user); err == nil && status == http.StatusOK {
-		app.BotID = &user.ID
-		_ = g.save(app, "")
+	if user, _, err := g.client().Users.Get(ctx, app.Slug+"[bot]"); err == nil {
+		app.BotID = user.GetID()
+		_ = g.save(app)
 	}
 }
 
+// Identity is a git author.
+type Identity struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
 // Identity is the App bot's git author.
-func (g *GitHub) Identity() (*Identity, error) {
+func (g *GitHub) Identity(ctx context.Context) (*Identity, error) {
 	app, err := g.require()
 	if err != nil {
 		return nil, err
 	}
-	g.botID(app)
-	if id := app.identity(); id != nil {
-		return id, nil
+	g.botID(ctx, app)
+	if app.BotID == 0 {
+		return nil, newError("GITHUB_UNAVAILABLE", http.StatusBadGateway, "暂时无法从 GitHub 读取 App 的身份。")
 	}
-	return nil, newError("GITHUB_UNAVAILABLE", "暂时无法从 GitHub 读取 App 的身份。", http.StatusBadGateway)
+	bot := app.Slug + "[bot]"
+	return &Identity{Name: bot, Email: fmt.Sprintf("%d+%s@users.noreply.github.com", app.BotID, bot)}, nil
 }
 
-// --- calls --------------------------------------------------------------------
-
-// call sends a request to GitHub's API and decodes a 2xx JSON answer into
-// out. Other statuses come back with a nil error and out untouched; their
-// body is in the returned error only through reasons().
-func (g *GitHub) call(method, path, auth string, body, out any) (int, error) {
-	status, raw, err := g.send(method, path, auth, body)
-	if err != nil {
-		return 0, err
-	}
-	if status < 300 && out != nil && len(raw) > 0 {
-		if err := json.Unmarshal(raw, out); err != nil {
-			return 0, fmt.Errorf("decoding %s %s: %w", method, path, err)
-		}
-	}
-	return status, nil
-}
-
-func (g *GitHub) send(method, path, auth string, body any) (int, []byte, error) {
-	var reader io.Reader
-	if body != nil {
-		data, err := json.Marshal(body)
-		if err != nil {
-			return 0, nil, err
-		}
-		reader = bytes.NewReader(data)
-	}
-	req, err := http.NewRequest(method, g.APIURL+path, reader)
-	if err != nil {
-		return 0, nil, err
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	req.Header.Set("User-Agent", "axp-forge")
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	if auth != "" {
-		req.Header.Set("Authorization", "Bearer "+auth)
-	}
-	resp, err := g.Client.Do(req)
-	if err != nil {
-		return 0, nil, &Error{Code: "GITHUB_UNREACHABLE", Message: "暂时连不上 GitHub。", Status: http.StatusBadGateway}
-	}
-	defer resp.Body.Close()
-	raw, err := io.ReadAll(resp.Body)
-	return resp.StatusCode, raw, err
-}
-
-// failed turns a non-2xx answer into an error naming GitHub's reasons.
-func failed(status int, raw []byte) *Error {
-	return newError("GITHUB_ERROR", fmt.Sprintf("GitHub 返回 %d：%s", status, orNone(reasons(raw))), http.StatusBadGateway)
-}
-
-func reasons(raw []byte) string {
-	var data struct {
-		Message string `json:"message"`
-		Errors  []any  `json:"errors"`
-	}
-	if json.Unmarshal(raw, &data) != nil {
-		return ""
-	}
-	var parts []string
-	if data.Message != "" {
-		parts = append(parts, data.Message)
-	}
-	for _, e := range data.Errors {
-		if m, ok := e.(map[string]any); ok {
-			if s, ok := m["message"].(string); ok && s != "" {
-				parts = append(parts, s)
-			}
-		}
-	}
-	return strings.Join(parts, "；")
-}
-
-func orNone(s string) string {
-	if s == "" {
-		return "没有说明原因"
-	}
-	return s
-}
-
-func (g *GitHub) jwt(app *App) (string, error) {
-	pem, err := os.ReadFile(g.path("github.pem"))
-	if err != nil {
-		return "", err
-	}
-	key, err := jwt.ParseRSAPrivateKeyFromPEM(pem)
-	if err != nil {
-		return "", err
-	}
-	return signJWT(key, app.ID, g.Now())
-}
-
-func signJWT(key *rsa.PrivateKey, appID int64, now time.Time) (string, error) {
-	return jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
-		"iat": now.Add(-time.Minute).Unix(),
-		"exp": now.Add(9 * time.Minute).Unix(),
-		"iss": strconv.FormatInt(appID, 10),
-	}).SignedString(key)
-}
-
-// asApp sends a request authenticated as the App.
-func (g *GitHub) asApp(method, path string, body any) (int, []byte, error) {
-	app, err := g.require()
-	if err != nil {
-		return 0, nil, err
-	}
-	signed, err := g.jwt(app)
-	if err != nil {
-		return 0, nil, err
-	}
-	status, raw, err := g.send(method, path, signed, body)
-	if err == nil && status == http.StatusUnauthorized {
-		return 0, nil, newError("GITHUB_APP_GONE",
-			"GitHub 不认这个 App 了（可能已在 GitHub 上删除）。请断开后重新连接。", http.StatusBadGateway)
-	}
-	return status, raw, err
-}
-
-func (g *GitHub) listInstallations(fresh bool) ([]installation, error) {
+func (g *GitHub) listInstallations(ctx context.Context, fresh bool) ([]*gh.Installation, error) {
 	g.mu.Lock()
 	cached, at := g.installations, g.listedAt
 	g.mu.Unlock()
 	if cached != nil && !fresh && g.Now().Sub(at) < installationsTTL {
 		return cached, nil
 	}
-	status, raw, err := g.asApp(http.MethodGet, "/app/installations?per_page=100", nil)
+	client, err := g.asApp()
 	if err != nil {
 		return nil, err
 	}
-	if status >= 300 {
-		return nil, failed(status, raw)
-	}
-	var list []installation
-	if err := json.Unmarshal(raw, &list); err != nil {
-		return nil, err
+	list, _, err := client.Apps.ListInstallations(ctx, &gh.ListOptions{PerPage: 100})
+	if err != nil {
+		return nil, appCall(err)
 	}
 	g.mu.Lock()
 	g.installations, g.listedAt = list, g.Now()
@@ -555,59 +457,49 @@ func (g *GitHub) listInstallations(fresh bool) ([]installation, error) {
 	return list, nil
 }
 
-func (g *GitHub) installationFor(owner string) (*installation, error) {
+func (g *GitHub) installationFor(ctx context.Context, owner string) (*gh.Installation, error) {
 	for _, fresh := range []bool{false, true} {
-		list, err := g.listInstallations(fresh)
+		list, err := g.listInstallations(ctx, fresh)
 		if err != nil {
 			return nil, err
 		}
-		for i := range list {
-			if strings.EqualFold(list[i].Account.Login, owner) {
-				return &list[i], nil
+		for _, inst := range list {
+			if strings.EqualFold(inst.GetAccount().GetLogin(), owner) {
+				return inst, nil
 			}
 		}
 	}
-	return nil, notInstalled(owner)
+	return nil, newError("GITHUB_NOT_INSTALLED", http.StatusConflict,
+		"AXP 的 GitHub App 没有安装到 %s。请让用户在 AXP 工作区的“能力”页把 App 安装到这个账号或组织，并授权需要的仓库。", owner)
 }
 
-// token returns an installation token with these permissions, for one
-// repository or (repository "") all of the installation's.
-func (g *GitHub) token(id int64, permissions Permissions, repository string) (token, error) {
-	names := slices.Sorted(maps.Keys(permissions))
-	key := fmt.Sprintf("%d|%s|", id, repository)
-	for _, name := range names {
-		key += name + "=" + permissions[name] + ","
-	}
+// token returns an installation token for a purpose, for one repository or
+// (repository "") all of the installation's.
+func (g *GitHub) token(ctx context.Context, id int64, use purpose, repository string) (token, error) {
+	key := fmt.Sprintf("%d|%s|%s", id, use.name, repository)
 	g.mu.Lock()
 	cached, ok := g.tokens[key]
 	g.mu.Unlock()
 	if ok && cached.expires.Sub(g.Now()) > tokenMargin {
 		return cached, nil
 	}
-	body := map[string]any{"permissions": permissions}
-	if repository != "" {
-		body["repositories"] = []string{repository}
-	}
-	status, raw, err := g.asApp(http.MethodPost, fmt.Sprintf("/app/installations/%d/access_tokens", id), body)
+	client, err := g.asApp()
 	if err != nil {
 		return token{}, err
 	}
-	if status == http.StatusUnprocessableEntity && repository != "" {
-		return token{}, newError("GITHUB_REPOSITORY_NOT_GRANTED", fmt.Sprintf(
-			"AXP 的 GitHub App 没有被授权访问仓库 %s。请让用户在 AXP 工作区的“能力”页管理 App 能访问的仓库。",
-			repository), http.StatusConflict)
+	options := &gh.InstallationTokenOptions{Permissions: &use.permissions}
+	if repository != "" {
+		options.Repositories = []string{repository}
 	}
-	if status >= 300 {
-		return token{}, failed(status, raw)
+	minted, _, err := client.Apps.CreateInstallationToken(ctx, id, options)
+	if statusOf(err) == http.StatusUnprocessableEntity && repository != "" {
+		return token{}, newError("GITHUB_REPOSITORY_NOT_GRANTED", http.StatusConflict,
+			"AXP 的 GitHub App 没有被授权访问仓库 %s。请让用户在 AXP 工作区的“能力”页管理 App 能访问的仓库。", repository)
 	}
-	var data struct {
-		Token     string    `json:"token"`
-		ExpiresAt time.Time `json:"expires_at"`
+	if err != nil {
+		return token{}, appCall(err)
 	}
-	if err := json.Unmarshal(raw, &data); err != nil {
-		return token{}, err
-	}
-	t := token{value: data.Token, expires: data.ExpiresAt}
+	t := token{value: minted.GetToken(), expires: minted.GetExpiresAt().Time}
 	g.mu.Lock()
 	if g.tokens == nil {
 		g.tokens = map[string]token{}
@@ -626,12 +518,12 @@ type Credential struct {
 	ExpiresAt int64  `json:"expires_at"`
 }
 
-func (g *GitHub) Credential(owner, name string) (*Credential, error) {
-	inst, err := g.installationFor(owner)
+func (g *GitHub) Credential(ctx context.Context, owner, name string) (*Credential, error) {
+	inst, err := g.installationFor(ctx, owner)
 	if err != nil {
 		return nil, err
 	}
-	t, err := g.token(inst.ID, push, name)
+	t, err := g.token(ctx, inst.GetID(), push, name)
 	if err != nil {
 		return nil, err
 	}
@@ -644,12 +536,12 @@ type ReadToken struct {
 	ExpiresAt int64  `json:"expires_at"`
 }
 
-func (g *GitHub) ReadToken(owner string) (*ReadToken, error) {
-	inst, err := g.installationFor(owner)
+func (g *GitHub) ReadToken(ctx context.Context, owner string) (*ReadToken, error) {
+	inst, err := g.installationFor(ctx, owner)
 	if err != nil {
 		return nil, err
 	}
-	t, err := g.token(inst.ID, readOnly, "")
+	t, err := g.token(ctx, inst.GetID(), readOnly, "")
 	if err != nil {
 		return nil, err
 	}
@@ -666,70 +558,51 @@ type PullRequest struct {
 // OpenPullRequest opens a pull request as the App; base defaults to the
 // repository's default branch. An open pull request for head is returned
 // instead of failing.
-func (g *GitHub) OpenPullRequest(repository, head, title, body, base string, draft bool) (*PullRequest, error) {
+func (g *GitHub) OpenPullRequest(ctx context.Context, repository, head, title, body, base string, draft bool) (*PullRequest, error) {
 	owner, name, err := ParseRepository(repository)
 	if err != nil {
 		return nil, err
 	}
-	inst, err := g.installationFor(owner)
+	inst, err := g.installationFor(ctx, owner)
 	if err != nil {
 		return nil, err
 	}
-	t, err := g.token(inst.ID, pullRequest, name)
+	t, err := g.token(ctx, inst.GetID(), pullRequest, name)
 	if err != nil {
 		return nil, err
 	}
-	repo := "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(name)
+	client := g.client(gh.WithAuthToken(t.value))
 	if base == "" {
-		status, raw, err := g.send(http.MethodGet, repo, t.value, nil)
+		repo, _, err := client.Repositories.Get(ctx, owner, name)
 		if err != nil {
-			return nil, err
+			return nil, fromGitHub(err)
 		}
-		if status >= 300 {
-			return nil, failed(status, raw)
-		}
-		var info struct {
-			DefaultBranch string `json:"default_branch"`
-		}
-		if err := json.Unmarshal(raw, &info); err != nil {
-			return nil, err
-		}
-		base = info.DefaultBranch
+		base = repo.GetDefaultBranch()
 	}
-	status, raw, err := g.send(http.MethodPost, repo+"/pulls", t.value, map[string]any{
-		"title": title, "body": body, "head": head, "base": base, "draft": draft,
+	pull, _, err := client.PullRequests.Create(ctx, owner, name, gh.CreatePullRequest{
+		Title: &title, Body: &body, Head: head, Base: base, Draft: &draft,
 	})
-	if err != nil {
-		return nil, err
+	if err == nil {
+		return &PullRequest{URL: pull.GetHTMLURL(), Number: pull.GetNumber(), Created: true}, nil
 	}
-	type pull struct {
-		HTMLURL string `json:"html_url"`
-		Number  int    `json:"number"`
-	}
-	if status == http.StatusCreated {
-		var p pull
-		if err := json.Unmarshal(raw, &p); err != nil {
-			return nil, err
-		}
-		return &PullRequest{URL: p.HTMLURL, Number: p.Number, Created: true}, nil
-	}
-	why := reasons(raw)
-	if status == http.StatusUnprocessableEntity && strings.Contains(why, "already exists") {
+	if statusOf(err) == http.StatusUnprocessableEntity && strings.Contains(reasons(err), "already exists") {
 		branch := head
 		if !strings.Contains(head, ":") {
 			branch = owner + ":" + head
 		}
-		var open []pull
-		query := "?state=open&head=" + url.QueryEscape(branch)
-		if s, err := g.call(http.MethodGet, repo+"/pulls"+query, t.value, nil, &open); err == nil && s == http.StatusOK && len(open) > 0 {
-			return &PullRequest{URL: open[0].HTMLURL, Number: open[0].Number}, nil
+		open, _, listErr := client.PullRequests.List(ctx, owner, name, &gh.PullRequestListOptions{Head: branch, State: "open"})
+		if listErr == nil && len(open) > 0 {
+			return &PullRequest{URL: open[0].GetHTMLURL(), Number: open[0].GetNumber()}, nil
 		}
 	}
+	if statusOf(err) == 0 {
+		return nil, fromGitHub(err)
+	}
 	code := http.StatusBadRequest
-	if status >= 500 {
+	if statusOf(err) >= 500 {
 		code = http.StatusBadGateway
 	}
-	return nil, newError("PULL_REQUEST_FAILED", fmt.Sprintf("GitHub 拒绝创建 PR（%d）：%s", status, orNone(why)), code)
+	return nil, newError("PULL_REQUEST_FAILED", code, "GitHub 拒绝创建 PR（%d）：%s", statusOf(err), reasons(err))
 }
 
 // --- for the browser --------------------------------------------------------------
@@ -769,95 +642,55 @@ type ErrorView struct {
 
 // Status reports the App and where it is installed; fresh skips the short
 // cache of installations.
-func (g *GitHub) Status(fresh bool) (*Status, error) {
+func (g *GitHub) Status(ctx context.Context, fresh bool) (*Status, error) {
 	app, err := g.App()
-	if err != nil {
-		return nil, err
+	if err != nil || app == nil {
+		return &Status{State: "not_connected", Installations: []InstallationView{}}, err
 	}
-	status := &Status{State: "not_connected", Installations: []InstallationView{}}
-	if app == nil {
-		return status, nil
-	}
-	status.App = &AppView{
+	status := &Status{State: "not_installed", Installations: []InstallationView{}, App: &AppView{
 		Name: app.Name, Slug: app.Slug, Owner: app.Owner, OwnerType: app.OwnerType,
 		HTMLURL: app.HTMLURL, SettingsURL: app.SettingsURL(), InstallURL: app.InstallURL(),
-	}
-	list, err := g.listInstallations(fresh)
-	if err == nil {
-		for _, inst := range list {
-			view, viewErr := g.installationView(inst)
-			if viewErr != nil {
-				err = viewErr
-				break
-			}
-			status.Installations = append(status.Installations, view)
+	}}
+	list, err := g.listInstallations(ctx, fresh)
+	for _, inst := range list {
+		if err != nil {
+			break
 		}
+		var view InstallationView
+		view, err = g.installationView(ctx, inst)
+		status.Installations = append(status.Installations, view)
 	}
 	var forgeErr *Error
 	switch {
 	case errors.As(err, &forgeErr):
-		status.State = "error"
-		status.Installations = []InstallationView{}
+		status.State, status.Installations = "error", []InstallationView{}
 		status.Error = &ErrorView{Code: forgeErr.Code, Message: forgeErr.Message}
 	case err != nil:
 		return nil, err
 	case len(status.Installations) > 0:
 		status.State = "ready"
-	default:
-		status.State = "not_installed"
 	}
 	return status, nil
 }
 
-func (g *GitHub) installationView(inst installation) (InstallationView, error) {
+func (g *GitHub) installationView(ctx context.Context, inst *gh.Installation) (InstallationView, error) {
 	view := InstallationView{
-		ID: inst.ID, Account: inst.Account.Login, AccountType: inst.Account.Type,
-		RepositorySelection: inst.RepositorySelection, ManageURL: inst.HTMLURL,
-		Repositories: []string{},
+		ID: inst.GetID(), Account: inst.GetAccount().GetLogin(), AccountType: inst.GetAccount().GetType(),
+		RepositorySelection: inst.GetRepositorySelection(), ManageURL: inst.GetHTMLURL(), Repositories: []string{},
 	}
-	if view.AccountType == "" {
-		view.AccountType = "User"
-	}
-	if view.RepositorySelection == "" {
-		view.RepositorySelection = "selected"
-	}
-	t, err := g.token(inst.ID, metadata, "")
+	t, err := g.token(ctx, inst.GetID(), listing, "")
 	if err != nil {
 		return view, err
 	}
-	var data struct {
-		TotalCount   int `json:"total_count"`
-		Repositories []struct {
-			FullName string `json:"full_name"`
-		} `json:"repositories"`
-	}
-	status, raw, err := g.send(http.MethodGet, fmt.Sprintf("/installation/repositories?per_page=%d", repositoriesShown), t.value, nil)
+	repos, _, err := g.client(gh.WithAuthToken(t.value)).Apps.ListRepos(ctx, &gh.ListOptions{PerPage: 100})
 	if err != nil {
-		return view, err
+		return view, fromGitHub(err)
 	}
-	if status >= 300 {
-		return view, failed(status, raw)
-	}
-	if err := json.Unmarshal(raw, &data); err != nil {
-		return view, err
-	}
-	view.TotalRepositories = data.TotalCount
-	for _, r := range data.Repositories {
-		view.Repositories = append(view.Repositories, r.FullName)
+	view.TotalRepositories = repos.GetTotalCount()
+	for _, repo := range repos.Repositories {
+		view.Repositories = append(view.Repositories, repo.GetFullName())
 	}
 	return view, nil
-}
-
-// marshal encodes JSON without escaping HTML characters, as GitHub shows
-// the manifest's text to the user.
-func marshal(v any) ([]byte, error) {
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(v); err != nil {
-		return nil, err
-	}
-	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }
 
 // write replaces a file atomically.

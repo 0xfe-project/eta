@@ -91,8 +91,8 @@ func (s *server) mcp() http.Handler {
 			"(`git remote get-url origin`); head is the pushed branch; base defaults " +
 			"to the repository's default branch. If a pull request for head is " +
 			"already open, it is returned instead. Never use `gh pr create`.",
-	}, func(_ context.Context, _ *mcp.CallToolRequest, in openPullRequestIn) (*mcp.CallToolResult, *github.PullRequest, error) {
-		pull, err := s.gh.OpenPullRequest(in.Repository, in.Head, in.Title, in.Body, in.Base, in.Draft)
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in openPullRequestIn) (*mcp.CallToolResult, *github.PullRequest, error) {
+		pull, err := s.gh.OpenPullRequest(ctx, in.Repository, in.Head, in.Title, in.Body, in.Base, in.Draft)
 		if err != nil {
 			// The agent sees the message as the tool's error.
 			return nil, nil, errors.New(message(err))
@@ -125,7 +125,7 @@ func (s *server) credential(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	s.answer(w, func() (any, error) { return s.gh.Credential(owner, name) })
+	s.answer(w, func() (any, error) { return s.gh.Credential(r.Context(), owner, name) })
 }
 
 func (s *server) ghToken(w http.ResponseWriter, r *http.Request) {
@@ -139,15 +139,15 @@ func (s *server) ghToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, &github.Error{Code: "INVALID_OWNER", Message: "缺少仓库所属的账号。", Status: http.StatusBadRequest})
 		return
 	}
-	s.answer(w, func() (any, error) { return s.gh.ReadToken(body.Owner) })
+	s.answer(w, func() (any, error) { return s.gh.ReadToken(r.Context(), body.Owner) })
 }
 
-func (s *server) identity(w http.ResponseWriter, _ *http.Request) {
-	s.answer(w, func() (any, error) { return s.gh.Identity() })
+func (s *server) identity(w http.ResponseWriter, r *http.Request) {
+	s.answer(w, func() (any, error) { return s.gh.Identity(r.Context()) })
 }
 
 func (s *server) status(w http.ResponseWriter, r *http.Request) {
-	s.answer(w, func() (any, error) { return s.gh.Status(r.URL.Query().Get("fresh") == "1") })
+	s.answer(w, func() (any, error) { return s.gh.Status(r.Context(), r.URL.Query().Get("fresh") == "1") })
 }
 
 func (s *server) forget(w http.ResponseWriter, _ *http.Request) {
@@ -177,7 +177,7 @@ func (s *server) manifest(w http.ResponseWriter, r *http.Request) {
 func (s *server) callback(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	target := capabilities + "&github=created"
-	if _, err := s.gh.FinishManifest(q.Get("code"), q.Get("state")); err != nil {
+	if _, err := s.gh.FinishManifest(r.Context(), q.Get("code"), q.Get("state")); err != nil {
 		s.logger.Warn("creating the GitHub App failed", "error", err)
 		target = capabilities + "&github_error=" + url.QueryEscape(message(err))
 	}
