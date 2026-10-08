@@ -1,0 +1,21 @@
+# System git configuration of every agent (/etc/gitconfig).
+#
+# GitHub over HTTPS only (the container has no SSH key), with gh's
+# credentials: the runtime logs gh in as the GitHub App (GH_CONFIG_DIR).
+[url "https://github.com/"]
+	insteadOf = git@github.com:
+	insteadOf = ssh://git@github.com/
+[credential "https://github.com"]
+	helper = !/usr/local/bin/gh auth git-credential
+# Commits name the agent until the GitHub App's identity is known; in GitHub
+# repositories they are the App's bot, which the runtime writes once GitHub is
+# connected.
+[user]
+	name = AXP Agent
+	email = agent@axp.invalid
+[includeIf "hasconfig:remote.*.url:https://github.com/**"]
+	path = /run/axp/git/github.inc
+[includeIf "hasconfig:remote.*.url:git@github.com:**"]
+	path = /run/axp/git/github.inc
+[init]
+	defaultBranch = main

@@ -32,15 +32,11 @@ export function GrokEvent({
   children?: React.ReactNode;
 }) {
   const hooksText =
-    hooks == null
-      ? null
-      : hooksOk != null
-        ? null // rendered with split colors below
-        : (
-            <span style={{ color: DIM }}>
-              [hooks: <span style={{ color: GREEN }}>{hooks}</span>]
-            </span>
-          );
+    hooks == null ? null : hooksOk != null ? null : ( // rendered with split colors below
+      <span style={{ color: DIM }}>
+        [hooks: <span style={{ color: GREEN }}>{hooks}</span>]
+      </span>
+    );
 
   return (
     <div
@@ -63,8 +59,7 @@ export function GrokEvent({
       </span>
       {hooks != null && hooksOk != null ? (
         <span style={{ color: DIM }}>
-          [hooks:{" "}
-          <span style={{ color: GREEN }}>{hooks}</span>
+          [hooks: <span style={{ color: GREEN }}>{hooks}</span>
           <span>/{hooksOk}</span>]
         </span>
       ) : (

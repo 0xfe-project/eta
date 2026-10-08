@@ -1,8 +1,16 @@
-import { StrictMode, startTransition } from "react";
-import { hydrateRoot } from "react-dom/client";
 import { StartClient } from "@tanstack/react-start/client";
+import { startTransition, StrictMode } from "react";
+import { hydrateRoot } from "react-dom/client";
+import { installErrorReporting } from "@/lib/report";
 
 async function start() {
+  installErrorReporting();
+
+  // Makes the app installable from the browser's own install UI.
+  if (import.meta.env.PROD && "serviceWorker" in navigator) {
+    void navigator.serviceWorker.register("/sw.js");
+  }
+
   // Install the inspector before the first React commit, only in development.
   if (import.meta.env.DEV) {
     await import("react-grab");

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build:linux-amd64": {
+      "inputs": [
+        "$TURBO_ROOT$/go.work",
+        "$TURBO_ROOT$/packages/telemetry-go/**/*.go",
+        "$TURBO_ROOT$/packages/telemetry-go/go.mod",
+        "$TURBO_ROOT$/packages/telemetry-go/go.sum",
+        "$TURBO_ROOT$/scripts/build/go.sh",
+        "go.mod",
+        "go.sum",
+        "**/*.go",
+        "**/*.sql",
+        "!**/*_test.go"
+      ]
+    },
+    "build:linux-arm64": {
+      "inputs": [
+        "$TURBO_ROOT$/go.work",
+        "$TURBO_ROOT$/packages/telemetry-go/**/*.go",
+        "$TURBO_ROOT$/packages/telemetry-go/go.mod",
+        "$TURBO_ROOT$/packages/telemetry-go/go.sum",
+        "$TURBO_ROOT$/scripts/build/go.sh",
+        "go.mod",
+        "go.sum",
+        "**/*.go",
+        "**/*.sql",
+        "!**/*_test.go"
+      ]
+    },
+    // The public API's OpenAPI document, generated from the code; the web
+    // client's types are generated from it (@axp/web#generate).
+    "openapi": {
+      "inputs": [
+        "$TURBO_ROOT$/go.work",
+        "go.mod",
+        "go.sum",
+        "**/*.go",
+        "!**/*_test.go"
+      ],
+      "outputs": ["out/openapi.json"]
+    },
+    "lint": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/go.work",
+        "$TURBO_ROOT$/packages/telemetry-go/**"
+      ]
+    },
+    // Tests run against development's PostgreSQL, each binary in a database
+    // of its own; AXP_TEST_NATS_URL and AXP_TEST_DOCKER add the NATS and
+    // Docker tests.
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/go.work",
+        "$TURBO_ROOT$/packages/telemetry-go/**",
+        "$TURBO_ROOT$/apps/agent-runtime/plugins/*/.codex-plugin/plugin.json"
+      ],
+      "env": ["DATABASE_URL", "AXP_TEST_NATS_URL", "AXP_TEST_DOCKER"]
+    }
+  }
+}

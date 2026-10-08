@@ -1,0 +1,18 @@
+# Managed Codex requirements of every agent (/etc/codex/requirements.toml).
+#
+# Building the image declares the plugins' hooks here (axp_runtime/plugins.py):
+# managed hooks are trusted by policy, while plugin hooks wait for a person to
+# trust them. Hooks from anywhere else, including any the agent writes itself,
+# never run.
+allow_managed_hooks_only = true
+
+# akhook: the image's rules (/etc/akhook/akhook.yml), checked before every
+# tool call of every agent, whatever its plugins. No matcher: akhook gets them
+# all and passes the tools it does not understand, so rules for new kinds of
+# tools need no change here. It reads the rules from
+# AKHOOK_ADDITIONAL_CONFIG_PATH, set by the image.
+[[hooks.PreToolUse]]
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "akhook codex hook pre_tool_use"
+timeout = 15

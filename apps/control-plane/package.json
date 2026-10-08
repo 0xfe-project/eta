@@ -1,0 +1,11 @@
+{
+  "name": "@axp/control-plane",
+  "private": true,
+  "scripts": {
+    "build:linux-amd64": "bash ../../scripts/build/go.sh axp-control-plane linux amd64",
+    "build:linux-arm64": "bash ../../scripts/build/go.sh axp-control-plane linux arm64",
+    "openapi": "mkdir -p out && go run . openapi public > out/openapi.json",
+    "lint": "test -z \"$(gofmt -l .)\" && go vet ./...",
+    "test": "bash ../../scripts/dev-postgres.sh && go test ./..."
+  }
+}

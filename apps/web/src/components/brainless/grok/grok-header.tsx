@@ -123,7 +123,12 @@ export function GrokLogo({
           )}
         </linearGradient>
       </defs>
-      <rect width={W} height={H} fill={`url(#g${uid})`} mask={`url(#m${uid})`} />
+      <rect
+        width={W}
+        height={H}
+        fill={`url(#g${uid})`}
+        mask={`url(#m${uid})`}
+      />
     </svg>
   );
 }
@@ -160,7 +165,10 @@ export function GrokHeader({
             <span className="font-semibold">Grok Build 测试版</span>{" "}
             <span className="text-[var(--terminal-muted)]">{version}</span>
           </div>
-          <div className="mt-2 break-words font-semibold" style={{ color: AMBER }}>
+          <div
+            className="mt-2 break-words font-semibold"
+            style={{ color: AMBER }}
+          >
             {headline}
           </div>
           <div className="truncate text-[var(--terminal-muted)]">{subhead}</div>
@@ -174,7 +182,9 @@ export function GrokHeader({
                 >
                   <span className="min-w-0 truncate">{m.label}</span>
                   {m.key ? (
-                    <span className="shrink-0 text-[var(--terminal-muted)]">{m.key}</span>
+                    <span className="shrink-0 text-[var(--terminal-muted)]">
+                      {m.key}
+                    </span>
                   ) : null}
                 </button>
               </li>

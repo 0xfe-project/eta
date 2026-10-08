@@ -58,7 +58,10 @@ export function ClaudeThinking({
   React.useEffect(() => {
     if (!running) return;
     // Verbs change slowly, like the real thing — not every second.
-    const id = setInterval(() => setVerbIdx((v) => (v + 1) % verbs.length), 5200);
+    const id = setInterval(
+      () => setVerbIdx((v) => (v + 1) % verbs.length),
+      5200,
+    );
     return () => clearInterval(id);
   }, [running, verbs.length]);
 
@@ -73,7 +76,7 @@ export function ClaudeThinking({
       aria-live="polite"
       className={className}
       style={{
-        fontFamily: "var(--font-geist-mono, ui-monospace, monospace)",
+        fontFamily: "var(--font-mono)",
         fontSize: 13,
         display: "flex",
         alignItems: "center",
@@ -103,7 +106,10 @@ export function ClaudeThinking({
           }
         }
       `}</style>
-      <span aria-hidden style={{ color: CLAUDE, width: "1ch", display: "inline-block" }}>
+      <span
+        aria-hidden
+        style={{ color: CLAUDE, width: "1ch", display: "inline-block" }}
+      >
         {prefersReduced ? "✳" : GLYPHS[glyph]}
       </span>
       <span className="cw-verb">{verb}…</span>

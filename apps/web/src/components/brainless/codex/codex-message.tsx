@@ -31,7 +31,10 @@ export function CodexMessage({
   }
   return (
     <div
-      className={cn("font-mono text-[13px] leading-[1.6] text-[var(--terminal-secondary)]", className)}
+      className={cn(
+        "font-mono text-[13px] leading-[1.6] text-[var(--terminal-secondary)]",
+        className,
+      )}
     >
       {children}
     </div>

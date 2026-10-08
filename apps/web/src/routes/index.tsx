@@ -1,16 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Workspace } from "@/components/workspace/workspace";
-import {
-  validateWorkspaceSearch,
-  useWorkspaceView,
-} from "@/components/workspace/workspace-search";
+import { validateWorkspaceSearch } from "@/components/workspace/workspace-search";
+import { Home } from "@/pages/home";
+
 export const Route = createFileRoute("/")({
   validateSearch: validateWorkspaceSearch,
   component: Home,
 });
-function Home() {
-  const [view, setView] = useWorkspaceView();
-  return (
-    <Workspace view={view} onViewChange={(value) => void setView(value)} />
-  );
-}

@@ -1,8 +1,8 @@
+import { CodexExec } from "@/components/brainless/codex/codex-exec";
 import { CodexHeader } from "@/components/brainless/codex/codex-header";
 import { CodexMessage } from "@/components/brainless/codex/codex-message";
-import { CodexExec } from "@/components/brainless/codex/codex-exec";
-import { CodexWorking } from "@/components/brainless/codex/codex-working";
 import { CodexPrompt } from "@/components/brainless/codex/codex-prompt";
+import { CodexWorking } from "@/components/brainless/codex/codex-working";
 
 /**
  * CodexSession — a complete Codex CLI screen: launch card, a full turn
@@ -29,11 +29,11 @@ export function CodexSession() {
 
         <div className="space-y-1">
           <CodexExec command="Read app/settings/page.tsx" />
+          <CodexExec command="Edited app/settings/page.tsx" result="(+12 −1)" />
           <CodexExec
-            command="Edited app/settings/page.tsx"
-            result="(+12 −1)"
+            command="Edited components/theme-toggle.tsx"
+            result="(+48 −0)"
           />
-          <CodexExec command="Edited components/theme-toggle.tsx" result="(+48 −0)" />
           <CodexExec command="Ran bun test" result="→ passed">
             {`bun test v1.2.21
 ✓ settings > renders the theme toggle

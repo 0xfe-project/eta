@@ -7,18 +7,18 @@ import { cn } from "@/lib/utils";
  * Captured grammar (v0.2.93): a `┃` gutter with line-numbered before/after
  * rows, a `───` rule, then optional hook sections with ✓ / ✗ results.
  */
-export type GrokWriteLine = {
+export interface GrokWriteLine {
   n?: number;
   text: string;
   kind?: "before" | "after";
-};
+}
 
-export type GrokHookResult = {
+export interface GrokHookResult {
   label: string;
   ok: boolean;
   detail?: string;
   ms?: number;
-};
+}
 
 const BORDER = "var(--terminal-rule)";
 const FG = "var(--terminal-foreground)";

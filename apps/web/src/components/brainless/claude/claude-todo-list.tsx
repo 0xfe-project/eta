@@ -13,10 +13,10 @@ import { cn } from "@/lib/utils";
  *     ◼ active   (terracotta + bold)
  *     ◻ pending  (default foreground)
  */
-export type Todo = {
+export interface Todo {
   label: string;
   status: "done" | "active" | "todo";
-};
+}
 
 const DONE = "var(--terminal-success)"; // 38;5;114
 const ACTIVE = "var(--terminal-accent)"; // 38;5;174 — Claude terracotta
@@ -69,11 +69,13 @@ export function ClaudeTodoList({
               {t.label}
               <span className="sr-only">
                 {" "}
-                ({t.status === "done"
+                (
+                {t.status === "done"
                   ? "completed"
                   : t.status === "active"
                     ? "in progress"
-                    : "pending"})
+                    : "pending"}
+                )
               </span>
             </span>
           </li>

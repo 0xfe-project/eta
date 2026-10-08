@@ -43,7 +43,13 @@ export function ClaudeLogo({
         let end = x;
         while (end < w && row[end] === "1") end += 1;
         rects.push(
-          <rect key={`${x}-${y}`} x={x} y={y * PH} width={end - x} height={PH} />,
+          <rect
+            key={`${x}-${y}`}
+            x={x}
+            y={y * PH}
+            width={end - x}
+            height={PH}
+          />,
         );
         x = end;
       } else {
@@ -105,14 +111,21 @@ export function ClaudeHeader({
         <div className="flex min-w-0 flex-col items-center gap-2 py-1 text-center">
           <div className="font-semibold">欢迎回来，{user}！</div>
           <ClaudeLogo className="my-1.5" />
-          <div className="min-w-0 space-y-0.5 break-words" style={{ color: GRAY }}>
+          <div
+            className="min-w-0 space-y-0.5 break-words"
+            style={{ color: GRAY }}
+          >
             <div>{model}</div>
             <div>{org}</div>
             <div>{cwd}</div>
           </div>
         </div>
 
-        <div aria-hidden className="hidden sm:block" style={{ background: `color-mix(in srgb, ${ROSE} 33%, transparent)` }} />
+        <div
+          aria-hidden
+          className="hidden sm:block"
+          style={{ background: `color-mix(in srgb, ${ROSE} 33%, transparent)` }}
+        />
 
         {/* right: tips + what's new */}
         <div className="min-w-0 space-y-1">

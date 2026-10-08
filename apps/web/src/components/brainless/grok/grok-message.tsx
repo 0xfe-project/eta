@@ -30,7 +30,9 @@ export function GrokMessage({
         </span>
         <span className="min-w-0 flex-1 break-words">{children}</span>
         {time ? (
-          <span className="shrink-0 tabular-nums text-[var(--terminal-muted)]">{time}</span>
+          <span className="shrink-0 tabular-nums text-[var(--terminal-muted)]">
+            {time}
+          </span>
         ) : null}
       </div>
     );
@@ -45,7 +47,9 @@ export function GrokMessage({
     >
       <span className="min-w-0 flex-1 break-words">{children}</span>
       {time ? (
-        <span className="shrink-0 tabular-nums text-[var(--terminal-muted)]">{time}</span>
+        <span className="shrink-0 tabular-nums text-[var(--terminal-muted)]">
+          {time}
+        </span>
       ) : null}
     </div>
   );

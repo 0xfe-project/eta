@@ -1,10 +1,25 @@
+import type { WorkspaceView } from "./types";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ChatPanel } from "./chat-panel";
+import {
+  useAgentMessages,
+  useAnswerInteraction,
+  useChat,
+  useCompact,
+  usePendingInteractions,
+  useSendMessage,
+  useStopReply,
+} from "@/queries/chat";
+import { useModelAvailability } from "@/queries/llm";
+import { AgentBar } from "./agent-bar";
+import { AgentEditor } from "./agent-editor";
+import { ChatPanel, ComposerNotice } from "./chat-panel";
 import { SettingsDialog } from "./settings-dialog";
+import { useAgents } from "./use-agents";
 import { WorkspacePanel } from "./workspace-panel";
-import { useWorkspace } from "./workspace-state";
-import type { WorkspaceView } from "./types";
+import { useWorkspaceStore } from "./workspace-store";
+
 export function Workspace({
   view,
   onViewChange,
@@ -12,17 +27,47 @@ export function Workspace({
   view: WorkspaceView;
   onViewChange: (view: WorkspaceView) => void;
 }) {
-  const {
-    workspace,
-    setWorkspace,
-    draft,
-    setDraft,
-    mobilePanel,
-    setMobilePanel,
-  } = useWorkspace();
+  const sessionTheme = useWorkspaceStore((s) => s.workspace.sessionTheme);
+  const draft = useWorkspaceStore((s) => s.draft);
+  const setDraft = useWorkspaceStore((s) => s.setDraft);
+  const mobilePanel = useWorkspaceStore((s) => s.mobilePanel);
+  const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
+  const setSettings = useWorkspaceStore((s) => s.setSettings);
+  const chat = useChat();
+  const pending = usePendingInteractions().length;
+  const { current: selected, openEditor } = useAgents();
+  const history = useAgentMessages(selected?.id);
+  const availability = useModelAvailability(selected);
+  const changeModel = {
+    label: "更换模型",
+    onClick: () => selected && openEditor(selected.id),
+  };
+  const blocked = !selected ? undefined : availability.state === "not_set" ? (
+    <ComposerNotice
+      message="这个智能体还没有选择模型。"
+      actions={[{ ...changeModel, label: "选择模型" }]}
+    />
+  ) : availability.state === "unavailable" ? (
+    <ComposerNotice
+      message={availability.message}
+      actions={[
+        {
+          label: "前往模型服务",
+          onClick: () => setSettings({ open: true, section: "providers" }),
+        },
+        changeModel,
+      ]}
+    />
+  ) : undefined;
+  const sendMessage = useSendMessage();
+  const compact = useCompact();
+  const stopReply = useStopReply();
+  const answer = useAnswerInteraction();
+  const onError = (error: Error) => toast.error(error.message);
+
   return (
-    <div className="mx-auto flex h-dvh w-full min-h-0 flex-col bg-background lg:max-w-[64rem]">
-      <header className="flex h-14 shrink-0 items-center justify-between">
+    <div className="mx-auto flex h-dvh w-full min-h-0 flex-col bg-background px-4 pb-4 sm:px-6 lg:max-w-[calc(64rem+3rem)]">
+      <header className="flex h-14 shrink-0 items-center justify-between gap-2">
         <h1 className="text-xl font-semibold tracking-tight">axp.</h1>
         <SettingsDialog />
       </header>
@@ -42,6 +87,7 @@ export function Workspace({
           aria-pressed={mobilePanel === "workspace"}
         >
           工作区
+          {pending ? <span className="tabular-nums">{pending}</span> : null}
         </Button>
       </div>
       <main
@@ -55,19 +101,52 @@ export function Workspace({
           )}
         >
           <ChatPanel
+            theme={sessionTheme}
+            agentId={selected?.id}
+            agentName={selected?.name}
+            model={
+              availability.state === "ok"
+                ? (availability.model?.display_name ??
+                  selected?.model ??
+                  undefined)
+                : undefined
+            }
+            blocked={blocked}
+            messages={history.messages}
+            hasOlder={history.hasOlder}
+            loadingOlder={history.loadingOlder}
+            onLoadOlder={history.loadOlder}
+            interactions={chat.data?.interactions ?? []}
+            head={<AgentBar />}
+            error={
+              (chat.error ?? history.error)
+                ? `无法加载对话：${(chat.error ?? history.error)?.message}`
+                : undefined
+            }
             draft={draft}
             onDraftChange={setDraft}
-            theme={workspace.sessionTheme}
-            messages={workspace.messages}
-            onSend={(content) =>
-              setWorkspace((state) => ({
-                ...state,
-                messages: [
-                  ...state.messages,
-                  { id: crypto.randomUUID(), content },
-                ],
-              }))
-            }
+            onSend={(text, mode) => {
+              if (!selected) {
+                openEditor();
+                return;
+              }
+              sendMessage.mutate(
+                { agentId: selected.id, text, mode },
+                { onSuccess: () => setDraft(""), onError },
+              );
+            }}
+            onCompact={() => {
+              if (!selected) {
+                openEditor();
+                return;
+              }
+              compact.mutate(selected.id, {
+                onSuccess: () => setDraft(""),
+                onError,
+              });
+            }}
+            onStop={(id) => stopReply.mutate(id, { onError })}
+            onAnswer={(id, value) => answer.mutate({ id, value }, { onError })}
           />
         </div>
         <WorkspacePanel
@@ -76,6 +155,7 @@ export function Workspace({
           className={mobilePanel === "chat" ? "hidden md:flex" : undefined}
         />
       </main>
+      <AgentEditor />
     </div>
   );
 }

@@ -1,27 +1,56 @@
 {
   "name": "axp",
+  "type": "module",
   "private": true,
   "packageManager": "bun@1.3.14",
-  "workspaces": [
-    "apps/*"
-  ],
+  "workspaces": ["apps/*", "packages/*"],
   "engines": {
     "node": ">=22.12.0"
   },
   "scripts": {
-    "setup": "bun install && bun run setup:control-plane",
-    "setup:control-plane": "uv sync --project apps/control-plane --dev && bun run db:migrate",
+    "prepare": "lefthook install",
+    "setup": "bun install && bun run setup:agent-runtime && bun run setup:memory-service && bun run setup:go && bun run db:migrate",
+    "setup:agent-runtime": "uv sync --project apps/agent-runtime --dev",
+    "setup:memory-service": "uv sync --project apps/memory-service --dev",
+    "setup:go": "go -C apps/control-plane mod download && go -C apps/llm-gateway mod download && go -C apps/forge-service mod download",
     "dev": "bash scripts/dev.sh",
-    "dev:control-plane": "uv run --project apps/control-plane python apps/control-plane/manage.py runserver 127.0.0.1:8000",
+    "dev:control-plane": "AXP_API_ADDR=127.0.0.1:${AXP_API_PORT:-8000} go -C apps/control-plane run . api",
+    "dev:internal": "AXP_INTERNAL_ADDR=127.0.0.1:${AXP_INTERNAL_PORT:-8001} go -C apps/control-plane run . internal",
+    "dev:controller": "go -C apps/control-plane run . controller",
+    "dev:llm-gateway": "go run ./apps/llm-gateway",
+    "dev:memory-service": "FASTEMBED_CACHE_PATH=out/models uv run --directory apps/memory-service python -m axp_memory",
+    "dev:forge-service": "go run ./apps/forge-service",
     "dev:web": "bun run --cwd apps/web dev",
-    "dev:agent-runtime": "bun run --cwd apps/agent-runtime dev",
-    "db:migrate": "uv run --project apps/control-plane python apps/control-plane/manage.py migrate",
-    "build": "bun run --cwd apps/web build && bun run --cwd apps/agent-runtime build",
-    "check": "bun run build && bun run --cwd apps/web typecheck && bun run --cwd apps/agent-runtime typecheck && uv run --project apps/control-plane python apps/control-plane/manage.py check && uv run --project apps/control-plane ruff check apps/control-plane",
-    "format": "prettier --write . && uv run --project apps/control-plane ruff format apps/control-plane"
+    "deploy": "bash deploy/deploy.sh",
+    "db:migrate": "bash scripts/dev-postgres.sh && go -C apps/control-plane run . migrate",
+    "runtime:build": "bash scripts/build/runtime-image.sh axp-agent-runtime:dev",
+    "build": "turbo run build build:linux-amd64 build:linux-arm64",
+    "image:linux-amd64": "bash scripts/build/image.sh app linux amd64",
+    "image:linux-arm64": "bash scripts/build/image.sh app linux arm64",
+    "check": "dprint check && bun run lint:repo && turbo run build typecheck lint test knip",
+    "lint": "turbo run lint && bun run lint:repo",
+    "test": "turbo run test",
+    "test:control-plane": "turbo run test --filter=@axp/control-plane",
+    "test:agent-runtime": "turbo run test --filter=@axp/agent-runtime",
+    "test:memory-service": "turbo run test --filter=@axp/memory-service",
+    "test:forge-service": "turbo run test --filter=@axp/forge-service",
+    "check:go": "turbo run lint test --filter=@axp/control-plane --filter=@axp/llm-gateway --filter=@axp/forge-service --filter=@axp/remote",
+    "format": "dprint fmt",
+    "format:check": "dprint check",
+    "knip": "knip",
+    "lint:repo": "eslint . --ignore-pattern 'apps/web/**'"
   },
   "devDependencies": {
+    "@antfu/eslint-config": "^9.5.1",
+    "@eslint-react/eslint-plugin": "^5.24.8",
     "concurrently": "^9.2.1",
-    "prettier": "^3.6.2"
+    "dprint": "^0.60.1",
+    "eslint": "^10.12.0",
+    "eslint-plugin-react-refresh": "^0.5.7",
+    "globals": "^17.13.0",
+    "knip": "^6.40.0",
+    "lefthook": "^2.1.17",
+    "turbo": "^2.11.7",
+    "typescript": "5.9.3"
   }
 }

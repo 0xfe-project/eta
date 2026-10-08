@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 /**
  * ClaudePrompt — Claude Code's input composer.
  *
- * Dual CSS rules around a real text input (❯ prefix), effort chip above, and a
+ * Dual CSS rules around a real textarea (❯ on the first row), effort chip above, and a
  * mode line below. Mode colors/glyphs match shift+tab captures:
  *   auto          ⏵⏵ gold
  *   manual        ⏸  gray
@@ -76,7 +76,8 @@ const EFFORTS: Record<
   max: { glyph: "◈", label: "max · /effort" },
   ultracode: {
     glyph: "✦",
-    label: "ultracode · xhigh effort + dynamic workflows for maximum thoroughness",
+    label:
+      "ultracode · xhigh effort + dynamic workflows for maximum thoroughness",
     rainbow: true,
   },
 };
@@ -91,17 +92,20 @@ export function ClaudePrompt({
   effort = "xhigh",
   className,
   inputClassName,
+  inputProps,
 }: {
   value?: string;
   defaultValue?: string;
-  onChange?: React.ChangeEventHandler<HTMLInputElement>;
-  onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
+  onChange?: React.ChangeEventHandler<HTMLTextAreaElement>;
+  onKeyDown?: React.KeyboardEventHandler<HTMLTextAreaElement>;
   placeholder?: string;
   mode?: ClaudeMode;
   /** Effort chip above the prompt. Pass `false` to hide. */
   effort?: ClaudeEffort | false;
   className?: string;
   inputClassName?: string;
+  /** Extra attributes for the textarea, e.g. combobox semantics. */
+  inputProps?: React.TextareaHTMLAttributes<HTMLTextAreaElement>;
 }) {
   const m = MODES[mode];
   const e = effort === false ? null : EFFORTS[effort];
@@ -109,7 +113,9 @@ export function ClaudePrompt({
   const rainbow = Boolean(e?.rainbow);
 
   return (
-    <div className={cn("min-w-0 font-mono text-[13px] leading-[1.6]", className)}>
+    <div
+      className={cn("min-w-0 font-mono text-[13px] leading-[1.6]", className)}
+    >
       {e ? (
         <div
           className="flex justify-end px-1 pb-1 text-[12px]"
@@ -122,7 +128,7 @@ export function ClaudePrompt({
       ) : null}
 
       <div
-        className="flex min-w-0 items-center gap-0 border-y py-0.5"
+        className="flex min-w-0 items-start gap-0 border-y py-0.5"
         style={
           rainbow
             ? {
@@ -136,22 +142,27 @@ export function ClaudePrompt({
             : { borderColor: RULE }
         }
       >
-        <span aria-hidden className="shrink-0 pl-0 pr-0" style={{ color: FG }}>
+        <span aria-hidden className="shrink-0 py-0.5" style={{ color: FG }}>
           ❯
         </span>
-        <input
-          type="text"
+        <textarea
+          rows={1}
           aria-label="消息"
           placeholder={placeholder}
           onKeyDown={onKeyDown}
-          {...(controlled
-            ? { value, onChange }
-            : { defaultValue, onChange })}
+          {...(controlled ? { value, onChange } : { defaultValue, onChange })}
+          {...inputProps}
           className={cn(
-            "term-input min-w-0 flex-1 bg-transparent py-0.5 pl-[1ch] outline-none placeholder:text-[var(--terminal-muted)]",
+            "term-input max-h-[40vh] min-w-0 flex-1 resize-none bg-transparent [field-sizing:content] py-0.5 pl-[1ch] outline-none placeholder:text-[var(--terminal-muted)]",
             inputClassName,
           )}
-          style={{ color: FG, caretColor: FG, caretShape: "block" } as React.CSSProperties}
+          style={
+            {
+              color: FG,
+              caretColor: FG,
+              caretShape: "block",
+            } as React.CSSProperties
+          }
         />
       </div>
 

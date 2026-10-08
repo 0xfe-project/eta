@@ -1,0 +1,39 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    // The embedding model, the same on every platform.
+    "build": {
+      "inputs": ["axp_memory/embedding.py", "uv.lock"],
+      "outputs": ["out/models/**"]
+    },
+    // Dependencies only; the image copies the source itself.
+    "build:linux-amd64": {
+      "inputs": [
+        "$TURBO_ROOT$/scripts/build/python.sh",
+        "$TURBO_ROOT$/packages/telemetry-py/src/**",
+        "$TURBO_ROOT$/packages/telemetry-py/pyproject.toml",
+        "pyproject.toml",
+        "uv.lock",
+        ".python-version"
+      ]
+    },
+    "build:linux-arm64": {
+      "inputs": [
+        "$TURBO_ROOT$/scripts/build/python.sh",
+        "$TURBO_ROOT$/packages/telemetry-py/src/**",
+        "$TURBO_ROOT$/packages/telemetry-py/pyproject.toml",
+        "pyproject.toml",
+        "uv.lock",
+        ".python-version"
+      ]
+    },
+    "lint": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/ruff.toml",
+        "$TURBO_ROOT$/packages/telemetry-py/src/**"
+      ]
+    }
+  }
+}

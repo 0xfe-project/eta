@@ -32,17 +32,20 @@ export function CodexPrompt({
   directory = "~/dev/brainless",
   className,
   inputClassName,
+  inputProps,
 }: {
   value?: string;
   defaultValue?: string;
-  onChange?: React.ChangeEventHandler<HTMLInputElement>;
-  onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
+  onChange?: React.ChangeEventHandler<HTMLTextAreaElement>;
+  onKeyDown?: React.KeyboardEventHandler<HTMLTextAreaElement>;
   placeholder?: string;
   mode?: CodexMode;
   model?: string;
   directory?: string;
   className?: string;
   inputClassName?: string;
+  /** Extra attributes for the textarea, e.g. combobox semantics. */
+  inputProps?: React.TextareaHTMLAttributes<HTMLTextAreaElement>;
 }) {
   const controlled = value !== undefined;
   const displayModel =
@@ -51,25 +54,26 @@ export function CodexPrompt({
       : model;
 
   return (
-    <div className={cn("min-w-0 font-mono text-[13px] leading-[1.6]", className)}>
+    <div
+      className={cn("min-w-0 font-mono text-[13px] leading-[1.6]", className)}
+    >
       <div
         className="min-w-0 py-[1lh] pr-[1ch]"
         style={{ background: INPUT_BG, color: FG }}
       >
-        <div className="flex min-w-0 items-center">
+        <div className="flex min-w-0 items-start">
           <span aria-hidden className="inline-block w-[2ch] shrink-0 font-bold">
             ›
           </span>
-          <input
-            type="text"
+          <textarea
+            rows={1}
             aria-label="消息"
             placeholder={placeholder}
             onKeyDown={onKeyDown}
-            {...(controlled
-              ? { value, onChange }
-              : { defaultValue, onChange })}
+            {...(controlled ? { value, onChange } : { defaultValue, onChange })}
+            {...inputProps}
             className={cn(
-              "term-input min-w-0 flex-1 bg-transparent outline-none placeholder:text-[var(--terminal-muted)]",
+              "term-input max-h-[40vh] min-w-0 flex-1 resize-none bg-transparent [field-sizing:content] outline-none placeholder:text-[var(--terminal-muted)]",
               inputClassName,
             )}
             style={

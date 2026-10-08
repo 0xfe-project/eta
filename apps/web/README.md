@@ -22,7 +22,7 @@ TanStack Start + React。开发命令在仓库根目录执行 `bun run dev`。
 
 `getRouter()` 为每个路由实例创建独立 QueryClient，避免 SSR 请求间共享缓存。SSR integration 提供 QueryClientProvider、缓存序列化和 hydration。默认查询保鲜 30 秒，失败重试一次；mutation 不自动重试。
 
-按功能在 `src/queries/` 中定义 `queryOptions()`，在组件中通过 `useQuery()` 消费。首页使用 `/api/health` 验证 Django 连通性，并由 Zod 校验响应。该相对路径 query 仅用于浏览器，由开发代理或生产反向代理处理。
+按功能在 `src/queries/` 中定义 `queryOptions()`，在组件中通过 `useQuery()` 消费。控制面接口经 `src/lib/api.ts` 的 `controlPlane`（openapi-fetch）调用，路径、参数、请求体和响应的类型都由 `bun run generate` 从控制面的 OpenAPI 文档生成到 `src/api/control-plane.gen.ts`（不入库）。该相对路径 query 仅用于浏览器，由开发代理或生产反向代理处理。
 
 需要 SSR 预取时，在 loader 中调用 `context.queryClient.ensureQueryData(options)`，并在组件中通过 `useSuspenseQuery(options)` 读取；此时 queryFn 必须能够在服务端执行，例如调用 Start server function，由其访问后端绝对 URL。不要在 SSR 中直接复用相对路径的 health query。
 
@@ -84,7 +84,7 @@ bun run --cwd apps/web typecheck
 
 首页参考 [today.ai hero](https://today.ai/) 中的左右分栏：桌面左侧为聊天，右侧为 Overview / Tasks / Memory / Capabilities；手机上通过 Chat / Workspace 切换面板。源码在 `src/components/workspace/`。
 
-聊天使用 brainless 消息与输入组件，默认 Claude 外观，使用原版单行 Prompt，支持 Enter 发送，使用一个常驻会话。右上角 Settings 可立即切换 Claude / Codex / Grok 外观，选择随工作区保存，切换保留消息与草稿。当前仅保存用户消息，尚未调用模型。任务支持新增、完成、删除；Memory 支持编辑上下文。数据使用 Zod 校验后保存在 `localStorage` 的 `axp.workspace.v1`，只属于当前浏览器，不会同步到后端。Capabilities 中的 Control plane 状态来自 Django 健康检查，与 agent runtime 是否连接无关。
+聊天使用 brainless 消息与输入组件，默认 Claude 外观，使用原版单行 Prompt，支持 Enter 发送，使用一个常驻会话。右上角 Settings 可立即切换 Claude / Codex / Grok 外观，选择随工作区保存，切换保留消息与草稿。当前仅保存用户消息，尚未调用模型。任务支持新增、完成、删除；Memory 支持编辑上下文。数据使用 Zod 校验后保存在 `localStorage` 的 `axp.workspace.v1`，只属于当前浏览器，不会同步到后端。Capabilities 中的 Control plane 状态来自控制面的健康检查，与 agent runtime 是否连接无关。
 
 已验证桌面/手机布局、深浅主题、任务与上下文操作、消息发送、刷新持久化、页签 URL 与浏览器后退。
 

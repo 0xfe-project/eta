@@ -48,7 +48,10 @@ export function GrokTool({
           <span aria-hidden className="shrink-0" style={{ color: GREEN }}>
             ◆
           </span>
-          <span className="min-w-0 break-words font-semibold" style={{ color: SILVER }}>
+          <span
+            className="min-w-0 break-words font-semibold"
+            style={{ color: SILVER }}
+          >
             {heading}
           </span>
           {hooks != null ? (
@@ -79,7 +82,9 @@ export function GrokTool({
           {path}
         </span>
       ) : null}
-      {meta ? <span className="text-[var(--terminal-muted)]">{meta}</span> : null}
+      {meta ? (
+        <span className="text-[var(--terminal-muted)]">{meta}</span>
+      ) : null}
       {children}
     </div>
   );

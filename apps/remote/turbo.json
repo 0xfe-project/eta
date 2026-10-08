@@ -1,0 +1,22 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "inputs": [
+        "$TURBO_ROOT$/go.work",
+        "$TURBO_ROOT$/scripts/build/remote.sh",
+        "go.mod",
+        "**/*.go",
+        "!**/*_test.go"
+      ],
+      "outputs": ["out/**"]
+    },
+    "lint": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/go.work"]
+    },
+    "test": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/go.work"]
+    }
+  }
+}

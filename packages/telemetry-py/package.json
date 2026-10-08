@@ -1,0 +1,8 @@
+{
+  "name": "@axp/telemetry-py",
+  "private": true,
+  "scripts": {
+    "lint": "uv run ruff check .",
+    "test": "uv run pytest"
+  }
+}

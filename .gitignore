@@ -13,3 +13,9 @@ dist/
 .ruff_cache/
 .DS_Store
 apps/web/src/routeTree.gen.ts
+# Generated from the control plane's OpenAPI document (@axp/web#generate).
+apps/web/src/api/control-plane.gen.ts
+var/
+out/
+.turbo/
+.claude/settings.local.json

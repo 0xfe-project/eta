@@ -1,13 +1,13 @@
-import { GrokStatus } from "@/components/brainless/grok/grok-status";
+import { GrokEvent } from "@/components/brainless/grok/grok-event";
 import { GrokHeader } from "@/components/brainless/grok/grok-header";
 import { GrokMessage } from "@/components/brainless/grok/grok-message";
-import { GrokEvent } from "@/components/brainless/grok/grok-event";
+import { GrokPermission } from "@/components/brainless/grok/grok-permission";
+import { GrokPrompt } from "@/components/brainless/grok/grok-prompt";
+import { GrokStatus } from "@/components/brainless/grok/grok-status";
 import { GrokThought } from "@/components/brainless/grok/grok-thought";
 import { GrokTool } from "@/components/brainless/grok/grok-tool";
-import { GrokWrite } from "@/components/brainless/grok/grok-write";
-import { GrokPermission } from "@/components/brainless/grok/grok-permission";
 import { GrokTurnEnd } from "@/components/brainless/grok/grok-turn-end";
-import { GrokPrompt } from "@/components/brainless/grok/grok-prompt";
+import { GrokWrite } from "@/components/brainless/grok/grok-write";
 
 /**
  * GrokSession — a complete Grok CLI screen: status bar, launch card, a full

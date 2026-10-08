@@ -1,0 +1,58 @@
+# The browser's entry: by longest prefix, /api/llm to the LLM gateway,
+# /api/memory to the memory service, /api/forge to the forge service,
+# /observe to OpenObserve, /api and /remote to the control plane, everything
+# else to web.
+# Paths are not rewritten and the browser's Host is kept.
+http://:{$AXP_GATEWAY_PORT:8080} {
+	bind {$AXP_GATEWAY_BIND:0.0.0.0}
+	import access_log
+
+	# Nothing a client sends under X-AXP-* reaches a service.
+	request_header -X-AXP-*
+	request_header X-Request-Id {http.request.uuid}
+	header >X-Request-Id {http.request.uuid}
+	request_body {
+		max_size 32MB
+	}
+
+	# kamal-proxy's health check.
+	handle /up {
+		log_skip
+		respond "ok"
+	}
+	handle /api/llm/* {
+		reverse_proxy {$AXP_UPSTREAM_LLM:axp-llm:8317}
+	}
+	# Agents' memories, for the user to see and edit.
+	handle /api/memory/* {
+		reverse_proxy {$AXP_UPSTREAM_MEMORY:axp-memory:8320}
+	}
+	# Code hosting: connecting the GitHub App, and GitHub's redirect back.
+	handle /api/forge/* {
+		reverse_proxy {$AXP_UPSTREAM_FORGE:axp-forge:8330}
+	}
+	# OpenObserve's UI and API, served under /observe (ZO_BASE_URI).
+	handle /observe/* {
+		log_skip
+		reverse_proxy {$AXP_UPSTREAM_OBSERVE:axp-openobserve:5080}
+	}
+	# Remote computers' install script, downloads and API: the one path the
+	# edge's access control lets through; each endpoint authenticates itself.
+	handle /remote/* {
+		reverse_proxy {$AXP_UPSTREAM_API:axp-api:8000}
+	}
+	handle /api/* {
+		# Chat streams (SSE) pass through as they are written.
+		reverse_proxy {$AXP_UPSTREAM_API:axp-api:8000} {
+			flush_interval -1
+		}
+	}
+	# Pages and assets are not worth a log record each (in development every
+	# Vite module is one).
+	handle {
+		log_skip
+		reverse_proxy {$AXP_UPSTREAM_WEB:axp-web:3000}
+	}
+
+	import errors
+}

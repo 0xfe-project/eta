@@ -1,11 +1,11 @@
 "use client";
 
-import * as React from "react";
+import { XIcon } from "@phosphor-icons/react/X";
 import { cn } from "cn";
 import { Dialog as DialogPrimitive } from "radix-ui";
 
+import * as React from "react";
 import { Button } from "@/components/ui/button";
-import { XIcon } from "@phosphor-icons/react/X";
 
 function Dialog({
   ...props

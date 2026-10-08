@@ -1,0 +1,23 @@
+# Rules for every agent's shell commands and file changes, checked by akhook
+# (vendor/akhook) before Codex runs them. The image loads this file as an
+# additional config (AKHOOK_ADDITIONAL_CONFIG_PATH), so a workspace's own
+# .akhook.yml may add rules but cannot disable or replace these.
+#
+# Rules guard against mistakes, not against an agent set on getting around
+# them: whatever must never happen is enforced by credentials instead.
+version: 1
+# Shown after an `ask` rule's message; the approval plugin asks the user.
+ask_instruction: "需要用户确认。请调用 request_approval 工具（request_id 为 {request_id}）；\
+  用户同意后，原样重新执行这条命令。用户拒绝时不要换个写法绕过。"
+rules:
+  - id: gh-pr-create
+    on: shell_exec
+    checks:
+      - argv: [gh, pr, create]
+    message: 推送分支后用 open_pull_request 工具开 PR。
+
+  - id: akhook-approval
+    on: shell_exec
+    checks:
+      - argv: [akhook, approval, grant]
+    message: 授权只能由用户在 AXP 中给出。

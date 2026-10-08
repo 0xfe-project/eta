@@ -1,0 +1,3 @@
+# Only the relay's built server is sent to Docker.
+*
+!apps/relay/out/server/
