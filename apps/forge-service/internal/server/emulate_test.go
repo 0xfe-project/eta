@@ -161,16 +161,17 @@ func freePort() (int, error) {
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
+// seedPermissions is what the seeded Apps' installations were granted.
+var seedPermissions = map[string]string{
+	"contents": "write", "issues": "write", "metadata": "read", "pull_requests": "write", "workflows": "write",
+}
+
 func seedConfig(keyPEM string) []byte {
 	var repos []map[string]any
 	for owner, names := range seedRepos {
 		for _, name := range names {
 			repos = append(repos, map[string]any{"owner": owner, "name": name, "private": true})
 		}
-	}
-	permissions := map[string]string{
-		"contents": "write", "pull_requests": "write", "issues": "read", "actions": "read",
-		"checks": "read", "statuses": "read", "metadata": "read",
 	}
 	app := func(id int, slug string) map[string]any {
 		var installations []map[string]any
@@ -180,7 +181,7 @@ func seedConfig(keyPEM string) []byte {
 			}
 			entry := map[string]any{
 				"installation_id": inst.id, "account": inst.account,
-				"repository_selection": inst.selection, "permissions": permissions,
+				"repository_selection": inst.selection, "permissions": seedPermissions,
 			}
 			if inst.selection == "selected" {
 				entry["repositories"] = inst.repos
@@ -189,7 +190,7 @@ func seedConfig(keyPEM string) []byte {
 		}
 		return map[string]any{
 			"app_id": id, "slug": slug, "name": slug, "private_key": keyPEM,
-			"permissions": permissions, "installations": installations,
+			"permissions": seedPermissions, "installations": installations,
 		}
 	}
 	data, _ := json.Marshal(map[string]any{"github": map[string]any{

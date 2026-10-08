@@ -5,7 +5,7 @@
 // sends a one-time code back) and its credentials stay in the state
 // directory: github.json and the private key github.pem. Calls go through
 // go-github, as the App (with a JWT signed by that key) or with an
-// installation token minted with only the permissions its purpose needs;
+// installation token, which carries everything the installation was granted;
 // tokens are cached until close to expiry. Nothing here is per agent: every
 // agent acts as the App.
 package github
@@ -47,29 +47,30 @@ var (
 	appName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._-]{0,33}$`)
 	account = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{0,38}$`)
 
-	// What the App may ever do. Workflows are left out: agents cannot
-	// change CI.
+	// Everything GitHub lets an App ask for in repositories, and in an
+	// organization it is installed on, at the highest level; the user may
+	// grant less, and tokens carry whatever the installation was granted.
 	appPermissions = map[string]string{
-		"contents": "write", "pull_requests": "write", "issues": "read", "actions": "read",
-		"checks": "read", "statuses": "read", "metadata": "read",
+		"actions": "write", "administration": "write", "artifact_metadata": "write",
+		"attestations": "write", "checks": "write", "code_quality": "write",
+		"codespaces": "write", "contents": "write", "dependabot_secrets": "write",
+		"deployments": "write", "discussions": "write", "environments": "write",
+		"issues": "write", "merge_queues": "write", "metadata": "read",
+		"packages": "write", "pages": "write", "pull_requests": "write",
+		"repository_custom_properties": "write", "repository_hooks": "write",
+		"repository_projects": "admin", "secret_scanning_alerts": "write",
+		"secrets": "write", "security_events": "write", "statuses": "write",
+		"vulnerability_alerts": "write", "workflows": "write",
+
+		"members": "write", "organization_administration": "write",
+		"organization_announcement_banners": "write", "organization_custom_org_roles": "write",
+		"organization_custom_properties": "admin", "organization_custom_roles": "write",
+		"organization_events": "read", "organization_hooks": "write",
+		"organization_packages": "write", "organization_personal_access_token_requests": "write",
+		"organization_personal_access_tokens": "write", "organization_plan": "read",
+		"organization_projects": "admin", "organization_secrets": "write",
+		"organization_self_hosted_runners": "write", "organization_user_blocking": "write",
 	}
-)
-
-// What each use of a token gets of the App's permissions.
-type purpose struct {
-	name        string
-	permissions gh.InstallationPermissions
-}
-
-var (
-	r, w = gh.Ptr("read"), gh.Ptr("write") // permission levels
-	// gh's, and git's through gh: pushes, and reads everything else. Pull
-	// requests are opened by open_pull_request.
-	agent = purpose{"agent", gh.InstallationPermissions{
-		Contents: w, PullRequests: r, Issues: r, Actions: r, Checks: r, Statuses: r, Metadata: r,
-	}}
-	pullRequest = purpose{"pull-request", gh.InstallationPermissions{PullRequests: w, Contents: r, Metadata: r}}
-	listing     = purpose{"listing", gh.InstallationPermissions{Metadata: r}}
 )
 
 // Error is an answer for the user or the agent, with the HTTP status it
@@ -174,7 +175,7 @@ type GitHub struct {
 	Now      func() time.Time
 
 	mu            sync.Mutex
-	tokens        map[string]token
+	tokens        map[int64]token
 	installations []*gh.Installation
 	listedAt      time.Time
 }
@@ -319,7 +320,7 @@ func (g *GitHub) StartManifest(name, organization, origin string) (*ManifestForm
 	manifest, err := json.Marshal(map[string]any{
 		"name":        name,
 		"url":         origin,
-		"description": "AXP 的智能体以这个 App 的身份读取仓库、推送分支和打开 PR。",
+		"description": "AXP 的智能体以这个 App 的身份使用 GitHub。",
 		// Nothing listens for webhooks; GitHub still wants a URL.
 		"hook_attributes":     map[string]any{"url": origin + "/api/forge/v1/github/webhook", "active": false},
 		"redirect_url":        origin + "/api/forge/v1/github/manifest/callback",
@@ -474,12 +475,11 @@ func (g *GitHub) installationFor(ctx context.Context, owner string) (*gh.Install
 		"AXP 的 GitHub App 没有安装到 %s。请让用户在 AXP 工作区的“能力”页把 App 安装到这个账号或组织，并授权需要的仓库。", owner)
 }
 
-// token returns an installation token for a purpose, for one repository or
-// (repository "") all of the installation's.
-func (g *GitHub) token(ctx context.Context, id int64, use purpose, repository string) (token, error) {
-	key := fmt.Sprintf("%d|%s|%s", id, use.name, repository)
+// token returns an installation token, for all of the installation's
+// repositories and permissions.
+func (g *GitHub) token(ctx context.Context, id int64) (token, error) {
 	g.mu.Lock()
-	cached, ok := g.tokens[key]
+	cached, ok := g.tokens[id]
 	g.mu.Unlock()
 	if ok && cached.expires.Sub(g.Now()) > tokenMargin {
 		return cached, nil
@@ -488,24 +488,16 @@ func (g *GitHub) token(ctx context.Context, id int64, use purpose, repository st
 	if err != nil {
 		return token{}, err
 	}
-	options := &gh.InstallationTokenOptions{Permissions: &use.permissions}
-	if repository != "" {
-		options.Repositories = []string{repository}
-	}
-	minted, _, err := client.Apps.CreateInstallationToken(ctx, id, options)
-	if statusOf(err) == http.StatusUnprocessableEntity && repository != "" {
-		return token{}, newError("GITHUB_REPOSITORY_NOT_GRANTED", http.StatusConflict,
-			"AXP 的 GitHub App 没有被授权访问仓库 %s。请让用户在 AXP 工作区的“能力”页管理 App 能访问的仓库。", repository)
-	}
+	minted, _, err := client.Apps.CreateInstallationToken(ctx, id, nil)
 	if err != nil {
 		return token{}, appCall(err)
 	}
 	t := token{value: minted.GetToken(), expires: minted.GetExpiresAt().Time}
 	g.mu.Lock()
 	if g.tokens == nil {
-		g.tokens = map[string]token{}
+		g.tokens = map[int64]token{}
 	}
-	g.tokens[key] = t
+	g.tokens[id] = t
 	g.mu.Unlock()
 	return t, nil
 }
@@ -531,7 +523,7 @@ func (g *GitHub) Credentials(ctx context.Context) (*Credentials, error) {
 	if err != nil {
 		return nil, err
 	}
-	t, err := g.token(ctx, inst.GetID(), agent, "")
+	t, err := g.token(ctx, inst.GetID())
 	if err != nil {
 		return nil, err
 	}
@@ -558,7 +550,7 @@ func (g *GitHub) OpenPullRequest(ctx context.Context, repository, head, title, b
 	if err != nil {
 		return nil, err
 	}
-	t, err := g.token(ctx, inst.GetID(), pullRequest, name)
+	t, err := g.token(ctx, inst.GetID())
 	if err != nil {
 		return nil, err
 	}
@@ -669,7 +661,7 @@ func (g *GitHub) installationView(ctx context.Context, inst *gh.Installation) (I
 		ID: inst.GetID(), Account: inst.GetAccount().GetLogin(), AccountType: inst.GetAccount().GetType(),
 		RepositorySelection: inst.GetRepositorySelection(), ManageURL: inst.GetHTMLURL(), Repositories: []string{},
 	}
-	t, err := g.token(ctx, inst.GetID(), listing, "")
+	t, err := g.token(ctx, inst.GetID())
 	if err != nil {
 		return view, err
 	}

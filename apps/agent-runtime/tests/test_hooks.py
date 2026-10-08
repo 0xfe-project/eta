@@ -1,4 +1,4 @@
-"""The image's akhook rules (hooks/akhook.yml) and their push-target script."""
+"""The image's akhook rules (hooks/akhook.yml) and the approval plugin."""
 
 import json
 import os
@@ -10,94 +10,15 @@ import pytest
 
 HOOKS = Path(__file__).resolve().parents[1] / "hooks"
 REPO = Path(__file__).resolve().parents[3]
-PUSH_TARGET = HOOKS / "push-target"
 PLUGINS = HOOKS.parent / "plugins"
-
-
-def _git(cwd: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(cwd), *args], check=True, capture_output=True)
 
 
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
-    """A clone of a remote whose default branch is `trunk`, on `feature`."""
+    """Where the commands run."""
     path = tmp_path / "repo"
     path.mkdir()
-    _git(path, "init", "-q", "-b", "feature")
-    _git(path, "remote", "add", "origin", "https://example.invalid/repo.git")
-    _git(path, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk")
     return path
-
-
-def _decide(command: str, cwd: Path) -> dict:
-    done = subprocess.run(
-        [str(PUSH_TARGET)],
-        input=json.dumps({"candidate": {"type": "shell_exec", "command": command}}),
-        capture_output=True,
-        text=True,
-        cwd=cwd,
-        check=True,
-    )
-    return json.loads(done.stdout)
-
-
-class TestPushTarget:
-    @pytest.mark.parametrize(
-        "command",
-        [
-            "git push",
-            "git push origin feature",
-            "git push -u origin HEAD",
-            "git push origin feature:review/feature",
-            "git push --tags",
-            "git push origin refs/tags/v1",
-            "git status && echo git push main",
-        ],
-    )
-    def test_other_branches_are_allowed(self, repo, command):
-        assert _decide(command, repo) == {"action": "allow"}
-
-    @pytest.mark.parametrize(
-        ("command", "branch"),
-        [
-            ("git push origin main", "main"),
-            ("git push origin HEAD:master", "master"),
-            ("git push origin feature:refs/heads/trunk", "trunk"),
-            ("git push --force origin +main", "main"),
-            ("git push origin --delete main", "main"),
-            ("git push origin :trunk", "trunk"),
-            ("cd . && FOO=1 git -C . push origin main", "main"),
-            ("git push --all origin", "所有分支"),
-        ],
-    )
-    def test_protected_branches_ask(self, repo, command, branch):
-        answer = _decide(command, repo)
-        assert answer["action"] == "ask"
-        assert branch in answer["message"]
-
-    def test_a_bare_push_from_the_default_branch_asks(self, repo):
-        _git(repo, "checkout", "-q", "-b", "trunk")
-        assert _decide("git push", repo)["action"] == "ask"
-
-    def test_a_bare_push_follows_the_upstream(self, repo):
-        _git(repo, "config", "branch.feature.remote", "origin")
-        _git(repo, "config", "branch.feature.merge", "refs/heads/main")
-        _git(repo, "config", "push.default", "upstream")
-        _git(repo, "update-ref", "refs/remotes/origin/main", _head(repo))
-        assert _decide("git push", repo)["action"] == "ask"
-
-    def test_unreadable_commands_ask(self, repo):
-        assert _decide("git push 'origin", repo)["action"] == "ask"
-
-
-def _head(repo: Path) -> str:
-    _git(repo, "commit", "-q", "--allow-empty", "-m", "x")
-    return subprocess.run(
-        ["git", "-C", str(repo), "rev-parse", "HEAD"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
 
 
 def _akhook() -> str | None:
@@ -111,91 +32,56 @@ def _akhook() -> str | None:
 
 @pytest.mark.skipif(_akhook() is None, reason="akhook is not built")
 class TestRules:
-    """The rules as the image runs them, with push-target at its image path
-    replaced by the one in this checkout."""
+    """The rules as the image runs them."""
 
-    @pytest.fixture
-    def run(self, repo, tmp_path):
-        config = tmp_path / "akhook.yml"
-        config.write_text(
-            (HOOKS / "akhook.yml")
-            .read_text()
-            .replace("/etc/akhook/push-target", str(PUSH_TARGET))
-        )
-        env = {
-            **os.environ,
-            "HOME": str(tmp_path),
-            "XDG_CONFIG_HOME": str(tmp_path / "config"),
-            "AKHOOK_ADDITIONAL_CONFIG_PATH": str(config),
-            "AKHOOK_STATE_DIR": str(tmp_path / "state"),
+    def run(self, command: str, cwd: Path, tmp_path: Path) -> dict | None:
+        event = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "cwd": str(cwd),
         }
-
-        def run(command: str, *args: str) -> dict | None:
-            event = {
-                "hook_event_name": "PreToolUse",
-                "tool_name": "Bash",
-                "tool_input": {"command": command},
-                "cwd": str(repo),
-            }
-            done = subprocess.run(
-                [_akhook(), *args]
-                if args
-                else [_akhook(), "codex", "hook", "pre_tool_use"],
-                input=json.dumps(event),
-                capture_output=True,
-                text=True,
-                env=env,
-                check=True,
-            )
-            if not done.stdout.strip():
-                return None
-            return json.loads(done.stdout)["hookSpecificOutput"]
-
-        run.env = env
-        return run
+        done = subprocess.run(
+            [_akhook(), "codex", "hook", "pre_tool_use"],
+            input=json.dumps(event),
+            capture_output=True,
+            text=True,
+            env={
+                **os.environ,
+                "HOME": str(tmp_path),
+                "XDG_CONFIG_HOME": str(tmp_path / "config"),
+                "AKHOOK_ADDITIONAL_CONFIG_PATH": str(HOOKS / "akhook.yml"),
+                "AKHOOK_STATE_DIR": str(tmp_path / "state"),
+            },
+            check=True,
+        )
+        if not done.stdout.strip():
+            return None
+        return json.loads(done.stdout)["hookSpecificOutput"]
 
     @pytest.mark.parametrize(
         "command",
         [
-            "git push origin feature",
-            "gh pr view 3",
-            "gh pr list",
-            "gh api repos/a/b/pulls",
-            "gh api graphql -f query='{ viewer { login } }'",
-            "git log",
+            "git push origin main",
+            "gh issue create -t x -b y",
+            "gh api -X DELETE repos/a/b",
         ],
     )
-    def test_reads_and_ordinary_pushes_pass(self, run, command):
-        assert run(command) is None
+    def test_github_commands_pass(self, repo, tmp_path, command):
+        assert self.run(command, repo, tmp_path) is None
 
     @pytest.mark.parametrize(
         ("command", "rule"),
         [
             ("gh pr create --fill", "gh-pr-create"),
             ("cd x && gh -R a/b pr create", "gh-pr-create"),
-            ("gh pr merge 3 --squash", "gh-write"),
-            ("gh issue comment 3 -b hi", "gh-write"),
-            ("gh repo create a/b", "gh-write"),
-            ("gh api -X DELETE repos/a/b", "gh-write"),
-            ("gh api graphql -f query='mutation { x }'", "gh-write"),
             ("akhook approval grant 0123456789abcdef", "akhook-approval"),
         ],
     )
-    def test_writes_are_denied(self, run, command, rule):
-        decision = run(command)
+    def test_denied(self, repo, tmp_path, command, rule):
+        decision = self.run(command, repo, tmp_path)
         assert decision["permissionDecision"] == "deny"
         assert f"[{rule}]" in decision["permissionDecisionReason"]
-
-    def test_pushing_main_needs_the_users_approval_once(self, run):
-        decision = run("git push origin main")
-        reason = decision["permissionDecisionReason"]
-        assert "要推送到受保护分支：main" in reason
-        request_id = reason.split("request_id 为 ")[1][:16]
-        subprocess.run(
-            [_akhook(), "approval", "grant", request_id], env=run.env, check=True
-        )
-        assert run("git push origin main") is None
-        assert run("git push origin main") is not None
 
 
 @pytest.mark.skipif(_akhook() is None, reason="akhook is not built")

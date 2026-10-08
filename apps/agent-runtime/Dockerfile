@@ -24,8 +24,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY out/${TARGETOS}-${TARGETARCH}/site-packages/ /usr/local/lib/python3.13/site-packages/
 # gh, logged in as the GitHub App by the runtime (GH_CONFIG_DIR, outside the
-# snapshot); the hooks below keep it to reads. A release binary, checked
-# against the release's checksums.
+# snapshot). A release binary, checked against the release's checksums.
 ARG GH_VERSION=2.102.0
 RUN set -eu; \
     archive="gh_${GH_VERSION}_linux_${TARGETARCH}.tar.gz"; \

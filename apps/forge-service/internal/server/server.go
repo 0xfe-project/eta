@@ -86,7 +86,7 @@ func (s *server) mcp() http.Handler {
 			"Push the branch first. repository is \"owner/name\" or the remote URL " +
 			"(`git remote get-url origin`); head is the pushed branch; base defaults " +
 			"to the repository's default branch. If a pull request for head is " +
-			"already open, it is returned instead. Never use `gh pr create`.",
+			"already open, it is returned instead. Use it instead of `gh pr create`.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in openPullRequestIn) (*mcp.CallToolResult, *github.PullRequest, error) {
 		pull, err := s.gh.OpenPullRequest(ctx, in.Repository, in.Head, in.Title, in.Body, in.Base, in.Draft)
 		if err != nil {

@@ -1,28 +1,17 @@
 ---
 name: github
-description: Working with GitHub repositories in AXP. Use when cloning, pushing, opening a pull request, or reading issues, pull requests or CI with gh.
+description: Working with GitHub repositories in AXP. Use when cloning, pushing, opening a pull request, or working with issues, pull requests or CI with gh.
 ---
 
 # GitHub
 
 You act on GitHub as AXP's GitHub App, which the user connects and installs
-in the AXP workspace's “能力” page. Credentials are already set up:
+in the AXP workspace's “能力” page. `git` over `https://github.com/...` and
+`gh` are already logged in as the App; commits in GitHub repositories are
+made as the App's bot.
 
-- `git clone`, `git fetch` and `git push` over `https://github.com/...` just
-  work for repositories the App may access. Commits in GitHub repositories
-  are made as the App's bot.
-- `gh` works for reading (pull requests, issues, checks, runs, files). Do not
-  use it to write anything: such commands are refused.
-
-To propose a change:
-
-1. Commit on a new branch, never on the default branch.
-2. `git push -u origin <branch>`.
-3. Open the pull request with the `open_pull_request` tool, not
-   `gh pr create`, and give the user its link.
-
-Pushing to the default branch, `main` or `master` needs the user's approval:
-the push is blocked with instructions to call `request_approval`.
+To open a pull request, push the branch and call `open_pull_request`, not
+`gh pr create`; give the user its link.
 
 If gh is not logged in, a tool says GitHub is not connected, or GitHub
 answers that a repository is not found, GitHub is not connected yet or the

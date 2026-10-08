@@ -147,7 +147,7 @@ func TestManifestForAUserAndAnOrganization(t *testing.T) {
 		t.Fatalf("manifest: %v", manifest)
 	}
 	permissions := manifest["default_permissions"].(map[string]any)
-	if permissions["contents"] != "write" || permissions["workflows"] != nil {
+	if permissions["contents"] != "write" || permissions["issues"] != "write" || permissions["workflows"] != "write" {
 		t.Fatalf("permissions: %v", permissions)
 	}
 	_, org, _ := e.do("POST", "/api/forge/v1/github/manifest", false, map[string]any{"name": "AXP Test", "organization": "acme", "origin": origin})
@@ -282,7 +282,7 @@ func TestCredentialsNeedTheAppInstalled(t *testing.T) {
 	}
 }
 
-func TestCredentialsPushAndReadTheRest(t *testing.T) {
+func TestCredentialsCarryEverythingGranted(t *testing.T) {
 	e := newEnv(t)
 	e.connect("installed-app")
 	before := len(emulator.issuedTokens(t))
@@ -294,10 +294,8 @@ func TestCredentialsPushAndReadTheRest(t *testing.T) {
 		tokens[0]["repository_selection"] != "selected" || !strings.HasPrefix(token(out), "ghs_") {
 		t.Fatalf("token: %v %v", tokens, out)
 	}
-	for name, level := range tokens[0]["permissions"].(map[string]any) {
-		if want := map[bool]string{true: "write", false: "read"}[name == "contents"]; level != want {
-			t.Errorf("%s: %v", name, level)
-		}
+	if got := fmt.Sprint(tokens[0]["permissions"]); got != fmt.Sprint(seedPermissions) {
+		t.Errorf("permissions: %s", got)
 	}
 	// Cached until close to expiry.
 	if _, again := e.credentials(); token(again) != token(out) || len(emulator.issuedTokens(t)) != before+1 {
@@ -337,9 +335,6 @@ func TestOpenPullRequestAsTheAppsBot(t *testing.T) {
 	if created.User.Login != "axp-test[bot]" || created.Base.Ref != "main" {
 		t.Fatalf("pull on GitHub: %+v", created)
 	}
-	if !slicesContainsPermissions(emulator.issuedTokens(t), "map[contents:read metadata:read pull_requests:write]") {
-		t.Fatal("no pull request token with only pull_requests:write and contents:read")
-	}
 
 	// The open pull request for the branch comes back instead of an error.
 	again := e.openPullRequest(map[string]any{"repository": "akarachen/axp", "head": "feature", "title": "x"})
@@ -357,13 +352,4 @@ func TestOpenPullRequestAsTheAppsBot(t *testing.T) {
 	if identity["name"] != "axp-test[bot]" || !strings.HasSuffix(identity["email"].(string), "+axp-test[bot]@users.noreply.github.com") {
 		t.Fatalf("identity: %v", identity)
 	}
-}
-
-func slicesContainsPermissions(tokens []map[string]any, want string) bool {
-	for _, token := range tokens {
-		if fmt.Sprint(token["permissions"]) == want {
-			return true
-		}
-	}
-	return false
 }

@@ -5,8 +5,6 @@ import { CheckCircleIcon } from "@phosphor-icons/react/CheckCircle";
 import { GitBranchIcon } from "@phosphor-icons/react/GitBranch";
 import { GithubLogoIcon } from "@phosphor-icons/react/GithubLogo";
 import { GitPullRequestIcon } from "@phosphor-icons/react/GitPullRequest";
-import { MagnifyingGlassIcon } from "@phosphor-icons/react/MagnifyingGlass";
-import { ShieldCheckIcon } from "@phosphor-icons/react/ShieldCheck";
 import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { useId, useState } from "react";
 import { toast } from "sonner";
@@ -94,9 +92,7 @@ function Stepper({ step }: { step: Step }) {
 
 const features = [
   [GitBranchIcon, "在你授权的仓库里 clone、提交和推送分支"],
-  [GitPullRequestIcon, "以这个 App 的身份打开 PR"],
-  [MagnifyingGlassIcon, "用 gh 读取 PR、Issue 和 CI"],
-  [ShieldCheckIcon, "不能修改 CI 工作流，推送默认分支前先请你确认"],
+  [GitPullRequestIcon, "用 gh 处理 PR、Issue、Release 和 CI"],
 ] as const;
 
 function Intro() {
