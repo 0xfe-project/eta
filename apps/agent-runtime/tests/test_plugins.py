@@ -186,7 +186,15 @@ class TestBuild:
             "python /opt/axp/plugins/memory/hooks/memory.py recall"
             in (recall["command"])
         )
-        assert set(requirements["hooks"]) == {"UserPromptSubmit", "Stop"}
+        assert set(requirements["hooks"]) == {"UserPromptSubmit", "Stop", "PreToolUse"}
+
+    def test_akhook_checks_every_agent(self, built):
+        """The image's rules are not a plugin's: they apply to every agent."""
+        _, codex = built
+        requirements = tomllib.loads((codex / "requirements.toml").read_text())
+        [group] = requirements["hooks"]["PreToolUse"]
+        [hook] = group["hooks"]
+        assert hook["command"] == "akhook codex hook pre_tool_use"
 
     def test_hooks_run_only_where_their_plugin_is_installed(self, built, tmp_path):
         _, codex = built
