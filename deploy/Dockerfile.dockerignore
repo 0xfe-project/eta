@@ -1,5 +1,6 @@
 # Only the prebuilt artifacts, the memory service's sources, the runtime's
-# plugins and the gateway configuration are sent to Docker.
+# plugins, the gateway configuration and what remote computers download are
+# sent to Docker.
 *
 !apps/control-plane/out/
 !apps/llm-gateway/out/
@@ -10,5 +11,7 @@
 !apps/memory-service/out/
 !apps/memory-service/axp_memory/
 !apps/agent-runtime/plugins/
+!apps/remote/out/dist/
+!apps/relay/out/connectors/
 **/__pycache__
 **/*.py[cod]

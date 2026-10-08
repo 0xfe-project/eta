@@ -15,7 +15,7 @@
 - `gateway` 不在 runtime 网络上，因此 runtime 碰不到公共 API；`runtime-gateway` 只加载 runtime 站点。
 - runtime 网络上还有 S3（只认预签名地址）和 OpenTelemetry Collector（无凭据的 OTLP 入口）。
 
-生产的鉴权在更外层（Cloudflare Access）；网关不做 CORS（同源）和限流。
+生产的鉴权在更外层（Cloudflare Access）；网关不做 CORS（同源）和限流。唯一的例外是 `/remote/`：远程电脑访问它，Access 对这个路径放行，其中每个接口自己鉴权（安装码或电脑的令牌，见[任务与远程电脑](tasks.md)）。
 
 ## 浏览器站点
 
@@ -27,6 +27,7 @@
 | `/api/memory/` | memory-service |
 | `/observe/`    | OpenObserve    |
 | `/api/`        | control-plane  |
+| `/remote/`     | control-plane  |
 | `/`            | web            |
 
 - 删除客户端发来的所有 `X-AXP-*` 头。
@@ -40,6 +41,7 @@
 
 - `/internal/*` 原样转发给内部运行协议，由它自己认证 runtime：令牌由它签发，换代后的旧实例也由它拒绝（`409 STALE_GENERATION`）。
 - 其余路由（llm-gateway 的 `/v1/*` 和 memory-service 的 `/memory/*`）先用 `forward_auth` 问内部运行协议 `GET /internal/v1/runtime-auth`：runtime 的 key 是 `<实例 ID>.<令牌>`，有效时返回 204 和 `X-AXP-Agent-Id`。网关用这个值替换请求里的同名头（runtime 自己设的会被覆盖），删掉 `Authorization` 后转发；无效时把 403/409 原样返回给 runtime。
+- `/tasks/*`（tasks 插件的 MCP，见[任务与远程电脑](tasks.md)）同样经 `forward_auth`，转发给内部运行协议服务。
 - 后面的服务只读 `X-AXP-Agent-Id`，自己不持有任何凭据；新增一个给 runtime 用的服务只是在 `runtime.caddy` 里加一条路由。
 
 ## 配置与检查

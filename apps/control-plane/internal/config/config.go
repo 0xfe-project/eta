@@ -44,6 +44,22 @@ type Config struct {
 	// The runtime image's Codex plugins (apps/agent-runtime/plugins), for the
 	// catalog agents choose from; the production image copies them alongside.
 	PluginsDir string `env:"AXP_PLUGINS_DIR"`
+	// The agenvo relay (vendor/agenvo), which remote computers' connectors
+	// pair with at its public origin; the control plane reaches it at
+	// RelayURL. Remote computers are off without the administrator secret.
+	RelayURL         string `env:"AXP_RELAY_URL"`
+	RelayOrigin      string `env:"AXP_RELAY_ORIGIN"`
+	RelayAdminSecret string `env:"AXP_RELAY_ADMIN_SECRET"`
+	// The only CA trusted for the relay (development's self-signed one).
+	RelayCAFile string `env:"AXP_RELAY_CA_FILE"`
+	// Where remote computers reach AXP (install commands); the browser's
+	// address when empty.
+	PublicURL string `env:"AXP_PUBLIC_URL"`
+	// The forge service, for remote computers' GitHub credentials.
+	ForgeURL string `env:"AXP_FORGE_URL"`
+	// Directories (colon-separated) with what remote computers download: the
+	// axp binaries and the agenvo connectors.
+	RemoteDist string `env:"AXP_REMOTE_DIST"`
 	// Test hook: runtimes run this instead of the Codex app-server.
 	CodexLaunch string `env:"AXP_CODEX_LAUNCH"`
 }
@@ -53,6 +69,7 @@ var defaults = map[string]string{
 	"AXP_API_ADDR":      ":8000",
 	"AXP_INTERNAL_ADDR": ":8001",
 	"AXP_PLUGINS_DIR":   "../agent-runtime/plugins",
+	"AXP_REMOTE_DIST":   "../remote/out/dist:../relay/out/connectors",
 }
 
 var production = map[string]string{
@@ -60,6 +77,8 @@ var production = map[string]string{
 	"AXP_LLM_GATEWAY_URL":     "http://axp-llm:8317",
 	"AXP_S3_ENDPOINT":         "http://axp-s3:8333",
 	"AXP_NATS_URL":            "nats://axp-nats:4222",
+	"AXP_RELAY_URL":           "http://axp-relay:8080",
+	"AXP_FORGE_URL":           "http://axp-forge:8330",
 }
 
 var development = map[string]string{

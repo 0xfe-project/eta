@@ -1,0 +1,7 @@
+{
+  "name": "@axp/relay",
+  "private": true,
+  "scripts": {
+    "build": "bash ../../scripts/build/relay.sh"
+  }
+}

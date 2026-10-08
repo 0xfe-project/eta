@@ -303,9 +303,7 @@ class TestBoot:
         ).iterdir()
         # MCP configs get this instance's values; Codex expands none itself.
         server = json.loads((installed / ".mcp.json").read_text())["mcpServers"]
-        assert server["tasks"]["env"] == {
-            "AXP_WORKSPACE_DIR": str(runtime.settings.workspace_dir)
-        }
+        assert server["tasks"]["url"] == "http://gateway.invalid/tasks/mcp"
         [memory] = (runtime.settings.codex_home / "plugins/cache/axp/memory").iterdir()
         server = json.loads((memory / ".mcp.json").read_text())["mcpServers"]
         assert server["memory"]["url"] == "http://gateway.invalid/memory/mcp"

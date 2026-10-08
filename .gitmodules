@@ -1,3 +1,6 @@
 [submodule "vendor/akhook"]
 	path = vendor/akhook
 	url = https://github.com/aghub-app/akhook
+[submodule "vendor/agenvo"]
+	path = vendor/agenvo
+	url = https://github.com/Xuanwo/agenvo

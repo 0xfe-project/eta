@@ -25,7 +25,7 @@
 | `openapi public\|internal` | 输出 API 的 OpenAPI 文档，不需要数据库和队列                             |
 | `ensure-runtime-network`   | 创建 runtime 的 Docker 网络（开发）                                      |
 
-代码在 `internal/` 下：`chat`（产品状态：智能体、消息、交互、`ui_event`，以及把 runtime 事件投影成产品状态）、`control`（controller 与内部运行协议）、`routines`（定时任务，见[定时任务](routines.md)）、`api`（HTTP：huma 跑在 chi 上）、`queue`（NATS）、`container`（Docker 官方 Go SDK）、`snapshots`（S3 预签名地址）、`store`（PostgreSQL 与 goose 迁移）、`config`（环境变量，caarlos0/env）。
+代码在 `internal/` 下：`chat`（产品状态：智能体、消息、交互、`ui_event`，以及把 runtime 事件投影成产品状态）、`control`（controller 与内部运行协议）、`routines`（定时任务，见[定时任务](routines.md)）、`tasks`（任务看板与远程电脑，见[任务与远程电脑](tasks.md)；它的 runner 在 controller 进程里单独循环）、`relay`（agenvo 中继的客户端）、`api`（HTTP：huma 跑在 chi 上）、`queue`（NATS）、`container`（Docker 官方 Go SDK）、`snapshots`（S3 预签名地址）、`store`（PostgreSQL 与 goose 迁移）、`config`（环境变量，caarlos0/env）。
 
 ## OpenAPI 与前端类型
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
 	"github.com/akarachen/axp/apps/control-plane/internal/llm"
 	"github.com/akarachen/axp/apps/control-plane/internal/store"
+	"github.com/akarachen/axp/apps/control-plane/internal/tasks"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -591,7 +593,7 @@ func (r *streamRecorder) Write(b []byte) (int, error) {
 func (r *streamRecorder) Flush() {}
 
 func TestPublicSchemaHasNoInternalFields(t *testing.T) {
-	_, document := Public(&Deps{Chat: &chat.Service{}})
+	_, document := Public(&Deps{Chat: &chat.Service{}, Tasks: &tasks.Service{}})
 	spec := document.OpenAPI()
 	var paths []string
 	for path := range spec.Paths {
@@ -604,15 +606,26 @@ func TestPublicSchemaHasNoInternalFields(t *testing.T) {
 		"/api/v1/agents", "/api/v1/agents/{agent_id}", "/api/v1/agents/{agent_id}/compact",
 		"/api/v1/agents/{agent_id}/messages", "/api/v1/agents/{agent_id}/restart", "/api/v1/chat",
 		"/api/v1/chat/interactions/{interaction_id}/answer", "/api/v1/chat/messages",
-		"/api/v1/chat/messages/{message_id}/stop", "/api/v1/chat/stream", "/api/v1/plugins",
+		"/api/v1/chat/messages/{message_id}/stop", "/api/v1/chat/stream", "/api/v1/computers",
+		"/api/v1/computers/{computer_id}", "/api/v1/computers/{computer_id}/install",
+		"/api/v1/computers/{computer_id}/runtimes/{kind}/approve",
+		"/api/v1/computers/{computer_id}/runtimes/{kind}/places", "/api/v1/plugins",
 		"/api/v1/routines", "/api/v1/routines/{routine_id}", "/api/v1/routines/{routine_id}/briefs/{version}/restore",
 		"/api/v1/routines/{routine_id}/run", "/api/v1/routines/{routine_id}/runs/{run_id}/feedback",
+		"/api/v1/tasks", "/api/v1/tasks/{task_id}", "/api/v1/tasks/{task_id}/comments",
+		"/api/v1/tasks/{task_id}/runs/{run_id}/interrupt", "/api/v1/tasks/{task_id}/runs/{run_id}/log",
 	}
 	if !slices.Equal(paths, want) {
 		t.Fatalf("paths %v", paths)
 	}
+	// The task board's own vocabulary is not the agents' internals: a
+	// remote computer's runtime (Paseo, Herdr), a tool call's command.
+	board := regexp.MustCompile(`^(Task|Computer|Assignee|LogEntry|RunLog|Install|Enrollment|Comment|Place)`)
 	properties := map[string]any{}
-	for _, schema := range spec.Components.Schemas.Map() {
+	for schemaName, schema := range spec.Components.Schemas.Map() {
+		if board.MatchString(schemaName) {
+			continue
+		}
 		for name := range schema.Properties {
 			properties[name] = true
 		}

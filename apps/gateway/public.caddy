@@ -1,6 +1,7 @@
 # The browser's entry: by longest prefix, /api/llm to the LLM gateway,
 # /api/memory to the memory service, /api/forge to the forge service,
-# /observe to OpenObserve, /api to the control plane, everything else to web.
+# /observe to OpenObserve, /api and /remote to the control plane, everything
+# else to web.
 # Paths are not rewritten and the browser's Host is kept.
 http://:{$AXP_GATEWAY_PORT:8080} {
 	bind {$AXP_GATEWAY_BIND:0.0.0.0}
@@ -34,6 +35,11 @@ http://:{$AXP_GATEWAY_PORT:8080} {
 	handle /observe/* {
 		log_skip
 		reverse_proxy {$AXP_UPSTREAM_OBSERVE:axp-openobserve:5080}
+	}
+	# Remote computers' install script, downloads and API: the one path the
+	# edge's access control lets through; each endpoint authenticates itself.
+	handle /remote/* {
+		reverse_proxy {$AXP_UPSTREAM_API:axp-api:8000}
 	}
 	handle /api/* {
 		# Chat streams (SSE) pass through as they are written.

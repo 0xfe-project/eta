@@ -34,7 +34,7 @@
     "test:agent-runtime": "turbo run test --filter=@axp/agent-runtime",
     "test:memory-service": "turbo run test --filter=@axp/memory-service",
     "test:forge-service": "turbo run test --filter=@axp/forge-service",
-    "check:go": "turbo run lint test --filter=@axp/control-plane --filter=@axp/llm-gateway --filter=@axp/forge-service",
+    "check:go": "turbo run lint test --filter=@axp/control-plane --filter=@axp/llm-gateway --filter=@axp/forge-service --filter=@axp/remote",
     "format": "dprint fmt",
     "format:check": "dprint check",
     "knip": "knip",

@@ -53,6 +53,8 @@ deploy/deploy.sh rollback <version>
 | `memory`          | `python -m axp_memory`         | 智能体记忆（[记忆](../docs/architecture/memory.md)）；网络别名 `axp-memory`，runtime 只能经 runtime 网关访问；数据在 accessory `postgres`（pgvector）                             |
 | `controller`      | `axp-control-plane controller` | 挂载 Docker socket；用 PostgreSQL advisory lock 保证同一时刻只有一个在运行                                                                                                        |
 
+accessory `relay` 是远程电脑接入用的 agenvo 中继（[任务与远程电脑](../docs/architecture/tasks.md)）：它的镜像 `axp-relay:<agenvo commit>-<Dockerfile 摘要>` 由 `deploy.sh` 构建并推送到本地仓库，只在固定的 agenvo 版本或 `relay.Dockerfile` 变化时重建并重启；状态（配对的设备、OAuth 授权）在卷 `axp-relay`；发布在 `127.0.0.1:24170`，由宿主机的反向代理以独立的主机名（`production.env` 的 `AXP_RELAY_ORIGIN`）对外，这个主机名不经过 Cloudflare Access。同时在 `production.env` 设置 `AXP_PUBLIC_URL`（安装命令里的 AXP 地址），并让 Access 对 AXP 的 `/remote/` 放行。
+
 服务之间没有共享密钥：角色中只有 `runtime-gateway` 和 controller 加入 runtime 网络（accessory 中还有 `axp-s3`、`axp-nats` 和 `axp-otel-collector`），其余角色只在 Kamal 网络上，runtime 连不到（见[网关](../docs/architecture/gateway.md)）。两个网关的访问日志是 JSON，写在容器输出里（`deploy/deploy.sh app logs -r gateway`），不进 OpenObserve。
 
 web、api、llm、memory、forge 不经过 kamal-proxy，重新部署时会有几秒中断（单用户场景可接受）。

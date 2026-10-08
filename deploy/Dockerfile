@@ -25,6 +25,10 @@ COPY apps/gateway/Caddyfile apps/gateway/*.caddy /app/apps/gateway/
 COPY apps/memory-service/axp_memory /app/apps/memory-service/axp_memory/
 # The runtime image's plugins: the catalog agents choose from.
 COPY apps/agent-runtime/plugins /app/apps/agent-runtime/plugins/
+# What remote computers download from /remote/dl: the axp binaries and the
+# agenvo connectors (where the control plane looks for them by default).
+COPY apps/remote/out/dist/ /app/apps/remote/out/dist/
+COPY apps/relay/out/connectors/ /app/apps/relay/out/connectors/
 # The control plane finds the plugins at ../agent-runtime/plugins; the LLM
 # gateway keeps its state under var/ here (deploy/deploy.yml).
 WORKDIR /app/apps/control-plane

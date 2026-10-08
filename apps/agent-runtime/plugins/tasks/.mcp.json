@@ -1,10 +1,9 @@
 {
   "mcpServers": {
     "tasks": {
-      "command": "python",
-      "args": ["server.py"],
-      "cwd": ".",
-      "env": { "AXP_WORKSPACE_DIR": "${AXP_WORKSPACE_DIR}" }
+      "type": "streamable-http",
+      "url": "${AXP_GATEWAY_URL}/tasks/mcp",
+      "bearer_token_env_var": "AXP_RUNTIME_LLM_KEY"
     }
   }
 }
