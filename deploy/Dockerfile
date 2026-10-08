@@ -29,6 +29,7 @@ WORKDIR /app/apps/control-plane
 COPY apps/control-plane/manage.py apps/control-plane/gunicorn.conf.py ./
 COPY apps/control-plane/config config/
 COPY apps/control-plane/chat chat/
+COPY apps/control-plane/routines routines/
 
 ENV PYTHONUNBUFFERED=1
 EXPOSE 3000 8000 8001 8080 8090 8317 8320 8330

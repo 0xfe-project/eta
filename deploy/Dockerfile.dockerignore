@@ -3,6 +3,7 @@
 *
 !apps/control-plane/out/
 !apps/llm-gateway/out/
+!apps/forge-service/out/
 !apps/gateway/Caddyfile
 !apps/gateway/*.caddy
 !apps/web/out/
@@ -10,6 +11,7 @@
 !apps/control-plane/gunicorn.conf.py
 !apps/control-plane/config/
 !apps/control-plane/chat/
+!apps/control-plane/routines/
 !apps/memory-service/out/
 !apps/memory-service/axp_memory/
 !apps/agent-runtime/plugins/
