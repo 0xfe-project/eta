@@ -1,6 +1,6 @@
--- The schema as Django left it (chat 0009, routines 0001): the baseline every
--- later migration builds on. A database that already has it (it was migrated
--- by Django) records this migration as applied without running it.
+-- The schema as Django left it (chat 0009, routines 0001): migration 1, the
+-- baseline every later migration builds on (store.go). A database Django
+-- migrated already has it.
 
 CREATE TABLE agent (
     id uuid NOT NULL,

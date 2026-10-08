@@ -4,16 +4,17 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"embed"
 	"errors"
-	"fmt"
 	"io/fs"
-	"sort"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
+	"github.com/pressly/goose/v3/lock"
 )
 
 // DB is what queries run on: the pool or a transaction.
@@ -46,73 +47,36 @@ func IsUniqueViolation(err error) bool {
 //go:embed migrations/*.sql
 var migrations embed.FS
 
-// migrationLock is the pg_advisory_lock key migrations run under.
-const migrationLock = 0x41585044
+//go:embed django.sql
+var djangoSchema string
 
-// Migrate applies the migrations not applied yet, in order, each in its own
-// transaction. A database Django migrated already has the baseline.
+// Migrate applies the migrations not applied yet (goose, under a session
+// lock). Migration 1 is the schema as Django left it; a database Django
+// migrated already has it.
 func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
-	conn, err := pool.Acquire(ctx)
+	db := stdlib.OpenDBFromPool(pool)
+	defer db.Close()
+	locker, err := lock.NewPostgresSessionLocker()
 	if err != nil {
 		return err
 	}
-	defer conn.Release()
-	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", migrationLock); err != nil {
-		return err
-	}
-	defer conn.Exec(context.Background(), "SELECT pg_advisory_unlock($1)", migrationLock) //nolint:errcheck
-	if _, err := conn.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migration (
-		version text PRIMARY KEY,
-		applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
-		return err
-	}
-	applied := map[string]bool{}
-	rows, err := conn.Query(ctx, "SELECT version FROM schema_migration")
+	fsys, err := fs.Sub(migrations, "migrations")
 	if err != nil {
 		return err
 	}
-	versions, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	if err != nil {
-		return err
-	}
-	for _, v := range versions {
-		applied[v] = true
-	}
-	names, err := fs.Glob(migrations, "migrations/*.sql")
-	if err != nil {
-		return err
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		version := strings.TrimSuffix(strings.TrimPrefix(name, "migrations/"), ".sql")
-		if applied[version] {
-			continue
-		}
-		sql, err := migrations.ReadFile(name)
-		if err != nil {
+	baseline := goose.NewGoMigration(1, &goose.GoFunc{RunTx: func(ctx context.Context, tx *sql.Tx) error {
+		var exists bool
+		if err := tx.QueryRowContext(ctx, "SELECT to_regclass('conversation') IS NOT NULL").Scan(&exists); err != nil || exists {
 			return err
 		}
-		err = pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
-			if version == "0001_baseline" {
-				var exists bool
-				if err := tx.QueryRow(ctx, "SELECT to_regclass('conversation') IS NOT NULL").Scan(&exists); err != nil {
-					return err
-				}
-				if exists {
-					sql = nil
-				}
-			}
-			if len(sql) > 0 {
-				if _, err := tx.Exec(ctx, string(sql)); err != nil {
-					return err
-				}
-			}
-			_, err := tx.Exec(ctx, "INSERT INTO schema_migration (version) VALUES ($1)", version)
-			return err
-		})
-		if err != nil {
-			return fmt.Errorf("migration %s: %w", version, err)
-		}
+		_, err := tx.ExecContext(ctx, djangoSchema)
+		return err
+	}}, nil)
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, fsys,
+		goose.WithSessionLocker(locker), goose.WithGoMigrations(baseline))
+	if err != nil {
+		return err
 	}
-	return nil
+	_, err = provider.Up(ctx)
+	return err
 }

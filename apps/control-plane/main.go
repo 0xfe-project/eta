@@ -78,13 +78,6 @@ func main() {
 	}
 }
 
-func env(name, fallback string) string {
-	if v := os.Getenv(name); v != "" {
-		return v
-	}
-	return fallback
-}
-
 // printOpenAPI prints an API's document; it needs no database or queue.
 func printOpenAPI(args []string) error {
 	if len(args) != 1 {
@@ -137,7 +130,7 @@ func connect(ctx context.Context) (*services, error) {
 	models := llm.NewGateway(cfg.LLMGatewayURL)
 	chatService := &chat.Service{
 		Queue: q, Models: models, Plugins: &plugins.Catalog{Dir: cfg.PluginsDir},
-		Cursors: chat.Cursors{Secret: cfg.SecretKey},
+		Cursors: chat.Cursors{Secret: []byte(cfg.SecretKey)},
 	}
 	return &services{
 		cfg:       cfg,
@@ -148,7 +141,7 @@ func connect(ctx context.Context) (*services, error) {
 			DB:       pool,
 			Chat:     chatService,
 			Routines: &routines.Service{Queue: q, Models: models},
-			Protocol: &control.Protocol{DB: pool, Chat: chatService, Snapshots: s3, Secret: cfg.SecretKey},
+			Protocol: &control.Protocol{DB: pool, Chat: chatService, Snapshots: s3, Secret: []byte(cfg.SecretKey)},
 			Dev:      cfg.Dev,
 		},
 	}, nil
@@ -174,21 +167,22 @@ func run(role string, args []string) error {
 		if err != nil {
 			return err
 		}
-		return container.NewDocker(cfg.Dev).EnsureNetwork(ctx)
+		driver, err := container.NewDocker(cfg.Dev)
+		if err != nil {
+			return err
+		}
+		return driver.EnsureNetwork(ctx)
 	case "api", "internal":
 		s, err := connect(ctx)
 		if err != nil {
 			return err
 		}
-		handler, addr := http.Handler(nil), ""
 		if role == "api" {
-			handler, _ = api.Public(s.deps)
-			addr = env("AXP_API_ADDR", ":8000")
-		} else {
-			handler, _ = api.Internal(s.deps)
-			addr = env("AXP_INTERNAL_ADDR", ":8001")
+			handler, _ := api.Public(s.deps)
+			return serve(ctx, s.cfg.APIAddr, handler)
 		}
-		return serve(ctx, addr, handler)
+		handler, _ := api.Internal(s.deps)
+		return serve(ctx, s.cfg.InternalAddr, handler)
 	case "controller":
 		flags := flag.NewFlagSet("controller", flag.ExitOnError)
 		interval := flags.Duration("interval", 500*time.Millisecond, "time between ticks")
@@ -256,7 +250,10 @@ func runController(ctx context.Context, s *services, interval time.Duration) err
 	// The tick in progress always finishes, even after SIGTERM: it may be
 	// stopping a runtime.
 	work := context.WithoutCancel(ctx)
-	driver := container.NewDocker(s.cfg.Dev)
+	driver, err := container.NewDocker(s.cfg.Dev)
+	if err != nil {
+		return err
+	}
 	if err := driver.EnsureNetwork(work); err != nil {
 		return err
 	}
@@ -268,7 +265,7 @@ func runController(ctx context.Context, s *services, interval time.Duration) err
 	}
 	runner := &routines.Runner{
 		DB: s.deps.DB, Queue: s.queue, Driver: driver, Models: s.models, Completer: s.models,
-		Secret: s.cfg.SecretKey, RuntimeGatewayURL: s.cfg.RuntimeGatewayURL, NATSURL: s.cfg.NATSURL,
+		Secret: []byte(s.cfg.SecretKey), RuntimeGatewayURL: s.cfg.RuntimeGatewayURL, NATSURL: s.cfg.NATSURL,
 		CodexLaunch: s.cfg.CodexLaunch,
 	}
 	if err := runner.SyncSchedules(work); err != nil {
@@ -276,7 +273,7 @@ func runController(ctx context.Context, s *services, interval time.Duration) err
 	}
 	controller := &control.Controller{
 		DB: s.deps.DB, Chat: s.deps.Chat, Queue: s.queue, Driver: driver, Snapshots: s.snapshots,
-		Models: s.models, Routines: runner, Secret: s.cfg.SecretKey,
+		Models: s.models, Routines: runner, Secret: []byte(s.cfg.SecretKey),
 		RuntimeGatewayURL: s.cfg.RuntimeGatewayURL, NATSURL: s.cfg.NATSURL, CodexLaunch: s.cfg.CodexLaunch,
 		ID: "controller-" + uuid.NewString()[:8], HostID: control.HostID(),
 	}

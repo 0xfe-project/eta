@@ -18,7 +18,9 @@ import (
 	"github.com/akarachen/axp/apps/control-plane/internal/control"
 	"github.com/akarachen/axp/apps/control-plane/internal/routines"
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/danielgtaylor/huma/v2/adapters/humago"
+	"github.com/danielgtaylor/huma/v2/adapters/humachi"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -120,7 +122,7 @@ func RequestID(ctx context.Context) string {
 
 type requestInfo struct{ method, path string }
 
-func withRequest(next http.Handler) http.Handler {
+func requestIDs(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get("X-Request-Id")
 		if id == "" {
@@ -133,8 +135,13 @@ func withRequest(next http.Handler) http.Handler {
 	})
 }
 
-func notFound(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, newError(r.Context(), 404, ""))
+// router is a chi router whose own errors use the error envelope.
+func router() chi.Router {
+	r := chi.NewRouter()
+	r.Use(requestIDs, middleware.Recoverer)
+	r.NotFound(func(w http.ResponseWriter, r *http.Request) { writeJSON(w, newError(r.Context(), 404, "")) })
+	r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) { writeJSON(w, newError(r.Context(), 405, "")) })
+	return r
 }
 
 func writeJSON(w http.ResponseWriter, e *Error) {
@@ -158,15 +165,14 @@ func config(title, version, prefix string, docs bool) huma.Config {
 
 // Public is the browser's API under /api.
 func Public(d *Deps) (http.Handler, huma.API) {
-	mux := http.NewServeMux()
-	api := humago.New(mux, config("AXP Control Plane", "0.1.0", "/api", true))
+	r := router()
+	api := humachi.New(r, config("AXP Control Plane", "0.1.0", "/api", true))
 	huma.Get(api, "/api/health", func(context.Context, *struct{}) (*struct{ Body Health }, error) {
 		return &struct{ Body Health }{Health{Status: "ok", Service: "control-plane"}}, nil
 	}, func(o *huma.Operation) { o.OperationID = "health"; o.Tags = []string{"health"} })
 	registerChat(api, d)
 	registerRoutines(api, d)
-	mux.HandleFunc("/", notFound)
-	return withRequest(mux), api
+	return r, api
 }
 
 type Health struct {
@@ -177,9 +183,8 @@ type Health struct {
 // Internal is runtimes' API under /internal. It is never served by the
 // public server.
 func Internal(d *Deps) (http.Handler, huma.API) {
-	mux := http.NewServeMux()
-	api := humago.New(mux, config("AXP Internal Runtime Protocol", "1", "/internal", d.Dev))
+	r := router()
+	api := humachi.New(r, config("AXP Internal Runtime Protocol", "1", "/internal", d.Dev))
 	registerInternal(api, d)
-	mux.HandleFunc("/", notFound)
-	return withRequest(mux), api
+	return r, api
 }

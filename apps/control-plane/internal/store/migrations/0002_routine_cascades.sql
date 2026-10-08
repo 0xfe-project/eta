@@ -1,3 +1,4 @@
+-- +goose Up
 -- Deleting a routine deletes its runs, their feedback and its briefs in the
 -- database (Django's ORM used to cascade them itself); a brief revised from
 -- deleted feedback keeps its text.

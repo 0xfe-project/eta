@@ -25,7 +25,7 @@
 | `openapi public\|internal` | 输出 API 的 OpenAPI 文档，不需要数据库和队列                             |
 | `ensure-runtime-network`   | 创建 runtime 的 Docker 网络（开发）                                      |
 
-代码在 `internal/` 下：`chat`（产品状态：智能体、消息、交互、`ui_event`，以及把 runtime 事件投影成产品状态）、`control`（controller 与内部运行协议）、`routines`（定时任务，见[定时任务](routines.md)）、`api`（HTTP）、`queue`（NATS）、`container`（Docker Engine API）、`snapshots`（S3 预签名地址）、`store`（PostgreSQL 与迁移）。
+代码在 `internal/` 下：`chat`（产品状态：智能体、消息、交互、`ui_event`，以及把 runtime 事件投影成产品状态）、`control`（controller 与内部运行协议）、`routines`（定时任务，见[定时任务](routines.md)）、`api`（HTTP：huma 跑在 chi 上）、`queue`（NATS）、`container`（Docker 官方 Go SDK）、`snapshots`（S3 预签名地址）、`store`（PostgreSQL 与 goose 迁移）、`config`（环境变量，caarlos0/env）。
 
 ## OpenAPI 与前端类型
 
@@ -41,7 +41,7 @@ Web 的 `build`、`lint`、`test` 都依赖 `generate`，Turbo 按 Go 代码的�
 
 ## 数据库
 
-迁移是 `internal/store/migrations/` 里的 SQL 文件，编译进二进制，按文件名顺序执行，记录在表 `schema_migration`。`0001_baseline` 是 Django 版控制面最后的表结构：已经由 Django 迁移过的数据库只记录它、不执行。
+迁移由 [goose](https://github.com/pressly/goose) 执行，SQL 文件在 `internal/store/migrations/`，编译进二进制，记录在表 `goose_db_version`，执行时持有 PostgreSQL 会话锁。1 号迁移是 Django 版控制面最后的表结构（`internal/store/django.sql`）：已经由 Django 迁移过的数据库只记录它、不执行。
 
 ## 测试
 

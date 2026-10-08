@@ -50,7 +50,8 @@
       ]
     },
     // Tests run against development's PostgreSQL, each binary in a database
-    // of its own; AXP_TEST_NATS_URL adds the NATS tests.
+    // of its own; AXP_TEST_NATS_URL and AXP_TEST_DOCKER add the NATS and
+    // Docker tests.
     "test": {
       "inputs": [
         "$TURBO_DEFAULT$",
@@ -58,7 +59,7 @@
         "$TURBO_ROOT$/packages/telemetry-go/**",
         "$TURBO_ROOT$/apps/agent-runtime/plugins/*/.codex-plugin/plugin.json"
       ],
-      "env": ["DATABASE_URL", "AXP_TEST_NATS_URL"]
+      "env": ["DATABASE_URL", "AXP_TEST_NATS_URL", "AXP_TEST_DOCKER"]
     }
   }
 }
