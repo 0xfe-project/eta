@@ -2,9 +2,12 @@ import type { WorkspaceView } from "./types";
 import { ArrowsInIcon } from "@phosphor-icons/react/ArrowsIn";
 import { ArrowsOutIcon } from "@phosphor-icons/react/ArrowsOut";
 import { Link } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { usePendingInteractions } from "@/queries/chat";
+import { Inbox } from "./inbox";
 import { MemoryView } from "./memory-view";
 import { views } from "./workspace-search";
 
@@ -19,6 +22,10 @@ export function WorkspacePanel({
   fullWindow?: boolean;
   className?: string;
 }) {
+  const pending = usePendingInteractions().length;
+  useEffect(() => {
+    document.title = pending ? `(${pending}) AXP` : "AXP";
+  }, [pending]);
   return (
     <Tabs
       id="workspace-panel"
@@ -40,6 +47,9 @@ export function WorkspacePanel({
               className="px-2 text-xs sm:px-3"
             >
               {label}
+              {value === "inbox" && pending ? (
+                <span className="tabular-nums">{pending}</span>
+              ) : null}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -67,6 +77,7 @@ export function WorkspacePanel({
         {views.map(({ value }) => (
           <TabsContent key={value} value={value}>
             {value === "memory" ? <MemoryView /> : null}
+            {value === "inbox" ? <Inbox fullWindow={fullWindow} /> : null}
           </TabsContent>
         ))}
       </div>

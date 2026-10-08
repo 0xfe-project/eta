@@ -54,11 +54,12 @@ PLUGIN_VARIABLES = re.compile(r"\$\{(AXP_GATEWAY_URL|AXP_WORKSPACE_DIR)\}")
 APPROVAL_METHODS = {
     "item/commandExecution/requestApproval": "command",
     "item/fileChange/requestApproval": "file_change",
+    # A plugin's tool asking the user to confirm (see user-attention.md).
+    "mcpServer/elicitation/request": "elicitation",
 }
 # Conservative answers for server requests the product does not surface.
 DECLINE_RESPONSES = {
     "item/permissions/requestApproval": {"permissions": {}},
-    "mcpServer/elicitation/request": {"action": "decline"},
     "item/tool/requestUserInput": {"answers": {}},
     "execCommandApproval": {"decision": "denied"},
     "applyPatchApproval": {"decision": "denied"},
@@ -669,8 +670,8 @@ class Runtime:
         if kind is None:
             return DECLINE_RESPONSES.get(method, {})
         command_id = self.current_command_id
-        if command_id is None:
-            return {"decision": "decline"}
+        if command_id is None or (kind == "elicitation" and not _confirmation(params)):
+            return _approval_response(kind, "decline")
         approval_id = str(uuid.uuid4())
         waiter = _ApprovalWaiter(command_id)
         with self._lock:
@@ -698,7 +699,7 @@ class Runtime:
         self.ledger.emit(
             "approval.applied", {"approval_id": approval_id, "decision": decision}
         )
-        return {"decision": decision}
+        return _approval_response(kind, decision)
 
     # --- execution ------------------------------------------------------------
 
@@ -1051,7 +1052,30 @@ def _command_view(command: dict) -> dict:
     }
 
 
+def _confirmation(params: dict) -> bool:
+    """Whether an elicitation only asks for a yes or no: a form with no fields."""
+    schema = params.get("requestedSchema")
+    return (
+        params.get("mode") == "form"
+        and isinstance(schema, dict)
+        and not schema.get("properties")
+    )
+
+
+def _approval_response(kind: str, decision: str) -> dict:
+    if kind != "elicitation":
+        return {"decision": decision}
+    if decision == "accept":
+        return {"action": "accept", "content": {}}
+    return {"action": decision}
+
+
 def _approval_summary(kind: str, params: dict) -> dict:
+    if kind == "elicitation":
+        return {
+            "server": (params.get("serverName") or "")[:100] or None,
+            "message": (params.get("message") or "")[:500] or None,
+        }
     summary = {"reason": (params.get("reason") or "")[:300] or None}
     if kind == "command":
         summary["command"] = (params.get("command") or "")[:500] or None

@@ -76,6 +76,7 @@ def interaction_public(interaction: Interaction) -> dict:
     return _render(
         InteractionOut(
             id=str(interaction.id),
+            agent_id=str(interaction.agent_id),
             message_id=str(interaction.message_id),
             kind=interaction.kind,
             prompt=interaction.prompt,

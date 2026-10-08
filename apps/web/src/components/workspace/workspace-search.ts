@@ -8,6 +8,7 @@ export const views = [
   { value: "tasks", label: "任务" },
   { value: "memory", label: "记忆" },
   { value: "capabilities", label: "能力" },
+  { value: "inbox", label: "确认" },
 ] as const;
 
 const viewParser = parseAsStringLiteral([
@@ -15,6 +16,7 @@ const viewParser = parseAsStringLiteral([
   "tasks",
   "memory",
   "capabilities",
+  "inbox",
 ] as const)
   .withDefault("overview")
   .withOptions({ history: "push" });

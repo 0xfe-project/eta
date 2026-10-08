@@ -134,6 +134,7 @@ class InteractionOption(Schema):
 
 class InteractionOut(Schema):
     id: str
+    agent_id: str
     message_id: str
     kind: Literal["choice"]
     prompt: str

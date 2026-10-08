@@ -59,6 +59,7 @@ const messageSchema = z.object({
 
 const interactionSchema = z.object({
   id: z.string(),
+  agent_id: z.string(),
   message_id: z.string(),
   kind: z.literal("choice"),
   prompt: z.string(),
@@ -214,6 +215,14 @@ export function useChat() {
   const query = useQuery(chatQueryOptions());
   useChatStream(query.data?.event_cursor);
   return query;
+}
+
+/** Every agent's interactions waiting for the user. */
+export function usePendingInteractions() {
+  const { data } = useQuery(chatQueryOptions());
+  return (data?.interactions ?? []).filter(
+    (interaction) => interaction.status === "pending",
+  );
 }
 
 // Under chatKey, so reloading the snapshot reloads history with it.

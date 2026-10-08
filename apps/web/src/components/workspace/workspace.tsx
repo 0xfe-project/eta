@@ -7,6 +7,7 @@ import {
   useAnswerInteraction,
   useChat,
   useCompact,
+  usePendingInteractions,
   useSendMessage,
   useStopReply,
 } from "@/queries/chat";
@@ -33,6 +34,7 @@ export function Workspace({
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const chat = useChat();
+  const pending = usePendingInteractions().length;
   const { current: selected, openEditor } = useAgents();
   const history = useAgentMessages(selected?.id);
   const availability = useModelAvailability(selected);
@@ -85,6 +87,7 @@ export function Workspace({
           aria-pressed={mobilePanel === "workspace"}
         >
           工作区
+          {pending ? <span className="tabular-nums">{pending}</span> : null}
         </Button>
       </div>
       <main

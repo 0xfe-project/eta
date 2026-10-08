@@ -4,6 +4,8 @@ Used by tests and by credential-free end-to-end runs. Behaviour is selected by
 markers in the user's text:
 
   [approve]  ask for command approval before answering
+  [confirm]  a plugin tool asks the user to confirm (MCP elicitation)
+  [form]     a plugin tool asks the user to fill in a form
   [slow]     stream slowly so the turn can be interrupted
   [fail]     finish the turn as failed
   [crash]    exit the process after the turn starts
@@ -130,6 +132,22 @@ def run_turn(thread_id: str, turn_id: str, text: str) -> None:
         if decision == "cancel":
             status = "interrupted"
         reply = "已执行命令。" if decision == "accept" else "已取消该命令。"
+    elif "[confirm]" in text or "[form]" in text:
+        fields = {"name": {"type": "string"}} if "[form]" in text else {}
+        answer = server_request(
+            "mcpServer/elicitation/request",
+            {
+                **base,
+                "serverName": "tasks",
+                "mode": "form",
+                "message": "清空所有任务？",
+                "requestedSchema": {"type": "object", "properties": fields},
+            },
+        )
+        action = answer.get("action")
+        if action == "cancel":
+            status = "interrupted"
+        reply = f"确认结果：{action}"
     else:
         reply = f"收到：{text}"
     if status == "completed":
