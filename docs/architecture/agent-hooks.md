@@ -59,19 +59,15 @@ agent 原样重新执行 git push origin main
 
 - 授权只对完全相同的调用有效（同样的规则、cwd 和命令），只能用一次。agent 换一条命令就要重新确认。
 - 状态是 `/run/akhook` 下的文件，不在 `/agent` 里，所以不进快照；实例换代后一并消失。akhook 每次处理 `ask` 时顺带删掉过期的授权和超过一天的请求。
-- `request_approval` 的 `tool_timeout_sec` 是一天：工具调用会一直等到用户回答。turn 被停止时 runtime 以 `cancel` 回答 elicitation，工具返回“用户没有确认”。
+- turn 被停止时 elicitation 以 `cancel` 结束，工具返回“用户没有确认”。
 
-## elicitation 在 runtime 和控制面
+## elicitation 到用户
 
-- **runtime**：`mcpServer/elicitation/request` 中，`mode` 为 `form` 且 `requestedSchema` 没有字段的，按审批处理：`kind = elicitation`，摘要是 `{server, message}`，等待和取消与命令审批相同。用户同意时回答 `{action: accept, content: {}}`，拒绝时回答 `decline`，取消时回答 `cancel`。其他 elicitation（有字段的表单、URL 模式）仍然直接回答 `decline`。
-- **控制面**：`approval.kind` 增加 `elicitation`，确认卡片的提示就是 MCP server 给出的 message（最多 500 字），选项仍是“允许 / 拒绝”。前端无需改动。
-
-以后其他插件也可以用 elicitation 请用户确认：只要请求一个没有字段的表单即可。需要用户填写内容的表单要等前端支持后再开放。
+`request_approval` 发出的是一个没有字段的表单 elicitation，经 runtime 和控制面变成对话里（以及“确认”标签页里）的确认卡片，见[用户确认](user-attention.md)。
 
 ## 验证
 
 - `apps/agent-runtime/tests/test_hooks.py`：`push-target` 的各种推送写法；用 akhook 跑规则文件（需要先构建 `vendor/akhook`，否则跳过）；`approval` 插件经 MCP 内存客户端完成 elicitation 与授权。
-- `test_runtime.py`：确认类 elicitation 走审批、拒绝、带字段的表单被直接拒绝。`test_control.py`：确认卡片的提示与送达的决定。
 - 用真实的 Codex（0.160.1）在镜像里按上图完整跑通过一次：受管 hook 拦下推送，拒绝理由原样交给模型，模型经 `tool_search` 调用 `request_approval`，`on-request` 策略下 Codex 把 elicitation 转给客户端，同意后重试的推送成功。
 
 ## 为什么不用 Codex 自带的 execpolicy

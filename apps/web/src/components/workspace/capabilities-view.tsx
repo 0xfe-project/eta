@@ -215,6 +215,7 @@ export function CapabilitiesView() {
       icon: ShieldCheckIcon,
       name: "操作确认",
       summary: "推送默认分支等操作会先在对话中请你确认，允许只对那一次生效",
+      action: { label: "查看待确认", run: show("inbox") },
     },
   ];
 

@@ -4,8 +4,9 @@
       "command": "python",
       "args": ["server.py"],
       "cwd": ".",
-      "env": { "AKHOOK_STATE_DIR": "/run/akhook" },
-      "tool_timeout_sec": 86400
+      "env": {
+        "AKHOOK_STATE_DIR": "/run/akhook"
+      }
     }
   }
 }
