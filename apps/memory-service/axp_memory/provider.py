@@ -15,6 +15,8 @@ class Memory:
     text: str
     # Relevance to the query, for search results.
     score: float | None = None
+    # ISO 8601, when the provider records it.
+    created_at: str | None = None
 
 
 class MemoryProvider(Protocol):

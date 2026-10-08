@@ -6,9 +6,10 @@
 #                  runtime once for them
 #
 # Upstreams trust the network instead of a shared secret: only the public
-# gateway reaches web, api and llm, and runtimes (on their own network) reach
-# only the runtime gateway. AXP_GATEWAY_SITES picks the sites to serve; every
-# address defaults to production's and scripts/dev.sh overrides them.
+# gateway reaches web, api, llm and the memory service's /api, and runtimes
+# (on their own network) reach only the runtime gateway. AXP_GATEWAY_SITES
+# picks the sites to serve; every address defaults to production's and
+# scripts/dev.sh overrides them.
 {
 	admin off
 	auto_https off

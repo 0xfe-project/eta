@@ -5,7 +5,9 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { MemoryView } from "./memory-view";
 import { views } from "./workspace-search";
+
 export function WorkspacePanel({
   view,
   onViewChange,
@@ -63,7 +65,9 @@ export function WorkspacePanel({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {views.map(({ value }) => (
-          <TabsContent key={value} value={value} />
+          <TabsContent key={value} value={value}>
+            {value === "memory" ? <MemoryView /> : null}
+          </TabsContent>
         ))}
       </div>
     </Tabs>

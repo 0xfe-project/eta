@@ -96,18 +96,15 @@ class Mem0Provider:
 
     def _add(self, agent_id, messages, *, infer):
         result = self.memory.add(messages, user_id=agent_id, infer=infer)
-        return [Memory(item["id"], item["memory"]) for item in result["results"]]
+        return [_memory(item) for item in result["results"]]
 
     def search(self, agent_id, query, limit):
         result = self.memory.search(query, top_k=limit, filters={"user_id": agent_id})
-        return [
-            Memory(item["id"], item["memory"], item.get("score"))
-            for item in result["results"]
-        ]
+        return [_memory(item) for item in result["results"]]
 
     def list(self, agent_id):
         result = self.memory.get_all(filters={"user_id": agent_id}, top_k=LIST_LIMIT)
-        return [Memory(item["id"], item["memory"]) for item in result["results"]]
+        return [_memory(item) for item in result["results"]]
 
     def delete(self, agent_id, memory_id):
         # mem0 deletes by id alone; the memory must be this agent's.
@@ -120,3 +117,7 @@ class Mem0Provider:
             return False
         self.memory.delete(memory_id)
         return True
+
+
+def _memory(item: dict) -> Memory:
+    return Memory(item["id"], item["memory"], item.get("score"), item.get("created_at"))

@@ -2,18 +2,19 @@ import { beforeEach, describe, expect, it } from "@rstest/core";
 import { useWorkspaceStore } from "./workspace-store";
 
 const key = "axp.workspace.v1";
-const saved = { tasks: [], memory: "", sessionTheme: "grok", lastModel: "m1" };
+const saved = { tasks: [], sessionTheme: "grok", lastModel: "m1" };
 
 describe("workspace store persistence", () => {
   beforeEach(() => {
     localStorage.clear();
     useWorkspaceStore.setState({
-      workspace: { tasks: [], memory: "", sessionTheme: "claude" },
+      workspace: { tasks: [], sessionTheme: "claude" },
     });
   });
 
   it("loads the bare object saved before the store existed", async () => {
-    localStorage.setItem(key, JSON.stringify(saved));
+    // Fields no longer kept (the old local memory notes) are dropped.
+    localStorage.setItem(key, JSON.stringify({ ...saved, memory: "notes" }));
     await useWorkspaceStore.persist.rehydrate();
     expect(useWorkspaceStore.getState().workspace).toEqual(saved);
   });
@@ -30,7 +31,6 @@ describe("workspace store persistence", () => {
     setDraft("unsent text");
     expect(JSON.parse(localStorage.getItem(key)!)).toEqual({
       tasks: [],
-      memory: "",
       sessionTheme: "claude",
       selectedAgentId: "a1",
     });

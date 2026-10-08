@@ -1,3 +1,4 @@
+import itertools
 import json
 import uuid
 
@@ -14,8 +15,10 @@ class FakeProvider:
 
     def __init__(self):
         self.memories: dict[str, tuple[str, str]] = {}
+        self.created: dict[str, str] = {}
         self.extractions: list[tuple[str, list, str | None]] = []
         self.scores: dict[str, float] = {}
+        self.clock = itertools.count()
 
     def add(self, agent_id, messages, *, infer, model=None):
         if infer:
@@ -27,7 +30,8 @@ class FakeProvider:
         for text in texts:
             memory_id = str(uuid.uuid4())
             self.memories[memory_id] = (agent_id, text)
-            added.append(Memory(memory_id, text))
+            self.created[memory_id] = f"2026-10-08T00:00:{next(self.clock):02d}+00:00"
+            added.append(Memory(memory_id, text, created_at=self.created[memory_id]))
         return added
 
     def search(self, agent_id, query, limit):
@@ -40,7 +44,7 @@ class FakeProvider:
 
     def list(self, agent_id):
         return [
-            Memory(memory_id, text)
+            Memory(memory_id, text, created_at=self.created[memory_id])
             for memory_id, (owner, text) in self.memories.items()
             if owner == agent_id
         ]
@@ -162,6 +166,40 @@ class TestHooks:
     def test_hooks_need_the_gateway_header(self, client):
         assert client.post("/memory/recall", json={"query": "x"}).status_code == 401
         assert client.post("/memory/capture", json={"messages": []}).status_code == 401
+
+
+class TestBrowserApi:
+    def url(self, agent, memory_id=""):
+        path = f"/api/memory/v1/agents/{agent}/memories"
+        return f"{path}/{memory_id}" if memory_id else path
+
+    def test_add_list_search_delete(self, client, provider):
+        first = client.post(self.url("a"), json={"text": "猫 叫豆豆"})
+        assert first.status_code == 201
+        client.post(self.url("a"), json={"text": "deploy uses Kamal"})
+        client.post(self.url("b"), json={"text": "猫 of b"})
+
+        listed = client.get(self.url("a")).json()["memories"]
+        assert [m["text"] for m in listed] == ["deploy uses Kamal", "猫 叫豆豆"]
+        assert all("created_at" in m for m in listed)
+
+        found = client.get(self.url("a"), params={"q": "猫"}).json()["memories"]
+        assert [m["text"] for m in found] == ["猫 叫豆豆"]
+        assert found[0]["score"] == 0.9
+        provider.scores["猫 叫豆豆"] = 0.05
+        assert client.get(self.url("a"), params={"q": "猫"}).json() == {"memories": []}
+
+        memory_id = first.json()["id"]
+        assert client.delete(self.url("b", memory_id)).status_code == 404
+        assert client.delete(self.url("a", memory_id)).status_code == 204
+        assert [m["text"] for m in client.get(self.url("a")).json()["memories"]] == [
+            "deploy uses Kamal"
+        ]
+
+    def test_add_needs_text(self, client):
+        response = client.post(self.url("a"), json={"text": "  "})
+        assert response.status_code == 400
+        assert response.json()["error"]["code"] == "INVALID_TEXT"
 
 
 class TestMem0Provider:

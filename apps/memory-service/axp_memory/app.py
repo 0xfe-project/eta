@@ -1,11 +1,18 @@
-"""HTTP surface, reached only through the runtime gateway under /memory.
+"""HTTP surface, for runtimes under /memory and for the browser under /api/memory.
 
-The gateway authenticates the runtime and sets X-AXP-Agent-Id; that header is
-the only identity here, so an agent reaches nothing but its own memories.
+The runtime gateway authenticates the runtime and sets X-AXP-Agent-Id; that
+header is the only identity there, so an agent reaches nothing but its own
+memories.
 
   /memory/mcp      MCP (streamable HTTP): remember, recall, forget
   /memory/recall   for the prompt hook: memories relevant to a prompt
   /memory/capture  for the stop hook: a finished turn, remembered later
+
+The browser's gateway forwards only /api/memory, where the agent is named in
+the path: the user sees and edits every agent's memories.
+
+  /api/memory/v1/agents/{agent}/memories       GET (?q= searches), POST
+  /api/memory/v1/agents/{agent}/memories/{id}  DELETE
 """
 
 import logging
@@ -24,10 +31,12 @@ logger = logging.getLogger(__name__)
 
 AGENT_HEADER = "X-AXP-Agent-Id"
 RECALL_LIMIT = 5
-# Below this a memory is unrelated to the prompt; it is not worth the context.
+# Below this a memory is unrelated to the prompt or search; it is not worth
+# the context, nor a place in search results.
 RECALL_MIN_SCORE = 0.2
 MAX_TEXT = 8000
 CAPTURE_BACKLOG = 1000
+SEARCH_LIMIT = 50
 
 
 def create_app(provider: MemoryProvider):
@@ -110,6 +119,43 @@ def create_app(provider: MemoryProvider):
             return _error(503, "BUSY")
         return Response(status_code=202)
 
+    @mcp.custom_route("/api/memory/v1/agents/{agent}/memories", methods=["GET", "POST"])
+    async def memories_route(request: Request) -> Response:
+        agent = request.path_params["agent"]
+        if request.method == "POST":
+            body = await request.json()
+            text = str(body.get("text") or "").strip()[:MAX_TEXT]
+            if not text:
+                return _error(400, "INVALID_TEXT", "记忆内容不能为空。")
+            message = {"role": "user", "content": text}
+            added = await anyio.to_thread.run_sync(
+                lambda: provider.add(agent, [message], infer=False)
+            )
+            return JSONResponse(_view(added[0]), status_code=201)
+        query = request.query_params.get("q", "").strip()[:MAX_TEXT]
+        if query:
+            found = await anyio.to_thread.run_sync(
+                provider.search, agent, query, SEARCH_LIMIT
+            )
+            found = [m for m in found if (m.score or 0) >= RECALL_MIN_SCORE]
+        else:
+            found = await anyio.to_thread.run_sync(provider.list, agent)
+            # Newest first; ISO 8601 in UTC sorts as text.
+            found.sort(key=lambda m: m.created_at or "", reverse=True)
+        return JSONResponse({"memories": [_view(m) for m in found]})
+
+    @mcp.custom_route(
+        "/api/memory/v1/agents/{agent}/memories/{memory_id}", methods=["DELETE"]
+    )
+    async def memory_route(request: Request) -> Response:
+        agent, memory_id = (
+            request.path_params["agent"],
+            request.path_params["memory_id"],
+        )
+        if not await anyio.to_thread.run_sync(provider.delete, agent, memory_id):
+            return _error(404, "NOT_FOUND", "这条记忆不存在。")
+        return Response(status_code=204)
+
     @mcp.custom_route("/up", methods=["GET"])
     async def up(_: Request) -> Response:
         return Response(status_code=204)
@@ -158,8 +204,13 @@ def _view(memory: Memory) -> dict:
     view = {"id": memory.id, "text": memory.text}
     if memory.score is not None:
         view["score"] = round(memory.score, 3)
+    if memory.created_at is not None:
+        view["created_at"] = memory.created_at
     return view
 
 
-def _error(status: int, code: str) -> JSONResponse:
-    return JSONResponse({"error": {"code": code}}, status_code=status)
+def _error(status: int, code: str, message: str | None = None) -> JSONResponse:
+    error = {"code": code}
+    if message:
+        error["message"] = message
+    return JSONResponse({"error": error}, status_code=status)
