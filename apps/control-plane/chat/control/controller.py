@@ -259,6 +259,7 @@ class Controller:
                     "model": agent.model,
                     "model_context_window": llm.context_window(agent.model),
                     "developer_instructions": _instructions(agent),
+                    "plugins": agent.plugins,
                 }
             ),
             "AXP_CONFIG_VERSION": str(instance.config_version),

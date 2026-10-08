@@ -5,7 +5,7 @@ from django.db import transaction
 from django.http import HttpRequest, HttpResponse, StreamingHttpResponse
 from ninja import Header, Query, Router, Status
 
-from . import services, stream
+from . import plugins, services, stream
 from .errors import ApiError
 from .idempotency import run_idempotent
 from .schemas import (
@@ -19,6 +19,7 @@ from .schemas import (
     MessageCreateIn,
     MessageOut,
     MessagePageOut,
+    PluginOut,
     SendMessageOut,
 )
 
@@ -51,10 +52,17 @@ def list_messages(
     return services.get_history(agent_id, before, limit)
 
 
+@router.get("/plugins", response={200: list[PluginOut], **_ERRORS})
+def list_plugins(request: HttpRequest):
+    return plugins.catalog()
+
+
 @router.post("/agents", response={201: AgentOut, **_ERRORS})
 def create_agent(request: HttpRequest, body: AgentCreateIn):
     def handler():
-        agent = services.create_agent(body.name, body.description, body.model)
+        agent = services.create_agent(
+            body.name, body.description, body.model, body.plugins
+        )
         return Status(201, services.agent_public(agent)), str(agent.id)
 
     return run_idempotent(request, body.model_dump(), handler)

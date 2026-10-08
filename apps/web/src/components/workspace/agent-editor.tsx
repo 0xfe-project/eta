@@ -1,4 +1,4 @@
-import type { Agent } from "@/queries/chat";
+import type { Agent, Plugin } from "@/queries/chat";
 import type { Model } from "@/queries/llm";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { TrashIcon } from "@phosphor-icons/react/Trash";
@@ -17,6 +17,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -33,7 +34,12 @@ import {
   NativeSelectOption,
 } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
-import { useCreateAgent, useDeleteAgent, useUpdateAgent } from "@/queries/chat";
+import {
+  useCreateAgent,
+  useDeleteAgent,
+  usePlugins,
+  useUpdateAgent,
+} from "@/queries/chat";
 import { useConnectors, useModels } from "@/queries/llm";
 import { AgentMonogram } from "./agent-identity";
 import { useAgents } from "./use-agents";
@@ -56,6 +62,8 @@ const agentFormSchema = z.object({
     ),
   // "" until a model is chosen.
   model: z.string(),
+  // null: every plugin, the default for new agents.
+  plugins: z.array(z.string()).nullable(),
 });
 type AgentForm = z.infer<typeof agentFormSchema>;
 
@@ -157,6 +165,43 @@ function ModelSelect({
   );
 }
 
+/** One checkbox per plugin of the runtime image. */
+function PluginList({
+  value,
+  plugins,
+  onChange,
+}: {
+  value: string[] | null;
+  plugins: Plugin[];
+  onChange: (value: string[]) => void;
+}) {
+  const names = plugins.map((plugin) => plugin.name);
+  const chosen = value ?? names;
+  const toggle = (name: string, on: boolean) =>
+    onChange(names.filter((n) => (n === name ? on : chosen.includes(n))));
+  return (
+    <ul className="divide-y border">
+      {plugins.map((plugin) => (
+        <li key={plugin.name}>
+          <Label className="items-start gap-3 p-2.5 leading-snug">
+            <Checkbox
+              className="mt-px"
+              checked={chosen.includes(plugin.name)}
+              onCheckedChange={(on) => toggle(plugin.name, on === true)}
+            />
+            <span className="min-w-0 space-y-0.5">
+              <span className="block font-medium">{plugin.name}</span>
+              <span className="block text-muted-foreground">
+                {plugin.description}
+              </span>
+            </span>
+          </Label>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function AgentEditorForm({
   agent,
   onDone,
@@ -169,6 +214,7 @@ function AgentEditorForm({
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const { data: models } = useModels();
+  const { data: plugins } = usePlugins();
   const usable = (models ?? []).filter((model) => model.available);
   const create = useCreateAgent();
   const updateAgent = useUpdateAgent();
@@ -186,10 +232,12 @@ function AgentEditorForm({
       name: agent?.name ?? "",
       description: agent?.description ?? "",
       model: agent?.model ?? "",
+      plugins: agent?.plugins ?? null,
     },
   });
   const description = watch("description");
   const model = watch("model");
+  const chosenPlugins = watch("plugins");
   // New agents start with the last used model, or the first usable one.
   const preferred = usable.find((item) => item.id === lastModel) ?? usable[0];
   useEffect(() => {
@@ -202,13 +250,17 @@ function AgentEditorForm({
   const pending = create.isPending || updateAgent.isPending;
   const onError = (error: Error) => toast.error(error.message);
 
-  const save = handleSubmit(({ model, ...fields }) => {
+  const save = handleSubmit(({ model, plugins, ...fields }) => {
     // Agents can be created before any account is connected, not after.
     if (!model && usable.length) {
       setError("model", { message: "请选择模型。" });
       return;
     }
-    const draft = { ...fields, ...(model ? { model } : {}) };
+    const draft = {
+      ...fields,
+      ...(model ? { model } : {}),
+      ...(plugins ? { plugins } : {}),
+    };
     if (model) setWorkspace((state) => ({ ...state, lastModel: model }));
     if (agent) {
       updateAgent.mutate(
@@ -298,6 +350,31 @@ function AgentEditorForm({
             </p>
           ) : null}
         </div>
+        {plugins?.length ? (
+          <div
+            role="group"
+            aria-labelledby="agent-plugins"
+            aria-describedby="agent-plugins-hint"
+            className="space-y-1.5"
+          >
+            <p id="agent-plugins" className="text-xs leading-none">
+              插件
+            </p>
+            <PluginList
+              value={chosenPlugins}
+              plugins={plugins}
+              onChange={(value) =>
+                setValue("plugins", value, { shouldDirty: true })
+              }
+            />
+            <p
+              id="agent-plugins-hint"
+              className="text-xs text-muted-foreground"
+            >
+              智能体可用的工具和技能；修改在空闲时生效。
+            </p>
+          </div>
+        ) : null}
         <div className="space-y-1.5">
           <div className="flex items-baseline justify-between gap-2">
             <Label htmlFor="agent-description">指令</Label>

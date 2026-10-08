@@ -19,6 +19,7 @@ from django.db.models import F
 from django.utils import timezone
 
 from . import cursors, llm, queue
+from . import plugins as agent_plugins
 from .errors import ApiError, not_found
 from .models import (
     Agent,
@@ -52,6 +53,7 @@ def agent_public(agent: Agent) -> dict:
             name=agent.name,
             description=agent.description,
             model=agent.model,
+            plugins=agent.plugins,
             status=agent.product_status,
             revision=agent.product_revision,
         )
@@ -375,9 +377,15 @@ def _agent(conversation: Conversation, agent_id: str) -> Agent:
     return agent
 
 
-def create_agent(name: str, description: str = "", model: str | None = None) -> Agent:
+def create_agent(
+    name: str,
+    description: str = "",
+    model: str | None = None,
+    plugins: list[str] | None = None,
+) -> Agent:
     if model:
         llm.validate_model(model)
+    plugins = agent_plugins.choose(plugins)
     conversation = lock_conversation(ensure_default_conversation())
     # Model, tools and mounts come from server configuration, not the request.
     agent = Agent.objects.create(
@@ -385,6 +393,7 @@ def create_agent(name: str, description: str = "", model: str | None = None) -> 
         name=name,
         description=description,
         model=model or None,
+        plugins=plugins,
     )
     emit_agent(conversation, agent)
     return agent
@@ -394,6 +403,8 @@ def update_agent(agent_id: str, changes: dict) -> Agent:
     if changes.get("model"):
         # Network call: before taking the conversation lock.
         llm.validate_model(changes["model"])
+    if "plugins" in changes:
+        changes["plugins"] = agent_plugins.choose(changes["plugins"])
     conversation = _locked_default()
     agent = _agent(conversation, agent_id)
     changed = [
@@ -403,8 +414,8 @@ def update_agent(agent_id: str, changes: dict) -> Agent:
         return agent
     for field in changed:
         setattr(agent, field, changes[field])
-    if {"name", "description", "model"} & set(changed):
-        # Runtimes receive the name, instructions and model at start; the
+    if {"name", "description", "model", "plugins"} & set(changed):
+        # Runtimes receive the name, instructions, model and plugins at start; the
         # controller restarts an idle runtime so the next turn uses them.
         agent.config_version += 1
         changed.append("config_version")

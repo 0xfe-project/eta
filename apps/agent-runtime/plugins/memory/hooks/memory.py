@@ -1,7 +1,7 @@
 """The memory plugin's hooks: ``memory.py recall`` and ``memory.py capture``.
 
-They are declared in the image's managed Codex requirements
-(codex/requirements.toml), not in the plugin, so they run without review.
+Declared in hooks.json; building the image makes them managed hooks
+(axp_runtime/plugins.py), which run without review.
 
 recall (UserPromptSubmit) adds the memories relevant to the prompt to the
 turn's context. capture (Stop) sends the finished turn, its prompts and final

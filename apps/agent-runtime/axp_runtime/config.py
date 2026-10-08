@@ -25,8 +25,10 @@ class Settings:
     # The agent's description, injected as Codex developer instructions.
     developer_instructions: str = ""
     config_version: int = 0
-    # Local Codex plugin marketplace installed for every agent.
+    # The image's local Codex plugin marketplace, and the names of the ones
+    # this agent runs with (all of them when None).
     plugins_dir: Path = Path("/opt/axp/plugins")
+    plugins: tuple[str, ...] | None = None
     # Presigned download of the agent's latest snapshot, if it has one.
     snapshot_url: str | None = None
     # Overrides the Codex launch command; used to run a scripted app-server.
@@ -74,6 +76,7 @@ def load_settings() -> Settings:
         config_version=int(os.environ.get("AXP_CONFIG_VERSION", "0")),
         snapshot_url=os.environ.get("AXP_SNAPSHOT_URL") or None,
         plugins_dir=Path(os.environ.get("AXP_PLUGINS_DIR", "/opt/axp/plugins")),
+        plugins=tuple(codex["plugins"]) if "plugins" in codex else None,
         codex_launch=shlex.split(launch) if launch else None,
         heartbeat_seconds=float(os.environ.get("AXP_HEARTBEAT_SECONDS", "5")),
         model_context_window=codex.get("model_context_window") or None,

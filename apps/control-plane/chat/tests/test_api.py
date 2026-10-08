@@ -136,6 +136,7 @@ class TestAgents:
             "name": "开发助手",
             "description": "",
             "model": "test-model",
+            "plugins": ["grok", "memory", "tasks"],
             "status": "idle",
             "revision": 1,
         }
@@ -267,6 +268,24 @@ class TestAgentManagement:
         # The name is part of the runtime's instructions too.
         chat.patch(f"/agents/{agent['id']}", {"name": "新"})
         assert Agent.objects.get().config_version == before + 2
+
+    def test_plugins_are_chosen_from_the_catalog(self, chat, agent):
+        assert [p["name"] for p in chat.get("/plugins").json()] == [
+            "grok",
+            "memory",
+            "tasks",
+        ]
+        created = chat.post("/agents", {"name": "a", "plugins": ["tasks", "grok"]})
+        # Catalog order, whatever order they were sent in.
+        assert created.json()["plugins"] == ["grok", "tasks"]
+        unknown = chat.post("/agents", {"name": "a", "plugins": ["nope"]})
+        assert error_of(unknown) == (422, "PLUGIN_NOT_FOUND")
+
+    def test_changing_plugins_bumps_config_version(self, chat, agent):
+        before = Agent.objects.get(pk=agent["id"]).config_version
+        response = chat.patch(f"/agents/{agent['id']}", {"plugins": []})
+        assert response.json()["plugins"] == []
+        assert Agent.objects.get().config_version == before + 1
 
     def test_rename(self, chat, agent):
         response = chat.patch(f"/agents/{agent['id']}", {"name": " 新名字 "})
@@ -465,6 +484,7 @@ def test_public_schema_has_no_internal_fields():
     schema = ChatClient().client.get("/api/openapi.json").json()
     assert {p for p in schema["paths"] if p.startswith("/api/v1")} == {
         "/api/v1/chat",
+        "/api/v1/plugins",
         "/api/v1/agents",
         "/api/v1/agents/{agent_id}/messages",
         "/api/v1/agents/{agent_id}",

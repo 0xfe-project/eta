@@ -85,6 +85,8 @@ class Agent(models.Model):
     description = models.TextField(blank=True, default="")
     # Server-controlled; never accepted from the web.
     model = models.CharField(max_length=100, null=True, blank=True)
+    # Names of the image's plugins the agent's runtime installs.
+    plugins = models.JSONField(default=list)
     desired_state = models.CharField(
         max_length=16, choices=DesiredState.choices, default=DesiredState.STOPPED
     )
@@ -94,7 +96,7 @@ class Agent(models.Model):
     # Incremented for every runtime instance; fences stale runtimes.
     generation = models.BigIntegerField(default=0)
     # Bumped when anything a runtime is started with changes (name, model,
-    # instructions). Runtimes pick it up the next time they start.
+    # instructions, plugins). Runtimes pick it up the next time they start.
     config_version = models.BigIntegerField(default=0)
     last_active_at = models.DateTimeField(null=True, blank=True)
     # Deleted agents keep their history but are hidden and never run again.

@@ -102,5 +102,10 @@ AXP_S3_SECRET_ACCESS_KEY = os.getenv(
 AXP_NATS_URL = os.getenv(
     "AXP_NATS_URL", "nats://172.30.0.1:4222" if DEBUG else "nats://axp-nats:4222"
 )
+# The runtime image's Codex plugins (apps/agent-runtime/plugins), for the
+# catalog agents choose from; the production image copies them alongside.
+AXP_PLUGINS_DIR = Path(
+    os.getenv("AXP_PLUGINS_DIR", BASE_DIR.parent / "agent-runtime" / "plugins")
+)
 # Test hook: runtimes run this instead of the Codex app-server.
 AXP_CODEX_LAUNCH = os.getenv("AXP_CODEX_LAUNCH") or None

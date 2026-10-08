@@ -713,6 +713,13 @@ class TestConfigChange:
     def instructions(self, spec):
         return json.loads(spec.env["AXP_CODEX_SETTINGS"])["developer_instructions"]
 
+    def test_runtime_gets_the_agents_plugins(self, ctl):
+        ctl.chat.patch(f"/agents/{ctl.agent['id']}", {"plugins": ["memory"]})
+        ctl.send()
+        ctl.start_runtime()
+        settings = json.loads(ctl.driver.started[0].env["AXP_CODEX_SETTINGS"])
+        assert settings["plugins"] == ["memory"]
+
     def test_instructions_are_passed_and_applied_between_turns(self, ctl):
         agent_path = f"/agents/{ctl.agent['id']}"
         ctl.chat.patch(agent_path, {"description": "第一版指令"})

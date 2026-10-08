@@ -10,23 +10,15 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl git zstd \
     && rm -rf /var/lib/apt/lists/*
 COPY out/${TARGETOS}-${TARGETARCH}/site-packages/ /usr/local/lib/python3.13/site-packages/
-# grok-api, the grok plugin's MCP server: a release binary, checked against the
-# release's checksums.
-ARG GROK_API_VERSION=0.1.1
-RUN set -eu; \
-    case "${TARGETARCH}" in amd64) arch=x86_64 ;; arm64) arch=aarch64 ;; esac; \
-    archive="grok-api-${arch}-unknown-linux-gnu.tar.gz"; \
-    base="https://github.com/AkaraChen/grok-api/releases/download/v${GROK_API_VERSION}"; \
-    cd /tmp; \
-    curl -fsSLO "${base}/${archive}"; \
-    curl -fsSL "${base}/SHA256SUMS" | grep " ${archive}\$" | sha256sum -c -; \
-    tar -xzf "${archive}" -C /usr/local/bin grok-api; \
-    rm "${archive}"; \
-    grok-api --version
-# The Codex plugins every agent gets (a local marketplace, installed at start)
-# and the static Codex configuration: sandbox, approvals, hooks.
-COPY plugins /opt/axp/plugins
+# The static Codex configuration (sandbox, approvals), then the plugins every
+# agent can run with: their setup scripts prepare their environments (with a
+# download cache kept across builds), and the plugins become a local
+# marketplace whose tool approvals and hooks join the Codex configuration.
 COPY codex /etc/codex
+COPY plugins /opt/axp/plugins
+RUN --mount=type=bind,source=axp_runtime/plugins.py,target=/tmp/plugins.py \
+    --mount=type=cache,target=/var/cache/axp-plugins \
+    python /tmp/plugins.py /opt/axp/plugins /etc/codex
 WORKDIR /app
 COPY axp_runtime ./axp_runtime
 
