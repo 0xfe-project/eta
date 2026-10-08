@@ -684,6 +684,28 @@ def test_deleted_agent_is_interrupted_then_stopped(ctl, running):
     assert len(ctl.driver.started) == 1
 
 
+def test_restart_interrupts_the_turn_then_replaces_the_runtime(ctl, running):
+    sent, runtime, command = running
+    runtime.turn_started(command)
+    old = ctl.instance()
+    assert ctl.chat.post(f"/agents/{ctl.agent['id']}/restart").status_code == 204
+    ctl.tick()
+    # Interrupted first, so the turn's snapshot is uploaded before the stop.
+    assert ctl.clients.of("interrupt") == [("interrupt", 1, str(command.pk))]
+    assert old.container_id not in ctl.driver.stopped
+    runtime.turn_completed(command, "interrupted")
+    ctl.tick()
+    assert old.container_id in ctl.driver.stopped
+    old.refresh_from_db()
+    assert old.end_reason == "CONFIG_CHANGED"
+    assert ctl.reply(sent).status == "stopped"
+    # The next message starts a new runtime on the same thread.
+    ctl.send("重启之后")
+    ctl.tick()
+    assert len(ctl.driver.started) == 2
+    assert ctl.driver.started[-1].env["AXP_THREAD_ID"] == "thread-1"
+
+
 class TestConfigChange:
     def instructions(self, spec):
         return json.loads(spec.env["AXP_CODEX_SETTINGS"])["developer_instructions"]

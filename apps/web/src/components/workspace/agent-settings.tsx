@@ -1,4 +1,5 @@
 import type { Agent } from "@/queries/chat";
+import { ArrowClockwiseIcon } from "@phosphor-icons/react/ArrowClockwise";
 import { CheckIcon } from "@phosphor-icons/react/Check";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
@@ -7,6 +8,7 @@ import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { TrashIcon } from "@phosphor-icons/react/Trash";
 import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { useRestartAgent } from "@/queries/chat";
 import { useModelAvailability } from "@/queries/llm";
 import { DeleteAgentDialog } from "./agent-editor";
 import { AgentMonogram, AgentStatus } from "./agent-identity";
@@ -24,6 +27,7 @@ import { useAgents } from "./use-agents";
 
 function AgentRow({ agent, current }: { agent: Agent; current: boolean }) {
   const { select, openEditor } = useAgents();
+  const restart = useRestartAgent();
   const [confirming, setConfirming] = useState(false);
   const instructions = agent.description.trim();
   const availability = useModelAvailability(agent);
@@ -109,6 +113,18 @@ function AgentRow({ agent, current }: { agent: Agent; current: boolean }) {
           <DropdownMenuItem onSelect={() => openEditor(agent.id)}>
             <PencilSimpleIcon aria-hidden="true" />
             编辑
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={restart.isPending}
+            onSelect={() =>
+              restart.mutate(agent.id, {
+                onSuccess: () => toast.success(`已重启 ${agent.name}`),
+                onError: (error) => toast.error(error.message),
+              })
+            }
+          >
+            <ArrowClockwiseIcon aria-hidden="true" />
+            重启
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
