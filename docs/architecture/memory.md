@@ -60,4 +60,4 @@ memory-service 只认 runtime 网关设置的 `X-AXP-Agent-Id`，并把它作为
 | 数据库      | 开发 PostgreSQL（`pgvector/pgvector:pg17-trixie`） | accessory `postgres`（同一镜像）                |
 | llm-gateway | `AXP_LLM_GATEWAY_URL`（`dev.sh` 设定）             | `http://axp-llm:8317`                           |
 
-PostgreSQL 镜像是 `postgres:17` 加 pgvector，同为 Debian trixie，因此原有数据目录的排序规则不变（bookworm 版的 `pgvector/pgvector:pg17` 会导致 collation 版本不匹配）。mem0 首次启动时创建 `vector` 扩展和 `memories` 表，它们不归 Django 迁移管理。mem0 的遥测已关闭；它的变更历史写在容器内的 SQLite，不保留。
+PostgreSQL 镜像是 `postgres:17` 加 pgvector，同为 Debian trixie，因此原有数据目录的排序规则不变（bookworm 版的 `pgvector/pgvector:pg17` 会导致 collation 版本不匹配）。mem0 首次启动时创建 `vector` 扩展和 `memories` 表，它们不归控制面的迁移管理。mem0 的遥测已关闭；它的变更历史写在容器内的 SQLite，不保留。

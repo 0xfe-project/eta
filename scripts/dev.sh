@@ -60,20 +60,17 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 # Development settings, development's runtime network and storage.
-export DJANGO_DEBUG=true
+export AXP_DEV=true
 
 # Fresh checkouts and worktrees bootstrap themselves.
 if [[ ! -f node_modules/concurrently/dist/bin/concurrently.js ]]; then
   bun install
 fi
-if [[ ! -d apps/control-plane/.venv ]]; then
-  uv sync --project apps/control-plane --dev
-fi
 if [[ ! -d apps/memory-service/.venv ]]; then
   uv sync --project apps/memory-service --dev
 fi
 bash scripts/dev-postgres.sh
-uv run --project apps/control-plane python apps/control-plane/manage.py migrate --verbosity 0
+go -C apps/control-plane run . migrate
 
 # --- Port allocation --------------------------------------------------------
 # Every running instance records its ports under a shared lock; a reservation
@@ -163,13 +160,15 @@ export AXP_FORGE_ADDR="127.0.0.1:$AXP_FORGE_PORT"
 export AXP_UPSTREAM_FORGE="$AXP_FORGE_ADDR"
 
 # Instances share the runtime network; only their ports differ.
-uv run --project apps/control-plane python apps/control-plane/manage.py ensure_runtime_network
+go -C apps/control-plane run . ensure-runtime-network
 runtime_network=axp-runtime
 # Rebuilt on every start so runtime changes are never stale; with Turbo and
 # Docker's layer cache an unchanged image takes about a second.
 bun run runtime:build
-# The memory service's embedding model, downloaded once and cached by Turbo.
+# The memory service's embedding model, downloaded once and cached by Turbo,
+# and the web client's types from the control plane's OpenAPI document.
 bunx turbo run build --filter=@axp/memory-service --output-logs=errors-only
+bunx turbo run generate --filter=@axp/web --output-logs=errors-only
 
 # --- Storage --------------------------------------------------------------------
 # Agent snapshots live in SeaweedFS. Its S3 API is on the runtime network's

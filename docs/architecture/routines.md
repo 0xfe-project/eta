@@ -4,11 +4,11 @@
 
 ## 数据
 
-都在 PostgreSQL（`apps/control-plane/routines`）：
+都在 PostgreSQL（`apps/control-plane/internal/routines`）：
 
 | 表                 | 内容                                                                     |
 | ------------------ | ------------------------------------------------------------------------ |
-| `routine`          | 名称、模型、计划（`schedule.py` 的四种形状）、时区、是否启用             |
+| `routine`          | 名称、模型、计划（`schedule.go` 的四种形状）、时区、是否启用             |
 | `routine_brief`    | 要求的各个版本；由反馈修订而来的版本指向那条反馈                         |
 | `routine_run`      | 每次运行：状态（运行中、已发送、没有新内容、失败）、报告、交接说明、错误 |
 | `routine_feedback` | 用户对某次运行的反馈；修订失败时标记 `revision_failed`                   |
@@ -19,7 +19,7 @@
 
 计划在 NATS 里（[队列](queue.md)的 stream `ROUTINES`）：`axp.routine.<id>.schedule` 上的一条带 `Nats-Schedule`（六段 cron）和 `Nats-Schedule-Time-Zone` 的消息，到点由 NATS 发布到 `axp.routine.<id>.fire`。新建、改计划、启用时发布（替换），暂停、删除时清除；都在请求的事务里完成，失败则回滚（`503`）。controller 启动时把所有已启用任务的计划重新发布一遍。“立即运行”直接往 `fire` 发一条带 `{"now": true}` 的消息，走同一条路径。
 
-浏览器看到的“下次运行”由 croniter 按同一个 cron 计算。
+浏览器看到的“下次运行”由控制面按同一个 cron 计算（robfig/cron）。
 
 ## 一次运行
 

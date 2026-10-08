@@ -2,7 +2,7 @@
 
 15:04:05.000 INFO  message key=value trace=0af76519
 
-Times are UTC, like the containers (Django switches its processes to UTC).
+Times are UTC, like the containers.
 """
 
 import json

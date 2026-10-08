@@ -99,9 +99,10 @@ describe("Inbox", () => {
       // Let the answer's response settle.
       await new Promise((resolve) => setTimeout(resolve, 10));
     });
-    const [url, init] = fetch.mock.calls[0];
-    expect(String(url)).toContain("/chat/interactions/i1/answer");
-    expect(JSON.parse(String(init?.body))).toEqual({ value: "deny" });
+    const [request] = fetch.mock.calls[0] as [Request];
+    expect(request.url).toContain("/api/v1/chat/interactions/i1/answer");
+    expect(request.headers.get("Idempotency-Key")).toBeTruthy();
+    expect(await request.json()).toEqual({ value: "deny" });
     expect(container.textContent).toContain("没有待确认的请求");
   });
 

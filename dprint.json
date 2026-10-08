@@ -27,7 +27,7 @@
     "**/.output",
     "**/.tanstack",
     "**/.turbo",
-    "**/routeTree.gen.ts",
+    "**/*.gen.ts",
     "**/*-lock.json",
     "bun.lock",
     "**/uv.lock",

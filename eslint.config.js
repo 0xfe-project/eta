@@ -14,7 +14,7 @@ export default antfu(
     markdown: false,
     toml: false,
     ignores: [
-      "**/routeTree.gen.ts",
+      "**/*.gen.ts",
       // Generated from the shadcn and brainless registries.
       "apps/web/src/components/ui/**",
       "apps/web/src/components/brainless/**",

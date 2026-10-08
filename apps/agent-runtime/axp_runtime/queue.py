@@ -1,4 +1,4 @@
-"""The agent's queue (NATS JetStream; apps/control-plane/chat/queue.py).
+"""The agent's queue (NATS JetStream; apps/control-plane/internal/queue).
 
 ``take()`` gives the runtime the next command from ``axp.agent.<agent>.commands``,
 already acked: from then on it is the runtime's alone, and a crash loses it

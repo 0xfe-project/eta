@@ -18,7 +18,7 @@ pre-commit:
 
     - name: ruff
       glob: "*.py"
-      run: uv run --project apps/control-plane ruff check --fix --force-exclude {staged_files}
+      run: uv run --project apps/agent-runtime ruff check --fix --force-exclude {staged_files}
       stage_fixed: true
 
     - name: format

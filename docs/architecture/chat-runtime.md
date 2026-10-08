@@ -4,15 +4,17 @@
 
 ## 组件与进程
 
-| 进程                   | 代码                              | 职责                                                                                       |
-| ---------------------- | --------------------------------- | ------------------------------------------------------------------------------------------ |
-| 公共 API（Django）     | `chat/api.py`、`chat/services.py` | 7 个产品接口、SSE、幂等、产品投影与 `ui_event`                                             |
-| 内部运行协议（Django） | `chat/control/internal_api.py`    | runtime → 控制面：心跳、会话注册、事件批次、快照上传地址、runtime 身份。独立进程与 URLconf |
-| controller             | `chat/control/controller.py`      | 唯一持有 Docker socket：为有工作的 Agent 启动、换代、停止容器                              |
-| 队列（NATS JetStream） | `chat/queue.py`                   | 把命令、中断、审批结果送到 Agent 的 runtime，见[队列](queue.md)                            |
-| agent runtime（容器）  | `apps/agent-runtime/axp_runtime`  | 一个 Agent 一个容器；从队列取工作，官方 Codex Python SDK 驱动一个持久 thread               |
+控制面（`apps/control-plane`，Go，见[控制面](control-plane.md)）是一个二进制、三个进程；代码路径相对于 `apps/control-plane/internal`。
 
-公共服务的 URLconf（`config.urls`）不包含任何 `/internal` 路由；内部服务以 `AXP_URLCONF=config.internal_urls` 启动，runtime 只能经 [runtime 网关](gateway.md) 访问它，有单独的 OpenAPI。公共响应、SSE 与前端类型只来自 `chat/schemas.py` 的手写允许列表，测试会检查其中不出现 command、thread、runtime、generation 等内部字段。
+| 进程                       | 代码                                                           | 职责                                                                         |
+| -------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| 公共 API（`api`）          | `api/chat.go`、`chat/chat.go`                                  | 产品接口、SSE、幂等、产品投影与 `ui_event`                                   |
+| 内部运行协议（`internal`） | `api/internal.go`、`control/protocol.go`、`chat/projection.go` | runtime → 控制面：心跳、会话注册、事件批次、快照上传地址、runtime 身份       |
+| controller                 | `control/controller.go`、`container`                           | 唯一持有 Docker socket：为有工作的 Agent 启动、换代、停止容器                |
+| 队列（NATS JetStream）     | `queue`                                                        | 把命令、中断、审批结果送到 Agent 的 runtime，见[队列](queue.md)              |
+| agent runtime（容器）      | `apps/agent-runtime/axp_runtime`                               | 一个 Agent 一个容器；从队列取工作，官方 Codex Python SDK 驱动一个持久 thread |
+
+公共 API 与内部运行协议是两个独立的 HTTP 服务（`/api` 与 `/internal`），各有自己的 OpenAPI；公共服务不路由任何 `/internal` 路径，runtime 只能经 [runtime 网关](gateway.md) 访问内部服务。公共响应与 SSE 只来自 `chat/public.go` 里的允许列表（前端类型由它生成），测试会检查其中不出现 command、thread、runtime、generation 等内部字段。
 
 ## 一条消息的路径
 

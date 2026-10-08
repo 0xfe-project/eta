@@ -5,7 +5,7 @@ Monorepo：Bun workspaces 管理 Web，uv 管理 Python 项目，`go.work` 管�
 ```text
 apps/
   gateway/         Go：统一入口网关，浏览器访问的唯一同源地址
-  control-plane/   Django 5.2 + Django Ninja：产品 API、内部运行协议、controller
+  control-plane/   Go：产品 API、内部运行协议、controller；操作 agent runtime
   llm-gateway/     Go：LLM 连接与模型目录（嵌入 CLIProxyAPI）
   web/             TanStack Start + React + Vite + TypeScript
   agent-runtime/   每个 Agent 一个容器的运行时，基于官方 Codex Python SDK；plugins/ 是所有 Agent 都装的 Codex plugin
@@ -13,7 +13,7 @@ apps/
   forge-service/   Go：代码托管（用户自己的 GitHub App），agent 的 git、gh 凭据与 open_pull_request
 ```
 
-设计见 [RFC #1](https://github.com/akarachen/axp/issues/1)，实现说明见 [聊天与运行时架构](docs/architecture/chat-runtime.md)、[统一入口网关](docs/architecture/gateway.md)、[LLM 网关](docs/architecture/llm-gateway.md)、[记忆](docs/architecture/memory.md)、[代码托管（GitHub）](docs/architecture/forge.md) 与 [工具调用规则与用户确认](docs/architecture/agent-hooks.md)。
+设计见 [RFC #1](https://github.com/akarachen/axp/issues/1)，实现说明见 [控制面](docs/architecture/control-plane.md)、[聊天与运行时架构](docs/architecture/chat-runtime.md)、[统一入口网关](docs/architecture/gateway.md)、[LLM 网关](docs/architecture/llm-gateway.md)、[记忆](docs/architecture/memory.md)、[代码托管（GitHub）](docs/architecture/forge.md) 与 [工具调用规则与用户确认](docs/architecture/agent-hooks.md)。
 
 ## 环境与初始化
 
@@ -32,13 +32,13 @@ bun run dev
 
 模型来自 llm-gateway：在设置的“模型服务”中用设备码绑定 Codex（ChatGPT）或 Grok（xAI）账号，每个服务可以绑定多个账号并自动轮换。账号登录失效、额度用尽等状态会显示在那里；智能体的模型不可用时不能发送消息，绑定或重新登录后自动恢复。详见 [LLM 网关](docs/architecture/llm-gateway.md)。
 
-`bun run dev` 启动网关、Django、内部运行协议服务、controller、llm-gateway 和 Web，与生产相同。controller 为每个 Agent 启动一个 runtime 容器，容器内的 Codex 把所有模型请求发给 llm-gateway，不持有任何账号凭据。runtime 镜像在每次启动时自动重建（没有变化时约 1 秒）。不想消耗模型额度时，可设 `AXP_CODEX_LAUNCH="python -m axp_runtime.testing.fake_app_server"` 用脚本化 app-server 跑通整条链路。
+`bun run dev` 启动网关、控制面（公共 API、内部运行协议服务、controller）、llm-gateway 和 Web，与生产相同。controller 为每个 Agent 启动一个 runtime 容器，容器内的 Codex 把所有模型请求发给 llm-gateway，不持有任何账号凭据。runtime 镜像在每次启动时自动重建（没有变化时约 1 秒）。不想消耗模型额度时，可设 `AXP_CODEX_LAUNCH="python -m axp_runtime.testing.fake_app_server"` 用脚本化 app-server 跑通整条链路。
 
 智能体要选一个可用的模型才能对话：首次使用在“模型服务”中绑定账号（开发凭据保存在仓库根目录的 `var/llm-gateway`）。`bun run dev` 需要 Docker：它在本机启动一组所有实例共享、名为 `axp-dev-*` 的容器（数据库、日志、工作区存储），与生产的容器、卷和网络互不相干。
 
 `bun run dev` 每个实例占用七个连续端口：网关 `P`（浏览器打开的地址）、API `P+1`、内部运行协议 `P+2`、Web `P+3`、llm-gateway `P+4`、runtime 网关 `P+5`（监听 runtime 网络的网关地址 `172.30.0.1`，其余都只监听 loopback）、memory-service `P+6`，默认 `P=3000`。被占用时（其他 checkout、worktree 或 agent 已在运行）自动顺延到下一个空闲端口块（3010、3020……），并用文件锁避免并行启动抢到同一端口，因此可以同时运行任意多个实例。用 `bun run dev --port 4000`（或 `AXP_DEV_PORT=4000`）指定端口，被占用或与生产端口（`deploy/ports.env`）重叠时直接报错。新的 worktree 首次运行会自动安装依赖并执行 migrations。
 
-`setup` 安装 JS/Python 依赖并执行 Django migrations。锁文件（`bun.lock`、两个 `uv.lock`）应一起提交。
+`setup` 安装 JS/Python/Go 依赖并执行数据库迁移。锁文件（`bun.lock`、两个 `uv.lock`、`go.sum`）应一起提交。
 
 开发无需任何环境文件：所有服务地址由 `bun run dev` 设定，其余都是代码里的固定值。
 
@@ -61,7 +61,7 @@ Web 已配置 Query、nuqs、Phosphor Icons、表单校验、通知、Markdown �
 | `bun run dev`                | 启动开发环境，任一进程退出时关闭所有进程                     |
 | `bun run deploy`             | 用 Kamal 把工作区部署到本机（见 `deploy/README.md`）         |
 | `bun run dev:llm-gateway`    | 单独启动 llm-gateway                                         |
-| `bun run dev:control-plane`  | 单独启动 Django（公共 API）                                  |
+| `bun run dev:control-plane`  | 单独启动控制面的公共 API                                     |
 | `bun run dev:internal`       | 单独启动内部运行协议服务                                     |
 | `bun run dev:controller`     | 单独启动 runtime controller（需要 Docker）                   |
 | `bun run dev:web`            | 单独启动 Web                                                 |
@@ -69,13 +69,13 @@ Web 已配置 Query、nuqs、Phosphor Icons、表单校验、通知、Markdown �
 | `bun run db:migrate`         | 执行数据库迁移                                               |
 | `bun run build`              | 用 Turbo 构建 Web 与各平台的镜像产物（见下文）               |
 | `bun run check`              | 格式检查，再构建、类型检查、lint 与全部测试                  |
-| `bun run lint`               | ESLint、Ruff、Django 系统检查与 Go 检查                      |
+| `bun run lint`               | ESLint、Ruff 与 Go 检查                                      |
 | `bun run test`               | 全部测试（Web 用 Rstest，Python 用 pytest，Go 用 `go test`） |
 | `bun run test:control-plane` | 运行 control plane 测试                                      |
 | `bun run test:agent-runtime` | 运行 runtime 测试（使用脚本化 app-server，无需凭据）         |
 | `bun run format`             | 用 dprint 格式化整个仓库（`format:check` 只检查）            |
 
-TanStack 的 `src/routeTree.gen.ts` 由 `dev` 或 `build` 自动生成；`check` 会先执行构建，因此可在全新安装后直接执行。
+TanStack 的 `src/routeTree.gen.ts` 由 `dev` 或 `build` 自动生成；控制面的类型 `src/api/control-plane.gen.ts` 由 `generate` 从控制面的 OpenAPI 文档生成，而这份文档由控制面的 Go 代码生成（见[控制面](docs/architecture/control-plane.md)）。两者都不入库；`check` 会先执行构建，因此可在全新安装后直接执行。
 
 构建、检查和测试都通过 [Turborepo](https://turborepo.com) 运行，结果缓存在 `.turbo/cache`，输入没变的任务直接复用。镜像所需的产物在 Docker 之外构建，输出到各应用的 `out/`：
 
@@ -97,7 +97,7 @@ TanStack 的 `src/routeTree.gen.ts` 由 `dev` 或 `build` 自动生成；`check`
 
 ## 日志
 
-三种语言的服务都走 OpenTelemetry：Go 用 `log/slog`（`packages/telemetry-go`），Python 用标准库 `logging`（`packages/telemetry-py`，gunicorn 自身的日志经 `apps/control-plane/gunicorn.conf.py` 接入），Web 服务端用 LogTape（`apps/web/src/server/telemetry.ts`）。llm-gateway 内嵌的 CLIProxyAPI 会自己打印到 stdout，这些行也被逐行转成日志（`library=cliproxy`）。每条日志同时：
+三种语言的服务都走 OpenTelemetry：Go 用 `log/slog`（`packages/telemetry-go`），Python 用标准库 `logging`（`packages/telemetry-py`），Web 服务端用 LogTape（`apps/web/src/server/telemetry.ts`）。llm-gateway 内嵌的 CLIProxyAPI 会自己打印到 stdout，这些行也被逐行转成日志（`library=cliproxy`）。每条日志同时：
 
 - 在 stderr 输出一行可读格式 `15:04:05.000 INFO  消息 key=value`（UTC，`INFO` 及以上）；
 - 通过 OTLP 发往 [OpenObserve](https://openobserve.ai)。
@@ -120,4 +120,4 @@ agent runtime 容器运行智能体执行的代码、不持有凭据，它们把
 
 Kamal 配置和部署脚本都在 [`deploy/`](deploy/README.md)。在任意一台满足条件的 Linux 机器上克隆仓库后执行 `deploy/deploy.sh`（或 `bun run deploy`），即可把已提交的 HEAD 部署到这台机器。
 
-配置参考：[TanStack Start 官方初始化指南](https://tanstack.com/start/latest/docs/framework/react/build-from-scratch)、[Django Ninja 官方教程](https://django-ninja.dev/tutorial/)、[Codex Python SDK](https://github.com/openai/codex/tree/main/sdk/python)。
+配置参考：[TanStack Start 官方初始化指南](https://tanstack.com/start/latest/docs/framework/react/build-from-scratch)、[huma](https://huma.rocks)、[Codex Python SDK](https://github.com/openai/codex/tree/main/sdk/python)。

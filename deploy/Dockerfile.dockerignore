@@ -1,5 +1,5 @@
-# Only the prebuilt artifacts, the control plane and memory service sources,
-# the runtime's plugins and the gateway configuration are sent to Docker.
+# Only the prebuilt artifacts, the memory service's sources, the runtime's
+# plugins and the gateway configuration are sent to Docker.
 *
 !apps/control-plane/out/
 !apps/llm-gateway/out/
@@ -7,11 +7,6 @@
 !apps/gateway/Caddyfile
 !apps/gateway/*.caddy
 !apps/web/out/
-!apps/control-plane/manage.py
-!apps/control-plane/gunicorn.conf.py
-!apps/control-plane/config/
-!apps/control-plane/chat/
-!apps/control-plane/routines/
 !apps/memory-service/out/
 !apps/memory-service/axp_memory/
 !apps/agent-runtime/plugins/
