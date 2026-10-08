@@ -119,20 +119,17 @@ func registerChat(api huma.API, d *Deps) {
 		})
 
 	huma.Register(api, op("createAgent", http.MethodPost, "/api/v1/agents", "Create an agent", 201, "chat"),
-		func(ctx context.Context, in *struct {
-			Keyed
-			Body AgentCreateIn
-		}) (*Response[chat.Agent], error) {
+		func(ctx context.Context, in *struct{ Body AgentCreateIn }) (*body[chat.Agent], error) {
 			if err := cleanName(&in.Body.Name); err != nil {
 				return nil, err
 			}
-			return idempotent(ctx, d, in.IdempotencyKey, in.Body, func(tx pgx.Tx) (handled[chat.Agent], error) {
-				agent, err := s.CreateAgent(ctx, tx, in.Body.Name, in.Body.Description, in.Body.Model, in.Body.Plugins)
-				if err != nil {
-					return handled[chat.Agent]{}, err
-				}
-				return handled[chat.Agent]{201, agent, agent.ID}, nil
+			agent, err := inTx(ctx, d, func(tx pgx.Tx) (*chat.Agent, error) {
+				return s.CreateAgent(ctx, tx, in.Body.Name, in.Body.Description, in.Body.Model, in.Body.Plugins)
 			})
+			if err != nil {
+				return nil, err
+			}
+			return &body[chat.Agent]{*agent}, nil
 		})
 
 	huma.Register(api, op("updateAgent", http.MethodPatch, "/api/v1/agents/{agent_id}",
@@ -173,70 +170,63 @@ func registerChat(api huma.API, d *Deps) {
 			return nil, err
 		})
 
-	sent := func(sent *chat.Sent, err error) (handled[chat.Sent], error) {
-		if err != nil {
-			return handled[chat.Sent]{}, err
-		}
-		return handled[chat.Sent]{202, sent, sent.Reply.ID}, nil
-	}
-
 	huma.Register(api, op("sendMessage", http.MethodPost, "/api/v1/chat/messages",
 		"Send a message to an agent; returns it and the reply that will answer it", 202, "chat"),
-		func(ctx context.Context, in *struct {
-			Keyed
-			Body MessageCreateIn
-		}) (*Response[chat.Sent], error) {
+		func(ctx context.Context, in *struct{ Body MessageCreateIn }) (*body[chat.Sent], error) {
 			if strings.TrimSpace(in.Body.Text) == "" {
 				return nil, invalid()
 			}
 			if in.Body.Mode == "" {
 				in.Body.Mode = "queue"
 			}
-			return idempotent(ctx, d, in.IdempotencyKey, in.Body, func(tx pgx.Tx) (handled[chat.Sent], error) {
-				return sent(s.SendMessage(ctx, tx, in.Body.AgentID, in.Body.Text, in.Body.Mode == "steer"))
+			sent, err := inTx(ctx, d, func(tx pgx.Tx) (*chat.Sent, error) {
+				return s.SendMessage(ctx, tx, in.Body.AgentID, in.Body.Text, in.Body.Mode == "steer")
 			})
+			if err != nil {
+				return nil, err
+			}
+			return &body[chat.Sent]{*sent}, nil
 		})
 
 	huma.Register(api, op("compactAgent", http.MethodPost, "/api/v1/agents/{agent_id}/compact",
 		"Compact the agent's context, shown as /compact", 202, "chat"),
-		func(ctx context.Context, in *struct {
-			Keyed
-			AgentPath
-		}) (*Response[chat.Sent], error) {
-			return idempotent(ctx, d, in.IdempotencyKey, struct{}{}, func(tx pgx.Tx) (handled[chat.Sent], error) {
-				return sent(s.Compact(ctx, tx, in.AgentID))
+		func(ctx context.Context, in *AgentPath) (*body[chat.Sent], error) {
+			sent, err := inTx(ctx, d, func(tx pgx.Tx) (*chat.Sent, error) {
+				return s.Compact(ctx, tx, in.AgentID)
 			})
+			if err != nil {
+				return nil, err
+			}
+			return &body[chat.Sent]{*sent}, nil
 		})
 
 	huma.Register(api, op("stopMessage", http.MethodPost, "/api/v1/chat/messages/{message_id}/stop",
 		"Stop a reply; repeating it is harmless", 200, "chat"),
 		func(ctx context.Context, in *struct {
-			Keyed
 			MessageID string `path:"message_id"`
-		}) (*Response[chat.Message], error) {
-			return idempotent(ctx, d, in.IdempotencyKey, struct{}{}, func(tx pgx.Tx) (handled[chat.Message], error) {
-				reply, err := s.StopReply(ctx, tx, in.MessageID)
-				if err != nil {
-					return handled[chat.Message]{}, err
-				}
-				return handled[chat.Message]{200, reply, reply.ID}, nil
+		}) (*body[chat.Message], error) {
+			reply, err := inTx(ctx, d, func(tx pgx.Tx) (*chat.Message, error) {
+				return s.StopReply(ctx, tx, in.MessageID)
 			})
+			if err != nil {
+				return nil, err
+			}
+			return &body[chat.Message]{*reply}, nil
 		})
 
 	huma.Register(api, op("answerInteraction", http.MethodPost, "/api/v1/chat/interactions/{interaction_id}/answer",
 		"Answer an interaction", 202, "chat"),
 		func(ctx context.Context, in *struct {
-			Keyed
 			InteractionID string `path:"interaction_id"`
 			Body          InteractionAnswerIn
-		}) (*Response[chat.Interaction], error) {
-			return idempotent(ctx, d, in.IdempotencyKey, in.Body, func(tx pgx.Tx) (handled[chat.Interaction], error) {
-				answered, err := s.AnswerInteraction(ctx, tx, in.InteractionID, in.Body.Value)
-				if err != nil {
-					return handled[chat.Interaction]{}, err
-				}
-				return handled[chat.Interaction]{202, answered, answered.ID}, nil
+		}) (*body[chat.Interaction], error) {
+			answered, err := inTx(ctx, d, func(tx pgx.Tx) (*chat.Interaction, error) {
+				return s.AnswerInteraction(ctx, tx, in.InteractionID, in.Body.Value)
 			})
+			if err != nil {
+				return nil, err
+			}
+			return &body[chat.Interaction]{*answered}, nil
 		})
 
 	registerStream(api, d)

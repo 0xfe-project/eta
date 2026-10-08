@@ -258,17 +258,8 @@ func (e *env) get(path string, query ...string) response {
 	return do(e.t, e.public, http.MethodGet, "/api/v1"+path, nil, nil)
 }
 
-// post sends with a fresh Idempotency-Key unless key is given ("-" for none).
-func (e *env) post(path string, body any, key ...string) response {
-	k := uuid.NewString()
-	if len(key) > 0 {
-		k = key[0]
-	}
-	headers := map[string]string{}
-	if k != "-" {
-		headers["Idempotency-Key"] = k
-	}
-	return do(e.t, e.public, http.MethodPost, "/api/v1"+path, body, headers)
+func (e *env) post(path string, body any) response {
+	return do(e.t, e.public, http.MethodPost, "/api/v1"+path, body, nil)
 }
 
 func (e *env) patch(path string, body any) response {

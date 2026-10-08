@@ -127,20 +127,17 @@ func registerTasks(api huma.API, d *Deps) {
 		})
 
 	huma.Register(api, taskOp("createTask", http.MethodPost, "/api/v1/tasks", "Create a task", 201, "tasks"),
-		func(ctx context.Context, in *struct {
-			Keyed
-			Body TaskIn
-		}) (*Response[tasks.TaskDetail], error) {
+		func(ctx context.Context, in *struct{ Body TaskIn }) (*body[tasks.TaskDetail], error) {
 			b := in.Body
-			return idempotent(ctx, d, in.IdempotencyKey, b, func(tx pgx.Tx) (handled[tasks.TaskDetail], error) {
-				t, err := s.Create(ctx, tx, tasks.Input{
+			t, err := inTx(ctx, d, func(tx pgx.Tx) (*tasks.TaskDetail, error) {
+				return s.Create(ctx, tx, tasks.Input{
 					Title: b.Title, Description: b.Description, Status: b.Status, Assignee: b.Assignee,
 				}, tasks.User)
-				if err != nil {
-					return handled[tasks.TaskDetail]{}, err
-				}
-				return handled[tasks.TaskDetail]{201, t, t.ID}, nil
 			})
+			if err != nil {
+				return nil, err
+			}
+			return &body[tasks.TaskDetail]{*t}, nil
 		})
 
 	huma.Register(api, taskOp("updateTask", http.MethodPatch, "/api/v1/tasks/{task_id}",
@@ -170,17 +167,16 @@ func registerTasks(api huma.API, d *Deps) {
 	huma.Register(api, taskOp("commentTask", http.MethodPost, "/api/v1/tasks/{task_id}/comments",
 		"Comment on a task; a remote agent working on it gets the comment as a follow-up", 201, "tasks"),
 		func(ctx context.Context, in *struct {
-			Keyed
 			TaskPath
 			Body CommentIn
-		}) (*Response[tasks.TaskDetail], error) {
-			return idempotent(ctx, d, in.IdempotencyKey, in.Body, func(tx pgx.Tx) (handled[tasks.TaskDetail], error) {
-				t, err := s.Comment(ctx, tx, in.TaskID, in.Body.Body, tasks.User)
-				if err != nil {
-					return handled[tasks.TaskDetail]{}, err
-				}
-				return handled[tasks.TaskDetail]{201, t, t.ID}, nil
+		}) (*body[tasks.TaskDetail], error) {
+			t, err := inTx(ctx, d, func(tx pgx.Tx) (*tasks.TaskDetail, error) {
+				return s.Comment(ctx, tx, in.TaskID, in.Body.Body, tasks.User)
 			})
+			if err != nil {
+				return nil, err
+			}
+			return &body[tasks.TaskDetail]{*t}, nil
 		})
 
 	huma.Register(api, taskOp("interruptTaskRun", http.MethodPost, "/api/v1/tasks/{task_id}/runs/{run_id}/interrupt",
@@ -217,12 +213,12 @@ func registerTasks(api huma.API, d *Deps) {
 
 	huma.Register(api, taskOp("createComputer", http.MethodPost, "/api/v1/computers",
 		"Add a computer; the answer has its one-time install command", 201, "computers"),
-		func(ctx context.Context, in *struct{ Body ComputerIn }) (*Response[Install], error) {
+		func(ctx context.Context, in *struct{ Body ComputerIn }) (*body[Install], error) {
 			e, err := inTx(ctx, d, func(tx pgx.Tx) (*tasks.Enrollment, error) { return s.CreateComputer(ctx, tx, in.Body.Name) })
 			if err != nil {
 				return nil, err
 			}
-			return &Response[Install]{201, Install{e.Computer, installCommand(ctx, d, e.Code)}}, nil
+			return &body[Install]{Install{e.Computer, installCommand(ctx, d, e.Code)}}, nil
 		})
 
 	huma.Register(api, taskOp("renewComputerInstall", http.MethodPost, "/api/v1/computers/{computer_id}/install",

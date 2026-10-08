@@ -117,10 +117,7 @@ func newError(ctx context.Context, status int, message string, errs ...error) *E
 
 type ctxKey int
 
-const (
-	requestIDKey ctxKey = iota
-	requestKey
-)
+const requestIDKey ctxKey = 0
 
 // RequestID is the request's id: the gateway's X-Request-Id, so gateway and
 // service logs line up, or a new one.
@@ -128,8 +125,6 @@ func RequestID(ctx context.Context) string {
 	id, _ := ctx.Value(requestIDKey).(string)
 	return id
 }
-
-type requestInfo struct{ method, path string }
 
 func requestIDs(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -139,7 +134,6 @@ func requestIDs(next http.Handler) http.Handler {
 		}
 		w.Header().Set("X-Request-ID", id)
 		ctx := context.WithValue(r.Context(), requestIDKey, id)
-		ctx = context.WithValue(ctx, requestKey, requestInfo{r.Method, r.URL.Path})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

@@ -1,7 +1,6 @@
 // Browser clients for the same-origin API behind the edge gateway: the
 // control plane (/api/v1), the LLM gateway (/api/llm/v1), the memory
 // service (/api/memory/v1) and the forge service (/api/forge/v1).
-// POSTs carry an Idempotency-Key so a retried request cannot run twice.
 //
 // The control plane's client is typed by its OpenAPI document, which is
 // generated from its code (`bun run generate` writes src/api).
@@ -39,18 +38,11 @@ function client(base: string) {
     async get(path: string, signal?: AbortSignal) {
       return parse(await fetch(`${base}${path}`, { signal }));
     },
-    async post(
-      path: string,
-      body: unknown = {},
-      idempotencyKey: string = crypto.randomUUID(),
-    ) {
+    async post(path: string, body: unknown = {}) {
       return parse(
         await fetch(`${base}${path}`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Idempotency-Key": idempotencyKey,
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         }),
       );
@@ -79,14 +71,6 @@ export const forgeApi = client("/api/forge/v1");
 export const controlPlane = createClient<paths>({
   // Looked up per request, so tests can replace it.
   fetch: (request) => globalThis.fetch(request),
-});
-
-controlPlane.use({
-  onRequest({ request }) {
-    if (request.method === "POST" && !request.headers.has("Idempotency-Key"))
-      request.headers.set("Idempotency-Key", crypto.randomUUID());
-    return request;
-  },
 });
 
 /** The response's data, or its error envelope as an ApiError. */

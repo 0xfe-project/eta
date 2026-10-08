@@ -62,17 +62,14 @@ func registerRoutines(api huma.API, d *Deps) {
 		})
 
 	huma.Register(api, routineOp("createRoutine", http.MethodPost, "/api/v1/routines", "Create a routine", 201),
-		func(ctx context.Context, in *struct {
-			Keyed
-			Body RoutineIn
-		}) (*Response[routines.Routine], error) {
-			return idempotent(ctx, d, in.IdempotencyKey, in.Body, func(tx pgx.Tx) (handled[routines.Routine], error) {
-				routine, err := s.Create(ctx, tx, routines.Input(in.Body))
-				if err != nil {
-					return handled[routines.Routine]{}, err
-				}
-				return handled[routines.Routine]{201, routine, routine.ID}, nil
+		func(ctx context.Context, in *struct{ Body RoutineIn }) (*body[routines.Routine], error) {
+			routine, err := inTx(ctx, d, func(tx pgx.Tx) (*routines.Routine, error) {
+				return s.Create(ctx, tx, routines.Input(in.Body))
 			})
+			if err != nil {
+				return nil, err
+			}
+			return &body[routines.Routine]{*routine}, nil
 		})
 
 	huma.Register(api, routineOp("updateRoutine", http.MethodPatch, "/api/v1/routines/{routine_id}",
@@ -115,33 +112,31 @@ func registerRoutines(api huma.API, d *Deps) {
 	huma.Register(api, routineOp("restoreBrief", http.MethodPost, "/api/v1/routines/{routine_id}/briefs/{version}/restore",
 		"Make an earlier brief the current one", 200),
 		func(ctx context.Context, in *struct {
-			Keyed
 			RoutinePath
 			Version int `path:"version"`
-		}) (*Response[routines.Routine], error) {
-			return idempotent(ctx, d, in.IdempotencyKey, struct{}{}, func(tx pgx.Tx) (handled[routines.Routine], error) {
-				routine, err := s.RestoreBrief(ctx, tx, in.RoutineID, in.Version)
-				if err != nil {
-					return handled[routines.Routine]{}, err
-				}
-				return handled[routines.Routine]{200, routine, routine.ID}, nil
+		}) (*body[routines.Routine], error) {
+			routine, err := inTx(ctx, d, func(tx pgx.Tx) (*routines.Routine, error) {
+				return s.RestoreBrief(ctx, tx, in.RoutineID, in.Version)
 			})
+			if err != nil {
+				return nil, err
+			}
+			return &body[routines.Routine]{*routine}, nil
 		})
 
 	huma.Register(api, routineOp("addFeedback", http.MethodPost, "/api/v1/routines/{routine_id}/runs/{run_id}/feedback",
 		"Give feedback on a run; it revises the brief", 201),
 		func(ctx context.Context, in *struct {
-			Keyed
 			RoutinePath
 			RunID string `path:"run_id"`
 			Body  FeedbackIn
-		}) (*Response[routines.Feedback], error) {
-			return idempotent(ctx, d, in.IdempotencyKey, in.Body, func(tx pgx.Tx) (handled[routines.Feedback], error) {
-				feedback, err := s.AddFeedback(ctx, tx, in.RoutineID, in.RunID, strings.TrimSpace(in.Body.Text))
-				if err != nil {
-					return handled[routines.Feedback]{}, err
-				}
-				return handled[routines.Feedback]{201, feedback, feedback.ID}, nil
+		}) (*body[routines.Feedback], error) {
+			feedback, err := inTx(ctx, d, func(tx pgx.Tx) (*routines.Feedback, error) {
+				return s.AddFeedback(ctx, tx, in.RoutineID, in.RunID, strings.TrimSpace(in.Body.Text))
 			})
+			if err != nil {
+				return nil, err
+			}
+			return &body[routines.Feedback]{*feedback}, nil
 		})
 }
