@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "grok": {
+      "command": "sh",
+      "args": [
+        "-c",
+        "XAI_API_KEY=\"$AXP_RUNTIME_LLM_KEY\" exec grok-api --base-url ${AXP_GATEWAY_URL}/v1 --non-interactive mcp"
+      ],
+      "cwd": "${AXP_WORKSPACE_DIR}",
+      "env_vars": ["AXP_RUNTIME_LLM_KEY"]
+    }
+  }
+}

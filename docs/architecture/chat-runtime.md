@@ -68,7 +68,7 @@ AXP 是单用户服务，所有智能体属于唯一的默认对话（`conversat
 
 智能体的扩展（MCP、skill、hook）一律是 Codex plugin，所有智能体都装同一套，没有按智能体的开关。runtime 镜像里的 `/opt/axp/plugins`（源码在 `apps/agent-runtime/plugins`）是一个本地 marketplace `axp`：`.agents/plugins/marketplace.json` 列出各 plugin，每个 plugin 是一个目录，有 `.codex-plugin/plugin.json`，可选 `.mcp.json` 和 `skills/`。
 
-runtime 每次启动、在 Codex 之前对每个 plugin 执行 `codex plugin add <name>@axp`（marketplace 用 `--config marketplaces.axp.*` 指向镜像目录）。Codex 只加载装进 `CODEX_HOME/plugins/cache` 的副本，仅在配置里启用不生效；已安装的副本不进快照，每次都以镜像为准。安装后在副本的 `.mcp.json` 里填入本实例的 `${AXP_GATEWAY_URL}` 和 `${AXP_WORKSPACE_DIR}`：Codex 不展开其中的变量，而网关地址在开发和生产中不同。plugin 的 stdio MCP 只拿到 `.mcp.json` 里写明的环境变量，`cwd: "."` 指 plugin 目录。MCP 启动失败只记日志，不影响 runtime 就绪。
+runtime 每次启动、在 Codex 之前对每个 plugin 执行 `codex plugin add <name>@axp`（marketplace 用 `--config marketplaces.axp.*` 指向镜像目录）。Codex 只加载装进 `CODEX_HOME/plugins/cache` 的副本，仅在配置里启用不生效；已安装的副本不进快照，每次都以镜像为准。安装后在副本的 `.mcp.json` 里填入本实例的 `${AXP_GATEWAY_URL}` 和 `${AXP_WORKSPACE_DIR}`：Codex 不展开其中的变量，而网关地址在开发和生产中不同。plugin 的 stdio MCP 只拿到 `.mcp.json` 里写明的环境变量（`env`，或用 `env_vars` 从 Codex 的环境透传，实例 key 只能这样传，不能写进会进快照的文件），`cwd: "."` 指 plugin 目录。MCP 启动失败只记日志，不影响 runtime 就绪。
 
 其余都是镜像里的静态 Codex 配置（源码 `apps/agent-runtime/codex`，装在 `/etc/codex`）：
 
@@ -81,6 +81,7 @@ runtime 每次启动、在 Codex 之前对每个 plugin 执行 `codex plugin add
 
 - `tasks`：stdio MCP，任务列表存在工作区的 `.axp/tasks.json`。
 - `memory`：长期记忆，见[记忆](memory.md)。
+- `grok`：[grok-api](https://github.com/AkaraChen/grok-api) 的 stdio MCP（镜像里装固定版本的 release），Grok Imagine 生成图像和视频、网页和 X 搜索。`--base-url` 指向 runtime 网关的 `/v1`，以实例 key 作为 `XAI_API_KEY`；CPA 自己转发 xAI 的 `/v1/images/*`、`/v1/videos/*` 和带 `web_search` / `x_search` 的 `/v1/responses`，用的是模型服务里绑定的 Grok 账号，容器里没有 xAI 凭据。没有绑定 Grok 账号时工具调用失败。
 
 ## 存储与隔离
 
