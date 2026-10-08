@@ -36,6 +36,9 @@ class Settings:
     heartbeat_seconds: float = 5.0
     # Context window of models Codex does not know (e.g. Grok).
     model_context_window: int | None = None
+    # Outside the snapshot: what the agent's tools read to reach the gateway
+    # (git's and gh's GitHub credentials, bin/axp-forge).
+    run_dir: Path = Path("/run/axp")
 
     @property
     def workspace_dir(self) -> Path:
@@ -79,4 +82,5 @@ def load_settings() -> Settings:
         codex_launch=shlex.split(launch) if launch else None,
         heartbeat_seconds=float(os.environ.get("AXP_HEARTBEAT_SECONDS", "5")),
         model_context_window=codex.get("model_context_window") or None,
+        run_dir=Path(os.environ.get("AXP_RUN_DIR", "/run/axp")),
     )

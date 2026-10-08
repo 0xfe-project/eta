@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import urllib.request
 import uuid
 from pathlib import Path
 
@@ -204,6 +205,7 @@ class Runtime:
             self.ledger = L.Ledger()
             self._spawn(self._outbox_loop, "outbox")
             self._install_plugins()
+            self._prepare_forge()
             self._start_codex()
             self._open_thread()
         except RecoveryFailed as exc:
@@ -387,6 +389,43 @@ class Runtime:
                     PLUGIN_VARIABLES.sub(lambda m: values[m[1]], path.read_text())
                 )
             logger.info("Installed plugin %s", name)
+
+    # --- code hosting -------------------------------------------------------
+
+    def _prepare_forge(self) -> None:
+        """Let the agent's git and gh reach the forge service (bin/axp-forge).
+
+        Codex keeps keys out of the commands it runs, so the runtime key goes
+        to a file outside the snapshot. The GitHub App's commit identity is
+        written now if GitHub is connected; otherwise axp-forge writes it
+        once it is.
+        """
+        run = self.settings.run_dir
+        key = f"{self.settings.instance_id}.{self.settings.token}"
+        try:
+            run.mkdir(parents=True, exist_ok=True)
+            gateway = run / "gateway.json"
+            gateway.write_text(
+                json.dumps({"url": self.settings.gateway_url, "key": key})
+            )
+            gateway.chmod(0o600)
+        except OSError:
+            logger.exception("Cannot prepare %s", run)
+            return
+        request = urllib.request.Request(
+            f"{self.settings.gateway_url}/forge/identity",
+            headers={"Authorization": f"Bearer {key}"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=3) as response:
+                identity = json.loads(response.read())
+        except (OSError, ValueError):
+            return  # not connected (yet), or the service is away
+        include = run / "git" / "github.inc"
+        include.parent.mkdir(parents=True, exist_ok=True)
+        include.write_text(
+            f"[user]\n\tname = {identity['name']}\n\temail = {identity['email']}\n"
+        )
 
     # --- Codex --------------------------------------------------------------
 

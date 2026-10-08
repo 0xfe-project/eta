@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { usePendingInteractions } from "@/queries/chat";
+import { CapabilitiesView } from "./capabilities-view";
 import { Inbox } from "./inbox";
 import { MemoryView } from "./memory-view";
 import { views } from "./workspace-search";
@@ -69,6 +70,7 @@ export function WorkspacePanel({
           <TabsContent key={value} value={value}>
             {value === "memory" ? <MemoryView /> : null}
             {value === "inbox" ? <Inbox /> : null}
+            {value === "capabilities" ? <CapabilitiesView /> : null}
           </TabsContent>
         ))}
       </div>

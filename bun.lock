@@ -24,6 +24,9 @@
     "apps/control-plane": {
       "name": "@axp/control-plane",
     },
+    "apps/forge-service": {
+      "name": "@axp/forge-service",
+    },
     "apps/gateway": {
       "name": "@axp/gateway",
     },
@@ -95,6 +98,8 @@
     "@axp/agent-runtime": ["@axp/agent-runtime@workspace:apps/agent-runtime"],
 
     "@axp/control-plane": ["@axp/control-plane@workspace:apps/control-plane"],
+
+    "@axp/forge-service": ["@axp/forge-service@workspace:apps/forge-service"],
 
     "@axp/gateway": ["@axp/gateway@workspace:apps/gateway"],
 

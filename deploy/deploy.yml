@@ -33,7 +33,8 @@ drain_timeout: 2
 servers:
   # The browser's gateway (apps/gateway/public.caddy): the only role behind
   # kamal-proxy. It routes /api/llm to the LLM gateway, /api/memory to the
-  # memory service, /api to the control plane and everything else to web.
+  # memory service, /api/forge to the forge service, /api to the control
+  # plane and everything else to web.
   gateway:
     hosts: [<%= host %>]
     cmd: caddy run --config /app/apps/gateway/Caddyfile
@@ -50,7 +51,8 @@ servers:
         path: /up
   # Runtimes' gateway (apps/gateway/runtime.caddy), on their network as
   # axp-runtime-gateway:8090: their only route to the internal API, the LLM
-  # gateway and the memory service, which it authenticates them for.
+  # gateway, the memory and the forge service, which it authenticates them
+  # for.
   runtime-gateway:
     hosts: [<%= host %>]
     cmd: caddy run --config /app/apps/gateway/Caddyfile
@@ -114,6 +116,23 @@ servers:
       network-alias: axp-memory
       <<: *health
       health-cmd: <%= ready.(8320, "/up") %>
+  # Code hosting (apps/forge-service) as axp-forge: the browser connects the
+  # GitHub App through the gateway at /api/forge, runtimes get git and gh
+  # credentials and open_pull_request at /forge through the runtime gateway.
+  # The App's credentials live in the axp-forge volume.
+  forge:
+    hosts: [<%= host %>]
+    cmd: python -m axp_forge
+    env:
+      clear:
+        PYTHONPATH: /app/apps/forge-service/site-packages:/app/apps/forge-service
+        AXP_FORGE_ADDR: ":8330"
+        AXP_FORGE_STATE_DIR: /app/var/forge
+    options:
+      network-alias: axp-forge
+      volume: axp-forge:/app/var/forge
+      <<: *health
+      health-cmd: <%= ready.(8330, "/up") %>
   # Internal runtime API, reached by runtimes only through the runtime gateway.
   internal:
     hosts: [<%= host %>]

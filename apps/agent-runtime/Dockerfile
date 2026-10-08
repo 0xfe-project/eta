@@ -37,7 +37,8 @@ RUN set -eu; \
     rm "${archive}"; \
     grok-api --version
 # gh, for agents to read GitHub; the hooks below keep it to reads. A release
-# binary, checked against the release's checksums.
+# binary, checked against the release's checksums. /usr/local/bin/gh is
+# bin/axp-forge, which runs it with a token from the forge service.
 ARG GH_VERSION=2.102.0
 RUN set -eu; \
     archive="gh_${GH_VERSION}_linux_${TARGETARCH}.tar.gz"; \
@@ -45,9 +46,14 @@ RUN set -eu; \
     cd /tmp; \
     curl -fsSLO "${base}/${archive}"; \
     curl -fsSL "${base}/gh_${GH_VERSION}_checksums.txt" | grep " ${archive}\$" | sha256sum -c -; \
-    tar -xzf "${archive}" --strip-components=2 -C /usr/local/bin "gh_${GH_VERSION}_linux_${TARGETARCH}/bin/gh"; \
+    mkdir -p /usr/local/lib/gh; \
+    tar -xzf "${archive}" --strip-components=2 -C /usr/local/lib/gh "gh_${GH_VERSION}_linux_${TARGETARCH}/bin/gh"; \
     rm "${archive}"; \
-    gh --version
+    /usr/local/lib/gh/gh --version
+# git and gh get GitHub credentials from the forge service (bin/axp-forge).
+COPY git/gitconfig /etc/gitconfig
+COPY bin /opt/axp/bin
+RUN ln -s /opt/axp/bin/axp-forge /usr/local/bin/gh
 # The hooks' rules: akhook checks every shell command and file change against
 # them before Codex runs it (a managed hook in /etc/codex/requirements.toml).
 # Approval requests live outside /agent, so no snapshot keeps them.

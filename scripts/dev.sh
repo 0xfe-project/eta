@@ -7,8 +7,8 @@ Usage: scripts/dev.sh [--port PORT]
 
 Starts the development stack. Each instance uses a block of consecutive
 ports: gateway PORT (open this one), control plane PORT+1, internal runtime
-API PORT+2, web PORT+3, LLM gateway PORT+4, runtime gateway PORT+5 and memory
-service PORT+6.
+API PORT+2, web PORT+3, LLM gateway PORT+4, runtime gateway PORT+5, memory
+service PORT+6 and forge service PORT+7.
 
   --port PORT   Use exactly this gateway port; fail if any port of its block is taken.
                 Also settable as AXP_DEV_PORT.
@@ -72,6 +72,9 @@ fi
 if [[ ! -d apps/memory-service/.venv ]]; then
   uv sync --project apps/memory-service --dev
 fi
+if [[ ! -d apps/forge-service/.venv ]]; then
+  uv sync --project apps/forge-service --dev
+fi
 bash scripts/dev-postgres.sh
 uv run --project apps/control-plane python apps/control-plane/manage.py migrate --verbosity 0
 
@@ -105,7 +108,7 @@ port_reserved() {
 source deploy/ports.env
 production_ports=" $AXP_PROD_HTTP_PORT $AXP_PROD_HTTPS_PORT $AXP_PROD_REGISTRY_PORT $AXP_PROD_OBSERVE_PORT "
 
-BLOCK_SIZE=7
+BLOCK_SIZE=8
 
 block_free() {
   local port
@@ -143,6 +146,7 @@ export AXP_WEB_PORT="$((web_port + 3))"
 export AXP_LLM_PORT="$((web_port + 4))"
 export AXP_RUNTIME_GATEWAY_PORT="$((web_port + 5))"
 export AXP_MEMORY_PORT="$((web_port + 6))"
+export AXP_FORGE_PORT="$((web_port + 7))"
 # Services listen on loopback, which runtime containers cannot reach; the
 # runtime gateway alone listens on the runtime network's gateway address (its
 # subnet is fixed in development). As in production, the browser and runtimes
@@ -158,6 +162,8 @@ export AXP_UPSTREAM_INTERNAL="127.0.0.1:$AXP_INTERNAL_PORT"
 export AXP_UPSTREAM_LLM="$AXP_LLM_ADDR"
 export AXP_MEMORY_ADDR="127.0.0.1:$AXP_MEMORY_PORT"
 export AXP_UPSTREAM_MEMORY="$AXP_MEMORY_ADDR"
+export AXP_FORGE_ADDR="127.0.0.1:$AXP_FORGE_PORT"
+export AXP_UPSTREAM_FORGE="$AXP_FORGE_ADDR"
 
 # Instances share the runtime network; only their ports differ.
 uv run --project apps/control-plane python apps/control-plane/manage.py ensure_runtime_network
@@ -223,18 +229,19 @@ docker rm -f "$gateway" >/dev/null 2>&1 || true
 gateway_env=""
 for name in AXP_GATEWAY_BIND AXP_GATEWAY_PORT AXP_RUNTIME_GATEWAY_BIND AXP_RUNTIME_GATEWAY_PORT \
   AXP_UPSTREAM_WEB AXP_UPSTREAM_API AXP_UPSTREAM_INTERNAL AXP_UPSTREAM_LLM AXP_UPSTREAM_MEMORY \
-  AXP_UPSTREAM_OBSERVE; do
+  AXP_UPSTREAM_FORGE AXP_UPSTREAM_OBSERVE; do
   gateway_env+=" -e $name"
 done
 
 # Every process stops on Ctrl+C or when any of them exits.
 exec node node_modules/concurrently/dist/bin/concurrently.js --kill-others \
-  --names gateway,control-plane,internal,controller,llm,memory,web \
-  --prefix-colors gray,blue,yellow,cyan,magenta,red,green \
+  --names gateway,control-plane,internal,controller,llm,memory,forge,web \
+  --prefix-colors gray,blue,yellow,cyan,magenta,red,white,green \
   "docker run --rm --name $gateway --network host$gateway_env -v $ROOT_DIR/apps/gateway:/etc/axp-gateway:ro caddy:2.11.7-alpine caddy run --config /etc/axp-gateway/Caddyfile" \
   "OTEL_SERVICE_NAME=control-plane-api bun run dev:control-plane" \
   "OTEL_SERVICE_NAME=control-plane-internal bun run dev:internal" \
   "OTEL_SERVICE_NAME=control-plane-controller bun run dev:controller" \
   "bun run dev:llm-gateway" \
   "bun run dev:memory-service" \
+  "bun run dev:forge-service" \
   "bun run dev:web"
