@@ -23,7 +23,7 @@ export function WorkspacePanel({
       value={view}
       onValueChange={(value) => onViewChange(value as WorkspaceView)}
       className={cn(
-        "relative z-10 min-h-0 min-w-0 gap-0 overflow-hidden border border-border/70 bg-card shadow-[0_2px_4px_-2px_rgb(0_0_0/0.06),0_12px_32px_-8px_rgb(0_0_0/0.12)] dark:shadow-[0_2px_4px_-2px_rgb(0_0_0/0.2),0_12px_32px_-8px_rgb(0_0_0/0.4)]",
+        "relative z-10 min-h-0 min-w-0 gap-0 overflow-hidden border border-border/70 bg-background shadow-[0_2px_4px_-2px_rgb(0_0_0/0.06),0_12px_32px_-8px_rgb(0_0_0/0.12)] dark:shadow-[0_2px_4px_-2px_rgb(0_0_0/0.2),0_12px_32px_-8px_rgb(0_0_0/0.4)]",
         fullWindow && "h-full border-0 shadow-none",
         className,
       )}
