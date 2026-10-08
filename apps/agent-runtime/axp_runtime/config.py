@@ -38,6 +38,9 @@ class Settings:
     model_context_window: int | None = None
     # The agent queue (NATS JetStream).
     nats_url: str = ""
+    # Outside the snapshot: what the agent's tools read to reach the gateway
+    # (git's and gh's GitHub credentials, bin/axp-forge).
+    run_dir: Path = Path("/run/axp")
 
     @property
     def workspace_dir(self) -> Path:
@@ -81,4 +84,5 @@ def load_settings() -> Settings:
         heartbeat_seconds=float(os.environ.get("AXP_HEARTBEAT_SECONDS", "5")),
         model_context_window=codex.get("model_context_window") or None,
         nats_url=_require("AXP_NATS_URL"),
+        run_dir=Path(os.environ.get("AXP_RUN_DIR", "/run/axp")),
     )

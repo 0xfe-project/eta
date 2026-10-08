@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "github": {
+      "type": "streamable-http",
+      "url": "${AXP_GATEWAY_URL}/forge/mcp",
+      "bearer_token_env_var": "AXP_RUNTIME_LLM_KEY"
+    }
+  }
+}

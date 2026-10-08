@@ -1,0 +1,23 @@
+# System git configuration of every agent (/etc/gitconfig).
+#
+# GitHub over HTTPS only (the container has no SSH key), with credentials from
+# AXP's forge service: axp-forge asks for a token for each repository, so
+# nothing is stored and nothing expires mid-session.
+[url "https://github.com/"]
+	insteadOf = git@github.com:
+	insteadOf = ssh://git@github.com/
+[credential "https://github.com"]
+	helper = /opt/axp/bin/axp-forge git-credential
+	useHttpPath = true
+# Commits name the agent until the GitHub App's identity is known; in GitHub
+# repositories they are the App's bot, which axp-forge writes once GitHub is
+# connected.
+[user]
+	name = AXP Agent
+	email = agent@axp.invalid
+[includeIf "hasconfig:remote.*.url:https://github.com/**"]
+	path = /run/axp/git/github.inc
+[includeIf "hasconfig:remote.*.url:git@github.com:**"]
+	path = /run/axp/git/github.inc
+[init]
+	defaultBranch = main

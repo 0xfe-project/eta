@@ -151,6 +151,7 @@ class TestBuild:
         assert catalog["name"] == "axp"
         assert [p["name"] for p in catalog["plugins"]] == [
             "approval",
+            "github",
             "grok",
             "memory",
             "routine",
@@ -169,6 +170,7 @@ class TestBuild:
         }
         assert servers == {
             "approval@axp": ["approval"],
+            "github@axp": ["github"],
             "grok@axp": ["grok"],
             "memory@axp": ["memory"],
             "routine@axp": ["routine"],
