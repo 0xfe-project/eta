@@ -13,3 +13,6 @@ default_tools_approval_mode = "approve"
 
 [plugins."memory@axp".mcp_servers.memory]
 default_tools_approval_mode = "approve"
+
+[plugins."grok@axp".mcp_servers.grok]
+default_tools_approval_mode = "approve"
