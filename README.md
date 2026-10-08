@@ -12,7 +12,7 @@ apps/
   memory-service/  Python：Agent 的长期记忆（mem0 + pgvector），memory plugin 的后端
 ```
 
-设计见 [RFC #1](https://github.com/akarachen/axp/issues/1)，实现说明见 [聊天与运行时架构](docs/architecture/chat-runtime.md)、[统一入口网关](docs/architecture/gateway.md)、[LLM 网关](docs/architecture/llm-gateway.md) 与 [记忆](docs/architecture/memory.md)。
+设计见 [RFC #1](https://github.com/akarachen/axp/issues/1)，实现说明见 [聊天与运行时架构](docs/architecture/chat-runtime.md)、[统一入口网关](docs/architecture/gateway.md)、[LLM 网关](docs/architecture/llm-gateway.md)、[记忆](docs/architecture/memory.md) 与 [工具调用规则与用户确认](docs/architecture/agent-hooks.md)。
 
 ## 环境与初始化
 

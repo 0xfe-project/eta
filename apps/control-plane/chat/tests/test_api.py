@@ -136,7 +136,7 @@ class TestAgents:
             "name": "开发助手",
             "description": "",
             "model": "test-model",
-            "plugins": ["grok", "memory", "tasks"],
+            "plugins": ["approval", "grok", "memory", "tasks"],
             "status": "idle",
             "revision": 1,
         }
@@ -271,6 +271,7 @@ class TestAgentManagement:
 
     def test_plugins_are_chosen_from_the_catalog(self, chat, agent):
         assert [p["name"] for p in chat.get("/plugins").json()] == [
+            "approval",
             "grok",
             "memory",
             "tasks",

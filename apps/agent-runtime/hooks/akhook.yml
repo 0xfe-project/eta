@@ -6,6 +6,9 @@
 # Rules guard against mistakes, not against an agent set on getting around
 # them: whatever must never happen is enforced by credentials instead.
 version: 1
+# Shown after an `ask` rule's message; the approval plugin asks the user.
+ask_instruction: "需要用户确认。请调用 request_approval 工具（request_id 为 {request_id}）；\
+  用户同意后，原样重新执行这条命令。用户拒绝时不要换个写法绕过。"
 rules:
   - id: gh-pr-create
     on: shell_exec
@@ -69,3 +72,18 @@ rules:
       # that relies on -f implying POST is left to the token's permissions.
       - regex: '\bgh\s+api\s+graphql\b.*\bmutation\b'
     message: gh 只能用来读。需要在 GitHub 上写入时，告诉用户你想做什么。
+
+  - id: push-protected-branch
+    on: shell_exec
+    checks:
+      - argv: [git, push]
+    decide:
+      argv: [/etc/akhook/push-target]
+      timeout_ms: 10000
+    message: 要推送到受保护分支。
+
+  - id: akhook-approval
+    on: shell_exec
+    checks:
+      - argv: [akhook, approval, grant]
+    message: 授权只能由用户在 AXP 中给出。
