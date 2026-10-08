@@ -84,6 +84,9 @@ class ActivityBlock(Schema):
     type: Literal["activity"]
     label: str
     status: Literal["running", "completed", "failed"]
+    name: str | None = None
+    input: str | None = None
+    output: str | None = None
 
 
 Block = Annotated[TextBlock | ActivityBlock, Field(discriminator="type")]

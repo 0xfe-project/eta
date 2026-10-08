@@ -31,6 +31,8 @@ ACTIVITY_LABELS = {
     "compaction": "压缩上下文",
 }
 ACTIVITY_STATUSES = {"running", "completed", "failed"}
+# The tool call's name, input and output, as the runtime clipped them.
+ACTIVITY_DETAIL_CHARS = {"name": 100, "input": 1000, "output": 4000}
 MAX_BATCH = 100
 
 
@@ -157,6 +159,9 @@ def item_updated(conversation, agent, instance, command, payload):
             "label": ACTIVITY_LABELS[kind],
             "status": status if status in ACTIVITY_STATUSES else "running",
         }
+        for key, limit in ACTIVITY_DETAIL_CHARS.items():
+            if isinstance(item.get(key), str) and item[key]:
+                block[key] = item[key][:limit]
     else:
         return
     blocks = list(reply.content)

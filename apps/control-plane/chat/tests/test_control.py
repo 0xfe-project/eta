@@ -341,13 +341,14 @@ class TestExecution:
         command_id = str(command.pk)
         runtime.turn_started(command, "turn-1")
         runtime.events(
-            item(command_id, id="c1", kind="command", status="running"),
+            item(command_id, id="c1", kind="command", status="running", input="ls"),
             item(
                 command_id, id="m1", kind="agent_message", status="running", text="正在"
             ),
         )
         reply = ctl.reply(sent)
         assert reply.status == "responding"
+        assert reply.content[0]["input"] == "ls"
         assert [
             (b["type"], b.get("label") or b.get("text")) for b in reply.content
         ] == [

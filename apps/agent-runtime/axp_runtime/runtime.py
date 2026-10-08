@@ -63,6 +63,8 @@ ITEM_KINDS = {
     "contextCompaction": "compaction",
 }
 FAILED_ITEM_STATUSES = {"failed", "declined", "error"}
+# How much of a tool call the transcript shows; the rest stays in Codex.
+ITEM_DETAIL_CHARS = {"name": 100, "input": 1000, "output": 4000}
 FLUSH_SECONDS = 0.3
 # thread/compact/start answers before its turn starts.
 COMPACT_START_SECONDS = 30
@@ -100,6 +102,47 @@ def _payload(notification) -> dict:
             mode="json", by_alias=True, exclude_none=True, warnings=False
         )
     return {}
+
+
+def _texts(content) -> str:
+    """The text parts of an MCP result or dynamic tool output."""
+    return "\n".join(
+        part["text"]
+        for part in content or []
+        if isinstance(part, dict) and isinstance(part.get("text"), str)
+    )
+
+
+def _arguments(value) -> str:
+    if value in (None, {}, [], ""):
+        return ""
+    return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+
+
+def _item_detail(kind: str, item: dict) -> tuple[str, str, str]:
+    """A tool call's name, input and output, as the transcript shows them."""
+    if kind == "command":
+        return "", item.get("command") or "", item.get("aggregatedOutput") or ""
+    if kind == "file_change":
+        changes = item.get("changes") or []
+        paths = ", ".join(change.get("path", "") for change in changes)
+        return "", paths, "\n".join(change.get("diff", "") for change in changes)
+    if kind in ("mcp_tool", "tool"):
+        prefix = item.get("server") or item.get("namespace")
+        name = ".".join(filter(None, [prefix, item.get("tool")]))
+        if kind == "mcp_tool":
+            error = (item.get("error") or {}).get("message")
+            output = error or _texts((item.get("result") or {}).get("content"))
+        else:
+            output = _texts(item.get("contentItems"))
+        return name, _arguments(item.get("arguments")), output
+    if kind == "web_search":
+        return "", item.get("query") or "", ""
+    if kind == "agent":
+        return item.get("tool") or "", item.get("prompt") or "", ""
+    if kind == "image":
+        return "", item.get("revisedPrompt") or "", ""
+    return "", "", ""
 
 
 def _toml(value) -> str:
@@ -804,8 +847,11 @@ class Runtime:
         view = {"id": item.get("id"), "kind": kind, "status": status}
         if kind == "agent_message":
             view["text"] = item.get("text") or ""
-        elif kind == "mcp_tool":
-            view["tool"] = item.get("tool")
+        else:
+            detail = zip(ITEM_DETAIL_CHARS.items(), _item_detail(kind, item))
+            for (key, limit), value in detail:
+                if value:
+                    view[key] = value[:limit]
         self.ledger.emit("item.updated", {"command_id": command_id, "item": view})
 
     def _finish_turn(self, command_id: str, turn: dict) -> None:

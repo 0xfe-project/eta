@@ -293,6 +293,8 @@ class TestTurns:
         assert runtime.decide(approval_id, "accept", 1) == "accepted"
         assert cp.wait_for("approval.applied")["decision"] == "accept"
         assert cp.completed(command_id)["status"] == "completed"
+        item = cp.wait_for("item.updated", command_id=command_id)["item"]
+        assert item == IsPartialDict(kind="command", input="touch approved.txt")
         # Repeating the same decision is fine; a different one is not.
         assert runtime.decide(approval_id, "accept", 1) == "accepted"
         assert runtime.decide(approval_id, "decline", 1) == "not_pending"
@@ -353,6 +355,33 @@ class TestTurns:
         command_id = send(runtime, "[crash]")
         cp.wait_for("command.outcome_unknown", command_id=command_id)
         assert runtime.status == "error"
+
+
+class TestItemDetail:
+    def test_mcp_tool_shows_its_name_arguments_and_result(self):
+        item = {
+            "server": "memory",
+            "tool": "recall",
+            "arguments": {"query": "偏好"},
+            "result": {"content": [{"type": "text", "text": "喜欢简洁"}]},
+        }
+        assert runtime_module._item_detail("mcp_tool", item) == (
+            "memory.recall",
+            '{"query": "偏好"}',
+            "喜欢简洁",
+        )
+
+    def test_failed_mcp_tool_shows_the_error(self):
+        item = {"server": "s", "tool": "t", "error": {"message": "boom"}}
+        assert runtime_module._item_detail("mcp_tool", item) == ("s.t", "", "boom")
+
+    def test_file_change_shows_paths_and_diffs(self):
+        changes = [{"path": "a.py", "diff": "+a"}, {"path": "b.py", "diff": "+b"}]
+        assert runtime_module._item_detail("file_change", {"changes": changes}) == (
+            "",
+            "a.py, b.py",
+            "+a\n+b",
+        )
 
 
 class TestSnapshots:
