@@ -1,6 +1,5 @@
 import type { Agent } from "@/queries/chat";
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/ArrowClockwise";
-import { CheckIcon } from "@phosphor-icons/react/Check";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
@@ -26,7 +25,7 @@ import { AgentMonogram, AgentStatus } from "./agent-identity";
 import { useAgents } from "./use-agents";
 
 function AgentRow({ agent, current }: { agent: Agent; current: boolean }) {
-  const { select, openEditor } = useAgents();
+  const { openEditor } = useAgents();
   const restart = useRestartAgent();
   const [confirming, setConfirming] = useState(false);
   const instructions = agent.description.trim();
@@ -103,13 +102,6 @@ function AgentRow({ agent, current }: { agent: Agent; current: boolean }) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-36">
-          <DropdownMenuItem
-            disabled={current}
-            onSelect={() => select(agent.id)}
-          >
-            <CheckIcon aria-hidden="true" />
-            设为当前
-          </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => openEditor(agent.id)}>
             <PencilSimpleIcon aria-hidden="true" />
             编辑
