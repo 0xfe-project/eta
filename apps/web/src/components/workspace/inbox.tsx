@@ -1,4 +1,3 @@
-import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useAnswerInteraction, usePendingInteractions } from "@/queries/chat";
@@ -6,11 +5,10 @@ import { useAgents } from "./use-agents";
 import { useWorkspaceStore } from "./workspace-store";
 
 /** Every agent's pending confirmations, answerable from anywhere. */
-export function Inbox({ fullWindow }: { fullWindow: boolean }) {
+export function Inbox() {
   const pending = usePendingInteractions();
   const { agents, select } = useAgents();
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
-  const navigate = useNavigate();
   const answer = useAnswerInteraction();
 
   if (pending.length === 0)
@@ -19,7 +17,6 @@ export function Inbox({ fullWindow }: { fullWindow: boolean }) {
   const openAgent = (agentId: string) => {
     select(agentId);
     setMobilePanel("chat");
-    if (fullWindow) void navigate({ to: "/" });
   };
 
   return (

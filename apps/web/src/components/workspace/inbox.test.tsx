@@ -35,7 +35,7 @@ async function render(snapshot: object) {
   queryClient.setQueryData(["chat"], snapshot);
   const router = createRouter({
     routeTree: createRootRoute({
-      component: () => <Inbox fullWindow={false} />,
+      component: () => <Inbox />,
     }),
     history: createMemoryHistory(),
   });

@@ -1,5 +1,4 @@
 import type { WorkspaceView } from "./types";
-import { ArrowsInIcon } from "@phosphor-icons/react/ArrowsIn";
 import { ArrowsOutIcon } from "@phosphor-icons/react/ArrowsOut";
 import { Link } from "@tanstack/react-router";
 import { useEffect } from "react";
@@ -14,12 +13,10 @@ import { views } from "./workspace-search";
 export function WorkspacePanel({
   view,
   onViewChange,
-  fullWindow = false,
   className,
 }: {
   view: WorkspaceView;
   onViewChange: (view: WorkspaceView) => void;
-  fullWindow?: boolean;
   className?: string;
 }) {
   const pending = usePendingInteractions().length;
@@ -33,7 +30,6 @@ export function WorkspacePanel({
       onValueChange={(value) => onViewChange(value as WorkspaceView)}
       className={cn(
         "relative z-10 min-h-0 min-w-0 gap-0 overflow-hidden border border-border/70 bg-card shadow-[0_2px_4px_-2px_rgb(0_0_0/0.06),0_12px_32px_-8px_rgb(0_0_0/0.12)] dark:shadow-[0_2px_4px_-2px_rgb(0_0_0/0.2),0_12px_32px_-8px_rgb(0_0_0/0.4)]",
-        fullWindow && "h-full border-0 shadow-none",
         className,
       )}
     >
@@ -60,16 +56,11 @@ export function WorkspacePanel({
           asChild
         >
           <Link
-            to={fullWindow ? "/" : "/workspace"}
-            search={{ view }}
-            aria-label={fullWindow ? "返回双栏" : "在全窗口中打开"}
-            title={fullWindow ? "返回双栏" : "在全窗口中打开"}
+            to="/workspace"
+            aria-label="在全窗口中打开"
+            title="在全窗口中打开"
           >
-            {fullWindow ? (
-              <ArrowsInIcon aria-hidden="true" />
-            ) : (
-              <ArrowsOutIcon aria-hidden="true" />
-            )}
+            <ArrowsOutIcon aria-hidden="true" />
           </Link>
         </Button>
       </div>
@@ -77,7 +68,7 @@ export function WorkspacePanel({
         {views.map(({ value }) => (
           <TabsContent key={value} value={value}>
             {value === "memory" ? <MemoryView /> : null}
-            {value === "inbox" ? <Inbox fullWindow={fullWindow} /> : null}
+            {value === "inbox" ? <Inbox /> : null}
           </TabsContent>
         ))}
       </div>
