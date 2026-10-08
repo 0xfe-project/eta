@@ -1,8 +1,10 @@
-"""Runtime controller: turns queued intent into execution (RFC §5-7).
+"""Runtime controller: keeps a runtime running for every agent with work.
 
-Each tick runs short database transactions; Docker and runtime calls always
-happen outside them. Every write locks the conversation row first, like the
-API, so the controller and request handlers never deadlock.
+Runtimes take their work from the agent queue (chat/queue.py) themselves; the
+controller starts, replaces and stops their containers. Each tick runs short
+database transactions; Docker and queue calls always happen outside them.
+Every write locks the conversation row first, like the API, so the
+controller and request handlers never deadlock.
 """
 
 import json
@@ -18,38 +20,23 @@ from django.db import close_old_connections, transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from .. import llm, services
-from ..models import (
-    Agent,
-    AgentCommand,
-    AgentSession,
-    Approval,
-    Interaction,
-    RuntimeInstance,
-)
+from .. import llm, queue, services
+from ..models import Agent, AgentCommand, AgentSession, RuntimeInstance
 from . import objects
 from .auth import runtime_token
 from .driver import RuntimeSpec
 from .internal_api import LEASE_SECONDS
 from .projection import mark_runtime_failed
-from .runtime_client import RuntimeClient, RuntimeHttpError, RuntimeUnavailable
 
 logger = logging.getLogger(__name__)
 
 ACTIVE = AgentCommand.ACTIVE_STATUSES
-LIVE_EXECUTION = (
-    AgentCommand.Status.DISPATCHING,
-    AgentCommand.Status.RUNNING,
-    AgentCommand.Status.WAITING_APPROVAL,
-)
 READY = (RuntimeInstance.Status.READY, RuntimeInstance.Status.BUSY)
-REDISPATCH_SECONDS = 3
 HOST_ID = socket.gethostname()
 START_TIMEOUT_SECONDS = 120
 IDLE_SECONDS = 600
 # A runtime that never came up is retried after this long.
 RETRY_SECONDS = 30
-DISPATCH_TIMEOUT_SECONDS = 120
 # The OpenTelemetry Collector on the runtime network.
 RUNTIME_OTLP_ENDPOINT = "http://otel-collector:4318"
 
@@ -65,12 +52,11 @@ def _instructions(agent: Agent) -> str:
 
 
 class Controller:
-    def __init__(
-        self, driver, *, controller_id: str | None = None, client=RuntimeClient
-    ):
+    def __init__(self, driver, *, controller_id: str | None = None):
         self.driver = driver
         self.controller_id = controller_id or f"controller-{uuid.uuid4().hex[:8]}"
-        self.client = client
+        # Agents with commands in the queue, as of this tick.
+        self.waiting: set[str] = set()
 
     def run_forever(
         self,
@@ -91,14 +77,10 @@ class Controller:
 
     def tick(self) -> None:
         for step in (
+            self.look_at_queue,
             self.expire_runtimes,
-            self.fail_stale_queued,
             self.restart_outdated,
             self.ensure_runtimes,
-            self.dispatch,
-            self.deliver_interrupts,
-            self.deliver_steers,
-            self.deliver_decisions,
             self.stop_idle,
             self.stop_deleted,
         ):
@@ -106,6 +88,9 @@ class Controller:
                 step()
             except Exception:
                 logger.exception("Controller step %s failed", step.__name__)
+
+    def look_at_queue(self) -> None:
+        self.waiting = queue.agents_with_commands()
 
     # --- runtime lifecycle ----------------------------------------------------
 
@@ -117,12 +102,13 @@ class Controller:
         for instance in live:
             retry_failed = (
                 instance.status == RuntimeInstance.Status.FAILED
-                and AgentCommand.objects.filter(
-                    agent=instance.agent, status=AgentCommand.Status.QUEUED
-                ).exists()
+                and str(instance.agent_id) in self.waiting
             )
             if instance.lease_expires_at < now:
                 reason = "LEASE_EXPIRED"
+                if instance.last_heartbeat_at is None:
+                    # It never came up: what waits for it fails.
+                    self._fail_start(instance, "START_TIMEOUT")
             elif retry_failed:
                 # New work arrived for a failed runtime: try a fresh one.
                 reason = "RETRY"
@@ -138,7 +124,23 @@ class Controller:
                 else RuntimeInstance.Status.STOPPED,
             )
 
+    def _fail_start(self, instance: RuntimeInstance, code: str) -> None:
+        with transaction.atomic():
+            conversation = services.lock_conversation(instance.agent.conversation_id)
+            instance.refresh_from_db()
+            mark_runtime_failed(conversation, instance.agent, instance, code)
+            instance.save(update_fields=["status", "error_code"])
+
     def end_instance(self, instance: RuntimeInstance, reason: str, status: str) -> None:
+        # Queued commands no longer in the queue were taken by this instance
+        # (only one runs per agent): they may have started.
+        taken = [
+            command.pk
+            for command in AgentCommand.objects.filter(
+                agent_id=instance.agent_id, status=AgentCommand.Status.QUEUED
+            )
+            if command.queue_seq is None or not queue.waiting(command.queue_seq)
+        ]
         with transaction.atomic():
             conversation = services.lock_conversation(instance.agent.conversation_id)
             instance = RuntimeInstance.objects.select_related("agent").get(
@@ -151,26 +153,13 @@ class Controller:
             instance.end_reason = reason
             instance.save(update_fields=["ended_at", "status", "end_reason"])
             # Its container, and whatever ran there since the last snapshot,
-            # is gone. A command never seen to start is queued again; one
-            # that started is never replayed.
-            for command in instance.commands.select_related("agent").filter(
-                status__in=LIVE_EXECUTION
+            # is gone. What it took from the queue is never replayed; the rest
+            # waits there for the next instance.
+            for command in AgentCommand.objects.select_related("agent").filter(
+                Q(runtime_instance=instance, status__in=ACTIVE) | Q(pk__in=taken)
             ):
                 if command.interrupt_requested_at:
                     services.finish_command(conversation, command, "cancelled")
-                elif command.status == AgentCommand.Status.DISPATCHING:
-                    command.status = AgentCommand.Status.QUEUED
-                    command.runtime_instance = None
-                    command.dispatch_generation = None
-                    command.dispatched_at = None
-                    command.save(
-                        update_fields=[
-                            "status",
-                            "runtime_instance",
-                            "dispatch_generation",
-                            "dispatched_at",
-                        ]
-                    )
                 else:
                     services.finish_command(
                         conversation, command, "failed", "REPLY_INTERRUPTED"
@@ -183,10 +172,9 @@ class Controller:
 
     def ensure_runtimes(self) -> None:
         wanted = Agent.objects.filter(
-            Q(commands__status=AgentCommand.Status.QUEUED)
-            | Q(desired_state=Agent.DesiredState.RUNNING),
+            Q(pk__in=self.waiting) | Q(desired_state=Agent.DesiredState.RUNNING),
             deleted_at__isnull=True,
-        ).distinct()
+        )
         retry_after = timezone.now() - _seconds(RETRY_SECONDS)
         for agent in wanted:
             if agent.runtimes.filter(ended_at__isnull=True).exists():
@@ -238,19 +226,15 @@ class Controller:
             services.refresh_agent_status(conversation, agent)
 
         try:
+            queue.open_consumer(agent.pk)
             started = self.driver.start(self._spec(agent, instance, session, restore))
         except Exception:
             logger.exception("Failed to start runtime for agent %s", agent.pk)
-            with transaction.atomic():
-                conversation = services.lock_conversation(agent.conversation_id)
-                instance.refresh_from_db()
-                mark_runtime_failed(conversation, agent, instance, "START_FAILED")
-                instance.save(update_fields=["status", "error_code"])
+            self._fail_start(instance, "START_FAILED")
             self.end_instance(instance, "START_FAILED", RuntimeInstance.Status.FAILED)
             return None
         RuntimeInstance.objects.filter(pk=instance.pk).update(
             container_id=started.container_id,
-            endpoint=started.endpoint,
             image_digest=started.image_digest,
         )
         instance.refresh_from_db()
@@ -267,6 +251,8 @@ class Controller:
             # requests, the LLM gateway. Provider credentials never enter the
             # container.
             "AXP_GATEWAY_URL": settings.AXP_RUNTIME_GATEWAY_URL,
+            # Its work: the agent's queue.
+            "AXP_NATS_URL": settings.AXP_NATS_URL,
             "AXP_THREAD_ID": session.thread_id or "",
             "AXP_CODEX_SETTINGS": json.dumps(
                 {
@@ -329,7 +315,7 @@ class Controller:
             agent = instance.agent
             if instance.config_version >= agent.config_version:
                 continue
-            if agent.commands.filter(status__in=ACTIVE).exists():
+            if self._busy(agent):
                 continue
             self.driver.stop(instance.container_id)
             self.end_instance(
@@ -341,206 +327,14 @@ class Controller:
         for instance in RuntimeInstance.objects.filter(
             ended_at__isnull=True, agent__deleted_at__isnull=False
         ).select_related("agent"):
-            if instance.agent.commands.filter(status__in=LIVE_EXECUTION).exists():
+            if instance.agent.commands.filter(status__in=ACTIVE).exists():
                 continue
             self.driver.stop(instance.container_id)
             self.end_instance(instance, "DELETED", RuntimeInstance.Status.STOPPED)
-
-    # --- queue ----------------------------------------------------------------
+            queue.forget(instance.agent_id)
 
     def _busy(self, agent: Agent) -> bool:
-        return agent.commands.filter(
-            status__in=[AgentCommand.Status.QUEUED, *ACTIVE]
-        ).exists()
-
-    def fail_stale_queued(self) -> None:
-        cutoff = timezone.now() - _seconds(DISPATCH_TIMEOUT_SECONDS)
-        stale = AgentCommand.objects.filter(
-            status=AgentCommand.Status.QUEUED,
-            created_at__lt=cutoff,
-        ).select_related("agent")
-        for command in stale:
-            # A command queued behind a long turn on a ready runtime still waits.
-            if command.agent.runtimes.filter(
-                ended_at__isnull=True, status__in=READY
-            ).exists():
-                continue
-            with transaction.atomic():
-                conversation = services.lock_conversation(command.agent.conversation_id)
-                command.refresh_from_db()
-                if command.status == AgentCommand.Status.QUEUED:
-                    services.finish_command(
-                        conversation, command, "failed", "DISPATCH_TIMEOUT"
-                    )
-
-    def dispatch(self) -> None:
-        for instance in RuntimeInstance.objects.filter(
-            ended_at__isnull=True, status__in=READY
-        ).select_related("agent"):
-            agent = instance.agent
-            client = self.client(instance)
-            resend_before = timezone.now() - _seconds(REDISPATCH_SECONDS)
-            # PUT is idempotent: resend dispatches whose response we never saw.
-            for command in agent.commands.filter(
-                status=AgentCommand.Status.DISPATCHING,
-                runtime_instance=instance,
-                dispatched_at__lt=resend_before,
-            ):
-                self._send(client, command)
-            command = self._claim(instance)
-            if command:
-                self._send(client, command)
-
-    def _claim(self, instance: RuntimeInstance) -> AgentCommand | None:
-        agent = instance.agent
-        with transaction.atomic():
-            services.lock_conversation(agent.conversation_id)
-            if agent.commands.filter(status__in=ACTIVE).exists():
-                return None
-            command = (
-                agent.commands.filter(status=AgentCommand.Status.QUEUED)
-                .order_by("agent_sequence")
-                .first()
-            )
-            if command is None:
-                return None
-            command.status = AgentCommand.Status.DISPATCHING
-            command.runtime_instance = instance
-            command.dispatch_generation = instance.generation
-            command.attempt_count += 1
-            command.save(
-                update_fields=[
-                    "status",
-                    "runtime_instance",
-                    "dispatch_generation",
-                    "attempt_count",
-                ]
-            )
-            agent.last_active_at = timezone.now()
-            agent.save(update_fields=["last_active_at", "updated_at"])
-            return command
-
-    def _send(self, client, command: AgentCommand) -> None:
-        AgentCommand.objects.filter(pk=command.pk).update(dispatched_at=timezone.now())
-        try:
-            client.put_command(command)
-        except RuntimeHttpError as exc:
-            if exc.code == "COMMAND_CONFLICT":
-                self._fail(command, "TURN_FAILED")
-            else:
-                logger.warning("Dispatch of %s deferred: %s", command.pk, exc)
-        except RuntimeUnavailable as exc:
-            logger.warning("Runtime unreachable for %s: %s", command.pk, exc)
-
-    def _fail(self, command: AgentCommand, code: str) -> None:
-        with transaction.atomic():
-            conversation = services.lock_conversation(command.agent.conversation_id)
-            command = AgentCommand.objects.select_related("agent").get(pk=command.pk)
-            services.finish_command(conversation, command, "failed", code)
-
-    # --- control channel ------------------------------------------------------
-
-    def deliver_interrupts(self) -> None:
-        pending = AgentCommand.objects.filter(
-            interrupt_requested_at__isnull=False,
-            interrupt_sent_at__isnull=True,
-            status__in=LIVE_EXECUTION,
-            runtime_instance__ended_at__isnull=True,
-        ).select_related("runtime_instance", "agent")
-        for command in pending:
-            try:
-                view = self.client(command.runtime_instance).interrupt(command.pk)
-            except (RuntimeHttpError, RuntimeUnavailable) as exc:
-                logger.warning("Interrupt of %s deferred: %s", command.pk, exc)
-                continue
-            if view is None:
-                # The runtime never accepted it: cancel locally.
-                with transaction.atomic():
-                    conversation = services.lock_conversation(
-                        command.agent.conversation_id
-                    )
-                    command.refresh_from_db()
-                    if command.status == AgentCommand.Status.DISPATCHING:
-                        services.finish_command(conversation, command, "cancelled")
-                continue
-            AgentCommand.objects.filter(pk=command.pk).update(
-                interrupt_sent_at=timezone.now()
-            )
-
-    def deliver_steers(self) -> None:
-        """Hand queued steers to their agent's running turn.
-
-        A steer stays queued until the runtime reports the turn took it in;
-        if the turn ends first, it is claimed and runs as its own turn.
-        """
-        resend_before = timezone.now() - _seconds(REDISPATCH_SECONDS)
-        steers = (
-            AgentCommand.objects.filter(
-                kind=AgentCommand.Kind.TURN,
-                status=AgentCommand.Status.QUEUED,
-                input__steer=True,
-                interrupt_requested_at__isnull=True,
-            )
-            .filter(Q(dispatched_at__isnull=True) | Q(dispatched_at__lt=resend_before))
-            .order_by("agent_sequence")
+        return (
+            str(agent.pk) in self.waiting
+            or agent.commands.filter(status__in=ACTIVE).exists()
         )
-        for steer in steers:
-            target = (
-                AgentCommand.objects.filter(
-                    agent_id=steer.agent_id,
-                    kind=AgentCommand.Kind.TURN,
-                    status__in=[
-                        AgentCommand.Status.RUNNING,
-                        AgentCommand.Status.WAITING_APPROVAL,
-                    ],
-                    codex_turn_id__isnull=False,
-                    interrupt_requested_at__isnull=True,
-                    runtime_instance__ended_at__isnull=True,
-                )
-                .select_related("runtime_instance")
-                .first()
-            )
-            if target is None:
-                continue
-            AgentCommand.objects.filter(pk=steer.pk).update(
-                dispatched_at=timezone.now()
-            )
-            try:
-                self.client(target.runtime_instance).steer(target, steer)
-            except (RuntimeHttpError, RuntimeUnavailable) as exc:
-                logger.info("Steer %s not taken: %s", steer.pk, exc)
-
-    def deliver_decisions(self) -> None:
-        decided = Approval.objects.filter(
-            status=Approval.Status.DECIDED,
-            delivery_attempted_at__isnull=True,
-            runtime_instance__ended_at__isnull=True,
-        ).select_related("runtime_instance", "agent")
-        for approval in decided:
-            try:
-                self.client(approval.runtime_instance).decide(approval)
-            except RuntimeUnavailable:
-                continue
-            except RuntimeHttpError as exc:
-                if exc.status != 409:
-                    continue
-                # The runtime no longer waits on this request.
-                with transaction.atomic():
-                    conversation = services.lock_conversation(
-                        approval.agent.conversation_id
-                    )
-                    Approval.objects.filter(pk=approval.pk).update(
-                        status=Approval.Status.EXPIRED, resolved_at=timezone.now()
-                    )
-                    interaction = Interaction.objects.filter(approval=approval).first()
-                    if interaction and interaction.status in (
-                        Interaction.Status.PENDING,
-                        Interaction.Status.SUBMITTED,
-                    ):
-                        services.save_interaction(
-                            conversation, interaction, status=Interaction.Status.EXPIRED
-                        )
-                continue
-            Approval.objects.filter(pk=approval.pk).update(
-                delivery_attempted_at=timezone.now()
-            )

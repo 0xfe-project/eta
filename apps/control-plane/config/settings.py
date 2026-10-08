@@ -97,5 +97,10 @@ AXP_S3_ACCESS_KEY_ID = os.getenv("AXP_S3_ACCESS_KEY_ID", "axp-dev" if DEBUG else
 AXP_S3_SECRET_ACCESS_KEY = os.getenv(
     "AXP_S3_SECRET_ACCESS_KEY", "axp-dev-secret" if DEBUG else ""
 )
+# NATS JetStream, the agent queue (chat/queue.py). Runtimes reach it at the same
+# address.
+AXP_NATS_URL = os.getenv(
+    "AXP_NATS_URL", "nats://172.30.0.1:4222" if DEBUG else "nats://axp-nats:4222"
+)
 # Test hook: runtimes run this instead of the Codex app-server.
 AXP_CODEX_LAUNCH = os.getenv("AXP_CODEX_LAUNCH") or None

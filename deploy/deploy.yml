@@ -221,6 +221,16 @@ accessories:
       - axp-s3:/data
     options:
       network: name=axp-prod-runtime,alias=axp-s3
+  # The agent queue (NATS JetStream), on the runtime network as axp-nats:4222
+  # for runtimes and on Kamal's for the control plane. Never published.
+  nats:
+    image: nats:2.14-alpine
+    host: <%= host %>
+    cmd: --jetstream --store_dir /data
+    volumes:
+      - axp-nats:/data
+    options:
+      network: name=axp-prod-runtime,alias=axp-nats
   # Logs and traces (OTLP), with its UI on 127.0.0.1:AXP_PROD_OBSERVE_PORT.
   openobserve:
     image: public.ecr.aws/zinclabs/openobserve:v1.0.4

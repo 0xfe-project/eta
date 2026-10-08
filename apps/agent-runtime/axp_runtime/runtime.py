@@ -1,11 +1,11 @@
 """Agent runtime: one persistent Codex thread driven through the Python SDK.
 
 Startup: restore the agent's snapshot -> install the image's Codex plugins ->
-start Codex -> resume the agent's thread (or create it once) -> report ready.
-Every turn ends by uploading a new snapshot of the agent's home.
+start Codex -> resume the agent's thread (or create it once) -> report ready
+-> run commands from the agent's queue, one at a time. Every turn ends by
+uploading a new snapshot of the agent's home.
 """
 
-import hashlib
 import json
 import logging
 import os
@@ -29,6 +29,7 @@ from pydantic import BaseModel, ConfigDict
 from . import ledger as L
 from .config import PROTOCOL_VERSION, Settings
 from .control_plane import ControlPlane, ControlPlaneError, Fenced, download, upload
+from .queue import AgentQueue
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,7 @@ ITEM_DETAIL_CHARS = {"name": 100, "input": 1000, "output": 4000}
 FLUSH_SECONDS = 0.3
 # thread/compact/start answers before its turn starts.
 COMPACT_START_SECONDS = 30
+DECISIONS = {"accept", "decline"}
 
 
 class RecoveryFailed(Exception):
@@ -168,9 +170,15 @@ def _toml(value) -> str:
 
 
 class Runtime:
-    def __init__(self, settings: Settings, control_plane: ControlPlane | None = None):
+    def __init__(
+        self,
+        settings: Settings,
+        control_plane: ControlPlane | None = None,
+        queue=AgentQueue,
+    ):
         self.settings = settings
         self.cp = control_plane or ControlPlane(settings)
+        self.queue = queue(settings, self.control)
         self.ledger: L.Ledger | None = None
         self.client: CodexClient | None = None
         self.status = "starting"
@@ -183,7 +191,6 @@ class Runtime:
         # turn takes it in.
         self._steers: dict[str, dict] = {}
         self._lock = threading.RLock()
-        self._wake = threading.Event()
         # stopping: take no new work. _halt: stop the background loops, once
         # shutdown has let them deliver what is pending.
         self.stopping = threading.Event()
@@ -218,6 +225,7 @@ class Runtime:
                 )
             return
         self.status = "ready"
+        self.queue.start()
         self._spawn(self._worker_loop, "worker")
 
     def shutdown(self, timeout: float = 8) -> None:
@@ -230,7 +238,7 @@ class Runtime:
             return  # already shutting down
         deadline = time.monotonic() + timeout
         self.stopping.set()
-        self._wake.set()
+        self.queue.stop()
         self._cancel_approvals()
         with self._codex_lock:
             self._stop_codex()
@@ -523,22 +531,28 @@ class Runtime:
             "command.outcome_unknown", {"command_id": command["command_id"]}
         )
 
-    # --- control requests (HTTP threads) -------------------------------------
+    # --- control messages (queue thread) ---------------------------------------
+
+    def control(self, body: dict) -> dict:
+        """Handle a control message from the control plane; returns the reply."""
+        kind = body.get("type")
+        if kind == "interrupt":
+            self.interrupt(str(body.get("command_id")))
+        elif kind == "decision" and body.get("decision") in DECISIONS:
+            self.decide(str(body.get("approval_id")), body["decision"])
+        elif kind == "steer":
+            target = self.current_command_id
+            result = self.steer(target, body) if target else "not_running"
+            return {"accepted": result == "accepted"}
+        return {}
 
     def accept(self, command_id: str, body: dict) -> dict:
-        canonical = json.dumps(
-            {k: body.get(k) for k in ("kind", "agent_sequence", "payload")},
-            sort_keys=True,
-        )
-        command, _ = self.ledger.accept_command(
+        command = self.ledger.accept_command(
             command_id,
             agent_sequence=int(body["agent_sequence"]),
             kind=body["kind"],
             payload=body.get("payload") or {},
-            request_hash=hashlib.sha256(canonical.encode()).hexdigest(),
-            generation=self.settings.generation,
         )
-        self._wake.set()
         return _command_view(command)
 
     def command_view(self, command_id: str) -> dict | None:
@@ -597,14 +611,6 @@ class Runtime:
             return "not_running"
         text = body.get("text") or ""
         payload = {"text": text}
-        canonical = json.dumps(
-            {
-                "kind": "turn",
-                "agent_sequence": body["agent_sequence"],
-                "payload": payload,
-            },
-            sort_keys=True,
-        )
         with self._lock:
             # Registered first: Codex may echo the steer before it answers.
             self._steers[steer_id] = {
@@ -613,8 +619,6 @@ class Runtime:
                     "agent_sequence": int(body["agent_sequence"]),
                     "kind": "turn",
                     "payload": payload,
-                    "request_hash": hashlib.sha256(canonical.encode()).hexdigest(),
-                    "generation": self.settings.generation,
                 },
             }
         try:
@@ -644,10 +648,8 @@ class Runtime:
         except Exception:
             logger.exception("turn/interrupt failed")
 
-    def decide(self, approval_id: str, decision: str, generation: int) -> str:
-        """Returns "accepted", "stale" or "not_pending"."""
-        if generation != self.settings.generation:
-            return "stale"
+    def decide(self, approval_id: str, decision: str) -> str:
+        """Returns "accepted" or "not_pending"."""
         approval = self.ledger.get_approval(approval_id)
         if approval is None:
             return "not_pending"
@@ -707,8 +709,10 @@ class Runtime:
         while not self.stopping.is_set():
             command = self.ledger.next_accepted()
             if command is None:
-                self._wake.wait(1)
-                self._wake.clear()
+                # Idle: take the next command; the queue no longer holds it.
+                body = self.queue.take()
+                if body:
+                    self._take(body)
                 continue
             if self.stopping.is_set() or self.client is None:
                 return
@@ -750,6 +754,14 @@ class Runtime:
                 self.current_command_id = None
             if self.status == "busy":
                 self.status = "ready"
+
+    def _take(self, body: dict) -> None:
+        try:
+            if body["kind"] not in ("turn", "compact"):
+                raise ValueError(body["kind"])
+            self.accept(str(body["command_id"]), body)
+        except (KeyError, TypeError, ValueError):
+            logger.warning("Dropping a malformed command")
 
     def _run_turn(self, command: dict, start) -> None:
         """Start a turn with ``start(client) -> turn id`` and stream it."""

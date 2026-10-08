@@ -147,7 +147,6 @@ class AgentCommandKind(models.TextChoices):
 
 class AgentCommandStatus(models.TextChoices):
     QUEUED = "queued"
-    DISPATCHING = "dispatching"
     RUNNING = "running"
     WAITING_APPROVAL = "waiting_approval"
     SUCCEEDED = "succeeded"
@@ -162,7 +161,6 @@ class AgentCommand(models.Model):
 
     # Statuses that hold the per-agent execution slot.
     ACTIVE_STATUSES = (
-        Status.DISPATCHING,
         Status.RUNNING,
         Status.WAITING_APPROVAL,
     )
@@ -183,11 +181,10 @@ class AgentCommand(models.Model):
         blank=True,
         related_name="commands",
     )
-    dispatch_generation = models.BigIntegerField(null=True, blank=True)
-    dispatched_at = models.DateTimeField(null=True, blank=True)
+    # Its message in the agent queue (chat/queue.py), to take it back. None
+    # for a steer the running turn took instead.
+    queue_seq = models.BigIntegerField(null=True, blank=True)
     interrupt_requested_at = models.DateTimeField(null=True, blank=True)
-    interrupt_sent_at = models.DateTimeField(null=True, blank=True)
-    attempt_count = models.IntegerField(default=0)
     created_at = models.DateTimeField(default=timezone.now)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
@@ -211,14 +208,14 @@ class AgentCommand(models.Model):
             ),
             models.UniqueConstraint(
                 fields=["agent"],
-                condition=Q(status__in=["dispatching", "running", "waiting_approval"]),
+                condition=Q(status__in=["running", "waiting_approval"]),
                 name="one_active_execution_per_agent",
             ),
             _choices_check("kind", AgentCommandKind, "agent_command_kind_valid"),
             _choices_check("status", AgentCommandStatus, "agent_command_status_valid"),
             models.CheckConstraint(
-                condition=Q(agent_sequence__gte=1, attempt_count__gte=0),
-                name="agent_command_counters_valid",
+                condition=Q(agent_sequence__gte=1),
+                name="agent_command_sequence_valid",
             ),
         ]
 
@@ -470,8 +467,6 @@ class RuntimeInstance(models.Model):
     container_id = models.CharField(max_length=100, null=True, blank=True, unique=True)
     host_id = models.CharField(max_length=100)
     image_digest = models.CharField(max_length=200, blank=True)
-    # Internal address of the runtime's control endpoint.
-    endpoint = models.CharField(max_length=200, blank=True)
     status = models.CharField(
         max_length=16, choices=RuntimeStatus.choices, default=RuntimeStatus.PROVISIONING
     )
@@ -581,7 +576,6 @@ class Approval(models.Model):
         max_length=32, choices=ApprovalStatus.choices, default=ApprovalStatus.PENDING
     )
     decision = models.CharField(max_length=16, null=True, blank=True)
-    delivery_attempted_at = models.DateTimeField(null=True, blank=True)
     expires_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
     resolved_at = models.DateTimeField(null=True, blank=True)

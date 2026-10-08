@@ -10,6 +10,7 @@ conversation and avoids lock-order deadlocks with the runtime worker.
 """
 
 import json
+import logging
 import uuid
 
 from django.core.serializers.json import DjangoJSONEncoder
@@ -17,7 +18,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.utils import timezone
 
-from . import cursors, llm
+from . import cursors, llm, queue
 from .errors import ApiError, not_found
 from .models import (
     Agent,
@@ -30,9 +31,10 @@ from .models import (
 )
 from .schemas import AgentOut, InteractionOut, MessageOut
 
+logger = logging.getLogger(__name__)
+
 HISTORY_PAGE_SIZE = 50
 MAX_HISTORY_PAGE_SIZE = 100
-MAX_QUEUED_PER_AGENT = 20
 
 
 # --- Public projections -----------------------------------------------------
@@ -186,7 +188,7 @@ FAILURES = {
     "AGENT_UNAVAILABLE": "智能体环境暂时不可用，请稍后再试。",
     "AGENT_RECOVERY_FAILED": "智能体会话无法恢复，此消息未执行。",
     "AGENT_EXTENSION_FAILED": "智能体扩展启动失败，此消息未执行。",
-    "DISPATCH_TIMEOUT": "智能体环境准备超时，此消息未执行。",
+    "START_TIMEOUT": "智能体环境准备超时，此消息未执行。",
 }
 
 
@@ -419,10 +421,8 @@ def delete_agent(agent_id: str) -> None:
     agent.deleted_at = timezone.now()
     agent.desired_state = Agent.DesiredState.STOPPED
     agent.save(update_fields=["deleted_at", "desired_state", "updated_at"])
-    commands = AgentCommand.objects.select_related("agent").filter(agent=agent)
-    for command in commands.filter(status=AgentCommand.Status.QUEUED):
-        finish_command(conversation, command, "cancelled")
-    # Running work is interrupted by the runtime; the controller then stops it.
+    # Queued work is taken off the queue; running work is interrupted by the
+    # runtime, and the controller then stops it.
     _stop_replies(conversation, agent)
     _emit(conversation, UiEvent.Type.AGENT_DELETED, {"agent_id": str(agent.id)})
 
@@ -450,8 +450,8 @@ def _stop_replies(conversation: Conversation, agent: Agent) -> None:
 def send_message(
     agent_id: str, text: str, *, steer: bool = False
 ) -> tuple[Message, Message]:
-    """Queue a turn. A steer joins the agent's running turn instead, once
-    the controller delivers it; with no running turn it waits like any turn."""
+    """Queue a turn. A steer joins the agent's running turn instead; with no
+    running turn (or one that refuses it) it waits like any turn."""
     return _enqueue(
         agent_id, text, {"text": text, **({"steer": True} if steer else {})}
     )
@@ -475,12 +475,6 @@ def _enqueue(
         llm.ensure_usable(found[0])
     conversation = _locked_default()
     agent = _agent(conversation, agent_id)
-
-    queued = AgentCommand.objects.filter(
-        agent=agent, status=AgentCommand.Status.QUEUED
-    ).count()
-    if queued >= MAX_QUEUED_PER_AGENT:
-        raise ApiError(429, "QUEUE_FULL", "该智能体待处理的消息过多，请稍后再发送。")
 
     Agent.objects.filter(pk=agent.pk).update(last_command_seq=F("last_command_seq") + 1)
     agent.refresh_from_db(fields=["last_command_seq"])
@@ -515,15 +509,66 @@ def _enqueue(
     emit_message(conversation, message)
     emit_message(conversation, reply)
     refresh_agent_status(conversation, agent)
+    # Still under the conversation lock, so commands enter the queue in
+    # order, and before commit: a failure rolls everything back. The
+    # runtime's events wait on the same lock, so they see these rows.
+    if not (input.get("steer") and _steer(command)):
+        try:
+            command.queue_seq = queue.enqueue(
+                agent.pk,
+                {
+                    "command_id": str(command.id),
+                    "kind": command.kind,
+                    "agent_sequence": command.agent_sequence,
+                    "payload": command.input,
+                },
+            )
+        except queue.QueueFull as exc:
+            raise ApiError(
+                429, "QUEUE_FULL", "该智能体待处理的消息过多，请稍后再发送。"
+            ) from exc
+        except Exception as exc:
+            raise _queue_unavailable(exc) from exc
+        command.save(update_fields=["queue_seq"])
     return message, reply
+
+
+def _steer(command: AgentCommand) -> bool:
+    """Hand a steer to the agent's running turn; False if it does not take it."""
+    try:
+        answer = queue.ask(
+            command.agent_id,
+            {
+                "type": "steer",
+                "command_id": str(command.id),
+                "agent_sequence": command.agent_sequence,
+                "text": command.input["text"],
+            },
+        )
+    except Exception:
+        logger.exception("Could not reach the runtime of agent %s", command.agent_id)
+        return False
+    return bool(answer and answer.get("accepted"))
+
+
+def _queue_unavailable(exc: Exception) -> ApiError:
+    logger.error("Agent queue unavailable: %s", exc)
+    return ApiError(503, "QUEUE_UNAVAILABLE", "消息队列暂时不可用，请稍后再试。")
+
+
+def _tell_runtime(agent_id, body: dict) -> None:
+    """Send the agent's runtime a control message. Repeating the request
+    (stop, answer) sends it again, so a lost one is only logged."""
+    try:
+        queue.tell(agent_id, body)
+    except Exception:
+        logger.exception("Could not send %s to agent %s", body["type"], agent_id)
 
 
 def _request_stop(conversation: Conversation, reply: Message) -> None:
     command = reply.command
-    # A delivered steer may already be in the running turn.
-    delivered_steer = command.input.get("steer") and command.dispatched_at
-    if command.status == AgentCommand.Status.QUEUED and not delivered_steer:
-        # Not yet handed to a runtime: cancel outright.
+    if command.status == AgentCommand.Status.QUEUED and _withdraw(command):
+        # Taken off the queue before any runtime took it.
         finish_command(conversation, command, "cancelled")
     elif reply.status in (
         Message.Status.QUEUED,
@@ -534,10 +579,29 @@ def _request_stop(conversation: Conversation, reply: Message) -> None:
         if command.interrupt_requested_at is None:
             command.interrupt_requested_at = timezone.now()
             command.save(update_fields=["interrupt_requested_at"])
+        _interrupt(command)
         expire_open_interactions(conversation, reply)
         save_message(conversation, reply, status=Message.Status.STOPPING)
         refresh_agent_status(conversation, reply.agent)
-    # stopping or terminal: repeat stops are no-ops.
+    elif reply.status == Message.Status.STOPPING:
+        # Still stopping: ask again.
+        _interrupt(command)
+    # terminal: repeat stops are no-ops.
+
+
+def _withdraw(command: AgentCommand) -> bool:
+    if command.queue_seq is None:
+        return False  # a steer in the running turn
+    try:
+        return queue.withdraw(command.queue_seq)
+    except Exception as exc:
+        raise _queue_unavailable(exc) from exc
+
+
+def _interrupt(command: AgentCommand) -> None:
+    _tell_runtime(
+        command.agent_id, {"type": "interrupt", "command_id": str(command.id)}
+    )
 
 
 def stop_reply(message_id: str) -> Message:
@@ -576,20 +640,34 @@ def answer_interaction(interaction_id: str, value: str) -> Interaction:
             status=Interaction.Status.SUBMITTED,
             answer={"value": value},
         )
-        if interaction.approval_id:
-            # The controller delivers the decision; "applied" comes from the runtime.
-            Approval.objects.filter(
-                pk=interaction.approval_id, status=Approval.Status.PENDING
-            ).update(
-                status=Approval.Status.DECIDED,
-                decision="accept" if value == "allow" else "decline",
-            )
+        approval = interaction.approval
+        if approval and approval.status == Approval.Status.PENDING:
+            approval.status = Approval.Status.DECIDED
+            approval.decision = "accept" if value == "allow" else "decline"
+            approval.save(update_fields=["status", "decision"])
+            _send_decision(approval)
         return interaction
     if interaction.status == Interaction.Status.EXPIRED:
         raise _expired()
     if interaction.answer and interaction.answer.get("value") == value:
+        approval = interaction.approval
+        if approval and approval.status == Approval.Status.DECIDED:
+            # Not applied yet: send it again.
+            _send_decision(approval)
         return interaction
     raise ApiError(409, "INTERACTION_ALREADY_ANSWERED", "该交互已有其他选择。")
+
+
+def _send_decision(approval: Approval) -> None:
+    """The runtime applies it and confirms with ``approval.applied``."""
+    _tell_runtime(
+        approval.agent_id,
+        {
+            "type": "decision",
+            "approval_id": approval.sdk_request_id,
+            "decision": approval.decision,
+        },
+    )
 
 
 def _expired() -> ApiError:

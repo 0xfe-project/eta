@@ -11,7 +11,6 @@ from chat.control import controller, objects
 from chat.control.auth import runtime_token
 from chat.control.controller import Controller
 from chat.control.driver import StartedRuntime
-from chat.control.runtime_client import RuntimeUnavailable
 from chat.models import (
     Agent,
     AgentCommand,
@@ -44,7 +43,7 @@ class FakeDriver:
         self.started.append(spec)
         container_id = uuid.uuid4().hex
         self.states[container_id] = "running"
-        return StartedRuntime(container_id, f"http://runtime-{spec.generation}", "sha")
+        return StartedRuntime(container_id, "sha")
 
     def state(self, container_id):
         return self.states.get(container_id, "missing")
@@ -52,43 +51,6 @@ class FakeDriver:
     def stop(self, container_id, timeout=10):
         self.stopped.append(container_id)
         self.states[container_id] = "exited"
-
-
-class FakeClients:
-    """Stands in for RuntimeClient; records calls per instance."""
-
-    def __init__(self):
-        self.calls = []
-        self.commands = {}
-        self.unavailable = False
-
-    def __call__(self, instance):
-        clients = self
-
-        class Client:
-            def put_command(self, command):
-                clients._record("put", instance, str(command.pk))
-                return {"status": "accepted"}
-
-            def interrupt(self, command_id):
-                clients._record("interrupt", instance, str(command_id))
-                return clients.commands.get(str(command_id), {"status": "running"})
-
-            def decide(self, approval):
-                clients._record("decide", instance, approval.decision)
-
-            def steer(self, target, command):
-                clients._record("steer", instance, f"{target.pk}:{command.pk}")
-
-        return Client()
-
-    def _record(self, kind, instance, arg):
-        if self.unavailable:
-            raise RuntimeUnavailable("down")
-        self.calls.append((kind, instance.generation, arg))
-
-    def of(self, kind):
-        return [call for call in self.calls if call[0] == kind]
 
 
 def internal(method, path, token, **kwargs):
@@ -150,12 +112,12 @@ class RuntimeHarness:
 
 
 class Control:
-    """A controller with fake Docker and runtime clients, plus one agent."""
+    """A controller with fake Docker and NATS, plus one agent."""
 
-    def __init__(self, chat):
+    def __init__(self, chat, nats):
         self.driver = FakeDriver()
-        self.clients = FakeClients()
-        self.controller = Controller(self.driver, client=self.clients)
+        self.nats = nats
+        self.controller = Controller(self.driver)
         self.chat = chat
         self.agent = chat.create_agent()
         self.tick = self.controller.tick
@@ -167,6 +129,12 @@ class Control:
         return RuntimeInstance.objects.get(
             agent_id=self.agent["id"], ended_at__isnull=True
         )
+
+    def take(self, command):
+        """What the runtime does: take the next command from the queue."""
+        body = self.nats.take(self.agent["id"])
+        assert body["command_id"] == str(command.pk)
+        return body
 
     def start_runtime(self, thread_id="thread-1") -> RuntimeHarness:
         self.tick()
@@ -214,18 +182,20 @@ def s3(monkeypatch):
 
 
 @pytest.fixture
-def ctl(chat, settings, s3):
+def ctl(chat, settings, s3, nats):
     settings.AXP_RUNTIME_GATEWAY_URL = "http://runtime-gateway:8090"
-    return Control(chat)
+    settings.AXP_NATS_URL = "nats://nats:4222"
+    return Control(chat, nats)
 
 
 @pytest.fixture
 def running(ctl):
-    """One message dispatched to a ready runtime: (sent, runtime, command)."""
+    """One message taken by a ready runtime: (sent, runtime, command)."""
     sent = ctl.send()
     runtime = ctl.start_runtime()
-    ctl.tick()
-    return sent, runtime, ctl.command(sent)
+    command = ctl.command(sent)
+    ctl.take(command)
+    return sent, runtime, command
 
 
 class TestProvisioning:
@@ -237,6 +207,9 @@ class TestProvisioning:
         env = ctl.driver.started[0].env
         assert env["AXP_RUNTIME_TOKEN"] == runtime_token(instance.pk, 1)
         assert env["AXP_GATEWAY_URL"] == "http://runtime-gateway:8090"
+        # It reads the agent's queue.
+        assert ctl.nats.consumers == [ctl.agent["id"]]
+        assert env["AXP_NATS_URL"] == "nats://nats:4222"
         # A new agent has nothing to restore.
         assert "AXP_SNAPSHOT_URL" not in env
         # Starting a runtime is invisible to the product: the reply is queued.
@@ -245,6 +218,14 @@ class TestProvisioning:
         # No second runtime while one is live.
         ctl.tick()
         assert len(ctl.driver.started) == 1
+
+    def test_queue_down_refuses_the_message(self, ctl):
+        ctl.nats.down = True
+        response = ctl.chat.post(
+            "/chat/messages", {"agent_id": ctl.agent["id"], "text": "你好"}
+        )
+        assert error_of(response) == (503, "QUEUE_UNAVAILABLE")
+        assert not Message.objects.exists()
 
     def test_start_failure_fails_waiting_replies(self, ctl):
         ctl.driver.fail_start = True
@@ -255,12 +236,14 @@ class TestProvisioning:
         assert reply.failure["code"] == "AGENT_UNAVAILABLE"
         assert ctl.agent_status() == "unavailable"
 
-    def test_dispatch_timeout_without_ready_runtime(self, ctl, monkeypatch):
-        monkeypatch.setattr(controller, "DISPATCH_TIMEOUT_SECONDS", 0)
+    def test_runtime_that_never_comes_up_fails_what_waits(self, ctl):
         sent = ctl.send()
         ctl.tick()  # provisions; never becomes ready
-        ctl.controller.fail_stale_queued()
-        assert ctl.reply(sent).failure["code"] == "DISPATCH_TIMEOUT"
+        ctl.expire_leases()
+        ctl.tick()
+        assert ctl.reply(sent).failure["code"] == "START_TIMEOUT"
+        # Its queue is emptied: nothing runs later.
+        assert ctl.nats.queued(ctl.agent["id"]) == []
 
 
 class TestInternalApi:
@@ -329,12 +312,26 @@ def item(command_id, **fields):
 
 
 class TestExecution:
-    def test_dispatch_stream_and_complete(self, ctl, running):
-        sent, runtime, command = running
-        assert command.status == "dispatching"
-        assert ctl.clients.of("put") == [("put", 1, str(command.pk))]
+    def test_queue_stream_and_complete(self, ctl):
+        sent = ctl.send()
+        command = ctl.command(sent)
+        # Waiting is a message in the agent's queue, nothing else.
+        assert ctl.nats.queued(ctl.agent["id"]) == [
+            {
+                "command_id": str(command.pk),
+                "kind": "turn",
+                "agent_sequence": 1,
+                "payload": {"text": "检查项目结构"},
+            }
+        ]
+        assert command.queue_seq == 1
+        runtime = ctl.start_runtime()
+        ctl.take(command)
         command_id = str(command.pk)
         runtime.turn_started(command, "turn-1")
+        command.refresh_from_db()
+        assert command.status == "running"
+        assert command.runtime_instance == ctl.instance()
         runtime.events(
             item(command_id, id="c1", kind="command", status="running", input="ls"),
             item(
@@ -373,14 +370,11 @@ class TestExecution:
         assert snapshot["agents"][0]["status"] == "idle"
         assert_no_internal_fields(snapshot)
 
-    def test_same_agent_runs_one_command_at_a_time(self, ctl, running):
-        _, runtime, command = running
-        second = ctl.send("第二条")
-        ctl.tick()
-        assert ctl.command(second).status == "queued"
-        runtime.turn_completed(command)
-        ctl.tick()
-        assert ctl.command(second).status == "dispatching"
+    def test_commands_queue_in_order(self, ctl):
+        first = ctl.command(ctl.send("第一条"))
+        second = ctl.command(ctl.send("第二条"))
+        queued = ctl.nats.queued(ctl.agent["id"])
+        assert [c["command_id"] for c in queued] == [str(first.pk), str(second.pk)]
 
     def test_failed_turn_has_product_reason(self, ctl, running):
         sent, runtime, command = running
@@ -396,28 +390,27 @@ class TestExecution:
         sent, runtime, command = running
         runtime.events(("command.outcome_unknown", {"command_id": str(command.pk)}))
         assert ctl.reply(sent).failure["code"] == "REPLY_INTERRUPTED"
-        ctl.tick()
-        assert len(ctl.clients.of("put")) == 1
 
     def test_stop_sends_interrupt_and_runtime_confirms(self, ctl, running):
         sent, runtime, command = running
         runtime.turn_started(command)
         stop = ctl.chat.post(f"/chat/messages/{sent['reply']['id']}/stop")
         assert stop.json()["status"] == "stopping"
-        ctl.tick()
-        ctl.tick()
-        assert ctl.clients.of("interrupt") == [("interrupt", 1, str(command.pk))]
+        interrupt = {"command_id": str(command.pk)}
+        assert ctl.nats.told_of("interrupt") == [interrupt]
+        # Stopping again asks again.
+        ctl.chat.post(f"/chat/messages/{sent['reply']['id']}/stop")
+        assert ctl.nats.told_of("interrupt") == [interrupt, interrupt]
         runtime.turn_completed(command, "interrupted")
         assert ctl.reply(sent).status == "stopped"
 
-    def test_stop_before_runtime_accepts_cancels_locally(self, ctl, running):
-        sent, _, command = running
-        ctl.clients.commands[str(command.pk)] = None
+    def test_stop_while_queued_takes_it_off_the_queue(self, ctl):
+        sent = ctl.send()
         ctl.chat.post(f"/chat/messages/{sent['reply']['id']}/stop")
-        ctl.controller.deliver_interrupts()
         assert ctl.reply(sent).status == "stopped"
-        command.refresh_from_db()
-        assert command.status == "cancelled"
+        assert ctl.command(sent).status == "cancelled"
+        assert ctl.nats.queued(ctl.agent["id"]) == []
+        assert ctl.nats.told == []
 
     def test_approval_round_trip(self, ctl, running):
         sent, runtime, command = running
@@ -444,8 +437,13 @@ class TestExecution:
         )
         assert answer.json()["status"] == "submitted"
         assert Approval.objects.get().status == "decided"
-        ctl.tick()
-        assert ctl.clients.of("decide") == [("decide", 1, "accept")]
+        decision = {"approval_id": "sdk-1", "decision": "accept"}
+        assert ctl.nats.told_of("decision") == [decision]
+        # Answering the same again resends it until the runtime applies it.
+        ctl.chat.post(
+            f"/chat/interactions/{interaction['id']}/answer", {"value": "allow"}
+        )
+        assert ctl.nats.told_of("decision") == [decision, decision]
         runtime.events(
             ("approval.applied", {"approval_id": "sdk-1", "decision": "accept"})
         )
@@ -474,8 +472,7 @@ class TestExecution:
         ctl.chat.post(
             f"/chat/interactions/{interaction['id']}/answer", {"value": "deny"}
         )
-        ctl.tick()
-        assert ctl.clients.of("decide") == [("decide", 1, "decline")]
+        assert ctl.nats.told_of("decision")[-1]["decision"] == "decline"
 
 
 class TestSlashCommands:
@@ -494,9 +491,8 @@ class TestSlashCommands:
         assert sent["message"]["blocks"][0]["text"] == "/compact"
         assert_no_internal_fields(sent)
         runtime = ctl.start_runtime()
-        ctl.tick()
         command = ctl.command(sent)
-        assert (command.kind, command.status) == ("compact", "dispatching")
+        assert ctl.take(command)["kind"] == "compact"
         runtime.turn_started(command)
         runtime.events(item(str(command.pk), id="k1", kind="compaction"))
         runtime.turn_completed(command)
@@ -507,14 +503,20 @@ class TestSlashCommands:
     def test_steer_joins_the_running_turn(self, ctl, running):
         sent, runtime, command = running
         runtime.turn_started(command)
+        ctl.nats.steering = True
         steered = self.steer(ctl)
         steer = ctl.command(steered)
-        ctl.tick()
-        assert ctl.clients.of("steer") == [("steer", 1, f"{command.pk}:{steer.pk}")]
-        ctl.tick()  # not resent right away
-        assert len(ctl.clients.of("steer")) == 1
-        steer.refresh_from_db()
-        assert steer.status == "queued"
+        # Handed straight to the running turn, never queued.
+        assert ctl.nats.asked == [
+            {
+                "type": "steer",
+                "command_id": str(steer.pk),
+                "agent_sequence": 2,
+                "text": "改用中文",
+            }
+        ]
+        assert ctl.nats.queued(ctl.agent["id"]) == []
+        assert (steer.status, steer.queue_seq) == ("queued", None)
         runtime.events(
             (
                 "turn.steered",
@@ -534,28 +536,21 @@ class TestSlashCommands:
         runtime.turn_completed(steer)
         assert ctl.reply(steered).content[0]["text"] == "好的"
         assert ctl.agent_status() == "idle"
-        assert len(ctl.clients.of("put")) == 1
 
-    def test_steer_without_running_turn_waits_its_turn(self, ctl, running):
-        _, runtime, command = running
-        steered = self.steer(ctl)
-        ctl.tick()  # the first turn has not started yet
-        assert ctl.clients.of("steer") == []
-        runtime.turn_started(command)
-        runtime.turn_completed(command)
-        ctl.tick()
-        assert ctl.command(steered).status == "dispatching"
-        assert ctl.clients.of("steer") == []
+    def test_steer_the_turn_refuses_waits_its_turn(self, ctl, running):
+        steer = ctl.command(self.steer(ctl))
+        # With no turn to join, it is queued like any turn.
+        assert ctl.nats.queued(ctl.agent["id"])[0]["command_id"] == str(steer.pk)
 
-    def test_stopping_a_delivered_steer_interrupts_it(self, ctl, running):
+    def test_stopping_a_steer_in_the_turn_interrupts_it(self, ctl, running):
         _, runtime, command = running
         runtime.turn_started(command)
+        ctl.nats.steering = True
         steered = self.steer(ctl)
-        ctl.tick()
+        steer = ctl.command(steered)
         stop = ctl.chat.post(f"/chat/messages/{steered['reply']['id']}/stop")
         assert stop.json()["status"] == "stopping"
-        steer = ctl.command(steered)
-        assert steer.status == "queued"
+        assert ctl.nats.told_of("interrupt") == [{"command_id": str(steer.pk)}]
         runtime.events(
             (
                 "turn.steered",
@@ -566,8 +561,6 @@ class TestSlashCommands:
                 },
             )
         )
-        ctl.tick()
-        assert ("interrupt", 1, str(steer.pk)) in ctl.clients.of("interrupt")
         runtime.turn_completed(steer, "interrupted")
         assert ctl.reply(steered).status == "stopped"
 
@@ -602,24 +595,31 @@ class TestRecovery:
         # The old runtime is rejected from now on.
         assert runtime.heartbeat().status_code == 409
 
-    def test_command_never_seen_to_start_is_queued_again(self, ctl, running):
+    def test_taken_command_is_never_replayed(self, ctl, running):
+        # Taken from the queue, but no event about it arrived.
         sent, _, command = running
-        assert command.status == "dispatching"
         ctl.expire_leases()
         ctl.tick()
         command.refresh_from_db()
-        assert command.status == "queued"
-        assert ctl.reply(sent).status == "queued"
-        assert ctl.clients.of("put") == [("put", 1, str(command.pk))]
-        RuntimeHarness(ctl.instance()).ready()
+        assert command.status == "failed"
+        assert ctl.reply(sent).failure["code"] == "REPLY_INTERRUPTED"
+
+    def test_waiting_command_goes_to_the_next_runtime(self, ctl):
+        sent = ctl.send()
+        ctl.start_runtime()
+        ctl.expire_leases()
         ctl.tick()
-        assert ctl.clients.of("put")[-1] == ("put", 2, str(command.pk))
+        # Still in the queue: the next runtime takes it.
+        assert ctl.reply(sent).status == "queued"
+        assert ctl.instance().generation == 2
+        ctl.take(ctl.command(sent))
 
     def test_runtime_failure_marks_agent_unavailable(self, ctl, started):
         _, runtime, _ = started
         queued = ctl.send("排队中")
         runtime.heartbeat("error", error_code="PLUGIN_INSTALL_FAILED")
         assert ctl.reply(queued).failure["code"] == "AGENT_EXTENSION_FAILED"
+        assert ctl.nats.queued(ctl.agent["id"]) == []
         assert ctl.agent_status() == "unavailable"
         # A new message retries with a fresh runtime.
         ctl.send("再试一次")
@@ -660,6 +660,7 @@ def test_idle_runtime_is_stopped(ctl, running, monkeypatch):
     runtime.turn_completed(command)
     Agent.objects.update(last_active_at=timezone.now() - timedelta(seconds=5))
     container = ctl.instance().container_id
+    ctl.controller.look_at_queue()
     ctl.controller.stop_idle()
     assert container in ctl.driver.stopped
     assert not RuntimeInstance.objects.filter(ended_at__isnull=True).exists()
@@ -673,11 +674,13 @@ def test_deleted_agent_is_interrupted_then_stopped(ctl, running):
     assert ctl.chat.delete(f"/agents/{ctl.agent['id']}").status_code == 204
     ctl.tick()
     # Still running: interrupted first, not killed mid-turn.
-    assert ctl.clients.of("interrupt") == [("interrupt", 1, str(command.pk))]
+    assert ctl.nats.told_of("interrupt") == [{"command_id": str(command.pk)}]
     assert container not in ctl.driver.stopped
     runtime.turn_completed(command, "interrupted")
     ctl.tick()
     assert container in ctl.driver.stopped
+    # Its queue goes with it.
+    assert ctl.nats.forgotten == [ctl.agent["id"]]
     assert not RuntimeInstance.objects.filter(ended_at__isnull=True).exists()
     # Nothing restarts it.
     ctl.tick()
@@ -691,7 +694,7 @@ def test_restart_interrupts_the_turn_then_replaces_the_runtime(ctl, running):
     assert ctl.chat.post(f"/agents/{ctl.agent['id']}/restart").status_code == 204
     ctl.tick()
     # Interrupted first, so the turn's snapshot is uploaded before the stop.
-    assert ctl.clients.of("interrupt") == [("interrupt", 1, str(command.pk))]
+    assert ctl.nats.told_of("interrupt") == [{"command_id": str(command.pk)}]
     assert old.container_id not in ctl.driver.stopped
     runtime.turn_completed(command, "interrupted")
     ctl.tick()
@@ -718,8 +721,8 @@ class TestConfigChange:
         assert self.instructions(ctl.driver.started[0]) == (
             "你的名字是开发助手。\n\n第一版指令"
         )
-        ctl.tick()
         command = ctl.command(sent)
+        ctl.take(command)
         runtime.turn_started(command)
         old = ctl.instance()
 

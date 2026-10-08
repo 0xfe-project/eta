@@ -8,27 +8,28 @@
 | ---------------------- | --------------------------------- | ------------------------------------------------------------------------------------------ |
 | 公共 API（Django）     | `chat/api.py`、`chat/services.py` | 7 个产品接口、SSE、幂等、产品投影与 `ui_event`                                             |
 | 内部运行协议（Django） | `chat/control/internal_api.py`    | runtime → 控制面：心跳、会话注册、事件批次、快照上传地址、runtime 身份。独立进程与 URLconf |
-| controller             | `chat/control/controller.py`      | 唯一持有 Docker socket：启动/隔离容器、派发命令、中断、审批送达                            |
-| agent runtime（容器）  | `apps/agent-runtime/axp_runtime`  | 一个 Agent 一个容器；官方 Codex Python SDK 驱动一个持久 thread                             |
+| controller             | `chat/control/controller.py`      | 唯一持有 Docker socket：为有工作的 Agent 启动、换代、停止容器                              |
+| 队列（NATS JetStream） | `chat/queue.py`                   | 把命令、中断、审批结果送到 Agent 的 runtime，见[队列](queue.md)                            |
+| agent runtime（容器）  | `apps/agent-runtime/axp_runtime`  | 一个 Agent 一个容器；从队列取工作，官方 Codex Python SDK 驱动一个持久 thread               |
 
 公共服务的 URLconf（`config.urls`）不包含任何 `/internal` 路由；内部服务以 `AXP_URLCONF=config.internal_urls` 启动，runtime 只能经 [runtime 网关](gateway.md) 访问它，有单独的 OpenAPI。公共响应、SSE 与前端类型只来自 `chat/schemas.py` 的手写允许列表，测试会检查其中不出现 command、thread、runtime、generation 等内部字段。
 
 ## 一条消息的路径
 
-1. `POST /chat/messages` 在一个事务里写入幂等记录、用户消息、助手回复占位、`agent_command(queued)` 和产品事件，返回 202。
-2. controller 发现有排队命令而 Agent 没有存活实例：`generation + 1`，写 `runtime_instance`，再在事务外启动容器；Agent 有快照时附上它的下载地址。token 由 `HMAC(SECRET_KEY, instance_id:generation)` 派生，换代即失效。
-3. runtime 启动：下载并解开 Agent 的快照（有的话）→ 安装镜像里的 Codex plugin（见下文）→ 启动 Codex app-server → 用控制面记录的 thread id 恢复（只有首次才 `thread/start`；无法恢复时报告 `recovery_failed`，绝不另起 thread）→ 心跳报告 ready。
-4. controller 认领该 Agent 最早的排队命令（每个 Agent 同时只有一个活动执行，由部分唯一索引兜底），`PUT /internal/v1/commands/{id}`。PUT 幂等，未见响应时会重发。
+1. `POST /chat/messages` 在一个事务里写入幂等记录、用户消息、助手回复占位、`agent_command(queued)` 和产品事件，并把命令发布到该 Agent 的[队列](queue.md)，返回 202。
+2. controller 发现 Agent 的队列里有命令而它没有存活实例：`generation + 1`，写 `runtime_instance`，再在事务外启动容器；Agent 有快照时附上它的下载地址。token 由 `HMAC(SECRET_KEY, instance_id:generation)` 派生，换代即失效。
+3. runtime 启动：下载并解开 Agent 的快照（有的话）→ 安装镜像里的 Codex plugin（见下文）→ 启动 Codex app-server → 用控制面记录的 thread id 恢复（只有首次才 `thread/start`；无法恢复时报告 `recovery_failed`，绝不另起 thread）→ 心跳报告 ready → 开始读队列。
+4. runtime 空闲时从队列取一条命令，确认后执行；一次一条（部分唯一索引兜底）。
 5. runtime 先记账再调用 `turn/start`；Codex 通知被转换成有序 outbox 事件（`turn.started`、`item.updated`、`approval.*`、`turn.completed` 等），增量文本每 0.3 秒合并一次。turn 结束后先上传快照（见下文），再发出 `turn.completed`。
 6. 内部事件接口按 `source_seq` 连续导入 `agent_event`（缺口返回 `409 EVENT_GAP` 与下一期望序号，重复事件幂等，内容不同则冲突），同事务内投影为消息块、交互和 `ui_event`，SSE 推给浏览器。
 
-停止：公共接口只记录 `interrupt_requested_at` 并把回复置为 `stopping`；controller 发 `POST …/interrupt`；runtime 以 `turn.completed(interrupted)` 确认后回复才变为 `stopped`。命令仍在队列中时直接取消。
+停止：命令还在队列里时从队列删除，直接取消。已被 runtime 取走的记录 `interrupt_requested_at`、回复置为 `stopping`，并发给 runtime 一条中断；runtime 以 `turn.completed(interrupted)` 确认后回复才变为 `stopped`。仍在 `stopping` 时再点停止会再发一次。
 
 压缩：`POST /agents/{id}/compact` 像发消息一样建一条 `/compact` 用户消息和回复，但命令 `kind` 为 `compact`，同样排队、一次一个。runtime 调用 `thread/compact/start`，它在 turn 开始前就返回，turn id 从随后的 `turn/started` 得到，之后与普通 turn 一样流式处理，`contextCompaction` 显示为“压缩上下文”。
 
-插话：`POST /chat/messages` 带 `mode: "steer"` 时，命令照常排队，但输入带 `steer` 标记。controller 发现该 Agent 有正在运行的 turn 时 `POST /internal/v1/commands/{运行中命令}/steer`（3 秒内不重发），runtime 以插话命令 id 作为 `clientUserMessageId` 调用 `turn/steer`。Codex 采纳后回显带同一 `clientId` 的 `userMessage`，runtime 此时发出 `turn.steered`：原命令记为成功，turn 的剩余输出和最终的 `turn.completed` 都归插话命令，因此插话后的回答显示在插话消息之下。turn 结束时仍未回显的已采纳插话同样转交，绝不重跑。没有运行中的 turn（或 Codex 拒绝）时插话留在队列里，轮到时作为普通 turn 执行。停止已送达的插话不会直接取消，而是等它接手 turn 后中断。
+插话：`POST /chat/messages` 带 `mode: "steer"` 时，命令照常排队，但输入带 `steer` 标记。控制面先问 runtime 正在运行的 turn 是否接受；runtime 以插话命令 id 作为 `clientUserMessageId` 调用 `turn/steer`。Codex 采纳后回显带同一 `clientId` 的 `userMessage`，runtime 此时发出 `turn.steered`：原命令记为成功，turn 的剩余输出和最终的 `turn.completed` 都归插话命令，因此插话后的回答显示在插话消息之下。turn 结束时仍未回显的已采纳插话同样转交，绝不重跑。没有运行中的 turn（或 Codex 拒绝）时插话照常入队，轮到时作为普通 turn 执行。停止已送达的插话不会直接取消，而是等它接手 turn 后中断。
 
-确认：runtime 用 SDK 的审批回调接住 `commandExecution` / `fileChange` 审批请求和 plugin 工具的确认请求（MCP elicitation，见[用户确认](user-attention.md)），生成 `approval.requested`；控制面建 `approval` 与 choice `interaction`。用户回答后审批变为 `decided`，controller 送达，runtime 回调返回后发出 `approval.applied`，交互才显示 `resolved`。等待中被停止时回调以 `cancel` 结束，同时中断该 turn。其他服务端请求（权限扩展、带表单字段的 elicitation 等）一律保守拒绝。
+确认：runtime 用 SDK 的审批回调接住 `commandExecution` / `fileChange` 审批请求和 plugin 工具的确认请求（MCP elicitation，见[用户确认](user-attention.md)），生成 `approval.requested`；控制面建 `approval` 与 choice `interaction`。用户回答后审批变为 `decided`，决定作为控制消息发给 runtime（再次给出同样的回答会重发），runtime 回调返回后发出 `approval.applied`，交互才显示 `resolved`。等待中被停止时回调以 `cancel` 结束，同时中断该 turn。其他服务端请求（权限扩展、带表单字段的 elicitation 等）一律保守拒绝。
 
 ## 智能体
 
@@ -47,10 +48,10 @@ AXP 是单用户服务，所有智能体属于唯一的默认对话（`conversat
 ## 恢复与隔离
 
 - 心跳续租（默认 30 秒）。租约过期时 controller 先停止并移除旧容器，再结束实例；之后旧实例的任何请求都得到 `409 STALE_GENERATION`，runtime 收到后立即退出。
-- 实例结束时，容器连同上次快照之后的改动一起消失；其上的执行中命令以“执行中断，无法确认结果，未自动重试”失败，绝不重放。排队中的命令不受影响，由下一个实例执行。
+- 实例结束时，容器连同上次快照之后的改动一起消失；它从队列取走的命令以“执行中断，无法确认结果，未自动重试”失败，绝不重放。仍在队列里的命令由下一个实例执行。
 - Codex 进程在 turn 中途退出时，该命令同样以执行中断失败，实例报告 `error`。
 - plugin 安装失败（`PLUGIN_INSTALL_FAILED`，回复显示“智能体扩展启动失败”）、快照无法下载或解开等使 runtime 停在未就绪状态；排队与派发中的回复以中文原因失败，Agent 显示为“不可用”。之后的新消息会让 controller 换一代实例重试；从未就绪过的实例有 30 秒的退避。
-- 排队超过 120 秒仍没有就绪实例的消息以“准备超时”失败。
+- 实例 120 秒内没有就绪时，该 Agent 的队列被清空，等待中的消息以“准备超时”失败。
 - 空闲超过 10 分钟的实例会被停止；下一条消息会重新拉起，从快照恢复同一 thread。
 
 ## 快照
@@ -92,7 +93,6 @@ runtime 每次启动、在 Codex 之前对每个 plugin 执行 `codex plugin add
 
 - Codex 在容器内使用 `danger-full-access` 沙箱、`on-request` 审批：容器本身是隔离边界。
 - Agent 能读到自己快照的上传地址，因此可以改写自己的快照，但碰不到其他 Agent 的。
-- 中断请求到达时 runtime 若尚未记录该命令（返回 404），controller 在本地取消；极端情况下更早一次超时的 PUT 仍可能随后送达。
 - 幂等记录与 `ui_event` 暂不清理（RFC v1 约定）。
 - 开发用 `runserver` 以线程处理 SSE，每个连接占一个线程；生产应使用 ASGI 服务与 PostgreSQL `LISTEN/NOTIFY` 唤醒（当前为轮询持久事件表）。
 - 自动化测试使用脚本化的 app-server（`axp_runtime.testing.fake_app_server`）；与真实模型的联调需要在“模型服务”中绑定账号。
