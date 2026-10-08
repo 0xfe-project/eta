@@ -23,7 +23,7 @@ hook 在容器里运行，而容器对 agent 完全开放：agent 可以把命�
 | 规则             | `apps/agent-runtime/hooks/akhook.yml` → `/etc/akhook/akhook.yml`   | 镜像通过 `AKHOOK_ADDITIONAL_CONFIG_PATH` 加载。工作区仓库自带的 `.akhook.yml` 可以追加规则，但关不掉、也替换不了这些规则             |
 | `push-target`    | `apps/agent-runtime/hooks/push-target` → `/etc/akhook/push-target` | 推送规则的 `decide` 脚本，判断这次 `git push` 是否到达受保护分支                                                                     |
 | `approval` 插件  | `apps/agent-runtime/plugins/approval`                              | MCP 工具 `request_approval`：读出请求，用 elicitation 问用户，同意后授权                                                             |
-| runtime / 控制面 | `runtime.py`、`projection.py`                                      | 把“只需确认”的 elicitation 当作审批，复用现有的确认卡片                                                                              |
+| runtime / 控制面 | `runtime.py`、`projection.go`                                      | 把“只需确认”的 elicitation 当作审批，复用现有的确认卡片                                                                              |
 
 镜像构建时，akhook 由 `rust` 构建阶段从 submodule 编译（`scripts/build/image.sh` 以 `akhook-src` 构建上下文传入，submodule 缺失时先初始化）。镜像里还装了 `gh`。
 

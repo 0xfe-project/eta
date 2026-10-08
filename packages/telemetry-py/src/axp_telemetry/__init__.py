@@ -71,7 +71,7 @@ def setup(service: str) -> None:
     """Route the root logger through OpenTelemetry for ``service``.
 
     A no-op when the root logger already uses the handler (for example when
-    gunicorn configured logging before Django loaded).
+    a server configured logging before the application loaded).
     """
     otel = handler(service)
     root = logging.getLogger()
@@ -113,7 +113,7 @@ _PRIMITIVES = (str, bool, int, float)
 def _keep_valid_attributes(record: logging.LogRecord) -> bool:
     """Drop ``extra`` values OpenTelemetry attributes cannot hold.
 
-    Libraries attach objects (Django adds the request and its socket); only
+    Libraries attach objects (web frameworks add the request and its socket); only
     primitives and sequences of them are valid attribute values.
     """
     for key, value in list(vars(record).items()):

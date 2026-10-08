@@ -2,10 +2,7 @@
 # dprint (dprint.json); this file configures `ruff check`.
 target-version = "py313"
 line-length = 88
-src = ["apps/control-plane", "apps/agent-runtime", "apps/memory-service"]
+src = ["apps/agent-runtime", "apps/memory-service"]
 
 [lint]
 select = ["E", "F", "I", "PT"]
-
-[lint.per-file-ignores]
-"**/migrations/*" = ["E501"]

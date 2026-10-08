@@ -2,9 +2,10 @@
   "name": "@axp/control-plane",
   "private": true,
   "scripts": {
-    "build:linux-amd64": "bash ../../scripts/build/python.sh linux amd64",
-    "build:linux-arm64": "bash ../../scripts/build/python.sh linux arm64",
-    "lint": "uv run ruff check . && uv run python manage.py check",
-    "test": "bash ../../scripts/dev-postgres.sh && uv run pytest"
+    "build:linux-amd64": "bash ../../scripts/build/go.sh axp-control-plane linux amd64",
+    "build:linux-arm64": "bash ../../scripts/build/go.sh axp-control-plane linux arm64",
+    "openapi": "mkdir -p out && go run . openapi public > out/openapi.json",
+    "lint": "test -z \"$(gofmt -l .)\" && go vet ./...",
+    "test": "bash ../../scripts/dev-postgres.sh && go test ./..."
   }
 }

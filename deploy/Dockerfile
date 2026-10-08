@@ -12,24 +12,22 @@ LABEL service="axp"
 COPY --from=oven/bun:1.3.14 /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=caddy:2.11.7-alpine /usr/bin/caddy /usr/local/bin/caddy
 # Least to most frequently changing.
-COPY apps/control-plane/out/${TARGETOS}-${TARGETARCH}/site-packages/ /usr/local/lib/python3.13/site-packages/
-# The memory service's dependencies stay apart from the control plane's; its
-# role puts them first on PYTHONPATH. Then its embedding model.
+# The memory service's dependencies; its role puts them on PYTHONPATH. Then
+# its embedding model.
 COPY apps/memory-service/out/${TARGETOS}-${TARGETARCH}/site-packages/ /app/apps/memory-service/site-packages/
 COPY apps/memory-service/out/models/ /app/apps/memory-service/models/
 COPY apps/llm-gateway/out/${TARGETOS}-${TARGETARCH}/axp-llm-gateway /usr/local/bin/
 COPY apps/forge-service/out/${TARGETOS}-${TARGETARCH}/axp-forge /usr/local/bin/
+COPY apps/control-plane/out/${TARGETOS}-${TARGETARCH}/axp-control-plane /usr/local/bin/
 # Self-contained server bundle plus client assets; no node_modules.
 COPY apps/web/out/ /app/apps/web/
 COPY apps/gateway/Caddyfile apps/gateway/*.caddy /app/apps/gateway/
 COPY apps/memory-service/axp_memory /app/apps/memory-service/axp_memory/
 # The runtime image's plugins: the catalog agents choose from.
 COPY apps/agent-runtime/plugins /app/apps/agent-runtime/plugins/
+# The control plane finds the plugins at ../agent-runtime/plugins; the LLM
+# gateway keeps its state under var/ here (deploy/deploy.yml).
 WORKDIR /app/apps/control-plane
-COPY apps/control-plane/manage.py apps/control-plane/gunicorn.conf.py ./
-COPY apps/control-plane/config config/
-COPY apps/control-plane/chat chat/
-COPY apps/control-plane/routines routines/
 
 ENV PYTHONUNBUFFERED=1
 EXPOSE 3000 8000 8001 8080 8090 8317 8320 8330

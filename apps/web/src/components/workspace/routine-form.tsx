@@ -1,3 +1,4 @@
+import type { HourlySchedule } from "@/api/control-plane.gen";
 import type { Routine, Schedule } from "@/queries/routines";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
 import { useState } from "react";
@@ -24,6 +25,8 @@ const KINDS = [
 ] as const;
 
 const WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"];
+// The intervals the control plane accepts.
+const HOURS: HourlySchedule["every"][] = [1, 2, 3, 4, 6, 8, 12];
 
 const browserZone = () => new Intl.DateTimeFormat().resolvedOptions().timeZone;
 const ZONES = [
@@ -125,10 +128,13 @@ function ScheduleFields({
           aria-label="间隔"
           value={String(schedule.every)}
           onChange={(e) =>
-            onChange({ ...schedule, every: Number(e.target.value) })
+            onChange({
+              ...schedule,
+              every: Number(e.target.value) as HourlySchedule["every"],
+            })
           }
         >
-          {[1, 2, 3, 4, 6, 8, 12].map((n) => (
+          {HOURS.map((n) => (
             <NativeSelectOption key={n} value={n}>
               {n} 小时
             </NativeSelectOption>

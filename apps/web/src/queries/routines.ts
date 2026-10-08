@@ -1,71 +1,34 @@
+import type {
+  Brief,
+  CronSchedule,
+  DailySchedule,
+  HourlySchedule,
+  Routine,
+  RoutineIn,
+  Run,
+  WeeklySchedule,
+} from "@/api/control-plane.gen";
 import {
   queryOptions,
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
+import { controlPlane, unwrap } from "@/lib/api";
 
 // Routines (#23): agents that run on a schedule, each run in a fresh runtime,
-// and leave a report (/api/v1/routines; apps/control-plane/routines).
+// and leave a report (/api/v1/routines; apps/control-plane). Every type comes
+// from the control plane's OpenAPI document.
 
+export type { Routine, Run };
 export type Schedule =
-  | { kind: "daily"; time: string }
-  | { kind: "weekly"; days: number[]; time: string }
-  | { kind: "hourly"; every: number }
-  | { kind: "cron"; cron: string };
-
-export type RunStatus = "running" | "sent" | "nothing_new" | "failed";
-
-interface Feedback {
-  id: string;
-  text: string;
-  created_at: string;
-  // The brief version it led to; null while the revision runs.
-  brief_version: number | null;
-  revision_failed: boolean;
-}
-
-export interface Run {
-  id: string;
-  started_at: string;
-  finished_at: string | null;
-  status: RunStatus;
-  // The report's first heading, if it sent one.
-  title: string | null;
-  report: string | null;
-  error: string | null;
-  feedback: Feedback[];
-}
-
-export interface BriefVersion {
-  version: number;
-  text: string;
-  created_at: string;
-  // The feedback that revised it; null when the user wrote it.
-  feedback: string | null;
-}
-
-export interface Routine {
-  id: string;
-  name: string;
-  model: string;
-  schedule: Schedule;
-  timezone: string;
-  enabled: boolean;
-  next_run_at: string | null;
-  briefs: BriefVersion[];
-  handoff: { text: string; written_at: string } | null;
-  runs: Run[];
-}
-
-export interface RoutineInput {
-  name: string;
-  brief: string;
-  model: string;
-  schedule: Schedule;
-  timezone: string;
-}
+  | DailySchedule
+  | WeeklySchedule
+  | HourlySchedule
+  | CronSchedule;
+export type RunStatus = Run["status"];
+export type BriefVersion = Brief;
+export type RoutineInput = RoutineIn;
 
 const keys = { all: ["routines"] as const };
 
@@ -85,7 +48,7 @@ function busy(routines: Routine[] | undefined) {
 const routinesQueryOptions = queryOptions({
   queryKey: keys.all,
   queryFn: async ({ signal }) =>
-    ((await apiGet("/routines", signal)) as { routines: Routine[] }).routines,
+    (await unwrap(controlPlane.GET("/api/v1/routines", { signal }))).routines,
   refetchInterval: (query) => (busy(query.state.data) ? 3000 : 30_000),
 });
 
@@ -101,8 +64,6 @@ export function useRoutine(id: string | null) {
   });
 }
 
-const path = (id: string) => `/routines/${encodeURIComponent(id)}`;
-
 function useRoutineMutation<T, R = unknown>(call: (input: T) => Promise<R>) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -114,7 +75,12 @@ function useRoutineMutation<T, R = unknown>(call: (input: T) => Promise<R>) {
 export function useSetRoutineEnabled() {
   return useRoutineMutation(
     ({ id, enabled }: { id: string; enabled: boolean }) =>
-      apiPatch(path(id), { enabled }),
+      unwrap(
+        controlPlane.PATCH("/api/v1/routines/{routine_id}", {
+          params: { path: { routine_id: id } },
+          body: { enabled },
+        }),
+      ),
   );
 }
 
@@ -122,34 +88,63 @@ export function useSetRoutineEnabled() {
 export function useSaveRoutine() {
   return useRoutineMutation(
     async ({ id, input }: { id: string | null; input: RoutineInput }) =>
-      (
-        (id
-          ? await apiPatch(path(id), input)
-          : await apiPost("/routines", input)) as Routine
+      (id
+        ? await unwrap(
+            controlPlane.PATCH("/api/v1/routines/{routine_id}", {
+              params: { path: { routine_id: id } },
+              body: input,
+            }),
+          )
+        : await unwrap(controlPlane.POST("/api/v1/routines", { body: input }))
       ).id,
   );
 }
 
 export function useDeleteRoutine() {
-  return useRoutineMutation((id: string) => apiDelete(path(id)));
+  return useRoutineMutation((id: string) =>
+    unwrap(
+      controlPlane.DELETE("/api/v1/routines/{routine_id}", {
+        params: { path: { routine_id: id } },
+      }),
+    ),
+  );
 }
 
 export function useRunRoutineNow() {
-  return useRoutineMutation((id: string) => apiPost(`${path(id)}/run`));
+  return useRoutineMutation((id: string) =>
+    unwrap(
+      controlPlane.POST("/api/v1/routines/{routine_id}/run", {
+        params: { path: { routine_id: id } },
+      }),
+    ),
+  );
 }
 
 export function useRestoreBrief() {
   return useRoutineMutation(
     ({ id, version }: { id: string; version: number }) =>
-      apiPost(`${path(id)}/briefs/${version}/restore`),
+      unwrap(
+        controlPlane.POST(
+          "/api/v1/routines/{routine_id}/briefs/{version}/restore",
+          {
+            params: { path: { routine_id: id, version } },
+          },
+        ),
+      ),
   );
 }
 
 export function useSendFeedback() {
   return useRoutineMutation(
     ({ id, runId, text }: { id: string; runId: string; text: string }) =>
-      apiPost(`${path(id)}/runs/${encodeURIComponent(runId)}/feedback`, {
-        text,
-      }),
+      unwrap(
+        controlPlane.POST(
+          "/api/v1/routines/{routine_id}/runs/{run_id}/feedback",
+          {
+            params: { path: { routine_id: id, run_id: runId } },
+            body: { text },
+          },
+        ),
+      ),
   );
 }

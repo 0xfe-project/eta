@@ -1,4 +1,18 @@
 import type { QueryClient } from "@tanstack/react-query";
+import type {
+  ActivityBlock,
+  Agent,
+  AgentDeleted,
+  AgentUpdated,
+  Snapshot as ChatSnapshot,
+  Interaction,
+  InteractionUpdated,
+  Message,
+  MessageUpdated,
+  Plugin,
+  Sent,
+  TextBlock,
+} from "@/api/control-plane.gen";
 import {
   infiniteQueryOptions,
   queryOptions,
@@ -8,99 +22,26 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
-import { z } from "zod";
-import { apiDelete, ApiError, apiGet, apiPatch, apiPost } from "@/lib/api";
+import { ApiError, controlPlane, unwrap } from "@/lib/api";
 import { refreshLlm } from "@/queries/llm";
 
-const agentSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  // Instructions injected into the agent's context.
-  description: z.string(),
-  // Model id from the LLM gateway catalog; null until one is chosen.
-  model: z.string().nullable(),
-  // Names of the plugins it runs with, in catalog order.
-  plugins: z.array(z.string()),
-  status: z.enum(["idle", "working", "waiting_for_input", "unavailable"]),
-  revision: z.number(),
-});
+// The control plane's chat API; every type comes from its OpenAPI document.
 
-const pluginSchema = z.object({ name: z.string(), description: z.string() });
-
-const blockSchema = z.discriminatedUnion("type", [
-  z.object({ id: z.string(), type: z.literal("text"), text: z.string() }),
-  z.object({
-    id: z.string(),
-    type: z.literal("activity"),
-    label: z.string(),
-    status: z.enum(["running", "completed", "failed"]),
-    // The tool's own name (MCP and dynamic tools), its input and output.
-    name: z.string().nullish(),
-    input: z.string().nullish(),
-    output: z.string().nullish(),
-  }),
-]);
-
-const messageSchema = z.object({
-  id: z.string(),
-  agent_id: z.string(),
-  role: z.enum(["user", "assistant"]),
-  reply_to_id: z.string().nullable(),
-  status: z.enum([
-    "queued",
-    "responding",
-    "waiting_for_input",
-    "stopping",
-    "completed",
-    "stopped",
-    "failed",
-  ]),
-  revision: z.number(),
-  blocks: z.array(blockSchema),
-  failure: z.object({ code: z.string(), message: z.string() }).nullable(),
-  created_at: z.string(),
-});
-
-const interactionSchema = z.object({
-  id: z.string(),
-  agent_id: z.string(),
-  message_id: z.string(),
-  kind: z.literal("choice"),
-  prompt: z.string(),
-  options: z.array(z.object({ value: z.string(), label: z.string() })),
-  status: z.enum(["pending", "submitted", "resolved", "expired"]),
-  revision: z.number(),
-});
-
-const snapshotSchema = z.object({
-  agents: z.array(agentSchema),
-  active_replies: z.array(messageSchema),
-  interactions: z.array(interactionSchema),
-  event_cursor: z.string(),
-});
-
-const messagePageSchema = z.object({
-  items: z.array(messageSchema),
-  next_cursor: z.string().nullable(),
-});
-
-export type Agent = z.infer<typeof agentSchema>;
+export type { Agent, Interaction, Plugin };
 /** Editable agent fields; grows as agents gain settings. */
 export type AgentDraft = Pick<Agent, "name" | "description"> & {
   model?: string;
   // Every plugin when left out.
   plugins?: string[];
 };
-export type Plugin = z.infer<typeof pluginSchema>;
-export type ChatMessage = z.infer<typeof messageSchema>;
-export type Block = z.infer<typeof blockSchema>;
-export type Interaction = z.infer<typeof interactionSchema>;
+export type ChatMessage = Message;
+export type Block = TextBlock | ActivityBlock;
 /**
  * The snapshot plus `messages`: every message seen since it was taken (over
  * SSE or from our own writes), starting with the active replies. History
  * pages fill in the rest; see useAgentMessages.
  */
-type Snapshot = z.infer<typeof snapshotSchema> & { messages: ChatMessage[] };
+type Snapshot = ChatSnapshot & { messages: ChatMessage[] };
 
 export const ACTIVE_STATUSES = new Set<ChatMessage["status"]>([
   "queued",
@@ -116,7 +57,9 @@ export function chatQueryOptions() {
   return queryOptions({
     queryKey: chatKey,
     queryFn: async ({ signal }) => {
-      const snapshot = snapshotSchema.parse(await apiGet("/chat", signal));
+      const snapshot = await unwrap(
+        controlPlane.GET("/api/v1/chat", { signal }),
+      );
       return {
         ...snapshot,
         messages: sortMessages([...snapshot.active_replies]),
@@ -169,18 +112,16 @@ function update(queryClient: QueryClient, apply: (s: Snapshot) => Snapshot) {
 
 function applyEvent(queryClient: QueryClient, type: string, data: unknown) {
   if (type === "agent.updated") {
-    const { agent } = z.object({ agent: agentSchema }).parse(data);
+    const { agent } = data as AgentUpdated;
     update(queryClient, (s) => ({ ...s, agents: upsert(s.agents, agent) }));
   } else if (type === "agent.deleted") {
-    const { agent_id } = z.object({ agent_id: z.string() }).parse(data);
+    const { agent_id } = data as AgentDeleted;
     update(queryClient, (s) => removeAgent(s, agent_id));
   } else if (type === "message.updated") {
-    const { message } = z.object({ message: messageSchema }).parse(data);
+    const { message } = data as MessageUpdated;
     update(queryClient, (s) => upsertMessage(s, message));
   } else if (type === "interaction.updated") {
-    const { interaction } = z
-      .object({ interaction: interactionSchema })
-      .parse(data);
+    const { interaction } = data as InteractionUpdated;
     update(queryClient, (s) => ({
       ...s,
       interactions: upsert(s.interactions, interaction),
@@ -237,10 +178,14 @@ function messagesQueryOptions(agentId: string) {
   return infiniteQueryOptions({
     queryKey: [...chatKey, "messages", agentId],
     queryFn: async ({ pageParam, signal }) => {
-      const params = new URLSearchParams();
-      if (pageParam) params.set("before", pageParam);
-      return messagePageSchema.parse(
-        await apiGet(`/agents/${agentId}/messages?${params}`, signal),
+      return unwrap(
+        controlPlane.GET("/api/v1/agents/{agent_id}/messages", {
+          params: {
+            path: { agent_id: agentId },
+            query: pageParam ? { before: pageParam } : {},
+          },
+          signal,
+        }),
       );
     },
     initialPageParam: null as string | null,
@@ -292,7 +237,7 @@ export function usePlugins() {
   return useQuery({
     queryKey: ["plugins"],
     queryFn: async ({ signal }) =>
-      z.array(pluginSchema).parse(await apiGet("/plugins", signal)),
+      unwrap(controlPlane.GET("/api/v1/plugins", { signal })),
     staleTime: Infinity,
   });
 }
@@ -301,7 +246,7 @@ export function useCreateAgent() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (draft: AgentDraft) =>
-      agentSchema.parse(await apiPost("/agents", draft)),
+      unwrap(controlPlane.POST("/api/v1/agents", { body: draft })),
     onSuccess: (agent) =>
       update(queryClient, (s) => ({ ...s, agents: upsert(s.agents, agent) })),
   });
@@ -309,9 +254,7 @@ export function useCreateAgent() {
 
 /** "queue" waits for the agent's current reply; "steer" joins it. */
 export type SendMode = "queue" | "steer";
-const sentSchema = z.object({ message: messageSchema, reply: messageSchema });
-
-function addSent(queryClient: QueryClient, sent: z.infer<typeof sentSchema>) {
+function addSent(queryClient: QueryClient, sent: Sent) {
   update(queryClient, (s) =>
     upsertMessage(upsertMessage(s, sent.message), sent.reply),
   );
@@ -325,11 +268,13 @@ export function useSendMessage() {
       text: string;
       mode?: SendMode;
     }) =>
-      sentSchema.parse(
-        await apiPost("/chat/messages", {
-          agent_id: input.agentId,
-          text: input.text,
-          mode: input.mode ?? "queue",
+      unwrap(
+        controlPlane.POST("/api/v1/chat/messages", {
+          body: {
+            agent_id: input.agentId,
+            text: input.text,
+            mode: input.mode ?? "queue",
+          },
         }),
       ),
     onSuccess: (sent) => addSent(queryClient, sent),
@@ -346,7 +291,11 @@ export function useCompact() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (agentId: string) =>
-      sentSchema.parse(await apiPost(`/agents/${agentId}/compact`)),
+      unwrap(
+        controlPlane.POST("/api/v1/agents/{agent_id}/compact", {
+          params: { path: { agent_id: agentId } },
+        }),
+      ),
     onSuccess: (sent) => addSent(queryClient, sent),
   });
 }
@@ -355,7 +304,11 @@ export function useStopReply() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (replyId: string) =>
-      messageSchema.parse(await apiPost(`/chat/messages/${replyId}/stop`)),
+      unwrap(
+        controlPlane.POST("/api/v1/chat/messages/{message_id}/stop", {
+          params: { path: { message_id: replyId } },
+        }),
+      ),
     onSuccess: (message) =>
       update(queryClient, (s) => upsertMessage(s, message)),
   });
@@ -365,9 +318,10 @@ export function useAnswerInteraction() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: { id: string; value: string }) =>
-      interactionSchema.parse(
-        await apiPost(`/chat/interactions/${input.id}/answer`, {
-          value: input.value,
+      unwrap(
+        controlPlane.POST("/api/v1/chat/interactions/{interaction_id}/answer", {
+          params: { path: { interaction_id: input.id } },
+          body: { value: input.value },
         }),
       ),
     onSuccess: (interaction) =>
@@ -385,7 +339,12 @@ export function useUpdateAgent() {
       id,
       ...changes
     }: { id: string } & Partial<AgentDraft>) =>
-      agentSchema.parse(await apiPatch(`/agents/${id}`, changes)),
+      unwrap(
+        controlPlane.PATCH("/api/v1/agents/{agent_id}", {
+          params: { path: { agent_id: id } },
+          body: changes,
+        }),
+      ),
     onSuccess: (agent) =>
       update(queryClient, (s) => ({ ...s, agents: upsert(s.agents, agent) })),
   });
@@ -394,7 +353,12 @@ export function useUpdateAgent() {
 /** Stop the agent's work and runtime; the next message starts a fresh one. */
 export function useRestartAgent() {
   return useMutation({
-    mutationFn: (id: string) => apiPost(`/agents/${id}/restart`),
+    mutationFn: (id: string) =>
+      unwrap(
+        controlPlane.POST("/api/v1/agents/{agent_id}/restart", {
+          params: { path: { agent_id: id } },
+        }),
+      ),
   });
 }
 
@@ -402,7 +366,11 @@ export function useDeleteAgent() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      await apiDelete(`/agents/${id}`);
+      await unwrap(
+        controlPlane.DELETE("/api/v1/agents/{agent_id}", {
+          params: { path: { agent_id: id } },
+        }),
+      );
       return id;
     },
     onSuccess: (id) => update(queryClient, (s) => removeAgent(s, id)),

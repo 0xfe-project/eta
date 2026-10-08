@@ -49,7 +49,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
     umask 077
     cat >"$ENV_FILE" <<EOF
 # AXP production settings for deploy/deploy.sh on this machine. Keep private.
-DJANGO_SECRET_KEY=$(openssl rand -hex 32)
+AXP_SECRET_KEY=$(openssl rand -hex 32)
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
 # The local registry has no auth; Kamal still requires a password.
 KAMAL_REGISTRY_PASSWORD=local
@@ -67,6 +67,13 @@ ensure_secret() {
     echo "Added $1 to $ENV_FILE."
   fi
 }
+# The control plane's key had Django's name; runtime tokens and cursors are
+# derived from it, so a machine set up before keeps its value.
+if ! grep -q "^AXP_SECRET_KEY=" "$ENV_FILE"; then
+  old_key="$(sed -n 's/^DJANGO_SECRET_KEY=//p' "$ENV_FILE")"
+  echo "AXP_SECRET_KEY=${old_key:-$(openssl rand -hex 32)}" >>"$ENV_FILE"
+  echo "Added AXP_SECRET_KEY to $ENV_FILE."
+fi
 ensure_secret AXP_S3_SECRET_ACCESS_KEY 32
 # OpenObserve requires upper and lower case letters, a digit and a symbol.
 if ! grep -q "^AXP_OBSERVE_PASSWORD=" "$ENV_FILE"; then
@@ -205,7 +212,7 @@ update_postgres() {
 
 migrate() {
   kamal app exec --roles api --version "$version" --quiet \
-    "python manage.py migrate --noinput"
+    "axp-control-plane migrate"
 }
 
 if [[ "$1" == "setup" || "$1" == "deploy" ]]; then
