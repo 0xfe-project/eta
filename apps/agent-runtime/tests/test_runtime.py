@@ -104,8 +104,6 @@ class Harness:
             home_dir=tmp / "home",
             known_thread_id=None,
             model=None,
-            sandbox="workspace-write",
-            approval_policy="on-request",
             codex_launch=FAKE,
             heartbeat_seconds=0.05,
             plugins_dir=PLUGINS,
@@ -253,22 +251,6 @@ class TestBoot:
         config = (runtime.settings.codex_home / "config.toml").read_text()
         assert '[plugins."tasks@axp"]' in config
         assert '[plugins."memory@axp"]' in config
-        # The plugins' own tools need no approval.
-        assert (
-            "plugins.memory@axp.mcp_servers.memory.default_tools_approval_mode"
-            '="approve"'
-        ) in runtime._codex_config().config_overrides
-
-    def test_trusts_only_the_plugins_hooks(self, rt):
-        runtime, _ = rt.start()
-        edits = json.loads(
-            (runtime.settings.codex_home / "fake_config_edits.json").read_text()
-        )
-        assert edits == {
-            'hooks.state."memory@axp:hooks/hooks.json:stop:0:0".trusted_hash': (
-                "sha256:1"
-            )
-        }
 
     def test_broken_plugin_fails_startup(self, rt, tmp_path):
         plugins = tmp_path / "plugins"

@@ -1,5 +1,8 @@
 """The memory plugin's hooks: ``memory.py recall`` and ``memory.py capture``.
 
+They are declared in the image's managed Codex requirements
+(codex/requirements.toml), not in the plugin, so they run without review.
+
 recall (UserPromptSubmit) adds the memories relevant to the prompt to the
 turn's context. capture (Stop) sends the finished turn, its prompts and final
 answer, to be remembered. Both go to the memory service through the runtime
@@ -34,7 +37,7 @@ def post(path: str, body: dict) -> bytes:
 
 def pending(turn_id: str) -> Path:
     """The turn's prompts, kept from recall until capture."""
-    directory = Path(os.environ["PLUGIN_DATA"]) / "turns"
+    directory = Path(os.environ["CODEX_HOME"]) / "axp-memory" / "turns"
     directory.mkdir(parents=True, exist_ok=True)
     for stale in directory.glob("*.json"):
         if stale.stat().st_mtime < time.time() - STALE_SECONDS:

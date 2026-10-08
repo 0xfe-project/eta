@@ -14,7 +14,7 @@ import uuid
 from datetime import timedelta
 
 from django.conf import settings
-from django.db import transaction
+from django.db import close_old_connections, transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -50,9 +50,6 @@ IDLE_SECONDS = 600
 # A runtime that never came up is retried after this long.
 RETRY_SECONDS = 30
 DISPATCH_TIMEOUT_SECONDS = 120
-# The per-agent container is the isolation boundary.
-CODEX_SANDBOX = "danger-full-access"
-CODEX_APPROVAL_POLICY = "on-request"
 # The OpenTelemetry Collector on the runtime network.
 RUNTIME_OTLP_ENDPOINT = "http://otel-collector:4318"
 
@@ -76,12 +73,18 @@ class Controller:
         self.client = client
 
     def run_forever(
-        self, interval: float = 0.5, stop: threading.Event | None = None
+        self,
+        interval: float = 0.5,
+        stop: threading.Event | None = None,
+        before_tick=lambda: None,
     ) -> None:
         """Tick until ``stop`` is set; a tick in progress always finishes."""
         stop = stop or threading.Event()
         logger.info("Controller %s started", self.controller_id)
         while not stop.is_set():
+            before_tick()
+            # Connections broken by a database restart are replaced.
+            close_old_connections()
             self.tick()
             stop.wait(interval)
         logger.info("Controller %s stopped", self.controller_id)
@@ -269,8 +272,6 @@ class Controller:
                 {
                     "model": agent.model,
                     "model_context_window": llm.context_window(agent.model),
-                    "sandbox": CODEX_SANDBOX,
-                    "approval_policy": CODEX_APPROVAL_POLICY,
                     "developer_instructions": _instructions(agent),
                 }
             ),

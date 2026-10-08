@@ -18,6 +18,7 @@ os.environ.setdefault("MEM0_DIR", os.path.join(tempfile.gettempdir(), "mem0"))
 import httpx  # noqa: E402
 from mem0 import Memory as Mem0  # noqa: E402
 from openai import OpenAI  # noqa: E402
+from psycopg_pool import ConnectionPool  # noqa: E402
 
 from . import embedding  # noqa: E402
 from .provider import Memory  # noqa: E402
@@ -40,7 +41,15 @@ class Mem0Provider:
                 "vector_store": {
                     "provider": "pgvector",
                     "config": {
-                        "connection_string": database_url,
+                        # Checked on checkout, so a database restart costs no
+                        # failed request.
+                        "connection_pool": ConnectionPool(
+                            database_url,
+                            min_size=1,
+                            max_size=5,
+                            check=ConnectionPool.check_connection,
+                            open=True,
+                        ),
                         "collection_name": TABLE,
                         "embedding_model_dims": embedding.DIMS,
                     },

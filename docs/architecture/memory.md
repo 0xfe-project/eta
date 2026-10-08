@@ -20,8 +20,9 @@ memory-service
 
 ## 记忆怎么来、怎么用
 
+- 两个 hook 的脚本在 plugin 目录（`hooks/memory.py`），声明在镜像的 `/etc/codex/requirements.toml`（managed hook，见[Plugin](chat-runtime.md#plugin)）。
 - **每轮召回**：`UserPromptSubmit` hook 用用户的输入检索，最多 5 条、相关度不低于 0.2 的记忆以 `additionalContext` 加进本轮上下文（Codex 作为 developer 消息发给模型），每条带 id。
-- **每轮保存**：`Stop` hook 把本轮的用户输入（含插话）和最终回答交给 `/memory/capture`，立即得到 202；memory-service 在后台逐条用该智能体的模型抽取事实再写入，hook 不等模型。用户输入在召回时暂存在 plugin 的数据目录（`PLUGIN_DATA/turns`），保存后删除；超过一天未结束的 turn 的暂存会被清掉。
+- **每轮保存**：`Stop` hook 把本轮的用户输入（含插话）和最终回答交给 `/memory/capture`，立即得到 202；memory-service 在后台逐条用该智能体的模型抽取事实再写入，hook 不等模型。用户输入在召回时暂存在 `CODEX_HOME/axp-memory/turns`，保存后删除；超过一天未结束的 turn 的暂存会被清掉。
 - **主动工具**：MCP 工具 `remember`（原样记下一条）、`recall`（检索）、`forget`（按 id 删除）。`skills/memory/SKILL.md` 告诉模型什么时候用它们。
 - 两个 hook 任何失败都只是本轮没有记忆，不会影响 turn。服务停止时还在队列里的保存会丢失。
 

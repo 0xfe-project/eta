@@ -10,8 +10,10 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl git zstd \
     && rm -rf /var/lib/apt/lists/*
 COPY out/${TARGETOS}-${TARGETARCH}/site-packages/ /usr/local/lib/python3.13/site-packages/
-# The Codex plugins every agent gets: a local marketplace, installed at start.
+# The Codex plugins every agent gets (a local marketplace, installed at start)
+# and the static Codex configuration: sandbox, approvals, hooks.
 COPY plugins /opt/axp/plugins
+COPY codex /etc/codex
 WORKDIR /app
 COPY axp_runtime ./axp_runtime
 

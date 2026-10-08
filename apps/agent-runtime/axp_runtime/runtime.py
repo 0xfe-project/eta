@@ -10,7 +10,6 @@ import json
 import logging
 import os
 import re
-import shutil
 import subprocess
 import tempfile
 import threading
@@ -50,7 +49,7 @@ SNAPSHOT_MAX_BYTES = 2 << 30
 # Codex model provider id for the LLM gateway.
 LLM_PROVIDER = "axp"
 # Plugins' MCP configs (.mcp.json) are static files, and Codex expands no
-# variables in them; these are filled in when the plugins are installed.
+# variables in them; these are filled in once the plugins are installed.
 PLUGIN_VARIABLES = re.compile(r"\$\{(AXP_GATEWAY_URL|AXP_WORKSPACE_DIR)\}")
 APPROVAL_METHODS = {
     "item/commandExecution/requestApproval": "command",
@@ -135,10 +134,6 @@ class Runtime:
         self.thread_id: str | None = None
         self.codex_version: str | None = None
         self.current_command_id: str | None = None
-        # Marketplace name and directory of the installed plugins.
-        self.marketplace: tuple[str, Path] | None = None
-        # (plugin id, server name) of the plugins' MCP servers.
-        self.plugin_mcp_servers: list[tuple[str, str]] = []
         self._approvals: dict[str, _ApprovalWaiter] = {}
         # Steer command id -> its command, from turn/steer until the running
         # turn takes it in.
@@ -166,7 +161,6 @@ class Runtime:
             self._spawn(self._outbox_loop, "outbox")
             self._install_plugins()
             self._start_codex()
-            self._trust_plugin_hooks()
             self._open_thread()
         except RecoveryFailed as exc:
             logger.error("Runtime not ready: %s", exc)
@@ -305,35 +299,33 @@ class Runtime:
     def _install_plugins(self) -> None:
         """Install every plugin of the image's marketplace into CODEX_HOME.
 
-        The marketplace is copied with its MCP configs filled in for this
-        instance, then each plugin is added; Codex only loads installed copies.
+        Codex only loads installed copies; their MCP configs then get this
+        instance's values. Everything else about them (hooks, tool approval)
+        is static Codex configuration in the image (/etc/codex).
         """
         source = self.settings.plugins_dir
         catalog = json.loads(
             (source / ".agents" / "plugins" / "marketplace.json").read_text()
         )
-        directory = Path(tempfile.mkdtemp(prefix="axp-plugins-"))
-        shutil.copytree(source, directory, dirs_exist_ok=True)
+        marketplace = catalog["name"]
+        install = [
+            str(bundled_codex_path()),
+            "--config",
+            f"marketplaces.{marketplace}.source_type={_toml('local')}",
+            "--config",
+            f"marketplaces.{marketplace}.source={_toml(str(source))}",
+            "plugin",
+            "add",
+        ]
         values = {
             "AXP_GATEWAY_URL": self.settings.gateway_url,
             "AXP_WORKSPACE_DIR": str(self.settings.workspace_dir),
         }
-        self.marketplace = (catalog["name"], directory)
         for plugin in catalog["plugins"]:
-            name = f"{plugin['name']}@{catalog['name']}"
-            mcp = directory / plugin["source"]["path"] / ".mcp.json"
-            if mcp.is_file():
-                text = PLUGIN_VARIABLES.sub(lambda m: values[m[1]], mcp.read_text())
-                mcp.write_text(text)
-                self.plugin_mcp_servers += [
-                    (name, server) for server in json.loads(text)["mcpServers"]
-                ]
-            args = [str(bundled_codex_path())]
-            for override in self._plugin_overrides():
-                args += ["--config", override]
+            name = f"{plugin['name']}@{marketplace}"
             try:
                 subprocess.run(
-                    [*args, "plugin", "add", name],
+                    [*install, name],
                     env={**os.environ, **self._codex_env()},
                     capture_output=True,
                     text=True,
@@ -345,56 +337,12 @@ class Runtime:
                 raise RecoveryFailed(
                     "PLUGIN_INSTALL_FAILED", f"{name}: {detail}"
                 ) from exc
-            logger.info("Installed plugin %s", name)
-
-    def _trust_plugin_hooks(self) -> None:
-        """Trust the hooks of the image's plugins, and only those.
-
-        Codex runs a hook only once its current definition is trusted, which
-        is recorded in config.toml; nobody is there to review them, and hooks
-        the agent writes itself stay untrusted.
-        """
-        name, _ = self.marketplace
-        try:
-            listed = self.client.request(
-                "hooks/list",
-                {"cwds": [str(self.settings.workspace_dir)]},
-                response_model=_Lenient,
-            )
-            edits = [
-                {
-                    "keyPath": f"hooks.state.{json.dumps(hook['key'])}.trusted_hash",
-                    "mergeStrategy": "upsert",
-                    "value": hook["currentHash"],
-                }
-                for entry in getattr(listed, "data", [])
-                for hook in entry["hooks"]
-                if (hook.get("pluginId") or "").endswith(f"@{name}")
-                and hook.get("trustStatus") != "trusted"
-            ]
-            if edits:
-                self.client.request(
-                    "config/batchWrite", {"edits": edits}, response_model=_Lenient
+            installed = self.settings.codex_home / "plugins/cache" / marketplace
+            for path in (installed / plugin["name"]).glob("*/.mcp.json"):
+                path.write_text(
+                    PLUGIN_VARIABLES.sub(lambda m: values[m[1]], path.read_text())
                 )
-        except (CodexError, JsonRpcError) as exc:
-            raise RecoveryFailed("PLUGIN_TRUST_FAILED", str(exc)) from exc
-
-    def _plugin_overrides(self) -> list[str]:
-        if self.marketplace is None:
-            return []
-        name, directory = self.marketplace
-        overrides = [
-            f"marketplaces.{name}.source_type={_toml('local')}",
-            f"marketplaces.{name}.source={_toml(str(directory))}",
-        ]
-        # Like their hooks, the plugins' tools are trusted: Codex would
-        # otherwise ask for every call, and nobody is there to answer.
-        for plugin, server in self.plugin_mcp_servers:
-            overrides.append(
-                f"plugins.{plugin}.mcp_servers.{server}"
-                f".default_tools_approval_mode={_toml('approve')}"
-            )
-        return overrides
+            logger.info("Installed plugin %s", name)
 
     # --- Codex --------------------------------------------------------------
 
@@ -410,12 +358,11 @@ class Runtime:
         return env
 
     def _codex_config(self) -> CodexConfig:
-        overrides = self._plugin_overrides()
         # Every model request goes through the runtime gateway, which
         # authenticates this runtime instance; the container holds no provider
         # credentials.
         llm_base_url = f"{self.settings.gateway_url}/v1"
-        overrides += [
+        overrides = [
             f"model_provider={_toml(LLM_PROVIDER)}",
             f"model_providers.{LLM_PROVIDER}.name={_toml('AXP LLM Gateway')}",
             f"model_providers.{LLM_PROVIDER}.base_url={_toml(llm_base_url)}",
@@ -466,12 +413,8 @@ class Runtime:
             _close_client(client)
 
     def _thread_params(self) -> dict:
-        params = {
-            "cwd": str(self.settings.workspace_dir),
-            "approvalPolicy": self.settings.approval_policy,
-            "approvalsReviewer": "user",
-            "sandbox": self.settings.sandbox,
-        }
+        # Sandbox and approvals are static Codex configuration (/etc/codex).
+        params = {"cwd": str(self.settings.workspace_dir)}
         if self.settings.model:
             params["model"] = self.settings.model
         if self.settings.developer_instructions:

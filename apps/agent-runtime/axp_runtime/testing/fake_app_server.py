@@ -55,13 +55,6 @@ def save(threads: dict) -> None:
     tmp.replace(STORE)
 
 
-def load_config_edits() -> dict:
-    try:
-        return json.loads((HOME / "fake_config_edits.json").read_text())
-    except FileNotFoundError:
-        return {}
-
-
 def server_request(method: str, params: dict) -> dict:
     request_id = f"srv-{uuid.uuid4().hex[:8]}"
     send({"id": request_id, "method": method, "params": params})
@@ -261,23 +254,6 @@ def handle(message: dict) -> None:
     if method == "turn/interrupt":
         _interrupts.add(params.get("turnId"))
         return reply({})
-    if method == "hooks/list":
-        # One hook from an installed plugin, one the agent wrote itself.
-        trusted = load_config_edits()
-        hooks = [
-            {"key": "memory@axp:hooks/hooks.json:stop:0:0", "pluginId": "memory@axp"},
-            {"key": "agent:hooks.json:stop:0:0", "pluginId": None},
-        ]
-        for hook in hooks:
-            hook["currentHash"] = "sha256:1"
-            path = f"hooks.state.{json.dumps(hook['key'])}.trusted_hash"
-            hook["trustStatus"] = "trusted" if path in trusted else "untrusted"
-        return reply({"data": [{"cwd": params["cwds"][0], "hooks": hooks}]})
-    if method == "config/batchWrite":
-        edits = load_config_edits()
-        edits.update({e["keyPath"]: e["value"] for e in params["edits"]})
-        (HOME / "fake_config_edits.json").write_text(json.dumps(edits))
-        return reply({"status": "ok"})
     if method is None and request_id is not None:
         return  # response to a server request; handled by the reader
     reply({})

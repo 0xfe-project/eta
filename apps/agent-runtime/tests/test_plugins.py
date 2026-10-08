@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import threading
+import tomllib
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -12,6 +13,7 @@ import pytest
 
 PLUGINS = Path(__file__).resolve().parent.parent / "plugins"
 MEMORY_HOOK = PLUGINS / "memory" / "hooks" / "memory.py"
+CODEX = Path(__file__).resolve().parent.parent / "codex"
 
 
 class MemoryService:
@@ -67,7 +69,7 @@ def hook(service, tmp_path):
                 **os.environ,
                 "AXP_GATEWAY_URL": url or service.url,
                 "AXP_RUNTIME_LLM_KEY": "instance.token",
-                "PLUGIN_DATA": str(tmp_path / "data"),
+                "CODEX_HOME": str(tmp_path / "codex"),
             },
         )
         return json.loads(result.stdout)
@@ -119,3 +121,29 @@ class TestMemoryHooks:
             "recall", {"turn_id": "t2", "prompt": "hi"}, url="http://127.0.0.1:9"
         )
         assert output == {}
+
+
+class TestCodexConfig:
+    """The static Codex configuration (codex/) matches the plugins."""
+
+    def test_every_plugin_tool_is_approved(self):
+        config = tomllib.loads((CODEX / "config.toml").read_text())
+        catalog = json.loads((PLUGINS / ".agents/plugins/marketplace.json").read_text())
+        for plugin in catalog["plugins"]:
+            mcp = PLUGINS / plugin["source"]["path"] / ".mcp.json"
+            if not mcp.exists():
+                continue
+            plugin_id = f"{plugin['name']}@{catalog['name']}"
+            for server in json.loads(mcp.read_text())["mcpServers"]:
+                settings = config["plugins"][plugin_id]["mcp_servers"][server]
+                assert settings["default_tools_approval_mode"] == "approve"
+
+    def test_hooks_run_scripts_of_the_image(self):
+        requirements = tomllib.loads((CODEX / "requirements.toml").read_text())
+        assert requirements["allow_managed_hooks_only"]
+        for groups in requirements["hooks"].values():
+            for group in groups:
+                for hook in group["hooks"]:
+                    script = hook["command"].split()[1]
+                    image_path = Path(script).relative_to("/opt/axp/plugins")
+                    assert (PLUGINS / image_path).is_file()

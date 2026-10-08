@@ -24,8 +24,6 @@ class Settings:
     home_dir: Path
     known_thread_id: str | None
     model: str | None
-    sandbox: str
-    approval_policy: str
     # The agent's description, injected as Codex developer instructions.
     developer_instructions: str = ""
     config_version: int = 0
@@ -74,8 +72,6 @@ def load_settings() -> Settings:
         home_dir=Path(os.environ.get("AXP_HOME", "/agent")),
         known_thread_id=os.environ.get("AXP_THREAD_ID") or None,
         model=codex.get("model"),
-        sandbox=codex.get("sandbox", "workspace-write"),
-        approval_policy=codex.get("approval_policy", "on-request"),
         developer_instructions=codex.get("developer_instructions") or "",
         config_version=int(os.environ.get("AXP_CONFIG_VERSION", "0")),
         snapshot_url=os.environ.get("AXP_SNAPSHOT_URL") or None,
