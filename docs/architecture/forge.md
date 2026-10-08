@@ -7,7 +7,7 @@
 | 部分          | 位置                                                                                   | 作用                                                    |
 | ------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------- |
 | forge 服务    | `apps/forge-service`（`python -m axp_forge`，生产角色 `forge`，别名 `axp-forge:8330`） | 保存 App 凭据，签发 installation token，开 PR           |
-| 向导          | 工作区“能力”页（`capabilities-view.tsx`）                                              | 创建 App、安装到仓库、查看与断开                        |
+| 向导          | “能力”页的 GitHub 卡片，点开是分步向导（`capabilities-view.tsx`、`github-wizard.tsx`） | 了解、创建 App、安装到仓库、完成                        |
 | `axp-forge`   | `apps/agent-runtime/bin/axp-forge`，镜像里是 `/opt/axp/bin/axp-forge`                  | git 的凭据助手；`/usr/local/bin/gh` 链接到它            |
 | git 配置      | `apps/agent-runtime/git/gitconfig` → `/etc/gitconfig`                                  | GitHub 走 HTTPS 与凭据助手，commit 身份                 |
 | `github` 插件 | `apps/agent-runtime/plugins/github`                                                    | `open_pull_request`（forge 服务的 MCP）与使用说明 skill |
@@ -20,6 +20,8 @@
 一个 provider 只有一个连接，始终是用户自己的 App；不保存 installation，用到某个账号时从 `GET /app/installations` 查（缓存 30 秒）。凭据只在 forge 服务的状态目录（开发为仓库根目录的 `var/forge`，生产为卷 `axp-forge`）：`github.json` 和私钥 `github.pem`（0600）。没有数据库，也不接收 webhook。
 
 ## 连接 GitHub
+
+“能力”页的每项能力是一张卡片；点开 GitHub 卡片是一个四步向导（了解、创建 App、安装到仓库、完成），步骤由服务端状态决定，从 GitHub 回来时自动重新打开在当前步骤。
 
 1. **创建 App**：浏览器把服务生成的 [manifest](https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-from-a-manifest) 表单提交给 GitHub（个人账号或组织）。用户在 GitHub 上确认后，GitHub 带着一次性的 `code` 回到 `/api/forge/v1/github/manifest/callback`，服务用 `POST /app-manifests/{code}/conversions` 换回 App ID、slug 和私钥，再把浏览器送回 `/?view=capabilities`。`state` 一小时内有效、只能用一次。
 2. **安装**：向导链接到 `https://github.com/apps/<slug>/installations/new`，用户选择账号和仓库；App 的 `setup_url` 把浏览器送回“能力”页。等待安装时状态每 5 秒刷新。
