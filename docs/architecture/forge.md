@@ -19,6 +19,8 @@
 
 一个 provider 只有一个连接，始终是用户自己的 App；不保存 installation，用到某个账号时从 `GET /app/installations` 查（缓存 30 秒）。凭据只在 forge 服务的状态目录（开发为仓库根目录的 `var/forge`，生产为卷 `axp-forge`）：`github.json` 和私钥 `github.pem`（0600）。没有数据库，也不接收 webhook。
 
+git 和 gh 的凭据、commit 身份是镜像级的，对每个 agent 都生效；`github` 插件只带来 `open_pull_request` 和使用说明，可以在智能体编辑器里关掉。
+
 ## 连接 GitHub
 
 “能力”页的每项能力是一张卡片；点开 GitHub 卡片是一个四步向导（了解、创建 App、安装到仓库、完成），步骤由服务端状态决定，从 GitHub 回来时自动重新打开在当前步骤。
