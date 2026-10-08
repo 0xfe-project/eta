@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -12,13 +13,13 @@ from pathlib import Path
 import pytest
 from dirty_equals import IsPartialDict
 
+from axp_runtime import plugins
 from axp_runtime import runtime as runtime_module
 from axp_runtime.config import Settings
 from axp_runtime.control_plane import ControlPlaneError
 from axp_runtime.runtime import Runtime
 
 FAKE = [sys.executable, "-m", "axp_runtime.testing.fake_app_server"]
-PLUGINS = Path(__file__).resolve().parent.parent / "plugins"
 # Crash scenarios log expected tracebacks.
 logging.disable(logging.CRITICAL)
 # The scripted app-server runs from the workspace directory.
@@ -102,7 +103,7 @@ class Harness:
     Presigned URLs resolve to ``objects``, an in-memory object store.
     """
 
-    def __init__(self, tmp: Path, monkeypatch):
+    def __init__(self, tmp: Path, monkeypatch, plugins_dir: Path):
         self.tmp = tmp
         self.objects: dict[str, bytes] = {}
         monkeypatch.setattr(runtime_module, "upload", self._upload)
@@ -118,7 +119,7 @@ class Harness:
             model=None,
             codex_launch=FAKE,
             heartbeat_seconds=0.05,
-            plugins_dir=PLUGINS,
+            plugins_dir=plugins_dir,
         )
         self.runtimes: list[Runtime] = []
 
@@ -138,9 +139,18 @@ class Harness:
         Path(path).write_bytes(self.objects[url])
 
 
+@pytest.fixture(scope="session")
+def plugins_dir(tmp_path_factory):
+    """The image's plugins as built, minus their setup."""
+    root = tmp_path_factory.mktemp("image") / "plugins"
+    shutil.copytree(Path(__file__).resolve().parent.parent / "plugins", root)
+    plugins.write_marketplace(root)
+    return root
+
+
 @pytest.fixture
-def rt(tmp_path, monkeypatch):
-    harness = Harness(tmp_path, monkeypatch)
+def rt(tmp_path, monkeypatch, plugins_dir):
+    harness = Harness(tmp_path, monkeypatch, plugins_dir)
     yield harness
     for runtime in harness.runtimes:
         runtime.shutdown()

@@ -136,7 +136,7 @@ class TestAgents:
             "name": "开发助手",
             "description": "",
             "model": "test-model",
-            "plugins": ["tasks", "memory", "grok"],
+            "plugins": ["grok", "memory", "tasks"],
             "status": "idle",
             "revision": 1,
         }
@@ -271,13 +271,13 @@ class TestAgentManagement:
 
     def test_plugins_are_chosen_from_the_catalog(self, chat, agent):
         assert [p["name"] for p in chat.get("/plugins").json()] == [
-            "tasks",
-            "memory",
             "grok",
+            "memory",
+            "tasks",
         ]
-        created = chat.post("/agents", {"name": "a", "plugins": ["grok", "tasks"]})
+        created = chat.post("/agents", {"name": "a", "plugins": ["tasks", "grok"]})
         # Catalog order, whatever order they were sent in.
-        assert created.json()["plugins"] == ["tasks", "grok"]
+        assert created.json()["plugins"] == ["grok", "tasks"]
         unknown = chat.post("/agents", {"name": "a", "plugins": ["nope"]})
         assert error_of(unknown) == (422, "PLUGIN_NOT_FOUND")
 

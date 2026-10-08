@@ -1,8 +1,9 @@
 """The runtime image's Codex plugins, which agents choose from.
 
-The catalog is the image's local marketplace (apps/agent-runtime/plugins):
-``.agents/plugins/marketplace.json`` lists the plugins, each described by its
-``.codex-plugin/plugin.json``. Runtimes install the chosen ones at start.
+The catalog is the directories of apps/agent-runtime/plugins, each a plugin
+described by its ``.codex-plugin/plugin.json``; building the runtime image
+makes them a marketplace in the same order (axp_runtime/plugins.py).
+Runtimes install the chosen ones at start.
 """
 
 import json
@@ -15,21 +16,15 @@ from .errors import ApiError
 
 @cache
 def catalog() -> list[dict]:
-    """``[{name, description}]`` in marketplace order."""
-    root = settings.AXP_PLUGINS_DIR
-    marketplace = json.loads(
-        (root / ".agents" / "plugins" / "marketplace.json").read_text()
-    )
-    plugins = []
-    for entry in marketplace["plugins"]:
-        manifest = root / entry["source"]["path"] / ".codex-plugin" / "plugin.json"
-        plugins.append(
-            {
-                "name": entry["name"],
-                "description": json.loads(manifest.read_text()).get("description", ""),
-            }
-        )
-    return plugins
+    """``[{name, description}]`` by name."""
+    manifests = sorted(settings.AXP_PLUGINS_DIR.glob("*/.codex-plugin/plugin.json"))
+    return [
+        {
+            "name": manifest.parent.parent.name,
+            "description": json.loads(manifest.read_text()).get("description", ""),
+        }
+        for manifest in manifests
+    ]
 
 
 def choose(names: list[str] | None) -> list[str]:

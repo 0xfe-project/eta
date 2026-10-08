@@ -67,22 +67,44 @@ AXP 是单用户服务，所有智能体属于唯一的默认对话（`conversat
 
 ## Plugin
 
-智能体的扩展（MCP、skill、hook）一律是 Codex plugin，每个智能体从镜像里的同一套中选择要装哪些（`agent.plugins`，默认全部）。runtime 镜像里的 `/opt/axp/plugins`（源码在 `apps/agent-runtime/plugins`）是一个本地 marketplace `axp`：`.agents/plugins/marketplace.json` 列出各 plugin，每个 plugin 是一个目录，有 `.codex-plugin/plugin.json`，可选 `.mcp.json` 和 `skills/`。
+智能体的扩展（MCP、skill、hook）一律是 Codex plugin，每个智能体从镜像里的同一套中选择要装哪些（`agent.plugins`，默认全部）。
+
+### 一个 plugin 是什么
+
+`apps/agent-runtime/plugins` 下的一个目录，就是一个 plugin，新增 plugin 只需新增目录：
+
+```
+plugins/grok/
+  .codex-plugin/plugin.json   # Codex 标准：name、version、description
+  .mcp.json  skills/          # Codex 标准，可选
+  hooks/hooks.json            # Codex 标准，可选；命令里用 ${PLUGIN_ROOT} 指 plugin 目录
+  setup                       # AXP 约定，可选：准备 plugin 的运行环境
+```
+
+`setup` 是可执行文件，构建镜像时以 root 在 plugin 目录里运行一次，环境里有 `TARGETARCH`、`PLUGIN_ROOT` 和 `AXP_PLUGIN_CACHE`（跨构建保留的下载缓存，各 plugin 一个目录）。它把 plugin 需要的东西（release 二进制、apt 或 Python 包）装到 plugin 目录以外（plugin 目录每次启动都会复制进 `CODEX_HOME`），下载要校验 checksum，最后自检（例如 `grok-api --version`）；失败则镜像构建失败。运行时不跑任何安装：runtime 只能访问 runtime 网关，容器又每次从镜像重新开始。
+
+### 构建镜像
+
+Dockerfile 把 `codex/`（静态 Codex 配置）装到 `/etc/codex`、`plugins/` 装到 `/opt/axp/plugins`，然后运行 `axp_runtime/plugins.py`（只用标准库，在 runtime 代码进镜像之前运行）：
+
+1. 依次运行各 plugin 的 `setup`；
+2. 生成本地 marketplace `axp`（`.agents/plugins/marketplace.json`，按目录名排序）；
+3. 在 `config.toml` 里让每个 plugin MCP 服务器的工具免确认（`plugins."<plugin>@axp".mcp_servers.<server>.default_tools_approval_mode = "approve"`），否则每次调用都会被 runtime 以“无人应答”拒绝；
+4. 把各 plugin 的 `hooks/hooks.json` 写进 `requirements.toml`，成为 managed hook（`${PLUGIN_ROOT}` 换成镜像里的目录）。Codex 只执行经过信任的 hook：plugin 自带的 hook 要有人审核，managed hook 按策略可信，`allow_managed_hooks_only` 让其他来源的 hook（包括智能体自己写的）一律不执行。managed hook 对所有智能体都执行，所以生成的命令先检查 `CODEX_HOME/plugins/cache/axp/<plugin>` 存在，即该智能体装了这个 plugin，才运行。hook 与 Codex 共享环境变量，用 `AXP_GATEWAY_URL` 和 `AXP_RUNTIME_LLM_KEY` 经 runtime 网关访问服务。
+
+静态的 `config.toml` 另外规定：容器是隔离边界，Codex 不再用沙盒（`danger-full-access`）；命令和文件改动仍经产品请用户确认（`on-request`）。
+
+控制面的 plugin 目录（`GET /plugins`）直接扫描同一批目录，顺序相同。
+
+### 启动
 
 runtime 每次启动、在 Codex 之前对选中的每个 plugin 执行 `codex plugin add <name>@axp`（marketplace 用 `--config marketplaces.axp.*` 指向镜像目录）。Codex 只加载装进 `CODEX_HOME/plugins/cache` 的副本，仅在配置里启用不生效；已安装的副本不进快照，每次都以镜像为准；但快照里的 Codex 配置仍记着上次启用的 plugin，没选中却仍启用的会用 `codex plugin remove` 卸掉。安装后在副本的 `.mcp.json` 里填入本实例的 `${AXP_GATEWAY_URL}` 和 `${AXP_WORKSPACE_DIR}`：Codex 不展开其中的变量，而网关地址在开发和生产中不同。plugin 的 stdio MCP 只拿到 `.mcp.json` 里写明的环境变量（`env`，或用 `env_vars` 从 Codex 的环境透传，实例 key 只能这样传，不能写进会进快照的文件），`cwd: "."` 指 plugin 目录。MCP 启动失败只记日志，不影响 runtime 就绪。
-
-其余都是镜像里的静态 Codex 配置（源码 `apps/agent-runtime/codex`，装在 `/etc/codex`）：
-
-- `config.toml`：容器是隔离边界，Codex 不再用沙盒（`danger-full-access`）；命令和文件改动仍经产品请用户确认（`on-request`）。镜像 plugin 的 MCP 工具免确认（`plugins."<plugin>".mcp_servers.<server>.default_tools_approval_mode = "approve"`），否则每次调用都会被 runtime 以“无人应答”拒绝。
-- `requirements.toml`：hook 在这里声明，而不是放在 plugin 里。Codex 只执行经过信任的 hook，plugin 的 hook 要有人审核，而 managed hook 按策略可信；`allow_managed_hooks_only` 让其他来源的 hook（包括智能体自己写的）一律不执行。managed hook 对所有智能体都执行，所以 hook 脚本要自己检查所属 plugin 是否装在 `CODEX_HOME/plugins/cache/axp/<plugin>`，没装就什么也不做。hook 与 Codex 共享环境变量，用 `AXP_GATEWAY_URL` 和 `AXP_RUNTIME_LLM_KEY` 经 runtime 网关访问服务。
-
-新增 plugin 的 MCP 服务器时要在 `config.toml` 里免确认，新增 hook 时在 `requirements.toml` 里声明，测试会检查两者与 plugin 一致。
 
 内置的 plugin：
 
 - `tasks`：stdio MCP，任务列表存在工作区的 `.axp/tasks.json`。
 - `memory`：长期记忆，见[记忆](memory.md)。
-- `grok`：[grok-api](https://github.com/AkaraChen/grok-api) 的 stdio MCP（镜像里装固定版本的 release），Grok Imagine 生成图像和视频、网页和 X 搜索。`--base-url` 指向 runtime 网关的 `/v1`，以实例 key 作为 `XAI_API_KEY`；CPA 自己转发 xAI 的 `/v1/images/*`、`/v1/videos/*` 和带 `web_search` / `x_search` 的 `/v1/responses`，用的是模型服务里绑定的 Grok 账号，容器里没有 xAI 凭据。没有绑定 Grok 账号时工具调用失败。
+- `grok`：[grok-api](https://github.com/AkaraChen/grok-api) 的 stdio MCP（`setup` 装固定版本的 release），Grok Imagine 生成图像和视频、网页和 X 搜索。`--base-url` 指向 runtime 网关的 `/v1`，以实例 key 作为 `XAI_API_KEY`；CPA 自己转发 xAI 的 `/v1/images/*`、`/v1/videos/*` 和带 `web_search` / `x_search` 的 `/v1/responses`，用的是模型服务里绑定的 Grok 账号，容器里没有 xAI 凭据。没有绑定 Grok 账号时工具调用失败。
 
 ## 存储与隔离
 

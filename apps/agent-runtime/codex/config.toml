@@ -1,18 +1,9 @@
 # System-wide Codex configuration of every agent (/etc/codex/config.toml).
-# Per-agent settings (model, provider, instructions) come from the runtime.
+# Per-agent settings (model, provider, instructions) come from the runtime;
+# building the image adds approval of the plugins' tools (axp_runtime/plugins.py).
 
 # The container is the isolation boundary: no sandbox inside it. Commands and
 # file changes still ask the user, through the product.
 sandbox_mode = "danger-full-access"
 approval_policy = "on-request"
 approvals_reviewer = "user"
-
-# The image's plugins are trusted: their tools need no approval.
-[plugins."tasks@axp".mcp_servers.tasks]
-default_tools_approval_mode = "approve"
-
-[plugins."memory@axp".mcp_servers.memory]
-default_tools_approval_mode = "approve"
-
-[plugins."grok@axp".mcp_servers.grok]
-default_tools_approval_mode = "approve"

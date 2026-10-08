@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 def keep_every_plugin(apps, schema_editor):
     # Agents so far ran with every plugin of the image.
-    apps.get_model("chat", "Agent").objects.update(plugins=["tasks", "memory", "grok"])
+    apps.get_model("chat", "Agent").objects.update(plugins=["grok", "memory", "tasks"])
 
 
 class Migration(migrations.Migration):

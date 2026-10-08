@@ -1,0 +1,19 @@
+#!/bin/sh
+# grok-api, the plugin's MCP server: a release binary, checked against the
+# release's checksums.
+set -eu
+version=0.1.1
+case "$TARGETARCH" in
+  amd64) arch=x86_64 ;;
+  arm64) arch=aarch64 ;;
+  *) echo "unsupported architecture: $TARGETARCH" >&2; exit 1 ;;
+esac
+archive="grok-api-${arch}-unknown-linux-gnu.tar.gz"
+base="https://github.com/AkaraChen/grok-api/releases/download/v${version}"
+mkdir -p "$AXP_PLUGIN_CACHE/$version"
+cd "$AXP_PLUGIN_CACHE/$version"
+[ -f "$archive" ] || curl -fsSLO "${base}/${archive}"
+[ -f SHA256SUMS ] || curl -fsSLO "${base}/SHA256SUMS"
+grep " ${archive}\$" SHA256SUMS | sha256sum -c -
+tar -xzf "$archive" -C /usr/local/bin grok-api
+grok-api --version
