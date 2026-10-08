@@ -5,6 +5,7 @@ import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { PaletteIcon } from "@phosphor-icons/react/Palette";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
+import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,7 +21,16 @@ import { AgentSettings } from "./agent-settings";
 import { ProviderSettings } from "./provider-settings";
 import { useWorkspaceStore } from "./workspace-store";
 
-const sessionThemes = ["claude", "codex", "grok"] as const;
+const colorModes = [
+  { value: "system", label: "跟随系统" },
+  { value: "light", label: "浅色" },
+  { value: "dark", label: "深色" },
+] as const;
+const sessionThemes = [
+  { value: "claude", label: "Claude" },
+  { value: "codex", label: "Codex" },
+  { value: "grok", label: "Grok" },
+] as const;
 const fontFields = [
   { key: "fontSans", label: "界面字体", placeholder: "Geist" },
   { key: "fontMono", label: "等宽字体", placeholder: "Geist Mono" },
@@ -61,51 +71,87 @@ function LogSettings() {
   );
 }
 
+/** A row of mutually exclusive choices with a sliding selection. */
+function Segmented<T extends string>({
+  label,
+  name,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  name: string;
+  options: readonly { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  const index = options.findIndex((option) => option.value === value);
+  return (
+    <fieldset className="grid min-w-0 gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+      <legend className="sr-only">{label}</legend>
+      <span aria-hidden="true" className="text-sm font-medium">
+        {label}
+      </span>
+      <div className="w-fit max-w-full bg-muted p-1">
+        <div
+          className="relative isolate grid"
+          style={{ gridTemplateColumns: `repeat(${options.length}, 1fr)` }}
+        >
+          {index >= 0 ? (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 left-0 border border-transparent bg-background shadow-xs transition-transform motion-reduce:transition-none dark:border-input dark:bg-input/30"
+              style={{
+                width: `${100 / options.length}%`,
+                transform: `translateX(${index * 100}%)`,
+              }}
+            />
+          ) : null}
+          {options.map((option) => (
+            <label
+              key={option.value}
+              className="relative cursor-pointer px-3 py-1.5 text-center text-sm text-muted-foreground transition-colors has-checked:text-foreground has-focus-visible:outline-2 has-focus-visible:outline-ring"
+            >
+              <input
+                type="radio"
+                name={name}
+                value={option.value}
+                checked={value === option.value}
+                onChange={() => onChange(option.value)}
+                className="sr-only"
+              />
+              {option.label}
+            </label>
+          ))}
+        </div>
+      </div>
+    </fieldset>
+  );
+}
+
 function AppearanceSettings() {
   const workspace = useWorkspaceStore((s) => s.workspace);
-  const { sessionTheme } = workspace;
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
+  const { theme = "system", setTheme } = useTheme();
   return (
     <div className="space-y-3">
       <h2 className="text-sm font-semibold">外观</h2>
-      <fieldset className="grid min-w-0 gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-        <legend className="sr-only">会话外观</legend>
-        <span aria-hidden="true" className="text-sm font-medium">
-          会话外观
-        </span>
-        <div className="w-fit max-w-full bg-muted p-1">
-          <div className="relative isolate grid grid-cols-3">
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-background shadow-xs transition-transform motion-reduce:transition-none"
-              style={{
-                transform: `translateX(${sessionThemes.indexOf(sessionTheme) * 100}%)`,
-              }}
-            />
-            {sessionThemes.map((theme) => (
-              <label
-                key={theme}
-                className="relative cursor-pointer px-3 py-1.5 text-center text-sm capitalize text-muted-foreground transition-colors has-checked:text-foreground has-focus-visible:outline-2 has-focus-visible:outline-ring"
-              >
-                <input
-                  type="radio"
-                  name="session-theme"
-                  value={theme}
-                  checked={sessionTheme === theme}
-                  onChange={() =>
-                    setWorkspace((state) => ({
-                      ...state,
-                      sessionTheme: theme,
-                    }))
-                  }
-                  className="sr-only"
-                />
-                {theme}
-              </label>
-            ))}
-          </div>
-        </div>
-      </fieldset>
+      <Segmented
+        label="颜色模式"
+        name="color-mode"
+        options={colorModes}
+        value={theme as (typeof colorModes)[number]["value"]}
+        onChange={setTheme}
+      />
+      <Segmented
+        label="会话外观"
+        name="session-theme"
+        options={sessionThemes}
+        value={workspace.sessionTheme}
+        onChange={(sessionTheme) =>
+          setWorkspace((state) => ({ ...state, sessionTheme }))
+        }
+      />
       {fontFields.map(({ key, label, placeholder }) => (
         <div
           key={key}
@@ -177,7 +223,7 @@ export function SettingsDialog() {
         <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
           <nav
             aria-label="设置分类"
-            className="flex shrink-0 gap-1 bg-muted/40 p-2 sm:w-44 sm:flex-col"
+            className="flex shrink-0 gap-1 border-b p-2 sm:w-44 sm:flex-col sm:border-r sm:border-b-0"
           >
             {sections.map(({ value, label, icon: Icon }) => (
               <button
@@ -190,7 +236,7 @@ export function SettingsDialog() {
                 className={cn(
                   "flex items-center gap-2 px-2 py-2 text-sm text-muted-foreground transition-colors duration-[60ms] ease-linear outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring",
                   settings.section === value &&
-                    "bg-background font-medium text-foreground shadow-xs",
+                    "bg-accent font-medium text-accent-foreground",
                 )}
               >
                 <Icon aria-hidden="true" className="size-4" />

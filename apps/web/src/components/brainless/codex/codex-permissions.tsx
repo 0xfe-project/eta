@@ -10,9 +10,9 @@ import { cn } from "@/lib/utils";
  * active row and wrapped descriptions. Footer: "Press enter to confirm or esc
  * to go back".
  */
-const FG = "#ededed";
-const DIM = "#7a7a7a";
-const ACCENT = "#f6e2b7";
+const FG = "var(--terminal-foreground)";
+const DIM = "var(--terminal-muted)";
+const ACCENT = "var(--terminal-warning)"; // 38;2;246;226;183
 
 export interface CodexPermissionOption {
   label: string;
@@ -90,7 +90,7 @@ export function CodexPermissions({
                 setSel(i);
                 onChoose?.(i);
               }}
-              className="flex cursor-pointer gap-2 outline-none focus-visible:ring-1 focus-visible:ring-white/30"
+              className="flex cursor-pointer gap-2 outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >
               <span
                 aria-hidden

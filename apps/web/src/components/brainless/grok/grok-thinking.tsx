@@ -17,8 +17,8 @@ const VERBS = [
   "Percolating",
 ];
 
-const FG = "#ffffff"; // 38;5;15
-const MUTED = "#c0c0c0"; // 38;5;7
+const FG = "var(--terminal-foreground)"; // 38;5;15
+const MUTED = "var(--terminal-secondary)"; // 38;5;7
 
 export function GrokThinking({
   running = true,
