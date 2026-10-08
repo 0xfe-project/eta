@@ -20,6 +20,7 @@
     "dev:controller": "uv run --project apps/control-plane python apps/control-plane/manage.py run_controller",
     "dev:llm-gateway": "go run ./apps/llm-gateway",
     "dev:memory-service": "FASTEMBED_CACHE_PATH=out/models uv run --directory apps/memory-service python -m axp_memory",
+    "dev:forge-service": "go run ./apps/forge-service",
     "dev:web": "bun run --cwd apps/web dev",
     "deploy": "bash deploy/deploy.sh",
     "db:migrate": "bash scripts/dev-postgres.sh && uv run --project apps/control-plane python apps/control-plane/manage.py migrate",
