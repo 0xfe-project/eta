@@ -27,7 +27,7 @@ from ..models import (
     Interaction,
     RuntimeInstance,
 )
-from . import mcp, objects
+from . import objects
 from .auth import runtime_token
 from .driver import RuntimeSpec
 from .internal_api import LEASE_SECONDS
@@ -203,11 +203,6 @@ class Controller:
         session, _ = AgentSession.objects.get_or_create(agent=agent)
         # Every container starts empty; the agent's home comes from its snapshot.
         restore = objects.snapshot_exists(agent.pk)
-        try:
-            mcp_config = mcp.snapshot(agent)
-        except mcp.McpConfigError:
-            logger.exception("Invalid MCP configuration for agent %s", agent.pk)
-            mcp_config = None
 
         with transaction.atomic():
             conversation = services.lock_conversation(agent.conversation_id)
@@ -227,7 +222,6 @@ class Controller:
                     else RuntimeInstance.Status.PROVISIONING
                 ),
                 lease_expires_at=timezone.now() + _seconds(START_TIMEOUT_SECONDS),
-                mcp_snapshot=mcp_config or [],
                 config_version=agent.config_version,
             )
             agent.status = (
@@ -238,13 +232,6 @@ class Controller:
                 AgentSession.objects.filter(agent=agent).update(
                     status=AgentSession.Status.RECOVERING
                 )
-            if mcp_config is None:
-                instance.status = RuntimeInstance.Status.FAILED
-                mark_runtime_failed(conversation, agent, instance, "MCP_CONFIG_INVALID")
-                instance.ended_at = timezone.now()
-                instance.end_reason = "MCP_CONFIG_INVALID"
-                instance.save()
-                return None
             services.refresh_agent_status(conversation, agent)
 
         try:
@@ -287,7 +274,6 @@ class Controller:
                     "developer_instructions": _instructions(agent),
                 }
             ),
-            "AXP_MCP_SNAPSHOT": json.dumps(instance.mcp_snapshot),
             "AXP_CONFIG_VERSION": str(instance.config_version),
             "AXP_HEARTBEAT_SECONDS": str(LEASE_SECONDS / 4),
             # The runtime and Codex export without credentials; the collector
@@ -331,7 +317,7 @@ class Controller:
             self.end_instance(instance, "IDLE", RuntimeInstance.Status.STOPPED)
 
     def restart_outdated(self) -> None:
-        """Restart runtimes started with old instructions or MCP bindings.
+        """Restart runtimes started with an old configuration.
 
         Only between turns, so a turn never sees its configuration change; the
         replacement resumes the same thread with the new configuration.

@@ -3,22 +3,10 @@
 import json
 import os
 import shlex
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 PROTOCOL_VERSION = "1"
-
-
-@dataclass(frozen=True)
-class McpModule:
-    module_key: str
-    revision: str
-    required: bool
-    allowed_tools: list[str]
-    command: str
-    args: list[str]
-    env: dict[str, str]
-    config: dict
 
 
 @dataclass(frozen=True)
@@ -40,14 +28,14 @@ class Settings:
     approval_policy: str
     # The agent's description, injected as Codex developer instructions.
     developer_instructions: str = ""
-    mcp_modules: list[McpModule] = field(default_factory=list)
     config_version: int = 0
+    # Local Codex plugin marketplace installed for every agent.
+    plugins_dir: Path = Path("/opt/axp/plugins")
     # Presigned download of the agent's latest snapshot, if it has one.
     snapshot_url: str | None = None
     # Overrides the Codex launch command; used to run a scripted app-server.
     codex_launch: list[str] | None = None
     heartbeat_seconds: float = 5.0
-    mcp_ready_timeout: float = 30.0
     # Context window of models Codex does not know (e.g. Grok).
     model_context_window: int | None = None
 
@@ -74,19 +62,6 @@ def _json(name: str, default):
 
 def load_settings() -> Settings:
     codex = _json("AXP_CODEX_SETTINGS", {})
-    modules = [
-        McpModule(
-            module_key=item["module_key"],
-            revision=str(item["revision"]),
-            required=bool(item.get("required", False)),
-            allowed_tools=list(item.get("allowed_tools") or []),
-            command=item["launch"]["command"],
-            args=list(item["launch"].get("args") or []),
-            env=dict(item["launch"].get("env") or {}),
-            config=dict(item.get("config") or {}),
-        )
-        for item in _json("AXP_MCP_SNAPSHOT", [])
-    ]
     launch = os.environ.get("AXP_CODEX_LAUNCH")
     return Settings(
         agent_id=_require("AXP_AGENT_ID"),
@@ -102,11 +77,10 @@ def load_settings() -> Settings:
         sandbox=codex.get("sandbox", "workspace-write"),
         approval_policy=codex.get("approval_policy", "on-request"),
         developer_instructions=codex.get("developer_instructions") or "",
-        mcp_modules=modules,
         config_version=int(os.environ.get("AXP_CONFIG_VERSION", "0")),
         snapshot_url=os.environ.get("AXP_SNAPSHOT_URL") or None,
+        plugins_dir=Path(os.environ.get("AXP_PLUGINS_DIR", "/opt/axp/plugins")),
         codex_launch=shlex.split(launch) if launch else None,
         heartbeat_seconds=float(os.environ.get("AXP_HEARTBEAT_SECONDS", "5")),
-        mcp_ready_timeout=float(os.environ.get("AXP_MCP_READY_TIMEOUT", "30")),
         model_context_window=codex.get("model_context_window") or None,
     )

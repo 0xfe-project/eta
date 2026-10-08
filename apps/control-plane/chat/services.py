@@ -18,7 +18,6 @@ from django.db.models import F
 from django.utils import timezone
 
 from . import cursors, llm
-from .control.mcp import bind_defaults
 from .errors import ApiError, not_found
 from .models import (
     Agent,
@@ -384,7 +383,6 @@ def create_agent(name: str, description: str = "", model: str | None = None) -> 
         description=description,
         model=model or None,
     )
-    bind_defaults(agent)
     emit_agent(conversation, agent)
     return agent
 

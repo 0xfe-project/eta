@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "tasks": {
+      "command": "python",
+      "args": ["server.py"],
+      "cwd": ".",
+      "env": { "AXP_WORKSPACE_DIR": "${AXP_WORKSPACE_DIR}" }
+    }
+  }
+}

@@ -1,7 +1,7 @@
 """Agent runtime: one persistent Codex thread driven through the Python SDK.
 
-Startup: restore the agent's snapshot -> start Codex -> resume the agent's
-thread (or create it once) -> wait for required MCP modules -> report ready.
+Startup: restore the agent's snapshot -> install the image's Codex plugins ->
+start Codex -> resume the agent's thread (or create it once) -> report ready.
 Every turn ends by uploading a new snapshot of the agent's home.
 """
 
@@ -9,6 +9,8 @@ import hashlib
 import json
 import logging
 import os
+import re
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -16,6 +18,7 @@ import time
 import uuid
 from pathlib import Path
 
+from codex_cli_bin import bundled_codex_path, bundled_path_dir
 from openai_codex import CodexConfig
 from openai_codex import __version__ as SDK_VERSION
 from openai_codex.client import CodexClient
@@ -33,11 +36,20 @@ logger = logging.getLogger(__name__)
 # Snapshots run after every turn: GNU tar with multithreaded zstd packs a
 # workspace with tens of thousands of files in about a second.
 SNAPSHOT_COMPRESSOR = "zstd -T0"
-# Codex's locks and scratch files are left out.
-SNAPSHOT_EXCLUDES = ("./codex/tmp", "./codex/*/tmp", "./codex/*.lock")
+# Codex's locks and scratch files are left out, and so are installed plugins:
+# every start installs them from the image.
+SNAPSHOT_EXCLUDES = (
+    "./codex/tmp",
+    "./codex/*/tmp",
+    "./codex/*.lock",
+    "./codex/plugins/cache",
+)
 SNAPSHOT_MAX_BYTES = 2 << 30
 # Codex model provider id for the LLM gateway.
 LLM_PROVIDER = "axp"
+# Plugins' MCP configs (.mcp.json) are static files, and Codex expands no
+# variables in them; these are filled in when the plugins are installed.
+PLUGIN_VARIABLES = re.compile(r"\$\{(AXP_GATEWAY_URL|AXP_WORKSPACE_DIR)\}")
 APPROVAL_METHODS = {
     "item/commandExecution/requestApproval": "command",
     "item/fileChange/requestApproval": "file_change",
@@ -121,8 +133,8 @@ class Runtime:
         self.thread_id: str | None = None
         self.codex_version: str | None = None
         self.current_command_id: str | None = None
-        self.mcp_status: dict[str, dict] = {}
-        self._mcp_changed = threading.Condition()
+        # Marketplace name and directory of the installed plugins.
+        self.marketplace: tuple[str, Path] | None = None
         self._approvals: dict[str, _ApprovalWaiter] = {}
         # Steer command id -> its command, from turn/steer until the running
         # turn takes it in.
@@ -148,9 +160,9 @@ class Runtime:
             self._prepare_home()
             self.ledger = L.Ledger()
             self._spawn(self._outbox_loop, "outbox")
+            self._install_plugins()
             self._start_codex()
             self._open_thread()
-            self._wait_for_mcp()
         except RecoveryFailed as exc:
             logger.error("Runtime not ready: %s", exc)
             self.error_code = exc.code
@@ -283,27 +295,78 @@ class Runtime:
             )
             self.ledger.emit("snapshot.saved", {"size": size})
 
+    # --- plugins --------------------------------------------------------------
+
+    def _install_plugins(self) -> None:
+        """Install every plugin of the image's marketplace into CODEX_HOME.
+
+        The marketplace is copied with its MCP configs filled in for this
+        instance, then each plugin is added; Codex only loads installed copies.
+        """
+        source = self.settings.plugins_dir
+        catalog = json.loads(
+            (source / ".agents" / "plugins" / "marketplace.json").read_text()
+        )
+        directory = Path(tempfile.mkdtemp(prefix="axp-plugins-"))
+        shutil.copytree(source, directory, dirs_exist_ok=True)
+        values = {
+            "AXP_GATEWAY_URL": self.settings.gateway_url,
+            "AXP_WORKSPACE_DIR": str(self.settings.workspace_dir),
+        }
+        for path in directory.rglob(".mcp.json"):
+            path.write_text(
+                PLUGIN_VARIABLES.sub(lambda m: values[m[1]], path.read_text())
+            )
+        self.marketplace = (catalog["name"], directory)
+        for plugin in catalog["plugins"]:
+            name = f"{plugin['name']}@{catalog['name']}"
+            args = [str(bundled_codex_path())]
+            for override in self._marketplace_overrides():
+                args += ["--config", override]
+            try:
+                subprocess.run(
+                    [*args, "plugin", "add", name],
+                    env={**os.environ, **self._codex_env()},
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=True,
+                )
+            except (OSError, subprocess.SubprocessError) as exc:
+                detail = getattr(exc, "stderr", None) or str(exc)
+                raise RecoveryFailed(
+                    "PLUGIN_INSTALL_FAILED", f"{name}: {detail}"
+                ) from exc
+            logger.info("Installed plugin %s", name)
+
+    def _marketplace_overrides(self) -> list[str]:
+        if self.marketplace is None:
+            return []
+        name, directory = self.marketplace
+        return [
+            f"marketplaces.{name}.source_type={_toml('local')}",
+            f"marketplaces.{name}.source={_toml(str(directory))}",
+        ]
+
     # --- Codex --------------------------------------------------------------
 
+    def _codex_env(self) -> dict[str, str]:
+        env = {
+            "CODEX_HOME": str(self.settings.codex_home),
+            "AXP_WORKSPACE_DIR": str(self.settings.workspace_dir),
+            # Plugin hooks reach their services through the runtime gateway
+            # with the same key as model requests.
+            "AXP_GATEWAY_URL": self.settings.gateway_url,
+            "AXP_RUNTIME_LLM_KEY": f"{self.settings.instance_id}.{self.settings.token}",
+        }
+        # Helper binaries Codex ships next to itself (the SDK adds these when
+        # it launches Codex itself).
+        if path_dir := bundled_path_dir():
+            env["PATH"] = f"{path_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+        return env
+
     def _codex_config(self) -> CodexConfig:
-        overrides = []
-        for module in self.settings.mcp_modules:
-            prefix = f"mcp_servers.{module.module_key}"
-            env = {
-                **module.env,
-                "AXP_MCP_CONFIG": json.dumps(module.config),
-                "AXP_WORKSPACE_DIR": str(self.settings.workspace_dir),
-            }
-            overrides += [
-                f"{prefix}.command={_toml(module.command)}",
-                f"{prefix}.args={_toml(module.args)}",
-                f"{prefix}.env={_toml(env)}",
-                f"{prefix}.required={_toml(module.required)}",
-            ]
-            if module.allowed_tools:
-                overrides.append(
-                    f"{prefix}.enabled_tools={_toml(module.allowed_tools)}"
-                )
+        overrides = self._marketplace_overrides()
         # Every model request goes through the runtime gateway, which
         # authenticates this runtime instance; the container holds no provider
         # credentials.
@@ -320,22 +383,22 @@ class Runtime:
                 f"model_context_window={_toml(self.settings.model_context_window)}"
             )
         overrides += _otel_overrides()
-        env = {
-            "CODEX_HOME": str(self.settings.codex_home),
-            "AXP_WORKSPACE_DIR": str(self.settings.workspace_dir),
-            "AXP_RUNTIME_LLM_KEY": f"{self.settings.instance_id}.{self.settings.token}",
-        }
-        launch = None
         if self.settings.codex_launch:
-            # A custom launcher gets the same overrides the SDK would pass.
             launch = [*self.settings.codex_launch]
-            for override in overrides:
-                launch += ["--config", override]
+        else:
+            # Plugin hooks run only once trusted, and nobody is there to trust
+            # them; they come from the image, and the container is the
+            # isolation boundary anyway.
+            launch = [str(bundled_codex_path()), "--dangerously-bypass-hook-trust"]
+        for override in overrides:
+            launch += ["--config", override]
+        if not self.settings.codex_launch:
+            launch += ["app-server", "--listen", "stdio://"]
         return CodexConfig(
-            launch_args_override=tuple(launch) if launch else None,
+            launch_args_override=tuple(launch),
             config_overrides=tuple(overrides),
             cwd=str(self.settings.workspace_dir),
-            env=env,
+            env=self._codex_env(),
             client_name="axp_runtime",
             client_title="AXP Agent Runtime",
         )
@@ -418,37 +481,15 @@ class Runtime:
             except Exception:
                 return
             if notification.method == "mcpServer/startupStatus/updated":
+                # Plugins' MCP servers are optional: a failed one only loses
+                # its tools.
                 payload = _payload(notification)
-                status = {
-                    "status": payload.get("status"),
-                    "error": payload.get("error"),
-                }
-                with self._mcp_changed:
-                    self.mcp_status[payload.get("name", "")] = status
-                    self._mcp_changed.notify_all()
-                if self.ledger:
-                    self.ledger.emit(
-                        "mcp.status",
-                        {"module_key": payload.get("name"), "status": status["status"]},
+                if payload.get("status") == "failed":
+                    logger.warning(
+                        "MCP server %s failed to start: %s",
+                        payload.get("name"),
+                        payload.get("error"),
                     )
-
-    def _wait_for_mcp(self) -> None:
-        required = [m.module_key for m in self.settings.mcp_modules if m.required]
-        deadline = time.monotonic() + self.settings.mcp_ready_timeout
-        with self._mcp_changed:
-            while True:
-                states = {
-                    key: self.mcp_status.get(key, {}).get("status") for key in required
-                }
-                failed = [k for k, s in states.items() if s in ("failed", "cancelled")]
-                if failed:
-                    raise RecoveryFailed("MCP_REQUIRED_FAILED", ",".join(failed))
-                if all(s == "ready" for s in states.values()):
-                    return
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise RecoveryFailed("MCP_REQUIRED_TIMEOUT", ",".join(required))
-                self._mcp_changed.wait(remaining)
 
     def _finish_unknown(self, command: dict) -> None:
         self.ledger.update_command(command["command_id"], status="outcome_unknown")
