@@ -54,6 +54,11 @@ const SLASH_COMMANDS: SlashCommand[] = [
 ];
 
 const activityText = { running: "进行中", completed: "完成", failed: "失败" };
+/** The activity as one line: the tool and what it was given. */
+function activityTitle(block: Activity) {
+  const tool = block.name || block.label;
+  return block.input ? `${tool} ${block.input}` : tool;
+}
 const workingLabel: Partial<Record<ChatMessage["status"], string>> = {
   queued: "排队中",
   responding: "工作中",
@@ -71,7 +76,8 @@ const sessions = {
     promptClass: "pt-2",
     Activity: ({ block }: { block: Activity }) => (
       <ClaudeToolCall
-        tool={block.label}
+        tool={block.name || block.label}
+        arg={block.input || undefined}
         result={activityText[block.status]}
         status={
           block.status === "running"
@@ -80,7 +86,9 @@ const sessions = {
               ? "success"
               : "error"
         }
-      />
+      >
+        {block.output}
+      </ClaudeToolCall>
     ),
     Choice: ({ prompt, labels, onChoose }: ChoiceProps) => (
       <ClaudePermission
@@ -106,7 +114,7 @@ const sessions = {
     promptClass: "pt-2",
     Activity: ({ block }: { block: Activity }) => (
       <CodexExec
-        command={block.label}
+        command={activityTitle(block)}
         status={
           block.status === "running"
             ? "run"
@@ -114,7 +122,9 @@ const sessions = {
               ? "ok"
               : "error"
         }
-      />
+      >
+        {block.output}
+      </CodexExec>
     ),
     Choice: ({ prompt, labels, onChoose }: ChoiceProps) => (
       <CodexPermissions
@@ -137,7 +147,11 @@ const sessions = {
     turnClass: "space-y-2 pt-1",
     promptClass: "pt-3",
     Activity: ({ block }: { block: Activity }) => (
-      <GrokTool verb={block.label} meta={activityText[block.status]} />
+      <GrokTool
+        verb={block.name || block.label}
+        path={block.input || undefined}
+        meta={activityText[block.status]}
+      />
     ),
     Choice: ({ prompt, labels, onChoose }: ChoiceProps) => (
       <GrokPermission

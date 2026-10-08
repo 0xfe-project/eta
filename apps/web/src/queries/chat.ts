@@ -30,6 +30,10 @@ const blockSchema = z.discriminatedUnion("type", [
     type: z.literal("activity"),
     label: z.string(),
     status: z.enum(["running", "completed", "failed"]),
+    // The tool's own name (MCP and dynamic tools), its input and output.
+    name: z.string().nullish(),
+    input: z.string().nullish(),
+    output: z.string().nullish(),
   }),
 ]);
 
