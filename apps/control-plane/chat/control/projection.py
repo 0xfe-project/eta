@@ -7,7 +7,7 @@ fields reach messages, interactions and ``ui_event``.
 
 from django.utils import timezone
 
-from .. import services
+from .. import queue, services
 from ..errors import ApiError
 from ..models import (
     Agent,
@@ -120,11 +120,14 @@ def _touch(agent: Agent) -> None:
 def turn_started(conversation, agent, instance, command, payload):
     if command is None or command.status in services.TERMINAL_COMMAND_STATUSES:
         return
-    if command.status == AgentCommand.Status.DISPATCHING:
+    if command.status == AgentCommand.Status.QUEUED:
         command.status = AgentCommand.Status.RUNNING
+    command.runtime_instance = instance
     command.codex_turn_id = payload.get("turn_id")
     command.started_at = command.started_at or timezone.now()
-    command.save(update_fields=["status", "codex_turn_id", "started_at"])
+    command.save(
+        update_fields=["status", "runtime_instance", "codex_turn_id", "started_at"]
+    )
     AgentSession.objects.filter(agent=agent).update(last_turn_id=command.codex_turn_id)
     if agent.status != Agent.Status.BUSY:
         agent.status = Agent.Status.BUSY
@@ -328,7 +331,6 @@ def turn_steered(conversation, agent, instance, command, payload):
     now = timezone.now()
     steer.status = AgentCommand.Status.RUNNING
     steer.runtime_instance = instance
-    steer.dispatch_generation = instance.generation
     steer.codex_turn_id = payload.get("turn_id")
     steer.started_at = now
     if command is not None and command.interrupt_requested_at:
@@ -338,7 +340,6 @@ def turn_steered(conversation, agent, instance, command, payload):
         update_fields=[
             "status",
             "runtime_instance",
-            "dispatch_generation",
             "codex_turn_id",
             "started_at",
             "interrupt_requested_at",
@@ -394,11 +395,14 @@ def mark_runtime_failed(conversation, agent, instance, code: str) -> None:
         if recovery
         else "AGENT_EXTENSION_FAILED"
         if code.startswith("PLUGIN")
+        else "START_TIMEOUT"
+        if code == "START_TIMEOUT"
         else "AGENT_UNAVAILABLE"
     )
+    # Nothing waiting runs: the next runtime starts with an empty queue.
+    queue.drop(agent.pk)
     waiting = AgentCommand.objects.select_related("agent").filter(
-        agent=agent,
-        status__in=[AgentCommand.Status.QUEUED, AgentCommand.Status.DISPATCHING],
+        agent=agent, status=AgentCommand.Status.QUEUED
     )
     for waiting_command in waiting:
         services.finish_command(conversation, waiting_command, "failed", reason)

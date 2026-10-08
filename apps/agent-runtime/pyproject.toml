@@ -3,7 +3,12 @@ name = "axp-agent-runtime"
 version = "0.1.0"
 description = "Per-agent runtime that drives Codex through the official Python SDK."
 requires-python = ">=3.13,<3.14"
-dependencies = ["axp-telemetry", "mcp>=1.20,<2", "openai-codex==0.160.1"]
+dependencies = [
+  "axp-telemetry",
+  "mcp>=1.20,<2",
+  "nats-py>=2.16,<3",
+  "openai-codex==0.160.1",
+]
 
 [dependency-groups]
 dev = [

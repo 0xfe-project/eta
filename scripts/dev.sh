@@ -25,8 +25,8 @@ app-server that needs no model.
 Needs Docker. One set of supporting containers per machine, shared by every
 instance and kept running between sessions: PostgreSQL, OpenObserve for
 logs (opened through the gateway at /observe/) with an OpenTelemetry Collector
-for runtimes, and SeaweedFS for agent snapshots. They are named axp-dev-* and
-never touch production's.
+for runtimes, SeaweedFS for agent snapshots and NATS for the agent queue. They
+are named axp-dev-* and never touch production's.
 EOF
 }
 
@@ -176,6 +176,17 @@ dev_container axp-dev-s3 chrislusf/seaweedfs:4.48 \
   --network "$runtime_network" -p "$AXP_RUNTIME_GATEWAY_BIND:8333:8333" -v axp-dev-s3:/data \
   -e AWS_ACCESS_KEY_ID=axp-dev -e AWS_SECRET_ACCESS_KEY=axp-dev-secret \
   -- mini -dir=/data
+
+# --- Agent queue ----------------------------------------------------------------
+# NATS JetStream, on the runtime network's gateway address like S3, so host
+# processes and runtimes use one URL.
+dev_container axp-dev-nats nats:2.14-alpine \
+  --network "$runtime_network" -p "$AXP_RUNTIME_GATEWAY_BIND:4222:4222" -v axp-dev-nats:/data \
+  -- --jetstream --store_dir /data --http_port 8222
+for _ in $(seq 1 60); do
+  docker exec axp-dev-nats wget -q -O /dev/null http://127.0.0.1:8222/healthz 2>/dev/null && break
+  sleep 0.5
+done
 
 # --- OpenObserve ----------------------------------------------------------------
 # Dev-only credentials; it listens on loopback only.

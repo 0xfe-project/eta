@@ -6,7 +6,7 @@ from dirty_equals import IsPartialDict, IsStr
 from django.core.signals import request_finished
 from django.db import close_old_connections
 
-from chat import cursors, llm, services
+from chat import cursors, llm, queue
 from chat.models import (
     Agent,
     AgentCommand,
@@ -85,7 +85,7 @@ class TestSnapshot:
 
 class TestHistory:
     def test_pages_backwards_in_send_order(self, chat, agent, monkeypatch):
-        monkeypatch.setattr(services, "MAX_QUEUED_PER_AGENT", 100)
+        monkeypatch.setattr(queue, "MAX_QUEUED_PER_AGENT", 100)
         for i in range(30):
             chat.send(agent["id"], f"m{i}")  # 60 messages
         path = f"/agents/{agent['id']}/messages"
@@ -363,7 +363,7 @@ class TestSendMessage:
         assert chat.post("/chat/messages", body).status_code == 404
 
     def test_queue_full_is_429(self, chat, agent, monkeypatch):
-        monkeypatch.setattr(services, "MAX_QUEUED_PER_AGENT", 2)
+        monkeypatch.setattr(queue, "MAX_QUEUED_PER_AGENT", 2)
         chat.send(agent["id"])
         chat.send(agent["id"])
         response = chat.post("/chat/messages", {"agent_id": agent["id"], "text": "hi"})

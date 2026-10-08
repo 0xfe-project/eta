@@ -177,6 +177,7 @@ kamal() {
 # state and is rebooted on every deploy so config changes take effect.
 prepare_accessories() {
   docker container inspect axp-s3 >/dev/null 2>&1 || kamal accessory boot s3
+  docker container inspect axp-nats >/dev/null 2>&1 || kamal accessory boot nats
   if ! docker container inspect axp-openobserve >/dev/null 2>&1; then
     kamal accessory boot openobserve
   elif ! docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' axp-openobserve | grep -qx 'ZO_BASE_URI=/observe'; then

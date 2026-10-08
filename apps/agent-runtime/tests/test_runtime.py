@@ -5,8 +5,6 @@ import subprocess
 import sys
 import threading
 import time
-import urllib.error
-import urllib.request
 import uuid
 from dataclasses import replace
 from pathlib import Path
@@ -18,7 +16,6 @@ from axp_runtime import runtime as runtime_module
 from axp_runtime.config import Settings
 from axp_runtime.control_plane import ControlPlaneError
 from axp_runtime.runtime import Runtime
-from axp_runtime.server import serve
 
 FAKE = [sys.executable, "-m", "axp_runtime.testing.fake_app_server"]
 PLUGINS = Path(__file__).resolve().parent.parent / "plugins"
@@ -82,6 +79,23 @@ class StubControlPlane:
         return self.wait_for("turn.completed", command_id=command_id)
 
 
+class FakeQueue:
+    """The agent's queue, empty: tests hand commands to the runtime directly."""
+
+    def __init__(self, settings, handle):
+        pass
+
+    def start(self):
+        pass
+
+    def stop(self):
+        pass
+
+    def take(self):
+        time.sleep(0.02)
+        return None
+
+
 class Harness:
     """Starts runtimes against stub control planes; shuts them all down.
 
@@ -99,8 +113,6 @@ class Harness:
             generation=1,
             token="secret",
             gateway_url="http://gateway.invalid",
-            listen_host="127.0.0.1",
-            listen_port=0,
             home_dir=tmp / "home",
             known_thread_id=None,
             model=None,
@@ -112,7 +124,7 @@ class Harness:
 
     def start(self, cp=None, **changes) -> tuple[Runtime, StubControlPlane]:
         cp = cp or StubControlPlane()
-        runtime = Runtime(replace(self.settings, **changes), cp)
+        runtime = Runtime(replace(self.settings, **changes), cp, queue=FakeQueue)
         self.runtimes.append(runtime)
         runtime.boot()
         return runtime, cp
@@ -331,15 +343,14 @@ class TestTurns:
         assert request["kind"] == "command"
         assert request["summary"]["command"] == "touch approved.txt"
         approval_id = request["approval_id"]
-        assert runtime.decide(approval_id, "accept", 2) == "stale"
-        assert runtime.decide(approval_id, "accept", 1) == "accepted"
+        assert runtime.decide(approval_id, "accept") == "accepted"
         assert cp.wait_for("approval.applied")["decision"] == "accept"
         assert cp.completed(command_id)["status"] == "completed"
         item = cp.wait_for("item.updated", command_id=command_id)["item"]
         assert item == IsPartialDict(kind="command", input="touch approved.txt")
         # Repeating the same decision is fine; a different one is not.
-        assert runtime.decide(approval_id, "accept", 1) == "accepted"
-        assert runtime.decide(approval_id, "decline", 1) == "not_pending"
+        assert runtime.decide(approval_id, "accept") == "accepted"
+        assert runtime.decide(approval_id, "decline") == "not_pending"
 
     def test_interrupt_while_waiting_for_approval(self, rt):
         runtime, cp = rt.start()
@@ -355,7 +366,7 @@ class TestTurns:
         request = cp.wait_for("approval.requested")
         assert request["kind"] == "elicitation"
         assert request["summary"] == {"server": "tasks", "message": "清空所有任务？"}
-        assert runtime.decide(request["approval_id"], "accept", 1) == "accepted"
+        assert runtime.decide(request["approval_id"], "accept") == "accepted"
         assert cp.wait_for("approval.applied")["decision"] == "accept"
         assert cp.completed(command_id)["status"] == "completed"
         assert reply_text(cp, command_id) == "确认结果：accept"
@@ -364,7 +375,7 @@ class TestTurns:
         runtime, cp = rt.start()
         command_id = send(runtime, "[confirm]")
         request = cp.wait_for("approval.requested")
-        runtime.decide(request["approval_id"], "decline", 1)
+        runtime.decide(request["approval_id"], "decline")
         cp.completed(command_id)
         assert reply_text(cp, command_id) == "确认结果：decline"
 
@@ -542,58 +553,44 @@ class TestSnapshots:
         assert runtime.error_code == "RECOVERY_DOWNLOAD_FAILED"
 
 
-class TestServer:
-    @pytest.fixture(autouse=True)
-    def _serve(self, rt):
-        self.runtime, self.cp = rt.start()
-        server = serve(self.runtime)
-        threading.Thread(target=server.serve_forever, daemon=True).start()
-        self.base = f"http://127.0.0.1:{server.server_address[1]}/internal/v1"
-        yield
-        server.shutdown()
-        server.server_close()
+class TestControlMessages:
+    def test_interrupt_decision_and_steer(self, rt):
+        runtime, cp = rt.start()
+        first = send(runtime, "[approve]", seq=1)
+        request = cp.wait_for("approval.requested")
+        decision = {"approval_id": request["approval_id"], "decision": "accept"}
+        assert runtime.control({"type": "decision", **decision}) == {}
+        assert cp.wait_for("approval.applied")["decision"] == "accept"
+        cp.completed(first)
+        slow = send(runtime, "[steer]", seq=2)
+        cp.wait_for("turn.started", command_id=slow)
+        steer = {"type": "steer", "command_id": "s1", "agent_sequence": 3, "text": "hi"}
+        assert runtime.control(steer) == {"accepted": True}
+        assert cp.completed("s1")["status"] == "completed"
+        # With no turn running, a steer is refused and gets queued instead.
+        assert runtime.control({**steer, "command_id": "s2"}) == {"accepted": False}
+        later = send(runtime, "[slow]", seq=4)
+        cp.wait_for("turn.started", command_id=later)
+        runtime.control({"type": "interrupt", "command_id": later})
+        assert cp.completed(later)["status"] == "interrupted"
 
-    def call(self, method, path, body=None, token="secret"):
-        request = urllib.request.Request(
-            self.base + path,
-            data=json.dumps(body).encode() if body is not None else None,
-            method=method,
-        )
-        request.add_header("Authorization", f"Bearer {token}")
-        try:
-            with urllib.request.urlopen(request) as response:
-                return response.status, json.loads(response.read())
-        except urllib.error.HTTPError as exc:
-            return exc.code, json.loads(exc.read())
+    def test_runtime_takes_commands_from_the_queue(self, rt, monkeypatch):
+        commands = [
+            {
+                "command_id": "q1",
+                "kind": "turn",
+                "agent_sequence": 1,
+                "payload": {"text": "hi"},
+            },
+            {"command_id": "bad", "kind": "shell", "agent_sequence": 2},
+        ]
 
-    def status(self, method, path, body=None):
-        return self.call(method, path, body)[0]
+        def take(self):
+            time.sleep(0.02)
+            return commands.pop(0) if commands else None
 
-    def test_auth_and_status(self):
-        assert self.call("GET", "/status", token="wrong")[0] == 403
-        status, body = self.call("GET", "/status")
-        assert status == 200
-        assert body["thread_id"] == self.runtime.thread_id
-
-    def test_command_lifecycle_over_http(self):
-        body = {
-            "kind": "turn",
-            "agent_id": "agent-1",
-            "generation": 1,
-            "agent_sequence": 1,
-            "payload": {"text": "hi"},
-        }
-        assert self.status("PUT", "/commands/c1", {**body, "generation": 9}) == 409
-        assert self.status("PUT", "/commands/c1", {**body, "agent_id": "x"}) == 409
-        assert self.status("PUT", "/commands/c1", body) == 202
-        assert self.status("PUT", "/commands/c1", body) == 202
-        conflict = {**body, "payload": {"text": "other"}}
-        assert self.status("PUT", "/commands/c1", conflict) == 409
-        self.cp.completed("c1")
-        interrupt = {"generation": 1}
-        assert self.status("POST", "/commands/c1/interrupt", interrupt) == 202
-        decision = "/approvals/x/decision"
-        assert self.status("PUT", decision, {"decision": "maybe"}) == 400
-        assert (
-            self.status("PUT", decision, {"decision": "accept", "generation": 1}) == 409
-        )
+        monkeypatch.setattr(FakeQueue, "take", take)
+        runtime, cp = rt.start()
+        assert cp.completed("q1")["status"] == "completed"
+        time.sleep(0.2)
+        assert runtime.ledger.get_command("bad") is None

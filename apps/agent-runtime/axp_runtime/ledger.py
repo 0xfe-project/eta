@@ -18,11 +18,9 @@ CREATE TABLE IF NOT EXISTS commands (
     agent_sequence INTEGER NOT NULL,
     kind TEXT NOT NULL,
     payload TEXT NOT NULL,
-    request_hash TEXT NOT NULL,
     status TEXT NOT NULL,
     turn_id TEXT,
     error_code TEXT,
-    generation INTEGER NOT NULL,
     interrupt_requested INTEGER NOT NULL DEFAULT 0,
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
@@ -88,48 +86,26 @@ class Ledger:
         return _command(row) if row else None
 
     def accept_command(
-        self,
-        command_id: str,
-        *,
-        agent_sequence: int,
-        kind: str,
-        payload: dict,
-        request_hash: str,
-        generation: int,
-    ) -> tuple[dict, bool]:
-        """Record a command. Returns (command, created); raises on conflicts."""
+        self, command_id: str, *, agent_sequence: int, kind: str, payload: dict
+    ) -> dict:
+        """Record a command taken from the queue (once; a repeat is a no-op)."""
         now = time.time()
         with self.tx() as db:
-            row = db.execute(
-                "SELECT * FROM commands WHERE command_id=?", (command_id,)
-            ).fetchone()
-            if row:
-                if row["request_hash"] != request_hash:
-                    raise CommandConflict(command_id)
-                if row["generation"] != generation and row["status"] == ACCEPTED:
-                    db.execute(
-                        "UPDATE commands SET generation=?, updated_at=? "
-                        "WHERE command_id=?",
-                        (generation, now, command_id),
-                    )
-                return _command(row), False
             db.execute(
-                "INSERT INTO commands(command_id, agent_sequence, kind, payload, "
-                "request_hash, status, generation, created_at, updated_at) "
-                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO commands(command_id, agent_sequence, kind, "
+                "payload, status, created_at, updated_at) "
+                "VALUES(?, ?, ?, ?, ?, ?, ?)",
                 (
                     command_id,
                     agent_sequence,
                     kind,
                     json.dumps(payload),
-                    request_hash,
                     ACCEPTED,
-                    generation,
                     now,
                     now,
                 ),
             )
-        return self.get_command(command_id), True
+        return self.get_command(command_id)
 
     def update_command(self, command_id: str, **fields) -> None:
         fields["updated_at"] = time.time()
@@ -244,10 +220,6 @@ class Ledger:
                 ).fetchone()
                 is None
             )
-
-
-class CommandConflict(Exception):
-    pass
 
 
 def _command(row) -> dict:

@@ -18,8 +18,6 @@ class Settings:
     # The runtime gateway: the internal API under /internal, the LLM gateway's
     # OpenAI-compatible API (Codex's model provider) under /v1.
     gateway_url: str
-    listen_host: str
-    listen_port: int
     # Everything the agent keeps; its snapshot is exactly this directory.
     home_dir: Path
     known_thread_id: str | None
@@ -36,6 +34,8 @@ class Settings:
     heartbeat_seconds: float = 5.0
     # Context window of models Codex does not know (e.g. Grok).
     model_context_window: int | None = None
+    # The agent queue (NATS JetStream).
+    nats_url: str = ""
 
     @property
     def workspace_dir(self) -> Path:
@@ -67,8 +67,6 @@ def load_settings() -> Settings:
         generation=int(_require("AXP_GENERATION")),
         token=_require("AXP_RUNTIME_TOKEN"),
         gateway_url=_require("AXP_GATEWAY_URL").rstrip("/"),
-        listen_host=os.environ.get("AXP_LISTEN_HOST", "0.0.0.0"),
-        listen_port=int(os.environ.get("AXP_LISTEN_PORT", "8080")),
         home_dir=Path(os.environ.get("AXP_HOME", "/agent")),
         known_thread_id=os.environ.get("AXP_THREAD_ID") or None,
         model=codex.get("model"),
@@ -79,4 +77,5 @@ def load_settings() -> Settings:
         codex_launch=shlex.split(launch) if launch else None,
         heartbeat_seconds=float(os.environ.get("AXP_HEARTBEAT_SECONDS", "5")),
         model_context_window=codex.get("model_context_window") or None,
+        nats_url=_require("AXP_NATS_URL"),
     )

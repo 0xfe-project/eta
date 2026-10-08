@@ -33,5 +33,4 @@ COPY axp_runtime ./axp_runtime
 ENV PYTHONPATH=/app \
     PYTHONUNBUFFERED=1 \
     AXP_HOME=/agent
-EXPOSE 8080
 CMD ["python", "-m", "axp_runtime"]

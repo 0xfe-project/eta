@@ -5,6 +5,7 @@ import threading
 from django.core.management.base import BaseCommand
 from django.db import DatabaseError, connections
 
+from chat import queue
 from chat.control import objects
 from chat.control.controller import Controller
 from chat.control.driver import DockerDriver
@@ -56,6 +57,7 @@ class Command(BaseCommand):
         driver = DockerDriver()
         driver.ensure_network()
         objects.ensure_bucket()
+        queue.ensure_stream()
         Controller(driver).run_forever(
             interval=interval, stop=stop, before_tick=hold_lock
         )

@@ -5,7 +5,6 @@ from dataclasses import dataclass
 
 from django.conf import settings
 
-RUNTIME_PORT = 8080
 LABEL = "dev.axp.runtime"
 MEMORY = "2g"
 CPUS = 1
@@ -26,7 +25,6 @@ class RuntimeSpec:
 @dataclass
 class StartedRuntime:
     container_id: str
-    endpoint: str
     image_digest: str
 
 
@@ -82,12 +80,8 @@ class DockerDriver:
             nano_cpus=int(CPUS * 1e9),
             restart_policy={"Name": "no"},
         )
-        container.reload()
-        network = container.attrs["NetworkSettings"]["Networks"][self.network]
         return StartedRuntime(
-            container_id=container.id,
-            endpoint=f"http://{network['IPAddress']}:{RUNTIME_PORT}",
-            image_digest=container.image.id,
+            container_id=container.id, image_digest=container.image.id
         )
 
     def state(self, container_id: str | None) -> str:
