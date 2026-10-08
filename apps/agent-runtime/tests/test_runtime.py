@@ -120,6 +120,7 @@ class Harness:
             codex_launch=FAKE,
             heartbeat_seconds=0.05,
             plugins_dir=plugins_dir,
+            run_dir=tmp / "run",
         )
         self.runtimes: list[Runtime] = []
 
@@ -390,6 +391,16 @@ class TestTurns:
         runtime.interrupt(command_id)
         assert cp.wait_for("approval.applied")["decision"] == "cancel"
         assert cp.completed(command_id)["status"] == "interrupted"
+
+    def test_git_and_gh_can_reach_the_gateway(self, rt):
+        runtime, _ = rt.start()
+        gateway = runtime.settings.run_dir / "gateway.json"
+        settings = runtime.settings
+        assert json.loads(gateway.read_text()) == {
+            "url": settings.gateway_url,
+            "key": f"{settings.instance_id}.{settings.token}",
+        }
+        assert gateway.stat().st_mode & 0o777 == 0o600
 
     def test_plugin_confirmation(self, rt):
         runtime, cp = rt.start()

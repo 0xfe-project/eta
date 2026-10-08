@@ -1,0 +1,191 @@
+#!/usr/bin/env python3
+"""GitHub credentials for git and gh, from AXP's forge service.
+
+Two programs in one file:
+
+  axp-forge git-credential get   git's credential helper (/etc/gitconfig):
+                                 a token for the repository being fetched or
+                                 pushed, for as long as GitHub says it lasts
+  gh ...                         /usr/local/bin/gh links here: runs the real
+                                 gh with a read-only token for the
+                                 repository's owner
+
+Both reach the forge service through the runtime gateway with the runtime's
+key, which the runtime writes to $AXP_RUN_DIR/gateway.json; Codex keeps keys
+out of the environment of the commands it runs. When GitHub is not connected
+or the App cannot reach a repository, the service's message goes to stderr,
+and git fails (gh runs anonymously). Successful calls also write the App's
+commit identity for GitHub repositories, which /etc/gitconfig includes.
+"""
+
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+RUN_DIR = Path(os.environ.get("AXP_RUN_DIR", "/run/axp"))
+REAL_GH = os.environ.get("AXP_REAL_GH", "/usr/local/lib/gh/gh")
+# Tokens are reused until this close to expiry.
+MARGIN = 300
+
+
+class ForgeError(Exception):
+    pass
+
+
+def forge(method: str, path: str, body: dict | None = None) -> dict:
+    try:
+        gateway = json.loads((RUN_DIR / "gateway.json").read_text())
+    except (OSError, ValueError) as exc:
+        raise ForgeError("AXP 的运行环境没有准备好，无法获取 GitHub 凭据。") from exc
+    request = urllib.request.Request(
+        gateway["url"] + path,
+        data=json.dumps(body).encode() if body is not None else None,
+        method=method,
+        headers={
+            "Authorization": f"Bearer {gateway['key']}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            return json.loads(response.read())
+    except urllib.error.HTTPError as exc:
+        try:
+            message = json.loads(exc.read())["error"]["message"]
+        except (ValueError, KeyError, TypeError):
+            message = f"AXP 的代码托管服务返回 {exc.code}。"
+        raise ForgeError(message) from exc
+    except OSError as exc:
+        raise ForgeError(f"连不上 AXP 的代码托管服务：{exc}") from exc
+
+
+def remember_identity() -> None:
+    include = RUN_DIR / "git" / "github.inc"
+    if include.exists():
+        return
+    try:
+        identity = forge("GET", "/forge/identity")
+    except ForgeError:
+        return
+    write_identity(include, identity)
+
+
+def write_identity(include: Path, identity: dict) -> None:
+    include.parent.mkdir(parents=True, exist_ok=True)
+    tmp = include.with_suffix(".tmp")
+    tmp.write_text(
+        f"[user]\n\tname = {identity['name']}\n\temail = {identity['email']}\n"
+    )
+    tmp.replace(include)
+
+
+# --- git ----------------------------------------------------------------------
+
+
+def git_credential(action: str) -> int:
+    if action != "get":
+        return 0  # store and erase: nothing is kept here
+    fields = dict(
+        line.split("=", 1) for line in sys.stdin.read().splitlines() if "=" in line
+    )
+    if fields.get("protocol") != "https" or fields.get("host") != "github.com":
+        return 0
+    try:
+        answer = forge(
+            "POST",
+            "/forge/credential",
+            {"host": "github.com", "path": fields.get("path", "")},
+        )
+    except ForgeError as exc:
+        print(f"AXP：{exc}", file=sys.stderr)
+        return 0
+    print(f"username={answer['username']}")
+    print(f"password={answer['password']}")
+    print(f"password_expiry_utc={answer['expires_at']}")
+    remember_identity()
+    return 0
+
+
+# --- gh -----------------------------------------------------------------------
+
+REPO = re.compile(r"(?:https?://github\.com/|git@github\.com:|github\.com/)?([\w.-]+)/[\w.-]+")
+
+
+def owner_of(args: list[str]) -> str | None:
+    """The account whose repository this gh command is about."""
+    for index, arg in enumerate(args):
+        value = None
+        if arg in ("-R", "--repo") and index + 1 < len(args):
+            value = args[index + 1]
+        elif arg.startswith("--repo="):
+            value = arg.split("=", 1)[1]
+        if value and (match := REPO.match(value)):
+            return match[1]
+    if len(args) >= 3 and args[0] == "repo" and args[1] in ("view", "clone"):
+        if not args[2].startswith("-") and (match := REPO.match(args[2])):
+            return match[1]
+    if len(args) >= 2 and args[0] == "api":
+        for arg in args[1:]:
+            if match := re.match(r"/?repos/([\w.-]+)/", arg):
+                return match[1]
+    if repo := os.environ.get("GH_REPO"):
+        if match := REPO.match(repo):
+            return match[1]
+    try:
+        remote = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    match = re.match(r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([\w.-]+)/", remote)
+    return match[1] if match else None
+
+
+def gh_token(owner: str) -> str:
+    cache = RUN_DIR / "gh" / f"{owner.lower()}.json"
+    try:
+        cached = json.loads(cache.read_text())
+        if cached["expires_at"] - time.time() > MARGIN:
+            return cached["token"]
+    except (OSError, ValueError, KeyError):
+        pass
+    answer = forge("POST", "/forge/gh-token", {"owner": owner})
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps(answer))
+    cache.chmod(0o600)
+    remember_identity()
+    return answer["token"]
+
+
+def gh(args: list[str]) -> None:
+    env = dict(os.environ)
+    if not env.get("GH_TOKEN") and not env.get("GITHUB_TOKEN"):
+        owner = owner_of(args)
+        if owner:
+            try:
+                env["GH_TOKEN"] = gh_token(owner)
+            except ForgeError as exc:
+                print(f"AXP：{exc}（gh 将以匿名身份运行）", file=sys.stderr)
+    os.execve(REAL_GH, ["gh", *args], env)
+
+
+def main() -> int:
+    if Path(sys.argv[0]).name == "gh":
+        gh(sys.argv[1:])
+    if sys.argv[1:2] == ["git-credential"] and len(sys.argv) == 3:
+        return git_credential(sys.argv[2])
+    print("usage: axp-forge git-credential get | gh ...", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
