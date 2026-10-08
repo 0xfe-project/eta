@@ -1,4 +1,4 @@
-import type { Connection, Connector } from "@/queries/llm";
+import type { Connection, Connector, Usage } from "@/queries/llm";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
 import { CopyIcon } from "@phosphor-icons/react/Copy";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
@@ -44,9 +44,58 @@ import {
   useModels,
   useSetConnectionEnabled,
   useStartLogin,
+  useUsage,
 } from "@/queries/llm";
 import { connectionStateLabels, untilText } from "./connection-state";
 import { useAgents } from "./use-agents";
+
+const windowLabels: Record<string, string> = {
+  "5h": "5 小时",
+  weekly: "每周",
+  monthly: "每月",
+};
+
+/** Remaining share of each subscription window, as the provider reports it. */
+function UsageWindows({ usage }: { usage: Usage }) {
+  if (usage.error)
+    return <p className="text-xs text-muted-foreground">{usage.error}</p>;
+  if (!usage.windows.length) return null;
+  return (
+    <dl className="grid grid-cols-[2.5rem_minmax(0,1fr)_11.5rem] items-center gap-x-3 gap-y-1.5 text-xs">
+      {usage.windows.map((window) => {
+        const left = Math.round(100 - window.used);
+        const label = windowLabels[window.kind] ?? window.kind;
+        return (
+          <div key={window.kind} className="contents">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd
+              role="meter"
+              aria-label={`${label}剩余额度`}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={left}
+              className="h-1.5 bg-muted"
+            >
+              <div
+                className={cn(
+                  "h-full",
+                  left <= 10 ? "bg-destructive" : "bg-foreground/70",
+                )}
+                style={{ width: `${left}%` }}
+              />
+            </dd>
+            <dd className="text-right tabular-nums text-muted-foreground">
+              <span className="text-foreground">剩余 {left}%</span>
+              {window.resets_at
+                ? ` · ${untilText(window.resets_at, "重置") || "即将重置"}`
+                : null}
+            </dd>
+          </div>
+        );
+      })}
+    </dl>
+  );
+}
 
 function ConnectionState({ connection }: { connection: Connection }) {
   const warn = NEEDS_ACTION.has(connection.state);
@@ -192,11 +241,13 @@ function LoginDialog({
 function ConnectionRow({
   connection,
   connector,
+  usage,
   onRelogin,
   affectedAgents,
 }: {
   connection: Connection;
   connector: Connector;
+  usage: Usage | undefined;
   onRelogin: () => void;
   affectedAgents: string[];
 }) {
@@ -205,63 +256,65 @@ function ConnectionRow({
   const [confirming, setConfirming] = useState(false);
   const onError = (error: Error) => toast.error(error.message);
   const disabled = connection.state === "disabled";
+  const plan = usage?.plan || connection.plan;
 
   return (
-    <li className="flex items-start gap-3 px-3 py-2.5">
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="flex max-w-full items-center gap-2">
+    <li className="flex flex-col gap-2 px-3 py-2.5">
+      <div className="flex items-center gap-3">
+        <span className="flex min-w-0 flex-1 items-center gap-2">
           <span className="truncate text-sm font-medium">
             {connection.label}
           </span>
-          {connection.plan ? (
+          {plan ? (
             <Badge variant="secondary" className="capitalize">
-              {connection.plan}
+              {plan}
             </Badge>
           ) : null}
           <ConnectionState connection={connection} />
         </span>
-        {connection.error && connection.state !== "disabled" ? (
-          <span className="text-xs text-muted-foreground">
-            {connection.error.message}
-          </span>
-        ) : null}
-      </div>
-      {NEEDS_ACTION.has(connection.state) ? (
-        <Button size="sm" variant="outline" onClick={onRelogin}>
-          重新登录
-        </Button>
-      ) : null}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`${connection.label} 的操作`}
-          >
-            <DotsThreeIcon aria-hidden="true" />
+        {NEEDS_ACTION.has(connection.state) ? (
+          <Button size="sm" variant="outline" onClick={onRelogin}>
+            重新登录
           </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-36">
-          <DropdownMenuItem onSelect={onRelogin}>重新登录</DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={() =>
-              setEnabled.mutate(
-                { id: connection.id, enabled: disabled },
-                { onError },
-              )
-            }
-          >
-            {disabled ? "启用" : "停用"}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            variant="destructive"
-            onSelect={() => setConfirming(true)}
-          >
-            移除
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+        ) : null}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`${connection.label} 的操作`}
+            >
+              <DotsThreeIcon aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-36">
+            <DropdownMenuItem onSelect={onRelogin}>重新登录</DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() =>
+                setEnabled.mutate(
+                  { id: connection.id, enabled: disabled },
+                  { onError },
+                )
+              }
+            >
+              {disabled ? "启用" : "停用"}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant="destructive"
+              onSelect={() => setConfirming(true)}
+            >
+              移除
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      {connection.error && connection.state !== "disabled" ? (
+        <p className="text-xs text-muted-foreground">
+          {connection.error.message}
+        </p>
+      ) : null}
+      {usage && !disabled ? <UsageWindows usage={usage} /> : null}
       <AlertDialog open={confirming} onOpenChange={setConfirming}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -295,9 +348,11 @@ function ConnectionRow({
 function ConnectorSection({
   connector,
   connections,
+  usage,
 }: {
   connector: Connector;
   connections: Connection[];
+  usage: Usage[] | undefined;
 }) {
   const [login, setLogin] = useState(0);
   const { agents } = useAgents();
@@ -344,6 +399,7 @@ function ConnectorSection({
               key={connection.id}
               connection={connection}
               connector={connector}
+              usage={usage?.find((item) => item.id === connection.id)}
               onRelogin={() => setLogin((n) => n + 1)}
               affectedAgents={affectedBy(connection)}
             />
@@ -371,6 +427,7 @@ function ConnectorSection({
 export function ProviderSettings() {
   const connectors = useConnectors();
   const connections = useConnections();
+  const { data: usage } = useUsage();
 
   if (connectors.error)
     return (
@@ -393,6 +450,7 @@ export function ProviderSettings() {
           connections={(connections.data ?? []).filter(
             (connection) => connection.connector === connector.id,
           )}
+          usage={usage}
         />
       ))}
     </div>

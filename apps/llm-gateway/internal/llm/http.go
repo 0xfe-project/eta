@@ -21,6 +21,7 @@ func Mount(e *gin.Engine, s *Service, logger *slog.Logger) {
 	v1.GET("/connections", func(c *gin.Context) { c.JSON(http.StatusOK, nonNil(s.Connections())) })
 	v1.PATCH("/connections/:id", h.patchConnection)
 	v1.DELETE("/connections/:id", h.deleteConnection)
+	v1.GET("/usage", func(c *gin.Context) { c.JSON(http.StatusOK, nonNil(s.Usage(c.Request.Context()))) })
 	v1.GET("/models", func(c *gin.Context) { c.JSON(http.StatusOK, s.Models()) })
 	v1.POST("/logins", h.startLogin)
 	v1.GET("/logins/:id", h.pollLogin)

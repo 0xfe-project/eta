@@ -36,6 +36,20 @@ const modelSchema = z.object({
   unavailable_reason: reasonSchema.optional(),
 });
 
+const usageSchema = z.object({
+  id: z.string(),
+  plan: z.string().optional(),
+  windows: z.array(
+    z.object({
+      kind: z.string(),
+      used: z.number(),
+      resets_at: z.string().optional(),
+      duration_seconds: z.number().optional(),
+    }),
+  ),
+  error: z.string().optional(),
+});
+
 const loginSchema = z.object({
   id: z.string(),
   connector: z.string(),
@@ -50,11 +64,13 @@ const loginSchema = z.object({
 export type Connector = z.infer<typeof connectorSchema>;
 export type Connection = z.infer<typeof connectionSchema>;
 export type Model = z.infer<typeof modelSchema>;
+export type Usage = z.infer<typeof usageSchema>;
 
 const keys = {
   connectors: ["llm", "connectors"] as const,
   connections: ["llm", "connections"] as const,
   models: ["llm", "models"] as const,
+  usage: ["llm", "usage"] as const,
   login: (id: string) => ["llm", "login", id] as const,
 };
 
@@ -89,10 +105,21 @@ export function useModels() {
   });
 }
 
+/** Subscription limits as each provider reports them, per connection. */
+export function useUsage() {
+  return useQuery({
+    queryKey: keys.usage,
+    queryFn: async ({ signal }) =>
+      z.array(usageSchema).parse(await llmApi.get("/usage", signal)),
+    refetchInterval: 60_000,
+  });
+}
+
 export function refreshLlm(queryClient: QueryClient) {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: keys.connections }),
     queryClient.invalidateQueries({ queryKey: keys.models }),
+    queryClient.invalidateQueries({ queryKey: keys.usage }),
   ]);
 }
 
