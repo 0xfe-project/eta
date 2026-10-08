@@ -10,9 +10,10 @@ apps/
   web/             TanStack Start + React + Vite + TypeScript
   agent-runtime/   每个 Agent 一个容器的运行时，基于官方 Codex Python SDK；plugins/ 是所有 Agent 都装的 Codex plugin
   memory-service/  Python：Agent 的长期记忆（mem0 + pgvector），memory plugin 的后端
+  forge-service/   Go：代码托管（用户自己的 GitHub App），agent 的 git、gh 凭据与 open_pull_request
 ```
 
-设计见 [RFC #1](https://github.com/akarachen/axp/issues/1)，实现说明见 [聊天与运行时架构](docs/architecture/chat-runtime.md)、[统一入口网关](docs/architecture/gateway.md)、[LLM 网关](docs/architecture/llm-gateway.md)、[记忆](docs/architecture/memory.md) 与 [工具调用规则与用户确认](docs/architecture/agent-hooks.md)。
+设计见 [RFC #1](https://github.com/akarachen/axp/issues/1)，实现说明见 [聊天与运行时架构](docs/architecture/chat-runtime.md)、[统一入口网关](docs/architecture/gateway.md)、[LLM 网关](docs/architecture/llm-gateway.md)、[记忆](docs/architecture/memory.md)、[代码托管（GitHub）](docs/architecture/forge.md) 与 [工具调用规则与用户确认](docs/architecture/agent-hooks.md)。
 
 ## 环境与初始化
 

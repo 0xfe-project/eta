@@ -1,6 +1,7 @@
 go 1.26.0
 
 use (
+	./apps/forge-service
 	./apps/llm-gateway
 	./packages/telemetry-go
 )
