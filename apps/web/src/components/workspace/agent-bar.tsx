@@ -5,6 +5,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { AgentMonogram, AgentStatusDot } from "./agent-identity";
@@ -51,6 +52,11 @@ export function AgentBar() {
                 ) : null}
               </DropdownMenuItem>
             ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => openEditor()}>
+              <PlusIcon aria-hidden="true" />
+              新建智能体
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       ) : (
