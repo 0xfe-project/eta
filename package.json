@@ -33,6 +33,7 @@
     "check:go": "turbo run lint test --filter=@axp/llm-gateway",
     "format": "dprint fmt",
     "format:check": "dprint check",
+    "knip": "knip",
     "lint:repo": "eslint . --ignore-pattern 'apps/web/**'"
   },
   "devDependencies": {
@@ -44,6 +45,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^17.13.0",
+    "knip": "^6.40.0",
     "lefthook": "^2.1.17",
     "turbo": "^2.11.7",
     "typescript": "5.9.3"
