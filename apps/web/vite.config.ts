@@ -9,7 +9,15 @@ import { defineConfig, loadEnv } from "vite";
 // dependency upgrades do not invalidate app code (and vice versa).
 const vendorChunks = {
   react: ["react", "react-dom", "scheduler"],
-  tanstack: ["@tanstack", "seroval", "seroval-plugins"],
+  // use-sync-external-store is a CommonJS dependency of @tanstack/react-store;
+  // left in the entry chunk it forms an import cycle with vendor-tanstack,
+  // which then calls it before the entry has initialised it.
+  tanstack: [
+    "@tanstack",
+    "seroval",
+    "seroval-plugins",
+    "use-sync-external-store",
+  ],
   zod: ["zod"],
 };
 
