@@ -38,8 +38,8 @@ class Settings:
     model_context_window: int | None = None
     # The agent queue (NATS JetStream).
     nats_url: str = ""
-    # Outside the snapshot: what the agent's tools read to reach the gateway
-    # (git's and gh's GitHub credentials, bin/axp-forge).
+    # Outside the snapshot: gh logged in as the GitHub App, and git's commit
+    # identity in GitHub repositories.
     run_dir: Path = Path("/run/axp")
 
     @property

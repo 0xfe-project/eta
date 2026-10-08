@@ -71,10 +71,15 @@ func (e *env) connect(code string) {
 	}
 }
 
-func (e *env) credential(path string) (int, map[string]any) {
+// credentials are what a runtime sets up gh with.
+func (e *env) credentials() (int, map[string]any) {
 	e.t.Helper()
-	status, out, _ := e.do("POST", "/forge/credential", true, map[string]any{"host": "github.com", "path": path})
+	status, out, _ := e.do("GET", "/forge/credentials", true, nil)
 	return status, out
+}
+
+func token(credentials map[string]any) string {
+	return credentials["token"].(string)
 }
 
 func errorCode(body map[string]any) string {
@@ -251,14 +256,8 @@ func TestAnAppDeletedOnGitHub(t *testing.T) {
 
 func TestEverythingSaysHowToConnectFirst(t *testing.T) {
 	e := newEnv(t)
-	for path, body := range map[string]any{
-		"/forge/credential": map[string]any{"host": "github.com", "path": "a/b.git"},
-		"/forge/gh-token":   map[string]any{"owner": "a"},
-	} {
-		status, out, _ := e.do("POST", path, true, body)
-		if status != 409 || !strings.Contains(errorMessage(out), "能力") {
-			t.Errorf("%s: %d %v", path, status, out)
-		}
+	if status, out := e.credentials(); status != 409 || !strings.Contains(errorMessage(out), "能力") {
+		t.Errorf("credentials: %d %v", status, out)
 	}
 	result := e.openPullRequest(map[string]any{"repository": "a/b", "head": "x", "title": "t"})
 	if !result.IsError || !strings.Contains(text(result), "能力") {
@@ -268,69 +267,49 @@ func TestEverythingSaysHowToConnectFirst(t *testing.T) {
 
 func TestRoutesNeedTheGatewayHeader(t *testing.T) {
 	e := newEnv(t)
-	for _, path := range []string{"/forge/credential", "/forge/mcp"} {
-		if status, _, _ := e.do("POST", path, false, map[string]any{"host": "github.com", "path": "a/b"}); status != 401 {
+	for _, path := range []string{"/forge/credentials", "/forge/mcp"} {
+		if status, _, _ := e.do("GET", path, false, nil); status != 401 {
 			t.Errorf("%s: %d", path, status)
 		}
 	}
 }
 
-func TestGitCredentialForOneRepository(t *testing.T) {
+func TestCredentialsNeedTheAppInstalled(t *testing.T) {
+	e := newEnv(t)
+	e.connect("new-app")
+	if status, out := e.credentials(); status != 409 || errorCode(out) != "GITHUB_NOT_INSTALLED" {
+		t.Fatalf("credentials: %d %v", status, out)
+	}
+}
+
+func TestCredentialsPushAndReadTheRest(t *testing.T) {
 	e := newEnv(t)
 	e.connect("installed-app")
 	before := len(emulator.issuedTokens(t))
-	_, out := e.credential("akarachen/notes.git")
-	if out["username"] != "x-access-token" || !strings.HasPrefix(out["password"].(string), "ghs_") {
-		t.Fatalf("credential: %v", out)
+	_, out := e.credentials()
+	tokens := emulator.issuedTokens(t)[before:]
+	// The installation on the App's owner, with every repository it was
+	// granted.
+	if len(tokens) != 1 || tokens[0]["account"].(map[string]any)["login"] != "akarachen" ||
+		tokens[0]["repository_selection"] != "selected" || !strings.HasPrefix(token(out), "ghs_") {
+		t.Fatalf("token: %v %v", tokens, out)
 	}
-	tokens := emulator.issuedTokens(t)
-	token := tokens[len(tokens)-1]
-	if fmt.Sprint(token["permissions"]) != "map[contents:write metadata:read]" ||
-		token["repository_selection"] != "selected" || len(token["repository_ids"].([]any)) != 1 {
-		t.Fatalf("token: %v", token)
-	}
-	// Cached until close to expiry.
-	e.credential("akarachen/notes")
-	if after := len(emulator.issuedTokens(t)); after != before+1 {
-		t.Fatalf("tokens minted: %d", after-before)
-	}
-}
-
-func TestRepositoriesTheAppCannotReach(t *testing.T) {
-	e := newEnv(t)
-	e.connect("installed-app")
-	if _, out := e.credential("akarachen/secret"); errorCode(out) != "GITHUB_REPOSITORY_NOT_GRANTED" {
-		t.Fatalf("not granted: %v", out)
-	}
-	if _, out := e.credential("someone/else"); errorCode(out) != "GITHUB_NOT_INSTALLED" {
-		t.Fatalf("other: %v", out)
-	}
-}
-
-func TestGhGetsAReadOnlyToken(t *testing.T) {
-	e := newEnv(t)
-	e.connect("installed-app")
-	_, out, _ := e.do("POST", "/forge/gh-token", true, map[string]any{"owner": "ACME"})
-	if !strings.HasPrefix(out["token"].(string), "ghs_") {
-		t.Fatalf("token: %v", out)
-	}
-	tokens := emulator.issuedTokens(t)
-	token := tokens[len(tokens)-1]
-	if token["account"].(map[string]any)["login"] != "acme" || token["repository_selection"] != "all" {
-		t.Fatalf("token: %v", token)
-	}
-	for name, level := range token["permissions"].(map[string]any) {
-		if level != "read" {
+	for name, level := range tokens[0]["permissions"].(map[string]any) {
+		if want := map[bool]string{true: "write", false: "read"}[name == "contents"]; level != want {
 			t.Errorf("%s: %v", name, level)
 		}
+	}
+	// Cached until close to expiry.
+	if _, again := e.credentials(); token(again) != token(out) || len(emulator.issuedTokens(t)) != before+1 {
+		t.Fatalf("again: %v", again)
 	}
 }
 
 func TestOpenPullRequestAsTheAppsBot(t *testing.T) {
 	e := newEnv(t)
 	e.connect("installed-app")
-	_, push := e.credential("akarachen/axp")
-	emulator.push(t, push["password"].(string), "akarachen/axp", "feature")
+	_, credentials := e.credentials()
+	emulator.push(t, token(credentials), "akarachen/axp", "feature")
 
 	result := e.openPullRequest(map[string]any{
 		"repository": "git@github.com:akarachen/axp.git", "head": "feature", "title": "Add feature", "body": "Why",
@@ -344,8 +323,7 @@ func TestOpenPullRequestAsTheAppsBot(t *testing.T) {
 	}
 	// On GitHub, by the App's bot, into the default branch.
 	req, _ := http.NewRequest(http.MethodGet, emulator.backend+"/repos/akarachen/axp/pulls/1", nil)
-	_, read, _ := e.do("POST", "/forge/gh-token", true, map[string]any{"owner": "akarachen"})
-	req.Header.Set("Authorization", "Bearer "+read["token"].(string))
+	req.Header.Set("Authorization", "Bearer "+token(credentials))
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -374,7 +352,8 @@ func TestOpenPullRequestAsTheAppsBot(t *testing.T) {
 	}
 
 	// The bot exists once the App has acted; commits are made as it.
-	_, identity, _ := e.do("GET", "/forge/identity", true, nil)
+	_, credentials = e.credentials()
+	identity := credentials["identity"].(map[string]any)
 	if identity["name"] != "axp-test[bot]" || !strings.HasSuffix(identity["email"].(string), "+axp-test[bot]@users.noreply.github.com") {
 		t.Fatalf("identity: %v", identity)
 	}

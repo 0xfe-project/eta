@@ -24,6 +24,7 @@ To propose a change:
 Pushing to the default branch, `main` or `master` needs the user's approval:
 the push is blocked with instructions to call `request_approval`.
 
-If git or a tool says GitHub is not connected, or the App cannot access a
-repository, tell the user to finish the setup in the “能力” page; do not
-look for other credentials.
+If gh is not logged in, a tool says GitHub is not connected, or GitHub
+answers that a repository is not found, GitHub is not connected yet or the
+App may not access that repository: tell the user to finish the setup in the
+“能力” page; do not look for other credentials.

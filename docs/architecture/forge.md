@@ -8,8 +8,8 @@
 | ------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------- |
 | forge 服务    | `apps/forge-service`（Go，二进制 `axp-forge`，生产角色 `forge`，别名 `axp-forge:8330`） | 保存 App 凭据，签发 installation token，开 PR           |
 | 向导          | “能力”页的 GitHub 卡片，点开是分步向导（`capabilities-view.tsx`、`github-wizard.tsx`）  | 了解、创建 App、安装到仓库、完成                        |
-| `axp-forge`   | `apps/agent-runtime/bin/axp-forge`，镜像里是 `/opt/axp/bin/axp-forge`                   | git 的凭据助手；`/usr/local/bin/gh` 链接到它            |
-| git 配置      | `apps/agent-runtime/git/gitconfig` → `/etc/gitconfig`                                   | GitHub 走 HTTPS 与凭据助手，commit 身份                 |
+| runtime       | `apps/agent-runtime/axp_runtime/runtime.py`（`_refresh_github`）                        | 启动时以 App 的身份登录 gh，过期前刷新                  |
+| git 配置      | `apps/agent-runtime/git/gitconfig` → `/etc/gitconfig`                                   | GitHub 走 HTTPS，凭据来自 gh，commit 身份               |
 | `github` 插件 | `apps/agent-runtime/plugins/github`                                                     | `open_pull_request`（forge 服务的 MCP）与使用说明 skill |
 
 | 路径              | 调用方                          | 鉴权                        |
@@ -17,7 +17,7 @@
 | `/api/forge/v1/*` | 浏览器（经 `gateway`）          | 无：只有网关连得到          |
 | `/forge/*`        | runtime（经 `runtime-gateway`） | 网关注入的 `X-AXP-Agent-Id` |
 
-一个 provider 只有一个连接，始终是用户自己的 App；不保存 installation，用到某个账号时从 `GET /app/installations` 查（缓存 30 秒）。凭据只在 forge 服务的状态目录（开发为仓库根目录的 `var/forge`，生产为卷 `axp-forge`）：`github.json` 和私钥 `github.pem`（0600）。没有数据库，也不接收 webhook。
+一个 provider 只有一个连接，始终是用户自己的 App。App 是私有的，GitHub 只允许把它安装到拥有它的账号上；不保存 installation，用到时从 `GET /app/installations` 查（缓存 30 秒）。凭据只在 forge 服务的状态目录（开发为仓库根目录的 `var/forge`，生产为卷 `axp-forge`）：`github.json` 和私钥 `github.pem`（0600）。没有数据库，也不接收 webhook。
 
 git 和 gh 的凭据、commit 身份是镜像级的，对每个 agent 都生效；`github` 插件只带来 `open_pull_request` 和使用说明，可以在智能体编辑器里关掉。
 
@@ -33,13 +33,12 @@ App 的权限：`contents`、`pull_requests` 读写，`issues`、`actions`、`ch
 
 ## runtime 里的 git 与 gh
 
-- `/etc/gitconfig` 把 `git@github.com:` 改写为 HTTPS，并为 `https://github.com` 配置凭据助手 `axp-forge git-credential`（`useHttpPath`）。git 每次需要凭据时，助手向 `/forge/credential` 要一个只对这个仓库有效、权限为 `contents: write` 的 token，带上 GitHub 给的过期时间，所以不会遇到过期。
-- `gh` 是 `axp-forge`：从 `-R`、`gh repo view|clone`、`gh api repos/...`、`GH_REPO` 或 `origin` 推断仓库所属账号，向 `/forge/gh-token` 要一个只读 token（按账号缓存到过期前 5 分钟），再执行真正的 gh（`/usr/local/lib/gh/gh`）。用户自己设了 `GH_TOKEN` 时不介入。
-- Codex 不把含 KEY 的环境变量交给它运行的命令，因此 runtime 启动时把网关地址和实例 key 写到 `/run/axp/gateway.json`（0600，不在快照里）供 `axp-forge` 使用。
-- commit 身份：默认是 `AXP Agent`；GitHub 仓库里由 `includeIf` 引入 `/run/axp/git/github.inc`，即 App 的 bot（`<slug>[bot]` 与 `<id>+<slug>[bot]@users.noreply.github.com`）。runtime 启动时写入；当时还没连接的话，`axp-forge` 第一次拿到凭据时写入。
-- GitHub 没有连接、App 没装到该账号或没授权该仓库时，服务的说明（引导用户去“能力”页）会出现在 git 的错误输出、`gh` 的提示和 `open_pull_request` 的错误里。公开仓库不需要凭据，照常可以 clone。
+- runtime 启动时（在 Codex 之前）向 `/forge/credentials` 要一个 installation token：App 所属账号的那个 installation，覆盖用户授权的所有仓库，权限为 `contents: write`，其余（`pull_requests`、`issues`、`actions`、`checks`、`statuses`、`metadata`）只读。token 写进 gh 的 `hosts.yml`（`GH_CONFIG_DIR=/run/axp/gh`，0600，不在快照里），所以 `gh` 一开始就是登录状态。之后在过期前 5 分钟刷新；GitHub 还没连接或 forge 服务不可达时每 60 秒再试，连接之后不用重启 agent。断开连接后 `hosts.yml` 被删除。
+- `/etc/gitconfig` 把 `git@github.com:` 改写为 HTTPS，凭据助手是 `gh auth git-credential`，所以 git 与 gh 用的是同一个 token。
+- commit 身份：默认是 `AXP Agent`；GitHub 仓库里由 `includeIf` 引入 `/run/axp/git/github.inc`，即 App 的 bot（`<slug>[bot]` 与 `<id>+<slug>[bot]@users.noreply.github.com`），runtime 拿到凭据时一并写入。
+- GitHub 没有连接时 gh 是未登录状态；App 没授权某个仓库时，GitHub 对它回答 404。`open_pull_request` 的错误里有服务的说明（引导用户去“能力”页）。公开仓库不需要凭据，照常可以 clone。
 
-写操作的约束见[工具调用规则与用户确认](agent-hooks.md)：`gh` 的写命令被拒绝，`gh pr create` 被引导到 `open_pull_request`，推送默认分支、`main`、`master` 要用户确认。这些是护栏；git 的 token 能写，绝对禁止的操作要靠 App 的权限（例如不给 `workflows`）。
+写操作的约束见[工具调用规则与用户确认](agent-hooks.md)：`gh` 的写命令被拒绝，`gh pr create` 被引导到 `open_pull_request`，推送默认分支、`main`、`master` 要用户确认。这些是护栏；token 能写仓库内容，绝对禁止的操作要靠 token 的权限（例如不给 `workflows`，PR 与 issue 只读）。
 
 ## open_pull_request
 
@@ -48,5 +47,5 @@ forge 服务在 `/forge/mcp` 提供这个 MCP 工具（`github` 插件的 `.mcp.
 ## 验证
 
 - `apps/forge-service/internal/server`：测试对着 [emulate](https://github.com/vercel-labs/emulate)（forge-service 的开发依赖，`bun install` 安装）模拟的 GitHub 运行：App 的 JWT 校验、installation token 的权限与仓库范围、分支、开 PR 及其作者都是它的真实行为。它缺的或行为不同的几处（manifest 换凭据、`/installation/repositories`、同一分支重复开 PR 的 422、被删除的 App）由测试里一层很薄的处理补上，其余请求原样转发。`open_pull_request` 通过 MCP 客户端调用，与 Codex 一样。
-- `apps/agent-runtime/tests/test_axp_forge.py`：凭据助手与 gh 包装对假的 forge 服务的行为。
+- `apps/agent-runtime/tests/test_runtime.py`：runtime 对假的 forge 服务写出 gh 的 `hosts.yml` 与 commit 身份，断开后删除。
 - 在开发环境中用浏览器走过向导：提交 manifest 后跳转到 GitHub，回调出错时显示原因；安装与已连接状态的界面。创建真实的 App 需要用户在 GitHub 上确认，没有自动化。

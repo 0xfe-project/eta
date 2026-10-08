@@ -8,6 +8,7 @@ import threading
 import time
 import uuid
 from dataclasses import replace
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
@@ -27,6 +28,43 @@ os.environ["PYTHONPATH"] = str(Path(__file__).resolve().parent.parent)
 
 
 SNAPSHOT_URL = "http://objects.invalid/agents/agent-1/snapshot.tar.zst"
+
+
+class StubForge:
+    """The forge service's /forge/credentials, behind the runtime gateway."""
+
+    def __init__(self):
+        self.authorizations: list[str] = []
+        self.answer = (
+            200,
+            {
+                "token": "ghs_one",
+                "expires_at": int(time.time()) + 3600,
+                "identity": {
+                    "name": "axp[bot]",
+                    "email": "1+axp[bot]@users.noreply.github.com",
+                },
+            },
+        )
+        forge = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                assert self.path == "/forge/credentials"
+                forge.authorizations.append(self.headers["Authorization"])
+                status, body = forge.answer
+                data = json.dumps(body).encode()
+                self.send_response(status)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def log_message(self, *args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.url = f"http://127.0.0.1:{server.server_port}"
 
 
 class StubControlPlane:
@@ -392,15 +430,30 @@ class TestTurns:
         assert cp.wait_for("approval.applied")["decision"] == "cancel"
         assert cp.completed(command_id)["status"] == "interrupted"
 
-    def test_git_and_gh_can_reach_the_gateway(self, rt):
-        runtime, _ = rt.start()
-        gateway = runtime.settings.run_dir / "gateway.json"
+    def test_gh_is_logged_in_as_the_github_app(self, rt):
+        forge = StubForge()
+        runtime, _ = rt.start(gateway_url=forge.url)
         settings = runtime.settings
-        assert json.loads(gateway.read_text()) == {
-            "url": settings.gateway_url,
-            "key": f"{settings.instance_id}.{settings.token}",
-        }
-        assert gateway.stat().st_mode & 0o777 == 0o600
+        key = f"{settings.instance_id}.{settings.token}"
+        assert forge.authorizations == [f"Bearer {key}"]
+        hosts = settings.run_dir / "gh" / "hosts.yml"
+        assert hosts.read_text() == (
+            "github.com:\n    oauth_token: ghs_one\n"
+            "    user: axp[bot]\n    git_protocol: https\n"
+        )
+        assert hosts.stat().st_mode & 0o777 == 0o600
+        assert (settings.run_dir / "git" / "github.inc").read_text() == (
+            "[user]\n\tname = axp[bot]\n\temail = 1+axp[bot]@users.noreply.github.com\n"
+        )
+        # Disconnected: gh is logged out.
+        forge.answer = 409, {"error": {"code": "GITHUB_NOT_CONNECTED"}}
+        runtime._refresh_github()
+        assert not hosts.exists()
+
+    def test_github_waits_for_the_forge_service(self, rt):
+        runtime, _ = rt.start()  # the gateway does not answer
+        assert runtime.status == "ready"
+        assert not (runtime.settings.run_dir / "gh" / "hosts.yml").exists()
 
     def test_plugin_confirmation(self, rt):
         runtime, cp = rt.start()

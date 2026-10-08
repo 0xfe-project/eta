@@ -6,9 +6,7 @@
 // where the user connects the GitHub App.
 //
 //	/forge/mcp                  MCP (streamable HTTP): open_pull_request
-//	/forge/credential           POST {host, path}: git's credential for a repo
-//	/forge/gh-token             POST {owner}: a read-only token for gh
-//	/forge/identity             GET: the App's commit identity
+//	/forge/credentials          GET: gh's token and the commit identity
 //
 //	/api/forge/v1/github                     GET status (?fresh=1), DELETE
 //	/api/forge/v1/github/manifest            POST {name, organization?, origin}
@@ -67,9 +65,7 @@ func requireAgent(next http.Handler) http.Handler {
 func (s *server) runtime() http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/forge/mcp", s.mcp())
-	mux.HandleFunc("POST /forge/credential", s.credential)
-	mux.HandleFunc("POST /forge/gh-token", s.ghToken)
-	mux.HandleFunc("GET /forge/identity", s.identity)
+	mux.HandleFunc("GET /forge/credentials", s.credentials)
 	return mux
 }
 
@@ -108,42 +104,8 @@ func (s *server) mcp() http.Handler {
 	})
 }
 
-func (s *server) credential(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Host string `json:"host"`
-		Path string `json:"path"`
-	}
-	if !decode(w, r, &body) {
-		return
-	}
-	if body.Host != "github.com" {
-		writeError(w, &github.Error{Code: "NOT_GITHUB", Message: "只支持 github.com。", Status: http.StatusNotFound})
-		return
-	}
-	owner, name, err := github.ParseRepository(body.Path)
-	if err != nil {
-		s.fail(w, err)
-		return
-	}
-	s.answer(w, func() (any, error) { return s.gh.Credential(r.Context(), owner, name) })
-}
-
-func (s *server) ghToken(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Owner string `json:"owner"`
-	}
-	if !decode(w, r, &body) {
-		return
-	}
-	if body.Owner == "" {
-		writeError(w, &github.Error{Code: "INVALID_OWNER", Message: "缺少仓库所属的账号。", Status: http.StatusBadRequest})
-		return
-	}
-	s.answer(w, func() (any, error) { return s.gh.ReadToken(r.Context(), body.Owner) })
-}
-
-func (s *server) identity(w http.ResponseWriter, r *http.Request) {
-	s.answer(w, func() (any, error) { return s.gh.Identity(r.Context()) })
+func (s *server) credentials(w http.ResponseWriter, r *http.Request) {
+	s.answer(w, func() (any, error) { return s.gh.Credentials(r.Context()) })
 }
 
 func (s *server) status(w http.ResponseWriter, r *http.Request) {

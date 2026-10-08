@@ -15,6 +15,7 @@ import tempfile
 import threading
 import time
 import tomllib
+import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
@@ -51,6 +52,10 @@ SNAPSHOT_EXCLUDES = (
 SNAPSHOT_MAX_BYTES = 2 << 30
 # Codex model provider id for the LLM gateway.
 LLM_PROVIDER = "axp"
+# gh's token is refreshed this long before it expires; without one, GitHub is
+# asked again this often.
+GITHUB_REFRESH_MARGIN = 300
+GITHUB_RETRY_SECONDS = 60
 # Plugins' MCP configs (.mcp.json) are static files, and Codex expands no
 # variables in them; these are filled in once the plugins are installed.
 PLUGIN_VARIABLES = re.compile(r"\$\{(AXP_GATEWAY_URL|AXP_WORKSPACE_DIR)\}")
@@ -323,7 +328,8 @@ class Runtime:
             self.ledger = L.Ledger()
             self._spawn(self._outbox_loop, "outbox")
             self._install_plugins()
-            self._prepare_forge()
+            delay = self._refresh_github()
+            self._spawn(lambda: self._github_loop(delay), "github")
             self._start_codex()
             self._open_thread()
         except RecoveryFailed as exc:
@@ -466,40 +472,49 @@ class Runtime:
 
     # --- code hosting -------------------------------------------------------
 
-    def _prepare_forge(self) -> None:
-        """Let the agent's git and gh reach the forge service (bin/axp-forge).
+    def _github_loop(self, delay: float) -> None:
+        while not self._halt.wait(delay):
+            delay = self._refresh_github()
 
-        Codex keeps keys out of the commands it runs, so the runtime key goes
-        to a file outside the snapshot. The GitHub App's commit identity is
-        written now if GitHub is connected; otherwise axp-forge writes it
-        once it is.
+    def _refresh_github(self) -> float:
+        """Log gh in as the GitHub App; git gets its credentials from gh.
+
+        The forge service's token goes to gh's hosts.yml and the App's bot
+        becomes the commit identity, both outside the snapshot. Returns the
+        seconds until the next refresh: shortly before the token expires, or
+        soon when GitHub is not connected (yet) or the service is away.
         """
-        run = self.settings.run_dir
-        key = f"{self.settings.instance_id}.{self.settings.token}"
-        try:
-            run.mkdir(parents=True, exist_ok=True)
-            gateway = run / "gateway.json"
-            gateway.write_text(
-                json.dumps({"url": self.settings.gateway_url, "key": key})
-            )
-            gateway.chmod(0o600)
-        except OSError:
-            logger.exception("Cannot prepare %s", run)
-            return
+        settings = self.settings
+        key = f"{settings.instance_id}.{settings.token}"
         request = urllib.request.Request(
-            f"{self.settings.gateway_url}/forge/identity",
+            f"{settings.gateway_url}/forge/credentials",
             headers={"Authorization": f"Bearer {key}"},
         )
+        hosts = settings.run_dir / "gh" / "hosts.yml"
         try:
-            with urllib.request.urlopen(request, timeout=3) as response:
-                identity = json.loads(response.read())
-        except (OSError, ValueError):
-            return  # not connected (yet), or the service is away
-        include = run / "git" / "github.inc"
-        include.parent.mkdir(parents=True, exist_ok=True)
-        include.write_text(
-            f"[user]\n\tname = {identity['name']}\n\temail = {identity['email']}\n"
+            with urllib.request.urlopen(request, timeout=5) as response:
+                answer = json.loads(response.read())
+        except urllib.error.HTTPError as exc:
+            if exc.code < 500:
+                hosts.unlink(missing_ok=True)  # not connected, or no longer
+            return GITHUB_RETRY_SECONDS
+        except (OSError, ValueError) as exc:
+            logger.warning("Cannot reach the forge service: %s", exc)
+            return GITHUB_RETRY_SECONDS
+        identity = answer.get("identity")
+        user = identity["name"] if identity else "x-access-token"
+        _write_private(
+            hosts,
+            f"github.com:\n    oauth_token: {answer['token']}\n"
+            f"    user: {user}\n    git_protocol: https\n",
         )
+        if identity:
+            _write_private(
+                settings.run_dir / "git" / "github.inc",
+                f"[user]\n\tname = {identity['name']}\n\temail = {identity['email']}\n",
+            )
+        left = answer["expires_at"] - time.time()
+        return max(GITHUB_RETRY_SECONDS, left - GITHUB_REFRESH_MARGIN)
 
     # --- Codex --------------------------------------------------------------
 
@@ -1160,6 +1175,15 @@ def _approval_summary(kind: str, params: dict) -> dict:
     if kind == "command":
         summary["command"] = (params.get("command") or "")[:500] or None
     return summary
+
+
+def _write_private(path: Path, text: str) -> None:
+    """Replace a file only its owner can read, atomically."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text)
+    tmp.chmod(0o600)
+    tmp.replace(path)
 
 
 def _tar(*args) -> subprocess.CompletedProcess:

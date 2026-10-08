@@ -4,7 +4,6 @@
 !plugins/
 !codex/
 !hooks/
-!bin/
 !git/
 !docker-entrypoint.sh
 **/__pycache__

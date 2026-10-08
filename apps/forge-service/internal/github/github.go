@@ -62,11 +62,12 @@ type purpose struct {
 }
 
 var (
-	r, w     = gh.Ptr("read"), gh.Ptr("write") // permission levels
-	readOnly = purpose{"read", gh.InstallationPermissions{
-		Contents: r, PullRequests: r, Issues: r, Actions: r, Checks: r, Statuses: r, Metadata: r,
+	r, w = gh.Ptr("read"), gh.Ptr("write") // permission levels
+	// gh's, and git's through gh: pushes, and reads everything else. Pull
+	// requests are opened by open_pull_request.
+	agent = purpose{"agent", gh.InstallationPermissions{
+		Contents: w, PullRequests: r, Issues: r, Actions: r, Checks: r, Statuses: r, Metadata: r,
 	}}
-	push        = purpose{"push", gh.InstallationPermissions{Contents: w, Metadata: r}}
 	pullRequest = purpose{"pull-request", gh.InstallationPermissions{PullRequests: w, Contents: r, Metadata: r}}
 	listing     = purpose{"listing", gh.InstallationPermissions{Metadata: r}}
 )
@@ -511,41 +512,31 @@ func (g *GitHub) token(ctx context.Context, id int64, use purpose, repository st
 
 // --- for runtimes ---------------------------------------------------------------
 
-// Credential is what git needs to fetch and push a repository.
-type Credential struct {
-	Username  string `json:"username"`
-	Password  string `json:"password"`
-	ExpiresAt int64  `json:"expires_at"`
+// Credentials are what a runtime sets gh up with, and git through gh. The App is private, so GitHub
+// installs it only on the account that owns it; the one installation covers
+// every repository the user granted. Identity is the App's bot, once GitHub
+// knows it.
+type Credentials struct {
+	Token     string    `json:"token"`
+	ExpiresAt int64     `json:"expires_at"`
+	Identity  *Identity `json:"identity"`
 }
 
-func (g *GitHub) Credential(ctx context.Context, owner, name string) (*Credential, error) {
-	inst, err := g.installationFor(ctx, owner)
+func (g *GitHub) Credentials(ctx context.Context) (*Credentials, error) {
+	app, err := g.require()
 	if err != nil {
 		return nil, err
 	}
-	t, err := g.token(ctx, inst.GetID(), push, name)
+	inst, err := g.installationFor(ctx, app.Owner)
 	if err != nil {
 		return nil, err
 	}
-	return &Credential{Username: "x-access-token", Password: t.value, ExpiresAt: t.expires.Unix()}, nil
-}
-
-// ReadToken is a read-only token for gh, covering the installation of owner.
-type ReadToken struct {
-	Token     string `json:"token"`
-	ExpiresAt int64  `json:"expires_at"`
-}
-
-func (g *GitHub) ReadToken(ctx context.Context, owner string) (*ReadToken, error) {
-	inst, err := g.installationFor(ctx, owner)
+	t, err := g.token(ctx, inst.GetID(), agent, "")
 	if err != nil {
 		return nil, err
 	}
-	t, err := g.token(ctx, inst.GetID(), readOnly, "")
-	if err != nil {
-		return nil, err
-	}
-	return &ReadToken{Token: t.value, ExpiresAt: t.expires.Unix()}, nil
+	identity, _ := g.Identity(ctx)
+	return &Credentials{Token: t.value, ExpiresAt: t.expires.Unix(), Identity: identity}, nil
 }
 
 // PullRequest is an opened (or already open) pull request.
