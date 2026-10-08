@@ -20,6 +20,17 @@ export function RootDocument() {
     <html lang="zh-CN" style={fonts} suppressHydrationWarning>
       <head>
         <HeadContent />
+        {/* Rendered here because head() keeps one meta per name. */}
+        <meta
+          name="theme-color"
+          content="#ffffff"
+          media="(prefers-color-scheme: light)"
+        />
+        <meta
+          name="theme-color"
+          content="#0a0a0a"
+          media="(prefers-color-scheme: dark)"
+        />
       </head>
       <body>
         <AppProviders>

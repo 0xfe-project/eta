@@ -9,7 +9,6 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "AXP" },
-      { name: "theme-color", content: "#ffffff" },
       { name: "apple-mobile-web-app-title", content: "AXP" },
     ],
     links: [
