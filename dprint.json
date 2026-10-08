@@ -19,6 +19,7 @@
     ]
   },
   "excludes": [
+    "vendor",
     "**/node_modules",
     "**/.venv",
     "**/out",
