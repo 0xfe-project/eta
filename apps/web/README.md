@@ -10,7 +10,7 @@ TanStack Start + React。开发命令在仓库根目录执行 `bun run dev`。
 | 服务端状态   | `@tanstack/react-query`                           | `src/lib/query-client.ts`                           |
 | Query SSR    | `@tanstack/react-router-ssr-query`                | `src/router.tsx`                                    |
 | URL 状态     | `nuqs`                                            | 根组件 adapter，首页 `view` 示例                    |
-| 表单与校验   | `react-hook-form` + `@hookform/resolvers` + `zod` | `src/components/prompt-preview.tsx`                 |
+| 表单与校验   | `react-hook-form` + `@hookform/resolvers` + `zod` | `src/components/workspace/agent-editor.tsx`         |
 | 通知         | `sonner`                                          | 根组件挂载 `Toaster`，业务中调用 `toast.success()`  |
 | Markdown     | `react-markdown` + `remark-gfm`                   | `src/components/markdown.tsx`                       |
 | 样式         | Tailwind CSS v4                                   | `vite.config.ts` + `src/styles.css`                 |
@@ -48,9 +48,7 @@ import { cn } from "@/lib/utils";
 
 图标按钮应有可访问名称，例如 `aria-label` 或可见文字。Phosphor 的常规 React 组件支持本项目的 React SSR；不需要切换为 RSC 版本。
 
-## 表单、通知与 Markdown
-
-`PromptPreview` 演示 `useForm` + `zodResolver`、字段错误、提交后 toast 和 Markdown 渲染。它只在浏览器内预览，不调用 agent 或持久化数据。
+## Markdown
 
 `Markdown` 支持 GFM 表格、列表与代码块，跳过原始 HTML，保留 react-markdown 默认 URL 过滤。后续 agent 消息可复用该组件；当前未实现流式传输或代码高亮。
 
@@ -76,17 +74,15 @@ bun run --cwd apps/web typecheck
 - 字体从 preset 的 Inter 改为本地打包的 Geist Variable / Geist Mono Variable。
 - `--radius` 与所有 Tailwind radius token 均为 `0px`；全局样式同时将元素和伪元素的 `border-radius` 强制设为 0，覆盖通知、弹层和内联圆角。
 - 组件使用 `bg-background`、`text-foreground`、`text-muted-foreground`、`border-border` 等语义 token，避免写死浅色主题。
-- `ThemeProvider` 当前固定亮色，Sonner 与页面共用主题；保留 `.dark` 变量供后续主题切换。
+- `ThemeProvider` 默认跟随系统，可在设置中选择浅色或深色；Sonner 与页面共用主题。
 
 后续添加组件，在 `apps/web` 执行 `bunx shadcn@latest add <component>`。仓库继续使用 Bun 管理依赖；本机 pnpm 由 Corepack 代理，执行 pnpm CLI 时需加 `COREPACK_ENABLE_PROJECT_SPEC=0`，避免根目录 `packageManager: bun` 的校验冲突。再次应用 preset 可能覆盖 `src/styles.css`，需要保留上述字体和零圆角规则。
 
 ## 工作台
 
-首页参考 [today.ai hero](https://today.ai/) 中的左右分栏：桌面左侧为聊天，右侧为 Overview / Tasks / Memory / Capabilities；手机上通过 Chat / Workspace 切换面板。源码在 `src/components/workspace/`。
+首页参考 [today.ai hero](https://today.ai/) 中的左右分栏：桌面左侧为聊天，右侧为概览、任务、定时、记忆、能力和确认；手机上通过 Chat / Workspace 切换面板。源码在 `src/components/workspace/`。
 
-聊天使用 brainless 消息与输入组件，默认 Claude 外观，使用原版单行 Prompt，支持 Enter 发送，使用一个常驻会话。右上角 Settings 可立即切换 Claude / Codex / Grok 外观，选择随工作区保存，切换保留消息与草稿。当前仅保存用户消息，尚未调用模型。任务支持新增、完成、删除；Memory 支持编辑上下文。数据使用 Zod 校验后保存在 `localStorage` 的 `axp.workspace.v1`，只属于当前浏览器，不会同步到后端。Capabilities 中的 Control plane 状态来自控制面的健康检查，与 agent runtime 是否连接无关。
-
-已验证桌面/手机布局、深浅主题、任务与上下文操作、消息发送、刷新持久化、页签 URL 与浏览器后退。
+聊天使用 brainless 消息与输入组件，默认 Claude 外观，可在设置的“外观”中切换 Claude / Codex / Grok，切换保留消息与草稿。对话、任务与记忆都在控制面；浏览器只把界面偏好（选中的智能体、外观、字体、新建智能体时预选的模型）用 Zod 校验后保存在 `localStorage` 的 `axp.workspace.v1`。
 
 ## React Grab
 
@@ -98,23 +94,17 @@ bun run --cwd apps/web typecheck
 
 终端 agent 界面优先使用 [brainless](https://brainless.swerdlow.dev/components)，不要自行拼 ASCII 界面或将整段 agent 输出塞进 `<pre>`。保留组件的 `details`、`listbox`、`radiogroup`、`aria-live` 等语义。
 
-`components.json` 已注册 `@brainless`，安装了 Claude、Codex、Grok 三套 session 及其基础组件，源码在 `src/components/brainless/`。后续在 `apps/web` 执行 `bunx shadcn@latest add @brainless/<name>`。
+`components.json` 已注册 `@brainless`，源码在 `src/components/brainless/`，只保留聊天用到的 Claude、Codex、Grok 组件。需要更多组件时在 `apps/web` 执行 `bunx shadcn@latest add @brainless/<name>`。
 
-```tsx
-import { ClaudeSession } from "@/components/brainless/blocks/claude-session";
-import { CodexHeader } from "@/components/brainless/codex/codex-header";
-import { GrokThought } from "@/components/brainless/grok/grok-thought";
-```
-
-`blocks/*-session.tsx` 是带静态演示内容的组合示例，尚未挂载到首页。首页已复用三套消息与输入组件；Header、Message、Prompt 保留 registry 原版结构与样式，不注入演示会话记录。仅把颜色常量映射到 `brainless/theme.css` 的 `--terminal-*` 语义变量。当前强制亮色；`.dark` 变量已预留，未来移除 AppProviders 的 `forcedTheme="light"` 并接入主题切换即可。接入运行时数据时继续组合工具调用、思考状态等组件；保持项目的零圆角规则。
+Header、Message、Prompt 保留 registry 原版结构与样式，仅把颜色常量映射到 `brainless/theme.css` 的 `--terminal-*` 语义变量（含深色）。保持项目的零圆角规则。
 
 ## 页面与路由
 
 - `/`：聊天与工作区双栏页面，最大宽度 1024px。
-- `/workspace?view=memory`：独立全窗口工作区，可直接访问、刷新和通过浏览器历史导航。`view` 支持 overview / tasks / memory / capabilities；四个内容区域暂时留空。
+- `/workspace?view=memory`：独立全窗口工作区，可直接访问、刷新和通过浏览器历史导航。`view` 支持 overview / tasks / routines / memory / capabilities / inbox。
 - `workspace-panel.tsx`：两种页面共用的标签栏、内容容器和展开/返回链接。
-- `settings-dialog.tsx`：会话外观设置。
-- `workspace-state.tsx`：根级 Provider，保留跨路由的消息、草稿、外观和手机面板选择；草稿仅在当前页面会话内保留。
+- `settings-dialog.tsx`：设置（智能体、模型服务、远程电脑、外观、日志）。
+- `workspace-store.ts`：zustand store，保留跨路由的界面偏好、草稿、手机面板选择和弹窗状态；只有界面偏好保存在浏览器中。
 - `workspace-search.ts`：两条路由共用的 URL 参数校验及读取。
 
 全窗口使用真实路由链接，不再使用 fixed 遮罩或本地 expanded 状态。
