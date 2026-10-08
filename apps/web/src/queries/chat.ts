@@ -374,6 +374,13 @@ export function useUpdateAgent() {
   });
 }
 
+/** Stop the agent's work and runtime; the next message starts a fresh one. */
+export function useRestartAgent() {
+  return useMutation({
+    mutationFn: (id: string) => apiPost(`/agents/${id}/restart`),
+  });
+}
+
 export function useDeleteAgent() {
   const queryClient = useQueryClient();
   return useMutation({

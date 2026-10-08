@@ -423,11 +423,28 @@ def delete_agent(agent_id: str) -> None:
     for command in commands.filter(status=AgentCommand.Status.QUEUED):
         finish_command(conversation, command, "cancelled")
     # Running work is interrupted by the runtime; the controller then stops it.
+    _stop_replies(conversation, agent)
+    _emit(conversation, UiEvent.Type.AGENT_DELETED, {"agent_id": str(agent.id)})
+
+
+def restart_agent(agent_id: str) -> None:
+    """Stop the agent's work and its runtime; the next message starts afresh.
+
+    The runtime is marked outdated, so the controller replaces it as soon as
+    the interrupted work lets go of it, and the new one resumes the thread.
+    """
+    conversation = _locked_default()
+    agent = _agent(conversation, agent_id)
+    agent.config_version += 1
+    agent.save(update_fields=["config_version", "updated_at"])
+    _stop_replies(conversation, agent)
+
+
+def _stop_replies(conversation: Conversation, agent: Agent) -> None:
     for reply in Message.objects.filter(
         agent=agent, role=Message.Role.ASSISTANT, status__in=Message.ACTIVE_STATUSES
     ).select_related("command"):
         _request_stop(conversation, reply)
-    _emit(conversation, UiEvent.Type.AGENT_DELETED, {"agent_id": str(agent.id)})
 
 
 def send_message(

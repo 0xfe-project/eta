@@ -75,6 +75,13 @@ def delete_agent(request: HttpRequest, agent_id: str):
     return HttpResponse(status=204)
 
 
+@router.post("/agents/{agent_id}/restart", response={204: None, **_ERRORS})
+def restart_agent(request: HttpRequest, agent_id: str):
+    with transaction.atomic():
+        services.restart_agent(agent_id)
+    return HttpResponse(status=204)
+
+
 @router.post("/chat/messages", response={202: SendMessageOut, **_ERRORS})
 def send_message(request: HttpRequest, body: MessageCreateIn):
     def handler():
