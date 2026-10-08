@@ -518,9 +518,6 @@ class Runtime:
 
     # --- Codex --------------------------------------------------------------
 
-    def _codex_env(self) -> dict[str, str]:
-        return codex_env(self.settings)
-
     def _codex_config(self) -> CodexConfig:
         return codex_config(self.settings)
 

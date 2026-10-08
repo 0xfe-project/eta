@@ -376,14 +376,6 @@ func (e *taskEnv) task(ref string) tasks.TaskDetail {
 	return t
 }
 
-func kinds(t tasks.TaskDetail) string {
-	var out []string
-	for _, a := range t.Activity {
-		out = append(out, a.Kind)
-	}
-	return strings.Join(out, ",")
-}
-
 func remoteAssignee(computer, runtime string, place map[string]any) map[string]any {
 	return map[string]any{"kind": "remote", "computer_id": computer, "runtime": runtime, "provider": "claude", "place": place}
 }

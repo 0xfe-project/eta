@@ -11,8 +11,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"net/http"
-	"strings"
 )
 
 func sign(secret []byte, message string) string {
@@ -32,13 +30,4 @@ func RoutineToken(secret []byte, runID string) string {
 // Matches compares tokens in constant time.
 func Matches(token, expected string) bool {
 	return hmac.Equal([]byte(token), []byte(expected))
-}
-
-// Bearer is the request's bearer token, or "".
-func Bearer(r *http.Request) string {
-	token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-	if !ok {
-		return ""
-	}
-	return token
 }

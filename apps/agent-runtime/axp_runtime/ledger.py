@@ -124,16 +124,6 @@ class Ledger:
             ).fetchone()
         return _command(row) if row else None
 
-    def commands_with_status(self, *statuses: str) -> list[dict]:
-        marks = ",".join("?" for _ in statuses)
-        with self._lock:
-            rows = self._db.execute(
-                f"SELECT * FROM commands WHERE status IN ({marks}) "
-                "ORDER BY agent_sequence",
-                statuses,
-            ).fetchall()
-        return [_command(row) for row in rows]
-
     # --- approvals ----------------------------------------------------------
 
     def add_approval(self, approval_id, command_id, generation, method) -> None:
@@ -158,13 +148,6 @@ class Ledger:
                 "WHERE approval_id=?",
                 (status, decision, approval_id),
             )
-
-    def pending_approvals(self) -> list[dict]:
-        with self._lock:
-            rows = self._db.execute(
-                "SELECT * FROM approvals WHERE status IN ('pending', 'decided')"
-            ).fetchall()
-        return [dict(row) for row in rows]
 
     # --- outbox -------------------------------------------------------------
 
