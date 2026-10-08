@@ -4,7 +4,8 @@
 # image:<os>-<arch> tasks, which build those artifacts first and in parallel.
 #
 #   app      deploy/Dockerfile, pushed to the registry as $AXP_APP_IMAGE
-#   runtime  apps/agent-runtime, loaded into Docker as $AXP_RUNTIME_IMAGE
+#   runtime  apps/agent-runtime (and vendor/akhook), loaded into Docker as
+#            $AXP_RUNTIME_IMAGE
 #
 # Docker's layer cache makes an unchanged image cost about a second, so Turbo
 # never caches these tasks.
@@ -17,7 +18,10 @@ case "$1" in
       --output=type=registry -t "${AXP_APP_IMAGE:?set AXP_APP_IMAGE}" .
     ;;
   runtime)
+    # akhook is built from its submodule, which a fresh clone lacks.
+    [[ -f vendor/akhook/Cargo.toml ]] || git submodule update --init vendor/akhook
     docker buildx build -q --platform "$platform" --load \
+      --build-context akhook-src=vendor/akhook \
       -t "${AXP_RUNTIME_IMAGE:-axp-agent-runtime:dev}" apps/agent-runtime
     ;;
   *) echo "unknown image: $1" >&2; exit 1 ;;
