@@ -195,6 +195,8 @@ class TestBuild:
         [group] = requirements["hooks"]["PreToolUse"]
         [hook] = group["hooks"]
         assert hook["command"] == "akhook codex hook pre_tool_use"
+        # It sees every tool call; it passes what it does not understand.
+        assert "matcher" not in group
 
     def test_hooks_run_only_where_their_plugin_is_installed(self, built, tmp_path):
         _, codex = built
