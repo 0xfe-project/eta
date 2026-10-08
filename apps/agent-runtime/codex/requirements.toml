@@ -17,3 +17,13 @@ timeout = 5
 type = "command"
 command = "python /opt/axp/plugins/memory/hooks/memory.py capture"
 timeout = 5
+
+# akhook: the image's rules (/etc/akhook/akhook.yml) for shell commands and
+# file changes, before they run. It reads them from
+# AKHOOK_ADDITIONAL_CONFIG_PATH, set by the image.
+[[hooks.PreToolUse]]
+matcher = "^(Bash|apply_patch)$"
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "akhook codex hook pre_tool_use"
+timeout = 15

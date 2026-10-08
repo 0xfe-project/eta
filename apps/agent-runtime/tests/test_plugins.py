@@ -144,6 +144,9 @@ class TestCodexConfig:
         for groups in requirements["hooks"].values():
             for group in groups:
                 for hook in group["hooks"]:
-                    script = hook["command"].split()[1]
-                    image_path = Path(script).relative_to("/opt/axp/plugins")
+                    program, *args = hook["command"].split()
+                    if program == "akhook":  # built into the image
+                        assert args == ["codex", "hook", "pre_tool_use"]
+                        continue
+                    image_path = Path(args[0]).relative_to("/opt/axp/plugins")
                     assert (PLUGINS / image_path).is_file()

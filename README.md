@@ -12,11 +12,13 @@ apps/
   memory-service/  Python：Agent 的长期记忆（mem0 + pgvector），memory plugin 的后端
 ```
 
-设计见 [RFC #1](https://github.com/akarachen/axp/issues/1)，实现说明见 [聊天与运行时架构](docs/architecture/chat-runtime.md)、[统一入口网关](docs/architecture/gateway.md)、[LLM 网关](docs/architecture/llm-gateway.md) 与 [记忆](docs/architecture/memory.md)。
+设计见 [RFC #1](https://github.com/akarachen/axp/issues/1)，实现说明见 [聊天与运行时架构](docs/architecture/chat-runtime.md)、[统一入口网关](docs/architecture/gateway.md)、[LLM 网关](docs/architecture/llm-gateway.md) 、[记忆](docs/architecture/memory.md) 与 [工具调用规则与用户确认](docs/architecture/agent-hooks.md)。
 
 ## 环境与初始化
 
 需要 Node.js 24、Bun 1.3.14、uv 和 Go（`go.work` 要求 1.26，较旧的 go 会自动下载对应工具链）。Python 项目使用 3.13，uv 会按 `.python-version` 自动获取。还需要 Docker。
+
+runtime 镜像里的 hook 规则引擎 [akhook](https://github.com/aghub-app/akhook) 以 submodule 放在 `vendor/akhook`，构建镜像时如果还没拉取会自动初始化；也可以直接 `git clone --recurse-submodules`。
 
 在仓库根目录执行：
 

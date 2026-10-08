@@ -16,3 +16,6 @@ default_tools_approval_mode = "approve"
 
 [plugins."grok@axp".mcp_servers.grok]
 default_tools_approval_mode = "approve"
+
+[plugins."approval@axp".mcp_servers.approval]
+default_tools_approval_mode = "approve"
