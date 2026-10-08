@@ -10,9 +10,6 @@ const storageKey = "axp.workspace.v1";
 // messages are dropped rather than uploaded.
 const workspaceSchema = z.object({
   selectedAgentId: z.string().max(64).optional(),
-  tasks: z.array(
-    z.object({ id: z.string(), title: z.string().max(200), done: z.boolean() }),
-  ),
   sessionTheme: z.enum(["claude", "codex", "grok"]).default("claude"),
   // CSS font-family lists for UI and code text; unset uses Geist.
   fontSans: z.string().max(200).optional(),
@@ -90,7 +87,7 @@ const storage: PersistStorage<Persisted> = {
 export const useWorkspaceStore = create<WorkspaceStore>()(
   persist(
     (set) => ({
-      workspace: { tasks: [], sessionTheme: "claude" },
+      workspace: { sessionTheme: "claude" },
       draft: "",
       mobilePanel: "chat",
       settings: { open: false, section: "agents" },
