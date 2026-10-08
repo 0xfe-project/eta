@@ -1,23 +1,17 @@
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useAnswerInteraction, usePendingInteractions } from "@/queries/chat";
-import { useAgents } from "./use-agents";
-import { useWorkspaceStore } from "./workspace-store";
+import { useAgents, useOpenAgent } from "./use-agents";
 
 /** Every agent's pending confirmations, answerable from anywhere. */
 export function Inbox() {
   const pending = usePendingInteractions();
-  const { agents, select } = useAgents();
-  const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
+  const { agents } = useAgents();
+  const openAgent = useOpenAgent();
   const answer = useAnswerInteraction();
 
   if (pending.length === 0)
     return <p className="text-sm text-muted-foreground">没有待确认的请求</p>;
-
-  const openAgent = (agentId: string) => {
-    select(agentId);
-    setMobilePanel("chat");
-  };
 
   return (
     <ul className="space-y-3" aria-label="待确认的请求">

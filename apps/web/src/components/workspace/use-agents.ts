@@ -22,3 +22,13 @@ export function useAgents() {
       setAgentEditor({ open: true, agentId }),
   };
 }
+
+/** Switch to an agent's chat (on mobile, to the chat panel too). */
+export function useOpenAgent() {
+  const { select } = useAgents();
+  const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
+  return (agentId: string) => {
+    select(agentId);
+    setMobilePanel("chat");
+  };
+}
