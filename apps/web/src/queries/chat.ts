@@ -177,7 +177,7 @@ function applyEvent(queryClient: QueryClient, type: string, data: unknown) {
 }
 
 /** Subscribe to product events from the snapshot's cursor. */
-export function useChatStream(cursor: string | undefined) {
+function useChatStream(cursor: string | undefined) {
   const queryClient = useQueryClient();
   useEffect(() => {
     if (!cursor) return;

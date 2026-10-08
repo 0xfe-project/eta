@@ -55,6 +55,10 @@
       "cache": false,
       "passThroughEnv": ["AXP_APP_IMAGE"]
     },
+    // Knip reads the whole repository, so it always runs.
+    "//#knip": {
+      "cache": false
+    },
     "dev": {
       "cache": false,
       "persistent": true

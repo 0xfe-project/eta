@@ -1,6 +1,6 @@
 import type { KnipConfig } from "knip";
 
-// Dead code check for the TypeScript workspaces (`bun run knip`). The Python
+// Dead code check for the TypeScript workspaces (`turbo run knip`). The Python
 // and Go apps only use package.json for Turbo scripts.
 export default {
   // System tools the Turbo scripts call.
@@ -17,8 +17,9 @@ export default {
   },
   workspaces: {
     "apps/web": {
-      // routeTree.gen.ts only exists after a build, so the file routes are
-      // entries themselves. public/sw.js is registered by URL in client.tsx.
+      // routeTree.gen.ts is gitignored, which knip skips, so the file routes
+      // are entries themselves. public/sw.js is registered by URL in
+      // client.tsx.
       entry: ["src/routes/**/*.{ts,tsx}", "public/sw.js"],
       // Generated from the shadcn and brainless registries; unused exports
       // there are expected.

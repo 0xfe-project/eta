@@ -6,8 +6,8 @@
 #    fails the commit. ESLint fixes are safe by design; its riskier changes
 #    are suggestions and never applied. Ruff applies safe fixes only.
 # 2. dprint formats the staged files and re-stages them.
-# 3. Turbo builds, typechecks, lints and tests the repository; unchanged
-#    packages come from the cache.
+# 3. Turbo builds, typechecks, lints, tests and checks the repository for
+#    dead code (knip); unchanged packages come from the cache.
 pre-commit:
   piped: true
   jobs:
@@ -26,4 +26,4 @@ pre-commit:
       stage_fixed: true
 
     - name: verify
-      run: bunx turbo run build typecheck lint test --output-logs=errors-only
+      run: bunx turbo run build typecheck lint test knip --output-logs=errors-only

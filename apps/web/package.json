@@ -45,7 +45,6 @@
   "devDependencies": {
     "@rstest/core": "^0.12.3",
     "@tailwindcss/vite": "^4.3.3",
-    "@tanstack/react-query-devtools": "^5.104.1",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
