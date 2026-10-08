@@ -1,7 +1,6 @@
-"""Built-in ``tasks`` MCP module (stdio).
+"""The ``tasks`` plugin's MCP server (stdio).
 
-Tasks live in the agent's workspace so they follow the workspace storage.
-Module config arrives in ``AXP_MCP_CONFIG`` as validated JSON.
+Tasks live in the agent's workspace, so they are part of its snapshot.
 """
 
 import json
@@ -11,13 +10,12 @@ from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
-CONFIG = json.loads(os.environ.get("AXP_MCP_CONFIG") or "{}")
 STORE = (
     Path(os.environ.get("AXP_WORKSPACE_DIR", "/agent/workspace"))
     / ".axp"
     / "tasks.json"
 )
-MAX_TASKS = int(CONFIG.get("max_tasks", 200))
+MAX_TASKS = 200
 
 mcp = FastMCP("tasks")
 

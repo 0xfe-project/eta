@@ -93,8 +93,8 @@ class Agent(models.Model):
     )
     # Incremented for every runtime instance; fences stale runtimes.
     generation = models.BigIntegerField(default=0)
-    # Bumped when anything a runtime is started with changes (name,
-    # instructions, MCP bindings). Runtimes pick it up the next time they start.
+    # Bumped when anything a runtime is started with changes (name, model,
+    # instructions). Runtimes pick it up the next time they start.
     config_version = models.BigIntegerField(default=0)
     last_active_at = models.DateTimeField(null=True, blank=True)
     # Deleted agents keep their history but are hidden and never run again.
@@ -481,8 +481,6 @@ class RuntimeInstance(models.Model):
     last_heartbeat_at = models.DateTimeField(null=True, blank=True)
     # Immutable configuration this instance was started with.
     config_version = models.BigIntegerField(default=0)
-    mcp_snapshot = models.JSONField(default=list)
-    mcp_status = models.JSONField(default=dict)
     last_source_seq = models.BigIntegerField(default=0)
     end_reason = models.CharField(max_length=64, null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True)
@@ -602,58 +600,4 @@ class Approval(models.Model):
                 fields=["id", "agent"], name="approval_id_agent_uniq"
             ),
             _choices_check("status", ApprovalStatus, "approval_status_valid"),
-        ]
-
-
-class McpModuleRevision(models.Model):
-    """Immutable, deployment-registered MCP module definition."""
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    module_key = models.SlugField(max_length=64)
-    revision = models.CharField(max_length=32)
-    transport = models.CharField(max_length=16, default="stdio")
-    # Only writable by trusted deployment tooling, never by API callers.
-    launch_spec = models.JSONField()
-    config_schema = models.JSONField(default=dict)
-    enabled = models.BooleanField(default=True)
-    created_at = models.DateTimeField(default=timezone.now)
-
-    class Meta:
-        db_table = "mcp_module_revision"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["module_key", "revision"], name="mcp_module_revision_uniq"
-            ),
-            models.UniqueConstraint(
-                fields=["id", "module_key"], name="mcp_module_id_key_uniq"
-            ),
-            models.CheckConstraint(
-                condition=Q(transport__in=["stdio"]), name="mcp_module_transport_valid"
-            ),
-        ]
-
-
-class AgentMcpBinding(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    agent = models.ForeignKey(
-        Agent, on_delete=models.CASCADE, related_name="mcp_bindings"
-    )
-    module_revision = models.ForeignKey(
-        McpModuleRevision, on_delete=models.PROTECT, related_name="bindings"
-    )
-    # Denormalized for the per-agent uniqueness constraint.
-    module_key = models.SlugField(max_length=64)
-    enabled = models.BooleanField(default=True)
-    required = models.BooleanField(default=False)
-    allowed_tools = models.JSONField(default=list)
-    config = models.JSONField(default=dict)
-    # e.g. "env:TASKS_API_TOKEN"; secret values are never stored here.
-    secret_ref = models.CharField(max_length=200, null=True, blank=True)
-
-    class Meta:
-        db_table = "agent_mcp_binding"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["agent", "module_key"], name="agent_mcp_binding_key_uniq"
-            )
         ]

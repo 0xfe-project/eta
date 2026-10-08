@@ -9,7 +9,6 @@ dependencies = [
   "django-ninja>=1.4,<2",
   "docker>=7.1,<8",
   "gunicorn>=23,<24",
-  "jsonschema>=4.25,<5",
   "psycopg[binary]>=3.2,<4",
   "python-dotenv>=1.1,<2",
   "axp-telemetry",

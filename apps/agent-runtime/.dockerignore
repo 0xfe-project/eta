@@ -1,6 +1,8 @@
 *
 !out/
 !axp_runtime/
+!plugins/
+!codex/
 !docker-entrypoint.sh
 **/__pycache__
 **/*.py[cod]

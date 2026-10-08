@@ -86,9 +86,7 @@ def import_events(instance: RuntimeInstance, events: list[dict]) -> int:
         handler = HANDLERS.get(event.get("type"))
         if handler:
             handler(conversation, agent, instance, command, payload)
-    instance.save(
-        update_fields=["last_source_seq", "mcp_status", "status", "error_code"]
-    )
+    instance.save(update_fields=["last_source_seq", "status", "error_code"])
     return instance.last_source_seq
 
 
@@ -360,12 +358,6 @@ def snapshot_failed(conversation, agent, instance, command, payload):
     AgentSession.objects.filter(agent=agent).update(last_error=reason)
 
 
-def mcp_status(conversation, agent, instance, command, payload):
-    key = str(payload.get("module_key") or "")[:64]
-    if key:
-        instance.mcp_status = {**instance.mcp_status, key: payload.get("status")}
-
-
 def runtime_failed(conversation, agent, instance, command, payload):
     mark_runtime_failed(
         conversation, agent, instance, str(payload.get("code") or "RUNTIME_FAILED")
@@ -388,7 +380,7 @@ def mark_runtime_failed(conversation, agent, instance, code: str) -> None:
         "AGENT_RECOVERY_FAILED"
         if recovery
         else "AGENT_EXTENSION_FAILED"
-        if code.startswith("MCP")
+        if code.startswith("PLUGIN")
         else "AGENT_UNAVAILABLE"
     )
     waiting = AgentCommand.objects.select_related("agent").filter(
@@ -411,6 +403,5 @@ HANDLERS = {
     "command.outcome_unknown": outcome_unknown,
     "snapshot.saved": snapshot_saved,
     "snapshot.failed": snapshot_failed,
-    "mcp.status": mcp_status,
     "runtime.failed": runtime_failed,
 }

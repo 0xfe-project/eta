@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -14,12 +15,13 @@ import pytest
 from dirty_equals import IsPartialDict
 
 from axp_runtime import runtime as runtime_module
-from axp_runtime.config import McpModule, Settings
+from axp_runtime.config import Settings
 from axp_runtime.control_plane import ControlPlaneError
 from axp_runtime.runtime import Runtime
 from axp_runtime.server import serve
 
 FAKE = [sys.executable, "-m", "axp_runtime.testing.fake_app_server"]
+PLUGINS = Path(__file__).resolve().parent.parent / "plugins"
 # Crash scenarios log expected tracebacks.
 logging.disable(logging.CRITICAL)
 # The scripted app-server runs from the workspace directory.
@@ -102,11 +104,9 @@ class Harness:
             home_dir=tmp / "home",
             known_thread_id=None,
             model=None,
-            sandbox="workspace-write",
-            approval_policy="on-request",
             codex_launch=FAKE,
             heartbeat_seconds=0.05,
-            mcp_ready_timeout=5,
+            plugins_dir=PLUGINS,
         )
         self.runtimes: list[Runtime] = []
 
@@ -234,14 +234,48 @@ class TestBoot:
         runtime, _ = rt.start(cp=StubControlPlane(thread_conflict=True))
         assert runtime.error_code == "RECOVERY_THREAD_MISMATCH"
 
-    def test_required_mcp_module_must_start(self, rt, monkeypatch):
-        module = McpModule("tasks", "1", True, [], "python3", [], {}, {})
-        ok, _ = rt.start(mcp_modules=[module])
-        assert ok.status == "ready"
-        ok.shutdown()
-        monkeypatch.setenv("FAKE_MCP_FAIL", "tasks")
-        failed, _ = rt.start(mcp_modules=[module], instance_id="i3")
-        assert (failed.status, failed.error_code) == ("error", "MCP_REQUIRED_FAILED")
+    def test_installs_the_image_plugins(self, rt):
+        runtime, _ = rt.start()
+        assert runtime.status == "ready"
+        [installed] = (
+            runtime.settings.codex_home / "plugins/cache/axp/tasks"
+        ).iterdir()
+        # MCP configs get this instance's values; Codex expands none itself.
+        server = json.loads((installed / ".mcp.json").read_text())["mcpServers"]
+        assert server["tasks"]["env"] == {
+            "AXP_WORKSPACE_DIR": str(runtime.settings.workspace_dir)
+        }
+        [memory] = (runtime.settings.codex_home / "plugins/cache/axp/memory").iterdir()
+        server = json.loads((memory / ".mcp.json").read_text())["mcpServers"]
+        assert server["memory"]["url"] == "http://gateway.invalid/memory/mcp"
+        config = (runtime.settings.codex_home / "config.toml").read_text()
+        assert '[plugins."tasks@axp"]' in config
+        assert '[plugins."memory@axp"]' in config
+
+    def test_broken_plugin_fails_startup(self, rt, tmp_path):
+        plugins = tmp_path / "plugins"
+        catalog = plugins / ".agents" / "plugins"
+        catalog.mkdir(parents=True)
+        (catalog / "marketplace.json").write_text(
+            json.dumps(
+                {
+                    "name": "axp",
+                    "plugins": [
+                        {
+                            "name": "missing",
+                            "source": {"source": "local", "path": "./missing"},
+                            "policy": {"installation": "AVAILABLE"},
+                            "category": "Productivity",
+                        }
+                    ],
+                }
+            )
+        )
+        runtime, _ = rt.start(plugins_dir=plugins)
+        assert (runtime.status, runtime.error_code) == (
+            "error",
+            "PLUGIN_INSTALL_FAILED",
+        )
 
 
 class TestTurns:
@@ -428,6 +462,18 @@ class TestSnapshots:
         home = restored.settings.codex_home
         assert not (home / "tmp").exists()
         assert not (home / "state.lock").exists()
+
+    def test_installed_plugins_are_left_out(self, rt):
+        runtime, cp = rt.start()
+        cp.completed(send(runtime, "hello"))
+        listing = subprocess.run(
+            ["tar", "--zstd", "-t"],
+            input=rt.objects[SNAPSHOT_URL],
+            capture_output=True,
+            check=True,
+        ).stdout.decode()
+        assert "./codex/config.toml" in listing
+        assert "plugins/cache" not in listing
 
     def test_failed_upload_is_reported_and_the_turn_still_completes(
         self, rt, monkeypatch

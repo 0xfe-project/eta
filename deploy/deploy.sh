@@ -190,6 +190,18 @@ prepare_accessories() {
   fi
 }
 
+# The postgres accessory's image (deploy/deploy.yml). Kamal keeps a running
+# accessory on its old image, so a changed one is rebooted onto the new image
+# (the data stays in the volume) before migrations run.
+POSTGRES_IMAGE=pgvector/pgvector:pg17-trixie
+update_postgres() {
+  local current
+  current="$(docker inspect -f '{{.Config.Image}}' axp-postgres 2>/dev/null || true)"
+  if [[ -n "$current" && "$current" != "$POSTGRES_IMAGE" ]]; then
+    kamal accessory reboot postgres
+  fi
+}
+
 migrate() {
   kamal app exec --roles api --version "$version" --quiet \
     "python manage.py migrate --noinput"
@@ -204,6 +216,7 @@ if [[ "$1" == "setup" || "$1" == "deploy" ]]; then
 
   # Accessories need no build: prepare them meanwhile, without the terminal.
   if [[ "$1" == "deploy" ]]; then
+    update_postgres
     accessories_log="$(mktemp)"
     trap 'rm -f "$accessories_log"' EXIT
     (tty_flags=() && prepare_accessories) </dev/null >"$accessories_log" 2>&1 &

@@ -8,10 +8,11 @@ apps/
   control-plane/   Django 5.2 + Django Ninja：产品 API、内部运行协议、controller
   llm-gateway/     Go：LLM 连接与模型目录（嵌入 CLIProxyAPI）
   web/             TanStack Start + React + Vite + TypeScript
-  agent-runtime/   每个 Agent 一个容器的运行时，基于官方 Codex Python SDK
+  agent-runtime/   每个 Agent 一个容器的运行时，基于官方 Codex Python SDK；plugins/ 是所有 Agent 都装的 Codex plugin
+  memory-service/  Python：Agent 的长期记忆（mem0 + pgvector），memory plugin 的后端
 ```
 
-设计见 [RFC #1](https://github.com/akarachen/axp/issues/1)，实现说明见 [聊天与运行时架构](docs/architecture/chat-runtime.md)、[统一入口网关](docs/architecture/gateway.md) 与 [LLM 网关](docs/architecture/llm-gateway.md)。
+设计见 [RFC #1](https://github.com/akarachen/axp/issues/1)，实现说明见 [聊天与运行时架构](docs/architecture/chat-runtime.md)、[统一入口网关](docs/architecture/gateway.md)、[LLM 网关](docs/architecture/llm-gateway.md) 与 [记忆](docs/architecture/memory.md)。
 
 ## 环境与初始化
 
@@ -32,7 +33,7 @@ bun run dev
 
 智能体要选一个可用的模型才能对话：首次使用在“模型服务”中绑定账号（开发凭据保存在仓库根目录的 `var/llm-gateway`）。`bun run dev` 需要 Docker：它在本机启动一组所有实例共享、名为 `axp-dev-*` 的容器（数据库、日志、工作区存储），与生产的容器、卷和网络互不相干。
 
-`bun run dev` 每个实例占用六个连续端口：网关 `P`（浏览器打开的地址）、API `P+1`、内部运行协议 `P+2`、Web `P+3`、llm-gateway `P+4`、runtime 网关 `P+5`（监听 runtime 网络的网关地址 `172.30.0.1`，其余都只监听 loopback），默认 `P=3000`。被占用时（其他 checkout、worktree 或 agent 已在运行）自动顺延到下一个空闲端口块（3010、3020……），并用文件锁避免并行启动抢到同一端口，因此可以同时运行任意多个实例。用 `bun run dev --port 4000`（或 `AXP_DEV_PORT=4000`）指定端口，被占用或与生产端口（`deploy/ports.env`）重叠时直接报错。新的 worktree 首次运行会自动安装依赖并执行 migrations。
+`bun run dev` 每个实例占用七个连续端口：网关 `P`（浏览器打开的地址）、API `P+1`、内部运行协议 `P+2`、Web `P+3`、llm-gateway `P+4`、runtime 网关 `P+5`（监听 runtime 网络的网关地址 `172.30.0.1`，其余都只监听 loopback）、memory-service `P+6`，默认 `P=3000`。被占用时（其他 checkout、worktree 或 agent 已在运行）自动顺延到下一个空闲端口块（3010、3020……），并用文件锁避免并行启动抢到同一端口，因此可以同时运行任意多个实例。用 `bun run dev --port 4000`（或 `AXP_DEV_PORT=4000`）指定端口，被占用或与生产端口（`deploy/ports.env`）重叠时直接报错。新的 worktree 首次运行会自动安装依赖并执行 migrations。
 
 `setup` 安装 JS/Python 依赖并执行 Django migrations。锁文件（`bun.lock`、两个 `uv.lock`）应一起提交。
 

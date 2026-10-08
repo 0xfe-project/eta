@@ -3,6 +3,19 @@
 # else first asks it who holds the runtime key and passes the answer on as
 # X-AXP-Agent-Id, replacing any value the runtime sent; services behind this
 # route trust that header and hold no credentials of their own.
+
+# Proxies to the upstream in the first argument as the runtime's agent.
+(as_agent) {
+	forward_auth {$AXP_UPSTREAM_INTERNAL:axp-internal:8001} {
+		uri /internal/v1/runtime-auth
+		copy_headers X-AXP-Agent-Id
+	}
+	reverse_proxy {args[0]} {
+		header_up -Authorization
+		flush_interval -1
+	}
+}
+
 http://:{$AXP_RUNTIME_GATEWAY_PORT:8090} {
 	bind {$AXP_RUNTIME_GATEWAY_BIND:0.0.0.0}
 	import access_log
@@ -12,14 +25,11 @@ http://:{$AXP_RUNTIME_GATEWAY_PORT:8090} {
 	}
 	# The LLM gateway's OpenAI-compatible API: Codex's model provider.
 	handle /v1/* {
-		forward_auth {$AXP_UPSTREAM_INTERNAL:axp-internal:8001} {
-			uri /internal/v1/runtime-auth
-			copy_headers X-AXP-Agent-Id
-		}
-		reverse_proxy {$AXP_UPSTREAM_LLM:axp-llm:8317} {
-			header_up -Authorization
-			flush_interval -1
-		}
+		import as_agent {$AXP_UPSTREAM_LLM:axp-llm:8317}
+	}
+	# Agents' memories: the memory plugin's MCP server and hooks.
+	handle /memory/* {
+		import as_agent {$AXP_UPSTREAM_MEMORY:axp-memory:8320}
 	}
 	respond 404
 

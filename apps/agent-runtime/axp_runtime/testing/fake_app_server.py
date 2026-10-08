@@ -9,9 +9,7 @@ markers in the user's text:
   [crash]    exit the process after the turn starts
   [steer]    wait for a turn/steer before finishing, then answer it
 
-Threads persist under CODEX_HOME so resume works across restarts. MCP servers
-passed as ``--config mcp_servers.<name>.command=...`` report ready, unless the
-name is listed in FAKE_MCP_FAIL.
+Threads persist under CODEX_HOME so resume works across restarts.
 """
 
 import json
@@ -55,28 +53,6 @@ def save(threads: dict) -> None:
     tmp = STORE.with_suffix(".tmp")
     tmp.write_text(json.dumps(threads))
     tmp.replace(STORE)
-
-
-def mcp_servers() -> list[str]:
-    names = []
-    args = sys.argv[1:]
-    for index, arg in enumerate(args):
-        if arg in ("--config", "-c") and index + 1 < len(args):
-            key = args[index + 1].split("=", 1)[0]
-            parts = key.split(".")
-            if len(parts) == 3 and parts[0] == "mcp_servers" and parts[2] == "command":
-                names.append(parts[1])
-    return names
-
-
-def report_mcp(thread_id: str) -> None:
-    failing = set(filter(None, os.environ.get("FAKE_MCP_FAIL", "").split(",")))
-    for name in mcp_servers():
-        status = "failed" if name in failing else "ready"
-        notify(
-            "mcpServer/startupStatus/updated",
-            {"name": name, "status": status, "threadId": thread_id},
-        )
 
 
 def server_request(method: str, params: dict) -> dict:
@@ -234,7 +210,7 @@ def handle(message: dict) -> None:
         }
         save(threads)
         reply({"thread": {"id": thread_id}})
-        return report_mcp(thread_id)
+        return
     if method == "thread/resume":
         thread_id = params.get("threadId")
         threads = load()
@@ -244,7 +220,7 @@ def handle(message: dict) -> None:
         threads[thread_id]["instructions"] = params.get("developerInstructions")
         save(threads)
         reply({"thread": {"id": thread_id}})
-        return report_mcp(thread_id)
+        return
     if method == "thread/read":
         thread = load().get(params.get("threadId"))
         if thread is None:

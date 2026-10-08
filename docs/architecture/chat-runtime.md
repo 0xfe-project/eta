@@ -16,8 +16,8 @@
 ## 一条消息的路径
 
 1. `POST /chat/messages` 在一个事务里写入幂等记录、用户消息、助手回复占位、`agent_command(queued)` 和产品事件，返回 202。
-2. controller 发现有排队命令而 Agent 没有存活实例：`generation + 1`，写 `runtime_instance`，生成 MCP 配置快照，再在事务外启动容器；Agent 有快照时附上它的下载地址。token 由 `HMAC(SECRET_KEY, instance_id:generation)` 派生，换代即失效。
-3. runtime 启动：下载并解开 Agent 的快照（有的话）→ 启动 Codex app-server → 用控制面记录的 thread id 恢复（只有首次才 `thread/start`；无法恢复时报告 `recovery_failed`，绝不另起 thread）→ 等待必需的 MCP 模块就绪 → 心跳报告 ready。
+2. controller 发现有排队命令而 Agent 没有存活实例：`generation + 1`，写 `runtime_instance`，再在事务外启动容器；Agent 有快照时附上它的下载地址。token 由 `HMAC(SECRET_KEY, instance_id:generation)` 派生，换代即失效。
+3. runtime 启动：下载并解开 Agent 的快照（有的话）→ 安装镜像里的 Codex plugin（见下文）→ 启动 Codex app-server → 用控制面记录的 thread id 恢复（只有首次才 `thread/start`；无法恢复时报告 `recovery_failed`，绝不另起 thread）→ 心跳报告 ready。
 4. controller 认领该 Agent 最早的排队命令（每个 Agent 同时只有一个活动执行，由部分唯一索引兜底），`PUT /internal/v1/commands/{id}`。PUT 幂等，未见响应时会重发。
 5. runtime 先记账再调用 `turn/start`；Codex 通知被转换成有序 outbox 事件（`turn.started`、`item.updated`、`approval.*`、`turn.completed` 等），增量文本每 0.3 秒合并一次。turn 结束后先上传快照（见下文），再发出 `turn.completed`。
 6. 内部事件接口按 `source_seq` 连续导入 `agent_event`（缺口返回 `409 EVENT_GAP` 与下一期望序号，重复事件幂等，内容不同则冲突），同事务内投影为消息块、交互和 `ui_event`，SSE 推给浏览器。
@@ -34,7 +34,7 @@
 
 AXP 是单用户服务，所有智能体属于唯一的默认对话（`conversation.is_default`），首次创建智能体时建立。
 
-智能体目前有名称和 `description`（指令）。指令原样作为 Codex 的 `developerInstructions` 在 `thread/start` 和 `thread/resume` 时注入。运行时启动所用的一切配置（指令、MCP 绑定）都由 `agent.config_version` 版本化：修改后版本递增；controller 在该智能体没有进行中的执行时停止旧实例（`CONFIG_CHANGED`），下一个实例用新配置恢复同一 thread，因此配置不会在 turn 中途改变。以后给智能体增加的、影响运行时的设置应走同一条路径。
+智能体目前有名称和 `description`（指令）。指令原样作为 Codex 的 `developerInstructions` 在 `thread/start` 和 `thread/resume` 时注入。运行时启动所用的一切配置（模型、指令）都由 `agent.config_version` 版本化：修改后版本递增；controller 在该智能体没有进行中的执行时停止旧实例（`CONFIG_CHANGED`），下一个实例用新配置恢复同一 thread，因此配置不会在 turn 中途改变。以后给智能体增加的、影响运行时的设置应走同一条路径。
 
 除 RFC 第 3 节的接口外，公开 API 提供 `POST /agents`（`name`、`description`）、`PATCH /agents/{id}`（部分更新）和 `DELETE /agents/{id}`。删除不抹掉数据：智能体被标记为已删除并从列表中隐藏，排队消息取消、进行中的回复被中断，历史消息保留；controller 等执行停下后停止并移除其容器，之后不再启动。快照保留。删除通过 `agent.deleted` 事件（`{agent_id}`）通知前端。
 
@@ -49,13 +49,13 @@ AXP 是单用户服务，所有智能体属于唯一的默认对话（`conversat
 - 心跳续租（默认 30 秒）。租约过期时 controller 先停止并移除旧容器，再结束实例；之后旧实例的任何请求都得到 `409 STALE_GENERATION`，runtime 收到后立即退出。
 - 实例结束时，容器连同上次快照之后的改动一起消失；其上的执行中命令以“执行中断，无法确认结果，未自动重试”失败，绝不重放。排队中的命令不受影响，由下一个实例执行。
 - Codex 进程在 turn 中途退出时，该命令同样以执行中断失败，实例报告 `error`。
-- 必需 MCP 失败、快照无法下载或解开等使 runtime 停在未就绪状态；排队与派发中的回复以中文原因失败，Agent 显示为“不可用”。之后的新消息会让 controller 换一代实例重试；从未就绪过的实例有 30 秒的退避。
+- plugin 安装失败（`PLUGIN_INSTALL_FAILED`，回复显示“智能体扩展启动失败”）、快照无法下载或解开等使 runtime 停在未就绪状态；排队与派发中的回复以中文原因失败，Agent 显示为“不可用”。之后的新消息会让 controller 换一代实例重试；从未就绪过的实例有 30 秒的退避。
 - 排队超过 120 秒仍没有就绪实例的消息以“准备超时”失败。
 - 空闲超过 10 分钟的实例会被停止；下一条消息会重新拉起，从快照恢复同一 thread。
 
 ## 快照
 
-一个 Agent 的全部状态是容器里的 `/agent`：`workspace/`（工作区，Codex 的 cwd）和 `codex/`（`CODEX_HOME`）。它的快照是 S3 桶 `axp-agents` 里的一个对象 `agents/<id>/snapshot.tar.zst`，即这个目录的 tar 包，用多线程 zstd 压缩（Codex 的锁文件和 `tmp` 除外）。
+一个 Agent 的全部状态是容器里的 `/agent`：`workspace/`（工作区，Codex 的 cwd）和 `codex/`（`CODEX_HOME`）。它的快照是 S3 桶 `axp-agents` 里的一个对象 `agents/<id>/snapshot.tar.zst`，即这个目录的 tar 包，用多线程 zstd 压缩（Codex 的锁文件、`tmp` 和已安装的 plugin `codex/plugins/cache` 除外）。
 
 - 每个 turn（包括压缩、被停止和失败的 turn）结束后，runtime 打包并上传快照，然后才发出 `turn.completed`。因此控制面看到命令结束时快照已经写完，空闲停机、换配置停机都不会打断上传，也不会丢掉已完成 turn 的改动。
 - 上传地址由 `POST /internal/v1/runtime-instances/{id}/snapshot` 签发，只指向该实例所属 Agent 的对象，已失效的实例拿不到地址。runtime 不持有任何存储凭据，容器不挂载任何卷，也不需要额外权限。
@@ -64,9 +64,23 @@ AXP 是单用户服务，所有智能体属于唯一的默认对话（`conversat
 - 账本（命令、审批、outbox）只在实例内存里，不进快照。
 - 两个 turn 之间后台进程写入的文件，在下一次快照时才会保存；宿主机崩溃会丢掉正在执行的那个 turn 的改动。
 
-## MCP
+## Plugin
 
-`mcp_module_revision` 由部署方注册（`manage.py mcp_register spec.json`，内置 `tasks` 模块由迁移注册），只接受 `command`/`args`/`env`，修订不可变。`agent_mcp_binding` 的配置按模块的 JSON Schema 校验，密钥只存 `env:NAME` 引用（`manage.py mcp_bind`）。新 Agent 默认绑定内置的 `tasks` 模块。绑定变更同样递增 `config_version`，按上文规则在空闲时换新实例并生成不可变快照，不会在 turn 中途改变工具。runtime 把快照转换为 Codex 的 `mcp_servers.*` 配置，并依据 `mcpServer/startupStatus/updated` 判断必需模块是否就绪。
+智能体的扩展（MCP、skill、hook）一律是 Codex plugin，所有智能体都装同一套，没有按智能体的开关。runtime 镜像里的 `/opt/axp/plugins`（源码在 `apps/agent-runtime/plugins`）是一个本地 marketplace `axp`：`.agents/plugins/marketplace.json` 列出各 plugin，每个 plugin 是一个目录，有 `.codex-plugin/plugin.json`，可选 `.mcp.json` 和 `skills/`。
+
+runtime 每次启动、在 Codex 之前对每个 plugin 执行 `codex plugin add <name>@axp`（marketplace 用 `--config marketplaces.axp.*` 指向镜像目录）。Codex 只加载装进 `CODEX_HOME/plugins/cache` 的副本，仅在配置里启用不生效；已安装的副本不进快照，每次都以镜像为准。安装后在副本的 `.mcp.json` 里填入本实例的 `${AXP_GATEWAY_URL}` 和 `${AXP_WORKSPACE_DIR}`：Codex 不展开其中的变量，而网关地址在开发和生产中不同。plugin 的 stdio MCP 只拿到 `.mcp.json` 里写明的环境变量，`cwd: "."` 指 plugin 目录。MCP 启动失败只记日志，不影响 runtime 就绪。
+
+其余都是镜像里的静态 Codex 配置（源码 `apps/agent-runtime/codex`，装在 `/etc/codex`）：
+
+- `config.toml`：容器是隔离边界，Codex 不再用沙盒（`danger-full-access`）；命令和文件改动仍经产品请用户确认（`on-request`）。镜像 plugin 的 MCP 工具免确认（`plugins."<plugin>".mcp_servers.<server>.default_tools_approval_mode = "approve"`），否则每次调用都会被 runtime 以“无人应答”拒绝。
+- `requirements.toml`：hook 在这里声明，而不是放在 plugin 里。Codex 只执行经过信任的 hook，plugin 的 hook 要有人审核，而 managed hook 按策略可信；`allow_managed_hooks_only` 让其他来源的 hook（包括智能体自己写的）一律不执行。hook 与 Codex 共享环境变量，用 `AXP_GATEWAY_URL` 和 `AXP_RUNTIME_LLM_KEY` 经 runtime 网关访问服务。
+
+新增 plugin 的 MCP 服务器时要在 `config.toml` 里免确认，新增 hook 时在 `requirements.toml` 里声明，测试会检查两者与 plugin 一致。
+
+内置的 plugin：
+
+- `tasks`：stdio MCP，任务列表存在工作区的 `.axp/tasks.json`。
+- `memory`：长期记忆，见[记忆](memory.md)。
 
 ## 存储与隔离
 

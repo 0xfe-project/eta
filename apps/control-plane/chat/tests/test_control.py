@@ -4,12 +4,10 @@ from datetime import timedelta
 from unittest import mock
 
 import pytest
-from django.core.management import call_command
-from django.core.management.base import CommandError
 from django.test import Client, override_settings
 from django.utils import timezone
 
-from chat.control import controller, mcp, objects
+from chat.control import controller, objects
 from chat.control.auth import runtime_token
 from chat.control.controller import Controller
 from chat.control.driver import StartedRuntime
@@ -20,7 +18,6 @@ from chat.models import (
     AgentSession,
     Approval,
     Interaction,
-    McpModuleRevision,
     Message,
     RuntimeInstance,
 )
@@ -240,8 +237,6 @@ class TestProvisioning:
         env = ctl.driver.started[0].env
         assert env["AXP_RUNTIME_TOKEN"] == runtime_token(instance.pk, 1)
         assert env["AXP_GATEWAY_URL"] == "http://runtime-gateway:8090"
-        snapshot = json.loads(env["AXP_MCP_SNAPSHOT"])
-        assert [m["module_key"] for m in snapshot] == ["tasks"]
         # A new agent has nothing to restore.
         assert "AXP_SNAPSHOT_URL" not in env
         # Starting a runtime is invisible to the product: the reply is queued.
@@ -315,18 +310,18 @@ class TestInternalApi:
 
     def test_event_ordering(self, ctl, runtime):
         runtime.ready()
-        status = ("mcp.status", {"module_key": "tasks", "status": "ready"})
-        assert runtime.events(status).json() == {"acked_source_seq": 1}
-        gap = runtime.events(("mcp.status", {}), seq_start=5)
+        failed = ("snapshot.failed", {"reason": "SNAPSHOT_FAILED"})
+        assert runtime.events(failed).json() == {"acked_source_seq": 1}
+        gap = runtime.events(("snapshot.saved", {}), seq_start=5)
         assert gap.status_code == 409
         assert gap.json()["next_expected_source_seq"] == 2
         # Re-sending an acked event is harmless; changing it is a conflict.
         runtime.seq = 0
-        assert runtime.events(status).json() == {"acked_source_seq": 1}
+        assert runtime.events(failed).json() == {"acked_source_seq": 1}
         runtime.seq = 0
-        conflict = runtime.events(("mcp.status", {"module_key": "x"}))
+        conflict = runtime.events(("snapshot.failed", {"reason": "OTHER"}))
         assert conflict.status_code == 409
-        assert ctl.instance().mcp_status == {"tasks": "ready"}
+        assert AgentSession.objects.get().last_error == "SNAPSHOT_FAILED"
 
 
 def item(command_id, **fields):
@@ -599,7 +594,7 @@ class TestRecovery:
     def test_runtime_failure_marks_agent_unavailable(self, ctl, started):
         _, runtime, _ = started
         queued = ctl.send("排队中")
-        runtime.heartbeat("error", error_code="MCP_REQUIRED_FAILED")
+        runtime.heartbeat("error", error_code="PLUGIN_INSTALL_FAILED")
         assert ctl.reply(queued).failure["code"] == "AGENT_EXTENSION_FAILED"
         assert ctl.agent_status() == "unavailable"
         # A new message retries with a fresh runtime.
@@ -718,51 +713,3 @@ class TestConfigChange:
             f"axp.runtime.instance.id={ctl.instance().pk},axp.runtime.generation=1"
         )
         assert "OTEL_EXPORTER_OTLP_HEADERS" not in env
-
-
-class TestMcp:
-    @pytest.fixture
-    def agent(self, agent):
-        return Agent.objects.get(pk=agent["id"])
-
-    def test_builtin_tasks_module_bound_by_default(self, agent):
-        assert agent.mcp_bindings.get().module_key == "tasks"
-        assert agent.config_version == 1
-
-    def test_config_is_validated_against_schema(self, agent):
-        revision = McpModuleRevision.objects.get(module_key="tasks")
-        with pytest.raises(mcp.McpConfigError):
-            mcp.bind(agent, revision, config={"max_tasks": "many"})
-        with pytest.raises(mcp.McpConfigError):
-            mcp.bind(agent, revision, secret_ref="plain-secret")
-        mcp.bind(agent, revision, config={"max_tasks": 5}, required=True)
-        [module] = mcp.snapshot(agent)
-        assert module["config"] == {"max_tasks": 5}
-        assert module["required"]
-
-    def test_launch_spec_rules_and_immutability(self):
-        with pytest.raises(mcp.McpConfigError):
-            mcp.register_revision("x", "1", {"command": "sh", "cwd": "/host"}, {})
-        mcp.register_revision("x", "1", {"command": "x-server"}, {})
-        mcp.register_revision("x", "1", {"command": "x-server"}, {})
-        with pytest.raises(mcp.McpConfigError):
-            mcp.register_revision("x", "1", {"command": "other"}, {})
-
-    def test_management_commands(self, agent, tmp_path):
-        spec = tmp_path / "spec.json"
-        spec.write_text(
-            json.dumps(
-                {
-                    "module_key": "notes",
-                    "revision": "2",
-                    "launch_spec": {"command": "notes-mcp"},
-                    "config_schema": {"type": "object"},
-                }
-            )
-        )
-        call_command("mcp_register", str(spec))
-        call_command("mcp_bind", str(agent.pk), "notes", "--tools", "read,write")
-        binding = agent.mcp_bindings.get(module_key="notes")
-        assert binding.allowed_tools == ["read", "write"]
-        with pytest.raises(CommandError):
-            call_command("mcp_bind", str(agent.pk), "missing")

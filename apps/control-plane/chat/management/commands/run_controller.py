@@ -3,7 +3,7 @@ import signal
 import threading
 
 from django.core.management.base import BaseCommand
-from django.db import connections
+from django.db import DatabaseError, connections
 
 from chat.control import objects
 from chat.control.controller import Controller
@@ -34,7 +34,28 @@ class Command(BaseCommand):
         logger.info("Waiting for the controller lock")
         with lock.cursor() as cursor:
             cursor.execute("SELECT pg_advisory_lock(%s)", [CONTROLLER_LOCK_KEY])
+
+        def hold_lock():
+            # A database restart drops the session and its lock: take it again
+            # (waiting for any controller that got it meanwhile) before going on.
+            if lock.is_usable():
+                return
+            logger.warning("Lost the controller lock; waiting for it again")
+            while not stop.is_set():
+                try:
+                    lock.close()
+                    lock.ensure_connection()
+                    with lock.cursor() as cursor:
+                        cursor.execute(
+                            "SELECT pg_advisory_lock(%s)", [CONTROLLER_LOCK_KEY]
+                        )
+                    return
+                except DatabaseError:
+                    stop.wait(1)
+
         driver = DockerDriver()
         driver.ensure_network()
         objects.ensure_bucket()
-        Controller(driver).run_forever(interval=interval, stop=stop)
+        Controller(driver).run_forever(
+            interval=interval, stop=stop, before_tick=hold_lock
+        )

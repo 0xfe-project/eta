@@ -1,0 +1,19 @@
+# Managed Codex requirements of every agent (/etc/codex/requirements.toml).
+#
+# Hooks are declared here rather than in their plugins: managed hooks are
+# trusted by policy, while plugin hooks wait for a person to trust them. Hooks
+# from anywhere else, including any the agent writes itself, never run.
+allow_managed_hooks_only = true
+
+# The memory plugin: recall memories into each turn, remember finished turns.
+[[hooks.UserPromptSubmit]]
+[[hooks.UserPromptSubmit.hooks]]
+type = "command"
+command = "python /opt/axp/plugins/memory/hooks/memory.py recall"
+timeout = 5
+
+[[hooks.Stop]]
+[[hooks.Stop.hooks]]
+type = "command"
+command = "python /opt/axp/plugins/memory/hooks/memory.py capture"
+timeout = 5

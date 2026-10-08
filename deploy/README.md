@@ -41,19 +41,20 @@ deploy/deploy.sh rollback <version>
 
 同一个镜像按角色运行：
 
-| 角色              | 进程                             | 说明                                                                                                |
-| ----------------- | -------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `gateway`         | Caddy，`public.caddy`            | 唯一由 kamal-proxy 代理的角色；按路径转发到 llm、api、web、OpenObserve                              |
-| `runtime-gateway` | Caddy，`runtime.caddy`           | runtime 网络上唯一提供服务的角色（`axp-runtime-gateway:8090`）；认证 runtime 并转发到 internal、llm |
-| `web`             | Bun 运行 `apps/web/server.js`    | SSR 与静态资源；网络别名 `axp-web`                                                                  |
-| `api`             | gunicorn（gthread）              | 公共 API；网络别名 `axp-api`                                                                        |
-| `llm`             | `axp-llm-gateway`（Go）          | 嵌入 CLIProxyAPI；网络别名 `axp-llm`；凭据在卷 `axp-llm`                                            |
-| `internal`        | gunicorn，`config.internal_urls` | 内部运行协议；网络别名 `axp-internal`，runtime 只能经 runtime 网关访问                              |
-| `controller`      | `run_controller`                 | 挂载 Docker socket；用 PostgreSQL advisory lock 保证同一时刻只有一个在运行                          |
+| 角色              | 进程                             | 说明                                                                                                                                                  |
+| ----------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `gateway`         | Caddy，`public.caddy`            | 唯一由 kamal-proxy 代理的角色；按路径转发到 llm、api、web、OpenObserve                                                                                |
+| `runtime-gateway` | Caddy，`runtime.caddy`           | runtime 网络上唯一提供服务的角色（`axp-runtime-gateway:8090`）；认证 runtime 并转发到 internal、llm、memory                                           |
+| `web`             | Bun 运行 `apps/web/server.js`    | SSR 与静态资源；网络别名 `axp-web`                                                                                                                    |
+| `api`             | gunicorn（gthread）              | 公共 API；网络别名 `axp-api`                                                                                                                          |
+| `llm`             | `axp-llm-gateway`（Go）          | 嵌入 CLIProxyAPI；网络别名 `axp-llm`；凭据在卷 `axp-llm`                                                                                              |
+| `internal`        | gunicorn，`config.internal_urls` | 内部运行协议；网络别名 `axp-internal`，runtime 只能经 runtime 网关访问                                                                                |
+| `memory`          | `python -m axp_memory`           | 智能体记忆（[记忆](../docs/architecture/memory.md)）；网络别名 `axp-memory`，runtime 只能经 runtime 网关访问；数据在 accessory `postgres`（pgvector） |
+| `controller`      | `run_controller`                 | 挂载 Docker socket；用 PostgreSQL advisory lock 保证同一时刻只有一个在运行                                                                            |
 
 服务之间没有共享密钥：角色中只有 `runtime-gateway` 和 controller 加入 runtime 网络（accessory 中还有 `axp-s3` 和 `axp-otel-collector`），其余角色只在 Kamal 网络上，runtime 连不到（见[网关](../docs/architecture/gateway.md)）。两个网关的访问日志是 JSON，写在容器输出里（`deploy/deploy.sh app logs -r gateway`），不进 OpenObserve。
 
-web、api、llm 不经过 kamal-proxy，重新部署时会有几秒中断（单用户场景可接受）。
+web、api、llm、memory 不经过 kamal-proxy，重新部署时会有几秒中断（单用户场景可接受）。
 
 ### 一次部署做什么
 
@@ -63,9 +64,9 @@ web、api、llm 不经过 kamal-proxy，重新部署时会有几秒中断（单�
 
 等待都由检查完成，不靠固定时长：每个角色都有 Docker 健康检查（启动期每 0.5 秒一次，能响应 HTTP 即就绪；controller 进程在即就绪），Kamal 据此判断就绪（`readiness_delay: 0`）。旧容器最多等 2 秒（`drain_timeout`）：聊天 SSE 连接不会自己结束，浏览器断开后会带 `Last-Event-ID` 自动续上；gunicorn 的 `graceful_timeout` 与之匹配。controller 收到 SIGTERM 后跑完当前一轮即退出（停止时限 30 秒，留给正在进行的 Docker 操作）。
 
-数据库是 Kamal accessory `axp-postgres`（卷 `axp-postgres`）。每个智能体的全部状态（工作区和 Codex 会话）是 accessory `axp-s3`（SeaweedFS，卷 `axp-s3`）里的一个快照对象，在 Kamal 网络和 runtime 网络上可达、不发布端口；controller 启动时创建桶 `axp-agents`。runtime 容器不挂载任何卷。数据都在本机卷里，换机器不会自动迁移；开发环境的 `axp-dev-*` 容器和卷与这些完全分开。
+数据库是 Kamal accessory `axp-postgres`（卷 `axp-postgres`，镜像 `pgvector/pgvector:pg17-trixie`：PostgreSQL 17 加 pgvector，智能体记忆存在表 `memories`；镜像变化时 `deploy.sh` 在迁移前重启它）。每个智能体的全部状态（工作区和 Codex 会话）是 accessory `axp-s3`（SeaweedFS，卷 `axp-s3`）里的一个快照对象，在 Kamal 网络和 runtime 网络上可达、不发布端口；controller 启动时创建桶 `axp-agents`。runtime 容器不挂载任何卷。数据都在本机卷里，换机器不会自动迁移；开发环境的 `axp-dev-*` 容器和卷与这些完全分开。
 
-日志由 Kamal accessory `axp-openobserve`（[OpenObserve](https://openobserve.ai)，卷 `axp-openobserve`）收集：各角色通过 OTLP 发送，`OTEL_SERVICE_NAME` 区分来源（`web`、`llm-gateway`、`control-plane-api`、`control-plane-internal`、`control-plane-controller`）。agent runtime 容器运行智能体执行的代码、不持有任何凭据：它们把日志、trace 和指标（包括 Codex 原生的 OpenTelemetry 数据，日志事件含 prompt）发给 accessory `axp-otel-collector`（runtime 网络上的 `otel-collector:4318`，配置见 `otel-collector.yaml`），由它带上凭据转发到 OpenObserve，记录带有 `axp.agent.id`、`axp.runtime.instance.id`。Codex 每收到一段流式输出都会产生一条日志和几个 span（约每两个字一条），Collector 会过滤掉这部分，只保留回合级的事件和 span；Collector 不保存状态，每次部署都会重启以应用配置变更。root 账号是 `root@axp.local`，密码 `AXP_OBSERVE_PASSWORD` 由 `deploy.sh` 首次需要时写入 `production.env`；已有的机器在下一次部署前会自动启动这个 accessory。
+日志由 Kamal accessory `axp-openobserve`（[OpenObserve](https://openobserve.ai)，卷 `axp-openobserve`）收集：各角色通过 OTLP 发送，`OTEL_SERVICE_NAME` 区分来源（`web`、`llm-gateway`、`memory-service`、`control-plane-api`、`control-plane-internal`、`control-plane-controller`）。agent runtime 容器运行智能体执行的代码、不持有任何凭据：它们把日志、trace 和指标（包括 Codex 原生的 OpenTelemetry 数据，日志事件含 prompt）发给 accessory `axp-otel-collector`（runtime 网络上的 `otel-collector:4318`，配置见 `otel-collector.yaml`），由它带上凭据转发到 OpenObserve，记录带有 `axp.agent.id`、`axp.runtime.instance.id`。Codex 每收到一段流式输出都会产生一条日志和几个 span（约每两个字一条），Collector 会过滤掉这部分，只保留回合级的事件和 span；Collector 不保存状态，每次部署都会重启以应用配置变更。root 账号是 `root@axp.local`，密码 `AXP_OBSERVE_PASSWORD` 由 `deploy.sh` 首次需要时写入 `production.env`；已有的机器在下一次部署前会自动启动这个 accessory。
 
 ## 端口与访问
 

@@ -49,8 +49,8 @@ servers:
       healthcheck:
         path: /up
   # Runtimes' gateway (apps/gateway/runtime.caddy), on their network as
-  # axp-runtime-gateway:8090: their only route to the internal API and the LLM
-  # gateway, which it authenticates them for.
+  # axp-runtime-gateway:8090: their only route to the internal API, the LLM
+  # gateway and the memory service, which it authenticates them for.
   runtime-gateway:
     hosts: [<%= host %>]
     cmd: caddy run --config /app/apps/gateway/Caddyfile
@@ -95,6 +95,24 @@ servers:
       volume: axp-llm:/app/apps/control-plane/var/llm-gateway
       <<: *health
       health-cmd: <%= ready.(8317) %>
+  # Agents' memories (apps/memory-service), reached by runtimes only through
+  # the runtime gateway as axp-memory. Facts are extracted through the LLM
+  # gateway and kept in PostgreSQL (pgvector).
+  memory:
+    hosts: [<%= host %>]
+    cmd: python -m axp_memory
+    env:
+      clear:
+        PYTHONPATH: /app/apps/memory-service/site-packages:/app/apps/memory-service
+        FASTEMBED_CACHE_PATH: /app/apps/memory-service/models
+        # The model is in the image; never look for it online.
+        HF_HUB_OFFLINE: "1"
+        AXP_MEMORY_ADDR: ":8320"
+        AXP_LLM_GATEWAY_URL: http://axp-llm:8317
+    options:
+      network-alias: axp-memory
+      <<: *health
+      health-cmd: <%= ready.(8320, "/up") %>
   # Internal runtime API, reached by runtimes only through the runtime gateway.
   internal:
     hosts: [<%= host %>]
@@ -176,7 +194,9 @@ env:
 
 accessories:
   postgres:
-    image: postgres:17
+    # PostgreSQL 17 with pgvector, on Debian trixie like postgres:17, so the
+    # data directory keeps its collation. deploy.sh names it too.
+    image: pgvector/pgvector:pg17-trixie
     host: <%= host %>
     env:
       clear:

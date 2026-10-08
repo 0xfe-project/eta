@@ -7,8 +7,10 @@ set -euo pipefail
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/scripts/dev-container.sh"
 
-# Same major version as production's accessory.
-dev_container axp-dev-postgres postgres:17 \
+# The same image as production's accessory: PostgreSQL 17 with pgvector, for
+# agents' memories. On Debian trixie like postgres:17, so data directories
+# created by either keep their collation.
+dev_container axp-dev-postgres pgvector/pgvector:pg17-trixie \
   -p 127.0.0.1:15432:5432 -v axp-dev-postgres:/var/lib/postgresql/data \
   -e POSTGRES_USER=axp -e POSTGRES_PASSWORD=axp -e POSTGRES_DB=axp
 # Over TCP: the server initdb runs on first start listens on the socket only.

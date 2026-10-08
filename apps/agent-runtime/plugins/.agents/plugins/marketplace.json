@@ -1,0 +1,32 @@
+{
+  "name": "axp",
+  "interface": {
+    "displayName": "AXP"
+  },
+  "plugins": [
+    {
+      "name": "tasks",
+      "source": {
+        "source": "local",
+        "path": "./tasks"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "memory",
+      "source": {
+        "source": "local",
+        "path": "./memory"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
