@@ -1,7 +1,7 @@
 """The runtime instance's own bookkeeping, in memory.
 
-The ledger records a command before Codex sees it, pending approvals, and an
-ordered outbox of events for the control plane. It lives and dies with the
+The ledger records a command before Codex sees it and an ordered outbox of
+events for the control plane. It lives and dies with the
 instance: what outlives it is the agent's snapshot.
 """
 
@@ -24,15 +24,6 @@ CREATE TABLE IF NOT EXISTS commands (
     interrupt_requested INTEGER NOT NULL DEFAULT 0,
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
-);
-CREATE TABLE IF NOT EXISTS approvals (
-    approval_id TEXT PRIMARY KEY,
-    command_id TEXT NOT NULL,
-    generation INTEGER NOT NULL,
-    method TEXT NOT NULL,
-    status TEXT NOT NULL,
-    decision TEXT,
-    created_at REAL NOT NULL
 );
 CREATE TABLE IF NOT EXISTS outbox (
     source_seq INTEGER PRIMARY KEY,
@@ -123,31 +114,6 @@ class Ledger:
                 (ACCEPTED,),
             ).fetchone()
         return _command(row) if row else None
-
-    # --- approvals ----------------------------------------------------------
-
-    def add_approval(self, approval_id, command_id, generation, method) -> None:
-        with self.tx() as db:
-            db.execute(
-                "INSERT INTO approvals(approval_id, command_id, generation, method, "
-                "status, created_at) VALUES(?, ?, ?, ?, 'pending', ?)",
-                (approval_id, command_id, generation, method, time.time()),
-            )
-
-    def get_approval(self, approval_id: str) -> dict | None:
-        with self._lock:
-            row = self._db.execute(
-                "SELECT * FROM approvals WHERE approval_id=?", (approval_id,)
-            ).fetchone()
-        return dict(row) if row else None
-
-    def set_approval(self, approval_id: str, status: str, decision=None) -> None:
-        with self.tx() as db:
-            db.execute(
-                "UPDATE approvals SET status=?, decision=COALESCE(?, decision) "
-                "WHERE approval_id=?",
-                (status, decision, approval_id),
-            )
 
     # --- outbox -------------------------------------------------------------
 

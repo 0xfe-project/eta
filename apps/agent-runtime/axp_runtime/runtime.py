@@ -626,25 +626,18 @@ class Runtime:
             return {"accepted": result == "accepted"}
         return {}
 
-    def accept(self, command_id: str, body: dict) -> dict:
-        command = self.ledger.accept_command(
+    def accept(self, command_id: str, body: dict) -> None:
+        self.ledger.accept_command(
             command_id,
             agent_sequence=int(body["agent_sequence"]),
             kind=body["kind"],
             payload=body.get("payload") or {},
         )
-        return _command_view(command)
 
-    def command_view(self, command_id: str) -> dict | None:
+    def interrupt(self, command_id: str) -> None:
         command = self.ledger.get_command(command_id)
-        return _command_view(command) if command else None
-
-    def interrupt(self, command_id: str) -> dict | None:
-        command = self.ledger.get_command(command_id)
-        if command is None:
-            return None
-        if command["status"] in L.TERMINAL:
-            return _command_view(command)
+        if command is None or command["status"] in L.TERMINAL:
+            return
         self.ledger.update_command(command_id, interrupt_requested=1)
         if command["status"] == L.ACCEPTED:
             self.ledger.update_command(command_id, status="interrupted")
@@ -666,7 +659,6 @@ class Runtime:
                 threading.Thread(
                     target=self._interrupt_turn, args=(command["turn_id"],), daemon=True
                 ).start()
-        return self.command_view(command_id)
 
     def steer(self, command_id: str, body: dict) -> str:
         """Add a steer to the running command's turn.
@@ -728,21 +720,14 @@ class Runtime:
         except Exception:
             logger.exception("turn/interrupt failed")
 
-    def decide(self, approval_id: str, decision: str) -> str:
-        """Returns "accepted" or "not_pending"."""
-        approval = self.ledger.get_approval(approval_id)
-        if approval is None:
-            return "not_pending"
-        if approval["status"] in ("decided", "applied"):
-            return "accepted" if approval["decision"] == decision else "not_pending"
+    def decide(self, approval_id: str, decision: str) -> None:
+        """Answer a pending approval; the first answer counts."""
         with self._lock:
             waiter = self._approvals.get(approval_id)
-        if approval["status"] != "pending" or waiter is None:
-            return "not_pending"
-        self.ledger.set_approval(approval_id, "decided", decision)
-        waiter.decision = decision
+            if waiter is None or waiter.decision is not None:
+                return
+            waiter.decision = decision
         waiter.event.set()
-        return "accepted"
 
     # --- SDK server requests (SDK reader thread) ------------------------------
 
@@ -758,9 +743,6 @@ class Runtime:
         waiter = _ApprovalWaiter(command_id)
         with self._lock:
             self._approvals[approval_id] = waiter
-        self.ledger.add_approval(
-            approval_id, command_id, self.settings.generation, method
-        )
         self.ledger.emit(
             "approval.requested",
             {
@@ -777,7 +759,6 @@ class Runtime:
         decision = waiter.decision or "cancel"
         with self._lock:
             self._approvals.pop(approval_id, None)
-        self.ledger.set_approval(approval_id, "applied", decision)
         self.ledger.emit(
             "approval.applied", {"approval_id": approval_id, "decision": decision}
         )
@@ -1133,15 +1114,6 @@ def _close_client(client: CodexClient) -> None:
     for stream in (proc.stdout, proc.stderr):
         if stream:
             stream.close()
-
-
-def _command_view(command: dict) -> dict:
-    return {
-        "command_id": command["command_id"],
-        "status": command["status"],
-        "codex_turn_id": command["turn_id"],
-        "error_code": command["error_code"],
-    }
 
 
 def _confirmation(params: dict) -> bool:

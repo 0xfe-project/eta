@@ -381,7 +381,7 @@ class TestTurns:
         )
         seqs = [e["source_seq"] for e in cp.events]
         assert seqs == list(range(1, len(seqs) + 1))
-        assert runtime.command_view(command_id)["status"] == "succeeded"
+        assert runtime.ledger.get_command(command_id)["status"] == "succeeded"
 
     def test_failed_turn(self, rt):
         runtime, cp = rt.start()
@@ -402,7 +402,7 @@ class TestTurns:
         assert cp.completed(second)["status"] == "interrupted"
         runtime.interrupt(first)
         cp.completed(first)
-        assert runtime.command_view(second)["status"] == "interrupted"
+        assert runtime.ledger.get_command(second)["status"] == "interrupted"
 
     def test_approval_accept(self, rt):
         runtime, cp = rt.start()
@@ -411,14 +411,15 @@ class TestTurns:
         assert request["kind"] == "command"
         assert request["summary"]["command"] == "touch approved.txt"
         approval_id = request["approval_id"]
-        assert runtime.decide(approval_id, "accept") == "accepted"
+        runtime.decide(approval_id, "accept")
         assert cp.wait_for("approval.applied")["decision"] == "accept"
         assert cp.completed(command_id)["status"] == "completed"
         item = cp.wait_for("item.updated", command_id=command_id)["item"]
         assert item == IsPartialDict(kind="command", input="touch approved.txt")
-        # Repeating the same decision is fine; a different one is not.
-        assert runtime.decide(approval_id, "accept") == "accepted"
-        assert runtime.decide(approval_id, "decline") == "not_pending"
+        # A later answer changes nothing.
+        runtime.decide(approval_id, "decline")
+        applied = [e for e in cp.events if e["type"] == "approval.applied"]
+        assert [e["payload"]["decision"] for e in applied] == ["accept"]
 
     def test_interrupt_while_waiting_for_approval(self, rt):
         runtime, cp = rt.start()
@@ -459,7 +460,7 @@ class TestTurns:
         request = cp.wait_for("approval.requested")
         assert request["kind"] == "elicitation"
         assert request["summary"] == {"server": "tasks", "message": "清空所有任务？"}
-        assert runtime.decide(request["approval_id"], "accept") == "accepted"
+        runtime.decide(request["approval_id"], "accept")
         assert cp.wait_for("approval.applied")["decision"] == "accept"
         assert cp.completed(command_id)["status"] == "completed"
         assert reply_text(cp, command_id) == "确认结果：accept"
@@ -493,7 +494,7 @@ class TestTurns:
         assert cp.completed(command_id)["status"] == "completed"
         item = cp.wait_for("item.updated", command_id=command_id)["item"]
         assert item == IsPartialDict(kind="compaction")
-        assert runtime.command_view(command_id)["status"] == "succeeded"
+        assert runtime.ledger.get_command(command_id)["status"] == "succeeded"
 
     def steer(self, runtime, target, text="改用中文", seq=2):
         steer_id = str(uuid.uuid4())
@@ -517,8 +518,8 @@ class TestTurns:
             if e["type"] == "item.updated"
         }
         assert texts == {first: "收到：[steer]", steer_id: "收到插话：改用中文"}
-        assert runtime.command_view(first)["status"] == "succeeded"
-        assert runtime.command_view(steer_id)["status"] == "succeeded"
+        assert runtime.ledger.get_command(first)["status"] == "succeeded"
+        assert runtime.ledger.get_command(steer_id)["status"] == "succeeded"
         assert "turn.completed" not in [
             e["type"] for e in cp.events if e["payload"].get("command_id") == first
         ]
