@@ -20,6 +20,8 @@ from django.db import close_old_connections, transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from routines import runner as routines
+
 from .. import llm, queue, services
 from ..models import Agent, AgentCommand, AgentSession, RuntimeInstance
 from . import objects
@@ -83,6 +85,9 @@ class Controller:
             self.ensure_runtimes,
             self.stop_idle,
             self.stop_deleted,
+            self.start_routines,
+            self.watch_routines,
+            routines.revise_briefs,
         ):
             try:
                 step()
@@ -91,6 +96,12 @@ class Controller:
 
     def look_at_queue(self) -> None:
         self.waiting = queue.agents_with_commands()
+
+    def start_routines(self) -> None:
+        routines.start_fired(self.driver)
+
+    def watch_routines(self) -> None:
+        routines.watch_runs(self.driver)
 
     # --- runtime lifecycle ----------------------------------------------------
 

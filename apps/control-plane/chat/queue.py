@@ -7,6 +7,10 @@ through the consumer ``agent-<agent>``, acks it and runs it.
 
 The live runtime also listens on ``axp.agent.<agent>.control`` (plain NATS,
 not stored): interrupts, approval decisions and steers go there.
+
+Routines are scheduled here too: ``axp.routine.<routine>.schedule`` holds a
+routine's NATS message schedule, which publishes to
+``axp.routine.<routine>.fire``; the controller starts a run for each fire.
 """
 
 import asyncio
@@ -48,6 +52,19 @@ ACK_WAIT_SECONDS = 30
 
 class QueueFull(Exception):
     pass
+
+
+ROUTINES_STREAM = "ROUTINES"
+ROUTINES_CONFIG = StreamConfig(
+    name=ROUTINES_STREAM,
+    subjects=["axp.routine.>"],
+    # A fire stays until the controller takes it; schedules stay until
+    # replaced or purged.
+    retention=RetentionPolicy.WORK_QUEUE,
+    storage=StorageType.FILE,
+    allow_msg_schedules=True,
+)
+FIRES = "routine-fires"
 
 
 def commands_subject(agent_id) -> str:
@@ -107,12 +124,21 @@ def _js(make_coroutine):
 
 def ensure_stream() -> None:
     async def ensure(js):
-        try:
-            await js.stream_info(STREAM)
-        except NotFoundError:
-            await js.add_stream(STREAM_CONFIG)
-        else:
-            await js.update_stream(STREAM_CONFIG)
+        for config in (STREAM_CONFIG, ROUTINES_CONFIG):
+            try:
+                await js.stream_info(config.name)
+            except NotFoundError:
+                await js.add_stream(config)
+            else:
+                await js.update_stream(config)
+        await js.add_consumer(
+            ROUTINES_STREAM,
+            ConsumerConfig(
+                durable_name=FIRES,
+                filter_subject="axp.routine.*.fire",
+                ack_policy=AckPolicy.EXPLICIT,
+            ),
+        )
 
     _js(ensure)
 
@@ -216,3 +242,60 @@ def ask(agent_id, body: dict) -> dict | None:
         return json.loads(reply.data)
 
     return _connection.run(request)
+
+
+# --- routines -------------------------------------------------------------------
+
+
+def schedule_routine(routine_id, cron: str, timezone: str) -> None:
+    """Fire the routine on a five-field cron in ``timezone``; replaces any
+    earlier schedule."""
+    headers = {
+        "Nats-Schedule": f"0 {cron}",
+        "Nats-Schedule-Target": f"axp.routine.{routine_id}.fire",
+        "Nats-Schedule-Time-Zone": timezone,
+    }
+    _js(
+        lambda js: js.publish(
+            f"axp.routine.{routine_id}.schedule", b"{}", headers=headers
+        )
+    )
+
+
+def unschedule_routine(routine_id) -> None:
+    _js(
+        lambda js: js.purge_stream(
+            ROUTINES_STREAM, subject=f"axp.routine.{routine_id}.schedule"
+        )
+    )
+
+
+def fire_routine(routine_id) -> None:
+    """Run the routine now, as if its schedule fired."""
+    body = json.dumps({"now": True}).encode()
+    _js(lambda js: js.publish(f"axp.routine.{routine_id}.fire", body))
+
+
+def take_fires() -> list[tuple[str, bool]]:
+    """Routines due to run, and whether each was asked for now; already
+    acked: a fire missed while the controller is down is not made up."""
+
+    async def take(js):
+        subscription = await js.pull_subscribe_bind(FIRES, stream=ROUTINES_STREAM)
+        try:
+            messages = await subscription.fetch(20, timeout=0.2)
+        except NatsTimeout:
+            return []
+        finally:
+            await subscription.unsubscribe()
+        fires = []
+        for message in messages:
+            await message.ack()
+            try:
+                now = bool(json.loads(message.data or b"{}").get("now"))
+            except ValueError:
+                now = False
+            fires.append((message.subject.split(".")[2], now))
+        return fires
+
+    return _js(take)

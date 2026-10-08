@@ -13,6 +13,7 @@ dependencies = [
   "python-dotenv>=1.1,<2",
   "axp-telemetry",
   "nats-py>=2.16,<3",
+  "croniter>=6,<7",
 ]
 
 [dependency-groups]
@@ -31,5 +32,5 @@ axp-telemetry = { path = "../../packages/telemetry-py", editable = true }
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings"
-testpaths = ["chat/tests"]
+testpaths = ["chat/tests", "routines/tests"]
 addopts = "-p no:cacheprovider"

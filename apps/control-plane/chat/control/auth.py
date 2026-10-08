@@ -24,3 +24,9 @@ def bearer(request) -> str:
 def token_matches(token: str, instance) -> bool:
     expected = runtime_token(instance.id, instance.generation)
     return hmac.compare_digest(token.encode(), expected.encode())
+
+
+def routine_token(run_id) -> str:
+    """A routine run's token; it works only while the run is running."""
+    message = f"routine-run:{run_id}".encode()
+    return hmac.new(settings.SECRET_KEY.encode(), message, hashlib.sha256).hexdigest()

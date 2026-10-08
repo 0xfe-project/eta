@@ -9,6 +9,7 @@ import { usePendingInteractions } from "@/queries/chat";
 import { Inbox } from "./inbox";
 import { MemoryView } from "./memory-view";
 import { Overview } from "./overview";
+import { Routines } from "./routines";
 import { views } from "./workspace-search";
 
 export function WorkspacePanel({
@@ -69,6 +70,7 @@ export function WorkspacePanel({
         {views.map(({ value }) => (
           <TabsContent key={value} value={value}>
             {value === "overview" ? <Overview /> : null}
+            {value === "routines" ? <Routines /> : null}
             {value === "memory" ? <MemoryView /> : null}
             {value === "inbox" ? <Inbox /> : null}
           </TabsContent>

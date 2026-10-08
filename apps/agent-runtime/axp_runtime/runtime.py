@@ -85,6 +85,9 @@ FLUSH_SECONDS = 0.3
 # thread/compact/start answers before its turn starts.
 COMPACT_START_SECONDS = 30
 DECISIONS = {"accept", "decline"}
+# Routine runs' own tools (apps/agent-runtime/plugins/routine); chat agents
+# never get them.
+ROUTINE_ONLY_PLUGINS = ("routine",)
 
 
 class RecoveryFailed(Exception):
@@ -168,6 +171,113 @@ def _toml(value) -> str:
         inner = ", ".join(f"{json.dumps(k)} = {_toml(v)}" for k, v in value.items())
         return "{" + inner + "}"
     return json.dumps(value)
+
+
+def install_plugins(settings: Settings) -> None:
+    """Install the chosen plugins of the image's marketplace into CODEX_HOME.
+
+    ``settings.plugins`` chooses them; without a choice, every plugin but
+    the routine runs' own. Codex only loads installed copies; their MCP
+    configs then get this instance's values. Plugins no longer chosen are
+    removed, since the snapshot's Codex config still enables them.
+    Everything else about them (hooks, tool approval) is static Codex
+    configuration in the image (/etc/codex).
+    """
+    source = settings.plugins_dir
+    catalog = json.loads(
+        (source / ".agents" / "plugins" / "marketplace.json").read_text()
+    )
+    marketplace = catalog["name"]
+    codex = [
+        str(bundled_codex_path()),
+        "--config",
+        f"marketplaces.{marketplace}.source_type={_toml('local')}",
+        "--config",
+        f"marketplaces.{marketplace}.source={_toml(str(source))}",
+        "plugin",
+    ]
+    values = {
+        "AXP_GATEWAY_URL": settings.gateway_url,
+        "AXP_WORKSPACE_DIR": str(settings.workspace_dir),
+    }
+    config = settings.codex_home / "config.toml"
+    enabled = (
+        tomllib.loads(config.read_text()).get("plugins", {}) if config.exists() else {}
+    )
+    chosen = settings.plugins
+    for plugin in catalog["plugins"]:
+        name = f"{plugin['name']}@{marketplace}"
+        wanted = (
+            plugin["name"] in chosen
+            if chosen is not None
+            else plugin["name"] not in ROUTINE_ONLY_PLUGINS
+        )
+        if not wanted and name not in enabled:
+            continue
+        try:
+            subprocess.run(
+                [*codex, "add" if wanted else "remove", name],
+                env={**os.environ, **codex_env(settings)},
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=True,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            detail = getattr(exc, "stderr", None) or str(exc)
+            raise RecoveryFailed("PLUGIN_INSTALL_FAILED", f"{name}: {detail}") from exc
+        if not wanted:
+            logger.info("Removed plugin %s", name)
+            continue
+        installed = settings.codex_home / "plugins/cache" / marketplace
+        for path in (installed / plugin["name"]).glob("*/.mcp.json"):
+            path.write_text(
+                PLUGIN_VARIABLES.sub(lambda m: values[m[1]], path.read_text())
+            )
+        logger.info("Installed plugin %s", name)
+
+
+def codex_env(settings: Settings) -> dict[str, str]:
+    env = {
+        "CODEX_HOME": str(settings.codex_home),
+        "AXP_WORKSPACE_DIR": str(settings.workspace_dir),
+        # Plugin hooks reach their services through the runtime gateway
+        # with the same key as model requests.
+        "AXP_GATEWAY_URL": settings.gateway_url,
+        "AXP_RUNTIME_LLM_KEY": f"{settings.instance_id}.{settings.token}",
+    }
+    return env
+
+
+def codex_config(settings: Settings) -> CodexConfig:
+    # Every model request goes through the runtime gateway, which
+    # authenticates this runtime instance; the container holds no provider
+    # credentials.
+    llm_base_url = f"{settings.gateway_url}/v1"
+    overrides = [
+        f"model_provider={_toml(LLM_PROVIDER)}",
+        f"model_providers.{LLM_PROVIDER}.name={_toml('AXP LLM Gateway')}",
+        f"model_providers.{LLM_PROVIDER}.base_url={_toml(llm_base_url)}",
+        f"model_providers.{LLM_PROVIDER}.wire_api={_toml('responses')}",
+        f"model_providers.{LLM_PROVIDER}.env_key={_toml('AXP_RUNTIME_LLM_KEY')}",
+    ]
+    if settings.model_context_window:
+        overrides.append(f"model_context_window={_toml(settings.model_context_window)}")
+    overrides += _otel_overrides()
+    launch = None
+    if settings.codex_launch:
+        # A custom launcher gets the same overrides the SDK would pass.
+        launch = [*settings.codex_launch]
+        for override in overrides:
+            launch += ["--config", override]
+    return CodexConfig(
+        launch_args_override=tuple(launch) if launch else None,
+        config_overrides=tuple(overrides),
+        cwd=str(settings.workspace_dir),
+        env=codex_env(settings),
+        client_name="axp_runtime",
+        client_title="AXP Agent Runtime",
+    )
 
 
 class Runtime:
@@ -350,111 +460,15 @@ class Runtime:
     # --- plugins --------------------------------------------------------------
 
     def _install_plugins(self) -> None:
-        """Install the agent's plugins of the image's marketplace into CODEX_HOME.
-
-        Codex only loads installed copies; their MCP configs then get this
-        instance's values. Plugins the agent no longer runs with are removed,
-        since the snapshot's Codex config still enables them. Everything else
-        about them (hooks, tool approval) is static Codex configuration in the
-        image (/etc/codex).
-        """
-        source = self.settings.plugins_dir
-        catalog = json.loads(
-            (source / ".agents" / "plugins" / "marketplace.json").read_text()
-        )
-        marketplace = catalog["name"]
-        codex = [
-            str(bundled_codex_path()),
-            "--config",
-            f"marketplaces.{marketplace}.source_type={_toml('local')}",
-            "--config",
-            f"marketplaces.{marketplace}.source={_toml(str(source))}",
-            "plugin",
-        ]
-        values = {
-            "AXP_GATEWAY_URL": self.settings.gateway_url,
-            "AXP_WORKSPACE_DIR": str(self.settings.workspace_dir),
-        }
-        config = self.settings.codex_home / "config.toml"
-        enabled = (
-            tomllib.loads(config.read_text()).get("plugins", {})
-            if config.exists()
-            else {}
-        )
-        chosen = self.settings.plugins
-        for plugin in catalog["plugins"]:
-            name = f"{plugin['name']}@{marketplace}"
-            wanted = chosen is None or plugin["name"] in chosen
-            if not wanted and name not in enabled:
-                continue
-            try:
-                subprocess.run(
-                    [*codex, "add" if wanted else "remove", name],
-                    env={**os.environ, **self._codex_env()},
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
-                    check=True,
-                )
-            except (OSError, subprocess.SubprocessError) as exc:
-                detail = getattr(exc, "stderr", None) or str(exc)
-                raise RecoveryFailed(
-                    "PLUGIN_INSTALL_FAILED", f"{name}: {detail}"
-                ) from exc
-            if not wanted:
-                logger.info("Removed plugin %s", name)
-                continue
-            installed = self.settings.codex_home / "plugins/cache" / marketplace
-            for path in (installed / plugin["name"]).glob("*/.mcp.json"):
-                path.write_text(
-                    PLUGIN_VARIABLES.sub(lambda m: values[m[1]], path.read_text())
-                )
-            logger.info("Installed plugin %s", name)
+        install_plugins(self.settings)
 
     # --- Codex --------------------------------------------------------------
 
     def _codex_env(self) -> dict[str, str]:
-        env = {
-            "CODEX_HOME": str(self.settings.codex_home),
-            "AXP_WORKSPACE_DIR": str(self.settings.workspace_dir),
-            # Plugin hooks reach their services through the runtime gateway
-            # with the same key as model requests.
-            "AXP_GATEWAY_URL": self.settings.gateway_url,
-            "AXP_RUNTIME_LLM_KEY": f"{self.settings.instance_id}.{self.settings.token}",
-        }
-        return env
+        return codex_env(self.settings)
 
     def _codex_config(self) -> CodexConfig:
-        # Every model request goes through the runtime gateway, which
-        # authenticates this runtime instance; the container holds no provider
-        # credentials.
-        llm_base_url = f"{self.settings.gateway_url}/v1"
-        overrides = [
-            f"model_provider={_toml(LLM_PROVIDER)}",
-            f"model_providers.{LLM_PROVIDER}.name={_toml('AXP LLM Gateway')}",
-            f"model_providers.{LLM_PROVIDER}.base_url={_toml(llm_base_url)}",
-            f"model_providers.{LLM_PROVIDER}.wire_api={_toml('responses')}",
-            f"model_providers.{LLM_PROVIDER}.env_key={_toml('AXP_RUNTIME_LLM_KEY')}",
-        ]
-        if self.settings.model_context_window:
-            overrides.append(
-                f"model_context_window={_toml(self.settings.model_context_window)}"
-            )
-        overrides += _otel_overrides()
-        launch = None
-        if self.settings.codex_launch:
-            # A custom launcher gets the same overrides the SDK would pass.
-            launch = [*self.settings.codex_launch]
-            for override in overrides:
-                launch += ["--config", override]
-        return CodexConfig(
-            launch_args_override=tuple(launch) if launch else None,
-            config_overrides=tuple(overrides),
-            cwd=str(self.settings.workspace_dir),
-            env=self._codex_env(),
-            client_name="axp_runtime",
-            client_title="AXP Agent Runtime",
-        )
+        return codex_config(self.settings)
 
     def _start_codex(self) -> None:
         client = CodexClient(self._codex_config(), approval_handler=self._on_request)
