@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/gin-gonic/gin v1.10.1
-	github.com/router-for-me/CLIProxyAPI/v7 v7.3.20
+	github.com/router-for-me/CLIProxyAPI/v8 v8.0.20
 	gopkg.in/yaml.v3 v3.0.1
 )
 

@@ -20,7 +20,7 @@ import (
 	"github.com/akarachen/axp/apps/llm-gateway/internal/llm"
 	"github.com/akarachen/axp/packages/telemetry-go"
 	"github.com/gin-gonic/gin"
-	"github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy"
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy"
 	"github.com/sirupsen/logrus"
 )
 
