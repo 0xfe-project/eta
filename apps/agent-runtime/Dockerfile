@@ -23,8 +23,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl git zstd \
     && rm -rf /var/lib/apt/lists/*
 COPY out/${TARGETOS}-${TARGETARCH}/site-packages/ /usr/local/lib/python3.13/site-packages/
-# akhook, the rule engine the agent's hooks run.
+# The hooks' rules: akhook checks every tool call against them before Codex
+# runs it (a managed hook in /etc/codex/requirements.toml).
 COPY --from=akhook /akhook /usr/local/bin/akhook
+COPY hooks /etc/akhook
+ENV AKHOOK_ADDITIONAL_CONFIG_PATH=/etc/akhook/akhook.yml
 # The static Codex configuration (sandbox, approvals), then the plugins every
 # agent can run with: their setup scripts prepare their environments (with a
 # download cache kept across builds), and the plugins become a local

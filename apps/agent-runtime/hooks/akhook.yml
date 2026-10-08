@@ -1,0 +1,71 @@
+# Rules for every agent's shell commands and file changes, checked by akhook
+# (vendor/akhook) before Codex runs them. The image loads this file as an
+# additional config (AKHOOK_ADDITIONAL_CONFIG_PATH), so a workspace's own
+# .akhook.yml may add rules but cannot disable or replace these.
+#
+# Rules guard against mistakes, not against an agent set on getting around
+# them: whatever must never happen is enforced by credentials instead.
+version: 1
+rules:
+  - id: gh-pr-create
+    on: shell_exec
+    checks:
+      - argv: [gh, pr, create]
+    message: >-
+      不要用 gh 开 PR：PR 要以 AXP 的 GitHub App 身份打开。推送分支后用
+      open_pull_request 工具开 PR。
+
+  - id: gh-write
+    on: shell_exec
+    checks:
+      - argv:
+          - gh
+          - [pr, issue]
+          - [
+              merge,
+              close,
+              reopen,
+              edit,
+              comment,
+              review,
+              delete,
+              lock,
+              unlock,
+              ready,
+              transfer,
+              pin,
+              unpin,
+            ]
+      - argv:
+          - gh
+          - [
+              repo,
+              release,
+              gist,
+              secret,
+              variable,
+              label,
+              ruleset,
+              workflow,
+              cache,
+              project,
+            ]
+          - [
+              create,
+              delete,
+              edit,
+              fork,
+              rename,
+              archive,
+              set,
+              upload,
+              enable,
+              disable,
+              run,
+              sync,
+            ]
+      - regex: '\bgh\s+api\b.*\s(-X|--method)\s*=?\s*(POST|PUT|PATCH|DELETE)\b'
+      # GraphQL reads are POSTs too, so only mutations count; a REST write
+      # that relies on -f implying POST is left to the token's permissions.
+      - regex: '\bgh\s+api\s+graphql\b.*\bmutation\b'
+    message: gh 只能用来读。需要在 GitHub 上写入时，告诉用户你想做什么。
