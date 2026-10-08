@@ -453,6 +453,30 @@ class TestExecution:
         assert Approval.objects.get().status == "applied"
         assert ctl.reply(sent).status == "responding"
 
+    def test_plugin_confirmation(self, ctl, running):
+        sent, runtime, command = running
+        runtime.turn_started(command)
+        runtime.events(
+            (
+                "approval.requested",
+                {
+                    "approval_id": "sdk-1",
+                    "command_id": str(command.pk),
+                    "kind": "elicitation",
+                    "summary": {"server": "tasks", "message": "清空所有任务？"},
+                },
+            ),
+        )
+        [interaction] = ctl.chat.get("/chat").json()["interactions"]
+        assert interaction["prompt"] == "tasks 请求确认\n清空所有任务？"
+        assert interaction["agent_id"] == ctl.agent["id"]
+        assert Approval.objects.get().kind == "elicitation"
+        ctl.chat.post(
+            f"/chat/interactions/{interaction['id']}/answer", {"value": "deny"}
+        )
+        ctl.tick()
+        assert ctl.clients.of("decide") == [("decide", 1, "decline")]
+
 
 class TestSlashCommands:
     def steer(self, ctl, text="改用中文"):

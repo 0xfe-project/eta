@@ -1,1 +1,6 @@
-export type WorkspaceView = "overview" | "tasks" | "memory" | "capabilities";
+export type WorkspaceView =
+  | "overview"
+  | "tasks"
+  | "memory"
+  | "capabilities"
+  | "inbox";

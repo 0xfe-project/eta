@@ -278,6 +278,14 @@ class TestBoot:
         )
 
 
+def reply_text(cp, command_id):
+    return [
+        e["payload"]["item"]["text"]
+        for e in cp.events
+        if e["type"] == "item.updated" and e["payload"]["command_id"] == command_id
+    ][-1]
+
+
 class TestTurns:
     def test_turn_streams_items_and_completes(self, rt):
         runtime, cp = rt.start()
@@ -340,6 +348,40 @@ class TestTurns:
         runtime.interrupt(command_id)
         assert cp.wait_for("approval.applied")["decision"] == "cancel"
         assert cp.completed(command_id)["status"] == "interrupted"
+
+    def test_plugin_confirmation(self, rt):
+        runtime, cp = rt.start()
+        command_id = send(runtime, "[confirm]")
+        request = cp.wait_for("approval.requested")
+        assert request["kind"] == "elicitation"
+        assert request["summary"] == {"server": "tasks", "message": "清空所有任务？"}
+        assert runtime.decide(request["approval_id"], "accept", 1) == "accepted"
+        assert cp.wait_for("approval.applied")["decision"] == "accept"
+        assert cp.completed(command_id)["status"] == "completed"
+        assert reply_text(cp, command_id) == "确认结果：accept"
+
+    def test_plugin_confirmation_declined(self, rt):
+        runtime, cp = rt.start()
+        command_id = send(runtime, "[confirm]")
+        request = cp.wait_for("approval.requested")
+        runtime.decide(request["approval_id"], "decline", 1)
+        cp.completed(command_id)
+        assert reply_text(cp, command_id) == "确认结果：decline"
+
+    def test_interrupt_while_waiting_for_confirmation(self, rt):
+        runtime, cp = rt.start()
+        command_id = send(runtime, "[confirm]")
+        cp.wait_for("approval.requested")
+        runtime.interrupt(command_id)
+        assert cp.wait_for("approval.applied")["decision"] == "cancel"
+        assert cp.completed(command_id)["status"] == "interrupted"
+
+    def test_plugin_form_is_declined(self, rt):
+        runtime, cp = rt.start()
+        command_id = send(runtime, "[form]")
+        cp.completed(command_id)
+        assert reply_text(cp, command_id) == "确认结果：decline"
+        assert not [e for e in cp.events if e["type"] == "approval.requested"]
 
     def test_compact_runs_as_a_turn(self, rt):
         runtime, cp = rt.start()

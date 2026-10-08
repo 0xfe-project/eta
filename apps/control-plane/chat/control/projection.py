@@ -179,7 +179,12 @@ def item_updated(conversation, agent, instance, command, payload):
 
 
 def _approval_prompt(kind: str, summary: dict) -> str:
-    if kind == "command":
+    if kind == "elicitation":
+        # A plugin's tool asking the user to confirm (see user-attention.md).
+        prompt = f"{summary['server'] or '扩展'} 请求确认"
+        if summary.get("message"):
+            prompt += f"\n{summary['message']}"
+    elif kind == "command":
         prompt = "允许运行命令？"
         if summary.get("command"):
             prompt += f"\n{summary['command']}"
@@ -193,12 +198,20 @@ def _approval_prompt(kind: str, summary: dict) -> str:
 def approval_requested(conversation, agent, instance, command, payload):
     if command is None:
         return
-    kind = "command" if payload.get("kind") == "command" else "file_change"
+    kind = payload.get("kind")
+    if kind not in ("command", "elicitation"):
+        kind = "file_change"
     raw = payload.get("summary") or {}
-    summary = {
-        "command": str(raw.get("command") or "")[:500] or None,
-        "reason": str(raw.get("reason") or "")[:300] or None,
-    }
+    if kind == "elicitation":
+        summary = {
+            "server": str(raw.get("server") or "")[:100] or None,
+            "message": str(raw.get("message") or "")[:500] or None,
+        }
+    else:
+        summary = {
+            "command": str(raw.get("command") or "")[:500] or None,
+            "reason": str(raw.get("reason") or "")[:300] or None,
+        }
     approval = Approval.objects.create(
         agent=agent,
         command=command,
