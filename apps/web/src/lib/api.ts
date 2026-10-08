@@ -1,6 +1,6 @@
 // Browser clients for the same-origin API behind the edge gateway: the
-// control plane (/api/v1), the LLM gateway (/api/llm/v1) and the memory
-// service (/api/memory/v1).
+// control plane (/api/v1), the LLM gateway (/api/llm/v1), the memory
+// service (/api/memory/v1) and the forge service (/api/forge/v1).
 // POSTs carry an Idempotency-Key so a retried request cannot run twice.
 
 export class ApiError extends Error {
@@ -66,6 +66,7 @@ function client(base: string) {
 const controlPlane = client("/api/v1");
 export const llmApi = client("/api/llm/v1");
 export const memoryApi = client("/api/memory/v1");
+export const forgeApi = client("/api/forge/v1");
 
 export const apiGet = controlPlane.get;
 export const apiPost = controlPlane.post;
