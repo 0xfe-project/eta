@@ -1,44 +1,30 @@
 package main
 
 import (
-	"os"
-	"path/filepath"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
-func TestCurrentTaskIsTheWorkspaceUnderTheRoot(t *testing.T) {
-	root := t.TempDir()
-	c := &Config{Root: root}
-	dir := filepath.Join(root, "task-1", "web", "src")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+func TestCurrentTaskComesFromTheFlagTheTabOrAXP(t *testing.T) {
+	asked := ""
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked = r.URL.Query().Get("dir")
+		_, _ = w.Write([]byte(`{"task_id":"from-dir"}`))
+	}))
+	defer srv.Close()
+	c := &Config{URL: srv.URL, Token: "t"}
+	dir := t.TempDir()
 	t.Chdir(dir)
-	id, workspace, err := currentTask(c)
-	if err != nil || id != "task-1" || workspace != filepath.Join(root, "task-1") {
-		t.Fatalf("%q %q %v", id, workspace, err)
-	}
-	t.Chdir(root)
-	if _, _, err := currentTask(c); err == nil {
-		t.Fatal("the root itself is no task")
-	}
-	t.Setenv("AXP_TASK_ID", "task-2")
-	if id, _, _ := currentTask(c); id != "task-2" {
+	if id, _ := currentTask(c, "12"); id != "12" {
 		t.Fatal(id)
 	}
-}
-
-func TestRepositoryNames(t *testing.T) {
-	for in, want := range map[string]string{
-		"acme/web": "acme/web", "https://github.com/acme/web.git": "acme/web",
-		"git@github.com:acme/web.git": "acme/web", "https://github.com/acme/web/": "acme/web",
-	} {
-		m := repoPattern.FindStringSubmatch(in)
-		if m == nil || m[1]+"/"+m[2] != want {
-			t.Fatalf("%s: %v", in, m)
-		}
+	t.Setenv("AXP_TASK_ID", "")
+	if id, err := currentTask(c, ""); err != nil || id != "from-dir" || asked != dir {
+		t.Fatalf("%q %v asked %q", id, err, asked)
 	}
-	if repoPattern.MatchString("acme") {
-		t.Fatal("a name without an owner")
+	t.Setenv("AXP_TASK_ID", "from-tab")
+	if id, _ := currentTask(c, ""); id != "from-tab" {
+		t.Fatal(id)
 	}
 }

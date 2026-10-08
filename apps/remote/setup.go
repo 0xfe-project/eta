@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -13,40 +14,44 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
-// setup connects this computer to AXP: it is what the install command runs.
+// setup connects this computer to AXP: it is what the install command runs,
+// and running it again picks up changed runtimes. It enrolls, installs an
+// agenvo connector per runtime found here, pairs each with AXP's relay
+// (waiting for the user to approve it in AXP) and runs it as the
+// connector's own user service.
 func setup(args []string) error {
 	flags := flag.NewFlagSet("setup", flag.ContinueOnError)
 	url := flags.String("url", "", "AXP's address")
 	code := flags.String("code", "", "the install command's code")
-	root := flags.String("root", "", "where task workspaces go (default ~/axp/tasks)")
 	caFile := flags.String("ca-file", os.Getenv("NODE_EXTRA_CA_CERTS"), "extra CA certificates (development)")
-	noService := flags.Bool("no-service", false, "do not register the daemon as a user service; run `axp daemon` yourself")
+	noService := flags.Bool("no-service", false, "do not register the connectors as user services; run them yourself")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if *code == "" && flags.NArg() > 0 {
 		*code = flags.Arg(0)
 	}
-	if *url == "" || *code == "" {
-		return errors.New("usage: axp setup --url URL --code CODE [--root DIR]")
-	}
-	home, _ := os.UserHomeDir()
-	if *root == "" {
-		*root = filepath.Join(home, "axp", "tasks")
-	}
-	// The installation this binary is in (the install script puts it in
-	// <AXP_HOME>/bin); its configuration goes there too.
-	axpHome := configDir()
 
 	step("检查 Node.js")
 	if err := checkNode(); err != nil {
 		return err
 	}
 	step("寻找这台电脑上的运行时（Paseo、Herdr）")
-	c := &Config{URL: strings.TrimRight(*url, "/"), Root: *root, Home: axpHome, CAFile: *caFile}
+	c, err := loadConfig()
+	if err != nil {
+		if *url == "" || *code == "" {
+			return errors.New("usage: axp setup --url URL --code CODE")
+		}
+		c = &Config{URL: strings.TrimRight(*url, "/"), Home: configDir()}
+	}
+	if *caFile != "" {
+		c.CAFile = *caFile
+	}
+	c.Paseo, c.Herdr = nil, nil
 	if endpoint, err := findPaseo(); err == nil {
 		c.Paseo = &PaseoConfig{Endpoint: endpoint}
 		fmt.Printf("  Paseo: %s\n", endpoint)
@@ -64,17 +69,20 @@ func setup(args []string) error {
 	}
 
 	step("连接 AXP")
-	var enrolled struct {
-		ComputerID  string `json:"computer_id"`
-		Name        string `json:"name"`
-		Token       string `json:"token"`
-		RelayOrigin string `json:"relay_origin"`
-	}
-	if err := call(c.URL, "", "POST", "/remote/v1/enroll", map[string]string{"code": *code}, &enrolled); err != nil {
-		return err
-	}
-	c.Token, c.ComputerID, c.Name, c.RelayOrigin = enrolled.Token, enrolled.ComputerID, enrolled.Name, enrolled.RelayOrigin
-	if err := os.MkdirAll(c.Root, 0o755); err != nil {
+	report := c.report()
+	if c.Token == "" {
+		var enrolled struct {
+			ComputerID  string `json:"computer_id"`
+			Name        string `json:"name"`
+			Token       string `json:"token"`
+			RelayOrigin string `json:"relay_origin"`
+		}
+		report["code"] = *code
+		if err := call(c.URL, "", "POST", "/remote/v1/enroll", report, &enrolled); err != nil {
+			return err
+		}
+		c.Token, c.ComputerID, c.Name, c.RelayOrigin = enrolled.Token, enrolled.ComputerID, enrolled.Name, enrolled.RelayOrigin
+	} else if err := c.call("POST", "/remote/v1/report", report, nil); err != nil {
 		return err
 	}
 	if err := c.save(); err != nil {
@@ -89,22 +97,55 @@ func setup(args []string) error {
 		return err
 	}
 
+	step("与 AXP 的中继配对")
+	if err := pairConnectors(c); err != nil {
+		return err
+	}
+
 	if *noService {
-		fmt.Printf("没有注册服务：运行 `%s daemon` 来启动。\n", self())
+		for _, kind := range c.kinds() {
+			fmt.Printf("没有注册服务：用 AGENVO_CONFIG_DIR=%s %s run 运行 %s connector。\n", c.connectorDir(kind), c.connectorBin(kind), kind)
+		}
 	} else {
 		step("注册为开机启动的服务")
-		if err := installService(); err != nil {
-			return fmt.Errorf("%w\n可以先手动运行 `%s daemon`", err, self())
+		for _, kind := range c.kinds() {
+			if out, err := c.connector(kind, "service", "install").CombinedOutput(); err != nil {
+				return fmt.Errorf("注册 %s connector 服务失败：%s", kind, out)
+			}
+		}
+		if runtime.GOOS == "linux" {
+			if user := os.Getenv("USER"); user != "" {
+				if out, _ := exec.Command("loginctl", "show-user", user, "--property=Linger").Output(); strings.Contains(string(out), "Linger=no") {
+					fmt.Printf("提示：要在退出登录后继续运行，执行 `loginctl enable-linger %s`。\n", user)
+				}
+			}
 		}
 	}
-	fmt.Printf(`
-已接入 AXP，这台电脑叫「%s」。
-打开 AXP 的 设置 → 远程电脑，核对指纹后批准 %s。
-任务工作区在 %s。`+"\n", c.Name, runtimesText(c), c.Root)
+	fmt.Printf("\n已接入 AXP，这台电脑叫「%s」。现在可以把任务指派给它上面的 %s 了。\n", c.Name, runtimesText(c))
 	return nil
 }
 
 func step(s string) { fmt.Println("==>", s) }
+
+// report is what AXP is told about this computer.
+func (c *Config) report() map[string]any {
+	hostname, _ := os.Hostname()
+	runtimes := []map[string]any{}
+	if c.Paseo != nil {
+		runtimes = append(runtimes, map[string]any{"kind": "paseo", "providers": orEmpty(paseoProviders())})
+	}
+	if c.Herdr != nil {
+		runtimes = append(runtimes, map[string]any{"kind": "herdr", "providers": orEmpty(herdrKinds())})
+	}
+	return map[string]any{"hostname": hostname, "os": runtime.GOOS, "arch": runtime.GOARCH, "cli": self(), "runtimes": runtimes}
+}
+
+func orEmpty(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
 
 func runtimesText(c *Config) string {
 	var kinds []string
@@ -242,7 +283,7 @@ func (c *Config) kinds() []string {
 }
 
 // installConnectors installs the connectors AXP serves (its pinned agenvo)
-// under AXP_HOME, away from any global installation.
+// under the installation, away from any global one.
 func installConnectors(c *Config) error {
 	args := []string{"install", "--global", "--prefix", filepath.Join(c.Home, "agenvo"), "--no-audit", "--no-fund", "--loglevel=error"}
 	for _, kind := range c.kinds() {
@@ -257,27 +298,98 @@ func installConnectors(c *Config) error {
 // configureConnectors gives each connector its one instance, named after
 // its kind (AXP calls it by that name).
 func configureConnectors(c *Config) error {
+	home, _ := os.UserHomeDir()
 	for _, kind := range c.kinds() {
+		if _, err := os.Stat(filepath.Join(c.connectorDir(kind), "config.json")); err == nil {
+			continue
+		}
 		var args []string
 		switch kind {
 		case "paseo":
 			args = []string{"instance", "add", "--id", "paseo", "--endpoint", c.Paseo.Endpoint}
 		case "herdr":
-			args = []string{"instance", "add", "--id", "herdr", "--config-root", c.Herdr.ConfigRoot, "--cwd", c.Root}
-		}
-		if _, err := os.Stat(filepath.Join(c.connectorDir(kind), "config.json")); err == nil {
-			continue
+			args = []string{"instance", "add", "--id", "herdr", "--config-root", c.Herdr.ConfigRoot, "--cwd", home}
 		}
 		if err := os.MkdirAll(c.connectorDir(kind), 0o700); err != nil {
 			return err
 		}
-		cmd := exec.Command(c.connectorBin(kind), args...)
-		cmd.Env = c.env(kind)
-		if out, err := cmd.CombinedOutput(); err != nil {
+		if out, err := c.connector(kind, args...).CombinedOutput(); err != nil {
 			return fmt.Errorf("配置 %s connector 失败：%s", kind, out)
 		}
 	}
 	return nil
+}
+
+// paired is the device a connector's own configuration has, if any.
+func (c *Config) paired(kind string) string {
+	data, err := os.ReadFile(filepath.Join(c.connectorDir(kind), "config.json"))
+	if err != nil {
+		return ""
+	}
+	var cfg struct {
+		DeviceID string `json:"deviceId"`
+	}
+	_ = json.Unmarshal(data, &cfg)
+	return cfg.DeviceID
+}
+
+// pairConnectors pairs every unpaired connector under this computer's label
+// and waits until the user approves each in AXP.
+func pairConnectors(c *Config) error {
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+	for _, kind := range c.kinds() {
+		if c.paired(kind) != "" {
+			fmt.Printf("  %s：已配对\n", kind)
+			continue
+		}
+		wg.Go(func() {
+			cmd := c.connector(kind, "connect", c.RelayOrigin, "--name", "axp:"+c.ComputerID+":"+kind, "--no-browser")
+			stdout, err := cmd.StdoutPipe()
+			if err != nil {
+				errs <- err
+				return
+			}
+			var stderr strings.Builder
+			cmd.Stderr = &stderr
+			if err := cmd.Start(); err != nil {
+				errs <- err
+				return
+			}
+			decoder := json.NewDecoder(stdout)
+			for {
+				var out struct {
+					Fingerprint string `json:"fingerprint"`
+					Paired      bool   `json:"paired"`
+				}
+				if err := decoder.Decode(&out); err != nil {
+					if !errors.Is(err, io.EOF) {
+						fmt.Fprintln(os.Stderr, "axp:", kind, "connector 输出无法识别：", err)
+					}
+					break
+				}
+				if out.Fingerprint != "" {
+					fmt.Printf("  %s：在 AXP 的 设置 → 远程电脑 中核对指纹后批准\n      %s\n", kind, out.Fingerprint)
+				}
+				if out.Paired {
+					fmt.Printf("  %s：已批准\n", kind)
+				}
+			}
+			if err := cmd.Wait(); err != nil {
+				errs <- fmt.Errorf("%s 配对没有完成：%s", kind, strings.TrimSpace(stderr.String()))
+			}
+		})
+	}
+	wg.Wait()
+	close(errs)
+	return <-errs
+}
+
+// connector runs a connector command with its configuration directory.
+func (c *Config) connector(kind string, args ...string) *exec.Cmd {
+	cmd := exec.Command(c.connectorBin(kind), args...)
+	cmd.Env = c.env(kind)
+	return cmd
 }
 
 // env is the environment for a connector (kind) or npm.
@@ -290,4 +402,25 @@ func (c *Config) env(kind string) []string {
 		env = append(env, "NODE_EXTRA_CA_CERTS="+c.CAFile)
 	}
 	return env
+}
+
+// uninstall stops the connectors' services, revokes their pairings and
+// forgets AXP's credentials.
+func uninstall() error {
+	c, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	for _, kind := range []string{"paseo", "herdr"} {
+		if _, err := os.Stat(c.connectorBin(kind)); err != nil {
+			continue
+		}
+		_ = c.connector(kind, "service", "uninstall").Run()
+		_ = c.connector(kind, "disconnect").Run()
+	}
+	if err := os.Remove(configPath()); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	fmt.Println("已停止这台电脑上的 connector，并移除了 AXP 的凭据。")
+	return nil
 }

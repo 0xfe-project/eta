@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"log/slog"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -19,17 +20,17 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Remote computers. A computer is one `axp` daemon: the install command's
-// one-time code enrolls it and gives it a token, which it and the CLI on that
-// computer use under /remote. The daemon runs an agenvo connector per runtime
-// (Paseo, Herdr); each pairs with the relay as its own device, which the user
-// approves here after comparing the fingerprint the daemon printed.
+// Remote computers. The install command's one-time code enrolls a computer
+// (`axp setup`) and gives it a token for its CLI under /remote. Setup
+// installs an agenvo connector per runtime (Paseo, Herdr) as the
+// connector's own service and pairs it with the relay under the label
+// axp:<computer id>:<runtime>; the user approves the pairing here after
+// comparing the fingerprint setup printed. Whether a computer is online is
+// the relay's view of its connectors.
 
 const (
 	// EnrollFor is how long an install command works.
 	EnrollFor = 24 * time.Hour
-	// A daemon heartbeats every few seconds; one silent for longer is offline.
-	onlineWithin = 30 * time.Second
 	// MaxActiveRuns is how many runs a computer works on at once.
 	MaxActiveRuns = 4
 )
@@ -45,48 +46,39 @@ type computerRow struct {
 	Hostname        *string    `db:"hostname"`
 	OS              *string    `db:"os"`
 	Arch            *string    `db:"arch"`
-	WorkspaceRoot   *string    `db:"workspace_root"`
 	CLIPath         *string    `db:"cli_path"`
-	LastSeenAt      *time.Time `db:"last_seen_at"`
 	CreatedAt       time.Time  `db:"created_at"`
 }
 
-func (c *computerRow) online() bool {
-	return c.LastSeenAt != nil && time.Since(*c.LastSeenAt) < onlineWithin
+type computerRuntimeRow struct {
+	ComputerID string    `db:"computer_id"`
+	Kind       string    `db:"kind"`
+	Providers  []string  `db:"providers"`
+	DeviceID   *string   `db:"device_id"`
+	UpdatedAt  time.Time `db:"updated_at"`
 }
 
-type computerRuntimeRow struct {
-	ComputerID         string    `db:"computer_id"`
-	Kind               string    `db:"kind"`
-	Providers          []string  `db:"providers"`
-	PairingCode        *string   `db:"pairing_code"`
-	PairingFingerprint *string   `db:"pairing_fingerprint"`
-	DeviceID           *string   `db:"device_id"`
-	Error              *string   `db:"error"`
-	UpdatedAt          time.Time `db:"updated_at"`
-}
+// PairingLabel is the relay label setup pairs a computer's runtime under.
+func PairingLabel(computerID, kind string) string { return "axp:" + computerID + ":" + kind }
 
 type ComputerRuntime struct {
 	Kind      string   `json:"kind" enum:"paseo,herdr"`
 	Providers []string `json:"providers"`
-	// pairing: waiting for the user to approve the device; needs_approval:
-	// the device changed its runtime and waits for approval again.
-	State string `json:"state" enum:"pairing,needs_approval,online,offline,error"`
-	// The fingerprint to compare with the daemon's terminal before approving.
+	// waiting: setup has not paired it yet; pairing: approve it here;
+	// needs_approval: the runtime changed and waits for approval again.
+	State string `json:"state" enum:"waiting,pairing,needs_approval,online,offline"`
+	// The fingerprint to compare with setup's output before approving.
 	Fingerprint *string `json:"fingerprint" nullable:"true"`
-	Error       *string `json:"error" nullable:"true"`
 }
 
 type Computer struct {
-	ID            string         `json:"id"`
-	Name          string         `json:"name"`
-	Enrolled      bool           `json:"enrolled"`
-	Online        bool           `json:"online"`
-	Hostname      *string        `json:"hostname" nullable:"true"`
-	OS            *string        `json:"os" nullable:"true"`
-	Arch          *string        `json:"arch" nullable:"true"`
-	WorkspaceRoot *string        `json:"workspace_root" nullable:"true"`
-	LastSeenAt    *jsontime.Time `json:"last_seen_at" nullable:"true"`
+	ID       string  `json:"id"`
+	Name     string  `json:"name"`
+	Enrolled bool    `json:"enrolled"`
+	Online   bool    `json:"online"`
+	Hostname *string `json:"hostname" nullable:"true"`
+	OS       *string `json:"os" nullable:"true"`
+	Arch     *string `json:"arch" nullable:"true"`
 	// Until it enrolls: when the install command stops working.
 	EnrollExpiresAt *jsontime.Time    `json:"enroll_expires_at" nullable:"true"`
 	Runtimes        []ComputerRuntime `json:"runtimes"`
@@ -114,6 +106,17 @@ func digest(s string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+func (s *Service) relayState(ctx context.Context) (*relay.State, error) {
+	if s.Relay == nil {
+		return nil, relayUnavailable()
+	}
+	state, err := s.Relay.State(ctx)
+	if err != nil {
+		slog.WarnContext(ctx, "Relay state unavailable", "error", err)
+	}
+	return state, err
+}
+
 // ListComputers is every computer with its runtimes' state on the relay.
 func (s *Service) ListComputers(ctx context.Context, db store.DB) (*Computers, error) {
 	out := &Computers{Computers: []Computer{}, RelayConfigured: s.Relay != nil}
@@ -122,10 +125,9 @@ func (s *Service) ListComputers(ctx context.Context, db store.DB) (*Computers, e
 		origin := s.Relay.Origin()
 		out.RelayOrigin = &origin
 		var err error
-		if state, err = s.Relay.State(ctx); err != nil {
+		if state, err = s.relayState(ctx); err != nil {
 			message := err.Error()
 			out.RelayError = &message
-			slog.WarnContext(ctx, "Relay state unavailable", "error", err)
 		}
 	}
 	rows, err := chat.All[computerRow](ctx, db, "SELECT * FROM computer ORDER BY created_at")
@@ -139,15 +141,14 @@ func (s *Service) ListComputers(ctx context.Context, db store.DB) (*Computers, e
 	active, err := chat.All[struct {
 		ComputerID string `db:"computer_id"`
 		N          int64  `db:"n"`
-	}](ctx, db, `SELECT computer_id, count(*) AS n FROM task_run WHERE status IN ('preparing', 'starting', 'running')
+	}](ctx, db, `SELECT computer_id, count(*) AS n FROM task_run WHERE status IN ('starting', 'running')
 		AND computer_id IS NOT NULL GROUP BY computer_id`)
 	if err != nil {
 		return nil, err
 	}
 	for _, r := range rows {
 		c := Computer{
-			ID: r.ID, Name: r.Name, Enrolled: r.TokenHash != nil, Online: r.online(), Hostname: r.Hostname, OS: r.OS,
-			Arch: r.Arch, WorkspaceRoot: r.WorkspaceRoot, LastSeenAt: jsontime.Ptr(r.LastSeenAt),
+			ID: r.ID, Name: r.Name, Enrolled: r.TokenHash != nil, Hostname: r.Hostname, OS: r.OS, Arch: r.Arch,
 			Runtimes: []ComputerRuntime{}, CreatedAt: jsontime.From(r.CreatedAt),
 		}
 		if r.TokenHash == nil {
@@ -155,7 +156,9 @@ func (s *Service) ListComputers(ctx context.Context, db store.DB) (*Computers, e
 		}
 		for _, rt := range runtimes {
 			if rt.ComputerID == r.ID {
-				c.Runtimes = append(c.Runtimes, runtimeState(rt, state, r.online()))
+				public := runtimeState(rt, state)
+				c.Runtimes = append(c.Runtimes, public)
+				c.Online = c.Online || public.State == "online"
 			}
 		}
 		for _, a := range active {
@@ -168,20 +171,22 @@ func (s *Service) ListComputers(ctx context.Context, db store.DB) (*Computers, e
 	return out, nil
 }
 
-func runtimeState(rt *computerRuntimeRow, state *relay.State, daemonOnline bool) ComputerRuntime {
-	out := ComputerRuntime{Kind: rt.Kind, Providers: rt.Providers, Error: rt.Error, State: "offline"}
+func runtimeState(rt *computerRuntimeRow, state *relay.State) ComputerRuntime {
+	out := ComputerRuntime{Kind: rt.Kind, Providers: rt.Providers, State: "offline"}
 	if out.Providers == nil {
 		out.Providers = []string{}
 	}
-	if rt.DeviceID == nil {
-		if rt.PairingCode != nil {
-			out.State, out.Fingerprint = "pairing", rt.PairingFingerprint
-		} else if rt.Error != nil {
-			out.State = "error"
-		}
+	if state == nil {
 		return out
 	}
-	if state == nil {
+	if rt.DeviceID == nil {
+		out.State = "waiting"
+		for _, p := range state.Pairings {
+			if p.Label == PairingLabel(rt.ComputerID, rt.Kind) {
+				fingerprint := p.Digest
+				out.State, out.Fingerprint = "pairing", &fingerprint
+			}
+		}
 		return out
 	}
 	for _, d := range state.Devices {
@@ -197,7 +202,7 @@ func runtimeState(rt *computerRuntimeRow, state *relay.State, daemonOnline bool)
 				out.State, out.Fingerprint = "needs_approval", &fingerprint
 				return out
 			}
-			if d.Online && inst.Available && daemonOnline {
+			if d.Online && inst.Available {
 				out.State = "online"
 			}
 		}
@@ -221,15 +226,14 @@ func (s *Service) CreateComputer(ctx context.Context, tx pgx.Tx, name string) (*
 	}
 	code := secret("axpe_")
 	now := chat.Now()
-	r := &computerRow{ID: chat.NewID(), Name: name, CreatedAt: now}
+	id := chat.NewID()
 	expires := now.Add(EnrollFor)
-	r.EnrollExpiresAt = &expires
 	if _, err := tx.Exec(ctx, `INSERT INTO computer (id, name, enroll_code_hash, enroll_expires_at, created_at)
-		VALUES ($1, $2, $3, $4, $5)`, r.ID, r.Name, digest(code), expires, now); err != nil {
+		VALUES ($1, $2, $3, $4, $5)`, id, name, digest(code), expires, now); err != nil {
 		return nil, err
 	}
 	return &Enrollment{Code: code, Computer: Computer{
-		ID: r.ID, Name: r.Name, Runtimes: []ComputerRuntime{}, CreatedAt: jsontime.From(now), EnrollExpiresAt: jsontime.Ptr(&expires),
+		ID: id, Name: name, Runtimes: []ComputerRuntime{}, CreatedAt: jsontime.From(now), EnrollExpiresAt: jsontime.Ptr(&expires),
 	}}, nil
 }
 
@@ -269,6 +273,10 @@ func computer(ctx context.Context, db store.DB, id string) (*computerRow, error)
 	return r, nil
 }
 
+func relayUnreachable(err error) error {
+	return apierr.New(502, "RELAY_UNAVAILABLE", "无法连接中继："+err.Error())
+}
+
 // Approve approves a computer's runtime on the relay: its pending pairing,
 // or its changed runtime.
 func (s *Service) Approve(ctx context.Context, db store.DB, id, kind string) error {
@@ -286,23 +294,24 @@ func (s *Service) Approve(ctx context.Context, db store.DB, id, kind string) err
 	if rt == nil {
 		return apierr.NotFound()
 	}
-	if rt.DeviceID == nil {
-		if rt.PairingCode == nil || rt.PairingFingerprint == nil {
-			return apierr.New(409, "NOTHING_TO_APPROVE", "这台电脑还没有发起配对。")
-		}
-		deviceID, err := s.Relay.ApprovePairing(ctx, *rt.PairingCode, *rt.PairingFingerprint)
-		if err != nil {
-			return apierr.New(502, "RELAY_REJECTED", "中继没有接受这次配对："+err.Error())
-		}
-		// The pairing stays until the daemon reports the device: its heartbeats
-		// show the same pairing until its connector sees the approval.
-		_, err = db.Exec(ctx, `UPDATE computer_runtime SET device_id = $3, error = NULL, updated_at = $4
-			WHERE computer_id = $1 AND kind = $2`, r.ID, kind, deviceID, chat.Now())
-		return err
-	}
 	state, err := s.Relay.State(ctx)
 	if err != nil {
-		return apierr.New(502, "RELAY_UNAVAILABLE", "无法连接中继："+err.Error())
+		return relayUnreachable(err)
+	}
+	if rt.DeviceID == nil {
+		for _, p := range state.Pairings {
+			if p.Label != PairingLabel(r.ID, kind) {
+				continue
+			}
+			deviceID, err := s.Relay.ApprovePairing(ctx, p.Code, p.Digest)
+			if err != nil {
+				return apierr.New(502, "RELAY_REJECTED", "中继没有接受这次配对："+err.Error())
+			}
+			_, err = db.Exec(ctx, `UPDATE computer_runtime SET device_id = $3, updated_at = $4
+				WHERE computer_id = $1 AND kind = $2`, r.ID, kind, deviceID, chat.Now())
+			return err
+		}
+		return apierr.New(409, "NOTHING_TO_APPROVE", "这台电脑还没有发起配对。")
 	}
 	for _, d := range state.Devices {
 		if d.ID != *rt.DeviceID {
@@ -349,7 +358,7 @@ func (s *Service) DeleteComputer(ctx context.Context, tx pgx.Tx, id string) erro
 	}
 	reason := "电脑已移除。"
 	runs, err := chat.All[runRow](ctx, tx, `SELECT * FROM task_run WHERE computer_id = $1
-		AND status IN ('queued', 'preparing', 'starting', 'running') FOR UPDATE`, r.ID)
+		AND status IN ('queued', 'starting', 'running') FOR UPDATE`, r.ID)
 	if err != nil {
 		return err
 	}
@@ -375,16 +384,19 @@ type AssigneeOption struct {
 func (s *Service) AssigneeOptions(ctx context.Context, db store.DB) ([]AssigneeOption, error) {
 	rows, err := chat.All[struct {
 		computerRuntimeRow
-		Name       string     `db:"name"`
-		LastSeenAt *time.Time `db:"last_seen_at"`
-	}](ctx, db, `SELECT r.*, c.name, c.last_seen_at FROM computer_runtime r JOIN computer c ON c.id = r.computer_id
+		Name string `db:"name"`
+	}](ctx, db, `SELECT r.*, c.name FROM computer_runtime r JOIN computer c ON c.id = r.computer_id
 		WHERE r.device_id IS NOT NULL ORDER BY c.name, r.kind`)
 	if err != nil {
 		return nil, err
 	}
+	var state *relay.State
+	if s.Relay != nil && len(rows) > 0 {
+		state, _ = s.relayState(ctx)
+	}
 	out := []AssigneeOption{}
 	for _, r := range rows {
-		online := r.LastSeenAt != nil && time.Since(*r.LastSeenAt) < onlineWithin
+		online := runtimeState(&r.computerRuntimeRow, state).State == "online"
 		for _, p := range r.Providers {
 			out = append(out, AssigneeOption{ComputerID: r.ComputerID, ComputerName: r.Name, Runtime: r.Kind, Provider: p, Online: online})
 		}
@@ -392,13 +404,37 @@ func (s *Service) AssigneeOptions(ctx context.Context, db store.DB) ([]AssigneeO
 	return out, nil
 }
 
-// --- the daemon and the CLI (/remote) ---------------------------------------------------------
+// Places is where on a computer's runtime an agent can work, read from
+// the runtime now.
+func (s *Service) Places(ctx context.Context, db store.DB, id, kind string) (*Places, error) {
+	if s.Relay == nil {
+		return nil, relayUnavailable()
+	}
+	r, err := computer(ctx, db, id)
+	if err != nil {
+		return nil, err
+	}
+	var deviceID *string
+	if err := db.QueryRow(ctx, "SELECT device_id FROM computer_runtime WHERE computer_id = $1 AND kind = $2",
+		r.ID, kind).Scan(&deviceID); err != nil && err != pgx.ErrNoRows {
+		return nil, err
+	}
+	if deviceID == nil {
+		return nil, apierr.New(409, "RUNTIME_NOT_PAIRED", "这台电脑的 "+kind+" 还没有配对。")
+	}
+	places, err := agents{s.Relay}.places(ctx, target{*deviceID, kind})
+	if err != nil {
+		return nil, apierr.New(502, "REMOTE_UNAVAILABLE", "读取远程电脑上的工作区失败："+err.Error())
+	}
+	return places, nil
+}
+
+// --- the CLI (/remote) ----------------------------------------------------------------------
 
 // RemoteComputer is an enrolled computer, as its token proves.
 type RemoteComputer struct {
 	ID   string
 	Name string
-	Root string
 }
 
 func unauthenticated() error {
@@ -417,11 +453,21 @@ func Authenticate(ctx context.Context, db store.DB, token string) (*RemoteComput
 	if r == nil {
 		return nil, unauthenticated()
 	}
-	root := ""
-	if r.WorkspaceRoot != nil {
-		root = *r.WorkspaceRoot
-	}
-	return &RemoteComputer{ID: r.ID, Name: r.Name, Root: root}, nil
+	return &RemoteComputer{ID: r.ID, Name: r.Name}, nil
+}
+
+type RuntimeReport struct {
+	Kind      string   `json:"kind" enum:"paseo,herdr"`
+	Providers []string `json:"providers" maxItems:"16"`
+}
+
+// Report is what setup tells AXP about the computer.
+type Report struct {
+	Hostname string          `json:"hostname" maxLength:"255"`
+	OS       string          `json:"os" maxLength:"32"`
+	Arch     string          `json:"arch" maxLength:"32"`
+	CLI      string          `json:"cli,omitempty" maxLength:"1024" doc:"The axp binary's path."`
+	Runtimes []RuntimeReport `json:"runtimes" maxItems:"4"`
 }
 
 type Enrolled struct {
@@ -432,7 +478,7 @@ type Enrolled struct {
 }
 
 // Enroll trades an install code for the computer's token.
-func (s *Service) Enroll(ctx context.Context, tx pgx.Tx, code string) (*Enrolled, error) {
+func (s *Service) Enroll(ctx context.Context, tx pgx.Tx, code string, in Report) (*Enrolled, error) {
 	if s.Relay == nil {
 		return nil, relayUnavailable()
 	}
@@ -444,108 +490,57 @@ func (s *Service) Enroll(ctx context.Context, tx pgx.Tx, code string) (*Enrolled
 		return nil, apierr.New(401, "ENROLL_CODE_INVALID", "安装命令无效或已过期，请在 AXP 中重新生成。")
 	}
 	token := secret("axpc_")
-	if _, err := tx.Exec(ctx, `UPDATE computer SET token_hash = $2, enroll_code_hash = NULL, enroll_expires_at = NULL,
-		last_seen_at = $3 WHERE id = $1`, r.ID, digest(token), chat.Now()); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE computer SET token_hash = $2, enroll_code_hash = NULL, enroll_expires_at = NULL
+		WHERE id = $1`, r.ID, digest(token)); err != nil {
+		return nil, err
+	}
+	if err := s.Report(ctx, tx, &RemoteComputer{ID: r.ID, Name: r.Name}, in); err != nil {
 		return nil, err
 	}
 	return &Enrolled{ComputerID: r.ID, Name: r.Name, Token: token, RelayOrigin: s.Relay.Origin()}, nil
 }
 
-type RuntimeReport struct {
-	Kind      string   `json:"kind" enum:"paseo,herdr"`
-	Providers []string `json:"providers" maxItems:"16"`
-	// A pairing the connector started and waits on.
-	Pairing *struct {
-		Code        string `json:"code" maxLength:"64"`
-		Fingerprint string `json:"fingerprint" maxLength:"128"`
-	} `json:"pairing,omitempty"`
-	// Set once the connector is paired.
-	DeviceID *string `json:"device_id,omitempty" maxLength:"64"`
-	Error    *string `json:"error,omitempty" maxLength:"2000"`
-}
-
-type Heartbeat struct {
-	Hostname      string `json:"hostname" maxLength:"255"`
-	OS            string `json:"os" maxLength:"32"`
-	Arch          string `json:"arch" maxLength:"32"`
-	WorkspaceRoot string `json:"workspace_root" minLength:"1" maxLength:"1024"`
-	// The axp binary's path.
-	CLI      string          `json:"cli,omitempty" maxLength:"1024"`
-	Runtimes []RuntimeReport `json:"runtimes" maxItems:"4"`
-}
-
-// Prepare asks the daemon to create a run's workspace: <root>/<task id>.
-type Prepare struct {
-	RunID  string `json:"run_id"`
-	TaskID string `json:"task_id"`
-}
-
-type HeartbeatReply struct {
-	RelayOrigin string    `json:"relay_origin"`
-	Prepare     []Prepare `json:"prepare"`
-}
-
-// Heartbeat records what the daemon reports and answers with the
-// workspaces it should prepare.
-func (s *Service) Heartbeat(ctx context.Context, tx pgx.Tx, c *RemoteComputer, in Heartbeat) (*HeartbeatReply, error) {
-	if s.Relay == nil {
-		return nil, relayUnavailable()
-	}
-	now := chat.Now()
-	if _, err := tx.Exec(ctx, `UPDATE computer SET hostname = $2, os = $3, arch = $4, workspace_root = $5, last_seen_at = $6,
-		cli_path = NULLIF($7, '') WHERE id = $1`, c.ID, in.Hostname, in.OS, in.Arch, in.WorkspaceRoot, now, in.CLI); err != nil {
-		return nil, err
+// Report records the computer and its runtimes as setup found them. A
+// runtime setup no longer finds keeps its pairing (its connector may still
+// run).
+func (s *Service) Report(ctx context.Context, tx pgx.Tx, c *RemoteComputer, in Report) error {
+	if _, err := tx.Exec(ctx, `UPDATE computer SET hostname = $2, os = $3, arch = $4, cli_path = NULLIF($5, '')
+		WHERE id = $1`, c.ID, in.Hostname, in.OS, in.Arch, in.CLI); err != nil {
+		return err
 	}
 	for _, rt := range in.Runtimes {
 		if !slices.Contains(Runtimes, rt.Kind) {
 			continue
 		}
-		var code, fingerprint *string
-		if rt.Pairing != nil && rt.DeviceID == nil {
-			code, fingerprint = &rt.Pairing.Code, &rt.Pairing.Fingerprint
-		}
 		providers := rt.Providers
 		if providers == nil {
 			providers = []string{}
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO computer_runtime (computer_id, kind, providers, pairing_code, pairing_fingerprint,
-			device_id, error, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-			ON CONFLICT (computer_id, kind) DO UPDATE SET providers = $3, pairing_code = $4, pairing_fingerprint = $5,
-			device_id = COALESCE($6, CASE WHEN $4::text IS NULL OR $4 = computer_runtime.pairing_code
-				THEN computer_runtime.device_id END), error = $7, updated_at = $8`,
-			c.ID, rt.Kind, providers, code, fingerprint, rt.DeviceID, rt.Error, now); err != nil {
-			return nil, err
+		if _, err := tx.Exec(ctx, `INSERT INTO computer_runtime (computer_id, kind, providers, updated_at) VALUES ($1, $2, $3, $4)
+			ON CONFLICT (computer_id, kind) DO UPDATE SET providers = $3, updated_at = $4`,
+			c.ID, rt.Kind, providers, chat.Now()); err != nil {
+			return err
 		}
 	}
-	prepare, err := chat.All[struct {
-		RunID  string `db:"id"`
-		TaskID string `db:"task_id"`
-	}](ctx, tx, "SELECT id, task_id FROM task_run WHERE computer_id = $1 AND status = 'preparing' ORDER BY created_at", c.ID)
-	if err != nil {
-		return nil, err
-	}
-	reply := &HeartbeatReply{RelayOrigin: s.Relay.Origin(), Prepare: []Prepare{}}
-	for _, p := range prepare {
-		reply.Prepare = append(reply.Prepare, Prepare{RunID: p.RunID, TaskID: p.TaskID})
-	}
-	return reply, nil
+	return nil
 }
 
-// Prepared is the daemon reporting a run's workspace ready.
-func (s *Service) Prepared(ctx context.Context, tx pgx.Tx, c *RemoteComputer, runID, workspace string) error {
-	id, ok := chat.ParseID(runID)
-	if !ok {
-		return apierr.NotFound()
-	}
-	tag, err := tx.Exec(ctx, `UPDATE task_run SET status = 'starting', workspace = $3 WHERE id = $1 AND computer_id = $2
-		AND status = 'preparing'`, id, c.ID, workspace)
+// CurrentTask is the task whose open session works in dir (or a directory
+// above it) on this computer.
+func (s *Service) CurrentTask(ctx context.Context, db store.DB, c *RemoteComputer, dir string) (string, error) {
+	sessions, err := chat.All[sessionRow](ctx, db, `SELECT * FROM task_session WHERE computer_id = $1 AND closed_at IS NULL
+		AND workspace <> '' ORDER BY length(workspace) DESC`, c.ID)
 	if err != nil {
-		return err
+		return "", err
 	}
-	if tag.RowsAffected() == 0 {
-		return apierr.New(409, "RUN_NOT_PREPARING", "这次运行不在等待工作区。")
+	dir = filepath.Clean(dir)
+	for _, s := range sessions {
+		root := filepath.Clean(s.Workspace)
+		if dir == root || strings.HasPrefix(dir, root+string(filepath.Separator)) {
+			return s.TaskID, nil
+		}
 	}
-	return nil
+	return "", apierr.New(404, "NO_TASK_HERE", "这个目录不是任何进行中任务的工作位置；用 --task 指定任务。")
 }
 
 // remoteTask is a task the computer works on.
@@ -628,27 +623,6 @@ func (s *Service) RemoteStatus(ctx context.Context, tx pgx.Tx, c *RemoteComputer
 		return err
 	}
 	return setStatus(ctx, tx, r, status, Remote, run, s.remoteData(ctx, tx, c, r))
-}
-
-type Checkout struct {
-	Repository string `json:"repository" minLength:"1" maxLength:"200"`
-	Branch     string `json:"branch" minLength:"1" maxLength:"255"`
-	BaseCommit string `json:"base_commit" minLength:"7" maxLength:"64"`
-	Path       string `json:"path" maxLength:"1024"`
-}
-
-func (s *Service) RecordCheckout(ctx context.Context, tx pgx.Tx, c *RemoteComputer, ref string, in Checkout) error {
-	r, err := remoteTask(ctx, tx, c, ref, true)
-	if err != nil {
-		return err
-	}
-	run, err := activeRun(ctx, tx, c, r.ID)
-	if err != nil {
-		return err
-	}
-	data := s.remoteData(ctx, tx, c, r)
-	data["repository"], data["branch"], data["base_commit"], data["path"] = in.Repository, in.Branch, in.BaseCommit, in.Path
-	return record(ctx, tx, r.ID, run, "checkout", Remote, nil, data)
 }
 
 type Deliverable struct {

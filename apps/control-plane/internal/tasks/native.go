@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -14,18 +16,27 @@ import (
 // A remote agent through the relay, in each runtime's native terms. Native
 // ids survive connector restarts, unlike the relay's opaque references, so
 // they are what a session keeps.
+//
+// Where it works is the user's own Paseo and Herdr state: an existing
+// workspace, or a worktree the runtime creates itself (Paseo's
+// workspaces.create, Herdr's worktree.create). AXP only archives or removes
+// what it opened, when the task is done.
 
-// Each connector the daemon sets up has one instance, named after its kind.
+// Each connector setup configures has one instance, named after its kind.
 func instanceFor(runtime string) string { return runtime }
 
-// native is a session's native agent.
+// native is a session's native agent and what AXP opened for it.
 type native struct {
 	// Paseo
-	AgentID string `json:"agent_id,omitempty"`
+	AgentID          string `json:"agent_id,omitempty"`
+	CreatedWorkspace bool   `json:"created_workspace,omitempty"`
 	// Herdr
-	Session     string `json:"session,omitempty"`
-	Name        string `json:"name,omitempty"`
-	PaneID      string `json:"pane_id,omitempty"`
+	Session         string `json:"session,omitempty"`
+	Name            string `json:"name,omitempty"`
+	TabID           string `json:"tab_id,omitempty"`
+	PaneID          string `json:"pane_id,omitempty"`
+	CreatedWorktree bool   `json:"created_worktree,omitempty"`
+	// Both
 	WorkspaceID string `json:"workspace_id,omitempty"`
 }
 
@@ -57,9 +68,19 @@ type agents struct {
 	relay relay.Relay
 }
 
-func (a agents) call(ctx context.Context, s *sessionRow, method string, params any, out any) error {
-	outcome, err := a.relay.Call(ctx, s.DeviceID, s.InstanceID, method, params)
+// target is where a call goes: a computer's device and runtime.
+type target struct {
+	DeviceID string
+	Runtime  string
+}
+
+func (a agents) call(ctx context.Context, t target, method string, params any, out any) error {
+	outcome, err := a.relay.Call(ctx, t.DeviceID, instanceFor(t.Runtime), method, params)
 	if err != nil {
+		var fault *relay.Fault
+		if errors.As(err, &fault) && fault.Code == "unsupported_method" {
+			return fmt.Errorf("这台电脑的 agenvo connector 不支持 %s，需要更新", method)
+		}
 		return err
 	}
 	if outcome.Execution == "unknown" {
@@ -71,67 +92,348 @@ func (a agents) call(ctx context.Context, s *sessionRow, method string, params a
 	return nil
 }
 
-// create starts a native agent in the session's workspace, without a prompt.
-func (a agents) create(ctx context.Context, s *sessionRow, title string) (native, error) {
+func (s *sessionRow) target() target { return target{s.DeviceID, s.Runtime} }
+
+func notFound(err error) bool {
+	var fault *relay.Fault
+	return errors.As(err, &fault) && fault.Code == "not_found"
+}
+
+// nativeCode is the runtime's own error code in a rejected call.
+func nativeCode(err error) string {
+	var fault *relay.Fault
+	if !errors.As(err, &fault) || len(fault.Native) == 0 {
+		return ""
+	}
+	var native struct {
+		Code string `json:"code"`
+	}
+	_ = json.Unmarshal(fault.Native, &native)
+	return native.Code
+}
+
+// --- places ------------------------------------------------------------------------------
+
+// PlaceProject is a repository a new worktree can branch off.
+type PlaceProject struct {
+	ID      string  `json:"id" doc:"Paseo's project id, or the Herdr workspace whose repository it is."`
+	Name    string  `json:"name"`
+	Path    string  `json:"path"`
+	Session *string `json:"session,omitempty" doc:"Herdr's session."`
+}
+
+// PlaceWorkspace is an existing workspace an agent can work in.
+type PlaceWorkspace struct {
+	ID      string  `json:"id"`
+	Name    string  `json:"name"`
+	Path    string  `json:"path"`
+	Project string  `json:"project,omitempty"`
+	Kind    string  `json:"kind" enum:"worktree,checkout,directory"`
+	Branch  *string `json:"branch,omitempty"`
+	Dirty   *bool   `json:"dirty,omitempty"`
+	Session *string `json:"session,omitempty" doc:"Herdr's session."`
+}
+
+// Places is where on a computer's runtime an agent can work.
+type Places struct {
+	Runtime    string           `json:"runtime" enum:"paseo,herdr"`
+	Projects   []PlaceProject   `json:"projects"`
+	Workspaces []PlaceWorkspace `json:"workspaces"`
+}
+
+func (a agents) places(ctx context.Context, t target) (*Places, error) {
+	out := &Places{Runtime: t.Runtime, Projects: []PlaceProject{}, Workspaces: []PlaceWorkspace{}}
+	switch t.Runtime {
+	case "paseo":
+		type project struct {
+			ProjectID          string `json:"projectId"`
+			ProjectDisplayName string `json:"projectDisplayName"`
+			ProjectRootPath    string `json:"projectRootPath"`
+			ProjectKind        string `json:"projectKind"`
+		}
+		var list struct {
+			Entries []struct {
+				project
+				ID                 string `json:"id"`
+				Name               string `json:"name"`
+				WorkspaceDirectory string `json:"workspaceDirectory"`
+				WorkspaceKind      string `json:"workspaceKind"`
+				GitRuntime         *struct {
+					CurrentBranch *string `json:"currentBranch"`
+					IsDirty       *bool   `json:"isDirty"`
+				} `json:"gitRuntime"`
+			} `json:"entries"`
+			EmptyProjects []project `json:"emptyProjects"`
+		}
+		if err := a.call(ctx, t, "paseo.workspaces.list", map[string]any{}, &list); err != nil {
+			return nil, err
+		}
+		seen := map[string]bool{}
+		add := func(p project) {
+			if !seen[p.ProjectID] && p.ProjectKind == "git" {
+				seen[p.ProjectID] = true
+				out.Projects = append(out.Projects, PlaceProject{ID: p.ProjectID, Name: p.ProjectDisplayName, Path: p.ProjectRootPath})
+			}
+		}
+		for _, e := range list.Entries {
+			add(e.project)
+			dir := e.WorkspaceDirectory
+			if dir == "" {
+				dir = e.ProjectRootPath
+			}
+			w := PlaceWorkspace{ID: e.ID, Name: e.Name, Path: dir, Project: e.ProjectDisplayName, Kind: "directory"}
+			switch e.WorkspaceKind {
+			case "worktree":
+				w.Kind = "worktree"
+			case "local_checkout", "checkout":
+				w.Kind = "checkout"
+			}
+			if e.GitRuntime != nil {
+				w.Branch, w.Dirty = e.GitRuntime.CurrentBranch, e.GitRuntime.IsDirty
+			}
+			out.Workspaces = append(out.Workspaces, w)
+		}
+		for _, p := range list.EmptyProjects {
+			add(p)
+		}
+	case "herdr":
+		sessions, err := a.herdrSessions(ctx, t)
+		if err != nil {
+			return nil, err
+		}
+		for _, sess := range sessions {
+			var workspaces struct {
+				Result struct {
+					Workspaces []struct {
+						ID    string `json:"workspace_id"`
+						Label string `json:"label"`
+					} `json:"workspaces"`
+				} `json:"result"`
+			}
+			if err := a.call(ctx, t, "workspace.list", sess.ref(), &workspaces); err != nil {
+				return nil, err
+			}
+			// Workspaces carry no directory; their panes do.
+			var panes struct {
+				Result struct {
+					Panes []struct {
+						WorkspaceID string `json:"workspace_id"`
+						Cwd         string `json:"cwd"`
+					} `json:"panes"`
+				} `json:"result"`
+			}
+			if err := a.call(ctx, t, "pane.list", sess.ref(), &panes); err != nil {
+				return nil, err
+			}
+			dirs := map[string]string{}
+			for _, p := range panes.Result.Panes {
+				if dirs[p.WorkspaceID] == "" {
+					dirs[p.WorkspaceID] = p.Cwd
+				}
+			}
+			name := sess.Name
+			for _, w := range workspaces.Result.Workspaces {
+				out.Workspaces = append(out.Workspaces, PlaceWorkspace{
+					ID: w.ID, Name: w.Label, Path: dirs[w.ID], Kind: "directory", Session: &name,
+				})
+				// A workspace's repository is what a new worktree branches off.
+				out.Projects = append(out.Projects, PlaceProject{ID: w.ID, Name: w.Label, Path: dirs[w.ID], Session: &name})
+			}
+		}
+	default:
+		return nil, fmt.Errorf("unknown runtime %q", t.Runtime)
+	}
+	sort.SliceStable(out.Projects, func(i, j int) bool { return out.Projects[i].Name < out.Projects[j].Name })
+	return out, nil
+}
+
+// --- opening ------------------------------------------------------------------------------
+
+var slugUnsafe = regexp.MustCompile(`[^a-z0-9]+`)
+
+// defaultBranch is axp/<number>-<title slug>.
+func defaultBranch(number int64, title string) string {
+	slug := strings.Trim(slugUnsafe.ReplaceAllString(strings.ToLower(title), "-"), "-")
+	if len(slug) > 40 {
+		slug = strings.Trim(slug[:40], "-")
+	}
+	if slug == "" {
+		return fmt.Sprintf("axp/%d", number)
+	}
+	return fmt.Sprintf("axp/%d-%s", number, slug)
+}
+
+// opening is what open needs to know about the task.
+type opening struct {
+	TaskID string
+	Number int64
+	Title  string
+	Place  Place
+}
+
+// open opens the run's place (a new worktree, or an existing workspace) and
+// starts the native agent there, without a prompt. It returns the agent and
+// the directory it works in; on failure, whatever it already opened.
+func (a agents) open(ctx context.Context, s *sessionRow, o opening) (native, string, error) {
+	t := s.target()
+	label := fmt.Sprintf("AXP #%d %s", o.Number, o.Title)
+	branch := deref(o.Place.Branch)
+	if branch == "" {
+		branch = defaultBranch(o.Number, o.Title)
+	}
 	switch s.Runtime {
 	case "paseo":
+		n := native{WorkspaceID: deref(o.Place.WorkspaceID)}
+		var dir string
+		if o.Place.Kind == PlaceKindWorktree {
+			source := map[string]any{"kind": "worktree", "projectId": deref(o.Place.From), "action": "branch-off", "branchName": branch}
+			if base := deref(o.Place.Base); base != "" {
+				source["baseBranch"] = base
+			}
+			var created struct {
+				Workspace struct {
+					ID                 string `json:"id"`
+					WorkspaceDirectory string `json:"workspaceDirectory"`
+				} `json:"workspace"`
+				Error *string `json:"error"`
+			}
+			if err := a.call(ctx, t, "paseo.workspaces.create", map[string]any{"source": source, "title": label}, &created); err != nil {
+				return native{}, "", err
+			}
+			if created.Workspace.ID == "" {
+				return native{}, "", fmt.Errorf("Paseo 没有建出 worktree：%s", deref(created.Error))
+			}
+			n.WorkspaceID, n.CreatedWorkspace, dir = created.Workspace.ID, true, created.Workspace.WorkspaceDirectory
+		} else {
+			places, err := a.places(ctx, t)
+			if err != nil {
+				return native{}, "", err
+			}
+			for _, w := range places.Workspaces {
+				if w.ID == n.WorkspaceID {
+					dir = w.Path
+				}
+			}
+			if dir == "" {
+				return native{}, "", errors.New("Paseo 里没有这个工作区了")
+			}
+		}
 		var out struct {
 			Agent struct {
 				ID string `json:"id"`
 			} `json:"agent"`
 		}
-		err := a.call(ctx, s, "paseo.agents.create", map[string]any{
-			"provider": s.Provider, "cwd": s.Workspace, "title": title,
-		}, &out)
-		if err == nil && out.Agent.ID == "" {
-			err = errors.New("Paseo returned no agent")
+		if err := a.call(ctx, t, "paseo.agents.create", map[string]any{
+			"provider": s.Provider, "cwd": dir, "workspaceId": n.WorkspaceID, "title": label,
+		}, &out); err != nil {
+			return n, dir, err
 		}
-		return native{AgentID: out.Agent.ID}, err
+		if out.Agent.ID == "" {
+			return n, dir, errors.New("Paseo returned no agent")
+		}
+		n.AgentID = out.Agent.ID
+		return n, dir, nil
 	case "herdr":
-		sess, err := a.herdrSession(ctx, s, "")
+		sess, err := a.herdrSession(ctx, t, deref(o.Place.Session))
 		if err != nil {
-			return native{}, err
+			return native{}, "", err
 		}
-		var ws struct {
+		n := native{Session: sess.Name, Name: herdrName(s.ID), WorkspaceID: deref(o.Place.WorkspaceID)}
+		if o.Place.Kind == PlaceKindWorktree {
+			params := merge(sess.ref(), map[string]any{"workspaceId": deref(o.Place.From), "branch": branch, "label": label})
+			if base := deref(o.Place.Base); base != "" {
+				params["base"] = base
+			}
+			var created struct {
+				Result struct {
+					Workspace struct {
+						ID string `json:"workspace_id"`
+					} `json:"workspace"`
+				} `json:"result"`
+			}
+			if err := a.call(ctx, t, "worktree.create", params, &created); err != nil {
+				return native{}, "", err
+			}
+			n.WorkspaceID, n.CreatedWorktree = created.Result.Workspace.ID, true
+		}
+		// A tab of its own, so the agent never takes over the user's panes;
+		// its environment tells `axp` which task it is on.
+		var tab struct {
 			Result struct {
-				Workspace struct {
-					WorkspaceID string `json:"workspace_id"`
-				} `json:"workspace"`
+				Tab struct {
+					ID string `json:"tab_id"`
+				} `json:"tab"`
 				RootPane struct {
-					PaneID string `json:"pane_id"`
+					ID  string `json:"pane_id"`
+					Cwd string `json:"cwd"`
 				} `json:"root_pane"`
 			} `json:"result"`
 		}
-		if err := a.call(ctx, s, "workspace.create", map[string]any{
-			"session": sess.Name, "backendGeneration": sess.Generation, "cwd": s.Workspace, "label": title,
-		}, &ws); err != nil {
-			return native{}, err
+		if err := a.call(ctx, t, "tab.create", merge(sess.ref(), map[string]any{
+			"workspaceId": n.WorkspaceID, "label": fmt.Sprintf("AXP #%d", o.Number), "env": map[string]string{"AXP_TASK_ID": o.TaskID},
+		}), &tab); err != nil {
+			return n, "", err
 		}
-		if ws.Result.RootPane.PaneID == "" {
-			return native{}, errors.New("Herdr returned no pane")
+		n.TabID, n.PaneID = tab.Result.Tab.ID, tab.Result.RootPane.ID
+		dir := tab.Result.RootPane.Cwd
+		if err := a.call(ctx, t, "agent.start", merge(sess.ref(), map[string]any{
+			"name": n.Name, "paneId": n.PaneID, "kind": s.Provider,
+		}), nil); err != nil {
+			return n, dir, err
 		}
-		n := native{Session: sess.Name, Name: herdrName(s.ID), PaneID: ws.Result.RootPane.PaneID, WorkspaceID: ws.Result.Workspace.WorkspaceID}
-		if err := a.call(ctx, s, "agent.start", map[string]any{
-			"session": sess.Name, "backendGeneration": sess.Generation, "name": n.Name, "paneId": n.PaneID, "kind": s.Provider,
-		}, nil); err != nil {
-			return native{}, err
-		}
-		// Starting is asynchronous: the agent takes input once its launch
-		// settles.
-		for range 30 {
-			agent, err := a.herdrAgent(ctx, s, n)
-			if err == nil && agent != nil && !agent.LaunchPending {
-				return n, nil
-			}
-			select {
-			case <-ctx.Done():
-				return n, ctx.Err()
-			case <-time.After(2 * time.Second):
-			}
-		}
-		return n, errors.New("Herdr 里的智能体没有启动起来（可能停在一个需要确认的界面，看看那台电脑上的 Herdr）")
+		return n, dir, a.herdrReady(ctx, t, n)
 	}
-	return native{}, fmt.Errorf("unknown runtime %q", s.Runtime)
+	return native{}, "", fmt.Errorf("unknown runtime %q", s.Runtime)
+}
+
+// trustDialog is Claude Code's question before it first works in a
+// repository; Claude has no launch flag for it. Answering it is the user's
+// full-access choice for AXP's agents, and Claude records the trust itself.
+const trustDialog = "Is this a project you created or one you trust"
+
+// herdrReady waits for a started agent to take input. Claude's folder-trust
+// question is answered Yes; any other blocking screen fails the start.
+func (a agents) herdrReady(ctx context.Context, t target, n native) error {
+	answered := false
+	for range 30 {
+		agent, err := a.herdrAgent(ctx, t, n)
+		if err == nil && agent != nil && !agent.LaunchPending {
+			return nil
+		}
+		if err == nil && agent != nil && agent.Status == "blocked" && !answered {
+			if screen, err := a.herdrScreen(ctx, t, n); err == nil && strings.Contains(screen, trustDialog) {
+				// The dialog's options are No, exit, then Yes.
+				if err := a.herdrKeys(ctx, t, n, "down", "enter"); err != nil {
+					return err
+				}
+				answered = true
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
+	}
+	return errors.New("Herdr 里的智能体没有启动起来，停在了一个需要确认的界面；看看那台电脑上的 Herdr")
+}
+
+func merge(a, b map[string]any) map[string]any {
+	out := map[string]any{}
+	for k, v := range a {
+		out[k] = v
+	}
+	for k, v := range b {
+		out[k] = v
+	}
+	return out
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // herdrName is the agent's name in Herdr, unique per session.
@@ -144,9 +446,11 @@ type herdrSession struct {
 	Generation string
 }
 
-// herdrSession is the named Herdr session (the first one when name is
-// empty) with its current generation, which changes when Herdr restarts.
-func (a agents) herdrSession(ctx context.Context, s *sessionRow, name string) (*herdrSession, error) {
+func (h herdrSession) ref() map[string]any {
+	return map[string]any{"session": h.Name, "backendGeneration": h.Generation}
+}
+
+func (a agents) herdrSessions(ctx context.Context, t target) ([]herdrSession, error) {
 	var out struct {
 		Items []struct {
 			Session           string `json:"session"`
@@ -154,38 +458,100 @@ func (a agents) herdrSession(ctx context.Context, s *sessionRow, name string) (*
 			Available         *bool  `json:"available"`
 		} `json:"items"`
 	}
-	if err := a.call(ctx, s, "session.list", map[string]any{}, &out); err != nil {
+	if err := a.call(ctx, t, "session.list", map[string]any{}, &out); err != nil {
 		return nil, err
 	}
+	var sessions []herdrSession
 	for _, item := range out.Items {
-		if (name == "" || item.Session == name) && item.BackendGeneration != "" && (item.Available == nil || *item.Available) {
-			return &herdrSession{item.Session, item.BackendGeneration}, nil
+		if item.BackendGeneration != "" && (item.Available == nil || *item.Available) {
+			sessions = append(sessions, herdrSession{item.Session, item.BackendGeneration})
+		}
+	}
+	return sessions, nil
+}
+
+// herdrSession is the named Herdr session (the first running one when name
+// is empty) with its current generation, which changes when Herdr restarts.
+func (a agents) herdrSession(ctx context.Context, t target, name string) (*herdrSession, error) {
+	sessions, err := a.herdrSessions(ctx, t)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range sessions {
+		if name == "" || s.Name == name {
+			return &s, nil
 		}
 	}
 	return nil, errors.New("Herdr 没有在这台电脑上运行")
 }
 
-func (a agents) herdrTarget(ctx context.Context, s *sessionRow, n native) (map[string]any, error) {
-	sess, err := a.herdrSession(ctx, s, n.Session)
+func (a agents) herdrTarget(ctx context.Context, t target, n native) (map[string]any, error) {
+	sess, err := a.herdrSession(ctx, t, n.Session)
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"session": sess.Name, "backendGeneration": sess.Generation, "name": n.Name}, nil
+	return merge(sess.ref(), map[string]any{"name": n.Name}), nil
 }
+
+type herdrAgent struct {
+	Status        string `json:"agent_status"`
+	LaunchPending bool   `json:"launch_pending"`
+}
+
+// herdrAgent is the session's agent as Herdr sees it now.
+func (a agents) herdrAgent(ctx context.Context, t target, n native) (*herdrAgent, error) {
+	params, err := a.herdrTarget(ctx, t, n)
+	if err != nil {
+		return nil, err
+	}
+	var out struct {
+		Result struct {
+			Agent *herdrAgent `json:"agent"`
+		} `json:"result"`
+	}
+	if err := a.call(ctx, t, "agent.get", params, &out); err != nil {
+		return nil, err
+	}
+	return out.Result.Agent, nil
+}
+
+func (a agents) herdrScreen(ctx context.Context, t target, n native) (string, error) {
+	sess, err := a.herdrSession(ctx, t, n.Session)
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		Output string `json:"output"`
+	}
+	err = a.call(ctx, t, "pane.read", merge(sess.ref(), map[string]any{"paneId": n.PaneID, "lines": 60, "source": "visible"}), &out)
+	return out.Output, err
+}
+
+func (a agents) herdrKeys(ctx context.Context, t target, n native, keys ...string) error {
+	params, err := a.herdrTarget(ctx, t, n)
+	if err != nil {
+		return err
+	}
+	params["keys"] = keys
+	return a.call(ctx, t, "agent.send-keys", params, nil)
+}
+
+// --- running ------------------------------------------------------------------------------
 
 // send hands the agent input. It returns errUnknown when delivery could not
 // be confirmed; the caller checks the native state instead of resending.
 func (a agents) send(ctx context.Context, s *sessionRow, n native, text string) error {
+	t := s.target()
 	switch s.Runtime {
 	case "paseo":
-		return a.call(ctx, s, "paseo.agents.send", map[string]any{"agentId": n.AgentID, "text": text}, nil)
+		return a.call(ctx, t, "paseo.agents.send", map[string]any{"agentId": n.AgentID, "text": text}, nil)
 	case "herdr":
-		target, err := a.herdrTarget(ctx, s, n)
+		params, err := a.herdrTarget(ctx, t, n)
 		if err != nil {
 			return err
 		}
-		target["text"] = text
-		return a.call(ctx, s, "agent.prompt", target, nil)
+		params["text"] = text
+		return a.call(ctx, t, "agent.prompt", params, nil)
 	}
 	return fmt.Errorf("unknown runtime %q", s.Runtime)
 }
@@ -193,14 +559,9 @@ func (a agents) send(ctx context.Context, s *sessionRow, n native, text string) 
 func (a agents) interrupt(ctx context.Context, s *sessionRow, n native) error {
 	switch s.Runtime {
 	case "paseo":
-		return a.call(ctx, s, "paseo.agents.cancel", map[string]any{"agentId": n.AgentID}, nil)
+		return a.call(ctx, s.target(), "paseo.agents.cancel", map[string]any{"agentId": n.AgentID}, nil)
 	case "herdr":
-		target, err := a.herdrTarget(ctx, s, n)
-		if err != nil {
-			return err
-		}
-		target["keys"] = []string{"esc"}
-		return a.call(ctx, s, "agent.send-keys", target, nil)
+		return a.herdrKeys(ctx, s.target(), n, "esc")
 	}
 	return fmt.Errorf("unknown runtime %q", s.Runtime)
 }
@@ -224,9 +585,8 @@ func (a agents) state(ctx context.Context, s *sessionRow, n native) (*agentState
 			ArchivedAt         *string `json:"archivedAt"`
 			LastError          *string `json:"lastError"`
 		}
-		if err := a.call(ctx, s, "paseo.agents.get", map[string]any{"agentId": n.AgentID}, &agent); err != nil {
-			var fault *relay.Fault
-			if errors.As(err, &fault) && fault.Code == "not_found" {
+		if err := a.call(ctx, s.target(), "paseo.agents.get", map[string]any{"agentId": n.AgentID}, &agent); err != nil {
+			if notFound(err) {
 				return &agentState{Activity: "gone"}, nil
 			}
 			return nil, err
@@ -251,10 +611,9 @@ func (a agents) state(ctx context.Context, s *sessionRow, n native) (*agentState
 		}
 		return st, nil
 	case "herdr":
-		agent, err := a.herdrAgent(ctx, s, n)
+		agent, err := a.herdrAgent(ctx, s.target(), n)
 		if err != nil {
-			var fault *relay.Fault
-			if errors.As(err, &fault) && fault.Code == "not_found" {
+			if notFound(err) {
 				return &agentState{Activity: "gone"}, nil
 			}
 			return nil, err
@@ -292,7 +651,7 @@ func (a agents) log(ctx context.Context, s *sessionRow, n native) ([]LogEntry, e
 				} `json:"item"`
 			} `json:"entries"`
 		}
-		if err := a.call(ctx, s, "paseo.agents.history", map[string]any{"agentId": n.AgentID, "limit": 50}, &out); err != nil {
+		if err := a.call(ctx, s.target(), "paseo.agents.history", map[string]any{"agentId": n.AgentID, "limit": 50}, &out); err != nil {
 			return nil, err
 		}
 		entries := []LogEntry{}
@@ -317,15 +676,15 @@ func (a agents) log(ctx context.Context, s *sessionRow, n native) ([]LogEntry, e
 		}
 		return entries, nil
 	case "herdr":
-		target, err := a.herdrTarget(ctx, s, n)
+		params, err := a.herdrTarget(ctx, s.target(), n)
 		if err != nil {
 			return nil, err
 		}
-		target["lines"], target["source"] = 300, "recent"
+		params["lines"], params["source"] = 300, "recent"
 		var out struct {
 			Output string `json:"output"`
 		}
-		if err := a.call(ctx, s, "agent.read", target, &out); err != nil {
+		if err := a.call(ctx, s.target(), "agent.read", params, &out); err != nil {
 			return nil, err
 		}
 		return []LogEntry{{Kind: "terminal", Text: out.Output}}, nil
@@ -333,24 +692,45 @@ func (a agents) log(ctx context.Context, s *sessionRow, n native) ([]LogEntry, e
 	return nil, fmt.Errorf("unknown runtime %q", s.Runtime)
 }
 
-type herdrAgent struct {
-	Status        string `json:"agent_status"`
-	LaunchPending bool   `json:"launch_pending"`
-}
-
-// herdrAgent is the session's agent as Herdr sees it now.
-func (a agents) herdrAgent(ctx context.Context, s *sessionRow, n native) (*herdrAgent, error) {
-	target, err := a.herdrTarget(ctx, s, n)
-	if err != nil {
-		return nil, err
+// cleanup archives or removes what AXP opened for a session whose task is
+// done, and says what it did. A Herdr worktree with uncommitted changes is
+// kept: Herdr refuses to remove it.
+func (a agents) cleanup(ctx context.Context, s *sessionRow, n native) (string, error) {
+	t := s.target()
+	if !n.CreatedWorkspace && !n.CreatedWorktree && n.AgentID == "" && n.TabID == "" {
+		return "AXP 没有在远程电脑上留下需要收尾的东西", nil
 	}
-	var out struct {
-		Result struct {
-			Agent *herdrAgent `json:"agent"`
-		} `json:"result"`
+	switch s.Runtime {
+	case "paseo":
+		if n.CreatedWorkspace {
+			if err := a.call(ctx, t, "paseo.workspaces.archive", map[string]any{"workspaceId": n.WorkspaceID}, nil); err != nil && !notFound(err) {
+				return "", err
+			}
+			return "归档了 AXP 开的 Paseo worktree 工作区，分支保留", nil
+		}
+		if err := a.call(ctx, t, "paseo.agents.archive", map[string]any{"agentId": n.AgentID}, nil); err != nil && !notFound(err) {
+			return "", err
+		}
+		return "归档了 AXP 开的 Paseo 智能体", nil
+	case "herdr":
+		sess, err := a.herdrSession(ctx, t, n.Session)
+		if err != nil {
+			return "", err
+		}
+		if n.CreatedWorktree {
+			err := a.call(ctx, t, "worktree.remove", merge(sess.ref(), map[string]any{"workspaceId": n.WorkspaceID}), nil)
+			if strings.HasPrefix(nativeCode(err), "dirty_worktree") {
+				return "AXP 开的 Herdr worktree 里有未提交的改动，保留了它", nil
+			}
+			if err != nil && !notFound(err) {
+				return "", err
+			}
+			return "删除了 AXP 开的 Herdr worktree，分支保留", nil
+		}
+		if err := a.call(ctx, t, "tab.close", merge(sess.ref(), map[string]any{"tabId": n.TabID}), nil); err != nil && !notFound(err) {
+			return "", err
+		}
+		return "关掉了 AXP 在 Herdr 工作区里开的 tab", nil
 	}
-	if err := a.call(ctx, s, "agent.get", target, &out); err != nil {
-		return nil, err
-	}
-	return out.Result.Agent, nil
+	return "", fmt.Errorf("unknown runtime %q", s.Runtime)
 }

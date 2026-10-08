@@ -3,40 +3,33 @@
 -- the computers that run agents for it through the agenvo relay, and the
 -- relay's OAuth tokens.
 
--- A computer: one `axp` daemon, enrolled with a one-time code, which
--- supervises an agenvo connector per runtime on that machine.
+-- A computer: enrolled with a one-time code by `axp setup`, which installs
+-- an agenvo connector per runtime there and pairs each with the relay under
+-- the label axp:<computer id>:<runtime>.
 CREATE TABLE computer (
     id uuid PRIMARY KEY,
     name text NOT NULL,
-    -- The install command's code (sha256), until the daemon enrolls.
+    -- The install command's code (sha256), until the computer enrolls.
     enroll_code_hash text UNIQUE,
     enroll_expires_at timestamptz,
-    -- The daemon's and CLI's credential (sha256), once enrolled.
+    -- The CLI's credential (sha256), once enrolled.
     token_hash text UNIQUE,
     hostname text,
     os text,
     arch text,
-    -- Where task workspaces live on the computer: <root>/<task id>/.
-    workspace_root text,
     -- The axp binary's path, for agents whose PATH lacks it.
     cli_path text,
-    last_seen_at timestamptz,
     created_at timestamptz NOT NULL
 );
 
--- An agenvo connector on a computer, as its daemon reports it, and its
--- device on the relay once paired.
+-- A runtime on a computer, as setup reports it, and its device on the relay
+-- once approved.
 CREATE TABLE computer_runtime (
     computer_id uuid NOT NULL REFERENCES computer(id) ON DELETE CASCADE,
     kind text NOT NULL CHECK (kind IN ('paseo', 'herdr')),
     -- Providers the runtime can launch (codex, claude, ...).
     providers text[] NOT NULL DEFAULT '{}',
-    -- A pairing waiting for the user: its code and the device fingerprint the
-    -- daemon's terminal shows.
-    pairing_code text,
-    pairing_fingerprint text,
     device_id text,
-    error text,
     updated_at timestamptz NOT NULL,
     PRIMARY KEY (computer_id, kind)
 );
@@ -52,13 +45,14 @@ CREATE TABLE task (
     computer_id uuid REFERENCES computer(id) ON DELETE SET NULL,
     runtime text CHECK (runtime IN ('paseo', 'herdr')),
     provider text,
-    -- owner/name on GitHub, for `axp repo checkout`.
-    repository text,
+    -- Where a remote agent works: an existing workspace, or a new worktree
+    -- (see tasks.Place).
+    place jsonb,
     -- The AXP agent that created it; the user when null.
     created_by_agent uuid REFERENCES agent(id) ON DELETE SET NULL,
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL,
-    CHECK ((assignee = 'remote') = (computer_id IS NOT NULL AND runtime IS NOT NULL AND provider IS NOT NULL))
+    CHECK ((assignee = 'remote') = (computer_id IS NOT NULL AND runtime IS NOT NULL AND provider IS NOT NULL AND place IS NOT NULL))
 );
 
 -- One native agent on a computer working on a task; follow-ups go to it.
@@ -70,13 +64,15 @@ CREATE TABLE task_session (
     provider text NOT NULL,
     device_id text NOT NULL,
     instance_id text NOT NULL,
-    -- The workspace on the computer.
+    -- The directory the agent works in.
     workspace text NOT NULL,
-    -- The native agent: Paseo's agent id, or Herdr's session and agent name.
+    -- The native agent and what AXP opened for it (see tasks.native).
     native jsonb NOT NULL,
     created_at timestamptz NOT NULL,
-    -- Replaced by another assignee; never reused.
-    closed_at timestamptz
+    -- Replaced by another assignee, or its task done; never reused.
+    closed_at timestamptz,
+    -- What AXP opened for it is to be archived or removed (the task is done).
+    cleanup_pending boolean NOT NULL DEFAULT false
 );
 CREATE UNIQUE INDEX task_session_open ON task_session (task_id, computer_id, runtime, provider) WHERE closed_at IS NULL;
 
@@ -88,7 +84,7 @@ CREATE TABLE task_run (
     computer_id uuid REFERENCES computer(id) ON DELETE SET NULL,
     runtime text NOT NULL,
     provider text NOT NULL,
-    status text NOT NULL CHECK (status IN ('queued', 'preparing', 'starting', 'running', 'completed', 'failed', 'cancelled')),
+    status text NOT NULL CHECK (status IN ('queued', 'starting', 'running', 'completed', 'failed', 'cancelled')),
     -- What it was sent.
     prompt text NOT NULL,
     workspace text,
@@ -104,7 +100,7 @@ CREATE TABLE task_run (
     finished_at timestamptz
 );
 CREATE INDEX task_run_task ON task_run (task_id, created_at);
-CREATE UNIQUE INDEX task_run_active ON task_run (task_id) WHERE status IN ('preparing', 'starting', 'running');
+CREATE UNIQUE INDEX task_run_active ON task_run (task_id) WHERE status IN ('starting', 'running');
 
 -- The task's timeline: comments and everything that happened to it.
 CREATE TABLE task_activity (

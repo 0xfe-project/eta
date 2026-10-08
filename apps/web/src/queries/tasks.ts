@@ -5,6 +5,8 @@ import type {
   ComputerRuntime,
   Computers,
   LogEntry,
+  Place,
+  Places,
   Task,
   TaskActivity,
   TaskDetail,
@@ -24,6 +26,8 @@ export type {
   Computer,
   ComputerRuntime,
   LogEntry,
+  Place,
+  Places,
   Task,
   TaskActivity,
   TaskDetail,
@@ -38,13 +42,12 @@ const keys = {
   task: (id: string) => ["tasks", id] as const,
   log: (task: string, run: string) => ["tasks", task, "log", run] as const,
   computers: ["computers"] as const,
+  places: (computer: string, runtime: string) =>
+    ["computers", computer, runtime, "places"] as const,
 };
 
 const activeRun = (status: string | null | undefined) =>
-  status === "queued" ||
-  status === "preparing" ||
-  status === "starting" ||
-  status === "running";
+  status === "queued" || status === "starting" || status === "running";
 
 export function useTasks() {
   return useQuery({
@@ -155,6 +158,31 @@ export function useDeleteTask() {
 }
 
 // --- computers ---------------------------------------------------------------------
+
+/** Where on a computer's runtime an agent can work, read from it now. */
+export function usePlaces(computer: string | null, runtime: string | null) {
+  return useQuery({
+    queryKey: keys.places(computer ?? "", runtime ?? ""),
+    queryFn: async ({ signal }): Promise<Places> =>
+      unwrap(
+        controlPlane.GET(
+          "/api/v1/computers/{computer_id}/runtimes/{kind}/places",
+          {
+            params: {
+              path: {
+                computer_id: computer!,
+                kind: runtime as "paseo" | "herdr",
+              },
+            },
+            signal,
+          },
+        ),
+      ),
+    enabled: Boolean(computer && runtime),
+    retry: false,
+    staleTime: 10_000,
+  });
+}
 
 export function useComputers() {
   return useQuery({

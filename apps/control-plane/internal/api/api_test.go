@@ -608,7 +608,8 @@ func TestPublicSchemaHasNoInternalFields(t *testing.T) {
 		"/api/v1/chat/interactions/{interaction_id}/answer", "/api/v1/chat/messages",
 		"/api/v1/chat/messages/{message_id}/stop", "/api/v1/chat/stream", "/api/v1/computers",
 		"/api/v1/computers/{computer_id}", "/api/v1/computers/{computer_id}/install",
-		"/api/v1/computers/{computer_id}/runtimes/{kind}/approve", "/api/v1/plugins",
+		"/api/v1/computers/{computer_id}/runtimes/{kind}/approve",
+		"/api/v1/computers/{computer_id}/runtimes/{kind}/places", "/api/v1/plugins",
 		"/api/v1/routines", "/api/v1/routines/{routine_id}", "/api/v1/routines/{routine_id}/briefs/{version}/restore",
 		"/api/v1/routines/{routine_id}/run", "/api/v1/routines/{routine_id}/runs/{run_id}/feedback",
 		"/api/v1/tasks", "/api/v1/tasks/{task_id}", "/api/v1/tasks/{task_id}/comments",
@@ -619,7 +620,7 @@ func TestPublicSchemaHasNoInternalFields(t *testing.T) {
 	}
 	// The task board's own vocabulary is not the agents' internals: a
 	// remote computer's runtime (Paseo, Herdr), a tool call's command.
-	board := regexp.MustCompile(`^(Task|Computer|Assignee|LogEntry|RunLog|Install|Enrollment|Comment)`)
+	board := regexp.MustCompile(`^(Task|Computer|Assignee|LogEntry|RunLog|Install|Enrollment|Comment|Place)`)
 	properties := map[string]any{}
 	for schemaName, schema := range spec.Components.Schemas.Map() {
 		if board.MatchString(schemaName) {

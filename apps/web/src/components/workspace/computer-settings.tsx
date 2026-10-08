@@ -22,7 +22,7 @@ import {
   useRenewInstall,
 } from "@/queries/tasks";
 import { when } from "./routine-format";
-import { ago, providerLabel, runtimeLabel } from "./task-format";
+import { providerLabel, runtimeLabel } from "./task-format";
 
 // Remote computers (#45): the user's other machines, whose Paseo and Herdr
 // agents work on the task board through the agenvo relay.
@@ -30,11 +30,11 @@ import { ago, providerLabel, runtimeLabel } from "./task-format";
 const showError = (error: Error) => toast.error(error.message);
 
 const stateLabels: Record<ComputerRuntime["state"], string> = {
+  waiting: "等待那台电脑发起配对",
   pairing: "等待批准",
   needs_approval: "运行时有变化，等待批准",
   online: "在线",
   offline: "离线",
-  error: "出错",
 };
 
 function InstallCommand({ command }: { command: string }) {
@@ -87,7 +87,7 @@ function RuntimeRow({
             runtime.state === "online" && "bg-emerald-500",
             runtime.state === "offline" && "bg-muted-foreground/40",
             waiting && "bg-amber-500 motion-safe:animate-pulse",
-            runtime.state === "error" && "bg-destructive",
+            runtime.state === "waiting" && "bg-muted-foreground/40",
           )}
         />
         <span className="font-medium">{runtimeLabel(runtime.kind)}</span>
@@ -102,8 +102,7 @@ function RuntimeRow({
       {waiting && runtime.fingerprint ? (
         <div className="space-y-1.5 border-l-2 border-amber-500 pl-3">
           <p className="text-xs text-muted-foreground">
-            核对指纹与那台电脑上 <code>axp daemon</code>{" "}
-            日志里显示的一致，再批准：
+            核对指纹与那台电脑上安装命令打印的一致，再批准：
           </p>
           <code className="block text-xs break-all">{runtime.fingerprint}</code>
           <Button
@@ -123,9 +122,6 @@ function RuntimeRow({
             指纹一致，批准
           </Button>
         </div>
-      ) : null}
-      {runtime.error ? (
-        <p className="text-xs text-destructive">{runtime.error}</p>
       ) : null}
     </li>
   );
@@ -151,11 +147,7 @@ function ComputerCard({
           <p className="truncate text-xs text-muted-foreground">
             {computer.enrolled
               ? [
-                  computer.online
-                    ? "在线"
-                    : computer.last_seen_at
-                      ? `离线，${ago(computer.last_seen_at)}见过`
-                      : "离线",
+                  computer.online ? "在线" : "离线",
                   computer.hostname,
                   computer.os && `${computer.os}/${computer.arch}`,
                   computer.active_runs
@@ -168,11 +160,6 @@ function ComputerCard({
                 ? `等待安装（安装命令 ${when(computer.enroll_expires_at)} 前有效）`
                 : "等待安装"}
           </p>
-          {computer.workspace_root ? (
-            <p className="truncate text-xs text-muted-foreground">
-              工作区 <code>{computer.workspace_root}</code>
-            </p>
-          ) : null}
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -272,7 +259,8 @@ export function ComputerSettings() {
         <h2 className="text-sm font-semibold">远程电脑</h2>
         <p className="text-xs text-muted-foreground">
           接入你的其他电脑后，可以把任务指派给它们上面的 Paseo 或 Herdr
-          智能体。每个任务在电脑上有自己的工作区；智能体以完全权限运行，请只接入专门用来干活的电脑。
+          智能体：在已有的工作区里干活，或者新开一个
+          worktree。智能体以完全权限运行，请只接入专门用来干活的电脑。
         </p>
       </div>
       {error ? (

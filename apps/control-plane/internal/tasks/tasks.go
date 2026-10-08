@@ -37,10 +37,9 @@ const (
 	StatusCancelled  = "cancelled"
 )
 
-// Run statuses. A run is active while preparing, starting or running.
+// Run statuses. A run is active while starting or running.
 const (
 	RunQueued    = "queued"
-	RunPreparing = "preparing"
 	RunStarting  = "starting"
 	RunRunning   = "running"
 	RunCompleted = "completed"
@@ -88,7 +87,7 @@ type taskRow struct {
 	ComputerID     *string   `db:"computer_id"`
 	Runtime        *string   `db:"runtime"`
 	Provider       *string   `db:"provider"`
-	Repository     *string   `db:"repository"`
+	Place          *Place    `db:"place"`
 	CreatedByAgent *string   `db:"created_by_agent"`
 	CreatedAt      time.Time `db:"created_at"`
 	UpdatedAt      time.Time `db:"updated_at"`
@@ -147,6 +146,8 @@ type sessionRow struct {
 	Native     json.RawMessage `db:"native"`
 	CreatedAt  time.Time       `db:"created_at"`
 	ClosedAt   *time.Time      `db:"closed_at"`
+	// What AXP opened for it is to be archived or removed.
+	CleanupPending bool `db:"cleanup_pending"`
 }
 
 func (s *sessionRow) native() native {
@@ -157,12 +158,35 @@ func (s *sessionRow) native() native {
 
 // --- public shapes -----------------------------------------------------------------------
 
+// Place is where a remote agent works: an existing workspace, or a new
+// worktree its runtime creates (Paseo off a project, Herdr off a
+// workspace's repository).
+type Place struct {
+	Kind string `json:"kind" enum:"workspace,worktree"`
+	// workspace: the workspace.
+	WorkspaceID *string `json:"workspace_id,omitempty" nullable:"true" maxLength:"256"`
+	// worktree: Paseo's project id, or the Herdr workspace to branch off.
+	From   *string `json:"from,omitempty" nullable:"true" maxLength:"256" doc:"For a new worktree: Paseo's project id, or the Herdr workspace whose repository to branch off."`
+	Branch *string `json:"branch,omitempty" nullable:"true" maxLength:"200" doc:"The new worktree's branch; axp/<number>-<title> when empty."`
+	Base   *string `json:"base,omitempty" nullable:"true" maxLength:"200" doc:"What the new branch starts from; the repository's current branch when empty."`
+	// Herdr's session.
+	Session *string `json:"session,omitempty" nullable:"true" maxLength:"64"`
+	// How it reads: the workspace's or the project's name.
+	Name *string `json:"name,omitempty" nullable:"true" maxLength:"200"`
+}
+
+const (
+	PlaceKindWorkspace = "workspace"
+	PlaceKindWorktree  = "worktree"
+)
+
 type TaskAssignee struct {
 	Kind         string  `json:"kind" enum:"none,user,remote"`
 	ComputerID   *string `json:"computer_id" nullable:"true"`
 	ComputerName *string `json:"computer_name" nullable:"true"`
 	Runtime      *string `json:"runtime" nullable:"true" enum:"paseo,herdr"`
 	Provider     *string `json:"provider" nullable:"true"`
+	Place        *Place  `json:"place,omitempty"`
 }
 
 type TaskCreator struct {
@@ -172,17 +196,16 @@ type TaskCreator struct {
 }
 
 type Task struct {
-	ID         string        `json:"id"`
-	Number     int64         `json:"number"`
-	Title      string        `json:"title"`
-	Status     string        `json:"status" enum:"backlog,todo,in_progress,in_review,done,blocked,cancelled"`
-	Assignee   TaskAssignee  `json:"assignee"`
-	Repository *string       `json:"repository" nullable:"true"`
-	CreatedBy  TaskCreator   `json:"created_by"`
-	RunStatus  *string       `json:"run_status" nullable:"true" enum:"queued,preparing,starting,running,completed,failed,cancelled" doc:"The latest run's status."`
-	Comments   int64         `json:"comments"`
-	CreatedAt  jsontime.Time `json:"created_at"`
-	UpdatedAt  jsontime.Time `json:"updated_at"`
+	ID        string        `json:"id"`
+	Number    int64         `json:"number"`
+	Title     string        `json:"title"`
+	Status    string        `json:"status" enum:"backlog,todo,in_progress,in_review,done,blocked,cancelled"`
+	Assignee  TaskAssignee  `json:"assignee"`
+	CreatedBy TaskCreator   `json:"created_by"`
+	RunStatus *string       `json:"run_status" nullable:"true" enum:"queued,starting,running,completed,failed,cancelled" doc:"The latest run's status."`
+	Comments  int64         `json:"comments"`
+	CreatedAt jsontime.Time `json:"created_at"`
+	UpdatedAt jsontime.Time `json:"updated_at"`
 }
 
 type TaskActor struct {
@@ -193,7 +216,7 @@ type TaskActor struct {
 
 type TaskActivity struct {
 	ID    string    `json:"id"`
-	Kind  string    `json:"kind" doc:"created, comment, status, assignee, title, description, repository, run_queued, run_started, run_completed, run_failed, run_cancelled, run_nudged, checkout or deliverable."`
+	Kind  string    `json:"kind" doc:"created, comment, status, assignee, title, description, run_queued, run_started, run_completed, run_failed, run_cancelled, run_nudged, cleanup or deliverable."`
 	Actor TaskActor `json:"actor"`
 	RunID *string   `json:"run_id" nullable:"true"`
 	Body  *string   `json:"body" nullable:"true"`
@@ -204,7 +227,7 @@ type TaskActivity struct {
 
 type TaskRun struct {
 	ID           string         `json:"id"`
-	Status       string         `json:"status" enum:"queued,preparing,starting,running,completed,failed,cancelled"`
+	Status       string         `json:"status" enum:"queued,starting,running,completed,failed,cancelled"`
 	ComputerID   *string        `json:"computer_id" nullable:"true"`
 	ComputerName *string        `json:"computer_name" nullable:"true"`
 	Runtime      string         `json:"runtime"`
@@ -226,10 +249,10 @@ type TaskDetail struct {
 
 func (r *taskRow) public() Task {
 	t := Task{
-		ID: r.ID, Number: r.Number, Title: r.Title, Status: r.Status, Repository: r.Repository,
+		ID: r.ID, Number: r.Number, Title: r.Title, Status: r.Status,
 		RunStatus: r.RunStatus, Comments: r.Comments,
 		CreatedAt: jsontime.From(r.CreatedAt), UpdatedAt: jsontime.From(r.UpdatedAt),
-		Assignee:  TaskAssignee{Kind: r.Assignee, ComputerID: r.ComputerID, ComputerName: r.ComputerName, Runtime: r.Runtime, Provider: r.Provider},
+		Assignee:  TaskAssignee{Kind: r.Assignee, ComputerID: r.ComputerID, ComputerName: r.ComputerName, Runtime: r.Runtime, Provider: r.Provider, Place: r.Place},
 		CreatedBy: TaskCreator{Kind: ActorUser},
 	}
 	if r.CreatedByAgent != nil {
@@ -366,6 +389,8 @@ type AssigneeInput struct {
 	ComputerID *string `json:"computer_id,omitempty" nullable:"true"`
 	Runtime    *string `json:"runtime,omitempty" nullable:"true" enum:"paseo,herdr"`
 	Provider   *string `json:"provider,omitempty" nullable:"true" maxLength:"32"`
+	// Where it works (remote only).
+	Place *Place `json:"place,omitempty"`
 }
 
 func invalid(message string) error { return apierr.New(422, "VALIDATION_ERROR", message) }
@@ -381,6 +406,9 @@ func checkAssignee(ctx context.Context, db store.DB, in AssigneeInput) error {
 	}
 	if in.ComputerID == nil || in.Runtime == nil || in.Provider == nil {
 		return invalid("指派给远程电脑时需要选择电脑、运行时和 provider。")
+	}
+	if err := checkPlace(in.Place); err != nil {
+		return err
 	}
 	computer, ok := chat.ParseID(*in.ComputerID)
 	if !ok {
@@ -398,21 +426,43 @@ func checkAssignee(ctx context.Context, db store.DB, in AssigneeInput) error {
 	return nil
 }
 
+func checkPlace(p *Place) error {
+	if p == nil {
+		return invalid("指派给远程电脑时需要选择工作位置：已有的工作区，或新开一个 worktree。")
+	}
+	switch p.Kind {
+	case PlaceKindWorkspace:
+		if deref(p.WorkspaceID) == "" {
+			return invalid("需要选择一个工作区。")
+		}
+	case PlaceKindWorktree:
+		if deref(p.From) == "" {
+			return invalid("新开 worktree 需要选择从哪个项目开。")
+		}
+	default:
+		return invalid("工作位置无效。")
+	}
+	return nil
+}
+
+// label identifies an assignee with its place: a different place is a
+// different assignment.
 func (a AssigneeInput) label() string {
 	if a.Kind != "remote" {
 		return a.Kind
 	}
-	return *a.ComputerID + "/" + *a.Runtime + "/" + *a.Provider
+	place, _ := json.Marshal(a.Place)
+	return *a.ComputerID + "/" + *a.Runtime + "/" + *a.Provider + "/" + string(place)
 }
 
 func assigneeOf(r *taskRow) AssigneeInput {
-	return AssigneeInput{Kind: r.Assignee, ComputerID: r.ComputerID, Runtime: r.Runtime, Provider: r.Provider}
+	return AssigneeInput{Kind: r.Assignee, ComputerID: r.ComputerID, Runtime: r.Runtime, Provider: r.Provider, Place: r.Place}
 }
 
 func assigneeData(r *taskRow) map[string]any {
 	d := map[string]any{"kind": r.Assignee}
 	if r.Assignee == "remote" {
-		d["computer_id"], d["computer_name"], d["runtime"], d["provider"] = *r.ComputerID, r.ComputerName, *r.Runtime, *r.Provider
+		d["computer_id"], d["computer_name"], d["runtime"], d["provider"], d["place"] = *r.ComputerID, r.ComputerName, *r.Runtime, *r.Provider, r.Place
 	}
 	return d
 }
@@ -422,23 +472,6 @@ type Input struct {
 	Description string
 	Status      string
 	Assignee    AssigneeInput
-	Repository  *string
-}
-
-func cleanRepository(repo *string) (*string, error) {
-	if repo == nil {
-		return nil, nil
-	}
-	r := strings.TrimSpace(*repo)
-	r = strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(r, "https://github.com/"), "github.com/"), ".git")
-	if r == "" {
-		return nil, nil
-	}
-	owner, name, ok := strings.Cut(r, "/")
-	if !ok || owner == "" || name == "" || strings.ContainsAny(name, "/ ") {
-		return nil, invalid("仓库要写成 owner/name。")
-	}
-	return &r, nil
 }
 
 func (s *Service) Create(ctx context.Context, tx pgx.Tx, in Input, by Actor) (*TaskDetail, error) {
@@ -448,10 +481,6 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, in Input, by Actor) (*T
 	if err := checkAssignee(ctx, tx, in.Assignee); err != nil {
 		return nil, err
 	}
-	repo, err := cleanRepository(in.Repository)
-	if err != nil {
-		return nil, err
-	}
 	var agent *string
 	if by.Kind == ActorAgent {
 		agent = &by.AgentID
@@ -459,8 +488,8 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, in Input, by Actor) (*T
 	id, now := chat.NewID(), chat.Now()
 	a := in.Assignee
 	if _, err := tx.Exec(ctx, `INSERT INTO task (id, title, description, status, assignee, computer_id, runtime, provider,
-		repository, created_by_agent, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)`,
-		id, strings.TrimSpace(in.Title), in.Description, in.Status, a.Kind, a.ComputerID, a.Runtime, a.Provider, repo, agent, now); err != nil {
+		place, created_by_agent, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)`,
+		id, strings.TrimSpace(in.Title), in.Description, in.Status, a.Kind, a.ComputerID, a.Runtime, a.Provider, placeOf(a), agent, now); err != nil {
 		return nil, err
 	}
 	if err := record(ctx, tx, id, nil, "created", by, nil, nil); err != nil {
@@ -494,7 +523,6 @@ type Changes struct {
 	Description *string
 	Status      *string
 	Assignee    *AssigneeInput
-	Repository  *string
 }
 
 func (s *Service) Update(ctx context.Context, tx pgx.Tx, ref string, c Changes, by Actor) (*TaskDetail, error) {
@@ -519,28 +547,14 @@ func (s *Service) Update(ctx context.Context, tx pgx.Tx, ref string, c Changes, 
 			return nil, err
 		}
 	}
-	if c.Repository != nil {
-		repo, err := cleanRepository(c.Repository)
-		if err != nil {
-			return nil, err
-		}
-		if !equal(repo, r.Repository) {
-			if _, err := tx.Exec(ctx, "UPDATE task SET repository = $2 WHERE id = $1", r.ID, repo); err != nil {
-				return nil, err
-			}
-			if err := record(ctx, tx, r.ID, nil, "repository", by, nil, map[string]any{"to": repo}); err != nil {
-				return nil, err
-			}
-		}
-	}
 	reassigned := false
 	if c.Assignee != nil && c.Assignee.label() != assigneeOf(r).label() {
 		if err := checkAssignee(ctx, tx, *c.Assignee); err != nil {
 			return nil, err
 		}
 		a := *c.Assignee
-		if _, err := tx.Exec(ctx, `UPDATE task SET assignee = $2, computer_id = $3, runtime = $4, provider = $5 WHERE id = $1`,
-			r.ID, a.Kind, a.ComputerID, a.Runtime, a.Provider); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE task SET assignee = $2, computer_id = $3, runtime = $4, provider = $5, place = $6 WHERE id = $1`,
+			r.ID, a.Kind, a.ComputerID, a.Runtime, a.Provider, placeOf(a)); err != nil {
 			return nil, err
 		}
 		// The previous remote agent's work stops; its session is not reused.
@@ -569,6 +583,11 @@ func (s *Service) Update(ctx context.Context, tx pgx.Tx, ref string, c Changes, 
 				return nil, err
 			}
 		}
+		if *c.Status == StatusDone {
+			if err := s.finish(ctx, tx, r.ID); err != nil {
+				return nil, err
+			}
+		}
 		// Taking a remote task out of the backlog starts it.
 		if !reassigned && r.Assignee == "remote" && !workable(from) && workable(r.Status) {
 			if err := s.startIfIdle(ctx, tx, r); err != nil {
@@ -587,8 +606,23 @@ func (s *Service) Update(ctx context.Context, tx pgx.Tx, ref string, c Changes, 
 	return detail(ctx, tx, r)
 }
 
-func equal(a, b *string) bool {
-	return (a == nil && b == nil) || (a != nil && b != nil && *a == *b)
+// placeOf is a remote assignee's place, for the place column.
+func placeOf(a AssigneeInput) *Place {
+	if a.Kind != "remote" {
+		return nil
+	}
+	return a.Place
+}
+
+// finish stops the task's remote work and has the runner archive or remove
+// what AXP opened for it.
+func (s *Service) finish(ctx context.Context, tx pgx.Tx, taskID string) error {
+	if err := s.stopRuns(ctx, tx, taskID, "任务已完成。"); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `UPDATE task_session SET closed_at = $2, cleanup_pending = true
+		WHERE task_id = $1 AND closed_at IS NULL`, taskID, chat.Now())
+	return err
 }
 
 // setStatus changes the status; data adds to the record (who, for a remote
@@ -623,7 +657,7 @@ func (s *Service) Delete(ctx context.Context, tx pgx.Tx, ref string) error {
 	if err != nil {
 		return err
 	}
-	active, err := chat.Exists(ctx, tx, `SELECT 1 FROM task_run WHERE task_id = $1 AND status IN ('preparing', 'starting', 'running')`, r.ID)
+	active, err := chat.Exists(ctx, tx, `SELECT 1 FROM task_run WHERE task_id = $1 AND status IN ('starting', 'running')`, r.ID)
 	if err != nil {
 		return err
 	}
@@ -672,7 +706,7 @@ func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, r *taskRow, prompt str
 // stopRuns cancels queued runs and asks the active one to stop.
 func (s *Service) stopRuns(ctx context.Context, tx pgx.Tx, taskID, reason string) error {
 	runs, err := chat.All[runRow](ctx, tx, `SELECT * FROM task_run WHERE task_id = $1
-		AND status IN ('queued', 'preparing', 'starting', 'running') FOR UPDATE`, taskID)
+		AND status IN ('queued', 'starting', 'running') FOR UPDATE`, taskID)
 	if err != nil {
 		return err
 	}
@@ -691,7 +725,7 @@ func (s *Service) stopRuns(ctx context.Context, tx pgx.Tx, taskID, reason string
 	return nil
 }
 
-// Interrupt asks a running run to stop; queued and preparing ones stop now.
+// Interrupt asks a running run to stop; queued and starting ones stop now.
 func (s *Service) Interrupt(ctx context.Context, tx pgx.Tx, ref, runID string) (*TaskDetail, error) {
 	r, err := find(ctx, tx, ref, true)
 	if err != nil {
@@ -713,7 +747,7 @@ func (s *Service) Interrupt(ctx context.Context, tx pgx.Tx, ref, runID string) (
 		if _, err := tx.Exec(ctx, "UPDATE task_run SET interrupt_requested_at = $2 WHERE id = $1", run.ID, chat.Now()); err != nil {
 			return nil, err
 		}
-	case RunQueued, RunPreparing, RunStarting:
+	case RunQueued, RunStarting:
 		reason := "已停止。"
 		if err := finishRun(ctx, tx, run, RunCancelled, &reason); err != nil {
 			return nil, err

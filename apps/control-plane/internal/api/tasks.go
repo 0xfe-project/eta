@@ -18,7 +18,6 @@ type TaskIn struct {
 	Description string              `json:"description,omitempty" maxLength:"20000"`
 	Status      string              `json:"status,omitempty" enum:"backlog,todo,in_progress,in_review,done,blocked,cancelled" default:"todo"`
 	Assignee    tasks.AssigneeInput `json:"assignee"`
-	Repository  *string             `json:"repository,omitempty" nullable:"true" maxLength:"200" doc:"owner/name on GitHub."`
 }
 
 // TaskUpdateIn is a partial update: only fields that are sent change.
@@ -27,7 +26,6 @@ type TaskUpdateIn struct {
 	Description *string              `json:"description,omitempty" nullable:"true" maxLength:"20000"`
 	Status      *string              `json:"status,omitempty" nullable:"true" enum:"backlog,todo,in_progress,in_review,done,blocked,cancelled"`
 	Assignee    *tasks.AssigneeInput `json:"assignee,omitempty"`
-	Repository  *string              `json:"repository,omitempty" nullable:"true" maxLength:"200" doc:"owner/name; empty to clear."`
 }
 
 type CommentIn struct {
@@ -136,7 +134,7 @@ func registerTasks(api huma.API, d *Deps) {
 			b := in.Body
 			return idempotent(ctx, d, in.IdempotencyKey, b, func(tx pgx.Tx) (handled[tasks.TaskDetail], error) {
 				t, err := s.Create(ctx, tx, tasks.Input{
-					Title: b.Title, Description: b.Description, Status: b.Status, Assignee: b.Assignee, Repository: b.Repository,
+					Title: b.Title, Description: b.Description, Status: b.Status, Assignee: b.Assignee,
 				}, tasks.User)
 				if err != nil {
 					return handled[tasks.TaskDetail]{}, err
@@ -154,7 +152,7 @@ func registerTasks(api huma.API, d *Deps) {
 			b := in.Body
 			t, err := inTx(ctx, d, func(tx pgx.Tx) (*tasks.TaskDetail, error) {
 				return s.Update(ctx, tx, in.TaskID, tasks.Changes{
-					Title: b.Title, Description: b.Description, Status: b.Status, Assignee: b.Assignee, Repository: b.Repository,
+					Title: b.Title, Description: b.Description, Status: b.Status, Assignee: b.Assignee,
 				}, tasks.User)
 			})
 			if err != nil {
@@ -235,6 +233,19 @@ func registerTasks(api huma.API, d *Deps) {
 				return nil, err
 			}
 			return &body[Install]{Install{e.Computer, installCommand(ctx, d, e.Code)}}, nil
+		})
+
+	huma.Register(api, taskOp("listComputerPlaces", http.MethodGet, "/api/v1/computers/{computer_id}/runtimes/{kind}/places",
+		"Where on a computer's runtime an agent can work: its projects and workspaces, read now", 200, "computers"),
+		func(ctx context.Context, in *struct {
+			ComputerPath
+			Kind string `path:"kind" enum:"paseo,herdr"`
+		}) (*body[tasks.Places], error) {
+			places, err := s.Places(ctx, d.DB, in.ComputerID, in.Kind)
+			if err != nil {
+				return nil, err
+			}
+			return &body[tasks.Places]{*places}, nil
 		})
 
 	huma.Register(api, taskOp("approveComputerRuntime", http.MethodPost, "/api/v1/computers/{computer_id}/runtimes/{kind}/approve",

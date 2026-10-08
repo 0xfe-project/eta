@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -15,49 +16,94 @@ import (
 	"github.com/google/uuid"
 )
 
-// fakeRelay is the agenvo relay with a Paseo connector whose agents do what
-// the test says.
+// fakeRelay is the agenvo relay with Paseo and Herdr connectors whose
+// native state the test controls.
 type fakeRelay struct {
 	mu       sync.Mutex
-	pairings map[string]string // code -> device
-	agents   map[string]*fakeAgent
+	pairings []relay.Pairing
+	devices  map[string]bool // approved device -> online
+	// Paseo
+	workspaces map[string]*fakeWorkspace
+	agents     map[string]*fakeAgent
+	// Herdr
+	tabs        map[string]*fakeTab
+	herdrAgents map[string]*fakeHerdrAgent
+	dirty       map[string]bool // Herdr worktree workspace -> uncommitted changes
 	// Every runtime call, as "method".
 	calls []string
 }
 
+type fakeWorkspace struct {
+	id, name, dir, project string
+	worktree, archived     bool
+}
+
 type fakeAgent struct {
-	cwd      string
-	status   string // idle or running
-	inputs   []string
-	lastSent time.Time
-	finished time.Time
-	gone     bool
+	cwd, workspace string
+	status         string // idle or running
+	inputs         []string
+	lastSent       time.Time
+	finished       time.Time
+	archived       bool
+}
+
+type fakeTab struct {
+	workspace string
+	env       map[string]any
+	closed    bool
+}
+
+type fakeHerdrAgent struct {
+	pane      string
+	status    string // blocked (trust question), idle, working
+	launching bool
+	inputs    []string
+	keys      [][]string
 }
 
 func newFakeRelay() *fakeRelay {
-	return &fakeRelay{pairings: map[string]string{}, agents: map[string]*fakeAgent{}}
+	return &fakeRelay{
+		devices: map[string]bool{}, workspaces: map[string]*fakeWorkspace{
+			"wks_main": {id: "wks_main", name: "web", dir: "/home/u/web", project: "prj_web"},
+		},
+		agents: map[string]*fakeAgent{}, tabs: map[string]*fakeTab{}, herdrAgents: map[string]*fakeHerdrAgent{},
+		dirty: map[string]bool{},
+	}
 }
 
 func (f *fakeRelay) Origin() string { return "https://relay.test" }
 
+func (f *fakeRelay) pair(label string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.pairings = append(f.pairings, relay.Pairing{Code: "code-" + label, Digest: "fp-" + label, Label: label})
+}
+
 func (f *fakeRelay) State(context.Context) (*relay.State, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	s := &relay.State{}
-	for _, device := range f.pairings {
-		s.Devices = append(s.Devices, relay.Device{ID: device, Online: true, Instances: []relay.Instance{
-			{InstanceID: "paseo", Kind: "paseo", Available: true, Approved: true},
+	s := &relay.State{Pairings: slices.Clone(f.pairings)}
+	for device, online := range f.devices {
+		kind := device[strings.LastIndex(device, ":")+1:]
+		s.Devices = append(s.Devices, relay.Device{ID: device, Online: online, Instances: []relay.Instance{
+			{InstanceID: kind, Kind: kind, Available: true, Approved: true},
 		}})
 	}
 	return s, nil
 }
 
-func (f *fakeRelay) ApprovePairing(_ context.Context, code, _ string) (string, error) {
+func (f *fakeRelay) ApprovePairing(_ context.Context, code, digest string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	device := "device-" + code
-	f.pairings[code] = device
-	return device, nil
+	for i, p := range f.pairings {
+		if p.Code == code && p.Digest == digest {
+			f.pairings = slices.Delete(f.pairings, i, i+1)
+			device := "device-" + strings.TrimPrefix(p.Label, "axp:")
+			f.devices[device] = true
+			return device, nil
+		}
+	}
+	return "", &relay.Fault{Code: "not_found"}
 }
 
 func (f *fakeRelay) ApproveInstance(context.Context, string, string, string) error { return nil }
@@ -72,25 +118,67 @@ func (f *fakeRelay) Call(_ context.Context, _, _, method string, params any) (*r
 		data, _ := json.Marshal(v)
 		return &relay.Outcome{Execution: "accepted", Result: data}, nil
 	}
+	str := func(k string) string { s, _ := p[k].(string); return s }
 	switch method {
+	// --- Paseo
+	case "paseo.workspaces.list":
+		entries := []map[string]any{}
+		for _, w := range f.workspaces {
+			if w.archived {
+				continue
+			}
+			kind := "local_checkout"
+			if w.worktree {
+				kind = "worktree"
+			}
+			entries = append(entries, map[string]any{
+				"id": w.id, "name": w.name, "projectId": w.project, "projectDisplayName": "web", "projectRootPath": "/home/u/web",
+				"projectKind": "git", "workspaceDirectory": w.dir, "workspaceKind": kind,
+				"gitRuntime": map[string]any{"currentBranch": "main", "isDirty": false},
+			})
+		}
+		return result(map[string]any{"entries": entries, "emptyProjects": []map[string]any{
+			{"projectId": "prj_api", "projectDisplayName": "api", "projectRootPath": "/home/u/api", "projectKind": "git"},
+		}})
+	case "paseo.workspaces.create":
+		source := p["source"].(map[string]any)
+		id := "wks_" + uuid.NewString()[:8]
+		branch := source["branchName"].(string)
+		f.workspaces[id] = &fakeWorkspace{id: id, name: str("title"), project: source["projectId"].(string),
+			dir: "/home/u/.paseo/worktrees/x/" + strings.ReplaceAll(branch, "/", "-"), worktree: true}
+		return result(map[string]any{"workspace": map[string]any{"id": id, "workspaceDirectory": f.workspaces[id].dir}})
+	case "paseo.workspaces.archive":
+		f.workspaces[str("workspaceId")].archived = true
+		for _, a := range f.agents {
+			if a.workspace == str("workspaceId") {
+				a.archived = true
+			}
+		}
+		return result(map[string]any{"archivedAt": time.Now()})
 	case "paseo.agents.create":
 		id := uuid.NewString()
-		f.agents[id] = &fakeAgent{cwd: p["cwd"].(string), status: "idle"}
+		f.agents[id] = &fakeAgent{cwd: str("cwd"), workspace: str("workspaceId"), status: "idle"}
 		return result(map[string]any{"agent": map[string]any{"id": id}})
 	case "paseo.agents.send":
-		a := f.agents[p["agentId"].(string)]
-		a.inputs = append(a.inputs, p["text"].(string))
+		a := f.agents[str("agentId")]
+		a.inputs = append(a.inputs, str("text"))
 		a.status, a.lastSent = "running", time.Now()
 		return result(map[string]any{"confirmation": "native_input_accepted"})
 	case "paseo.agents.cancel":
-		f.agents[p["agentId"].(string)].status = "idle"
+		f.agents[str("agentId")].status = "idle"
 		return result(map[string]any{"interruption": "requested"})
+	case "paseo.agents.archive":
+		f.agents[str("agentId")].archived = true
+		return result(map[string]any{})
 	case "paseo.agents.get":
-		a := f.agents[p["agentId"].(string)]
-		if a == nil || a.gone {
+		a := f.agents[str("agentId")]
+		if a == nil {
 			return nil, &relay.Fault{Code: "not_found"}
 		}
 		out := map[string]any{"status": a.status, "lastUserMessageAt": a.lastSent.UTC().Format(time.RFC3339Nano)}
+		if a.archived {
+			out["archivedAt"] = time.Now()
+		}
 		if !a.finished.IsZero() {
 			out["attentionReason"], out["attentionTimestamp"] = "finished", a.finished.UTC().Format(time.RFC3339Nano)
 		}
@@ -101,11 +189,81 @@ func (f *fakeRelay) Call(_ context.Context, _, _, method string, params any) (*r
 			{"timestamp": "2026-10-08T12:00:01Z", "item": map[string]any{"type": "tool_call", "name": "Bash", "status": "completed",
 				"detail": map[string]any{"command": "ls", "output": "hello.txt"}}},
 		}})
+	// --- Herdr
+	case "session.list":
+		return result(map[string]any{"items": []map[string]any{{"session": "work", "backendGeneration": strings.Repeat("a", 64)}}})
+	case "workspace.list":
+		return result(map[string]any{"result": map[string]any{"workspaces": []map[string]any{{"workspace_id": "w1", "label": "web"}}}})
+	case "pane.list":
+		return result(map[string]any{"result": map[string]any{"panes": []map[string]any{{"workspace_id": "w1", "cwd": "/home/u/web"}}}})
+	case "worktree.create":
+		return result(map[string]any{"result": map[string]any{"workspace": map[string]any{"workspace_id": "w2"}}})
+	case "tab.create":
+		id := fmt.Sprintf("%s:t%d", str("workspaceId"), len(f.tabs)+2)
+		env := map[string]any{}
+		for k, v := range p["env"].(map[string]string) {
+			env[k] = v
+		}
+		f.tabs[id] = &fakeTab{workspace: str("workspaceId"), env: env}
+		cwd := "/home/u/web"
+		if str("workspaceId") == "w2" {
+			cwd = "/home/u/.herdr/worktrees/web/feature"
+		}
+		return result(map[string]any{"result": map[string]any{
+			"tab": map[string]any{"tab_id": id}, "root_pane": map[string]any{"pane_id": id + "p", "cwd": cwd},
+		}})
+	case "tab.close":
+		f.tabs[str("tabId")].closed = true
+		return result(map[string]any{})
+	case "worktree.remove":
+		if f.dirty[str("workspaceId")] {
+			return nil, &relay.Fault{Code: "native_error", Message: "Herdr rejected the request",
+				Native: json.RawMessage(`{"code":"dirty_worktree_requires_force"}`)}
+		}
+		return result(map[string]any{})
+	case "agent.start":
+		// Claude stops at its folder-trust question first.
+		f.herdrAgents[str("name")] = &fakeHerdrAgent{pane: str("paneId"), status: "blocked", launching: true}
+		return &relay.Outcome{Execution: "starting"}, nil
+	case "agent.get":
+		a := f.herdrAgents[str("name")]
+		if a == nil {
+			return nil, &relay.Fault{Code: "native_error", Native: json.RawMessage(`{"code":"agent_not_found"}`)}
+		}
+		return result(map[string]any{"result": map[string]any{"agent": map[string]any{"agent_status": a.status, "launch_pending": a.launching}}})
+	case "pane.read":
+		return result(map[string]any{"output": " Quick safety check: Is this a project you created or one you trust?\n ❯ No, exit\n   Yes, I trust this folder"})
+	case "agent.send-keys":
+		a := f.herdrAgents[str("name")]
+		a.keys = append(a.keys, anyStrings(p["keys"]))
+		if a.launching && slices.Equal(anyStrings(p["keys"]), []string{"down", "enter"}) {
+			a.status, a.launching = "idle", false
+		}
+		return result(map[string]any{})
+	case "agent.prompt":
+		a := f.herdrAgents[str("name")]
+		a.inputs = append(a.inputs, str("text"))
+		a.status = "working"
+		return result(map[string]any{})
 	}
-	return nil, &relay.Fault{Code: "method_not_found", Message: method}
+	return nil, &relay.Fault{Code: "unsupported_method", Message: method}
 }
 
-// finish ends the agent's turn.
+func anyStrings(v any) []string {
+	switch v := v.(type) {
+	case []string:
+		return v
+	case []any:
+		out := []string{}
+		for _, s := range v {
+			out = append(out, fmt.Sprint(s))
+		}
+		return out
+	}
+	return nil
+}
+
+// finish ends a Paseo agent's turn.
 func (f *fakeRelay) finish(id string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -152,9 +310,9 @@ func (e *taskEnv) remote(token, method, path string, body any) response {
 	return do(e.t, e.public, method, "/remote/v1"+path, body, headers)
 }
 
-// computer adds a computer, enrolls it with Paseo paired, and is its id and
-// token.
-func (e *taskEnv) computer(name string) (string, string) {
+// computer adds a computer, enrolls it with its runtimes and approves their
+// pairings; it is the computer's id and token.
+func (e *taskEnv) computer(name string, kinds ...string) (string, string) {
 	e.t.Helper()
 	r := e.post("/computers", map[string]any{"name": name})
 	if r.status != 201 {
@@ -166,46 +324,45 @@ func (e *taskEnv) computer(name string) (string, string) {
 		e.t.Fatalf("install command %q", install.Command)
 	}
 	code := install.Command[strings.LastIndex(install.Command, " ")+1:]
+	runtimes := []map[string]any{}
+	for _, k := range kinds {
+		runtimes = append(runtimes, map[string]any{"kind": k, "providers": []string{"claude", "codex"}})
+	}
+	report := map[string]any{"code": code, "hostname": "laptop", "os": "linux", "arch": "amd64",
+		"cli": "/home/u/.local/share/axp/bin/axp", "runtimes": runtimes}
 	var enrolled tasks.Enrolled
-	r = e.remote("", http.MethodPost, "/enroll", map[string]any{"code": code})
+	r = e.remote("", http.MethodPost, "/enroll", report)
 	if r.status != 200 {
 		e.t.Fatalf("enroll: %d %s", r.status, r.body)
 	}
 	r.json(e.t, &enrolled)
-	if s, _ := e.remote("", http.MethodPost, "/enroll", map[string]any{"code": code}).error(); s != 401 {
+	if s, _ := e.remote("", http.MethodPost, "/enroll", report).error(); s != 401 {
 		e.t.Fatalf("an install code works twice: %d", s)
 	}
-	e.heartbeat(enrolled.Token, map[string]any{"kind": "paseo", "providers": []string{"claude", "codex"},
-		"pairing": map[string]any{"code": "code-" + name, "fingerprint": "fp"}})
-	var list tasks.Computers
-	e.get("/computers").json(e.t, &list)
-	if got := list.Computers[len(list.Computers)-1].Runtimes[0]; got.State != "pairing" || got.Fingerprint == nil {
-		e.t.Fatalf("runtime %+v", got)
-	}
-	if r := e.post("/computers/"+install.Computer.ID+"/runtimes/paseo/approve", nil); r.status != 204 {
-		e.t.Fatalf("approve: %d %s", r.status, r.body)
-	}
-	device := "device-code-" + name
-	e.heartbeat(enrolled.Token, map[string]any{"kind": "paseo", "providers": []string{"claude", "codex"}, "device_id": device})
-	e.get("/computers").json(e.t, &list)
-	if got := list.Computers[len(list.Computers)-1].Runtimes[0]; got.State != "online" {
-		e.t.Fatalf("runtime %+v", got)
+	for _, k := range kinds {
+		state := func() tasks.ComputerRuntime {
+			var list tasks.Computers
+			e.get("/computers").json(e.t, &list)
+			for _, rt := range list.Computers[len(list.Computers)-1].Runtimes {
+				if rt.Kind == k {
+					return rt
+				}
+			}
+			e.t.Fatalf("no %s", k)
+			return tasks.ComputerRuntime{}
+		}
+		expect(e.t, state().State, "waiting")
+		// Setup's connector pairs under the computer's label.
+		e.relay.pair(tasks.PairingLabel(enrolled.ComputerID, k))
+		if got := state(); got.State != "pairing" || *got.Fingerprint != "fp-"+tasks.PairingLabel(enrolled.ComputerID, k) {
+			e.t.Fatalf("runtime %+v", got)
+		}
+		if r := e.post("/computers/"+install.Computer.ID+"/runtimes/"+k+"/approve", nil); r.status != 204 {
+			e.t.Fatalf("approve: %d %s", r.status, r.body)
+		}
+		expect(e.t, state().State, "online")
 	}
 	return enrolled.ComputerID, enrolled.Token
-}
-
-func (e *taskEnv) heartbeat(token string, runtimes ...map[string]any) tasks.HeartbeatReply {
-	e.t.Helper()
-	r := e.remote(token, http.MethodPost, "/heartbeat", map[string]any{
-		"hostname": "laptop", "os": "linux", "arch": "amd64", "workspace_root": "/home/u/axp/tasks",
-		"cli": "/home/u/.local/share/axp/bin/axp", "runtimes": runtimes,
-	})
-	if r.status != 200 {
-		e.t.Fatalf("heartbeat: %d %s", r.status, r.body)
-	}
-	var reply tasks.HeartbeatReply
-	r.json(e.t, &reply)
-	return reply
 }
 
 func (e *taskEnv) task(ref string) tasks.TaskDetail {
@@ -227,12 +384,15 @@ func kinds(t tasks.TaskDetail) string {
 	return strings.Join(out, ",")
 }
 
-func (e *taskEnv) createRemote(computer string) tasks.TaskDetail {
+func remoteAssignee(computer, runtime string, place map[string]any) map[string]any {
+	return map[string]any{"kind": "remote", "computer_id": computer, "runtime": runtime, "provider": "claude", "place": place}
+}
+
+var newWorktree = map[string]any{"kind": "worktree", "from": "prj_web"}
+
+func (e *taskEnv) create(assignee map[string]any) tasks.TaskDetail {
 	e.t.Helper()
-	r := e.post("/tasks", map[string]any{
-		"title": "Fix the login page", "description": "It breaks on Safari.", "repository": "https://github.com/acme/web.git",
-		"assignee": map[string]any{"kind": "remote", "computer_id": computer, "runtime": "paseo", "provider": "claude"},
-	})
+	r := e.post("/tasks", map[string]any{"title": "Fix the login page", "description": "It breaks on Safari.", "assignee": assignee})
 	if r.status != 201 {
 		e.t.Fatalf("create task: %d %s", r.status, r.body)
 	}
@@ -241,50 +401,46 @@ func (e *taskEnv) createRemote(computer string) tasks.TaskDetail {
 	return t
 }
 
-// start takes a fresh task's first run to running: the daemon prepares
-// its workspace, the runner opens the agent and sends the brief.
-func (e *taskEnv) start(token string, t tasks.TaskDetail) {
-	e.t.Helper()
-	e.runner.Tick(e.ctx)
-	reply := e.heartbeat(token, map[string]any{"kind": "paseo", "providers": []string{"claude"}, "device_id": "x"})
-	if len(reply.Prepare) != 1 || reply.Prepare[0].TaskID != t.ID {
-		e.t.Fatalf("prepare %+v", reply.Prepare)
-	}
-	if r := e.remote(token, http.MethodPost, "/runs/"+reply.Prepare[0].RunID+"/prepared",
-		map[string]any{"workspace": "/home/u/axp/tasks/" + t.ID}); r.status != 204 {
-		e.t.Fatalf("prepared: %d %s", r.status, r.body)
-	}
-	e.runner.Tick(e.ctx)
-}
-
 // --- tests -------------------------------------------------------------------------
 
-func TestRemoteTaskFromBriefToFollowUp(t *testing.T) {
+func TestRemoteTaskInANewWorktreeFromBriefToDone(t *testing.T) {
 	e := newTaskEnv(t)
-	computer, token := e.computer("laptop")
-	task := e.createRemote(computer)
-	expect(t, task.Number, int64(1))
-	expect(t, *task.Repository, "acme/web")
-	expect(t, task.Assignee.Kind, "remote")
-	expect(t, task.Runs[0].Status, "queued")
+	computer, token := e.computer("laptop", "paseo")
 
-	e.start(token, task)
+	// The places come from Paseo: its projects, empty ones too, and workspaces.
+	var places tasks.Places
+	e.get("/computers/"+computer+"/runtimes/paseo/places").json(t, &places)
+	expect(t, len(places.Projects), 2)
+	expect(t, places.Workspaces[0].Path, "/home/u/web")
+
+	task := e.create(remoteAssignee(computer, "paseo", newWorktree))
+	expect(t, task.Assignee.Place.Kind, "worktree")
+	expect(t, task.Runs[0].Status, "queued")
+	e.runner.Tick(e.ctx)
+
+	// Paseo made the worktree, on the task's default branch.
 	_, agent := e.relay.only(t)
-	expect(t, agent.cwd, "/home/u/axp/tasks/"+task.ID)
+	expect(t, agent.cwd, "/home/u/.paseo/worktrees/x/axp-1-fix-the-login-page")
 	if len(agent.inputs) != 1 || !strings.Contains(agent.inputs[0], "`/home/u/.local/share/axp/bin/axp`") ||
-		!strings.Contains(agent.inputs[0], "任务 #1：Fix the login page") || !strings.Contains(agent.inputs[0], "axp repo checkout acme/web") {
+		!strings.Contains(agent.inputs[0], "任务 #1：Fix the login page") {
 		t.Fatalf("brief %q", agent.inputs)
 	}
 	task = e.task("1")
 	expect(t, task.Status, "in_progress")
 	expect(t, task.Runs[0].Status, "running")
 
-	// The agent works as the computer: checkout, reply, status, deliverable.
+	// The CLI finds its task from where it runs.
+	var current CurrentTask
+	e.remote(token, http.MethodGet, "/current-task?dir="+agent.cwd+"/src", nil).json(t, &current)
+	expect(t, current.TaskID, task.ID)
+	if s, _ := e.remote(token, http.MethodGet, "/current-task?dir=/home/u/other", nil).error(); s != 404 {
+		t.Fatalf("a directory outside every place: %d", s)
+	}
+
 	for _, w := range []struct {
 		path string
 		body map[string]any
 	}{
-		{"/checkouts", map[string]any{"repository": "acme/web", "branch": "axp/1", "base_commit": "0123456789abcdef", "path": "/x"}},
 		{"/comments", map[string]any{"body": "Fixed the flexbox gap; PR opened."}},
 		{"/status", map[string]any{"status": "in_review"}},
 		{"/deliverables", map[string]any{"kind": "pull_request", "url": "https://github.com/acme/web/pull/7"}},
@@ -299,32 +455,93 @@ func TestRemoteTaskFromBriefToFollowUp(t *testing.T) {
 	task = e.task("#1")
 	expect(t, task.Status, "in_review")
 	expect(t, task.Runs[0].Status, "completed")
-	expect(t, kinds(task), "created,assignee,run_queued,run_started,status,checkout,comment,status,deliverable,run_completed")
 
-	// The run's transcript comes from the agent.
 	var log RunLog
 	e.get("/tasks/"+task.ID+"/runs/"+task.Runs[0].ID+"/log").json(t, &log)
-	expect(t, len(log.Entries), 2)
 	expect(t, log.Entries[1].Command, "ls")
 
 	// A comment goes to the same agent as a follow-up.
-	if r := e.post("/tasks/"+task.ID+"/comments", map[string]any{"body": "Also check Firefox."}); r.status != 201 {
-		t.Fatalf("comment: %d %s", r.status, r.body)
-	}
-	e.runner.Tick(e.ctx) // queued -> starting, without preparing again
+	e.post("/tasks/"+task.ID+"/comments", map[string]any{"body": "Also check Firefox."})
+	e.runner.Tick(e.ctx)
 	e.runner.Tick(e.ctx)
 	_, agent = e.relay.only(t)
 	if len(agent.inputs) != 2 || !strings.Contains(agent.inputs[1], "Also check Firefox.") {
 		t.Fatalf("follow-up %q", agent.inputs)
 	}
-	expect(t, e.task("1").Runs[1].Status, "running")
+	e.relay.finish(id)
+	e.remote(token, http.MethodPost, "/tasks/"+task.ID+"/comments", map[string]any{"body": "Firefox is fine."})
+	e.runner.Tick(e.ctx)
+
+	// Done: the worktree workspace AXP opened is archived.
+	e.patch("/tasks/1", map[string]any{"status": "done"})
+	e.runner.Tick(e.ctx)
+	task = e.task("1")
+	last := task.Activity[len(task.Activity)-1]
+	expect(t, last.Kind, "cleanup")
+	if !strings.Contains(*last.Body, "worktree") {
+		t.Fatalf("cleanup %q", *last.Body)
+	}
+	if !slices.Contains(e.relay.calls, "paseo.workspaces.archive") {
+		t.Fatalf("calls %v", e.relay.calls)
+	}
+}
+
+func TestAnExistingWorkspaceKeepsItsWorkspaceWhenDone(t *testing.T) {
+	e := newTaskEnv(t)
+	computer, _ := e.computer("laptop", "paseo")
+	e.create(remoteAssignee(computer, "paseo", map[string]any{"kind": "workspace", "workspace_id": "wks_main"}))
+	e.runner.Tick(e.ctx)
+	_, agent := e.relay.only(t)
+	expect(t, agent.cwd, "/home/u/web")
+	e.patch("/tasks/1", map[string]any{"status": "done"})
+	e.runner.Tick(e.ctx)
+	// Only the agent AXP started is archived; the user's workspace stays.
+	if slices.Contains(e.relay.calls, "paseo.workspaces.archive") || !slices.Contains(e.relay.calls, "paseo.agents.archive") {
+		t.Fatalf("calls %v", e.relay.calls)
+	}
+	expect(t, e.relay.workspaces["wks_main"].archived, false)
+}
+
+func TestHerdrRunsInATabOfANewWorktree(t *testing.T) {
+	e := newTaskEnv(t)
+	computer, _ := e.computer("desktop", "herdr")
+	var places tasks.Places
+	e.get("/computers/"+computer+"/runtimes/herdr/places").json(t, &places)
+	expect(t, places.Workspaces[0].Path, "/home/u/web")
+	expect(t, *places.Workspaces[0].Session, "work")
+
+	task := e.create(remoteAssignee(computer, "herdr", map[string]any{"kind": "worktree", "from": "w1", "session": "work", "branch": "feature"}))
+	e.runner.Tick(e.ctx)
+	if len(e.relay.tabs) != 1 {
+		t.Fatalf("tabs %v", e.relay.tabs)
+	}
+	for _, tab := range e.relay.tabs {
+		expect(t, tab.workspace, "w2")
+		expect(t, tab.env["AXP_TASK_ID"], any(task.ID))
+	}
+	for _, a := range e.relay.herdrAgents {
+		// Claude's folder-trust question was answered, then the brief sent.
+		if len(a.keys) != 1 || len(a.inputs) != 1 {
+			t.Fatalf("agent %+v", a)
+		}
+	}
+	expect(t, e.task("1").Runs[0].Status, "running")
+
+	// Uncommitted work keeps the worktree.
+	e.relay.dirty["w2"] = true
+	e.patch("/tasks/1", map[string]any{"status": "done"})
+	e.runner.Tick(e.ctx)
+	last := e.task("1").Activity
+	if body := *last[len(last)-1].Body; !strings.Contains(body, "未提交") {
+		t.Fatalf("cleanup %q", body)
+	}
 }
 
 func TestRemoteAgentThatDoesNotReplyIsRemindedOnceThenFails(t *testing.T) {
 	e := newTaskEnv(t)
-	computer, token := e.computer("laptop")
-	task := e.createRemote(computer)
-	e.start(token, task)
+	computer, _ := e.computer("laptop", "paseo")
+	e.create(remoteAssignee(computer, "paseo", newWorktree))
+	e.runner.Tick(e.ctx)
 	id, _ := e.relay.only(t)
 
 	e.relay.finish(id)
@@ -348,24 +565,24 @@ func TestRemoteAgentThatDoesNotReplyIsRemindedOnceThenFails(t *testing.T) {
 
 func TestInterruptingARun(t *testing.T) {
 	e := newTaskEnv(t)
-	computer, token := e.computer("laptop")
-	task := e.createRemote(computer)
-	e.start(token, task)
+	computer, _ := e.computer("laptop", "paseo")
+	e.create(remoteAssignee(computer, "paseo", newWorktree))
+	e.runner.Tick(e.ctx)
 	run := e.task("1").Runs[0]
 	if r := e.post("/tasks/1/runs/"+run.ID+"/interrupt", nil); r.status != 200 {
 		t.Fatalf("interrupt: %d %s", r.status, r.body)
 	}
 	e.runner.Tick(e.ctx)
 	expect(t, e.task("1").Runs[0].Status, "cancelled")
-	if !strings.Contains(strings.Join(e.relay.calls, ","), "paseo.agents.cancel") {
+	if !slices.Contains(e.relay.calls, "paseo.agents.cancel") {
 		t.Fatalf("calls %v", e.relay.calls)
 	}
 }
 
 func TestReassigningStopsTheRemoteAgent(t *testing.T) {
 	e := newTaskEnv(t)
-	computer, _ := e.computer("laptop")
-	e.createRemote(computer)
+	computer, _ := e.computer("laptop", "paseo")
+	e.create(remoteAssignee(computer, "paseo", newWorktree))
 	r := e.patch("/tasks/1", map[string]any{"assignee": map[string]any{"kind": "user"}})
 	if r.status != 200 {
 		t.Fatalf("reassign: %d %s", r.status, r.body)
@@ -373,35 +590,36 @@ func TestReassigningStopsTheRemoteAgent(t *testing.T) {
 	task := e.task("1")
 	expect(t, task.Runs[0].Status, "cancelled")
 	expect(t, task.Assignee.Kind, "user")
-	// Comments now reach nobody.
 	e.post("/tasks/1/comments", map[string]any{"body": "I'll do it."})
 	expect(t, len(e.task("1").Runs), 1)
 }
 
-func TestComputersSeeOnlyTheirTasks(t *testing.T) {
+func TestAssigningNeedsAPairedRuntimeAndAPlace(t *testing.T) {
 	e := newTaskEnv(t)
-	laptop, _ := e.computer("laptop")
-	_, other := e.computer("desktop")
-	task := e.createRemote(laptop)
+	laptop, _ := e.computer("laptop", "paseo")
+	_, other := e.computer("desktop", "paseo")
+	task := e.create(remoteAssignee(laptop, "paseo", newWorktree))
 	if s, code := e.remote(other, http.MethodPost, "/tasks/"+task.ID+"/comments", map[string]any{"body": "hi"}).error(); s != 403 {
 		t.Fatalf("%d %s", s, code)
 	}
 	if s, _ := e.remote("nope", http.MethodGet, "/tasks/"+task.ID, nil).error(); s != 401 {
 		t.Fatalf("bad token: %d", s)
 	}
-	// An assignee must be a paired runtime's provider.
-	r := e.post("/tasks", map[string]any{"title": "x", "assignee": map[string]any{
-		"kind": "remote", "computer_id": laptop, "runtime": "herdr", "provider": "claude"}})
-	if s, _ := r.error(); s != 422 {
-		t.Fatalf("unpaired runtime accepted: %d", s)
+	for _, assignee := range []map[string]any{
+		remoteAssignee(laptop, "herdr", newWorktree),                        // not paired
+		remoteAssignee(laptop, "paseo", nil),                                // no place
+		remoteAssignee(laptop, "paseo", map[string]any{"kind": "worktree"}), // from what?
+	} {
+		if s, _ := e.post("/tasks", map[string]any{"title": "x", "assignee": assignee}).error(); s != 422 {
+			t.Fatalf("%v accepted: %d", assignee, s)
+		}
 	}
 }
 
 func TestBacklogTasksWaitUntilTakenUp(t *testing.T) {
 	e := newTaskEnv(t)
-	computer, _ := e.computer("laptop")
-	r := e.post("/tasks", map[string]any{"title": "Later", "status": "backlog",
-		"assignee": map[string]any{"kind": "remote", "computer_id": computer, "runtime": "paseo", "provider": "codex"}})
+	computer, _ := e.computer("laptop", "paseo")
+	r := e.post("/tasks", map[string]any{"title": "Later", "status": "backlog", "assignee": remoteAssignee(computer, "paseo", newWorktree)})
 	if r.status != 201 {
 		t.Fatalf("%d %s", r.status, r.body)
 	}
@@ -439,7 +657,10 @@ func (e *taskEnv) mcpCall(agentID, tool string, args map[string]any) map[string]
 
 func TestAgentsUseTheBoard(t *testing.T) {
 	e := newTaskEnv(t)
+	computer, _ := e.computer("laptop", "paseo")
 	agent := e.createAgent("helper")
+	places := e.mcpCall(agent.ID, "list_places", map[string]any{"computer_id": computer, "runtime": "paseo"})
+	expect(t, len(places["projects"].([]any)), 2)
 	created := e.mcpCall(agent.ID, "create_task", map[string]any{
 		"title": "Proofread the report", "assignee": map[string]any{"kind": "user"},
 	})

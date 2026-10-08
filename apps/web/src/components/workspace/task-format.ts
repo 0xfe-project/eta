@@ -1,6 +1,7 @@
 import type {
   AssigneeInput,
   AssigneeOption,
+  Place,
   RunStatus,
   Task,
   TaskStatus,
@@ -24,7 +25,6 @@ export const statusLabel = (status: TaskStatus) =>
 
 export const runStatusLabels: Record<RunStatus, string> = {
   queued: "排队中",
-  preparing: "准备工作区",
   starting: "启动中",
   running: "工作中",
   completed: "已回复",
@@ -33,10 +33,7 @@ export const runStatusLabels: Record<RunStatus, string> = {
 };
 
 export const isActive = (status: RunStatus | null | undefined) =>
-  status === "queued" ||
-  status === "preparing" ||
-  status === "starting" ||
-  status === "running";
+  status === "queued" || status === "starting" || status === "running";
 
 const runtimeLabels: Record<string, string> = {
   paseo: "Paseo",
@@ -117,4 +114,12 @@ export function ago(iso: string) {
   if (seconds < 86_400) return `${Math.floor(seconds / 3600)} 小时前`;
   const date = new Date(iso);
   return `${date.getMonth() + 1}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+/** "新 worktree（web，axp/12-fix）" or "工作区 web". */
+export function placeLabel(place: Place | null | undefined) {
+  if (!place) return null;
+  if (place.kind === "worktree")
+    return `新 worktree（从 ${place.name ?? "项目"} 开${place.branch ? `，${place.branch}` : ""}）`;
+  return `工作区 ${place.name ?? place.workspace_id}`;
 }

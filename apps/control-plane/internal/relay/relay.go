@@ -45,9 +45,16 @@ var ErrNotConfigured = errors.New("relay not configured")
 type Fault struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	// The runtime's own error, when it rejected the call.
+	Native json.RawMessage `json:"native,omitempty"`
 }
 
-func (f *Fault) Error() string { return "relay: " + f.Code + ": " + f.Message }
+func (f *Fault) Error() string {
+	if len(f.Native) > 0 {
+		return "relay: " + f.Code + ": " + f.Message + ": " + string(f.Native)
+	}
+	return "relay: " + f.Code + ": " + f.Message
+}
 
 // Outcome is a runtime call's result. Execution is accepted, rejected,
 // not_started, starting or unknown; unknown means the write may or may not

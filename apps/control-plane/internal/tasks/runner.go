@@ -18,18 +18,18 @@ import (
 // relay calls take seconds and must not hold up the agents' runtimes.
 //
 //	queued     waits for the task's previous run and the computer's capacity
-//	preparing  the daemon creates the workspace (it is told in its heartbeat)
-//	starting   the native agent is opened (once per session) and sent the prompt
+//	starting   the place is opened and the native agent started (once per
+//	           session), then sent the prompt
 //	running    watched until its turn ends; then completed, reminded once to
 //	           comment, or failed
+//
+// When a task is done, what AXP opened for it is archived or removed.
 //
 // Writes to remote agents are never repeated: the time a prompt is handed to
 // the relay is recorded first, and a lost confirmation is settled from the
 // native state.
 
 const (
-	// A workspace the daemon has not prepared by then fails the run.
-	prepareTimeout = 10 * time.Minute
 	// An agent that shows no sign of the prompt by then never got it.
 	deliveryTimeout = 2 * time.Minute
 	// Without a native turn-end time (Herdr), idle this long after a send
@@ -66,9 +66,9 @@ func (r *Runner) Tick(ctx context.Context) {
 		run  func(context.Context) error
 	}{
 		{"dispatch_runs", r.dispatch},
-		{"expire_preparing", r.expirePreparing},
 		{"start_runs", r.start},
 		{"watch_runs", r.watch},
+		{"clean_up", r.cleanup},
 	}
 	for _, step := range steps {
 		if err := step.run(ctx); err != nil {
@@ -99,15 +99,15 @@ func (r *Runner) fail(ctx context.Context, runID, message string) error {
 	})
 }
 
-// dispatch moves the oldest queued run of each idle task on: straight to
-// starting when its session already has a workspace, else to preparing.
+// dispatch starts the oldest queued run of each idle task, within the
+// computer's capacity.
 func (r *Runner) dispatch(ctx context.Context) error {
 	if r.Service.Relay == nil {
 		return nil
 	}
 	queued, err := chat.All[runRow](ctx, r.DB, `SELECT DISTINCT ON (q.task_id) q.* FROM task_run q
 		WHERE q.status = 'queued' AND NOT EXISTS (SELECT 1 FROM task_run a WHERE a.task_id = q.task_id
-			AND a.status IN ('preparing', 'starting', 'running'))
+			AND a.status IN ('starting', 'running'))
 		ORDER BY q.task_id, q.created_at`)
 	if err != nil {
 		return err
@@ -120,7 +120,7 @@ func (r *Runner) dispatch(ctx context.Context) error {
 			}
 			var active int
 			if err := tx.QueryRow(ctx, `SELECT count(*) FROM task_run WHERE computer_id = $1
-				AND status IN ('preparing', 'starting', 'running')`, *run.ComputerID).Scan(&active); err != nil {
+				AND status IN ('starting', 'running')`, *run.ComputerID).Scan(&active); err != nil {
 				return err
 			}
 			if active >= MaxActiveRuns {
@@ -135,7 +135,7 @@ func (r *Runner) dispatch(ctx context.Context) error {
 					run.ID, session.ID, session.Workspace)
 				return err
 			}
-			_, err = tx.Exec(ctx, "UPDATE task_run SET status = 'preparing' WHERE id = $1", run.ID)
+			_, err = tx.Exec(ctx, "UPDATE task_run SET status = 'starting' WHERE id = $1", run.ID)
 			return err
 		})
 		if err != nil {
@@ -158,20 +158,6 @@ func openSession(ctx context.Context, db interface {
 		return nil, nil
 	}
 	return s, err
-}
-
-func (r *Runner) expirePreparing(ctx context.Context) error {
-	runs, err := chat.All[runRow](ctx, r.DB, `SELECT * FROM task_run WHERE status = 'preparing' AND created_at < $1`,
-		time.Now().Add(-prepareTimeout))
-	if err != nil {
-		return err
-	}
-	for _, run := range runs {
-		if err := r.fail(ctx, run.ID, "电脑没有准备好任务的工作区（可能离线）。"); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // start opens the run's native agent when its session has none, then sends
@@ -233,14 +219,14 @@ func isTransport(err error) bool {
 	return !errors.As(err, &fault)
 }
 
-// session is the run's open session, created (with its native agent) when
-// there is none. A run without a workspace or device fails.
+// session is the run's open session, opened (its place and native agent)
+// when there is none.
 func (r *Runner) session(ctx context.Context, a agents, run *runRow) (*sessionRow, error) {
 	if run.SessionID != nil {
 		return chat.One[sessionRow](ctx, r.DB, "SELECT * FROM task_session WHERE id = $1", *run.SessionID)
 	}
-	if run.Workspace == nil || run.ComputerID == nil {
-		return nil, r.fail(ctx, run.ID, "没有工作区。")
+	if run.ComputerID == nil {
+		return nil, r.fail(ctx, run.ID, "这次运行没有电脑。")
 	}
 	var deviceID *string
 	if err := r.DB.QueryRow(ctx, "SELECT device_id FROM computer_runtime WHERE computer_id = $1 AND kind = $2",
@@ -250,33 +236,46 @@ func (r *Runner) session(ctx context.Context, a agents, run *runRow) (*sessionRo
 	if deviceID == nil {
 		return nil, r.fail(ctx, run.ID, "这台电脑的 "+run.Runtime+" 还没有配对。")
 	}
-	var number int64
-	var title string
-	if err := r.DB.QueryRow(ctx, "SELECT number, title FROM task WHERE id = $1", run.TaskID).Scan(&number, &title); err != nil {
+	task, err := find(ctx, r.DB, run.TaskID, false)
+	if err != nil {
 		return nil, err
+	}
+	if task.Place == nil {
+		return nil, r.fail(ctx, run.ID, "任务没有工作位置。")
 	}
 	s := &sessionRow{
 		ID: chat.NewID(), TaskID: run.TaskID, ComputerID: *run.ComputerID, Runtime: run.Runtime, Provider: run.Provider,
-		DeviceID: *deviceID, InstanceID: instanceFor(run.Runtime), Workspace: *run.Workspace, CreatedAt: chat.Now(),
+		DeviceID: *deviceID, InstanceID: instanceFor(run.Runtime), CreatedAt: chat.Now(),
 	}
-	n, err := a.create(ctx, s, fmt.Sprintf("AXP #%d %s", number, title))
-	if err != nil {
-		// Creating has no idempotency the relay exposes: whatever happened,
-		// the run fails rather than possibly opening a second agent.
-		return nil, r.fail(ctx, run.ID, "无法在远程电脑上打开智能体："+err.Error())
+	n, dir, openErr := a.open(ctx, s, opening{TaskID: task.ID, Number: task.Number, Title: task.Title, Place: *task.Place})
+	if n.WorkspaceID == "" && openErr != nil {
+		// Opening has no idempotency the relay exposes: whatever happened,
+		// the run fails rather than possibly opening a second place.
+		return nil, r.fail(ctx, run.ID, "无法在远程电脑上打开工作位置："+openErr.Error())
 	}
+	// What was opened is kept with the session, so a done task cleans it up
+	// even when the agent did not start.
+	s.Workspace = dir
 	s.Native, _ = json.Marshal(n)
 	err = r.inTx(ctx, func(tx pgx.Tx) error {
+		closed := any(nil)
+		if openErr != nil {
+			closed = chat.Now()
+		}
 		if _, err := tx.Exec(ctx, `INSERT INTO task_session (id, task_id, computer_id, runtime, provider, device_id, instance_id,
-			workspace, native, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-			s.ID, s.TaskID, s.ComputerID, s.Runtime, s.Provider, s.DeviceID, s.InstanceID, s.Workspace, s.Native, s.CreatedAt); err != nil {
+			workspace, native, created_at, closed_at, cleanup_pending) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+			s.ID, s.TaskID, s.ComputerID, s.Runtime, s.Provider, s.DeviceID, s.InstanceID, s.Workspace, s.Native, s.CreatedAt,
+			closed, openErr != nil); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, "UPDATE task_run SET session_id = $2 WHERE id = $1", run.ID, s.ID)
+		_, err := tx.Exec(ctx, "UPDATE task_run SET session_id = $2, workspace = $3 WHERE id = $1", run.ID, s.ID, s.Workspace)
 		return err
 	})
 	if err != nil {
 		return nil, err
+	}
+	if openErr != nil {
+		return nil, r.fail(ctx, run.ID, "智能体没有在远程电脑上启动："+openErr.Error())
 	}
 	return s, nil
 }
@@ -387,4 +386,37 @@ func (r *Runner) withCLI(ctx context.Context, run *runRow, prompt string) string
 		return prompt
 	}
 	return fmt.Sprintf("（这台电脑上的 `axp` 命令是 `%s`；PATH 里找不到 `axp` 时用这个完整路径。）\n\n%s", *path, prompt)
+}
+
+// cleanup archives or removes what AXP opened for sessions whose task is
+// done (or whose agent never started), once their runs have stopped.
+func (r *Runner) cleanup(ctx context.Context) error {
+	a, ok := r.agents()
+	if !ok {
+		return nil
+	}
+	sessions, err := chat.All[sessionRow](ctx, r.DB, `SELECT s.* FROM task_session s
+		WHERE s.cleanup_pending AND NOT EXISTS (SELECT 1 FROM task_run r WHERE r.session_id = s.id AND r.status IN ('starting', 'running'))`)
+	if err != nil {
+		return err
+	}
+	for _, s := range sessions {
+		callCtx, cancel := context.WithTimeout(ctx, callTimeout)
+		note, err := a.cleanup(callCtx, s, s.native())
+		cancel()
+		if err != nil {
+			// The computer may be offline: try again later.
+			slog.WarnContext(ctx, "Cannot clean up a remote session", "session", s.ID, "error", err)
+			continue
+		}
+		if err := r.inTx(ctx, func(tx pgx.Tx) error {
+			if _, err := tx.Exec(ctx, "UPDATE task_session SET cleanup_pending = false WHERE id = $1", s.ID); err != nil {
+				return err
+			}
+			return record(ctx, tx, s.TaskID, nil, "cleanup", System, &note, map[string]any{"runtime": s.Runtime})
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }

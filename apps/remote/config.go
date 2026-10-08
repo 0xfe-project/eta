@@ -22,8 +22,6 @@ type Config struct {
 	ComputerID  string `json:"computer_id"`
 	Name        string `json:"name"`
 	RelayOrigin string `json:"relay_origin"`
-	// Task workspaces: <root>/<task id>/.
-	Root string `json:"root"`
 	// Where setup installed the connectors.
 	Home string `json:"home"`
 	// The runtimes setup found, by kind.

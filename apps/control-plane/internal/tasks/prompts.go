@@ -5,25 +5,22 @@ import (
 	"strings"
 )
 
-// What remote agents are sent. They work in <root>/<task id>/ on their
-// computer, where the `axp` CLI knows which task they are on.
+// What remote agents are sent. They work in their place (a workspace or a
+// new worktree of the user's), where the `axp` CLI knows which task they are
+// on.
 
-const cliGuide = `你在 AXP 的任务看板上工作，用 ` + "`axp`" + ` 命令和看板打交道（在任务目录及其子目录中运行）：
+const cliGuide = `你在 AXP 的任务看板上工作，用 ` + "`axp`" + ` 命令和看板打交道（在当前目录及其子目录中运行）：
 
 - ` + "`axp task show`" + `：任务的描述、状态和全部评论。
-- ` + "`axp repo checkout <owner/name> [--ref <branch或commit>]`" + `：把仓库拉到任务目录下，并新建本任务的分支；git push 和 gh 都以 AXP 的 GitHub App 身份进行。
-- ` + "`axp gh pr create ...`" + `：用 App 的身份运行 gh，开出的 PR 会记为任务的交付物。
 - ` + "`axp task comment \"<Markdown>\"`" + `（或 ` + "`--file <path>`" + `）：在任务下回复。
 - ` + "`axp task status in_review|blocked|in_progress`" + `：做完待验收时设为 in_review，需要人帮忙时设为 blocked。
+- ` + "`axp gh pr create ...`" + `：以 AXP 的 GitHub App 身份开 PR（先用 git 推送分支），开出的 PR 会记为任务的交付物。
 
-规则：每一轮结束前，必须用 ` + "`axp task comment`" + ` 汇报你做了什么、结果如何、还需要什么；没有评论的一轮不算完成。只在本任务的目录里修改文件。`
+规则：每一轮结束前，必须用 ` + "`axp task comment`" + ` 汇报你做了什么、结果如何、还需要什么；没有评论的一轮不算完成。在当前目录里工作，把改动提交到当前分支。`
 
 func describe(r *taskRow) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "任务 #%d：%s\n", r.Number, r.Title)
-	if r.Repository != nil {
-		fmt.Fprintf(&b, "仓库：%s（先运行 `axp repo checkout %s`）\n", *r.Repository, *r.Repository)
-	}
 	if desc := strings.TrimSpace(r.Description); desc != "" {
 		fmt.Fprintf(&b, "\n%s\n", desc)
 	}

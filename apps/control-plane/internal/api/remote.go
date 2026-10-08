@@ -23,7 +23,7 @@ import (
 // /remote: what remote computers call, the one path outside the edge's
 // access control (Cloudflare Access bypasses it). Every endpoint
 // authenticates itself: the install command's one-time code, or the
-// computer's token (Authorization: Bearer) for its daemon and its CLI.
+// computer's token (Authorization: Bearer) for its CLI.
 
 type RemoteBearer struct {
 	Authorization string `header:"Authorization" doc:"Bearer <the computer's token>"`
@@ -36,10 +36,11 @@ func (b RemoteBearer) computer(ctx context.Context, d *Deps) (*tasks.RemoteCompu
 
 type EnrollIn struct {
 	Code string `json:"code" minLength:"1" maxLength:"100"`
+	tasks.Report
 }
 
-type PreparedIn struct {
-	Workspace string `json:"workspace" minLength:"1" maxLength:"1024"`
+type CurrentTask struct {
+	TaskID string `json:"task_id"`
 }
 
 type StatusIn struct {
@@ -93,44 +94,39 @@ func remote(r chi.Router, d *Deps) {
 
 	huma.Register(api, remoteOp("enroll", http.MethodPost, "/remote/v1/enroll", "Trade an install code for the computer's token", 200),
 		func(ctx context.Context, in *struct{ Body EnrollIn }) (*body[tasks.Enrolled], error) {
-			e, err := inTx(ctx, d, func(tx pgx.Tx) (*tasks.Enrolled, error) { return s.Enroll(ctx, tx, in.Body.Code) })
+			e, err := inTx(ctx, d, func(tx pgx.Tx) (*tasks.Enrolled, error) { return s.Enroll(ctx, tx, in.Body.Code, in.Body.Report) })
 			if err != nil {
 				return nil, err
 			}
 			return &body[tasks.Enrolled]{*e}, nil
 		})
 
-	huma.Register(api, remoteOp("heartbeat", http.MethodPost, "/remote/v1/heartbeat",
-		"The daemon's report; the answer lists workspaces to prepare", 200),
+	huma.Register(api, remoteOp("report", http.MethodPost, "/remote/v1/report",
+		"What setup finds on the computer: its runtimes and their providers", 204),
 		func(ctx context.Context, in *struct {
 			RemoteBearer
-			Body tasks.Heartbeat
-		}) (*body[tasks.HeartbeatReply], error) {
-			c, err := in.computer(ctx, d)
-			if err != nil {
-				return nil, err
-			}
-			reply, err := inTx(ctx, d, func(tx pgx.Tx) (*tasks.HeartbeatReply, error) { return s.Heartbeat(ctx, tx, c, in.Body) })
-			if err != nil {
-				return nil, err
-			}
-			return &body[tasks.HeartbeatReply]{*reply}, nil
+			Body tasks.Report
+		}) (*struct{}, error) {
+			return nil, remoteWrite(ctx, d, in.RemoteBearer, func(tx pgx.Tx, c *tasks.RemoteComputer) error {
+				return s.Report(ctx, tx, c, in.Body)
+			})
 		})
 
-	huma.Register(api, remoteOp("prepared", http.MethodPost, "/remote/v1/runs/{run_id}/prepared", "A run's workspace is ready", 204),
+	huma.Register(api, remoteOp("currentTask", http.MethodGet, "/remote/v1/current-task",
+		"The task whose place a directory is in", 200),
 		func(ctx context.Context, in *struct {
 			RemoteBearer
-			RunID string `path:"run_id"`
-			Body  PreparedIn
-		}) (*struct{}, error) {
+			Dir string `query:"dir" minLength:"1" maxLength:"4096"`
+		}) (*body[CurrentTask], error) {
 			c, err := in.computer(ctx, d)
 			if err != nil {
 				return nil, err
 			}
-			_, err = inTx(ctx, d, func(tx pgx.Tx) (struct{}, error) {
-				return struct{}{}, s.Prepared(ctx, tx, c, in.RunID, in.Body.Workspace)
-			})
-			return nil, err
+			id, err := s.CurrentTask(ctx, d.DB, c, in.Dir)
+			if err != nil {
+				return nil, err
+			}
+			return &body[CurrentTask]{CurrentTask{id}}, nil
 		})
 
 	huma.Register(api, remoteOp("remoteGetTask", http.MethodGet, "/remote/v1/tasks/{task_id}", "A task the computer works on", 200),
@@ -167,16 +163,6 @@ func remote(r chi.Router, d *Deps) {
 		}) (*struct{}, error) {
 			return nil, remoteWrite(ctx, d, in.RemoteBearer, func(tx pgx.Tx, c *tasks.RemoteComputer) error {
 				return s.RemoteStatus(ctx, tx, c, in.TaskID, in.Body.Status)
-			})
-		})
-	})
-	write("remoteCheckout", "checkouts", "Record a repository checked out for the task", func(o huma.Operation) {
-		huma.Register(api, o, func(ctx context.Context, in *struct {
-			RemoteTaskPath
-			Body tasks.Checkout
-		}) (*struct{}, error) {
-			return nil, remoteWrite(ctx, d, in.RemoteBearer, func(tx pgx.Tx, c *tasks.RemoteComputer) error {
-				return s.RecordCheckout(ctx, tx, c, in.TaskID, in.Body)
 			})
 		})
 	})

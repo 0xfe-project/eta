@@ -30,8 +30,7 @@ type createTaskIn struct {
 	Title       string               `json:"title" jsonschema:"a short title"`
 	Description string               `json:"description,omitempty" jsonschema:"what to do, in Markdown; a remote agent gets it as its brief"`
 	Status      string               `json:"status,omitempty" jsonschema:"backlog, todo (default), in_progress, in_review, done, blocked or cancelled"`
-	Assignee    *tasks.AssigneeInput `json:"assignee,omitempty" jsonschema:"kind none, user (the user themself) or remote (with computer_id, runtime and provider from list_assignees); none by default"`
-	Repository  string               `json:"repository,omitempty" jsonschema:"owner/name on GitHub that the work is in"`
+	Assignee    *tasks.AssigneeInput `json:"assignee,omitempty" jsonschema:"kind none, user (the user themself) or remote (with computer_id, runtime and provider from list_assignees, and a place from list_places); none by default"`
 }
 
 type updateTaskIn struct {
@@ -39,8 +38,12 @@ type updateTaskIn struct {
 	Title       *string              `json:"title,omitempty"`
 	Description *string              `json:"description,omitempty"`
 	Status      *string              `json:"status,omitempty" jsonschema:"backlog, todo, in_progress, in_review, done, blocked or cancelled"`
-	Assignee    *tasks.AssigneeInput `json:"assignee,omitempty" jsonschema:"kind none, user or remote (with computer_id, runtime and provider from list_assignees)"`
-	Repository  *string              `json:"repository,omitempty"`
+	Assignee    *tasks.AssigneeInput `json:"assignee,omitempty" jsonschema:"kind none, user or remote (with computer_id, runtime and provider from list_assignees, and a place from list_places)"`
+}
+
+type listPlacesIn struct {
+	ComputerID string `json:"computer_id" jsonschema:"from list_assignees"`
+	Runtime    string `json:"runtime" jsonschema:"paseo or herdr"`
 }
 
 type commentTaskIn struct {
@@ -115,6 +118,18 @@ func tasksMCP(d *Deps) http.Handler {
 		return nil, &assigneesOut{options}, toolError(err)
 	})
 	mcp.AddTool(srv, &mcp.Tool{
+		Name: "list_places",
+		Description: "Where on a remote computer's runtime an agent can work, read from it now: its projects (repositories a new worktree " +
+			"can branch off) and its existing workspaces (with path, branch and whether they have uncommitted changes). Pick one " +
+			"for the assignee's place: {kind: workspace, workspace_id} to work in an existing workspace, or {kind: worktree, " +
+			"from: <project id>, branch?, base?} for a new worktree (Paseo only branches off its projects; for Herdr, from is a " +
+			"workspace whose repository to branch off). Pass session for Herdr. Prefer a new worktree for independent work and " +
+			"an existing workspace when the work belongs there.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in listPlacesIn) (*mcp.CallToolResult, any, error) {
+		places, err := s.Places(ctx, d.DB, in.ComputerID, in.Runtime)
+		return nil, places, toolError(err)
+	})
+	mcp.AddTool(srv, &mcp.Tool{
 		Name: "create_task",
 		Description: "Create a task on the board. Assigned to a remote agent, it starts working on it in the task's own workspace on that " +
 			"computer, and reports back as comments; assigned to the user, it waits for them.",
@@ -123,24 +138,20 @@ func tasksMCP(d *Deps) http.Handler {
 		if in.Assignee != nil {
 			assignee = *in.Assignee
 		}
-		var repo *string
-		if in.Repository != "" {
-			repo = &in.Repository
-		}
 		t, err := write(ctx, func(tx pgx.Tx, by tasks.Actor) (*tasks.TaskDetail, error) {
 			return s.Create(ctx, tx, tasks.Input{
-				Title: in.Title, Description: in.Description, Status: in.Status, Assignee: assignee, Repository: repo,
+				Title: in.Title, Description: in.Description, Status: in.Status, Assignee: assignee,
 			}, by)
 		})
 		return nil, t, err
 	})
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "update_task",
-		Description: "Change a task's title, description, status, assignee or repository; only the fields given change.",
+		Description: "Change a task's title, description, status or assignee (with its place); only the fields given change. Setting a task done archives or removes what AXP opened on the remote computer for it.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in updateTaskIn) (*mcp.CallToolResult, any, error) {
 		t, err := write(ctx, func(tx pgx.Tx, by tasks.Actor) (*tasks.TaskDetail, error) {
 			return s.Update(ctx, tx, in.Task, tasks.Changes{
-				Title: in.Title, Description: in.Description, Status: in.Status, Assignee: in.Assignee, Repository: in.Repository,
+				Title: in.Title, Description: in.Description, Status: in.Status, Assignee: in.Assignee,
 			}, by)
 		})
 		return nil, t, err

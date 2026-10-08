@@ -1,3 +1,4 @@
+import type { AssigneeDraft } from "./assignee-draft";
 import type {
   LogEntry,
   Task,
@@ -11,7 +12,6 @@ import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { ChatCircleIcon } from "@phosphor-icons/react/ChatCircle";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
-import { GitBranchIcon } from "@phosphor-icons/react/GitBranch";
 import { GitPullRequestIcon } from "@phosphor-icons/react/GitPullRequest";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
@@ -54,14 +54,19 @@ import {
   useTasks,
   useUpdateTask,
 } from "@/queries/tasks";
+import {
+  draftInput,
+  draftOf,
+  emptyDraft,
+  useDraftPlaces,
+} from "./assignee-draft";
+import { AssigneeFields } from "./assignee-picker";
 import { when } from "./routine-format";
 import {
   ago,
-  assigneeFromKey,
-  assigneeKey,
   assigneeLabel,
-  assigneeOptions,
   isActive,
+  placeLabel,
   remoteLabel,
   runStatusLabels,
   statuses,
@@ -229,43 +234,6 @@ function Field({
   );
 }
 
-function AssigneeSelect({
-  id,
-  value,
-  onChange,
-  className,
-}: {
-  id?: string;
-  value: string;
-  onChange: (key: string) => void;
-  className?: string;
-}) {
-  const { data } = useTasks();
-  const options = assigneeOptions(data?.assignees ?? []);
-  // A remote agent no longer offered (its computer went away) stays shown.
-  const known = options.some((o) => o.key === value);
-  return (
-    <NativeSelect
-      id={id}
-      aria-label={id ? undefined : "指派给"}
-      className={className}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      {known ? null : (
-        <NativeSelectOption value={value}>
-          不可用的远程智能体
-        </NativeSelectOption>
-      )}
-      {options.map((o) => (
-        <NativeSelectOption key={o.key} value={o.key}>
-          {o.label}
-        </NativeSelectOption>
-      ))}
-    </NativeSelect>
-  );
-}
-
 function StatusSelect({
   id,
   value,
@@ -300,23 +268,23 @@ function TaskForm({ onDone }: { onDone: (id?: string) => void }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<TaskStatus>("todo");
-  const [assignee, setAssignee] = useState("none");
-  const [repository, setRepository] = useState("");
-  const remote = assignee.startsWith("remote:");
+  const [draft, setDraft] = useState<AssigneeDraft>(emptyDraft);
+  const places = useDraftPlaces(draft);
+  const assignee = draftInput(draft, places);
+  const remote = draft.key.startsWith("remote:");
   const noComputers = (data?.assignees.length ?? 0) === 0;
   return (
     <form
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!title.trim()) return;
+        if (!title.trim() || !assignee) return;
         create.mutate(
           {
             title: title.trim(),
             description: description.trim(),
             status,
-            assignee: assigneeFromKey(assignee),
-            repository: repository.trim() || null,
+            assignee,
           },
           { onSuccess: (task) => onDone(task.id), onError: showError },
         );
@@ -354,47 +322,28 @@ function TaskForm({ onDone }: { onDone: (id?: string) => void }) {
           onChange={(e) => setDescription(e.target.value)}
         />
       </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field id="task-status" label="状态">
-          <StatusSelect
-            id="task-status"
-            className="w-full"
-            value={status}
-            onChange={setStatus}
-          />
-        </Field>
-        <Field id="task-assignee" label="指派给">
-          <AssigneeSelect
-            id="task-assignee"
-            className="w-full"
-            value={assignee}
-            onChange={setAssignee}
-          />
-        </Field>
-      </div>
+      <Field id="task-status" label="状态">
+        <StatusSelect
+          id="task-status"
+          className="w-full"
+          value={status}
+          onChange={setStatus}
+        />
+      </Field>
+      <AssigneeFields id="task" draft={draft} onChange={setDraft} />
       {noComputers ? (
         <p className="text-xs text-muted-foreground">
           要让远程电脑上的智能体领任务，先在 设置 → 远程电脑 中接入一台电脑。
         </p>
       ) : null}
-      <Field
-        id="task-repository"
-        label="仓库"
-        hint="GitHub 上的 owner/name；远程智能体用 axp repo checkout 拉取，以 AXP 的 GitHub App 身份推送和开 PR。"
-      >
-        <Input
-          id="task-repository"
-          maxLength={200}
-          placeholder="可选，例如 akarachen/axp"
-          value={repository}
-          onChange={(e) => setRepository(e.target.value)}
-        />
-      </Field>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={() => onDone()}>
           取消
         </Button>
-        <Button type="submit" disabled={!title.trim() || create.isPending}>
+        <Button
+          type="submit"
+          disabled={!title.trim() || !assignee || create.isPending}
+        >
           {remote && status !== "backlog" ? "创建并开始" : "创建"}
         </Button>
       </div>
@@ -430,23 +379,14 @@ function describe(a: TaskActivity): React.ReactNode {
       return `把状态从「${statusLabel(str(d.from) as TaskStatus)}」改为「${statusLabel(str(d.to) as TaskStatus)}」`;
     case "assignee": {
       const to = d.to as Task["assignee"] | undefined;
-      return to ? `指派给 ${assigneeLabel(to)}` : "改了指派";
+      if (!to) return "改了指派";
+      const place = placeLabel(to.place);
+      return `指派给 ${assigneeLabel(to)}${place ? `，${place}` : ""}`;
     }
     case "title":
       return `把标题改为「${str(d.to)}」`;
     case "description":
       return "修改了描述";
-    case "repository":
-      return d.to ? `把仓库设为 ${str(d.to)}` : "移除了仓库";
-    case "checkout":
-      return (
-        <span className="inline-flex flex-wrap items-center gap-x-1">
-          <GitBranchIcon aria-hidden="true" />
-          拉取了 {str(d.repository)}，分支{" "}
-          <code className="text-xs">{str(d.branch)}</code>，起点{" "}
-          <code className="text-xs">{str(d.base_commit).slice(0, 10)}</code>
-        </span>
-      );
     case "deliverable":
       return (
         <span className="inline-flex flex-wrap items-center gap-x-1">
@@ -462,6 +402,8 @@ function describe(a: TaskActivity): React.ReactNode {
           </a>
         </span>
       );
+    case "cleanup":
+      return a.body ?? "收尾完成";
     case "run_queued":
       return null;
     case "run_started":
@@ -954,29 +896,54 @@ function Description({ task }: { task: TaskDetail }) {
   );
 }
 
-function RepositoryField({ task }: { task: TaskDetail }) {
+/** The assignee and its place, changed together. */
+function AssigneeRow({ task }: { task: TaskDetail }) {
   const update = useUpdateTask();
-  const [value, setValue] = useState(task.repository ?? "");
-  const save = () => {
-    if (value.trim() !== (task.repository ?? ""))
-      update.mutate(
-        { id: task.id, changes: { repository: value.trim() } },
-        { onError: showError },
-      );
-  };
+  const [draft, setDraft] = useState<AssigneeDraft | null>(null);
+  const places = useDraftPlaces(draft ?? emptyDraft);
+  if (!draft) {
+    const place = placeLabel(task.assignee.place);
+    return (
+      <div className="flex items-start gap-2">
+        <span className="min-w-0 flex-1">
+          {assigneeLabel(task.assignee)}
+          {place ? (
+            <span className="block text-muted-foreground">{place}</span>
+          ) : null}
+        </span>
+        <Button
+          size="xs"
+          variant="ghost"
+          onClick={() => setDraft(draftOf(task.assignee))}
+        >
+          修改
+        </Button>
+      </div>
+    );
+  }
+  const assignee = draftInput(draft, places);
   return (
-    <Input
-      aria-label="仓库"
-      className="h-7 text-xs"
-      placeholder="owner/name"
-      maxLength={200}
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={save}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") save();
-      }}
-    />
+    <div className="space-y-2">
+      <AssigneeFields id="task-detail" draft={draft} onChange={setDraft} />
+      <div className="flex justify-end gap-2">
+        <Button size="sm" variant="ghost" onClick={() => setDraft(null)}>
+          取消
+        </Button>
+        <Button
+          size="sm"
+          disabled={!assignee || update.isPending}
+          onClick={() =>
+            assignee &&
+            update.mutate(
+              { id: task.id, changes: { assignee } },
+              { onSuccess: () => setDraft(null), onError: showError },
+            )
+          }
+        >
+          保存
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -1039,17 +1006,9 @@ function TaskView({ task }: { task: TaskDetail }) {
             onChange={(status) => change({ status })}
           />
         </dd>
-        <dt className="text-muted-foreground">指派给</dt>
+        <dt className="self-start pt-1 text-muted-foreground">指派给</dt>
         <dd>
-          <AssigneeSelect
-            className="w-full"
-            value={assigneeKey(task.assignee)}
-            onChange={(key) => change({ assignee: assigneeFromKey(key) })}
-          />
-        </dd>
-        <dt className="text-muted-foreground">仓库</dt>
-        <dd>
-          <RepositoryField key={task.repository ?? ""} task={task} />
+          <AssigneeRow task={task} />
         </dd>
       </dl>
 
