@@ -1,4 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  queryOptions,
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { z } from "zod";
 import { memoryApi } from "@/lib/api";
 
@@ -27,19 +33,43 @@ const path = (agentId: string) =>
 const POLL_MS = 15_000;
 
 /** The agent's memories, newest first, or the ones matching ``query``. */
-export function useMemories(agentId: string | undefined, query: string) {
-  return useQuery({
-    queryKey: keys.memories(agentId ?? "", query),
-    enabled: Boolean(agentId),
+function memoriesQueryOptions(agentId: string, query: string) {
+  return queryOptions({
+    queryKey: keys.memories(agentId, query),
     queryFn: async ({ signal }) => {
       const search = query ? `?q=${encodeURIComponent(query)}` : "";
-      const body = await memoryApi.get(`${path(agentId!)}${search}`, signal);
+      const body = await memoryApi.get(`${path(agentId)}${search}`, signal);
       return z.array(memorySchema).parse(body.memories);
     },
     refetchInterval: query ? false : POLL_MS,
+  });
+}
+
+export function useMemories(agentId: string | undefined, query: string) {
+  return useQuery({
+    ...memoriesQueryOptions(agentId ?? "", query),
+    enabled: Boolean(agentId),
     // Keeps the list while a search for the same agent loads.
     placeholderData: (previous, previousQuery) =>
       previousQuery?.queryKey[1] === agentId ? previous : undefined,
+  });
+}
+
+/**
+ * How many memories each agent has; undefined until every list loads. Shares
+ * the memory tab's cache. The API has no count, so this reads whole lists.
+ */
+export function useMemoryCounts(agentIds: string[]) {
+  return useQueries({
+    queries: agentIds.map((id) => memoriesQueryOptions(id, "")),
+    combine: (results) => ({
+      byAgent: new Map(
+        agentIds.map((id, i) => [id, results[i].data?.length] as const),
+      ),
+      total: results.every((result) => result.data)
+        ? results.reduce((sum, result) => sum + result.data!.length, 0)
+        : undefined,
+    }),
   });
 }
 

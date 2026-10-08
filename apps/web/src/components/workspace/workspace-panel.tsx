@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { usePendingInteractions } from "@/queries/chat";
 import { Inbox } from "./inbox";
 import { MemoryView } from "./memory-view";
+import { Overview } from "./overview";
 import { views } from "./workspace-search";
 
 export function WorkspacePanel({
@@ -67,6 +68,7 @@ export function WorkspacePanel({
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {views.map(({ value }) => (
           <TabsContent key={value} value={value}>
+            {value === "overview" ? <Overview /> : null}
             {value === "memory" ? <MemoryView /> : null}
             {value === "inbox" ? <Inbox /> : null}
           </TabsContent>
