@@ -45,6 +45,6 @@ forge 服务在 `/forge/mcp` 提供这个 MCP 工具（`github` 插件的 `.mcp.
 
 ## 验证
 
-- `apps/forge-service/internal/server/server_test.go`：用假的 GitHub API（真实的 RSA 密钥，校验 JWT）覆盖创建、回调的 `state`、安装与仓库列表、App 被删除、各用途的 token 权限与缓存、未连接时的提示和开 PR（含已存在的 PR；经 MCP 客户端调用，与 Codex 一样）。
+- `apps/forge-service/internal/server`：测试对着 [emulate](https://github.com/vercel-labs/emulate)（forge-service 的开发依赖，`bun install` 安装）模拟的 GitHub 运行：App 的 JWT 校验、installation token 的权限与仓库范围、分支、开 PR 及其作者都是它的真实行为。它缺的或行为不同的几处（manifest 换凭据、`/installation/repositories`、同一分支重复开 PR 的 422、被删除的 App）由测试里一层很薄的处理补上，其余请求原样转发。`open_pull_request` 通过 MCP 客户端调用，与 Codex 一样。
 - `apps/agent-runtime/tests/test_axp_forge.py`：凭据助手与 gh 包装对假的 forge 服务的行为。
 - 在开发环境中用浏览器走过向导：提交 manifest 后跳转到 GitHub，回调出错时显示原因；安装与已连接状态的界面。创建真实的 App 需要用户在 GitHub 上确认，没有自动化。

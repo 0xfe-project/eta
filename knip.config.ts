@@ -5,8 +5,9 @@ import type { KnipConfig } from "knip";
 export default {
   // System tools the Turbo scripts call.
   ignoreBinaries: ["go", "gofmt", "uv"],
-  // scripts/dev.sh runs it by path.
-  ignoreDependencies: ["concurrently"],
+  // Run by path: scripts/dev.sh runs concurrently, the forge service's Go
+  // tests run emulate (their emulated GitHub).
+  ignoreDependencies: ["concurrently", "emulate"],
   // CSS files are part of the module graph: their @imports reference
   // packages (fonts, tw-animate-css, shadcn) and other stylesheets.
   compilers: {

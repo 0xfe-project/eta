@@ -2,11 +2,7 @@ package server
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"log/slog"
@@ -15,198 +11,29 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"slices"
-	"strconv"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/akarachen/axp/apps/forge-service/internal/github"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 const origin = "https://axp.example.com"
 
-// fakeGitHub answers the parts of GitHub's API the service uses, for one App.
-type fakeGitHub struct {
-	t   *testing.T
-	key *rsa.PrivateKey
-	pem string
-
-	mu            sync.Mutex
-	installations []map[string]any
-	repositories  map[int64][]string // installation id -> repositories it may access
-	tokens        []map[string]any   // access token requests, with the token issued
-	pulls         []map[string]any
-	appDeleted    bool
-}
-
-func newFakeGitHub(t *testing.T) *fakeGitHub {
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatal(err)
-	}
-	der, err := x509.MarshalPKCS8PrivateKey(key)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pemText := string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))
-	return &fakeGitHub{t: t, key: key, pem: pemText, repositories: map[int64][]string{}}
-}
-
-func (f *fakeGitHub) install(account, accountType string, repositories ...string) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	id := int64(100 + len(f.installations))
-	f.installations = append(f.installations, map[string]any{
-		"id":                   id,
-		"account":              map[string]any{"login": account, "type": accountType},
-		"repository_selection": "selected",
-		"html_url":             fmt.Sprintf("https://github.com/settings/installations/%d", id),
-	})
-	f.repositories[id] = repositories
-}
-
-func (f *fakeGitHub) lastToken() map[string]any {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.tokens[len(f.tokens)-1]
-}
-
-func reply(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
-}
-
-func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	path := r.URL.Path
-	auth := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-	switch {
-	case path == "/app-manifests/good-code/conversions" && r.Method == http.MethodPost:
-		reply(w, 201, map[string]any{
-			"id": 77, "slug": "axp-test", "name": "AXP Test", "client_id": "Iv1.abc",
-			"html_url": "https://github.com/apps/axp-test",
-			"owner":    map[string]any{"login": "akarachen", "type": "User"},
-			"pem":      f.pem,
-		})
-		return
-	case strings.HasPrefix(path, "/app-manifests/"):
-		reply(w, 404, map[string]any{"message": "Not Found"})
-		return
-	case path == "/users/axp-test[bot]":
-		reply(w, 200, map[string]any{"id": 4242})
-		return
-	case strings.HasPrefix(path, "/app/"):
-		if f.appDeleted {
-			reply(w, 401, map[string]any{"message": "Bad credentials"})
-			return
-		}
-		claims := jwt.MapClaims{}
-		if _, err := jwt.ParseWithClaims(auth, claims, func(*jwt.Token) (any, error) { return &f.key.PublicKey, nil }); err != nil || claims["iss"] != "77" {
-			f.t.Errorf("bad App JWT: %v %v", err, claims)
-			reply(w, 401, nil)
-			return
-		}
-		if path == "/app/installations" {
-			reply(w, 200, f.installations)
-			return
-		}
-		id, _ := strconv.ParseInt(strings.Split(path, "/")[3], 10, 64)
-		var body map[string]any
-		_ = json.NewDecoder(r.Body).Decode(&body)
-		if wanted, ok := body["repositories"].([]any); ok {
-			for _, name := range wanted {
-				if !slices.Contains(f.repositories[id], name.(string)) {
-					reply(w, 422, map[string]any{"message": "There is at least one repository that does not exist or is not accessible"})
-					return
-				}
-			}
-		}
-		token := fmt.Sprintf("ghs_%d", len(f.tokens))
-		body["token"], body["installation"] = token, id
-		f.tokens = append(f.tokens, body)
-		reply(w, 201, map[string]any{"token": token, "expires_at": "2099-01-01T00:00:00Z"})
-		return
-	}
-	var granted map[string]any
-	for _, t := range f.tokens {
-		if t["token"] == auth {
-			granted = t
-		}
-	}
-	if granted == nil {
-		f.t.Errorf("%s %s without an installation token", r.Method, path)
-		reply(w, 401, nil)
-		return
-	}
-	switch {
-	case path == "/installation/repositories":
-		id := granted["installation"].(int64)
-		var owner string
-		for _, inst := range f.installations {
-			if inst["id"] == id {
-				owner = inst["account"].(map[string]any)["login"].(string)
-			}
-		}
-		var repos []map[string]any
-		for _, name := range f.repositories[id] {
-			repos = append(repos, map[string]any{"full_name": owner + "/" + name})
-		}
-		reply(w, 200, map[string]any{"total_count": len(repos), "repositories": repos})
-	case path == "/repos/akarachen/axp" && r.Method == http.MethodGet:
-		reply(w, 200, map[string]any{"default_branch": "main"})
-	case path == "/repos/akarachen/axp/pulls" && r.Method == http.MethodPost:
-		var body map[string]any
-		_ = json.NewDecoder(r.Body).Decode(&body)
-		for _, p := range f.pulls {
-			if p["head"] == body["head"] {
-				reply(w, 422, map[string]any{"message": "Validation Failed", "errors": []any{map[string]any{
-					"message": "A pull request already exists for akarachen:" + body["head"].(string) + ".",
-				}}})
-				return
-			}
-		}
-		if body["head"] == "empty" {
-			reply(w, 422, map[string]any{"message": "Validation Failed", "errors": []any{map[string]any{"message": "No commits between main and empty"}}})
-			return
-		}
-		body["number"] = len(f.pulls) + 1
-		f.pulls = append(f.pulls, body)
-		reply(w, 201, map[string]any{"number": body["number"], "html_url": fmt.Sprintf("https://github.com/akarachen/axp/pull/%d", body["number"])})
-	case path == "/repos/akarachen/axp/pulls":
-		head := strings.SplitN(r.URL.Query().Get("head"), ":", 2)[1]
-		var found []map[string]any
-		for _, p := range f.pulls {
-			if p["head"] == head {
-				found = append(found, map[string]any{"number": p["number"], "html_url": fmt.Sprintf("https://github.com/akarachen/axp/pull/%d", p["number"])})
-			}
-		}
-		reply(w, 200, found)
-	default:
-		reply(w, 404, map[string]any{"message": "no fake for " + r.Method + " " + path})
-	}
-}
-
+// env is the service under test, with its own state, against the shared
+// emulated GitHub (emulate_test.go).
 type env struct {
 	t      *testing.T
-	fake   *fakeGitHub
 	gh     *github.GitHub
 	server *httptest.Server
 }
 
 func newEnv(t *testing.T) *env {
-	fake := newFakeGitHub(t)
-	api := httptest.NewServer(fake)
-	t.Cleanup(api.Close)
 	gh := github.New(t.TempDir())
-	gh.APIURL = api.URL
+	gh.APIURL = emulator.URL
 	srv := httptest.NewServer(New(gh, slog.New(slog.NewTextHandler(io.Discard, nil))))
 	t.Cleanup(srv.Close)
-	return &env{t: t, fake: fake, gh: gh, server: srv}
+	return &env{t: t, gh: gh, server: srv}
 }
 
 // do sends a request, as a runtime when agent is set, and decodes JSON.
@@ -232,15 +59,22 @@ func (e *env) do(method, path string, agent bool, body any) (int, map[string]any
 	return resp.StatusCode, out, resp.Header
 }
 
-// connect runs the browser's side of the manifest flow, through GitHub's redirect.
-func (e *env) connect() {
+// connect runs the browser's side of the manifest flow, through GitHub's
+// redirect; code picks which seeded App GitHub "created".
+func (e *env) connect(code string) {
 	e.t.Helper()
 	_, form, _ := e.do("POST", "/api/forge/v1/github/manifest", false, map[string]any{"name": "AXP Test", "origin": origin})
 	action, _ := url.Parse(form["action"].(string))
-	status, _, header := e.do("GET", "/api/forge/v1/github/manifest/callback?code=good-code&state="+action.Query().Get("state"), false, nil)
+	status, _, header := e.do("GET", "/api/forge/v1/github/manifest/callback?code="+code+"&state="+action.Query().Get("state"), false, nil)
 	if status != 303 || header.Get("Location") != "/?view=capabilities&github=created" {
 		e.t.Fatalf("callback: %d %s", status, header.Get("Location"))
 	}
+}
+
+func (e *env) credential(path string) (int, map[string]any) {
+	e.t.Helper()
+	status, out, _ := e.do("POST", "/forge/credential", true, map[string]any{"host": "github.com", "path": path})
+	return status, out
 }
 
 func errorCode(body map[string]any) string {
@@ -332,36 +166,42 @@ func TestInvalidManifestRequests(t *testing.T) {
 	}
 }
 
-func TestCreatingThenInstalling(t *testing.T) {
+func TestCreatedButNotInstalled(t *testing.T) {
 	e := newEnv(t)
-	e.connect()
+	e.connect("new-app")
 	_, status, _ := e.do("GET", "/api/forge/v1/github", false, nil)
 	app := status["app"].(map[string]any)
 	if status["state"] != "not_installed" ||
-		app["install_url"] != "https://github.com/apps/axp-test/installations/new" ||
-		app["settings_url"] != "https://github.com/settings/apps/axp-test" {
+		app["install_url"] != "https://github.com/apps/axp-new/installations/new" ||
+		app["settings_url"] != "https://github.com/settings/apps/axp-new" {
 		t.Fatalf("status: %v", status)
 	}
 	info, err := os.Stat(filepath.Join(e.gh.StateDir, "github.pem"))
 	if err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("key: %v %v", info.Mode(), err)
+		t.Fatalf("key: %v %v", info, err)
 	}
-	e.fake.install("akarachen", "User", "axp", "notes")
-	_, status, _ = e.do("GET", "/api/forge/v1/github?fresh=1", false, nil)
-	installations := status["installations"].([]any)
-	if status["state"] != "ready" || len(installations) != 1 {
+}
+
+func TestInstalled(t *testing.T) {
+	e := newEnv(t)
+	e.connect("installed-app")
+	_, status, _ := e.do("GET", "/api/forge/v1/github?fresh=1", false, nil)
+	if status["state"] != "ready" {
 		t.Fatalf("status: %v", status)
 	}
-	inst := installations[0].(map[string]any)
-	if inst["account"] != "akarachen" || fmt.Sprint(inst["repositories"]) != "[akarachen/axp akarachen/notes]" ||
-		!strings.HasSuffix(inst["manage_url"].(string), "/installations/100") {
-		t.Fatalf("installation: %v", inst)
+	seen := map[string]string{}
+	for _, raw := range status["installations"].([]any) {
+		inst := raw.(map[string]any)
+		seen[inst["account"].(string)] = fmt.Sprint(inst["repository_selection"], inst["repositories"])
+	}
+	if seen["akarachen"] != "selected[akarachen/axp akarachen/notes]" || seen["acme"] != "all[acme/web acme/api]" {
+		t.Fatalf("installations: %v", seen)
 	}
 }
 
 func TestACallbackNeedsAFreshState(t *testing.T) {
 	e := newEnv(t)
-	_, _, header := e.do("GET", "/api/forge/v1/github/manifest/callback?code=good-code&state=forged", false, nil)
+	_, _, header := e.do("GET", "/api/forge/v1/github/manifest/callback?code=installed-app&state=forged", false, nil)
 	if !strings.Contains(header.Get("Location"), "github_error=") {
 		t.Fatalf("location: %s", header.Get("Location"))
 	}
@@ -382,7 +222,7 @@ func TestAnExpiredCode(t *testing.T) {
 
 func TestOneAppAtATimeAndForgetting(t *testing.T) {
 	e := newEnv(t)
-	e.connect()
+	e.connect("new-app")
 	if _, again, _ := e.do("POST", "/api/forge/v1/github/manifest", false, map[string]any{"name": "AXP 2", "origin": origin}); errorCode(again) != "GITHUB_ALREADY_CONNECTED" {
 		t.Fatalf("again: %v", again)
 	}
@@ -396,8 +236,13 @@ func TestOneAppAtATimeAndForgetting(t *testing.T) {
 
 func TestAnAppDeletedOnGitHub(t *testing.T) {
 	e := newEnv(t)
-	e.connect()
-	e.fake.appDeleted = true
+	e.connect("new-app")
+	emulator.deleteApp(newApp)
+	t.Cleanup(func() {
+		emulator.mu.Lock()
+		delete(emulator.deletedApps, newApp)
+		emulator.mu.Unlock()
+	})
 	_, status, _ := e.do("GET", "/api/forge/v1/github?fresh=1", false, nil)
 	if status["state"] != "error" || status["error"].(map[string]any)["code"] != "GITHUB_APP_GONE" {
 		t.Fatalf("status: %v", status)
@@ -432,67 +277,61 @@ func TestRoutesNeedTheGatewayHeader(t *testing.T) {
 
 func TestGitCredentialForOneRepository(t *testing.T) {
 	e := newEnv(t)
-	e.connect()
-	e.fake.install("akarachen", "User", "axp")
-	_, out, _ := e.do("POST", "/forge/credential", true, map[string]any{"host": "github.com", "path": "akarachen/axp.git"})
-	if out["username"] != "x-access-token" || out["password"] != "ghs_0" {
+	e.connect("installed-app")
+	before := len(emulator.issuedTokens(t))
+	_, out := e.credential("akarachen/notes.git")
+	if out["username"] != "x-access-token" || !strings.HasPrefix(out["password"].(string), "ghs_") {
 		t.Fatalf("credential: %v", out)
 	}
-	token := e.fake.lastToken()
-	if fmt.Sprint(token["repositories"]) != "[axp]" || fmt.Sprint(token["permissions"]) != "map[contents:write metadata:read]" {
-		t.Fatalf("token request: %v", token)
+	tokens := emulator.issuedTokens(t)
+	token := tokens[len(tokens)-1]
+	if fmt.Sprint(token["permissions"]) != "map[contents:write metadata:read]" ||
+		token["repository_selection"] != "selected" || len(token["repository_ids"].([]any)) != 1 {
+		t.Fatalf("token: %v", token)
 	}
 	// Cached until close to expiry.
-	e.do("POST", "/forge/credential", true, map[string]any{"host": "github.com", "path": "akarachen/axp"})
-	if len(e.fake.tokens) != 1 {
-		t.Fatalf("tokens: %d", len(e.fake.tokens))
+	e.credential("akarachen/notes")
+	if after := len(emulator.issuedTokens(t)); after != before+1 {
+		t.Fatalf("tokens minted: %d", after-before)
 	}
 }
 
 func TestRepositoriesTheAppCannotReach(t *testing.T) {
 	e := newEnv(t)
-	e.connect()
-	e.fake.install("akarachen", "User", "axp")
-	if _, out, _ := e.do("POST", "/forge/credential", true, map[string]any{"host": "github.com", "path": "akarachen/secret"}); errorCode(out) != "GITHUB_REPOSITORY_NOT_GRANTED" {
+	e.connect("installed-app")
+	if _, out := e.credential("akarachen/secret"); errorCode(out) != "GITHUB_REPOSITORY_NOT_GRANTED" {
 		t.Fatalf("not granted: %v", out)
 	}
-	if _, out, _ := e.do("POST", "/forge/credential", true, map[string]any{"host": "github.com", "path": "someone/else"}); errorCode(out) != "GITHUB_NOT_INSTALLED" {
+	if _, out := e.credential("someone/else"); errorCode(out) != "GITHUB_NOT_INSTALLED" {
 		t.Fatalf("other: %v", out)
 	}
 }
 
 func TestGhGetsAReadOnlyToken(t *testing.T) {
 	e := newEnv(t)
-	e.connect()
-	e.fake.install("acme", "Organization", "web")
+	e.connect("installed-app")
 	_, out, _ := e.do("POST", "/forge/gh-token", true, map[string]any{"owner": "ACME"})
 	if !strings.HasPrefix(out["token"].(string), "ghs_") {
 		t.Fatalf("token: %v", out)
 	}
-	token := e.fake.lastToken()
+	tokens := emulator.issuedTokens(t)
+	token := tokens[len(tokens)-1]
+	if token["account"].(map[string]any)["login"] != "acme" || token["repository_selection"] != "all" {
+		t.Fatalf("token: %v", token)
+	}
 	for name, level := range token["permissions"].(map[string]any) {
 		if level != "read" {
 			t.Errorf("%s: %v", name, level)
 		}
 	}
-	if token["repositories"] != nil {
-		t.Errorf("repositories: %v", token["repositories"])
-	}
 }
 
-func TestIdentity(t *testing.T) {
+func TestOpenPullRequestAsTheAppsBot(t *testing.T) {
 	e := newEnv(t)
-	e.connect()
-	_, out, _ := e.do("GET", "/forge/identity", true, nil)
-	if out["name"] != "axp-test[bot]" || out["email"] != "4242+axp-test[bot]@users.noreply.github.com" {
-		t.Fatalf("identity: %v", out)
-	}
-}
+	e.connect("installed-app")
+	_, push := e.credential("akarachen/axp")
+	emulator.push(t, push["password"].(string), "akarachen/axp", "feature")
 
-func TestOpenPullRequest(t *testing.T) {
-	e := newEnv(t)
-	e.connect()
-	e.fake.install("akarachen", "User", "axp")
 	result := e.openPullRequest(map[string]any{
 		"repository": "git@github.com:akarachen/axp.git", "head": "feature", "title": "Add feature", "body": "Why",
 	})
@@ -500,18 +339,52 @@ func TestOpenPullRequest(t *testing.T) {
 	if err := json.Unmarshal([]byte(text(result)), &pull); err != nil || result.IsError {
 		t.Fatalf("result: %v", text(result))
 	}
-	if pull["url"] != "https://github.com/akarachen/axp/pull/1" || pull["created"] != true {
+	if pull["created"] != true || !strings.HasSuffix(pull["url"].(string), "/akarachen/axp/pull/1") {
 		t.Fatalf("pull: %v", pull)
 	}
-	if e.fake.pulls[0]["base"] != "main" || e.fake.lastToken()["permissions"].(map[string]any)["pull_requests"] != "write" {
-		t.Fatalf("request: %v %v", e.fake.pulls[0], e.fake.lastToken())
+	// On GitHub, by the App's bot, into the default branch.
+	req, _ := http.NewRequest(http.MethodGet, emulator.backend+"/repos/akarachen/axp/pulls/1", nil)
+	_, read, _ := e.do("POST", "/forge/gh-token", true, map[string]any{"owner": "akarachen"})
+	req.Header.Set("Authorization", "Bearer "+read["token"].(string))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
 	}
+	var created struct {
+		User struct{ Login string } `json:"user"`
+		Base struct{ Ref string }   `json:"base"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&created)
+	resp.Body.Close()
+	if created.User.Login != "axp-test[bot]" || created.Base.Ref != "main" {
+		t.Fatalf("pull on GitHub: %+v", created)
+	}
+	if !slicesContainsPermissions(emulator.issuedTokens(t), "map[contents:read metadata:read pull_requests:write]") {
+		t.Fatal("no pull request token with only pull_requests:write and contents:read")
+	}
+
+	// The open pull request for the branch comes back instead of an error.
 	again := e.openPullRequest(map[string]any{"repository": "akarachen/axp", "head": "feature", "title": "x"})
-	if !strings.Contains(text(again), `"created":false`) {
+	if !strings.Contains(text(again), `"created":false`) || !strings.Contains(text(again), "/pull/1") {
 		t.Fatalf("again: %v", text(again))
 	}
-	empty := e.openPullRequest(map[string]any{"repository": "akarachen/axp", "head": "empty", "title": "x"})
-	if !empty.IsError || !strings.Contains(text(empty), "No commits") {
-		t.Fatalf("empty: %v", text(empty))
+	same := e.openPullRequest(map[string]any{"repository": "akarachen/axp", "head": "main", "title": "x"})
+	if !same.IsError || !strings.Contains(text(same), "GitHub 拒绝创建 PR") {
+		t.Fatalf("same branch: %v", text(same))
 	}
+
+	// The bot exists once the App has acted; commits are made as it.
+	_, identity, _ := e.do("GET", "/forge/identity", true, nil)
+	if identity["name"] != "axp-test[bot]" || !strings.HasSuffix(identity["email"].(string), "+axp-test[bot]@users.noreply.github.com") {
+		t.Fatalf("identity: %v", identity)
+	}
+}
+
+func slicesContainsPermissions(tokens []map[string]any, want string) bool {
+	for _, token := range tokens {
+		if fmt.Sprint(token["permissions"]) == want {
+			return true
+		}
+	}
+	return false
 }
