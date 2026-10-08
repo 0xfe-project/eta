@@ -35,9 +35,11 @@ import (
 	"github.com/akarachen/axp/apps/control-plane/internal/llm"
 	"github.com/akarachen/axp/apps/control-plane/internal/plugins"
 	"github.com/akarachen/axp/apps/control-plane/internal/queue"
+	"github.com/akarachen/axp/apps/control-plane/internal/relay"
 	"github.com/akarachen/axp/apps/control-plane/internal/routines"
 	"github.com/akarachen/axp/apps/control-plane/internal/snapshots"
 	"github.com/akarachen/axp/apps/control-plane/internal/store"
+	"github.com/akarachen/axp/apps/control-plane/internal/tasks"
 	"github.com/akarachen/axp/packages/telemetry-go"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
@@ -84,7 +86,7 @@ func printOpenAPI(args []string) error {
 		return errors.New(usage)
 	}
 	var document huma.API
-	deps := &api.Deps{Chat: &chat.Service{}, Dev: true}
+	deps := &api.Deps{Chat: &chat.Service{}, Tasks: &tasks.Service{}, Dev: true}
 	switch args[0] {
 	case "public":
 		_, document = api.Public(deps)
@@ -128,6 +130,14 @@ func connect(ctx context.Context) (*services, error) {
 		return nil, err
 	}
 	models := llm.NewGateway(cfg.LLMGatewayURL)
+	taskService := &tasks.Service{}
+	relayClient, err := relay.New(cfg.RelayURL, cfg.RelayOrigin, cfg.RelayAdminSecret, cfg.RelayCAFile, pool)
+	if err != nil {
+		return nil, err
+	}
+	if relayClient != nil {
+		taskService.Relay = relayClient
+	}
 	chatService := &chat.Service{
 		Queue: q, Models: models, Plugins: &plugins.Catalog{Dir: cfg.PluginsDir},
 		Cursors: chat.Cursors{Secret: []byte(cfg.SecretKey)},
@@ -138,11 +148,13 @@ func connect(ctx context.Context) (*services, error) {
 		models:    models,
 		snapshots: s3,
 		deps: &api.Deps{
-			DB:       pool,
-			Chat:     chatService,
-			Routines: &routines.Service{Queue: q, Models: models},
-			Protocol: &control.Protocol{DB: pool, Chat: chatService, Snapshots: s3, Secret: []byte(cfg.SecretKey)},
-			Dev:      cfg.Dev,
+			DB:        pool,
+			Chat:      chatService,
+			Routines:  &routines.Service{Queue: q, Models: models},
+			Protocol:  &control.Protocol{DB: pool, Chat: chatService, Snapshots: s3, Secret: []byte(cfg.SecretKey)},
+			Tasks:     taskService,
+			PublicURL: cfg.PublicURL, ForgeURL: cfg.ForgeURL, RemoteDist: cfg.RemoteDist,
+			Dev: cfg.Dev,
 		},
 	}, nil
 }
@@ -277,6 +289,8 @@ func runController(ctx context.Context, s *services, interval time.Duration) err
 		RuntimeGatewayURL: s.cfg.RuntimeGatewayURL, NATSURL: s.cfg.NATSURL, CodexLaunch: s.cfg.CodexLaunch,
 		ID: "controller-" + uuid.NewString()[:8], HostID: control.HostID(),
 	}
+	// Remote agents' runs, on their own loop: relay calls take seconds.
+	go (&tasks.Runner{DB: s.deps.DB, Service: s.deps.Tasks}).Loop(ctx, 2*time.Second)
 	slog.Info("Controller started", "controller", controller.ID)
 	for ctx.Err() == nil {
 		// A database restart drops the session and its lock: take it again

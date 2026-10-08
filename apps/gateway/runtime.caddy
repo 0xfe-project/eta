@@ -31,6 +31,10 @@ http://:{$AXP_RUNTIME_GATEWAY_PORT:8090} {
 	handle /memory/* {
 		import as_agent {$AXP_UPSTREAM_MEMORY:axp-memory:8320}
 	}
+	# The task board: the tasks plugin's MCP server, in the internal API.
+	handle /tasks/* {
+		import as_agent {$AXP_UPSTREAM_INTERNAL:axp-internal:8001}
+	}
 	# Code hosting: git's and gh's GitHub credentials, open_pull_request.
 	handle /forge/* {
 		import as_agent {$AXP_UPSTREAM_FORGE:axp-forge:8330}

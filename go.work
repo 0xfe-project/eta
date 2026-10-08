@@ -4,5 +4,6 @@ use (
 	./apps/control-plane
 	./apps/forge-service
 	./apps/llm-gateway
+	./apps/remote
 	./packages/telemetry-go
 )

@@ -8,7 +8,8 @@ Usage: scripts/dev.sh [--port PORT]
 Starts the development stack. Each instance uses a block of consecutive
 ports: gateway PORT (open this one), control plane PORT+1, internal runtime
 API PORT+2, web PORT+3, LLM gateway PORT+4, runtime gateway PORT+5, memory
-service PORT+6 and forge service PORT+7.
+service PORT+6, forge service PORT+7 and the agenvo relay PORT+8 (HTTPS with
+a self-signed certificate, for remote computers).
 
   --port PORT   Use exactly this gateway port; fail if any port of its block is taken.
                 Also settable as AXP_DEV_PORT.
@@ -100,9 +101,9 @@ port_reserved() {
 
 # Production's ports are never used, even when they happen to be free.
 source deploy/ports.env
-production_ports=" $AXP_PROD_HTTP_PORT $AXP_PROD_HTTPS_PORT $AXP_PROD_REGISTRY_PORT $AXP_PROD_OBSERVE_PORT "
+production_ports=" $AXP_PROD_HTTP_PORT $AXP_PROD_HTTPS_PORT $AXP_PROD_REGISTRY_PORT $AXP_PROD_OBSERVE_PORT $AXP_PROD_RELAY_PORT "
 
-BLOCK_SIZE=8
+BLOCK_SIZE=9
 
 block_free() {
   local port
@@ -158,6 +159,8 @@ export AXP_MEMORY_ADDR="127.0.0.1:$AXP_MEMORY_PORT"
 export AXP_UPSTREAM_MEMORY="$AXP_MEMORY_ADDR"
 export AXP_FORGE_ADDR="127.0.0.1:$AXP_FORGE_PORT"
 export AXP_UPSTREAM_FORGE="$AXP_FORGE_ADDR"
+export AXP_FORGE_URL="http://$AXP_FORGE_ADDR"
+export AXP_RELAY_PORT="$((web_port + 8))"
 
 # Instances share the runtime network; only their ports differ.
 go -C apps/control-plane run . ensure-runtime-network
@@ -169,6 +172,33 @@ bun run runtime:build
 # and the web client's types from the control plane's OpenAPI document.
 bunx turbo run build --filter=@axp/memory-service --output-logs=errors-only
 bunx turbo run generate --filter=@axp/web --output-logs=errors-only
+# The agenvo relay and what remote computers download (/remote/dl).
+bunx turbo run build --filter=@axp/relay --filter=@axp/remote --output-logs=errors-only
+
+# --- Relay ------------------------------------------------------------------------
+# agenvo (vendor/agenvo) accepts only an HTTPS origin, so development's relay
+# serves TLS itself with a self-signed certificate kept with its state in
+# var/relay. Connectors on this machine trust it through NODE_EXTRA_CA_CERTS
+# (`axp setup --ca-file`). Paired connectors are bound to the origin, so they
+# pair again when this instance's port changes.
+relay_dir="$ROOT_DIR/var/relay"
+mkdir -p "$relay_dir"
+chmod 700 "$relay_dir"
+if [[ ! -f "$relay_dir/cert.pem" ]]; then
+  openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 3650 \
+    -keyout "$relay_dir/key.pem" -out "$relay_dir/cert.pem" -subj /CN=localhost \
+    -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" 2>/dev/null
+fi
+[[ -f "$relay_dir/admin_secret" ]] || (umask 077 && openssl rand -hex 32 >"$relay_dir/admin_secret")
+cat >"$relay_dir/relay.json" <<EOF
+{"origin": "https://localhost:$AXP_RELAY_PORT", "dataDir": "$relay_dir/data", "host": "127.0.0.1",
+ "port": $AXP_RELAY_PORT, "tls": {"cert": "$relay_dir/cert.pem", "key": "$relay_dir/key.pem"}}
+EOF
+export AXP_RELAY_URL="https://localhost:$AXP_RELAY_PORT"
+export AXP_RELAY_ORIGIN="$AXP_RELAY_URL"
+export AXP_RELAY_CA_FILE="$relay_dir/cert.pem"
+AXP_RELAY_ADMIN_SECRET="$(<"$relay_dir/admin_secret")"
+export AXP_RELAY_ADMIN_SECRET
 
 # --- Storage --------------------------------------------------------------------
 # Agent snapshots live in SeaweedFS. Its S3 API is on the runtime network's
@@ -227,6 +257,7 @@ AXP dev in $ROOT_DIR
   API:      http://localhost:$AXP_GATEWAY_PORT/api/health
   Internal: http://127.0.0.1:$AXP_INTERNAL_PORT/internal/docs
   Logs:     http://localhost:$AXP_GATEWAY_PORT/observe/ ($OBSERVE_USER / $OBSERVE_PASSWORD)
+  Relay:    $AXP_RELAY_ORIGIN (connectors trust $AXP_RELAY_CA_FILE)
 EOF
 
 # Both gateways (production's two roles) in one Caddy on the host network, so
@@ -242,8 +273,8 @@ done
 
 # Every process stops on Ctrl+C or when any of them exits.
 exec node node_modules/concurrently/dist/bin/concurrently.js --kill-others \
-  --names gateway,control-plane,internal,controller,llm,memory,forge,web \
-  --prefix-colors gray,blue,yellow,cyan,magenta,red,white,green \
+  --names gateway,control-plane,internal,controller,llm,memory,forge,relay,web \
+  --prefix-colors gray,blue,yellow,cyan,magenta,red,white,gray,green \
   "docker run --rm --name $gateway --network host$gateway_env -v $ROOT_DIR/apps/gateway:/etc/axp-gateway:ro caddy:2.11.7-alpine caddy run --config /etc/axp-gateway/Caddyfile" \
   "OTEL_SERVICE_NAME=control-plane-api bun run dev:control-plane" \
   "OTEL_SERVICE_NAME=control-plane-internal bun run dev:internal" \
@@ -251,4 +282,5 @@ exec node node_modules/concurrently/dist/bin/concurrently.js --kill-others \
   "bun run dev:llm-gateway" \
   "bun run dev:memory-service" \
   "bun run dev:forge-service" \
+  "AGENVO_ADMIN_SECRET=\$AXP_RELAY_ADMIN_SECRET node apps/relay/out/server/node_modules/@agenvo/server/dist/cli.js serve --config $relay_dir/relay.json" \
   "bun run dev:web"

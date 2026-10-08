@@ -1,6 +1,7 @@
 import type { SettingsSection, WorkspaceState } from "./workspace-store";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
 import { ChartLineIcon } from "@phosphor-icons/react/ChartLine";
+import { DesktopIcon } from "@phosphor-icons/react/Desktop";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { PaletteIcon } from "@phosphor-icons/react/Palette";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
@@ -17,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useNeedsAttention } from "@/queries/llm";
 import { AgentSettings } from "./agent-settings";
+import { ComputerSettings } from "./computer-settings";
 import { ProviderSettings } from "./provider-settings";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -36,6 +38,7 @@ const sections: {
 }[] = [
   { value: "agents", label: "智能体", icon: RobotIcon },
   { value: "providers", label: "模型服务", icon: PlugsConnectedIcon },
+  { value: "computers", label: "远程电脑", icon: DesktopIcon },
   { value: "appearance", label: "外观", icon: PaletteIcon },
   { value: "logs", label: "日志", icon: ChartLineIcon },
 ];
@@ -209,6 +212,8 @@ export function SettingsDialog() {
               <AgentSettings />
             ) : settings.section === "providers" ? (
               <ProviderSettings />
+            ) : settings.section === "computers" ? (
+              <ComputerSettings />
             ) : settings.section === "logs" ? (
               <LogSettings />
             ) : (

@@ -1,0 +1,255 @@
+package api
+
+import (
+	"context"
+	"net/http"
+	"strings"
+
+	"github.com/akarachen/axp/apps/control-plane/internal/tasks"
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/jackc/pgx/v5"
+)
+
+// The task board and remote computers: the web client's 任务 tab and the
+// 远程电脑 settings.
+
+type TaskIn struct {
+	Title       string              `json:"title" minLength:"1" maxLength:"200"`
+	Description string              `json:"description,omitempty" maxLength:"20000"`
+	Status      string              `json:"status,omitempty" enum:"backlog,todo,in_progress,in_review,done,blocked,cancelled" default:"todo"`
+	Assignee    tasks.AssigneeInput `json:"assignee"`
+	Repository  *string             `json:"repository,omitempty" nullable:"true" maxLength:"200" doc:"owner/name on GitHub."`
+}
+
+// TaskUpdateIn is a partial update: only fields that are sent change.
+type TaskUpdateIn struct {
+	Title       *string              `json:"title,omitempty" nullable:"true" minLength:"1" maxLength:"200"`
+	Description *string              `json:"description,omitempty" nullable:"true" maxLength:"20000"`
+	Status      *string              `json:"status,omitempty" nullable:"true" enum:"backlog,todo,in_progress,in_review,done,blocked,cancelled"`
+	Assignee    *tasks.AssigneeInput `json:"assignee,omitempty"`
+	Repository  *string              `json:"repository,omitempty" nullable:"true" maxLength:"200" doc:"owner/name; empty to clear."`
+}
+
+type CommentIn struct {
+	Body string `json:"body" minLength:"1" maxLength:"20000"`
+}
+
+type TaskList struct {
+	Tasks []tasks.Task `json:"tasks"`
+	// Who tasks can be assigned to besides the user.
+	Assignees []tasks.AssigneeOption `json:"assignees"`
+}
+
+type TaskPath struct {
+	TaskID string `path:"task_id" doc:"The task's id or number."`
+}
+
+type TaskRunPath struct {
+	TaskPath
+	RunID string `path:"run_id"`
+}
+
+type RunLog struct {
+	Entries []tasks.LogEntry `json:"entries"`
+}
+
+type ComputerIn struct {
+	Name string `json:"name" minLength:"1" maxLength:"100"`
+}
+
+type ComputerPath struct {
+	ComputerID string `path:"computer_id"`
+}
+
+// Install is a new install command for a computer.
+type Install struct {
+	Computer tasks.Computer `json:"computer"`
+	Command  string         `json:"command" doc:"Run on the computer; works once, until enroll_expires_at."`
+}
+
+func taskOp(id, method, path, summary string, status int, tag string) huma.Operation {
+	o := op(id, method, path, summary, status, tag)
+	o.Errors = []int{400, 404, 409, 422, 502, 503}
+	return o
+}
+
+// publicURL is the address computers reach AXP at: the configured one, or
+// the one the browser used.
+func publicURL(d *Deps, r *http.Request) string {
+	if d.PublicURL != "" {
+		return strings.TrimRight(d.PublicURL, "/")
+	}
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	return scheme + "://" + r.Host
+}
+
+type httpRequestKey struct{}
+
+// withRequest keeps the request, for handlers that need its address.
+func withRequest(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), httpRequestKey{}, r)))
+	})
+}
+
+func installCommand(ctx context.Context, d *Deps, code string) string {
+	base := d.PublicURL
+	if r, ok := ctx.Value(httpRequestKey{}).(*http.Request); ok {
+		base = publicURL(d, r)
+	}
+	return "curl -fsSL " + base + "/remote/install.sh | sh -s -- " + code
+}
+
+func registerTasks(api huma.API, d *Deps) {
+	s := d.Tasks
+
+	huma.Register(api, taskOp("listTasks", http.MethodGet, "/api/v1/tasks", "Every task, and who they can be assigned to", 200, "tasks"),
+		func(ctx context.Context, _ *struct{}) (*body[TaskList], error) {
+			list, err := s.List(ctx, d.DB)
+			if err != nil {
+				return nil, err
+			}
+			assignees, err := s.AssigneeOptions(ctx, d.DB)
+			if err != nil {
+				return nil, err
+			}
+			return &body[TaskList]{TaskList{list, assignees}}, nil
+		})
+
+	huma.Register(api, taskOp("getTask", http.MethodGet, "/api/v1/tasks/{task_id}", "A task with its timeline and runs", 200, "tasks"),
+		func(ctx context.Context, in *TaskPath) (*body[tasks.TaskDetail], error) {
+			t, err := s.Get(ctx, d.DB, in.TaskID)
+			if err != nil {
+				return nil, err
+			}
+			return &body[tasks.TaskDetail]{*t}, nil
+		})
+
+	huma.Register(api, taskOp("createTask", http.MethodPost, "/api/v1/tasks", "Create a task", 201, "tasks"),
+		func(ctx context.Context, in *struct {
+			Keyed
+			Body TaskIn
+		}) (*Response[tasks.TaskDetail], error) {
+			b := in.Body
+			return idempotent(ctx, d, in.IdempotencyKey, b, func(tx pgx.Tx) (handled[tasks.TaskDetail], error) {
+				t, err := s.Create(ctx, tx, tasks.Input{
+					Title: b.Title, Description: b.Description, Status: b.Status, Assignee: b.Assignee, Repository: b.Repository,
+				}, tasks.User)
+				if err != nil {
+					return handled[tasks.TaskDetail]{}, err
+				}
+				return handled[tasks.TaskDetail]{201, t, t.ID}, nil
+			})
+		})
+
+	huma.Register(api, taskOp("updateTask", http.MethodPatch, "/api/v1/tasks/{task_id}",
+		"Change a task; only the fields sent change", 200, "tasks"),
+		func(ctx context.Context, in *struct {
+			TaskPath
+			Body TaskUpdateIn
+		}) (*body[tasks.TaskDetail], error) {
+			b := in.Body
+			t, err := inTx(ctx, d, func(tx pgx.Tx) (*tasks.TaskDetail, error) {
+				return s.Update(ctx, tx, in.TaskID, tasks.Changes{
+					Title: b.Title, Description: b.Description, Status: b.Status, Assignee: b.Assignee, Repository: b.Repository,
+				}, tasks.User)
+			})
+			if err != nil {
+				return nil, err
+			}
+			return &body[tasks.TaskDetail]{*t}, nil
+		})
+
+	huma.Register(api, taskOp("deleteTask", http.MethodDelete, "/api/v1/tasks/{task_id}", "Delete a task", 204, "tasks"),
+		func(ctx context.Context, in *TaskPath) (*struct{}, error) {
+			_, err := inTx(ctx, d, func(tx pgx.Tx) (struct{}, error) { return struct{}{}, s.Delete(ctx, tx, in.TaskID) })
+			return nil, err
+		})
+
+	huma.Register(api, taskOp("commentTask", http.MethodPost, "/api/v1/tasks/{task_id}/comments",
+		"Comment on a task; a remote agent working on it gets the comment as a follow-up", 201, "tasks"),
+		func(ctx context.Context, in *struct {
+			Keyed
+			TaskPath
+			Body CommentIn
+		}) (*Response[tasks.TaskDetail], error) {
+			return idempotent(ctx, d, in.IdempotencyKey, in.Body, func(tx pgx.Tx) (handled[tasks.TaskDetail], error) {
+				t, err := s.Comment(ctx, tx, in.TaskID, in.Body.Body, tasks.User)
+				if err != nil {
+					return handled[tasks.TaskDetail]{}, err
+				}
+				return handled[tasks.TaskDetail]{201, t, t.ID}, nil
+			})
+		})
+
+	huma.Register(api, taskOp("interruptTaskRun", http.MethodPost, "/api/v1/tasks/{task_id}/runs/{run_id}/interrupt",
+		"Stop a run", 200, "tasks"),
+		func(ctx context.Context, in *TaskRunPath) (*body[tasks.TaskDetail], error) {
+			t, err := inTx(ctx, d, func(tx pgx.Tx) (*tasks.TaskDetail, error) {
+				return s.Interrupt(ctx, tx, in.TaskID, in.RunID)
+			})
+			if err != nil {
+				return nil, err
+			}
+			return &body[tasks.TaskDetail]{*t}, nil
+		})
+
+	huma.Register(api, taskOp("getTaskRunLog", http.MethodGet, "/api/v1/tasks/{task_id}/runs/{run_id}/log",
+		"The remote agent's recent transcript, read from it now", 200, "tasks"),
+		func(ctx context.Context, in *TaskRunPath) (*body[RunLog], error) {
+			entries, err := s.Log(ctx, d.DB, in.TaskID, in.RunID)
+			if err != nil {
+				return nil, err
+			}
+			return &body[RunLog]{RunLog{entries}}, nil
+		})
+
+	huma.Register(api, taskOp("listComputers", http.MethodGet, "/api/v1/computers",
+		"Remote computers and their runtimes on the relay", 200, "computers"),
+		func(ctx context.Context, _ *struct{}) (*body[tasks.Computers], error) {
+			list, err := s.ListComputers(ctx, d.DB)
+			if err != nil {
+				return nil, err
+			}
+			return &body[tasks.Computers]{*list}, nil
+		})
+
+	huma.Register(api, taskOp("createComputer", http.MethodPost, "/api/v1/computers",
+		"Add a computer; the answer has its one-time install command", 201, "computers"),
+		func(ctx context.Context, in *struct{ Body ComputerIn }) (*Response[Install], error) {
+			e, err := inTx(ctx, d, func(tx pgx.Tx) (*tasks.Enrollment, error) { return s.CreateComputer(ctx, tx, in.Body.Name) })
+			if err != nil {
+				return nil, err
+			}
+			return &Response[Install]{201, Install{e.Computer, installCommand(ctx, d, e.Code)}}, nil
+		})
+
+	huma.Register(api, taskOp("renewComputerInstall", http.MethodPost, "/api/v1/computers/{computer_id}/install",
+		"A new install command for a computer that has not connected yet", 200, "computers"),
+		func(ctx context.Context, in *ComputerPath) (*body[Install], error) {
+			e, err := inTx(ctx, d, func(tx pgx.Tx) (*tasks.Enrollment, error) { return s.RenewEnrollment(ctx, tx, in.ComputerID) })
+			if err != nil {
+				return nil, err
+			}
+			return &body[Install]{Install{e.Computer, installCommand(ctx, d, e.Code)}}, nil
+		})
+
+	huma.Register(api, taskOp("approveComputerRuntime", http.MethodPost, "/api/v1/computers/{computer_id}/runtimes/{kind}/approve",
+		"Approve a computer's runtime on the relay, after comparing its fingerprint", 204, "computers"),
+		func(ctx context.Context, in *struct {
+			ComputerPath
+			Kind string `path:"kind" enum:"paseo,herdr"`
+		}) (*struct{}, error) {
+			return nil, s.Approve(ctx, d.DB, in.ComputerID, in.Kind)
+		})
+
+	huma.Register(api, taskOp("deleteComputer", http.MethodDelete, "/api/v1/computers/{computer_id}",
+		"Revoke a computer's access and forget it", 204, "computers"),
+		func(ctx context.Context, in *ComputerPath) (*struct{}, error) {
+			_, err := inTx(ctx, d, func(tx pgx.Tx) (struct{}, error) { return struct{}{}, s.DeleteComputer(ctx, tx, in.ComputerID) })
+			return nil, err
+		})
+}

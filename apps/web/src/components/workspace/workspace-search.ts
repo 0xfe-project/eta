@@ -24,9 +24,11 @@ const viewParser = parseAsStringLiteral([
   .withDefault("overview")
   .withOptions({ history: "push" });
 export const validateWorkspaceSearch = createStandardSchemaV1(
-  // The routines tab's place: a routine, one of its runs, or its editor.
+  // The routines tab's place: a routine, one of its runs, or its editor;
+  // the tasks tab's: a task or "new".
   {
     view: viewParser,
+    task: parseAsString,
     routine: parseAsString,
     run: parseAsString,
     edit: parseAsString,

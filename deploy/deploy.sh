@@ -75,6 +75,7 @@ if ! grep -q "^AXP_SECRET_KEY=" "$ENV_FILE"; then
   echo "Added AXP_SECRET_KEY to $ENV_FILE."
 fi
 ensure_secret AXP_S3_SECRET_ACCESS_KEY 32
+ensure_secret AXP_RELAY_ADMIN_SECRET 32
 # OpenObserve requires upper and lower case letters, a digit and a symbol.
 if ! grep -q "^AXP_OBSERVE_PASSWORD=" "$ENV_FILE"; then
   echo "AXP_OBSERVE_PASSWORD=Axp-$(openssl rand -hex 16)" >>"$ENV_FILE"
@@ -118,8 +119,8 @@ ssh -i "$KEY_FILE" -p "$AXP_SSH_PORT" -o BatchMode=yes -o IdentitiesOnly=yes \
 
 # --- Machine prerequisites ------------------------------------------------------
 # Reserved ports must be free unless our own containers hold them.
-ours="$(docker ps --filter name='^(kamal-proxy|axp-registry|axp-openobserve)$' --format '{{.Ports}}')"
-for port in "$AXP_PROD_HTTP_PORT" "$AXP_PROD_HTTPS_PORT" "$AXP_PROD_REGISTRY_PORT" "$AXP_PROD_OBSERVE_PORT"; do
+ours="$(docker ps --filter name='^(kamal-proxy|axp-registry|axp-openobserve|axp-relay)$' --format '{{.Ports}}')"
+for port in "$AXP_PROD_HTTP_PORT" "$AXP_PROD_HTTPS_PORT" "$AXP_PROD_REGISTRY_PORT" "$AXP_PROD_OBSERVE_PORT" "$AXP_PROD_RELAY_PORT"; do
   if [[ "$ours" != *":$port->"* ]] && ss -Htln "sport = :$port" 2>/dev/null | grep -q .; then
     fail "port $port (deploy/ports.env) is taken by another service on this machine."
   fi
@@ -174,7 +175,7 @@ kamal() {
     --env-file "$ENV_FILE" \
     -e AXP_DEPLOY_USER -e AXP_SSH_PORT -e AXP_BUILD_ARCH \
     -e AXP_PROD_HTTP_PORT -e AXP_PROD_HTTPS_PORT -e AXP_PROD_REGISTRY_PORT \
-    -e AXP_PROD_OBSERVE_PORT -e AXP_OBSERVE_BASIC \
+    -e AXP_PROD_OBSERVE_PORT -e AXP_OBSERVE_BASIC -e AXP_PROD_RELAY_PORT -e AXP_RELAY_IMAGE \
     -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0='*' \
     "$KAMAL_IMAGE" "$@" -c deploy/deploy.yml
 }
@@ -191,10 +192,32 @@ prepare_accessories() {
     # Booted before it moved under /observe; its data stays in the volume.
     kamal accessory reboot openobserve
   fi
+  update_relay
   if docker container inspect axp-otel-collector >/dev/null 2>&1; then
     kamal accessory reboot otel-collector
   else
     kamal accessory boot otel-collector
+  fi
+}
+
+# The relay's image: the pinned agenvo, tagged with its commit and its
+# Dockerfile, so it is built (and the accessory rebooted onto it) only when
+# either changes. Its state stays in the volume.
+relay_tag="$(git -C vendor/agenvo rev-parse --short=12 HEAD 2>/dev/null || git rev-parse HEAD:vendor/agenvo | cut -c1-12)-$(sha256sum deploy/relay.Dockerfile | cut -c1-8)"
+export AXP_RELAY_IMAGE="127.0.0.1:$AXP_PROD_REGISTRY_PORT/axp-relay:$relay_tag"
+build_relay() {
+  docker manifest inspect --insecure "$AXP_RELAY_IMAGE" >/dev/null 2>&1 && return
+  bunx turbo run build --filter=@axp/relay --output-logs=errors-only
+  docker build -q -f deploy/relay.Dockerfile -t "$AXP_RELAY_IMAGE" . >/dev/null
+  docker push -q "$AXP_RELAY_IMAGE" >/dev/null
+}
+update_relay() {
+  local current
+  current="$(docker inspect -f '{{.Config.Image}}' axp-relay 2>/dev/null || true)"
+  if [[ -z "$current" ]]; then
+    kamal accessory boot relay
+  elif [[ "$current" != "$AXP_RELAY_IMAGE" ]]; then
+    kamal accessory reboot relay
   fi
 }
 
@@ -222,6 +245,7 @@ if [[ "$1" == "setup" || "$1" == "deploy" ]]; then
   [[ -z "$(git status --porcelain)" ]] || version+="_uncommitted_$(openssl rand -hex 8)"
   app_image="127.0.0.1:$AXP_PROD_REGISTRY_PORT/axp:$version"
 
+  build_relay
   # Accessories need no build: prepare them meanwhile, without the terminal.
   if [[ "$1" == "deploy" ]]; then
     update_postgres
