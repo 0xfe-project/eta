@@ -39,7 +39,8 @@ export function Workspace({
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const chat = useQuery(chatQueryOptions());
-  const pending = usePendingInteractions().length;
+  const waiting = usePendingInteractions();
+  const pending = waiting.length;
   const { current: selected, openEditor } = useAgents();
   const history = useAgentMessages(selected?.id);
   const connectionLost = useStreamLost((s) => s.lost);
@@ -141,7 +142,7 @@ export function Workspace({
             hasOlder={history.hasOlder}
             loadingOlder={history.loadingOlder}
             onLoadOlder={history.loadOlder}
-            interactions={chat.data?.interactions ?? []}
+            interactions={waiting}
             head={<AgentBar />}
             agentStatus={selected?.status}
             connectionLost={connectionLost}

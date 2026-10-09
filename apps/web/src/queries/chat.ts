@@ -21,7 +21,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { create } from "zustand";
 import { ApiError, controlPlane, unwrap } from "@/lib/api";
 import { refreshLlm } from "@/queries/llm";
@@ -85,18 +85,55 @@ function upsert<T extends { id: string; revision: number }>(
 }
 
 // Send order; a reply sorts after its user message.
-function sortMessages(messages: ChatMessage[]) {
-  return messages.sort(
-    (a, b) =>
-      a.created_at.localeCompare(b.created_at) ||
-      (a.role === b.role ? 0 : a.role === "user" ? -1 : 1),
+function compareMessages(a: ChatMessage, b: ChatMessage) {
+  return (
+    a.created_at.localeCompare(b.created_at) ||
+    (a.role === b.role ? 0 : a.role === "user" ? -1 : 1)
   );
+}
+function sortMessages(messages: ChatMessage[]) {
+  return messages.sort(compareMessages);
+}
+
+/**
+ * Sorted `messages` with `message` in place: a newer revision replaces its
+ * older one where it stands (a message's send time never changes), a new
+ * message goes in send order. Every other message keeps its object.
+ */
+function placeMessage(messages: ChatMessage[], message: ChatMessage) {
+  const index = messages.findIndex((existing) => existing.id === message.id);
+  if (index !== -1 && messages[index].revision >= message.revision)
+    return messages;
+  const next = [...messages];
+  if (index !== -1) {
+    next[index] = message;
+    return next;
+  }
+  // New messages are mostly the latest: look from the end.
+  let at = messages.length;
+  while (at > 0 && compareMessages(messages[at - 1], message) > 0) at--;
+  next.splice(at, 0, message);
+  return next;
 }
 
 function upsertMessage(snapshot: Snapshot, message: ChatMessage): Snapshot {
-  const messages = upsert(snapshot.messages, message);
+  const messages = placeMessage(snapshot.messages, message);
   if (messages === snapshot.messages) return snapshot;
-  return { ...snapshot, messages: sortMessages(messages) };
+  return { ...snapshot, messages };
+}
+
+/**
+ * The snapshot without finished messages that history already holds at the
+ * same or a later revision; those history shows by itself.
+ */
+function dropCovered(snapshot: Snapshot, history: ChatMessage[]): Snapshot {
+  const revisions = new Map(history.map((m) => [m.id, m.revision]));
+  const messages = snapshot.messages.filter(
+    (m) =>
+      ACTIVE_STATUSES.has(m.status) || (revisions.get(m.id) ?? -1) < m.revision,
+  );
+  if (messages.length === snapshot.messages.length) return snapshot;
+  return { ...snapshot, messages };
 }
 
 function removeAgent(snapshot: Snapshot, agentId: string): Snapshot {
@@ -192,10 +229,18 @@ export function useLiveChat() {
   }, [queryClient]);
 }
 
+const NO_INTERACTIONS: Interaction[] = [];
 /** Every agent's interactions waiting for the user. */
 export function usePendingInteractions() {
-  const { data } = useQuery(chatQueryOptions());
-  return (data?.interactions ?? []).filter(
+  const { data } = useQuery({
+    ...chatQueryOptions(),
+    // The same array until one of them changes, for memo.
+    select: selectPending,
+  });
+  return data ?? NO_INTERACTIONS;
+}
+function selectPending(snapshot: Snapshot) {
+  return snapshot.interactions.filter(
     (interaction) => interaction.status === "pending",
   );
 }
@@ -256,29 +301,42 @@ function messagesQueryOptions(agentId: string) {
 
 /**
  * One agent's timeline: history pages merged with the messages seen since
- * the snapshot, by revision.
+ * the snapshot, by revision. Unchanged messages keep their objects, so a
+ * memoized row only renders again when its own message changes.
  */
 export function useAgentMessages(agentId: string | undefined) {
-  const { data: snapshot } = useQuery(chatQueryOptions());
+  const queryClient = useQueryClient();
+  // Only this agent's live messages: other agents' updates change nothing
+  // here, and structural sharing keeps the array until one of these changes.
+  const { data: live } = useQuery({
+    ...chatQueryOptions(),
+    select: useCallback(
+      (snapshot: Snapshot) =>
+        snapshot.messages.filter((message) => message.agent_id === agentId),
+      [agentId],
+    ),
+  });
   // History read after the snapshot leaves no gap before the live messages.
   const history = useInfiniteQuery({
     ...messagesQueryOptions(agentId ?? ""),
-    enabled: Boolean(agentId && snapshot),
+    enabled: Boolean(agentId && live),
   });
   const pages = history.data?.pages;
-  const live = snapshot?.messages;
-  const messages = useMemo(() => {
+  // Merged once per page; each live update then only places its message.
+  const loaded = useMemo(() => {
     const byId = new Map<string, ChatMessage>();
     for (const page of pages ?? [])
       for (const message of page.items) byId.set(message.id, message);
-    for (const message of live ?? []) {
-      if (message.agent_id !== agentId) continue;
-      const known = byId.get(message.id);
-      if (!known || known.revision < message.revision)
-        byId.set(message.id, message);
-    }
     return sortMessages([...byId.values()]);
-  }, [agentId, live, pages]);
+  }, [pages]);
+  const messages = useMemo(
+    () => (live ?? []).reduce(placeMessage, loaded),
+    [live, loaded],
+  );
+  // Once shown from history, finished live messages need not be kept.
+  useEffect(() => {
+    if (loaded.length) update(queryClient, (s) => dropCovered(s, loaded));
+  }, [loaded, queryClient]);
   return {
     messages,
     loading: history.isPending && Boolean(agentId),
