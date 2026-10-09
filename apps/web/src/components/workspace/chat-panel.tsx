@@ -6,7 +6,15 @@ import type {
   SendMode,
 } from "@/queries/chat";
 import type { Outgoing } from "@/queries/outbox";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  memo,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ClaudeHeader } from "@/components/brainless/claude/claude-header";
 import { ClaudeMessage } from "@/components/brainless/claude/claude-message";
 import { ClaudePermission } from "@/components/brainless/claude/claude-permission";
@@ -299,6 +307,197 @@ function useTranscriptScroll({
   return { scrollRef, contentRef, topRef, onScroll: remember, toBottom };
 }
 
+const NO_INTERACTIONS: Interaction[] = [];
+
+interface TurnActions {
+  onStop: (replyId: string) => void;
+  onAnswer: (interactionId: string, value: string) => void;
+  onResend: (text: string) => void;
+}
+
+/**
+ * What a reply's state line needs from the rest of the conversation; plain
+ * values, so a row given the same ones skips rendering.
+ */
+interface ReplyLine {
+  /** Replies ahead of a queued one. */
+  ahead?: number;
+  /** The agent is starting for this reply. */
+  starting?: boolean;
+  /** The next reply failed the same way; this one says so. */
+  sameAsNext?: boolean;
+  /** The text of the user message a failed reply answered. */
+  resend?: string;
+}
+
+/** The state line facts per reply. */
+function replyLines(
+  messages: ChatMessage[],
+  agentStatus: Agent["status"] | undefined,
+) {
+  const replies = messages.filter((message) => message.role === "assistant");
+  const executing = replies.filter((message) =>
+    EXECUTING.has(message.status),
+  ).length;
+  const lines = new Map<string, ReplyLine>();
+  let queued = 0;
+  replies.forEach((message, i) => {
+    if (message.status === "queued") {
+      const ahead = executing + queued++;
+      lines.set(message.id, {
+        ahead,
+        starting: ahead === 0 && agentStatus === "starting",
+      });
+    } else if (message.status === "failed") {
+      const code = message.failure?.code ?? "";
+      const next = replies[i + 1];
+      lines.set(message.id, {
+        // A run of replies failed by the same environment trouble says it once.
+        sameAsNext:
+          ENVIRONMENT_FAILURES.has(code) &&
+          next?.status === "failed" &&
+          next.failure?.code === code,
+        resend: messageText(messages.find((m) => m.id === message.reply_to_id)),
+      });
+    }
+  });
+  return lines;
+}
+
+/**
+ * One message of the transcript. Memoized: a streamed update renders only
+ * the message it changed, not the whole conversation.
+ */
+const Turn = memo(
+  ({
+    theme,
+    message,
+    pending,
+    actions,
+    ...line
+  }: {
+    theme: SessionTheme;
+    message: ChatMessage;
+    /** Its interactions waiting for the user. */
+    pending: Interaction[];
+    actions: React.RefObject<TurnActions>;
+  } & ReplyLine) => {
+    const session = sessions[theme];
+    const { Message, Activity, Choice, Working } = session;
+    const timeLabel = theme === "grok" ? time(message.created_at) : undefined;
+    if (message.role === "user")
+      return (
+        <Message role="user" time={timeLabel}>
+          <span className="whitespace-pre-wrap">
+            {message.blocks.map((block) =>
+              block.type === "text" ? block.text : null,
+            )}
+          </span>
+        </Message>
+      );
+    // Only a reply at work still grows; the rest render as finished text.
+    const streaming = ACTIVE_STATUSES.has(message.status);
+    return (
+      <div className={session.turnClass}>
+        {message.blocks.map((block) =>
+          block.type === "text" ? (
+            <Message key={block.id} time={timeLabel}>
+              <Markdown streaming={streaming}>{block.text}</Markdown>
+            </Message>
+          ) : (
+            <Activity key={block.id} block={block} />
+          ),
+        )}
+        {pending.map((interaction) => (
+          <Choice
+            key={interaction.id}
+            prompt={interaction.prompt}
+            labels={interaction.options.map((option) => option.label)}
+            onChoose={(index) =>
+              actions.current.onAnswer(
+                interaction.id,
+                interaction.options[index].value,
+              )
+            }
+          />
+        ))}
+        <ReplyState
+          message={message}
+          asking={pending.length > 0}
+          line={line}
+          Working={Working}
+          onStop={() => actions.current.onStop(message.id)}
+          onResend={(text) => actions.current.onResend(text)}
+        />
+      </div>
+    );
+  },
+);
+
+/**
+ * The line under a reply. Only one per agent moves: the reply at work, or
+ * the agent starting for the first one waiting.
+ */
+function ReplyState({
+  message,
+  asking,
+  line,
+  Working,
+  onStop,
+  onResend,
+}: {
+  message: ChatMessage;
+  asking: boolean;
+  line: ReplyLine;
+  Working: (props: { label: string }) => React.ReactNode;
+  onStop: () => void;
+  onResend: (text: string) => void;
+}) {
+  switch (message.status) {
+    case "responding":
+    case "waiting_for_input":
+      return asking ? null : <Working label="工作中" />;
+    case "stopping":
+      return <Working label="正在停止" />;
+    case "queued": {
+      if (line.starting) return <Working label="正在启动智能体" />;
+      return (
+        <div className="flex flex-wrap items-baseline gap-x-3 text-[var(--terminal-muted)]">
+          <span>
+            {line.ahead ? `等待中 · 前面还有 ${line.ahead} 条` : "等待中"}
+          </span>
+          <button
+            type="button"
+            onClick={onStop}
+            className="underline underline-offset-2 outline-none hover:text-[var(--terminal-foreground)] focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            撤回
+          </button>
+        </div>
+      );
+    }
+    case "stopped":
+      return <Warning>已停止</Warning>;
+    case "failed": {
+      const text = line.resend;
+      return (
+        <ComposerNotice
+          message={
+            line.sameAsNext
+              ? "此消息未执行，原因同下。"
+              : (message.failure?.message ?? "回复失败。")
+          }
+          actions={
+            text ? [{ label: "重新发送", onClick: () => onResend(text) }] : []
+          }
+        />
+      );
+    }
+    default:
+      return null;
+  }
+}
+
 function time(iso: string) {
   return new Date(iso).toLocaleTimeString("zh-CN", {
     hour: "2-digit",
@@ -372,7 +571,7 @@ export function ChatPanel({
 }) {
   const formRef = useRef<HTMLFormElement>(null);
   const session = sessions[theme];
-  const { Message, Activity, Choice, Working, SlashMenu } = session;
+  const { Message, SlashMenu } = session;
   // The reply in progress; later ones wait behind it.
   const active = messages.find(
     (message) =>
@@ -380,9 +579,26 @@ export function ChatPanel({
       ACTIVE_STATUSES.has(message.status) &&
       message.status !== "stopping",
   );
-  const replies = messages.filter((message) => message.role === "assistant");
-  const executing = replies.filter((message) => EXECUTING.has(message.status));
-  const queued = replies.filter((message) => message.status === "queued");
+  const lines = useMemo(
+    () => replyLines(messages, agentStatus),
+    [messages, agentStatus],
+  );
+  const pendingByMessage = useMemo(() => {
+    const byMessage = new Map<string, Interaction[]>();
+    for (const interaction of interactions)
+      if (interaction.status === "pending")
+        byMessage.set(interaction.message_id, [
+          ...(byMessage.get(interaction.message_id) ?? []),
+          interaction,
+        ]);
+    return byMessage;
+  }, [interactions]);
+  // The rows call the latest handlers without taking them as props, which
+  // change on every render and would undo the rows' memo.
+  const actionsRef = useRef<TurnActions>({ onStop, onAnswer, onResend });
+  useLayoutEffect(() => {
+    actionsRef.current = { onStop, onAnswer, onResend };
+  });
   const transcript = useTranscriptScroll({
     agentId,
     firstId: messages[0]?.id,
@@ -430,64 +646,6 @@ export function ChatPanel({
     // Sending jumps back to the live end, as in a terminal.
     transcript.toBottom();
     formRef.current?.querySelector("textarea")?.focus();
-  }
-  /**
-   * The line under a reply. Only one per agent moves: the reply at work, or
-   * the agent starting for the first one waiting.
-   */
-  function replyState(message: ChatMessage, asking: boolean) {
-    switch (message.status) {
-      case "responding":
-      case "waiting_for_input":
-        return asking ? null : <Working label="工作中" />;
-      case "stopping":
-        return <Working label="正在停止" />;
-      case "queued": {
-        const ahead = executing.length + queued.indexOf(message);
-        if (ahead === 0 && agentStatus === "starting")
-          return <Working label="正在启动智能体" />;
-        return (
-          <div className="flex flex-wrap items-baseline gap-x-3 text-[var(--terminal-muted)]">
-            <span>{ahead ? `等待中 · 前面还有 ${ahead} 条` : "等待中"}</span>
-            <button
-              type="button"
-              onClick={() => onStop(message.id)}
-              className="underline underline-offset-2 outline-none hover:text-[var(--terminal-foreground)] focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              撤回
-            </button>
-          </div>
-        );
-      }
-      case "stopped":
-        return <Warning>已停止</Warning>;
-      case "failed": {
-        const code = message.failure?.code ?? "";
-        const next = replies[replies.indexOf(message) + 1];
-        // A run of replies failed by the same environment trouble says it once.
-        const sameAsNext =
-          ENVIRONMENT_FAILURES.has(code) &&
-          next?.status === "failed" &&
-          next.failure?.code === code;
-        const text = messageText(
-          messages.find((m) => m.id === message.reply_to_id),
-        );
-        return (
-          <ComposerNotice
-            message={
-              sameAsNext
-                ? "此消息未执行，原因同下。"
-                : (message.failure?.message ?? "回复失败。")
-            }
-            actions={
-              text ? [{ label: "重新发送", onClick: () => onResend(text) }] : []
-            }
-          />
-        );
-      }
-      default:
-        return null;
-    }
   }
   const promptProps = {
     value: draft,
@@ -601,52 +759,16 @@ export function ChatPanel({
             aria-label="对话消息"
             aria-live="polite"
           >
-            {messages.map((message) => {
-              const timeLabel =
-                theme === "grok" ? time(message.created_at) : undefined;
-              if (message.role === "user")
-                return (
-                  <Message key={message.id} role="user" time={timeLabel}>
-                    <span className="whitespace-pre-wrap">
-                      {message.blocks.map((block) =>
-                        block.type === "text" ? block.text : null,
-                      )}
-                    </span>
-                  </Message>
-                );
-              const pending = interactions.filter(
-                (interaction) =>
-                  interaction.message_id === message.id &&
-                  interaction.status === "pending",
-              );
-              return (
-                <div key={message.id} className={session.turnClass}>
-                  {message.blocks.map((block) =>
-                    block.type === "text" ? (
-                      <Message key={block.id} time={timeLabel}>
-                        <Markdown>{block.text}</Markdown>
-                      </Message>
-                    ) : (
-                      <Activity key={block.id} block={block} />
-                    ),
-                  )}
-                  {pending.map((interaction) => (
-                    <Choice
-                      key={interaction.id}
-                      prompt={interaction.prompt}
-                      labels={interaction.options.map((option) => option.label)}
-                      onChoose={(index) =>
-                        onAnswer(
-                          interaction.id,
-                          interaction.options[index].value,
-                        )
-                      }
-                    />
-                  ))}
-                  {replyState(message, pending.length > 0)}
-                </div>
-              );
-            })}
+            {messages.map((message) => (
+              <Turn
+                key={message.id}
+                theme={theme}
+                message={message}
+                pending={pendingByMessage.get(message.id) ?? NO_INTERACTIONS}
+                {...lines.get(message.id)}
+                actions={actionsRef}
+              />
+            ))}
             {outgoing.map((item) => (
               <div key={item.id} className={session.turnClass}>
                 <Message role="user">

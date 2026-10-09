@@ -13,7 +13,7 @@ TanStack Start + React。开发命令在仓库根目录执行 `bun run dev`。
 | URL 状态     | `nuqs`                                            | 根组件 adapter，首页 `view` 示例                                                                  |
 | 表单与校验   | `react-hook-form` + `@hookform/resolvers` + `zod` | `src/components/prompt-preview.tsx`                                                               |
 | 通知         | `sonner`                                          | 根组件挂载 `Toaster`，业务中调用 `toast.success()`                                                |
-| Markdown     | `react-markdown` + `remark-gfm`                   | `src/components/markdown.tsx`                                                                     |
+| Markdown     | `streamdown` + `@streamdown/cjk`                  | `src/components/markdown.tsx`                                                                     |
 | 样式         | Tailwind CSS v4                                   | `vite.config.ts` + `src/styles.css`                                                               |
 | 条件样式合并 | `cn`（shadcn CLI 配置）                           | `src/lib/utils.ts` 的 `cn()`                                                                      |
 
@@ -63,7 +63,7 @@ import { cn } from "@/lib/utils";
 
 `PromptPreview` 演示 `useForm` + `zodResolver`、字段错误、提交后 toast 和 Markdown 渲染。它只在浏览器内预览，不调用 agent 或持久化数据。
 
-`Markdown` 支持 GFM 表格、列表与代码块，跳过原始 HTML，保留 react-markdown 默认 URL 过滤。后续 agent 消息可复用该组件；当前未实现流式传输或代码高亮。
+`Markdown` 支持 GFM 表格、列表与代码块，不渲染原始 HTML，过滤不安全 URL，链接在新标签页打开。聊天中正在输出的文本用 `streaming` 模式（补全未闭合语法，只重新解析最后一块），其余用静态模式；不带代码高亮、数学公式和 Mermaid。
 
 ## 验证
 
@@ -74,7 +74,7 @@ bun run --cwd apps/web typecheck
 
 已验证构建、类型检查、浏览器健康请求、表单校验、通知、Markdown 和 nuqs URL 状态。Query Devtools 已关闭，不挂载或加载。
 
-参考：[Query SSR integration](https://tanstack.com/router/latest/docs/integrations/query)、[Phosphor React](https://github.com/phosphor-icons/react)、[React Hook Form resolvers](https://github.com/react-hook-form/resolvers)、[react-markdown](https://github.com/remarkjs/react-markdown)。
+参考：[Query SSR integration](https://tanstack.com/router/latest/docs/integrations/query)、[Phosphor React](https://github.com/phosphor-icons/react)、[React Hook Form resolvers](https://github.com/react-hook-form/resolvers)、[Streamdown](https://streamdown.ai/docs)。
 
 ## shadcn 与设计规范
 
