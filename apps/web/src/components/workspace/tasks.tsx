@@ -14,10 +14,11 @@ import { ChatCircleIcon } from "@phosphor-icons/react/ChatCircle";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { GitPullRequestIcon } from "@phosphor-icons/react/GitPullRequest";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
+import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { StopIcon } from "@phosphor-icons/react/Stop";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Markdown } from "@/components/markdown";
 import { Empty, LoadError, Loading } from "@/components/states";
@@ -65,6 +66,7 @@ import { Select, SelectOption } from "./select-field";
 import {
   ago,
   assigneeLabel,
+  createdBy,
   isActive,
   placeLabel,
   remoteLabel,
@@ -258,7 +260,7 @@ function Field({
   );
 }
 
-export function StatusSelect({
+function StatusSelect({
   id,
   value,
   onChange,
@@ -387,6 +389,234 @@ export function TaskForm({
   );
 }
 
+// --- detail: shared pieces ----------------------------------------------------------
+
+/**
+ * Long text folds to a few lines with a button to unfold it, so a long
+ * description or report does not push everything else off a phone's screen.
+ * `actions` sit beside that button.
+ */
+function Folded({
+  children,
+  className,
+  max = "max-h-48",
+  enabled = true,
+  actions,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  /** The folded height, a max-h-* class. */
+  max?: string;
+  enabled?: boolean;
+  actions?: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [long, setLong] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !enabled || open) return;
+    const measure = () => setLong(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    if (el.firstElementChild) observer.observe(el.firstElementChild);
+    return () => observer.disconnect();
+  }, [enabled, open, children]);
+  const folded = enabled && !open;
+  return (
+    <div className="min-w-0">
+      <div
+        ref={ref}
+        className={cn(
+          className,
+          folded && [max, "overflow-hidden"],
+          folded &&
+            long &&
+            "[mask-image:linear-gradient(to_bottom,black_70%,transparent)]",
+        )}
+      >
+        {children}
+      </div>
+      {(enabled && long) || actions ? (
+        <div className="-ml-2 flex flex-wrap items-center">
+          {enabled && long ? (
+            <Button
+              variant="ghost"
+              size="xs"
+              className="text-muted-foreground"
+              aria-expanded={open}
+              onClick={() => setOpen(!open)}
+            >
+              {open ? "收起" : "展开全文"}
+            </Button>
+          ) : null}
+          {actions}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function StopRun({ task, run }: { task: string; run: TaskRun }) {
+  const interrupt = useInterruptRun();
+  if (run.status !== "running") return null;
+  return (
+    <Button
+      variant="ghost"
+      size="xs"
+      disabled={interrupt.isPending}
+      onClick={() =>
+        interrupt.mutate({ id: task, run: run.id }, { onError: showError })
+      }
+    >
+      <StopIcon aria-hidden="true" />
+      停止
+    </Button>
+  );
+}
+
+/** A run's state: pulsing while at work, red when it failed. */
+function RunStatusText({ run }: { run: TaskRun }) {
+  if (isActive(run.status))
+    return <Working label={runStatusLabels[run.status]} />;
+  return (
+    <span
+      className={cn(
+        "text-xs",
+        run.status === "failed" ? "text-destructive" : "text-muted-foreground",
+      )}
+    >
+      {runStatusLabels[run.status]}
+      {run.error && run.status === "failed" ? `：${run.error}` : ""}
+    </span>
+  );
+}
+
+/** The pull requests the task delivered, newest first. */
+function deliverables(task: TaskDetail) {
+  return task.activity
+    .filter((a) => a.kind === "deliverable" && typeof a.data.url === "string")
+    .map((a) => ({
+      id: a.id,
+      url: a.data.url as string,
+      title:
+        (typeof a.data.title === "string" && a.data.title) ||
+        (a.data.url as string).replace("https://github.com/", ""),
+    }))
+    .reverse();
+}
+
+/** A property's name, on the first line of its value. */
+const propertyLabel = "text-xs leading-8 text-muted-foreground";
+
+/**
+ * What the task is at now: its status, who has it and what it delivered.
+ * Each value starts on an 8-high line beside its name; `children` adds rows.
+ */
+export function TaskProperties({
+  task,
+  className,
+  children,
+}: {
+  task: TaskDetail;
+  className?: string;
+  children?: React.ReactNode;
+}) {
+  const update = useUpdateTask();
+  const links = deliverables(task);
+  return (
+    <dl
+      className={cn(
+        "grid grid-cols-[3.5rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm",
+        className,
+      )}
+    >
+      <dt className={propertyLabel}>状态</dt>
+      <dd className="flex min-w-0 items-center gap-2">
+        <StatusIcon status={task.status} />
+        <StatusSelect
+          className="min-w-32"
+          value={task.status}
+          onChange={(status) =>
+            update.mutate(
+              { id: task.id, changes: { status } },
+              { onError: showError },
+            )
+          }
+        />
+      </dd>
+      <dt className={propertyLabel}>指派给</dt>
+      <dd className="min-w-0">
+        <AssigneeRow task={task} />
+      </dd>
+      {links.length ? (
+        <>
+          <dt className={propertyLabel}>交付</dt>
+          <dd className="min-w-0">
+            <ul>
+              {links.map((link) => (
+                <li key={link.id}>
+                  <a
+                    href={link.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-start gap-2 py-1.5 leading-5 underline-offset-4 hover:underline"
+                  >
+                    <GitPullRequestIcon
+                      aria-hidden="true"
+                      className="mt-0.5 size-4 shrink-0"
+                    />
+                    <span className="line-clamp-2 min-w-0 wrap-anywhere">
+                      {link.title}
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </dd>
+        </>
+      ) : null}
+      {children}
+    </dl>
+  );
+}
+
+const commentBoxId = "task-comment";
+
+/** A blocked task's open question: the agent's last word, if it is the last. */
+export function Question({ task }: { task: TaskDetail }) {
+  if (task.status !== "blocked") return null;
+  const last = task.activity.filter((a) => a.kind === "comment").at(-1);
+  if (!last || last.actor.kind === "user") return null;
+  return (
+    <section aria-label="待回复" className="space-y-1 bg-muted px-3 py-2">
+      <p className="text-xs">
+        <span className="font-medium">{actorName(last)}</span>
+        <span className="text-muted-foreground"> 在等你回复</span>
+      </p>
+      <Folded
+        max="max-h-32"
+        actions={
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => {
+              const box = document.getElementById(commentBoxId);
+              box?.scrollIntoView({ block: "center" });
+              box?.focus({ preventScroll: true });
+            }}
+          >
+            回复
+          </Button>
+        }
+      >
+        <Markdown className="text-sm">{last.body ?? ""}</Markdown>
+      </Folded>
+    </section>
+  );
+}
+
 // --- detail: timeline ---------------------------------------------------------------
 
 function actorName(a: TaskActivity) {
@@ -425,18 +655,21 @@ function describe(a: TaskActivity): React.ReactNode {
       return "修改了描述";
     case "deliverable":
       return (
-        <span className="inline-flex flex-wrap items-center gap-x-1">
-          <GitPullRequestIcon aria-hidden="true" />
+        <>
+          <GitPullRequestIcon
+            aria-hidden="true"
+            className="mr-1 inline size-3.5 align-[-2px]"
+          />
           交付了{" "}
           <a
             href={str(d.url)}
             target="_blank"
             rel="noreferrer"
-            className="underline underline-offset-4"
+            className="text-foreground underline underline-offset-4"
           >
             {str(d.title) || str(d.url).replace("https://github.com/", "")}
           </a>
-        </span>
+        </>
       );
     case "cleanup":
       return a.body ?? "收尾完成";
@@ -460,6 +693,51 @@ function describe(a: TaskActivity): React.ReactNode {
   return a.kind;
 }
 
+/** Bookkeeping the task's current state already shows; runs of it fold. */
+const minor = new Set<string>([
+  "created",
+  "title",
+  "description",
+  "assignee",
+  "status",
+  "cleanup",
+  "run_completed",
+  "run_nudged",
+]);
+
+/** The timeline's entries: single events, and runs of minor ones. */
+function entries(items: TaskActivity[]) {
+  const out: (TaskActivity | TaskActivity[])[] = [];
+  for (const a of items) {
+    const last = out.at(-1);
+    if (!minor.has(a.kind)) out.push(a);
+    else if (Array.isArray(last)) last.push(a);
+    else out.push([a]);
+  }
+  return out.map((e) => (Array.isArray(e) && e.length === 1 ? e[0] : e));
+}
+
+function Time({ at }: { at: string }) {
+  return (
+    <time
+      dateTime={at}
+      className="text-xs whitespace-nowrap text-muted-foreground tabular-nums"
+    >
+      {when(at)}
+    </time>
+  );
+}
+
+/** An event as a line: who, what, when. */
+function EventLine({ a }: { a: TaskActivity }) {
+  return (
+    <p className="text-muted-foreground wrap-anywhere">
+      {a.kind.startsWith("run_") ? null : `${actorName(a)} `}
+      {describe(a)} <Time at={a.created_at} />
+    </p>
+  );
+}
+
 const logKindLabels: Record<LogEntry["kind"], string> = {
   user: "指令",
   assistant: "回复",
@@ -477,7 +755,7 @@ function RunLog({ task, run }: { task: string; run: TaskRun }) {
   if (!data?.length)
     return <p className="text-xs text-muted-foreground">还没有记录。</p>;
   return (
-    <ol className="max-h-96 space-y-1.5 overflow-y-auto border-l pl-3 text-xs">
+    <ol aria-label="执行记录" className="space-y-2 border-l pl-3 text-xs">
       {data.map((entry) => (
         <li
           key={`${entry.at}-${entry.kind}-${entry.text.slice(0, 32)}`}
@@ -491,17 +769,21 @@ function RunLog({ task, run }: { task: string; run: TaskRun }) {
               : ""}
           </span>
           {entry.command ? (
-            <pre className="mt-0.5 overflow-x-auto bg-muted px-2 py-1 font-mono whitespace-pre-wrap">
+            <pre className="mt-0.5 bg-muted px-2 py-1 font-mono whitespace-pre-wrap wrap-anywhere">
               $ {entry.command}
             </pre>
           ) : null}
           {entry.text ? (
             entry.kind === "assistant" || entry.kind === "user" ? (
-              <Markdown className="mt-0.5 text-xs">{entry.text}</Markdown>
+              <Folded max="max-h-40">
+                <Markdown className="mt-0.5 text-xs">{entry.text}</Markdown>
+              </Folded>
             ) : (
-              <pre className="mt-0.5 max-h-48 overflow-auto font-mono whitespace-pre-wrap text-muted-foreground">
-                {entry.text}
-              </pre>
+              <Folded max="max-h-20">
+                <pre className="mt-0.5 font-mono whitespace-pre-wrap text-muted-foreground wrap-anywhere">
+                  {entry.text}
+                </pre>
+              </Folded>
             )
           ) : null}
         </li>
@@ -510,6 +792,7 @@ function RunLog({ task, run }: { task: string; run: TaskRun }) {
   );
 }
 
+/** A run where it started: who, how it went, and its log on demand. */
 function RunEntry({
   task,
   run,
@@ -520,63 +803,37 @@ function RunEntry({
   activity: TaskActivity;
 }) {
   const [open, setOpen] = useState(false);
-  const interrupt = useInterruptRun();
-  const active = isActive(run.status);
   return (
-    <div className="space-y-1.5">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="text-muted-foreground">
-          {remoteLabel({
-            computer_name: run.computer_name,
-            runtime: run.runtime,
-            provider: run.provider,
-          })}{" "}
-          {describe(activity)}
+    <div className="space-y-1">
+      <p className="text-muted-foreground wrap-anywhere">
+        {remoteLabel({
+          computer_name: run.computer_name,
+          runtime: run.runtime,
+          provider: run.provider,
+        })}{" "}
+        {describe(activity)} <Time at={activity.created_at} />
+      </p>
+      <div className="-ml-2 flex flex-wrap items-center gap-x-1">
+        <span className="px-2">
+          <RunStatusText run={run} />
         </span>
-        {active ? (
-          <Working label={runStatusLabels[run.status]} />
-        ) : (
-          <span
-            className={cn(
-              "text-xs",
-              run.status === "failed"
-                ? "text-destructive"
-                : "text-muted-foreground",
-            )}
-          >
-            {runStatusLabels[run.status]}
-            {run.error && run.status === "failed" ? `：${run.error}` : ""}
-          </span>
-        )}
-        <span className="ml-auto flex items-center">
-          {run.status === "running" ? (
-            <Button
-              variant="ghost"
-              size="xs"
-              disabled={interrupt.isPending}
-              onClick={() =>
-                interrupt.mutate(
-                  { id: task.id, run: run.id },
-                  { onError: showError },
-                )
-              }
-            >
-              <StopIcon aria-hidden="true" />
-              停止
-            </Button>
-          ) : null}
-          <Button
-            variant="ghost"
-            size="xs"
-            aria-expanded={open}
-            onClick={() => setOpen(!open)}
-          >
-            {open ? "收起记录" : "执行记录"}
-          </Button>
-        </span>
+        <StopRun task={task.id} run={run} />
+        <Button
+          variant="ghost"
+          size="xs"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
+          {open ? (
+            <CaretDownIcon aria-hidden="true" />
+          ) : (
+            <CaretRightIcon aria-hidden="true" />
+          )}
+          执行记录
+        </Button>
       </div>
       {run.workspace && open ? (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground wrap-anywhere">
           工作区 <code>{run.workspace}</code>
         </p>
       ) : null}
@@ -585,49 +842,94 @@ function RunEntry({
   );
 }
 
+/** Minor events in a row, as one line that unfolds into them. */
+function Changes({ items }: { items: TaskActivity[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="inline-flex items-center gap-1 text-left text-muted-foreground outline-none hover:text-foreground focus-visible:underline"
+      >
+        {open ? (
+          <CaretDownIcon aria-hidden="true" className="size-3" />
+        ) : (
+          <CaretRightIcon aria-hidden="true" className="size-3" />
+        )}
+        {items.length} 条变更
+        <span className="ml-1">
+          <Time at={items.at(-1)!.created_at} />
+        </span>
+      </button>
+      {open ? (
+        <ul className="mt-1 space-y-1">
+          {items.map((a) => (
+            <li key={a.id}>
+              <EventLine a={a} />
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 function Entry({
   mark,
-  at,
   last,
   children,
 }: {
   mark: React.ReactNode;
-  at: string;
   last: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <li className="relative grid grid-cols-[1rem_1fr] gap-x-2 pb-3">
+    <li className="relative grid grid-cols-[1rem_minmax(0,1fr)] gap-x-2 pb-4">
       {last ? null : (
         <span
           aria-hidden="true"
-          className="absolute top-4 bottom-0 left-[calc(0.5rem-0.5px)] w-px bg-border"
+          className="absolute top-5 bottom-0 left-[calc(0.5rem-0.5px)] w-px bg-border"
         />
       )}
       <span className="flex h-5 items-center justify-center">{mark}</span>
-      <div className="min-w-0 text-sm leading-5">
-        {children}
-        <span className="block text-xs text-muted-foreground tabular-nums">
-          {when(at)}
-        </span>
-      </div>
+      <div className="min-w-0 text-sm leading-5">{children}</div>
     </li>
   );
 }
 
+const dot = (destructive = false) => (
+  <span
+    className={cn(
+      "size-1.5 bg-muted-foreground/60",
+      destructive && "bg-destructive",
+    )}
+  />
+);
+
+/**
+ * The task's history: comments in full (long ones folded), runs with their
+ * logs on demand, and bookkeeping folded into "N 条变更".
+ */
 export function Timeline({ task }: { task: TaskDetail }) {
   // Runs show where they started; their queueing is not news.
-  const items = task.activity.filter((a) => describe(a) !== null);
+  const items = entries(task.activity.filter((a) => describe(a) !== null));
   const runs = new Map(task.runs.map((r) => [r.id, r]));
   return (
     <ol aria-label="时间线">
       {items.map((a, i) => {
         const last = i === items.length - 1;
+        if (Array.isArray(a))
+          return (
+            <Entry key={a[0].id} last={last} mark={dot()}>
+              <Changes items={a} />
+            </Entry>
+          );
         if (a.kind === "comment")
           return (
             <Entry
               key={a.id}
-              at={a.created_at}
               last={last}
               mark={
                 a.actor.kind === "user" ? (
@@ -637,34 +939,24 @@ export function Timeline({ task }: { task: TaskDetail }) {
                 )
               }
             >
-              <div className="border bg-background px-3 py-2">
-                <p className="mb-1 text-xs font-medium">{actorName(a)}</p>
+              <p className="flex flex-wrap items-baseline gap-x-2">
+                <span className="text-xs font-medium wrap-anywhere">
+                  {actorName(a)}
+                </span>
+                <Time at={a.created_at} />
+              </p>
+              <Folded max="max-h-60" className="mt-1">
                 <Markdown className="text-sm">{a.body ?? ""}</Markdown>
-              </div>
+              </Folded>
             </Entry>
           );
         const run = a.kind === "run_started" && a.run_id && runs.get(a.run_id);
         return (
-          <Entry
-            key={a.id}
-            at={a.created_at}
-            last={last}
-            mark={
-              <span
-                className={cn(
-                  "size-1.5 bg-muted-foreground/60",
-                  a.kind === "run_failed" && "bg-destructive",
-                )}
-              />
-            }
-          >
+          <Entry key={a.id} last={last} mark={dot(a.kind === "run_failed")}>
             {run ? (
               <RunEntry task={task} run={run} activity={a} />
             ) : (
-              <p className="text-muted-foreground">
-                {a.kind.startsWith("run_") ? null : `${actorName(a)} `}
-                {describe(a)}
-              </p>
+              <EventLine a={a} />
             )}
           </Entry>
         );
@@ -696,14 +988,16 @@ export function CommentBox({ task }: { task: TaskDetail }) {
       }}
     >
       <Textarea
-        aria-label="评论"
+        id={commentBoxId}
+        aria-label={remote ? "追问" : "评论"}
         placeholder={
           remote
-            ? "评论会作为追问发给远程智能体……"
+            ? `追问 ${assigneeLabel(task.assignee)}，支持 Markdown`
             : "写一条评论，支持 Markdown"
         }
-        rows={3}
+        rows={2}
         maxLength={20000}
+        className="min-h-16 text-sm md:text-sm"
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
@@ -713,16 +1007,13 @@ export function CommentBox({ task }: { task: TaskDetail }) {
           }
         }}
       />
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-muted-foreground">
-          {remote ? `${assigneeLabel(task.assignee)} 会收到这条评论` : null}
-        </span>
+      <div className="flex justify-end">
         <Button
           type="submit"
           size="sm"
           disabled={!text.trim() || comment.isPending}
         >
-          评论
+          {remote ? "发送追问" : "评论"}
         </Button>
       </div>
     </form>
@@ -852,15 +1143,21 @@ export function EditableTitle({
     return (
       <h2
         className={cn(
-          "min-w-0 flex-1 cursor-text text-base font-semibold break-words",
+          "min-w-0 flex-1 text-base font-semibold wrap-anywhere",
           className,
         )}
-        onClick={() => {
-          setTitle(task.title);
-          setEditing(true);
-        }}
       >
-        {task.title}
+        <button
+          type="button"
+          title="修改标题"
+          className="cursor-text text-left outline-none focus-visible:underline"
+          onClick={() => {
+            setTitle(task.title);
+            setEditing(true);
+          }}
+        >
+          {task.title}
+        </button>
       </h2>
     );
   const save = () => {
@@ -888,7 +1185,14 @@ export function EditableTitle({
   );
 }
 
-export function Description({ task }: { task: TaskDetail }) {
+/** The task's description; `fold` folds a long one (the side panel). */
+export function Description({
+  task,
+  fold = false,
+}: {
+  task: TaskDetail;
+  fold?: boolean;
+}) {
   const update = useUpdateTask();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(task.description);
@@ -900,6 +1204,7 @@ export function Description({ task }: { task: TaskDetail }) {
           autoFocus
           rows={8}
           maxLength={20000}
+          className="max-h-[60dvh] text-sm md:text-sm"
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
@@ -922,26 +1227,35 @@ export function Description({ task }: { task: TaskDetail }) {
         </div>
       </div>
     );
-  return (
-    <button
-      type="button"
+  const edit = (
+    <Button
+      variant="ghost"
+      size="xs"
+      className="text-muted-foreground"
       onClick={() => {
         setText(task.description);
         setEditing(true);
       }}
-      className="block w-full border-l-2 border-foreground pl-3 text-left outline-none focus-visible:bg-muted/60"
     >
-      {task.description.trim() ? (
-        <Markdown className="text-sm">{task.description}</Markdown>
-      ) : (
-        <span className="text-sm text-muted-foreground">添加描述…</span>
-      )}
-    </button>
+      <PencilSimpleIcon aria-hidden="true" />
+      {task.description.trim() ? "编辑描述" : "添加描述"}
+    </Button>
+  );
+  if (!task.description.trim()) return <div className="-ml-2">{edit}</div>;
+  return (
+    <Folded
+      enabled={fold}
+      max="max-h-56"
+      className="border-l-2 border-foreground pl-3"
+      actions={edit}
+    >
+      <Markdown className="text-sm">{task.description}</Markdown>
+    </Folded>
   );
 }
 
 /** The assignee and its place, changed together. */
-export function AssigneeRow({ task }: { task: TaskDetail }) {
+function AssigneeRow({ task }: { task: TaskDetail }) {
   const update = useUpdateTask();
   const [draft, setDraft] = useState<AssigneeDraft | null>(null);
   const places = useDraftPlaces(draft ?? emptyDraft);
@@ -949,15 +1263,18 @@ export function AssigneeRow({ task }: { task: TaskDetail }) {
     const place = placeLabel(task.assignee.place);
     return (
       <div className="flex items-start gap-2">
-        <span className="min-w-0 flex-1">
+        <span className="min-w-0 flex-1 py-1.5 leading-5 wrap-anywhere">
           {assigneeLabel(task.assignee)}
           {place ? (
-            <span className="block text-muted-foreground">{place}</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              {place}
+            </span>
           ) : null}
         </span>
         <Button
-          size="xs"
+          size="sm"
           variant="ghost"
+          className="mt-0.5 text-muted-foreground"
           onClick={() => setDraft(draftOf(task.assignee))}
         >
           修改
@@ -991,22 +1308,16 @@ export function AssigneeRow({ task }: { task: TaskDetail }) {
   );
 }
 
+/** A task in the side panel: one column, what matters first. */
 function TaskView({ task }: { task: TaskDetail }) {
   const [, setNav] = useTaskNav();
-  const update = useUpdateTask();
   const remove = useDeleteTask();
   const [feedback, setFeedback] = useState(false);
-  const change = (changes: Parameters<typeof update.mutate>[0]["changes"]) =>
-    update.mutate({ id: task.id, changes }, { onError: showError });
   return (
-    <div className="space-y-4">
-      <div>
-        <Back label="任务" onClick={() => void setNav({ task: null })} />
-        <div className="flex items-start gap-2">
-          <span className="pt-0.5 text-sm text-muted-foreground tabular-nums">
-            #{task.number}
-          </span>
-          <EditableTitle key={task.title} task={task} />
+    <article className="space-y-4">
+      <header className="space-y-1">
+        <div className="flex items-center justify-between gap-2">
+          <Back label="任务" onClick={() => void setNav({ task: null })} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon-sm" aria-label="更多">
@@ -1015,6 +1326,7 @@ function TaskView({ task }: { task: TaskDetail }) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={() => setFeedback(true)}>
+                <RobotIcon aria-hidden="true" />
                 让智能体反馈
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -1032,43 +1344,26 @@ function TaskView({ task }: { task: TaskDetail }) {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        <p className="text-xs text-muted-foreground">
-          {task.created_by.kind === "agent"
-            ? `由 ${task.created_by.agent_name ?? "智能体"} 创建`
-            : "由我创建"}{" "}
-          · {when(task.created_at)}
+        <EditableTitle key={task.title} task={task} />
+        <p className="text-xs text-muted-foreground tabular-nums">
+          #{task.number} · {createdBy(task)}
         </p>
-      </div>
-
-      <dl className="grid grid-cols-[4rem_1fr] items-center gap-x-3 gap-y-2 text-xs">
-        <dt className="text-muted-foreground">状态</dt>
-        <dd className="flex items-center gap-2">
-          <StatusIcon status={task.status} />
-          <StatusSelect
-            className="flex-1"
-            value={task.status}
-            onChange={(status) => change({ status })}
-          />
-        </dd>
-        <dt className="self-start pt-1 text-muted-foreground">指派给</dt>
-        <dd>
-          <AssigneeRow task={task} />
-        </dd>
-      </dl>
-
-      <Description key={task.description} task={task} />
-
-      <div className="flex justify-end">
-        <Button size="sm" variant="outline" onClick={() => setFeedback(true)}>
-          <RobotIcon aria-hidden="true" />
-          让智能体反馈
-        </Button>
-      </div>
-
-      <Timeline task={task} />
-      <CommentBox task={task} />
+      </header>
+      <TaskProperties task={task} className="bg-muted/50 px-3 py-2" />
+      <Question task={task} />
+      <Description key={task.description} task={task} fold />
+      <section aria-labelledby="task-activity" className="space-y-3">
+        <h3
+          id="task-activity"
+          className="text-xs font-medium text-muted-foreground"
+        >
+          动态
+        </h3>
+        <Timeline task={task} />
+        <CommentBox task={task} />
+      </section>
       <FeedbackDialog task={task} open={feedback} onOpenChange={setFeedback} />
-    </div>
+    </article>
   );
 }
 

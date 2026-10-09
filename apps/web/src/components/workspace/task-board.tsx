@@ -1,9 +1,8 @@
 import type { WorkspaceState } from "./workspace-store";
-import type { Task, TaskDetail, TaskStatus } from "@/queries/tasks";
+import type { Task, TaskStatus } from "@/queries/tasks";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
-import { GitPullRequestIcon } from "@phosphor-icons/react/GitPullRequest";
 import { KanbanIcon } from "@phosphor-icons/react/Kanban";
 import { ListIcon } from "@phosphor-icons/react/List";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
@@ -37,20 +36,26 @@ import {
 import { PageHeader } from "./app-shell";
 import { RefreshButton } from "./refresh-button";
 import { when } from "./routine-format";
-import { ago, assigneeLabel, statuses, statusLabel } from "./task-format";
+import {
+  ago,
+  assigneeLabel,
+  createdBy,
+  statuses,
+  statusLabel,
+} from "./task-format";
 import { useTaskNav } from "./task-nav";
 import { StatusIcon } from "./task-status-icon";
 import {
-  AssigneeRow,
   CommentBox,
   Comments,
   Description,
   EditableTitle,
   FeedbackDialog,
+  Question,
   RunState,
-  StatusSelect,
   TaskForm,
   TaskMissing,
+  TaskProperties,
   Timeline,
 } from "./tasks";
 import { useWorkspaceStore } from "./workspace-store";
@@ -314,43 +319,9 @@ function BoardView({
 
 // --- task ---------------------------------------------------------------------------
 
-function Property({
-  label,
-  top = false,
-  children,
-}: {
-  label: string;
-  top?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <>
-      <dt className={cn("text-muted-foreground", top && "self-start pt-1")}>
-        {label}
-      </dt>
-      <dd className="min-w-0">{children}</dd>
-    </>
-  );
-}
-
-/** The pull requests the task delivered, newest first. */
-function deliverables(task: TaskDetail) {
-  return task.activity
-    .filter((a) => a.kind === "deliverable" && typeof a.data.url === "string")
-    .map((a) => ({
-      id: a.id,
-      url: a.data.url as string,
-      title:
-        (typeof a.data.title === "string" && a.data.title) ||
-        (a.data.url as string).replace("https://github.com/", ""),
-    }))
-    .reverse();
-}
-
 function TaskPage({ id }: { id: string }) {
   const [, setNav] = useTaskNav();
   const { data: task, isPending, error, refetch } = useTask(id);
-  const update = useUpdateTask();
   const remove = useDeleteTask();
   const [feedback, setFeedback] = useState(false);
   const back = () => void setNav({ task: null });
@@ -387,7 +358,6 @@ function TaskPage({ id }: { id: string }) {
         </main>
       </>
     );
-  const links = deliverables(task);
   return (
     <>
       <PageHeader title={crumbs}>
@@ -426,13 +396,11 @@ function TaskPage({ id }: { id: string }) {
           <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-8">
             <div className="space-y-1">
               <EditableTitle key={task.title} task={task} className="text-xl" />
-              <p className="text-xs text-muted-foreground">
-                {task.created_by.kind === "agent"
-                  ? `由 ${task.created_by.agent_name ?? "智能体"} 创建`
-                  : "由我创建"}{" "}
-                · {when(task.created_at)}
+              <p className="text-xs text-muted-foreground tabular-nums">
+                {createdBy(task)}
               </p>
             </div>
+            <Question task={task} />
             <Description key={task.description} task={task} />
             <section aria-labelledby="task-activity" className="space-y-3">
               <h2 id="task-activity" className="text-sm font-semibold">
@@ -445,62 +413,12 @@ function TaskPage({ id }: { id: string }) {
         </div>
         <aside
           aria-label="属性"
-          className="space-y-6 border-t px-4 py-5 text-xs sm:px-8 lg:overflow-y-auto lg:border-t-0 lg:border-l lg:px-4"
+          className="border-t px-4 py-5 text-xs sm:px-8 lg:overflow-y-auto lg:border-t-0 lg:border-l lg:px-4"
         >
-          <dl className="grid grid-cols-[4rem_minmax(0,1fr)] items-center gap-x-3 gap-y-3">
-            <Property label="状态">
-              <span className="flex items-center gap-2">
-                <StatusIcon status={task.status} />
-                <StatusSelect
-                  className="flex-1"
-                  value={task.status}
-                  onChange={(status) =>
-                    update.mutate(
-                      { id: task.id, changes: { status } },
-                      { onError: showError },
-                    )
-                  }
-                />
-              </span>
-            </Property>
-            <Property label="指派给" top>
-              <AssigneeRow task={task} />
-            </Property>
-            <Property label="更新于">
-              <span className="tabular-nums">{when(task.updated_at)}</span>
-            </Property>
-          </dl>
-          {links.length ? (
-            <section
-              aria-labelledby="task-deliverables"
-              className="space-y-1.5"
-            >
-              <h2
-                id="task-deliverables"
-                className="font-medium text-muted-foreground"
-              >
-                交付
-              </h2>
-              <ul className="space-y-1">
-                {links.map((link) => (
-                  <li key={link.id}>
-                    <a
-                      href={link.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-1.5 underline-offset-4 hover:underline"
-                    >
-                      <GitPullRequestIcon
-                        aria-hidden="true"
-                        className="size-3.5 shrink-0"
-                      />
-                      <span className="truncate">{link.title}</span>
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
+          <TaskProperties task={task}>
+            <dt className="text-xs leading-8 text-muted-foreground">更新于</dt>
+            <dd className="leading-8 tabular-nums">{when(task.updated_at)}</dd>
+          </TaskProperties>
         </aside>
       </main>
       <FeedbackDialog task={task} open={feedback} onOpenChange={setFeedback} />

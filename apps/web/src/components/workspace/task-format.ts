@@ -4,8 +4,10 @@ import type {
   Place,
   RunStatus,
   Task,
+  TaskDetail,
   TaskStatus,
 } from "@/queries/tasks";
+import { when } from "./routine-format";
 
 // How tasks read: their statuses, assignees and runs.
 
@@ -122,4 +124,13 @@ export function placeLabel(place: Place | null | undefined) {
   if (place.kind === "worktree")
     return `新 worktree（从 ${place.name ?? "项目"} 开${place.branch ? `，${place.branch}` : ""}）`;
   return `工作区 ${place.name ?? place.workspace_id}`;
+}
+
+/** "由 Josh 创建 · 今天 08:58". */
+export function createdBy(task: TaskDetail) {
+  return `${
+    task.created_by.kind === "agent"
+      ? `由 ${task.created_by.agent_name ?? "智能体"} 创建`
+      : "由我创建"
+  } · ${when(task.created_at)}`;
 }
