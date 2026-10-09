@@ -22,12 +22,19 @@ def repo(tmp_path: Path) -> Path:
 
 
 def _akhook() -> str | None:
-    built = REPO / "vendor/akhook/target/release/akhook"
-    return (
-        os.environ.get("AKHOOK")
-        or shutil.which("akhook")
-        or (str(built) if built.exists() else None)
-    )
+    for built in (
+        REPO / "packages/akhook/out/akhook",  # turbo run build (@axp/akhook)
+        REPO / "vendor/akhook/target/release/akhook",
+    ):
+        if built.exists():
+            return os.environ.get("AKHOOK") or str(built)
+    return os.environ.get("AKHOOK") or shutil.which("akhook")
+
+
+# Locally the rules' tests wait for akhook to be built; in CI (CI set) they
+# never skip, so a missing build fails instead of hiding the rules.
+if os.environ.get("CI") and _akhook() is None:
+    raise RuntimeError("CI: akhook is not built (turbo run build --filter=@axp/akhook)")
 
 
 @pytest.mark.skipif(_akhook() is None, reason="akhook is not built")
