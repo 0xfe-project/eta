@@ -21,10 +21,17 @@
   }
   * {
     @apply border-border outline-ring/50;
-    overscroll-behavior: none;
   }
   html {
     @apply font-sans;
+    /* No bounce, pull-to-refresh or swipe navigation at the page edge. */
+    overscroll-behavior: none;
+  }
+  /* Vertical panes don't bounce or hand their scroll on either. Only on y:
+     horizontal scrollers (Markdown tables and code blocks, the task board)
+     have to pass vertical swipes on to the pane around them. */
+  [class*="overflow-y-auto"] {
+    overscroll-behavior-y: none;
   }
 }
 
