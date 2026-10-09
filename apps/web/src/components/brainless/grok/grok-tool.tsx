@@ -1,4 +1,5 @@
 import * as React from "react";
+import { toolHeadingClass } from "@/components/brainless/tool-call-styles";
 import { cn } from "@/lib/utils";
 
 /**
@@ -37,19 +38,19 @@ export function GrokTool({
   if (variant === "card") {
     const heading = title ?? [verb, path].filter(Boolean).join(" ");
     return (
-      <div
+      <details
         className={cn(
-          "min-w-0 border-l-2 pl-3 font-mono text-[13px] leading-[1.55]",
+          "group min-w-0 max-w-full [&_summary::-webkit-details-marker]:hidden border-l-2 pl-3 font-mono text-[13px] leading-[1.55]",
           className,
         )}
         style={{ borderColor: GREEN }}
       >
-        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+        <summary className="flex min-w-0 list-none cursor-pointer items-baseline gap-x-2 outline-none focus-visible:ring-1 focus-visible:ring-[var(--terminal-link)]/60">
           <span aria-hidden className="shrink-0" style={{ color: GREEN }}>
             ◆
           </span>
           <span
-            className="min-w-0 break-words font-semibold"
+            className={cn(toolHeadingClass, "font-semibold")}
             style={{ color: SILVER }}
           >
             {heading}
@@ -59,33 +60,44 @@ export function GrokTool({
               [hooks: <span style={{ color: GREEN }}>{hooks}</span>]
             </span>
           ) : null}
-        </div>
+        </summary>
         {children ? (
-          <div className="mt-1 min-w-0 break-words" style={{ color: MUTED }}>
+          <div
+            className="mt-1 min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]"
+            style={{ color: MUTED }}
+          >
             {children}
           </div>
         ) : null}
-      </div>
+      </details>
     );
   }
 
   return (
-    <div
+    <details
       className={cn(
-        "flex min-w-0 flex-wrap items-baseline gap-2 font-mono text-[13px] leading-[1.6] text-[var(--terminal-muted)]",
+        "group min-w-0 max-w-full font-mono text-[13px] leading-[1.6] text-[var(--terminal-muted)] [&_summary::-webkit-details-marker]:hidden",
         className,
       )}
     >
-      {verb ? <span className="shrink-0">{verb}</span> : null}
-      {path ? (
-        <span className="min-w-0 break-all" style={{ color: BLUE }}>
-          {path}
+      <summary className="flex min-w-0 list-none cursor-pointer items-baseline gap-2 outline-none focus-visible:ring-1 focus-visible:ring-[var(--terminal-link)]/60">
+        <span className={toolHeadingClass}>
+          {verb}
+          {verb && path ? " " : null}
+          {path ? <span style={{ color: BLUE }}>{path}</span> : null}
         </span>
+        {meta ? (
+          <span className="shrink-0 text-[var(--terminal-muted)]">{meta}</span>
+        ) : null}
+      </summary>
+      {children ? (
+        <div
+          className="mt-1 min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]"
+          style={{ color: MUTED }}
+        >
+          {children}
+        </div>
       ) : null}
-      {meta ? (
-        <span className="text-[var(--terminal-muted)]">{meta}</span>
-      ) : null}
-      {children}
-    </div>
+    </details>
   );
 }

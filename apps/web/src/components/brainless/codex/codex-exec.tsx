@@ -1,4 +1,5 @@
 import * as React from "react";
+import { toolHeadingClass } from "@/components/brainless/tool-call-styles";
 import { cn } from "@/lib/utils";
 
 /**
@@ -33,21 +34,21 @@ export function CodexExec({
     <details
       open={defaultOpen}
       className={cn(
-        "group font-mono text-[13px] leading-[1.55] [&_summary::-webkit-details-marker]:hidden",
+        "group min-w-0 max-w-full font-mono text-[13px] leading-[1.55] [&_summary::-webkit-details-marker]:hidden",
         className,
       )}
     >
       <summary
         className={cn(
           "flex min-w-0 list-none items-baseline gap-2 outline-none",
-          expandable ? "cursor-pointer" : "cursor-default",
+          "cursor-pointer",
           "focus-visible:ring-1 focus-visible:ring-[var(--terminal-link)]/60",
         )}
       >
         <span aria-hidden className="shrink-0" style={{ color: DOT[status] }}>
           •
         </span>
-        <span className="min-w-0 break-words text-[var(--terminal-link)]">
+        <span className={cn(toolHeadingClass, "text-[var(--terminal-link)]")}>
           {command}
         </span>
         {result ? (
@@ -62,7 +63,7 @@ export function CodexExec({
         ) : null}
       </summary>
       {expandable ? (
-        <pre className="mt-1 overflow-x-auto whitespace-pre-wrap pl-4 text-[var(--terminal-muted)]">
+        <pre className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere] pl-4 text-[var(--terminal-muted)]">
           {children}
         </pre>
       ) : null}
