@@ -8,7 +8,7 @@ Go 服务建在 [Go 服务框架](service-framework.md)上，按它的结构组�
 
 - [ ] `apps/<service>/package.json`：`build:linux-amd64`、`build:linux-arm64`（`scripts/build/go.sh <二进制> linux <arch>`）、`lint`、`test`；浏览器要调用它的 API 时加 `openapi`（`go run . openapi > out/openapi.json`）。
 - [ ] `apps/<service>/turbo.json`：构建任务的 `inputs`（含它用到的 `packages/*`），`test` 用到的环境变量。
-- [ ] Go 服务：`go.work` 的 `use`；`go.mod` 依赖 `packages/service-go`（以及用到的其他 `packages/*`），并 `replace` 到本地目录。
+- [ ] Go 服务：`go.mod` 的 `go` 指令与其他模块一致；依赖 `packages/service-go`（以及用到的其他 `packages/*`，含它们间接依赖的本地包），并 `replace` 到本地目录。仓库不用 `go.work`，每个模块都能单独构建，`go.mod` 就是构建时实际用到的版本；改完在模块目录运行 `go mod tidy`。
 - [ ] 根 `package.json`：`dev:<service>`、`setup:go`、`test:<service>`、`check:go`。
 - [ ] 根 `turbo.json`：`//#image:linux-amd64` 和 `//#image:linux-arm64` 依赖它的构建任务。
 

@@ -4,7 +4,6 @@
   "tasks": {
     "build": {
       "inputs": [
-        "$TURBO_ROOT$/go.work",
         "$TURBO_ROOT$/packages/*-go/**",
         "!$TURBO_ROOT$/packages/*-go/.turbo/**",
         "!$TURBO_ROOT$/packages/*-go/out/**",
@@ -20,7 +19,6 @@
     "lint": {
       "inputs": [
         "$TURBO_DEFAULT$",
-        "$TURBO_ROOT$/go.work",
         "$TURBO_ROOT$/packages/*-go/**",
         "!$TURBO_ROOT$/packages/*-go/.turbo/**",
         "!$TURBO_ROOT$/packages/*-go/out/**",
@@ -30,7 +28,6 @@
     "test": {
       "inputs": [
         "$TURBO_DEFAULT$",
-        "$TURBO_ROOT$/go.work",
         "$TURBO_ROOT$/packages/*-go/**",
         "!$TURBO_ROOT$/packages/*-go/.turbo/**",
         "!$TURBO_ROOT$/packages/*-go/out/**",

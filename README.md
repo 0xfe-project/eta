@@ -1,6 +1,6 @@
 # AXP
 
-Monorepo：Bun workspaces 管理 Web，uv 管理 Python 项目，`go.work` 管理 Go 服务。
+Monorepo：Bun workspaces 管理 Web，uv 管理 Python 项目，Go 服务各自是独立的 Go 模块（本地包用 `replace` 引用）。
 
 ```text
 apps/
@@ -24,7 +24,7 @@ packages/
 
 ## 环境与初始化
 
-需要 Node.js 24、Bun 1.3.14、uv 和 Go（`go.work` 要求 1.26，较旧的 go 会自动下载对应工具链）。Python 项目使用 3.13，uv 会按 `.python-version` 自动获取。还需要 Docker。
+需要 Node.js 24、Bun 1.3.14、uv 和 Go（各 `go.mod` 统一要求 1.26.9，较旧的 go 会自动下载对应工具链）。Python 项目使用 3.13，uv 会按 `.python-version` 自动获取。还需要 Docker。
 
 runtime 镜像里的 hook 规则引擎 [akhook](https://github.com/aghub-app/akhook) 以 submodule 放在 `vendor/akhook`，构建镜像时如果还没拉取会自动初始化；也可以直接 `git clone --recurse-submodules`。
 
