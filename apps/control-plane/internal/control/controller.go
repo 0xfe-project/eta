@@ -129,7 +129,7 @@ func (c *Controller) expireRuntimes(ctx context.Context) error {
 		switch {
 		case instance.LeaseExpiresAt.Before(now):
 			reason, status = "LEASE_EXPIRED", chat.RuntimeFailed
-			if instance.LastHeartbeatAt == nil {
+			if instance.ReadyAt == nil && instance.Status != chat.RuntimeFailed {
 				// It never came up: what waits for it fails.
 				if err := c.failStart(ctx, instance.ID, instance.ConversationID, "START_TIMEOUT"); err != nil {
 					return err
@@ -249,7 +249,7 @@ func (c *Controller) ensureRuntimes(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if last != nil && last.Status == chat.RuntimeFailed && last.LastHeartbeatAt == nil &&
+		if last != nil && last.Status == chat.RuntimeFailed && last.ReadyAt == nil &&
 			last.EndedAt != nil && last.EndedAt.After(time.Now().Add(-RetryAfter)) {
 			// It never came up: back off instead of crash-looping.
 			continue

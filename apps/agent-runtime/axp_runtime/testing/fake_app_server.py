@@ -7,6 +7,7 @@ markers in the user's text:
   [confirm]  a plugin tool asks the user to confirm (MCP elicitation)
   [form]     a plugin tool asks the user to fill in a form
   [slow]     stream slowly so the turn can be interrupted
+  [long]     answer with 200,000 Chinese characters, in large deltas
   [fail]     finish the turn as failed
   [crash]    exit the process after the turn starts
   [steer]    wait for a turn/steer before finishing, then answer it
@@ -78,17 +79,17 @@ def set_turn(thread_id: str, turn: dict) -> None:
     save(threads)
 
 
-def stream_message(thread_id, turn_id, text, delay) -> bool:
+def stream_message(thread_id, turn_id, text, delay, chunk=4) -> bool:
     item_id = f"msg-{uuid.uuid4().hex[:8]}"
     item = {"id": item_id, "type": "agentMessage", "text": ""}
     base = {"threadId": thread_id, "turnId": turn_id}
     notify("item/started", {**base, "item": item, "startedAtMs": 0})
-    for start in range(0, len(text), 4):
+    for start in range(0, len(text), chunk):
         if turn_id in _interrupts:
             return False
         notify(
             "item/agentMessage/delta",
-            {**base, "itemId": item_id, "delta": text[start : start + 4]},
+            {**base, "itemId": item_id, "delta": text[start : start + chunk]},
         )
         time.sleep(delay)
     item["text"] = text
@@ -150,7 +151,9 @@ def run_turn(thread_id: str, turn_id: str, text: str) -> None:
         reply = f"确认结果：{action}"
     else:
         reply = f"收到：{text}"
-    if status == "completed":
+    if status == "completed" and "[long]" in text:
+        stream_message(thread_id, turn_id, "长" * 200_000, 0.05, chunk=20_000)
+    elif status == "completed":
         delay = 0.3 if "[slow]" in text else 0.01
         if not stream_message(
             thread_id, turn_id, reply * (10 if "[slow]" in text else 1), delay

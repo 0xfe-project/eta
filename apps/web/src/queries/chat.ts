@@ -69,6 +69,7 @@ export function chatQueryOptions() {
     // Live updates arrive over SSE; refetching would only reset the stream.
     staleTime: Infinity,
     refetchOnWindowFocus: false,
+    // useLiveChat tries again.
     retry: false,
   });
 }
@@ -111,6 +112,13 @@ function update(queryClient: QueryClient, apply: (s: Snapshot) => Snapshot) {
   );
 }
 
+const EVENT_TYPES = [
+  "agent.updated",
+  "agent.deleted",
+  "message.updated",
+  "interaction.updated",
+] as const;
+
 function applyEvent(queryClient: QueryClient, type: string, data: unknown) {
   if (type === "agent.updated") {
     const { agent } = data as AgentUpdated;
@@ -133,42 +141,55 @@ function applyEvent(queryClient: QueryClient, type: string, data: unknown) {
 /** Whether the stream dropped and has not come back yet. */
 export const useStreamLost = create<{ lost: boolean }>(() => ({ lost: false }));
 
-/** Subscribe to product events from the snapshot's cursor. */
-function useChatStream(cursor: string | undefined) {
+/**
+ * Keep the chat snapshot live with product events over SSE. Mounted once,
+ * for every page (RootDocument). EventSource resumes by itself with
+ * Last-Event-ID; once it gives up (a 503 while the control plane restarts,
+ * an expired cursor), or the snapshot cannot be loaded, this reloads the
+ * snapshot and reconnects, waiting 1 s, 2 s, 4 s, … up to 30 s.
+ */
+export function useLiveChat() {
   const queryClient = useQueryClient();
   useEffect(() => {
-    if (!cursor) return;
-    const source = new EventSource(
-      `/api/v1/chat/stream?cursor=${encodeURIComponent(cursor)}`,
-    );
-    const types = [
-      "agent.updated",
-      "agent.deleted",
-      "message.updated",
-      "interaction.updated",
-    ];
-    const listener = (event: MessageEvent) =>
-      applyEvent(queryClient, event.type, JSON.parse(event.data));
-    types.forEach((type) => source.addEventListener(type, listener));
-    source.onopen = () => useStreamLost.setState({ lost: false });
-    // EventSource resumes by itself with Last-Event-ID. Once it gives up
-    // (e.g. an expired cursor), reload the snapshot for a fresh cursor.
-    source.onerror = () => {
-      useStreamLost.setState({ lost: true });
-      if (source.readyState === EventSource.CLOSED)
-        void queryClient.invalidateQueries({ queryKey: chatKey });
+    let source: EventSource | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let failures = 0;
+    let stopped = false;
+    const retry = () => {
+      timer = setTimeout(connect, Math.min(1000 * 2 ** failures++, 30_000));
     };
+    async function connect() {
+      // A failed reload keeps the old snapshot, and its cursor.
+      if (failures && queryClient.getQueryData(chatKey))
+        await queryClient.invalidateQueries({ queryKey: chatKey });
+      const snapshot = await queryClient
+        .ensureQueryData(chatQueryOptions())
+        .catch(() => undefined);
+      if (stopped) return;
+      if (!snapshot) return retry();
+      source = new EventSource(
+        `/api/v1/chat/stream?cursor=${encodeURIComponent(snapshot.event_cursor)}`,
+      );
+      for (const type of EVENT_TYPES)
+        source.addEventListener(type, (event) =>
+          applyEvent(queryClient, type, JSON.parse(event.data)),
+        );
+      source.onopen = () => {
+        failures = 0;
+        useStreamLost.setState({ lost: false });
+      };
+      source.onerror = () => {
+        useStreamLost.setState({ lost: true });
+        if (source?.readyState === EventSource.CLOSED) retry();
+      };
+    }
+    void connect();
     return () => {
-      types.forEach((type) => source.removeEventListener(type, listener));
-      source.close();
+      stopped = true;
+      clearTimeout(timer);
+      source?.close();
     };
-  }, [cursor, queryClient]);
-}
-
-export function useChat() {
-  const query = useQuery(chatQueryOptions());
-  useChatStream(query.data?.event_cursor);
-  return query;
+  }, [queryClient]);
 }
 
 /** Every agent's interactions waiting for the user. */

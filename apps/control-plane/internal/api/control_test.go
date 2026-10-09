@@ -67,6 +67,43 @@ func TestRuntimeThatNeverComesUpFailsWhatWaits(t *testing.T) {
 	expect(t, len(c.nats.Queued(c.agent.ID)), 0)
 }
 
+func TestRuntimeThatOnlyReportsStartingTimesOut(t *testing.T) {
+	c := newControl(t)
+	sent := c.sendText("检查项目结构")
+	c.tick()
+	r := c.runtime(c.agent.ID)
+	expect(t, r.heartbeat("starting").status, 200)
+	c.tick()
+	expect(t, c.replyStatus(sent), "queued")
+	// Still "starting" past the start timeout: its heartbeats no longer
+	// extend the lease.
+	c.exec("UPDATE runtime_instance SET created_at = created_at - $1::interval", "121 seconds")
+	expect(t, r.heartbeat("starting").status, 200)
+	c.tick()
+	expect(t, c.replyFailure(sent), "START_TIMEOUT")
+	// It never came up: the next one waits RetryAfter instead of crash-looping.
+	c.sendText("再试一次")
+	c.tick()
+	expect(t, len(c.driver.started), 1)
+}
+
+func TestRuntimeThatCameUpIsNotTimedOutWhenItFails(t *testing.T) {
+	c, r := provisioned(t)
+	r.ready("thread-1")
+	c.exec("UPDATE runtime_instance SET created_at = created_at - $1::interval", "1 hour")
+	expect(t, r.heartbeat("busy").status, 200)
+	c.tick()
+	_, generation := c.liveInstance(c.agent.ID)
+	expect(t, generation, int64(1))
+	// It came up once, so a crash is retried at once, not backed off.
+	c.expireLeases()
+	c.tick()
+	c.sendText("继续")
+	c.tick()
+	_, generation = c.liveInstance(c.agent.ID)
+	expect(t, generation, int64(2))
+}
+
 func provisioned(t *testing.T) (*controlEnv, *runtimeHarness) {
 	c := newControl(t)
 	c.sendText("检查项目结构")
@@ -139,6 +176,31 @@ func TestEventOrdering(t *testing.T) {
 	conflict := r.events(event{"snapshot.failed", map[string]any{"reason": "OTHER"}})
 	expect(t, conflict.status, 409)
 	expect(t, scalar[string](c.env, "SELECT last_error FROM agent_session"), "SNAPSHOT_FAILED")
+}
+
+func TestEventsWithNULAreImported(t *testing.T) {
+	c, r := provisioned(t)
+	r.ready("thread-1")
+	item := map[string]any{"id": "cmd-1", "kind": "command", "status": "completed",
+		"input": "find . -print0", "output": "a\x00b\x00"}
+	resp := r.events(event{"item.updated", map[string]any{"item": item, "note\x00": "x\x00y"}})
+	expect(t, resp.status, 200)
+	expect(t, scalar[string](c.env, "SELECT payload->'item'->>'output' FROM agent_event"), "ab")
+	expect(t, scalar[string](c.env, "SELECT payload->>'note' FROM agent_event"), "xy")
+	// Re-sent as it was, it is the same event.
+	r.seq = 0
+	expect(t, r.events(event{"item.updated", map[string]any{"item": item, "note\x00": "x\x00y"}}).status, 200)
+}
+
+func TestEventBatchesUpTo4MiBAreTaken(t *testing.T) {
+	c, r := provisioned(t)
+	r.ready("thread-1")
+	// 1.5 MiB as sent: the runtime's batches are up to 1 MiB, with margin.
+	text := strings.Repeat("长", 1<<19)
+	expect(t, r.events(event{"snapshot.failed", map[string]any{"reason": "SNAPSHOT_FAILED", "text": text}}).status, 200)
+	huge := strings.Repeat("长", 2<<20)
+	expect(t, r.events(event{"snapshot.failed", map[string]any{"reason": "SNAPSHOT_FAILED", "text": huge}}).status, 413)
+	expect(t, scalar[int](c.env, "SELECT count(*) FROM agent_event"), 1)
 }
 
 func TestQueueStreamAndComplete(t *testing.T) {

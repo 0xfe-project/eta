@@ -5,6 +5,7 @@ import urllib.error
 import urllib.request
 
 from .config import Settings
+from .ledger import encode
 
 
 class Fenced(Exception):
@@ -28,7 +29,7 @@ class ControlPlane:
         )
 
     def _request(self, method: str, url: str, body: dict | None = None) -> dict:
-        data = json.dumps(body).encode() if body is not None else None
+        data = encode(body) if body is not None else None
         request = urllib.request.Request(url, data=data, method=method)
         request.add_header("Authorization", f"Bearer {self.settings.token}")
         request.add_header("Content-Type", "application/json")

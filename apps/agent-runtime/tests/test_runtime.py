@@ -6,6 +6,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
 import uuid
 from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -17,6 +18,7 @@ from dirty_equals import IsPartialDict
 from axp_runtime import runtime as runtime_module
 from axp_runtime.config import Settings
 from axp_runtime.control_plane import ControlPlaneError
+from axp_runtime.ledger import Ledger, encode
 from axp_runtime.runtime import Runtime
 
 FAKE = [sys.executable, "-m", "axp_runtime.testing.fake_app_server"]
@@ -67,13 +69,21 @@ class StubForge:
 
 
 class StubControlPlane:
-    """Records what the runtime reports; acks every event batch."""
+    """Records what the runtime reports; acks every event batch.
 
-    def __init__(self, thread_conflict=False):
+    Like the control plane, it refuses a body over ``max_bytes`` (413) and
+    can refuse events of some types (422) or be ``down``.
+    """
+
+    def __init__(self, thread_conflict=False, max_bytes=1 << 20, refuse=()):
         self.events: list[dict] = []
         self.sessions: list[dict] = []
         self.heartbeats: list[dict] = []
         self.thread_conflict = thread_conflict
+        self.max_bytes = max_bytes
+        self.refuse = set(refuse)
+        self.refused: list[int] = []
+        self.down = False
         self.lock = threading.Lock()
 
     def heartbeat(self, body):
@@ -87,7 +97,17 @@ class StubControlPlane:
         return {}
 
     def post_events(self, events):
+        if self.down:
+            raise OSError("connection refused")
+        status = None
+        if len(encode({"events": events})) > self.max_bytes:
+            status = 413
+        elif any(e["type"] in self.refuse for e in events):
+            status = 422
         with self.lock:
+            if status:
+                self.refused.append(len(events))
+                raise ControlPlaneError(status, {})
             self.events.extend(events)
         return {"acked_source_seq": events[-1]["source_seq"]}
 
@@ -690,3 +710,107 @@ class TestControlMessages:
         assert cp.completed("q1")["status"] == "completed"
         time.sleep(0.2)
         assert runtime.ledger.get_command("bad") is None
+
+
+def wait_until(condition, timeout=10):
+    deadline = time.monotonic() + timeout
+    while not condition():
+        assert time.monotonic() < deadline, "timed out"
+        time.sleep(0.02)
+
+
+class TestOutbox:
+    def test_acked_events_are_deleted_and_seqs_continue(self):
+        ledger = Ledger()
+        assert [ledger.emit("e", {}) for _ in range(3)] == [1, 2, 3]
+        ledger.ack_through(3)
+        assert ledger.all_acked()
+        assert ledger._db.execute("SELECT count(*) FROM outbox").fetchone()[0] == 0
+        assert ledger.emit("e", {}) == 4
+        assert [e["source_seq"] for e in ledger.unacked(10, 1 << 20)] == [4]
+
+    def test_batches_are_measured_as_sent(self):
+        ledger = Ledger()
+        for _ in range(3):
+            ledger.emit("e", {"text": "长" * 1000})
+        # About 3 KB each in UTF-8 (6 KB as ASCII escapes).
+        assert len(ledger.unacked(10, 7_000)) == 2
+
+    def test_long_chinese_reply_arrives(self, rt):
+        # Over 1 MiB as ASCII escapes, which the control plane once refused.
+        assert len(json.dumps("长" * 200_000)) > 1 << 20
+        runtime, cp = rt.start()
+        command_id = send(runtime, "[long]")
+        assert cp.completed(command_id)["status"] == "completed"
+        assert reply_text(cp, command_id) == "长" * runtime_module.AGENT_MESSAGE_CHARS
+        assert cp.refused == []
+        seqs = [e["source_seq"] for e in cp.events]
+        assert seqs == list(range(1, len(seqs) + 1))
+
+    def test_refused_batch_is_split_and_an_oversized_item_skipped(self, rt):
+        cp = StubControlPlane(max_bytes=200_000)
+        cp.down = True
+        runtime, cp = rt.start(cp)
+        command_id = send(runtime, "[long]")
+        wait_until(lambda: runtime.command_view(command_id)["status"] == "succeeded")
+        cp.down = False  # a backlog of growing replies, over 200 KB
+        assert cp.completed(command_id)["status"] == "completed"
+        assert any(size > 1 for size in cp.refused)
+        assert cp.wait_for("event.rejected", type="item.updated")["status"] == 413
+        seqs = [e["source_seq"] for e in cp.events]
+        assert seqs == list(range(1, len(seqs) + 1))
+        assert runtime.status == "ready"
+
+    def test_refused_state_event_fails_the_runtime(self, rt):
+        runtime, cp = rt.start(StubControlPlane(refuse={"turn.started"}))
+        command_id = send(runtime, "[slow]")
+        assert cp.wait_for("event.rejected", type="turn.started")["status"] == 422
+        assert cp.wait_for("runtime.failed")["code"] == "EVENT_REJECTED"
+        cp.wait_for("command.outcome_unknown", command_id=command_id)
+        assert runtime.status == "error"
+
+
+class TestUnexpectedFailures:
+    def test_worker_failure_fails_the_runtime(self, rt, monkeypatch):
+        def broken(self, command_id, item, *, completed):
+            raise RuntimeError("unexpected")
+
+        monkeypatch.setattr(Runtime, "_emit_item", broken)
+        runtime, cp = rt.start()
+        command_id = send(runtime, "你好")
+        cp.wait_for("command.outcome_unknown", command_id=command_id)
+        assert cp.wait_for("runtime.failed")["code"] == "RUNTIME_THREAD_FAILED"
+        wait_until(lambda: cp.heartbeats[-1]["status"] == "error")
+        assert runtime.client is None  # Codex stopped
+
+    def test_boot_failure_is_reported(self, rt):
+        cp = StubControlPlane()
+
+        def unreachable(body):
+            raise urllib.error.URLError("connection refused")
+
+        cp.register_session = unreachable
+        runtime, cp = rt.start(cp)
+        assert (runtime.status, runtime.error_code) == ("error", "START_FAILED")
+        assert cp.wait_for("runtime.failed")["code"] == "START_FAILED"
+        wait_until(lambda: cp.heartbeats[-1]["error_code"] == "START_FAILED")
+
+    def test_github_refresh_survives_failures(self, rt, monkeypatch):
+        forge = StubForge()
+        forge.answer = 200, {"unexpected": True}
+        runtime, _ = rt.start(gateway_url=forge.url)
+        assert runtime.status == "ready"
+        assert runtime._refresh_github() == runtime_module.GITHUB_RETRY_SECONDS
+        calls = []
+
+        def flaky():
+            calls.append(1)
+            if len(calls) == 1:
+                raise RuntimeError("unexpected")
+            return 3600
+
+        monkeypatch.setattr(runtime_module, "GITHUB_RETRY_SECONDS", 0.05)
+        monkeypatch.setattr(runtime, "_refresh_github", flaky)
+        runtime._spawn(lambda: runtime._github_loop(0.01), "github")
+        wait_until(lambda: len(calls) == 2)
+        assert runtime.status == "ready"

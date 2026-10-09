@@ -7,10 +7,14 @@ import {
   it,
   rstest,
 } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQuery,
+} from "@tanstack/react-query";
 import { act, useMemo } from "react";
 import { createRoot } from "react-dom/client";
-import { useAgentMessages, useChat } from "@/queries/chat";
+import { chatQueryOptions, useAgentMessages } from "@/queries/chat";
 import {
   useOutbox,
   useOutboxActions,
@@ -71,7 +75,7 @@ let posts: Post[] = [];
 
 /** The chat as Workspace wires it, for one agent. */
 function Chat({ agentStatus = "idle" }: { agentStatus?: "idle" | "starting" }) {
-  const chat = useChat();
+  const chat = useQuery(chatQueryOptions());
   const history = useAgentMessages(chat.data ? AGENT : undefined);
   const draft = useOutbox((s) => s.drafts[AGENT] ?? "");
   const all = useOutbox((s) => s.outgoing);

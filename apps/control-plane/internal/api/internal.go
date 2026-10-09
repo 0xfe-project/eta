@@ -81,6 +81,11 @@ func internalOp(id, method, path, summary string, status int, tag string) huma.O
 	}
 }
 
+// MaxEventsBody is how large an event batch may be. The runtime sends at most
+// 1 MiB (OUTBOX_BATCH_BYTES in apps/agent-runtime/axp_runtime/runtime.py);
+// the room above it is margin, not a target.
+const MaxEventsBody = 4 << 20
+
 func registerInternal(api huma.API, d *Deps) {
 	p := d.Protocol
 	instance := func(ctx context.Context, in InstancePath) (*chat.RuntimeRecord, error) {
@@ -124,8 +129,10 @@ func registerInternal(api huma.API, d *Deps) {
 			return &httpapi.Body[ThreadOut]{Body: ThreadOut{in.Body.ThreadID}}, nil
 		})
 
-	huma.Register(api, internalOp("postEvents", http.MethodPost, "/internal/v1/runtime-instances/{instance_id}/events",
-		"Deliver the runtime's outbox events, in order", 200, "runtime instances"),
+	postEvents := internalOp("postEvents", http.MethodPost, "/internal/v1/runtime-instances/{instance_id}/events",
+		"Deliver the runtime's outbox events, in order", 200, "runtime instances")
+	postEvents.MaxBodyBytes = MaxEventsBody
+	huma.Register(api, postEvents,
 		func(ctx context.Context, in *struct {
 			InstancePath
 			Body EventsIn

@@ -224,6 +224,8 @@ type RuntimeRecord struct {
 	ControllerID    string     `db:"controller_id"`
 	LeaseExpiresAt  time.Time  `db:"lease_expires_at"`
 	LastHeartbeatAt *time.Time `db:"last_heartbeat_at"`
+	// When it first reported ready or busy; nil while it never came up.
+	ReadyAt *time.Time `db:"ready_at"`
 	// Immutable configuration this instance was started with.
 	ConfigVersion int64      `db:"config_version"`
 	LastSourceSeq int64      `db:"last_source_seq"`
