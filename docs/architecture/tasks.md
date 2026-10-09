@@ -62,7 +62,7 @@ worktree 只由运行时自己创建：Paseo 打开别人（git、Herdr）建的
 
 Herdr 运行的是交互式终端程序。agent 启动后停在阻塞界面时，AXP 读一次 pane：只有 Claude Code 的“是否信任此文件夹”（`Is this a project you created or one you trust`）会被自动确认（发送 `down`、`enter`），由 Claude 自己记下对仓库的信任，之后这个仓库的 worktree 不会再问；其他阻塞界面一律不碰，启动失败并提示到那台电脑上查看。这符合 agenvo 的约定：阻塞时由调用方读界面、按自己的授权回答。
 
-第一轮的指令是 CLI 的用法、规则和任务本身；后续是那条评论。智能体必须在每一轮结束前用 `axp task comment` 回复：一轮结束（Paseo 报告 turn 完成；或者看到它工作过、之后空闲；或者空闲足够久）时，若这一轮没有远程评论，就提醒它一次；提醒之后仍然没有评论，这次运行失败。
+第一轮的指令是任务本身、工作位置的约定和回报规则，只点名 `axp` skill，不重复它的用法（见下文“`axp` 命令”）；后续是那条评论。智能体必须在每一轮结束前用 `axp task comment` 回复：一轮结束（Paseo 报告 turn 完成；或者看到它工作过、之后空闲；或者空闲足够久）时，若这一轮没有远程评论，就提醒它一次；提醒之后仍然没有评论，这次运行失败。
 
 不重放写操作：发送指令之前先记下发送时间，中继无法确认结果（`unknown`、断线、超时）时，以原生状态核对（Paseo 的最后输入时间）；2 分钟内没有送达迹象才判为失败。打开工作位置没有可用的幂等键，结果不确定时运行直接失败，而不是冒险再开一个。离线的电脑可能还在干活：运行保持 `running`，不迁移到别的电脑。远程智能体空闲、turn 完成都不代表任务成功，验收以评论和交付物为准，由用户（或用户请来的智能体）决定。
 
@@ -84,7 +84,7 @@ Paseo 归档 worktree 时不检查未提交的改动，未提交的内容会丢�
 ### 接入
 
 1. 设置 → 远程电脑 → 添加电脑，得到一条一次性的安装命令（24 小时内有效）：`curl -fsSL https://<AXP>/remote/install.sh | sh -s -- <code>`。
-2. 在那台电脑上运行。脚本下载 `axp`，`axp setup` 检查 Node.js 24.13+ 以及正在运行的 Paseo daemon 和/或已安装的 Herdr（只检查，不代装），用安装码换到这台电脑的令牌并报告运行时和 provider，从 AXP 下载并安装 agenvo connector（`/remote/dl/agenvo-<kind>.tgz`，与中继同一版本），给每个 connector 配置唯一的实例（以运行时命名）。
+2. 在那台电脑上运行。脚本下载 `axp`，`axp setup` 检查 Node.js 24.13+ 以及正在运行的 Paseo daemon 和/或已安装的 Herdr（只检查，不代装），用安装码换到这台电脑的令牌并报告运行时和 provider，为这里的智能体装上 `axp` skill，从 AXP 下载并安装 agenvo connector（`/remote/dl/agenvo-<kind>.tgz`，与中继同一版本），给每个 connector 配置唯一的实例（以运行时命名）。
 3. 每个 connector 以名字 `axp:<电脑 id>:<运行时>` 向中继发起配对，安装命令打印指纹并等待。设置页从中继的管理接口按这个名字找到待批准的配对，用户核对指纹一致后批准，控制面用管理员接口批准。
 4. 批准后，安装命令用 agenvo 自己的 `service install` 把每个 connector 注册为用户服务（Linux systemd、macOS launchd）。之后在线状态就是中继看到的 connector 状态，AXP 与那台电脑之间没有别的进程或心跳。connector 的运行时有变化时（比如 Paseo daemon 换了身份），设置里会再次出现“等待批准”。再次运行 `axp setup` 会重新报告运行时，并接入新出现的运行时。
 5. 撤销：设置里“撤销并移除”在中继上撤销这台电脑的设备，令牌随电脑一起删除；它的任务改为未指派。撤销不会停止已经在那台电脑上进行的工作。`axp uninstall` 卸载 connector 的服务并清除凭据。
@@ -104,6 +104,8 @@ agenvo 让 Codex 和 Claude 以完全权限运行（Paseo 的 `full-access`/`byp
 | `axp task status in_progress\|in_review\|blocked` | 远程智能体能设的状态                                                                                               |
 | `axp gh <args…>`                                  | 以 AXP 的 GitHub App 身份运行 gh（`gh pr …` 在用户授权过 App 时以用户的名义）；`gh pr create` 开出的 PR 记为交付物 |
 | `axp setup` / `status` / `uninstall`              | 电脑本身的接入、查看和卸载                                                                                         |
+
+怎么用这些命令（回报、状态、开 PR、补附件）只写在 `axp` skill 里（`apps/remote/skills/axp/SKILL.md`）：它编进 `axp` 二进制，`axp setup` 把它装到 `~/.claude/skills/axp`（Claude Code）和 `~/.agents/skills/axp`（Codex），`axp uninstall` 删除。skill 与 CLI 同一版本；控制面的指令和 AXP 智能体的插件都不再复述它。已接入的电脑重新运行一次安装命令即可装上。
 
 `axp task` 的任务依次取自 `--task`、环境变量 `AXP_TASK_ID`（AXP 在 Herdr 里开的 tab 带着它），最后按当前目录向 AXP 查询（`/remote/v1/current-task`：这台电脑上哪个进行中的会话在这个目录或其上级工作）。git 用那台电脑自己的凭据；`axp gh` 向 AXP 要 GitHub App 的 installation token（控制面向 forge 服务的 `/forge/credentials` 要，调用方记为 `computer-<id>`）；`axp gh pr …` 要的是 `?as=user`：用户授权过 App 时是用户的 token（`ghu_`），PR 以用户的名义打开，没有授权时仍是 installation token。
 

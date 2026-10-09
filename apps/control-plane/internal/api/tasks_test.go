@@ -422,8 +422,15 @@ func TestRemoteTaskInANewWorktreeFromBriefToDone(t *testing.T) {
 	_, agent := e.relay.only(t)
 	expect(t, agent.cwd, "/home/u/.paseo/worktrees/x/axp-1-fix-the-login-page")
 	if len(agent.inputs) != 1 || !strings.Contains(agent.inputs[0], "`/home/u/.local/share/axp/bin/axp`") ||
-		!strings.Contains(agent.inputs[0], "任务 #1：Fix the login page") {
+		!strings.Contains(agent.inputs[0], "任务 #1：Fix the login page") ||
+		!strings.Contains(agent.inputs[0], "It breaks on Safari.") || !strings.Contains(agent.inputs[0], "`axp` skill") {
 		t.Fatalf("brief %q", agent.inputs)
+	}
+	// How to use axp is the skill's; the brief only names it.
+	for _, manual := range []string{"axp gh", "--attach", "axp task status", "axp task show"} {
+		if strings.Contains(agent.inputs[0], manual) {
+			t.Fatalf("brief repeats the skill (%s): %q", manual, agent.inputs[0])
+		}
 	}
 	task = e.task("1")
 	expect(t, task.Status, "in_progress")

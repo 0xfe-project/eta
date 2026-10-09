@@ -19,8 +19,8 @@ import (
 )
 
 // setup connects this computer to AXP: it is what the install command runs,
-// and running it again picks up changed runtimes. It enrolls, installs an
-// agenvo connector per runtime found here, pairs each with AXP's relay
+// and running it again picks up changed runtimes. It enrolls, installs the
+// axp skill for the agents here and an agenvo connector per runtime found here, pairs each with AXP's relay
 // (waiting for the user to approve it in AXP) and runs it as the
 // connector's own user service.
 func setup(args []string) error {
@@ -86,6 +86,11 @@ func setup(args []string) error {
 		return err
 	}
 	if err := c.save(); err != nil {
+		return err
+	}
+
+	step("为这里的智能体安装 axp skill")
+	if err := installSkill(); err != nil {
 		return err
 	}
 
@@ -404,8 +409,8 @@ func (c *Config) env(kind string) []string {
 	return env
 }
 
-// uninstall stops the connectors' services, revokes their pairings and
-// forgets AXP's credentials.
+// uninstall stops the connectors' services, revokes their pairings, removes
+// the skill and forgets AXP's credentials.
 func uninstall() error {
 	c, err := loadConfig()
 	if err != nil {
@@ -418,9 +423,10 @@ func uninstall() error {
 		_ = c.connector(kind, "service", "uninstall").Run()
 		_ = c.connector(kind, "disconnect").Run()
 	}
+	uninstallSkill()
 	if err := os.Remove(configPath()); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	fmt.Println("已停止这台电脑上的 connector，并移除了 AXP 的凭据。")
+	fmt.Println("已停止这台电脑上的 connector，并移除了 axp skill 和 AXP 的凭据。")
 	return nil
 }

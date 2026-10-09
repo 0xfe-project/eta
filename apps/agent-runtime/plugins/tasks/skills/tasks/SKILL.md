@@ -12,11 +12,9 @@ blocked and cancelled.
 A task is assigned to nobody, to the user, or to an agent on one of the
 user's remote computers (`list_assignees`: a computer, a runtime — paseo or
 herdr — and a provider such as codex or claude) together with a place to
-work. Look at the computer first with `list_places`: its projects and its
-existing workspaces (path, branch, uncommitted changes). Then pick a new
-worktree branched off a project (`{kind: worktree, from, branch?, base?}`)
-for independent work, or an existing workspace (`{kind: workspace,
-workspace_id}`) when the work belongs there; pass `session` for Herdr.
+work. Look at the computer first with `list_places`, then pick a new
+worktree for independent work, or an existing workspace when the work
+belongs there.
 
 A remote agent starts on the task as soon as it is assigned (unless it is in
 the backlog) and reports back as comments. Every comment you or the user add
