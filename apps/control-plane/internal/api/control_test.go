@@ -511,6 +511,88 @@ func TestIdleRuntimeIsStopped(t *testing.T) {
 	expect(t, c.agentStatus(), "idle")
 }
 
+// The runtime acks a command as it takes it; turn.started comes only once
+// Codex started the turn. In between the command is in neither the queue nor
+// the running set, and the runtime is not idle.
+func TestTakenCommandKeepsTheRuntimeThroughAConfigChange(t *testing.T) {
+	c := newControl(t)
+	sent, r, command := c.running()
+	old, _ := c.liveInstance(c.agent.ID)
+	container := scalar[string](c.env, "SELECT container_id FROM runtime_instance WHERE id = $1", old)
+	c.patch("/agents/"+c.agent.ID, map[string]any{"name": "审查员"})
+	c.tick()
+	if c.driver.wasStopped(container) {
+		t.Fatal("stopped with a taken command")
+	}
+	expect(t, c.replyStatus(sent), "queued")
+	// Once the turn settles, the new configuration applies.
+	r.turnStarted(command, "t")
+	r.turnCompleted(command, "completed")
+	c.tick()
+	if !c.driver.wasStopped(container) {
+		t.Fatal("not stopped")
+	}
+	expect(t, scalar[string](c.env, "SELECT end_reason FROM runtime_instance WHERE id = $1", old), "CONFIG_CHANGED")
+	expect(t, c.replyStatus(sent), "completed")
+}
+
+func TestTakenCommandKeepsAnIdleRuntime(t *testing.T) {
+	c := newControl(t)
+	c.controller.IdleAfter = time.Nanosecond
+	_, r, first := c.running()
+	r.turnCompleted(first, "completed")
+	sent := c.sendText("十分钟后的消息")
+	command := c.commandOf(sent)
+	c.take(command)
+	c.exec("UPDATE agent SET last_active_at = $1", time.Now().Add(-5*time.Second))
+	instance, _ := c.liveInstance(c.agent.ID)
+	container := scalar[string](c.env, "SELECT container_id FROM runtime_instance WHERE id = $1", instance)
+	stopIdle := func() {
+		if err := c.controller.LookAtQueue(c.ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := c.controller.StopIdle(c.ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stopIdle()
+	if c.driver.wasStopped(container) {
+		t.Fatal("stopped with a taken command")
+	}
+	expect(t, c.replyStatus(sent), "queued")
+	r.turnStarted(command, "t")
+	r.turnCompleted(command, "completed")
+	c.exec("UPDATE agent SET last_active_at = $1", time.Now().Add(-5*time.Second))
+	stopIdle()
+	if !c.driver.wasStopped(container) {
+		t.Fatal("not stopped")
+	}
+}
+
+// A taken command the runtime never reports holds it only while its
+// heartbeat says it is busy; then it fails like any taken command.
+func TestUnreportedTakenCommandDoesNotHoldTheRuntimeForever(t *testing.T) {
+	c := newControl(t)
+	c.controller.ClaimGrace = time.Nanosecond
+	sent, r, command := c.running()
+	old, _ := c.liveInstance(c.agent.ID)
+	container := scalar[string](c.env, "SELECT container_id FROM runtime_instance WHERE id = $1", old)
+	c.patch("/agents/"+c.agent.ID, map[string]any{"name": "审查员"})
+	c.tick() // first seen taken
+	r.heartbeat("busy")
+	c.tick()
+	if c.driver.wasStopped(container) {
+		t.Fatal("stopped while the runtime reports busy")
+	}
+	r.heartbeat("ready")
+	c.tick()
+	if !c.driver.wasStopped(container) {
+		t.Fatal("not stopped")
+	}
+	expect(t, c.commandStatus(command), "failed")
+	expect(t, c.replyFailure(sent), "REPLY_INTERRUPTED")
+}
+
 func TestDeletedAgentIsInterruptedThenStopped(t *testing.T) {
 	c := newControl(t)
 	_, r, command := c.running()
