@@ -510,27 +510,36 @@ function deliverables(task: TaskDetail) {
     .reverse();
 }
 
+/** A property's name, on the first line of its value. */
+const propertyLabel = "text-xs leading-8 text-muted-foreground";
+
 /**
- * What the task is at now: its status, who has it, how its latest run is
- * going and what it delivered. `children` adds rows.
+ * What the task is at now: its status, who has it and what it delivered.
+ * Each value starts on an 8-high line beside its name; `children` adds rows.
  */
 export function TaskProperties({
   task,
+  className,
   children,
 }: {
   task: TaskDetail;
+  className?: string;
   children?: React.ReactNode;
 }) {
   const update = useUpdateTask();
-  const run = task.runs.at(-1);
   const links = deliverables(task);
   return (
-    <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-2 text-xs">
-      <dt className="text-muted-foreground">状态</dt>
+    <dl
+      className={cn(
+        "grid grid-cols-[3.5rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm",
+        className,
+      )}
+    >
+      <dt className={propertyLabel}>状态</dt>
       <dd className="flex min-w-0 items-center gap-2">
         <StatusIcon status={task.status} />
         <StatusSelect
-          className="min-w-0 flex-1"
+          className="min-w-32"
           value={task.status}
           onChange={(status) =>
             update.mutate(
@@ -540,40 +549,26 @@ export function TaskProperties({
           }
         />
       </dd>
-      <dt className="self-start pt-1 text-muted-foreground">指派给</dt>
+      <dt className={propertyLabel}>指派给</dt>
       <dd className="min-w-0">
         <AssigneeRow task={task} />
       </dd>
-      {run ? (
-        <>
-          <dt className="text-muted-foreground">执行</dt>
-          <dd className="flex min-h-6 min-w-0 flex-wrap items-center gap-x-2">
-            <RunStatusText run={run} />
-            <span className="text-muted-foreground tabular-nums">
-              {ago(run.created_at)}
-            </span>
-            <span className="ml-auto">
-              <StopRun task={task.id} run={run} />
-            </span>
-          </dd>
-        </>
-      ) : null}
       {links.length ? (
         <>
-          <dt className="self-start text-muted-foreground">交付</dt>
+          <dt className={propertyLabel}>交付</dt>
           <dd className="min-w-0">
-            <ul className="space-y-1">
+            <ul>
               {links.map((link) => (
                 <li key={link.id}>
                   <a
                     href={link.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex items-start gap-1.5 underline-offset-4 hover:underline"
+                    className="flex items-start gap-2 py-1.5 leading-5 underline-offset-4 hover:underline"
                   >
                     <GitPullRequestIcon
                       aria-hidden="true"
-                      className="mt-px size-3.5 shrink-0"
+                      className="mt-0.5 size-4 shrink-0"
                     />
                     <span className="line-clamp-2 min-w-0 wrap-anywhere">
                       {link.title}
@@ -1271,15 +1266,18 @@ function AssigneeRow({ task }: { task: TaskDetail }) {
     const place = placeLabel(task.assignee.place);
     return (
       <div className="flex items-start gap-2">
-        <span className="min-w-0 flex-1 pt-1 wrap-anywhere">
+        <span className="min-w-0 flex-1 py-1.5 leading-5 wrap-anywhere">
           {assigneeLabel(task.assignee)}
           {place ? (
-            <span className="block text-muted-foreground">{place}</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              {place}
+            </span>
           ) : null}
         </span>
         <Button
-          size="xs"
+          size="sm"
           variant="ghost"
+          className="mt-0.5 text-muted-foreground"
           onClick={() => setDraft(draftOf(task.assignee))}
         >
           修改
@@ -1354,7 +1352,7 @@ function TaskView({ task }: { task: TaskDetail }) {
           #{task.number} · {createdBy(task)}
         </p>
       </header>
-      <TaskProperties task={task} />
+      <TaskProperties task={task} className="bg-muted/50 px-3 py-2" />
       <Question task={task} />
       <Description key={task.description} task={task} fold />
       <section aria-labelledby="task-activity" className="space-y-3">

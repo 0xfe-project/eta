@@ -416,8 +416,8 @@ function TaskPage({ id }: { id: string }) {
           className="border-t px-4 py-5 text-xs sm:px-8 lg:overflow-y-auto lg:border-t-0 lg:border-l lg:px-4"
         >
           <TaskProperties task={task}>
-            <dt className="text-muted-foreground">更新于</dt>
-            <dd className="tabular-nums">{when(task.updated_at)}</dd>
+            <dt className="text-xs leading-8 text-muted-foreground">更新于</dt>
+            <dd className="leading-8 tabular-nums">{when(task.updated_at)}</dd>
           </TaskProperties>
         </aside>
       </main>
