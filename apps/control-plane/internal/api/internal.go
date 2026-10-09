@@ -167,11 +167,14 @@ func registerInternal(api huma.API, d *Deps) {
 		})
 
 	huma.Register(api, internalOp("runtimeAuth", http.MethodGet, "/internal/v1/runtime-auth",
-		"The runtime gateway's forward auth: which agent holds this runtime key (<instance id>.<token>)", 204, "runtime gateway"),
-		func(ctx context.Context, in *Bearer) (*struct {
+		"The runtime gateway's forward auth: which agent holds this runtime key (<instance id>.<token>), and whether it has the route's plugin", 204, "runtime gateway"),
+		func(ctx context.Context, in *struct {
+			Bearer
+			Plugin string `query:"plugin" maxLength:"64" doc:"The plugin whose route this is; the agent must have it enabled."`
+		}) (*struct {
 			AgentID string `header:"X-AXP-Agent-Id"`
 		}, error) {
-			agent, err := p.AgentFor(ctx, in.token())
+			agent, err := p.AgentFor(ctx, in.token(), in.Plugin)
 			if err != nil {
 				return nil, err
 			}
