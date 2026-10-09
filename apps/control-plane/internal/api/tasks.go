@@ -52,6 +52,12 @@ type TaskRunPath struct {
 
 type RunLog struct {
 	Entries []tasks.LogEntry `json:"entries"`
+	Older   string           `json:"older,omitempty" doc:"Reads the entries before these (as before); absent at the start."`
+}
+
+type RunLogIn struct {
+	TaskRunPath
+	Before string `query:"before" doc:"A page's older: read the entries before it."`
 }
 
 type ComputerIn struct {
@@ -191,12 +197,12 @@ func registerTasks(api huma.API, d *Deps) {
 
 	huma.Register(api, taskOp("getTaskRunLog", http.MethodGet, "/api/v1/tasks/{task_id}/runs/{run_id}/log",
 		"The remote agent's recent transcript, read from it now", 200, "tasks"),
-		func(ctx context.Context, in *TaskRunPath) (*httpapi.Body[RunLog], error) {
-			entries, err := s.Log(ctx, d.DB, in.TaskID, in.RunID)
+		func(ctx context.Context, in *RunLogIn) (*httpapi.Body[RunLog], error) {
+			page, err := s.Log(ctx, d.DB, in.TaskID, in.RunID, in.Before)
 			if err != nil {
 				return nil, err
 			}
-			return &httpapi.Body[RunLog]{Body: RunLog{entries}}, nil
+			return &httpapi.Body[RunLog]{Body: RunLog{page.Entries, page.Older}}, nil
 		})
 
 	huma.Register(api, taskOp("listComputers", http.MethodGet, "/api/v1/computers",

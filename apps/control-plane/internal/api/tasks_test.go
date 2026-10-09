@@ -35,6 +35,61 @@ type fakeRelay struct {
 	calls []string
 	// When set, every runtime call fails with this relay error code.
 	failing string
+	// Every agent's Paseo timeline, oldest first (two entries by default),
+	// in epoch "e1" unless set.
+	history      []map[string]any
+	historyEpoch string
+	// History reads asked for, as their "limit".
+	historyReads []int
+}
+
+// readHistory answers like Paseo, reading entries that start before a cursor,
+// and like the connector, refusing answers over 62 KiB.
+func (f *fakeRelay) readHistory(p map[string]any) (*relay.Outcome, error) {
+	epoch := f.historyEpoch
+	if epoch == "" {
+		epoch = "e1"
+	}
+	history := f.history
+	if history == nil {
+		history = []map[string]any{
+			{"timestamp": "2026-10-08T12:00:00Z", "item": map[string]any{"type": "assistant_message", "text": "done"}},
+			{"timestamp": "2026-10-08T12:00:01Z", "item": map[string]any{"type": "tool_call", "name": "Bash", "status": "completed",
+				"detail": map[string]any{"command": "ls", "output": "hello.txt"}}},
+		}
+	}
+	limit := p["limit"].(int)
+	f.historyReads = append(f.historyReads, limit)
+	end, stale := len(history)+1, false
+	if p["cursor"] != nil {
+		var c struct {
+			Epoch string
+			Seq   int
+		}
+		data, _ := json.Marshal(p["cursor"])
+		_ = json.Unmarshal(data, &c)
+		if c.Epoch != epoch {
+			stale = true
+		} else {
+			end = c.Seq
+		}
+	}
+	// Entry i (0-based) starts at seq i+1.
+	var entries []map[string]any
+	start := max(0, min(end-1, len(history))-limit)
+	for i := start; i < min(end-1, len(history)); i++ {
+		entries = append(entries, history[i])
+	}
+	out := map[string]any{"entries": entries, "epoch": epoch, "staleCursor": stale, "reset": stale, "hasOlder": start > 0}
+	if len(entries) > 0 {
+		out["startCursor"] = map[string]any{"epoch": epoch, "seq": start + 1}
+	}
+	data, _ := json.Marshal(out)
+	if len(data) >= 62*1024 {
+		fault := &relay.Fault{Code: "result_too_large", Message: "Native result exceeds 64 KiB."}
+		return &relay.Outcome{Execution: "accepted", Error: fault}, fault
+	}
+	return &relay.Outcome{Execution: "accepted", Result: data}, nil
 }
 
 type fakeWorkspace struct {
@@ -192,11 +247,7 @@ func (f *fakeRelay) Call(_ context.Context, _, _, method string, params any) (*r
 		}
 		return result(out)
 	case "paseo.agents.history":
-		return result(map[string]any{"entries": []map[string]any{
-			{"timestamp": "2026-10-08T12:00:00Z", "item": map[string]any{"type": "assistant_message", "text": "done"}},
-			{"timestamp": "2026-10-08T12:00:01Z", "item": map[string]any{"type": "tool_call", "name": "Bash", "status": "completed",
-				"detail": map[string]any{"command": "ls", "output": "hello.txt"}}},
-		}})
+		return f.readHistory(p)
 	// --- Herdr
 	case "session.list":
 		return result(map[string]any{"items": []map[string]any{{"session": "work", "backendGeneration": strings.Repeat("a", 64)}}})
@@ -498,6 +549,106 @@ func TestRemoteTaskInANewWorktreeFromBriefToDone(t *testing.T) {
 	}
 	if !slices.Contains(e.relay.calls, "paseo.workspaces.archive") {
 		t.Fatalf("calls %v", e.relay.calls)
+	}
+}
+
+// toolCall is a Paseo history entry whose command printed size bytes.
+func toolCall(command string, size int) map[string]any {
+	return map[string]any{"timestamp": "2026-10-09T12:00:00Z", "item": map[string]any{"type": "tool_call", "name": "Bash",
+		"status": "completed", "detail": map[string]any{"command": command, "output": strings.Repeat("x", size)}}}
+}
+
+// runLog starts a run on a Paseo computer and returns its log's path.
+func (e *taskEnv) runLog(t *testing.T) string {
+	computer, _ := e.computer("laptop", "paseo")
+	task := e.create(remoteAssignee(computer, "paseo", newWorktree))
+	e.runner.Tick(e.ctx)
+	return "/tasks/" + task.ID + "/runs/" + e.task("1").Runs[0].ID + "/log"
+}
+
+func TestALongTranscriptIsReadInPagesSmallEnoughForTheRelay(t *testing.T) {
+	e := newTaskEnv(t)
+	path := e.runLog(t)
+	// 120 commands of 3 KB each: 50 entries are about 150 KB, far over 64 KiB.
+	for i := range 120 {
+		e.relay.history = append(e.relay.history, toolCall(fmt.Sprint(i+1), 3000))
+	}
+
+	var commands []string
+	var pages []RunLog
+	for before := ""; ; {
+		var page RunLog
+		e.get(path, "before", before).json(t, &page)
+		pages = append(pages, page)
+		var these []string
+		for _, entry := range page.Entries {
+			these = append(these, entry.Command)
+		}
+		commands = append(these, commands...)
+		if page.Older == "" {
+			break
+		}
+		before = page.Older
+	}
+	// Latest page first, each oldest first; together every command once, in order.
+	expect(t, len(pages), 3)
+	expect(t, len(pages[0].Entries), 50)
+	expect(t, pages[0].Entries[49].Command, "120")
+	for i, command := range commands {
+		expect(t, command, fmt.Sprint(i+1))
+	}
+	expect(t, len(commands), 120)
+	// Reads shrank to fit and stayed small.
+	if slices.Max(e.relay.historyReads) > 25 || !slices.Contains(e.relay.historyReads, 12) {
+		t.Fatalf("reads %v", e.relay.historyReads)
+	}
+	// A read that fails is only that: the run goes on.
+	expect(t, e.task("1").Runs[0].Status, "running")
+}
+
+func TestAnEntryTooLargeForTheRelayIsSkippedAndSaidSo(t *testing.T) {
+	e := newTaskEnv(t)
+	path := e.runLog(t)
+	for i := range 6 {
+		size := 10
+		if i == 2 {
+			size = 70 * 1024
+		}
+		e.relay.history = append(e.relay.history, toolCall(fmt.Sprint(i+1), size))
+	}
+	var page RunLog
+	e.get(path).json(t, &page)
+	var got []string
+	for _, entry := range page.Entries {
+		got = append(got, entry.Kind+":"+entry.Command)
+	}
+	expect(t, strings.Join(got, " "), "tool:1 tool:2 other: tool:4 tool:5 tool:6")
+	expect(t, page.Older, "")
+
+	// The latest entry too large: nothing to step back from.
+	e.relay.history = append(e.relay.history, toolCall("7", 70*1024))
+	if status, code := e.get(path).error(); status != 424 || code != "REMOTE_LOG_TOO_LARGE" {
+		t.Fatalf("%d %s", status, code)
+	}
+}
+
+func TestOlderEntriesOfARebuiltTimelineAreReadFromTheLatestAgain(t *testing.T) {
+	e := newTaskEnv(t)
+	path := e.runLog(t)
+	for i := range 60 {
+		e.relay.history = append(e.relay.history, toolCall(fmt.Sprint(i+1), 10))
+	}
+	var page RunLog
+	e.get(path).json(t, &page)
+	if page.Older == "" {
+		t.Fatal("no older entries")
+	}
+	e.relay.historyEpoch = "e2"
+	if status, code := e.get(path, "before", page.Older).error(); status != 409 || code != "LOG_RESET" {
+		t.Fatalf("%d %s", status, code)
+	}
+	if status, _ := e.get(path, "before", "nonsense").error(); status != 422 {
+		t.Fatalf("a bad cursor: %d", status)
 	}
 }
 

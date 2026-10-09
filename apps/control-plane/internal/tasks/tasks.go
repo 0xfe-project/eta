@@ -14,6 +14,7 @@ package tasks
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"maps"
 	"strings"
 	"time"
@@ -765,8 +766,9 @@ func finishRun(ctx context.Context, tx pgx.Tx, run *runRow, status string, reaso
 	return record(ctx, tx, run.TaskID, &run.ID, "run_"+status, System, reason, nil)
 }
 
-// Log is a run's session transcript, read live from the remote agent.
-func (s *Service) Log(ctx context.Context, db pg.DB, ref, runID string) ([]LogEntry, error) {
+// Log is a page of a run's session transcript, read live from the remote
+// agent: the latest one, or the one before older (a page's Older).
+func (s *Service) Log(ctx context.Context, db pg.DB, ref, runID, older string) (*LogPage, error) {
 	r, err := find(ctx, db, ref, false)
 	if err != nil {
 		return nil, err
@@ -781,16 +783,23 @@ func (s *Service) Log(ctx context.Context, db pg.DB, ref, runID string) ([]LogEn
 		return nil, err
 	}
 	if session == nil {
-		return []LogEntry{}, nil
+		return &LogPage{Entries: []LogEntry{}}, nil
 	}
 	if s.Relay == nil {
 		return nil, relayUnavailable()
 	}
-	entries, err := agents{s.Relay}.log(ctx, session, session.native())
-	if err != nil {
+	page, err := agents{s.Relay}.log(ctx, session, session.native(), older)
+	switch {
+	case errors.Is(err, errBadCursor):
+		return nil, apierr.Invalid()
+	case errors.Is(err, errStaleCursor):
+		return nil, apierr.New(409, "LOG_RESET", "远程智能体的记录重建过，请从最新的记录重新读取。")
+	case tooLarge(err) || errors.Is(err, errTooManyReads):
+		return nil, apierr.Upstream("REMOTE_LOG_TOO_LARGE", "远程智能体最新的记录太大，超过了中继单次 64 KiB 的上限，读不出来。")
+	case err != nil:
 		return nil, apierr.Upstream("REMOTE_UNAVAILABLE", "读取远程智能体的记录失败："+err.Error())
 	}
-	return entries, nil
+	return page, nil
 }
 
 func relayUnavailable() error {

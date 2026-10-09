@@ -14,7 +14,13 @@ import type {
   TaskRun,
   TaskUpdateIn,
 } from "@/api/control-plane.gen";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useMemo } from "react";
 import { controlPlane, unwrap } from "@/lib/api";
 
 // The task board and the remote computers that work on it
@@ -78,22 +84,41 @@ export function useTask(id: string | null) {
   });
 }
 
-/** A run's transcript, read from the remote agent while it is open. */
+/**
+ * A run's transcript, read from the remote agent while it is open: the latest
+ * page, then older ones on demand, oldest first.
+ */
 export function useRunLog(task: string, run: string, live: boolean) {
-  return useQuery({
+  const log = useInfiniteQuery({
     queryKey: keys.log(task, run),
-    queryFn: async ({ signal }) =>
-      (
-        await unwrap(
-          controlPlane.GET("/api/v1/tasks/{task_id}/runs/{run_id}/log", {
-            params: { path: { task_id: task, run_id: run } },
-            signal,
-          }),
-        )
-      ).entries,
+    queryFn: async ({ pageParam, signal }) =>
+      unwrap(
+        controlPlane.GET("/api/v1/tasks/{task_id}/runs/{run_id}/log", {
+          params: {
+            path: { task_id: task, run_id: run },
+            query: pageParam ? { before: pageParam } : {},
+          },
+          signal,
+        }),
+      ),
+    initialPageParam: "",
+    getNextPageParam: (page) => page.older || undefined,
     refetchInterval: live ? 3000 : false,
     retry: false,
   });
+  const pages = log.data?.pages;
+  const entries = useMemo(
+    () => [...(pages ?? [])].reverse().flatMap((page) => page.entries),
+    [pages],
+  );
+  return {
+    entries,
+    error: log.error,
+    isPending: log.isPending,
+    hasOlder: log.hasNextPage,
+    loadingOlder: log.isFetchingNextPage,
+    loadOlder: log.fetchNextPage,
+  };
 }
 
 function useTaskMutation<T>(call: (input: T) => Promise<TaskDetail>) {
