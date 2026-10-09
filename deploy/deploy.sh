@@ -184,7 +184,14 @@ kamal() {
 # added, boot it before the first deploy that uses it. The collector holds no
 # state and is rebooted on every deploy so config changes take effect.
 prepare_accessories() {
-  docker container inspect axp-s3 >/dev/null 2>&1 || kamal accessory boot s3
+  if ! docker container inspect axp-s3 >/dev/null 2>&1; then
+    kamal accessory boot s3
+  elif docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' axp-s3 | grep -qx "$RUNTIME_NETWORK"; then
+    # Booted when SeaweedFS itself was on the runtime network: move it off
+    # before s3-proxy takes the axp-s3 name there. Its data stays in the volume.
+    kamal accessory reboot s3
+  fi
+  docker container inspect axp-s3-proxy >/dev/null 2>&1 || kamal accessory boot s3-proxy
   docker container inspect axp-nats >/dev/null 2>&1 || kamal accessory boot nats
   if ! docker container inspect axp-openobserve >/dev/null 2>&1; then
     kamal accessory boot openobserve

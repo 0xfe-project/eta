@@ -96,6 +96,7 @@ runtime 每次启动、在 Codex 之前对选中的每个 plugin 执行 `codex p
 
 - 开发与生产各有一套 SeaweedFS 和 runtime 网络（`axp-dev-s3` / `axp-runtime` 与 `axp-s3` / `axp-prod-runtime`），开发新建的容器以 `axp-dev-` 开头，互不可见。
 - 一个 Agent 只能读写自己的快照：容器里没有挂载，没有共享文件系统，也没有存储凭据。
+- runtime 网络上只有 SeaweedFS 的 S3 端口可达（生产经 `s3-proxy`，开发只发布 8333），它的 filer、master、volume 等不鉴权的接口连不到，绕不开预签名地址（见[网关](gateway.md)）。
 
 ## 已知限制
 
