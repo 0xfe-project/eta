@@ -28,6 +28,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
+	"golang.org/x/sync/errgroup"
 )
 
 func init() {
@@ -224,31 +225,24 @@ func writeJSON(w http.ResponseWriter, e *Error) {
 // what the caller closes next (the database, NATS) outlives the requests.
 func Serve(ctx context.Context, addr string, handler http.Handler, drain time.Duration) error {
 	server := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second}
-	served := make(chan struct{})
-	drained := make(chan struct{})
-	go func() {
-		defer close(drained)
-		select {
-		case <-ctx.Done():
-		case <-served: // failed to listen or serve: nothing to drain
-			return
+	// A failure to listen ends ctx too, so the shutdown never waits on it.
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		slog.Info("Listening", "addr", addr)
+		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+			return err
 		}
+		return nil
+	})
+	g.Go(func() error {
+		<-ctx.Done()
 		// ctx has ended, so the drain gets a context of its own.
 		shutdown, cancel := context.WithTimeout(context.Background(), drain)
 		defer cancel()
-		if err := server.Shutdown(shutdown); err != nil {
-			slog.Warn("Requests outlived the drain; closing them", "addr", addr, "error", err)
+		if server.Shutdown(shutdown) != nil {
 			_ = server.Close()
 		}
-	}()
-	slog.Info("Listening", "addr", addr)
-	err := server.ListenAndServe()
-	close(served)
-	if !errors.Is(err, http.ErrServerClosed) {
-		return err
-	}
-	// ListenAndServe returns as soon as Shutdown starts; Shutdown itself
-	// returns once the requests are done or the drain is over.
-	<-drained
-	return nil
+		return nil
+	})
+	return g.Wait()
 }
