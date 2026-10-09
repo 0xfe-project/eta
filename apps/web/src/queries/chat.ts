@@ -21,7 +21,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { create } from "zustand";
 import { ApiError, controlPlane, unwrap } from "@/lib/api";
 import { refreshLlm } from "@/queries/llm";
@@ -69,15 +69,9 @@ export function chatQueryOptions() {
     // Live updates arrive over SSE; refetching would only reset the stream.
     staleTime: Infinity,
     refetchOnWindowFocus: false,
-    // A few quick tries; useLiveChat keeps trying after that.
-    retry: (failures, error) =>
-      failures < 3 && !(error instanceof ApiError && error.status < 500),
+    // useLiveChat tries again.
+    retry: false,
   });
-}
-
-/** 1 s, 2 s, 4 s, … up to 30 s. */
-function backoff(failures: number) {
-  return Math.min(1000 * 2 ** failures, 30_000);
 }
 
 function upsert<T extends { id: string; revision: number }>(
@@ -118,6 +112,13 @@ function update(queryClient: QueryClient, apply: (s: Snapshot) => Snapshot) {
   );
 }
 
+const EVENT_TYPES = [
+  "agent.updated",
+  "agent.deleted",
+  "message.updated",
+  "interaction.updated",
+] as const;
+
 function applyEvent(queryClient: QueryClient, type: string, data: unknown) {
   if (type === "agent.updated") {
     const { agent } = data as AgentUpdated;
@@ -141,79 +142,54 @@ function applyEvent(queryClient: QueryClient, type: string, data: unknown) {
 export const useStreamLost = create<{ lost: boolean }>(() => ({ lost: false }));
 
 /**
- * Keep the chat snapshot live: product events over SSE from its cursor.
- * Mounted once for every page (RootDocument), so the sidebar's badge, the
- * tab title and the inbox are live wherever the user is.
+ * Keep the chat snapshot live with product events over SSE. Mounted once,
+ * for every page (RootDocument). EventSource resumes by itself with
+ * Last-Event-ID; once it gives up (a 503 while the control plane restarts,
+ * an expired cursor), or the snapshot cannot be loaded, this reloads the
+ * snapshot and reconnects, waiting 1 s, 2 s, 4 s, … up to 30 s.
  */
 export function useLiveChat() {
   const queryClient = useQueryClient();
-  const { data, status, errorUpdatedAt, errorUpdateCount } = useQuery(
-    chatQueryOptions(),
-  );
-  const cursor = data?.event_cursor;
-  // Bumped to reopen the stream when a new snapshot kept the same cursor.
-  const [attempt, setAttempt] = useState(0);
-  const failuresRef = useRef(0);
-
-  // A snapshot that never loaded is tried again, ever more slowly (once
-  // loaded, the stream below reloads it).
-  const loaded = data !== undefined;
   useEffect(() => {
-    if (status !== "error" || loaded) return;
-    const timer = setTimeout(
-      () => void queryClient.refetchQueries({ queryKey: chatKey, exact: true }),
-      backoff(errorUpdateCount),
-    );
-    return () => clearTimeout(timer);
-  }, [status, loaded, errorUpdatedAt, errorUpdateCount, queryClient]);
-
-  useEffect(() => {
-    if (!cursor) return;
-    let retry: ReturnType<typeof setTimeout> | undefined;
-    const source = new EventSource(
-      `/api/v1/chat/stream?cursor=${encodeURIComponent(cursor)}`,
-    );
-    const types = [
-      "agent.updated",
-      "agent.deleted",
-      "message.updated",
-      "interaction.updated",
-    ];
-    const listener = (event: MessageEvent) =>
-      applyEvent(queryClient, event.type, JSON.parse(event.data));
-    types.forEach((type) => source.addEventListener(type, listener));
-    source.onopen = () => {
-      failuresRef.current = 0;
-      useStreamLost.setState({ lost: false });
+    let source: EventSource | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let failures = 0;
+    let stopped = false;
+    const retry = () => {
+      timer = setTimeout(connect, Math.min(1000 * 2 ** failures++, 30_000));
     };
-    // EventSource resumes by itself with Last-Event-ID. Once it gives up
-    // (a 503 while the control plane restarts, an expired cursor), reload
-    // the snapshot for a fresh cursor and reconnect, after a backoff.
-    source.onerror = () => {
-      useStreamLost.setState({ lost: true });
-      if (source.readyState !== EventSource.CLOSED) return;
-      retry = setTimeout(
-        async () => {
-          // A failed reload keeps the old snapshot and its cursor.
-          await queryClient.invalidateQueries({ queryKey: chatKey });
-          const fresh = queryClient.getQueryData<Snapshot>(chatKey);
-          // A new cursor reopens the stream by itself.
-          if (fresh?.event_cursor === cursor) setAttempt((n) => n + 1);
-        },
-        backoff(failuresRef.current++),
+    async function connect() {
+      // A failed reload keeps the old snapshot, and its cursor.
+      if (failures && queryClient.getQueryData(chatKey))
+        await queryClient.invalidateQueries({ queryKey: chatKey });
+      const snapshot = await queryClient
+        .ensureQueryData(chatQueryOptions())
+        .catch(() => undefined);
+      if (stopped) return;
+      if (!snapshot) return retry();
+      source = new EventSource(
+        `/api/v1/chat/stream?cursor=${encodeURIComponent(snapshot.event_cursor)}`,
       );
-    };
+      for (const type of EVENT_TYPES)
+        source.addEventListener(type, (event) =>
+          applyEvent(queryClient, type, JSON.parse(event.data)),
+        );
+      source.onopen = () => {
+        failures = 0;
+        useStreamLost.setState({ lost: false });
+      };
+      source.onerror = () => {
+        useStreamLost.setState({ lost: true });
+        if (source?.readyState === EventSource.CLOSED) retry();
+      };
+    }
+    void connect();
     return () => {
-      clearTimeout(retry);
-      types.forEach((type) => source.removeEventListener(type, listener));
-      source.close();
+      stopped = true;
+      clearTimeout(timer);
+      source?.close();
     };
-  }, [cursor, attempt, queryClient]);
-}
-
-/** The chat snapshot; useLiveChat keeps it live. */
-export function useChat() {
-  return useQuery(chatQueryOptions());
+  }, [queryClient]);
 }
 
 /** Every agent's interactions waiting for the user. */

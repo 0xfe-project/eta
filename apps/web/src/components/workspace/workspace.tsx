@@ -1,12 +1,13 @@
 import type { WorkspaceView } from "./types";
+import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
+  chatQueryOptions,
   useAgentMessages,
   useAnswerInteraction,
-  useChat,
   useCompact,
   usePendingInteractions,
   useStopReply,
@@ -37,7 +38,7 @@ export function Workspace({
   const mobilePanel = useWorkspaceStore((s) => s.mobilePanel);
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
-  const chat = useChat();
+  const chat = useQuery(chatQueryOptions());
   const pending = usePendingInteractions().length;
   const { current: selected, openEditor } = useAgents();
   const history = useAgentMessages(selected?.id);

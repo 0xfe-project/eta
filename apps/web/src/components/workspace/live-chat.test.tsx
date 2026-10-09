@@ -6,10 +6,14 @@ import {
   it,
   rstest,
 } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQuery,
+} from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { useChat, usePendingInteractions } from "@/queries/chat";
+import { chatQueryOptions, usePendingInteractions } from "@/queries/chat";
 import { LiveChat } from "./live-chat";
 
 (
@@ -63,7 +67,7 @@ let snapshotRequests = 0;
 
 function Page() {
   // Pages read the snapshot without subscribing themselves.
-  useChat();
+  useQuery(chatQueryOptions());
   const pending = usePendingInteractions().length;
   return <output>{pending}</output>;
 }
@@ -161,33 +165,32 @@ describe("the chat stream", () => {
   it("keeps trying, more slowly, while the server is away", async () => {
     await render();
     await wait(0);
-    answers = Array.from<() => Response>({ length: 4 }).fill(unavailable);
+    answers = Array.from<() => Response>({ length: 2 }).fill(unavailable);
     FakeEventSource.all[0].giveUp();
-    // After 1 s the snapshot is reloaded; it fails, with its own tries
-    // (1 s, 2 s, 4 s), and the stream reopens from the old cursor.
-    await wait(1000 + 7000);
-    expect(snapshotRequests).toBe(5);
-    expect(FakeEventSource.all).toHaveLength(2);
+    await wait(1000);
+    // The reload failed: the stream reopens from the old cursor.
+    expect(snapshotRequests).toBe(2);
     expect(FakeEventSource.all[1].url).toBe("/api/v1/chat/stream?cursor=c1");
     FakeEventSource.all[1].giveUp();
     await wait(1000);
-    expect(snapshotRequests).toBe(5); // backing off: 2 s now
+    expect(snapshotRequests).toBe(2); // backing off: 2 s now
     await wait(1000);
-    expect(snapshotRequests).toBe(6);
+    expect(snapshotRequests).toBe(3);
     expect(FakeEventSource.all).toHaveLength(3);
     FakeEventSource.all[2].onopen?.();
     expect(FakeEventSource.open()).toHaveLength(1);
   });
 
   it("retries a snapshot that failed, with a backoff", async () => {
-    answers = Array.from<() => Response>({ length: 5 }).fill(unavailable);
+    answers = Array.from<() => Response>({ length: 2 }).fill(unavailable);
     await render();
-    // react-query's own tries (1 s, 2 s, 4 s), then ours (8 s): all fail.
-    await wait(7000);
-    expect(snapshotRequests).toBe(4);
+    await wait(1000);
+    expect(snapshotRequests).toBe(2);
     expect(FakeEventSource.all).toEqual([]);
-    await wait(16_000);
-    expect(snapshotRequests).toBe(6);
+    await wait(1000);
+    expect(snapshotRequests).toBe(2); // backing off: 2 s now
+    await wait(1000);
+    expect(snapshotRequests).toBe(3);
     expect(FakeEventSource.open()).toHaveLength(1);
   });
 });
