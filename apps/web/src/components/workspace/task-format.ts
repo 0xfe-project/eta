@@ -134,3 +134,7 @@ export function createdBy(task: TaskDetail) {
       : "由我创建"
   } · ${when(task.created_at)}`;
 }
+
+/** Whether a deliverable is a pull request on github.com. */
+export const isPullURL = (url: string) =>
+  /^https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/.test(url);
