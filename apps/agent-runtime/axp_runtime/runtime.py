@@ -98,6 +98,9 @@ REJECTED_STATUSES = {400, 413, 422}
 FLUSH_SECONDS = 0.3
 # thread/compact/start answers before its turn starts.
 COMPACT_START_SECONDS = 30
+# A turn that ends while a steer's turn/steer is still unanswered waits this
+# long for the answer: only a steer Codex took belongs to the turn.
+STEER_ANSWER_SECONDS = 30
 DECISIONS = {"accept", "decline"}
 
 
@@ -116,8 +119,9 @@ class _ThreadResponse(_Lenient):
 
 
 class _ApprovalWaiter:
-    def __init__(self, command_id: str):
+    def __init__(self, command_id: str, kind: str):
         self.command_id = command_id
+        self.kind = kind
         self.event = threading.Event()
         self.decision: str | None = None
 
@@ -306,8 +310,12 @@ class Runtime:
         self.current_command_id: str | None = None
         self._approvals: dict[str, _ApprovalWaiter] = {}
         # Steer command id -> its command, from turn/steer until the running
-        # turn takes it in.
+        # turn takes it in. "answered" is set once turn/steer returns; a steer
+        # stays only if Codex took it ("taken").
         self._steers: dict[str, dict] = {}
+        # Steers asked to stop before the turn took them in: stopped as they
+        # take it over.
+        self._stopped_steers: set[str] = set()
         self._lock = threading.RLock()
         # stopping: take no new work. _halt: stop the background loops, once
         # shutdown has let them deliver what is pending.
@@ -687,6 +695,11 @@ class Runtime:
     def interrupt(self, command_id: str) -> dict | None:
         command = self.ledger.get_command(command_id)
         if command is None:
+            with self._lock:
+                if command_id in self._steers:
+                    # Delivered, not yet taken in: the turn stops once the
+                    # steer takes it over.
+                    self._stopped_steers.add(command_id)
             return None
         if command["status"] in L.TERMINAL:
             return _command_view(command)
@@ -704,9 +717,18 @@ class Runtime:
                     None,
                 )
             if waiter:
-                # "cancel" declines and interrupts the turn in one step.
+                # For an approval "cancel" declines and interrupts the turn in
+                # one step. For a plugin's confirmation it only dismisses the
+                # prompt (the tool hears "not confirmed" and the turn goes
+                # on), so the turn is interrupted too.
                 waiter.decision = "cancel"
                 waiter.event.set()
+                if waiter.kind == "elicitation" and self.client and command["turn_id"]:
+                    threading.Thread(
+                        target=self._interrupt_turn,
+                        args=(command["turn_id"],),
+                        daemon=True,
+                    ).start()
             elif self.client and command["turn_id"]:
                 threading.Thread(
                     target=self._interrupt_turn, args=(command["turn_id"],), daemon=True
@@ -736,10 +758,12 @@ class Runtime:
             return "not_running"
         text = body.get("text") or ""
         payload = {"text": text}
+        answered = threading.Event()
         with self._lock:
             # Registered first: Codex may echo the steer before it answers.
             self._steers[steer_id] = {
                 "turn_id": command["turn_id"],
+                "answered": answered,
                 "record": {
                     "agent_sequence": int(body["agent_sequence"]),
                     "kind": "turn",
@@ -761,7 +785,10 @@ class Runtime:
             logger.info("turn/steer rejected: %s", exc)
             with self._lock:
                 self._steers.pop(steer_id, None)
+                self._stopped_steers.discard(steer_id)
             return "not_running"
+        finally:
+            answered.set()
         return "accepted"
 
     def _interrupt_turn(self, turn_id: str) -> None:
@@ -800,7 +827,7 @@ class Runtime:
         if command_id is None or (kind == "elicitation" and not _confirmation(params)):
             return _approval_response(kind, "decline")
         approval_id = str(uuid.uuid4())
-        waiter = _ApprovalWaiter(command_id)
+        waiter = _ApprovalWaiter(command_id, kind)
         with self._lock:
             self._approvals[approval_id] = waiter
         self.ledger.add_approval(
@@ -957,13 +984,21 @@ class Runtime:
                 elif method == "turn/completed":
                     flush()
                     # Steers Codex accepted but never echoed still went to
-                    # this turn; never run them again.
-                    for steer_id in [
-                        key
-                        for key, steer in list(self._steers.items())
-                        if steer["turn_id"] == turn_id
-                    ]:
-                        owner = self._take_steer(owner, steer_id, turn_id)
+                    # this turn; never run them again. One still waiting for
+                    # Codex's answer is waited for: refused (the turn had
+                    # ended), it was never part of it and runs on its own.
+                    with self._lock:
+                        pending = [
+                            (key, steer["answered"])
+                            for key, steer in self._steers.items()
+                            if steer["turn_id"] == turn_id
+                        ]
+                    for steer_id, answered in pending:
+                        answered.wait(STEER_ANSWER_SECONDS)
+                        with self._lock:
+                            taken = steer_id in self._steers
+                        if taken:
+                            owner = self._take_steer(owner, steer_id, turn_id)
                     self._finish_turn(owner, payload.get("turn") or {})
                     return
         finally:
@@ -972,9 +1007,16 @@ class Runtime:
             client.unregister_turn_notifications(turn_id)
 
     def _take_steer(self, previous: str, steer_id: str, turn_id: str) -> str:
-        """Hand the running turn from ``previous`` to the steer command."""
+        """Hand the running turn from ``previous`` to the steer command.
+
+        A stop asked for the steer before this, or for the command it takes
+        over, stops the turn: the steer now owns it."""
         with self._lock:
             steer = self._steers.pop(steer_id)
+            stopped = steer_id in self._stopped_steers
+            self._stopped_steers.discard(steer_id)
+        if self.ledger.get_command(previous)["interrupt_requested"]:
+            stopped = True
         self.ledger.accept_command(steer_id, **steer["record"])
         self.ledger.update_command(steer_id, status=L.RUNNING, turn_id=turn_id)
         self.ledger.update_command(previous, status="succeeded")
@@ -983,6 +1025,11 @@ class Runtime:
             {"command_id": previous, "steer_command_id": steer_id, "turn_id": turn_id},
         )
         self.current_command_id = steer_id
+        if stopped:
+            self.ledger.update_command(steer_id, interrupt_requested=1)
+            threading.Thread(
+                target=self._interrupt_turn, args=(turn_id,), daemon=True
+            ).start()
         return steer_id
 
     def _emit_item(self, command_id: str, item: dict, *, completed: bool) -> None:

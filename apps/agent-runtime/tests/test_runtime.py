@@ -546,6 +546,28 @@ class TestTurns:
             e["type"] for e in cp.events if e["payload"].get("command_id") == first
         ]
 
+    def test_a_steer_the_ending_turn_refused_is_not_taken_in(self, rt):
+        runtime, cp = rt.start()
+        first = send(runtime, "[late-steer]", seq=1)
+        cp.wait_for("turn.started", command_id=first)
+        # The turn ends while turn/steer is unanswered; Codex then refuses
+        # it, so it runs as its own turn (the control plane queues it).
+        steer_id, result = self.steer(runtime, first)
+        assert result == "not_running"
+        assert cp.completed(first)["status"] == "completed"
+        assert "turn.steered" not in cp.types()
+        assert runtime.command_view(steer_id) is None
+
+    def test_stopping_a_steer_not_yet_taken_in_stops_the_turn(self, rt):
+        runtime, cp = rt.start()
+        first = send(runtime, "[steer-later]", seq=1)
+        cp.wait_for("turn.started", command_id=first)
+        steer_id, result = self.steer(runtime, first)
+        assert result == "accepted"
+        runtime.interrupt(steer_id)
+        assert cp.wait_for("turn.steered", command_id=first)
+        assert cp.completed(steer_id)["status"] == "interrupted"
+
     def test_steer_needs_a_running_turn(self, rt):
         runtime, cp = rt.start()
         done = send(runtime, "你好")
