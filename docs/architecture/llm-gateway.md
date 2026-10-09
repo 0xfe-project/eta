@@ -56,7 +56,7 @@ Kamal 网络上的服务（不是 runtime）直接调用 `/v1`，不带 key，�
 
 - `Agent.model` 存目录中的模型 ID；创建、修改时校验存在性，修改模型与修改指令一样递增 `config_version`，空闲时重启 runtime。
 - `POST /chat/messages` 在加锁前检查模型：未设置返回 409 `MODEL_NOT_SET`，不可用（或网关不可达）返回 409 `MODEL_UNAVAILABLE`。目录在进程内缓存 10 秒。
-- controller 给 runtime 注入网关的 `/v1` 地址（`AXP_LLM_BASE_URL`）和模型的上下文窗口。
+- controller 给 runtime 注入 runtime 网关的地址（`AXP_GATEWAY_URL`）和模型的上下文窗口；runtime 自己在后面加上 `/v1`。
 - runtime 给 Codex 加上 `model_provider = "axp"` 及 `model_providers.axp.{base_url, wire_api = "responses", env_key = "AXP_RUNTIME_LLM_KEY"}`，并在需要时设置 `model_context_window`；Codex 进程的 `AXP_RUNTIME_LLM_KEY` 就是上面的实例 key。
 
 ## 前端
