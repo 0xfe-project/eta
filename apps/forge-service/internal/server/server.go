@@ -90,14 +90,11 @@ func (s *server) mcp() http.Handler {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "forge"}, nil)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "open_pull_request",
-		Description: "Open a GitHub pull request through AXP's GitHub App, on behalf of " +
-			"the user when they authorized it (author is then the user), else as the App's bot.\n\n" +
+		Description: "Open a GitHub pull request through AXP's GitHub App.\n\n" +
 			"Push the branch first. repository is \"owner/name\" or the remote URL " +
 			"(`git remote get-url origin`); head is the pushed branch; base defaults " +
 			"to the repository's default branch. If a pull request for head is " +
-			"already open, it is returned instead. The result's author is who opened it; " +
-			"fallback, when present, says why it is the bot: tell the user. " +
-			"Use it instead of `gh pr create`.",
+			"already open, it is returned instead. Use it instead of `gh pr create`.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in openPullRequestIn) (*mcp.CallToolResult, *github.PullRequest, error) {
 		pull, err := s.gh.OpenPullRequest(ctx, in.Repository, in.Head, in.Title, in.Body, in.Base, in.Draft)
 		if err != nil {

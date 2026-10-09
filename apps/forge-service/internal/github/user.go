@@ -260,28 +260,29 @@ func (g *GitHub) dropUser() {
 	_ = os.Remove(g.path("user.json"))
 }
 
-// userToken returns the user and a current token, refreshing it first when
-// it is close to expiry. A user is nil when nobody authorized the App;
-// reason says why a user who had is not usable now.
-func (g *GitHub) userToken(ctx context.Context) (user *User, reason string) {
+// userToken returns the user with a current token, refreshing it first when
+// it is close to expiry; nil when nobody authorized the App or the
+// authorization is not usable now. An authorization GitHub refuses to
+// refresh is forgotten.
+func (g *GitHub) userToken(ctx context.Context) *User {
 	// One refresh at a time: a refresh token works once.
 	g.userMu.Lock()
 	defer g.userMu.Unlock()
 	user, err := g.AuthorizedUser()
 	if err != nil || user == nil {
-		return nil, ""
+		return nil
 	}
 	now := g.Now()
 	if user.ExpiresAt == 0 || time.Unix(user.ExpiresAt, 0).Sub(now) > tokenMargin {
-		return user, ""
+		return user
 	}
 	app, err := g.require()
 	if err != nil {
-		return nil, ""
+		return nil
 	}
 	if user.RefreshToken == "" || (user.RefreshExpiresAt != 0 && now.Unix() >= user.RefreshExpiresAt) {
 		_ = os.Remove(g.path("user.json"))
-		return nil, "你对 App 的授权已过期，请在 AXP 的“能力”页重新授权"
+		return nil
 	}
 	fresh, err := g.exchange(ctx, url.Values{
 		"client_id": {app.ClientID}, "client_secret": {g.clientSecret()},
@@ -290,16 +291,16 @@ func (g *GitHub) userToken(ctx context.Context) (user *User, reason string) {
 	var forgeErr *Error
 	if errors.As(err, &forgeErr) && forgeErr.Code == "AUTHORIZATION_FAILED" {
 		_ = os.Remove(g.path("user.json"))
-		return nil, "GitHub 不再接受你对 App 的授权，请在 AXP 的“能力”页重新授权"
+		return nil
 	}
 	if err != nil {
-		return nil, "暂时无法刷新你对 App 的授权"
+		return nil
 	}
 	fresh.Login, fresh.ID = user.Login, user.ID
 	if err := g.saveUser(fresh); err != nil {
-		return nil, "无法保存刷新后的授权"
+		return nil
 	}
-	return fresh, ""
+	return fresh
 }
 
 // ForgetUser revokes the user's authorization on GitHub (best effort) and

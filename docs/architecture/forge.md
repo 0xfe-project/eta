@@ -50,7 +50,7 @@ GitHub App 有两种身份（[官方说明](https://docs.github.com/en/apps/crea
 - **保存与刷新**：`user.json` 保存 token、refresh token、登录名和到期时间。token 8 小时过期，到期前 10 分钟用时刷新；refresh token 6 个月过期，用一次就换新的，所以刷新是串行的。刷新被拒或已过期时删除授权，以 App 的身份继续。
 - **撤销**：向导里“取消授权”调用 `DELETE /applications/{client_id}/grant` 并删除 `user.json`。用户在 GitHub 上撤销时 AXP 收不到 webhook，下次 GitHub 回答 401 时删除授权。
 - **使用范围**：只有 `open_pull_request` 和远程电脑上的 `axp gh pr …`（`/forge/credentials?as=user`，只给 `computer-<id>` 调用方）用用户的 token；runtime 里 git 与 gh 的凭据、commit 身份仍是 App 的。用户的 token 的权限是用户与 App 的交集。
-- **回退**：没有授权时以 App 的身份打开。有授权但 GitHub 回答 401（撤销）、403 或 404（用户对仓库的权限不够）时改以 App 的身份打开，结果的 `fallback` 写明原因；`author` 总是 GitHub 上 PR 的作者。
+- **回退**：没有授权时以 App 的身份打开。有授权但 GitHub 回答 401（撤销）、403 或 404（用户对仓库的权限不够）时改以 App 的身份打开，不另外提示（以用户的名义只是锦上添花）；结果的 `author` 是 GitHub 上 PR 的作者。
 - **较早创建的 App**：当时没有保存 client secret，也没有 callback URL。向导提示用户在 App 设置里把 Callback URL 设为 `<AXP>/api/forge/v1/github/authorization/callback`、生成新的 client secret，填进 AXP（`POST /api/forge/v1/github/oauth-client`），再去授权。
 - **界面上的“via”**：GitHub 文档只承诺用户头像加 App 的标识，没有写“via <App>”的文案和位置，也没有配置项。
 

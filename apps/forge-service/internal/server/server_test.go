@@ -324,7 +324,7 @@ func TestOpenPullRequestAsTheAppsBot(t *testing.T) {
 		t.Fatalf("result: %v", text(result))
 	}
 	if pull["created"] != true || !strings.HasSuffix(pull["url"].(string), "/akarachen/axp/pull/1") ||
-		pull["author"] != "axp-test[bot]" || pull["fallback"] != nil {
+		pull["author"] != "axp-test[bot]" {
 		t.Fatalf("pull: %v", pull)
 	}
 	// On GitHub, by the App's bot, into the default branch.
@@ -433,7 +433,7 @@ func TestOpenPullRequestOnBehalfOfTheUser(t *testing.T) {
 	_, credentials := e.credentials()
 	emulator.push(t, token(credentials), "akarachen/axp", "by-user")
 	pull := e.pull(map[string]any{"repository": "akarachen/axp", "head": "by-user", "title": "As the user"})
-	if pull["author"] != "akarachen" || pull["created"] != true || pull["fallback"] != nil {
+	if pull["author"] != "akarachen" || pull["created"] != true {
 		t.Fatalf("pull: %v", pull)
 	}
 	// Git and gh in runtimes stay the App's.
@@ -468,7 +468,7 @@ func TestARevokedAuthorizationFallsBackToTheBot(t *testing.T) {
 	_, credentials := e.credentials()
 	emulator.push(t, token(credentials), "akarachen/axp", "after-revoke")
 	pull := e.pull(map[string]any{"repository": "akarachen/axp", "head": "after-revoke", "title": "Revoked"})
-	if pull["author"] != "axp-test[bot]" || !strings.Contains(fmt.Sprint(pull["fallback"]), "重新授权") {
+	if pull["author"] != "axp-test[bot]" {
 		t.Fatalf("pull: %v", pull)
 	}
 	if _, status, _ := e.do("GET", "/api/forge/v1/github", false, nil); status["user"] != nil || e.user() != nil {

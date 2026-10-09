@@ -546,7 +546,7 @@ func (g *GitHub) Credentials(ctx context.Context, asUser bool) (*Credentials, er
 		return nil, err
 	}
 	if asUser {
-		if user, _ := g.userToken(ctx); user != nil {
+		if user := g.userToken(ctx); user != nil {
 			expires := user.ExpiresAt
 			if expires == 0 {
 				expires = g.Now().Add(time.Hour).Unix()
@@ -568,22 +568,21 @@ func (g *GitHub) Credentials(ctx context.Context, asUser bool) (*Credentials, er
 }
 
 // PullRequest is an opened (or already open) pull request. Author is its
-// author on GitHub: the user who authorized the App, or the App's bot;
-// Fallback says why it is the bot although the user had authorized the App.
+// author on GitHub: the user who authorized the App, or the App's bot.
 type PullRequest struct {
-	URL      string `json:"url"`
-	Number   int    `json:"number"`
-	Created  bool   `json:"created"`
-	Author   string `json:"author"`
-	Fallback string `json:"fallback,omitempty"`
+	URL     string `json:"url"`
+	Number  int    `json:"number"`
+	Created bool   `json:"created"`
+	Author  string `json:"author"`
 }
 
 // OpenPullRequest opens a pull request on behalf of the user who authorized
 // the App, or else as the App; base defaults to the repository's default
 // branch. An open pull request for head is returned instead of failing.
 //
-// GitHub refusing the user's token (revoked: 401) or the user's access
-// falling short of the App's (403, 404) makes the App open it instead.
+// GitHub refusing the user's token (revoked: 401, which also forgets it) or
+// the user's access falling short of the App's (403, 404) makes the App open
+// it instead, quietly: the user's authorship is a nicety.
 func (g *GitHub) OpenPullRequest(ctx context.Context, repository, head, title, body, base string, draft bool) (*PullRequest, error) {
 	owner, name, err := ParseRepository(repository)
 	if err != nil {
@@ -593,8 +592,7 @@ func (g *GitHub) OpenPullRequest(ctx context.Context, repository, head, title, b
 	if err != nil {
 		return nil, err
 	}
-	user, fallback := g.userToken(ctx)
-	if user != nil {
+	if user := g.userToken(ctx); user != nil {
 		pull, err := g.createPull(ctx, user.AccessToken, owner, name, head, title, body, base, draft)
 		switch statusOf(err) {
 		case 0:
@@ -604,9 +602,8 @@ func (g *GitHub) OpenPullRequest(ctx context.Context, repository, head, title, b
 			return nil, fromGitHub(err)
 		case http.StatusUnauthorized:
 			g.dropUser()
-			fallback = "GitHub 不再接受你对 App 的授权（可能已撤销），请在 AXP 的“能力”页重新授权"
 		case http.StatusForbidden, http.StatusNotFound:
-			fallback = fmt.Sprintf("%s 在这个仓库的权限不够开 PR", user.Login)
+			// The App can, though the user cannot: the App opens it.
 		default:
 			return nil, pullError(err)
 		}
@@ -618,9 +615,6 @@ func (g *GitHub) OpenPullRequest(ctx context.Context, repository, head, title, b
 	pull, err := g.createPull(ctx, t.value, owner, name, head, title, body, base, draft)
 	if err != nil {
 		return nil, pullError(err)
-	}
-	if fallback != "" {
-		pull.Fallback = fallback + "；这次以 App 的身份打开。"
 	}
 	return pull, nil
 }
