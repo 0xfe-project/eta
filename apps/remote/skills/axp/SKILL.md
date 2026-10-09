@@ -8,7 +8,8 @@ description: Working on a task from AXP's task board on this computer with the a
 AXP hands you a task to work on here and sends each new comment on it as a
 follow-up. Talk to the board with `axp` (`axp help` lists its commands; if it
 is not on PATH, the prompt names its full path). Run it in the task's working
-directory or below it, which is how it knows the task; `--task N` names one.
+directory or below it, which is how it knows the task; elsewhere, add
+`--task N` to an `axp task …` command (`axp task show --task 12`).
 
 - `axp task show`: the task, its status and its timeline (comments, status
   changes, deliverables). Read it when a follow-up needs context.
