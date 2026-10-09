@@ -35,6 +35,7 @@ import {
   useUpdateTask,
 } from "@/queries/tasks";
 import { PageHeader } from "./app-shell";
+import { RefreshButton } from "./refresh-button";
 import { when } from "./routine-format";
 import { ago, assigneeLabel, statuses, statusLabel } from "./task-format";
 import { useTaskNav } from "./task-nav";
@@ -374,7 +375,9 @@ function TaskPage({ id }: { id: string }) {
   if (!task)
     return (
       <>
-        <PageHeader title={crumbs} />
+        <PageHeader title={crumbs}>
+          <RefreshButton resource="tasks" />
+        </PageHeader>
         <main id="main" className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8">
           <TaskMissing
             isPending={isPending}
@@ -388,6 +391,7 @@ function TaskPage({ id }: { id: string }) {
   return (
     <>
       <PageHeader title={crumbs}>
+        <RefreshButton resource="tasks" />
         <Button size="sm" variant="outline" onClick={() => setFeedback(true)}>
           <RobotIcon aria-hidden="true" />
           让智能体反馈
@@ -540,6 +544,7 @@ export function TaskBoard() {
           </>
         }
       >
+        <RefreshButton resource="tasks" />
         <Tabs
           value={scope}
           onValueChange={(value) =>
@@ -597,7 +602,7 @@ export function TaskBoard() {
           layout === "board" ? "overflow-hidden" : "overflow-y-auto",
         )}
       >
-        {error ? (
+        {error && !data ? (
           <div className="mx-auto max-w-md px-4 py-16">
             <LoadError
               what="任务"

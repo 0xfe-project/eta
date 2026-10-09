@@ -147,7 +147,7 @@ export function RoutineList({
           <PlusIcon aria-hidden="true" />
         </Button>
       </div>
-      {error ? (
+      {error && !data ? (
         <LoadError
           what="定时任务"
           error={error}
