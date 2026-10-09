@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useRoutine, useRoutines } from "@/queries/routines";
 import { PageHeader } from "./app-shell";
+import { RefreshButton } from "./refresh-button";
 import { RoutineForm } from "./routine-form";
 import { useRoutineNav } from "./routine-nav";
 import {
@@ -62,6 +63,7 @@ export function RoutineBoard() {
   return (
     <>
       <PageHeader title="定时">
+        <RefreshButton resource="routines" />
         <Button
           size="sm"
           onClick={() => void setNav({ edit: "new", routine: null, run: null })}
