@@ -38,7 +38,7 @@ func TestTargets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expect(t, names(chat), []string{"approval", "github", "grok", "memory", "tasks"})
+	expect(t, names(chat), []string{"approval", "github", "grok", "memory", "routines", "tasks"})
 	routine, err := List(repoPlugins, TargetRoutine)
 	if err != nil {
 		t.Fatal(err)
