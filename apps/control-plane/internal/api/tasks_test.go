@@ -132,10 +132,13 @@ func newFakeRelay() *fakeRelay {
 
 func (f *fakeRelay) Origin() string { return "https://relay.test" }
 
-func (f *fakeRelay) pair(label string) {
+func (f *fakeRelay) pair(label string) { f.pairAs(label, "code-"+label, "fp-"+label) }
+
+// pairAs is a device asking to pair under label, with its code and digest.
+func (f *fakeRelay) pairAs(label, code, digest string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.pairings = append(f.pairings, relay.Pairing{Code: "code-" + label, Digest: "fp-" + label, Label: label})
+	f.pairings = append(f.pairings, relay.Pairing{Code: code, Digest: digest, Label: label})
 }
 
 func (f *fakeRelay) State(context.Context) (*relay.State, error) {
@@ -413,15 +416,31 @@ func (e *taskEnv) computer(name string, kinds ...string) (string, string) {
 		expect(e.t, state().State, "waiting")
 		// Setup's connector pairs under the computer's label.
 		e.relay.pair(tasks.PairingLabel(enrolled.ComputerID, k))
-		if got := state(); got.State != "pairing" || *got.Fingerprint != "fp-"+tasks.PairingLabel(enrolled.ComputerID, k) {
+		fingerprint := "fp-" + tasks.PairingLabel(enrolled.ComputerID, k)
+		if got := state(); got.State != "pairing" || !slices.Equal(got.Fingerprints, []string{fingerprint}) {
 			e.t.Fatalf("runtime %+v", got)
 		}
-		if r := e.post("/computers/"+install.Computer.ID+"/runtimes/"+k+"/approve", nil); r.status != 204 {
+		if r := e.post("/computers/"+install.Computer.ID+"/runtimes/"+k+"/approve", map[string]any{"fingerprint": fingerprint}); r.status != 204 {
 			e.t.Fatalf("approve: %d %s", r.status, r.body)
 		}
 		expect(e.t, state().State, "online")
 	}
 	return enrolled.ComputerID, enrolled.Token
+}
+
+// enroll adds a computer and enrolls it with Paseo, unpaired; it is the
+// computer's id.
+func (e *taskEnv) enroll(name string) string {
+	e.t.Helper()
+	var install Install
+	e.post("/computers", map[string]any{"name": name}).json(e.t, &install)
+	code := install.Command[strings.LastIndex(install.Command, " ")+1:]
+	r := e.remote("", http.MethodPost, "/enroll", map[string]any{"code": code, "hostname": "laptop", "os": "linux",
+		"arch": "amd64", "runtimes": []map[string]any{{"kind": "paseo", "providers": []string{"claude"}}}})
+	if r.status != 200 {
+		e.t.Fatalf("enroll: %d %s", r.status, r.body)
+	}
+	return install.Computer.ID
 }
 
 func (e *taskEnv) task(ref string) tasks.TaskDetail {
@@ -795,6 +814,35 @@ func TestInterruptingARun(t *testing.T) {
 	if !slices.Contains(e.relay.calls, "paseo.agents.cancel") {
 		t.Fatalf("calls %v", e.relay.calls)
 	}
+}
+
+// Two devices ask to pair under one computer's label (setup run again, or
+// someone else using the label): both are shown, and only the one whose
+// fingerprint the user compared is approved.
+func TestApprovingAPairingTakesTheComparedFingerprint(t *testing.T) {
+	e := newTaskEnv(t)
+	computer := e.enroll("laptop")
+	label := tasks.PairingLabel(computer, "paseo")
+	e.relay.pairAs(label, "code-a", "fp-a")
+	e.relay.pairAs(label, "code-b", "fp-b")
+	var list tasks.Computers
+	e.get("/computers").json(t, &list)
+	runtime := list.Computers[0].Runtimes[0]
+	expect(t, runtime.State, "pairing")
+	expect(t, strings.Join(runtime.Fingerprints, ","), "fp-a,fp-b")
+
+	approve := func(body any) response {
+		return e.post("/computers/"+computer+"/runtimes/paseo/approve", body)
+	}
+	expect(t, approve(nil).status, 400)
+	expect(t, approve(map[string]any{"fingerprint": ""}).status, 422)
+	expectError(t, approve(map[string]any{"fingerprint": "fp-c"}), 409, "FINGERPRINT_MISMATCH")
+	expect(t, approve(map[string]any{"fingerprint": "fp-b"}).status, 204)
+	state, _ := e.relay.State(e.ctx)
+	if len(state.Pairings) != 1 || state.Pairings[0].Digest != "fp-a" {
+		t.Fatalf("approved the wrong pairing: %+v", state.Pairings)
+	}
+	expect(t, scalar[string](e.env, "SELECT device_id FROM computer_runtime"), "device-"+strings.TrimPrefix(label, "axp:"))
 }
 
 func TestReassigningStopsTheRemoteAgent(t *testing.T) {
