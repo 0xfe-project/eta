@@ -48,10 +48,13 @@ jobs:
           key: turbo-${{ runner.os }}-${{ github.sha }}
           restore-keys: turbo-${{ runner.os }}-
 
-      # The queue tests' NATS. PostgreSQL comes from scripts/dev-postgres.sh,
-      # which the tests that need it run themselves.
+      # The queue tests' NATS.
       - name: Start NATS
         run: docker run -d --name nats -p 127.0.0.1:14222:4222 nats:2.14-alpine --jetstream
+      # The tests that need PostgreSQL run scripts/dev-postgres.sh themselves,
+      # in parallel; on a fresh machine they would race to create it.
+      - name: Start PostgreSQL
+        run: bash scripts/dev-postgres.sh
 
       - run: bun install --frozen-lockfile
       - run: bun run check
