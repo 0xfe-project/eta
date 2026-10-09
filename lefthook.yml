@@ -8,6 +8,9 @@
 # 2. dprint formats the staged files and re-stages them.
 # 3. Turbo builds, typechecks, lints, tests and checks the repository for
 #    dead code (knip); unchanged packages come from the cache.
+assert_lefthook_installed: true
+rc: ./scripts/lefthook-rc.sh
+
 pre-commit:
   piped: true
   jobs:
