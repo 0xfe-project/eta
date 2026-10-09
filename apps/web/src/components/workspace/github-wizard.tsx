@@ -31,10 +31,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
+  authorizationCallbackPath,
+  useAuthorizeGitHub,
   useCreateGitHubApp,
   useDisconnectGitHub,
   useGitHubStatus,
   useRefreshGitHub,
+  useSetGitHubOAuthClient,
+  useUnauthorizeGitHub,
 } from "@/queries/forge";
 
 const steps = ["了解", "创建 App", "安装到仓库", "完成"] as const;
@@ -234,7 +238,7 @@ function Install({ status }: { status: GitHubStatus }) {
         {[
           "选择要安装到的账号或组织",
           "勾选智能体可以访问的仓库，或选择「All repositories」",
-          "点击「Install」，完成后自动回到这里",
+          "点击「Install」；GitHub 接着请你授权时确认，PR 就能以你的名义打开",
         ].map((text, index) => (
           <li key={text} className="flex gap-3 text-sm">
             <span
@@ -285,7 +289,8 @@ function Done({ status }: { status: GitHubStatus }) {
             >
               {app.slug}[bot]
             </a>{" "}
-            的身份推送分支和打开 PR。
+            的身份推送分支，{status.user ? "以你的名义" : "也以它的身份"}打开
+            PR。
           </p>
         </div>
       </div>
@@ -328,7 +333,133 @@ function Done({ status }: { status: GitHubStatus }) {
           <a href={app.install_url}>安装到其他账号或组织</a>
         </Button>
       </div>
+      <Authorization status={status} />
     </div>
+  );
+}
+
+/**
+ * The user authorizing the App to open pull requests on their behalf: the
+ * author is then the user, with the App's badge. An App created before AXP
+ * kept its client secret needs the secret first.
+ */
+function Authorization({ status }: { status: GitHubStatus }) {
+  const authorize = useAuthorizeGitHub();
+  const unauthorize = useUnauthorizeGitHub();
+  const onError = (error: Error) => toast.error(error.message);
+  if (status.user) {
+    return (
+      <section className="flex items-center gap-3 border px-3 py-2.5">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">PR 作者：{status.user.login}</p>
+          <p className="text-xs text-muted-foreground">
+            GitHub 显示为你本人，并带 App 的标识；授权失效时改以 App
+            的身份打开。
+          </p>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={unauthorize.isPending}
+          onClick={() => unauthorize.mutate(undefined, { onError })}
+        >
+          取消授权
+        </Button>
+      </section>
+    );
+  }
+  return (
+    <section className="space-y-3 border px-3 py-2.5">
+      <div>
+        <p className="text-sm font-medium">以你的名义打开 PR</p>
+        <p className="text-xs text-muted-foreground">
+          授权 App 代表你后，智能体打开的 PR 作者是你本人，并带 App 的标识。
+        </p>
+      </div>
+      {status.oauth ? null : (
+        <OAuthClientForm settingsURL={status.app!.settings_url} />
+      )}
+      <Button
+        size="sm"
+        disabled={!status.oauth || authorize.isPending}
+        onClick={() => authorize.mutate(undefined, { onError })}
+      >
+        <GithubLogoIcon aria-hidden="true" data-icon="inline-start" />
+        {authorize.isPending ? "正在打开 GitHub…" : "前往 GitHub 授权"}
+      </Button>
+    </section>
+  );
+}
+
+function OAuthClientForm({ settingsURL }: { settingsURL: string }) {
+  const save = useSetGitHubOAuthClient();
+  const [clientID, setClientID] = useState("");
+  const [secret, setSecret] = useState("");
+  const idId = useId();
+  const secretId = useId();
+  return (
+    <form
+      className="space-y-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        save.mutate(
+          { client_id: clientID.trim(), client_secret: secret.trim() },
+          { onError: (error) => toast.error(error.message) },
+        );
+      }}
+    >
+      <p className="text-xs text-muted-foreground">
+        这个 App 创建得早，AXP 没有保存它的 client secret。请在{" "}
+        <a
+          href={settingsURL}
+          target="_blank"
+          rel="noreferrer"
+          className="text-foreground underline underline-offset-2"
+        >
+          App 设置
+        </a>{" "}
+        里把 Callback URL 设为{" "}
+        <code className="break-all text-foreground">
+          {window.location.origin + authorizationCallbackPath}
+        </code>
+        ，生成一个新的 client secret，然后填在这里：
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="space-y-1">
+          <label htmlFor={idId} className="text-xs font-medium">
+            Client ID
+          </label>
+          <Input
+            id={idId}
+            value={clientID}
+            required
+            spellCheck={false}
+            onChange={(e) => setClientID(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1">
+          <label htmlFor={secretId} className="text-xs font-medium">
+            Client secret
+          </label>
+          <Input
+            id={secretId}
+            type="password"
+            value={secret}
+            required
+            autoComplete="off"
+            onChange={(e) => setSecret(e.target.value)}
+          />
+        </div>
+      </div>
+      <Button
+        type="submit"
+        variant="outline"
+        size="sm"
+        disabled={save.isPending}
+      >
+        保存
+      </Button>
+    </form>
   );
 }
 

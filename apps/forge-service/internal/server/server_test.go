@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/akarachen/axp/apps/forge-service/internal/github"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -30,7 +31,7 @@ type env struct {
 
 func newEnv(t *testing.T) *env {
 	gh := github.New(t.TempDir())
-	gh.APIURL = emulator.URL
+	gh.APIURL, gh.OAuthURL = emulator.URL, emulator.URL
 	srv := httptest.NewServer(New(gh, slog.New(slog.NewTextHandler(io.Discard, nil))))
 	t.Cleanup(srv.Close)
 	return &env{t: t, gh: gh, server: srv}
@@ -142,7 +143,8 @@ func TestManifestForAUserAndAnOrganization(t *testing.T) {
 		t.Fatal(err)
 	}
 	if manifest["redirect_url"] != origin+"/api/forge/v1/github/manifest/callback" ||
-		manifest["setup_url"] != origin+"/?view=capabilities" ||
+		fmt.Sprint(manifest["callback_urls"]) != "["+origin+github.CallbackPath+"]" ||
+		manifest["request_oauth_on_install"] != true || manifest["setup_url"] != nil ||
 		manifest["hook_attributes"].(map[string]any)["active"] != false {
 		t.Fatalf("manifest: %v", manifest)
 	}
@@ -181,9 +183,14 @@ func TestCreatedButNotInstalled(t *testing.T) {
 		app["settings_url"] != "https://github.com/settings/apps/axp-new" {
 		t.Fatalf("status: %v", status)
 	}
-	info, err := os.Stat(filepath.Join(e.gh.StateDir, "github.pem"))
-	if err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("key: %v %v", info, err)
+	for _, name := range []string{"github.pem", "github.secret"} {
+		info, err := os.Stat(filepath.Join(e.gh.StateDir, name))
+		if err != nil || info.Mode().Perm() != 0o600 {
+			t.Fatalf("%s: %v %v", name, info, err)
+		}
+	}
+	if status["oauth"] != true || status["user"] != nil {
+		t.Fatalf("authorization: %v", status)
 	}
 }
 
@@ -316,7 +323,8 @@ func TestOpenPullRequestAsTheAppsBot(t *testing.T) {
 	if err := json.Unmarshal([]byte(text(result)), &pull); err != nil || result.IsError {
 		t.Fatalf("result: %v", text(result))
 	}
-	if pull["created"] != true || !strings.HasSuffix(pull["url"].(string), "/akarachen/axp/pull/1") {
+	if pull["created"] != true || !strings.HasSuffix(pull["url"].(string), "/akarachen/axp/pull/1") ||
+		pull["author"] != "axp-test[bot]" {
 		t.Fatalf("pull: %v", pull)
 	}
 	// On GitHub, by the App's bot, into the default branch.
@@ -351,5 +359,213 @@ func TestOpenPullRequestAsTheAppsBot(t *testing.T) {
 	identity := credentials["identity"].(map[string]any)
 	if identity["name"] != "axp-test[bot]" || !strings.HasSuffix(identity["email"].(string), "+axp-test[bot]@users.noreply.github.com") {
 		t.Fatalf("identity: %v", identity)
+	}
+}
+
+// authorize runs the browser's side of the user authorizing the App, as
+// login, through GitHub's redirect; it returns where the browser ends up.
+func (e *env) authorize(login string) string {
+	e.t.Helper()
+	status, out, _ := e.do("POST", "/api/forge/v1/github/authorization", false, map[string]any{"origin": origin})
+	if status != 200 {
+		e.t.Fatalf("authorization: %d %v", status, out)
+	}
+	authorize, _ := url.Parse(out["url"].(string))
+	q := authorize.Query()
+	if q.Get("redirect_uri") != origin+github.CallbackPath || q.Get("code_challenge_method") != "S256" || q.Get("client_id") != "Iv1.axp-test" {
+		e.t.Fatalf("authorize url: %s", authorize)
+	}
+	return e.returnFromGitHub(url.Values{"login": {login}, "redirect_uri": {q.Get("redirect_uri")}, "state": {q.Get("state")}})
+}
+
+// returnFromGitHub has emulate's GitHub authorize and follows its redirect
+// back to the service.
+func (e *env) returnFromGitHub(form url.Values) string {
+	e.t.Helper()
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := client.PostForm(emulator.URL+"/login/oauth/callback", form)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	resp.Body.Close()
+	back, _ := url.Parse(resp.Header.Get("Location"))
+	_, _, header := e.do("GET", back.Path+"?"+back.RawQuery, false, nil)
+	return header.Get("Location")
+}
+
+func (e *env) user() map[string]any {
+	e.t.Helper()
+	data, err := os.ReadFile(filepath.Join(e.gh.StateDir, "user.json"))
+	if err != nil {
+		return nil
+	}
+	var user map[string]any
+	_ = json.Unmarshal(data, &user)
+	return user
+}
+
+func (e *env) pull(args map[string]any) map[string]any {
+	e.t.Helper()
+	result := e.openPullRequest(args)
+	var pull map[string]any
+	if err := json.Unmarshal([]byte(text(result)), &pull); err != nil || result.IsError {
+		e.t.Fatalf("result: %v", text(result))
+	}
+	return pull
+}
+
+func TestOpenPullRequestOnBehalfOfTheUser(t *testing.T) {
+	e := newEnv(t)
+	e.connect("installed-app")
+	if location := e.authorize("akarachen"); location != "/?view=capabilities&github=authorized" {
+		t.Fatalf("location: %s", location)
+	}
+	_, status, _ := e.do("GET", "/api/forge/v1/github", false, nil)
+	if status["user"].(map[string]any)["login"] != "akarachen" {
+		t.Fatalf("status: %v", status)
+	}
+	user := e.user()
+	info, _ := os.Stat(filepath.Join(e.gh.StateDir, "user.json"))
+	if user["refresh_token"] == "" || user["expires_at"] == nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("user.json: %v %v", user, info.Mode())
+	}
+
+	_, credentials := e.credentials()
+	emulator.push(t, token(credentials), "akarachen/axp", "by-user")
+	pull := e.pull(map[string]any{"repository": "akarachen/axp", "head": "by-user", "title": "As the user"})
+	if pull["author"] != "akarachen" || pull["created"] != true {
+		t.Fatalf("pull: %v", pull)
+	}
+	// Git and gh in runtimes stay the App's.
+	if !strings.HasPrefix(token(credentials), "ghs_") || credentials["user"] != nil {
+		t.Fatalf("credentials: %v", credentials)
+	}
+}
+
+func TestAnExpiredTokenIsRefreshedOnce(t *testing.T) {
+	e := newEnv(t)
+	e.connect("installed-app")
+	e.authorize("akarachen")
+	before := e.user()
+	later := time.Now().Add(8 * time.Hour)
+	e.gh.Now = func() time.Time { return later }
+
+	_, credentials := e.credentials()
+	emulator.push(t, token(credentials), "akarachen/axp", "after-refresh")
+	pull := e.pull(map[string]any{"repository": "akarachen/axp", "head": "after-refresh", "title": "Later"})
+	after := e.user()
+	if pull["author"] != "akarachen" || after["access_token"] == before["access_token"] || after["refresh_token"] == before["refresh_token"] {
+		t.Fatalf("pull %v, user %v → %v", pull, before, after)
+	}
+}
+
+func TestARevokedAuthorizationFallsBackToTheBot(t *testing.T) {
+	e := newEnv(t)
+	e.connect("installed-app")
+	e.authorize("akarachen")
+	emulator.revoke(e.user()["access_token"].(string))
+
+	_, credentials := e.credentials()
+	emulator.push(t, token(credentials), "akarachen/axp", "after-revoke")
+	pull := e.pull(map[string]any{"repository": "akarachen/axp", "head": "after-revoke", "title": "Revoked"})
+	if pull["author"] != "axp-test[bot]" {
+		t.Fatalf("pull: %v", pull)
+	}
+	if _, status, _ := e.do("GET", "/api/forge/v1/github", false, nil); status["user"] != nil || e.user() != nil {
+		t.Fatalf("still authorized: %v", status)
+	}
+}
+
+func TestAuthorizingWhileInstalling(t *testing.T) {
+	e := newEnv(t)
+	e.connect("installed-app")
+	// GitHub sends no state after an installation, only setup_action.
+	location := e.returnFromGitHub(url.Values{"login": {"akarachen"}, "redirect_uri": {origin + github.CallbackPath + "?installation_id=100&setup_action=install"}})
+	if location != "/?view=capabilities&github=authorized" || e.user()["login"] != "akarachen" {
+		t.Fatalf("location %s, user %v", location, e.user())
+	}
+}
+
+func TestAnAuthorizationNeedsItsStateAndTheApp(t *testing.T) {
+	e := newEnv(t)
+	e.connect("installed-app")
+	// Neither AXP's state nor an installation.
+	location := e.returnFromGitHub(url.Values{"login": {"akarachen"}, "redirect_uri": {origin + github.CallbackPath}})
+	if !strings.Contains(location, "github_error=") || e.user() != nil {
+		t.Fatalf("stateless: %s", location)
+	}
+	// Someone who reaches no installation of the App.
+	if location := e.authorize("stranger"); !strings.Contains(location, "github_error=") || e.user() != nil {
+		t.Fatalf("stranger: %s", location)
+	}
+	// Declined on GitHub.
+	_, _, header := e.do("GET", github.CallbackPath+"?error=access_denied&error_description=denied&state=x", false, nil)
+	if !strings.Contains(header.Get("Location"), "github_error=") {
+		t.Fatalf("declined: %s", header.Get("Location"))
+	}
+}
+
+func TestAnAppWithoutItsClientSecret(t *testing.T) {
+	e := newEnv(t)
+	e.connect("installed-app")
+	// An App connected before AXP kept the secret.
+	_ = os.Remove(filepath.Join(e.gh.StateDir, "github.secret"))
+	if status, out, _ := e.do("POST", "/api/forge/v1/github/authorization", false, map[string]any{"origin": origin}); status != 409 || errorCode(out) != "OAUTH_NOT_CONFIGURED" {
+		t.Fatalf("authorize: %d %v", status, out)
+	}
+	if status, out, _ := e.do("POST", "/api/forge/v1/github/oauth-client", false, map[string]any{"client_id": "Iv1.axp-test", "client_secret": ""}); status != 400 {
+		t.Fatalf("empty secret: %d %v", status, out)
+	}
+	if status, _, _ := e.do("POST", "/api/forge/v1/github/oauth-client", false, map[string]any{"client_id": "Iv1.axp-test", "client_secret": "secret-axp-test"}); status != 204 {
+		t.Fatalf("oauth client: %d", status)
+	}
+	if location := e.authorize("akarachen"); location != "/?view=capabilities&github=authorized" {
+		t.Fatalf("location: %s", location)
+	}
+}
+
+func TestUnauthorizingRevokesOnGitHub(t *testing.T) {
+	e := newEnv(t)
+	e.connect("installed-app")
+	e.authorize("akarachen")
+	access := e.user()["access_token"].(string)
+	if status, _, _ := e.do("DELETE", "/api/forge/v1/github/authorization", false, nil); status != 204 || e.user() != nil {
+		t.Fatalf("delete: %d", status)
+	}
+	emulator.mu.Lock()
+	revoked := emulator.revoked[access]
+	emulator.mu.Unlock()
+	if !revoked {
+		t.Fatal("not revoked on GitHub")
+	}
+	// Disconnecting forgets an authorization too.
+	e.authorize("akarachen")
+	e.do("DELETE", "/api/forge/v1/github", false, nil)
+	if e.user() != nil {
+		t.Fatal("user.json kept")
+	}
+}
+
+func TestTheUsersTokenIsForRemoteComputersOnly(t *testing.T) {
+	e := newEnv(t)
+	e.connect("installed-app")
+	e.authorize("akarachen")
+	if status, out := e.credentials(); status != 200 || out["user"] != nil {
+		t.Fatalf("agent: %d %v", status, out)
+	}
+	if status, out, _ := e.do("GET", "/forge/credentials?as=user", true, nil); status != 403 {
+		t.Fatalf("agent as user: %d %v", status, out)
+	}
+	req, _ := http.NewRequest("GET", e.server.URL+"/forge/credentials?as=user", nil)
+	req.Header.Set(agentHeader, "computer-1")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	if out["user"] != "akarachen" || out["token"] != e.user()["access_token"] {
+		t.Fatalf("computer: %v", out)
 	}
 }

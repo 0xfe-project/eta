@@ -53,11 +53,14 @@ type RemoteTaskPath struct {
 	TaskID string `path:"task_id"`
 }
 
-// GitCredentials are the GitHub App's installation token, for git and gh.
+// GitCredentials are the GitHub App's installation token, for git and gh,
+// or, asked for as the user, the token of the user who authorized the App
+// (User names them).
 type GitCredentials struct {
 	Token     string         `json:"token"`
 	ExpiresAt int64          `json:"expires_at"`
 	Identity  map[string]any `json:"identity,omitempty"`
+	User      string         `json:"user,omitempty"`
 }
 
 func remoteOp(id, method, path, summary string, status int) huma.Operation {
@@ -181,12 +184,15 @@ func remote(public *httpapi.API, d *Deps) {
 
 	huma.Register(api, remoteOp("gitCredentials", http.MethodGet, "/remote/v1/git/credentials",
 		"The GitHub App's token for git and gh", 200),
-		func(ctx context.Context, in *RemoteBearer) (*httpapi.Body[GitCredentials], error) {
+		func(ctx context.Context, in *struct {
+			RemoteBearer
+			As string `query:"as" enum:"user" doc:"user: the token of the user who authorized the App, when there is one"`
+		}) (*httpapi.Body[GitCredentials], error) {
 			c, err := in.computer(ctx, d)
 			if err != nil {
 				return nil, err
 			}
-			creds, err := forgeCredentials(ctx, d.ForgeURL, "computer-"+c.ID)
+			creds, err := forgeCredentials(ctx, d.ForgeURL, "computer-"+c.ID, in.As == "user")
 			if err != nil {
 				return nil, err
 			}
@@ -212,13 +218,17 @@ var downloadable = regexp.MustCompile(`^(axp-(linux|darwin)-(amd64|arm64)|agenvo
 
 // forgeCredentials asks the forge service for the GitHub App's token, as
 // the runtime gateway would for an agent.
-func forgeCredentials(ctx context.Context, forgeURL, caller string) (*GitCredentials, error) {
+func forgeCredentials(ctx context.Context, forgeURL, caller string, asUser bool) (*GitCredentials, error) {
 	if forgeURL == "" {
 		return nil, apierr.New(503, "FORGE_UNAVAILABLE", "代码托管服务不可用。")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(forgeURL, "/")+"/forge/credentials", nil)
+	target := strings.TrimRight(forgeURL, "/") + "/forge/credentials"
+	if asUser {
+		target += "?as=user"
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return nil, err
 	}

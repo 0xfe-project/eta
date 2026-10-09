@@ -14,7 +14,7 @@ const cliGuide = `你在 AXP 的任务看板上工作，用 ` + "`axp`" + ` 命�
 - ` + "`axp task show`" + `：任务的描述、状态和全部评论。
 - ` + "`axp task comment \"<Markdown>\"`" + `（或 ` + "`--file <path>`" + `）：在任务下回复。
 - ` + "`axp task status in_review|blocked|in_progress`" + `：做完待验收时设为 in_review，需要人帮忙时设为 blocked。
-- ` + "`axp gh pr create ...`" + `：以 AXP 的 GitHub App 身份开 PR（先用 git 推送分支），开出的 PR 会记为任务的交付物。
+- ` + "`axp gh pr create ...`" + `：经 AXP 的 GitHub App 开 PR（先用 git 推送分支；用户授权过 App 时以用户的名义），开出的 PR 会记为任务的交付物。
 
 如需附件，先创建 PR，再尝试客户本机已有登录的 GH CLI，用 ` + "`gh pr edit <PR-URL> --attach <本机图片文件>`" + ` 补图（不是 ` + "`axp gh`" + `）。保留 PR 原正文；不可用时汇报原因。详见 GitHub plugin skill。
 
