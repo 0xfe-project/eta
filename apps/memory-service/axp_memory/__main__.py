@@ -17,7 +17,10 @@ DEFAULT_DATABASE_URL = "postgres://axp:axp@127.0.0.1:15432/axp"
 
 
 def main() -> None:
-    axp_telemetry.setup("memory-service")
+    # Health checks and the web's polling are most requests and say nothing.
+    axp_telemetry.setup(
+        "memory-service", quiet=("/up", "/api/memory/v1/agents/*/memories")
+    )
     host, _, port = os.environ.get("AXP_MEMORY_ADDR", "0.0.0.0:8320").rpartition(":")
     provider = Mem0Provider(
         database_url=os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL),

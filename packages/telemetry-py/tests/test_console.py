@@ -85,16 +85,20 @@ def test_successful_reads_are_not_logged(monkeypatch, capsys):
 
     monkeypatch.setattr(axp_telemetry, "_provider", None)
     monkeypatch.setattr(axp_telemetry, "_handler", None)
-    axp_telemetry.setup("t")
+    axp_telemetry.setup("t", quiet=("/up", "/agents/*/memories"))
     access = logging.getLogger("uvicorn.access")
     line = '%s - "%s %s HTTP/%s" %d'
     access.info(line, "10.0.0.1:1", "GET", "/up", "1.1", 204)
+    access.info(line, "10.0.0.1:1", "GET", "/agents/a1/memories?q=x", "1.1", 200)
+    access.info(line, "10.0.0.1:1", "GET", "/agents/a1", "1.1", 200)
     access.info(line, "10.0.0.1:1", "GET", "/missing", "1.1", 404)
     access.info(line, "10.0.0.1:1", "POST", "/memory/capture", "1.1", 202)
     axp_telemetry.shutdown()
 
     err = capsys.readouterr().err
-    assert "/up" not in err
+    assert "GET /up" not in err
+    assert "GET /agents/a1/memories" not in err
+    assert 'GET /agents/a1 HTTP/1.1" 200' in err
     assert 'GET /missing HTTP/1.1" 404' in err
     assert "POST /memory/capture" in err
 

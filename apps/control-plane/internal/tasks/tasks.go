@@ -794,8 +794,8 @@ func (s *Service) Log(ctx context.Context, db pg.DB, ref, runID, older string) (
 		return nil, apierr.Invalid()
 	case errors.Is(err, errStaleCursor):
 		return nil, apierr.New(409, "LOG_RESET", "远程智能体的记录重建过，请从最新的记录重新读取。")
-	case tooLarge(err) || errors.Is(err, errTooManyReads):
-		return nil, apierr.Upstream("REMOTE_LOG_TOO_LARGE", "远程智能体最新的记录太大，超过了中继单次 64 KiB 的上限，读不出来。")
+	case tooLarge(err):
+		return nil, apierr.Upstream("REMOTE_LOG_TOO_LARGE", "这里有一条记录太大，超过了中继单次 64 KiB 的上限，读不出来。")
 	case err != nil:
 		return nil, apierr.Upstream("REMOTE_UNAVAILABLE", "读取远程智能体的记录失败："+err.Error())
 	}

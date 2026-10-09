@@ -74,9 +74,9 @@ web、api、llm、memory、forge、routines 不经过 kamal-proxy，重新部署
 
 记什么由服务自己决定，规则是：记下排查时需要的，不记重复的。
 
-- 成功的 GET 访问（健康检查、前端轮询）不记；写操作和失败的请求照记（llm-gateway 的访问行、memory-service 的 uvicorn 访问日志）。
+- 健康检查和前端轮询路由的成功 GET 不记，路由由各服务自己列出（llm-gateway 的 `RedirectStdout`、memory-service 的 `setup(quiet=…)`）；其他请求照记，4xx 记 WARN，5xx 记 ERROR。
 - 业务错误中，调用方自己的错（4xx）不记；上游或服务端的失败（424、5xx）记一条 WARN，带 `request_id`、`code`、方法和路径（`packages/service-go/httpapi`）。`request_id` 就是 gateway 访问日志里的 `uuid`。
-- 循环里每轮都会重复的失败（远程电脑离线、数据库断开）只在错误变化时记一次，恢复后重新计算（`telemetry.Repeats`）。
+- 循环里每轮都会重复的失败（远程电脑离线、数据库断开）在错误变化时记一次；同一个错误持续时，每 10 分钟再记一次，这样最近的时间窗里也能看到；恢复后重新计算（`telemetry.Repeats`）。
 - 每条记录带 `service.version`，值为部署的 git commit（Kamal 的 `KAMAL_VERSION`）。
 
 ## 端口与访问

@@ -780,8 +780,7 @@ function RunLog({ task, run }: { task: string; run: TaskRun }) {
 }
 
 function RunLogEntries({ entries }: { entries: LogEntry[] }) {
-  // Entries can be alike (those skipped as too large have no time): number
-  // the repeats.
+  // Entries can be alike (same time, kind and start): number the repeats.
   const seen = new Map<string, number>();
   const key = (entry: LogEntry) => {
     const base = `${entry.at}-${entry.kind}-${entry.text.slice(0, 32)}`;

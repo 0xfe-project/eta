@@ -569,17 +569,19 @@ func (e *taskEnv) runLog(t *testing.T) string {
 func TestALongTranscriptIsReadInPagesSmallEnoughForTheRelay(t *testing.T) {
 	e := newTaskEnv(t)
 	path := e.runLog(t)
-	// 120 commands of 3 KB each: 50 entries are about 150 KB, far over 64 KiB.
+	// 120 commands of 5 KB each: 20 entries are about 100 KB, over 64 KiB.
 	for i := range 120 {
-		e.relay.history = append(e.relay.history, toolCall(fmt.Sprint(i+1), 3000))
+		e.relay.history = append(e.relay.history, toolCall(fmt.Sprint(i+1), 5000))
 	}
 
 	var commands []string
-	var pages []RunLog
+	var latest RunLog
 	for before := ""; ; {
 		var page RunLog
 		e.get(path, "before", before).json(t, &page)
-		pages = append(pages, page)
+		if before == "" {
+			latest = page
+		}
 		var these []string
 		for _, entry := range page.Entries {
 			these = append(these, entry.Command)
@@ -590,23 +592,20 @@ func TestALongTranscriptIsReadInPagesSmallEnoughForTheRelay(t *testing.T) {
 		}
 		before = page.Older
 	}
-	// Latest page first, each oldest first; together every command once, in order.
-	expect(t, len(pages), 3)
-	expect(t, len(pages[0].Entries), 50)
-	expect(t, pages[0].Entries[49].Command, "120")
+	// The latest page is oldest first and ends with the last command;
+	// together the pages hold every command once, in order.
+	expect(t, latest.Entries[len(latest.Entries)-1].Command, "120")
+	expect(t, len(commands), 120)
 	for i, command := range commands {
 		expect(t, command, fmt.Sprint(i+1))
 	}
-	expect(t, len(commands), 120)
-	// Reads shrank to fit and stayed small.
-	if slices.Max(e.relay.historyReads) > 25 || !slices.Contains(e.relay.historyReads, 12) {
-		t.Fatalf("reads %v", e.relay.historyReads)
-	}
+	// Each page took the largest read that fit, halving from 20.
+	expect(t, fmt.Sprint(e.relay.historyReads[:2]), "[20 10]")
 	// A read that fails is only that: the run goes on.
 	expect(t, e.task("1").Runs[0].Status, "running")
 }
 
-func TestAnEntryTooLargeForTheRelayIsSkippedAndSaidSo(t *testing.T) {
+func TestAnEntryTooLargeForTheRelayIsAnErrorAndTheNewerOnesStillRead(t *testing.T) {
 	e := newTaskEnv(t)
 	path := e.runLog(t)
 	for i := range 6 {
@@ -616,23 +615,33 @@ func TestAnEntryTooLargeForTheRelayIsSkippedAndSaidSo(t *testing.T) {
 		}
 		e.relay.history = append(e.relay.history, toolCall(fmt.Sprint(i+1), size))
 	}
-	var page RunLog
-	e.get(path).json(t, &page)
-	var got []string
-	for _, entry := range page.Entries {
-		got = append(got, entry.Kind+":"+entry.Command)
+	var commands []string
+	before := ""
+	for {
+		r := e.get(path, "before", before)
+		if r.status != 200 {
+			if status, code := r.error(); status != 424 || code != "REMOTE_LOG_TOO_LARGE" {
+				t.Fatalf("%d %s", status, code)
+			}
+			break
+		}
+		var page RunLog
+		r.json(t, &page)
+		for _, entry := range page.Entries {
+			commands = append(commands, entry.Command)
+		}
+		if page.Older == "" {
+			t.Fatal("read past the large entry")
+		}
+		before = page.Older
 	}
-	expect(t, strings.Join(got, " "), "tool:1 tool:2 other: tool:4 tool:5 tool:6")
-	expect(t, page.Older, "")
-
-	// The latest entry too large: nothing to step back from.
-	e.relay.history = append(e.relay.history, toolCall("7", 70*1024))
-	if status, code := e.get(path).error(); status != 424 || code != "REMOTE_LOG_TOO_LARGE" {
-		t.Fatalf("%d %s", status, code)
-	}
+	// Everything after the large entry was read.
+	slices.Sort(commands)
+	expect(t, strings.Join(commands, " "), "4 5 6")
+	expect(t, e.task("1").Runs[0].Status, "running")
 }
 
-func TestOlderEntriesOfARebuiltTimelineAreReadFromTheLatestAgain(t *testing.T) {
+func TestAnOlderPageOfARebuiltTimelineIsRefused(t *testing.T) {
 	e := newTaskEnv(t)
 	path := e.runLog(t)
 	for i := range 60 {
