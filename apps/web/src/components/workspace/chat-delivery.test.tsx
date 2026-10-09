@@ -150,6 +150,10 @@ async function settle(ms = 10) {
     await new Promise((resolve) => setTimeout(resolve, ms));
   });
 }
+// Until the page shows what the test waits for, however slow the machine.
+async function until(shown: () => boolean) {
+  for (let i = 0; i < 200 && !shown(); i++) await settle();
+}
 const textarea = (c: HTMLElement) => c.querySelector("textarea")!;
 async function type(c: HTMLElement, value: string) {
   await act(async () => {
@@ -289,6 +293,7 @@ describe("waiting replies", () => {
     const b = message("user", { text: "B" });
     const rb = message("assistant", { reply_to_id: b.id });
     const c = await render([a, ra, b, rb], "starting");
+    await until(() => log(c).includes("前面还有"));
     const moving = [...c.querySelectorAll('[role="status"]')].map(
       (s) => s.textContent,
     );
@@ -315,6 +320,7 @@ describe("waiting replies", () => {
       failure,
     });
     const c = await render([a, ra, b, rb]);
+    await until(() => log(c).includes("原因同下"));
     expect(count(log(c), failure.message)).toBe(1);
     expect(log(c)).toContain("此消息未执行，原因同下。");
     expect(
