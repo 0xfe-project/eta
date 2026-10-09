@@ -38,6 +38,7 @@ import {
 import { useConnectors, useModels } from "@/queries/llm";
 import { AgentAvatar } from "./agent-identity";
 import { Select, SelectGroup, SelectOption } from "./select-field";
+import { UsageLine } from "./usage-line";
 import { useAgents } from "./use-agents";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -373,6 +374,7 @@ function AgentEditorForm({
             </p>
           </div>
         ) : null}
+        {agent ? <UsageLine principal={agent.id} /> : null}
         <div className="space-y-1.5">
           <div className="flex items-baseline justify-between gap-2">
             <Label htmlFor="agent-description">指令</Label>

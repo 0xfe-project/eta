@@ -4,13 +4,16 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
+	"github.com/akarachen/axp/apps/llm-gateway/internal/usage"
 	"github.com/gin-gonic/gin"
 )
 
 // Mount registers the public API under /api/llm. The gateway forwards it to
-// the browser; the control plane calls it directly.
-func Mount(e *gin.Engine, s *Service, logger *slog.Logger) {
+// the browser; the control plane calls it directly. book is who used the
+// models.
+func Mount(e *gin.Engine, s *Service, book *usage.Book, logger *slog.Logger) {
 	e.GET("/api/llm/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "service": "llm-gateway"})
 	})
@@ -22,6 +25,9 @@ func Mount(e *gin.Engine, s *Service, logger *slog.Logger) {
 	v1.PATCH("/connections/:id", h.patchConnection)
 	v1.DELETE("/connections/:id", h.deleteConnection)
 	v1.GET("/usage", func(c *gin.Context) { c.JSON(http.StatusOK, nonNil(s.Usage(c.Request.Context()))) })
+	// Tokens by chat agent and routine (and by model and account), over the
+	// last 5 hours, day and week.
+	v1.GET("/usage/agents", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"usage": book.Report(time.Now())}) })
 	v1.GET("/models", func(c *gin.Context) { c.JSON(http.StatusOK, s.Models()) })
 	v1.POST("/logins", h.startLogin)
 	v1.GET("/logins/:id", h.pollLogin)
