@@ -28,8 +28,9 @@ type Pull struct {
 	Deletions int    `json:"deletions"`
 	// HeadSHA is the commit the user sees; merging names it.
 	HeadSHA string `json:"head_sha"`
-	// Merge tells whether it can be merged now: ready, pending while GitHub
-	// still computes it, or blocked, with Reason. Empty unless open.
+	// Merge tells whether it can be merged now as far as AXP can tell:
+	// ready, pending while GitHub still computes it, or blocked, with
+	// Reason; GitHub's answer to the merge is what counts. Empty unless open.
 	Merge  string `json:"merge,omitempty"`
 	Reason string `json:"reason,omitempty"`
 }
@@ -78,35 +79,44 @@ func (g *GitHub) PullRequest(ctx context.Context, pullURL string) (*Pull, error)
 	if err != nil {
 		return nil, err
 	}
-	_, pull, repo, err := g.readAs(ctx, owner, name, number)
+	r, err := g.readAs(ctx, owner, name, number)
 	if err != nil {
 		return nil, err
 	}
-	return view(pull, repo), nil
+	return r.view(r.pull), nil
+}
+
+// read is a pull request and its repository as read by client, as the
+// user who authorized the App or else as the App, for what comes next.
+type read struct {
+	client *gh.Client
+	asUser bool
+	pull   *gh.PullRequest
+	repo   *gh.Repository
 }
 
 // readAs reads the pull request and its repository with pullClient's
-// client, which it returns for what comes next.
-func (g *GitHub) readAs(ctx context.Context, owner, name string, number int) (*gh.Client, *gh.PullRequest, *gh.Repository, error) {
+// client; after GitHub refused the user's token it is the App's.
+func (g *GitHub) readAs(ctx context.Context, owner, name string, number int) (*read, error) {
 	if _, err := g.require(); err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 	client, asUser, err := g.pullClient(ctx, owner, false)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 	pull, repo, err := readPull(ctx, client, owner, name, number)
 	if asUser && statusOf(err) == http.StatusUnauthorized {
 		g.dropUser()
-		if client, _, err = g.pullClient(ctx, owner, true); err != nil {
-			return nil, nil, nil, err
+		if client, asUser, err = g.pullClient(ctx, owner, true); err != nil {
+			return nil, err
 		}
 		pull, repo, err = readPull(ctx, client, owner, name, number)
 	}
 	if err != nil {
-		return nil, nil, nil, readError(err)
+		return nil, readError(err)
 	}
-	return client, pull, repo, nil
+	return &read{client: client, asUser: asUser, pull: pull, repo: repo}, nil
 }
 
 func readPull(ctx context.Context, client *gh.Client, owner, name string, number int) (*gh.PullRequest, *gh.Repository, error) {
@@ -127,7 +137,8 @@ func readError(err error) error {
 	return fromGitHub(err)
 }
 
-func view(pull *gh.PullRequest, repo *gh.Repository) *Pull {
+// view is pull as the task's detail shows it, judged with what r read.
+func (r *read) view(pull *gh.PullRequest) *Pull {
 	p := &Pull{
 		URL: pull.GetHTMLURL(), Title: pull.GetTitle(), State: pull.GetState(),
 		Additions: pull.GetAdditions(), Deletions: pull.GetDeletions(), HeadSHA: pull.GetHead().GetSHA(),
@@ -144,16 +155,19 @@ func view(pull *gh.PullRequest, repo *gh.Repository) *Pull {
 		p.Merge, p.Reason = "blocked", "草稿 PR 不能合并，请先在 GitHub 上标为可审阅。"
 		return p
 	}
-	p.Merge, p.Reason = mergeability(pull, repo)
+	p.Merge, p.Reason = mergeability(pull, r.repo, r.asUser)
 	return p
 }
 
 // mergeability is whether GitHub would merge pull now, as far as its
 // mergeable_state tells; GitHub computes it in the background, so it may
-// not be known yet.
-func mergeability(pull *gh.PullRequest, repo *gh.Repository) (string, string) {
-	if perms := repo.GetPermissions(); perms != nil && perms.Push != nil && !perms.GetPush() && !perms.GetMaintain() && !perms.GetAdmin() {
-		return "blocked", "没有这个仓库的写权限，不能合并。"
+// not be known yet. The repository's permissions are the user's: read with
+// the App's installation token they are all false, whatever the App was
+// granted, so only the user's are looked at; for the App, GitHub decides
+// when merging.
+func mergeability(pull *gh.PullRequest, repo *gh.Repository, asUser bool) (string, string) {
+	if perms := repo.GetPermissions(); asUser && perms != nil && perms.Push != nil && !perms.GetPush() && !perms.GetMaintain() && !perms.GetAdmin() {
+		return "blocked", "你的 GitHub 账号没有这个仓库的写权限，不能合并。"
 	}
 	if mergeMethod(repo) == "" && repo.AllowMergeCommit != nil {
 		return "blocked", "仓库没有允许任何合并方式。"
@@ -202,11 +216,12 @@ func (g *GitHub) MergePullRequest(ctx context.Context, pullURL, headSHA string) 
 	}
 	// The user leaving does not cut a merge short.
 	ctx = context.WithoutCancel(ctx)
-	client, pull, repo, err := g.readAs(ctx, owner, name, number)
+	r, err := g.readAs(ctx, owner, name, number)
 	if err != nil {
 		return nil, err
 	}
-	now := view(pull, repo)
+	client, repo := r.client, r.repo
+	now := r.view(r.pull)
 	switch {
 	case now.State == "merged":
 		return nil, newError("ALREADY_MERGED", http.StatusConflict, "这个 PR 已经合并了。")
@@ -222,7 +237,7 @@ func (g *GitHub) MergePullRequest(ctx context.Context, pullURL, headSHA string) 
 		SHA: headSHA, MergeMethod: mergeMethod(repo),
 	})
 	if err == nil {
-		return g.mergedPull(ctx, client, owner, name, number, now)
+		return g.mergedPull(ctx, r, owner, name, number, now)
 	}
 	status := statusOf(err)
 	switch {
@@ -238,7 +253,7 @@ func (g *GitHub) MergePullRequest(ctx context.Context, pullURL, headSHA string) 
 	// No answer, or GitHub failed: it may have merged all the same.
 	check, _, readErr := client.PullRequests.Get(ctx, owner, name, number)
 	if readErr == nil && check.GetMerged() && check.GetHead().GetSHA() == headSHA {
-		return view(check, repo), nil
+		return r.view(check), nil
 	}
 	return nil, newError("MERGE_UNKNOWN", http.StatusFailedDependency,
 		"没有得到 GitHub 的合并结果，GitHub 上暂时也没显示已合并。请刷新确认后再决定是否重试。")
@@ -246,9 +261,9 @@ func (g *GitHub) MergePullRequest(ctx context.Context, pullURL, headSHA string) 
 
 // mergedPull is the pull request after GitHub merged it; reading it again
 // failing is no reason to report the merge as failed.
-func (g *GitHub) mergedPull(ctx context.Context, client *gh.Client, owner, name string, number int, before *Pull) (*Pull, error) {
-	if pull, _, err := client.PullRequests.Get(ctx, owner, name, number); err == nil && pull.GetMerged() {
-		return view(pull, nil), nil
+func (g *GitHub) mergedPull(ctx context.Context, r *read, owner, name string, number int, before *Pull) (*Pull, error) {
+	if pull, _, err := r.client.PullRequests.Get(ctx, owner, name, number); err == nil && pull.GetMerged() {
+		return r.view(pull), nil
 	}
 	merged := *before
 	merged.State, merged.Merge, merged.Reason = "merged", "", ""

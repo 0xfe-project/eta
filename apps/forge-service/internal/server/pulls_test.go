@@ -2,6 +2,8 @@ package server
 
 import (
 	"net/url"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -68,6 +70,7 @@ func TestAPullRequestsStateAndMerge(t *testing.T) {
 func TestGitHubRefusingAStaleHead(t *testing.T) {
 	e := newEnv(t)
 	e.connect("installed-app")
+	emulator.setRepoPermissions(t, "akarachen/notes", nil)
 	pullURL, number := e.openPull("pushed-again", false)
 	_, pull := e.pullState(pullURL)
 	emulator.failMerge("akarachen/notes", number, faultStale)
@@ -141,5 +144,90 @@ func TestPullRequestsThatCannotBeRead(t *testing.T) {
 	}
 	if status, out := e.merge("https://github.com/akarachen/notes/pull/999", "abc"); status != 424 {
 		t.Fatalf("merge missing: %d %v", status, out)
+	}
+}
+
+// The repository's permissions as GitHub reports them for the user.
+var (
+	canWrite = map[string]bool{"push": true, "triage": true, "pull": true}
+	canRead  = map[string]bool{"pull": true}
+)
+
+// GitHub reports no permissions at all for the App's installation token,
+// whatever the App was granted: the App still merges.
+func TestTheAppMergesThoughGitHubReportsNoPermissions(t *testing.T) {
+	e := newEnv(t)
+	e.connect("installed-app")
+	emulator.setRepoPermissions(t, "akarachen/notes", canRead)
+	pullURL, number := e.openPull("as-the-app", false)
+
+	_, pull := e.pullState(pullURL)
+	if pull["merge"] != "ready" {
+		t.Fatalf("pull: %v", pull)
+	}
+	if status, out := e.merge(pullURL, "0000000000000000000000000000000000000000"); status != 409 || errorCode(out) != "STALE_HEAD" {
+		t.Fatalf("stale: %d %v", status, out)
+	}
+	status, out := e.merge(pullURL, pull["head_sha"].(string))
+	if status != 200 || out["state"] != "merged" || !slices.Equal(emulator.mergers("akarachen/notes", number), []string{"app"}) {
+		t.Fatalf("merge: %d %v by %v", status, out, emulator.mergers("akarachen/notes", number))
+	}
+}
+
+func TestAUserWithoutWriteAccessCannotMerge(t *testing.T) {
+	e := newEnv(t)
+	e.connect("installed-app")
+	e.authorize("akarachen")
+	emulator.setRepoPermissions(t, "akarachen/notes", canRead)
+	pullURL, number := e.openPull("read-only-user", false)
+
+	_, pull := e.pullState(pullURL)
+	if pull["merge"] != "blocked" || !strings.Contains(pull["reason"].(string), "写权限") {
+		t.Fatalf("pull: %v", pull)
+	}
+	status, out := e.merge(pullURL, pull["head_sha"].(string))
+	if status != 409 || errorCode(out) != "NOT_MERGEABLE" || emulator.mergers("akarachen/notes", number) != nil {
+		t.Fatalf("merge: %d %v by %v", status, out, emulator.mergers("akarachen/notes", number))
+	}
+}
+
+// After GitHub refused the user's token, the App reads, judges and merges.
+func TestARevokedAuthorizationMergesAsTheApp(t *testing.T) {
+	e := newEnv(t)
+	e.connect("installed-app")
+	e.authorize("akarachen")
+	emulator.setRepoPermissions(t, "akarachen/notes", canRead)
+	pullURL, number := e.openPull("revoked-then-merged", false)
+	emulator.revoke(e.user()["access_token"].(string))
+
+	_, pull := e.pullState(pullURL)
+	if pull["merge"] != "ready" || e.user() != nil {
+		t.Fatalf("pull: %v, user %v", pull, e.user())
+	}
+	status, out := e.merge(pullURL, pull["head_sha"].(string))
+	if status != 200 || out["state"] != "merged" || !slices.Equal(emulator.mergers("akarachen/notes", number), []string{"app"}) {
+		t.Fatalf("merge: %d %v by %v", status, out, emulator.mergers("akarachen/notes", number))
+	}
+}
+
+// GitHub refusing the user's merge is the answer: the App does not merge
+// instead.
+func TestGitHubRefusingTheUsersMerge(t *testing.T) {
+	e := newEnv(t)
+	e.connect("installed-app")
+	e.authorize("akarachen")
+	emulator.setRepoPermissions(t, "akarachen/notes", canWrite)
+	pullURL, number := e.openPull("user-refused", false)
+	_, pull := e.pullState(pullURL)
+	if pull["merge"] != "ready" {
+		t.Fatalf("pull: %v", pull)
+	}
+	emulator.failMerge("akarachen/notes", number, faultForbidden)
+	status, out := e.merge(pullURL, pull["head_sha"].(string))
+	if status != 403 || errorCode(out) != "MERGE_FORBIDDEN" || !slices.Equal(emulator.mergers("akarachen/notes", number), []string{"user"}) {
+		t.Fatalf("merge: %d %v by %v", status, out, emulator.mergers("akarachen/notes", number))
+	}
+	if _, pull = e.pullState(pullURL); pull["state"] != "open" || e.user() == nil {
+		t.Fatalf("pull: %v, user %v", pull, e.user())
 	}
 }

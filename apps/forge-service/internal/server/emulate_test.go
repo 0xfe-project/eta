@@ -16,7 +16,10 @@ package server
 //     GET /user/installations from the seed, and revokes on
 //     DELETE /applications/{client_id}/grant (the token then gets 401);
 //   - a merge can be made to fail the way GitHub and networks do
-//     (mergeFault).
+//     (mergeFault), and who called it is recorded (mergers);
+//   - a repository's permissions, which emulate always reports as all
+//     true, can be made GitHub's for a test (setRepoPermissions): all false
+//     for an installation token, the user's own for the user's token.
 
 import (
 	"bytes"
@@ -93,9 +96,11 @@ type githubEmulator struct {
 	tokens      map[string]int // installation token -> installation id
 	pullHeads   map[string]bool
 	deletedApps map[int]bool
-	refresh     map[string]string // refresh token -> login
-	revoked     map[string]bool   // user tokens
-	mergeFaults map[string]string // merge path -> fault
+	refresh     map[string]string          // refresh token -> login
+	revoked     map[string]bool            // user tokens
+	mergeFaults map[string]string          // merge path -> fault
+	merges      map[string][]string        // merge path -> "app" or "user", per call
+	repoPerms   map[string]map[string]bool // owner/name -> the user's permissions
 }
 
 func startEmulator() (*githubEmulator, error) {
@@ -127,6 +132,7 @@ func startEmulator() (*githubEmulator, error) {
 		backend: fmt.Sprintf("http://127.0.0.1:%d", port), pem: keyPEM, dir: dir,
 		tokens: map[string]int{}, pullHeads: map[string]bool{}, deletedApps: map[int]bool{},
 		refresh: map[string]string{}, revoked: map[string]bool{}, mergeFaults: map[string]string{},
+		merges: map[string][]string{}, repoPerms: map[string]map[string]bool{},
 	}
 	e.cmd = exec.Command(bin, "--service", "github", "--port", fmt.Sprint(port), "--seed", seed)
 	var logs bytes.Buffer
@@ -243,6 +249,9 @@ func (e *githubEmulator) handler() http.Handler {
 			e.mu.Lock()
 			e.tokens[token.Token] = id
 			e.mu.Unlock()
+		}
+		if req.Method == http.MethodGet && resp.StatusCode == http.StatusOK && strings.Count(req.URL.Path, "/") == 3 && strings.HasPrefix(req.URL.Path, "/repos/") {
+			return e.repoPermissions(resp)
 		}
 		return nil
 	}
@@ -486,11 +495,13 @@ func (e *githubEmulator) duplicatePull(w http.ResponseWriter, r *http.Request) b
 //
 //   - stale: someone pushed in between; GitHub answers 409;
 //   - lost: GitHub merges, the connection drops before the answer;
-//   - failed: GitHub answers 502 without merging.
+//   - failed: GitHub answers 502 without merging;
+//   - forbidden: GitHub refuses the token's merge with 403.
 const (
-	faultStale  = "stale"
-	faultLost   = "lost"
-	faultFailed = "failed"
+	faultStale     = "stale"
+	faultLost      = "lost"
+	faultFailed    = "failed"
+	faultForbidden = "forbidden"
 )
 
 func (e *githubEmulator) failMerge(repo string, number int, fault string) {
@@ -503,8 +514,15 @@ func (e *githubEmulator) mergeFault(w http.ResponseWriter, r *http.Request, prox
 	e.mu.Lock()
 	fault := e.mergeFaults[r.URL.Path]
 	delete(e.mergeFaults, r.URL.Path)
+	merger := "user"
+	if _, ok := e.tokens[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]; ok {
+		merger = "app"
+	}
+	e.merges[r.URL.Path] = append(e.merges[r.URL.Path], merger)
 	e.mu.Unlock()
 	switch fault {
+	case faultForbidden:
+		reply(w, http.StatusForbidden, map[string]any{"message": "Resource not accessible by integration"})
 	case faultStale:
 		reply(w, http.StatusConflict, map[string]any{"message": "Head branch was modified. Review and try the merge again."})
 	case faultFailed:
@@ -519,6 +537,58 @@ func (e *githubEmulator) mergeFault(w http.ResponseWriter, r *http.Request, prox
 		return false
 	}
 	return true
+}
+
+// mergers is who called GitHub's merge of a pull request, in order.
+func (e *githubEmulator) mergers(repo string, number int) []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.merges[fmt.Sprintf("/repos/%s/pulls/%d/merge", repo, number)]
+}
+
+// setRepoPermissions has GitHub report repo's permissions as it does for
+// the rest of the test: the user's are perms, an installation token's all
+// false.
+func (e *githubEmulator) setRepoPermissions(t *testing.T, repo string, perms map[string]bool) {
+	e.mu.Lock()
+	e.repoPerms[repo] = perms
+	e.mu.Unlock()
+	t.Cleanup(func() {
+		e.mu.Lock()
+		delete(e.repoPerms, repo)
+		e.mu.Unlock()
+	})
+}
+
+func (e *githubEmulator) repoPermissions(resp *http.Response) error {
+	e.mu.Lock()
+	perms, ok := e.repoPerms[strings.TrimPrefix(resp.Request.URL.Path, "/repos/")]
+	_, app := e.tokens[strings.TrimPrefix(resp.Request.Header.Get("Authorization"), "Bearer ")]
+	e.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	if app {
+		perms = map[string]bool{}
+	}
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	var repo map[string]any
+	if err := json.Unmarshal(raw, &repo); err != nil {
+		return err
+	}
+	shown := map[string]bool{}
+	for _, level := range []string{"admin", "maintain", "push", "triage", "pull"} {
+		shown[level] = perms[level]
+	}
+	repo["permissions"] = shown
+	raw, _ = json.Marshal(repo)
+	resp.Body = io.NopCloser(bytes.NewReader(raw))
+	resp.ContentLength = int64(len(raw))
+	resp.Header.Set("Content-Length", fmt.Sprint(len(raw)))
+	return nil
 }
 
 func (e *githubEmulator) deleteApp(id int) {
