@@ -11,7 +11,10 @@ in the AXP workspace's “能力” page. `git` over `https://github.com/...` an
 made as the App's bot.
 
 To open a pull request, push the branch and call `open_pull_request`, not
-`gh pr create`; give the user its link.
+`gh pr create`; give the user its link. When the user authorized the App,
+the pull request is opened on their behalf (its author is the user, with the
+App's badge); otherwise as the App's bot. If the result has a `fallback`,
+tell the user why it was opened as the bot.
 
 If gh is not logged in, a tool says GitHub is not connected, or GitHub
 answers that a repository is not found, GitHub is not connected yet or the

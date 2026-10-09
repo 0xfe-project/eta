@@ -97,15 +97,15 @@ agenvo 让 Codex 和 Claude 以完全权限运行（Paseo 的 `full-access`/`byp
 
 ### `axp` 命令
 
-| 命令                                              | 作用                                                                  |
-| ------------------------------------------------- | --------------------------------------------------------------------- |
-| `axp task show`                                   | 任务的描述、状态和时间线                                              |
-| `axp task comment <text>` / `--file <path>`       | 在任务下回复（结束这一轮的条件）                                      |
-| `axp task status in_progress\|in_review\|blocked` | 远程智能体能设的状态                                                  |
-| `axp gh <args…>`                                  | 以 AXP 的 GitHub App 身份运行 gh；`gh pr create` 开出的 PR 记为交付物 |
-| `axp setup` / `status` / `uninstall`              | 电脑本身的接入、查看和卸载                                            |
+| 命令                                              | 作用                                                                                                               |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `axp task show`                                   | 任务的描述、状态和时间线                                                                                           |
+| `axp task comment <text>` / `--file <path>`       | 在任务下回复（结束这一轮的条件）                                                                                   |
+| `axp task status in_progress\|in_review\|blocked` | 远程智能体能设的状态                                                                                               |
+| `axp gh <args…>`                                  | 以 AXP 的 GitHub App 身份运行 gh（`gh pr …` 在用户授权过 App 时以用户的名义）；`gh pr create` 开出的 PR 记为交付物 |
+| `axp setup` / `status` / `uninstall`              | 电脑本身的接入、查看和卸载                                                                                         |
 
-`axp task` 的任务依次取自 `--task`、环境变量 `AXP_TASK_ID`（AXP 在 Herdr 里开的 tab 带着它），最后按当前目录向 AXP 查询（`/remote/v1/current-task`：这台电脑上哪个进行中的会话在这个目录或其上级工作）。git 用那台电脑自己的凭据；`axp gh` 向 AXP 要 GitHub App 的 installation token（控制面向 forge 服务的 `/forge/credentials` 要，调用方记为 `computer-<id>`）。
+`axp task` 的任务依次取自 `--task`、环境变量 `AXP_TASK_ID`（AXP 在 Herdr 里开的 tab 带着它），最后按当前目录向 AXP 查询（`/remote/v1/current-task`：这台电脑上哪个进行中的会话在这个目录或其上级工作）。git 用那台电脑自己的凭据；`axp gh` 向 AXP 要 GitHub App 的 installation token（控制面向 forge 服务的 `/forge/credentials` 要，调用方记为 `computer-<id>`）；`axp gh pr …` 要的是 `?as=user`：用户授权过 App 时是用户的 token（`ghu_`），PR 以用户的名义打开，没有授权时仍是 installation token。
 
 ## 接口与鉴权
 

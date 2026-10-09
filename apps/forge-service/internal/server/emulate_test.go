@@ -9,7 +9,12 @@ package server
 //   - POST /app-manifests/{code}/conversions returns a seeded App;
 //   - GET /installation/repositories answers from the seed;
 //   - a second pull request for the same head is refused with 422;
-//   - an App deleted on GitHub gets 401.
+//   - an App deleted on GitHub gets 401;
+//   - the user's authorization of an App: emulate's OAuth issues the token,
+//     the layer checks the App's client secret, adds the expiry and refresh
+//     token GitHub Apps get and refreshes them, answers
+//     GET /user/installations from the seed, and revokes on
+//     DELETE /applications/{client_id}/grant (the token then gets 401).
 
 import (
 	"bytes"
@@ -86,6 +91,8 @@ type githubEmulator struct {
 	tokens      map[string]int // installation token -> installation id
 	pullHeads   map[string]bool
 	deletedApps map[int]bool
+	refresh     map[string]string // refresh token -> login
+	revoked     map[string]bool   // user tokens
 }
 
 func startEmulator() (*githubEmulator, error) {
@@ -116,6 +123,7 @@ func startEmulator() (*githubEmulator, error) {
 	e := &githubEmulator{
 		backend: fmt.Sprintf("http://127.0.0.1:%d", port), pem: keyPEM, dir: dir,
 		tokens: map[string]int{}, pullHeads: map[string]bool{}, deletedApps: map[int]bool{},
+		refresh: map[string]string{}, revoked: map[string]bool{},
 	}
 	e.cmd = exec.Command(bin, "--service", "github", "--port", fmt.Sprint(port), "--seed", seed)
 	var logs bytes.Buffer
@@ -194,7 +202,7 @@ func seedConfig(keyPEM string) []byte {
 		}
 	}
 	data, _ := json.Marshal(map[string]any{"github": map[string]any{
-		"users": []map[string]any{{"login": "akarachen"}},
+		"users": []map[string]any{{"login": "akarachen"}, {"login": "stranger"}},
 		"orgs":  []map[string]any{{"login": "acme", "members": []map[string]any{{"login": "akarachen", "role": "admin"}}}},
 		"repos": repos,
 		"apps":  []map[string]any{app(newApp, "axp-new"), app(installedApp, "axp-test")},
@@ -237,7 +245,22 @@ func (e *githubEmulator) handler() http.Handler {
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
+		e.mu.Lock()
+		revoked := e.revoked[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]
+		e.mu.Unlock()
 		switch {
+		case revoked:
+			reply(w, http.StatusUnauthorized, map[string]any{"message": "Bad credentials"})
+			return
+		case r.Method == http.MethodPost && path == "/login/oauth/access_token":
+			e.accessToken(w, r)
+			return
+		case r.Method == http.MethodGet && path == "/user/installations":
+			e.userInstallations(w, r)
+			return
+		case r.Method == http.MethodDelete && strings.HasPrefix(path, "/applications/"):
+			e.revokeGrant(w, r)
+			return
 		case r.Method == http.MethodPost && strings.HasPrefix(path, "/app-manifests/"):
 			e.convertManifest(w, strings.Split(path, "/")[2])
 			return
@@ -263,11 +286,121 @@ func (e *githubEmulator) convertManifest(w http.ResponseWriter, code string) {
 		return
 	}
 	reply(w, http.StatusCreated, map[string]any{
-		"id": app.id, "slug": app.slug, "name": app.slug, "client_id": "Iv1." + app.slug,
+		"id": app.id, "slug": app.slug, "name": app.slug,
+		"client_id": "Iv1." + app.slug, "client_secret": "secret-" + app.slug,
 		"html_url": "https://github.com/apps/" + app.slug,
 		"owner":    map[string]any{"login": "akarachen", "type": "User"},
 		"pem":      e.pem,
 	})
+}
+
+// accessToken is GitHub's token endpoint for an App's user authorization:
+// a code (exchanged by emulate) or a refresh token, which works once.
+func (e *githubEmulator) accessToken(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	slug := strings.TrimPrefix(r.PostForm.Get("client_id"), "Iv1.")
+	if r.PostForm.Get("client_secret") != "secret-"+slug {
+		reply(w, http.StatusOK, map[string]any{"error": "incorrect_client_credentials"})
+		return
+	}
+	code := r.PostForm.Get("code")
+	var login string
+	if r.PostForm.Get("grant_type") == "refresh_token" {
+		e.mu.Lock()
+		login = e.refresh[r.PostForm.Get("refresh_token")]
+		delete(e.refresh, r.PostForm.Get("refresh_token"))
+		e.mu.Unlock()
+		if login == "" {
+			reply(w, http.StatusOK, map[string]any{"error": "bad_refresh_token"})
+			return
+		}
+		code = e.authorizationCode(login)
+	}
+	resp, err := http.PostForm(e.backend+"/login/oauth/access_token", url.Values{"code": {code}})
+	if err != nil {
+		reply(w, http.StatusBadGateway, nil)
+		return
+	}
+	defer resp.Body.Close()
+	var out map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	if token, ok := out["access_token"].(string); ok {
+		if login == "" {
+			login = e.login(token)
+		}
+		refresh := "ghr_" + base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprint(time.Now().UnixNano())))
+		e.mu.Lock()
+		e.refresh[refresh] = login
+		e.mu.Unlock()
+		out["expires_in"], out["refresh_token"], out["refresh_token_expires_in"] = 28800, refresh, 15897600
+	}
+	reply(w, http.StatusOK, out)
+}
+
+// authorizationCode is the code emulate gives when login authorizes.
+func (e *githubEmulator) authorizationCode(login string) string {
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := client.PostForm(e.backend+"/login/oauth/callback", url.Values{"login": {login}, "redirect_uri": {"http://localhost/"}})
+	if err != nil {
+		return ""
+	}
+	resp.Body.Close()
+	location, _ := url.Parse(resp.Header.Get("Location"))
+	return location.Query().Get("code")
+}
+
+func (e *githubEmulator) login(token string) string {
+	req, _ := http.NewRequest(http.MethodGet, e.backend+"/user", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	var user struct{ Login string }
+	_ = json.NewDecoder(resp.Body).Decode(&user)
+	return user.Login
+}
+
+// userInstallations are the seeded installations on the token's user and
+// the organizations they belong to (akarachen is acme's admin).
+func (e *githubEmulator) userInstallations(w http.ResponseWriter, r *http.Request) {
+	login := e.login(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	if login == "" {
+		reply(w, http.StatusUnauthorized, map[string]any{"message": "Bad credentials"})
+		return
+	}
+	installations := []map[string]any{}
+	for _, inst := range seedInstallations {
+		if inst.account == login || (inst.account == "acme" && login == "akarachen") {
+			installations = append(installations, map[string]any{
+				"id": inst.id, "app_id": inst.app, "account": map[string]any{"login": inst.account},
+			})
+		}
+	}
+	reply(w, http.StatusOK, map[string]any{"total_count": len(installations), "installations": installations})
+}
+
+func (e *githubEmulator) revokeGrant(w http.ResponseWriter, r *http.Request) {
+	clientID, secret, _ := r.BasicAuth()
+	var body struct {
+		AccessToken string `json:"access_token"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	if secret != "secret-"+strings.TrimPrefix(clientID, "Iv1.") || body.AccessToken == "" {
+		reply(w, http.StatusUnauthorized, map[string]any{"message": "Bad credentials"})
+		return
+	}
+	e.revoke(body.AccessToken)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// revoke makes GitHub refuse a user token, as when the user revokes the
+// App's authorization.
+func (e *githubEmulator) revoke(token string) {
+	e.mu.Lock()
+	e.revoked[token] = true
+	e.mu.Unlock()
 }
 
 func (e *githubEmulator) installationRepositories(w http.ResponseWriter, r *http.Request) {

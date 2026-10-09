@@ -110,7 +110,9 @@ function githubCapability(status: GitHubStatus | undefined): Capability {
     case "ready":
       return {
         ...base,
-        summary: `以 ${status.app?.slug}[bot] 的身份推送代码和打开 PR`,
+        summary: status.user
+          ? `以 ${status.user.login} 的名义打开 PR，以 ${status.app?.slug}[bot] 的身份推送代码`
+          : `以 ${status.app?.slug}[bot] 的身份推送代码和打开 PR`,
       };
     case "not_installed":
       return { ...base, summary: "App 已创建，还需安装到仓库", todo: "待安装" };
@@ -151,6 +153,8 @@ function useReturnFromGitHub(onReturn: (error: string | undefined) => void) {
     const error = params.get("github_error") ?? undefined;
     if (!error && params.get("github") === "created")
       toast.success("GitHub App 已创建");
+    else if (!error && params.get("github") === "authorized")
+      toast.success("已授权，PR 将以你的名义打开");
     else if (!error && params.get("setup_action"))
       toast.success("已在 GitHub 上安装 App");
     for (const name of RETURN_PARAMS) params.delete(name);

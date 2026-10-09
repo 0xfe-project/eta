@@ -30,6 +30,10 @@ const statusSchema = z.object({
     .nullable(),
   installations: z.array(installationSchema),
   error: z.object({ code: z.string(), message: z.string() }).optional(),
+  // Who authorized the App to open pull requests on their behalf, and
+  // whether the service can ask (it has the App's client secret).
+  user: z.object({ login: z.string(), html_url: z.string() }).nullish(),
+  oauth: z.boolean().optional(),
 });
 
 const manifestSchema = z.object({ action: z.string(), manifest: z.string() });
@@ -79,6 +83,42 @@ export function useCreateGitHubApp() {
       document.body.append(element);
       element.submit();
     },
+  });
+}
+
+/** Where GitHub sends the browser back after the user authorized the App. */
+export const authorizationCallbackPath =
+  "/api/forge/v1/github/authorization/callback";
+
+/** The user authorizing the App to act on their behalf, on GitHub. */
+export function useAuthorizeGitHub() {
+  return useMutation({
+    mutationFn: async () => {
+      const { url } = z.object({ url: z.string() }).parse(
+        await forgeApi.post("/github/authorization", {
+          origin: window.location.origin,
+        }),
+      );
+      window.location.assign(url);
+    },
+  });
+}
+
+export function useUnauthorizeGitHub() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => forgeApi.delete("/github/authorization"),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: key }),
+  });
+}
+
+/** The client ID and secret of an App created before AXP kept them. */
+export function useSetGitHubOAuthClient() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { client_id: string; client_secret: string }) =>
+      forgeApi.post("/github/oauth-client", input),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: key }),
   });
 }
 

@@ -7,7 +7,8 @@
 // go-github, as the App (with a JWT signed by that key) or with an
 // installation token, which carries everything the installation was granted;
 // tokens are cached until close to expiry. Nothing here is per agent: every
-// agent acts as the App.
+// agent acts as the App, or, once the user authorized it, opens pull
+// requests on the user's behalf (user.go).
 package github
 
 import (
@@ -132,6 +133,7 @@ type App struct {
 	Owner     string `json:"owner"`
 	OwnerType string `json:"owner_type"` // "User" or "Organization"
 	BotID     int64  `json:"bot_id,omitempty"`
+	ClientID  string `json:"client_id,omitempty"`
 }
 
 func (a *App) SettingsURL() string {
@@ -174,12 +176,16 @@ type token struct {
 type GitHub struct {
 	StateDir string
 	APIURL   string // empty for api.github.com
+	OAuthURL string // empty for github.com
 	Now      func() time.Time
 
 	mu            sync.Mutex
 	tokens        map[int64]token
 	installations []*gh.Installation
 	listedAt      time.Time
+	authorizing   map[string]authorizing
+
+	userMu sync.Mutex // user.json
 }
 
 // New keeps the App's state in stateDir and calls the real GitHub.
@@ -324,13 +330,16 @@ func (g *GitHub) StartManifest(name, organization, origin string) (*ManifestForm
 		"url":         origin,
 		"description": "AXP 的智能体以这个 App 的身份使用 GitHub。",
 		// Nothing listens for webhooks; GitHub still wants a URL.
-		"hook_attributes":     map[string]any{"url": origin + "/api/forge/v1/github/webhook", "active": false},
-		"redirect_url":        origin + "/api/forge/v1/github/manifest/callback",
-		"setup_url":           origin + "/?view=capabilities",
-		"setup_on_update":     true,
-		"public":              false,
-		"default_permissions": appPermissions,
-		"default_events":      []string{},
+		"hook_attributes": map[string]any{"url": origin + "/api/forge/v1/github/webhook", "active": false},
+		"redirect_url":    origin + "/api/forge/v1/github/manifest/callback",
+		// Installing also asks the user to authorize the App, so it can open
+		// pull requests on their behalf; GitHub then returns to the callback
+		// URL instead of a setup URL.
+		"callback_urls":            []string{origin + CallbackPath},
+		"request_oauth_on_install": true,
+		"public":                   false,
+		"default_permissions":      appPermissions,
+		"default_events":           []string{},
 	})
 	form.Manifest = string(manifest)
 	return form, err
@@ -389,6 +398,12 @@ func (g *GitHub) FinishManifest(ctx context.Context, code, state string) (*App, 
 	if err := write(g.path("github.pem"), []byte(created.GetPEM()), 0o600); err != nil {
 		return nil, err
 	}
+	if created.GetClientSecret() != "" {
+		if err := write(g.path("github.secret"), []byte(created.GetClientSecret()), 0o600); err != nil {
+			return nil, err
+		}
+		app.ClientID = created.GetClientID()
+	}
 	if err := g.save(app); err != nil {
 		return nil, err
 	}
@@ -396,11 +411,15 @@ func (g *GitHub) FinishManifest(ctx context.Context, code, state string) (*App, 
 	return app, nil
 }
 
-// Forget drops the App's credentials here; the App on GitHub stays.
-func (g *GitHub) Forget() error {
+// Forget drops the App's credentials and the user's authorization here; the
+// App on GitHub stays.
+func (g *GitHub) Forget(ctx context.Context) error {
+	if err := g.ForgetUser(ctx); err != nil {
+		return err
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	for _, name := range []string{"github.json", "github.pem"} {
+	for _, name := range []string{"github.json", "github.pem", "github.secret"} {
 		if err := os.Remove(g.path(name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
@@ -510,16 +529,31 @@ func (g *GitHub) token(ctx context.Context, id int64) (token, error) {
 // installs it only on the account that owns it; the one installation covers
 // every repository the user granted. Identity is the App's bot, once GitHub
 // knows it.
+//
+// asUser asks for the token of the user who authorized the App instead, so
+// what gh does shows as the user's; User names them. Without an
+// authorization it is the installation token, as usual.
 type Credentials struct {
 	Token     string    `json:"token"`
 	ExpiresAt int64     `json:"expires_at"`
 	Identity  *Identity `json:"identity"`
+	User      string    `json:"user,omitempty"`
 }
 
-func (g *GitHub) Credentials(ctx context.Context) (*Credentials, error) {
+func (g *GitHub) Credentials(ctx context.Context, asUser bool) (*Credentials, error) {
 	app, err := g.require()
 	if err != nil {
 		return nil, err
+	}
+	if asUser {
+		if user, _ := g.userToken(ctx); user != nil {
+			expires := user.ExpiresAt
+			if expires == 0 {
+				expires = g.Now().Add(time.Hour).Unix()
+			}
+			identity, _ := g.Identity(ctx)
+			return &Credentials{Token: user.AccessToken, ExpiresAt: expires, Identity: identity, User: user.Login}, nil
+		}
 	}
 	inst, err := g.installationFor(ctx, app.Owner)
 	if err != nil {
@@ -533,16 +567,23 @@ func (g *GitHub) Credentials(ctx context.Context) (*Credentials, error) {
 	return &Credentials{Token: t.value, ExpiresAt: t.expires.Unix(), Identity: identity}, nil
 }
 
-// PullRequest is an opened (or already open) pull request.
+// PullRequest is an opened (or already open) pull request. Author is its
+// author on GitHub: the user who authorized the App, or the App's bot;
+// Fallback says why it is the bot although the user had authorized the App.
 type PullRequest struct {
-	URL     string `json:"url"`
-	Number  int    `json:"number"`
-	Created bool   `json:"created"`
+	URL      string `json:"url"`
+	Number   int    `json:"number"`
+	Created  bool   `json:"created"`
+	Author   string `json:"author"`
+	Fallback string `json:"fallback,omitempty"`
 }
 
-// OpenPullRequest opens a pull request as the App; base defaults to the
-// repository's default branch. An open pull request for head is returned
-// instead of failing.
+// OpenPullRequest opens a pull request on behalf of the user who authorized
+// the App, or else as the App; base defaults to the repository's default
+// branch. An open pull request for head is returned instead of failing.
+//
+// GitHub refusing the user's token (revoked: 401) or the user's access
+// falling short of the App's (403, 404) makes the App open it instead.
 func (g *GitHub) OpenPullRequest(ctx context.Context, repository, head, title, body, base string, draft bool) (*PullRequest, error) {
 	owner, name, err := ParseRepository(repository)
 	if err != nil {
@@ -552,15 +593,46 @@ func (g *GitHub) OpenPullRequest(ctx context.Context, repository, head, title, b
 	if err != nil {
 		return nil, err
 	}
+	user, fallback := g.userToken(ctx)
+	if user != nil {
+		pull, err := g.createPull(ctx, user.AccessToken, owner, name, head, title, body, base, draft)
+		switch statusOf(err) {
+		case 0:
+			if err == nil {
+				return pull, nil
+			}
+			return nil, fromGitHub(err)
+		case http.StatusUnauthorized:
+			g.dropUser()
+			fallback = "GitHub 不再接受你对 App 的授权（可能已撤销），请在 AXP 的“能力”页重新授权"
+		case http.StatusForbidden, http.StatusNotFound:
+			fallback = fmt.Sprintf("%s 在这个仓库的权限不够开 PR", user.Login)
+		default:
+			return nil, pullError(err)
+		}
+	}
 	t, err := g.token(ctx, inst.GetID())
 	if err != nil {
 		return nil, err
 	}
-	client := g.client(gh.WithAuthToken(t.value))
+	pull, err := g.createPull(ctx, t.value, owner, name, head, title, body, base, draft)
+	if err != nil {
+		return nil, pullError(err)
+	}
+	if fallback != "" {
+		pull.Fallback = fallback + "；这次以 App 的身份打开。"
+	}
+	return pull, nil
+}
+
+// createPull opens the pull request with token, or returns the one open for
+// head; errors are GitHub's.
+func (g *GitHub) createPull(ctx context.Context, token, owner, name, head, title, body, base string, draft bool) (*PullRequest, error) {
+	client := g.client(gh.WithAuthToken(token))
 	if base == "" {
 		repo, _, err := client.Repositories.Get(ctx, owner, name)
 		if err != nil {
-			return nil, fromGitHub(err)
+			return nil, err
 		}
 		base = repo.GetDefaultBranch()
 	}
@@ -568,7 +640,7 @@ func (g *GitHub) OpenPullRequest(ctx context.Context, repository, head, title, b
 		Title: &title, Body: &body, Head: head, Base: base, Draft: &draft,
 	})
 	if err == nil {
-		return &PullRequest{URL: pull.GetHTMLURL(), Number: pull.GetNumber(), Created: true}, nil
+		return &PullRequest{URL: pull.GetHTMLURL(), Number: pull.GetNumber(), Created: true, Author: pull.GetUser().GetLogin()}, nil
 	}
 	if statusOf(err) == http.StatusUnprocessableEntity && strings.Contains(reasons(err), "already exists") {
 		branch := head
@@ -577,17 +649,21 @@ func (g *GitHub) OpenPullRequest(ctx context.Context, repository, head, title, b
 		}
 		open, _, listErr := client.PullRequests.List(ctx, owner, name, &gh.PullRequestListOptions{Head: branch, State: "open"})
 		if listErr == nil && len(open) > 0 {
-			return &PullRequest{URL: open[0].GetHTMLURL(), Number: open[0].GetNumber()}, nil
+			return &PullRequest{URL: open[0].GetHTMLURL(), Number: open[0].GetNumber(), Author: open[0].GetUser().GetLogin()}, nil
 		}
 	}
+	return nil, err
+}
+
+func pullError(err error) error {
 	if statusOf(err) == 0 {
-		return nil, fromGitHub(err)
+		return fromGitHub(err)
 	}
 	code := http.StatusBadRequest
 	if statusOf(err) >= 500 {
 		code = http.StatusFailedDependency
 	}
-	return nil, newError("PULL_REQUEST_FAILED", code, "GitHub 拒绝创建 PR（%d）：%s", statusOf(err), reasons(err))
+	return newError("PULL_REQUEST_FAILED", code, "GitHub 拒绝创建 PR（%d）：%s", statusOf(err), reasons(err))
 }
 
 // --- for the browser --------------------------------------------------------------
@@ -598,6 +674,15 @@ type Status struct {
 	App           *AppView           `json:"app"`
 	Installations []InstallationView `json:"installations"`
 	Error         *ErrorView         `json:"error,omitempty"`
+	// The user's authorization: whom pull requests are opened for, and
+	// whether AXP has the client secret to ask for one.
+	User  *UserView `json:"user"`
+	OAuth bool      `json:"oauth"`
+}
+
+type UserView struct {
+	Login   string `json:"login"`
+	HTMLURL string `json:"html_url"`
 }
 
 type AppView struct {
@@ -635,7 +720,10 @@ func (g *GitHub) Status(ctx context.Context, fresh bool) (*Status, error) {
 	status := &Status{State: "not_installed", Installations: []InstallationView{}, App: &AppView{
 		Name: app.Name, Slug: app.Slug, Owner: app.Owner, OwnerType: app.OwnerType,
 		HTMLURL: app.HTMLURL, SettingsURL: app.SettingsURL(), InstallURL: app.InstallURL(),
-	}}
+	}, OAuth: app.ClientID != "" && g.clientSecret() != ""}
+	if user, _ := g.AuthorizedUser(); user != nil {
+		status.User = &UserView{Login: user.Login, HTMLURL: WebURL + "/" + user.Login}
+	}
 	list, err := g.listInstallations(ctx, fresh)
 	for _, inst := range list {
 		if err != nil {
