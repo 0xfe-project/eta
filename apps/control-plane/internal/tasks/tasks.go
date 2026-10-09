@@ -18,11 +18,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akarachen/axp/apps/control-plane/internal/apierr"
-	"github.com/akarachen/axp/apps/control-plane/internal/chat"
-	"github.com/akarachen/axp/apps/control-plane/internal/jsontime"
 	"github.com/akarachen/axp/apps/control-plane/internal/relay"
-	"github.com/akarachen/axp/apps/control-plane/internal/store"
+	"github.com/akarachen/axp/packages/service-go/apierr"
+	"github.com/akarachen/axp/packages/service-go/jsontime"
+	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -273,8 +272,8 @@ func (a *activityRow) public() TaskActivity {
 // --- reads -------------------------------------------------------------------------------
 
 // List is every task, most recently updated first.
-func (s *Service) List(ctx context.Context, db store.DB) ([]Task, error) {
-	rows, err := chat.All[taskRow](ctx, db, taskSelect+" ORDER BY t.updated_at DESC")
+func (s *Service) List(ctx context.Context, db pg.DB) ([]Task, error) {
+	rows, err := pg.All[taskRow](ctx, db, taskSelect+" ORDER BY t.updated_at DESC")
 	if err != nil {
 		return nil, err
 	}
@@ -286,10 +285,10 @@ func (s *Service) List(ctx context.Context, db store.DB) ([]Task, error) {
 }
 
 // find is a task by its id or its number ("12" or "#12").
-func find(ctx context.Context, db store.DB, ref string, lock bool) (*taskRow, error) {
+func find(ctx context.Context, db pg.DB, ref string, lock bool) (*taskRow, error) {
 	var where string
 	var arg any
-	if id, ok := chat.ParseID(ref); ok {
+	if id, ok := pg.ParseID(ref); ok {
 		where, arg = "t.id = $1", id
 	} else if n, ok := parseNumber(ref); ok {
 		where, arg = "t.number = $1", n
@@ -300,7 +299,7 @@ func find(ctx context.Context, db store.DB, ref string, lock bool) (*taskRow, er
 	if lock {
 		sql += " FOR UPDATE OF t"
 	}
-	r, err := chat.One[taskRow](ctx, db, sql, arg)
+	r, err := pg.One[taskRow](ctx, db, sql, arg)
 	if err != nil {
 		return nil, err
 	}
@@ -325,7 +324,7 @@ func parseNumber(ref string) (int64, bool) {
 	return n, true
 }
 
-func (s *Service) Get(ctx context.Context, db store.DB, ref string) (*TaskDetail, error) {
+func (s *Service) Get(ctx context.Context, db pg.DB, ref string) (*TaskDetail, error) {
 	r, err := find(ctx, db, ref, false)
 	if err != nil {
 		return nil, err
@@ -333,13 +332,13 @@ func (s *Service) Get(ctx context.Context, db store.DB, ref string) (*TaskDetail
 	return detail(ctx, db, r)
 }
 
-func detail(ctx context.Context, db store.DB, r *taskRow) (*TaskDetail, error) {
-	activity, err := chat.All[activityRow](ctx, db, `SELECT x.*, a.name AS agent_name FROM task_activity x
+func detail(ctx context.Context, db pg.DB, r *taskRow) (*TaskDetail, error) {
+	activity, err := pg.All[activityRow](ctx, db, `SELECT x.*, a.name AS agent_name FROM task_activity x
 		LEFT JOIN agent a ON a.id = x.actor_agent WHERE x.task_id = $1 ORDER BY x.created_at, x.id`, r.ID)
 	if err != nil {
 		return nil, err
 	}
-	runs, err := chat.All[struct {
+	runs, err := pg.All[struct {
 		runRow
 		ComputerName *string `db:"computer_name"`
 	}](ctx, db, `SELECT r.*, c.name AS computer_name FROM task_run r LEFT JOIN computer c ON c.id = r.computer_id
@@ -375,11 +374,11 @@ func record(ctx context.Context, tx pgx.Tx, taskID string, runID *string, kind s
 	}
 	_, err := tx.Exec(ctx, `INSERT INTO task_activity (id, task_id, run_id, kind, actor, actor_agent, body, data, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-		chat.NewID(), taskID, runID, kind, actor.Kind, agent, body, encoded, chat.Now())
+		pg.NewID(), taskID, runID, kind, actor.Kind, agent, body, encoded, pg.Now())
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, "UPDATE task SET updated_at = $2 WHERE id = $1", taskID, chat.Now())
+	_, err = tx.Exec(ctx, "UPDATE task SET updated_at = $2 WHERE id = $1", taskID, pg.Now())
 	return err
 }
 
@@ -396,7 +395,7 @@ type AssigneeInput struct {
 func invalid(message string) error { return apierr.New(422, "VALIDATION_ERROR", message) }
 
 // checkAssignee validates a remote assignee against the computer's runtimes.
-func checkAssignee(ctx context.Context, db store.DB, in AssigneeInput) error {
+func checkAssignee(ctx context.Context, db pg.DB, in AssigneeInput) error {
 	switch in.Kind {
 	case "none", "user":
 		return nil
@@ -410,12 +409,12 @@ func checkAssignee(ctx context.Context, db store.DB, in AssigneeInput) error {
 	if err := checkPlace(in.Place); err != nil {
 		return err
 	}
-	computer, ok := chat.ParseID(*in.ComputerID)
+	computer, ok := pg.ParseID(*in.ComputerID)
 	if !ok {
 		return invalid("没有这台电脑。")
 	}
 	*in.ComputerID = computer
-	ok, err := chat.Exists(ctx, db, `SELECT 1 FROM computer_runtime WHERE computer_id = $1 AND kind = $2
+	ok, err := pg.Exists(ctx, db, `SELECT 1 FROM computer_runtime WHERE computer_id = $1 AND kind = $2
 		AND device_id IS NOT NULL AND $3 = ANY(providers)`, computer, *in.Runtime, *in.Provider)
 	if err != nil {
 		return err
@@ -485,7 +484,7 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, in Input, by Actor) (*T
 	if by.Kind == ActorAgent {
 		agent = &by.AgentID
 	}
-	id, now := chat.NewID(), chat.Now()
+	id, now := pg.NewID(), pg.Now()
 	a := in.Assignee
 	if _, err := tx.Exec(ctx, `INSERT INTO task (id, title, description, status, assignee, computer_id, runtime, provider,
 		place, created_by_agent, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)`,
@@ -561,7 +560,7 @@ func (s *Service) Update(ctx context.Context, tx pgx.Tx, ref string, c Changes, 
 		if err := s.stopRuns(ctx, tx, r.ID, "任务已改派。"); err != nil {
 			return nil, err
 		}
-		if _, err := tx.Exec(ctx, "UPDATE task_session SET closed_at = $2 WHERE task_id = $1 AND closed_at IS NULL", r.ID, chat.Now()); err != nil {
+		if _, err := tx.Exec(ctx, "UPDATE task_session SET closed_at = $2 WHERE task_id = $1 AND closed_at IS NULL", r.ID, pg.Now()); err != nil {
 			return nil, err
 		}
 		from := assigneeData(r)
@@ -621,7 +620,7 @@ func (s *Service) finish(ctx context.Context, tx pgx.Tx, taskID string) error {
 		return err
 	}
 	_, err := tx.Exec(ctx, `UPDATE task_session SET closed_at = $2, cleanup_pending = true
-		WHERE task_id = $1 AND closed_at IS NULL`, taskID, chat.Now())
+		WHERE task_id = $1 AND closed_at IS NULL`, taskID, pg.Now())
 	return err
 }
 
@@ -644,7 +643,7 @@ func setStatus(ctx context.Context, tx pgx.Tx, r *taskRow, status string, by Act
 
 // startIfIdle queues the first brief when the remote agent has no run yet.
 func (s *Service) startIfIdle(ctx context.Context, tx pgx.Tx, r *taskRow) error {
-	started, err := chat.Exists(ctx, tx, `SELECT 1 FROM task_run WHERE task_id = $1 AND computer_id = $2
+	started, err := pg.Exists(ctx, tx, `SELECT 1 FROM task_run WHERE task_id = $1 AND computer_id = $2
 		AND runtime = $3 AND provider = $4 AND status <> 'cancelled'`, r.ID, *r.ComputerID, *r.Runtime, *r.Provider)
 	if err != nil || started {
 		return err
@@ -657,7 +656,7 @@ func (s *Service) Delete(ctx context.Context, tx pgx.Tx, ref string) error {
 	if err != nil {
 		return err
 	}
-	active, err := chat.Exists(ctx, tx, `SELECT 1 FROM task_run WHERE task_id = $1 AND status IN ('starting', 'running')`, r.ID)
+	active, err := pg.Exists(ctx, tx, `SELECT 1 FROM task_run WHERE task_id = $1 AND status IN ('starting', 'running')`, r.ID)
 	if err != nil {
 		return err
 	}
@@ -695,9 +694,9 @@ func (s *Service) Comment(ctx context.Context, tx pgx.Tx, ref, body string, by A
 // enqueue queues a run for the task's remote agent; the runner starts it
 // once the task has no other active run.
 func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, r *taskRow, prompt string) error {
-	id := chat.NewID()
+	id := pg.NewID()
 	if _, err := tx.Exec(ctx, `INSERT INTO task_run (id, task_id, computer_id, runtime, provider, status, prompt, created_at)
-		VALUES ($1, $2, $3, $4, $5, 'queued', $6, $7)`, id, r.ID, *r.ComputerID, *r.Runtime, *r.Provider, prompt, chat.Now()); err != nil {
+		VALUES ($1, $2, $3, $4, $5, 'queued', $6, $7)`, id, r.ID, *r.ComputerID, *r.Runtime, *r.Provider, prompt, pg.Now()); err != nil {
 		return err
 	}
 	return record(ctx, tx, r.ID, &id, "run_queued", System, nil, nil)
@@ -705,7 +704,7 @@ func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, r *taskRow, prompt str
 
 // stopRuns cancels queued runs and asks the active one to stop.
 func (s *Service) stopRuns(ctx context.Context, tx pgx.Tx, taskID, reason string) error {
-	runs, err := chat.All[runRow](ctx, tx, `SELECT * FROM task_run WHERE task_id = $1
+	runs, err := pg.All[runRow](ctx, tx, `SELECT * FROM task_run WHERE task_id = $1
 		AND status IN ('queued', 'starting', 'running') FOR UPDATE`, taskID)
 	if err != nil {
 		return err
@@ -713,7 +712,7 @@ func (s *Service) stopRuns(ctx context.Context, tx pgx.Tx, taskID, reason string
 	for _, run := range runs {
 		if run.Status == RunRunning {
 			if _, err := tx.Exec(ctx, "UPDATE task_run SET interrupt_requested_at = $2 WHERE id = $1 AND interrupt_requested_at IS NULL",
-				run.ID, chat.Now()); err != nil {
+				run.ID, pg.Now()); err != nil {
 				return err
 			}
 			continue
@@ -731,11 +730,11 @@ func (s *Service) Interrupt(ctx context.Context, tx pgx.Tx, ref, runID string) (
 	if err != nil {
 		return nil, err
 	}
-	id, ok := chat.ParseID(runID)
+	id, ok := pg.ParseID(runID)
 	if !ok {
 		return nil, apierr.NotFound()
 	}
-	run, err := chat.One[runRow](ctx, tx, "SELECT * FROM task_run WHERE id = $1 AND task_id = $2 FOR UPDATE", id, r.ID)
+	run, err := pg.One[runRow](ctx, tx, "SELECT * FROM task_run WHERE id = $1 AND task_id = $2 FOR UPDATE", id, r.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -744,7 +743,7 @@ func (s *Service) Interrupt(ctx context.Context, tx pgx.Tx, ref, runID string) (
 	}
 	switch run.Status {
 	case RunRunning:
-		if _, err := tx.Exec(ctx, "UPDATE task_run SET interrupt_requested_at = $2 WHERE id = $1", run.ID, chat.Now()); err != nil {
+		if _, err := tx.Exec(ctx, "UPDATE task_run SET interrupt_requested_at = $2 WHERE id = $1", run.ID, pg.Now()); err != nil {
 			return nil, err
 		}
 	case RunQueued, RunStarting:
@@ -760,23 +759,23 @@ func (s *Service) Interrupt(ctx context.Context, tx pgx.Tx, ref, runID string) (
 
 func finishRun(ctx context.Context, tx pgx.Tx, run *runRow, status string, reason *string) error {
 	if _, err := tx.Exec(ctx, `UPDATE task_run SET status = $2, error = $3, finished_at = $4 WHERE id = $1`,
-		run.ID, status, reason, chat.Now()); err != nil {
+		run.ID, status, reason, pg.Now()); err != nil {
 		return err
 	}
 	return record(ctx, tx, run.TaskID, &run.ID, "run_"+status, System, reason, nil)
 }
 
 // Log is a run's session transcript, read live from the remote agent.
-func (s *Service) Log(ctx context.Context, db store.DB, ref, runID string) ([]LogEntry, error) {
+func (s *Service) Log(ctx context.Context, db pg.DB, ref, runID string) ([]LogEntry, error) {
 	r, err := find(ctx, db, ref, false)
 	if err != nil {
 		return nil, err
 	}
-	id, ok := chat.ParseID(runID)
+	id, ok := pg.ParseID(runID)
 	if !ok {
 		return nil, apierr.NotFound()
 	}
-	session, err := chat.One[sessionRow](ctx, db, `SELECT s.* FROM task_session s JOIN task_run r ON r.session_id = s.id
+	session, err := pg.One[sessionRow](ctx, db, `SELECT s.* FROM task_session s JOIN task_run r ON r.session_id = s.id
 		WHERE r.id = $1 AND r.task_id = $2`, id, r.ID)
 	if err != nil {
 		return nil, err
@@ -789,7 +788,7 @@ func (s *Service) Log(ctx context.Context, db store.DB, ref, runID string) ([]Lo
 	}
 	entries, err := agents{s.Relay}.log(ctx, session, session.native())
 	if err != nil {
-		return nil, apierr.New(502, "REMOTE_UNAVAILABLE", "读取远程智能体的记录失败："+err.Error())
+		return nil, apierr.Upstream("REMOTE_UNAVAILABLE", "读取远程智能体的记录失败："+err.Error())
 	}
 	return entries, nil
 }

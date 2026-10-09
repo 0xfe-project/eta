@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
@@ -92,54 +91,6 @@ func TestControl(t *testing.T) {
 		t.Fatalf("answer %v %v", answer, err)
 	}
 	if err := q.Tell(ctx, agent, map[string]any{"type": "interrupt"}); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestRoutineSchedulesFire(t *testing.T) {
-	q := connect(t)
-	ctx := context.Background()
-	// Whatever earlier runs left.
-	_, _ = q.TakeFires(ctx)
-	routine := uuid.NewString()
-	t.Cleanup(func() { _ = q.UnscheduleRoutine(context.Background(), routine) })
-	if err := q.FireRoutine(ctx, routine); err != nil {
-		t.Fatal(err)
-	}
-	fires, err := q.TakeFires(ctx)
-	if err != nil || len(fires) != 1 || fires[0] != (Fire{RoutineID: routine, Now: true}) {
-		t.Fatalf("fires %v %v", fires, err)
-	}
-	if fires, err := q.TakeFires(ctx); err != nil || len(fires) != 0 {
-		t.Fatalf("taken twice %v %v", fires, err)
-	}
-	// Every minute, in a time zone: NATS fires it on the minute.
-	if err := q.ScheduleRoutine(ctx, routine, "* * * * *", "Asia/Shanghai"); err != nil {
-		t.Fatal(err)
-	}
-	if err := q.ScheduleRoutine(ctx, routine, "* * * * *", "Asia/Shanghai"); err != nil {
-		t.Fatal(err) // replacing is fine
-	}
-	if os.Getenv("AXP_TEST_NATS_SLOW") != "" {
-		deadline := time.Now().Add(70 * time.Second)
-		for time.Now().Before(deadline) {
-			fires, err := q.TakeFires(ctx)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(fires) > 0 {
-				if fires[0] != (Fire{RoutineID: routine}) {
-					t.Fatalf("fire %v", fires[0])
-				}
-				break
-			}
-			time.Sleep(time.Second)
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the schedule never fired")
-		}
-	}
-	if err := q.UnscheduleRoutine(ctx, routine); err != nil {
 		t.Fatal(err)
 	}
 }

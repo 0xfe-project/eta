@@ -1,6 +1,6 @@
 # 队列
 
-本文说明 [#22](https://github.com/AkaraChen/axp/issues/22) 的实现：AXP 的队列是 NATS JetStream（2.14），承载聊天命令和[定时任务](routines.md)的计划。
+本文说明 [#22](https://github.com/AkaraChen/axp/issues/22) 的实现：AXP 的队列是 NATS JetStream（2.14），承载聊天命令。[定时任务](routines.md)服务也把计划放在同一个 NATS 里，但用它自己的 stream `ROUTINES`，与本文的队列无关。
 
 ## 只有一个队列
 

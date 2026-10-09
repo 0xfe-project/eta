@@ -8,6 +8,13 @@
         "$TURBO_ROOT$/packages/telemetry-go/**/*.go",
         "$TURBO_ROOT$/packages/telemetry-go/go.mod",
         "$TURBO_ROOT$/packages/telemetry-go/go.sum",
+        "$TURBO_ROOT$/packages/plugins-go/*.go",
+        "$TURBO_ROOT$/packages/plugins-go/go.mod",
+        "$TURBO_ROOT$/packages/plugins-go/go.sum",
+        "$TURBO_ROOT$/packages/service-go/**/*.go",
+        "$TURBO_ROOT$/packages/service-go/**/*.sql",
+        "$TURBO_ROOT$/packages/service-go/go.mod",
+        "$TURBO_ROOT$/packages/service-go/go.sum",
         "$TURBO_ROOT$/scripts/build/go.sh",
         "go.mod",
         "go.sum",
@@ -22,6 +29,13 @@
         "$TURBO_ROOT$/packages/telemetry-go/**/*.go",
         "$TURBO_ROOT$/packages/telemetry-go/go.mod",
         "$TURBO_ROOT$/packages/telemetry-go/go.sum",
+        "$TURBO_ROOT$/packages/plugins-go/*.go",
+        "$TURBO_ROOT$/packages/plugins-go/go.mod",
+        "$TURBO_ROOT$/packages/plugins-go/go.sum",
+        "$TURBO_ROOT$/packages/service-go/**/*.go",
+        "$TURBO_ROOT$/packages/service-go/**/*.sql",
+        "$TURBO_ROOT$/packages/service-go/go.mod",
+        "$TURBO_ROOT$/packages/service-go/go.sum",
         "$TURBO_ROOT$/scripts/build/go.sh",
         "go.mod",
         "go.sum",
@@ -46,7 +60,9 @@
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/go.work",
-        "$TURBO_ROOT$/packages/telemetry-go/**"
+        "$TURBO_ROOT$/packages/telemetry-go/**",
+        "$TURBO_ROOT$/packages/plugins-go/**",
+        "$TURBO_ROOT$/packages/service-go/**"
       ]
     },
     // Tests run against development's PostgreSQL, each binary in a database
@@ -57,7 +73,9 @@
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/go.work",
         "$TURBO_ROOT$/packages/telemetry-go/**",
-        "$TURBO_ROOT$/apps/agent-runtime/plugins/*/.codex-plugin/plugin.json"
+        "$TURBO_ROOT$/packages/plugins-go/**",
+        "$TURBO_ROOT$/apps/agent-runtime/plugins/*/plugin.json",
+        "$TURBO_ROOT$/apps/agent-runtime/plugins/*/mcp.json"
       ],
       "env": ["DATABASE_URL", "AXP_TEST_NATS_URL", "AXP_TEST_DOCKER"]
     }

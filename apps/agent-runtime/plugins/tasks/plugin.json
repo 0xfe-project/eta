@@ -1,0 +1,6 @@
+{
+  "name": "tasks",
+  "version": "2.0.0",
+  "description": "The task board: create, assign and follow tasks, including work by agents on the user's remote computers.",
+  "targets": ["chat"]
+}

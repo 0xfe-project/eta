@@ -17,12 +17,12 @@ hook 在容器里运行，而容器对 agent 完全开放：agent 可以把命�
 
 ## 组成
 
-| 部分             | 位置                                                             | 作用                                                                                                                                 |
-| ---------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| akhook           | `vendor/akhook`（submodule），镜像里是 `/usr/local/bin/akhook`   | 规则引擎。Codex 的受管 `PreToolUse` hook（`/etc/codex/requirements.toml`，不设 matcher）在每次工具调用前调用它，不认识的工具直接放行 |
-| 规则             | `apps/agent-runtime/hooks/akhook.yml` → `/etc/akhook/akhook.yml` | 镜像通过 `AKHOOK_ADDITIONAL_CONFIG_PATH` 加载。工作区仓库自带的 `.akhook.yml` 可以追加规则，但关不掉、也替换不了这些规则             |
-| `approval` 插件  | `apps/agent-runtime/plugins/approval`                            | MCP 工具 `request_approval`：读出请求，用 elicitation 问用户，同意后授权                                                             |
-| runtime / 控制面 | `runtime.py`、`projection.go`                                    | 把“只需确认”的 elicitation 当作审批，复用现有的确认卡片                                                                              |
+| 部分             | 位置                                                             | 作用                                                                                                                                                                                           |
+| ---------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| akhook           | `vendor/akhook`（submodule），镜像里是 `/usr/local/bin/akhook`   | 规则引擎。Codex 的受管 hook（`/etc/codex/requirements.toml`）：`PreToolUse` 不设 matcher，每次工具调用前调用它；`UserPromptSubmit` 和 `Stop` 运行插件的生命周期规则（[插件](plugins.md#hook)） |
+| 规则             | `apps/agent-runtime/hooks/akhook.yml` → `/etc/akhook/akhook.yml` | 镜像通过 `AKHOOK_ADDITIONAL_CONFIG_PATH` 加载。工作区仓库自带的 `.akhook.yml` 可以追加规则，但关不掉、也替换不了这些规则                                                                       |
+| `approval` 插件  | `apps/agent-runtime/plugins/approval`                            | MCP 工具 `request_approval`：读出请求，用 elicitation 问用户，同意后授权                                                                                                                       |
+| runtime / 控制面 | `runtime.py`、`projection.go`                                    | 把“只需确认”的 elicitation 当作审批，复用现有的确认卡片                                                                                                                                        |
 
 镜像构建时，akhook 由 `rust` 构建阶段从 submodule 编译（`scripts/build/image.sh` 以 `akhook-src` 构建上下文传入，submodule 缺失时先初始化）。镜像里还装了 `gh`。
 

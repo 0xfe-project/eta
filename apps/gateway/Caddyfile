@@ -26,13 +26,14 @@
 	}
 }
 
-# Failures use the control plane's error envelope.
+# Failures use the control plane's error envelope. An unreachable upstream is
+# 503, not 502: Cloudflare replaces an origin's 502 and 504 with its own page.
 (errors) {
 	handle_errors {
 		header Content-Type application/json
 		@too_large expression {err.status_code} == 413
 		respond @too_large `{"error":{"code":"PAYLOAD_TOO_LARGE","message":"请求内容过大。","request_id":"{http.request.uuid}"}}` 413
-		respond `{"error":{"code":"UPSTREAM_UNAVAILABLE","message":"服务暂时不可用，请稍后再试。","request_id":"{http.request.uuid}"}}` 502
+		respond `{"error":{"code":"UPSTREAM_UNAVAILABLE","message":"服务暂时不可用，请稍后再试。","request_id":"{http.request.uuid}"}}` 503
 	}
 }
 

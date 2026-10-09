@@ -1,7 +1,7 @@
 # The browser's entry: by longest prefix, /api/llm to the LLM gateway,
 # /api/memory to the memory service, /api/forge to the forge service,
-# /observe to OpenObserve, /api and /remote to the control plane, everything
-# else to web.
+# /api/routines to the routine service, /observe to OpenObserve, /api and
+# /remote to the control plane, everything else to web.
 # Paths are not rewritten and the browser's Host is kept.
 http://:{$AXP_GATEWAY_PORT:8080} {
 	bind {$AXP_GATEWAY_BIND:0.0.0.0}
@@ -30,6 +30,10 @@ http://:{$AXP_GATEWAY_PORT:8080} {
 	# Code hosting: connecting the GitHub App, and GitHub's redirect back.
 	handle /api/forge/* {
 		reverse_proxy {$AXP_UPSTREAM_FORGE:axp-forge:8330}
+	}
+	# Routines: agents that run on a schedule and leave reports.
+	handle /api/routines/* {
+		reverse_proxy {$AXP_UPSTREAM_ROUTINES:axp-routines:8340}
 	}
 	# OpenObserve's UI and API, served under /observe (ZO_BASE_URI).
 	handle /observe/* {

@@ -105,6 +105,9 @@ func (h handler) cancelLogin(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// error writes err for the browser. An upstream failure is 424, never 502:
+// Cloudflare, in front of production, replaces an origin's 502 and 504 with
+// its own error page, and the message would never reach the browser.
 func (h handler) error(c *gin.Context, err error) {
 	var ue *UserError
 	switch {
@@ -114,10 +117,10 @@ func (h handler) error(c *gin.Context, err error) {
 		h.fail(c, http.StatusConflict, "UNSUPPORTED", "该连接方式不支持此操作。")
 	case errors.As(err, &ue):
 		h.logger.Warn("llm request failed", "path", c.Request.URL.Path, "error", err)
-		h.fail(c, http.StatusBadGateway, ue.Code, ue.Message)
+		h.fail(c, http.StatusFailedDependency, ue.Code, ue.Message)
 	default:
 		h.logger.Error("llm request failed", "path", c.Request.URL.Path, "error", err)
-		h.fail(c, http.StatusBadGateway, "UPSTREAM_ERROR", "模型服务暂时不可用，请稍后再试。")
+		h.fail(c, http.StatusFailedDependency, "UPSTREAM_ERROR", "模型服务暂时不可用，请稍后再试。")
 	}
 }
 

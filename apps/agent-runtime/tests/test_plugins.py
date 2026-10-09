@@ -2,21 +2,16 @@
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 import threading
-import tomllib
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import pytest
 
-from axp_runtime import plugins
-
 PLUGINS = Path(__file__).resolve().parent.parent / "plugins"
 MEMORY_HOOK = PLUGINS / "memory" / "hooks" / "memory.py"
-CODEX = Path(__file__).resolve().parent.parent / "codex"
 
 
 class MemoryService:
@@ -71,7 +66,7 @@ def hook(service, tmp_path):
             env={
                 **os.environ,
                 "AXP_GATEWAY_URL": url or service.url,
-                "AXP_RUNTIME_LLM_KEY": "instance.token",
+                "AXP_AGENT_KEY": "instance.token",
                 "CODEX_HOME": str(tmp_path / "codex"),
             },
         )
@@ -84,7 +79,7 @@ class TestMemoryHooks:
     def test_recall_adds_memories_to_the_context(self, hook, service):
         service.memories = [{"id": "m1", "text": "用户的猫叫豆豆", "score": 0.4}]
         output = hook("recall", {"turn_id": "t1", "prompt": "我的猫叫什么"})
-        context = output["hookSpecificOutput"]["additionalContext"]
+        context = output["context"]
         assert "- 用户的猫叫豆豆 (memory m1)" in context
         assert service.requests == [
             ("/memory/recall", {"query": "我的猫叫什么"}, "Bearer instance.token")
@@ -124,125 +119,3 @@ class TestMemoryHooks:
             "recall", {"turn_id": "t2", "prompt": "hi"}, url="http://127.0.0.1:9"
         )
         assert output == {}
-
-
-class TestBuild:
-    """Building the image's plugins (axp_runtime/plugins.py)."""
-
-    @pytest.fixture
-    def built(self, tmp_path):
-        root = tmp_path / "plugins"
-        shutil.copytree(PLUGINS, root)
-        codex = tmp_path / "codex"
-        shutil.copytree(CODEX, codex)
-        # Setup scripts install system-wide; only the generated files here.
-        plugins.write_marketplace(root)
-        for name, tables in (
-            ("config.toml", plugins.tool_approvals(root)),
-            ("requirements.toml", plugins.managed_hooks(root)),
-        ):
-            with (codex / name).open("a") as file:
-                file.write(tables)
-        return root, codex
-
-    def test_marketplace_lists_every_plugin(self, built):
-        root, _ = built
-        catalog = json.loads((root / ".agents/plugins/marketplace.json").read_text())
-        assert catalog["name"] == "axp"
-        assert [p["name"] for p in catalog["plugins"]] == [
-            "approval",
-            "github",
-            "grok",
-            "memory",
-            "routine",
-            "tasks",
-        ]
-        for plugin in catalog["plugins"]:
-            assert (root / plugin["source"]["path"] / ".codex-plugin").is_dir()
-
-    def test_every_plugin_tool_is_approved(self, built):
-        _, codex = built
-        config = tomllib.loads((codex / "config.toml").read_text())
-        assert config["sandbox_mode"] == "danger-full-access"
-        servers = {
-            plugin: list(settings["mcp_servers"])
-            for plugin, settings in config["plugins"].items()
-        }
-        assert servers == {
-            "approval@axp": ["approval"],
-            "github@axp": ["github"],
-            "grok@axp": ["grok"],
-            "memory@axp": ["memory"],
-            "routine@axp": ["routine"],
-            "tasks@axp": ["tasks"],
-        }
-        for settings in config["plugins"].values():
-            for server in settings["mcp_servers"].values():
-                assert server == {"default_tools_approval_mode": "approve"}
-
-    def test_hooks_become_managed_and_run_from_the_image(self, built):
-        _, codex = built
-        requirements = tomllib.loads((codex / "requirements.toml").read_text())
-        assert requirements["allow_managed_hooks_only"]
-        [[recall]] = [g["hooks"] for g in requirements["hooks"]["UserPromptSubmit"]]
-        assert recall["timeout"] == 5
-        assert (
-            "python /opt/axp/plugins/memory/hooks/memory.py recall"
-            in (recall["command"])
-        )
-        assert set(requirements["hooks"]) == {"UserPromptSubmit", "Stop", "PreToolUse"}
-
-    def test_akhook_checks_every_agent(self, built):
-        """The image's rules are not a plugin's: they apply to every agent."""
-        _, codex = built
-        requirements = tomllib.loads((codex / "requirements.toml").read_text())
-        [group] = requirements["hooks"]["PreToolUse"]
-        [hook] = group["hooks"]
-        assert hook["command"] == "akhook codex hook pre_tool_use"
-        # It sees every tool call; it passes what it does not understand.
-        assert "matcher" not in group
-
-    def test_hooks_run_only_where_their_plugin_is_installed(self, built, tmp_path):
-        _, codex = built
-        requirements = tomllib.loads((codex / "requirements.toml").read_text())
-        command = requirements["hooks"]["Stop"][0]["hooks"][0]["command"]
-        command = command.replace("python /opt/axp/plugins", "echo ran")
-        home = tmp_path / "home"
-
-        def run():
-            env = {**os.environ, "CODEX_HOME": str(home)}
-            return subprocess.run(
-                ["sh", "-c", command], env=env, capture_output=True, text=True
-            )
-
-        assert (run().returncode, run().stdout) == (0, "")
-        (home / "plugins/cache/axp/memory/1.0.0").mkdir(parents=True)
-        assert run().stdout == "ran/memory/hooks/memory.py capture\n"
-
-    def test_setup_scripts_are_executable(self):
-        for plugin in plugins.plugins(PLUGINS):
-            script = plugin / "setup"
-            if script.exists():
-                assert os.access(script, os.X_OK), script
-
-    def test_setup_runs_from_the_plugin_with_its_cache(self, tmp_path):
-        root = tmp_path / "plugins"
-        plugin = root / "demo"
-        (plugin / ".codex-plugin").mkdir(parents=True)
-        (plugin / ".codex-plugin/plugin.json").write_text('{"name": "demo"}')
-        (plugin / "setup").write_text(
-            '#!/bin/sh\necho "$PWD $PLUGIN_ROOT" > "$AXP_PLUGIN_CACHE/ran"\n'
-        )
-        (plugin / "setup").chmod(0o755)
-        plugins.setup(root, tmp_path / "cache")
-        assert (tmp_path / "cache/demo/ran").read_text() == f"{plugin} {plugin}\n"
-
-    def test_failed_setup_fails_the_build(self, tmp_path):
-        root = tmp_path / "plugins"
-        plugin = root / "demo"
-        (plugin / ".codex-plugin").mkdir(parents=True)
-        (plugin / ".codex-plugin/plugin.json").write_text('{"name": "demo"}')
-        (plugin / "setup").write_text("#!/bin/sh\nexit 3\n")
-        (plugin / "setup").chmod(0o755)
-        with pytest.raises(subprocess.CalledProcessError):
-            plugins.setup(root, tmp_path / "cache")

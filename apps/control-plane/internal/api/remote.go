@@ -12,10 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akarachen/axp/apps/control-plane/internal/apierr"
 	"github.com/akarachen/axp/apps/control-plane/internal/tasks"
+	"github.com/akarachen/axp/packages/service-go/apierr"
+	"github.com/akarachen/axp/packages/service-go/httpapi"
+	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 )
@@ -62,13 +63,14 @@ type GitCredentials struct {
 func remoteOp(id, method, path, summary string, status int) huma.Operation {
 	return huma.Operation{
 		OperationID: id, Method: method, Path: path, Summary: summary, DefaultStatus: status,
-		Tags: []string{"remote"}, Errors: []int{400, 401, 403, 404, 409, 422, 502, 503},
+		Tags: []string{"remote"}, Errors: []int{400, 401, 403, 404, 409, 422, 424, 503},
 	}
 }
 
-// remote mounts /remote on r.
-func remote(r chi.Router, d *Deps) {
-	api := humachi.New(r, config("AXP Remote Computers", "1", "/remote", true))
+// remote mounts /remote on public's router, with its own OpenAPI document.
+func remote(public *httpapi.API, d *Deps) {
+	r := public.Router
+	api := public.Sub(httpapi.Config{Title: "AXP Remote Computers", Version: "1", Prefix: "/remote", Docs: true})
 	s := d.Tasks
 
 	r.Get("/remote/install.sh", func(w http.ResponseWriter, req *http.Request) {
@@ -78,7 +80,7 @@ func remote(r chi.Router, d *Deps) {
 	r.Get("/remote/dl/{name}", func(w http.ResponseWriter, req *http.Request) {
 		name := chi.URLParam(req, "name")
 		if !downloadable.MatchString(name) {
-			writeJSON(w, newError(req.Context(), 404, ""))
+			httpapi.WriteError(w, req, apierr.NotFound())
 			return
 		}
 		for dir := range strings.SplitSeq(d.RemoteDist, ":") {
@@ -89,16 +91,16 @@ func remote(r chi.Router, d *Deps) {
 				return
 			}
 		}
-		writeJSON(w, newError(req.Context(), 404, ""))
+		httpapi.WriteError(w, req, apierr.NotFound())
 	})
 
 	huma.Register(api, remoteOp("enroll", http.MethodPost, "/remote/v1/enroll", "Trade an install code for the computer's token", 200),
-		func(ctx context.Context, in *struct{ Body EnrollIn }) (*body[tasks.Enrolled], error) {
-			e, err := inTx(ctx, d, func(tx pgx.Tx) (*tasks.Enrolled, error) { return s.Enroll(ctx, tx, in.Body.Code, in.Body.Report) })
+		func(ctx context.Context, in *struct{ Body EnrollIn }) (*httpapi.Body[tasks.Enrolled], error) {
+			e, err := pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (*tasks.Enrolled, error) { return s.Enroll(ctx, tx, in.Body.Code, in.Body.Report) })
 			if err != nil {
 				return nil, err
 			}
-			return &body[tasks.Enrolled]{*e}, nil
+			return &httpapi.Body[tasks.Enrolled]{Body: *e}, nil
 		})
 
 	huma.Register(api, remoteOp("report", http.MethodPost, "/remote/v1/report",
@@ -117,7 +119,7 @@ func remote(r chi.Router, d *Deps) {
 		func(ctx context.Context, in *struct {
 			RemoteBearer
 			Dir string `query:"dir" minLength:"1" maxLength:"4096"`
-		}) (*body[CurrentTask], error) {
+		}) (*httpapi.Body[CurrentTask], error) {
 			c, err := in.computer(ctx, d)
 			if err != nil {
 				return nil, err
@@ -126,11 +128,11 @@ func remote(r chi.Router, d *Deps) {
 			if err != nil {
 				return nil, err
 			}
-			return &body[CurrentTask]{CurrentTask{id}}, nil
+			return &httpapi.Body[CurrentTask]{Body: CurrentTask{id}}, nil
 		})
 
 	huma.Register(api, remoteOp("remoteGetTask", http.MethodGet, "/remote/v1/tasks/{task_id}", "A task the computer works on", 200),
-		func(ctx context.Context, in *RemoteTaskPath) (*body[tasks.TaskDetail], error) {
+		func(ctx context.Context, in *RemoteTaskPath) (*httpapi.Body[tasks.TaskDetail], error) {
 			c, err := in.computer(ctx, d)
 			if err != nil {
 				return nil, err
@@ -139,7 +141,7 @@ func remote(r chi.Router, d *Deps) {
 			if err != nil {
 				return nil, err
 			}
-			return &body[tasks.TaskDetail]{*t}, nil
+			return &httpapi.Body[tasks.TaskDetail]{Body: *t}, nil
 		})
 
 	// write is a CLI write on a task the computer works on.
@@ -179,7 +181,7 @@ func remote(r chi.Router, d *Deps) {
 
 	huma.Register(api, remoteOp("gitCredentials", http.MethodGet, "/remote/v1/git/credentials",
 		"The GitHub App's token for git and gh", 200),
-		func(ctx context.Context, in *RemoteBearer) (*body[GitCredentials], error) {
+		func(ctx context.Context, in *RemoteBearer) (*httpapi.Body[GitCredentials], error) {
 			c, err := in.computer(ctx, d)
 			if err != nil {
 				return nil, err
@@ -188,7 +190,7 @@ func remote(r chi.Router, d *Deps) {
 			if err != nil {
 				return nil, err
 			}
-			return &body[GitCredentials]{*creds}, nil
+			return &httpapi.Body[GitCredentials]{Body: *creds}, nil
 		})
 }
 
@@ -197,7 +199,7 @@ func remoteWrite(ctx context.Context, d *Deps, b RemoteBearer, fn func(pgx.Tx, *
 	if err != nil {
 		return err
 	}
-	_, err = inTx(ctx, d, func(tx pgx.Tx) (struct{}, error) { return struct{}{}, fn(tx, c) })
+	_, err = pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (struct{}, error) { return struct{}{}, fn(tx, c) })
 	return err
 }
 
@@ -237,7 +239,7 @@ func forgeCredentials(ctx context.Context, forgeURL, caller string) (*GitCredent
 		if e.Error.Message == "" {
 			e.Error.Message = "GitHub 还没有连接。"
 		}
-		return nil, apierr.New(502, "FORGE_ERROR", e.Error.Message)
+		return nil, apierr.Upstream("FORGE_ERROR", e.Error.Message)
 	}
 	var creds GitCredentials
 	if err := json.Unmarshal(data, &creds); err != nil {

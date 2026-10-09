@@ -8,7 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/akarachen/axp/apps/control-plane/internal/apierr"
+	"github.com/akarachen/axp/packages/service-go/apierr"
+	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -74,7 +75,7 @@ func (s *Service) ImportEvents(ctx context.Context, tx pgx.Tx, instanceID string
 	if err := LockConversation(ctx, tx, conversationID); err != nil {
 		return 0, err
 	}
-	instance, err := One[RuntimeRecord](ctx, tx, "SELECT * FROM runtime_instance WHERE id = $1 FOR UPDATE", instanceID)
+	instance, err := pg.One[RuntimeRecord](ctx, tx, "SELECT * FROM runtime_instance WHERE id = $1 FOR UPDATE", instanceID)
 	if err != nil {
 		return 0, err
 	}
@@ -109,7 +110,7 @@ func (s *Service) ImportEvents(ctx context.Context, tx pgx.Tx, instanceID string
 		}
 		var eventSeq int64
 		if err := tx.QueryRow(ctx, `UPDATE conversation SET last_event_seq = last_event_seq + 1, updated_at = $2
-			WHERE id = $1 RETURNING last_event_seq`, conversationID, Now()).Scan(&eventSeq); err != nil {
+			WHERE id = $1 RETURNING last_event_seq`, conversationID, pg.Now()).Scan(&eventSeq); err != nil {
 			return 0, err
 		}
 		var commandID *string
@@ -119,8 +120,8 @@ func (s *Service) ImportEvents(ctx context.Context, tx pgx.Tx, instanceID string
 		if _, err := tx.Exec(ctx, `INSERT INTO agent_event (id, conversation_id, agent_id, command_id,
 			runtime_instance_id, source_event_id, source_seq, seq, type, schema_version, payload, created_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, $10, $11)`,
-			NewID(), conversationID, instance.AgentID, commandID, instance.ID, event.SourceEventID, seq,
-			eventSeq, truncate(event.Type, 64), payload, Now()); err != nil {
+			pg.NewID(), conversationID, instance.AgentID, commandID, instance.ID, event.SourceEventID, seq,
+			eventSeq, truncate(event.Type, 64), payload, pg.Now()); err != nil {
 			return 0, err
 		}
 		instance.LastSourceSeq = seq
@@ -217,15 +218,15 @@ func (p *projection) command(ctx context.Context, id any) (*CommandRecord, error
 	if !ok || s == "" {
 		return nil, nil
 	}
-	parsed, ok := ParseID(s)
+	parsed, ok := pg.ParseID(s)
 	if !ok {
 		return nil, nil
 	}
-	return One[CommandRecord](ctx, p.tx, "SELECT * FROM agent_command WHERE id = $1 AND agent_id = $2", parsed, p.agentID)
+	return pg.One[CommandRecord](ctx, p.tx, "SELECT * FROM agent_command WHERE id = $1 AND agent_id = $2", parsed, p.agentID)
 }
 
 func (p *projection) touch(ctx context.Context) error {
-	now := Now()
+	now := pg.Now()
 	_, err := p.tx.Exec(ctx, "UPDATE agent SET last_active_at = $2, updated_at = $2 WHERE id = $1", p.agentID, now)
 	return err
 }
@@ -253,14 +254,14 @@ func (p *projection) turnStarted(ctx context.Context, command *CommandRecord, pa
 	command.CodexTurnID = stringField(payload, "turn_id")
 	if _, err := p.tx.Exec(ctx, `UPDATE agent_command SET status = $2, runtime_instance_id = $3, codex_turn_id = $4,
 		started_at = COALESCE(started_at, $5) WHERE id = $1`,
-		command.ID, command.Status, p.instance.ID, command.CodexTurnID, Now()); err != nil {
+		command.ID, command.Status, p.instance.ID, command.CodexTurnID, pg.Now()); err != nil {
 		return err
 	}
 	if err := p.setLastTurn(ctx, command.CodexTurnID); err != nil {
 		return err
 	}
 	if _, err := p.tx.Exec(ctx, "UPDATE agent SET status = 'busy', updated_at = $2 WHERE id = $1 AND status <> 'busy'",
-		p.agentID, Now()); err != nil {
+		p.agentID, pg.Now()); err != nil {
 		return err
 	}
 	if err := p.touch(ctx); err != nil {
@@ -388,8 +389,8 @@ func (p *projection) approvalRequested(ctx context.Context, command *CommandReco
 	} else {
 		summary = map[string]*string{"command": field("command", 500), "reason": field("reason", 300)}
 	}
-	approvalID := NewID()
-	now := Now()
+	approvalID := pg.NewID()
+	now := pg.Now()
 	if _, err := p.tx.Exec(ctx, `INSERT INTO approval (id, agent_id, command_id, runtime_instance_id, generation,
 		sdk_request_id, kind, summary, status, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9)`,
@@ -403,7 +404,7 @@ func (p *projection) approvalRequested(ctx context.Context, command *CommandReco
 	}
 	stopping := r.Status != MessageQueued && r.Status != MessageResponding
 	interaction := &interactionRow{
-		ID: NewID(), ConversationID: r.ConversationID, AgentID: p.agentID, MessageID: r.ID,
+		ID: pg.NewID(), ConversationID: r.ConversationID, AgentID: p.agentID, MessageID: r.ID,
 		ApprovalID: &approvalID, Kind: "choice", Prompt: approvalPrompt(kind, summary),
 		Options:  []InteractionOption{{Value: "allow", Label: "允许"}, {Value: "deny", Label: "拒绝"}},
 		Status:   InteractionPending,
@@ -442,12 +443,12 @@ func (p *projection) approvalRequested(ctx context.Context, command *CommandReco
 // approval is the agent's latest approval with the payload's id, and its
 // interaction.
 func (p *projection) approval(ctx context.Context, payload map[string]any) (*approvalRow, *interactionRow, error) {
-	approval, err := One[approvalRow](ctx, p.tx, `SELECT * FROM approval WHERE agent_id = $1 AND sdk_request_id = $2
+	approval, err := pg.One[approvalRow](ctx, p.tx, `SELECT * FROM approval WHERE agent_id = $1 AND sdk_request_id = $2
 		ORDER BY created_at DESC LIMIT 1`, p.agentID, pyStr(payload["approval_id"]))
 	if err != nil || approval == nil {
 		return nil, nil, err
 	}
-	interaction, err := One[interactionRow](ctx, p.tx, "SELECT * FROM interaction WHERE approval_id = $1", approval.ID)
+	interaction, err := pg.One[interactionRow](ctx, p.tx, "SELECT * FROM interaction WHERE approval_id = $1", approval.ID)
 	return approval, interaction, err
 }
 
@@ -457,7 +458,7 @@ func (p *projection) approvalApplied(ctx context.Context, _ *CommandRecord, payl
 		return err
 	}
 	if _, err := p.tx.Exec(ctx, "UPDATE approval SET status = 'applied', decision = $2, resolved_at = $3 WHERE id = $1",
-		approval.ID, truncate(pyStr(payload["decision"]), 16), Now()); err != nil {
+		approval.ID, truncate(pyStr(payload["decision"]), 16), pg.Now()); err != nil {
 		return err
 	}
 	if interaction != nil && (interaction.Status == InteractionSubmitted || interaction.Status == InteractionPending) {
@@ -470,7 +471,7 @@ func (p *projection) approvalApplied(ctx context.Context, _ *CommandRecord, payl
 			return err
 		}
 	}
-	command, err := One[CommandRecord](ctx, p.tx, "SELECT * FROM agent_command WHERE id = $1", approval.CommandID)
+	command, err := pg.One[CommandRecord](ctx, p.tx, "SELECT * FROM agent_command WHERE id = $1", approval.CommandID)
 	if err != nil {
 		return err
 	}
@@ -498,7 +499,7 @@ func (p *projection) approvalExpired(ctx context.Context, _ *CommandRecord, payl
 		return err
 	}
 	if _, err := p.tx.Exec(ctx, "UPDATE approval SET status = 'expired', resolved_at = $2 WHERE id = $1",
-		approval.ID, Now()); err != nil {
+		approval.ID, pg.Now()); err != nil {
 		return err
 	}
 	if interaction != nil && (interaction.Status == InteractionPending || interaction.Status == InteractionSubmitted) {
@@ -544,7 +545,7 @@ func (p *projection) turnSteered(ctx context.Context, command *CommandRecord, pa
 	if err != nil || steer == nil || steer.terminal() {
 		return err
 	}
-	now := Now()
+	now := pg.Now()
 	interruptAt := steer.InterruptRequestedAt
 	if command != nil && command.InterruptRequestedAt != nil && interruptAt == nil {
 		// Stopping the turn's first part stops all of it.
@@ -625,7 +626,7 @@ func (s *Service) MarkRuntimeFailed(ctx context.Context, tx pgx.Tx, instance *Ru
 		status = AgentRecoveryFailed
 	}
 	if _, err := tx.Exec(ctx, "UPDATE agent SET status = $2, last_error_code = $3, updated_at = $4 WHERE id = $1",
-		instance.AgentID, status, errorCode, Now()); err != nil {
+		instance.AgentID, status, errorCode, pg.Now()); err != nil {
 		return err
 	}
 	if recovery {
@@ -647,7 +648,7 @@ func (s *Service) MarkRuntimeFailed(ctx context.Context, tx pgx.Tx, instance *Ru
 	if err := s.Queue.Drop(ctx, instance.AgentID); err != nil {
 		return fmt.Errorf("drop the agent's queue: %w", err)
 	}
-	waiting, err := All[CommandRecord](ctx, tx, `SELECT * FROM agent_command
+	waiting, err := pg.All[CommandRecord](ctx, tx, `SELECT * FROM agent_command
 		WHERE agent_id = $1 AND status = 'queued' ORDER BY agent_sequence`, instance.AgentID)
 	if err != nil {
 		return err

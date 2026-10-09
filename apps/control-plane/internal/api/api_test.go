@@ -14,8 +14,9 @@ import (
 
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
 	"github.com/akarachen/axp/apps/control-plane/internal/llm"
-	"github.com/akarachen/axp/apps/control-plane/internal/store"
 	"github.com/akarachen/axp/apps/control-plane/internal/tasks"
+	"github.com/akarachen/axp/packages/service-go/pg"
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -273,8 +274,6 @@ func TestPluginsAreChosenFromTheCatalog(t *testing.T) {
 	// Catalog order, whatever order they were sent in.
 	expect(t, fmt.Sprint(created.m(t)["plugins"]), "[grok tasks]")
 	expectError(t, e.post("/agents", map[string]any{"name": "a", "plugins": []string{"nope"}}), 422, "PLUGIN_NOT_FOUND")
-	// Routine runs' own tools are not an agent's to choose.
-	expectError(t, e.post("/agents", map[string]any{"name": "a", "plugins": []string{"routine"}}), 422, "PLUGIN_NOT_FOUND")
 }
 
 func TestChangingPluginsBumpsConfigVersion(t *testing.T) {
@@ -593,7 +592,7 @@ func (r *streamRecorder) Write(b []byte) (int, error) {
 func (r *streamRecorder) Flush() {}
 
 func TestPublicSchemaHasNoInternalFields(t *testing.T) {
-	_, document := Public(&Deps{Chat: &chat.Service{}, Tasks: &tasks.Service{}})
+	document := Public(&Deps{Chat: &chat.Service{}, Tasks: &tasks.Service{}}).API
 	spec := document.OpenAPI()
 	var paths []string
 	for path := range spec.Paths {
@@ -610,8 +609,6 @@ func TestPublicSchemaHasNoInternalFields(t *testing.T) {
 		"/api/v1/computers/{computer_id}", "/api/v1/computers/{computer_id}/install",
 		"/api/v1/computers/{computer_id}/runtimes/{kind}/approve",
 		"/api/v1/computers/{computer_id}/runtimes/{kind}/places", "/api/v1/plugins",
-		"/api/v1/routines", "/api/v1/routines/{routine_id}", "/api/v1/routines/{routine_id}/briefs/{version}/restore",
-		"/api/v1/routines/{routine_id}/run", "/api/v1/routines/{routine_id}/runs/{run_id}/feedback",
 		"/api/v1/tasks", "/api/v1/tasks/{task_id}", "/api/v1/tasks/{task_id}/comments",
 		"/api/v1/tasks/{task_id}/runs/{run_id}/interrupt", "/api/v1/tasks/{task_id}/runs/{run_id}/log",
 	}
@@ -633,6 +630,24 @@ func TestPublicSchemaHasNoInternalFields(t *testing.T) {
 	assertNoInternalFields(t, properties)
 }
 
+// Cloudflare, in front of production, replaces an origin's 502 and 504 with
+// its own error page: no operation may answer with them.
+func TestNoOperationAnswersWithStatusesCloudflareReplaces(t *testing.T) {
+	document := Public(&Deps{Chat: &chat.Service{}, Tasks: &tasks.Service{}}).API
+	for path, item := range document.OpenAPI().Paths {
+		for _, op := range []*huma.Operation{item.Get, item.Post, item.Put, item.Patch, item.Delete} {
+			if op == nil {
+				continue
+			}
+			for status := range op.Responses {
+				if status == "502" || status == "504" {
+					t.Fatalf("%s %s answers %s", op.Method, path, status)
+				}
+			}
+		}
+	}
+}
+
 func TestConcurrentFirstAgentsShareOneDefaultChat(t *testing.T) {
 	e := newEnv(t)
 	var wg sync.WaitGroup
@@ -641,7 +656,7 @@ func TestConcurrentFirstAgentsShareOneDefaultChat(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errs <- store.InTx(e.ctx, e.db, func(tx pgx.Tx) error {
+			errs <- pg.InTx(e.ctx, e.db, func(tx pgx.Tx) error {
 				_, err := e.chat.CreateAgent(e.ctx, tx, fmt.Sprintf("agent-%d", i), "", nil, nil)
 				return err
 			})
@@ -665,7 +680,7 @@ func TestMessageAgentMustShareConversation(t *testing.T) {
 	command := scalar[string](e, "SELECT id FROM agent_command")
 	e.exec(`INSERT INTO conversation (id, is_default, title, last_event_seq, last_ui_event_seq, last_message_seq,
 		created_at, updated_at) VALUES ($1, false, '', 0, 0, 0, now(), now())`, "00000000-0000-0000-0000-000000000001")
-	err := store.InTx(e.ctx, e.db, func(tx pgx.Tx) error {
+	err := pg.InTx(e.ctx, e.db, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(e.ctx, "SET CONSTRAINTS ALL IMMEDIATE"); err != nil {
 			return err
 		}

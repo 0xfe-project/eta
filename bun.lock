@@ -45,6 +45,9 @@
     "apps/remote": {
       "name": "@axp/remote",
     },
+    "apps/routine-service": {
+      "name": "@axp/routine-service",
+    },
     "apps/web": {
       "name": "@axp/web",
       "dependencies": {
@@ -96,6 +99,12 @@
         "vite": "latest",
       },
     },
+    "packages/plugins-go": {
+      "name": "@axp/plugins-go",
+    },
+    "packages/service-go": {
+      "name": "@axp/service-go",
+    },
     "packages/telemetry-go": {
       "name": "@axp/telemetry-go",
     },
@@ -120,9 +129,15 @@
 
     "@axp/memory-service": ["@axp/memory-service@workspace:apps/memory-service"],
 
+    "@axp/plugins-go": ["@axp/plugins-go@workspace:packages/plugins-go"],
+
     "@axp/relay": ["@axp/relay@workspace:apps/relay"],
 
     "@axp/remote": ["@axp/remote@workspace:apps/remote"],
+
+    "@axp/routine-service": ["@axp/routine-service@workspace:apps/routine-service"],
+
+    "@axp/service-go": ["@axp/service-go@workspace:packages/service-go"],
 
     "@axp/telemetry-go": ["@axp/telemetry-go@workspace:packages/telemetry-go"],
 

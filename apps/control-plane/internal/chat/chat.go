@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akarachen/axp/apps/control-plane/internal/apierr"
 	"github.com/akarachen/axp/apps/control-plane/internal/llm"
 	"github.com/akarachen/axp/apps/control-plane/internal/plugins"
 	"github.com/akarachen/axp/apps/control-plane/internal/queue"
-	"github.com/akarachen/axp/apps/control-plane/internal/store"
+	"github.com/akarachen/axp/packages/service-go/apierr"
+	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -33,7 +33,7 @@ type Service struct {
 
 // --- reads --------------------------------------------------------------------
 
-func (s *Service) Snapshot(ctx context.Context, db store.DB) (*Snapshot, error) {
+func (s *Service) Snapshot(ctx context.Context, db pg.DB) (*Snapshot, error) {
 	snapshot := &Snapshot{Agents: []Agent{}, ActiveReplies: []Message{}, Interactions: []Interaction{}}
 	conversationID, err := DefaultConversationID(ctx, db)
 	if err != nil {
@@ -49,7 +49,7 @@ func (s *Service) Snapshot(ctx context.Context, db store.DB) (*Snapshot, error) 
 	if err := db.QueryRow(ctx, "SELECT last_ui_event_seq FROM conversation WHERE id = $1", conversationID).Scan(&seq); err != nil {
 		return nil, err
 	}
-	agents, err := All[AgentRecord](ctx, db, `SELECT * FROM agent
+	agents, err := pg.All[AgentRecord](ctx, db, `SELECT * FROM agent
 		WHERE conversation_id = $1 AND deleted_at IS NULL ORDER BY created_at, id`, conversationID)
 	if err != nil {
 		return nil, err
@@ -57,7 +57,7 @@ func (s *Service) Snapshot(ctx context.Context, db store.DB) (*Snapshot, error) 
 	for _, a := range agents {
 		snapshot.Agents = append(snapshot.Agents, a.public())
 	}
-	active, err := All[messageRow](ctx, db, `SELECT * FROM message
+	active, err := pg.All[messageRow](ctx, db, `SELECT * FROM message
 		WHERE conversation_id = $1 AND role = 'assistant' AND status = ANY($2) ORDER BY seq`,
 		conversationID, activeMessageStatuses)
 	if err != nil {
@@ -66,7 +66,7 @@ func (s *Service) Snapshot(ctx context.Context, db store.DB) (*Snapshot, error) 
 	for _, m := range active {
 		snapshot.ActiveReplies = append(snapshot.ActiveReplies, m.public())
 	}
-	interactions, err := All[interactionRow](ctx, db, `SELECT * FROM interaction
+	interactions, err := pg.All[interactionRow](ctx, db, `SELECT * FROM interaction
 		WHERE conversation_id = $1 AND status IN ('pending', 'submitted') ORDER BY created_at, id`, conversationID)
 	if err != nil {
 		return nil, err
@@ -79,13 +79,13 @@ func (s *Service) Snapshot(ctx context.Context, db store.DB) (*Snapshot, error) 
 }
 
 // Interactions is the latest interactions of every agent, newest first.
-func (s *Service) Interactions(ctx context.Context, db store.DB, limit int) (*InteractionList, error) {
+func (s *Service) Interactions(ctx context.Context, db pg.DB, limit int) (*InteractionList, error) {
 	list := &InteractionList{Interactions: []Interaction{}}
 	conversationID, err := DefaultConversationID(ctx, db)
 	if err != nil || conversationID == "" {
 		return list, err
 	}
-	rows, err := All[interactionRow](ctx, db, `SELECT * FROM interaction
+	rows, err := pg.All[interactionRow](ctx, db, `SELECT * FROM interaction
 		WHERE conversation_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2`, conversationID, limit)
 	if err != nil {
 		return nil, err
@@ -98,7 +98,7 @@ func (s *Service) Interactions(ctx context.Context, db store.DB, limit int) (*In
 
 // History is one agent's messages, newest page first; each page in send
 // order.
-func (s *Service) History(ctx context.Context, db store.DB, agentID, before string, limit int) (*MessagePage, error) {
+func (s *Service) History(ctx context.Context, db pg.DB, agentID, before string, limit int) (*MessagePage, error) {
 	beforeSeq := int64(-1)
 	if before != "" {
 		seq, err := s.Cursors.DecodeHistory(before)
@@ -111,11 +111,11 @@ func (s *Service) History(ctx context.Context, db store.DB, agentID, before stri
 	if err != nil {
 		return nil, err
 	}
-	id, ok := ParseID(agentID)
+	id, ok := pg.ParseID(agentID)
 	if conversationID == "" || !ok {
 		return nil, apierr.NotFound()
 	}
-	found, err := Exists(ctx, db, `SELECT 1 FROM agent
+	found, err := pg.Exists(ctx, db, `SELECT 1 FROM agent
 		WHERE id = $1 AND conversation_id = $2 AND deleted_at IS NULL`, id, conversationID)
 	if err != nil {
 		return nil, err
@@ -129,7 +129,7 @@ func (s *Service) History(ctx context.Context, db store.DB, agentID, before stri
 		query += " AND seq < $3"
 		args = append(args, beforeSeq)
 	}
-	page, err := All[messageRow](ctx, db, query+" ORDER BY seq DESC LIMIT $2", args...)
+	page, err := pg.All[messageRow](ctx, db, query+" ORDER BY seq DESC LIMIT $2", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -152,11 +152,11 @@ func (s *Service) History(ctx context.Context, db store.DB, agentID, before stri
 // --- writes (in the caller's transaction) -----------------------------------------
 
 func liveAgent(ctx context.Context, tx pgx.Tx, conversationID, agentID string) (*AgentRecord, error) {
-	id, ok := ParseID(agentID)
+	id, ok := pg.ParseID(agentID)
 	if !ok {
 		return nil, apierr.NotFound()
 	}
-	agent, err := One[AgentRecord](ctx, tx, `SELECT * FROM agent
+	agent, err := pg.One[AgentRecord](ctx, tx, `SELECT * FROM agent
 		WHERE id = $1 AND conversation_id = $2 AND deleted_at IS NULL`, id, conversationID)
 	if err != nil {
 		return nil, err
@@ -185,9 +185,9 @@ func (s *Service) CreateAgent(ctx context.Context, tx pgx.Tx, name, description 
 	if err := LockConversation(ctx, tx, conversationID); err != nil {
 		return nil, err
 	}
-	now := Now()
+	now := pg.Now()
 	agent := &AgentRecord{
-		ID: NewID(), ConversationID: conversationID, Name: name, Description: description,
+		ID: pg.NewID(), ConversationID: conversationID, Name: name, Description: description,
 		Model: model, Plugins: chosen, DesiredState: DesiredStopped, Status: AgentStopped,
 		ProductStatus: ProductIdle, ProductRevision: 1, CreatedAt: now, UpdatedAt: now,
 	}
@@ -256,7 +256,7 @@ func (s *Service) UpdateAgent(ctx context.Context, tx pgx.Tx, agentID string, ch
 		if _, err := tx.Exec(ctx, `UPDATE agent SET name = $2, description = $3, model = $4, plugins = $5,
 			config_version = $6, product_revision = $7, updated_at = $8 WHERE id = $1`,
 			agent.ID, agent.Name, agent.Description, agent.Model, agent.Plugins,
-			agent.ConfigVersion, agent.ProductRevision, Now()); err != nil {
+			agent.ConfigVersion, agent.ProductRevision, pg.Now()); err != nil {
 			return nil, err
 		}
 		if err := emitAgent(ctx, tx, agent); err != nil {
@@ -278,7 +278,7 @@ func (s *Service) DeleteAgent(ctx context.Context, tx pgx.Tx, agentID string) er
 	if err != nil {
 		return err
 	}
-	now := Now()
+	now := pg.Now()
 	if _, err := tx.Exec(ctx, `UPDATE agent SET deleted_at = $2, desired_state = 'stopped', updated_at = $2
 		WHERE id = $1`, agent.ID, now); err != nil {
 		return err
@@ -305,14 +305,14 @@ func (s *Service) RestartAgent(ctx context.Context, tx pgx.Tx, agentID string) e
 		return err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE agent SET config_version = config_version + 1, updated_at = $2
-		WHERE id = $1`, agent.ID, Now()); err != nil {
+		WHERE id = $1`, agent.ID, pg.Now()); err != nil {
 		return err
 	}
 	return s.stopReplies(ctx, tx, agent.ID)
 }
 
 func (s *Service) stopReplies(ctx context.Context, tx pgx.Tx, agentID string) error {
-	replies, err := All[messageRow](ctx, tx, `SELECT * FROM message
+	replies, err := pg.All[messageRow](ctx, tx, `SELECT * FROM message
 		WHERE agent_id = $1 AND role = 'assistant' AND status = ANY($2) ORDER BY seq`, agentID, activeMessageStatuses)
 	if err != nil {
 		return err
@@ -341,12 +341,12 @@ func (s *Service) Compact(ctx context.Context, tx pgx.Tx, agentID string) (*Sent
 }
 
 func textBlock(text string) Block {
-	return Block{ID: strings.ReplaceAll(NewID(), "-", ""), Type: "text", Text: text}
+	return Block{ID: strings.ReplaceAll(pg.NewID(), "-", ""), Type: "text", Text: text}
 }
 
 func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, agentID, text string, input map[string]any, kind string) (*Sent, error) {
 	// A network call: before taking the conversation lock.
-	if id, ok := ParseID(agentID); ok {
+	if id, ok := pg.ParseID(agentID); ok {
 		var model *string
 		err := tx.QueryRow(ctx, "SELECT model FROM agent WHERE id = $1 AND deleted_at IS NULL", id).Scan(&model)
 		if err == nil {
@@ -365,8 +365,8 @@ func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, agentID, text string, 
 	if err != nil {
 		return nil, err
 	}
-	now := Now()
-	command := &CommandRecord{ID: NewID(), AgentID: agent.ID, Kind: kind, Status: CommandQueued, Input: input, CreatedAt: now}
+	now := pg.Now()
+	command := &CommandRecord{ID: pg.NewID(), AgentID: agent.ID, Kind: kind, Status: CommandQueued, Input: input, CreatedAt: now}
 	if err := tx.QueryRow(ctx, `UPDATE agent SET last_command_seq = last_command_seq + 1
 		WHERE id = $1 RETURNING last_command_seq`, agent.ID).Scan(&command.AgentSequence); err != nil {
 		return nil, err
@@ -382,12 +382,12 @@ func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, agentID, text string, 
 		return nil, err
 	}
 	message := &messageRow{
-		ID: NewID(), ConversationID: conversationID, AgentID: agent.ID, CommandID: command.ID,
+		ID: pg.NewID(), ConversationID: conversationID, AgentID: agent.ID, CommandID: command.ID,
 		Seq: seq - 1, Role: RoleUser, Status: MessageCompleted, Content: []Block{textBlock(text)},
 		Revision: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	answer := &messageRow{
-		ID: NewID(), ConversationID: conversationID, AgentID: agent.ID, CommandID: command.ID,
+		ID: pg.NewID(), ConversationID: conversationID, AgentID: agent.ID, CommandID: command.ID,
 		ReplyToID: &message.ID, Seq: seq, Role: RoleAssistant, Status: MessageQueued, Content: []Block{},
 		Revision: 1, CreatedAt: now, UpdatedAt: now,
 	}
@@ -460,7 +460,7 @@ func (s *Service) interrupt(ctx context.Context, command *CommandRecord) {
 }
 
 func (s *Service) requestStop(ctx context.Context, tx pgx.Tx, r *messageRow) error {
-	command, err := One[CommandRecord](ctx, tx, "SELECT * FROM agent_command WHERE id = $1", r.CommandID)
+	command, err := pg.One[CommandRecord](ctx, tx, "SELECT * FROM agent_command WHERE id = $1", r.CommandID)
 	if err != nil {
 		return err
 	}
@@ -484,7 +484,7 @@ func (s *Service) requestStop(ctx context.Context, tx pgx.Tx, r *messageRow) err
 		// Ask the runtime to interrupt; it confirms by finalizing the reply.
 		if command.InterruptRequestedAt == nil {
 			if _, err := tx.Exec(ctx, "UPDATE agent_command SET interrupt_requested_at = $2 WHERE id = $1",
-				command.ID, Now()); err != nil {
+				command.ID, pg.Now()); err != nil {
 				return err
 			}
 		}
@@ -508,7 +508,7 @@ func (s *Service) requestStop(ctx context.Context, tx pgx.Tx, r *messageRow) err
 // StopReply stops the reply message: off the queue if it still waits there,
 // otherwise the runtime interrupts it.
 func (s *Service) StopReply(ctx context.Context, tx pgx.Tx, messageID string) (*Message, error) {
-	id, ok := ParseID(messageID)
+	id, ok := pg.ParseID(messageID)
 	if !ok {
 		return nil, apierr.NotFound()
 	}
@@ -516,7 +516,7 @@ func (s *Service) StopReply(ctx context.Context, tx pgx.Tx, messageID string) (*
 	if err != nil {
 		return nil, err
 	}
-	r, err := One[messageRow](ctx, tx, `SELECT * FROM message
+	r, err := pg.One[messageRow](ctx, tx, `SELECT * FROM message
 		WHERE id = $1 AND conversation_id = $2 AND role = 'assistant'`, id, conversationID)
 	if err != nil {
 		return nil, err
@@ -527,7 +527,7 @@ func (s *Service) StopReply(ctx context.Context, tx pgx.Tx, messageID string) (*
 	if err := s.requestStop(ctx, tx, r); err != nil {
 		return nil, err
 	}
-	r, err = One[messageRow](ctx, tx, "SELECT * FROM message WHERE id = $1", id)
+	r, err = pg.One[messageRow](ctx, tx, "SELECT * FROM message WHERE id = $1", id)
 	if err != nil {
 		return nil, err
 	}
@@ -538,7 +538,7 @@ func (s *Service) StopReply(ctx context.Context, tx pgx.Tx, messageID string) (*
 // AnswerInteraction submits the user's choice; an approval's decision goes
 // to the runtime, which confirms it with approval.applied.
 func (s *Service) AnswerInteraction(ctx context.Context, tx pgx.Tx, interactionID, value string) (*Interaction, error) {
-	id, ok := ParseID(interactionID)
+	id, ok := pg.ParseID(interactionID)
 	if !ok {
 		return nil, apierr.NotFound()
 	}
@@ -546,7 +546,7 @@ func (s *Service) AnswerInteraction(ctx context.Context, tx pgx.Tx, interactionI
 	if err != nil {
 		return nil, err
 	}
-	interaction, err := One[interactionRow](ctx, tx, `SELECT * FROM interaction
+	interaction, err := pg.One[interactionRow](ctx, tx, `SELECT * FROM interaction
 		WHERE id = $1 AND conversation_id = $2`, id, conversationID)
 	if err != nil {
 		return nil, err
@@ -560,7 +560,7 @@ func (s *Service) AnswerInteraction(ctx context.Context, tx pgx.Tx, interactionI
 	expired := apierr.New(409, "INTERACTION_EXPIRED", "该交互已失效。")
 	var approval *approvalRow
 	if interaction.ApprovalID != nil {
-		if approval, err = One[approvalRow](ctx, tx, "SELECT * FROM approval WHERE id = $1", *interaction.ApprovalID); err != nil {
+		if approval, err = pg.One[approvalRow](ctx, tx, "SELECT * FROM approval WHERE id = $1", *interaction.ApprovalID); err != nil {
 			return nil, err
 		}
 	}
@@ -618,7 +618,7 @@ type UIEvent struct {
 }
 
 // StreamStart is the ui_event sequence the cursor resumes after.
-func (s *Service) StreamStart(ctx context.Context, db store.DB, cursor string) (int64, error) {
+func (s *Service) StreamStart(ctx context.Context, db pg.DB, cursor string) (int64, error) {
 	seq, err := s.Cursors.DecodeEvent(cursor)
 	if err != nil {
 		return 0, err
@@ -640,7 +640,7 @@ func (s *Service) StreamStart(ctx context.Context, db store.DB, cursor string) (
 }
 
 // EventsAfter is up to limit events of the default conversation after seq.
-func EventsAfter(ctx context.Context, db store.DB, conversationID string, seq int64, limit int) ([]*UIEvent, error) {
-	return All[UIEvent](ctx, db, `SELECT seq, type, payload FROM ui_event
+func EventsAfter(ctx context.Context, db pg.DB, conversationID string, seq int64, limit int) ([]*UIEvent, error) {
+	return pg.All[UIEvent](ctx, db, `SELECT seq, type, payload FROM ui_event
 		WHERE conversation_id = $1 AND seq > $2 ORDER BY seq LIMIT $3`, conversationID, seq, limit)
 }

@@ -1,6 +1,6 @@
 #!/bin/sh
 # grok-api, the plugin's MCP server: a release binary, checked against the
-# release's checksums.
+# release's checksums, installed into AXP_PLUGIN_BIN.
 set -eu
 version=0.1.1
 case "$TARGETARCH" in
@@ -15,5 +15,5 @@ cd "$AXP_PLUGIN_CACHE/$version"
 [ -f "$archive" ] || curl -fsSLO "${base}/${archive}"
 [ -f SHA256SUMS ] || curl -fsSLO "${base}/SHA256SUMS"
 grep " ${archive}\$" SHA256SUMS | sha256sum -c -
-tar -xzf "$archive" -C /usr/local/bin grok-api
-grok-api --version
+tar -xzf "$archive" -C "$AXP_PLUGIN_BIN" grok-api
+"$AXP_PLUGIN_BIN/grok-api" --version

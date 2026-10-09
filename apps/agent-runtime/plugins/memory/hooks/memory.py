@@ -1,18 +1,17 @@
 """The memory plugin's hooks: ``memory.py recall`` and ``memory.py capture``.
 
-Declared in hooks.json; building the image makes them managed hooks
-(axp_runtime/plugins.py), which run without review.
-
-recall (UserPromptSubmit) adds the memories relevant to the prompt to the
-turn's context. capture (Stop) sends the finished turn, its prompts and final
-answer, to be remembered. Both go to the memory service through the runtime
-gateway with the runtime's key, and never hold up the turn: on any failure
-they do nothing.
+akhook runs them (the plugin's akhook.yml) with its lifecycle event on stdin.
+recall (prompt_submit) adds the memories relevant to the prompt to the
+turn's context. capture (stop) sends the finished turn, its prompts and final
+answer, to be remembered. Both go to the memory service at AXP_GATEWAY_URL
+with the agent's key (AXP_AGENT_KEY), and never hold up the turn: on any
+failure they do nothing.
 """
 
 import json
 import os
 import sys
+import tempfile
 import time
 import urllib.request
 from pathlib import Path
@@ -27,7 +26,7 @@ def post(path: str, body: dict) -> bytes:
         os.environ["AXP_GATEWAY_URL"] + path,
         data=json.dumps(body).encode(),
         headers={
-            "Authorization": f"Bearer {os.environ['AXP_RUNTIME_LLM_KEY']}",
+            "Authorization": f"Bearer {os.environ['AXP_AGENT_KEY']}",
             "Content-Type": "application/json",
         },
     )
@@ -37,7 +36,8 @@ def post(path: str, body: dict) -> bytes:
 
 def pending(turn_id: str) -> Path:
     """The turn's prompts, kept from recall until capture."""
-    directory = Path(os.environ["CODEX_HOME"]) / "axp-memory" / "turns"
+    home = os.environ.get("CODEX_HOME") or tempfile.gettempdir()
+    directory = Path(home) / "axp-memory" / "turns"
     directory.mkdir(parents=True, exist_ok=True)
     for stale in directory.glob("*.json"):
         if stale.stat().st_mtime < time.time() - STALE_SECONDS:
@@ -62,12 +62,7 @@ def recall(event: dict) -> dict:
             *lines,
         ]
     )
-    return {
-        "hookSpecificOutput": {
-            "hookEventName": "UserPromptSubmit",
-            "additionalContext": context,
-        }
-    }
+    return {"context": context}
 
 
 def capture(event: dict) -> dict:

@@ -6,6 +6,9 @@ import (
 	"strings"
 
 	"github.com/akarachen/axp/apps/control-plane/internal/tasks"
+	"github.com/akarachen/axp/packages/service-go/httpapi"
+	"github.com/akarachen/axp/packages/service-go/idempotency"
+	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/jackc/pgx/v5"
 )
@@ -67,7 +70,7 @@ type Install struct {
 
 func taskOp(id, method, path, summary string, status int, tag string) huma.Operation {
 	o := op(id, method, path, summary, status, tag)
-	o.Errors = []int{400, 404, 409, 422, 502, 503}
+	o.Errors = []int{400, 404, 409, 422, 424, 503}
 	return o
 }
 
@@ -84,18 +87,9 @@ func publicURL(d *Deps, r *http.Request) string {
 	return scheme + "://" + r.Host
 }
 
-type httpRequestKey struct{}
-
-// withRequest keeps the request, for handlers that need its address.
-func withRequest(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), httpRequestKey{}, r)))
-	})
-}
-
 func installCommand(ctx context.Context, d *Deps, code string) string {
 	base := d.PublicURL
-	if r, ok := ctx.Value(httpRequestKey{}).(*http.Request); ok {
+	if r := httpapi.Request(ctx); r != nil {
 		base = publicURL(d, r)
 	}
 	return "curl -fsSL " + base + "/remote/install.sh | sh -s -- " + code
@@ -105,7 +99,7 @@ func registerTasks(api huma.API, d *Deps) {
 	s := d.Tasks
 
 	huma.Register(api, taskOp("listTasks", http.MethodGet, "/api/v1/tasks", "Every task, and who they can be assigned to", 200, "tasks"),
-		func(ctx context.Context, _ *struct{}) (*body[TaskList], error) {
+		func(ctx context.Context, _ *struct{}) (*httpapi.Body[TaskList], error) {
 			list, err := s.List(ctx, d.DB)
 			if err != nil {
 				return nil, err
@@ -114,32 +108,32 @@ func registerTasks(api huma.API, d *Deps) {
 			if err != nil {
 				return nil, err
 			}
-			return &body[TaskList]{TaskList{list, assignees}}, nil
+			return &httpapi.Body[TaskList]{Body: TaskList{list, assignees}}, nil
 		})
 
 	huma.Register(api, taskOp("getTask", http.MethodGet, "/api/v1/tasks/{task_id}", "A task with its timeline and runs", 200, "tasks"),
-		func(ctx context.Context, in *TaskPath) (*body[tasks.TaskDetail], error) {
+		func(ctx context.Context, in *TaskPath) (*httpapi.Body[tasks.TaskDetail], error) {
 			t, err := s.Get(ctx, d.DB, in.TaskID)
 			if err != nil {
 				return nil, err
 			}
-			return &body[tasks.TaskDetail]{*t}, nil
+			return &httpapi.Body[tasks.TaskDetail]{Body: *t}, nil
 		})
 
 	huma.Register(api, taskOp("createTask", http.MethodPost, "/api/v1/tasks", "Create a task", 201, "tasks"),
 		func(ctx context.Context, in *struct {
-			Keyed
+			idempotency.Keyed
 			Body TaskIn
-		}) (*Response[tasks.TaskDetail], error) {
+		}) (*idempotency.Response[tasks.TaskDetail], error) {
 			b := in.Body
-			return idempotent(ctx, d, in.IdempotencyKey, b, func(tx pgx.Tx) (handled[tasks.TaskDetail], error) {
+			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, b, func(tx pgx.Tx) (idempotency.Result[tasks.TaskDetail], error) {
 				t, err := s.Create(ctx, tx, tasks.Input{
 					Title: b.Title, Description: b.Description, Status: b.Status, Assignee: b.Assignee,
 				}, tasks.User)
 				if err != nil {
-					return handled[tasks.TaskDetail]{}, err
+					return idempotency.Result[tasks.TaskDetail]{}, err
 				}
-				return handled[tasks.TaskDetail]{201, t, t.ID}, nil
+				return idempotency.Result[tasks.TaskDetail]{Status: 201, Body: t, Resource: t.ID}, nil
 			})
 		})
 
@@ -148,9 +142,9 @@ func registerTasks(api huma.API, d *Deps) {
 		func(ctx context.Context, in *struct {
 			TaskPath
 			Body TaskUpdateIn
-		}) (*body[tasks.TaskDetail], error) {
+		}) (*httpapi.Body[tasks.TaskDetail], error) {
 			b := in.Body
-			t, err := inTx(ctx, d, func(tx pgx.Tx) (*tasks.TaskDetail, error) {
+			t, err := pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (*tasks.TaskDetail, error) {
 				return s.Update(ctx, tx, in.TaskID, tasks.Changes{
 					Title: b.Title, Description: b.Description, Status: b.Status, Assignee: b.Assignee,
 				}, tasks.User)
@@ -158,81 +152,81 @@ func registerTasks(api huma.API, d *Deps) {
 			if err != nil {
 				return nil, err
 			}
-			return &body[tasks.TaskDetail]{*t}, nil
+			return &httpapi.Body[tasks.TaskDetail]{Body: *t}, nil
 		})
 
 	huma.Register(api, taskOp("deleteTask", http.MethodDelete, "/api/v1/tasks/{task_id}", "Delete a task", 204, "tasks"),
 		func(ctx context.Context, in *TaskPath) (*struct{}, error) {
-			_, err := inTx(ctx, d, func(tx pgx.Tx) (struct{}, error) { return struct{}{}, s.Delete(ctx, tx, in.TaskID) })
+			_, err := pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (struct{}, error) { return struct{}{}, s.Delete(ctx, tx, in.TaskID) })
 			return nil, err
 		})
 
 	huma.Register(api, taskOp("commentTask", http.MethodPost, "/api/v1/tasks/{task_id}/comments",
 		"Comment on a task; a remote agent working on it gets the comment as a follow-up", 201, "tasks"),
 		func(ctx context.Context, in *struct {
-			Keyed
+			idempotency.Keyed
 			TaskPath
 			Body CommentIn
-		}) (*Response[tasks.TaskDetail], error) {
-			return idempotent(ctx, d, in.IdempotencyKey, in.Body, func(tx pgx.Tx) (handled[tasks.TaskDetail], error) {
+		}) (*idempotency.Response[tasks.TaskDetail], error) {
+			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(tx pgx.Tx) (idempotency.Result[tasks.TaskDetail], error) {
 				t, err := s.Comment(ctx, tx, in.TaskID, in.Body.Body, tasks.User)
 				if err != nil {
-					return handled[tasks.TaskDetail]{}, err
+					return idempotency.Result[tasks.TaskDetail]{}, err
 				}
-				return handled[tasks.TaskDetail]{201, t, t.ID}, nil
+				return idempotency.Result[tasks.TaskDetail]{Status: 201, Body: t, Resource: t.ID}, nil
 			})
 		})
 
 	huma.Register(api, taskOp("interruptTaskRun", http.MethodPost, "/api/v1/tasks/{task_id}/runs/{run_id}/interrupt",
 		"Stop a run", 200, "tasks"),
-		func(ctx context.Context, in *TaskRunPath) (*body[tasks.TaskDetail], error) {
-			t, err := inTx(ctx, d, func(tx pgx.Tx) (*tasks.TaskDetail, error) {
+		func(ctx context.Context, in *TaskRunPath) (*httpapi.Body[tasks.TaskDetail], error) {
+			t, err := pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (*tasks.TaskDetail, error) {
 				return s.Interrupt(ctx, tx, in.TaskID, in.RunID)
 			})
 			if err != nil {
 				return nil, err
 			}
-			return &body[tasks.TaskDetail]{*t}, nil
+			return &httpapi.Body[tasks.TaskDetail]{Body: *t}, nil
 		})
 
 	huma.Register(api, taskOp("getTaskRunLog", http.MethodGet, "/api/v1/tasks/{task_id}/runs/{run_id}/log",
 		"The remote agent's recent transcript, read from it now", 200, "tasks"),
-		func(ctx context.Context, in *TaskRunPath) (*body[RunLog], error) {
+		func(ctx context.Context, in *TaskRunPath) (*httpapi.Body[RunLog], error) {
 			entries, err := s.Log(ctx, d.DB, in.TaskID, in.RunID)
 			if err != nil {
 				return nil, err
 			}
-			return &body[RunLog]{RunLog{entries}}, nil
+			return &httpapi.Body[RunLog]{Body: RunLog{entries}}, nil
 		})
 
 	huma.Register(api, taskOp("listComputers", http.MethodGet, "/api/v1/computers",
 		"Remote computers and their runtimes on the relay", 200, "computers"),
-		func(ctx context.Context, _ *struct{}) (*body[tasks.Computers], error) {
+		func(ctx context.Context, _ *struct{}) (*httpapi.Body[tasks.Computers], error) {
 			list, err := s.ListComputers(ctx, d.DB)
 			if err != nil {
 				return nil, err
 			}
-			return &body[tasks.Computers]{*list}, nil
+			return &httpapi.Body[tasks.Computers]{Body: *list}, nil
 		})
 
 	huma.Register(api, taskOp("createComputer", http.MethodPost, "/api/v1/computers",
 		"Add a computer; the answer has its one-time install command", 201, "computers"),
-		func(ctx context.Context, in *struct{ Body ComputerIn }) (*Response[Install], error) {
-			e, err := inTx(ctx, d, func(tx pgx.Tx) (*tasks.Enrollment, error) { return s.CreateComputer(ctx, tx, in.Body.Name) })
+		func(ctx context.Context, in *struct{ Body ComputerIn }) (*idempotency.Response[Install], error) {
+			e, err := pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (*tasks.Enrollment, error) { return s.CreateComputer(ctx, tx, in.Body.Name) })
 			if err != nil {
 				return nil, err
 			}
-			return &Response[Install]{201, Install{e.Computer, installCommand(ctx, d, e.Code)}}, nil
+			return &idempotency.Response[Install]{Status: 201, Body: Install{e.Computer, installCommand(ctx, d, e.Code)}}, nil
 		})
 
 	huma.Register(api, taskOp("renewComputerInstall", http.MethodPost, "/api/v1/computers/{computer_id}/install",
 		"A new install command for a computer that has not connected yet", 200, "computers"),
-		func(ctx context.Context, in *ComputerPath) (*body[Install], error) {
-			e, err := inTx(ctx, d, func(tx pgx.Tx) (*tasks.Enrollment, error) { return s.RenewEnrollment(ctx, tx, in.ComputerID) })
+		func(ctx context.Context, in *ComputerPath) (*httpapi.Body[Install], error) {
+			e, err := pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (*tasks.Enrollment, error) { return s.RenewEnrollment(ctx, tx, in.ComputerID) })
 			if err != nil {
 				return nil, err
 			}
-			return &body[Install]{Install{e.Computer, installCommand(ctx, d, e.Code)}}, nil
+			return &httpapi.Body[Install]{Body: Install{e.Computer, installCommand(ctx, d, e.Code)}}, nil
 		})
 
 	huma.Register(api, taskOp("listComputerPlaces", http.MethodGet, "/api/v1/computers/{computer_id}/runtimes/{kind}/places",
@@ -240,12 +234,12 @@ func registerTasks(api huma.API, d *Deps) {
 		func(ctx context.Context, in *struct {
 			ComputerPath
 			Kind string `path:"kind" enum:"paseo,herdr"`
-		}) (*body[tasks.Places], error) {
+		}) (*httpapi.Body[tasks.Places], error) {
 			places, err := s.Places(ctx, d.DB, in.ComputerID, in.Kind)
 			if err != nil {
 				return nil, err
 			}
-			return &body[tasks.Places]{*places}, nil
+			return &httpapi.Body[tasks.Places]{Body: *places}, nil
 		})
 
 	huma.Register(api, taskOp("approveComputerRuntime", http.MethodPost, "/api/v1/computers/{computer_id}/runtimes/{kind}/approve",
@@ -260,7 +254,7 @@ func registerTasks(api huma.API, d *Deps) {
 	huma.Register(api, taskOp("deleteComputer", http.MethodDelete, "/api/v1/computers/{computer_id}",
 		"Revoke a computer's access and forget it", 204, "computers"),
 		func(ctx context.Context, in *ComputerPath) (*struct{}, error) {
-			_, err := inTx(ctx, d, func(tx pgx.Tx) (struct{}, error) { return struct{}{}, s.DeleteComputer(ctx, tx, in.ComputerID) })
+			_, err := pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (struct{}, error) { return struct{}{}, s.DeleteComputer(ctx, tx, in.ComputerID) })
 			return nil, err
 		})
 }

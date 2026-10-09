@@ -8,10 +8,6 @@
 //
 // The live runtime also listens on axp.agent.<agent>.control (plain NATS,
 // not stored): interrupts, approval decisions and steers go there.
-//
-// Routines are scheduled here too: axp.routine.<routine>.schedule holds a
-// routine's NATS message schedule, which publishes to
-// axp.routine.<routine>.fire; the controller starts a run for each fire.
 package queue
 
 import (
@@ -36,8 +32,6 @@ const (
 	// it dies in between.
 	ackWait = 30 * time.Second
 
-	RoutinesStream = "ROUTINES"
-	fires          = "routine-fires"
 	// JetStream's "maximum messages per subject exceeded".
 	errMaxMsgsPerSubject = 10077
 	// JetStream's "no message found" when deleting one.
@@ -46,12 +40,6 @@ const (
 
 // ErrFull is a full agent queue.
 var ErrFull = errors.New("agent queue full")
-
-// Fire is a routine due to run; Now when it was asked to run now.
-type Fire struct {
-	RoutineID string
-	Now       bool
-}
 
 // Queue is what the control plane does with NATS.
 type Queue interface {
@@ -72,16 +60,6 @@ type Queue interface {
 	Tell(ctx context.Context, agentID string, body any) error
 	// Ask asks the agent's live runtime; nil when no runtime answers.
 	Ask(ctx context.Context, agentID string, body any) (map[string]any, error)
-
-	// ScheduleRoutine fires the routine on a five-field cron in timezone,
-	// replacing any earlier schedule.
-	ScheduleRoutine(ctx context.Context, routineID, cron, timezone string) error
-	UnscheduleRoutine(ctx context.Context, routineID string) error
-	// FireRoutine runs the routine now, as if its schedule fired.
-	FireRoutine(ctx context.Context, routineID string) error
-	// TakeFires returns routines due to run, already acked: a fire missed
-	// while the controller is down is not made up.
-	TakeFires(ctx context.Context) ([]Fire, error)
 }
 
 func CommandsSubject(agentID string) string { return "axp.agent." + agentID + ".commands" }
@@ -103,21 +81,6 @@ var streamConfig = jetstream.StreamConfig{
 	MaxAge:               0,
 	MaxMsgSize:           -1,
 	MaxConsumers:         -1,
-}
-
-var routinesConfig = jetstream.StreamConfig{
-	Name:     RoutinesStream,
-	Subjects: []string{"axp.routine.>"},
-	// A fire stays until the controller takes it; schedules stay until
-	// replaced or purged.
-	Retention:         jetstream.WorkQueuePolicy,
-	Storage:           jetstream.FileStorage,
-	AllowMsgSchedules: true,
-	MaxMsgs:           -1,
-	MaxBytes:          -1,
-	MaxMsgSize:        -1,
-	MaxConsumers:      -1,
-	MaxMsgsPerSubject: -1,
 }
 
 // NATS is the queue on a NATS server.
@@ -172,24 +135,11 @@ func withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, timeout)
 }
 
-// EnsureStreams creates or updates both streams and the fires' consumer.
+// EnsureStreams creates or updates the stream.
 func (q *NATS) EnsureStreams(ctx context.Context) error {
 	ctx, cancel := withTimeout(ctx)
 	defer cancel()
-	for _, config := range []jetstream.StreamConfig{streamConfig, routinesConfig} {
-		if _, err := q.js.CreateOrUpdateStream(ctx, config); err != nil {
-			return err
-		}
-	}
-	routines, err := q.stream(ctx, RoutinesStream)
-	if err != nil {
-		return err
-	}
-	_, err = routines.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
-		Durable:       fires,
-		FilterSubject: "axp.routine.*.fire",
-		AckPolicy:     jetstream.AckExplicitPolicy,
-	})
+	_, err := q.js.CreateOrUpdateStream(ctx, streamConfig)
 	return err
 }
 
@@ -339,60 +289,4 @@ func (q *NATS) Ask(ctx context.Context, agentID string, body any) (map[string]an
 		return nil, err
 	}
 	return answer, nil
-}
-
-func (q *NATS) ScheduleRoutine(ctx context.Context, routineID, cron, timezone string) error {
-	ctx, cancel := withTimeout(ctx)
-	defer cancel()
-	msg := nats.NewMsg("axp.routine." + routineID + ".schedule")
-	msg.Data = []byte("{}")
-	msg.Header.Set(jetstream.ScheduleHeader, "0 "+cron)
-	msg.Header.Set(jetstream.ScheduleTargetHeader, "axp.routine."+routineID+".fire")
-	msg.Header.Set(jetstream.ScheduleTimeZoneHeader, timezone)
-	_, err := q.js.PublishMsg(ctx, msg)
-	return err
-}
-
-func (q *NATS) UnscheduleRoutine(ctx context.Context, routineID string) error {
-	ctx, cancel := withTimeout(ctx)
-	defer cancel()
-	s, err := q.stream(ctx, RoutinesStream)
-	if err != nil {
-		return err
-	}
-	return s.Purge(ctx, jetstream.WithPurgeSubject("axp.routine."+routineID+".schedule"))
-}
-
-func (q *NATS) FireRoutine(ctx context.Context, routineID string) error {
-	ctx, cancel := withTimeout(ctx)
-	defer cancel()
-	_, err := q.js.Publish(ctx, "axp.routine."+routineID+".fire", []byte(`{"now":true}`))
-	return err
-}
-
-func (q *NATS) TakeFires(ctx context.Context) ([]Fire, error) {
-	ctx, cancel := withTimeout(ctx)
-	defer cancel()
-	consumer, err := q.js.Consumer(ctx, RoutinesStream, fires)
-	if err != nil {
-		return nil, err
-	}
-	batch, err := consumer.Fetch(20, jetstream.FetchMaxWait(200*time.Millisecond))
-	if err != nil {
-		return nil, err
-	}
-	var taken []Fire
-	for msg := range batch.Messages() {
-		if err := msg.Ack(); err != nil {
-			return taken, err
-		}
-		var body struct {
-			Now bool `json:"now"`
-		}
-		_ = json.Unmarshal(msg.Data(), &body)
-		if parts := strings.Split(msg.Subject(), "."); len(parts) == 4 {
-			taken = append(taken, Fire{RoutineID: parts[2], Now: body.Now})
-		}
-	}
-	return taken, batch.Error()
 }

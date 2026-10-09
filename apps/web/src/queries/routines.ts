@@ -7,18 +7,18 @@ import type {
   RoutineIn,
   Run,
   WeeklySchedule,
-} from "@/api/control-plane.gen";
+} from "@/api/routines.gen";
 import {
   queryOptions,
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { controlPlane, unwrap } from "@/lib/api";
+import { routinesApi, unwrap } from "@/lib/api";
 
-// Routines (#23): agents that run on a schedule, each run in a fresh runtime,
-// and leave a report (/api/v1/routines; apps/control-plane). Every type comes
-// from the control plane's OpenAPI document.
+// Routines (#23): agents that run on a schedule and leave a report
+// (/api/routines/v1; apps/routine-service). Every type comes from the routine
+// service's OpenAPI document.
 
 export type { Routine, Run };
 export type Schedule =
@@ -48,7 +48,8 @@ function busy(routines: Routine[] | undefined) {
 const routinesQueryOptions = queryOptions({
   queryKey: keys.all,
   queryFn: async ({ signal }) =>
-    (await unwrap(controlPlane.GET("/api/v1/routines", { signal }))).routines,
+    (await unwrap(routinesApi.GET("/api/routines/v1/routines", { signal })))
+      .routines,
   refetchInterval: (query) => (busy(query.state.data) ? 3000 : 30_000),
 });
 
@@ -76,7 +77,7 @@ export function useSetRoutineEnabled() {
   return useRoutineMutation(
     ({ id, enabled }: { id: string; enabled: boolean }) =>
       unwrap(
-        controlPlane.PATCH("/api/v1/routines/{routine_id}", {
+        routinesApi.PATCH("/api/routines/v1/routines/{routine_id}", {
           params: { path: { routine_id: id } },
           body: { enabled },
         }),
@@ -90,12 +91,14 @@ export function useSaveRoutine() {
     async ({ id, input }: { id: string | null; input: RoutineInput }) =>
       (id
         ? await unwrap(
-            controlPlane.PATCH("/api/v1/routines/{routine_id}", {
+            routinesApi.PATCH("/api/routines/v1/routines/{routine_id}", {
               params: { path: { routine_id: id } },
               body: input,
             }),
           )
-        : await unwrap(controlPlane.POST("/api/v1/routines", { body: input }))
+        : await unwrap(
+            routinesApi.POST("/api/routines/v1/routines", { body: input }),
+          )
       ).id,
   );
 }
@@ -103,7 +106,7 @@ export function useSaveRoutine() {
 export function useDeleteRoutine() {
   return useRoutineMutation((id: string) =>
     unwrap(
-      controlPlane.DELETE("/api/v1/routines/{routine_id}", {
+      routinesApi.DELETE("/api/routines/v1/routines/{routine_id}", {
         params: { path: { routine_id: id } },
       }),
     ),
@@ -113,7 +116,7 @@ export function useDeleteRoutine() {
 export function useRunRoutineNow() {
   return useRoutineMutation((id: string) =>
     unwrap(
-      controlPlane.POST("/api/v1/routines/{routine_id}/run", {
+      routinesApi.POST("/api/routines/v1/routines/{routine_id}/run", {
         params: { path: { routine_id: id } },
       }),
     ),
@@ -124,8 +127,8 @@ export function useRestoreBrief() {
   return useRoutineMutation(
     ({ id, version }: { id: string; version: number }) =>
       unwrap(
-        controlPlane.POST(
-          "/api/v1/routines/{routine_id}/briefs/{version}/restore",
+        routinesApi.POST(
+          "/api/routines/v1/routines/{routine_id}/briefs/{version}/restore",
           {
             params: { path: { routine_id: id, version } },
           },
@@ -138,8 +141,8 @@ export function useSendFeedback() {
   return useRoutineMutation(
     ({ id, runId, text }: { id: string; runId: string; text: string }) =>
       unwrap(
-        controlPlane.POST(
-          "/api/v1/routines/{routine_id}/runs/{run_id}/feedback",
+        routinesApi.POST(
+          "/api/routines/v1/routines/{routine_id}/runs/{run_id}/feedback",
           {
             params: { path: { routine_id: id, run_id: runId } },
             body: { text },

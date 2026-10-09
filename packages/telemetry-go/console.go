@@ -49,7 +49,12 @@ func formatLine(r sdklog.Record) string {
 		ts = r.ObservedTimestamp()
 	}
 	b.WriteString(ts.UTC().Format("15:04:05.000"))
-	fmt.Fprintf(&b, " %-5s %s", levelName(r.Severity()), r.Body().AsString())
+	message := r.Body().AsString()
+	if message == "" {
+		// Events (such as ADK's GenAI events) may have a name but no text.
+		message = r.EventName()
+	}
+	fmt.Fprintf(&b, " %-5s %s", levelName(r.Severity()), message)
 	r.WalkAttributes(func(kv attribute.KeyValue) bool {
 		b.WriteString(" ")
 		b.WriteString(string(kv.Key))

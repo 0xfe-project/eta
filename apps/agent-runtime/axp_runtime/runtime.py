@@ -91,9 +91,6 @@ FLUSH_SECONDS = 0.3
 # thread/compact/start answers before its turn starts.
 COMPACT_START_SECONDS = 30
 DECISIONS = {"accept", "decline"}
-# Routine runs' own tools (apps/agent-runtime/plugins/routine); chat agents
-# never get them.
-ROUTINE_ONLY_PLUGINS = ("routine",)
 
 
 class RecoveryFailed(Exception):
@@ -182,10 +179,10 @@ def _toml(value) -> str:
 def install_plugins(settings: Settings) -> None:
     """Install the chosen plugins of the image's marketplace into CODEX_HOME.
 
-    ``settings.plugins`` chooses them; without a choice, every plugin but
-    the routine runs' own. Codex only loads installed copies; their MCP
-    configs then get this instance's values. Plugins no longer chosen are
-    removed, since the snapshot's Codex config still enables them.
+    ``settings.plugins`` chooses them; without a choice, every one. Codex
+    only loads installed copies; their MCP configs then get this instance's
+    values. Plugins no longer chosen are removed, since the snapshot's Codex
+    config still enables them.
     Everything else about them (hooks, tool approval) is static Codex
     configuration in the image (/etc/codex).
     """
@@ -213,11 +210,7 @@ def install_plugins(settings: Settings) -> None:
     chosen = settings.plugins
     for plugin in catalog["plugins"]:
         name = f"{plugin['name']}@{marketplace}"
-        wanted = (
-            plugin["name"] in chosen
-            if chosen is not None
-            else plugin["name"] not in ROUTINE_ONLY_PLUGINS
-        )
+        wanted = chosen is None or plugin["name"] in chosen
         if not wanted and name not in enabled:
             continue
         try:

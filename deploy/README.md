@@ -41,23 +41,24 @@ deploy/deploy.sh rollback <version>
 
 同一个镜像按角色运行：
 
-| 角色              | 进程                           | 说明                                                                                                                                                                              |
-| ----------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `gateway`         | Caddy，`public.caddy`          | 唯一由 kamal-proxy 代理的角色；按路径转发到 llm、api、web、OpenObserve                                                                                                            |
-| `runtime-gateway` | Caddy，`runtime.caddy`         | runtime 网络上唯一提供服务的角色（`axp-runtime-gateway:8090`）；认证 runtime 并转发到 internal、llm、memory、forge                                                                |
-| `web`             | Bun 运行 `apps/web/server.js`  | SSR 与静态资源；网络别名 `axp-web`                                                                                                                                                |
-| `api`             | `axp-control-plane api`（Go）  | 控制面的公共 API；网络别名 `axp-api`                                                                                                                                              |
-| `llm`             | `axp-llm-gateway`（Go）        | 嵌入 CLIProxyAPI；网络别名 `axp-llm`；凭据在卷 `axp-llm`                                                                                                                          |
-| `internal`        | `axp-control-plane internal`   | 内部运行协议；网络别名 `axp-internal`，runtime 只能经 runtime 网关访问                                                                                                            |
-| `forge`           | `axp-forge`（Go）              | 代码托管（[GitHub](../docs/architecture/forge.md)）；网络别名 `axp-forge`，GitHub App 的凭据在卷 `axp-forge`；浏览器经网关访问 `/api/forge`，runtime 经 runtime 网关访问 `/forge` |
-| `memory`          | `python -m axp_memory`         | 智能体记忆（[记忆](../docs/architecture/memory.md)）；网络别名 `axp-memory`，runtime 只能经 runtime 网关访问；数据在 accessory `postgres`（pgvector）                             |
-| `controller`      | `axp-control-plane controller` | 挂载 Docker socket；用 PostgreSQL advisory lock 保证同一时刻只有一个在运行                                                                                                        |
+| 角色              | 进程                           | 说明                                                                                                                                                                                                                          |
+| ----------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `gateway`         | Caddy，`public.caddy`          | 唯一由 kamal-proxy 代理的角色；按路径转发到 llm、memory、forge、routines、api、web、OpenObserve                                                                                                                               |
+| `runtime-gateway` | Caddy，`runtime.caddy`         | runtime 网络上唯一提供服务的角色（`axp-runtime-gateway:8090`）；认证 runtime 并转发到 internal、llm、memory、forge                                                                                                            |
+| `web`             | Bun 运行 `apps/web/server.js`  | SSR 与静态资源；网络别名 `axp-web`                                                                                                                                                                                            |
+| `api`             | `axp-control-plane api`（Go）  | 控制面的公共 API；网络别名 `axp-api`                                                                                                                                                                                          |
+| `llm`             | `axp-llm-gateway`（Go）        | 嵌入 CLIProxyAPI；网络别名 `axp-llm`；凭据在卷 `axp-llm`                                                                                                                                                                      |
+| `internal`        | `axp-control-plane internal`   | 内部运行协议；网络别名 `axp-internal`，runtime 只能经 runtime 网关访问                                                                                                                                                        |
+| `forge`           | `axp-forge`（Go）              | 代码托管（[GitHub](../docs/architecture/forge.md)）；网络别名 `axp-forge`，GitHub App 的凭据在卷 `axp-forge`；浏览器经网关访问 `/api/forge`，runtime 经 runtime 网关访问 `/forge`                                             |
+| `routines`        | `axp-routines`（Go）           | 定时任务（[定时任务](../docs/architecture/routines.md)）；网络别名 `axp-routines`，浏览器经网关访问 `/api/routines`；自己的数据库 `axp_routines`（accessory `postgres`，启动时创建并迁移），计划在 `axp-nats`；只能有一个容器 |
+| `memory`          | `python -m axp_memory`         | 智能体记忆（[记忆](../docs/architecture/memory.md)）；网络别名 `axp-memory`，runtime 只能经 runtime 网关访问；数据在 accessory `postgres`（pgvector）                                                                         |
+| `controller`      | `axp-control-plane controller` | 挂载 Docker socket；用 PostgreSQL advisory lock 保证同一时刻只有一个在运行                                                                                                                                                    |
 
 accessory `relay` 是远程电脑接入用的 agenvo 中继（[任务与远程电脑](../docs/architecture/tasks.md)）：它的镜像 `axp-relay:<agenvo commit>-<Dockerfile 摘要>` 由 `deploy.sh` 构建并推送到本地仓库，只在固定的 agenvo 版本或 `relay.Dockerfile` 变化时重建并重启；状态（配对的设备、OAuth 授权）在卷 `axp-relay`；发布在 `127.0.0.1:24170`，由宿主机的反向代理以独立的主机名（`production.env` 的 `AXP_RELAY_ORIGIN`）对外，这个主机名不经过 Cloudflare Access。同时在 `production.env` 设置 `AXP_PUBLIC_URL`（安装命令里的 AXP 地址），并让 Access 对 AXP 的 `/remote/` 放行。
 
 服务之间没有共享密钥：角色中只有 `runtime-gateway` 和 controller 加入 runtime 网络（accessory 中还有 `axp-s3`、`axp-nats` 和 `axp-otel-collector`），其余角色只在 Kamal 网络上，runtime 连不到（见[网关](../docs/architecture/gateway.md)）。两个网关的访问日志是 JSON，写在容器输出里（`deploy/deploy.sh app logs -r gateway`），不进 OpenObserve。
 
-web、api、llm、memory、forge 不经过 kamal-proxy，重新部署时会有几秒中断（单用户场景可接受）。
+web、api、llm、memory、forge、routines 不经过 kamal-proxy，重新部署时会有几秒中断（单用户场景可接受）。
 
 ### 一次部署做什么
 
@@ -69,7 +70,7 @@ web、api、llm、memory、forge 不经过 kamal-proxy，重新部署时会有�
 
 队列是 accessory `axp-nats`（NATS JetStream，卷 `axp-nats`，见[队列](../docs/architecture/queue.md)），在 Kamal 网络和 runtime 网络上可达、不发布端口，不设鉴权；已有的机器在下一次部署前会自动启动它。数据库是 Kamal accessory `axp-postgres`（卷 `axp-postgres`，镜像 `pgvector/pgvector:pg17-trixie`：PostgreSQL 17 加 pgvector，智能体记忆存在表 `memories`；镜像变化时 `deploy.sh` 在迁移前重启它）。每个智能体的全部状态（工作区和 Codex 会话）是 accessory `axp-s3`（SeaweedFS，卷 `axp-s3`）里的一个快照对象，在 Kamal 网络和 runtime 网络上可达、不发布端口；controller 启动时创建桶 `axp-agents`。runtime 容器不挂载任何卷。数据都在本机卷里，换机器不会自动迁移；开发环境的 `axp-dev-*` 容器和卷与这些完全分开。
 
-日志由 Kamal accessory `axp-openobserve`（[OpenObserve](https://openobserve.ai)，卷 `axp-openobserve`）收集：各角色通过 OTLP 发送，`OTEL_SERVICE_NAME` 区分来源（`web`、`llm-gateway`、`memory-service`、`forge-service`、`control-plane-api`、`control-plane-internal`、`control-plane-controller`）。agent runtime 容器运行智能体执行的代码、不持有任何凭据：它们把日志、trace 和指标（包括 Codex 原生的 OpenTelemetry 数据，日志事件含 prompt）发给 accessory `axp-otel-collector`（runtime 网络上的 `otel-collector:4318`，配置见 `otel-collector.yaml`），由它带上凭据转发到 OpenObserve，记录带有 `axp.agent.id`、`axp.runtime.instance.id`。Codex 每收到一段流式输出都会产生一条日志和几个 span（约每两个字一条），Collector 会过滤掉这部分，只保留回合级的事件和 span；Collector 不保存状态，每次部署都会重启以应用配置变更。root 账号是 `root@axp.local`，密码 `AXP_OBSERVE_PASSWORD` 由 `deploy.sh` 首次需要时写入 `production.env`；已有的机器在下一次部署前会自动启动这个 accessory。
+日志由 Kamal accessory `axp-openobserve`（[OpenObserve](https://openobserve.ai)，卷 `axp-openobserve`）收集：各角色通过 OTLP 发送，`OTEL_SERVICE_NAME` 区分来源（`web`、`llm-gateway`、`memory-service`、`forge-service`、`routine-service`、`control-plane-api`、`control-plane-internal`、`control-plane-controller`）。agent runtime 容器运行智能体执行的代码、不持有任何凭据：它们把日志、trace 和指标（包括 Codex 原生的 OpenTelemetry 数据，日志事件含 prompt）发给 accessory `axp-otel-collector`（runtime 网络上的 `otel-collector:4318`，配置见 `otel-collector.yaml`），由它带上凭据转发到 OpenObserve，记录带有 `axp.agent.id`、`axp.runtime.instance.id`。Codex 每收到一段流式输出都会产生一条日志和几个 span（约每两个字一条），Collector 会过滤掉这部分，只保留回合级的事件和 span；Collector 不保存状态，每次部署都会重启以应用配置变更。root 账号是 `root@axp.local`，密码 `AXP_OBSERVE_PASSWORD` 由 `deploy.sh` 首次需要时写入 `production.env`；已有的机器在下一次部署前会自动启动这个 accessory。
 
 ## 端口与访问
 
