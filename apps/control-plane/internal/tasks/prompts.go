@@ -16,6 +16,8 @@ const cliGuide = `你在 AXP 的任务看板上工作，用 ` + "`axp`" + ` 命�
 - ` + "`axp task status in_review|blocked|in_progress`" + `：做完待验收时设为 in_review，需要人帮忙时设为 blocked。
 - ` + "`axp gh pr create ...`" + `：以 AXP 的 GitHub App 身份开 PR（先用 git 推送分支），开出的 PR 会记为任务的交付物。
 
+如需附件，先创建 PR，再尝试客户本机已有登录的 GH CLI，用 ` + "`gh pr edit <PR-URL> --attach <本机图片文件>`" + ` 补图（不是 ` + "`axp gh`" + `）。保留 PR 原正文；不可用时汇报原因。详见 GitHub plugin skill。
+
 规则：每一轮结束前，必须用 ` + "`axp task comment`" + ` 汇报你做了什么、结果如何、还需要什么；没有评论的一轮不算完成。在当前目录里工作，把改动提交到当前分支。`
 
 func describe(r *taskRow) string {
