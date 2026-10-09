@@ -43,6 +43,23 @@ type projection struct {
 	tx       pgx.Tx
 	agentID  string
 	instance *RuntimeRecord
+	// The reply a run of item.updated events changed and flush has yet to
+	// save: one revision and one ui_event for the run, not one per event.
+	unsaved *messageRow
+}
+
+// flush saves the reply changed since the last flush, if any. Every event
+// but the next item.updated of the same reply comes after it.
+func (p *projection) flush(ctx context.Context) error {
+	r := p.unsaved
+	if r == nil {
+		return nil
+	}
+	p.unsaved = nil
+	if err := saveMessage(ctx, p.tx, r); err != nil {
+		return err
+	}
+	return p.touch(ctx)
 }
 
 type handler func(p *projection, ctx context.Context, command *CommandRecord, payload map[string]any) error
@@ -127,11 +144,19 @@ func (s *Service) ImportEvents(ctx context.Context, tx pgx.Tx, instanceID string
 			return 0, err
 		}
 		instance.LastSourceSeq = seq
+		if event.Type != "item.updated" {
+			if err := p.flush(ctx); err != nil {
+				return 0, err
+			}
+		}
 		if h, ok := handlers[event.Type]; ok {
 			if err := h(p, ctx, command, payload); err != nil {
 				return 0, err
 			}
 		}
+	}
+	if err := p.flush(ctx); err != nil {
+		return 0, err
 	}
 	if _, err := tx.Exec(ctx, "UPDATE runtime_instance SET last_source_seq = $2, status = $3, error_code = $4 WHERE id = $1",
 		instance.ID, instance.LastSourceSeq, instance.Status, instance.ErrorCode); err != nil {
@@ -313,9 +338,17 @@ func (p *projection) itemUpdated(ctx context.Context, command *CommandRecord, pa
 	if command == nil {
 		return nil
 	}
-	r, err := reply(ctx, p.tx, command.ID)
-	if err != nil || r == nil || r.terminal() {
-		return err
+	r := p.unsaved
+	if r == nil || r.CommandID != command.ID {
+		// Another reply's run ends here.
+		if err := p.flush(ctx); err != nil {
+			return err
+		}
+		var err error
+		r, err = reply(ctx, p.tx, command.ID)
+		if err != nil || r == nil || r.terminal() {
+			return err
+		}
 	}
 	item, _ := payload["item"].(map[string]any)
 	itemID := truncate(orEmpty(item["id"]), 100)
@@ -360,10 +393,8 @@ func (p *projection) itemUpdated(ctx context.Context, command *CommandRecord, pa
 	if r.Status == MessageQueued {
 		r.Status = MessageResponding
 	}
-	if err := saveMessage(ctx, p.tx, r); err != nil {
-		return err
-	}
-	return p.touch(ctx)
+	p.unsaved = r
+	return nil
 }
 
 func approvalPrompt(kind string, summary map[string]*string) string {
