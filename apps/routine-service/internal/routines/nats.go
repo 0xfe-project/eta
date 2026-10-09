@@ -48,11 +48,15 @@ type NATS struct {
 	stream jetstream.Stream
 }
 
-// ConnectNATS connects to url and makes sure the stream and its consumer
-// exist.
-func ConnectNATS(ctx context.Context, url string) (*NATS, error) {
-	nc, err := nats.Connect(url, nats.Name("routine-service"), nats.Timeout(natsLimit),
-		nats.RetryOnFailedConnect(true), nats.MaxReconnects(-1))
+// ConnectNATS connects to url as the services' user (with its password,
+// when the server has one) and makes sure the stream and its consumer exist.
+func ConnectNATS(ctx context.Context, url, password string) (*NATS, error) {
+	options := []nats.Option{nats.Name("routine-service"), nats.Timeout(natsLimit),
+		nats.RetryOnFailedConnect(true), nats.MaxReconnects(-1)}
+	if password != "" {
+		options = append(options, nats.UserInfo("services", password))
+	}
+	nc, err := nats.Connect(url, options...)
 	if err != nil {
 		return nil, err
 	}

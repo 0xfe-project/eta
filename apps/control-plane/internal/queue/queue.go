@@ -34,8 +34,11 @@ const (
 
 	// JetStream's "maximum messages per subject exceeded".
 	errMaxMsgsPerSubject = 10077
-	// JetStream's "no message found" when deleting one.
-	errMsgDeleteFailed = 10057
+	// JetStream's answers when deleting a message that is gone: "no message
+	// found", or "sequence not found" when messages around it remain (other
+	// agents' commands, in the shared stream).
+	errMsgDeleteFailed  = 10057
+	errSequenceNotFound = 10043
 )
 
 // ErrFull is a full agent queue.
@@ -92,15 +95,20 @@ type NATS struct {
 	streams map[string]jetstream.Stream
 }
 
-// Connect connects to url; a server that is not up yet is retried in the
+// Connect connects to url as the services' user (with its password, when
+// the server has one); a server that is not up yet is retried in the
 // background.
-func Connect(url string) (*NATS, error) {
-	nc, err := nats.Connect(url,
+func Connect(url, password string) (*NATS, error) {
+	options := []nats.Option{
 		nats.Name("control-plane"),
 		nats.Timeout(timeout),
 		nats.RetryOnFailedConnect(true),
 		nats.MaxReconnects(-1),
-	)
+	}
+	if password != "" {
+		options = append(options, nats.UserInfo("services", password))
+	}
+	nc, err := nats.Connect(url, options...)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +179,8 @@ func (q *NATS) Withdraw(ctx context.Context, seq int64) (bool, error) {
 	if err := s.DeleteMsg(ctx, uint64(seq)); err != nil {
 		// The client keeps only the text of the server's answer.
 		gone := errors.Is(err, jetstream.ErrMsgDeleteUnsuccessful) &&
-			strings.Contains(err.Error(), fmt.Sprintf("err_code=%d", errMsgDeleteFailed))
+			(strings.Contains(err.Error(), fmt.Sprintf("err_code=%d", errMsgDeleteFailed)) ||
+				strings.Contains(err.Error(), fmt.Sprintf("err_code=%d", errSequenceNotFound)))
 		if gone || errors.Is(err, jetstream.ErrMsgNotFound) {
 			// A runtime took it.
 			return false, nil

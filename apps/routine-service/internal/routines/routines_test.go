@@ -71,7 +71,7 @@ func TestNATSSchedulesAndFires(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 70*time.Second)
 	defer cancel()
-	n, err := ConnectNATS(ctx, url)
+	n, err := ConnectNATS(ctx, url, os.Getenv("AXP_TEST_NATS_PASSWORD"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -42,6 +42,12 @@ type Config struct {
 	S3SecretAccessKey string `env:"AXP_S3_SECRET_ACCESS_KEY" dev:"axp-dev-secret"`
 	// NATS JetStream, the agent queue. Runtimes reach it at the same address.
 	NATSURL string `env:"AXP_NATS_URL" dev:"nats://172.30.0.1:4222" prod:"nats://axp-nats:4222"`
+	// The services' NATS password (deploy/nats.conf); runtimes use their key.
+	NATSPassword string `env:"AXP_NATS_PASSWORD" dev:"axp-dev-nats"`
+	// Signs the internal API's answers to NATS's auth callout; its public
+	// key is deploy/nats.conf's issuer (AXP_NATS_CALLOUT_ISSUER). The
+	// development key is not a secret.
+	NATSCalloutSeed string `env:"AXP_NATS_CALLOUT_SEED" dev:"SAACRHA2F2DE2Z7UYNV7CQXSAHDTLMFOJAQMFYAZKQZYFO3CFGUHRHDAG4"`
 	// The runtime image's Codex plugins (apps/agent-runtime/plugins), for the
 	// catalog agents choose from; the production image copies them alongside.
 	PluginsDir string `env:"AXP_PLUGINS_DIR" default:"../agent-runtime/plugins"`

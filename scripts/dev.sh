@@ -217,10 +217,19 @@ dev_container axp-dev-s3 chrislusf/seaweedfs:4.48 \
 
 # --- Agent queue ----------------------------------------------------------------
 # NATS JetStream, on the runtime network's gateway address like S3, so host
-# processes and runtimes use one URL.
+# processes and runtimes use one URL. It runs production's deploy/nats.conf
+# (runtimes authenticated by their key, through the internal API) with
+# development's credentials, which are the services' config defaults; the
+# config is copied to a path every checkout shares.
+nats_conf="$HOME/.local/share/axp/dev-nats.conf"
+mkdir -p "$(dirname "$nats_conf")"
+cp "$ROOT_DIR/deploy/nats.conf" "$nats_conf"
 dev_container axp-dev-nats nats:2.14-alpine \
   --network "$runtime_network" -p "$AXP_RUNTIME_GATEWAY_BIND:4222:4222" -v axp-dev-nats:/data \
-  -- --jetstream --store_dir /data --http_port 8222
+  -v "$nats_conf:/etc/nats/nats.conf:ro" -e AXP_NATS_PASSWORD=axp-dev-nats \
+  -e AXP_NATS_CALLOUT_ISSUER=AC7PHNCHUVJP267O6FG6RZGI473BHKFBTYJ4V5C7GZQW7IDS45SQ5HAF \
+  -e AXP_NATS_CONF_SHA="$(sha256sum "$nats_conf" | cut -c1-12)" \
+  -- -c /etc/nats/nats.conf
 for _ in $(seq 1 60); do
   docker exec axp-dev-nats wget -q -O /dev/null http://127.0.0.1:8222/healthz 2>/dev/null && break
   sleep 0.5

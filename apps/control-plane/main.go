@@ -17,7 +17,9 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/akarachen/axp/apps/control-plane/internal/api"
@@ -38,6 +40,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/nats-io/nkeys"
 )
 
 func main() {
@@ -56,6 +59,20 @@ func main() {
 			if err != nil {
 				return err
 			}
+			// Runtimes' NATS connections are authenticated here, as their
+			// HTTP requests are (runtime-auth): by their runtime key.
+			go func() {
+				if err := s.queue.ServeAuth(ctx, s.cfg.NATSCalloutSeed, func(ctx context.Context, key string) (string, error) {
+					instanceID, token, _ := strings.Cut(key, ".")
+					instance, err := s.deps.Protocol.Authenticate(ctx, instanceID, token)
+					if err != nil {
+						return "", err
+					}
+					return instance.AgentID, nil
+				}); err != nil {
+					slog.Error("Cannot answer NATS's auth callout", "error", err)
+				}
+			}()
 			return httpapi.Serve(ctx, s.cfg.InternalAddr, api.Internal(s.deps).Router, time.Second)
 		}},
 		service.Command{Name: "controller", Args: "[-interval 500ms]", Run: func(ctx context.Context, args []string) error {
@@ -76,6 +93,40 @@ func main() {
 			"public":   func() huma.API { return api.Public(openAPIDeps()).API },
 			"internal": func() huma.API { return api.Internal(openAPIDeps()).API },
 		}),
+		service.Command{Name: "nats-callout-key", Run: func(context.Context, []string) error {
+			// A new key for NATS's auth callout: the seed is the internal
+			// API's AXP_NATS_CALLOUT_SEED, the public key NATS's
+			// AXP_NATS_CALLOUT_ISSUER (deploy/nats.conf).
+			key, err := nkeys.CreateAccount()
+			if err != nil {
+				return err
+			}
+			seed, _ := key.Seed()
+			public, _ := key.PublicKey()
+			fmt.Printf("AXP_NATS_CALLOUT_SEED=%s\nAXP_NATS_CALLOUT_ISSUER=%s\n", seed, public)
+			return nil
+		}},
+		service.Command{Name: "expire-runtimes", Run: func(ctx context.Context, _ []string) error {
+			// Every live runtime's lease ends now: the controller stops and
+			// replaces them on its next tick, as when one stops answering.
+			// For a deploy that changes what runtimes must do to work (their
+			// NATS key, deploy/deploy.sh).
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			pool, err := pg.Open(ctx, cfg.DatabaseURL)
+			if err != nil {
+				return err
+			}
+			defer pool.Close()
+			expired, err := pool.Exec(ctx, "UPDATE runtime_instance SET lease_expires_at = now() WHERE ended_at IS NULL")
+			if err != nil {
+				return err
+			}
+			fmt.Printf("%d runtimes expire; the controller replaces them.\n", expired.RowsAffected())
+			return nil
+		}},
 		service.Command{Name: "ensure-runtime-network", Run: func(ctx context.Context, _ []string) error {
 			cfg, err := config.Load()
 			if err != nil {
@@ -114,7 +165,7 @@ func connect(ctx context.Context) (*services, error) {
 	if err != nil {
 		return nil, err
 	}
-	q, err := queue.Connect(cfg.NATSURL)
+	q, err := queue.Connect(cfg.NATSURL, cfg.NATSPassword)
 	if err != nil {
 		return nil, err
 	}

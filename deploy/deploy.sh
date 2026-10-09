@@ -76,6 +76,13 @@ if ! grep -q "^AXP_SECRET_KEY=" "$ENV_FILE"; then
 fi
 ensure_secret AXP_S3_SECRET_ACCESS_KEY 32
 ensure_secret AXP_RELAY_ADMIN_SECRET 32
+ensure_secret AXP_NATS_PASSWORD 24
+# The key the control plane signs NATS's auth callout answers with, and its
+# public key, which the NATS server trusts (deploy/nats.conf).
+if ! grep -q "^AXP_NATS_CALLOUT_SEED=" "$ENV_FILE"; then
+  go -C apps/control-plane run . nats-callout-key >>"$ENV_FILE"
+  echo "Added AXP_NATS_CALLOUT_SEED and AXP_NATS_CALLOUT_ISSUER to $ENV_FILE."
+fi
 # OpenObserve requires upper and lower case letters, a digit and a symbol.
 if ! grep -q "^AXP_OBSERVE_PASSWORD=" "$ENV_FILE"; then
   echo "AXP_OBSERVE_PASSWORD=Axp-$(openssl rand -hex 16)" >>"$ENV_FILE"
@@ -245,6 +252,16 @@ migrate() {
     "axp-control-plane migrate"
 }
 
+# NATS has authenticated runtimes by their key since it runs deploy/nats.conf.
+# A server booted before is rebooted onto it just before the new roles start
+# (the old ones cannot use it), and the runtimes started before, which connect
+# without their key, are replaced once the new controller runs. JetStream's
+# data stays in the volume.
+nats_outdated() {
+  docker container inspect axp-nats >/dev/null 2>&1 &&
+    [[ "$(docker inspect -f '{{join .Args " "}}' axp-nats)" != *nats.conf* ]]
+}
+
 if [[ "$1" == "setup" || "$1" == "deploy" ]]; then
   docker buildx version >/dev/null 2>&1 || fail "missing docker buildx (the images need BuildKit)."
   # Kamal deploys the image Turbo builds and pushes, under this version.
@@ -279,7 +296,15 @@ if [[ "$1" == "setup" || "$1" == "deploy" ]]; then
     echo "Accessories ready."
   fi
   command="$1"
+  replace_runtimes=""
+  if [[ "$command" == "deploy" ]] && nats_outdated; then
+    kamal accessory reboot nats
+    replace_runtimes=1
+  fi
   kamal "$command" --skip-push --version "$version" "${@:2}"
+  if [[ -n "$replace_runtimes" ]]; then
+    kamal app exec --roles controller --reuse --quiet "axp-control-plane expire-runtimes"
+  fi
   # A first setup has no database until Kamal boots it.
   [[ "$command" == "deploy" ]] || migrate
 else

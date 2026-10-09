@@ -33,8 +33,10 @@ type Config struct {
 	// Its own database; by default axp_routines on DATABASE_URL's server.
 	DatabaseURL     string `env:"AXP_ROUTINES_DATABASE_URL"`
 	BaseDatabaseURL string `env:"DATABASE_URL" dev:"postgres://axp:axp@127.0.0.1:15432/axp"`
-	// NATS, where the schedules live.
-	NATSURL string `env:"AXP_NATS_URL" dev:"nats://172.30.0.1:4222" prod:"nats://axp-nats:4222"`
+	// NATS, where the schedules live, and the services' password there
+	// (deploy/nats.conf).
+	NATSURL      string `env:"AXP_NATS_URL" dev:"nats://172.30.0.1:4222" prod:"nats://axp-nats:4222"`
+	NATSPassword string `env:"AXP_NATS_PASSWORD" dev:"axp-dev-nats"`
 	// The LLM gateway, for the catalog and models.
 	LLMGatewayURL string `env:"AXP_LLM_GATEWAY_URL" dev:"http://127.0.0.1:8317" prod:"http://axp-llm:8317"`
 	// The plugins; runs get those of the routine target.
@@ -82,7 +84,7 @@ func serve(ctx context.Context, _ []string) error {
 		return err
 	}
 	defer db.Close()
-	queue, err := routines.ConnectNATS(ctx, c.NATSURL)
+	queue, err := routines.ConnectNATS(ctx, c.NATSURL, c.NATSPassword)
 	if err != nil {
 		return err
 	}

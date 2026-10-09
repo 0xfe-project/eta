@@ -35,7 +35,17 @@ controller 只管容器：
 
 ## 运行
 
-NATS 不设鉴权，只在内部网络上可达。
+NATS 只在内部网络上可达，并且按智能体隔离（#98）：runtime 和服务都在 runtime 网络上能连到它，而“智能体之间互不访问”不能只靠网络。配置是 `deploy/nats.conf`，开发和生产相同：
+
+- **服务**（控制面三个角色、定时任务服务）以用户 `services` 连接（密码 `AXP_NATS_PASSWORD`），有全部权限。
+- **runtime** 只带自己的 runtime key（`<实例 ID>.<令牌>`，就是它访问 runtime 网关用的那个）作 token 连接，没有别的凭据。NATS 用 auth callout 去问控制面：`internal` 进程订阅 `$SYS.REQ.USER.AUTH`（队列组，多个进程分担），按 runtime-auth 同样的规则认证（令牌、代际、实例未结束），回一个只属于这个智能体的用户，用 `AXP_NATS_CALLOUT_SEED` 签名（NATS 认它的公钥 `AXP_NATS_CALLOUT_ISSUER`）。它只能：
+  - 发布 `$JS.API.CONSUMER.MSG.NEXT.AGENTS.agent-<id>`、`$JS.API.CONSUMER.INFO.AGENTS.agent-<id>` 和 `$JS.ACK.AGENTS.agent-<id>.>`，即取、确认自己的命令；
+  - 订阅自己的 `axp.agent.<id>.control` 和自己的回复前缀 `_INBOX_<id>.>`（runtime 以此为 inbox 前缀）；
+  - 回应收到的请求（每个请求一条回复，1 分钟内）。
+
+  所以一个被提示注入的智能体不能给别的智能体插话、停止或替它审批，读不到也清不掉别人的队列，删不了流，也触发不了定时任务。认证失败直接拒绝连接。
+
+- `axp-control-plane nats-callout-key` 生成一对新的签名密钥；`deploy.sh` 第一次部署时自动生成两者并写进 `production.env`。在这之前启动的 NATS 不认识 runtime 的 key：`deploy.sh` 在新角色启动前把它重启到这份配置，然后用 `axp-control-plane expire-runtimes` 让 controller 换掉之前启动的 runtime（它们连接时不带 key）。
 
 |      | 开发                                                                                    | 生产                                                               |
 | ---- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |

@@ -20,7 +20,7 @@ func connect(t *testing.T) *NATS {
 	if url == "" {
 		t.Skip("AXP_TEST_NATS_URL is not set")
 	}
-	q, err := Connect(url)
+	q, err := Connect(url, os.Getenv("AXP_TEST_NATS_PASSWORD"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,6 +71,32 @@ func TestCommands(t *testing.T) {
 	}
 	if agents, _ := q.AgentsWithCommands(ctx); agents[agent] {
 		t.Fatal("dropped commands remain")
+	}
+}
+
+// In the shared stream, other agents' commands sit around one that was
+// taken; withdrawing it is still "a runtime took it", not an error.
+func TestWithdrawingATakenCommandAmongOthers(t *testing.T) {
+	q := connect(t)
+	ctx := context.Background()
+	agent, other := uuid.NewString(), uuid.NewString()
+	t.Cleanup(func() { _ = q.Forget(context.Background(), agent); _ = q.Forget(context.Background(), other) })
+	for _, a := range []string{agent, other} {
+		if err := q.OpenConsumer(ctx, a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before, _ := q.Enqueue(ctx, other, map[string]any{})
+	seq, _ := q.Enqueue(ctx, agent, map[string]any{})
+	after, _ := q.Enqueue(ctx, other, map[string]any{})
+	if before == 0 || seq == 0 || after == 0 {
+		t.Fatal("not enqueued")
+	}
+	if ok, err := q.Withdraw(ctx, seq); err != nil || !ok {
+		t.Fatalf("withdraw %v %v", ok, err)
+	}
+	if ok, err := q.Withdraw(ctx, seq); err != nil || ok {
+		t.Fatalf("withdrew a gone command %v %v", ok, err)
 	}
 }
 

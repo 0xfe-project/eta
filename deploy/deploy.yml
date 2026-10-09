@@ -30,9 +30,15 @@ x-secrets:
     - AXP_S3_ACCESS_KEY_ID
     - AXP_S3_SECRET_ACCESS_KEY
     - AXP_RELAY_ADMIN_SECRET
+    - AXP_NATS_PASSWORD
+    - AXP_NATS_CALLOUT_SEED
     - OTEL_EXPORTER_OTLP_HEADERS
   database: &database-secrets
     - DATABASE_URL
+    - OTEL_EXPORTER_OTLP_HEADERS
+  routines: &routines-secrets
+    - DATABASE_URL
+    - AXP_NATS_PASSWORD
     - OTEL_EXPORTER_OTLP_HEADERS
   telemetry: &telemetry-secrets
     - OTEL_EXPORTER_OTLP_HEADERS
@@ -164,7 +170,7 @@ servers:
     hosts: [<%= host %>]
     cmd: axp-routines
     env:
-      secret: *database-secrets
+      secret: *routines-secrets
       clear:
         AXP_ROUTINES_ADDR: ":8340"
         AXP_PLUGINS_DIR: /app/apps/agent-runtime/plugins
@@ -292,10 +298,18 @@ accessories:
       network: name=axp-prod-runtime,alias=axp-s3
   # The agent queue (NATS JetStream), on the runtime network as axp-nats:4222
   # for runtimes and on Kamal's for the control plane. Never published.
+  # Runtimes are authenticated by their key and kept to their own agent's
+  # subjects (deploy/nats.conf).
   nats:
     image: nats:2.14-alpine
     host: <%= host %>
-    cmd: --jetstream --store_dir /data
+    cmd: -c /etc/nats/nats.conf
+    files:
+      - deploy/nats.conf:/etc/nats/nats.conf
+    env:
+      secret:
+        - AXP_NATS_PASSWORD
+        - AXP_NATS_CALLOUT_ISSUER
     volumes:
       - axp-nats:/data
     options:

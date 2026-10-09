@@ -13,7 +13,7 @@
 
 - web、control-plane（公共 API）、llm-gateway 和内部运行协议都不在 runtime 网络上（开发时只监听 loopback，容器连不到）。浏览器只能经 `gateway` 访问它们，runtime 只能经 `runtime-gateway`。
 - `gateway` 不在 runtime 网络上，因此 runtime 碰不到公共 API；`runtime-gateway` 只加载 runtime 站点。
-- runtime 网络上还有 S3（只认预签名地址）和 OpenTelemetry Collector（无凭据的 OTLP 入口）。S3 只有 8333 端口可达：SeaweedFS 除 S3 外还在其他端口提供不鉴权的 filer、master、volume、WebDAV 和管理接口（直接读写任何智能体的快照），所以它本身不在 runtime 网络上（[#67](https://github.com/akarachen/axp/issues/67)）。
+- runtime 网络上还有 NATS（`axp-nats:4222`；runtime 只能用自己的 runtime key 连接，只能取、确认自己智能体的命令和收发自己的控制消息，见[队列](queue.md)）、S3（只认预签名地址）和 OpenTelemetry Collector（无凭据的 OTLP 入口）。S3 只有 8333 端口可达：SeaweedFS 除 S3 外还在其他端口提供不鉴权的 filer、master、volume、WebDAV 和管理接口（直接读写任何智能体的快照），所以它本身不在 runtime 网络上（[#67](https://github.com/akarachen/axp/issues/67)）。
   - 生产：SeaweedFS（accessory `s3`）只在 Kamal 网络上（别名 `axp-s3`、`axp-seaweedfs`）；runtime 网络上的 `axp-s3` 是 accessory `s3-proxy`，一个只监听 8333 的 Caddy（`caddy reverse-proxy`），转发到 `axp-seaweedfs:8333`。它原样保留 `Host`，预签名地址（`http://axp-s3:8333/...`，签名包含 Host）在 runtime 和控制面两侧都有效。上游不能写 `axp-s3`：代理同时在两个网络上，这个名字也指向它自己。
   - 开发：`axp-dev-s3` 不在 `axp-runtime` 网络上，只把 8333 发布到 runtime 网络的网关地址 `172.30.0.1:8333`，宿主机进程与 runtime 用同一地址；其他端口不发布，runtime 连不到。
 

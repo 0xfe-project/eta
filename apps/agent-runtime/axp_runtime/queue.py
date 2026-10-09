@@ -4,6 +4,10 @@
 already acked: from then on it is the runtime's alone, and a crash loses it
 rather than running it twice. Control messages on ``axp.agent.<agent>.control``
 go to ``handle(body)``, whose result is the reply.
+
+The runtime connects with its runtime key; NATS asks the control plane whose
+it is and lets the connection use only this agent's subjects (deploy/nats.conf),
+replies included: they come to its own inbox prefix.
 """
 
 import asyncio
@@ -52,6 +56,8 @@ class AgentQueue:
         self._nc = await nats.connect(
             self.settings.nats_url,
             name=f"agent-{agent}",
+            token=f"{self.settings.instance_id}.{self.settings.token}",
+            inbox_prefix=f"_INBOX_{agent}".encode(),
             max_reconnect_attempts=-1,
         )
         await self._nc.subscribe(f"axp.agent.{agent}.control", cb=self._control)
