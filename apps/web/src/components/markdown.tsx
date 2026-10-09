@@ -1,5 +1,7 @@
+import type { Options } from "react-markdown";
 import { cjk } from "@streamdown/cjk";
 import ReactMarkdown from "react-markdown";
+import rehypeExternalLinks from "rehype-external-links";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +13,10 @@ const remarkPlugins = [
   ...cjk.remarkPluginsAfter,
 ];
 
+const rehypePlugins: Options["rehypePlugins"] = [
+  [rehypeExternalLinks, { target: "_blank", rel: ["noopener", "noreferrer"] }],
+];
+
 export function Markdown({
   children,
   className,
@@ -20,7 +26,11 @@ export function Markdown({
 }) {
   return (
     <div className={cn("markdown", className)}>
-      <ReactMarkdown remarkPlugins={remarkPlugins} skipHtml>
+      <ReactMarkdown
+        remarkPlugins={remarkPlugins}
+        rehypePlugins={rehypePlugins}
+        skipHtml
+      >
         {children}
       </ReactMarkdown>
     </div>
