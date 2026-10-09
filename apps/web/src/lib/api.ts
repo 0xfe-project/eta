@@ -73,6 +73,16 @@ export const controlPlane = createClient<paths>({
   fetch: (request) => globalThis.fetch(request),
 });
 
+// Control planes before Idempotency-Key replay was removed reject POSTs
+// without one; keep sending it until every deployment has that change.
+controlPlane.use({
+  onRequest({ request }) {
+    if (request.method === "POST" && !request.headers.has("Idempotency-Key"))
+      request.headers.set("Idempotency-Key", crypto.randomUUID());
+    return request;
+  },
+});
+
 /** The response's data, or its error envelope as an ApiError. */
 export async function unwrap<T>(
   result: Promise<{ data?: T; error?: unknown; response: Response }>,

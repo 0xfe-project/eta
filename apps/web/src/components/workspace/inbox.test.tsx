@@ -101,6 +101,7 @@ describe("Inbox", () => {
     });
     const [request] = fetch.mock.calls[0] as [Request];
     expect(request.url).toContain("/api/v1/chat/interactions/i1/answer");
+    expect(request.headers.get("Idempotency-Key")).toBeTruthy();
     expect(await request.json()).toEqual({ value: "deny" });
     expect(container.textContent).toContain("没有待确认的请求");
   });
