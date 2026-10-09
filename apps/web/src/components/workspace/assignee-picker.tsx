@@ -1,9 +1,9 @@
 import type { AssigneeDraft } from "./assignee-draft";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectGroup, SelectOption } from "@/components/ui/select";
 import { usePlaces, useTasks } from "@/queries/tasks";
 import { emptyDraft, placeKey } from "./assignee-draft";
+import { Select, SelectGroup, SelectOption } from "./select-field";
 import { assigneeFromKey, assigneeOptions } from "./task-format";
 
 // Who a task is for, and for a remote agent where it works: one of the

@@ -39,7 +39,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectOption } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -62,6 +61,7 @@ import {
 } from "./assignee-draft";
 import { AssigneeFields } from "./assignee-picker";
 import { when } from "./routine-format";
+import { Select, SelectOption } from "./select-field";
 import {
   ago,
   assigneeLabel,

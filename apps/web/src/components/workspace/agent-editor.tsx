@@ -28,7 +28,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectGroup, SelectOption } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   useCreateAgent,
@@ -38,6 +37,7 @@ import {
 } from "@/queries/chat";
 import { useConnectors, useModels } from "@/queries/llm";
 import { AgentAvatar } from "./agent-identity";
+import { Select, SelectGroup, SelectOption } from "./select-field";
 import { useAgents } from "./use-agents";
 import { useWorkspaceStore } from "./workspace-store";
 

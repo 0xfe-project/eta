@@ -1,7 +1,7 @@
 import { afterEach, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { Select, SelectGroup, SelectOption } from "./select";
+import { Select, SelectGroup, SelectOption } from "./select-field";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }

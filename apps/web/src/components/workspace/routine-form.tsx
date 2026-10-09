@@ -6,13 +6,13 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectOption } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useModels } from "@/queries/llm";
 import { useSaveRoutine } from "@/queries/routines";
 import { ModelSelect } from "./agent-editor";
 import { occurrences, when } from "./routine-format";
+import { Select, SelectOption } from "./select-field";
 
 const KINDS = [
   { value: "daily", label: "每天" },

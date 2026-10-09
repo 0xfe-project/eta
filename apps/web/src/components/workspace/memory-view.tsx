@@ -14,10 +14,10 @@ import { toast } from "sonner";
 import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectOption } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useForget, useMemories, useRemember } from "@/queries/memory";
+import { Select, SelectOption } from "./select-field";
 import { ago } from "./task-format";
 import { useAgents } from "./use-agents";
 

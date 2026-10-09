@@ -132,7 +132,7 @@ import { GrokThought } from "@/components/brainless/grok/grok-thought";
 
 ### Select 迁移清单（任务 #13）
 
-所有单选入口使用 `src/components/ui/select.tsx`（shadcn 风格的 Radix Select），桌面与移动端均由应用渲染菜单。菜单通过 Portal 进入弹窗层级，支持键盘导航、Escape、滚动按钮；长选项换行，触发器文字截断，菜单宽高受可用视口限制。
+所有单选入口使用通过 `nlx shadcn add select --yes --overwrite` 安装的官方 `radix-lyra` Select（`src/components/ui/select.tsx`），业务层统一通过 `src/components/workspace/select-field.tsx` 组合官方组件，桌面与移动端均由应用渲染菜单。菜单通过 Portal 进入弹窗层级，支持键盘导航、Escape、滚动按钮；长选项换行，触发器文字截断，菜单宽高受可用视口限制。
 
 | 共享入口         | 使用位置                           | 保留语义                                               |
 | ---------------- | ---------------------------------- | ------------------------------------------------------ |
