@@ -148,54 +148,10 @@ function Gauge({
   );
 }
 
-function Caption({
-  children,
-  suppressHydrationWarning,
-}: {
-  children: ReactNode;
-  suppressHydrationWarning?: boolean;
-}) {
+function Caption({ children }: { children: ReactNode }) {
   return (
-    <span
-      suppressHydrationWarning={suppressHydrationWarning}
-      className="font-mono text-[10px] tracking-widest text-muted-foreground"
-    >
+    <span className="font-mono text-[10px] tracking-widest text-muted-foreground">
       {children}
-    </span>
-  );
-}
-
-/** A warning lamp: dark at zero, lit while anything needs looking at. */
-function Lamp({
-  label,
-  count,
-  fault = false,
-}: {
-  label: string;
-  count: number;
-  fault?: boolean;
-}) {
-  const lit = count > 0;
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 border px-1.5 py-0.5 font-mono text-[11px]",
-        !lit && "text-muted-foreground opacity-50",
-        lit && !fault && "border-foreground",
-        lit && fault && "border-destructive text-destructive",
-      )}
-    >
-      <span
-        aria-hidden="true"
-        className={cn(
-          "size-1.5",
-          !lit && "bg-muted-foreground/40",
-          lit && !fault && "border border-foreground",
-          lit && fault && "bg-destructive",
-        )}
-      />
-      {label}
-      {lit ? <span className="tabular-nums">{count}</span> : null}
     </span>
   );
 }
@@ -488,7 +444,6 @@ export function Overview() {
   const pending = usePendingInteractions();
   const connectionList = useConnections();
   const modelList = useModels();
-  const connections = connectionList.data ?? [];
   const models = modelList.data ?? [];
   // Until the snapshot lands the instruments read "—", not zero.
   const loaded = snapshot !== undefined;
@@ -510,8 +465,6 @@ export function Overview() {
     ? Math.max(0, (now - new Date(reply.created_at).getTime()) / 1000)
     : 0;
   const timer = timerScale(elapsed);
-  const connectionsIn = (state: Connection["state"]) =>
-    connections.filter((connection) => connection.state === state).length;
 
   return (
     <section
@@ -519,23 +472,7 @@ export function Overview() {
       aria-busy={!loaded}
       className="mx-auto max-w-2xl border p-3.5 text-foreground"
     >
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-1.5">
-          <Lamp label="待确认" count={pending.length} />
-          <Lamp label="限流" count={connectionsIn("rate_limited")} />
-          <Lamp label="需登录" count={connectionsIn("needs_login")} fault />
-          <Lamp label="连接错误" count={connectionsIn("error")} fault />
-          <Lamp label="不可用" count={count("unavailable")} fault />
-        </div>
-        <Caption suppressHydrationWarning>
-          {new Date(now).toLocaleTimeString("zh-CN", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </Caption>
-      </div>
-
-      <div className="mt-2 grid grid-cols-[1fr_minmax(8rem,10rem)_1fr] items-center gap-1">
+      <div className="grid grid-cols-[1fr_minmax(8rem,10rem)_1fr] items-center gap-1">
         <div>
           <Gauge
             value={(working + waiting) / load.max}

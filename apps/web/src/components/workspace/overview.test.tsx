@@ -123,7 +123,7 @@ describe("Overview", () => {
     }));
   });
 
-  it("reads load, warnings and memories off the fleet", async () => {
+  it("reads load, accounts, pending interactions and memories off the fleet", async () => {
     const container = await render({
       agents: [
         agent("a1", "研究员", "working"),
@@ -139,9 +139,9 @@ describe("Overview", () => {
     });
     expect(label(container, "负载")).toBe("负载：3 个智能体中 2 个在运转");
     const text = container.textContent;
-    expect(text).toContain("待确认2");
-    expect(text).toContain("限流1");
-    expect(text).toContain("不可用1");
+    expect(text).toContain("待确认02");
+    expect(text).not.toContain("限流1");
+    expect(text).not.toContain("不可用1");
     expect(text).toContain("1 / 2 可用");
     expect(text).toContain("0007");
   });
