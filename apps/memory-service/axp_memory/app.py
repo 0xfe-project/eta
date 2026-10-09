@@ -69,7 +69,7 @@ def create_app(provider: MemoryProvider):
         """
         message = {"role": "user", "content": text[:MAX_TEXT]}
         added = await anyio.to_thread.run_sync(
-            lambda: provider.add(agent_of(ctx), [message], infer=False)
+            lambda: provider.add(agent_of(ctx), [message], source="agent", infer=False)
         )
         return _view(added[0]) if added else {}
 
@@ -129,7 +129,7 @@ def create_app(provider: MemoryProvider):
                 return _error(400, "INVALID_TEXT", "记忆内容不能为空。")
             message = {"role": "user", "content": text}
             added = await anyio.to_thread.run_sync(
-                lambda: provider.add(agent, [message], infer=False)
+                lambda: provider.add(agent, [message], source="user", infer=False)
             )
             return JSONResponse(_view(added[0]), status_code=201)
         query = request.query_params.get("q", "").strip()[:MAX_TEXT]
@@ -188,7 +188,9 @@ class _Captures:
         while True:
             agent, messages, model = self.queue.get()
             try:
-                added = self.provider.add(agent, messages, infer=True, model=model)
+                added = self.provider.add(
+                    agent, messages, source="conversation", infer=True, model=model
+                )
                 logger.info("Remembered %d facts for agent %s", len(added), agent)
             except Exception:
                 logger.exception("Could not remember a turn for agent %s", agent)
@@ -206,6 +208,8 @@ def _view(memory: Memory) -> dict:
         view["score"] = round(memory.score, 3)
     if memory.created_at is not None:
         view["created_at"] = memory.created_at
+    if memory.source is not None:
+        view["source"] = memory.source
     return view
 
 
