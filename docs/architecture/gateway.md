@@ -47,13 +47,14 @@
 - 其余路由先用 `forward_auth` 问内部运行协议 `GET /internal/v1/runtime-auth`：runtime 的 key 是 `<实例 ID>.<令牌>`，有效时返回 204 和 `X-AXP-Agent-Id`。网关用这个值替换请求里的同名头（runtime 自己设的会被覆盖），删掉 `Authorization` 后转发；无效时把 403/409 原样返回给 runtime。
 - 插件的路由在问的时候带上插件名（`?plugin=`），这个智能体没有启用该插件时返回 403 `PLUGIN_NOT_ENABLED`，所以关掉插件也收回了它的能力，而不只是隐藏工具：
 
-  | 路由                                  | 上游             | 需要的插件 |
-  | ------------------------------------- | ---------------- | ---------- |
-  | `/v1/*`（模型请求）                   | llm-gateway      | —          |
-  | `/memory/*`（MCP 与记忆 hook）        | memory-service   | `memory`   |
-  | `/tasks/*`（MCP，见[任务](tasks.md)） | 内部运行协议服务 | `tasks`    |
-  | `/forge/mcp`（`open_pull_request`）   | forge-service    | `github`   |
-  | `/forge/*`（git 与 gh 的凭据）        | forge-service    | —          |
+  | 路由                                            | 上游             | 需要的插件 |
+  | ----------------------------------------------- | ---------------- | ---------- |
+  | `/v1/*`（模型请求）                             | llm-gateway      | —          |
+  | `/memory/*`（MCP 与记忆 hook）                  | memory-service   | `memory`   |
+  | `/tasks/*`（MCP，见[任务](tasks.md)）           | 内部运行协议服务 | `tasks`    |
+  | `/routines/*`（MCP，见[定时任务](routines.md)） | routine-service  | `routines` |
+  | `/forge/mcp`（`open_pull_request`）             | forge-service    | `github`   |
+  | `/forge/*`（git 与 gh 的凭据）                  | forge-service    | —          |
 
   `/forge/credentials` 每个 runtime 启动时都会取（git 和 gh 用），不属于插件。
 - 后面的服务只读 `X-AXP-Agent-Id`，自己不持有任何凭据；新增一个给 runtime 用的服务只是在 `runtime.caddy` 里加一条路由。
