@@ -1,6 +1,8 @@
-import type { Components } from "react-markdown";
+import type { Options } from "react-markdown";
+import type { RehypeRewriteOptions } from "rehype-rewrite";
 import { cjk } from "@streamdown/cjk";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
+import rehypeRewrite from "rehype-rewrite";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 
@@ -12,20 +14,23 @@ const remarkPlugins = [
   ...cjk.remarkPluginsAfter,
 ];
 
-const components: Components = {
-  a: ({ node: _node, href, ...props }) => {
+const linkOptions: RehypeRewriteOptions = {
+  selector: "a",
+  rewrite(node) {
+    if (node.type !== "element") return;
+    const href = node.properties.href;
     // Keep document anchors (including footnotes) and mail/phone handlers local.
-    const newTab = !!href && !/^(?:#|mailto:|tel:)/i.test(href);
-    return (
-      <a
-        {...props}
-        href={href}
-        target={newTab ? "_blank" : undefined}
-        rel={newTab ? "noopener noreferrer" : undefined}
-      />
-    );
+    if (
+      typeof href !== "string" ||
+      !defaultUrlTransform(href) ||
+      /^(?:#|mailto:|tel:)/i.test(href)
+    )
+      return;
+    node.properties.target = "_blank";
+    node.properties.rel = ["noopener", "noreferrer"];
   },
 };
+const rehypePlugins: Options["rehypePlugins"] = [[rehypeRewrite, linkOptions]];
 
 export function Markdown({
   children,
@@ -38,7 +43,7 @@ export function Markdown({
     <div className={cn("markdown", className)}>
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
-        components={components}
+        rehypePlugins={rehypePlugins}
         skipHtml
       >
         {children}
