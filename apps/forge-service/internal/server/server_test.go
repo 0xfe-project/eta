@@ -67,7 +67,7 @@ func (e *env) connect(code string) {
 	_, form, _ := e.do("POST", "/api/forge/v1/github/manifest", false, map[string]any{"name": "AXP Test", "origin": origin})
 	action, _ := url.Parse(form["action"].(string))
 	status, _, header := e.do("GET", "/api/forge/v1/github/manifest/callback?code="+code+"&state="+action.Query().Get("state"), false, nil)
-	if status != 303 || header.Get("Location") != "/?view=capabilities&github=created" {
+	if status != 303 || header.Get("Location") != "/workspace/capabilities?github=created" {
 		e.t.Fatalf("callback: %d %s", status, header.Get("Location"))
 	}
 }
@@ -417,7 +417,7 @@ func (e *env) pull(args map[string]any) map[string]any {
 func TestOpenPullRequestOnBehalfOfTheUser(t *testing.T) {
 	e := newEnv(t)
 	e.connect("installed-app")
-	if location := e.authorize("akarachen"); location != "/?view=capabilities&github=authorized" {
+	if location := e.authorize("akarachen"); location != "/workspace/capabilities?github=authorized" {
 		t.Fatalf("location: %s", location)
 	}
 	_, status, _ := e.do("GET", "/api/forge/v1/github", false, nil)
@@ -481,7 +481,7 @@ func TestAuthorizingWhileInstalling(t *testing.T) {
 	e.connect("installed-app")
 	// GitHub sends no state after an installation, only setup_action.
 	location := e.returnFromGitHub(url.Values{"login": {"akarachen"}, "redirect_uri": {origin + github.CallbackPath + "?installation_id=100&setup_action=install"}})
-	if location != "/?view=capabilities&github=authorized" || e.user()["login"] != "akarachen" {
+	if location != "/workspace/capabilities?github=authorized" || e.user()["login"] != "akarachen" {
 		t.Fatalf("location %s, user %v", location, e.user())
 	}
 }
@@ -519,7 +519,7 @@ func TestAnAppWithoutItsClientSecret(t *testing.T) {
 	if status, _, _ := e.do("POST", "/api/forge/v1/github/oauth-client", false, map[string]any{"client_id": "Iv1.axp-test", "client_secret": "secret-axp-test"}); status != 204 {
 		t.Fatalf("oauth client: %d", status)
 	}
-	if location := e.authorize("akarachen"); location != "/?view=capabilities&github=authorized" {
+	if location := e.authorize("akarachen"); location != "/workspace/capabilities?github=authorized" {
 		t.Fatalf("location: %s", location)
 	}
 }
