@@ -5,9 +5,10 @@
     "build:linux-amd64": {
       "inputs": [
         "$TURBO_ROOT$/go.work",
-        "$TURBO_ROOT$/packages/telemetry-go/**/*.go",
-        "$TURBO_ROOT$/packages/telemetry-go/go.mod",
-        "$TURBO_ROOT$/packages/telemetry-go/go.sum",
+        "$TURBO_ROOT$/packages/*-go/**",
+        "!$TURBO_ROOT$/packages/*-go/.turbo/**",
+        "!$TURBO_ROOT$/packages/*-go/out/**",
+        "!$TURBO_ROOT$/packages/*-go/node_modules/**",
         "$TURBO_ROOT$/scripts/build/go.sh",
         "go.mod",
         "go.sum",
@@ -18,9 +19,10 @@
     "build:linux-arm64": {
       "inputs": [
         "$TURBO_ROOT$/go.work",
-        "$TURBO_ROOT$/packages/telemetry-go/**/*.go",
-        "$TURBO_ROOT$/packages/telemetry-go/go.mod",
-        "$TURBO_ROOT$/packages/telemetry-go/go.sum",
+        "$TURBO_ROOT$/packages/*-go/**",
+        "!$TURBO_ROOT$/packages/*-go/.turbo/**",
+        "!$TURBO_ROOT$/packages/*-go/out/**",
+        "!$TURBO_ROOT$/packages/*-go/node_modules/**",
         "$TURBO_ROOT$/scripts/build/go.sh",
         "go.mod",
         "go.sum",
@@ -32,14 +34,20 @@
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/go.work",
-        "$TURBO_ROOT$/packages/telemetry-go/**"
+        "$TURBO_ROOT$/packages/*-go/**",
+        "!$TURBO_ROOT$/packages/*-go/.turbo/**",
+        "!$TURBO_ROOT$/packages/*-go/out/**",
+        "!$TURBO_ROOT$/packages/*-go/node_modules/**"
       ]
     },
     "test": {
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/go.work",
-        "$TURBO_ROOT$/packages/telemetry-go/**"
+        "$TURBO_ROOT$/packages/*-go/**",
+        "!$TURBO_ROOT$/packages/*-go/.turbo/**",
+        "!$TURBO_ROOT$/packages/*-go/out/**",
+        "!$TURBO_ROOT$/packages/*-go/node_modules/**"
       ]
     }
   }
