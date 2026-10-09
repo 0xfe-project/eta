@@ -3,8 +3,10 @@ import type {
   CronSchedule,
   DailySchedule,
   HourlySchedule,
+  ListedRun,
   Routine,
   RoutineIn,
+  RoutineSummary,
   Run,
   WeeklySchedule,
 } from "@/api/routines.gen";
@@ -14,13 +16,14 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { routinesApi, unwrap } from "@/lib/api";
+import { ApiError, routinesApi, unwrap } from "@/lib/api";
 
 // Routines (#23): agents that run on a schedule and leave a report
 // (/api/routines/v1; apps/routine-service). Every type comes from the routine
-// service's OpenAPI document.
+// service's OpenAPI document. The list is in summary (no reports, no
+// briefs); a routine's page is fetched when it is opened.
 
-export type { Routine, Run };
+export type { ListedRun, Routine, RoutineSummary, Run };
 export type Schedule =
   | DailySchedule
   | WeeklySchedule
@@ -30,38 +33,61 @@ export type RunStatus = Run["status"];
 export type BriefVersion = Brief;
 export type RoutineInput = RoutineIn;
 
-const keys = { all: ["routines"] as const };
+const keys = {
+  all: ["routines"] as const,
+  one: (id: string) => ["routines", id] as const,
+};
 
 // Faster while something is happening: a run, or a brief being revised.
-function busy(routines: Routine[] | undefined) {
-  return (routines ?? []).some((routine) =>
-    routine.runs.some(
-      (run) =>
-        run.status === "running" ||
-        run.feedback.some(
-          (f) => f.brief_version === null && !f.revision_failed,
-        ),
-    ),
-  );
-}
+const POLL_BUSY = 3000;
+const POLL_IDLE = 30_000;
 
 const routinesQueryOptions = queryOptions({
   queryKey: keys.all,
   queryFn: async ({ signal }) =>
     (await unwrap(routinesApi.GET("/api/routines/v1/routines", { signal })))
       .routines,
-  refetchInterval: (query) => (busy(query.state.data) ? 3000 : 30_000),
+  refetchInterval: (query) =>
+    (query.state.data ?? []).some(
+      (routine) => routine.runs[0]?.status === "running" || routine.revising,
+    )
+      ? POLL_BUSY
+      : POLL_IDLE,
 });
 
 export function useRoutines() {
   return useQuery(routinesQueryOptions);
 }
 
+/** A routine's page; null once it is gone. */
 export function useRoutine(id: string | null) {
   return useQuery({
-    ...routinesQueryOptions,
-    select: (routines) => routines.find((routine) => routine.id === id),
+    queryKey: keys.one(id ?? ""),
+    queryFn: async ({ signal }) => {
+      try {
+        return await unwrap(
+          routinesApi.GET("/api/routines/v1/routines/{routine_id}", {
+            params: { path: { routine_id: id! } },
+            signal,
+          }),
+        );
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) return null;
+        throw error;
+      }
+    },
     enabled: Boolean(id),
+    refetchInterval: (query) => {
+      const routine = query.state.data;
+      const busy =
+        routine?.runs[0]?.status === "running" ||
+        routine?.runs.some((run) =>
+          run.feedback.some(
+            (f) => f.brief_version === null && !f.revision_failed,
+          ),
+        );
+      return busy ? POLL_BUSY : POLL_IDLE;
+    },
   });
 }
 

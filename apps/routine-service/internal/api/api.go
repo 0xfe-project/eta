@@ -52,7 +52,7 @@ type FeedbackIn struct {
 }
 
 type RoutineList struct {
-	Routines []routines.Routine `json:"routines"`
+	Routines []routines.RoutineSummary `json:"routines"`
 }
 
 type RoutinePath struct {
@@ -71,13 +71,23 @@ func New(d *Deps) *httpapi.API {
 	httpapi.AddHealth(api, prefix+"/health", "routine-service")
 	s := d.Routines
 
-	huma.Register(api, op("listRoutines", http.MethodGet, "/routines", "Every routine with its recent runs", 200),
+	huma.Register(api, op("listRoutines", http.MethodGet, "/routines", "Every routine, with its last runs in summary", 200),
 		func(ctx context.Context, _ *struct{}) (*httpapi.Body[RoutineList], error) {
 			list, err := s.List(ctx, d.DB)
 			if err != nil {
 				return nil, err
 			}
 			return &httpapi.Body[RoutineList]{Body: RoutineList{list}}, nil
+		})
+
+	huma.Register(api, op("getRoutine", http.MethodGet, "/routines/{routine_id}",
+		"A routine with its briefs, and its recent runs with their reports and feedback", 200),
+		func(ctx context.Context, in *RoutinePath) (*httpapi.Body[routines.Routine], error) {
+			r, err := s.Get(ctx, d.DB, in.RoutineID)
+			if err != nil {
+				return nil, err
+			}
+			return &httpapi.Body[routines.Routine]{Body: *r}, nil
 		})
 
 	huma.Register(api, op("createRoutine", http.MethodPost, "/routines", "Create a routine", 201),

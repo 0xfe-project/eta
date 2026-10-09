@@ -40,7 +40,7 @@
 
 ## 界面
 
-右侧面板的“定时”tab 和 `/workspace/routines`（`apps/web/src/components/workspace/routines.tsx`）：列表、任务详情（要求和一条把运行、反馈、要求修订串在一起的时间线）、报告页（报告和反馈）、新建与编辑表单。类型由本服务的 OpenAPI 文档生成（`apps/web/redocly.yaml`）。
+右侧面板的“定时”tab 和 `/workspace/routines`（`apps/web/src/components/workspace/routines.tsx`）：列表、任务详情（要求和一条把运行、反馈、要求修订串在一起的时间线）、报告页（报告和反馈）、新建与编辑表单。列表接口（`GET /routines`）只返回摘要：每个任务最近 14 次运行的状态、时间和标题，以及是否正在修订要求，固定 3 个查询，与任务数量无关；打开任务时再取它的详情（`GET /routines/{id}`：全部要求版本、最近 30 次运行的报告和反馈）。类型由本服务的 OpenAPI 文档生成（`apps/web/redocly.yaml`）。
 
 ## 开发与测试
 

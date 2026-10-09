@@ -1,4 +1,11 @@
-import type { BriefVersion, Routine, Run, RunStatus } from "@/queries/routines";
+import type {
+  BriefVersion,
+  ListedRun,
+  Routine,
+  RoutineSummary,
+  Run,
+  RunStatus,
+} from "@/queries/routines";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
 import { CaretLeftIcon } from "@phosphor-icons/react/CaretLeft";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
@@ -88,7 +95,13 @@ function Back({ label, onClick }: { label: string; onClick: () => void }) {
 // --- list -----------------------------------------------------------------------
 
 /** The last runs, oldest first, on a fixed-width track. */
-function History({ runs, length = 14 }: { runs: Run[]; length?: number }) {
+function History({
+  runs,
+  length = 14,
+}: {
+  runs: ListedRun[];
+  length?: number;
+}) {
   const recent = runs.slice(0, length).reverse();
   return (
     <span
@@ -106,7 +119,7 @@ function History({ runs, length = 14 }: { runs: Run[]; length?: number }) {
   );
 }
 
-function NextRun({ routine }: { routine: Routine }) {
+function NextRun({ routine }: { routine: RoutineSummary }) {
   if (routine.runs[0]?.status === "running")
     return (
       <span className="inline-flex items-center gap-1.5 text-foreground">

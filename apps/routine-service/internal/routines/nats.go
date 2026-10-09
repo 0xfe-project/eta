@@ -107,7 +107,7 @@ func (n *NATS) Fire(ctx context.Context, routineID string) error {
 // Sync makes the stream's schedules the enabled routines': it purges every
 // schedule and publishes theirs again, so schedules of routines that are
 // gone do not outlive them.
-func (n *NATS) Sync(ctx context.Context, rows []Routine) error {
+func (n *NATS) Sync(ctx context.Context, rows []RoutineSummary) error {
 	purge, cancel := context.WithTimeout(ctx, natsLimit)
 	defer cancel()
 	if err := n.stream.Purge(purge, jetstream.WithPurgeSubject(scheduleSubject("*"))); err != nil {

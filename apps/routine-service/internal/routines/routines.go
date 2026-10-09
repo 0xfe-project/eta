@@ -22,8 +22,11 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// RunHistory is how many runs the browser gets per routine.
+// RunHistory is how many runs a routine's page gets.
 const RunHistory = 30
+
+// ListRuns is how many runs, in summary, a routine's line in the list gets.
+const ListRuns = 14
 
 const (
 	RunRunning    = "running"
@@ -55,11 +58,13 @@ type runRow struct {
 }
 
 // title is the report's first heading, or its first line.
-func (r *runRow) title() *string {
-	if r.Report == nil {
+func (r *runRow) title() *string { return reportTitle(r.Report) }
+
+func reportTitle(report *string) *string {
+	if report == nil {
 		return nil
 	}
-	first, _, _ := strings.Cut(strings.TrimSpace(strings.ReplaceAll(*r.Report, "\r", "\n")), "\n")
+	first, _, _ := strings.Cut(strings.TrimSpace(strings.ReplaceAll(*report, "\r", "\n")), "\n")
 	title := []rune(strings.TrimSpace(strings.TrimLeft(first, "#")))
 	if len(title) > 200 {
 		title = title[:200]
@@ -122,6 +127,29 @@ type Handoff struct {
 	_         struct{}      `nullable:"true"`
 	Text      string        `json:"text"`
 	WrittenAt jsontime.Time `json:"written_at"`
+}
+
+// ListedRun is a run as the list shows it: no report, no feedback.
+type ListedRun struct {
+	ID         string         `json:"id"`
+	StartedAt  jsontime.Time  `json:"started_at"`
+	FinishedAt *jsontime.Time `json:"finished_at" nullable:"true"`
+	Status     string         `json:"status" enum:"running,sent,nothing_new,failed"`
+	Title      *string        `json:"title" doc:"The report's first heading, if it sent one."`
+}
+
+// RoutineSummary is a routine as the list shows it; its page (Get) has the
+// briefs, the reports and the feedback.
+type RoutineSummary struct {
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Model     string         `json:"model"`
+	Schedule  Schedule       `json:"schedule"`
+	Timezone  string         `json:"timezone"`
+	Enabled   bool           `json:"enabled"`
+	NextRunAt *jsontime.Time `json:"next_run_at" nullable:"true"`
+	Runs      []ListedRun    `json:"runs" doc:"The last runs, newest first."`
+	Revising  bool           `json:"revising" doc:"Feedback on one of its runs is being made into a new brief."`
 }
 
 type Routine struct {
@@ -197,12 +225,7 @@ func public(ctx context.Context, db pg.DB, r *routineRow) (*Routine, error) {
 	}
 	out := &Routine{
 		ID: r.ID, Name: r.Name, Model: r.Model, Schedule: r.Schedule, Timezone: r.Timezone,
-		Enabled: r.Enabled, Briefs: []Brief{}, Runs: []Run{},
-	}
-	if r.Enabled {
-		if next, err := NextRun(r.Schedule, r.Timezone, time.Now()); err == nil {
-			out.NextRunAt = jsontime.Ptr(&next)
-		}
+		Enabled: r.Enabled, NextRunAt: nextRunAt(r), Briefs: []Brief{}, Runs: []Run{},
 	}
 	for _, b := range briefs {
 		out.Briefs = append(out.Briefs, Brief{Version: b.Version, Text: b.Text, CreatedAt: jsontime.From(b.CreatedAt), Feedback: b.FeedbackText})
@@ -250,20 +273,71 @@ func (s *Service) Get(ctx context.Context, db pg.DB, id string) (*Routine, error
 	return public(ctx, db, r)
 }
 
-func (s *Service) List(ctx context.Context, db pg.DB) ([]Routine, error) {
+// List is every routine in summary: three queries however many there are.
+func (s *Service) List(ctx context.Context, db pg.DB) ([]RoutineSummary, error) {
 	rows, err := pg.All[routineRow](ctx, db, "SELECT * FROM routine ORDER BY created_at")
 	if err != nil {
 		return nil, err
 	}
-	out := []Routine{}
-	for _, r := range rows {
-		p, err := public(ctx, db, r)
-		if err != nil {
-			return nil, err
+	// Each routine's last runs, by its index; of a report only the first
+	// line, which its title comes from.
+	runs, err := pg.All[struct {
+		RoutineID  string     `db:"routine_id"`
+		ID         string     `db:"id"`
+		Status     string     `db:"status"`
+		StartedAt  time.Time  `db:"started_at"`
+		FinishedAt *time.Time `db:"finished_at"`
+		FirstLine  *string    `db:"first_line"`
+	}](ctx, db, `SELECT rt.id AS routine_id, run.* FROM routine rt CROSS JOIN LATERAL (
+			SELECT id, status, started_at, finished_at,
+				left(split_part(btrim(replace(report, E'\r', E'\n')), E'\n', 1), 1000) AS first_line
+			FROM routine_run WHERE routine_id = rt.id ORDER BY started_at DESC LIMIT $1) run
+		ORDER BY run.started_at DESC`, ListRuns)
+	if err != nil {
+		return nil, err
+	}
+	revising, err := pg.All[struct {
+		RoutineID string `db:"routine_id"`
+	}](ctx, db, `SELECT DISTINCT run.routine_id FROM routine_feedback f JOIN routine_run run ON run.id = f.run_id
+		WHERE NOT f.revision_failed AND NOT EXISTS (SELECT 1 FROM routine_brief b WHERE b.feedback_id = f.id)`)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]RoutineSummary, len(rows))
+	index := map[string]*RoutineSummary{}
+	for i, r := range rows {
+		out[i] = RoutineSummary{
+			ID: r.ID, Name: r.Name, Model: r.Model, Schedule: r.Schedule, Timezone: r.Timezone,
+			Enabled: r.Enabled, NextRunAt: nextRunAt(r), Runs: []ListedRun{},
 		}
-		out = append(out, *p)
+		index[r.ID] = &out[i]
+	}
+	for _, run := range runs {
+		if r := index[run.RoutineID]; r != nil {
+			r.Runs = append(r.Runs, ListedRun{
+				ID: run.ID, StartedAt: jsontime.From(run.StartedAt), FinishedAt: jsontime.Ptr(run.FinishedAt),
+				Status: run.Status, Title: reportTitle(run.FirstLine),
+			})
+		}
+	}
+	for _, f := range revising {
+		if r := index[f.RoutineID]; r != nil {
+			r.Revising = true
+		}
 	}
 	return out, nil
+}
+
+// nextRunAt is when an enabled routine runs next.
+func nextRunAt(r *routineRow) *jsontime.Time {
+	if !r.Enabled {
+		return nil
+	}
+	next, err := NextRun(r.Schedule, r.Timezone, time.Now())
+	if err != nil {
+		return nil
+	}
+	return jsontime.Ptr(&next)
 }
 
 // --- writes ------------------------------------------------------------------------
