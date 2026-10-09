@@ -30,16 +30,7 @@ export function StatusIcon({
     <Icon
       aria-hidden="true"
       weight={status === "done" ? "fill" : "regular"}
-      className={cn(
-        "size-4 shrink-0",
-        status === "in_progress" && "text-amber-600 dark:text-amber-400",
-        status === "in_review" && "text-sky-600 dark:text-sky-400",
-        status === "done" && "text-emerald-600 dark:text-emerald-400",
-        status === "blocked" && "text-destructive",
-        (status === "backlog" || status === "cancelled") &&
-          "text-muted-foreground",
-        className,
-      )}
+      className={cn("size-4 shrink-0 text-muted-foreground", className)}
     />
   );
 }
