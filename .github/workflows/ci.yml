@@ -1,0 +1,124 @@
+# The repository's whole check (`nr check`: format, lint, build, typecheck,
+# test, knip) on every pull request and every push to main. Its job, `check`,
+# is the one to require for main.
+#
+# The tests run as they do locally, against development's PostgreSQL
+# (scripts/dev-postgres.sh) and a NATS JetStream server of their own; with CI
+# set, tests that need akhook or NATS fail instead of skipping.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # What the runtime image builds akhook with (apps/agent-runtime/Dockerfile).
+  RUST_VERSION: "1.97"
+  UV_VERSION: "0.12.10"
+  NI_VERSION: "30.6.0"
+  AXP_TEST_NATS_URL: nats://127.0.0.1:14222
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+          persist-credentials: false
+
+      # Toolchains at the repository's versions: Node (.node-version), Bun
+      # (packageManager), Go (go.work), Python (.python-version, through uv).
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          # The relay build's `npm ci` in vendor/agenvo.
+          cache: npm
+          cache-dependency-path: vendor/agenvo/package-lock.json
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.work
+          cache-dependency-path: |
+            go.work.sum
+            apps/*/go.sum
+            packages/*/go.sum
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: |
+            apps/*/uv.lock
+            packages/*/uv.lock
+      - name: Install Rust ${{ env.RUST_VERSION }}
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+          key: cargo-${{ runner.os }}-${{ hashFiles('vendor/akhook/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/dprint
+          key: dprint-${{ runner.os }}-${{ hashFiles('dprint.json') }}
+      # Turbo's own hashes decide what is reused. They cover each task's
+      # inputs but not the toolchains above, so the key does: a toolchain
+      # change starts from an empty cache.
+      - uses: actions/cache@v6
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-rust${{ env.RUST_VERSION }}-uv${{ env.UV_VERSION }}-${{ hashFiles('.node-version', 'package.json', 'go.work') }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-rust${{ env.RUST_VERSION }}-uv${{ env.UV_VERSION }}-${{ hashFiles('.node-version', 'package.json', 'go.work') }}-
+
+      - name: Install dependencies
+        run: |
+          npm install -g "@antfu/ni@$NI_VERSION"
+          ni --frozen
+
+      # Before the tests, which also start it: several at once would race to
+      # create the container.
+      - name: Start PostgreSQL
+        run: bash scripts/dev-postgres.sh
+      - name: Start NATS
+        run: |
+          docker run -d --name axp-ci-nats -p 127.0.0.1:14222:4222 \
+            nats:2.14-alpine --jetstream --http_port 8222
+          for _ in $(seq 1 60); do
+            docker exec axp-ci-nats wget -q -O /dev/null http://127.0.0.1:8222/healthz && exit 0
+            sleep 0.5
+          done
+          echo "NATS did not become ready" >&2
+          exit 1
+
+      # Verbose test output, so the log lists each test that ran.
+      - name: Check
+        run: nr check
+        env:
+          GOFLAGS: -v
+          PYTEST_ADDOPTS: -v
+
+      # Otherwise the cache only grows: entries written over two weeks ago go,
+      # and are rebuilt when next needed.
+      - name: Prune the Turbo cache
+        run: find .turbo/cache -type f -mtime +14 -delete

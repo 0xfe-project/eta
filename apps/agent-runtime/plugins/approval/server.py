@@ -32,13 +32,19 @@ def _akhook(*args: str) -> str:
 
 def _message(request: dict) -> str:
     reasons = "\n".join(rule["message"] for rule in request.get("rules", []))
-    calls = []
+    calls, tools = [], []
     for candidate in request.get("candidates", []):
-        if candidate.get("type") == "shell_exec":
+        kind = candidate.get("type")
+        if kind == "shell_exec":
             calls.append(candidate["command"])
-        else:
+        elif kind == "file_change":
             calls.append(f"{candidate.get('action')} {candidate.get('path')}")
-    message = f"{reasons}\n\n" + "\n".join(calls)
+        elif kind == "tool_call":
+            args = json.dumps(candidate.get("args"), ensure_ascii=False)
+            tools.append(f"{candidate.get('name')} {args}")
+    # akhook adds the tool call itself to every request; shell commands and
+    # file changes already say what it does.
+    message = f"{reasons}\n\n" + "\n".join(calls or tools)
     if len(message) > MESSAGE_CHARS:
         message = message[: MESSAGE_CHARS - 1] + "…"
     return message

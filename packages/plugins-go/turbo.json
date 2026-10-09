@@ -41,8 +41,12 @@
         "!$TURBO_ROOT$/packages/*-go/node_modules/**"
       ]
     },
-    // The tests compile the repository's plugins.
+    // The tests compile the repository's plugins and run their hooks with
+    // akhook, which CI fails without (CI=1).
     "test": {
+      "dependsOn": ["//#build:akhook"],
+      "env": ["CI"],
+      "passThroughEnv": ["GOFLAGS"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/go.work",

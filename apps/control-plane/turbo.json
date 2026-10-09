@@ -60,7 +60,7 @@
     },
     // Tests run against development's PostgreSQL, each binary in a database
     // of its own; AXP_TEST_NATS_URL and AXP_TEST_DOCKER add the NATS and
-    // Docker tests.
+    // Docker tests. CI fails without NATS (CI=1).
     "test": {
       "inputs": [
         "$TURBO_DEFAULT$",
@@ -72,7 +72,8 @@
         "$TURBO_ROOT$/apps/agent-runtime/plugins/*/plugin.json",
         "$TURBO_ROOT$/apps/agent-runtime/plugins/*/mcp.json"
       ],
-      "env": ["DATABASE_URL", "AXP_TEST_NATS_URL", "AXP_TEST_DOCKER"]
+      "env": ["DATABASE_URL", "AXP_TEST_NATS_URL", "AXP_TEST_DOCKER", "CI"],
+      "passThroughEnv": ["GOFLAGS"]
     }
   }
 }

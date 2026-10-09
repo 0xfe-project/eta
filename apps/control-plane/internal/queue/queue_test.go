@@ -18,6 +18,9 @@ func connect(t *testing.T) *NATS {
 	t.Helper()
 	url := os.Getenv("AXP_TEST_NATS_URL")
 	if url == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("AXP_TEST_NATS_URL is not set; CI runs the NATS tests")
+		}
 		t.Skip("AXP_TEST_NATS_URL is not set")
 	}
 	q, err := Connect(url)

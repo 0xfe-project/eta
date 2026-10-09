@@ -67,6 +67,9 @@ func TestDescribeAndNextRun(t *testing.T) {
 func TestNATSSchedulesAndFires(t *testing.T) {
 	url := os.Getenv("AXP_TEST_NATS_URL")
 	if url == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("AXP_TEST_NATS_URL is not set; CI runs the NATS tests")
+		}
 		t.Skip("AXP_TEST_NATS_URL is not set")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 70*time.Second)

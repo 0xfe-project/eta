@@ -59,7 +59,7 @@
       ]
     },
     // Tests run against development's PostgreSQL, in a database of their own;
-    // AXP_TEST_NATS_URL adds the NATS test.
+    // AXP_TEST_NATS_URL adds the NATS test, which CI fails without (CI=1).
     "test": {
       "inputs": [
         "$TURBO_DEFAULT$",
@@ -69,7 +69,8 @@
         "!$TURBO_ROOT$/packages/*-go/out/**",
         "!$TURBO_ROOT$/packages/*-go/node_modules/**"
       ],
-      "env": ["DATABASE_URL", "AXP_TEST_NATS_URL"]
+      "env": ["DATABASE_URL", "AXP_TEST_NATS_URL", "CI"],
+      "passThroughEnv": ["GOFLAGS"]
     }
   }
 }

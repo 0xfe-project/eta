@@ -69,6 +69,19 @@
       "cache": false,
       "passThroughEnv": ["AXP_APP_IMAGE"]
     },
+    // akhook for this machine, which the hook tests run
+    // (@axp/agent-runtime#test, @axp/plugins-go#test). The image builds its
+    // own. Built with the machine's cargo; CI pins its version.
+    "//#build:akhook": {
+      "inputs": [
+        "scripts/build/akhook.sh",
+        "vendor/akhook/Cargo.toml",
+        "vendor/akhook/Cargo.lock",
+        "vendor/akhook/src/**",
+        "vendor/akhook/presets/**"
+      ],
+      "outputs": ["vendor/akhook/target/release/akhook"]
+    },
     // Knip reads the whole repository, so it always runs.
     "//#knip": {
       "cache": false

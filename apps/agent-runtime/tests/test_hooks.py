@@ -30,7 +30,18 @@ def _akhook() -> str | None:
     )
 
 
-@pytest.mark.skipif(_akhook() is None, reason="akhook is not built")
+@pytest.fixture
+def akhook() -> str:
+    """akhook, which //#build:akhook builds before the tests; CI fails without it."""
+    path = _akhook()
+    if path is None:
+        if os.environ.get("CI"):
+            pytest.fail("akhook is not built (turbo run //#build:akhook)")
+        pytest.skip("akhook is not built")
+    return path
+
+
+@pytest.mark.usefixtures("akhook")
 class TestRules:
     """The rules as the image runs them."""
 
@@ -84,7 +95,7 @@ class TestRules:
         assert f"[{rule}]" in decision["permissionDecisionReason"]
 
 
-@pytest.mark.skipif(_akhook() is None, reason="akhook is not built")
+@pytest.mark.usefixtures("akhook")
 class TestApprovalPlugin:
     """request_approval asks through MCP elicitation, then grants the request."""
 
@@ -178,3 +189,12 @@ class TestApprovalPlugin:
         text, _ = self._call(server, request_id, "decline")
         assert "用户拒绝了" in text
         assert self._hook() is not None
+
+    def test_a_tool_call_alone_shows_its_name_and_arguments(self, server):
+        request = {
+            "rules": [{"id": "x", "message": "要调用。"}],
+            "candidates": [
+                {"type": "tool_call", "name": "mcp__x__y", "args": {"a": 1}}
+            ],
+        }
+        assert server._message(request) == '要调用。\n\nmcp__x__y {"a": 1}'

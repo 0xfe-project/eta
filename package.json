@@ -26,6 +26,7 @@
     "db:migrate": "bash scripts/dev-postgres.sh && go -C apps/control-plane run . migrate",
     "runtime:build": "bash scripts/build/runtime-image.sh axp-agent-runtime:dev",
     "build": "turbo run build build:linux-amd64 build:linux-arm64",
+    "build:akhook": "bash scripts/build/akhook.sh",
     "image:linux-amd64": "bash scripts/build/image.sh app linux amd64",
     "image:linux-arm64": "bash scripts/build/image.sh app linux arm64",
     "check": "dprint check && bun run lint:repo && turbo run build typecheck lint test knip",

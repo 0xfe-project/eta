@@ -148,16 +148,25 @@ func TestStdioServerAndSkills(t *testing.T) {
 	}
 }
 
-// akhook is AKHOOK_BIN, or akhook on PATH.
+// akhook is AKHOOK_BIN, akhook on PATH, or the one //#build:akhook builds
+// before the tests. CI fails without it.
 func akhookBinary(t *testing.T) string {
 	if bin := os.Getenv("AKHOOK_BIN"); bin != "" {
 		return bin
 	}
-	bin, err := exec.LookPath("akhook")
-	if err != nil {
-		t.Skip("set AKHOOK_BIN or put akhook on PATH")
+	if bin, err := exec.LookPath("akhook"); err == nil {
+		return bin
 	}
-	return bin
+	if bin, err := filepath.Abs("../../../vendor/akhook/target/release/akhook"); err == nil {
+		if _, err := os.Stat(bin); err == nil {
+			return bin
+		}
+	}
+	if os.Getenv("CI") != "" {
+		t.Fatal("akhook is not built (turbo run //#build:akhook)")
+	}
+	t.Skip("akhook is not built: run turbo run //#build:akhook, set AKHOOK_BIN or put akhook on PATH")
+	return ""
 }
 
 // A plugin's hooks run through akhook: prompt_submit's context reaches the
