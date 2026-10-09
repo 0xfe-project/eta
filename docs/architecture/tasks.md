@@ -8,6 +8,7 @@
 
 - [Xuanwo/agenvo#3](https://github.com/Xuanwo/agenvo/pull/3)：`paseo.workspaces.archive`，任务完成时归档 AXP 开的 Paseo worktree。
 - [Xuanwo/agenvo#4](https://github.com/Xuanwo/agenvo/pull/4)：Herdr 的 `worktree.list/create/open/remove` 和 `tab.create/close`。
+- [AkaraChen/agenvo#1](https://github.com/AkaraChen/agenvo/pull/1)：管理员接口 `POST /api/admin/call`，以中继所有者的身份调用已批准的实例（只在 fork 里，AXP 自己需要）。
 
 中继和远程电脑上的 connector 都从这个 submodule 构建（`/remote/dl/agenvo-<kind>.tgz`）。旧版 connector 没有这些方法，调用时报「connector 不支持……，需要更新」，在那台电脑上重新运行 `axp setup` 即可。上游合入后，fork 跟进上游再升级 submodule。
 
@@ -133,8 +134,7 @@ agenvo 让 Codex 和 Claude 以完全权限运行（Paseo 的 `full-access`/`byp
 
 控制面调用中继：
 
-- **管理员接口**（`/api/admin/*`，Bearer 管理员密钥）：状态（设备、实例、在线、待批准的配对）、批准配对（配对码 + 指纹）、批准实例、撤销设备。
-- **MCP**（`/mcp`）：中继只接受 OAuth 访问令牌，令牌在所有者于浏览器中同意后签发。控制面持有管理员密钥，所以自己完成这一流程：动态注册客户端、用管理员密钥登录、读取同意页的一次性 handle 并同意、用授权码（S256 PKCE）换令牌。令牌存在表 `relay_token`（一行），API 与 controller 共用；刷新令牌只能用一次，所以刷新在事务的 advisory lock 下进行，授权失效（30 天或被撤销）时重新走一遍。
+- 全部经**管理员接口**（`/api/admin/*`，Bearer 管理员密钥）：状态（设备、实例、在线、待批准的配对）、批准配对（配对码 + 指纹）、批准实例、撤销设备，以及调用远程运行时（`POST /api/admin/call`，即 MCP 工具 `runtime_call` 的输入与结果，但以所有者身份、不需要 OAuth 授权；fork 的改动）。控制面不走中继的 MCP 端点，也不保存任何令牌（#89）。
 
 中继检查 `Host` 是否等于它的公开 origin，所以控制面在内网访问它时也带上 origin 的主机名。
 
