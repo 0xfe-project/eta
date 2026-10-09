@@ -87,6 +87,14 @@ ITEM_KINDS = {
 FAILED_ITEM_STATUSES = {"failed", "declined", "error"}
 # How much of a tool call the transcript shows; the rest stays in Codex.
 ITEM_DETAIL_CHARS = {"name": 100, "input": 1000, "output": 4000}
+# A reply longer than this is cut, so every event fits in one batch.
+AGENT_MESSAGE_CHARS = 100_000
+# Outbox batches, as sent (UTF-8 JSON). The control plane takes up to 4 MiB
+# (MaxEventsBody in apps/control-plane/internal/api/internal.go).
+OUTBOX_BATCH_EVENTS = 100
+OUTBOX_BATCH_BYTES = 1 << 20
+# The control plane refuses these for what was sent; resending never helps.
+REJECTED_STATUSES = {400, 413, 422}
 FLUSH_SECONDS = 0.3
 # thread/compact/start answers before its turn starts.
 COMPACT_START_SECONDS = 30
@@ -336,6 +344,11 @@ class Runtime:
                     "runtime.failed", {"status": self.status, "code": exc.code}
                 )
             return
+        except Exception:
+            if not self.stopping.is_set():
+                logger.exception("Runtime not ready")
+                self._fail("START_FAILED")
+            return
         self.status = "ready"
         self.queue.start()
         self._spawn(self._worker_loop, "worker")
@@ -383,9 +396,37 @@ class Runtime:
                 waiter.event.set()
 
     def _spawn(self, target, name: str) -> None:
-        thread = threading.Thread(target=target, name=name, daemon=True)
+        def run():
+            try:
+                target()
+            except Exception:
+                if self.stopping.is_set():
+                    return
+                # The runtime cannot work without any of its threads.
+                logger.exception("Runtime thread %s failed", name)
+                self._fail("RUNTIME_THREAD_FAILED")
+
+        thread = threading.Thread(target=run, name=name, daemon=True)
         thread.start()
         self._threads.append(thread)
+
+    def _fail(self, code: str) -> None:
+        """Stop working for good: stop Codex, end what ran with an unknown
+        outcome and report why (once). The heartbeat carries the failure even
+        when no event can."""
+        with self._lock:
+            if self.error_code is not None:
+                return
+            self.status = "error"
+            self.error_code = code
+        self._cancel_approvals()
+        with self._codex_lock:
+            self._stop_codex()
+        if self.ledger is None:
+            return
+        for command in self.ledger.commands_with_status(L.STARTING, L.RUNNING):
+            self._finish_unknown(command)
+        self.ledger.emit("runtime.failed", {"status": "error", "code": code})
 
     def _join(self, deadline: float, *names: str) -> bool:
         """Wait for our threads (or the named ones); True if all stopped."""
@@ -467,7 +508,11 @@ class Runtime:
 
     def _github_loop(self, delay: float) -> None:
         while not self._halt.wait(delay):
-            delay = self._refresh_github()
+            try:
+                delay = self._refresh_github()
+            except Exception:
+                logger.exception("GitHub refresh failed")
+                delay = GITHUB_RETRY_SECONDS
 
     def _refresh_github(self) -> float:
         """Log gh in as the GitHub App; git gets its credentials from gh.
@@ -494,19 +539,23 @@ class Runtime:
         except (OSError, ValueError) as exc:
             logger.warning("Cannot reach the forge service: %s", exc)
             return GITHUB_RETRY_SECONDS
-        identity = answer.get("identity")
-        user = identity["name"] if identity else "x-access-token"
+        try:
+            token, left = answer["token"], answer["expires_at"] - time.time()
+            identity = answer.get("identity")
+            user = identity["name"] if identity else "x-access-token"
+            commit = identity and (
+                f"[user]\n\tname = {identity['name']}\n\temail = {identity['email']}\n"
+            )
+        except (AttributeError, KeyError, TypeError) as exc:
+            logger.warning("Unexpected answer from the forge service: %r", exc)
+            return GITHUB_RETRY_SECONDS
         _write_private(
             hosts,
-            f"github.com:\n    oauth_token: {answer['token']}\n"
+            f"github.com:\n    oauth_token: {token}\n"
             f"    user: {user}\n    git_protocol: https\n",
         )
-        if identity:
-            _write_private(
-                settings.run_dir / "git" / "github.inc",
-                f"[user]\n\tname = {identity['name']}\n\temail = {identity['email']}\n",
-            )
-        left = answer["expires_at"] - time.time()
+        if commit:
+            _write_private(settings.run_dir / "git" / "github.inc", commit)
         return max(GITHUB_RETRY_SECONDS, left - GITHUB_REFRESH_MARGIN)
 
     # --- Codex --------------------------------------------------------------
@@ -782,7 +831,8 @@ class Runtime:
     # --- execution ------------------------------------------------------------
 
     def _worker_loop(self) -> None:
-        while not self.stopping.is_set():
+        # A failed runtime takes no more work.
+        while not self.stopping.is_set() and self.error_code is None:
             command = self.ledger.next_accepted()
             if command is None:
                 # Idle: take the next command; the queue no longer holds it.
@@ -814,17 +864,7 @@ class Runtime:
                 if self.stopping.is_set():
                     return
                 logger.exception("Codex transport closed")
-                # A steered turn ends under the steer's command.
-                latest = self.ledger.get_command(
-                    self.current_command_id or command["command_id"]
-                )
-                if latest["status"] in (L.STARTING, L.RUNNING):
-                    self._finish_unknown(latest)
-                self.status = "error"
-                self.error_code = "CODEX_EXITED"
-                self.ledger.emit(
-                    "runtime.failed", {"status": "error", "code": "CODEX_EXITED"}
-                )
+                self._fail("CODEX_EXITED")
                 return
             finally:
                 self.current_command_id = None
@@ -958,7 +998,7 @@ class Runtime:
             status = "running"
         view = {"id": item.get("id"), "kind": kind, "status": status}
         if kind == "agent_message":
-            view["text"] = item.get("text") or ""
+            view["text"] = (item.get("text") or "")[:AGENT_MESSAGE_CHARS]
         else:
             detail = zip(ITEM_DETAIL_CHARS.items(), _item_detail(kind, item))
             for (key, limit), value in detail:
@@ -1021,8 +1061,9 @@ class Runtime:
 
     def _outbox_loop(self) -> None:
         backoff = 0.2
+        limit = OUTBOX_BATCH_EVENTS
         while not self._halt.is_set():
-            batch = self.ledger.unacked(limit=100, max_bytes=256 * 1024)
+            batch = self.ledger.unacked(limit=limit, max_bytes=OUTBOX_BATCH_BYTES)
             if not batch:
                 self._halt.wait(0.1)
                 continue
@@ -1030,6 +1071,7 @@ class Runtime:
                 result = self.cp.post_events(batch)
                 self.ledger.ack_through(int(result["acked_source_seq"]))
                 backoff = 0.2
+                limit = OUTBOX_BATCH_EVENTS
             except Fenced:
                 self.fence()
             except ControlPlaneError as exc:
@@ -1038,6 +1080,13 @@ class Runtime:
                     # The control plane already holds everything before this.
                     self.ledger.ack_through(expected - 1)
                     continue
+                if exc.status in REJECTED_STATUSES:
+                    if len(batch) > 1:
+                        # Halve until the event it refuses is on its own.
+                        limit = len(batch) // 2
+                    else:
+                        self._reject_event(batch[0], exc)
+                    continue
                 logger.warning("Event delivery rejected: %s", exc)
                 self._halt.wait(backoff)
                 backoff = min(backoff * 2, 5)
@@ -1045,6 +1094,23 @@ class Runtime:
                 logger.warning("Event delivery failed: %s", exc)
                 self._halt.wait(backoff)
                 backoff = min(backoff * 2, 5)
+
+    def _reject_event(self, event: dict, exc: ControlPlaneError) -> None:
+        """Send a stand-in for an event the control plane refuses, so the
+        events after it (a turn's end above all) still arrive. Only a shown
+        item can go missing; losing anything else fails the runtime."""
+        logger.error("Control plane refused event %s: %s", event["type"], exc)
+        self.ledger.replace(
+            event["source_seq"],
+            "event.rejected",
+            {
+                "command_id": event["payload"].get("command_id"),
+                "type": event["type"],
+                "status": exc.status,
+            },
+        )
+        if event["type"] != "item.updated":
+            self._fail("EVENT_REJECTED")
 
 
 def _start_compaction(client: CodexClient, thread_id: str) -> str:

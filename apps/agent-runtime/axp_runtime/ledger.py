@@ -34,12 +34,12 @@ CREATE TABLE IF NOT EXISTS approvals (
     decision TEXT,
     created_at REAL NOT NULL
 );
+-- Events not yet acked by the control plane; acked ones are deleted.
 CREATE TABLE IF NOT EXISTS outbox (
     source_seq INTEGER PRIMARY KEY,
     event_id TEXT NOT NULL UNIQUE,
     type TEXT NOT NULL,
     payload TEXT NOT NULL,
-    acked INTEGER NOT NULL DEFAULT 0,
     created_at REAL NOT NULL
 );
 """
@@ -60,6 +60,8 @@ class Ledger:
         )
         self._db.row_factory = sqlite3.Row
         self._db.executescript(SCHEMA)
+        # The last source_seq handed out; the outbox forgets acked events.
+        self._seq = 0
 
     @contextmanager
     def tx(self):
@@ -170,10 +172,7 @@ class Ledger:
 
     def emit(self, type_: str, payload: dict) -> int:
         with self.tx() as db:
-            row = db.execute(
-                "SELECT COALESCE(MAX(source_seq), 0) AS seq FROM outbox"
-            ).fetchone()
-            seq = row["seq"] + 1
+            seq = self._seq + 1
             db.execute(
                 "INSERT INTO outbox(source_seq, event_id, type, payload, created_at) "
                 "VALUES(?, ?, ?, ?, ?)",
@@ -185,41 +184,51 @@ class Ledger:
                     time.time(),
                 ),
             )
+            self._seq = seq
         return seq
 
     def unacked(self, limit: int, max_bytes: int) -> list[dict]:
+        """The oldest unacked events, at most ``max_bytes`` as sent (but at
+        least one event)."""
         with self._lock:
             rows = self._db.execute(
-                "SELECT * FROM outbox WHERE acked=0 ORDER BY source_seq LIMIT ?",
-                (limit,),
+                "SELECT * FROM outbox ORDER BY source_seq LIMIT ?", (limit,)
             ).fetchall()
         batch, size = [], 0
         for row in rows:
-            size += len(row["payload"]) + 200
+            event = {
+                "source_seq": row["source_seq"],
+                "source_event_id": row["event_id"],
+                "type": row["type"],
+                "payload": json.loads(row["payload"]),
+            }
+            size += len(encode(event)) + 1
             if batch and size > max_bytes:
                 break
-            batch.append(
-                {
-                    "source_seq": row["source_seq"],
-                    "source_event_id": row["event_id"],
-                    "type": row["type"],
-                    "payload": json.loads(row["payload"]),
-                }
-            )
+            batch.append(event)
         return batch
+
+    def replace(self, source_seq: int, type_: str, payload: dict) -> None:
+        """Send something else under an event's seq (the control plane will
+        never take the original)."""
+        with self.tx() as db:
+            db.execute(
+                "UPDATE outbox SET type=?, payload=? WHERE source_seq=?",
+                (type_, json.dumps(payload, ensure_ascii=False), source_seq),
+            )
 
     def ack_through(self, source_seq: int) -> None:
         with self.tx() as db:
-            db.execute("UPDATE outbox SET acked=1 WHERE source_seq<=?", (source_seq,))
+            db.execute("DELETE FROM outbox WHERE source_seq<=?", (source_seq,))
 
     def all_acked(self) -> bool:
         with self._lock:
-            return (
-                self._db.execute(
-                    "SELECT 1 FROM outbox WHERE acked=0 LIMIT 1"
-                ).fetchone()
-                is None
-            )
+            return self._db.execute("SELECT 1 FROM outbox LIMIT 1").fetchone() is None
+
+
+def encode(body) -> bytes:
+    """JSON as sent to the control plane: UTF-8, not ASCII escapes."""
+    return json.dumps(body, ensure_ascii=False).encode()
 
 
 def _command(row) -> dict:
