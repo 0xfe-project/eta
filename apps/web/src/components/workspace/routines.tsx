@@ -85,18 +85,16 @@ function Back({ label, onClick }: { label: string; onClick: () => void }) {
 
 // --- list -----------------------------------------------------------------------
 
-const HISTORY = 14;
-
 /** The last runs, oldest first, on a fixed-width track. */
-function History({ runs }: { runs: Run[] }) {
-  const recent = runs.slice(0, HISTORY).reverse();
+function History({ runs, length = 14 }: { runs: Run[]; length?: number }) {
+  const recent = runs.slice(0, length).reverse();
   return (
     <span
       role="img"
       aria-label={recent.map((run) => runStatusLabels[run.status]).join("、")}
       className="flex items-center gap-0.5"
     >
-      {Array.from({ length: HISTORY - recent.length }, (_, i) => (
+      {Array.from({ length: length - recent.length }, (_, i) => (
         <span key={i} className="size-2 bg-muted" />
       ))}
       {recent.map((run) => (
@@ -118,13 +116,25 @@ function NextRun({ routine }: { routine: Routine }) {
   return routine.next_run_at ? when(routine.next_run_at) : "—";
 }
 
-function RoutineList() {
+/**
+ * The routines; `selected` marks the one open beside the list, and `bare`
+ * leaves the heading to the page around it.
+ */
+export function RoutineList({
+  selected,
+  bare = false,
+}: {
+  selected?: string | null;
+  bare?: boolean;
+}) {
   const [, setNav] = useRoutineNav();
   const { data } = useRoutines();
   if (!data) return null;
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
+      <div
+        className={cn("flex items-center justify-between", bare && "hidden")}
+      >
         <h2 className="text-sm font-semibold">定时任务</h2>
         <Button
           size="icon-sm"
@@ -151,9 +161,12 @@ function RoutineList() {
             <li key={routine.id}>
               <button
                 type="button"
-                onClick={() => void setNav({ routine: routine.id })}
+                onClick={() =>
+                  void setNav({ routine: routine.id, run: null, edit: null })
+                }
+                aria-current={routine.id === selected ? "true" : undefined}
                 className={cn(
-                  "grid w-full grid-cols-[1fr_auto_5.5rem] items-center gap-4 px-2 py-2 text-left transition-colors duration-[60ms] ease-linear outline-none hover:bg-muted/60 focus-visible:bg-muted/60",
+                  "grid w-full grid-cols-[1fr_auto_5.5rem] items-center gap-4 px-2 py-2 text-left transition-colors duration-[60ms] ease-linear outline-none hover:bg-muted/60 focus-visible:bg-muted/60 aria-[current]:bg-muted",
                   !routine.enabled && "text-muted-foreground",
                 )}
               >
@@ -166,7 +179,7 @@ function RoutineList() {
                   </span>
                 </span>
                 <span className={routine.enabled ? undefined : "opacity-40"}>
-                  <History runs={routine.runs} />
+                  <History runs={routine.runs} length={bare ? 7 : 14} />
                 </span>
                 <span className="text-right text-xs text-muted-foreground tabular-nums">
                   <NextRun routine={routine} />
@@ -393,7 +406,14 @@ function Timeline({ routine }: { routine: Routine }) {
   );
 }
 
-function RoutineDetail({ routine }: { routine: Routine }) {
+/** A routine; `listed` when the list stays in view beside it on wide screens. */
+export function RoutineDetail({
+  routine,
+  listed = false,
+}: {
+  routine: Routine;
+  listed?: boolean;
+}) {
   const [, setNav] = useRoutineNav();
   const setEnabled = useSetRoutineEnabled();
   const runNow = useRunRoutineNow();
@@ -404,7 +424,12 @@ function RoutineDetail({ routine }: { routine: Routine }) {
   return (
     <div className="space-y-4">
       <div>
-        <Back label="定时任务" onClick={() => void setNav({ routine: null })} />
+        <span className={listed ? "lg:hidden" : undefined}>
+          <Back
+            label="定时任务"
+            onClick={() => void setNav({ routine: null })}
+          />
+        </span>
         <div className="flex items-center gap-2">
           <h2 className="min-w-0 flex-1 truncate text-base font-semibold">
             {routine.name}
@@ -528,7 +553,7 @@ function FeedbackForm({ routine, run }: { routine: Routine; run: Run }) {
   );
 }
 
-function RunView({ routine, run }: { routine: Routine; run: Run }) {
+export function RunView({ routine, run }: { routine: Routine; run: Run }) {
   const [, setNav] = useRoutineNav();
   const reports = routine.runs.filter((r) => r.status === "sent");
   const index = reports.findIndex((r) => r.id === run.id);

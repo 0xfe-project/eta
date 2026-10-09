@@ -173,6 +173,36 @@ export function usePendingInteractions() {
   );
 }
 
+/**
+ * Every agent's latest confirmations, answered or not, newest first: the
+ * fetched list, kept live by the snapshot's interactions from the stream.
+ */
+export function useInteractionHistory() {
+  const { data: snapshot } = useQuery(chatQueryOptions());
+  const query = useQuery({
+    // Under chatKey, so reloading the snapshot reloads the list with it.
+    queryKey: [...chatKey, "interactions"],
+    queryFn: async ({ signal }) =>
+      (
+        await unwrap(
+          controlPlane.GET("/api/v1/chat/interactions", {
+            params: { query: { limit: 100 } },
+            signal,
+          }),
+        )
+      ).interactions,
+  });
+  const byId = new Map((query.data ?? []).map((i) => [i.id, i]));
+  for (const live of snapshot?.interactions ?? []) {
+    const known = byId.get(live.id);
+    if (!known || live.revision > known.revision) byId.set(live.id, live);
+  }
+  const interactions = [...byId.values()].sort((a, b) =>
+    b.created_at.localeCompare(a.created_at),
+  );
+  return { ...query, interactions };
+}
+
 // Under chatKey, so reloading the snapshot reloads history with it.
 function messagesQueryOptions(agentId: string) {
   return infiniteQueryOptions({

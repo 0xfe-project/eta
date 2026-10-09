@@ -605,7 +605,7 @@ func TestPublicSchemaHasNoInternalFields(t *testing.T) {
 	want := []string{
 		"/api/v1/agents", "/api/v1/agents/{agent_id}", "/api/v1/agents/{agent_id}/compact",
 		"/api/v1/agents/{agent_id}/messages", "/api/v1/agents/{agent_id}/restart", "/api/v1/chat",
-		"/api/v1/chat/interactions/{interaction_id}/answer", "/api/v1/chat/messages",
+		"/api/v1/chat/interactions", "/api/v1/chat/interactions/{interaction_id}/answer", "/api/v1/chat/messages",
 		"/api/v1/chat/messages/{message_id}/stop", "/api/v1/chat/stream", "/api/v1/computers",
 		"/api/v1/computers/{computer_id}", "/api/v1/computers/{computer_id}/install",
 		"/api/v1/computers/{computer_id}/runtimes/{kind}/approve",

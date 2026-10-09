@@ -13,7 +13,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -192,6 +191,27 @@ function AttentionDot({ className }: { className?: string }) {
   );
 }
 
+/** Opens settings; the dot marks accounts the user has to act on. */
+export function SettingsButton({ className }: { className?: string }) {
+  const setSettings = useWorkspaceStore((s) => s.setSettings);
+  const attention = useNeedsAttention();
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label={attention ? "设置（有账号需要处理）" : "设置"}
+      title="设置"
+      className={cn("relative", className)}
+      onClick={() => setSettings((state) => ({ ...state, open: true }))}
+    >
+      <GearSixIcon aria-hidden="true" />
+      {attention ? (
+        <AttentionDot className="absolute top-1.5 right-1.5" />
+      ) : null}
+    </Button>
+  );
+}
+
 export function SettingsDialog() {
   const settings = useWorkspaceStore((s) => s.settings);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
@@ -202,20 +222,6 @@ export function SettingsDialog() {
       open={settings.open}
       onOpenChange={(open) => setSettings((state) => ({ ...state, open }))}
     >
-      <DialogTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={attention ? "设置（有账号需要处理）" : "设置"}
-          title="设置"
-          className="relative"
-        >
-          <GearSixIcon aria-hidden="true" />
-          {attention ? (
-            <AttentionDot className="absolute top-1.5 right-1.5" />
-          ) : null}
-        </Button>
-      </DialogTrigger>
       <DialogContent
         aria-describedby={undefined}
         className="flex h-[min(36rem,calc(100dvh-2rem))] max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"

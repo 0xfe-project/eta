@@ -135,6 +135,16 @@ type Interaction struct {
 	Options   []InteractionOption `json:"options"`
 	Status    string              `json:"status" enum:"pending,submitted,resolved,expired"`
 	Revision  int64               `json:"revision"`
+	// The option the user chose; null until answered.
+	Answer    *string       `json:"answer" nullable:"true" doc:"The option the user chose; null until answered."`
+	CreatedAt jsontime.Time `json:"created_at"`
+	UpdatedAt jsontime.Time `json:"updated_at"`
+}
+
+// InteractionList is the latest interactions, newest first, whatever their
+// status: the confirmations the user has had, like notifications.
+type InteractionList struct {
+	Interactions []Interaction `json:"interactions"`
 }
 
 // Snapshot is the chat as of EventCursor: every agent, the replies still in
@@ -204,8 +214,13 @@ func (i *interactionRow) public() Interaction {
 	if options == nil {
 		options = []InteractionOption{}
 	}
+	var chosen *string
+	if i.Answer != nil {
+		chosen = &i.Answer.Value
+	}
 	return Interaction{
 		ID: i.ID, AgentID: i.AgentID, MessageID: i.MessageID, Kind: i.Kind,
 		Prompt: i.Prompt, Options: options, Status: i.Status, Revision: i.Revision,
+		Answer: chosen, CreatedAt: jsontime.From(i.CreatedAt), UpdatedAt: jsontime.From(i.UpdatedAt),
 	}
 }

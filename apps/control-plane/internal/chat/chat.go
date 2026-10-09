@@ -78,6 +78,24 @@ func (s *Service) Snapshot(ctx context.Context, db store.DB) (*Snapshot, error) 
 	return snapshot, nil
 }
 
+// Interactions is the latest interactions of every agent, newest first.
+func (s *Service) Interactions(ctx context.Context, db store.DB, limit int) (*InteractionList, error) {
+	list := &InteractionList{Interactions: []Interaction{}}
+	conversationID, err := DefaultConversationID(ctx, db)
+	if err != nil || conversationID == "" {
+		return list, err
+	}
+	rows, err := All[interactionRow](ctx, db, `SELECT * FROM interaction
+		WHERE conversation_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2`, conversationID, limit)
+	if err != nil {
+		return nil, err
+	}
+	for _, i := range rows {
+		list.Interactions = append(list.Interactions, i.public())
+	}
+	return list, nil
+}
+
 // History is one agent's messages, newest page first; each page in send
 // order.
 func (s *Service) History(ctx context.Context, db store.DB, agentID, before string, limit int) (*MessagePage, error) {
