@@ -16,6 +16,8 @@ const memorySchema = z.object({
   // Relevance, on search results only.
   score: z.number().optional(),
   created_at: z.string().optional(),
+  // Missing on memories from before sources were recorded.
+  source: z.enum(["conversation", "agent", "user"]).optional(),
 });
 
 export type Memory = z.infer<typeof memorySchema>;

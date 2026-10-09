@@ -16,11 +16,12 @@ class FakeProvider:
     def __init__(self):
         self.memories: dict[str, tuple[str, str]] = {}
         self.created: dict[str, str] = {}
+        self.sources: dict[str, str] = {}
         self.extractions: list[tuple[str, list, str | None]] = []
         self.scores: dict[str, float] = {}
         self.clock = itertools.count()
 
-    def add(self, agent_id, messages, *, infer, model=None):
+    def add(self, agent_id, messages, *, source, infer, model=None):
         if infer:
             self.extractions.append((agent_id, messages, model))
             texts = [f"fact: {m['content']}" for m in messages if m["role"] == "user"]
@@ -31,7 +32,12 @@ class FakeProvider:
             memory_id = str(uuid.uuid4())
             self.memories[memory_id] = (agent_id, text)
             self.created[memory_id] = f"2026-10-08T00:00:{next(self.clock):02d}+00:00"
-            added.append(Memory(memory_id, text, created_at=self.created[memory_id]))
+            self.sources[memory_id] = source
+            added.append(
+                Memory(
+                    memory_id, text, created_at=self.created[memory_id], source=source
+                )
+            )
         return added
 
     def search(self, agent_id, query, limit):
@@ -44,7 +50,12 @@ class FakeProvider:
 
     def list(self, agent_id):
         return [
-            Memory(memory_id, text, created_at=self.created[memory_id])
+            Memory(
+                memory_id,
+                text,
+                created_at=self.created[memory_id],
+                source=self.sources[memory_id],
+            )
             for memory_id, (owner, text) in self.memories.items()
             if owner == agent_id
         ]
@@ -196,6 +207,24 @@ class TestBrowserApi:
             "deploy uses Kamal"
         ]
 
+    def test_memories_keep_their_source(self, client):
+        added = client.post(self.url("a"), json={"text": "by the user"}).json()
+        assert added["source"] == "user"
+        assert "created_at" in added
+        call_tool(client, "a", "remember", text="by the agent")
+        client.post(
+            "/memory/capture",
+            headers=as_agent("a"),
+            json={"messages": [{"role": "user", "content": "in a turn"}]},
+        )
+        client.app.state.captures.queue.join()
+        listed = client.get(self.url("a")).json()["memories"]
+        assert {m["text"]: m["source"] for m in listed} == {
+            "by the user": "user",
+            "by the agent": "agent",
+            "fact: in a turn": "conversation",
+        }
+
     def test_add_needs_text(self, client):
         response = client.post(self.url("a"), json={"text": "  "})
         assert response.status_code == 400
@@ -203,6 +232,24 @@ class TestBrowserApi:
 
 
 class TestMem0Provider:
+    def test_add_records_the_source(self):
+        class Store:
+            def add(self, messages, *, user_id, infer, metadata):
+                self.metadata = metadata
+                return {"results": [{"id": "m1", "memory": "x", "event": "ADD"}]}
+
+        provider = mem0_provider.Mem0Provider.__new__(mem0_provider.Mem0Provider)
+        provider.memory = Store()
+        [added] = provider.add(
+            "a", [{"role": "user", "content": "x"}], source="user", infer=False
+        )
+        assert provider.memory.metadata["source"] == "user"
+        assert added.source == "user"
+        assert added.created_at == provider.memory.metadata["created_at"]
+        stored = {"id": "m1", "memory": "x", "metadata": {"source": "agent"}}
+        assert mem0_provider._memory(stored).source == "agent"
+        assert mem0_provider._memory({"id": "m2", "memory": "y"}).source is None
+
     def test_delete_checks_the_owner(self):
         class Store:
             deleted = []

@@ -1,21 +1,34 @@
 import type { Memory } from "@/queries/memory";
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/ArrowClockwise";
 import { BrainIcon } from "@phosphor-icons/react/Brain";
+import { CaretLeftIcon } from "@phosphor-icons/react/CaretLeft";
+import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
+import { ChatCircleDotsIcon } from "@phosphor-icons/react/ChatCircleDots";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/MagnifyingGlass";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { TrashIcon } from "@phosphor-icons/react/Trash";
-import { useEffect, useState } from "react";
+import { UserIcon } from "@phosphor-icons/react/User";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import { useForget, useMemories, useRemember } from "@/queries/memory";
+import { ago } from "./task-format";
 import { useAgents } from "./use-agents";
 
 // Each search embeds the query; wait for the user to stop typing.
 const SEARCH_DELAY_MS = 300;
+const PAGE_SIZE = 20;
+
+const sources = {
+  conversation: { icon: ChatCircleDotsIcon, label: "对话中记下" },
+  agent: { icon: RobotIcon, label: "智能体记下" },
+  user: { icon: UserIcon, label: "手动添加" },
+};
 
 function useDebounced(value: string) {
   const [debounced, setDebounced] = useState(value);
@@ -28,6 +41,7 @@ function useDebounced(value: string) {
 
 function date(iso: string) {
   return new Date(iso).toLocaleString("zh-CN", {
+    year: "numeric",
     month: "numeric",
     day: "numeric",
     hour: "2-digit",
@@ -78,32 +92,135 @@ function RememberForm({ agentId }: { agentId: string }) {
 
 function MemoryRow({ agentId, memory }: { agentId: string; memory: Memory }) {
   const forget = useForget(agentId);
+  const textRef = useRef<HTMLParagraphElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  // Whether the clamped text hides some of it; measured while clamped, so
+  // the toggle stays once expanded.
+  const [long, setLong] = useState(false);
+  useLayoutEffect(() => {
+    const element = textRef.current;
+    if (!element || expanded) return;
+    const measure = () =>
+      setLong(element.scrollHeight > element.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [expanded, memory.text]);
+  const source = memory.source ? sources[memory.source] : undefined;
+
   return (
-    <li className="group flex items-start gap-2 px-3 py-2">
-      <div className="min-w-0 flex-1">
-        <p className="text-sm break-words whitespace-pre-wrap">{memory.text}</p>
-        {memory.created_at ? (
-          <p className="text-xs text-muted-foreground tabular-nums">
-            {date(memory.created_at)}
-          </p>
-        ) : null}
-      </div>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label="忘记这条记忆"
-        title="忘记"
-        disabled={forget.isPending}
-        className="opacity-60 group-hover:opacity-100 focus-visible:opacity-100"
-        onClick={() =>
-          forget.mutate(memory.id, {
-            onError: (error) => toast.error(error.message),
-          })
-        }
+    <li className="group px-3 py-2.5">
+      <p
+        ref={textRef}
+        className={cn(
+          "text-sm leading-relaxed break-words whitespace-pre-wrap",
+          expanded ? null : "line-clamp-3",
+        )}
       >
-        <TrashIcon aria-hidden="true" />
-      </Button>
+        {memory.text}
+      </p>
+      <div className="mt-1 flex h-6 items-center gap-3 text-xs text-muted-foreground">
+        {source ? (
+          <span className="flex items-center gap-1">
+            <source.icon aria-hidden="true" className="size-3.5" />
+            {source.label}
+          </span>
+        ) : null}
+        {memory.created_at ? (
+          <time
+            dateTime={memory.created_at}
+            title={date(memory.created_at)}
+            className="tabular-nums"
+          >
+            {ago(memory.created_at)}
+          </time>
+        ) : null}
+        {long ? (
+          <button
+            type="button"
+            aria-expanded={expanded}
+            onClick={() => setExpanded(!expanded)}
+            className="text-foreground/70 outline-none hover:text-foreground focus-visible:underline"
+          >
+            {expanded ? "收起" : "展开"}
+          </button>
+        ) : null}
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label="忘记这条记忆"
+          title="忘记"
+          disabled={forget.isPending}
+          className="ml-auto opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
+          onClick={() =>
+            forget.mutate(memory.id, {
+              onError: (error) => toast.error(error.message),
+            })
+          }
+        >
+          <TrashIcon aria-hidden="true" />
+        </Button>
+      </div>
     </li>
+  );
+}
+
+/** One page of memories at a time, with the pages under them. */
+function MemoryList({
+  agentId,
+  memories,
+}: {
+  agentId: string;
+  memories: Memory[];
+}) {
+  const listRef = useRef<HTMLUListElement>(null);
+  const [page, setPage] = useState(0);
+  const pages = Math.ceil(memories.length / PAGE_SIZE);
+  // Forgetting the last memory of the last page leaves the page empty.
+  const current = Math.min(page, pages - 1);
+  const go = (to: number) => {
+    setPage(to);
+    listRef.current?.scrollIntoView({ block: "nearest" });
+  };
+  return (
+    <div className="space-y-2">
+      <ul ref={listRef} aria-label="记忆列表" className="divide-y border">
+        {memories
+          .slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE)
+          .map((memory) => (
+            <MemoryRow key={memory.id} agentId={agentId} memory={memory} />
+          ))}
+      </ul>
+      {pages > 1 ? (
+        <nav
+          aria-label="记忆分页"
+          className="flex items-center justify-end gap-1 text-xs text-muted-foreground tabular-nums"
+        >
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label="上一页"
+            disabled={current === 0}
+            onClick={() => go(current - 1)}
+          >
+            <CaretLeftIcon aria-hidden="true" />
+          </Button>
+          <span aria-current="page" className="min-w-10 text-center">
+            {current + 1} / {pages}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label="下一页"
+            disabled={current === pages - 1}
+            onClick={() => go(current + 1)}
+          >
+            <CaretRightIcon aria-hidden="true" />
+          </Button>
+        </nav>
+      ) : null}
+    </div>
   );
 }
 
@@ -147,7 +264,7 @@ export function MemoryView() {
       <div className="flex items-center justify-between gap-2">
         <h2 className="min-w-0 truncate text-sm font-semibold">
           {current.name} 的记忆
-          {data && !query ? (
+          {data ? (
             <span className="ml-1.5 font-normal tabular-nums text-muted-foreground">
               {data.length}
             </span>
@@ -199,11 +316,12 @@ export function MemoryView() {
           </Empty>
         )
       ) : (
-        <ul aria-label="记忆列表" className="divide-y border">
-          {data.map((memory) => (
-            <MemoryRow key={memory.id} agentId={current.id} memory={memory} />
-          ))}
-        </ul>
+        // Keyed so another agent or search starts on its first page.
+        <MemoryList
+          key={`${current.id}\n${query}`}
+          agentId={current.id}
+          memories={data}
+        />
       )}
     </div>
   );

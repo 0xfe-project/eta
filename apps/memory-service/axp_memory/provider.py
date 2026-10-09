@@ -17,6 +17,10 @@ class Memory:
     score: float | None = None
     # ISO 8601, when the provider records it.
     created_at: str | None = None
+    # How it came to be remembered: "conversation" (extracted from a finished
+    # turn), "agent" (the agent's remember tool) or "user" (added by the
+    # user). None for memories from before sources were recorded.
+    source: str | None = None
 
 
 class MemoryProvider(Protocol):
@@ -25,13 +29,14 @@ class MemoryProvider(Protocol):
         agent_id: str,
         messages: list[dict],
         *,
+        source: str,
         infer: bool,
         model: str | None = None,
     ) -> list[Memory]:
         """Remember ``messages`` ({"role", "content"}) for the agent.
 
         With ``infer`` the provider extracts facts with ``model``; without it
-        every message is kept as written.
+        every message is kept as written. Every memory keeps ``source``.
         """
         ...
 

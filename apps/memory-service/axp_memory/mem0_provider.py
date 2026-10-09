@@ -9,6 +9,7 @@ import os
 import tempfile
 import threading
 import uuid
+from datetime import UTC, datetime
 
 # Read when mem0 is imported. mem0 keeps a change log in SQLite next to the
 # vector store; it is not needed and stays in the container.
@@ -83,20 +84,31 @@ class Mem0Provider:
         # The model is set per extraction.
         self._extracting = threading.Lock()
 
-    def add(self, agent_id, messages, *, infer, model=None):
+    def add(self, agent_id, messages, *, source, infer, model=None):
         if not infer:
-            return self._add(agent_id, messages, infer=False)
+            return self._add(agent_id, messages, source, infer=False)
         with self._extracting:
             self.memory.llm.config.model = model
             token = _agent.set(agent_id)
             try:
-                return self._add(agent_id, messages, infer=True)
+                return self._add(agent_id, messages, source, infer=True)
             finally:
                 _agent.reset(token)
 
-    def _add(self, agent_id, messages, *, infer):
-        result = self.memory.add(messages, user_id=agent_id, infer=infer)
-        return [_memory(item) for item in result["results"]]
+    def _add(self, agent_id, messages, source, *, infer):
+        # mem0 stamps created_at unless the metadata has it; stamping it here
+        # lets the new memories carry it, which mem0's add result does not.
+        created_at = datetime.now(UTC).isoformat()
+        result = self.memory.add(
+            messages,
+            user_id=agent_id,
+            infer=infer,
+            metadata={"source": source, "created_at": created_at},
+        )
+        return [
+            Memory(item["id"], item["memory"], created_at=created_at, source=source)
+            for item in result["results"]
+        ]
 
     def search(self, agent_id, query, limit):
         result = self.memory.search(query, top_k=limit, filters={"user_id": agent_id})
@@ -120,4 +132,10 @@ class Mem0Provider:
 
 
 def _memory(item: dict) -> Memory:
-    return Memory(item["id"], item["memory"], item.get("score"), item.get("created_at"))
+    return Memory(
+        item["id"],
+        item["memory"],
+        item.get("score"),
+        item.get("created_at"),
+        (item.get("metadata") or {}).get("source"),
+    )
