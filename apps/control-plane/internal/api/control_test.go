@@ -161,6 +161,63 @@ func TestHeartbeatMarksReadyAndExtendsLease(t *testing.T) {
 	expect(t, scalar[string](c.env, "SELECT status FROM agent"), "ready")
 }
 
+// A heartbeat that only renews the lease does not wait for the conversation
+// lock, which every agent's event imports take.
+func TestRenewingHeartbeatDoesNotWaitForTheConversationLock(t *testing.T) {
+	c, r := provisioned(t)
+	r.ready("thread-1")
+	before := scalar[time.Time](c.env, "SELECT lease_expires_at FROM runtime_instance")
+	tx, err := c.db.Begin(c.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(c.ctx)
+	if err := chat.LockConversation(c.ctx, tx, scalar[string](c.env, "SELECT conversation_id FROM agent")); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan int, 1)
+	go func() { done <- r.heartbeat("busy").status }()
+	select {
+	case status := <-done:
+		expect(t, status, 200)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the heartbeat waited for the conversation lock")
+	}
+	expect(t, scalar[string](c.env, "SELECT status FROM runtime_instance"), "busy")
+	if !scalar[time.Time](c.env, "SELECT lease_expires_at FROM runtime_instance").After(before) {
+		t.Fatal("lease not extended")
+	}
+}
+
+// What changes more than the lease still takes the lock: a failed
+// runtime's heartbeat waits for it, an ended one is fenced.
+func TestHeartbeatOfAFailedOrEndedRuntimeTakesTheLock(t *testing.T) {
+	c, r := provisioned(t)
+	r.ready("thread-1")
+	c.exec("UPDATE runtime_instance SET status = 'failed'")
+	tx, err := c.db.Begin(c.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(c.ctx)
+	if err := chat.LockConversation(c.ctx, tx, scalar[string](c.env, "SELECT conversation_id FROM agent")); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan int, 1)
+	go func() { done <- r.heartbeat("ready").status }()
+	select {
+	case <-done:
+		t.Fatal("a failed runtime's heartbeat skipped the lock")
+	case <-time.After(300 * time.Millisecond):
+	}
+	if err := tx.Rollback(c.ctx); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, <-done, 200)
+	c.exec("UPDATE runtime_instance SET ended_at = now()")
+	expectError(t, r.heartbeat("busy"), 409, "STALE_GENERATION")
+}
+
 func TestEventOrdering(t *testing.T) {
 	c, r := provisioned(t)
 	r.ready("thread-1")
