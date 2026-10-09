@@ -40,7 +40,7 @@
     "react-dom": "^19.2.0",
     "react-hook-form": "^7.89.0",
     "react-markdown": "^10.1.0",
-    "rehype-rewrite": "^4.0.4",
+    "rehype-external-links": "^3.0.0",
     "remark-gfm": "^4.0.1",
     "shadcn": "^4.21.3",
     "sonner": "^2.0.8",

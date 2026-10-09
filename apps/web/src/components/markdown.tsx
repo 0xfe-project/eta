@@ -1,8 +1,7 @@
-import type { Options } from "react-markdown";
-import type { RehypeRewriteOptions } from "rehype-rewrite";
+import type { Components, Options } from "react-markdown";
 import { cjk } from "@streamdown/cjk";
-import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
-import rehypeRewrite from "rehype-rewrite";
+import ReactMarkdown from "react-markdown";
+import rehypeExternalLinks from "rehype-external-links";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 
@@ -14,23 +13,28 @@ const remarkPlugins = [
   ...cjk.remarkPluginsAfter,
 ];
 
-const linkOptions: RehypeRewriteOptions = {
-  selector: "a",
-  rewrite(node) {
-    if (node.type !== "element") return;
-    const href = node.properties.href;
-    // Keep document anchors (including footnotes) and mail/phone handlers local.
-    if (
-      typeof href !== "string" ||
-      !defaultUrlTransform(href) ||
-      /^(?:#|mailto:|tel:)/i.test(href)
-    )
-      return;
-    node.properties.target = "_blank";
-    node.properties.rel = ["noopener", "noreferrer"];
+const rehypePlugins: Options["rehypePlugins"] = [
+  [rehypeExternalLinks, { target: "_blank", rel: ["noopener", "noreferrer"] }],
+];
+
+const components: Components = {
+  a: ({ node: _node, href, ...props }) => {
+    // The plugin handles absolute URLs; include relative pages, but keep
+    // document anchors and native protocol handlers in their current context.
+    const relativePage =
+      !!href &&
+      !href.startsWith("#") &&
+      !/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(href);
+    return (
+      <a
+        {...props}
+        href={href}
+        target={relativePage ? "_blank" : props.target}
+        rel={relativePage ? "noopener noreferrer" : props.rel}
+      />
+    );
   },
 };
-const rehypePlugins: Options["rehypePlugins"] = [[rehypeRewrite, linkOptions]];
 
 export function Markdown({
   children,
@@ -44,6 +48,7 @@ export function Markdown({
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         rehypePlugins={rehypePlugins}
+        components={components}
         skipHtml
       >
         {children}
