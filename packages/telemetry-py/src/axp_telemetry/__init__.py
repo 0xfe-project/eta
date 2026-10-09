@@ -20,7 +20,7 @@ from opentelemetry.sdk._logs.export import (
     BatchLogRecordProcessor,
     SimpleLogRecordProcessor,
 )
-from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+from opentelemetry.sdk.resources import SERVICE_NAME, SERVICE_VERSION, Resource
 
 from .console import ConsoleExporter
 
@@ -43,7 +43,11 @@ def handler(service: str) -> logging.Handler:
     # Attributes passed to Resource.create win over the environment, so the
     # default name only applies without OTEL_SERVICE_NAME (as in Go and JS).
     name = os.environ.get("OTEL_SERVICE_NAME") or service
-    provider = LoggerProvider(resource=Resource.create({SERVICE_NAME: name}))
+    attributes = {SERVICE_NAME: name}
+    # Kamal sets the deployed version (its git commit) in every container.
+    if version := os.environ.get("KAMAL_VERSION"):
+        attributes[SERVICE_VERSION] = version
+    provider = LoggerProvider(resource=Resource.create(attributes))
     provider.add_log_record_processor(SimpleLogRecordProcessor(ConsoleExporter()))
     if os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") or os.environ.get(
         "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"
@@ -63,6 +67,7 @@ def handler(service: str) -> logging.Handler:
 
     _handler = LoggingHandler(logger_provider=provider)
     _handler.addFilter(_keep_valid_attributes)
+    _handler.addFilter(_skip_successful_reads)
     _provider = provider
     return _handler
 
@@ -81,6 +86,9 @@ def setup(service: str) -> None:
         root.removeHandler(existing)
     root.addHandler(otel)
     root.setLevel(logging.INFO)
+    # One record per outgoing request (the LLM gateway's calls) says nothing
+    # the caller does not log itself.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     _log_uncaught_exceptions()
 
 
@@ -126,6 +134,21 @@ def _keep_valid_attributes(record: logging.LogRecord) -> bool:
         if not valid:
             delattr(record, key)
     return True
+
+
+def _skip_successful_reads(record: logging.LogRecord) -> bool:
+    """Drop uvicorn's access records of successful GETs.
+
+    Health checks and the web's polling are most requests and say nothing;
+    writes and failures stay.
+    """
+    if record.name != "uvicorn.access" or not isinstance(record.args, tuple):
+        return True
+    # (client address, method, path, HTTP version, status code)
+    if len(record.args) != 5:
+        return True
+    _, method, _, _, status = record.args
+    return not (method == "GET" and isinstance(status, int) and status < 400)
 
 
 def shutdown() -> None:

@@ -72,6 +72,13 @@ web、api、llm、memory、forge、routines 不经过 kamal-proxy，重新部署
 
 日志由 Kamal accessory `axp-openobserve`（[OpenObserve](https://openobserve.ai)，卷 `axp-openobserve`）收集：各角色通过 OTLP 发送，`OTEL_SERVICE_NAME` 区分来源（`web`、`llm-gateway`、`memory-service`、`forge-service`、`routine-service`、`control-plane-api`、`control-plane-internal`、`control-plane-controller`）。agent runtime 容器运行智能体执行的代码、不持有任何凭据：它们把日志、trace 和指标（包括 Codex 原生的 OpenTelemetry 数据，日志事件含 prompt）发给 accessory `axp-otel-collector`（runtime 网络上的 `otel-collector:4318`，配置见 `otel-collector.yaml`），由它带上凭据转发到 OpenObserve，记录带有 `axp.agent.id`、`axp.runtime.instance.id`。Codex 每收到一段流式输出都会产生一条日志和几个 span（约每两个字一条），Collector 会过滤掉这部分，只保留回合级的事件和 span；Collector 不保存状态，每次部署都会重启以应用配置变更。root 账号是 `root@axp.local`，密码 `AXP_OBSERVE_PASSWORD` 由 `deploy.sh` 首次需要时写入 `production.env`；已有的机器在下一次部署前会自动启动这个 accessory。
 
+记什么由服务自己决定，规则是：记下排查时需要的，不记重复的。
+
+- 成功的 GET 访问（健康检查、前端轮询）不记；写操作和失败的请求照记（llm-gateway 的访问行、memory-service 的 uvicorn 访问日志）。
+- 业务错误中，调用方自己的错（4xx）不记；上游或服务端的失败（424、5xx）记一条 WARN，带 `request_id`、`code`、方法和路径（`packages/service-go/httpapi`）。`request_id` 就是 gateway 访问日志里的 `uuid`。
+- 循环里每轮都会重复的失败（远程电脑离线、数据库断开）只在错误变化时记一次，恢复后重新计算（`telemetry.Repeats`）。
+- 每条记录带 `service.version`，值为部署的 git commit（Kamal 的 `KAMAL_VERSION`）。
+
 ## 端口与访问
 
 生产端口固定在 `ports.env`：kamal-proxy HTTP `24180`、HTTPS `24143`，镜像仓库 `24150`，OpenObserve `24160`（只绑定 `127.0.0.1`，用 `ssh -L 24160:127.0.0.1:24160` 或反向代理访问）。它们不在 dev 的 3000–3992 范围、Linux 临时端口范围（32768+）和常用服务端口内；`production.env` 不能覆盖，`bun run dev --port` 也会拒绝。

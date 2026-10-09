@@ -25,6 +25,7 @@ import (
 	"github.com/akarachen/axp/apps/control-plane/internal/queue"
 	"github.com/akarachen/axp/apps/control-plane/internal/snapshots"
 	"github.com/akarachen/axp/packages/service-go/pg"
+	"github.com/akarachen/axp/packages/telemetry-go"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -57,6 +58,8 @@ type Controller struct {
 
 	// Agents with commands in the queue, as of this tick.
 	waiting map[string]bool
+	// Failing steps: an outage is logged once, not every tick.
+	failures telemetry.Repeats
 }
 
 // Tick runs every step once; a failing step is logged and the rest run.
@@ -73,9 +76,7 @@ func (c *Controller) Tick(ctx context.Context) {
 		{"stop_deleted", c.stopDeleted},
 	}
 	for _, step := range steps {
-		if err := step.run(ctx); err != nil {
-			slog.ErrorContext(ctx, "Controller step failed", "step", step.name, "error", err)
-		}
+		c.failures.Log(ctx, slog.LevelError, step.name, step.run(ctx), "Controller step failed", "step", step.name)
 	}
 }
 

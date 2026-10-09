@@ -1,9 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -31,6 +33,8 @@ type fakeRelay struct {
 	dirty       map[string]bool // Herdr worktree workspace -> uncommitted changes
 	// Every runtime call, as "method".
 	calls []string
+	// When set, every runtime call fails with this relay error code.
+	failing string
 }
 
 type fakeWorkspace struct {
@@ -113,6 +117,10 @@ func (f *fakeRelay) Call(_ context.Context, _, _, method string, params any) (*r
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, method)
+	if f.failing != "" {
+		fault := &relay.Fault{Code: f.failing, Message: f.failing}
+		return &relay.Outcome{Execution: "not_started", Error: fault}, fault
+	}
 	p := params.(map[string]any)
 	result := func(v any) (*relay.Outcome, error) {
 		data, _ := json.Marshal(v)
@@ -491,6 +499,49 @@ func TestRemoteTaskInANewWorktreeFromBriefToDone(t *testing.T) {
 	if !slices.Contains(e.relay.calls, "paseo.workspaces.archive") {
 		t.Fatalf("calls %v", e.relay.calls)
 	}
+}
+
+func TestAnOfflineComputerIsLoggedOnceAndCleanedUpLater(t *testing.T) {
+	var logs bytes.Buffer
+	defer slog.SetDefault(slog.Default())
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	count := func(msg string) int { return strings.Count(logs.String(), msg) }
+
+	e := newTaskEnv(t)
+	computer, _ := e.computer("laptop", "paseo")
+	e.create(remoteAssignee(computer, "paseo", newWorktree))
+	e.runner.Tick(e.ctx)
+	id, _ := e.relay.only(t)
+	e.relay.failing = "device_offline"
+	for range 3 {
+		e.runner.Tick(e.ctx)
+	}
+	if n := count("Cannot look at a remote agent"); n != 1 {
+		t.Fatalf("watch logged %d times: %s", n, logs.String())
+	}
+
+	// Back online, the run ends (reminded, then failed for not replying).
+	e.relay.failing = ""
+	e.relay.finish(id)
+	e.runner.Tick(e.ctx)
+	e.relay.finish(id)
+	e.runner.Tick(e.ctx)
+	if status := e.task("1").Runs[0].Status; status == "running" {
+		t.Fatalf("run still %s", status)
+	}
+
+	e.patch("/tasks/1", map[string]any{"status": "done"})
+	e.relay.failing = "device_offline"
+	for range 3 {
+		e.runner.Tick(e.ctx)
+	}
+	if n := count("Cannot clean up a remote session"); n != 1 {
+		t.Fatalf("cleanup logged %d times: %s", n, logs.String())
+	}
+	e.relay.failing = ""
+	e.runner.Tick(e.ctx)
+	last := e.task("1").Activity
+	expect(t, last[len(last)-1].Kind, "cleanup")
 }
 
 func TestAnExistingWorkspaceKeepsItsWorkspaceWhenDone(t *testing.T) {

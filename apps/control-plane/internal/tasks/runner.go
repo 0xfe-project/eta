@@ -10,6 +10,7 @@ import (
 
 	"github.com/akarachen/axp/apps/control-plane/internal/relay"
 	"github.com/akarachen/axp/packages/service-go/pg"
+	"github.com/akarachen/axp/packages/telemetry-go"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -44,6 +45,9 @@ type Runner struct {
 	// Runs seen working since their last send (for runtimes without a native
 	// turn-end time).
 	working map[string]bool
+	// Failures of steps, runs and sessions: a computer that stays offline is
+	// logged once, not every tick.
+	failures telemetry.Repeats
 }
 
 // Loop runs the steps every interval until ctx ends.
@@ -71,9 +75,7 @@ func (r *Runner) Tick(ctx context.Context) {
 		{"clean_up", r.cleanup},
 	}
 	for _, step := range steps {
-		if err := step.run(ctx); err != nil {
-			slog.ErrorContext(ctx, "Task runner step failed", "step", step.name, "error", err)
-		}
+		r.failures.Log(ctx, slog.LevelError, "step:"+step.name, step.run(ctx), "Task runner step failed", "step", step.name)
 	}
 }
 
@@ -172,9 +174,7 @@ func (r *Runner) start(ctx context.Context) error {
 		return err
 	}
 	for _, run := range runs {
-		if err := r.startOne(ctx, a, run); err != nil {
-			slog.WarnContext(ctx, "Task run did not start", "run", run.ID, "error", err)
-		}
+		r.failures.Log(ctx, slog.LevelWarn, "start:"+run.ID, r.startOne(ctx, a, run), "Task run did not start", "run", run.ID)
 	}
 	return nil
 }
@@ -291,9 +291,7 @@ func (r *Runner) watch(ctx context.Context) error {
 		return err
 	}
 	for _, run := range runs {
-		if err := r.watchOne(ctx, a, run); err != nil {
-			slog.WarnContext(ctx, "Cannot look at a remote agent", "run", run.ID, "error", err)
-		}
+		r.failures.Log(ctx, slog.LevelWarn, "watch:"+run.ID, r.watchOne(ctx, a, run), "Cannot look at a remote agent", "run", run.ID)
 	}
 	return nil
 }
@@ -404,9 +402,10 @@ func (r *Runner) cleanup(ctx context.Context) error {
 		callCtx, cancel := context.WithTimeout(ctx, callTimeout)
 		note, err := a.cleanup(callCtx, s, s.native())
 		cancel()
+		// The computer may be offline: try again later.
+		r.failures.Log(ctx, slog.LevelWarn, "cleanup:"+s.ID, err, "Cannot clean up a remote session",
+			"session", s.ID, "task", s.TaskID, "runtime", s.Runtime, "computer", s.ComputerID)
 		if err != nil {
-			// The computer may be offline: try again later.
-			slog.WarnContext(ctx, "Cannot clean up a remote session", "session", s.ID, "error", err)
 			continue
 		}
 		if err := r.inTx(ctx, func(tx pgx.Tx) error {
