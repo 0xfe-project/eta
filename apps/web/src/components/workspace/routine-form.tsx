@@ -6,10 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
+import { Select, SelectOption } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useModels } from "@/queries/llm";
@@ -70,19 +67,19 @@ function ScheduleFields({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <NativeSelect
+      <Select
         aria-label="频率"
         value={schedule.kind}
-        onChange={(e) =>
-          onChange(defaults(e.target.value as Schedule["kind"], schedule))
+        onValueChange={(value) =>
+          onChange(defaults(value as Schedule["kind"], schedule))
         }
       >
         {KINDS.map((kind) => (
-          <NativeSelectOption key={kind.value} value={kind.value}>
+          <SelectOption key={kind.value} value={kind.value}>
             {kind.label}
-          </NativeSelectOption>
+          </SelectOption>
         ))}
-      </NativeSelect>
+      </Select>
       {schedule.kind === "weekly" ? (
         <div role="group" aria-label="星期" className="flex">
           {WEEKDAYS.map((label, i) => {
@@ -124,22 +121,22 @@ function ScheduleFields({
         />
       ) : null}
       {schedule.kind === "hourly" ? (
-        <NativeSelect
+        <Select
           aria-label="间隔"
           value={String(schedule.every)}
-          onChange={(e) =>
+          onValueChange={(value) =>
             onChange({
               ...schedule,
-              every: Number(e.target.value) as HourlySchedule["every"],
+              every: Number(value) as HourlySchedule["every"],
             })
           }
         >
           {HOURS.map((n) => (
-            <NativeSelectOption key={n} value={n}>
+            <SelectOption key={n} value={n}>
               {n} 小时
-            </NativeSelectOption>
+            </SelectOption>
           ))}
-        </NativeSelect>
+        </Select>
       ) : null}
       {schedule.kind === "cron" ? (
         <Input
@@ -274,25 +271,25 @@ export function RoutineForm({
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="时区">
-          <NativeSelect
+          <Select
             aria-label="时区"
             className="w-full"
             value={timezone}
-            onChange={(e) => setTimezone(e.target.value)}
+            onValueChange={(value) => setTimezone(value)}
           >
             {zones.map((zone) => (
-              <NativeSelectOption key={zone} value={zone}>
+              <SelectOption key={zone} value={zone}>
                 {zone}
-              </NativeSelectOption>
+              </SelectOption>
             ))}
-          </NativeSelect>
+          </Select>
         </Field>
         <Field label="模型">
           <ModelSelect
             aria-label="模型"
             value={model}
             models={models}
-            onChange={(e) => setModel(e.target.value)}
+            onValueChange={(value) => setModel(value)}
           />
         </Field>
       </div>

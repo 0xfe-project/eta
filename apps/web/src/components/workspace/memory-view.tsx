@@ -14,10 +14,7 @@ import { toast } from "sonner";
 import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
+import { Select, SelectOption } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useForget, useMemories, useRemember } from "@/queries/memory";
@@ -272,18 +269,18 @@ export function MemoryView({
       <div className="flex items-center justify-between gap-2">
         <h2 className="flex min-w-0 items-center gap-1.5 text-sm font-semibold">
           {onAgentChange ? (
-            <NativeSelect
+            <Select
               size="sm"
               aria-label="智能体"
               value={current.id}
-              onChange={(e) => onAgentChange(e.target.value)}
+              onValueChange={(value) => onAgentChange(value)}
             >
               {agents.map((agent) => (
-                <NativeSelectOption key={agent.id} value={agent.id}>
+                <SelectOption key={agent.id} value={agent.id}>
                   {agent.name}
-                </NativeSelectOption>
+                </SelectOption>
               ))}
-            </NativeSelect>
+            </Select>
           ) : (
             <span className="truncate">{current.name}</span>
           )}

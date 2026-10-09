@@ -1,10 +1,7 @@
 import type { AssigneeDraft } from "./assignee-draft";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
+import { Select, SelectGroup, SelectOption } from "@/components/ui/select";
 import { usePlaces, useTasks } from "@/queries/tasks";
 import { emptyDraft, placeKey } from "./assignee-draft";
 import { assigneeFromKey, assigneeOptions } from "./task-format";
@@ -54,66 +51,64 @@ export function AssigneeFields({
   return (
     <div className="grid gap-3">
       <Field id={`${id}-assignee`} label="指派给">
-        <NativeSelect
+        <Select
           id={`${id}-assignee`}
           className="w-full"
           value={draft.key}
-          onChange={(e) => onChange({ ...emptyDraft, key: e.target.value })}
+          onValueChange={(value) => onChange({ ...emptyDraft, key: value })}
         >
           {known ? null : (
-            <NativeSelectOption value={draft.key}>
-              不可用的远程智能体
-            </NativeSelectOption>
+            <SelectOption value={draft.key}>不可用的远程智能体</SelectOption>
           )}
           {options.map((o) => (
-            <NativeSelectOption key={o.key} value={o.key}>
+            <SelectOption key={o.key} value={o.key}>
               {o.label}
-            </NativeSelectOption>
+            </SelectOption>
           ))}
-        </NativeSelect>
+        </Select>
       </Field>
       {remote ? (
         <Field id={`${id}-place`} label="工作位置">
           {places.error ? (
             <p className="text-xs text-destructive">{places.error.message}</p>
           ) : (
-            <NativeSelect
+            <Select
               id={`${id}-place`}
               className="w-full"
               value={draft.place}
               disabled={places.isPending}
-              onChange={(e) => onChange({ ...draft, place: e.target.value })}
+              onValueChange={(value) => onChange({ ...draft, place: value })}
             >
-              <NativeSelectOption value="">
+              <SelectOption value="">
                 {places.isPending ? "读取那台电脑上的项目……" : "选择工作位置"}
-              </NativeSelectOption>
+              </SelectOption>
               {places.data?.projects.length ? (
-                <optgroup label="新开一个 worktree">
+                <SelectGroup label="新开一个 worktree">
                   {places.data.projects.map((p) => (
-                    <NativeSelectOption
+                    <SelectOption
                       key={`w${p.id}`}
                       value={placeKey("worktree", p.id, p.session)}
                     >
                       从 {p.name} 开（{p.path}）
-                    </NativeSelectOption>
+                    </SelectOption>
                   ))}
-                </optgroup>
+                </SelectGroup>
               ) : null}
               {places.data?.workspaces.length ? (
-                <optgroup label="在已有的工作区里">
+                <SelectGroup label="在已有的工作区里">
                   {places.data.workspaces.map((w) => (
-                    <NativeSelectOption
+                    <SelectOption
                       key={`s${w.id}`}
                       value={placeKey("workspace", w.id, w.session)}
                     >
                       {w.name}
                       {w.branch ? ` · ${w.branch}` : ""}
                       {w.dirty ? " · 有未提交改动" : ""}（{w.path}）
-                    </NativeSelectOption>
+                    </SelectOption>
                   ))}
-                </optgroup>
+                </SelectGroup>
               ) : null}
-            </NativeSelect>
+            </Select>
           )}
         </Field>
       ) : null}
