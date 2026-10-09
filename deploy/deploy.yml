@@ -247,8 +247,10 @@ accessories:
         - POSTGRES_PASSWORD
     volumes:
       - axp-postgres:/var/lib/postgresql/data
-  # Agent snapshots, over S3 on the runtime network as axp-s3. Never
-  # published (Kamal also attaches it to its own network).
+  # Agent snapshots (SeaweedFS), on Kamal's network only, as axp-s3 and
+  # axp-seaweedfs. Never published: besides S3 (8333) it serves its filer,
+  # master, volume, WebDAV and admin APIs without authentication, so runtimes
+  # reach S3 alone, through s3-proxy.
   s3:
     image: chrislusf/seaweedfs:4.48
     host: <%= host %>
@@ -259,6 +261,15 @@ accessories:
         - AWS_SECRET_ACCESS_KEY
     volumes:
       - axp-s3:/data
+    options:
+      network-alias: axp-seaweedfs
+  # SeaweedFS's S3 port on the runtime network as axp-s3:8333, the host in
+  # presigned snapshot URLs, which it passes on unchanged (the signature
+  # covers it). Its upstream is axp-seaweedfs: axp-s3 would also name itself.
+  s3-proxy:
+    image: caddy:2.11.7-alpine
+    host: <%= host %>
+    cmd: caddy reverse-proxy --from :8333 --to axp-seaweedfs:8333
     options:
       network: name=axp-prod-runtime,alias=axp-s3
   # The agent queue (NATS JetStream), on the runtime network as axp-nats:4222

@@ -205,11 +205,13 @@ AXP_RELAY_ADMIN_SECRET="$(<"$relay_dir/admin_secret")"
 export AXP_RELAY_ADMIN_SECRET
 
 # --- Storage --------------------------------------------------------------------
-# Agent snapshots live in SeaweedFS. Its S3 API is on the runtime network's
-# gateway address, so host processes and runtimes use one URL (presigned
-# snapshot URLs name it).
+# Agent snapshots live in SeaweedFS. Its S3 API is published on the runtime
+# network's gateway address, so host processes and runtimes use one URL
+# (presigned snapshot URLs name it). It stays off the runtime network: as in
+# production, runtimes reach its S3 port alone, never its unauthenticated
+# filer, master, volume, WebDAV or admin APIs.
 dev_container axp-dev-s3 chrislusf/seaweedfs:4.48 \
-  --network "$runtime_network" -p "$AXP_RUNTIME_GATEWAY_BIND:8333:8333" -v axp-dev-s3:/data \
+  -p "$AXP_RUNTIME_GATEWAY_BIND:8333:8333" -v axp-dev-s3:/data \
   -e AWS_ACCESS_KEY_ID=axp-dev -e AWS_SECRET_ACCESS_KEY=axp-dev-secret \
   -- mini -dir=/data
 
