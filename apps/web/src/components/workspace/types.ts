@@ -3,5 +3,4 @@ export type WorkspaceView =
   | "tasks"
   | "routines"
   | "memory"
-  | "capabilities"
   | "inbox";

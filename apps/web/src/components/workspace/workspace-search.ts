@@ -13,7 +13,6 @@ export const sectionPaths = {
   tasks: "/workspace/tasks",
   routines: "/workspace/routines",
   memory: "/workspace/memory",
-  capabilities: "/workspace/capabilities",
   inbox: "/workspace/inbox",
 } as const satisfies Partial<Record<WorkspaceView, string>>;
 
@@ -26,7 +25,6 @@ export const views = [
   { value: "tasks", label: "任务" },
   { value: "routines", label: "定时" },
   { value: "memory", label: "记忆" },
-  { value: "capabilities", label: "能力" },
   { value: "inbox", label: "确认" },
 ] as const;
 
@@ -35,7 +33,6 @@ const viewParser = parseAsStringLiteral([
   "tasks",
   "routines",
   "memory",
-  "capabilities",
   "inbox",
 ] as const)
   .withDefault("overview")
