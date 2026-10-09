@@ -154,8 +154,9 @@ func run(logger *slog.Logger) error {
 	return nil
 }
 
-// available is the routine target's plugins whose servers' commands are
-// installed here; the others are left out, with a warning.
+// available is the routine target's plugins whose servers' commands, and
+// akhook for those with hooks, are installed here; the others are left out,
+// with a warning.
 func available(dir string, logger *slog.Logger) ([]*plugins.Plugin, error) {
 	list, err := plugins.List(dir, plugins.TargetRoutine)
 	if err != nil {
@@ -169,6 +170,11 @@ func available(dir string, logger *slog.Logger) ([]*plugins.Plugin, error) {
 				if _, err := exec.LookPath(plugins.Expand(s.Command, map[string]string{"PLUGIN_ROOT": p.Dir})); err != nil {
 					missing = s.Command
 				}
+			}
+		}
+		if p.Hooks != "" {
+			if _, err := exec.LookPath("akhook"); err != nil {
+				missing = "akhook"
 			}
 		}
 		if missing != "" {

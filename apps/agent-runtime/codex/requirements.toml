@@ -1,18 +1,30 @@
 # Managed Codex requirements of every agent (/etc/codex/requirements.toml).
 #
-# Building the image declares the plugins' hooks here (axp_runtime/plugins.py):
-# managed hooks are trusted by policy, while plugin hooks wait for a person to
-# trust them. Hooks from anywhere else, including any the agent writes itself,
-# never run.
+# Managed hooks are trusted by policy, while plugin hooks wait for a person to
+# trust them; hooks from anywhere else, including any the agent writes itself,
+# never run. The only hooks are akhook's: it reads its rules from
+# AKHOOK_ADDITIONAL_CONFIG_PATH, set by the image: the plugins' hooks
+# (/opt/axp/plugins/akhook.yml, each rule running only where its plugin is
+# installed) and the image's rules (/etc/akhook/akhook.yml).
 allow_managed_hooks_only = true
 
-# akhook: the image's rules (/etc/akhook/akhook.yml), checked before every
-# tool call of every agent, whatever its plugins. No matcher: akhook gets them
-# all and passes the tools it does not understand, so rules for new kinds of
-# tools need no change here. It reads the rules from
-# AKHOOK_ADDITIONAL_CONFIG_PATH, set by the image.
+# Before every tool call of every agent, whatever its plugins. No matcher:
+# akhook gets them all, so rules for new kinds of tools need no change here.
 [[hooks.PreToolUse]]
 [[hooks.PreToolUse.hooks]]
 type = "command"
 command = "akhook codex hook pre_tool_use"
+timeout = 15
+
+# The plugins' lifecycle hooks (memory's recall and capture).
+[[hooks.UserPromptSubmit]]
+[[hooks.UserPromptSubmit.hooks]]
+type = "command"
+command = "akhook codex hook prompt_submit"
+timeout = 15
+
+[[hooks.Stop]]
+[[hooks.Stop.hooks]]
+type = "command"
+command = "akhook codex hook stop"
 timeout = 15

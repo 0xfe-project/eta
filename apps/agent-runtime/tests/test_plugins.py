@@ -66,7 +66,7 @@ def hook(service, tmp_path):
             env={
                 **os.environ,
                 "AXP_GATEWAY_URL": url or service.url,
-                "AXP_RUNTIME_LLM_KEY": "instance.token",
+                "AXP_AGENT_KEY": "instance.token",
                 "CODEX_HOME": str(tmp_path / "codex"),
             },
         )
@@ -79,7 +79,7 @@ class TestMemoryHooks:
     def test_recall_adds_memories_to_the_context(self, hook, service):
         service.memories = [{"id": "m1", "text": "用户的猫叫豆豆", "score": 0.4}]
         output = hook("recall", {"turn_id": "t1", "prompt": "我的猫叫什么"})
-        context = output["hookSpecificOutput"]["additionalContext"]
+        context = output["context"]
         assert "- 用户的猫叫豆豆 (memory m1)" in context
         assert service.requests == [
             ("/memory/recall", {"query": "我的猫叫什么"}, "Bearer instance.token")

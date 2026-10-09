@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/pelletier/go-toml/v2"
+	"gopkg.in/yaml.v3"
 )
 
 // The repository's plugins and Codex configuration.
@@ -237,24 +238,63 @@ func TestEveryPluginToolIsApproved(t *testing.T) {
 	})
 }
 
-func TestHooksBecomeManagedAndRunOnlyWhereInstalled(t *testing.T) {
-	_, codex := compiled(t)
+func TestHooksBecomeAkhookRulesThatRunOnlyWhereInstalled(t *testing.T) {
+	root, codex := compiled(t)
+	data, err := os.ReadFile(filepath.Join(root, ChatHooks))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hooks Hooks
+	if err := yaml.Unmarshal(data, &hooks); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string][]string{}
+	for _, rule := range hooks.Rules {
+		got[rule.On+" "+rule.ID] = rule.Run.Argv
+	}
+	guard := `[ -d "$CODEX_HOME/plugins/cache/axp/memory" ] || exit 0; export AXP_AGENT_KEY="$AXP_RUNTIME_LLM_KEY"; exec "$0" "$@"`
+	expect(t, got, map[string][]string{
+		"prompt_submit memory/recall": {"sh", "-c", guard, "python", "/opt/axp/plugins/memory/hooks/memory.py", "recall"},
+		"stop memory/capture":         {"sh", "-c", guard, "python", "/opt/axp/plugins/memory/hooks/memory.py", "capture"},
+	})
+	// Codex runs akhook for every hook; nothing is generated there.
 	requirements := readTOML(t, filepath.Join(codex, "requirements.toml"))
 	expect(t, requirements["allow_managed_hooks_only"], any(true))
-	hooks := requirements["hooks"].(map[string]any)
-	var events []string
-	for event := range hooks {
-		events = append(events, event)
+	for event, action := range map[string]string{"PreToolUse": "pre_tool_use", "UserPromptSubmit": "prompt_submit", "Stop": "stop"} {
+		groups := requirements["hooks"].(map[string]any)[event].([]any)
+		if len(groups) != 1 {
+			t.Fatalf("%s: %d groups", event, len(groups))
+		}
+		hook := groups[0].(map[string]any)["hooks"].([]any)[0].(map[string]any)
+		expect(t, hook["command"], any("akhook codex hook "+action))
 	}
-	if len(events) != 3 || hooks["UserPromptSubmit"] == nil || hooks["Stop"] == nil || hooks["PreToolUse"] == nil {
-		t.Fatalf("events %v", events)
+}
+
+func TestPluginHooksAreLifecycleRulesOnly(t *testing.T) {
+	for name, hooks := range map[string]string{
+		"tool rule":    "version: 1\nrules:\n  - id: r\n    on: shell_exec\n    run: {argv: [x]}\n",
+		"no argv":      "version: 1\nrules:\n  - id: r\n    on: stop\n",
+		"other field":  "version: 1\nrules:\n  - id: r\n    on: stop\n    run: {argv: [x]}\n    message: m\n",
+		"env variable": "version: 1\nrules:\n  - id: r\n    on: stop\n    run: {argv: [x, '${AXP_AGENT_KEY}']}\n",
+	} {
+		root := t.TempDir()
+		writePlugin(t, root, "p", `{"name":"p","targets":["chat"]}`, "")
+		if err := os.WriteFile(filepath.Join(root, "p", "akhook.yml"), []byte(hooks), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := List(root, ""); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
 	}
-	recall := hooks["UserPromptSubmit"].([]any)[0].(map[string]any)["hooks"].([]any)[0].(map[string]any)
-	expect(t, recall["timeout"], any(int64(5)))
-	expect(t, recall["command"], any(`if [ -d "$CODEX_HOME/plugins/cache/axp/memory" ]; then python /opt/axp/plugins/memory/hooks/memory.py recall; fi`))
-	// The image's rules are not a plugin's: akhook checks every agent.
-	akhook := hooks["PreToolUse"].([]any)[0].(map[string]any)["hooks"].([]any)[0].(map[string]any)
-	if !strings.HasPrefix(akhook["command"].(string), "akhook codex hook pre_tool_use") {
-		t.Fatalf("akhook %v", akhook)
+	root := t.TempDir()
+	writePlugin(t, root, "p", `{"name":"p","targets":["chat"]}`, "")
+	if err := os.MkdirAll(filepath.Join(root, "p", "hooks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "p", "hooks", "hooks.json"), []byte(`{"hooks":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := List(root, ""); err == nil || !strings.Contains(err.Error(), "akhook.yml") {
+		t.Fatalf("hooks.json: %v", err)
 	}
 }

@@ -3,10 +3,12 @@ module github.com/akarachen/axp/packages/plugins-go
 go 1.26.6
 
 require (
+	github.com/aghub-app/akhook/go/adk v0.0.0-20261009042807-3f4a76787ae3
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	google.golang.org/adk/v2 v2.5.0
 	google.golang.org/genai v1.71.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -46,7 +48,6 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/grpc v1.84.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	rsc.io/omap v1.2.0 // indirect
 	rsc.io/ordered v1.1.1 // indirect
 )

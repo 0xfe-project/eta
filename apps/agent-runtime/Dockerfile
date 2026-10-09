@@ -38,19 +38,21 @@ RUN set -eu; \
 ENV GH_CONFIG_DIR=/run/axp/gh
 # git gets GitHub credentials from gh.
 COPY git/gitconfig /etc/gitconfig
-# The hooks' rules: akhook checks every shell command and file change against
-# them before Codex runs it (a managed hook in /etc/codex/requirements.toml).
-# Approval requests live outside /agent, so no snapshot keeps them.
+# akhook runs the agent's hooks (managed hooks in /etc/codex/requirements.toml):
+# the plugins' lifecycle rules (compiled below) and the image's rules, which
+# it checks every shell command and file change against before Codex runs
+# it; the image's come last, so no plugin overrides them. Approval requests
+# live outside /agent, so no snapshot keeps them.
 COPY --from=akhook /akhook /usr/local/bin/akhook
 COPY hooks /etc/akhook
-ENV AKHOOK_ADDITIONAL_CONFIG_PATH=/etc/akhook/akhook.yml \
+ENV AKHOOK_ADDITIONAL_CONFIG_PATH=/opt/axp/plugins/akhook.yml:/etc/akhook/akhook.yml \
     AKHOOK_STATE_DIR=/run/akhook
 # The static Codex configuration (sandbox, approvals), then the plugins every
 # agent can run with (docs/architecture/plugins.md), compiled for Codex by
 # axp-plugins (packages/plugins-go, the `plugins-tool` build context): their
 # setup scripts prepare their environments (with a download cache kept across
-# builds), and the plugins become a local marketplace whose tool approvals and
-# hooks join the Codex configuration.
+# builds), the plugins become a local marketplace whose tool approvals join the
+# Codex configuration, and their hooks become /opt/axp/plugins/akhook.yml.
 COPY codex /etc/codex
 COPY plugins /opt/axp/plugins
 RUN --mount=type=bind,from=plugins-tool,source=${TARGETOS}-${TARGETARCH}/axp-plugins,target=/usr/local/bin/axp-plugins \

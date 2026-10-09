@@ -5,7 +5,7 @@
 //	plugin.json       name, version, description and targets ("chat", "routine")
 //	mcp.json          MCP servers, in the standard mcpServers shape
 //	skills/*/SKILL.md Agent Skills
-//	hooks/hooks.json  lifecycle hooks (chat only, until they move to akhook)
+//	akhook.yml        lifecycle hooks, as akhook rules (hooks.go)
 //	setup             run once when an image is built
 //
 // The chat target is the chat agents' runtime, which runs Codex: Chat
@@ -64,7 +64,7 @@ type Plugin struct {
 	Manifest
 	Dir     string
 	Servers map[string]Server
-	// Hooks is hooks/hooks.json, when there is one.
+	// Hooks is akhook.yml, when there is one.
 	Hooks string
 	// Skills is the skills directory, when there is one.
 	Skills string
@@ -115,10 +115,18 @@ func Read(dir string) (*Plugin, error) {
 	for _, f := range []struct {
 		path string
 		into *string
-	}{{"hooks/hooks.json", &p.Hooks}, {"skills", &p.Skills}, {"setup", &p.Setup}} {
+	}{{"akhook.yml", &p.Hooks}, {"skills", &p.Skills}, {"setup", &p.Setup}} {
 		path := filepath.Join(dir, f.path)
 		if _, err := os.Stat(path); err == nil {
 			*f.into = path
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "hooks", "hooks.json")); err == nil {
+		return nil, fmt.Errorf("%s: hooks/hooks.json: a plugin's hooks are akhook rules in akhook.yml", p.Name)
+	}
+	if p.Hooks != "" {
+		if _, err := ReadHooks(p); err != nil {
+			return nil, err
 		}
 	}
 	return p, nil

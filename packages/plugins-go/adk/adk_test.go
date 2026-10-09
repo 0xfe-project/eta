@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"iter"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -103,11 +105,13 @@ func TestStdioServerAndSkills(t *testing.T) {
 	t.Setenv("SECRET", "from the service")
 	p := plugin(t, `{"mcpServers":{"echo":{"command":"`+self+`","env":{"`+serverEnv+`":"1","ECHO_KEY":"${AXP_AGENT_KEY}"},"cwd":"${PLUGIN_ROOT}"}}}`)
 	ctx, cancel := context.WithCancel(context.Background())
-	toolsets, err := Toolsets(ctx, []*plugins.Plugin{p}, map[string]string{"AXP_AGENT_KEY": "key-1"})
+	loaded, err := Load(ctx, []*plugins.Plugin{p}, map[string]string{"AXP_AGENT_KEY": "key-1", "AXP_WORKSPACE_DIR": t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := llmagent.New(llmagent.Config{Name: "test", Model: &scripted{}, Toolsets: toolsets})
+	config := llmagent.Config{Name: "test", Model: &scripted{}}
+	loaded.Install(&config)
+	a, err := llmagent.New(config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,10 +148,70 @@ func TestStdioServerAndSkills(t *testing.T) {
 	}
 }
 
-func TestPluginsWithHooksAreRefused(t *testing.T) {
+// akhook is AKHOOK_BIN, or akhook on PATH.
+func akhookBinary(t *testing.T) string {
+	if bin := os.Getenv("AKHOOK_BIN"); bin != "" {
+		return bin
+	}
+	bin, err := exec.LookPath("akhook")
+	if err != nil {
+		t.Skip("set AKHOOK_BIN or put akhook on PATH")
+	}
+	return bin
+}
+
+// A plugin's hooks run through akhook: prompt_submit's context reaches the
+// model, with the agent's key in the command's environment.
+func TestHooksRunThroughAkhook(t *testing.T) {
+	bin := akhookBinary(t)
+	t.Setenv("PATH", filepath.Dir(bin)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	p := plugin(t, `{"mcpServers":{}}`)
-	p.Hooks = filepath.Join(p.Dir, "hooks", "hooks.json")
-	if _, err := Toolsets(context.Background(), []*plugins.Plugin{p}, nil); err == nil {
-		t.Fatal("hooks were accepted")
+	hooks := "version: 1\nrules:\n  - id: hello\n    on: prompt_submit\n    run:\n      argv: [sh, '${PLUGIN_ROOT}/hello']\n"
+	if err := os.WriteFile(filepath.Join(p.Dir, "akhook.yml"), []byte(hooks), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	script := `printf '{"context": "key is %s"}' "$AXP_AGENT_KEY"`
+	if err := os.WriteFile(filepath.Join(p.Dir, "hello"), []byte(script), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p, err := plugins.Read(p.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(context.Background(), []*plugins.Plugin{p}, map[string]string{"AXP_AGENT_KEY": "key-1", "AXP_WORKSPACE_DIR": t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	model := &recording{}
+	config := llmagent.Config{Name: "test", Model: model}
+	loaded.Install(&config)
+	a, err := llmagent.New(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := runner.NewInMemory("test", a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, err := range r.Run(context.Background(), "u", "s", genai.NewContentFromText("hi", genai.RoleUser), agent.RunConfig{}) {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	system := model.request.Config.SystemInstruction
+	if system == nil || !strings.Contains(fmt.Sprint(system.Parts[len(system.Parts)-1].Text), "key is key-1") {
+		t.Fatalf("system %+v", system)
+	}
+}
+
+// recording answers once and keeps the request.
+type recording struct{ request *model.LLMRequest }
+
+func (m *recording) Name() string { return "recording" }
+
+func (m *recording) GenerateContent(_ context.Context, req *model.LLMRequest, _ bool) iter.Seq2[*model.LLMResponse, error] {
+	m.request = req
+	return func(yield func(*model.LLMResponse, error) bool) {
+		yield(&model.LLMResponse{Content: genai.NewContentFromText("done", genai.RoleModel)}, nil)
 	}
 }

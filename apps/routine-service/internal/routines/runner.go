@@ -187,7 +187,13 @@ func (r *Runner) agent(ctx context.Context, routine *routineRow, run *runRow) (s
 	if err != nil {
 		return "", err
 	}
-	var toolsets []tool.Toolset
+	config := llmagent.Config{
+		Name:  "routine",
+		Model: llm,
+		// A provider, so that braces in the brief are not state placeholders.
+		InstructionProvider: func(agent.ReadonlyContext) (string, error) { return text, nil },
+		Tools:               tools,
+	}
 	if len(r.Plugins) > 0 {
 		workspace, err := os.MkdirTemp(r.WorkDir, "run-")
 		if err != nil {
@@ -196,21 +202,15 @@ func (r *Runner) agent(ctx context.Context, routine *routineRow, run *runRow) (s
 		defer os.RemoveAll(workspace)
 		key, revoke := r.Proxy.Issue(routine.ID)
 		defer revoke()
-		toolsets, err = pluginsadk.Toolsets(ctx, r.Plugins, map[string]string{
+		loaded, err := pluginsadk.Load(ctx, r.Plugins, map[string]string{
 			"AXP_GATEWAY_URL": r.Proxy.URL, "AXP_AGENT_KEY": key, "AXP_WORKSPACE_DIR": workspace,
 		})
 		if err != nil {
 			return "", err
 		}
+		loaded.Install(&config)
 	}
-	a, err := llmagent.New(llmagent.Config{
-		Name:  "routine",
-		Model: llm,
-		// A provider, so that braces in the brief are not state placeholders.
-		InstructionProvider: func(agent.ReadonlyContext) (string, error) { return text, nil },
-		Tools:               tools,
-		Toolsets:            toolsets,
-	})
+	a, err := llmagent.New(config)
 	if err != nil {
 		return "", err
 	}

@@ -13,20 +13,22 @@ import (
 // The chat target: Codex plugins in a local marketplace, which the chat
 // runtime installs for each agent (apps/agent-runtime). The runtime fills in
 // ${AXP_GATEWAY_URL} and ${AXP_WORKSPACE_DIR} when it installs a plugin, and
-// gives Codex the agent's key as AgentKeyEnv.
+// gives Codex the agent's key as AgentKeyEnv. Codex runs akhook for every
+// agent (the image's requirements.toml); the plugins' hooks are one akhook
+// config, ChatHooks, whose rules each run only where their plugin is
+// installed.
 
 const (
 	Marketplace = "axp"
 	AgentKeyEnv = "AXP_RUNTIME_LLM_KEY"
+	// ChatHooks is the plugins' akhook rules, in root.
+	ChatHooks = "akhook.yml"
 )
 
 // Chat compiles root's chat plugins for Codex, in place: each gets
-// .codex-plugin/plugin.json and a Codex .mcp.json, root gets the marketplace,
-// and codexDir's config.toml approves the plugins' tools and its
-// requirements.toml declares their hooks as managed hooks. Codex only runs
-// plugin hooks a person has trusted; managed hooks run by policy, but for
-// every agent, so each runs only where its plugin is installed. imageRoot is
-// where agents see root.
+// .codex-plugin/plugin.json and a Codex .mcp.json, root gets the marketplace
+// and ChatHooks, and codexDir's config.toml approves the plugins' tools.
+// imageRoot is where agents see root.
 func Chat(root, codexDir, imageRoot string) error {
 	plugins, err := List(root, TargetChat)
 	if err != nil {
@@ -49,7 +51,7 @@ func Chat(root, codexDir, imageRoot string) error {
 		Interface map[string]string `json:"interface"`
 		Plugins   []entry           `json:"plugins"`
 	}{Name: Marketplace, Interface: map[string]string{"displayName": "AXP"}, Plugins: []entry{}}
-	var approvals, hooks []string
+	var approvals []string
 	for _, p := range plugins {
 		pluginRoot := filepath.Join(imageRoot, p.Name)
 		manifest := map[string]string{"name": p.Name, "version": p.Version, "description": p.Description}
@@ -69,13 +71,6 @@ func Chat(root, codexDir, imageRoot string) error {
 				return err
 			}
 		}
-		if p.Hooks != "" {
-			tables, err := managedHooks(p, pluginRoot)
-			if err != nil {
-				return err
-			}
-			hooks = append(hooks, tables...)
-		}
 		e := entry{Name: p.Name, Category: "Productivity"}
 		e.Source.Source, e.Source.Path = "local", "./"+p.Name
 		e.Policy.Installation, e.Policy.Authentication = "AVAILABLE", "ON_INSTALL"
@@ -85,18 +80,9 @@ func Chat(root, codexDir, imageRoot string) error {
 	if err := writeJSON(filepath.Join(root, ".agents", "plugins", "marketplace.json"), catalog); err != nil {
 		return err
 	}
-	for _, f := range []struct {
-		name, heading string
-		tables        []string
-	}{
-		{"config.toml", "The plugins' tools need no approval.", approvals},
-		{"requirements.toml", "The plugins' hooks.", hooks},
-	} {
-		if len(f.tables) == 0 {
-			continue
-		}
-		text := fmt.Sprintf("\n# %s (generated from the plugins)\n%s", f.heading, strings.Join(f.tables, "\n"))
-		file, err := os.OpenFile(filepath.Join(codexDir, f.name), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if len(approvals) > 0 {
+		text := "\n# The plugins' tools need no approval (generated from the plugins).\n" + strings.Join(approvals, "\n")
+		file, err := os.OpenFile(filepath.Join(codexDir, "config.toml"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 		if err != nil {
 			return err
 		}
@@ -108,7 +94,14 @@ func Chat(root, codexDir, imageRoot string) error {
 			return err
 		}
 	}
-	return nil
+	installed := func(p *Plugin) string { return filepath.Join(imageRoot, p.Name) }
+	return WriteHooks(filepath.Join(root, ChatHooks), plugins, installed, func(p *Plugin, argv []string) []string {
+		// Only where the agent installed the plugin, with the agent's key
+		// under its neutral name.
+		guard := fmt.Sprintf(`[ -d "$CODEX_HOME/plugins/cache/%s/%s" ] || exit 0; export AXP_AGENT_KEY="$%s"; exec "$0" "$@"`,
+			Marketplace, p.Name, AgentKeyEnv)
+		return append([]string{"sh", "-c", guard}, argv...)
+	})
 }
 
 const bearerKey = "Bearer ${AXP_AGENT_KEY}"
@@ -177,56 +170,6 @@ func codexServer(s Server, pluginRoot string) (map[string]any, error) {
 		out["env"] = env
 	}
 	return out, nil
-}
-
-// managedHooks are requirements.toml tables for the plugin's hooks.json,
-// run from the image and only where the plugin is installed.
-func managedHooks(p *Plugin, pluginRoot string) ([]string, error) {
-	var file struct {
-		Hooks map[string][]struct {
-			Matcher *string          `json:"matcher"`
-			Hooks   []map[string]any `json:"hooks"`
-		} `json:"hooks"`
-	}
-	if err := readJSON(p.Hooks, &file); err != nil {
-		return nil, err
-	}
-	installed := fmt.Sprintf(`"$CODEX_HOME/plugins/cache/%s/%s"`, Marketplace, p.Name)
-	events := make([]string, 0, len(file.Hooks))
-	for event := range file.Hooks {
-		events = append(events, event)
-	}
-	sort.Strings(events)
-	var tables []string
-	for _, event := range events {
-		for _, group := range file.Hooks[event] {
-			lines := []string{fmt.Sprintf("[[hooks.%s]]", event)}
-			if group.Matcher != nil {
-				lines = append(lines, "matcher = "+quote(*group.Matcher))
-			}
-			for _, handler := range group.Hooks {
-				lines = append(lines, fmt.Sprintf("[[hooks.%s.hooks]]", event))
-				keys := make([]string, 0, len(handler))
-				for key := range handler {
-					keys = append(keys, key)
-				}
-				sort.Strings(keys)
-				for _, key := range keys {
-					value := handler[key]
-					if key == "command" {
-						command := fmt.Sprint(value)
-						for _, name := range []string{"${PLUGIN_ROOT}", "${CLAUDE_PLUGIN_ROOT}"} {
-							command = strings.ReplaceAll(command, name, pluginRoot)
-						}
-						value = fmt.Sprintf("if [ -d %s ]; then %s; fi", installed, command)
-					}
-					lines = append(lines, key+" = "+quote(value))
-				}
-			}
-			tables = append(tables, strings.Join(lines, "\n")+"\n")
-		}
-	}
-	return tables, nil
 }
 
 // quote is v as JSON, which is valid TOML for strings and numbers.
