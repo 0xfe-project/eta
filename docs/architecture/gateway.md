@@ -33,7 +33,7 @@
 - 删除客户端发来的所有 `X-AXP-*` 头。
 - 每个请求生成新的 `X-Request-Id`，转发给上游并写回响应；control-plane 的错误体 `request_id` 与之一致。
 - `/api/` 和 llm 的流式响应逐条转发（`flush_interval -1`），WebSocket 原样透传。
-- 请求体上限 32 MiB（413 `PAYLOAD_TOO_LARGE`），上游不可达返回 502 `UPSTREAM_UNAVAILABLE`，错误体与 control-plane 相同：`{"error": {"code", "message", "request_id"}}`。
+- 请求体上限 32 MiB（413 `PAYLOAD_TOO_LARGE`），上游不可达返回 503 `UPSTREAM_UNAVAILABLE`（不用 502：Cloudflare 会把源站的 502 和 504 换成它自己的错误页，错误体到不了浏览器；控制面对外部依赖的失败同样用 424 而不是 502），错误体与 control-plane 相同：`{"error": {"code", "message", "request_id"}}`。
 - `/up` 由网关自己应答，供 kamal-proxy 健康检查。
 - 访问日志为 JSON；页面、静态资源、OpenObserve 与 `/up` 不记录。
 
