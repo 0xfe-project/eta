@@ -25,6 +25,13 @@ describe("workspace store persistence", () => {
     expect(useWorkspaceStore.getState().workspace.sessionTheme).toBe("claude");
   });
 
+  it("remembers how the task page was left", async () => {
+    const page = { taskLayout: "board", taskScope: "remote" };
+    localStorage.setItem(key, JSON.stringify({ ...saved, ...page }));
+    await useWorkspaceStore.persist.rehydrate();
+    expect(useWorkspaceStore.getState().workspace).toMatchObject(page);
+  });
+
   it("saves the bare workspace object, not other UI state", () => {
     const { setWorkspace, setDraft } = useWorkspaceStore.getState();
     setWorkspace((w) => ({ ...w, selectedAgentId: "a1" }));

@@ -1,17 +1,34 @@
+import { BellIcon } from "@phosphor-icons/react/Bell";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
-import { useAnswerInteraction, usePendingInteractions } from "@/queries/chat";
+import {
+  chatQueryOptions,
+  useAnswerInteraction,
+  usePendingInteractions,
+} from "@/queries/chat";
 import { useAgents, useOpenAgent } from "./use-agents";
 
 /** Every agent's pending confirmations, answerable from anywhere. */
 export function Inbox() {
+  const { data, error, refetch } = useQuery(chatQueryOptions());
   const pending = usePendingInteractions();
   const { agents } = useAgents();
   const openAgent = useOpenAgent();
   const answer = useAnswerInteraction();
 
+  if (error)
+    return (
+      <LoadError what="确认请求" error={error} onRetry={() => void refetch()} />
+    );
+  if (!data) return <Loading />;
   if (pending.length === 0)
-    return <p className="text-sm text-muted-foreground">没有待确认的请求</p>;
+    return (
+      <Empty icon={BellIcon} title="没有待确认的请求">
+        智能体要做需要你批准的操作时，会在这里等你答复。
+      </Empty>
+    );
 
   return (
     <ul className="space-y-3" aria-label="待确认的请求">

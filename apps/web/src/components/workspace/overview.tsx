@@ -242,26 +242,34 @@ function connectionCell(connection: Connection) {
 }
 
 /** One segment per account, like a fuel gauge. */
-function AccountsGauge({ connections }: { connections: Connection[] }) {
+function AccountsGauge({
+  connections = [],
+  loading,
+}: {
+  connections: Connection[] | undefined;
+  loading: boolean;
+}) {
   const active = connections.filter((c) => c.state === "active").length;
   const broken = connections.find((c) => NEEDS_ACTION.has(c.state));
   const limited = connections.find((c) => c.state === "rate_limited");
-  const note = broken
-    ? `${broken.label} ${connectionStateLabels[broken.state]}`
-    : limited
-      ? [
-          `${limited.label} ${connectionStateLabels.rate_limited}`,
-          untilText(limited.retry_at),
-        ]
-          .filter(Boolean)
-          .join(" · ")
-      : connections.length
-        ? "全部正常"
-        : "还没有账号";
+  const note = loading
+    ? "读取中…"
+    : broken
+      ? `${broken.label} ${connectionStateLabels[broken.state]}`
+      : limited
+        ? [
+            `${limited.label} ${connectionStateLabels.rate_limited}`,
+            untilText(limited.retry_at),
+          ]
+            .filter(Boolean)
+            .join(" · ")
+        : connections.length
+          ? "全部正常"
+          : "还没有账号";
   return (
     <Meter
       title="模型账号"
-      reading={`${active} / ${connections.length} 可用`}
+      reading={loading ? "—" : `${active} / ${connections.length} 可用`}
       ends={["E", "F"]}
       note={note}
       alert={Boolean(broken)}
@@ -277,20 +285,28 @@ function AccountsGauge({ connections }: { connections: Connection[] }) {
   );
 }
 
-function ModelsGauge({ models }: { models: Model[] }) {
+function ModelsGauge({
+  models = [],
+  loading,
+}: {
+  models: Model[] | undefined;
+  loading: boolean;
+}) {
   const available = models.filter((model) => model.available).length;
   const unavailable = models.length - available;
   return (
     <Meter
       title="模型目录"
-      reading={`${available} / ${models.length} 可用`}
+      reading={loading ? "—" : `${available} / ${models.length} 可用`}
       ends={["0", String(models.length)]}
       note={
-        unavailable
-          ? `${unavailable} 个不可用`
-          : models.length
-            ? "全部可用"
-            : "没有模型"
+        loading
+          ? "读取中…"
+          : unavailable
+            ? `${unavailable} 个不可用`
+            : models.length
+              ? "全部可用"
+              : "没有模型"
       }
     >
       {models.map((model) => (
@@ -359,7 +375,13 @@ function contextText(tokens: number | undefined) {
 }
 
 /** The current agent: its gear, model and whether the model can run. */
-function Display({ agent }: { agent: Agent | undefined }) {
+function Display({
+  agent,
+  loading,
+}: {
+  agent: Agent | undefined;
+  loading: boolean;
+}) {
   const availability = useModelAvailability(agent);
   const model =
     availability.state === "not_set" ? undefined : availability.model;
@@ -398,6 +420,10 @@ function Display({ agent }: { agent: Agent | undefined }) {
             )}
           </Row>
         </>
+      ) : loading ? (
+        <div className="text-sm text-muted-foreground motion-safe:animate-pulse">
+          读取中…
+        </div>
       ) : (
         <div className="text-sm text-muted-foreground">还没有智能体</div>
       )}
@@ -460,8 +486,12 @@ export function Overview() {
   const { agents, current } = useAgents();
   const openAgent = useOpenAgent();
   const pending = usePendingInteractions();
-  const connections = useConnections().data ?? [];
-  const models = useModels().data ?? [];
+  const connectionList = useConnections();
+  const modelList = useModels();
+  const connections = connectionList.data ?? [];
+  const models = modelList.data ?? [];
+  // Until the snapshot lands the instruments read "—", not zero.
+  const loaded = snapshot !== undefined;
   const memories = useMemoryCounts(agents.map((agent) => agent.id));
 
   const count = (status: Agent["status"]) =>
@@ -486,6 +516,7 @@ export function Overview() {
   return (
     <section
       aria-label="概览"
+      aria-busy={!loaded}
       className="mx-auto max-w-2xl border p-3.5 text-foreground"
     >
       <div className="flex items-center justify-between gap-2">
@@ -513,9 +544,9 @@ export function Overview() {
             label={`负载：${agents.length} 个智能体中 ${working + waiting} 个在运转`}
           >
             <span className="font-mono text-[2.25rem] leading-none font-semibold tracking-tight tabular-nums">
-              {working + waiting}
+              {loaded ? working + waiting : "—"}
               <span className="text-lg text-muted-foreground">
-                /{agents.length}
+                /{loaded ? agents.length : "—"}
               </span>
             </span>
             <span className="mt-1.5">
@@ -523,11 +554,11 @@ export function Overview() {
             </span>
           </Gauge>
           <p className="-mt-3 text-center font-mono text-[10px] text-muted-foreground">
-            {working} 工作中 · {waiting} 等待确认
+            {loaded ? working : "—"} 工作中 · {loaded ? waiting : "—"} 等待确认
           </p>
         </div>
 
-        <Display agent={current} />
+        <Display agent={current} loading={!loaded} />
 
         <div>
           <Gauge
@@ -550,14 +581,17 @@ export function Overview() {
             </span>
           </Gauge>
           <p className="-mt-3 text-center font-mono text-[10px] text-muted-foreground">
-            {reply ? "回复中" : "未在回复"} · {replies} 条进行中
+            {reply ? "回复中" : "未在回复"} · {loaded ? replies : "—"} 条进行中
           </p>
         </div>
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-4">
-        <AccountsGauge connections={connections} />
-        <ModelsGauge models={models} />
+        <AccountsGauge
+          connections={connectionList.data}
+          loading={connectionList.isPending}
+        />
+        <ModelsGauge models={modelList.data} loading={modelList.isPending} />
       </div>
 
       {agents.length ? (
@@ -598,15 +632,15 @@ export function Overview() {
       <div className="mt-3.5 flex items-end justify-between border-t pt-2.5">
         <div className="flex flex-col">
           <Caption>智能体</Caption>
-          <Digits value={agents.length} width={2} strong />
+          <Digits value={loaded ? agents.length : undefined} width={2} strong />
         </div>
         <div className="flex flex-col items-center">
           <Caption>待确认</Caption>
-          <Digits value={pending.length} width={2} />
+          <Digits value={loaded ? pending.length : undefined} width={2} />
         </div>
         <div className="flex flex-col items-end">
           <Caption>记忆条目</Caption>
-          <Digits value={memories.total} width={4} />
+          <Digits value={loaded ? memories.total : undefined} width={4} />
         </div>
       </div>
     </section>

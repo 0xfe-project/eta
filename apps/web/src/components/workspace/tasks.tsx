@@ -13,12 +13,14 @@ import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { ChatCircleIcon } from "@phosphor-icons/react/ChatCircle";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { GitPullRequestIcon } from "@phosphor-icons/react/GitPullRequest";
+import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { StopIcon } from "@phosphor-icons/react/Stop";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Markdown } from "@/components/markdown";
+import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -42,6 +44,7 @@ import {
   NativeSelectOption,
 } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
+import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useSendMessage } from "@/queries/chat";
 import {
@@ -94,7 +97,7 @@ function Back({ label, onClick }: { label: string; onClick: () => void }) {
 }
 
 /** A remote agent at work: a pulsing square, like a running routine. */
-export function Working({ label }: { label?: string }) {
+function Working({ label }: { label?: string }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-xs text-foreground">
       <span className="size-1.5 bg-foreground motion-safe:animate-pulse" />
@@ -108,6 +111,24 @@ export function Working({ label }: { label?: string }) {
 /** Done and cancelled start folded: they are the past. */
 const folded = new Set<TaskStatus>(["done", "cancelled"]);
 
+/** Whether the task's agent is at work, or its last run failed. */
+export function RunState({ task }: { task: Task }) {
+  if (isActive(task.run_status)) return <Working />;
+  if (task.run_status === "failed")
+    return <span className="text-destructive">运行失败</span>;
+  return null;
+}
+
+export function Comments({ count }: { count: number }) {
+  return count ? (
+    <span className="inline-flex items-center gap-1">
+      <ChatCircleIcon aria-label="评论" className="size-3.5" />
+      {count}
+    </span>
+  ) : null;
+}
+
+/** Title and when on top; number, assignee and activity beneath. */
 function TaskRow({ task }: { task: Task }) {
   const [, setNav] = useTaskNav();
   return (
@@ -115,30 +136,29 @@ function TaskRow({ task }: { task: Task }) {
       <button
         type="button"
         onClick={() => void setNav({ task: task.id })}
-        className="grid w-full grid-cols-[auto_2.5rem_1fr_auto] items-center gap-2 px-2 py-1.5 text-left transition-colors duration-[60ms] ease-linear outline-none hover:bg-muted/60 focus-visible:bg-muted/60"
+        className="flex w-full items-start gap-2.5 px-2 py-2 text-left transition-colors duration-[60ms] ease-linear outline-none hover:bg-muted/60 focus-visible:bg-muted/60"
       >
-        <StatusIcon status={task.status} />
-        <span className="text-xs text-muted-foreground tabular-nums">
-          #{task.number}
-        </span>
-        <span className="min-w-0">
-          <span className="block truncate text-sm">{task.title}</span>
-          <span className="block truncate text-xs text-muted-foreground">
-            {assigneeLabel(task.assignee)}
-          </span>
-        </span>
-        <span className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
-          {isActive(task.run_status) ? <Working /> : null}
-          {task.run_status === "failed" ? (
-            <span className="text-destructive">运行失败</span>
-          ) : null}
-          {task.comments ? (
-            <span className="inline-flex items-center gap-0.5">
-              <ChatCircleIcon aria-label="评论" />
-              {task.comments}
+        <StatusIcon status={task.status} className="mt-0.5" />
+        <span className="min-w-0 flex-1 space-y-0.5">
+          <span className="flex items-baseline gap-3">
+            <span className="min-w-0 flex-1 truncate text-sm">
+              {task.title}
             </span>
-          ) : null}
-          <span className="w-14 text-right">{ago(task.updated_at)}</span>
+            <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+              {ago(task.updated_at)}
+            </span>
+          </span>
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
+            <span className="shrink-0">#{task.number}</span>
+            <span aria-hidden="true">·</span>
+            <span className="min-w-0 truncate">
+              {assigneeLabel(task.assignee)}
+            </span>
+            <span className="ml-auto flex shrink-0 items-center gap-3 pl-2">
+              <RunState task={task} />
+              <Comments count={task.comments} />
+            </span>
+          </span>
         </span>
       </button>
     </li>
@@ -147,9 +167,8 @@ function TaskRow({ task }: { task: Task }) {
 
 function TaskList() {
   const [, setNav] = useTaskNav();
-  const { data } = useTasks();
+  const { data, error, refetch } = useTasks();
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  if (!data) return null;
   const isOpen = (status: TaskStatus) => open[status] ?? !folded.has(status);
   return (
     <div className="space-y-2">
@@ -165,15 +184,23 @@ function TaskList() {
           <PlusIcon aria-hidden="true" />
         </Button>
       </div>
-      {data.tasks.length === 0 ? (
-        <Button
-          variant="outline"
-          className="h-20 w-full border-dashed text-muted-foreground"
-          onClick={() => void setNav({ task: "new" })}
+      {error ? (
+        <LoadError what="任务" error={error} onRetry={() => void refetch()} />
+      ) : !data ? (
+        <Loading />
+      ) : data.tasks.length === 0 ? (
+        <Empty
+          icon={ListChecksIcon}
+          title="还没有任务"
+          action={
+            <Button size="sm" onClick={() => void setNav({ task: "new" })}>
+              <PlusIcon aria-hidden="true" data-icon="inline-start" />
+              新建任务
+            </Button>
+          }
         >
-          <PlusIcon aria-hidden="true" />
-          新建任务
-        </Button>
+          把要做的事交给智能体，它会在时间线里记下每一步。
+        </Empty>
       ) : (
         statuses.map(({ value, label }) => {
           const group = data.tasks.filter((t) => t.status === value);
@@ -187,9 +214,9 @@ function TaskList() {
                 className="flex w-full items-center gap-2 px-2 py-1 text-left text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:text-foreground"
               >
                 {isOpen(value) ? (
-                  <CaretDownIcon aria-hidden="true" />
+                  <CaretDownIcon aria-hidden="true" className="size-3" />
                 ) : (
-                  <CaretRightIcon aria-hidden="true" />
+                  <CaretRightIcon aria-hidden="true" className="size-3" />
                 )}
                 <StatusIcon status={value} className="size-3.5" />
                 {label}
@@ -448,8 +475,7 @@ const logKindLabels: Record<LogEntry["kind"], string> = {
 function RunLog({ task, run }: { task: string; run: TaskRun }) {
   const live = isActive(run.status);
   const { data, error, isPending } = useRunLog(task, run.id, live);
-  if (isPending)
-    return <p className="text-xs text-muted-foreground">读取中…</p>;
+  if (isPending) return <Loading layout="lines" label="正在读取记录…" />;
   if (error) return <p className="text-xs text-destructive">{error.message}</p>;
   if (!data?.length)
     return <p className="text-xs text-muted-foreground">还没有记录。</p>;
@@ -1051,22 +1077,44 @@ function TaskView({ task }: { task: TaskDetail }) {
 
 // --- tab -------------------------------------------------------------------------------
 
+/** Where a task would be: loading, failed, or gone. */
+export function TaskMissing({
+  isPending,
+  error,
+  onRetry,
+}: {
+  isPending: boolean;
+  error: Error | null;
+  onRetry: () => void;
+}) {
+  const gone = error instanceof ApiError && error.status === 404;
+  if (error && !gone)
+    return <LoadError what="任务" error={error} onRetry={onRetry} />;
+  if (isPending) return <Loading layout="detail" />;
+  return (
+    <Empty icon={ListChecksIcon} title="这个任务已不存在">
+      它可能已被删除。
+    </Empty>
+  );
+}
+
 /** The task board: a status-grouped list, a task, or a new one. */
 export function Tasks() {
   const [nav, setNav] = useTaskNav();
   const id = nav.task && nav.task !== "new" ? nav.task : null;
-  const { data: task, isPending, error } = useTask(id);
+  const { data: task, isPending, error, refetch } = useTask(id);
   if (nav.task === "new")
     return <TaskForm onDone={(id) => void setNav({ task: id ?? null })} />;
   if (!id) return <TaskList />;
-  if (isPending) return null;
   if (!task)
     return (
-      <div>
+      <div className="space-y-3">
         <Back label="任务" onClick={() => void setNav({ task: null })} />
-        <p className="text-sm text-muted-foreground">
-          {error?.message ?? "这个任务已不存在。"}
-        </p>
+        <TaskMissing
+          isPending={isPending}
+          error={error}
+          onRetry={() => void refetch()}
+        />
       </div>
     );
   return <TaskView task={task} />;

@@ -19,6 +19,9 @@ const workspaceSchema = z.object({
   fontMono: z.string().max(200).optional(),
   // Preselected model for new agents.
   lastModel: z.string().max(100).optional(),
+  // The task page as last left: rows or a board, and whose tasks.
+  taskLayout: z.enum(["list", "board"]).optional(),
+  taskScope: z.enum(["all", "user", "remote"]).optional(),
 });
 
 export type WorkspaceState = z.infer<typeof workspaceSchema>;

@@ -1,11 +1,13 @@
 import type { Interaction } from "@/queries/chat";
+import { BellIcon } from "@phosphor-icons/react/Bell";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { toast } from "sonner";
+import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useAnswerInteraction, useInteractionHistory } from "@/queries/chat";
-import { AgentMonogram } from "./agent-identity";
+import { AgentAvatar } from "./agent-identity";
 import { PageHeader } from "./app-shell";
 import { useAgents, useOpenAgent } from "./use-agents";
 
@@ -52,9 +54,9 @@ function Item({ interaction }: { interaction: Interaction }) {
   const pending = interaction.status === "pending";
   return (
     <li className="flex gap-3 border-b px-4 py-3 sm:px-6">
-      <AgentMonogram
-        agent={agent ?? { name: "?" }}
-        className="size-7 text-xs"
+      <AgentAvatar
+        agent={agent ?? { id: interaction.agent_id }}
+        className="size-7"
       />
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex items-baseline gap-2">
@@ -116,7 +118,7 @@ function Item({ interaction }: { interaction: Interaction }) {
 /** Every agent's confirmations, grouped by day, the waiting ones marked. */
 export function Notifications() {
   const [filter, setFilter] = useQueryState("filter", filterParser);
-  const { interactions, isPending, error } = useInteractionHistory();
+  const { interactions, isPending, error, refetch } = useInteractionHistory();
   const shown = interactions.filter(
     (i) => filter === "all" || i.status === "pending",
   );
@@ -145,16 +147,26 @@ export function Notifications() {
       <main id="main" className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl">
           {error ? (
-            <p
-              role="alert"
-              className="px-4 py-6 text-sm text-destructive sm:px-6"
-            >
-              无法加载确认记录：{error.message}
-            </p>
-          ) : isPending ? null : shown.length === 0 ? (
-            <p className="px-4 py-16 text-center text-sm text-muted-foreground sm:px-6">
-              {filter === "pending" ? "没有待处理的确认" : "还没有确认请求"}
-            </p>
+            <div className="px-4 py-16 sm:px-6">
+              <LoadError
+                what="确认记录"
+                error={error}
+                onRetry={() => void refetch()}
+              />
+            </div>
+          ) : isPending ? (
+            <Loading rows={5} className="px-2 py-4 sm:px-4" />
+          ) : shown.length === 0 ? (
+            <div className="px-4 py-16 sm:px-6">
+              <Empty
+                icon={BellIcon}
+                title={
+                  filter === "pending" ? "没有待处理的确认" : "还没有确认请求"
+                }
+              >
+                智能体要做需要你批准的操作时，会在这里等你答复。
+              </Empty>
+            </div>
           ) : (
             [...days].map(([label, items]) => (
               <section key={label} aria-label={label}>

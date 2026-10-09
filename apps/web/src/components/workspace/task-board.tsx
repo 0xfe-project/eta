@@ -1,15 +1,17 @@
+import type { WorkspaceState } from "./workspace-store";
 import type { Task, TaskDetail, TaskStatus } from "@/queries/tasks";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
-import { ChatCircleIcon } from "@phosphor-icons/react/ChatCircle";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { GitPullRequestIcon } from "@phosphor-icons/react/GitPullRequest";
 import { KanbanIcon } from "@phosphor-icons/react/Kanban";
 import { ListIcon } from "@phosphor-icons/react/List";
+import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -34,26 +36,23 @@ import {
 } from "@/queries/tasks";
 import { PageHeader } from "./app-shell";
 import { when } from "./routine-format";
-import {
-  ago,
-  assigneeLabel,
-  isActive,
-  statuses,
-  statusLabel,
-} from "./task-format";
+import { ago, assigneeLabel, statuses, statusLabel } from "./task-format";
 import { useTaskNav } from "./task-nav";
 import { StatusIcon } from "./task-status-icon";
 import {
   AssigneeRow,
   CommentBox,
+  Comments,
   Description,
   EditableTitle,
   FeedbackDialog,
+  RunState,
   StatusSelect,
   TaskForm,
+  TaskMissing,
   Timeline,
-  Working,
 } from "./tasks";
+import { useWorkspaceStore } from "./workspace-store";
 
 // The task board as a full-window page: every task as rows grouped by status
 // or as a board to drag them across, and a task with its properties beside it.
@@ -70,30 +69,12 @@ const flow: TaskStatus[] = [
   "done",
   "cancelled",
 ];
-/** Done and cancelled start folded in the list: they are the past. */
-const folded = new Set<TaskStatus>(["done", "cancelled"]);
 
 const scopes = [
   { value: "all", label: "全部" },
   { value: "user", label: "我的" },
   { value: "remote", label: "智能体" },
 ] as const;
-
-function RunState({ task }: { task: Task }) {
-  if (isActive(task.run_status)) return <Working />;
-  if (task.run_status === "failed")
-    return <span className="text-destructive">运行失败</span>;
-  return null;
-}
-
-function Comments({ count }: { count: number }) {
-  return count ? (
-    <span className="inline-flex items-center gap-0.5">
-      <ChatCircleIcon aria-label="评论" />
-      {count}
-    </span>
-  ) : null;
-}
 
 /** The status icon as a menu: change a task's status without opening it. */
 function StatusMenu({ task }: { task: Task }) {
@@ -141,7 +122,8 @@ function ListView({
 }) {
   const [, setNav] = useTaskNav();
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  const isOpen = (status: TaskStatus) => open[status] ?? !folded.has(status);
+  // Every group starts open; a click folds it.
+  const isOpen = (status: TaskStatus) => open[status] ?? true;
   return (
     <div className="pb-6">
       {statuses.map(({ value, label }) => {
@@ -315,7 +297,9 @@ function BoardView({
                 <PlusIcon aria-hidden="true" />
               </Button>
             </div>
-            <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-1.5 pb-1.5">
+            {/* Sideways scrolls pass through to the board (overscroll is
+                off everywhere else, which would trap them here). */}
+            <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-x-auto px-1.5 pb-1.5">
               {group.map((task) => (
                 <Card key={task.id} task={task} />
               ))}
@@ -364,7 +348,7 @@ function deliverables(task: TaskDetail) {
 
 function TaskPage({ id }: { id: string }) {
   const [, setNav] = useTaskNav();
-  const { data: task, isPending, error } = useTask(id);
+  const { data: task, isPending, error, refetch } = useTask(id);
   const update = useUpdateTask();
   const remove = useDeleteTask();
   const [feedback, setFeedback] = useState(false);
@@ -391,12 +375,12 @@ function TaskPage({ id }: { id: string }) {
     return (
       <>
         <PageHeader title={crumbs} />
-        <main id="main" className="px-4 py-6 sm:px-6">
-          {isPending ? null : (
-            <p className="text-sm text-muted-foreground">
-              {error?.message ?? "这个任务已不存在。"}
-            </p>
-          )}
+        <main id="main" className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8">
+          <TaskMissing
+            isPending={isPending}
+            error={error}
+            onRetry={() => void refetch()}
+          />
         </main>
       </>
     );
@@ -524,13 +508,19 @@ function TaskPage({ id }: { id: string }) {
 
 export function TaskBoard() {
   const [nav, setNav] = useTaskNav();
-  const { data } = useTasks();
+  const { data, error, refetch } = useTasks();
   const [newStatus, setNewStatus] = useState<TaskStatus>("todo");
+  // Remembered in this browser, so the page opens as it was left.
+  const layout = useWorkspaceStore((s) => s.workspace.taskLayout ?? "list");
+  const scope = useWorkspaceStore((s) => s.workspace.taskScope ?? "all");
+  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
+  const setView = (changes: Pick<WorkspaceState, "taskLayout" | "taskScope">) =>
+    setWorkspace((workspace) => ({ ...workspace, ...changes }));
   const id = nav.task && nav.task !== "new" ? nav.task : null;
   if (id) return <TaskPage id={id} />;
 
   const tasks = (data?.tasks ?? []).filter(
-    (task) => nav.scope === "all" || task.assignee.kind === nav.scope,
+    (task) => scope === "all" || task.assignee.kind === scope,
   );
   const create = (status: TaskStatus = "todo") => {
     setNewStatus(status);
@@ -551,9 +541,9 @@ export function TaskBoard() {
         }
       >
         <Tabs
-          value={nav.scope}
-          onValueChange={(scope) =>
-            void setNav({ scope: scope as typeof nav.scope })
+          value={scope}
+          onValueChange={(value) =>
+            setView({ taskScope: value as typeof scope })
           }
           className="hidden sm:flex"
         >
@@ -570,9 +560,9 @@ export function TaskBoard() {
           </TabsList>
         </Tabs>
         <Tabs
-          value={nav.layout}
-          onValueChange={(layout) =>
-            void setNav({ layout: layout as typeof nav.layout })
+          value={layout}
+          onValueChange={(value) =>
+            setView({ taskLayout: value as typeof layout })
           }
         >
           <TabsList aria-label="布局">
@@ -604,21 +594,55 @@ export function TaskBoard() {
         id="main"
         className={cn(
           "min-h-0 flex-1",
-          nav.layout === "board" ? "overflow-hidden" : "overflow-y-auto",
+          layout === "board" ? "overflow-hidden" : "overflow-y-auto",
         )}
       >
-        {!data ? null : data.tasks.length === 0 ? (
-          <div className="mx-auto max-w-md px-4 py-16 text-center">
-            <Button
-              variant="outline"
-              className="h-20 w-full border-dashed text-muted-foreground"
-              onClick={() => create()}
-            >
-              <PlusIcon aria-hidden="true" />
-              新建任务
-            </Button>
+        {error ? (
+          <div className="mx-auto max-w-md px-4 py-16">
+            <LoadError
+              what="任务"
+              error={error}
+              onRetry={() => void refetch()}
+            />
           </div>
-        ) : nav.layout === "board" ? (
+        ) : !data ? (
+          <Loading rows={6} className="px-2 py-3 sm:px-4" />
+        ) : tasks.length === 0 ? (
+          <div className="mx-auto max-w-md px-4 py-16">
+            {data.tasks.length === 0 ? (
+              <Empty
+                icon={ListChecksIcon}
+                title="还没有任务"
+                action={
+                  <Button size="sm" onClick={() => create()}>
+                    <PlusIcon aria-hidden="true" data-icon="inline-start" />
+                    新建任务
+                  </Button>
+                }
+              >
+                把要做的事交给智能体，它会在时间线里记下每一步。
+              </Empty>
+            ) : (
+              <Empty
+                icon={ListChecksIcon}
+                title={
+                  scope === "user"
+                    ? "没有指派给你的任务"
+                    : "没有指派给智能体的任务"
+                }
+                action={
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setView({ taskScope: "all" })}
+                  >
+                    查看全部任务
+                  </Button>
+                }
+              />
+            )}
+          </div>
+        ) : layout === "board" ? (
           <BoardView tasks={tasks} onCreate={create} />
         ) : (
           <ListView tasks={tasks} onCreate={create} />

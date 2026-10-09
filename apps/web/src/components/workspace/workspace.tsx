@@ -68,12 +68,14 @@ export function Workspace({
   const onError = (error: Error) => toast.error(error.message);
 
   return (
-    <div className="mx-auto flex h-dvh w-full min-h-0 flex-col bg-background px-4 pb-4 sm:px-6 lg:max-w-[calc(64rem+3rem)]">
-      <header className="flex h-14 shrink-0 items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold tracking-tight">axp.</h1>
-        <SettingsButton />
-      </header>
-      <div className="grid grid-cols-2 md:hidden" aria-label="工作区面板">
+    // The chat fills the left; the workspace panel floats on the right,
+    // inset from the window's edges.
+    <div className="flex h-dvh w-full min-h-0 flex-col bg-background p-2 md:p-3">
+      <h1 className="sr-only">axp.</h1>
+      <div
+        className="grid shrink-0 grid-cols-[1fr_1fr_auto] items-center gap-1 pb-2 md:hidden"
+        aria-label="工作区面板"
+      >
         <Button
           variant="ghost"
           className={cn("h-10", mobilePanel === "chat" && "bg-muted")}
@@ -91,17 +93,19 @@ export function Workspace({
           工作区
           {pending ? <span className="tabular-nums">{pending}</span> : null}
         </Button>
+        <SettingsButton />
       </div>
       <main
         id="main"
-        className="isolate grid min-h-0 flex-1 gap-4 md:grid-cols-2 md:gap-5"
+        className="isolate grid min-h-0 flex-1 gap-3 md:grid-cols-2"
       >
         <div
           className={cn(
-            "min-h-0 min-w-0",
+            "relative min-h-0 min-w-0 md:px-3",
             mobilePanel === "workspace" && "hidden md:block",
           )}
         >
+          <SettingsButton className="absolute top-3 right-0 z-10 hidden md:inline-flex" />
           <ChatPanel
             theme={sessionTheme}
             agentId={selected?.id}
@@ -115,6 +119,7 @@ export function Workspace({
             }
             blocked={blocked}
             messages={history.messages}
+            loading={!chat.data || history.loading}
             hasOlder={history.hasOlder}
             loadingOlder={history.loadingOlder}
             onLoadOlder={history.loadOlder}
