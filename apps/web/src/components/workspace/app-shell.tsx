@@ -19,7 +19,7 @@ import { SettingsButton, SettingsDialog } from "./settings-dialog";
 import { useAgents, useOpenAgent } from "./use-agents";
 import { usePendingTitle } from "./use-pending-title";
 
-// The full-window workspace (/workspace) around its pages: on wide screens
+// The full-window workspace (/workspace) around its pages: from md up
 // a sidebar of sections and agents, on narrow ones a bar along the top. The
 // conversation stays on the home page.
 
@@ -56,7 +56,7 @@ function Sidebar() {
   const { agents, loaded, error, openEditor } = useAgents();
   const openAgent = useOpenAgent();
   return (
-    <aside className="hidden w-56 shrink-0 flex-col border-r bg-sidebar lg:flex">
+    <aside className="hidden w-48 shrink-0 flex-col border-r bg-sidebar md:flex lg:w-56">
       <div className="flex h-12 shrink-0 items-center justify-between pr-2 pl-4">
         <Link to="/workspace" className="text-lg font-semibold tracking-tight">
           axp.
@@ -146,7 +146,7 @@ function Sidebar() {
 function TopBar() {
   const badges = useBadges();
   return (
-    <header className="flex h-12 shrink-0 items-center gap-1 px-4 sm:px-6 lg:hidden">
+    <header className="flex h-12 shrink-0 items-center gap-1 px-4 sm:px-6 md:hidden">
       <Link
         to="/workspace"
         className="mr-auto text-xl font-semibold tracking-tight"
