@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ToolDisclosure } from "@/components/brainless/tool-disclosure";
+import { toolHeadingClass } from "@/components/brainless/tool-call-styles";
 import { cn } from "@/lib/utils";
 
 /**
@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
  *   2. Card:    `┃  ◆ Run Write …  [hooks: 3]` (left gutter + diamond)
  */
 const GREEN = "var(--terminal-success)"; // 38;5;10 — active Run tool cards
+const MUTED = "var(--terminal-muted)";
+const DIM = "var(--terminal-muted)";
 const BLUE = "var(--terminal-link)";
 const SILVER = "var(--terminal-secondary)";
 
@@ -33,30 +35,69 @@ export function GrokTool({
   className?: string;
   children?: React.ReactNode;
 }) {
-  const card = variant === "card";
-  const heading = card ? (
-    <span className="font-semibold" style={{ color: SILVER }}>
-      {title ?? [verb, path].filter(Boolean).join(" ")}
-    </span>
-  ) : (
-    <>
-      {verb}
-      {verb && path ? " " : null}
-      {path ? <span style={{ color: BLUE }}>{path}</span> : null}
-    </>
-  );
+  if (variant === "card") {
+    const heading = title ?? [verb, path].filter(Boolean).join(" ");
+    return (
+      <details
+        className={cn(
+          "group min-w-0 max-w-full [&_summary::-webkit-details-marker]:hidden border-l-2 pl-3 font-mono text-[13px] leading-[1.55]",
+          className,
+        )}
+        style={{ borderColor: GREEN }}
+      >
+        <summary className="flex min-w-0 list-none cursor-pointer items-baseline gap-x-2 outline-none focus-visible:ring-1 focus-visible:ring-[var(--terminal-link)]/60">
+          <span aria-hidden className="shrink-0" style={{ color: GREEN }}>
+            ◆
+          </span>
+          <span
+            className={cn(toolHeadingClass, "font-semibold")}
+            style={{ color: SILVER }}
+          >
+            {heading}
+          </span>
+          {hooks != null ? (
+            <span className="shrink-0" style={{ color: DIM }}>
+              [hooks: <span style={{ color: GREEN }}>{hooks}</span>]
+            </span>
+          ) : null}
+        </summary>
+        {children ? (
+          <div
+            className="mt-1 min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]"
+            style={{ color: MUTED }}
+          >
+            {children}
+          </div>
+        ) : null}
+      </details>
+    );
+  }
+
   return (
-    <ToolDisclosure
+    <details
       className={cn(
-        "text-[var(--terminal-muted)]",
-        card && "border-l-2 border-[var(--terminal-success)] pl-3",
+        "group min-w-0 max-w-full font-mono text-[13px] leading-[1.6] text-[var(--terminal-muted)] [&_summary::-webkit-details-marker]:hidden",
         className,
       )}
-      heading={heading}
-      leading={card ? <span style={{ color: GREEN }}>◆</span> : undefined}
-      trailing={card && hooks != null ? `hooks: ${hooks}` : meta}
     >
-      {children}
-    </ToolDisclosure>
+      <summary className="flex min-w-0 list-none cursor-pointer items-baseline gap-2 outline-none focus-visible:ring-1 focus-visible:ring-[var(--terminal-link)]/60">
+        <span className={toolHeadingClass}>
+          {verb}
+          {verb && path ? " " : null}
+          {path ? <span style={{ color: BLUE }}>{path}</span> : null}
+        </span>
+        {meta ? (
+          <span className="shrink-0 text-[var(--terminal-muted)]">{meta}</span>
+        ) : null}
+      </summary>
+      {children ? (
+        <div
+          className="mt-1 min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]"
+          style={{ color: MUTED }}
+        >
+          {children}
+        </div>
+      ) : null}
+    </details>
   );
 }

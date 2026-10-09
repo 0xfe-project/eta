@@ -1,4 +1,5 @@
 import * as React from "react";
+import { toolHeadingClass } from "@/components/brainless/tool-call-styles";
 import { cn } from "@/lib/utils";
 
 /**
@@ -39,14 +40,14 @@ export function ClaudeToolCall({
     <details
       open={defaultOpen}
       className={cn(
-        "group font-mono text-[13px] leading-[1.55] [&_summary::-webkit-details-marker]:hidden",
+        "group min-w-0 max-w-full font-mono text-[13px] leading-[1.55] [&_summary::-webkit-details-marker]:hidden",
         className,
       )}
     >
       <summary
         className={cn(
           "list-none",
-          expandable ? "cursor-pointer" : "cursor-default",
+          "cursor-pointer",
           "rounded-none outline-none focus-visible:ring-1 focus-visible:ring-[var(--terminal-link)]/60",
         )}
       >
@@ -58,7 +59,7 @@ export function ClaudeToolCall({
           >
             ⏺
           </span>
-          <span className="min-w-0 break-words">
+          <span className={toolHeadingClass}>
             <span className="text-[var(--terminal-claude-foreground)]">
               {tool}
             </span>
@@ -84,7 +85,7 @@ export function ClaudeToolCall({
               {result}
               {expandable ? (
                 <span className="ml-2 text-[var(--terminal-muted)] group-open:hidden">
-                  (ctrl+o to expand)
+                  （点击展开）
                 </span>
               ) : null}
             </span>
@@ -93,7 +94,7 @@ export function ClaudeToolCall({
       </summary>
 
       {expandable ? (
-        <div className="mt-1 whitespace-pre-wrap pl-[32px] text-[var(--terminal-muted)]">
+        <div className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere] pl-[32px] text-[var(--terminal-muted)]">
           {children}
         </div>
       ) : null}

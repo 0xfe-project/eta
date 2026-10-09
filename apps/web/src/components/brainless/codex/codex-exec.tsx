@@ -1,5 +1,6 @@
 import * as React from "react";
-import { ToolDisclosure } from "@/components/brainless/tool-disclosure";
+import { toolHeadingClass } from "@/components/brainless/tool-call-styles";
+import { cn } from "@/lib/utils";
 
 /**
  * CodexExec — a Codex action/exec line: a command or edit with an optional
@@ -28,15 +29,44 @@ export function CodexExec({
   className?: string;
   children?: React.ReactNode;
 }) {
+  const expandable = Boolean(children);
   return (
-    <ToolDisclosure
-      defaultOpen={defaultOpen}
-      className={className}
-      leading={<span style={{ color: DOT[status] }}>•</span>}
-      heading={<span className="text-[var(--terminal-link)]">{command}</span>}
-      trailing={result}
+    <details
+      open={defaultOpen}
+      className={cn(
+        "group min-w-0 max-w-full font-mono text-[13px] leading-[1.55] [&_summary::-webkit-details-marker]:hidden",
+        className,
+      )}
     >
-      {children}
-    </ToolDisclosure>
+      <summary
+        className={cn(
+          "flex min-w-0 list-none items-baseline gap-2 outline-none",
+          "cursor-pointer",
+          "focus-visible:ring-1 focus-visible:ring-[var(--terminal-link)]/60",
+        )}
+      >
+        <span aria-hidden className="shrink-0" style={{ color: DOT[status] }}>
+          •
+        </span>
+        <span className={cn(toolHeadingClass, "text-[var(--terminal-link)]")}>
+          {command}
+        </span>
+        {result ? (
+          <span className="shrink-0 text-[var(--terminal-muted)]">
+            {result}
+          </span>
+        ) : null}
+        {expandable ? (
+          <span className="shrink-0 text-[var(--terminal-muted)] group-open:hidden">
+            ▸
+          </span>
+        ) : null}
+      </summary>
+      {expandable ? (
+        <pre className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere] pl-4 text-[var(--terminal-muted)]">
+          {children}
+        </pre>
+      ) : null}
+    </details>
   );
 }
