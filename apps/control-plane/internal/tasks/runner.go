@@ -28,7 +28,10 @@ import (
 //
 // Writes to remote agents are never repeated: the time a prompt is handed to
 // the relay is recorded first, and a lost confirmation is settled from the
-// native state.
+// native state. So is the time a place starts being opened: a run whose
+// opening was interrupted fails instead of opening a second place. A start
+// in progress finishes even when the runner is told to stop, so that a
+// deploy does not leave one half done.
 
 const (
 	// An agent that shows no sign of the prompt by then never got it.
@@ -50,7 +53,8 @@ type Runner struct {
 	failures telemetry.Repeats
 }
 
-// Loop runs the steps every interval until ctx ends.
+// Loop runs the steps every interval until ctx ends; a tick in progress
+// stops at the next step or run, except for a start under way.
 func (r *Runner) Loop(ctx context.Context, interval time.Duration) {
 	for ctx.Err() == nil {
 		r.Tick(ctx)
@@ -75,6 +79,9 @@ func (r *Runner) Tick(ctx context.Context) {
 		{"clean_up", r.cleanup},
 	}
 	for _, step := range steps {
+		if ctx.Err() != nil {
+			return
+		}
 		r.failures.Log(ctx, slog.LevelError, "step:"+step.name, step.run(ctx), "Task runner step failed", "step", step.name)
 	}
 }
@@ -174,23 +181,41 @@ func (r *Runner) start(ctx context.Context) error {
 		return err
 	}
 	for _, run := range runs {
+		if ctx.Err() != nil {
+			return nil
+		}
 		r.failures.Log(ctx, slog.LevelWarn, "start:"+run.ID, r.startOne(ctx, a, run), "Task run did not start", "run", run.ID)
 	}
 	return nil
 }
 
 func (r *Runner) startOne(ctx context.Context, a agents, run *runRow) error {
-	ctx, cancel := context.WithTimeout(ctx, callTimeout*3)
+	// Finished even when the runner is stopped: a start cut short is a
+	// place opened and never recorded.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), callTimeout*3)
 	defer cancel()
+	opened := run.SessionID == nil
 	session, err := r.session(ctx, a, run)
 	if err != nil || session == nil {
 		return err
 	}
 	// Recorded before the call: if its confirmation is lost, watch settles
-	// it from the native state.
+	// it from the native state. Only a run still starting is sent anything:
+	// stopping, reassigning or finishing the task cancels one that is.
 	sentAt := pg.Now()
-	if _, err := r.DB.Exec(ctx, `UPDATE task_run SET status = 'running', sent_at = $2 WHERE id = $1 AND status = 'starting'`,
-		run.ID, sentAt); err != nil {
+	started, err := r.DB.Exec(ctx, `UPDATE task_run SET status = 'running', sent_at = $2 WHERE id = $1 AND status = 'starting'`,
+		run.ID, sentAt)
+	if err != nil {
+		return err
+	}
+	if started.RowsAffected() == 0 {
+		if !opened {
+			return nil
+		}
+		// Cancelled while its place was being opened: what was opened for
+		// it is closed and cleaned up, never reused.
+		_, err := r.DB.Exec(ctx, `UPDATE task_session SET closed_at = COALESCE(closed_at, $2), cleanup_pending = true
+			WHERE id = $1`, session.ID, pg.Now())
 		return err
 	}
 	delete(r.working, run.ID)
@@ -242,6 +267,15 @@ func (r *Runner) session(ctx context.Context, a agents, run *runRow) (*sessionRo
 	}
 	if task.Place == nil {
 		return nil, r.fail(ctx, run.ID, "任务没有工作位置。")
+	}
+	if run.OpeningAt != nil {
+		return nil, r.fail(ctx, run.ID, "上次打开工作位置时被中断（例如部署），可能已经打开了一个；为了不重复打开，这次运行失败，请重新运行。")
+	}
+	marked, err := r.DB.Exec(ctx, "UPDATE task_run SET opening_at = $2 WHERE id = $1 AND status = 'starting' AND opening_at IS NULL",
+		run.ID, pg.Now())
+	if err != nil || marked.RowsAffected() == 0 {
+		// Cancelled meanwhile, or another runner got there first.
+		return nil, err
 	}
 	s := &sessionRow{
 		ID: pg.NewID(), TaskID: run.TaskID, ComputerID: *run.ComputerID, Runtime: run.Runtime, Provider: run.Provider,
