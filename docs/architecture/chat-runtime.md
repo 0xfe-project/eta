@@ -18,7 +18,7 @@
 
 ## 一条消息的路径
 
-1. `POST /chat/messages` 在一个事务里写入幂等记录、用户消息、助手回复占位、`agent_command(queued)` 和产品事件，并把命令发布到该 Agent 的[队列](queue.md)，返回 202。
+1. `POST /chat/messages` 在一个事务里写入幂等记录、用户消息、助手回复占位、`agent_command(queued)` 和产品事件，并把命令发布到该 Agent 的[队列](queue.md)，返回 202。用户消息的 id 可以由客户端给出（`id`，每条消息一个新的 UUID），Web 同时用它作为 `Idempotency-Key`（见下文[发送](#发送)）。插话时响应的 `steered` 说明它是否进了正在运行的 turn。
 2. controller 发现 Agent 的队列里有命令而它没有存活实例：`generation + 1`，写 `runtime_instance`，再在事务外启动容器；Agent 有快照时附上它的下载地址。token 由 `HMAC(SECRET_KEY, instance_id:generation)` 派生，换代即失效。
 3. runtime 启动：下载并解开 Agent 的快照（有的话）→ 安装镜像里的 Codex plugin（见下文）→ 启动 Codex app-server → 用控制面记录的 thread id 恢复（只有首次才 `thread/start`；无法恢复时报告 `recovery_failed`，绝不另起 thread）→ 心跳报告 ready → 开始读队列。
 4. runtime 空闲时从队列取一条命令，确认后执行；一次一条（部分唯一索引兜底）。
@@ -33,9 +33,22 @@
 
 确认：runtime 用 SDK 的审批回调接住 `commandExecution` / `fileChange` 审批请求和 plugin 工具的确认请求（MCP elicitation，见[用户确认](user-attention.md)），生成 `approval.requested`；控制面建 `approval` 与 choice `interaction`。用户回答后审批变为 `decided`，决定作为控制消息发给 runtime（再次给出同样的回答会重发），runtime 回调返回后发出 `approval.applied`，交互才显示 `resolved`。等待中被停止时回调以 `cancel` 结束，同时中断该 turn。其他服务端请求（权限扩展、带表单字段的 elicitation 等）一律保守拒绝。
 
+## 发送
+
+用户按下发送时消息就有了身份：Web 生成它的 id，消息立刻出现在对话里（“发送中…”），输入框清空。之后每一次尝试都带着同一个 id，既作为消息 id，也作为 `Idempotency-Key`，因此重试、响应丢失后再发、刷新页面后继续发送都是同一条消息，服务端返回第一次的结果，不会多出一条。
+
+- 待送达的消息和每个智能体的草稿保存在浏览器里（`apps/web/src/queries/outbox.ts`，localStorage 的 `axp.chat.v1`），刷新后未送达的会继续发送。同一个智能体的消息按发送顺序一条一条发。
+- 没有响应（断网、超时 20 秒）或 5xx 时自动再试，共 4 次；仍不成功，或服务端明确拒绝（4xx），消息标为“未送达”并给出原因，可以“重试”（同一条）、“编辑”（回到输入框，作为新消息发送）或“丢弃”。
+- 消息经 SSE 先于响应到达时，按 id 认出它，不会显示两遍。
+- 插话没有进入正在运行的 turn 时，提示它已改为排队。
+
+对话里每个智能体同一时刻只有一行在动：正在执行的回复（“工作中”“正在停止”），或者智能体启动时排在第一条的回复（“正在启动智能体”）；其余等待中的回复是静态的“等待中 · 前面还有 n 条”，可以撤回。因环境原因（`AGENT_*`、`START_TIMEOUT`）连续失败的回复只在最后一条写出原因；失败的回复都可以“重新发送”，发的是一条新消息。SSE 断开、正在重连时，对话顶部提示状态可能不是最新的。
+
 ## 智能体
 
 AXP 是单用户服务，所有智能体属于唯一的默认对话（`conversation.is_default`），首次创建智能体时建立。
+
+智能体对外的状态是 `idle`（空闲）、`starting`（有工作在等它的环境：容器启动、快照下载、恢复会话）、`working`、`waiting_for_input` 和 `unavailable`，由 `RefreshAgentStatus` 从内部状态和进行中的回复推出。
 
 智能体有名称、`description`（指令）、模型和 `plugins`（启用的 plugin 名，见下文 [Plugin](#plugin)）。指令原样作为 Codex 的 `developerInstructions` 在 `thread/start` 和 `thread/resume` 时注入。运行时启动所用的一切配置（模型、指令、plugin）都由 `agent.config_version` 版本化：修改后版本递增；controller 在该智能体没有进行中的执行时停止旧实例（`CONFIG_CHANGED`），下一个实例用新配置恢复同一 thread，因此配置不会在 turn 中途改变。以后给智能体增加的、影响运行时的设置应走同一条路径。重启（`POST /agents/{id}/restart`，设置里的“重启”）也走这条路径：递增 `config_version` 并停止该智能体所有进行中的回复，中断确认后旧实例即被替换。
 

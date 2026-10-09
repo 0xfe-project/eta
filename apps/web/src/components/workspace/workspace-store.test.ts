@@ -33,9 +33,9 @@ describe("workspace store persistence", () => {
   });
 
   it("saves the bare workspace object, not other UI state", () => {
-    const { setWorkspace, setDraft } = useWorkspaceStore.getState();
+    const { setWorkspace, setMobilePanel } = useWorkspaceStore.getState();
     setWorkspace((w) => ({ ...w, selectedAgentId: "a1" }));
-    setDraft("unsent text");
+    setMobilePanel("workspace");
     expect(JSON.parse(localStorage.getItem(key)!)).toEqual({
       tasks: [],
       sessionTheme: "claude",

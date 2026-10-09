@@ -327,24 +327,32 @@ func (s *Service) stopReplies(ctx context.Context, tx pgx.Tx, agentID string) er
 
 // SendMessage queues a turn. A steer joins the agent's running turn instead;
 // with no running turn (or one that refuses it) it waits like any turn.
-func (s *Service) SendMessage(ctx context.Context, tx pgx.Tx, agentID, text string, steer bool) (*Sent, error) {
+// messageID is the client's id for the message, or "" for a new one.
+func (s *Service) SendMessage(ctx context.Context, tx pgx.Tx, agentID, messageID, text string, steer bool) (*Sent, error) {
 	input := map[string]any{"text": text}
 	if steer {
 		input["steer"] = true
 	}
-	return s.enqueue(ctx, tx, agentID, text, input, KindTurn)
+	return s.enqueue(ctx, tx, agentID, messageID, text, input, KindTurn)
 }
 
 // Compact queues a compaction of the agent's context, shown as /compact.
 func (s *Service) Compact(ctx context.Context, tx pgx.Tx, agentID string) (*Sent, error) {
-	return s.enqueue(ctx, tx, agentID, "/compact", map[string]any{}, KindCompact)
+	return s.enqueue(ctx, tx, agentID, "", "/compact", map[string]any{}, KindCompact)
 }
 
 func textBlock(text string) Block {
 	return Block{ID: strings.ReplaceAll(pg.NewID(), "-", ""), Type: "text", Text: text}
 }
 
-func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, agentID, text string, input map[string]any, kind string) (*Sent, error) {
+func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, agentID, messageID, text string, input map[string]any, kind string) (*Sent, error) {
+	if messageID == "" {
+		messageID = pg.NewID()
+	} else if id, ok := pg.ParseID(messageID); ok {
+		messageID = id
+	} else {
+		return nil, apierr.Invalid()
+	}
 	// A network call: before taking the conversation lock.
 	if id, ok := pg.ParseID(agentID); ok {
 		var model *string
@@ -382,7 +390,7 @@ func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, agentID, text string, 
 		return nil, err
 	}
 	message := &messageRow{
-		ID: pg.NewID(), ConversationID: conversationID, AgentID: agent.ID, CommandID: command.ID,
+		ID: messageID, ConversationID: conversationID, AgentID: agent.ID, CommandID: command.ID,
 		Seq: seq - 1, Role: RoleUser, Status: MessageCompleted, Content: []Block{textBlock(text)},
 		Revision: 1, CreatedAt: now, UpdatedAt: now,
 	}
@@ -410,7 +418,8 @@ func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, agentID, text string, 
 	// Still under the conversation lock, so commands enter the queue in order,
 	// and before commit: a failure rolls everything back. The runtime's
 	// events wait on the same lock, so they see these rows.
-	if !(input["steer"] == true && s.steer(ctx, command, text)) {
+	steered := input["steer"] == true && s.steer(ctx, command, text)
+	if !steered {
 		queueSeq, err := s.Queue.Enqueue(ctx, agent.ID, map[string]any{
 			"command_id":     command.ID,
 			"kind":           command.Kind,
@@ -428,7 +437,7 @@ func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, agentID, text string, 
 			return nil, err
 		}
 	}
-	return &Sent{Message: message.public(), Reply: answer.public()}, nil
+	return &Sent{Message: message.public(), Reply: answer.public(), Steered: steered}, nil
 }
 
 // steer hands a steer to the agent's running turn; false if it does not

@@ -29,8 +29,10 @@ func TestMessageProvisionsRuntime(t *testing.T) {
 	if _, ok := env["AXP_SNAPSHOT_URL"]; ok {
 		t.Fatal("a snapshot to restore")
 	}
-	// Starting a runtime is invisible to the product: the reply is queued.
+	// The reply waits while the agent starts.
 	expect(t, c.replyStatus(sent), "queued")
+	expect(t, c.agentStatus(), "starting")
+	c.runtime(c.agent.ID).ready("thread-1")
 	expect(t, c.agentStatus(), "working")
 	// No second runtime while one is live.
 	c.tick()
@@ -342,6 +344,7 @@ func TestSteerJoinsTheRunningTurn(t *testing.T) {
 	r.turnStarted(command, "t")
 	c.nats.Steering = true
 	steered := c.steer("改用中文")
+	expect(t, steered.Steered, true)
 	steer := c.commandOf(steered)
 	// Handed straight to the running turn, never queued.
 	want := []map[string]any{{"type": "steer", "command_id": steer, "agent_sequence": float64(2), "text": "改用中文"}}
@@ -368,7 +371,9 @@ func TestSteerJoinsTheRunningTurn(t *testing.T) {
 func TestSteerTheTurnRefusesWaitsItsTurn(t *testing.T) {
 	c := newControl(t)
 	c.running()
-	steer := c.commandOf(c.steer("改用中文"))
+	steered := c.steer("改用中文")
+	expect(t, steered.Steered, false)
+	steer := c.commandOf(steered)
 	// With no turn to join, it is queued like any turn.
 	expect(t, c.nats.Queued(c.agent.ID)[0]["command_id"], any(steer))
 }

@@ -316,11 +316,12 @@ function Meter({
   );
 }
 
-// P parks an idle agent, N holds one waiting on the user, D drives a turn.
-const gears: { gear: string; status: Agent["status"] }[] = [
-  { gear: "P", status: "idle" },
-  { gear: "N", status: "waiting_for_input" },
-  { gear: "D", status: "working" },
+// P parks an idle agent, N holds one waiting on the user, D drives a turn
+// (or gets the agent going for one).
+const gears: { gear: string; statuses: Agent["status"][] }[] = [
+  { gear: "P", statuses: ["idle"] },
+  { gear: "N", statuses: ["waiting_for_input"] },
+  { gear: "D", statuses: ["starting", "working"] },
 ];
 
 function contextText(tokens: number | undefined) {
@@ -344,12 +345,14 @@ function Display({
   return (
     <div className="flex h-full min-h-36 flex-col justify-between bg-muted p-2.5 text-center">
       <div className="font-mono text-[11px] tracking-[0.2em] text-muted-foreground">
-        {gears.map(({ gear, status }) => (
+        {gears.map(({ gear, statuses }) => (
           <span
             key={gear}
             className={cn(
               "px-1",
-              agent?.status === status && "bg-foreground text-card",
+              agent &&
+                statuses.includes(agent.status) &&
+                "bg-foreground text-card",
             )}
           >
             {gear}
@@ -451,7 +454,7 @@ export function Overview() {
 
   const count = (status: Agent["status"]) =>
     agents.filter((agent) => agent.status === status).length;
-  const working = count("working");
+  const working = count("starting") + count("working");
   const waiting = count("waiting_for_input");
   const load = loadScale(agents.length);
 

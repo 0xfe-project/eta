@@ -41,7 +41,8 @@ func TestSnapshotContainsAgentsAndActiveReplies(t *testing.T) {
 	var snapshot chat.Snapshot
 	r.json(t, &snapshot)
 	expect(t, snapshot.Agents[0].ID, agent.ID)
-	expect(t, snapshot.Agents[0].Status, "working")
+	// The message waits on a runtime that is not there yet.
+	expect(t, snapshot.Agents[0].Status, "starting")
 	expect(t, len(snapshot.ActiveReplies), 1)
 	expect(t, snapshot.ActiveReplies[0].ID, sent.Reply.ID)
 	if _, ok := r.m(t)["messages"]; ok {
@@ -379,7 +380,29 @@ func TestEventsAreWrittenWithProjection(t *testing.T) {
 	if !reflect.DeepEqual(a, b) {
 		t.Fatalf("stored %s, sent %s", stored, reply)
 	}
-	expect(t, events[3].Payload["agent"].(map[string]any)["status"], any("working"))
+	expect(t, events[3].Payload["agent"].(map[string]any)["status"], any("starting"))
+}
+
+func TestClientChoosesTheMessageID(t *testing.T) {
+	e := newEnv(t)
+	agent := e.createAgent("开发助手")
+	id := "0b8f2a6c-58c4-4d1e-9a8e-2f0c1d3e4b5a"
+	body := map[string]any{"id": id, "agent_id": agent.ID, "text": "你好"}
+	r := e.post("/chat/messages", body, id)
+	expect(t, r.status, 202)
+	var sent chat.Sent
+	r.json(t, &sent)
+	expect(t, sent.Message.ID, id)
+	expect(t, sent.Steered, false)
+	// Sending it again, as a client does when it cannot tell whether the
+	// first try arrived, is the same message.
+	again := e.post("/chat/messages", body, id)
+	expect(t, again.status, 202)
+	var replayed chat.Sent
+	again.json(t, &replayed)
+	expect(t, replayed.Reply.ID, sent.Reply.ID)
+	expect(t, scalar[int](e, "SELECT count(*) FROM message WHERE role = 'user'"), 1)
+	expectError(t, e.post("/chat/messages", map[string]any{"id": "nope", "agent_id": agent.ID, "text": "你好"}), 422, "VALIDATION_ERROR")
 }
 
 func TestStopQueuedReplyCancels(t *testing.T) {

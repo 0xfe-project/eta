@@ -19,6 +19,7 @@ const (
 	DesiredRunning = "running"
 
 	ProductIdle            = "idle"
+	ProductStarting        = "starting"
 	ProductWorking         = "working"
 	ProductWaitingForInput = "waiting_for_input"
 	ProductUnavailable     = "unavailable"

@@ -37,6 +37,9 @@ type AgentUpdateIn struct {
 }
 
 type MessageCreateIn struct {
+	// The client's id for the message, so it knows the message when it
+	// arrives; a new UUID per message. Left out, the server picks one.
+	ID      string `json:"id,omitempty" maxLength:"64" doc:"The client's id for the message (a UUID, new per message), so it knows the message when it arrives; left out, the server picks one."`
 	AgentID string `json:"agent_id" minLength:"1" maxLength:"64"`
 	// Kept verbatim so code indentation survives.
 	Text string `json:"text" minLength:"1" maxLength:"10000" doc:"Kept verbatim so code indentation survives."`
@@ -193,7 +196,7 @@ func registerChat(api huma.API, d *Deps) {
 				in.Body.Mode = "queue"
 			}
 			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(tx pgx.Tx) (idempotency.Result[chat.Sent], error) {
-				return sent(s.SendMessage(ctx, tx, in.Body.AgentID, in.Body.Text, in.Body.Mode == "steer"))
+				return sent(s.SendMessage(ctx, tx, in.Body.AgentID, in.Body.ID, in.Body.Text, in.Body.Mode == "steer"))
 			})
 		})
 

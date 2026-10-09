@@ -22,6 +22,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
+import { create } from "zustand";
 import { ApiError, controlPlane, unwrap } from "@/lib/api";
 import { refreshLlm } from "@/queries/llm";
 
@@ -129,6 +130,9 @@ function applyEvent(queryClient: QueryClient, type: string, data: unknown) {
   }
 }
 
+/** Whether the stream dropped and has not come back yet. */
+export const useStreamLost = create<{ lost: boolean }>(() => ({ lost: false }));
+
 /** Subscribe to product events from the snapshot's cursor. */
 function useChatStream(cursor: string | undefined) {
   const queryClient = useQueryClient();
@@ -146,9 +150,11 @@ function useChatStream(cursor: string | undefined) {
     const listener = (event: MessageEvent) =>
       applyEvent(queryClient, event.type, JSON.parse(event.data));
     types.forEach((type) => source.addEventListener(type, listener));
+    source.onopen = () => useStreamLost.setState({ lost: false });
     // EventSource resumes by itself with Last-Event-ID. Once it gives up
     // (e.g. an expired cursor), reload the snapshot for a fresh cursor.
     source.onerror = () => {
+      useStreamLost.setState({ lost: true });
       if (source.readyState === EventSource.CLOSED)
         void queryClient.invalidateQueries({ queryKey: chatKey });
     };
@@ -284,12 +290,13 @@ export function useCreateAgent() {
 
 /** "queue" waits for the agent's current reply; "steer" joins it. */
 export type SendMode = "queue" | "steer";
-function addSent(queryClient: QueryClient, sent: Sent) {
+export function addSent(queryClient: QueryClient, sent: Sent) {
   update(queryClient, (s) =>
     upsertMessage(upsertMessage(s, sent.message), sent.reply),
   );
 }
 
+/** A one-off send; the chat's composer sends through the outbox instead. */
 export function useSendMessage() {
   const queryClient = useQueryClient();
   return useMutation({

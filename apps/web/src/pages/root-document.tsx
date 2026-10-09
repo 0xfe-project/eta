@@ -3,12 +3,14 @@ import { HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { AppProviders } from "@/components/providers";
 import { useWorkspaceStore } from "@/components/workspace/workspace-store";
+import { useOutbox } from "@/queries/outbox";
 
 export function RootDocument() {
-  // Saved workspace state loads after hydration, so the first client render
+  // Saved workspace state and drafts load after hydration, so the first client render
   // matches the server's.
   useEffect(() => {
     void useWorkspaceStore.persist.rehydrate();
+    void useOutbox.persist.rehydrate();
   }, []);
   const fontSans = useWorkspaceStore((s) => s.workspace.fontSans);
   const fontMono = useWorkspaceStore((s) => s.workspace.fontMono);
