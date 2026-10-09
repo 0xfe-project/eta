@@ -19,8 +19,9 @@ type Agent struct {
 	Description string   `json:"description" doc:"Instructions injected into the agent's context."`
 	Model       *string  `json:"model" doc:"Model id from the LLM gateway catalog; null until one is chosen."`
 	Plugins     []string `json:"plugins" doc:"The plugins it runs with, in catalog order."`
-	Status      string   `json:"status" enum:"idle,working,waiting_for_input,unavailable"`
-	Revision    int64    `json:"revision"`
+	// starting: its environment is being prepared for the work waiting on it.
+	Status   string `json:"status" enum:"idle,starting,working,waiting_for_input,unavailable" doc:"starting: its environment is being prepared for the work waiting on it."`
+	Revision int64  `json:"revision"`
 }
 
 // Block is a part of a message: text, or an activity (a tool call, a
@@ -166,6 +167,9 @@ type MessagePage struct {
 type Sent struct {
 	Message Message `json:"message"`
 	Reply   Message `json:"reply"`
+	// A steer that joined the running turn; false when it waits like any
+	// message.
+	Steered bool `json:"steered" doc:"A steer that joined the running turn; false when it waits like any message."`
 }
 
 // Stream events' payloads.

@@ -1,4 +1,11 @@
-import type { Block, ChatMessage, Interaction, SendMode } from "@/queries/chat";
+import type {
+  Agent,
+  Block,
+  ChatMessage,
+  Interaction,
+  SendMode,
+} from "@/queries/chat";
+import type { Outgoing } from "@/queries/outbox";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { ClaudeHeader } from "@/components/brainless/claude/claude-header";
 import { ClaudeMessage } from "@/components/brainless/claude/claude-message";
@@ -59,12 +66,25 @@ function activityTitle(block: Activity) {
   const tool = block.name || block.label;
   return block.input ? `${tool} ${block.input}` : tool;
 }
-const workingLabel: Partial<Record<ChatMessage["status"], string>> = {
-  queued: "排队中",
-  responding: "工作中",
-  waiting_for_input: "工作中",
-  stopping: "正在停止",
-};
+// Replies holding the agent's runtime; queued ones wait behind them.
+const EXECUTING = new Set<ChatMessage["status"]>([
+  "responding",
+  "waiting_for_input",
+  "stopping",
+]);
+// Failures of the agent's environment, which fail everything waiting at once.
+const ENVIRONMENT_FAILURES = new Set([
+  "AGENT_UNAVAILABLE",
+  "AGENT_RECOVERY_FAILED",
+  "AGENT_EXTENSION_FAILED",
+  "START_TIMEOUT",
+]);
+
+function messageText(message: ChatMessage | undefined) {
+  return (message?.blocks ?? [])
+    .map((block) => (block.type === "text" ? block.text : ""))
+    .join("");
+}
 
 const sessions = {
   claude: {
@@ -169,7 +189,7 @@ const sessions = {
   },
 };
 
-/** Why the composer is disabled, with up to two ways out. */
+/** A warning with the ways out of it. */
 export function ComposerNotice({
   message,
   actions,
@@ -304,8 +324,15 @@ export function ChatPanel({
   onAnswer,
   head,
   error,
+  connectionLost,
   model: modelLabel,
   blocked,
+  agentStatus,
+  outgoing,
+  onRetry,
+  onEdit,
+  onDiscard,
+  onResend,
 }: {
   theme: SessionTheme;
   agentId: string | undefined;
@@ -328,10 +355,20 @@ export function ChatPanel({
   /** Shows and switches the agent being talked to. */
   head?: React.ReactNode;
   error?: string;
+  /** The live updates dropped; what shows may be out of date. */
+  connectionLost?: boolean;
   /** The agent's model, shown where the session blocks show one. */
   model?: string;
   /** Why the composer is disabled, with the way out. */
   blocked?: React.ReactNode;
+  agentStatus?: Agent["status"];
+  /** The user's messages on their way, after the transcript. */
+  outgoing: Outgoing[];
+  onRetry: (outgoing: Outgoing) => void;
+  onEdit: (outgoing: Outgoing) => void;
+  onDiscard: (id: string) => void;
+  /** Send a failed reply's message again, as a new message. */
+  onResend: (text: string) => void;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
   const session = sessions[theme];
@@ -343,6 +380,9 @@ export function ChatPanel({
       ACTIVE_STATUSES.has(message.status) &&
       message.status !== "stopping",
   );
+  const replies = messages.filter((message) => message.role === "assistant");
+  const executing = replies.filter((message) => EXECUTING.has(message.status));
+  const queued = replies.filter((message) => message.status === "queued");
   const transcript = useTranscriptScroll({
     agentId,
     firstId: messages[0]?.id,
@@ -390,6 +430,64 @@ export function ChatPanel({
     // Sending jumps back to the live end, as in a terminal.
     transcript.toBottom();
     formRef.current?.querySelector("textarea")?.focus();
+  }
+  /**
+   * The line under a reply. Only one per agent moves: the reply at work, or
+   * the agent starting for the first one waiting.
+   */
+  function replyState(message: ChatMessage, asking: boolean) {
+    switch (message.status) {
+      case "responding":
+      case "waiting_for_input":
+        return asking ? null : <Working label="工作中" />;
+      case "stopping":
+        return <Working label="正在停止" />;
+      case "queued": {
+        const ahead = executing.length + queued.indexOf(message);
+        if (ahead === 0 && agentStatus === "starting")
+          return <Working label="正在启动智能体" />;
+        return (
+          <div className="flex flex-wrap items-baseline gap-x-3 text-[var(--terminal-muted)]">
+            <span>{ahead ? `等待中 · 前面还有 ${ahead} 条` : "等待中"}</span>
+            <button
+              type="button"
+              onClick={() => onStop(message.id)}
+              className="underline underline-offset-2 outline-none hover:text-[var(--terminal-foreground)] focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              撤回
+            </button>
+          </div>
+        );
+      }
+      case "stopped":
+        return <Warning>已停止</Warning>;
+      case "failed": {
+        const code = message.failure?.code ?? "";
+        const next = replies[replies.indexOf(message) + 1];
+        // A run of replies failed by the same environment trouble says it once.
+        const sameAsNext =
+          ENVIRONMENT_FAILURES.has(code) &&
+          next?.status === "failed" &&
+          next.failure?.code === code;
+        const text = messageText(
+          messages.find((m) => m.id === message.reply_to_id),
+        );
+        return (
+          <ComposerNotice
+            message={
+              sameAsNext
+                ? "此消息未执行，原因同下。"
+                : (message.failure?.message ?? "回复失败。")
+            }
+            actions={
+              text ? [{ label: "重新发送", onClick: () => onResend(text) }] : []
+            }
+          />
+        );
+      }
+      default:
+        return null;
+    }
   }
   const promptProps = {
     value: draft,
@@ -488,6 +586,9 @@ export function ChatPanel({
             <GrokHeader version="" headline="AXP" subhead={model} />
           )}
           {error ? <Warning>{error}</Warning> : null}
+          {connectionLost && !error ? (
+            <Warning>连接中断，正在重连…显示的状态可能不是最新的。</Warning>
+          ) : null}
           {loading && !error && !messages.length ? (
             <div role="status" className="text-[var(--terminal-muted)]">
               正在读取对话…
@@ -518,7 +619,6 @@ export function ChatPanel({
                   interaction.message_id === message.id &&
                   interaction.status === "pending",
               );
-              const working = workingLabel[message.status];
               return (
                 <div key={message.id} className={session.turnClass}>
                   {message.blocks.map((block) =>
@@ -543,20 +643,31 @@ export function ChatPanel({
                       }
                     />
                   ))}
-                  {working && pending.length === 0 ? (
-                    <Working label={working} />
-                  ) : null}
-                  {message.status === "stopped" ? (
-                    <Warning>已停止</Warning>
-                  ) : null}
-                  {message.status === "failed" ? (
-                    <Warning>
-                      {message.failure?.message ?? "回复失败。"}
-                    </Warning>
-                  ) : null}
+                  {replyState(message, pending.length > 0)}
                 </div>
               );
             })}
+            {outgoing.map((item) => (
+              <div key={item.id} className={session.turnClass}>
+                <Message role="user">
+                  <span className="whitespace-pre-wrap">{item.text}</span>
+                </Message>
+                {item.failure ? (
+                  <ComposerNotice
+                    message={item.failure}
+                    actions={[
+                      { label: "重试", onClick: () => onRetry(item) },
+                      { label: "编辑", onClick: () => onEdit(item) },
+                      { label: "丢弃", onClick: () => onDiscard(item.id) },
+                    ]}
+                  />
+                ) : (
+                  <div role="status" className="text-[var(--terminal-muted)]">
+                    发送中…
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       </div>

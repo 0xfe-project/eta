@@ -156,9 +156,15 @@ func RefreshAgentStatus(ctx context.Context, tx pgx.Tx, agentID string) error {
 		if err != nil {
 			return err
 		}
-		if slices.Contains(active, MessageWaitingForInput) {
+		switch {
+		case slices.Contains(active, MessageWaitingForInput):
 			status = ProductWaitingForInput
-		} else if len(active) > 0 {
+		case len(active) == 0:
+		case agent.Status == AgentStopped || agent.Status == AgentProvisioning || agent.Status == AgentRecovering:
+			// Work waits on its environment: a new runtime, its snapshot and
+			// thread.
+			status = ProductStarting
+		default:
 			status = ProductWorking
 		}
 	}

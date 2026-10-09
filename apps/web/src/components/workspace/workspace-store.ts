@@ -46,12 +46,10 @@ type Update<T> = T | ((state: T) => T);
 interface WorkspaceStore {
   /** Persisted in this browser. */
   workspace: WorkspaceState;
-  draft: string;
   mobilePanel: "chat" | "workspace";
   settings: SettingsState;
   agentEditor: AgentEditorState;
   setWorkspace: (update: Update<WorkspaceState>) => void;
-  setDraft: (draft: string) => void;
   setMobilePanel: (panel: "chat" | "workspace") => void;
   setSettings: (update: Update<SettingsState>) => void;
   setAgentEditor: (update: Update<AgentEditorState>) => void;
@@ -94,13 +92,11 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
   persist(
     (set) => ({
       workspace: { tasks: [], sessionTheme: "claude" },
-      draft: "",
       mobilePanel: "chat",
       settings: { open: false, section: "agents" },
       agentEditor: { open: false, agentId: null },
       setWorkspace: (update) =>
         set((s) => ({ workspace: apply(update, s.workspace) })),
-      setDraft: (draft) => set({ draft }),
       setMobilePanel: (mobilePanel) => set({ mobilePanel }),
       setSettings: (update) =>
         set((s) => ({ settings: apply(update, s.settings) })),

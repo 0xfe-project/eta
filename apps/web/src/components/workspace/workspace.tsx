@@ -1,4 +1,5 @@
 import type { WorkspaceView } from "./types";
+import { useMemo } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -8,10 +9,15 @@ import {
   useChat,
   useCompact,
   usePendingInteractions,
-  useSendMessage,
   useStopReply,
+  useStreamLost,
 } from "@/queries/chat";
 import { useModelAvailability } from "@/queries/llm";
+import {
+  useOutbox,
+  useOutboxActions,
+  useOutboxDelivery,
+} from "@/queries/outbox";
 import { AgentBar } from "./agent-bar";
 import { AgentEditor } from "./agent-editor";
 import { ChatPanel, ComposerNotice } from "./chat-panel";
@@ -29,8 +35,6 @@ export function Workspace({
   onViewChange: (view: WorkspaceView) => void;
 }) {
   const sessionTheme = useWorkspaceStore((s) => s.workspace.sessionTheme);
-  const draft = useWorkspaceStore((s) => s.draft);
-  const setDraft = useWorkspaceStore((s) => s.setDraft);
   const mobilePanel = useWorkspaceStore((s) => s.mobilePanel);
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
@@ -39,6 +43,22 @@ export function Workspace({
   usePendingTitle();
   const { current: selected, openEditor } = useAgents();
   const history = useAgentMessages(selected?.id);
+  const connectionLost = useStreamLost((s) => s.lost);
+  // The draft and the messages on their way are the selected agent's.
+  const draftKey = selected?.id ?? "";
+  const draft = useOutbox((s) => s.drafts[draftKey] ?? "");
+  const setDraft = (text: string) =>
+    useOutbox.getState().setDraft(draftKey, text);
+  const allOutgoing = useOutbox((s) => s.outgoing);
+  const arrived = useMemo(
+    () => new Set(history.messages.map((message) => message.id)),
+    [history.messages],
+  );
+  useOutboxDelivery(arrived);
+  const outbox = useOutboxActions();
+  const outgoing = allOutgoing.filter(
+    (o) => o.agentId === selected?.id && !arrived.has(o.id),
+  );
   const availability = useModelAvailability(selected);
   const changeModel = {
     label: "更换模型",
@@ -61,7 +81,6 @@ export function Workspace({
       ]}
     />
   ) : undefined;
-  const sendMessage = useSendMessage();
   const compact = useCompact();
   const stopReply = useStopReply();
   const answer = useAnswerInteraction();
@@ -125,6 +144,17 @@ export function Workspace({
             onLoadOlder={history.loadOlder}
             interactions={chat.data?.interactions ?? []}
             head={<AgentBar />}
+            agentStatus={selected?.status}
+            connectionLost={connectionLost}
+            outgoing={outgoing}
+            onRetry={outbox.retry}
+            onEdit={outbox.edit}
+            onDiscard={outbox.discard}
+            onResend={(text) => {
+              if (!selected) return;
+              if (text === "/compact") compact.mutate(selected.id, { onError });
+              else outbox.send(selected.id, text, "queue");
+            }}
             error={
               (chat.error ?? history.error)
                 ? `无法加载对话：${(chat.error ?? history.error)?.message}`
@@ -137,20 +167,17 @@ export function Workspace({
                 openEditor();
                 return;
               }
-              sendMessage.mutate(
-                { agentId: selected.id, text, mode },
-                { onSuccess: () => setDraft(""), onError },
-              );
+              // On its way: the transcript shows it from here on.
+              outbox.send(selected.id, text, mode);
+              setDraft("");
             }}
             onCompact={() => {
               if (!selected) {
                 openEditor();
                 return;
               }
-              compact.mutate(selected.id, {
-                onSuccess: () => setDraft(""),
-                onError,
-              });
+              compact.mutate(selected.id, { onError });
+              setDraft("");
             }}
             onStop={(id) => stopReply.mutate(id, { onError })}
             onAnswer={(id, value) => answer.mutate({ id, value }, { onError })}
