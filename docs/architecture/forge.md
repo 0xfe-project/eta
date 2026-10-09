@@ -59,7 +59,7 @@ GitHub App 有两种身份（[官方说明](https://docs.github.com/en/apps/crea
 任务详情（首页侧栏与全屏详情共用 `TaskProperties`）对每个 github.com 上的交付 PR 调用 `GET /api/forge/v1/pulls?url=`，显示状态（打开、草稿、已合并、已关闭）和 GitHub 的 `additions`/`deletions`；读不到时只显示“状态暂不可用”，不显示数字，也不影响详情其余部分。查询挂在任务的 query key 下，打开详情、刷新按钮和任务的修改都会重新读取；GitHub 还在计算可合并性时每 5 秒再读。
 
 - **身份**：用户授权过 App 时以用户的 token 读和合并，GitHub 按用户自己的权限判断；没有授权（或 GitHub 拒绝了它，401）时用 installation token。用户的 token 被拒（403、404）不改用 App，以免借 App 越过用户的权限。
-- **能否合并**：由 GitHub 的 `mergeable`/`mergeable_state` 和仓库的 `permissions` 得出 `ready`、`pending`（还没算出）或 `blocked`（草稿、冲突、分支保护要求未满足、落后于目标分支、没有写权限），附原因。只有 `ready` 时界面上的按钮可用。
+- **能否合并**：由 GitHub 的 `mergeable`/`mergeable_state` 得出 `ready`、`pending`（还没算出）或 `blocked`（草稿、冲突、分支保护要求未满足、落后于目标分支），附原因。以用户身份读时，仓库的 `permissions` 是用户自己的权限，没有写权限也是 `blocked`；以 App 身份读时 GitHub 对 installation token 报告的 `permissions` 全是 false（与 App 获批的权限无关），所以不看它，由 GitHub 在合并时判断。用户的 token 被拒（401）改用 App 后，按 App 身份判断。只有 `ready` 时界面上的按钮可用；`ready` 只是 AXP 看不出不能合并，以 GitHub 的合并结果为准。
 - **合并**：`POST /api/forge/v1/pulls/merge {url, head_sha}`。先重新读 PR，head 不是用户看到的 `head_sha` 就拒绝（`STALE_HEAD`），再以 `sha` 调用 GitHub 的 merge，GitHub 在这之间有新提交时回答 409，同样是 `STALE_HEAD`。合并方式取仓库允许的第一个：squash、merge commit、rebase。不传 admin 覆盖、不开 auto-merge、不删分支。同一个 PR 同时只有一个合并（`MERGE_IN_PROGRESS`），前端也防重复点击。
 - **结果未知**：GitHub 没有回答（断线、超时、5xx）时不重试，而是再读一次 PR：已在 `head_sha` 合并即为成功，否则回答 `MERGE_UNKNOWN`，界面重新读取 PR 状态，由用户确认后再决定。
 - **合并并完成任务**：下拉菜单的“合并并标记任务完成”在合并成功之后才走现有的 `PATCH /api/v1/tasks/{id}`（`status: done`），收尾照旧。两步不在一个事务里：完成失败时提示“PR 已合并，任务未完成”，“标记任务完成”只重试改状态，不再合并。GitHub 上已合并、任务还没完成时同样提供这个按钮。
@@ -67,7 +67,7 @@ GitHub App 有两种身份（[官方说明](https://docs.github.com/en/apps/crea
 ## 验证
 
 - `apps/forge-service/internal/server`：测试对着 [emulate](https://github.com/vercel-labs/emulate)（forge-service 的开发依赖，`bun install` 安装）模拟的 GitHub 运行：App 的 JWT 校验、installation token 的权限、分支、开 PR 及其作者都是它的真实行为。它缺的或行为不同的几处（manifest 换凭据、`/installation/repositories`、同一分支重复开 PR 的 422、被删除的 App，以及用户授权的 client secret 校验、过期与刷新、`/user/installations` 和撤销）由测试里一层很薄的处理补上，其余请求原样转发。`open_pull_request` 通过 MCP 客户端调用，与 Codex 一样。
-- `apps/forge-service/internal/server/pulls_test.go`：同一个 emulate 上读 PR、草稿不能合并、读不到的 PR、过期的 head（本地检查与 GitHub 的 409）、合并成功、GitHub 已合并但回答丢失（核实为成功）、GitHub 失败（`MERGE_UNKNOWN`，没有合并）。
+- `apps/forge-service/internal/server/pulls_test.go`：同一个 emulate 上读 PR、草稿不能合并、读不到的 PR、过期的 head（本地检查与 GitHub 的 409）、合并成功、GitHub 已合并但回答丢失（核实为成功）、GitHub 失败（`MERGE_UNKNOWN`，没有合并）；以及仓库权限按 GitHub 的真实形状报告时（emulate 总报告全为 true，测试那层按用例改写）：App 身份权限全 false 仍能合并、用户没有写权限不能合并且不调用 GitHub、用户的 token 被拒后以 App 判断并合并、GitHub 拒绝用户的合并（403）不改用 App。
 - `apps/web/src/components/workspace/task-pulls.test.tsx`：增删行数、读不到时不显示数字、不能合并时禁用并说明原因、按看到的 head 合并且只发一次、合并并完成时完成失败后只重试改状态、没有回答时重新读取而不重试。
 - `apps/agent-runtime/tests/test_runtime.py`：runtime 对假的 forge 服务写出 gh 的 `hosts.yml` 与 commit 身份，断开后删除。
 - 在开发环境中用浏览器走过向导：提交 manifest 后跳转到 GitHub，回调出错时显示原因；安装与已连接状态的界面。创建真实的 App 需要用户在 GitHub 上确认，没有自动化。
