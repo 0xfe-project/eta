@@ -85,6 +85,8 @@ class StubControlPlane:
         self.refused: list[int] = []
         self.down = False
         self.lock = threading.Lock()
+        # The turns snapshots were uploaded after.
+        self.snapshot_commands: list[str] = []
 
     def heartbeat(self, body):
         self.heartbeats.append(body)
@@ -111,7 +113,8 @@ class StubControlPlane:
             self.events.extend(events)
         return {"acked_source_seq": events[-1]["source_seq"]}
 
-    def snapshot_upload_url(self):
+    def snapshot_upload_url(self, command_id):
+        self.snapshot_commands.append(command_id)
         return SNAPSHOT_URL
 
     def types(self):
@@ -600,6 +603,8 @@ class TestSnapshots:
         types = cp.types()
         assert types.index("turn.completed") < types.index("snapshot.saved")
         assert SNAPSHOT_URL in rt.objects
+        # Named after the turn it follows.
+        assert cp.snapshot_commands == [command_id]
 
     def test_the_reply_does_not_wait_for_the_upload(self, rt):
         uploading = threading.Event()

@@ -10,6 +10,7 @@ import (
 
 	"github.com/akarachen/axp/apps/control-plane/internal/auth"
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
+	"github.com/akarachen/axp/apps/control-plane/internal/snapshots"
 )
 
 func TestMessageProvisionsRuntime(t *testing.T) {
@@ -459,7 +460,7 @@ func TestLostRuntimeIsFencedThenReplaced(t *testing.T) {
 	c := newControl(t)
 	sent, r, command := c.running()
 	r.turnStarted(command, "t")
-	c.s3.snapshots[c.agent.ID] = true
+	saved := c.s3.add(c.agent.ID, snapshots.KindTurn, command)
 	old, _ := c.liveInstance(c.agent.ID)
 	container := scalar[string](c.env, "SELECT container_id FROM runtime_instance WHERE id = $1", old)
 	c.expireLeases()
@@ -478,7 +479,7 @@ func TestLostRuntimeIsFencedThenReplaced(t *testing.T) {
 	expect(t, generation, int64(2))
 	env := c.driver.started[len(c.driver.started)-1].Env
 	expect(t, env["AXP_THREAD_ID"], "thread-1")
-	expect(t, env["AXP_SNAPSHOT_URL"], "http://s3.test/get/"+c.agent.ID)
+	expect(t, env["AXP_SNAPSHOT_URL"], "http://s3.test/get/"+saved.ID)
 	// The old runtime is rejected from now on.
 	expect(t, r.heartbeat("ready").status, 409)
 }
@@ -536,7 +537,9 @@ func TestRuntimeGetsAnUploadURLForItsOwnAgentOnly(t *testing.T) {
 	c := newControl(t)
 	_, r, _ := c.running()
 	resp := r.call(http.MethodPost, "snapshot", nil)
-	expect(t, resp.m(t)["upload_url"], any("http://s3.test/put/"+c.agent.ID))
+	if url, _ := resp.m(t)["upload_url"].(string); !strings.HasPrefix(url, "http://s3.test/put/"+c.agent.ID+"/") {
+		t.Fatalf("upload url %q", url)
+	}
 	// A fenced instance gets nothing.
 	c.expireLeases()
 	c.tick()

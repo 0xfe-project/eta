@@ -200,10 +200,19 @@ func (p *Protocol) PostEvents(ctx context.Context, instance *chat.RuntimeRecord,
 	return acked, err
 }
 
-// UploadURL is where the instance uploads its agent's next snapshot; only
-// its own agent's.
-func (p *Protocol) UploadURL(ctx context.Context, instance *chat.RuntimeRecord) (string, error) {
-	return p.Snapshots.UploadURL(ctx, instance.AgentID)
+// UploadURL is where the instance uploads its agent's next snapshot, after
+// the turn of commandID; only its own agent's. An instance started before
+// the user restored an earlier snapshot holds the home that was rolled
+// back: its snapshot would undo the restore, so it gets none.
+func (p *Protocol) UploadURL(ctx context.Context, instance *chat.RuntimeRecord, commandID string) (string, error) {
+	latest, err := snapshots.Latest(ctx, p.Snapshots, instance.AgentID)
+	if err != nil {
+		return "", err
+	}
+	if latest != nil && latest.Kind == snapshots.KindRestore && latest.SavedAt.After(instance.CreatedAt) {
+		return "", apierr.New(409, "SNAPSHOT_SUPERSEDED", "快照已回滚，这个运行实例的状态不再保存。")
+	}
+	return p.Snapshots.UploadURL(ctx, instance.AgentID, commandID)
 }
 
 // AgentFor answers the runtime gateway: which agent holds the runtime key

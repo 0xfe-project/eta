@@ -145,6 +145,7 @@ func connect(ctx context.Context) (*services, error) {
 			DB:        pool,
 			Chat:      chatService,
 			Protocol:  &control.Protocol{DB: pool, Chat: chatService, Snapshots: s3, Secret: []byte(cfg.SecretKey)},
+			Snapshots: s3,
 			Tasks:     taskService,
 			PublicURL: cfg.PublicURL, ForgeURL: cfg.ForgeURL, RemoteDist: cfg.RemoteDist,
 			Dev: cfg.Dev,

@@ -367,6 +367,66 @@ export function useCreateAgent() {
   });
 }
 
+/** A copy of the agent that starts from its newest snapshot. */
+export function useDuplicateAgent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) =>
+      unwrap(
+        controlPlane.POST("/api/v1/agents/{agent_id}/duplicate", {
+          params: { path: { agent_id: id } },
+        }),
+      ),
+    onSuccess: (agent) =>
+      update(queryClient, (s) => ({ ...s, agents: upsert(s.agents, agent) })),
+  });
+}
+
+const snapshotsKey = (agentId: string) =>
+  ["chat", "snapshots", agentId] as const;
+
+/** The agent's snapshots, newest (current) first. */
+export function useAgentSnapshots(agentId: string) {
+  return useQuery({
+    queryKey: snapshotsKey(agentId),
+    queryFn: async ({ signal }) =>
+      (
+        await unwrap(
+          controlPlane.GET("/api/v1/agents/{agent_id}/snapshots", {
+            params: { path: { agent_id: agentId } },
+            signal,
+          }),
+        )
+      ).snapshots,
+  });
+}
+
+/** Goes back to an earlier snapshot; the next runtime starts from it. */
+export function useRestoreSnapshot() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      agentId,
+      snapshotId,
+    }: {
+      agentId: string;
+      snapshotId: string;
+    }) =>
+      (
+        await unwrap(
+          controlPlane.POST(
+            "/api/v1/agents/{agent_id}/snapshots/{snapshot_id}/restore",
+            {
+              params: { path: { agent_id: agentId, snapshot_id: snapshotId } },
+            },
+          ),
+        )
+      ).snapshots,
+    onSuccess: (snapshots, { agentId }) =>
+      queryClient.setQueryData(snapshotsKey(agentId), snapshots),
+  });
+}
+
 /** "queue" waits for the agent's current reply; "steer" joins it. */
 export type SendMode = "queue" | "steer";
 export function addSent(queryClient: QueryClient, sent: Sent) {

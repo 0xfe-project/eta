@@ -8,6 +8,7 @@ package api
 import (
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
 	"github.com/akarachen/axp/apps/control-plane/internal/control"
+	"github.com/akarachen/axp/apps/control-plane/internal/snapshots"
 	"github.com/akarachen/axp/apps/control-plane/internal/tasks"
 	"github.com/akarachen/axp/packages/service-go/httpapi"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,7 +19,9 @@ type Deps struct {
 	DB       *pgxpool.Pool
 	Chat     *chat.Service
 	Protocol *control.Protocol
-	Tasks    *tasks.Service
+	// Agents' snapshots (S3).
+	Snapshots snapshots.Store
+	Tasks     *tasks.Service
 	// Where remote computers reach AXP; the browser's address when empty.
 	PublicURL string
 	// The forge service, for remote computers' GitHub credentials.

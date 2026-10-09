@@ -1,5 +1,6 @@
 import type { Agent } from "@/queries/chat";
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/ArrowClockwise";
+import { CopyIcon } from "@phosphor-icons/react/Copy";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
@@ -18,7 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { useRestartAgent } from "@/queries/chat";
+import { useDuplicateAgent, useRestartAgent } from "@/queries/chat";
 import { useModelAvailability } from "@/queries/llm";
 import { DeleteAgentDialog } from "./agent-editor";
 import { AgentAvatar, AgentStatus } from "./agent-identity";
@@ -27,6 +28,7 @@ import { useAgents } from "./use-agents";
 function AgentRow({ agent }: { agent: Agent }) {
   const { openEditor } = useAgents();
   const restart = useRestartAgent();
+  const duplicate = useDuplicateAgent();
   const [confirming, setConfirming] = useState(false);
   const instructions = agent.description.trim();
   const availability = useModelAvailability(agent);
@@ -108,6 +110,19 @@ function AgentRow({ agent }: { agent: Agent }) {
           >
             <ArrowClockwiseIcon aria-hidden="true" />
             重启
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={duplicate.isPending}
+            onSelect={() =>
+              duplicate.mutate(agent.id, {
+                onSuccess: (copy) =>
+                  toast.success(`已复制为「${copy.name}」，从它最近的快照开始`),
+                onError: (error) => toast.error(error.message),
+              })
+            }
+          >
+            <CopyIcon aria-hidden="true" />
+            复制
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem

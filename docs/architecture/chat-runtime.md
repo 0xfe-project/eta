@@ -75,12 +75,17 @@ AXP 是单用户服务，所有智能体属于唯一的默认对话（`conversat
 
 ## 快照
 
-一个 Agent 的全部状态是容器里的 `/agent`：`workspace/`（工作区，Codex 的 cwd）和 `codex/`（`CODEX_HOME`）。它的快照是 S3 桶 `axp-agents` 里的一个对象 `agents/<id>/snapshot.tar.zst`，即这个目录的 tar 包，用多线程 zstd 压缩（Codex 的锁文件、`tmp` 和已安装的 plugin `codex/plugins/cache` 除外）。
+一个 Agent 的全部状态是容器里的 `/agent`：`workspace/`（工作区，Codex 的 cwd）和 `codex/`（`CODEX_HOME`）。快照是这个目录的 tar 包，用多线程 zstd 压缩（Codex 的锁文件、`tmp` 和已安装的 plugin `codex/plugins/cache` 除外），存在 S3 桶 `axp-agents` 的 `agents/<id>/snapshots/<时间>-<类型>-<引用>.tar.zst`：每个 turn 之后一份（类型 `turn`，引用是那条命令），只保留最近 5 份（`snapshots.Keep`，每份最大 2 GiB），新的上传前删掉多出来的。对象名以纳秒时间开头，按名字排序就是时间顺序；S3 本身就是记录，没有表。保留历史之前的单个对象 `agents/<id>/snapshot.tar.zst` 仍被认作最旧的一份（`legacy`）。
+
+最新的一份就是下一个实例启动时恢复的那份。因此（#102）：
+
+- **回到之前的快照**（智能体设置里的“快照”，`POST /agents/{id}/snapshots/{snapshot}/restore`）把那一份复制成最新的（类型 `restore`，引用原快照），并像重启一样递增 `config_version`，下一个实例从它恢复工作区和 Codex thread，之后的改动和对话它都不再记得；对话记录仍然显示。智能体有回复在进行、或刚结束的回合快照还在上传时返回 409 `AGENT_BUSY`。回滚之前启动的实例再来要上传地址时得到 409 `SNAPSHOT_SUPERSEDED`（它的状态是被撤销的那份），不会盖掉回滚。处于 `recovery_failed`/`error` 的智能体回滚后恢复可用：恢复失败不再是死路。
+- **复制智能体**（`POST /agents/{id}/duplicate`，设置里智能体的“复制”）先把它最新的快照复制到新智能体名下（类型 `copy`），再建一个同名加“ 副本”、同指令、模型和插件的智能体，并沿用原来的 thread id：副本从这份快照恢复同一个 thread，之后各走各的。对话记录不复制。两个智能体可以有同一个 thread id（迁移 0011 去掉了这个唯一约束），因为每个 runtime 只读自己的那份 home。
 
 - 每个 turn（包括压缩、被停止和失败的 turn）结束后，runtime 先发出 `turn.completed`（回复立即显示完成，不等上传），再打包上传快照，之后发出 `snapshot.saved` 或 `snapshot.failed`；下一条命令等上传结束才开始。controller 判断实例是否空闲时，把“最后一个 `turn.completed` 之后还没有快照事件”算作忙，所以空闲停机、换配置停机都不会打断上传，也不会丢掉已完成 turn 的改动。
-- 上传地址由 `POST /internal/v1/runtime-instances/{id}/snapshot` 签发，只指向该实例所属 Agent 的对象，已失效的实例拿不到地址。runtime 不持有任何存储凭据，容器不挂载任何卷，也不需要额外权限。
+- 上传地址由 `POST /internal/v1/runtime-instances/{id}/snapshot`（请求体带这一回合的 `command_id`）签发，只指向该实例所属 Agent 的新对象，已失效的实例拿不到地址。runtime 不持有任何存储凭据，容器不挂载任何卷，也不需要额外权限。
 - 上传失败或超过 2 GiB 时 runtime 发出 `snapshot.failed`，控制面把原因记在 `agent_session.last_error`，直到下一次 `snapshot.saved`；turn 照常完成，下一次快照会带上全部改动。
-- controller 启动实例前检查对象是否存在，存在就把预签名下载地址交给 runtime；下载或解包失败时实例以 `RECOVERY_*` 报告 `recovery_failed`。
+- controller 启动实例前取最新的一份，有就把它的预签名下载地址交给 runtime；下载或解包失败时实例以 `RECOVERY_*` 报告 `recovery_failed`。
 - 账本（命令、审批、outbox）只在实例内存里，不进快照。
 - 两个 turn 之间后台进程写入的文件，在下一次快照时才会保存；宿主机崩溃会丢掉正在执行的那个 turn 的改动。
 

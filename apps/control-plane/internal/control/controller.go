@@ -273,8 +273,9 @@ func (c *Controller) Provision(ctx context.Context, agentID string) error {
 	if err != nil {
 		return err
 	}
-	// Every container starts empty; the agent's home comes from its snapshot.
-	restore, err := c.Snapshots.Exists(ctx, agentID)
+	// Every container starts empty; the agent's home comes from its newest
+	// snapshot.
+	restore, err := snapshots.Latest(ctx, c.Snapshots, agentID)
 	if err != nil {
 		return err
 	}
@@ -358,7 +359,7 @@ func instructions(agent *chat.AgentRecord) string {
 }
 
 func (c *Controller) spec(ctx context.Context, agent *chat.AgentRecord, instance *chat.RuntimeRecord,
-	session *chat.SessionRecord, restore bool) (container.Spec, error) {
+	session *chat.SessionRecord, restore *snapshots.Snapshot) (container.Spec, error) {
 	plugins := agent.Plugins
 	if plugins == nil {
 		plugins = []string{}
@@ -402,8 +403,8 @@ func (c *Controller) spec(ctx context.Context, agent *chat.AgentRecord, instance
 			"axp.runtime.generation="+generation,
 		),
 	}
-	if restore {
-		url, err := c.Snapshots.DownloadURL(ctx, agent.ID)
+	if restore != nil {
+		url, err := c.Snapshots.DownloadURL(ctx, *restore)
 		if err != nil {
 			return container.Spec{}, err
 		}

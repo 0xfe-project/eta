@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -21,6 +22,7 @@ import (
 	"github.com/akarachen/axp/apps/control-plane/internal/llm"
 	"github.com/akarachen/axp/apps/control-plane/internal/plugins"
 	"github.com/akarachen/axp/apps/control-plane/internal/queue/queuetest"
+	"github.com/akarachen/axp/apps/control-plane/internal/snapshots"
 	"github.com/akarachen/axp/apps/control-plane/internal/store"
 	"github.com/akarachen/axp/packages/service-go/pg/pgtest"
 	"github.com/google/uuid"
@@ -103,17 +105,61 @@ func (f *fakeDriver) wasStopped(id string) bool {
 	return false
 }
 
-// fakeS3 is agent snapshots, by agent id, behind presigned-looking URLs.
-type fakeS3 struct{ snapshots map[string]bool }
+// fakeS3 is agents' snapshots, newest first, behind presigned-looking
+// URLs. An upload URL counts as the upload.
+type fakeS3 struct {
+	mu        sync.Mutex
+	n         int
+	snapshots map[string][]snapshots.Snapshot
+}
 
-func (f *fakeS3) Exists(_ context.Context, agentID string) (bool, error) {
-	return f.snapshots[agentID], nil
+func (f *fakeS3) add(agentID, kind, ref string) snapshots.Snapshot {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.n++
+	s := snapshots.Snapshot{ID: fmt.Sprintf("%03d-%s-%s", f.n, kind, ref), Kind: kind, Ref: ref,
+		SavedAt: time.Now().Add(time.Duration(f.n) * time.Microsecond), Size: int64(f.n)}
+	f.snapshots[agentID] = append([]snapshots.Snapshot{s}, f.snapshots[agentID]...)
+	return s
 }
-func (f *fakeS3) UploadURL(_ context.Context, agentID string) (string, error) {
-	return "http://s3.test/put/" + agentID, nil
+
+func (f *fakeS3) List(_ context.Context, agentID string) ([]snapshots.Snapshot, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.snapshots[agentID]), nil
 }
-func (f *fakeS3) DownloadURL(_ context.Context, agentID string) (string, error) {
-	return "http://s3.test/get/" + agentID, nil
+
+func (f *fakeS3) UploadURL(_ context.Context, agentID, commandID string) (string, error) {
+	f.mu.Lock()
+	if list := f.snapshots[agentID]; len(list) >= snapshots.Keep {
+		f.snapshots[agentID] = list[:snapshots.Keep-1]
+	}
+	f.mu.Unlock()
+	return "http://s3.test/put/" + agentID + "/" + f.add(agentID, snapshots.KindTurn, commandID).ID, nil
+}
+
+func (f *fakeS3) DownloadURL(_ context.Context, s snapshots.Snapshot) (string, error) {
+	return "http://s3.test/get/" + s.ID, nil
+}
+
+func (f *fakeS3) Restore(ctx context.Context, agentID, id string) (*snapshots.Snapshot, error) {
+	list, _ := f.List(ctx, agentID)
+	for _, s := range list {
+		if s.ID == id {
+			restored := f.add(agentID, snapshots.KindRestore, id)
+			return &restored, nil
+		}
+	}
+	return nil, nil
+}
+
+func (f *fakeS3) CopyLatest(ctx context.Context, from, to string) (bool, error) {
+	list, _ := f.List(ctx, from)
+	if len(list) == 0 {
+		return false, nil
+	}
+	f.add(to, snapshots.KindCopy, from)
+	return true, nil
 }
 
 // --- the environment ---------------------------------------------------------------
@@ -142,7 +188,7 @@ func newEnv(t *testing.T) *env {
 		nats:   queuetest.New(),
 		models: &fakeCatalog{},
 		driver: &fakeDriver{states: map[string]string{}},
-		s3:     &fakeS3{snapshots: map[string]bool{}},
+		s3:     &fakeS3{snapshots: map[string][]snapshots.Snapshot{}},
 		secret: []byte("test-secret"),
 	}
 	e.models.set(llm.Model{ID: testModel, DisplayName: "Test Model", Available: true})
@@ -152,9 +198,10 @@ func newEnv(t *testing.T) *env {
 	}
 	e.chat = chatService
 	deps := &Deps{
-		DB:       e.db,
-		Chat:     chatService,
-		Protocol: &control.Protocol{DB: e.db, Chat: chatService, Snapshots: e.s3, Secret: e.secret},
+		DB:        e.db,
+		Chat:      chatService,
+		Protocol:  &control.Protocol{DB: e.db, Chat: chatService, Snapshots: e.s3, Secret: e.secret},
+		Snapshots: e.s3,
 	}
 	e.public = Public(deps).Router
 	e.internal = Internal(deps).Router

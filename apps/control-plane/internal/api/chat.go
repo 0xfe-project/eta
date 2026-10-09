@@ -63,6 +63,10 @@ func cleanName(name *string) error {
 	return nil
 }
 
+type SnapshotList struct {
+	Snapshots []chat.AgentSnapshot `json:"snapshots"`
+}
+
 type AgentPath struct {
 	AgentID string `path:"agent_id"`
 }
@@ -174,6 +178,67 @@ func registerChat(api huma.API, d *Deps) {
 				return struct{}{}, s.RestartAgent(ctx, tx, in.AgentID)
 			})
 			return nil, err
+		})
+
+	huma.Register(api, op("listAgentSnapshots", http.MethodGet, "/api/v1/agents/{agent_id}/snapshots",
+		"The agent's snapshots: its home after each of its last turns, newest first", 200, "chat"),
+		func(ctx context.Context, in *AgentPath) (*httpapi.Body[SnapshotList], error) {
+			list, err := s.Snapshots(ctx, d.DB, d.Snapshots, in.AgentID)
+			if err != nil {
+				return nil, err
+			}
+			return &httpapi.Body[SnapshotList]{Body: SnapshotList{list}}, nil
+		})
+
+	huma.Register(api, op("restoreAgentSnapshot", http.MethodPost, "/api/v1/agents/{agent_id}/snapshots/{snapshot_id}/restore",
+		"Go back to an earlier snapshot: the agent's next runtime starts from it", 200, "chat"),
+		func(ctx context.Context, in *struct {
+			AgentPath
+			SnapshotID string `path:"snapshot_id" maxLength:"200"`
+		}) (*httpapi.Body[SnapshotList], error) {
+			err := pg.InTx(ctx, d.DB, func(tx pgx.Tx) error {
+				if err := s.PrepareRestore(ctx, tx, in.AgentID); err != nil {
+					return err
+				}
+				restored, err := d.Snapshots.Restore(ctx, in.AgentID, in.SnapshotID)
+				if err != nil {
+					return err
+				}
+				if restored == nil {
+					return apierr.NotFound()
+				}
+				return s.Restored(ctx, tx, in.AgentID)
+			})
+			if err != nil {
+				return nil, err
+			}
+			list, err := s.Snapshots(ctx, d.DB, d.Snapshots, in.AgentID)
+			if err != nil {
+				return nil, err
+			}
+			return &httpapi.Body[SnapshotList]{Body: SnapshotList{list}}, nil
+		})
+
+	huma.Register(api, op("duplicateAgent", http.MethodPost, "/api/v1/agents/{agent_id}/duplicate",
+		"A copy of the agent that starts from its newest snapshot, with its own conversation", 201, "chat"),
+		func(ctx context.Context, in *AgentPath) (*httpapi.Body[chat.Agent], error) {
+			id, ok := pg.ParseID(in.AgentID)
+			if !ok {
+				return nil, apierr.NotFound()
+			}
+			newID := pg.NewID()
+			// Copied first: a copy that has the thread also has its home.
+			copied, err := d.Snapshots.CopyLatest(ctx, id, newID)
+			if err != nil {
+				return nil, err
+			}
+			agent, err := pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (*chat.Agent, error) {
+				return s.DuplicateAgent(ctx, tx, id, newID, copied)
+			})
+			if err != nil {
+				return nil, err
+			}
+			return &httpapi.Body[chat.Agent]{Body: *agent}, nil
 		})
 
 	sent := func(sent *chat.Sent, err error) (idempotency.Result[chat.Sent], error) {

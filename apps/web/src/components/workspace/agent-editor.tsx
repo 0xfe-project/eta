@@ -37,6 +37,7 @@ import {
 } from "@/queries/chat";
 import { useConnectors, useModels } from "@/queries/llm";
 import { AgentAvatar } from "./agent-identity";
+import { AgentSnapshots } from "./agent-snapshots";
 import { Select, SelectGroup, SelectOption } from "./select-field";
 import { useAgents } from "./use-agents";
 import { useWorkspaceStore } from "./workspace-store";
@@ -373,6 +374,7 @@ function AgentEditorForm({
             </p>
           </div>
         ) : null}
+        {agent ? <AgentSnapshots agent={agent} /> : null}
         <div className="space-y-1.5">
           <div className="flex items-baseline justify-between gap-2">
             <Label htmlFor="agent-description">指令</Label>

@@ -463,7 +463,7 @@ class Runtime:
         self.settings.workspace_dir.mkdir(exist_ok=True)
         self.settings.codex_home.mkdir(exist_ok=True)
 
-    def _save_snapshot(self) -> None:
+    def _save_snapshot(self, command_id: str) -> None:
         """Upload the agent's home. A failure is reported, never fatal: the
         next snapshot carries everything since."""
         started = time.monotonic()
@@ -482,7 +482,7 @@ class Runtime:
                     logger.error("Snapshot of %d bytes is over the limit", size)
                     reason = "SNAPSHOT_TOO_LARGE"
                 else:
-                    upload(self.cp.snapshot_upload_url(), archive)
+                    upload(self.cp.snapshot_upload_url(command_id), archive)
                     reason = None
         except Fenced:
             self.fence()
@@ -1028,7 +1028,7 @@ class Runtime:
                 "status": {"succeeded": "completed"}.get(status, status),
             },
         )
-        self._save_snapshot()
+        self._save_snapshot(command_id)
 
     def _wait_outbox_drained(self, timeout: float) -> None:
         deadline = time.monotonic() + timeout

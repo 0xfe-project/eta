@@ -185,17 +185,22 @@ func (s *Service) CreateAgent(ctx context.Context, tx pgx.Tx, name, description 
 	if err := LockConversation(ctx, tx, conversationID); err != nil {
 		return nil, err
 	}
+	return insertAgent(ctx, tx, conversationID, pg.NewID(), name, description, model, chosen)
+}
+
+func insertAgent(ctx context.Context, tx pgx.Tx, conversationID, id, name, description string, model *string,
+	plugins []string) (*Agent, error) {
 	now := pg.Now()
 	agent := &AgentRecord{
-		ID: pg.NewID(), ConversationID: conversationID, Name: name, Description: description,
-		Model: model, Plugins: chosen, DesiredState: DesiredStopped, Status: AgentStopped,
+		ID: id, ConversationID: conversationID, Name: name, Description: description,
+		Model: model, Plugins: plugins, DesiredState: DesiredStopped, Status: AgentStopped,
 		ProductStatus: ProductIdle, ProductRevision: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO agent (id, conversation_id, name, description, model, plugins,
 		desired_state, status, generation, config_version, product_status, product_revision,
 		last_command_seq, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, 'stopped', 'stopped', 0, 0, 'idle', 1, 0, $7, $7)`,
-		agent.ID, conversationID, name, description, model, chosen, now); err != nil {
+		agent.ID, conversationID, name, description, model, plugins, now); err != nil {
 		return nil, err
 	}
 	if err := emitAgent(ctx, tx, agent); err != nil {

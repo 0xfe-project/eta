@@ -70,6 +70,11 @@ type ThreadOut struct {
 	ThreadID string `json:"thread_id"`
 }
 
+// SnapshotIn names the turn a snapshot follows (older runtimes send none).
+type SnapshotIn struct {
+	CommandID string `json:"command_id,omitempty" maxLength:"64" pattern:"^[0-9a-fA-F-]*$"`
+}
+
 type UploadOut struct {
 	UploadURL string `json:"upload_url"`
 }
@@ -154,12 +159,19 @@ func registerInternal(api huma.API, d *Deps) {
 
 	huma.Register(api, internalOp("snapshotUploadURL", http.MethodPost, "/internal/v1/runtime-instances/{instance_id}/snapshot",
 		"Where to upload the agent's next snapshot", 200, "runtime instances"),
-		func(ctx context.Context, in *InstancePath) (*httpapi.Body[UploadOut], error) {
-			runtime, err := instance(ctx, *in)
+		func(ctx context.Context, in *struct {
+			InstancePath
+			Body *SnapshotIn
+		}) (*httpapi.Body[UploadOut], error) {
+			runtime, err := instance(ctx, in.InstancePath)
 			if err != nil {
 				return nil, err
 			}
-			url, err := p.UploadURL(ctx, runtime)
+			commandID := ""
+			if in.Body != nil {
+				commandID = in.Body.CommandID
+			}
+			url, err := p.UploadURL(ctx, runtime, commandID)
 			if err != nil {
 				return nil, err
 			}

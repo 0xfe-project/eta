@@ -56,8 +56,11 @@ class ControlPlane:
     def post_events(self, events: list[dict]) -> dict:
         return self._request("POST", f"{self.base}/events", {"events": events})
 
-    def snapshot_upload_url(self) -> str:
-        return self._request("POST", f"{self.base}/snapshot")["upload_url"]
+    def snapshot_upload_url(self, command_id: str) -> str:
+        """Where the snapshot after the turn of command_id goes."""
+        return self._request(
+            "POST", f"{self.base}/snapshot", {"command_id": command_id}
+        )["upload_url"]
 
 
 def upload(url: str, path) -> None:
