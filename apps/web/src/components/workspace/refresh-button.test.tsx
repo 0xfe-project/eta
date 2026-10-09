@@ -5,7 +5,14 @@ import { createRoot } from "react-dom/client";
 import { toast } from "sonner";
 import { RoutineBoard } from "./routine-board";
 import { TaskBoard } from "./task-board";
+import { WorkspacePanel } from "./workspace-panel";
 import { useWorkspaceStore } from "./workspace-store";
+
+rstest.mock("@tanstack/react-router", () => ({
+  Link: ({ children, ...props }: React.ComponentProps<"a">) => (
+    <a {...props}>{children}</a>
+  ),
+}));
 
 const navigation = rstest.hoisted(() => ({
   task: null as string | null,
@@ -67,7 +74,7 @@ const routine = {
   ],
 };
 const cleanup: (() => void)[] = [];
-async function render(page: "tasks" | "routines") {
+async function render(page: "tasks" | "routines", panel = false) {
   const client = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity, retry: false } },
   });
@@ -83,7 +90,13 @@ async function render(page: "tasks" | "routines") {
   await act(async () =>
     root.render(
       <QueryClientProvider client={client}>
-        {page === "tasks" ? <TaskBoard /> : <RoutineBoard />}
+        {panel ? (
+          <WorkspacePanel view={page} onViewChange={navigation.set} />
+        ) : page === "tasks" ? (
+          <TaskBoard />
+        ) : (
+          <RoutineBoard />
+        )}
       </QueryClientProvider>,
     ),
   );
@@ -98,7 +111,7 @@ const refresh = (container: HTMLElement) =>
   container.querySelector<HTMLButtonElement>('button[aria-label="刷新"]')!;
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
 
-describe("page refresh", () => {
+describe.each([false, true])("refresh (sidebar: %s)", (panel) => {
   afterEach(async () => {
     await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
     navigation.task =
@@ -128,7 +141,7 @@ describe("page refresh", () => {
           resolve = done;
         }),
     );
-    const container = await render("tasks");
+    const container = await render("tasks", panel);
     const group = container.querySelector<HTMLButtonElement>(
       'button[aria-expanded="true"]',
     )!;
@@ -178,7 +191,7 @@ describe("page refresh", () => {
         }),
       ),
     );
-    const container = await render("routines");
+    const container = await render("routines", panel);
     const input = container.querySelector<HTMLTextAreaElement>(
       'textarea[aria-label="反馈"]',
     )!;
@@ -216,50 +229,54 @@ describe("page refresh", () => {
           ),
         );
       });
-    const container = await render("tasks");
+    const container = await render("tasks", panel);
     await act(async () => {
       refresh(container).click();
       await settle();
     });
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(panel ? 1 : 2);
     expect(
       fetch.mock.calls.every(
         ([request]) => (request as Request).method === "GET",
       ),
     ).toBe(true);
     expect(container.textContent).toContain("最新说明");
-    expect(
-      container.querySelector<HTMLSelectElement>('select[aria-label="状态"]')!
-        .value,
-    ).toBe("in_review");
+    if (!panel)
+      expect(
+        container.querySelector<HTMLSelectElement>('select[aria-label="状态"]')!
+          .value,
+      ).toBe("in_review");
     expect(navigation.task).toBe("t1");
     expect(navigation.set).not.toHaveBeenCalled();
   });
 
-  it("keeps the board view when refreshed task statuses change", async () => {
-    useWorkspaceStore.getState().setWorkspace((workspace) => ({
-      ...workspace,
-      taskLayout: "board",
-      taskScope: "all",
-    }));
-    rstest.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          tasks: [{ ...task, status: "in_review" }],
-          assignees: [],
-        }),
-      ),
-    );
-    const container = await render("tasks");
-    await act(async () => {
-      refresh(container).click();
-      await settle();
-    });
-    expect(
-      container.querySelector('section[aria-label="待验收"]')?.textContent,
-    ).toContain("测试任务");
-    expect(useWorkspaceStore.getState().workspace.taskLayout).toBe("board");
-  });
+  it.skipIf(panel)(
+    "keeps the board view when refreshed task statuses change",
+    async () => {
+      useWorkspaceStore.getState().setWorkspace((workspace) => ({
+        ...workspace,
+        taskLayout: "board",
+        taskScope: "all",
+      }));
+      rstest.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            tasks: [{ ...task, status: "in_review" }],
+            assignees: [],
+          }),
+        ),
+      );
+      const container = await render("tasks", panel);
+      await act(async () => {
+        refresh(container).click();
+        await settle();
+      });
+      expect(
+        container.querySelector('section[aria-label="待验收"]')?.textContent,
+      ).toContain("测试任务");
+      expect(useWorkspaceStore.getState().workspace.taskLayout).toBe("board");
+    },
+  );
 
   it("disables routine refresh while its query is already fetching", async () => {
     let resolve!: (response: Response) => void;
@@ -269,7 +286,7 @@ describe("page refresh", () => {
           resolve = done;
         }),
     );
-    const container = await render("routines");
+    const container = await render("routines", panel);
     await act(async () => {
       refresh(container).click();
       await settle();
@@ -290,7 +307,7 @@ describe("page refresh", () => {
         .spyOn(globalThis, "fetch")
         .mockRejectedValue(new Error("网络断开"));
       const error = rstest.spyOn(toast, "error");
-      const container = await render(page);
+      const container = await render(page, panel);
       await act(async () => {
         refresh(container).click();
         await settle();
