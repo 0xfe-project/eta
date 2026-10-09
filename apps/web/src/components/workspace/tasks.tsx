@@ -45,6 +45,7 @@ import { cn } from "@/lib/utils";
 import { useSendMessage } from "@/queries/chat";
 import {
   useCommentTask,
+  useConfirmRun,
   useCreateTask,
   useDeleteTask,
   useInterruptRun,
@@ -477,6 +478,73 @@ function StopRun({ task, run }: { task: string; run: TaskRun }) {
   );
 }
 
+/**
+ * A run an AXP agent asked for: nothing reaches the remote agent until the
+ * user lets it go, or stops it.
+ */
+function AwaitingRun({
+  task,
+  run,
+  activity,
+}: {
+  task: TaskDetail;
+  run: TaskRun;
+  activity: TaskActivity;
+}) {
+  const confirm = useConfirmRun();
+  const interrupt = useInterruptRun();
+  const busy = confirm.isPending || interrupt.isPending;
+  return (
+    <div className="space-y-1">
+      <p className="text-muted-foreground wrap-anywhere">
+        AXP 智能体请求交给{" "}
+        {remoteLabel({
+          computer_name: run.computer_name,
+          runtime: run.runtime,
+          provider: run.provider,
+        })}{" "}
+        <Time at={activity.created_at} />
+      </p>
+      {run.status === "awaiting_confirmation" ? (
+        <div className="-ml-2 flex flex-wrap items-center gap-x-1">
+          <span className="px-2 text-xs">
+            远程智能体在你的电脑上有完全权限；确认任务说明和评论没问题再交给它。
+          </span>
+          <Button
+            size="xs"
+            disabled={busy}
+            onClick={() =>
+              confirm.mutate(
+                { id: task.id, run: run.id },
+                { onError: showError },
+              )
+            }
+          >
+            交给它
+          </Button>
+          <Button
+            variant="ghost"
+            size="xs"
+            disabled={busy}
+            onClick={() =>
+              interrupt.mutate(
+                { id: task.id, run: run.id },
+                { onError: showError },
+              )
+            }
+          >
+            不交
+          </Button>
+        </div>
+      ) : (
+        <span className="text-xs text-muted-foreground">
+          {runStatusLabels[run.status]}
+        </span>
+      )}
+    </div>
+  );
+}
+
 /** A run's state: pulsing while at work, red when it failed. */
 function RunStatusText({ run }: { run: TaskRun }) {
   if (isActive(run.status))
@@ -684,7 +752,10 @@ function describe(a: TaskActivity): React.ReactNode {
     case "cleanup":
       return a.body ?? "收尾完成";
     case "run_queued":
-      return null;
+      // Only one an AXP agent asked for is news: it waits for the user.
+      return d.awaiting_confirmation === true ? "请求交给远程智能体" : null;
+    case "run_confirmed":
+      return "同意交给远程智能体";
     case "run_started":
       return "开始工作";
     case "run_completed":
@@ -713,6 +784,7 @@ const minor = new Set<string>([
   "cleanup",
   "run_completed",
   "run_nudged",
+  "run_confirmed",
 ]);
 
 /** The timeline's entries: single events, and runs of minor ones. */
@@ -991,11 +1063,13 @@ export function Timeline({ task }: { task: TaskDetail }) {
               </Folded>
             </Entry>
           );
-        const run = a.kind === "run_started" && a.run_id && runs.get(a.run_id);
+        const run = a.run_id ? runs.get(a.run_id) : undefined;
         return (
           <Entry key={a.id} last={last} mark={dot(a.kind === "run_failed")}>
-            {run ? (
+            {run && a.kind === "run_started" ? (
               <RunEntry task={task} run={run} activity={a} />
+            ) : run && a.kind === "run_queued" ? (
+              <AwaitingRun task={task} run={run} activity={a} />
             ) : (
               <EventLine a={a} />
             )}

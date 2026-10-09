@@ -357,7 +357,7 @@ func (s *Service) DeleteComputer(ctx context.Context, tx pgx.Tx, id string) erro
 	}
 	reason := "电脑已移除。"
 	runs, err := pg.All[runRow](ctx, tx, `SELECT * FROM task_run WHERE computer_id = $1
-		AND status IN ('queued', 'starting', 'running') FOR UPDATE`, r.ID)
+		AND status IN ('awaiting_confirmation', 'queued', 'starting', 'running') FOR UPDATE`, r.ID)
 	if err != nil {
 		return err
 	}

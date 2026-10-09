@@ -26,6 +26,7 @@ export const statusLabel = (status: TaskStatus) =>
   statuses.find((s) => s.value === status)?.label ?? status;
 
 export const runStatusLabels: Record<RunStatus, string> = {
+  awaiting_confirmation: "等你确认",
   queued: "排队中",
   starting: "启动中",
   running: "工作中",

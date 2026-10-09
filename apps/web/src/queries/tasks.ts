@@ -169,6 +169,17 @@ export function useInterruptRun() {
   );
 }
 
+/** Lets a run an AXP agent asked for go to the remote agent. */
+export function useConfirmRun() {
+  return useTaskMutation(({ id, run }: { id: string; run: string }) =>
+    unwrap(
+      controlPlane.POST("/api/v1/tasks/{task_id}/runs/{run_id}/confirm", {
+        params: { path: { task_id: id, run_id: run } },
+      }),
+    ),
+  );
+}
+
 export function useDeleteTask() {
   const queryClient = useQueryClient();
   return useMutation({

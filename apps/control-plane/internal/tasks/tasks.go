@@ -39,6 +39,8 @@ const (
 
 // Run statuses. A run is active while starting or running.
 const (
+	// An AXP agent asked for it: it waits for the user to confirm it.
+	RunAwaiting  = "awaiting_confirmation"
 	RunQueued    = "queued"
 	RunStarting  = "starting"
 	RunRunning   = "running"
@@ -203,7 +205,7 @@ type Task struct {
 	Status    string        `json:"status" enum:"backlog,todo,in_progress,in_review,done,blocked,cancelled"`
 	Assignee  TaskAssignee  `json:"assignee"`
 	CreatedBy TaskCreator   `json:"created_by"`
-	RunStatus *string       `json:"run_status" nullable:"true" enum:"queued,starting,running,completed,failed,cancelled" doc:"The latest run's status."`
+	RunStatus *string       `json:"run_status" nullable:"true" enum:"awaiting_confirmation,queued,starting,running,completed,failed,cancelled" doc:"The latest run's status."`
 	Comments  int64         `json:"comments"`
 	CreatedAt jsontime.Time `json:"created_at"`
 	UpdatedAt jsontime.Time `json:"updated_at"`
@@ -228,7 +230,7 @@ type TaskActivity struct {
 
 type TaskRun struct {
 	ID           string         `json:"id"`
-	Status       string         `json:"status" enum:"queued,starting,running,completed,failed,cancelled"`
+	Status       string         `json:"status" enum:"awaiting_confirmation,queued,starting,running,completed,failed,cancelled" doc:"awaiting_confirmation: an AXP agent asked for it; it waits for the user to confirm."`
 	ComputerID   *string        `json:"computer_id" nullable:"true"`
 	ComputerName *string        `json:"computer_name" nullable:"true"`
 	Runtime      string         `json:"runtime"`
@@ -506,7 +508,7 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, in Input, by Actor) (*T
 		}
 	}
 	if r.Assignee == "remote" && workable(r.Status) {
-		if err := s.enqueue(ctx, tx, r, initialPrompt(r)); err != nil {
+		if err := s.enqueue(ctx, tx, r, initialPrompt(r), by); err != nil {
 			return nil, err
 		}
 	}
@@ -591,13 +593,13 @@ func (s *Service) Update(ctx context.Context, tx pgx.Tx, ref string, c Changes, 
 		}
 		// Taking a remote task out of the backlog starts it.
 		if !reassigned && r.Assignee == "remote" && !workable(from) && workable(r.Status) {
-			if err := s.startIfIdle(ctx, tx, r); err != nil {
+			if err := s.startIfIdle(ctx, tx, r, by); err != nil {
 				return nil, err
 			}
 		}
 	}
 	if reassigned && r.Assignee == "remote" && workable(r.Status) {
-		if err := s.enqueue(ctx, tx, r, initialPrompt(r)); err != nil {
+		if err := s.enqueue(ctx, tx, r, initialPrompt(r), by); err != nil {
 			return nil, err
 		}
 	}
@@ -644,13 +646,13 @@ func setStatus(ctx context.Context, tx pgx.Tx, r *taskRow, status string, by Act
 }
 
 // startIfIdle queues the first brief when the remote agent has no run yet.
-func (s *Service) startIfIdle(ctx context.Context, tx pgx.Tx, r *taskRow) error {
+func (s *Service) startIfIdle(ctx context.Context, tx pgx.Tx, r *taskRow, by Actor) error {
 	started, err := pg.Exists(ctx, tx, `SELECT 1 FROM task_run WHERE task_id = $1 AND computer_id = $2
 		AND runtime = $3 AND provider = $4 AND status <> 'cancelled'`, r.ID, *r.ComputerID, *r.Runtime, *r.Provider)
 	if err != nil || started {
 		return err
 	}
-	return s.enqueue(ctx, tx, r, initialPrompt(r))
+	return s.enqueue(ctx, tx, r, initialPrompt(r), by)
 }
 
 func (s *Service) Delete(ctx context.Context, tx pgx.Tx, ref string) error {
@@ -684,7 +686,7 @@ func (s *Service) Comment(ctx context.Context, tx pgx.Tx, ref, body string, by A
 		return nil, err
 	}
 	if r.Assignee == "remote" && workable(r.Status) {
-		if err := s.enqueue(ctx, tx, r, followUpPrompt(r, by, body)); err != nil {
+		if err := s.enqueue(ctx, tx, r, followUpPrompt(r, by, body), by); err != nil {
 			return nil, err
 		}
 	}
@@ -694,20 +696,56 @@ func (s *Service) Comment(ctx context.Context, tx pgx.Tx, ref, body string, by A
 // --- runs ----------------------------------------------------------------------------------
 
 // enqueue queues a run for the task's remote agent; the runner starts it
-// once the task has no other active run.
-func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, r *taskRow, prompt string) error {
-	id := pg.NewID()
+// once the task has no other active run. One an AXP agent caused waits for
+// the user to confirm it first: remote agents run with full access on the
+// user's computer, and an agent in a container may have been led astray by
+// what it read (a prompt injection), so only the user lets work cross that
+// line.
+func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, r *taskRow, prompt string, by Actor) error {
+	id, status := pg.NewID(), RunQueued
+	if by.Kind == ActorAgent {
+		status = RunAwaiting
+	}
 	if _, err := tx.Exec(ctx, `INSERT INTO task_run (id, task_id, computer_id, runtime, provider, status, prompt, created_at)
-		VALUES ($1, $2, $3, $4, $5, 'queued', $6, $7)`, id, r.ID, *r.ComputerID, *r.Runtime, *r.Provider, prompt, pg.Now()); err != nil {
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, id, r.ID, *r.ComputerID, *r.Runtime, *r.Provider, status, prompt, pg.Now()); err != nil {
 		return err
 	}
-	return record(ctx, tx, r.ID, &id, "run_queued", System, nil, nil)
+	return record(ctx, tx, r.ID, &id, "run_queued", System, nil, map[string]any{"awaiting_confirmation": status == RunAwaiting})
+}
+
+// ConfirmRun lets a run an AXP agent asked for go to the remote agent.
+func (s *Service) ConfirmRun(ctx context.Context, tx pgx.Tx, ref, runID string) (*TaskDetail, error) {
+	r, err := find(ctx, tx, ref, true)
+	if err != nil {
+		return nil, err
+	}
+	id, ok := pg.ParseID(runID)
+	if !ok {
+		return nil, apierr.NotFound()
+	}
+	run, err := pg.One[runRow](ctx, tx, "SELECT * FROM task_run WHERE id = $1 AND task_id = $2 FOR UPDATE", id, r.ID)
+	if err != nil {
+		return nil, err
+	}
+	if run == nil {
+		return nil, apierr.NotFound()
+	}
+	if run.Status != RunAwaiting {
+		return nil, apierr.New(409, "RUN_NOT_AWAITING", "这次运行不在等待确认。")
+	}
+	if _, err := tx.Exec(ctx, "UPDATE task_run SET status = 'queued' WHERE id = $1", run.ID); err != nil {
+		return nil, err
+	}
+	if err := record(ctx, tx, r.ID, &run.ID, "run_confirmed", User, nil, nil); err != nil {
+		return nil, err
+	}
+	return detail(ctx, tx, r)
 }
 
 // stopRuns cancels queued runs and asks the active one to stop.
 func (s *Service) stopRuns(ctx context.Context, tx pgx.Tx, taskID, reason string) error {
 	runs, err := pg.All[runRow](ctx, tx, `SELECT * FROM task_run WHERE task_id = $1
-		AND status IN ('queued', 'starting', 'running') FOR UPDATE`, taskID)
+		AND status IN ('awaiting_confirmation', 'queued', 'starting', 'running') FOR UPDATE`, taskID)
 	if err != nil {
 		return err
 	}
@@ -748,7 +786,7 @@ func (s *Service) Interrupt(ctx context.Context, tx pgx.Tx, ref, runID string) (
 		if _, err := tx.Exec(ctx, "UPDATE task_run SET interrupt_requested_at = $2 WHERE id = $1", run.ID, pg.Now()); err != nil {
 			return nil, err
 		}
-	case RunQueued, RunStarting:
+	case RunAwaiting, RunQueued, RunStarting:
 		reason := "已停止。"
 		if err := finishRun(ctx, tx, run, RunCancelled, &reason); err != nil {
 			return nil, err

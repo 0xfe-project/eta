@@ -571,6 +571,7 @@ func TestPublicSchemaHasNoInternalFields(t *testing.T) {
 		"/api/v1/computers/{computer_id}/runtimes/{kind}/approve",
 		"/api/v1/computers/{computer_id}/runtimes/{kind}/places", "/api/v1/plugins",
 		"/api/v1/tasks", "/api/v1/tasks/{task_id}", "/api/v1/tasks/{task_id}/comments",
+		"/api/v1/tasks/{task_id}/runs/{run_id}/confirm",
 		"/api/v1/tasks/{task_id}/runs/{run_id}/interrupt", "/api/v1/tasks/{task_id}/runs/{run_id}/log",
 	}
 	if !slices.Equal(paths, want) {

@@ -951,6 +951,64 @@ func (e *taskEnv) mcpCall(agentID, tool string, args map[string]any) map[string]
 	return v
 }
 
+// Work an AXP agent sends to a remote computer (creating, commenting on,
+// reassigning or taking up a remote task) waits for the user: nothing reaches
+// the remote agent until they confirm it in the task.
+func TestRemoteWorkAnAgentAsksForWaitsForTheUser(t *testing.T) {
+	e := newTaskEnv(t)
+	computer, _ := e.computer("laptop", "paseo")
+	agent := e.createAgent("helper")
+	e.mcpCall(agent.ID, "create_task", map[string]any{
+		"title": "Fix the login page", "assignee": remoteAssignee(computer, "paseo", newWorktree),
+	})
+	run := e.task("1").Runs[0]
+	expect(t, run.Status, "awaiting_confirmation")
+	e.runner.Tick(e.ctx)
+	if len(e.relay.calls) != 0 {
+		t.Fatalf("the remote computer was called before the user confirmed: %v", e.relay.calls)
+	}
+	// The agent cannot confirm it: the tasks plugin has no such tool.
+	if r := e.post("/tasks/1/runs/"+run.ID+"/confirm", nil); r.status != 200 {
+		t.Fatalf("confirm: %d %s", r.status, r.body)
+	}
+	expect(t, e.task("1").Runs[0].Status, "queued")
+	e.runner.Tick(e.ctx)
+	expect(t, e.task("1").Runs[0].Status, "running")
+	expectError(t, e.post("/tasks/1/runs/"+run.ID+"/confirm", nil), 409, "RUN_NOT_AWAITING")
+
+	// Its comment on the running task is a follow-up that waits too.
+	e.mcpCall(agent.ID, "comment_task", map[string]any{"task": "1", "body": "Also check Safari."})
+	runs := e.task("1").Runs
+	expect(t, len(runs), 2)
+	followUp := runs[0]
+	if followUp.Status != "awaiting_confirmation" {
+		followUp = runs[1]
+	}
+	expect(t, followUp.Status, "awaiting_confirmation")
+	// Stopping it instead cancels it.
+	if r := e.post("/tasks/1/runs/"+followUp.ID+"/interrupt", nil); r.status != 200 {
+		t.Fatalf("interrupt: %d %s", r.status, r.body)
+	}
+	for _, r := range e.task("1").Runs {
+		if r.ID == followUp.ID {
+			expect(t, r.Status, "cancelled")
+		}
+	}
+}
+
+// The user's own requests go straight to the remote agent, as before.
+func TestRemoteWorkTheUserAsksForIsNotHeld(t *testing.T) {
+	e := newTaskEnv(t)
+	computer, _ := e.computer("laptop", "paseo")
+	e.create(remoteAssignee(computer, "paseo", newWorktree))
+	expect(t, e.task("1").Runs[0].Status, "queued")
+	agent := e.createAgent("helper")
+	// An agent reassigning a task to a remote computer is held as well.
+	e.post("/tasks", map[string]any{"title": "Second", "assignee": map[string]any{"kind": "user"}})
+	e.mcpCall(agent.ID, "update_task", map[string]any{"task": "2", "assignee": remoteAssignee(computer, "paseo", newWorktree)})
+	expect(t, e.task("2").Runs[0].Status, "awaiting_confirmation")
+}
+
 func TestAgentsUseTheBoard(t *testing.T) {
 	e := newTaskEnv(t)
 	computer, _ := e.computer("laptop", "paseo")

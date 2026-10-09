@@ -195,6 +195,19 @@ func registerTasks(api huma.API, d *Deps) {
 			return &httpapi.Body[tasks.TaskDetail]{Body: *t}, nil
 		})
 
+	// Only here, for the user: not in the tasks plugin's MCP server.
+	huma.Register(api, taskOp("confirmTaskRun", http.MethodPost, "/api/v1/tasks/{task_id}/runs/{run_id}/confirm",
+		"Let a run an AXP agent asked for go to the remote agent", 200, "tasks"),
+		func(ctx context.Context, in *TaskRunPath) (*httpapi.Body[tasks.TaskDetail], error) {
+			t, err := pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (*tasks.TaskDetail, error) {
+				return s.ConfirmRun(ctx, tx, in.TaskID, in.RunID)
+			})
+			if err != nil {
+				return nil, err
+			}
+			return &httpapi.Body[tasks.TaskDetail]{Body: *t}, nil
+		})
+
 	huma.Register(api, taskOp("getTaskRunLog", http.MethodGet, "/api/v1/tasks/{task_id}/runs/{run_id}/log",
 		"The remote agent's recent transcript, read from it now", 200, "tasks"),
 		func(ctx context.Context, in *RunLogIn) (*httpapi.Body[RunLog], error) {

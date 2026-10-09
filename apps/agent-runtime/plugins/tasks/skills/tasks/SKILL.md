@@ -18,7 +18,10 @@ belongs there.
 
 A remote agent starts on the task as soon as it is assigned (unless it is in
 the backlog) and reports back as comments. Every comment you or the user add
-while it is assigned reaches it as a follow-up. It sets the task to
+while it is assigned reaches it as a follow-up. What you send it (assigning
+or creating a remote task, taking it out of the backlog, commenting on it)
+waits until the user confirms it on the task: remote agents have full access
+to the user's computer. Tell the user it is waiting for them. It sets the task to
 in_review when its work is ready; checking that work and marking the task
 done is the user's call unless they ask you to. A done task's worktree (or
 the agent AXP started in an existing workspace) is archived.
