@@ -35,7 +35,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -1012,6 +1011,7 @@ export function Timeline({ task }: { task: TaskDetail }) {
 export function CommentBox({ task }: { task: TaskDetail }) {
   const [text, setText] = useState("");
   const comment = useCommentTask();
+  const [feedback, setFeedback] = useState(false);
   const remote = task.assignee.kind === "remote";
   const submit = () => {
     const body = text.trim();
@@ -1022,48 +1022,60 @@ export function CommentBox({ task }: { task: TaskDetail }) {
     );
   };
   return (
-    <form
-      className="space-y-2"
-      onSubmit={(e) => {
-        e.preventDefault();
-        submit();
-      }}
-    >
-      <Textarea
-        id={commentBoxId}
-        aria-label={remote ? "追问" : "评论"}
-        placeholder={
-          remote
-            ? `追问 ${assigneeLabel(task.assignee)}，支持 Markdown`
-            : "写一条评论，支持 Markdown"
-        }
-        rows={2}
-        maxLength={20000}
-        className="min-h-16 text-sm md:text-sm"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-            e.preventDefault();
-            submit();
-          }
+    <>
+      <form
+        className="space-y-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
         }}
-      />
-      <div className="flex justify-end">
-        <Button
-          type="submit"
-          size="sm"
-          disabled={!text.trim() || comment.isPending}
-        >
-          {remote ? "发送追问" : "评论"}
-        </Button>
-      </div>
-    </form>
+      >
+        <Textarea
+          id={commentBoxId}
+          aria-label={remote ? "追问" : "评论"}
+          placeholder={
+            remote
+              ? `追问 ${assigneeLabel(task.assignee)}，支持 Markdown`
+              : "写一条评论，支持 Markdown"
+          }
+          rows={2}
+          maxLength={20000}
+          className="min-h-16 text-sm md:text-sm"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+        />
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setFeedback(true)}
+          >
+            <RobotIcon aria-hidden="true" />
+            让智能体反馈
+          </Button>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={!text.trim() || comment.isPending}
+          >
+            {remote ? "发送追问" : "评论"}
+          </Button>
+        </div>
+      </form>
+      <FeedbackDialog task={task} open={feedback} onOpenChange={setFeedback} />
+    </>
   );
 }
 
 /** Ask one of the AXP agents to look at the task and give feedback on it. */
-export function FeedbackDialog({
+function FeedbackDialog({
   task,
   open,
   onOpenChange,
@@ -1354,7 +1366,6 @@ function AssigneeRow({ task }: { task: TaskDetail }) {
 function TaskView({ task }: { task: TaskDetail }) {
   const [, setNav] = useTaskNav();
   const remove = useDeleteTask();
-  const [feedback, setFeedback] = useState(false);
   return (
     <article className="space-y-4">
       <header className="space-y-1">
@@ -1367,11 +1378,6 @@ function TaskView({ task }: { task: TaskDetail }) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => setFeedback(true)}>
-                <RobotIcon aria-hidden="true" />
-                让智能体反馈
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
               <DropdownMenuItem
                 variant="destructive"
                 onSelect={() =>
@@ -1404,7 +1410,6 @@ function TaskView({ task }: { task: TaskDetail }) {
         <Timeline task={task} />
         <CommentBox task={task} />
       </section>
-      <FeedbackDialog task={task} open={feedback} onOpenChange={setFeedback} />
     </article>
   );
 }

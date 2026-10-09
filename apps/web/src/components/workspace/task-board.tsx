@@ -7,7 +7,6 @@ import { KanbanIcon } from "@phosphor-icons/react/Kanban";
 import { ListIcon } from "@phosphor-icons/react/List";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
-import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Empty, LoadError, Loading } from "@/components/states";
@@ -22,7 +21,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -50,7 +48,6 @@ import {
   Comments,
   Description,
   EditableTitle,
-  FeedbackDialog,
   Question,
   RunState,
   TaskForm,
@@ -321,7 +318,6 @@ function TaskPage({ id }: { id: string }) {
   const [, setNav] = useTaskNav();
   const { data: task, isPending, error, refetch } = useTask(id);
   const remove = useDeleteTask();
-  const [feedback, setFeedback] = useState(false);
   const back = () => void setNav({ task: null });
   const crumbs = (
     <>
@@ -360,10 +356,6 @@ function TaskPage({ id }: { id: string }) {
     <>
       <PageHeader title={crumbs}>
         <RefreshButton resource="tasks" />
-        <Button size="sm" variant="outline" onClick={() => setFeedback(true)}>
-          <RobotIcon aria-hidden="true" />
-          让智能体反馈
-        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon-sm" aria-label="更多">
@@ -371,10 +363,6 @@ function TaskPage({ id }: { id: string }) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => setFeedback(true)}>
-              让智能体反馈
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
             <DropdownMenuItem
               variant="destructive"
               onSelect={() =>
@@ -419,7 +407,6 @@ function TaskPage({ id }: { id: string }) {
           </TaskProperties>
         </aside>
       </main>
-      <FeedbackDialog task={task} open={feedback} onOpenChange={setFeedback} />
     </>
   );
 }
