@@ -23,7 +23,9 @@
 3. runtime 启动：下载并解开 Agent 的快照（有的话）→ 安装镜像里的 Codex plugin（见下文）→ 启动 Codex app-server → 用控制面记录的 thread id 恢复（只有首次才 `thread/start`；无法恢复时报告 `recovery_failed`，绝不另起 thread）→ 心跳报告 ready → 开始读队列。
 4. runtime 空闲时从队列取一条命令，确认后执行；一次一条（部分唯一索引兜底）。
 5. runtime 先记账再调用 `turn/start`；Codex 通知被转换成有序 outbox 事件（`turn.started`、`item.updated`、`approval.*`、`turn.completed` 等），增量文本每 0.3 秒合并一次。turn 结束后先上传快照（见下文），再发出 `turn.completed`。
-6. 内部事件接口按 `source_seq` 连续导入 `agent_event`（缺口返回 `409 EVENT_GAP` 与下一期望序号，重复事件幂等，内容不同则冲突），同事务内投影为消息块、交互和 `ui_event`，SSE 推给浏览器。
+6. 内部事件接口按 `source_seq` 连续导入 `agent_event`（缺口返回 `409 EVENT_GAP` 与下一期望序号，重复事件幂等，内容不同则冲突），同事务内投影为消息块、交互和 `ui_event`，SSE 推给浏览器。字符串里的 NUL 字符在写入 jsonb 前去掉。
+
+outbox 的送达：批次按实际发送的 UTF-8 JSON 字节计，最多 1 MiB（接口收 4 MiB），回复文本最多 100,000 字。接口以 400、413、422 拒收时 runtime 把批次减半；单条仍被拒，就在同一 `source_seq` 发一个 `event.rejected` 占位，后面的事件（尤其 `turn.completed`）照常送达，被拒的不是显示条目（`item.updated`）时实例报告 `error`（`EVENT_REJECTED`）。已确认的事件从 outbox 删除。
 
 停止：命令还在队列里时从队列删除，直接取消。已被 runtime 取走的记录 `interrupt_requested_at`、回复置为 `stopping`，并发给 runtime 一条中断；runtime 以 `turn.completed(interrupted)` 确认后回复才变为 `stopped`。仍在 `stopping` 时再点停止会再发一次。
 
@@ -64,9 +66,9 @@ AXP 是单用户服务，所有智能体属于唯一的默认对话（`conversat
 
 - 心跳续租（默认 30 秒）。租约过期时 controller 先停止并移除旧容器，再结束实例；之后旧实例的任何请求都得到 `409 STALE_GENERATION`，runtime 收到后立即退出。
 - 实例结束时，容器连同上次快照之后的改动一起消失；它从队列取走的命令以“执行中断，无法确认结果，未自动重试”失败，绝不重放。仍在队列里的命令由下一个实例执行。
-- Codex 进程在 turn 中途退出时，该命令同样以执行中断失败，实例报告 `error`。
+- Codex 进程在 turn 中途退出，或 runtime 的任何后台线程意外出错时，实例停掉 Codex，执行中的命令同样以执行中断失败，实例报告 `error`。GitHub 凭据刷新失败只记日志，稍后重试。
 - plugin 安装失败（`PLUGIN_INSTALL_FAILED`，回复显示“智能体扩展启动失败”）、快照无法下载或解开等使 runtime 停在未就绪状态；排队与派发中的回复以中文原因失败，Agent 显示为“不可用”。之后的新消息会让 controller 换一代实例重试；从未就绪过的实例有 30 秒的退避。
-- 实例 120 秒内没有就绪时，该 Agent 的队列被清空，等待中的消息以“准备超时”失败。
+- 实例创建后 120 秒内没有就绪（`ready_at` 为空）时，该 Agent 的队列被清空，等待中的消息以“准备超时”失败；一直报告 `starting` 的心跳不会把租约续过这个期限。
 - 空闲超过 10 分钟的实例会被停止；下一条消息会重新拉起，从快照恢复同一 thread。
 
 ## 快照

@@ -81,6 +81,8 @@ func (s *Service) ImportEvents(ctx context.Context, tx pgx.Tx, instanceID string
 	}
 	p := &projection{s: s, tx: tx, agentID: instance.AgentID, instance: instance}
 	for _, event := range events {
+		// jsonb holds no NUL characters; command output can (find -print0).
+		event.Payload, _ = withoutNUL(event.Payload).(map[string]any)
 		seq := event.SourceSeq
 		if seq <= instance.LastSourceSeq {
 			var existingID string
@@ -136,6 +138,30 @@ func (s *Service) ImportEvents(ctx context.Context, tx pgx.Tx, instanceID string
 		return 0, err
 	}
 	return instance.LastSourceSeq, nil
+}
+
+// withoutNUL is the JSON value with NUL characters taken out of its strings.
+func withoutNUL(v any) any {
+	switch v := v.(type) {
+	case string:
+		return strings.ReplaceAll(v, "\x00", "")
+	case map[string]any:
+		if v == nil {
+			return v
+		}
+		out := make(map[string]any, len(v))
+		for key, value := range v {
+			out[strings.ReplaceAll(key, "\x00", "")] = withoutNUL(value)
+		}
+		return out
+	case []any:
+		out := make([]any, len(v))
+		for i, value := range v {
+			out[i] = withoutNUL(value)
+		}
+		return out
+	}
+	return v
 }
 
 func samePayload(stored []byte, payload map[string]any) bool {
