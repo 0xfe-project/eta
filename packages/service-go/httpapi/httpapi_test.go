@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/akarachen/axp/packages/service-go/apierr"
 	"github.com/danielgtaylor/huma/v2"
@@ -95,5 +98,146 @@ func TestRequestsAreAnsweredAndIdentified(t *testing.T) {
 	}
 	if status, out, _ := do(t, "GET", "/api/test/openapi.json", ""); status != 200 || out["openapi"] == nil {
 		t.Fatalf("openapi %d", status)
+	}
+}
+
+// freeAddr is a local address nothing listens on.
+func freeAddr(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
+	return addr
+}
+
+// serve runs Serve with a handler that blocks every request until release
+// closes, and waits until it accepts connections. entered gets one value per
+// request that has reached the handler.
+func serve(t *testing.T, drain time.Duration) (addr string, entered chan struct{}, release chan struct{}, cancel context.CancelFunc, served chan error) {
+	t.Helper()
+	addr = freeAddr(t)
+	entered, release, served = make(chan struct{}, 1), make(chan struct{}), make(chan error, 1)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		entered <- struct{}{}
+		<-release
+		_, _ = io.WriteString(w, "done")
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go func() { served <- Serve(ctx, addr, handler, drain) }()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		conn, err := net.Dial("tcp", addr)
+		if err == nil {
+			_ = conn.Close()
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("server never listened: %v", err)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// stoppedListening waits until addr refuses connections, which Shutdown
+// does before it waits for requests.
+func stoppedListening(t *testing.T, addr string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		conn, err := net.Dial("tcp", addr)
+		if err != nil {
+			return
+		}
+		_ = conn.Close()
+		if time.Now().After(deadline) {
+			t.Fatal("server still listening after its context ended")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func TestServeDrainsRequestsBeforeReturning(t *testing.T) {
+	addr, entered, release, cancel, served := serve(t, 10*time.Second)
+
+	type response struct {
+		body string
+		err  error
+	}
+	answered := make(chan response, 1)
+	go func() {
+		res, err := http.Get("http://" + addr + "/")
+		if err != nil {
+			answered <- response{err: err}
+			return
+		}
+		defer res.Body.Close()
+		body, err := io.ReadAll(res.Body)
+		answered <- response{string(body), err}
+	}()
+	<-entered
+	cancel()
+	stoppedListening(t, addr)
+
+	select {
+	case err := <-served:
+		t.Fatalf("Serve returned (%v) with a request in flight", err)
+	default:
+	}
+
+	close(release)
+	res := <-answered
+	if res.err != nil || res.body != "done" {
+		t.Fatalf("response = %q, %v; want the full body", res.body, res.err)
+	}
+	select {
+	case err := <-served:
+		if err != nil {
+			t.Fatalf("Serve = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve did not return after the request finished")
+	}
+}
+
+func TestServeGivesUpAfterTheDrain(t *testing.T) {
+	addr, entered, release, cancel, served := serve(t, 50*time.Millisecond)
+	defer close(release)
+	go func() {
+		if res, err := http.Get("http://" + addr + "/"); err == nil {
+			_ = res.Body.Close()
+		}
+	}()
+	<-entered
+	cancel()
+	select {
+	case err := <-served:
+		if err != nil {
+			t.Fatalf("Serve = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve waited past the drain for a request that never finishes")
+	}
+}
+
+func TestServeReturnsWhenItCannotListen(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	served := make(chan error, 1)
+	// ctx never ends: Serve must not wait for a shutdown that never starts.
+	go func() { served <- Serve(context.Background(), ln.Addr().String(), http.NotFoundHandler(), time.Second) }()
+	select {
+	case err := <-served:
+		if err == nil || errors.Is(err, http.ErrServerClosed) {
+			t.Fatalf("Serve = %v; want the listen error", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve hung after failing to listen")
 	}
 }
