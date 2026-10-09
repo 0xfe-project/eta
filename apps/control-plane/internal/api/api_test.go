@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
 	"github.com/akarachen/axp/apps/control-plane/internal/llm"
@@ -514,6 +515,36 @@ func TestStreamHeaderTakesPrecedenceAndCursorsAreChecked(t *testing.T) {
 	expect(t, rec.code, 200)
 	expect(t, rec.header.Get("Content-Type"), "text/event-stream")
 	expect(t, rec.header.Get("Cache-Control"), "no-cache")
+}
+
+// Events past their retention are deleted; a browser whose cursor points
+// into what was deleted, or is too far behind, reloads its snapshot (410).
+func TestOldEventsArePrunedAndOldCursorsExpire(t *testing.T) {
+	e := newEnv(t)
+	agent := e.createAgent("开发助手")
+	e.send(agent.ID, "一")
+	old := scalar[int64](e, "SELECT last_ui_event_seq FROM conversation")
+	e.exec("UPDATE ui_event SET created_at = now() - interval '8 days'")
+	e.send(agent.ID, "二")
+	if err := chat.Prune(e.ctx, e.db, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, scalar[int64](e, "SELECT min(seq) FROM ui_event"), old+1)
+	cursors := chat.Cursors{Secret: e.secret}
+	expectError(t, e.get("/chat/stream", "cursor", cursors.Event(1)), 410, "CURSOR_EXPIRED")
+	if _, err := e.chat.StreamStart(e.ctx, e.db, cursors.Event(old)); err != nil {
+		t.Fatalf("a cursor at what is kept: %v", err)
+	}
+	// Far behind: a snapshot is cheaper than replaying it all.
+	latest := scalar[int64](e, "SELECT last_ui_event_seq FROM conversation")
+	e.exec(`INSERT INTO ui_event (id, seq, type, payload, created_at, conversation_id)
+		SELECT gen_random_uuid(), g, 'agent.updated', '{}', now(), id FROM conversation, generate_series($1::bigint, $2::bigint) g`,
+		latest+1, latest+chat.ReplayLimit+1)
+	e.exec("UPDATE conversation SET last_ui_event_seq = $1", latest+chat.ReplayLimit+1)
+	expectError(t, e.get("/chat/stream", "cursor", cursors.Event(latest)), 410, "CURSOR_EXPIRED")
+	if _, err := e.chat.StreamStart(e.ctx, e.db, cursors.Event(latest+1)); err != nil {
+		t.Fatalf("a cursor ReplayLimit behind: %v", err)
+	}
 }
 
 func TestHeartbeatHasNoID(t *testing.T) {

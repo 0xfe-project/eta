@@ -637,12 +637,18 @@ func (s *Service) StreamStart(ctx context.Context, db pg.DB, cursor string) (int
 		return 0, err
 	}
 	var latest int64
+	var oldest *int64
 	if conversationID != "" {
-		if err := db.QueryRow(ctx, "SELECT last_ui_event_seq FROM conversation WHERE id = $1", conversationID).Scan(&latest); err != nil {
+		if err := db.QueryRow(ctx, `SELECT last_ui_event_seq, (SELECT min(seq) FROM ui_event WHERE conversation_id = $1)
+			FROM conversation WHERE id = $1`, conversationID).Scan(&latest, &oldest); err != nil {
 			return 0, err
 		}
 	}
-	if seq > latest {
+	// Ahead of the conversation (another database), behind what is kept, or
+	// so far behind that a fresh snapshot is cheaper than the replay: the
+	// browser loads the snapshot and follows from its cursor.
+	pruned := seq < latest && (oldest == nil || *oldest > seq+1)
+	if seq > latest || pruned || latest-seq > ReplayLimit {
 		return 0, apierr.New(410, "CURSOR_EXPIRED", "事件游标已失效，请重新加载。")
 	}
 	return seq, nil

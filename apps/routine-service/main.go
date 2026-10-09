@@ -24,6 +24,7 @@ import (
 	"github.com/akarachen/axp/packages/service-go"
 	"github.com/akarachen/axp/packages/service-go/config"
 	"github.com/akarachen/axp/packages/service-go/httpapi"
+	"github.com/akarachen/axp/packages/service-go/idempotency"
 	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -115,6 +116,19 @@ func serve(ctx context.Context, _ []string) error {
 		if err := queue.Consume(ctx, runner.Fire); err != nil {
 			slog.Error("Taking routine fires stopped", "error", err)
 			stop()
+		}
+	}()
+	// Idempotency keys past their retention, now and then.
+	go func() {
+		for {
+			if err := idempotency.Prune(ctx, db, time.Now()); err != nil && ctx.Err() == nil {
+				slog.Warn("Pruning idempotency keys failed", "error", err)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Hour):
+			}
 		}
 	}()
 	handler := api.New(&api.Deps{DB: db, Routines: domain, Revise: runner.Revise, Docs: c.Dev}).Router

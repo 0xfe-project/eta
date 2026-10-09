@@ -64,6 +64,8 @@ AXP 是单用户服务，所有智能体属于唯一的默认对话（`conversat
 
 全站只有一条 SSE 订阅，挂在根组件（`apps/web/src/components/workspace/live-chat.ts`），所以任何页面上的侧栏角标、标签页标题和确认页都是实时的。EventSource 自己重连失败（例如部署期间网关返回 503）进入 `CLOSED` 后，按 1、2、4…30 秒退避重拉快照并重新打开，即使游标没变；快照拉取失败也按同样的退避重试。
 
+保留期：controller 每小时清理一次（`chat.Prune`、`idempotency.Prune`）：`ui_event` 保留 7 天；runtime 的原始事件 `agent_event` 里 `item.updated` 保留 1 天（到达时已经投影进消息），其余 30 天；幂等记录保留 7 天（定时任务服务自己的幂等记录也一样）。删除都按会话序号做范围删除，走 `(conversation_id, seq)` 索引。游标指向已删除的事件，或落后最新超过 1000 条时，`/chat/stream` 返回 410 `CURSOR_EXPIRED`：浏览器重新取快照再从新游标跟上，而不是逐条重放。
+
 ## 恢复与隔离
 
 - 心跳续租（默认 30 秒）。租约过期时 controller 先停止并移除旧容器，再结束实例；之后旧实例的任何请求都得到 `409 STALE_GENERATION`，runtime 收到后立即退出。
@@ -106,6 +108,5 @@ runtime 每次启动、在 Codex 之前对选中的每个 plugin 执行 `codex p
 
 - Codex 在容器内使用 `danger-full-access` 沙箱、`on-request` 审批：容器本身是隔离边界。
 - Agent 能读到自己快照的上传地址，因此可以改写自己的快照，但碰不到其他 Agent 的。
-- 幂等记录与 `ui_event` 暂不清理（RFC v1 约定）。
 - 开发用 `runserver` 以线程处理 SSE，每个连接占一个线程；生产应使用 ASGI 服务与 PostgreSQL `LISTEN/NOTIFY` 唤醒（当前为轮询持久事件表）。
 - 自动化测试使用脚本化的 app-server（`axp_runtime.testing.fake_app_server`）；与真实模型的联调需要在“模型服务”中绑定账号。

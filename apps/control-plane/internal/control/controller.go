@@ -24,6 +24,7 @@ import (
 	"github.com/akarachen/axp/apps/control-plane/internal/llm"
 	"github.com/akarachen/axp/apps/control-plane/internal/queue"
 	"github.com/akarachen/axp/apps/control-plane/internal/snapshots"
+	"github.com/akarachen/axp/packages/service-go/idempotency"
 	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/akarachen/axp/packages/telemetry-go"
 	"github.com/jackc/pgx/v5"
@@ -60,6 +61,8 @@ type Controller struct {
 	IdleAfter time.Duration
 	// ClaimGrace overrides the package default.
 	ClaimGrace time.Duration
+	// PruneEvery overrides the package default.
+	PruneEvery time.Duration
 
 	// Agents with commands in the queue, as of this tick.
 	waiting map[string]bool
@@ -69,7 +72,12 @@ type Controller struct {
 	// Commands taken but not reported started, by agent, and when this
 	// controller first saw them taken.
 	claims map[string]map[string]time.Time
+	// When the event logs and idempotency keys were last pruned.
+	pruned time.Time
 }
+
+// PruneEvery is how often old events and idempotency keys are deleted.
+const PruneEvery = time.Hour
 
 // Tick runs every step once; a failing step is logged and the rest run.
 func (c *Controller) Tick(ctx context.Context) {
@@ -83,10 +91,32 @@ func (c *Controller) Tick(ctx context.Context) {
 		{"ensure_runtimes", c.ensureRuntimes},
 		{"stop_idle", c.StopIdle},
 		{"stop_deleted", c.stopDeleted},
+		{"prune", c.prune},
 	}
 	for _, step := range steps {
 		c.failures.Log(ctx, slog.LevelError, step.name, step.run(ctx), "Controller step failed", "step", step.name)
 	}
+}
+
+// prune deletes, at most every PruneEvery, events and idempotency keys past
+// their retention.
+func (c *Controller) prune(ctx context.Context) error {
+	every := c.PruneEvery
+	if every == 0 {
+		every = PruneEvery
+	}
+	now := time.Now()
+	if now.Sub(c.pruned) < every {
+		return nil
+	}
+	if err := chat.Prune(ctx, c.DB, now); err != nil {
+		return err
+	}
+	if err := idempotency.Prune(ctx, c.DB, now); err != nil {
+		return err
+	}
+	c.pruned = now
+	return nil
 }
 
 func (c *Controller) LookAtQueue(ctx context.Context) error {

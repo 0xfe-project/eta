@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/akarachen/axp/packages/service-go/apierr"
 	"github.com/akarachen/axp/packages/service-go/httpapi"
@@ -110,6 +111,17 @@ func Do[T any](ctx context.Context, pool *pgxpool.Pool, key string, payload any,
 		return nil, err
 	}
 	return &Response[T]{Status: result.Status, Body: *result.Body}, nil
+}
+
+// Retention is how long a key is remembered: a retry comes within minutes,
+// a reload within days.
+const Retention = 7 * 24 * time.Hour
+
+// Prune forgets keys older than Retention: their responses can be large (a
+// task's whole timeline). A request retried after that runs again.
+func Prune(ctx context.Context, db pg.DB, now time.Time) error {
+	_, err := db.Exec(ctx, "DELETE FROM api_idempotency WHERE created_at < $1", now.Add(-Retention))
+	return err
 }
 
 func requestHash(payload any) (string, error) {

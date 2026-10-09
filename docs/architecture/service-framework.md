@@ -16,7 +16,7 @@
 | `pg`          | PostgreSQL：连接池、服务自己的库（不存在就建）、goose 迁移、事务（`InTx`、`InTxValue`）、按 `db` tag 映射行（`One`、`All`、`Exists`）、ID 与时间 |
 | `pg/pgtest`   | 测试用：每个测试二进制一个新库，迁移一次，每个测试前清空                                                                                         |
 | `httpapi`     | HTTP API：chi 上的 huma，代码生成 OpenAPI；统一的错误信封、请求 ID、操作定义（`Op`、`Body[T]`）、健康检查、带排空时间的 `Serve`                  |
-| `idempotency` | POST 的 `Idempotency-Key`：同一个 key 重试拿到第一次的响应。表 `api_idempotency` 由 `pg.Migrate` 建在每个服务的库里                              |
+| `idempotency` | POST 的 `Idempotency-Key`：同一个 key 重试拿到第一次的响应。表 `api_idempotency` 由 `pg.Migrate` 建在每个服务的库里，`Prune` 删除 7 天前的记录   |
 | `service`     | 一个二进制、多个命令（`serve`、`migrate`、`openapi`…）：选择命令、遥测（`packages/telemetry-go`）、SIGINT/SIGTERM                                |
 
 几条约定由这些包保证：

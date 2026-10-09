@@ -598,6 +598,33 @@ func TestTakenCommandKeepsTheRuntimeThroughAConfigChange(t *testing.T) {
 	expect(t, c.replyStatus(sent), "completed")
 }
 
+// The controller prunes the runtimes' raw events: item.updated after a day
+// (they are projected onto messages), the rest after a month.
+func TestTheControllerPrunesRawEvents(t *testing.T) {
+	c := newControl(t)
+	_, r, command := c.running()
+	r.turnStarted(command, "t")
+	r.events(event{"item.updated", map[string]any{"command_id": command,
+		"item": map[string]any{"id": "i1", "kind": "agent_message", "status": "completed", "text": "好"}}})
+	r.turnCompleted(command, "completed")
+	count := func(kind string) int {
+		return scalar[int](c.env, "SELECT count(*) FROM agent_event WHERE type = $1", kind)
+	}
+	expect(t, count("item.updated"), 1)
+	c.exec("UPDATE agent_event SET created_at = now() - interval '2 days'")
+	c.controller.PruneEvery = time.Nanosecond
+	c.tick()
+	expect(t, count("item.updated"), 0)
+	expect(t, count("turn.completed"), 1)
+	// What was shown stays: the message was projected when it arrived.
+	expect(t, scalar[int](c.env, "SELECT count(*) FROM message WHERE content::text LIKE '%好%'"), 1)
+	c.exec("UPDATE agent_event SET created_at = now() - interval '31 days'")
+	if err := chat.Prune(c.ctx, c.db, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, scalar[int](c.env, "SELECT count(*) FROM agent_event"), 0)
+}
+
 func TestTakenCommandKeepsAnIdleRuntime(t *testing.T) {
 	c := newControl(t)
 	c.controller.IdleAfter = time.Nanosecond

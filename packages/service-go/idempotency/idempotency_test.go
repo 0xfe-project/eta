@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/akarachen/axp/packages/service-go/apierr"
 	"github.com/akarachen/axp/packages/service-go/httpapi"
@@ -111,5 +112,26 @@ func TestAFailureDoesNotUseUpTheKey(t *testing.T) {
 	}
 	if status, body := post(); status != 201 || !strings.Contains(body, `"n":2`) {
 		t.Fatalf("retry %d %s", status, body)
+	}
+}
+
+func TestPruneForgetsKeysPastTheirRetention(t *testing.T) {
+	pool := pgtest.DB(t)
+	ctx := context.Background()
+	for key, age := range map[string]string{"old": "8 days", "new": "1 day"} {
+		if _, err := pool.Exec(ctx, `INSERT INTO api_idempotency (id, method, canonical_path, key, request_hash,
+			response_status, response_body, created_at) VALUES (gen_random_uuid(), 'POST', '/api/notes', $1, '', 201, '{}',
+			now() - $2::interval)`, key, age); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := Prune(ctx, pool, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	var keys []string
+	rows, _ := pool.Query(ctx, "SELECT key FROM api_idempotency")
+	keys, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil || len(keys) != 1 || keys[0] != "new" {
+		t.Fatalf("%v %v", keys, err)
 	}
 }
