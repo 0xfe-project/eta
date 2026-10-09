@@ -24,8 +24,13 @@ import (
 // Setup configures logging for service, installs the returned logger as the
 // slog default, and returns a shutdown function that flushes pending records.
 func Setup(ctx context.Context, service string) (*slog.Logger, func(context.Context) error, error) {
+	attrs := []attribute.KeyValue{attribute.String("service.name", service)}
+	// Kamal sets the deployed version (its git commit) in every container.
+	if version := os.Getenv("KAMAL_VERSION"); version != "" {
+		attrs = append(attrs, attribute.String("service.version", version))
+	}
 	res, err := resource.New(ctx,
-		resource.WithAttributes(attribute.String("service.name", service)),
+		resource.WithAttributes(attrs...),
 		resource.WithTelemetrySDK(),
 		resource.WithFromEnv(), // OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES win
 	)

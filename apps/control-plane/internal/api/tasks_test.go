@@ -1,9 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -31,6 +33,63 @@ type fakeRelay struct {
 	dirty       map[string]bool // Herdr worktree workspace -> uncommitted changes
 	// Every runtime call, as "method".
 	calls []string
+	// When set, every runtime call fails with this relay error code.
+	failing string
+	// Every agent's Paseo timeline, oldest first (two entries by default),
+	// in epoch "e1" unless set.
+	history      []map[string]any
+	historyEpoch string
+	// History reads asked for, as their "limit".
+	historyReads []int
+}
+
+// readHistory answers like Paseo, reading entries that start before a cursor,
+// and like the connector, refusing answers over 62 KiB.
+func (f *fakeRelay) readHistory(p map[string]any) (*relay.Outcome, error) {
+	epoch := f.historyEpoch
+	if epoch == "" {
+		epoch = "e1"
+	}
+	history := f.history
+	if history == nil {
+		history = []map[string]any{
+			{"timestamp": "2026-10-08T12:00:00Z", "item": map[string]any{"type": "assistant_message", "text": "done"}},
+			{"timestamp": "2026-10-08T12:00:01Z", "item": map[string]any{"type": "tool_call", "name": "Bash", "status": "completed",
+				"detail": map[string]any{"command": "ls", "output": "hello.txt"}}},
+		}
+	}
+	limit := p["limit"].(int)
+	f.historyReads = append(f.historyReads, limit)
+	end, stale := len(history)+1, false
+	if p["cursor"] != nil {
+		var c struct {
+			Epoch string
+			Seq   int
+		}
+		data, _ := json.Marshal(p["cursor"])
+		_ = json.Unmarshal(data, &c)
+		if c.Epoch != epoch {
+			stale = true
+		} else {
+			end = c.Seq
+		}
+	}
+	// Entry i (0-based) starts at seq i+1.
+	var entries []map[string]any
+	start := max(0, min(end-1, len(history))-limit)
+	for i := start; i < min(end-1, len(history)); i++ {
+		entries = append(entries, history[i])
+	}
+	out := map[string]any{"entries": entries, "epoch": epoch, "staleCursor": stale, "reset": stale, "hasOlder": start > 0}
+	if len(entries) > 0 {
+		out["startCursor"] = map[string]any{"epoch": epoch, "seq": start + 1}
+	}
+	data, _ := json.Marshal(out)
+	if len(data) >= 62*1024 {
+		fault := &relay.Fault{Code: "result_too_large", Message: "Native result exceeds 64 KiB."}
+		return &relay.Outcome{Execution: "accepted", Error: fault}, fault
+	}
+	return &relay.Outcome{Execution: "accepted", Result: data}, nil
 }
 
 type fakeWorkspace struct {
@@ -113,6 +172,10 @@ func (f *fakeRelay) Call(_ context.Context, _, _, method string, params any) (*r
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, method)
+	if f.failing != "" {
+		fault := &relay.Fault{Code: f.failing, Message: f.failing}
+		return &relay.Outcome{Execution: "not_started", Error: fault}, fault
+	}
 	p := params.(map[string]any)
 	result := func(v any) (*relay.Outcome, error) {
 		data, _ := json.Marshal(v)
@@ -184,11 +247,7 @@ func (f *fakeRelay) Call(_ context.Context, _, _, method string, params any) (*r
 		}
 		return result(out)
 	case "paseo.agents.history":
-		return result(map[string]any{"entries": []map[string]any{
-			{"timestamp": "2026-10-08T12:00:00Z", "item": map[string]any{"type": "assistant_message", "text": "done"}},
-			{"timestamp": "2026-10-08T12:00:01Z", "item": map[string]any{"type": "tool_call", "name": "Bash", "status": "completed",
-				"detail": map[string]any{"command": "ls", "output": "hello.txt"}}},
-		}})
+		return f.readHistory(p)
 	// --- Herdr
 	case "session.list":
 		return result(map[string]any{"items": []map[string]any{{"session": "work", "backendGeneration": strings.Repeat("a", 64)}}})
@@ -491,6 +550,158 @@ func TestRemoteTaskInANewWorktreeFromBriefToDone(t *testing.T) {
 	if !slices.Contains(e.relay.calls, "paseo.workspaces.archive") {
 		t.Fatalf("calls %v", e.relay.calls)
 	}
+}
+
+// toolCall is a Paseo history entry whose command printed size bytes.
+func toolCall(command string, size int) map[string]any {
+	return map[string]any{"timestamp": "2026-10-09T12:00:00Z", "item": map[string]any{"type": "tool_call", "name": "Bash",
+		"status": "completed", "detail": map[string]any{"command": command, "output": strings.Repeat("x", size)}}}
+}
+
+// runLog starts a run on a Paseo computer and returns its log's path.
+func (e *taskEnv) runLog(t *testing.T) string {
+	computer, _ := e.computer("laptop", "paseo")
+	task := e.create(remoteAssignee(computer, "paseo", newWorktree))
+	e.runner.Tick(e.ctx)
+	return "/tasks/" + task.ID + "/runs/" + e.task("1").Runs[0].ID + "/log"
+}
+
+func TestALongTranscriptIsReadInPagesSmallEnoughForTheRelay(t *testing.T) {
+	e := newTaskEnv(t)
+	path := e.runLog(t)
+	// 120 commands of 5 KB each: 20 entries are about 100 KB, over 64 KiB.
+	for i := range 120 {
+		e.relay.history = append(e.relay.history, toolCall(fmt.Sprint(i+1), 5000))
+	}
+
+	var commands []string
+	var latest RunLog
+	for before := ""; ; {
+		var page RunLog
+		e.get(path, "before", before).json(t, &page)
+		if before == "" {
+			latest = page
+		}
+		var these []string
+		for _, entry := range page.Entries {
+			these = append(these, entry.Command)
+		}
+		commands = append(these, commands...)
+		if page.Older == "" {
+			break
+		}
+		before = page.Older
+	}
+	// The latest page is oldest first and ends with the last command;
+	// together the pages hold every command once, in order.
+	expect(t, latest.Entries[len(latest.Entries)-1].Command, "120")
+	expect(t, len(commands), 120)
+	for i, command := range commands {
+		expect(t, command, fmt.Sprint(i+1))
+	}
+	// Each page took the largest read that fit, halving from 20.
+	expect(t, fmt.Sprint(e.relay.historyReads[:2]), "[20 10]")
+	// A read that fails is only that: the run goes on.
+	expect(t, e.task("1").Runs[0].Status, "running")
+}
+
+func TestAnEntryTooLargeForTheRelayIsAnErrorAndTheNewerOnesStillRead(t *testing.T) {
+	e := newTaskEnv(t)
+	path := e.runLog(t)
+	for i := range 6 {
+		size := 10
+		if i == 2 {
+			size = 70 * 1024
+		}
+		e.relay.history = append(e.relay.history, toolCall(fmt.Sprint(i+1), size))
+	}
+	var commands []string
+	before := ""
+	for {
+		r := e.get(path, "before", before)
+		if r.status != 200 {
+			if status, code := r.error(); status != 424 || code != "REMOTE_LOG_TOO_LARGE" {
+				t.Fatalf("%d %s", status, code)
+			}
+			break
+		}
+		var page RunLog
+		r.json(t, &page)
+		for _, entry := range page.Entries {
+			commands = append(commands, entry.Command)
+		}
+		if page.Older == "" {
+			t.Fatal("read past the large entry")
+		}
+		before = page.Older
+	}
+	// Everything after the large entry was read.
+	slices.Sort(commands)
+	expect(t, strings.Join(commands, " "), "4 5 6")
+	expect(t, e.task("1").Runs[0].Status, "running")
+}
+
+func TestAnOlderPageOfARebuiltTimelineIsRefused(t *testing.T) {
+	e := newTaskEnv(t)
+	path := e.runLog(t)
+	for i := range 60 {
+		e.relay.history = append(e.relay.history, toolCall(fmt.Sprint(i+1), 10))
+	}
+	var page RunLog
+	e.get(path).json(t, &page)
+	if page.Older == "" {
+		t.Fatal("no older entries")
+	}
+	e.relay.historyEpoch = "e2"
+	if status, code := e.get(path, "before", page.Older).error(); status != 409 || code != "LOG_RESET" {
+		t.Fatalf("%d %s", status, code)
+	}
+	if status, _ := e.get(path, "before", "nonsense").error(); status != 422 {
+		t.Fatalf("a bad cursor: %d", status)
+	}
+}
+
+func TestAnOfflineComputerIsLoggedOnceAndCleanedUpLater(t *testing.T) {
+	var logs bytes.Buffer
+	defer slog.SetDefault(slog.Default())
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	count := func(msg string) int { return strings.Count(logs.String(), msg) }
+
+	e := newTaskEnv(t)
+	computer, _ := e.computer("laptop", "paseo")
+	e.create(remoteAssignee(computer, "paseo", newWorktree))
+	e.runner.Tick(e.ctx)
+	id, _ := e.relay.only(t)
+	e.relay.failing = "device_offline"
+	for range 3 {
+		e.runner.Tick(e.ctx)
+	}
+	if n := count("Cannot look at a remote agent"); n != 1 {
+		t.Fatalf("watch logged %d times: %s", n, logs.String())
+	}
+
+	// Back online, the run ends (reminded, then failed for not replying).
+	e.relay.failing = ""
+	e.relay.finish(id)
+	e.runner.Tick(e.ctx)
+	e.relay.finish(id)
+	e.runner.Tick(e.ctx)
+	if status := e.task("1").Runs[0].Status; status == "running" {
+		t.Fatalf("run still %s", status)
+	}
+
+	e.patch("/tasks/1", map[string]any{"status": "done"})
+	e.relay.failing = "device_offline"
+	for range 3 {
+		e.runner.Tick(e.ctx)
+	}
+	if n := count("Cannot clean up a remote session"); n != 1 {
+		t.Fatalf("cleanup logged %d times: %s", n, logs.String())
+	}
+	e.relay.failing = ""
+	e.runner.Tick(e.ctx)
+	last := e.task("1").Activity
+	expect(t, last[len(last)-1].Kind, "cleanup")
 }
 
 func TestAnExistingWorkspaceKeepsItsWorkspaceWhenDone(t *testing.T) {

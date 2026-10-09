@@ -71,10 +71,14 @@ export async function setupTelemetry(service: string): Promise<void> {
  */
 function otlpProvider(service: string): ApiLoggerProvider {
   const provider = new LoggerProvider({
-    // OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES override the defaults.
-    resource: resourceFromAttributes({ "service.name": service }).merge(
-      detectResources({ detectors: [envDetector] }),
-    ),
+    // OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES override the defaults;
+    // Kamal sets the deployed version (its git commit) in every container.
+    resource: resourceFromAttributes({
+      "service.name": service,
+      ...(process.env.KAMAL_VERSION
+        ? { "service.version": process.env.KAMAL_VERSION }
+        : {}),
+    }).merge(detectResources({ detectors: [envDetector] })),
     processors: [new BatchLogRecordProcessor(new OTLPLogExporter())],
   });
   return {

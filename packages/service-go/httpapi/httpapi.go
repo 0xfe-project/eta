@@ -190,6 +190,15 @@ func newError(ctx context.Context, status int, message string, errs ...error) *E
 		var product *apierr.Error
 		if errors.As(err, &product) {
 			e.status, e.Detail.Code, e.Detail.Message, e.extra = product.Status, product.Code, product.Message, product.Extra
+			// The caller's mistakes are theirs; a failure beyond the
+			// service (an upstream, a queue) is ours to find later.
+			if product.Status == 424 || product.Status >= 500 {
+				attrs := []any{"request_id", e.Detail.RequestID, "status", product.Status, "code", product.Code, "message", product.Message}
+				if r := Request(ctx); r != nil {
+					attrs = append(attrs, "http.request.method", r.Method, "url.path", r.URL.Path)
+				}
+				slog.WarnContext(ctx, "API request failed upstream", attrs...)
+			}
 			return e
 		}
 	}

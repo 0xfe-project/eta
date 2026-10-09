@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -632,65 +633,154 @@ func (a agents) state(ctx context.Context, s *sessionRow, n native) (*agentState
 	return nil, fmt.Errorf("unknown runtime %q", s.Runtime)
 }
 
-// log is the agent's recent transcript, oldest first.
-func (a agents) log(ctx context.Context, s *sessionRow, n native) ([]LogEntry, error) {
+// LogPage is part of a run's transcript, oldest first, and where the part
+// before it starts.
+type LogPage struct {
+	Entries []LogEntry
+	// Older reads the entries before these; empty at the start.
+	Older string
+}
+
+// Entries a Paseo transcript page asks for at most. The connector refuses
+// any answer over 64 KiB (result_too_large) rather than cut it, and a few
+// commands' output reach that: on a refusal, a page asks for half as many.
+const logPage = 20
+
+// log is a page of the agent's transcript, oldest first: the latest one, or
+// the one before older (a page's Older).
+func (a agents) log(ctx context.Context, s *sessionRow, n native, older string) (*LogPage, error) {
 	switch s.Runtime {
 	case "paseo":
-		var out struct {
-			Entries []struct {
-				Timestamp string `json:"timestamp"`
-				Item      struct {
-					Type   string `json:"type"`
-					Text   string `json:"text"`
-					Name   string `json:"name"`
-					Status string `json:"status"`
-					Detail struct {
-						Command string `json:"command"`
-						Output  string `json:"output"`
-					} `json:"detail"`
-				} `json:"item"`
-			} `json:"entries"`
-		}
-		if err := a.call(ctx, s.target(), "paseo.agents.history", map[string]any{"agentId": n.AgentID, "limit": 50}, &out); err != nil {
-			return nil, err
-		}
-		entries := []LogEntry{}
-		for _, e := range out.Entries {
-			entry := LogEntry{Text: e.Item.Text, At: e.Timestamp}
-			switch e.Item.Type {
-			case "user_message":
-				entry.Kind = "user"
-			case "assistant_message":
-				entry.Kind = "assistant"
-			case "reasoning":
-				entry.Kind = "reasoning"
-			case "tool_call":
-				entry.Kind, entry.Tool, entry.Command, entry.Status, entry.Text = "tool", e.Item.Name, e.Item.Detail.Command, e.Item.Status, e.Item.Detail.Output
-			default:
-				entry.Kind = "other"
-				if entry.Text == "" {
-					entry.Text = e.Item.Type
-				}
-			}
-			entries = append(entries, entry)
-		}
-		return entries, nil
+		return a.paseoLog(ctx, s, n, older)
 	case "herdr":
 		params, err := a.herdrTarget(ctx, s.target(), n)
 		if err != nil {
 			return nil, err
 		}
-		params["lines"], params["source"] = 300, "recent"
 		var out struct {
 			Output string `json:"output"`
 		}
-		if err := a.call(ctx, s.target(), "agent.read", params, &out); err != nil {
+		params["source"] = "recent"
+		// Wide lines can make the screen too large for the relay.
+		for _, lines := range []int{300, 150, 80} {
+			params["lines"] = lines
+			if err = a.call(ctx, s.target(), "agent.read", params, &out); !tooLarge(err) {
+				break
+			}
+		}
+		if err != nil {
 			return nil, err
 		}
-		return []LogEntry{{Kind: "terminal", Text: out.Output}}, nil
+		return &LogPage{Entries: []LogEntry{{Kind: "terminal", Text: out.Output}}}, nil
 	}
 	return nil, fmt.Errorf("unknown runtime %q", s.Runtime)
 }
+
+func tooLarge(err error) bool {
+	var fault *relay.Fault
+	return errors.As(err, &fault) && fault.Code == "result_too_large"
+}
+
+// paseoCursor is a position in Paseo's timeline: entries before seq, in one
+// epoch (a timeline rebuilt from the provider starts a new one).
+type paseoCursor struct {
+	Epoch string `json:"epoch"`
+	Seq   int64  `json:"seq"`
+}
+
+func (c paseoCursor) String() string { return fmt.Sprintf("%d:%s", c.Seq, c.Epoch) }
+
+func parseCursor(s string) (*paseoCursor, bool) {
+	seq, epoch, ok := strings.Cut(s, ":")
+	n, err := strconv.ParseInt(seq, 10, 64)
+	if !ok || err != nil || n < 0 || epoch == "" {
+		return nil, false
+	}
+	return &paseoCursor{epoch, n}, true
+}
+
+type paseoEntry struct {
+	Timestamp string `json:"timestamp"`
+	Item      struct {
+		Type   string `json:"type"`
+		Text   string `json:"text"`
+		Name   string `json:"name"`
+		Status string `json:"status"`
+		Detail struct {
+			Command string `json:"command"`
+			Output  string `json:"output"`
+		} `json:"detail"`
+	} `json:"item"`
+}
+
+func (e paseoEntry) entry() LogEntry {
+	entry := LogEntry{Text: e.Item.Text, At: e.Timestamp}
+	switch e.Item.Type {
+	case "user_message":
+		entry.Kind = "user"
+	case "assistant_message":
+		entry.Kind = "assistant"
+	case "reasoning":
+		entry.Kind = "reasoning"
+	case "tool_call":
+		entry.Kind, entry.Tool, entry.Command, entry.Status, entry.Text = "tool", e.Item.Name, e.Item.Detail.Command, e.Item.Status, e.Item.Detail.Output
+	default:
+		entry.Kind = "other"
+		if entry.Text == "" {
+			entry.Text = e.Item.Type
+		}
+	}
+	return entry
+}
+
+// paseoLog reads the entries before older (or the latest ones), as many as
+// the relay can carry in one answer.
+func (a agents) paseoLog(ctx context.Context, s *sessionRow, n native, older string) (*LogPage, error) {
+	params := map[string]any{"agentId": n.AgentID, "direction": "before"}
+	if older != "" {
+		cursor, ok := parseCursor(older)
+		if !ok {
+			return nil, errBadCursor
+		}
+		params["cursor"] = cursor
+	}
+	var out struct {
+		Entries     []paseoEntry `json:"entries"`
+		StartCursor *paseoCursor `json:"startCursor"`
+		HasOlder    bool         `json:"hasOlder"`
+		StaleCursor bool         `json:"staleCursor"`
+		Reset       bool         `json:"reset"`
+	}
+	var err error
+	for limit := logPage; ; limit /= 2 {
+		params["limit"] = limit
+		// An entry too large on its own stays unread: only Paseo knows
+		// where it ends, so there is nothing to step over it with.
+		if err = a.call(ctx, s.target(), "paseo.agents.history", params, &out); !tooLarge(err) || limit == 1 {
+			break
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	// The timeline was rebuilt: a cursor into the old one means nothing.
+	if out.StaleCursor || out.Reset {
+		return nil, errStaleCursor
+	}
+	page := &LogPage{Entries: make([]LogEntry, 0, len(out.Entries))}
+	for _, e := range out.Entries {
+		page.Entries = append(page.Entries, e.entry())
+	}
+	if out.HasOlder && out.StartCursor != nil && len(out.Entries) > 0 {
+		page.Older = out.StartCursor.String()
+	}
+	return page, nil
+}
+
+var (
+	errBadCursor   = errors.New("invalid log cursor")
+	errStaleCursor = errors.New("the remote agent's timeline was rebuilt")
+)
 
 // cleanup archives or removes what AXP opened for a session whose task is
 // done, and says what it did. A Herdr worktree with uncommitted changes is

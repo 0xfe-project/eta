@@ -1,11 +1,13 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -33,6 +35,8 @@ func testAPI() *API {
 				return nil, apierr.NotFound()
 			case "broken":
 				return nil, errors.New("database down")
+			case "upstream":
+				return nil, apierr.Upstream("REMOTE_UNAVAILABLE", "远程失败。")
 			case "wrapped":
 				return nil, errors.Join(errors.New("context"), apierr.New(409, "BUSY", "忙。"))
 			}
@@ -99,6 +103,24 @@ func TestRequestsAreAnsweredAndIdentified(t *testing.T) {
 	}
 	if status, out, _ := do(t, "GET", "/api/test/openapi.json", ""); status != 200 || out["openapi"] == nil {
 		t.Fatalf("openapi %d", status)
+	}
+}
+
+func TestUpstreamFailuresAreLoggedAndCallerMistakesAreNot(t *testing.T) {
+	var logs bytes.Buffer
+	defer slog.SetDefault(slog.Default())
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+
+	do(t, "GET", "/api/test/things/gone", "", "X-Request-Id", "req-404")
+	do(t, "GET", "/api/test/things/upstream", "", "X-Request-Id", "req-424")
+	line := logs.String()
+	if strings.Contains(line, "req-404") {
+		t.Errorf("a 404 was logged: %s", line)
+	}
+	for _, want := range []string{"request_id=req-424", "status=424", "code=REMOTE_UNAVAILABLE", "url.path=/api/test/things/upstream"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("no %s in %s", want, line)
+		}
 	}
 }
 

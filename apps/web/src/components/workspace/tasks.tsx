@@ -760,18 +760,49 @@ const logKindLabels: Record<LogEntry["kind"], string> = {
 
 function RunLog({ task, run }: { task: string; run: TaskRun }) {
   const live = isActive(run.status);
-  const { data, error, isPending } = useRunLog(task, run.id, live);
+  const { entries, error, isPending, hasOlder, loadingOlder, loadOlder } =
+    useRunLog(task, run.id, live);
   if (isPending) return <Loading layout="lines" label="正在读取记录…" />;
-  if (error) return <p className="text-xs text-destructive">{error.message}</p>;
-  if (!data?.length)
-    return <p className="text-xs text-muted-foreground">还没有记录。</p>;
+  // A read that fails keeps what was read before: it says nothing about the run.
+  const failed = error ? (
+    <p className="text-xs text-destructive">{error.message}</p>
+  ) : null;
+  if (!entries.length)
+    return (
+      failed ?? <p className="text-xs text-muted-foreground">还没有记录。</p>
+    );
+  return (
+    <div className="space-y-2">
+      {failed}
+      {hasOlder ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 px-2 text-xs text-muted-foreground"
+          disabled={loadingOlder}
+          onClick={() => void loadOlder()}
+        >
+          {loadingOlder ? "正在读取更早的记录…" : "加载更早的记录"}
+        </Button>
+      ) : null}
+      <RunLogEntries entries={entries} />
+    </div>
+  );
+}
+
+function RunLogEntries({ entries }: { entries: LogEntry[] }) {
+  // Entries can be alike (same time, kind and start): number the repeats.
+  const seen = new Map<string, number>();
+  const key = (entry: LogEntry) => {
+    const base = `${entry.at}-${entry.kind}-${entry.text.slice(0, 32)}`;
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return `${base}-${n}`;
+  };
   return (
     <ol aria-label="执行记录" className="space-y-2 border-l pl-3 text-xs">
-      {data.map((entry) => (
-        <li
-          key={`${entry.at}-${entry.kind}-${entry.text.slice(0, 32)}`}
-          className="min-w-0"
-        >
+      {entries.map((entry) => (
+        <li key={key(entry)} className="min-w-0">
           <span className="text-muted-foreground">
             {logKindLabels[entry.kind]}
             {entry.tool ? ` · ${entry.tool}` : ""}

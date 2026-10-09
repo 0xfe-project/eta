@@ -32,7 +32,9 @@ func main() {
 	}
 	// CLIProxyAPI prints and logs (logrus) on its own; route both through
 	// OpenTelemetry. logrus starts out on stderr, so point it at stdout.
-	restoreStdout, err := telemetry.RedirectStdout(logger.With("library", "cliproxy"))
+	// Health checks and the web's polling are most requests and say nothing.
+	restoreStdout, err := telemetry.RedirectStdout(logger.With("library", "cliproxy"),
+		"/", "/api/llm/health", "/api/llm/v1/connections", "/api/llm/v1/models", "/api/llm/v1/logins/*")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "telemetry:", err)
 		os.Exit(1)
