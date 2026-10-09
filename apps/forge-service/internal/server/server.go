@@ -35,7 +35,7 @@ import (
 
 const (
 	agentHeader  = "X-AXP-Agent-Id"
-	capabilities = "/?view=capabilities"
+	capabilities = "/workspace/capabilities"
 )
 
 // New returns the service's handler.
@@ -162,10 +162,10 @@ func (s *server) manifest(w http.ResponseWriter, r *http.Request) {
 // browser goes on to the capabilities view, with what happened.
 func (s *server) callback(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	target := capabilities + "&github=created"
+	target := back("github", "created")
 	if _, err := s.gh.FinishManifest(r.Context(), q.Get("code"), q.Get("state")); err != nil {
 		s.logger.Warn("creating the GitHub App failed", "error", err)
-		target = capabilities + "&github_error=" + url.QueryEscape(message(err))
+		target = back("github_error", message(err))
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
 }
@@ -206,11 +206,16 @@ func (s *server) unauthorize(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// back is the capabilities page, told what happened.
+func back(key, value string) string {
+	return capabilities + "?" + url.Values{key: {value}}.Encode()
+}
+
 // authorized is GitHub sending the browser back after the user authorized
 // the App, from the wizard or right after installing it.
 func (s *server) authorized(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	target := capabilities + "&github=authorized"
+	target := back("github", "authorized")
 	var err error
 	switch {
 	case q.Get("error") != "":
@@ -219,13 +224,13 @@ func (s *server) authorized(w http.ResponseWriter, r *http.Request) {
 	case q.Get("code") != "":
 		_, err = s.gh.FinishAuthorization(r.Context(), q.Get("code"), q.Get("state"), q.Get("setup_action"))
 	case q.Get("setup_action") != "":
-		target = capabilities + "&setup_action=" + url.QueryEscape(q.Get("setup_action"))
+		target = back("setup_action", q.Get("setup_action"))
 	default:
 		err = &github.Error{Code: "AUTHORIZATION_EXPIRED", Message: "这次授权已失效，请回到 AXP 重新授权。"}
 	}
 	if err != nil {
 		s.logger.Warn("authorizing the GitHub App failed", "error", err)
-		target = capabilities + "&github_error=" + url.QueryEscape(message(err))
+		target = back("github_error", message(err))
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
 }
