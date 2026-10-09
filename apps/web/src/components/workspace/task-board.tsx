@@ -303,9 +303,7 @@ function BoardView({
                 <PlusIcon aria-hidden="true" />
               </Button>
             </div>
-            {/* Sideways scrolls pass through to the board (overscroll is
-                off everywhere else, which would trap them here). */}
-            <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-x-auto px-1.5 pb-1.5">
+            <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-1.5 pb-1.5">
               {group.map((task) => (
                 <Card key={task.id} task={task} />
               ))}
