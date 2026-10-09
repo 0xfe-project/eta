@@ -2,9 +2,12 @@ import type { Memory } from "@/queries/memory";
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/ArrowClockwise";
 import { BrainIcon } from "@phosphor-icons/react/Brain";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/MagnifyingGlass";
+import { PlusIcon } from "@phosphor-icons/react/Plus";
+import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { TrashIcon } from "@phosphor-icons/react/Trash";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -106,7 +109,13 @@ function MemoryRow({ agentId, memory }: { agentId: string; memory: Memory }) {
 
 /** The current agent's long-term memories: browse, search, add and forget. */
 export function MemoryView() {
-  const { current, loaded } = useAgents();
+  const {
+    current,
+    loaded,
+    error: agentsError,
+    retry,
+    openEditor,
+  } = useAgents();
   const [search, setSearch] = useState("");
   const query = useDebounced(search.trim());
   const { data, error, isPending, isFetching, refetch } = useMemories(
@@ -114,12 +123,24 @@ export function MemoryView() {
     query,
   );
 
+  if (agentsError && !loaded)
+    return <LoadError what="智能体" error={agentsError} onRetry={retry} />;
+  if (!loaded) return <Loading />;
   if (!current)
-    return loaded ? (
-      <p className="py-10 text-center text-sm text-muted-foreground">
-        还没有智能体
-      </p>
-    ) : null;
+    return (
+      <Empty
+        icon={RobotIcon}
+        title="还没有智能体"
+        action={
+          <Button size="sm" onClick={() => openEditor()}>
+            <PlusIcon aria-hidden="true" data-icon="inline-start" />
+            新建智能体
+          </Button>
+        }
+      >
+        记忆属于某个智能体，在和它的对话里慢慢积累。
+      </Empty>
+    );
 
   return (
     <div className="space-y-3">
@@ -164,26 +185,19 @@ export function MemoryView() {
       </div>
       <RememberForm agentId={current.id} />
       {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error.message}
-        </p>
+        <LoadError what="记忆" error={error} onRetry={() => void refetch()} />
       ) : isPending ? (
-        <p className="text-sm text-muted-foreground">正在加载…</p>
+        <Loading />
       ) : data.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 border border-dashed px-6 py-10 text-center">
-          <BrainIcon
-            aria-hidden="true"
-            className="size-8 text-muted-foreground"
-          />
-          <p className="text-sm font-medium">
-            {query ? "没有相关的记忆" : "还没有记忆"}
-          </p>
-          {query ? null : (
-            <p className="text-xs text-muted-foreground">
-              对话中值得长期记住的事实会在每轮结束后自动记下。
-            </p>
-          )}
-        </div>
+        query ? (
+          <Empty icon={MagnifyingGlassIcon} title="没有相关的记忆">
+            换个说法再搜一次。
+          </Empty>
+        ) : (
+          <Empty icon={BrainIcon} title="还没有记忆">
+            对话中值得长期记住的事实会在每轮结束后自动记下。
+          </Empty>
+        )
       ) : (
         <ul aria-label="记忆列表" className="divide-y border">
           {data.map((memory) => (

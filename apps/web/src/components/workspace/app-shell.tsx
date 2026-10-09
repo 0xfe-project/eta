@@ -7,12 +7,13 @@ import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { PuzzlePieceIcon } from "@phosphor-icons/react/PuzzlePiece";
 import { Link } from "@tanstack/react-router";
+import { Empty, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { usePendingInteractions } from "@/queries/chat";
 import { useTasks } from "@/queries/tasks";
 import { AgentEditor } from "./agent-editor";
-import { AgentMonogram, AgentStatusDot } from "./agent-identity";
+import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels } from "./agent-status";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
 import { useAgents, useOpenAgent } from "./use-agents";
@@ -52,7 +53,7 @@ function Badge({ count }: { count: number | undefined }) {
 
 function Sidebar() {
   const badges = useBadges();
-  const { agents, loaded, openEditor } = useAgents();
+  const { agents, loaded, error, openEditor } = useAgents();
   const openAgent = useOpenAgent();
   return (
     <aside className="hidden w-56 shrink-0 flex-col border-r bg-sidebar lg:flex">
@@ -79,51 +80,64 @@ function Sidebar() {
           </Link>
         ))}
       </nav>
-      {loaded ? (
-        <section
-          aria-labelledby="sidebar-agents"
-          className="mt-5 flex min-h-0 flex-col px-2"
-        >
-          <div className="flex h-7 items-center justify-between pl-2">
-            <h2
-              id="sidebar-agents"
-              className="text-xs font-medium text-muted-foreground"
-            >
-              智能体
-            </h2>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              aria-label="新建智能体"
-              title="新建智能体"
-              onClick={() => openEditor()}
-            >
-              <PlusIcon aria-hidden="true" />
-            </Button>
-          </div>
-          <ul className="grid min-h-0 gap-px overflow-y-auto">
-            {agents.map((agent) => (
-              <li key={agent.id}>
-                <button
-                  type="button"
-                  onClick={() => openAgent(agent.id)}
-                  title={`与 ${agent.name} 对话`}
-                  className={cn(item, "w-full")}
-                >
-                  <AgentMonogram agent={agent} className="size-5 text-[10px]" />
-                  <span className="min-w-0 flex-1 truncate text-left">
-                    {agent.name}
-                  </span>
-                  <AgentStatusDot status={agent.status} />
-                  <span className="sr-only">
-                    {agentStatusLabels[agent.status]}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      <section
+        aria-labelledby="sidebar-agents"
+        className="mt-5 flex min-h-0 flex-col px-2"
+      >
+        <div className="flex h-7 items-center justify-between pl-2">
+          <h2
+            id="sidebar-agents"
+            className="text-xs font-medium text-muted-foreground"
+          >
+            智能体
+          </h2>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label="新建智能体"
+            title="新建智能体"
+            onClick={() => openEditor()}
+          >
+            <PlusIcon aria-hidden="true" />
+          </Button>
+        </div>
+        {error && !loaded ? (
+          <p className="px-2 text-xs text-muted-foreground">无法加载智能体</p>
+        ) : !loaded ? (
+          <Loading rows={2} />
+        ) : agents.length ? null : (
+          <Empty
+            title="还没有智能体"
+            className="px-3 py-4"
+            action={
+              <Button size="xs" variant="outline" onClick={() => openEditor()}>
+                新建智能体
+              </Button>
+            }
+          />
+        )}
+        <ul className="grid min-h-0 gap-px overflow-y-auto">
+          {agents.map((agent) => (
+            <li key={agent.id}>
+              <button
+                type="button"
+                onClick={() => openAgent(agent.id)}
+                title={`与 ${agent.name} 对话`}
+                className={cn(item, "w-full")}
+              >
+                <AgentAvatar agent={agent} className="size-5" />
+                <span className="min-w-0 flex-1 truncate text-left">
+                  {agent.name}
+                </span>
+                <AgentStatusDot status={agent.status} />
+                <span className="sr-only">
+                  {agentStatusLabels[agent.status]}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
     </aside>
   );
 }
