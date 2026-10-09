@@ -151,7 +151,9 @@ const sessions = {
         verb={block.name || block.label}
         path={block.input || undefined}
         meta={activityText[block.status]}
-      />
+      >
+        {block.output}
+      </GrokTool>
     ),
     Choice: ({ prompt, labels, onChoose }: ChoiceProps) => (
       <GrokPermission
