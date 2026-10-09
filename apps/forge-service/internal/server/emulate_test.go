@@ -14,7 +14,9 @@ package server
 //     the layer checks the App's client secret, adds the expiry and refresh
 //     token GitHub Apps get and refreshes them, answers
 //     GET /user/installations from the seed, and revokes on
-//     DELETE /applications/{client_id}/grant (the token then gets 401).
+//     DELETE /applications/{client_id}/grant (the token then gets 401);
+//   - a merge can be made to fail the way GitHub and networks do
+//     (mergeFault).
 
 import (
 	"bytes"
@@ -93,6 +95,7 @@ type githubEmulator struct {
 	deletedApps map[int]bool
 	refresh     map[string]string // refresh token -> login
 	revoked     map[string]bool   // user tokens
+	mergeFaults map[string]string // merge path -> fault
 }
 
 func startEmulator() (*githubEmulator, error) {
@@ -123,7 +126,7 @@ func startEmulator() (*githubEmulator, error) {
 	e := &githubEmulator{
 		backend: fmt.Sprintf("http://127.0.0.1:%d", port), pem: keyPEM, dir: dir,
 		tokens: map[string]int{}, pullHeads: map[string]bool{}, deletedApps: map[int]bool{},
-		refresh: map[string]string{}, revoked: map[string]bool{},
+		refresh: map[string]string{}, revoked: map[string]bool{}, mergeFaults: map[string]string{},
 	}
 	e.cmd = exec.Command(bin, "--service", "github", "--port", fmt.Sprint(port), "--seed", seed)
 	var logs bytes.Buffer
@@ -269,6 +272,8 @@ func (e *githubEmulator) handler() http.Handler {
 			return
 		case strings.HasPrefix(path, "/app/") && e.appDeleted(r):
 			reply(w, http.StatusUnauthorized, map[string]any{"message": "Bad credentials"})
+			return
+		case r.Method == http.MethodPut && strings.HasSuffix(path, "/merge") && e.mergeFault(w, r, proxy):
 			return
 		case r.Method == http.MethodPost && strings.HasSuffix(path, "/pulls"):
 			if e.duplicatePull(w, r) {
@@ -475,6 +480,45 @@ func (e *githubEmulator) duplicatePull(w http.ResponseWriter, r *http.Request) b
 	}
 	e.pullHeads[key] = true
 	return false
+}
+
+// Merge faults, for the next merge of a pull request:
+//
+//   - stale: someone pushed in between; GitHub answers 409;
+//   - lost: GitHub merges, the connection drops before the answer;
+//   - failed: GitHub answers 502 without merging.
+const (
+	faultStale  = "stale"
+	faultLost   = "lost"
+	faultFailed = "failed"
+)
+
+func (e *githubEmulator) failMerge(repo string, number int, fault string) {
+	e.mu.Lock()
+	e.mergeFaults[fmt.Sprintf("/repos/%s/pulls/%d/merge", repo, number)] = fault
+	e.mu.Unlock()
+}
+
+func (e *githubEmulator) mergeFault(w http.ResponseWriter, r *http.Request, proxy http.Handler) bool {
+	e.mu.Lock()
+	fault := e.mergeFaults[r.URL.Path]
+	delete(e.mergeFaults, r.URL.Path)
+	e.mu.Unlock()
+	switch fault {
+	case faultStale:
+		reply(w, http.StatusConflict, map[string]any{"message": "Head branch was modified. Review and try the merge again."})
+	case faultFailed:
+		reply(w, http.StatusBadGateway, map[string]any{"message": "Server Error"})
+	case faultLost:
+		proxy.ServeHTTP(httptest.NewRecorder(), r)
+		conn, _, err := w.(http.Hijacker).Hijack()
+		if err == nil {
+			conn.Close()
+		}
+	default:
+		return false
+	}
+	return true
 }
 
 func (e *githubEmulator) deleteApp(id int) {

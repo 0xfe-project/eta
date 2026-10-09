@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import { HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { AppProviders } from "@/components/providers";
+import { LiveChat } from "@/components/workspace/live-chat";
 import { useWorkspaceStore } from "@/components/workspace/workspace-store";
 import { useOutbox } from "@/queries/outbox";
 
@@ -42,6 +43,7 @@ export function RootDocument() {
           >
             跳转到内容
           </a>
+          <LiveChat />
           <Outlet />
         </AppProviders>
         <Scripts />

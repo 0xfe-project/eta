@@ -46,7 +46,7 @@ type Runner struct {
 	// turn-end time).
 	working map[string]bool
 	// Failures of steps, runs and sessions: a computer that stays offline is
-	// logged once, not every tick.
+	// logged when it changes and now and then, not every tick.
 	failures telemetry.Repeats
 }
 

@@ -68,6 +68,7 @@ import {
   assigneeLabel,
   createdBy,
   isActive,
+  isPullURL,
   placeLabel,
   remoteLabel,
   runStatusLabels,
@@ -75,6 +76,7 @@ import {
   statusLabel,
 } from "./task-format";
 import { useTaskNav } from "./task-nav";
+import { DeliveredPull } from "./task-pulls";
 import { StatusIcon } from "./task-status-icon";
 import { useAgents } from "./use-agents";
 import { useWorkspaceStore } from "./workspace-store";
@@ -493,7 +495,7 @@ function RunStatusText({ run }: { run: TaskRun }) {
   );
 }
 
-/** The pull requests the task delivered, newest first. */
+/** What the task delivered (pull requests, mostly), newest first. */
 function deliverables(task: TaskDetail) {
   return task.activity
     .filter((a) => a.kind === "deliverable" && typeof a.data.url === "string")
@@ -555,24 +557,33 @@ export function TaskProperties({
           <dt className={propertyLabel}>交付</dt>
           <dd className="min-w-0">
             <ul>
-              {links.map((link) => (
-                <li key={link.id}>
-                  <a
-                    href={link.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-start gap-2 py-1.5 leading-5 underline-offset-4 hover:underline"
-                  >
-                    <GitPullRequestIcon
-                      aria-hidden="true"
-                      className="mt-0.5 size-4 shrink-0"
-                    />
-                    <span className="line-clamp-2 min-w-0 wrap-anywhere">
-                      {link.title}
-                    </span>
-                  </a>
-                </li>
-              ))}
+              {links.map((link) =>
+                isPullURL(link.url) ? (
+                  <DeliveredPull
+                    key={link.id}
+                    task={task}
+                    url={link.url}
+                    title={link.title}
+                  />
+                ) : (
+                  <li key={link.id}>
+                    <a
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-start gap-2 py-1.5 leading-5 underline-offset-4 hover:underline"
+                    >
+                      <GitPullRequestIcon
+                        aria-hidden="true"
+                        className="mt-0.5 size-4 shrink-0"
+                      />
+                      <span className="line-clamp-2 min-w-0 wrap-anywhere">
+                        {link.title}
+                      </span>
+                    </a>
+                  </li>
+                ),
+              )}
             </ul>
           </dd>
         </>

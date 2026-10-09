@@ -15,6 +15,8 @@
 //	/api/forge/v1/github/oauth-client             POST {client_id, client_secret}
 //	/api/forge/v1/github/authorization            POST {origin} → {url}, DELETE
 //	/api/forge/v1/github/authorization/callback   GitHub's redirect after authorizing
+//	/api/forge/v1/pulls?url=                      GET a task's pull request now
+//	/api/forge/v1/pulls/merge                     POST {url, head_sha}: merge it
 package server
 
 import (
@@ -25,6 +27,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/akarachen/axp/apps/forge-service/internal/github"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -48,6 +51,8 @@ func New(gh *github.GitHub, logger *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/forge/v1/github/authorization", s.authorize)
 	mux.HandleFunc("DELETE /api/forge/v1/github/authorization", s.unauthorize)
 	mux.HandleFunc("GET "+github.CallbackPath, s.authorized)
+	mux.HandleFunc("GET /api/forge/v1/pulls", s.pull)
+	mux.HandleFunc("POST /api/forge/v1/pulls/merge", s.merge)
 	mux.HandleFunc("GET /up", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
@@ -57,6 +62,9 @@ func New(gh *github.GitHub, logger *slog.Logger) http.Handler {
 type server struct {
 	gh     *github.GitHub
 	logger *slog.Logger
+	// The pull requests being merged, so a second click does not race the
+	// first.
+	merging sync.Map
 }
 
 // requireAgent admits only requests the runtime gateway authenticated.
@@ -220,6 +228,32 @@ func (s *server) authorized(w http.ResponseWriter, r *http.Request) {
 		target = capabilities + "&github_error=" + url.QueryEscape(message(err))
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
+}
+
+func (s *server) pull(w http.ResponseWriter, r *http.Request) {
+	s.answer(w, func() (any, error) { return s.gh.PullRequest(r.Context(), r.URL.Query().Get("url")) })
+}
+
+func (s *server) merge(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		URL     string `json:"url"`
+		HeadSHA string `json:"head_sha"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	if _, busy := s.merging.LoadOrStore(body.URL, true); busy {
+		writeError(w, &github.Error{Code: "MERGE_IN_PROGRESS", Message: "这个 PR 正在合并。", Status: http.StatusConflict})
+		return
+	}
+	defer s.merging.Delete(body.URL)
+	s.answer(w, func() (any, error) {
+		pull, err := s.gh.MergePullRequest(r.Context(), body.URL, body.HeadSHA)
+		if err == nil {
+			s.logger.Info("merged a pull request", "url", body.URL, "head_sha", body.HeadSHA)
+		}
+		return pull, err
+	})
 }
 
 // answer writes what produce returns as JSON, or its error.

@@ -106,6 +106,9 @@ func (p *Protocol) Heartbeat(ctx context.Context, instance *chat.RuntimeRecord, 
 				}
 			}
 		case "ready", "busy":
+			if current.ReadyAt == nil {
+				current.ReadyAt = &now
+			}
 			current.Status = chat.RuntimeReady
 			if status == "busy" {
 				current.Status = chat.RuntimeBusy
@@ -124,8 +127,15 @@ func (p *Protocol) Heartbeat(ctx context.Context, instance *chat.RuntimeRecord, 
 				}
 			}
 		}
+		if status == "starting" && current.ReadyAt == nil {
+			// Reporting "starting" is no progress: one that never comes up
+			// times out StartTimeout after it was created.
+			if deadline := current.CreatedAt.Add(StartTimeout); deadline.Before(lease) {
+				lease = deadline
+			}
+		}
 		_, err = tx.Exec(ctx, `UPDATE runtime_instance SET last_heartbeat_at = $2, lease_expires_at = $3, status = $4,
-			error_code = $5 WHERE id = $1`, current.ID, now, lease, current.Status, current.ErrorCode)
+			error_code = $5, ready_at = $6 WHERE id = $1`, current.ID, now, lease, current.Status, current.ErrorCode, current.ReadyAt)
 		return err
 	})
 	if err != nil {

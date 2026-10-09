@@ -35,6 +35,9 @@ const (
 	IdleAfter    = 600 * time.Second
 	// A runtime that never came up is retried after this long.
 	RetryAfter = 30 * time.Second
+	// A runtime reports a command it took within this long, as started or
+	// in its heartbeat; see Controller.busy.
+	ClaimGrace = LeaseSeconds * time.Second
 	// The OpenTelemetry Collector on the runtime network.
 	runtimeOTLPEndpoint = "http://otel-collector:4318"
 )
@@ -55,11 +58,17 @@ type Controller struct {
 	HostID            string
 	// IdleAfter stops a ready runtime with no work for this long.
 	IdleAfter time.Duration
+	// ClaimGrace overrides the package default.
+	ClaimGrace time.Duration
 
 	// Agents with commands in the queue, as of this tick.
 	waiting map[string]bool
-	// Failing steps: an outage is logged once, not every tick.
+	// Failing steps: an outage is logged when it changes and now and then,
+	// not every tick.
 	failures telemetry.Repeats
+	// Commands taken but not reported started, by agent, and when this
+	// controller first saw them taken.
+	claims map[string]map[string]time.Time
 }
 
 // Tick runs every step once; a failing step is logged and the rest run.
@@ -122,7 +131,7 @@ func (c *Controller) expireRuntimes(ctx context.Context) error {
 		switch {
 		case instance.LeaseExpiresAt.Before(now):
 			reason, status = "LEASE_EXPIRED", chat.RuntimeFailed
-			if instance.LastHeartbeatAt == nil {
+			if instance.ReadyAt == nil && instance.Status != chat.RuntimeFailed {
 				// It never came up: what waits for it fails.
 				if err := c.failStart(ctx, instance.ID, instance.ConversationID, "START_TIMEOUT"); err != nil {
 					return err
@@ -165,24 +174,14 @@ func (c *Controller) EndInstance(ctx context.Context, instanceID, reason, status
 	if err != nil {
 		return err
 	}
-	// Queued commands no longer in the queue were taken by this instance
-	// (only one runs per agent): they may have started.
 	queued, err := pg.All[chat.CommandRecord](ctx, c.DB,
 		"SELECT * FROM agent_command WHERE agent_id = $1 AND status = 'queued'", instance.AgentID)
 	if err != nil {
 		return err
 	}
-	var taken []string
-	for _, command := range queued {
-		waiting := false
-		if command.QueueSeq != nil {
-			if waiting, err = c.Queue.Waiting(ctx, *command.QueueSeq); err != nil {
-				return err
-			}
-		}
-		if !waiting {
-			taken = append(taken, command.ID)
-		}
+	taken, err := c.taken(ctx, queued)
+	if err != nil {
+		return err
 	}
 	return pg.InTx(ctx, c.DB, func(tx pgx.Tx) error {
 		var conversationID string
@@ -252,7 +251,7 @@ func (c *Controller) ensureRuntimes(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if last != nil && last.Status == chat.RuntimeFailed && last.LastHeartbeatAt == nil &&
+		if last != nil && last.Status == chat.RuntimeFailed && last.ReadyAt == nil &&
 			last.EndedAt != nil && last.EndedAt.After(time.Now().Add(-RetryAfter)) {
 			// It never came up: back off instead of crash-looping.
 			continue
@@ -422,12 +421,84 @@ func (c *Controller) spec(ctx context.Context, agent *chat.AgentRecord, instance
 	}, nil
 }
 
-func (c *Controller) busy(ctx context.Context, agentID string) (bool, error) {
+// taken are the queued commands no longer in the queue: the agent's runtime
+// took them (only one runs per agent), and they may have started.
+func (c *Controller) taken(ctx context.Context, queued []*chat.CommandRecord) ([]string, error) {
+	var taken []string
+	for _, command := range queued {
+		waiting := false
+		if command.QueueSeq != nil {
+			var err error
+			if waiting, err = c.Queue.Waiting(ctx, *command.QueueSeq); err != nil {
+				return nil, err
+			}
+		}
+		if !waiting {
+			taken = append(taken, command.ID)
+		}
+	}
+	return taken, nil
+}
+
+// busy reports whether the instance's agent has work: waiting in the queue,
+// running, or taken by the runtime but not yet reported started. The runtime
+// acks a command as it takes it, and turn.started follows only once Codex
+// started the turn, so the queue and the database alone miss that window.
+//
+// A taken command counts until the runtime has had ClaimGrace to report it;
+// from then on only while its heartbeat says busy, so a command it never
+// reports does not keep it alive forever. Stopping it then fails the command
+// like any taken one, never replaying it.
+func (c *Controller) busy(ctx context.Context, instance *liveRuntime) (bool, error) {
+	agentID := instance.AgentID
 	if c.waiting[agentID] {
 		return true, nil
 	}
-	return pg.Exists(ctx, c.DB, "SELECT 1 FROM agent_command WHERE agent_id = $1 AND status = ANY($2)",
+	// One read, then the queue: a command taken or started in between is
+	// still seen, as taken.
+	commands, err := pg.All[chat.CommandRecord](ctx, c.DB,
+		"SELECT * FROM agent_command WHERE agent_id = $1 AND (status = ANY($2) OR status = 'queued')",
 		agentID, chat.ActiveCommandStatuses)
+	if err != nil {
+		return false, err
+	}
+	var queued []*chat.CommandRecord
+	for _, command := range commands {
+		if command.Status != chat.CommandQueued {
+			return true, nil
+		}
+		queued = append(queued, command)
+	}
+	taken, err := c.taken(ctx, queued)
+	if err != nil {
+		return false, err
+	}
+	grace := c.ClaimGrace
+	if grace == 0 {
+		grace = ClaimGrace
+	}
+	now := time.Now()
+	seen := map[string]time.Time{}
+	busy := false
+	for _, id := range taken {
+		since, ok := c.claims[agentID][id]
+		if !ok {
+			since = now
+		}
+		seen[id] = since
+		if now.Sub(since) < grace || instance.Status == chat.RuntimeBusy {
+			busy = true
+		}
+	}
+	if c.claims == nil {
+		c.claims = map[string]map[string]time.Time{}
+	}
+	if len(seen) == 0 {
+		delete(c.claims, agentID)
+	} else {
+		c.claims[agentID] = seen
+	}
+	return busy, nil
 }
 
 // StopIdle stops ready runtimes that have had no work for a while.
@@ -445,7 +516,7 @@ func (c *Controller) StopIdle(ctx context.Context) error {
 		if instance.DesiredState == chat.DesiredRunning {
 			continue
 		}
-		if busy, err := c.busy(ctx, instance.AgentID); err != nil || busy {
+		if busy, err := c.busy(ctx, instance); err != nil || busy {
 			if err != nil {
 				return err
 			}
@@ -480,7 +551,7 @@ func (c *Controller) restartOutdated(ctx context.Context) error {
 		if instance.ConfigVersion >= instance.AgentConfigVersion {
 			continue
 		}
-		if busy, err := c.busy(ctx, instance.AgentID); err != nil || busy {
+		if busy, err := c.busy(ctx, instance); err != nil || busy {
 			if err != nil {
 				return err
 			}

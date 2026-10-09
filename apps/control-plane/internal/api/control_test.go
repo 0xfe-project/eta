@@ -67,6 +67,43 @@ func TestRuntimeThatNeverComesUpFailsWhatWaits(t *testing.T) {
 	expect(t, len(c.nats.Queued(c.agent.ID)), 0)
 }
 
+func TestRuntimeThatOnlyReportsStartingTimesOut(t *testing.T) {
+	c := newControl(t)
+	sent := c.sendText("检查项目结构")
+	c.tick()
+	r := c.runtime(c.agent.ID)
+	expect(t, r.heartbeat("starting").status, 200)
+	c.tick()
+	expect(t, c.replyStatus(sent), "queued")
+	// Still "starting" past the start timeout: its heartbeats no longer
+	// extend the lease.
+	c.exec("UPDATE runtime_instance SET created_at = created_at - $1::interval", "121 seconds")
+	expect(t, r.heartbeat("starting").status, 200)
+	c.tick()
+	expect(t, c.replyFailure(sent), "START_TIMEOUT")
+	// It never came up: the next one waits RetryAfter instead of crash-looping.
+	c.sendText("再试一次")
+	c.tick()
+	expect(t, len(c.driver.started), 1)
+}
+
+func TestRuntimeThatCameUpIsNotTimedOutWhenItFails(t *testing.T) {
+	c, r := provisioned(t)
+	r.ready("thread-1")
+	c.exec("UPDATE runtime_instance SET created_at = created_at - $1::interval", "1 hour")
+	expect(t, r.heartbeat("busy").status, 200)
+	c.tick()
+	_, generation := c.liveInstance(c.agent.ID)
+	expect(t, generation, int64(1))
+	// It came up once, so a crash is retried at once, not backed off.
+	c.expireLeases()
+	c.tick()
+	c.sendText("继续")
+	c.tick()
+	_, generation = c.liveInstance(c.agent.ID)
+	expect(t, generation, int64(2))
+}
+
 func provisioned(t *testing.T) (*controlEnv, *runtimeHarness) {
 	c := newControl(t)
 	c.sendText("检查项目结构")
@@ -139,6 +176,31 @@ func TestEventOrdering(t *testing.T) {
 	conflict := r.events(event{"snapshot.failed", map[string]any{"reason": "OTHER"}})
 	expect(t, conflict.status, 409)
 	expect(t, scalar[string](c.env, "SELECT last_error FROM agent_session"), "SNAPSHOT_FAILED")
+}
+
+func TestEventsWithNULAreImported(t *testing.T) {
+	c, r := provisioned(t)
+	r.ready("thread-1")
+	item := map[string]any{"id": "cmd-1", "kind": "command", "status": "completed",
+		"input": "find . -print0", "output": "a\x00b\x00"}
+	resp := r.events(event{"item.updated", map[string]any{"item": item, "note\x00": "x\x00y"}})
+	expect(t, resp.status, 200)
+	expect(t, scalar[string](c.env, "SELECT payload->'item'->>'output' FROM agent_event"), "ab")
+	expect(t, scalar[string](c.env, "SELECT payload->>'note' FROM agent_event"), "xy")
+	// Re-sent as it was, it is the same event.
+	r.seq = 0
+	expect(t, r.events(event{"item.updated", map[string]any{"item": item, "note\x00": "x\x00y"}}).status, 200)
+}
+
+func TestEventBatchesUpTo4MiBAreTaken(t *testing.T) {
+	c, r := provisioned(t)
+	r.ready("thread-1")
+	// 1.5 MiB as sent: the runtime's batches are up to 1 MiB, with margin.
+	text := strings.Repeat("长", 1<<19)
+	expect(t, r.events(event{"snapshot.failed", map[string]any{"reason": "SNAPSHOT_FAILED", "text": text}}).status, 200)
+	huge := strings.Repeat("长", 2<<20)
+	expect(t, r.events(event{"snapshot.failed", map[string]any{"reason": "SNAPSHOT_FAILED", "text": huge}}).status, 413)
+	expect(t, scalar[int](c.env, "SELECT count(*) FROM agent_event"), 1)
 }
 
 func TestQueueStreamAndComplete(t *testing.T) {
@@ -509,6 +571,88 @@ func TestIdleRuntimeIsStopped(t *testing.T) {
 	}
 	expect(t, scalar[int](c.env, "SELECT count(*) FROM runtime_instance WHERE ended_at IS NULL"), 0)
 	expect(t, c.agentStatus(), "idle")
+}
+
+// The runtime acks a command as it takes it; turn.started comes only once
+// Codex started the turn. In between the command is in neither the queue nor
+// the running set, and the runtime is not idle.
+func TestTakenCommandKeepsTheRuntimeThroughAConfigChange(t *testing.T) {
+	c := newControl(t)
+	sent, r, command := c.running()
+	old, _ := c.liveInstance(c.agent.ID)
+	container := scalar[string](c.env, "SELECT container_id FROM runtime_instance WHERE id = $1", old)
+	c.patch("/agents/"+c.agent.ID, map[string]any{"name": "审查员"})
+	c.tick()
+	if c.driver.wasStopped(container) {
+		t.Fatal("stopped with a taken command")
+	}
+	expect(t, c.replyStatus(sent), "queued")
+	// Once the turn settles, the new configuration applies.
+	r.turnStarted(command, "t")
+	r.turnCompleted(command, "completed")
+	c.tick()
+	if !c.driver.wasStopped(container) {
+		t.Fatal("not stopped")
+	}
+	expect(t, scalar[string](c.env, "SELECT end_reason FROM runtime_instance WHERE id = $1", old), "CONFIG_CHANGED")
+	expect(t, c.replyStatus(sent), "completed")
+}
+
+func TestTakenCommandKeepsAnIdleRuntime(t *testing.T) {
+	c := newControl(t)
+	c.controller.IdleAfter = time.Nanosecond
+	_, r, first := c.running()
+	r.turnCompleted(first, "completed")
+	sent := c.sendText("十分钟后的消息")
+	command := c.commandOf(sent)
+	c.take(command)
+	c.exec("UPDATE agent SET last_active_at = $1", time.Now().Add(-5*time.Second))
+	instance, _ := c.liveInstance(c.agent.ID)
+	container := scalar[string](c.env, "SELECT container_id FROM runtime_instance WHERE id = $1", instance)
+	stopIdle := func() {
+		if err := c.controller.LookAtQueue(c.ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := c.controller.StopIdle(c.ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stopIdle()
+	if c.driver.wasStopped(container) {
+		t.Fatal("stopped with a taken command")
+	}
+	expect(t, c.replyStatus(sent), "queued")
+	r.turnStarted(command, "t")
+	r.turnCompleted(command, "completed")
+	c.exec("UPDATE agent SET last_active_at = $1", time.Now().Add(-5*time.Second))
+	stopIdle()
+	if !c.driver.wasStopped(container) {
+		t.Fatal("not stopped")
+	}
+}
+
+// A taken command the runtime never reports holds it only while its
+// heartbeat says it is busy; then it fails like any taken command.
+func TestUnreportedTakenCommandDoesNotHoldTheRuntimeForever(t *testing.T) {
+	c := newControl(t)
+	c.controller.ClaimGrace = time.Nanosecond
+	sent, r, command := c.running()
+	old, _ := c.liveInstance(c.agent.ID)
+	container := scalar[string](c.env, "SELECT container_id FROM runtime_instance WHERE id = $1", old)
+	c.patch("/agents/"+c.agent.ID, map[string]any{"name": "审查员"})
+	c.tick() // first seen taken
+	r.heartbeat("busy")
+	c.tick()
+	if c.driver.wasStopped(container) {
+		t.Fatal("stopped while the runtime reports busy")
+	}
+	r.heartbeat("ready")
+	c.tick()
+	if !c.driver.wasStopped(container) {
+		t.Fatal("not stopped")
+	}
+	expect(t, c.commandStatus(command), "failed")
+	expect(t, c.replyFailure(sent), "REPLY_INTERRUPTED")
 }
 
 func TestDeletedAgentIsInterruptedThenStopped(t *testing.T) {

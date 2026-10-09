@@ -17,7 +17,6 @@ import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels } from "./agent-status";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
 import { useAgents, useOpenAgent } from "./use-agents";
-import { usePendingTitle } from "./use-pending-title";
 
 // The full-window workspace (/workspace) around its pages: from md up
 // a sidebar of sections and agents, on narrow ones a bar along the top. The
@@ -199,7 +198,6 @@ export function PageHeader({
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  usePendingTitle();
   return (
     <div className="flex h-dvh min-h-0 bg-background">
       <Sidebar />

@@ -5,11 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/akarachen/axp/packages/service-go/apierr"
 	"github.com/danielgtaylor/huma/v2"
@@ -117,5 +121,109 @@ func TestUpstreamFailuresAreLoggedAndCallerMistakesAreNot(t *testing.T) {
 		if !strings.Contains(line, want) {
 			t.Errorf("no %s in %s", want, line)
 		}
+	}
+}
+
+// serve runs Serve with a handler that blocks each request until release
+// closes; entered receives once a request is in the handler.
+func serve(t *testing.T, drain time.Duration) (addr string, entered, release chan struct{}, cancel context.CancelFunc, served chan error) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr = ln.Addr().String()
+	_ = ln.Close()
+	entered, release, served = make(chan struct{}, 1), make(chan struct{}), make(chan error, 1)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		entered <- struct{}{}
+		<-release
+		_, _ = io.WriteString(w, "done")
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go func() { served <- Serve(ctx, addr, handler, drain) }()
+	waitListening(t, addr, true)
+	return
+}
+
+// waitListening waits until addr accepts connections, or refuses them.
+func waitListening(t *testing.T, addr string, want bool) {
+	t.Helper()
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
+		conn, err := net.Dial("tcp", addr)
+		if err == nil {
+			_ = conn.Close()
+		}
+		if (err == nil) == want {
+			return
+		}
+	}
+	t.Fatalf("listening at %s never became %v", addr, want)
+}
+
+func get(addr string) (string, error) {
+	res, err := http.Get("http://" + addr + "/")
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+	body, err := io.ReadAll(res.Body)
+	return string(body), err
+}
+
+func returned(t *testing.T, served chan error) error {
+	t.Helper()
+	select {
+	case err := <-served:
+		return err
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve did not return")
+		return nil
+	}
+}
+
+func TestServeDrainsRequestsBeforeReturning(t *testing.T) {
+	addr, entered, release, cancel, served := serve(t, 10*time.Second)
+	answered := make(chan string, 1)
+	go func() { body, err := get(addr); answered <- fmt.Sprint(body, err) }()
+	<-entered
+	cancel()
+	waitListening(t, addr, false) // Shutdown has started
+	select {
+	case err := <-served:
+		t.Fatalf("Serve returned (%v) with a request in flight", err)
+	default:
+	}
+	close(release)
+	if got := <-answered; got != "done<nil>" {
+		t.Fatalf("response = %q; want the full body", got)
+	}
+	if err := returned(t, served); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestServeGivesUpAfterTheDrain(t *testing.T) {
+	addr, entered, release, cancel, served := serve(t, 50*time.Millisecond)
+	defer close(release)
+	go func() { _, _ = get(addr) }()
+	<-entered
+	cancel()
+	if err := returned(t, served); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestServeReturnsWhenItCannotListen(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	served := make(chan error, 1)
+	// ctx never ends: Serve must not wait for a shutdown that never starts.
+	go func() { served <- Serve(context.Background(), ln.Addr().String(), http.NotFoundHandler(), time.Second) }()
+	if err := returned(t, served); err == nil {
+		t.Fatal("Serve = nil; want the listen error")
 	}
 }

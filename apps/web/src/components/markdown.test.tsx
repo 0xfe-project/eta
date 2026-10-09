@@ -2,9 +2,11 @@ import { describe, expect, it } from "@rstest/core";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Markdown } from "./markdown";
 
-function render(source: string) {
+function render(source: string, streaming = false) {
   const root = document.createElement("div");
-  root.innerHTML = renderToStaticMarkup(<Markdown>{source}</Markdown>);
+  root.innerHTML = renderToStaticMarkup(
+    <Markdown streaming={streaming}>{source}</Markdown>,
+  );
   return root;
 }
 
@@ -83,7 +85,47 @@ describe("Markdown links next to Chinese text", () => {
 
   it("drops raw HTML and unsafe links", () => {
     const root = render("[坏](javascript:alert(1)) <b>x</b>");
-    expect(root.querySelector("a")!.getAttribute("href")).toBe("");
+    expect(root.querySelector("a")!.hasAttribute("href")).toBe(false);
     expect(root.querySelector("b")).toBeNull();
+  });
+});
+
+describe("Markdown", () => {
+  it("opens links in a new tab without an opener", () => {
+    for (const a of render(
+      "[a](https://a.com) 和 https://b.com/x，中文",
+    ).querySelectorAll("a")) {
+      expect(a.getAttribute("target")).toBe("_blank");
+      expect(a.getAttribute("rel")).toBe("noopener noreferrer");
+    }
+  });
+
+  it("renders plain tables and code blocks, styled by .markdown", () => {
+    const root = render("| a | b |\n|---|---|\n| 1 | 2 |\n\n```ts\nx\n```");
+    expect(root.firstElementChild!.classList).toContain("markdown");
+    expect(root.querySelectorAll("table td")).toHaveLength(2);
+    expect(root.querySelector("pre > code")!.textContent).toBe("x\n");
+    // No toolbars, wrappers or Streamdown classes of its own.
+    expect(root.querySelector("button")).toBeNull();
+    expect(
+      root.querySelector("[class*=streamdown], [data-streamdown]"),
+    ).toBeNull();
+  });
+
+  it("renders the same finished text in either mode", () => {
+    const source =
+      "# 标题\n\n见 https://example.com/a，然后\n\n**加粗**中文\n\n- x\n- y";
+    // Streaming renders block by block, without newlines between them.
+    const html = (root: HTMLElement) => root.innerHTML.replaceAll(">\n<", "><");
+    expect(html(render(source, true))).toBe(html(render(source)));
+    expect(render(source, true).querySelector("strong")!.textContent).toBe(
+      "加粗",
+    );
+  });
+
+  it("gives a link still being streamed no destination", () => {
+    const a = render("见 [链接](https://exa", true).querySelector("a")!;
+    expect(a.textContent).toBe("链接");
+    expect(a.hasAttribute("href")).toBe(false);
   });
 });

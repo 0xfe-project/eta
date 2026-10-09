@@ -1,12 +1,13 @@
 import type { WorkspaceView } from "./types";
+import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
+  chatQueryOptions,
   useAgentMessages,
   useAnswerInteraction,
-  useChat,
   useCompact,
   usePendingInteractions,
   useStopReply,
@@ -23,7 +24,6 @@ import { AgentEditor } from "./agent-editor";
 import { ChatPanel, ComposerNotice } from "./chat-panel";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
 import { useAgents } from "./use-agents";
-import { usePendingTitle } from "./use-pending-title";
 import { WorkspacePanel } from "./workspace-panel";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -38,9 +38,9 @@ export function Workspace({
   const mobilePanel = useWorkspaceStore((s) => s.mobilePanel);
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
-  const chat = useChat();
-  const pending = usePendingInteractions().length;
-  usePendingTitle();
+  const chat = useQuery(chatQueryOptions());
+  const waiting = usePendingInteractions();
+  const pending = waiting.length;
   const { current: selected, openEditor } = useAgents();
   const history = useAgentMessages(selected?.id);
   const connectionLost = useStreamLost((s) => s.lost);
@@ -142,7 +142,7 @@ export function Workspace({
             hasOlder={history.hasOlder}
             loadingOlder={history.loadingOlder}
             onLoadOlder={history.loadOlder}
-            interactions={chat.data?.interactions ?? []}
+            interactions={waiting}
             head={<AgentBar />}
             agentStatus={selected?.status}
             connectionLost={connectionLost}

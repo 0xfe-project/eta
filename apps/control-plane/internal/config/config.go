@@ -35,7 +35,8 @@ type Config struct {
 	// The LLM gateway (apps/llm-gateway), for its model catalog.
 	LLMGatewayURL string `env:"AXP_LLM_GATEWAY_URL" dev:"http://127.0.0.1:8317" prod:"http://axp-llm:8317"`
 	// SeaweedFS's S3 API, holding agent snapshots. Runtimes reach it at the
-	// same address through presigned URLs.
+	// same address through presigned URLs: in production through s3-proxy,
+	// which forwards this port alone (deploy/deploy.yml).
 	S3Endpoint        string `env:"AXP_S3_ENDPOINT" dev:"http://172.30.0.1:8333" prod:"http://axp-s3:8333"`
 	S3AccessKeyID     string `env:"AXP_S3_ACCESS_KEY_ID" dev:"axp-dev"`
 	S3SecretAccessKey string `env:"AXP_S3_SECRET_ACCESS_KEY" dev:"axp-dev-secret"`

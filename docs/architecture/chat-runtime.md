@@ -23,7 +23,9 @@
 3. runtime 启动：下载并解开 Agent 的快照（有的话）→ 安装镜像里的 Codex plugin（见下文）→ 启动 Codex app-server → 用控制面记录的 thread id 恢复（只有首次才 `thread/start`；无法恢复时报告 `recovery_failed`，绝不另起 thread）→ 心跳报告 ready → 开始读队列。
 4. runtime 空闲时从队列取一条命令，确认后执行；一次一条（部分唯一索引兜底）。
 5. runtime 先记账再调用 `turn/start`；Codex 通知被转换成有序 outbox 事件（`turn.started`、`item.updated`、`approval.*`、`turn.completed` 等），增量文本每 0.3 秒合并一次。turn 结束后先上传快照（见下文），再发出 `turn.completed`。
-6. 内部事件接口按 `source_seq` 连续导入 `agent_event`（缺口返回 `409 EVENT_GAP` 与下一期望序号，重复事件幂等，内容不同则冲突），同事务内投影为消息块、交互和 `ui_event`，SSE 推给浏览器。
+6. 内部事件接口按 `source_seq` 连续导入 `agent_event`（缺口返回 `409 EVENT_GAP` 与下一期望序号，重复事件幂等，内容不同则冲突），同事务内投影为消息块、交互和 `ui_event`，SSE 推给浏览器。字符串里的 NUL 字符在写入 jsonb 前去掉。同一批里同一回复连续的 `item.updated` 先在内存里合并，这一段结束时（下一个其他事件、另一条回复的 `item.updated` 或批次末尾）才写一次消息、出一个 revision 和一条 `message.updated`；原始事件仍逐条存进 `agent_event`，每条 `message.updated` 仍带整条消息。revision 因此会跳号，浏览器只比较大小。
+
+outbox 的送达：批次按实际发送的 UTF-8 JSON 字节计，最多 1 MiB（接口收 4 MiB），回复文本最多 100,000 字。接口以 400、413、422 拒收时 runtime 把批次减半；单条仍被拒，就在同一 `source_seq` 发一个 `event.rejected` 占位，后面的事件（尤其 `turn.completed`）照常送达，被拒的不是显示条目（`item.updated`）时实例报告 `error`（`EVENT_REJECTED`）。已确认的事件从 outbox 删除。
 
 停止：命令还在队列里时从队列删除，直接取消。已被 runtime 取走的记录 `interrupt_requested_at`、回复置为 `stopping`，并发给 runtime 一条中断；runtime 以 `turn.completed(interrupted)` 确认后回复才变为 `stopped`。仍在 `stopping` 时再点停止会再发一次。
 
@@ -58,15 +60,17 @@ AXP 是单用户服务，所有智能体属于唯一的默认对话（`conversat
 
 历史按智能体分页：`GET /agents/{id}/messages?before=&limit=` 从最新一页往回翻（默认 50 条，最多 100），每页按发送顺序排列，`next_cursor` 是指向更早消息的签名游标，走 `(agent_id, seq)` 索引。`GET /chat` 快照不再带消息，只带智能体、进行中的回复、待处理交互和事件游标。
 
-前端分两层合成一个智能体的时间线：快照之后经 SSE 和写接口到达的消息叠在 `["chat"]` 缓存里（起点是进行中的回复），历史页在 `["chat", "messages", agentId]` 无限查询里；渲染时按 id 去重、取较高 revision。历史页总是在快照之后读取，与叠加层之间不会有缺口；SSE 断开后重拉快照时，同一前缀下的历史查询一起失效重拉。
+前端分两层合成一个智能体的时间线：快照之后经 SSE 和写接口到达的消息叠在 `["chat"]` 缓存里（起点是进行中的回复），历史页在 `["chat", "messages", agentId]` 无限查询里；渲染时按 id 去重、取较高 revision。历史页总是在快照之后读取，与叠加层之间不会有缺口；SSE 断开后重拉快照时，同一前缀下的历史查询一起失效重拉。叠加层按发送顺序保存，新 revision 原位替换、新消息有序插入，其余消息保持原对象；历史页已经以同一或更高 revision 收录的已结束消息从叠加层移除。每条消息是一个 memo 行，所以一次更新只重新渲染它改变的那条消息；进行中的回复用 Streamdown 的 streaming 模式只重新解析最后一个 Markdown 块，其余用 static 模式。
+
+全站只有一条 SSE 订阅，挂在根组件（`apps/web/src/components/workspace/live-chat.ts`），所以任何页面上的侧栏角标、标签页标题和确认页都是实时的。EventSource 自己重连失败（例如部署期间网关返回 503）进入 `CLOSED` 后，按 1、2、4…30 秒退避重拉快照并重新打开，即使游标没变；快照拉取失败也按同样的退避重试。
 
 ## 恢复与隔离
 
 - 心跳续租（默认 30 秒）。租约过期时 controller 先停止并移除旧容器，再结束实例；之后旧实例的任何请求都得到 `409 STALE_GENERATION`，runtime 收到后立即退出。
 - 实例结束时，容器连同上次快照之后的改动一起消失；它从队列取走的命令以“执行中断，无法确认结果，未自动重试”失败，绝不重放。仍在队列里的命令由下一个实例执行。
-- Codex 进程在 turn 中途退出时，该命令同样以执行中断失败，实例报告 `error`。
+- Codex 进程在 turn 中途退出，或 runtime 的任何后台线程意外出错时，实例停掉 Codex，执行中的命令同样以执行中断失败，实例报告 `error`。GitHub 凭据刷新失败只记日志，稍后重试。
 - plugin 安装失败（`PLUGIN_INSTALL_FAILED`，回复显示“智能体扩展启动失败”）、快照无法下载或解开等使 runtime 停在未就绪状态；排队与派发中的回复以中文原因失败，Agent 显示为“不可用”。之后的新消息会让 controller 换一代实例重试；从未就绪过的实例有 30 秒的退避。
-- 实例 120 秒内没有就绪时，该 Agent 的队列被清空，等待中的消息以“准备超时”失败。
+- 实例创建后 120 秒内没有就绪（`ready_at` 为空）时，该 Agent 的队列被清空，等待中的消息以“准备超时”失败；一直报告 `starting` 的心跳不会把租约续过这个期限。
 - 空闲超过 10 分钟的实例会被停止；下一条消息会重新拉起，从快照恢复同一 thread。
 
 ## 快照
@@ -96,6 +100,7 @@ runtime 每次启动、在 Codex 之前对选中的每个 plugin 执行 `codex p
 
 - 开发与生产各有一套 SeaweedFS 和 runtime 网络（`axp-dev-s3` / `axp-runtime` 与 `axp-s3` / `axp-prod-runtime`），开发新建的容器以 `axp-dev-` 开头，互不可见。
 - 一个 Agent 只能读写自己的快照：容器里没有挂载，没有共享文件系统，也没有存储凭据。
+- runtime 网络上只有 SeaweedFS 的 S3 端口可达（生产经 `s3-proxy`，开发只发布 8333），它的 filer、master、volume 等不鉴权的接口连不到，绕不开预签名地址（见[网关](gateway.md)）。
 
 ## 已知限制
 
