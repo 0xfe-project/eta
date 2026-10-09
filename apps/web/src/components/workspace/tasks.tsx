@@ -184,7 +184,7 @@ function TaskList() {
           <PlusIcon aria-hidden="true" />
         </Button>
       </div>
-      {error ? (
+      {error && !data ? (
         <LoadError what="任务" error={error} onRetry={() => void refetch()} />
       ) : !data ? (
         <Loading />

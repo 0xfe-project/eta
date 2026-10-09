@@ -8,6 +8,7 @@ import { usePendingInteractions } from "@/queries/chat";
 import { Inbox } from "./inbox";
 import { MemoryView } from "./memory-view";
 import { Overview } from "./overview";
+import { RefreshButton } from "./refresh-button";
 import { useRoutineNav } from "./routine-nav";
 import { Routines } from "./routines";
 import { useTaskNav } from "./task-nav";
@@ -67,7 +68,11 @@ export function WorkspacePanel({
       )}
     >
       <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 pt-3">
-        <span aria-hidden="true" />
+        <div className="justify-self-start">
+          {view === "tasks" || view === "routines" ? (
+            <RefreshButton resource={view} />
+          ) : null}
+        </div>
         <TabsList variant="default" aria-label="工作区标签" className="gap-1">
           {views.map(({ value, label }) => (
             <TabsTrigger
