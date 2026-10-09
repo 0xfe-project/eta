@@ -134,3 +134,60 @@ export function useRefreshGitHub() {
   const queryClient = useQueryClient();
   return () => queryClient.invalidateQueries({ queryKey: key });
 }
+
+// A task's pull requests on GitHub, read and merged through the forge
+// service with the App's or the authorizing user's token, never the
+// browser's. Keyed under the task, so refreshing the task refreshes them.
+
+const pullSchema = z.object({
+  url: z.string(),
+  title: z.string(),
+  state: z.enum(["open", "draft", "merged", "closed"]),
+  additions: z.number(),
+  deletions: z.number(),
+  head_sha: z.string(),
+  // Open ones only: whether GitHub would merge it now, and why not.
+  merge: z.enum(["ready", "pending", "blocked"]).optional(),
+  reason: z.string().optional(),
+});
+
+export type PullRequest = z.infer<typeof pullSchema>;
+
+const pullKey = (task: string, url: string) =>
+  ["tasks", task, "pull", url] as const;
+
+export function usePullRequest(task: string, url: string) {
+  return useQuery({
+    queryKey: pullKey(task, url),
+    queryFn: async ({ signal }) =>
+      pullSchema.parse(
+        await forgeApi.get(`/pulls?url=${encodeURIComponent(url)}`, signal),
+      ),
+    // Changes on GitHub, so every look at the task reads it again.
+    staleTime: 0,
+    // GitHub computes mergeability in the background.
+    refetchInterval: (query) =>
+      query.state.data?.merge === "pending" ? 5000 : false,
+  });
+}
+
+/**
+ * Merging a pull request at the head the user saw. Whatever the outcome,
+ * the pull request is read again; a lost answer is never retried here.
+ */
+export function useMergePullRequest(task: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { url: string; headSha: string }) =>
+      pullSchema.parse(
+        await forgeApi.post("/pulls/merge", {
+          url: input.url,
+          head_sha: input.headSha,
+        }),
+      ),
+    onSuccess: (pull, input) =>
+      queryClient.setQueryData(pullKey(task, input.url), pull),
+    onSettled: (_pull, _error, input) =>
+      queryClient.invalidateQueries({ queryKey: pullKey(task, input.url) }),
+  });
+}
