@@ -78,33 +78,6 @@
   .markdown td {
     @apply border border-border px-3 py-1 text-left;
   }
-  /* Frosted glass behind the chat head. Blur and tint fade out over the
-     bottom --fade along ease-in-out, cubic-bezier(0.42, 0, 0.58, 1), sampled
-     at eighths into gradient stops, so the edge has no visible seam. */
-  .chat-glass {
-    --fade: 2.5rem;
-    --glass-mask: linear-gradient(
-      to bottom,
-      #000 calc(100% - var(--fade)),
-      rgb(0 0 0 / 0.969) calc(100% - var(--fade) * 0.875),
-      rgb(0 0 0 / 0.871) calc(100% - var(--fade) * 0.75),
-      rgb(0 0 0 / 0.707) calc(100% - var(--fade) * 0.625),
-      rgb(0 0 0 / 0.5) calc(100% - var(--fade) * 0.5),
-      rgb(0 0 0 / 0.293) calc(100% - var(--fade) * 0.375),
-      rgb(0 0 0 / 0.129) calc(100% - var(--fade) * 0.25),
-      rgb(0 0 0 / 0.031) calc(100% - var(--fade) * 0.125),
-      transparent
-    );
-    background-color: color-mix(
-      in oklab,
-      var(--terminal-background) 70%,
-      transparent
-    );
-    -webkit-backdrop-filter: blur(12px);
-    backdrop-filter: blur(12px);
-    -webkit-mask-image: var(--glass-mask);
-    mask-image: var(--glass-mask);
-  }
 }
 
 @theme inline {

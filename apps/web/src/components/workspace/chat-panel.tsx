@@ -718,14 +718,10 @@ export function ChatPanel({
         onScroll={transcript.onScroll}
         className="min-h-0 flex-1 overflow-y-auto"
       >
-        {/* Floats over the transcript, which scrolls on under the glass and
-            stays clickable where it shows through; only the buttons catch. */}
+        {/* Floats over the transcript, which scrolls on beneath it and stays
+            clickable around it; only the buttons catch. */}
         {head ? (
           <div className="pointer-events-none sticky top-0 z-10 [&_button]:pointer-events-auto">
-            <div
-              aria-hidden="true"
-              className="chat-glass pointer-events-none absolute inset-0 -z-10"
-            />
             {head}
           </div>
         ) : null}
