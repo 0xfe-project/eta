@@ -1,6 +1,6 @@
 module github.com/akarachen/axp/apps/routine-service
 
-go 1.26.6
+go 1.26.9
 
 require (
 	cloud.google.com/go v0.123.0 // indirect
@@ -54,7 +54,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
-	golang.org/x/net v0.59.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
