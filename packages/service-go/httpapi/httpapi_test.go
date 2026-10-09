@@ -90,7 +90,9 @@ func TestRequestsAreAnsweredAndIdentified(t *testing.T) {
 	if status, out, _ := do(t, "GET", "/api/test/health", ""); status != 200 || out["service"] != "test" {
 		t.Fatalf("health %d %v", status, out)
 	}
-	// Lists are never null; responses carry no $schema.
+	if _, out, _ := do(t, "GET", "/api/test/things/x", ""); out["$schema"] != nil {
+		t.Fatalf("a $schema link: %v", out)
+	}
 	if status, out, _ := do(t, "GET", "/api/test/openapi.json", ""); status != 200 || out["openapi"] == nil {
 		t.Fatalf("openapi %d", status)
 	}
