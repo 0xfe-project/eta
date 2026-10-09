@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { chatQueryOptions } from "@/queries/chat";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -23,12 +24,15 @@ export function useAgents() {
   };
 }
 
-/** Switch to an agent's chat (on mobile, to the chat panel too). */
+/** Switch to an agent's chat, from any page (on mobile, to the chat panel). */
 export function useOpenAgent() {
   const { select } = useAgents();
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const navigate = useNavigate();
   return (agentId: string) => {
     select(agentId);
     setMobilePanel("chat");
+    if (pathname !== "/") void navigate({ to: "/" });
   };
 }

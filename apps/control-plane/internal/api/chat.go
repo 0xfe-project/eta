@@ -112,6 +112,18 @@ func registerChat(api huma.API, d *Deps) {
 			return &body[chat.MessagePage]{*page}, nil
 		})
 
+	huma.Register(api, op("listInteractions", http.MethodGet, "/api/v1/chat/interactions",
+		"Every agent's latest confirmations, newest first, answered or not", 200, "chat"),
+		func(ctx context.Context, in *struct {
+			Limit int `query:"limit" default:"50" minimum:"1" maximum:"200"`
+		}) (*body[chat.InteractionList], error) {
+			list, err := s.Interactions(ctx, d.DB, in.Limit)
+			if err != nil {
+				return nil, err
+			}
+			return &body[chat.InteractionList]{*list}, nil
+		})
+
 	huma.Register(api, op("listPlugins", http.MethodGet, "/api/v1/plugins",
 		"The runtime image's plugins agents choose from", 200, "chat"),
 		func(context.Context, *struct{}) (*body[[]plugins.Plugin], error) {

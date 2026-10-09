@@ -280,6 +280,14 @@ func TestApprovalRoundTrip(t *testing.T) {
 	expect(t, scalar[string](c.env, "SELECT status FROM interaction"), "resolved")
 	expect(t, scalar[string](c.env, "SELECT status FROM approval"), "applied")
 	expect(t, c.replyStatus(sent), "responding")
+	// Answered, it leaves the snapshot but stays in the list, with its answer.
+	expect(t, len(c.interactions()), 0)
+	var list chat.InteractionList
+	c.get("/chat/interactions").json(t, &list)
+	expect(t, len(list.Interactions), 1)
+	expect(t, list.Interactions[0].Status, "resolved")
+	expect(t, *list.Interactions[0].Answer, "allow")
+	assertNoInternalFields(t, list.Interactions[0])
 }
 
 func TestPluginConfirmation(t *testing.T) {

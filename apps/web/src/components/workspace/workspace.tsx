@@ -15,8 +15,9 @@ import { useModelAvailability } from "@/queries/llm";
 import { AgentBar } from "./agent-bar";
 import { AgentEditor } from "./agent-editor";
 import { ChatPanel, ComposerNotice } from "./chat-panel";
-import { SettingsDialog } from "./settings-dialog";
+import { SettingsButton, SettingsDialog } from "./settings-dialog";
 import { useAgents } from "./use-agents";
+import { usePendingTitle } from "./use-pending-title";
 import { WorkspacePanel } from "./workspace-panel";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -35,6 +36,7 @@ export function Workspace({
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const chat = useChat();
   const pending = usePendingInteractions().length;
+  usePendingTitle();
   const { current: selected, openEditor } = useAgents();
   const history = useAgentMessages(selected?.id);
   const availability = useModelAvailability(selected);
@@ -69,7 +71,7 @@ export function Workspace({
     <div className="mx-auto flex h-dvh w-full min-h-0 flex-col bg-background px-4 pb-4 sm:px-6 lg:max-w-[calc(64rem+3rem)]">
       <header className="flex h-14 shrink-0 items-center justify-between gap-2">
         <h1 className="text-xl font-semibold tracking-tight">axp.</h1>
-        <SettingsDialog />
+        <SettingsButton />
       </header>
       <div className="grid grid-cols-2 md:hidden" aria-label="工作区面板">
         <Button
@@ -155,6 +157,7 @@ export function Workspace({
           className={mobilePanel === "chat" ? "hidden md:flex" : undefined}
         />
       </main>
+      <SettingsDialog />
       <AgentEditor />
     </div>
   );

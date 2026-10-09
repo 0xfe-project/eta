@@ -82,7 +82,7 @@ bun run --cwd apps/web typecheck
 
 ## 工作台
 
-首页参考 [today.ai hero](https://today.ai/) 中的左右分栏：桌面左侧为聊天，右侧为 Overview / Tasks / Memory / Capabilities；手机上通过 Chat / Workspace 切换面板。源码在 `src/components/workspace/`。
+首页左侧为聊天，右侧为概览 / 任务 / 定时 / 记忆 / 能力 / 确认面板；全窗口工作台在 `/workspace`（见「页面与路由」）。源码在 `src/components/workspace/`。
 
 聊天使用 brainless 消息与输入组件，默认 Claude 外观，使用原版单行 Prompt，支持 Enter 发送，使用一个常驻会话。右上角 Settings 可立即切换 Claude / Codex / Grok 外观，选择随工作区保存，切换保留消息与草稿。当前仅保存用户消息，尚未调用模型。任务支持新增、完成、删除；Memory 支持编辑上下文。数据使用 Zod 校验后保存在 `localStorage` 的 `axp.workspace.v1`，只属于当前浏览器，不会同步到后端。Capabilities 中的 Control plane 状态来自控制面的健康检查，与 agent runtime 是否连接无关。
 
@@ -110,11 +110,11 @@ import { GrokThought } from "@/components/brainless/grok/grok-thought";
 
 ## 页面与路由
 
-- `/`：聊天与工作区双栏页面，最大宽度 1024px。
-- `/workspace?view=memory`：独立全窗口工作区，可直接访问、刷新和通过浏览器历史导航。`view` 支持 overview / tasks / memory / capabilities；四个内容区域暂时留空。
-- `workspace-panel.tsx`：两种页面共用的标签栏、内容容器和展开/返回链接。
-- `settings-dialog.tsx`：会话外观设置。
-- `workspace-state.tsx`：根级 Provider，保留跨路由的消息、草稿、外观和手机面板选择；草稿仅在当前页面会话内保留。
-- `workspace-search.ts`：两条路由共用的 URL 参数校验及读取。
+- `/`：聊天与右侧面板（概览仪表盘、任务、定时、记忆、能力、确认）。除概览外，标签右上角的「在全窗口中打开」进入 `/workspace` 下对应的位置。手机上通过「对话 / 工作区」切换。
+- `/workspace`：全窗口工作台，传统应用布局。宽屏（`lg` 起）左侧边栏切换分区并列出智能体（点击回到 `/` 与它对话），窄屏收成顶部图标栏。外壳在 `app-shell.tsx`，挂在 `/workspace` 布局路由上；`/workspace` 本身跳到任务。
+- `/workspace/tasks`：任务列表（按状态分组，点状态图标直接改）或看板（`?layout=board`，拖动卡片改状态），`?scope=` 按指派过滤；`?task=<id>` 打开任务，正文和时间线在左、属性在右；`?task=new` 新建。
+- `/workspace/routines`：列表在左、定时任务详情或报告在右，参数同面板（`routine`、`run`、`edit`）。
+- `/workspace/memory`、`/workspace/capabilities`：对应面板内容的全窗口版本。
+- `/workspace/inbox`：确认请求，形态像通知：按天分组，待处理的标记出来、就地答复，之前的显示当时的选择或已过期；`?filter=pending` 只看待处理。历史来自 `GET /api/v1/chat/interactions`，并由聊天事件流保持实时。
 
-全窗口使用真实路由链接，不再使用 fixed 遮罩或本地 expanded 状态。
+分区和面板共用同一套组件与 URL 参数（`task-nav.ts`、`routine-nav.ts`、`workspace-search.ts`），都支持直接访问、刷新和浏览器历史导航。

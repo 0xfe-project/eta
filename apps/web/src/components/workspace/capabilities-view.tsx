@@ -21,7 +21,7 @@ import {
 import { useGitHubStatus, useRefreshGitHub } from "@/queries/forge";
 import { useConnections } from "@/queries/llm";
 import { GitHubWizard } from "./github-wizard";
-import { useWorkspaceView } from "./workspace-search";
+import { useShowSection } from "./workspace-search";
 import { useWorkspaceStore } from "./workspace-store";
 
 interface Capability {
@@ -165,7 +165,7 @@ function useReturnFromGitHub(onReturn: (error: string | undefined) => void) {
 export function CapabilitiesView() {
   const { data: github } = useGitHubStatus();
   const { data: connections } = useConnections();
-  const [, setView] = useWorkspaceView();
+  const showSection = useShowSection();
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const [open, setOpen] = useState<string>();
   const [returned, setReturned] = useState<{ error?: string }>();
@@ -180,7 +180,7 @@ export function CapabilitiesView() {
     (connection) =>
       connection.connector === "xai" && connection.state === "active",
   );
-  const show = (view: WorkspaceView) => () => void setView(view);
+  const show = (view: WorkspaceView) => () => showSection(view);
   const capabilities: Capability[] = [
     githubCapability(github),
     {

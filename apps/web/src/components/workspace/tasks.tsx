@@ -94,7 +94,7 @@ function Back({ label, onClick }: { label: string; onClick: () => void }) {
 }
 
 /** A remote agent at work: a pulsing square, like a running routine. */
-function Working({ label }: { label?: string }) {
+export function Working({ label }: { label?: string }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-xs text-foreground">
       <span className="size-1.5 bg-foreground motion-safe:animate-pulse" />
@@ -234,7 +234,7 @@ function Field({
   );
 }
 
-function StatusSelect({
+export function StatusSelect({
   id,
   value,
   onChange,
@@ -262,12 +262,21 @@ function StatusSelect({
   );
 }
 
-function TaskForm({ onDone }: { onDone: (id?: string) => void }) {
+/** A new task; `bare` leaves the heading to a dialog around it. */
+export function TaskForm({
+  onDone,
+  bare = false,
+  initialStatus = "todo",
+}: {
+  onDone: (id?: string) => void;
+  bare?: boolean;
+  initialStatus?: TaskStatus;
+}) {
   const create = useCreateTask();
   const { data } = useTasks();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [status, setStatus] = useState<TaskStatus>("todo");
+  const [status, setStatus] = useState<TaskStatus>(initialStatus);
   const [draft, setDraft] = useState<AssigneeDraft>(emptyDraft);
   const places = useDraftPlaces(draft);
   const assignee = draftInput(draft, places);
@@ -290,13 +299,16 @@ function TaskForm({ onDone }: { onDone: (id?: string) => void }) {
         );
       }}
     >
-      <div className="space-y-1">
-        <Back label="任务" onClick={() => onDone()} />
-        <h2 className="text-sm font-semibold">新建任务</h2>
-      </div>
+      {bare ? null : (
+        <div className="space-y-1">
+          <Back label="任务" onClick={() => onDone()} />
+          <h2 className="text-sm font-semibold">新建任务</h2>
+        </div>
+      )}
       <Field id="task-title" label="标题">
         <Input
           id="task-title"
+          autoFocus={bare}
           maxLength={200}
           placeholder="例如：修复登录页在 Safari 上的布局"
           value={title}
@@ -580,7 +592,7 @@ function Entry({
   );
 }
 
-function Timeline({ task }: { task: TaskDetail }) {
+export function Timeline({ task }: { task: TaskDetail }) {
   // Runs show where they started; their queueing is not news.
   const items = task.activity.filter((a) => describe(a) !== null);
   const runs = new Map(task.runs.map((r) => [r.id, r]));
@@ -640,7 +652,7 @@ function Timeline({ task }: { task: TaskDetail }) {
 
 // --- detail ---------------------------------------------------------------------------
 
-function CommentBox({ task }: { task: TaskDetail }) {
+export function CommentBox({ task }: { task: TaskDetail }) {
   const [text, setText] = useState("");
   const comment = useCommentTask();
   const remote = task.assignee.kind === "remote";
@@ -695,7 +707,7 @@ function CommentBox({ task }: { task: TaskDetail }) {
 }
 
 /** Ask one of the AXP agents to look at the task and give feedback on it. */
-function FeedbackDialog({
+export function FeedbackDialog({
   task,
   open,
   onOpenChange,
@@ -803,14 +815,23 @@ function FeedbackDialog({
   );
 }
 
-function EditableTitle({ task }: { task: TaskDetail }) {
+export function EditableTitle({
+  task,
+  className,
+}: {
+  task: TaskDetail;
+  className?: string;
+}) {
   const update = useUpdateTask();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(task.title);
   if (!editing)
     return (
       <h2
-        className="min-w-0 flex-1 cursor-text text-base font-semibold break-words"
+        className={cn(
+          "min-w-0 flex-1 cursor-text text-base font-semibold break-words",
+          className,
+        )}
         onClick={() => {
           setTitle(task.title);
           setEditing(true);
@@ -831,7 +852,7 @@ function EditableTitle({ task }: { task: TaskDetail }) {
     <Input
       aria-label="标题"
       autoFocus
-      className="h-8 flex-1 text-base font-semibold"
+      className={cn("h-8 flex-1 text-base font-semibold", className)}
       maxLength={200}
       value={title}
       onChange={(e) => setTitle(e.target.value)}
@@ -844,7 +865,7 @@ function EditableTitle({ task }: { task: TaskDetail }) {
   );
 }
 
-function Description({ task }: { task: TaskDetail }) {
+export function Description({ task }: { task: TaskDetail }) {
   const update = useUpdateTask();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(task.description);
@@ -897,7 +918,7 @@ function Description({ task }: { task: TaskDetail }) {
 }
 
 /** The assignee and its place, changed together. */
-function AssigneeRow({ task }: { task: TaskDetail }) {
+export function AssigneeRow({ task }: { task: TaskDetail }) {
   const update = useUpdateTask();
   const [draft, setDraft] = useState<AssigneeDraft | null>(null);
   const places = useDraftPlaces(draft ?? emptyDraft);
