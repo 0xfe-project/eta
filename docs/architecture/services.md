@@ -4,9 +4,11 @@
 
 ## 代码与构建
 
+Go 服务建在 [Go 服务框架](service-framework.md)上，按它的结构组织（`main.go`、`migrations/`、`internal/<领域>`、`internal/api`）。
+
 - [ ] `apps/<service>/package.json`：`build:linux-amd64`、`build:linux-arm64`（`scripts/build/go.sh <二进制> linux <arch>`）、`lint`、`test`；浏览器要调用它的 API 时加 `openapi`（`go run . openapi > out/openapi.json`）。
 - [ ] `apps/<service>/turbo.json`：构建任务的 `inputs`（含它用到的 `packages/*`），`test` 用到的环境变量。
-- [ ] Go 服务：`go.work` 的 `use`；用到 `packages/*` 时在 `go.mod` 里 `replace` 到本地目录。
+- [ ] Go 服务：`go.work` 的 `use`；`go.mod` 依赖 `packages/service-go`（以及用到的其他 `packages/*`），并 `replace` 到本地目录。
 - [ ] 根 `package.json`：`dev:<service>`、`setup:go`、`test:<service>`、`check:go`。
 - [ ] 根 `turbo.json`：`//#image:linux-amd64` 和 `//#image:linux-arm64` 依赖它的构建任务。
 
@@ -27,7 +29,7 @@
 - [ ] `deploy/Dockerfile.dockerignore`：放行它的 `out/`。
 - [ ] `deploy/deploy.yml`：角色（`cmd`、`env`、`network-alias`、健康检查），需要卷时加 `volume`；文件里的路由说明。
 - [ ] `deploy/README.md`：角色表、日志的 `OTEL_SERVICE_NAME` 列表。
-- [ ] 需要数据库迁移时：服务自己在启动时迁移（如 routine-service），或在 `deploy/deploy.sh` 的 `migrate` 里加一步（如控制面）。
+- [ ] 需要数据库时：自己的库，`pg.Setup` 在启动时建库并迁移（如 routine-service）；或用 `service.Migrate` 命令，在 `deploy/deploy.sh` 的 `migrate` 里执行（如控制面）。
 
 ## 文档
 

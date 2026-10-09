@@ -5,11 +5,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akarachen/axp/apps/control-plane/internal/apierr"
 	"github.com/akarachen/axp/apps/control-plane/internal/auth"
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
 	"github.com/akarachen/axp/apps/control-plane/internal/snapshots"
-	"github.com/akarachen/axp/apps/control-plane/internal/store"
+	"github.com/akarachen/axp/packages/service-go/apierr"
+	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -33,9 +33,9 @@ func fenced() error { return apierr.New(409, "STALE_GENERATION", "运行实例�
 // that does not match, and fences an instance that was replaced.
 func (p *Protocol) Authenticate(ctx context.Context, instanceID, token string) (*chat.RuntimeRecord, error) {
 	var instance *chat.RuntimeRecord
-	if id, ok := chat.ParseID(instanceID); ok {
+	if id, ok := pg.ParseID(instanceID); ok {
 		var err error
-		if instance, err = chat.One[chat.RuntimeRecord](ctx, p.DB, "SELECT * FROM runtime_instance WHERE id = $1", id); err != nil {
+		if instance, err = pg.One[chat.RuntimeRecord](ctx, p.DB, "SELECT * FROM runtime_instance WHERE id = $1", id); err != nil {
 			return nil, err
 		}
 	}
@@ -66,7 +66,7 @@ type Lease struct {
 }
 
 func (p *Protocol) inConversation(ctx context.Context, instance *chat.RuntimeRecord, fn func(pgx.Tx) error) error {
-	return store.InTx(ctx, p.DB, func(tx pgx.Tx) error {
+	return pg.InTx(ctx, p.DB, func(tx pgx.Tx) error {
 		var conversationID string
 		if err := tx.QueryRow(ctx, "SELECT conversation_id FROM agent WHERE id = $1", instance.AgentID).Scan(&conversationID); err != nil {
 			return err
@@ -80,10 +80,10 @@ func (p *Protocol) inConversation(ctx context.Context, instance *chat.RuntimeRec
 
 // Heartbeat extends the instance's lease and takes in its status.
 func (p *Protocol) Heartbeat(ctx context.Context, instance *chat.RuntimeRecord, body Heartbeat) (*Lease, error) {
-	now := chat.Now()
+	now := pg.Now()
 	lease := now.Add(LeaseSeconds * time.Second)
 	err := p.inConversation(ctx, instance, func(tx pgx.Tx) error {
-		current, err := chat.One[chat.RuntimeRecord](ctx, tx, "SELECT * FROM runtime_instance WHERE id = $1", instance.ID)
+		current, err := pg.One[chat.RuntimeRecord](ctx, tx, "SELECT * FROM runtime_instance WHERE id = $1", instance.ID)
 		if err != nil {
 			return err
 		}
@@ -110,7 +110,7 @@ func (p *Protocol) Heartbeat(ctx context.Context, instance *chat.RuntimeRecord, 
 			if status == "busy" {
 				current.Status = chat.RuntimeBusy
 			}
-			agent, err := chat.One[chat.AgentRecord](ctx, tx, "SELECT * FROM agent WHERE id = $1", current.AgentID)
+			agent, err := pg.One[chat.AgentRecord](ctx, tx, "SELECT * FROM agent WHERE id = $1", current.AgentID)
 			if err != nil {
 				return err
 			}
@@ -155,12 +155,12 @@ func clip(s *string, n int) string {
 // RegisterSession records the agent's thread; a runtime never silently
 // swaps it.
 func (p *Protocol) RegisterSession(ctx context.Context, instance *chat.RuntimeRecord, body Session) error {
-	return store.InTx(ctx, p.DB, func(tx pgx.Tx) error {
+	return pg.InTx(ctx, p.DB, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `INSERT INTO agent_session (agent_id, status, sdk_version, runtime_version)
 			VALUES ($1, 'new', '', '') ON CONFLICT (agent_id) DO NOTHING`, instance.AgentID); err != nil {
 			return err
 		}
-		session, err := chat.One[chat.SessionRecord](ctx, tx, "SELECT * FROM agent_session WHERE agent_id = $1 FOR UPDATE", instance.AgentID)
+		session, err := pg.One[chat.SessionRecord](ctx, tx, "SELECT * FROM agent_session WHERE agent_id = $1 FOR UPDATE", instance.AgentID)
 		if err != nil {
 			return err
 		}
@@ -169,7 +169,7 @@ func (p *Protocol) RegisterSession(ctx context.Context, instance *chat.RuntimeRe
 		}
 		var resumedAt *time.Time
 		if body.Resumed {
-			now := chat.Now()
+			now := pg.Now()
 			resumedAt = &now
 		}
 		_, err = tx.Exec(ctx, `UPDATE agent_session SET thread_id = $2, status = 'ready', sdk_version = $3,
@@ -182,7 +182,7 @@ func (p *Protocol) RegisterSession(ctx context.Context, instance *chat.RuntimeRe
 // PostEvents imports a batch of the instance's events.
 func (p *Protocol) PostEvents(ctx context.Context, instance *chat.RuntimeRecord, events []chat.RuntimeEvent) (int64, error) {
 	var acked int64
-	err := store.InTx(ctx, p.DB, func(tx pgx.Tx) error {
+	err := pg.InTx(ctx, p.DB, func(tx pgx.Tx) error {
 		var err error
 		acked, err = p.Chat.ImportEvents(ctx, tx, instance.ID, events)
 		return err

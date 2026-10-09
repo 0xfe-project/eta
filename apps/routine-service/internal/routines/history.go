@@ -6,7 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akarachen/axp/apps/routine-service/internal/store"
+	"github.com/akarachen/axp/packages/service-go/apierr"
+	"github.com/akarachen/axp/packages/service-go/pg"
 )
 
 // What a run sees of its routine through its tools: its earlier runs, and
@@ -27,7 +28,7 @@ type RunSummary struct {
 	Error   *string `json:"error,omitempty"`
 }
 
-func summaries(ctx context.Context, db store.DB, runs []*runRow) ([]RunSummary, error) {
+func summaries(ctx context.Context, db pg.DB, runs []*runRow) ([]RunSummary, error) {
 	ids := make([]string, len(runs))
 	for i, run := range runs {
 		ids[i] = run.ID
@@ -57,7 +58,7 @@ func likePattern(s string) string {
 
 // listRuns is the routine's other finished runs, newest first: before a
 // run's started_at, and mentioning q, when given.
-func listRuns(ctx context.Context, db store.DB, run *runRow, before, q string, limit int) ([]RunSummary, error) {
+func listRuns(ctx context.Context, db pg.DB, run *runRow, before, q string, limit int) ([]RunSummary, error) {
 	if limit == 0 {
 		limit = 10
 	}
@@ -67,7 +68,7 @@ func listRuns(ctx context.Context, db store.DB, run *runRow, before, q string, l
 	if before != "" {
 		t, err := time.Parse(time.RFC3339Nano, before)
 		if err != nil {
-			return nil, New(422, "VALIDATION_ERROR", "before 应是某次运行的 started_at。")
+			return nil, apierr.New(422, "VALIDATION_ERROR", "before 应是某次运行的 started_at。")
 		}
 		args = append(args, t)
 		sql += " AND started_at < $" + strconv.Itoa(len(args))
@@ -78,7 +79,7 @@ func listRuns(ctx context.Context, db store.DB, run *runRow, before, q string, l
 		sql += " AND (report ILIKE $" + n + " OR handoff ILIKE $" + n + ")"
 	}
 	args = append(args, limit)
-	runs, err := store.All[runRow](ctx, db, sql+" ORDER BY started_at DESC LIMIT $"+strconv.Itoa(len(args)), args...)
+	runs, err := pg.All[runRow](ctx, db, sql+" ORDER BY started_at DESC LIMIT $"+strconv.Itoa(len(args)), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -86,16 +87,16 @@ func listRuns(ctx context.Context, db store.DB, run *runRow, before, q string, l
 }
 
 // getRun is one of the routine's runs in full.
-func getRun(ctx context.Context, db store.DB, run *runRow, otherID string) (*RunSummary, error) {
+func getRun(ctx context.Context, db pg.DB, run *runRow, otherID string) (*RunSummary, error) {
 	var other *runRow
-	if id, ok := parseID(otherID); ok {
+	if id, ok := pg.ParseID(otherID); ok {
 		var err error
-		if other, err = store.One[runRow](ctx, db, "SELECT * FROM routine_run WHERE id = $1 AND routine_id = $2", id, run.RoutineID); err != nil {
+		if other, err = pg.One[runRow](ctx, db, "SELECT * FROM routine_run WHERE id = $1 AND routine_id = $2", id, run.RoutineID); err != nil {
 			return nil, err
 		}
 	}
 	if other == nil {
-		return nil, New(404, "NOT_FOUND", "没有这次运行。")
+		return nil, apierr.New(404, "NOT_FOUND", "没有这次运行。")
 	}
 	out, err := summaries(ctx, db, []*runRow{other})
 	if err != nil {
@@ -118,26 +119,26 @@ func trimmed(s *string) *string {
 }
 
 // finish ends the run with its report (nil: nothing new) and handoff.
-func finish(ctx context.Context, db store.DB, runID string, report *string, handoff string) (string, error) {
+func finish(ctx context.Context, db pg.DB, runID string, report *string, handoff string) (string, error) {
 	report = trimmed(report)
 	status := RunNothingNew
 	if report != nil {
 		status = RunSent
 	}
 	tag, err := db.Exec(ctx, `UPDATE routine_run SET status = $2, report = $3, handoff = $4, finished_at = $5
-		WHERE id = $1 AND status = 'running'`, runID, status, report, trimmed(&handoff), now())
+		WHERE id = $1 AND status = 'running'`, runID, status, report, trimmed(&handoff), pg.Now())
 	if err != nil {
 		return "", err
 	}
 	if tag.RowsAffected() == 0 {
-		return "", New(409, "RUN_FINISHED", "这次运行已经结束。")
+		return "", apierr.New(409, "RUN_FINISHED", "这次运行已经结束。")
 	}
 	return status, nil
 }
 
 // complete records how a run that never called finish ended: its last
 // message is the report, or it failed.
-func complete(ctx context.Context, db store.DB, runID, message string, runError error) error {
+func complete(ctx context.Context, db pg.DB, runID, message string, runError error) error {
 	report, status := trimmed(&message), RunSent
 	var errorText *string
 	if runError != nil || report == nil {
@@ -149,6 +150,6 @@ func complete(ctx context.Context, db store.DB, runID, message string, runError 
 		errorText = &text
 	}
 	_, err := db.Exec(ctx, `UPDATE routine_run SET status = $2, report = $3, error = $4, finished_at = $5
-		WHERE id = $1 AND status = 'running'`, runID, status, report, errorText, now())
+		WHERE id = $1 AND status = 'running'`, runID, status, report, errorText, pg.Now())
 	return err
 }

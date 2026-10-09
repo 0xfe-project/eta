@@ -2,162 +2,129 @@
 // and leave reports (docs/architecture/routines.md). The browser reaches it
 // at /api/routines through the gateway.
 //
-//	routine-service           serve
-//	routine-service openapi   print the API's OpenAPI document
-//
-// Configuration, from the environment:
-//
-//	AXP_ROUTINES_ADDR          listen address (default :8340)
-//	AXP_ROUTINES_DATABASE_URL  its database, created when missing (default:
-//	                           DATABASE_URL's server, database axp_routines)
-//	AXP_NATS_URL               NATS, where schedules live
-//	AXP_LLM_GATEWAY_URL        the LLM gateway
-//	AXP_PLUGINS_DIR            the plugins (default ../agent-runtime/plugins);
-//	                           runs get those of the routine target
-//	AXP_DEV                    development's defaults
+//	routine-service           serve (the default)
+//	routine-service migrate   creates and migrates its database
+//	routine-service openapi   prints the API's OpenAPI document
 package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
-	"os/signal"
-	"syscall"
 	"time"
 	_ "time/tzdata" // routines' time zones, wherever this runs
 
 	"github.com/akarachen/axp/apps/routine-service/internal/api"
 	"github.com/akarachen/axp/apps/routine-service/internal/routines"
-	"github.com/akarachen/axp/apps/routine-service/internal/store"
+	"github.com/akarachen/axp/apps/routine-service/migrations"
 	plugins "github.com/akarachen/axp/packages/plugins-go"
-	"github.com/akarachen/axp/packages/telemetry-go"
+	"github.com/akarachen/axp/packages/service-go"
+	"github.com/akarachen/axp/packages/service-go/config"
+	"github.com/akarachen/axp/packages/service-go/httpapi"
+	"github.com/akarachen/axp/packages/service-go/pg"
+	"github.com/danielgtaylor/huma/v2"
 )
 
-func main() {
-	if len(os.Args) == 2 && os.Args[1] == "openapi" {
-		_, doc := api.New(&routines.Service{}, false)
-		out, _ := json.MarshalIndent(doc.OpenAPI(), "", "  ")
-		fmt.Println(string(out))
-		return
-	}
-	logger, shutdown, err := telemetry.Setup(context.Background(), "routine-service")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "telemetry:", err)
-		os.Exit(1)
-	}
-	err = run(logger)
-	if err != nil {
-		logger.Error("routine-service stopped", "error", err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := telemetry.Shutdown(ctx, shutdown); err != nil {
-		fmt.Fprintln(os.Stderr, "telemetry:", err)
-	}
-	if err != nil {
-		os.Exit(1)
-	}
+type Config struct {
+	Addr string `env:"AXP_ROUTINES_ADDR" default:":8340"`
+	// Its own database; by default axp_routines on DATABASE_URL's server.
+	DatabaseURL     string `env:"AXP_ROUTINES_DATABASE_URL"`
+	BaseDatabaseURL string `env:"DATABASE_URL" dev:"postgres://axp:axp@127.0.0.1:15432/axp"`
+	// NATS, where the schedules live.
+	NATSURL string `env:"AXP_NATS_URL" dev:"nats://172.30.0.1:4222" prod:"nats://axp-nats:4222"`
+	// The LLM gateway, for the catalog and models.
+	LLMGatewayURL string `env:"AXP_LLM_GATEWAY_URL" dev:"http://127.0.0.1:8317" prod:"http://axp-llm:8317"`
+	// The plugins; runs get those of the routine target.
+	PluginsDir string `env:"AXP_PLUGINS_DIR" default:"../agent-runtime/plugins"`
+	Dev        bool   `env:"AXP_DEV"`
 }
 
-func setting(name, production, development string) string {
-	if v := os.Getenv(name); v != "" {
-		return v
+func (c Config) database() (string, error) {
+	if c.DatabaseURL != "" {
+		return c.DatabaseURL, nil
 	}
-	if os.Getenv("AXP_DEV") == "true" {
-		return development
-	}
-	return production
-}
-
-// databaseURL is AXP_ROUTINES_DATABASE_URL, or database axp_routines on
-// DATABASE_URL's server.
-func databaseURL() (string, error) {
-	if v := os.Getenv("AXP_ROUTINES_DATABASE_URL"); v != "" {
-		return v, nil
-	}
-	base := setting("DATABASE_URL", "", "postgres://axp:axp@127.0.0.1:15432/axp")
-	if base == "" {
+	if c.BaseDatabaseURL == "" {
 		return "", errors.New("set AXP_ROUTINES_DATABASE_URL or DATABASE_URL")
 	}
-	u, err := url.Parse(base)
-	if err != nil {
-		return "", err
-	}
-	u.Path = "/axp_routines"
-	return u.String(), nil
+	return pg.WithDatabase(c.BaseDatabaseURL, "axp_routines")
 }
 
-func run(logger *slog.Logger) error {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	dbURL, err := databaseURL()
+func main() {
+	service.Main("routine-service",
+		service.Command{Name: "serve", Default: true, Run: serve},
+		service.Migrate(func() (string, error) {
+			c, err := config.Load[Config]()
+			if err != nil {
+				return "", err
+			}
+			return c.database()
+		}, migrations.All, true),
+		service.OpenAPI(map[string]func() huma.API{
+			"public": func() huma.API { return api.New(&api.Deps{}).API },
+		}),
+	)
+}
+
+func serve(ctx context.Context, _ []string) error {
+	c, err := config.Load[Config]()
 	if err != nil {
 		return err
 	}
-	db, err := store.Open(ctx, dbURL)
+	url, err := c.database()
+	if err != nil {
+		return err
+	}
+	db, err := pg.Setup(ctx, url, migrations.All, true)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	if err := store.Migrate(ctx, db); err != nil {
-		return fmt.Errorf("migrate: %w", err)
-	}
-	queue, err := routines.ConnectNATS(ctx, setting("AXP_NATS_URL", "nats://axp-nats:4222", "nats://172.30.0.1:4222"))
-	if err != nil {
-		return fmt.Errorf("nats: %w", err)
-	}
-	defer queue.Close()
-
-	llm := setting("AXP_LLM_GATEWAY_URL", "http://axp-llm:8317", "http://127.0.0.1:8317")
-	gateway := &routines.Gateway{URL: llm, Client: &http.Client{}}
-	proxy, err := routines.NewKeyProxy(llm)
+	queue, err := routines.ConnectNATS(ctx, c.NATSURL)
 	if err != nil {
 		return err
 	}
-	runPlugins, err := available(setting("AXP_PLUGINS_DIR", "../agent-runtime/plugins", "../agent-runtime/plugins"), logger)
+	defer queue.Close()
+	gateway := &routines.Gateway{URL: c.LLMGatewayURL, Client: &http.Client{}}
+	proxy, err := routines.NewKeyProxy(c.LLMGatewayURL)
+	if err != nil {
+		return err
+	}
+	runPlugins, err := available(c.PluginsDir)
 	if err != nil {
 		return err
 	}
 	runner := &routines.Runner{DB: db, Model: gateway.Model, Plugins: runPlugins, Proxy: proxy, WorkDir: os.TempDir()}
-	service := &routines.Service{DB: db, Schedules: queue, Models: gateway, Revise: runner.Revise}
+	domain := &routines.Service{Schedules: queue, Models: gateway}
+
 	if err := runner.Recover(ctx); err != nil {
 		return err
 	}
-	if err := queue.Sync(ctx, service); err != nil {
-		return fmt.Errorf("nats: %w", err)
+	list, err := domain.List(ctx, db)
+	if err != nil {
+		return err
 	}
+	if err := queue.Sync(ctx, list); err != nil {
+		return err
+	}
+	ctx, stop := context.WithCancel(ctx)
+	defer stop()
 	go func() {
 		if err := queue.Consume(ctx, runner.Fire); err != nil {
-			logger.Error("Taking routine fires stopped", "error", err)
+			slog.Error("Taking routine fires stopped", "error", err)
 			stop()
 		}
 	}()
-
-	handler, _ := api.New(service, os.Getenv("AXP_DEV") == "true")
-	server := &http.Server{Addr: setting("AXP_ROUTINES_ADDR", ":8340", ":8340"), Handler: handler, ReadHeaderTimeout: 10 * time.Second}
-	go func() {
-		<-ctx.Done()
-		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = server.Shutdown(shutdown)
-	}()
-	logger.Info("routine-service starting", "addr", server.Addr, "plugins", len(runPlugins))
-	if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-		return err
-	}
-	return nil
+	handler := api.New(&api.Deps{DB: db, Routines: domain, Revise: runner.Revise, Docs: c.Dev}).Router
+	return httpapi.Serve(ctx, c.Addr, handler, 5*time.Second)
 }
 
 // available is the routine target's plugins whose servers' commands, and
 // akhook for those with hooks, are installed here; the others are left out,
 // with a warning.
-func available(dir string, logger *slog.Logger) ([]*plugins.Plugin, error) {
+func available(dir string) ([]*plugins.Plugin, error) {
 	list, err := plugins.List(dir, plugins.TargetRoutine)
 	if err != nil {
 		return nil, err
@@ -178,10 +145,11 @@ func available(dir string, logger *slog.Logger) ([]*plugins.Plugin, error) {
 			}
 		}
 		if missing != "" {
-			logger.Warn("Leaving out a plugin whose command is not installed", "plugin", p.Name, "command", missing)
+			slog.Warn("Leaving out a plugin whose command is not installed", "plugin", p.Name, "command", missing)
 			continue
 		}
 		out = append(out, p)
 	}
+	slog.Info("Routine runs get plugins", "count", len(out))
 	return out, nil
 }

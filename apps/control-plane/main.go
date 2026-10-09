@@ -10,20 +10,14 @@
 //	axp-control-plane ensure-runtime-network
 //	                              creates the Docker network runtimes run on
 //
-// Settings come from the environment (internal/config).
+// Settings come from the environment (internal/config); service-go runs
+// the commands (docs/architecture/service-framework.md).
 package main
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"flag"
-	"fmt"
 	"log/slog"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/akarachen/axp/apps/control-plane/internal/api"
@@ -38,67 +32,68 @@ import (
 	"github.com/akarachen/axp/apps/control-plane/internal/snapshots"
 	"github.com/akarachen/axp/apps/control-plane/internal/store"
 	"github.com/akarachen/axp/apps/control-plane/internal/tasks"
-	"github.com/akarachen/axp/packages/telemetry-go"
+	"github.com/akarachen/axp/packages/service-go"
+	"github.com/akarachen/axp/packages/service-go/httpapi"
+	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
-const usage = "usage: axp-control-plane api|internal|controller|migrate|openapi public|internal|ensure-runtime-network"
-
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, usage)
-		os.Exit(2)
-	}
-	role, args := os.Args[1], os.Args[2:]
-	if role == "openapi" {
-		if err := printOpenAPI(args); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		return
-	}
-	logger, shutdown, err := telemetry.Setup(context.Background(), "control-plane")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "telemetry:", err)
-		os.Exit(1)
-	}
-	err = run(role, args)
-	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		logger.Error("control-plane stopped", "role", role, "error", err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := telemetry.Shutdown(ctx, shutdown); err != nil {
-		fmt.Fprintln(os.Stderr, "telemetry:", err)
-	}
-	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		os.Exit(1)
-	}
+	service.Main("control-plane",
+		service.Command{Name: "api", Run: func(ctx context.Context, _ []string) error {
+			s, err := connect(ctx)
+			if err != nil {
+				return err
+			}
+			// Chat streams (SSE) never finish; browsers reconnect with
+			// Last-Event-ID, so deploys do not wait for them.
+			return httpapi.Serve(ctx, s.cfg.APIAddr, api.Public(s.deps).Router, time.Second)
+		}},
+		service.Command{Name: "internal", Run: func(ctx context.Context, _ []string) error {
+			s, err := connect(ctx)
+			if err != nil {
+				return err
+			}
+			return httpapi.Serve(ctx, s.cfg.InternalAddr, api.Internal(s.deps).Router, time.Second)
+		}},
+		service.Command{Name: "controller", Args: "[-interval 500ms]", Run: func(ctx context.Context, args []string) error {
+			flags := flag.NewFlagSet("controller", flag.ExitOnError)
+			interval := flags.Duration("interval", 500*time.Millisecond, "time between ticks")
+			_ = flags.Parse(args)
+			s, err := connect(ctx)
+			if err != nil {
+				return err
+			}
+			return runController(ctx, s, *interval)
+		}},
+		service.Migrate(func() (string, error) {
+			cfg, err := config.Load()
+			return cfg.DatabaseURL, err
+		}, store.Migrations, false),
+		service.OpenAPI(map[string]func() huma.API{
+			"public":   func() huma.API { return api.Public(openAPIDeps()).API },
+			"internal": func() huma.API { return api.Internal(openAPIDeps()).API },
+		}),
+		service.Command{Name: "ensure-runtime-network", Run: func(ctx context.Context, _ []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			driver, err := container.NewDocker(cfg.Dev)
+			if err != nil {
+				return err
+			}
+			return driver.EnsureNetwork(ctx)
+		}},
+	)
 }
 
-// printOpenAPI prints an API's document; it needs no database or queue.
-func printOpenAPI(args []string) error {
-	if len(args) != 1 {
-		return errors.New(usage)
-	}
-	var document huma.API
-	deps := &api.Deps{Chat: &chat.Service{}, Tasks: &tasks.Service{}, Dev: true}
-	switch args[0] {
-	case "public":
-		_, document = api.Public(deps)
-	case "internal":
-		_, document = api.Internal(deps)
-	default:
-		return errors.New(usage)
-	}
-	data, err := json.MarshalIndent(document.OpenAPI(), "", "  ")
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Println(string(data))
-	return err
+// openAPIDeps are enough to build the APIs for their documents, connecting
+// to nothing.
+func openAPIDeps() *api.Deps {
+	return &api.Deps{Chat: &chat.Service{}, Tasks: &tasks.Service{}, Dev: true}
 }
 
 // services is everything a role may need, connected lazily where possible.
@@ -115,7 +110,7 @@ func connect(ctx context.Context) (*services, error) {
 	if err != nil {
 		return nil, err
 	}
-	pool, err := store.Open(ctx, cfg.DatabaseURL)
+	pool, err := pg.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return nil, err
 	}
@@ -154,71 +149,6 @@ func connect(ctx context.Context) (*services, error) {
 			Dev: cfg.Dev,
 		},
 	}, nil
-}
-
-func run(role string, args []string) error {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	switch role {
-	case "migrate":
-		cfg, err := config.Load()
-		if err != nil {
-			return err
-		}
-		pool, err := store.Open(ctx, cfg.DatabaseURL)
-		if err != nil {
-			return err
-		}
-		defer pool.Close()
-		return store.Migrate(ctx, pool)
-	case "ensure-runtime-network":
-		cfg, err := config.Load()
-		if err != nil {
-			return err
-		}
-		driver, err := container.NewDocker(cfg.Dev)
-		if err != nil {
-			return err
-		}
-		return driver.EnsureNetwork(ctx)
-	case "api", "internal":
-		s, err := connect(ctx)
-		if err != nil {
-			return err
-		}
-		if role == "api" {
-			handler, _ := api.Public(s.deps)
-			return serve(ctx, s.cfg.APIAddr, handler)
-		}
-		handler, _ := api.Internal(s.deps)
-		return serve(ctx, s.cfg.InternalAddr, handler)
-	case "controller":
-		flags := flag.NewFlagSet("controller", flag.ExitOnError)
-		interval := flags.Duration("interval", 500*time.Millisecond, "time between ticks")
-		_ = flags.Parse(args)
-		s, err := connect(ctx)
-		if err != nil {
-			return err
-		}
-		return runController(ctx, s, *interval)
-	}
-	return errors.New(usage)
-}
-
-func serve(ctx context.Context, addr string, handler http.Handler) error {
-	srv := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second}
-	go func() {
-		<-ctx.Done()
-		// Chat streams (SSE) never finish; browsers reconnect with
-		// Last-Event-ID, so deploys do not wait for them.
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
-		if srv.Shutdown(shutdownCtx) != nil {
-			_ = srv.Close()
-		}
-	}()
-	slog.Info("control-plane listening", "addr", addr)
-	return srv.ListenAndServe()
 }
 
 // controllerLock is the pg_advisory_lock key of the controller; any constant

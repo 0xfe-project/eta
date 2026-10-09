@@ -16,10 +16,11 @@ apps/
   relay/           agenvo 中继（vendor/agenvo）的构建：中继本身和远程电脑下载的 connector
 packages/
   plugins-go/      插件标准：读取插件，编译到聊天智能体（Codex），加载进定时任务（ADK）
+  service-go/      Go 服务框架：配置、数据库与迁移、HTTP API、错误、幂等、命令
   telemetry-go/    Go 服务共用的日志与 OpenTelemetry
 ```
 
-设计见 [RFC #1](https://github.com/akarachen/axp/issues/1)，实现说明见 [控制面](docs/architecture/control-plane.md)、[聊天与运行时架构](docs/architecture/chat-runtime.md)、[统一入口网关](docs/architecture/gateway.md)、[LLM 网关](docs/architecture/llm-gateway.md)、[记忆](docs/architecture/memory.md)、[代码托管（GitHub）](docs/architecture/forge.md) 、[工具调用规则与用户确认](docs/architecture/agent-hooks.md)、[任务与远程电脑](docs/architecture/tasks.md)、[定时任务](docs/architecture/routines.md) 与 [插件](docs/architecture/plugins.md)；新增服务时按[清单](docs/architecture/services.md)核对。
+设计见 [RFC #1](https://github.com/akarachen/axp/issues/1)，实现说明见 [控制面](docs/architecture/control-plane.md)、[聊天与运行时架构](docs/architecture/chat-runtime.md)、[统一入口网关](docs/architecture/gateway.md)、[LLM 网关](docs/architecture/llm-gateway.md)、[记忆](docs/architecture/memory.md)、[代码托管（GitHub）](docs/architecture/forge.md) 、[工具调用规则与用户确认](docs/architecture/agent-hooks.md)、[任务与远程电脑](docs/architecture/tasks.md)、[定时任务](docs/architecture/routines.md)、[插件](docs/architecture/plugins.md) 与 [Go 服务框架](docs/architecture/service-framework.md)；新增服务时按[清单](docs/architecture/services.md)核对。
 
 ## 环境与初始化
 

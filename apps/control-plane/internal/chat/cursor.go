@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/akarachen/axp/apps/control-plane/internal/apierr"
+	"github.com/akarachen/axp/packages/service-go/apierr"
 )
 
 // Cursors are opaque and signed: "<sequence>.<signature>". Event cursors hold

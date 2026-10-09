@@ -7,5 +7,6 @@ use (
 	./apps/remote
 	./apps/routine-service
 	./packages/plugins-go
+	./packages/service-go
 	./packages/telemetry-go
 )

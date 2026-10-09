@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/akarachen/axp/packages/service-go/apierr"
 	"github.com/openai/openai-go/v3/option"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/model/openaimodel"
@@ -41,10 +42,10 @@ func Validate(ctx context.Context, catalog Catalog, model string) error {
 	ok, err := catalog.Has(ctx, model)
 	if err != nil {
 		slog.WarnContext(ctx, "LLM gateway unavailable", "error", err)
-		return New(503, "MODEL_SERVICE_UNAVAILABLE", "模型服务暂时不可用，请稍后再试。")
+		return apierr.New(503, "MODEL_SERVICE_UNAVAILABLE", "模型服务暂时不可用，请稍后再试。")
 	}
 	if !ok {
-		return New(422, "MODEL_NOT_FOUND", "所选模型不存在。")
+		return apierr.New(422, "MODEL_NOT_FOUND", "所选模型不存在。")
 	}
 	return nil
 }

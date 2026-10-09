@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/akarachen/axp/apps/routine-service/internal/store"
 	plugins "github.com/akarachen/axp/packages/plugins-go"
 	pluginsadk "github.com/akarachen/axp/packages/plugins-go/adk"
+	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/adk/v2/agent"
@@ -98,7 +98,7 @@ func (r *Runner) background(f func()) {
 // and feedback it had not revised the brief from yet is.
 func (r *Runner) Recover(ctx context.Context) error {
 	if _, err := r.DB.Exec(ctx, `UPDATE routine_run SET status = 'failed', error = '运行被中断（服务重启）。',
-		finished_at = $1 WHERE status = 'running'`, now()); err != nil {
+		finished_at = $1 WHERE status = 'running'`, pg.Now()); err != nil {
 		return err
 	}
 	rows, err := r.DB.Query(ctx, `SELECT f.id FROM routine_feedback f
@@ -122,15 +122,15 @@ func (r *Runner) Recover(ctx context.Context) error {
 // Fire starts a run of the routine, unless it is paused (and was not asked
 // to run now) or still running.
 func (r *Runner) Fire(ctx context.Context, routineID string, asked bool) error {
-	id, ok := parseID(routineID)
+	id, ok := pg.ParseID(routineID)
 	if !ok {
 		return nil
 	}
-	routine, err := store.One[routineRow](ctx, r.DB, "SELECT * FROM routine WHERE id = $1", id)
+	routine, err := pg.One[routineRow](ctx, r.DB, "SELECT * FROM routine WHERE id = $1", id)
 	if err != nil || routine == nil || !(routine.Enabled || asked) {
 		return err
 	}
-	run := &runRow{ID: newID(), RoutineID: routine.ID, Status: RunRunning, StartedAt: now()}
+	run := &runRow{ID: pg.NewID(), RoutineID: routine.ID, Status: RunRunning, StartedAt: pg.Now()}
 	tag, err := r.DB.Exec(ctx, `INSERT INTO routine_run (id, routine_id, status, started_at)
 		VALUES ($1, $2, 'running', $3) ON CONFLICT (routine_id) WHERE status = 'running' DO NOTHING`,
 		run.ID, run.RoutineID, run.StartedAt)
@@ -253,7 +253,7 @@ func (r *Runner) instructions(ctx context.Context, routine *routineRow, run *run
 		return "", err
 	}
 	handoff := "这是第一次运行。"
-	last, err := store.One[runRow](ctx, r.DB, `SELECT * FROM routine_run
+	last, err := pg.One[runRow](ctx, r.DB, `SELECT * FROM routine_run
 		WHERE routine_id = $1 AND id <> $2 AND handoff IS NOT NULL ORDER BY started_at DESC LIMIT 1`, routine.ID, run.ID)
 	if err != nil {
 		return "", err
@@ -358,6 +358,9 @@ func (r *Runner) Revise(feedbackID string) {
 }
 
 func (r *Runner) revise(ctx context.Context, feedbackID string) error {
+	if done, err := pg.Exists(ctx, r.DB, "SELECT 1 FROM routine_brief WHERE feedback_id = $1", feedbackID); err != nil || done {
+		return err
+	}
 	var text, routineID, modelName, brief string
 	var report, runError *string
 	if err := r.DB.QueryRow(ctx, `SELECT f.text, rt.id, rt.model, run.report, run.error,
@@ -395,7 +398,7 @@ func (r *Runner) revise(ctx context.Context, feedbackID string) error {
 	if strings.TrimSpace(revised.String()) == "" {
 		return errEmpty
 	}
-	return store.InTx(ctx, r.DB, func(tx pgx.Tx) error {
+	return pg.InTx(ctx, r.DB, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, "SELECT 1 FROM routine WHERE id = $1 FOR UPDATE", routineID); err != nil {
 			return err
 		}

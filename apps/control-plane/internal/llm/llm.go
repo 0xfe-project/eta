@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/akarachen/axp/apps/control-plane/internal/apierr"
+	"github.com/akarachen/axp/packages/service-go/apierr"
 )
 
 const (

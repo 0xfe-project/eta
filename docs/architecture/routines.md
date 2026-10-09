@@ -2,11 +2,11 @@
 
 本文说明 [#23](https://github.com/AkaraChen/axp/issues/23) 的实现：按计划运行的智能体。每次运行留下一份报告（或者什么都不发），并给下一次运行写一段交接说明。用户对报告的反馈会修订任务的要求。
 
-定时任务是一个独立的 Go 服务（`apps/routine-service`），与控制面无关：它有自己的数据库和 API，计划在 NATS，运行是进程内的 [ADK](https://adk.dev/) agent。浏览器经网关访问 `/api/routines`。
+定时任务是一个独立的 Go 服务（`apps/routine-service`，建在 [Go 服务框架](service-framework.md)上），与控制面无关：它有自己的数据库和 API，计划在 NATS，运行是进程内的 [ADK](https://adk.dev/) agent。浏览器经网关访问 `/api/routines`。
 
 ## 数据
 
-服务自己的数据库 `axp_routines`（与其他服务同一个 PostgreSQL 实例；默认由 `DATABASE_URL` 换库名得到，也可用 `AXP_ROUTINES_DATABASE_URL` 指定）。服务启动时库不存在就创建，然后执行自己的 goose 迁移（`internal/store/migrations`）。
+服务自己的数据库 `axp_routines`（与其他服务同一个 PostgreSQL 实例；默认由 `DATABASE_URL` 换库名得到，也可用 `AXP_ROUTINES_DATABASE_URL` 指定）。服务启动时库不存在就创建，然后执行自己的迁移（`migrations/`）。新建任务、恢复要求版本、提交反馈这些 POST 支持 `Idempotency-Key`。
 
 | 表                 | 内容                                                                     |
 | ------------------ | ------------------------------------------------------------------------ |

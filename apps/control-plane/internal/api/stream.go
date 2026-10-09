@@ -10,8 +10,8 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/akarachen/axp/apps/control-plane/internal/apierr"
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
+	"github.com/akarachen/axp/packages/service-go/apierr"
 	"github.com/danielgtaylor/huma/v2"
 )
 

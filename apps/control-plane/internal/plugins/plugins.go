@@ -9,8 +9,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/akarachen/axp/apps/control-plane/internal/apierr"
 	standard "github.com/akarachen/axp/packages/plugins-go"
+	"github.com/akarachen/axp/packages/service-go/apierr"
 )
 
 type Plugin struct {

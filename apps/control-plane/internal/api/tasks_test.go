@@ -297,8 +297,8 @@ func newTaskEnv(t *testing.T) *taskEnv {
 	fake := newFakeRelay()
 	service := &tasks.Service{Relay: fake}
 	deps := &Deps{DB: e.db, Chat: e.chat, Tasks: service, PublicURL: "https://axp.test"}
-	e.public, _ = Public(deps)
-	e.internal, _ = Internal(deps)
+	e.public = Public(deps).Router
+	e.internal = Internal(deps).Router
 	return &taskEnv{env: e, relay: fake, runner: &tasks.Runner{DB: e.db, Service: service}}
 }
 

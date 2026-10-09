@@ -24,7 +24,7 @@ import (
 	"github.com/akarachen/axp/apps/control-plane/internal/llm"
 	"github.com/akarachen/axp/apps/control-plane/internal/queue"
 	"github.com/akarachen/axp/apps/control-plane/internal/snapshots"
-	"github.com/akarachen/axp/apps/control-plane/internal/store"
+	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -97,7 +97,7 @@ type liveRuntime struct {
 }
 
 func (c *Controller) live(ctx context.Context, where string, args ...any) ([]*liveRuntime, error) {
-	return chat.All[liveRuntime](ctx, c.DB, `SELECT r.*, a.conversation_id, a.config_version AS agent_config_version,
+	return pg.All[liveRuntime](ctx, c.DB, `SELECT r.*, a.conversation_id, a.config_version AS agent_config_version,
 		a.desired_state, a.last_active_at
 		FROM runtime_instance r JOIN agent a ON a.id = r.agent_id
 		WHERE r.ended_at IS NULL`+where+` ORDER BY r.created_at`, args...)
@@ -145,11 +145,11 @@ func (c *Controller) expireRuntimes(ctx context.Context) error {
 }
 
 func (c *Controller) failStart(ctx context.Context, instanceID, conversationID, code string) error {
-	return store.InTx(ctx, c.DB, func(tx pgx.Tx) error {
+	return pg.InTx(ctx, c.DB, func(tx pgx.Tx) error {
 		if err := chat.LockConversation(ctx, tx, conversationID); err != nil {
 			return err
 		}
-		instance, err := chat.One[chat.RuntimeRecord](ctx, tx, "SELECT * FROM runtime_instance WHERE id = $1", instanceID)
+		instance, err := pg.One[chat.RuntimeRecord](ctx, tx, "SELECT * FROM runtime_instance WHERE id = $1", instanceID)
 		if err != nil {
 			return err
 		}
@@ -160,13 +160,13 @@ func (c *Controller) failStart(ctx context.Context, instanceID, conversationID, 
 // EndInstance records that the instance's container is gone, and what that
 // means for the work it had.
 func (c *Controller) EndInstance(ctx context.Context, instanceID, reason, status string) error {
-	instance, err := chat.One[chat.RuntimeRecord](ctx, c.DB, "SELECT * FROM runtime_instance WHERE id = $1", instanceID)
+	instance, err := pg.One[chat.RuntimeRecord](ctx, c.DB, "SELECT * FROM runtime_instance WHERE id = $1", instanceID)
 	if err != nil {
 		return err
 	}
 	// Queued commands no longer in the queue were taken by this instance
 	// (only one runs per agent): they may have started.
-	queued, err := chat.All[chat.CommandRecord](ctx, c.DB,
+	queued, err := pg.All[chat.CommandRecord](ctx, c.DB,
 		"SELECT * FROM agent_command WHERE agent_id = $1 AND status = 'queued'", instance.AgentID)
 	if err != nil {
 		return err
@@ -183,7 +183,7 @@ func (c *Controller) EndInstance(ctx context.Context, instanceID, reason, status
 			taken = append(taken, command.ID)
 		}
 	}
-	return store.InTx(ctx, c.DB, func(tx pgx.Tx) error {
+	return pg.InTx(ctx, c.DB, func(tx pgx.Tx) error {
 		var conversationID string
 		if err := tx.QueryRow(ctx, "SELECT conversation_id FROM agent WHERE id = $1", instance.AgentID).Scan(&conversationID); err != nil {
 			return err
@@ -196,13 +196,13 @@ func (c *Controller) EndInstance(ctx context.Context, instanceID, reason, status
 			return err
 		}
 		if _, err := tx.Exec(ctx, "UPDATE runtime_instance SET ended_at = $2, status = $3, end_reason = $4 WHERE id = $1",
-			instanceID, chat.Now(), status, reason); err != nil {
+			instanceID, pg.Now(), status, reason); err != nil {
 			return err
 		}
 		// Its container, and whatever ran there since the last snapshot, is
 		// gone. What it took from the queue is never replayed; the rest waits
 		// there for the next instance.
-		commands, err := chat.All[chat.CommandRecord](ctx, tx, `SELECT * FROM agent_command
+		commands, err := pg.All[chat.CommandRecord](ctx, tx, `SELECT * FROM agent_command
 			WHERE (runtime_instance_id = $1 AND status = ANY($2)) OR id = ANY($3) ORDER BY agent_sequence`,
 			instanceID, chat.ActiveCommandStatuses, taken)
 		if err != nil {
@@ -219,7 +219,7 @@ func (c *Controller) EndInstance(ctx context.Context, instanceID, reason, status
 			}
 		}
 		if _, err := tx.Exec(ctx, `UPDATE agent SET status = 'stopped', updated_at = $2
-			WHERE id = $1 AND status NOT IN ('error', 'recovery_failed')`, instance.AgentID, chat.Now()); err != nil {
+			WHERE id = $1 AND status NOT IN ('error', 'recovery_failed')`, instance.AgentID, pg.Now()); err != nil {
 			return err
 		}
 		return chat.RefreshAgentStatus(ctx, tx, instance.AgentID)
@@ -229,24 +229,24 @@ func (c *Controller) EndInstance(ctx context.Context, instanceID, reason, status
 func (c *Controller) ensureRuntimes(ctx context.Context) error {
 	waiting := make([]string, 0, len(c.waiting))
 	for id := range c.waiting {
-		if id, ok := chat.ParseID(id); ok {
+		if id, ok := pg.ParseID(id); ok {
 			waiting = append(waiting, id)
 		}
 	}
-	wanted, err := chat.All[chat.AgentRecord](ctx, c.DB, `SELECT * FROM agent
+	wanted, err := pg.All[chat.AgentRecord](ctx, c.DB, `SELECT * FROM agent
 		WHERE (id = ANY($1) OR desired_state = 'running') AND deleted_at IS NULL ORDER BY created_at`, waiting)
 	if err != nil {
 		return err
 	}
 	for _, agent := range wanted {
-		live, err := chat.Exists(ctx, c.DB, "SELECT 1 FROM runtime_instance WHERE agent_id = $1 AND ended_at IS NULL", agent.ID)
+		live, err := pg.Exists(ctx, c.DB, "SELECT 1 FROM runtime_instance WHERE agent_id = $1 AND ended_at IS NULL", agent.ID)
 		if err != nil {
 			return err
 		}
 		if live {
 			continue
 		}
-		last, err := chat.One[chat.RuntimeRecord](ctx, c.DB, `SELECT * FROM runtime_instance WHERE agent_id = $1
+		last, err := pg.One[chat.RuntimeRecord](ctx, c.DB, `SELECT * FROM runtime_instance WHERE agent_id = $1
 			ORDER BY generation DESC LIMIT 1`, agent.ID)
 		if err != nil {
 			return err
@@ -269,7 +269,7 @@ func (c *Controller) Provision(ctx context.Context, agentID string) error {
 		VALUES ($1, 'new', '', '') ON CONFLICT (agent_id) DO NOTHING`, agentID); err != nil {
 		return err
 	}
-	session, err := chat.One[chat.SessionRecord](ctx, c.DB, "SELECT * FROM agent_session WHERE agent_id = $1", agentID)
+	session, err := pg.One[chat.SessionRecord](ctx, c.DB, "SELECT * FROM agent_session WHERE agent_id = $1", agentID)
 	if err != nil {
 		return err
 	}
@@ -281,7 +281,7 @@ func (c *Controller) Provision(ctx context.Context, agentID string) error {
 	recovering := session.ThreadID != nil && *session.ThreadID != ""
 	var agent *chat.AgentRecord
 	var instance *chat.RuntimeRecord
-	err = store.InTx(ctx, c.DB, func(tx pgx.Tx) error {
+	err = pg.InTx(ctx, c.DB, func(tx pgx.Tx) error {
 		var conversationID string
 		if err := tx.QueryRow(ctx, "SELECT conversation_id FROM agent WHERE id = $1", agentID).Scan(&conversationID); err != nil {
 			return err
@@ -289,17 +289,17 @@ func (c *Controller) Provision(ctx context.Context, agentID string) error {
 		if err := chat.LockConversation(ctx, tx, conversationID); err != nil {
 			return err
 		}
-		if agent, err = chat.One[chat.AgentRecord](ctx, tx, "SELECT * FROM agent WHERE id = $1 FOR UPDATE", agentID); err != nil {
+		if agent, err = pg.One[chat.AgentRecord](ctx, tx, "SELECT * FROM agent WHERE id = $1 FOR UPDATE", agentID); err != nil {
 			return err
 		}
-		if live, err := chat.Exists(ctx, tx, "SELECT 1 FROM runtime_instance WHERE agent_id = $1 AND ended_at IS NULL", agentID); err != nil || live {
+		if live, err := pg.Exists(ctx, tx, "SELECT 1 FROM runtime_instance WHERE agent_id = $1 AND ended_at IS NULL", agentID); err != nil || live {
 			instance = nil
 			return err
 		}
 		agent.Generation++
-		now := chat.Now()
+		now := pg.Now()
 		instance = &chat.RuntimeRecord{
-			ID: chat.NewID(), AgentID: agentID, Generation: agent.Generation, HostID: c.HostID,
+			ID: pg.NewID(), AgentID: agentID, Generation: agent.Generation, HostID: c.HostID,
 			ControllerID: c.ID, Status: chat.RuntimeProvisioning, LeaseExpiresAt: now.Add(StartTimeout),
 			ConfigVersion: agent.ConfigVersion, CreatedAt: now,
 		}
@@ -425,7 +425,7 @@ func (c *Controller) busy(ctx context.Context, agentID string) (bool, error) {
 	if c.waiting[agentID] {
 		return true, nil
 	}
-	return chat.Exists(ctx, c.DB, "SELECT 1 FROM agent_command WHERE agent_id = $1 AND status = ANY($2)",
+	return pg.Exists(ctx, c.DB, "SELECT 1 FROM agent_command WHERE agent_id = $1 AND status = ANY($2)",
 		agentID, chat.ActiveCommandStatuses)
 }
 
@@ -503,7 +503,7 @@ func (c *Controller) stopDeleted(ctx context.Context) error {
 		return err
 	}
 	for _, instance := range live {
-		active, err := chat.Exists(ctx, c.DB, "SELECT 1 FROM agent_command WHERE agent_id = $1 AND status = ANY($2)",
+		active, err := pg.Exists(ctx, c.DB, "SELECT 1 FROM agent_command WHERE agent_id = $1 AND status = ANY($2)",
 			instance.AgentID, chat.ActiveCommandStatuses)
 		if err != nil {
 			return err

@@ -10,63 +10,23 @@ import (
 	"iter"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/akarachen/axp/apps/routine-service/internal/routines"
-	"github.com/akarachen/axp/apps/routine-service/internal/store"
-	"github.com/jackc/pgx/v5"
+	"github.com/akarachen/axp/apps/routine-service/migrations"
+	"github.com/akarachen/axp/packages/service-go/pg"
+	"github.com/akarachen/axp/packages/service-go/pg/pgtest"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )
 
-// The tests run against development's PostgreSQL (DATABASE_URL), in a
-// database of their own, emptied before every test.
-
-var pool *pgxpool.Pool
-
-func TestMain(m *testing.M) {
-	code, err := withDatabase(m)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "testenv:", err)
-		os.Exit(1)
-	}
-	os.Exit(code)
-}
-
-func withDatabase(m *testing.M) (int, error) {
-	ctx := context.Background()
-	base := os.Getenv("DATABASE_URL")
-	if base == "" {
-		base = "postgres://axp:axp@127.0.0.1:15432/axp"
-	}
-	u, err := url.Parse(base)
-	if err != nil {
-		return 0, err
-	}
-	name := fmt.Sprintf("axp_routines_test_%d_%d", os.Getpid(), time.Now().UnixNano()%1_000_000)
-	u.Path = "/" + name
-	if pool, err = store.Open(ctx, u.String()); err != nil {
-		return 0, err
-	}
-	defer func() {
-		pool.Close()
-		u.Path = "/postgres"
-		if admin, err := pgx.Connect(ctx, u.String()); err == nil {
-			_, _ = admin.Exec(ctx, "DROP DATABASE "+name+" WITH (FORCE)")
-			admin.Close(ctx)
-		}
-	}()
-	if err := store.Migrate(ctx, pool); err != nil {
-		return 0, err
-	}
-	return m.Run(), nil
-}
+// The tests run against development's PostgreSQL, in a database of their
+// own, emptied before every test.
+func TestMain(m *testing.M) { pgtest.Main(m, migrations.All) }
 
 // --- fakes -------------------------------------------------------------------------
 
@@ -172,29 +132,19 @@ type env struct {
 	runner    *routines.Runner
 }
 
+var pool *pgxpool.Pool
+
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	ctx := context.Background()
-	rows, err := pool.Query(ctx, `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> 'goose_db_version'`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tables, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := pool.Exec(ctx, "TRUNCATE "+strings.Join(tables, ", ")+" RESTART IDENTITY CASCADE"); err != nil {
-		t.Fatal(err)
-	}
+	pool = pgtest.DB(t)
 	e := &env{t: t, schedules: &schedules{schedules: map[string][2]string{}}, catalog: &catalog{}, llm: &llm{script: steps()}}
 	e.runner = &routines.Runner{
 		DB:    pool,
 		Model: func(context.Context, string, string) (model.LLM, error) { return e.llm, nil },
 		Go:    func(f func()) { f() },
 	}
-	service := &routines.Service{DB: pool, Schedules: e.schedules, Models: e.catalog, Revise: e.runner.Revise}
-	handler, _ := New(service, false)
-	e.server = httptest.NewServer(handler)
+	service := &routines.Service{Schedules: e.schedules, Models: e.catalog}
+	e.server = httptest.NewServer(New(&Deps{DB: pool, Routines: service, Revise: e.runner.Revise}).Router)
 	t.Cleanup(e.server.Close)
 	return e
 }
@@ -220,6 +170,9 @@ func (e *env) do(method, path string, body any) response {
 	}
 	req, _ := http.NewRequest(method, e.server.URL+"/api/routines/v1"+path, reader)
 	req.Header.Set("Content-Type", "application/json")
+	if method == http.MethodPost {
+		req.Header.Set("Idempotency-Key", pg.NewID())
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		e.t.Fatal(err)

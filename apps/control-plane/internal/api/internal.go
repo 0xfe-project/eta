@@ -7,6 +7,7 @@ import (
 
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
 	"github.com/akarachen/axp/apps/control-plane/internal/control"
+	"github.com/akarachen/axp/packages/service-go/httpapi"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -91,7 +92,7 @@ func registerInternal(api huma.API, d *Deps) {
 		func(ctx context.Context, in *struct {
 			InstancePath
 			Body HeartbeatIn
-		}) (*body[control.Lease], error) {
+		}) (*httpapi.Body[control.Lease], error) {
 			runtime, err := instance(ctx, in.InstancePath)
 			if err != nil {
 				return nil, err
@@ -100,7 +101,7 @@ func registerInternal(api huma.API, d *Deps) {
 			if err != nil {
 				return nil, err
 			}
-			return &body[control.Lease]{*lease}, nil
+			return &httpapi.Body[control.Lease]{Body: *lease}, nil
 		})
 
 	huma.Register(api, internalOp("registerSession", http.MethodPut, "/internal/v1/runtime-instances/{instance_id}/session",
@@ -108,7 +109,7 @@ func registerInternal(api huma.API, d *Deps) {
 		func(ctx context.Context, in *struct {
 			InstancePath
 			Body SessionIn
-		}) (*body[ThreadOut], error) {
+		}) (*httpapi.Body[ThreadOut], error) {
 			runtime, err := instance(ctx, in.InstancePath)
 			if err != nil {
 				return nil, err
@@ -120,7 +121,7 @@ func registerInternal(api huma.API, d *Deps) {
 			if err != nil {
 				return nil, err
 			}
-			return &body[ThreadOut]{ThreadOut{in.Body.ThreadID}}, nil
+			return &httpapi.Body[ThreadOut]{Body: ThreadOut{in.Body.ThreadID}}, nil
 		})
 
 	huma.Register(api, internalOp("postEvents", http.MethodPost, "/internal/v1/runtime-instances/{instance_id}/events",
@@ -128,7 +129,7 @@ func registerInternal(api huma.API, d *Deps) {
 		func(ctx context.Context, in *struct {
 			InstancePath
 			Body EventsIn
-		}) (*body[Acked], error) {
+		}) (*httpapi.Body[Acked], error) {
 			runtime, err := instance(ctx, in.InstancePath)
 			if err != nil {
 				return nil, err
@@ -141,12 +142,12 @@ func registerInternal(api huma.API, d *Deps) {
 			if err != nil {
 				return nil, err
 			}
-			return &body[Acked]{Acked{acked}}, nil
+			return &httpapi.Body[Acked]{Body: Acked{acked}}, nil
 		})
 
 	huma.Register(api, internalOp("snapshotUploadURL", http.MethodPost, "/internal/v1/runtime-instances/{instance_id}/snapshot",
 		"Where to upload the agent's next snapshot", 200, "runtime instances"),
-		func(ctx context.Context, in *InstancePath) (*body[UploadOut], error) {
+		func(ctx context.Context, in *InstancePath) (*httpapi.Body[UploadOut], error) {
 			runtime, err := instance(ctx, *in)
 			if err != nil {
 				return nil, err
@@ -155,7 +156,7 @@ func registerInternal(api huma.API, d *Deps) {
 			if err != nil {
 				return nil, err
 			}
-			return &body[UploadOut]{UploadOut{url}}, nil
+			return &httpapi.Body[UploadOut]{Body: UploadOut{url}}, nil
 		})
 
 	huma.Register(api, internalOp("runtimeAuth", http.MethodGet, "/internal/v1/runtime-auth",

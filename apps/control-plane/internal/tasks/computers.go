@@ -12,11 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akarachen/axp/apps/control-plane/internal/apierr"
-	"github.com/akarachen/axp/apps/control-plane/internal/chat"
-	"github.com/akarachen/axp/apps/control-plane/internal/jsontime"
 	"github.com/akarachen/axp/apps/control-plane/internal/relay"
-	"github.com/akarachen/axp/apps/control-plane/internal/store"
+	"github.com/akarachen/axp/packages/service-go/apierr"
+	"github.com/akarachen/axp/packages/service-go/jsontime"
+	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -118,7 +117,7 @@ func (s *Service) relayState(ctx context.Context) (*relay.State, error) {
 }
 
 // ListComputers is every computer with its runtimes' state on the relay.
-func (s *Service) ListComputers(ctx context.Context, db store.DB) (*Computers, error) {
+func (s *Service) ListComputers(ctx context.Context, db pg.DB) (*Computers, error) {
 	out := &Computers{Computers: []Computer{}, RelayConfigured: s.Relay != nil}
 	var state *relay.State
 	if s.Relay != nil {
@@ -130,15 +129,15 @@ func (s *Service) ListComputers(ctx context.Context, db store.DB) (*Computers, e
 			out.RelayError = &message
 		}
 	}
-	rows, err := chat.All[computerRow](ctx, db, "SELECT * FROM computer ORDER BY created_at")
+	rows, err := pg.All[computerRow](ctx, db, "SELECT * FROM computer ORDER BY created_at")
 	if err != nil {
 		return nil, err
 	}
-	runtimes, err := chat.All[computerRuntimeRow](ctx, db, "SELECT * FROM computer_runtime ORDER BY kind")
+	runtimes, err := pg.All[computerRuntimeRow](ctx, db, "SELECT * FROM computer_runtime ORDER BY kind")
 	if err != nil {
 		return nil, err
 	}
-	active, err := chat.All[struct {
+	active, err := pg.All[struct {
 		ComputerID string `db:"computer_id"`
 		N          int64  `db:"n"`
 	}](ctx, db, `SELECT computer_id, count(*) AS n FROM task_run WHERE status IN ('starting', 'running')
@@ -225,8 +224,8 @@ func (s *Service) CreateComputer(ctx context.Context, tx pgx.Tx, name string) (*
 		return nil, invalid("电脑需要一个名字。")
 	}
 	code := secret("axpe_")
-	now := chat.Now()
-	id := chat.NewID()
+	now := pg.Now()
+	id := pg.NewID()
 	expires := now.Add(EnrollFor)
 	if _, err := tx.Exec(ctx, `INSERT INTO computer (id, name, enroll_code_hash, enroll_expires_at, created_at)
 		VALUES ($1, $2, $3, $4, $5)`, id, name, digest(code), expires, now); err != nil {
@@ -248,7 +247,7 @@ func (s *Service) RenewEnrollment(ctx context.Context, tx pgx.Tx, id string) (*E
 		return nil, apierr.New(409, "COMPUTER_ENROLLED", "这台电脑已经接入。")
 	}
 	code := secret("axpe_")
-	expires := chat.Now().Add(EnrollFor)
+	expires := pg.Now().Add(EnrollFor)
 	if _, err := tx.Exec(ctx, "UPDATE computer SET enroll_code_hash = $2, enroll_expires_at = $3 WHERE id = $1",
 		r.ID, digest(code), expires); err != nil {
 		return nil, err
@@ -258,12 +257,12 @@ func (s *Service) RenewEnrollment(ctx context.Context, tx pgx.Tx, id string) (*E
 	}}, nil
 }
 
-func computer(ctx context.Context, db store.DB, id string) (*computerRow, error) {
-	parsed, ok := chat.ParseID(id)
+func computer(ctx context.Context, db pg.DB, id string) (*computerRow, error) {
+	parsed, ok := pg.ParseID(id)
 	if !ok {
 		return nil, apierr.NotFound()
 	}
-	r, err := chat.One[computerRow](ctx, db, "SELECT * FROM computer WHERE id = $1", parsed)
+	r, err := pg.One[computerRow](ctx, db, "SELECT * FROM computer WHERE id = $1", parsed)
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +278,7 @@ func relayUnreachable(err error) error {
 
 // Approve approves a computer's runtime on the relay: its pending pairing,
 // or its changed runtime.
-func (s *Service) Approve(ctx context.Context, db store.DB, id, kind string) error {
+func (s *Service) Approve(ctx context.Context, db pg.DB, id, kind string) error {
 	if s.Relay == nil {
 		return relayUnavailable()
 	}
@@ -287,7 +286,7 @@ func (s *Service) Approve(ctx context.Context, db store.DB, id, kind string) err
 	if err != nil {
 		return err
 	}
-	rt, err := chat.One[computerRuntimeRow](ctx, db, "SELECT * FROM computer_runtime WHERE computer_id = $1 AND kind = $2", r.ID, kind)
+	rt, err := pg.One[computerRuntimeRow](ctx, db, "SELECT * FROM computer_runtime WHERE computer_id = $1 AND kind = $2", r.ID, kind)
 	if err != nil {
 		return err
 	}
@@ -308,7 +307,7 @@ func (s *Service) Approve(ctx context.Context, db store.DB, id, kind string) err
 				return apierr.Upstream("RELAY_REJECTED", "中继没有接受这次配对："+err.Error())
 			}
 			_, err = db.Exec(ctx, `UPDATE computer_runtime SET device_id = $3, updated_at = $4
-				WHERE computer_id = $1 AND kind = $2`, r.ID, kind, deviceID, chat.Now())
+				WHERE computer_id = $1 AND kind = $2`, r.ID, kind, deviceID, pg.Now())
 			return err
 		}
 		return apierr.New(409, "NOTHING_TO_APPROVE", "这台电脑还没有发起配对。")
@@ -336,7 +335,7 @@ func (s *Service) DeleteComputer(ctx context.Context, tx pgx.Tx, id string) erro
 	if err != nil {
 		return err
 	}
-	runtimes, err := chat.All[computerRuntimeRow](ctx, tx, "SELECT * FROM computer_runtime WHERE computer_id = $1", r.ID)
+	runtimes, err := pg.All[computerRuntimeRow](ctx, tx, "SELECT * FROM computer_runtime WHERE computer_id = $1", r.ID)
 	if err != nil {
 		return err
 	}
@@ -347,7 +346,7 @@ func (s *Service) DeleteComputer(ctx context.Context, tx pgx.Tx, id string) erro
 			}
 		}
 	}
-	tasks, err := chat.All[taskRow](ctx, tx, taskSelect+" WHERE t.computer_id = $1 FOR UPDATE OF t", r.ID)
+	tasks, err := pg.All[taskRow](ctx, tx, taskSelect+" WHERE t.computer_id = $1 FOR UPDATE OF t", r.ID)
 	if err != nil {
 		return err
 	}
@@ -357,7 +356,7 @@ func (s *Service) DeleteComputer(ctx context.Context, tx pgx.Tx, id string) erro
 		}
 	}
 	reason := "电脑已移除。"
-	runs, err := chat.All[runRow](ctx, tx, `SELECT * FROM task_run WHERE computer_id = $1
+	runs, err := pg.All[runRow](ctx, tx, `SELECT * FROM task_run WHERE computer_id = $1
 		AND status IN ('queued', 'starting', 'running') FOR UPDATE`, r.ID)
 	if err != nil {
 		return err
@@ -381,8 +380,8 @@ type AssigneeOption struct {
 }
 
 // AssigneeOptions are the paired runtimes' providers.
-func (s *Service) AssigneeOptions(ctx context.Context, db store.DB) ([]AssigneeOption, error) {
-	rows, err := chat.All[struct {
+func (s *Service) AssigneeOptions(ctx context.Context, db pg.DB) ([]AssigneeOption, error) {
+	rows, err := pg.All[struct {
 		computerRuntimeRow
 		Name string `db:"name"`
 	}](ctx, db, `SELECT r.*, c.name FROM computer_runtime r JOIN computer c ON c.id = r.computer_id
@@ -406,7 +405,7 @@ func (s *Service) AssigneeOptions(ctx context.Context, db store.DB) ([]AssigneeO
 
 // Places is where on a computer's runtime an agent can work, read from
 // the runtime now.
-func (s *Service) Places(ctx context.Context, db store.DB, id, kind string) (*Places, error) {
+func (s *Service) Places(ctx context.Context, db pg.DB, id, kind string) (*Places, error) {
 	if s.Relay == nil {
 		return nil, relayUnavailable()
 	}
@@ -442,11 +441,11 @@ func unauthenticated() error {
 }
 
 // Authenticate is the computer holding token.
-func Authenticate(ctx context.Context, db store.DB, token string) (*RemoteComputer, error) {
+func Authenticate(ctx context.Context, db pg.DB, token string) (*RemoteComputer, error) {
 	if token == "" {
 		return nil, unauthenticated()
 	}
-	r, err := chat.One[computerRow](ctx, db, "SELECT * FROM computer WHERE token_hash = $1", digest(token))
+	r, err := pg.One[computerRow](ctx, db, "SELECT * FROM computer WHERE token_hash = $1", digest(token))
 	if err != nil {
 		return nil, err
 	}
@@ -482,7 +481,7 @@ func (s *Service) Enroll(ctx context.Context, tx pgx.Tx, code string, in Report)
 	if s.Relay == nil {
 		return nil, relayUnavailable()
 	}
-	r, err := chat.One[computerRow](ctx, tx, "SELECT * FROM computer WHERE enroll_code_hash = $1 FOR UPDATE", digest(code))
+	r, err := pg.One[computerRow](ctx, tx, "SELECT * FROM computer WHERE enroll_code_hash = $1 FOR UPDATE", digest(code))
 	if err != nil {
 		return nil, err
 	}
@@ -518,7 +517,7 @@ func (s *Service) Report(ctx context.Context, tx pgx.Tx, c *RemoteComputer, in R
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO computer_runtime (computer_id, kind, providers, updated_at) VALUES ($1, $2, $3, $4)
 			ON CONFLICT (computer_id, kind) DO UPDATE SET providers = $3, updated_at = $4`,
-			c.ID, rt.Kind, providers, chat.Now()); err != nil {
+			c.ID, rt.Kind, providers, pg.Now()); err != nil {
 			return err
 		}
 	}
@@ -527,8 +526,8 @@ func (s *Service) Report(ctx context.Context, tx pgx.Tx, c *RemoteComputer, in R
 
 // CurrentTask is the task whose open session works in dir (or a directory
 // above it) on this computer.
-func (s *Service) CurrentTask(ctx context.Context, db store.DB, c *RemoteComputer, dir string) (string, error) {
-	sessions, err := chat.All[sessionRow](ctx, db, `SELECT * FROM task_session WHERE computer_id = $1 AND closed_at IS NULL
+func (s *Service) CurrentTask(ctx context.Context, db pg.DB, c *RemoteComputer, dir string) (string, error) {
+	sessions, err := pg.All[sessionRow](ctx, db, `SELECT * FROM task_session WHERE computer_id = $1 AND closed_at IS NULL
 		AND workspace <> '' ORDER BY length(workspace) DESC`, c.ID)
 	if err != nil {
 		return "", err
@@ -544,12 +543,12 @@ func (s *Service) CurrentTask(ctx context.Context, db store.DB, c *RemoteCompute
 }
 
 // remoteTask is a task the computer works on.
-func remoteTask(ctx context.Context, db store.DB, c *RemoteComputer, ref string, lock bool) (*taskRow, error) {
+func remoteTask(ctx context.Context, db pg.DB, c *RemoteComputer, ref string, lock bool) (*taskRow, error) {
 	r, err := find(ctx, db, ref, lock)
 	if err != nil {
 		return nil, err
 	}
-	mine, err := chat.Exists(ctx, db, "SELECT 1 FROM task_run WHERE task_id = $1 AND computer_id = $2", r.ID, c.ID)
+	mine, err := pg.Exists(ctx, db, "SELECT 1 FROM task_run WHERE task_id = $1 AND computer_id = $2", r.ID, c.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -560,7 +559,7 @@ func remoteTask(ctx context.Context, db store.DB, c *RemoteComputer, ref string,
 }
 
 // activeRun is the computer's current run on the task, if any.
-func activeRun(ctx context.Context, db store.DB, c *RemoteComputer, taskID string) (*string, error) {
+func activeRun(ctx context.Context, db pg.DB, c *RemoteComputer, taskID string) (*string, error) {
 	var id string
 	err := db.QueryRow(ctx, `SELECT id FROM task_run WHERE task_id = $1 AND computer_id = $2
 		ORDER BY (status = 'running') DESC, created_at DESC LIMIT 1`, taskID, c.ID).Scan(&id)
@@ -573,7 +572,7 @@ func activeRun(ctx context.Context, db store.DB, c *RemoteComputer, taskID strin
 	return &id, nil
 }
 
-func (s *Service) RemoteTask(ctx context.Context, db store.DB, c *RemoteComputer, ref string) (*TaskDetail, error) {
+func (s *Service) RemoteTask(ctx context.Context, db pg.DB, c *RemoteComputer, ref string) (*TaskDetail, error) {
 	r, err := remoteTask(ctx, db, c, ref, false)
 	if err != nil {
 		return nil, err
@@ -597,7 +596,7 @@ func (s *Service) RemoteComment(ctx context.Context, tx pgx.Tx, c *RemoteCompute
 	return record(ctx, tx, r.ID, run, "comment", Remote, &body, s.remoteData(ctx, tx, c, r))
 }
 
-func (s *Service) remoteData(ctx context.Context, db store.DB, c *RemoteComputer, r *taskRow) map[string]any {
+func (s *Service) remoteData(ctx context.Context, db pg.DB, c *RemoteComputer, r *taskRow) map[string]any {
 	d := map[string]any{"computer_id": c.ID, "computer_name": c.Name}
 	var runtime, provider string
 	if db.QueryRow(ctx, `SELECT runtime, provider FROM task_run WHERE task_id = $1 AND computer_id = $2

@@ -36,7 +36,7 @@
     "test:memory-service": "turbo run test --filter=@axp/memory-service",
     "test:forge-service": "turbo run test --filter=@axp/forge-service",
     "test:routine-service": "turbo run test --filter=@axp/routine-service",
-    "check:go": "turbo run lint test --filter=@axp/control-plane --filter=@axp/llm-gateway --filter=@axp/forge-service --filter=@axp/routine-service --filter=@axp/plugins-go --filter=@axp/remote",
+    "check:go": "turbo run lint test --filter=@axp/control-plane --filter=@axp/llm-gateway --filter=@axp/forge-service --filter=@axp/routine-service --filter=@axp/plugins-go --filter=@axp/service-go --filter=@axp/remote",
     "format": "dprint fmt",
     "format:check": "dprint check",
     "knip": "knip",

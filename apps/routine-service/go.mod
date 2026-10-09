@@ -8,10 +8,12 @@ require (
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	github.com/aghub-app/akhook/go/adk v0.0.0-20261009042807-3f4a76787ae3 // indirect
+	github.com/akarachen/axp/packages/telemetry-go v0.0.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
+	github.com/go-chi/chi/v5 v5.3.2 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
@@ -30,6 +32,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0 // indirect
 	github.com/nats-io/nkeys v0.4.16 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
+	github.com/pressly/goose/v3 v3.28.0 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/sethvargo/go-retry v0.4.0 // indirect
@@ -69,14 +72,12 @@ require (
 
 require (
 	github.com/akarachen/axp/packages/plugins-go v0.0.0
-	github.com/akarachen/axp/packages/telemetry-go v0.0.0-00010101000000-000000000000
+	github.com/akarachen/axp/packages/service-go v0.0.0
 	github.com/danielgtaylor/huma/v2 v2.39.1
-	github.com/go-chi/chi/v5 v5.3.2
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/nats-io/nats.go v1.54.0
 	github.com/openai/openai-go/v3 v3.64.0
-	github.com/pressly/goose/v3 v3.28.0
 	github.com/robfig/cron/v3 v3.0.1
 	google.golang.org/adk/v2 v2.5.0
 	google.golang.org/genai v1.71.0
@@ -84,5 +85,6 @@ require (
 
 replace (
 	github.com/akarachen/axp/packages/plugins-go => ../../packages/plugins-go
+	github.com/akarachen/axp/packages/service-go => ../../packages/service-go
 	github.com/akarachen/axp/packages/telemetry-go => ../../packages/telemetry-go
 )

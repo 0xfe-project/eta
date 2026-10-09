@@ -1,0 +1,23 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "lint": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/go.work",
+        "$TURBO_ROOT$/packages/telemetry-go/**"
+      ]
+    },
+    // The idempotency tests run against development's PostgreSQL, in a
+    // database of their own.
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/go.work",
+        "$TURBO_ROOT$/packages/telemetry-go/**"
+      ],
+      "env": ["DATABASE_URL"]
+    }
+  }
+}

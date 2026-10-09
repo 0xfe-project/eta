@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/akarachen/axp/packages/service-go/apierr"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/robfig/cron/v3"
 )
@@ -97,7 +98,7 @@ func (Schedule) Schema(r huma.Registry) *huma.Schema {
 func (s Schedule) check() error {
 	for _, d := range s.Days {
 		if d < 0 || d > 6 {
-			return New(422, "VALIDATION_ERROR", "请求参数无效。")
+			return apierr.New(422, "VALIDATION_ERROR", "请求参数无效。")
 		}
 	}
 	return nil
@@ -143,11 +144,11 @@ func CheckSchedule(s Schedule, timezone string) error {
 		return err
 	}
 	if _, err := location(timezone); err != nil {
-		return New(422, "INVALID_TIMEZONE", "时区无效。")
+		return apierr.New(422, "INVALID_TIMEZONE", "时区无效。")
 	}
 	// The time zone is the routine's, never the expression's.
 	if _, err := parser.Parse(s.Cron5()); err != nil || strings.Contains(s.Cron5(), "TZ=") {
-		return New(422, "INVALID_SCHEDULE", "cron 表达式无效。")
+		return apierr.New(422, "INVALID_SCHEDULE", "cron 表达式无效。")
 	}
 	return nil
 }

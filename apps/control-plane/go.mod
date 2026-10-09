@@ -4,8 +4,7 @@ go 1.26.6
 
 require (
 	github.com/akarachen/axp/packages/plugins-go v0.0.0
-	github.com/akarachen/axp/packages/telemetry-go v0.0.0-00010101000000-000000000000
-	github.com/caarlos0/env/v11 v11.4.1
+	github.com/akarachen/axp/packages/service-go v0.0.0
 	github.com/containerd/errdefs v1.0.0
 	github.com/danielgtaylor/huma/v2 v2.39.1
 	github.com/go-chi/chi/v5 v5.3.2
@@ -21,6 +20,7 @@ require (
 
 require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
+	github.com/akarachen/axp/packages/telemetry-go v0.0.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
@@ -86,5 +86,6 @@ require (
 
 replace (
 	github.com/akarachen/axp/packages/plugins-go => ../../packages/plugins-go
+	github.com/akarachen/axp/packages/service-go => ../../packages/service-go
 	github.com/akarachen/axp/packages/telemetry-go => ../../packages/telemetry-go
 )

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"slices"
 
-	"github.com/akarachen/axp/apps/control-plane/internal/apierr"
-	"github.com/akarachen/axp/apps/control-plane/internal/store"
+	"github.com/akarachen/axp/packages/service-go/apierr"
+	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -26,7 +26,7 @@ func LockConversation(ctx context.Context, tx pgx.Tx, id string) error {
 
 // DefaultConversationID is the conversation every agent is in, or "" before
 // the first agent.
-func DefaultConversationID(ctx context.Context, db store.DB) (string, error) {
+func DefaultConversationID(ctx context.Context, db pg.DB) (string, error) {
 	var id string
 	err := db.QueryRow(ctx, "SELECT id FROM conversation WHERE is_default").Scan(&id)
 	if err == pgx.ErrNoRows {
@@ -42,11 +42,11 @@ func ensureDefaultConversation(ctx context.Context, tx pgx.Tx) (string, error) {
 	}
 	// A request creating it concurrently wins; this one waits for it and
 	// reads its row.
-	now := Now()
+	now := pg.Now()
 	if _, err := tx.Exec(ctx, `INSERT INTO conversation
 		(id, is_default, title, last_event_seq, last_ui_event_seq, last_message_seq, created_at, updated_at)
 		VALUES ($1, true, '', 0, 0, 0, $2, $2)
-		ON CONFLICT (is_default) WHERE is_default DO NOTHING`, NewID(), now); err != nil {
+		ON CONFLICT (is_default) WHERE is_default DO NOTHING`, pg.NewID(), now); err != nil {
 		return "", err
 	}
 	return DefaultConversationID(ctx, tx)
@@ -77,7 +77,7 @@ func emit(ctx context.Context, tx pgx.Tx, conversationID, kind string, payload a
 	if err != nil {
 		return err
 	}
-	now := Now()
+	now := pg.Now()
 	var seq int64
 	if err := tx.QueryRow(ctx, `UPDATE conversation
 		SET last_ui_event_seq = last_ui_event_seq + 1, updated_at = $2
@@ -85,7 +85,7 @@ func emit(ctx context.Context, tx pgx.Tx, conversationID, kind string, payload a
 		return err
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO ui_event (id, conversation_id, seq, type, payload, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)`, NewID(), conversationID, seq, kind, data, now)
+		VALUES ($1, $2, $3, $4, $5, $6)`, pg.NewID(), conversationID, seq, kind, data, now)
 	return err
 }
 
@@ -101,7 +101,7 @@ func emitInteraction(ctx context.Context, tx pgx.Tx, i *interactionRow) error {
 // revision and publishes it.
 func saveMessage(ctx context.Context, tx pgx.Tx, m *messageRow) error {
 	m.Revision++
-	m.UpdatedAt = Now()
+	m.UpdatedAt = pg.Now()
 	content := m.Content
 	if content == nil {
 		content = []Block{}
@@ -118,7 +118,7 @@ func saveMessage(ctx context.Context, tx pgx.Tx, m *messageRow) error {
 // revision and publishes it.
 func saveInteraction(ctx context.Context, tx pgx.Tx, i *interactionRow) error {
 	i.Revision++
-	i.UpdatedAt = Now()
+	i.UpdatedAt = pg.Now()
 	if _, err := tx.Exec(ctx, `UPDATE interaction SET status = $2, answer = $3, revision = $4,
 		updated_at = $5 WHERE id = $1`, i.ID, i.Status, i.Answer, i.Revision, i.UpdatedAt); err != nil {
 		return err
@@ -126,13 +126,13 @@ func saveInteraction(ctx context.Context, tx pgx.Tx, i *interactionRow) error {
 	return emitInteraction(ctx, tx, i)
 }
 
-func loadAgent(ctx context.Context, db store.DB, id string) (*AgentRecord, error) {
-	return One[AgentRecord](ctx, db, "SELECT * FROM agent WHERE id = $1", id)
+func loadAgent(ctx context.Context, db pg.DB, id string) (*AgentRecord, error) {
+	return pg.One[AgentRecord](ctx, db, "SELECT * FROM agent WHERE id = $1", id)
 }
 
 // SetAgentStatus changes the agent's internal status.
 func SetAgentStatus(ctx context.Context, tx pgx.Tx, agentID, status string) error {
-	_, err := tx.Exec(ctx, "UPDATE agent SET status = $2, updated_at = $3 WHERE id = $1", agentID, status, Now())
+	_, err := tx.Exec(ctx, "UPDATE agent SET status = $2, updated_at = $3 WHERE id = $1", agentID, status, pg.Now())
 	return err
 }
 
@@ -168,14 +168,14 @@ func RefreshAgentStatus(ctx context.Context, tx pgx.Tx, agentID string) error {
 	agent.ProductStatus = status
 	agent.ProductRevision++
 	if _, err := tx.Exec(ctx, `UPDATE agent SET product_status = $2, product_revision = $3, updated_at = $4
-		WHERE id = $1`, agentID, status, agent.ProductRevision, Now()); err != nil {
+		WHERE id = $1`, agentID, status, agent.ProductRevision, pg.Now()); err != nil {
 		return err
 	}
 	return emitAgent(ctx, tx, agent)
 }
 
 func expireOpenInteractions(ctx context.Context, tx pgx.Tx, messageID string) error {
-	open, err := All[interactionRow](ctx, tx, `SELECT * FROM interaction
+	open, err := pg.All[interactionRow](ctx, tx, `SELECT * FROM interaction
 		WHERE message_id = $1 AND status IN ('pending', 'submitted') ORDER BY created_at, id`, messageID)
 	if err != nil {
 		return err
@@ -215,8 +215,8 @@ var outcomes = map[string][2]string{
 	Cancelled:   {CommandCancelled, MessageStopped},
 }
 
-func reply(ctx context.Context, db store.DB, commandID string) (*messageRow, error) {
-	return One[messageRow](ctx, db, "SELECT * FROM message WHERE command_id = $1 AND role = 'assistant'", commandID)
+func reply(ctx context.Context, db pg.DB, commandID string) (*messageRow, error) {
+	return pg.One[messageRow](ctx, db, "SELECT * FROM message WHERE command_id = $1 AND role = 'assistant'", commandID)
 }
 
 // FinishCommand settles a command and its reply; false when it was already
@@ -225,7 +225,7 @@ func FinishCommand(ctx context.Context, tx pgx.Tx, command *CommandRecord, outco
 	if command.terminal() {
 		return false, nil
 	}
-	now := Now()
+	now := pg.Now()
 	statuses := outcomes[outcome]
 	command.Status = statuses[0]
 	command.FinishedAt = &now

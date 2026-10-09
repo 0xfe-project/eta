@@ -1,0 +1,8 @@
+{
+  "name": "@axp/service-go",
+  "private": true,
+  "scripts": {
+    "lint": "test -z \"$(gofmt -l .)\" && go vet ./...",
+    "test": "bash ../../scripts/dev-postgres.sh && go test ./..."
+  }
+}

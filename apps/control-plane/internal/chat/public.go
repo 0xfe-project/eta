@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"reflect"
 
-	"github.com/akarachen/axp/apps/control-plane/internal/jsontime"
+	"github.com/akarachen/axp/packages/service-go/jsontime"
 	"github.com/danielgtaylor/huma/v2"
 )
 

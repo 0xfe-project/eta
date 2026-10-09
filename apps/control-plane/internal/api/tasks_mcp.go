@@ -5,9 +5,9 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/akarachen/axp/apps/control-plane/internal/apierr"
-	"github.com/akarachen/axp/apps/control-plane/internal/chat"
 	"github.com/akarachen/axp/apps/control-plane/internal/tasks"
+	"github.com/akarachen/axp/packages/service-go/apierr"
+	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/jackc/pgx/v5"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -73,7 +73,7 @@ func tasksMCP(d *Deps) http.Handler {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "tasks"}, nil)
 	agent := func(ctx context.Context) (tasks.Actor, error) {
 		id, _ := ctx.Value(agentKey{}).(string)
-		if parsed, ok := chat.ParseID(id); ok {
+		if parsed, ok := pg.ParseID(id); ok {
 			return tasks.AgentActor(parsed), nil
 		}
 		return tasks.Actor{}, errors.New("the task board is only for agents")
@@ -83,7 +83,7 @@ func tasksMCP(d *Deps) http.Handler {
 		if err != nil {
 			return nil, err
 		}
-		t, err := inTx(ctx, d, func(tx pgx.Tx) (*tasks.TaskDetail, error) { return fn(tx, by) })
+		t, err := pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (*tasks.TaskDetail, error) { return fn(tx, by) })
 		return t, toolError(err)
 	}
 

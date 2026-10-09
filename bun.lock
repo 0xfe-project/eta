@@ -102,6 +102,9 @@
     "packages/plugins-go": {
       "name": "@axp/plugins-go",
     },
+    "packages/service-go": {
+      "name": "@axp/service-go",
+    },
     "packages/telemetry-go": {
       "name": "@axp/telemetry-go",
     },
@@ -133,6 +136,8 @@
     "@axp/remote": ["@axp/remote@workspace:apps/remote"],
 
     "@axp/routine-service": ["@axp/routine-service@workspace:apps/routine-service"],
+
+    "@axp/service-go": ["@axp/service-go@workspace:packages/service-go"],
 
     "@axp/telemetry-go": ["@axp/telemetry-go@workspace:packages/telemetry-go"],
 

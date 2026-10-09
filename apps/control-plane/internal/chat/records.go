@@ -1,13 +1,7 @@
 package chat
 
 import (
-	"context"
-	"errors"
 	"time"
-
-	"github.com/akarachen/axp/apps/control-plane/internal/store"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
 // Records are rows as they are stored; they never reach the browser.
@@ -236,48 +230,3 @@ type RuntimeRecord struct {
 	EndedAt       *time.Time `db:"ended_at"`
 	CreatedAt     time.Time  `db:"created_at"`
 }
-
-// --- queries ----------------------------------------------------------------
-
-// One is the row sql selects, or nil.
-func One[T any](ctx context.Context, db store.DB, sql string, args ...any) (*T, error) {
-	rows, err := db.Query(ctx, sql, args...)
-	if err != nil {
-		return nil, err
-	}
-	row, err := pgx.CollectOneRow(rows, pgx.RowToAddrOfStructByName[T])
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
-	return row, err
-}
-
-// All is the rows sql selects.
-func All[T any](ctx context.Context, db store.DB, sql string, args ...any) ([]*T, error) {
-	rows, err := db.Query(ctx, sql, args...)
-	if err != nil {
-		return nil, err
-	}
-	return pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[T])
-}
-
-// Exists reports whether sql selects a row.
-func Exists(ctx context.Context, db store.DB, sql string, args ...any) (bool, error) {
-	var exists bool
-	err := db.QueryRow(ctx, "SELECT EXISTS ("+sql+")", args...).Scan(&exists)
-	return exists, err
-}
-
-// ParseID is id as a canonical UUID, or false.
-func ParseID(id string) (string, bool) {
-	parsed, err := uuid.Parse(id)
-	if err != nil {
-		return "", false
-	}
-	return parsed.String(), true
-}
-
-func NewID() string { return uuid.NewString() }
-
-// Now is the current time, at the database's precision.
-func Now() time.Time { return time.Now().UTC().Truncate(time.Microsecond) }

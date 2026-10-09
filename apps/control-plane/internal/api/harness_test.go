@@ -21,12 +21,13 @@ import (
 	"github.com/akarachen/axp/apps/control-plane/internal/llm"
 	"github.com/akarachen/axp/apps/control-plane/internal/plugins"
 	"github.com/akarachen/axp/apps/control-plane/internal/queue/queuetest"
-	"github.com/akarachen/axp/apps/control-plane/internal/testenv"
+	"github.com/akarachen/axp/apps/control-plane/internal/store"
+	"github.com/akarachen/axp/packages/service-go/pg/pgtest"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func TestMain(m *testing.M) { testenv.Main(m) }
+func TestMain(m *testing.M) { pgtest.Main(m, store.Migrations) }
 
 // testModel is the model the fake LLM gateway offers.
 const testModel = "test-model"
@@ -137,7 +138,7 @@ func newEnv(t *testing.T) *env {
 	e := &env{
 		t:      t,
 		ctx:    context.Background(),
-		db:     testenv.DB(t),
+		db:     pgtest.DB(t),
 		nats:   queuetest.New(),
 		models: &fakeCatalog{},
 		driver: &fakeDriver{states: map[string]string{}},
@@ -155,8 +156,8 @@ func newEnv(t *testing.T) *env {
 		Chat:     chatService,
 		Protocol: &control.Protocol{DB: e.db, Chat: chatService, Snapshots: e.s3, Secret: e.secret},
 	}
-	e.public, _ = Public(deps)
-	e.internal, _ = Internal(deps)
+	e.public = Public(deps).Router
+	e.internal = Internal(deps).Router
 	e.controller = &control.Controller{
 		DB: e.db, Chat: chatService, Queue: e.nats, Driver: e.driver, Snapshots: e.s3, Models: e.models,
 		Secret: e.secret, RuntimeGatewayURL: "http://runtime-gateway:8090",

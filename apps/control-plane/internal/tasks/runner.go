@@ -8,8 +8,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/akarachen/axp/apps/control-plane/internal/chat"
 	"github.com/akarachen/axp/apps/control-plane/internal/relay"
+	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -90,7 +90,7 @@ func (r *Runner) inTx(ctx context.Context, fn func(pgx.Tx) error) error {
 
 func (r *Runner) fail(ctx context.Context, runID, message string) error {
 	return r.inTx(ctx, func(tx pgx.Tx) error {
-		run, err := chat.One[runRow](ctx, tx, "SELECT * FROM task_run WHERE id = $1 FOR UPDATE", runID)
+		run, err := pg.One[runRow](ctx, tx, "SELECT * FROM task_run WHERE id = $1 FOR UPDATE", runID)
 		if err != nil || run == nil || run.FinishedAt != nil {
 			return err
 		}
@@ -105,7 +105,7 @@ func (r *Runner) dispatch(ctx context.Context) error {
 	if r.Service.Relay == nil {
 		return nil
 	}
-	queued, err := chat.All[runRow](ctx, r.DB, `SELECT DISTINCT ON (q.task_id) q.* FROM task_run q
+	queued, err := pg.All[runRow](ctx, r.DB, `SELECT DISTINCT ON (q.task_id) q.* FROM task_run q
 		WHERE q.status = 'queued' AND NOT EXISTS (SELECT 1 FROM task_run a WHERE a.task_id = q.task_id
 			AND a.status IN ('starting', 'running'))
 		ORDER BY q.task_id, q.created_at`)
@@ -114,7 +114,7 @@ func (r *Runner) dispatch(ctx context.Context) error {
 	}
 	for _, q := range queued {
 		err := r.inTx(ctx, func(tx pgx.Tx) error {
-			run, err := chat.One[runRow](ctx, tx, "SELECT * FROM task_run WHERE id = $1 AND status = 'queued' FOR UPDATE", q.ID)
+			run, err := pg.One[runRow](ctx, tx, "SELECT * FROM task_run WHERE id = $1 AND status = 'queued' FOR UPDATE", q.ID)
 			if err != nil || run == nil || run.ComputerID == nil {
 				return err
 			}
@@ -167,7 +167,7 @@ func (r *Runner) start(ctx context.Context) error {
 	if !ok {
 		return nil
 	}
-	runs, err := chat.All[runRow](ctx, r.DB, "SELECT * FROM task_run WHERE status = 'starting' ORDER BY created_at")
+	runs, err := pg.All[runRow](ctx, r.DB, "SELECT * FROM task_run WHERE status = 'starting' ORDER BY created_at")
 	if err != nil {
 		return err
 	}
@@ -188,7 +188,7 @@ func (r *Runner) startOne(ctx context.Context, a agents, run *runRow) error {
 	}
 	// Recorded before the call: if its confirmation is lost, watch settles
 	// it from the native state.
-	sentAt := chat.Now()
+	sentAt := pg.Now()
 	if _, err := r.DB.Exec(ctx, `UPDATE task_run SET status = 'running', sent_at = $2 WHERE id = $1 AND status = 'starting'`,
 		run.ID, sentAt); err != nil {
 		return err
@@ -223,7 +223,7 @@ func isTransport(err error) bool {
 // when there is none.
 func (r *Runner) session(ctx context.Context, a agents, run *runRow) (*sessionRow, error) {
 	if run.SessionID != nil {
-		return chat.One[sessionRow](ctx, r.DB, "SELECT * FROM task_session WHERE id = $1", *run.SessionID)
+		return pg.One[sessionRow](ctx, r.DB, "SELECT * FROM task_session WHERE id = $1", *run.SessionID)
 	}
 	if run.ComputerID == nil {
 		return nil, r.fail(ctx, run.ID, "这次运行没有电脑。")
@@ -244,8 +244,8 @@ func (r *Runner) session(ctx context.Context, a agents, run *runRow) (*sessionRo
 		return nil, r.fail(ctx, run.ID, "任务没有工作位置。")
 	}
 	s := &sessionRow{
-		ID: chat.NewID(), TaskID: run.TaskID, ComputerID: *run.ComputerID, Runtime: run.Runtime, Provider: run.Provider,
-		DeviceID: *deviceID, InstanceID: instanceFor(run.Runtime), CreatedAt: chat.Now(),
+		ID: pg.NewID(), TaskID: run.TaskID, ComputerID: *run.ComputerID, Runtime: run.Runtime, Provider: run.Provider,
+		DeviceID: *deviceID, InstanceID: instanceFor(run.Runtime), CreatedAt: pg.Now(),
 	}
 	n, dir, openErr := a.open(ctx, s, opening{TaskID: task.ID, Number: task.Number, Title: task.Title, Place: *task.Place})
 	if n.WorkspaceID == "" && openErr != nil {
@@ -260,7 +260,7 @@ func (r *Runner) session(ctx context.Context, a agents, run *runRow) (*sessionRo
 	err = r.inTx(ctx, func(tx pgx.Tx) error {
 		closed := any(nil)
 		if openErr != nil {
-			closed = chat.Now()
+			closed = pg.Now()
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO task_session (id, task_id, computer_id, runtime, provider, device_id, instance_id,
 			workspace, native, created_at, closed_at, cleanup_pending) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
@@ -286,7 +286,7 @@ func (r *Runner) watch(ctx context.Context) error {
 	if !ok {
 		return nil
 	}
-	runs, err := chat.All[runRow](ctx, r.DB, "SELECT * FROM task_run WHERE status = 'running' AND session_id IS NOT NULL")
+	runs, err := pg.All[runRow](ctx, r.DB, "SELECT * FROM task_run WHERE status = 'running' AND session_id IS NOT NULL")
 	if err != nil {
 		return err
 	}
@@ -301,7 +301,7 @@ func (r *Runner) watch(ctx context.Context) error {
 func (r *Runner) watchOne(ctx context.Context, a agents, run *runRow) error {
 	ctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
-	session, err := chat.One[sessionRow](ctx, r.DB, "SELECT * FROM task_session WHERE id = $1", *run.SessionID)
+	session, err := pg.One[sessionRow](ctx, r.DB, "SELECT * FROM task_session WHERE id = $1", *run.SessionID)
 	if err != nil || session == nil {
 		return err
 	}
@@ -351,7 +351,7 @@ func (r *Runner) watchOne(ctx context.Context, a agents, run *runRow) error {
 		return nil
 	}
 	delete(r.working, run.ID)
-	commented, err := chat.Exists(ctx, r.DB, `SELECT 1 FROM task_activity WHERE task_id = $1 AND kind = 'comment'
+	commented, err := pg.Exists(ctx, r.DB, `SELECT 1 FROM task_activity WHERE task_id = $1 AND kind = 'comment'
 		AND actor = 'remote' AND created_at >= $2`, run.TaskID, sent)
 	if err != nil {
 		return err
@@ -362,7 +362,7 @@ func (r *Runner) watchOne(ctx context.Context, a agents, run *runRow) error {
 	if run.NudgedAt != nil {
 		return r.fail(ctx, run.ID, "远程智能体结束了这一轮，但没有用 axp task comment 回复。")
 	}
-	now := chat.Now()
+	now := pg.Now()
 	if _, err := r.DB.Exec(ctx, "UPDATE task_run SET nudged_at = $2, sent_at = $2 WHERE id = $1", run.ID, now); err != nil {
 		return err
 	}
@@ -395,7 +395,7 @@ func (r *Runner) cleanup(ctx context.Context) error {
 	if !ok {
 		return nil
 	}
-	sessions, err := chat.All[sessionRow](ctx, r.DB, `SELECT s.* FROM task_session s
+	sessions, err := pg.All[sessionRow](ctx, r.DB, `SELECT s.* FROM task_session s
 		WHERE s.cleanup_pending AND NOT EXISTS (SELECT 1 FROM task_run r WHERE r.session_id = s.id AND r.status IN ('starting', 'running'))`)
 	if err != nil {
 		return err
