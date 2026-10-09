@@ -7,18 +7,13 @@ import (
 
 // What remote agents are sent. They work in their place (a workspace or a
 // new worktree of the user's), where the `axp` CLI knows which task they are
-// on.
+// on. How to use it (replying, statuses, pull requests, attachments) is the
+// axp skill `axp setup` installs for them (apps/remote/skills/axp), not
+// these prompts: they carry the task, the place and the rule AXP enforces.
 
-const cliGuide = `你在 AXP 的任务看板上工作，用 ` + "`axp`" + ` 命令和看板打交道（在当前目录及其子目录中运行）：
-
-- ` + "`axp task show`" + `：任务的描述、状态和全部评论。
-- ` + "`axp task comment \"<Markdown>\"`" + `（或 ` + "`--file <path>`" + `）：在任务下回复。
-- ` + "`axp task status in_review|blocked|in_progress`" + `：做完待验收时设为 in_review，需要人帮忙时设为 blocked。
-- ` + "`axp gh pr create ...`" + `：经 AXP 的 GitHub App 开 PR（先用 git 推送分支；用户授权过 App 时以用户的名义），开出的 PR 会记为任务的交付物。
-
-如需附件，先创建 PR，再尝试客户本机已有登录的 GH CLI，用 ` + "`gh pr edit <PR-URL> --attach <本机图片文件>`" + ` 补图（不是 ` + "`axp gh`" + `）。保留 PR 原正文；不可用时汇报原因。详见 GitHub plugin skill。
-
-规则：每一轮结束前，必须用 ` + "`axp task comment`" + ` 汇报你做了什么、结果如何、还需要什么；没有评论的一轮不算完成。在当前目录里工作，把改动提交到当前分支。`
+const brief = "你在处理 AXP 任务看板上的任务，用 `axp` skill 和看板打交道。" +
+	"每一轮结束前，必须用 `axp task comment` 汇报你做了什么、结果如何、还需要什么；没有评论的一轮不算完成。" +
+	"在当前目录里工作，把改动提交到当前分支。"
 
 func describe(r *taskRow) string {
 	var b strings.Builder
@@ -30,7 +25,7 @@ func describe(r *taskRow) string {
 }
 
 func initialPrompt(r *taskRow) string {
-	return cliGuide + "\n\n---\n\n" + describe(r) + "\n开始处理这个任务。"
+	return brief + "\n\n---\n\n" + describe(r) + "\n开始处理这个任务。"
 }
 
 func actorName(by Actor) string {

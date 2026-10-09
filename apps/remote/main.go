@@ -7,7 +7,8 @@
 // the agenvo connectors, pairs them with AXP's relay and runs them as their
 // own user services.
 //
-// Agents working on a task use the rest: `axp task …`, `axp gh …`.
+// Agents working on a task use the rest: `axp task …`, `axp gh …`, as the
+// axp skill setup installs for them tells them (skills/axp/SKILL.md).
 package main
 
 import (
@@ -28,7 +29,7 @@ This computer:
   axp setup --url URL --code CODE     connect it to AXP (the install command);
                                       run again after adding or removing a runtime
   axp status                          the connectors' state
-  axp uninstall                       stop the connectors and forget the credentials
+  axp uninstall                       stop the connectors, remove the skill and forget the credentials
 `
 
 func main() {

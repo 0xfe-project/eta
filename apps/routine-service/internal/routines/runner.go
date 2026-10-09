@@ -45,9 +45,7 @@ const instructions = `你在执行定时任务「%s」。
 - 需要了解之前做过什么时，用 list_runs、get_run、search_runs 查看过往的报告
   和用户的反馈。
   发送之前确认内容没有和以前的报告重复；没有值得发送的新内容就不发。
-- 最后调用一次 finish 结束运行：
-  - report 是给用户的报告（Markdown，第一行是 # 标题），没有新内容时传 null；
-  - handoff 写给下一次运行：发了什么、观察到什么、下次要注意什么，几句话即可。`
+- 最后调用一次 finish 结束运行。`
 
 const prompt = "现在是 %s，执行这次运行。"
 

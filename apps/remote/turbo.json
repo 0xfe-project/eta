@@ -12,7 +12,8 @@
         "$TURBO_ROOT$/scripts/build/remote.sh",
         "go.mod",
         "**/*.go",
-        "!**/*_test.go"
+        "!**/*_test.go",
+        "skills/**"
       ],
       "outputs": ["out/**"]
     },

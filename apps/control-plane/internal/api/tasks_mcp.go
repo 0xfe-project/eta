@@ -123,8 +123,7 @@ func tasksMCP(d *Deps) http.Handler {
 			"can branch off) and its existing workspaces (with path, branch and whether they have uncommitted changes). Pick one " +
 			"for the assignee's place: {kind: workspace, workspace_id} to work in an existing workspace, or {kind: worktree, " +
 			"from: <project id>, branch?, base?} for a new worktree (Paseo only branches off its projects; for Herdr, from is a " +
-			"workspace whose repository to branch off). Pass session for Herdr. Prefer a new worktree for independent work and " +
-			"an existing workspace when the work belongs there.",
+			"workspace whose repository to branch off). Pass session for Herdr.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in listPlacesIn) (*mcp.CallToolResult, any, error) {
 		places, err := s.Places(ctx, d.DB, in.ComputerID, in.Runtime)
 		return nil, places, toolError(err)
