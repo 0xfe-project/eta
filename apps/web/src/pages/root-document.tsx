@@ -13,6 +13,19 @@ export function RootDocument() {
     void useWorkspaceStore.persist.rehydrate();
     void useOutbox.persist.rehydrate();
   }, []);
+  // iOS zooms into focused inputs under 16px up to the page's maximum-scale,
+  // while Safari still lets users pinch past it. Other browsers would block
+  // pinch zoom with this, so it is added on iOS only.
+  useEffect(() => {
+    const ios =
+      /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+      (navigator.userAgent.includes("Macintosh") &&
+        navigator.maxTouchPoints > 1);
+    const viewport = document.querySelector('meta[name="viewport"]');
+    const content = viewport?.getAttribute("content");
+    if (ios && content && !content.includes("maximum-scale"))
+      viewport?.setAttribute("content", `${content}, maximum-scale=1`);
+  }, []);
   const fontSans = useWorkspaceStore((s) => s.workspace.fontSans);
   const fontMono = useWorkspaceStore((s) => s.workspace.fontMono);
   const fonts = {
