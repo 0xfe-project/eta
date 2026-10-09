@@ -1,26 +1,26 @@
 # 任务与远程电脑
 
-本文说明 [#45](https://github.com/AkaraChen/axp/issues/45) 的实现：一个像 [multica](https://github.com/multica-ai/multica) 那样的任务看板，任务可以指派给用户自己，或者指派给用户其他电脑上的编码智能体。远程电脑通过 [agenvo](https://github.com/Xuanwo/agenvo) 中继接入，智能体跑在那台电脑的 [Paseo](https://paseo.sh) 或 [Herdr](https://herdr.dev) 里，工作在用户自己的项目和工作区中。
+本文说明 [#45](https://github.com/AkaraChen/axp/issues/45) 的实现：一个像 [multica](https://github.com/multica-ai/multica) 那样的任务看板，任务可以指派给用户自己，或者指派给用户其他电脑上的编码智能体。远程电脑通过 [agenvo](https://github.com/AkaraChen/agenvo) 中继接入，智能体跑在那台电脑的 [Paseo](https://paseo.sh) 或 [Herdr](https://herdr.dev) 里，工作在用户自己的项目和工作区中。
 
-## 上游依赖
+## agenvo
 
-远程电脑依赖 agenvo 的两项能力，分别在上游 PR 中：
+`vendor/agenvo` 指向自己维护的 fork [AkaraChen/agenvo](https://github.com/AkaraChen/agenvo)，它的 main 在上游之上合入了两项远程电脑依赖、但上游尚未合入的能力：
 
-- [#3](https://github.com/Xuanwo/agenvo/pull/3)：`paseo.workspaces.archive`，任务完成时归档 AXP 开的 Paseo worktree。
-- [#4](https://github.com/Xuanwo/agenvo/pull/4)：Herdr 的 `worktree.list/create/open/remove` 和 `tab.create/close`。
+- [Xuanwo/agenvo#3](https://github.com/Xuanwo/agenvo/pull/3)：`paseo.workspaces.archive`，任务完成时归档 AXP 开的 Paseo worktree。
+- [Xuanwo/agenvo#4](https://github.com/Xuanwo/agenvo/pull/4)：Herdr 的 `worktree.list/create/open/remove` 和 `tab.create/close`。
 
-`vendor/agenvo` 只固定在上游 main 的提交上，不指向 fork。在两者合入并升级 submodule 之前，远程电脑装上的 connector 没有这些方法，调用时报「connector 不支持……，需要更新」，所以这项功能在那之前不启用。
+中继和远程电脑上的 connector 都从这个 submodule 构建（`/remote/dl/agenvo-<kind>.tgz`）。旧版 connector 没有这些方法，调用时报「connector 不支持……，需要更新」，在那台电脑上重新运行 `axp setup` 即可。上游合入后，fork 跟进上游再升级 submodule。
 
 ## 组成
 
-| 部分         | 位置                                                                   | 作用                                                                                                                        |
-| ------------ | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| 任务看板     | `apps/control-plane/internal/tasks`、Web 的“任务”tab                   | 任务、时间线、运行；打开工作位置、派发与观察远程智能体、收尾（runner）                                                      |
-| 中继         | `vendor/agenvo`（submodule，固定版本，不改动），生产 accessory `relay` | 远程电脑上的 connector 与中继配对、保持 WSS 连接；控制面经它调用 Paseo/Herdr                                                |
-| 中继客户端   | `apps/control-plane/internal/relay`                                    | 管理员接口（配对、批准、撤销、状态）和 MCP `runtime_call`                                                                   |
-| `axp`        | `apps/remote`（Go，`/remote/dl/axp-<os>-<arch>`）                      | 远程电脑上的安装（`axp setup`）和给智能体用的 CLI                                                                           |
-| tasks 插件   | `apps/agent-runtime/plugins/tasks`                                     | AXP 智能体读写看板：`list_tasks`、`get_task`、`list_assignees`、`list_places`、`create_task`、`update_task`、`comment_task` |
-| 远程电脑设置 | Web 设置的“远程电脑”                                                   | 添加电脑（安装命令）、核对指纹后批准、在线状态、撤销                                                                        |
+| 部分         | 位置                                                                       | 作用                                                                                                                        |
+| ------------ | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| 任务看板     | `apps/control-plane/internal/tasks`、Web 的“任务”tab                       | 任务、时间线、运行；打开工作位置、派发与观察远程智能体、收尾（runner）                                                      |
+| 中继         | `vendor/agenvo`（submodule，固定在 fork 的提交上），生产 accessory `relay` | 远程电脑上的 connector 与中继配对、保持 WSS 连接；控制面经它调用 Paseo/Herdr                                                |
+| 中继客户端   | `apps/control-plane/internal/relay`                                        | 管理员接口（配对、批准、撤销、状态）和 MCP `runtime_call`                                                                   |
+| `axp`        | `apps/remote`（Go，`/remote/dl/axp-<os>-<arch>`）                          | 远程电脑上的安装（`axp setup`）和给智能体用的 CLI                                                                           |
+| tasks 插件   | `apps/agent-runtime/plugins/tasks`                                         | AXP 智能体读写看板：`list_tasks`、`get_task`、`list_assignees`、`list_places`、`create_task`、`update_task`、`comment_task` |
+| 远程电脑设置 | Web 设置的“远程电脑”                                                       | 添加电脑（安装命令）、核对指纹后批准、在线状态、撤销                                                                        |
 
 ## 任务
 
@@ -139,4 +139,4 @@ agenvo 让 Codex 和 Claude 以完全权限运行（Paseo 的 `full-access`/`byp
 
 - `apps/control-plane/internal/api/tasks_test.go`：用假的中继（Paseo 和 Herdr connector）覆盖接入（安装码只能用一次、按名字配对、批准、在线）、工作位置的查询、Paseo 新 worktree 从派发到完成和收尾（归档工作区）、已有工作区只归档 agent、Herdr 在新 worktree 的 tab 里运行（环境变量带任务 ID、自动确认 Claude 的信任对话框、有未提交改动时保留 worktree）、按目录找当前任务、提醒一次后失败、停止、改派、backlog、指派的校验、电脑之间的隔离，以及 AXP 智能体经 MCP 使用看板。
 - `apps/control-plane/internal/relay`、`apps/remote`：MCP 应答的解析（JSON 与 SSE）、当前任务的来源。
-- 在开发环境里，用合入了上游 #3、#4 的本地 agenvo 构建、真实的中继、本机的 Paseo（Claude）和 Herdr（Claude）走过：运行安装命令、在设置里核对指纹并批准、读取工作位置、在 Paseo 新 worktree 和 Herdr 新 worktree 里各完成一个任务（Herdr 自动确认了 Claude 的信任对话框）、在 Herdr 已有工作区的新 tab 里完成一个任务，以及三者在 done 后的收尾。
+- 在开发环境里，用合入了 #3、#4 的 agenvo 构建、真实的中继、本机的 Paseo（Claude）和 Herdr（Claude）走过：运行安装命令、在设置里核对指纹并批准、读取工作位置、在 Paseo 新 worktree 和 Herdr 新 worktree 里各完成一个任务（Herdr 自动确认了 Claude 的信任对话框）、在 Herdr 已有工作区的新 tab 里完成一个任务，以及三者在 done 后的收尾。

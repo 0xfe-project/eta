@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds agenvo (vendor/agenvo, pinned and unmodified) for AXP, into
+# Builds agenvo (vendor/agenvo, pinned to our fork) for AXP, into
 # apps/relay/out:
 #
 #   server/       the relay (@agenvo/server) with its production
