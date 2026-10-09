@@ -5,7 +5,7 @@ import { useWorkspaceStore } from "./workspace-store";
 
 /** Agents plus the locally remembered current one (newest by default). */
 export function useAgents() {
-  const { data } = useQuery(chatQueryOptions());
+  const { data, error, refetch } = useQuery(chatQueryOptions());
   const selectedAgentId = useWorkspaceStore((s) => s.workspace.selectedAgentId);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const setAgentEditor = useWorkspaceStore((s) => s.setAgentEditor);
@@ -16,6 +16,9 @@ export function useAgents() {
     agents,
     current,
     loaded: data !== undefined,
+    /** Why they could not be loaded; `retry` asks again. */
+    error,
+    retry: () => void refetch(),
     select: (id: string) =>
       setWorkspace((state) => ({ ...state, selectedAgentId: id })),
     /** Edit an agent, or create one when called without an id. */

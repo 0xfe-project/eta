@@ -1,25 +1,32 @@
 import type { Agent } from "@/queries/chat";
+import { Blobatar } from "@blobatar/react";
 import { cn } from "@/lib/utils";
 import { agentStatusLabels } from "./agent-status";
 
-/** Square monogram; the theme is monochrome, so status lives in the dot. */
-export function AgentMonogram({
+/**
+ * The agent's face, generated from its id so a rename keeps it. `animate`
+ * makes it blink and breathe: for the one large avatar, not for lists.
+ * Decorative; the name always sits beside it.
+ */
+export function AgentAvatar({
   agent,
+  animate = false,
   className,
 }: {
-  agent: Pick<Agent, "name">;
+  agent: Pick<Agent, "id">;
+  animate?: boolean;
   className?: string;
 }) {
-  return (
-    <span
+  const classes = cn("size-8 shrink-0", className);
+  return animate ? (
+    <Blobatar
+      name={agent.id}
+      animate="always"
       aria-hidden="true"
-      className={cn(
-        "inline-flex size-8 shrink-0 items-center justify-center bg-muted text-sm font-semibold text-foreground",
-        className,
-      )}
-    >
-      {Array.from(agent.name.trim())[0]?.toUpperCase() ?? "?"}
-    </span>
+      className={classes}
+    />
+  ) : (
+    <Blobatar name={agent.id} alt="" aria-hidden="true" className={classes} />
   );
 }
 

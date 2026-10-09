@@ -1,11 +1,18 @@
+import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
+import { Empty } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useRoutine } from "@/queries/routines";
+import { useRoutine, useRoutines } from "@/queries/routines";
 import { PageHeader } from "./app-shell";
 import { RoutineForm } from "./routine-form";
 import { useRoutineNav } from "./routine-nav";
-import { RoutineDetail, RoutineList, RunView } from "./routines";
+import {
+  RoutineDetail,
+  RoutineList,
+  RoutineMissing,
+  RunView,
+} from "./routines";
 
 /**
  * Routines as a full-window page: the list beside the open routine, its run
@@ -14,7 +21,13 @@ import { RoutineDetail, RoutineList, RunView } from "./routines";
 export function RoutineBoard() {
   const [nav, setNav] = useRoutineNav();
   const editing = nav.edit && nav.edit !== "new" ? nav.edit : null;
-  const { data: routine, isPending } = useRoutine(nav.routine ?? editing);
+  const {
+    data: routine,
+    isPending,
+    error,
+    refetch,
+  } = useRoutine(nav.routine ?? editing);
+  const { data: routines } = useRoutines();
   const open = Boolean(nav.edit || nav.routine);
   const run = routine?.runs.find((r) => r.id === nav.run);
 
@@ -33,8 +46,17 @@ export function RoutineBoard() {
       <RunView routine={routine} run={run} />
     ) : routine ? (
       <RoutineDetail routine={routine} listed />
-    ) : nav.routine && !isPending ? (
-      <p className="text-sm text-muted-foreground">这个定时任务已不存在。</p>
+    ) : open ? (
+      <RoutineMissing
+        isPending={isPending}
+        error={error}
+        onRetry={() => void refetch()}
+      />
+    ) : routines?.length ? (
+      // With none yet, the list says how to start.
+      <Empty icon={ClockIcon} title="选择一个定时任务">
+        在左边选一个，查看它的说明和每次运行的报告。
+      </Empty>
     ) : null;
 
   return (

@@ -8,6 +8,7 @@ import { TrashIcon } from "@phosphor-icons/react/Trash";
 import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Empty, LoadError, Loading } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,7 +22,7 @@ import { cn } from "@/lib/utils";
 import { useRestartAgent } from "@/queries/chat";
 import { useModelAvailability } from "@/queries/llm";
 import { DeleteAgentDialog } from "./agent-editor";
-import { AgentMonogram, AgentStatus } from "./agent-identity";
+import { AgentAvatar, AgentStatus } from "./agent-identity";
 import { useAgents } from "./use-agents";
 
 function AgentRow({ agent, current }: { agent: Agent; current: boolean }) {
@@ -42,10 +43,7 @@ function AgentRow({ agent, current }: { agent: Agent; current: boolean }) {
         current ? "bg-accent" : "hover:bg-muted/60",
       )}
     >
-      <AgentMonogram
-        agent={agent}
-        className={current ? "bg-foreground text-background" : undefined}
-      />
+      <AgentAvatar agent={agent} />
       <button
         type="button"
         onClick={() => openEditor(agent.id)}
@@ -138,21 +136,25 @@ function AgentRow({ agent, current }: { agent: Agent; current: boolean }) {
 }
 
 export function AgentSettings() {
-  const { agents, current, openEditor } = useAgents();
+  const { agents, current, loaded, error, retry, openEditor } = useAgents();
 
+  if (error && !loaded)
+    return <LoadError what="智能体" error={error} onRetry={retry} />;
+  if (!loaded) return <Loading />;
   if (agents.length === 0)
     return (
-      <div className="flex flex-col items-center gap-3 border border-dashed px-6 py-10">
-        <RobotIcon
-          aria-hidden="true"
-          className="size-8 text-muted-foreground"
-        />
-        <p className="text-sm font-medium">还没有智能体</p>
-        <Button size="sm" onClick={() => openEditor()}>
-          <PlusIcon aria-hidden="true" data-icon="inline-start" />
-          新建智能体
-        </Button>
-      </div>
+      <Empty
+        icon={RobotIcon}
+        title="还没有智能体"
+        action={
+          <Button size="sm" onClick={() => openEditor()}>
+            <PlusIcon aria-hidden="true" data-icon="inline-start" />
+            新建智能体
+          </Button>
+        }
+      >
+        智能体是你对话、交代任务的对象，每个都有自己的模型和记忆。
+      </Empty>
     );
 
   return (

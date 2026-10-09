@@ -93,12 +93,14 @@ func notConnected() *Error {
 }
 
 // fromGitHub turns a failed call into an answer naming GitHub's reasons.
+// GitHub's failures are 424, never 502: Cloudflare, in front of production,
+// replaces an origin's 502 and 504 with its own error page.
 func fromGitHub(err error) error {
 	var resp *gh.ErrorResponse
 	if !errors.As(err, &resp) {
-		return newError("GITHUB_UNREACHABLE", http.StatusBadGateway, "暂时连不上 GitHub。")
+		return newError("GITHUB_UNREACHABLE", http.StatusFailedDependency, "暂时连不上 GitHub。")
 	}
-	return newError("GITHUB_ERROR", http.StatusBadGateway, "GitHub 返回 %d：%s", statusOf(err), reasons(err))
+	return newError("GITHUB_ERROR", http.StatusFailedDependency, "GitHub 返回 %d：%s", statusOf(err), reasons(err))
 }
 
 func statusOf(err error) int {
@@ -238,7 +240,7 @@ func (f roundTripper) RoundTrip(r *http.Request) (*http.Response, error) { retur
 // any more is worth its own answer.
 func appCall(err error) error {
 	if statusOf(err) == http.StatusUnauthorized {
-		return newError("GITHUB_APP_GONE", http.StatusBadGateway,
+		return newError("GITHUB_APP_GONE", http.StatusFailedDependency,
 			"GitHub 不认这个 App 了（可能已在 GitHub 上删除）。请断开后重新连接。")
 	}
 	return fromGitHub(err)
@@ -374,7 +376,7 @@ func (g *GitHub) FinishManifest(ctx context.Context, code, state string) (*App, 
 		if statusOf(err) == 0 {
 			return nil, fromGitHub(err)
 		}
-		return nil, newError("MANIFEST_FAILED", http.StatusBadGateway,
+		return nil, newError("MANIFEST_FAILED", http.StatusFailedDependency,
 			"GitHub 没有返回 App 的凭据（%d），请重新创建。", statusOf(err))
 	}
 	app := &App{
@@ -432,7 +434,7 @@ func (g *GitHub) Identity(ctx context.Context) (*Identity, error) {
 	}
 	g.botID(ctx, app)
 	if app.BotID == 0 {
-		return nil, newError("GITHUB_UNAVAILABLE", http.StatusBadGateway, "暂时无法从 GitHub 读取 App 的身份。")
+		return nil, newError("GITHUB_UNAVAILABLE", http.StatusFailedDependency, "暂时无法从 GitHub 读取 App 的身份。")
 	}
 	bot := app.Slug + "[bot]"
 	return &Identity{Name: bot, Email: fmt.Sprintf("%d+%s@users.noreply.github.com", app.BotID, bot)}, nil
@@ -583,7 +585,7 @@ func (g *GitHub) OpenPullRequest(ctx context.Context, repository, head, title, b
 	}
 	code := http.StatusBadRequest
 	if statusOf(err) >= 500 {
-		code = http.StatusBadGateway
+		code = http.StatusFailedDependency
 	}
 	return nil, newError("PULL_REQUEST_FAILED", code, "GitHub 拒绝创建 PR（%d）：%s", statusOf(err), reasons(err))
 }

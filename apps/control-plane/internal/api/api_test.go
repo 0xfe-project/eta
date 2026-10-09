@@ -16,6 +16,7 @@ import (
 	"github.com/akarachen/axp/apps/control-plane/internal/llm"
 	"github.com/akarachen/axp/apps/control-plane/internal/store"
 	"github.com/akarachen/axp/apps/control-plane/internal/tasks"
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -627,6 +628,24 @@ func TestPublicSchemaHasNoInternalFields(t *testing.T) {
 		}
 	}
 	assertNoInternalFields(t, properties)
+}
+
+// Cloudflare, in front of production, replaces an origin's 502 and 504 with
+// its own error page: no operation may answer with them.
+func TestNoOperationAnswersWithStatusesCloudflareReplaces(t *testing.T) {
+	_, document := Public(&Deps{Chat: &chat.Service{}, Tasks: &tasks.Service{}})
+	for path, item := range document.OpenAPI().Paths {
+		for _, op := range []*huma.Operation{item.Get, item.Post, item.Put, item.Patch, item.Delete} {
+			if op == nil {
+				continue
+			}
+			for status := range op.Responses {
+				if status == "502" || status == "504" {
+					t.Fatalf("%s %s answers %s", op.Method, path, status)
+				}
+			}
+		}
+	}
 }
 
 func TestConcurrentFirstAgentsShareOneDefaultChat(t *testing.T) {

@@ -41,7 +41,7 @@ import {
   useUpdateAgent,
 } from "@/queries/chat";
 import { useConnectors, useModels } from "@/queries/llm";
-import { AgentMonogram } from "./agent-identity";
+import { AgentAvatar } from "./agent-identity";
 import { useAgents } from "./use-agents";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -118,28 +118,31 @@ export function ModelSelect({
   ...props
 }: Omit<React.ComponentProps<typeof NativeSelect>, "children"> & {
   value: string;
-  models: Model[];
+  /** Undefined while they load. */
+  models: Model[] | undefined;
   invalid?: boolean;
 }) {
   const { data: connectors } = useConnectors();
+  const loading = !models || !connectors;
   const groups = (connectors ?? []).map((connector) => ({
     connector,
-    models: models.filter((model) => model.connector === connector.id),
+    models: (models ?? []).filter((model) => model.connector === connector.id),
   }));
-  const known = models.some((model) => model.id === value);
+  const known = (models ?? []).some((model) => model.id === value);
   return (
     <NativeSelect
       className="w-full"
       aria-invalid={invalid}
       value={value}
       {...props}
+      disabled={loading || props.disabled}
     >
       <NativeSelectOption value="" disabled>
-        选择模型
+        {loading ? "正在加载模型…" : "选择模型"}
       </NativeSelectOption>
       {value && !known ? (
         <NativeSelectOption value={value} disabled>
-          {value}（已不存在）
+          {loading ? "正在加载模型…" : `${value}（已不存在）`}
         </NativeSelectOption>
       ) : null}
       {groups
@@ -216,6 +219,8 @@ function AgentEditorForm({
   const { data: models } = useModels();
   const { data: plugins } = usePlugins();
   const usable = (models ?? []).filter((model) => model.available);
+  // Only once they have loaded can there be none.
+  const noModels = models !== undefined && !usable.length;
   const create = useCreateAgent();
   const updateAgent = useUpdateAgent();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -313,10 +318,10 @@ function AgentEditorForm({
           <ModelSelect
             id="agent-model"
             value={model}
-            models={models ?? []}
+            models={models}
             invalid={Boolean(errors.model)}
             aria-describedby={
-              errors.model || !usable.length ? "agent-model-hint" : undefined
+              errors.model || noModels ? "agent-model-hint" : undefined
             }
             onChange={(event) =>
               setValue("model", event.target.value, {
@@ -325,7 +330,7 @@ function AgentEditorForm({
               })
             }
           />
-          {errors.model || !usable.length ? (
+          {errors.model || noModels ? (
             <p
               id="agent-model-hint"
               role={errors.model ? "alert" : undefined}
@@ -336,7 +341,7 @@ function AgentEditorForm({
               }
             >
               {errors.model?.message ?? "暂无可用模型。"}
-              {!usable.length ? (
+              {noModels ? (
                 <Button
                   type="button"
                   variant="link"
@@ -464,7 +469,7 @@ export function AgentEditor() {
     >
       <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
         <DialogHeader className="shrink-0 flex-row items-center gap-3 border-b p-3 pr-12">
-          {agent ? <AgentMonogram agent={agent} /> : null}
+          {agent ? <AgentAvatar agent={agent} /> : null}
           <div className="min-w-0">
             <DialogTitle className="truncate text-base">
               {agent ? agent.name : "新建智能体"}

@@ -6,6 +6,7 @@ import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { LoadError, Loading } from "@/components/states";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -431,9 +432,11 @@ export function ProviderSettings() {
 
   if (connectors.error)
     return (
-      <p role="alert" className="text-sm text-destructive">
-        无法加载模型服务：{connectors.error.message}
-      </p>
+      <LoadError
+        what="模型服务"
+        error={connectors.error}
+        onRetry={() => void connectors.refetch()}
+      />
     );
   return (
     <div className="space-y-4">
@@ -443,6 +446,7 @@ export function ProviderSettings() {
           无法加载账号：{connections.error.message}
         </p>
       ) : null}
+      {connectors.isPending ? <Loading rows={2} /> : null}
       {(connectors.data ?? []).map((connector) => (
         <ConnectorSection
           key={connector.id}

@@ -289,6 +289,7 @@ export function ChatPanel({
   agentId,
   agentName,
   messages,
+  loading,
   hasOlder,
   loadingOlder,
   onLoadOlder,
@@ -309,6 +310,8 @@ export function ChatPanel({
   agentName: string | undefined;
   /** The conversation with the current agent, as far back as loaded. */
   messages: ChatMessage[];
+  /** The conversation is still being read. */
+  loading?: boolean;
   /** Earlier messages exist; onLoadOlder fetches the next page of them. */
   hasOlder: boolean;
   loadingOlder: boolean;
@@ -453,11 +456,10 @@ export function ChatPanel({
       className="relative flex h-full min-h-0 flex-col bg-[var(--terminal-background)]"
     >
       {head}
-      {/* Top padding keeps the floating agent card off the first lines. */}
       <div
         ref={transcript.scrollRef}
         onScroll={transcript.onScroll}
-        className={`min-h-0 flex-1 overflow-y-auto pt-14 font-mono text-[13px] leading-[1.6] ${session.textClass}`}
+        className={`min-h-0 flex-1 overflow-y-auto pt-2 font-mono text-[13px] leading-[1.6] ${session.textClass}`}
       >
         <div ref={transcript.contentRef} className="space-y-3">
           {/* Stays put while a page loads, so nothing shifts until it lands. */}
@@ -484,6 +486,11 @@ export function ChatPanel({
             <GrokHeader version="" headline="AXP" subhead={model} />
           )}
           {error ? <Warning>{error}</Warning> : null}
+          {loading && !error && !messages.length ? (
+            <div role="status" className="text-[var(--terminal-muted)]">
+              正在读取对话…
+            </div>
+          ) : null}
           {/* Off-screen turns skip rendering; `auto` remembers their size. */}
           <div
             className={`${session.turnClass} *:[contain-intrinsic-size:auto_120px] *:[content-visibility:auto]`}

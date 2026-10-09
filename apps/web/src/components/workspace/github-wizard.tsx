@@ -8,6 +8,7 @@ import { GitPullRequestIcon } from "@phosphor-icons/react/GitPullRequest";
 import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { useId, useState } from "react";
 import { toast } from "sonner";
+import { LoadError, Loading } from "@/components/states";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -416,9 +417,13 @@ export function GitHubWizard({
   const step: Step = reached === 0 ? local : reached;
 
   const body = error ? (
-    <Alert>无法读取 GitHub 的连接状态：{error.message}</Alert>
+    <LoadError
+      what="GitHub 的连接状态"
+      error={error}
+      onRetry={() => void refetch()}
+    />
   ) : isPending ? (
-    <p className="text-sm text-muted-foreground">正在加载…</p>
+    <Loading layout="lines" />
   ) : status.state === "error" ? (
     <Alert>{status.error?.message ?? "GitHub 连接出错。"}</Alert>
   ) : step === 0 ? (

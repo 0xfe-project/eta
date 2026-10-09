@@ -15,7 +15,36 @@ import { useTaskNav } from "./task-nav";
 import { Tasks } from "./tasks";
 import { hasPage, sectionPaths, views } from "./workspace-search";
 
-/** The home page's side panel; most tabs also open in the full window. */
+/** Opens the full window where the side panel is: its tab, task or routine. */
+function FullWindowButton({
+  view,
+  className,
+}: {
+  view: WorkspaceView;
+  className?: string;
+}) {
+  const [{ task }] = useTaskNav();
+  const [routineNav] = useRoutineNav();
+  const search = Object.fromEntries(
+    Object.entries(
+      view === "tasks" ? { task } : view === "routines" ? routineNav : {},
+    ).filter(([, value]) => value !== null),
+  );
+  return (
+    <Button variant="ghost" size="icon" className={className} asChild>
+      <Link
+        to={hasPage(view) ? sectionPaths[view] : "/workspace"}
+        search={hasPage(view) ? search : {}}
+        aria-label="在全窗口中打开"
+        title="在全窗口中打开"
+      >
+        <ArrowsOutIcon aria-hidden="true" />
+      </Link>
+    </Button>
+  );
+}
+
+/** The home page's side panel. */
 export function WorkspacePanel({
   view,
   onViewChange,
@@ -26,26 +55,17 @@ export function WorkspacePanel({
   className?: string;
 }) {
   const pending = usePendingInteractions().length;
-  const label = views.find((v) => v.value === view)?.label;
-  // The full window opens where the panel is.
-  const [{ task }] = useTaskNav();
-  const [routineNav] = useRoutineNav();
-  const search = Object.fromEntries(
-    Object.entries(
-      view === "tasks" ? { task } : view === "routines" ? routineNav : {},
-    ).filter(([, value]) => value !== null),
-  );
   return (
     <Tabs
       id="workspace-panel"
       value={view}
       onValueChange={(value) => onViewChange(value as WorkspaceView)}
       className={cn(
-        "relative z-10 min-h-0 min-w-0 gap-0 overflow-hidden border border-border/70 bg-background shadow-[0_2px_4px_-2px_rgb(0_0_0/0.06),0_12px_32px_-8px_rgb(0_0_0/0.12)] lg:border-y-0 lg:border-r-0 lg:border-border lg:shadow-none dark:shadow-[0_2px_4px_-2px_rgb(0_0_0/0.2),0_12px_32px_-8px_rgb(0_0_0/0.4)] dark:lg:shadow-none",
+        "relative z-10 min-h-0 min-w-0 gap-0 overflow-hidden border border-border/70 bg-background shadow-[0_2px_4px_-2px_rgb(0_0_0/0.06),0_12px_32px_-8px_rgb(0_0_0/0.12)] dark:shadow-[0_2px_4px_-2px_rgb(0_0_0/0.2),0_12px_32px_-8px_rgb(0_0_0/0.4)]",
         className,
       )}
     >
-      <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-1 px-3 pt-3">
+      <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 pt-3">
         <span aria-hidden="true" />
         <TabsList variant="default" aria-label="工作区标签" className="gap-1">
           {views.map(({ value, label }) => (
@@ -61,23 +81,7 @@ export function WorkspacePanel({
             </TabsTrigger>
           ))}
         </TabsList>
-        {hasPage(view) ? (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="justify-self-end"
-            asChild
-          >
-            <Link
-              to={sectionPaths[view]}
-              search={search}
-              aria-label={`在全窗口中打开${label}`}
-              title="在全窗口中打开"
-            >
-              <ArrowsOutIcon aria-hidden="true" />
-            </Link>
-          </Button>
-        ) : null}
+        <FullWindowButton view={view} className="justify-self-end" />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {views.map(({ value }) => (

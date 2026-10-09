@@ -5,6 +5,7 @@ import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -250,7 +251,7 @@ function AddComputer({
 }
 
 export function ComputerSettings() {
-  const { data, error } = useComputers();
+  const { data, error, refetch } = useComputers();
   // Install commands are shown once, right after they are made.
   const [commands, setCommands] = useState<Record<string, string>>({});
   return (
@@ -264,8 +265,14 @@ export function ComputerSettings() {
         </p>
       </div>
       {error ? (
-        <p className="text-sm text-destructive">{error.message}</p>
-      ) : !data ? null : !data.relay_configured ? (
+        <LoadError
+          what="远程电脑"
+          error={error}
+          onRetry={() => void refetch()}
+        />
+      ) : !data ? (
+        <Loading rows={2} />
+      ) : !data.relay_configured ? (
         <p className="text-sm text-muted-foreground">
           服务器没有配置中继（agenvo relay），暂时不能接入远程电脑。
         </p>
@@ -281,6 +288,11 @@ export function ComputerSettings() {
               setCommands({ ...commands, [id]: command })
             }
           />
+          {data.computers.length ? null : (
+            <Empty icon={DesktopIcon} title="还没有接入电脑">
+              给它起个名字添加，再到那台电脑上运行给出的安装命令。
+            </Empty>
+          )}
           <ul className="space-y-2">
             {data.computers.map((computer) => (
               <ComputerCard

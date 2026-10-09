@@ -274,7 +274,7 @@ func computer(ctx context.Context, db store.DB, id string) (*computerRow, error)
 }
 
 func relayUnreachable(err error) error {
-	return apierr.New(502, "RELAY_UNAVAILABLE", "无法连接中继："+err.Error())
+	return apierr.Upstream("RELAY_UNAVAILABLE", "无法连接中继："+err.Error())
 }
 
 // Approve approves a computer's runtime on the relay: its pending pairing,
@@ -305,7 +305,7 @@ func (s *Service) Approve(ctx context.Context, db store.DB, id, kind string) err
 			}
 			deviceID, err := s.Relay.ApprovePairing(ctx, p.Code, p.Digest)
 			if err != nil {
-				return apierr.New(502, "RELAY_REJECTED", "中继没有接受这次配对："+err.Error())
+				return apierr.Upstream("RELAY_REJECTED", "中继没有接受这次配对："+err.Error())
 			}
 			_, err = db.Exec(ctx, `UPDATE computer_runtime SET device_id = $3, updated_at = $4
 				WHERE computer_id = $1 AND kind = $2`, r.ID, kind, deviceID, chat.Now())
@@ -320,7 +320,7 @@ func (s *Service) Approve(ctx context.Context, db store.DB, id, kind string) err
 		for _, inst := range d.Instances {
 			if inst.InstanceID == instanceFor(kind) && !inst.Approved {
 				if err := s.Relay.ApproveInstance(ctx, d.ID, inst.InstanceID, inst.Fingerprint); err != nil {
-					return apierr.New(502, "RELAY_REJECTED", "中继没有接受批准："+err.Error())
+					return apierr.Upstream("RELAY_REJECTED", "中继没有接受批准："+err.Error())
 				}
 				return nil
 			}
@@ -343,7 +343,7 @@ func (s *Service) DeleteComputer(ctx context.Context, tx pgx.Tx, id string) erro
 	for _, rt := range runtimes {
 		if rt.DeviceID != nil && s.Relay != nil {
 			if err := s.Relay.RevokeDevice(ctx, *rt.DeviceID); err != nil {
-				return apierr.New(502, "RELAY_UNAVAILABLE", "无法在中继上撤销这台电脑："+err.Error())
+				return apierr.Upstream("RELAY_UNAVAILABLE", "无法在中继上撤销这台电脑："+err.Error())
 			}
 		}
 	}
@@ -424,7 +424,7 @@ func (s *Service) Places(ctx context.Context, db store.DB, id, kind string) (*Pl
 	}
 	places, err := agents{s.Relay}.places(ctx, target{*deviceID, kind})
 	if err != nil {
-		return nil, apierr.New(502, "REMOTE_UNAVAILABLE", "读取远程电脑上的工作区失败："+err.Error())
+		return nil, apierr.Upstream("REMOTE_UNAVAILABLE", "读取远程电脑上的工作区失败："+err.Error())
 	}
 	return places, nil
 }

@@ -291,7 +291,7 @@ export function RoutineForm({
           <ModelSelect
             aria-label="模型"
             value={model}
-            models={models ?? []}
+            models={models}
             onChange={(e) => setModel(e.target.value)}
           />
         </Field>

@@ -4,17 +4,18 @@ TanStack Start + React。开发命令在仓库根目录执行 `bun run dev`。
 
 ## 已配置的库
 
-| 用途         | 库                                                | 配置入口                                            |
-| ------------ | ------------------------------------------------- | --------------------------------------------------- |
-| 图标         | `@phosphor-icons/react`                           | `src/components/providers.tsx`，默认 20px / regular |
-| 服务端状态   | `@tanstack/react-query`                           | `src/lib/query-client.ts`                           |
-| Query SSR    | `@tanstack/react-router-ssr-query`                | `src/router.tsx`                                    |
-| URL 状态     | `nuqs`                                            | 根组件 adapter，首页 `view` 示例                    |
-| 表单与校验   | `react-hook-form` + `@hookform/resolvers` + `zod` | `src/components/prompt-preview.tsx`                 |
-| 通知         | `sonner`                                          | 根组件挂载 `Toaster`，业务中调用 `toast.success()`  |
-| Markdown     | `react-markdown` + `remark-gfm`                   | `src/components/markdown.tsx`                       |
-| 样式         | Tailwind CSS v4                                   | `vite.config.ts` + `src/styles.css`                 |
-| 条件样式合并 | `cn`（shadcn CLI 配置）                           | `src/lib/utils.ts` 的 `cn()`                        |
+| 用途         | 库                                                | 配置入口                                                                                          |
+| ------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| 图标         | `@phosphor-icons/react`                           | `src/components/providers.tsx`，默认 20px / regular                                               |
+| 智能体头像   | `blobatar` + `@blobatar/react`                    | `AgentAvatar`（`agent-identity.tsx`），按 id 生成；动画需 `styles.css` 引入 `blobatar/motion.css` |
+| 服务端状态   | `@tanstack/react-query`                           | `src/lib/query-client.ts`                                                                         |
+| Query SSR    | `@tanstack/react-router-ssr-query`                | `src/router.tsx`                                                                                  |
+| URL 状态     | `nuqs`                                            | 根组件 adapter，首页 `view` 示例                                                                  |
+| 表单与校验   | `react-hook-form` + `@hookform/resolvers` + `zod` | `src/components/prompt-preview.tsx`                                                               |
+| 通知         | `sonner`                                          | 根组件挂载 `Toaster`，业务中调用 `toast.success()`                                                |
+| Markdown     | `react-markdown` + `remark-gfm`                   | `src/components/markdown.tsx`                                                                     |
+| 样式         | Tailwind CSS v4                                   | `vite.config.ts` + `src/styles.css`                                                               |
+| 条件样式合并 | `cn`（shadcn CLI 配置）                           | `src/lib/utils.ts` 的 `cn()`                                                                      |
 
 `@/` 同时在 TypeScript 和 Vite 中指向 `src/`。
 
@@ -47,6 +48,16 @@ import { cn } from "@/lib/utils";
 ```
 
 图标按钮应有可访问名称，例如 `aria-label` 或可见文字。Phosphor 的常规 React 组件支持本项目的 React SSR；不需要切换为 RSC 版本。
+
+## 加载、空与出错
+
+`src/components/states.tsx` 是各处共用的三种状态，不要再手写「正在加载…」或单独一行的空提示：
+
+- `Loading`：灰色骨架，形状接近将要出现的内容（`list` 列表行、`detail` 详情页、`lines` 小块文字）；延迟 300ms 淡入，快的请求不会闪一下。读屏器读到 `label`。
+- `Empty`：居中的图标 + 一句「还没有…」+ 一句这里会放什么 + 开始的按钮。筛选或搜索后为空也用它，按钮换成清除筛选。
+- `LoadError`：同样的排版，「无法加载…」+ 错误信息 + 重试。404 当作「已不存在」用 `Empty` 表达，不当作出错（查询不会重试 4xx）。
+
+按钮、下拉框里的加载（比如模型选择框显示「正在加载模型…」）和终端风格的对话区（「正在读取对话…」）保持各自的样式，不用这三个组件。概览仪表盘加载时读数显示「—」而不是 0。
 
 ## 表单、通知与 Markdown
 
@@ -82,7 +93,7 @@ bun run --cwd apps/web typecheck
 
 ## 工作台
 
-首页左侧为聊天，右侧为概览 / 任务 / 定时 / 记忆 / 能力 / 确认面板；全窗口工作台在 `/workspace`（见「页面与路由」）。源码在 `src/components/workspace/`。
+首页左侧为聊天，顶部居中是当前智能体的头像（点击切换），右上角是设置；右侧是浮起的概览 / 任务 / 定时 / 记忆 / 能力 / 确认面板，与窗口边缘留出间距；全窗口工作台在 `/workspace`（见「页面与路由」）。源码在 `src/components/workspace/`。
 
 聊天使用 brainless 消息与输入组件，默认 Claude 外观，使用原版单行 Prompt，支持 Enter 发送，使用一个常驻会话。右上角 Settings 可立即切换 Claude / Codex / Grok 外观，选择随工作区保存，切换保留消息与草稿。当前仅保存用户消息，尚未调用模型。任务支持新增、完成、删除；Memory 支持编辑上下文。数据使用 Zod 校验后保存在 `localStorage` 的 `axp.workspace.v1`，只属于当前浏览器，不会同步到后端。Capabilities 中的 Control plane 状态来自控制面的健康检查，与 agent runtime 是否连接无关。
 
@@ -110,9 +121,9 @@ import { GrokThought } from "@/components/brainless/grok/grok-thought";
 
 ## 页面与路由
 
-- `/`：聊天与右侧面板（概览仪表盘、任务、定时、记忆、能力、确认）。除概览外，标签右上角的「在全窗口中打开」进入 `/workspace` 下对应的位置。手机上通过「对话 / 工作区」切换。
+- `/`：聊天与右侧面板（概览仪表盘、任务、定时、记忆、能力、确认）。面板右上角的「在全窗口中打开」进入 `/workspace` 下当前标签对应的位置（概览进入任务）。手机上通过「对话 / 工作区」切换。
 - `/workspace`：全窗口工作台，传统应用布局。宽屏（`lg` 起）左侧边栏切换分区并列出智能体（点击回到 `/` 与它对话），窄屏收成顶部图标栏。外壳在 `app-shell.tsx`，挂在 `/workspace` 布局路由上；`/workspace` 本身跳到任务。
-- `/workspace/tasks`：任务列表（按状态分组，点状态图标直接改）或看板（`?layout=board`，拖动卡片改状态），`?scope=` 按指派过滤；`?task=<id>` 打开任务，正文和时间线在左、属性在右；`?task=new` 新建。
+- `/workspace/tasks`：任务列表（按状态分组，点状态图标直接改）或看板（拖动卡片改状态），可按指派过滤；布局和过滤记在浏览器里（`axp.workspace.v1`），下次打开保持上次的选择；`?task=<id>` 打开任务，正文和时间线在左、属性在右；`?task=new` 新建。
 - `/workspace/routines`：列表在左、定时任务详情或报告在右，参数同面板（`routine`、`run`、`edit`）。
 - `/workspace/memory`、`/workspace/capabilities`：对应面板内容的全窗口版本。
 - `/workspace/inbox`：确认请求，形态像通知：按天分组，待处理的标记出来、就地答复，之前的显示当时的选择或已过期；`?filter=pending` 只看待处理。历史来自 `GET /api/v1/chat/interactions`，并由聊天事件流保持实时。

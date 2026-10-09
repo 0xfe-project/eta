@@ -67,7 +67,7 @@ type Install struct {
 
 func taskOp(id, method, path, summary string, status int, tag string) huma.Operation {
 	o := op(id, method, path, summary, status, tag)
-	o.Errors = []int{400, 404, 409, 422, 502, 503}
+	o.Errors = []int{400, 404, 409, 422, 424, 503}
 	return o
 }
 

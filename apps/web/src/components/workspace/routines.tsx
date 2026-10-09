@@ -2,12 +2,14 @@ import type { BriefVersion, Routine, Run, RunStatus } from "@/queries/routines";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
 import { CaretLeftIcon } from "@phosphor-icons/react/CaretLeft";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
+import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlayIcon } from "@phosphor-icons/react/Play";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Markdown } from "@/components/markdown";
+import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -128,8 +130,7 @@ export function RoutineList({
   bare?: boolean;
 }) {
   const [, setNav] = useRoutineNav();
-  const { data } = useRoutines();
-  if (!data) return null;
+  const { data, error, refetch } = useRoutines();
   return (
     <div className="space-y-2">
       <div
@@ -146,15 +147,27 @@ export function RoutineList({
           <PlusIcon aria-hidden="true" />
         </Button>
       </div>
-      {data.length === 0 ? (
-        <Button
-          variant="outline"
-          className="h-20 w-full border-dashed text-muted-foreground"
-          onClick={() => void setNav({ edit: "new" })}
+      {error ? (
+        <LoadError
+          what="定时任务"
+          error={error}
+          onRetry={() => void refetch()}
+        />
+      ) : !data ? (
+        <Loading />
+      ) : data.length === 0 ? (
+        <Empty
+          icon={ClockIcon}
+          title="还没有定时任务"
+          action={
+            <Button size="sm" onClick={() => void setNav({ edit: "new" })}>
+              <PlusIcon aria-hidden="true" data-icon="inline-start" />
+              新建定时任务
+            </Button>
+          }
         >
-          <PlusIcon aria-hidden="true" />
-          新建定时任务
-        </Button>
+          让智能体按时去做一件事，比如每天早上整理新闻，每次的结果留成一份报告。
+        </Empty>
       ) : (
         <ul aria-label="定时任务" className="-mx-2">
           {data.map((routine) => (
@@ -626,11 +639,36 @@ export function RunView({ routine, run }: { routine: Routine; run: Run }) {
 
 // --- tab --------------------------------------------------------------------------
 
+/** Where a routine would be: loading, failed, or gone. */
+export function RoutineMissing({
+  isPending,
+  error,
+  onRetry,
+}: {
+  isPending: boolean;
+  error: Error | null;
+  onRetry: () => void;
+}) {
+  if (error)
+    return <LoadError what="定时任务" error={error} onRetry={onRetry} />;
+  if (isPending) return <Loading layout="detail" />;
+  return (
+    <Empty icon={ClockIcon} title="这个定时任务已不存在">
+      它可能已被删除。
+    </Empty>
+  );
+}
+
 /** Routines: agents that run on a schedule and leave reports. */
 export function Routines() {
   const [nav, setNav] = useRoutineNav();
   const editing = nav.edit && nav.edit !== "new" ? nav.edit : null;
-  const { data: routine, isPending } = useRoutine(nav.routine ?? editing);
+  const {
+    data: routine,
+    isPending,
+    error,
+    refetch,
+  } = useRoutine(nav.routine ?? editing);
 
   if (nav.edit === "new")
     return (
@@ -647,12 +685,15 @@ export function Routines() {
       />
     );
   if (!nav.routine) return <RoutineList />;
-  if (isPending) return null;
   if (!routine)
     return (
-      <div>
+      <div className="space-y-3">
         <Back label="定时任务" onClick={() => void setNav({ routine: null })} />
-        <p className="text-sm text-muted-foreground">这个定时任务已不存在。</p>
+        <RoutineMissing
+          isPending={isPending}
+          error={error}
+          onRetry={() => void refetch()}
+        />
       </div>
     );
   const run = routine.runs.find((r) => r.id === nav.run);

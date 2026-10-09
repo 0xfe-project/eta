@@ -62,7 +62,7 @@ type GitCredentials struct {
 func remoteOp(id, method, path, summary string, status int) huma.Operation {
 	return huma.Operation{
 		OperationID: id, Method: method, Path: path, Summary: summary, DefaultStatus: status,
-		Tags: []string{"remote"}, Errors: []int{400, 401, 403, 404, 409, 422, 502, 503},
+		Tags: []string{"remote"}, Errors: []int{400, 401, 403, 404, 409, 422, 424, 503},
 	}
 }
 
@@ -237,7 +237,7 @@ func forgeCredentials(ctx context.Context, forgeURL, caller string) (*GitCredent
 		if e.Error.Message == "" {
 			e.Error.Message = "GitHub 还没有连接。"
 		}
-		return nil, apierr.New(502, "FORGE_ERROR", e.Error.Message)
+		return nil, apierr.Upstream("FORGE_ERROR", e.Error.Message)
 	}
 	var creds GitCredentials
 	if err := json.Unmarshal(data, &creds); err != nil {

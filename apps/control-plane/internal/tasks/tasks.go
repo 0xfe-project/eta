@@ -789,7 +789,7 @@ func (s *Service) Log(ctx context.Context, db store.DB, ref, runID string) ([]Lo
 	}
 	entries, err := agents{s.Relay}.log(ctx, session, session.native())
 	if err != nil {
-		return nil, apierr.New(502, "REMOTE_UNAVAILABLE", "读取远程智能体的记录失败："+err.Error())
+		return nil, apierr.Upstream("REMOTE_UNAVAILABLE", "读取远程智能体的记录失败："+err.Error())
 	}
 	return entries, nil
 }
