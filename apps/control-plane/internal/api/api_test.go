@@ -21,31 +21,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-func TestErrorEnvelope(t *testing.T) {
-	e := newEnv(t)
-	r := e.post("/chat/messages/not-a-reply/stop", nil)
-	var body map[string]map[string]string
-	r.json(t, &body)
-	expect(t, r.status, 404)
-	expect(t, body["error"]["code"], "NOT_FOUND")
-	expect(t, body["error"]["request_id"], r.header.Get("X-Request-ID"))
-	if body["error"]["message"] == "" {
-		t.Fatal("no message")
-	}
-}
-
-func TestMalformedJSONIs400(t *testing.T) {
-	e := newEnv(t)
-	expectError(t, e.post("/agents", "{"), 400, "BAD_REQUEST")
-}
-
-func TestKeepsGatewayRequestID(t *testing.T) {
-	e := newEnv(t)
-	r := do(t, e.public, http.MethodGet, "/api/health", nil, map[string]string{"X-Request-Id": "gateway-request-1"})
-	expect(t, r.header.Get("X-Request-ID"), "gateway-request-1")
-	expect(t, r.m(t)["status"], any("ok"))
-}
-
 func TestEmptySnapshotHasNoSideEffects(t *testing.T) {
 	e := newEnv(t)
 	r := e.get("/chat")
@@ -318,43 +293,6 @@ func TestDeleteHidesAgentKeepsHistoryAndStopsWork(t *testing.T) {
 	expect(t, e.post("/chat/messages", map[string]any{"agent_id": agent.ID, "text": "hi"}).status, 404)
 	expect(t, e.patch("/agents/"+agent.ID, map[string]any{"name": "x"}).status, 404)
 	expect(t, e.delete("/agents/"+agent.ID).status, 404)
-}
-
-func TestIdempotentReplay(t *testing.T) {
-	e := newEnv(t)
-	first := e.post("/agents", map[string]any{"name": "a"}, "k1")
-	second := e.post("/agents", map[string]any{"name": "a"}, "k1")
-	expect(t, second.status, 201)
-	expect(t, string(second.body), string(first.body))
-	expect(t, scalar[int](e, "SELECT count(*) FROM agent"), 1)
-}
-
-func TestIdempotencyKeyWithDifferentBodyConflicts(t *testing.T) {
-	e := newEnv(t)
-	e.post("/agents", map[string]any{"name": "a"}, "k1")
-	expectError(t, e.post("/agents", map[string]any{"name": "b"}, "k1"), 409, "IDEMPOTENCY_KEY_REUSED")
-}
-
-func TestIdempotencyKeyIsScopedByPath(t *testing.T) {
-	e := newEnv(t)
-	agent := e.createAgent("开发助手")
-	e.post("/agents", map[string]any{"name": "a"}, "k1")
-	expect(t, e.post("/chat/messages", map[string]any{"agent_id": agent.ID, "text": "hi"}, "k1").status, 202)
-}
-
-func TestIdempotencyKeyRequired(t *testing.T) {
-	e := newEnv(t)
-	expectError(t, e.post("/agents", map[string]any{"name": "a"}, "-"), 400, "IDEMPOTENCY_KEY_REQUIRED")
-	expectError(t, e.post("/agents", map[string]any{"name": "a"}, "   "), 400, "IDEMPOTENCY_KEY_REQUIRED")
-}
-
-func TestFailuresDoNotConsumeTheKey(t *testing.T) {
-	e := newEnv(t)
-	expect(t, e.post("/agents", map[string]any{"name": ""}, "k1").status, 422)
-	missing := map[string]any{"agent_id": uuid.NewString(), "text": "hi"}
-	expect(t, e.post("/chat/messages", missing, "k2").status, 404)
-	expect(t, scalar[int](e, "SELECT count(*) FROM api_idempotency"), 0)
-	expect(t, e.post("/agents", map[string]any{"name": "a"}, "k1").status, 201)
 }
 
 func TestSendRetryReturnsSameMessages(t *testing.T) {

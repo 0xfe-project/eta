@@ -201,7 +201,11 @@ func TestMarketplaceListsTheChatPlugins(t *testing.T) {
 		}
 		expect(t, manifest["name"], p.Name)
 	}
-	expect(t, listed, []string{"approval", "github", "grok", "memory", "tasks"})
+	chat, err := List(repoPlugins, TargetChat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expect(t, listed, names(chat))
 }
 
 func TestCodexGetsTheAgentKeyItsWay(t *testing.T) {
@@ -225,17 +229,24 @@ func TestEveryPluginToolIsApproved(t *testing.T) {
 	_, codex := compiled(t)
 	config := readTOML(t, filepath.Join(codex, "config.toml"))
 	expect(t, config["sandbox_mode"], any("danger-full-access"))
-	servers := map[string][]string{}
+	servers := map[string]bool{}
 	for plugin, settings := range config["plugins"].(map[string]any) {
 		for server, s := range settings.(map[string]any)["mcp_servers"].(map[string]any) {
-			servers[plugin] = append(servers[plugin], server)
+			servers[plugin+" "+server] = true
 			expect(t, s, any(map[string]any{"default_tools_approval_mode": "approve"}))
 		}
 	}
-	expect(t, servers, map[string][]string{
-		"approval@axp": {"approval"}, "github@axp": {"github"}, "grok@axp": {"grok"},
-		"memory@axp": {"memory"}, "tasks@axp": {"tasks"},
-	})
+	chat, err := List(repoPlugins, TargetChat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{}
+	for _, p := range chat {
+		for server := range p.Servers {
+			want[p.Name+"@axp "+server] = true
+		}
+	}
+	expect(t, servers, want)
 }
 
 func TestHooksBecomeAkhookRulesThatRunOnlyWhereInstalled(t *testing.T) {

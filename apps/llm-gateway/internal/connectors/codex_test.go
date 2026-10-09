@@ -81,7 +81,7 @@ func TestCodexDeviceLogin(t *testing.T) {
 
 	select {
 	case r := <-uploaded:
-		if r.Method != http.MethodPost || r.URL.Query().Get("name") != "codex-"+hash8("acct-1")+"-dev@example.com-pro.json" {
+		if r.Method != http.MethodPost || r.URL.Query().Get("name") != "codex-ba36a4ed-dev@example.com-pro.json" {
 			t.Fatalf("upload %s %s", r.Method, r.URL)
 		}
 	case <-time.After(5 * time.Second):
@@ -104,11 +104,4 @@ func TestCodexDeviceLogin(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-}
-
-func hash8(s string) string {
-	_, name, _ := CodexCredential(
-		"e30."+base64.RawURLEncoding.EncodeToString([]byte(`{"email":"x","https://api.openai.com/auth":{"chatgpt_account_id":"`+s+`"}}`))+".s",
-		"a", "r", 1, time.Now())
-	return strings.TrimSuffix(strings.TrimPrefix(name, "codex-"), "-x.json")
 }
