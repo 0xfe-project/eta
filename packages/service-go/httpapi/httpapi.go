@@ -28,6 +28,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
+	"golang.org/x/sync/errgroup"
 )
 
 func init() {
@@ -220,20 +221,28 @@ func writeJSON(w http.ResponseWriter, e *Error) {
 // --- serving ---------------------------------------------------------------------------
 
 // Serve serves handler at addr until ctx ends, then waits up to drain for
-// requests in flight before closing the rest.
+// requests in flight before closing the rest. It returns only after that, so
+// what the caller closes next (the database, NATS) outlives the requests.
 func Serve(ctx context.Context, addr string, handler http.Handler, drain time.Duration) error {
 	server := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second}
-	go func() {
+	// A failure to listen ends ctx too, so the shutdown never waits on it.
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		slog.Info("Listening", "addr", addr)
+		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
+	})
+	g.Go(func() error {
 		<-ctx.Done()
+		// ctx has ended, so the drain gets a context of its own.
 		shutdown, cancel := context.WithTimeout(context.Background(), drain)
 		defer cancel()
 		if server.Shutdown(shutdown) != nil {
 			_ = server.Close()
 		}
-	}()
-	slog.Info("Listening", "addr", addr)
-	if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-		return err
-	}
-	return nil
+		return nil
+	})
+	return g.Wait()
 }
