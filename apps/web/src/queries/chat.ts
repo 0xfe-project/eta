@@ -21,7 +21,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { create } from "zustand";
 import { ApiError, controlPlane, unwrap } from "@/lib/api";
 import { refreshLlm } from "@/queries/llm";
@@ -69,8 +69,15 @@ export function chatQueryOptions() {
     // Live updates arrive over SSE; refetching would only reset the stream.
     staleTime: Infinity,
     refetchOnWindowFocus: false,
-    retry: false,
+    // A few quick tries; useLiveChat keeps trying after that.
+    retry: (failures, error) =>
+      failures < 3 && !(error instanceof ApiError && error.status < 500),
   });
+}
+
+/** 1 s, 2 s, 4 s, … up to 30 s. */
+function backoff(failures: number) {
+  return Math.min(1000 * 2 ** failures, 30_000);
 }
 
 function upsert<T extends { id: string; revision: number }>(
@@ -133,11 +140,36 @@ function applyEvent(queryClient: QueryClient, type: string, data: unknown) {
 /** Whether the stream dropped and has not come back yet. */
 export const useStreamLost = create<{ lost: boolean }>(() => ({ lost: false }));
 
-/** Subscribe to product events from the snapshot's cursor. */
-function useChatStream(cursor: string | undefined) {
+/**
+ * Keep the chat snapshot live: product events over SSE from its cursor.
+ * Mounted once for every page (RootDocument), so the sidebar's badge, the
+ * tab title and the inbox are live wherever the user is.
+ */
+export function useLiveChat() {
   const queryClient = useQueryClient();
+  const { data, status, errorUpdatedAt, errorUpdateCount } = useQuery(
+    chatQueryOptions(),
+  );
+  const cursor = data?.event_cursor;
+  // Bumped to reopen the stream when a new snapshot kept the same cursor.
+  const [attempt, setAttempt] = useState(0);
+  const failuresRef = useRef(0);
+
+  // A snapshot that never loaded is tried again, ever more slowly (once
+  // loaded, the stream below reloads it).
+  const loaded = data !== undefined;
+  useEffect(() => {
+    if (status !== "error" || loaded) return;
+    const timer = setTimeout(
+      () => void queryClient.refetchQueries({ queryKey: chatKey, exact: true }),
+      backoff(errorUpdateCount),
+    );
+    return () => clearTimeout(timer);
+  }, [status, loaded, errorUpdatedAt, errorUpdateCount, queryClient]);
+
   useEffect(() => {
     if (!cursor) return;
+    let retry: ReturnType<typeof setTimeout> | undefined;
     const source = new EventSource(
       `/api/v1/chat/stream?cursor=${encodeURIComponent(cursor)}`,
     );
@@ -150,25 +182,38 @@ function useChatStream(cursor: string | undefined) {
     const listener = (event: MessageEvent) =>
       applyEvent(queryClient, event.type, JSON.parse(event.data));
     types.forEach((type) => source.addEventListener(type, listener));
-    source.onopen = () => useStreamLost.setState({ lost: false });
+    source.onopen = () => {
+      failuresRef.current = 0;
+      useStreamLost.setState({ lost: false });
+    };
     // EventSource resumes by itself with Last-Event-ID. Once it gives up
-    // (e.g. an expired cursor), reload the snapshot for a fresh cursor.
+    // (a 503 while the control plane restarts, an expired cursor), reload
+    // the snapshot for a fresh cursor and reconnect, after a backoff.
     source.onerror = () => {
       useStreamLost.setState({ lost: true });
-      if (source.readyState === EventSource.CLOSED)
-        void queryClient.invalidateQueries({ queryKey: chatKey });
+      if (source.readyState !== EventSource.CLOSED) return;
+      retry = setTimeout(
+        async () => {
+          // A failed reload keeps the old snapshot and its cursor.
+          await queryClient.invalidateQueries({ queryKey: chatKey });
+          const fresh = queryClient.getQueryData<Snapshot>(chatKey);
+          // A new cursor reopens the stream by itself.
+          if (fresh?.event_cursor === cursor) setAttempt((n) => n + 1);
+        },
+        backoff(failuresRef.current++),
+      );
     };
     return () => {
+      clearTimeout(retry);
       types.forEach((type) => source.removeEventListener(type, listener));
       source.close();
     };
-  }, [cursor, queryClient]);
+  }, [cursor, attempt, queryClient]);
 }
 
+/** The chat snapshot; useLiveChat keeps it live. */
 export function useChat() {
-  const query = useQuery(chatQueryOptions());
-  useChatStream(query.data?.event_cursor);
-  return query;
+  return useQuery(chatQueryOptions());
 }
 
 /** Every agent's interactions waiting for the user. */
