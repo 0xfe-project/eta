@@ -39,10 +39,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -65,6 +61,7 @@ import {
 } from "./assignee-draft";
 import { AssigneeFields } from "./assignee-picker";
 import { when } from "./routine-format";
+import { Select, SelectOption } from "./select-field";
 import {
   ago,
   assigneeLabel,
@@ -273,19 +270,19 @@ export function StatusSelect({
   className?: string;
 }) {
   return (
-    <NativeSelect
+    <Select
       id={id}
       aria-label={id ? undefined : "状态"}
       className={className}
       value={value}
-      onChange={(e) => onChange(e.target.value as TaskStatus)}
+      onValueChange={(value) => onChange(value as TaskStatus)}
     >
       {statuses.map((s) => (
-        <NativeSelectOption key={s.value} value={s.value}>
+        <SelectOption key={s.value} value={s.value}>
           {s.label}
-        </NativeSelectOption>
+        </SelectOption>
       ))}
-    </NativeSelect>
+    </Select>
   );
 }
 
@@ -766,18 +763,18 @@ export function FeedbackDialog({
         </DialogHeader>
         <div className="space-y-3">
           <Field id="feedback-agent" label="智能体">
-            <NativeSelect
+            <Select
               id="feedback-agent"
               className="w-full"
               value={chosen}
-              onChange={(e) => setAgentId(e.target.value)}
+              onValueChange={(value) => setAgentId(value)}
             >
               {agents.map((agent) => (
-                <NativeSelectOption key={agent.id} value={agent.id}>
+                <SelectOption key={agent.id} value={agent.id}>
                   {agent.name}
-                </NativeSelectOption>
+                </SelectOption>
               ))}
-            </NativeSelect>
+            </Select>
           </Field>
           <Field
             label="方式"

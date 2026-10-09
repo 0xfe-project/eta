@@ -78,7 +78,7 @@ bun run --cwd apps/web typecheck
 
 ## shadcn 与设计规范
 
-已执行 `pnpm dlx shadcn@latest apply --preset buFzlTs -y`。`components.json` 使用 `radix-lyra`、neutral 配色和 Phosphor 图标。已安装 Button、Input、Textarea、Label、NativeSelect、Sonner、Tabs、Dialog、Tooltip，源码在 `src/components/ui/`。
+已执行 `pnpm dlx shadcn@latest apply --preset buFzlTs -y`。`components.json` 使用 `radix-lyra`、neutral 配色和 Phosphor 图标。已安装 Button、Input、Textarea、Label、Select（Radix 自绘）、Sonner、Tabs、Dialog、Tooltip，源码在 `src/components/ui/`。
 
 根据 [Vercel design.md](https://vercel.com/design.md) 中适用于产品界面的规则，统一使用 Geist Sans / Geist Mono、单色语义主题、清晰层级与焦点状态，支持系统深浅模式和减少动效偏好。本项目是 AXP 产品界面，借用视觉规范，不添加 Vercel 报告品牌标识或报告专用 CSS 层。
 
@@ -129,3 +129,23 @@ import { GrokThought } from "@/components/brainless/grok/grok-thought";
 - `/workspace/inbox`：确认请求，形态像通知：按天分组，待处理的标记出来、就地答复，之前的显示当时的选择或已过期；`?filter=pending` 只看待处理。历史来自 `GET /api/v1/chat/interactions`，并由聊天事件流保持实时。
 
 分区和面板共用同一套组件与 URL 参数（`task-nav.ts`、`routine-nav.ts`、`workspace-search.ts`），都支持直接访问、刷新和浏览器历史导航。
+
+### Select 迁移清单（任务 #13）
+
+所有单选入口使用通过 `nlx shadcn add select --yes --overwrite` 安装的官方 `radix-lyra` Select（`src/components/ui/select.tsx`），业务层统一通过 `src/components/workspace/select-field.tsx` 组合官方组件，桌面与移动端均由应用渲染菜单。菜单通过 Portal 进入弹窗层级，支持键盘导航、Escape、滚动按钮；长选项换行，触发器文字截断，菜单宽高受可用视口限制。
+
+| 共享入口         | 使用位置                           | 保留语义                                               |
+| ---------------- | ---------------------------------- | ------------------------------------------------------ |
+| ModelSelect      | 智能体编辑、定时创建/编辑          | 加载占位、服务商分组、已删除模型、不可用选项、表单校验 |
+| StatusSelect     | 新建任务、任务详情、看板及首页侧栏 | 受控状态及原业务更新回调                               |
+| 反馈智能体       | 任务反馈弹窗                       | 当前智能体及反馈提交                                   |
+| AssigneeFields   | 任务与侧栏的新建/编辑              | 用户/远程指派、不可用对象、指派切换后重置工作位置      |
+| 工作位置         | AssigneeFields                     | 空值清除、项目/已有工作区分组、读取中禁用              |
+| 记忆智能体       | 记忆页面/侧栏                      | 智能体切换                                             |
+| 频率、间隔、时区 | 定时表单                           | 计划切换、数字间隔转换、时区提交                       |
+
+原有智能体/设置 DropdownMenu、插件复选框、星期多选按钮和其他自绘按钮组保留，没有移动端原生回退。原选择入口均使用受控值和业务 JSON 提交，没有 `name` 原生表单字段；模型继续通过 react-hook-form 的 `setValue` 执行 dirty/validation。空字符串在 UI 层编码以满足 Radix Item 的非空值约束，回调始终返回原业务值。
+
+源码审计：`rg -n '<select|<option|<optgroup|NativeSelect|native-select|showPicker' apps/web/src` 无匹配。Radix 在表单内部生成的隐藏 select 仅用于内部表单事件兼容，不是可操作入口，也不会打开系统 picker。
+
+验证：桌面 1280×900 与触屏移动模拟 390×844，在真实共享 Select + Dialog 的独立浏览器测试页检查打开、选择、80 项长列表滚动/End 导航、Enter、Escape/焦点恢复、长文本换行、空值清除、禁用选项/触发器及受控值表单提交，均通过。测试页为临时文件，不进入产品。自动化回归测试覆盖空值回调、禁用分组选项、加载占位及已有任务状态刷新。移动验证为 Chromium 触屏模拟，未使用实体 iOS/Android 设备。

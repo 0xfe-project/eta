@@ -13,8 +13,7 @@
     @apply font-sans antialiased bg-background text-foreground;
     line-height: 1.6;
   }
-  button:not(:disabled),
-  select {
+  button:not(:disabled) {
     cursor: pointer;
   }
   :focus-visible {

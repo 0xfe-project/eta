@@ -28,11 +28,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  NativeSelect,
-  NativeSelectOptGroup,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   useCreateAgent,
@@ -42,6 +37,7 @@ import {
 } from "@/queries/chat";
 import { useConnectors, useModels } from "@/queries/llm";
 import { AgentAvatar } from "./agent-identity";
+import { Select, SelectGroup, SelectOption } from "./select-field";
 import { useAgents } from "./use-agents";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -116,7 +112,7 @@ export function ModelSelect({
   models,
   invalid,
   ...props
-}: Omit<React.ComponentProps<typeof NativeSelect>, "children"> & {
+}: Omit<React.ComponentProps<typeof Select>, "children"> & {
   value: string;
   /** Undefined while they load. */
   models: Model[] | undefined;
@@ -130,41 +126,38 @@ export function ModelSelect({
   }));
   const known = (models ?? []).some((model) => model.id === value);
   return (
-    <NativeSelect
+    <Select
       className="w-full"
       aria-invalid={invalid}
       value={value}
       {...props}
       disabled={loading || props.disabled}
     >
-      <NativeSelectOption value="" disabled>
+      <SelectOption value="" disabled>
         {loading ? "正在加载模型…" : "选择模型"}
-      </NativeSelectOption>
+      </SelectOption>
       {value && !known ? (
-        <NativeSelectOption value={value} disabled>
+        <SelectOption value={value} disabled>
           {loading ? "正在加载模型…" : `${value}（已不存在）`}
-        </NativeSelectOption>
+        </SelectOption>
       ) : null}
       {groups
         .filter((group) => group.models.length)
         .map(({ connector, models }) => (
-          <NativeSelectOptGroup
-            key={connector.id}
-            label={connector.display_name}
-          >
+          <SelectGroup key={connector.id} label={connector.display_name}>
             {models.map((model) => (
-              <NativeSelectOption
+              <SelectOption
                 key={model.id}
                 value={model.id}
                 disabled={!model.available && model.id !== value}
               >
                 {model.display_name}
                 {model.available ? "" : "（不可用）"}
-              </NativeSelectOption>
+              </SelectOption>
             ))}
-          </NativeSelectOptGroup>
+          </SelectGroup>
         ))}
-    </NativeSelect>
+    </Select>
   );
 }
 
@@ -323,8 +316,8 @@ function AgentEditorForm({
             aria-describedby={
               errors.model || noModels ? "agent-model-hint" : undefined
             }
-            onChange={(event) =>
-              setValue("model", event.target.value, {
+            onValueChange={(value) =>
+              setValue("model", value, {
                 shouldDirty: true,
                 shouldValidate: true,
               })

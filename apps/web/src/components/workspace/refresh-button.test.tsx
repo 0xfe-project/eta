@@ -243,9 +243,9 @@ describe.each([false, true])("refresh (sidebar: %s)", (panel) => {
     expect(container.textContent).toContain("最新说明");
     if (!panel)
       expect(
-        container.querySelector<HTMLSelectElement>('select[aria-label="状态"]')!
-          .value,
-      ).toBe("in_review");
+        container.querySelector('[role="combobox"][aria-label="状态"]')!
+          .textContent,
+      ).toContain("待验收");
     expect(navigation.task).toBe("t1");
     expect(navigation.set).not.toHaveBeenCalled();
   });
