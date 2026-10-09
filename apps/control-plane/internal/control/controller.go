@@ -469,6 +469,14 @@ func (c *Controller) busy(ctx context.Context, instance *liveRuntime) (bool, err
 		}
 		queued = append(queued, command)
 	}
+	// The runtime reports a turn finished before it uploads the snapshot
+	// that turn left; stopping it in between would lose the turn's work.
+	if uploading, err := pg.Exists(ctx, c.DB, `SELECT 1 FROM (SELECT type FROM agent_event
+		WHERE runtime_instance_id = $1 AND source_seq IS NOT NULL
+		AND type IN ('turn.completed', 'snapshot.saved', 'snapshot.failed')
+		ORDER BY source_seq DESC LIMIT 1) last WHERE type = 'turn.completed'`, instance.ID); err != nil || uploading {
+		return uploading, err
+	}
 	taken, err := c.taken(ctx, queued)
 	if err != nil {
 		return false, err
