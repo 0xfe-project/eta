@@ -16,7 +16,6 @@ import (
 	"github.com/akarachen/axp/apps/control-plane/internal/apierr"
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
 	"github.com/akarachen/axp/apps/control-plane/internal/control"
-	"github.com/akarachen/axp/apps/control-plane/internal/routines"
 	"github.com/akarachen/axp/apps/control-plane/internal/tasks"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
@@ -41,7 +40,6 @@ func init() {
 type Deps struct {
 	DB       *pgxpool.Pool
 	Chat     *chat.Service
-	Routines *routines.Service
 	Protocol *control.Protocol
 	Tasks    *tasks.Service
 	// Where remote computers reach AXP; the browser's address when empty.
@@ -182,7 +180,6 @@ func Public(d *Deps) (http.Handler, huma.API) {
 		return &struct{ Body Health }{Health{Status: "ok", Service: "control-plane"}}, nil
 	}, func(o *huma.Operation) { o.OperationID = "health"; o.Tags = []string{"health"} })
 	registerChat(api, d)
-	registerRoutines(api, d)
 	registerTasks(api, d)
 	return r, api
 }

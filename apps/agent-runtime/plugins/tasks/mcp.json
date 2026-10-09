@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "tasks": {
+      "url": "${AXP_GATEWAY_URL}/tasks/mcp",
+      "headers": { "Authorization": "Bearer ${AXP_AGENT_KEY}" }
+    }
+  }
+}

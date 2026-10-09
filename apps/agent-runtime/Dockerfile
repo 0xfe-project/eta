@@ -46,14 +46,16 @@ COPY hooks /etc/akhook
 ENV AKHOOK_ADDITIONAL_CONFIG_PATH=/etc/akhook/akhook.yml \
     AKHOOK_STATE_DIR=/run/akhook
 # The static Codex configuration (sandbox, approvals), then the plugins every
-# agent can run with: their setup scripts prepare their environments (with a
-# download cache kept across builds), and the plugins become a local
-# marketplace whose tool approvals and hooks join the Codex configuration.
+# agent can run with (docs/architecture/plugins.md), compiled for Codex by
+# axp-plugins (packages/plugins-go, the `plugins-tool` build context): their
+# setup scripts prepare their environments (with a download cache kept across
+# builds), and the plugins become a local marketplace whose tool approvals and
+# hooks join the Codex configuration.
 COPY codex /etc/codex
 COPY plugins /opt/axp/plugins
-RUN --mount=type=bind,source=axp_runtime/plugins.py,target=/tmp/plugins.py \
+RUN --mount=type=bind,from=plugins-tool,source=${TARGETOS}-${TARGETARCH}/axp-plugins,target=/usr/local/bin/axp-plugins \
     --mount=type=cache,target=/var/cache/axp-plugins \
-    python /tmp/plugins.py /opt/axp/plugins /etc/codex
+    axp-plugins chat /opt/axp/plugins /etc/codex /opt/axp/plugins
 WORKDIR /app
 COPY axp_runtime ./axp_runtime
 

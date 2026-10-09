@@ -8,7 +8,6 @@ import (
 	"github.com/akarachen/axp/apps/control-plane/internal/apierr"
 	"github.com/akarachen/axp/apps/control-plane/internal/auth"
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
-	"github.com/akarachen/axp/apps/control-plane/internal/routines"
 	"github.com/akarachen/axp/apps/control-plane/internal/snapshots"
 	"github.com/akarachen/axp/apps/control-plane/internal/store"
 	"github.com/jackc/pgx/v5"
@@ -198,17 +197,9 @@ func (p *Protocol) UploadURL(ctx context.Context, instance *chat.RuntimeRecord) 
 }
 
 // AgentFor answers the runtime gateway: which agent holds the runtime key
-// "<instance id>.<token>". Routine runs use the gateway too; their usage is
-// the routine's.
+// "<instance id>.<token>".
 func (p *Protocol) AgentFor(ctx context.Context, key string) (string, error) {
 	instanceID, token, _ := strings.Cut(key, ".")
-	run, err := routines.RunFor(ctx, p.DB, p.Secret, instanceID, token)
-	if err != nil {
-		return "", err
-	}
-	if run != nil {
-		return "routine-" + run.RoutineID, nil
-	}
 	instance, err := p.Authenticate(ctx, instanceID, token)
 	if err != nil {
 		return "", err

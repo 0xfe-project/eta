@@ -6,11 +6,11 @@
 
 `apps/llm-gateway` 是一个 Go 进程，按 CLIProxyAPI（CPA）的 [SDK 用法](https://github.com/router-for-me/CLIProxyAPI/blob/main/docs/sdk-usage.md) 嵌入 `cliproxy.Service`，并在 CPA 的 gin 引擎上挂载 AXP 自己的路由：
 
-| 路径               | 调用方                                        | 鉴权                                         |
-| ------------------ | --------------------------------------------- | -------------------------------------------- |
-| `/api/llm/v1/*`    | 浏览器（经 `gateway`）、control-plane（直连） | 无：只有这两者连得到（见[网关](gateway.md)） |
-| `/v1/*`            | runtime 中的 Codex（经 `runtime-gateway`）    | 网关注入的 `X-AXP-Agent-Id`                  |
-| `/v0/management/*` | 仅进程内回环调用                              | 每次启动随机生成的管理密码                   |
+| 路径               | 调用方                                                              | 鉴权                                       |
+| ------------------ | ------------------------------------------------------------------- | ------------------------------------------ |
+| `/api/llm/v1/*`    | 浏览器（经 `gateway`）、control-plane 与 routine-service（直连）    | 无：只有它们连得到（见[网关](gateway.md)） |
+| `/v1/*`            | runtime 中的 Codex（经 `runtime-gateway`）、routine-service（直连） | 调用方给出的 `X-AXP-Agent-Id`              |
+| `/v0/management/*` | 仅进程内回环调用                                                    | 每次启动随机生成的管理密码                 |
 
 CPA 负责 token 刷新、按模型名在账号间轮换、协议转换。凭据只存在 llm-gateway 的状态目录（工作目录下的 `var/llm-gateway/auths`，生产为卷 `axp-llm`）；runtime 容器只拿到 runtime 网关的地址和自己的实例令牌。
 
@@ -47,6 +47,10 @@ Connector 只负责“凭据怎么进来”；连接列表、启停、删除统�
 `GET /api/llm/v1/connections` 把 CPA 的凭据状态归一化为 `active`、`disabled`、`needs_login`、`rate_limited`、`error`，附中文说明和恢复时间，不返回 token。CPA 把请求失败记在每个模型上（`ModelStates`），所以任一模型收到 401 即视为账号需要重新登录；所有模型都在冷却中才视为账号被限流。
 
 `GET /api/llm/v1/models` 返回模型目录。见过的模型持久化在 `models.json`，账号失效或被移除后模型仍在目录中（`available: false` 并附原因），智能体保留原来的选择，重新绑定后自动恢复。图像、视频等非对话模型和 `codex-auto-review` 被过滤。
+
+### 服务直连
+
+Kamal 网络上的服务（不是 runtime）直接调用 `/v1`，不带 key，自己在 `X-AXP-Agent-Id` 里写明用量记在谁名下：网关只在 Kamal 网络和 runtime 网络上，runtime 网络上只有 runtime 网关连得到它，而 runtime 网关总会改写这个头。[定时任务](routines.md)服务用 ADK 的 `openaimodel`（Chat Completions）调用 `/v1`，以 `routine-<id>` 记账；Codex 和 Grok 两类模型的多轮工具调用都经它验证过（[#57](https://github.com/AkaraChen/axp/issues/57)）。
 
 ## control-plane 与 runtime
 

@@ -34,8 +34,8 @@ drain_timeout: 2
 servers:
   # The browser's gateway (apps/gateway/public.caddy): the only role behind
   # kamal-proxy. It routes /api/llm to the LLM gateway, /api/memory to the
-  # memory service, /api/forge to the forge service, /api to the control
-  # plane and everything else to web.
+  # memory service, /api/forge to the forge service, /api/routines to the
+  # routine service, /api to the control plane and everything else to web.
   gateway:
     hosts: [<%= host %>]
     cmd: caddy run --config /app/apps/gateway/Caddyfile
@@ -133,6 +133,22 @@ servers:
       volume: axp-forge:/app/var/forge
       <<: *health
       health-cmd: <%= ready.(8330, "/up") %>
+  # Routines (apps/routine-service) as axp-routines: the browser reaches
+  # /api/routines through the gateway. Runs are ADK agents in this process;
+  # it keeps its own database (axp_routines on the postgres accessory,
+  # created and migrated when it starts) and its schedules in NATS. One
+  # container: a new one fails the runs the old one left running.
+  routines:
+    hosts: [<%= host %>]
+    cmd: axp-routines
+    env:
+      clear:
+        AXP_ROUTINES_ADDR: ":8340"
+        AXP_PLUGINS_DIR: /app/apps/agent-runtime/plugins
+    options:
+      network-alias: axp-routines
+      <<: *health
+      health-cmd: <%= ready.(8340, "/api/routines/health") %>
   # Internal runtime API, reached by runtimes only through the runtime gateway.
   internal:
     hosts: [<%= host %>]

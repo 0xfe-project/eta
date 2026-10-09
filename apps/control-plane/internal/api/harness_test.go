@@ -21,7 +21,6 @@ import (
 	"github.com/akarachen/axp/apps/control-plane/internal/llm"
 	"github.com/akarachen/axp/apps/control-plane/internal/plugins"
 	"github.com/akarachen/axp/apps/control-plane/internal/queue/queuetest"
-	"github.com/akarachen/axp/apps/control-plane/internal/routines"
 	"github.com/akarachen/axp/apps/control-plane/internal/testenv"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -116,17 +115,6 @@ func (f *fakeS3) DownloadURL(_ context.Context, agentID string) (string, error) 
 	return "http://s3.test/get/" + agentID, nil
 }
 
-type fakeCompleter struct {
-	text    string
-	err     error
-	prompts []string
-}
-
-func (f *fakeCompleter) Complete(_ context.Context, _, _, prompt string) (string, error) {
-	f.prompts = append(f.prompts, prompt)
-	return f.text, f.err
-}
-
 // --- the environment ---------------------------------------------------------------
 
 type env struct {
@@ -137,7 +125,6 @@ type env struct {
 	models     *fakeCatalog
 	driver     *fakeDriver
 	s3         *fakeS3
-	completer  *fakeCompleter
 	secret     []byte
 	chat       *chat.Service
 	public     http.Handler
@@ -148,15 +135,14 @@ type env struct {
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	e := &env{
-		t:         t,
-		ctx:       context.Background(),
-		db:        testenv.DB(t),
-		nats:      queuetest.New(),
-		models:    &fakeCatalog{},
-		driver:    &fakeDriver{states: map[string]string{}},
-		s3:        &fakeS3{snapshots: map[string]bool{}},
-		completer: &fakeCompleter{},
-		secret:    []byte("test-secret"),
+		t:      t,
+		ctx:    context.Background(),
+		db:     testenv.DB(t),
+		nats:   queuetest.New(),
+		models: &fakeCatalog{},
+		driver: &fakeDriver{states: map[string]string{}},
+		s3:     &fakeS3{snapshots: map[string]bool{}},
+		secret: []byte("test-secret"),
 	}
 	e.models.set(llm.Model{ID: testModel, DisplayName: "Test Model", Available: true})
 	chatService := &chat.Service{
@@ -167,20 +153,13 @@ func newEnv(t *testing.T) *env {
 	deps := &Deps{
 		DB:       e.db,
 		Chat:     chatService,
-		Routines: &routines.Service{Queue: e.nats, Models: e.models},
 		Protocol: &control.Protocol{DB: e.db, Chat: chatService, Snapshots: e.s3, Secret: e.secret},
 	}
 	e.public, _ = Public(deps)
 	e.internal, _ = Internal(deps)
-	runner := &routines.Runner{
-		DB: e.db, Queue: e.nats, Driver: e.driver, Models: e.models, Completer: e.completer, Secret: e.secret,
-		RuntimeGatewayURL: "http://runtime-gateway:8090", NATSURL: "nats://nats:4222",
-		// In the test's goroutine.
-		Background: func(f func()) { f() },
-	}
 	e.controller = &control.Controller{
 		DB: e.db, Chat: chatService, Queue: e.nats, Driver: e.driver, Snapshots: e.s3, Models: e.models,
-		Routines: runner, Secret: e.secret, RuntimeGatewayURL: "http://runtime-gateway:8090",
+		Secret: e.secret, RuntimeGatewayURL: "http://runtime-gateway:8090",
 		NATSURL: "nats://nats:4222", ID: "controller-test", HostID: "test",
 	}
 	return e

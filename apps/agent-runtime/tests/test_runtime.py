@@ -14,7 +14,6 @@ from pathlib import Path
 import pytest
 from dirty_equals import IsPartialDict
 
-from axp_runtime import plugins
 from axp_runtime import runtime as runtime_module
 from axp_runtime.config import Settings
 from axp_runtime.control_plane import ControlPlaneError
@@ -180,10 +179,16 @@ class Harness:
 
 @pytest.fixture(scope="session")
 def plugins_dir(tmp_path_factory):
-    """The image's plugins as built, minus their setup."""
-    root = tmp_path_factory.mktemp("image") / "plugins"
+    """The image's plugins as built (packages/plugins-go), minus their setup."""
+    image = tmp_path_factory.mktemp("image")
+    root = image / "plugins"
     shutil.copytree(Path(__file__).resolve().parent.parent / "plugins", root)
-    plugins.write_marketplace(root)
+    (image / "codex").mkdir()
+    subprocess.run(
+        ["go", "run", "./cmd/axp-plugins", "compile", root, image / "codex", root],
+        cwd=Path(__file__).resolve().parents[3] / "packages" / "plugins-go",
+        check=True,
+    )
     return root
 
 
@@ -310,8 +315,6 @@ class TestBoot:
         config = (runtime.settings.codex_home / "config.toml").read_text()
         assert '[plugins."tasks@axp"]' in config
         assert '[plugins."memory@axp"]' in config
-        # Routine runs' own tools are never an agent's.
-        assert not (runtime.settings.codex_home / "plugins/cache/axp/routine").exists()
 
     def test_installs_only_the_agents_plugins(self, rt):
         runtime, _ = rt.start(plugins=("tasks",))

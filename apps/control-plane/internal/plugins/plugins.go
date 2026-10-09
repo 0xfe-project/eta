@@ -1,26 +1,17 @@
-// Package plugins is the runtime image's Codex plugins, which agents choose
-// from.
-//
-// The catalog is the directories of apps/agent-runtime/plugins, each a plugin
-// described by its .codex-plugin/plugin.json; building the runtime image makes
-// them a marketplace in the same order (axp_runtime/plugins.py). Runtimes
-// install the chosen ones at start.
+// Package plugins is the plugins agents choose from: those of the chat
+// target in apps/agent-runtime/plugins (docs/architecture/plugins.md), which
+// the runtime image compiles for Codex in the same order.
 package plugins
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/akarachen/axp/apps/control-plane/internal/apierr"
+	standard "github.com/akarachen/axp/packages/plugins-go"
 )
-
-// RoutineOnly are routine runs' own tools; never an agent's.
-var RoutineOnly = []string{"routine"}
 
 type Plugin struct {
 	Name        string `json:"name"`
@@ -35,24 +26,13 @@ type Catalog struct {
 	plugins []Plugin
 }
 
-// All is the catalog by name.
+// All is the catalog by name; empty when Dir cannot be read.
 func (c *Catalog) All() []Plugin {
 	c.once.Do(func() {
-		manifests, _ := filepath.Glob(filepath.Join(c.Dir, "*", ".codex-plugin", "plugin.json"))
-		sort.Strings(manifests)
 		c.plugins = []Plugin{}
-		for _, manifest := range manifests {
-			name := filepath.Base(filepath.Dir(filepath.Dir(manifest)))
-			if slices.Contains(RoutineOnly, name) {
-				continue
-			}
-			var meta struct {
-				Description string `json:"description"`
-			}
-			if data, err := os.ReadFile(manifest); err == nil {
-				_ = json.Unmarshal(data, &meta)
-			}
-			c.plugins = append(c.plugins, Plugin{Name: name, Description: meta.Description})
+		list, _ := standard.List(c.Dir, standard.TargetChat)
+		for _, p := range list {
+			c.plugins = append(c.plugins, Plugin{Name: p.Name, Description: p.Description})
 		}
 	})
 	return c.plugins

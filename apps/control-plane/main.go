@@ -25,7 +25,6 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-	_ "time/tzdata" // routines' time zones, wherever this runs
 
 	"github.com/akarachen/axp/apps/control-plane/internal/api"
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
@@ -36,7 +35,6 @@ import (
 	"github.com/akarachen/axp/apps/control-plane/internal/plugins"
 	"github.com/akarachen/axp/apps/control-plane/internal/queue"
 	"github.com/akarachen/axp/apps/control-plane/internal/relay"
-	"github.com/akarachen/axp/apps/control-plane/internal/routines"
 	"github.com/akarachen/axp/apps/control-plane/internal/snapshots"
 	"github.com/akarachen/axp/apps/control-plane/internal/store"
 	"github.com/akarachen/axp/apps/control-plane/internal/tasks"
@@ -150,7 +148,6 @@ func connect(ctx context.Context) (*services, error) {
 		deps: &api.Deps{
 			DB:        pool,
 			Chat:      chatService,
-			Routines:  &routines.Service{Queue: q, Models: models},
 			Protocol:  &control.Protocol{DB: pool, Chat: chatService, Snapshots: s3, Secret: []byte(cfg.SecretKey)},
 			Tasks:     taskService,
 			PublicURL: cfg.PublicURL, ForgeURL: cfg.ForgeURL, RemoteDist: cfg.RemoteDist,
@@ -275,17 +272,9 @@ func runController(ctx context.Context, s *services, interval time.Duration) err
 	if err := s.queue.EnsureStreams(work); err != nil {
 		return err
 	}
-	runner := &routines.Runner{
-		DB: s.deps.DB, Queue: s.queue, Driver: driver, Models: s.models, Completer: s.models,
-		Secret: []byte(s.cfg.SecretKey), RuntimeGatewayURL: s.cfg.RuntimeGatewayURL, NATSURL: s.cfg.NATSURL,
-		CodexLaunch: s.cfg.CodexLaunch,
-	}
-	if err := runner.SyncSchedules(work); err != nil {
-		return err
-	}
 	controller := &control.Controller{
 		DB: s.deps.DB, Chat: s.deps.Chat, Queue: s.queue, Driver: driver, Snapshots: s.snapshots,
-		Models: s.models, Routines: runner, Secret: []byte(s.cfg.SecretKey),
+		Models: s.models, Secret: []byte(s.cfg.SecretKey),
 		RuntimeGatewayURL: s.cfg.RuntimeGatewayURL, NATSURL: s.cfg.NATSURL, CodexLaunch: s.cfg.CodexLaunch,
 		ID: "controller-" + uuid.NewString()[:8], HostID: control.HostID(),
 	}

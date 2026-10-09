@@ -1,8 +1,7 @@
 // Package auth is runtimes' credentials.
 //
 // A runtime's token is derived from its instance id and generation, so it
-// stops working as soon as a new generation takes over; a routine run's from
-// the run's id, and it works only while the run runs. Identity in request
+// stops working as soon as a new generation takes over. Identity in request
 // bodies is never trusted.
 package auth
 
@@ -23,10 +22,6 @@ func sign(secret []byte, message string) string {
 
 func RuntimeToken(secret []byte, instanceID string, generation int64) string {
 	return sign(secret, fmt.Sprintf("runtime:%s:%d", instanceID, generation))
-}
-
-func RoutineToken(secret []byte, runID string) string {
-	return sign(secret, "routine-run:"+runID)
 }
 
 // Matches compares tokens in constant time.

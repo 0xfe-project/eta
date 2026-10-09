@@ -1,5 +1,5 @@
-// Package queuetest stands in for NATS in tests: the agents' queues, their
-// live runtimes and the routines' schedules.
+// Package queuetest stands in for NATS in tests: the agents' queues and
+// their live runtimes.
 package queuetest
 
 import (
@@ -32,13 +32,10 @@ type Fake struct {
 	Down bool
 	// MaxQueued is the per-agent limit (queue.MaxQueuedPerAgent by default).
 	MaxQueued int
-	// Schedules maps routine ids to their [cron, timezone].
-	Schedules map[string][2]string
-	Fires     []queue.Fire
 }
 
 func New() *Fake {
-	return &Fake{commands: map[int64]command{}, Schedules: map[string][2]string{}, MaxQueued: queue.MaxQueuedPerAgent}
+	return &Fake{commands: map[int64]command{}, MaxQueued: queue.MaxQueuedPerAgent}
 }
 
 var errDown = errors.New("nats down")
@@ -127,38 +124,6 @@ func (f *Fake) Ask(_ context.Context, _ string, body any) (map[string]any, error
 	defer f.mu.Unlock()
 	f.Asked = append(f.Asked, asMap(body))
 	return map[string]any{"accepted": f.Steering}, nil
-}
-
-func (f *Fake) ScheduleRoutine(_ context.Context, routineID, cron, timezone string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.Down {
-		return errDown
-	}
-	f.Schedules[routineID] = [2]string{cron, timezone}
-	return nil
-}
-
-func (f *Fake) UnscheduleRoutine(_ context.Context, routineID string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	delete(f.Schedules, routineID)
-	return nil
-}
-
-func (f *Fake) FireRoutine(_ context.Context, routineID string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.Fires = append(f.Fires, queue.Fire{RoutineID: routineID, Now: true})
-	return nil
-}
-
-func (f *Fake) TakeFires(context.Context) ([]queue.Fire, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	fires := f.Fires
-	f.Fires = nil
-	return fires, nil
 }
 
 // --- for tests ---------------------------------------------------------------

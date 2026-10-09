@@ -1,12 +1,15 @@
 // Browser clients for the same-origin API behind the edge gateway: the
-// control plane (/api/v1), the LLM gateway (/api/llm/v1), the memory
-// service (/api/memory/v1) and the forge service (/api/forge/v1).
-// POSTs carry an Idempotency-Key so a retried request cannot run twice.
+// control plane (/api/v1), the routine service (/api/routines/v1), the LLM
+// gateway (/api/llm/v1), the memory service (/api/memory/v1) and the forge
+// service (/api/forge/v1). POSTs carry an Idempotency-Key so a retried
+// request cannot run twice.
 //
-// The control plane's client is typed by its OpenAPI document, which is
-// generated from its code (`bun run generate` writes src/api).
+// The control plane's and the routine service's clients are typed by their
+// OpenAPI documents, which are generated from their code (`bun run generate`
+// writes src/api; redocly.yaml lists the services).
 
-import type { paths } from "@/api/control-plane.gen";
+import type { paths as ControlPlanePaths } from "@/api/control-plane.gen";
+import type { paths as RoutinesPaths } from "@/api/routines.gen";
 import createClient from "openapi-fetch";
 
 export class ApiError extends Error {
@@ -75,19 +78,24 @@ export const llmApi = client("/api/llm/v1");
 export const memoryApi = client("/api/memory/v1");
 export const forgeApi = client("/api/forge/v1");
 
-/** The control plane, typed by its OpenAPI document. */
-export const controlPlane = createClient<paths>({
-  // Looked up per request, so tests can replace it.
-  fetch: (request) => globalThis.fetch(request),
-});
+/** A service's client, typed by its OpenAPI document. */
+function typedClient<Paths extends object>() {
+  const client = createClient<Paths>({
+    // Looked up per request, so tests can replace it.
+    fetch: (request) => globalThis.fetch(request),
+  });
+  client.use({
+    onRequest({ request }) {
+      if (request.method === "POST" && !request.headers.has("Idempotency-Key"))
+        request.headers.set("Idempotency-Key", crypto.randomUUID());
+      return request;
+    },
+  });
+  return client;
+}
 
-controlPlane.use({
-  onRequest({ request }) {
-    if (request.method === "POST" && !request.headers.has("Idempotency-Key"))
-      request.headers.set("Idempotency-Key", crypto.randomUUID());
-    return request;
-  },
-});
+export const controlPlane = typedClient<ControlPlanePaths>();
+export const routinesApi = typedClient<RoutinesPaths>();
 
 /** The response's data, or its error envelope as an ApiError. */
 export async function unwrap<T>(

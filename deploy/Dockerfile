@@ -1,10 +1,26 @@
 # Production image for every Kamal role (gateway, runtime-gateway, web, api,
-# internal, controller, llm, memory, forge); the roles differ only in their command. Build
-# context is the repository root. Agent runtimes use apps/agent-runtime.
+# internal, controller, llm, memory, forge, routines); the roles differ only in
+# their command. Build context is the repository root. Agent runtimes use
+# apps/agent-runtime.
 #
-# Nothing is compiled or installed here: `bun run build` (Turbo) produces the
-# artifacts for each target platform outside Docker, and this file only copies
-# them. Each COPY layer is reused while its files are byte-identical.
+# Nothing is compiled here: `bun run build` (Turbo) produces the artifacts for
+# each target platform outside Docker, and this file only copies them. Each
+# COPY layer is reused while its files are byte-identical.
+
+# The plugins routine runs get (the routine target, docs/architecture/plugins.md):
+# their setup scripts install what they run (grok-api) into /opt/axp/bin, with
+# a download cache kept across builds.
+FROM python:3.13-slim AS routine-plugins
+ARG TARGETOS
+ARG TARGETARCH
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+COPY apps/agent-runtime/plugins /opt/axp/plugins
+COPY packages/plugins-go/out/${TARGETOS}-${TARGETARCH}/axp-plugins /usr/local/bin/
+RUN --mount=type=cache,target=/var/cache/axp-plugins \
+    axp-plugins setup routine /opt/axp/plugins /opt/axp/bin
+
 FROM python:3.13-slim
 ARG TARGETOS
 ARG TARGETARCH
@@ -18,12 +34,14 @@ COPY apps/memory-service/out/${TARGETOS}-${TARGETARCH}/site-packages/ /app/apps/
 COPY apps/memory-service/out/models/ /app/apps/memory-service/models/
 COPY apps/llm-gateway/out/${TARGETOS}-${TARGETARCH}/axp-llm-gateway /usr/local/bin/
 COPY apps/forge-service/out/${TARGETOS}-${TARGETARCH}/axp-forge /usr/local/bin/
+COPY --from=routine-plugins /opt/axp/bin/ /usr/local/bin/
+COPY apps/routine-service/out/${TARGETOS}-${TARGETARCH}/axp-routines /usr/local/bin/
 COPY apps/control-plane/out/${TARGETOS}-${TARGETARCH}/axp-control-plane /usr/local/bin/
 # Self-contained server bundle plus client assets; no node_modules.
 COPY apps/web/out/ /app/apps/web/
 COPY apps/gateway/Caddyfile apps/gateway/*.caddy /app/apps/gateway/
 COPY apps/memory-service/axp_memory /app/apps/memory-service/axp_memory/
-# The runtime image's plugins: the catalog agents choose from.
+# The plugins: the catalog agents choose from, and what routine runs get.
 COPY apps/agent-runtime/plugins /app/apps/agent-runtime/plugins/
 # What remote computers download from /remote/dl: the axp binaries and the
 # agenvo connectors (where the control plane looks for them by default).
@@ -34,5 +52,5 @@ COPY apps/relay/out/connectors/ /app/apps/relay/out/connectors/
 WORKDIR /app/apps/control-plane
 
 ENV PYTHONUNBUFFERED=1
-EXPOSE 3000 8000 8001 8080 8090 8317 8320 8330
+EXPOSE 3000 8000 8001 8080 8090 8317 8320 8330 8340
 CMD ["bun", "/app/apps/web/server.js"]

@@ -1,9 +1,11 @@
-go 1.26.0
+go 1.26.6
 
 use (
 	./apps/control-plane
 	./apps/forge-service
 	./apps/llm-gateway
 	./apps/remote
+	./apps/routine-service
+	./packages/plugins-go
 	./packages/telemetry-go
 )

@@ -1,13 +1,11 @@
 // Package llm is the client for the LLM gateway (apps/llm-gateway).
 //
-// The control plane calls the LLM gateway directly. It needs the catalog, to
+// The control plane calls the LLM gateway directly for the catalog: to
 // validate an agent's model, to refuse chats whose model is unusable and to
-// tell runtimes a model's context window, and one chat completion to revise
-// a routine's brief.
+// tell runtimes a model's context window.
 package llm
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -24,7 +22,6 @@ import (
 const (
 	cacheFor       = 10 * time.Second
 	catalogTimeout = 5 * time.Second
-	reviseTimeout  = 120 * time.Second
 )
 
 type Model struct {
@@ -119,49 +116,6 @@ func (g *Gateway) fetch(ctx context.Context) (map[string]Model, error) {
 		models[item.ID] = m
 	}
 	return models, nil
-}
-
-// Complete runs one chat completion with model, for agent (the gateway
-// requires one), and returns its text.
-func (g *Gateway) Complete(ctx context.Context, agent, model, prompt string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, reviseTimeout)
-	defer cancel()
-	body, _ := json.Marshal(map[string]any{
-		"model":    model,
-		"messages": []map[string]string{{"role": "user", "content": prompt}},
-	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, g.URL+"/v1/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-AXP-Agent-Id", agent)
-	resp, err := g.Client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("chat completion returned %d", resp.StatusCode)
-	}
-	var out struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", err
-	}
-	if len(out.Choices) == 0 {
-		return "", errors.New("no choices")
-	}
-	text := strings.TrimSpace(out.Choices[0].Message.Content)
-	if text == "" {
-		return "", errors.New("empty completion")
-	}
-	return text, nil
 }
 
 // Validate rejects model ids the gateway has never offered.

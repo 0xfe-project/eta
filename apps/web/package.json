@@ -3,7 +3,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "generate": "openapi-typescript ../control-plane/out/openapi.json --output src/api/control-plane.gen.ts --root-types --root-types-no-schema-prefix --default-non-nullable false",
+    "generate": "openapi-typescript --root-types --root-types-no-schema-prefix --default-non-nullable false",
     "dev": "vite",
     "build": "vite build && bun run bundle",
     "bundle": "rm -rf out && bun build server.js --target=bun --outdir out --define process.env.NODE_ENV='\"production\"' && mkdir -p out/dist && cp -r dist/client out/dist/",

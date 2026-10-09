@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/akarachen/axp/apps/control-plane/internal/auth"
@@ -22,7 +23,6 @@ import (
 	"github.com/akarachen/axp/apps/control-plane/internal/container"
 	"github.com/akarachen/axp/apps/control-plane/internal/llm"
 	"github.com/akarachen/axp/apps/control-plane/internal/queue"
-	"github.com/akarachen/axp/apps/control-plane/internal/routines"
 	"github.com/akarachen/axp/apps/control-plane/internal/snapshots"
 	"github.com/akarachen/axp/apps/control-plane/internal/store"
 	"github.com/jackc/pgx/v5"
@@ -45,7 +45,6 @@ type Controller struct {
 	Driver    container.Driver
 	Snapshots snapshots.Store
 	Models    llm.Catalog
-	Routines  *routines.Runner
 	Secret    []byte
 	// Where runtimes reach the internal API and NATS.
 	RuntimeGatewayURL string
@@ -72,9 +71,6 @@ func (c *Controller) Tick(ctx context.Context) {
 		{"ensure_runtimes", c.ensureRuntimes},
 		{"stop_idle", c.StopIdle},
 		{"stop_deleted", c.stopDeleted},
-		{"start_routines", c.Routines.StartFired},
-		{"watch_routines", c.Routines.WatchRuns},
-		{"revise_briefs", c.Routines.ReviseBriefs},
 	}
 	for _, step := range steps {
 		if err := step.run(ctx); err != nil {
@@ -400,7 +396,7 @@ func (c *Controller) spec(ctx context.Context, agent *chat.AgentRecord, instance
 		// holds them. Resource attributes tie records to the agent.
 		"OTEL_EXPORTER_OTLP_ENDPOINT": runtimeOTLPEndpoint,
 		"OTEL_SERVICE_NAME":           "agent-runtime",
-		"OTEL_RESOURCE_ATTRIBUTES": routines.ResourceAttributes(
+		"OTEL_RESOURCE_ATTRIBUTES": resourceAttributes(
 			"axp.agent.id="+agent.ID,
 			"axp.runtime.instance.id="+instance.ID,
 			"axp.runtime.generation="+generation,
@@ -532,4 +528,13 @@ func (c *Controller) stopDeleted(ctx context.Context) error {
 func HostID() string {
 	name, _ := os.Hostname()
 	return name
+}
+
+// resourceAttributes is OTEL_RESOURCE_ATTRIBUTES for a runtime: this
+// process's, then attrs.
+func resourceAttributes(attrs ...string) string {
+	if own := os.Getenv("OTEL_RESOURCE_ATTRIBUTES"); own != "" {
+		attrs = append([]string{own}, attrs...)
+	}
+	return strings.Join(attrs, ",")
 }

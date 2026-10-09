@@ -8,9 +8,9 @@
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 控制面 → 容器    | 启动参数：`AXP_AGENT_ID`、`AXP_INSTANCE_ID`、`AXP_GENERATION`、`AXP_RUNTIME_TOKEN`、`AXP_GATEWAY_URL`、`AXP_NATS_URL`、`AXP_THREAD_ID`、`AXP_CODEX_SETTINGS`、`AXP_SNAPSHOT_URL` 等（`control/controller.go`） |
 | 控制面 → runtime | NATS：`axp.agent.<id>.commands`（工作，runtime 经 consumer `agent-<id>` 自取）、`axp.agent.<id>.control`（中断、审批决定、插话），见[队列](queue.md)                                                           |
-| runtime → 控制面 | 内部运行协议（HTTP，经 [runtime 网关](gateway.md)）：心跳、会话、事件批次、快照上传地址、runtime 身份；定时任务的运行另有查历史、`finish`、`complete`                                                          |
+| runtime → 控制面 | 内部运行协议（HTTP，经 [runtime 网关](gateway.md)）：心跳、会话、事件批次、快照上传地址、runtime 身份                                                                                                          |
 
-内部运行协议的 OpenAPI 文档在 `/internal/openapi.json`（开发时 `/internal/docs` 可浏览）。runtime 的令牌是 `HMAC(AXP_SECRET_KEY, runtime:<实例>:<代>)`，换代即失效；定时任务运行的令牌是 `HMAC(AXP_SECRET_KEY, routine-run:<运行>)`，运行结束即失效。
+内部运行协议的 OpenAPI 文档在 `/internal/openapi.json`（开发时 `/internal/docs` 可浏览）。runtime 的令牌是 `HMAC(AXP_SECRET_KEY, runtime:<实例>:<代>)`，换代即失效。
 
 ## 进程与代码
 
@@ -25,7 +25,7 @@
 | `openapi public\|internal` | 输出 API 的 OpenAPI 文档，不需要数据库和队列                             |
 | `ensure-runtime-network`   | 创建 runtime 的 Docker 网络（开发）                                      |
 
-代码在 `internal/` 下：`chat`（产品状态：智能体、消息、交互、`ui_event`，以及把 runtime 事件投影成产品状态）、`control`（controller 与内部运行协议）、`routines`（定时任务，见[定时任务](routines.md)）、`tasks`（任务看板与远程电脑，见[任务与远程电脑](tasks.md)；它的 runner 在 controller 进程里单独循环）、`relay`（agenvo 中继的客户端）、`api`（HTTP：huma 跑在 chi 上）、`queue`（NATS）、`container`（Docker 官方 Go SDK）、`snapshots`（S3 预签名地址）、`store`（PostgreSQL 与 goose 迁移）、`config`（环境变量，caarlos0/env）。
+代码在 `internal/` 下：`chat`（产品状态：智能体、消息、交互、`ui_event`，以及把 runtime 事件投影成产品状态）、`control`（controller 与内部运行协议）、`tasks`（任务看板与远程电脑，见[任务与远程电脑](tasks.md)；它的 runner 在 controller 进程里单独循环）、`relay`（agenvo 中继的客户端）、`api`（HTTP：huma 跑在 chi 上）、`queue`（NATS）、`container`（Docker 官方 Go SDK）、`snapshots`（S3 预签名地址）、`store`（PostgreSQL 与 goose 迁移）、`config`（环境变量，caarlos0/env）。
 
 ## OpenAPI 与前端类型
 

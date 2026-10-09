@@ -1,4 +1,4 @@
-import type { HourlySchedule } from "@/api/control-plane.gen";
+import type { HourlySchedule } from "@/api/routines.gen";
 import type { Routine, Schedule } from "@/queries/routines";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
 import { useState } from "react";

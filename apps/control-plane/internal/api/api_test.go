@@ -273,8 +273,6 @@ func TestPluginsAreChosenFromTheCatalog(t *testing.T) {
 	// Catalog order, whatever order they were sent in.
 	expect(t, fmt.Sprint(created.m(t)["plugins"]), "[grok tasks]")
 	expectError(t, e.post("/agents", map[string]any{"name": "a", "plugins": []string{"nope"}}), 422, "PLUGIN_NOT_FOUND")
-	// Routine runs' own tools are not an agent's to choose.
-	expectError(t, e.post("/agents", map[string]any{"name": "a", "plugins": []string{"routine"}}), 422, "PLUGIN_NOT_FOUND")
 }
 
 func TestChangingPluginsBumpsConfigVersion(t *testing.T) {
@@ -610,8 +608,6 @@ func TestPublicSchemaHasNoInternalFields(t *testing.T) {
 		"/api/v1/computers/{computer_id}", "/api/v1/computers/{computer_id}/install",
 		"/api/v1/computers/{computer_id}/runtimes/{kind}/approve",
 		"/api/v1/computers/{computer_id}/runtimes/{kind}/places", "/api/v1/plugins",
-		"/api/v1/routines", "/api/v1/routines/{routine_id}", "/api/v1/routines/{routine_id}/briefs/{version}/restore",
-		"/api/v1/routines/{routine_id}/run", "/api/v1/routines/{routine_id}/runs/{run_id}/feedback",
 		"/api/v1/tasks", "/api/v1/tasks/{task_id}", "/api/v1/tasks/{task_id}/comments",
 		"/api/v1/tasks/{task_id}/runs/{run_id}/interrupt", "/api/v1/tasks/{task_id}/runs/{run_id}/log",
 	}

@@ -4,12 +4,9 @@ import (
 	"context"
 	"net/http"
 	"strings"
-	"time"
 
-	"github.com/akarachen/axp/apps/control-plane/internal/apierr"
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
 	"github.com/akarachen/axp/apps/control-plane/internal/control"
-	"github.com/akarachen/axp/apps/control-plane/internal/routines"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -74,23 +71,6 @@ type ThreadOut struct {
 
 type UploadOut struct {
 	UploadURL string `json:"upload_url"`
-}
-
-type FinishIn struct {
-	_       struct{} `additionalProperties:"true"`
-	Report  *string  `json:"report,omitempty" nullable:"true" maxLength:"100000"`
-	Handoff string   `json:"handoff,omitempty" maxLength:"4000"`
-}
-
-type CompleteIn struct {
-	_         struct{} `additionalProperties:"true"`
-	Completed bool     `json:"completed"`
-	Message   string   `json:"message,omitempty" maxLength:"100000"`
-	Error     *string  `json:"error,omitempty" nullable:"true" maxLength:"500"`
-}
-
-type RunStatus struct {
-	Status string `json:"status"`
 }
 
 func internalOp(id, method, path, summary string, status int, tag string) huma.Operation {
@@ -192,97 +172,4 @@ func registerInternal(api huma.API, d *Deps) {
 			}{agent}, nil
 		})
 
-	registerRuns(api, d)
-}
-
-type RunPath struct {
-	Bearer
-	RunID string `path:"run_id"`
-}
-
-func registerRuns(api huma.API, d *Deps) {
-	run := func(ctx context.Context, in RunPath) (*routines.RunRecord, error) {
-		r, err := routines.RunFor(ctx, d.DB, d.Protocol.Secret, in.RunID, in.token())
-		if err != nil {
-			return nil, err
-		}
-		if r == nil {
-			return nil, apierr.New(403, "INVALID_RUNTIME_TOKEN", "运行令牌无效。")
-		}
-		return r, nil
-	}
-
-	huma.Register(api, internalOp("listRuns", http.MethodGet, "/internal/v1/routine-runs/{run_id}/runs",
-		"The routine's earlier runs, newest first", 200, "routine runs"),
-		func(ctx context.Context, in *struct {
-			RunPath
-			Before time.Time `query:"before" doc:"A run's started_at, to page back."`
-			Q      string    `query:"q" doc:"Runs whose report or handoff mention this."`
-			Limit  int       `query:"limit" default:"10"`
-		}) (*body[[]routines.RunSummary], error) {
-			r, err := run(ctx, in.RunPath)
-			if err != nil {
-				return nil, err
-			}
-			var before *time.Time
-			if !in.Before.IsZero() {
-				before = &in.Before
-			}
-			runs, err := routines.ListRuns(ctx, d.DB, r, before, in.Q, in.Limit)
-			if err != nil {
-				return nil, err
-			}
-			return &body[[]routines.RunSummary]{runs}, nil
-		})
-
-	huma.Register(api, internalOp("getRun", http.MethodGet, "/internal/v1/routine-runs/{run_id}/runs/{other_id}",
-		"One of the routine's runs in full", 200, "routine runs"),
-		func(ctx context.Context, in *struct {
-			RunPath
-			OtherID string `path:"other_id"`
-		}) (*body[routines.RunSummary], error) {
-			r, err := run(ctx, in.RunPath)
-			if err != nil {
-				return nil, err
-			}
-			other, err := routines.GetRun(ctx, d.DB, r, in.OtherID)
-			if err != nil {
-				return nil, err
-			}
-			return &body[routines.RunSummary]{*other}, nil
-		})
-
-	huma.Register(api, internalOp("finishRun", http.MethodPost, "/internal/v1/routine-runs/{run_id}/finish",
-		"End the run with its report (null: nothing new) and a handoff for the next run", 200, "routine runs"),
-		func(ctx context.Context, in *struct {
-			RunPath
-			Body FinishIn
-		}) (*body[RunStatus], error) {
-			r, err := run(ctx, in.RunPath)
-			if err != nil {
-				return nil, err
-			}
-			status, err := routines.Finish(ctx, d.DB, r, in.Body.Report, in.Body.Handoff)
-			if err != nil {
-				return nil, err
-			}
-			return &body[RunStatus]{RunStatus{status}}, nil
-		})
-
-	huma.Register(api, internalOp("completeRun", http.MethodPost, "/internal/v1/routine-runs/{run_id}/complete",
-		"The runtime is done; without a finish, its last message is the report", 200, "routine runs"),
-		func(ctx context.Context, in *struct {
-			RunPath
-			Body CompleteIn
-		}) (*body[RunStatus], error) {
-			r, err := run(ctx, in.RunPath)
-			if err != nil {
-				return nil, err
-			}
-			status, err := routines.Complete(ctx, d.DB, r, in.Body.Completed, in.Body.Message, in.Body.Error)
-			if err != nil {
-				return nil, err
-			}
-			return &body[RunStatus]{RunStatus{status}}, nil
-		})
 }

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    // axp-plugins, which the images run while they are built.
+    "build:linux-amd64": {
+      "inputs": [
+        "$TURBO_ROOT$/go.work",
+        "$TURBO_ROOT$/scripts/build/go.sh",
+        "go.mod",
+        "go.sum",
+        "**/*.go",
+        "!**/*_test.go"
+      ]
+    },
+    "build:linux-arm64": {
+      "inputs": [
+        "$TURBO_ROOT$/go.work",
+        "$TURBO_ROOT$/scripts/build/go.sh",
+        "go.mod",
+        "go.sum",
+        "**/*.go",
+        "!**/*_test.go"
+      ]
+    },
+    "lint": { "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/go.work"] },
+    // The tests compile the repository's plugins.
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/go.work",
+        "$TURBO_ROOT$/apps/agent-runtime/plugins/**",
+        "$TURBO_ROOT$/apps/agent-runtime/codex/**"
+      ]
+    }
+  }
+}

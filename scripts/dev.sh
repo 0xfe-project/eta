@@ -8,8 +8,9 @@ Usage: scripts/dev.sh [--port PORT]
 Starts the development stack. Each instance uses a block of consecutive
 ports: gateway PORT (open this one), control plane PORT+1, internal runtime
 API PORT+2, web PORT+3, LLM gateway PORT+4, runtime gateway PORT+5, memory
-service PORT+6, forge service PORT+7 and the agenvo relay PORT+8 (HTTPS with
-a self-signed certificate, for remote computers).
+service PORT+6, forge service PORT+7, the agenvo relay PORT+8 (HTTPS with
+a self-signed certificate, for remote computers) and the routine service
+PORT+9.
 
   --port PORT   Use exactly this gateway port; fail if any port of its block is taken.
                 Also settable as AXP_DEV_PORT.
@@ -103,7 +104,7 @@ port_reserved() {
 source deploy/ports.env
 production_ports=" $AXP_PROD_HTTP_PORT $AXP_PROD_HTTPS_PORT $AXP_PROD_REGISTRY_PORT $AXP_PROD_OBSERVE_PORT $AXP_PROD_RELAY_PORT "
 
-BLOCK_SIZE=9
+BLOCK_SIZE=10
 
 block_free() {
   local port
@@ -142,6 +143,7 @@ export AXP_LLM_PORT="$((web_port + 4))"
 export AXP_RUNTIME_GATEWAY_PORT="$((web_port + 5))"
 export AXP_MEMORY_PORT="$((web_port + 6))"
 export AXP_FORGE_PORT="$((web_port + 7))"
+export AXP_ROUTINES_PORT="$((web_port + 9))"
 # Services listen on loopback, which runtime containers cannot reach; the
 # runtime gateway alone listens on the runtime network's gateway address (its
 # subnet is fixed in development). As in production, the browser and runtimes
@@ -160,6 +162,8 @@ export AXP_UPSTREAM_MEMORY="$AXP_MEMORY_ADDR"
 export AXP_FORGE_ADDR="127.0.0.1:$AXP_FORGE_PORT"
 export AXP_UPSTREAM_FORGE="$AXP_FORGE_ADDR"
 export AXP_FORGE_URL="http://$AXP_FORGE_ADDR"
+export AXP_ROUTINES_ADDR="127.0.0.1:$AXP_ROUTINES_PORT"
+export AXP_UPSTREAM_ROUTINES="$AXP_ROUTINES_ADDR"
 export AXP_RELAY_PORT="$((web_port + 8))"
 
 # Instances share the runtime network; only their ports differ.
@@ -267,14 +271,14 @@ docker rm -f "$gateway" >/dev/null 2>&1 || true
 gateway_env=""
 for name in AXP_GATEWAY_BIND AXP_GATEWAY_PORT AXP_RUNTIME_GATEWAY_BIND AXP_RUNTIME_GATEWAY_PORT \
   AXP_UPSTREAM_WEB AXP_UPSTREAM_API AXP_UPSTREAM_INTERNAL AXP_UPSTREAM_LLM AXP_UPSTREAM_MEMORY \
-  AXP_UPSTREAM_FORGE AXP_UPSTREAM_OBSERVE; do
+  AXP_UPSTREAM_FORGE AXP_UPSTREAM_ROUTINES AXP_UPSTREAM_OBSERVE; do
   gateway_env+=" -e $name"
 done
 
 # Every process stops on Ctrl+C or when any of them exits.
 exec node node_modules/concurrently/dist/bin/concurrently.js --kill-others \
-  --names gateway,control-plane,internal,controller,llm,memory,forge,relay,web \
-  --prefix-colors gray,blue,yellow,cyan,magenta,red,white,gray,green \
+  --names gateway,control-plane,internal,controller,llm,memory,forge,routines,relay,web \
+  --prefix-colors gray,blue,yellow,cyan,magenta,red,white,blue,gray,green \
   "docker run --rm --name $gateway --network host$gateway_env -v $ROOT_DIR/apps/gateway:/etc/axp-gateway:ro caddy:2.11.7-alpine caddy run --config /etc/axp-gateway/Caddyfile" \
   "OTEL_SERVICE_NAME=control-plane-api bun run dev:control-plane" \
   "OTEL_SERVICE_NAME=control-plane-internal bun run dev:internal" \
@@ -282,5 +286,6 @@ exec node node_modules/concurrently/dist/bin/concurrently.js --kill-others \
   "bun run dev:llm-gateway" \
   "bun run dev:memory-service" \
   "bun run dev:forge-service" \
+  "bun run dev:routine-service" \
   "AGENVO_ADMIN_SECRET=\$AXP_RELAY_ADMIN_SECRET node apps/relay/out/server/node_modules/@agenvo/server/dist/cli.js serve --config $relay_dir/relay.json" \
   "bun run dev:web"

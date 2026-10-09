@@ -23,6 +23,17 @@
         ".python-version"
       ]
     },
+    // The image compiles its plugins with axp-plugins.
+    "image:linux-amd64": {
+      "dependsOn": ["$TURBO_EXTENDS$", "@axp/plugins-go#build:linux-amd64"]
+    },
+    "image:linux-arm64": {
+      "dependsOn": ["$TURBO_EXTENDS$", "@axp/plugins-go#build:linux-arm64"]
+    },
+    // The tests compile the plugins with packages/plugins-go.
+    "test": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/plugins-go/**"]
+    },
     "lint": {
       "inputs": [
         "$TURBO_DEFAULT$",
