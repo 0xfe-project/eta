@@ -14,6 +14,10 @@ import { toast } from "sonner";
 import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useForget, useMemories, useRemember } from "@/queries/memory";
@@ -224,15 +228,19 @@ function MemoryList({
   );
 }
 
-/** The current agent's long-term memories: browse, search, add and forget. */
-export function MemoryView() {
-  const {
-    current,
-    loaded,
-    error: agentsError,
-    retry,
-    openEditor,
-  } = useAgents();
+/**
+ * An agent's long-term memories: browse, search, add and forget. Shows the
+ * given agent (else the newest); `onAgentChange` adds a switcher.
+ */
+export function MemoryView({
+  agentId,
+  onAgentChange,
+}: {
+  agentId: string | undefined;
+  onAgentChange?: (agentId: string) => void;
+}) {
+  const { agents, loaded, error: agentsError, retry, openEditor } = useAgents();
+  const current = agents.find((agent) => agent.id === agentId) ?? agents.at(-1);
   const [search, setSearch] = useState("");
   const query = useDebounced(search.trim());
   const { data, error, isPending, isFetching, refetch } = useMemories(
@@ -262,10 +270,26 @@ export function MemoryView() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="min-w-0 truncate text-sm font-semibold">
-          {current.name} 的记忆
+        <h2 className="flex min-w-0 items-center gap-1.5 text-sm font-semibold">
+          {onAgentChange ? (
+            <NativeSelect
+              size="sm"
+              aria-label="智能体"
+              value={current.id}
+              onChange={(e) => onAgentChange(e.target.value)}
+            >
+              {agents.map((agent) => (
+                <NativeSelectOption key={agent.id} value={agent.id}>
+                  {agent.name}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          ) : (
+            <span className="truncate">{current.name}</span>
+          )}
+          <span className="shrink-0">的记忆</span>
           {data ? (
-            <span className="ml-1.5 font-normal tabular-nums text-muted-foreground">
+            <span className="font-normal tabular-nums text-muted-foreground">
               {data.length}
             </span>
           ) : null}

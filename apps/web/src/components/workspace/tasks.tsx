@@ -742,13 +742,13 @@ export function FeedbackDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { agents, current } = useAgents();
+  const { agents } = useAgents();
   const send = useSendMessage();
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
   const [agentId, setAgentId] = useState<string>("");
   const [mode, setMode] = useState<"queue" | "steer">("queue");
   const [note, setNote] = useState("");
-  const chosen = agentId || current?.id || "";
+  const chosen = agentId || agents.at(-1)?.id || "";
   const text = [
     `请看一下任务 #${task.number}「${task.title}」，读它的描述和时间线（get_task），然后用 comment_task 在任务下给出你的反馈。`,
     note.trim(),

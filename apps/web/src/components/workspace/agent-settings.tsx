@@ -9,7 +9,6 @@ import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Empty, LoadError, Loading } from "@/components/states";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -25,7 +24,7 @@ import { DeleteAgentDialog } from "./agent-editor";
 import { AgentAvatar, AgentStatus } from "./agent-identity";
 import { useAgents } from "./use-agents";
 
-function AgentRow({ agent, current }: { agent: Agent; current: boolean }) {
+function AgentRow({ agent }: { agent: Agent }) {
   const { openEditor } = useAgents();
   const restart = useRestartAgent();
   const [confirming, setConfirming] = useState(false);
@@ -37,12 +36,7 @@ function AgentRow({ agent, current }: { agent: Agent; current: boolean }) {
       : (availability.model?.display_name ?? agent.model);
 
   return (
-    <li
-      className={cn(
-        "flex items-start gap-3 px-3 py-2.5 transition-colors duration-[60ms] ease-linear",
-        current ? "bg-accent" : "hover:bg-muted/60",
-      )}
-    >
+    <li className="flex items-start gap-3 px-3 py-2.5 transition-colors duration-[60ms] ease-linear hover:bg-muted/60">
       <AgentAvatar agent={agent} />
       <button
         type="button"
@@ -52,7 +46,6 @@ function AgentRow({ agent, current }: { agent: Agent; current: boolean }) {
       >
         <span className="flex max-w-full items-center gap-2">
           <span className="truncate text-sm font-medium">{agent.name}</span>
-          {current ? <Badge variant="secondary">当前</Badge> : null}
           <span className="text-xs">
             <AgentStatus status={agent.status} />
           </span>
@@ -136,7 +129,7 @@ function AgentRow({ agent, current }: { agent: Agent; current: boolean }) {
 }
 
 export function AgentSettings() {
-  const { agents, current, loaded, error, retry, openEditor } = useAgents();
+  const { agents, loaded, error, retry, openEditor } = useAgents();
 
   if (error && !loaded)
     return <LoadError what="智能体" error={error} onRetry={retry} />;
@@ -173,11 +166,7 @@ export function AgentSettings() {
       </div>
       <ul aria-label="智能体列表" className="divide-y border">
         {agents.map((agent) => (
-          <AgentRow
-            key={agent.id}
-            agent={agent}
-            current={agent.id === current?.id}
-          />
+          <AgentRow key={agent.id} agent={agent} />
         ))}
       </ul>
     </div>

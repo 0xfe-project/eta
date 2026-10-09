@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { usePendingInteractions } from "@/queries/chat";
-import { CapabilitiesView } from "./capabilities-view";
 import { Inbox } from "./inbox";
 import { MemoryView } from "./memory-view";
 import { Overview } from "./overview";
@@ -13,6 +12,7 @@ import { useRoutineNav } from "./routine-nav";
 import { Routines } from "./routines";
 import { useTaskNav } from "./task-nav";
 import { Tasks } from "./tasks";
+import { useAgents } from "./use-agents";
 import { hasPage, sectionPaths, views } from "./workspace-search";
 
 /** Opens the full window where the side panel is: its tab, task or routine. */
@@ -55,6 +55,7 @@ export function WorkspacePanel({
   className?: string;
 }) {
   const pending = usePendingInteractions().length;
+  const { current } = useAgents();
   return (
     <Tabs
       id="workspace-panel"
@@ -89,8 +90,7 @@ export function WorkspacePanel({
             {value === "overview" ? <Overview /> : null}
             {value === "tasks" ? <Tasks /> : null}
             {value === "routines" ? <Routines /> : null}
-            {value === "memory" ? <MemoryView /> : null}
-            {value === "capabilities" ? <CapabilitiesView /> : null}
+            {value === "memory" ? <MemoryView agentId={current?.id} /> : null}
             {value === "inbox" ? <Inbox /> : null}
           </TabsContent>
         ))}
