@@ -598,6 +598,31 @@ func TestTakenCommandKeepsTheRuntimeThroughAConfigChange(t *testing.T) {
 	expect(t, c.replyStatus(sent), "completed")
 }
 
+// A finished turn's snapshot uploads after the turn is reported: the
+// runtime is not replaced (or stopped) until the snapshot is reported.
+func TestARuntimeUploadingItsSnapshotIsNotReplaced(t *testing.T) {
+	c := newControl(t)
+	sent, r, command := c.running()
+	old, _ := c.liveInstance(c.agent.ID)
+	live := func() bool {
+		return scalar[bool](c.env, "SELECT ended_at IS NULL FROM runtime_instance WHERE id = $1", old)
+	}
+	r.turnStarted(command, "t")
+	r.turnCompletedUploading(command, "completed")
+	expect(t, c.replyStatus(sent), "completed")
+	c.patch("/agents/"+c.agent.ID, map[string]any{"name": "审查员"})
+	c.tick()
+	if !live() {
+		t.Fatal("replaced while its snapshot was uploading")
+	}
+	r.events(event{"snapshot.failed", map[string]any{"reason": "SNAPSHOT_FAILED"}})
+	c.tick()
+	if live() {
+		t.Fatal("not replaced once the snapshot was reported")
+	}
+	expect(t, scalar[string](c.env, "SELECT end_reason FROM runtime_instance WHERE id = $1", old), "CONFIG_CHANGED")
+}
+
 func TestTakenCommandKeepsAnIdleRuntime(t *testing.T) {
 	c := newControl(t)
 	c.controller.IdleAfter = time.Nanosecond
