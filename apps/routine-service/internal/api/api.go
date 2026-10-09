@@ -80,6 +80,12 @@ func New(d *Deps) *httpapi.API {
 			return &httpapi.Body[RoutineList]{Body: RoutineList{list}}, nil
 		})
 
+	huma.Register(api, op("markRoutineSeen", http.MethodPost, "/routines/{routine_id}/seen",
+		"The user saw the routine's finished runs: their reports and failures no longer wait for them", 204),
+		func(ctx context.Context, in *RoutinePath) (*struct{}, error) {
+			return nil, s.MarkSeen(ctx, d.DB, in.RoutineID)
+		})
+
 	huma.Register(api, op("getRoutine", http.MethodGet, "/routines/{routine_id}",
 		"A routine with its briefs, and its recent runs with their reports and feedback", 200),
 		func(ctx context.Context, in *RoutinePath) (*httpapi.Body[routines.Routine], error) {

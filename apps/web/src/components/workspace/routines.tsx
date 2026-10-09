@@ -13,7 +13,7 @@ import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlayIcon } from "@phosphor-icons/react/Play";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Markdown } from "@/components/markdown";
 import { Empty, LoadError, Loading } from "@/components/states";
@@ -30,6 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
   useDeleteRoutine,
+  useMarkRoutineSeen,
   useRestoreBrief,
   useRoutine,
   useRoutines,
@@ -447,6 +448,12 @@ export function RoutineDetail({
   const [brief] = routine.briefs;
   const [expanded, setExpanded] = useState(false);
   const running = routine.runs[0]?.status === "running";
+  // Opened: its reports and failures so far are seen.
+  const finished = routine.runs.find((run) => run.finished_at)?.id;
+  const { mutate: markSeen } = useMarkRoutineSeen();
+  useEffect(() => {
+    if (finished) markSeen(routine.id);
+  }, [routine.id, finished, markSeen]);
   return (
     <div className="space-y-4">
       <div>

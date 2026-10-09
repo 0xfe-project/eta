@@ -99,6 +99,24 @@ function useRoutineMutation<T, R = unknown>(call: (input: T) => Promise<R>) {
   });
 }
 
+/**
+ * Records that the user saw the routine's finished runs (they opened it):
+ * its new reports and failures stop waiting for them.
+ */
+export function useMarkRoutineSeen() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      unwrap(
+        routinesApi.POST("/api/routines/v1/routines/{routine_id}/seen", {
+          params: { path: { routine_id: id } },
+        }),
+      ),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: keys.all, exact: true }),
+  });
+}
+
 export function useSetRoutineEnabled() {
   return useRoutineMutation(
     ({ id, enabled }: { id: string; enabled: boolean }) =>

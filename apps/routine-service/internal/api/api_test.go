@@ -440,7 +440,30 @@ func TestListingTakesTheSameQueriesForAnyNumberOfRoutines(t *testing.T) {
 		e.runNow(e.create(news()), finishCall("# 又一", ""))
 	}
 	expect(t, queries(), one)
-	expect(t, one, 3)
+	expect(t, one, 4)
+}
+
+// A report or a failure the user has not seen waits for them until they
+// open the routine.
+func TestUnseenRunsWaitForTheUser(t *testing.T) {
+	e := newEnv(t)
+	routine := e.create(news())
+	e.runNow(routine, finishCall("# 今日要闻", ""))
+	e.llm.script = func(*model.LLMRequest, int) (*genai.Content, error) { return nil, errors.New("down") }
+	e.post("/routines/"+routine.ID+"/run", nil)
+	e.tick()
+	unseen := func() (int64, int64) {
+		var list RoutineList
+		e.do(http.MethodGet, "/routines", nil).json(t, &list)
+		return list.Routines[0].UnseenReports, list.Routines[0].UnseenFailures
+	}
+	if reports, failures := unseen(); reports != 1 || failures != 1 {
+		t.Fatalf("unseen %d reports, %d failures", reports, failures)
+	}
+	expect(t, e.post("/routines/"+routine.ID+"/seen", nil).status, 204)
+	if reports, failures := unseen(); reports != 0 || failures != 0 {
+		t.Fatalf("still unseen %d, %d", reports, failures)
+	}
 }
 
 func TestNothingNew(t *testing.T) {

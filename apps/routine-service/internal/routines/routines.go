@@ -55,6 +55,7 @@ type runRow struct {
 	Report     *string    `db:"report"`
 	Handoff    *string    `db:"handoff"`
 	Error      *string    `db:"error"`
+	SeenAt     *time.Time `db:"seen_at"`
 }
 
 // title is the report's first heading, or its first line.
@@ -150,6 +151,9 @@ type RoutineSummary struct {
 	NextRunAt *jsontime.Time `json:"next_run_at" nullable:"true"`
 	Runs      []ListedRun    `json:"runs" doc:"The last runs, newest first."`
 	Revising  bool           `json:"revising" doc:"Feedback on one of its runs is being made into a new brief."`
+	// Finished runs the user has not seen (MarkSeen).
+	UnseenReports  int64 `json:"unseen_reports" doc:"Reports the user has not seen yet."`
+	UnseenFailures int64 `json:"unseen_failures" doc:"Failed runs the user has not seen yet."`
 }
 
 type Routine struct {
@@ -273,7 +277,7 @@ func (s *Service) Get(ctx context.Context, db pg.DB, id string) (*Routine, error
 	return public(ctx, db, r)
 }
 
-// List is every routine in summary: three queries however many there are.
+// List is every routine in summary: four queries however many there are.
 func (s *Service) List(ctx context.Context, db pg.DB) ([]RoutineSummary, error) {
 	rows, err := pg.All[routineRow](ctx, db, "SELECT * FROM routine ORDER BY created_at")
 	if err != nil {
@@ -303,6 +307,16 @@ func (s *Service) List(ctx context.Context, db pg.DB) ([]RoutineSummary, error) 
 	if err != nil {
 		return nil, err
 	}
+	unseen, err := pg.All[struct {
+		RoutineID string `db:"routine_id"`
+		Reports   int64  `db:"reports"`
+		Failures  int64  `db:"failures"`
+	}](ctx, db, `SELECT routine_id, count(*) FILTER (WHERE status = 'sent') AS reports,
+		count(*) FILTER (WHERE status = 'failed') AS failures
+		FROM routine_run WHERE seen_at IS NULL AND finished_at IS NOT NULL GROUP BY routine_id`)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]RoutineSummary, len(rows))
 	index := map[string]*RoutineSummary{}
 	for i, r := range rows {
@@ -325,7 +339,23 @@ func (s *Service) List(ctx context.Context, db pg.DB) ([]RoutineSummary, error) 
 			r.Revising = true
 		}
 	}
+	for _, u := range unseen {
+		if r := index[u.RoutineID]; r != nil {
+			r.UnseenReports, r.UnseenFailures = u.Reports, u.Failures
+		}
+	}
 	return out, nil
+}
+
+// MarkSeen records that the user saw the routine's finished runs.
+func (s *Service) MarkSeen(ctx context.Context, db pg.DB, id string) error {
+	r, err := get(ctx, db, id, false)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(ctx, `UPDATE routine_run SET seen_at = $2 WHERE routine_id = $1 AND seen_at IS NULL
+		AND finished_at IS NOT NULL`, r.ID, pg.Now())
+	return err
 }
 
 // nextRunAt is when an enabled routine runs next.

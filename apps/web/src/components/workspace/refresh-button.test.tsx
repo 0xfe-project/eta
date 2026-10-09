@@ -78,10 +78,9 @@ async function render(page: "tasks" | "routines", panel = false) {
   const client = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity, retry: false } },
   });
-  client.setQueryData(
-    [page],
-    page === "tasks" ? { tasks: [task], assignees: [] } : [routine],
-  );
+  // Both lists: the panel's 待处理 badge reads both.
+  client.setQueryData(["tasks"], { tasks: [task], assignees: [] });
+  client.setQueryData(["routines"], [routine]);
   client.setQueryData(["tasks", "t1"], detail);
   client.setQueryData(["routines", "r1"], routine);
   client.setQueryData(["chat"], { agents: [], interactions: [], messages: [] });
@@ -213,7 +212,8 @@ describe.each([false, true])("refresh (sidebar: %s)", (panel) => {
       refresh(container).click();
       await settle();
     });
-    expect(fetch).toHaveBeenCalledTimes(panel ? 1 : 2);
+    // The detail and the list: the panel's 待处理 badge keeps the list on.
+    expect(fetch).toHaveBeenCalledTimes(2);
     expect(
       fetch.mock.calls.every(
         ([request]) => (request as Request).method === "GET",
@@ -244,7 +244,8 @@ describe.each([false, true])("refresh (sidebar: %s)", (panel) => {
       refresh(container).click();
       await settle();
     });
-    expect(fetch).toHaveBeenCalledTimes(panel ? 1 : 2);
+    // The detail and the list: the panel's 待处理 badge keeps the list on.
+    expect(fetch).toHaveBeenCalledTimes(2);
     expect(
       fetch.mock.calls.every(
         ([request]) => (request as Request).method === "GET",

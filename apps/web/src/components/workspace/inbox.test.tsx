@@ -31,8 +31,13 @@ const interaction = (id: string, agentId: string, status = "pending") => ({
 });
 
 async function render(snapshot: object) {
-  const queryClient = new QueryClient();
+  // The tasks and routines that wait for the user too: none.
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { staleTime: Infinity } },
+  });
   queryClient.setQueryData(["chat"], snapshot);
+  queryClient.setQueryData(["tasks"], { tasks: [], assignees: [] });
+  queryClient.setQueryData(["routines"], []);
   const router = createRouter({
     routeTree: createRootRoute({
       component: () => <Inbox />,
@@ -103,7 +108,7 @@ describe("Inbox", () => {
     expect(request.url).toContain("/api/v1/chat/interactions/i1/answer");
     expect(request.headers.get("Idempotency-Key")).toBeTruthy();
     expect(await request.json()).toEqual({ value: "deny" });
-    expect(container.textContent).toContain("没有待确认的请求");
+    expect(container.textContent).toContain("没有等你处理的事");
   });
 
   it("opens the agent's conversation", async () => {
