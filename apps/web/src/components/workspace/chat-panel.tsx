@@ -711,15 +711,24 @@ export function ChatPanel({
     <section
       aria-label="对话"
       data-session-theme={theme}
-      className="relative flex h-full min-h-0 flex-col bg-[var(--terminal-background)]"
+      className="relative isolate flex h-full min-h-0 flex-col bg-[var(--terminal-background)]"
     >
-      {head}
       <div
         ref={transcript.scrollRef}
         onScroll={transcript.onScroll}
-        className={`min-h-0 flex-1 overflow-y-auto pt-2 font-mono text-[13px] leading-[1.6] ${session.textClass}`}
+        className="min-h-0 flex-1 overflow-y-auto"
       >
-        <div ref={transcript.contentRef} className="space-y-3">
+        {/* Floats over the transcript, which scrolls on beneath it and stays
+            clickable around it; only the buttons catch. */}
+        {head ? (
+          <div className="pointer-events-none sticky top-0 z-10 [&_button]:pointer-events-auto">
+            {head}
+          </div>
+        ) : null}
+        <div
+          ref={transcript.contentRef}
+          className={`space-y-3 pt-2 font-mono text-[13px] leading-[1.6] ${session.textClass}`}
+        >
           {/* Stays put while a page loads, so nothing shifts until it lands. */}
           {hasOlder ? (
             <div
