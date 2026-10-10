@@ -28,6 +28,7 @@ export type WorkspaceState = z.infer<typeof workspaceSchema>;
 export type SettingsSection =
   | "agents"
   | "providers"
+  | "connections"
   | "computers"
   | "appearance"
   | "logs";
