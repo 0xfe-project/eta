@@ -93,7 +93,7 @@ bun run --cwd apps/web typecheck
 
 ## 工作台
 
-首页左侧为聊天，顶部居中是当前智能体的头像（点击切换），右上角是设置；右侧是浮起的概览 / 任务 / 定时 / 记忆 / 能力 / 确认面板，与窗口边缘留出间距；全窗口工作台在 `/workspace`（见「页面与路由」）。源码在 `src/components/workspace/`。
+首页左侧为聊天，顶部居中是当前智能体的头像（点击切换），右上角是设置；右侧是浮起的概览 / 任务 / 定时 / 记忆 / 确认面板，与窗口边缘留出间距；全窗口工作台在 `/workspace`（见「页面与路由」）。源码在 `src/components/workspace/`。
 
 聊天使用 brainless 消息与输入组件，默认 Claude 外观，支持 Enter 发送。消息经控制面交给当前智能体的 runtime，回复经 SSE 流式到达，对话记录在控制面（见[聊天运行时](../../docs/architecture/chat-runtime.md)）。设置 → 外观可以切换 Claude / Codex / Grok 外观，切换保留消息与草稿。`localStorage` 只放这个浏览器自己的东西，都用 Zod 校验：`axp.workspace.v1` 是界面状态（选中的智能体、外观、字体、上次用的模型、任务页布局），`axp.chat.v1` 是草稿和还没送达的消息。
 
@@ -121,11 +121,12 @@ import { GrokThought } from "@/components/brainless/grok/grok-thought";
 
 ## 页面与路由
 
-- `/`：聊天与右侧面板（概览仪表盘、任务、定时、记忆、能力、确认）。面板右上角的「在全窗口中打开」进入 `/workspace` 下当前标签对应的位置（概览进入任务）。手机上通过「对话 / 工作区」切换。
+- `/`：聊天与右侧面板（概览仪表盘、任务、定时、记忆、确认）。面板右上角的「在全窗口中打开」进入 `/workspace` 下当前标签对应的位置（概览进入任务）。手机上通过「对话 / 工作区」切换。
 - `/workspace`：全窗口工作台，传统应用布局。宽屏（`lg` 起）左侧边栏切换分区并列出智能体（点击回到 `/` 与它对话），窄屏收成顶部图标栏。外壳在 `app-shell.tsx`，挂在 `/workspace` 布局路由上；`/workspace` 本身跳到任务。
 - `/workspace/tasks`：任务列表（按状态分组，点状态图标直接改）或看板（拖动卡片改状态），可按指派过滤；布局和过滤记在浏览器里（`axp.workspace.v1`），下次打开保持上次的选择；`?task=<id>` 打开任务，正文和时间线在左、属性在右；`?task=new` 新建。
 - `/workspace/routines`：列表在左、定时任务详情或报告在右，参数同面板（`routine`、`run`、`edit`）。
-- `/workspace/memory`、`/workspace/capabilities`：对应面板内容的全窗口版本。
+- `/workspace/memory`：对应面板内容的全窗口版本。
+- 设置是首页和 `/workspace` 共用的弹层；“连接”分区管理需要用户自己配置的 GitHub（App 向导）和 Grok（LLM 网关的 xAI 账号，grok 插件也用它，所以不在“模型服务”里）。`?settings=<分区>` 在任意页面打开对应分区，GitHub 的回调用 `/?settings=connections&github=…`；旧的 `/workspace/capabilities` 带参数跳到这里。
 - `/workspace/inbox`：确认请求，形态像通知：按天分组，待处理的标记出来、就地答复，之前的显示当时的选择或已过期；`?filter=pending` 只看待处理。历史来自 `GET /api/v1/chat/interactions`，并由聊天事件流保持实时。
 
 分区和面板共用同一套组件与 URL 参数（`task-nav.ts`、`routine-nav.ts`、`workspace-search.ts`），都支持直接访问、刷新和浏览器历史导航。

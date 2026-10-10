@@ -3,10 +3,12 @@ import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
 import { ChartLineIcon } from "@phosphor-icons/react/ChartLine";
 import { DesktopIcon } from "@phosphor-icons/react/Desktop";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
+import { LinkIcon } from "@phosphor-icons/react/Link";
 import { PaletteIcon } from "@phosphor-icons/react/Palette";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { useTheme } from "next-themes";
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { useNeedsAttention } from "@/queries/llm";
 import { AgentSettings } from "./agent-settings";
 import { ComputerSettings } from "./computer-settings";
+import { ConnectionSettings } from "./connection-settings";
 import { ProviderSettings } from "./provider-settings";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -47,6 +50,7 @@ const sections: {
 }[] = [
   { value: "agents", label: "智能体", icon: RobotIcon },
   { value: "providers", label: "模型服务", icon: PlugsConnectedIcon },
+  { value: "connections", label: "连接", icon: LinkIcon },
   { value: "computers", label: "远程电脑", icon: DesktopIcon },
   { value: "appearance", label: "外观", icon: PaletteIcon },
   { value: "logs", label: "日志", icon: ChartLineIcon },
@@ -212,10 +216,33 @@ export function SettingsButton({ className }: { className?: string }) {
   );
 }
 
+/**
+ * `?settings=<section>` opens settings there, once: how GitHub's redirects
+ * and old links reach 连接. The parameter is dropped from the address.
+ */
+function useSettingsLink() {
+  const setSettings = useWorkspaceStore((s) => s.setSettings);
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("settings")) return;
+    const section = sections.find(
+      ({ value }) => value === url.searchParams.get("settings"),
+    );
+    url.searchParams.delete("settings");
+    window.history.replaceState(window.history.state, "", url);
+    if (section) setSettings({ open: true, section: section.value });
+  }, [setSettings]);
+}
+
 export function SettingsDialog() {
   const settings = useWorkspaceStore((s) => s.settings);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
-  const attention = useNeedsAttention();
+  // Grok's account lives under 连接, the other providers' under 模型服务.
+  const attention: Partial<Record<SettingsSection, boolean>> = {
+    providers: useNeedsAttention(false),
+    connections: useNeedsAttention(true),
+  };
+  useSettingsLink();
 
   return (
     <Dialog
@@ -232,7 +259,7 @@ export function SettingsDialog() {
         <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
           <nav
             aria-label="设置分类"
-            className="flex shrink-0 gap-1 border-b p-2 sm:w-44 sm:flex-col sm:border-r sm:border-b-0"
+            className="flex shrink-0 gap-1 overflow-x-auto border-b p-2 sm:w-44 sm:flex-col sm:border-r sm:border-b-0"
           >
             {sections.map(({ value, label, icon: Icon }) => (
               <button
@@ -243,14 +270,14 @@ export function SettingsDialog() {
                   setSettings((state) => ({ ...state, section: value }))
                 }
                 className={cn(
-                  "flex items-center gap-2 px-2 py-2 text-sm text-muted-foreground transition-colors duration-[60ms] ease-linear outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring",
+                  "flex shrink-0 items-center gap-2 px-2 py-2 text-sm whitespace-nowrap text-muted-foreground transition-colors duration-[60ms] ease-linear outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring",
                   settings.section === value &&
                     "bg-accent font-medium text-accent-foreground",
                 )}
               >
                 <Icon aria-hidden="true" className="size-4" />
                 {label}
-                {value === "providers" && attention ? (
+                {attention[value] ? (
                   <>
                     <AttentionDot className="ml-auto" />
                     <span className="sr-only">（有账号需要处理）</span>
@@ -264,6 +291,8 @@ export function SettingsDialog() {
               <AgentSettings />
             ) : settings.section === "providers" ? (
               <ProviderSettings />
+            ) : settings.section === "connections" ? (
+              <ConnectionSettings />
             ) : settings.section === "computers" ? (
               <ComputerSettings />
             ) : settings.section === "logs" ? (

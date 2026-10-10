@@ -5,7 +5,6 @@ import { ChatsCircleIcon } from "@phosphor-icons/react/ChatsCircle";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
-import { PuzzlePieceIcon } from "@phosphor-icons/react/PuzzlePiece";
 import { Link } from "@tanstack/react-router";
 import { Empty, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -28,7 +27,6 @@ const sections = [
   { to: "/workspace/tasks", label: "任务", icon: ListChecksIcon },
   { to: "/workspace/routines", label: "定时", icon: ClockIcon },
   { to: "/workspace/memory", label: "记忆", icon: BrainIcon },
-  { to: "/workspace/capabilities", label: "能力", icon: PuzzlePieceIcon },
 ] as const;
 
 /**

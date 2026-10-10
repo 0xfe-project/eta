@@ -34,8 +34,9 @@ import (
 )
 
 const (
-	agentHeader  = "X-AXP-Agent-Id"
-	capabilities = "/workspace/capabilities"
+	agentHeader = "X-AXP-Agent-Id"
+	// Settings → 连接 on the home page.
+	connections = "/?settings=connections"
 )
 
 // New returns the service's handler.
@@ -159,7 +160,7 @@ func (s *server) manifest(w http.ResponseWriter, r *http.Request) {
 }
 
 // callback is GitHub sending the browser back after the App was created; the
-// browser goes on to the capabilities view, with what happened.
+// browser goes on to Settings → 连接, with what happened.
 func (s *server) callback(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	target := back("github", "created")
@@ -206,9 +207,9 @@ func (s *server) unauthorize(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// back is the capabilities page, told what happened.
+// back is Settings → 连接, told what happened.
 func back(key, value string) string {
-	return capabilities + "?" + url.Values{key: {value}}.Encode()
+	return connections + "&" + url.Values{key: {value}}.Encode()
 }
 
 // authorized is GitHub sending the browser back after the user authorized

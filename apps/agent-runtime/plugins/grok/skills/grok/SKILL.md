@@ -6,8 +6,8 @@ description: Generate or edit images and videos with Grok Imagine, and search th
 # Grok
 
 The `grok` tools call xAI through the LLM gateway, with the Grok account
-connected in the model settings. When no Grok account is connected they fail;
-tell the user to connect one under 模型服务.
+connected in AXP's settings under 连接. When no Grok account is connected they
+fail; tell the user to connect one under 设置 → 连接.
 
 - `image_generate` — generate an image from a prompt, or edit images by
   passing them as `image` / `images`. Save results into the workspace with
