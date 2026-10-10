@@ -52,6 +52,12 @@ Connector 只负责“凭据怎么进来”；连接列表、启停、删除统�
 
 Kamal 网络上的服务（不是 runtime）直接调用 `/v1`，不带 key，自己在 `X-AXP-Agent-Id` 里写明用量记在谁名下：网关只在 Kamal 网络和 runtime 网络上，runtime 网络上只有 runtime 网关连得到它，而 runtime 网关总会改写这个头。[定时任务](routines.md)服务用 ADK 的 `openaimodel`（Chat Completions）调用 `/v1`，以 `routine-<id>` 记账；Codex 和 Grok 两类模型的多轮工具调用都经它验证过（[#57](https://github.com/AkaraChen/axp/issues/57)）。
 
+### 用量
+
+账号的订阅窗口（`GET /api/llm/v1/usage`）只说明一个账号用了多少，不说明是谁用的。网关另外按“谁”记账（#101）：每个 `/v1` 请求的主体就是上面的 `X-AXP-Agent-Id`——聊天智能体的 id（记忆抽取经 memory-service 调用时也带这个智能体的 id，所以算在它头上）或 `routine-<id>`。CLIProxyAPI 对每个上游请求都把一条用量记录交给注册的用量插件（`sdk/cliproxy/usage`，与它自己的 `usage-statistics-enabled` 开关无关，配置里仍然关着它）；网关的插件（`internal/usage`）按小时累计（主体、账号、模型）的请求数、失败数和 token，存在状态目录的 `usage.json`，每分钟和退出时写一次，保留 30 天。
+
+`GET /api/llm/v1/usage/agents` 返回每个主体近 5 小时、24 小时、7 天的合计，以及近 7 天按模型、按账号的分布。Web 在智能体的设置里和定时任务的详情里各显示一行。
+
 ## control-plane 与 runtime
 
 - `Agent.model` 存目录中的模型 ID；创建、修改时校验存在性，修改模型与修改指令一样递增 `config_version`，空闲时重启 runtime。
