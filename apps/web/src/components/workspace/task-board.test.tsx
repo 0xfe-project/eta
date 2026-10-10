@@ -70,6 +70,7 @@ describe("task board with a task open", () => {
     useWorkspaceStore.getState().setWorkspace((workspace) => ({
       ...workspace,
       taskLayout: "list",
+      taskListWidth: undefined,
     }));
   });
 
@@ -77,10 +78,17 @@ describe("task board with a task open", () => {
     navigation.task = "t1";
     const container = await render();
     const list = container.querySelector('section[aria-label="任务列表"]')!;
-    // The list's column: hidden on phones, beside the task from md.
-    const pane = list.parentElement!;
-    expect(pane.className).toMatch(/(^| )hidden( |$)/);
-    expect(pane.className).toContain("md:flex");
+    // The list's column and the separator after it: hidden on phones,
+    // beside the task from md.
+    const pane = container.querySelector("[data-panel]")!;
+    expect(pane.contains(list)).toBe(true);
+    expect(pane.parentElement!.className).toContain(
+      "max-md:[&>[data-panel]:first-child]:hidden!",
+    );
+    const separator = container.querySelector('[role="separator"]')!;
+    expect(separator.getAttribute("aria-label")).toBe("调整任务列表宽度");
+    expect(separator.className).toContain("max-md:hidden");
+    expect(separator.previousElementSibling).toBe(pane);
     // The task is the page's one main, and its row in the list is marked.
     expect(container.querySelectorAll("main")).toHaveLength(1);
     expect(container.querySelector("main")!.textContent).toContain("任务说明");
@@ -106,10 +114,41 @@ describe("task board with a task open", () => {
     expect(useWorkspaceStore.getState().workspace.taskLayout).toBe("board");
   });
 
+  it("opens the list at its remembered width", async () => {
+    // happy-dom lays nothing out: two 500px panels around a 1px separator.
+    const offsetWidth = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "offsetWidth",
+    )!;
+    Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
+      configurable: true,
+      get(this: HTMLElement) {
+        if (this.hasAttribute("data-group")) return 1001;
+        if (this.hasAttribute("data-panel")) return 500;
+        return this.getAttribute("role") === "separator" ? 1 : 0;
+      },
+    });
+    cleanup.push(() =>
+      Object.defineProperty(HTMLElement.prototype, "offsetWidth", offsetWidth),
+    );
+    useWorkspaceStore.getState().setWorkspace((workspace) => ({
+      ...workspace,
+      taskListWidth: 400,
+    }));
+    navigation.task = "t1";
+    const container = await render();
+    const pane = container.querySelector<HTMLElement>("[data-panel]")!;
+    // Sizes are percentages of the group.
+    expect(Number(pane.style.flexGrow)).toBeCloseTo(40);
+  });
+
   it("is the whole page without a task", async () => {
     const container = await render();
     const main = container.querySelector("main#main")!;
-    expect(main.parentElement!.className).not.toContain("hidden");
+    expect(container.querySelector("[data-panel]")!.className).not.toContain(
+      "hidden",
+    );
+    expect(container.querySelector('[role="separator"]')).toBeNull();
     expect(main.querySelector('[aria-current="true"]')).toBeNull();
   });
 });
