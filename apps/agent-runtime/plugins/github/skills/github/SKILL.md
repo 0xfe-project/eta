@@ -23,8 +23,8 @@ under “连接”. `gh auth status` names who you act as:
 
 Commits are authored by the App's bot either way.
 
-Open pull requests with `gh pr create` or the `open_pull_request` tool; give
-the user the link.
+To open a pull request, push the branch and call `open_pull_request`, not
+`gh pr create`; give the user its link.
 
 If gh is not logged in, a tool says GitHub is not connected, or GitHub
 answers that a repository is not found, GitHub is not connected yet or the

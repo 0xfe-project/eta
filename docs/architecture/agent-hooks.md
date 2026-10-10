@@ -4,7 +4,7 @@
 
 规则写在一份 YAML 里（`apps/agent-runtime/hooks/akhook.yml`）。命中后：
 
-- **拒绝**：把原因和替代做法告诉 agent。例如 agent 自己执行 `akhook approval grant` 被拒，提示授权只能由用户给出。
+- **拒绝**：把原因和替代做法告诉 agent。例如 `gh pr create` 被拒，提示改用 `open_pull_request`（见[代码托管](forge.md)）。
 - **请用户确认**：先拒绝，agent 调用 `request_approval` 工具，在 AXP 里弹出确认卡片；用户同意后，agent 原样重新执行，这一次放行。
 
 维护时只改规则文件。代码只负责“怎么匹配”和“怎么问用户”，与具体规则无关。
@@ -28,9 +28,10 @@ hook 在容器里运行，而容器对 agent 完全开放：agent 可以把命�
 
 ## 规则
 
-| 规则              | 动作 | 内容                                   |
-| ----------------- | ---- | -------------------------------------- |
-| `akhook-approval` | 拒绝 | agent 自己执行 `akhook approval grant` |
+| 规则              | 动作 | 内容                                     |
+| ----------------- | ---- | ---------------------------------------- |
+| `gh-pr-create`    | 拒绝 | `gh pr create`：改用 `open_pull_request` |
+| `akhook-approval` | 拒绝 | agent 自己执行 `akhook approval grant`   |
 
 ## 用户确认
 
