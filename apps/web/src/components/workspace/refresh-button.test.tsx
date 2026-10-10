@@ -54,7 +54,7 @@ const routine = {
   id: "r1",
   name: "测试定时",
   enabled: true,
-  schedule: { kind: "daily", at: "09:00" },
+  schedule: { kind: "daily", time: "09:00" },
   timezone: "UTC",
   model: "GPT",
   next_run_at: "2026-10-10T09:00:00Z",
@@ -74,22 +74,28 @@ const routine = {
   ],
 };
 const cleanup: (() => void)[] = [];
+let client: QueryClient | undefined;
 async function render(page: "tasks" | "routines", panel = false) {
-  const client = new QueryClient({
+  const queryClient = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity, retry: false } },
   });
+  client = queryClient;
   // Both lists: the panel's 待处理 badge reads both.
-  client.setQueryData(["tasks"], { tasks: [task], assignees: [] });
-  client.setQueryData(["routines"], [routine]);
-  client.setQueryData(["tasks", "t1"], detail);
-  client.setQueryData(["routines", "r1"], routine);
-  client.setQueryData(["chat"], { agents: [], interactions: [], messages: [] });
+  queryClient.setQueryData(["tasks"], { tasks: [task], assignees: [] });
+  queryClient.setQueryData(["routines"], [routine]);
+  queryClient.setQueryData(["tasks", "t1"], detail);
+  queryClient.setQueryData(["routines", "r1"], routine);
+  queryClient.setQueryData(["chat"], {
+    agents: [],
+    interactions: [],
+    messages: [],
+  });
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   await act(async () =>
     root.render(
-      <QueryClientProvider client={client}>
+      <QueryClientProvider client={queryClient}>
         {panel ? (
           <WorkspacePanel view={page} onViewChange={navigation.set} />
         ) : page === "tasks" ? (
@@ -102,14 +108,25 @@ async function render(page: "tasks" | "routines", panel = false) {
   );
   cleanup.push(() => {
     root.unmount();
-    client.clear();
+    queryClient.clear();
     container.remove();
   });
   return container;
 }
 const refresh = (container: HTMLElement) =>
   container.querySelector<HTMLButtonElement>('button[aria-label="刷新"]')!;
-const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+// Until the refetches have landed: a fixed pause alone is not enough when the
+// machine is busy (CI, or the whole repository's checks in parallel). A test
+// that holds a request on purpose settles without waiting for it (idle false).
+async function settle(idle = true) {
+  await pause(20);
+  if (!idle) return;
+  const deadline = Date.now() + 5000;
+  while (client?.isFetching() && Date.now() < deadline) {
+    await pause(10);
+  }
+}
 
 describe.each([false, true])("refresh (sidebar: %s)", (panel) => {
   afterEach(async () => {
@@ -149,7 +166,7 @@ describe.each([false, true])("refresh (sidebar: %s)", (panel) => {
     await act(async () => {
       refresh(container).click();
       refresh(container).click();
-      await settle();
+      await settle(false);
     });
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(refresh(container).disabled).toBe(true);
@@ -300,7 +317,7 @@ describe.each([false, true])("refresh (sidebar: %s)", (panel) => {
     const container = await render("routines", panel);
     await act(async () => {
       refresh(container).click();
-      await settle();
+      await settle(false);
     });
     expect(refresh(container).disabled).toBe(true);
     await act(async () => refresh(container).click());

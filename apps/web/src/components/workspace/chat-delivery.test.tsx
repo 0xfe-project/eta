@@ -162,16 +162,19 @@ async function render(
 // stand-in server is still reading. A fixed pause alone is not enough when
 // the machine is busy (the whole repository's checks run in parallel).
 async function settle(ms = 10) {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, ms));
-  });
-  await rstest.waitFor(
-    () => {
-      if (reading > 0 || client?.isFetching()) throw new Error("not settled");
-    },
-    { timeout: 5000 },
-  );
-  await act(async () => {});
+  const pause = (wait: number) =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    });
+  const idle = () => reading === 0 && !client?.isFetching();
+  await pause(ms);
+  // Idle twice in a row, React flushed in between: a query that starts only
+  // once another one's data has rendered (the history after the chat) counts.
+  const deadline = Date.now() + 5000;
+  for (let quiet = 0; quiet < 2 && Date.now() < deadline; ) {
+    await pause(5);
+    quiet = idle() ? quiet + 1 : 0;
+  }
 }
 const textarea = (c: HTMLElement) => c.querySelector("textarea")!;
 async function type(c: HTMLElement, value: string) {
