@@ -47,6 +47,8 @@ type fakeRelay struct {
 	historyReads []int
 	// Called with each runtime call's method before it is answered.
 	before func(method string)
+	// Answers the agenvo plugin's MCP requests.
+	mcp func(body []byte, header http.Header) (*relay.Answer, error)
 }
 
 // readHistory answers like Paseo, reading entries that start before a cursor,
@@ -183,6 +185,10 @@ func (f *fakeRelay) ApprovePairing(_ context.Context, code, digest string) (stri
 
 func (f *fakeRelay) ApproveInstance(context.Context, string, string, string) error { return nil }
 func (f *fakeRelay) RevokeDevice(context.Context, string) error                    { return nil }
+
+func (f *fakeRelay) MCP(_ context.Context, body []byte, header http.Header) (*relay.Answer, error) {
+	return f.mcp(body, header)
+}
 
 func (f *fakeRelay) Call(_ context.Context, _, _, method string, params any) (*relay.Outcome, error) {
 	if f.before != nil {
@@ -1082,4 +1088,26 @@ func TestAgentsUseTheBoard(t *testing.T) {
 	expect(t, task.Activity[len(task.Activity)-1].Actor.Kind, "agent")
 	list := e.mcpCall(agent.ID, "list_tasks", map[string]any{})
 	expect(t, len(list["tasks"].([]any)), 1)
+}
+
+// get_task names a task's native agents in agenvo's terms, so an agent
+// with the agenvo plugin can look at the right one.
+func TestAgentsSeeATasksNativeAgents(t *testing.T) {
+	e := newTaskEnv(t)
+	computer, _ := e.computer("laptop", "paseo")
+	agent := e.createAgent("helper")
+	e.create(remoteAssignee(computer, "paseo", newWorktree))
+	e.runner.Tick(e.ctx)
+	nativeID, native := e.relay.only(t)
+
+	task := e.mcpCall(agent.ID, "get_task", map[string]any{"task": "1"})
+	sessions := task["sessions"].([]any)
+	expect(t, len(sessions), 1)
+	session := sessions[0].(map[string]any)
+	expect(t, session["open"], true)
+	expect(t, session["runtime"], "paseo")
+	expect(t, session["device_id"] != "", true)
+	expect(t, session["instance_id"], "paseo")
+	expect(t, session["workspace"].(string), native.cwd)
+	expect(t, session["native"].(map[string]any)["agent_id"].(string), nativeID)
 }

@@ -10,14 +10,15 @@ AXP 用 [Xuanwo/agenvo](https://github.com/Xuanwo/agenvo) 发布在 npm 上的�
 
 ## 组成
 
-| 部分         | 位置                                                                  | 作用                                                                                                                        |
-| ------------ | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| 任务看板     | `apps/control-plane/internal/tasks`、Web 的“任务”tab                  | 任务、时间线、运行；打开工作位置、派发与观察远程智能体、收尾（runner）                                                      |
-| 中继         | `@agenvo/server`（`apps/relay/package.json`），生产 accessory `relay` | 远程电脑上的 connector 与中继配对、保持 WSS 连接；控制面经它调用 Paseo/Herdr                                                |
-| 中继客户端   | `apps/control-plane/internal/relay`                                   | 管理员接口（配对、批准、撤销、状态）和 MCP `execute`                                                                        |
-| `axp`        | `apps/remote`（Go，`/remote/dl/axp-<os>-<arch>`）                     | 远程电脑上的安装（`axp setup`）和给智能体用的 CLI                                                                           |
-| tasks 插件   | `apps/agent-runtime/plugins/tasks`                                    | AXP 智能体读写看板：`list_tasks`、`get_task`、`list_assignees`、`list_places`、`create_task`、`update_task`、`comment_task` |
-| 远程电脑设置 | Web 设置的“远程电脑”                                                  | 添加电脑（安装命令）、核对指纹后批准、在线状态、撤销                                                                        |
+| 部分         | 位置                                                                                 | 作用                                                                                                                        |
+| ------------ | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| 任务看板     | `apps/control-plane/internal/tasks`、Web 的“任务”tab                                 | 任务、时间线、运行；打开工作位置、派发与观察远程智能体、收尾（runner）                                                      |
+| 中继         | `@agenvo/server`（`apps/relay/package.json`），生产 accessory `relay`                | 远程电脑上的 connector 与中继配对、保持 WSS 连接；控制面经它调用 Paseo/Herdr                                                |
+| 中继客户端   | `apps/control-plane/internal/relay`                                                  | 管理员接口（配对、批准、撤销、状态）和 MCP `execute`                                                                        |
+| `axp`        | `apps/remote`（Go，`/remote/dl/axp-<os>-<arch>`）                                    | 远程电脑上的安装（`axp setup`）和给智能体用的 CLI                                                                           |
+| tasks 插件   | `apps/agent-runtime/plugins/tasks`                                                   | AXP 智能体读写看板：`list_tasks`、`get_task`、`list_assignees`、`list_places`、`create_task`、`update_task`、`comment_task` |
+| agenvo 插件  | `apps/agent-runtime/plugins/agenvo`、`apps/control-plane/internal/api/agenvo_mcp.go` | AXP 智能体直接用中继的 MCP 工具（`search`、`execute`）操作远程运行时的原生方法                                              |
+| 远程电脑设置 | Web 设置的“远程电脑”                                                                 | 添加电脑（安装命令）、核对指纹后批准、在线状态、撤销                                                                        |
 
 ## 任务
 
@@ -84,6 +85,48 @@ Herdr 运行的是交互式终端程序。agent 启动后停在阻塞界面时�
 
 Paseo 归档 worktree 时不检查未提交的改动，未提交的内容会丢失；这是 Paseo 的行为，由用户承担（已提交的内容在分支上）。电脑离线时收尾稍后重试。启动失败的会话同样收尾。
 
+## agenvo 插件
+
+任务把一段工作交给远程智能体并跟踪到底；agenvo 插件（[#48](https://github.com/AkaraChen/axp/issues/48)）则让 AXP 智能体自己细粒度地操作远程运行时：看有哪些工作区和 agent、开一个 agent、发输入、读它做了什么、中断、回答它的提问、操作 Herdr 的终端。一次原生调用不是一个任务，不需要包装成任务。
+
+### 做法：转发中继自己的 MCP
+
+中继的 MCP 只有两个工具，插件原样使用它们，AXP 不再定义一遍原生方法：
+
+- `search`：列出实例（设备、运行时、在线与否、connector 版本、电脑主人写的 `context`），按关键词查方法的说明，`includeSchema` 取参数 schema；
+- `execute`：一段 JavaScript 函数体，`await call({deviceId, instanceId}, method, params)` 调一次原生方法，返回 `{execution, requestId, result, nativeIds?, error?}`。脚本最多 30 秒，没有定时器，等待由调用方自己在外面做。
+
+中继的 MCP 只认浏览器同意后签发的 OAuth 令牌，而控制面已经持有这样一份授权（见下文“接口与鉴权”）。所以插件的 MCP 服务器是控制面内部 API 上的 `/agenvo/mcp`：runtime 网关核对 runtime key 和插件是否启用后转发过来，控制面换上自己的访问令牌发给中继（`relay.Client.MCP`，请求的其他头一律不带），中继的应答原样返回。令牌只在控制面；智能体的容器里没有任何中继凭据，中继地址也来自控制面的配置（`AXP_RELAY_BASE_URL`），用户不需要再配置一遍。
+
+没有选“直接接入”（每个智能体自己做 OAuth）：那要在浏览器里为每个智能体同意一次，并把令牌放进容器。也没有在 AXP 里写一套类型化的工具（`list_sessions`、`send_input`……）：那等于为每个运行时重写原生方法的参数和语义，agenvo 每次升级都要跟着改，正是 #44 删掉的那层。
+
+转发只加两条限制：
+
+- 只放行 `initialize`、`ping`、`notifications/*`、`tools/list` 和 `tools/call`。`events/*` 拒绝：订阅会让中继向调用方给的回调地址发请求，容器里也没有能收的地方。
+- 一个工具结果超过 64 KiB（与单次原生调用的帧上限相同）时，整体换成一个错误（`result_too_large: …`），说明结果没送到、脚本确实执行了（写操作要先核对原生状态）、请返回更少的内容。从不截断，所以不会有被悄悄丢掉的记录。
+
+中继未配置、连不上或超时时，返回 JSON-RPC 错误并说明这次 `execute` 的写操作结果未知。日志只记智能体、方法和错误，不记请求和结果。
+
+### 操作矩阵（agenvo 0.2.0）
+
+以 `search` 实际返回为准；下表是 0.2.0 的方法：
+
+| 操作          | Paseo                                                                                   | Herdr                                                                                     |
+| ------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| 发现          | `search`（实例、在线、`context`）、`paseo.providers.list/models/modes`                  | `search`、`session.list`                                                                  |
+| 项目、工作区  | `paseo.workspaces.list/create/archive`（create 可从项目 branch-off 新 worktree）        | `workspace.list/get/create/close`、`worktree.list/create/open/remove`、`tab.create/close` |
+| 会话（agent） | `paseo.agents.list/get/create/resume/archive`                                           | `agent.list/get/start/explain`                                                            |
+| 输入、追问    | `paseo.agents.send`（默认 `interrupt` 当前 turn，`steer` 加入；可带自己的 `messageId`） | `agent.prompt`、`agent.send-keys`、`pane.run/send-text/send-keys`                         |
+| 状态与历史    | `paseo.agents.get`；`paseo.agents.history`（`limit` ≤ 50、`cursor`、epoch 变化即作废）  | `agent.get`；`agent.read`/`pane.read` 的终端快照（`lines`），没有结构化历史和游标         |
+| 中断          | `paseo.agents.cancel`                                                                   | `agent.send-keys`（`esc`）                                                                |
+| 回答原生交互  | `paseo.agents.get` 里的待答请求 + `paseo.interactions.respond`                          | 读终端后按键回答，没有请求 ID                                                             |
+| 终端          | 不提供                                                                                  | `pane.*`                                                                                  |
+| 事件订阅      | `paseo.agents.subscribe` 只在 connector 连接上有效；`events/*` 经 AXP 不可用            | 同左                                                                                      |
+
+### 与任务的关系
+
+`get_task`（tasks 插件）多给出任务的会话（`sessions`）：`device_id`、`instance_id`（即 `call` 的目标）、工作目录、原生 ID（Paseo 的 agent 和工作区；Herdr 的 session、agent 名、工作区、tab 和 pane）以及是否仍在用。智能体据此找到任务里的远程智能体：读它可以；要它做事则评论任务，由 runner 发送并跟踪回复，不直接 `send`、`cancel` 或归档（runner 会失去对这次运行的跟踪）。怎么用这些只写在插件的 skill 里（`plugins/agenvo/skills/agenvo/SKILL.md`），控制面的提示词不重复。
+
 ## 远程电脑
 
 ### 接入
@@ -125,6 +168,7 @@ Paseo 归档 worktree 时不检查未提交的改动，未提交的内容会丢�
 | `/remote/v1/*`                         | `axp setup` 与 CLI                 | 电脑的令牌（`Authorization: Bearer`，只存摘要）；只能读写指派给它或它运行过的任务 |
 | `/remote/relay/*`                      | connector（经 `gateway` 到中继）   | 中继自己：配对需在 AXP 里批准，之后用设备密钥；管理页用管理员密钥                 |
 | `/tasks/mcp`                           | AXP 智能体（经 `runtime-gateway`） | runtime 网关注入的 `X-AXP-Agent-Id`                                               |
+| `/agenvo/mcp`                          | AXP 智能体（经 `runtime-gateway`） | 同上，且智能体启用了 agenvo 插件；转发到中继时用控制面的 OAuth 令牌               |
 
 `/remote/` 在 `axp.akr.moe` 上绕过 Cloudflare Access（Access 的 Bypass 应用），其余路径不变。`/remote` 是公共 API 进程上一份独立的 huma 文档（`/remote/openapi.json`），不进 Web 的类型。
 
@@ -146,6 +190,7 @@ Paseo 归档 worktree 时不检查未提交的改动，未提交的内容会丢�
 
 ## 验证
 
+- agenvo 插件：`apps/control-plane/internal/api/agenvo_mcp_test.go` 覆盖原样转发、拒绝 `events/*` 和批量请求、超过 64 KiB 的结果整体换成错误（JSON 与 SSE 两种应答，正好 64 KiB 的照常送达）、中继未配置或连不上；`TestAgentsSeeATasksNativeAgents` 覆盖 `get_task` 给出会话的 native ID。在开发环境里用 agenvo 0.2.0 的真实中继、本机的 Paseo 和一个隔离的 Herdr 会话（各自单独的 connector 配置），让一个只启用 agenvo 插件的 AXP 智能体（gpt-5.5）读 skill 后走过：发现实例 → 列工作区和 provider → 在测试目录建 Paseo agent（Paseo 建了工作区）→ 发送 → `history` `limit 5` 读到回复 → 追问 → 发耗时请求后 `cancel`、确认停下 → 归档；Herdr 上 `workspace.create` → `pane.run` → `pane.read` → `sleep 300` 后 `ctrl+c` 中断 → `workspace.close`。经 runtime 网关另外核对：没有 key 时 403；`events/subscribe` 被拒；100 KB 的结果被换成 `result_too_large` 错误；脚本在一次调用后失败时带回已派发调用的回执；`paseo.agents.history` `limit 50` 超过帧上限（`result_too_large`），`25` 读出；参数不合法为 `not_started`/`invalid_params`；connector 停掉后 `search` 显示 `device_offline`，`call` 为 `not_started`/`device_offline`；Herdr 原生拒绝时 `error.native` 保留原生错误码。容器里没有任何中继凭据，Codex 只拿 runtime key。
 - `apps/control-plane/internal/api/tasks_test.go`：用假的中继（Paseo 和 Herdr connector）覆盖接入（安装码只能用一次、按名字配对、批准、在线）、工作位置的查询、Paseo 新 worktree 从派发到完成和收尾（归档工作区）、已有工作区只归档 agent、Herdr 在新 worktree 的 tab 里运行（环境变量带任务 ID、自动确认 Claude 的信任对话框、有未提交改动时保留 worktree）、按目录找当前任务、提醒一次后失败、停止、改派、backlog、指派的校验、电脑之间的隔离，以及 AXP 智能体经 MCP 使用看板。
 - `apps/control-plane/internal/relay`、`apps/remote`：MCP 应答的解析（JSON 与 SSE）、当前任务的来源。
 - 切到上游 agenvo（`c7ca5dc`）并把中继放到 `/remote/relay` 下之后，在开发环境里用真实的中继、本机的 Paseo 和独立的 Herdr server（Claude）走过：带安装码的 `axp setup` 经 `/remote/relay` 配对并批准、控制面经 `execute` 读取两边的工作位置、Herdr 新 worktree 里完成一个任务（完全权限启动、自动确认信任对话框、智能体提交并回报）以及 done 后的收尾；把开发实例换到另一个端口后，不带安装码的 `axp setup` 把已配对的 connector 改到新地址，不重新配对即上线；注册服务时重跑 setup 会重启服务。没有在这一版上跑 Paseo 任务（Paseo 方法与之前相同），开发环境里注册为服务的 connector 不带开发中继的 CA，连不上自签证书的中继（生产不受影响）。

@@ -51,6 +51,11 @@ type commentTaskIn struct {
 	Body string `json:"body" jsonschema:"the comment, in Markdown"`
 }
 
+type taskOut struct {
+	*tasks.TaskDetail
+	Sessions []tasks.TaskSession `json:"sessions"`
+}
+
 type taskListOut struct {
 	Tasks []tasks.Task `json:"tasks"`
 }
@@ -104,11 +109,16 @@ func tasksMCP(d *Deps) http.Handler {
 		return nil, out, nil
 	})
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "get_task",
-		Description: "One task in full: its description, its timeline (comments, status changes, runs, checkouts, pull requests) and its runs.",
+		Name: "get_task",
+		Description: "One task in full: its description, its timeline (comments, status changes, runs, checkouts, pull requests), " +
+			"its runs, and its sessions: the native agents on remote computers working on it, with their agenvo target and native IDs.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in taskRef) (*mcp.CallToolResult, any, error) {
 		t, err := s.Get(ctx, d.DB, in.Task)
-		return nil, t, toolError(err)
+		if err != nil {
+			return nil, nil, toolError(err)
+		}
+		sessions, err := s.Sessions(ctx, d.DB, t.ID)
+		return nil, &taskOut{t, sessions}, toolError(err)
 	})
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "list_assignees",
