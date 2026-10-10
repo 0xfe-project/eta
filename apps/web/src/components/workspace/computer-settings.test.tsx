@@ -12,7 +12,7 @@ import { ComputerSettings } from "./computer-settings";
 // Two devices asked to pair under the laptop's label.
 const computers = {
   relay_configured: true,
-  relay_origin: "https://relay.test",
+  relay_url: "https://axp.test/remote/relay",
   relay_error: null,
   computers: [
     {
@@ -84,5 +84,71 @@ describe("approving a computer's runtime", () => {
       await settle();
     });
     expect(approvals).toEqual([{ fingerprint: "SHA256:bbbb" }]);
+  });
+});
+
+// The laptop's Paseo connector runs agenvo 0.1.0; AXP serves 0.2.0.
+const outdated = {
+  ...computers,
+  connector_version: "0.2.0",
+  computers: [
+    {
+      ...computers.computers[0],
+      online: true,
+      runtimes: [
+        {
+          kind: "paseo",
+          providers: ["claude"],
+          state: "online",
+          fingerprints: [],
+          connector_version: "0.1.0",
+          needs_update: true,
+        },
+      ],
+    },
+  ],
+} as unknown as Computers;
+
+describe("updating a computer's connector", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+    rstest.restoreAllMocks();
+  });
+
+  it("marks it and shows the update command with the steps", async () => {
+    const posted: string[] = [];
+    rstest.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const request = input as Request;
+      if (request.method === "POST") {
+        posted.push(new URL(request.url).pathname);
+        return Response.json({
+          computer: outdated.computers[0],
+          command:
+            "curl -fsSL https://axp.test/remote/install.sh | sh -s -- axpe_new",
+        });
+      }
+      return Response.json(outdated);
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    await act(async () =>
+      createRoot(container).render(
+        <QueryClientProvider client={new QueryClient()}>
+          <ComputerSettings />
+        </QueryClientProvider>,
+      ),
+    );
+    await act(settle);
+    expect(document.body.textContent).toContain("connector 需要更新");
+    expect(document.body.textContent).toContain("AXP 提供的版本 0.2.0");
+    await act(async () => {
+      buttons("更新")[0].click();
+      await settle();
+    });
+    expect(posted).toEqual(["/api/v1/computers/c1/install"]);
+    expect(document.body.textContent).toContain("axpe_new");
+    expect(document.body.textContent).toContain("（0.2.0）");
+    expect(document.body.textContent).toContain("不需要重新配对");
+    expect(document.body.textContent).toContain("connector 0.1.0，需要更新");
   });
 });

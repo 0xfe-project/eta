@@ -73,6 +73,9 @@ func AgentActor(id string) Actor { return Actor{Kind: ActorAgent, AgentID: id} }
 // Service is the task board.
 type Service struct {
 	Relay relay.Relay
+	// The agenvo version of the connectors AXP serves (/remote/dl), which
+	// remote computers should run; unknown when empty.
+	ConnectorVersion string
 }
 
 // --- rows ------------------------------------------------------------------------------

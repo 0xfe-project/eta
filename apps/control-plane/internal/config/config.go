@@ -46,10 +46,11 @@ type Config struct {
 	// catalog agents choose from; the production image copies them alongside.
 	PluginsDir string `env:"AXP_PLUGINS_DIR" default:"../agent-runtime/plugins"`
 	// The agenvo relay (vendor/agenvo), which remote computers' connectors
-	// pair with at its public origin; the control plane reaches it at
-	// RelayURL. Remote computers are off without the administrator secret.
+	// pair with at its public base URL (production: AXP_PUBLIC_URL under
+	// /remote/relay); the control plane reaches it at RelayURL. Remote
+	// computers are off without the base URL or the administrator secret.
 	RelayURL         string `env:"AXP_RELAY_URL" prod:"http://axp-relay:8080"`
-	RelayOrigin      string `env:"AXP_RELAY_ORIGIN"`
+	RelayBaseURL     string `env:"AXP_RELAY_BASE_URL"`
 	RelayAdminSecret string `env:"AXP_RELAY_ADMIN_SECRET"`
 	// The only CA trusted for the relay (development's self-signed one).
 	RelayCAFile string `env:"AXP_RELAY_CA_FILE"`
