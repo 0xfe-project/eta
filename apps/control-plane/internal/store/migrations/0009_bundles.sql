@@ -40,14 +40,15 @@ UPDATE message SET status = 'failed', failure = '{"code": "REPLY_INTERRUPTED", "
 ALTER TABLE agent DROP COLUMN desired_state, DROP COLUMN generation,
     ADD COLUMN bundles jsonb NOT NULL DEFAULT '[]',
     ADD COLUMN boot_id uuid,
-    ADD COLUMN build_error text;
+    ADD COLUMN build_error text,
+    -- The old checks reject the new statuses: dropped before the rows change.
+    DROP CONSTRAINT agent_status_valid,
+    DROP CONSTRAINT agent_product_status_valid,
+    DROP CONSTRAINT IF EXISTS agent_counters_valid;
 UPDATE agent SET bundles = plugins, status = 'starting',
     product_status = CASE WHEN product_status IN ('waiting_for_input', 'working', 'starting') THEN 'idle' ELSE product_status END;
-ALTER TABLE agent DROP CONSTRAINT agent_status_valid,
-    ADD CONSTRAINT agent_status_valid CHECK (status IN ('starting', 'ready', 'error')),
-    DROP CONSTRAINT agent_product_status_valid,
+ALTER TABLE agent ADD CONSTRAINT agent_status_valid CHECK (status IN ('starting', 'ready', 'error')),
     ADD CONSTRAINT agent_product_status_valid CHECK (product_status IN ('idle', 'starting', 'working', 'waiting_for_input', 'unavailable')),
-    DROP CONSTRAINT IF EXISTS agent_counters_valid,
     ADD CONSTRAINT agent_counters_valid CHECK (config_version >= 0 AND last_command_seq >= 0 AND product_revision >= 1);
 
 -- The user's bundles; the built-in ones are files in the image.
