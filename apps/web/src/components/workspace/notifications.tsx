@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { useAnswerInteraction, useInteractionHistory } from "@/queries/chat";
 import { AgentAvatar } from "./agent-identity";
 import { PageHeader } from "./app-shell";
+import { AttentionList } from "./attention";
 import { useAgents, useOpenAgent } from "./use-agents";
 
 // Confirmations as notifications: the ones waiting on the user to answer
@@ -129,7 +130,7 @@ export function Notifications() {
   }
   return (
     <>
-      <PageHeader title="确认">
+      <PageHeader title="待处理">
         <Tabs
           value={filter}
           onValueChange={(value) => void setFilter(value as typeof filter)}
@@ -146,6 +147,9 @@ export function Notifications() {
       </PageHeader>
       <main id="main" className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl">
+          <div className="px-4 pt-4 sm:px-6 [&:not(:has(ul))]:hidden">
+            <AttentionList />
+          </div>
           {error ? (
             <div className="px-4 py-16 sm:px-6">
               <LoadError

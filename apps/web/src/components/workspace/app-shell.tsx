@@ -10,13 +10,13 @@ import { Link } from "@tanstack/react-router";
 import { Empty, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { usePendingInteractions } from "@/queries/chat";
 import { useTasks } from "@/queries/tasks";
 import { AgentEditor } from "./agent-editor";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels } from "./agent-status";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
 import { useAgents, useOpenAgent } from "./use-agents";
+import { useAttention } from "./use-attention";
 
 // The full-window workspace (/workspace) around its pages: from md up
 // a sidebar of sections and agents, on narrow ones a bar along the top. The
@@ -24,19 +24,22 @@ import { useAgents, useOpenAgent } from "./use-agents";
 
 const sections = [
   { to: "/", label: "对话", icon: ChatsCircleIcon },
-  { to: "/workspace/inbox", label: "确认", icon: BellIcon },
+  { to: "/workspace/inbox", label: "待处理", icon: BellIcon },
   { to: "/workspace/tasks", label: "任务", icon: ListChecksIcon },
   { to: "/workspace/routines", label: "定时", icon: ClockIcon },
   { to: "/workspace/memory", label: "记忆", icon: BrainIcon },
   { to: "/workspace/capabilities", label: "能力", icon: PuzzlePieceIcon },
 ] as const;
 
-/** What each section holds for the user: confirmations, tasks to accept. */
+/**
+ * What each section holds for the user: everything waiting for them, and
+ * tasks to accept.
+ */
 function useBadges(): Partial<Record<(typeof sections)[number]["to"], number>> {
-  const pending = usePendingInteractions().length;
+  const { total } = useAttention();
   const { data } = useTasks();
   const review = data?.tasks.filter((t) => t.status === "in_review").length;
-  return { "/workspace/tasks": review, "/workspace/inbox": pending };
+  return { "/workspace/tasks": review, "/workspace/inbox": total };
 }
 
 const item =

@@ -25,7 +25,7 @@ export const views = [
   { value: "tasks", label: "任务" },
   { value: "routines", label: "定时" },
   { value: "memory", label: "记忆" },
-  { value: "inbox", label: "确认" },
+  { value: "inbox", label: "待处理" },
 ] as const;
 
 const viewParser = parseAsStringLiteral([
