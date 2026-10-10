@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -88,19 +89,13 @@ func (f *fakeDriver) State(_ context.Context, id string) (string, error) {
 	return container.Missing, nil
 }
 
-func (f *fakeDriver) Stop(_ context.Context, id string) error {
-	f.stopped = append(f.stopped, id)
-	f.states[id] = container.Exited
+func (f *fakeDriver) Stop(_ context.Context, instanceID string) error {
+	f.stopped = append(f.stopped, instanceID)
 	return nil
 }
 
-func (f *fakeDriver) wasStopped(id string) bool {
-	for _, s := range f.stopped {
-		if s == id {
-			return true
-		}
-	}
-	return false
+func (f *fakeDriver) wasStopped(instanceID string) bool {
+	return slices.Contains(f.stopped, instanceID)
 }
 
 // fakeS3 is agent snapshots, by agent id, behind presigned-looking URLs.
