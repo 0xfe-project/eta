@@ -2,8 +2,8 @@
 
 Startup: restore the agent's snapshot -> install the agent's Codex plugins ->
 start Codex -> resume the agent's thread (or create it once) -> report ready
--> run commands from the agent's queue, one at a time. Every turn ends by
-uploading a new snapshot of the agent's home.
+-> run commands from the agent's queue, one at a time. Every turn is
+reported finished, then a new snapshot of the agent's home is uploaded.
 """
 
 import json
@@ -1007,9 +1007,10 @@ class Runtime:
         self.ledger.emit("item.updated", {"command_id": command_id, "item": view})
 
     def _finish_turn(self, command_id: str, turn: dict) -> None:
-        # Saved before the turn is reported finished, so the control plane
-        # never stops this instance while a snapshot is still uploading.
-        self._save_snapshot()
+        # Reported finished first, so the reply does not wait for the upload;
+        # the snapshot follows. The control plane does not stop or replace
+        # this instance between a turn.completed and the snapshot event after
+        # it, and the next command waits for the upload here.
         raw = turn.get("status")
         status = {"completed": "succeeded", "interrupted": "interrupted"}.get(
             raw, "failed"
@@ -1027,6 +1028,7 @@ class Runtime:
                 "status": {"succeeded": "completed"}.get(status, status),
             },
         )
+        self._save_snapshot()
 
     def _wait_outbox_drained(self, timeout: float) -> None:
         deadline = time.monotonic() + timeout

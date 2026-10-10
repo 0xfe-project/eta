@@ -436,7 +436,15 @@ func (r *runtimeHarness) turnStarted(commandID, turnID string) response {
 	return r.events(event{"turn.started", map[string]any{"command_id": commandID, "turn_id": turnID}})
 }
 
+// turnCompleted ends the turn as the runtime does: reported finished, then
+// the snapshot it left saved.
 func (r *runtimeHarness) turnCompleted(commandID, status string) response {
+	return r.events(event{"turn.completed", map[string]any{"command_id": commandID, "status": status}},
+		event{"snapshot.saved", map[string]any{"size": 1}})
+}
+
+// turnCompletedUploading ends the turn with its snapshot still uploading.
+func (r *runtimeHarness) turnCompletedUploading(commandID, status string) response {
 	return r.events(event{"turn.completed", map[string]any{"command_id": commandID, "status": status}})
 }
 

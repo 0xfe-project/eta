@@ -180,6 +180,8 @@ class Harness:
             run_dir=tmp / "run",
         )
         self.runtimes: list[Runtime] = []
+        # When set, uploads wait for it.
+        self.upload_gate: threading.Event | None = None
 
     def start(self, cp=None, **changes) -> tuple[Runtime, StubControlPlane]:
         cp = cp or StubControlPlane()
@@ -189,6 +191,8 @@ class Harness:
         return runtime, cp
 
     def _upload(self, url, path):
+        if self.upload_gate is not None:
+            assert self.upload_gate.wait(10)
         self.objects[url] = Path(path).read_bytes()
 
     def _download(self, url, path):
@@ -588,13 +592,25 @@ class TestItemDetail:
 
 
 class TestSnapshots:
-    def test_every_turn_saves_a_snapshot_before_completing(self, rt):
+    def test_every_turn_is_reported_finished_then_saves_a_snapshot(self, rt):
         runtime, cp = rt.start()
         command_id = send(runtime, "你好")
         cp.completed(command_id)
+        cp.wait_for("snapshot.saved")
         types = cp.types()
-        assert types.index("snapshot.saved") < types.index("turn.completed")
+        assert types.index("turn.completed") < types.index("snapshot.saved")
         assert SNAPSHOT_URL in rt.objects
+
+    def test_the_reply_does_not_wait_for_the_upload(self, rt):
+        uploading = threading.Event()
+        rt.upload_gate = uploading
+        runtime, cp = rt.start()
+        command_id = send(runtime, "你好")
+        # Reported finished while the snapshot is still uploading.
+        assert cp.completed(command_id)["status"] == "completed"
+        assert "snapshot.saved" not in cp.types()
+        uploading.set()
+        cp.wait_for("snapshot.saved")
 
     def test_new_instance_restores_the_snapshot(self, rt):
         runtime, cp = rt.start()
