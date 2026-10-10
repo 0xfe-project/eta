@@ -90,7 +90,7 @@ func newError(code string, status int, format string, args ...any) *Error {
 
 func notConnected() *Error {
 	return newError("GITHUB_NOT_CONNECTED", http.StatusConflict,
-		"GitHub 还没有连接。请让用户在 AXP 工作区的“能力”页按向导连接 GitHub。")
+		"GitHub 还没有连接。请让用户在 AXP 的“设置 → 连接”里按向导连接 GitHub。")
 }
 
 // fromGitHub turns a failed call into an answer naming GitHub's reasons.
@@ -493,7 +493,7 @@ func (g *GitHub) installationFor(ctx context.Context, owner string) (*gh.Install
 		}
 	}
 	return nil, newError("GITHUB_NOT_INSTALLED", http.StatusConflict,
-		"AXP 的 GitHub App 没有安装到 %s。请让用户在 AXP 工作区的“能力”页把 App 安装到这个账号或组织，并授权需要的仓库。", owner)
+		"AXP 的 GitHub App 没有安装到 %s。请让用户在 AXP 的“设置 → 连接”里把 App 安装到这个账号或组织，并授权需要的仓库。", owner)
 }
 
 // token returns an installation token, for all of the installation's
