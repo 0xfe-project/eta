@@ -23,7 +23,7 @@ git 和 gh 的凭据、commit 身份是镜像级的，对每个 agent 都生效�
 
 ## 连接 GitHub
 
-设置的“连接”分区里，GitHub 一项显示连接状态，点“连接”或“管理”打开四步向导（了解、创建 App、安装到仓库、完成），步骤由服务端状态决定，从 GitHub 回来时自动重新打开在当前步骤。
+设置的“连接”分区里，GitHub 和 Grok 各是一张卡片；点开 GitHub 卡片是一个四步向导（了解、创建 App、安装到仓库、完成），步骤由服务端状态决定，从 GitHub 回来时自动重新打开在当前步骤。
 
 1. **创建 App**：浏览器把服务生成的 [manifest](https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-from-a-manifest) 表单提交给 GitHub（个人账号或组织）。用户在 GitHub 上确认后，GitHub 带着一次性的 `code` 回到 `/api/forge/v1/github/manifest/callback`，服务用 `POST /app-manifests/{code}/conversions` 换回 App ID、slug、私钥、client ID 和 client secret，再把浏览器送回 `/?settings=connections`（设置弹层打开在“连接”）。`state` 一小时内有效、只能用一次。
 2. **安装**：向导链接到 `https://github.com/apps/<slug>/installations/new`，用户选择账号和仓库。manifest 设了 `request_oauth_on_install`，GitHub 安装后接着请用户授权 App，再回到 App 的 callback URL（`/api/forge/v1/github/authorization/callback`，带 `setup_action`），由它换得用户的 token 并送回“连接”；这个选项下 GitHub 不用 setup URL。等待安装时状态每 5 秒刷新。

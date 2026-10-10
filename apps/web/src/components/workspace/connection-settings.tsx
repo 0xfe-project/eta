@@ -1,24 +1,76 @@
 import type { GitHubStatus } from "@/queries/forge";
+import type { Connection } from "@/queries/llm";
+import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
+import { GithubLogoIcon } from "@phosphor-icons/react/GithubLogo";
+import { ImageIcon } from "@phosphor-icons/react/Image";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { LoadError, Loading } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useGitHubStatus, useRefreshGitHub } from "@/queries/forge";
 import {
   GROK_CONNECTOR,
+  NEEDS_ACTION,
   useConnections,
   useConnectors,
   useUsage,
 } from "@/queries/llm";
+import { connectionStateLabels } from "./connection-state";
 import { GitHubWizard } from "./github-wizard";
 import { ConnectorSection } from "./provider-settings";
 
-/** What the GitHub App does now, and what is left for the user to do. */
-function githubSummary(status: GitHubStatus): {
+interface Summary {
   summary: string;
+  /** Set when the user has something to do. */
   todo?: string;
-} {
+}
+
+/** One connection: its state at a glance; opening it sets it up. */
+function ConnectionCard({
+  icon: Icon,
+  name,
+  summary,
+  todo,
+  onOpen,
+}: Summary & {
+  icon: typeof GithubLogoIcon;
+  name: string;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group flex items-start gap-3 border bg-card p-3 text-left transition-colors duration-[60ms] ease-linear outline-none hover:bg-muted/40 focus-visible:ring-1 focus-visible:ring-ring"
+    >
+      <span className="flex size-8 shrink-0 items-center justify-center bg-muted">
+        <Icon aria-hidden="true" className="size-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2">
+          <span className="truncate text-sm font-medium">{name}</span>
+          {todo ? <Badge variant="outline">{todo}</Badge> : null}
+        </span>
+        <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">
+          {summary}
+        </span>
+      </span>
+      <CaretRightIcon
+        aria-hidden="true"
+        className="mt-2 size-3.5 shrink-0 text-muted-foreground transition-transform duration-[60ms] ease-linear group-hover:translate-x-0.5 motion-reduce:transition-none"
+      />
+    </button>
+  );
+}
+
+/** What the GitHub App does now, and what is left for the user to do. */
+function githubSummary(status: GitHubStatus): Summary {
   switch (status.state) {
     case "ready":
       return {
@@ -71,7 +123,7 @@ function useReturnFromGitHub(onReturn: (error: string | undefined) => void) {
 }
 
 function GitHubConnection() {
-  const { data: status, error, refetch } = useGitHubStatus();
+  const { data: status, error } = useGitHubStatus();
   const [open, setOpen] = useState(false);
   const [returned, setReturned] = useState<{ error?: string }>();
   useReturnFromGitHub(
@@ -80,42 +132,21 @@ function GitHubConnection() {
       setOpen(true);
     }, []),
   );
-  const current = status ? githubSummary(status) : undefined;
+  // Loading shows what it is for; the wizard shows a failed load in full.
+  const current: Summary = status
+    ? githubSummary(status)
+    : error
+      ? { summary: "无法加载连接状态", todo: "出错" }
+      : { summary: "推送代码、以 App 身份打开 PR、读取 CI" };
 
   return (
-    <section aria-labelledby="connection-github" className="space-y-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <h3 id="connection-github" className="text-sm font-medium">
-          GitHub
-        </h3>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={!status}
-          onClick={() => setOpen(true)}
-        >
-          {status?.app ? "管理" : "连接"}
-        </Button>
-      </div>
-      {error && !status ? (
-        <LoadError
-          what="GitHub 的连接状态"
-          error={error}
-          onRetry={() => void refetch()}
-          className="border py-4"
-        />
-      ) : current ? (
-        <p className="flex items-center gap-2 border px-3 py-2.5 text-xs text-muted-foreground">
-          {current.todo ? (
-            <Badge variant="outline" className="shrink-0">
-              {current.todo}
-            </Badge>
-          ) : null}
-          <span className="min-w-0">{current.summary}</span>
-        </p>
-      ) : (
-        <Loading layout="lines" rows={1} className="border px-3 py-3" />
-      )}
+    <>
+      <ConnectionCard
+        icon={GithubLogoIcon}
+        name="GitHub"
+        {...current}
+        onOpen={() => setOpen(true)}
+      />
       <GitHubWizard
         // A return from GitHub starts the wizard over where it now stands.
         key={returned ? `returned-${returned.error ?? ""}` : "wizard"}
@@ -123,8 +154,28 @@ function GitHubConnection() {
         onOpenChange={setOpen}
         returnError={returned?.error}
       />
-    </section>
+    </>
   );
+}
+
+const GROK_SUMMARY = "生成图片和视频，搜索网页与 X";
+
+function grokSummary(accounts: Connection[] | undefined): Summary {
+  if (!accounts) return { summary: GROK_SUMMARY };
+  const active = accounts.find((account) => account.state === "active");
+  if (active) return { summary: `用 ${active.label} ${GROK_SUMMARY}` };
+  const stuck = accounts.find((account) => NEEDS_ACTION.has(account.state));
+  if (stuck)
+    return {
+      summary: stuck.error?.message ?? stuck.label,
+      todo: connectionStateLabels[stuck.state],
+    };
+  if (accounts.length)
+    return {
+      summary: accounts[0].label,
+      todo: connectionStateLabels[accounts[0].state],
+    };
+  return { summary: GROK_SUMMARY, todo: "未绑定" };
 }
 
 /**
@@ -135,33 +186,51 @@ function GrokConnection() {
   const connectors = useConnectors();
   const connections = useConnections();
   const { data: usage } = useUsage();
+  const [open, setOpen] = useState(false);
   const connector = connectors.data?.find((item) => item.id === GROK_CONNECTOR);
+  const accounts = connections.data?.filter(
+    (connection) => connection.connector === GROK_CONNECTOR,
+  );
+  const failed = connectors.error ?? connections.error;
+  const current: Summary = failed
+    ? { summary: failed.message, todo: "出错" }
+    : grokSummary(accounts);
 
-  if (connectors.error)
-    return (
-      <LoadError
-        what="Grok"
-        error={connectors.error}
-        onRetry={() => void connectors.refetch()}
-        className="border py-4"
-      />
-    );
-  if (connectors.isPending) return <Loading rows={1} />;
-  if (!connector) return null;
   return (
     <>
-      {connections.error ? (
-        <p role="alert" className="text-xs text-destructive">
-          无法加载账号：{connections.error.message}
-        </p>
-      ) : null}
-      <ConnectorSection
-        connector={connector}
-        connections={(connections.data ?? []).filter(
-          (connection) => connection.connector === GROK_CONNECTOR,
-        )}
-        usage={usage}
+      <ConnectionCard
+        icon={ImageIcon}
+        name="Grok"
+        {...current}
+        onOpen={() => setOpen(true)}
       />
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent aria-describedby={undefined} className="sm:max-w-lg">
+          <DialogHeader className="flex-row items-center gap-2">
+            <ImageIcon aria-hidden="true" className="size-5" />
+            <DialogTitle className="text-sm">Grok</DialogTitle>
+          </DialogHeader>
+          {failed ? (
+            <LoadError
+              what="Grok 账号"
+              error={failed}
+              onRetry={() => {
+                void connectors.refetch();
+                void connections.refetch();
+              }}
+            />
+          ) : connector && accounts ? (
+            <ConnectorSection
+              connector={connector}
+              connections={accounts}
+              usage={usage}
+              hideHeading
+            />
+          ) : (
+            <Loading rows={1} />
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -169,10 +238,12 @@ function GrokConnection() {
 /** Settings → 连接: the integrations the user has to set up themselves. */
 export function ConnectionSettings() {
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <h2 className="text-sm font-semibold">连接</h2>
-      <GitHubConnection />
-      <GrokConnection />
+      <div className="grid gap-2 sm:grid-cols-2">
+        <GitHubConnection />
+        <GrokConnection />
+      </div>
     </div>
   );
 }

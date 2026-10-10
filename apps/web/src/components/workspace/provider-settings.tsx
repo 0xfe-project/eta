@@ -352,10 +352,13 @@ export function ConnectorSection({
   connector,
   connections,
   usage,
+  hideHeading,
 }: {
   connector: Connector;
   connections: Connection[];
   usage: Usage[] | undefined;
+  /** Where a surrounding title already names the provider. */
+  hideHeading?: boolean;
 }) {
   const [login, setLogin] = useState(0);
   const { agents } = useAgents();
@@ -379,8 +382,16 @@ export function ConnectorSection({
 
   return (
     <section aria-labelledby={headingId} className="space-y-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <h3 id={headingId} className="text-sm font-medium">
+      <div
+        className={cn(
+          "flex items-center justify-between gap-2",
+          hideHeading && "justify-end",
+        )}
+      >
+        <h3
+          id={headingId}
+          className={cn("text-sm font-medium", hideHeading && "sr-only")}
+        >
           {connector.display_name}
         </h3>
         <Button
