@@ -16,8 +16,10 @@ import (
 	"github.com/akarachen/axp/apps/llm-gateway/internal/connectors"
 	"github.com/akarachen/axp/apps/llm-gateway/internal/cpa"
 	"github.com/akarachen/axp/apps/llm-gateway/internal/llm"
+	"github.com/akarachen/axp/apps/llm-gateway/internal/usage"
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy"
+	sdkusage "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/usage"
 )
 
 func fakeJWT(claims map[string]any) string {
@@ -45,9 +47,14 @@ func TestCPAContract(t *testing.T) {
 	port := freePort(t)
 	var service *llm.Service
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	book, err := usage.Open(t.TempDir() + "/usage.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sdkusage.RegisterPlugin(book)
 	proxy, err := cpa.New(cpa.Options{
 		Host: "127.0.0.1", Port: port, StateDir: t.TempDir(),
-		Mount: func(e *gin.Engine) { llm.Mount(e, service, logger) },
+		Mount: func(e *gin.Engine) { llm.Mount(e, service, book, logger) },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -168,6 +175,26 @@ func TestCPAContract(t *testing.T) {
 			t.Fatalf("model after delete = %+v", m)
 		}
 	}
+
+	// CPA hands its usage plugins every record, though its own usage
+	// statistics are off (cpa.New): the book counts it, by principal.
+	sdkusage.PublishRecord(ctx, sdkusage.Record{
+		APIKey: "agent-1", AuthID: conn.ID, Alias: models[0].ID, RequestedAt: time.Now(),
+		Detail: sdkusage.Detail{InputTokens: 100, OutputTokens: 20},
+	})
+	waitFor(t, func() bool {
+		res, err := http.Get(base + "/api/llm/v1/usage/agents")
+		if err != nil {
+			return false
+		}
+		defer res.Body.Close()
+		var body struct {
+			Usage []usage.Usage `json:"usage"`
+		}
+		_ = json.NewDecoder(res.Body).Decode(&body)
+		return len(body.Usage) == 1 && body.Usage[0].Principal == "agent-1" &&
+			body.Usage[0].Windows["5h"].TotalTokens == 120 && body.Usage[0].Accounts[0].Name == conn.ID
+	})
 }
 
 func waitFor(t *testing.T, cond func() bool) {

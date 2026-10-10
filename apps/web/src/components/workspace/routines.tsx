@@ -41,6 +41,7 @@ import {
 import { RoutineForm } from "./routine-form";
 import { describeSchedule, when } from "./routine-format";
 import { useRoutineNav } from "./routine-nav";
+import { UsageLine } from "./usage-line";
 
 const runStatusLabels: Record<RunStatus, string> = {
   running: "运行中",
@@ -519,6 +520,7 @@ export function RoutineDetail({
           {describeSchedule(routine.schedule)} · {routine.timezone} ·{" "}
           {routine.model}
         </p>
+        <UsageLine principal={`routine-${routine.id}`} />
       </div>
 
       <button

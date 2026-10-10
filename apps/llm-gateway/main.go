@@ -18,9 +18,11 @@ import (
 	"github.com/akarachen/axp/apps/llm-gateway/internal/connectors"
 	"github.com/akarachen/axp/apps/llm-gateway/internal/cpa"
 	"github.com/akarachen/axp/apps/llm-gateway/internal/llm"
+	"github.com/akarachen/axp/apps/llm-gateway/internal/usage"
 	"github.com/akarachen/axp/packages/telemetry-go"
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy"
+	sdkusage "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/usage"
 	"github.com/sirupsen/logrus"
 )
 
@@ -72,13 +74,20 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
+	// Who used the models: CLIProxyAPI hands it every upstream request.
+	book, err := usage.Open(filepath.Join(stateDir, "usage.json"))
+	if err != nil {
+		return err
+	}
+	sdkusage.RegisterPlugin(book)
+
 	var service *llm.Service
 	proxy, err := cpa.New(cpa.Options{
 		Host:     host,
 		Port:     port,
 		StateDir: stateDir,
 		Mount: func(e *gin.Engine) {
-			llm.Mount(e, service, logger)
+			llm.Mount(e, service, book, logger)
 		},
 	})
 	if err != nil {
@@ -99,6 +108,9 @@ func run(logger *slog.Logger) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	bookDone := make(chan struct{})
+	go func() { book.Run(ctx); close(bookDone) }()
+	defer func() { <-bookDone }()
 	logger.Info("llm-gateway starting", "addr", net.JoinHostPort(host, strconv.Itoa(port)), "state_dir", stateDir)
 	return proxy.Run(ctx)
 }
