@@ -3,6 +3,7 @@ import type { Computer, ComputerRuntime } from "@/queries/tasks";
 import { CopyIcon } from "@phosphor-icons/react/Copy";
 import { DesktopIcon } from "@phosphor-icons/react/Desktop";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
+import { InfoIcon } from "@phosphor-icons/react/Info";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -33,6 +34,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   useAddComputer,
@@ -414,6 +420,7 @@ function ComputerRow({
   const renew = useRenewInstall();
   const remove = useDeleteComputer();
   const [confirming, setConfirming] = useState(false);
+  const [offlineHintOpen, setOfflineHintOpen] = useState(false);
   const approvals = pending(computer);
   const updates = outdated(computer);
   const online = computer.runtimes.filter((r) => r.state === "online");
@@ -455,6 +462,26 @@ function ComputerRow({
         {details}
       </span>
       <span className="shrink-0 text-xs text-muted-foreground">{status}</span>
+      {computer.enrolled && !computer.online ? (
+        <Tooltip open={offlineHintOpen} onOpenChange={setOfflineHintOpen}>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="shrink-0 text-muted-foreground"
+              aria-label={`${computer.name} 的离线说明`}
+              onClick={() => setOfflineHintOpen((open) => !open)}
+            >
+              <InfoIcon aria-hidden="true" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            离线的电脑如果开着机，可能是 connector
+            版本过旧或中继地址变了：在它的“⋯”菜单里选“更新
+            connector”，按提示在那台电脑上运行命令。
+          </TooltipContent>
+        </Tooltip>
+      ) : null}
       {!computer.enrolled ? (
         <Button
           size="sm"
@@ -590,13 +617,6 @@ export function ComputerSettings() {
               有电脑的 agenvo connector 与 AXP 提供的版本
               {data.connector_version ? ` ${data.connector_version}` : ""}{" "}
               不一致：点那台电脑上的“更新”，按提示在那台电脑上运行命令。
-            </p>
-          ) : null}
-          {data.computers.some((c) => c.enrolled && !c.online) ? (
-            <p className="text-xs text-muted-foreground">
-              离线的电脑如果开着机，可能是 connector
-              版本过旧或中继地址变了：在它的“⋯”菜单里选“更新
-              connector”，按提示在那台电脑上运行命令。
             </p>
           ) : null}
           {data.computers.length ? (
