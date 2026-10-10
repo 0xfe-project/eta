@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "agenvo": {
+      "url": "${AXP_GATEWAY_URL}/agenvo/mcp",
+      "headers": { "Authorization": "Bearer ${AXP_AGENT_KEY}" }
+    }
+  }
+}

@@ -121,7 +121,7 @@ func TestCreateAgentReturnsProductFieldsOnly(t *testing.T) {
 	delete(got, "id")
 	want := map[string]any{
 		"name": "开发助手", "description": "", "model": "test-model",
-		"plugins": []any{"approval", "github", "grok", "memory", "routines", "tasks"}, "status": "idle", "revision": float64(1),
+		"plugins": []any{"agenvo", "approval", "github", "grok", "memory", "routines", "tasks"}, "status": "idle", "revision": float64(1),
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v", got)
@@ -243,7 +243,7 @@ func TestPluginsAreChosenFromTheCatalog(t *testing.T) {
 	for _, p := range plugins {
 		names = append(names, p.Name)
 	}
-	if !slices.Equal(names, []string{"approval", "github", "grok", "memory", "routines", "tasks"}) {
+	if !slices.Equal(names, []string{"agenvo", "approval", "github", "grok", "memory", "routines", "tasks"}) {
 		t.Fatalf("plugins %v", names)
 	}
 	created := e.post("/agents", map[string]any{"name": "a", "plugins": []string{"tasks", "grok"}})
