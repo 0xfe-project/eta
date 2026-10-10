@@ -226,11 +226,22 @@ func (p *Protocol) UploadURL(ctx context.Context, instance *chat.RuntimeRecord) 
 
 // AgentFor answers the runtime gateway: which agent holds the runtime key
 // "<instance id>.<token>".
-func (p *Protocol) AgentFor(ctx context.Context, key string) (string, error) {
+func (p *Protocol) AgentFor(ctx context.Context, key, plugin string) (string, error) {
 	instanceID, token, _ := strings.Cut(key, ".")
 	instance, err := p.Authenticate(ctx, instanceID, token)
 	if err != nil {
 		return "", err
+	}
+	if plugin != "" {
+		// What a plugin's routes serve only its agents have: turning a
+		// plugin off takes its abilities away, not just its tools.
+		var enabled bool
+		if err := p.DB.QueryRow(ctx, "SELECT plugins ? $2 FROM agent WHERE id = $1", instance.AgentID, plugin).Scan(&enabled); err != nil {
+			return "", err
+		}
+		if !enabled {
+			return "", apierr.New(403, "PLUGIN_NOT_ENABLED", "这个智能体没有启用 "+plugin+" 插件。")
+		}
 	}
 	return instance.AgentID, nil
 }
