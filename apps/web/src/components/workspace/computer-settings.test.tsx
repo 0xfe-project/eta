@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { ComputerSettings } from "./computer-settings";
 
 (
@@ -38,6 +39,21 @@ const computers = {
   ],
 } as unknown as Computers;
 
+// The app mounts these providers at its root (AppProviders).
+async function renderSettings() {
+  const container = document.createElement("div");
+  document.body.append(container);
+  await act(async () =>
+    createRoot(container).render(
+      <QueryClientProvider client={new QueryClient()}>
+        <TooltipProvider>
+          <ComputerSettings />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    ),
+  );
+}
+
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
 const buttons = (name: string) =>
   [...document.querySelectorAll("button")].filter((b) =>
@@ -60,16 +76,15 @@ describe("approving a computer's runtime", () => {
       }
       return Response.json(computers);
     });
-    const container = document.createElement("div");
-    document.body.append(container);
-    await act(async () =>
-      createRoot(container).render(
-        <QueryClientProvider client={new QueryClient()}>
-          <ComputerSettings />
-        </QueryClientProvider>,
-      ),
-    );
+    await renderSettings();
     await act(settle);
+    await act(async () => {
+      document
+        .querySelector<HTMLButtonElement>('[aria-label="laptop 的离线说明"]')
+        ?.click();
+      await settle();
+    });
+    expect(document.body.textContent).toContain("选“更新 connector”");
     await act(async () => {
       buttons("批准 Paseo")[0].click();
       await settle();
@@ -129,15 +144,7 @@ describe("updating a computer's connector", () => {
       }
       return Response.json(outdated);
     });
-    const container = document.createElement("div");
-    document.body.append(container);
-    await act(async () =>
-      createRoot(container).render(
-        <QueryClientProvider client={new QueryClient()}>
-          <ComputerSettings />
-        </QueryClientProvider>,
-      ),
-    );
+    await renderSettings();
     await act(settle);
     expect(document.body.textContent).toContain("connector 需要更新");
     expect(document.body.textContent).toContain("AXP 提供的版本 0.2.0");
