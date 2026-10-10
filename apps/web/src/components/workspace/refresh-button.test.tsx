@@ -126,6 +126,9 @@ async function settle(idle = true) {
   while (client?.isFetching() && Date.now() < deadline) {
     await pause(10);
   }
+  // The query is idle before it tells its observers (on a zero timeout), and
+  // a late poll can run first: let that notification reach React.
+  await pause(0);
 }
 
 describe.each([false, true])("refresh (sidebar: %s)", (panel) => {
