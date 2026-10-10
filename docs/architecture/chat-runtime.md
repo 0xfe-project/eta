@@ -31,9 +31,9 @@ outbox 的送达：批次按实际发送的 UTF-8 JSON 字节计，最多 1 MiB�
 
 压缩：`POST /agents/{id}/compact` 像发消息一样建一条 `/compact` 用户消息和回复，但命令 `kind` 为 `compact`，同样排队、一次一个。runtime 调用 `thread/compact/start`，它在 turn 开始前就返回，turn id 从随后的 `turn/started` 得到，之后与普通 turn 一样流式处理，`contextCompaction` 显示为“压缩上下文”。
 
-插话：`POST /chat/messages` 带 `mode: "steer"` 时，命令照常排队，但输入带 `steer` 标记。控制面先问 runtime 正在运行的 turn 是否接受；runtime 以插话命令 id 作为 `clientUserMessageId` 调用 `turn/steer`。Codex 采纳后回显带同一 `clientId` 的 `userMessage`，runtime 此时发出 `turn.steered`：原命令记为成功，turn 的剩余输出和最终的 `turn.completed` 都归插话命令，因此插话后的回答显示在插话消息之下。turn 结束时仍未回显的已采纳插话同样转交，绝不重跑。没有运行中的 turn（或 Codex 拒绝）时插话照常入队，轮到时作为普通 turn 执行。停止已送达的插话不会直接取消，而是等它接手 turn 后中断。
+插话：`POST /chat/messages` 带 `mode: "steer"` 时，命令照常排队，但输入带 `steer` 标记。控制面先问 runtime 正在运行的 turn 是否接受；runtime 以插话命令 id 作为 `clientUserMessageId` 调用 `turn/steer`。Codex 采纳后回显带同一 `clientId` 的 `userMessage`，runtime 此时发出 `turn.steered`：原命令记为成功，turn 的剩余输出和最终的 `turn.completed` 都归插话命令，因此插话后的回答显示在插话消息之下。turn 结束时仍未回显的已采纳插话同样转交，绝不重跑；`turn/steer` 还没有应答的插话，turn 结束时先等它的应答（最多 30 秒）：Codex 采纳了才转交，拒绝了（turn 已经结束）就不属于这个 turn，照常入队。没有运行中的 turn（或 Codex 拒绝）时插话照常入队，轮到时作为普通 turn 执行。停止已送达、还没接手 turn 的插话不会直接取消，runtime 记下它，等它接手 turn 时立即中断；它接手的原命令已被要求停止时也一样。
 
-确认：runtime 用 SDK 的审批回调接住 `commandExecution` / `fileChange` 审批请求和 plugin 工具的确认请求（MCP elicitation，见[用户确认](user-attention.md)），生成 `approval.requested`；控制面建 `approval` 与 choice `interaction`。用户回答后审批变为 `decided`，决定作为控制消息发给 runtime（再次给出同样的回答会重发），runtime 回调返回后发出 `approval.applied`，交互才显示 `resolved`。等待中被停止时回调以 `cancel` 结束，同时中断该 turn。其他服务端请求（权限扩展、带表单字段的 elicitation 等）一律保守拒绝。
+确认：runtime 用 SDK 的审批回调接住 `commandExecution` / `fileChange` 审批请求和 plugin 工具的确认请求（MCP elicitation，见[用户确认](user-attention.md)），生成 `approval.requested`；控制面建 `approval` 与 choice `interaction`。用户回答后审批变为 `decided`，决定作为控制消息发给 runtime（再次给出同样的回答会重发），runtime 回调返回后发出 `approval.applied`，交互才显示 `resolved`。等待中被停止时回调以 `cancel` 结束，同时中断该 turn：命令和文件审批的 `cancel` 本身就会中断 turn；plugin 确认的 `cancel` 在 MCP 里只表示“用户关掉了提示”，工具收到“未确认”后 turn 会继续，所以 runtime 另外调用 `turn/interrupt`。其他服务端请求（权限扩展、带表单字段的 elicitation 等）一律保守拒绝。
 
 ## 发送
 
