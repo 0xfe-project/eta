@@ -1,7 +1,7 @@
 # The agent runtime's base image. The control plane builds each agent's image
 # on it: its bundles' scripts, then their plugins, compiled for Codex
 # (docs/architecture/bundles.md). The runtime (out/main.js, built by Turbo)
-# drives Codex's app-server through oar; the agent's state lives on its
+# drives Codex's app-server over its stdio; the agent's state lives on its
 # volume at /agent.
 
 # akhook, the rule engine of the agent's hooks, from the vendor/akhook
@@ -23,9 +23,11 @@ ARG TARGETARCH
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl git \
     && rm -rf /var/lib/apt/lists/*
-# Codex, at the version the runtime's oar was checked against.
-ARG CODEX_VERSION=0.162.1
-RUN npm install --global --no-fund --no-audit "@openai/codex@${CODEX_VERSION}" \
+# Codex, at the version the runtime's protocol types are generated from
+# (package.json's @openai/codex; scripts/build/image.sh passes it).
+ARG CODEX_VERSION
+RUN test -n "$CODEX_VERSION" \
+    && npm install --global --no-fund --no-audit "@openai/codex@${CODEX_VERSION}" \
     && npm cache clean --force && codex --version
 # gh, logged in as the GitHub App by the runtime (GH_CONFIG_DIR, outside the
 # agent's volume). A release binary, checked against the release's checksums.

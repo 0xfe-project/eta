@@ -1,12 +1,13 @@
-// Package chat turns product intents (create an agent, send, stop) into
-// internal records, and runtime events into product state: agent status,
-// messages and the ui_event stream the browser follows.
+// Package chat turns product intents (create an agent, send, stop, answer)
+// into internal records, and runtime events into product state: agent status,
+// messages, interactions and the ui_event stream the browser follows.
 package chat
 
 import (
 	"context"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/akarachen/axp/apps/control-plane/internal/bundles"
 	"github.com/akarachen/axp/apps/control-plane/internal/llm"
@@ -31,7 +32,7 @@ type Service struct {
 // --- reads --------------------------------------------------------------------
 
 func (s *Service) Snapshot(ctx context.Context, db pg.DB) (*Snapshot, error) {
-	snapshot := &Snapshot{Agents: []Agent{}, ActiveReplies: []Message{}}
+	snapshot := &Snapshot{Agents: []Agent{}, ActiveReplies: []Message{}, Interactions: []Interaction{}}
 	conversationID, err := DefaultConversationID(ctx, db)
 	if err != nil {
 		return nil, err
@@ -63,8 +64,34 @@ func (s *Service) Snapshot(ctx context.Context, db pg.DB) (*Snapshot, error) {
 	for _, m := range active {
 		snapshot.ActiveReplies = append(snapshot.ActiveReplies, m.public())
 	}
+	interactions, err := pg.All[interactionRow](ctx, db, `SELECT * FROM interaction
+		WHERE conversation_id = $1 AND status IN ('pending', 'submitted') ORDER BY created_at, id`, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	for _, i := range interactions {
+		snapshot.Interactions = append(snapshot.Interactions, i.public())
+	}
 	snapshot.EventCursor = s.Cursors.Event(seq)
 	return snapshot, nil
+}
+
+// Interactions is the latest interactions of every agent, newest first.
+func (s *Service) Interactions(ctx context.Context, db pg.DB, limit int) (*InteractionList, error) {
+	list := &InteractionList{Interactions: []Interaction{}}
+	conversationID, err := DefaultConversationID(ctx, db)
+	if err != nil || conversationID == "" {
+		return list, err
+	}
+	rows, err := pg.All[interactionRow](ctx, db, `SELECT * FROM interaction
+		WHERE conversation_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2`, conversationID, limit)
+	if err != nil {
+		return nil, err
+	}
+	for _, i := range rows {
+		list.Interactions = append(list.Interactions, i.public())
+	}
+	return list, nil
 }
 
 // History is one agent's messages, newest page first; each page in send
@@ -308,16 +335,25 @@ func (s *Service) stopReplies(ctx context.Context, tx pgx.Tx, agentID string) er
 // refuses it) it waits like any turn. messageID is the client's id for the
 // message, or "" for a new one.
 func (s *Service) SendMessage(ctx context.Context, tx pgx.Tx, agentID, messageID, text string, steer bool) (*Sent, error) {
+	input := map[string]any{"text": text}
+	if steer {
+		input["steer"] = true
+	}
+	return s.enqueue(ctx, tx, agentID, messageID, text, input, KindTurn)
+}
+
+// Compact queues a compaction of the agent's context, shown as /compact.
+func (s *Service) Compact(ctx context.Context, tx pgx.Tx, agentID string) (*Sent, error) {
+	return s.enqueue(ctx, tx, agentID, "", "/compact", map[string]any{"text": "/compact"}, KindCompact)
+}
+
+func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, agentID, messageID, text string, input map[string]any, kind string) (*Sent, error) {
 	if messageID == "" {
 		messageID = pg.NewID()
 	} else if id, ok := pg.ParseID(messageID); ok {
 		messageID = id
 	} else {
 		return nil, apierr.Invalid()
-	}
-	input := map[string]any{"text": text}
-	if steer {
-		input["steer"] = true
 	}
 	// A network call: before taking the conversation lock.
 	if id, ok := pg.ParseID(agentID); ok {
@@ -348,7 +384,7 @@ func (s *Service) SendMessage(ctx context.Context, tx pgx.Tx, agentID, messageID
 		return nil, apierr.New(429, "QUEUE_FULL", "该智能体待处理的消息过多，请稍后再发送。")
 	}
 	now := pg.Now()
-	command := &CommandRecord{ID: pg.NewID(), AgentID: agent.ID, Kind: KindTurn, Status: CommandQueued, Input: input, CreatedAt: now}
+	command := &CommandRecord{ID: pg.NewID(), AgentID: agent.ID, Kind: kind, Status: CommandQueued, Input: input, CreatedAt: now}
 	if err := tx.QueryRow(ctx, `UPDATE agent SET last_command_seq = last_command_seq + 1
 		WHERE id = $1 RETURNING last_command_seq`, agent.ID).Scan(&command.AgentSequence); err != nil {
 		return nil, err
@@ -409,13 +445,16 @@ func (s *Service) requestStop(ctx context.Context, tx pgx.Tx, r *messageRow) err
 		_, err := FinishCommand(ctx, tx, command, Cancelled, "")
 		return err
 	}
-	if r.Status != MessageQueued && r.Status != MessageResponding {
+	if r.Status != MessageQueued && r.Status != MessageResponding && r.Status != MessageWaitingForInput {
 		return nil // stopping already, or final
 	}
 	// Delivered: the controller asks the runtime to interrupt it, which
 	// confirms by finishing the reply.
 	if _, err := tx.Exec(ctx, "UPDATE agent_command SET interrupt_requested_at = $2 WHERE id = $1 AND interrupt_requested_at IS NULL",
 		command.ID, pg.Now()); err != nil {
+		return err
+	}
+	if err := expireOpenInteractions(ctx, tx, r.ID); err != nil {
 		return err
 	}
 	r.Status = MessageStopping
@@ -455,6 +494,70 @@ func (s *Service) StopReply(ctx context.Context, tx pgx.Tx, messageID string) (*
 		return nil, err
 	}
 	public := r.public()
+	return &public, nil
+}
+
+// AnswerInteraction submits the user's choice; an approval's decision goes
+// to the runtime (the controller delivers it), which confirms it with
+// approval.applied.
+func (s *Service) AnswerInteraction(ctx context.Context, tx pgx.Tx, interactionID, value string) (*Interaction, error) {
+	id, ok := pg.ParseID(interactionID)
+	if !ok {
+		return nil, apierr.NotFound()
+	}
+	conversationID, err := lockedDefault(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	interaction, err := pg.One[interactionRow](ctx, tx, `SELECT * FROM interaction
+		WHERE id = $1 AND conversation_id = $2`, id, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	if interaction == nil {
+		return nil, apierr.NotFound()
+	}
+	if !slices.ContainsFunc(interaction.Options, func(o InteractionOption) bool { return o.Value == value }) {
+		return nil, apierr.New(422, "INVALID_CHOICE", "所选项无效。")
+	}
+	expired := apierr.New(409, "INTERACTION_EXPIRED", "该交互已失效。")
+	var approval *ApprovalRecord
+	if interaction.ApprovalID != nil {
+		if approval, err = pg.One[ApprovalRecord](ctx, tx, "SELECT * FROM approval WHERE id = $1", *interaction.ApprovalID); err != nil {
+			return nil, err
+		}
+	}
+	switch {
+	case interaction.Status == InteractionPending:
+		if interaction.ExpiresAt != nil && !interaction.ExpiresAt.After(time.Now()) {
+			return nil, expired
+		}
+		interaction.Status = InteractionSubmitted
+		interaction.Answer = &answer{Value: value}
+		if err := saveInteraction(ctx, tx, interaction); err != nil {
+			return nil, err
+		}
+		if approval != nil && approval.Status == ApprovalPending {
+			decision := "decline"
+			if value == "allow" {
+				decision = "accept"
+			}
+			if _, err := tx.Exec(ctx, "UPDATE approval SET status = 'decided', decision = $2 WHERE id = $1",
+				approval.ID, decision); err != nil {
+				return nil, err
+			}
+			if err := Notify(ctx, tx, approval.AgentID); err != nil {
+				return nil, err
+			}
+		}
+	case interaction.Status == InteractionExpired:
+		return nil, expired
+	case interaction.Answer != nil && interaction.Answer.Value == value:
+		// The same answer again: the controller still delivers it.
+	default:
+		return nil, apierr.New(409, "INTERACTION_ALREADY_ANSWERED", "该交互已有其他选择。")
+	}
+	public := interaction.public()
 	return &public, nil
 }
 

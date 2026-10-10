@@ -1,12 +1,14 @@
-// The agent's one Codex session, as the control plane drives it: a prompt
-// starts a turn for a command, a steer joins the running turn, an abort stops
-// it. What the turn does is reported as events for the command that owns it
-// (Emit). oar opens the session and speaks Codex's app-server protocol; the
-// turn's facts are read from Codex's own notifications on oar's record stream,
-// root thread only (sub-agents' threads stay inside their tool calls).
+// The agent's one Codex thread, as the control plane drives it: a prompt
+// starts a turn (or a compaction) for a command, a steer joins the running
+// turn, an abort stops it, a decision answers an approval Codex asked for.
+// What the turn does is reported as events for the command that owns it
+// (Emit), read from the app-server's notifications on the root thread
+// (sub-agents' threads stay inside their tool calls).
 
-import type { RawEvent, Session } from "@botiverse/oar";
+import type { Codex, Notification, Request } from "./appserver.ts";
 import type { ItemView } from "./items.ts";
+import { randomUUID } from "node:crypto";
+import { RpcError } from "./appserver.ts";
 import { itemView, textView } from "./items.ts";
 
 type Json = Record<string, unknown>;
@@ -16,6 +18,8 @@ export type Emit = (type: string, payload: Json) => void;
 export type Answer =
   | { accepted: true }
   | { accepted: false; code: string; reason?: string };
+
+export type Kind = "turn" | "compact";
 
 export interface Timing {
   // Streamed reply text is reported at most this often.
@@ -27,10 +31,34 @@ export interface Timing {
 
 const defaultTiming: Timing = { flushMs: 300, steerAnswerMs: 30_000 };
 
+const APPROVALS: Record<string, "command" | "file_change" | "elicitation"> = {
+  "item/commandExecution/requestApproval": "command",
+  "item/fileChange/requestApproval": "file_change",
+  // A plugin's tool asking the user to confirm (docs/architecture/user-attention.md).
+  "mcpServer/elicitation/request": "elicitation",
+};
+// Conservative answers to the requests the product does not show.
+const DECLINES: Record<string, unknown> = {
+  "item/permissions/requestApproval": { permissions: {} },
+  "item/tool/requestUserInput": { answers: {} },
+  execCommandApproval: { decision: "denied" },
+  applyPatchApproval: { decision: "denied" },
+  "item/tool/call": { contentItems: [], success: false },
+};
+const DECISIONS = new Set(["accept", "decline"]);
+
 interface Steer {
   turnId: string;
   // true once Codex took it (or never answered in time), false if it refused.
   answered: Promise<boolean>;
+}
+
+interface Approval {
+  commandId: string;
+  kind: string;
+  requestId: string | number;
+  decided: (decision: string) => void;
+  decision?: string;
 }
 
 const str = (value: unknown): string =>
@@ -39,6 +67,50 @@ const record = (value: unknown): Json =>
   typeof value === "object" && value !== null ? (value as Json) : {};
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
+const text = (input: string) => [
+  { type: "text" as const, text: input, text_elements: [] },
+];
+
+function refusal(error: unknown): Answer {
+  return {
+    accepted: false,
+    code: error instanceof RpcError ? "runtime_refused" : "runtime_exited",
+    reason: error instanceof Error ? error.message : String(error),
+  };
+}
+
+/** Whether an elicitation only asks for a yes or no: a form with no fields. */
+function confirmation(params: Json): boolean {
+  const schema = record(params.requestedSchema);
+  return (
+    params.mode === "form" &&
+    Object.keys(record(schema.properties)).length === 0
+  );
+}
+
+function summary(kind: string, params: Json): Json {
+  const clip = (value: unknown, n: number) => str(value).slice(0, n) || null;
+  if (kind === "elicitation") {
+    return {
+      server: clip(params.serverName, 100),
+      message: clip(params.message, 500),
+    };
+  }
+  const out: Json = { reason: clip(params.reason, 300) };
+  if (kind === "command") {
+    out.command = clip(params.command, 500);
+  }
+  return out;
+}
+
+function response(kind: string, decision: string): unknown {
+  if (kind !== "elicitation") {
+    return { decision };
+  }
+  return decision === "accept"
+    ? { action: "accept", content: {}, _meta: null }
+    : { action: decision, content: null, _meta: null };
+}
 
 export class Agent {
   // The command whose turn runs (or is starting), and Codex's id for the turn.
@@ -51,24 +123,34 @@ export class Agent {
   private readonly stopped = new Set<string>();
   // Steers sent to the running turn and not yet echoed by Codex.
   private readonly steers = new Map<string, Steer>();
+  // Approvals waiting for the user, by their id.
+  private readonly approvals = new Map<string, Approval>();
   // Reply texts of the running turn, by item, and the ones not yet reported.
   private readonly texts = new Map<string, string>();
   private readonly dirty = new Set<string>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
-  // Records are read one at a time, in order; reading may wait (steers).
+  // Notifications are read one at a time, in order; reading may wait.
   private reading: Promise<void> = Promise.resolve();
   // Codex's app-server exited.
   onExit: (code: number | null) => void = () => {};
 
   constructor(
-    private readonly session: Session,
+    private readonly codex: Codex,
+    readonly threadId: string,
     private readonly emit: Emit,
     private readonly timing: Timing = defaultTiming,
   ) {
-    session.rawEvents((event) => this.schedule(() => this.read(event)));
+    codex.onNotification((notification) =>
+      this.schedule(() => this.read(notification)),
+    );
+    codex.onRequest((request) => this.ask(request));
+    void codex.exited.then((code) => {
+      this.cancelApprovals();
+      this.onExit(code);
+    });
   }
 
-  /** Settles once every record so far has been read. */
+  /** Settles once every notification so far has been read. */
   settled(): Promise<void> {
     return this.reading;
   }
@@ -77,85 +159,200 @@ export class Agent {
     return { command_id: this.owner, turn_id: this.turnId };
   }
 
-  /** Start the command's turn; refused while another runs. */
-  async prompt(commandId: string, text: string): Promise<Answer> {
+  /** Start the command's turn, or compact the thread; refused while another runs. */
+  async prompt(
+    commandId: string,
+    input: string,
+    kind: Kind = "turn",
+  ): Promise<Answer> {
     if (this.taken.has(commandId)) {
       return { accepted: true };
     }
     if (this.owner !== null) {
       return { accepted: false, code: "busy" };
     }
-    // Owned from now: Codex may report the turn before it answers.
+    // Owned from now: Codex reports the turn before it answers a compaction.
     this.owner = commandId;
     this.taken.add(commandId);
-    const outcome = await this.session.prompt(text, { inputId: commandId });
-    if (outcome.kind === "accepted") {
+    try {
+      if (kind === "compact") {
+        await this.codex.request("thread/compact/start", {
+          threadId: this.threadId,
+        });
+      } else {
+        await this.codex.request("turn/start", {
+          threadId: this.threadId,
+          clientUserMessageId: commandId,
+          input: text(input),
+        });
+      }
       return { accepted: true };
+    } catch (error) {
+      this.taken.delete(commandId);
+      if (this.owner === commandId && this.turnId === null) {
+        this.owner = null;
+      }
+      return refusal(error);
     }
-    this.taken.delete(commandId);
-    if (this.owner === commandId && this.turnId === null) {
-      this.owner = null;
-    }
-    return { accepted: false, code: outcome.code, reason: outcome.reason };
   }
 
   /** Add the command's input to the running turn; refused without one. */
-  async steer(commandId: string, text: string): Promise<Answer> {
+  async steer(commandId: string, input: string): Promise<Answer> {
     if (this.taken.has(commandId) || this.steers.has(commandId)) {
       return { accepted: true };
     }
-    if (
-      this.session.steer === undefined ||
-      this.owner === null ||
-      this.turnId === null ||
-      this.stopped.has(this.owner)
-    ) {
+    const owner = this.owner;
+    const turnId = this.turnId;
+    if (owner === null || turnId === null || this.stopped.has(owner)) {
       return { accepted: false, code: "no_active_turn" };
     }
     let answer: (taken: boolean) => void = () => {};
     // Registered first: Codex may echo the steer before it answers.
     this.steers.set(commandId, {
-      turnId: this.turnId,
+      turnId,
       answered: new Promise((resolve) => (answer = resolve)),
     });
-    const outcome = await this.session.steer(text, { inputId: commandId });
-    answer(outcome.kind === "accepted");
-    if (outcome.kind === "accepted") {
+    try {
+      await this.codex.request("turn/steer", {
+        threadId: this.threadId,
+        expectedTurnId: turnId,
+        clientUserMessageId: commandId,
+        input: text(input),
+      });
+      answer(true);
       return { accepted: true };
+    } catch (error) {
+      answer(false);
+      this.steers.delete(commandId);
+      this.stopped.delete(commandId);
+      return refusal(error);
     }
-    this.steers.delete(commandId);
-    this.stopped.delete(commandId);
-    return { accepted: false, code: outcome.code, reason: outcome.reason };
   }
 
   /** Stop the command's turn, now or as soon as it owns one. */
   async abort(commandId: string): Promise<void> {
     if (commandId === this.owner) {
       this.stopped.add(commandId);
-      if (this.turnId !== null) {
-        await this.session.abort();
+      let elicited = false;
+      for (const [id, approval] of this.approvals) {
+        if (approval.commandId === commandId) {
+          // For a command or file approval "cancel" also interrupts the
+          // turn; for a plugin's confirmation it only dismisses the prompt
+          // (the tool hears "not confirmed" and the turn goes on).
+          elicited ||= approval.kind === "elicitation";
+          this.decide(id, "cancel");
+        }
+      }
+      if (this.turnId !== null && (elicited || !this.hasApproval(commandId))) {
+        await this.interrupt(this.turnId);
       }
     } else if (this.steers.has(commandId)) {
       this.stopped.add(commandId);
     }
   }
 
+  /** The user's answer to an approval: "accepted" or "not_pending". */
+  decide(approvalId: string, decision: string): "accepted" | "not_pending" {
+    const approval = this.approvals.get(approvalId);
+    if (approval === undefined) {
+      return "not_pending";
+    }
+    if (approval.decision !== undefined) {
+      return approval.decision === decision ? "accepted" : "not_pending";
+    }
+    if (!DECISIONS.has(decision) && decision !== "cancel") {
+      return "not_pending";
+    }
+    approval.decision = decision;
+    approval.decided(decision);
+    return "accepted";
+  }
+
+  private hasApproval(commandId: string): boolean {
+    return [...this.approvals.values()].some((a) => a.commandId === commandId);
+  }
+
+  private cancelApprovals(): void {
+    for (const id of [...this.approvals.keys()]) {
+      this.decide(id, "cancel");
+    }
+  }
+
+  private async interrupt(turnId: string): Promise<void> {
+    try {
+      await this.codex.request("turn/interrupt", {
+        threadId: this.threadId,
+        turnId,
+      });
+    } catch (error) {
+      console.warn("turn/interrupt failed", error);
+    }
+  }
+
+  /** A request from Codex: an approval for the user, or a conservative no. */
+  private async ask(request: Request): Promise<unknown> {
+    const kind = APPROVALS[request.method];
+    if (kind === undefined) {
+      if (request.method in DECLINES) {
+        return DECLINES[request.method];
+      }
+      throw new Error(`${request.method} is not supported`);
+    }
+    const params = record(request.params);
+    const commandId = this.owner;
+    if (
+      commandId === null ||
+      (kind === "elicitation" && !confirmation(params))
+    ) {
+      return response(kind, "decline");
+    }
+    const approvalId = randomUUID();
+    const decision = await new Promise<string>((decided) => {
+      this.approvals.set(approvalId, {
+        commandId,
+        kind,
+        requestId: request.id,
+        decided,
+      });
+      this.emit("approval.requested", {
+        approval_id: approvalId,
+        command_id: commandId,
+        kind,
+        summary: summary(kind, params),
+      });
+      if (this.stopped.has(commandId)) {
+        this.decide(approvalId, "cancel");
+      }
+    });
+    this.approvals.delete(approvalId);
+    this.emit("approval.applied", { approval_id: approvalId, decision });
+    return response(kind, decision);
+  }
+
   private schedule(step: () => void | Promise<void>): void {
     this.reading = this.reading.then(step).catch((error: unknown) => {
-      console.error("Reading the session failed", error);
+      console.error("Reading the app-server failed", error);
     });
   }
 
-  private async read(event: RawEvent): Promise<void> {
-    if (event.kind === "response" && event.body.kind === "exited") {
-      this.onExit(event.body.code);
+  private async read(notification: Notification): Promise<void> {
+    const params = record(notification.params);
+    if (notification.method === "serverRequest/resolved") {
+      // Codex no longer waits on the request (the turn ended without it).
+      for (const [id, approval] of this.approvals) {
+        if (String(approval.requestId) === String(params.requestId)) {
+          this.decide(id, "cancel");
+        }
+      }
       return;
     }
-    if (event.kind !== "frame" || event.sessionId !== this.session.id) {
+    if (
+      typeof params.threadId === "string" &&
+      params.threadId !== this.threadId
+    ) {
       return;
     }
-    const params = record(event.body.native);
-    switch (event.body.type) {
+    switch (notification.method) {
       case "turn/started":
         this.turnStarted(params);
         break;
@@ -164,7 +361,7 @@ export class Agent {
         break;
       case "item/started":
       case "item/completed":
-        this.item(params, event.body.type === "item/completed");
+        this.item(params, notification.method === "item/completed");
         break;
       case "turn/completed":
         await this.turnCompleted(params);
@@ -180,7 +377,7 @@ export class Agent {
     this.turnId = id;
     this.emit("turn.started", { command_id: this.owner, turn_id: id });
     if (this.stopped.has(this.owner)) {
-      void this.session.abort();
+      void this.interrupt(id);
     }
   }
 
@@ -253,7 +450,9 @@ export class Agent {
     this.owner = steerId;
     if (stop) {
       this.stopped.add(steerId);
-      void this.session.abort();
+      if (this.turnId !== null) {
+        void this.interrupt(this.turnId);
+      }
     }
   }
 

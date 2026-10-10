@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"slices"
 
 	"github.com/akarachen/axp/packages/service-go/apierr"
 	"github.com/akarachen/axp/packages/service-go/pg"
@@ -65,9 +66,10 @@ func lockedDefault(ctx context.Context, tx pgx.Tx) (string, error) {
 // --- events (callers hold the conversation lock) ------------------------------
 
 const (
-	EventAgentUpdated   = "agent.updated"
-	EventAgentDeleted   = "agent.deleted"
-	EventMessageUpdated = "message.updated"
+	EventAgentUpdated       = "agent.updated"
+	EventAgentDeleted       = "agent.deleted"
+	EventMessageUpdated     = "message.updated"
+	EventInteractionUpdated = "interaction.updated"
 )
 
 func emit(ctx context.Context, tx pgx.Tx, conversationID, kind string, payload any) error {
@@ -89,6 +91,37 @@ func emit(ctx context.Context, tx pgx.Tx, conversationID, kind string, payload a
 
 func emitAgent(ctx context.Context, tx pgx.Tx, a *AgentRecord) error {
 	return emit(ctx, tx, a.ConversationID, EventAgentUpdated, AgentUpdated{a.public()})
+}
+
+func emitInteraction(ctx context.Context, tx pgx.Tx, i *interactionRow) error {
+	return emit(ctx, tx, i.ConversationID, EventInteractionUpdated, InteractionUpdated{i.public()})
+}
+
+// saveInteraction writes the interaction's status and answer as a new
+// revision and publishes it.
+func saveInteraction(ctx context.Context, tx pgx.Tx, i *interactionRow) error {
+	i.Revision++
+	i.UpdatedAt = pg.Now()
+	if _, err := tx.Exec(ctx, `UPDATE interaction SET status = $2, answer = $3, revision = $4,
+		updated_at = $5 WHERE id = $1`, i.ID, i.Status, i.Answer, i.Revision, i.UpdatedAt); err != nil {
+		return err
+	}
+	return emitInteraction(ctx, tx, i)
+}
+
+func expireOpenInteractions(ctx context.Context, tx pgx.Tx, messageID string) error {
+	open, err := pg.All[interactionRow](ctx, tx, `SELECT * FROM interaction
+		WHERE message_id = $1 AND status IN ('pending', 'submitted') ORDER BY created_at, id`, messageID)
+	if err != nil {
+		return err
+	}
+	for _, i := range open {
+		i.Status = InteractionExpired
+		if err := saveInteraction(ctx, tx, i); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // saveMessage writes the message's status, blocks and failure as a new
@@ -139,13 +172,19 @@ func RefreshAgentStatus(ctx context.Context, tx pgx.Tx, agentID string) error {
 	if agent.Status == AgentError {
 		status = ProductUnavailable
 	} else {
-		var active bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM message
-			WHERE agent_id = $1 AND role = 'assistant' AND status = ANY($2))`, agentID, activeMessageStatuses).Scan(&active); err != nil {
+		rows, err := tx.Query(ctx, `SELECT DISTINCT status FROM message
+			WHERE agent_id = $1 AND role = 'assistant' AND status = ANY($2)`, agentID, activeMessageStatuses)
+		if err != nil {
+			return err
+		}
+		active, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		if err != nil {
 			return err
 		}
 		switch {
-		case !active:
+		case slices.Contains(active, MessageWaitingForInput):
+			status = ProductWaitingForInput
+		case len(active) == 0:
 		case agent.Status != AgentReady:
 			// Work waits on its environment: an image, a container, the thread.
 			status = ProductStarting
@@ -213,11 +252,18 @@ func FinishCommand(ctx context.Context, tx pgx.Tx, command *CommandRecord, outco
 		command.ID, command.Status, now, command.ErrorCode); err != nil {
 		return false, err
 	}
+	if _, err := tx.Exec(ctx, `UPDATE approval SET status = 'expired', resolved_at = $2
+		WHERE command_id = $1 AND status IN ('pending', 'decided')`, command.ID, now); err != nil {
+		return false, err
+	}
 	r, err := reply(ctx, tx, command.ID)
 	if err != nil {
 		return false, err
 	}
 	if r != nil && !r.terminal() {
+		if err := expireOpenInteractions(ctx, tx, r.ID); err != nil {
+			return false, err
+		}
 		settled := "failed"
 		if outcome == Succeeded {
 			settled = "completed"

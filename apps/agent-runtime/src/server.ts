@@ -3,7 +3,7 @@
 // network and can reach this port, never the token.
 
 import type { Context } from "hono";
-import type { Agent, Answer } from "./agent.ts";
+import type { Agent, Answer, Kind } from "./agent.ts";
 import { Buffer } from "node:buffer";
 import { timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
@@ -12,6 +12,9 @@ interface Input {
   boot_id?: unknown;
   command_id?: unknown;
   text?: unknown;
+  kind?: unknown;
+  approval_id?: unknown;
+  decision?: unknown;
 }
 
 function same(a: string, b: string): boolean {
@@ -34,7 +37,7 @@ export function controlAPI(agent: Agent, token: string, bootId: string): Hono {
   // A prompt or steer names the boot it was meant for: one sent before this
   // boot reported itself started belongs to the previous one.
   const deliver =
-    (run: (commandId: string, text: string) => Promise<Answer>) =>
+    (run: (commandId: string, text: string, kind: Kind) => Promise<Answer>) =>
     async (c: Context) => {
       const body = (await c.req.json().catch(() => null)) as Input | null;
       if (
@@ -46,17 +49,30 @@ export function controlAPI(agent: Agent, token: string, bootId: string): Hono {
       if (body.boot_id !== bootId) {
         return c.json({ accepted: false, code: "wrong_boot" }, 409);
       }
-      const answer = await run(body.command_id, body.text);
+      const kind = body.kind === "compact" ? "compact" : "turn";
+      const answer = await run(body.command_id, body.text, kind);
       return c.json(answer, answer.accepted ? 200 : 409);
     };
   app.post(
     "/prompt",
-    deliver((id, text) => agent.prompt(id, text)),
+    deliver((id, text, kind) => agent.prompt(id, text, kind)),
   );
   app.post(
     "/steer",
     deliver((id, text) => agent.steer(id, text)),
   );
+
+  // The user's answer to an approval; "not_pending" once it is gone.
+  app.post("/decide", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as Input | null;
+    if (
+      typeof body?.approval_id !== "string" ||
+      typeof body.decision !== "string"
+    ) {
+      return c.json({ error: "invalid" }, 400);
+    }
+    return c.json({ result: agent.decide(body.approval_id, body.decision) });
+  });
 
   app.post("/abort", async (c) => {
     const body = (await c.req.json().catch(() => null)) as Input | null;

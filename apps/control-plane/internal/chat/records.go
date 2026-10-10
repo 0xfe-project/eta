@@ -13,10 +13,11 @@ const (
 	AgentReady    = "ready"
 	AgentError    = "error"
 
-	ProductIdle        = "idle"
-	ProductStarting    = "starting"
-	ProductWorking     = "working"
-	ProductUnavailable = "unavailable"
+	ProductIdle            = "idle"
+	ProductStarting        = "starting"
+	ProductWorking         = "working"
+	ProductWaitingForInput = "waiting_for_input"
+	ProductUnavailable     = "unavailable"
 )
 
 type AgentRecord struct {
@@ -49,14 +50,20 @@ type AgentRecord struct {
 
 const (
 	KindTurn = "turn"
+	// KindCompact compacts the thread's context; a turn without user input.
+	KindCompact = "compact"
 
-	CommandQueued      = "queued"
-	CommandRunning     = "running"
-	CommandSucceeded   = "succeeded"
-	CommandFailed      = "failed"
-	CommandCancelled   = "cancelled"
-	CommandInterrupted = "interrupted"
+	CommandQueued          = "queued"
+	CommandRunning         = "running"
+	CommandWaitingApproval = "waiting_approval"
+	CommandSucceeded       = "succeeded"
+	CommandFailed          = "failed"
+	CommandCancelled       = "cancelled"
+	CommandInterrupted     = "interrupted"
 )
+
+// ActiveCommandStatuses hold the agent's single execution slot.
+var ActiveCommandStatuses = []string{CommandRunning, CommandWaitingApproval}
 
 var terminalCommandStatuses = []string{CommandSucceeded, CommandFailed, CommandCancelled, CommandInterrupted}
 
@@ -104,15 +111,16 @@ const (
 	RoleUser      = "user"
 	RoleAssistant = "assistant"
 
-	MessageQueued     = "queued"
-	MessageResponding = "responding"
-	MessageStopping   = "stopping"
-	MessageCompleted  = "completed"
-	MessageStopped    = "stopped"
-	MessageFailed     = "failed"
+	MessageQueued          = "queued"
+	MessageResponding      = "responding"
+	MessageWaitingForInput = "waiting_for_input"
+	MessageStopping        = "stopping"
+	MessageCompleted       = "completed"
+	MessageStopped         = "stopped"
+	MessageFailed          = "failed"
 )
 
-var activeMessageStatuses = []string{MessageQueued, MessageResponding, MessageStopping}
+var activeMessageStatuses = []string{MessageQueued, MessageResponding, MessageWaitingForInput, MessageStopping}
 
 type messageRow struct {
 	ID             string    `db:"id"`
@@ -132,4 +140,56 @@ type messageRow struct {
 
 func (m *messageRow) terminal() bool {
 	return m.Status == MessageCompleted || m.Status == MessageStopped || m.Status == MessageFailed
+}
+
+const (
+	InteractionPending   = "pending"
+	InteractionSubmitted = "submitted"
+	InteractionResolved  = "resolved"
+	InteractionExpired   = "expired"
+)
+
+type answer struct {
+	Value string `json:"value"`
+}
+
+type interactionRow struct {
+	ID             string              `db:"id"`
+	ConversationID string              `db:"conversation_id"`
+	AgentID        string              `db:"agent_id"`
+	MessageID      string              `db:"message_id"`
+	ApprovalID     *string             `db:"approval_id"`
+	Kind           string              `db:"kind"`
+	Prompt         string              `db:"prompt"`
+	Options        []InteractionOption `db:"options"`
+	Status         string              `db:"status"`
+	Revision       int64               `db:"revision"`
+	Answer         *answer             `db:"answer"`
+	ExpiresAt      *time.Time          `db:"expires_at"`
+	CreatedAt      time.Time           `db:"created_at"`
+	UpdatedAt      time.Time           `db:"updated_at"`
+}
+
+const (
+	ApprovalPending = "pending"
+	ApprovalDecided = "decided"
+	ApprovalApplied = "applied"
+	ApprovalExpired = "expired"
+)
+
+// ApprovalRecord is a request a runtime boot made for the user's decision.
+type ApprovalRecord struct {
+	ID        string `db:"id"`
+	AgentID   string `db:"agent_id"`
+	CommandID string `db:"command_id"`
+	// The boot that asked; its id for the request is SDKRequestID.
+	BootID       *string        `db:"boot_id"`
+	SDKRequestID string         `db:"sdk_request_id"`
+	Kind         string         `db:"kind"`
+	Summary      map[string]any `db:"summary"`
+	Status       string         `db:"status"`
+	Decision     *string        `db:"decision"`
+	ExpiresAt    *time.Time     `db:"expires_at"`
+	CreatedAt    time.Time      `db:"created_at"`
+	ResolvedAt   *time.Time     `db:"resolved_at"`
 }

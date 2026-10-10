@@ -28,6 +28,7 @@
     "**/.tanstack",
     "**/.turbo",
     "**/*.gen.ts",
+    "apps/agent-runtime/src/protocol",
     "**/*-lock.json",
     "bun.lock",
     "**/uv.lock",

@@ -37,6 +37,10 @@ type AgentUpdateIn struct {
 	Bundles     *[]string `json:"bundles,omitempty" nullable:"true" maxItems:"50"`
 }
 
+type InteractionAnswerIn struct {
+	Value string `json:"value" minLength:"1" maxLength:"100"`
+}
+
 type BundleCreateIn struct {
 	Name        string `json:"name" minLength:"1" maxLength:"40" doc:"Lower-case letters, digits and hyphens."`
 	Description string `json:"description,omitempty" maxLength:"500"`
@@ -118,6 +122,18 @@ func registerChat(api huma.API, d *Deps) {
 				return nil, err
 			}
 			return &httpapi.Body[chat.MessagePage]{Body: *page}, nil
+		})
+
+	huma.Register(api, op("listInteractions", http.MethodGet, "/api/v1/chat/interactions",
+		"Every agent's latest confirmations, newest first, answered or not", 200, "chat"),
+		func(ctx context.Context, in *struct {
+			Limit int `query:"limit" default:"50" minimum:"1" maximum:"200"`
+		}) (*httpapi.Body[chat.InteractionList], error) {
+			list, err := s.Interactions(ctx, d.DB, in.Limit)
+			if err != nil {
+				return nil, err
+			}
+			return &httpapi.Body[chat.InteractionList]{Body: *list}, nil
 		})
 
 	huma.Register(api, op("listPlugins", http.MethodGet, "/api/v1/plugins",
@@ -249,6 +265,21 @@ func registerChat(api huma.API, d *Deps) {
 			})
 		})
 
+	huma.Register(api, op("compactAgent", http.MethodPost, "/api/v1/agents/{agent_id}/compact",
+		"Compact the agent's context, shown as /compact", 202, "chat"),
+		func(ctx context.Context, in *struct {
+			idempotency.Keyed
+			AgentPath
+		}) (*idempotency.Response[chat.Sent], error) {
+			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, struct{}{}, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[chat.Sent], error) {
+				sent, err := s.Compact(ctx, tx, in.AgentID)
+				if err != nil {
+					return idempotency.Result[chat.Sent]{}, err
+				}
+				return idempotency.Result[chat.Sent]{Status: 202, Body: sent, Resource: sent.Reply.ID}, nil
+			})
+		})
+
 	huma.Register(api, op("stopMessage", http.MethodPost, "/api/v1/chat/messages/{message_id}/stop",
 		"Stop a reply; repeating it is harmless", 200, "chat"),
 		func(ctx context.Context, in *struct {
@@ -261,6 +292,22 @@ func registerChat(api huma.API, d *Deps) {
 					return idempotency.Result[chat.Message]{}, err
 				}
 				return idempotency.Result[chat.Message]{Status: 200, Body: reply, Resource: reply.ID}, nil
+			})
+		})
+
+	huma.Register(api, op("answerInteraction", http.MethodPost, "/api/v1/chat/interactions/{interaction_id}/answer",
+		"Answer an interaction", 202, "chat"),
+		func(ctx context.Context, in *struct {
+			idempotency.Keyed
+			InteractionID string `path:"interaction_id"`
+			Body          InteractionAnswerIn
+		}) (*idempotency.Response[chat.Interaction], error) {
+			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[chat.Interaction], error) {
+				answered, err := s.AnswerInteraction(ctx, tx, in.InteractionID, in.Body.Value)
+				if err != nil {
+					return idempotency.Result[chat.Interaction]{}, err
+				}
+				return idempotency.Result[chat.Interaction]{Status: 202, Body: answered, Resource: answered.ID}, nil
 			})
 		})
 

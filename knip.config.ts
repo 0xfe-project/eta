@@ -20,9 +20,11 @@ export default {
   },
   workspaces: {
     "apps/agent-runtime": {
-      // The runtime is bundled from main.ts; the memory plugin's hooks run
-      // in agents' images (akhook.yml).
-      entry: ["src/main.ts", "plugins/*/hooks/*.mjs"],
+      // The runtime is bundled from main.ts; plugins' scripts run in agents'
+      // images.
+      entry: ["src/main.ts", "plugins/*/hooks/*.mjs", "plugins/*/server.mjs"],
+      // Generated from the pinned Codex's app-server schema.
+      ignore: ["src/protocol/**"],
     },
     "apps/web": {
       // routeTree.gen.ts is gitignored, which knip skips, so the file routes

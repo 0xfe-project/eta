@@ -8,7 +8,7 @@ apps/
   control-plane/   Go：产品 API、内部 API、controller；构建并运行每个智能体的容器
   llm-gateway/     Go：LLM 连接与模型目录（嵌入 CLIProxyAPI）
   web/             TanStack Start + React + Vite + TypeScript
-  agent-runtime/   每个 Agent 一个常驻容器的运行时（Node，oar 驱动 Codex）；bundles/ 是内置环境包，plugins/ 是聊天智能体和定时任务用的插件
+  agent-runtime/   每个 Agent 一个常驻容器的运行时（Node，直接驱动 Codex app-server）；bundles/ 是内置环境包，plugins/ 是聊天智能体和定时任务用的插件
   memory-service/  Python：Agent 的长期记忆（mem0 + pgvector），memory plugin 的后端
   forge-service/   Go：代码托管（用户自己的 GitHub App），agent 的 git、gh 凭据与 open_pull_request
   routine-service/ Go：定时任务，每次运行是进程内的 ADK agent；自己的数据库，计划在 NATS
@@ -79,7 +79,7 @@ Web 已配置 Query、nuqs、Phosphor Icons、表单校验、通知、Markdown �
 | `bun run lint`               | ESLint、Ruff 与 Go 检查                                                      |
 | `bun run test`               | 全部测试（Web 用 Rstest，runtime 用 Bun，Python 用 pytest，Go 用 `go test`） |
 | `bun run test:control-plane` | 运行 control plane 测试                                                      |
-| `bun run test:agent-runtime` | 运行 runtime 测试（脚本化的 oar 会话，无需凭据）                             |
+| `bun run test:agent-runtime` | 运行 runtime 测试（脚本化的 app-server，无需凭据）                           |
 | `bun run format`             | 用 dprint 格式化整个仓库（`format:check` 只检查）                            |
 
 TanStack 的 `src/routeTree.gen.ts` 由 `dev` 或 `build` 自动生成；控制面的类型 `src/api/control-plane.gen.ts` 由 `generate` 从控制面的 OpenAPI 文档生成，而这份文档由控制面的 Go 代码生成（见[控制面](docs/architecture/control-plane.md)）。两者都不入库；`check` 会先执行构建，因此可在全新安装后直接执行。
@@ -131,4 +131,4 @@ agent runtime 容器运行智能体执行的代码、不持有凭据，它们把
 
 Kamal 配置和部署脚本都在 [`deploy/`](deploy/README.md)。在任意一台满足条件的 Linux 机器上克隆仓库后执行 `deploy/deploy.sh`（或 `bun run deploy`），即可把已提交的 HEAD 部署到这台机器。
 
-配置参考：[TanStack Start 官方初始化指南](https://tanstack.com/start/latest/docs/framework/react/build-from-scratch)、[huma](https://huma.rocks)、[oar](https://github.com/botiverse/oar)。
+配置参考：[TanStack Start 官方初始化指南](https://tanstack.com/start/latest/docs/framework/react/build-from-scratch)、[huma](https://huma.rocks)、[Codex app-server](https://github.com/openai/codex/tree/main/codex-rs/app-server)。

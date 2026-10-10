@@ -124,7 +124,7 @@ func TestCreateAgentReturnsProductFieldsOnly(t *testing.T) {
 	delete(got, "id")
 	want := map[string]any{
 		"name": "开发助手", "description": "", "model": "test-model",
-		"bundles": []any{"agenvo", "github", "grok", "memory", "routines", "tasks"}, "status": "idle",
+		"bundles": []any{"agenvo", "approval", "github", "grok", "memory", "routines", "tasks"}, "status": "idle",
 		"build_error": nil, "revision": float64(1),
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -252,7 +252,7 @@ func TestBundlesAreChosenFromTheCatalog(t *testing.T) {
 		names = append(names, b.Name)
 		expect(t, b.Builtin, true)
 	}
-	if !slices.Equal(names, []string{"agenvo", "github", "grok", "memory", "routines", "tasks"}) {
+	if !slices.Equal(names, []string{"agenvo", "approval", "github", "grok", "memory", "routines", "tasks"}) {
 		t.Fatalf("bundles %v", names)
 	}
 	created := e.post("/agents", map[string]any{"name": "a", "bundles": []string{"tasks", "grok"}})
@@ -277,7 +277,7 @@ func TestUsersBundles(t *testing.T) {
 	e := newEnv(t)
 	var plugins []struct{ Name string }
 	e.get("/plugins").json(t, &plugins)
-	expect(t, len(plugins), 6)
+	expect(t, len(plugins), 7)
 	created := e.post("/bundles", map[string]any{
 		"name": "python", "description": "Python 3", "script": "apt-get install -y python3", "plugins": []string{"memory"},
 	})
@@ -623,9 +623,10 @@ func TestPublicSchemaHasNoInternalFields(t *testing.T) {
 	}
 	slices.Sort(paths)
 	want := []string{
-		"/api/v1/agents", "/api/v1/agents/{agent_id}",
+		"/api/v1/agents", "/api/v1/agents/{agent_id}", "/api/v1/agents/{agent_id}/compact",
 		"/api/v1/agents/{agent_id}/messages", "/api/v1/agents/{agent_id}/restart",
-		"/api/v1/bundles", "/api/v1/bundles/{name}", "/api/v1/chat", "/api/v1/chat/messages",
+		"/api/v1/bundles", "/api/v1/bundles/{name}", "/api/v1/chat",
+		"/api/v1/chat/interactions", "/api/v1/chat/interactions/{interaction_id}/answer", "/api/v1/chat/messages",
 		"/api/v1/chat/messages/{message_id}/stop", "/api/v1/chat/stream", "/api/v1/computers",
 		"/api/v1/computers/{computer_id}", "/api/v1/computers/{computer_id}/install",
 		"/api/v1/computers/{computer_id}/runtimes/{kind}/approve",

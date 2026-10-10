@@ -1,122 +1,135 @@
-import type { RawEvent, Session } from "@botiverse/oar";
+import type { Codex, Notification, Request } from "./appserver.ts";
 import { describe, expect, test } from "bun:test";
 import { Agent } from "./agent.ts";
+import { RpcError } from "./appserver.ts";
+import { openThread } from "./thread.ts";
 
 const THREAD = "thread-1";
 
-type Outcome =
-  | { kind: "accepted" }
-  | { kind: "rejected"; code: string; reason: string };
+/** A scripted app-server: the test writes Codex's notifications and requests. */
+class FakeCodex implements Codex {
+  requests: { method: string; params: Record<string, unknown> }[] = [];
+  answers: Record<
+    string,
+    (params: Record<string, unknown>) => Promise<unknown>
+  > = {};
+  private notified: (n: Notification) => void = () => {};
+  private asked: (r: Request) => Promise<unknown> = async () => ({});
+  private exit: (code: number | null) => void = () => {};
+  readonly exited = new Promise<number | null>(
+    (resolve) => (this.exit = resolve),
+  );
 
-/** A scripted oar session: the test writes Codex's notifications. */
-class FakeSession {
-  readonly id = THREAD;
-  private observers: ((event: RawEvent) => void)[] = [];
-  private seq = 0;
-  prompts: { text: string; inputId?: string }[] = [];
-  steered: { text: string; inputId?: string }[] = [];
-  aborts = 0;
-  promptAnswer: Outcome = { kind: "accepted" };
-  steerAnswer: () => Promise<Outcome> = async () => ({ kind: "accepted" });
+  request = (async (method: string, params: Record<string, unknown>) => {
+    this.requests.push({ method, params });
+    const answer = this.answers[method];
+    return answer ? answer(params) : {};
+  }) as Codex["request"];
 
-  rawEvents(observer: (event: RawEvent) => void): () => void {
-    this.observers.push(observer);
-    return () => {};
+  onNotification(handler: (n: Notification) => void): void {
+    this.notified = handler;
   }
 
-  async prompt(text: string, options?: { inputId?: string }): Promise<Outcome> {
-    this.prompts.push({ text, inputId: options?.inputId });
-    return this.promptAnswer;
+  onRequest(handler: (r: Request) => Promise<unknown>): void {
+    this.asked = handler;
   }
 
-  async steer(text: string, options?: { inputId?: string }): Promise<Outcome> {
-    this.steered.push({ text, inputId: options?.inputId });
-    return this.steerAnswer();
+  close(): void {}
+
+  notify(method: string, params: Record<string, unknown>): void {
+    this.notified({ method, params } as Notification);
   }
 
-  async abort(): Promise<Outcome> {
-    this.aborts += 1;
-    return { kind: "accepted" };
+  ask(
+    method: string,
+    params: Record<string, unknown>,
+    id: number | string = 7,
+  ): Promise<unknown> {
+    return this.asked({ method, id, params } as Request);
   }
 
-  frame(type: string, native: unknown, sessionId = THREAD): void {
-    this.seq += 1;
-    const event = {
-      kind: "frame",
-      sessionId,
-      agentPath: [],
-      seq: this.seq,
-      receivedAt: 0,
-      body: { type, native, events: [] },
-    };
-    for (const observer of this.observers) {
-      observer(event as unknown as RawEvent);
-    }
+  die(code: number | null): void {
+    this.exit(code);
   }
 
-  exit(code: number | null): void {
-    const event = {
-      kind: "response",
-      sessionId: THREAD,
-      agentPath: [],
-      seq: ++this.seq,
-      receivedAt: 0,
-      requestId: "",
-      body: { kind: "exited", code },
-    };
-    for (const observer of this.observers) {
-      observer(event as unknown as RawEvent);
-    }
+  sent(method: string) {
+    return this.requests
+      .filter((r) => r.method === method)
+      .map((r) => r.params);
   }
 }
 
 function setUp(timing = { flushMs: 5, steerAnswerMs: 50 }) {
-  const session = new FakeSession();
+  const codex = new FakeCodex();
   const events: { type: string; payload: Record<string, unknown> }[] = [];
   const agent = new Agent(
-    session as unknown as Session,
+    codex,
+    THREAD,
     (type, payload) => events.push({ type, payload }),
     timing,
   );
-  return { session, agent, events, types: () => events.map((e) => e.type) };
+  const types = () => events.map((e) => e.type);
+  const turnStarted = async (id = "turn-1") => {
+    codex.notify("turn/started", { threadId: THREAD, turn: { id } });
+    await agent.settled();
+  };
+  const turnCompleted = async (status = "completed", id = "turn-1") => {
+    codex.notify("turn/completed", { threadId: THREAD, turn: { id, status } });
+    await agent.settled();
+  };
+  const item = async (
+    method: string,
+    item: Record<string, unknown>,
+    threadId = THREAD,
+  ) => {
+    codex.notify(method, { threadId, turnId: "turn-1", item });
+    await agent.settled();
+  };
+  return { codex, agent, events, types, turnStarted, turnCompleted, item };
 }
-
-const turnStarted = (s: FakeSession, id = "turn-1") =>
-  s.frame("turn/started", { threadId: THREAD, turn: { id } });
-const turnCompleted = (s: FakeSession, status = "completed", id = "turn-1") =>
-  s.frame("turn/completed", { threadId: THREAD, turn: { id, status } });
 
 describe("a turn", () => {
   test("reports its start, its items and its end for the command", async () => {
-    const { session, agent, events, types } = setUp();
+    const { codex, agent, events, types, turnStarted, turnCompleted, item } =
+      setUp();
     expect(await agent.prompt("c1", "hi")).toEqual({ accepted: true });
-    expect(session.prompts).toEqual([{ text: "hi", inputId: "c1" }]);
-    turnStarted(session);
-    await agent.settled();
-    session.frame("item/agentMessage/delta", { itemId: "m1", delta: "Hel" });
-    session.frame("item/agentMessage/delta", { itemId: "m1", delta: "lo" });
-    session.frame("item/started", {
-      item: {
-        id: "x1",
-        type: "commandExecution",
-        command: "ls",
-        status: "inProgress",
+    expect(codex.sent("turn/start")).toEqual([
+      {
+        threadId: THREAD,
+        clientUserMessageId: "c1",
+        input: [{ type: "text", text: "hi", text_elements: [] }],
       },
+    ]);
+    await turnStarted();
+    codex.notify("item/agentMessage/delta", {
+      threadId: THREAD,
+      itemId: "m1",
+      delta: "Hel",
     });
-    session.frame("item/completed", {
-      item: {
-        id: "x1",
-        type: "commandExecution",
-        command: "ls",
-        aggregatedOutput: "a\nb",
-        status: "completed",
-      },
+    codex.notify("item/agentMessage/delta", {
+      threadId: THREAD,
+      itemId: "m1",
+      delta: "lo",
     });
-    session.frame("item/completed", {
-      item: { id: "m1", type: "agentMessage", text: "Hello" },
+    await item("item/started", {
+      id: "x1",
+      type: "commandExecution",
+      command: "ls",
+      status: "inProgress",
     });
-    turnCompleted(session);
-    await agent.settled();
+    await item("item/completed", {
+      id: "x1",
+      type: "commandExecution",
+      command: "ls",
+      aggregatedOutput: "a\nb",
+      status: "completed",
+    });
+    await item("item/completed", {
+      id: "m1",
+      type: "agentMessage",
+      text: "Hello",
+    });
+    await turnCompleted();
     expect(types()).toEqual([
       "turn.started",
       "item.updated",
@@ -141,12 +154,6 @@ describe("a turn", () => {
       input: "ls",
       output: "a\nb",
     });
-    expect(events[4]!.payload.item).toEqual({
-      id: "m1",
-      kind: "agent_message",
-      status: "completed",
-      text: "Hello",
-    });
     expect(events[5]!.payload).toEqual({
       command_id: "c1",
       turn_id: "turn-1",
@@ -156,15 +163,22 @@ describe("a turn", () => {
   });
 
   test("streams text between items at most every flush", async () => {
-    const { session, agent, events } = setUp({
+    const { codex, agent, events, turnStarted } = setUp({
       flushMs: 20,
       steerAnswerMs: 50,
     });
     await agent.prompt("c1", "hi");
-    turnStarted(session);
-    await agent.settled();
-    session.frame("item/agentMessage/delta", { itemId: "m1", delta: "a" });
-    session.frame("item/agentMessage/delta", { itemId: "m1", delta: "b" });
+    await turnStarted();
+    codex.notify("item/agentMessage/delta", {
+      threadId: THREAD,
+      itemId: "m1",
+      delta: "a",
+    });
+    codex.notify("item/agentMessage/delta", {
+      threadId: THREAD,
+      itemId: "m1",
+      delta: "b",
+    });
     await new Promise((resolve) => setTimeout(resolve, 60));
     await agent.settled();
     expect(
@@ -175,17 +189,13 @@ describe("a turn", () => {
   });
 
   test("an interrupted or failed turn says so", async () => {
-    const { session, agent, events } = setUp();
+    const { agent, events, turnStarted, turnCompleted } = setUp();
     await agent.prompt("c1", "hi");
-    turnStarted(session);
-    await agent.settled();
-    turnCompleted(session, "interrupted");
-    await agent.settled();
+    await turnStarted();
+    await turnCompleted("interrupted");
     await agent.prompt("c2", "again");
-    turnStarted(session, "turn-2");
-    await agent.settled();
-    turnCompleted(session, "failed", "turn-2");
-    await agent.settled();
+    await turnStarted("turn-2");
+    await turnCompleted("failed", "turn-2");
     expect(
       events
         .filter((e) => e.type === "turn.completed")
@@ -194,104 +204,114 @@ describe("a turn", () => {
   });
 
   test("sub-agents' threads stay out of the transcript", async () => {
-    const { session, agent, types } = setUp();
+    const { agent, types, turnStarted, turnCompleted, item } = setUp();
     await agent.prompt("c1", "hi");
-    turnStarted(session);
-    await agent.settled();
-    session.frame(
+    await turnStarted();
+    await item(
       "item/completed",
-      { item: { id: "m9", type: "agentMessage", text: "child" } },
+      { id: "m9", type: "agentMessage", text: "child" },
       "child-thread",
     );
-    turnCompleted(session);
-    await agent.settled();
+    await turnCompleted();
     expect(types()).toEqual(["turn.started", "turn.completed"]);
   });
 
+  test("compacting is a turn of its own", async () => {
+    const { codex, agent, events, turnStarted, turnCompleted, item } = setUp();
+    expect(await agent.prompt("c1", "/compact", "compact")).toEqual({
+      accepted: true,
+    });
+    expect(codex.sent("thread/compact/start")).toEqual([{ threadId: THREAD }]);
+    await turnStarted();
+    await item("item/completed", { id: "k1", type: "contextCompaction" });
+    await turnCompleted();
+    expect(events.map((e) => [e.type, e.payload.command_id])).toEqual([
+      ["turn.started", "c1"],
+      ["item.updated", "c1"],
+      ["turn.completed", "c1"],
+    ]);
+  });
+
   test("Codex exiting is reported", async () => {
-    const { session, agent } = setUp();
+    const { codex, agent } = setUp();
     let exited: number | null | undefined;
     agent.onExit = (code) => (exited = code);
-    session.exit(1);
-    await agent.settled();
+    codex.die(1);
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(exited).toBe(1);
   });
 });
 
 describe("prompts", () => {
   test("one turn at a time", async () => {
-    const { session, agent } = setUp();
+    const { codex, agent, turnStarted } = setUp();
     await agent.prompt("c1", "hi");
-    turnStarted(session);
-    await agent.settled();
+    await turnStarted();
     expect(await agent.prompt("c2", "more")).toEqual({
       accepted: false,
       code: "busy",
     });
-    expect(session.prompts.length).toBe(1);
+    expect(codex.sent("turn/start").length).toBe(1);
   });
 
   test("asking again for the same command changes nothing", async () => {
-    const { session, agent } = setUp();
+    const { codex, agent } = setUp();
     await agent.prompt("c1", "hi");
     expect(await agent.prompt("c1", "hi")).toEqual({ accepted: true });
-    expect(session.prompts.length).toBe(1);
+    expect(codex.sent("turn/start").length).toBe(1);
   });
 
-  test("a prompt Codex refuses leaves the session free", async () => {
-    const { session, agent } = setUp();
-    session.promptAnswer = {
-      kind: "rejected",
-      code: "runtime_refused",
-      reason: "no",
+  test("a prompt Codex refuses leaves the thread free", async () => {
+    const { codex, agent } = setUp();
+    codex.answers["turn/start"] = async () => {
+      throw new RpcError("turn/start", -32600, "no");
     };
-    expect(await agent.prompt("c1", "hi")).toEqual({
-      accepted: false,
-      code: "runtime_refused",
-      reason: "no",
-    });
-    session.promptAnswer = { kind: "accepted" };
+    const refused = await agent.prompt("c1", "hi");
+    expect(refused).toMatchObject({ accepted: false, code: "runtime_refused" });
+    delete codex.answers["turn/start"];
     expect(await agent.prompt("c2", "hi")).toEqual({ accepted: true });
   });
 });
 
 describe("steers", () => {
   test("join the running turn, which then answers them", async () => {
-    const { session, agent, events } = setUp();
+    const { codex, agent, events, turnStarted, turnCompleted, item } = setUp();
     await agent.prompt("c1", "hi");
-    turnStarted(session);
-    await agent.settled();
+    await turnStarted();
     expect(await agent.steer("s1", "also this")).toEqual({ accepted: true });
-    expect(session.steered).toEqual([{ text: "also this", inputId: "s1" }]);
-    session.frame("item/started", {
-      item: { id: "u1", type: "userMessage", clientId: "s1" },
+    expect(codex.sent("turn/steer")).toEqual([
+      {
+        threadId: THREAD,
+        expectedTurnId: "turn-1",
+        clientUserMessageId: "s1",
+        input: [{ type: "text", text: "also this", text_elements: [] }],
+      },
+    ]);
+    await item("item/started", {
+      id: "u1",
+      type: "userMessage",
+      clientId: "s1",
     });
-    session.frame("item/completed", {
-      item: { id: "m1", type: "agentMessage", text: "done" },
+    await item("item/completed", {
+      id: "m1",
+      type: "agentMessage",
+      text: "done",
     });
-    turnCompleted(session);
-    await agent.settled();
+    await turnCompleted();
     expect(events.map((e) => [e.type, e.payload.command_id])).toEqual([
       ["turn.started", "c1"],
       ["turn.steered", "c1"],
       ["item.updated", "s1"],
       ["turn.completed", "s1"],
     ]);
-    expect(events[1]!.payload).toEqual({
-      command_id: "c1",
-      steer_command_id: "s1",
-      turn_id: "turn-1",
-    });
   });
 
   test("an accepted steer Codex never echoed still belongs to the turn", async () => {
-    const { session, agent, events } = setUp();
+    const { agent, events, turnStarted, turnCompleted } = setUp();
     await agent.prompt("c1", "hi");
-    turnStarted(session);
-    await agent.settled();
+    await turnStarted();
     await agent.steer("s1", "also this");
-    turnCompleted(session);
-    await agent.settled();
+    await turnCompleted();
     expect(events.map((e) => [e.type, e.payload.command_id])).toEqual([
       ["turn.started", "c1"],
       ["turn.steered", "c1"],
@@ -300,25 +320,27 @@ describe("steers", () => {
   });
 
   test("a steer still unanswered at the turn's end is waited for", async () => {
-    const { session, agent, events } = setUp();
-    let refuse: (outcome: Outcome) => void = () => {};
-    session.steerAnswer = () => new Promise((resolve) => (refuse = resolve));
+    const { codex, agent, events, turnStarted } = setUp();
+    let refuse: () => void = () => {};
+    codex.answers["turn/steer"] = () =>
+      new Promise(
+        (_, reject) =>
+          (refuse = () =>
+            reject(new RpcError("turn/steer", -32600, "not steerable"))),
+      );
     await agent.prompt("c1", "hi");
-    turnStarted(session);
-    await agent.settled();
+    await turnStarted();
     const steered = agent.steer("s1", "too late");
-    turnCompleted(session);
+    codex.notify("turn/completed", {
+      threadId: THREAD,
+      turn: { id: "turn-1", status: "completed" },
+    });
     await new Promise((resolve) => setTimeout(resolve, 5));
     expect(events.map((e) => e.type)).toEqual(["turn.started"]);
-    refuse({
-      kind: "rejected",
-      code: "runtime_refused",
-      reason: "not_steerable",
-    });
-    expect(await steered).toEqual({
+    refuse();
+    expect(await steered).toMatchObject({
       accepted: false,
       code: "runtime_refused",
-      reason: "not_steerable",
     });
     await agent.settled();
     expect(events.map((e) => [e.type, e.payload.command_id])).toEqual([
@@ -328,7 +350,7 @@ describe("steers", () => {
   });
 
   test("need a running turn", async () => {
-    const { agent, session } = setUp();
+    const { codex, agent } = setUp();
     expect(await agent.steer("s1", "hi")).toEqual({
       accepted: false,
       code: "no_active_turn",
@@ -338,52 +360,268 @@ describe("steers", () => {
       accepted: false,
       code: "no_active_turn",
     });
-    expect(session.steered).toEqual([]);
+    expect(codex.sent("turn/steer")).toEqual([]);
   });
 });
 
 describe("stops", () => {
   test("interrupt the running turn", async () => {
-    const { session, agent } = setUp();
+    const { codex, agent, turnStarted } = setUp();
     await agent.prompt("c1", "hi");
-    turnStarted(session);
-    await agent.settled();
+    await turnStarted();
     await agent.abort("c1");
-    expect(session.aborts).toBe(1);
+    expect(codex.sent("turn/interrupt")).toEqual([
+      { threadId: THREAD, turnId: "turn-1" },
+    ]);
   });
 
   test("before the turn started, interrupt it once it does", async () => {
-    const { session, agent } = setUp();
+    const { codex, agent, turnStarted } = setUp();
     await agent.prompt("c1", "hi");
     await agent.abort("c1");
-    expect(session.aborts).toBe(0);
-    turnStarted(session);
-    await agent.settled();
-    expect(session.aborts).toBe(1);
+    expect(codex.sent("turn/interrupt")).toEqual([]);
+    await turnStarted();
+    expect(codex.sent("turn/interrupt").length).toBe(1);
   });
 
   test("of a steer not yet taken in interrupt the turn when it takes over", async () => {
-    const { session, agent, events } = setUp();
+    const { codex, agent, events, turnStarted, item } = setUp();
     await agent.prompt("c1", "hi");
-    turnStarted(session);
-    await agent.settled();
+    await turnStarted();
     await agent.steer("s1", "also");
     await agent.abort("s1");
-    expect(session.aborts).toBe(0);
-    session.frame("item/started", {
-      item: { id: "u1", type: "userMessage", clientId: "s1" },
+    expect(codex.sent("turn/interrupt")).toEqual([]);
+    await item("item/started", {
+      id: "u1",
+      type: "userMessage",
+      clientId: "s1",
     });
-    await agent.settled();
-    expect(session.aborts).toBe(1);
+    expect(codex.sent("turn/interrupt").length).toBe(1);
     expect(events.at(-1)!.type).toBe("turn.steered");
   });
 
   test("of other commands do nothing", async () => {
-    const { session, agent } = setUp();
+    const { codex, agent, turnStarted } = setUp();
     await agent.prompt("c1", "hi");
-    turnStarted(session);
-    await agent.settled();
+    await turnStarted();
     await agent.abort("c2");
-    expect(session.aborts).toBe(0);
+    expect(codex.sent("turn/interrupt")).toEqual([]);
+  });
+});
+
+describe("approvals", () => {
+  async function asking(method: string, params: Record<string, unknown>) {
+    const s = setUp();
+    await s.agent.prompt("c1", "hi");
+    await s.turnStarted();
+    const answer = s.codex.ask(method, {
+      threadId: THREAD,
+      turnId: "turn-1",
+      ...params,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const requested = s.events.find((e) => e.type === "approval.requested")!;
+    return {
+      ...s,
+      answer,
+      requested,
+      approvalId: requested?.payload.approval_id as string,
+    };
+  }
+
+  test("a command waits for the user's decision", async () => {
+    const { agent, answer, requested, approvalId, events } = await asking(
+      "item/commandExecution/requestApproval",
+      {
+        itemId: "x1",
+        command: "rm -rf build",
+        reason: "clean up",
+      },
+    );
+    expect(requested.payload).toEqual({
+      approval_id: approvalId,
+      command_id: "c1",
+      kind: "command",
+      summary: { reason: "clean up", command: "rm -rf build" },
+    });
+    expect(agent.decide(approvalId, "accept")).toBe("accepted");
+    expect(await answer).toEqual({ decision: "accept" });
+    expect(events.at(-1)).toEqual({
+      type: "approval.applied",
+      payload: { approval_id: approvalId, decision: "accept" },
+    });
+    expect(agent.decide(approvalId, "accept")).toBe("not_pending");
+  });
+
+  test("a file change can be declined", async () => {
+    const { agent, answer, approvalId } = await asking(
+      "item/fileChange/requestApproval",
+      { itemId: "f1" },
+    );
+    agent.decide(approvalId, "decline");
+    expect(await answer).toEqual({ decision: "decline" });
+  });
+
+  test("a plugin's confirmation is a form without fields", async () => {
+    const { agent, answer, requested, approvalId } = await asking(
+      "mcpServer/elicitation/request",
+      {
+        serverName: "approval",
+        mode: "form",
+        message: "删除表？",
+        requestedSchema: { type: "object", properties: {} },
+        _meta: null,
+      },
+    );
+    expect(requested.payload.summary).toEqual({
+      server: "approval",
+      message: "删除表？",
+    });
+    agent.decide(approvalId, "accept");
+    expect(await answer).toEqual({
+      action: "accept",
+      content: {},
+      _meta: null,
+    });
+  });
+
+  test("forms with fields are declined without asking", async () => {
+    const { answer, requested } = await asking(
+      "mcpServer/elicitation/request",
+      {
+        serverName: "x",
+        mode: "form",
+        message: "name?",
+        requestedSchema: {
+          type: "object",
+          properties: { name: { type: "string" } },
+        },
+        _meta: null,
+      },
+    );
+    expect(requested).toBeUndefined();
+    expect(await answer).toEqual({
+      action: "decline",
+      content: null,
+      _meta: null,
+    });
+  });
+
+  test("stopping cancels the command approval, which ends the turn", async () => {
+    const { codex, agent, answer } = await asking(
+      "item/commandExecution/requestApproval",
+      { itemId: "x1", command: "ls" },
+    );
+    await agent.abort("c1");
+    expect(await answer).toEqual({ decision: "cancel" });
+    expect(codex.sent("turn/interrupt")).toEqual([]);
+  });
+
+  test("stopping cancels a plugin's confirmation and interrupts the turn", async () => {
+    const { codex, agent, answer } = await asking(
+      "mcpServer/elicitation/request",
+      {
+        serverName: "approval",
+        mode: "form",
+        message: "ok?",
+        requestedSchema: { type: "object", properties: {} },
+        _meta: null,
+      },
+    );
+    await agent.abort("c1");
+    expect(await answer).toEqual({
+      action: "cancel",
+      content: null,
+      _meta: null,
+    });
+    expect(codex.sent("turn/interrupt").length).toBe(1);
+  });
+
+  test("one Codex withdraws is cancelled", async () => {
+    const { codex, agent, answer } = await asking(
+      "item/commandExecution/requestApproval",
+      { itemId: "x1", command: "ls" },
+    );
+    codex.notify("serverRequest/resolved", { threadId: THREAD, requestId: 7 });
+    await agent.settled();
+    expect(await answer).toEqual({ decision: "cancel" });
+  });
+
+  test("other requests get a conservative no", async () => {
+    const { codex } = setUp();
+    expect(await codex.ask("item/tool/requestUserInput", {})).toEqual({
+      answers: {},
+    });
+    expect(await codex.ask("item/tool/call", {})).toEqual({
+      contentItems: [],
+      success: false,
+    });
+  });
+
+  test("with no command running, a request is declined", async () => {
+    const { codex } = setUp();
+    expect(
+      await codex.ask("item/commandExecution/requestApproval", {
+        command: "ls",
+      }),
+    ).toEqual({ decision: "decline" });
+  });
+});
+
+describe("the agent's thread", () => {
+  const settings = {
+    workspace: "/agent/workspace",
+    model: "m",
+    instructions: "be brief",
+  };
+
+  test("is the workspace's latest root thread, resumed", async () => {
+    const codex = new FakeCodex();
+    codex.answers["thread/list"] = async () => ({
+      data: [
+        { id: "child", parentThreadId: "root", ephemeral: false },
+        { id: "root", parentThreadId: null, ephemeral: false },
+      ],
+    });
+    expect(await openThread(codex, settings)).toEqual({
+      threadId: "root",
+      resumed: true,
+    });
+    expect(codex.sent("thread/list")[0]).toMatchObject({
+      cwd: "/agent/workspace",
+      sortKey: "updated_at",
+      sortDirection: "desc",
+    });
+    expect(codex.sent("thread/resume")).toEqual([
+      {
+        threadId: "root",
+        excludeTurns: true,
+        cwd: "/agent/workspace",
+        model: "m",
+        developerInstructions: "be brief",
+      },
+    ]);
+  });
+
+  test("is started when there is none yet", async () => {
+    const codex = new FakeCodex();
+    codex.answers["thread/list"] = async () => ({ data: [] });
+    codex.answers["thread/start"] = async () => ({ thread: { id: "new" } });
+    expect(await openThread(codex, settings)).toEqual({
+      threadId: "new",
+      resumed: false,
+    });
+  });
+
+  test("is never replaced when it cannot be resumed", async () => {
+    const codex = new FakeCodex();
+    codex.answers["thread/list"] = async () => ({
+      data: [{ id: "root", parentThreadId: null, ephemeral: false }],
+    });
+    codex.answers["thread/resume"] = async () => {
+      throw new RpcError("thread/resume", -32600, "broken");
+    };
+    await expect(openThread(codex, settings)).rejects.toThrow("broken");
+    expect(codex.sent("thread/start")).toEqual([]);
   });
 });

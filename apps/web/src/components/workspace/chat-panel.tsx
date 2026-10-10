@@ -1,4 +1,10 @@
-import type { Agent, Block, ChatMessage, SendMode } from "@/queries/chat";
+import type {
+  Agent,
+  Block,
+  ChatMessage,
+  Interaction,
+  SendMode,
+} from "@/queries/chat";
 import type { Outgoing } from "@/queries/outbox";
 import {
   memo,
@@ -11,6 +17,7 @@ import {
 } from "react";
 import { ClaudeHeader } from "@/components/brainless/claude/claude-header";
 import { ClaudeMessage } from "@/components/brainless/claude/claude-message";
+import { ClaudePermission } from "@/components/brainless/claude/claude-permission";
 import { ClaudePrompt } from "@/components/brainless/claude/claude-prompt";
 import { ClaudeSlashMenu } from "@/components/brainless/claude/claude-slash-menu";
 import { ClaudeThinking } from "@/components/brainless/claude/claude-thinking";
@@ -18,11 +25,13 @@ import { ClaudeToolCall } from "@/components/brainless/claude/claude-tool-call";
 import { CodexExec } from "@/components/brainless/codex/codex-exec";
 import { CodexHeader } from "@/components/brainless/codex/codex-header";
 import { CodexMessage } from "@/components/brainless/codex/codex-message";
+import { CodexPermissions } from "@/components/brainless/codex/codex-permissions";
 import { CodexPrompt } from "@/components/brainless/codex/codex-prompt";
 import { CodexSlashMenu } from "@/components/brainless/codex/codex-slash-menu";
 import { CodexWorking } from "@/components/brainless/codex/codex-working";
 import { GrokHeader } from "@/components/brainless/grok/grok-header";
 import { GrokMessage } from "@/components/brainless/grok/grok-message";
+import { GrokPermission } from "@/components/brainless/grok/grok-permission";
 import { GrokPrompt } from "@/components/brainless/grok/grok-prompt";
 import { GrokSlashMenu } from "@/components/brainless/grok/grok-slash-menu";
 import { GrokThinking } from "@/components/brainless/grok/grok-thinking";
@@ -39,7 +48,13 @@ interface MessageProps {
   time?: string;
   children: React.ReactNode;
 }
-type SlashName = "/stop" | "/queue" | "/steer";
+interface ChoiceProps {
+  prompt: string;
+  labels: string[];
+  onChoose: (index: number) => void;
+}
+
+type SlashName = "/stop" | "/queue" | "/steer" | "/compact";
 interface SlashCommand {
   name: SlashName;
   description: string;
@@ -50,6 +65,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { name: "/stop", description: "停止当前回复" },
   { name: "/queue", description: "当前回复结束后发送", takesText: true },
   { name: "/steer", description: "插入当前回复", takesText: true },
+  { name: "/compact", description: "压缩上下文" },
 ];
 
 const activityText = { running: "进行中", completed: "完成", failed: "失败" };
@@ -59,7 +75,11 @@ function activityTitle(block: Activity) {
   return block.input ? `${tool} ${block.input}` : tool;
 }
 // Replies holding the agent's runtime; queued ones wait behind them.
-const EXECUTING = new Set<ChatMessage["status"]>(["responding", "stopping"]);
+const EXECUTING = new Set<ChatMessage["status"]>([
+  "responding",
+  "waiting_for_input",
+  "stopping",
+]);
 // Failures of the agent's environment, which fail everything waiting at once.
 const ENVIRONMENT_FAILURES = new Set([
   "AGENT_UNAVAILABLE",
@@ -98,6 +118,15 @@ const sessions = {
         {block.output}
       </ClaudeToolCall>
     ),
+    Choice: ({ prompt, labels, onChoose }: ChoiceProps) => (
+      <ClaudePermission
+        title="需要确认"
+        command={prompt}
+        question="是否继续？"
+        options={labels}
+        onChoose={onChoose}
+      />
+    ),
     Working: ({ label }: { label: string }) => (
       <ClaudeThinking verbs={[label]} showTokens={false} />
     ),
@@ -125,6 +154,13 @@ const sessions = {
         {block.output}
       </CodexExec>
     ),
+    Choice: ({ prompt, labels, onChoose }: ChoiceProps) => (
+      <CodexPermissions
+        title={prompt}
+        options={labels.map((label) => ({ label, description: "" }))}
+        onChoose={onChoose}
+      />
+    ),
     Working: ({ label }: { label: string }) => <CodexWorking label={label} />,
     SlashMenu: CodexSlashMenu,
     slashMenuBelow: true,
@@ -146,6 +182,14 @@ const sessions = {
       >
         {block.output}
       </GrokTool>
+    ),
+    Choice: ({ prompt, labels, onChoose }: ChoiceProps) => (
+      <GrokPermission
+        title="需要确认"
+        command={prompt}
+        options={labels}
+        onChoose={onChoose}
+      />
     ),
     Working: ({ label }: { label: string }) => <GrokThinking verbs={[label]} />,
     SlashMenu: GrokSlashMenu,
@@ -263,8 +307,11 @@ function useTranscriptScroll({
   return { scrollRef, contentRef, topRef, onScroll: remember, toBottom };
 }
 
+const NO_INTERACTIONS: Interaction[] = [];
+
 interface TurnActions {
   onStop: (replyId: string) => void;
+  onAnswer: (interactionId: string, value: string) => void;
   onResend: (text: string) => void;
 }
 
@@ -325,15 +372,18 @@ const Turn = memo(
   ({
     theme,
     message,
+    pending,
     actions,
     ...line
   }: {
     theme: SessionTheme;
     message: ChatMessage;
+    /** Its interactions waiting for the user. */
+    pending: Interaction[];
     actions: React.RefObject<TurnActions>;
   } & ReplyLine) => {
     const session = sessions[theme];
-    const { Message, Activity, Working } = session;
+    const { Message, Activity, Choice, Working } = session;
     const timeLabel = theme === "grok" ? time(message.created_at) : undefined;
     if (message.role === "user")
       return (
@@ -358,8 +408,22 @@ const Turn = memo(
             <Activity key={block.id} block={block} />
           ),
         )}
+        {pending.map((interaction) => (
+          <Choice
+            key={interaction.id}
+            prompt={interaction.prompt}
+            labels={interaction.options.map((option) => option.label)}
+            onChoose={(index) =>
+              actions.current.onAnswer(
+                interaction.id,
+                interaction.options[index].value,
+              )
+            }
+          />
+        ))}
         <ReplyState
           message={message}
+          asking={pending.length > 0}
           line={line}
           Working={Working}
           onStop={() => actions.current.onStop(message.id)}
@@ -376,12 +440,14 @@ const Turn = memo(
  */
 function ReplyState({
   message,
+  asking,
   line,
   Working,
   onStop,
   onResend,
 }: {
   message: ChatMessage;
+  asking: boolean;
   line: ReplyLine;
   Working: (props: { label: string }) => React.ReactNode;
   onStop: () => void;
@@ -389,7 +455,8 @@ function ReplyState({
 }) {
   switch (message.status) {
     case "responding":
-      return <Working label="工作中" />;
+    case "waiting_for_input":
+      return asking ? null : <Working label="工作中" />;
     case "stopping":
       return <Working label="正在停止" />;
     case "queued": {
@@ -447,10 +514,13 @@ export function ChatPanel({
   hasOlder,
   loadingOlder,
   onLoadOlder,
+  interactions,
   draft,
   onDraftChange: setDraft,
   onSend,
+  onCompact,
   onStop,
+  onAnswer,
   head,
   error,
   connectionLost,
@@ -474,10 +544,13 @@ export function ChatPanel({
   hasOlder: boolean;
   loadingOlder: boolean;
   onLoadOlder: () => void;
+  interactions: Interaction[];
   draft: string;
   onDraftChange: (value: string) => void;
   onSend: (content: string, mode: SendMode) => void;
+  onCompact: () => void;
   onStop: (replyId: string) => void;
+  onAnswer: (interactionId: string, value: string) => void;
   /** Shows and switches the agent being talked to. */
   head?: React.ReactNode;
   error?: string;
@@ -510,11 +583,21 @@ export function ChatPanel({
     () => replyLines(messages, agentStatus),
     [messages, agentStatus],
   );
+  const pendingByMessage = useMemo(() => {
+    const byMessage = new Map<string, Interaction[]>();
+    for (const interaction of interactions)
+      if (interaction.status === "pending")
+        byMessage.set(interaction.message_id, [
+          ...(byMessage.get(interaction.message_id) ?? []),
+          interaction,
+        ]);
+    return byMessage;
+  }, [interactions]);
   // The rows call the latest handlers without taking them as props, which
   // change on every render and would undo the rows' memo.
-  const actionsRef = useRef<TurnActions>({ onStop, onResend });
+  const actionsRef = useRef<TurnActions>({ onStop, onAnswer, onResend });
   useLayoutEffect(() => {
-    actionsRef.current = { onStop, onResend };
+    actionsRef.current = { onStop, onAnswer, onResend };
   });
   const transcript = useTranscriptScroll({
     agentId,
@@ -542,6 +625,8 @@ export function ChatPanel({
     if (name === "/stop") {
       if (active) onStop(active.id);
       setDraft("");
+    } else if (name === "/compact") {
+      onCompact();
     } else if (text.trim()) {
       onSend(text, name === "/steer" ? "steer" : "queue");
     }
@@ -688,6 +773,7 @@ export function ChatPanel({
                 key={message.id}
                 theme={theme}
                 message={message}
+                pending={pendingByMessage.get(message.id) ?? NO_INTERACTIONS}
                 {...lines.get(message.id)}
                 actions={actionsRef}
               />

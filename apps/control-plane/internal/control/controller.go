@@ -92,7 +92,7 @@ func (c *Controller) Tick(ctx context.Context) {
 	c.failures.Log(ctx, slog.LevelError, "reconcile", c.reconcile(ctx), "Controller step failed", "step", "reconcile")
 	waiting, err := pg.All[struct {
 		AgentID string `db:"agent_id"`
-	}](ctx, c.DB, `SELECT DISTINCT agent_id FROM agent_command WHERE status IN ('queued', 'running')`)
+	}](ctx, c.DB, `SELECT DISTINCT agent_id FROM agent_command WHERE status IN ('queued', 'running', 'waiting_approval')`)
 	c.failures.Log(ctx, slog.LevelError, "dispatch", err, "Controller step failed", "step", "dispatch")
 	for _, w := range waiting {
 		c.Dispatch(ctx, w.AgentID)
@@ -267,14 +267,14 @@ func (c *Controller) ensureContainer(ctx context.Context, agent *chat.AgentRecor
 // a steer it took that the running turn has yet to hand over to.
 func (c *Controller) busy(ctx context.Context, agentID string) (bool, error) {
 	return pg.Exists(ctx, c.DB, `SELECT 1 FROM agent_command WHERE agent_id = $1
-		AND (status = 'running' OR (status = 'queued' AND delivered_at IS NOT NULL))`, agentID)
+		AND (status IN ('running', 'waiting_approval') OR (status = 'queued' AND delivered_at IS NOT NULL))`, agentID)
 }
 
 // settleLost finishes what the agent's runtime had: it never reports it.
 func (c *Controller) settleLost(ctx context.Context, agentID string) error {
 	return c.inConversation(ctx, agentID, func(tx pgx.Tx) error {
 		commands, err := pg.All[chat.CommandRecord](ctx, tx, `SELECT * FROM agent_command WHERE agent_id = $1
-			AND (status = 'running' OR (status = 'queued' AND delivered_at IS NOT NULL)) ORDER BY agent_sequence`, agentID)
+			AND (status IN ('running', 'waiting_approval') OR (status = 'queued' AND delivered_at IS NOT NULL)) ORDER BY agent_sequence`, agentID)
 		if err != nil {
 			return err
 		}

@@ -6,6 +6,9 @@
 # Rules guard against mistakes, not against an agent set on getting around
 # them: whatever must never happen is enforced by credentials instead.
 version: 1
+# Shown after an `ask` rule's message; the approval plugin asks the user.
+ask_instruction: "需要用户确认。请调用 request_approval 工具（request_id 为 {request_id}）；\
+  用户同意后，原样重新执行这条命令。用户拒绝时不要换个写法绕过。"
 rules:
   - id: gh-pr-create
     on: shell_exec
@@ -17,4 +20,4 @@ rules:
     on: shell_exec
     checks:
       - argv: [akhook, approval, grant]
-    message: 被规则拦下的命令没有人能授权，不要绕过。
+    message: 授权只能由用户在 AXP 中给出。

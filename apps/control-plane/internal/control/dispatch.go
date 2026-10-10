@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/akarachen/axp/apps/control-plane/internal/auth"
@@ -96,7 +97,7 @@ func (c *Controller) dispatch(ctx context.Context, agentID string) error {
 		return err
 	}
 	commands, err := pg.All[chat.CommandRecord](ctx, c.DB, `SELECT * FROM agent_command
-		WHERE agent_id = $1 AND status IN ('queued', 'running') ORDER BY agent_sequence`, agentID)
+		WHERE agent_id = $1 AND status IN ('queued', 'running', 'waiting_approval') ORDER BY agent_sequence`, agentID)
 	if err != nil || len(commands) == 0 {
 		return err
 	}
@@ -114,17 +115,21 @@ func (c *Controller) dispatch(ctx context.Context, agentID string) error {
 	var waiting []*chat.CommandRecord
 	delivered := false
 	for _, command := range commands {
-		if command.InterruptRequestedAt != nil && (command.Status == chat.CommandRunning || command.DeliveredAt != nil) {
+		active := slices.Contains(chat.ActiveCommandStatuses, command.Status)
+		if command.InterruptRequestedAt != nil && (active || command.DeliveredAt != nil) {
 			c.abort(ctx, url, command)
 		}
 		switch {
-		case command.Status == chat.CommandRunning:
+		case active:
 			running = command
 		case command.DeliveredAt != nil:
 			delivered = true
 		case command.InterruptRequestedAt == nil:
 			waiting = append(waiting, command)
 		}
+	}
+	if err := c.decide(ctx, url, agent); err != nil {
+		return err
 	}
 	if running != nil {
 		if running.CodexTurnID != nil {
@@ -158,6 +163,31 @@ func (c *Controller) abort(ctx context.Context, url string, command *chat.Comman
 	}
 }
 
+// decide hands the runtime the user's decisions it has not applied yet, now
+// and then until it confirms them (approval.applied).
+func (c *Controller) decide(ctx context.Context, url string, agent *chat.AgentRecord) error {
+	decided, err := pg.All[chat.ApprovalRecord](ctx, c.DB, `SELECT * FROM approval
+		WHERE agent_id = $1 AND status = 'decided' AND boot_id = $2`, agent.ID, *agent.BootID)
+	if err != nil {
+		return err
+	}
+	if c.aborts == nil {
+		c.aborts = map[string]time.Time{}
+	}
+	for _, approval := range decided {
+		if time.Since(c.aborts["approval:"+approval.ID]) < abortEvery || approval.Decision == nil {
+			continue
+		}
+		c.aborts["approval:"+approval.ID] = time.Now()
+		if _, err := c.call(ctx, url, agent.ID, "/decide", map[string]string{
+			"approval_id": approval.SDKRequestID, "decision": *approval.Decision,
+		}); err != nil {
+			slog.WarnContext(ctx, "Delivering a decision failed", "approval", approval.ID, "error", err)
+		}
+	}
+	return nil
+}
+
 // steer offers the running turn a steer, once; one it refuses waits for its
 // own turn.
 func (c *Controller) steer(ctx context.Context, url string, agent *chat.AgentRecord, command *chat.CommandRecord) error {
@@ -189,7 +219,7 @@ func (c *Controller) prompt(ctx context.Context, url string, agent *chat.AgentRe
 	claimed := false
 	err := c.inConversation(ctx, agent.ID, func(tx pgx.Tx) error {
 		if busy, err := pg.Exists(ctx, tx, `SELECT 1 FROM agent_command WHERE agent_id = $1
-			AND (status = 'running' OR (status = 'queued' AND delivered_at IS NOT NULL))`, agent.ID); err != nil || busy {
+			AND (status IN ('running', 'waiting_approval') OR (status = 'queued' AND delivered_at IS NOT NULL))`, agent.ID); err != nil || busy {
 			return err
 		}
 		updated, err := tx.Exec(ctx, `UPDATE agent_command SET status = 'running', delivered_at = $2, boot_id = $3
@@ -202,7 +232,7 @@ func (c *Controller) prompt(ctx context.Context, url string, agent *chat.AgentRe
 		return err
 	}
 	a, err := c.call(ctx, url, agent.ID, "/prompt", map[string]string{
-		"boot_id": *agent.BootID, "command_id": command.ID, "text": command.Text(),
+		"boot_id": *agent.BootID, "command_id": command.ID, "text": command.Text(), "kind": command.Kind,
 	})
 	switch {
 	case err == nil && a.Accepted:

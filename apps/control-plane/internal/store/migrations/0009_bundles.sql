@@ -1,11 +1,10 @@
 -- +goose Up
 -- Agents run in one long-lived container each, built from their bundles,
 -- with their state on a Docker volume (docs/architecture/chat-runtime.md).
--- Gone: runtime instances and their leases, generations and snapshots, the
--- thread record (the runtime finds its thread on the volume), approvals and
--- interactions (Codex runs without approval prompts), compaction commands.
+-- Gone: runtime instances and their leases, generations and snapshots, and
+-- the thread record (the runtime finds its thread on the volume).
 
-DROP TABLE interaction, approval, agent_session CASCADE;
+DROP TABLE agent_session CASCADE;
 
 -- Waiting commands are rows: delivered_at is when the controller handed one
 -- to the runtime boot boot_id (a prompt, or a steer the running turn took).
@@ -14,10 +13,6 @@ ALTER TABLE agent_command DROP COLUMN runtime_instance_id, DROP COLUMN queue_seq
     ADD COLUMN boot_id uuid;
 UPDATE agent_command SET status = 'failed', finished_at = COALESCE(finished_at, now()), error_code = 'REPLY_INTERRUPTED'
     WHERE status IN ('queued', 'running', 'waiting_approval');
-ALTER TABLE agent_command DROP CONSTRAINT agent_command_status_valid,
-    ADD CONSTRAINT agent_command_status_valid CHECK (status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted'));
-DROP INDEX one_active_execution_per_agent;
-CREATE UNIQUE INDEX one_active_execution_per_agent ON agent_command (agent_id) WHERE status = 'running';
 CREATE INDEX agent_command_waiting_idx ON agent_command (agent_id, agent_sequence) WHERE status = 'queued';
 
 -- Events are a runtime boot's, in order.
@@ -25,12 +20,17 @@ ALTER TABLE agent_event DROP COLUMN runtime_instance_id, DROP COLUMN source_even
     ADD COLUMN boot_id uuid;
 CREATE UNIQUE INDEX agent_event_boot_seq_uniq ON agent_event (agent_id, boot_id, source_seq);
 
+-- An approval is asked by one runtime boot; its id there is sdk_request_id.
+ALTER TABLE approval DROP COLUMN runtime_instance_id, DROP COLUMN generation,
+    ADD COLUMN boot_id uuid;
+UPDATE approval SET status = 'expired', resolved_at = COALESCE(resolved_at, now()) WHERE status IN ('pending', 'decided');
+UPDATE interaction SET status = 'expired', revision = revision + 1, updated_at = now() WHERE status IN ('pending', 'submitted');
+CREATE INDEX approval_agent_request_idx ON approval (agent_id, sdk_request_id);
+
 DROP TABLE runtime_instance CASCADE;
 
 UPDATE message SET status = 'failed', failure = '{"code": "REPLY_INTERRUPTED", "message": "执行中断，无法确认结果，未自动重试。"}'
     WHERE role = 'assistant' AND status IN ('queued', 'responding', 'waiting_for_input', 'stopping');
-ALTER TABLE message DROP CONSTRAINT message_status_valid,
-    ADD CONSTRAINT message_status_valid CHECK (status IN ('queued', 'responding', 'stopping', 'completed', 'stopped', 'failed'));
 
 -- The agent's bundles (names, built in or the user's), and the plugins they
 -- add, which the runtime gateway checks routes against. status is the
@@ -46,7 +46,7 @@ UPDATE agent SET bundles = plugins, status = 'starting',
 ALTER TABLE agent DROP CONSTRAINT agent_status_valid,
     ADD CONSTRAINT agent_status_valid CHECK (status IN ('starting', 'ready', 'error')),
     DROP CONSTRAINT agent_product_status_valid,
-    ADD CONSTRAINT agent_product_status_valid CHECK (product_status IN ('idle', 'starting', 'working', 'unavailable')),
+    ADD CONSTRAINT agent_product_status_valid CHECK (product_status IN ('idle', 'starting', 'working', 'waiting_for_input', 'unavailable')),
     DROP CONSTRAINT IF EXISTS agent_counters_valid,
     ADD CONSTRAINT agent_counters_valid CHECK (config_version >= 0 AND last_command_seq >= 0 AND product_revision >= 1);
 
