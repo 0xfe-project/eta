@@ -1,0 +1,17 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    // akhook from its submodule, for the tests that run the agents' rules.
+    "build": {
+      "inputs": [
+        "$TURBO_ROOT$/scripts/build/akhook.sh",
+        "$TURBO_ROOT$/vendor/akhook/Cargo.toml",
+        "$TURBO_ROOT$/vendor/akhook/Cargo.lock",
+        "$TURBO_ROOT$/vendor/akhook/src/**",
+        "$TURBO_ROOT$/vendor/akhook/presets/**"
+      ],
+      "outputs": ["out/**"]
+    }
+  }
+}

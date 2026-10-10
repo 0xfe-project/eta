@@ -23,6 +23,11 @@ const (
 	natsLimit = 5 * time.Second
 )
 
+// A fire that waited longer than this in the stream (the service was down,
+// so it piled up) is dropped when it is finally taken: missed fires are not
+// made up, and neither is a "run now" nobody took in time.
+var staleFire = time.Minute
+
 var streamConfig = jetstream.StreamConfig{
 	Name:     Stream,
 	Subjects: []string{"axp.routine.>"},
@@ -124,8 +129,8 @@ func (n *NATS) Sync(ctx context.Context, rows []Routine) error {
 }
 
 // Consume hands fires to fire as they arrive (now when asked to run now),
-// until ctx ends. A fire is acked when it is taken: one missed while the
-// service is down is not made up.
+// until ctx ends. A fire is acked when it is taken; one that waited since
+// before the service started (staleFire) is dropped, not made up.
 func (n *NATS) Consume(ctx context.Context, fire func(ctx context.Context, routineID string, now bool) error) error {
 	c, err := n.stream.Consumer(ctx, consumer)
 	if err != nil {
@@ -135,6 +140,11 @@ func (n *NATS) Consume(ctx context.Context, fire func(ctx context.Context, routi
 		_ = msg.Ack()
 		parts := strings.Split(msg.Subject(), ".")
 		if len(parts) != 4 {
+			return
+		}
+		if meta, err := msg.Metadata(); err == nil && time.Since(meta.Timestamp) > staleFire {
+			slog.InfoContext(ctx, "Skipped a routine fire that waited while the service was down",
+				"routine", parts[2], "fired_at", meta.Timestamp)
 			return
 		}
 		var body struct {

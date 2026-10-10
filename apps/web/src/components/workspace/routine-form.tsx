@@ -51,11 +51,11 @@ function defaults(kind: Schedule["kind"], from: Schedule): Schedule {
   }
 }
 
-/** The next few run times, in this browser's time zone; none for cron. */
-function nextRuns(schedule: Schedule) {
+/** The next few run times, in the routine's time zone; none for cron. */
+function nextRuns(schedule: Schedule, timeZone: string) {
   const now = new Date();
   const later = new Date(now.getTime() + 60 * 86_400_000);
-  return occurrences(schedule, now, later).slice(0, 3);
+  return occurrences(schedule, now, later, timeZone).slice(0, 3);
 }
 
 function ScheduleFields({
@@ -193,7 +193,7 @@ export function RoutineForm({
     () => routine?.timezone ?? browserZone(),
   );
   const zones = ZONES.includes(timezone) ? ZONES : [timezone, ...ZONES];
-  const preview = nextRuns(schedule);
+  const preview = nextRuns(schedule, timezone);
   const ready = name.trim() && brief.trim() && model;
 
   return (
@@ -261,6 +261,7 @@ export function RoutineForm({
           preview.length ? (
             <span className="tabular-nums">
               {preview.map((d) => when(d.toISOString())).join("、")}…
+              {timezone === browserZone() ? null : "（本机时间）"}
             </span>
           ) : (
             "分 时 日 月 星期"

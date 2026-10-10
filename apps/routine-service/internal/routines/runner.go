@@ -27,6 +27,13 @@ import (
 // RunLimit is how long a run may take.
 const RunLimit = 15 * time.Minute
 
+// ReviseLimit is how long revising a brief from feedback may take.
+const ReviseLimit = 2 * time.Minute
+
+// A brief changed while it was being revised is revised again from the new
+// one, this many times at most.
+const reviseTries = 3
+
 const instructions = `你在执行定时任务「%s」。
 它按计划自动运行（%s，时区 %s）。
 每次运行都在一个全新的环境里，之前运行留下的文件都不在了。
@@ -77,6 +84,8 @@ type Runner struct {
 	// Where runs get their working directories.
 	WorkDir string
 	Limit   time.Duration
+	// How long revising a brief may take (ReviseLimit by default).
+	ReviseLimit time.Duration
 	// Go runs work in the background; tests run it at once.
 	Go func(func())
 
@@ -344,27 +353,44 @@ func (r *Runner) Revise(feedbackID string) {
 			delete(r.revising, feedbackID)
 			r.mu.Unlock()
 		}()
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		limit := r.ReviseLimit
+		if limit == 0 {
+			limit = ReviseLimit
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), limit)
 		defer cancel()
-		if err := r.revise(ctx, feedbackID); err != nil {
+		err := r.revise(ctx, feedbackID)
+		for try := 1; errors.Is(err, errBriefChanged) && try < reviseTries; try++ {
+			err = r.revise(ctx, feedbackID)
+		}
+		if err != nil {
 			slog.Error("Revising the brief from feedback failed", "feedback", feedbackID, "error", err)
-			if _, err := r.DB.Exec(ctx, "UPDATE routine_feedback SET revision_failed = true WHERE id = $1", feedbackID); err != nil {
+			// Recorded even when the revision ran out of time.
+			record, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			defer cancel()
+			if _, err := r.DB.Exec(record, "UPDATE routine_feedback SET revision_failed = true WHERE id = $1", feedbackID); err != nil {
 				slog.Error("Recording a failed revision failed", "feedback", feedbackID, "error", err)
 			}
 		}
 	})
 }
 
+// errBriefChanged: the brief changed while it was being revised (edited,
+// restored, or revised from other feedback); the revision is redone from the
+// new one rather than replacing it.
+var errBriefChanged = errors.New("the brief changed during the revision")
+
 func (r *Runner) revise(ctx context.Context, feedbackID string) error {
 	if done, err := pg.Exists(ctx, r.DB, "SELECT 1 FROM routine_brief WHERE feedback_id = $1", feedbackID); err != nil || done {
 		return err
 	}
 	var text, routineID, modelName, brief string
+	var version int
 	var report, runError *string
-	if err := r.DB.QueryRow(ctx, `SELECT f.text, rt.id, rt.model, run.report, run.error,
-		(SELECT b.text FROM routine_brief b WHERE b.routine_id = rt.id ORDER BY b.version DESC LIMIT 1)
+	if err := r.DB.QueryRow(ctx, `SELECT f.text, rt.id, rt.model, run.report, run.error, b.text, b.version
 		FROM routine_feedback f JOIN routine_run run ON run.id = f.run_id JOIN routine rt ON rt.id = run.routine_id
-		WHERE f.id = $1`, feedbackID).Scan(&text, &routineID, &modelName, &report, &runError, &brief); err != nil {
+		JOIN LATERAL (SELECT text, version FROM routine_brief WHERE routine_id = rt.id ORDER BY version DESC LIMIT 1) b ON true
+		WHERE f.id = $1`, feedbackID).Scan(&text, &routineID, &modelName, &report, &runError, &brief, &version); err != nil {
 		return err
 	}
 	shown := "（没有报告）"
@@ -399,6 +425,13 @@ func (r *Runner) revise(ctx context.Context, feedbackID string) error {
 	return pg.InTx(ctx, r.DB, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, "SELECT 1 FROM routine WHERE id = $1 FOR UPDATE", routineID); err != nil {
 			return err
+		}
+		var latest int
+		if err := tx.QueryRow(ctx, "SELECT max(version) FROM routine_brief WHERE routine_id = $1", routineID).Scan(&latest); err != nil {
+			return err
+		}
+		if latest != version {
+			return errBriefChanged
 		}
 		return addBrief(ctx, tx, routineID, strings.TrimSpace(revised.String()), &feedbackID)
 	})
