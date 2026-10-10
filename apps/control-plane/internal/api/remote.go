@@ -197,16 +197,15 @@ func remote(public *httpapi.API, d *Deps) {
 	})
 
 	huma.Register(api, remoteOp("gitCredentials", http.MethodGet, "/remote/v1/git/credentials",
-		"The GitHub App's token for git and gh", 200),
+		"The token for git and gh: the user's once they authorized the GitHub App, else the App's", 200),
 		func(ctx context.Context, in *struct {
 			RemoteBearer
-			As string `query:"as" enum:"user" doc:"user: the token of the user who authorized the App, when there is one"`
 		}) (*httpapi.Body[GitCredentials], error) {
 			c, err := in.computer(ctx, d)
 			if err != nil {
 				return nil, err
 			}
-			creds, err := forgeCredentials(ctx, d.ForgeURL, "computer-"+c.ID, in.As == "user")
+			creds, err := forgeCredentials(ctx, d.ForgeURL, "computer-"+c.ID)
 			if err != nil {
 				return nil, err
 			}
@@ -230,18 +229,15 @@ func fileExists(path string) bool {
 
 var downloadable = regexp.MustCompile(`^axp-(linux|darwin)-(amd64|arm64)$`)
 
-// forgeCredentials asks the forge service for the GitHub App's token, as
-// the runtime gateway would for an agent.
-func forgeCredentials(ctx context.Context, forgeURL, caller string, asUser bool) (*GitCredentials, error) {
+// forgeCredentials asks the forge service for gh's token, as the runtime
+// gateway would for an agent.
+func forgeCredentials(ctx context.Context, forgeURL, caller string) (*GitCredentials, error) {
 	if forgeURL == "" {
 		return nil, apierr.New(503, "FORGE_UNAVAILABLE", "代码托管服务不可用。")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	target := strings.TrimRight(forgeURL, "/") + "/forge/credentials"
-	if asUser {
-		target += "?as=user"
-	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return nil, err

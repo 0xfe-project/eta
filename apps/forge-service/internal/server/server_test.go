@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -436,10 +437,6 @@ func TestOpenPullRequestOnBehalfOfTheUser(t *testing.T) {
 	if pull["author"] != "akarachen" || pull["created"] != true {
 		t.Fatalf("pull: %v", pull)
 	}
-	// Git and gh in runtimes stay the App's.
-	if !strings.HasPrefix(token(credentials), "ghs_") || credentials["user"] != nil {
-		t.Fatalf("credentials: %v", credentials)
-	}
 }
 
 func TestAnExpiredTokenIsRefreshedOnce(t *testing.T) {
@@ -546,26 +543,85 @@ func TestUnauthorizingRevokesOnGitHub(t *testing.T) {
 	}
 }
 
-func TestTheUsersTokenIsForRemoteComputersOnly(t *testing.T) {
-	e := newEnv(t)
-	e.connect("installed-app")
-	e.authorize("akarachen")
-	if status, out := e.credentials(); status != 200 || out["user"] != nil {
-		t.Fatalf("agent: %d %v", status, out)
-	}
-	if status, out, _ := e.do("GET", "/forge/credentials?as=user", true, nil); status != 403 {
-		t.Fatalf("agent as user: %d %v", status, out)
-	}
-	req, _ := http.NewRequest("GET", e.server.URL+"/forge/credentials?as=user", nil)
-	req.Header.Set(agentHeader, "computer-1")
+// createRepository creates a private repository in the user's account with
+// token, as `gh repo create` does; it returns GitHub's status and the owner.
+func createRepository(t *testing.T, token, name string) (int, string) {
+	t.Helper()
+	data, _ := json.Marshal(map[string]any{"name": name, "private": true})
+	req, _ := http.NewRequest(http.MethodPost, emulator.URL+"/user/repos", bytes.NewReader(data))
+	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	var out map[string]any
-	_ = json.NewDecoder(resp.Body).Decode(&out)
-	if out["user"] != "akarachen" || out["token"] != e.user()["access_token"] {
-		t.Fatalf("computer: %v", out)
+	var repo struct {
+		Owner struct{ Login string } `json:"owner"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&repo)
+	return resp.StatusCode, repo.Owner.Login
+}
+
+// Agents in runtimes and remote computers get the same credentials: the
+// App's bot until the user authorizes the App, then the user, so what
+// GitHub allows only a user, such as creating a repository in their
+// account, works for agents too.
+func TestEveryCallerActsAsTheUserWhoAuthorized(t *testing.T) {
+	e := newEnv(t)
+	e.connect("installed-app")
+	callers := map[string]string{"agent": "agent-1", "remote computer": "computer-1"}
+	get := func(caller string) map[string]any {
+		req, _ := http.NewRequest("GET", e.server.URL+"/forge/credentials", nil)
+		req.Header.Set(agentHeader, caller)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var out map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&out)
+		return out
+	}
+
+	for who, caller := range callers {
+		out := get(caller)
+		if !strings.HasPrefix(token(out), "ghs_") || out["user"] != nil {
+			t.Fatalf("%s before authorizing: %v", who, out)
+		}
+		if status, _ := createRepository(t, token(out), "by-the-bot"); status != http.StatusForbidden {
+			t.Fatalf("%s: the bot created a repository in the user's account: %d", who, status)
+		}
+	}
+
+	e.authorize("akarachen")
+	for who, caller := range callers {
+		out := get(caller)
+		if out["user"] != "akarachen" || out["token"] != e.user()["access_token"] {
+			t.Fatalf("%s after authorizing: %v", who, out)
+		}
+		// Asked for again within the hour, so revoking in AXP takes effect.
+		if left := int64(out["expires_at"].(float64)) - time.Now().Unix(); left > 3600 || left < 3500 {
+			t.Fatalf("%s: token for %ds", who, left)
+		}
+		// The commit author stays the App's bot.
+		if out["identity"].(map[string]any)["name"] != "axp-test[bot]" {
+			t.Fatalf("%s identity: %v", who, out["identity"])
+		}
+	}
+	// The ?as=user of older callers changes nothing.
+	if status, out, _ := e.do("GET", "/forge/credentials?as=user", true, nil); status != 200 || out["user"] != "akarachen" {
+		t.Fatalf("as=user: %d %v", status, out)
+	}
+
+	user := get("agent-1")
+	emulator.push(t, token(user), "akarachen/axp", "pushed-as-user")
+	if status, owner := createRepository(t, token(user), "made-by-an-agent"); status != http.StatusCreated || owner != "akarachen" {
+		t.Fatalf("create as the user: %d %s", status, owner)
+	}
+
+	// Unauthorizing in AXP: the next ask gets the bot again.
+	e.do("DELETE", "/api/forge/v1/github/authorization", false, nil)
+	if out := get("agent-1"); !strings.HasPrefix(token(out), "ghs_") || out["user"] != nil {
+		t.Fatalf("after unauthorizing: %v", out)
 	}
 }

@@ -72,6 +72,8 @@ class TestRules:
             "git push origin main",
             "gh issue create -t x -b y",
             "gh api -X DELETE repos/a/b",
+            "gh pr create --fill",
+            "gh repo create a/b --private",
         ],
     )
     def test_github_commands_pass(self, repo, tmp_path, command):
@@ -80,8 +82,6 @@ class TestRules:
     @pytest.mark.parametrize(
         ("command", "rule"),
         [
-            ("gh pr create --fill", "gh-pr-create"),
-            ("cd x && gh -R a/b pr create", "gh-pr-create"),
             ("akhook approval grant 0123456789abcdef", "akhook-approval"),
         ],
     )

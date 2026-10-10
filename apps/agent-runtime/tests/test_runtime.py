@@ -470,6 +470,15 @@ class TestTurns:
         assert (settings.run_dir / "git" / "github.inc").read_text() == (
             "[user]\n\tname = axp[bot]\n\temail = 1+axp[bot]@users.noreply.github.com\n"
         )
+        # The user authorized the App: gh acts as them, commits stay the bot's.
+        forge.answer = 200, {**forge.answer[1], "token": "ghu_two", "user": "akarachen"}
+        runtime._refresh_github()
+        assert hosts.read_text() == (
+            "github.com:\n    oauth_token: ghu_two\n"
+            "    user: akarachen\n    git_protocol: https\n"
+        )
+        commit = (settings.run_dir / "git" / "github.inc").read_text()
+        assert "name = axp[bot]" in commit
         # Disconnected: gh is logged out.
         forge.answer = 409, {"error": {"code": "GITHUB_NOT_CONNECTED"}}
         runtime._refresh_github()

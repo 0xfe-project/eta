@@ -523,12 +523,14 @@ class Runtime:
                 delay = GITHUB_RETRY_SECONDS
 
     def _refresh_github(self) -> float:
-        """Log gh in as the GitHub App; git gets its credentials from gh.
+        """Log gh in through the GitHub App; git gets its credentials from gh.
 
-        The forge service's token goes to gh's hosts.yml and the App's bot
-        becomes the commit identity, both outside the snapshot. Returns the
-        seconds until the next refresh: shortly before the token expires, or
-        soon when GitHub is not connected (yet) or the service is away.
+        The forge service's token goes to gh's hosts.yml: the user's, when
+        they authorized the App (gh then names them), else the App's. The
+        App's bot becomes the commit identity; both stay outside the
+        snapshot. Returns the seconds until the next refresh: shortly before
+        the token expires, or soon when GitHub is not connected (yet) or the
+        service is away.
         """
         settings = self.settings
         key = f"{settings.instance_id}.{settings.token}"
@@ -550,7 +552,9 @@ class Runtime:
         try:
             token, left = answer["token"], answer["expires_at"] - time.time()
             identity = answer.get("identity")
-            user = identity["name"] if identity else "x-access-token"
+            user = answer.get("user") or (
+                identity["name"] if identity else "x-access-token"
+            )
             commit = identity and (
                 f"[user]\n\tname = {identity['name']}\n\temail = {identity['email']}\n"
             )
