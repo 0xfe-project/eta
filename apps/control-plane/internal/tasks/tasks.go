@@ -126,6 +126,7 @@ type runRow struct {
 	Status               string     `db:"status"`
 	Prompt               string     `db:"prompt"`
 	Workspace            *string    `db:"workspace"`
+	OpeningAt            *time.Time `db:"opening_at"`
 	SentAt               *time.Time `db:"sent_at"`
 	NudgedAt             *time.Time `db:"nudged_at"`
 	InterruptRequestedAt *time.Time `db:"interrupt_requested_at"`

@@ -136,7 +136,7 @@ func registerTasks(api huma.API, d *Deps) {
 			Body TaskIn
 		}) (*idempotency.Response[tasks.TaskDetail], error) {
 			b := in.Body
-			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, b, func(tx pgx.Tx) (idempotency.Result[tasks.TaskDetail], error) {
+			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, b, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[tasks.TaskDetail], error) {
 				t, err := s.Create(ctx, tx, tasks.Input{
 					Title: b.Title, Description: b.Description, Status: b.Status, Assignee: b.Assignee,
 				}, tasks.User)
@@ -178,7 +178,7 @@ func registerTasks(api huma.API, d *Deps) {
 			TaskPath
 			Body CommentIn
 		}) (*idempotency.Response[tasks.TaskDetail], error) {
-			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(tx pgx.Tx) (idempotency.Result[tasks.TaskDetail], error) {
+			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[tasks.TaskDetail], error) {
 				t, err := s.Comment(ctx, tx, in.TaskID, in.Body.Body, tasks.User)
 				if err != nil {
 					return idempotency.Result[tasks.TaskDetail]{}, err
