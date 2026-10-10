@@ -22,7 +22,7 @@
 2. controller 发现 Agent 的队列里有命令而它没有存活实例：`generation + 1`，写 `runtime_instance`，再在事务外启动容器；Agent 有快照时附上它的下载地址。token 由 `HMAC(AXP_SECRET_KEY, runtime:<实例>:<代>)` 派生，换代即失效。
 3. runtime 启动：下载并解开 Agent 的快照（有的话）→ 安装镜像里的 Codex plugin（见下文）→ 启动 Codex app-server → 用控制面记录的 thread id 恢复（只有首次才 `thread/start`；无法恢复时报告 `recovery_failed`，绝不另起 thread）→ 心跳报告 ready → 开始读队列。
 4. runtime 空闲时从队列取一条命令，确认后执行；一次一条（部分唯一索引兜底）。
-5. runtime 先记账再调用 `turn/start`；Codex 通知被转换成有序 outbox 事件（`turn.started`、`item.updated`、`approval.*`、`turn.completed` 等），增量文本每 0.3 秒合并一次。turn 结束后先上传快照（见下文），再发出 `turn.completed`。
+5. runtime 先记账再调用 `turn/start`；Codex 通知被转换成有序 outbox 事件（`turn.started`、`item.updated`、`approval.*`、`turn.completed` 等），增量文本每 0.3 秒合并一次。turn 结束后先发出 `turn.completed`，再上传快照（见下文）。
 6. 内部事件接口按 `source_seq` 连续导入 `agent_event`（缺口返回 `409 EVENT_GAP` 与下一期望序号，重复事件幂等，内容不同则冲突），同事务内投影为消息块、交互和 `ui_event`，SSE 推给浏览器。字符串里的 NUL 字符在写入 jsonb 前去掉。同一批里同一回复连续的 `item.updated` 先在内存里合并，这一段结束时（下一个其他事件、另一条回复的 `item.updated` 或批次末尾）才写一次消息、出一个 revision 和一条 `message.updated`；原始事件仍逐条存进 `agent_event`，每条 `message.updated` 仍带整条消息。revision 因此会跳号，浏览器只比较大小。
 
 outbox 的送达：批次按实际发送的 UTF-8 JSON 字节计，最多 1 MiB（接口收 4 MiB），回复文本最多 100,000 字。接口以 400、413、422 拒收时 runtime 把批次减半；单条仍被拒，就在同一 `source_seq` 发一个 `event.rejected` 占位，后面的事件（尤其 `turn.completed`）照常送达，被拒的不是显示条目（`item.updated`）时实例报告 `error`（`EVENT_REJECTED`）。已确认的事件从 outbox 删除。
@@ -77,7 +77,7 @@ AXP 是单用户服务，所有智能体属于唯一的默认对话（`conversat
 
 一个 Agent 的全部状态是容器里的 `/agent`：`workspace/`（工作区，Codex 的 cwd）和 `codex/`（`CODEX_HOME`）。它的快照是 S3 桶 `axp-agents` 里的一个对象 `agents/<id>/snapshot.tar.zst`，即这个目录的 tar 包，用多线程 zstd 压缩（Codex 的锁文件、`tmp` 和已安装的 plugin `codex/plugins/cache` 除外）。
 
-- 每个 turn（包括压缩、被停止和失败的 turn）结束后，runtime 打包并上传快照，然后才发出 `turn.completed`。因此控制面看到命令结束时快照已经写完，空闲停机、换配置停机都不会打断上传，也不会丢掉已完成 turn 的改动。
+- 每个 turn（包括压缩、被停止和失败的 turn）结束后，runtime 先发出 `turn.completed`（回复立即显示完成，不等上传），再打包上传快照，之后发出 `snapshot.saved` 或 `snapshot.failed`；下一条命令等上传结束才开始。controller 判断实例是否空闲时，把“最后一个 `turn.completed` 之后还没有快照事件”算作忙，所以空闲停机、换配置停机都不会打断上传，也不会丢掉已完成 turn 的改动。
 - 上传地址由 `POST /internal/v1/runtime-instances/{id}/snapshot` 签发，只指向该实例所属 Agent 的对象，已失效的实例拿不到地址。runtime 不持有任何存储凭据，容器不挂载任何卷，也不需要额外权限。
 - 上传失败或超过 2 GiB 时 runtime 发出 `snapshot.failed`，控制面把原因记在 `agent_session.last_error`，直到下一次 `snapshot.saved`；turn 照常完成，下一次快照会带上全部改动。
 - controller 启动实例前检查对象是否存在，存在就把预签名下载地址交给 runtime；下载或解包失败时实例以 `RECOVERY_*` 报告 `recovery_failed`。
