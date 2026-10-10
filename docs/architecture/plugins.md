@@ -58,7 +58,7 @@ rules:
 4. 在 `config.toml` 里让每个插件 MCP 服务器的工具免确认，否则每次调用都会被 runtime 以“无人应答”拒绝；
 5. 把各插件的 hook 合成一份 akhook 配置 `/opt/axp/plugins/akhook.yml`：规则 ID 加上插件名（`memory/recall`），`${PLUGIN_ROOT}` 换成镜像里的目录，命令前加一层 `sh -c`，只有 `CODEX_HOME/plugins/cache/axp/<plugin>` 存在（该智能体装了这个插件）才运行，并把 runtime key 以 `AXP_AGENT_KEY` 交给它。Codex 那边不生成任何东西：镜像的 `requirements.toml` 固定把 `PreToolUse`、`UserPromptSubmit`、`Stop` 交给 akhook（managed hook，`allow_managed_hooks_only` 让其他来源的 hook 一律不执行），akhook 从 `AKHOOK_ADDITIONAL_CONFIG_PATH` 读这份配置和镜像自己的规则（后者在后，插件改不了）。
 
-runtime 启动时安装选中的插件、在副本里填入 `${AXP_GATEWAY_URL}` 和 `${AXP_WORKSPACE_DIR}`，见[聊天与运行时架构](chat-runtime.md#plugin)。插件背后的服务路由（`/memory/*`、`/tasks/*`、`/forge/mcp`）由 runtime 网关按智能体启用的插件放行，没启用的直接 403：容器里的代码拿着自己的 key 也调不到（见[网关](gateway.md)的 runtime 站点）。控制面的插件目录（`GET /plugins`）用同一个包读取，只列 chat 插件。
+runtime 启动时安装选中的插件、在副本里填入 `${AXP_GATEWAY_URL}` 和 `${AXP_WORKSPACE_DIR}`，见[聊天与运行时架构](chat-runtime.md#plugin)。插件背后的服务路由（`/memory/*`、`/tasks/*`、`/agenvo/*`、`/forge/mcp`）由 runtime 网关按智能体启用的插件放行，没启用的直接 403：容器里的代码拿着自己的 key 也调不到（见[网关](gateway.md)的 runtime 站点）。控制面的插件目录（`GET /plugins`）用同一个包读取，只列 chat 插件。
 
 ## routine 目标：加载进 ADK agent
 
@@ -74,11 +74,12 @@ runtime 启动时安装选中的插件、在副本里填入 `${AXP_GATEWAY_URL}`
 
 ## 现有插件
 
-| 插件     | targets       | 内容                                                                                      |
-| -------- | ------------- | ----------------------------------------------------------------------------------------- |
-| approval | chat          | 用户确认 akhook `ask` 规则拦下的命令（[确认](agent-hooks.md)）                            |
-| github   | chat          | GitHub App 的 git、gh 凭据与 `open_pull_request`（[代码托管](forge.md)）                  |
-| grok     | chat、routine | [grok-api](https://github.com/AkaraChen/grok-api)：Grok Imagine 图像和视频，网页和 X 搜索 |
-| memory   | chat          | 长期记忆（[记忆](memory.md)），带 recall / capture hook                                   |
-| routines | chat          | 定时任务（[定时任务](routines.md)）：列出、查看报告、新建和修改                           |
-| tasks    | chat          | 任务看板（[任务与远程电脑](tasks.md)）                                                    |
+| 插件     | targets       | 内容                                                                                                |
+| -------- | ------------- | --------------------------------------------------------------------------------------------------- |
+| agenvo   | chat          | 远程电脑上 Paseo、Herdr 的原生方法：agenvo 中继自己的 MCP（[任务与远程电脑](tasks.md#agenvo-插件)） |
+| approval | chat          | 用户确认 akhook `ask` 规则拦下的命令（[确认](agent-hooks.md)）                                      |
+| github   | chat          | GitHub App 的 git、gh 凭据与 `open_pull_request`（[代码托管](forge.md)）                            |
+| grok     | chat、routine | [grok-api](https://github.com/AkaraChen/grok-api)：Grok Imagine 图像和视频，网页和 X 搜索           |
+| memory   | chat          | 长期记忆（[记忆](memory.md)），带 recall / capture hook                                             |
+| routines | chat          | 定时任务（[定时任务](routines.md)）：列出、查看报告、新建和修改                                     |
+| tasks    | chat          | 任务看板（[任务与远程电脑](tasks.md)）                                                              |

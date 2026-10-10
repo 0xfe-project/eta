@@ -47,6 +47,8 @@ type fakeRelay struct {
 	historyReads []int
 	// Called with each runtime call's method before it is answered.
 	before func(method string)
+	// Answers the agenvo plugin's MCP requests.
+	mcp func(body []byte, header http.Header) (*relay.Answer, error)
 }
 
 // readHistory answers like Paseo, reading entries that start before a cursor,
@@ -183,6 +185,10 @@ func (f *fakeRelay) ApprovePairing(_ context.Context, code, digest string) (stri
 
 func (f *fakeRelay) ApproveInstance(context.Context, string, string, string) error { return nil }
 func (f *fakeRelay) RevokeDevice(context.Context, string) error                    { return nil }
+
+func (f *fakeRelay) MCP(_ context.Context, body []byte, header http.Header) (*relay.Answer, error) {
+	return f.mcp(body, header)
+}
 
 func (f *fakeRelay) Call(_ context.Context, _, _, method string, params any) (*relay.Outcome, error) {
 	if f.before != nil {

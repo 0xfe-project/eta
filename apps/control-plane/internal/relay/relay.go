@@ -112,6 +112,16 @@ type Relay interface {
 	ApproveInstance(ctx context.Context, deviceID, instanceID, fingerprint string) error
 	RevokeDevice(ctx context.Context, deviceID string) error
 	Call(ctx context.Context, deviceID, instanceID, method string, params any) (*Outcome, error)
+	// MCP is one request to the relay's MCP endpoint with the control
+	// plane's grant (the agenvo plugin).
+	MCP(ctx context.Context, body []byte, header http.Header) (*Answer, error)
+}
+
+// Answer is the MCP endpoint's HTTP answer.
+type Answer struct {
+	Status int
+	Header http.Header
+	Body   []byte
 }
 
 // Client is the relay at URL whose public base URL is Public.
@@ -148,8 +158,10 @@ func New(internalURL, baseURL, secret, caFile string, db *pgxpool.Pool) (*Client
 	return &Client{
 		URL: strings.TrimRight(internalURL, "/"), Public: public, Secret: secret, DB: db,
 		// Never follow redirects: consent answers with one to our callback.
+		// An execute script runs up to 30 seconds, and its calls are
+		// confirmed after that.
 		HTTP: &http.Client{
-			Transport: transport, Timeout: 30 * time.Second,
+			Transport: transport, Timeout: 90 * time.Second,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
 	}, nil
@@ -311,31 +323,47 @@ func (c *Client) Call(ctx context.Context, deviceID, instanceID, method string, 
 }
 
 func (c *Client) tool(ctx context.Context, name string, args any) (*Outcome, error) {
+	body, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+		"params": map[string]any{"name": name, "arguments": args},
+	})
+	answer, err := c.MCP(ctx, body, http.Header{"Mcp-Protocol-Version": {"2025-06-18"}})
+	if err != nil {
+		return nil, err
+	}
+	if answer.Status >= 300 {
+		return nil, fmt.Errorf("relay: MCP HTTP %d", answer.Status)
+	}
+	return toolOutcome(answer.Header.Get("Content-Type"), answer.Body)
+}
+
+// MCP posts body to the relay's MCP endpoint with the control plane's
+// access token (a new one once, if the relay refuses it). Of the caller's
+// headers only MCP's own pass.
+func (c *Client) MCP(ctx context.Context, body []byte, in http.Header) (*Answer, error) {
 	for attempt := 0; ; attempt++ {
 		token, err := c.accessToken(ctx, attempt > 0)
 		if err != nil {
 			return nil, err
 		}
-		body, _ := json.Marshal(map[string]any{
-			"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-			"params": map[string]any{"name": name, "arguments": args},
-		})
-		resp, data, err := c.send(ctx, http.MethodPost, "/mcp", bytes.NewReader(body), http.Header{
-			"Authorization":        {"Bearer " + token},
-			"Content-Type":         {"application/json"},
-			"Accept":               {"application/json, text/event-stream"},
-			"Mcp-Protocol-Version": {"2025-06-18"},
-		})
+		header := http.Header{
+			"Authorization": {"Bearer " + token},
+			"Content-Type":  {"application/json"},
+			"Accept":        {"application/json, text/event-stream"},
+		}
+		for _, name := range []string{"Mcp-Protocol-Version", "Mcp-Session-Id"} {
+			if v := in.Get(name); v != "" {
+				header.Set(name, v)
+			}
+		}
+		resp, data, err := c.send(ctx, http.MethodPost, "/mcp", bytes.NewReader(body), header)
 		if err != nil {
 			return nil, err
 		}
 		if resp.StatusCode == http.StatusUnauthorized && attempt == 0 {
 			continue
 		}
-		if resp.StatusCode >= 300 {
-			return nil, fmt.Errorf("relay: MCP HTTP %d", resp.StatusCode)
-		}
-		return toolOutcome(resp.Header.Get("Content-Type"), data)
+		return &Answer{Status: resp.StatusCode, Header: resp.Header, Body: data}, nil
 	}
 }
 
