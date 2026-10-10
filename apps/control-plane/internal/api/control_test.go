@@ -715,6 +715,36 @@ func TestARuntimeUploadingItsSnapshotIsNotReplaced(t *testing.T) {
 	expect(t, scalar[string](c.env, "SELECT end_reason FROM runtime_instance WHERE id = $1", old), "CONFIG_CHANGED")
 }
 
+// Only a started turn leaves a snapshot to wait for: a turn.completed with
+// none after it is not an upload when the snapshot came first (a runtime
+// from before that order) or no turn started (a command stopped or rejected
+// before it). Such a runtime is still replaced.
+func TestATurnCompletedWithoutAnUploadDoesNotHoldTheRuntime(t *testing.T) {
+	for name, finish := range map[string]func(r *runtimeHarness, command string){
+		"snapshot first": func(r *runtimeHarness, command string) {
+			r.turnStarted(command, "t")
+			r.events(event{"snapshot.saved", map[string]any{"size": 1}},
+				event{"turn.completed", map[string]any{"command_id": command, "status": "completed"}})
+		},
+		"no turn started": func(r *runtimeHarness, command string) {
+			r.events(event{"turn.completed", map[string]any{"command_id": command, "status": "interrupted"}})
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			c := newControl(t)
+			_, r, command := c.running()
+			old, _ := c.liveInstance(c.agent.ID)
+			finish(r, command)
+			c.patch("/agents/"+c.agent.ID, map[string]any{"name": "审查员"})
+			c.tick()
+			if !c.driver.wasStopped(old) {
+				t.Fatal("not replaced")
+			}
+			expect(t, scalar[string](c.env, "SELECT end_reason FROM runtime_instance WHERE id = $1", old), "CONFIG_CHANGED")
+		})
+	}
+}
+
 func TestTakenCommandKeepsAnIdleRuntime(t *testing.T) {
 	c := newControl(t)
 	c.controller.IdleAfter = time.Nanosecond
