@@ -59,6 +59,15 @@ func (c *controlEnv) stored(sent chat.Sent) (content string, revision int64) {
 const uiBytes = `SELECT coalesce(sum(octet_length(payload::text)), 0) FROM ui_event
 	WHERE type = 'message.updated' AND payload->'message'->>'role' = 'assistant'`
 
+// numbered is events as the boot numbered them, from seq start.
+func (r *runtimeHarness) numbered(start int64, events ...event) []chat.RuntimeEvent {
+	out := make([]chat.RuntimeEvent, 0, len(events))
+	for i, ev := range events {
+		out = append(out, chat.RuntimeEvent{BootID: r.boot, Seq: start + int64(i), Type: ev.kind, Payload: ev.payload})
+	}
+	return out
+}
+
 func TestStreamedUpdatesInABatchSaveTheReplyOnce(t *testing.T) {
 	const n = 30
 	events := func(command string) []event { return stream(command, n) }
@@ -66,9 +75,9 @@ func TestStreamedUpdatesInABatchSaveTheReplyOnce(t *testing.T) {
 	// One event per batch: every update is its own revision.
 	c := newControl(t)
 	sent, r, command := c.running()
-	r.turnStarted(command, "t")
+	before := len(c.published())
 	for _, ev := range events(command) {
-		expect(t, r.events(ev).status, 200)
+		r.events(ev)
 	}
 	eachContent, eachRevision := c.stored(sent)
 	eachUpdates := len(c.published())
@@ -78,12 +87,11 @@ func TestStreamedUpdatesInABatchSaveTheReplyOnce(t *testing.T) {
 	// The same events in one batch.
 	c = newControl(t)
 	sent, r, command = c.running()
-	r.turnStarted(command, "t")
-	before := len(c.published())
+	before2 := len(c.published())
 	_, startRevision := c.stored(sent)
-	expect(t, r.events(events(command)...).status, 200)
+	r.events(events(command)...)
 	content, revision := c.stored(sent)
-	updates := len(c.published()) - before
+	updates := len(c.published()) - before2
 	raw := scalar[int](c.env, "SELECT count(*) FROM agent_event WHERE type = 'item.updated'")
 	bytes := scalar[int64](c.env, uiBytes)
 
@@ -98,70 +106,39 @@ func TestStreamedUpdatesInABatchSaveTheReplyOnce(t *testing.T) {
 	// Every raw event is still kept, in order.
 	expect(t, raw, n+2)
 	expect(t, raw, eachRaw)
-	expect(t, scalar[int64](c.env, "SELECT max(source_seq) FROM agent_event"), int64(n+3))
+	expect(t, scalar[int64](c.env, "SELECT max(source_seq) FROM agent_event"), int64(n+4))
 }
 
 func TestMergedUpdatesAreSavedBeforeTheNextOtherEvent(t *testing.T) {
 	c := newControl(t)
 	sent, r, command := c.running()
-	r.turnStarted(command, "t")
 	before := len(c.published())
 	text := func(s string) event { return item(command, "id", "m1", "kind", "agent_message", "text", s) }
-	expect(t, r.events(
+	r.events(
 		text("一"), text("一二"),
-		event{"approval.requested", map[string]any{
-			"approval_id": "sdk-1", "command_id": command, "kind": "command",
-			"summary": map[string]any{"command": "rm -rf build"},
-		}},
+		// Any other event, even one nothing projects.
+		event{"runtime.notice", map[string]any{}},
 		text("一二三"),
 		event{"turn.completed", map[string]any{"command_id": command, "status": "completed"}},
 		// After the turn the reply is final: a late update changes nothing.
 		text("一二三四"),
-	).status, 200)
-
-	// The browser sees the reply as it was before each other event.
-	var kinds []string
-	rows, err := c.db.Query(c.ctx, `SELECT type, payload FROM ui_event ORDER BY seq`)
-	if err != nil {
-		t.Fatal(err)
+	)
+	var statuses []string
+	for _, m := range c.published()[before:] {
+		text := ""
+		if len(m.Blocks) > 0 {
+			text = m.Blocks[0].Text
+		}
+		statuses = append(statuses, m.Status+" "+text)
 	}
-	for rows.Next() {
-		var kind string
-		var payload map[string]any
-		if err := rows.Scan(&kind, &payload); err != nil {
-			t.Fatal(err)
-		}
-		if kind == chat.EventMessageUpdated {
-			m := payload["message"].(map[string]any)
-			if m["role"] != "assistant" {
-				continue
-			}
-			text := ""
-			if blocks := m["blocks"].([]any); len(blocks) > 0 {
-				text = blocks[0].(map[string]any)["text"].(string)
-			}
-			kind = fmt.Sprintf("%s %s %s", kind, m["status"], text)
-		}
-		if kind != chat.EventAgentUpdated {
-			kinds = append(kinds, kind)
-		}
-	}
-	rows.Close()
-	tail := kinds[len(kinds)-6:]
 	want := []string{
-		// 一 and 一二 as one update, saved before the approval.
-		"message.updated responding 一二",
-		chat.EventInteractionUpdated,
-		"message.updated waiting_for_input 一二",
+		// 一 and 一二 as one update, saved before the other event.
+		"responding 一二",
 		// 一二三, saved before the turn's end.
-		"message.updated waiting_for_input 一二三",
-		chat.EventInteractionUpdated,
-		"message.updated completed 一二三",
+		"responding 一二三",
+		"completed 一二三",
 	}
-	if fmt.Sprint(tail) != fmt.Sprint(want) {
-		t.Fatalf("ui events %q, want them ending %q", kinds, want)
-	}
-	expect(t, len(c.published())-before, 4)
+	expect(t, fmt.Sprint(statuses), fmt.Sprint(want))
 	expect(t, c.replyStatus(sent), "completed")
 	// Revisions only grow; the browser keeps the larger one, gaps and all.
 	published := c.published()
@@ -175,48 +152,45 @@ func TestMergedUpdatesAreSavedBeforeTheNextOtherEvent(t *testing.T) {
 func TestInterleavedRepliesKeepTheirOrder(t *testing.T) {
 	c := newControl(t)
 	sent, r, command := c.running()
-	r.turnStarted(command, "t")
-	c.nats.Steering = true
-	steered := c.steer("改用中文")
-	steer := c.commandOf(steered)
+	steered := steer(c, "改用中文")
+	steerCommand := c.commandOf(steered)
 	before := len(c.published())
 	// Two replies of the same batch, taking turns: never merged across one
 	// another, so each run is saved where it ends.
-	expect(t, r.events(
+	r.events(
 		item(command, "id", "m1", "kind", "agent_message", "text", "甲"),
 		item(command, "id", "m1", "kind", "agent_message", "text", "甲甲"),
-		item(steer, "id", "m2", "kind", "agent_message", "text", "乙"),
-		item(command, "id", "m1", "kind", "agent_message", "text", "甲甲甲"),
-	).status, 200)
+		event{"turn.steered", map[string]any{"command_id": command, "steer_command_id": steerCommand, "turn_id": "turn-1"}},
+		item(steerCommand, "id", "m2", "kind", "agent_message", "text", "乙"),
+		item(steerCommand, "id", "m2", "kind", "agent_message", "text", "乙乙"),
+	)
 	var order []string
 	for _, m := range c.published()[before:] {
-		order = append(order, m.Blocks[0].Text)
+		if len(m.Blocks) > 0 {
+			order = append(order, m.Status+" "+m.Blocks[0].Text)
+		}
 	}
-	expect(t, fmt.Sprint(order), fmt.Sprint([]string{"甲甲", "乙", "甲甲甲"}))
-	expect(t, scalar[string](c.env, "SELECT content->0->>'text' FROM message WHERE id = $1", sent.Reply.ID), "甲甲甲")
-	expect(t, scalar[string](c.env, "SELECT content->0->>'text' FROM message WHERE id = $1", steered.Reply.ID), "乙")
+	expect(t, fmt.Sprint(order), fmt.Sprint([]string{"responding 甲甲", "completed 甲甲", "responding 乙乙"}))
+	expect(t, scalar[string](c.env, "SELECT content->0->>'text' FROM message WHERE id = $1", sent.Reply.ID), "甲甲")
+	expect(t, scalar[string](c.env, "SELECT content->0->>'text' FROM message WHERE id = $1", steered.Reply.ID), "乙乙")
 }
 
 func TestResentBatchOfMergedUpdatesChangesNothing(t *testing.T) {
 	c := newControl(t)
 	sent, r, command := c.running()
-	r.turnStarted(command, "t")
-	start := r.seq
+	start := r.seq + 1
 	batch := stream(command, 5)
-	expect(t, r.events(batch...).status, 200)
+	r.events(batch...)
 	content, revision := c.stored(sent)
 	updates := len(c.published())
-	// The runtime did not hear the ack and sends the batch again.
-	resent := r.eventsFrom(start+1, batch...)
-	expect(t, resent.status, 200)
-	expect(t, resent.m(t)["acked_source_seq"], any(float64(start+int64(len(batch)))))
+	// The same batch delivered again.
+	r.resend(r.numbered(start, batch...)...)
 	again, againRevision := c.stored(sent)
 	expect(t, again, content)
 	expect(t, againRevision, revision)
 	expect(t, len(c.published()), updates)
 	// Part of it again, then what follows: only the new events count.
-	expect(t, r.eventsFrom(start+4, append(batch[3:], item(command, "id", "m1", "kind", "agent_message",
-		"text", "完"))...).status, 200)
+	r.resend(r.numbered(start+3, append(batch[3:], item(command, "id", "m1", "kind", "agent_message", "text", "完"))...)...)
 	expect(t, len(c.published()), updates+1)
 	expect(t, scalar[string](c.env, "SELECT content->1->>'text' FROM message WHERE id = $1", sent.Reply.ID), "完")
 }

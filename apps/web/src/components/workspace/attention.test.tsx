@@ -41,23 +41,6 @@ const routine = (id: string, reports: number, failures: number) => ({
   unseen_failures: failures,
 });
 
-const confirmation = (id: string, status: string) => ({
-  id,
-  agent_id: "a1",
-  message_id: `m-${id}`,
-  kind: "choice",
-  prompt: `tasks 请求确认\n删除${id}？`,
-  options: [
-    { value: "allow", label: "允许" },
-    { value: "deny", label: "拒绝" },
-  ],
-  status,
-  revision: 1,
-  answer: status === "resolved" ? "allow" : null,
-  created_at: "2026-10-09T09:00:00Z",
-  updated_at: "2026-10-09T09:00:00Z",
-});
-
 async function mount(
   client: QueryClient,
   ui: () => React.ReactNode,
@@ -95,7 +78,6 @@ describe("what waits for the user", () => {
     const client = new QueryClient({
       defaultOptions: { queries: { staleTime: Infinity } },
     });
-    client.setQueryData(["chat"], { agents: [], interactions: [] });
     client.setQueryData(["tasks"], {
       assignees: [],
       tasks: [
@@ -140,13 +122,9 @@ describe("what waits for the user", () => {
     ]);
   });
 
-  it("groups confirmations, tasks and routines, and says which failed to load", async () => {
+  it("groups tasks and routines, and says which failed to load", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { staleTime: Infinity, retry: false } },
-    });
-    client.setQueryData(["chat"], {
-      agents: [{ id: "a1", name: "研究员" }],
-      interactions: [confirmation("i1", "pending")],
     });
     client.setQueryData(["tasks"], {
       assignees: [],
@@ -163,35 +141,18 @@ describe("what waits for the user", () => {
       );
     const container = await mount(client, () => <PendingList />);
     await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
-    expect(headings(container)).toEqual(["确认请求1", "任务1"]);
+    expect(headings(container)).toEqual(["任务1"]);
     expect(container.textContent).toContain("无法加载定时");
-    expect(container.querySelector("li")!.textContent).toContain(
-      "删除i1？允许拒绝",
-    );
   });
 
-  it("lists answered confirmations under 全部 only, never the waiting ones twice", async () => {
+  it("is the 待处理 page, empty when nothing waits", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { staleTime: Infinity } },
     });
-    const pending = confirmation("i1", "pending");
-    const answered = confirmation("i2", "resolved");
-    client.setQueryData(["chat"], { agents: [], interactions: [pending] });
-    client.setQueryData(["chat", "interactions"], [pending, answered]);
     client.setQueryData(["tasks"], { assignees: [], tasks: [] });
     client.setQueryData(["routines"], []);
-    const all = await mount(client, () => <Notifications />);
-    expect(headings(all)).toContain("已处理的确认");
-    const items = [...all.querySelectorAll("li")].map((li) => li.textContent);
-    expect(items).toHaveLength(2);
-    expect(items[1]).toContain("已选择「允许」");
-    document.body.innerHTML = "";
-    const waiting = await mount(
-      client,
-      () => <Notifications />,
-      "/?filter=pending",
-    );
-    expect(headings(waiting)).not.toContain("已处理的确认");
-    expect(waiting.querySelectorAll("li")).toHaveLength(1);
+    const page = await mount(client, () => <Notifications />);
+    expect(page.querySelector("h1")?.textContent).toBe("待处理");
+    expect(page.textContent).toContain("没有等你处理的事");
   });
 });

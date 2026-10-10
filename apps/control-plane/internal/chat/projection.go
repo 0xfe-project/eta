@@ -3,20 +3,18 @@ package chat
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"reflect"
 	"strconv"
 	"strings"
 
-	"github.com/akarachen/axp/packages/service-go/apierr"
 	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/jackc/pgx/v5"
 )
 
-// Runtime outbox events are stored raw in agent_event and projected onto
-// product state; only allowlisted, translated fields reach messages,
-// interactions and the ui_event stream.
+// Runtime events are stored raw in agent_event and projected onto product
+// state; only allowlisted, translated fields reach messages and the ui_event
+// stream.
 
+// MaxEventBatch events are imported in one transaction at most.
 const MaxEventBatch = 100
 
 var activityLabels = map[string]string{
@@ -30,19 +28,20 @@ var activityLabels = map[string]string{
 	"compaction":  "压缩上下文",
 }
 
-// RuntimeEvent is one event of a runtime's outbox.
+// RuntimeEvent is one event of a runtime boot, as it published it
+// (apps/agent-runtime/src/outbox.ts).
 type RuntimeEvent struct {
-	SourceSeq     int64          `json:"source_seq"`
-	SourceEventID string         `json:"source_event_id" maxLength:"100"`
-	Type          string         `json:"type" maxLength:"64"`
-	Payload       map[string]any `json:"payload"`
+	BootID  string         `json:"boot_id"`
+	Seq     int64          `json:"seq"`
+	Type    string         `json:"type"`
+	Payload map[string]any `json:"payload"`
 }
 
 type projection struct {
-	s        *Service
-	tx       pgx.Tx
-	agentID  string
-	instance *RuntimeRecord
+	s       *Service
+	tx      pgx.Tx
+	agentID string
+	bootID  string
 	// The reply a run of item.updated events changed and flush has yet to
 	// save: one revision and one ui_event for the run, not one per event.
 	unsaved *messageRow
@@ -65,104 +64,79 @@ func (p *projection) flush(ctx context.Context) error {
 type handler func(p *projection, ctx context.Context, command *CommandRecord, payload map[string]any) error
 
 var handlers = map[string]handler{
-	"turn.started":            (*projection).turnStarted,
-	"item.updated":            (*projection).itemUpdated,
-	"approval.requested":      (*projection).approvalRequested,
-	"approval.applied":        (*projection).approvalApplied,
-	"approval.expired":        (*projection).approvalExpired,
-	"turn.completed":          (*projection).turnCompleted,
-	"turn.steered":            (*projection).turnSteered,
-	"command.outcome_unknown": (*projection).outcomeUnknown,
-	"snapshot.saved":          (*projection).snapshotSaved,
-	"snapshot.failed":         (*projection).snapshotFailed,
-	"runtime.failed":          (*projection).runtimeFailed,
+	"runtime.started": (*projection).runtimeStarted,
+	"runtime.failed":  (*projection).runtimeFailed,
+	"turn.started":    (*projection).turnStarted,
+	"item.updated":    (*projection).itemUpdated,
+	"turn.steered":    (*projection).turnSteered,
+	"turn.completed":  (*projection).turnCompleted,
 }
 
-// ImportEvents stores and projects an ordered batch from the instance and
-// returns the acked source sequence. It takes the conversation lock.
-func (s *Service) ImportEvents(ctx context.Context, tx pgx.Tx, instanceID string, events []RuntimeEvent) (int64, error) {
-	if len(events) > MaxEventBatch {
-		return 0, apierr.New(400, "BATCH_TOO_LARGE", "事件批次过大。")
-	}
+// ImportEvents stores and projects an ordered run of one agent's runtime
+// events, all of one boot. An event stored already (redelivered) is
+// skipped. It takes the conversation lock.
+func (s *Service) ImportEvents(ctx context.Context, tx pgx.Tx, agentID string, events []RuntimeEvent) error {
 	var conversationID string
-	if err := tx.QueryRow(ctx, `SELECT a.conversation_id FROM runtime_instance r
-		JOIN agent a ON a.id = r.agent_id WHERE r.id = $1`, instanceID).Scan(&conversationID); err != nil {
-		return 0, err
+	err := tx.QueryRow(ctx, "SELECT conversation_id FROM agent WHERE id = $1", agentID).Scan(&conversationID)
+	if err == pgx.ErrNoRows {
+		return nil // not an agent of this control plane
+	}
+	if err != nil {
+		return err
 	}
 	if err := LockConversation(ctx, tx, conversationID); err != nil {
-		return 0, err
+		return err
 	}
-	instance, err := pg.One[RuntimeRecord](ctx, tx, "SELECT * FROM runtime_instance WHERE id = $1 FOR UPDATE", instanceID)
-	if err != nil {
-		return 0, err
-	}
-	p := &projection{s: s, tx: tx, agentID: instance.AgentID, instance: instance}
+	p := &projection{s: s, tx: tx, agentID: agentID}
 	for _, event := range events {
-		// jsonb holds no NUL characters; command output can (find -print0).
-		event.Payload, _ = withoutNUL(event.Payload).(map[string]any)
-		seq := event.SourceSeq
-		if seq <= instance.LastSourceSeq {
-			var existingID string
-			var existingPayload []byte
-			err := tx.QueryRow(ctx, `SELECT source_event_id, payload FROM agent_event
-				WHERE runtime_instance_id = $1 AND source_seq = $2`, instance.ID, seq).Scan(&existingID, &existingPayload)
-			if err != nil && err != pgx.ErrNoRows {
-				return 0, err
-			}
-			if err == pgx.ErrNoRows || existingID != event.SourceEventID || !samePayload(existingPayload, event.Payload) {
-				return 0, apierr.New(409, "EVENT_CONFLICT", "事件与已记录内容冲突。")
-			}
+		boot, ok := pg.ParseID(event.BootID)
+		if !ok {
 			continue
 		}
-		if seq != instance.LastSourceSeq+1 {
-			e := apierr.New(409, "EVENT_GAP", "事件序号不连续。")
-			e.Extra = map[string]any{"next_expected_source_seq": instance.LastSourceSeq + 1}
-			return 0, e
-		}
+		p.bootID = boot
+		// jsonb holds no NUL characters; command output can (find -print0).
+		event.Payload, _ = withoutNUL(event.Payload).(map[string]any)
 		payload := event.Payload
 		if payload == nil {
 			payload = map[string]any{}
 		}
 		command, err := p.command(ctx, payload["command_id"])
 		if err != nil {
-			return 0, err
-		}
-		var eventSeq int64
-		if err := tx.QueryRow(ctx, `UPDATE conversation SET last_event_seq = last_event_seq + 1, updated_at = $2
-			WHERE id = $1 RETURNING last_event_seq`, conversationID, pg.Now()).Scan(&eventSeq); err != nil {
-			return 0, err
+			return err
 		}
 		var commandID *string
 		if command != nil {
 			commandID = &command.ID
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO agent_event (id, conversation_id, agent_id, command_id,
-			runtime_instance_id, source_event_id, source_seq, seq, type, schema_version, payload, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, $10, $11)`,
-			pg.NewID(), conversationID, instance.AgentID, commandID, instance.ID, event.SourceEventID, seq,
-			eventSeq, truncate(event.Type, 64), payload, pg.Now()); err != nil {
-			return 0, err
+		var eventSeq int64
+		if err := tx.QueryRow(ctx, `UPDATE conversation SET last_event_seq = last_event_seq + 1, updated_at = $2
+			WHERE id = $1 RETURNING last_event_seq`, conversationID, pg.Now()).Scan(&eventSeq); err != nil {
+			return err
 		}
-		instance.LastSourceSeq = seq
+		stored, err := tx.Exec(ctx, `INSERT INTO agent_event (id, conversation_id, agent_id, command_id,
+			boot_id, source_seq, seq, type, schema_version, payload, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, $9, $10)
+			ON CONFLICT (agent_id, boot_id, source_seq) DO NOTHING`,
+			pg.NewID(), conversationID, agentID, commandID, boot, event.Seq,
+			eventSeq, truncate(event.Type, 64), payload, pg.Now())
+		if err != nil {
+			return err
+		}
+		if stored.RowsAffected() == 0 {
+			continue
+		}
 		if event.Type != "item.updated" {
 			if err := p.flush(ctx); err != nil {
-				return 0, err
+				return err
 			}
 		}
 		if h, ok := handlers[event.Type]; ok {
 			if err := h(p, ctx, command, payload); err != nil {
-				return 0, err
+				return err
 			}
 		}
 	}
-	if err := p.flush(ctx); err != nil {
-		return 0, err
-	}
-	if _, err := tx.Exec(ctx, "UPDATE runtime_instance SET last_source_seq = $2, status = $3, error_code = $4 WHERE id = $1",
-		instance.ID, instance.LastSourceSeq, instance.Status, instance.ErrorCode); err != nil {
-		return 0, err
-	}
-	return instance.LastSourceSeq, nil
+	return p.flush(ctx)
 }
 
 // withoutNUL is the JSON value with NUL characters taken out of its strings.
@@ -187,16 +161,6 @@ func withoutNUL(v any) any {
 		return out
 	}
 	return v
-}
-
-func samePayload(stored []byte, payload map[string]any) bool {
-	var a, b any
-	if json.Unmarshal(stored, &a) != nil {
-		return false
-	}
-	data, _ := json.Marshal(payload)
-	_ = json.Unmarshal(data, &b)
-	return reflect.DeepEqual(a, b)
 }
 
 // pyStr is how the runtime's values were always read: str(value).
@@ -257,13 +221,6 @@ func truncate(s string, n int) string {
 	return s
 }
 
-func optional(s string) *string {
-	if s == "" {
-		return nil
-	}
-	return &s
-}
-
 func (p *projection) command(ctx context.Context, id any) (*CommandRecord, error) {
 	s, ok := id.(string)
 	if !ok || s == "" {
@@ -279,11 +236,6 @@ func (p *projection) command(ctx context.Context, id any) (*CommandRecord, error
 func (p *projection) touch(ctx context.Context) error {
 	now := pg.Now()
 	_, err := p.tx.Exec(ctx, "UPDATE agent SET last_active_at = $2, updated_at = $2 WHERE id = $1", p.agentID, now)
-	return err
-}
-
-func (p *projection) setLastTurn(ctx context.Context, turnID *string) error {
-	_, err := p.tx.Exec(ctx, "UPDATE agent_session SET last_turn_id = $2 WHERE agent_id = $1", p.agentID, turnID)
 	return err
 }
 
@@ -303,16 +255,9 @@ func (p *projection) turnStarted(ctx context.Context, command *CommandRecord, pa
 		command.Status = CommandRunning
 	}
 	command.CodexTurnID = stringField(payload, "turn_id")
-	if _, err := p.tx.Exec(ctx, `UPDATE agent_command SET status = $2, runtime_instance_id = $3, codex_turn_id = $4,
-		started_at = COALESCE(started_at, $5) WHERE id = $1`,
-		command.ID, command.Status, p.instance.ID, command.CodexTurnID, pg.Now()); err != nil {
-		return err
-	}
-	if err := p.setLastTurn(ctx, command.CodexTurnID); err != nil {
-		return err
-	}
-	if _, err := p.tx.Exec(ctx, "UPDATE agent SET status = 'busy', updated_at = $2 WHERE id = $1 AND status <> 'busy'",
-		p.agentID, pg.Now()); err != nil {
+	if _, err := p.tx.Exec(ctx, `UPDATE agent_command SET status = $2, codex_turn_id = $3,
+		started_at = COALESCE(started_at, $4) WHERE id = $1`,
+		command.ID, command.Status, command.CodexTurnID, pg.Now()); err != nil {
 		return err
 	}
 	if err := p.touch(ctx); err != nil {
@@ -397,175 +342,6 @@ func (p *projection) itemUpdated(ctx context.Context, command *CommandRecord, pa
 	return nil
 }
 
-func approvalPrompt(kind string, summary map[string]*string) string {
-	get := func(key string) string {
-		if v := summary[key]; v != nil {
-			return *v
-		}
-		return ""
-	}
-	var prompt string
-	switch kind {
-	case "elicitation":
-		// A plugin's tool asking the user to confirm (see user-attention.md).
-		server := get("server")
-		if server == "" {
-			server = "扩展"
-		}
-		prompt = server + " 请求确认"
-		if m := get("message"); m != "" {
-			prompt += "\n" + m
-		}
-	case "command":
-		prompt = "允许运行命令？"
-		if c := get("command"); c != "" {
-			prompt += "\n" + c
-		}
-	default:
-		prompt = "允许修改工作区文件？"
-	}
-	if r := get("reason"); r != "" {
-		prompt += "\n原因：" + r
-	}
-	return truncate(prompt, 500)
-}
-
-func (p *projection) approvalRequested(ctx context.Context, command *CommandRecord, payload map[string]any) error {
-	if command == nil {
-		return nil
-	}
-	kind, _ := payload["kind"].(string)
-	if kind != "command" && kind != "elicitation" {
-		kind = "file_change"
-	}
-	raw, _ := payload["summary"].(map[string]any)
-	field := func(key string, limit int) *string { return optional(truncate(orEmpty(raw[key]), limit)) }
-	var summary map[string]*string
-	if kind == "elicitation" {
-		summary = map[string]*string{"server": field("server", 100), "message": field("message", 500)}
-	} else {
-		summary = map[string]*string{"command": field("command", 500), "reason": field("reason", 300)}
-	}
-	approvalID := pg.NewID()
-	now := pg.Now()
-	if _, err := p.tx.Exec(ctx, `INSERT INTO approval (id, agent_id, command_id, runtime_instance_id, generation,
-		sdk_request_id, kind, summary, status, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9)`,
-		approvalID, p.agentID, command.ID, p.instance.ID, p.instance.Generation,
-		truncate(pyStr(payload["approval_id"]), 100), kind, summary, now); err != nil {
-		return err
-	}
-	r, err := reply(ctx, p.tx, command.ID)
-	if err != nil || r == nil {
-		return err
-	}
-	stopping := r.Status != MessageQueued && r.Status != MessageResponding
-	interaction := &interactionRow{
-		ID: pg.NewID(), ConversationID: r.ConversationID, AgentID: p.agentID, MessageID: r.ID,
-		ApprovalID: &approvalID, Kind: "choice", Prompt: approvalPrompt(kind, summary),
-		Options:  []InteractionOption{{Value: "allow", Label: "允许"}, {Value: "deny", Label: "拒绝"}},
-		Status:   InteractionPending,
-		Revision: 1, CreatedAt: now, UpdatedAt: now,
-	}
-	if stopping {
-		// A stop already in flight will cancel this request.
-		interaction.Status = InteractionExpired
-	}
-	if _, err := p.tx.Exec(ctx, `INSERT INTO interaction (id, conversation_id, agent_id, message_id, approval_id,
-		kind, prompt, options, status, revision, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, 'choice', $6, $7, $8, 1, $9, $9)`,
-		interaction.ID, interaction.ConversationID, p.agentID, r.ID, approvalID,
-		interaction.Prompt, interaction.Options, interaction.Status, now); err != nil {
-		return err
-	}
-	if err := emitInteraction(ctx, p.tx, interaction); err != nil {
-		return err
-	}
-	if stopping {
-		return nil
-	}
-	if command.Status == CommandRunning {
-		command.Status = CommandWaitingApproval
-		if _, err := p.tx.Exec(ctx, "UPDATE agent_command SET status = 'waiting_approval' WHERE id = $1", command.ID); err != nil {
-			return err
-		}
-	}
-	r.Status = MessageWaitingForInput
-	if err := saveMessage(ctx, p.tx, r); err != nil {
-		return err
-	}
-	return RefreshAgentStatus(ctx, p.tx, p.agentID)
-}
-
-// approval is the agent's latest approval with the payload's id, and its
-// interaction.
-func (p *projection) approval(ctx context.Context, payload map[string]any) (*approvalRow, *interactionRow, error) {
-	approval, err := pg.One[approvalRow](ctx, p.tx, `SELECT * FROM approval WHERE agent_id = $1 AND sdk_request_id = $2
-		ORDER BY created_at DESC LIMIT 1`, p.agentID, pyStr(payload["approval_id"]))
-	if err != nil || approval == nil {
-		return nil, nil, err
-	}
-	interaction, err := pg.One[interactionRow](ctx, p.tx, "SELECT * FROM interaction WHERE approval_id = $1", approval.ID)
-	return approval, interaction, err
-}
-
-func (p *projection) approvalApplied(ctx context.Context, _ *CommandRecord, payload map[string]any) error {
-	approval, interaction, err := p.approval(ctx, payload)
-	if err != nil || approval == nil {
-		return err
-	}
-	if _, err := p.tx.Exec(ctx, "UPDATE approval SET status = 'applied', decision = $2, resolved_at = $3 WHERE id = $1",
-		approval.ID, truncate(pyStr(payload["decision"]), 16), pg.Now()); err != nil {
-		return err
-	}
-	if interaction != nil && (interaction.Status == InteractionSubmitted || interaction.Status == InteractionPending) {
-		if interaction.Status == InteractionSubmitted {
-			interaction.Status = InteractionResolved
-		} else {
-			interaction.Status = InteractionExpired
-		}
-		if err := saveInteraction(ctx, p.tx, interaction); err != nil {
-			return err
-		}
-	}
-	command, err := pg.One[CommandRecord](ctx, p.tx, "SELECT * FROM agent_command WHERE id = $1", approval.CommandID)
-	if err != nil {
-		return err
-	}
-	if command.Status == CommandWaitingApproval {
-		if _, err := p.tx.Exec(ctx, "UPDATE agent_command SET status = 'running' WHERE id = $1", command.ID); err != nil {
-			return err
-		}
-	}
-	r, err := reply(ctx, p.tx, command.ID)
-	if err != nil {
-		return err
-	}
-	if r != nil && r.Status == MessageWaitingForInput {
-		r.Status = MessageResponding
-		if err := saveMessage(ctx, p.tx, r); err != nil {
-			return err
-		}
-	}
-	return RefreshAgentStatus(ctx, p.tx, p.agentID)
-}
-
-func (p *projection) approvalExpired(ctx context.Context, _ *CommandRecord, payload map[string]any) error {
-	approval, interaction, err := p.approval(ctx, payload)
-	if err != nil || approval == nil || approval.Status == ApprovalApplied {
-		return err
-	}
-	if _, err := p.tx.Exec(ctx, "UPDATE approval SET status = 'expired', resolved_at = $2 WHERE id = $1",
-		approval.ID, pg.Now()); err != nil {
-		return err
-	}
-	if interaction != nil && (interaction.Status == InteractionPending || interaction.Status == InteractionSubmitted) {
-		interaction.Status = InteractionExpired
-		return saveInteraction(ctx, p.tx, interaction)
-	}
-	return nil
-}
-
 func (p *projection) turnCompleted(ctx context.Context, command *CommandRecord, payload map[string]any) error {
 	if command == nil {
 		return nil
@@ -581,11 +357,6 @@ func (p *projection) turnCompleted(ctx context.Context, command *CommandRecord, 
 	}
 	if err != nil {
 		return err
-	}
-	if turnID := stringField(payload, "turn_id"); turnID != nil && *turnID != "" {
-		if err := p.setLastTurn(ctx, turnID); err != nil {
-			return err
-		}
 	}
 	return p.touch(ctx)
 }
@@ -608,12 +379,9 @@ func (p *projection) turnSteered(ctx context.Context, command *CommandRecord, pa
 		// Stopping the turn's first part stops all of it.
 		interruptAt = &now
 	}
-	if _, err := p.tx.Exec(ctx, `UPDATE agent_command SET status = 'running', runtime_instance_id = $2,
-		codex_turn_id = $3, started_at = $4, interrupt_requested_at = $5 WHERE id = $1`,
-		steer.ID, p.instance.ID, stringField(payload, "turn_id"), now, interruptAt); err != nil {
-		return err
-	}
-	if err := SetAgentStatus(ctx, p.tx, p.agentID, AgentBusy); err != nil {
+	if _, err := p.tx.Exec(ctx, `UPDATE agent_command SET status = 'running', codex_turn_id = $2, started_at = $3,
+		delivered_at = COALESCE(delivered_at, $3), boot_id = $4, interrupt_requested_at = $5 WHERE id = $1`,
+		steer.ID, stringField(payload, "turn_id"), now, p.bootID, interruptAt); err != nil {
 		return err
 	}
 	r, err := reply(ctx, p.tx, steer.ID)
@@ -622,6 +390,9 @@ func (p *projection) turnSteered(ctx context.Context, command *CommandRecord, pa
 	}
 	if r != nil && r.Status == MessageQueued {
 		r.Status = MessageResponding
+		if interruptAt != nil {
+			r.Status = MessageStopping
+		}
 		if err := saveMessage(ctx, p.tx, r); err != nil {
 			return err
 		}
@@ -632,30 +403,36 @@ func (p *projection) turnSteered(ctx context.Context, command *CommandRecord, pa
 	return p.touch(ctx)
 }
 
-// outcomeUnknown: the runtime could not prove the turn did not run; it is
-// never replayed.
-func (p *projection) outcomeUnknown(ctx context.Context, command *CommandRecord, _ map[string]any) error {
-	if command == nil {
-		return nil
+// runtimeStarted: a new boot of the agent's runtime is ready. Whatever was
+// delivered to an earlier boot died with it: it is never replayed.
+func (p *projection) runtimeStarted(ctx context.Context, _ *CommandRecord, _ map[string]any) error {
+	if _, err := p.tx.Exec(ctx, `UPDATE agent SET status = 'ready', boot_id = $2, last_error_code = NULL, updated_at = $3
+		WHERE id = $1`, p.agentID, p.bootID, pg.Now()); err != nil {
+		return err
 	}
-	_, err := FinishCommand(ctx, p.tx, command, Failed, "REPLY_INTERRUPTED")
-	return err
+	lost, err := pg.All[CommandRecord](ctx, p.tx, `SELECT * FROM agent_command WHERE agent_id = $1
+		AND (status = 'running' OR (status = 'queued' AND delivered_at IS NOT NULL))
+		AND boot_id IS DISTINCT FROM $2 ORDER BY agent_sequence`, p.agentID, p.bootID)
+	if err != nil {
+		return err
+	}
+	for _, command := range lost {
+		if err := finishLost(ctx, p.tx, command); err != nil {
+			return err
+		}
+	}
+	return RefreshAgentStatus(ctx, p.tx, p.agentID)
 }
 
-func (p *projection) snapshotSaved(ctx context.Context, _ *CommandRecord, _ map[string]any) error {
-	_, err := p.tx.Exec(ctx, `UPDATE agent_session SET last_error = NULL
-		WHERE agent_id = $1 AND last_error LIKE 'SNAPSHOT%'`, p.agentID)
-	return err
-}
-
-// snapshotFailed: work since the last good snapshot would be lost with the
-// container.
-func (p *projection) snapshotFailed(ctx context.Context, _ *CommandRecord, payload map[string]any) error {
-	reason := orEmpty(payload["reason"])
-	if reason == "" {
-		reason = "SNAPSHOT_FAILED"
+// finishLost settles a command whose runtime is gone: stopped if a stop was
+// asked for, otherwise failed with an unknown outcome.
+func finishLost(ctx context.Context, tx pgx.Tx, command *CommandRecord) error {
+	var err error
+	if command.InterruptRequestedAt != nil {
+		_, err = FinishCommand(ctx, tx, command, Cancelled, "")
+	} else {
+		_, err = FinishCommand(ctx, tx, command, Failed, "REPLY_INTERRUPTED")
 	}
-	_, err := p.tx.Exec(ctx, "UPDATE agent_session SET last_error = $2 WHERE agent_id = $1", p.agentID, truncate(reason, 100))
 	return err
 }
 
@@ -664,56 +441,41 @@ func (p *projection) runtimeFailed(ctx context.Context, _ *CommandRecord, payloa
 	if code == "" {
 		code = "RUNTIME_FAILED"
 	}
-	return p.s.MarkRuntimeFailed(ctx, p.tx, p.instance, code)
+	return MarkAgentFailed(ctx, p.tx, p.agentID, code, nil)
 }
 
-// MarkRuntimeFailed records a runtime that cannot become ready and fails
-// what waits on it. The caller holds the conversation lock.
-func (s *Service) MarkRuntimeFailed(ctx context.Context, tx pgx.Tx, instance *RuntimeRecord, code string) error {
-	instance.Status = RuntimeFailed
-	errorCode := truncate(code, 64)
-	instance.ErrorCode = &errorCode
-	if _, err := tx.Exec(ctx, "UPDATE runtime_instance SET status = 'failed', error_code = $2 WHERE id = $1",
-		instance.ID, errorCode); err != nil {
+// MarkAgentFailed records an agent whose runtime cannot run (its image did
+// not build, its runtime could not start) and fails what waits on it. The
+// caller holds the conversation lock.
+func MarkAgentFailed(ctx context.Context, tx pgx.Tx, agentID, code string, buildError *string) error {
+	code = truncate(code, 64)
+	if _, err := tx.Exec(ctx, `UPDATE agent SET status = 'error', last_error_code = $2, build_error = $3, updated_at = $4
+		WHERE id = $1`, agentID, code, buildError, pg.Now()); err != nil {
 		return err
-	}
-	recovery := strings.HasPrefix(code, "RECOVERY")
-	status := AgentError
-	if recovery {
-		status = AgentRecoveryFailed
-	}
-	if _, err := tx.Exec(ctx, "UPDATE agent SET status = $2, last_error_code = $3, updated_at = $4 WHERE id = $1",
-		instance.AgentID, status, errorCode, pg.Now()); err != nil {
-		return err
-	}
-	if recovery {
-		if _, err := tx.Exec(ctx, "UPDATE agent_session SET status = 'recovery_failed', last_error = $2 WHERE agent_id = $1",
-			instance.AgentID, truncate(code, 100)); err != nil {
-			return err
-		}
 	}
 	reason := "AGENT_UNAVAILABLE"
 	switch {
-	case recovery:
+	case strings.HasPrefix(code, "RECOVERY"):
 		reason = "AGENT_RECOVERY_FAILED"
 	case strings.HasPrefix(code, "PLUGIN"):
 		reason = "AGENT_EXTENSION_FAILED"
-	case code == "START_TIMEOUT":
-		reason = "START_TIMEOUT"
+	case code == "BUILD_FAILED":
+		reason = "AGENT_BUILD_FAILED"
 	}
-	// Nothing waiting runs: the next runtime starts with an empty queue.
-	if err := s.Queue.Drop(ctx, instance.AgentID); err != nil {
-		return fmt.Errorf("drop the agent's queue: %w", err)
-	}
-	waiting, err := pg.All[CommandRecord](ctx, tx, `SELECT * FROM agent_command
-		WHERE agent_id = $1 AND status = 'queued' ORDER BY agent_sequence`, instance.AgentID)
+	commands, err := pg.All[CommandRecord](ctx, tx, `SELECT * FROM agent_command
+		WHERE agent_id = $1 AND status IN ('queued', 'running') ORDER BY agent_sequence`, agentID)
 	if err != nil {
 		return err
 	}
-	for _, command := range waiting {
-		if _, err := FinishCommand(ctx, tx, command, Failed, reason); err != nil {
+	for _, command := range commands {
+		if command.Status == CommandQueued && command.DeliveredAt == nil {
+			_, err = FinishCommand(ctx, tx, command, Failed, reason)
+		} else {
+			err = finishLost(ctx, tx, command)
+		}
+		if err != nil {
 			return err
 		}
 	}
-	return RefreshAgentStatus(ctx, tx, instance.AgentID)
+	return RefreshAgentStatus(ctx, tx, agentID)
 }

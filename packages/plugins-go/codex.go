@@ -10,17 +10,18 @@ import (
 	"strings"
 )
 
-// The chat target: Codex plugins in a local marketplace, which the chat
-// runtime installs for each agent (apps/agent-runtime). The runtime fills in
-// ${AXP_GATEWAY_URL} and ${AXP_WORKSPACE_DIR} when it installs a plugin, and
-// gives Codex the agent's key as AgentKeyEnv. Codex runs akhook for every
-// agent (the image's requirements.toml); the plugins' hooks are one akhook
-// config, ChatHooks, whose rules each run only where their plugin is
+// The chat target: Codex plugins in a local marketplace, compiled into an
+// agent's image when the control plane builds it from the agent's bundles;
+// the runtime installs them into the agent's CODEX_HOME (apps/agent-runtime).
+// It fills in ${AXP_GATEWAY_URL} and ${AXP_WORKSPACE_DIR} when it installs a
+// plugin; Codex has the agent's key as AgentKeyEnv. Codex runs akhook for
+// every agent (the image's requirements.toml); the plugins' hooks are one
+// akhook config, ChatHooks, whose rules each run only where their plugin is
 // installed.
 
 const (
 	Marketplace = "axp"
-	AgentKeyEnv = "AXP_RUNTIME_LLM_KEY"
+	AgentKeyEnv = "AXP_AGENT_KEY"
 	// ChatHooks is the plugins' akhook rules, in root.
 	ChatHooks = "akhook.yml"
 )
@@ -96,10 +97,8 @@ func Chat(root, codexDir, imageRoot string) error {
 	}
 	installed := func(p *Plugin) string { return filepath.Join(imageRoot, p.Name) }
 	return WriteHooks(filepath.Join(root, ChatHooks), plugins, installed, func(p *Plugin, argv []string) []string {
-		// Only where the agent installed the plugin, with the agent's key
-		// under its neutral name.
-		guard := fmt.Sprintf(`[ -d "$CODEX_HOME/plugins/cache/%s/%s" ] || exit 0; export AXP_AGENT_KEY="$%s"; exec "$0" "$@"`,
-			Marketplace, p.Name, AgentKeyEnv)
+		// Only where the agent installed the plugin.
+		guard := fmt.Sprintf(`[ -d "$CODEX_HOME/plugins/cache/%s/%s" ] || exit 0; exec "$0" "$@"`, Marketplace, p.Name)
 		return append([]string{"sh", "-c", guard}, argv...)
 	})
 }

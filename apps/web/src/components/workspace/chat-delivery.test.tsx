@@ -97,7 +97,6 @@ function Chat({ agentStatus = "idle" }: { agentStatus?: "idle" | "starting" }) {
       hasOlder={false}
       loadingOlder={false}
       onLoadOlder={() => {}}
-      interactions={[]}
       draft={draft}
       onDraftChange={(text) => useOutbox.getState().setDraft(AGENT, text)}
       onSend={(text, mode) => {
@@ -109,9 +108,7 @@ function Chat({ agentStatus = "idle" }: { agentStatus?: "idle" | "starting" }) {
       onEdit={outbox.edit}
       onDiscard={outbox.discard}
       onResend={(text) => outbox.send(AGENT, text, "queue")}
-      onCompact={() => {}}
       onStop={() => {}}
-      onAnswer={() => {}}
     />
   );
 }
@@ -128,7 +125,6 @@ async function render(
         return Response.json({
           agents: [],
           active_replies: [],
-          interactions: [],
           event_cursor: "c",
         });
       if (request.method === "GET")
@@ -201,10 +197,7 @@ const button = (c: HTMLElement, text: string) =>
 function accepted(post: Post) {
   const user = message("user", { id: post.body.id, text: post.body.text });
   const reply = message("assistant", { reply_to_id: user.id });
-  return Response.json(
-    { message: user, reply, steered: false },
-    { status: 202 },
-  );
+  return Response.json({ message: user, reply }, { status: 202 });
 }
 const count = (text: string, part: string) => text.split(part).length - 1;
 
@@ -325,8 +318,8 @@ describe("waiting replies", () => {
 
   it("says an environment failure once and offers to send again", async () => {
     const failure = {
-      code: "START_TIMEOUT",
-      message: "智能体环境准备超时，此消息未执行。",
+      code: "AGENT_BUILD_FAILED",
+      message: "智能体环境构建失败，此消息未执行。",
     };
     const a = message("user", { text: "A" });
     const ra = message("assistant", {

@@ -19,6 +19,11 @@ export default {
         .join("\n"),
   },
   workspaces: {
+    "apps/agent-runtime": {
+      // The runtime is bundled from main.ts; the memory plugin's hooks run
+      // in agents' images (akhook.yml).
+      entry: ["src/main.ts", "plugins/*/hooks/*.mjs"],
+    },
     "apps/web": {
       // routeTree.gen.ts is gitignored, which knip skips, so the file routes
       // are entries themselves. public/sw.js is registered by URL in

@@ -74,7 +74,6 @@ if ! grep -q "^AXP_SECRET_KEY=" "$ENV_FILE"; then
   echo "AXP_SECRET_KEY=${old_key:-$(openssl rand -hex 32)}" >>"$ENV_FILE"
   echo "Added AXP_SECRET_KEY to $ENV_FILE."
 fi
-ensure_secret AXP_S3_SECRET_ACCESS_KEY 32
 ensure_secret AXP_RELAY_ADMIN_SECRET 32
 # OpenObserve requires upper and lower case letters, a digit and a symbol.
 if ! grep -q "^AXP_OBSERVE_PASSWORD=" "$ENV_FILE"; then
@@ -184,14 +183,12 @@ kamal() {
 # added, boot it before the first deploy that uses it. The collector holds no
 # state and is rebooted on every deploy so config changes take effect.
 prepare_accessories() {
-  if ! docker container inspect axp-s3 >/dev/null 2>&1; then
-    kamal accessory boot s3
-  elif docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' axp-s3 | grep -qx "$RUNTIME_NETWORK"; then
-    # Booted when SeaweedFS itself was on the runtime network: move it off
-    # before s3-proxy takes the axp-s3 name there. Its data stays in the volume.
-    kamal accessory reboot s3
-  fi
-  docker container inspect axp-s3-proxy >/dev/null 2>&1 || kamal accessory boot s3-proxy
+  # Agents' snapshots (SeaweedFS) are gone with the runtimes that kept them:
+  # agents keep their state on volumes of their own. Its volume axp-s3 stays
+  # until removed by hand, and so do the runtimes of the old controller,
+  # which would otherwise go on running.
+  docker rm -f axp-s3 axp-s3-proxy >/dev/null 2>&1 || true
+  docker ps -aq --filter label=dev.axp.runtime=runtime --filter name='^axp-agent-' | xargs -r docker rm -f >/dev/null
   docker container inspect axp-nats >/dev/null 2>&1 || kamal accessory boot nats
   if ! docker container inspect axp-openobserve >/dev/null 2>&1; then
     kamal accessory boot openobserve

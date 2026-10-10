@@ -1,4 +1,4 @@
-import type { Agent, Plugin } from "@/queries/chat";
+import type { Agent, Bundle } from "@/queries/chat";
 import type { Model } from "@/queries/llm";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { TrashIcon } from "@phosphor-icons/react/Trash";
@@ -30,9 +30,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  useBundles,
   useCreateAgent,
   useDeleteAgent,
-  usePlugins,
   useUpdateAgent,
 } from "@/queries/chat";
 import { useConnectors, useModels } from "@/queries/llm";
@@ -59,8 +59,8 @@ const agentFormSchema = z.object({
     ),
   // "" until a model is chosen.
   model: z.string(),
-  // null: every plugin, the default for new agents.
-  plugins: z.array(z.string()).nullable(),
+  // null: every built-in bundle, the default for new agents.
+  bundles: z.array(z.string()).nullable(),
 });
 type AgentForm = z.infer<typeof agentFormSchema>;
 
@@ -162,35 +162,45 @@ export function ModelSelect({
   );
 }
 
-/** One checkbox per plugin of the runtime image. */
-function PluginList({
+/** One checkbox per bundle; built-in ones first. */
+function BundleList({
   value,
-  plugins,
+  bundles,
   onChange,
 }: {
   value: string[] | null;
-  plugins: Plugin[];
+  bundles: Bundle[];
   onChange: (value: string[]) => void;
 }) {
-  const names = plugins.map((plugin) => plugin.name);
-  const chosen = value ?? names;
+  const names = bundles.map((bundle) => bundle.name);
+  const chosen =
+    value ?? bundles.filter((bundle) => bundle.builtin).map((b) => b.name);
   const toggle = (name: string, on: boolean) =>
     onChange(names.filter((n) => (n === name ? on : chosen.includes(n))));
   return (
     <ul className="divide-y border">
-      {plugins.map((plugin) => (
-        <li key={plugin.name}>
+      {bundles.map((bundle) => (
+        <li key={bundle.name}>
           <Label className="items-start gap-3 p-2.5 leading-snug">
             <Checkbox
               className="mt-px"
-              checked={chosen.includes(plugin.name)}
-              onCheckedChange={(on) => toggle(plugin.name, on === true)}
+              checked={chosen.includes(bundle.name)}
+              onCheckedChange={(on) => toggle(bundle.name, on === true)}
             />
             <span className="min-w-0 space-y-0.5">
-              <span className="block font-medium">{plugin.name}</span>
-              <span className="block text-muted-foreground">
-                {plugin.description}
+              <span className="block font-medium">
+                {bundle.name}
+                {bundle.builtin ? null : (
+                  <span className="ml-1.5 font-normal text-muted-foreground">
+                    自定义
+                  </span>
+                )}
               </span>
+              {bundle.description ? (
+                <span className="block text-muted-foreground">
+                  {bundle.description}
+                </span>
+              ) : null}
             </span>
           </Label>
         </li>
@@ -211,7 +221,7 @@ function AgentEditorForm({
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const { data: models } = useModels();
-  const { data: plugins } = usePlugins();
+  const { data: bundles } = useBundles();
   const usable = (models ?? []).filter((model) => model.available);
   // Only once they have loaded can there be none.
   const noModels = models !== undefined && !usable.length;
@@ -231,12 +241,12 @@ function AgentEditorForm({
       name: agent?.name ?? "",
       description: agent?.description ?? "",
       model: agent?.model ?? "",
-      plugins: agent?.plugins ?? null,
+      bundles: agent?.bundles ?? null,
     },
   });
   const description = watch("description");
   const model = watch("model");
-  const chosenPlugins = watch("plugins");
+  const chosenBundles = watch("bundles");
   // New agents start with the last used model, or the first usable one.
   const preferred = usable.find((item) => item.id === lastModel) ?? usable[0];
   useEffect(() => {
@@ -249,7 +259,7 @@ function AgentEditorForm({
   const pending = create.isPending || updateAgent.isPending;
   const onError = (error: Error) => toast.error(error.message);
 
-  const save = handleSubmit(({ model, plugins, ...fields }) => {
+  const save = handleSubmit(({ model, bundles, ...fields }) => {
     // Agents can be created before any account is connected, not after.
     if (!model && usable.length) {
       setError("model", { message: "请选择模型。" });
@@ -258,7 +268,7 @@ function AgentEditorForm({
     const draft = {
       ...fields,
       ...(model ? { model } : {}),
-      ...(plugins ? { plugins } : {}),
+      ...(bundles ? { bundles } : {}),
     };
     if (model) setWorkspace((state) => ({ ...state, lastModel: model }));
     if (agent) {
@@ -349,29 +359,45 @@ function AgentEditorForm({
             </p>
           ) : null}
         </div>
-        {plugins?.length ? (
+        {bundles?.length ? (
           <div
             role="group"
-            aria-labelledby="agent-plugins"
-            aria-describedby="agent-plugins-hint"
+            aria-labelledby="agent-bundles"
+            aria-describedby="agent-bundles-hint"
             className="space-y-1.5"
           >
-            <p id="agent-plugins" className="text-xs leading-none">
-              插件
+            <p id="agent-bundles" className="text-xs leading-none">
+              环境包
             </p>
-            <PluginList
-              value={chosenPlugins}
-              plugins={plugins}
+            <BundleList
+              value={chosenBundles}
+              bundles={bundles}
               onChange={(value) =>
-                setValue("plugins", value, { shouldDirty: true })
+                setValue("bundles", value, { shouldDirty: true })
               }
             />
             <p
-              id="agent-plugins-hint"
+              id="agent-bundles-hint"
               className="text-xs text-muted-foreground"
             >
-              智能体可用的工具和技能；修改在空闲时生效。
+              智能体的环境由这些环境包构建：安装的工具、可用的插件。修改后重新构建，在空闲时生效。
             </p>
+          </div>
+        ) : null}
+        {agent?.build_error ? (
+          <div className="space-y-1.5" role="alert">
+            <p className="text-xs leading-none text-destructive">
+              环境构建失败
+            </p>
+            <pre
+              // The build's last lines say what failed: show them first.
+              ref={(pre) => {
+                if (pre) pre.scrollTop = pre.scrollHeight;
+              }}
+              className="max-h-48 overflow-auto border bg-muted/40 p-2 font-mono text-[11px] leading-snug whitespace-pre-wrap"
+            >
+              {agent.build_error}
+            </pre>
           </div>
         ) : null}
         {agent ? <UsageLine principal={agent.id} /> : null}

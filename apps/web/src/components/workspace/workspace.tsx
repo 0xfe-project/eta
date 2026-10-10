@@ -7,9 +7,6 @@ import { cn } from "@/lib/utils";
 import {
   chatQueryOptions,
   useAgentMessages,
-  useAnswerInteraction,
-  useCompact,
-  usePendingInteractions,
   useStopReply,
   useStreamLost,
 } from "@/queries/chat";
@@ -24,6 +21,7 @@ import { AgentEditor } from "./agent-editor";
 import { ChatPanel, ComposerNotice } from "./chat-panel";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
 import { useAgents } from "./use-agents";
+import { useAttention } from "./use-attention";
 import { WorkspacePanel } from "./workspace-panel";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -39,8 +37,7 @@ export function Workspace({
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const chat = useQuery(chatQueryOptions());
-  const waiting = usePendingInteractions();
-  const pending = waiting.length;
+  const pending = useAttention().total;
   const { current: selected, openEditor } = useAgents();
   const history = useAgentMessages(selected?.id);
   const connectionLost = useStreamLost((s) => s.lost);
@@ -88,9 +85,7 @@ export function Workspace({
       ]}
     />
   ) : undefined;
-  const compact = useCompact();
   const stopReply = useStopReply();
-  const answer = useAnswerInteraction();
   const onError = (error: Error) => toast.error(error.message);
 
   return (
@@ -149,7 +144,6 @@ export function Workspace({
             hasOlder={history.hasOlder}
             loadingOlder={history.loadingOlder}
             onLoadOlder={history.loadOlder}
-            interactions={waiting}
             head={<AgentBar />}
             agentStatus={selected?.status}
             connectionLost={connectionLost}
@@ -158,9 +152,7 @@ export function Workspace({
             onEdit={outbox.edit}
             onDiscard={outbox.discard}
             onResend={(text) => {
-              if (!selected) return;
-              if (text === "/compact") compact.mutate(selected.id, { onError });
-              else outbox.send(selected.id, text, "queue");
+              if (selected) outbox.send(selected.id, text, "queue");
             }}
             error={
               (chat.error ?? history.error)
@@ -178,16 +170,7 @@ export function Workspace({
               outbox.send(selected.id, text, mode);
               setDraft("");
             }}
-            onCompact={() => {
-              if (!selected) {
-                openEditor();
-                return;
-              }
-              compact.mutate(selected.id, { onError });
-              setDraft("");
-            }}
             onStop={(id) => stopReply.mutate(id, { onError })}
-            onAnswer={(id, value) => answer.mutate({ id, value }, { onError })}
           />
         </div>
         <WorkspacePanel

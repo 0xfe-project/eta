@@ -6,10 +6,10 @@ rules:
   - id: recall
     on: prompt_submit
     run:
-      argv: [python, "${PLUGIN_ROOT}/hooks/memory.py", recall]
+      argv: [node, "${PLUGIN_ROOT}/hooks/memory.mjs", recall]
       timeout_ms: 5000
   - id: capture
     on: stop
     run:
-      argv: [python, "${PLUGIN_ROOT}/hooks/memory.py", capture]
+      argv: [node, "${PLUGIN_ROOT}/hooks/memory.mjs", capture]
       timeout_ms: 5000

@@ -3,7 +3,6 @@ import type { PersistStorage, StorageValue } from "zustand/middleware";
 import type { SendMode } from "@/queries/chat";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { toast } from "sonner";
 import { z } from "zod";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
@@ -133,8 +132,6 @@ async function attempt(queryClient: QueryClient, outgoing: Outgoing) {
       );
       addSent(queryClient, sent);
       remove(outgoing.id);
-      if (outgoing.mode === "steer" && !sent.steered)
-        toast("没有进行中的回复可以插入，这条消息已改为排队。");
       return;
     } catch (error) {
       // No answer, or the server's own trouble: it may have arrived, and the

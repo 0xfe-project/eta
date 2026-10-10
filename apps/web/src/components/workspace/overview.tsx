@@ -4,11 +4,7 @@ import type { Connection, Model } from "@/queries/llm";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import {
-  ACTIVE_STATUSES,
-  chatQueryOptions,
-  usePendingInteractions,
-} from "@/queries/chat";
+import { ACTIVE_STATUSES, chatQueryOptions } from "@/queries/chat";
 import {
   NEEDS_ACTION,
   useConnections,
@@ -20,6 +16,7 @@ import { AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels } from "./agent-status";
 import { connectionStateLabels, untilText } from "./connection-state";
 import { useAgents, useOpenAgent } from "./use-agents";
+import { useAttention } from "./use-attention";
 
 // An instrument cluster for the workspace, in the app's monochrome: the
 // foreground marks what is happening, destructive what needs fixing.
@@ -316,11 +313,11 @@ function Meter({
   );
 }
 
-// P parks an idle agent, N holds one waiting on the user, D drives a turn
-// (or gets the agent going for one).
+// P parks an idle agent, N holds one that cannot run, D drives a turn (or
+// gets the agent going for one).
 const gears: { gear: string; statuses: Agent["status"][] }[] = [
   { gear: "P", statuses: ["idle"] },
-  { gear: "N", statuses: ["waiting_for_input"] },
+  { gear: "N", statuses: ["unavailable"] },
   { gear: "D", statuses: ["starting", "working"] },
 ];
 
@@ -444,7 +441,7 @@ export function Overview() {
   const { data: snapshot } = useQuery(chatQueryOptions());
   const { agents, current } = useAgents();
   const openAgent = useOpenAgent();
-  const pending = usePendingInteractions();
+  const attention = useAttention();
   const connectionList = useConnections();
   const modelList = useModels();
   const models = modelList.data ?? [];
@@ -455,7 +452,7 @@ export function Overview() {
   const count = (status: Agent["status"]) =>
     agents.filter((agent) => agent.status === status).length;
   const working = count("starting") + count("working");
-  const waiting = count("waiting_for_input");
+  const unavailable = count("unavailable");
   const load = loadScale(agents.length);
 
   const messages = snapshot?.messages ?? [];
@@ -478,13 +475,13 @@ export function Overview() {
       <div className="grid grid-cols-[1fr_minmax(8rem,10rem)_1fr] items-center gap-1">
         <div>
           <Gauge
-            value={(working + waiting) / load.max}
+            value={working / load.max}
             labels={load.labels}
             redFrom={0.9}
-            label={`负载：${agents.length} 个智能体中 ${working + waiting} 个在运转`}
+            label={`负载：${agents.length} 个智能体中 ${working} 个在运转`}
           >
             <span className="font-mono text-[2.25rem] leading-none font-semibold tracking-tight tabular-nums">
-              {loaded ? working + waiting : "—"}
+              {loaded ? working : "—"}
               <span className="text-lg text-muted-foreground">
                 /{loaded ? agents.length : "—"}
               </span>
@@ -494,7 +491,8 @@ export function Overview() {
             </span>
           </Gauge>
           <p className="-mt-3 text-center font-mono text-[10px] text-muted-foreground">
-            {loaded ? working : "—"} 工作中 · {loaded ? waiting : "—"} 等待确认
+            {loaded ? working : "—"} 工作中 · {loaded ? unavailable : "—"}{" "}
+            不可用
           </p>
         </div>
 
@@ -575,8 +573,8 @@ export function Overview() {
           <Digits value={loaded ? agents.length : undefined} width={2} strong />
         </div>
         <div className="flex flex-col items-center">
-          <Caption>待确认</Caption>
-          <Digits value={loaded ? pending.length : undefined} width={2} />
+          <Caption>待处理</Caption>
+          <Digits value={loaded ? attention.total : undefined} width={2} />
         </div>
         <div className="flex flex-col items-end">
           <Caption>记忆条目</Caption>

@@ -18,10 +18,12 @@ type Agent struct {
 	// Instructions injected into the agent's context.
 	Description string   `json:"description" doc:"Instructions injected into the agent's context."`
 	Model       *string  `json:"model" doc:"Model id from the LLM gateway catalog; null until one is chosen."`
-	Plugins     []string `json:"plugins" doc:"The plugins it runs with, in catalog order."`
+	Bundles     []string `json:"bundles" doc:"The bundles it is built from, in catalog order (GET /api/v1/bundles)."`
 	// starting: its environment is being prepared for the work waiting on it.
-	Status   string `json:"status" enum:"idle,starting,working,waiting_for_input,unavailable" doc:"starting: its environment is being prepared for the work waiting on it."`
-	Revision int64  `json:"revision"`
+	Status string `json:"status" enum:"idle,starting,working,unavailable" doc:"starting: its environment is being prepared for the work waiting on it."`
+	// Why its image could not be built: the end of the build's output.
+	BuildError *string `json:"build_error" doc:"Why its image could not be built: the end of the build's output."`
+	Revision   int64   `json:"revision"`
 }
 
 // Block is a part of a message: text, or an activity (a tool call, a
@@ -115,46 +117,19 @@ type Message struct {
 	AgentID   string        `json:"agent_id"`
 	Role      string        `json:"role" enum:"user,assistant"`
 	ReplyToID *string       `json:"reply_to_id"`
-	Status    string        `json:"status" enum:"queued,responding,waiting_for_input,stopping,completed,stopped,failed"`
+	Status    string        `json:"status" enum:"queued,responding,stopping,completed,stopped,failed"`
 	Revision  int64         `json:"revision"`
 	Blocks    []Block       `json:"blocks"`
 	Failure   *Failure      `json:"failure"`
 	CreatedAt jsontime.Time `json:"created_at"`
 }
 
-type InteractionOption struct {
-	Value string `json:"value"`
-	Label string `json:"label"`
-}
-
-type Interaction struct {
-	ID        string              `json:"id"`
-	AgentID   string              `json:"agent_id"`
-	MessageID string              `json:"message_id"`
-	Kind      string              `json:"kind" enum:"choice"`
-	Prompt    string              `json:"prompt"`
-	Options   []InteractionOption `json:"options"`
-	Status    string              `json:"status" enum:"pending,submitted,resolved,expired"`
-	Revision  int64               `json:"revision"`
-	// The option the user chose; null until answered.
-	Answer    *string       `json:"answer" nullable:"true" doc:"The option the user chose; null until answered."`
-	CreatedAt jsontime.Time `json:"created_at"`
-	UpdatedAt jsontime.Time `json:"updated_at"`
-}
-
-// InteractionList is the latest interactions, newest first, whatever their
-// status: the confirmations the user has had, like notifications.
-type InteractionList struct {
-	Interactions []Interaction `json:"interactions"`
-}
-
-// Snapshot is the chat as of EventCursor: every agent, the replies still in
-// progress and the interactions still open. The rest arrives over the stream.
+// Snapshot is the chat as of EventCursor: every agent and the replies still
+// in progress. The rest arrives over the stream.
 type Snapshot struct {
-	Agents        []Agent       `json:"agents"`
-	ActiveReplies []Message     `json:"active_replies"`
-	Interactions  []Interaction `json:"interactions"`
-	EventCursor   string        `json:"event_cursor"`
+	Agents        []Agent   `json:"agents"`
+	ActiveReplies []Message `json:"active_replies"`
+	EventCursor   string    `json:"event_cursor"`
 }
 
 // MessagePage is one page of an agent's history, in send order.
@@ -167,9 +142,6 @@ type MessagePage struct {
 type Sent struct {
 	Message Message `json:"message"`
 	Reply   Message `json:"reply"`
-	// A steer that joined the running turn; false when it waits like any
-	// message.
-	Steered bool `json:"steered" doc:"A steer that joined the running turn; false when it waits like any message."`
 }
 
 // Stream events' payloads.
@@ -186,18 +158,14 @@ type MessageUpdated struct {
 	Message Message `json:"message"`
 }
 
-type InteractionUpdated struct {
-	Interaction Interaction `json:"interaction"`
-}
-
 func (a *AgentRecord) public() Agent {
-	plugins := a.Plugins
-	if plugins == nil {
-		plugins = []string{}
+	bundles := a.Bundles
+	if bundles == nil {
+		bundles = []string{}
 	}
 	return Agent{
 		ID: a.ID, Name: a.Name, Description: a.Description, Model: a.Model,
-		Plugins: plugins, Status: a.ProductStatus, Revision: a.ProductRevision,
+		Bundles: bundles, Status: a.ProductStatus, BuildError: a.BuildError, Revision: a.ProductRevision,
 	}
 }
 
@@ -210,21 +178,5 @@ func (m *messageRow) public() Message {
 		ID: m.ID, AgentID: m.AgentID, Role: m.Role, ReplyToID: m.ReplyToID,
 		Status: m.Status, Revision: m.Revision, Blocks: blocks, Failure: m.Failure,
 		CreatedAt: jsontime.From(m.CreatedAt),
-	}
-}
-
-func (i *interactionRow) public() Interaction {
-	options := i.Options
-	if options == nil {
-		options = []InteractionOption{}
-	}
-	var chosen *string
-	if i.Answer != nil {
-		chosen = &i.Answer.Value
-	}
-	return Interaction{
-		ID: i.ID, AgentID: i.AgentID, MessageID: i.MessageID, Kind: i.Kind,
-		Prompt: i.Prompt, Options: options, Status: i.Status, Revision: i.Revision,
-		Answer: chosen, CreatedAt: jsontime.From(i.CreatedAt), UpdatedAt: jsontime.From(i.UpdatedAt),
 	}
 }

@@ -2,8 +2,8 @@
 // and operates their runtimes. One binary, one role per process:
 //
 //	axp-control-plane api         the browser's API under /api (AXP_API_ADDR, default :8000)
-//	axp-control-plane internal    runtimes' API under /internal (AXP_INTERNAL_ADDR, default :8001)
-//	axp-control-plane controller  starts, replaces and stops runtime containers (Docker socket)
+//	axp-control-plane internal    the runtime gateway's API under /internal (AXP_INTERNAL_ADDR, default :8001)
+//	axp-control-plane controller  builds and runs agents' containers and delivers their work (Docker socket)
 //	axp-control-plane migrate     applies database migrations
 //	axp-control-plane openapi public|internal
 //	                              prints an API's OpenAPI document
@@ -22,22 +22,20 @@ import (
 	"time"
 
 	"github.com/akarachen/axp/apps/control-plane/internal/api"
+	"github.com/akarachen/axp/apps/control-plane/internal/bundles"
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
 	"github.com/akarachen/axp/apps/control-plane/internal/config"
 	"github.com/akarachen/axp/apps/control-plane/internal/container"
 	"github.com/akarachen/axp/apps/control-plane/internal/control"
 	"github.com/akarachen/axp/apps/control-plane/internal/llm"
 	"github.com/akarachen/axp/apps/control-plane/internal/plugins"
-	"github.com/akarachen/axp/apps/control-plane/internal/queue"
 	"github.com/akarachen/axp/apps/control-plane/internal/relay"
-	"github.com/akarachen/axp/apps/control-plane/internal/snapshots"
 	"github.com/akarachen/axp/apps/control-plane/internal/store"
 	"github.com/akarachen/axp/apps/control-plane/internal/tasks"
 	"github.com/akarachen/axp/packages/service-go"
 	"github.com/akarachen/axp/packages/service-go/httpapi"
 	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -59,9 +57,9 @@ func main() {
 			}
 			return httpapi.Serve(ctx, s.cfg.InternalAddr, api.Internal(s.deps).Router, time.Second)
 		}},
-		service.Command{Name: "controller", Args: "[-interval 500ms]", Run: func(ctx context.Context, args []string) error {
+		service.Command{Name: "controller", Args: "[-interval 1s]", Run: func(ctx context.Context, args []string) error {
 			flags := flag.NewFlagSet("controller", flag.ExitOnError)
-			interval := flags.Duration("interval", 500*time.Millisecond, "time between ticks")
+			interval := flags.Duration("interval", time.Second, "time between ticks")
 			_ = flags.Parse(args)
 			s, err := connect(ctx)
 			if err != nil {
@@ -82,7 +80,7 @@ func main() {
 			if err != nil {
 				return err
 			}
-			driver, err := container.NewDocker(cfg.Dev)
+			driver, err := container.NewDocker(cfg.Dev, cfg.RuntimeImage)
 			if err != nil {
 				return err
 			}
@@ -99,11 +97,9 @@ func openAPIDeps() *api.Deps {
 
 // services is everything a role may need, connected lazily where possible.
 type services struct {
-	cfg       config.Config
-	deps      *api.Deps
-	queue     *queue.NATS
-	models    *llm.Gateway
-	snapshots *snapshots.S3
+	cfg    config.Config
+	deps   *api.Deps
+	models *llm.Gateway
 }
 
 func connect(ctx context.Context) (*services, error) {
@@ -112,14 +108,6 @@ func connect(ctx context.Context) (*services, error) {
 		return nil, err
 	}
 	pool, err := pg.Open(ctx, cfg.DatabaseURL)
-	if err != nil {
-		return nil, err
-	}
-	q, err := queue.Connect(cfg.NATSURL)
-	if err != nil {
-		return nil, err
-	}
-	s3, err := snapshots.NewS3(cfg.S3Endpoint, cfg.S3AccessKeyID, cfg.S3SecretAccessKey)
 	if err != nil {
 		return nil, err
 	}
@@ -133,19 +121,18 @@ func connect(ctx context.Context) (*services, error) {
 		taskService.Relay = relayClient
 	}
 	chatService := &chat.Service{
-		Queue: q, Models: models, Plugins: &plugins.Catalog{Dir: cfg.PluginsDir},
+		Models:  models,
+		Bundles: &bundles.Catalog{Dir: cfg.BundlesDir, Plugins: &plugins.Catalog{Dir: cfg.PluginsDir}},
 		Cursors: chat.Cursors{Secret: []byte(cfg.SecretKey)},
 	}
 	return &services{
-		cfg:       cfg,
-		queue:     q,
-		models:    models,
-		snapshots: s3,
+		cfg:    cfg,
+		models: models,
 		deps: &api.Deps{
 			DB:        pool,
 			Chat:      chatService,
-			Protocol:  &control.Protocol{DB: pool, Chat: chatService, Snapshots: s3, Secret: []byte(cfg.SecretKey)},
 			Tasks:     taskService,
+			Secret:    []byte(cfg.SecretKey),
 			PublicURL: cfg.PublicURL, ForgeURL: cfg.ForgeURL, RemoteDist: cfg.RemoteDist,
 			Dev: cfg.Dev,
 		},
@@ -180,6 +167,36 @@ func holdLock(ctx context.Context, url string) (*pgx.Conn, error) {
 	}
 }
 
+// listen wakes the controller for every agent the API notifies about
+// (chat.Notify): work to deliver or stop. Notifications missed while it
+// reconnects are found by the next tick.
+func listen(ctx context.Context, url string, wake func(string)) {
+	for ctx.Err() == nil {
+		conn, err := pgx.Connect(ctx, url)
+		if err == nil {
+			if _, err = conn.Exec(ctx, "LISTEN "+chat.WorkChannel); err == nil {
+				for {
+					notification, waitErr := conn.WaitForNotification(ctx)
+					if waitErr != nil {
+						err = waitErr
+						break
+					}
+					wake(notification.Payload)
+				}
+			}
+			conn.Close(context.Background())
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		slog.Warn("Listening for agents' work failed; retrying", "error", err)
+		select {
+		case <-ctx.Done():
+		case <-time.After(time.Second):
+		}
+	}
+}
+
 func runController(ctx context.Context, s *services, interval time.Duration) error {
 	slog.Info("Waiting for the controller lock")
 	lock, err := holdLock(ctx, s.cfg.DatabaseURL)
@@ -191,60 +208,75 @@ func runController(ctx context.Context, s *services, interval time.Duration) err
 			lock.Close(context.Background())
 		}
 	}()
-	// The tick in progress always finishes, even after SIGTERM: it may be
-	// stopping a runtime.
+	// The step in progress always finishes, even after SIGTERM: it may be
+	// starting a container or delivering a command.
 	work := context.WithoutCancel(ctx)
-	driver, err := container.NewDocker(s.cfg.Dev)
+	driver, err := container.NewDocker(s.cfg.Dev, s.cfg.RuntimeImage)
 	if err != nil {
 		return err
 	}
 	if err := driver.EnsureNetwork(work); err != nil {
 		return err
 	}
-	if err := s.snapshots.EnsureBucket(work); err != nil {
+	events, err := control.ConnectEvents(s.cfg.NATSURL)
+	if err != nil {
 		return err
 	}
-	if err := s.queue.EnsureStreams(work); err != nil {
+	if err := events.EnsureStream(work); err != nil {
 		return err
+	}
+	wakes := make(chan string, 1024)
+	wake := func(agentID string) {
+		select {
+		case wakes <- agentID:
+		default: // the next tick finds it
+		}
 	}
 	controller := &control.Controller{
-		DB: s.deps.DB, Chat: s.deps.Chat, Queue: s.queue, Driver: driver, Snapshots: s.snapshots,
-		Models: s.models, Secret: []byte(s.cfg.SecretKey),
-		RuntimeGatewayURL: s.cfg.RuntimeGatewayURL, NATSURL: s.cfg.NATSURL, CodexLaunch: s.cfg.CodexLaunch,
-		ID: "controller-" + uuid.NewString()[:8], HostID: control.HostID(),
+		DB: s.deps.DB, Chat: s.deps.Chat, Bundles: s.deps.Chat.Bundles, Driver: driver, Models: s.models,
+		Secret: []byte(s.cfg.SecretKey), PluginsDir: s.cfg.PluginsDir,
+		RuntimeGatewayURL: s.cfg.RuntimeGatewayURL, NATSURL: s.cfg.NATSURL, Wake: wake,
 	}
 	// Remote agents' runs, on their own loop: relay calls take seconds. It
 	// runs only while this controller holds the lock (a computer's capacity
 	// assumes one runner), and is waited for: a start under way finishes.
+	// So are the event import and the notifications.
 	runner := &tasks.Runner{DB: s.deps.DB, Service: s.deps.Tasks}
 	var running sync.WaitGroup
-	startRunner := func() context.CancelFunc {
-		runnerCtx, stop := context.WithCancel(ctx)
-		running.Go(func() { runner.Loop(runnerCtx, 2*time.Second) })
+	startLoops := func() context.CancelFunc {
+		loopCtx, stop := context.WithCancel(ctx)
+		running.Go(func() { runner.Loop(loopCtx, 2*time.Second) })
+		running.Go(func() { events.Import(loopCtx, s.deps.DB, s.deps.Chat, wake) })
+		running.Go(func() { listen(loopCtx, s.cfg.DatabaseURL, wake) })
 		// Stopping twice is fine.
 		return func() { stop(); running.Wait() }
 	}
-	stopRunner := startRunner()
-	slog.Info("Controller started", "controller", controller.ID)
+	stopLoops := startLoops()
+	slog.Info("Controller started")
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	controller.Tick(work)
 	for ctx.Err() == nil {
 		// A database restart drops the session and its lock: take it again
 		// (waiting for any controller that got it meanwhile) before going on.
 		if lock.Ping(work) != nil {
 			slog.Warn("Lost the controller lock; waiting for it again")
-			stopRunner()
+			stopLoops()
 			lock.Close(context.Background())
 			if lock, err = holdLock(ctx, s.cfg.DatabaseURL); err != nil {
 				break
 			}
-			stopRunner = startRunner()
+			stopLoops = startLoops()
 		}
-		controller.Tick(work)
 		select {
 		case <-ctx.Done():
-		case <-time.After(interval):
+		case <-ticker.C:
+			controller.Tick(work)
+		case agentID := <-wakes:
+			controller.Dispatch(work, agentID)
 		}
 	}
-	stopRunner()
-	slog.Info("Controller stopped", "controller", controller.ID)
+	stopLoops()
+	slog.Info("Controller stopped")
 	return nil
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds the agent runtime image for this machine's architecture through
-# Turbo, which restores or builds its site-packages first:
+# Turbo, which restores or builds the runtime's bundle first:
 # scripts/build/runtime-image.sh <tag>.
 set -euo pipefail
 cd "$(dirname -- "${BASH_SOURCE[0]}")/../.."

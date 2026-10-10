@@ -1,13 +1,12 @@
 // Package api is the control plane's HTTP surface: the public API the
-// browser calls under /api (through the gateway) and the internal API
-// runtimes call under /internal (through the runtime gateway). Each is its
-// own httpapi API with its own OpenAPI document, generated from the code;
-// the web client's types are generated from the public one.
+// browser calls under /api (through the gateway) and the internal API the
+// runtime gateway calls under /internal for runtimes. Each is its own
+// httpapi API with its own OpenAPI document, generated from the code; the
+// web client's types are generated from the public one.
 package api
 
 import (
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
-	"github.com/akarachen/axp/apps/control-plane/internal/control"
 	"github.com/akarachen/axp/apps/control-plane/internal/tasks"
 	"github.com/akarachen/axp/packages/service-go/httpapi"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -15,10 +14,11 @@ import (
 
 // Deps is what the handlers use.
 type Deps struct {
-	DB       *pgxpool.Pool
-	Chat     *chat.Service
-	Protocol *control.Protocol
-	Tasks    *tasks.Service
+	DB    *pgxpool.Pool
+	Chat  *chat.Service
+	Tasks *tasks.Service
+	// Agents' keys are derived from it.
+	Secret []byte
 	// Where remote computers reach AXP; the browser's address when empty.
 	PublicURL string
 	// The forge service, for remote computers' GitHub credentials.
@@ -40,10 +40,10 @@ func Public(d *Deps) *httpapi.API {
 	return api
 }
 
-// Internal is runtimes' API under /internal. It is never served by the
-// public server.
+// Internal is the runtime gateway's API under /internal. It is never served
+// by the public server.
 func Internal(d *Deps) *httpapi.API {
-	api := httpapi.New(httpapi.Config{Title: "AXP Internal Runtime Protocol", Version: "1", Prefix: "/internal", Docs: d.Dev})
+	api := httpapi.New(httpapi.Config{Title: "AXP Internal API", Version: "2", Prefix: "/internal", Docs: d.Dev})
 	registerInternal(api, d)
 	// The tasks plugin, through the runtime gateway's /tasks.
 	api.Router.Handle("/tasks/mcp", tasksMCP(d))
