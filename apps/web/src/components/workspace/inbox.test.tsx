@@ -28,6 +28,8 @@ const interaction = (id: string, agentId: string, status = "pending") => ({
   ],
   status,
   revision: 1,
+  created_at: "2026-10-09T09:00:00Z",
+  updated_at: "2026-10-09T09:00:00Z",
 });
 
 async function render(snapshot: object) {
@@ -99,11 +101,12 @@ describe("Inbox", () => {
       agents: [agent("a1", "研究员")],
       interactions: [interaction("i1", "a1")],
     });
-    await act(async () => {
-      button(container, "拒绝").click();
-      // Let the answer's response settle.
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    });
+    await act(async () => button(container, "拒绝").click());
+    // Until the answer's response has settled, however long that takes.
+    for (let i = 0; i < 100; i++) {
+      if (container.textContent?.includes("没有等你处理的事")) break;
+      await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    }
     const [request] = fetch.mock.calls[0] as [Request];
     expect(request.url).toContain("/api/v1/chat/interactions/i1/answer");
     expect(request.headers.get("Idempotency-Key")).toBeTruthy();
