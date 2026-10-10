@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -418,4 +419,121 @@ func TestRuntimeAuthChecksTheRoutesPlugin(t *testing.T) {
 	expect(t, c.patch("/agents/"+c.agent.ID, map[string]any{"bundles": []string{"grok"}}).status, 200)
 	expectError(t, runtimeAuth(c.env, key, "memory"), 403, "PLUGIN_NOT_ENABLED")
 	expect(t, runtimeAuth(c.env, key, "grok").status, 204)
+}
+
+// --- approvals and compaction ------------------------------------------------
+
+func (c *controlEnv) interactions() []chat.Interaction {
+	var snapshot chat.Snapshot
+	c.get("/chat").json(c.t, &snapshot)
+	return snapshot.Interactions
+}
+
+func TestApprovalRoundTrip(t *testing.T) {
+	c := newControl(t)
+	sent, r, command := c.running()
+	r.events(event{"approval.requested", map[string]any{
+		"approval_id": "sdk-1", "command_id": command, "kind": "command",
+		"summary": map[string]any{"command": "rm -rf build", "reason": "清理构建产物"},
+	}})
+	var snapshot chat.Snapshot
+	c.get("/chat").json(t, &snapshot)
+	expect(t, len(snapshot.Interactions), 1)
+	interaction := snapshot.Interactions[0]
+	if !strings.Contains(interaction.Prompt, "rm -rf build") {
+		t.Fatalf("prompt %q", interaction.Prompt)
+	}
+	expect(t, snapshot.Agents[0].Status, "waiting_for_input")
+	expect(t, c.replyStatus(sent), "waiting_for_input")
+	expect(t, c.commandStatus(command), "waiting_approval")
+	assertNoInternalFields(t, interaction)
+	answer := c.post("/chat/interactions/"+interaction.ID+"/answer", map[string]any{"value": "allow"})
+	expect(t, answer.m(t)["status"], any("submitted"))
+	expect(t, scalar[string](c.env, "SELECT status FROM approval"), "decided")
+	c.wake()
+	decided := c.runtimes.called("/decide")
+	expect(t, len(decided), 1)
+	expect(t, fmt.Sprint(decided[0]), fmt.Sprint(map[string]any{"approval_id": "sdk-1", "decision": "accept"}))
+	// Until the runtime applies it, it is handed over again now and then.
+	c.wake()
+	expect(t, len(c.runtimes.called("/decide")), 1)
+	r.events(event{"approval.applied", map[string]any{"approval_id": "sdk-1", "decision": "accept"}})
+	expect(t, scalar[string](c.env, "SELECT status FROM interaction"), "resolved")
+	expect(t, scalar[string](c.env, "SELECT status FROM approval"), "applied")
+	expect(t, c.replyStatus(sent), "responding")
+	expect(t, c.commandStatus(command), "running")
+	// Answered, it leaves the snapshot but stays in the list, with its answer.
+	expect(t, len(c.interactions()), 0)
+	var list chat.InteractionList
+	c.get("/chat/interactions").json(t, &list)
+	expect(t, len(list.Interactions), 1)
+	expect(t, list.Interactions[0].Status, "resolved")
+	expect(t, *list.Interactions[0].Answer, "allow")
+	assertNoInternalFields(t, list.Interactions[0])
+}
+
+func TestPluginConfirmation(t *testing.T) {
+	c := newControl(t)
+	_, r, command := c.running()
+	r.events(event{"approval.requested", map[string]any{
+		"approval_id": "sdk-1", "command_id": command, "kind": "elicitation",
+		"summary": map[string]any{"server": "tasks", "message": "清空所有任务？"},
+	}})
+	interaction := c.interactions()[0]
+	expect(t, interaction.Prompt, "tasks 请求确认\n清空所有任务？")
+	expect(t, scalar[string](c.env, "SELECT kind FROM approval"), "elicitation")
+	c.post("/chat/interactions/"+interaction.ID+"/answer", map[string]any{"value": "deny"})
+	c.wake()
+	decided := c.runtimes.called("/decide")
+	expect(t, decided[len(decided)-1]["decision"], any("decline"))
+}
+
+func TestStoppingWhileWaitingForApprovalExpiresIt(t *testing.T) {
+	c := newControl(t)
+	sent, r, command := c.running()
+	r.events(event{"approval.requested", map[string]any{
+		"approval_id": "sdk-1", "command_id": command, "kind": "command", "summary": map[string]any{"command": "ls"},
+	}})
+	expect(t, c.post("/chat/messages/"+sent.Reply.ID+"/stop", nil).status, 200)
+	expect(t, c.replyStatus(sent), "stopping")
+	expect(t, scalar[string](c.env, "SELECT status FROM interaction"), "expired")
+	c.wake()
+	aborts := c.runtimes.called("/abort")
+	expect(t, aborts[len(aborts)-1]["command_id"], any(command))
+	r.events(event{"approval.applied", map[string]any{"approval_id": "sdk-1", "decision": "cancel"}})
+	r.turnCompleted(command, "interrupted")
+	expect(t, c.replyStatus(sent), "stopped")
+}
+
+func TestApprovalsOfAGoneBootExpire(t *testing.T) {
+	c := newControl(t)
+	sent, r, command := c.running()
+	r.events(event{"approval.requested", map[string]any{
+		"approval_id": "sdk-1", "command_id": command, "kind": "command", "summary": map[string]any{"command": "ls"},
+	}})
+	next := &runtimeHarness{e: c.env, agentID: c.agent.ID, boot: uuid.NewString()}
+	next.events(event{"runtime.started", map[string]any{"thread_id": "thread-1", "resumed": true}})
+	expect(t, c.replyFailure(sent), "REPLY_INTERRUPTED")
+	expect(t, scalar[string](c.env, "SELECT status FROM approval"), "expired")
+	expect(t, scalar[string](c.env, "SELECT status FROM interaction"), "expired")
+}
+
+func TestCompactRunsAsItsOwnCommand(t *testing.T) {
+	c := newControl(t)
+	r := c.post("/agents/"+c.agent.ID+"/compact", nil)
+	expect(t, r.status, 202)
+	var sent chat.Sent
+	r.json(t, &sent)
+	expect(t, sent.Message.Blocks[0].Text, "/compact")
+	assertNoInternalFields(t, sent)
+	runtime := c.boot()
+	command := c.commandOf(sent)
+	prompt := c.runtimes.called("/prompt")[0]
+	expect(t, prompt["command_id"], any(command))
+	expect(t, prompt["kind"], any("compact"))
+	runtime.turnStarted(command, "t")
+	runtime.events(item(command, "id", "k1", "kind", "compaction"))
+	runtime.turnCompleted(command, "completed")
+	expect(t, c.replyStatus(sent), "completed")
+	expect(t, scalar[string](c.env, "SELECT content->0->>'label' FROM message WHERE id = $1", sent.Reply.ID), "压缩上下文")
 }

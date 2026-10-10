@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@/queries/chat";
+import type { ChatMessage, Interaction } from "@/queries/chat";
 import { writeFileSync } from "node:fs";
 import {
   afterEach,
@@ -108,6 +108,7 @@ function Chat() {
       hasOlder={false}
       loadingOlder={false}
       onLoadOlder={() => {}}
+      interactions={chat.data?.interactions ?? []}
       draft={text}
       onDraftChange={setText}
       // Fresh handlers every render, as Workspace passes them.
@@ -117,7 +118,9 @@ function Chat() {
       onEdit={() => {}}
       onDiscard={() => {}}
       onResend={() => {}}
+      onCompact={() => {}}
       onStop={() => {}}
+      onAnswer={() => {}}
     />
   );
 }
@@ -135,6 +138,7 @@ async function render() {
         return Response.json({
           agents: [],
           active_replies: [streaming, elsewhere],
+          interactions: [],
           event_cursor: "c",
         });
       // Newest first, as the control plane pages them.
@@ -261,6 +265,26 @@ describe("a streamed update", () => {
     });
     counts.typing = typing.length;
     expect(typing).toEqual([]);
+
+    const interaction: Interaction = {
+      id: "00000000-0000-0000-0002-000000000001",
+      agent_id: AGENT,
+      message_id: streaming.id,
+      status: "pending",
+      kind: "choice",
+      prompt: "运行命令？",
+      options: [{ label: "允许", value: "accept" }],
+      answer: null,
+      revision: 1,
+      created_at: streaming.created_at,
+      updated_at: streaming.created_at,
+    };
+    const asked = await rendered(() =>
+      emit("interaction.updated", { interaction }),
+    );
+    counts.interaction = asked.length;
+    expect(asked).toEqual(["正在写完"]);
+    expect(c.textContent).toContain("运行命令？");
   });
 
   it("keeps order, and every message, once history covers the live ones", async () => {

@@ -21,7 +21,10 @@ case "$1" in
   runtime)
     # akhook is built from its submodule, which a fresh clone lacks.
     [[ -f vendor/akhook/Cargo.toml ]] || git submodule update --init vendor/akhook
+    # Codex at the version the runtime's protocol types were generated from.
+    codex="$(node -p 'require("./apps/agent-runtime/package.json").devDependencies["@openai/codex"]')"
     docker buildx build -q --platform "$platform" --load \
+      --build-arg CODEX_VERSION="$codex" \
       --build-context akhook-src=vendor/akhook \
       --build-context plugins-tool=packages/plugins-go/out \
       -t "${AXP_RUNTIME_IMAGE:-axp-agent-runtime:dev}" apps/agent-runtime

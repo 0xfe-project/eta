@@ -9,6 +9,7 @@
 - **入队**：`POST /chat/messages` 在同一个事务里写入消息和命令，并 `NOTIFY axp_agent_work`，事务提交时 controller 收到通知。每个智能体最多 20 条在等（`429 QUEUE_FULL`）。
 - **交付**：controller 一次只交付一条：先在事务里把它记为已交付（`running`、`delivered_at`、`boot_id`），再调用 runtime 的 `POST /prompt`。没有送到（runtime 不在、不是这次启动、正忙）就退回等待；送到但结果不明的以“执行中断”结束，绝不交付两次。
 - **撤回**：停止一条还在等的命令，就是把它记为取消；已交付的，controller 请 runtime 中断。
+- **决定**：用户对审批的回答记为 `decided` 并通知 controller，它交给 runtime 的 `POST /decide`，直到 runtime 报告 `approval.applied`。
 - 插话（`steer`）在有 turn 运行时交给 `POST /steer`：被采纳的记下 `delivered_at`，等 runtime 报告接手（`turn.steered`）。
 
 controller 每秒还会检查一遍所有有工作的智能体，通知丢了（controller 重启、数据库重连）也不会让命令一直等下去。

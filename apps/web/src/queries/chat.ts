@@ -6,6 +6,8 @@ import type {
   AgentUpdated,
   Bundle,
   Snapshot as ChatSnapshot,
+  Interaction,
+  InteractionUpdated,
   Message,
   MessageUpdated,
   Sent,
@@ -26,7 +28,7 @@ import { refreshLlm } from "@/queries/llm";
 
 // The control plane's chat API; every type comes from its OpenAPI document.
 
-export type { Agent, Bundle };
+export type { Agent, Bundle, Interaction };
 /** Editable agent fields; grows as agents gain settings. */
 export type AgentDraft = Pick<Agent, "name" | "description"> & {
   model?: string;
@@ -45,6 +47,7 @@ type Snapshot = ChatSnapshot & { messages: ChatMessage[] };
 export const ACTIVE_STATUSES = new Set<ChatMessage["status"]>([
   "queued",
   "responding",
+  "waiting_for_input",
   "stopping",
 ]);
 
@@ -150,6 +153,7 @@ const EVENT_TYPES = [
   "agent.updated",
   "agent.deleted",
   "message.updated",
+  "interaction.updated",
 ] as const;
 
 function applyEvent(queryClient: QueryClient, type: string, data: unknown) {
@@ -162,6 +166,12 @@ function applyEvent(queryClient: QueryClient, type: string, data: unknown) {
   } else if (type === "message.updated") {
     const { message } = data as MessageUpdated;
     update(queryClient, (s) => upsertMessage(s, message));
+  } else if (type === "interaction.updated") {
+    const { interaction } = data as InteractionUpdated;
+    update(queryClient, (s) => ({
+      ...s,
+      interactions: upsert(s.interactions, interaction),
+    }));
   }
 }
 
@@ -217,6 +227,52 @@ export function useLiveChat() {
       source?.close();
     };
   }, [queryClient]);
+}
+
+const NO_INTERACTIONS: Interaction[] = [];
+/** Every agent's interactions waiting for the user. */
+export function usePendingInteractions() {
+  const { data } = useQuery({
+    ...chatQueryOptions(),
+    // The same array until one of them changes, for memo.
+    select: selectPending,
+  });
+  return data ?? NO_INTERACTIONS;
+}
+function selectPending(snapshot: Snapshot) {
+  return snapshot.interactions.filter(
+    (interaction) => interaction.status === "pending",
+  );
+}
+
+/**
+ * Every agent's latest confirmations, answered or not, newest first: the
+ * fetched list, kept live by the snapshot's interactions from the stream.
+ */
+export function useInteractionHistory() {
+  const { data: snapshot } = useQuery(chatQueryOptions());
+  const query = useQuery({
+    // Under chatKey, so reloading the snapshot reloads the list with it.
+    queryKey: [...chatKey, "interactions"],
+    queryFn: async ({ signal }) =>
+      (
+        await unwrap(
+          controlPlane.GET("/api/v1/chat/interactions", {
+            params: { query: { limit: 100 } },
+            signal,
+          }),
+        )
+      ).interactions,
+  });
+  const byId = new Map((query.data ?? []).map((i) => [i.id, i]));
+  for (const live of snapshot?.interactions ?? []) {
+    const known = byId.get(live.id);
+    if (!known || live.revision > known.revision) byId.set(live.id, live);
+  }
+  const interactions = [...byId.values()].sort((a, b) =>
+    b.created_at.localeCompare(a.created_at),
+  );
+  return { ...query, interactions };
 }
 
 // Under chatKey, so reloading the snapshot reloads history with it.
@@ -401,6 +457,20 @@ export function useSendMessage() {
   });
 }
 
+/** Compact the agent's context; shows as a `/compact` turn. */
+export function useCompact() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (agentId: string) =>
+      unwrap(
+        controlPlane.POST("/api/v1/agents/{agent_id}/compact", {
+          params: { path: { agent_id: agentId } },
+        }),
+      ),
+    onSuccess: (sent) => addSent(queryClient, sent),
+  });
+}
+
 export function useStopReply() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -412,6 +482,24 @@ export function useStopReply() {
       ),
     onSuccess: (message) =>
       update(queryClient, (s) => upsertMessage(s, message)),
+  });
+}
+
+export function useAnswerInteraction() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string; value: string }) =>
+      unwrap(
+        controlPlane.POST("/api/v1/chat/interactions/{interaction_id}/answer", {
+          params: { path: { interaction_id: input.id } },
+          body: { value: input.value },
+        }),
+      ),
+    onSuccess: (interaction) =>
+      update(queryClient, (s) => ({
+        ...s,
+        interactions: upsert(s.interactions, interaction),
+      })),
   });
 }
 

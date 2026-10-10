@@ -65,23 +65,18 @@ async function render({
     agents,
     active_replies: messages,
     messages,
+    interactions: Array.from({ length: pending }, (_, i) => ({
+      id: `i${i}`,
+      agent_id: agents[0].id,
+      message_id: "m",
+      kind: "choice",
+      prompt: "",
+      options: [],
+      status: "pending",
+      revision: 1,
+    })),
     event_cursor: "0",
   });
-  // What waits for the user: tasks to review.
-  queryClient.setQueryData(["tasks"], {
-    assignees: [],
-    tasks: Array.from({ length: pending }, (_, i) => ({
-      id: `t${i}`,
-      number: i + 1,
-      title: "",
-      status: "in_review",
-      assignee: { kind: "remote" },
-      comments: 0,
-      run_status: null,
-      updated_at: "2026-10-09T09:00:00Z",
-    })),
-  });
-  queryClient.setQueryData(["routines"], []);
   queryClient.setQueryData(["llm", "connections"], connections);
   queryClient.setQueryData(
     ["llm", "models"],
@@ -128,11 +123,11 @@ describe("Overview", () => {
     }));
   });
 
-  it("reads load, accounts, what waits and memories off the fleet", async () => {
+  it("reads load, accounts, pending interactions and memories off the fleet", async () => {
     const container = await render({
       agents: [
         agent("a1", "研究员", "working"),
-        agent("a2", "运维", "starting"),
+        agent("a2", "运维", "waiting_for_input"),
         agent("a3", "画师", "unavailable"),
       ],
       pending: 2,
@@ -144,8 +139,7 @@ describe("Overview", () => {
     });
     expect(label(container, "负载")).toBe("负载：3 个智能体中 2 个在运转");
     const text = container.textContent;
-    expect(text).toContain("待处理02");
-    expect(text).toContain("2 工作中 · 1 不可用");
+    expect(text).toContain("待确认02");
     expect(text).not.toContain("限流1");
     expect(text).not.toContain("不可用1");
     expect(text).toContain("1 / 2 可用");

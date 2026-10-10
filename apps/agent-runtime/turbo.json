@@ -2,10 +2,19 @@
   "$schema": "https://turborepo.com/schema.json",
   "extends": ["//"],
   "tasks": {
+    // The app-server protocol's types, from the Codex package.json pins.
+    "generate": {
+      "inputs": ["package.json"],
+      "outputs": ["src/protocol/**"]
+    },
     // One bundle for every platform (Node); the image copies it.
     "build": {
+      "dependsOn": ["generate"],
       "inputs": ["src/**", "package.json", "tsconfig.json"],
       "outputs": ["out/**"]
+    },
+    "typecheck": {
+      "dependsOn": ["generate"]
     },
     // The base image: the runtime's bundle, akhook and axp-plugins, which
     // compiles each agent's plugins when the control plane builds its image.
@@ -17,7 +26,7 @@
     },
     // The image's rules run with akhook; in CI (CI set) they never skip.
     "test": {
-      "dependsOn": ["@axp/akhook#build"],
+      "dependsOn": ["generate", "@axp/akhook#build"],
       "env": ["CI"]
     }
   }

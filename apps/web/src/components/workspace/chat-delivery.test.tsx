@@ -97,6 +97,7 @@ function Chat({ agentStatus = "idle" }: { agentStatus?: "idle" | "starting" }) {
       hasOlder={false}
       loadingOlder={false}
       onLoadOlder={() => {}}
+      interactions={[]}
       draft={draft}
       onDraftChange={(text) => useOutbox.getState().setDraft(AGENT, text)}
       onSend={(text, mode) => {
@@ -108,7 +109,9 @@ function Chat({ agentStatus = "idle" }: { agentStatus?: "idle" | "starting" }) {
       onEdit={outbox.edit}
       onDiscard={outbox.discard}
       onResend={(text) => outbox.send(AGENT, text, "queue")}
+      onCompact={() => {}}
       onStop={() => {}}
+      onAnswer={() => {}}
     />
   );
 }
@@ -125,6 +128,7 @@ async function render(
         return Response.json({
           agents: [],
           active_replies: [],
+          interactions: [],
           event_cursor: "c",
         });
       if (request.method === "GET")

@@ -87,6 +87,7 @@ async function render(page: "tasks" | "routines", panel = false) {
   queryClient.setQueryData(["routines", "r1"], routine);
   queryClient.setQueryData(["chat"], {
     agents: [],
+    interactions: [],
     messages: [],
   });
   const container = document.createElement("div");

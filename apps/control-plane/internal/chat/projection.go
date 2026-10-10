@@ -11,8 +11,8 @@ import (
 )
 
 // Runtime events are stored raw in agent_event and projected onto product
-// state; only allowlisted, translated fields reach messages and the ui_event
-// stream.
+// state; only allowlisted, translated fields reach messages, interactions
+// and the ui_event stream.
 
 // MaxEventBatch events are imported in one transaction at most.
 const MaxEventBatch = 100
@@ -64,12 +64,15 @@ func (p *projection) flush(ctx context.Context) error {
 type handler func(p *projection, ctx context.Context, command *CommandRecord, payload map[string]any) error
 
 var handlers = map[string]handler{
-	"runtime.started": (*projection).runtimeStarted,
-	"runtime.failed":  (*projection).runtimeFailed,
-	"turn.started":    (*projection).turnStarted,
-	"item.updated":    (*projection).itemUpdated,
-	"turn.steered":    (*projection).turnSteered,
-	"turn.completed":  (*projection).turnCompleted,
+	"runtime.started":    (*projection).runtimeStarted,
+	"runtime.failed":     (*projection).runtimeFailed,
+	"turn.started":       (*projection).turnStarted,
+	"item.updated":       (*projection).itemUpdated,
+	"approval.requested": (*projection).approvalRequested,
+	"approval.applied":   (*projection).approvalApplied,
+	"approval.expired":   (*projection).approvalExpired,
+	"turn.steered":       (*projection).turnSteered,
+	"turn.completed":     (*projection).turnCompleted,
 }
 
 // ImportEvents stores and projects an ordered run of one agent's runtime
@@ -213,6 +216,13 @@ func orEmpty(v any) string {
 	return pyStr(v)
 }
 
+func optional(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
 func truncate(s string, n int) string {
 	r := []rune(s)
 	if len(r) > n {
@@ -342,6 +352,175 @@ func (p *projection) itemUpdated(ctx context.Context, command *CommandRecord, pa
 	return nil
 }
 
+func approvalPrompt(kind string, summary map[string]*string) string {
+	get := func(key string) string {
+		if v := summary[key]; v != nil {
+			return *v
+		}
+		return ""
+	}
+	var prompt string
+	switch kind {
+	case "elicitation":
+		// A plugin's tool asking the user to confirm (see user-attention.md).
+		server := get("server")
+		if server == "" {
+			server = "扩展"
+		}
+		prompt = server + " 请求确认"
+		if m := get("message"); m != "" {
+			prompt += "\n" + m
+		}
+	case "command":
+		prompt = "允许运行命令？"
+		if c := get("command"); c != "" {
+			prompt += "\n" + c
+		}
+	default:
+		prompt = "允许修改工作区文件？"
+	}
+	if r := get("reason"); r != "" {
+		prompt += "\n原因：" + r
+	}
+	return truncate(prompt, 500)
+}
+
+func (p *projection) approvalRequested(ctx context.Context, command *CommandRecord, payload map[string]any) error {
+	if command == nil {
+		return nil
+	}
+	kind, _ := payload["kind"].(string)
+	if kind != "command" && kind != "elicitation" {
+		kind = "file_change"
+	}
+	raw, _ := payload["summary"].(map[string]any)
+	field := func(key string, limit int) *string { return optional(truncate(orEmpty(raw[key]), limit)) }
+	var summary map[string]*string
+	if kind == "elicitation" {
+		summary = map[string]*string{"server": field("server", 100), "message": field("message", 500)}
+	} else {
+		summary = map[string]*string{"command": field("command", 500), "reason": field("reason", 300)}
+	}
+	approvalID := pg.NewID()
+	now := pg.Now()
+	if _, err := p.tx.Exec(ctx, `INSERT INTO approval (id, agent_id, command_id, boot_id,
+		sdk_request_id, kind, summary, status, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)`,
+		approvalID, p.agentID, command.ID, p.bootID,
+		truncate(pyStr(payload["approval_id"]), 100), kind, summary, now); err != nil {
+		return err
+	}
+	r, err := reply(ctx, p.tx, command.ID)
+	if err != nil || r == nil {
+		return err
+	}
+	stopping := r.Status != MessageQueued && r.Status != MessageResponding
+	interaction := &interactionRow{
+		ID: pg.NewID(), ConversationID: r.ConversationID, AgentID: p.agentID, MessageID: r.ID,
+		ApprovalID: &approvalID, Kind: "choice", Prompt: approvalPrompt(kind, summary),
+		Options:  []InteractionOption{{Value: "allow", Label: "允许"}, {Value: "deny", Label: "拒绝"}},
+		Status:   InteractionPending,
+		Revision: 1, CreatedAt: now, UpdatedAt: now,
+	}
+	if stopping {
+		// A stop already in flight will cancel this request.
+		interaction.Status = InteractionExpired
+	}
+	if _, err := p.tx.Exec(ctx, `INSERT INTO interaction (id, conversation_id, agent_id, message_id, approval_id,
+		kind, prompt, options, status, revision, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, 'choice', $6, $7, $8, 1, $9, $9)`,
+		interaction.ID, interaction.ConversationID, p.agentID, r.ID, approvalID,
+		interaction.Prompt, interaction.Options, interaction.Status, now); err != nil {
+		return err
+	}
+	if err := emitInteraction(ctx, p.tx, interaction); err != nil {
+		return err
+	}
+	if stopping {
+		return nil
+	}
+	if command.Status == CommandRunning {
+		command.Status = CommandWaitingApproval
+		if _, err := p.tx.Exec(ctx, "UPDATE agent_command SET status = 'waiting_approval' WHERE id = $1", command.ID); err != nil {
+			return err
+		}
+	}
+	r.Status = MessageWaitingForInput
+	if err := saveMessage(ctx, p.tx, r); err != nil {
+		return err
+	}
+	return RefreshAgentStatus(ctx, p.tx, p.agentID)
+}
+
+// approval is the agent's latest approval with the payload's id, and its
+// interaction.
+func (p *projection) approval(ctx context.Context, payload map[string]any) (*ApprovalRecord, *interactionRow, error) {
+	approval, err := pg.One[ApprovalRecord](ctx, p.tx, `SELECT * FROM approval WHERE agent_id = $1 AND sdk_request_id = $2
+		ORDER BY created_at DESC LIMIT 1`, p.agentID, pyStr(payload["approval_id"]))
+	if err != nil || approval == nil {
+		return nil, nil, err
+	}
+	interaction, err := pg.One[interactionRow](ctx, p.tx, "SELECT * FROM interaction WHERE approval_id = $1", approval.ID)
+	return approval, interaction, err
+}
+
+func (p *projection) approvalApplied(ctx context.Context, _ *CommandRecord, payload map[string]any) error {
+	approval, interaction, err := p.approval(ctx, payload)
+	if err != nil || approval == nil {
+		return err
+	}
+	if _, err := p.tx.Exec(ctx, "UPDATE approval SET status = 'applied', decision = $2, resolved_at = $3 WHERE id = $1",
+		approval.ID, truncate(pyStr(payload["decision"]), 16), pg.Now()); err != nil {
+		return err
+	}
+	if interaction != nil && (interaction.Status == InteractionSubmitted || interaction.Status == InteractionPending) {
+		if interaction.Status == InteractionSubmitted {
+			interaction.Status = InteractionResolved
+		} else {
+			interaction.Status = InteractionExpired
+		}
+		if err := saveInteraction(ctx, p.tx, interaction); err != nil {
+			return err
+		}
+	}
+	command, err := pg.One[CommandRecord](ctx, p.tx, "SELECT * FROM agent_command WHERE id = $1", approval.CommandID)
+	if err != nil {
+		return err
+	}
+	if command.Status == CommandWaitingApproval {
+		if _, err := p.tx.Exec(ctx, "UPDATE agent_command SET status = 'running' WHERE id = $1", command.ID); err != nil {
+			return err
+		}
+	}
+	r, err := reply(ctx, p.tx, command.ID)
+	if err != nil {
+		return err
+	}
+	if r != nil && r.Status == MessageWaitingForInput {
+		r.Status = MessageResponding
+		if err := saveMessage(ctx, p.tx, r); err != nil {
+			return err
+		}
+	}
+	return RefreshAgentStatus(ctx, p.tx, p.agentID)
+}
+
+func (p *projection) approvalExpired(ctx context.Context, _ *CommandRecord, payload map[string]any) error {
+	approval, interaction, err := p.approval(ctx, payload)
+	if err != nil || approval == nil || approval.Status == ApprovalApplied {
+		return err
+	}
+	if _, err := p.tx.Exec(ctx, "UPDATE approval SET status = 'expired', resolved_at = $2 WHERE id = $1",
+		approval.ID, pg.Now()); err != nil {
+		return err
+	}
+	if interaction != nil && (interaction.Status == InteractionPending || interaction.Status == InteractionSubmitted) {
+		interaction.Status = InteractionExpired
+		return saveInteraction(ctx, p.tx, interaction)
+	}
+	return nil
+}
+
 func (p *projection) turnCompleted(ctx context.Context, command *CommandRecord, payload map[string]any) error {
 	if command == nil {
 		return nil
@@ -411,7 +590,7 @@ func (p *projection) runtimeStarted(ctx context.Context, _ *CommandRecord, _ map
 		return err
 	}
 	lost, err := pg.All[CommandRecord](ctx, p.tx, `SELECT * FROM agent_command WHERE agent_id = $1
-		AND (status = 'running' OR (status = 'queued' AND delivered_at IS NOT NULL))
+		AND (status IN ('running', 'waiting_approval') OR (status = 'queued' AND delivered_at IS NOT NULL))
 		AND boot_id IS DISTINCT FROM $2 ORDER BY agent_sequence`, p.agentID, p.bootID)
 	if err != nil {
 		return err
@@ -463,7 +642,7 @@ func MarkAgentFailed(ctx context.Context, tx pgx.Tx, agentID, code string, build
 		reason = "AGENT_BUILD_FAILED"
 	}
 	commands, err := pg.All[CommandRecord](ctx, tx, `SELECT * FROM agent_command
-		WHERE agent_id = $1 AND status IN ('queued', 'running') ORDER BY agent_sequence`, agentID)
+		WHERE agent_id = $1 AND status IN ('queued', 'running', 'waiting_approval') ORDER BY agent_sequence`, agentID)
 	if err != nil {
 		return err
 	}

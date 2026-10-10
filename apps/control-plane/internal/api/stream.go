@@ -97,14 +97,15 @@ func registerStream(api huma.API, d *Deps) {
 	var payloads []*huma.Schema
 	for _, t := range []reflect.Type{
 		reflect.TypeFor[chat.AgentUpdated](), reflect.TypeFor[chat.AgentDeleted](),
-		reflect.TypeFor[chat.MessageUpdated](),
+		reflect.TypeFor[chat.MessageUpdated](), reflect.TypeFor[chat.InteractionUpdated](),
 	} {
 		payloads = append(payloads, registry.Schema(t, true, ""))
 	}
 	operation := op("chatStream", http.MethodGet, "/api/v1/chat/stream",
 		"Product events after a cursor (server-sent events)", 200, "chat")
-	operation.Description = "Events agent.updated (AgentUpdated), agent.deleted (AgentDeleted) and " +
-		"message.updated (MessageUpdated); each event's id is the cursor to resume after it."
+	operation.Description = "Events agent.updated (AgentUpdated), agent.deleted (AgentDeleted), " +
+		"message.updated (MessageUpdated) and interaction.updated (InteractionUpdated); each event's id " +
+		"is the cursor to resume after it."
 	operation.Responses = map[string]*huma.Response{
 		"200": {
 			Description: "Server-sent events",
