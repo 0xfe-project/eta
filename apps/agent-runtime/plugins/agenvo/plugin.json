@@ -1,0 +1,6 @@
+{
+  "name": "agenvo",
+  "version": "1.0.0",
+  "description": "Native control of the Paseo and Herdr runtimes on the user's remote computers through agenvo: workspaces, agents, input, history, interrupts and terminals.",
+  "targets": ["chat"]
+}

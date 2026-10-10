@@ -363,6 +363,47 @@ func detail(ctx context.Context, db pg.DB, r *taskRow) (*TaskDetail, error) {
 	return out, nil
 }
 
+// TaskSession is a native agent working (or that worked) on a task: where
+// it is in agenvo's terms, for agents that reach it with the agenvo plugin.
+type TaskSession struct {
+	ID         string `json:"id"`
+	ComputerID string `json:"computer_id"`
+	Runtime    string `json:"runtime"`
+	Provider   string `json:"provider"`
+	// agenvo's call target.
+	DeviceID   string `json:"device_id"`
+	InstanceID string `json:"instance_id"`
+	Workspace  string `json:"workspace"`
+	// Native IDs: Paseo agent_id and workspace_id; Herdr session, name,
+	// workspace_id, tab_id and pane_id.
+	Native map[string]any `json:"native"`
+	// Open while the task's runs go to it; closed when reassigned or done.
+	Open bool `json:"open"`
+}
+
+// Sessions is a task's native agents, most recent first.
+func (s *Service) Sessions(ctx context.Context, db pg.DB, ref string) ([]TaskSession, error) {
+	r, err := find(ctx, db, ref, false)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := pg.All[sessionRow](ctx, db, "SELECT * FROM task_session WHERE task_id = $1 ORDER BY created_at DESC", r.ID)
+	if err != nil {
+		return nil, err
+	}
+	out := []TaskSession{}
+	for _, row := range rows {
+		native := map[string]any{}
+		_ = json.Unmarshal(row.Native, &native)
+		out = append(out, TaskSession{
+			ID: row.ID, ComputerID: row.ComputerID, Runtime: row.Runtime, Provider: row.Provider,
+			DeviceID: row.DeviceID, InstanceID: row.InstanceID, Workspace: row.Workspace,
+			Native: native, Open: row.ClosedAt == nil,
+		})
+	}
+	return out, nil
+}
+
 // --- writes (in the caller's transaction) -------------------------------------------------
 
 func record(ctx context.Context, tx pgx.Tx, taskID string, runID *string, kind string, actor Actor, body *string, data map[string]any) error {

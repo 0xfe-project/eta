@@ -49,6 +49,11 @@ http://:{$AXP_RUNTIME_GATEWAY_PORT:8090} {
 	handle /tasks/* {
 		import as_agent_with {$AXP_UPSTREAM_INTERNAL:axp-internal:8001} tasks
 	}
+	# Remote runtimes' native methods: the agenvo plugin's MCP server, the
+	# relay's tools forwarded with the control plane's grant.
+	handle /agenvo/* {
+		import as_agent_with {$AXP_UPSTREAM_INTERNAL:axp-internal:8001} agenvo
+	}
 	# Routines: the routines plugin's MCP server, in the routine service.
 	handle /routines/* {
 		import as_agent_with {$AXP_UPSTREAM_ROUTINES:axp-routines:8340} routines
