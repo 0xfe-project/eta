@@ -148,13 +148,22 @@ func TestStdioServerAndSkills(t *testing.T) {
 	}
 }
 
-// akhook is AKHOOK_BIN, or akhook on PATH.
+// akhook is AKHOOK_BIN, the one turbo builds (@axp/akhook), or akhook on
+// PATH. Locally its tests wait for it; in CI (CI set) a missing akhook fails.
 func akhookBinary(t *testing.T) string {
 	if bin := os.Getenv("AKHOOK_BIN"); bin != "" {
 		return bin
 	}
+	if built, err := filepath.Abs("../../akhook/out/akhook"); err == nil {
+		if _, err := os.Stat(built); err == nil {
+			return built
+		}
+	}
 	bin, err := exec.LookPath("akhook")
 	if err != nil {
+		if os.Getenv("CI") != "" {
+			t.Fatal("CI: akhook is not built (turbo run build --filter=@axp/akhook)")
+		}
 		t.Skip("set AKHOOK_BIN or put akhook on PATH")
 	}
 	return bin

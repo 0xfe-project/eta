@@ -1,6 +1,6 @@
 // Package relay is the control plane's client for the agenvo relay
-// (vendor/agenvo, AXP's fork), which connects remote computers' coding
-// runtimes (docs/architecture/tasks.md).
+// (vendor/agenvo, our fork AkaraChen/agenvo), which connects remote
+// computers' coding runtimes (docs/architecture/tasks.md).
 //
 // The control plane holds the relay's administrator secret and uses its
 // administrator API (Bearer: the secret), reached on the internal network,

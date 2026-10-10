@@ -257,13 +257,25 @@ export function useRenewInstall() {
   );
 }
 
+/** Approves the pairing whose fingerprint the user compared, only that one. */
 export function useApproveRuntime() {
   return useComputerMutation(
-    ({ id, kind }: { id: string; kind: ComputerRuntime["kind"] }) =>
+    ({
+      id,
+      kind,
+      fingerprint,
+    }: {
+      id: string;
+      kind: ComputerRuntime["kind"];
+      fingerprint: string;
+    }) =>
       unwrap(
         controlPlane.POST(
           "/api/v1/computers/{computer_id}/runtimes/{kind}/approve",
-          { params: { path: { computer_id: id, kind } } },
+          {
+            params: { path: { computer_id: id, kind } },
+            body: { fingerprint },
+          },
         ),
       ),
   );

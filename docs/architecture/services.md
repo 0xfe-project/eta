@@ -15,13 +15,14 @@ Go 服务建在 [Go 服务框架](service-framework.md)上，按它的结构组�
 ## 网关与 web
 
 - [ ] `apps/gateway/public.caddy`：浏览器访问的 `/api/<service>/*`，并更新文件头的路由说明；runtime 要访问时还有 `runtime.caddy`（经 `as_agent` 认证）。
+- [ ] `docs/architecture/gateway.md`：路由表（浏览器站点和 runtime 站点）与 `AXP_UPSTREAM_*` 环境变量列表；`apps/gateway/Caddyfile` 文件头的站点说明。
 - [ ] 有 OpenAPI 时：`apps/web/redocly.yaml` 加一项，`apps/web/turbo.json` 的 `generate` 依赖它的 `openapi`，`apps/web/src/lib/api.ts` 用 `typedClient` 加一个客户端；`.gitignore` 已忽略 `src/api/*.gen.ts`，`knip.config.ts` 的 `ignoreUnresolved` 加上生成的模块。
 
 ## 开发环境
 
 - [ ] `scripts/dev.sh`：端口（`PORT+N`，同时调整 `BLOCK_SIZE` 和文件头说明）、`AXP_<SERVICE>_ADDR`、`AXP_UPSTREAM_<SERVICE>`，网关容器的环境变量列表，`concurrently` 的 `--names`、`--prefix-colors` 和命令。
 - [ ] `deploy/ports.env` 里开发端口范围的说明。
-- [ ] `README.md`：服务列表与端口说明。
+- [ ] `README.md`：服务列表与端口说明，以及命令表（新增的 `bun run` 脚本）。
 
 ## 生产
 

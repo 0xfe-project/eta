@@ -85,7 +85,7 @@ func New(d *Deps) *httpapi.API {
 			idempotency.Keyed
 			Body RoutineIn
 		}) (*idempotency.Response[routines.Routine], error) {
-			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(tx pgx.Tx) (idempotency.Result[routines.Routine], error) {
+			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[routines.Routine], error) {
 				r, err := s.Create(ctx, tx, routines.Input(in.Body))
 				if err != nil {
 					return idempotency.Result[routines.Routine]{}, err
@@ -133,7 +133,7 @@ func New(d *Deps) *httpapi.API {
 			RoutinePath
 			Version int `path:"version"`
 		}) (*idempotency.Response[routines.Routine], error) {
-			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, struct{}{}, func(tx pgx.Tx) (idempotency.Result[routines.Routine], error) {
+			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, struct{}{}, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[routines.Routine], error) {
 				r, err := s.RestoreBrief(ctx, tx, in.RoutineID, in.Version)
 				if err != nil {
 					return idempotency.Result[routines.Routine]{}, err
@@ -150,7 +150,7 @@ func New(d *Deps) *httpapi.API {
 			RunID string `path:"run_id"`
 			Body  FeedbackIn
 		}) (*idempotency.Response[routines.Feedback], error) {
-			out, err := idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(tx pgx.Tx) (idempotency.Result[routines.Feedback], error) {
+			out, err := idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[routines.Feedback], error) {
 				f, err := s.AddFeedback(ctx, tx, in.RoutineID, in.RunID, strings.TrimSpace(in.Body.Text))
 				if err != nil {
 					return idempotency.Result[routines.Feedback]{}, err
