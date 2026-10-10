@@ -99,6 +99,9 @@
         "vite": "^8.3.4",
       },
     },
+    "packages/akhook": {
+      "name": "@axp/akhook",
+    },
     "packages/plugins-go": {
       "name": "@axp/plugins-go",
     },
@@ -118,6 +121,8 @@
     "@antfu/install-pkg": ["@antfu/install-pkg@2.1.0", "", { "dependencies": { "package-manager-detector": "^1.8.0", "tinyexec": "^1.3.1" } }, "sha512-sdg9NxU3zR4Mnawfbc/x6GB5Wf17WYud5qOuEuxXjaKpYpMkISSJEjItGebXJ2bQ4DIcly4NYH23mtkGJjvKUw=="],
 
     "@axp/agent-runtime": ["@axp/agent-runtime@workspace:apps/agent-runtime"],
+
+    "@axp/akhook": ["@axp/akhook@workspace:packages/akhook"],
 
     "@axp/control-plane": ["@axp/control-plane@workspace:apps/control-plane"],
 

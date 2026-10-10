@@ -72,6 +72,8 @@ interface Post {
   reject: (error: unknown) => void;
 }
 let posts: Post[] = [];
+let client: QueryClient | undefined;
+let reading = 0;
 
 /** The chat as Workspace wires it, for one agent. */
 function Chat({ agentStatus = "idle" }: { agentStatus?: "idle" | "starting" }) {
@@ -131,16 +133,23 @@ async function render(
         });
       if (request.method === "GET")
         return Response.json({ items: history, next_cursor: null });
-      const body = await request.json();
-      return new Promise<Response>((resolve, reject) =>
-        posts.push({ body, resolve, reject }),
-      );
+      reading++;
+      try {
+        const body = await request.json();
+        return new Promise<Response>((resolve, reject) =>
+          posts.push({ body, resolve, reject }),
+        );
+      } finally {
+        reading--;
+      }
     });
   const container = document.createElement("div");
   document.body.append(container);
+  const queryClient = new QueryClient();
+  client = queryClient;
   await act(async () => {
     createRoot(container).render(
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider client={queryClient}>
         <Chat agentStatus={agentStatus} />
       </QueryClientProvider>,
     );
@@ -149,10 +158,20 @@ async function render(
   return container;
 }
 
+// What the page is waiting for: its queries, and sends whose request the
+// stand-in server is still reading. A fixed pause alone is not enough when
+// the machine is busy (the whole repository's checks run in parallel).
 async function settle(ms = 10) {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, ms));
   });
+  await rstest.waitFor(
+    () => {
+      if (reading > 0 || client?.isFetching()) throw new Error("not settled");
+    },
+    { timeout: 5000 },
+  );
+  await act(async () => {});
 }
 const textarea = (c: HTMLElement) => c.querySelector("textarea")!;
 async function type(c: HTMLElement, value: string) {

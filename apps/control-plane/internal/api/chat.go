@@ -129,7 +129,7 @@ func registerChat(api huma.API, d *Deps) {
 			if err := cleanName(&in.Body.Name); err != nil {
 				return nil, err
 			}
-			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(tx pgx.Tx) (idempotency.Result[chat.Agent], error) {
+			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[chat.Agent], error) {
 				agent, err := s.CreateAgent(ctx, tx, in.Body.Name, in.Body.Description, in.Body.Model, in.Body.Plugins)
 				if err != nil {
 					return idempotency.Result[chat.Agent]{}, err
@@ -195,7 +195,7 @@ func registerChat(api huma.API, d *Deps) {
 			if in.Body.Mode == "" {
 				in.Body.Mode = "queue"
 			}
-			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(tx pgx.Tx) (idempotency.Result[chat.Sent], error) {
+			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[chat.Sent], error) {
 				return sent(s.SendMessage(ctx, tx, in.Body.AgentID, in.Body.ID, in.Body.Text, in.Body.Mode == "steer"))
 			})
 		})
@@ -206,7 +206,7 @@ func registerChat(api huma.API, d *Deps) {
 			idempotency.Keyed
 			AgentPath
 		}) (*idempotency.Response[chat.Sent], error) {
-			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, struct{}{}, func(tx pgx.Tx) (idempotency.Result[chat.Sent], error) {
+			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, struct{}{}, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[chat.Sent], error) {
 				return sent(s.Compact(ctx, tx, in.AgentID))
 			})
 		})
@@ -217,7 +217,7 @@ func registerChat(api huma.API, d *Deps) {
 			idempotency.Keyed
 			MessageID string `path:"message_id"`
 		}) (*idempotency.Response[chat.Message], error) {
-			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, struct{}{}, func(tx pgx.Tx) (idempotency.Result[chat.Message], error) {
+			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, struct{}{}, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[chat.Message], error) {
 				reply, err := s.StopReply(ctx, tx, in.MessageID)
 				if err != nil {
 					return idempotency.Result[chat.Message]{}, err
@@ -233,7 +233,7 @@ func registerChat(api huma.API, d *Deps) {
 			InteractionID string `path:"interaction_id"`
 			Body          InteractionAnswerIn
 		}) (*idempotency.Response[chat.Interaction], error) {
-			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(tx pgx.Tx) (idempotency.Result[chat.Interaction], error) {
+			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[chat.Interaction], error) {
 				answered, err := s.AnswerInteraction(ctx, tx, in.InteractionID, in.Body.Value)
 				if err != nil {
 					return idempotency.Result[chat.Interaction]{}, err
