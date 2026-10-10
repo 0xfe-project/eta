@@ -513,7 +513,7 @@ export function ComputerSettings() {
         <>
           {data.relay_error ? (
             <p role="alert" className="text-xs text-destructive">
-              无法连接中继 {data.relay_origin}：{data.relay_error}
+              无法连接中继 {data.relay_url}：{data.relay_error}
             </p>
           ) : null}
           {data.computers.length ? (

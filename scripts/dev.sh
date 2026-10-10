@@ -102,7 +102,7 @@ port_reserved() {
 
 # Production's ports are never used, even when they happen to be free.
 source deploy/ports.env
-production_ports=" $AXP_PROD_HTTP_PORT $AXP_PROD_HTTPS_PORT $AXP_PROD_REGISTRY_PORT $AXP_PROD_OBSERVE_PORT $AXP_PROD_RELAY_PORT "
+production_ports=" $AXP_PROD_HTTP_PORT $AXP_PROD_HTTPS_PORT $AXP_PROD_REGISTRY_PORT $AXP_PROD_OBSERVE_PORT "
 
 BLOCK_SIZE=10
 
@@ -180,11 +180,12 @@ bunx turbo run generate --filter=@axp/web --output-logs=errors-only
 bunx turbo run build --filter=@axp/relay --filter=@axp/remote --output-logs=errors-only
 
 # --- Relay ------------------------------------------------------------------------
-# agenvo (vendor/agenvo) accepts only an HTTPS origin, so development's relay
-# serves TLS itself with a self-signed certificate kept with its state in
-# var/relay. Connectors on this machine trust it through NODE_EXTRA_CA_CERTS
-# (`axp setup --ca-file`). Paired connectors are bound to the origin, so they
-# pair again when this instance's port changes.
+# agenvo (vendor/agenvo) accepts only an HTTPS base URL, so development's relay
+# is not behind the (plain HTTP) gateway as in production: it serves TLS
+# itself, under production's path, with a self-signed certificate kept with
+# its state in var/relay. Connectors on this machine trust it through
+# NODE_EXTRA_CA_CERTS (`axp setup --ca-file`). When this instance's port
+# changes, running `axp setup` again moves paired connectors to it.
 relay_dir="$ROOT_DIR/var/relay"
 mkdir -p "$relay_dir"
 chmod 700 "$relay_dir"
@@ -195,11 +196,11 @@ if [[ ! -f "$relay_dir/cert.pem" ]]; then
 fi
 [[ -f "$relay_dir/admin_secret" ]] || (umask 077 && openssl rand -hex 32 >"$relay_dir/admin_secret")
 cat >"$relay_dir/relay.json" <<EOF
-{"origin": "https://localhost:$AXP_RELAY_PORT", "dataDir": "$relay_dir/data", "host": "127.0.0.1",
+{"baseUrl": "https://localhost:$AXP_RELAY_PORT/remote/relay", "dataDir": "$relay_dir/data", "host": "127.0.0.1",
  "port": $AXP_RELAY_PORT, "tls": {"cert": "$relay_dir/cert.pem", "key": "$relay_dir/key.pem"}}
 EOF
 export AXP_RELAY_URL="https://localhost:$AXP_RELAY_PORT"
-export AXP_RELAY_ORIGIN="$AXP_RELAY_URL"
+export AXP_RELAY_BASE_URL="$AXP_RELAY_URL/remote/relay"
 export AXP_RELAY_CA_FILE="$relay_dir/cert.pem"
 AXP_RELAY_ADMIN_SECRET="$(<"$relay_dir/admin_secret")"
 export AXP_RELAY_ADMIN_SECRET
@@ -263,7 +264,7 @@ AXP dev in $ROOT_DIR
   API:      http://localhost:$AXP_GATEWAY_PORT/api/health
   Internal: http://127.0.0.1:$AXP_INTERNAL_PORT/internal/docs
   Logs:     http://localhost:$AXP_GATEWAY_PORT/observe/ ($OBSERVE_USER / $OBSERVE_PASSWORD)
-  Relay:    $AXP_RELAY_ORIGIN (connectors trust $AXP_RELAY_CA_FILE)
+  Relay:    $AXP_RELAY_BASE_URL (connectors trust $AXP_RELAY_CA_FILE)
 EOF
 
 # Both gateways (production's two roles) in one Caddy on the host network, so

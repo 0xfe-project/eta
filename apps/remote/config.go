@@ -17,11 +17,12 @@ import (
 // installation (<AXP_HOME>/config.json, 0600): the CLI finds it from its own
 // binary (<AXP_HOME>/bin/axp), whatever environment an agent runs it in.
 type Config struct {
-	URL         string `json:"url"`
-	Token       string `json:"token"`
-	ComputerID  string `json:"computer_id"`
-	Name        string `json:"name"`
-	RelayOrigin string `json:"relay_origin"`
+	URL        string `json:"url"`
+	Token      string `json:"token"`
+	ComputerID string `json:"computer_id"`
+	Name       string `json:"name"`
+	// The relay's base URL, which the connectors pair and connect with.
+	RelayURL string `json:"relay_url"`
 	// Where setup installed the connectors.
 	Home string `json:"home"`
 	// The runtimes setup found, by kind.

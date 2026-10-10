@@ -89,6 +89,9 @@ func setup(args []string) error {
 	if err := configureConnectors(c); err != nil {
 		return err
 	}
+	if err := followRelay(c); err != nil {
+		return err
+	}
 
 	step("与 AXP 的中继配对")
 	if err := pairConnectors(c); err != nil {
@@ -101,7 +104,12 @@ func setup(args []string) error {
 		}
 	} else {
 		step("注册为开机启动的服务")
+		// Installing again restarts a running service, so it runs the
+		// connector just installed, with its current relay address.
 		for _, kind := range c.kinds() {
+			if out, err := c.connector(kind, "service", "uninstall").CombinedOutput(); err != nil {
+				return fmt.Errorf("停止 %s connector 服务失败：%s", kind, out)
+			}
 			if out, err := c.connector(kind, "service", "install").CombinedOutput(); err != nil {
 				return fmt.Errorf("注册 %s connector 服务失败：%s", kind, out)
 			}
@@ -130,17 +138,26 @@ func connect(c *Config, code string) error {
 		if c.Token == "" {
 			return errors.New("usage: axp setup --url URL --code CODE")
 		}
-		err := c.call("POST", "/remote/v1/report", c.report(), nil)
+		var reported struct {
+			RelayURL string `json:"relay_url"`
+		}
+		err := c.call("POST", "/remote/v1/report", c.report(), &reported)
 		if e, ok := errors.AsType[*apiError](err); ok && e.Status == http.StatusUnauthorized {
 			return errors.New("AXP 不再认识这台电脑（可能已被移除）：在 AXP 的 设置 → 远程电脑 中复制新的安装命令，再运行一次")
 		}
-		return err
+		if err != nil {
+			return err
+		}
+		if reported.RelayURL != "" {
+			c.RelayURL = reported.RelayURL
+		}
+		return c.save()
 	}
 	var enrolled struct {
-		ComputerID  string `json:"computer_id"`
-		Name        string `json:"name"`
-		Token       string `json:"token"`
-		RelayOrigin string `json:"relay_origin"`
+		ComputerID string `json:"computer_id"`
+		Name       string `json:"name"`
+		Token      string `json:"token"`
+		RelayURL   string `json:"relay_url"`
 	}
 	report := c.report()
 	report["code"] = code
@@ -150,7 +167,7 @@ func connect(c *Config, code string) error {
 	if c.ComputerID != "" && c.ComputerID != enrolled.ComputerID {
 		c.unpair()
 	}
-	c.Token, c.ComputerID, c.Name, c.RelayOrigin = enrolled.Token, enrolled.ComputerID, enrolled.Name, enrolled.RelayOrigin
+	c.Token, c.ComputerID, c.Name, c.RelayURL = enrolled.Token, enrolled.ComputerID, enrolled.Name, enrolled.RelayURL
 	return c.save()
 }
 
@@ -357,6 +374,39 @@ func configureConnectors(c *Config) error {
 	return nil
 }
 
+// followRelay points paired connectors at the relay's current base URL.
+// The relay keeps its devices when its address changes (its state moves
+// with it), so they need the new address, not a new pairing.
+func followRelay(c *Config) error {
+	for _, kind := range c.kinds() {
+		if c.RelayURL == "" || c.paired(kind) == "" {
+			continue
+		}
+		path := filepath.Join(c.connectorDir(kind), "config.json")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		var cfg map[string]any
+		if err := json.Unmarshal(data, &cfg); err != nil {
+			return err
+		}
+		if cfg["relay"] == c.RelayURL {
+			continue
+		}
+		cfg["relay"] = c.RelayURL
+		data, _ = json.MarshalIndent(cfg, "", "  ")
+		if err := os.WriteFile(path+".tmp", data, 0o600); err != nil {
+			return err
+		}
+		if err := os.Rename(path+".tmp", path); err != nil {
+			return err
+		}
+		fmt.Printf("  %s：中继地址改为 %s\n", kind, c.RelayURL)
+	}
+	return nil
+}
+
 // paired is the device a connector's own configuration has, if any.
 func (c *Config) paired(kind string) string {
 	data, err := os.ReadFile(filepath.Join(c.connectorDir(kind), "config.json"))
@@ -381,7 +431,7 @@ func pairConnectors(c *Config) error {
 			continue
 		}
 		wg.Go(func() {
-			cmd := c.connector(kind, "connect", c.RelayOrigin, "--name", "axp:"+c.ComputerID+":"+kind, "--no-browser")
+			cmd := c.connector(kind, "connect", c.RelayURL, "--name", "axp:"+c.ComputerID+":"+kind, "--no-browser")
 			stdout, err := cmd.StdoutPipe()
 			if err != nil {
 				errs <- err

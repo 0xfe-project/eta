@@ -12,7 +12,7 @@ import { ComputerSettings } from "./computer-settings";
 // Two devices asked to pair under the laptop's label.
 const computers = {
   relay_configured: true,
-  relay_origin: "https://relay.test",
+  relay_url: "https://axp.test/remote/relay",
   relay_error: null,
   computers: [
     {

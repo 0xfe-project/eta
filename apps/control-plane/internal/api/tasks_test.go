@@ -31,6 +31,8 @@ type fakeRelay struct {
 	tabs        map[string]*fakeTab
 	herdrAgents map[string]*fakeHerdrAgent
 	dirty       map[string]bool // Herdr worktree workspace -> uncommitted changes
+	// A connector before agenvo 0.2, whose sessions carry a generation.
+	oldHerdr bool
 	// Every runtime call, as "method".
 	calls []string
 	// When set, every runtime call fails with this relay error code.
@@ -118,6 +120,7 @@ type fakeHerdrAgent struct {
 	pane      string
 	status    string // blocked (trust question), idle, working
 	launching bool
+	args      []string
 	inputs    []string
 	keys      [][]string
 }
@@ -132,7 +135,7 @@ func newFakeRelay() *fakeRelay {
 	}
 }
 
-func (f *fakeRelay) Origin() string { return "https://relay.test" }
+func (f *fakeRelay) BaseURL() string { return "https://axp.test/remote/relay" }
 
 func (f *fakeRelay) pair(label string) { f.pairAs(label, "code-"+label, "fp-"+label) }
 
@@ -258,7 +261,10 @@ func (f *fakeRelay) Call(_ context.Context, _, _, method string, params any) (*r
 		return f.readHistory(p)
 	// --- Herdr
 	case "session.list":
-		return result(map[string]any{"items": []map[string]any{{"session": "work", "backendGeneration": strings.Repeat("a", 64)}}})
+		if f.oldHerdr {
+			return result(map[string]any{"items": []map[string]any{{"session": "work", "backendGeneration": strings.Repeat("a", 64)}}})
+		}
+		return result(map[string]any{"items": []map[string]any{{"session": "work", "endpointPresent": true}, {"session": "old", "available": false}}})
 	case "workspace.list":
 		return result(map[string]any{"result": map[string]any{"workspaces": []map[string]any{{"workspace_id": "w1", "label": "web"}}}})
 	case "pane.list":
@@ -290,7 +296,7 @@ func (f *fakeRelay) Call(_ context.Context, _, _, method string, params any) (*r
 		return result(map[string]any{})
 	case "agent.start":
 		// Claude stops at its folder-trust question first.
-		f.herdrAgents[str("name")] = &fakeHerdrAgent{pane: str("paneId"), status: "blocked", launching: true}
+		f.herdrAgents[str("name")] = &fakeHerdrAgent{pane: str("paneId"), status: "blocked", launching: true, args: anyStrings(p["args"])}
 		return &relay.Outcome{Execution: "starting"}, nil
 	case "agent.get":
 		a := f.herdrAgents[str("name")]
@@ -762,8 +768,9 @@ func TestHerdrRunsInATabOfANewWorktree(t *testing.T) {
 		expect(t, tab.env["AXP_TASK_ID"], any(task.ID))
 	}
 	for _, a := range e.relay.herdrAgents {
-		// Claude's folder-trust question was answered, then the brief sent.
-		if len(a.keys) != 1 || len(a.inputs) != 1 {
+		// Started with full access; Claude's folder-trust question was
+		// answered, then the brief sent.
+		if !slices.Contains(a.args, "--dangerously-skip-permissions") || len(a.keys) != 1 || len(a.inputs) != 1 {
 			t.Fatalf("agent %+v", a)
 		}
 	}
@@ -776,6 +783,18 @@ func TestHerdrRunsInATabOfANewWorktree(t *testing.T) {
 	last := e.task("1").Activity
 	if body := *last[len(last)-1].Body; !strings.Contains(body, "未提交") {
 		t.Fatalf("cleanup %q", body)
+	}
+}
+
+// A Herdr connector from before agenvo 0.2 is told to update rather than
+// called with arguments it rejects.
+func TestOldHerdrConnectorNeedsAnUpdate(t *testing.T) {
+	e := newTaskEnv(t)
+	computer, _ := e.computer("desktop", "herdr")
+	e.relay.oldHerdr = true
+	r := e.get("/computers/" + computer + "/runtimes/herdr/places")
+	if r.status < 400 || !strings.Contains(string(r.body), "axp setup") {
+		t.Fatalf("%d %s", r.status, r.body)
 	}
 }
 
