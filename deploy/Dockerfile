@@ -1,7 +1,7 @@
 # Production image for every Kamal role (gateway, runtime-gateway, web, api,
 # internal, controller, llm, memory, forge, routines); the roles differ only in
-# their command. Build context is the repository root. Agent runtimes use
-# apps/agent-runtime.
+# their command. Build context is the repository root. Agents' images are
+# built by the controller on apps/agent-runtime's.
 #
 # Nothing is compiled here: `bun run build` (Turbo) produces the artifacts for
 # each target platform outside Docker, and this file only copies them. Each
@@ -27,6 +27,9 @@ ARG TARGETARCH
 LABEL service="axp"
 COPY --from=oven/bun:1.3.14 /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=caddy:2.11.7-alpine /usr/bin/caddy /usr/local/bin/caddy
+# The controller builds agents' images through the host's Docker (BuildKit).
+COPY --from=docker:29-cli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=docker:29-cli /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
 # Least to most frequently changing.
 # The memory service's dependencies; its role puts them on PYTHONPATH. Then
 # its embedding model.
@@ -41,13 +44,15 @@ COPY apps/control-plane/out/${TARGETOS}-${TARGETARCH}/axp-control-plane /usr/loc
 COPY apps/web/out/ /app/apps/web/
 COPY apps/gateway/Caddyfile apps/gateway/*.caddy /app/apps/gateway/
 COPY apps/memory-service/axp_memory /app/apps/memory-service/axp_memory/
-# The plugins: the catalog agents choose from, and what routine runs get.
+# The bundles and plugins agents' images are built from; the plugins are
+# also what routine runs get.
+COPY apps/agent-runtime/bundles /app/apps/agent-runtime/bundles/
 COPY apps/agent-runtime/plugins /app/apps/agent-runtime/plugins/
 # What remote computers download from /remote/dl: the axp binaries (where
 # the control plane looks for them by default).
 COPY apps/remote/out/dist/ /app/apps/remote/out/dist/
-# The control plane finds the plugins at ../agent-runtime/plugins; the LLM
-# gateway keeps its state under var/ here (deploy/deploy.yml).
+# The control plane finds them at ../agent-runtime/; the LLM gateway keeps
+# its state under var/ here (deploy/deploy.yml).
 WORKDIR /app/apps/control-plane
 
 ENV PYTHONUNBUFFERED=1

@@ -9,8 +9,7 @@
   },
   "scripts": {
     "prepare": "lefthook install",
-    "setup": "bun install && bun run setup:agent-runtime && bun run setup:memory-service && bun run setup:go && bun run db:migrate",
-    "setup:agent-runtime": "uv sync --project apps/agent-runtime --dev",
+    "setup": "bun install && bun run setup:memory-service && bun run setup:go && bun run db:migrate",
     "setup:memory-service": "uv sync --project apps/memory-service --dev",
     "setup:go": "go -C apps/control-plane mod download && go -C apps/llm-gateway mod download && go -C apps/forge-service mod download && go -C apps/routine-service mod download",
     "dev": "bash scripts/dev.sh",

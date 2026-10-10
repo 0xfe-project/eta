@@ -7,16 +7,11 @@ import (
 // Records are rows as they are stored; they never reach the browser.
 
 const (
-	AgentStopped        = "stopped"
-	AgentProvisioning   = "provisioning"
-	AgentRecovering     = "recovering"
-	AgentReady          = "ready"
-	AgentBusy           = "busy"
-	AgentRecoveryFailed = "recovery_failed"
-	AgentError          = "error"
-
-	DesiredStopped = "stopped"
-	DesiredRunning = "running"
+	// The agent's runtime: starting until the current container's runtime
+	// reports itself started; error when it cannot run.
+	AgentStarting = "starting"
+	AgentReady    = "ready"
+	AgentError    = "error"
 
 	ProductIdle            = "idle"
 	ProductStarting        = "starting"
@@ -26,18 +21,20 @@ const (
 )
 
 type AgentRecord struct {
-	ID             string   `db:"id"`
-	ConversationID string   `db:"conversation_id"`
-	Name           string   `db:"name"`
-	Description    string   `db:"description"`
-	Model          *string  `db:"model"`
-	Plugins        []string `db:"plugins"`
-	DesiredState   string   `db:"desired_state"`
-	Status         string   `db:"status"`
-	// Incremented for every runtime instance; fences stale runtimes.
-	Generation int64 `db:"generation"`
+	ID             string  `db:"id"`
+	ConversationID string  `db:"conversation_id"`
+	Name           string  `db:"name"`
+	Description    string  `db:"description"`
+	Model          *string `db:"model"`
+	// The bundles it loads, in catalog order, and the plugins they add.
+	Bundles []string `db:"bundles"`
+	Plugins []string `db:"plugins"`
+	Status  string   `db:"status"`
+	// The runtime boot that reported itself last (runtime.started).
+	BootID *string `db:"boot_id"`
 	// Bumped when anything a runtime is started with changes (name, model,
-	// instructions, plugins). Runtimes pick it up the next time they start.
+	// instructions, bundles) and on restart: the controller replaces the
+	// container once the agent is between turns.
 	ConfigVersion   int64      `db:"config_version"`
 	LastActiveAt    *time.Time `db:"last_active_at"`
 	DeletedAt       *time.Time `db:"deleted_at"`
@@ -45,8 +42,10 @@ type AgentRecord struct {
 	ProductRevision int64      `db:"product_revision"`
 	LastCommandSeq  int64      `db:"last_command_seq"`
 	LastErrorCode   *string    `db:"last_error_code"`
-	CreatedAt       time.Time  `db:"created_at"`
-	UpdatedAt       time.Time  `db:"updated_at"`
+	// The end of a failed image build's output.
+	BuildError *string   `db:"build_error"`
+	CreatedAt  time.Time `db:"created_at"`
+	UpdatedAt  time.Time `db:"updated_at"`
 }
 
 const (
@@ -68,6 +67,10 @@ var ActiveCommandStatuses = []string{CommandRunning, CommandWaitingApproval}
 
 var terminalCommandStatuses = []string{CommandSucceeded, CommandFailed, CommandCancelled, CommandInterrupted}
 
+// CommandRecord is a turn asked of the agent. A queued one waits here until
+// the controller delivers it to the agent's runtime: as a prompt (it then
+// runs) or as a steer the running turn took (it stays queued until the turn
+// hands over to it).
 type CommandRecord struct {
 	ID            string         `db:"id"`
 	AgentID       string         `db:"agent_id"`
@@ -76,10 +79,9 @@ type CommandRecord struct {
 	Status        string         `db:"status"`
 	Input         map[string]any `db:"input"`
 	CodexTurnID   *string        `db:"codex_turn_id"`
-	RuntimeID     *string        `db:"runtime_instance_id"`
-	// Its message in the agent queue, to take it back. Nil for a steer the
-	// running turn took instead.
-	QueueSeq             *int64     `db:"queue_seq"`
+	// When the controller handed it to the runtime boot BootID.
+	DeliveredAt          *time.Time `db:"delivered_at"`
+	BootID               *string    `db:"boot_id"`
 	InterruptRequestedAt *time.Time `db:"interrupt_requested_at"`
 	CreatedAt            time.Time  `db:"created_at"`
 	StartedAt            *time.Time `db:"started_at"`
@@ -94,6 +96,15 @@ func (c *CommandRecord) terminal() bool {
 		}
 	}
 	return false
+}
+
+// Steer reports whether the command asks to join the running turn.
+func (c *CommandRecord) Steer() bool { return c.Input["steer"] == true }
+
+// Text is the command's input.
+func (c *CommandRecord) Text() string {
+	text, _ := c.Input["text"].(string)
+	return text
 }
 
 const (
@@ -166,13 +177,13 @@ const (
 	ApprovalExpired = "expired"
 )
 
-type approvalRow struct {
-	ID         string `db:"id"`
-	AgentID    string `db:"agent_id"`
-	CommandID  string `db:"command_id"`
-	RuntimeID  string `db:"runtime_instance_id"`
-	Generation int64  `db:"generation"`
-	// The runtime's id for the SDK request; meaningless to another generation.
+// ApprovalRecord is a request a runtime boot made for the user's decision.
+type ApprovalRecord struct {
+	ID        string `db:"id"`
+	AgentID   string `db:"agent_id"`
+	CommandID string `db:"command_id"`
+	// The boot that asked; its id for the request is SDKRequestID.
+	BootID       *string        `db:"boot_id"`
 	SDKRequestID string         `db:"sdk_request_id"`
 	Kind         string         `db:"kind"`
 	Summary      map[string]any `db:"summary"`
@@ -181,55 +192,4 @@ type approvalRow struct {
 	ExpiresAt    *time.Time     `db:"expires_at"`
 	CreatedAt    time.Time      `db:"created_at"`
 	ResolvedAt   *time.Time     `db:"resolved_at"`
-}
-
-const (
-	SessionNew            = "new"
-	SessionRecovering     = "recovering"
-	SessionReady          = "ready"
-	SessionRecoveryFailed = "recovery_failed"
-)
-
-// SessionRecord is the agent's single persistent Codex thread.
-type SessionRecord struct {
-	AgentID        string     `db:"agent_id"`
-	ThreadID       *string    `db:"thread_id"`
-	Status         string     `db:"status"`
-	SDKVersion     string     `db:"sdk_version"`
-	RuntimeVersion string     `db:"runtime_version"`
-	LastTurnID     *string    `db:"last_turn_id"`
-	LastResumeAt   *time.Time `db:"last_resume_at"`
-	LastError      *string    `db:"last_error"`
-}
-
-const (
-	RuntimeProvisioning = "provisioning"
-	RuntimeRecovering   = "recovering"
-	RuntimeReady        = "ready"
-	RuntimeBusy         = "busy"
-	RuntimeStopped      = "stopped"
-	RuntimeFailed       = "failed"
-)
-
-// RuntimeRecord is one runtime instance (container) of an agent.
-type RuntimeRecord struct {
-	ID              string     `db:"id"`
-	AgentID         string     `db:"agent_id"`
-	Generation      int64      `db:"generation"`
-	ContainerID     *string    `db:"container_id"`
-	HostID          string     `db:"host_id"`
-	ImageDigest     string     `db:"image_digest"`
-	Status          string     `db:"status"`
-	ErrorCode       *string    `db:"error_code"`
-	ControllerID    string     `db:"controller_id"`
-	LeaseExpiresAt  time.Time  `db:"lease_expires_at"`
-	LastHeartbeatAt *time.Time `db:"last_heartbeat_at"`
-	// When it first reported ready or busy; nil while it never came up.
-	ReadyAt *time.Time `db:"ready_at"`
-	// Immutable configuration this instance was started with.
-	ConfigVersion int64      `db:"config_version"`
-	LastSourceSeq int64      `db:"last_source_seq"`
-	EndReason     *string    `db:"end_reason"`
-	EndedAt       *time.Time `db:"ended_at"`
-	CreatedAt     time.Time  `db:"created_at"`
 }
