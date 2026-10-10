@@ -80,7 +80,7 @@ func (a agents) call(ctx context.Context, t target, method string, params any, o
 	if err != nil {
 		var fault *relay.Fault
 		if errors.As(err, &fault) && fault.Code == "unsupported_method" {
-			return fmt.Errorf("这台电脑的 agenvo connector 不支持 %s，需要更新", method)
+			return fmt.Errorf("这台电脑的 agenvo connector 不支持 %s，需要更新：%s", method, updateHint)
 		}
 		return err
 	}
@@ -92,6 +92,9 @@ func (a agents) call(ctx context.Context, t target, method string, params any, o
 	}
 	return nil
 }
+
+// updateHint is how a computer gets the connectors AXP serves.
+const updateHint = "在 AXP 的 设置 → 远程电脑 中点这台电脑的「更新」，按提示在那台电脑上运行命令"
 
 func (s *sessionRow) target() target { return target{s.DeviceID, s.Runtime} }
 
@@ -479,7 +482,7 @@ func (a agents) herdrSessions(ctx context.Context, t target) ([]herdrSession, er
 	for _, item := range out.Items {
 		// Connectors before agenvo 0.2 address sessions by generation.
 		if item.BackendGeneration != "" {
-			return nil, errors.New("这台电脑的 agenvo connector 需要更新：在那台电脑上重新运行 axp setup")
+			return nil, errors.New("这台电脑的 agenvo connector 需要更新：" + updateHint)
 		}
 		if item.Available == nil || *item.Available {
 			sessions = append(sessions, herdrSession{item.Session})

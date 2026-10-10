@@ -33,6 +33,8 @@ type fakeRelay struct {
 	dirty       map[string]bool // Herdr worktree workspace -> uncommitted changes
 	// A connector before agenvo 0.2, whose sessions carry a generation.
 	oldHerdr bool
+	// Connector versions by device; the version AXP serves otherwise.
+	versions map[string]string
 	// Every runtime call, as "method".
 	calls []string
 	// When set, every runtime call fails with this relay error code.
@@ -152,8 +154,12 @@ func (f *fakeRelay) State(context.Context) (*relay.State, error) {
 	s := &relay.State{Pairings: slices.Clone(f.pairings)}
 	for device, online := range f.devices {
 		kind := device[strings.LastIndex(device, ":")+1:]
+		version, ok := f.versions[device]
+		if !ok {
+			version = servedVersion
+		}
 		s.Devices = append(s.Devices, relay.Device{ID: device, Online: online, Instances: []relay.Instance{
-			{InstanceID: kind, Kind: kind, Available: true, Approved: true},
+			{InstanceID: kind, Kind: kind, Available: true, Approved: true, ConnectorVersion: version},
 		}})
 	}
 	return s, nil
@@ -365,10 +371,13 @@ type taskEnv struct {
 	runner *tasks.Runner
 }
 
+// servedVersion is the agenvo version of the connectors AXP serves.
+const servedVersion = "0.2.0"
+
 func newTaskEnv(t *testing.T) *taskEnv {
 	e := newEnv(t)
 	fake := newFakeRelay()
-	service := &tasks.Service{Relay: fake}
+	service := &tasks.Service{Relay: fake, ConnectorVersion: servedVersion}
 	deps := &Deps{DB: e.db, Chat: e.chat, Tasks: service, PublicURL: "https://axp.test"}
 	e.public = Public(deps).Router
 	e.internal = Internal(deps).Router
@@ -793,9 +802,44 @@ func TestOldHerdrConnectorNeedsAnUpdate(t *testing.T) {
 	computer, _ := e.computer("desktop", "herdr")
 	e.relay.oldHerdr = true
 	r := e.get("/computers/" + computer + "/runtimes/herdr/places")
-	if r.status < 400 || !strings.Contains(string(r.body), "axp setup") {
+	if r.status < 400 || !strings.Contains(string(r.body), "「更新」") {
 		t.Fatalf("%d %s", r.status, r.body)
 	}
+}
+
+// A computer whose connector runs another agenvo version than AXP serves is
+// marked for an update; its update command is a new install command, which
+// enrolls the same computer again and keeps its pairings.
+func TestOutdatedConnectorIsUpdatedWithANewInstallCommand(t *testing.T) {
+	e := newTaskEnv(t)
+	computer, _ := e.computer("laptop", "paseo")
+	device := "device-" + computer + ":paseo"
+	e.relay.versions = map[string]string{device: "0.1.0"}
+	var list tasks.Computers
+	e.get("/computers").json(t, &list)
+	rt := list.Computers[0].Runtimes[0]
+	if !rt.NeedsUpdate || rt.ConnectorVersion == nil || *rt.ConnectorVersion != "0.1.0" || *list.ConnectorVersion != servedVersion {
+		t.Fatalf("%+v %v", rt, list.ConnectorVersion)
+	}
+
+	r := e.post("/computers/"+computer+"/install", nil)
+	if r.status != 200 {
+		t.Fatalf("update command: %d %s", r.status, r.body)
+	}
+	var install Install
+	r.json(t, &install)
+	code := install.Command[strings.LastIndex(install.Command, " ")+1:]
+	var enrolled tasks.Enrolled
+	e.remote("", http.MethodPost, "/enroll", map[string]any{"code": code, "hostname": "laptop", "os": "linux", "arch": "amd64",
+		"runtimes": []map[string]any{{"kind": "paseo", "providers": []string{"claude"}}}}).json(t, &enrolled)
+	expect(t, enrolled.ComputerID, computer)
+	expect(t, enrolled.RelayURL, "https://axp.test/remote/relay")
+
+	delete(e.relay.versions, device) // setup installed what AXP serves
+	e.get("/computers").json(t, &list)
+	rt = list.Computers[0].Runtimes[0]
+	expect(t, rt.State, "online")
+	expect(t, rt.NeedsUpdate, false)
 }
 
 func TestRemoteAgentThatDoesNotReplyIsRemindedOnceThenFails(t *testing.T) {
