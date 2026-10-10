@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net/url"
@@ -62,23 +61,12 @@ func taskCommand(args []string) error {
 	if err != nil {
 		return err
 	}
-	flags := flag.NewFlagSet("task "+args[0], flag.ContinueOnError)
-	task := flags.String("task", "", "the task's number or id (default: the one this directory belongs to)")
-	file := flags.String("file", "", "comment: read the comment from a file (- for stdin)")
-	// Flags may come after the text.
-	var positional []string
-	rest := args[1:]
-	for len(rest) > 0 {
-		if err := flags.Parse(rest); err != nil {
-			return err
-		}
-		if flags.NArg() == 0 {
-			break
-		}
-		positional = append(positional, flags.Arg(0))
-		rest = flags.Args()[1:]
+	a, err := parseTaskArgs(args[1:])
+	if err != nil {
+		return err
 	}
-	id, err := currentTask(c, *task)
+	positional := a.positional
+	id, err := currentTask(c, a.task)
 	if err != nil {
 		return err
 	}
@@ -92,12 +80,12 @@ func taskCommand(args []string) error {
 		return nil
 	case "comment":
 		body := strings.Join(positional, " ")
-		if *file != "" {
+		if a.file != "" {
 			var data []byte
-			if *file == "-" {
+			if a.file == "-" {
 				data, err = io.ReadAll(os.Stdin)
 			} else {
-				data, err = os.ReadFile(*file)
+				data, err = os.ReadFile(a.file)
 			}
 			if err != nil {
 				return err
@@ -123,6 +111,42 @@ func taskCommand(args []string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown task command %q", args[0])
+}
+
+type taskArgs struct {
+	// --task: the task's number or id (default: the one this directory
+	// belongs to). --file: comment's text from a file (- for stdin).
+	task, file string
+	positional []string
+}
+
+// parseTaskArgs takes --task and --file (or -task, -file, =value) wherever
+// they are; everything else is text, even when it starts with "-" (a
+// comment that is a Markdown list), and so is everything after "--".
+func parseTaskArgs(args []string) (taskArgs, error) {
+	var a taskArgs
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			a.positional = append(a.positional, args[i+1:]...)
+			break
+		}
+		name, value, inline := strings.Cut(strings.TrimLeft(arg, "-"), "=")
+		target := map[string]*string{"task": &a.task, "file": &a.file}[name]
+		if !strings.HasPrefix(arg, "-") || target == nil {
+			a.positional = append(a.positional, arg)
+			continue
+		}
+		if !inline {
+			if i+1 == len(args) {
+				return a, fmt.Errorf("--%s needs a value", name)
+			}
+			i++
+			value = args[i]
+		}
+		*target = value
+	}
+	return a, nil
 }
 
 func printTask(t *taskDetail) {
