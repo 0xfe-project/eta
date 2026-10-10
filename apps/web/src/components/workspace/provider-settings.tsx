@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import {
+  GROK_CONNECTOR,
   NEEDS_ACTION,
   useCancelLogin,
   useConnections,
@@ -49,6 +50,7 @@ import {
 } from "@/queries/llm";
 import { connectionStateLabels, untilText } from "./connection-state";
 import { useAgents } from "./use-agents";
+import { useWorkspaceStore } from "./workspace-store";
 
 const windowLabels: Record<string, string> = {
   "5h": "5 小时",
@@ -346,14 +348,17 @@ function ConnectionRow({
   );
 }
 
-function ConnectorSection({
+export function ConnectorSection({
   connector,
   connections,
   usage,
+  hideHeading,
 }: {
   connector: Connector;
   connections: Connection[];
   usage: Usage[] | undefined;
+  /** Where a surrounding title already names the provider. */
+  hideHeading?: boolean;
 }) {
   const [login, setLogin] = useState(0);
   const { agents } = useAgents();
@@ -377,8 +382,16 @@ function ConnectorSection({
 
   return (
     <section aria-labelledby={headingId} className="space-y-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <h3 id={headingId} className="text-sm font-medium">
+      <div
+        className={cn(
+          "flex items-center justify-between gap-2",
+          hideHeading && "justify-end",
+        )}
+      >
+        <h3
+          id={headingId}
+          className={cn("text-sm font-medium", hideHeading && "sr-only")}
+        >
           {connector.display_name}
         </h3>
         <Button
@@ -424,8 +437,12 @@ function ConnectorSection({
   );
 }
 
-/** Settings → 模型服务: accounts per provider and their state. */
+/**
+ * Settings → 模型服务: accounts per provider and their state. Grok's account
+ * also powers the grok plugin, so it lives under 连接 instead.
+ */
 export function ProviderSettings() {
+  const setSettings = useWorkspaceStore((s) => s.setSettings);
   const connectors = useConnectors();
   const connections = useConnections();
   const { data: usage } = useUsage();
@@ -447,16 +464,32 @@ export function ProviderSettings() {
         </p>
       ) : null}
       {connectors.isPending ? <Loading rows={2} /> : null}
-      {(connectors.data ?? []).map((connector) => (
-        <ConnectorSection
-          key={connector.id}
-          connector={connector}
-          connections={(connections.data ?? []).filter(
-            (connection) => connection.connector === connector.id,
-          )}
-          usage={usage}
-        />
-      ))}
+      {(connectors.data ?? [])
+        .filter((connector) => connector.id !== GROK_CONNECTOR)
+        .map((connector) => (
+          <ConnectorSection
+            key={connector.id}
+            connector={connector}
+            connections={(connections.data ?? []).filter(
+              (connection) => connection.connector === connector.id,
+            )}
+            usage={usage}
+          />
+        ))}
+      {connectors.data?.some((connector) => connector.id === GROK_CONNECTOR) ? (
+        <p className="text-xs text-muted-foreground">
+          Grok 账号在
+          <Button
+            variant="link"
+            size="xs"
+            className="px-1"
+            onClick={() => setSettings({ open: true, section: "connections" })}
+          >
+            连接
+          </Button>
+          中绑定
+        </p>
+      ) : null}
     </div>
   );
 }

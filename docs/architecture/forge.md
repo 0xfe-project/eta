@@ -4,13 +4,13 @@
 
 ## 组成
 
-| 部分          | 位置                                                                                    | 作用                                                    |
-| ------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| forge 服务    | `apps/forge-service`（Go，二进制 `axp-forge`，生产角色 `forge`，别名 `axp-forge:8330`） | 保存 App 凭据，签发 installation token，开 PR           |
-| 向导          | “能力”页的 GitHub 卡片，点开是分步向导（`capabilities-view.tsx`、`github-wizard.tsx`）  | 了解、创建 App、安装到仓库、完成                        |
-| runtime       | `apps/agent-runtime/axp_runtime/runtime.py`（`_refresh_github`）                        | 启动时以 App 的身份登录 gh，过期前刷新                  |
-| git 配置      | `apps/agent-runtime/git/gitconfig` → `/etc/gitconfig`                                   | GitHub 走 HTTPS，凭据来自 gh，commit 身份               |
-| `github` 插件 | `apps/agent-runtime/plugins/github`                                                     | `open_pull_request`（forge 服务的 MCP）与使用说明 skill |
+| 部分          | 位置                                                                                     | 作用                                                    |
+| ------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| forge 服务    | `apps/forge-service`（Go，二进制 `axp-forge`，生产角色 `forge`，别名 `axp-forge:8330`）  | 保存 App 凭据，签发 installation token，开 PR           |
+| 向导          | 设置 → 连接里的 GitHub，点开是分步向导（`connection-settings.tsx`、`github-wizard.tsx`） | 了解、创建 App、安装到仓库、完成                        |
+| runtime       | `apps/agent-runtime/axp_runtime/runtime.py`（`_refresh_github`）                         | 启动时以 App 的身份登录 gh，过期前刷新                  |
+| git 配置      | `apps/agent-runtime/git/gitconfig` → `/etc/gitconfig`                                    | GitHub 走 HTTPS，凭据来自 gh，commit 身份               |
+| `github` 插件 | `apps/agent-runtime/plugins/github`                                                      | `open_pull_request`（forge 服务的 MCP）与使用说明 skill |
 
 | 路径              | 调用方                          | 鉴权                        |
 | ----------------- | ------------------------------- | --------------------------- |
@@ -23,10 +23,10 @@ git 和 gh 的凭据、commit 身份是镜像级的，对每个 agent 都生效�
 
 ## 连接 GitHub
 
-“能力”页的每项能力是一张卡片；点开 GitHub 卡片是一个四步向导（了解、创建 App、安装到仓库、完成），步骤由服务端状态决定，从 GitHub 回来时自动重新打开在当前步骤。
+设置的“连接”分区里，GitHub 和 Grok 各是一张卡片；点开 GitHub 卡片是一个四步向导（了解、创建 App、安装到仓库、完成），步骤由服务端状态决定，从 GitHub 回来时自动重新打开在当前步骤。
 
-1. **创建 App**：浏览器把服务生成的 [manifest](https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-from-a-manifest) 表单提交给 GitHub（个人账号或组织）。用户在 GitHub 上确认后，GitHub 带着一次性的 `code` 回到 `/api/forge/v1/github/manifest/callback`，服务用 `POST /app-manifests/{code}/conversions` 换回 App ID、slug、私钥、client ID 和 client secret，再把浏览器送回 `/?view=capabilities`。`state` 一小时内有效、只能用一次。
-2. **安装**：向导链接到 `https://github.com/apps/<slug>/installations/new`，用户选择账号和仓库。manifest 设了 `request_oauth_on_install`，GitHub 安装后接着请用户授权 App，再回到 App 的 callback URL（`/api/forge/v1/github/authorization/callback`，带 `setup_action`），由它换得用户的 token 并送回“能力”页；这个选项下 GitHub 不用 setup URL。等待安装时状态每 5 秒刷新。
+1. **创建 App**：浏览器把服务生成的 [manifest](https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-from-a-manifest) 表单提交给 GitHub（个人账号或组织）。用户在 GitHub 上确认后，GitHub 带着一次性的 `code` 回到 `/api/forge/v1/github/manifest/callback`，服务用 `POST /app-manifests/{code}/conversions` 换回 App ID、slug、私钥、client ID 和 client secret，再把浏览器送回 `/?settings=connections`（设置弹层打开在“连接”）。`state` 一小时内有效、只能用一次。
+2. **安装**：向导链接到 `https://github.com/apps/<slug>/installations/new`，用户选择账号和仓库。manifest 设了 `request_oauth_on_install`，GitHub 安装后接着请用户授权 App，再回到 App 的 callback URL（`/api/forge/v1/github/authorization/callback`，带 `setup_action`），由它换得用户的 token 并送回“连接”；这个选项下 GitHub 不用 setup URL。等待安装时状态每 5 秒刷新。
 3. **完成**：列出每个安装的账号和可访问的仓库，附 GitHub 上的管理链接，以及 PR 以谁的名义打开（可以取消授权或去授权）。“断开连接”删除 AXP 保存的凭据和用户的授权，GitHub 上的 App 需要用户自己删除（提示里有链接）。
 
 App 申请 GitHub 允许的全部仓库权限（含 `workflows`、`administration`、`secrets`）和组织权限，都取最高级别；用户安装时授予什么，智能体就有什么。权限在创建 App 时写进 manifest，已经创建的 App 要在 GitHub 的 App 设置里改权限，再由安装方接受。webhook 关闭。
@@ -36,7 +36,7 @@ App 申请 GitHub 允许的全部仓库权限（含 `workflows`、`administratio
 - runtime 启动时（在 Codex 之前）向 `/forge/credentials` 要一个 installation token：App 所属账号的那个 installation，覆盖用户授权的所有仓库和权限。forge 服务对每个 installation 只签一种 token，`open_pull_request` 和向导也用它。token 写进 gh 的 `hosts.yml`（`GH_CONFIG_DIR=/run/axp/gh`，0600，不在快照里），所以 `gh` 一开始就是登录状态。之后在过期前 5 分钟刷新；GitHub 还没连接或 forge 服务不可达时每 60 秒再试，连接之后不用重启 agent。断开连接后 `hosts.yml` 被删除。
 - `/etc/gitconfig` 把 `git@github.com:` 改写为 HTTPS，凭据助手是 `gh auth git-credential`，所以 git 与 gh 用的是同一个 token。
 - commit 身份：默认是 `AXP Agent`；GitHub 仓库里由 `includeIf` 引入 `/run/axp/git/github.inc`，即 App 的 bot（`<slug>[bot]` 与 `<id>+<slug>[bot]@users.noreply.github.com`），runtime 拿到凭据时一并写入。
-- GitHub 没有连接时 gh 是未登录状态；App 没授权某个仓库时，GitHub 对它回答 404。`open_pull_request` 的错误里有服务的说明（引导用户去“能力”页）。公开仓库不需要凭据，照常可以 clone。
+- GitHub 没有连接时 gh 是未登录状态；App 没授权某个仓库时，GitHub 对它回答 404。`open_pull_request` 的错误里有服务的说明（引导用户去“设置 → 连接”）。公开仓库不需要凭据，照常可以 clone。
 
 ## open_pull_request
 

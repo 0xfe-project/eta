@@ -1,12 +1,10 @@
 import type { WorkspaceView } from "./types";
-import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   createStandardSchemaV1,
   parseAsString,
   parseAsStringLiteral,
   useQueryState,
 } from "nuqs";
-import { useWorkspaceStore } from "./workspace-store";
 
 /** The sections with a page in the full-window workspace. */
 export const sectionPaths = {
@@ -51,25 +49,4 @@ export const validateWorkspaceSearch = createStandardSchemaV1(
 );
 export function useWorkspaceView() {
   return useQueryState("view", viewParser);
-}
-
-/**
- * Shows a section: as the side panel's tab on the home page, or as its own
- * full-window page anywhere else (the tabs without one, on the home page).
- */
-export function useShowSection() {
-  const pathname = useLocation({ select: (location) => location.pathname });
-  const navigate = useNavigate();
-  const [, setView] = useWorkspaceView();
-  const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
-  return (view: WorkspaceView) => {
-    if (pathname === "/") {
-      void setView(view);
-      setMobilePanel("workspace");
-    } else if (hasPage(view)) void navigate({ to: sectionPaths[view] });
-    else {
-      setMobilePanel("workspace");
-      void navigate({ to: "/", search: { view } });
-    }
-  };
 }
