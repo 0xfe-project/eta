@@ -104,6 +104,8 @@ TanStack 的 `src/routeTree.gen.ts` 由 `dev` 或 `build` 自动生成；控制�
 
 GitHub Actions（`.github/workflows/ci.yml`）在每个 PR 和推到 `main` 时跑 `bun run check`：squash 合并、`--no-verify` 和机器人推送都绕不过它。CI 里设了 `CI=1`（缺 akhook 等工具的测试失败而不是跳过）和 `AXP_TEST_NATS_URL`（真实 NATS 的测试也跑），PostgreSQL 仍由测试自己通过 `scripts/dev-postgres.sh` 启动。
 
+Turbo 用 Vercel Remote Cache（`turbo.json` 的 `remoteCache.teamId`），本机各个 checkout（包括 worktree）和 CI 共用：提交时 pre-commit 跑过的任务会上传，CI 大多直接复用。本机用 `bunx turbo login` 登录一次；CI 用 GitHub 的 OIDC token 换一个短期 token，这需要在 Vercel 团队的 Settings → Build and Deployment → OIDC Policies for CLI Access 里，为这个仓库添加一条 Turborepo CLI 策略。
+
 ## 日志
 
 三种语言的服务都走 OpenTelemetry：Go 用 `log/slog`（`packages/telemetry-go`），Python 用标准库 `logging`（`packages/telemetry-py`），Web 服务端用 LogTape（`apps/web/src/server/telemetry.ts`）。llm-gateway 内嵌的 CLIProxyAPI 会自己打印到 stdout，这些行也被逐行转成日志（`library=cliproxy`）。每条日志同时：
