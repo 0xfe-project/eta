@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,7 +47,10 @@ func setup(args []string) error {
 		if *url == "" || *code == "" {
 			return errors.New("usage: axp setup --url URL --code CODE")
 		}
-		c = &Config{URL: strings.TrimRight(*url, "/"), Home: configDir()}
+		c = &Config{Home: configDir()}
+	}
+	if *url != "" {
+		c.URL = strings.TrimRight(*url, "/")
 	}
 	if *caFile != "" {
 		c.CAFile = *caFile
@@ -69,23 +73,7 @@ func setup(args []string) error {
 	}
 
 	step("连接 AXP")
-	report := c.report()
-	if c.Token == "" {
-		var enrolled struct {
-			ComputerID  string `json:"computer_id"`
-			Name        string `json:"name"`
-			Token       string `json:"token"`
-			RelayOrigin string `json:"relay_origin"`
-		}
-		report["code"] = *code
-		if err := call(c.URL, "", "POST", "/remote/v1/enroll", report, &enrolled); err != nil {
-			return err
-		}
-		c.Token, c.ComputerID, c.Name, c.RelayOrigin = enrolled.Token, enrolled.ComputerID, enrolled.Name, enrolled.RelayOrigin
-	} else if err := c.call("POST", "/remote/v1/report", report, nil); err != nil {
-		return err
-	}
-	if err := c.save(); err != nil {
+	if err := connect(c, *code); err != nil {
 		return err
 	}
 
@@ -131,6 +119,50 @@ func setup(args []string) error {
 }
 
 func step(s string) { fmt.Println("==>", s) }
+
+// connect enrolls with the install command's code, or reports with the
+// token setup has. A code always enrolls: it is how a computer AXP removed
+// (its token deleted, its pairings revoked) comes back, and AXP may have
+// given the same computer a new code. Enrolled as another computer, the
+// connectors' pairings were under the old one's label: they pair again.
+func connect(c *Config, code string) error {
+	if code == "" {
+		if c.Token == "" {
+			return errors.New("usage: axp setup --url URL --code CODE")
+		}
+		err := c.call("POST", "/remote/v1/report", c.report(), nil)
+		if e, ok := errors.AsType[*apiError](err); ok && e.Status == http.StatusUnauthorized {
+			return errors.New("AXP 不再认识这台电脑（可能已被移除）：在 AXP 的 设置 → 远程电脑 中复制新的安装命令，再运行一次")
+		}
+		return err
+	}
+	var enrolled struct {
+		ComputerID  string `json:"computer_id"`
+		Name        string `json:"name"`
+		Token       string `json:"token"`
+		RelayOrigin string `json:"relay_origin"`
+	}
+	report := c.report()
+	report["code"] = code
+	if err := call(c.URL, "", "POST", "/remote/v1/enroll", report, &enrolled); err != nil {
+		return err
+	}
+	if c.ComputerID != "" && c.ComputerID != enrolled.ComputerID {
+		c.unpair()
+	}
+	c.Token, c.ComputerID, c.Name, c.RelayOrigin = enrolled.Token, enrolled.ComputerID, enrolled.Name, enrolled.RelayOrigin
+	return c.save()
+}
+
+// unpair forgets the connectors' pairings (revoking them where the relay
+// still has them) and stops their services, so that they pair again.
+func (c *Config) unpair() {
+	for _, kind := range []string{"paseo", "herdr"} {
+		if _, err := os.Stat(c.connectorBin(kind)); err == nil {
+			_ = c.connector(kind, "disconnect").Run()
+		}
+	}
+}
 
 // report is what AXP is told about this computer.
 func (c *Config) report() map[string]any {
@@ -416,13 +448,7 @@ func uninstall() error {
 	if err != nil {
 		return err
 	}
-	for _, kind := range []string{"paseo", "herdr"} {
-		if _, err := os.Stat(c.connectorBin(kind)); err != nil {
-			continue
-		}
-		_ = c.connector(kind, "service", "uninstall").Run()
-		_ = c.connector(kind, "disconnect").Run()
-	}
+	c.unpair()
 	uninstallSkill()
 	if err := os.Remove(configPath()); err != nil && !os.IsNotExist(err) {
 		return err

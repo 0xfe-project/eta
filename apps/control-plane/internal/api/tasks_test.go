@@ -41,6 +41,8 @@ type fakeRelay struct {
 	historyEpoch string
 	// History reads asked for, as their "limit".
 	historyReads []int
+	// Called with each runtime call's method before it is answered.
+	before func(method string)
 }
 
 // readHistory answers like Paseo, reading entries that start before a cursor,
@@ -132,10 +134,13 @@ func newFakeRelay() *fakeRelay {
 
 func (f *fakeRelay) Origin() string { return "https://relay.test" }
 
-func (f *fakeRelay) pair(label string) {
+func (f *fakeRelay) pair(label string) { f.pairAs(label, "code-"+label, "fp-"+label) }
+
+// pairAs is a device asking to pair under label, with its code and digest.
+func (f *fakeRelay) pairAs(label, code, digest string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.pairings = append(f.pairings, relay.Pairing{Code: "code-" + label, Digest: "fp-" + label, Label: label})
+	f.pairings = append(f.pairings, relay.Pairing{Code: code, Digest: digest, Label: label})
 }
 
 func (f *fakeRelay) State(context.Context) (*relay.State, error) {
@@ -169,6 +174,9 @@ func (f *fakeRelay) ApproveInstance(context.Context, string, string, string) err
 func (f *fakeRelay) RevokeDevice(context.Context, string) error                    { return nil }
 
 func (f *fakeRelay) Call(_ context.Context, _, _, method string, params any) (*relay.Outcome, error) {
+	if f.before != nil {
+		f.before(method)
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, method)
@@ -413,15 +421,31 @@ func (e *taskEnv) computer(name string, kinds ...string) (string, string) {
 		expect(e.t, state().State, "waiting")
 		// Setup's connector pairs under the computer's label.
 		e.relay.pair(tasks.PairingLabel(enrolled.ComputerID, k))
-		if got := state(); got.State != "pairing" || *got.Fingerprint != "fp-"+tasks.PairingLabel(enrolled.ComputerID, k) {
+		fingerprint := "fp-" + tasks.PairingLabel(enrolled.ComputerID, k)
+		if got := state(); got.State != "pairing" || !slices.Equal(got.Fingerprints, []string{fingerprint}) {
 			e.t.Fatalf("runtime %+v", got)
 		}
-		if r := e.post("/computers/"+install.Computer.ID+"/runtimes/"+k+"/approve", nil); r.status != 204 {
+		if r := e.post("/computers/"+install.Computer.ID+"/runtimes/"+k+"/approve", map[string]any{"fingerprint": fingerprint}); r.status != 204 {
 			e.t.Fatalf("approve: %d %s", r.status, r.body)
 		}
 		expect(e.t, state().State, "online")
 	}
 	return enrolled.ComputerID, enrolled.Token
+}
+
+// enroll adds a computer and enrolls it with Paseo, unpaired; it is the
+// computer's id.
+func (e *taskEnv) enroll(name string) string {
+	e.t.Helper()
+	var install Install
+	e.post("/computers", map[string]any{"name": name}).json(e.t, &install)
+	code := install.Command[strings.LastIndex(install.Command, " ")+1:]
+	r := e.remote("", http.MethodPost, "/enroll", map[string]any{"code": code, "hostname": "laptop", "os": "linux",
+		"arch": "amd64", "runtimes": []map[string]any{{"kind": "paseo", "providers": []string{"claude"}}}})
+	if r.status != 200 {
+		e.t.Fatalf("enroll: %d %s", r.status, r.body)
+	}
+	return install.Computer.ID
 }
 
 func (e *taskEnv) task(ref string) tasks.TaskDetail {
@@ -794,6 +818,108 @@ func TestInterruptingARun(t *testing.T) {
 	expect(t, e.task("1").Runs[0].Status, "cancelled")
 	if !slices.Contains(e.relay.calls, "paseo.agents.cancel") {
 		t.Fatalf("calls %v", e.relay.calls)
+	}
+}
+
+// Two devices ask to pair under one computer's label (setup run again, or
+// someone else using the label): both are shown, and only the one whose
+// fingerprint the user compared is approved.
+func TestApprovingAPairingTakesTheComparedFingerprint(t *testing.T) {
+	e := newTaskEnv(t)
+	computer := e.enroll("laptop")
+	label := tasks.PairingLabel(computer, "paseo")
+	e.relay.pairAs(label, "code-a", "fp-a")
+	e.relay.pairAs(label, "code-b", "fp-b")
+	var list tasks.Computers
+	e.get("/computers").json(t, &list)
+	runtime := list.Computers[0].Runtimes[0]
+	expect(t, runtime.State, "pairing")
+	expect(t, strings.Join(runtime.Fingerprints, ","), "fp-a,fp-b")
+
+	approve := func(body any) response {
+		return e.post("/computers/"+computer+"/runtimes/paseo/approve", body)
+	}
+	expect(t, approve(nil).status, 400)
+	expect(t, approve(map[string]any{"fingerprint": ""}).status, 422)
+	expectError(t, approve(map[string]any{"fingerprint": "fp-c"}), 409, "FINGERPRINT_MISMATCH")
+	expect(t, approve(map[string]any{"fingerprint": "fp-b"}).status, 204)
+	state, _ := e.relay.State(e.ctx)
+	if len(state.Pairings) != 1 || state.Pairings[0].Digest != "fp-a" {
+		t.Fatalf("approved the wrong pairing: %+v", state.Pairings)
+	}
+	expect(t, scalar[string](e.env, "SELECT device_id FROM computer_runtime"), "device-"+strings.TrimPrefix(label, "axp:"))
+}
+
+// Stopped while its place was being opened: the remote agent is never sent
+// the prompt, and what was opened for it is cleaned up.
+func TestARunStoppedWhileItsPlaceOpensIsNeverSent(t *testing.T) {
+	e := newTaskEnv(t)
+	computer, _ := e.computer("laptop", "paseo")
+	e.create(remoteAssignee(computer, "paseo", newWorktree))
+	run := e.task("1").Runs[0]
+	e.relay.before = func(method string) {
+		if method == "paseo.agents.create" {
+			if r := e.post("/tasks/1/runs/"+run.ID+"/interrupt", nil); r.status != 200 {
+				t.Errorf("interrupt: %d %s", r.status, r.body)
+			}
+		}
+	}
+	e.runner.Tick(e.ctx)
+	e.relay.before = nil
+	expect(t, e.task("1").Runs[0].Status, "cancelled")
+	if slices.Contains(e.relay.calls, "paseo.agents.send") {
+		t.Fatalf("a cancelled run was sent its prompt: %v", e.relay.calls)
+	}
+	expect(t, scalar[bool](e.env, "SELECT closed_at IS NOT NULL FROM task_session"), true)
+	if !slices.Contains(e.relay.calls, "paseo.workspaces.archive") {
+		t.Fatalf("the worktree opened for it stays: %v", e.relay.calls)
+	}
+}
+
+// The runner is stopped (a deploy) while it opens a place: the start still
+// finishes and is recorded, so the next runner does not open another.
+func TestAStartFinishesWhenTheRunnerIsStopped(t *testing.T) {
+	e := newTaskEnv(t)
+	computer, _ := e.computer("laptop", "paseo")
+	e.create(remoteAssignee(computer, "paseo", newWorktree))
+	ctx, stop := context.WithCancel(e.ctx)
+	e.relay.before = func(method string) {
+		if method == "paseo.workspaces.create" {
+			stop()
+		}
+	}
+	e.runner.Tick(ctx)
+	e.relay.before = nil
+	expect(t, e.task("1").Runs[0].Status, "running")
+	e.runner.Tick(e.ctx)
+	opened := 0
+	for _, call := range e.relay.calls {
+		if call == "paseo.workspaces.create" || call == "paseo.agents.create" {
+			opened++
+		}
+	}
+	expect(t, opened, 2) // one worktree, one agent
+	_, agent := e.relay.only(t)
+	expect(t, len(agent.inputs), 1)
+}
+
+// A runner that died while opening a place (no record of what it opened)
+// fails the run rather than open a second place.
+func TestARunInterruptedWhileOpeningFailsInsteadOfOpeningAgain(t *testing.T) {
+	e := newTaskEnv(t)
+	computer, _ := e.computer("laptop", "paseo")
+	e.create(remoteAssignee(computer, "paseo", newWorktree))
+	e.exec("UPDATE task_run SET status = 'starting', opening_at = now()")
+	e.runner.Tick(e.ctx)
+	run := e.task("1").Runs[0]
+	expect(t, run.Status, "failed")
+	if run.Error == nil || !strings.Contains(*run.Error, "中断") {
+		t.Fatalf("error %v", run.Error)
+	}
+	for _, call := range e.relay.calls {
+		if strings.HasSuffix(call, ".create") {
+			t.Fatalf("opened again: %v", e.relay.calls)
+		}
 	}
 }
 

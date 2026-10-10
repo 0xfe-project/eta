@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/akarachen/axp/apps/control-plane/internal/api"
@@ -236,7 +237,11 @@ func runController(ctx context.Context, s *services, interval time.Duration) err
 	if err != nil {
 		return err
 	}
-	defer func() { lock.Close(context.Background()) }()
+	defer func() {
+		if lock != nil { // nil when stopped while taking it again
+			lock.Close(context.Background())
+		}
+	}()
 	// The tick in progress always finishes, even after SIGTERM: it may be
 	// stopping a runtime.
 	work := context.WithoutCancel(ctx)
@@ -259,18 +264,30 @@ func runController(ctx context.Context, s *services, interval time.Duration) err
 		RuntimeGatewayURL: s.cfg.RuntimeGatewayURL, NATSURL: s.cfg.NATSURL, CodexLaunch: s.cfg.CodexLaunch,
 		ID: "controller-" + uuid.NewString()[:8], HostID: control.HostID(),
 	}
-	// Remote agents' runs, on their own loop: relay calls take seconds.
-	go (&tasks.Runner{DB: s.deps.DB, Service: s.deps.Tasks}).Loop(ctx, 2*time.Second)
+	// Remote agents' runs, on their own loop: relay calls take seconds. It
+	// runs only while this controller holds the lock (a computer's capacity
+	// assumes one runner), and is waited for: a start under way finishes.
+	runner := &tasks.Runner{DB: s.deps.DB, Service: s.deps.Tasks}
+	var running sync.WaitGroup
+	startRunner := func() context.CancelFunc {
+		runnerCtx, stop := context.WithCancel(ctx)
+		running.Go(func() { runner.Loop(runnerCtx, 2*time.Second) })
+		// Stopping twice is fine.
+		return func() { stop(); running.Wait() }
+	}
+	stopRunner := startRunner()
 	slog.Info("Controller started", "controller", controller.ID)
 	for ctx.Err() == nil {
 		// A database restart drops the session and its lock: take it again
 		// (waiting for any controller that got it meanwhile) before going on.
 		if lock.Ping(work) != nil {
 			slog.Warn("Lost the controller lock; waiting for it again")
+			stopRunner()
 			lock.Close(context.Background())
 			if lock, err = holdLock(ctx, s.cfg.DatabaseURL); err != nil {
 				break
 			}
+			stopRunner = startRunner()
 		}
 		controller.Tick(work)
 		select {
@@ -278,6 +295,7 @@ func runController(ctx context.Context, s *services, interval time.Duration) err
 		case <-time.After(interval):
 		}
 	}
+	stopRunner()
 	slog.Info("Controller stopped", "controller", controller.ID)
 	return nil
 }

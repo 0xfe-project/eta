@@ -23,14 +23,16 @@
 
 按最长前缀匹配，不改写路径，保留浏览器的 `Host`：
 
-| 前缀           | 上游           |
-| -------------- | -------------- |
-| `/api/llm/`    | llm-gateway    |
-| `/api/memory/` | memory-service |
-| `/observe/`    | OpenObserve    |
-| `/api/`        | control-plane  |
-| `/remote/`     | control-plane  |
-| `/`            | web            |
+| 前缀             | 上游            |
+| ---------------- | --------------- |
+| `/api/llm/`      | llm-gateway     |
+| `/api/memory/`   | memory-service  |
+| `/api/forge/`    | forge-service   |
+| `/api/routines/` | routine-service |
+| `/observe/`      | OpenObserve     |
+| `/api/`          | control-plane   |
+| `/remote/`       | control-plane   |
+| `/`              | web             |
 
 - 删除客户端发来的所有 `X-AXP-*` 头。
 - 每个请求生成新的 `X-Request-Id`，转发给上游并写回响应；control-plane 的错误体 `request_id` 与之一致。
@@ -44,8 +46,9 @@
 - `/internal/*` 原样转发给内部运行协议，由它自己认证 runtime：令牌由它签发，换代后的旧实例也由它拒绝（`409 STALE_GENERATION`）。
 - 其余路由（llm-gateway 的 `/v1/*` 和 memory-service 的 `/memory/*`）先用 `forward_auth` 问内部运行协议 `GET /internal/v1/runtime-auth`：runtime 的 key 是 `<实例 ID>.<令牌>`，有效时返回 204 和 `X-AXP-Agent-Id`。网关用这个值替换请求里的同名头（runtime 自己设的会被覆盖），删掉 `Authorization` 后转发；无效时把 403/409 原样返回给 runtime。
 - `/tasks/*`（tasks 插件的 MCP，见[任务与远程电脑](tasks.md)）同样经 `forward_auth`，转发给内部运行协议服务。
+- `/forge/*`（git 和 gh 的 GitHub 凭据、`open_pull_request`，见 [forge](forge.md)）同样经 `forward_auth`，转发给 forge-service。
 - 后面的服务只读 `X-AXP-Agent-Id`，自己不持有任何凭据；新增一个给 runtime 用的服务只是在 `runtime.caddy` 里加一条路由。
 
 ## 配置与检查
 
-所有地址都有生产默认值（Kamal 网络别名），`scripts/dev.sh` 用环境变量覆盖：`AXP_GATEWAY_BIND`/`PORT`、`AXP_RUNTIME_GATEWAY_BIND`/`PORT`、`AXP_UPSTREAM_{WEB,API,LLM,MEMORY,OBSERVE,INTERNAL}`；`AXP_GATEWAY_SITES` 选择加载的站点（默认全部）。Caddy 的版本在 `deploy/Dockerfile`、`deploy/deploy.yml`（`s3-proxy`）、`scripts/dev.sh` 和 `apps/gateway/package.json` 中保持一致。`bun run lint` 用这个版本检查格式（`caddy fmt`）并校验配置（`caddy validate`）。
+所有地址都有生产默认值（Kamal 网络别名），`scripts/dev.sh` 用环境变量覆盖：`AXP_GATEWAY_BIND`/`PORT`、`AXP_RUNTIME_GATEWAY_BIND`/`PORT`、`AXP_UPSTREAM_{WEB,API,LLM,MEMORY,FORGE,ROUTINES,OBSERVE,INTERNAL}`；`AXP_GATEWAY_SITES` 选择加载的站点（默认全部）。Caddy 的版本在 `deploy/Dockerfile`、`deploy/deploy.yml`（`s3-proxy`）、`scripts/dev.sh` 和 `apps/gateway/package.json` 中保持一致。`bun run lint` 用这个版本检查格式（`caddy fmt`）并校验配置（`caddy validate`）。

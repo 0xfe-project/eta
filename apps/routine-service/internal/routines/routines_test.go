@@ -111,3 +111,53 @@ func TestNATSSchedulesAndFires(t *testing.T) {
 		t.Fatalf("%d messages left", info.State.Msgs)
 	}
 }
+
+// Fires that piled up in the stream while the service was down are not made
+// up when it starts: only fires from then on start runs.
+func TestFiresFromBeforeTheServiceStartedAreDropped(t *testing.T) {
+	url := os.Getenv("AXP_TEST_NATS_URL")
+	if url == "" {
+		t.Skip("AXP_TEST_NATS_URL is not set")
+	}
+	defer func(d time.Duration) { staleFire = d }(staleFire)
+	staleFire = 500 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	n, err := ConnectNATS(ctx, url, os.Getenv("AXP_TEST_NATS_PASSWORD"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer n.Close()
+	// Down: a schedule's fire and a "run now" wait in the stream.
+	missed, asked := uuid.NewString(), uuid.NewString()
+	if _, err := n.js.Publish(ctx, fireSubject(missed), []byte(`{}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := n.Fire(ctx, asked); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(time.Second)
+	// Up again.
+	fired := make(chan string, 4)
+	go n.Consume(ctx, func(_ context.Context, id string, _ bool) error { //nolint:errcheck
+		fired <- id
+		return nil
+	})
+	fresh := uuid.NewString()
+	if err := n.Fire(ctx, fresh); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case got := <-fired:
+		if got != fresh {
+			t.Fatalf("a fire from before the start ran: %s", got)
+		}
+	case <-ctx.Done():
+		t.Fatal("the new fire never ran")
+	}
+	select {
+	case got := <-fired:
+		t.Fatalf("another fire ran: %s", got)
+	case <-time.After(300 * time.Millisecond):
+	}
+}
