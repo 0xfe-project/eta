@@ -147,4 +147,5 @@ Paseo 归档 worktree 时不检查未提交的改动，未提交的内容会丢�
 
 - `apps/control-plane/internal/api/tasks_test.go`：用假的中继（Paseo 和 Herdr connector）覆盖接入（安装码只能用一次、按名字配对、批准、在线）、工作位置的查询、Paseo 新 worktree 从派发到完成和收尾（归档工作区）、已有工作区只归档 agent、Herdr 在新 worktree 的 tab 里运行（环境变量带任务 ID、自动确认 Claude 的信任对话框、有未提交改动时保留 worktree）、按目录找当前任务、提醒一次后失败、停止、改派、backlog、指派的校验、电脑之间的隔离，以及 AXP 智能体经 MCP 使用看板。
 - `apps/control-plane/internal/relay`、`apps/remote`：MCP 应答的解析（JSON 与 SSE）、当前任务的来源。
+- 切到上游 agenvo（`c7ca5dc`）并把中继放到 `/remote/relay` 下之后，在开发环境里用真实的中继、本机的 Paseo 和独立的 Herdr server（Claude）走过：带安装码的 `axp setup` 经 `/remote/relay` 配对并批准、控制面经 `execute` 读取两边的工作位置、Herdr 新 worktree 里完成一个任务（完全权限启动、自动确认信任对话框、智能体提交并回报）以及 done 后的收尾；把开发实例换到另一个端口后，不带安装码的 `axp setup` 把已配对的 connector 改到新地址，不重新配对即上线；注册服务时重跑 setup 会重启服务。没有在这一版上跑 Paseo 任务（Paseo 方法与之前相同），开发环境里注册为服务的 connector 不带开发中继的 CA，连不上自签证书的中继（生产不受影响）。
 - 在开发环境里，用合入了 #3、#4 的 agenvo 构建、真实的中继、本机的 Paseo（Claude）和 Herdr（Claude）走过：运行安装命令、在设置里核对指纹并批准、读取工作位置、在 Paseo 新 worktree 和 Herdr 新 worktree 里各完成一个任务（Herdr 自动确认了 Claude 的信任对话框）、在 Herdr 已有工作区的新 tab 里完成一个任务，以及三者在 done 后的收尾。
