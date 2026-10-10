@@ -60,6 +60,7 @@ import {
   useDraftPlaces,
 } from "./assignee-draft";
 import { AssigneeFields } from "./assignee-picker";
+import { BackToTop } from "./back-to-top";
 import { when } from "./routine-format";
 import { Select, SelectOption } from "./select-field";
 import {
@@ -1204,7 +1205,8 @@ export function EditableTitle({
         <button
           type="button"
           title="修改标题"
-          className="cursor-text text-left outline-none focus-visible:underline"
+          // Kept in view while the task scrolls, so a long title stays short.
+          className="line-clamp-2 cursor-text text-left outline-none focus-visible:underline"
           onClick={() => {
             setTitle(task.title);
             setEditing(true);
@@ -1367,50 +1369,54 @@ function TaskView({ task }: { task: TaskDetail }) {
   const [, setNav] = useTaskNav();
   const remove = useDeleteTask();
   return (
-    <article className="space-y-4">
-      <header className="space-y-1">
-        <div className="flex items-center justify-between gap-2">
-          <Back label="任务" onClick={() => void setNav({ task: null })} />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-sm" aria-label="更多">
-                <DotsThreeIcon aria-hidden="true" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                variant="destructive"
-                onSelect={() =>
-                  remove.mutate(task.id, {
-                    onSuccess: () => void setNav({ task: null }),
-                    onError: showError,
-                  })
-                }
-              >
-                删除
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        <EditableTitle key={task.title} task={task} />
-        <p className="text-xs text-muted-foreground tabular-nums">
-          #{task.number} · {createdBy(task)}
-        </p>
-      </header>
-      <TaskProperties task={task} className="bg-muted/50 px-3 py-2" />
-      <Question task={task} />
-      <Description key={task.description} task={task} fold />
-      <section aria-labelledby="task-activity" className="space-y-3">
-        <h3
-          id="task-activity"
-          className="text-xs font-medium text-muted-foreground"
-        >
-          动态
-        </h3>
-        <Timeline task={task} />
-        <CommentBox task={task} />
-      </section>
-    </article>
+    <>
+      <article className="space-y-4">
+        {/* Pinned to the panel's edge, over its padding (p-3), as the rest scrolls. */}
+        <header className="sticky -top-3 z-10 -mx-3 -mt-3 mb-2 space-y-1 bg-background px-3 pt-3 pb-2">
+          <div className="flex items-center justify-between gap-2">
+            <Back label="任务" onClick={() => void setNav({ task: null })} />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon-sm" aria-label="更多">
+                  <DotsThreeIcon aria-hidden="true" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  variant="destructive"
+                  onSelect={() =>
+                    remove.mutate(task.id, {
+                      onSuccess: () => void setNav({ task: null }),
+                      onError: showError,
+                    })
+                  }
+                >
+                  删除
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          <EditableTitle key={task.title} task={task} />
+          <p className="text-xs text-muted-foreground tabular-nums">
+            #{task.number} · {createdBy(task)}
+          </p>
+        </header>
+        <TaskProperties task={task} className="bg-muted/50 px-3 py-2" />
+        <Question task={task} />
+        <Description key={task.description} task={task} fold />
+        <section aria-labelledby="task-activity" className="space-y-3">
+          <h3
+            id="task-activity"
+            className="text-xs font-medium text-muted-foreground"
+          >
+            动态
+          </h3>
+          <Timeline task={task} />
+          <CommentBox task={task} />
+        </section>
+      </article>
+      <BackToTop />
+    </>
   );
 }
 
