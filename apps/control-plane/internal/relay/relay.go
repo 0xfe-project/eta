@@ -1,6 +1,6 @@
 // Package relay is the control plane's client for the agenvo relay
-// (vendor/agenvo, unmodified), which connects remote computers' coding
-// runtimes (docs/architecture/tasks.md).
+// (vendor/agenvo, our fork AkaraChen/agenvo), which connects remote
+// computers' coding runtimes (docs/architecture/tasks.md).
 //
 // The relay has two surfaces, both reached on the internal network:
 //

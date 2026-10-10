@@ -2,12 +2,13 @@
 #
 #   public.caddy   the browser's single same-origin entry
 #   runtime.caddy  agent runtimes' only route to the internal API, the LLM
-#                  gateway and the memory service; it authenticates each
-#                  runtime once for them
+#                  gateway, the memory service and the forge service; it
+#                  authenticates each runtime once for them
 #
 # Upstreams trust the network instead of a shared secret: only the public
-# gateway reaches web, api, llm and the memory service's /api, and runtimes
-# (on their own network) reach only the runtime gateway. AXP_GATEWAY_SITES
+# gateway reaches web, api, llm, OpenObserve and the memory, forge and
+# routine services' /api, and runtimes (on their own network) reach only the
+# runtime gateway, S3, NATS and the OpenTelemetry Collector. AXP_GATEWAY_SITES
 # picks the sites to serve; every address defaults to production's and
 # scripts/dev.sh overrides them.
 {

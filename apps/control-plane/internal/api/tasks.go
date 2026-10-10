@@ -64,6 +64,10 @@ type ComputerIn struct {
 	Name string `json:"name" minLength:"1" maxLength:"100"`
 }
 
+type ApproveIn struct {
+	Fingerprint string `json:"fingerprint" minLength:"1" maxLength:"200" doc:"The fingerprint the user compared with setup's output; only that pairing is approved."`
+}
+
 type ComputerPath struct {
 	ComputerID string `path:"computer_id"`
 }
@@ -132,7 +136,7 @@ func registerTasks(api huma.API, d *Deps) {
 			Body TaskIn
 		}) (*idempotency.Response[tasks.TaskDetail], error) {
 			b := in.Body
-			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, b, func(tx pgx.Tx) (idempotency.Result[tasks.TaskDetail], error) {
+			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, b, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[tasks.TaskDetail], error) {
 				t, err := s.Create(ctx, tx, tasks.Input{
 					Title: b.Title, Description: b.Description, Status: b.Status, Assignee: b.Assignee,
 				}, tasks.User)
@@ -174,7 +178,7 @@ func registerTasks(api huma.API, d *Deps) {
 			TaskPath
 			Body CommentIn
 		}) (*idempotency.Response[tasks.TaskDetail], error) {
-			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(tx pgx.Tx) (idempotency.Result[tasks.TaskDetail], error) {
+			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[tasks.TaskDetail], error) {
 				t, err := s.Comment(ctx, tx, in.TaskID, in.Body.Body, tasks.User)
 				if err != nil {
 					return idempotency.Result[tasks.TaskDetail]{}, err
@@ -253,8 +257,9 @@ func registerTasks(api huma.API, d *Deps) {
 		func(ctx context.Context, in *struct {
 			ComputerPath
 			Kind string `path:"kind" enum:"paseo,herdr"`
+			Body ApproveIn
 		}) (*struct{}, error) {
-			return nil, s.Approve(ctx, d.DB, in.ComputerID, in.Kind)
+			return nil, s.Approve(ctx, d.DB, in.ComputerID, in.Kind, in.Body.Fingerprint)
 		})
 
 	huma.Register(api, taskOp("deleteComputer", http.MethodDelete, "/api/v1/computers/{computer_id}",

@@ -62,7 +62,7 @@ agent 原样重新执行这条命令
 
 ## 验证
 
-- `apps/agent-runtime/tests/test_hooks.py`：用 akhook 跑规则文件（需要先构建 `vendor/akhook`，否则跳过）；`approval` 插件经 MCP 内存客户端完成 elicitation 与授权。
+- `apps/agent-runtime/tests/test_hooks.py`：用 akhook 跑规则文件。测试依赖 `@axp/akhook#build`（`scripts/build/akhook.sh`，从 `vendor/akhook` 编译到 `packages/akhook/out/akhook`，结果进 Turbo 缓存）；本地没有 Rust 时跳过，`CI=1` 时找不到 akhook 直接失败。ADK 那边的 `packages/plugins-go/adk` 同理；`approval` 插件经 MCP 内存客户端完成 elicitation 与授权。
 - 用真实的 Codex（0.160.1）在镜像里按上图完整跑通过一次：受管 hook 拦下命令，拒绝理由原样交给模型，模型经 `tool_search` 调用 `request_approval`，`on-request` 策略下 Codex 把 elicitation 转给客户端，同意后重试的命令成功。
 
 ## 为什么不用 Codex 自带的 execpolicy

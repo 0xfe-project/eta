@@ -102,6 +102,8 @@ TanStack 的 `src/routeTree.gen.ts` 由 `dev` 或 `build` 自动生成；控制�
 2. dprint 格式化暂存的文件并重新暂存。
 3. Turbo 运行构建、类型检查、lint 和测试，没变的部分直接用缓存。
 
+GitHub Actions（`.github/workflows/ci.yml`）在每个 PR 和推到 `main` 时跑 `bun run check`：squash 合并、`--no-verify` 和机器人推送都绕不过它。CI 里设了 `CI=1`（缺 akhook 等工具的测试失败而不是跳过）和 `AXP_TEST_NATS_URL`（真实 NATS 的测试也跑），PostgreSQL 仍由测试自己通过 `scripts/dev-postgres.sh` 启动。
+
 ## 日志
 
 三种语言的服务都走 OpenTelemetry：Go 用 `log/slog`（`packages/telemetry-go`），Python 用标准库 `logging`（`packages/telemetry-py`），Web 服务端用 LogTape（`apps/web/src/server/telemetry.ts`）。llm-gateway 内嵌的 CLIProxyAPI 会自己打印到 stdout，这些行也被逐行转成日志（`library=cliproxy`）。每条日志同时：
