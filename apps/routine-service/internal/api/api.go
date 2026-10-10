@@ -178,5 +178,7 @@ func New(d *Deps) *httpapi.API {
 			}
 			return out, err
 		})
+	// Chat agents' routines plugin (MCP), through the runtime gateway.
+	api.Router.Handle("/routines/mcp", routinesMCP(d))
 	return api
 }

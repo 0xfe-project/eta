@@ -68,7 +68,7 @@ runtime 启动时安装选中的插件、在副本里填入 `${AXP_GATEWAY_URL}`
 - 各插件的 `skills/` 合成一个 skill toolset。
 - 带 `akhook.yml` 的插件，规则写进本次运行目录里的一份 akhook 配置，由 akhook 的 ADK 回调（`github.com/aghub-app/akhook/go/adk`）运行：每次 invocation 开始时 `prompt_submit` 补充的上下文进入 system instruction，结束时运行 `stop`。命令只拿到 `PATH`、`HOME` 和三个 `AXP_*` 变量。服务所在环境没有 akhook 时，带 hook 的插件和缺命令的插件一样被跳过并记警告。
 
-`${AXP_GATEWAY_URL}` 是服务在 loopback 上开的代理：它只接受正在运行的运行的 key，把 `/v1` 以 `X-AXP-Agent-Id: routine-<id>` 转发给 LLM 网关，用量记在定时任务名下。需要控制面身份的插件（memory、tasks、github 经 runtime 网关向控制面校验 key）暂不标 `routine`。
+`${AXP_GATEWAY_URL}` 是服务在 loopback 上开的代理：它只接受正在运行的运行的 key，把 `/v1` 以 `X-AXP-Agent-Id: routine-<id>` 转发给 LLM 网关，用量记在定时任务名下。需要控制面身份的插件（memory、tasks、github、routines 经 runtime 网关向控制面校验 key）暂不标 `routine`。
 
 构建应用镜像时运行 `axp-plugins setup routine`，把 routine 插件要用的可执行文件（如 `grok-api`）装进镜像（`deploy/Dockerfile`）；服务启动时跳过命令不存在的插件并记警告。
 
@@ -80,4 +80,5 @@ runtime 启动时安装选中的插件、在副本里填入 `${AXP_GATEWAY_URL}`
 | github   | chat          | GitHub App 的 git、gh 凭据与 `open_pull_request`（[代码托管](forge.md)）                  |
 | grok     | chat、routine | [grok-api](https://github.com/AkaraChen/grok-api)：Grok Imagine 图像和视频，网页和 X 搜索 |
 | memory   | chat          | 长期记忆（[记忆](memory.md)），带 recall / capture hook                                   |
+| routines | chat          | 定时任务（[定时任务](routines.md)）：列出、查看报告、新建和修改                           |
 | tasks    | chat          | 任务看板（[任务与远程电脑](tasks.md)）                                                    |
