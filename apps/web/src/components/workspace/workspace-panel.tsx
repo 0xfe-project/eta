@@ -4,7 +4,6 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { usePendingInteractions } from "@/queries/chat";
 import { Inbox } from "./inbox";
 import { MemoryView } from "./memory-view";
 import { Overview } from "./overview";
@@ -14,6 +13,7 @@ import { Routines } from "./routines";
 import { useTaskNav } from "./task-nav";
 import { Tasks } from "./tasks";
 import { useAgents } from "./use-agents";
+import { useAttention } from "./use-attention";
 import { hasPage, sectionPaths, views } from "./workspace-search";
 
 /** Opens the full window where the side panel is: its tab, task or routine. */
@@ -55,7 +55,7 @@ export function WorkspacePanel({
   onViewChange: (view: WorkspaceView) => void;
   className?: string;
 }) {
-  const pending = usePendingInteractions().length;
+  const pending = useAttention().total;
   const { current } = useAgents();
   return (
     <Tabs

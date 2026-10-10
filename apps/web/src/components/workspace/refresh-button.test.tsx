@@ -78,11 +78,11 @@ async function render(page: "tasks" | "routines", panel = false) {
   const client = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity, retry: false } },
   });
-  client.setQueryData(
-    [page],
-    page === "tasks" ? { tasks: [task], assignees: [] } : [routine],
-  );
+  // Both lists: the panel's 待处理 badge reads both.
+  client.setQueryData(["tasks"], { tasks: [task], assignees: [] });
+  client.setQueryData(["routines"], [routine]);
   client.setQueryData(["tasks", "t1"], detail);
+  client.setQueryData(["routines", "r1"], routine);
   client.setQueryData(["chat"], { agents: [], interactions: [], messages: [] });
   const container = document.createElement("div");
   document.body.append(container);
@@ -178,19 +178,24 @@ describe.each([false, true])("refresh (sidebar: %s)", (panel) => {
   it("refreshes the shared routine query and selected report without changing navigation or feedback", async () => {
     navigation.routine = "r1";
     navigation.run = "run1";
-    const fetch = rstest.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          routines: [
-            {
-              ...routine,
-              name: "最新计划",
-              runs: [{ ...routine.runs[0], report: "最新报告" }],
-            },
-          ],
-        }),
-      ),
-    );
+    const latest = {
+      ...routine,
+      name: "最新计划",
+      runs: [{ ...routine.runs[0], report: "最新报告" }],
+    };
+    // The list in summary, the routine's page in full.
+    const fetch = rstest
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(
+        async (input) =>
+          new Response(
+            JSON.stringify(
+              (input as Request).url.endsWith("/r1")
+                ? latest
+                : { routines: [latest] },
+            ),
+          ),
+      );
     const container = await render("routines", panel);
     const input = container.querySelector<HTMLTextAreaElement>(
       'textarea[aria-label="反馈"]',
@@ -207,8 +212,13 @@ describe.each([false, true])("refresh (sidebar: %s)", (panel) => {
       refresh(container).click();
       await settle();
     });
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect((fetch.mock.calls[0][0] as Request).method).toBe("GET");
+    // The detail and the list: the panel's 待处理 badge keeps the list on.
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(
+      fetch.mock.calls.every(
+        ([request]) => (request as Request).method === "GET",
+      ),
+    ).toBe(true);
     expect(container.textContent).toContain("最新计划");
     expect(container.textContent).toContain("最新报告");
     expect(input.value).toBe("保留反馈草稿");
@@ -234,7 +244,8 @@ describe.each([false, true])("refresh (sidebar: %s)", (panel) => {
       refresh(container).click();
       await settle();
     });
-    expect(fetch).toHaveBeenCalledTimes(panel ? 1 : 2);
+    // The detail and the list: the panel's 待处理 badge keeps the list on.
+    expect(fetch).toHaveBeenCalledTimes(2);
     expect(
       fetch.mock.calls.every(
         ([request]) => (request as Request).method === "GET",

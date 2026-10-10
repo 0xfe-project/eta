@@ -19,6 +19,8 @@ import (
 	"github.com/akarachen/axp/apps/routine-service/migrations"
 	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/akarachen/axp/packages/service-go/pg/pgtest"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
@@ -269,10 +271,13 @@ func (e *env) runNow(routine routines.Routine, script ...*genai.Content) string 
 	return scalar[string](e, "SELECT id::text FROM routine_run WHERE routine_id = $1 ORDER BY started_at DESC LIMIT 1", routine.ID)
 }
 
+// shown is the first routine's page.
 func (e *env) shown() routines.Routine {
 	var list RoutineList
 	e.do(http.MethodGet, "/routines", nil).json(e.t, &list)
-	return list.Routines[0]
+	var routine routines.Routine
+	e.do(http.MethodGet, "/routines/"+list.Routines[0].ID, nil).json(e.t, &routine)
+	return routine
 }
 
 func finishCall(report any, handoff string) *genai.Content {
@@ -381,6 +386,83 @@ func TestRunFinishesWithAReport(t *testing.T) {
 	}
 	if !strings.HasPrefix(first.Contents[0].Parts[0].Text, "现在是") {
 		t.Fatalf("prompt %q", first.Contents[0].Parts[0].Text)
+	}
+}
+
+// The list has each routine's last runs in summary, never their reports;
+// the routine's page has them.
+func TestTheListIsASummary(t *testing.T) {
+	e := newEnv(t)
+	routine := e.create(news())
+	e.runNow(routine, finishCall("# 今日要闻\n\n很长的正文", "交接"))
+	list := e.do(http.MethodGet, "/routines", nil)
+	if strings.Contains(string(list.body), "很长的正文") || strings.Contains(string(list.body), "每天整理科技新闻") {
+		t.Fatalf("the list carries reports or briefs: %s", list.body)
+	}
+	var shown RoutineList
+	list.json(t, &shown)
+	expect(t, shown.Routines[0].Runs[0].Status, "sent")
+	expect(t, *shown.Routines[0].Runs[0].Title, "今日要闻")
+	expect(t, shown.Routines[0].Revising, false)
+	expect(t, *e.shown().Runs[0].Report, "# 今日要闻\n\n很长的正文")
+	expect(t, e.do(http.MethodGet, "/routines/"+uuid.NewString(), nil).status, 404)
+}
+
+// counting is a database that counts the statements run on it.
+type counting struct {
+	pg.DB
+	n int
+}
+
+func (c *counting) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	c.n++
+	return c.DB.Query(ctx, sql, args...)
+}
+
+func (c *counting) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	c.n++
+	return c.DB.QueryRow(ctx, sql, args...)
+}
+
+func TestListingTakesTheSameQueriesForAnyNumberOfRoutines(t *testing.T) {
+	e := newEnv(t)
+	service := &routines.Service{Schedules: e.schedules, Models: e.catalog}
+	queries := func() int {
+		db := &counting{DB: pool}
+		if _, err := service.List(context.Background(), db); err != nil {
+			t.Fatal(err)
+		}
+		return db.n
+	}
+	e.runNow(e.create(news()), finishCall("# 一", ""))
+	one := queries()
+	for range 4 {
+		e.runNow(e.create(news()), finishCall("# 又一", ""))
+	}
+	expect(t, queries(), one)
+	expect(t, one, 4)
+}
+
+// A report or a failure the user has not seen waits for them until they
+// open the routine.
+func TestUnseenRunsWaitForTheUser(t *testing.T) {
+	e := newEnv(t)
+	routine := e.create(news())
+	e.runNow(routine, finishCall("# 今日要闻", ""))
+	e.llm.script = func(*model.LLMRequest, int) (*genai.Content, error) { return nil, errors.New("down") }
+	e.post("/routines/"+routine.ID+"/run", nil)
+	e.tick()
+	unseen := func() (int64, int64) {
+		var list RoutineList
+		e.do(http.MethodGet, "/routines", nil).json(t, &list)
+		return list.Routines[0].UnseenReports, list.Routines[0].UnseenFailures
+	}
+	if reports, failures := unseen(); reports != 1 || failures != 1 {
+		t.Fatalf("unseen %d reports, %d failures", reports, failures)
+	}
+	expect(t, e.post("/routines/"+routine.ID+"/seen", nil).status, 204)
+	if reports, failures := unseen(); reports != 0 || failures != 0 {
+		t.Fatalf("still unseen %d, %d", reports, failures)
 	}
 }
 

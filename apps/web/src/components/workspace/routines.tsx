@@ -1,4 +1,11 @@
-import type { BriefVersion, Routine, Run, RunStatus } from "@/queries/routines";
+import type {
+  BriefVersion,
+  ListedRun,
+  Routine,
+  RoutineSummary,
+  Run,
+  RunStatus,
+} from "@/queries/routines";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
 import { CaretLeftIcon } from "@phosphor-icons/react/CaretLeft";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
@@ -6,7 +13,7 @@ import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlayIcon } from "@phosphor-icons/react/Play";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Markdown } from "@/components/markdown";
 import { Empty, LoadError, Loading } from "@/components/states";
@@ -23,6 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
   useDeleteRoutine,
+  useMarkRoutineSeen,
   useRestoreBrief,
   useRoutine,
   useRoutines,
@@ -88,7 +96,13 @@ function Back({ label, onClick }: { label: string; onClick: () => void }) {
 // --- list -----------------------------------------------------------------------
 
 /** The last runs, oldest first, on a fixed-width track. */
-function History({ runs, length = 14 }: { runs: Run[]; length?: number }) {
+function History({
+  runs,
+  length = 14,
+}: {
+  runs: ListedRun[];
+  length?: number;
+}) {
   const recent = runs.slice(0, length).reverse();
   return (
     <span
@@ -106,7 +120,7 @@ function History({ runs, length = 14 }: { runs: Run[]; length?: number }) {
   );
 }
 
-function NextRun({ routine }: { routine: Routine }) {
+function NextRun({ routine }: { routine: RoutineSummary }) {
   if (routine.runs[0]?.status === "running")
     return (
       <span className="inline-flex items-center gap-1.5 text-foreground">
@@ -434,6 +448,12 @@ export function RoutineDetail({
   const [brief] = routine.briefs;
   const [expanded, setExpanded] = useState(false);
   const running = routine.runs[0]?.status === "running";
+  // Opened: its reports and failures so far are seen.
+  const finished = routine.runs.find((run) => run.finished_at)?.id;
+  const { mutate: markSeen } = useMarkRoutineSeen();
+  useEffect(() => {
+    if (finished) markSeen(routine.id);
+  }, [routine.id, finished, markSeen]);
   return (
     <div className="space-y-4">
       <div>
