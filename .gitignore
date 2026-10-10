@@ -19,3 +19,6 @@ var/
 out/
 .turbo/
 .claude/settings.local.json
+
+# Turborepo
+.turbo
