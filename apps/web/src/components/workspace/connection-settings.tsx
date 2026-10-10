@@ -75,8 +75,8 @@ function githubSummary(status: GitHubStatus): Summary {
     case "ready":
       return {
         summary: status.user
-          ? `以 ${status.user.login} 的名义打开 PR，以 ${status.app?.slug}[bot] 的身份推送代码`
-          : `以 ${status.app?.slug}[bot] 的身份推送代码和打开 PR`,
+          ? `智能体以 ${status.user.login} 的名义使用 GitHub`
+          : `智能体以 ${status.app?.slug}[bot] 的身份使用 GitHub`,
       };
     case "not_installed":
       return { summary: "App 已创建，还需安装到仓库", todo: "待安装" };
@@ -84,7 +84,7 @@ function githubSummary(status: GitHubStatus): Summary {
       return { summary: status.error?.message ?? "连接出错", todo: "出错" };
     default:
       return {
-        summary: "推送代码、以 App 身份打开 PR、读取 CI",
+        summary: "推送代码、处理 PR、创建仓库、读取 CI",
         todo: "未连接",
       };
   }
@@ -112,7 +112,7 @@ function useReturnFromGitHub(onReturn: (error: string | undefined) => void) {
     if (!error && params.get("github") === "created")
       toast.success("GitHub App 已创建");
     else if (!error && params.get("github") === "authorized")
-      toast.success("已授权，PR 将以你的名义打开");
+      toast.success("已授权，智能体将以你的名义使用 GitHub");
     else if (!error && params.get("setup_action"))
       toast.success("已在 GitHub 上安装 App");
     for (const name of RETURN_PARAMS) params.delete(name);
@@ -137,7 +137,7 @@ function GitHubConnection() {
     ? githubSummary(status)
     : error
       ? { summary: "无法加载连接状态", todo: "出错" }
-      : { summary: "推送代码、以 App 身份打开 PR、读取 CI" };
+      : { summary: "推送代码、处理 PR、创建仓库、读取 CI" };
 
   return (
     <>

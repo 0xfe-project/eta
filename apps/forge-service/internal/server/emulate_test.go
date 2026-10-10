@@ -19,7 +19,11 @@ package server
 //     (mergeFault), and who called it is recorded (mergers);
 //   - a repository's permissions, which emulate always reports as all
 //     true, can be made GitHub's for a test (setRepoPermissions): all false
-//     for an installation token, the user's own for the user's token.
+//     for an installation token, the user's own for the user's token;
+//   - an installation token cannot create a repository in a user's account
+//     (POST /user/repos gets 403, as GitHub answers an App installed on a
+//     personal account even with administration: write); the user's token
+//     can.
 
 import (
 	"bytes"
@@ -284,6 +288,9 @@ func (e *githubEmulator) handler() http.Handler {
 			return
 		case r.Method == http.MethodPut && strings.HasSuffix(path, "/merge") && e.mergeFault(w, r, proxy):
 			return
+		case r.Method == http.MethodPost && path == "/user/repos" && e.installationToken(r):
+			reply(w, http.StatusForbidden, map[string]any{"message": "Resource not accessible by integration"})
+			return
 		case r.Method == http.MethodPost && strings.HasSuffix(path, "/pulls"):
 			if e.duplicatePull(w, r) {
 				return
@@ -411,6 +418,13 @@ func (e *githubEmulator) revokeGrant(w http.ResponseWriter, r *http.Request) {
 
 // revoke makes GitHub refuse a user token, as when the user revokes the
 // App's authorization.
+func (e *githubEmulator) installationToken(r *http.Request) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	_, ok := e.tokens[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]
+	return ok
+}
+
 func (e *githubEmulator) revoke(token string) {
 	e.mu.Lock()
 	e.revoked[token] = true

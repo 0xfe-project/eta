@@ -10,12 +10,6 @@ version: 1
 ask_instruction: "需要用户确认。请调用 request_approval 工具（request_id 为 {request_id}）；\
   用户同意后，原样重新执行这条命令。用户拒绝时不要换个写法绕过。"
 rules:
-  - id: gh-pr-create
-    on: shell_exec
-    checks:
-      - argv: [gh, pr, create]
-    message: 推送分支后用 open_pull_request 工具开 PR。
-
   - id: akhook-approval
     on: shell_exec
     checks:
