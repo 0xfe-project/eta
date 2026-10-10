@@ -72,6 +72,7 @@ class TestRules:
             "git push origin main",
             "gh issue create -t x -b y",
             "gh api -X DELETE repos/a/b",
+            "gh repo create a/b --private",
         ],
     )
     def test_github_commands_pass(self, repo, tmp_path, command):

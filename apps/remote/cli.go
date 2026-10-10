@@ -184,25 +184,24 @@ type credentials struct {
 
 var pullURL = regexp.MustCompile(`https://github\.com/[\w.-]+/[\w.-]+/pull/\d+`)
 
-// ghCommand runs gh as AXP's GitHub App; a pull request it creates is
-// recorded as the task's deliverable. gh pr runs on behalf of the user who
-// authorized the App, when they have, so pull requests and their comments
-// show as theirs.
+// ghCommand runs gh through AXP's GitHub App: on behalf of the user who
+// authorized the App, when they have, so what it does shows as theirs (and
+// what GitHub allows only a user, such as creating a repository in their
+// account, works), else as the App's bot. A pull request it creates is
+// recorded as the task's deliverable.
 func ghCommand(args []string) error {
 	c, err := loadConfig()
 	if err != nil {
 		return err
 	}
-	path := "/remote/v1/git/credentials"
-	if len(args) >= 1 && args[0] == "pr" {
-		path += "?as=user"
-	}
 	var creds credentials
-	if err := c.call("GET", path, nil, &creds); err != nil {
+	if err := c.call("GET", "/remote/v1/git/credentials", nil, &creds); err != nil {
 		return err
 	}
 	if creds.User != "" {
 		fmt.Fprintf(os.Stderr, "axp: 以 %s 的身份（经 AXP 的 GitHub App）运行 gh\n", creds.User)
+	} else {
+		fmt.Fprintln(os.Stderr, "axp: 以 GitHub App 的 bot 身份运行 gh（用户还没有授权 App）")
 	}
 	cmd := exec.Command("gh", args...)
 	cmd.Env = append(os.Environ(), "GH_TOKEN="+creds.Token, "GITHUB_TOKEN="+creds.Token)

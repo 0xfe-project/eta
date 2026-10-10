@@ -23,8 +23,11 @@ directory or below it, which is how it knows the task; elsewhere, add
 
 ## GitHub
 
-`axp gh <args…>` runs gh as AXP's GitHub App (`axp gh pr …` in the user's
-name when they have authorized the App). Open pull requests with
+`axp gh <args…>` runs gh through AXP's GitHub App, in the user's name when
+they have authorized the App (it says so first), else as the App's bot.
+In the user's name it can do what both the user and the App can, including
+creating a repository in their account (`axp gh repo create`); the bot
+cannot create one in a personal account. Open pull requests with
 `axp gh pr create …` after pushing the branch: AXP records the pull request
 as the task's deliverable. Your git push uses this computer's own
 credentials.
