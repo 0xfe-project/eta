@@ -1,8 +1,14 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -26,5 +32,119 @@ func TestCurrentTaskComesFromTheFlagTheTabOrAXP(t *testing.T) {
 	t.Setenv("AXP_TASK_ID", "from-tab")
 	if id, _ := currentTask(c, ""); id != "from-tab" {
 		t.Fatal(id)
+	}
+}
+
+func TestTaskArgsTakeOnlyTheirFlags(t *testing.T) {
+	for _, tc := range []struct {
+		args       []string
+		task, file string
+		text       []string
+	}{
+		{args: []string{"- a", "--task", "3"}, task: "3", text: []string{"- a"}},
+		{args: []string{"-task=3", "- [x] 完成", "-v"}, task: "3", text: []string{"- [x] 完成", "-v"}},
+		{args: []string{"--file", "-", "--task", "#4"}, task: "#4", file: "-"},
+		{args: []string{"--task", "3", "--", "--file", "x", "--"}, task: "3", text: []string{"--file", "x", "--"}},
+	} {
+		a, err := parseTaskArgs(tc.args)
+		if err != nil || a.task != tc.task || a.file != tc.file || !slices.Equal(a.positional, tc.text) {
+			t.Errorf("%q: %+v %v", tc.args, a, err)
+		}
+	}
+	if _, err := parseTaskArgs([]string{"text", "--task"}); err == nil {
+		t.Error("--task without its value")
+	}
+}
+
+// remoteAXP is AXP's /remote API for a test, recording what it was sent;
+// the CLI's configuration points at it.
+func remoteAXP(t *testing.T, handle func(w http.ResponseWriter, path string, body map[string]any)) *Config {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		handle(w, r.URL.Path, body)
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("AXP_CONFIG_DIR", t.TempDir())
+	c := &Config{URL: srv.URL, Token: "old", ComputerID: "c1", Name: "laptop", Home: t.TempDir()}
+	if err := c.save(); err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+func TestCommentMayStartWithADash(t *testing.T) {
+	var got string
+	remoteAXP(t, func(w http.ResponseWriter, path string, body map[string]any) {
+		got = path + " " + fmt.Sprint(body["body"])
+		w.WriteHeader(http.StatusNoContent)
+	})
+	if err := taskCommand([]string{"comment", "- a", "--task", "3"}); err != nil {
+		t.Fatal(err)
+	}
+	if got != "/remote/v1/tasks/3/comments - a" {
+		t.Fatal(got)
+	}
+	if err := taskCommand([]string{"comment", "--task", "3", "--", "--help", "me"}); err != nil {
+		t.Fatal(err)
+	}
+	if got != "/remote/v1/tasks/3/comments --help me" {
+		t.Fatal(got)
+	}
+}
+
+func TestSetupWithACodeEnrollsAgain(t *testing.T) {
+	var enrolledWith any
+	c := remoteAXP(t, func(w http.ResponseWriter, path string, body map[string]any) {
+		switch path {
+		case "/remote/v1/enroll":
+			enrolledWith = body["code"]
+			_, _ = w.Write([]byte(`{"computer_id":"c2","name":"laptop","token":"new","relay_origin":"https://relay"}`))
+		default: // The computer was removed: its token is gone.
+			w.WriteHeader(http.StatusUnauthorized)
+		}
+	})
+	// A connector paired under the removed computer's label.
+	marker := filepath.Join(t.TempDir(), "calls")
+	bin := c.connectorBin("paseo")
+	if err := os.MkdirAll(filepath.Dir(bin), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho \"$@\" >> "+marker+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := connect(c, "")
+	if err == nil || !strings.Contains(err.Error(), "安装命令") {
+		t.Fatalf("a rejected token should ask for the install command: %v", err)
+	}
+	if err := connect(c, "code-2"); err != nil {
+		t.Fatal(err)
+	}
+	if enrolledWith != "code-2" {
+		t.Fatalf("enrolled with %v", enrolledWith)
+	}
+	saved, err := loadConfig()
+	if err != nil || saved.Token != "new" || saved.ComputerID != "c2" || saved.RelayOrigin != "https://relay" {
+		t.Fatalf("%+v %v", saved, err)
+	}
+	if calls, _ := os.ReadFile(marker); string(calls) != "disconnect\n" {
+		t.Fatalf("the old pairing should be dropped, connector got %q", calls)
+	}
+}
+
+func TestSetupWithACodeForTheSameComputerKeepsItsPairings(t *testing.T) {
+	c := remoteAXP(t, func(w http.ResponseWriter, path string, body map[string]any) {
+		_, _ = w.Write([]byte(`{"computer_id":"c1","name":"laptop","token":"new","relay_origin":"https://relay"}`))
+	})
+	marker := filepath.Join(t.TempDir(), "calls")
+	bin := c.connectorBin("paseo")
+	_ = os.MkdirAll(filepath.Dir(bin), 0o755)
+	_ = os.WriteFile(bin, []byte("#!/bin/sh\necho \"$@\" >> "+marker+"\n"), 0o755)
+	if err := connect(c, "code-2"); err != nil || c.Token != "new" {
+		t.Fatalf("%+v %v", c, err)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("pairings under the same computer's label should stay")
 	}
 }

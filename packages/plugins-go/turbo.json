@@ -38,8 +38,11 @@
         "!$TURBO_ROOT$/packages/*-go/node_modules/**"
       ]
     },
-    // The tests compile the repository's plugins.
+    // The tests compile the repository's plugins and run their hooks with
+    // akhook; in CI (CI set) they never skip those.
     "test": {
+      "dependsOn": ["@axp/akhook#build"],
+      "env": ["CI"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/packages/*-go/**",

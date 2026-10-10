@@ -30,9 +30,12 @@
     "image:linux-arm64": {
       "dependsOn": ["$TURBO_EXTENDS$", "@axp/plugins-go#build:linux-arm64"]
     },
-    // The tests compile the plugins with packages/plugins-go.
+    // The tests compile the plugins with packages/plugins-go, and run the
+    // agents' rules with akhook; in CI (CI set) they never skip those.
     "test": {
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/plugins-go/**"]
+      "dependsOn": ["@axp/akhook#build"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/plugins-go/**"],
+      "env": ["CI"]
     },
     "lint": {
       "inputs": [
