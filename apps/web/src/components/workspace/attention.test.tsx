@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "@rstest/core";
+import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   createMemoryHistory,
@@ -6,9 +6,11 @@ import {
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
+import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { AttentionList } from "./attention";
+import { PendingList } from "./attention";
+import { Notifications } from "./notifications";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -39,9 +41,54 @@ const routine = (id: string, reports: number, failures: number) => ({
   unseen_failures: failures,
 });
 
+const confirmation = (id: string, status: string) => ({
+  id,
+  agent_id: "a1",
+  message_id: `m-${id}`,
+  kind: "choice",
+  prompt: `tasks 请求确认\n删除${id}？`,
+  options: [
+    { value: "allow", label: "允许" },
+    { value: "deny", label: "拒绝" },
+  ],
+  status,
+  revision: 1,
+  answer: status === "resolved" ? "allow" : null,
+  created_at: "2026-10-09T09:00:00Z",
+  updated_at: "2026-10-09T09:00:00Z",
+});
+
+async function mount(
+  client: QueryClient,
+  ui: () => React.ReactNode,
+  path = "/",
+) {
+  const router = createRouter({
+    routeTree: createRootRoute({
+      component: () => <NuqsAdapter>{ui()}</NuqsAdapter>,
+    }),
+    history: createMemoryHistory({ initialEntries: [path] }),
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  await act(async () => {
+    createRoot(container).render(
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+    await router.load();
+  });
+  return container;
+}
+
+const headings = (container: HTMLElement) =>
+  [...container.querySelectorAll("h2, h3")].map((h) => h.textContent);
+
 describe("what waits for the user", () => {
   afterEach(() => {
     document.body.innerHTML = "";
+    rstest.restoreAllMocks();
   });
 
   it("lists tasks and routines that need them, and nothing else", async () => {
@@ -66,7 +113,7 @@ describe("what waits for the user", () => {
       [routine("a", 2, 0), routine("b", 0, 1), routine("c", 0, 0)],
     );
     const router = createRouter({
-      routeTree: createRootRoute({ component: () => <AttentionList /> }),
+      routeTree: createRootRoute({ component: () => <PendingList /> }),
       history: createMemoryHistory(),
     });
     const container = document.createElement("div");
@@ -91,5 +138,60 @@ describe("what waits for the user", () => {
       "定时a2 份新报告",
       "定时b1 次失败",
     ]);
+  });
+
+  it("groups confirmations, tasks and routines, and says which failed to load", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { staleTime: Infinity, retry: false } },
+    });
+    client.setQueryData(["chat"], {
+      agents: [{ id: "a1", name: "研究员" }],
+      interactions: [confirmation("i1", "pending")],
+    });
+    client.setQueryData(["tasks"], {
+      assignees: [],
+      tasks: [task(1, { status: "in_review" })],
+    });
+    // The routines never load.
+    rstest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        Response.json(
+          { error: { code: "UNAVAILABLE", message: "定时服务不可用" } },
+          { status: 503 },
+        ),
+      );
+    const container = await mount(client, () => <PendingList />);
+    await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    expect(headings(container)).toEqual(["确认请求1", "任务1"]);
+    expect(container.textContent).toContain("无法加载定时");
+    expect(container.querySelector("li")!.textContent).toContain(
+      "删除i1？允许拒绝",
+    );
+  });
+
+  it("lists answered confirmations under 全部 only, never the waiting ones twice", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { staleTime: Infinity } },
+    });
+    const pending = confirmation("i1", "pending");
+    const answered = confirmation("i2", "resolved");
+    client.setQueryData(["chat"], { agents: [], interactions: [pending] });
+    client.setQueryData(["chat", "interactions"], [pending, answered]);
+    client.setQueryData(["tasks"], { assignees: [], tasks: [] });
+    client.setQueryData(["routines"], []);
+    const all = await mount(client, () => <Notifications />);
+    expect(headings(all)).toContain("已处理的确认");
+    const items = [...all.querySelectorAll("li")].map((li) => li.textContent);
+    expect(items).toHaveLength(2);
+    expect(items[1]).toContain("已选择「允许」");
+    document.body.innerHTML = "";
+    const waiting = await mount(
+      client,
+      () => <Notifications />,
+      "/?filter=pending",
+    );
+    expect(headings(waiting)).not.toContain("已处理的确认");
+    expect(waiting.querySelectorAll("li")).toHaveLength(1);
   });
 });
