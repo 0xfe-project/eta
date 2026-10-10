@@ -6,8 +6,8 @@
 // where the user connects the GitHub App.
 //
 //	/forge/mcp                  MCP (streamable HTTP): open_pull_request
-//	/forge/credentials          GET: gh's token and the commit identity;
-//	                            ?as=user: the user's token, for remote computers
+//	/forge/credentials          GET: gh's token (the user's once they authorized
+//	                            the App, else the App's) and the commit identity
 //
 //	/api/forge/v1/github                          GET status (?fresh=1), DELETE
 //	/api/forge/v1/github/manifest                 POST {name, organization?, origin}
@@ -121,16 +121,10 @@ func (s *server) mcp() http.Handler {
 	})
 }
 
-// credentials hands out the user's token only to remote computers (the
-// control plane asks for them as computer-<id>), for `axp gh`; agents in
-// runtimes get the installation token and open pull requests through MCP.
+// credentials are the same for agents in runtimes and for remote computers
+// (the control plane asks as computer-<id>, for `axp gh`).
 func (s *server) credentials(w http.ResponseWriter, r *http.Request) {
-	asUser := r.URL.Query().Get("as") == "user"
-	if asUser && !strings.HasPrefix(r.Header.Get(agentHeader), "computer-") {
-		writeError(w, &github.Error{Code: "FORBIDDEN", Message: "只有远程电脑可以使用用户的授权。", Status: http.StatusForbidden})
-		return
-	}
-	s.answer(w, func() (any, error) { return s.gh.Credentials(r.Context(), asUser) })
+	s.answer(w, func() (any, error) { return s.gh.Credentials(r.Context()) })
 }
 
 func (s *server) status(w http.ResponseWriter, r *http.Request) {

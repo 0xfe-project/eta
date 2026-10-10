@@ -238,7 +238,7 @@ function Install({ status }: { status: GitHubStatus }) {
         {[
           "选择要安装到的账号或组织",
           "勾选智能体可以访问的仓库，或选择「All repositories」",
-          "点击「Install」；GitHub 接着请你授权时确认，PR 就能以你的名义打开",
+          "点击「Install」；GitHub 接着请你授权时确认，智能体就能以你的名义使用 GitHub",
         ].map((text, index) => (
           <li key={text} className="flex gap-3 text-sm">
             <span
@@ -280,7 +280,9 @@ function Done({ status }: { status: GitHubStatus }) {
         <div>
           <p className="text-sm font-medium">已连接</p>
           <p className="text-xs text-muted-foreground">
-            智能体以{" "}
+            {status.user
+              ? `智能体以 ${status.user.login} 的名义使用 GitHub，commit 作者是 `
+              : "智能体以 "}
             <a
               href={app.html_url}
               target="_blank"
@@ -288,9 +290,8 @@ function Done({ status }: { status: GitHubStatus }) {
               className="font-medium text-foreground underline underline-offset-2"
             >
               {app.slug}[bot]
-            </a>{" "}
-            的身份推送分支，{status.user ? "以你的名义" : "也以它的身份"}打开
-            PR。
+            </a>
+            {status.user ? "。" : " 的身份使用 GitHub。"}
           </p>
         </div>
       </div>
@@ -339,9 +340,10 @@ function Done({ status }: { status: GitHubStatus }) {
 }
 
 /**
- * The user authorizing the App to open pull requests on their behalf: the
- * author is then the user, with the App's badge. An App created before AXP
- * kept its client secret needs the secret first.
+ * The user authorizing the App to act on their behalf: agents then use
+ * GitHub as the user, with the App's badge, and can do what GitHub allows
+ * only a user, such as creating a repository in their account. An App
+ * created before AXP kept its client secret needs the secret first.
  */
 function Authorization({ status }: { status: GitHubStatus }) {
   const authorize = useAuthorizeGitHub();
@@ -351,10 +353,12 @@ function Authorization({ status }: { status: GitHubStatus }) {
     return (
       <section className="flex items-center gap-3 border px-3 py-2.5">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">PR 作者：{status.user.login}</p>
+          <p className="text-sm font-medium">
+            智能体的身份：{status.user.login}
+          </p>
           <p className="text-xs text-muted-foreground">
-            GitHub 显示为你本人，并带 App 的标识；授权失效时改以 App
-            的身份打开。
+            gh、推送、PR 和合并都以你的名义，GitHub 显示为你本人并带 App
+            的标识。取消授权后一小时内回到 App 的身份。
           </p>
         </div>
         <Button
@@ -371,9 +375,11 @@ function Authorization({ status }: { status: GitHubStatus }) {
   return (
     <section className="space-y-3 border px-3 py-2.5">
       <div>
-        <p className="text-sm font-medium">以你的名义打开 PR</p>
+        <p className="text-sm font-medium">以你的名义使用 GitHub</p>
         <p className="text-xs text-muted-foreground">
-          授权 App 代表你后，智能体打开的 PR 作者是你本人，并带 App 的标识。
+          授权后，智能体以你的名义使用
+          GitHub，也能在你的个人账号下创建仓库；不授权时是 App 的 bot，GitHub
+          不允许它在个人账号下创建仓库。
         </p>
       </div>
       {status.oauth ? null : (

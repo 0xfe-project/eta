@@ -6,9 +6,9 @@
 // directory: github.json and the private key github.pem. Calls go through
 // go-github, as the App (with a JWT signed by that key) or with an
 // installation token, which carries everything the installation was granted;
-// tokens are cached until close to expiry. Nothing here is per agent: every
-// agent acts as the App, or, once the user authorized it, opens pull
-// requests on the user's behalf (user.go).
+// tokens are cached until close to expiry. Nothing here is per agent: once
+// the user authorized the App, every agent acts on the user's behalf
+// (user.go), otherwise as the App.
 package github
 
 import (
@@ -58,7 +58,7 @@ var (
 		"deployments": "write", "discussions": "write", "environments": "write",
 		"issues": "write", "merge_queues": "write", "metadata": "read",
 		"packages": "write", "pages": "write", "pull_requests": "write",
-		"repository_custom_properties": "write", "repository_hooks": "write",
+		"repository_creation": "write", "repository_custom_properties": "write", "repository_hooks": "write",
 		"repository_projects": "admin", "secret_scanning_alerts": "write",
 		"secrets": "write", "security_events": "write", "statuses": "write",
 		"vulnerability_alerts": "write", "workflows": "write",
@@ -525,14 +525,19 @@ func (g *GitHub) token(ctx context.Context, id int64) (token, error) {
 
 // --- for runtimes ---------------------------------------------------------------
 
-// Credentials are what a runtime sets gh up with, and git through gh. The App is private, so GitHub
-// installs it only on the account that owns it; the one installation covers
-// every repository the user granted. Identity is the App's bot, once GitHub
-// knows it.
-//
-// asUser asks for the token of the user who authorized the App instead, so
-// what gh does shows as the user's; User names them. Without an
-// authorization it is the installation token, as usual.
+// userTokenTTL is the longest a user's token is handed out for: whoever
+// holds it asks again by then, so revoking the authorization in AXP takes
+// effect within it.
+const userTokenTTL = time.Hour
+
+// Credentials are what runtimes and remote computers set gh up with, and git
+// through gh. Every caller acts as the same one: the user who authorized the
+// App, with their user access token (User names them), so GitHub lets
+// through what needs a user, such as creating a repository in their
+// account; otherwise the App's installation token, as its bot. The App is
+// private, so GitHub installs it only on the account that owns it; the one
+// installation covers every repository the user granted. Identity, the
+// commit author, is the App's bot either way, once GitHub knows it.
 type Credentials struct {
 	Token     string    `json:"token"`
 	ExpiresAt int64     `json:"expires_at"`
@@ -540,20 +545,18 @@ type Credentials struct {
 	User      string    `json:"user,omitempty"`
 }
 
-func (g *GitHub) Credentials(ctx context.Context, asUser bool) (*Credentials, error) {
+func (g *GitHub) Credentials(ctx context.Context) (*Credentials, error) {
 	app, err := g.require()
 	if err != nil {
 		return nil, err
 	}
-	if asUser {
-		if user := g.userToken(ctx); user != nil {
-			expires := user.ExpiresAt
-			if expires == 0 {
-				expires = g.Now().Add(time.Hour).Unix()
-			}
-			identity, _ := g.Identity(ctx)
-			return &Credentials{Token: user.AccessToken, ExpiresAt: expires, Identity: identity, User: user.Login}, nil
+	if user := g.userToken(ctx); user != nil {
+		expires := g.Now().Add(userTokenTTL).Unix()
+		if user.ExpiresAt != 0 && user.ExpiresAt < expires {
+			expires = user.ExpiresAt
 		}
+		identity, _ := g.Identity(ctx)
+		return &Credentials{Token: user.AccessToken, ExpiresAt: expires, Identity: identity, User: user.Login}, nil
 	}
 	inst, err := g.installationFor(ctx, app.Owner)
 	if err != nil {
