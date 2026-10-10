@@ -7,6 +7,7 @@ package container
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/netip"
 	"sort"
@@ -59,8 +60,11 @@ type Driver interface {
 	Start(ctx context.Context, spec Spec) (Started, error)
 	// State is Running, Exited or Missing.
 	State(ctx context.Context, containerID string) (string, error)
-	// Stop stops and removes; it returns once the container cannot write.
-	Stop(ctx context.Context, containerID string) error
+	// Stop stops and removes the instance's containers, found by their
+	// label: also one whose ID was never recorded (the controller stopped
+	// between starting it and writing the ID down). It returns once none
+	// can write.
+	Stop(ctx context.Context, instanceID string) error
 }
 
 // Docker is this machine's Docker (DOCKER_HOST and the other DOCKER_*
@@ -139,14 +143,24 @@ func (d *Docker) Start(ctx context.Context, spec Spec) (Started, error) {
 	if err != nil {
 		return Started{}, err
 	}
-	if _, err := d.client.ContainerStart(ctx, created.ID, client.ContainerStartOptions{}); err != nil {
-		return Started{}, err
-	}
-	inspected, err := d.client.ContainerInspect(ctx, created.ID, client.ContainerInspectOptions{})
+	inspected, err := d.start(ctx, created.ID)
 	if err != nil {
+		// Created, maybe running: nothing records it, so it goes now.
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), (stopSeconds+30)*time.Second)
+		defer cancel()
+		if removeErr := d.remove(cleanup, created.ID); removeErr != nil {
+			return Started{}, errors.Join(err, removeErr)
+		}
 		return Started{}, err
 	}
 	return Started{ContainerID: created.ID, ImageDigest: inspected.Container.Image}, nil
+}
+
+func (d *Docker) start(ctx context.Context, containerID string) (client.ContainerInspectResult, error) {
+	if _, err := d.client.ContainerStart(ctx, containerID, client.ContainerStartOptions{}); err != nil {
+		return client.ContainerInspectResult{}, err
+	}
+	return d.client.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
 }
 
 func (d *Docker) State(ctx context.Context, containerID string) (string, error) {
@@ -166,10 +180,24 @@ func (d *Docker) State(ctx context.Context, containerID string) (string, error) 
 	return Exited, nil
 }
 
-func (d *Docker) Stop(ctx context.Context, containerID string) error {
-	if containerID == "" {
-		return nil
+func (d *Docker) Stop(ctx context.Context, instanceID string) error {
+	list, err := d.client.ContainerList(ctx, client.ContainerListOptions{
+		All:     true,
+		Filters: make(client.Filters).Add("label", Label+".instance="+instanceID),
+	})
+	if err != nil {
+		return err
 	}
+	for _, c := range list.Items {
+		if err := d.remove(ctx, c.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// remove stops and removes a container.
+func (d *Docker) remove(ctx context.Context, containerID string) error {
 	timeout := stopSeconds
 	_, err := d.client.ContainerStop(ctx, containerID, client.ContainerStopOptions{Timeout: &timeout})
 	if cerrdefs.IsNotFound(err) {

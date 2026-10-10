@@ -66,8 +66,11 @@ type ComputerRuntime struct {
 	// waiting: setup has not paired it yet; pairing: approve it here;
 	// needs_approval: the runtime changed and waits for approval again.
 	State string `json:"state" enum:"waiting,pairing,needs_approval,online,offline"`
-	// The fingerprint to compare with setup's output before approving.
-	Fingerprint *string `json:"fingerprint" nullable:"true"`
+	// The fingerprints to compare with setup's output before approving: one
+	// per pairing waiting under this runtime's label. More than one means
+	// someone else asked too (setup run again, or another device using the
+	// label); only the one setup printed is to be approved.
+	Fingerprints []string `json:"fingerprints"`
 }
 
 type Computer struct {
@@ -171,7 +174,7 @@ func (s *Service) ListComputers(ctx context.Context, db pg.DB) (*Computers, erro
 }
 
 func runtimeState(rt *computerRuntimeRow, state *relay.State) ComputerRuntime {
-	out := ComputerRuntime{Kind: rt.Kind, Providers: rt.Providers, State: "offline"}
+	out := ComputerRuntime{Kind: rt.Kind, Providers: rt.Providers, State: "offline", Fingerprints: []string{}}
 	if out.Providers == nil {
 		out.Providers = []string{}
 	}
@@ -182,8 +185,7 @@ func runtimeState(rt *computerRuntimeRow, state *relay.State) ComputerRuntime {
 		out.State = "waiting"
 		for _, p := range state.Pairings {
 			if p.Label == PairingLabel(rt.ComputerID, rt.Kind) {
-				fingerprint := p.Digest
-				out.State, out.Fingerprint = "pairing", &fingerprint
+				out.State, out.Fingerprints = "pairing", append(out.Fingerprints, p.Digest)
 			}
 		}
 		return out
@@ -197,8 +199,7 @@ func runtimeState(rt *computerRuntimeRow, state *relay.State) ComputerRuntime {
 				continue
 			}
 			if !inst.Approved {
-				fingerprint := inst.Fingerprint
-				out.State, out.Fingerprint = "needs_approval", &fingerprint
+				out.State, out.Fingerprints = "needs_approval", []string{inst.Fingerprint}
 				return out
 			}
 			if d.Online && inst.Available {
@@ -207,6 +208,12 @@ func runtimeState(rt *computerRuntimeRow, state *relay.State) ComputerRuntime {
 		}
 	}
 	return out
+}
+
+// fingerprintMismatch: what was asked to be approved is not what the user
+// compared (another pairing came in, or the page is stale).
+func fingerprintMismatch() error {
+	return apierr.New(409, "FINGERPRINT_MISMATCH", "指纹与等待批准的配对不一致，请刷新后重新核对。")
 }
 
 // Enrollment is a new computer and its one-time install code.
@@ -277,8 +284,9 @@ func relayUnreachable(err error) error {
 }
 
 // Approve approves a computer's runtime on the relay: its pending pairing,
-// or its changed runtime.
-func (s *Service) Approve(ctx context.Context, db pg.DB, id, kind string) error {
+// or its changed runtime, only when its fingerprint is the one the user
+// compared with setup's output.
+func (s *Service) Approve(ctx context.Context, db pg.DB, id, kind, fingerprint string) error {
 	if s.Relay == nil {
 		return relayUnavailable()
 	}
@@ -298,8 +306,13 @@ func (s *Service) Approve(ctx context.Context, db pg.DB, id, kind string) error 
 		return relayUnreachable(err)
 	}
 	if rt.DeviceID == nil {
+		asked := false
 		for _, p := range state.Pairings {
 			if p.Label != PairingLabel(r.ID, kind) {
+				continue
+			}
+			asked = true
+			if p.Digest != fingerprint {
 				continue
 			}
 			deviceID, err := s.Relay.ApprovePairing(ctx, p.Code, p.Digest)
@@ -310,6 +323,9 @@ func (s *Service) Approve(ctx context.Context, db pg.DB, id, kind string) error 
 				WHERE computer_id = $1 AND kind = $2`, r.ID, kind, deviceID, pg.Now())
 			return err
 		}
+		if asked {
+			return fingerprintMismatch()
+		}
 		return apierr.New(409, "NOTHING_TO_APPROVE", "这台电脑还没有发起配对。")
 	}
 	for _, d := range state.Devices {
@@ -318,6 +334,9 @@ func (s *Service) Approve(ctx context.Context, db pg.DB, id, kind string) error 
 		}
 		for _, inst := range d.Instances {
 			if inst.InstanceID == instanceFor(kind) && !inst.Approved {
+				if inst.Fingerprint != fingerprint {
+					return fingerprintMismatch()
+				}
 				if err := s.Relay.ApproveInstance(ctx, d.ID, inst.InstanceID, inst.Fingerprint); err != nil {
 					return apierr.Upstream("RELAY_REJECTED", "中继没有接受批准："+err.Error())
 				}
