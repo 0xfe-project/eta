@@ -4,12 +4,12 @@ import type {
   Agent,
   AgentDeleted,
   AgentUpdated,
+  Bundle,
   Snapshot as ChatSnapshot,
   Interaction,
   InteractionUpdated,
   Message,
   MessageUpdated,
-  Plugin,
   Sent,
   TextBlock,
 } from "@/api/control-plane.gen";
@@ -28,12 +28,12 @@ import { refreshLlm } from "@/queries/llm";
 
 // The control plane's chat API; every type comes from its OpenAPI document.
 
-export type { Agent, Interaction, Plugin };
+export type { Agent, Bundle, Interaction };
 /** Editable agent fields; grows as agents gain settings. */
 export type AgentDraft = Pick<Agent, "name" | "description"> & {
   model?: string;
-  // Every plugin when left out.
-  plugins?: string[];
+  // Every built-in bundle when left out.
+  bundles?: string[];
 };
 export type ChatMessage = Message;
 export type Block = TextBlock | ActivityBlock;
@@ -347,13 +347,68 @@ export function useAgentMessages(agentId: string | undefined) {
   };
 }
 
-/** The runtime image's plugins agents choose from; fixed per deploy. */
+/** The plugins bundles add; fixed per deploy. */
 export function usePlugins() {
   return useQuery({
     queryKey: ["plugins"],
     queryFn: async ({ signal }) =>
       unwrap(controlPlane.GET("/api/v1/plugins", { signal })),
     staleTime: Infinity,
+  });
+}
+
+const bundlesKey = ["bundles"] as const;
+
+/** The bundles agents are built from: the built-in ones, then the user's. */
+export function useBundles() {
+  return useQuery({
+    queryKey: bundlesKey,
+    queryFn: async ({ signal }) =>
+      unwrap(controlPlane.GET("/api/v1/bundles", { signal })),
+  });
+}
+
+export type BundleDraft = Pick<
+  Bundle,
+  "name" | "description" | "script" | "plugins"
+>;
+
+export function useSaveBundle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      draft,
+      creating,
+    }: {
+      draft: BundleDraft;
+      creating: boolean;
+    }) =>
+      creating
+        ? unwrap(controlPlane.POST("/api/v1/bundles", { body: draft }))
+        : unwrap(
+            controlPlane.PATCH("/api/v1/bundles/{name}", {
+              params: { path: { name: draft.name } },
+              body: {
+                description: draft.description,
+                script: draft.script,
+                plugins: draft.plugins,
+              },
+            }),
+          ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: bundlesKey }),
+  });
+}
+
+export function useDeleteBundle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (name: string) =>
+      unwrap(
+        controlPlane.DELETE("/api/v1/bundles/{name}", {
+          params: { path: { name } },
+        }),
+      ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: bundlesKey }),
   });
 }
 
@@ -466,7 +521,7 @@ export function useUpdateAgent() {
   });
 }
 
-/** Stop the agent's work and runtime; the next message starts a fresh one. */
+/** Stop the agent's work and replace its container; it resumes its thread. */
 export function useRestartAgent() {
   return useMutation({
     mutationFn: (id: string) =>

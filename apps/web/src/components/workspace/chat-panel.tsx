@@ -85,7 +85,7 @@ const ENVIRONMENT_FAILURES = new Set([
   "AGENT_UNAVAILABLE",
   "AGENT_RECOVERY_FAILED",
   "AGENT_EXTENSION_FAILED",
-  "START_TIMEOUT",
+  "AGENT_BUILD_FAILED",
 ]);
 
 function messageText(message: ChatMessage | undefined) {

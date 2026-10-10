@@ -6,7 +6,7 @@ plugin 的工具在做有风险的操作前可以请用户确认：工具调用�
 
 ## plugin 怎么用
 
-在 MCP 工具里发一个表单为空的 elicitation，等它返回：
+在 MCP 工具里发一个表单为空的 elicitation，等它返回（任何 MCP SDK 都可以，下面是 Python 的写法）：
 
 ```python
 from mcp.server.fastmcp import Context, FastMCP
@@ -34,7 +34,7 @@ async def drop_table(name: str, ctx: Context) -> str:
 ## 流程
 
 1. 工具发出 `elicitation/create`；Codex 以 `mcpServer/elicitation/request` 转给 runtime。
-2. runtime 像命令审批一样记账并发出 `approval.requested`（`kind: "elicitation"`，摘要是 MCP 服务名和提示文字），然后阻塞在 SDK 回调里等决定。
+2. runtime 像命令审批一样发出 `approval.requested`（`kind: "elicitation"`，摘要是 MCP 服务名和提示文字），然后挂起对这个请求的应答，等决定。
 3. 控制面建 `approval` 和 choice `interaction`，回复显示“等待确认”，SSE 推给浏览器。
 4. 用户在对话里或“确认”标签页回答；controller 把决定送到 runtime；runtime 以 `{"action": …}` 回应 Codex，工具继续执行。
 

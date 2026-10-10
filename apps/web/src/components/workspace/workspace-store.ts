@@ -27,6 +27,7 @@ const workspaceSchema = z.object({
 export type WorkspaceState = z.infer<typeof workspaceSchema>;
 export type SettingsSection =
   | "agents"
+  | "bundles"
   | "providers"
   | "connections"
   | "computers"

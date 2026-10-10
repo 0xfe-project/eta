@@ -4,6 +4,7 @@ import { ChartLineIcon } from "@phosphor-icons/react/ChartLine";
 import { DesktopIcon } from "@phosphor-icons/react/Desktop";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { LinkIcon } from "@phosphor-icons/react/Link";
+import { PackageIcon } from "@phosphor-icons/react/Package";
 import { PaletteIcon } from "@phosphor-icons/react/Palette";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
@@ -20,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useNeedsAttention } from "@/queries/llm";
 import { AgentSettings } from "./agent-settings";
+import { BundleSettings } from "./bundle-settings";
 import { ComputerSettings } from "./computer-settings";
 import { ConnectionSettings } from "./connection-settings";
 import { ProviderSettings } from "./provider-settings";
@@ -49,6 +51,7 @@ const sections: {
   icon: typeof RobotIcon;
 }[] = [
   { value: "agents", label: "智能体", icon: RobotIcon },
+  { value: "bundles", label: "环境包", icon: PackageIcon },
   { value: "providers", label: "模型服务", icon: PlugsConnectedIcon },
   { value: "connections", label: "连接", icon: LinkIcon },
   { value: "computers", label: "远程电脑", icon: DesktopIcon },
@@ -289,6 +292,8 @@ export function SettingsDialog() {
           <section className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4">
             {settings.section === "agents" ? (
               <AgentSettings />
+            ) : settings.section === "bundles" ? (
+              <BundleSettings />
             ) : settings.section === "providers" ? (
               <ProviderSettings />
             ) : settings.section === "connections" ? (

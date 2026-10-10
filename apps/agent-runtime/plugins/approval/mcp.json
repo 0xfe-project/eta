@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "approval": {
-      "command": "python",
-      "args": ["server.py"],
+      "command": "node",
+      "args": ["server.mjs"],
       "cwd": "${PLUGIN_ROOT}",
       "env": {
         "AKHOOK_STATE_DIR": "/run/akhook"

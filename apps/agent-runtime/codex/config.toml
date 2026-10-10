@@ -1,7 +1,7 @@
 # System-wide Codex configuration of every agent (/etc/codex/config.toml).
 # Per-agent settings (model, provider, instructions) come from the runtime;
-# building the image appends approval of the plugins' tools (axp-plugins,
-# packages/plugins-go).
+# building an agent's image appends approval of its plugins' tools
+# (axp-plugins, packages/plugins-go).
 
 # The container is the isolation boundary: no sandbox inside it. Commands and
 # file changes still ask the user, through the product.

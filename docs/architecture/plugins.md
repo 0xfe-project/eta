@@ -1,6 +1,6 @@
 # 插件
 
-本文说明 [#56](https://github.com/AkaraChen/axp/issues/56) 的实现：AXP 的插件是一个不属于任何 agent harness 的目录，按目标编译。聊天智能体和定时任务都从这里取扩展；插件本身不写 Codex 或 ADK 特有的东西。
+本文说明 [#56](https://github.com/AkaraChen/axp/issues/56) 的实现：AXP 的插件是一个不属于任何 agent harness 的目录，按目标编译。聊天智能体经[环境包](bundles.md)载入插件，定时任务直接加载；插件本身不写 Codex 或 ADK 特有的东西。
 
 ## 一个插件是什么
 
@@ -40,7 +40,7 @@ rules:
   - id: recall
     on: prompt_submit
     run:
-      argv: [python, "${PLUGIN_ROOT}/hooks/memory.py", recall]
+      argv: [node, "${PLUGIN_ROOT}/hooks/memory.mjs", recall]
       timeout_ms: 5000
 ```
 
@@ -50,15 +50,15 @@ rules:
 
 ## chat 目标：编译成 Codex plugin
 
-聊天智能体的 runtime 跑 Codex，所以 chat 目标的产物是 Codex 的布局，和 runtime 的安装代码（`axp_runtime/runtime.py`）约定的完全一致。构建 runtime 镜像时运行 `axp-plugins chat /opt/axp/plugins /etc/codex /opt/axp/plugins`（`packages/plugins-go/cmd/axp-plugins`，由 Turbo 先为目标平台编译）：
+聊天智能体的 runtime 跑 Codex，所以 chat 目标的产物是 Codex 的布局，和 runtime 的安装代码（`apps/agent-runtime/src/plugins.ts`）约定的完全一致。controller 构建智能体的镜像时，把它的环境包带来的插件复制到 `/opt/axp/plugins`，再运行 `axp-plugins chat /opt/axp/plugins /etc/codex /opt/axp/plugins`（`packages/plugins-go/cmd/axp-plugins`，在 runtime 的基础镜像里）：
 
 1. 运行 chat 插件的 `setup`（`AXP_PLUGIN_BIN=/usr/local/bin`）；
-2. 为每个插件就地生成 `.codex-plugin/plugin.json` 和 Codex 写法的 `.mcp.json`：`Authorization: Bearer ${AXP_AGENT_KEY}` 变成 `bearer_token_env_var = AXP_RUNTIME_LLM_KEY`；stdio 的 `env` 里的 key 变成 `env_vars` 透传，再由 `sh -c 'export NAME="$AXP_RUNTIME_LLM_KEY"; exec "$0" "$@"'` 改名（Codex 只透传、不改名）；`${PLUGIN_ROOT}` 换成镜像里的目录；
+2. 为每个插件就地生成 `.codex-plugin/plugin.json` 和 Codex 写法的 `.mcp.json`：`Authorization: Bearer ${AXP_AGENT_KEY}` 变成 `bearer_token_env_var = AXP_AGENT_KEY`；stdio 的 `env` 里的 key 变成 `env_vars` 透传，再由 `sh -c 'export NAME="$AXP_AGENT_KEY"; exec "$0" "$@"'` 改名（Codex 只透传、不改名）；`${PLUGIN_ROOT}` 换成镜像里的目录；
 3. 生成本地 marketplace `axp`（`.agents/plugins/marketplace.json`，只含 chat 插件，按目录名排序）；
 4. 在 `config.toml` 里让每个插件 MCP 服务器的工具免确认，否则每次调用都会被 runtime 以“无人应答”拒绝；
-5. 把各插件的 hook 合成一份 akhook 配置 `/opt/axp/plugins/akhook.yml`：规则 ID 加上插件名（`memory/recall`），`${PLUGIN_ROOT}` 换成镜像里的目录，命令前加一层 `sh -c`，只有 `CODEX_HOME/plugins/cache/axp/<plugin>` 存在（该智能体装了这个插件）才运行，并把 runtime key 以 `AXP_AGENT_KEY` 交给它。Codex 那边不生成任何东西：镜像的 `requirements.toml` 固定把 `PreToolUse`、`UserPromptSubmit`、`Stop` 交给 akhook（managed hook，`allow_managed_hooks_only` 让其他来源的 hook 一律不执行），akhook 从 `AKHOOK_ADDITIONAL_CONFIG_PATH` 读这份配置和镜像自己的规则（后者在后，插件改不了）。
+5. 把各插件的 hook 合成一份 akhook 配置 `/opt/axp/plugins/akhook.yml`：规则 ID 加上插件名（`memory/recall`），`${PLUGIN_ROOT}` 换成镜像里的目录，命令前加一层 `sh -c`，只有 `CODEX_HOME/plugins/cache/axp/<plugin>` 存在（装好了这个插件）才运行；智能体的 key 就在环境里（`AXP_AGENT_KEY`）。Codex 那边不生成任何东西：镜像的 `requirements.toml` 固定把 `PreToolUse`、`UserPromptSubmit`、`Stop` 交给 akhook（managed hook，`allow_managed_hooks_only` 让其他来源的 hook 一律不执行），akhook 从 `AKHOOK_ADDITIONAL_CONFIG_PATH` 读这份配置和镜像自己的规则（后者在后，插件改不了）。
 
-runtime 启动时安装选中的插件、在副本里填入 `${AXP_GATEWAY_URL}` 和 `${AXP_WORKSPACE_DIR}`，见[聊天与运行时架构](chat-runtime.md#plugin)。插件背后的服务路由（`/memory/*`、`/tasks/*`、`/agenvo/*`、`/forge/mcp`）由 runtime 网关按智能体启用的插件放行，没启用的直接 403：容器里的代码拿着自己的 key 也调不到（见[网关](gateway.md)的 runtime 站点）。控制面的插件目录（`GET /plugins`）用同一个包读取，只列 chat 插件。
+runtime 每次启动把镜像里的插件装进 `CODEX_HOME`、在副本里填入 `${AXP_GATEWAY_URL}` 和 `${AXP_WORKSPACE_DIR}`，见[聊天与运行时架构](chat-runtime.md#runtime)。插件背后的服务路由（`/memory/*`、`/tasks/*`、`/agenvo/*`、`/forge/mcp`）由 runtime 网关按智能体的插件（它的环境包带来的）放行，没有的直接 403：容器里的代码拿着自己的 key 也调不到（见[网关](gateway.md)的 runtime 站点）。控制面的插件目录（`GET /plugins`）用同一个包读取，只列 chat 插件。
 
 ## routine 目标：加载进 ADK agent
 
@@ -80,6 +80,6 @@ runtime 启动时安装选中的插件、在副本里填入 `${AXP_GATEWAY_URL}`
 | approval | chat          | 用户确认 akhook `ask` 规则拦下的命令（[确认](agent-hooks.md)）                                      |
 | github   | chat          | GitHub App 的 git、gh 凭据与 `open_pull_request`（[代码托管](forge.md)）                            |
 | grok     | chat、routine | [grok-api](https://github.com/AkaraChen/grok-api)：Grok Imagine 图像和视频，网页和 X 搜索           |
-| memory   | chat          | 长期记忆（[记忆](memory.md)），带 recall / capture hook                                             |
+| memory   | chat          | 长期记忆（[记忆](memory.md)），带 recall / capture hook（Node 脚本）                                |
 | routines | chat          | 定时任务（[定时任务](routines.md)）：列出、查看报告、新建和修改                                     |
 | tasks    | chat          | 任务看板（[任务与远程电脑](tasks.md)）                                                              |

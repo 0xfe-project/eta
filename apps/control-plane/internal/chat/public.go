@@ -18,10 +18,12 @@ type Agent struct {
 	// Instructions injected into the agent's context.
 	Description string   `json:"description" doc:"Instructions injected into the agent's context."`
 	Model       *string  `json:"model" doc:"Model id from the LLM gateway catalog; null until one is chosen."`
-	Plugins     []string `json:"plugins" doc:"The plugins it runs with, in catalog order."`
+	Bundles     []string `json:"bundles" doc:"The bundles it is built from, in catalog order (GET /api/v1/bundles)."`
 	// starting: its environment is being prepared for the work waiting on it.
-	Status   string `json:"status" enum:"idle,starting,working,waiting_for_input,unavailable" doc:"starting: its environment is being prepared for the work waiting on it."`
-	Revision int64  `json:"revision"`
+	Status string `json:"status" enum:"idle,starting,working,waiting_for_input,unavailable" doc:"starting: its environment is being prepared for the work waiting on it."`
+	// Why its image could not be built: the end of the build's output.
+	BuildError *string `json:"build_error" doc:"Why its image could not be built: the end of the build's output."`
+	Revision   int64   `json:"revision"`
 }
 
 // Block is a part of a message: text, or an activity (a tool call, a
@@ -167,9 +169,6 @@ type MessagePage struct {
 type Sent struct {
 	Message Message `json:"message"`
 	Reply   Message `json:"reply"`
-	// A steer that joined the running turn; false when it waits like any
-	// message.
-	Steered bool `json:"steered" doc:"A steer that joined the running turn; false when it waits like any message."`
 }
 
 // Stream events' payloads.
@@ -191,13 +190,13 @@ type InteractionUpdated struct {
 }
 
 func (a *AgentRecord) public() Agent {
-	plugins := a.Plugins
-	if plugins == nil {
-		plugins = []string{}
+	bundles := a.Bundles
+	if bundles == nil {
+		bundles = []string{}
 	}
 	return Agent{
 		ID: a.ID, Name: a.Name, Description: a.Description, Model: a.Model,
-		Plugins: plugins, Status: a.ProductStatus, Revision: a.ProductRevision,
+		Bundles: bundles, Status: a.ProductStatus, BuildError: a.BuildError, Revision: a.ProductRevision,
 	}
 }
 

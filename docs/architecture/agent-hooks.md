@@ -9,7 +9,7 @@
 
 维护时只改规则文件。代码只负责“怎么匹配”和“怎么问用户”，与具体规则无关。
 
-规则对每个 agent 都生效，不随它选择的插件变化。`approval` 是普通插件，可以在智能体编辑器里关掉；关掉后需要确认的操作会一直被拦，agent 只能告诉用户。
+规则对每个 agent 都生效，不随它的环境包变化。`approval` 是普通插件（在同名环境包里），可以在智能体编辑器里去掉；关掉后需要确认的操作会一直被拦，agent 只能告诉用户。
 
 ## 能防什么，不能防什么
 
@@ -21,8 +21,8 @@ hook 在容器里运行，而容器对 agent 完全开放：agent 可以把命�
 | ---------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | akhook           | `vendor/akhook`（submodule），镜像里是 `/usr/local/bin/akhook`   | 规则引擎。Codex 的受管 hook（`/etc/codex/requirements.toml`）：`PreToolUse` 不设 matcher，每次工具调用前调用它；`UserPromptSubmit` 和 `Stop` 运行插件的生命周期规则（[插件](plugins.md#hook)） |
 | 规则             | `apps/agent-runtime/hooks/akhook.yml` → `/etc/akhook/akhook.yml` | 镜像通过 `AKHOOK_ADDITIONAL_CONFIG_PATH` 加载。工作区仓库自带的 `.akhook.yml` 可以追加规则，但关不掉、也替换不了这些规则                                                                       |
-| `approval` 插件  | `apps/agent-runtime/plugins/approval`                            | MCP 工具 `request_approval`：读出请求，用 elicitation 问用户，同意后授权                                                                                                                       |
-| runtime / 控制面 | `runtime.py`、`projection.go`                                    | 把“只需确认”的 elicitation 当作审批，复用现有的确认卡片                                                                                                                                        |
+| `approval` 插件  | `apps/agent-runtime/plugins/approval`（环境包 `approval`）       | MCP 工具 `request_approval`（Node 写的 stdio MCP 服务）：读出请求，用 elicitation 问用户，同意后授权                                                                                           |
+| runtime / 控制面 | `apps/agent-runtime/src/agent.ts`、`projection.go`               | 把“只需确认”的 elicitation 当作审批，复用现有的确认卡片                                                                                                                                        |
 
 镜像构建时，akhook 由 `rust` 构建阶段从 submodule 编译（`scripts/build/image.sh` 以 `akhook-src` 构建上下文传入，submodule 缺失时先初始化）。镜像里还装了 `gh`。
 
@@ -53,7 +53,7 @@ agent 原样重新执行这条命令
 ```
 
 - 授权只对完全相同的调用有效（同样的规则、cwd 和命令），只能用一次。agent 换一条命令就要重新确认。
-- 状态是 `/run/akhook` 下的文件，不在 `/agent` 里，所以不进快照；实例换代后一并消失。akhook 每次处理 `ask` 时顺带删掉过期的授权和超过一天的请求。
+- 状态是 `/run/akhook` 下的文件，不在智能体的卷 `/agent` 上；容器重建后一并消失。akhook 每次处理 `ask` 时顺带删掉过期的授权和超过一天的请求。
 - turn 被停止时 elicitation 以 `cancel` 结束，工具返回“用户没有确认”。
 
 ## elicitation 到用户
@@ -62,7 +62,7 @@ agent 原样重新执行这条命令
 
 ## 验证
 
-- `apps/agent-runtime/tests/test_hooks.py`：用 akhook 跑规则文件。测试依赖 `@axp/akhook#build`（`scripts/build/akhook.sh`，从 `vendor/akhook` 编译到 `packages/akhook/out/akhook`，结果进 Turbo 缓存）；本地没有 Rust 时跳过，`CI=1` 时找不到 akhook 直接失败。ADK 那边的 `packages/plugins-go/adk` 同理；`approval` 插件经 MCP 内存客户端完成 elicitation 与授权。
+- `apps/agent-runtime/src/hooks.test.ts`：用 akhook 跑规则文件。测试依赖 `@axp/akhook#build`（`scripts/build/akhook.sh`，从 `vendor/akhook` 编译到 `packages/akhook/out/akhook`，结果进 Turbo 缓存）；本地没有 Rust 时跳过，`CI=1` 时找不到 akhook 直接失败。ADK 那边的 `packages/plugins-go/adk` 同理；`approval` 插件以子进程启动，测试扮演 Codex 回答它的 elicitation，再检查授权放行一次。
 - 用真实的 Codex（0.160.1）在镜像里按上图完整跑通过一次：受管 hook 拦下命令，拒绝理由原样交给模型，模型经 `tool_search` 调用 `request_approval`，`on-request` 策略下 Codex 把 elicitation 转给客户端，同意后重试的命令成功。
 
 ## 为什么不用 Codex 自带的 execpolicy

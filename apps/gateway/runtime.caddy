@@ -1,10 +1,10 @@
-# Agent runtimes' only route out. The internal API authenticates runtimes
-# itself (it issues their tokens and fences replaced instances). Everything
-# else first asks it who holds the runtime key and passes the answer on as
+# Agent runtimes' only route to AXP's services. Every route first asks the
+# internal API who holds the agent's key and passes the answer on as
 # X-AXP-Agent-Id, replacing any value the runtime sent; services behind this
 # route trust that header and hold no credentials of their own. A plugin's
-# route also asks whether that agent has the plugin enabled (403 if not), so
-# turning a plugin off takes its abilities away, not just its tools.
+# route also asks whether that agent's bundles add the plugin (403 if not),
+# so removing a plugin takes its abilities away, not just its tools.
+# Runtimes report to the control plane over NATS, never through here.
 
 # Proxies to the upstream in the first argument as the runtime's agent.
 (as_agent) {
@@ -34,9 +34,6 @@ http://:{$AXP_RUNTIME_GATEWAY_PORT:8090} {
 	bind {$AXP_RUNTIME_GATEWAY_BIND:0.0.0.0}
 	import access_log
 
-	handle /internal/* {
-		reverse_proxy {$AXP_UPSTREAM_INTERNAL:axp-internal:8001}
-	}
 	# The LLM gateway's OpenAI-compatible API: Codex's model provider.
 	handle /v1/* {
 		import as_agent {$AXP_UPSTREAM_LLM:axp-llm:8317}

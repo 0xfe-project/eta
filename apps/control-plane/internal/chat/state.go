@@ -11,7 +11,7 @@ import (
 )
 
 // Product state kept in step with the internal records: agent status,
-// messages, interactions and the ui_event stream.
+// messages and the ui_event stream.
 //
 // Locking rule: every write transaction locks the conversation row first.
 // That row allocates message and event sequences, which serializes event
@@ -97,23 +97,6 @@ func emitInteraction(ctx context.Context, tx pgx.Tx, i *interactionRow) error {
 	return emit(ctx, tx, i.ConversationID, EventInteractionUpdated, InteractionUpdated{i.public()})
 }
 
-// saveMessage writes the message's status, blocks and failure as a new
-// revision and publishes it.
-func saveMessage(ctx context.Context, tx pgx.Tx, m *messageRow) error {
-	m.Revision++
-	m.UpdatedAt = pg.Now()
-	content := m.Content
-	if content == nil {
-		content = []Block{}
-	}
-	if _, err := tx.Exec(ctx, `UPDATE message SET status = $2, content = $3, failure = $4,
-		revision = $5, updated_at = $6 WHERE id = $1`,
-		m.ID, m.Status, content, m.Failure, m.Revision, m.UpdatedAt); err != nil {
-		return err
-	}
-	return emit(ctx, tx, m.ConversationID, EventMessageUpdated, MessageUpdated{m.public()})
-}
-
 // saveInteraction writes the interaction's status and answer as a new
 // revision and publishes it.
 func saveInteraction(ctx context.Context, tx pgx.Tx, i *interactionRow) error {
@@ -124,60 +107,6 @@ func saveInteraction(ctx context.Context, tx pgx.Tx, i *interactionRow) error {
 		return err
 	}
 	return emitInteraction(ctx, tx, i)
-}
-
-func loadAgent(ctx context.Context, db pg.DB, id string) (*AgentRecord, error) {
-	return pg.One[AgentRecord](ctx, db, "SELECT * FROM agent WHERE id = $1", id)
-}
-
-// SetAgentStatus changes the agent's internal status.
-func SetAgentStatus(ctx context.Context, tx pgx.Tx, agentID, status string) error {
-	_, err := tx.Exec(ctx, "UPDATE agent SET status = $2, updated_at = $3 WHERE id = $1", agentID, status, pg.Now())
-	return err
-}
-
-// RefreshAgentStatus recomputes the agent's product status from internal
-// state and publishes a change.
-func RefreshAgentStatus(ctx context.Context, tx pgx.Tx, agentID string) error {
-	agent, err := loadAgent(ctx, tx, agentID)
-	if err != nil {
-		return err
-	}
-	status := ProductIdle
-	if agent.Status == AgentRecoveryFailed || agent.Status == AgentError {
-		status = ProductUnavailable
-	} else {
-		rows, err := tx.Query(ctx, `SELECT DISTINCT status FROM message
-			WHERE agent_id = $1 AND role = 'assistant' AND status = ANY($2)`, agentID, activeMessageStatuses)
-		if err != nil {
-			return err
-		}
-		active, err := pgx.CollectRows(rows, pgx.RowTo[string])
-		if err != nil {
-			return err
-		}
-		switch {
-		case slices.Contains(active, MessageWaitingForInput):
-			status = ProductWaitingForInput
-		case len(active) == 0:
-		case agent.Status == AgentStopped || agent.Status == AgentProvisioning || agent.Status == AgentRecovering:
-			// Work waits on its environment: a new runtime, its snapshot and
-			// thread.
-			status = ProductStarting
-		default:
-			status = ProductWorking
-		}
-	}
-	if status == agent.ProductStatus {
-		return nil
-	}
-	agent.ProductStatus = status
-	agent.ProductRevision++
-	if _, err := tx.Exec(ctx, `UPDATE agent SET product_status = $2, product_revision = $3, updated_at = $4
-		WHERE id = $1`, agentID, status, agent.ProductRevision, pg.Now()); err != nil {
-		return err
-	}
-	return emitAgent(ctx, tx, agent)
 }
 
 func expireOpenInteractions(ctx context.Context, tx pgx.Tx, messageID string) error {
@@ -195,6 +124,86 @@ func expireOpenInteractions(ctx context.Context, tx pgx.Tx, messageID string) er
 	return nil
 }
 
+// saveMessage writes the message's status, blocks and failure as a new
+// revision and publishes it.
+func saveMessage(ctx context.Context, tx pgx.Tx, m *messageRow) error {
+	m.Revision++
+	m.UpdatedAt = pg.Now()
+	content := m.Content
+	if content == nil {
+		content = []Block{}
+	}
+	if _, err := tx.Exec(ctx, `UPDATE message SET status = $2, content = $3, failure = $4,
+		revision = $5, updated_at = $6 WHERE id = $1`,
+		m.ID, m.Status, content, m.Failure, m.Revision, m.UpdatedAt); err != nil {
+		return err
+	}
+	return emit(ctx, tx, m.ConversationID, EventMessageUpdated, MessageUpdated{m.public()})
+}
+
+func loadAgent(ctx context.Context, db pg.DB, id string) (*AgentRecord, error) {
+	return pg.One[AgentRecord](ctx, db, "SELECT * FROM agent WHERE id = $1", id)
+}
+
+// SetAgentStatus changes the agent's runtime status.
+func SetAgentStatus(ctx context.Context, tx pgx.Tx, agentID, status string) error {
+	_, err := tx.Exec(ctx, "UPDATE agent SET status = $2, updated_at = $3 WHERE id = $1", agentID, status, pg.Now())
+	return err
+}
+
+// Notify wakes the controller for the agent once tx commits: it has work to
+// deliver or to stop.
+func Notify(ctx context.Context, tx pgx.Tx, agentID string) error {
+	_, err := tx.Exec(ctx, "SELECT pg_notify($1, $2)", WorkChannel, agentID)
+	return err
+}
+
+// WorkChannel is the PostgreSQL notification channel Notify uses.
+const WorkChannel = "axp_agent_work"
+
+// RefreshAgentStatus recomputes the agent's product status from its runtime
+// and its replies, and publishes a change.
+func RefreshAgentStatus(ctx context.Context, tx pgx.Tx, agentID string) error {
+	agent, err := loadAgent(ctx, tx, agentID)
+	if err != nil {
+		return err
+	}
+	status := ProductIdle
+	if agent.Status == AgentError {
+		status = ProductUnavailable
+	} else {
+		rows, err := tx.Query(ctx, `SELECT DISTINCT status FROM message
+			WHERE agent_id = $1 AND role = 'assistant' AND status = ANY($2)`, agentID, activeMessageStatuses)
+		if err != nil {
+			return err
+		}
+		active, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		if err != nil {
+			return err
+		}
+		switch {
+		case slices.Contains(active, MessageWaitingForInput):
+			status = ProductWaitingForInput
+		case len(active) == 0:
+		case agent.Status != AgentReady:
+			// Work waits on its environment: an image, a container, the thread.
+			status = ProductStarting
+		default:
+			status = ProductWorking
+		}
+	}
+	if status == agent.ProductStatus {
+		return nil
+	}
+	agent.ProductStatus = status
+	agent.ProductRevision++
+	if _, err := tx.Exec(ctx, `UPDATE agent SET product_status = $2, product_revision = $3, updated_at = $4
+		WHERE id = $1`, agentID, status, agent.ProductRevision, pg.Now()); err != nil {
+		return err
+	}
+	return emitAgent(ctx, tx, agent)
+}
+
 // failures are product-facing failure reasons. Internal causes stay in the
 // control plane.
 var failures = map[string]string{
@@ -203,7 +212,7 @@ var failures = map[string]string{
 	"AGENT_UNAVAILABLE":      "智能体环境暂时不可用，请稍后再试。",
 	"AGENT_RECOVERY_FAILED":  "智能体会话无法恢复，此消息未执行。",
 	"AGENT_EXTENSION_FAILED": "智能体扩展启动失败，此消息未执行。",
-	"START_TIMEOUT":          "智能体环境准备超时，此消息未执行。",
+	"AGENT_BUILD_FAILED":     "智能体环境构建失败，此消息未执行。",
 }
 
 // Outcomes of a command.
@@ -275,10 +284,6 @@ func FinishCommand(ctx context.Context, tx pgx.Tx, command *CommandRecord, outco
 		if err := saveMessage(ctx, tx, r); err != nil {
 			return false, err
 		}
-	}
-	if _, err := tx.Exec(ctx, "UPDATE agent SET status = 'ready', updated_at = $2 WHERE id = $1 AND status = 'busy'",
-		command.AgentID, now); err != nil {
-		return false, err
 	}
 	return true, RefreshAgentStatus(ctx, tx, command.AgentID)
 }

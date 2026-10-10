@@ -2,9 +2,7 @@
 //
 //	axp-plugins chat <plugins> <codex config dir> <image root>
 //	    sets up the chat plugins and compiles them for Codex, in place
-//	    (the agent runtime image; <image root> is where agents see them)
-//	axp-plugins compile <plugins> <codex config dir> <image root>
-//	    only compiles them (tests)
+//	    (an agent's image; <image root> is where the agent sees them)
 //	axp-plugins setup <target> <plugins> <bin dir>
 //	    sets up the target's plugins, their executables into <bin dir>
 //
@@ -41,8 +39,6 @@ func run(args []string) error {
 			return err
 		}
 		return plugins.Chat(args[1], args[2], args[3])
-	case len(args) == 4 && args[0] == "compile":
-		return plugins.Chat(args[1], args[2], args[3])
 	case len(args) == 4 && args[0] == "setup":
 		list, err := plugins.List(args[2], args[1])
 		if err != nil {
@@ -53,5 +49,5 @@ func run(args []string) error {
 		}
 		return plugins.SetUp(list, cache, args[3])
 	}
-	return fmt.Errorf("usage: axp-plugins chat|compile <plugins> <codex dir> <image root> | setup <target> <plugins> <bin dir>")
+	return fmt.Errorf("usage: axp-plugins chat <plugins> <codex dir> <image root> | setup <target> <plugins> <bin dir>")
 }

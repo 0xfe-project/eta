@@ -15,6 +15,8 @@ export default antfu(
     toml: false,
     ignores: [
       "**/*.gen.ts",
+      // Generated from the pinned Codex's app-server schema.
+      "apps/agent-runtime/src/protocol/**",
       // Generated from the shadcn and brainless registries.
       "apps/web/src/components/ui/**",
       "apps/web/src/components/brainless/**",
@@ -25,7 +27,7 @@ export default antfu(
   {
     // The typescript-eslint based rule misreads plain JS scopes and reports
     // every variable as "only used as a type"; use the core rule there.
-    files: ["**/*.js"],
+    files: ["**/*.js", "**/*.mjs"],
     rules: {
       "unused-imports/no-unused-vars": "off",
       "no-unused-vars": [

@@ -1,15 +1,17 @@
-// Package auth is runtimes' credentials.
+// Package auth is runtimes' credentials, derived from the control plane's
+// secret and the agent, so nothing stores them.
 //
-// A runtime's token is derived from its instance id and generation, so it
-// stops working as soon as a new generation takes over. Identity in request
-// bodies is never trusted.
+// An agent's key ("<agent id>.<token>") is what its runtime and plugins show
+// AXP's services through the runtime gateway; it works as long as the agent
+// exists. The control token is the controller's credential for the agent's
+// runtime's control API. Agents never learn each other's: identity in
+// request bodies is never trusted.
 package auth
 
 import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"net/http"
 	"strings"
 )
@@ -20,8 +22,23 @@ func sign(secret []byte, message string) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-func RuntimeToken(secret []byte, instanceID string, generation int64) string {
-	return sign(secret, fmt.Sprintf("runtime:%s:%d", instanceID, generation))
+// AgentKey is the agent's key for AXP's services.
+func AgentKey(secret []byte, agentID string) string {
+	return agentID + "." + sign(secret, "agent:"+agentID)
+}
+
+// AgentOf is the agent whose key this is, or "".
+func AgentOf(secret []byte, key string) string {
+	agentID, _, _ := strings.Cut(key, ".")
+	if agentID == "" || !Matches(key, AgentKey(secret, agentID)) {
+		return ""
+	}
+	return agentID
+}
+
+// ControlToken is the controller's credential for the agent's runtime.
+func ControlToken(secret []byte, agentID string) string {
+	return sign(secret, "control:"+agentID)
 }
 
 // Matches compares tokens in constant time.
