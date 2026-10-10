@@ -3,13 +3,13 @@ import type { KnipConfig } from "knip";
 // Dead code check for the TypeScript workspaces (`turbo run knip`). The Python
 // and Go apps only use package.json for Turbo scripts.
 export default {
-  // Submodules (akhook, agenvo) are other projects, built from source.
+  // The akhook submodule is another project, built from source.
   ignore: ["vendor/**"],
   // System tools the Turbo scripts call.
   ignoreBinaries: ["go", "gofmt", "uv"],
-  // Run by path: scripts/dev.sh runs concurrently, the forge service's Go
-  // tests run emulate (their emulated GitHub).
-  ignoreDependencies: ["concurrently", "emulate"],
+  // Run by path: scripts/dev.sh runs concurrently and the agenvo relay, the
+  // forge service's Go tests run emulate (their emulated GitHub).
+  ignoreDependencies: ["concurrently", "@agenvo/server", "emulate"],
   // CSS files are part of the module graph: their @imports reference
   // packages (fonts, tw-animate-css, shadcn) and other stylesheets.
   compilers: {

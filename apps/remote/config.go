@@ -23,6 +23,9 @@ type Config struct {
 	Name       string `json:"name"`
 	// The relay's base URL, which the connectors pair and connect with.
 	RelayURL string `json:"relay_url"`
+	// The relay's agenvo version, which setup installs (the latest when
+	// empty); AXP says it on every setup.
+	ConnectorVersion string `json:"-"`
 	// Where setup installed the connectors.
 	Home string `json:"home"`
 	// The runtimes setup found, by kind.
