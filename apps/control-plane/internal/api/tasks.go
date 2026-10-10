@@ -64,6 +64,10 @@ type ComputerIn struct {
 	Name string `json:"name" minLength:"1" maxLength:"100"`
 }
 
+type ApproveIn struct {
+	Fingerprint string `json:"fingerprint" minLength:"1" maxLength:"200" doc:"The fingerprint the user compared with setup's output; only that pairing is approved."`
+}
+
 type ComputerPath struct {
 	ComputerID string `path:"computer_id"`
 }
@@ -253,8 +257,9 @@ func registerTasks(api huma.API, d *Deps) {
 		func(ctx context.Context, in *struct {
 			ComputerPath
 			Kind string `path:"kind" enum:"paseo,herdr"`
+			Body ApproveIn
 		}) (*struct{}, error) {
-			return nil, s.Approve(ctx, d.DB, in.ComputerID, in.Kind)
+			return nil, s.Approve(ctx, d.DB, in.ComputerID, in.Kind, in.Body.Fingerprint)
 		})
 
 	huma.Register(api, taskOp("deleteComputer", http.MethodDelete, "/api/v1/computers/{computer_id}",
