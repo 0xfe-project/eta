@@ -45,7 +45,7 @@ type Config struct {
 	// The runtime image's Codex plugins (apps/agent-runtime/plugins), for the
 	// catalog agents choose from; the production image copies them alongside.
 	PluginsDir string `env:"AXP_PLUGINS_DIR" default:"../agent-runtime/plugins"`
-	// The agenvo relay (vendor/agenvo), which remote computers' connectors
+	// The agenvo relay (@agenvo/server), which remote computers' connectors
 	// pair with at its public base URL (production: AXP_PUBLIC_URL under
 	// /remote/relay); the control plane reaches it at RelayURL. Remote
 	// computers are off without the base URL or the administrator secret.
@@ -60,8 +60,8 @@ type Config struct {
 	// The forge service, for remote computers' GitHub credentials.
 	ForgeURL string `env:"AXP_FORGE_URL" prod:"http://axp-forge:8330"`
 	// Directories (colon-separated) with what remote computers download: the
-	// axp binaries and the agenvo connectors.
-	RemoteDist string `env:"AXP_REMOTE_DIST" default:"../remote/out/dist:../relay/out/connectors"`
+	// axp binaries.
+	RemoteDist string `env:"AXP_REMOTE_DIST" default:"../remote/out/dist"`
 	// Test hook: runtimes run this instead of the Codex app-server.
 	CodexLaunch string `env:"AXP_CODEX_LAUNCH"`
 }

@@ -139,7 +139,8 @@ func connect(c *Config, code string) error {
 			return errors.New("usage: axp setup --url URL --code CODE")
 		}
 		var reported struct {
-			RelayURL string `json:"relay_url"`
+			RelayURL         string `json:"relay_url"`
+			ConnectorVersion string `json:"connector_version"`
 		}
 		err := c.call("POST", "/remote/v1/report", c.report(), &reported)
 		if e, ok := errors.AsType[*apiError](err); ok && e.Status == http.StatusUnauthorized {
@@ -151,6 +152,7 @@ func connect(c *Config, code string) error {
 		if reported.RelayURL != "" {
 			c.RelayURL = reported.RelayURL
 		}
+		c.ConnectorVersion = reported.ConnectorVersion
 		return c.save()
 	}
 	var enrolled struct {
@@ -158,6 +160,7 @@ func connect(c *Config, code string) error {
 		Name       string `json:"name"`
 		Token      string `json:"token"`
 		RelayURL   string `json:"relay_url"`
+		Version    string `json:"connector_version"`
 	}
 	report := c.report()
 	report["code"] = code
@@ -168,6 +171,7 @@ func connect(c *Config, code string) error {
 		c.unpair()
 	}
 	c.Token, c.ComputerID, c.Name, c.RelayURL = enrolled.Token, enrolled.ComputerID, enrolled.Name, enrolled.RelayURL
+	c.ConnectorVersion = enrolled.Version
 	return c.save()
 }
 
@@ -336,12 +340,16 @@ func (c *Config) kinds() []string {
 	return kinds
 }
 
-// installConnectors installs the connectors AXP serves (its pinned agenvo)
-// under the installation, away from any global one.
+// installConnectors installs the connectors from npm, at the relay's
+// version, under the installation, away from any global one.
 func installConnectors(c *Config) error {
 	args := []string{"install", "--global", "--prefix", filepath.Join(c.Home, "agenvo"), "--no-audit", "--no-fund", "--loglevel=error"}
 	for _, kind := range c.kinds() {
-		args = append(args, c.URL+"/remote/dl/agenvo-"+kind+".tgz")
+		pkg := "@agenvo/" + kind
+		if c.ConnectorVersion != "" {
+			pkg += "@" + c.ConnectorVersion
+		}
+		args = append(args, pkg)
 	}
 	cmd := exec.Command("npm", args...)
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr

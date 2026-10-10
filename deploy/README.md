@@ -56,7 +56,7 @@ deploy/deploy.sh rollback <version>
 
 每个角色只拿自己读取的机密（`deploy.yml` 的 `x-secrets`，没有顶层 `env.secret`：Kamal 把角色的 secret 与顶层的取并集，角色里无法去掉顶层的项）：`api`、`internal`、`controller` 共用同一套初始化，拿全部（`AXP_SECRET_KEY`、`DATABASE_URL`、`AXP_S3_ACCESS_KEY_ID`、`AXP_S3_SECRET_ACCESS_KEY`、`AXP_RELAY_ADMIN_SECRET`、`OTEL_EXPORTER_OTLP_HEADERS`）；`memory`、`routines` 拿 `DATABASE_URL` 和 `OTEL_EXPORTER_OTLP_HEADERS`；`web`、`llm`、`forge` 只拿 `OTEL_EXPORTER_OTLP_HEADERS`；两个网关没有机密。新增机密时加到读取它的角色上。
 
-accessory `relay` 是远程电脑接入用的 agenvo 中继（[任务与远程电脑](../docs/architecture/tasks.md)）：它的镜像 `axp-relay:<agenvo commit>-<Dockerfile 摘要>` 由 `deploy.sh` 构建并推送到本地仓库，只在固定的 agenvo 版本或 `relay.Dockerfile` 变化时重建并重启；状态（配对的设备、OAuth 授权）在卷 `axp-relay`；不发布端口，由 `gateway` 在 AXP 地址的 `/remote/relay` 下对外（`AXP_RELAY_BASE_URL`，由 `AXP_PUBLIC_URL` 推出）。在 `production.env` 设置 `AXP_PUBLIC_URL`（安装命令里的 AXP 地址，没有它远程电脑功能关闭），并让 Access 对 AXP 的 `/remote/` 放行（中继在其下，自己鉴权设备）。
+accessory `relay` 是远程电脑接入用的 agenvo 中继（[任务与远程电脑](../docs/architecture/tasks.md)）：它的镜像 `axp-relay:<agenvo 版本>-<Dockerfile 摘要>` 由 `deploy.sh` 按 `apps/relay/package.json` 固定的版本从 npm 装 `@agenvo/server`，推送到本地仓库，只在这个版本或 `relay.Dockerfile` 变化时重建并重启；状态（配对的设备、OAuth 授权）在卷 `axp-relay`；不发布端口，由 `gateway` 在 AXP 地址的 `/remote/relay` 下对外（`AXP_RELAY_BASE_URL`，由 `AXP_PUBLIC_URL` 推出）。在 `production.env` 设置 `AXP_PUBLIC_URL`（安装命令里的 AXP 地址，没有它远程电脑功能关闭），并让 Access 对 AXP 的 `/remote/` 放行（中继在其下，自己鉴权设备）。
 
 服务之间没有共享密钥：角色中只有 `runtime-gateway` 和 controller 加入 runtime 网络（accessory 中还有 `axp-s3-proxy`、`axp-nats` 和 `axp-otel-collector`），其余角色只在 Kamal 网络上，runtime 连不到（见[网关](../docs/architecture/gateway.md)）。两个网关的访问日志是 JSON，写在容器输出里（`deploy/deploy.sh app logs -r gateway`），不进 OpenObserve。
 

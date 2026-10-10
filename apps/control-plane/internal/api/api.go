@@ -23,8 +23,7 @@ type Deps struct {
 	PublicURL string
 	// The forge service, for remote computers' GitHub credentials.
 	ForgeURL string
-	// What remote computers download from /remote/dl: the axp binaries and
-	// the agenvo connectors.
+	// What remote computers download from /remote/dl: the axp binaries.
 	RemoteDist string
 	// Dev serves the internal API's docs.
 	Dev bool

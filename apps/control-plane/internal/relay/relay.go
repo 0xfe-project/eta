@@ -1,5 +1,5 @@
 // Package relay is the control plane's client for the agenvo relay
-// (vendor/agenvo), which connects remote computers' coding runtimes
+// (@agenvo/server), which connects remote computers' coding runtimes
 // (docs/architecture/tasks.md).
 //
 // The relay has two surfaces, both reached on the internal network:
@@ -104,6 +104,8 @@ type State struct {
 type Relay interface {
 	// BaseURL is the relay's public base URL, which connectors pair with.
 	BaseURL() string
+	// Version is the relay's agenvo version, which connectors should run.
+	Version(ctx context.Context) (string, error)
 	State(ctx context.Context) (*State, error)
 	ApprovePairing(ctx context.Context, code, fingerprint string) (deviceID string, err error)
 	// ApproveInstance approves a device's changed or added runtime.
@@ -176,6 +178,20 @@ func (c *Client) send(ctx context.Context, method, path string, body io.Reader, 
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	return resp, data, err
+}
+
+func (c *Client) Version(ctx context.Context) (string, error) {
+	resp, data, err := c.send(ctx, http.MethodGet, "/health", nil, nil)
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode >= 300 {
+		return "", outcomeError(resp.StatusCode, data)
+	}
+	var health struct {
+		Version string `json:"version"`
+	}
+	return health.Version, json.Unmarshal(data, &health)
 }
 
 // --- administrator API ---------------------------------------------------------------

@@ -1,16 +1,12 @@
 package tasks
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -102,7 +98,7 @@ type Computers struct {
 	// Whether a relay is set up; without one nothing can be added.
 	RelayConfigured bool    `json:"relay_configured"`
 	RelayURL        *string `json:"relay_url" nullable:"true"`
-	// The agenvo version of the connectors AXP serves, what updating installs.
+	// The relay's agenvo version, which updating installs on the connectors.
 	ConnectorVersion *string `json:"connector_version" nullable:"true"`
 	// The relay could not be asked for its devices' state.
 	RelayError *string `json:"relay_error" nullable:"true"`
@@ -133,10 +129,8 @@ func (s *Service) relayState(ctx context.Context) (*relay.State, error) {
 // ListComputers is every computer with its runtimes' state on the relay.
 func (s *Service) ListComputers(ctx context.Context, db pg.DB) (*Computers, error) {
 	out := &Computers{Computers: []Computer{}, RelayConfigured: s.Relay != nil}
-	if s.ConnectorVersion != "" {
-		out.ConnectorVersion = &s.ConnectorVersion
-	}
 	var state *relay.State
+	var served string
 	if s.Relay != nil {
 		base := s.Relay.BaseURL()
 		out.RelayURL = &base
@@ -144,6 +138,9 @@ func (s *Service) ListComputers(ctx context.Context, db pg.DB) (*Computers, erro
 		if state, err = s.relayState(ctx); err != nil {
 			message := err.Error()
 			out.RelayError = &message
+		}
+		if served = s.ConnectorVersion(ctx); served != "" {
+			out.ConnectorVersion = &served
 		}
 	}
 	rows, err := pg.All[computerRow](ctx, db, "SELECT * FROM computer ORDER BY created_at")
@@ -172,7 +169,7 @@ func (s *Service) ListComputers(ctx context.Context, db pg.DB) (*Computers, erro
 		}
 		for _, rt := range runtimes {
 			if rt.ComputerID == r.ID {
-				public := runtimeState(rt, state, s.ConnectorVersion)
+				public := runtimeState(rt, state, served)
 				c.Runtimes = append(c.Runtimes, public)
 				c.Online = c.Online || public.State == "online"
 			}
@@ -432,7 +429,7 @@ func (s *Service) AssigneeOptions(ctx context.Context, db pg.DB) ([]AssigneeOpti
 	}
 	out := []AssigneeOption{}
 	for _, r := range rows {
-		online := runtimeState(&r.computerRuntimeRow, state, s.ConnectorVersion).State == "online"
+		online := runtimeState(&r.computerRuntimeRow, state, "").State == "online"
 		for _, p := range r.Providers {
 			out = append(out, AssigneeOption{ComputerID: r.ComputerID, ComputerName: r.Name, Runtime: r.Kind, Provider: p, Online: online})
 		}
@@ -511,6 +508,18 @@ type Enrolled struct {
 	Name       string `json:"name"`
 	Token      string `json:"token"`
 	RelayURL   string `json:"relay_url"`
+	// The agenvo version setup installs; the latest when empty.
+	ConnectorVersion string `json:"connector_version,omitempty"`
+}
+
+// ConnectorVersion is the relay's agenvo version, which remote computers'
+// connectors should run, or "" when the relay cannot say.
+func (s *Service) ConnectorVersion(ctx context.Context) string {
+	v, err := s.Relay.Version(ctx)
+	if err != nil {
+		slog.WarnContext(ctx, "Relay version unavailable", "error", err)
+	}
+	return v
 }
 
 // Enroll trades an install code for the computer's token.
@@ -533,7 +542,7 @@ func (s *Service) Enroll(ctx context.Context, tx pgx.Tx, code string, in Report)
 	if err := s.Report(ctx, tx, &RemoteComputer{ID: r.ID, Name: r.Name}, in); err != nil {
 		return nil, err
 	}
-	return &Enrolled{ComputerID: r.ID, Name: r.Name, Token: token, RelayURL: s.Relay.BaseURL()}, nil
+	return &Enrolled{ComputerID: r.ID, Name: r.Name, Token: token, RelayURL: s.Relay.BaseURL(), ConnectorVersion: s.ConnectorVersion(ctx)}, nil
 }
 
 // Report records the computer and its runtimes as setup found them. A
@@ -679,45 +688,4 @@ func (s *Service) RecordDeliverable(ctx context.Context, tx pgx.Tx, c *RemoteCom
 	data := s.remoteData(ctx, tx, c, r)
 	data["kind"], data["url"], data["title"] = in.Kind, in.URL, in.Title
 	return record(ctx, tx, r.ID, run, "deliverable", Remote, nil, data)
-}
-
-// ServedConnectorVersion is the agenvo version of the connector tarballs
-// in dirs (colon-separated, as AXP serves them at /remote/dl), or "" when
-// there are none.
-func ServedConnectorVersion(dirs string) string {
-	for dir := range strings.SplitSeq(dirs, ":") {
-		for _, kind := range Runtimes {
-			if v := tarballVersion(filepath.Join(dir, "agenvo-"+kind+".tgz")); v != "" {
-				return v
-			}
-		}
-	}
-	return ""
-}
-
-// tarballVersion is an npm tarball's package version.
-func tarballVersion(path string) string {
-	f, err := os.Open(path)
-	if err != nil {
-		return ""
-	}
-	defer f.Close()
-	gz, err := gzip.NewReader(f)
-	if err != nil {
-		return ""
-	}
-	tr := tar.NewReader(gz)
-	for {
-		h, err := tr.Next()
-		if err != nil {
-			return ""
-		}
-		if h.Name == "package/package.json" {
-			var p struct {
-				Version string `json:"version"`
-			}
-			_ = json.NewDecoder(tr).Decode(&p)
-			return p.Version
-		}
-	}
 }
