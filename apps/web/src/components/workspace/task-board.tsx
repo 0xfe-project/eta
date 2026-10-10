@@ -32,6 +32,7 @@ import {
   useUpdateTask,
 } from "@/queries/tasks";
 import { PageHeader } from "./app-shell";
+import { BackToTop } from "./back-to-top";
 import { RefreshButton } from "./refresh-button";
 import { when } from "./routine-format";
 import {
@@ -379,8 +380,9 @@ function TaskPage({ id }: { id: string }) {
         className="min-h-0 flex-1 overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] lg:overflow-hidden"
       >
         <div className="lg:overflow-y-auto">
-          <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-8">
-            <div className="space-y-1">
+          <div className="mx-auto max-w-3xl space-y-6 px-4 pb-6 sm:px-8">
+            {/* Pinned under the page header (任务 and the number) as the rest scrolls. */}
+            <div className="sticky top-0 z-10 mb-3 space-y-1 bg-background pt-4 pb-3">
               <EditableTitle key={task.title} task={task} className="text-xl" />
               <p className="text-xs text-muted-foreground tabular-nums">
                 {createdBy(task)}
@@ -396,6 +398,7 @@ function TaskPage({ id }: { id: string }) {
               <CommentBox task={task} />
             </section>
           </div>
+          <BackToTop className="px-4 sm:px-8" />
         </div>
         <aside
           aria-label="属性"
