@@ -1,6 +1,10 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "agentGuidance": false,
+  // Vercel Remote Cache, shared by every checkout (worktrees included) and CI:
+  // a commit's pre-commit run uploads, so CI mostly replays. Each machine
+  // authenticates itself (`turbo login`; CI exchanges its OIDC token).
+  "remoteCache": { "teamId": "team_m0cGPvm66wsuOjDpnCrXUDPz" },
   "tasks": {
     "build": {
       "outputs": ["dist/**", "out/**"]
