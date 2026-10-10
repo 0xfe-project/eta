@@ -15,6 +15,10 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      # The Remote Cache token is exchanged for the job's OIDC token.
+      id-token: write
     env:
       # Tests that need a tool fail instead of skipping without it.
       CI: "1"
@@ -24,12 +28,25 @@ jobs:
         with:
           submodules: true
 
+      # Turborepo's Remote Cache (turbo.json's remoteCache), which development
+      # machines fill as they commit: a short-lived token for the Vercel team,
+      # through its OIDC policy for this repository. Without one the run only
+      # goes uncached.
+      - name: Turborepo Remote Cache
+        uses: vercel/setup-turborepo-remote-cache-action@v1.1.0
+        continue-on-error: true
+        with:
+          team: team_m0cGPvm66wsuOjDpnCrXUDPz
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
+      # Node runs the relay's build (npm ci in vendor/agenvo).
       - uses: actions/setup-node@v7
         with:
           node-version: 24
+          cache: npm
+          cache-dependency-path: vendor/agenvo/package-lock.json
       - uses: actions/setup-go@v7
         with:
           go-version-file: apps/control-plane/go.mod
@@ -42,11 +59,13 @@ jobs:
         with:
           workspaces: vendor/akhook
 
+      # Bun's package store; Go's, uv's and Cargo's are cached by their setup
+      # actions above.
       - uses: actions/cache@v6
         with:
-          path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ github.sha }}
-          restore-keys: turbo-${{ runner.os }}-
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
       # The queue tests' NATS.
       - name: Start NATS
