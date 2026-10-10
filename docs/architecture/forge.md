@@ -40,7 +40,7 @@ App 申请 GitHub 允许的全部仓库权限（含 `workflows`、`administratio
 
 ## open_pull_request
 
-forge 服务在 `/forge/mcp` 提供这个 MCP 工具（`github` 插件的 `.mcp.json` 指向它，经 runtime 网关鉴权）。参数是仓库（`owner/name` 或 remote URL）、已推送的分支、标题、正文，可选的 base（默认是仓库的默认分支）和 draft。同一分支已有打开的 PR 时返回它，而不是报错。`gh pr create` 同样可用，身份与 gh 的其余命令相同。
+forge 服务在 `/forge/mcp` 提供这个 MCP 工具（`github` 插件的 `.mcp.json` 指向它，经 runtime 网关鉴权）。参数是仓库（`owner/name` 或 remote URL）、已推送的分支、标题、正文，可选的 base（默认是仓库的默认分支）和 draft。同一分支已有打开的 PR 时返回它，而不是报错。规则 `gh-pr-create` 把 `gh pr create` 引导到这个工具（见[工具调用规则与用户确认](agent-hooks.md)）。
 
 ## 身份
 
