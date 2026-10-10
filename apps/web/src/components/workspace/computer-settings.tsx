@@ -97,6 +97,11 @@ function Runtimes({ runtimes }: { runtimes: ComputerRuntime[] }) {
                 "没有可用的 provider"
               : stateLabels[runtime.state]}
           </span>
+          {runtime.needs_update ? (
+            <span className="text-amber-600 dark:text-amber-500">
+              connector {runtime.connector_version}，需要更新
+            </span>
+          ) : null}
         </li>
       ))}
     </ul>
@@ -152,6 +157,9 @@ function Approval({
     </div>
   );
 }
+
+const outdated = (computer: Computer) =>
+  computer.runtimes.filter((runtime) => runtime.needs_update);
 
 const pending = (computer: Computer) =>
   computer.runtimes.filter(
@@ -222,17 +230,31 @@ function CommandBox({ command }: { command: string }) {
 }
 
 /**
+ * What the dialog is opened on: nothing (a new computer), a computer and
+ * its new install command (to install or, with `update`, to update it), or
+ * a computer alone (to approve its runtimes).
+ */
+interface Target {
+  id?: string;
+  command?: string;
+  update?: boolean;
+}
+
+/**
  * One computer's way in, all three steps in view from the start: a name,
  * the install command, then the computer connecting and being approved.
- * For an installed computer, only its runtimes waiting for approval.
+ * For an installed computer, only its runtimes waiting for approval; to
+ * update one, the update command and then its runtimes coming back.
  */
 function ComputerDialog({
   target,
   computers,
+  connectorVersion,
   onClose,
 }: {
-  target: { id?: string; command?: string };
+  target: Target;
   computers: Computer[];
+  connectorVersion?: string | null;
   onClose: () => void;
 }) {
   const add = useAddComputer();
@@ -241,10 +263,15 @@ function ComputerDialog({
   const computer = computers.find((c) => c.id === made.id);
   const approvals = computer ? pending(computer) : [];
   const connected = Boolean(computer?.runtimes.length);
-  const done = computer?.online && connected && !approvals.length;
+  const done =
+    computer?.online &&
+    connected &&
+    !approvals.length &&
+    !(computer && outdated(computer).length);
   // Opened on an installed computer to approve; decided once, so the steps
   // stay put while the computer enrolls.
   const approveOnly = Boolean(target.id && !target.command);
+  const update = Boolean(target.update);
 
   const progress = (
     <div aria-live="polite" className="space-y-2">
@@ -271,11 +298,33 @@ function ComputerDialog({
           <DialogDescription>
             {approveOnly
               ? "核对指纹与那台电脑终端里打印的一致，再批准。"
-              : "智能体会在那台电脑上以完全权限运行，请只接入专门用来干活的电脑。"}
+              : update
+                ? `把这台电脑上的 axp 和 agenvo connector 更新到 AXP 当前提供的版本${connectorVersion ? `（${connectorVersion}）` : ""}，并连到 AXP 当前的中继地址。`
+                : "智能体会在那台电脑上以完全权限运行，请只接入专门用来干活的电脑。"}
           </DialogDescription>
         </DialogHeader>
         {approveOnly ? (
           progress
+        ) : update ? (
+          <ol className="space-y-4">
+            <Step n={1} title="在那台电脑的终端里运行" active={!done}>
+              {made.command ? <CommandBox command={made.command} /> : null}
+              <p className="text-xs text-muted-foreground">
+                它会下载新的 axp，安装新的 connector，把 connector
+                改到当前的中继地址并重启它们的服务，不需要重新配对。Paseo 和
+                Herdr 里正在运行的智能体不会被停止。命令只能用一次，24
+                小时内有效；运行后这台电脑原来的令牌失效。
+              </p>
+            </Step>
+            <Step n={2} title="确认已更新" active={connected && !done}>
+              {connected ? progress : null}
+              <p className="text-xs text-muted-foreground">
+                {done
+                  ? "已更新，所有运行时都在线。"
+                  : "等待那台电脑重新连上。若出现“等待批准”（connector 有变化），核对指纹与终端里打印的一致后批准。"}
+              </p>
+            </Step>
+          </ol>
         ) : (
           <ol className="space-y-4">
             <Step n={1} title="起个名字" active={!made.id}>
@@ -360,13 +409,20 @@ function ComputerRow({
   onOpen,
 }: {
   computer: Computer;
-  onOpen: (target: { id: string; command?: string }) => void;
+  onOpen: (target: Target) => void;
 }) {
   const renew = useRenewInstall();
   const remove = useDeleteComputer();
   const [confirming, setConfirming] = useState(false);
   const approvals = pending(computer);
+  const updates = outdated(computer);
   const online = computer.runtimes.filter((r) => r.state === "online");
+  const startUpdate = () =>
+    renew.mutate(computer.id, {
+      onSuccess: (install) =>
+        onOpen({ id: computer.id, command: install.command, update: true }),
+      onError: showError,
+    });
   const details = [
     computer.hostname,
     computer.os &&
@@ -382,6 +438,7 @@ function ComputerRow({
       ? "离线"
       : [
           online.map((r) => runtimeLabel(r.kind)).join("、"),
+          updates.length ? "connector 需要更新" : null,
           computer.active_runs ? `${computer.active_runs} 个任务进行中` : null,
         ]
           .filter(Boolean)
@@ -420,6 +477,10 @@ function ComputerRow({
             ? ` ${runtimeLabel(approvals[0].kind)}`
             : "配对"}
         </Button>
+      ) : updates.length ? (
+        <Button size="sm" disabled={renew.isPending} onClick={startUpdate}>
+          更新
+        </Button>
       ) : null}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -432,6 +493,11 @@ function ComputerRow({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-36">
+          {computer.enrolled ? (
+            <DropdownMenuItem disabled={renew.isPending} onSelect={startUpdate}>
+              更新 connector
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem
             variant="destructive"
             onSelect={() => setConfirming(true)}
@@ -480,7 +546,7 @@ export function ComputerSettings() {
   // starts fresh.
   const [dialog, setDialog] = useState<{
     n: number;
-    target: { id?: string; command?: string };
+    target: Target;
   }>();
   const open = (target: { id?: string; command?: string } = {}) =>
     setDialog((d) => ({ n: (d?.n ?? 0) + 1, target }));
@@ -516,6 +582,23 @@ export function ComputerSettings() {
               无法连接中继 {data.relay_url}：{data.relay_error}
             </p>
           ) : null}
+          {data.computers.some((c) => outdated(c).length) ? (
+            <p
+              role="status"
+              className="text-xs text-amber-600 dark:text-amber-500"
+            >
+              有电脑的 agenvo connector 与 AXP 提供的版本
+              {data.connector_version ? ` ${data.connector_version}` : ""}{" "}
+              不一致：点那台电脑上的“更新”，按提示在那台电脑上运行命令。
+            </p>
+          ) : null}
+          {data.computers.some((c) => c.enrolled && !c.online) ? (
+            <p className="text-xs text-muted-foreground">
+              离线的电脑如果开着机，可能是 connector
+              版本过旧或中继地址变了：在它的“⋯”菜单里选“更新
+              connector”，按提示在那台电脑上运行命令。
+            </p>
+          ) : null}
           {data.computers.length ? (
             <ul aria-label="远程电脑" className="divide-y border">
               {data.computers.map((computer) => (
@@ -536,6 +619,7 @@ export function ComputerSettings() {
               key={dialog.n}
               target={dialog.target}
               computers={data.computers}
+              connectorVersion={data.connector_version}
               onClose={() => setDialog(undefined)}
             />
           ) : null}

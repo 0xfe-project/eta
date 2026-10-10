@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -75,6 +76,8 @@ type Instance struct {
 	Fingerprint string `json:"fingerprint"`
 	Available   bool   `json:"available"`
 	Approved    bool   `json:"approved"`
+	// The agenvo version its connector runs, while it is connected.
+	ConnectorVersion string `json:"connectorVersion,omitempty"`
 }
 
 type Device struct {
@@ -207,10 +210,38 @@ func outcomeError(status int, data []byte) error {
 	return fmt.Errorf("relay: HTTP %d: %s", status, bytes.TrimSpace(data))
 }
 
+// State is the administrator API's state, with each connected instance's
+// connector version, which only the MCP search tool reports (left out when
+// it cannot be read).
 func (c *Client) State(ctx context.Context) (*State, error) {
 	var s State
 	if err := c.admin(ctx, http.MethodGet, "/api/admin/state", nil, &s); err != nil {
 		return nil, err
+	}
+	out, err := c.tool(ctx, "search", map[string]string{"query": ""})
+	if err == nil && out.Error != nil {
+		err = out.Error
+	}
+	if err != nil {
+		slog.WarnContext(ctx, "Relay connector versions unavailable", "error", err)
+		return &s, nil
+	}
+	var found struct {
+		Items []struct {
+			DeviceID         string `json:"deviceId"`
+			InstanceID       string `json:"instanceId"`
+			ConnectorVersion string `json:"connectorVersion"`
+		} `json:"items"`
+	}
+	_ = json.Unmarshal(out.Result, &found)
+	for _, item := range found.Items {
+		for i := range s.Devices {
+			for j := range s.Devices[i].Instances {
+				if s.Devices[i].ID == item.DeviceID && s.Devices[i].Instances[j].InstanceID == item.InstanceID {
+					s.Devices[i].Instances[j].ConnectorVersion = item.ConnectorVersion
+				}
+			}
+		}
 	}
 	return &s, nil
 }
