@@ -535,6 +535,39 @@ func TestFailedRevisionIsMarked(t *testing.T) {
 	expect(t, scalar[int](e, "SELECT count(*) FROM routine_brief"), 1)
 }
 
+// The brief is edited while a revision waits for the model: the revision is
+// redone from the edited brief instead of replacing it.
+func TestARevisionDoesNotOverwriteANewerBrief(t *testing.T) {
+	e, routine, run := reported(t)
+	e.llm.requests = nil
+	e.llm.script = func(_ *model.LLMRequest, n int) (*genai.Content, error) {
+		if n == 1 {
+			expect(t, e.patch("/routines/"+routine.ID, map[string]any{"brief": "手动改过的要求"}).status, 200)
+			return text("基于旧要求的修订"), nil
+		}
+		return text("基于新要求的修订"), nil
+	}
+	expect(t, e.post("/routines/"+routine.ID+"/runs/"+run+"/feedback", map[string]any{"text": "别放体育新闻"}).status, 201)
+	expect(t, len(e.llm.requests), 2)
+	if prompt := e.llm.requests[1].Contents[0].Parts[0].Text; !strings.Contains(prompt, "手动改过的要求") {
+		t.Fatalf("redone from %q", prompt)
+	}
+	expect(t, scalar[string](e, "SELECT text FROM routine_brief ORDER BY version DESC LIMIT 1"), "基于新要求的修订")
+	expect(t, scalar[int](e, "SELECT max(version) FROM routine_brief"), 3)
+	expect(t, scalar[bool](e, "SELECT revision_failed FROM routine_feedback"), false)
+}
+
+func TestARevisionThatRunsOutOfTimeIsMarkedFailed(t *testing.T) {
+	e, routine, run := reported(t)
+	e.runner.ReviseLimit = 50 * time.Millisecond
+	e.llm.script = func(*model.LLMRequest, int) (*genai.Content, error) {
+		time.Sleep(100 * time.Millisecond)
+		return nil, context.DeadlineExceeded
+	}
+	e.post("/routines/"+routine.ID+"/runs/"+run+"/feedback", map[string]any{"text": "短一点"})
+	expect(t, scalar[bool](e, "SELECT revision_failed FROM routine_feedback"), true)
+}
+
 func TestRecoverRevisesPendingFeedback(t *testing.T) {
 	e, _, run := reported(t)
 	if _, err := pool.Exec(context.Background(), `INSERT INTO routine_feedback (id, run_id, text, created_at)
