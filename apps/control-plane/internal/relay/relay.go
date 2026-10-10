@@ -1,6 +1,6 @@
 // Package relay is the control plane's client for the agenvo relay
-// (vendor/agenvo, our fork AkaraChen/agenvo), which connects remote
-// computers' coding runtimes (docs/architecture/tasks.md).
+// (vendor/agenvo), which connects remote computers' coding runtimes
+// (docs/architecture/tasks.md).
 //
 // The relay has two surfaces, both reached on the internal network:
 //
@@ -11,8 +11,10 @@
 //     the control plane holds the administrator secret, so it signs in and
 //     consents itself, once, and keeps refreshing the grant.
 //
-// The relay checks Host against its public origin, so every request carries
-// the origin's host whatever address it is sent to.
+// The relay is public at its base URL, AXP's address under /remote/relay
+// (the public gateway's route to it). It checks Host and paths against that,
+// so every request carries the base URL's host and path prefix whatever
+// address it is sent to.
 package relay
 
 import (
@@ -27,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -73,6 +76,8 @@ type Instance struct {
 	Fingerprint string `json:"fingerprint"`
 	Available   bool   `json:"available"`
 	Approved    bool   `json:"approved"`
+	// The agenvo version its connector runs, while it is connected.
+	ConnectorVersion string `json:"connectorVersion,omitempty"`
 }
 
 type Device struct {
@@ -97,8 +102,8 @@ type State struct {
 
 // Relay is what the control plane does with the relay.
 type Relay interface {
-	// Origin is the relay's public origin, which connectors pair with.
-	Origin() string
+	// BaseURL is the relay's public base URL, which connectors pair with.
+	BaseURL() string
 	State(ctx context.Context) (*State, error)
 	ApprovePairing(ctx context.Context, code, fingerprint string) (deviceID string, err error)
 	// ApproveInstance approves a device's changed or added runtime.
@@ -107,20 +112,24 @@ type Relay interface {
 	Call(ctx context.Context, deviceID, instanceID, method string, params any) (*Outcome, error)
 }
 
-// Client is the relay at URL whose public origin is PublicOrigin.
+// Client is the relay at URL whose public base URL is Public.
 type Client struct {
-	URL          string
-	PublicOrigin string
-	Secret       string
-	DB           *pgxpool.Pool
-	HTTP         *http.Client
+	URL    string
+	Public *url.URL
+	Secret string
+	DB     *pgxpool.Pool
+	HTTP   *http.Client
 }
 
 // New is the relay client, or nil when no relay is configured. caFile, when
 // set, is the only CA trusted for the relay (development's self-signed one).
-func New(internalURL, origin, secret, caFile string, db *pgxpool.Pool) (*Client, error) {
-	if internalURL == "" || origin == "" || secret == "" {
+func New(internalURL, baseURL, secret, caFile string, db *pgxpool.Pool) (*Client, error) {
+	if internalURL == "" || baseURL == "" || secret == "" {
 		return nil, nil
+	}
+	public, err := url.Parse(strings.TrimRight(baseURL, "/"))
+	if err != nil || public.Scheme != "https" || public.Host == "" {
+		return nil, fmt.Errorf("relay: base URL %q is not an HTTPS URL", baseURL)
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	if caFile != "" {
@@ -132,11 +141,10 @@ func New(internalURL, origin, secret, caFile string, db *pgxpool.Pool) (*Client,
 		if !pool.AppendCertsFromPEM(pem) {
 			return nil, fmt.Errorf("relay: no certificate in %s", caFile)
 		}
-		host, _, _ := strings.Cut(strings.TrimPrefix(origin, "https://"), ":")
-		transport.TLSClientConfig = &tls.Config{RootCAs: pool, ServerName: host}
+		transport.TLSClientConfig = &tls.Config{RootCAs: pool, ServerName: public.Hostname()}
 	}
 	return &Client{
-		URL: strings.TrimRight(internalURL, "/"), PublicOrigin: strings.TrimRight(origin, "/"), Secret: secret, DB: db,
+		URL: strings.TrimRight(internalURL, "/"), Public: public, Secret: secret, DB: db,
 		// Never follow redirects: consent answers with one to our callback.
 		HTTP: &http.Client{
 			Transport: transport, Timeout: 30 * time.Second,
@@ -145,20 +153,22 @@ func New(internalURL, origin, secret, caFile string, db *pgxpool.Pool) (*Client,
 	}, nil
 }
 
-func (c *Client) Origin() string { return c.PublicOrigin }
+func (c *Client) BaseURL() string { return c.Public.String() }
 
-func (c *Client) host() string { return strings.TrimPrefix(c.PublicOrigin, "https://") }
+// origin is the base URL's scheme and host, what browsers send as Origin.
+func (c *Client) origin() string { return c.Public.Scheme + "://" + c.Public.Host }
 
-// send is one request to the relay, as its public origin.
+// send is one request to the relay's path (under the base URL), as its
+// public address.
 func (c *Client) send(ctx context.Context, method, path string, body io.Reader, header http.Header) (*http.Response, []byte, error) {
-	req, err := http.NewRequestWithContext(ctx, method, c.URL+path, body)
+	req, err := http.NewRequestWithContext(ctx, method, c.URL+c.Public.Path+path, body)
 	if err != nil {
 		return nil, nil, err
 	}
 	for k, v := range header {
 		req.Header[k] = v
 	}
-	req.Host = c.host()
+	req.Host = c.Public.Host
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return nil, nil, err
@@ -177,7 +187,7 @@ func (c *Client) admin(ctx context.Context, method, path string, in, out any) er
 		data, _ := json.Marshal(in)
 		body = bytes.NewReader(data)
 		header.Set("Content-Type", "application/json")
-		header.Set("Origin", c.PublicOrigin)
+		header.Set("Origin", c.origin())
 	}
 	resp, data, err := c.send(ctx, method, path, body, header)
 	if err != nil {
@@ -200,10 +210,38 @@ func outcomeError(status int, data []byte) error {
 	return fmt.Errorf("relay: HTTP %d: %s", status, bytes.TrimSpace(data))
 }
 
+// State is the administrator API's state, with each connected instance's
+// connector version, which only the MCP search tool reports (left out when
+// it cannot be read).
 func (c *Client) State(ctx context.Context) (*State, error) {
 	var s State
 	if err := c.admin(ctx, http.MethodGet, "/api/admin/state", nil, &s); err != nil {
 		return nil, err
+	}
+	out, err := c.tool(ctx, "search", map[string]string{"query": ""})
+	if err == nil && out.Error != nil {
+		err = out.Error
+	}
+	if err != nil {
+		slog.WarnContext(ctx, "Relay connector versions unavailable", "error", err)
+		return &s, nil
+	}
+	var found struct {
+		Items []struct {
+			DeviceID         string `json:"deviceId"`
+			InstanceID       string `json:"instanceId"`
+			ConnectorVersion string `json:"connectorVersion"`
+		} `json:"items"`
+	}
+	_ = json.Unmarshal(out.Result, &found)
+	for _, item := range found.Items {
+		for i := range s.Devices {
+			for j := range s.Devices[i].Instances {
+				if s.Devices[i].ID == item.DeviceID && s.Devices[i].Instances[j].InstanceID == item.InstanceID {
+					s.Devices[i].Instances[j].ConnectorVersion = item.ConnectorVersion
+				}
+			}
+		}
 	}
 	return &s, nil
 }
@@ -232,14 +270,21 @@ func (c *Client) RevokeDevice(ctx context.Context, deviceID string) error {
 
 // --- MCP ----------------------------------------------------------------------------
 
-// Call is the relay's runtime_call tool: method on one approved instance.
-// A transport failure on a write is reported as an unknown outcome.
+// Call is method on one approved instance, run through the relay's execute
+// tool as a script of that one call which returns its outcome. A script
+// that fails (past its deadline, say) leaves a write's fate unknown.
 func (c *Client) Call(ctx context.Context, deviceID, instanceID, method string, params any) (*Outcome, error) {
 	if params == nil {
 		params = map[string]any{}
 	}
-	args := map[string]any{"deviceId": deviceID, "instanceId": instanceID, "method": method, "params": params}
-	out, err := c.tool(ctx, "runtime_call", args)
+	target, _ := json.Marshal(map[string]string{"deviceId": deviceID, "instanceId": instanceID})
+	name, _ := json.Marshal(method)
+	input, err := json.Marshal(params)
+	if err != nil {
+		return nil, err
+	}
+	code := fmt.Sprintf("return await call(%s, %s, %s);", target, name, input)
+	out, err := c.tool(ctx, "execute", map[string]string{"code": code})
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +324,7 @@ func (c *Client) tool(ctx context.Context, name string, args any) (*Outcome, err
 }
 
 // toolOutcome reads a tools/call answer (JSON or one SSE event): its text
-// content is the relay's outcome.
+// content is the outcome the script returned, or why the script failed.
 func toolOutcome(contentType string, data []byte) (*Outcome, error) {
 	if strings.Contains(contentType, "text/event-stream") {
 		var last []byte
@@ -292,6 +337,7 @@ func toolOutcome(contentType string, data []byte) (*Outcome, error) {
 	}
 	var rpc struct {
 		Result *struct {
+			IsError bool `json:"isError"`
 			Content []struct {
 				Text string `json:"text"`
 			} `json:"content"`
@@ -309,6 +355,13 @@ func toolOutcome(contentType string, data []byte) (*Outcome, error) {
 	if rpc.Result == nil || len(rpc.Result.Content) == 0 {
 		return nil, errors.New("relay: empty MCP answer")
 	}
+	if rpc.Result.IsError {
+		var lines []string
+		for _, c := range rpc.Result.Content {
+			lines = append(lines, c.Text)
+		}
+		return &Outcome{Execution: "unknown", Error: &Fault{Code: "script_error", Message: strings.Join(lines, "\n")}}, nil
+	}
 	var out Outcome
 	if err := json.Unmarshal([]byte(rpc.Result.Content[0].Text), &out); err != nil {
 		return nil, err
@@ -318,8 +371,8 @@ func toolOutcome(contentType string, data []byte) (*Outcome, error) {
 
 // --- OAuth ----------------------------------------------------------------------------
 
-// The redirect URI is never visited: consent answers with a redirect to it,
-// and the code is read from that.
+// The redirect URI is never visited: consent answers by sending the browser
+// on to it, and the code is read from that.
 const callback = "http://127.0.0.1/axp-relay-callback"
 
 type tokenRow struct {
@@ -396,13 +449,13 @@ func (c *Client) form(ctx context.Context, path string, values url.Values, heade
 		header = http.Header{}
 	}
 	header.Set("Content-Type", "application/x-www-form-urlencoded")
-	header.Set("Origin", c.PublicOrigin)
+	header.Set("Origin", c.origin())
 	return c.send(ctx, http.MethodPost, path, strings.NewReader(values.Encode()), header)
 }
 
 func (c *Client) exchange(ctx context.Context, clientID string, values url.Values) (*tokenRow, error) {
 	values.Set("client_id", clientID)
-	values.Set("resource", c.PublicOrigin+"/mcp")
+	values.Set("resource", c.BaseURL()+"/mcp")
 	resp, data, err := c.form(ctx, "/token", values, nil)
 	if err != nil {
 		return nil, err
@@ -461,7 +514,7 @@ func (c *Client) authorize(ctx context.Context) (*tokenRow, error) {
 		return nil, err
 	}
 
-	resp, _, err = c.form(ctx, "/login", url.Values{"secret": {c.Secret}, "next": {"/admin"}}, nil)
+	resp, _, err = c.form(ctx, "/login", url.Values{"secret": {c.Secret}, "next": {c.Public.Path + "/admin"}}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -484,7 +537,7 @@ func (c *Client) authorize(ctx context.Context) (*tokenRow, error) {
 		"response_type": {"code"}, "client_id": {client.ClientID}, "redirect_uri": {callback},
 		"code_challenge":        {base64.RawURLEncoding.EncodeToString(challenge[:])},
 		"code_challenge_method": {"S256"}, "state": {random()}, "scope": {"runtime:approved"},
-		"resource": {c.PublicOrigin + "/mcp"},
+		"resource": {c.BaseURL() + "/mcp"},
 	}.Encode()
 	resp, data, err = c.send(ctx, http.MethodGet, "/authorize?"+query, nil, http.Header{"Cookie": {session}})
 	if err != nil {
@@ -499,7 +552,12 @@ func (c *Client) authorize(ctx context.Context) (*tokenRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	location, err := url.Parse(resp.Header.Get("Location"))
+	// The relay sends the browser on with a Refresh header after the page.
+	redirect := resp.Header.Get("Location")
+	if refresh := resp.Header.Get("Refresh"); redirect == "" && refresh != "" {
+		_, redirect, _ = strings.Cut(refresh, "url=")
+	}
+	location, err := url.Parse(redirect)
 	if err != nil || location.Query().Get("code") == "" {
 		return nil, fmt.Errorf("relay: consent not granted (HTTP %d)", resp.StatusCode)
 	}

@@ -246,10 +246,10 @@ env:
     OTEL_EXPORTER_OTLP_ENDPOINT: http://axp-openobserve:5080/observe/api/default
     OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=production
     # Remote computers (docs/architecture/tasks.md): where they reach AXP and
-    # the relay (its own public host name). Off while AXP_RELAY_ORIGIN is
-    # unset in production.env.
+    # the relay, under AXP's address at /remote/relay (the gateway's route to
+    # it). Off while AXP_PUBLIC_URL is unset in production.env.
     AXP_PUBLIC_URL: '<%= ENV.fetch("AXP_PUBLIC_URL", "") %>'
-    AXP_RELAY_ORIGIN: '<%= ENV.fetch("AXP_RELAY_ORIGIN", "") %>'
+    AXP_RELAY_BASE_URL: '<%= ENV.fetch("AXP_PUBLIC_URL", "").chomp("/").then { |u| u.empty? ? "" : u + "/remote/relay" } %>'
 
 accessories:
   postgres:
@@ -302,14 +302,12 @@ accessories:
       network: name=axp-prod-runtime,alias=axp-nats
   # The agenvo relay (deploy/relay.Dockerfile) that remote computers'
   # connectors pair with, on Kamal's network as axp-relay:8080 for the control
-  # plane and published on 127.0.0.1:AXP_PROD_RELAY_PORT for the host's
-  # reverse proxy (AXP_RELAY_ORIGIN). One process owns its SQLite state, so it
-  # is an accessory: deploys leave it running, deploy.sh reboots it only onto
-  # a new agenvo version.
+  # plane and the gateway, which serves it at AXP_RELAY_BASE_URL. One process
+  # owns its SQLite state, so it is an accessory: deploys leave it running,
+  # deploy.sh reboots it only onto a new agenvo version.
   relay:
     image: <%= ENV.fetch("AXP_RELAY_IMAGE", "axp-relay:unbuilt") %>
     host: <%= host %>
-    port: '127.0.0.1:<%= ENV.fetch("AXP_PROD_RELAY_PORT") %>:8080'
     files:
       - deploy/relay.json.erb:/config/relay.json
     env:

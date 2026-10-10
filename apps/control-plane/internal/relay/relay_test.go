@@ -21,3 +21,15 @@ func TestToolOutcomeReadsJSONAndEvents(t *testing.T) {
 		t.Fatal("an MCP error is not an outcome")
 	}
 }
+
+// A script that fails leaves its call's fate unknown.
+func TestToolOutcomeOfAFailedScriptIsUnknown(t *testing.T) {
+	body := `{"jsonrpc":"2.0","id":1,"result":{"isError":true,"content":[{"type":"text","text":"Execution failed (script_timeout): late"}]}}`
+	out, err := toolOutcome("application/json", []byte(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Execution != "unknown" || out.Error == nil || out.Error.Code != "script_error" {
+		t.Fatalf("%+v", out)
+	}
+}

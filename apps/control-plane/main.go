@@ -124,8 +124,8 @@ func connect(ctx context.Context) (*services, error) {
 		return nil, err
 	}
 	models := llm.NewGateway(cfg.LLMGatewayURL)
-	taskService := &tasks.Service{}
-	relayClient, err := relay.New(cfg.RelayURL, cfg.RelayOrigin, cfg.RelayAdminSecret, cfg.RelayCAFile, pool)
+	taskService := &tasks.Service{ConnectorVersion: tasks.ServedConnectorVersion(cfg.RemoteDist)}
+	relayClient, err := relay.New(cfg.RelayURL, cfg.RelayBaseURL, cfg.RelayAdminSecret, cfg.RelayCAFile, pool)
 	if err != nil {
 		return nil, err
 	}

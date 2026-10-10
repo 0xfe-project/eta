@@ -230,7 +230,7 @@ func registerTasks(api huma.API, d *Deps) {
 		})
 
 	huma.Register(api, taskOp("renewComputerInstall", http.MethodPost, "/api/v1/computers/{computer_id}/install",
-		"A new install command for a computer that has not connected yet", 200, "computers"),
+		"A new install command for a computer: to install it, or to update it once connected", 200, "computers"),
 		func(ctx context.Context, in *ComputerPath) (*httpapi.Body[Install], error) {
 			e, err := pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (*tasks.Enrollment, error) { return s.RenewEnrollment(ctx, tx, in.ComputerID) })
 			if err != nil {

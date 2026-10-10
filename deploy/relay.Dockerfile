@@ -1,4 +1,4 @@
-# The agenvo relay (vendor/agenvo, pinned to our fork AkaraChen/agenvo), the
+# The agenvo relay (vendor/agenvo, pinned to an upstream commit), the
 # `relay` accessory in deploy/deploy.yml. Built from scripts/build/relay.sh's
 # output (apps/relay/out/server); deploy/deploy.sh tags it with the agenvo
 # commit and this file's hash, so it changes only when they do. Its
