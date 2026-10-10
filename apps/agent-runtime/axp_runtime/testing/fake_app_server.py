@@ -11,6 +11,8 @@ markers in the user's text:
   [fail]     finish the turn as failed
   [crash]    exit the process after the turn starts
   [steer]    wait for a turn/steer before finishing, then answer it
+  [steer-later]  as [steer], but take the steer in only after a pause
+  [late-steer]   end the turn as a turn/steer arrives, then refuse the steer
 
 Threads persist under CODEX_HOME so resume works across restarts.
 """
@@ -32,6 +34,10 @@ _interrupts: set[str] = set()
 # Running turn id -> steers not yet taken in.
 _steers: dict[str, list[dict]] = {}
 _steers_cond = threading.Condition()
+# [late-steer] turns: a steer arrived (the turn may end), and the turn ended
+# (the steer may be refused).
+_late_asked: dict[str, threading.Event] = {}
+_late_ended: dict[str, threading.Event] = {}
 
 
 def send(message: dict) -> None:
@@ -146,25 +152,40 @@ def run_turn(thread_id: str, turn_id: str, text: str) -> None:
             },
         )
         action = answer.get("action")
-        if action == "cancel":
-            status = "interrupted"
+        # As in MCP, "cancel" only dismisses the prompt: the tool hears that
+        # the user did not confirm, and the turn goes on (slowly here, so a
+        # stop can still interrupt it).
         reply = f"确认结果：{action}"
+        if action == "cancel" and not stream_message(
+            thread_id, turn_id, reply * 10, 0.05
+        ):
+            status = "interrupted"
+        reply = None if action == "cancel" else reply
     else:
         reply = f"收到：{text}"
     if status == "completed" and "[long]" in text:
         stream_message(thread_id, turn_id, "长" * 200_000, 0.05, chunk=20_000)
+    elif status == "completed" and reply is None:
+        pass
     elif status == "completed":
         delay = 0.3 if "[slow]" in text else 0.01
         if not stream_message(
             thread_id, turn_id, reply * (10 if "[slow]" in text else 1), delay
         ):
             status = "interrupted"
-    if status == "completed" and "[steer]" in text:
+    if status == "completed" and "[late-steer]" in text:
+        _late_asked[turn_id].wait(5)
+    if status == "completed" and ("[steer]" in text or "[steer-later]" in text):
         with _steers_cond:
             _steers_cond.wait_for(lambda: _steers[turn_id], timeout=5)
+        if "[steer-later]" in text:
+            time.sleep(0.5)
     with _steers_cond:
         steers = _steers.pop(turn_id)
     for steer in steers if status == "completed" else []:
+        if turn_id in _interrupts:
+            status = "interrupted"
+            break
         item = {
             "id": f"user-{uuid.uuid4().hex[:8]}",
             "type": "userMessage",
@@ -174,7 +195,9 @@ def run_turn(thread_id: str, turn_id: str, text: str) -> None:
         notify("item/started", {**base, "item": item, "startedAtMs": 0})
         notify("item/completed", {**base, "item": item, "completedAtMs": 0})
         said = "".join(i.get("text", "") for i in steer["input"])
-        stream_message(thread_id, turn_id, f"收到插话：{said}", 0.01)
+        delay = 0.1 if "[steer-later]" in text else 0.01
+        if not stream_message(thread_id, turn_id, f"收到插话：{said}", delay):
+            status = "interrupted"
     if "[fail]" in text:
         status = "failed"
     turn = {"id": turn_id, "items": [], "status": status}
@@ -182,6 +205,8 @@ def run_turn(thread_id: str, turn_id: str, text: str) -> None:
         turn["error"] = {"message": "scripted failure"}
     set_turn(thread_id, turn)
     notify("turn/completed", {"threadId": thread_id, "turn": turn})
+    if turn_id in _late_ended:
+        _late_ended[turn_id].set()
 
 
 def run_compaction(thread_id: str) -> None:
@@ -253,6 +278,9 @@ def handle(message: dict) -> None:
         turn_id = str(uuid.uuid4())
         with _steers_cond:
             _steers[turn_id] = []
+        if "[late-steer]" in text:
+            _late_asked[turn_id] = threading.Event()
+            _late_ended[turn_id] = threading.Event()
         reply({"turn": {"id": turn_id, "items": [], "status": "inProgress"}})
         threading.Thread(
             target=run_turn, args=(thread_id, turn_id, text), daemon=True
@@ -260,6 +288,17 @@ def handle(message: dict) -> None:
         return
     if method == "turn/steer":
         turn_id = params.get("expectedTurnId")
+        if turn_id in _late_asked:
+            # The turn ends first; the steer is answered after, refused.
+            _late_asked[turn_id].set()
+
+            def refuse():
+                _late_ended[turn_id].wait(5)
+                time.sleep(0.3)  # the runtime sees the turn end first
+                reply(error={"code": -32600, "message": "no active turn"})
+
+            threading.Thread(target=refuse, daemon=True).start()
+            return
         with _steers_cond:
             if turn_id not in _steers:
                 return reply(error={"code": -32600, "message": "no active turn"})
