@@ -1,0 +1,6 @@
+{
+  "name": "routines",
+  "version": "1.0.0",
+  "description": "Routines: list and read the user's scheduled agents and their reports, set new ones up and change them.",
+  "targets": ["chat"]
+}
