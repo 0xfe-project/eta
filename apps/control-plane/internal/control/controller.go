@@ -464,10 +464,16 @@ func (c *Controller) busy(ctx context.Context, instance *liveRuntime) (bool, err
 	}
 	// The runtime reports a turn finished before it uploads the snapshot
 	// that turn left; stopping it in between would lose the turn's work.
-	if uploading, err := pg.Exists(ctx, c.DB, `SELECT 1 FROM (SELECT type FROM agent_event
-		WHERE runtime_instance_id = $1 AND source_seq IS NOT NULL
-		AND type IN ('turn.completed', 'snapshot.saved', 'snapshot.failed')
-		ORDER BY source_seq DESC LIMIT 1) last WHERE type = 'turn.completed'`, instance.ID); err != nil || uploading {
+	// Only a turn that started uploads one: a command stopped or rejected
+	// before its turn started is reported finished with no snapshot after
+	// it, and a runtime from before this order saved the snapshot first.
+	if uploading, err := pg.Exists(ctx, c.DB, `SELECT 1 FROM (SELECT max(source_seq) seq
+		FROM agent_event WHERE runtime_instance_id = $1 AND type = 'turn.started') started
+		WHERE EXISTS (SELECT 1 FROM agent_event WHERE runtime_instance_id = $1
+			AND source_seq > started.seq AND type = 'turn.completed')
+		AND NOT EXISTS (SELECT 1 FROM agent_event WHERE runtime_instance_id = $1
+			AND source_seq > started.seq AND type IN ('snapshot.saved', 'snapshot.failed'))`,
+		instance.ID); err != nil || uploading {
 		return uploading, err
 	}
 	taken, err := c.taken(ctx, queued)
