@@ -40,9 +40,11 @@ type EnrollIn struct {
 	tasks.Report
 }
 
-// Reported is what setup learns from reporting: where the relay is now.
+// Reported is what setup learns from reporting: where the relay is now,
+// and the agenvo version to install (the latest when empty).
 type Reported struct {
-	RelayURL string `json:"relay_url,omitempty"`
+	RelayURL         string `json:"relay_url,omitempty"`
+	ConnectorVersion string `json:"connector_version,omitempty"`
 }
 
 type CurrentTask struct {
@@ -112,7 +114,7 @@ func remote(public *httpapi.API, d *Deps) {
 		})
 
 	huma.Register(api, remoteOp("report", http.MethodPost, "/remote/v1/report",
-		"What setup finds on the computer: its runtimes and their providers; answers with the relay's address", 200),
+		"What setup finds on the computer: its runtimes and their providers; answers with the relay's address and the connector version to install", 200),
 		func(ctx context.Context, in *struct {
 			RemoteBearer
 			Body tasks.Report
@@ -124,7 +126,7 @@ func remote(public *httpapi.API, d *Deps) {
 			}
 			out := Reported{}
 			if s.Relay != nil {
-				out.RelayURL = s.Relay.BaseURL()
+				out.RelayURL, out.ConnectorVersion = s.Relay.BaseURL(), s.ConnectorVersion(ctx)
 			}
 			return &httpapi.Body[Reported]{Body: out}, nil
 		})
@@ -226,7 +228,7 @@ func fileExists(path string) bool {
 	return err == nil && info.Mode().IsRegular()
 }
 
-var downloadable = regexp.MustCompile(`^(axp-(linux|darwin)-(amd64|arm64)|agenvo-(paseo|herdr)\.tgz)$`)
+var downloadable = regexp.MustCompile(`^axp-(linux|darwin)-(amd64|arm64)$`)
 
 // forgeCredentials asks the forge service for the GitHub App's token, as
 // the runtime gateway would for an agent.

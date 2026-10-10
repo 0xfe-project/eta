@@ -1,7 +1,7 @@
 {
   "name": "@axp/relay",
   "private": true,
-  "scripts": {
-    "build": "bash ../../scripts/build/relay.sh"
+  "dependencies": {
+    "@agenvo/server": "0.2.0"
   }
 }

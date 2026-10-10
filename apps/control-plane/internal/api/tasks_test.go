@@ -139,6 +139,8 @@ func newFakeRelay() *fakeRelay {
 
 func (f *fakeRelay) BaseURL() string { return "https://axp.test/remote/relay" }
 
+func (f *fakeRelay) Version(context.Context) (string, error) { return servedVersion, nil }
+
 func (f *fakeRelay) pair(label string) { f.pairAs(label, "code-"+label, "fp-"+label) }
 
 // pairAs is a device asking to pair under label, with its code and digest.
@@ -371,13 +373,13 @@ type taskEnv struct {
 	runner *tasks.Runner
 }
 
-// servedVersion is the agenvo version of the connectors AXP serves.
+// servedVersion is the relay's agenvo version, which connectors should run.
 const servedVersion = "0.2.0"
 
 func newTaskEnv(t *testing.T) *taskEnv {
 	e := newEnv(t)
 	fake := newFakeRelay()
-	service := &tasks.Service{Relay: fake, ConnectorVersion: servedVersion}
+	service := &tasks.Service{Relay: fake}
 	deps := &Deps{DB: e.db, Chat: e.chat, Tasks: service, PublicURL: "https://axp.test"}
 	e.public = Public(deps).Router
 	e.internal = Internal(deps).Router
@@ -834,8 +836,9 @@ func TestOutdatedConnectorIsUpdatedWithANewInstallCommand(t *testing.T) {
 		"runtimes": []map[string]any{{"kind": "paseo", "providers": []string{"claude"}}}}).json(t, &enrolled)
 	expect(t, enrolled.ComputerID, computer)
 	expect(t, enrolled.RelayURL, "https://axp.test/remote/relay")
+	expect(t, enrolled.ConnectorVersion, servedVersion)
 
-	delete(e.relay.versions, device) // setup installed what AXP serves
+	delete(e.relay.versions, device) // setup installed the relay's version
 	e.get("/computers").json(t, &list)
 	rt = list.Computers[0].Runtimes[0]
 	expect(t, rt.State, "online")
