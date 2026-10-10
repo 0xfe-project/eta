@@ -38,11 +38,13 @@ export function useAttention() {
   const { data: routines } = useRoutines();
   const tasks = (board?.tasks ?? []).flatMap((task) => {
     const reason = taskReason(task);
-    return reason ? [{ task, reason }] : [];
+    const alert = task.run_status === "failed" || task.status === "blocked";
+    return reason ? [{ task, reason, alert }] : [];
   });
   const waiting = (routines ?? []).flatMap((routine) => {
     const reason = routineReason(routine);
-    return reason ? [{ routine, reason }] : [];
+    const alert = routine.unseen_failures > 0;
+    return reason ? [{ routine, reason, alert }] : [];
   });
   return {
     interactions,
