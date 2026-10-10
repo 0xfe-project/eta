@@ -335,6 +335,10 @@ func (a agents) open(ctx context.Context, s *sessionRow, o opening) (native, str
 		n.AgentID = out.Agent.ID
 		return n, dir, nil
 	case "herdr":
+		args, ok := fullAccess[s.Provider]
+		if !ok {
+			return native{}, "", fmt.Errorf("Herdr 里的 %s 不能以完全权限启动", s.Provider)
+		}
 		sess, err := a.herdrSession(ctx, t, deref(o.Place.Session))
 		if err != nil {
 			return native{}, "", err
@@ -378,13 +382,23 @@ func (a agents) open(ctx context.Context, s *sessionRow, o opening) (native, str
 		n.TabID, n.PaneID = tab.Result.Tab.ID, tab.Result.RootPane.ID
 		dir := tab.Result.RootPane.Cwd
 		if err := a.call(ctx, t, "agent.start", merge(sess.ref(), map[string]any{
-			"name": n.Name, "paneId": n.PaneID, "kind": s.Provider,
+			"name": n.Name, "paneId": n.PaneID, "kind": s.Provider, "args": args,
 		}), nil); err != nil {
 			return n, dir, err
 		}
 		return n, dir, a.herdrReady(ctx, t, n)
 	}
 	return native{}, "", fmt.Errorf("unknown runtime %q", s.Runtime)
+}
+
+// fullAccess is the launch flags, per agent Herdr can start for AXP
+// (apps/remote's herdrKinds), for running without permission prompts or a
+// sandbox: the full access AXP's agents work with. Herdr passes them on as
+// they are.
+var fullAccess = map[string][]string{
+	"codex":  {"--dangerously-bypass-approvals-and-sandbox"},
+	"claude": {"--dangerously-skip-permissions", "--settings", `{"sandbox":{"enabled":false}}`},
+	"devin":  {"--permission-mode", "dangerous", "--respect-workspace-trust", "false"},
 }
 
 // trustDialog is Claude Code's question before it first works in a
@@ -443,12 +457,11 @@ func herdrName(sessionID string) string {
 }
 
 type herdrSession struct {
-	Name       string
-	Generation string
+	Name string
 }
 
 func (h herdrSession) ref() map[string]any {
-	return map[string]any{"session": h.Name, "backendGeneration": h.Generation}
+	return map[string]any{"session": h.Name}
 }
 
 func (a agents) herdrSessions(ctx context.Context, t target) ([]herdrSession, error) {
@@ -464,15 +477,19 @@ func (a agents) herdrSessions(ctx context.Context, t target) ([]herdrSession, er
 	}
 	var sessions []herdrSession
 	for _, item := range out.Items {
-		if item.BackendGeneration != "" && (item.Available == nil || *item.Available) {
-			sessions = append(sessions, herdrSession{item.Session, item.BackendGeneration})
+		// Connectors before agenvo 0.2 address sessions by generation.
+		if item.BackendGeneration != "" {
+			return nil, errors.New("这台电脑的 agenvo connector 需要更新：在那台电脑上重新运行 axp setup")
+		}
+		if item.Available == nil || *item.Available {
+			sessions = append(sessions, herdrSession{item.Session})
 		}
 	}
 	return sessions, nil
 }
 
 // herdrSession is the named Herdr session (the first running one when name
-// is empty) with its current generation, which changes when Herdr restarts.
+// is empty).
 func (a agents) herdrSession(ctx context.Context, t target, name string) (*herdrSession, error) {
 	sessions, err := a.herdrSessions(ctx, t)
 	if err != nil {

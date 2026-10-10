@@ -92,7 +92,7 @@ type Computers struct {
 	Computers []Computer `json:"computers"`
 	// Whether a relay is set up; without one nothing can be added.
 	RelayConfigured bool    `json:"relay_configured"`
-	RelayOrigin     *string `json:"relay_origin" nullable:"true"`
+	RelayURL        *string `json:"relay_url" nullable:"true"`
 	// The relay could not be asked for its devices' state.
 	RelayError *string `json:"relay_error" nullable:"true"`
 }
@@ -124,8 +124,8 @@ func (s *Service) ListComputers(ctx context.Context, db pg.DB) (*Computers, erro
 	out := &Computers{Computers: []Computer{}, RelayConfigured: s.Relay != nil}
 	var state *relay.State
 	if s.Relay != nil {
-		origin := s.Relay.Origin()
-		out.RelayOrigin = &origin
+		base := s.Relay.BaseURL()
+		out.RelayURL = &base
 		var err error
 		if state, err = s.relayState(ctx); err != nil {
 			message := err.Error()
@@ -489,10 +489,10 @@ type Report struct {
 }
 
 type Enrolled struct {
-	ComputerID  string `json:"computer_id"`
-	Name        string `json:"name"`
-	Token       string `json:"token"`
-	RelayOrigin string `json:"relay_origin"`
+	ComputerID string `json:"computer_id"`
+	Name       string `json:"name"`
+	Token      string `json:"token"`
+	RelayURL   string `json:"relay_url"`
 }
 
 // Enroll trades an install code for the computer's token.
@@ -515,7 +515,7 @@ func (s *Service) Enroll(ctx context.Context, tx pgx.Tx, code string, in Report)
 	if err := s.Report(ctx, tx, &RemoteComputer{ID: r.ID, Name: r.Name}, in); err != nil {
 		return nil, err
 	}
-	return &Enrolled{ComputerID: r.ID, Name: r.Name, Token: token, RelayOrigin: s.Relay.Origin()}, nil
+	return &Enrolled{ComputerID: r.ID, Name: r.Name, Token: token, RelayURL: s.Relay.BaseURL()}, nil
 }
 
 // Report records the computer and its runtimes as setup found them. A

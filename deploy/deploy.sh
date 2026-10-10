@@ -119,8 +119,8 @@ ssh -i "$KEY_FILE" -p "$AXP_SSH_PORT" -o BatchMode=yes -o IdentitiesOnly=yes \
 
 # --- Machine prerequisites ------------------------------------------------------
 # Reserved ports must be free unless our own containers hold them.
-ours="$(docker ps --filter name='^(kamal-proxy|axp-registry|axp-openobserve|axp-relay)$' --format '{{.Ports}}')"
-for port in "$AXP_PROD_HTTP_PORT" "$AXP_PROD_HTTPS_PORT" "$AXP_PROD_REGISTRY_PORT" "$AXP_PROD_OBSERVE_PORT" "$AXP_PROD_RELAY_PORT"; do
+ours="$(docker ps --filter name='^(kamal-proxy|axp-registry|axp-openobserve)$' --format '{{.Ports}}')"
+for port in "$AXP_PROD_HTTP_PORT" "$AXP_PROD_HTTPS_PORT" "$AXP_PROD_REGISTRY_PORT" "$AXP_PROD_OBSERVE_PORT"; do
   if [[ "$ours" != *":$port->"* ]] && ss -Htln "sport = :$port" 2>/dev/null | grep -q .; then
     fail "port $port (deploy/ports.env) is taken by another service on this machine."
   fi
@@ -175,7 +175,7 @@ kamal() {
     --env-file "$ENV_FILE" \
     -e AXP_DEPLOY_USER -e AXP_SSH_PORT -e AXP_BUILD_ARCH \
     -e AXP_PROD_HTTP_PORT -e AXP_PROD_HTTPS_PORT -e AXP_PROD_REGISTRY_PORT \
-    -e AXP_PROD_OBSERVE_PORT -e AXP_OBSERVE_BASIC -e AXP_PROD_RELAY_PORT -e AXP_RELAY_IMAGE \
+    -e AXP_PROD_OBSERVE_PORT -e AXP_OBSERVE_BASIC -e AXP_RELAY_IMAGE \
     -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0='*' \
     "$KAMAL_IMAGE" "$@" -c deploy/deploy.yml
 }

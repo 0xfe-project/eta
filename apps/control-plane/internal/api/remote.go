@@ -40,6 +40,11 @@ type EnrollIn struct {
 	tasks.Report
 }
 
+// Reported is what setup learns from reporting: where the relay is now.
+type Reported struct {
+	RelayURL string `json:"relay_url,omitempty"`
+}
+
 type CurrentTask struct {
 	TaskID string `json:"task_id"`
 }
@@ -107,14 +112,21 @@ func remote(public *httpapi.API, d *Deps) {
 		})
 
 	huma.Register(api, remoteOp("report", http.MethodPost, "/remote/v1/report",
-		"What setup finds on the computer: its runtimes and their providers", 204),
+		"What setup finds on the computer: its runtimes and their providers; answers with the relay's address", 200),
 		func(ctx context.Context, in *struct {
 			RemoteBearer
 			Body tasks.Report
-		}) (*struct{}, error) {
-			return nil, remoteWrite(ctx, d, in.RemoteBearer, func(tx pgx.Tx, c *tasks.RemoteComputer) error {
+		}) (*httpapi.Body[Reported], error) {
+			if err := remoteWrite(ctx, d, in.RemoteBearer, func(tx pgx.Tx, c *tasks.RemoteComputer) error {
 				return s.Report(ctx, tx, c, in.Body)
-			})
+			}); err != nil {
+				return nil, err
+			}
+			out := Reported{}
+			if s.Relay != nil {
+				out.RelayURL = s.Relay.BaseURL()
+			}
+			return &httpapi.Body[Reported]{Body: out}, nil
 		})
 
 	huma.Register(api, remoteOp("currentTask", http.MethodGet, "/remote/v1/current-task",

@@ -232,7 +232,7 @@ func status() error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("电脑：%s（%s）\nAXP：%s\n中继：%s\n", c.Name, c.ComputerID, c.URL, c.RelayOrigin)
+	fmt.Printf("电脑：%s（%s）\nAXP：%s\n中继：%s\n", c.Name, c.ComputerID, c.URL, c.RelayURL)
 	for _, kind := range c.kinds() {
 		out, _ := c.connector(kind, "status", "--json").Output()
 		fmt.Printf("\n%s connector：\n%s", kind, out)

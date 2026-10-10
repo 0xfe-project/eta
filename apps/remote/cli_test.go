@@ -99,7 +99,7 @@ func TestSetupWithACodeEnrollsAgain(t *testing.T) {
 		switch path {
 		case "/remote/v1/enroll":
 			enrolledWith = body["code"]
-			_, _ = w.Write([]byte(`{"computer_id":"c2","name":"laptop","token":"new","relay_origin":"https://relay"}`))
+			_, _ = w.Write([]byte(`{"computer_id":"c2","name":"laptop","token":"new","relay_url":"https://axp/remote/relay"}`))
 		default: // The computer was removed: its token is gone.
 			w.WriteHeader(http.StatusUnauthorized)
 		}
@@ -125,7 +125,7 @@ func TestSetupWithACodeEnrollsAgain(t *testing.T) {
 		t.Fatalf("enrolled with %v", enrolledWith)
 	}
 	saved, err := loadConfig()
-	if err != nil || saved.Token != "new" || saved.ComputerID != "c2" || saved.RelayOrigin != "https://relay" {
+	if err != nil || saved.Token != "new" || saved.ComputerID != "c2" || saved.RelayURL != "https://axp/remote/relay" {
 		t.Fatalf("%+v %v", saved, err)
 	}
 	if calls, _ := os.ReadFile(marker); string(calls) != "disconnect\n" {
@@ -135,7 +135,7 @@ func TestSetupWithACodeEnrollsAgain(t *testing.T) {
 
 func TestSetupWithACodeForTheSameComputerKeepsItsPairings(t *testing.T) {
 	c := remoteAXP(t, func(w http.ResponseWriter, path string, body map[string]any) {
-		_, _ = w.Write([]byte(`{"computer_id":"c1","name":"laptop","token":"new","relay_origin":"https://relay"}`))
+		_, _ = w.Write([]byte(`{"computer_id":"c1","name":"laptop","token":"new","relay_url":"https://axp/remote/relay"}`))
 	})
 	marker := filepath.Join(t.TempDir(), "calls")
 	bin := c.connectorBin("paseo")
@@ -146,5 +146,39 @@ func TestSetupWithACodeForTheSameComputerKeepsItsPairings(t *testing.T) {
 	}
 	if _, err := os.Stat(marker); err == nil {
 		t.Fatal("pairings under the same computer's label should stay")
+	}
+}
+
+// Setup run again learns the relay's new address from AXP and moves the
+// paired connectors to it, keeping the rest of their configuration.
+func TestSetupMovesPairedConnectorsToTheRelaysAddress(t *testing.T) {
+	c := remoteAXP(t, func(w http.ResponseWriter, path string, body map[string]any) {
+		_, _ = w.Write([]byte(`{"relay_url":"https://axp/remote/relay"}`))
+	})
+	c.RelayURL = "https://relay.old"
+	c.Paseo, c.Herdr = &PaseoConfig{}, &HerdrConfig{}
+	write := func(kind, data string) {
+		_ = os.MkdirAll(c.connectorDir(kind), 0o700)
+		_ = os.WriteFile(filepath.Join(c.connectorDir(kind), "config.json"), []byte(data), 0o600)
+	}
+	write("paseo", `{"relay":"https://relay.old","deviceId":"d1","instances":[{"id":"paseo"}]}`)
+	write("herdr", `{"instances":[{"id":"herdr"}]}`) // not paired yet
+	if err := connect(c, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := followRelay(c); err != nil {
+		t.Fatal(err)
+	}
+	var paseo map[string]any
+	data, _ := os.ReadFile(filepath.Join(c.connectorDir("paseo"), "config.json"))
+	_ = json.Unmarshal(data, &paseo)
+	if paseo["relay"] != "https://axp/remote/relay" || paseo["deviceId"] != "d1" || len(paseo["instances"].([]any)) != 1 {
+		t.Fatalf("paseo %s", data)
+	}
+	if data, _ := os.ReadFile(filepath.Join(c.connectorDir("herdr"), "config.json")); strings.Contains(string(data), "relay") {
+		t.Fatalf("herdr %s", data)
+	}
+	if saved, _ := loadConfig(); saved.RelayURL != "https://axp/remote/relay" {
+		t.Fatalf("saved %+v", saved)
 	}
 }
