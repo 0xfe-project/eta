@@ -99,7 +99,7 @@ func TestSetupWithACodeEnrollsAgain(t *testing.T) {
 		switch path {
 		case "/remote/v1/enroll":
 			enrolledWith = body["code"]
-			_, _ = w.Write([]byte(`{"computer_id":"c2","name":"laptop","token":"new","relay_url":"https://axp/remote/relay"}`))
+			_, _ = w.Write([]byte(`{"computer_id":"c2","name":"laptop","token":"new","relay_url":"https://axp/remote/relay","connector_version":"0.2.0"}`))
 		default: // The computer was removed: its token is gone.
 			w.WriteHeader(http.StatusUnauthorized)
 		}
@@ -121,8 +121,8 @@ func TestSetupWithACodeEnrollsAgain(t *testing.T) {
 	if err := connect(c, "code-2"); err != nil {
 		t.Fatal(err)
 	}
-	if enrolledWith != "code-2" {
-		t.Fatalf("enrolled with %v", enrolledWith)
+	if enrolledWith != "code-2" || c.ConnectorVersion != "0.2.0" {
+		t.Fatalf("enrolled with %v, to install %q", enrolledWith, c.ConnectorVersion)
 	}
 	saved, err := loadConfig()
 	if err != nil || saved.Token != "new" || saved.ComputerID != "c2" || saved.RelayURL != "https://axp/remote/relay" {

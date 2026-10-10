@@ -51,8 +51,7 @@
         "@axp/forge-service#build:linux-amd64",
         "@axp/routine-service#build:linux-amd64",
         "@axp/plugins-go#build:linux-amd64",
-        "@axp/remote#build",
-        "@axp/relay#build"
+        "@axp/remote#build"
       ],
       "cache": false,
       "passThroughEnv": ["AXP_APP_IMAGE"]
@@ -67,8 +66,7 @@
         "@axp/forge-service#build:linux-arm64",
         "@axp/routine-service#build:linux-arm64",
         "@axp/plugins-go#build:linux-arm64",
-        "@axp/remote#build",
-        "@axp/relay#build"
+        "@axp/remote#build"
       ],
       "cache": false,
       "passThroughEnv": ["AXP_APP_IMAGE"]

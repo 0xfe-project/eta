@@ -13,7 +13,7 @@ apps/
   forge-service/   Go：代码托管（用户自己的 GitHub App），agent 的 git、gh 凭据与 open_pull_request
   routine-service/ Go：定时任务，每次运行是进程内的 ADK agent；自己的数据库，计划在 NATS
   remote/          Go：远程电脑上的 axp（daemon 与给智能体用的 CLI）
-  relay/           agenvo 中继（vendor/agenvo）的构建：中继本身和远程电脑下载的 connector
+  relay/           agenvo 中继（@agenvo/server）的版本，开发从这里运行它
 packages/
   plugins-go/      插件标准：读取插件，编译到聊天智能体（Codex），加载进定时任务（ADK）
   service-go/      Go 服务框架：配置、数据库与迁移、HTTP API、错误、幂等、命令
