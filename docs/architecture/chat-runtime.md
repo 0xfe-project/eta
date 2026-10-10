@@ -19,7 +19,7 @@
 ## 一条消息的路径
 
 1. `POST /chat/messages` 在一个事务里写入幂等记录、用户消息、助手回复占位、`agent_command(queued)` 和产品事件，并把命令发布到该 Agent 的[队列](queue.md)，返回 202。用户消息的 id 可以由客户端给出（`id`，每条消息一个新的 UUID），Web 同时用它作为 `Idempotency-Key`（见下文[发送](#发送)）。插话时响应的 `steered` 说明它是否进了正在运行的 turn。
-2. controller 发现 Agent 的队列里有命令而它没有存活实例：`generation + 1`，写 `runtime_instance`，再在事务外启动容器；Agent 有快照时附上它的下载地址。token 由 `HMAC(SECRET_KEY, instance_id:generation)` 派生，换代即失效。
+2. controller 发现 Agent 的队列里有命令而它没有存活实例：`generation + 1`，写 `runtime_instance`，再在事务外启动容器；Agent 有快照时附上它的下载地址。token 由 `HMAC(AXP_SECRET_KEY, runtime:<实例>:<代>)` 派生，换代即失效。
 3. runtime 启动：下载并解开 Agent 的快照（有的话）→ 安装镜像里的 Codex plugin（见下文）→ 启动 Codex app-server → 用控制面记录的 thread id 恢复（只有首次才 `thread/start`；无法恢复时报告 `recovery_failed`，绝不另起 thread）→ 心跳报告 ready → 开始读队列。
 4. runtime 空闲时从队列取一条命令，确认后执行；一次一条（部分唯一索引兜底）。
 5. runtime 先记账再调用 `turn/start`；Codex 通知被转换成有序 outbox 事件（`turn.started`、`item.updated`、`approval.*`、`turn.completed` 等），增量文本每 0.3 秒合并一次。turn 结束后先上传快照（见下文），再发出 `turn.completed`。
@@ -68,7 +68,7 @@ AXP 是单用户服务，所有智能体属于唯一的默认对话（`conversat
 
 ## 恢复与隔离
 
-- 心跳续租（默认 30 秒）。租约过期时 controller 先停止并移除旧容器，再结束实例；之后旧实例的任何请求都得到 `409 STALE_GENERATION`，runtime 收到后立即退出。
+- 心跳续租（默认 30 秒）。只续租的心跳（runtime 仍是 ready/busy，Agent 也已就绪）是一条带条件的 UPDATE，不拿全局会话锁；状态需要变化（首次就绪、失败、已结束）时才走加锁的路径。租约过期时 controller 先停止并移除旧容器，再结束实例；之后旧实例的任何请求都得到 `409 STALE_GENERATION`，runtime 收到后立即退出。
 - 实例结束时，容器连同上次快照之后的改动一起消失；它从队列取走的命令以“执行中断，无法确认结果，未自动重试”失败，绝不重放。仍在队列里的命令由下一个实例执行。
 - Codex 进程在 turn 中途退出，或 runtime 的任何后台线程意外出错时，实例停掉 Codex，执行中的命令同样以执行中断失败，实例报告 `error`。GitHub 凭据刷新失败只记日志，稍后重试。
 - plugin 安装失败（`PLUGIN_INSTALL_FAILED`，回复显示“智能体扩展启动失败”）、快照无法下载或解开等使 runtime 停在未就绪状态；排队与派发中的回复以中文原因失败，Agent 显示为“不可用”。之后的新消息会让 controller 换一代实例重试；从未就绪过的实例有 30 秒的退避。
@@ -108,5 +108,5 @@ runtime 每次启动、在 Codex 之前对选中的每个 plugin 执行 `codex p
 
 - Codex 在容器内使用 `danger-full-access` 沙箱、`on-request` 审批：容器本身是隔离边界。
 - Agent 能读到自己快照的上传地址，因此可以改写自己的快照，但碰不到其他 Agent 的。
-- 开发用 `runserver` 以线程处理 SSE，每个连接占一个线程；生产应使用 ASGI 服务与 PostgreSQL `LISTEN/NOTIFY` 唤醒（当前为轮询持久事件表）。
+- SSE 每个连接一个 goroutine，每 500 毫秒轮询一次持久事件表，没有用 PostgreSQL `LISTEN/NOTIFY` 唤醒。
 - 自动化测试使用脚本化的 app-server（`axp_runtime.testing.fake_app_server`）；与真实模型的联调需要在“模型服务”中绑定账号。

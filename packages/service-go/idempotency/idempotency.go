@@ -6,11 +6,17 @@
 // and does not use up the key. Keys live in the service's database
 // (api_idempotency, created by pg.Migrate).
 //
+// Requests with the same key take turns, so two at once never both run the
+// operation. Once it starts it finishes, even if the client goes away: it
+// may have done something the database cannot roll back (published a
+// command), so it runs on Do's context, which keeps the request's values but
+// not its cancellation.
+//
 //	huma.Register(api, op, func(ctx context.Context, in *struct {
 //		idempotency.Keyed
 //		Body RoutineIn
 //	}) (*idempotency.Response[Routine], error) {
-//		return idempotency.Do(ctx, pool, in.IdempotencyKey, in.Body, func(tx pgx.Tx) (idempotency.Result[Routine], error) {
+//		return idempotency.Do(ctx, pool, in.IdempotencyKey, in.Body, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[Routine], error) {
 //			r, err := s.Create(ctx, tx, in.Body)
 //			return idempotency.Created(r, r.ID), err
 //		})
@@ -61,10 +67,15 @@ func Created[T any](body *T, resource string) Result[T] { return Result[T]{201, 
 // OK is a 200 with body, about resource.
 func OK[T any](body *T, resource string) Result[T] { return Result[T]{200, body, resource} }
 
+// Timeout bounds an operation, which the client leaving does not cancel.
+const Timeout = time.Minute
+
 // Do runs fn once per key: in a transaction, unless a request with the key
 // was answered already, whose response it returns. The same key with a
-// different payload is refused.
-func Do[T any](ctx context.Context, pool *pgxpool.Pool, key string, payload any, fn func(pgx.Tx) (Result[T], error)) (*Response[T], error) {
+// different payload is refused. fn gets the context to work with: ctx
+// without its cancellation, bounded by Timeout.
+func Do[T any](ctx context.Context, pool *pgxpool.Pool, key string, payload any,
+	fn func(context.Context, pgx.Tx) (Result[T], error)) (*Response[T], error) {
 	key = strings.TrimSpace(key)
 	if key == "" || len(key) > maxKeyLength {
 		return nil, apierr.New(400, "IDEMPOTENCY_KEY_REQUIRED", "请求缺少有效的 Idempotency-Key。")
@@ -77,40 +88,45 @@ func Do[T any](ctx context.Context, pool *pgxpool.Pool, key string, payload any,
 	if r := httpapi.Request(ctx); r != nil {
 		method, path = r.Method, r.URL.Path
 	}
-	if existing, err := lookup(ctx, pool, method, path, key); err != nil || existing != nil {
-		if err != nil {
-			return nil, err
-		}
-		return replay[T](existing, hash)
-	}
-	var result Result[T]
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), Timeout)
+	defer cancel()
+	var out *Response[T]
 	err = pg.InTx(ctx, pool, func(tx pgx.Tx) error {
-		var err error
-		if result, err = fn(tx); err != nil {
+		// Held until commit: a request with the same key waits here, then
+		// finds this one's response.
+		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+			"idempotency "+method+" "+path+" "+key); err != nil {
+			return err
+		}
+		existing, err := lookup(ctx, tx, method, path, key)
+		if err != nil {
+			return err
+		}
+		if existing != nil {
+			out, err = replay[T](existing, hash)
+			return err
+		}
+		result, err := fn(ctx, tx)
+		if err != nil {
 			return err
 		}
 		body, err := json.Marshal(result.Body)
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO api_idempotency (id, method, canonical_path, key, request_hash,
+		if _, err := tx.Exec(ctx, `INSERT INTO api_idempotency (id, method, canonical_path, key, request_hash,
 			response_status, response_body, resource_id, created_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-			pg.NewID(), method, path, key, hash, result.Status, body, result.Resource, pg.Now())
-		return err
-	})
-	if pg.IsUniqueViolation(err) {
-		// A concurrent request with the same key committed first.
-		existing, lookupErr := lookup(ctx, pool, method, path, key)
-		if lookupErr != nil || existing == nil {
-			return nil, errors.Join(err, lookupErr)
+			pg.NewID(), method, path, key, hash, result.Status, body, result.Resource, pg.Now()); err != nil {
+			return err
 		}
-		return replay[T](existing, hash)
-	}
+		out = &Response[T]{Status: result.Status, Body: *result.Body}
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	return &Response[T]{Status: result.Status, Body: *result.Body}, nil
+	return out, nil
 }
 
 // Retention is how long a key is remembered: a retry comes within minutes,

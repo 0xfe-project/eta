@@ -307,6 +307,29 @@ func TestSendRetryReturnsSameMessages(t *testing.T) {
 	expect(t, scalar[int](e, "SELECT count(*) FROM agent_command"), 1)
 }
 
+// Retries racing each other (a slow network, a reload) with one key queue
+// the command once: none leaves a second command the user never sees.
+func TestConcurrentSendsWithOneKeyQueueOnce(t *testing.T) {
+	e := newEnv(t)
+	agent := e.createAgent("研究员")
+	body := map[string]any{"agent_id": agent.ID, "text": "你好"}
+	responses := make(chan response, 8)
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() { responses <- e.post("/chat/messages", body, "same-key") })
+	}
+	wg.Wait()
+	close(responses)
+	ids := map[string]bool{}
+	for r := range responses {
+		expect(t, r.status, 202)
+		ids[r.m(t)["message"].(map[string]any)["id"].(string)] = true
+	}
+	expect(t, len(ids), 1)
+	expect(t, len(e.nats.Queued(agent.ID)), 1)
+	expect(t, scalar[int](e, "SELECT count(*) FROM agent_command"), 1)
+}
+
 func TestSendReturnsMessageAndReplyPlaceholder(t *testing.T) {
 	e := newEnv(t)
 	agent := e.createAgent("开发助手")

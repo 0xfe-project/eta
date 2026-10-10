@@ -103,7 +103,11 @@ function Runtimes({ runtimes }: { runtimes: ComputerRuntime[] }) {
   );
 }
 
-/** A runtime that asked to pair: approve once the fingerprints match. */
+/**
+ * A runtime that asked to pair: approve once the fingerprints match. Each
+ * request under its label is listed; more than one means someone else asked
+ * too, and only the one `axp setup` printed is to be approved.
+ */
 function Approval({
   computer,
   runtime,
@@ -113,37 +117,45 @@ function Approval({
 }) {
   const approve = useApproveRuntime();
   const label = runtimeLabel(runtime.kind);
+  const several = runtime.fingerprints.length > 1;
   return (
     <div className="space-y-1.5 bg-muted px-3 py-2">
       <p className="text-xs text-muted-foreground">
         {runtime.state === "needs_approval"
           ? `${label} 的指纹变了`
-          : `${label} 请求配对`}
+          : several
+            ? `${label} 收到 ${runtime.fingerprints.length} 个配对请求：只批准与电脑上 axp setup 输出一致的那个`
+            : `${label} 请求配对`}
       </p>
-      <div className="flex items-center gap-3">
-        <code className="min-w-0 flex-1 font-mono text-xs break-all">
-          {runtime.fingerprint}
-        </code>
-        <Button
-          size="sm"
-          disabled={approve.isPending}
-          onClick={() =>
-            approve.mutate(
-              { id: computer.id, kind: runtime.kind },
-              { onSuccess: () => toast(`已批准 ${label}`), onError: showError },
-            )
-          }
-        >
-          批准
-        </Button>
-      </div>
+      {runtime.fingerprints.map((fingerprint) => (
+        <div key={fingerprint} className="flex items-center gap-3">
+          <code className="min-w-0 flex-1 font-mono text-xs break-all">
+            {fingerprint}
+          </code>
+          <Button
+            size="sm"
+            disabled={approve.isPending}
+            onClick={() =>
+              approve.mutate(
+                { id: computer.id, kind: runtime.kind, fingerprint },
+                {
+                  onSuccess: () => toast(`已批准 ${label}`),
+                  onError: showError,
+                },
+              )
+            }
+          >
+            批准
+          </Button>
+        </div>
+      ))}
     </div>
   );
 }
 
 const pending = (computer: Computer) =>
   computer.runtimes.filter(
-    (runtime) => needsApproval(runtime) && runtime.fingerprint,
+    (runtime) => needsApproval(runtime) && runtime.fingerprints.length > 0,
   );
 
 function Step({

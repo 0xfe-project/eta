@@ -161,6 +161,63 @@ func TestHeartbeatMarksReadyAndExtendsLease(t *testing.T) {
 	expect(t, scalar[string](c.env, "SELECT status FROM agent"), "ready")
 }
 
+// A heartbeat that only renews the lease does not wait for the conversation
+// lock, which every agent's event imports take.
+func TestRenewingHeartbeatDoesNotWaitForTheConversationLock(t *testing.T) {
+	c, r := provisioned(t)
+	r.ready("thread-1")
+	before := scalar[time.Time](c.env, "SELECT lease_expires_at FROM runtime_instance")
+	tx, err := c.db.Begin(c.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(c.ctx)
+	if err := chat.LockConversation(c.ctx, tx, scalar[string](c.env, "SELECT conversation_id FROM agent")); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan int, 1)
+	go func() { done <- r.heartbeat("busy").status }()
+	select {
+	case status := <-done:
+		expect(t, status, 200)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the heartbeat waited for the conversation lock")
+	}
+	expect(t, scalar[string](c.env, "SELECT status FROM runtime_instance"), "busy")
+	if !scalar[time.Time](c.env, "SELECT lease_expires_at FROM runtime_instance").After(before) {
+		t.Fatal("lease not extended")
+	}
+}
+
+// What changes more than the lease still takes the lock: a failed
+// runtime's heartbeat waits for it, an ended one is fenced.
+func TestHeartbeatOfAFailedOrEndedRuntimeTakesTheLock(t *testing.T) {
+	c, r := provisioned(t)
+	r.ready("thread-1")
+	c.exec("UPDATE runtime_instance SET status = 'failed'")
+	tx, err := c.db.Begin(c.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(c.ctx)
+	if err := chat.LockConversation(c.ctx, tx, scalar[string](c.env, "SELECT conversation_id FROM agent")); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan int, 1)
+	go func() { done <- r.heartbeat("ready").status }()
+	select {
+	case <-done:
+		t.Fatal("a failed runtime's heartbeat skipped the lock")
+	case <-time.After(300 * time.Millisecond):
+	}
+	if err := tx.Rollback(c.ctx); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, <-done, 200)
+	c.exec("UPDATE runtime_instance SET ended_at = now()")
+	expectError(t, r.heartbeat("busy"), 409, "STALE_GENERATION")
+}
+
 func TestEventOrdering(t *testing.T) {
 	c, r := provisioned(t)
 	r.ready("thread-1")
@@ -455,16 +512,30 @@ func TestStoppingASteerInTheTurnInterruptsIt(t *testing.T) {
 	expect(t, c.replyStatus(steered), "stopped")
 }
 
+// The controller stopped between starting a container and writing its ID
+// down: the container is still found, by the instance's label.
+func TestRuntimeWithoutARecordedContainerIsStillStopped(t *testing.T) {
+	c := newControl(t)
+	c.running()
+	old, _ := c.liveInstance(c.agent.ID)
+	c.exec("UPDATE runtime_instance SET container_id = NULL WHERE id = $1", old)
+	c.expireLeases()
+	c.tick()
+	if !c.driver.wasStopped(old) {
+		t.Fatal("not stopped")
+	}
+	expect(t, scalar[bool](c.env, "SELECT ended_at IS NOT NULL FROM runtime_instance WHERE id = $1", old), true)
+}
+
 func TestLostRuntimeIsFencedThenReplaced(t *testing.T) {
 	c := newControl(t)
 	sent, r, command := c.running()
 	r.turnStarted(command, "t")
 	c.s3.snapshots[c.agent.ID] = true
 	old, _ := c.liveInstance(c.agent.ID)
-	container := scalar[string](c.env, "SELECT container_id FROM runtime_instance WHERE id = $1", old)
 	c.expireLeases()
 	c.tick()
-	if !c.driver.wasStopped(container) {
+	if !c.driver.wasStopped(old) {
 		t.Fatal("not stopped")
 	}
 	expect(t, scalar[bool](c.env, "SELECT ended_at IS NOT NULL FROM runtime_instance WHERE id = $1", old), true)
@@ -559,14 +630,13 @@ func TestIdleRuntimeIsStopped(t *testing.T) {
 	r.turnCompleted(command, "completed")
 	c.exec("UPDATE agent SET last_active_at = $1", time.Now().Add(-5*time.Second))
 	instance, _ := c.liveInstance(c.agent.ID)
-	container := scalar[string](c.env, "SELECT container_id FROM runtime_instance WHERE id = $1", instance)
 	if err := c.controller.LookAtQueue(c.ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := c.controller.StopIdle(c.ctx); err != nil {
 		t.Fatal(err)
 	}
-	if !c.driver.wasStopped(container) {
+	if !c.driver.wasStopped(instance) {
 		t.Fatal("not stopped")
 	}
 	expect(t, scalar[int](c.env, "SELECT count(*) FROM runtime_instance WHERE ended_at IS NULL"), 0)
@@ -580,10 +650,9 @@ func TestTakenCommandKeepsTheRuntimeThroughAConfigChange(t *testing.T) {
 	c := newControl(t)
 	sent, r, command := c.running()
 	old, _ := c.liveInstance(c.agent.ID)
-	container := scalar[string](c.env, "SELECT container_id FROM runtime_instance WHERE id = $1", old)
 	c.patch("/agents/"+c.agent.ID, map[string]any{"name": "审查员"})
 	c.tick()
-	if c.driver.wasStopped(container) {
+	if c.driver.wasStopped(old) {
 		t.Fatal("stopped with a taken command")
 	}
 	expect(t, c.replyStatus(sent), "queued")
@@ -591,7 +660,7 @@ func TestTakenCommandKeepsTheRuntimeThroughAConfigChange(t *testing.T) {
 	r.turnStarted(command, "t")
 	r.turnCompleted(command, "completed")
 	c.tick()
-	if !c.driver.wasStopped(container) {
+	if !c.driver.wasStopped(old) {
 		t.Fatal("not stopped")
 	}
 	expect(t, scalar[string](c.env, "SELECT end_reason FROM runtime_instance WHERE id = $1", old), "CONFIG_CHANGED")
@@ -635,7 +704,6 @@ func TestTakenCommandKeepsAnIdleRuntime(t *testing.T) {
 	c.take(command)
 	c.exec("UPDATE agent SET last_active_at = $1", time.Now().Add(-5*time.Second))
 	instance, _ := c.liveInstance(c.agent.ID)
-	container := scalar[string](c.env, "SELECT container_id FROM runtime_instance WHERE id = $1", instance)
 	stopIdle := func() {
 		if err := c.controller.LookAtQueue(c.ctx); err != nil {
 			t.Fatal(err)
@@ -645,7 +713,7 @@ func TestTakenCommandKeepsAnIdleRuntime(t *testing.T) {
 		}
 	}
 	stopIdle()
-	if c.driver.wasStopped(container) {
+	if c.driver.wasStopped(instance) {
 		t.Fatal("stopped with a taken command")
 	}
 	expect(t, c.replyStatus(sent), "queued")
@@ -653,7 +721,7 @@ func TestTakenCommandKeepsAnIdleRuntime(t *testing.T) {
 	r.turnCompleted(command, "completed")
 	c.exec("UPDATE agent SET last_active_at = $1", time.Now().Add(-5*time.Second))
 	stopIdle()
-	if !c.driver.wasStopped(container) {
+	if !c.driver.wasStopped(instance) {
 		t.Fatal("not stopped")
 	}
 }
@@ -665,17 +733,16 @@ func TestUnreportedTakenCommandDoesNotHoldTheRuntimeForever(t *testing.T) {
 	c.controller.ClaimGrace = time.Nanosecond
 	sent, r, command := c.running()
 	old, _ := c.liveInstance(c.agent.ID)
-	container := scalar[string](c.env, "SELECT container_id FROM runtime_instance WHERE id = $1", old)
 	c.patch("/agents/"+c.agent.ID, map[string]any{"name": "审查员"})
 	c.tick() // first seen taken
 	r.heartbeat("busy")
 	c.tick()
-	if c.driver.wasStopped(container) {
+	if c.driver.wasStopped(old) {
 		t.Fatal("stopped while the runtime reports busy")
 	}
 	r.heartbeat("ready")
 	c.tick()
-	if !c.driver.wasStopped(container) {
+	if !c.driver.wasStopped(old) {
 		t.Fatal("not stopped")
 	}
 	expect(t, c.commandStatus(command), "failed")
@@ -687,17 +754,16 @@ func TestDeletedAgentIsInterruptedThenStopped(t *testing.T) {
 	_, r, command := c.running()
 	r.turnStarted(command, "t")
 	instance, _ := c.liveInstance(c.agent.ID)
-	container := scalar[string](c.env, "SELECT container_id FROM runtime_instance WHERE id = $1", instance)
 	expect(t, c.delete("/agents/"+c.agent.ID).status, 204)
 	c.tick()
 	// Still running: interrupted first, not killed mid-turn.
 	expect(t, fmt.Sprint(c.nats.ToldOf("interrupt")), fmt.Sprint([]map[string]any{{"command_id": command}}))
-	if c.driver.wasStopped(container) {
+	if c.driver.wasStopped(instance) {
 		t.Fatal("stopped mid-turn")
 	}
 	r.turnCompleted(command, "interrupted")
 	c.tick()
-	if !c.driver.wasStopped(container) {
+	if !c.driver.wasStopped(instance) {
 		t.Fatal("not stopped")
 	}
 	// Its queue goes with it.
@@ -713,17 +779,16 @@ func TestRestartInterruptsTheTurnThenReplacesTheRuntime(t *testing.T) {
 	sent, r, command := c.running()
 	r.turnStarted(command, "t")
 	old, _ := c.liveInstance(c.agent.ID)
-	container := scalar[string](c.env, "SELECT container_id FROM runtime_instance WHERE id = $1", old)
 	expect(t, c.post("/agents/"+c.agent.ID+"/restart", nil).status, 204)
 	c.tick()
 	// Interrupted first, so the turn's snapshot is uploaded before the stop.
 	expect(t, fmt.Sprint(c.nats.ToldOf("interrupt")), fmt.Sprint([]map[string]any{{"command_id": command}}))
-	if c.driver.wasStopped(container) {
+	if c.driver.wasStopped(old) {
 		t.Fatal("stopped mid-turn")
 	}
 	r.turnCompleted(command, "interrupted")
 	c.tick()
-	if !c.driver.wasStopped(container) {
+	if !c.driver.wasStopped(old) {
 		t.Fatal("not stopped")
 	}
 	expect(t, scalar[string](c.env, "SELECT end_reason FROM runtime_instance WHERE id = $1", old), "CONFIG_CHANGED")
@@ -755,17 +820,16 @@ func TestInstructionsArePassedAndAppliedBetweenTurns(t *testing.T) {
 	c.take(command)
 	r.turnStarted(command, "t")
 	old, _ := c.liveInstance(c.agent.ID)
-	container := scalar[string](c.env, "SELECT container_id FROM runtime_instance WHERE id = $1", old)
 
 	c.patch(path, map[string]any{"name": "审查员", "description": "第二版指令"})
 	c.tick()
 	// A turn is running: the runtime keeps going until it settles.
-	if c.driver.wasStopped(container) {
+	if c.driver.wasStopped(old) {
 		t.Fatal("stopped mid-turn")
 	}
 	r.turnCompleted(command, "completed")
 	c.tick()
-	if !c.driver.wasStopped(container) {
+	if !c.driver.wasStopped(old) {
 		t.Fatal("not stopped")
 	}
 	expect(t, scalar[string](c.env, "SELECT end_reason FROM runtime_instance WHERE id = $1", old), "CONFIG_CHANGED")

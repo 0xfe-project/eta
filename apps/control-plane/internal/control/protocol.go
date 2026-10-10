@@ -82,6 +82,28 @@ func (p *Protocol) inConversation(ctx context.Context, instance *chat.RuntimeRec
 func (p *Protocol) Heartbeat(ctx context.Context, instance *chat.RuntimeRecord, body Heartbeat) (*Lease, error) {
 	now := pg.Now()
 	lease := now.Add(LeaseSeconds * time.Second)
+	status := body.Status
+	if !runtimeStatuses[status] {
+		status = "starting"
+	}
+	if status == chat.RuntimeReady || status == chat.RuntimeBusy {
+		// Nearly every heartbeat only renews: the runtime stays ready or
+		// busy, its agent already is. Those leave the conversation lock to
+		// the writes that need it (event imports of every agent queue on
+		// it). The UPDATE's own row lock and conditions fence it: a runtime
+		// ended, failed or replaced meanwhile matches none and takes the
+		// locked path below.
+		renewed, err := p.DB.Exec(ctx, `UPDATE runtime_instance r SET last_heartbeat_at = $2, lease_expires_at = $3, status = $4
+			FROM agent a WHERE r.id = $1 AND a.id = r.agent_id AND a.generation = r.generation
+			AND r.ended_at IS NULL AND r.ready_at IS NOT NULL AND r.status IN ('ready', 'busy')
+			AND a.status IN ('ready', 'busy')`, instance.ID, now, lease, status)
+		if err != nil {
+			return nil, err
+		}
+		if renewed.RowsAffected() == 1 {
+			return &Lease{LeaseExpiresAt: lease.Format(time.RFC3339Nano), Generation: instance.Generation}, nil
+		}
+	}
 	err := p.inConversation(ctx, instance, func(tx pgx.Tx) error {
 		current, err := pg.One[chat.RuntimeRecord](ctx, tx, "SELECT * FROM runtime_instance WHERE id = $1", instance.ID)
 		if err != nil {
@@ -89,10 +111,6 @@ func (p *Protocol) Heartbeat(ctx context.Context, instance *chat.RuntimeRecord, 
 		}
 		if current.EndedAt != nil {
 			return fenced()
-		}
-		status := body.Status
-		if !runtimeStatuses[status] {
-			status = "starting"
 		}
 		switch status {
 		case "recovery_failed", "error":

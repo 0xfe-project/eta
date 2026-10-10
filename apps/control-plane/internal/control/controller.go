@@ -143,13 +143,6 @@ func (c *Controller) live(ctx context.Context, where string, args ...any) ([]*li
 		WHERE r.ended_at IS NULL`+where+` ORDER BY r.created_at`, args...)
 }
 
-func containerID(r *chat.RuntimeRecord) string {
-	if r.ContainerID == nil {
-		return ""
-	}
-	return *r.ContainerID
-}
-
 func (c *Controller) expireRuntimes(ctx context.Context) error {
 	live, err := c.live(ctx, "")
 	if err != nil {
@@ -174,7 +167,7 @@ func (c *Controller) expireRuntimes(ctx context.Context) error {
 			continue
 		}
 		// Fence physically before a replacement starts.
-		if err := c.Driver.Stop(ctx, containerID(&instance.RuntimeRecord)); err != nil {
+		if err := c.Driver.Stop(ctx, instance.ID); err != nil {
 			return err
 		}
 		if err := c.EndInstance(ctx, instance.ID, reason, status); err != nil {
@@ -559,7 +552,7 @@ func (c *Controller) StopIdle(ctx context.Context) error {
 		if lastActive.After(idleBefore) {
 			continue
 		}
-		if err := c.Driver.Stop(ctx, containerID(&instance.RuntimeRecord)); err != nil {
+		if err := c.Driver.Stop(ctx, instance.ID); err != nil {
 			return err
 		}
 		if err := c.EndInstance(ctx, instance.ID, "IDLE", chat.RuntimeStopped); err != nil {
@@ -587,7 +580,7 @@ func (c *Controller) restartOutdated(ctx context.Context) error {
 			}
 			continue
 		}
-		if err := c.Driver.Stop(ctx, containerID(&instance.RuntimeRecord)); err != nil {
+		if err := c.Driver.Stop(ctx, instance.ID); err != nil {
 			return err
 		}
 		if err := c.EndInstance(ctx, instance.ID, "CONFIG_CHANGED", chat.RuntimeStopped); err != nil {
@@ -613,7 +606,7 @@ func (c *Controller) stopDeleted(ctx context.Context) error {
 		if active {
 			continue
 		}
-		if err := c.Driver.Stop(ctx, containerID(&instance.RuntimeRecord)); err != nil {
+		if err := c.Driver.Stop(ctx, instance.ID); err != nil {
 			return err
 		}
 		if err := c.EndInstance(ctx, instance.ID, "DELETED", chat.RuntimeStopped); err != nil {
