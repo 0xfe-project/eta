@@ -59,7 +59,8 @@ import {
 import { useWorkspaceStore } from "./workspace-store";
 
 // The task board as a full-window page: every task as rows grouped by status
-// or as a board to drag them across, and a task with its properties beside it.
+// or as a board to drag them across, and an open task beside the list. The
+// task lays itself out by its own width (container queries), not the window's.
 
 const showError = (error: Error) => toast.error(error.message);
 
@@ -119,9 +120,11 @@ function StatusMenu({ task }: { task: Task }) {
 
 function ListView({
   tasks,
+  selected,
   onCreate,
 }: {
   tasks: Task[];
+  selected: string | null;
   onCreate: (status: TaskStatus) => void;
 }) {
   const [, setNav] = useTaskNav();
@@ -168,13 +171,17 @@ function ListView({
                 {group.map((task) => (
                   <li
                     key={task.id}
-                    className="flex h-10 items-center gap-1 border-b px-2 transition-colors duration-[60ms] ease-linear hover:bg-muted/40 sm:px-4"
+                    className={cn(
+                      "flex h-10 items-center gap-1 border-b px-2 transition-colors duration-[60ms] ease-linear hover:bg-muted/40 sm:px-4",
+                      task.id === selected && "bg-muted hover:bg-muted",
+                    )}
                   >
                     <StatusMenu task={task} />
                     <button
                       type="button"
+                      aria-current={task.id === selected || undefined}
                       onClick={() => void setNav({ task: task.id })}
-                      className="grid h-full min-w-0 flex-1 grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-2 text-left outline-none focus-visible:underline sm:grid-cols-[3rem_minmax(0,1fr)_auto_minmax(0,12rem)_4.5rem]"
+                      className="grid h-full min-w-0 flex-1 grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-2 text-left outline-none focus-visible:underline @lg:grid-cols-[3rem_minmax(0,1fr)_auto_minmax(0,12rem)_4.5rem]"
                     >
                       <span className="text-xs text-muted-foreground tabular-nums">
                         #{task.number}
@@ -184,10 +191,10 @@ function ListView({
                         <RunState task={task} />
                         <Comments count={task.comments} />
                       </span>
-                      <span className="hidden truncate text-xs text-muted-foreground sm:block">
+                      <span className="hidden truncate text-xs text-muted-foreground @lg:block">
                         {assigneeLabel(task.assignee)}
                       </span>
-                      <span className="hidden text-right text-xs text-muted-foreground tabular-nums sm:block">
+                      <span className="hidden text-right text-xs text-muted-foreground tabular-nums @lg:block">
                         {ago(task.updated_at)}
                       </span>
                     </button>
@@ -377,9 +384,9 @@ function TaskPage({ id }: { id: string }) {
       </PageHeader>
       <main
         id="main"
-        className="min-h-0 flex-1 overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] lg:overflow-hidden"
+        className="min-h-0 flex-1 overflow-y-auto @2xl:grid @2xl:grid-cols-[minmax(0,1fr)_18rem] @2xl:overflow-hidden"
       >
-        <div className="lg:overflow-y-auto">
+        <div className="@2xl:overflow-y-auto">
           <div className="mx-auto max-w-3xl space-y-6 px-4 pb-6 sm:px-8">
             {/* Pinned under the page header (任务 and the number) as the rest scrolls. */}
             <div className="sticky top-0 z-10 mb-3 space-y-1 bg-background pt-4 pb-3">
@@ -402,7 +409,7 @@ function TaskPage({ id }: { id: string }) {
         </div>
         <aside
           aria-label="属性"
-          className="border-t px-4 py-5 text-xs sm:px-8 lg:overflow-y-auto lg:border-t-0 lg:border-l lg:px-4"
+          className="border-t px-4 py-5 text-xs sm:px-8 @2xl:overflow-y-auto @2xl:border-t-0 @2xl:border-l @2xl:px-4"
         >
           <TaskProperties task={task}>
             <dt className="text-xs leading-8 text-muted-foreground">更新于</dt>
@@ -427,138 +434,157 @@ export function TaskBoard() {
   const setView = (changes: Pick<WorkspaceState, "taskLayout" | "taskScope">) =>
     setWorkspace((workspace) => ({ ...workspace, ...changes }));
   const id = nav.task && nav.task !== "new" ? nav.task : null;
-  if (id) return <TaskPage id={id} />;
-
   const tasks = (data?.tasks ?? []).filter(
     (task) => scope === "all" || task.assignee.kind === scope,
   );
+  // Beside a task the board has no room; the list keeps its place.
+  const board = layout === "board" && !id;
+  // The open task is the page's main content; the list beside it is not.
+  const Main = id ? "section" : "main";
   const create = (status: TaskStatus = "todo") => {
     setNewStatus(status);
     void setNav({ task: "new" });
   };
+  // With a task open the list narrows to a column beside it (from md, the
+  // sidebar's breakpoint); on phones the task takes the page, 任务 goes back.
   return (
-    <>
-      <PageHeader
-        title={
-          <>
-            任务
-            {data ? (
-              <span className="font-normal text-muted-foreground tabular-nums">
-                {tasks.length}
-              </span>
-            ) : null}
-          </>
-        }
-      >
-        <RefreshButton resource="tasks" />
-        <Tabs
-          value={scope}
-          onValueChange={(value) =>
-            setView({ taskScope: value as typeof scope })
-          }
-          className="hidden sm:flex"
-        >
-          <TabsList aria-label="指派范围" className="gap-1">
-            {scopes.map((s) => (
-              <TabsTrigger
-                key={s.value}
-                value={s.value}
-                className="px-2 text-xs"
-              >
-                {s.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-        <Tabs
-          value={layout}
-          onValueChange={(value) =>
-            setView({ taskLayout: value as typeof layout })
-          }
-        >
-          <TabsList aria-label="布局">
-            <TabsTrigger
-              value="list"
-              aria-label="列表"
-              title="列表"
-              className="px-2"
-            >
-              <ListIcon aria-hidden="true" />
-            </TabsTrigger>
-            <TabsTrigger
-              value="board"
-              aria-label="看板"
-              title="看板"
-              className="px-2"
-            >
-              <KanbanIcon aria-hidden="true" />
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <Button size="sm" onClick={() => create()}>
-          <PlusIcon aria-hidden="true" />
-          <span className="hidden sm:inline">新建任务</span>
-          <span className="sr-only sm:hidden">新建任务</span>
-        </Button>
-      </PageHeader>
-      <main
-        id="main"
+    <div className="flex min-h-0 flex-1">
+      <div
         className={cn(
-          "min-h-0 flex-1",
-          layout === "board" ? "overflow-hidden" : "overflow-y-auto",
+          "@container flex min-w-0 flex-1 flex-col",
+          id &&
+            "hidden md:flex md:w-64 md:flex-none md:border-r lg:w-80 xl:w-96",
         )}
       >
-        {error && !data ? (
-          <div className="mx-auto max-w-md px-4 py-16">
-            <LoadError
-              what="任务"
-              error={error}
-              onRetry={() => void refetch()}
-            />
-          </div>
-        ) : !data ? (
-          <Loading rows={6} className="px-2 py-3 sm:px-4" />
-        ) : tasks.length === 0 ? (
-          <div className="mx-auto max-w-md px-4 py-16">
-            {data.tasks.length === 0 ? (
-              <Empty
-                icon={ListChecksIcon}
-                title="还没有任务"
-                action={
-                  <Button size="sm" onClick={() => create()}>
-                    <PlusIcon aria-hidden="true" data-icon="inline-start" />
-                    新建任务
-                  </Button>
-                }
+        <PageHeader
+          title={
+            <>
+              任务
+              {data ? (
+                <span className="font-normal text-muted-foreground tabular-nums">
+                  {tasks.length}
+                </span>
+              ) : null}
+            </>
+          }
+        >
+          <RefreshButton resource="tasks" />
+          <Tabs
+            value={scope}
+            onValueChange={(value) =>
+              setView({ taskScope: value as typeof scope })
+            }
+            className="hidden @md:flex"
+          >
+            <TabsList aria-label="指派范围" className="gap-1">
+              {scopes.map((s) => (
+                <TabsTrigger
+                  key={s.value}
+                  value={s.value}
+                  className="px-2 text-xs"
+                >
+                  {s.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          <Tabs
+            value={layout}
+            onValueChange={(value) =>
+              setView({ taskLayout: value as typeof layout })
+            }
+            className={id ? "hidden" : undefined}
+          >
+            <TabsList aria-label="布局">
+              <TabsTrigger
+                value="list"
+                aria-label="列表"
+                title="列表"
+                className="px-2"
               >
-                把要做的事交给智能体，它会在时间线里记下每一步。
-              </Empty>
-            ) : (
-              <Empty
-                icon={ListChecksIcon}
-                title={
-                  scope === "user"
-                    ? "没有指派给你的任务"
-                    : "没有指派给智能体的任务"
-                }
-                action={
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setView({ taskScope: "all" })}
-                  >
-                    查看全部任务
-                  </Button>
-                }
+                <ListIcon aria-hidden="true" />
+              </TabsTrigger>
+              <TabsTrigger
+                value="board"
+                aria-label="看板"
+                title="看板"
+                className="px-2"
+              >
+                <KanbanIcon aria-hidden="true" />
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <Button size="sm" onClick={() => create()}>
+            <PlusIcon aria-hidden="true" />
+            <span className="hidden @md:inline">新建任务</span>
+            <span className="sr-only @md:hidden">新建任务</span>
+          </Button>
+        </PageHeader>
+        <Main
+          id={id ? undefined : "main"}
+          aria-label={id ? "任务列表" : undefined}
+          className={cn(
+            "min-h-0 flex-1",
+            board ? "overflow-hidden" : "overflow-y-auto",
+          )}
+        >
+          {error && !data ? (
+            <div className="mx-auto max-w-md px-4 py-16">
+              <LoadError
+                what="任务"
+                error={error}
+                onRetry={() => void refetch()}
               />
-            )}
-          </div>
-        ) : layout === "board" ? (
-          <BoardView tasks={tasks} onCreate={create} />
-        ) : (
-          <ListView tasks={tasks} onCreate={create} />
-        )}
-      </main>
+            </div>
+          ) : !data ? (
+            <Loading rows={6} className="px-2 py-3 sm:px-4" />
+          ) : tasks.length === 0 ? (
+            <div className="mx-auto max-w-md px-4 py-16">
+              {data.tasks.length === 0 ? (
+                <Empty
+                  icon={ListChecksIcon}
+                  title="还没有任务"
+                  action={
+                    <Button size="sm" onClick={() => create()}>
+                      <PlusIcon aria-hidden="true" data-icon="inline-start" />
+                      新建任务
+                    </Button>
+                  }
+                >
+                  把要做的事交给智能体，它会在时间线里记下每一步。
+                </Empty>
+              ) : (
+                <Empty
+                  icon={ListChecksIcon}
+                  title={
+                    scope === "user"
+                      ? "没有指派给你的任务"
+                      : "没有指派给智能体的任务"
+                  }
+                  action={
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setView({ taskScope: "all" })}
+                    >
+                      查看全部任务
+                    </Button>
+                  }
+                />
+              )}
+            </div>
+          ) : board ? (
+            <BoardView tasks={tasks} onCreate={create} />
+          ) : (
+            <ListView tasks={tasks} selected={id} onCreate={create} />
+          )}
+        </Main>
+      </div>
+      {id ? (
+        <div className="@container flex min-w-0 flex-1 flex-col">
+          <TaskPage key={id} id={id} />
+        </div>
+      ) : null}
       <Dialog
         open={nav.task === "new"}
         onOpenChange={(open) => !open && void setNav({ task: null })}
@@ -575,6 +601,6 @@ export function TaskBoard() {
           />
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }
