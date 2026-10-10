@@ -41,6 +41,8 @@ type fakeRelay struct {
 	historyEpoch string
 	// History reads asked for, as their "limit".
 	historyReads []int
+	// Called with each runtime call's method before it is answered.
+	before func(method string)
 }
 
 // readHistory answers like Paseo, reading entries that start before a cursor,
@@ -169,6 +171,9 @@ func (f *fakeRelay) ApproveInstance(context.Context, string, string, string) err
 func (f *fakeRelay) RevokeDevice(context.Context, string) error                    { return nil }
 
 func (f *fakeRelay) Call(_ context.Context, _, _, method string, params any) (*relay.Outcome, error) {
+	if f.before != nil {
+		f.before(method)
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, method)
@@ -794,6 +799,79 @@ func TestInterruptingARun(t *testing.T) {
 	expect(t, e.task("1").Runs[0].Status, "cancelled")
 	if !slices.Contains(e.relay.calls, "paseo.agents.cancel") {
 		t.Fatalf("calls %v", e.relay.calls)
+	}
+}
+
+// Stopped while its place was being opened: the remote agent is never sent
+// the prompt, and what was opened for it is cleaned up.
+func TestARunStoppedWhileItsPlaceOpensIsNeverSent(t *testing.T) {
+	e := newTaskEnv(t)
+	computer, _ := e.computer("laptop", "paseo")
+	e.create(remoteAssignee(computer, "paseo", newWorktree))
+	run := e.task("1").Runs[0]
+	e.relay.before = func(method string) {
+		if method == "paseo.agents.create" {
+			if r := e.post("/tasks/1/runs/"+run.ID+"/interrupt", nil); r.status != 200 {
+				t.Errorf("interrupt: %d %s", r.status, r.body)
+			}
+		}
+	}
+	e.runner.Tick(e.ctx)
+	e.relay.before = nil
+	expect(t, e.task("1").Runs[0].Status, "cancelled")
+	if slices.Contains(e.relay.calls, "paseo.agents.send") {
+		t.Fatalf("a cancelled run was sent its prompt: %v", e.relay.calls)
+	}
+	expect(t, scalar[bool](e.env, "SELECT closed_at IS NOT NULL FROM task_session"), true)
+	if !slices.Contains(e.relay.calls, "paseo.workspaces.archive") {
+		t.Fatalf("the worktree opened for it stays: %v", e.relay.calls)
+	}
+}
+
+// The runner is stopped (a deploy) while it opens a place: the start still
+// finishes and is recorded, so the next runner does not open another.
+func TestAStartFinishesWhenTheRunnerIsStopped(t *testing.T) {
+	e := newTaskEnv(t)
+	computer, _ := e.computer("laptop", "paseo")
+	e.create(remoteAssignee(computer, "paseo", newWorktree))
+	ctx, stop := context.WithCancel(e.ctx)
+	e.relay.before = func(method string) {
+		if method == "paseo.workspaces.create" {
+			stop()
+		}
+	}
+	e.runner.Tick(ctx)
+	e.relay.before = nil
+	expect(t, e.task("1").Runs[0].Status, "running")
+	e.runner.Tick(e.ctx)
+	opened := 0
+	for _, call := range e.relay.calls {
+		if call == "paseo.workspaces.create" || call == "paseo.agents.create" {
+			opened++
+		}
+	}
+	expect(t, opened, 2) // one worktree, one agent
+	_, agent := e.relay.only(t)
+	expect(t, len(agent.inputs), 1)
+}
+
+// A runner that died while opening a place (no record of what it opened)
+// fails the run rather than open a second place.
+func TestARunInterruptedWhileOpeningFailsInsteadOfOpeningAgain(t *testing.T) {
+	e := newTaskEnv(t)
+	computer, _ := e.computer("laptop", "paseo")
+	e.create(remoteAssignee(computer, "paseo", newWorktree))
+	e.exec("UPDATE task_run SET status = 'starting', opening_at = now()")
+	e.runner.Tick(e.ctx)
+	run := e.task("1").Runs[0]
+	expect(t, run.Status, "failed")
+	if run.Error == nil || !strings.Contains(*run.Error, "中断") {
+		t.Fatalf("error %v", run.Error)
+	}
+	for _, call := range e.relay.calls {
+		if strings.HasSuffix(call, ".create") {
+			t.Fatalf("opened again: %v", e.relay.calls)
+		}
 	}
 }
 
