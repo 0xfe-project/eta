@@ -25,7 +25,7 @@ export default antfu(
   {
     // The typescript-eslint based rule misreads plain JS scopes and reports
     // every variable as "only used as a type"; use the core rule there.
-    files: ["**/*.js"],
+    files: ["**/*.js", "**/*.mjs"],
     rules: {
       "unused-imports/no-unused-vars": "off",
       "no-unused-vars": [

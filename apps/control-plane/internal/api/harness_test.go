@@ -9,22 +9,25 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/akarachen/axp/apps/control-plane/internal/auth"
+	"github.com/akarachen/axp/apps/control-plane/internal/bundles"
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
 	"github.com/akarachen/axp/apps/control-plane/internal/container"
 	"github.com/akarachen/axp/apps/control-plane/internal/control"
 	"github.com/akarachen/axp/apps/control-plane/internal/llm"
 	"github.com/akarachen/axp/apps/control-plane/internal/plugins"
-	"github.com/akarachen/axp/apps/control-plane/internal/queue/queuetest"
 	"github.com/akarachen/axp/apps/control-plane/internal/store"
+	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/akarachen/axp/packages/service-go/pg/pgtest"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -63,52 +66,171 @@ func (f *fakeCatalog) set(models ...llm.Model) {
 	}
 }
 
+// fakeRuntime is the agents' runtimes' control API: it records what the
+// controller asks and answers as told.
+type fakeRuntime struct {
+	mu     sync.Mutex
+	server *httptest.Server
+	calls  []runtimeCall
+	// answer answers a prompt or a steer; accepted when nil.
+	answer func(path string) (int, map[string]any)
+}
+
+type runtimeCall struct {
+	path, agent string
+	body        map[string]any
+}
+
+func newFakeRuntime(t *testing.T, secret []byte) *fakeRuntime {
+	f := &fakeRuntime{}
+	f.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		agent := r.Header.Get("X-Test-Agent")
+		f.mu.Lock()
+		f.calls = append(f.calls, runtimeCall{path: r.URL.Path, agent: agent, body: body})
+		answer := f.answer
+		f.mu.Unlock()
+		status, reply := 200, map[string]any{"accepted": true}
+		if r.URL.Path == "/abort" {
+			reply = map[string]any{}
+		} else if answer != nil {
+			status, reply = answer(r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(reply)
+	}))
+	t.Cleanup(f.server.Close)
+	return f
+}
+
+// called is what the controller asked at path, in order.
+func (f *fakeRuntime) called(path string) []map[string]any {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []map[string]any
+	for _, c := range f.calls {
+		if c.path == path {
+			out = append(out, c.body)
+		}
+	}
+	return out
+}
+
+func (f *fakeRuntime) answering(fn func(path string) (int, map[string]any)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.answer = fn
+}
+
+// fakeDriver is Docker: images it builds and containers it runs, whose
+// control API is the fake runtime (or nothing, while down).
 type fakeDriver struct {
-	started   []container.Spec
-	stopped   []string
-	states    map[string]string
-	failStart bool
+	mu         sync.Mutex
+	runtime    *fakeRuntime
+	base       string
+	images     map[string]bool
+	built      []string
+	contexts   []string
+	failBuilds string
+	containers map[string]*container.Runtime
+	runs       []container.Spec
+	removed    []string
+	down       bool
 }
 
-func (f *fakeDriver) Name(suffix string) string { return "axp-" + suffix }
-
-func (f *fakeDriver) Start(_ context.Context, spec container.Spec) (container.Started, error) {
-	if f.failStart {
-		return container.Started{}, fmt.Errorf("docker down")
+func (f *fakeDriver) List(context.Context) ([]container.Runtime, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []container.Runtime
+	for _, c := range f.containers {
+		r := *c
+		if r.State == container.Running {
+			r.URL = f.runtime.server.URL
+			if f.down {
+				r.URL = "http://127.0.0.1:1"
+			}
+		}
+		out = append(out, r)
 	}
-	f.started = append(f.started, spec)
-	id := strings.ReplaceAll(uuid.NewString(), "-", "")
-	f.states[id] = container.Running
-	return container.Started{ContainerID: id, ImageDigest: "sha"}, nil
+	return out, nil
 }
 
-func (f *fakeDriver) State(_ context.Context, id string) (string, error) {
-	if s, ok := f.states[id]; ok {
-		return s, nil
+func (f *fakeDriver) Run(_ context.Context, spec container.Spec) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.runs = append(f.runs, spec)
+	f.containers[spec.AgentID] = &container.Runtime{
+		AgentID: spec.AgentID, ContainerID: uuid.NewString(), Config: spec.Config, State: container.Running,
 	}
-	return container.Missing, nil
-}
-
-func (f *fakeDriver) Stop(_ context.Context, instanceID string) error {
-	f.stopped = append(f.stopped, instanceID)
 	return nil
 }
 
-func (f *fakeDriver) wasStopped(instanceID string) bool {
-	return slices.Contains(f.stopped, instanceID)
+func (f *fakeDriver) Start(_ context.Context, id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, c := range f.containers {
+		if c.ContainerID == id {
+			c.State = container.Running
+		}
+	}
+	return nil
 }
 
-// fakeS3 is agent snapshots, by agent id, behind presigned-looking URLs.
-type fakeS3 struct{ snapshots map[string]bool }
+func (f *fakeDriver) Remove(_ context.Context, agentID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.containers, agentID)
+	f.removed = append(f.removed, agentID)
+	return nil
+}
 
-func (f *fakeS3) Exists(_ context.Context, agentID string) (bool, error) {
-	return f.snapshots[agentID], nil
+func (f *fakeDriver) Base(context.Context) (string, string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.base, "axp-agent-runtime:test", nil
 }
-func (f *fakeS3) UploadURL(_ context.Context, agentID string) (string, error) {
-	return "http://s3.test/put/" + agentID, nil
+
+func (f *fakeDriver) ImageTag(hash string) string { return "axp-test-agent:" + hash }
+
+func (f *fakeDriver) HasImage(_ context.Context, tag string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.images[tag], nil
 }
-func (f *fakeS3) DownloadURL(_ context.Context, agentID string) (string, error) {
-	return "http://s3.test/get/" + agentID, nil
+
+func (f *fakeDriver) Build(_ context.Context, dir, tag string) (string, error) {
+	dockerfile, _ := os.ReadFile(filepath.Join(dir, "Dockerfile"))
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.built = append(f.built, tag)
+	f.contexts = append(f.contexts, string(dockerfile))
+	if f.failBuilds != "" {
+		return f.failBuilds, fmt.Errorf("exit status 1")
+	}
+	f.images[tag] = true
+	return "", nil
+}
+
+func (f *fakeDriver) Prune(context.Context, []string) error { return nil }
+
+func (f *fakeDriver) runsOf(agentID string) []container.Spec {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []container.Spec
+	for _, spec := range f.runs {
+		if spec.AgentID == agentID {
+			out = append(out, spec)
+		}
+	}
+	return out
+}
+
+func (f *fakeDriver) builds() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.built)
 }
 
 // --- the environment ---------------------------------------------------------------
@@ -117,10 +239,9 @@ type env struct {
 	t          *testing.T
 	ctx        context.Context
 	db         *pgxpool.Pool
-	nats       *queuetest.Fake
 	models     *fakeCatalog
 	driver     *fakeDriver
-	s3         *fakeS3
+	runtimes   *fakeRuntime
 	secret     []byte
 	chat       *chat.Service
 	public     http.Handler
@@ -128,40 +249,60 @@ type env struct {
 	controller *control.Controller
 }
 
+const (
+	repoBundles = "../../../agent-runtime/bundles"
+	repoPlugins = "../../../agent-runtime/plugins"
+)
+
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	e := &env{
 		t:      t,
 		ctx:    context.Background(),
 		db:     pgtest.DB(t),
-		nats:   queuetest.New(),
 		models: &fakeCatalog{},
-		driver: &fakeDriver{states: map[string]string{}},
-		s3:     &fakeS3{snapshots: map[string]bool{}},
 		secret: []byte("test-secret"),
 	}
-	e.models.set(llm.Model{ID: testModel, DisplayName: "Test Model", Available: true})
+	e.runtimes = newFakeRuntime(t, e.secret)
+	e.driver = &fakeDriver{
+		runtime: e.runtimes, base: "sha256:base", images: map[string]bool{}, containers: map[string]*container.Runtime{},
+	}
+	e.models.set(llm.Model{ID: testModel, DisplayName: "Test Model", ContextWindow: 200000, Available: true})
 	chatService := &chat.Service{
-		Queue: e.nats, Models: e.models, Plugins: &plugins.Catalog{Dir: "../../../agent-runtime/plugins"},
+		Models:  e.models,
+		Bundles: &bundles.Catalog{Dir: repoBundles, Plugins: &plugins.Catalog{Dir: repoPlugins}},
 		Cursors: chat.Cursors{Secret: e.secret},
 	}
 	e.chat = chatService
-	deps := &Deps{
-		DB:       e.db,
-		Chat:     chatService,
-		Protocol: &control.Protocol{DB: e.db, Chat: chatService, Snapshots: e.s3, Secret: e.secret},
-	}
+	deps := &Deps{DB: e.db, Chat: chatService, Secret: e.secret}
 	e.public = Public(deps).Router
 	e.internal = Internal(deps).Router
 	e.controller = &control.Controller{
-		DB: e.db, Chat: chatService, Queue: e.nats, Driver: e.driver, Snapshots: e.s3, Models: e.models,
-		Secret: e.secret, RuntimeGatewayURL: "http://runtime-gateway:8090",
-		NATSURL: "nats://nats:4222", ID: "controller-test", HostID: "test",
+		DB: e.db, Chat: chatService, Bundles: chatService.Bundles, Driver: e.driver, Models: e.models,
+		Secret: e.secret, PluginsDir: repoPlugins,
+		RuntimeGatewayURL: "http://runtime-gateway:8090", NATSURL: "nats://nats:4222",
 	}
 	return e
 }
 
 func (e *env) tick() { e.controller.Tick(e.ctx) }
+
+// settle ticks until every agent has its container (images build in the
+// background), or fails the test.
+func (e *env) settle() {
+	e.t.Helper()
+	for range 200 {
+		e.tick()
+		e.driver.mu.Lock()
+		running := len(e.driver.containers)
+		e.driver.mu.Unlock()
+		if scalar[int](e, `SELECT count(*) FROM agent WHERE deleted_at IS NULL`) == running {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	e.t.Fatal("agents' containers never started")
+}
 
 // --- HTTP ----------------------------------------------------------------------------
 
@@ -358,50 +499,13 @@ func expectError(t *testing.T, r response, status int, code string) {
 
 // --- the runtime side --------------------------------------------------------------
 
-// runtimeHarness talks to the internal API the way a runtime does.
+// runtimeHarness is one boot of an agent's runtime, reporting events the way
+// the controller imports them from NATS.
 type runtimeHarness struct {
-	e          *env
-	instanceID string
-	token      string
-	seq        int64
-}
-
-func (e *env) liveInstance(agentID string) (id string, generation int64) {
-	e.t.Helper()
-	if err := e.db.QueryRow(e.ctx, `SELECT id, generation FROM runtime_instance
-		WHERE agent_id = $1 AND ended_at IS NULL`, agentID).Scan(&id, &generation); err != nil {
-		e.t.Fatalf("live instance: %v", err)
-	}
-	return id, generation
-}
-
-func (e *env) runtime(agentID string) *runtimeHarness {
-	id, generation := e.liveInstance(agentID)
-	return &runtimeHarness{e: e, instanceID: id, token: auth.RuntimeToken(e.secret, id, generation)}
-}
-
-func (r *runtimeHarness) call(method, path string, body any, token ...string) response {
-	tok := r.token
-	if len(token) > 0 {
-		tok = token[0]
-	}
-	if body == nil {
-		body = map[string]any{}
-	}
-	return do(r.e.t, r.e.internal, method, "/internal/v1/runtime-instances/"+r.instanceID+"/"+path, body,
-		map[string]string{"Authorization": "Bearer " + tok})
-}
-
-func (r *runtimeHarness) heartbeat(status string, extra ...any) response {
-	body := map[string]any{"status": status}
-	for i := 0; i+1 < len(extra); i += 2 {
-		body[extra[i].(string)] = extra[i+1]
-	}
-	return r.call(http.MethodPost, "heartbeat", body)
-}
-
-func (r *runtimeHarness) session(threadID string) response {
-	return r.call(http.MethodPut, "session", map[string]any{"thread_id": threadID})
+	e       *env
+	agentID string
+	boot    string
+	seq     int64
 }
 
 type event struct {
@@ -409,53 +513,35 @@ type event struct {
 	payload map[string]any
 }
 
-func (r *runtimeHarness) events(events ...event) response {
-	return r.eventsFrom(0, events...)
-}
-
-// eventsFrom numbers the batch from start (0: after the last one).
-func (r *runtimeHarness) eventsFrom(start int64, events ...event) response {
-	batch := []map[string]any{}
-	for _, ev := range events {
-		if start > 0 {
-			r.seq, start = start, 0
-		} else {
-			r.seq++
-		}
-		batch = append(batch, map[string]any{
-			"source_seq":      r.seq,
-			"source_event_id": fmt.Sprintf("%s-%d", r.instanceID, r.seq),
-			"type":            ev.kind,
-			"payload":         ev.payload,
-		})
-	}
-	return r.call(http.MethodPost, "events", map[string]any{"events": batch})
-}
-
-func (r *runtimeHarness) turnStarted(commandID, turnID string) response {
-	return r.events(event{"turn.started", map[string]any{"command_id": commandID, "turn_id": turnID}})
-}
-
-// turnCompleted ends the turn as the runtime does: reported finished, then
-// the snapshot it left saved.
-func (r *runtimeHarness) turnCompleted(commandID, status string) response {
-	return r.events(event{"turn.completed", map[string]any{"command_id": commandID, "status": status}},
-		event{"snapshot.saved", map[string]any{"size": 1}})
-}
-
-// turnCompletedUploading ends the turn with its snapshot still uploading.
-func (r *runtimeHarness) turnCompletedUploading(commandID, status string) response {
-	return r.events(event{"turn.completed", map[string]any{"command_id": commandID, "status": status}})
-}
-
-func (r *runtimeHarness) ready(threadID string) {
+// events imports a batch of the boot's events, then lets the controller
+// deliver what it now can.
+func (r *runtimeHarness) events(events ...event) {
 	r.e.t.Helper()
-	if s := r.session(threadID).status; s != 200 {
-		r.e.t.Fatalf("session: %d", s)
+	batch := make([]chat.RuntimeEvent, 0, len(events))
+	for _, ev := range events {
+		r.seq++
+		batch = append(batch, chat.RuntimeEvent{BootID: r.boot, Seq: r.seq, Type: ev.kind, Payload: ev.payload})
 	}
-	if s := r.heartbeat("ready").status; s != 200 {
-		r.e.t.Fatalf("heartbeat: %d", s)
+	r.resend(batch...)
+}
+
+// resend imports events as given (a redelivery).
+func (r *runtimeHarness) resend(batch ...chat.RuntimeEvent) {
+	r.e.t.Helper()
+	if err := pg.InTx(r.e.ctx, r.e.db, func(tx pgx.Tx) error {
+		return r.e.chat.ImportEvents(r.e.ctx, tx, r.agentID, batch)
+	}); err != nil {
+		r.e.t.Fatalf("import: %v", err)
 	}
+	r.e.controller.Dispatch(r.e.ctx, r.agentID)
+}
+
+func (r *runtimeHarness) turnStarted(commandID, turnID string) {
+	r.events(event{"turn.started", map[string]any{"command_id": commandID, "turn_id": turnID}})
+}
+
+func (r *runtimeHarness) turnCompleted(commandID, status string) {
+	r.events(event{"turn.completed", map[string]any{"command_id": commandID, "status": status}})
 }
 
 func item(commandID string, fields ...any) event {
@@ -468,7 +554,7 @@ func item(commandID string, fields ...any) event {
 
 // --- the controller side -------------------------------------------------------------
 
-// control is a controller with fake Docker and NATS, plus one agent.
+// controlEnv is a controller with fake Docker and runtimes, plus one agent.
 type controlEnv struct {
 	*env
 	agent chat.Agent
@@ -479,12 +565,22 @@ func newControl(t *testing.T) *controlEnv {
 	return &controlEnv{env: e, agent: e.createAgent("开发助手")}
 }
 
-func (c *controlEnv) sendText(text string) chat.Sent { return c.send(c.agent.ID, text) }
+// sendText sends a message and wakes the controller, as the API's NOTIFY
+// does.
+func (c *controlEnv) sendText(text string) chat.Sent {
+	sent := c.send(c.agent.ID, text)
+	c.wake()
+	return sent
+}
 
-func (c *controlEnv) startRuntime(threadID string) *runtimeHarness {
-	c.tick()
-	r := c.runtime(c.agent.ID)
-	r.ready(threadID)
+func (c *controlEnv) wake() { c.controller.Dispatch(c.ctx, c.agent.ID) }
+
+// boot is the agent's container started and its runtime reporting itself.
+func (c *controlEnv) boot() *runtimeHarness {
+	c.t.Helper()
+	c.settle()
+	r := &runtimeHarness{e: c.env, agentID: c.agent.ID, boot: uuid.NewString()}
+	r.events(event{"runtime.started", map[string]any{"thread_id": "thread-1", "resumed": false}})
 	return r
 }
 
@@ -492,45 +588,36 @@ func (c *controlEnv) commandOf(sent chat.Sent) string {
 	return scalar[string](c.env, "SELECT command_id FROM message WHERE id = $1", sent.Reply.ID)
 }
 
-// take is what the runtime does: take the next command from the queue.
-func (c *controlEnv) take(commandID string) map[string]any {
-	c.t.Helper()
-	body := c.nats.Take(c.agent.ID)
-	if body == nil || body["command_id"] != commandID {
-		c.t.Fatalf("took %v, want command %s", body, commandID)
-	}
-	return body
-}
-
 func (c *controlEnv) replyStatus(sent chat.Sent) string {
 	return scalar[string](c.env, "SELECT status FROM message WHERE id = $1", sent.Reply.ID)
 }
 
 func (c *controlEnv) replyFailure(sent chat.Sent) string {
-	return scalar[string](c.env, "SELECT failure->>'code' FROM message WHERE id = $1", sent.Reply.ID)
+	return scalar[string](c.env, "SELECT coalesce(failure->>'code', '') FROM message WHERE id = $1", sent.Reply.ID)
 }
 
 func (c *controlEnv) commandStatus(id string) string {
 	return scalar[string](c.env, "SELECT status FROM agent_command WHERE id = $1", id)
 }
 
-func (c *controlEnv) expireLeases() {
-	c.exec("UPDATE runtime_instance SET lease_expires_at = $1 WHERE ended_at IS NULL", time.Now().Add(-time.Second))
-}
-
-// running is one message taken by a ready runtime.
-func (c *controlEnv) running() (chat.Sent, *runtimeHarness, string) {
-	sent := c.sendText("检查项目结构")
-	r := c.startRuntime("thread-1")
-	command := c.commandOf(sent)
-	c.take(command)
-	return sent, r, command
-}
-
-func (c *controlEnv) settings(spec container.Spec) map[string]any {
-	var s map[string]any
-	if err := json.Unmarshal([]byte(spec.Env["AXP_CODEX_SETTINGS"]), &s); err != nil {
-		c.t.Fatal(err)
+// prompted is the command ids the runtime was asked to start, in order.
+func (c *controlEnv) prompted() []string {
+	var out []string
+	for _, body := range c.runtimes.called("/prompt") {
+		out = append(out, body["command_id"].(string))
 	}
-	return s
+	return out
+}
+
+// running is one message delivered to a ready runtime, its turn started.
+func (c *controlEnv) running() (chat.Sent, *runtimeHarness, string) {
+	c.t.Helper()
+	sent := c.sendText("检查项目结构")
+	r := c.boot()
+	command := c.commandOf(sent)
+	if got := c.prompted(); len(got) != 1 || got[0] != command {
+		c.t.Fatalf("prompted %v, want %s", got, command)
+	}
+	r.turnStarted(command, "turn-1")
+	return sent, r, command
 }

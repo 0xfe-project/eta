@@ -19,16 +19,15 @@ Without --port the default is 3000. When that block is taken (another checkout,
 worktree or agent is running) the next free block in steps of 10 is used, so
 any number of instances can start in parallel.
 
-Agents run in containers started by the controller from the runtime image,
-rebuilt on every start. AXP_CODEX_LAUNCH="python -m
-axp_runtime.testing.fake_app_server" replaces Codex with a scripted
-app-server that needs no model.
+Every agent runs in a container of its own, from an image the controller
+builds on the runtime image (rebuilt on every start) out of the agent's
+bundles, with its state on a volume of its own (axp-dev-agent-<id>).
 
 Needs Docker. One set of supporting containers per machine, shared by every
 instance and kept running between sessions: PostgreSQL, OpenObserve for
 logs (opened through the gateway at /observe/) with an OpenTelemetry Collector
-for runtimes, SeaweedFS for agent snapshots and NATS for the agent queue. They
-are named axp-dev-* and never touch production's.
+for runtimes, and NATS, where runtimes publish their events. They are named
+axp-dev-* and never touch production's.
 EOF
 }
 
@@ -169,9 +168,13 @@ export AXP_RELAY_PORT="$((web_port + 8))"
 # Instances share the runtime network; only their ports differ.
 go -C apps/control-plane run . ensure-runtime-network
 runtime_network=axp-runtime
-# Rebuilt on every start so runtime changes are never stale; with Turbo and
-# Docker's layer cache an unchanged image takes about a second.
-bun run runtime:build
+# This checkout's runtime image, rebuilt on every start so runtime changes
+# are never stale; with Turbo and Docker's layer cache an unchanged image
+# takes about a second. Agents' images build on it, so worktrees never
+# overwrite each other's: whichever controller runs moves the agents onto
+# its own.
+export AXP_RUNTIME_IMAGE="axp-agent-runtime:dev-$(printf '%s' "$ROOT_DIR" | sha256sum | cut -c1-8)"
+bash scripts/build/runtime-image.sh "$AXP_RUNTIME_IMAGE"
 # The memory service's embedding model, downloaded once and cached by Turbo,
 # and the web client's types from the control plane's OpenAPI document.
 bunx turbo run build --filter=@axp/memory-service --output-logs=errors-only
@@ -205,20 +208,9 @@ export AXP_RELAY_CA_FILE="$relay_dir/cert.pem"
 AXP_RELAY_ADMIN_SECRET="$(<"$relay_dir/admin_secret")"
 export AXP_RELAY_ADMIN_SECRET
 
-# --- Storage --------------------------------------------------------------------
-# Agent snapshots live in SeaweedFS. Its S3 API is published on the runtime
-# network's gateway address, so host processes and runtimes use one URL
-# (presigned snapshot URLs name it). It stays off the runtime network: as in
-# production, runtimes reach its S3 port alone, never its unauthenticated
-# filer, master, volume, WebDAV or admin APIs.
-dev_container axp-dev-s3 chrislusf/seaweedfs:4.48 \
-  -p "$AXP_RUNTIME_GATEWAY_BIND:8333:8333" -v axp-dev-s3:/data \
-  -e AWS_ACCESS_KEY_ID=axp-dev -e AWS_SECRET_ACCESS_KEY=axp-dev-secret \
-  -- mini -dir=/data
-
-# --- Agent queue ----------------------------------------------------------------
-# NATS JetStream, on the runtime network's gateway address like S3, so host
-# processes and runtimes use one URL.
+# --- NATS -----------------------------------------------------------------------
+# JetStream, on the runtime network's gateway address, so host processes and
+# runtimes use one URL.
 dev_container axp-dev-nats nats:2.14-alpine \
   --network "$runtime_network" -p "$AXP_RUNTIME_GATEWAY_BIND:4222:4222" -v axp-dev-nats:/data \
   -- --jetstream --store_dir /data --http_port 8222

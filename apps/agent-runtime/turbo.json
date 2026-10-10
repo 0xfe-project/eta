@@ -2,47 +2,23 @@
   "$schema": "https://turborepo.com/schema.json",
   "extends": ["//"],
   "tasks": {
-    // Dependencies only; the image copies the source itself.
-    "build:linux-amd64": {
-      "inputs": [
-        "$TURBO_ROOT$/scripts/build/python.sh",
-        "$TURBO_ROOT$/packages/telemetry-py/src/**",
-        "$TURBO_ROOT$/packages/telemetry-py/pyproject.toml",
-        "pyproject.toml",
-        "uv.lock",
-        ".python-version"
-      ]
+    // One bundle for every platform (Node); the image copies it.
+    "build": {
+      "inputs": ["src/**", "package.json", "tsconfig.json"],
+      "outputs": ["out/**"]
     },
-    "build:linux-arm64": {
-      "inputs": [
-        "$TURBO_ROOT$/scripts/build/python.sh",
-        "$TURBO_ROOT$/packages/telemetry-py/src/**",
-        "$TURBO_ROOT$/packages/telemetry-py/pyproject.toml",
-        "pyproject.toml",
-        "uv.lock",
-        ".python-version"
-      ]
-    },
-    // The image compiles its plugins with axp-plugins.
+    // The base image: the runtime's bundle, akhook and axp-plugins, which
+    // compiles each agent's plugins when the control plane builds its image.
     "image:linux-amd64": {
-      "dependsOn": ["$TURBO_EXTENDS$", "@axp/plugins-go#build:linux-amd64"]
+      "dependsOn": ["build", "@axp/plugins-go#build:linux-amd64"]
     },
     "image:linux-arm64": {
-      "dependsOn": ["$TURBO_EXTENDS$", "@axp/plugins-go#build:linux-arm64"]
+      "dependsOn": ["build", "@axp/plugins-go#build:linux-arm64"]
     },
-    // The tests compile the plugins with packages/plugins-go, and run the
-    // agents' rules with akhook; in CI (CI set) they never skip those.
+    // The image's rules run with akhook; in CI (CI set) they never skip.
     "test": {
       "dependsOn": ["@axp/akhook#build"],
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/plugins-go/**"],
       "env": ["CI"]
-    },
-    "lint": {
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "$TURBO_ROOT$/ruff.toml",
-        "$TURBO_ROOT$/packages/telemetry-py/src/**"
-      ]
     }
   }
 }

@@ -1,37 +1,43 @@
-# 队列
+# 命令与事件
 
-本文说明 [#22](https://github.com/AkaraChen/axp/issues/22) 的实现：AXP 的队列是 NATS JetStream（2.14），承载聊天命令。[定时任务](routines.md)服务也把计划放在同一个 NATS 里，但用它自己的 stream `ROUTINES`，与本文的队列无关。
+聊天智能体的工作和结果走两条路：等待执行的命令在 PostgreSQL 里，由 controller 交给 runtime 的控制接口；runtime 发生的事经 NATS JetStream 回到控制面。[定时任务](routines.md)服务把计划放在同一个 NATS 里，用它自己的 stream `ROUTINES`，与本文无关。
 
-## 只有一个队列
+## 命令只在一个地方
 
-一条等待执行的命令，就是它所属 Agent 的 subject `axp.agent.<agent>.commands` 上的一条消息。PostgreSQL 只记录发生过什么（消息、回复、命令的结果），从不决定谁等待、谁先执行。
+一条等待执行的命令，就是 `agent_command` 里 `status = 'queued'`、`delivered_at` 为空的一行，按 `agent_sequence` 排队。
 
-- **入队**：`POST /chat/messages` 在同一个事务里写入消息和命令，并在会话锁内、提交前发布到队列，所以命令按发送顺序入队；发布失败时整个请求回滚（`503 QUEUE_UNAVAILABLE`）。每个 Agent 最多排 20 条，由 stream 的 `max_msgs_per_subject` 拒绝多出来的（`429 QUEUE_FULL`）。
-- **出队**：runtime 空闲时通过 consumer `agent-<agent>` 取一条，立刻确认（ack），再执行。一次只取一条，所以同一个 Agent 一次只执行一条命令。取到即确认：runtime 之后崩溃，这条命令丢失而不会被执行两次。
-- **撤回**：停止一条还没被取走的命令，就是从 stream 里删掉它（按发布时记下的 `queue_seq`）；删除成功即取消。已被取走的，改为通知 runtime 中断。
+- **入队**：`POST /chat/messages` 在同一个事务里写入消息和命令，并 `NOTIFY axp_agent_work`，事务提交时 controller 收到通知。每个智能体最多 20 条在等（`429 QUEUE_FULL`）。
+- **交付**：controller 一次只交付一条：先在事务里把它记为已交付（`running`、`delivered_at`、`boot_id`），再调用 runtime 的 `POST /prompt`。没有送到（runtime 不在、不是这次启动、正忙）就退回等待；送到但结果不明的以“执行中断”结束，绝不交付两次。
+- **撤回**：停止一条还在等的命令，就是把它记为取消；已交付的，controller 请 runtime 中断。
+- 插话（`steer`）在有 turn 运行时交给 `POST /steer`：被采纳的记下 `delivered_at`，等 runtime 报告接手（`turn.steered`）。
 
-stream `AGENTS` 是 work-queue：消息被确认后即删除。
+controller 每秒还会检查一遍所有有工作的智能体，通知丢了（controller 重启、数据库重连）也不会让命令一直等下去。
 
-## 控制消息
+## 事件
 
-运行中的 runtime 还订阅 `axp.agent.<agent>.control`（普通 NATS，不存储）：
+runtime 把事件发到 stream `AGENT_EVENTS` 的 subject `axp.agent.<agent>.events`。每个事件是：
 
-| `type`      | 内容                      | 用途                                                                         |
-| ----------- | ------------------------- | ---------------------------------------------------------------------------- |
-| `interrupt` | `command_id`              | 停止正在执行的命令；仍在停止中时再次停止会再发一次                           |
-| `decision`  | `approval_id`、`decision` | 用户对审批的回答；再次给出同样的回答会再发一次                               |
-| `steer`     | `command_id`、`text` 等   | 请求-应答：正在运行的 turn 接受插话则 `{"accepted": true}`，否则插话照常入队 |
+```json
+{
+  "boot_id": "<这次启动>",
+  "seq": 1,
+  "type": "turn.started",
+  "payload": { "command_id": "...", "turn_id": "..." }
+}
+```
 
-没有 runtime 在运行时，这些消息无人接收：此时既没有执行中的命令，也没有待回答的审批。
+| 类型              | 载荷                                                       | 含义                                                 |
+| ----------------- | ---------------------------------------------------------- | ---------------------------------------------------- |
+| `runtime.started` | `thread_id`、`resumed`                                     | 这次启动就绪；之前启动手里的命令以“执行中断”结束     |
+| `runtime.failed`  | `code`                                                     | 无法启动（`PLUGIN_INSTALL_FAILED`、`RECOVERY_*` 等） |
+| `turn.started`    | `command_id`、`turn_id`                                    | 命令的 turn 开始                                     |
+| `item.updated`    | `command_id`、`item`（`id`、`kind`、`status`、文本或活动） | 回复的一段文本或一个工具调用                         |
+| `turn.steered`    | `command_id`、`steer_command_id`、`turn_id`                | turn 接手了插话                                      |
+| `turn.completed`  | `command_id`、`turn_id`、`status`                          | `completed`、`interrupted` 或 `failed`               |
 
-## controller
-
-controller 只管容器：
-
-- 某个 Agent 的 subject 上有消息（`stream_info` 的按 subject 计数），就为它启动 runtime；有消息或有执行中的命令时不算空闲。
-- 实例结束时，它执行过的命令，以及已不在队列里却没有任何事件的命令（被它取走了），都以“执行中断”失败，绝不重放；队列里剩下的由下一个实例执行。
-- runtime 报告失败或一直没有就绪（`START_TIMEOUT`）时，清空该 Agent 的队列，等待中的回复以相应原因失败。
-- 删除 Agent 时删除它的队列和 consumer。
+- runtime 按顺序逐条发布，消息 id 是 `<boot_id>:<seq>`，重试的发布在两分钟内只存一次；没发出去的在内存里排队，runtime 退出时丢失。
+- controller 用 ordered consumer 按顺序读，每批在一个事务里导入并记下读到的 stream 序号（`event_position`），重启后从那里继续，每个事件只导入一次。`agent_event` 的 `(agent_id, boot_id, source_seq)` 唯一，同一事件再来也只算一次。
+- stream 保留 7 天。
 
 ## 运行
 

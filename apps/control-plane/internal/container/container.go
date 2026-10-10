@@ -1,99 +1,127 @@
-// Package container runs agent runtimes as Docker containers. Only the
-// controller holds the Docker socket.
+// Package container runs agents' runtimes: one long-lived Docker container
+// per agent, from an image built for it, with its state on a Docker volume
+// of its own. Only the controller holds the Docker socket.
 //
-// Development and production share the daemon; their networks, images and
-// names never overlap.
+// Development and production share the daemon; their networks, images,
+// containers and volumes never overlap (labels and names say which is
+// whose).
 package container
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"net/netip"
+	"os/exec"
 	"sort"
+	"strings"
 	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 )
 
 const (
-	Label  = "dev.axp.runtime"
-	memory = 2 << 30 // 2 GiB
-	cpus   = 1
+	Label       = "dev.axp.runtime"
+	envLabel    = "dev.axp.env"
+	agentLabel  = "dev.axp.agent"
+	configLabel = "dev.axp.config"
+	memory      = 2 << 30 // 2 GiB
+	cpus        = 1
 	// DevSubnet is fixed in development, where host processes listen on its
 	// gateway address (172.30.0.1); deploy/deploy.sh creates production's.
 	DevSubnet   = "172.30.0.0/24"
 	devGateway  = "172.30.0.1"
 	stopSeconds = 10
+	// The runtime's control API (apps/agent-runtime/src/server.ts).
+	controlPort = 8080
+	// The volume's mount point, the runtime's AXP_HOME.
+	home = "/agent"
+	// An image build may download a lot (a bundle's script installs tools).
+	buildTimeout = 30 * time.Minute
+	// A failed build keeps this much of its output.
+	buildOutput = 4000
 )
 
-// Spec is a runtime to start.
+// Spec is an agent's runtime container.
 type Spec struct {
-	AgentID    string
-	InstanceID string
-	Generation int64
-	Name       string
-	Env        map[string]string
-	// Instead of the image's command (an agent's runtime).
-	Command []string
+	AgentID string
+	Image   string
+	Env     map[string]string
+	// What the container was created from; a different one replaces it.
+	Config string
 }
 
-type Started struct {
+// Runtime is an agent's runtime container as it is.
+type Runtime struct {
+	AgentID     string
 	ContainerID string
-	ImageDigest string
+	Config      string
+	// Running, Restarting or Stopped.
+	State string
+	// The control API, while running.
+	URL string
 }
 
-// States of a container.
 const (
-	Running = "running"
-	Exited  = "exited"
-	Missing = "missing"
+	Running    = "running"
+	Restarting = "restarting"
+	Stopped    = "stopped"
 )
 
-// Driver starts, inspects and stops runtimes.
+// Driver runs agents' containers and builds their images.
 type Driver interface {
-	// Name is a container name in this environment.
-	Name(suffix string) string
-	Start(ctx context.Context, spec Spec) (Started, error)
-	// State is Running, Exited or Missing.
-	State(ctx context.Context, containerID string) (string, error)
-	// Stop stops and removes the instance's containers, found by their
-	// label: also one whose ID was never recorded (the controller stopped
-	// between starting it and writing the ID down). It returns once none
-	// can write.
-	Stop(ctx context.Context, instanceID string) error
+	// List is this environment's agent containers.
+	List(ctx context.Context) ([]Runtime, error)
+	// Run replaces the agent's container (its volume stays) with a new one
+	// and starts it.
+	Run(ctx context.Context, spec Spec) error
+	// Start starts the agent's stopped container again.
+	Start(ctx context.Context, containerID string) error
+	// Remove stops and removes the agent's container; its volume stays.
+	Remove(ctx context.Context, agentID string) error
+	// Base is the ID of the image agents' images are built on, and its name.
+	Base(ctx context.Context) (id, ref string, err error)
+	// ImageTag is the tag of the agent image with this content hash.
+	ImageTag(hash string) string
+	HasImage(ctx context.Context, tag string) (bool, error)
+	// Build builds dir (with its Dockerfile) as tag; a failure returns the
+	// end of the build's output.
+	Build(ctx context.Context, dir, tag string) (failure string, err error)
+	// Prune removes this environment's agent images no container uses
+	// except keep.
+	Prune(ctx context.Context, keep []string) error
 }
 
 // Docker is this machine's Docker (DOCKER_HOST and the other DOCKER_*
 // variables are honoured).
 type Docker struct {
-	dev     bool
+	env     string
+	prefix  string
 	network string
-	image   string
+	base    string
 	client  *client.Client
 }
 
-func NewDocker(dev bool) (*Docker, error) {
+// NewDocker drives Docker for development or production; base is the
+// runtime image agents' images build on.
+func NewDocker(dev bool, base string) (*Docker, error) {
 	c, err := client.New(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, err
 	}
-	d := &Docker{dev: dev, network: "axp-prod-runtime", image: "axp-agent-runtime:production", client: c}
+	d := &Docker{env: "production", prefix: "axp-", network: "axp-prod-runtime", base: base, client: c}
 	if dev {
-		d.network, d.image = "axp-runtime", "axp-agent-runtime:dev"
+		d.env, d.prefix, d.network = "dev", "axp-dev-", "axp-runtime"
 	}
 	return d, nil
 }
 
-func (d *Docker) Name(suffix string) string {
-	if d.dev {
-		return "axp-dev-" + suffix
-	}
-	return "axp-" + suffix
-}
+func (d *Docker) name(agentID string) string { return d.prefix + "agent-" + agentID }
 
 // EnsureNetwork creates the runtime network when it is missing (in
 // development; deploy/deploy.sh creates production's).
@@ -112,9 +140,40 @@ func (d *Docker) EnsureNetwork(ctx context.Context) error {
 	return err
 }
 
-func (d *Docker) Start(ctx context.Context, spec Spec) (Started, error) {
+func (d *Docker) filters(kind string) client.Filters {
+	return make(client.Filters).Add("label", Label+"="+kind).Add("label", envLabel+"="+d.env)
+}
+
+func (d *Docker) List(ctx context.Context) ([]Runtime, error) {
+	list, err := d.client.ContainerList(ctx, client.ContainerListOptions{All: true, Filters: d.filters("agent")})
+	if err != nil {
+		return nil, err
+	}
+	var out []Runtime
+	for _, c := range list.Items {
+		r := Runtime{AgentID: c.Labels[agentLabel], ContainerID: c.ID, Config: c.Labels[configLabel], State: Stopped}
+		switch c.State {
+		case container.StateRunning:
+			r.State = Running
+		case container.StateRestarting:
+			r.State = Restarting
+		}
+		if c.NetworkSettings != nil && r.State == Running {
+			if endpoint := c.NetworkSettings.Networks[d.network]; endpoint != nil && endpoint.IPAddress.IsValid() {
+				r.URL = "http://" + netip.AddrPortFrom(endpoint.IPAddress, controlPort).String()
+			}
+		}
+		out = append(out, r)
+	}
+	return out, nil
+}
+
+func (d *Docker) Run(ctx context.Context, spec Spec) error {
 	if err := d.EnsureNetwork(ctx); err != nil {
-		return Started{}, err
+		return err
+	}
+	if err := d.Remove(ctx, spec.AgentID); err != nil {
+		return err
 	}
 	env := make([]string, 0, len(spec.Env))
 	for k, v := range spec.Env {
@@ -122,68 +181,45 @@ func (d *Docker) Start(ctx context.Context, spec Spec) (Started, error) {
 	}
 	sort.Strings(env)
 	created, err := d.client.ContainerCreate(ctx, client.ContainerCreateOptions{
-		Name: spec.Name,
+		Name: d.name(spec.AgentID),
 		Config: &container.Config{
-			Image: d.image,
-			Cmd:   spec.Command,
+			Image: spec.Image,
 			Env:   env,
 			Labels: map[string]string{
-				Label:                 "runtime",
-				Label + ".agent":      spec.AgentID,
-				Label + ".instance":   spec.InstanceID,
-				Label + ".generation": fmt.Sprint(spec.Generation),
+				Label: "agent", envLabel: d.env, agentLabel: spec.AgentID, configLabel: spec.Config,
 			},
 		},
 		HostConfig: &container.HostConfig{
-			NetworkMode:   container.NetworkMode(d.network),
-			RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyDisabled},
+			NetworkMode: container.NetworkMode(d.network),
+			// The runtime exits when it cannot go on; Docker starts it again,
+			// waiting longer each time it fails.
+			RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyUnlessStopped},
 			Resources:     container.Resources{Memory: memory, NanoCPUs: cpus * 1_000_000_000},
+			// Docker creates the volume the first time.
+			Mounts: []mount.Mount{{Type: mount.TypeVolume, Source: d.name(spec.AgentID), Target: home}},
 		},
 	})
 	if err != nil {
-		return Started{}, err
+		return err
 	}
-	inspected, err := d.start(ctx, created.ID)
-	if err != nil {
+	if _, err := d.client.ContainerStart(ctx, created.ID, client.ContainerStartOptions{}); err != nil {
 		// Created, maybe running: nothing records it, so it goes now.
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), (stopSeconds+30)*time.Second)
 		defer cancel()
-		if removeErr := d.remove(cleanup, created.ID); removeErr != nil {
-			return Started{}, errors.Join(err, removeErr)
-		}
-		return Started{}, err
+		return errors.Join(err, d.remove(cleanup, created.ID))
 	}
-	return Started{ContainerID: created.ID, ImageDigest: inspected.Container.Image}, nil
+	return nil
 }
 
-func (d *Docker) start(ctx context.Context, containerID string) (client.ContainerInspectResult, error) {
-	if _, err := d.client.ContainerStart(ctx, containerID, client.ContainerStartOptions{}); err != nil {
-		return client.ContainerInspectResult{}, err
-	}
-	return d.client.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
+func (d *Docker) Start(ctx context.Context, containerID string) error {
+	_, err := d.client.ContainerStart(ctx, containerID, client.ContainerStartOptions{})
+	return err
 }
 
-func (d *Docker) State(ctx context.Context, containerID string) (string, error) {
-	if containerID == "" {
-		return Missing, nil
-	}
-	inspected, err := d.client.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
-	if cerrdefs.IsNotFound(err) {
-		return Missing, nil
-	}
-	if err != nil {
-		return "", err
-	}
-	if s := inspected.Container.State; s != nil && (s.Running || s.Restarting) {
-		return Running, nil
-	}
-	return Exited, nil
-}
-
-func (d *Docker) Stop(ctx context.Context, instanceID string) error {
+func (d *Docker) Remove(ctx context.Context, agentID string) error {
 	list, err := d.client.ContainerList(ctx, client.ContainerListOptions{
 		All:     true,
-		Filters: make(client.Filters).Add("label", Label+".instance="+instanceID),
+		Filters: d.filters("agent").Add("label", agentLabel+"="+agentID),
 	})
 	if err != nil {
 		return err
@@ -196,7 +232,8 @@ func (d *Docker) Stop(ctx context.Context, instanceID string) error {
 	return nil
 }
 
-// remove stops and removes a container.
+// remove stops and removes a container, giving the runtime time to send its
+// last events.
 func (d *Docker) remove(ctx context.Context, containerID string) error {
 	timeout := stopSeconds
 	_, err := d.client.ContainerStop(ctx, containerID, client.ContainerStopOptions{Timeout: &timeout})
@@ -206,19 +243,67 @@ func (d *Docker) remove(ctx context.Context, containerID string) error {
 	if err != nil {
 		return err
 	}
-	wait, cancel := context.WithTimeout(ctx, (stopSeconds+30)*time.Second)
-	defer cancel()
-	waited := d.client.ContainerWait(wait, containerID, client.ContainerWaitOptions{Condition: container.WaitConditionNotRunning})
-	select {
-	case <-waited.Result:
-	case err := <-waited.Error:
-		if !cerrdefs.IsNotFound(err) {
-			return err
-		}
-	}
 	_, err = d.client.ContainerRemove(ctx, containerID, client.ContainerRemoveOptions{Force: true})
 	if cerrdefs.IsNotFound(err) {
 		return nil
 	}
 	return err
+}
+
+func (d *Docker) Base(ctx context.Context) (string, string, error) {
+	inspected, err := d.client.ImageInspect(ctx, d.base)
+	if err != nil {
+		return "", "", fmt.Errorf("the runtime image %s: %w", d.base, err)
+	}
+	return inspected.ID, d.base, nil
+}
+
+func (d *Docker) ImageTag(hash string) string { return d.prefix + "agent:" + hash }
+
+func (d *Docker) HasImage(ctx context.Context, tag string) (bool, error) {
+	_, err := d.client.ImageInspect(ctx, tag)
+	if cerrdefs.IsNotFound(err) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func (d *Docker) Build(ctx context.Context, dir, tag string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, buildTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "docker", "build", "--progress=plain",
+		"--label", Label+"=agent-image", "--label", envLabel+"="+d.env, "--tag", tag, dir)
+	var output bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &output, &output
+	if err := cmd.Run(); err != nil {
+		tail := output.String()
+		if r := []rune(tail); len(r) > buildOutput {
+			tail = "…" + string(r[len(r)-buildOutput:])
+		}
+		return strings.TrimSpace(tail), err
+	}
+	return "", nil
+}
+
+func (d *Docker) Prune(ctx context.Context, keep []string) error {
+	list, err := d.client.ImageList(ctx, client.ImageListOptions{Filters: d.filters("agent-image")})
+	if err != nil {
+		return err
+	}
+	for _, image := range list.Items {
+		kept := false
+		for _, tag := range image.RepoTags {
+			for _, k := range keep {
+				kept = kept || tag == k
+			}
+		}
+		if kept {
+			continue
+		}
+		// One a container still uses stays (Docker refuses).
+		if _, err := d.client.ImageRemove(ctx, image.ID, client.ImageRemoveOptions{}); err != nil && !cerrdefs.IsConflict(err) && !cerrdefs.IsNotFound(err) {
+			return err
+		}
+	}
+	return nil
 }

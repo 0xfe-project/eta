@@ -1,10 +1,10 @@
 # System-wide Codex configuration of every agent (/etc/codex/config.toml).
 # Per-agent settings (model, provider, instructions) come from the runtime;
-# building the image appends approval of the plugins' tools (axp-plugins,
-# packages/plugins-go).
+# building an agent's image appends approval of its plugins' tools
+# (axp-plugins, packages/plugins-go).
 
-# The container is the isolation boundary: no sandbox inside it. Commands and
-# file changes still ask the user, through the product.
+# The container is the isolation boundary: no sandbox inside it, and nobody
+# sits at an approval prompt. akhook's rules (/etc/akhook) still check every
+# command and file change.
 sandbox_mode = "danger-full-access"
-approval_policy = "on-request"
-approvals_reviewer = "user"
+approval_policy = "never"

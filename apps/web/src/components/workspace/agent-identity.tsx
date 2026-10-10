@@ -46,7 +46,6 @@ export function AgentStatusDot({
         status === "starting" &&
           "bg-muted-foreground motion-safe:animate-pulse",
         status === "working" && "bg-foreground motion-safe:animate-pulse",
-        status === "waiting_for_input" && "border border-foreground",
         status === "unavailable" && "bg-destructive",
         className,
       )}

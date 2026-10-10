@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/akarachen/axp/apps/control-plane/internal/bundles"
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
 	"github.com/akarachen/axp/apps/control-plane/internal/plugins"
 	"github.com/akarachen/axp/packages/service-go/apierr"
@@ -24,8 +25,8 @@ type AgentCreateIn struct {
 	Description string `json:"description,omitempty" maxLength:"10000" doc:"Instructions injected into the agent's context; kept verbatim."`
 	// A model id from the LLM gateway's catalog (GET /api/llm/v1/models).
 	Model *string `json:"model,omitempty" nullable:"true" minLength:"1" maxLength:"100" doc:"A model id from the LLM gateway's catalog (GET /api/llm/v1/models)."`
-	// Names from GET /plugins; every plugin when left out.
-	Plugins []string `json:"plugins,omitempty" nullable:"true" maxItems:"50" doc:"Names from GET /api/v1/plugins; every plugin when left out."`
+	// Names from GET /bundles; every built-in bundle when left out.
+	Bundles []string `json:"bundles,omitempty" nullable:"true" maxItems:"50" doc:"Names from GET /api/v1/bundles; every built-in bundle when left out."`
 }
 
 // AgentUpdateIn is a partial update: only fields that are sent change.
@@ -33,7 +34,27 @@ type AgentUpdateIn struct {
 	Name        *string   `json:"name,omitempty" nullable:"true" minLength:"1" maxLength:"100"`
 	Description *string   `json:"description,omitempty" nullable:"true" maxLength:"10000"`
 	Model       *string   `json:"model,omitempty" nullable:"true" minLength:"1" maxLength:"100"`
+	Bundles     *[]string `json:"bundles,omitempty" nullable:"true" maxItems:"50"`
+}
+
+type BundleCreateIn struct {
+	Name        string `json:"name" minLength:"1" maxLength:"40" doc:"Lower-case letters, digits and hyphens."`
+	Description string `json:"description,omitempty" maxLength:"500"`
+	// Run as root when an agent's image is built; a shell script unless it
+	// starts with #!.
+	Script  string   `json:"script,omitempty" maxLength:"100000" doc:"Run as root when an agent's image is built; a shell script unless it starts with #!."`
+	Plugins []string `json:"plugins" maxItems:"50" doc:"Names from GET /api/v1/plugins."`
+}
+
+// BundleUpdateIn is a partial update: only fields that are sent change.
+type BundleUpdateIn struct {
+	Description *string   `json:"description,omitempty" nullable:"true" maxLength:"500"`
+	Script      *string   `json:"script,omitempty" nullable:"true" maxLength:"100000"`
 	Plugins     *[]string `json:"plugins,omitempty" nullable:"true" maxItems:"50"`
+}
+
+type BundlePath struct {
+	Name string `path:"name" maxLength:"40"`
 }
 
 type MessageCreateIn struct {
@@ -45,10 +66,6 @@ type MessageCreateIn struct {
 	Text string `json:"text" minLength:"1" maxLength:"10000" doc:"Kept verbatim so code indentation survives."`
 	// "queue" waits for the agent's current turn; "steer" joins it.
 	Mode string `json:"mode,omitempty" enum:"queue,steer" default:"queue" doc:"\"queue\" waits for the agent's current turn; \"steer\" joins it."`
-}
-
-type InteractionAnswerIn struct {
-	Value string `json:"value" minLength:"1" maxLength:"100"`
 }
 
 // cleanName trims a name, which must not be blank.
@@ -103,22 +120,57 @@ func registerChat(api huma.API, d *Deps) {
 			return &httpapi.Body[chat.MessagePage]{Body: *page}, nil
 		})
 
-	huma.Register(api, op("listInteractions", http.MethodGet, "/api/v1/chat/interactions",
-		"Every agent's latest confirmations, newest first, answered or not", 200, "chat"),
-		func(ctx context.Context, in *struct {
-			Limit int `query:"limit" default:"50" minimum:"1" maximum:"200"`
-		}) (*httpapi.Body[chat.InteractionList], error) {
-			list, err := s.Interactions(ctx, d.DB, in.Limit)
+	huma.Register(api, op("listPlugins", http.MethodGet, "/api/v1/plugins",
+		"The plugins bundles add", 200, "bundles"),
+		func(context.Context, *struct{}) (*httpapi.Body[[]plugins.Plugin], error) {
+			return &httpapi.Body[[]plugins.Plugin]{Body: s.Bundles.Plugins.All()}, nil
+		})
+
+	huma.Register(api, op("listBundles", http.MethodGet, "/api/v1/bundles",
+		"The bundles agents are built from: the built-in ones, then the user's", 200, "bundles"),
+		func(ctx context.Context, _ *struct{}) (*httpapi.Body[[]bundles.Bundle], error) {
+			all, err := s.Bundles.All(ctx, d.DB)
 			if err != nil {
 				return nil, err
 			}
-			return &httpapi.Body[chat.InteractionList]{Body: *list}, nil
+			return &httpapi.Body[[]bundles.Bundle]{Body: all}, nil
 		})
 
-	huma.Register(api, op("listPlugins", http.MethodGet, "/api/v1/plugins",
-		"The runtime image's plugins agents choose from", 200, "chat"),
-		func(context.Context, *struct{}) (*httpapi.Body[[]plugins.Plugin], error) {
-			return &httpapi.Body[[]plugins.Plugin]{Body: s.Plugins.All()}, nil
+	huma.Register(api, op("createBundle", http.MethodPost, "/api/v1/bundles", "Add a bundle", 201, "bundles"),
+		func(ctx context.Context, in *struct{ Body BundleCreateIn }) (*httpapi.Body[bundles.Bundle], error) {
+			b := in.Body
+			bundle, err := pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (*bundles.Bundle, error) {
+				return s.Bundles.Create(ctx, tx, bundles.Input{Name: &b.Name, Description: &b.Description, Script: &b.Script, Plugins: &b.Plugins})
+			})
+			if err != nil {
+				return nil, err
+			}
+			return &httpapi.Body[bundles.Bundle]{Body: *bundle}, nil
+		})
+
+	huma.Register(api, op("updateBundle", http.MethodPatch, "/api/v1/bundles/{name}",
+		"Change a bundle; agents that load it are rebuilt", 200, "bundles"),
+		func(ctx context.Context, in *struct {
+			BundlePath
+			Body BundleUpdateIn
+		}) (*httpapi.Body[bundles.Bundle], error) {
+			b := in.Body
+			bundle, err := pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (*bundles.Bundle, error) {
+				return s.Bundles.Update(ctx, tx, in.Name, bundles.Input{Description: b.Description, Script: b.Script, Plugins: b.Plugins})
+			})
+			if err != nil {
+				return nil, err
+			}
+			return &httpapi.Body[bundles.Bundle]{Body: *bundle}, nil
+		})
+
+	huma.Register(api, op("deleteBundle", http.MethodDelete, "/api/v1/bundles/{name}",
+		"Remove a bundle no agent loads", 204, "bundles"),
+		func(ctx context.Context, in *BundlePath) (*struct{}, error) {
+			_, err := pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (struct{}, error) {
+				return struct{}{}, s.Bundles.Delete(ctx, tx, in.Name)
+			})
+			return nil, err
 		})
 
 	huma.Register(api, op("createAgent", http.MethodPost, "/api/v1/agents", "Create an agent", 201, "chat"),
@@ -130,7 +182,7 @@ func registerChat(api huma.API, d *Deps) {
 				return nil, err
 			}
 			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[chat.Agent], error) {
-				agent, err := s.CreateAgent(ctx, tx, in.Body.Name, in.Body.Description, in.Body.Model, in.Body.Plugins)
+				agent, err := s.CreateAgent(ctx, tx, in.Body.Name, in.Body.Description, in.Body.Model, in.Body.Bundles)
 				if err != nil {
 					return idempotency.Result[chat.Agent]{}, err
 				}
@@ -149,7 +201,7 @@ func registerChat(api huma.API, d *Deps) {
 			}
 			agent, err := pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (*chat.Agent, error) {
 				return s.UpdateAgent(ctx, tx, in.AgentID, chat.AgentChanges{
-					Name: in.Body.Name, Description: in.Body.Description, Model: in.Body.Model, Plugins: in.Body.Plugins,
+					Name: in.Body.Name, Description: in.Body.Description, Model: in.Body.Model, Bundles: in.Body.Bundles,
 				})
 			})
 			if err != nil {
@@ -168,20 +220,13 @@ func registerChat(api huma.API, d *Deps) {
 		})
 
 	huma.Register(api, op("restartAgent", http.MethodPost, "/api/v1/agents/{agent_id}/restart",
-		"Stop the agent's work and its runtime; the next message starts a fresh one", 204, "chat"),
+		"Stop the agent's work and replace its container; it resumes its thread", 204, "chat"),
 		func(ctx context.Context, in *AgentPath) (*struct{}, error) {
 			_, err := pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (struct{}, error) {
 				return struct{}{}, s.RestartAgent(ctx, tx, in.AgentID)
 			})
 			return nil, err
 		})
-
-	sent := func(sent *chat.Sent, err error) (idempotency.Result[chat.Sent], error) {
-		if err != nil {
-			return idempotency.Result[chat.Sent]{}, err
-		}
-		return idempotency.Result[chat.Sent]{Status: 202, Body: sent, Resource: sent.Reply.ID}, nil
-	}
 
 	huma.Register(api, op("sendMessage", http.MethodPost, "/api/v1/chat/messages",
 		"Send a message to an agent; returns it and the reply that will answer it", 202, "chat"),
@@ -196,18 +241,11 @@ func registerChat(api huma.API, d *Deps) {
 				in.Body.Mode = "queue"
 			}
 			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[chat.Sent], error) {
-				return sent(s.SendMessage(ctx, tx, in.Body.AgentID, in.Body.ID, in.Body.Text, in.Body.Mode == "steer"))
-			})
-		})
-
-	huma.Register(api, op("compactAgent", http.MethodPost, "/api/v1/agents/{agent_id}/compact",
-		"Compact the agent's context, shown as /compact", 202, "chat"),
-		func(ctx context.Context, in *struct {
-			idempotency.Keyed
-			AgentPath
-		}) (*idempotency.Response[chat.Sent], error) {
-			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, struct{}{}, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[chat.Sent], error) {
-				return sent(s.Compact(ctx, tx, in.AgentID))
+				sent, err := s.SendMessage(ctx, tx, in.Body.AgentID, in.Body.ID, in.Body.Text, in.Body.Mode == "steer")
+				if err != nil {
+					return idempotency.Result[chat.Sent]{}, err
+				}
+				return idempotency.Result[chat.Sent]{Status: 202, Body: sent, Resource: sent.Reply.ID}, nil
 			})
 		})
 
@@ -223,22 +261,6 @@ func registerChat(api huma.API, d *Deps) {
 					return idempotency.Result[chat.Message]{}, err
 				}
 				return idempotency.Result[chat.Message]{Status: 200, Body: reply, Resource: reply.ID}, nil
-			})
-		})
-
-	huma.Register(api, op("answerInteraction", http.MethodPost, "/api/v1/chat/interactions/{interaction_id}/answer",
-		"Answer an interaction", 202, "chat"),
-		func(ctx context.Context, in *struct {
-			idempotency.Keyed
-			InteractionID string `path:"interaction_id"`
-			Body          InteractionAnswerIn
-		}) (*idempotency.Response[chat.Interaction], error) {
-			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[chat.Interaction], error) {
-				answered, err := s.AnswerInteraction(ctx, tx, in.InteractionID, in.Body.Value)
-				if err != nil {
-					return idempotency.Result[chat.Interaction]{}, err
-				}
-				return idempotency.Result[chat.Interaction]{Status: 202, Body: answered, Resource: answered.ID}, nil
 			})
 		})
 

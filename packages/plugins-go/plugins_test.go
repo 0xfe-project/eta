@@ -38,7 +38,7 @@ func TestTargets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expect(t, names(chat), []string{"agenvo", "approval", "github", "grok", "memory", "routines", "tasks"})
+	expect(t, names(chat), []string{"agenvo", "github", "grok", "memory", "routines", "tasks"})
 	routine, err := List(repoPlugins, TargetRoutine)
 	if err != nil {
 		t.Fatal(err)
@@ -211,18 +211,16 @@ func TestMarketplaceListsTheChatPlugins(t *testing.T) {
 func TestCodexGetsTheAgentKeyItsWay(t *testing.T) {
 	root, _ := compiled(t)
 	expect(t, readMCP(t, root, "memory")["memory"], map[string]any{
-		"type": "streamable-http", "url": "${AXP_GATEWAY_URL}/memory/mcp", "bearer_token_env_var": "AXP_RUNTIME_LLM_KEY",
+		"type": "streamable-http", "url": "${AXP_GATEWAY_URL}/memory/mcp", "bearer_token_env_var": "AXP_AGENT_KEY",
 	})
 	// Codex passes the key on by name; the server wants it as XAI_API_KEY.
 	expect(t, readMCP(t, root, "grok")["grok"], map[string]any{
 		"command": "sh",
-		"args": []any{"-c", `export XAI_API_KEY="$AXP_RUNTIME_LLM_KEY"; exec "$0" "$@"`,
+		"args": []any{"-c", `export XAI_API_KEY="$AXP_AGENT_KEY"; exec "$0" "$@"`,
 			"grok-api", "--base-url", "${AXP_GATEWAY_URL}/v1", "--non-interactive", "mcp"},
 		"cwd":      "${AXP_WORKSPACE_DIR}",
-		"env_vars": []any{"AXP_RUNTIME_LLM_KEY"},
+		"env_vars": []any{"AXP_AGENT_KEY"},
 	})
-	// The plugin's own files are where the image keeps it.
-	expect(t, readMCP(t, root, "approval")["approval"]["cwd"], any("/opt/axp/plugins/approval"))
 }
 
 func TestEveryPluginToolIsApproved(t *testing.T) {
@@ -263,10 +261,10 @@ func TestHooksBecomeAkhookRulesThatRunOnlyWhereInstalled(t *testing.T) {
 	for _, rule := range hooks.Rules {
 		got[rule.On+" "+rule.ID] = rule.Run.Argv
 	}
-	guard := `[ -d "$CODEX_HOME/plugins/cache/axp/memory" ] || exit 0; export AXP_AGENT_KEY="$AXP_RUNTIME_LLM_KEY"; exec "$0" "$@"`
+	guard := `[ -d "$CODEX_HOME/plugins/cache/axp/memory" ] || exit 0; exec "$0" "$@"`
 	expect(t, got, map[string][]string{
-		"prompt_submit memory/recall": {"sh", "-c", guard, "python", "/opt/axp/plugins/memory/hooks/memory.py", "recall"},
-		"stop memory/capture":         {"sh", "-c", guard, "python", "/opt/axp/plugins/memory/hooks/memory.py", "capture"},
+		"prompt_submit memory/recall": {"sh", "-c", guard, "node", "/opt/axp/plugins/memory/hooks/memory.mjs", "recall"},
+		"stop memory/capture":         {"sh", "-c", guard, "node", "/opt/axp/plugins/memory/hooks/memory.mjs", "capture"},
 	})
 	// Codex runs akhook for every hook; nothing is generated there.
 	requirements := readTOML(t, filepath.Join(codex, "requirements.toml"))
@@ -308,4 +306,16 @@ func TestPluginHooksAreLifecycleRulesOnly(t *testing.T) {
 	if _, err := List(root, ""); err == nil || !strings.Contains(err.Error(), "akhook.yml") {
 		t.Fatalf("hooks.json: %v", err)
 	}
+}
+
+func TestStdioServersRunFromWhereTheImageKeepsThePlugin(t *testing.T) {
+	root, codex := t.TempDir(), t.TempDir()
+	writePlugin(t, root, "p", `{"name":"p","version":"1","targets":["chat"]}`,
+		`{"mcpServers":{"s":{"command":"node","args":["${PLUGIN_ROOT}/server.js"],"cwd":"${PLUGIN_ROOT}"}}}`)
+	if err := Chat(root, codex, "/opt/axp/plugins"); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, readMCP(t, root, "p")["s"], map[string]any{
+		"command": "node", "args": []any{"/opt/axp/plugins/p/server.js"}, "cwd": "/opt/axp/plugins/p",
+	})
 }

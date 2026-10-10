@@ -1,0 +1,5 @@
+{
+  "name": "memory",
+  "description": "跨对话的长期记忆：每轮开始时回忆，结束时记下。",
+  "plugins": ["memory"]
+}

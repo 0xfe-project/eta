@@ -1,352 +1,99 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
-	"reflect"
+	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/akarachen/axp/apps/control-plane/internal/auth"
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
+	"github.com/google/uuid"
 )
 
-func TestMessageProvisionsRuntime(t *testing.T) {
+// --- containers ----------------------------------------------------------------------
+
+func TestAgentGetsItsImageAndContainer(t *testing.T) {
 	c := newControl(t)
-	sent := c.sendText("检查项目结构")
-	c.tick()
-	id, generation := c.liveInstance(c.agent.ID)
-	expect(t, generation, int64(1))
-	expect(t, scalar[string](c.env, "SELECT status FROM runtime_instance WHERE id = $1", id), "provisioning")
-	env := c.driver.started[0].Env
-	expect(t, env["AXP_RUNTIME_TOKEN"], auth.RuntimeToken(c.secret, id, 1))
-	expect(t, env["AXP_GATEWAY_URL"], "http://runtime-gateway:8090")
-	// It reads the agent's queue.
-	expect(t, fmt.Sprint(c.nats.Consumers), fmt.Sprint([]string{c.agent.ID}))
-	expect(t, env["AXP_NATS_URL"], "nats://nats:4222")
-	// A new agent has nothing to restore.
-	if _, ok := env["AXP_SNAPSHOT_URL"]; ok {
-		t.Fatal("a snapshot to restore")
+	c.settle()
+	builds := c.driver.builds()
+	expect(t, len(builds), 1)
+	runs := c.driver.runsOf(c.agent.ID)
+	expect(t, len(runs), 1)
+	spec := runs[0]
+	expect(t, spec.Image, builds[0])
+	key := spec.Env["AXP_AGENT_KEY"]
+	expect(t, key, auth.AgentKey(c.secret, c.agent.ID))
+	// The model provider is the LLM gateway, through the runtime gateway,
+	// with the agent's key.
+	expect(t, spec.Env["AXP_LLM_BASE_URL"], "http://runtime-gateway:8090/v1")
+	expect(t, spec.Env["AXP_LLM_API_KEY"], key)
+	expect(t, spec.Env["AXP_MODEL"], testModel)
+	expect(t, spec.Env["AXP_MODEL_CONTEXT_WINDOW"], "200000")
+	expect(t, spec.Env["AXP_INSTRUCTIONS"], "你的名字是开发助手。")
+	expect(t, spec.Env["AXP_CONTROL_TOKEN"], auth.ControlToken(c.secret, c.agent.ID))
+	// Every built-in bundle's plugin is compiled into it.
+	dockerfile := c.driver.contexts[0]
+	if !strings.Contains(dockerfile, "FROM axp-agent-runtime:test") || !strings.Contains(dockerfile, "COPY bundles/memory ") ||
+		!strings.Contains(dockerfile, "axp-plugins chat") {
+		t.Fatalf("Dockerfile:\n%s", dockerfile)
 	}
-	// The reply waits while the agent starts.
-	expect(t, c.replyStatus(sent), "queued")
+	// Nothing changes: nothing happens.
+	c.tick()
+	expect(t, len(c.driver.runsOf(c.agent.ID)), 1)
+	expect(t, len(c.driver.builds()), 1)
+}
+
+func TestAgentsWithTheSameBundlesShareAnImage(t *testing.T) {
+	c := newControl(t)
+	c.createAgent("第二个")
+	c.settle()
+	expect(t, len(c.driver.builds()), 1)
+}
+
+func TestWorkWaitsForTheRuntimeToReportItself(t *testing.T) {
+	c := newControl(t)
+	sent := c.sendText("你好")
+	c.settle()
 	expect(t, c.agentStatus(), "starting")
-	c.runtime(c.agent.ID).ready("thread-1")
-	expect(t, c.agentStatus(), "working")
-	// No second runtime while one is live.
-	c.tick()
-	expect(t, len(c.driver.started), 1)
+	expect(t, len(c.prompted()), 0)
+	c.boot()
+	expect(t, c.prompted()[0], c.commandOf(sent))
+	body := c.runtimes.called("/prompt")[0]
+	expect(t, body["text"], any("你好"))
+	expect(t, body["boot_id"], any(scalar[string](c.env, "SELECT boot_id::text FROM agent WHERE id = $1", c.agent.ID)))
 }
 
-func TestQueueDownRefusesTheMessage(t *testing.T) {
+func TestATurnStreamsAndCompletes(t *testing.T) {
 	c := newControl(t)
-	c.nats.Down = true
-	expectError(t, c.post("/chat/messages", map[string]any{"agent_id": c.agent.ID, "text": "你好"}), 503, "QUEUE_UNAVAILABLE")
-	expect(t, scalar[int](c.env, "SELECT count(*) FROM message"), 0)
-}
-
-func TestStartFailureFailsWaitingReplies(t *testing.T) {
-	c := newControl(t)
-	c.driver.failStart = true
-	sent := c.sendText("检查项目结构")
-	c.tick()
-	expect(t, c.replyStatus(sent), "failed")
-	expect(t, c.replyFailure(sent), "AGENT_UNAVAILABLE")
-	expect(t, c.agentStatus(), "unavailable")
-}
-
-func TestRuntimeThatNeverComesUpFailsWhatWaits(t *testing.T) {
-	c := newControl(t)
-	sent := c.sendText("检查项目结构")
-	c.tick() // provisions; never becomes ready
-	c.expireLeases()
-	c.tick()
-	expect(t, c.replyFailure(sent), "START_TIMEOUT")
-	// Its queue is emptied: nothing runs later.
-	expect(t, len(c.nats.Queued(c.agent.ID)), 0)
-}
-
-func TestRuntimeThatOnlyReportsStartingTimesOut(t *testing.T) {
-	c := newControl(t)
-	sent := c.sendText("检查项目结构")
-	c.tick()
-	r := c.runtime(c.agent.ID)
-	expect(t, r.heartbeat("starting").status, 200)
-	c.tick()
-	expect(t, c.replyStatus(sent), "queued")
-	// Still "starting" past the start timeout: its heartbeats no longer
-	// extend the lease.
-	c.exec("UPDATE runtime_instance SET created_at = created_at - $1::interval", "121 seconds")
-	expect(t, r.heartbeat("starting").status, 200)
-	c.tick()
-	expect(t, c.replyFailure(sent), "START_TIMEOUT")
-	// It never came up: the next one waits RetryAfter instead of crash-looping.
-	c.sendText("再试一次")
-	c.tick()
-	expect(t, len(c.driver.started), 1)
-}
-
-func TestRuntimeThatCameUpIsNotTimedOutWhenItFails(t *testing.T) {
-	c, r := provisioned(t)
-	r.ready("thread-1")
-	c.exec("UPDATE runtime_instance SET created_at = created_at - $1::interval", "1 hour")
-	expect(t, r.heartbeat("busy").status, 200)
-	c.tick()
-	_, generation := c.liveInstance(c.agent.ID)
-	expect(t, generation, int64(1))
-	// It came up once, so a crash is retried at once, not backed off.
-	c.expireLeases()
-	c.tick()
-	c.sendText("继续")
-	c.tick()
-	_, generation = c.liveInstance(c.agent.ID)
-	expect(t, generation, int64(2))
-}
-
-func provisioned(t *testing.T) (*controlEnv, *runtimeHarness) {
-	c := newControl(t)
-	c.sendText("检查项目结构")
-	c.tick()
-	return c, c.runtime(c.agent.ID)
-}
-
-func TestPublicServerDoesNotRouteInternalAPI(t *testing.T) {
-	c, r := provisioned(t)
-	resp := do(t, c.public, http.MethodPost, "/internal/v1/runtime-instances/"+r.instanceID+"/heartbeat", nil, nil)
-	expect(t, resp.status, 404)
-}
-
-func TestTokenIsBoundToInstanceAndGeneration(t *testing.T) {
-	c, r := provisioned(t)
-	expect(t, r.heartbeat("ready").status, 200)
-	expect(t, r.call(http.MethodPost, "heartbeat", map[string]any{"status": "ready"}, "x").status, 403)
-	c.exec("UPDATE agent SET generation = 2 WHERE id = $1", c.agent.ID)
-	expectError(t, r.heartbeat("ready"), 409, "STALE_GENERATION")
-}
-
-func runtimeAuth(c *controlEnv, key string, plugin ...string) response {
-	path := "/internal/v1/runtime-auth"
-	if len(plugin) > 0 {
-		path += "?plugin=" + plugin[0]
-	}
-	return do(c.t, c.internal, http.MethodGet, path, nil, map[string]string{"Authorization": "Bearer " + key})
-}
-
-func TestRuntimeAuthNamesTheAgent(t *testing.T) {
-	c, r := provisioned(t)
-	key := r.instanceID + "." + r.token
-	resp := runtimeAuth(c, key)
-	expect(t, resp.status, 204)
-	expect(t, resp.header.Get("X-AXP-Agent-Id"), c.agent.ID)
-	for _, bad := range []string{r.instanceID + ".x", r.token, ""} {
-		expect(t, runtimeAuth(c, bad).status, 403)
-	}
-	c.exec("UPDATE agent SET generation = 2 WHERE id = $1", c.agent.ID)
-	expectError(t, runtimeAuth(c, key), 409, "STALE_GENERATION")
-}
-
-// A plugin's routes on the runtime gateway (/tasks, /memory, /forge/mcp)
-// ask with the plugin: an agent that has it turned off is refused.
-func TestRuntimeAuthChecksTheRoutesPlugin(t *testing.T) {
-	c, r := provisioned(t)
-	key := r.instanceID + "." + r.token
-	for _, plugin := range []string{"tasks", "memory", "github"} {
-		expect(t, runtimeAuth(c, key, plugin).status, 204)
-	}
-	expect(t, c.patch("/agents/"+c.agent.ID, map[string]any{"plugins": []string{"memory"}}).status, 200)
-	expect(t, runtimeAuth(c, key, "memory").status, 204)
-	for _, plugin := range []string{"tasks", "github"} {
-		expectError(t, runtimeAuth(c, key, plugin), 403, "PLUGIN_NOT_ENABLED")
-	}
-	// Routes of no plugin (the model, git's credentials) stay open to it.
-	resp := runtimeAuth(c, key)
-	expect(t, resp.status, 204)
-	expect(t, resp.header.Get("X-AXP-Agent-Id"), c.agent.ID)
-}
-
-func TestSessionThreadCannotChange(t *testing.T) {
-	c, r := provisioned(t)
-	expect(t, r.session("t1").status, 200)
-	expect(t, r.session("t1").status, 200)
-	expect(t, r.session("t2").status, 409)
-	expect(t, scalar[string](c.env, "SELECT thread_id FROM agent_session"), "t1")
-}
-
-func TestHeartbeatMarksReadyAndExtendsLease(t *testing.T) {
-	c, r := provisioned(t)
-	before := scalar[time.Time](c.env, "SELECT lease_expires_at FROM runtime_instance")
-	r.ready("thread-1")
-	expect(t, scalar[string](c.env, "SELECT status FROM runtime_instance"), "ready")
-	if scalar[time.Time](c.env, "SELECT lease_expires_at FROM runtime_instance").Equal(before) {
-		t.Fatal("lease not extended")
-	}
-	expect(t, scalar[string](c.env, "SELECT status FROM agent"), "ready")
-}
-
-// A heartbeat that only renews the lease does not wait for the conversation
-// lock, which every agent's event imports take.
-func TestRenewingHeartbeatDoesNotWaitForTheConversationLock(t *testing.T) {
-	c, r := provisioned(t)
-	r.ready("thread-1")
-	before := scalar[time.Time](c.env, "SELECT lease_expires_at FROM runtime_instance")
-	tx, err := c.db.Begin(c.ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tx.Rollback(c.ctx)
-	if err := chat.LockConversation(c.ctx, tx, scalar[string](c.env, "SELECT conversation_id FROM agent")); err != nil {
-		t.Fatal(err)
-	}
-	done := make(chan int, 1)
-	go func() { done <- r.heartbeat("busy").status }()
-	select {
-	case status := <-done:
-		expect(t, status, 200)
-	case <-time.After(5 * time.Second):
-		t.Fatal("the heartbeat waited for the conversation lock")
-	}
-	expect(t, scalar[string](c.env, "SELECT status FROM runtime_instance"), "busy")
-	if !scalar[time.Time](c.env, "SELECT lease_expires_at FROM runtime_instance").After(before) {
-		t.Fatal("lease not extended")
-	}
-}
-
-// What changes more than the lease still takes the lock: a failed
-// runtime's heartbeat waits for it, an ended one is fenced.
-func TestHeartbeatOfAFailedOrEndedRuntimeTakesTheLock(t *testing.T) {
-	c, r := provisioned(t)
-	r.ready("thread-1")
-	c.exec("UPDATE runtime_instance SET status = 'failed'")
-	tx, err := c.db.Begin(c.ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tx.Rollback(c.ctx)
-	if err := chat.LockConversation(c.ctx, tx, scalar[string](c.env, "SELECT conversation_id FROM agent")); err != nil {
-		t.Fatal(err)
-	}
-	done := make(chan int, 1)
-	go func() { done <- r.heartbeat("ready").status }()
-	select {
-	case <-done:
-		t.Fatal("a failed runtime's heartbeat skipped the lock")
-	case <-time.After(300 * time.Millisecond):
-	}
-	if err := tx.Rollback(c.ctx); err != nil {
-		t.Fatal(err)
-	}
-	expect(t, <-done, 200)
-	c.exec("UPDATE runtime_instance SET ended_at = now()")
-	expectError(t, r.heartbeat("busy"), 409, "STALE_GENERATION")
-}
-
-func TestEventOrdering(t *testing.T) {
-	c, r := provisioned(t)
-	r.ready("thread-1")
-	failed := event{"snapshot.failed", map[string]any{"reason": "SNAPSHOT_FAILED"}}
-	expect(t, r.events(failed).m(t)["acked_source_seq"], any(float64(1)))
-	gap := r.eventsFrom(5, event{"snapshot.saved", map[string]any{}})
-	expect(t, gap.status, 409)
-	expect(t, gap.m(t)["next_expected_source_seq"], any(float64(2)))
-	// Re-sending an acked event is harmless; changing it is a conflict.
-	r.seq = 0
-	expect(t, r.events(failed).m(t)["acked_source_seq"], any(float64(1)))
-	r.seq = 0
-	conflict := r.events(event{"snapshot.failed", map[string]any{"reason": "OTHER"}})
-	expect(t, conflict.status, 409)
-	expect(t, scalar[string](c.env, "SELECT last_error FROM agent_session"), "SNAPSHOT_FAILED")
-}
-
-func TestEventsWithNULAreImported(t *testing.T) {
-	c, r := provisioned(t)
-	r.ready("thread-1")
-	item := map[string]any{"id": "cmd-1", "kind": "command", "status": "completed",
-		"input": "find . -print0", "output": "a\x00b\x00"}
-	resp := r.events(event{"item.updated", map[string]any{"item": item, "note\x00": "x\x00y"}})
-	expect(t, resp.status, 200)
-	expect(t, scalar[string](c.env, "SELECT payload->'item'->>'output' FROM agent_event"), "ab")
-	expect(t, scalar[string](c.env, "SELECT payload->>'note' FROM agent_event"), "xy")
-	// Re-sent as it was, it is the same event.
-	r.seq = 0
-	expect(t, r.events(event{"item.updated", map[string]any{"item": item, "note\x00": "x\x00y"}}).status, 200)
-}
-
-func TestEventBatchesUpTo4MiBAreTaken(t *testing.T) {
-	c, r := provisioned(t)
-	r.ready("thread-1")
-	// 1.5 MiB as sent: the runtime's batches are up to 1 MiB, with margin.
-	text := strings.Repeat("长", 1<<19)
-	expect(t, r.events(event{"snapshot.failed", map[string]any{"reason": "SNAPSHOT_FAILED", "text": text}}).status, 200)
-	huge := strings.Repeat("长", 2<<20)
-	expect(t, r.events(event{"snapshot.failed", map[string]any{"reason": "SNAPSHOT_FAILED", "text": huge}}).status, 413)
-	expect(t, scalar[int](c.env, "SELECT count(*) FROM agent_event"), 1)
-}
-
-func TestQueueStreamAndComplete(t *testing.T) {
-	c := newControl(t)
-	sent := c.sendText("检查项目结构")
-	command := c.commandOf(sent)
-	// Waiting is a message in the agent's queue, nothing else.
-	want := []map[string]any{{
-		"command_id": command, "kind": "turn", "agent_sequence": float64(1),
-		"payload": map[string]any{"text": "检查项目结构"},
-	}}
-	if got := c.nats.Queued(c.agent.ID); !reflect.DeepEqual(got, want) {
-		t.Fatalf("queued %v", got)
-	}
-	expect(t, scalar[int64](c.env, "SELECT queue_seq FROM agent_command"), 1)
-	r := c.startRuntime("thread-1")
-	c.take(command)
-	r.turnStarted(command, "turn-1")
-	expect(t, c.commandStatus(command), "running")
-	instance, _ := c.liveInstance(c.agent.ID)
-	expect(t, scalar[string](c.env, "SELECT runtime_instance_id FROM agent_command"), instance)
-	r.events(
-		item(command, "id", "c1", "kind", "command", "status", "running", "input", "ls"),
-		item(command, "id", "m1", "kind", "agent_message", "status", "running", "text", "正在"),
-	)
+	sent, r, command := c.running()
 	expect(t, c.replyStatus(sent), "responding")
-	var blocks []chat.Block
-	readBlocks := func() {
-		var msg chat.Message
-		page := chat.MessagePage{}
-		c.get("/agents/"+c.agent.ID+"/messages").json(t, &page)
-		for _, m := range page.Items {
-			if m.ID == sent.Reply.ID {
-				msg = m
-			}
-		}
-		blocks = msg.Blocks
-	}
-	readBlocks()
-	expect(t, blocks[0].Input, "ls")
-	expect(t, blocks[0].Label, "运行命令")
-	expect(t, blocks[1].Text, "正在")
+	expect(t, c.agentStatus(), "working")
 	r.events(
-		item(command, "id", "m1", "kind", "agent_message", "status", "completed", "text", "正在检查。"),
-		event{"turn.completed", map[string]any{"command_id": command, "turn_id": "turn-1", "status": "completed"}},
+		item(command, "id", "x1", "kind", "command", "status", "completed", "input", "ls", "output", "a\nb"),
+		item(command, "id", "m1", "kind", "agent_message", "text", "完成。"),
 	)
+	r.turnCompleted(command, "completed")
 	expect(t, c.replyStatus(sent), "completed")
-	readBlocks()
-	expect(t, blocks[0].Status, "completed")
-	expect(t, blocks[1].Text, "正在检查。")
 	expect(t, c.commandStatus(command), "succeeded")
-	expect(t, scalar[string](c.env, "SELECT codex_turn_id FROM agent_command"), "turn-1")
-	var snapshot chat.Snapshot
-	resp := c.get("/chat")
-	resp.json(t, &snapshot)
-	expect(t, snapshot.Agents[0].Status, "idle")
-	assertNoInternalFields(t, resp.m(t))
+	expect(t, c.agentStatus(), "idle")
+	blocks := scalar[string](c.env, "SELECT content::text FROM message WHERE id = $1", sent.Reply.ID)
+	if !strings.Contains(blocks, "运行命令") || !strings.Contains(blocks, "完成。") {
+		t.Fatalf("blocks: %s", blocks)
+	}
 }
 
-func TestCommandsQueueInOrder(t *testing.T) {
+func TestCommandsRunOneAtATimeInOrder(t *testing.T) {
 	c := newControl(t)
-	first := c.commandOf(c.sendText("第一条"))
-	second := c.commandOf(c.sendText("第二条"))
-	queued := c.nats.Queued(c.agent.ID)
-	expect(t, queued[0]["command_id"], any(first))
-	expect(t, queued[1]["command_id"], any(second))
+	first := c.sendText("一")
+	second := c.sendText("二")
+	r := c.boot()
+	expect(t, len(c.prompted()), 1)
+	r.turnStarted(c.commandOf(first), "turn-1")
+	c.tick()
+	expect(t, len(c.prompted()), 1)
+	r.turnCompleted(c.commandOf(first), "completed")
+	expect(t, slices.Equal(c.prompted(), []string{c.commandOf(first), c.commandOf(second)}), true)
 }
 
 func TestFailedTurnHasProductReason(t *testing.T) {
@@ -354,561 +101,321 @@ func TestFailedTurnHasProductReason(t *testing.T) {
 	sent, r, command := c.running()
 	r.turnCompleted(command, "failed")
 	expect(t, c.replyStatus(sent), "failed")
-	expect(t, scalar[string](c.env, "SELECT failure::text FROM message WHERE id = $1", sent.Reply.ID),
-		`{"code": "TURN_FAILED", "message": "智能体执行失败，请稍后再试。"}`)
+	expect(t, c.replyFailure(sent), "TURN_FAILED")
 }
 
-func TestOutcomeUnknownIsNotReplayed(t *testing.T) {
+func TestPromptMeantForAnotherBootWaits(t *testing.T) {
 	c := newControl(t)
-	sent, r, command := c.running()
-	r.events(event{"command.outcome_unknown", map[string]any{"command_id": command}})
+	c.runtimes.answering(func(string) (int, map[string]any) {
+		return http.StatusConflict, map[string]any{"accepted": false, "code": "wrong_boot"}
+	})
+	sent := c.sendText("你好")
+	c.boot()
+	expect(t, len(c.prompted()), 1)
+	expect(t, c.commandStatus(c.commandOf(sent)), "queued")
+	expect(t, scalar[bool](c.env, "SELECT delivered_at IS NULL FROM agent_command WHERE id = $1", c.commandOf(sent)), true)
+	c.runtimes.answering(nil)
+	c.tick()
+	expect(t, len(c.prompted()), 2)
+	expect(t, c.commandStatus(c.commandOf(sent)), "running")
+}
+
+func TestUnreachableRuntimeKeepsTheCommand(t *testing.T) {
+	c := newControl(t)
+	c.driver.down = true
+	sent := c.sendText("你好")
+	c.boot()
+	expect(t, c.commandStatus(c.commandOf(sent)), "queued")
+	c.driver.down = false
+	c.tick()
+	expect(t, c.prompted()[0], c.commandOf(sent))
+}
+
+func TestRefusedPromptFails(t *testing.T) {
+	c := newControl(t)
+	c.runtimes.answering(func(string) (int, map[string]any) {
+		return http.StatusConflict, map[string]any{"accepted": false, "code": "runtime_refused", "reason": "no"}
+	})
+	sent := c.sendText("你好")
+	c.boot()
+	expect(t, c.replyStatus(sent), "failed")
+	expect(t, c.replyFailure(sent), "TURN_FAILED")
+}
+
+func TestANewBootFailsWhatTheOldOneHad(t *testing.T) {
+	c := newControl(t)
+	sent, _, command := c.running()
+	waiting := c.sendText("还在等")
+	// Docker restarted the runtime: the new boot reports itself.
+	r := &runtimeHarness{e: c.env, agentID: c.agent.ID, boot: uuid.NewString()}
+	r.events(event{"runtime.started", map[string]any{"thread_id": "thread-1", "resumed": true}})
+	expect(t, c.commandStatus(command), "failed")
 	expect(t, c.replyFailure(sent), "REPLY_INTERRUPTED")
+	// What waited is the new boot's.
+	expect(t, c.prompted()[1], c.commandOf(waiting))
 }
 
-func TestStopSendsInterruptAndRuntimeConfirms(t *testing.T) {
+func TestRedeliveredEventsAreImportedOnce(t *testing.T) {
 	c := newControl(t)
 	sent, r, command := c.running()
-	r.turnStarted(command, "t")
-	stop := c.post("/chat/messages/"+sent.Reply.ID+"/stop", nil)
-	expect(t, stop.m(t)["status"], any("stopping"))
-	expect(t, fmt.Sprint(c.nats.ToldOf("interrupt")), fmt.Sprint([]map[string]any{{"command_id": command}}))
-	// Stopping again asks again.
-	c.post("/chat/messages/"+sent.Reply.ID+"/stop", nil)
-	expect(t, len(c.nats.ToldOf("interrupt")), 2)
+	r.events(item(command, "id", "m1", "kind", "agent_message", "text", "一"))
+	revision := scalar[int64](c.env, "SELECT revision FROM message WHERE id = $1", sent.Reply.ID)
+	r.resend(chat.RuntimeEvent{BootID: r.boot, Seq: r.seq, Type: "item.updated", Payload: map[string]any{
+		"command_id": command, "item": map[string]any{"id": "m1", "kind": "agent_message", "text": "一"},
+	}})
+	expect(t, scalar[int64](c.env, "SELECT revision FROM message WHERE id = $1", sent.Reply.ID), revision)
+	expect(t, scalar[int](c.env, "SELECT count(*) FROM agent_event WHERE type = 'item.updated'"), 1)
+}
+
+func TestEventsWithNULAreImported(t *testing.T) {
+	c := newControl(t)
+	sent, r, command := c.running()
+	r.events(item(command, "id", "x1", "kind", "command", "status", "completed", "input", "find . -print0", "output", "a\x00b"))
+	content := scalar[string](c.env, "SELECT content::text FROM message WHERE id = $1", sent.Reply.ID)
+	if !strings.Contains(content, `"output": "ab"`) {
+		t.Fatalf("content: %s", content)
+	}
+}
+
+// --- stops ---------------------------------------------------------------------------
+
+func TestStopQueuedReplyCancelsIt(t *testing.T) {
+	c := newControl(t)
+	sent := c.sendText("你好")
+	r := c.post("/chat/messages/"+sent.Reply.ID+"/stop", nil)
+	expect(t, r.status, 200)
+	expect(t, c.replyStatus(sent), "stopped")
+	c.boot()
+	expect(t, len(c.prompted()), 0)
+}
+
+func TestStopAsksTheRuntimeAndItConfirms(t *testing.T) {
+	c := newControl(t)
+	sent, r, command := c.running()
+	expect(t, c.post("/chat/messages/"+sent.Reply.ID+"/stop", nil).status, 200)
+	expect(t, c.replyStatus(sent), "stopping")
+	c.controller.Dispatch(c.ctx, c.agent.ID)
+	aborts := c.runtimes.called("/abort")
+	expect(t, len(aborts), 1)
+	expect(t, aborts[0]["command_id"], any(command))
+	// Asked again only after a while.
+	c.controller.Dispatch(c.ctx, c.agent.ID)
+	expect(t, len(c.runtimes.called("/abort")), 1)
 	r.turnCompleted(command, "interrupted")
 	expect(t, c.replyStatus(sent), "stopped")
+	expect(t, c.commandStatus(command), "interrupted")
 }
 
-func TestStopWhileQueuedTakesItOffTheQueue(t *testing.T) {
-	c := newControl(t)
-	sent := c.sendText("检查项目结构")
-	c.post("/chat/messages/"+sent.Reply.ID+"/stop", nil)
-	expect(t, c.replyStatus(sent), "stopped")
-	expect(t, c.commandStatus(c.commandOf(sent)), "cancelled")
-	expect(t, len(c.nats.Queued(c.agent.ID)), 0)
-	expect(t, len(c.nats.Told), 0)
-}
+// --- steers --------------------------------------------------------------------------
 
-func (c *controlEnv) interactions() []chat.Interaction {
-	var snapshot chat.Snapshot
-	c.get("/chat").json(c.t, &snapshot)
-	return snapshot.Interactions
-}
-
-func TestApprovalRoundTrip(t *testing.T) {
-	c := newControl(t)
-	sent, r, command := c.running()
-	r.turnStarted(command, "t")
-	r.events(event{"approval.requested", map[string]any{
-		"approval_id": "sdk-1", "command_id": command, "kind": "command",
-		"summary": map[string]any{"command": "rm -rf build", "reason": "清理构建产物"},
-	}})
-	var snapshot chat.Snapshot
-	c.get("/chat").json(t, &snapshot)
-	expect(t, len(snapshot.Interactions), 1)
-	interaction := snapshot.Interactions[0]
-	if !strings.Contains(interaction.Prompt, "rm -rf build") {
-		t.Fatalf("prompt %q", interaction.Prompt)
-	}
-	expect(t, snapshot.Agents[0].Status, "waiting_for_input")
-	assertNoInternalFields(t, interaction)
-	answer := c.post("/chat/interactions/"+interaction.ID+"/answer", map[string]any{"value": "allow"})
-	expect(t, answer.m(t)["status"], any("submitted"))
-	expect(t, scalar[string](c.env, "SELECT status FROM approval"), "decided")
-	decision := fmt.Sprint([]map[string]any{{"approval_id": "sdk-1", "decision": "accept"}})
-	expect(t, fmt.Sprint(c.nats.ToldOf("decision")), decision)
-	// Answering the same again resends it until the runtime applies it.
-	c.post("/chat/interactions/"+interaction.ID+"/answer", map[string]any{"value": "allow"})
-	expect(t, len(c.nats.ToldOf("decision")), 2)
-	r.events(event{"approval.applied", map[string]any{"approval_id": "sdk-1", "decision": "accept"}})
-	expect(t, scalar[string](c.env, "SELECT status FROM interaction"), "resolved")
-	expect(t, scalar[string](c.env, "SELECT status FROM approval"), "applied")
-	expect(t, c.replyStatus(sent), "responding")
-	// Answered, it leaves the snapshot but stays in the list, with its answer.
-	expect(t, len(c.interactions()), 0)
-	var list chat.InteractionList
-	c.get("/chat/interactions").json(t, &list)
-	expect(t, len(list.Interactions), 1)
-	expect(t, list.Interactions[0].Status, "resolved")
-	expect(t, *list.Interactions[0].Answer, "allow")
-	assertNoInternalFields(t, list.Interactions[0])
-}
-
-func TestPluginConfirmation(t *testing.T) {
-	c := newControl(t)
-	_, r, command := c.running()
-	r.turnStarted(command, "t")
-	r.events(event{"approval.requested", map[string]any{
-		"approval_id": "sdk-1", "command_id": command, "kind": "elicitation",
-		"summary": map[string]any{"server": "tasks", "message": "清空所有任务？"},
-	}})
-	interaction := c.interactions()[0]
-	expect(t, interaction.Prompt, "tasks 请求确认\n清空所有任务？")
-	expect(t, interaction.AgentID, c.agent.ID)
-	expect(t, scalar[string](c.env, "SELECT kind FROM approval"), "elicitation")
-	c.post("/chat/interactions/"+interaction.ID+"/answer", map[string]any{"value": "deny"})
-	told := c.nats.ToldOf("decision")
-	expect(t, told[len(told)-1]["decision"], any("decline"))
-}
-
-func (c *controlEnv) steer(text string) chat.Sent {
+func steer(c *controlEnv, text string) chat.Sent {
 	c.t.Helper()
 	r := c.post("/chat/messages", map[string]any{"agent_id": c.agent.ID, "text": text, "mode": "steer"})
-	if r.status != 202 {
-		c.t.Fatalf("steer: %d %s", r.status, r.body)
-	}
+	expect(c.t, r.status, 202)
 	var sent chat.Sent
 	r.json(c.t, &sent)
+	c.wake()
 	return sent
-}
-
-func TestCompactRunsAsItsOwnCommand(t *testing.T) {
-	c := newControl(t)
-	r := c.post("/agents/"+c.agent.ID+"/compact", nil)
-	expect(t, r.status, 202)
-	var sent chat.Sent
-	r.json(t, &sent)
-	expect(t, sent.Message.Blocks[0].Text, "/compact")
-	assertNoInternalFields(t, sent)
-	runtime := c.startRuntime("thread-1")
-	command := c.commandOf(sent)
-	expect(t, c.take(command)["kind"], any("compact"))
-	runtime.turnStarted(command, "t")
-	runtime.events(item(command, "id", "k1", "kind", "compaction"))
-	runtime.turnCompleted(command, "completed")
-	expect(t, c.replyStatus(sent), "completed")
-	expect(t, scalar[string](c.env, "SELECT content->0->>'label' FROM message WHERE id = $1", sent.Reply.ID), "压缩上下文")
 }
 
 func TestSteerJoinsTheRunningTurn(t *testing.T) {
 	c := newControl(t)
-	sent, r, command := c.running()
-	r.turnStarted(command, "t")
-	c.nats.Steering = true
-	steered := c.steer("改用中文")
-	expect(t, steered.Steered, true)
-	steer := c.commandOf(steered)
-	// Handed straight to the running turn, never queued.
-	want := []map[string]any{{"type": "steer", "command_id": steer, "agent_sequence": float64(2), "text": "改用中文"}}
-	if !reflect.DeepEqual(c.nats.Asked, want) {
-		t.Fatalf("asked %v", c.nats.Asked)
-	}
-	expect(t, len(c.nats.Queued(c.agent.ID)), 0)
-	expect(t, c.commandStatus(steer), "queued")
-	expect(t, scalar[*int64](c.env, "SELECT queue_seq FROM agent_command WHERE id = $1", steer) == nil, true)
-	r.events(
-		event{"turn.steered", map[string]any{"command_id": command, "steer_command_id": steer, "turn_id": "t"}},
-		item(steer, "id", "m2", "kind", "agent_message", "text", "好的"),
-	)
+	first, r, command := c.running()
+	sent := steer(c, "也看看测试")
+	steers := c.runtimes.called("/steer")
+	expect(t, len(steers), 1)
+	steerCommand := c.commandOf(sent)
+	expect(t, steers[0]["command_id"], any(steerCommand))
+	expect(t, steers[0]["text"], any("也看看测试"))
+	expect(t, c.commandStatus(steerCommand), "queued")
+	r.events(event{"turn.steered", map[string]any{"command_id": command, "steer_command_id": steerCommand, "turn_id": "turn-1"}})
+	expect(t, c.replyStatus(first), "completed")
+	expect(t, c.commandStatus(steerCommand), "running")
+	expect(t, c.replyStatus(sent), "responding")
+	r.turnCompleted(steerCommand, "completed")
 	expect(t, c.replyStatus(sent), "completed")
-	expect(t, c.commandStatus(steer), "running")
-	expect(t, scalar[string](c.env, "SELECT codex_turn_id FROM agent_command WHERE id = $1", steer), "t")
-	expect(t, c.replyStatus(steered), "responding")
-	expect(t, c.agentStatus(), "working")
-	r.turnCompleted(steer, "completed")
-	expect(t, scalar[string](c.env, "SELECT content->0->>'text' FROM message WHERE id = $1", steered.Reply.ID), "好的")
-	expect(t, c.agentStatus(), "idle")
+	// It never ran as a turn of its own.
+	expect(t, len(c.prompted()), 1)
 }
 
 func TestSteerTheTurnRefusesWaitsItsTurn(t *testing.T) {
 	c := newControl(t)
-	c.running()
-	steered := c.steer("改用中文")
-	expect(t, steered.Steered, false)
-	steer := c.commandOf(steered)
-	// With no turn to join, it is queued like any turn.
-	expect(t, c.nats.Queued(c.agent.ID)[0]["command_id"], any(steer))
+	_, r, command := c.running()
+	c.runtimes.answering(func(path string) (int, map[string]any) {
+		if path == "/steer" {
+			return http.StatusConflict, map[string]any{"accepted": false, "code": "no_active_turn"}
+		}
+		return 200, map[string]any{"accepted": true}
+	})
+	sent := steer(c, "也看看测试")
+	expect(t, len(c.runtimes.called("/steer")), 1)
+	c.tick()
+	expect(t, len(c.runtimes.called("/steer")), 1)
+	r.turnCompleted(command, "completed")
+	expect(t, c.prompted()[1], c.commandOf(sent))
 }
 
-func TestStoppingASteerInTheTurnInterruptsIt(t *testing.T) {
+func TestSteerWithNoRunningTurnIsATurn(t *testing.T) {
+	c := newControl(t)
+	c.boot()
+	sent := steer(c, "你好")
+	expect(t, len(c.runtimes.called("/steer")), 0)
+	expect(t, c.prompted()[0], c.commandOf(sent))
+}
+
+func TestStoppingADeliveredSteerAsksTheRuntime(t *testing.T) {
+	c := newControl(t)
+	_, _, _ = c.running()
+	sent := steer(c, "也看看测试")
+	expect(t, c.post("/chat/messages/"+sent.Reply.ID+"/stop", nil).status, 200)
+	expect(t, c.replyStatus(sent), "stopping")
+	c.controller.Dispatch(c.ctx, c.agent.ID)
+	aborts := c.runtimes.called("/abort")
+	expect(t, aborts[len(aborts)-1]["command_id"], any(c.commandOf(sent)))
+}
+
+// --- configuration -------------------------------------------------------------------
+
+func TestConfigChangeReplacesTheContainerBetweenTurns(t *testing.T) {
 	c := newControl(t)
 	_, r, command := c.running()
-	r.turnStarted(command, "t")
-	c.nats.Steering = true
-	steered := c.steer("改用中文")
-	steer := c.commandOf(steered)
-	stop := c.post("/chat/messages/"+steered.Reply.ID+"/stop", nil)
-	expect(t, stop.m(t)["status"], any("stopping"))
-	expect(t, fmt.Sprint(c.nats.ToldOf("interrupt")), fmt.Sprint([]map[string]any{{"command_id": steer}}))
-	r.events(event{"turn.steered", map[string]any{"command_id": command, "steer_command_id": steer, "turn_id": "t"}})
-	r.turnCompleted(steer, "interrupted")
-	expect(t, c.replyStatus(steered), "stopped")
-}
-
-// The controller stopped between starting a container and writing its ID
-// down: the container is still found, by the instance's label.
-func TestRuntimeWithoutARecordedContainerIsStillStopped(t *testing.T) {
-	c := newControl(t)
-	c.running()
-	old, _ := c.liveInstance(c.agent.ID)
-	c.exec("UPDATE runtime_instance SET container_id = NULL WHERE id = $1", old)
-	c.expireLeases()
+	expect(t, c.patch("/agents/"+c.agent.ID, map[string]any{"description": "只用中文回答。"}).status, 200)
 	c.tick()
-	if !c.driver.wasStopped(old) {
-		t.Fatal("not stopped")
-	}
-	expect(t, scalar[bool](c.env, "SELECT ended_at IS NOT NULL FROM runtime_instance WHERE id = $1", old), true)
+	expect(t, len(c.driver.runsOf(c.agent.ID)), 1)
+	// Nothing new starts on the old configuration.
+	waiting := c.sendText("下一个")
+	r.turnCompleted(command, "completed")
+	expect(t, len(c.prompted()), 1)
+	c.tick()
+	runs := c.driver.runsOf(c.agent.ID)
+	expect(t, len(runs), 2)
+	expect(t, runs[1].Env["AXP_INSTRUCTIONS"], "你的名字是开发助手。\n\n只用中文回答。")
+	expect(t, c.agentStatus(), "starting")
+	c.boot()
+	expect(t, c.prompted()[1], c.commandOf(waiting))
 }
 
-func TestLostRuntimeIsFencedThenReplaced(t *testing.T) {
+func TestRestartReplacesTheContainer(t *testing.T) {
 	c := newControl(t)
 	sent, r, command := c.running()
-	r.turnStarted(command, "t")
-	c.s3.snapshots[c.agent.ID] = true
-	old, _ := c.liveInstance(c.agent.ID)
-	c.expireLeases()
+	expect(t, c.post("/agents/"+c.agent.ID+"/restart", nil).status, 204)
+	expect(t, c.replyStatus(sent), "stopping")
+	r.turnCompleted(command, "interrupted")
 	c.tick()
-	if !c.driver.wasStopped(old) {
-		t.Fatal("not stopped")
+	expect(t, len(c.driver.runsOf(c.agent.ID)), 2)
+}
+
+func TestChangingBundlesBuildsAnotherImage(t *testing.T) {
+	c := newControl(t)
+	c.settle()
+	expect(t, c.patch("/agents/"+c.agent.ID, map[string]any{"bundles": []string{"grok"}}).status, 200)
+	c.settle()
+	for range 200 {
+		if len(c.driver.runsOf(c.agent.ID)) == 2 {
+			break
+		}
+		c.tick()
 	}
-	expect(t, scalar[bool](c.env, "SELECT ended_at IS NOT NULL FROM runtime_instance WHERE id = $1", old), true)
-	// Its work went with the container and is never replayed.
-	expect(t, c.commandStatus(command), "failed")
-	expect(t, c.replyFailure(sent), "REPLY_INTERRUPTED")
-	c.sendText("继续")
-	c.tick()
-	// The replacement restores the snapshot and resumes the same thread.
-	_, generation := c.liveInstance(c.agent.ID)
-	expect(t, generation, int64(2))
-	env := c.driver.started[len(c.driver.started)-1].Env
-	expect(t, env["AXP_THREAD_ID"], "thread-1")
-	expect(t, env["AXP_SNAPSHOT_URL"], "http://s3.test/get/"+c.agent.ID)
-	// The old runtime is rejected from now on.
-	expect(t, r.heartbeat("ready").status, 409)
+	builds := c.driver.builds()
+	expect(t, len(builds), 2)
+	runs := c.driver.runsOf(c.agent.ID)
+	expect(t, len(runs), 2)
+	expect(t, runs[1].Image, builds[1])
+	if strings.Contains(c.driver.contexts[1], "bundles/memory") {
+		t.Fatalf("Dockerfile:\n%s", c.driver.contexts[1])
+	}
 }
 
-func TestTakenCommandIsNeverReplayed(t *testing.T) {
+func TestFailedBuildMakesTheAgentUnavailable(t *testing.T) {
 	c := newControl(t)
-	// Taken from the queue, but no event about it arrived.
-	sent, _, command := c.running()
-	c.expireLeases()
-	c.tick()
-	expect(t, c.commandStatus(command), "failed")
-	expect(t, c.replyFailure(sent), "REPLY_INTERRUPTED")
-}
-
-func TestWaitingCommandGoesToTheNextRuntime(t *testing.T) {
-	c := newControl(t)
-	sent := c.sendText("检查项目结构")
-	c.startRuntime("thread-1")
-	c.expireLeases()
-	c.tick()
-	// Still in the queue: the next runtime takes it.
-	expect(t, c.replyStatus(sent), "queued")
-	_, generation := c.liveInstance(c.agent.ID)
-	expect(t, generation, int64(2))
-	c.take(c.commandOf(sent))
-}
-
-func TestRuntimeFailureMarksAgentUnavailable(t *testing.T) {
-	c := newControl(t)
-	_, r, command := c.running()
-	r.turnStarted(command, "t")
-	queued := c.sendText("排队中")
-	r.heartbeat("error", "error_code", "PLUGIN_INSTALL_FAILED")
-	expect(t, c.replyFailure(queued), "AGENT_EXTENSION_FAILED")
-	expect(t, len(c.nats.Queued(c.agent.ID)), 0)
+	c.driver.failBuilds = "E: Unable to locate package nope"
+	sent := c.sendText("你好")
+	for range 200 {
+		c.tick()
+		if c.agentStatus() == "unavailable" {
+			break
+		}
+	}
 	expect(t, c.agentStatus(), "unavailable")
-	// A new message retries with a fresh runtime.
-	c.sendText("再试一次")
+	expect(t, c.replyFailure(sent), "AGENT_BUILD_FAILED")
+	var snapshot chat.Snapshot
+	c.get("/chat").json(t, &snapshot)
+	if snapshot.Agents[0].BuildError == nil || !strings.Contains(*snapshot.Agents[0].BuildError, "nope") {
+		t.Fatalf("build error: %v", snapshot.Agents[0].BuildError)
+	}
+	// Later messages fail at once; nothing builds again by itself.
+	later := c.sendText("再试")
+	c.controller.Dispatch(c.ctx, c.agent.ID)
+	expect(t, c.replyFailure(later), "AGENT_BUILD_FAILED")
+	builds := len(c.driver.builds())
 	c.tick()
-	_, generation := c.liveInstance(c.agent.ID)
-	expect(t, generation, int64(2))
-}
-
-func TestRecoveryFailedNeverReplacesThread(t *testing.T) {
-	c := newControl(t)
-	_, r, command := c.running()
-	r.turnStarted(command, "t")
-	r.heartbeat("recovery_failed", "error_code", "RECOVERY_RESUME_FAILED")
-	expect(t, scalar[string](c.env, "SELECT status FROM agent"), "recovery_failed")
-	expect(t, scalar[string](c.env, "SELECT status FROM agent_session"), "recovery_failed")
-	expect(t, scalar[string](c.env, "SELECT thread_id FROM agent_session"), "thread-1")
-}
-
-func TestRuntimeGetsAnUploadURLForItsOwnAgentOnly(t *testing.T) {
-	c := newControl(t)
-	_, r, _ := c.running()
-	resp := r.call(http.MethodPost, "snapshot", nil)
-	expect(t, resp.m(t)["upload_url"], any("http://s3.test/put/"+c.agent.ID))
-	// A fenced instance gets nothing.
-	c.expireLeases()
-	c.tick()
-	expect(t, r.call(http.MethodPost, "snapshot", nil).status, 409)
-}
-
-func TestFailedSnapshotIsRecordedUntilOneSucceeds(t *testing.T) {
-	c := newControl(t)
-	_, r, _ := c.running()
-	r.events(event{"snapshot.failed", map[string]any{"reason": "SNAPSHOT_TOO_LARGE"}})
-	expect(t, scalar[string](c.env, "SELECT last_error FROM agent_session"), "SNAPSHOT_TOO_LARGE")
-	r.events(event{"snapshot.saved", map[string]any{"size": 1}})
-	expect(t, scalar[*string](c.env, "SELECT last_error FROM agent_session") == nil, true)
-}
-
-func TestIdleRuntimeIsStopped(t *testing.T) {
-	c := newControl(t)
-	c.controller.IdleAfter = time.Nanosecond
-	_, r, command := c.running()
-	r.turnCompleted(command, "completed")
-	c.exec("UPDATE agent SET last_active_at = $1", time.Now().Add(-5*time.Second))
-	instance, _ := c.liveInstance(c.agent.ID)
-	if err := c.controller.LookAtQueue(c.ctx); err != nil {
-		t.Fatal(err)
-	}
-	if err := c.controller.StopIdle(c.ctx); err != nil {
-		t.Fatal(err)
-	}
-	if !c.driver.wasStopped(instance) {
-		t.Fatal("not stopped")
-	}
-	expect(t, scalar[int](c.env, "SELECT count(*) FROM runtime_instance WHERE ended_at IS NULL"), 0)
+	expect(t, len(c.driver.builds()), builds)
+	// A restart builds again.
+	c.driver.failBuilds = ""
+	expect(t, c.post("/agents/"+c.agent.ID+"/restart", nil).status, 204)
+	c.settle()
+	expect(t, len(c.driver.builds()), builds+1)
 	expect(t, c.agentStatus(), "idle")
 }
 
-// The runtime acks a command as it takes it; turn.started comes only once
-// Codex started the turn. In between the command is in neither the queue nor
-// the running set, and the runtime is not idle.
-func TestTakenCommandKeepsTheRuntimeThroughAConfigChange(t *testing.T) {
+func TestRuntimeFailureFailsWhatWaits(t *testing.T) {
 	c := newControl(t)
-	sent, r, command := c.running()
-	old, _ := c.liveInstance(c.agent.ID)
-	c.patch("/agents/"+c.agent.ID, map[string]any{"name": "审查员"})
-	c.tick()
-	if c.driver.wasStopped(old) {
-		t.Fatal("stopped with a taken command")
-	}
-	expect(t, c.replyStatus(sent), "queued")
-	// Once the turn settles, the new configuration applies.
-	r.turnStarted(command, "t")
-	r.turnCompleted(command, "completed")
-	c.tick()
-	if !c.driver.wasStopped(old) {
-		t.Fatal("not stopped")
-	}
-	expect(t, scalar[string](c.env, "SELECT end_reason FROM runtime_instance WHERE id = $1", old), "CONFIG_CHANGED")
-	expect(t, c.replyStatus(sent), "completed")
+	sent := c.sendText("你好")
+	c.settle()
+	r := &runtimeHarness{e: c.env, agentID: c.agent.ID, boot: uuid.NewString()}
+	r.events(event{"runtime.failed", map[string]any{"code": "PLUGIN_INSTALL_FAILED"}})
+	expect(t, c.agentStatus(), "unavailable")
+	expect(t, c.replyFailure(sent), "AGENT_EXTENSION_FAILED")
+	// The next boot (Docker starts it again) makes it available.
+	c.boot()
+	expect(t, c.agentStatus(), "idle")
 }
 
-// A finished turn's snapshot uploads after the turn is reported: the
-// runtime is not replaced (or stopped) until the snapshot is reported.
-func TestARuntimeUploadingItsSnapshotIsNotReplaced(t *testing.T) {
+func TestDeletedAgentsContainerIsRemoved(t *testing.T) {
 	c := newControl(t)
-	sent, r, command := c.running()
-	old, _ := c.liveInstance(c.agent.ID)
-	live := func() bool {
-		return scalar[bool](c.env, "SELECT ended_at IS NULL FROM runtime_instance WHERE id = $1", old)
-	}
-	r.turnStarted(command, "t")
-	r.turnCompletedUploading(command, "completed")
-	expect(t, c.replyStatus(sent), "completed")
-	c.patch("/agents/"+c.agent.ID, map[string]any{"name": "审查员"})
-	c.tick()
-	if !live() {
-		t.Fatal("replaced while its snapshot was uploading")
-	}
-	r.events(event{"snapshot.failed", map[string]any{"reason": "SNAPSHOT_FAILED"}})
-	c.tick()
-	if live() {
-		t.Fatal("not replaced once the snapshot was reported")
-	}
-	expect(t, scalar[string](c.env, "SELECT end_reason FROM runtime_instance WHERE id = $1", old), "CONFIG_CHANGED")
-}
-
-// Only a started turn leaves a snapshot to wait for: a turn.completed with
-// none after it is not an upload when the snapshot came first (a runtime
-// from before that order) or no turn started (a command stopped or rejected
-// before it). Such a runtime is still replaced.
-func TestATurnCompletedWithoutAnUploadDoesNotHoldTheRuntime(t *testing.T) {
-	for name, finish := range map[string]func(r *runtimeHarness, command string){
-		"snapshot first": func(r *runtimeHarness, command string) {
-			r.turnStarted(command, "t")
-			r.events(event{"snapshot.saved", map[string]any{"size": 1}},
-				event{"turn.completed", map[string]any{"command_id": command, "status": "completed"}})
-		},
-		"no turn started": func(r *runtimeHarness, command string) {
-			r.events(event{"turn.completed", map[string]any{"command_id": command, "status": "interrupted"}})
-		},
-	} {
-		t.Run(name, func(t *testing.T) {
-			c := newControl(t)
-			_, r, command := c.running()
-			old, _ := c.liveInstance(c.agent.ID)
-			finish(r, command)
-			c.patch("/agents/"+c.agent.ID, map[string]any{"name": "审查员"})
-			c.tick()
-			if !c.driver.wasStopped(old) {
-				t.Fatal("not replaced")
-			}
-			expect(t, scalar[string](c.env, "SELECT end_reason FROM runtime_instance WHERE id = $1", old), "CONFIG_CHANGED")
-		})
-	}
-}
-
-func TestTakenCommandKeepsAnIdleRuntime(t *testing.T) {
-	c := newControl(t)
-	c.controller.IdleAfter = time.Nanosecond
-	_, r, first := c.running()
-	r.turnCompleted(first, "completed")
-	sent := c.sendText("十分钟后的消息")
-	command := c.commandOf(sent)
-	c.take(command)
-	c.exec("UPDATE agent SET last_active_at = $1", time.Now().Add(-5*time.Second))
-	instance, _ := c.liveInstance(c.agent.ID)
-	stopIdle := func() {
-		if err := c.controller.LookAtQueue(c.ctx); err != nil {
-			t.Fatal(err)
-		}
-		if err := c.controller.StopIdle(c.ctx); err != nil {
-			t.Fatal(err)
-		}
-	}
-	stopIdle()
-	if c.driver.wasStopped(instance) {
-		t.Fatal("stopped with a taken command")
-	}
-	expect(t, c.replyStatus(sent), "queued")
-	r.turnStarted(command, "t")
-	r.turnCompleted(command, "completed")
-	c.exec("UPDATE agent SET last_active_at = $1", time.Now().Add(-5*time.Second))
-	stopIdle()
-	if !c.driver.wasStopped(instance) {
-		t.Fatal("not stopped")
-	}
-}
-
-// A taken command the runtime never reports holds it only while its
-// heartbeat says it is busy; then it fails like any taken command.
-func TestUnreportedTakenCommandDoesNotHoldTheRuntimeForever(t *testing.T) {
-	c := newControl(t)
-	c.controller.ClaimGrace = time.Nanosecond
-	sent, r, command := c.running()
-	old, _ := c.liveInstance(c.agent.ID)
-	c.patch("/agents/"+c.agent.ID, map[string]any{"name": "审查员"})
-	c.tick() // first seen taken
-	r.heartbeat("busy")
-	c.tick()
-	if c.driver.wasStopped(old) {
-		t.Fatal("stopped while the runtime reports busy")
-	}
-	r.heartbeat("ready")
-	c.tick()
-	if !c.driver.wasStopped(old) {
-		t.Fatal("not stopped")
-	}
-	expect(t, c.commandStatus(command), "failed")
-	expect(t, c.replyFailure(sent), "REPLY_INTERRUPTED")
-}
-
-func TestDeletedAgentIsInterruptedThenStopped(t *testing.T) {
-	c := newControl(t)
-	_, r, command := c.running()
-	r.turnStarted(command, "t")
-	instance, _ := c.liveInstance(c.agent.ID)
+	sent, _, command := c.running()
 	expect(t, c.delete("/agents/"+c.agent.ID).status, 204)
 	c.tick()
-	// Still running: interrupted first, not killed mid-turn.
-	expect(t, fmt.Sprint(c.nats.ToldOf("interrupt")), fmt.Sprint([]map[string]any{{"command_id": command}}))
-	if c.driver.wasStopped(instance) {
-		t.Fatal("stopped mid-turn")
-	}
-	r.turnCompleted(command, "interrupted")
-	c.tick()
-	if !c.driver.wasStopped(instance) {
-		t.Fatal("not stopped")
-	}
-	// Its queue goes with it.
-	expect(t, fmt.Sprint(c.nats.Forgotten), fmt.Sprint([]string{c.agent.ID}))
-	expect(t, scalar[int](c.env, "SELECT count(*) FROM runtime_instance WHERE ended_at IS NULL"), 0)
-	// Nothing restarts it.
-	c.tick()
-	expect(t, len(c.driver.started), 1)
-}
-
-func TestRestartInterruptsTheTurnThenReplacesTheRuntime(t *testing.T) {
-	c := newControl(t)
-	sent, r, command := c.running()
-	r.turnStarted(command, "t")
-	old, _ := c.liveInstance(c.agent.ID)
-	expect(t, c.post("/agents/"+c.agent.ID+"/restart", nil).status, 204)
-	c.tick()
-	// Interrupted first, so the turn's snapshot is uploaded before the stop.
-	expect(t, fmt.Sprint(c.nats.ToldOf("interrupt")), fmt.Sprint([]map[string]any{{"command_id": command}}))
-	if c.driver.wasStopped(old) {
-		t.Fatal("stopped mid-turn")
-	}
-	r.turnCompleted(command, "interrupted")
-	c.tick()
-	if !c.driver.wasStopped(old) {
-		t.Fatal("not stopped")
-	}
-	expect(t, scalar[string](c.env, "SELECT end_reason FROM runtime_instance WHERE id = $1", old), "CONFIG_CHANGED")
+	expect(t, slices.Contains(c.driver.removed, c.agent.ID), true)
+	expect(t, c.commandStatus(command), "cancelled")
 	expect(t, c.replyStatus(sent), "stopped")
-	// The next message starts a new runtime on the same thread.
-	c.sendText("重启之后")
-	c.tick()
-	expect(t, len(c.driver.started), 2)
-	expect(t, c.driver.started[1].Env["AXP_THREAD_ID"], "thread-1")
 }
 
-func TestRuntimeGetsTheAgentsPlugins(t *testing.T) {
-	c := newControl(t)
-	c.patch("/agents/"+c.agent.ID, map[string]any{"plugins": []string{"memory"}})
-	c.sendText("检查项目结构")
-	c.startRuntime("thread-1")
-	expect(t, fmt.Sprint(c.settings(c.driver.started[0])["plugins"]), "[memory]")
+// --- the runtime gateway -------------------------------------------------------------
+
+func TestPublicServerDoesNotRouteInternalAPI(t *testing.T) {
+	e := newEnv(t)
+	r := do(t, e.public, http.MethodGet, "/internal/v1/runtime-auth", nil, nil)
+	expect(t, r.status, 404)
 }
 
-func TestInstructionsArePassedAndAppliedBetweenTurns(t *testing.T) {
-	c := newControl(t)
-	path := "/agents/" + c.agent.ID
-	instructions := func(i int) any { return c.settings(c.driver.started[i])["developer_instructions"] }
-	c.patch(path, map[string]any{"description": "第一版指令"})
-	sent := c.sendText("检查项目结构")
-	r := c.startRuntime("thread-1")
-	expect(t, instructions(0), any("你的名字是开发助手。\n\n第一版指令"))
-	command := c.commandOf(sent)
-	c.take(command)
-	r.turnStarted(command, "t")
-	old, _ := c.liveInstance(c.agent.ID)
-
-	c.patch(path, map[string]any{"name": "审查员", "description": "第二版指令"})
-	c.tick()
-	// A turn is running: the runtime keeps going until it settles.
-	if c.driver.wasStopped(old) {
-		t.Fatal("stopped mid-turn")
+func runtimeAuth(e *env, key, plugin string) response {
+	path := "/internal/v1/runtime-auth"
+	if plugin != "" {
+		path += "?plugin=" + plugin
 	}
-	r.turnCompleted(command, "completed")
-	c.tick()
-	if !c.driver.wasStopped(old) {
-		t.Fatal("not stopped")
-	}
-	expect(t, scalar[string](c.env, "SELECT end_reason FROM runtime_instance WHERE id = $1", old), "CONFIG_CHANGED")
-	// The next message starts a runtime with the new instructions.
-	c.sendText("新指令下")
-	c.tick()
-	last := len(c.driver.started) - 1
-	expect(t, instructions(last), any("你的名字是审查员。\n\n第二版指令"))
-	expect(t, c.driver.started[last].Env["AXP_THREAD_ID"], "thread-1")
+	return do(e.t, e.internal, http.MethodGet, path, nil, map[string]string{"Authorization": "Bearer " + key})
 }
 
-func TestRuntimeReachesModelsAndStorageWithoutCredentials(t *testing.T) {
+func TestRuntimeAuthNamesTheAgent(t *testing.T) {
 	c := newControl(t)
-	c.sendText("检查项目结构")
-	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "deployment.environment.name=production")
-	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "Authorization=Basic%20secret")
-	c.startRuntime("thread-1")
-	env := c.driver.started[0].Env
-	for k := range env {
-		if strings.HasPrefix(k, "AXP_S3") {
-			t.Fatalf("storage credentials: %s", k)
-		}
-	}
-	expect(t, env["OTEL_EXPORTER_OTLP_ENDPOINT"], "http://otel-collector:4318")
-	instance, _ := c.liveInstance(c.agent.ID)
-	expect(t, env["OTEL_RESOURCE_ATTRIBUTES"], "deployment.environment.name=production,"+
-		"axp.agent.id="+c.agent.ID+",axp.runtime.instance.id="+instance+",axp.runtime.generation=1")
-	if _, ok := env["OTEL_EXPORTER_OTLP_HEADERS"]; ok {
-		t.Fatal("collector credentials")
-	}
+	key := auth.AgentKey(c.secret, c.agent.ID)
+	r := runtimeAuth(c.env, key, "")
+	expect(t, r.status, 204)
+	expect(t, r.header.Get("X-AXP-Agent-Id"), c.agent.ID)
+	expectError(t, runtimeAuth(c.env, key+"x", ""), 403, "INVALID_AGENT_KEY")
+	expectError(t, runtimeAuth(c.env, "nope", ""), 403, "INVALID_AGENT_KEY")
+	expectError(t, runtimeAuth(c.env, auth.AgentKey([]byte("other"), c.agent.ID), ""), 403, "INVALID_AGENT_KEY")
+	// A deleted agent's key no longer works.
+	expect(t, c.delete("/agents/"+c.agent.ID).status, 204)
+	expectError(t, runtimeAuth(c.env, key, ""), 403, "INVALID_AGENT_KEY")
+}
+
+func TestRuntimeAuthChecksTheRoutesPlugin(t *testing.T) {
+	c := newControl(t)
+	key := auth.AgentKey(c.secret, c.agent.ID)
+	expect(t, runtimeAuth(c.env, key, "memory").status, 204)
+	expect(t, c.patch("/agents/"+c.agent.ID, map[string]any{"bundles": []string{"grok"}}).status, 200)
+	expectError(t, runtimeAuth(c.env, key, "memory"), 403, "PLUGIN_NOT_ENABLED")
+	expect(t, runtimeAuth(c.env, key, "grok").status, 204)
 }

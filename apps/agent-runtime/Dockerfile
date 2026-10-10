@@ -1,7 +1,8 @@
-# Agent runtime image: one container per agent. Dependencies come prebuilt for
-# the target platform from `bun run build` (Turbo); this file only copies them.
-# The agent's home (/agent: workspace and Codex state) lives in the container
-# and is restored from, and saved to, its snapshot.
+# The agent runtime's base image. The control plane builds each agent's image
+# on it: its bundles' scripts, then their plugins, compiled for Codex
+# (docs/architecture/bundles.md). The runtime (out/main.js, built by Turbo)
+# drives Codex's app-server through oar; the agent's state lives on its
+# volume at /agent.
 
 # akhook, the rule engine of the agent's hooks, from the vendor/akhook
 # submodule (the `akhook-src` build context, see scripts/build/image.sh). Built
@@ -15,16 +16,19 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     cargo build --release --locked && cp target/release/akhook /akhook
 
-FROM python:3.13-slim
+FROM node:24-trixie-slim
 
 ARG TARGETOS
 ARG TARGETARCH
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl git zstd \
+    && apt-get install -y --no-install-recommends ca-certificates curl git \
     && rm -rf /var/lib/apt/lists/*
-COPY out/${TARGETOS}-${TARGETARCH}/site-packages/ /usr/local/lib/python3.13/site-packages/
+# Codex, at the version the runtime's oar was checked against.
+ARG CODEX_VERSION=0.162.1
+RUN npm install --global --no-fund --no-audit "@openai/codex@${CODEX_VERSION}" \
+    && npm cache clean --force && codex --version
 # gh, logged in as the GitHub App by the runtime (GH_CONFIG_DIR, outside the
-# snapshot). A release binary, checked against the release's checksums.
+# agent's volume). A release binary, checked against the release's checksums.
 ARG GH_VERSION=2.102.0
 RUN set -eu; \
     archive="gh_${GH_VERSION}_linux_${TARGETARCH}.tar.gz"; \
@@ -39,29 +43,20 @@ ENV GH_CONFIG_DIR=/run/axp/gh
 # git gets GitHub credentials from gh.
 COPY git/gitconfig /etc/gitconfig
 # akhook runs the agent's hooks (managed hooks in /etc/codex/requirements.toml):
-# the plugins' lifecycle rules (compiled below) and the image's rules, which
-# it checks every shell command and file change against before Codex runs
-# it; the image's come last, so no plugin overrides them. Approval requests
-# live outside /agent, so no snapshot keeps them.
+# the plugins' lifecycle rules (compiled into each agent's image) and the
+# image's rules, which it checks every shell command and file change against
+# before Codex runs it; the image's come last, so no plugin overrides them.
 COPY --from=akhook /akhook /usr/local/bin/akhook
 COPY hooks /etc/akhook
 ENV AKHOOK_ADDITIONAL_CONFIG_PATH=/opt/axp/plugins/akhook.yml:/etc/akhook/akhook.yml \
     AKHOOK_STATE_DIR=/run/akhook
-# The static Codex configuration (sandbox, approvals), then the plugins every
-# agent can run with (docs/architecture/plugins.md), compiled for Codex by
-# axp-plugins (packages/plugins-go, the `plugins-tool` build context): their
-# setup scripts prepare their environments (with a download cache kept across
-# builds), the plugins become a local marketplace whose tool approvals join the
-# Codex configuration, and their hooks become /opt/axp/plugins/akhook.yml.
+# The static Codex configuration. axp-plugins (packages/plugins-go, the
+# `plugins-tool` build context) compiles an agent's plugins when its image is
+# built.
 COPY codex /etc/codex
-COPY plugins /opt/axp/plugins
-RUN --mount=type=bind,from=plugins-tool,source=${TARGETOS}-${TARGETARCH}/axp-plugins,target=/usr/local/bin/axp-plugins \
-    --mount=type=cache,target=/var/cache/axp-plugins \
-    axp-plugins chat /opt/axp/plugins /etc/codex /opt/axp/plugins
-WORKDIR /app
-COPY axp_runtime ./axp_runtime
+COPY --from=plugins-tool ${TARGETOS}-${TARGETARCH}/axp-plugins /usr/local/bin/axp-plugins
+COPY out/main.js /app/main.js
 
-ENV PYTHONPATH=/app \
-    PYTHONUNBUFFERED=1 \
-    AXP_HOME=/agent
-CMD ["python", "-m", "axp_runtime"]
+ENV AXP_HOME=/agent \
+    CODEX_HOME=/agent/codex
+CMD ["node", "/app/main.js"]

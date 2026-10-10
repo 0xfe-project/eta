@@ -55,10 +55,13 @@ func firstText(page chat.MessagePage) string { return page.Items[0].Blocks[0].Te
 
 func TestHistoryPagesBackwardsInSendOrder(t *testing.T) {
 	e := newEnv(t)
-	e.nats.MaxQueued = 100
 	agent := e.createAgent("开发助手")
 	for i := range 30 {
 		e.send(agent.ID, fmt.Sprintf("m%d", i)) // 60 messages
+		if i%10 == 9 {
+			// No more than 20 wait at a time.
+			e.exec("UPDATE agent_command SET status = 'succeeded' WHERE status = 'queued'")
+		}
 	}
 	path := "/agents/" + agent.ID + "/messages"
 	var latest, page chat.MessagePage
@@ -121,7 +124,8 @@ func TestCreateAgentReturnsProductFieldsOnly(t *testing.T) {
 	delete(got, "id")
 	want := map[string]any{
 		"name": "开发助手", "description": "", "model": "test-model",
-		"plugins": []any{"agenvo", "approval", "github", "grok", "memory", "routines", "tasks"}, "status": "idle", "revision": float64(1),
+		"bundles": []any{"agenvo", "github", "grok", "memory", "routines", "tasks"}, "status": "idle",
+		"build_error": nil, "revision": float64(1),
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v", got)
@@ -235,30 +239,65 @@ func TestUpdateNameOrDescriptionBumpsConfigVersion(t *testing.T) {
 	expect(t, version(), before+2)
 }
 
-func TestPluginsAreChosenFromTheCatalog(t *testing.T) {
+func TestBundlesAreChosenFromTheCatalog(t *testing.T) {
 	e := newEnv(t)
-	var plugins []struct{ Name string }
-	e.get("/plugins").json(t, &plugins)
+	var all []struct {
+		Name    string
+		Builtin bool
+		Plugins []string
+	}
+	e.get("/bundles").json(t, &all)
 	var names []string
-	for _, p := range plugins {
-		names = append(names, p.Name)
+	for _, b := range all {
+		names = append(names, b.Name)
+		expect(t, b.Builtin, true)
 	}
-	if !slices.Equal(names, []string{"agenvo", "approval", "github", "grok", "memory", "routines", "tasks"}) {
-		t.Fatalf("plugins %v", names)
+	if !slices.Equal(names, []string{"agenvo", "github", "grok", "memory", "routines", "tasks"}) {
+		t.Fatalf("bundles %v", names)
 	}
-	created := e.post("/agents", map[string]any{"name": "a", "plugins": []string{"tasks", "grok"}})
+	created := e.post("/agents", map[string]any{"name": "a", "bundles": []string{"tasks", "grok"}})
 	// Catalog order, whatever order they were sent in.
-	expect(t, fmt.Sprint(created.m(t)["plugins"]), "[grok tasks]")
-	expectError(t, e.post("/agents", map[string]any{"name": "a", "plugins": []string{"nope"}}), 422, "PLUGIN_NOT_FOUND")
+	expect(t, fmt.Sprint(created.m(t)["bundles"]), "[grok tasks]")
+	id := created.m(t)["id"].(string)
+	expect(t, scalar[string](e, "SELECT plugins::text FROM agent WHERE id = $1", id), `["grok", "tasks"]`)
+	expectError(t, e.post("/agents", map[string]any{"name": "a", "bundles": []string{"nope"}}), 422, "BUNDLE_NOT_FOUND")
 }
 
-func TestChangingPluginsBumpsConfigVersion(t *testing.T) {
+func TestChangingBundlesBumpsConfigVersion(t *testing.T) {
 	e := newEnv(t)
 	agent := e.createAgent("旧名字")
 	before := scalar[int64](e, "SELECT config_version FROM agent WHERE id = $1", agent.ID)
-	r := e.patch("/agents/"+agent.ID, map[string]any{"plugins": []string{}})
-	expect(t, fmt.Sprint(r.m(t)["plugins"]), "[]")
+	r := e.patch("/agents/"+agent.ID, map[string]any{"bundles": []string{}})
+	expect(t, fmt.Sprint(r.m(t)["bundles"]), "[]")
 	expect(t, scalar[int64](e, "SELECT config_version FROM agent WHERE id = $1", agent.ID), before+1)
+	expect(t, scalar[string](e, "SELECT plugins::text FROM agent WHERE id = $1", agent.ID), "[]")
+}
+
+func TestUsersBundles(t *testing.T) {
+	e := newEnv(t)
+	var plugins []struct{ Name string }
+	e.get("/plugins").json(t, &plugins)
+	expect(t, len(plugins), 6)
+	created := e.post("/bundles", map[string]any{
+		"name": "python", "description": "Python 3", "script": "apt-get install -y python3", "plugins": []string{"memory"},
+	})
+	expect(t, created.status, 201)
+	expectError(t, e.post("/bundles", map[string]any{"name": "python", "plugins": []string{}}), 409, "BUNDLE_EXISTS")
+	expectError(t, e.post("/bundles", map[string]any{"name": "github", "plugins": []string{}}), 409, "BUNDLE_EXISTS")
+	expectError(t, e.post("/bundles", map[string]any{"name": "Bad Name", "plugins": []string{}}), 422, "INVALID_BUNDLE_NAME")
+	expectError(t, e.post("/bundles", map[string]any{"name": "x", "plugins": []string{"nope"}}), 422, "PLUGIN_NOT_FOUND")
+	agent := e.post("/agents", map[string]any{"name": "a", "bundles": []string{"python"}}).m(t)["id"].(string)
+	expect(t, scalar[string](e, "SELECT plugins::text FROM agent WHERE id = $1", agent), `["memory"]`)
+	// Its agents get its plugins at once.
+	r := do(t, e.public, http.MethodPatch, "/api/v1/bundles/python", map[string]any{"plugins": []string{"grok", "tasks"}}, nil)
+	expect(t, r.status, 200)
+	expect(t, fmt.Sprint(r.m(t)["plugins"]), "[grok tasks]")
+	expect(t, scalar[string](e, "SELECT plugins::text FROM agent WHERE id = $1", agent), `["grok", "tasks"]`)
+	expectError(t, do(t, e.public, http.MethodPatch, "/api/v1/bundles/github", map[string]any{"script": "x"}, nil), 409, "BUNDLE_BUILTIN")
+	expectError(t, e.delete("/bundles/python"), 409, "BUNDLE_IN_USE")
+	expect(t, e.delete("/agents/"+agent).status, 204)
+	expect(t, e.delete("/bundles/python").status, 204)
+	expect(t, e.delete("/bundles/python").status, 404)
 }
 
 func TestRename(t *testing.T) {
@@ -325,7 +364,6 @@ func TestConcurrentSendsWithOneKeyQueueOnce(t *testing.T) {
 		ids[r.m(t)["message"].(map[string]any)["id"].(string)] = true
 	}
 	expect(t, len(ids), 1)
-	expect(t, len(e.nats.Queued(agent.ID)), 1)
 	expect(t, scalar[int](e, "SELECT count(*) FROM agent_command"), 1)
 }
 
@@ -364,10 +402,10 @@ func TestSendToUnknownAgentIs404(t *testing.T) {
 
 func TestQueueFullIs429(t *testing.T) {
 	e := newEnv(t)
-	e.nats.MaxQueued = 2
 	agent := e.createAgent("开发助手")
-	e.send(agent.ID, "a")
-	e.send(agent.ID, "b")
+	for i := range chat.MaxQueuedPerAgent {
+		e.send(agent.ID, fmt.Sprint(i))
+	}
 	expectError(t, e.post("/chat/messages", map[string]any{"agent_id": agent.ID, "text": "hi"}), 429, "QUEUE_FULL")
 }
 
@@ -416,7 +454,6 @@ func TestClientChoosesTheMessageID(t *testing.T) {
 	var sent chat.Sent
 	r.json(t, &sent)
 	expect(t, sent.Message.ID, id)
-	expect(t, sent.Steered, false)
 	// Sending it again, as a client does when it cannot tell whether the
 	// first try arrived, is the same message.
 	again := e.post("/chat/messages", body, id)
@@ -586,9 +623,9 @@ func TestPublicSchemaHasNoInternalFields(t *testing.T) {
 	}
 	slices.Sort(paths)
 	want := []string{
-		"/api/v1/agents", "/api/v1/agents/{agent_id}", "/api/v1/agents/{agent_id}/compact",
-		"/api/v1/agents/{agent_id}/messages", "/api/v1/agents/{agent_id}/restart", "/api/v1/chat",
-		"/api/v1/chat/interactions", "/api/v1/chat/interactions/{interaction_id}/answer", "/api/v1/chat/messages",
+		"/api/v1/agents", "/api/v1/agents/{agent_id}",
+		"/api/v1/agents/{agent_id}/messages", "/api/v1/agents/{agent_id}/restart",
+		"/api/v1/bundles", "/api/v1/bundles/{name}", "/api/v1/chat", "/api/v1/chat/messages",
 		"/api/v1/chat/messages/{message_id}/stop", "/api/v1/chat/stream", "/api/v1/computers",
 		"/api/v1/computers/{computer_id}", "/api/v1/computers/{computer_id}/install",
 		"/api/v1/computers/{computer_id}/runtimes/{kind}/approve",

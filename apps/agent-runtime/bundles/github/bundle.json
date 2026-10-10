@@ -1,0 +1,5 @@
+{
+  "name": "github",
+  "description": "以 AXP 的 GitHub App 身份使用 git、gh，并开 PR。",
+  "plugins": ["github"]
+}

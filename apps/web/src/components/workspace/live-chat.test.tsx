@@ -13,7 +13,7 @@ import {
 } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { chatQueryOptions, usePendingInteractions } from "@/queries/chat";
+import { chatQueryOptions } from "@/queries/chat";
 import { LiveChat } from "./live-chat";
 
 (
@@ -59,7 +59,6 @@ class FakeEventSource {
 const snapshot = {
   agents: [],
   active_replies: [],
-  interactions: [],
   event_cursor: "c1",
 };
 let answers: (() => Response)[];
@@ -67,9 +66,8 @@ let snapshotRequests = 0;
 
 function Page() {
   // Pages read the snapshot without subscribing themselves.
-  useQuery(chatQueryOptions());
-  const pending = usePendingInteractions().length;
-  return <output>{pending}</output>;
+  const { data } = useQuery(chatQueryOptions());
+  return <output>{data?.agents.length ?? 0}</output>;
 }
 
 async function render() {
@@ -117,23 +115,22 @@ const unavailable = () =>
   );
 
 describe("the chat stream", () => {
-  it("brings a new confirmation to whatever page is open", async () => {
+  it("brings a new agent to whatever page is open", async () => {
     await render();
     await wait(0);
     const badge = () => document.querySelector("output")?.textContent;
     expect(badge()).toBe("0");
     await act(async () =>
-      FakeEventSource.all[0].emit("interaction.updated", {
-        interaction: {
-          id: "i1",
-          agent_id: "a1",
-          message_id: "m1",
-          kind: "choice",
-          prompt: "允许执行命令？",
-          options: [],
-          status: "pending",
+      FakeEventSource.all[0].emit("agent.updated", {
+        agent: {
+          id: "a1",
+          name: "研究员",
+          description: "",
+          model: null,
+          bundles: [],
+          status: "idle",
+          build_error: null,
           revision: 1,
-          created_at: "2026-10-09T00:00:00Z",
         },
       }),
     );
