@@ -2,12 +2,26 @@
 # itself (it issues their tokens and fences replaced instances). Everything
 # else first asks it who holds the runtime key and passes the answer on as
 # X-AXP-Agent-Id, replacing any value the runtime sent; services behind this
-# route trust that header and hold no credentials of their own.
+# route trust that header and hold no credentials of their own. A plugin's
+# route also asks whether that agent has the plugin enabled (403 if not), so
+# turning a plugin off takes its abilities away, not just its tools.
 
 # Proxies to the upstream in the first argument as the runtime's agent.
 (as_agent) {
 	forward_auth {$AXP_UPSTREAM_INTERNAL:axp-internal:8001} {
 		uri /internal/v1/runtime-auth
+		copy_headers X-AXP-Agent-Id
+	}
+	reverse_proxy {args[0]} {
+		header_up -Authorization
+		flush_interval -1
+	}
+}
+
+# As as_agent, for an agent with the plugin in the second argument.
+(as_agent_with) {
+	forward_auth {$AXP_UPSTREAM_INTERNAL:axp-internal:8001} {
+		uri /internal/v1/runtime-auth?plugin={args[1]}
 		copy_headers X-AXP-Agent-Id
 	}
 	reverse_proxy {args[0]} {
@@ -29,13 +43,17 @@ http://:{$AXP_RUNTIME_GATEWAY_PORT:8090} {
 	}
 	# Agents' memories: the memory plugin's MCP server and hooks.
 	handle /memory/* {
-		import as_agent {$AXP_UPSTREAM_MEMORY:axp-memory:8320}
+		import as_agent_with {$AXP_UPSTREAM_MEMORY:axp-memory:8320} memory
 	}
 	# The task board: the tasks plugin's MCP server, in the internal API.
 	handle /tasks/* {
-		import as_agent {$AXP_UPSTREAM_INTERNAL:axp-internal:8001}
+		import as_agent_with {$AXP_UPSTREAM_INTERNAL:axp-internal:8001} tasks
 	}
-	# Code hosting: git's and gh's GitHub credentials, open_pull_request.
+	# Code hosting: the github plugin's MCP server (open_pull_request)...
+	handle /forge/mcp* {
+		import as_agent_with {$AXP_UPSTREAM_FORGE:axp-forge:8330} github
+	}
+	# ...and git's and gh's GitHub credentials, which every runtime fetches.
 	handle /forge/* {
 		import as_agent {$AXP_UPSTREAM_FORGE:axp-forge:8330}
 	}

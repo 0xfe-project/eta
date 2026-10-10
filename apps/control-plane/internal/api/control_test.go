@@ -125,8 +125,12 @@ func TestTokenIsBoundToInstanceAndGeneration(t *testing.T) {
 	expectError(t, r.heartbeat("ready"), 409, "STALE_GENERATION")
 }
 
-func runtimeAuth(c *controlEnv, key string) response {
-	return do(c.t, c.internal, http.MethodGet, "/internal/v1/runtime-auth", nil, map[string]string{"Authorization": "Bearer " + key})
+func runtimeAuth(c *controlEnv, key string, plugin ...string) response {
+	path := "/internal/v1/runtime-auth"
+	if len(plugin) > 0 {
+		path += "?plugin=" + plugin[0]
+	}
+	return do(c.t, c.internal, http.MethodGet, path, nil, map[string]string{"Authorization": "Bearer " + key})
 }
 
 func TestRuntimeAuthNamesTheAgent(t *testing.T) {
@@ -140,6 +144,25 @@ func TestRuntimeAuthNamesTheAgent(t *testing.T) {
 	}
 	c.exec("UPDATE agent SET generation = 2 WHERE id = $1", c.agent.ID)
 	expectError(t, runtimeAuth(c, key), 409, "STALE_GENERATION")
+}
+
+// A plugin's routes on the runtime gateway (/tasks, /memory, /forge/mcp)
+// ask with the plugin: an agent that has it turned off is refused.
+func TestRuntimeAuthChecksTheRoutesPlugin(t *testing.T) {
+	c, r := provisioned(t)
+	key := r.instanceID + "." + r.token
+	for _, plugin := range []string{"tasks", "memory", "github"} {
+		expect(t, runtimeAuth(c, key, plugin).status, 204)
+	}
+	expect(t, c.patch("/agents/"+c.agent.ID, map[string]any{"plugins": []string{"memory"}}).status, 200)
+	expect(t, runtimeAuth(c, key, "memory").status, 204)
+	for _, plugin := range []string{"tasks", "github"} {
+		expectError(t, runtimeAuth(c, key, plugin), 403, "PLUGIN_NOT_ENABLED")
+	}
+	// Routes of no plugin (the model, git's credentials) stay open to it.
+	resp := runtimeAuth(c, key)
+	expect(t, resp.status, 204)
+	expect(t, resp.header.Get("X-AXP-Agent-Id"), c.agent.ID)
 }
 
 func TestSessionThreadCannotChange(t *testing.T) {
