@@ -7,7 +7,7 @@ import { KanbanIcon } from "@phosphor-icons/react/Kanban";
 import { ListIcon } from "@phosphor-icons/react/List";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import {
@@ -430,7 +435,9 @@ export function TaskBoard() {
   // Remembered in this browser, so the page opens as it was left.
   const layout = useWorkspaceStore((s) => s.workspace.taskLayout ?? "list");
   const scope = useWorkspaceStore((s) => s.workspace.taskScope ?? "all");
+  const listWidth = useWorkspaceStore((s) => s.workspace.taskListWidth);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
+  const groupRef = useRef<HTMLDivElement>(null);
   const setView = (changes: Pick<WorkspaceState, "taskLayout" | "taskScope">) =>
     setWorkspace((workspace) => ({ ...workspace, ...changes }));
   const id = nav.task && nav.task !== "new" ? nav.task : null;
@@ -446,15 +453,35 @@ export function TaskBoard() {
     void setNav({ task: "new" });
   };
   // With a task open the list narrows to a column beside it (from md, the
-  // sidebar's breakpoint); on phones the task takes the page, 任务 goes back.
+  // sidebar's breakpoint) that the separator between them resizes; on phones
+  // the task takes the page, 任务 goes back.
   return (
-    <div className="flex min-h-0 flex-1">
-      <div
-        className={cn(
-          "@container flex min-w-0 flex-1 flex-col",
-          id &&
-            "hidden md:flex md:w-64 md:flex-none md:border-r lg:w-80 xl:w-96",
-        )}
+    <ResizablePanelGroup
+      className={cn(
+        "min-h-0 flex-1",
+        // The panel sets its own display inline; only !important hides it.
+        id && "max-md:[&>[data-panel]:first-child]:hidden!",
+      )}
+      elementRef={groupRef}
+      onLayoutChanged={(layout, { isUserInteraction }) => {
+        // Sizes come as percentages of the group.
+        const width = Math.round(
+          ((layout["task-list"] ?? 0) * (groupRef.current?.offsetWidth ?? 0)) /
+            100,
+        );
+        if (isUserInteraction && width)
+          setWorkspace((workspace) => ({ ...workspace, taskListWidth: width }));
+      }}
+    >
+      <ResizablePanel
+        id="task-list"
+        // Alone it fills the page; beside a task it keeps its pixels as the
+        // window resizes and leaves the task room for its title and actions.
+        defaultSize={id ? (listWidth ?? "20rem") : undefined}
+        minSize={id ? "16rem" : undefined}
+        groupResizeBehavior={id ? "preserve-pixel-size" : undefined}
+        className="@container flex min-w-0 flex-col"
+        style={{ overflow: "hidden" }}
       >
         <PageHeader
           title={
@@ -579,11 +606,22 @@ export function TaskBoard() {
             <ListView tasks={tasks} selected={id} onCreate={create} />
           )}
         </Main>
-      </div>
+      </ResizablePanel>
       {id ? (
-        <div className="@container flex min-w-0 flex-1 flex-col">
-          <TaskPage key={id} id={id} />
-        </div>
+        <>
+          <ResizableHandle
+            aria-label="调整任务列表宽度"
+            className="transition-colors duration-[60ms] ease-linear data-[separator=active]:bg-ring data-[separator=hover]:bg-ring max-md:hidden"
+          />
+          <ResizablePanel
+            id="task"
+            minSize="18rem"
+            className="@container flex min-w-0 flex-col"
+            style={{ overflow: "hidden" }}
+          >
+            <TaskPage key={id} id={id} />
+          </ResizablePanel>
+        </>
       ) : null}
       <Dialog
         open={nav.task === "new"}
@@ -601,6 +639,6 @@ export function TaskBoard() {
           />
         </DialogContent>
       </Dialog>
-    </div>
+    </ResizablePanelGroup>
   );
 }

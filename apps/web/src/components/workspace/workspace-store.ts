@@ -22,6 +22,8 @@ const workspaceSchema = z.object({
   // The task page as last left: rows or a board, and whose tasks.
   taskLayout: z.enum(["list", "board"]).optional(),
   taskScope: z.enum(["all", "user", "remote"]).optional(),
+  // The task list's width in pixels beside an open task, as last dragged.
+  taskListWidth: z.number().positive().max(10000).optional(),
 });
 
 export type WorkspaceState = z.infer<typeof workspaceSchema>;
