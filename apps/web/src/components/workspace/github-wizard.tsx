@@ -144,9 +144,16 @@ function CreateForm({
               placeholder="例如 acme"
               maxLength={39}
               required
+              pattern={String.raw`.*\S.*`}
               spellCheck={false}
               autoFocus
-              onChange={(e) => setOrganization(e.target.value)}
+              onInvalid={(e) =>
+                e.currentTarget.setCustomValidity("请输入组织名称")
+              }
+              onChange={(e) => {
+                e.currentTarget.setCustomValidity("");
+                setOrganization(e.target.value);
+              }}
             />
           </div>
         ) : null}
