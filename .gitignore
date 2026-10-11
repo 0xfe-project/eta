@@ -21,6 +21,9 @@ var/
 out/
 .turbo/
 .claude/settings.local.json
+# Bare `go build` output in the Go app directories; real builds go to out/.
+/apps/control-plane/control-plane
+/apps/remote/remote
 
 # Turborepo
 .turbo
