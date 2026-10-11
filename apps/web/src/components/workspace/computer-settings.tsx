@@ -118,6 +118,57 @@ function Runtimes({ runtimes }: { runtimes: ComputerRuntime[] }) {
 }
 
 /**
+ * A card's runtimes on one line, and below them the agents they offer
+ * together: which runtime offers which agent does not matter here.
+ */
+function RuntimeSummary({ runtimes }: { runtimes: ComputerRuntime[] }) {
+  const agents = [
+    ...new Set(
+      runtimes
+        .filter((runtime) => runtime.state === "online")
+        .flatMap((runtime) => runtime.providers),
+    ),
+  ];
+  return (
+    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+      <dt className="text-muted-foreground">运行时</dt>
+      <dd>
+        <ul className="flex flex-wrap gap-x-3 gap-y-0.5">
+          {runtimes.map((runtime) => (
+            <li
+              key={runtime.kind}
+              className="flex min-w-0 flex-wrap items-center gap-x-1.5"
+            >
+              <StatusDot
+                online={runtime.state === "online"}
+                label={stateLabels[runtime.state]}
+              />
+              <span className="font-medium">{runtimeLabel(runtime.kind)}</span>
+              {runtime.state === "online" ? null : (
+                <span className="text-muted-foreground">
+                  {stateLabels[runtime.state]}
+                </span>
+              )}
+              {runtime.needs_update ? (
+                <span className="text-amber-600 dark:text-amber-500">
+                  connector {runtime.connector_version}，需要更新
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      </dd>
+      <dt className="text-muted-foreground">智能体</dt>
+      <dd className="min-w-0 break-words">
+        {agents.map(providerLabel).join("、") || (
+          <span className="text-muted-foreground">没有可用的智能体</span>
+        )}
+      </dd>
+    </dl>
+  );
+}
+
+/**
  * A runtime that asked to pair: approve once the fingerprints match. Each
  * request under its label is listed; more than one means someone else asked
  * too, and only the one `axp setup` printed is to be approved.
@@ -543,7 +594,7 @@ function ComputerCard({
           </Tooltip>
         </div>
       ) : (
-        <Runtimes runtimes={computer.runtimes} />
+        <RuntimeSummary runtimes={computer.runtimes} />
       )}
       {computer.active_runs ? (
         <p className="text-xs text-muted-foreground">
