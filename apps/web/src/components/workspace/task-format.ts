@@ -1,6 +1,5 @@
 import type {
   AssigneeInput,
-  AssigneeOption,
   Place,
   RunStatus,
   Task,
@@ -96,18 +95,6 @@ export function assigneeFromKey(key: string): AssigneeInput {
     runtime: runtime as "paseo" | "herdr",
     provider,
   };
-}
-
-/** The assignee options: nobody, the user, then every remote agent. */
-export function assigneeOptions(remote: AssigneeOption[]) {
-  return [
-    { key: "none", label: "未指派" },
-    { key: "user", label: "我" },
-    ...remote.map((option) => ({
-      key: assigneeKey({ kind: "remote", ...option }),
-      label: remoteLabel(option) + (option.online ? "" : "（离线）"),
-    })),
-  ];
 }
 
 /** "刚刚", "5 分钟前", "3 小时前", "10-11". */
