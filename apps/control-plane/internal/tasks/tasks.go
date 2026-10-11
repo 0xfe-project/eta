@@ -169,7 +169,7 @@ type Place struct {
 	// worktree: Paseo's project id, or the Herdr workspace to branch off.
 	From   *string `json:"from,omitempty" nullable:"true" maxLength:"256" doc:"For a new worktree: Paseo's project id, or the Herdr workspace whose repository to branch off."`
 	Branch *string `json:"branch,omitempty" nullable:"true" maxLength:"200" doc:"The new worktree's branch; axp/<number>-<title> when empty."`
-	Base   *string `json:"base,omitempty" nullable:"true" maxLength:"200" doc:"What the new branch starts from; the repository's current branch when empty."`
+	Base   *string `json:"base,omitempty" nullable:"true" maxLength:"200" doc:"What the new branch starts from; the repository's current branch when empty. Paseo looks it up among the refs already in that computer's repository (the local branch, then origin/<base>) without fetching; origin/<base> names only the remote one."`
 	// Herdr's session.
 	Session *string `json:"session,omitempty" nullable:"true" maxLength:"64"`
 	// How it reads: the workspace's or the project's name.
