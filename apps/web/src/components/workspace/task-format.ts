@@ -28,13 +28,15 @@ export const statusLabel = (status: TaskStatus) =>
 export const runStatusLabels: Record<RunStatus, string> = {
   queued: "排队中",
   starting: "启动中",
-  running: "工作中",
+  running: "正在运行",
   completed: "已回复",
   failed: "失败",
   cancelled: "已停止",
 };
 
-export const isActive = (status: RunStatus | null | undefined) =>
+export const isActive = (
+  status: RunStatus | null | undefined,
+): status is "queued" | "starting" | "running" =>
   status === "queued" || status === "starting" || status === "running";
 
 const runtimeLabels: Record<string, string> = {

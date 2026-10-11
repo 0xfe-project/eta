@@ -1,6 +1,7 @@
 import type { AssigneeDraft } from "./assignee-draft";
 import type {
   LogEntry,
+  RunStatus,
   Task,
   TaskActivity,
   TaskDetail,
@@ -11,12 +12,14 @@ import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { ChatCircleIcon } from "@phosphor-icons/react/ChatCircle";
+import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { GitPullRequestIcon } from "@phosphor-icons/react/GitPullRequest";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
+import { SpinnerIcon } from "@phosphor-icons/react/Spinner";
 import { StopIcon } from "@phosphor-icons/react/Stop";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -97,12 +100,26 @@ function Back({ label, onClick }: { label: string; onClick: () => void }) {
   );
 }
 
-/** A remote agent at work: a pulsing square, like a running routine. */
-function Working({ label }: { label?: string }) {
+/**
+ * A run underway, by its own status: a spinner while the remote agent starts
+ * or works, a clock while it waits its turn. Still under reduced motion; the
+ * words carry it either way.
+ */
+function Working({ status }: { status: RunStatus }) {
+  const queued = status === "queued";
+  const Icon = queued ? ClockIcon : SpinnerIcon;
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-foreground">
-      <span className="size-1.5 bg-foreground motion-safe:animate-pulse" />
-      {label}
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1 text-xs whitespace-nowrap",
+        queued ? "text-muted-foreground" : "font-medium text-foreground",
+      )}
+    >
+      <Icon
+        aria-hidden="true"
+        className={cn("size-3.5", !queued && "motion-safe:animate-spin")}
+      />
+      {runStatusLabels[status]}
     </span>
   );
 }
@@ -112,9 +129,13 @@ function Working({ label }: { label?: string }) {
 /** Done and cancelled start folded: they are the past. */
 const folded = new Set<TaskStatus>(["done", "cancelled"]);
 
-/** Whether the task's agent is at work, or its last run failed. */
+/**
+ * Whether the task's latest run is underway, or failed. A finished run (the
+ * agent replied, asked, or was stopped) shows nothing: the task's status
+ * says the rest.
+ */
 export function RunState({ task }: { task: Task }) {
-  if (isActive(task.run_status)) return <Working />;
+  if (isActive(task.run_status)) return <Working status={task.run_status} />;
   if (task.run_status === "failed")
     return <span className="text-destructive">运行失败</span>;
   return null;
@@ -478,10 +499,9 @@ function StopRun({ task, run }: { task: string; run: TaskRun }) {
   );
 }
 
-/** A run's state: pulsing while at work, red when it failed. */
+/** A run's state: spinning while at work, red when it failed. */
 function RunStatusText({ run }: { run: TaskRun }) {
-  if (isActive(run.status))
-    return <Working label={runStatusLabels[run.status]} />;
+  if (isActive(run.status)) return <Working status={run.status} />;
   return (
     <span
       className={cn(
