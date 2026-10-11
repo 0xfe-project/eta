@@ -23,6 +23,8 @@
 
 交付的结果：runtime 接受即成功；runtime 连不上、`busy`、`wrong_boot`（这条是给前一次启动的）或 Codex 正在重启时，命令退回等待，稍后再交付；Codex 拒绝时回复以“智能体执行失败”结束；超时（无法确定 turn 是否开始）时以“执行中断”结束并要求中断，绝不重放。
 
+工具调用投影为活动块：名称、输入和输出都是裁剪过的文本，只用来显示。AXP 自己的插件工具（tasks、routines、github）在结果的 `_meta["axp/ref"]` 里写明这次调用创建或操作的那一个对象（`{kind, id, number, title, status, url}`）。runtime 不认识具体插件，只把完成的 MCP 调用里的这个字段原样带上；控制面只接受完整的 `task`、`routine` 或 `pull_request`（PR 必须是 https 链接），存为活动块的 `ref`。Web 在调用行下面显示一张卡片，点击后打开这个对象：任务和定时在对话旁边的面板或全窗口页面里打开，PR 打开 GitHub。列表、失败、执行中、旧数据和其他工具都没有 `ref`，只显示原来的调用行。
+
 同一批里同一回复连续的 `item.updated` 先在内存里合并，这一段结束时才写一次消息、出一个 revision 和一条 `message.updated`；原始事件仍逐条存进 `agent_event`。重复送达的事件（同一 `(agent, boot, seq)`）只导入一次。字符串里的 NUL 字符在写入 jsonb 前去掉。
 
 停止：命令还在等时直接取消。已交付的记录 `interrupt_requested_at`、回复置为 `stopping`，controller 向 runtime 发 `POST /abort {command_id}`（直到 turn 结束，每 5 秒最多一次）；turn 还没开始时，runtime 记下它，开始时立即中断。runtime 以 `turn.completed(interrupted)` 确认后回复才变为 `stopped`。

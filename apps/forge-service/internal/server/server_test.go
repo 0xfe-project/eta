@@ -328,6 +328,10 @@ func TestOpenPullRequestAsTheAppsBot(t *testing.T) {
 		pull["author"] != "axp-test[bot]" {
 		t.Fatalf("pull: %v", pull)
 	}
+	// The transcript links the call to it.
+	if ref := result.Meta["axp/ref"]; fmt.Sprint(ref) != fmt.Sprintf("map[kind:pull_request number:1 title:Add feature url:%s]", pull["url"]) {
+		t.Fatalf("ref: %v", ref)
+	}
 	// On GitHub, by the App's bot, into the default branch.
 	req, _ := http.NewRequest(http.MethodGet, emulator.backend+"/repos/akarachen/axp/pulls/1", nil)
 	req.Header.Set("Authorization", "Bearer "+token(credentials))
@@ -349,6 +353,9 @@ func TestOpenPullRequestAsTheAppsBot(t *testing.T) {
 	again := e.openPullRequest(map[string]any{"repository": "akarachen/axp", "head": "feature", "title": "x"})
 	if !strings.Contains(text(again), `"created":false`) || !strings.Contains(text(again), "/pull/1") {
 		t.Fatalf("again: %v", text(again))
+	}
+	if _, titled := again.Meta["axp/ref"].(map[string]any)["title"]; titled {
+		t.Fatalf("an open one found has its own title: %v", again.Meta)
 	}
 	same := e.openPullRequest(map[string]any{"repository": "akarachen/axp", "head": "main", "title": "x"})
 	if !same.IsError || !strings.Contains(text(same), "GitHub 拒绝创建 PR") {

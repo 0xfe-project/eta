@@ -37,6 +37,7 @@ import { GrokSlashMenu } from "@/components/brainless/grok/grok-slash-menu";
 import { GrokThinking } from "@/components/brainless/grok/grok-thinking";
 import { GrokTool } from "@/components/brainless/grok/grok-tool";
 import { Markdown } from "@/components/markdown";
+import { ActivityRefCard } from "@/components/workspace/activity-ref";
 import { ACTIVE_STATUSES } from "@/queries/chat";
 
 // Each theme is laid out like its brainless session block
@@ -102,6 +103,8 @@ const sessions = {
     textClass: "text-[var(--terminal-claude-foreground)]",
     turnClass: "space-y-3 pt-1",
     promptClass: "pt-2",
+    // Under the tool's name, past the ⏺.
+    refClass: "ml-[2ch]",
     Activity: ({ block }: { block: Activity }) => (
       <ClaudeToolCall
         tool={block.name || block.label}
@@ -140,6 +143,8 @@ const sessions = {
     textClass: "text-[var(--terminal-foreground)]",
     turnClass: "space-y-3 pt-1",
     promptClass: "pt-2",
+    // Under the command, past the •.
+    refClass: "ml-[2ch]",
     Activity: ({ block }: { block: Activity }) => (
       <CodexExec
         command={activityTitle(block)}
@@ -174,6 +179,7 @@ const sessions = {
     textClass: "text-[var(--terminal-foreground)]",
     turnClass: "space-y-2 pt-1",
     promptClass: "pt-3",
+    refClass: "",
     Activity: ({ block }: { block: Activity }) => (
       <GrokTool
         verb={block.name || block.label}
@@ -405,7 +411,15 @@ const Turn = memo(
               <Markdown streaming={streaming}>{block.text}</Markdown>
             </Message>
           ) : (
-            <Activity key={block.id} block={block} />
+            <div key={block.id} className="space-y-1">
+              <Activity block={block} />
+              {block.ref && block.status === "completed" ? (
+                <ActivityRefCard
+                  value={block.ref}
+                  className={session.refClass}
+                />
+              ) : null}
+            </div>
           ),
         )}
         {pending.map((interaction) => (

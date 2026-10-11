@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"strconv"
 	"strings"
 
@@ -289,6 +290,33 @@ func (p *projection) turnStarted(ctx context.Context, command *CommandRecord, pa
 // Activity details as the runtime clipped them: name, input and output.
 var activityDetailChars = map[string]int{"name": 100, "input": 1000, "output": 4000}
 
+// activityRef is the ref a runtime passed on from a tool's result, when it
+// is whole; else the zero ActivityRef, and the transcript links to nothing.
+func activityRef(v any) ActivityRef {
+	raw, _ := v.(map[string]any)
+	text := func(key string, limit int) string {
+		s, _ := raw[key].(string)
+		return truncate(s, limit)
+	}
+	ref := ActivityRef{Kind: text("kind", 20), ID: text("id", 100), Title: text("title", 300), Status: text("status", 20)}
+	if n, ok := raw["number"].(float64); ok && n > 0 && n == math.Trunc(n) {
+		ref.Number = int64(n)
+	}
+	switch ref.Kind {
+	case "task", "routine":
+		if ref.ID != "" {
+			return ref
+		}
+	case "pull_request":
+		url := text("url", 500)
+		if strings.HasPrefix(url, "https://") && ref.Number > 0 {
+			ref.ID, ref.URL = "", url
+			return ref
+		}
+	}
+	return ActivityRef{}
+}
+
 func (p *projection) itemUpdated(ctx context.Context, command *CommandRecord, payload map[string]any) error {
 	if command == nil {
 		return nil
@@ -328,6 +356,9 @@ func (p *projection) itemUpdated(ctx context.Context, command *CommandRecord, pa
 			case "output":
 				block.Output = value
 			}
+		}
+		if status == "completed" {
+			block.Ref = activityRef(item["ref"])
 		}
 	} else {
 		return nil

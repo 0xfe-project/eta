@@ -59,6 +59,18 @@ type assigneesOut struct {
 	Assignees []tasks.AssigneeOption `json:"assignees"`
 }
 
+// taskResult names the task for the transcript to link to: AXP tools put
+// the one thing they made or touched in their result's _meta "axp/ref"
+// (apps/agent-runtime/src/items.ts, chat.Ref).
+func taskResult(t *tasks.TaskDetail) *mcp.CallToolResult {
+	if t == nil {
+		return nil
+	}
+	return &mcp.CallToolResult{Meta: mcp.Meta{"axp/ref": map[string]any{
+		"kind": "task", "id": t.ID, "number": t.Number, "title": t.Title, "status": t.Status,
+	}}}
+}
+
 // toolError is what the agent sees: the product message.
 func toolError(err error) error {
 	var product *apierr.Error
@@ -108,7 +120,7 @@ func tasksMCP(d *Deps) http.Handler {
 		Description: "One task in full: its description, its timeline (comments, status changes, runs, checkouts, pull requests) and its runs.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in taskRef) (*mcp.CallToolResult, any, error) {
 		t, err := s.Get(ctx, d.DB, in.Task)
-		return nil, t, toolError(err)
+		return taskResult(t), t, toolError(err)
 	})
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "list_assignees",
@@ -142,7 +154,7 @@ func tasksMCP(d *Deps) http.Handler {
 				Title: in.Title, Description: in.Description, Status: in.Status, Assignee: assignee,
 			}, by)
 		})
-		return nil, t, err
+		return taskResult(t), t, err
 	})
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "update_task",
@@ -153,7 +165,7 @@ func tasksMCP(d *Deps) http.Handler {
 				Title: in.Title, Description: in.Description, Status: in.Status, Assignee: in.Assignee,
 			}, by)
 		})
-		return nil, t, err
+		return taskResult(t), t, err
 	})
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "comment_task",
@@ -162,7 +174,7 @@ func tasksMCP(d *Deps) http.Handler {
 		t, err := write(ctx, func(tx pgx.Tx, by tasks.Actor) (*tasks.TaskDetail, error) {
 			return s.Comment(ctx, tx, in.Task, in.Body, by)
 		})
-		return nil, t, err
+		return taskResult(t), t, err
 	})
 
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, &mcp.StreamableHTTPOptions{

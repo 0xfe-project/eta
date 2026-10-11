@@ -110,7 +110,15 @@ func (s *server) mcp() http.Handler {
 			// The agent sees the message as the tool's error.
 			return nil, nil, errors.New(message(err))
 		}
-		return nil, pull, nil
+		// Names the pull request for the transcript to link to: AXP tools put
+		// the one thing they made in their result's _meta "axp/ref"
+		// (apps/agent-runtime/src/items.ts).
+		// An open one found instead keeps the title it has on GitHub.
+		ref := map[string]any{"kind": "pull_request", "number": pull.Number, "url": pull.URL}
+		if pull.Created {
+			ref["title"] = in.Title
+		}
+		return &mcp.CallToolResult{Meta: mcp.Meta{"axp/ref": ref}}, pull, nil
 	})
 	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, &mcp.StreamableHTTPOptions{
 		Stateless:    true,

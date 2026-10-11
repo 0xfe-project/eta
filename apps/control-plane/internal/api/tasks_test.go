@@ -1115,6 +1115,13 @@ func TestBacklogTasksWaitUntilTakenUp(t *testing.T) {
 // mcpCall calls the tasks plugin's tool as the agent.
 func (e *taskEnv) mcpCall(agentID, tool string, args map[string]any) map[string]any {
 	e.t.Helper()
+	v, _ := e.mcpResult(agentID, tool, args)
+	return v
+}
+
+// mcpResult is a tool's structured output and its result's _meta.
+func (e *taskEnv) mcpResult(agentID, tool string, args map[string]any) (out, meta map[string]any) {
+	e.t.Helper()
 	body := map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": map[string]any{"name": tool, "arguments": args}}
 	r := do(e.t, e.internal, http.MethodPost, "/tasks/mcp", body, map[string]string{
 		"X-AXP-Agent-Id": agentID, "Accept": "application/json, text/event-stream",
@@ -1122,21 +1129,21 @@ func (e *taskEnv) mcpCall(agentID, tool string, args map[string]any) map[string]
 	if r.status != 200 {
 		e.t.Fatalf("mcp: %d %s", r.status, r.body)
 	}
-	var out struct {
+	var res struct {
 		Result struct {
 			IsError bool `json:"isError"`
 			Content []struct {
 				Text string `json:"text"`
 			} `json:"content"`
+			Meta map[string]any `json:"_meta"`
 		} `json:"result"`
 	}
-	r.json(e.t, &out)
-	if out.Result.IsError {
-		e.t.Fatalf("%s: %s", tool, out.Result.Content[0].Text)
+	r.json(e.t, &res)
+	if res.Result.IsError {
+		e.t.Fatalf("%s: %s", tool, res.Result.Content[0].Text)
 	}
-	var v map[string]any
-	_ = json.Unmarshal([]byte(out.Result.Content[0].Text), &v)
-	return v
+	_ = json.Unmarshal([]byte(res.Result.Content[0].Text), &out)
+	return out, res.Result.Meta
 }
 
 func TestAgentsUseTheBoard(t *testing.T) {
@@ -1149,11 +1156,14 @@ func TestAgentsUseTheBoard(t *testing.T) {
 		"title": "Proofread the report", "assignee": map[string]any{"kind": "user"},
 	})
 	expect(t, fmt.Sprint(created["number"]), "1")
-	e.mcpCall(agent.ID, "comment_task", map[string]any{"task": "1", "body": "Two typos on page 3."})
+	_, meta := e.mcpResult(agent.ID, "comment_task", map[string]any{"task": "1", "body": "Two typos on page 3."})
+	// The transcript links the call to the task it touched.
+	expect(t, fmt.Sprint(meta["axp/ref"]), fmt.Sprintf("map[id:%s kind:task number:1 status:todo title:Proofread the report]", created["id"]))
 	task := e.task("1")
 	expect(t, task.CreatedBy.Kind, "agent")
 	expect(t, *task.CreatedBy.AgentName, "helper")
 	expect(t, task.Activity[len(task.Activity)-1].Actor.Kind, "agent")
-	list := e.mcpCall(agent.ID, "list_tasks", map[string]any{})
+	list, meta := e.mcpResult(agent.ID, "list_tasks", map[string]any{})
 	expect(t, len(list["tasks"].([]any)), 1)
+	expect(t, meta["axp/ref"], nil)
 }
