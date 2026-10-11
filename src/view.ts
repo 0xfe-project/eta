@@ -203,8 +203,30 @@ export function queuedText(message: AgentMessage): {
 }
 
 /** The entries a view shows as system rows rather than messages. */
-export const SYSTEM_ROW_KINDS = ["goal", "ask", "answer", "btw", "compaction", "merge"] as const;
+export const SYSTEM_ROW_KINDS = ["goal", "ask", "answer", "btw", "compaction", "merge", "run_failed"] as const;
 export type SystemRowKind = (typeof SYSTEM_ROW_KINDS)[number];
+
+/** One system row: an entry the session recorded that is not a message. */
+export interface ViewSystemRow {
+	entryId: string;
+	seq: number;
+	at: number;
+	kind: SystemRowKind;
+	args: Record<string, string>;
+}
+
+/** The entry as a system row, or `undefined` when it is not one. */
+export function systemRowOf(entry: Entry): ViewSystemRow | undefined {
+	if (!(SYSTEM_ROW_KINDS as readonly string[]).includes(entry.type)) return undefined;
+	return {
+		entryId: entry.id,
+		seq: entry.seq,
+		at: entry.timestamp,
+		kind: entry.type as SystemRowKind,
+		// A failed run is only worth a row if the row says why.
+		args: entry.type === "run_failed" ? { runId: entry.payload.runId, error: entry.payload.error } : {},
+	};
+}
 
 /** How many transcript rows a snapshot keeps; older ones are fetched on demand. */
 export const VIEW_MESSAGE_WINDOW = 200;
@@ -276,10 +298,7 @@ export function builtinViewContributions(sources: ViewSources): ViewContribution
 		{
 			name: "systems",
 			project: () => ({
-				rows: sources
-					.entries()
-					.filter((entry) => (SYSTEM_ROW_KINDS as readonly string[]).includes(entry.type))
-					.map((entry) => ({ entryId: entry.id, seq: entry.seq, kind: entry.type, args: {} })),
+				rows: sources.entries().flatMap((entry) => systemRowOf(entry) ?? []),
 			}),
 			revision: fromEntries,
 		},

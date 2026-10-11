@@ -19,6 +19,8 @@
  * - `turn:end`         → the usage row for that turn's assistant message, then
  *                        the commit that holds both, then `usage:recorded`.
  * - `compaction:end`   → the compaction entry (the service's payload carries it).
+ * - `turn:run-failed`  → one `run_failed` entry, staged ahead of the run
+ *                        boundary's flush, so a failed run ends durable.
  * - `turn:run-end`     → whatever is still staged.
  *
  * The entry ids live here now, which is why `message:end` carries no entryId:
@@ -45,6 +47,7 @@ import {
 	type Entry,
 	type MessageEntry,
 	type NewEntry,
+	type RunFailedEntry,
 	type SessionLog,
 } from "@eta/core/session";
 import {
@@ -104,6 +107,13 @@ function usageId(): string {
 	return `usage-${usageCounter.toString(36)}-${Date.now().toString(36)}`;
 }
 
+let runFailedCounter = 0;
+
+function runFailedId(): string {
+	runFailedCounter += 1;
+	return `run-failed-${runFailedCounter.toString(36)}-${Date.now().toString(36)}`;
+}
+
 let compactionCounter = 0;
 
 function compactionId(): string {
@@ -139,6 +149,8 @@ export class JournalingService extends Service {
 	 * the question be asked precisely.
 	 */
 	private readonly valueKeys = new Map<string, Set<string>>();
+	/** Runs whose failure is already an entry: one failed run, one record. */
+	private readonly failedRuns = new Set<string>();
 	private readonly offs: (() => boolean)[] = [];
 
 	constructor(ctx: Context, options: JournalingServiceOptions = {}) {
@@ -162,6 +174,10 @@ export class JournalingService extends Service {
 			on("compaction:end", (event) => {
 				if (event.status !== "completed") return;
 				this.recordCompaction(event);
+			}),
+			on("turn:run-failed", (event) => {
+				// Staged only: the runner's flush, which follows, is the commit that lands it.
+				this.recordRunFailure(event.runId, event.error);
 			}),
 			on("turn:run-end", () => {
 				void this.enqueueCommit();
@@ -385,6 +401,24 @@ export class JournalingService extends Service {
 		const entry = this.entryOf.get(message as object);
 		if (entry === undefined) return;
 		log.recordUsage({ id: usageId(), usage, entryId: entry.id, adjustment: false });
+	}
+
+	/**
+	 * The system record of a failed run. Not a message: the transcript never
+	 * projects it, so a retry does not send the failure back to the model.
+	 */
+	private recordRunFailure(runId: string, error: string): void {
+		const log = this.log;
+		if (log === undefined || this.failedRuns.has(runId)) return;
+		this.failedRuns.add(runId);
+		this.entryVersion += 1;
+		const entry = log.record<RunFailedEntry>({
+			id: runFailedId(),
+			parentId: null,
+			type: "run_failed",
+			payload: { runId, error },
+		} as NewEntry<RunFailedEntry>);
+		this.emit("entry:added", { entry });
 	}
 
 	/** The compaction entry a completed compaction produces. */

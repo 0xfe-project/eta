@@ -258,6 +258,7 @@ export {
 	type SystemRowKind,
 	signatureOf,
 	streamingBox,
+	systemRowOf,
 	thinkingRows,
 	VIEW_MESSAGE_WINDOW,
 	type ViewContribution,
@@ -266,4 +267,5 @@ export {
 	ViewService,
 	type ViewServiceOptions,
 	type ViewSources,
+	type ViewSystemRow,
 } from "./view";
