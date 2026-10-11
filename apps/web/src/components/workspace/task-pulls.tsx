@@ -14,7 +14,6 @@ import {
 import { ApiError } from "@/lib/api";
 import { useMergePullRequest, usePullRequest } from "@/queries/forge";
 import { useUpdateTask } from "@/queries/tasks";
-import { useTaskNav } from "./task-nav";
 
 const stateLabels: Record<PullRequest["state"], string> = {
   open: "打开",
@@ -38,12 +37,13 @@ export function DeliveredPull({
   task,
   url,
   title,
+  onDone,
 }: {
   task: TaskDetail;
   url: string;
   title: string;
+  onDone: () => void;
 }) {
-  const [, setNav] = useTaskNav();
   const pull = usePullRequest(task.id, url);
   const merge = useMergePullRequest(task.id);
   const update = useUpdateTask();
@@ -59,28 +59,25 @@ export function DeliveredPull({
   const complete = () => {
     if (completingRef.current || finished) return;
     completingRef.current = true;
-    update.mutate(
-      { id: task.id, changes: { status: "done" } },
-      {
-        onSettled: () => {
-          completingRef.current = false;
-        },
-        onSuccess: () => {
+    void update
+      .mutateAsync({ id: task.id, changes: { status: "done" } })
+      .then(
+        () => {
           setUnfinished(null);
-          void setNav({ task: null }, { history: "replace" });
+          onDone();
           toast.success(
             mergedHereRef.current ? "PR 已合并，任务已完成" : "任务已完成",
-            {
-              position: "bottom-right",
-            },
+            { position: "bottom-right" },
           );
         },
-        onError: (error) => {
+        (error: Error) => {
           setUnfinished(`PR 已合并，任务未完成：${error.message}`);
           toast.error("PR 已合并，任务未完成");
         },
-      },
-    );
+      )
+      .finally(() => {
+        completingRef.current = false;
+      });
   };
   const mergeIt = (andComplete: boolean) => {
     if (

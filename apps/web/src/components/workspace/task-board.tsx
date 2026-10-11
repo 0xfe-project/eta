@@ -416,7 +416,10 @@ function TaskPage({ id }: { id: string }) {
           aria-label="属性"
           className="border-t px-4 py-5 text-xs sm:px-8 @2xl:overflow-y-auto @2xl:border-t-0 @2xl:border-l @2xl:px-4"
         >
-          <TaskProperties task={task}>
+          <TaskProperties
+            task={task}
+            onDone={() => void setNav({ task: null }, { history: "replace" })}
+          >
             <dt className="text-xs leading-8 text-muted-foreground">更新于</dt>
             <dd className="leading-8 tabular-nums">{when(task.updated_at)}</dd>
           </TaskProperties>

@@ -1,7 +1,6 @@
 import type { TaskDetail } from "@/queries/tasks";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { NuqsTestingAdapter } from "nuqs/adapters/testing";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { toast } from "sonner";
@@ -78,17 +77,16 @@ async function render(status = task.status) {
   const root = createRoot(container);
   await act(async () =>
     root.render(
-      <NuqsTestingAdapter searchParams="?task=t1" onUrlUpdate={returned}>
-        <QueryClientProvider client={client}>
-          <ul>
-            <DeliveredPull
-              task={{ ...task, status }}
-              url={url}
-              title="acme/web#7"
-            />
-          </ul>
-        </QueryClientProvider>
-      </NuqsTestingAdapter>,
+      <QueryClientProvider client={client}>
+        <ul>
+          <DeliveredPull
+            task={{ ...task, status }}
+            url={url}
+            title="acme/web#7"
+            onDone={returned}
+          />
+        </ul>
+      </QueryClientProvider>,
     ),
   );
   await act(settle);
@@ -223,7 +221,6 @@ describe("a delivered pull request", () => {
     )
       await act(settle);
     expect(returned).toHaveBeenCalledTimes(1);
-    expect(returned.mock.calls[0][0].searchParams.get("task")).toBeNull();
   });
 
   it("reports success only after completion is confirmed, blocking duplicate clicks", async () => {
@@ -255,7 +252,6 @@ describe("a delivered pull request", () => {
     )
       await act(settle);
     expect(returned).toHaveBeenCalledTimes(1);
-    expect(returned.mock.calls[0][0].searchParams.get("task")).toBeNull();
   });
 
   it("reports combined success after both requests succeed", async () => {
@@ -280,7 +276,6 @@ describe("a delivered pull request", () => {
     )
       await act(settle);
     expect(returned).toHaveBeenCalledTimes(1);
-    expect(returned.mock.calls[0][0].searchParams.get("task")).toBeNull();
   });
 
   it("keeps an actionable completion error and never reports success", async () => {

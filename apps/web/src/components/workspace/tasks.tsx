@@ -540,10 +540,12 @@ export function TaskProperties({
   task,
   className,
   children,
+  onDone,
 }: {
   task: TaskDetail;
   className?: string;
   children?: React.ReactNode;
+  onDone: () => void;
 }) {
   const update = useUpdateTask();
   const links = deliverables(task);
@@ -584,6 +586,7 @@ export function TaskProperties({
                     task={task}
                     url={link.url}
                     title={link.title}
+                    onDone={onDone}
                   />
                 ) : (
                   <li key={link.id}>
@@ -1421,7 +1424,11 @@ function TaskView({ task }: { task: TaskDetail }) {
             #{task.number} · {createdBy(task)}
           </p>
         </header>
-        <TaskProperties task={task} className="bg-muted/50 px-3 py-2" />
+        <TaskProperties
+          task={task}
+          className="bg-muted/50 px-3 py-2"
+          onDone={() => void setNav({ task: null }, { history: "replace" })}
+        />
         <Question task={task} />
         <Description key={task.description} task={task} fold />
         <section aria-labelledby="task-activity" className="space-y-3">
