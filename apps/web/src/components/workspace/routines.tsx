@@ -706,11 +706,14 @@ export function Routines() {
         onDone={() => void setNav({ edit: null })}
       />
     );
-  if (!nav.routine) return <RoutineList />;
+  if (!nav.routine && !editing) return <RoutineList />;
   if (!routine)
     return (
       <div className="space-y-3">
-        <Back label="定时任务" onClick={() => void setNav({ routine: null })} />
+        <Back
+          label="定时任务"
+          onClick={() => void setNav({ edit: null, routine: null, run: null })}
+        />
         <RoutineMissing
           isPending={isPending}
           error={error}
