@@ -1,6 +1,5 @@
 import type { Bundle, BundleDraft } from "@/queries/chat";
 import { PackageIcon } from "@phosphor-icons/react/Package";
-import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Empty, LoadError, Loading } from "@/components/states";
@@ -21,7 +20,7 @@ import {
   useBundles,
   useDeleteBundle,
   usePlugins,
-  useSaveBundle,
+  useUpdateBundle,
 } from "@/queries/chat";
 
 // Bundles are what agents are built from: a script run into the agent's
@@ -29,25 +28,19 @@ import {
 // edited here, and every agent that loads one is rebuilt.
 
 const showError = (error: Error) => toast.error(error.message);
-const NAME = /^[a-z0-9][a-z0-9-]{0,39}$/;
 
 function BundleDialog({
   bundle,
   open,
   onOpenChange,
 }: {
-  /** The bundle to edit; a new one when undefined. */
-  bundle: Bundle | undefined;
+  bundle: Bundle;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const { data: plugins } = usePlugins();
-  const save = useSaveBundle();
-  const [draft, setDraft] = useState<BundleDraft>(
-    bundle ?? { name: "", description: "", script: "", plugins: [] },
-  );
-  const creating = bundle === undefined;
-  const nameInvalid = creating && draft.name !== "" && !NAME.test(draft.name);
+  const save = useUpdateBundle();
+  const [draft, setDraft] = useState<BundleDraft>(bundle);
   const toggle = (name: string, on: boolean) =>
     setDraft((d) => ({
       ...d,
@@ -59,7 +52,7 @@ function BundleDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>{creating ? "新建环境包" : bundle.name}</DialogTitle>
+          <DialogTitle>{bundle.name}</DialogTitle>
           <DialogDescription>
             脚本在构建智能体环境时以 root 运行；用到它的智能体会重新构建。
           </DialogDescription>
@@ -68,47 +61,15 @@ function BundleDialog({
           className="space-y-4"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!NAME.test(draft.name)) return;
-            save.mutate(
-              { draft, creating },
-              {
-                onSuccess: () => {
-                  toast.success(
-                    creating ? `已创建「${draft.name}」` : "已保存",
-                  );
-                  onOpenChange(false);
-                },
-                onError: showError,
+            save.mutate(draft, {
+              onSuccess: () => {
+                toast.success("已保存");
+                onOpenChange(false);
               },
-            );
+              onError: showError,
+            });
           }}
         >
-          {creating ? (
-            <div className="space-y-1.5">
-              <Label htmlFor="bundle-name">名称</Label>
-              <Input
-                id="bundle-name"
-                autoFocus
-                value={draft.name}
-                placeholder="例如：python"
-                aria-invalid={nameInvalid}
-                aria-describedby="bundle-name-hint"
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, name: e.target.value }))
-                }
-              />
-              <p
-                id="bundle-name-hint"
-                className={
-                  nameInvalid
-                    ? "text-xs text-destructive"
-                    : "text-xs text-muted-foreground"
-                }
-              >
-                小写字母、数字和连字符，最多 40 个字符。
-              </p>
-            </div>
-          ) : null}
           <div className="space-y-1.5">
             <Label htmlFor="bundle-description">说明</Label>
             <Input
@@ -169,11 +130,8 @@ function BundleDialog({
             </div>
           ) : null}
           <DialogFooter>
-            <Button
-              type="submit"
-              disabled={save.isPending || !NAME.test(draft.name)}
-            >
-              {creating ? "创建" : "保存"}
+            <Button type="submit" disabled={save.isPending}>
+              保存
             </Button>
           </DialogFooter>
         </form>
@@ -185,21 +143,10 @@ function BundleDialog({
 export function BundleSettings() {
   const { data: bundles, isPending, error, refetch } = useBundles();
   const remove = useDeleteBundle();
-  // The dialog: closed (null), a new bundle (undefined) or one to edit.
-  const [editing, setEditing] = useState<Bundle | undefined | null>(null);
+  const [editing, setEditing] = useState<Bundle | null>(null);
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold">环境包</h2>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setEditing(undefined)}
-        >
-          <PlusIcon aria-hidden="true" />
-          新建
-        </Button>
-      </div>
+      <h2 className="text-sm font-semibold">环境包</h2>
       <p className="text-xs text-muted-foreground">
         智能体的环境由它选择的环境包构建：脚本装好工具，插件带来
         MCP、技能和钩子。
@@ -264,7 +211,7 @@ export function BundleSettings() {
       )}
       {editing !== null ? (
         <BundleDialog
-          key={editing?.name ?? "new"}
+          key={editing.name}
           bundle={editing}
           open
           onOpenChange={(open) => {

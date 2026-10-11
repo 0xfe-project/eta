@@ -373,28 +373,20 @@ export type BundleDraft = Pick<
   "name" | "description" | "script" | "plugins"
 >;
 
-export function useSaveBundle() {
+export function useUpdateBundle() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      draft,
-      creating,
-    }: {
-      draft: BundleDraft;
-      creating: boolean;
-    }) =>
-      creating
-        ? unwrap(controlPlane.POST("/api/v1/bundles", { body: draft }))
-        : unwrap(
-            controlPlane.PATCH("/api/v1/bundles/{name}", {
-              params: { path: { name: draft.name } },
-              body: {
-                description: draft.description,
-                script: draft.script,
-                plugins: draft.plugins,
-              },
-            }),
-          ),
+    mutationFn: async (draft: BundleDraft) =>
+      unwrap(
+        controlPlane.PATCH("/api/v1/bundles/{name}", {
+          params: { path: { name: draft.name } },
+          body: {
+            description: draft.description,
+            script: draft.script,
+            plugins: draft.plugins,
+          },
+        }),
+      ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: bundlesKey }),
   });
 }
