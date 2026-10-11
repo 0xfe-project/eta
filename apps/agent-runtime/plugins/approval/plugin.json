@@ -1,6 +1,6 @@
 {
   "name": "approval",
   "version": "1.0.0",
-  "description": "Asks the user to approve a command an AXP rule held back.",
+  "description": "请用户确认被 AXP 规则拦下的命令。",
   "targets": ["chat"]
 }
