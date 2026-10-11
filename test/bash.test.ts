@@ -98,12 +98,46 @@ describe("bash", () => {
 	});
 
 	it("reports an abort", async () => {
+		// Abort only once a live update shows `going`: the update is published after
+		// the chunk is in the captured window, so the abort cannot outrun the output
+		// however loaded the machine is — and what was printed must survive it.
 		const controller = new AbortController();
-		const pending = createBashTool().execute(
-			{ command: "echo going; sleep 10" },
-			{ call: run(controller.signal), context: { env }, update: () => undefined },
+		let printed = (): void => undefined;
+		const going = new Promise<"printed">((resolve) => {
+			printed = () => resolve("printed");
+		});
+		const pending = Promise.resolve(
+			createBashTool().execute(
+				{ command: "echo going; sleep 10" },
+				{
+					call: run(controller.signal),
+					context: { env },
+					update: (partial) => {
+						if (textOf(partial).includes("going")) printed();
+					},
+				},
+			),
 		);
-		setTimeout(() => controller.abort(), 20);
+		// Handles the rejection now, so a failure below never leaves it unhandled.
+		const settled = pending.then(
+			() => "settled" as const,
+			() => "settled" as const,
+		);
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		try {
+			const first = await Promise.race([
+				going,
+				settled,
+				new Promise<"no output">((resolve) => {
+					timer = setTimeout(() => resolve("no output"), 3_000);
+				}),
+			]);
+			expect(first).toBe("printed");
+		} finally {
+			clearTimeout(timer);
+			// Also the cleanup when the output never came: no `sleep 10` left behind.
+			controller.abort();
+		}
 		await expect(pending).rejects.toThrow(/going[\s\S]*Command aborted/);
 	});
 
