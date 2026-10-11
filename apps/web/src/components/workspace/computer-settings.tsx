@@ -91,13 +91,16 @@ function Runtimes({ runtimes }: { runtimes: ComputerRuntime[] }) {
   return (
     <ul className="space-y-1 text-xs">
       {runtimes.map((runtime) => (
-        <li key={runtime.kind} className="flex items-center gap-1.5">
+        <li
+          key={runtime.kind}
+          className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5"
+        >
           <StatusDot
             online={runtime.state === "online"}
             label={stateLabels[runtime.state]}
           />
           <span className="font-medium">{runtimeLabel(runtime.kind)}</span>
-          <span className="text-muted-foreground">
+          <span className="min-w-0 text-muted-foreground">
             {runtime.state === "online"
               ? runtime.providers.map(providerLabel).join("、") ||
                 "没有可用的 provider"
@@ -409,8 +412,11 @@ function ComputerDialog({
   );
 }
 
-/** One line per computer; whatever needs doing is the one button on it. */
-function ComputerRow({
+/**
+ * One card per computer: its name and whatever needs doing on top, then
+ * where it runs and its runtimes.
+ */
+function ComputerCard({
   computer,
   onOpen,
 }: {
@@ -423,7 +429,6 @@ function ComputerRow({
   const [offlineHintOpen, setOfflineHintOpen] = useState(false);
   const approvals = pending(computer);
   const updates = outdated(computer);
-  const online = computer.runtimes.filter((r) => r.state === "online");
   const startUpdate = () =>
     renew.mutate(computer.id, {
       onSuccess: (install) =>
@@ -439,100 +444,112 @@ function ComputerRow({
   ]
     .filter(Boolean)
     .join(" · ");
-  const status = !computer.enrolled
-    ? "等待安装"
-    : !computer.online
-      ? "离线"
-      : [
-          online.map((r) => runtimeLabel(r.kind)).join("、"),
-          updates.length ? "connector 需要更新" : null,
-          computer.active_runs ? `${computer.active_runs} 个任务进行中` : null,
-        ]
-          .filter(Boolean)
-          .join(" · ");
 
   return (
-    <li className="flex h-11 items-center gap-2 px-3">
-      <StatusDot
-        online={computer.online}
-        label={computer.online ? "在线" : "离线"}
-      />
-      <span className="shrink-0 text-sm font-medium">{computer.name}</span>
-      <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-        {details}
-      </span>
-      <span className="shrink-0 text-xs text-muted-foreground">{status}</span>
-      {computer.enrolled && !computer.online ? (
-        <Tooltip open={offlineHintOpen} onOpenChange={setOfflineHintOpen}>
-          <TooltipTrigger asChild>
+    <li className="flex min-w-0 flex-col gap-2 border p-3">
+      <div className="flex min-w-0 items-center gap-2">
+        <StatusDot
+          online={computer.online}
+          label={computer.online ? "在线" : "离线"}
+        />
+        <span
+          className="min-w-0 flex-1 truncate text-sm font-medium"
+          title={computer.name}
+        >
+          {computer.name}
+        </span>
+        {!computer.enrolled ? (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={renew.isPending}
+            onClick={() =>
+              renew.mutate(computer.id, {
+                onSuccess: (install) =>
+                  onOpen({ id: computer.id, command: install.command }),
+                onError: showError,
+              })
+            }
+          >
+            安装
+          </Button>
+        ) : approvals.length ? (
+          <Button size="sm" onClick={() => onOpen({ id: computer.id })}>
+            批准
+            {approvals.length === 1
+              ? ` ${runtimeLabel(approvals[0].kind)}`
+              : "配对"}
+          </Button>
+        ) : updates.length ? (
+          <Button size="sm" disabled={renew.isPending} onClick={startUpdate}>
+            更新
+          </Button>
+        ) : null}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
               size="icon-sm"
-              className="shrink-0 text-muted-foreground"
-              aria-label={`${computer.name} 的离线说明`}
-              onClick={() => setOfflineHintOpen((open) => !open)}
+              aria-label={`${computer.name} 的操作`}
             >
-              <InfoIcon aria-hidden="true" />
+              <DotsThreeIcon aria-hidden="true" />
             </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            离线的电脑如果开着机，可能是 connector
-            版本过旧或中继地址变了：在它的“⋯”菜单里选“更新
-            connector”，按提示在那台电脑上运行命令。
-          </TooltipContent>
-        </Tooltip>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-36">
+            {computer.enrolled ? (
+              <DropdownMenuItem
+                disabled={renew.isPending}
+                onSelect={startUpdate}
+              >
+                更新 connector
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuItem
+              variant="destructive"
+              onSelect={() => setConfirming(true)}
+            >
+              撤销并移除
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      {details ? (
+        <p className="truncate text-xs text-muted-foreground" title={details}>
+          {details}
+        </p>
       ) : null}
       {!computer.enrolled ? (
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={renew.isPending}
-          onClick={() =>
-            renew.mutate(computer.id, {
-              onSuccess: (install) =>
-                onOpen({ id: computer.id, command: install.command }),
-              onError: showError,
-            })
-          }
-        >
-          安装
-        </Button>
-      ) : approvals.length ? (
-        <Button size="sm" onClick={() => onOpen({ id: computer.id })}>
-          批准
-          {approvals.length === 1
-            ? ` ${runtimeLabel(approvals[0].kind)}`
-            : "配对"}
-        </Button>
-      ) : updates.length ? (
-        <Button size="sm" disabled={renew.isPending} onClick={startUpdate}>
-          更新
-        </Button>
+        <p className="text-xs text-muted-foreground">等待安装</p>
+      ) : !computer.online ? (
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          离线
+          <Tooltip open={offlineHintOpen} onOpenChange={setOfflineHintOpen}>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="text-muted-foreground"
+                aria-label={`${computer.name} 的离线说明`}
+                onClick={() => setOfflineHintOpen((open) => !open)}
+              >
+                <InfoIcon aria-hidden="true" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              离线的电脑如果开着机，可能是 connector
+              版本过旧或中继地址变了：在它的“⋯”菜单里选“更新
+              connector”，按提示在那台电脑上运行命令。
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      ) : (
+        <Runtimes runtimes={computer.runtimes} />
+      )}
+      {computer.active_runs ? (
+        <p className="text-xs text-muted-foreground">
+          {computer.active_runs} 个任务进行中
+        </p>
       ) : null}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`${computer.name} 的操作`}
-          >
-            <DotsThreeIcon aria-hidden="true" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-36">
-          {computer.enrolled ? (
-            <DropdownMenuItem disabled={renew.isPending} onSelect={startUpdate}>
-              更新 connector
-            </DropdownMenuItem>
-          ) : null}
-          <DropdownMenuItem
-            variant="destructive"
-            onSelect={() => setConfirming(true)}
-          >
-            撤销并移除
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
       <AlertDialog open={confirming} onOpenChange={setConfirming}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -620,15 +637,20 @@ export function ComputerSettings() {
             </p>
           ) : null}
           {data.computers.length ? (
-            <ul aria-label="远程电脑" className="divide-y border">
-              {data.computers.map((computer) => (
-                <ComputerRow
-                  key={computer.id}
-                  computer={computer}
-                  onOpen={open}
-                />
-              ))}
-            </ul>
+            <div className="@container">
+              <ul
+                aria-label="远程电脑"
+                className="grid grid-cols-1 gap-2 @lg:grid-cols-2"
+              >
+                {data.computers.map((computer) => (
+                  <ComputerCard
+                    key={computer.id}
+                    computer={computer}
+                    onOpen={open}
+                  />
+                ))}
+              </ul>
+            </div>
           ) : (
             <Empty icon={DesktopIcon} title="还没有接入电脑">
               接入后，可以把任务指派给它上面的 Paseo 或 Herdr 智能体。
