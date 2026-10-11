@@ -18,6 +18,7 @@
  */
 import type { AgentMessage } from "@eta/core";
 import type { Entry } from "@eta/core/session";
+import { systemRowOf, type ViewSystemRow } from "@eta/harness";
 
 /** One row of a transcript page. */
 export interface HistoryRow {
@@ -79,6 +80,38 @@ export function historyOf(
 	const end = before === undefined ? messages.length : messages.filter((row) => row.seq < before).length;
 	const start = Math.max(0, end - Math.max(0, options.limit));
 	return messages.slice(start, end);
+}
+
+/** A history page: its messages, and the system rows (a failed run, a goal…) that sit among them. */
+export interface HistoryPage {
+	rows: HistoryRow[];
+	systems: ViewSystemRow[];
+}
+
+/**
+ * A page of a session's history, cut by `historyOf`, plus the system rows in the same span.
+ *
+ * The span is the page's own: from its oldest message (or the start of the branch, when the
+ * page reaches it) to just before `beforeSeq`. Paging back by the oldest row's seq then hands
+ * every system row out exactly once — which is how a client that never saw a run fail live
+ * still finds the record of it.
+ */
+export function historyPageOf(
+	entries: readonly Entry[],
+	options: { beforeSeq?: number | undefined; limit: number },
+): HistoryPage {
+	const rows = historyOf(entries, options);
+	const firstMessage = branchMessages(entries)[0];
+	const oldest = rows[0];
+	const from = oldest === undefined || oldest.entryId === firstMessage?.entryId ? -Infinity : oldest.seq;
+	const before = options.beforeSeq ?? Infinity;
+	const systems: ViewSystemRow[] = [];
+	for (const entry of entries) {
+		if (entry.seq < from || entry.seq >= before) continue;
+		const row = systemRowOf(entry);
+		if (row !== undefined) systems.push(row);
+	}
+	return { rows, systems };
 }
 
 /** Every message on a branch, oldest first — what a search walks. */

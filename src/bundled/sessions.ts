@@ -30,7 +30,7 @@ import type { SessionFacts, SessionsApi, SessionsListener } from "@eta/plugin-sd
 import { Service } from "cordis";
 import type { CreateSessionOptions, ForkSessionOptions, ManagedSession, SessionManager } from "../manager";
 import { formatModelId, parseModelId } from "../model-id";
-import { firstHit, type HistoryRow, historyOf, type SearchHit } from "../search";
+import { firstHit, type HistoryPage, historyPageOf, type SearchHit } from "../search";
 import type { SessionMeta } from "../store";
 import type { WireService } from "../wire-service";
 
@@ -506,10 +506,10 @@ export class SessionsService extends Service implements SessionsApi {
 	 * the windowed view a client holds: a client that scrolled past what it has asks for what came
 	 * before a sequence number, and the answer is the conversation, not the window.
 	 */
-	async history(id: string, options: { beforeSeq?: number; limit?: number } = {}): Promise<HistoryRow[]> {
+	async history(id: string, options: { beforeSeq?: number; limit?: number } = {}): Promise<HistoryPage> {
 		const attached = await this.open(id);
 		const limit = Math.max(1, Math.min(500, options.limit ?? 100));
-		return historyOf(attached.managed.session.log.graph.pathOldestFirst(), {
+		return historyPageOf(attached.managed.session.log.graph.pathOldestFirst(), {
 			...(options.beforeSeq === undefined ? {} : { beforeSeq: options.beforeSeq }),
 			limit,
 		});
@@ -962,11 +962,11 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
 					wire.handle("sessions", "history", async (call) => {
 						const args = (call.args ?? {}) as Partial<SessionArgs["history"]>;
 						if (args.session === undefined) throw new Error("sessions.history needs a session");
-						const rows = await service.history(args.session, {
+						const { rows, systems } = await service.history(args.session, {
 							...(args.beforeSeq === undefined ? {} : { beforeSeq: args.beforeSeq }),
 							...(args.limit === undefined ? {} : { limit: args.limit }),
 						});
-						return { result: { session: args.session, rows } };
+						return { result: { session: args.session, rows, systems } };
 					}),
 				);
 				registrations.push(

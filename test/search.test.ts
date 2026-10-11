@@ -10,7 +10,7 @@
  */
 import type { Entry } from "@eta/core/session";
 import { describe, expect, it } from "vitest";
-import { branchMessages, firstHit, historyOf, messageText } from "../src/search";
+import { branchMessages, firstHit, historyOf, historyPageOf, messageText } from "../src/search";
 
 /** A message entry, in the shape the journal holds. */
 function message(id: string, seq: number, text: string, parentId: string | null): Entry {
@@ -94,6 +94,58 @@ describe("paging through history", () => {
 		// The page is two messages, and the goal entry between them is not one of them.
 		expect(historyOf(withGoal, { limit: 2 }).map((row) => messageText(row.message))).toEqual(["first", "second"]);
 		expect(branchMessages(withGoal)).toHaveLength(2);
+	});
+});
+
+describe("system rows in a history page", () => {
+	const failed = (id: string, seq: number, parentId: string): Entry =>
+		({
+			id,
+			seq,
+			parentId,
+			timestamp: 1_000 + seq,
+			type: "run_failed",
+			payload: { runId: `run-${id}`, error: `model_unavailable: ${id}` },
+		}) as Entry;
+	// m0 f1 m1 m2 f2 m3: two failed runs between the messages.
+	const entries: Entry[] = [
+		message("m0", 1, "one", null),
+		failed("f1", 2, "m0"),
+		message("m1", 3, "two", "f1"),
+		message("m2", 4, "three", "m1"),
+		failed("f2", 5, "m2"),
+		message("m3", 6, "four", "f2"),
+	];
+
+	it("carries the failed runs in the page's span, with why they failed", () => {
+		const page = historyPageOf(entries, { limit: 2 });
+		expect(page.rows.map((row) => row.seq)).toEqual([4, 6]);
+		expect(page.systems).toEqual([
+			{
+				entryId: "f2",
+				seq: 5,
+				at: 1_005,
+				kind: "run_failed",
+				args: { runId: "run-f2", error: "model_unavailable: f2" },
+			},
+		]);
+	});
+
+	it("hands every system row out exactly once while paging back", () => {
+		const seen: string[] = [];
+		let cursor: number | undefined;
+		for (;;) {
+			const page = historyPageOf(entries, { beforeSeq: cursor, limit: 1 });
+			seen.unshift(...page.systems.map((row) => row.entryId));
+			if (page.rows.length === 0) break;
+			cursor = page.rows[0]?.seq;
+		}
+		expect(seen).toEqual(["f1", "f2"]);
+	});
+
+	it("a failure before any answer is on the first page", () => {
+		const only = [message("m0", 1, "hello?", null), failed("f0", 2, "m0")];
+		expect(historyPageOf(only, { limit: 10 }).systems.map((row) => row.entryId)).toEqual(["f0"]);
 	});
 });
 

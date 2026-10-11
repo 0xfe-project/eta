@@ -151,7 +151,16 @@ export {
 	UnknownOpError,
 } from "./registry";
 export { createEventRing, DEFAULT_RING_CAPACITY, type EventRing, matchesFilter } from "./ring";
-export { branchMessages, firstHit, type HistoryRow, historyOf, messageText, type SearchHit } from "./search";
+export {
+	branchMessages,
+	firstHit,
+	type HistoryPage,
+	type HistoryRow,
+	historyOf,
+	historyPageOf,
+	messageText,
+	type SearchHit,
+} from "./search";
 export {
 	type AssembledServer,
 	type AssembleOptions,
