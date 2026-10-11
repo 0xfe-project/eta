@@ -1,0 +1,30 @@
+import { toast } from "sonner";
+
+// A tab opened before a deploy keeps running the code it loaded, which the
+// API may have outgrown: an agent editor from before environment bundles
+// still sent `plugins`, which the API then refused. Whenever the tab is in
+// view, compare its build with the server's and offer a reload once they
+// differ.
+const CHECK_EVERY = 5 * 60_000;
+
+let offered = false;
+
+export async function checkForUpdate() {
+  if (offered || document.visibilityState !== "visible") return;
+  const response = await fetch("/version", { cache: "no-store" }).catch(
+    () => null,
+  );
+  // Offline, or a server without the route: nothing to compare.
+  if (!response?.ok) return;
+  if ((await response.text()) === __AXP_BUILD__) return;
+  offered = true;
+  toast("AXP 已更新", {
+    duration: Infinity,
+    action: { label: "刷新", onClick: () => location.reload() },
+  });
+}
+
+export function watchForUpdates() {
+  document.addEventListener("visibilitychange", () => void checkForUpdate());
+  setInterval(() => void checkForUpdate(), CHECK_EVERY);
+}
