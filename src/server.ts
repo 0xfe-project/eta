@@ -32,15 +32,15 @@ import { sessionsPlugin } from "./bundled/sessions";
 import { settingsPlugin } from "./bundled/settings";
 import { FileSessionStore } from "./file-store";
 import { SessionManager, type SessionManagerOptions } from "./manager";
-import { parseModelId } from "./model-id";
+import { formatModelId, parseModelId } from "./model-id";
 import { initializeNetwork } from "./network";
 import { discoverPersonas } from "./personas";
 import { PluginManager } from "./plugins";
-import type { EtaProviderConfig } from "./providers/config-types";
+import { configDefaultModel, type EtaConfig } from "./providers/config-types";
 import { buildModels } from "./providers/runtime";
 import { defaultConfigPath, ProviderConfigStore } from "./providers/store";
 import { messageText } from "./search";
-import { SettingsStore, settingsPath } from "./settings";
+import { type Settings, SettingsStore, settingsPath } from "./settings";
 import { renderSkillsBlock } from "./skills";
 import { serveWire, type WireServer } from "./transport";
 import { WireService } from "./wire-service";
@@ -155,22 +155,25 @@ export async function assembleServer(options: AssembleOptions): Promise<Assemble
 	});
 	const settings = new SettingsStore({ path: settingsPath(options.dataDir), warn });
 
+	// The config as it stands at startup. The model layer is built from it, and so is the default
+	// model a session inherits when nothing else chose one.
+	const readConfig = async (): Promise<EtaConfig> => {
+		try {
+			return (await providers.read()).config;
+		} catch (error) {
+			warn(`[eta-server] ${String(error)}`);
+			return {};
+		}
+	};
+	const config = await readConfig();
+
 	// The model layer, from the config as it stands. Built once here and handed to every session:
 	// which model a session uses is the session's own configuration, but *how* to reach a
 	// provider is the server's.
-	const readConfig = async (): Promise<EtaProviderConfig[]> => {
-		try {
-			const { config } = await providers.read();
-			return config.providers ?? [];
-		} catch (error) {
-			warn(`[eta-server] ${String(error)}`);
-			return [];
-		}
-	};
 	let models: KernelModels | undefined = options.models;
 	if (models === undefined) {
 		try {
-			const built = await buildModels(await readConfig(), { warn });
+			const built = await buildModels(config.providers ?? [], { warn });
 			models = built.models;
 		} catch (error) {
 			warn(`[eta-server] could not build the model layer: ${String(error)}`);
@@ -196,7 +199,6 @@ export async function assembleServer(options: AssembleOptions): Promise<Assemble
 	// find out any other way.
 	if (options.network !== false) {
 		try {
-			const { config } = await providers.read();
 			const status = await initializeNetwork(config.network ?? { mode: "system" });
 			if (status.warning !== undefined) warn(`[eta-server] network: ${status.warning} (source: ${status.source})`);
 		} catch (error) {
@@ -210,7 +212,16 @@ export async function assembleServer(options: AssembleOptions): Promise<Assemble
 		...(envFor === undefined ? {} : { envFor }),
 		store,
 		modelsFor: () => kernelModels,
-		settings: () => settings.read(),
+		// What a new session starts as: the user's settings, with the config's default model as the
+		// last resort. The order matters — a model the user chose explicitly wins over the provider
+		// file's default, which is a fallback and not an instruction. Without a provider to fall
+		// back to, a session is left without a model and says so at its first run.
+		settings: async (): Promise<Settings> => {
+			const chosen = await settings.read();
+			if (chosen.model !== undefined) return chosen;
+			const fallback = configDefaultModel(config);
+			return fallback === undefined ? chosen : { ...chosen, model: formatModelId(fallback) };
+		},
 		// The cards that apply to a session's directory, read when it opens: a card written by hand
 		// is picked up by the next session, and a card that is gone resolves to the fallback.
 		personasFor: (meta) =>

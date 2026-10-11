@@ -225,6 +225,50 @@ describe("a server started the way main starts it", () => {
 		expect(hello.mounted).toEqual([{ name: "settings", source: "bundled" }]);
 		client.close();
 	});
+
+	it("gives a new session the config's default model, unless the caller chose one", async () => {
+		const root = await mkdtemp(join(tmpdir(), "eta-default-model-"));
+		roots.push(root);
+		const configPath = join(root, "config.json");
+		await writeFile(
+			configPath,
+			JSON.stringify({
+				providers: [
+					{
+						id: "acme",
+						baseUrl: "https://example.invalid/v1",
+						apiKey: "test",
+						models: [{ id: "fast" }, { id: "slow" }],
+					},
+				],
+				defaultModel: "acme:slow",
+			}),
+		);
+		// A scripted model layer: the subject is which model a session *records*, not a request.
+		const server = await assembleServer({
+			dataDir: root,
+			configPath,
+			models: fakeModels([]) as never,
+		});
+		servers.push(server);
+		const client = await connect(server.server.port);
+		await until(() => client.frames.some((frame) => frame.type === "hello"));
+
+		// No model named: the config's default is what the session runs on.
+		const created = (await client.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
+		expect(server.sessions.openSessions().find((open) => open.meta.id === created.session)?.meta.model).toBe(
+			"acme:slow",
+		);
+
+		// A model the caller names wins over the default.
+		const explicit = (await client.call("sessions", "create", { cwd: "/work/eta", model: "acme:fast" })) as {
+			session: string;
+		};
+		expect(server.sessions.openSessions().find((open) => open.meta.id === explicit.session)?.meta.model).toBe(
+			"acme:fast",
+		);
+		client.close();
+	});
 });
 
 describe("plugins from the user's directories", () => {
