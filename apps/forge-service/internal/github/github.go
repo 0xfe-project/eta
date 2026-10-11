@@ -337,9 +337,11 @@ func (g *GitHub) StartManifest(name, organization, origin string) (*ManifestForm
 		// URL instead of a setup URL.
 		"callback_urls":            []string{origin + CallbackPath},
 		"request_oauth_on_install": true,
-		"public":                   false,
-		"default_permissions":      appPermissions,
-		"default_events":           []string{},
+		// A private App installs only on the account that owns it; public
+		// lets the user install it on their other accounts and organizations.
+		"public":              true,
+		"default_permissions": appPermissions,
+		"default_events":      []string{},
 	})
 	form.Manifest = string(manifest)
 	return form, err
