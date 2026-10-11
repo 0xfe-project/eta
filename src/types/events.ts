@@ -97,6 +97,13 @@ export interface TurnEvents {
 		toolResults: AgentMessage[];
 		usage: Usage;
 	};
+	/**
+	 * The run failed. Emitted once, before the run's durability flush and before
+	 * `turn:run-end`, so the journaling subscriber can record the failure and the
+	 * flush lands it: by the time `turn:run-end` reports `failed`, the record is
+	 * on disk. A cancelled run is `aborted`, never this.
+	 */
+	"turn:run-failed": { runId: string; error: string; failedAt: number };
 	/** The run ended: a clean stop, a failure, or the caller cancelling it. */
 	"turn:run-end": {
 		runId: string;
@@ -328,6 +335,7 @@ export const KERNEL_EVENT_NAMES = [
 	"tool:update",
 	"turn:end",
 	"turn:run-end",
+	"turn:run-failed",
 	"turn:run-start",
 	"turn:start",
 	"usage:recorded",

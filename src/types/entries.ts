@@ -14,7 +14,16 @@ import type { JsonValue } from "./json";
 import type { AgentMessage } from "./messages";
 
 /** All first-class entry kinds. New kinds join this union explicitly. */
-export type EntryType = "message" | "compaction" | "branch_summary" | "merge" | "goal" | "ask" | "answer" | "btw";
+export type EntryType =
+	| "message"
+	| "compaction"
+	| "branch_summary"
+	| "merge"
+	| "goal"
+	| "ask"
+	| "answer"
+	| "btw"
+	| "run_failed";
 
 export interface EntryBase {
 	id: string;
@@ -109,6 +118,24 @@ export interface BtwEntry extends EntryBase {
 	payload: BtwPayload;
 }
 
+/**
+ * A run that ended in failure (`model_unavailable`, a provider error…). The
+ * failed generation itself is not history — it is never sent back to the model
+ * — but the fact that the run failed, and why, is: this system record is what a
+ * client that reconnects or reopens the session reads to show it. The entry's
+ * `timestamp` is when the failure was recorded. No transcript message is
+ * projected from it.
+ */
+export interface RunFailedPayload {
+	runId: string;
+	error: string;
+}
+
+export interface RunFailedEntry extends EntryBase {
+	type: "run_failed";
+	payload: RunFailedPayload;
+}
+
 export type Entry =
 	| MessageEntry
 	| CompactionEntry
@@ -117,7 +144,8 @@ export type Entry =
 	| GoalEntry
 	| AskEntry
 	| AnswerEntry
-	| BtwEntry;
+	| BtwEntry
+	| RunFailedEntry;
 
 /** Entry supplied before storage assigns sequence and timestamp. */
 export type NewEntry<TEntry extends Entry = Entry> = TEntry extends Entry ? Omit<TEntry, "seq" | "timestamp"> : never;

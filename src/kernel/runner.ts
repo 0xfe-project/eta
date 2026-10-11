@@ -495,7 +495,12 @@ export class Runner {
 				throw caught;
 			}
 		}
-		if (error !== undefined) status = "failed";
+		if (error !== undefined) {
+			status = "failed";
+			// The failure is announced before the flush, so the journal's record of it
+			// rides in the same durability wait as the rest of the run.
+			this.emit("turn:run-failed", { runId, error, failedAt: Date.now() });
+		}
 		// The one place the loop waits for the disk: a finished run is a durable
 		// run. Commits were started as messages landed and are not awaited — the
 		// runner never blocks on storage (§3 ruling 6). This runs even when the

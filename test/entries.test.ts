@@ -57,6 +57,7 @@ describe("entry union", () => {
 			{ ...base(), type: "ask", payload: { questionId: "q", question: "?" } },
 			{ ...base(), type: "answer", payload: { questionId: "q", answers: [] } },
 			{ ...base(), type: "btw", payload: { note: "n" } },
+			{ ...base(), type: "run_failed", payload: { runId: "r", error: "model_unavailable: x/y" } },
 		];
 		const kinds: unknown[] = entries.map((e) => {
 			switch (e.type) {
@@ -76,13 +77,15 @@ describe("entry union", () => {
 					return e.payload.answers.length;
 				case "btw":
 					return e.payload.note;
+				case "run_failed":
+					return e.payload.error;
 			}
 			return undefined;
 		});
 		expect(kinds.every((kind) => kind !== undefined)).toBe(true);
 		// If a variant were missing from the switch, TypeScript would flag `never`.
 		expectTypeOf<Entry["type"]>().toEqualTypeOf<
-			"message" | "compaction" | "branch_summary" | "merge" | "goal" | "ask" | "answer" | "btw"
+			"message" | "compaction" | "branch_summary" | "merge" | "goal" | "ask" | "answer" | "btw" | "run_failed"
 		>();
 	});
 

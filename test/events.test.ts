@@ -46,6 +46,7 @@ describe("event vocabulary", () => {
 			  "tool:update",
 			  "turn:end",
 			  "turn:run-end",
+			  "turn:run-failed",
 			  "turn:run-start",
 			  "turn:start",
 			  "usage:recorded",
