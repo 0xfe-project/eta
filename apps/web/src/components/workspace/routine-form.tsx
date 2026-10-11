@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useModels } from "@/queries/llm";
 import { useSaveRoutine } from "@/queries/routines";
-import { ModelSelect } from "./agent-editor";
+import { ModelSelect } from "./agent-fields";
 import { occurrences, when } from "./routine-format";
 import { Select, SelectOption } from "./select-field";
 
