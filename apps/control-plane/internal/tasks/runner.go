@@ -282,6 +282,12 @@ func (r *Runner) session(ctx context.Context, a agents, run *runRow) (*sessionRo
 		DeviceID: *deviceID, InstanceID: instanceFor(run.Runtime), CreatedAt: pg.Now(),
 	}
 	n, dir, openErr := a.open(ctx, s, opening{TaskID: task.ID, Number: task.Number, Title: task.Title, Place: *task.Place})
+	if openErr != nil {
+		// The run fails without logging; this keeps the runtime's own
+		// answer, which the task's message only summarizes.
+		slog.WarnContext(ctx, "Cannot open a remote place", "run", run.ID, "task", task.ID, "runtime", run.Runtime,
+			"computer", *run.ComputerID, "unknown", errors.Is(openErr, errUnknown), "native", unknownNative(openErr), "error", openErr)
+	}
 	if n.WorkspaceID == "" && openErr != nil {
 		// Opening has no idempotency the relay exposes: whatever happened,
 		// the run fails rather than possibly opening a second place.
