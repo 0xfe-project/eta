@@ -133,7 +133,6 @@ export function Workspace({
             mobilePanel === "workspace" && "hidden md:block",
           )}
         >
-          <SettingsButton className="absolute top-3 right-0 z-10 hidden md:inline-flex" />
           <ChatPanel
             theme={sessionTheme}
             agentId={selected?.id}
