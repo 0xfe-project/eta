@@ -13,7 +13,7 @@
 		"name": "ssh"
 	},
 	"scripts": {
-		"test": "vitest --run --passWithNoTests",
+		"test": "bun --bun vitest --run --passWithNoTests",
 		"typecheck": "tsc -p tsconfig.json --noEmit"
 	},
 	"devDependencies": {
