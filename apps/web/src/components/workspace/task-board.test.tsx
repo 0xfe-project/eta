@@ -144,7 +144,7 @@ describe("task board with a task open", () => {
 
   it("is the whole page without a task", async () => {
     const container = await render();
-    const main = container.querySelector("main#main")!;
+    const main = container.querySelector('[role="main"]#main')!;
     expect(container.querySelector("[data-panel]")!.className).not.toContain(
       "hidden",
     );
