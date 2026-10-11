@@ -268,7 +268,7 @@ export function MemoryView({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <h2 className="flex min-w-0 items-center gap-1.5 text-sm font-semibold">
           {onAgentChange ? (
             <Select
@@ -293,7 +293,7 @@ export function MemoryView({
             </span>
           ) : null}
         </h2>
-        <div className="flex w-full items-center gap-2 sm:w-auto">
+        <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:shrink-0">
           <Button
             variant="ghost"
             size="icon-sm"
@@ -320,7 +320,7 @@ export function MemoryView({
               </SelectOption>
             ))}
           </Select>
-          <div className="relative min-w-0 flex-1 sm:w-48">
+          <div className="relative min-w-0 flex-1 sm:w-48 sm:flex-none">
             <MagnifyingGlassIcon
               aria-hidden="true"
               className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
