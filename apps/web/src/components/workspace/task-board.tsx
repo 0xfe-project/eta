@@ -501,7 +501,6 @@ export function TaskBoard() {
             onValueChange={(value) =>
               setView({ taskScope: value as typeof scope })
             }
-            className="hidden @md:flex"
           >
             <TabsList aria-label="指派范围" className="gap-1">
               {scopes.map((s) => (
