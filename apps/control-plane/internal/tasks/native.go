@@ -65,6 +65,30 @@ type LogEntry struct {
 // errUnknown is a write whose outcome the relay could not confirm.
 var errUnknown = errors.New("relay could not confirm the outcome")
 
+// unknownOutcome is errUnknown with what the runtime said about it: Paseo
+// reports a failed workspace creation as unknown too, with the reason. It is
+// still unknown, never a rejection, so nothing is repeated on it.
+type unknownOutcome struct{ fault *relay.Fault }
+
+func (e unknownOutcome) Error() string {
+	if e.fault == nil || e.fault.Message == "" {
+		return errUnknown.Error()
+	}
+	return e.fault.Message + "（结果未能确认，AXP 不会自动重试）"
+}
+
+func (e unknownOutcome) Is(target error) bool { return target == errUnknown }
+
+// unknownNative is the runtime's own error in an unconfirmed outcome, for
+// logs.
+func unknownNative(err error) string {
+	var u unknownOutcome
+	if !errors.As(err, &u) || u.fault == nil {
+		return ""
+	}
+	return u.fault.Code + ": " + string(u.fault.Native)
+}
+
 type agents struct {
 	relay relay.Relay
 }
@@ -85,7 +109,7 @@ func (a agents) call(ctx context.Context, t target, method string, params any, o
 		return err
 	}
 	if outcome.Execution == "unknown" {
-		return errUnknown
+		return unknownOutcome{outcome.Error}
 	}
 	if out != nil && len(outcome.Result) > 0 {
 		return json.Unmarshal(outcome.Result, out)
@@ -302,7 +326,7 @@ func (a agents) open(ctx context.Context, s *sessionRow, o opening) (native, str
 				Error *string `json:"error"`
 			}
 			if err := a.call(ctx, t, "paseo.workspaces.create", map[string]any{"source": source, "title": label}, &created); err != nil {
-				return native{}, "", err
+				return native{}, "", withBaseHint(err, deref(o.Place.Base))
 			}
 			if created.Workspace.ID == "" {
 				return native{}, "", fmt.Errorf("Paseo 没有建出 worktree：%s", deref(created.Error))
@@ -392,6 +416,18 @@ func (a agents) open(ctx context.Context, s *sessionRow, o opening) (native, str
 		return n, dir, a.herdrReady(ctx, t, n)
 	}
 	return native{}, "", fmt.Errorf("unknown runtime %q", s.Runtime)
+}
+
+// withBaseHint says how to fix a base branch Paseo did not find: it
+// resolves the base among the refs already in the repository (refs/heads/<base>,
+// then refs/remotes/origin/<base>; origin/<base> means only the latter) and
+// does not fetch first. A branch only on the remote needs fetching there.
+func withBaseHint(err error, base string) error {
+	if base == "" || !strings.Contains(err.Error(), "Base branch not found") {
+		return err
+	}
+	name := strings.TrimPrefix(base, "origin/")
+	return fmt.Errorf("%w。Paseo 只在那台电脑的仓库里已有的引用中找基准分支（本地分支 %s 或远程跟踪分支 origin/%s），不会先 fetch：在那台电脑的仓库里运行 git fetch origin %s 后重新运行任务", err, name, name, name)
 }
 
 // fullAccess is the launch flags, per agent Herdr can start for AXP

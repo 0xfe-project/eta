@@ -37,6 +37,11 @@ type fakeRelay struct {
 	versions map[string]string
 	// Every runtime call, as "method".
 	calls []string
+	// The refs in Paseo projects' repositories, when set: a base branch not
+	// among them fails workspace creation as Paseo does (unknown, with the
+	// reason). Every create's source.
+	refs    map[string]bool
+	sources []map[string]any
 	// When set, every runtime call fails with this relay error code.
 	failing string
 	// Every agent's Paseo timeline, oldest first (two entries by default),
@@ -230,6 +235,11 @@ func (f *fakeRelay) Call(_ context.Context, _, _, method string, params any) (*r
 		}})
 	case "paseo.workspaces.create":
 		source := p["source"].(map[string]any)
+		f.sources = append(f.sources, source)
+		if base, ok := source["baseBranch"].(string); ok && f.refs != nil && !paseoResolves(f.refs, base) {
+			return &relay.Outcome{Execution: "unknown", Error: &relay.Fault{Code: "native_error", Message: "Base branch not found: " + base,
+				Native: json.RawMessage(`{"creation":{"phase":"failed","failedStage":"workspace","outcomeUnknown":true,"workspaceId":"wks_candidate"}}`)}}, nil
+		}
 		id := "wks_" + uuid.NewString()[:8]
 		branch := source["branchName"].(string)
 		f.workspaces[id] = &fakeWorkspace{id: id, name: str("title"), project: source["projectId"].(string),
@@ -334,6 +344,16 @@ func (f *fakeRelay) Call(_ context.Context, _, _, method string, params any) (*r
 		return result(map[string]any{})
 	}
 	return nil, &relay.Fault{Code: "unsupported_method", Message: method}
+}
+
+// paseoResolves is Paseo's lookup of a worktree's base (resolveBaseBranchForWorktree
+// in @getpaseo/server 0.10): origin/<name> only as that remote-tracking ref,
+// a bare name as the local branch, then origin's; never fetched.
+func paseoResolves(refs map[string]bool, base string) bool {
+	if strings.HasPrefix(base, "origin/") {
+		return refs["refs/remotes/"+base]
+	}
+	return refs["refs/heads/"+base] || refs["refs/remotes/origin/"+base]
 }
 
 func anyStrings(v any) []string {
@@ -992,6 +1012,54 @@ func TestARunInterruptedWhileOpeningFailsInsteadOfOpeningAgain(t *testing.T) {
 		if strings.HasSuffix(call, ".create") {
 			t.Fatalf("opened again: %v", e.relay.calls)
 		}
+	}
+}
+
+// Paseo reports a base branch it cannot find as an unknown outcome (#63:
+// a branch only on the remote, not fetched on that computer yet). The run
+// fails once with Paseo's reason and how to fix it, and nothing is opened
+// again.
+func TestAnUnknownOpeningKeepsTheRuntimesReason(t *testing.T) {
+	e := newTaskEnv(t)
+	computer, _ := e.computer("laptop", "paseo")
+	e.relay.refs = map[string]bool{"refs/heads/main": true}
+	place := map[string]any{"kind": "worktree", "from": "prj_web", "branch": "fix/61", "base": "refactor/kernel-plugins"}
+	e.create(remoteAssignee(computer, "paseo", place))
+	e.runner.Tick(e.ctx)
+	e.runner.Tick(e.ctx)
+	run := e.task("1").Runs[0]
+	expect(t, run.Status, "failed")
+	if run.Error == nil {
+		t.Fatal("no error")
+	}
+	for _, want := range []string{"Base branch not found: refactor/kernel-plugins", "不会自动重试", "git fetch origin refactor/kernel-plugins"} {
+		if !strings.Contains(*run.Error, want) {
+			t.Fatalf("error %q, want %q", *run.Error, want)
+		}
+	}
+	// One attempt, with the base as given (never main instead), and no agent.
+	expect(t, len(e.relay.sources), 1)
+	expect(t, e.relay.sources[0]["baseBranch"], any("refactor/kernel-plugins"))
+	for _, call := range e.relay.calls {
+		if call == "paseo.agents.create" {
+			t.Fatalf("started an agent: %v", e.relay.calls)
+		}
+	}
+}
+
+// Once the remote branch is fetched there, the same base opens the worktree,
+// bare or as origin/<name>.
+func TestAFetchedRemoteBaseBranchOpensTheWorktree(t *testing.T) {
+	for _, base := range []string{"refactor/kernel-plugins", "origin/refactor/kernel-plugins"} {
+		t.Run(base, func(t *testing.T) {
+			e := newTaskEnv(t)
+			computer, _ := e.computer("laptop", "paseo")
+			e.relay.refs = map[string]bool{"refs/heads/main": true, "refs/remotes/origin/refactor/kernel-plugins": true}
+			e.create(remoteAssignee(computer, "paseo", map[string]any{"kind": "worktree", "from": "prj_web", "branch": "fix/61", "base": base}))
+			e.runner.Tick(e.ctx)
+			expect(t, e.task("1").Runs[0].Status, "running")
+			expect(t, e.relay.sources[0]["baseBranch"], any(base))
+		})
 	}
 }
 
