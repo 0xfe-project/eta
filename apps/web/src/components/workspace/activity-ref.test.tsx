@@ -185,6 +185,59 @@ describe("activity ref cards", () => {
     ]);
   });
 
+  it("offers to file an issue draft on GitHub, as no issue yet", async () => {
+    const url =
+      "https://github.com/akarachen/axp/issues/new?body=%E5%9D%8F%E4%BA%86&title=%E5%8D%A1%E7%89%87%E9%94%99%E4%BD%8D";
+    const { container } = await mount([
+      activity({
+        status: "completed",
+        name: "github.draft_issue",
+        ref: { kind: "issue_draft", title: "卡片错位", url },
+      }),
+    ]);
+    expect(cards(container)).toEqual([
+      {
+        href: url,
+        label: "去 GitHub 创建 issue：卡片错位（akarachen/axp）",
+        text: "卡片错位 · akarachen/axp去 GitHub 创建",
+      },
+    ]);
+    const link = container.querySelector('[role="log"] a')!;
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.parentElement!.className).toContain("border-dashed");
+    // The link carried the body: nothing to copy.
+    expect(container.querySelector('[role="log"] button')).toBeNull();
+  });
+
+  it("lets a draft too long for its link copy its body", async () => {
+    const copied: string[] = [];
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: async (text: string) => void copied.push(text) },
+    });
+    const { container } = await mount([
+      activity({
+        status: "completed",
+        name: "github.draft_issue",
+        ref: {
+          kind: "issue_draft",
+          title: "长",
+          body: "很长的正文",
+          url: "https://github.com/akarachen/axp/issues/new?title=%E9%95%BF",
+        },
+      }),
+    ]);
+    const copy = container.querySelector<HTMLButtonElement>(
+      '[role="log"] button[aria-label^="正文太长"]',
+    )!;
+    expect(copy.textContent).toBe("复制正文");
+    await act(async () => {
+      copy.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(copied).toEqual(["很长的正文"]);
+  });
+
   it("links nothing without a ref, or before the call completes", async () => {
     const { container } = await mount([
       activity({ status: "completed" }), // list results, history, unknown tools

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"math"
+	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -298,23 +300,50 @@ func activityRef(v any) ActivityRef {
 		s, _ := raw[key].(string)
 		return truncate(s, limit)
 	}
-	ref := ActivityRef{Kind: text("kind", 20), ID: text("id", 100), Title: text("title", 300), Status: text("status", 20)}
-	if n, ok := raw["number"].(float64); ok && n > 0 && n == math.Trunc(n) {
-		ref.Number = int64(n)
-	}
+	ref := ActivityRef{Kind: text("kind", 20), Title: text("title", 300)}
 	switch ref.Kind {
 	case "task", "routine":
+		ref.ID = text("id", 100)
+		if ref.Kind == "task" {
+			ref.Number, ref.Status = refNumber(raw["number"]), text("status", 20)
+		}
 		if ref.ID != "" {
 			return ref
 		}
 	case "pull_request":
-		url := text("url", 500)
-		if strings.HasPrefix(url, "https://") && ref.Number > 0 {
-			ref.ID, ref.URL = "", url
+		ref.Number, ref.URL = refNumber(raw["number"]), text("url", 500)
+		if ref.Number > 0 && githubURL(ref.URL, pullPath) {
+			return ref
+		}
+	case "issue_draft":
+		// Not an issue yet: no id or number, the page that files it, and
+		// the body to paste when that page's link leaves it out.
+		ref.URL, ref.Body = text("url", 10000), text("body", 65536)
+		if ref.Title != "" && githubURL(ref.URL, newIssuePath) {
 			return ref
 		}
 	}
 	return ActivityRef{}
+}
+
+var (
+	pullPath     = regexp.MustCompile(`^/[A-Za-z0-9-]+/[A-Za-z0-9._-]+/pull/[0-9]+$`)
+	newIssuePath = regexp.MustCompile(`^/[A-Za-z0-9-]+/[A-Za-z0-9._-]+/issues/new$`)
+)
+
+// githubURL is whether link is a page on github.com with that path, the
+// only places a ref may send the user.
+func githubURL(link string, path *regexp.Regexp) bool {
+	u, err := url.Parse(link)
+	return err == nil && u.Scheme == "https" && u.Host == "github.com" && u.User == nil &&
+		u.Fragment == "" && path.MatchString(u.Path)
+}
+
+func refNumber(v any) int64 {
+	if n, ok := v.(float64); ok && n > 0 && n == math.Trunc(n) {
+		return int64(n)
+	}
+	return 0
 }
 
 func (p *projection) itemUpdated(ctx context.Context, command *CommandRecord, payload map[string]any) error {

@@ -5,7 +5,7 @@
 // routes under /forge require it. The browser's gateway forwards /api/forge,
 // where the user connects the GitHub App.
 //
-//	/forge/mcp                  MCP (streamable HTTP): open_pull_request
+//	/forge/mcp                  MCP (streamable HTTP): open_pull_request, draft_issue
 //	/forge/credentials          GET: gh's token (the user's once they authorized
 //	                            the App, else the App's) and the commit identity
 //
@@ -119,6 +119,24 @@ func (s *server) mcp() http.Handler {
 			ref["title"] = in.Title
 		}
 		return &mcp.CallToolResult{Meta: mcp.Meta{"axp/ref": ref}}, pull, nil
+	})
+	mcp.AddTool(srv, &mcp.Tool{
+		Name: "draft_issue",
+		Description: "Draft a GitHub issue for the user to file: AXP shows it as a card that opens GitHub's " +
+			"new-issue page with the title and body filled in, and the user reviews and submits it. Nothing is " +
+			"written to GitHub. Use it when you may not create the issue yourself.",
+	}, func(_ context.Context, _ *mcp.CallToolRequest, in draftIssueIn) (*mcp.CallToolResult, *issueDraft, error) {
+		draft, err := newIssueDraft(in)
+		if err != nil {
+			return nil, nil, err
+		}
+		// Not an issue yet: the transcript offers to file it (axp/ref, as
+		// above), and the body comes along only when the link leaves it out.
+		ref := map[string]any{"kind": "issue_draft", "title": draft.Title, "url": draft.URL}
+		if draft.Body != "" {
+			ref["body"] = draft.Body
+		}
+		return &mcp.CallToolResult{Meta: mcp.Meta{"axp/ref": ref}}, draft, nil
 	})
 	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, &mcp.StreamableHTTPOptions{
 		Stateless:    true,

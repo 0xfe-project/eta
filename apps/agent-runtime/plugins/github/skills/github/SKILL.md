@@ -26,6 +26,12 @@ Commits are authored by the App's bot either way.
 To open a pull request, push the branch and call `open_pull_request`, not
 `gh pr create`; give the user its link.
 
+When you may not create an issue yourself (GitHub refuses, or the App is not
+on that repository), call `draft_issue` instead: the user gets a card that
+opens GitHub's new-issue page filled in, and files it. Keep the draft short
+and clear: a specific title, then what happens, what was expected and how
+to reproduce. Do not say the issue exists or give it a number.
+
 If gh is not logged in, a tool says GitHub is not connected, or GitHub
 answers that a repository is not found, GitHub is not connected yet or the
 App may not access that repository: tell the user to finish the setup in the

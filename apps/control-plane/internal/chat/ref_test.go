@@ -21,6 +21,17 @@ func TestActivityRefKeepsOnlyWholeRefs(t *testing.T) {
 		{"unknown kind", map[string]any{"kind": "memory", "id": "m1"}, ActivityRef{}},
 		{"task without id", map[string]any{"kind": "task", "number": 12.0}, ActivityRef{}},
 		{"unsafe url", map[string]any{"kind": "pull_request", "number": 3.0, "url": "javascript:alert(1)"}, ActivityRef{}},
+		{"pull request elsewhere", map[string]any{"kind": "pull_request", "number": 3.0, "url": "https://evil.example/o/r/pull/3"}, ActivityRef{}},
+		{"not a pull request page", map[string]any{"kind": "pull_request", "number": 3.0, "url": "https://github.com/o/r/issues/3"}, ActivityRef{}},
+		{"issue draft", map[string]any{"kind": "issue_draft", "title": "Bug", "number": 9.0, "id": "x",
+			"url": "https://github.com/o/r/issues/new?title=Bug"},
+			ActivityRef{Kind: "issue_draft", Title: "Bug", URL: "https://github.com/o/r/issues/new?title=Bug"}},
+		{"issue draft with its body", map[string]any{"kind": "issue_draft", "title": "Bug", "body": "长正文",
+			"url": "https://github.com/o/r/issues/new?title=Bug"},
+			ActivityRef{Kind: "issue_draft", Title: "Bug", Body: "长正文", URL: "https://github.com/o/r/issues/new?title=Bug"}},
+		{"issue draft elsewhere", map[string]any{"kind": "issue_draft", "title": "Bug", "url": "https://github.com.evil.example/o/r/issues/new"}, ActivityRef{}},
+		{"issue draft as someone", map[string]any{"kind": "issue_draft", "title": "Bug", "url": "https://u:p@github.com/o/r/issues/new"}, ActivityRef{}},
+		{"issue draft without title", map[string]any{"kind": "issue_draft", "url": "https://github.com/o/r/issues/new"}, ActivityRef{}},
 		{"fractional number", map[string]any{"kind": "task", "id": "t1", "number": 1.5}, ActivityRef{Kind: "task", ID: "t1"}},
 	}
 	for _, c := range cases {

@@ -104,6 +104,11 @@ func (agentTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 // openPullRequest calls the MCP tool the way Codex does.
 func (e *env) openPullRequest(args map[string]any) *mcp.CallToolResult {
 	e.t.Helper()
+	return e.callTool("open_pull_request", args)
+}
+
+func (e *env) callTool(name string, args map[string]any) *mcp.CallToolResult {
+	e.t.Helper()
 	ctx := context.Background()
 	client := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil)
 	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{
@@ -114,7 +119,7 @@ func (e *env) openPullRequest(args map[string]any) *mcp.CallToolResult {
 		e.t.Fatal(err)
 	}
 	defer session.Close()
-	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "open_pull_request", Arguments: args})
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
 	if err != nil {
 		e.t.Fatal(err)
 	}

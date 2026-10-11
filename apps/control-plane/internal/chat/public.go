@@ -43,15 +43,17 @@ type Block struct {
 }
 
 // ActivityRef is the one thing an activity made or touched, as its tool
-// named it (apps/agent-runtime/src/items.ts): a task or a routine in AXP, or
-// a pull request on GitHub. The transcript links to it.
+// named it (apps/agent-runtime/src/items.ts): a task or a routine in AXP, a
+// pull request on GitHub, or an issue drafted for the user to file there.
+// The transcript links to it.
 type ActivityRef struct {
-	Kind   string `json:"kind" enum:"task,routine,pull_request"`
+	Kind   string `json:"kind" enum:"task,routine,pull_request,issue_draft"`
 	ID     string `json:"id,omitempty" doc:"The task's or routine's id."`
 	Number int64  `json:"number,omitempty" doc:"The task's or pull request's number."`
 	Title  string `json:"title"`
 	Status string `json:"status,omitempty" doc:"The task's status as the tool left it."`
-	URL    string `json:"url,omitempty" doc:"The pull request's https URL."`
+	URL    string `json:"url,omitempty" doc:"The pull request, or GitHub's new-issue page prefilled with the draft."`
+	Body   string `json:"body,omitempty" doc:"A draft's body, when its URL is too long to carry it."`
 }
 
 type TextBlock struct {
