@@ -1,10 +1,12 @@
 import type { AssigneeDraft } from "./assignee-draft";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePlaces, useTasks } from "@/queries/tasks";
 import { emptyDraft, placeKey } from "./assignee-draft";
+import { AssigneeMenu } from "./assignee-menu";
 import { Select, SelectGroup, SelectOption } from "./select-field";
-import { assigneeFromKey, assigneeOptions } from "./task-format";
+import { assigneeFromKey } from "./task-format";
 
 // Who a task is for, and for a remote agent where it works: one of the
 // computer's existing workspaces, or a new worktree its runtime creates.
@@ -38,39 +40,54 @@ export function AssigneeFields({
   draft: AssigneeDraft;
   onChange: (draft: AssigneeDraft) => void;
 }) {
-  const { data } = useTasks();
-  const options = assigneeOptions(data?.assignees ?? []);
+  const tasks = useTasks();
   const assignee = assigneeFromKey(draft.key);
   const remote = assignee.kind === "remote";
   const places = usePlaces(
     remote ? (assignee.computer_id ?? null) : null,
     remote ? (assignee.runtime ?? null) : null,
   );
-  const known = options.some((o) => o.key === draft.key);
+  const knownPlace = [
+    ...(places.data?.projects.map((p) =>
+      placeKey("worktree", p.id, p.session),
+    ) ?? []),
+    ...(places.data?.workspaces.map((w) =>
+      placeKey("workspace", w.id, w.session),
+    ) ?? []),
+  ].includes(draft.place);
   const worktree = draft.place.startsWith("worktree");
   return (
     <div className="grid gap-3">
       <Field id={`${id}-assignee`} label="指派给">
-        <Select
+        <AssigneeMenu
           id={`${id}-assignee`}
-          className="w-full"
           value={draft.key}
-          onValueChange={(value) => onChange({ ...emptyDraft, key: value })}
-        >
-          {known ? null : (
-            <SelectOption value={draft.key}>不可用的远程智能体</SelectOption>
-          )}
-          {options.map((o) => (
-            <SelectOption key={o.key} value={o.key}>
-              {o.label}
-            </SelectOption>
-          ))}
-        </Select>
+          options={tasks.data?.assignees ?? []}
+          pending={tasks.isPending}
+          error={tasks.error?.message}
+          retry={() => {
+            void tasks.refetch();
+          }}
+          onChange={(value) => {
+            if (value !== draft.key) onChange({ ...emptyDraft, key: value });
+          }}
+        />
       </Field>
       {remote ? (
         <Field id={`${id}-place`} label="工作位置">
           {places.error ? (
-            <p className="text-xs text-destructive">{places.error.message}</p>
+            <div className="grid gap-1">
+              <p className="text-xs text-destructive">{places.error.message}</p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  void places.refetch();
+                }}
+              >
+                重试
+              </Button>
+            </div>
           ) : (
             <Select
               id={`${id}-place`}
@@ -82,6 +99,12 @@ export function AssigneeFields({
               <SelectOption value="">
                 {places.isPending ? "读取那台电脑上的项目……" : "选择工作位置"}
               </SelectOption>
+              {draft.place && !knownPlace ? (
+                <SelectOption value={draft.place} disabled>
+                  当前工作位置（{draft.place.split("\u0000")[1]}）
+                  {places.isPending ? "" : " · 不可用"}
+                </SelectOption>
+              ) : null}
               {places.data?.projects.length ? (
                 <SelectGroup label="新开一个 worktree">
                   {places.data.projects.map((p) => (
