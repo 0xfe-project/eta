@@ -51,6 +51,10 @@ function Select({
       open={open}
       onOpenChange={onOpenChange}
       onValueChange={(next) => {
+        // Inside a form Radix mirrors the value into a hidden native select,
+        // which reports "" for a value with no option yet (still loading).
+        // Only options choose.
+        if (!next.startsWith(encode(""))) return;
         const decoded = decode(next);
         setLocalValue(decoded);
         onValueChange?.(decoded);

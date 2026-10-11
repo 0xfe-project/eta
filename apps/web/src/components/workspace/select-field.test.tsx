@@ -70,3 +70,24 @@ it("shows a disabled placeholder and keeps the trigger disabled", async () => {
   expect(trigger.disabled).toBe(true);
   expect(trigger.textContent).toBe("正在加载模型…");
 });
+
+it("does not report a value it has no option for as cleared", async () => {
+  // Inside a form Radix mirrors the value into a hidden native select, which
+  // falls back to "" for a value with no option yet (models before their
+  // services load) and reports that as a change: the agent editor then set
+  // its default model again, until React gave up (#185).
+  const change = rstest.fn();
+  const render = (value: string) =>
+    root.render(
+      <form>
+        <Select aria-label="模型" value={value} onValueChange={change}>
+          <SelectOption value="" disabled>
+            选择模型
+          </SelectOption>
+        </Select>
+      </form>,
+    );
+  await act(async () => render(""));
+  await act(async () => render("gpt-5.5"));
+  expect(change).not.toHaveBeenCalled();
+});
