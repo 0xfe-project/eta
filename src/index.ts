@@ -1,14 +1,16 @@
 /** Client business vocabulary. No server, kernel, harness or SDK dependencies. */
 import type {
-	HelloFrame as WireHelloFrame,
-	StateSnapshot,
 	StatePatch,
+	StateSnapshot,
+	HelloFrame as WireHelloFrame,
 	ServerFrame as WireServerFrame,
 } from "@eta/client-wire-proto";
-import type { MountedPlugin, ViewDiagnostics, SessionViewSections } from "./types";
-export type * from "./types";
+import type { MountedPlugin, SessionViewSections, ViewDiagnostics } from "./types";
+
 export type * from "./data";
 export * from "./operations";
+export type * from "./types";
+export { SERVICE_PROTOCOL } from "./types";
 
 /** The existing hello payload, specialized without coupling the pipe to business types. */
 export type HelloFrame = WireHelloFrame<MountedPlugin, ViewDiagnostics>;

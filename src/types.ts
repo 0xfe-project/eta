@@ -223,3 +223,29 @@ export interface ProvidersView {
 	/** The config file's content hash: a write carries the revision it read. */
 	revision: string;
 }
+
+/* ------------------------------------------------------------------ service discovery */
+
+/** Bumped when a client and a running backend can no longer understand each other. */
+export const SERVICE_PROTOCOL = 1;
+
+/**
+ * What a running backend says about itself in its run file (`eta-server --run-file <path>`), so a
+ * shell can find it instead of starting a second one. Public facts only: no credential is in here,
+ * and the file is 0600 in the user's own directory.
+ *
+ * `state: "starting"` is the claim a server writes before it listens — it says "this pid is
+ * becoming the backend, wait for it" — and `"ready"` replaces it once the port is open.
+ */
+export type ServiceDescriptor =
+	| { state: "starting"; pid: number; startedAt: number }
+	| {
+			state: "ready";
+			protocol: number;
+			pid: number;
+			host: string;
+			port: number;
+			dataDir: string;
+			version: string;
+			startedAt: number;
+	  };
