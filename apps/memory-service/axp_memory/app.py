@@ -132,14 +132,19 @@ def create_app(provider: MemoryProvider):
                 lambda: provider.add(agent, [message], source="user", infer=False)
             )
             return JSONResponse(_view(added[0]), status_code=201)
+        source = request.query_params.get("source") or None
+        if source is not None and source not in {"conversation", "agent", "user"}:
+            return _error(400, "INVALID_SOURCE", "无效的记忆种类。")
         query = request.query_params.get("q", "").strip()[:MAX_TEXT]
         if query:
             found = await anyio.to_thread.run_sync(
-                provider.search, agent, query, SEARCH_LIMIT
+                lambda: provider.search(agent, query, SEARCH_LIMIT, source=source)
             )
             found = [m for m in found if (m.score or 0) >= RECALL_MIN_SCORE]
         else:
-            found = await anyio.to_thread.run_sync(provider.list, agent)
+            found = await anyio.to_thread.run_sync(
+                lambda: provider.list(agent, source=source)
+            )
             # Newest first; ISO 8601 in UTC sorts as text.
             found.sort(key=lambda m: m.created_at or "", reverse=True)
         return JSONResponse({"memories": [_view(m) for m in found]})

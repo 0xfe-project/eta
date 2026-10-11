@@ -20,12 +20,16 @@ const memorySchema = z.object({
   source: z.enum(["conversation", "agent", "user"]).optional(),
 });
 
+export type MemorySource = NonNullable<Memory["source"]>;
+
 export type Memory = z.infer<typeof memorySchema>;
 
 const keys = {
   agent: (agentId: string) => ["memory", agentId] as const,
-  memories: (agentId: string, query: string) =>
-    ["memory", agentId, query] as const,
+  memories: (agentId: string, query: string, source?: MemorySource) =>
+    source
+      ? (["memory", agentId, query, source] as const)
+      : (["memory", agentId, query] as const),
 };
 
 const path = (agentId: string) =>
@@ -35,11 +39,18 @@ const path = (agentId: string) =>
 const POLL_MS = 15_000;
 
 /** The agent's memories, newest first, or the ones matching ``query``. */
-function memoriesQueryOptions(agentId: string, query: string) {
+function memoriesQueryOptions(
+  agentId: string,
+  query: string,
+  source?: MemorySource,
+) {
   return queryOptions({
-    queryKey: keys.memories(agentId, query),
+    queryKey: keys.memories(agentId, query, source),
     queryFn: async ({ signal }) => {
-      const search = query ? `?q=${encodeURIComponent(query)}` : "";
+      const params = new URLSearchParams();
+      if (query) params.set("q", query);
+      if (source) params.set("source", source);
+      const search = params.size ? `?${params}` : "";
       const body = await memoryApi.get(`${path(agentId)}${search}`, signal);
       return z.array(memorySchema).parse(body.memories);
     },
@@ -47,13 +58,14 @@ function memoriesQueryOptions(agentId: string, query: string) {
   });
 }
 
-export function useMemories(agentId: string | undefined, query: string) {
+export function useMemories(
+  agentId: string | undefined,
+  query: string,
+  source?: MemorySource,
+) {
   return useQuery({
-    ...memoriesQueryOptions(agentId ?? "", query),
+    ...memoriesQueryOptions(agentId ?? "", query, source),
     enabled: Boolean(agentId),
-    // Keeps the list while a search for the same agent loads.
-    placeholderData: (previous, previousQuery) =>
-      previousQuery?.queryKey[1] === agentId ? previous : undefined,
   });
 }
 
