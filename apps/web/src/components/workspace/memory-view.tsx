@@ -1,4 +1,4 @@
-import type { Memory } from "@/queries/memory";
+import type { Memory, MemorySource } from "@/queries/memory";
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/ArrowClockwise";
 import { BrainIcon } from "@phosphor-icons/react/Brain";
 import { CaretLeftIcon } from "@phosphor-icons/react/CaretLeft";
@@ -238,11 +238,13 @@ export function MemoryView({
 }) {
   const { agents, loaded, error: agentsError, retry, openEditor } = useAgents();
   const current = agents.find((agent) => agent.id === agentId) ?? agents.at(-1);
+  const [source, setSource] = useState<MemorySource | "">("");
   const [search, setSearch] = useState("");
   const query = useDebounced(search.trim());
   const { data, error, isPending, isFetching, refetch } = useMemories(
     current?.id,
     query,
+    source || undefined,
   );
 
   if (agentsError && !loaded)
@@ -266,7 +268,7 @@ export function MemoryView({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="flex min-w-0 items-center gap-1.5 text-sm font-semibold">
           {onAgentChange ? (
             <Select
@@ -291,7 +293,7 @@ export function MemoryView({
             </span>
           ) : null}
         </h2>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex w-full items-center gap-2 sm:w-auto">
           <Button
             variant="ghost"
             size="icon-sm"
@@ -305,7 +307,20 @@ export function MemoryView({
               className={isFetching ? "animate-spin" : undefined}
             />
           </Button>
-          <div className="relative w-48">
+          <Select
+            aria-label="记忆种类"
+            value={source}
+            onValueChange={(value) => setSource(value as MemorySource | "")}
+            className="shrink-0"
+          >
+            <SelectOption value="">全部种类</SelectOption>
+            {Object.entries(sources).map(([value, { label }]) => (
+              <SelectOption key={value} value={value}>
+                {label}
+              </SelectOption>
+            ))}
+          </Select>
+          <div className="relative min-w-0 flex-1 sm:w-48">
             <MagnifyingGlassIcon
               aria-hidden="true"
               className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
@@ -327,9 +342,9 @@ export function MemoryView({
       ) : isPending ? (
         <Loading />
       ) : data.length === 0 ? (
-        query ? (
+        query || source ? (
           <Empty icon={MagnifyingGlassIcon} title="没有相关的记忆">
-            换个说法再搜一次。
+            {source ? "试试其他种类或全部种类。" : "换个说法再搜一次。"}
           </Empty>
         ) : (
           <Empty icon={BrainIcon} title="还没有记忆">
@@ -337,9 +352,9 @@ export function MemoryView({
           </Empty>
         )
       ) : (
-        // Keyed so another agent or search starts on its first page.
+        // Agent, search and source changes all start on the first page.
         <MemoryList
-          key={`${current.id}\n${query}`}
+          key={`${current.id}\n${query}\n${source}`}
           agentId={current.id}
           memories={data}
         />

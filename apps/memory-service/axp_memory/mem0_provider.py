@@ -110,12 +110,18 @@ class Mem0Provider:
             for item in result["results"]
         ]
 
-    def search(self, agent_id, query, limit):
-        result = self.memory.search(query, top_k=limit, filters={"user_id": agent_id})
+    def search(self, agent_id, query, limit, *, source=None):
+        filters = {"user_id": agent_id}
+        if source is not None:
+            filters["source"] = source
+        result = self.memory.search(query, top_k=limit, filters=filters)
         return [_memory(item) for item in result["results"]]
 
-    def list(self, agent_id):
-        result = self.memory.get_all(filters={"user_id": agent_id}, top_k=LIST_LIMIT)
+    def list(self, agent_id, *, source=None):
+        filters = {"user_id": agent_id}
+        if source is not None:
+            filters["source"] = source
+        result = self.memory.get_all(filters=filters, top_k=LIST_LIMIT)
         return [_memory(item) for item in result["results"]]
 
     def delete(self, agent_id, memory_id):

@@ -40,24 +40,32 @@ class FakeProvider:
             )
         return added
 
-    def search(self, agent_id, query, limit):
+    def search(self, agent_id, query, limit, *, source=None):
         found = [
-            Memory(memory_id, text, self.scores.get(text, 0.9))
+            Memory(
+                memory_id,
+                text,
+                self.scores.get(text, 0.9),
+                source=self.sources.get(memory_id),
+            )
             for memory_id, (owner, text) in self.memories.items()
-            if owner == agent_id and any(w in text for w in query.split())
+            if owner == agent_id
+            and (source is None or self.sources.get(memory_id) == source)
+            and any(w in text for w in query.split())
         ]
         return found[:limit]
 
-    def list(self, agent_id):
+    def list(self, agent_id, *, source=None):
         return [
             Memory(
                 memory_id,
                 text,
                 created_at=self.created[memory_id],
-                source=self.sources[memory_id],
+                source=self.sources.get(memory_id),
             )
             for memory_id, (owner, text) in self.memories.items()
             if owner == agent_id
+            and (source is None or self.sources.get(memory_id) == source)
         ]
 
     def delete(self, agent_id, memory_id):
@@ -225,6 +233,40 @@ class TestBrowserApi:
             "fact: in a turn": "conversation",
         }
 
+    def test_source_filter_before_search_limit(self, client, provider):
+        for i in range(55):
+            provider.add(
+                "a", [{"content": f"部署 对话 {i}"}], source="conversation", infer=False
+            )
+        for source in ("agent", "user"):
+            provider.add(
+                "a", [{"content": f"部署 {source}"}], source=source, infer=False
+            )
+        [legacy] = provider.add(
+            "a", [{"content": "旧记忆"}], source="user", infer=False
+        )
+        del provider.sources[legacy.id]
+        provider.add("b", [{"content": "部署 其他智能体"}], source="user", infer=False)
+
+        assert len(client.get(self.url("a")).json()["memories"]) == 58
+        for source, count in (("conversation", 55), ("agent", 1), ("user", 1)):
+            listed = client.get(self.url("a"), params={"source": source}).json()[
+                "memories"
+            ]
+            assert len(listed) == count
+            assert all(m["source"] == source for m in listed)
+            found = client.get(
+                self.url("a"), params={"q": "部署", "source": source}
+            ).json()["memories"]
+            assert len(found) == min(count, 50)
+            assert all(m["source"] == source for m in found)
+        assert client.get(
+            self.url("a"), params={"q": "不存在", "source": "user"}
+        ).json() == {"memories": []}
+        assert (
+            client.get(self.url("a"), params={"source": "unknown"}).status_code == 400
+        )
+
     def test_add_needs_text(self, client):
         response = client.post(self.url("a"), json={"text": "  "})
         assert response.status_code == 400
@@ -249,6 +291,25 @@ class TestMem0Provider:
         stored = {"id": "m1", "memory": "x", "metadata": {"source": "agent"}}
         assert mem0_provider._memory(stored).source == "agent"
         assert mem0_provider._memory({"id": "m2", "memory": "y"}).source is None
+
+    def test_source_filter_is_passed_to_storage_before_limits(self):
+        class Store:
+            def search(self, query, *, top_k, filters):
+                self.search_args = (query, top_k, filters)
+                return {"results": []}
+
+            def get_all(self, *, filters, top_k):
+                self.list_args = (top_k, filters)
+                return {"results": []}
+
+        provider = mem0_provider.Mem0Provider.__new__(mem0_provider.Mem0Provider)
+        provider.memory = Store()
+        for source in (None, "conversation", "agent", "user"):
+            filters = {"user_id": "a", **({"source": source} if source else {})}
+            provider.search("a", "部署", 50, source=source)
+            provider.list("a", source=source)
+            assert provider.memory.search_args == ("部署", 50, filters)
+            assert provider.memory.list_args == (mem0_provider.LIST_LIMIT, filters)
 
     def test_delete_checks_the_owner(self):
         class Store:
