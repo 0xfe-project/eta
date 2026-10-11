@@ -17,7 +17,7 @@
 | `/api/forge/v1/*` | 浏览器（经 `gateway`）          | 无：只有网关连得到          |
 | `/forge/*`        | runtime（经 `runtime-gateway`） | 网关注入的 `X-AXP-Agent-Id` |
 
-一个 provider 只有一个连接，始终是用户自己的 App。App 是私有的，GitHub 只允许把它安装到拥有它的账号上；不保存 installation，用到时从 `GET /app/installations` 查（缓存 30 秒）。凭据只在 forge 服务的状态目录（开发为仓库根目录的 `var/forge`，生产为卷 `axp-forge`）：`github.json`、私钥 `github.pem` 和 client secret `github.secret`，用户的授权在 `user.json`（后三者 0600）。没有数据库，也不接收 webhook。
+一个 provider 只有一个连接，始终是用户自己的 App。App 是公开的（manifest 的 `public: true`），这样可以安装到拥有它的账号以外的账号和组织；私有 App 只能安装到拥有它的账号上。这个值只在创建时生效，之前创建的私有 App 要在 GitHub 的 App 设置里手动 Make public，AXP 不改已有 App 的可见性。公开也意味着知道链接的其他人能安装它，他们授予的仓库同样会被 AXP 的智能体访问到；不保存 installation，用到时从 `GET /app/installations` 查（缓存 30 秒）。凭据只在 forge 服务的状态目录（开发为仓库根目录的 `var/forge`，生产为卷 `axp-forge`）：`github.json`、私钥 `github.pem` 和 client secret `github.secret`，用户的授权在 `user.json`（后三者 0600）。没有数据库，也不接收 webhook。
 
 git 和 gh 的凭据、commit 身份是镜像级的，对每个 agent 都生效；`github` 插件只带来 `open_pull_request` 和使用说明，可以在智能体编辑器里关掉。
 
