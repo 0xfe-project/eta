@@ -4,6 +4,7 @@ import {
 	stateSection,
 	type HelloFrame,
 	type SessionCall,
+	type SessionHistoryResult,
 	type SessionViewSections,
 	type ProvidersView,
 } from "../src/index";
@@ -24,6 +25,18 @@ const sections = {
 					],
 					timestamp: 10,
 				},
+			},
+		],
+	},
+	systems: {
+		rows: [
+			{ entryId: "g", seq: 2, kind: "goal", args: {} },
+			{
+				entryId: "f",
+				seq: 3,
+				at: 11,
+				kind: "run_failed",
+				args: { runId: "run", error: "model_unavailable: acme/fast" },
 			},
 		],
 	},
@@ -76,6 +89,12 @@ describe("existing business JSON on the generic pipe", () => {
 		expect(JSON.parse(encodeFrame(hello))).toEqual(hello);
 		expect(stateSection(snapshot, "transcript")?.messages[0]?.message.role).toBe("user");
 		expect(stateSection(snapshot, "core")?.session).toBe("s1");
+		expect(stateSection(snapshot, "systems")?.rows.find((row) => row.kind === "run_failed")?.args.error).toBe(
+			"model_unavailable: acme/fast",
+		);
+		// A history page from a server that predates system rows still reads.
+		const older: SessionHistoryResult = { session: "s1", rows: sections.transcript.messages };
+		expect(older.systems ?? []).toEqual([]);
 		expect(stateSection(snapshot, "prompt")).toBeUndefined();
 	});
 	it("uses unchanged diff and removal semantics for business and plugin sections", () => {

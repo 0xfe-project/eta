@@ -57,12 +57,26 @@ export interface ViewMessageRow {
 
 export interface SessionViewMessageRow extends ViewMessageRow {}
 
-/** A system row: something the session did that is not a message (goal, ask, btw…). */
+/**
+ * A system row: something the session did that is not a message (goal, ask, btw, a failed
+ * run…). A `run_failed` row carries `args.runId` and `args.error`; it is a record for the
+ * reader, never part of what the model is sent.
+ */
 export interface SessionViewSystemRow {
 	entryId: string;
 	seq: number;
+	/** When the entry was recorded; absent from servers that predate it. */
+	at?: number | undefined;
 	kind: string;
 	args: Record<string, string>;
+}
+
+/** `sessions.history`'s answer: one page of messages and the system rows among them. */
+export interface SessionHistoryResult {
+	session: string;
+	rows: ViewMessageRow[];
+	/** System rows in the page's span (a failed run…); absent from servers that predate it. */
+	systems?: SessionViewSystemRow[] | undefined;
 }
 
 export interface TranscriptSection {
