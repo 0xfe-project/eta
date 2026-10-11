@@ -28,9 +28,14 @@ function vendorGroups() {
   }));
 }
 
+// One per build, shared by its browser and server code (routes/version.ts).
+// The config is evaluated once per environment, so it is kept in the process.
+const build = (process.env.AXP_WEB_BUILD ||= Date.now().toString(36));
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   return {
+    define: { __AXP_BUILD__: JSON.stringify(build) },
     resolve: {
       alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
     },
