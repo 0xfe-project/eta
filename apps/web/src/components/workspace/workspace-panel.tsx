@@ -10,6 +10,7 @@ import { Overview } from "./overview";
 import { RefreshButton } from "./refresh-button";
 import { useRoutineNav } from "./routine-nav";
 import { Routines } from "./routines";
+import { SettingsButton } from "./settings-dialog";
 import { useTaskNav } from "./task-nav";
 import { Tasks } from "./tasks";
 import { useAgents } from "./use-agents";
@@ -17,13 +18,7 @@ import { useAttention } from "./use-attention";
 import { hasPage, sectionPaths, views } from "./workspace-search";
 
 /** Opens the full window where the side panel is: its tab, task or routine. */
-function FullWindowButton({
-  view,
-  className,
-}: {
-  view: WorkspaceView;
-  className?: string;
-}) {
+function FullWindowButton({ view }: { view: WorkspaceView }) {
   const [{ task }] = useTaskNav();
   const [routineNav] = useRoutineNav();
   const search = Object.fromEntries(
@@ -32,7 +27,7 @@ function FullWindowButton({
     ).filter(([, value]) => value !== null),
   );
   return (
-    <Button variant="ghost" size="icon" className={className} asChild>
+    <Button variant="ghost" size="icon" asChild>
       <Link
         to={hasPage(view) ? sectionPaths[view] : "/workspace"}
         search={hasPage(view) ? search : {}}
@@ -87,7 +82,11 @@ export function WorkspacePanel({
             </TabsTrigger>
           ))}
         </TabsList>
-        <FullWindowButton view={view} className="justify-self-end" />
+        <div className="flex justify-self-end">
+          {/* Phones keep theirs in the panel switcher above. */}
+          <SettingsButton className="hidden md:inline-flex" />
+          <FullWindowButton view={view} />
+        </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {views.map(({ value }) => (

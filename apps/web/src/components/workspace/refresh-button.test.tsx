@@ -90,6 +90,8 @@ async function render(page: "tasks" | "routines", panel = false) {
     interactions: [],
     messages: [],
   });
+  // The panel's settings button reads the accounts.
+  queryClient.setQueryData(["llm", "connections"], []);
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
