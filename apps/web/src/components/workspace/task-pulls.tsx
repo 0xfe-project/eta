@@ -37,10 +37,12 @@ export function DeliveredPull({
   task,
   url,
   title,
+  onDone,
 }: {
   task: TaskDetail;
   url: string;
   title: string;
+  onDone: () => void;
 }) {
   const pull = usePullRequest(task.id, url);
   const merge = useMergePullRequest(task.id);
@@ -49,22 +51,42 @@ export function DeliveredPull({
   // Set at once, before isPending: a second click in the same tick is not
   // a second merge.
   const mergingRef = useRef(false);
+  const completingRef = useRef(false);
+  const mergedHereRef = useRef(false);
   const finished = task.status === "done" || task.status === "cancelled";
   const data = pull.data;
 
-  const complete = () =>
-    update.mutate(
-      { id: task.id, changes: { status: "done" } },
-      {
-        onSuccess: () => setUnfinished(null),
-        onError: (error) => {
+  const complete = () => {
+    if (completingRef.current || finished) return;
+    completingRef.current = true;
+    void update
+      .mutateAsync({ id: task.id, changes: { status: "done" } })
+      .then(
+        () => {
+          setUnfinished(null);
+          onDone();
+          toast.success(
+            mergedHereRef.current ? "PR 已合并，任务已完成" : "任务已完成",
+            { position: "bottom-right" },
+          );
+        },
+        (error: Error) => {
           setUnfinished(`PR 已合并，任务未完成：${error.message}`);
           toast.error("PR 已合并，任务未完成");
         },
-      },
-    );
+      )
+      .finally(() => {
+        completingRef.current = false;
+      });
+  };
   const mergeIt = (andComplete: boolean) => {
-    if (!data || mergingRef.current) return;
+    if (
+      !data ||
+      mergingRef.current ||
+      completingRef.current ||
+      data.merge !== "ready"
+    )
+      return;
     mergingRef.current = true;
     merge.mutate(
       { url, headSha: data.head_sha },
@@ -73,15 +95,18 @@ export function DeliveredPull({
           mergingRef.current = false;
         },
         onSuccess: () => {
+          mergedHereRef.current = true;
+          setUnfinished(null);
           if (andComplete) complete();
           else toast.success("已合并");
         },
-        onError: (error) =>
-          toast.error(
-            unanswered(error)
-              ? "没有得到合并结果，已重新读取 PR 状态，请确认后再决定是否重试。"
-              : error.message,
-          ),
+        onError: (error) => {
+          const message = unanswered(error)
+            ? "没有得到合并结果，已重新读取 PR 状态，请确认后再决定是否重试。"
+            : error.message;
+          setUnfinished(message);
+          toast.error(message);
+        },
       },
     );
   };

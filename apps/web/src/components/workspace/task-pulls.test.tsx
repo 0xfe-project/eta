@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { toast } from "sonner";
 import { DeliveredPull } from "./task-pulls";
 
 (
@@ -66,6 +67,7 @@ function serve(answer: (call: Call) => Response | Promise<Response>) {
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
 const cleanup: (() => void)[] = [];
+const returned = rstest.fn();
 async function render(status = task.status) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -81,6 +83,7 @@ async function render(status = task.status) {
             task={{ ...task, status }}
             url={url}
             title="acme/web#7"
+            onDone={returned}
           />
         </ul>
       </QueryClientProvider>,
@@ -116,6 +119,7 @@ describe("a delivered pull request", () => {
   afterEach(async () => {
     await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
     rstest.restoreAllMocks();
+    returned.mockClear();
   });
 
   it("shows its state and the lines it adds and removes", async () => {
@@ -168,6 +172,7 @@ describe("a delivered pull request", () => {
     expect(merges[0].url).toBe("/api/forge/v1/pulls/merge");
     expect(merges[0].body).toEqual({ url, head_sha: "abc123" });
     expect(calls.some((c) => c.method === "PATCH")).toBe(false);
+    expect(returned).not.toHaveBeenCalled();
   });
 
   it("merges and completes; a failed completion is retried without merging again", async () => {
@@ -200,6 +205,7 @@ describe("a delivered pull request", () => {
       JSON.parse(calls.find((c) => c.method === "PATCH")!.body as string),
     ).toEqual({ status: "done" });
     expect(container.textContent).toContain("PR 已合并，任务未完成");
+    expect(returned).not.toHaveBeenCalled();
 
     await act(async () => {
       button(container, "标记任务完成")!.click();
@@ -208,6 +214,106 @@ describe("a delivered pull request", () => {
     expect(calls.filter((c) => c.method === "POST")).toHaveLength(1);
     expect(calls.filter((c) => c.method === "PATCH")).toHaveLength(2);
     expect(container.textContent).not.toContain("任务未完成");
+    for (
+      let attempt = 0;
+      attempt < 10 && returned.mock.calls.length === 0;
+      attempt++
+    )
+      await act(settle);
+    expect(returned).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports success only after completion is confirmed, blocking duplicate clicks", async () => {
+    let resolve!: (response: Response) => void;
+    const calls = serve((call) =>
+      call.method === "PATCH"
+        ? new Promise<Response>((done) => {
+            resolve = done;
+          })
+        : json({ ...open, state: "merged", merge: undefined }),
+    );
+    const container = await render();
+    await act(async () => {
+      button(container, "标记任务完成")!.click();
+      button(container, "标记任务完成")!.click();
+      await settle();
+    });
+    expect(calls.filter((call) => call.method === "PATCH")).toHaveLength(1);
+    expect(returned).not.toHaveBeenCalled();
+    expect(button(container, "标记任务完成")!.disabled).toBe(true);
+    await act(async () => {
+      resolve(json({ ...task, status: "done" }));
+      await settle();
+    });
+    for (
+      let attempt = 0;
+      attempt < 10 && returned.mock.calls.length === 0;
+      attempt++
+    )
+      await act(settle);
+    expect(returned).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports combined success after both requests succeed", async () => {
+    const calls = serve((call) =>
+      call.method === "PATCH"
+        ? json({ ...task, status: "done" })
+        : call.method === "POST"
+          ? json({ ...open, state: "merged", merge: undefined })
+          : json(open),
+    );
+    const container = await render();
+    await openMenu(container);
+    await act(async () => {
+      menuItem("合并并标记任务完成")!.click();
+      await settle();
+    });
+    expect(calls.filter((call) => call.method === "PATCH")).toHaveLength(1);
+    for (
+      let attempt = 0;
+      attempt < 10 && returned.mock.calls.length === 0;
+      attempt++
+    )
+      await act(settle);
+    expect(returned).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps an actionable completion error and never reports success", async () => {
+    const success = rstest.spyOn(toast, "success");
+    serve((call) =>
+      call.method === "PATCH"
+        ? json({ error: { code: "INTERNAL", message: "请稍后重试" } }, 500)
+        : json({ ...open, state: "merged", merge: undefined }),
+    );
+    const container = await render();
+    await act(async () => {
+      button(container, "标记任务完成")!.click();
+      await settle();
+    });
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "请稍后重试",
+    );
+    expect(button(container, "标记任务完成")!.disabled).toBe(false);
+    expect(returned).not.toHaveBeenCalled();
+    expect(success).not.toHaveBeenCalled();
+  });
+
+  it("keeps the detail on merge failure with a visible error", async () => {
+    serve((call) =>
+      call.method === "POST"
+        ? json({ error: { code: "CONFLICT", message: "请先解决冲突" } }, 409)
+        : json(open),
+    );
+    const container = await render();
+    await openMenu(container);
+    await act(async () => {
+      menuItem("合并并标记任务完成")!.click();
+      await settle();
+    });
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "请先解决冲突",
+    );
+    expect(returned).not.toHaveBeenCalled();
   });
 
   it("reads GitHub again when a merge got no answer, without retrying it", async () => {
@@ -225,6 +331,7 @@ describe("a delivered pull request", () => {
     expect(calls.filter((c) => c.method === "POST")).toHaveLength(1);
     expect(reads).toBe(2);
     expect(calls.some((c) => c.method === "PATCH")).toBe(false);
+    expect(returned).not.toHaveBeenCalled();
   });
 
   it("offers to complete the task once merged on GitHub", async () => {

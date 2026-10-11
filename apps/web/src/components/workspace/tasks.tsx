@@ -21,7 +21,7 @@ import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { SpinnerIcon } from "@phosphor-icons/react/Spinner";
 import { StopIcon } from "@phosphor-icons/react/Stop";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Markdown } from "@/components/markdown";
 import { Empty, LoadError, Loading } from "@/components/states";
@@ -540,10 +540,12 @@ export function TaskProperties({
   task,
   className,
   children,
+  onDone,
 }: {
   task: TaskDetail;
   className?: string;
   children?: React.ReactNode;
+  onDone: () => void;
 }) {
   const update = useUpdateTask();
   const links = deliverables(task);
@@ -584,6 +586,7 @@ export function TaskProperties({
                     task={task}
                     url={link.url}
                     title={link.title}
+                    onDone={onDone}
                   />
                 ) : (
                   <li key={link.id}>
@@ -1421,7 +1424,11 @@ function TaskView({ task }: { task: TaskDetail }) {
             #{task.number} · {createdBy(task)}
           </p>
         </header>
-        <TaskProperties task={task} className="bg-muted/50 px-3 py-2" />
+        <TaskProperties
+          task={task}
+          className="bg-muted/50 px-3 py-2"
+          onDone={() => void setNav({ task: null }, { history: "replace" })}
+        />
         <Question task={task} />
         <Description key={task.description} task={task} fold />
         <section aria-labelledby="task-activity" className="space-y-3">
@@ -1467,20 +1474,51 @@ export function TaskMissing({
 export function Tasks() {
   const [nav, setNav] = useTaskNav();
   const id = nav.task && nav.task !== "new" ? nav.task : null;
+  const listRef = useRef<HTMLDivElement>(null);
+  const listScrollRef = useRef(0);
+  const detailOpen = Boolean(nav.task);
+  useLayoutEffect(() => {
+    let area = listRef.current?.parentElement;
+    while (
+      area &&
+      !["auto", "scroll"].includes(getComputedStyle(area).overflowY)
+    )
+      area = area.parentElement;
+    if (!area || detailOpen) return;
+    area.scrollTop = listScrollRef.current;
+  }, [detailOpen]);
   const { data: task, isPending, error, refetch } = useTask(id);
-  if (nav.task === "new")
-    return <TaskForm onDone={(id) => void setNav({ task: id ?? null })} />;
-  if (!id) return <TaskList />;
-  if (!task)
-    return (
-      <div className="space-y-3">
-        <Back label="任务" onClick={() => void setNav({ task: null })} />
-        <TaskMissing
-          isPending={isPending}
-          error={error}
-          onRetry={() => void refetch()}
-        />
+  return (
+    <>
+      <div
+        ref={listRef}
+        hidden={detailOpen}
+        onClickCapture={() => {
+          let area = listRef.current?.parentElement;
+          while (
+            area &&
+            !["auto", "scroll"].includes(getComputedStyle(area).overflowY)
+          )
+            area = area.parentElement;
+          if (area) listScrollRef.current = area.scrollTop;
+        }}
+      >
+        <TaskList />
       </div>
-    );
-  return <TaskView task={task} />;
+      {nav.task === "new" ? (
+        <TaskForm onDone={(id) => void setNav({ task: id ?? null })} />
+      ) : !id ? null : !task ? (
+        <div className="space-y-3">
+          <Back label="任务" onClick={() => void setNav({ task: null })} />
+          <TaskMissing
+            isPending={isPending}
+            error={error}
+            onRetry={() => void refetch()}
+          />
+        </div>
+      ) : (
+        <TaskView key={id} task={task} />
+      )}
+    </>
+  );
 }

@@ -416,7 +416,10 @@ function TaskPage({ id }: { id: string }) {
           aria-label="属性"
           className="border-t px-4 py-5 text-xs sm:px-8 @2xl:overflow-y-auto @2xl:border-t-0 @2xl:border-l @2xl:px-4"
         >
-          <TaskProperties task={task}>
+          <TaskProperties
+            task={task}
+            onDone={() => void setNav({ task: null }, { history: "replace" })}
+          >
             <dt className="text-xs leading-8 text-muted-foreground">更新于</dt>
             <dd className="leading-8 tabular-nums">{when(task.updated_at)}</dd>
           </TaskProperties>
@@ -447,7 +450,7 @@ export function TaskBoard() {
   // Beside a task the board has no room; the list keeps its place.
   const board = layout === "board" && !id;
   // The open task is the page's main content; the list beside it is not.
-  const Main = id ? "section" : "main";
+  const Main = "section";
   const create = (status: TaskStatus = "todo") => {
     setNewStatus(status);
     void setNav({ task: "new" });
@@ -548,6 +551,7 @@ export function TaskBoard() {
           </Button>
         </PageHeader>
         <Main
+          role={id ? undefined : "main"}
           id={id ? undefined : "main"}
           aria-label={id ? "任务列表" : undefined}
           className={cn(
