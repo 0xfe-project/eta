@@ -145,7 +145,7 @@ func TestManifestForAUserAndAnOrganization(t *testing.T) {
 	}
 	if manifest["redirect_url"] != origin+"/api/forge/v1/github/manifest/callback" ||
 		fmt.Sprint(manifest["callback_urls"]) != "["+origin+github.CallbackPath+"]" ||
-		manifest["request_oauth_on_install"] != true || manifest["setup_url"] != nil ||
+		manifest["request_oauth_on_install"] != true || manifest["public"] != true || manifest["setup_url"] != nil ||
 		manifest["hook_attributes"].(map[string]any)["active"] != false {
 		t.Fatalf("manifest: %v", manifest)
 	}
