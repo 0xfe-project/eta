@@ -51,10 +51,15 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean;
 }) {
+  // Settings and shared editors can open without a Radix DialogTrigger.
+  // Keep the actual opener for each content instance, including nested ones.
+  const opener = React.useRef<HTMLElement | null>(null);
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -65,6 +70,21 @@ function DialogContent({
           className,
         )}
         {...props}
+        onOpenAutoFocus={(event) => {
+          opener.current =
+            document.activeElement instanceof HTMLElement &&
+            document.activeElement !== document.body
+              ? document.activeElement
+              : null;
+          onOpenAutoFocus?.(event);
+        }}
+        onCloseAutoFocus={(event) => {
+          onCloseAutoFocus?.(event);
+          if (!event.defaultPrevented && opener.current?.isConnected) {
+            event.preventDefault();
+            opener.current.focus();
+          }
+        }}
       >
         {children}
         {showCloseButton && (
