@@ -40,7 +40,6 @@ import { PageHeader } from "./app-shell";
 import { BackToTop } from "./back-to-top";
 import { RefreshButton } from "./refresh-button";
 import { when } from "./routine-format";
-import { useTaskCompleted } from "./task-completed";
 import {
   ago,
   assigneeLabel,
@@ -329,7 +328,6 @@ function BoardView({
 // --- task ---------------------------------------------------------------------------
 
 function TaskPage({ id }: { id: string }) {
-  const onCompleted = useTaskCompleted();
   const [, setNav] = useTaskNav();
   const { data: task, isPending, error, refetch } = useTask(id);
   const remove = useDeleteTask();
@@ -418,7 +416,7 @@ function TaskPage({ id }: { id: string }) {
           aria-label="属性"
           className="border-t px-4 py-5 text-xs sm:px-8 @2xl:overflow-y-auto @2xl:border-t-0 @2xl:border-l @2xl:px-4"
         >
-          <TaskProperties task={task} onCompleted={onCompleted}>
+          <TaskProperties task={task}>
             <dt className="text-xs leading-8 text-muted-foreground">更新于</dt>
             <dd className="leading-8 tabular-nums">{when(task.updated_at)}</dd>
           </TaskProperties>

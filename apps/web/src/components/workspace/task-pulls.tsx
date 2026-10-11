@@ -14,6 +14,7 @@ import {
 import { ApiError } from "@/lib/api";
 import { useMergePullRequest, usePullRequest } from "@/queries/forge";
 import { useUpdateTask } from "@/queries/tasks";
+import { useTaskNav } from "./task-nav";
 
 const stateLabels: Record<PullRequest["state"], string> = {
   open: "打开",
@@ -37,13 +38,12 @@ export function DeliveredPull({
   task,
   url,
   title,
-  onCompleted,
 }: {
   task: TaskDetail;
   url: string;
   title: string;
-  onCompleted: (merged: boolean) => void;
 }) {
+  const [, setNav] = useTaskNav();
   const pull = usePullRequest(task.id, url);
   const merge = useMergePullRequest(task.id);
   const update = useUpdateTask();
@@ -67,7 +67,13 @@ export function DeliveredPull({
         },
         onSuccess: () => {
           setUnfinished(null);
-          onCompleted(mergedHereRef.current);
+          void setNav({ task: null }, { history: "replace" });
+          toast.success(
+            mergedHereRef.current ? "PR 已合并，任务已完成" : "任务已完成",
+            {
+              position: "bottom-right",
+            },
+          );
         },
         onError: (error) => {
           setUnfinished(`PR 已合并，任务未完成：${error.message}`);

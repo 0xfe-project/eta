@@ -66,7 +66,6 @@ import { AssigneeFields } from "./assignee-picker";
 import { BackToTop } from "./back-to-top";
 import { when } from "./routine-format";
 import { Select, SelectOption } from "./select-field";
-import { useTaskCompleted } from "./task-completed";
 import {
   ago,
   assigneeLabel,
@@ -541,12 +540,10 @@ export function TaskProperties({
   task,
   className,
   children,
-  onCompleted,
 }: {
   task: TaskDetail;
   className?: string;
   children?: React.ReactNode;
-  onCompleted: (merged: boolean) => void;
 }) {
   const update = useUpdateTask();
   const links = deliverables(task);
@@ -587,7 +584,6 @@ export function TaskProperties({
                     task={task}
                     url={link.url}
                     title={link.title}
-                    onCompleted={onCompleted}
                   />
                 ) : (
                   <li key={link.id}>
@@ -1391,7 +1387,6 @@ function AssigneeRow({ task }: { task: TaskDetail }) {
 /** A task in the side panel: one column, what matters first. */
 function TaskView({ task }: { task: TaskDetail }) {
   const [, setNav] = useTaskNav();
-  const onCompleted = useTaskCompleted();
   const remove = useDeleteTask();
   return (
     <>
@@ -1426,11 +1421,7 @@ function TaskView({ task }: { task: TaskDetail }) {
             #{task.number} · {createdBy(task)}
           </p>
         </header>
-        <TaskProperties
-          task={task}
-          className="bg-muted/50 px-3 py-2"
-          onCompleted={onCompleted}
-        />
+        <TaskProperties task={task} className="bg-muted/50 px-3 py-2" />
         <Question task={task} />
         <Description key={task.description} task={task} fold />
         <section aria-labelledby="task-activity" className="space-y-3">
