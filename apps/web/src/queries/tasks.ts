@@ -126,7 +126,11 @@ function useTaskMutation<T>(call: (input: T) => Promise<TaskDetail>) {
   return useMutation({
     mutationFn: call,
     onSuccess: (task) => queryClient.setQueryData(keys.task(task.id), task),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: keys.tasks }),
+    // Not awaited: the answer, or the failure, is news before the board
+    // has caught up with it.
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: keys.tasks });
+    },
   });
 }
 
@@ -148,14 +152,19 @@ export function useUpdateTask() {
   );
 }
 
+/** `key` is the comment's Idempotency-Key: every try of one comment shares it. */
 export function useCommentTask() {
-  return useTaskMutation(({ id, body }: { id: string; body: string }) =>
-    unwrap(
-      controlPlane.POST("/api/v1/tasks/{task_id}/comments", {
-        params: { path: { task_id: id } },
-        body: { body },
-      }),
-    ),
+  return useTaskMutation(
+    ({ id, body, key }: { id: string; body: string; key: string }) =>
+      unwrap(
+        controlPlane.POST("/api/v1/tasks/{task_id}/comments", {
+          params: {
+            path: { task_id: id },
+            header: { "Idempotency-Key": key },
+          },
+          body: { body },
+        }),
+      ),
   );
 }
 

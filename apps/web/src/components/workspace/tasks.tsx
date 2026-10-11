@@ -1032,21 +1032,93 @@ export function Timeline({ task }: { task: TaskDetail }) {
 
 // --- detail ---------------------------------------------------------------------------
 
+/** The user's comments on a task with this body, sent or arriving. */
+const commentsLike = (task: TaskDetail, body: string) =>
+  task.activity.filter(
+    (a) => a.kind === "comment" && a.actor.kind === "user" && a.body === body,
+  ).length;
+
+/**
+ * A comment on its way: out of the box the moment it is sent, so the box is
+ * free for the next one, and shown under the timeline until the timeline has
+ * it. `key` is its Idempotency-Key, so a retry is the same comment.
+ */
+interface Outgoing {
+  key: string;
+  body: string;
+  /** How many such comments the task had when it was sent. */
+  before: number;
+  /** Why it did not arrive; absent while it is being sent. */
+  failure?: string;
+}
+
 export function CommentBox({ task }: { task: TaskDetail }) {
   const [text, setText] = useState("");
+  const [outgoing, setOutgoing] = useState<Outgoing | null>(null);
   const comment = useCommentTask();
   const [feedback, setFeedback] = useState(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const remote = task.assignee.kind === "remote";
+  // Arrived once the task has one more of it, from the response or a refresh:
+  // the timeline shows it in the same render this stops showing it.
+  const waiting =
+    outgoing && commentsLike(task, outgoing.body) <= outgoing.before
+      ? outgoing
+      : null;
+  const deliver = (o: Outgoing) => {
+    comment
+      .mutateAsync({ id: task.id, body: o.body, key: o.key })
+      .catch((error: unknown) => {
+        const failure =
+          error instanceof ApiError ? error.message : "网络连接失败。";
+        // Gone with the task's view: say so, as the box that held it is gone.
+        if (!mountedRef.current) {
+          toast.error(`${remote ? "追问" : "评论"}未送达：${failure}`);
+          return;
+        }
+        setOutgoing((current) =>
+          current?.key === o.key ? { ...current, failure } : current,
+        );
+      });
+  };
   const submit = () => {
     const body = text.trim();
-    if (!body || comment.isPending) return;
-    comment.mutate(
-      { id: task.id, body },
-      { onSuccess: () => setText(""), onError: showError },
-    );
+    if (!body || waiting) return;
+    const o = {
+      key: crypto.randomUUID(),
+      body,
+      before: commentsLike(task, body),
+    };
+    setOutgoing(o);
+    setText("");
+    deliver(o);
   };
   return (
     <>
+      {waiting ? (
+        <OutgoingComment
+          outgoing={waiting}
+          onRetry={() => {
+            const again = { ...waiting, failure: undefined };
+            setOutgoing(again);
+            deliver(again);
+          }}
+          onEdit={() => {
+            setOutgoing(null);
+            // Ahead of what was written since, which stays.
+            setText((draft) =>
+              draft ? `${waiting.body}\n${draft}` : waiting.body,
+            );
+          }}
+          onDiscard={() => setOutgoing(null)}
+        />
+      ) : null}
       <form
         className="space-y-2"
         onSubmit={(e) => {
@@ -1087,14 +1159,80 @@ export function CommentBox({ task }: { task: TaskDetail }) {
           <Button
             type="submit"
             size="sm"
-            disabled={!text.trim() || comment.isPending}
+            disabled={!text.trim() || Boolean(waiting)}
           >
-            {remote ? "发送追问" : "评论"}
+            {waiting && !waiting.failure ? (
+              <>
+                <SpinnerIcon aria-hidden="true" className="animate-spin" />
+                发送中…
+              </>
+            ) : remote ? (
+              "发送追问"
+            ) : (
+              "评论"
+            )}
           </Button>
         </div>
       </form>
       <FeedbackDialog task={task} open={feedback} onOpenChange={setFeedback} />
     </>
+  );
+}
+
+/** The comment on its way, at the end of the timeline, until it is in it. */
+function OutgoingComment({
+  outgoing,
+  onRetry,
+  onEdit,
+  onDiscard,
+}: {
+  outgoing: Outgoing;
+  onRetry: () => void;
+  onEdit: () => void;
+  onDiscard: () => void;
+}) {
+  return (
+    <ol aria-label="待发送">
+      <Entry
+        last
+        mark={
+          <span
+            className={cn(
+              "size-2 bg-muted-foreground/60",
+              outgoing.failure && "bg-destructive",
+            )}
+          />
+        }
+      >
+        <div className={cn(!outgoing.failure && "opacity-60")}>
+          <Folded max="max-h-60">
+            <Markdown className="text-sm">{outgoing.body}</Markdown>
+          </Folded>
+        </div>
+        {outgoing.failure ? (
+          <div className="mt-1 space-y-1">
+            <p role="alert" className="text-xs text-destructive">
+              未送达：{outgoing.failure}
+            </p>
+            <div className="-ml-2 flex flex-wrap gap-x-1">
+              <Button size="xs" variant="ghost" onClick={onRetry}>
+                重试
+              </Button>
+              <Button size="xs" variant="ghost" onClick={onEdit}>
+                编辑
+              </Button>
+              <Button size="xs" variant="ghost" onClick={onDiscard}>
+                丢弃
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <p role="status" className="mt-1 text-xs text-muted-foreground">
+            发送中…
+          </p>
+        )}
+      </Entry>
+    </ol>
   );
 }
 
