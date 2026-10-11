@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import { useConnectors } from "@/queries/llm";
 import { DESCRIPTION_MAX } from "./agent-form";
 import { Select, SelectGroup, SelectOption } from "./select-field";
@@ -86,34 +87,43 @@ function BundleList({
   const toggle = (name: string, on: boolean) =>
     onChange(names.filter((n) => (n === name ? on : chosen.includes(n))));
   return (
-    <ul className="divide-y border">
-      {bundles.map((bundle, index) => (
-        <li key={bundle.name}>
-          <Label className="items-start gap-3 p-2.5 leading-snug">
-            <Checkbox
-              className="mt-px"
-              autoFocus={autoFocus && index === 0}
-              checked={chosen.includes(bundle.name)}
-              onCheckedChange={(on) => toggle(bundle.name, on === true)}
-            />
-            <span className="min-w-0 space-y-0.5">
-              <span className="block font-medium">
-                {bundle.name}
-                {bundle.builtin ? null : (
-                  <span className="ml-1.5 font-normal text-muted-foreground">
-                    自定义
-                  </span>
-                )}
-              </span>
-              {bundle.description ? (
-                <span className="block text-muted-foreground">
-                  {bundle.description}
+    <ul className="grid grid-cols-2 gap-2">
+      {bundles.map((bundle, index) => {
+        const on = chosen.includes(bundle.name);
+        return (
+          <li key={bundle.name} className="flex">
+            {/* A card per bundle, as in choosing where GitHub's App lives. */}
+            <Label
+              className={cn(
+                "flex-1 cursor-pointer items-start gap-2.5 border p-3 leading-snug transition-colors duration-[60ms] ease-linear hover:bg-muted/50 has-focus-visible:ring-1 has-focus-visible:ring-ring",
+                on && "border-foreground bg-muted/50",
+              )}
+            >
+              <Checkbox
+                className="mt-px"
+                autoFocus={autoFocus && index === 0}
+                checked={on}
+                onCheckedChange={(next) => toggle(bundle.name, next === true)}
+              />
+              <span className="min-w-0 space-y-0.5">
+                <span className="block font-medium break-words">
+                  {bundle.name}
+                  {bundle.builtin ? null : (
+                    <span className="ml-1.5 font-normal text-muted-foreground">
+                      自定义
+                    </span>
+                  )}
                 </span>
-              ) : null}
-            </span>
-          </Label>
-        </li>
-      ))}
+                {bundle.description ? (
+                  <span className="block text-muted-foreground">
+                    {bundle.description}
+                  </span>
+                ) : null}
+              </span>
+            </Label>
+          </li>
+        );
+      })}
     </ul>
   );
 }
