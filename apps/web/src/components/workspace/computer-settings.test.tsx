@@ -146,7 +146,7 @@ describe("updating a computer's connector", () => {
     });
     await renderSettings();
     await act(settle);
-    expect(document.body.textContent).toContain("connector 需要更新");
+    expect(document.body.textContent).toContain("connector 0.1.0，需要更新");
     expect(document.body.textContent).toContain("AXP 提供的版本 0.2.0");
     await act(async () => {
       buttons("更新")[0].click();
