@@ -1,10 +1,13 @@
 import type { WorkspaceView } from "./types";
+import { useLocation } from "@tanstack/react-router";
 import {
   createStandardSchemaV1,
   parseAsString,
   parseAsStringLiteral,
   useQueryState,
 } from "nuqs";
+import { useEffect } from "react";
+import { useWorkspaceStore } from "./workspace-store";
 
 /** The sections with a page in the full-window workspace. */
 export const sectionPaths = {
@@ -18,6 +21,24 @@ export const hasPage = (
   view: WorkspaceView,
 ): view is keyof typeof sectionPaths => view in sectionPaths;
 
+/**
+ * Where a section opens from the current mode: its page in the full-window
+ * workspace, or its tab of the side panel beside the chat, which keeps the
+ * chat (the agent is remembered in the browser, not in the URL).
+ */
+export function useSectionLink() {
+  const fullWindow = useLocation({
+    select: (location) => location.pathname.startsWith("/workspace"),
+  });
+  return (
+    view: keyof typeof sectionPaths,
+    search: { task?: string; routine?: string } = {},
+  ) =>
+    fullWindow
+      ? ({ to: sectionPaths[view], search } as const)
+      : ({ to: "/", search: { view, ...search } } as const);
+}
+
 export const views = [
   { value: "overview", label: "概览" },
   { value: "tasks", label: "任务" },
@@ -26,13 +47,14 @@ export const views = [
   { value: "inbox", label: "待处理" },
 ] as const;
 
-const viewParser = parseAsStringLiteral([
+const linkedViewParser = parseAsStringLiteral([
   "overview",
   "tasks",
   "routines",
   "memory",
   "inbox",
-] as const)
+] as const);
+const viewParser = linkedViewParser
   .withDefault("overview")
   .withOptions({ history: "push" });
 export const validateWorkspaceSearch = createStandardSchemaV1(
@@ -49,4 +71,16 @@ export const validateWorkspaceSearch = createStandardSchemaV1(
 );
 export function useWorkspaceView() {
   return useQueryState("view", viewParser);
+}
+
+/**
+ * Shows the panel on narrow screens, where it hides behind the chat, when
+ * the URL opens one of its tabs: a link, a reload, back and forward.
+ */
+export function useShowLinkedView() {
+  const [linked] = useQueryState("view", linkedViewParser);
+  const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
+  useEffect(() => {
+    if (linked) setMobilePanel("workspace");
+  }, [linked, setMobilePanel]);
 }

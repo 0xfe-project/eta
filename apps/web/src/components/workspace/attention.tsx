@@ -21,10 +21,12 @@ import { useTasks } from "@/queries/tasks";
 import { AgentAvatar } from "./agent-identity";
 import { useAgents, useOpenAgent } from "./use-agents";
 import { useAttention } from "./use-attention";
+import { useSectionLink } from "./workspace-search";
 
 // Everything waiting for the user, the same in the side panel and on the
 // full-window page: confirmations to answer in place, then tasks and
-// routines to open. Each row says what it is, why it waits and what to do.
+// routines to open in the same mode (the panel's tab beside the chat, or the
+// full-window page). Each row says what it is, why it waits and what to do.
 
 function clock(iso: string) {
   return new Date(iso).toLocaleTimeString("zh-CN", {
@@ -200,6 +202,7 @@ export function PendingList() {
   ];
   const confirmations = usePendingInteractions();
   const { tasks, routines } = useAttention();
+  const sectionLink = useSectionLink();
   const failed = sources.filter(({ query }) => query.error);
   const loading = sources.some(({ query }) => query.isPending);
   const total = confirmations.length + tasks.length + routines.length;
@@ -229,8 +232,7 @@ export function PendingList() {
         {tasks.map(({ task, reason, alert }) => (
           <li key={task.id}>
             <Link
-              to="/workspace/tasks"
-              search={{ task: task.id }}
+              {...sectionLink("tasks", { task: task.id })}
               title={`#${task.number} ${task.title}`}
               className={linkRow}
             >
@@ -255,8 +257,7 @@ export function PendingList() {
         {routines.map(({ routine, reason, alert }) => (
           <li key={routine.id}>
             <Link
-              to="/workspace/routines"
-              search={{ routine: routine.id }}
+              {...sectionLink("routines", { routine: routine.id })}
               title={routine.name}
               className={linkRow}
             >
