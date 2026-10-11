@@ -25,6 +25,7 @@ import { ChatPanel, ComposerNotice } from "./chat-panel";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
 import { useAgents } from "./use-agents";
 import { WorkspacePanel } from "./workspace-panel";
+import { useShowLinkedView } from "./workspace-search";
 import { useWorkspaceStore } from "./workspace-store";
 
 export function Workspace({
@@ -38,6 +39,7 @@ export function Workspace({
   const mobilePanel = useWorkspaceStore((s) => s.mobilePanel);
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
+  useShowLinkedView();
   const chat = useQuery(chatQueryOptions());
   const waiting = usePendingInteractions();
   const pending = waiting.length;
