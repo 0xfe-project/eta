@@ -1,4 +1,4 @@
-import type { PointerEvent } from "react";
+import type { FocusEvent, PointerEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 
 // Long enough that passing over the trigger, or crossing the gap to the
@@ -96,6 +96,17 @@ export function useHoverMenu() {
       },
       onCloseAutoFocus: (event: Event) => {
         if (hovered) event.preventDefault();
+      },
+      // Radix focuses the content when the pointer leaves an item, even as
+      // it closes: say, for the dialog the item opened, which the overlay
+      // slides under the pointer. Give the focus back.
+      onFocus: (event: FocusEvent) => {
+        if (
+          !open &&
+          event.target === event.currentTarget &&
+          event.relatedTarget instanceof HTMLElement
+        )
+          event.relatedTarget.focus();
       },
     },
   };

@@ -1,6 +1,5 @@
 import type { GitHubStatus, Installation } from "@/queries/forge";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
-import { CheckIcon } from "@phosphor-icons/react/Check";
 import { CheckCircleIcon } from "@phosphor-icons/react/CheckCircle";
 import { GitBranchIcon } from "@phosphor-icons/react/GitBranch";
 import { GithubLogoIcon } from "@phosphor-icons/react/GithubLogo";
@@ -40,6 +39,7 @@ import {
   useSetGitHubOAuthClient,
   useUnauthorizeGitHub,
 } from "@/queries/forge";
+import { Stepper } from "./stepper";
 
 const steps = ["了解", "创建 App", "安装到仓库", "完成"] as const;
 type Step = 0 | 1 | 2 | 3;
@@ -48,51 +48,6 @@ type Step = 0 | 1 | 2 | 3;
 function serverStep(status: GitHubStatus | undefined): Step {
   if (!status || status.state === "not_connected") return 0;
   return status.state === "ready" ? 3 : 2;
-}
-
-function Stepper({ step }: { step: Step }) {
-  return (
-    <ol aria-label="连接步骤" className="grid grid-cols-4 gap-2">
-      {steps.map((label, index) => {
-        const done = index < step || step === 3;
-        const current = index === step;
-        return (
-          <li
-            key={label}
-            aria-current={current ? "step" : undefined}
-            className="flex flex-col gap-1.5"
-          >
-            <span
-              aria-hidden="true"
-              className={cn(
-                "h-0.5 w-full bg-border transition-colors duration-[60ms] ease-linear",
-                (done || current) && "bg-foreground",
-              )}
-            />
-            <span
-              className={cn(
-                "flex items-center gap-1 text-[11px]",
-                current
-                  ? "font-medium text-foreground"
-                  : done
-                    ? "text-foreground/70"
-                    : "text-muted-foreground",
-              )}
-            >
-              {done && !current ? (
-                <CheckIcon aria-hidden="true" className="size-3" />
-              ) : (
-                <span aria-hidden="true" className="tabular-nums">
-                  {index + 1}
-                </span>
-              )}
-              {label}
-            </span>
-          </li>
-        );
-      })}
-    </ol>
-  );
 }
 
 const features = [
@@ -643,7 +598,12 @@ export function GitHubWizard({
           <GithubLogoIcon aria-hidden="true" className="size-5" />
           <DialogTitle className="text-sm">连接 GitHub</DialogTitle>
         </DialogHeader>
-        <Stepper step={step} />
+        <Stepper
+          steps={steps}
+          step={step}
+          label="连接步骤"
+          complete={step === 3}
+        />
         <div className="min-h-64">{body}</div>
         {footer ? <DialogFooter>{footer}</DialogFooter> : null}
       </DialogContent>

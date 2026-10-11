@@ -1,11 +1,10 @@
-import type { Agent, Bundle } from "@/queries/chat";
-import type { Model } from "@/queries/llm";
+import type { AgentForm } from "./agent-form";
+import type { Agent } from "@/queries/chat";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { TrashIcon } from "@phosphor-icons/react/Trash";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { z } from "zod";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,7 +16,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -26,43 +24,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { useBundles, useDeleteAgent, useUpdateAgent } from "@/queries/chat";
+import { useModels } from "@/queries/llm";
 import {
-  useBundles,
-  useCreateAgent,
-  useDeleteAgent,
-  useUpdateAgent,
-} from "@/queries/chat";
-import { useConnectors, useModels } from "@/queries/llm";
+  BundlesField,
+  InstructionsField,
+  ModelField,
+  NameField,
+} from "./agent-fields";
+import { agentDraft, agentFormSchema } from "./agent-form";
 import { AgentAvatar } from "./agent-identity";
-import { Select, SelectGroup, SelectOption } from "./select-field";
+import { CreateAgentWizard } from "./create-agent-wizard";
 import { UsageLine } from "./usage-line";
 import { useAgents } from "./use-agents";
 import { useWorkspaceStore } from "./workspace-store";
-
-const DESCRIPTION_MAX = 10_000;
-
-// One schema for create and edit; new agent settings become new fields here.
-const agentFormSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, "请输入名称。")
-    .max(100, "名称最多 100 个字符。"),
-  description: z
-    .string()
-    .max(
-      DESCRIPTION_MAX,
-      `指令最多 ${DESCRIPTION_MAX.toLocaleString()} 个字符。`,
-    ),
-  // "" until a model is chosen.
-  model: z.string(),
-  // null: every built-in bundle, the default for new agents.
-  bundles: z.array(z.string()).nullable(),
-});
-type AgentForm = z.infer<typeof agentFormSchema>;
 
 export function DeleteAgentDialog({
   agent,
@@ -107,284 +82,67 @@ export function DeleteAgentDialog({
   );
 }
 
-/** Models grouped by service; unusable ones stay visible but disabled. */
-export function ModelSelect({
-  value,
-  models,
-  invalid,
-  ...props
-}: Omit<React.ComponentProps<typeof Select>, "children"> & {
-  value: string;
-  /** Undefined while they load. */
-  models: Model[] | undefined;
-  invalid?: boolean;
-}) {
-  const { data: connectors } = useConnectors();
-  const loading = !models || !connectors;
-  const groups = (connectors ?? []).map((connector) => ({
-    connector,
-    models: (models ?? []).filter((model) => model.connector === connector.id),
-  }));
-  const known = (models ?? []).some((model) => model.id === value);
-  return (
-    <Select
-      className="w-full"
-      aria-invalid={invalid}
-      value={value}
-      {...props}
-      disabled={loading || props.disabled}
-    >
-      <SelectOption value="" disabled>
-        {loading ? "正在加载模型…" : "选择模型"}
-      </SelectOption>
-      {value && !known ? (
-        <SelectOption value={value} disabled>
-          {loading ? "正在加载模型…" : `${value}（已不存在）`}
-        </SelectOption>
-      ) : null}
-      {groups
-        .filter((group) => group.models.length)
-        .map(({ connector, models }) => (
-          <SelectGroup key={connector.id} label={connector.display_name}>
-            {models.map((model) => (
-              <SelectOption
-                key={model.id}
-                value={model.id}
-                disabled={!model.available && model.id !== value}
-              >
-                {model.display_name}
-                {model.available ? "" : "（不可用）"}
-              </SelectOption>
-            ))}
-          </SelectGroup>
-        ))}
-    </Select>
-  );
-}
-
-/** One checkbox per bundle; built-in ones first. */
-function BundleList({
-  value,
-  bundles,
-  onChange,
-}: {
-  value: string[] | null;
-  bundles: Bundle[];
-  onChange: (value: string[]) => void;
-}) {
-  const names = bundles.map((bundle) => bundle.name);
-  const chosen =
-    value ?? bundles.filter((bundle) => bundle.builtin).map((b) => b.name);
-  const toggle = (name: string, on: boolean) =>
-    onChange(names.filter((n) => (n === name ? on : chosen.includes(n))));
-  return (
-    <ul className="divide-y border">
-      {bundles.map((bundle) => (
-        <li key={bundle.name}>
-          <Label className="items-start gap-3 p-2.5 leading-snug">
-            <Checkbox
-              className="mt-px"
-              checked={chosen.includes(bundle.name)}
-              onCheckedChange={(on) => toggle(bundle.name, on === true)}
-            />
-            <span className="min-w-0 space-y-0.5">
-              <span className="block font-medium">
-                {bundle.name}
-                {bundle.builtin ? null : (
-                  <span className="ml-1.5 font-normal text-muted-foreground">
-                    自定义
-                  </span>
-                )}
-              </span>
-              {bundle.description ? (
-                <span className="block text-muted-foreground">
-                  {bundle.description}
-                </span>
-              ) : null}
-            </span>
-          </Label>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 function AgentEditorForm({
   agent,
   onDone,
 }: {
-  agent: Agent | undefined;
+  agent: Agent;
   onDone: () => void;
 }) {
-  const { select } = useAgents();
-  const lastModel = useWorkspaceStore((s) => s.workspace.lastModel);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const { data: models } = useModels();
   const { data: bundles } = useBundles();
-  const usable = (models ?? []).filter((model) => model.available);
-  // Only once they have loaded can there be none.
-  const noModels = models !== undefined && !usable.length;
-  const create = useCreateAgent();
   const updateAgent = useUpdateAgent();
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const {
-    register,
-    handleSubmit,
-    watch,
-    setValue,
-    setError,
-    formState: { errors, isDirty },
-  } = useForm<AgentForm>({
+  const form = useForm<AgentForm>({
     resolver: zodResolver(agentFormSchema),
     defaultValues: {
-      name: agent?.name ?? "",
-      description: agent?.description ?? "",
-      model: agent?.model ?? "",
-      bundles: agent?.bundles ?? null,
+      name: agent.name,
+      description: agent.description,
+      model: agent.model ?? "",
+      bundles: agent.bundles ?? null,
     },
   });
-  const description = watch("description");
-  const model = watch("model");
-  const chosenBundles = watch("bundles");
-  // New agents start with the last used model, or the first usable one.
-  const preferred = usable.find((item) => item.id === lastModel) ?? usable[0];
-  useEffect(() => {
-    if (!agent && !model && preferred) setValue("model", preferred.id);
-  }, [agent, model, preferred, setValue]);
   const openProviders = () => {
     onDone();
     setSettings({ open: true, section: "providers" });
   };
-  const pending = create.isPending || updateAgent.isPending;
-  const onError = (error: Error) => toast.error(error.message);
 
-  const save = handleSubmit(({ model, bundles, ...fields }) => {
+  const save = form.handleSubmit((values) => {
     // Agents can be created before any account is connected, not after.
-    if (!model && usable.length) {
-      setError("model", { message: "请选择模型。" });
+    if (!values.model && models?.some((model) => model.available)) {
+      form.setError("model", { message: "请选择模型。" });
       return;
     }
-    const draft = {
-      ...fields,
-      ...(model ? { model } : {}),
-      ...(bundles ? { bundles } : {}),
-    };
-    if (model) setWorkspace((state) => ({ ...state, lastModel: model }));
-    if (agent) {
-      updateAgent.mutate(
-        { id: agent.id, ...draft },
-        {
-          onSuccess: () => {
-            toast.success("已保存");
-            onDone();
-          },
-          onError,
-        },
-      );
-    } else {
-      create.mutate(draft, {
-        onSuccess: (created) => {
-          select(created.id);
-          toast.success(`已创建「${created.name}」`);
+    if (values.model) {
+      setWorkspace((state) => ({ ...state, lastModel: values.model }));
+    }
+    updateAgent.mutate(
+      { id: agent.id, ...agentDraft(values) },
+      {
+        onSuccess: () => {
+          toast.success("已保存");
           onDone();
         },
-        onError,
-      });
-    }
+        onError: (error) => toast.error(error.message),
+      },
+    );
   });
 
   return (
     <form noValidate onSubmit={save} className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="agent-name">名称</Label>
-          <Input
-            id="agent-name"
-            autoFocus={!agent}
-            placeholder="例如：代码审查"
-            aria-invalid={Boolean(errors.name)}
-            aria-describedby={errors.name ? "agent-name-error" : undefined}
-            {...register("name")}
-          />
-          {errors.name ? (
-            <p
-              id="agent-name-error"
-              role="alert"
-              className="text-xs text-destructive"
-            >
-              {errors.name.message}
-            </p>
-          ) : null}
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="agent-model">模型</Label>
-          <ModelSelect
-            id="agent-model"
-            value={model}
-            models={models}
-            invalid={Boolean(errors.model)}
-            aria-describedby={
-              errors.model || noModels ? "agent-model-hint" : undefined
-            }
-            onValueChange={(value) =>
-              setValue("model", value, {
-                shouldDirty: true,
-                shouldValidate: true,
-              })
-            }
-          />
-          {errors.model || noModels ? (
-            <p
-              id="agent-model-hint"
-              role={errors.model ? "alert" : undefined}
-              className={
-                errors.model
-                  ? "text-xs text-destructive"
-                  : "text-xs text-muted-foreground"
-              }
-            >
-              {errors.model?.message ?? "暂无可用模型。"}
-              {noModels ? (
-                <Button
-                  type="button"
-                  variant="link"
-                  size="xs"
-                  className="h-auto px-1"
-                  onClick={openProviders}
-                >
-                  前往模型服务
-                </Button>
-              ) : null}
-            </p>
-          ) : null}
-        </div>
+        <NameField form={form} />
+        <ModelField
+          form={form}
+          models={models}
+          onOpenProviders={openProviders}
+        />
         {bundles?.length ? (
-          <div
-            role="group"
-            aria-labelledby="agent-bundles"
-            aria-describedby="agent-bundles-hint"
-            className="space-y-1.5"
-          >
-            <p id="agent-bundles" className="text-xs leading-none">
-              环境包
-            </p>
-            <BundleList
-              value={chosenBundles}
-              bundles={bundles}
-              onChange={(value) =>
-                setValue("bundles", value, { shouldDirty: true })
-              }
-            />
-            <p
-              id="agent-bundles-hint"
-              className="text-xs text-muted-foreground"
-            >
-              智能体的环境由这些环境包构建：安装的工具、可用的插件。修改后重新构建，在空闲时生效。
-            </p>
-          </div>
+          <BundlesField form={form} bundles={bundles} />
         ) : null}
-        {agent?.build_error ? (
+        {agent.build_error ? (
           <div className="space-y-1.5" role="alert">
             <p className="text-xs leading-none text-destructive">
               环境构建失败
@@ -400,77 +158,45 @@ function AgentEditorForm({
             </pre>
           </div>
         ) : null}
-        {agent ? <UsageLine principal={agent.id} /> : null}
-        <div className="space-y-1.5">
-          <div className="flex items-baseline justify-between gap-2">
-            <Label htmlFor="agent-description">指令</Label>
-            <span
-              className="text-xs tabular-nums text-muted-foreground"
-              aria-live="polite"
-            >
-              {description.length.toLocaleString()} /{" "}
-              {DESCRIPTION_MAX.toLocaleString()}
-            </span>
-          </div>
-          <Textarea
-            id="agent-description"
-            rows={12}
-            className="max-h-[50dvh] min-h-48 font-mono leading-relaxed"
-            placeholder="职责、工作方式和约束。例如：你负责审查 Pull Request，只指出会导致错误的问题。"
-            aria-invalid={Boolean(errors.description)}
-            aria-describedby="agent-description-hint"
-            {...register("description")}
-          />
-          <p
-            id="agent-description-hint"
-            className={
-              errors.description
-                ? "text-xs text-destructive"
-                : "text-xs text-muted-foreground"
-            }
-            role={errors.description ? "alert" : undefined}
-          >
-            {errors.description?.message ??
-              "注入智能体的上下文；修改在空闲时生效，不打断进行中的回复。"}
-          </p>
-        </div>
+        <UsageLine principal={agent.id} />
+        <InstructionsField form={form} />
       </div>
       <DialogFooter className="shrink-0 border-t p-3 sm:justify-between">
-        {agent ? (
-          <Button
-            type="button"
-            variant="ghost"
-            className="text-destructive hover:text-destructive"
-            onClick={() => setConfirmDelete(true)}
-          >
-            <TrashIcon aria-hidden="true" data-icon="inline-start" />
-            删除智能体
-          </Button>
-        ) : (
-          <span aria-hidden="true" />
-        )}
+        <Button
+          type="button"
+          variant="ghost"
+          className="text-destructive hover:text-destructive"
+          onClick={() => setConfirmDelete(true)}
+        >
+          <TrashIcon aria-hidden="true" data-icon="inline-start" />
+          删除智能体
+        </Button>
         <div className="flex gap-2">
           <Button type="button" variant="outline" onClick={onDone}>
             取消
           </Button>
-          <Button type="submit" disabled={pending || (agent && !isDirty)}>
-            {agent ? "保存" : "创建"}
+          <Button
+            type="submit"
+            disabled={updateAgent.isPending || !form.formState.isDirty}
+          >
+            保存
           </Button>
         </div>
       </DialogFooter>
-      {agent ? (
-        <DeleteAgentDialog
-          agent={agent}
-          open={confirmDelete}
-          onOpenChange={setConfirmDelete}
-          onDeleted={onDone}
-        />
-      ) : null}
+      <DeleteAgentDialog
+        agent={agent}
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        onDeleted={onDone}
+      />
     </form>
   );
 }
 
-/** Create or edit an agent; opened from the chat head, settings or empty state. */
+/**
+ * Create an agent step by step, or edit one on a single page; every
+ * entry (the chat head, settings, empty states) opens this one dialog.
+ */
 export function AgentEditor() {
   const agentEditor = useWorkspaceStore((s) => s.agentEditor);
   const setAgentEditor = useWorkspaceStore((s) => s.setAgentEditor);
@@ -500,13 +226,12 @@ export function AgentEditor() {
             </DialogDescription>
           </div>
         </DialogHeader>
-        {agentEditor.open ? (
+        {!agentEditor.open ? null : agent ? (
           // Keyed so each open starts from the agent's saved values.
-          <AgentEditorForm
-            key={agentEditor.agentId ?? "new"}
-            agent={agent}
-            onDone={close}
-          />
+          <AgentEditorForm key={agent.id} agent={agent} onDone={close} />
+        ) : agentEditor.agentId === null ? (
+          // Unmounted on close: reopening starts a new, empty draft.
+          <CreateAgentWizard onDone={close} />
         ) : null}
       </DialogContent>
     </Dialog>
