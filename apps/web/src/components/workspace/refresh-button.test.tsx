@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import * as actualRouter from "@tanstack/react-router" with {
+  rstest: "importActual",
+};
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { toast } from "sonner";
@@ -9,6 +12,7 @@ import { WorkspacePanel } from "./workspace-panel";
 import { useWorkspaceStore } from "./workspace-store";
 
 rstest.mock("@tanstack/react-router", () => ({
+  ...actualRouter,
   Link: ({ children, ...props }: React.ComponentProps<"a">) => (
     <a {...props}>{children}</a>
   ),

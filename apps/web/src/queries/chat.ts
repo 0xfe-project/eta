@@ -21,6 +21,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useHydrated } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo } from "react";
 import { create } from "zustand";
 import { ApiError, controlPlane, unwrap } from "@/lib/api";
@@ -72,6 +73,28 @@ export function chatQueryOptions() {
     // useLiveChat tries again.
     retry: false,
   });
+}
+
+/**
+ * The browser snapshot, read after this component hydrates. The root's live
+ * subscription can fill the cache before a suspended page hydrates; its first
+ * render must still match the server's loading state.
+ */
+export function useChatSnapshot<T = Snapshot>(
+  select?: (snapshot: Snapshot) => T,
+) {
+  const hydrated = useHydrated();
+  const query = useQuery({
+    ...chatQueryOptions(),
+    enabled: hydrated,
+    select,
+  });
+  return {
+    data: hydrated ? query.data : undefined,
+    error: hydrated ? query.error : null,
+    isPending: !hydrated || query.isPending,
+    refetch: query.refetch,
+  };
 }
 
 function upsert<T extends { id: string; revision: number }>(
@@ -232,11 +255,8 @@ export function useLiveChat() {
 const NO_INTERACTIONS: Interaction[] = [];
 /** Every agent's interactions waiting for the user. */
 export function usePendingInteractions() {
-  const { data } = useQuery({
-    ...chatQueryOptions(),
-    // The same array until one of them changes, for memo.
-    select: selectPending,
-  });
+  // The same array until one of them changes, for memo.
+  const { data } = useChatSnapshot(selectPending);
   return data ?? NO_INTERACTIONS;
 }
 function selectPending(snapshot: Snapshot) {
@@ -250,7 +270,7 @@ function selectPending(snapshot: Snapshot) {
  * fetched list, kept live by the snapshot's interactions from the stream.
  */
 export function useInteractionHistory() {
-  const { data: snapshot } = useQuery(chatQueryOptions());
+  const { data: snapshot } = useChatSnapshot();
   const query = useQuery({
     // Under chatKey, so reloading the snapshot reloads the list with it.
     queryKey: [...chatKey, "interactions"],
@@ -308,14 +328,13 @@ export function useAgentMessages(agentId: string | undefined) {
   const queryClient = useQueryClient();
   // Only this agent's live messages: other agents' updates change nothing
   // here, and structural sharing keeps the array until one of these changes.
-  const { data: live } = useQuery({
-    ...chatQueryOptions(),
-    select: useCallback(
+  const { data: live } = useChatSnapshot(
+    useCallback(
       (snapshot: Snapshot) =>
         snapshot.messages.filter((message) => message.agent_id === agentId),
       [agentId],
     ),
-  });
+  );
   // History read after the snapshot leaves no gap before the live messages.
   const history = useInfiniteQuery({
     ...messagesQueryOptions(agentId ?? ""),

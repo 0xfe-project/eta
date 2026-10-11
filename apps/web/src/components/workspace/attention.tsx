@@ -5,15 +5,14 @@ import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { SpinnerIcon } from "@phosphor-icons/react/Spinner";
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
-  chatQueryOptions,
   useAnswerInteraction,
+  useChatSnapshot,
   usePendingInteractions,
 } from "@/queries/chat";
 import { useRoutines } from "@/queries/routines";
@@ -196,7 +195,7 @@ export function PendingList() {
   // Only their state: the items come from usePendingInteractions and
   // useAttention.
   const sources = [
-    { what: "确认请求", query: useQuery(chatQueryOptions()) },
+    { what: "确认请求", query: useChatSnapshot() },
     { what: "任务", query: useTasks() },
     { what: "定时", query: useRoutines() },
   ];

@@ -1,11 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import { chatQueryOptions } from "@/queries/chat";
+import { useChatSnapshot } from "@/queries/chat";
 import { useWorkspaceStore } from "./workspace-store";
 
 /** Agents plus the locally remembered current one (newest by default). */
 export function useAgents() {
-  const { data, error, refetch } = useQuery(chatQueryOptions());
+  const { data, error, refetch } = useChatSnapshot();
   const selectedAgentId = useWorkspaceStore((s) => s.workspace.selectedAgentId);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const setAgentEditor = useWorkspaceStore((s) => s.setAgentEditor);
