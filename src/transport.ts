@@ -176,6 +176,12 @@ export function createConnection(socket: Socket, deps: TransportDeps): Connectio
  */
 export interface WireServerOptions {
 	port: number;
+	/**
+	 * The interface to listen on. Defaults to loopback: the pipe runs commands and reads files for
+	 * whoever connects, so reaching it from another machine is something a caller opts into (and
+	 * puts its own access control in front of), never what a bare start does.
+	 */
+	hostname?: string | undefined;
 	/** Where the UI is served from, when there is one. */
 	staticRoutes?: Record<string, () => Response | Promise<Response>>;
 }
@@ -215,6 +221,7 @@ export function serveWire(deps: TransportDeps, options: WireServerOptions): Wire
 
 	const server = Bun.serve<{ socketId: number }>({
 		port: options.port,
+		hostname: options.hostname ?? "127.0.0.1",
 		fetch(request, bunServer) {
 			const path = new URL(request.url).pathname;
 			const route = options.staticRoutes?.[path];

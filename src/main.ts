@@ -4,7 +4,7 @@
  * A thin shell around `assembleServer` — argument parsing, a signal handler, and the one thing
  * an assembly cannot do for itself: knowing where its data directory is.
  *
- *   bun packages/eta-server/src/main.ts --data-dir ~/.eta --port 8787
+ *   bun packages/eta-server/src/main.ts --data-dir ~/.eta --port 8787 [--host 127.0.0.1]
  *
  * Everything else is defaults: `~/.eta/config.json` for providers, `<data-dir>/settings.json`
  * for the defaults new sessions inherit, `<data-dir>/sessions/<id>/` for the sessions themselves.
@@ -22,12 +22,15 @@ function argument(name: string, fallback: string): string {
 
 const dataDir = argument("data-dir", join(homedir(), ".eta"));
 const port = Number(argument("port", "8787"));
+// Loopback unless asked otherwise: anything that can reach this port can run commands.
+const hostname = argument("host", "127.0.0.1");
 const configPath = argument("config", join(dataDir, "config.json"));
 
 const server = await assembleServer({
 	dataDir,
 	configPath,
 	port,
+	hostname,
 	// The file and shell tools a session runs: the local Node adapter, when this runtime can
 	// host it (Node, or Bun/Deno in Node-compatibility mode). Without one a session still
 	// works — it simply has no read/write/edit/bash, which is a session, not a failure.
@@ -37,6 +40,7 @@ const server = await assembleServer({
 	},
 });
 const hello = {
+	host: hostname,
 	port: server.server.port,
 	dataDir,
 	configPath,

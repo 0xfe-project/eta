@@ -52,6 +52,8 @@ export interface AssembleOptions {
 	configPath?: string;
 	/** The port to listen on. Zero means "any free one". */
 	port?: number;
+	/** The interface to listen on. Defaults to loopback (see `WireServerOptions.hostname`). */
+	hostname?: string | undefined;
 	/**
 	 * Whether to apply the config's network settings to the environment at startup. `false` leaves
 	 * the environment exactly as the process was started with — what a test wants, and what a
@@ -304,7 +306,13 @@ export async function assembleServer(options: AssembleOptions): Promise<Assemble
 
 	// `mounted` is read live: a plugin loaded later (or reloaded) shows up in the next `hello`.
 	const listMounted = (): MountedPlugin[] => [...bundled.mounted, ...manager.mounted()];
-	const server = serveWire({ wire, mounted: listMounted, warn }, { port: options.port ?? 0 });
+	const server = serveWire(
+		{ wire, mounted: listMounted, warn },
+		{
+			port: options.port ?? 0,
+			...(options.hostname === undefined ? {} : { hostname: options.hostname }),
+		},
+	);
 
 	return {
 		ctx,
