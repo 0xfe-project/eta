@@ -38,12 +38,23 @@ const detail = {
 };
 
 const cleanup: (() => void)[] = [];
-async function render() {
+async function render(model?: string, available = true) {
   const client = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity, retry: false } },
   });
   client.setQueryData(["tasks"], { tasks: [task, other], assignees: [] });
   client.setQueryData(["tasks", "t1"], detail);
+  client.setQueryData(["chat"], {
+    agents: [{ id: "a1", name: "审查智能体", model: model ?? null }],
+    interactions: [],
+    messages: [],
+  });
+  client.setQueryData(
+    ["llm", "models"],
+    model
+      ? [{ id: model, connector: "test", display_name: model, available }]
+      : [],
+  );
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -72,6 +83,8 @@ describe("task board with a task open", () => {
       taskLayout: "list",
       taskListWidth: undefined,
     }));
+    useWorkspaceStore.getState().setAgentEditor({ open: false, agentId: null });
+    rstest.restoreAllMocks();
   });
 
   it("keeps the list beside the task from md, and leaves phones the task alone", async () => {
@@ -151,4 +164,54 @@ describe("task board with a task open", () => {
     expect(container.querySelector('[role="separator"]')).toBeNull();
     expect(main.querySelector('[aria-current="true"]')).toBeNull();
   });
+
+  it("blocks feedback without a model and opens the chosen agent's editor", async () => {
+    navigation.task = "t1";
+    const container = await render();
+    const fetch = rstest.spyOn(globalThis, "fetch");
+    const feedback = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("让智能体反馈"),
+    )!;
+    await act(async () => feedback.click());
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog.textContent).toContain("这个智能体还没有选择模型。");
+    expect(
+      dialog.querySelector("#feedback-agent")!.getAttribute("aria-describedby"),
+    ).toBe("feedback-model-hint");
+    const send = [...dialog.querySelectorAll("button")].find(
+      (button) => button.textContent === "发送",
+    )!;
+    expect(send.disabled).toBe(true);
+    await act(async () => send.click());
+    expect(fetch).not.toHaveBeenCalled();
+    const configure = [...dialog.querySelectorAll("button")].find(
+      (button) => button.textContent === "选择模型",
+    )!;
+    await act(async () => configure.click());
+    expect(useWorkspaceStore.getState().agentEditor).toEqual({
+      open: true,
+      agentId: "a1",
+    });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it.each([true, false])(
+    "allows feedback only while the selected model is available (%s)",
+    async (available) => {
+      navigation.task = "t1";
+      const container = await render("测试模型", available);
+      const feedback = [...container.querySelectorAll("button")].find(
+        (button) => button.textContent?.includes("让智能体反馈"),
+      )!;
+      await act(async () => feedback.click());
+      const dialog = document.querySelector('[role="dialog"]')!;
+      const send = [...dialog.querySelectorAll("button")].find(
+        (button) => button.textContent === "发送",
+      )!;
+      expect(send.disabled).toBe(!available);
+      expect(dialog.textContent?.includes("测试模型 暂不可用")).toBe(
+        !available,
+      );
+    },
+  );
 });

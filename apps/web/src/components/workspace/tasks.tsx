@@ -46,6 +46,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useSendMessage } from "@/queries/chat";
+import { useModelAvailability } from "@/queries/llm";
 import {
   useCommentTask,
   useCreateTask,
@@ -1090,7 +1091,9 @@ export function CommentBox({ task }: { task: TaskDetail }) {
           </Button>
         </div>
       </form>
-      <FeedbackDialog task={task} open={feedback} onOpenChange={setFeedback} />
+      {feedback ? (
+        <FeedbackDialog task={task} open onOpenChange={setFeedback} />
+      ) : null}
     </>
   );
 }
@@ -1105,13 +1108,16 @@ function FeedbackDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { agents } = useAgents();
+  const { agents, openEditor } = useAgents();
   const send = useSendMessage();
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
   const [agentId, setAgentId] = useState<string>("");
   const [mode, setMode] = useState<"queue" | "steer">("queue");
   const [note, setNote] = useState("");
   const chosen = agentId || agents.at(-1)?.id || "";
+  const agent = agents.find((item) => item.id === chosen);
+  const availability = useModelAvailability(agent);
+  const ready = Boolean(agent) && availability.state === "ok";
   const text = [
     `请看一下任务 #${task.number}「${task.title}」，读它的描述和时间线（get_task），然后用 comment_task 在任务下给出你的反馈。`,
     note.trim(),
@@ -1133,6 +1139,9 @@ function FeedbackDialog({
               id="feedback-agent"
               className="w-full"
               value={chosen}
+              aria-describedby={
+                !ready && agent ? "feedback-model-hint" : undefined
+              }
               onValueChange={(value) => setAgentId(value)}
             >
               {agents.map((agent) => (
@@ -1141,6 +1150,28 @@ function FeedbackDialog({
                 </SelectOption>
               ))}
             </Select>
+            {agent && availability.state !== "ok" ? (
+              <p
+                id="feedback-model-hint"
+                className="text-xs text-muted-foreground"
+              >
+                {availability.state === "not_set"
+                  ? "这个智能体还没有选择模型。"
+                  : availability.message}
+                <Button
+                  type="button"
+                  variant="link"
+                  size="xs"
+                  className="h-auto px-1"
+                  onClick={() => {
+                    onOpenChange(false);
+                    openEditor(agent.id);
+                  }}
+                >
+                  {availability.state === "not_set" ? "选择模型" : "更换模型"}
+                </Button>
+              </p>
+            ) : null}
           </Field>
           <Field
             label="方式"
@@ -1179,8 +1210,9 @@ function FeedbackDialog({
         </div>
         <DialogFooter>
           <Button
-            disabled={!chosen || send.isPending}
-            onClick={() =>
+            disabled={!ready || send.isPending}
+            onClick={() => {
+              if (!ready) return;
               send.mutate(
                 { agentId: chosen, text, mode },
                 {
@@ -1193,8 +1225,8 @@ function FeedbackDialog({
                   },
                   onError: showError,
                 },
-              )
-            }
+              );
+            }}
           >
             发送
           </Button>
