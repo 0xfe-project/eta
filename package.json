@@ -20,12 +20,12 @@
 		"typescript": "5.9.3",
 		"vitest": "4.1.9",
 		"bun-types": "1.4.2",
-		"@eta/execution-node": "*",
 		"@eta/ssh": "*"
 	},
 	"dependencies": {
 		"@eta/core": "*",
 		"@eta/harness": "*",
+		"@eta/execution-node": "*",
 		"@eta/storage-jsonl": "*",
 		"@eta/client-wire-proto": "*",
 		"@earendil-works/pi-ai": "0.85.1",

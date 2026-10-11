@@ -11,6 +11,7 @@
  */
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { createLocalEnvironment } from "@eta/execution-node";
 import { assembleServer } from "./server";
 
 function argument(name: string, fallback: string): string {
@@ -23,7 +24,18 @@ const dataDir = argument("data-dir", join(homedir(), ".eta"));
 const port = Number(argument("port", "8787"));
 const configPath = argument("config", join(dataDir, "config.json"));
 
-const server = await assembleServer({ dataDir, configPath, port });
+const server = await assembleServer({
+	dataDir,
+	configPath,
+	port,
+	// The file and shell tools a session runs: the local Node adapter, when this runtime can
+	// host it (Node, or Bun/Deno in Node-compatibility mode). Without one a session still
+	// works — it simply has no read/write/edit/bash, which is a session, not a failure.
+	envFor: (meta) => {
+		const env = createLocalEnvironment(meta.cwd);
+		return env === undefined ? undefined : { env };
+	},
+});
 const hello = {
 	port: server.server.port,
 	dataDir,
