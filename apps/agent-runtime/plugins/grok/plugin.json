@@ -1,6 +1,6 @@
 {
   "name": "grok",
   "version": "1.0.0",
-  "description": "Grok Imagine images and videos, and web and X search, through the LLM gateway's Grok account.",
+  "description": "通过 LLM 网关的 Grok 账号使用 Grok Imagine 生成图像和视频，搜索网页及 X。",
   "targets": ["chat", "routine"]
 }

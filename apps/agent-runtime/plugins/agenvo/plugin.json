@@ -1,6 +1,6 @@
 {
   "name": "agenvo",
   "version": "1.0.0",
-  "description": "Native control of the Paseo and Herdr runtimes on the user's remote computers through agenvo: workspaces, agents, input, history, interrupts and terminals.",
+  "description": "通过 agenvo 操作远程电脑上的 Paseo 和 Herdr：管理工作区与智能体，发送输入，查看历史，打断运行及使用终端。",
   "targets": ["chat"]
 }

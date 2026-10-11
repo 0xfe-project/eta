@@ -1,6 +1,6 @@
 {
   "name": "routines",
   "version": "1.0.0",
-  "description": "Routines: list and read the user's scheduled agents and their reports, set new ones up and change them.",
+  "description": "列出和查看定时智能体及其报告，创建和修改定时任务。",
   "targets": ["chat"]
 }
