@@ -12,15 +12,17 @@ import {
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels } from "./agent-status";
 import { useAgents } from "./use-agents";
+import { useHoverMenu } from "./use-hover-menu";
 
 // The avatar, with the name on a label overlapping its foot.
 const avatar = "size-16";
 const label =
   "relative -mt-2.5 flex max-w-48 items-center gap-1 border bg-background px-2.5 py-0.5 text-sm font-medium shadow-sm transition-colors duration-[60ms] ease-linear group-hover:bg-muted group-focus-visible:ring-1 group-focus-visible:ring-ring group-data-[state=open]:bg-muted motion-reduce:transition-none";
 
-/** Atop the chat: who you are talking to, click to switch. */
+/** Atop the chat: who you are talking to, hover or click to switch. */
 export function AgentBar() {
   const { agents, current, loaded, error, select, openEditor } = useAgents();
+  const menu = useHoverMenu();
   // The conversation below says what failed.
   if (error && !loaded) return null;
   return (
@@ -32,8 +34,8 @@ export function AgentBar() {
           <Skeleton className="-mt-2.5 h-6 w-20" />
         </div>
       ) : current ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+        <DropdownMenu {...menu.root}>
+          <DropdownMenuTrigger asChild {...menu.trigger}>
             <button
               type="button"
               aria-label={`正在与 ${current.name} 对话（${agentStatusLabels[current.status]}），切换智能体`}
@@ -50,7 +52,11 @@ export function AgentBar() {
               </span>
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="center" className="w-56">
+          <DropdownMenuContent
+            align="center"
+            className="w-56"
+            {...menu.content}
+          >
             {agents.map((agent) => (
               <DropdownMenuItem
                 key={agent.id}
