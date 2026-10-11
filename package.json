@@ -14,7 +14,8 @@
 		"typecheck": "tsc -p tsconfig.json --noEmit"
 	},
 	"dependencies": {
-		"@eta/execution": "*"
+		"@eta/execution": "*",
+		"std-env": "4.2.0"
 	},
 	"devDependencies": {
 		"@types/node": "22.19.19",
