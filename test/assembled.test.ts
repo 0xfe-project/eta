@@ -188,6 +188,77 @@ describe("a server started the way main starts it", () => {
 		first.close();
 	});
 
+	it("aborts a run whose provider stops with a plain Error, and runs the next one (#64)", async () => {
+		const root = await mkdtemp(join(tmpdir(), "eta-abort-"));
+		roots.push(root);
+		// A provider that, like many hand-written ones, waits on the signal and gives up with a
+		// plain Error("aborted") — no AbortError name. The first request hangs that way; the
+		// next one answers from the script.
+		const models = fakeModels([assistantMessage({ content: [{ type: "text", text: "after the abort" }] })]);
+		const scripted = models.streamSimple;
+		let requested!: () => void;
+		const firstRequest = new Promise<void>((resolve) => {
+			requested = resolve;
+		});
+		let first = true;
+		models.streamSimple = (model, context, options) => {
+			if (!first) return scripted(model, context, options);
+			first = false;
+			requested();
+			const signal = options?.signal;
+			return {
+				[Symbol.asyncIterator]: () => ({
+					next: () =>
+						new Promise((_resolve, reject) => {
+							if (signal?.aborted === true) reject(new Error("aborted"));
+							else signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+						}),
+				}),
+			} as never;
+		};
+		const server = await assembleServer({
+			dataDir: root,
+			configPath: join(root, "no-such-config.json"),
+			models: models as never,
+		});
+		servers.push(server);
+		const client = await connect(server.server.port);
+		await until(() => client.frames.some((frame) => frame.type === "hello"));
+		const { session } = (await client.call("sessions", "create", { cwd: "/work/eta" })) as { session: string };
+		const target = `sessions.${session}`;
+		client.subscribe(target);
+		await until(() => client.frames.some((frame) => frame.type === "state" && frame.target === target));
+		const runEnds = () =>
+			client.frames
+				.filter(
+					(frame): frame is Extract<ServerFrame, { type: "event" }> =>
+						frame.type === "event" && frame.target === target && frame.name === "turn:run-end",
+				)
+				.map((frame) => (frame.data as { status: string; error?: string }).status);
+		const runner = () => server.sessions.openSessions().find((open) => open.meta.id === session)?.session.runner;
+
+		await client.call("sessions", "prompt", { session, text: "think forever" });
+		await firstRequest;
+		expect(runner()?.running).toBe(true);
+		await client.call("sessions", "abort", { session });
+		await until(() => runEnds().length > 0);
+		await until(() => runner()?.running === false);
+		// One end for the run, and it says aborted — not failed, and not missing.
+		expect(runEnds()).toEqual(["aborted"]);
+
+		// The session is not stuck: the next prompt starts a fresh run that completes.
+		await client.call("sessions", "prompt", { session, text: "and now?" });
+		await until(() => runEnds().length > 1);
+		expect(runEnds()).toEqual(["aborted", "completed"]);
+		const view = (await client.call("sessions", "resync", { session })) as {
+			state: { sections: { transcript: { messages: { message: { role: string; content: unknown } }[] } } };
+		};
+		expect(JSON.stringify(view.state.sections.transcript.messages.at(-1)?.message.content)).toContain(
+			"after the abort",
+		);
+		client.close();
+	});
+
 	it("starts without the feature plugins, and says so", async () => {
 		const root = await mkdtemp(join(tmpdir(), "eta-bare-"));
 		roots.push(root);
