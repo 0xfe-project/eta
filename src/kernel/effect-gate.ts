@@ -19,6 +19,23 @@ export class AbortRequested extends Error {
 	}
 }
 
+/**
+ * The cancellation a signal carries, when its own gate aborted it.
+ *
+ * This is how an effect's ending is attributed to the run rather than to the
+ * effect: once the gate that owns `signal` has been cancelled, whatever the
+ * effect it handed that signal to ends with — an `AbortError`, the signal's own
+ * reason, or a plain `Error("aborted")` from a provider that spells it its own
+ * way — is that cancellation, not a failure. The source is the signal, never
+ * the error's name or message: a timeout or a closed gate aborts the signal
+ * with some other reason and is not a cancellation, and a signal nobody aborted
+ * says nothing, so a real failure stays a failure.
+ */
+export function cancellationOf(signal: AbortSignal | undefined): AbortRequested | undefined {
+	if (signal?.aborted !== true) return undefined;
+	return signal.reason instanceof AbortRequested ? signal.reason : undefined;
+}
+
 /** Procedure-facing synchronous admission capability for one drive pass. */
 export interface Gate {
 	readonly signal: AbortSignal;

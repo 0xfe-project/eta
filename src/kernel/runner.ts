@@ -25,7 +25,7 @@ import { kernelEmit } from "../types/events";
 import type { AgentMessage, ThinkingLevel } from "../types/messages";
 import type { CompactionDriver } from "./compaction";
 import type { ConfigService } from "./config";
-import { AbortRequested, createGate, type Gate, type GateControl } from "./effect-gate";
+import { AbortRequested, cancellationOf, createGate, type Gate, type GateControl } from "./effect-gate";
 import { generateWithRetry } from "./generation";
 import type { GoalService } from "./goal";
 import type { QueuedItem } from "./inbox";
@@ -429,6 +429,10 @@ export class Runner {
 				this.kernel.noteTurn();
 				if (assistant === undefined) break;
 				if (assistant.stopReason === "error") {
+					// A provider that reports this run's cancellation as an error stopped
+					// because it was asked to: that is the abort, not a failure.
+					const cancelled = cancellationOf(gate.signal);
+					if (cancelled !== undefined) throw cancelled;
 					error = assistant.errorMessage ?? "provider error";
 					break;
 				}
@@ -478,9 +482,15 @@ export class Runner {
 		} catch (caught) {
 			// Cancellation is expected control flow, not a failure: it unwinds the
 			// loop, waits for the effects that already started, and reports aborted.
-			if (caught instanceof AbortRequested || isAbortError(caught)) {
+			// Once this run's own gate is cancelled, whatever an effect threw on the
+			// way out is that cancellation — a provider may end with a plain
+			// Error("aborted") rather than an AbortError. The judge is this run's
+			// signal at the moment the throw arrives; before an abort, a throw is a
+			// fault and still propagates.
+			const cancelled = caught instanceof AbortRequested ? caught : cancellationOf(gate.signal);
+			if (cancelled !== undefined || isAbortError(caught)) {
 				status = "aborted";
-				await (caught instanceof AbortRequested ? caught.cancellation : this.cancellation());
+				await (cancelled?.cancellation ?? this.cancellation());
 			} else {
 				throw caught;
 			}

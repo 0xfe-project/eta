@@ -15,7 +15,7 @@
 import type { Context } from "cordis";
 import { Service } from "cordis";
 import type { ToolExecution } from "../types/config";
-import { AbortRequested } from "./effect-gate";
+import { AbortRequested, cancellationOf } from "./effect-gate";
 
 /** The minimal tool shape the seam requires. Plugin tools may carry more. */
 export interface KernelTool<TArgs = unknown, TResult = unknown> {
@@ -61,7 +61,7 @@ export interface ToolMiddleware {
 	after?: (name: string, args: unknown, result: unknown, call: ToolCallInfo) => unknown | Promise<unknown>;
 }
 
-/** The result a call reports when the run was cancelled before it started. */
+/** The result a call reports when the run was cancelled before it could complete. */
 const ABORTED_TOOL_RESULT = { isError: true, content: "Tool execution was cancelled before completion." };
 
 /** Whether an error is the run being cancelled rather than a tool failing. */
@@ -161,7 +161,8 @@ export class ToolService extends Service {
 				const tracked = options.track === undefined ? admitted : options.track(admitted);
 				return await tracked;
 			} catch (error) {
-				// Not admitted: the run was cancelled before this call started.
+				// Not admitted, or cancelled while it ran: the run is stopping, and the
+				// call reports that rather than a failure of its own.
 				if (error instanceof AbortRequested) return ABORTED_TOOL_RESULT;
 				throw error;
 			} finally {
@@ -198,6 +199,11 @@ export class ToolService extends Service {
 			// tool throws is a result the model has to read (eta-agent's
 			// executeToolCall converts the same way).
 			if (isAbortError(error)) throw error;
+			// The run was cancelled while this call ran: whatever the tool ended with
+			// on the way out is that cancellation, not a tool failure — judged by the
+			// call's own signal, never by what the error says.
+			const cancelled = cancellationOf(call.signal);
+			if (cancelled !== undefined) throw cancelled;
 			return { isError: true, content: error instanceof Error ? error.message : String(error) };
 		}
 		for (const m of [...this.middlewares].reverse()) {
