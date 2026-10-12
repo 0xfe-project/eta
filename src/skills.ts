@@ -1,17 +1,37 @@
 /**
- * Skill discovery: walk up from cwd collecting `.agents/skills` at every level,
- * plus `~/.agents/skills`, the git repo root, and every git submodule root.
- * The catalog block is compact (`- name desc… : dir`) so it stays cheap in the
- * stable prompt block; fs.watch on the discovered trees hot-reloads it.
+ * Skill discovery: which skill directories apply to a session, and the catalog block they render.
+ *
+ * A skill is a directory with a `SKILL.md` in it (the loader in the harness owns what that file
+ * means). What lives here is *where to look*, which is the part that needs the app's knowledge of
+ * a machine:
+ *
+ * ```
+ * <cwd>/.agents/skills            and every directory up the tree
+ * <git root>/.agents/skills       and every submodule root, recursively
+ * ~/.agents/skills                the user's own, everywhere
+ * ```
+ *
+ * The order is deliberate — closest first — because the loader returns skills in the order it
+ * found them and a nearer directory is a more specific answer to "how do I do this here".
+ *
+ * Two rules about the walk:
+ *
+ * - **Dedupe by directory.** Walking up from `/a/b/c` adds `/a/b/c/.agents/skills`,
+ *   `/a/b/.agents/skills`, `/a/.agents/skills`, `/.agents/skills`; the git root and the home
+ *   directory are usually already in that list, and a directory visited twice would load its
+ *   skills twice.
+ * - **Submodules are roots too.** A repo that vendors another repo has two places a skill can
+ *   live, and a session working inside one of them should see both.
+ *
+ * Nothing here is cached: discovery is cheap (a few `existsSync` calls and a `.gitmodules` read),
+ * and a cache would be a cache that has to be invalidated when a skill appears.
  */
-
-import { existsSync, readFileSync, watch as fsWatch } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, parse, resolve } from "node:path";
-import { BACKGROUND_CONTEXT, loadSkills, type ExecutionEnv } from "@eta/core";
+import type { ExecutionEnv } from "@eta/harness";
 
-/** Every `.agents/skills` candidate for a cwd, deduped, closest-first-ish. */
-export function discoverSkillDirs(cwd: string, home = homedir()): string[] {
+/** Every `.agents/skills` candidate for a cwd, deduped, closest first. */
+export function discoverSkillDirs(cwd: string, home: string): string[] {
 	const dirs = new Set<string>();
 	let dir = resolve(cwd);
 	const fsRoot = parse(dir).root;
@@ -27,7 +47,7 @@ export function discoverSkillDirs(cwd: string, home = homedir()): string[] {
 	return [...dirs];
 }
 
-/** The git repo containing cwd plus every (recursively nested) submodule root. */
+/** The git repository containing `cwd`, plus every (recursively nested) submodule root. */
 export function gitRepoChain(cwd: string): string[] {
 	let dir = resolve(cwd);
 	const fsRoot = parse(dir).root;
@@ -46,15 +66,15 @@ export function gitRepoChain(cwd: string): string[] {
 	const out = [repo];
 	const queue = [repo];
 	while (queue.length > 0) {
-		const base = queue.shift()!;
+		const base = queue.shift() as string;
 		let text = "";
 		try {
 			text = readFileSync(join(base, ".gitmodules"), "utf8");
 		} catch {
 			/* no .gitmodules */
 		}
-		for (const m of text.matchAll(/^\s*path\s*=\s*(.+)$/gm)) {
-			const sub = resolve(base, m[1]!.trim());
+		for (const match of text.matchAll(/^\s*path\s*=\s*(.+)$/gm)) {
+			const sub = resolve(base, (match[1] ?? "").trim());
 			if (out.includes(sub)) continue;
 			out.push(sub);
 			queue.push(sub);
@@ -63,46 +83,26 @@ export function gitRepoChain(cwd: string): string[] {
 	return out;
 }
 
-/** Compact catalog for the system prompt; "" when no skill loads. */
-export async function renderSkillsBlock(env: ExecutionEnv, cwd: string, home = homedir()): Promise<string> {
-	const { skills } = await loadSkills(env, discoverSkillDirs(cwd, home), BACKGROUND_CONTEXT);
-	const lines: string[] = [];
-	const seen = new Set<string>();
-	for (const skill of skills) {
-		if (skill.disableModelInvocation === true) continue;
-		const dir = dirname(skill.filePath);
-		const desc = (skill.description ?? "")
-			.replace(/[\r\n]+/g, " ")
-			.trim()
-			.slice(0, 100);
-		const line = `- ${skill.name} ${desc} : ${dir}`;
-		if (seen.has(line)) continue;
-		seen.add(line);
-		lines.push(line);
-	}
-	if (lines.length === 0) return "";
-	return ["<skills>", ...lines, "</skills>"].join("\n");
+export interface RenderSkillsOptions {
+	env: ExecutionEnv;
+	cwd: string;
+	home: string;
+	/** Diagnostics from the loader: a skill that would not parse, a directory that would not list. */
+	warn?: ((message: string) => void) | undefined;
 }
 
-/** Watch every discovered dir (falling back to the closest existing ancestor) and fire onChange. */
-export function watchSkillDirs(dirs: string[], onChange: () => void): void {
-	const watched = new Set<string>();
-	for (const dir of dirs) {
-		let probe = resolve(dir);
-		for (;;) {
-			if (watched.has(probe)) break;
-			try {
-				const watcher = fsWatch(probe, { persistent: false }, () => onChange());
-				watcher.on("error", () => {
-					/* watch degrades to rescan-on-next-session */
-				});
-				watched.add(probe);
-				break;
-			} catch {
-				const up = dirname(probe);
-				if (up === probe) break;
-				probe = up;
-			}
-		}
-	}
+/**
+ * The catalog block a model sees, or `""` when nothing loads.
+ *
+ * The block lists names, descriptions and *locations*: the model reads the file when a task
+ * matches. That is progressive disclosure, and it is why the block stays small enough to sit in
+ * the stable part of the prompt.
+ */
+export async function renderSkillsBlock(options: RenderSkillsOptions): Promise<string> {
+	// The loader is imported here rather than at the top so this file can be used (and its directory
+	// walk tested) without pulling in the harness's YAML and ignore-file machinery.
+	const { formatSkillsForSystemPrompt, loadSkills } = await import("@eta/harness");
+	const { skills, diagnostics } = await loadSkills(options.env, discoverSkillDirs(options.cwd, options.home));
+	for (const diagnostic of diagnostics) options.warn?.(`[eta-skills] ${diagnostic.path}: ${diagnostic.message}`);
+	return formatSkillsForSystemPrompt(skills);
 }

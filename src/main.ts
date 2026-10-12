@@ -1,40 +1,54 @@
 /**
- * `bun run dev` — the machine's eta. It owns this machine's sessions and providers,
- * and a second start (a desktop window, an SSH connection that needs the same
- * sessions) reuses it instead of opening the same journals twice. Set ETA_SERVICE=off
- * for the old behaviour: no run file, no token, nothing shared.
+ * The entry point: start the server.
+ *
+ * A thin shell around `assembleServer` — argument parsing, a signal handler, and the one thing
+ * an assembly cannot do for itself: knowing where its data directory is.
+ *
+ *   bun packages/eta-server/src/main.ts --data-dir ~/.eta --port 8787
+ *
+ * Everything else is defaults: `~/.eta/config.json` for providers, `<data-dir>/settings.json`
+ * for the defaults new sessions inherit, `<data-dir>/sessions/<id>/` for the sessions themselves.
  */
-import { startServer, BackendBusyError } from "./server.ts";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { createLocalEnvironment } from "@eta/execution-node";
+import { assembleServer } from "./server";
 
-const mode = process.env.ETA_SERVICE ?? "claim";
-const hostname = process.env.ETA_HOST ?? "127.0.0.1";
-const port = Number(process.env.PORT ?? 3000);
+function argument(name: string, fallback: string): string {
+	const index = process.argv.indexOf(`--${name}`);
+	const value = index === -1 ? undefined : process.argv[index + 1];
+	return value ?? fallback;
+}
 
-if (mode === "off") {
-	const plain = await startServer({ port, hostname });
-	console.log(`eta-server on http://${hostname}:${plain.port} (model: ${process.env.ANTHROPIC_API_KEY ? "anthropic" : "faux echo"})`);
-} else {
-	try {
-		const server = await startServer({
-			port,
-			hostname,
-			service: { role: "dev", version: "0.1.0" },
-		});
-		console.log(
-			`eta-server on http://${hostname}:${server.port} (model: ${process.env.ANTHROPIC_API_KEY ? "anthropic" : "faux echo"}; sessions ${server.descriptor?.dataDir ?? ""})`,
-		);
-		const close = async (): Promise<void> => {
-			await server.close();
-			process.exit(0);
-		};
-		process.on("SIGTERM", close);
-		process.on("SIGINT", close);
-	} catch (error) {
-		if (error instanceof BackendBusyError) {
-			console.error(`eta: ${error.message}`);
-			console.error("eta: this machine already has a backend for the same sessions — open that one, stop it, or run with ETA_SERVICE=off to start an isolated instance.");
-			process.exit(1);
-		}
-		throw error;
-	}
+const dataDir = argument("data-dir", join(homedir(), ".eta"));
+const port = Number(argument("port", "8787"));
+const configPath = argument("config", join(dataDir, "config.json"));
+
+const server = await assembleServer({
+	dataDir,
+	configPath,
+	port,
+	// The file and shell tools a session runs: the local Node adapter, when this runtime can
+	// host it (Node, or Bun/Deno in Node-compatibility mode). Without one a session still
+	// works — it simply has no read/write/edit/bash, which is a session, not a failure.
+	envFor: (meta) => {
+		const env = createLocalEnvironment(meta.cwd);
+		return env === undefined ? undefined : { env };
+	},
+});
+const hello = {
+	port: server.server.port,
+	dataDir,
+	configPath,
+	plugins: server
+		.mounted()
+		.map((plugin) => (plugin.error === undefined ? plugin.name : `${plugin.name} (${plugin.error})`)),
+};
+console.log(JSON.stringify(hello, null, 2));
+
+/** A signal is a shutdown, not a crash: the sessions flush and the files close. */
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+	process.on(signal, () => {
+		void server.close().then(() => process.exit(0));
+	});
 }
