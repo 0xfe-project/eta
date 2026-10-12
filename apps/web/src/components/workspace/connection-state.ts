@@ -1,4 +1,4 @@
-import type { Connection } from "@/queries/llm";
+import type { Connection, Model } from "@/queries/llm";
 
 export const connectionStateLabels: Record<Connection["state"], string> = {
   active: "正常",
@@ -6,6 +6,13 @@ export const connectionStateLabels: Record<Connection["state"], string> = {
   needs_login: "需要重新登录",
   rate_limited: "额度已用尽",
   error: "出错",
+  degraded: "暂时故障",
+};
+
+export const modelStatusLabels: Record<Model["status"], string> = {
+  available: "可用",
+  degraded: "暂时故障",
+  unavailable: "不可用",
 };
 
 export function untilText(iso: string | undefined, verb = "恢复") {

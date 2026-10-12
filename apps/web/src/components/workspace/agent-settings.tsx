@@ -56,10 +56,13 @@ function AgentRow({ agent }: { agent: Agent }) {
               "inline-flex max-w-full items-center gap-1 text-xs",
               availability.state === "ok"
                 ? "text-muted-foreground"
-                : "text-destructive",
+                : availability.state === "degraded"
+                  ? "text-amber-600 dark:text-amber-500"
+                  : "text-destructive",
             )}
             title={
-              availability.state === "unavailable"
+              availability.state === "unavailable" ||
+              availability.state === "degraded"
                 ? availability.message
                 : undefined
             }

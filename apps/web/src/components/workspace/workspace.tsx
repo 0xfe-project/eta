@@ -138,13 +138,21 @@ export function Workspace({
             agentId={selected?.id}
             agentName={selected?.name}
             model={
-              availability.state === "ok"
+              availability.state === "ok" || availability.state === "degraded"
                 ? (availability.model?.display_name ??
                   selected?.model ??
                   undefined)
                 : undefined
             }
             blocked={blocked}
+            notice={
+              availability.state === "degraded" ? (
+                <ComposerNotice
+                  message={availability.message}
+                  actions={[changeModel]}
+                />
+              ) : undefined
+            }
             messages={history.messages}
             loading={!chat.data || history.loading}
             hasOlder={history.hasOlder}

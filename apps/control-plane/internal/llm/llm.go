@@ -25,9 +25,11 @@ const (
 )
 
 type Model struct {
-	ID                 string
-	DisplayName        string
-	ContextWindow      int
+	ID            string
+	DisplayName   string
+	ContextWindow int
+	// Available is whether turns may start: a model with a transient
+	// upstream failure is, since it recovers by itself.
 	Available          bool
 	UnavailableMessage string
 }
@@ -40,7 +42,9 @@ type Catalog interface {
 // ErrUnavailable is any failure to read the catalog.
 var ErrUnavailable = errors.New("LLM gateway unavailable")
 
-// Gateway is the LLM gateway at URL, its catalog cached briefly.
+// Gateway is the LLM gateway at URL, its catalog cached briefly. When the
+// gateway cannot be read, the last catalog it served stands in for it: a
+// blip must not refuse every chat, and what it said was unusable still is.
 type Gateway struct {
 	URL    string
 	Client *http.Client
@@ -64,6 +68,13 @@ func (g *Gateway) Models(ctx context.Context, refresh bool) (map[string]Model, e
 	g.mu.Unlock()
 	models, err := g.fetch(ctx)
 	if err != nil {
+		g.mu.Lock()
+		last := g.models
+		g.mu.Unlock()
+		if last != nil {
+			slog.WarnContext(ctx, "LLM gateway unavailable; using its last catalog", "error", err)
+			return last, nil
+		}
 		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
 	g.mu.Lock()
@@ -88,13 +99,13 @@ func (g *Gateway) fetch(ctx context.Context) (map[string]Model, error) {
 		return nil, fmt.Errorf("catalog returned %d", resp.StatusCode)
 	}
 	var items []struct {
-		ID                string `json:"id"`
-		DisplayName       string `json:"display_name"`
-		ContextWindow     int    `json:"context_window"`
-		Available         bool   `json:"available"`
-		UnavailableReason *struct {
+		ID            string `json:"id"`
+		DisplayName   string `json:"display_name"`
+		ContextWindow int    `json:"context_window"`
+		Available     bool   `json:"available"`
+		Reason        *struct {
 			Message string `json:"message"`
-		} `json:"unavailable_reason"`
+		} `json:"reason"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
 		return nil, err
@@ -110,8 +121,8 @@ func (g *Gateway) fetch(ctx context.Context) (map[string]Model, error) {
 		if m.DisplayName == "" {
 			m.DisplayName = item.ID
 		}
-		if item.UnavailableReason != nil {
-			m.UnavailableMessage = item.UnavailableReason.Message
+		if !item.Available && item.Reason != nil {
+			m.UnavailableMessage = item.Reason.Message
 		}
 		models[item.ID] = m
 	}

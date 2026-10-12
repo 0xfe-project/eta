@@ -11,6 +11,7 @@ import {
 } from "@/queries/chat";
 import {
   NEEDS_ACTION,
+  USABLE,
   useConnections,
   useModelAvailability,
   useModels,
@@ -190,6 +191,8 @@ const hatch = (color: string) => ({
 
 function connectionCell(connection: Connection) {
   if (connection.state === "active") return { className: "bg-foreground" };
+  if (connection.state === "degraded")
+    return { style: hatch("var(--foreground)") };
   if (NEEDS_ACTION.has(connection.state))
     return { className: "bg-destructive" };
   if (connection.state === "rate_limited")
@@ -205,16 +208,18 @@ function AccountsGauge({
   connections: Connection[] | undefined;
   loading: boolean;
 }) {
-  const active = connections.filter((c) => c.state === "active").length;
+  const active = connections.filter((c) => USABLE.has(c.state)).length;
   const broken = connections.find((c) => NEEDS_ACTION.has(c.state));
-  const limited = connections.find((c) => c.state === "rate_limited");
+  const limited = connections.find(
+    (c) => c.state === "rate_limited" || c.state === "degraded",
+  );
   const note = loading
     ? "读取中…"
     : broken
       ? `${broken.label} ${connectionStateLabels[broken.state]}`
       : limited
         ? [
-            `${limited.label} ${connectionStateLabels.rate_limited}`,
+            `${limited.label} ${connectionStateLabels[limited.state]}`,
             untilText(limited.retry_at),
           ]
             .filter(Boolean)
@@ -250,6 +255,7 @@ function ModelsGauge({
 }) {
   const available = models.filter((model) => model.available).length;
   const unavailable = models.length - available;
+  const degraded = models.filter((model) => model.status === "degraded").length;
   return (
     <Meter
       title="模型目录"
@@ -258,8 +264,13 @@ function ModelsGauge({
       note={
         loading
           ? "读取中…"
-          : unavailable
-            ? `${unavailable} 个不可用`
+          : unavailable || degraded
+            ? [
+                unavailable ? `${unavailable} 个不可用` : "",
+                degraded ? `${degraded} 个暂时故障` : "",
+              ]
+                .filter(Boolean)
+                .join(" · ")
             : models.length
               ? "全部可用"
               : "没有模型"
@@ -269,12 +280,20 @@ function ModelsGauge({
         <i
           key={model.id}
           title={
-            model.available
+            model.status === "available"
               ? model.display_name
-              : `${model.display_name}：${model.unavailable_reason?.message ?? "不可用"}`
+              : `${model.display_name}：${model.reason?.message ?? "不可用"}`
           }
-          className={model.available ? "bg-foreground" : undefined}
-          style={model.available ? undefined : hatch("var(--muted-foreground)")}
+          className={model.status === "available" ? "bg-foreground" : undefined}
+          style={
+            model.status === "available"
+              ? undefined
+              : hatch(
+                  model.status === "degraded"
+                    ? "var(--foreground)"
+                    : "var(--muted-foreground)",
+                )
+          }
         />
       ))}
     </Meter>
@@ -372,6 +391,8 @@ function Display({
           <Row label="模型">
             {availability.state === "ok" ? (
               <span className="text-foreground">■ 可用</span>
+            ) : availability.state === "degraded" ? (
+              <span className="text-foreground">▨ 暂时故障</span>
             ) : availability.state === "unavailable" ? (
               <span className="text-destructive">■ 不可用</span>
             ) : (

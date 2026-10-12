@@ -35,7 +35,15 @@ rstest.mock("@/queries/chat", () => {
 });
 rstest.mock("@/queries/llm", () => ({
   useModels: () => ({
-    data: [{ id: "m1", display_name: "M1", connector: "c", available: true }],
+    data: [
+      {
+        id: "m1",
+        display_name: "M1",
+        connector: "c",
+        status: "available",
+        available: true,
+      },
+    ],
   }),
   useConnectors: () => ({ data: [{ id: "c", display_name: "C" }] }),
 }));

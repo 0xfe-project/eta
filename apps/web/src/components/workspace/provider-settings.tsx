@@ -1,9 +1,11 @@
-import type { Connection, Connector, Usage } from "@/queries/llm";
+import type { Connection, Connector, Model, Usage } from "@/queries/llm";
+import { ArrowClockwiseIcon } from "@phosphor-icons/react/ArrowClockwise";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
 import { CopyIcon } from "@phosphor-icons/react/Copy";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { WarningIcon } from "@phosphor-icons/react/Warning";
+import { useIsMutating } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { LoadError, Loading } from "@/components/states";
@@ -38,17 +40,23 @@ import { cn } from "@/lib/utils";
 import {
   GROK_CONNECTOR,
   NEEDS_ACTION,
+  USABLE,
   useCancelLogin,
   useConnections,
   useConnectors,
   useDeleteConnection,
   useLoginStatus,
   useModels,
+  useRefreshLlmStatus,
   useSetConnectionEnabled,
   useStartLogin,
   useUsage,
 } from "@/queries/llm";
-import { connectionStateLabels, untilText } from "./connection-state";
+import {
+  connectionStateLabels,
+  modelStatusLabels,
+  untilText,
+} from "./connection-state";
 import { useAgents } from "./use-agents";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -102,16 +110,25 @@ function UsageWindows({ usage }: { usage: Usage }) {
 
 function ConnectionState({ connection }: { connection: Connection }) {
   const warn = NEEDS_ACTION.has(connection.state);
+  const degraded = connection.state === "degraded";
   const until =
-    connection.state === "rate_limited" ? untilText(connection.retry_at) : "";
+    connection.state === "rate_limited" || degraded
+      ? untilText(connection.retry_at)
+      : "";
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1 text-xs",
-        warn ? "text-destructive" : "text-muted-foreground",
+        warn
+          ? "text-destructive"
+          : degraded
+            ? "text-amber-600 dark:text-amber-500"
+            : "text-muted-foreground",
       )}
     >
-      {warn ? <WarningIcon aria-hidden="true" className="size-3.5" /> : null}
+      {warn || degraded ? (
+        <WarningIcon aria-hidden="true" className="size-3.5" />
+      ) : null}
       {connectionStateLabels[connection.state]}
       {until ? ` · ${until}` : null}
     </span>
@@ -317,6 +334,11 @@ function ConnectionRow({
           {connection.error.message}
         </p>
       ) : null}
+      {connection.check_error?.code === "CHECK_FAILED" ? (
+        <p className="text-xs text-muted-foreground">
+          {connection.check_error.message}
+        </p>
+      ) : null}
       {usage && !disabled ? <UsageWindows usage={usage} /> : null}
       <AlertDialog open={confirming} onOpenChange={setConfirming}>
         <AlertDialogContent>
@@ -348,6 +370,120 @@ function ConnectionRow({
   );
 }
 
+const modelDot: Record<Model["status"], string> = {
+  available: "bg-emerald-500",
+  degraded: "bg-amber-500",
+  unavailable: "bg-destructive",
+};
+
+/** Each model of a provider with its state; why, for those not available. */
+function ModelStatusList({ models }: { models: Model[] }) {
+  if (!models.length) return null;
+  const troubled = models.filter((model) => model.status !== "available");
+  return (
+    <div className="space-y-1.5">
+      <ul aria-label="模型状态" className="flex flex-wrap gap-1.5">
+        {models.map((model) => (
+          <li
+            key={model.id}
+            className="inline-flex max-w-full items-center gap-1.5 border px-1.5 py-0.5 text-xs"
+          >
+            <span
+              role="img"
+              aria-label={modelStatusLabels[model.status]}
+              title={modelStatusLabels[model.status]}
+              className={cn("size-1.5 shrink-0", modelDot[model.status])}
+            />
+            <span className="truncate">{model.display_name}</span>
+          </li>
+        ))}
+      </ul>
+      {troubled.length ? (
+        <ul className="space-y-0.5 text-xs text-muted-foreground">
+          {troubled.map((model) => (
+            <li key={model.id}>
+              <span
+                className={
+                  model.status === "degraded"
+                    ? "text-amber-600 dark:text-amber-500"
+                    : "text-destructive"
+                }
+              >
+                {model.display_name} {modelStatusLabels[model.status]}
+              </span>
+              ：
+              {[
+                model.reason?.message,
+                untilText(model.retry_at, "自动重试"),
+                model.status === "degraded" ? "仍可发送" : "",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function timeText(ms: number) {
+  return new Date(ms).toLocaleTimeString("zh-CN", { hour12: false });
+}
+
+/**
+ * Checks every account against its provider now. A failed check keeps the
+ * status shown; the outcome stays next to the button until the next one.
+ */
+export function RefreshStatus({ className }: { className?: string }) {
+  const refresh = useRefreshLlmStatus();
+  // Another settings page may be checking: one round at a time.
+  const busy = useIsMutating({ mutationKey: ["llm", "refresh"] }) > 0;
+  const result = refresh.data;
+  const failedChecks = result?.connections.filter(
+    (connection) => connection.check_error,
+  ).length;
+  const outcome = refresh.isError
+    ? `刷新失败：${refresh.error.message} 仍显示之前的状态。`
+    : result
+      ? [
+          `已于 ${timeText(refresh.submittedAt)} 重新检查`,
+          failedChecks ? `${failedChecks} 个账号未能检查` : "账号均可连接",
+        ].join("，")
+      : "";
+  return (
+    <div className={cn("flex min-w-0 items-center gap-2", className)}>
+      <p
+        role="status"
+        className={cn(
+          "min-w-0 text-right text-xs",
+          refresh.isError || failedChecks
+            ? "text-destructive"
+            : "text-muted-foreground",
+        )}
+      >
+        {busy ? "正在检查…" : outcome}
+      </p>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        aria-busy={busy}
+        disabled={busy}
+        onClick={() => refresh.mutate()}
+        className="shrink-0"
+      >
+        <ArrowClockwiseIcon
+          aria-hidden="true"
+          data-icon="inline-start"
+          className={busy ? "motion-safe:animate-spin" : undefined}
+        />
+        {busy ? "检查中" : "刷新状态"}
+      </Button>
+    </div>
+  );
+}
+
 export function ConnectorSection({
   connector,
   connections,
@@ -367,7 +503,7 @@ export function ConnectorSection({
   // Removing the last usable account takes this connector's models away.
   const affectedBy = (connection: Connection) => {
     const others = connections.some(
-      (other) => other.id !== connection.id && other.state === "active",
+      (other) => other.id !== connection.id && USABLE.has(other.state),
     );
     if (others) return [];
     const ids = new Set(
@@ -424,6 +560,11 @@ export function ConnectorSection({
           尚未绑定账号
         </p>
       )}
+      <ModelStatusList
+        models={(models ?? []).filter(
+          (model) => model.connector === connector.id,
+        )}
+      />
       {login ? (
         // Keyed so every open starts a fresh login.
         <LoginDialog
@@ -457,7 +598,10 @@ export function ProviderSettings() {
     );
   return (
     <div className="space-y-4">
-      <h2 className="text-sm font-semibold">模型服务</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold">模型服务</h2>
+        <RefreshStatus />
+      </div>
       {connections.error ? (
         <p role="alert" className="text-xs text-destructive">
           无法加载账号：{connections.error.message}

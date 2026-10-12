@@ -19,6 +19,9 @@ const (
 	StateNeedsLogin  = "needs_login"
 	StateRateLimited = "rate_limited"
 	StateError       = "error"
+	// StateDegraded is a transient upstream failure (timeouts, 5xx): the
+	// account recovers by itself when its cooldown ends.
+	StateDegraded = "degraded"
 )
 
 // ConnectionError is a product-level explanation; raw upstream errors are only logged.
@@ -37,11 +40,24 @@ type Connection struct {
 	Error     *ConnectionError `json:"error,omitempty"`
 	RetryAt   *time.Time       `json:"retry_at,omitempty"`
 	CreatedAt time.Time        `json:"created_at"`
+	// CheckedAt is when the account was last checked against its provider
+	// (see Service.Usage); CheckError is why that check failed.
+	CheckedAt  *time.Time       `json:"checked_at,omitempty"`
+	CheckError *ConnectionError `json:"check_error,omitempty"`
 	// fileName is the auth file managed through CPA's management API.
 	fileName string
 }
 
 // normalize maps a CPA auth record to a Connection.
+//
+// It follows CPA's own routing (selector.isAuthBlockedForModel): once a
+// credential has per-model states, a failure blocks only its model, and CPA
+// still routes every other model to it. CPA also leaves the credential in
+// StatusError with the last failure until a request succeeds, and
+// aggregates one model's 429 into the credential's quota; neither takes the
+// account down here. Only what is about the credential does: a rejected
+// login, a credential-wide quota, or a failure before any model was tried.
+// Cooldowns end by themselves, whatever the sticky status says.
 func normalize(a *coreauth.Auth, connector string, now time.Time) Connection {
 	c := Connection{
 		ID:        a.ID,
@@ -52,96 +68,166 @@ func normalize(a *coreauth.Auth, connector string, now time.Time) Connection {
 		CreatedAt: a.CreatedAt,
 		fileName:  fileName(a),
 	}
-	httpStatus := 0
-	detail := strings.TrimSpace(a.StatusMessage)
-	if a.LastError != nil {
-		httpStatus = a.LastError.HTTPStatus
-		if detail == "" {
-			detail = strings.TrimSpace(a.LastError.Message)
-		}
-	}
-	lower := strings.ToLower(detail)
 	retry := func(t time.Time) {
 		if t.After(now) {
 			c.RetryAt = &t
 		}
 	}
-
-	// CPA records request failures per model. A rejected credential fails
-	// every model, so a 401 on any of them means the account needs a login;
-	// when every model is cooling down, so is the account.
-	if a.Status != coreauth.StatusError && httpStatus == 0 {
-		cooling, earliest := 0, time.Time{}
-		for _, ms := range a.ModelStates {
-			if ms == nil || ms.LastError == nil {
-				continue
-			}
-			if ms.LastError.HTTPStatus == http.StatusUnauthorized && (ms.Unavailable || ms.Status == coreauth.StatusError) {
-				httpStatus = http.StatusUnauthorized
-				break
-			}
-			if ms.Unavailable && ms.NextRetryAfter.After(now) {
-				cooling++
-				if earliest.IsZero() || ms.NextRetryAfter.Before(earliest) {
-					earliest = ms.NextRetryAfter
-				}
-				if ms.LastError.HTTPStatus == http.StatusTooManyRequests || ms.Quota.Exceeded {
-					httpStatus = http.StatusTooManyRequests
-				}
-			}
-		}
-		if httpStatus == http.StatusTooManyRequests && cooling < len(a.ModelStates) {
-			httpStatus = 0 // some models still work
-		}
-		if httpStatus == http.StatusTooManyRequests && a.NextRetryAfter.Before(earliest) {
-			a = withRetry(a, earliest)
-		}
+	perModel := len(a.ModelStates) > 0
+	status := 0
+	if a.LastError != nil {
+		status = a.LastError.HTTPStatus
 	}
 
 	switch {
 	case a.Disabled || a.Status == coreauth.StatusDisabled:
 		c.State = StateDisabled
-	case a.Quota.Exceeded && a.Quota.NextRecoverAt.After(now):
+	case loginRejected(a, now):
+		c.State = StateNeedsLogin
+		c.Error = &ConnectionError{"AUTH_EXPIRED", "登录已失效，请重新登录。"}
+	case a.Quota.Exceeded && a.Quota.NextRecoverAt.After(now) && (!perModel || a.Quota.Reason == "credential_quota"):
 		c.State = StateRateLimited
 		retry(a.Quota.NextRecoverAt)
 		c.Error = &ConnectionError{"QUOTA_EXCEEDED", "额度已用尽，恢复后会自动继续使用。"}
-	case httpStatus == http.StatusTooManyRequests && a.NextRetryAfter.After(now):
+	case perModel || !a.Unavailable || !a.NextRetryAfter.After(now):
+		// Usable; any model's own trouble is on that model (modelStatus).
+	case status == http.StatusTooManyRequests:
 		c.State = StateRateLimited
 		retry(a.NextRetryAfter)
 		c.Error = &ConnectionError{"RATE_LIMITED", "请求过于频繁，稍后会自动恢复。"}
-	case httpStatus == http.StatusUnauthorized || (a.Status == coreauth.StatusError && looksLikeAuthFailure(lower)):
-		c.State = StateNeedsLogin
-		c.Error = &ConnectionError{"AUTH_EXPIRED", "登录已失效，请重新登录。"}
-	case a.Status == coreauth.StatusError || (a.Unavailable && a.NextRetryAfter.After(now)):
+	case status == http.StatusPaymentRequired || status == http.StatusForbidden:
 		c.State = StateError
 		retry(a.NextRetryAfter)
-		msg := "账号暂时不可用。"
-		if httpStatus == http.StatusForbidden {
-			msg = "上游拒绝了该账号（HTTP 403），可能没有使用权限或已被停用。"
-		} else if httpStatus > 0 {
-			msg = fmt.Sprintf("上游返回错误（HTTP %d），稍后会自动重试。", httpStatus)
-		}
-		c.Error = &ConnectionError{"UPSTREAM_ERROR", msg}
+		c.Error = &ConnectionError{"UPSTREAM_ERROR", fmt.Sprintf("上游拒绝了该账号（HTTP %d），可能没有使用权限或已被停用。", status)}
+	default:
+		c.State = StateDegraded
+		retry(a.NextRetryAfter)
+		c.Error = &ConnectionError{"UPSTREAM_UNSTABLE", transientMessage(status)}
 	}
 	return c
 }
 
-func withRetry(a *coreauth.Auth, at time.Time) *coreauth.Auth {
-	copy := *a
-	copy.NextRetryAfter = at
-	return &copy
+// modelCooldown is when CPA will route a model again, zero when it does now.
+func modelCooldown(ms *coreauth.ModelState, now time.Time) time.Time {
+	if ms.Status == coreauth.StatusDisabled {
+		return now.Add(100 * 365 * 24 * time.Hour)
+	}
+	var until time.Time
+	if ms.Unavailable && ms.NextRetryAfter.After(now) {
+		until = ms.NextRetryAfter
+	}
+	if ms.Quota.Exceeded && ms.Quota.NextRecoverAt.After(until) && ms.Quota.NextRecoverAt.After(now) {
+		until = ms.Quota.NextRecoverAt
+	}
+	return until
 }
 
-// modelUsable reports whether a connection can currently serve model.
-func modelUsable(a *coreauth.Auth, model string, now time.Time) bool {
-	ms := a.ModelStates[model]
-	if ms == nil {
+func modelErrorStatus(ms *coreauth.ModelState) int {
+	if ms.Quota.Exceeded {
+		return http.StatusTooManyRequests
+	}
+	if ms.LastError != nil {
+		return ms.LastError.HTTPStatus
+	}
+	return 0
+}
+
+// loginRejected reports a credential the provider no longer accepts. A 401
+// is about the credential whichever model it came from.
+func loginRejected(a *coreauth.Auth, now time.Time) bool {
+	if coreauth.HasUnauthorizedAuthFailure(a) {
 		return true
 	}
-	if ms.Quota.Exceeded && ms.Quota.NextRecoverAt.After(now) {
-		return false
+	if a.Status == coreauth.StatusError {
+		if a.LastError != nil && a.LastError.HTTPStatus == http.StatusUnauthorized {
+			return true
+		}
+		msg := strings.TrimSpace(a.StatusMessage)
+		if msg == "" && a.LastError != nil {
+			msg = a.LastError.Message
+		}
+		if looksLikeAuthFailure(strings.ToLower(msg)) {
+			return true
+		}
 	}
-	return !(ms.Unavailable && ms.NextRetryAfter.After(now))
+	for _, ms := range a.ModelStates {
+		if ms != nil && ms.LastError != nil && ms.LastError.HTTPStatus == http.StatusUnauthorized &&
+			(ms.Status == coreauth.StatusError || ms.Unavailable) && !modelCooldown(ms, now).IsZero() {
+			return true
+		}
+	}
+	return false
+}
+
+func transientMessage(status int) string {
+	if status > 0 {
+		return fmt.Sprintf("上游暂时故障（HTTP %d），稍后会自动重试。", status)
+	}
+	return "上游暂时无法连接，稍后会自动重试。"
+}
+
+// Model states. A degraded model still takes requests: the failure was
+// transient and CPA retries it when its short cooldown ends.
+const (
+	ModelAvailable   = "available"
+	ModelDegraded    = "degraded"
+	ModelUnavailable = "unavailable"
+)
+
+// modelStatus is what one account can do for model now, given the
+// account's own state. name is the provider's display name.
+func modelStatus(a *coreauth.Auth, conn Connection, model, name string, now time.Time) (string, *ConnectionError, *time.Time) {
+	switch conn.State {
+	case StateActive:
+	case StateDegraded:
+		return ModelDegraded, conn.Error, conn.RetryAt
+	default:
+		return ModelUnavailable, connectionReason(name, conn), conn.RetryAt
+	}
+	ms := a.ModelStates[model]
+	if ms == nil {
+		return ModelAvailable, nil, nil
+	}
+	until := modelCooldown(ms, now)
+	if until.IsZero() {
+		return ModelAvailable, nil, nil
+	}
+	retry := &until
+	if ms.Status == coreauth.StatusDisabled {
+		return ModelUnavailable, &ConnectionError{"DISABLED", "该模型已停用。"}, nil
+	}
+	switch status := modelErrorStatus(ms); status {
+	case http.StatusTooManyRequests:
+		return ModelUnavailable, &ConnectionError{"RATE_LIMITED", name + " 账号的该模型额度已用尽，恢复后可继续使用。"}, retry
+	case http.StatusPaymentRequired, http.StatusForbidden:
+		return ModelUnavailable, &ConnectionError{"FORBIDDEN", fmt.Sprintf("%s 账号无权使用该模型（HTTP %d）。", name, status)}, retry
+	case http.StatusNotFound:
+		return ModelUnavailable, &ConnectionError{"MODEL_NOT_FOUND", name + " 暂不提供该模型（HTTP 404）。"}, retry
+	default:
+		return ModelDegraded, &ConnectionError{"UPSTREAM_UNSTABLE", transientMessage(status)}, retry
+	}
+}
+
+// connectionReason explains a model that is unavailable because of the
+// account serving it.
+func connectionReason(name string, c Connection) *ConnectionError {
+	switch c.State {
+	case StateNeedsLogin:
+		return &ConnectionError{"AUTH_EXPIRED", name + " 账号登录已失效，请重新登录。"}
+	case StateRateLimited:
+		return &ConnectionError{"RATE_LIMITED", name + " 账号额度已用尽，恢复后可继续使用。"}
+	case StateError:
+		msg := name + " 账号暂时不可用。"
+		if c.Error != nil {
+			msg = name + " " + c.Error.Message
+		}
+		return &ConnectionError{"UPSTREAM_ERROR", msg}
+	case StateDisabled:
+		return &ConnectionError{"DISABLED", name + " 账号已停用。"}
+	case StateDegraded:
+		return c.Error
+	}
+	return &ConnectionError{"NO_CONNECTION", "尚未绑定 " + name + " 账号。"}
 }
 
 func looksLikeAuthFailure(msg string) bool {

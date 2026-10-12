@@ -80,7 +80,15 @@ async function render({
   queryClient.setQueryData(["llm", "connections"], connections);
   queryClient.setQueryData(
     ["llm", "models"],
-    [{ id: "gpt", connector: "codex", display_name: "GPT", available: true }],
+    [
+      {
+        id: "gpt",
+        connector: "codex",
+        display_name: "GPT",
+        status: "available",
+        available: true,
+      },
+    ],
   );
   for (const { id } of agents)
     queryClient.setQueryData(

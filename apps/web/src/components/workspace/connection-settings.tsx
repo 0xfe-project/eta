@@ -17,13 +17,14 @@ import { useGitHubStatus, useRefreshGitHub } from "@/queries/forge";
 import {
   GROK_CONNECTOR,
   NEEDS_ACTION,
+  USABLE,
   useConnections,
   useConnectors,
   useUsage,
 } from "@/queries/llm";
 import { connectionStateLabels } from "./connection-state";
 import { GitHubWizard } from "./github-wizard";
-import { ConnectorSection } from "./provider-settings";
+import { ConnectorSection, RefreshStatus } from "./provider-settings";
 
 interface Summary {
   summary: string;
@@ -162,7 +163,7 @@ const GROK_SUMMARY = "生成图片和视频，搜索网页与 X";
 
 function grokSummary(accounts: Connection[] | undefined): Summary {
   if (!accounts) return { summary: GROK_SUMMARY };
-  const active = accounts.find((account) => account.state === "active");
+  const active = accounts.find((account) => USABLE.has(account.state));
   if (active) return { summary: `用 ${active.label} ${GROK_SUMMARY}` };
   const stuck = accounts.find((account) => NEEDS_ACTION.has(account.state));
   if (stuck)
@@ -220,12 +221,15 @@ function GrokConnection() {
               }}
             />
           ) : connector && accounts ? (
-            <ConnectorSection
-              connector={connector}
-              connections={accounts}
-              usage={usage}
-              hideHeading
-            />
+            <>
+              <RefreshStatus className="justify-end" />
+              <ConnectorSection
+                connector={connector}
+                connections={accounts}
+                usage={usage}
+                hideHeading
+              />
+            </>
           ) : (
             <Loading rows={1} />
           )}
