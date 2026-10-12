@@ -411,14 +411,13 @@ function ModelStatusList({ models }: { models: Model[] }) {
               >
                 {model.display_name} {modelStatusLabels[model.status]}
               </span>
-              ：
+              ：{model.reason?.message}
               {[
-                model.reason?.message,
-                untilText(model.retry_at, "自动重试"),
+                untilText(model.retry_at),
                 model.status === "degraded" ? "仍可发送" : "",
               ]
                 .filter(Boolean)
-                .join(" · ")}
+                .join("，")}
             </li>
           ))}
         </ul>
@@ -444,7 +443,7 @@ export function RefreshStatus({ className }: { className?: string }) {
     (connection) => connection.check_error,
   ).length;
   const outcome = refresh.isError
-    ? `刷新失败：${refresh.error.message} 仍显示之前的状态。`
+    ? `刷新失败：${refresh.error.message}仍显示之前的状态。`
     : result
       ? [
           `已于 ${timeText(refresh.submittedAt)} 重新检查`,
@@ -452,11 +451,16 @@ export function RefreshStatus({ className }: { className?: string }) {
         ].join("，")
       : "";
   return (
-    <div className={cn("flex min-w-0 items-center gap-2", className)}>
+    <div
+      className={cn(
+        "flex min-w-0 flex-col-reverse items-end gap-1 sm:flex-row sm:items-center sm:gap-2",
+        className,
+      )}
+    >
       <p
         role="status"
         className={cn(
-          "min-w-0 text-right text-xs",
+          "min-w-0 text-right text-xs empty:hidden",
           refresh.isError || failedChecks
             ? "text-destructive"
             : "text-muted-foreground",

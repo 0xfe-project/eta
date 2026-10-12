@@ -100,7 +100,7 @@ describe("refreshing model status", () => {
     expect(list?.textContent).toContain("gpt-1");
     expect(list?.textContent).toContain("gpt-2");
     expect(document.body.textContent).toContain(
-      "gpt-1 暂时故障：上游暂时故障（HTTP 502），稍后会自动重试。 · 仍可发送",
+      "gpt-1 暂时故障：上游暂时故障（HTTP 502），稍后会自动重试。仍可发送",
     );
   });
 
@@ -147,7 +147,7 @@ describe("refreshing model status", () => {
     await settle();
 
     expect(status()).toBe(
-      "刷新失败：模型服务暂时不可用，请稍后再试。 仍显示之前的状态。",
+      "刷新失败：模型服务暂时不可用，请稍后再试。仍显示之前的状态。",
     );
     expect(models()).toEqual(before);
     expect(models()?.some((m) => m.status === "unavailable")).toBe(false);
