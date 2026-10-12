@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { Connection, Connector, Usage } from "@/queries/llm";
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/ArrowClockwise";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
@@ -433,12 +434,15 @@ export function ConnectorSection({
   connections,
   usage,
   hideHeading,
+  description,
 }: {
   connector: Connector;
   connections: Connection[];
   usage: Usage[] | undefined;
   /** Where a surrounding title already names the provider. */
   hideHeading?: boolean;
+  /** A line under the heading, about what else the accounts serve. */
+  description?: ReactNode;
 }) {
   const [login, setLogin] = useState(0);
   const { agents } = useAgents();
@@ -483,6 +487,9 @@ export function ConnectorSection({
           绑定账号
         </Button>
       </div>
+      {description ? (
+        <p className="text-xs text-muted-foreground">{description}</p>
+      ) : null}
       {connections.length ? (
         <ul
           aria-label={`${connector.display_name} 账号`}
@@ -519,7 +526,7 @@ export function ConnectorSection({
 
 /**
  * Settings → 模型服务: accounts per provider and their state. Grok's account
- * also powers the grok plugin, so it lives under 连接 instead.
+ * also powers the grok plugin, whose card under 连接 shows the same accounts.
  */
 export function ProviderSettings() {
   const setSettings = useWorkspaceStore((s) => s.setSettings);
@@ -547,32 +554,33 @@ export function ProviderSettings() {
         </p>
       ) : null}
       {connectors.isPending ? <Loading rows={2} /> : null}
-      {(connectors.data ?? [])
-        .filter((connector) => connector.id !== GROK_CONNECTOR)
-        .map((connector) => (
-          <ConnectorSection
-            key={connector.id}
-            connector={connector}
-            connections={(connections.data ?? []).filter(
-              (connection) => connection.connector === connector.id,
-            )}
-            usage={usage}
-          />
-        ))}
-      {connectors.data?.some((connector) => connector.id === GROK_CONNECTOR) ? (
-        <p className="text-xs text-muted-foreground">
-          Grok 账号在
-          <Button
-            variant="link"
-            size="xs"
-            className="px-1"
-            onClick={() => setSettings({ open: true, section: "connections" })}
-          >
-            连接
-          </Button>
-          中绑定
-        </p>
-      ) : null}
+      {(connectors.data ?? []).map((connector) => (
+        <ConnectorSection
+          key={connector.id}
+          connector={connector}
+          connections={(connections.data ?? []).filter(
+            (connection) => connection.connector === connector.id,
+          )}
+          usage={usage}
+          description={
+            connector.id === GROK_CONNECTOR ? (
+              <>
+                同一账号也供 grok 插件生成图片、视频和搜索，见
+                <Button
+                  variant="link"
+                  size="xs"
+                  className="h-auto px-1"
+                  onClick={() =>
+                    setSettings({ open: true, section: "connections" })
+                  }
+                >
+                  连接
+                </Button>
+              </>
+            ) : undefined
+          }
+        />
+      ))}
     </div>
   );
 }

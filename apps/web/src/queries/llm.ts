@@ -223,17 +223,13 @@ export const NEEDS_ACTION = new Set<Connection["state"]>([
 /** The xAI connector: Grok's models and the grok plugin's tools. */
 export const GROK_CONNECTOR = "xai";
 
-/**
- * Whether an account needs the user; `grok` narrows it to Grok's (true) or
- * the other providers' (false).
- */
+/** Whether an account needs the user; `grok` narrows it to Grok's. */
 export function useNeedsAttention(grok?: boolean) {
   const { data } = useConnections();
   return (data ?? []).some(
     (connection) =>
       NEEDS_ACTION.has(connection.state) &&
-      (grok === undefined ||
-        (connection.connector === GROK_CONNECTOR) === grok),
+      (!grok || connection.connector === GROK_CONNECTOR),
   );
 }
 

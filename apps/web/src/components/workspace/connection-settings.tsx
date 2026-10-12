@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { LoadError, Loading } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +26,7 @@ import {
 import { connectionStateLabels } from "./connection-state";
 import { GitHubWizard } from "./github-wizard";
 import { ConnectorSection, RefreshStatus } from "./provider-settings";
+import { useWorkspaceStore } from "./workspace-store";
 
 interface Summary {
   summary: string;
@@ -184,6 +186,7 @@ function grokSummary(accounts: Connection[] | undefined): Summary {
  * Grok models and the grok plugin's images, videos and search.
  */
 function GrokConnection() {
+  const setSettings = useWorkspaceStore((s) => s.setSettings);
   const connectors = useConnectors();
   const connections = useConnections();
   const { data: usage } = useUsage();
@@ -228,6 +231,23 @@ function GrokConnection() {
                 connections={accounts}
                 usage={usage}
                 hideHeading
+                description={
+                  <>
+                    与
+                    <Button
+                      variant="link"
+                      size="xs"
+                      className="h-auto px-1"
+                      onClick={() => {
+                        setOpen(false);
+                        setSettings({ open: true, section: "providers" });
+                      }}
+                    >
+                      模型服务
+                    </Button>
+                    里的 Grok 是同一账号，也提供 Grok 模型
+                  </>
+                }
               />
             </>
           ) : (

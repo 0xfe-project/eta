@@ -240,9 +240,9 @@ function useSettingsLink() {
 export function SettingsDialog() {
   const settings = useWorkspaceStore((s) => s.settings);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
-  // Grok's account lives under 连接, the other providers' under 模型服务.
+  // 模型服务 lists every account; 连接 only Grok's, for the grok plugin.
   const attention: Partial<Record<SettingsSection, boolean>> = {
-    providers: useNeedsAttention(false),
+    providers: useNeedsAttention(),
     connections: useNeedsAttention(true),
   };
   useSettingsLink();

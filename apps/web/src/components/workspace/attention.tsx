@@ -148,9 +148,6 @@ function LinkRowBody({
 }) {
   return (
     <>
-      <span className="flex size-7 shrink-0 items-center justify-center">
-        <Icon aria-hidden="true" className="size-4 text-muted-foreground" />
-      </span>
       <span className="min-w-0 flex-1">
         <span className="line-clamp-3 text-sm break-words">{title}</span>
         <span
@@ -161,6 +158,9 @@ function LinkRowBody({
         >
           {reason}
         </span>
+      </span>
+      <span className="flex size-7 shrink-0 items-center justify-center">
+        <Icon aria-hidden="true" className="size-4 text-muted-foreground" />
       </span>
       <CaretRightIcon
         aria-hidden="true"
