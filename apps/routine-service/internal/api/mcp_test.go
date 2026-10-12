@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -12,6 +13,13 @@ import (
 // mcp calls a tool of the routines plugin as agent; it is the tool's result
 // (JSON), or its error text.
 func (e *env) mcp(agent, tool string, args map[string]any) (map[string]any, string) {
+	e.t.Helper()
+	v, _, errText := e.mcpResult(agent, tool, args)
+	return v, errText
+}
+
+// mcpResult is mcp with the result's _meta.
+func (e *env) mcpResult(agent, tool string, args map[string]any) (v, meta map[string]any, errText string) {
 	e.t.Helper()
 	body, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
@@ -30,7 +38,7 @@ func (e *env) mcp(agent, tool string, args map[string]any) (map[string]any, stri
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
-		return nil, string(data)
+		return nil, nil, string(data)
 	}
 	var out struct {
 		Result struct {
@@ -38,17 +46,17 @@ func (e *env) mcp(agent, tool string, args map[string]any) (map[string]any, stri
 			Content []struct {
 				Text string `json:"text"`
 			} `json:"content"`
+			Meta map[string]any `json:"_meta"`
 		} `json:"result"`
 	}
 	if err := json.Unmarshal(data, &out); err != nil || len(out.Result.Content) == 0 {
 		e.t.Fatalf("%s: %s", tool, data)
 	}
 	if out.Result.IsError {
-		return nil, out.Result.Content[0].Text
+		return nil, nil, out.Result.Content[0].Text
 	}
-	var v map[string]any
 	_ = json.Unmarshal([]byte(out.Result.Content[0].Text), &v)
-	return v, ""
+	return v, out.Result.Meta, ""
 }
 
 // A chat agent sets up a routine from the conversation, reads it and changes
@@ -85,7 +93,9 @@ func TestAChatAgentManagesRoutines(t *testing.T) {
 	if _, errText := e.mcp(agent, "update_routine", map[string]any{"routine": id, "brief": "只要 AI 新闻。", "enabled": false}); errText != "" {
 		t.Fatal(errText)
 	}
-	shown, _ := e.mcp(agent, "get_routine", map[string]any{"routine": id})
+	shown, meta, _ := e.mcpResult(agent, "get_routine", map[string]any{"routine": id})
+	// The transcript links the call to the routine.
+	expect(t, fmt.Sprint(meta["axp/ref"]), fmt.Sprintf("map[id:%s kind:routine title:日报]", id))
 	briefs := shown["briefs"].([]any)
 	expect(t, briefs[0].(map[string]any)["text"], any("只要 AI 新闻。"))
 	expect(t, len(briefs), 2)

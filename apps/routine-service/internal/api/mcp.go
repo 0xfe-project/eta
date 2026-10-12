@@ -64,6 +64,16 @@ type routineListOut struct {
 	Routines []routines.RoutineSummary `json:"routines"`
 }
 
+// routineResult names the routine for the transcript to link to: AXP tools
+// put the one thing they made or touched in their result's _meta "axp/ref"
+// (apps/agent-runtime/src/items.ts).
+func routineResult(r *routines.Routine) *mcp.CallToolResult {
+	if r == nil {
+		return nil
+	}
+	return &mcp.CallToolResult{Meta: mcp.Meta{"axp/ref": map[string]any{"kind": "routine", "id": r.ID, "title": r.Name}}}
+}
+
 // mcpError is what the agent sees: the product message.
 func mcpError(err error) error {
 	var product *apierr.Error
@@ -89,7 +99,7 @@ func routinesMCP(d *Deps) http.Handler {
 		Description: "One routine in full: its brief and earlier versions, its handoff note, and its recent runs with their reports and the user's feedback.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in routineRef) (*mcp.CallToolResult, any, error) {
 		r, err := s.Get(ctx, d.DB, in.Routine)
-		return nil, r, mcpError(err)
+		return routineResult(r), r, mcpError(err)
 	})
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_run",
@@ -125,7 +135,7 @@ func routinesMCP(d *Deps) http.Handler {
 				Name: in.Name, Brief: in.Brief, Model: model, Schedule: *in.Schedule.schedule(), Timezone: in.Timezone,
 			})
 		})
-		return nil, r, mcpError(err)
+		return routineResult(r), r, mcpError(err)
 	})
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "update_routine",
@@ -137,14 +147,14 @@ func routinesMCP(d *Deps) http.Handler {
 				Timezone: in.Timezone, Enabled: in.Enabled,
 			})
 		})
-		return nil, r, mcpError(err)
+		return routineResult(r), r, mcpError(err)
 	})
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "run_routine",
 		Description: "Run a routine now, as if its schedule fired; its report shows up in AXP when it finishes.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in routineRef) (*mcp.CallToolResult, any, error) {
 		r, err := s.RunNow(ctx, d.DB, in.Routine)
-		return nil, r, mcpError(err)
+		return routineResult(r), r, mcpError(err)
 	})
 
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, &mcp.StreamableHTTPOptions{

@@ -104,6 +104,11 @@ func (agentTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 // openPullRequest calls the MCP tool the way Codex does.
 func (e *env) openPullRequest(args map[string]any) *mcp.CallToolResult {
 	e.t.Helper()
+	return e.callTool("open_pull_request", args)
+}
+
+func (e *env) callTool(name string, args map[string]any) *mcp.CallToolResult {
+	e.t.Helper()
 	ctx := context.Background()
 	client := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil)
 	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{
@@ -114,7 +119,7 @@ func (e *env) openPullRequest(args map[string]any) *mcp.CallToolResult {
 		e.t.Fatal(err)
 	}
 	defer session.Close()
-	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "open_pull_request", Arguments: args})
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -328,6 +333,10 @@ func TestOpenPullRequestAsTheAppsBot(t *testing.T) {
 		pull["author"] != "axp-test[bot]" {
 		t.Fatalf("pull: %v", pull)
 	}
+	// The transcript links the call to it.
+	if ref := result.Meta["axp/ref"]; fmt.Sprint(ref) != fmt.Sprintf("map[kind:pull_request number:1 title:Add feature url:%s]", pull["url"]) {
+		t.Fatalf("ref: %v", ref)
+	}
 	// On GitHub, by the App's bot, into the default branch.
 	req, _ := http.NewRequest(http.MethodGet, emulator.backend+"/repos/akarachen/axp/pulls/1", nil)
 	req.Header.Set("Authorization", "Bearer "+token(credentials))
@@ -349,6 +358,9 @@ func TestOpenPullRequestAsTheAppsBot(t *testing.T) {
 	again := e.openPullRequest(map[string]any{"repository": "akarachen/axp", "head": "feature", "title": "x"})
 	if !strings.Contains(text(again), `"created":false`) || !strings.Contains(text(again), "/pull/1") {
 		t.Fatalf("again: %v", text(again))
+	}
+	if _, titled := again.Meta["axp/ref"].(map[string]any)["title"]; titled {
+		t.Fatalf("an open one found has its own title: %v", again.Meta)
 	}
 	same := e.openPullRequest(map[string]any{"repository": "akarachen/axp", "head": "main", "title": "x"})
 	if !same.IsError || !strings.Contains(text(same), "GitHub 拒绝创建 PR") {

@@ -38,6 +38,22 @@ type Block struct {
 	Name   string
 	Input  string
 	Output string
+	// The one thing it made or touched; the zero ActivityRef when it names none.
+	Ref ActivityRef
+}
+
+// ActivityRef is the one thing an activity made or touched, as its tool
+// named it (apps/agent-runtime/src/items.ts): a task or a routine in AXP, a
+// pull request on GitHub, or an issue drafted for the user to file there.
+// The transcript links to it.
+type ActivityRef struct {
+	Kind   string `json:"kind" enum:"task,routine,pull_request,issue_draft"`
+	ID     string `json:"id,omitempty" doc:"The task's or routine's id."`
+	Number int64  `json:"number,omitempty" doc:"The task's or pull request's number."`
+	Title  string `json:"title"`
+	Status string `json:"status,omitempty" doc:"The task's status as the tool left it."`
+	URL    string `json:"url,omitempty" doc:"The pull request, or GitHub's new-issue page prefilled with the draft."`
+	Body   string `json:"body,omitempty" doc:"A draft's body, when its URL is too long to carry it."`
 }
 
 type TextBlock struct {
@@ -47,35 +63,41 @@ type TextBlock struct {
 }
 
 type ActivityBlock struct {
-	ID     string `json:"id"`
-	Type   string `json:"type" enum:"activity"`
-	Label  string `json:"label"`
-	Status string `json:"status" enum:"running,completed,failed"`
-	Name   string `json:"name,omitempty" doc:"The tool's own name (MCP and dynamic tools)."`
-	Input  string `json:"input,omitempty"`
-	Output string `json:"output,omitempty"`
+	ID     string       `json:"id"`
+	Type   string       `json:"type" enum:"activity"`
+	Label  string       `json:"label"`
+	Status string       `json:"status" enum:"running,completed,failed"`
+	Name   string       `json:"name,omitempty" doc:"The tool's own name (MCP and dynamic tools)."`
+	Input  string       `json:"input,omitempty"`
+	Output string       `json:"output,omitempty"`
+	Ref    *ActivityRef `json:"ref,omitempty"`
 }
 
 func (b Block) MarshalJSON() ([]byte, error) {
 	if b.Type == "text" {
 		return json.Marshal(TextBlock{ID: b.ID, Type: b.Type, Text: b.Text})
 	}
-	return json.Marshal(ActivityBlock{
+	activity := ActivityBlock{
 		ID: b.ID, Type: b.Type, Label: b.Label, Status: b.Status,
 		Name: b.Name, Input: b.Input, Output: b.Output,
-	})
+	}
+	if b.Ref.Kind != "" {
+		activity.Ref = &b.Ref
+	}
+	return json.Marshal(activity)
 }
 
 func (b *Block) UnmarshalJSON(data []byte) error {
 	var raw struct {
-		ID     string  `json:"id"`
-		Type   string  `json:"type"`
-		Text   string  `json:"text"`
-		Label  string  `json:"label"`
-		Status string  `json:"status"`
-		Name   *string `json:"name"`
-		Input  *string `json:"input"`
-		Output *string `json:"output"`
+		ID     string       `json:"id"`
+		Type   string       `json:"type"`
+		Text   string       `json:"text"`
+		Label  string       `json:"label"`
+		Status string       `json:"status"`
+		Name   *string      `json:"name"`
+		Input  *string      `json:"input"`
+		Output *string      `json:"output"`
+		Ref    *ActivityRef `json:"ref"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
@@ -89,6 +111,9 @@ func (b *Block) UnmarshalJSON(data []byte) error {
 	*b = Block{
 		ID: raw.ID, Type: raw.Type, Text: raw.Text, Label: raw.Label, Status: raw.Status,
 		Name: deref(raw.Name), Input: deref(raw.Input), Output: deref(raw.Output),
+	}
+	if raw.Ref != nil {
+		b.Ref = *raw.Ref
 	}
 	return nil
 }
