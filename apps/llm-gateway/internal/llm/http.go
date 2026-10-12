@@ -29,6 +29,9 @@ func Mount(e *gin.Engine, s *Service, book *usage.Book, logger *slog.Logger) {
 	// last 5 hours, day and week.
 	v1.GET("/usage/agents", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"usage": book.Report(time.Now())}) })
 	v1.GET("/models", func(c *gin.Context) { c.JSON(http.StatusOK, s.Models()) })
+	// Checks every account against its provider now, rather than reporting
+	// what the last requests left behind.
+	v1.POST("/refresh", h.refresh)
 	v1.POST("/logins", h.startLogin)
 	v1.GET("/logins/:id", h.pollLogin)
 	v1.POST("/logins/:id/input", h.submitLogin)
@@ -62,6 +65,15 @@ func (h handler) deleteConnection(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+func (h handler) refresh(c *gin.Context) {
+	status, err := h.s.Refresh(c.Request.Context())
+	if err != nil {
+		h.error(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, status)
 }
 
 func (h handler) startLogin(c *gin.Context) {

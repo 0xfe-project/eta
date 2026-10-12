@@ -60,7 +60,11 @@ export function ModelSelect({
                 disabled={!model.available && model.id !== value}
               >
                 {model.display_name}
-                {model.available ? "" : "（不可用）"}
+                {model.status === "unavailable"
+                  ? "（不可用）"
+                  : model.status === "degraded"
+                    ? "（暂时故障）"
+                    : ""}
               </SelectOption>
             ))}
           </SelectGroup>

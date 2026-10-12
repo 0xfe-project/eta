@@ -21,10 +21,21 @@ const connectionSchema = z.object({
   connector: z.string(),
   label: z.string(),
   plan: z.string().optional(),
-  state: z.enum(["active", "disabled", "needs_login", "rate_limited", "error"]),
+  state: z.enum([
+    "active",
+    "disabled",
+    "needs_login",
+    "rate_limited",
+    "error",
+    "degraded",
+  ]),
   error: reasonSchema.optional(),
   retry_at: z.string().optional(),
   created_at: z.string(),
+  /** When the account was last checked against its provider. */
+  checked_at: z.string().optional(),
+  /** Why that check failed; the account's state stays as it was. */
+  check_error: reasonSchema.optional(),
 });
 
 const modelSchema = z.object({
@@ -32,8 +43,15 @@ const modelSchema = z.object({
   connector: z.string(),
   display_name: z.string(),
   context_window: z.number().optional(),
+  /**
+   * `degraded` is a transient upstream failure: requests still go through
+   * and it clears by itself (`retry_at`); `unavailable` needs the user.
+   */
+  status: z.enum(["available", "degraded", "unavailable"]),
+  /** Whether chats may use it: status is not `unavailable`. */
   available: z.boolean(),
-  unavailable_reason: reasonSchema.optional(),
+  reason: reasonSchema.optional(),
+  retry_at: z.string().optional(),
 });
 
 const usageSchema = z.object({
@@ -150,6 +168,41 @@ export function useAgentUsage(principal: string | undefined) {
   });
 }
 
+const statusSchema = z.object({
+  connections: z.array(connectionSchema),
+  models: z.array(modelSchema),
+  usage: z.array(usageSchema),
+});
+
+const statusKeys = [keys.connections, keys.models, keys.usage];
+
+/**
+ * Checks every account against its provider now (not just a re-read of
+ * what the last requests left behind). Polls in flight are cancelled before
+ * and after, so none that started earlier lands on top of the result; a
+ * failed check leaves the status as it was.
+ */
+export function useRefreshLlmStatus() {
+  const queryClient = useQueryClient();
+  const cancel = () =>
+    Promise.all(
+      statusKeys.map((queryKey) => queryClient.cancelQueries({ queryKey })),
+    );
+  return useMutation({
+    mutationKey: ["llm", "refresh"],
+    mutationFn: async () => {
+      await cancel();
+      return statusSchema.parse(await llmApi.post("/refresh", {}));
+    },
+    onSuccess: async (status) => {
+      await cancel();
+      queryClient.setQueryData(keys.connections, status.connections);
+      queryClient.setQueryData(keys.models, status.models);
+      queryClient.setQueryData(keys.usage, status.usage);
+    },
+  });
+}
+
 export function refreshLlm(queryClient: QueryClient) {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: keys.connections }),
@@ -157,6 +210,9 @@ export function refreshLlm(queryClient: QueryClient) {
     queryClient.invalidateQueries({ queryKey: keys.usage }),
   ]);
 }
+
+/** Accounts that serve requests; a degraded one recovers by itself. */
+export const USABLE = new Set<Connection["state"]>(["active", "degraded"]);
 
 /** Accounts the user has to act on (re-login, or an error that will not clear). */
 export const NEEDS_ACTION = new Set<Connection["state"]>([
@@ -234,36 +290,47 @@ export function useDeleteConnection() {
 export type ModelAvailability =
   | { state: "ok"; model: Model | undefined }
   | { state: "not_set" }
+  /** A transient upstream failure: chats go on, with a warning. */
+  | { state: "degraded"; model: Model; message: string }
   | { state: "unavailable"; model: Model | undefined; message: string };
 
 /**
  * Whether an agent can chat with its model. The control plane enforces the
- * same rule; this only keeps the UI ahead of it.
+ * same rule; this only keeps the UI ahead of it. While the catalog cannot
+ * be read (stale is true), the last one only names models: it does not
+ * block, and the server decides on send.
  */
-function modelAvailability(
+export function modelAvailability(
   agent: Pick<Agent, "model"> | undefined,
   models: Model[] | undefined,
+  stale = false,
 ): ModelAvailability {
   const model = models?.find((item) => item.id === agent?.model);
   if (!agent?.model) return { state: "not_set" };
   // Unknown until the catalog loads; the server still checks on send.
-  if (!models) return { state: "ok", model };
+  if (!models || stale) return { state: "ok", model };
   if (!model)
     return {
       state: "unavailable",
       model,
       message: `${agent.model} 已不存在，请更换模型。`,
     };
-  if (!model.available)
+  if (model.status === "unavailable")
     return {
       state: "unavailable",
       model,
-      message: `${model.display_name} 暂不可用：${model.unavailable_reason?.message ?? "请检查模型服务中的账号。"}`,
+      message: `${model.display_name} 暂不可用：${model.reason?.message ?? "请检查模型服务中的账号。"}`,
+    };
+  if (model.status === "degraded")
+    return {
+      state: "degraded",
+      model,
+      message: `${model.display_name} ${model.reason?.message ?? "上游暂时故障，稍后会自动重试。"}仍可发送。`,
     };
   return { state: "ok", model };
 }
 
 export function useModelAvailability(agent: Pick<Agent, "model"> | undefined) {
-  const { data } = useModels();
-  return modelAvailability(agent, data);
+  const { data, isError } = useModels();
+  return modelAvailability(agent, data, isError);
 }

@@ -18,13 +18,14 @@ import { useGitHubStatus, useRefreshGitHub } from "@/queries/forge";
 import {
   GROK_CONNECTOR,
   NEEDS_ACTION,
+  USABLE,
   useConnections,
   useConnectors,
   useUsage,
 } from "@/queries/llm";
 import { connectionStateLabels } from "./connection-state";
 import { GitHubWizard } from "./github-wizard";
-import { ConnectorSection } from "./provider-settings";
+import { ConnectorSection, RefreshStatus } from "./provider-settings";
 import { useWorkspaceStore } from "./workspace-store";
 
 interface Summary {
@@ -164,7 +165,7 @@ const GROK_SUMMARY = "生成图片和视频，搜索网页与 X";
 
 function grokSummary(accounts: Connection[] | undefined): Summary {
   if (!accounts) return { summary: GROK_SUMMARY };
-  const active = accounts.find((account) => account.state === "active");
+  const active = accounts.find((account) => USABLE.has(account.state));
   if (active) return { summary: `用 ${active.label} ${GROK_SUMMARY}` };
   const stuck = accounts.find((account) => NEEDS_ACTION.has(account.state));
   if (stuck)
@@ -223,29 +224,32 @@ function GrokConnection() {
               }}
             />
           ) : connector && accounts ? (
-            <ConnectorSection
-              connector={connector}
-              connections={accounts}
-              usage={usage}
-              hideHeading
-              description={
-                <>
-                  与
-                  <Button
-                    variant="link"
-                    size="xs"
-                    className="h-auto px-1"
-                    onClick={() => {
-                      setOpen(false);
-                      setSettings({ open: true, section: "providers" });
-                    }}
-                  >
-                    模型服务
-                  </Button>
-                  里的 Grok 是同一账号，也提供 Grok 模型
-                </>
-              }
-            />
+            <>
+              <RefreshStatus className="justify-end" />
+              <ConnectorSection
+                connector={connector}
+                connections={accounts}
+                usage={usage}
+                hideHeading
+                description={
+                  <>
+                    与
+                    <Button
+                      variant="link"
+                      size="xs"
+                      className="h-auto px-1"
+                      onClick={() => {
+                        setOpen(false);
+                        setSettings({ open: true, section: "providers" });
+                      }}
+                    >
+                      模型服务
+                    </Button>
+                    里的 Grok 是同一账号，也提供 Grok 模型
+                  </>
+                }
+              />
+            </>
           ) : (
             <Loading rows={1} />
           )}

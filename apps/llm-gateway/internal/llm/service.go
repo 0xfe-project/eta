@@ -19,15 +19,22 @@ import (
 )
 
 // Model is an entry of the catalog. Models stay listed after their last
-// connection goes away (available=false) so agents keep their selection and
+// connection goes away (unavailable) so agents keep their selection and
 // recover automatically when an account is connected again.
 type Model struct {
-	ID            string           `json:"id"`
-	Connector     string           `json:"connector"`
-	DisplayName   string           `json:"display_name"`
-	ContextWindow int              `json:"context_window,omitempty"`
-	Available     bool             `json:"available"`
-	Unavailable   *ConnectionError `json:"unavailable_reason,omitempty"`
+	ID            string `json:"id"`
+	Connector     string `json:"connector"`
+	DisplayName   string `json:"display_name"`
+	ContextWindow int    `json:"context_window,omitempty"`
+	// Status is ModelAvailable, ModelDegraded or ModelUnavailable, from the
+	// best account that serves the model.
+	Status string `json:"status,omitempty"`
+	// Available is whether requests are let through: a degraded model is.
+	Available bool `json:"available"`
+	// Reason explains a degraded or unavailable model; RetryAt is when it
+	// recovers by itself, if it does.
+	Reason  *ConnectionError `json:"reason,omitempty"`
+	RetryAt *time.Time       `json:"retry_at,omitempty"`
 }
 
 // Service ties connectors, CPA's auth manager and the model catalog together.
@@ -44,6 +51,8 @@ type Service struct {
 	mu          sync.Mutex
 	catalog     map[string]Model
 	logins      map[string]loginRef
+	checks      map[string]check
+	refreshing  *refreshCall
 	now         func() time.Time
 }
 
@@ -74,6 +83,7 @@ func NewService(cfg Config) *Service {
 		catalogPath: cfg.CatalogPath,
 		catalog:     map[string]Model{},
 		logins:      map[string]loginRef{},
+		checks:      map[string]check{},
 		now:         time.Now,
 	}
 	for _, c := range cfg.Connectors {
@@ -109,7 +119,7 @@ func (s *Service) Connections() []Connection {
 		if !ok {
 			continue
 		}
-		out = append(out, normalize(a, connector, now))
+		out = append(out, s.withCheck(normalize(a, connector, now), a))
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Connector != out[j].Connector {
@@ -151,8 +161,11 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return s.manage(ctx, http.MethodDelete, "/auth-files?name="+url.QueryEscape(c.fileName), nil)
 }
 
-// Models returns the catalog with current availability.
+// Models returns the catalog with each model's current status: the best of
+// the accounts that serve it, so one account's trouble does not hide a
+// model another account still serves.
 func (s *Service) Models() []Model {
+	now := s.now()
 	conns := s.Connections()
 	connByID := map[string]Connection{}
 	worst := map[string]Connection{} // per connector, the most actionable problem
@@ -163,7 +176,12 @@ func (s *Service) Models() []Model {
 		}
 	}
 
-	available := map[string]bool{}
+	type status struct {
+		state   string
+		reason  *ConnectionError
+		retryAt *time.Time
+	}
+	best := map[string]status{}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	changed := false
@@ -172,8 +190,11 @@ func (s *Service) Models() []Model {
 		if !ok {
 			continue
 		}
-		active := connByID[a.ID].State == StateActive
-		now := s.now()
+		conn, ok := connByID[a.ID]
+		if !ok {
+			continue
+		}
+		name := s.byID[connector].Info().DisplayName
 		for _, info := range s.registry.GetModelsForClient(a.ID) {
 			if info == nil || info.ID == "" || !chatModel(info) {
 				continue
@@ -188,8 +209,9 @@ func (s *Service) Models() []Model {
 				s.catalog[m.ID] = m
 				changed = true
 			}
-			if active && modelUsable(a, m.ID, now) {
-				available[m.ID] = true
+			state, reason, retryAt := modelStatus(a, conn, m.ID, name, now)
+			if prev, ok := best[m.ID]; !ok || modelRank(state) > modelRank(prev.state) {
+				best[m.ID] = status{state, reason, retryAt}
 			}
 		}
 	}
@@ -199,10 +221,17 @@ func (s *Service) Models() []Model {
 
 	out := make([]Model, 0, len(s.catalog))
 	for _, m := range s.catalog {
-		m.Available = available[m.ID]
-		if !m.Available {
-			m.Unavailable = unavailableReason(s.byID[m.Connector], worst[m.Connector])
+		st, ok := best[m.ID]
+		if !ok {
+			// No account serves it: none is connected, or they all are down.
+			w := worst[m.Connector]
+			st = status{ModelUnavailable, connectionReason(s.connectorName(m.Connector), w), w.RetryAt}
+			if w.State == StateDegraded {
+				st.state = ModelDegraded
+			}
 		}
+		m.Status, m.Reason, m.RetryAt = st.state, st.reason, st.retryAt
+		m.Available = st.state != ModelUnavailable
 		out = append(out, m)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -214,31 +243,32 @@ func (s *Service) Models() []Model {
 	return out
 }
 
-func unavailableReason(c Connector, worst Connection) *ConnectionError {
-	name := "该服务"
-	if c != nil {
-		name = c.Info().DisplayName
+func (s *Service) connectorName(id string) string {
+	if c, ok := s.byID[id]; ok {
+		return c.Info().DisplayName
 	}
-	switch worst.State {
-	case StateNeedsLogin:
-		return &ConnectionError{"AUTH_EXPIRED", name + " 账号登录已失效，请重新登录。"}
-	case StateRateLimited:
-		return &ConnectionError{"RATE_LIMITED", name + " 账号额度已用尽，恢复后可继续使用。"}
-	case StateError:
-		return &ConnectionError{"UPSTREAM_ERROR", name + " 账号暂时不可用。"}
-	case StateDisabled:
-		return &ConnectionError{"DISABLED", name + " 账号已停用。"}
+	return "该服务"
+}
+
+func modelRank(state string) int {
+	switch state {
+	case ModelAvailable:
+		return 2
+	case ModelDegraded:
+		return 1
 	}
-	return &ConnectionError{"NO_CONNECTION", "尚未绑定 " + name + " 账号。"}
+	return 0
 }
 
 func severity(state string) int {
 	switch state {
 	case StateNeedsLogin:
-		return 4
+		return 5
 	case StateError:
-		return 3
+		return 4
 	case StateRateLimited:
+		return 3
+	case StateDegraded:
 		return 2
 	case StateDisabled:
 		return 1

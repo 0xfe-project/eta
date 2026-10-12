@@ -44,9 +44,15 @@ Connector 只负责“凭据怎么进来”；连接列表、启停、删除统�
 
 ## 状态与模型目录
 
-`GET /api/llm/v1/connections` 把 CPA 的凭据状态归一化为 `active`、`disabled`、`needs_login`、`rate_limited`、`error`，附中文说明和恢复时间，不返回 token。CPA 把请求失败记在每个模型上（`ModelStates`），所以任一模型收到 401 即视为账号需要重新登录；所有模型都在冷却中才视为账号被限流。
+`GET /api/llm/v1/connections` 把 CPA 的凭据状态归一化为 `active`、`disabled`、`needs_login`、`rate_limited`、`error`、`degraded`，附中文说明和恢复时间，不返回 token。状态以 CPA 实际怎么路由为准（`selector.isAuthBlockedForModel`），读时派生，网关不另存状态、不跑定时任务：
 
-`GET /api/llm/v1/models` 返回模型目录。见过的模型持久化在 `models.json`，账号失效或被移除后模型仍在目录中（`available: false` 并附原因），智能体保留原来的选择，重新绑定后自动恢复。图像、视频等非对话模型和 `codex-auto-review` 被过滤。
+- CPA 把请求失败记在模型上（`ModelStates`），之后只有该模型被冷却，其他模型照常路由到这个账号。所以只有关于凭据本身的失败才影响整个账号：任一模型收到 401（`needs_login`）、凭据级额度（`credential_quota`）、尚未有模型状态时的账号级失败（429 → `rate_limited`，402/403 → `error`，其余 → `degraded`）。
+- CPA 在失败后把凭据留在 `StatusError` 和最后一次错误上，直到有请求成功；聚合出的 `Quota.Exceeded` 也可能只来自一个模型的 429。网关不据此判整个账号不可用；冷却到期即恢复，不需要一次成功请求来解锁（#89：一次 502 曾因此让全部模型一直不可用）。
+- 瞬时失败（超时、5xx、无状态码）由 CPA 冷却约 1 分钟（上游给了 Retry-After 时按它），之后的失败只延长仍在进行的冷却，不会叠加。
+
+`GET /api/llm/v1/models` 返回模型目录和每个模型的 `status`：`available`、`degraded`（瞬时故障，冷却中，请求仍放行，附 `retry_at`）、`unavailable`（明确错误：未绑定、停用、登录失效、无权（402/403）、模型不存在（404）、额度用尽；附 `reason`）。同一模型由多个账号提供时取最好的那个。`available` 即 `status != unavailable`。见过的模型持久化在 `models.json`，账号失效或被移除后模型仍在目录中，智能体保留原来的选择，重新绑定后自动恢复。图像、视频等非对话模型和 `codex-auto-review` 被过滤。
+
+`POST /api/llm/v1/refresh` 立即重新检查：对每个启用的账号读一次用量（`GET /usage` 也是同一操作）——带账号令牌的上游请求，不消耗额度，也不重放任何会话或消息。上游拒绝令牌（401）时先用 CPA 的 `ForceRefreshAuth` 刷新一次再读，仍被拒绝才判 `needs_login`；网络或上游故障只在账号上记 `check_error`，不改变可用性。并发调用共享同一轮检查；检查结果按开始时间新者为准，CPA 在检查之后又有请求结果时以请求结果为准。返回 `{connections, models, usage}`。检查只能证明账号和上游可达，不能证明某个模型的推理已恢复，模型的瞬时故障仍由冷却到期解除。
 
 ### 服务直连
 
@@ -61,12 +67,12 @@ Kamal 网络上的服务（不是 runtime）直接调用 `/v1`，不带 key，�
 ## control-plane 与 runtime
 
 - `Agent.model` 存目录中的模型 ID；创建、修改时校验存在性，修改模型与修改指令一样递增 `config_version`，空闲时重启 runtime。
-- `POST /chat/messages` 在加锁前检查模型：未设置返回 409 `MODEL_NOT_SET`，不可用（或网关不可达）返回 409 `MODEL_UNAVAILABLE`。目录在进程内缓存 10 秒。
+- `POST /chat/messages` 在加锁前检查模型：未设置返回 409 `MODEL_NOT_SET`，`unavailable` 返回 409 `MODEL_UNAVAILABLE`；`degraded` 放行。目录在进程内缓存 10 秒；网关读不到时沿用上次读到的目录，从未读到过才返回 409。
 - controller 给 runtime 注入 runtime 网关的地址（`AXP_GATEWAY_URL`）和模型的上下文窗口；runtime 自己在后面加上 `/v1`。
 - runtime 给 Codex 加上 `model_provider = "axp"` 及 `model_providers.axp.{base_url, wire_api = "responses", env_key = "AXP_RUNTIME_LLM_KEY"}`，并在需要时设置 `model_context_window`；Codex 进程的 `AXP_RUNTIME_LLM_KEY` 就是上面的实例 key。
 
 ## 前端
 
-- 设置 → “模型服务”：按 Connector 列出账号、状态和错误，提供重新登录、停用/启用、移除；设备码弹窗显示验证码、授权链接和倒计时，每 2 秒轮询。账号需要处理时，设置按钮和菜单显示红点。
-- 账号和模型目录每 30 秒刷新一次；发送收到 `MODEL_*` 错误时立即刷新。
-- 智能体编辑器有模型下拉框（按服务分组，不可用的模型禁用），新建时默认选上次用过的模型。模型未设置或不可用时，聊天输入框禁用并给出“选择模型”“前往模型服务”“更换模型”入口。
+- 设置 → “模型服务”：按 Connector 列出账号、状态和错误，提供重新登录、停用/启用、移除；设备码弹窗显示验证码、授权链接和倒计时，每 2 秒轮询。账号需要处理时，设置按钮和菜单显示红点。“刷新状态”按钮（模型服务和连接里都有）调用 `POST /refresh`，显示检查中、结果和失败；失败时保留原来的状态。
+- 账号和模型目录每 30 秒刷新一次；发送收到 `MODEL_*` 错误时立即刷新。手动刷新开始和返回时都取消进行中的轮询，避免旧结果覆盖新结果。
+- 智能体编辑器有模型下拉框（按服务分组，`unavailable` 的模型禁用，`degraded` 标注“暂时故障”），新建时默认选上次用过的模型。模型未设置或 `unavailable` 时，聊天输入框禁用并给出“选择模型”“前往模型服务”“更换模型”入口；`degraded` 只提示，不禁用；模型目录读取失败时不据旧数据禁用，交给服务端判断。

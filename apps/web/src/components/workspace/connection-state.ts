@@ -6,6 +6,7 @@ export const connectionStateLabels: Record<Connection["state"], string> = {
   needs_login: "需要重新登录",
   rate_limited: "额度已用尽",
   error: "出错",
+  degraded: "暂时故障",
 };
 
 export function untilText(iso: string | undefined, verb = "恢复") {

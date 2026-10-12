@@ -540,6 +540,7 @@ export function ChatPanel({
   connectionLost,
   model: modelLabel,
   blocked,
+  notice,
   agentStatus,
   outgoing,
   onRetry,
@@ -574,6 +575,8 @@ export function ChatPanel({
   model?: string;
   /** Why the composer is disabled, with the way out. */
   blocked?: React.ReactNode;
+  /** A warning above the composer that leaves it usable. */
+  notice?: React.ReactNode;
   agentStatus?: Agent["status"];
   /** The user's messages on their way, after the transcript. */
   outgoing: Outgoing[];
@@ -824,7 +827,9 @@ export function ChatPanel({
           send();
         }}
       >
-        {blocked ? <div className="px-[1ch] pb-[1lh]">{blocked}</div> : null}
+        {blocked || notice ? (
+          <div className="px-[1ch] pb-[1lh]">{blocked ?? notice}</div>
+        ) : null}
         {/* A disabled fieldset disables the session's own input. */}
         <fieldset disabled={Boolean(blocked)} className="contents">
           {session.slashMenuBelow ? null : slashMenu}

@@ -171,7 +171,7 @@ func TestCPAContract(t *testing.T) {
 	}
 	waitFor(t, func() bool { return len(service.Connections()) == 0 })
 	for _, m := range service.Models() {
-		if m.Available || m.Unavailable == nil || m.Unavailable.Code != "NO_CONNECTION" {
+		if m.Available || m.Status != llm.ModelUnavailable || m.Reason == nil || m.Reason.Code != "NO_CONNECTION" {
 			t.Fatalf("model after delete = %+v", m)
 		}
 	}
