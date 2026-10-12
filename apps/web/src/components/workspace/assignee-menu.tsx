@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { assigneeTree } from "./assignee-tree";
+import { assignmentStatus } from "./computer-readiness";
 import { assigneeFromKey, assigneeKey, remoteLabel } from "./task-format";
 
 const compactQuery = "(max-width: 767px), (pointer: coarse)";
@@ -65,7 +66,9 @@ export function AssigneeMenu({
       : value === "user"
         ? "我"
         : selected
-          ? remoteLabel(selected) + (selected.online ? "" : "（离线）")
+          ? `${remoteLabel(
+              selected,
+            )}（${assignmentStatus(selected.runtime_state, selected.online)}）`
           : `${remoteLabel({ ...assignee, computer_name: assignee.computer_id })}（不可用）`;
   const ancestors: Choice[] = [];
   let choices = tree;
@@ -89,7 +92,15 @@ export function AssigneeMenu({
     <>
       <span className="min-w-0 break-words">
         {choice.label}
-        {choice.offline ? "（离线）" : ""}
+        {choice.status ? (
+          <span className="block text-xs text-muted-foreground">
+            {choice.status}
+          </span>
+        ) : choice.offline ? (
+          "（连接不可用）"
+        ) : (
+          ""
+        )}
       </span>
       {isSelected(choice) ? (
         <CheckIcon aria-label="已选" className="ml-auto shrink-0" />

@@ -228,6 +228,18 @@ export function useComputers() {
   });
 }
 
+// An explicit read-only observation; never start an agent as a probe.
+export function useCheckComputer() {
+  return useMutation({
+    mutationFn: (id: string) =>
+      unwrap(
+        controlPlane.GET("/api/v1/computers/{computer_id}/check", {
+          params: { path: { computer_id: id } },
+        }),
+      ),
+  });
+}
+
 function useComputerMutation<T, R>(call: (input: T) => Promise<R>) {
   const queryClient = useQueryClient();
   return useMutation({

@@ -1,10 +1,12 @@
 import type { AssigneeOption } from "@/queries/tasks";
+import { assignmentStatus } from "./computer-readiness";
 import { assigneeKey, providerLabel, runtimeLabel } from "./task-format";
 export interface Choice {
   key: string;
   label: string;
   children?: Choice[];
   offline?: boolean;
+  status?: string;
 }
 
 /** Group actual tuples, rather than synthesizing computer/runtime/provider combinations. */
@@ -34,6 +36,7 @@ export function assigneeTree(options: AssigneeOption[]): Choice[] {
       runtime.children!.push({
         key,
         label: providerLabel(option.provider),
+        status: assignmentStatus(option.runtime_state, option.online),
         offline: !option.online,
       });
     }

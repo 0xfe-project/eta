@@ -43,10 +43,12 @@ import { cn } from "@/lib/utils";
 import {
   useAddComputer,
   useApproveRuntime,
+  useCheckComputer,
   useComputers,
   useDeleteComputer,
   useRenewInstall,
 } from "@/queries/tasks";
+import { runtimeStateLabels as stateLabels } from "./computer-readiness";
 import { when } from "./routine-format";
 import { providerLabel, runtimeLabel } from "./task-format";
 
@@ -54,14 +56,6 @@ import { providerLabel, runtimeLabel } from "./task-format";
 // agents work on the task board through the agenvo relay.
 
 const showError = (error: Error) => toast.error(error.message);
-
-const stateLabels: Record<ComputerRuntime["state"], string> = {
-  waiting: "等待配对",
-  pairing: "等待批准",
-  needs_approval: "有变化，等待批准",
-  online: "在线",
-  offline: "离线",
-};
 
 const osLabels: Record<string, string> = {
   darwin: "macOS",
@@ -102,8 +96,9 @@ function Runtimes({ runtimes }: { runtimes: ComputerRuntime[] }) {
           <span className="font-medium">{runtimeLabel(runtime.kind)}</span>
           <span className="min-w-0 text-muted-foreground">
             {runtime.state === "online"
-              ? runtime.providers.map(providerLabel).join("、") ||
-                "没有可用的 provider"
+              ? runtime.providers.length
+                ? `${runtime.providers.map(providerLabel).join("、")}（可执行性未检查）`
+                : "没有上报 provider"
               : stateLabels[runtime.state]}
           </span>
           {runtime.needs_update ? (
@@ -117,54 +112,111 @@ function Runtimes({ runtimes }: { runtimes: ComputerRuntime[] }) {
   );
 }
 
-/**
- * A card's runtimes on one line, and below them the agents they offer
- * together: which runtime offers which agent does not matter here.
- */
-function RuntimeSummary({ runtimes }: { runtimes: ComputerRuntime[] }) {
-  const agents = [
-    ...new Set(
-      runtimes
-        .filter((runtime) => runtime.state === "online")
-        .flatMap((runtime) => runtime.providers),
-    ),
-  ];
+/** Keep provider observations beside their runtime; discovery is not execution. */
+function RuntimeSummary({ computer }: { computer: Computer }) {
+  const check = useCheckComputer();
+  const [checkedAt, setCheckedAt] = useState<string>();
+  const { refetch } = useComputers();
   return (
-    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
-      <dt className="text-muted-foreground">运行时</dt>
-      <dd>
-        <ul className="flex flex-wrap gap-x-3 gap-y-0.5">
-          {runtimes.map((runtime) => (
-            <li
-              key={runtime.kind}
-              className="flex min-w-0 flex-wrap items-center gap-x-1.5"
-            >
-              <StatusDot
-                online={runtime.state === "online"}
-                label={stateLabels[runtime.state]}
-              />
-              <span className="font-medium">{runtimeLabel(runtime.kind)}</span>
-              {runtime.state === "online" ? null : (
+    <div className="space-y-2 text-xs">
+      <ul className="space-y-2">
+        {computer.runtimes.map((runtime) => {
+          const observation = check.data?.runtimes.find(
+            (r) => r.kind === runtime.kind,
+          );
+          const providers =
+            observation?.providers ??
+            runtime.providers.map((provider) => ({
+              provider,
+              state: "unchecked",
+              reason: "安装时上报；实际启动未检查",
+            }));
+          return (
+            <li key={runtime.kind} className="space-y-1">
+              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                <StatusDot
+                  online={runtime.state === "online"}
+                  label={stateLabels[runtime.state]}
+                />
+                <span className="font-medium">
+                  {runtimeLabel(runtime.kind)}
+                </span>
                 <span className="text-muted-foreground">
                   {stateLabels[runtime.state]}
                 </span>
-              )}
-              {runtime.needs_update ? (
-                <span className="text-amber-600 dark:text-amber-500">
-                  connector {runtime.connector_version}，需要更新
-                </span>
+                {runtime.needs_update ? (
+                  <span className="text-muted-foreground">
+                    connector {runtime.connector_version}，需要更新
+                  </span>
+                ) : null}
+              </div>
+              <ul className="space-y-1 pl-3">
+                {providers.map((provider) => (
+                  <li key={provider.provider} className="break-words">
+                    <span className="font-medium">
+                      {providerLabel(provider.provider)}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {" "}
+                      ·{" "}
+                      {runtime.state !== "online"
+                        ? runtime.state === "unknown"
+                          ? "未检查：运行时状态未知"
+                          : `不可执行：${stateLabels[runtime.state]}`
+                        : check.isError || observation?.error
+                          ? "未检查：重新检查失败"
+                          : provider.state === "unavailable"
+                            ? `不可用：${provider.reason}`
+                            : provider.state === "discovered"
+                              ? provider.reason
+                              : `未检查：${provider.reason}`}
+                    </span>
+                  </li>
+                ))}
+                {!providers.length ? (
+                  <li className="text-muted-foreground">
+                    未检查：没有上报 provider
+                  </li>
+                ) : null}
+              </ul>
+              {observation?.error ? (
+                <p role="alert" className="break-words text-destructive">
+                  检查失败：{observation.error}
+                </p>
               ) : null}
             </li>
-          ))}
-        </ul>
-      </dd>
-      <dt className="text-muted-foreground">智能体</dt>
-      <dd className="min-w-0 break-words">
-        {agents.map(providerLabel).join("、") || (
-          <span className="text-muted-foreground">没有可用的智能体</span>
-        )}
-      </dd>
-    </dl>
+          );
+        })}
+      </ul>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={check.isPending}
+          onClick={() =>
+            check.mutate(computer.id, {
+              onSuccess: () => void refetch(),
+              onSettled: (data) =>
+                setCheckedAt(data?.checked_at ?? new Date().toISOString()),
+            })
+          }
+        >
+          {check.isPending ? "检查中……" : "重新检查"}
+        </Button>
+        <span role="status" className="text-muted-foreground">
+          {check.isPending
+            ? "正在读取原生状态"
+            : checkedAt
+              ? `${check.isError ? "检查尝试" : "上次检查"} ${when(checkedAt)}`
+              : "尚未检查"}
+        </span>
+      </div>
+      {check.error ? (
+        <p role="alert" className="break-words text-destructive">
+          重新检查失败：{check.error.message}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -501,7 +553,7 @@ function ComputerCard({
       <div className="flex min-w-0 items-center gap-2">
         <StatusDot
           online={computer.online}
-          label={computer.online ? "在线" : "离线"}
+          label={computer.online ? "connector 在线" : "connector 未连接"}
         />
         <span
           className="min-w-0 flex-1 truncate text-sm font-medium"
@@ -569,11 +621,16 @@ function ComputerCard({
           {details}
         </p>
       ) : null}
+      {computer.enrolled && computer.online ? (
+        <p className="text-xs text-muted-foreground">connector 在线</p>
+      ) : null}
       {!computer.enrolled ? (
         <p className="text-xs text-muted-foreground">等待安装</p>
       ) : !computer.online ? (
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          离线
+          {computer.runtimes.some((r) => r.state === "unknown")
+            ? "连接状态未知"
+            : "connector 未连接"}
           <Tooltip open={offlineHintOpen} onOpenChange={setOfflineHintOpen}>
             <TooltipTrigger asChild>
               <Button
@@ -593,9 +650,8 @@ function ComputerCard({
             </TooltipContent>
           </Tooltip>
         </div>
-      ) : (
-        <RuntimeSummary runtimes={computer.runtimes} />
-      )}
+      ) : null}
+      {computer.enrolled ? <RuntimeSummary computer={computer} /> : null}
       {computer.active_runs ? (
         <p className="text-xs text-muted-foreground">
           {computer.active_runs} 个任务进行中
@@ -685,6 +741,12 @@ export function ComputerSettings() {
               有电脑的 agenvo connector 与 AXP 提供的版本
               {data.connector_version ? ` ${data.connector_version}` : ""}{" "}
               不一致：点那台电脑上的“更新”，按提示在那台电脑上运行命令。
+            </p>
+          ) : null}
+          {data.computers.length ? (
+            <p className="text-xs text-muted-foreground">
+              只读检查不启动 Agent；provider
+              可用不保证授权、工作区和实际启动成功。检查结果仅供参考，不限制指派。
             </p>
           ) : null}
           {data.computers.length ? (

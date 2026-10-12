@@ -214,6 +214,8 @@ func (f *fakeRelay) Call(_ context.Context, _, _, method string, params any) (*r
 	str := func(k string) string { s, _ := p[k].(string); return s }
 	switch method {
 	// --- Paseo
+	case "paseo.providers.list":
+		return result(map[string]any{"providers": []map[string]any{{"provider": "codex", "available": true}, {"provider": "claude", "available": false, "error": "需授权：请先登录 Claude"}}})
 	case "paseo.workspaces.list":
 		entries := []map[string]any{}
 		for _, w := range f.workspaces {
@@ -1166,4 +1168,41 @@ func TestAgentsUseTheBoard(t *testing.T) {
 	list, meta := e.mcpResult(agent.ID, "list_tasks", map[string]any{})
 	expect(t, len(list["tasks"].([]any)), 1)
 	expect(t, meta["axp/ref"], nil)
+}
+
+func TestComputerReadOnlyCheck(t *testing.T) {
+	e := newTaskEnv(t)
+	id, _ := e.computer("checks", "paseo", "herdr")
+	e.relay.calls = nil
+	var check tasks.ComputerCheck
+	e.get("/computers/"+id+"/check").json(t, &check)
+	expect(t, len(check.Runtimes), 2)
+	for _, rt := range check.Runtimes {
+		if rt.Kind == "paseo" {
+			expect(t, rt.Providers[0].State, "discovered")
+			expect(t, rt.Providers[1].State, "unavailable")
+			expect(t, rt.Providers[1].Reason, "需授权：请先登录 Claude")
+		} else {
+			expect(t, rt.Providers[0].State, "unchecked")
+		}
+	}
+	expect(t, len(e.relay.calls), 1)
+	expect(t, e.relay.calls[0], "paseo.providers.list")
+	e.relay.failing = "runtime_unavailable"
+	e.get("/computers/"+id+"/check").json(t, &check)
+	for _, rt := range check.Runtimes {
+		if rt.Kind == "paseo" {
+			if rt.Error == nil {
+				t.Fatal("failed native check must surface failure")
+			}
+			expect(t, rt.Providers[0].State, "unchecked")
+		}
+	}
+	e.relay.failing = ""
+	e.get("/computers/"+id+"/check").json(t, &check)
+	for _, rt := range check.Runtimes {
+		if rt.Kind == "paseo" {
+			expect(t, rt.Providers[0].State, "discovered")
+		}
+	}
 }

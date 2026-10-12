@@ -252,6 +252,16 @@ func registerTasks(api huma.API, d *Deps) {
 			return &httpapi.Body[tasks.Places]{Body: *places}, nil
 		})
 
+	huma.Register(api, taskOp("checkComputer", http.MethodGet, "/api/v1/computers/{computer_id}/check",
+		"Read current connector and provider discovery without starting agents", 200, "computers"),
+		func(ctx context.Context, in *ComputerPath) (*httpapi.Body[tasks.ComputerCheck], error) {
+			check, err := s.CheckComputer(ctx, d.DB, in.ComputerID)
+			if err != nil {
+				return nil, err
+			}
+			return &httpapi.Body[tasks.ComputerCheck]{Body: *check}, nil
+		})
+
 	huma.Register(api, taskOp("approveComputerRuntime", http.MethodPost, "/api/v1/computers/{computer_id}/runtimes/{kind}/approve",
 		"Approve a computer's runtime on the relay, after comparing its fingerprint", 204, "computers"),
 		func(ctx context.Context, in *struct {

@@ -159,3 +159,100 @@ describe("updating a computer's connector", () => {
     expect(document.body.textContent).toContain("connector 0.1.0，需要更新");
   });
 });
+
+it("separates connector, runtime and provider state through recheck failure and recovery", async () => {
+  let available = false;
+  let fail = false;
+  let finish: (() => void) | undefined;
+  const base = outdated.computers[0];
+  const snapshot = () => ({
+    ...outdated,
+    computers: [
+      {
+        ...base,
+        runtimes: [
+          {
+            ...base.runtimes[0],
+            connector_online: true,
+            needs_update: false,
+            state: available ? "online" : "unavailable",
+          },
+        ],
+      },
+    ],
+  });
+  rstest.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const request = input as Request;
+    expect(request.method).toBe("GET");
+    if (new URL(request.url).pathname.endsWith("/check")) {
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      if (fail)
+        return Response.json(
+          { error: { message: "中继连接超时" } },
+          { status: 502 },
+        );
+      available = true;
+      return Response.json({
+        checked_at: "2026-10-12T10:30:00Z",
+        runtimes: [
+          {
+            kind: "paseo",
+            error: null,
+            providers: [
+              {
+                provider: "codex",
+                state: "discovered",
+                reason: "原生发现可用；实际启动未检查",
+              },
+              {
+                provider: "claude",
+                state: "unavailable",
+                reason: "需授权：请先登录 Claude",
+              },
+            ],
+          },
+        ],
+      });
+    }
+    return Response.json(snapshot());
+  });
+  await renderSettings();
+  await act(settle);
+  expect(document.body.textContent).toContain("connector 在线");
+  expect(document.body.textContent).toContain("服务未启动或不可用");
+  await act(async () => {
+    buttons("重新检查")[0].click();
+    await settle();
+  });
+  expect(buttons("检查中")[0].disabled).toBe(true);
+  await act(async () => {
+    finish!();
+    await settle();
+  });
+  expect(document.body.textContent).toContain("服务可用");
+  expect(document.body.textContent).toContain("实际启动未检查");
+  expect(document.body.textContent).toContain("需授权：请先登录 Claude");
+  expect(document.body.textContent).toContain("上次检查");
+  fail = true;
+  await act(async () => {
+    buttons("重新检查")[0].click();
+    await settle();
+    finish!();
+    await settle();
+  });
+  expect(document.body.textContent).toContain("重新检查失败：中继连接超时");
+  expect(document.body.textContent).toContain("未检查：重新检查失败");
+  expect(buttons("重新检查")[0].disabled).toBe(false);
+  fail = false;
+  await act(async () => {
+    buttons("重新检查")[0].click();
+    await settle();
+    finish!();
+    await settle();
+  });
+  expect(document.body.textContent).not.toContain("重新检查失败");
+  expect(document.body.textContent).toContain("实际启动未检查");
+  rstest.restoreAllMocks();
+});

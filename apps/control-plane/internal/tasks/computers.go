@@ -61,11 +61,12 @@ type computerRuntimeRow struct {
 func PairingLabel(computerID, kind string) string { return "axp:" + computerID + ":" + kind }
 
 type ComputerRuntime struct {
-	Kind      string   `json:"kind" enum:"paseo,herdr"`
-	Providers []string `json:"providers"`
+	Kind            string   `json:"kind" enum:"paseo,herdr"`
+	ConnectorOnline bool     `json:"connector_online"`
+	Providers       []string `json:"providers"`
 	// waiting: setup has not paired it yet; pairing: approve it here;
 	// needs_approval: the runtime changed and waits for approval again.
-	State string `json:"state" enum:"waiting,pairing,needs_approval,online,offline"`
+	State string `json:"state" enum:"waiting,pairing,needs_approval,online,offline,unavailable,unknown"`
 	// The fingerprints to compare with setup's output before approving: one
 	// per pairing waiting under this runtime's label. More than one means
 	// someone else asked too (setup run again, or another device using the
@@ -171,7 +172,7 @@ func (s *Service) ListComputers(ctx context.Context, db pg.DB) (*Computers, erro
 			if rt.ComputerID == r.ID {
 				public := runtimeState(rt, state, served)
 				c.Runtimes = append(c.Runtimes, public)
-				c.Online = c.Online || public.State == "online"
+				c.Online = c.Online || public.ConnectorOnline
 			}
 		}
 		for _, a := range active {
@@ -190,6 +191,7 @@ func runtimeState(rt *computerRuntimeRow, state *relay.State, served string) Com
 		out.Providers = []string{}
 	}
 	if state == nil {
+		out.State = "unknown"
 		return out
 	}
 	if rt.DeviceID == nil {
@@ -204,6 +206,10 @@ func runtimeState(rt *computerRuntimeRow, state *relay.State, served string) Com
 	for _, d := range state.Devices {
 		if d.ID != *rt.DeviceID || d.Revoked {
 			continue
+		}
+		out.ConnectorOnline = d.Online
+		if d.Online {
+			out.State = "unavailable"
 		}
 		for _, inst := range d.Instances {
 			if inst.InstanceID != instanceFor(rt.Kind) {
@@ -411,6 +417,7 @@ type AssigneeOption struct {
 	Runtime      string `json:"runtime"`
 	Provider     string `json:"provider"`
 	Online       bool   `json:"online"`
+	RuntimeState string `json:"runtime_state,omitempty"`
 }
 
 // AssigneeOptions are the paired runtimes' providers.
@@ -429,9 +436,10 @@ func (s *Service) AssigneeOptions(ctx context.Context, db pg.DB) ([]AssigneeOpti
 	}
 	out := []AssigneeOption{}
 	for _, r := range rows {
-		online := runtimeState(&r.computerRuntimeRow, state, "").State == "online"
+		rt := runtimeState(&r.computerRuntimeRow, state, "")
+		online := rt.State == "online"
 		for _, p := range r.Providers {
-			out = append(out, AssigneeOption{ComputerID: r.ComputerID, ComputerName: r.Name, Runtime: r.Kind, Provider: p, Online: online})
+			out = append(out, AssigneeOption{ComputerID: r.ComputerID, ComputerName: r.Name, Runtime: r.Kind, Provider: p, Online: online, RuntimeState: rt.State})
 		}
 	}
 	return out, nil
