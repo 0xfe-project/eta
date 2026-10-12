@@ -13,7 +13,7 @@ import {
   useStopReply,
   useStreamLost,
 } from "@/queries/chat";
-import { GROK_CONNECTOR, useModelAvailability } from "@/queries/llm";
+import { useModelAvailability } from "@/queries/llm";
 import {
   useOutbox,
   useOutboxActions,
@@ -75,17 +75,10 @@ export function Workspace({
     <ComposerNotice
       message={availability.message}
       actions={[
-        // Grok's account is under 连接.
-        availability.model?.connector === GROK_CONNECTOR
-          ? {
-              label: "前往连接",
-              onClick: () =>
-                setSettings({ open: true, section: "connections" }),
-            }
-          : {
-              label: "前往模型服务",
-              onClick: () => setSettings({ open: true, section: "providers" }),
-            },
+        {
+          label: "前往模型服务",
+          onClick: () => setSettings({ open: true, section: "providers" }),
+        },
         changeModel,
       ]}
     />
