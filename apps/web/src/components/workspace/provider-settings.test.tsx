@@ -94,16 +94,6 @@ describe("refreshing model status", () => {
     rstest.restoreAllMocks();
   });
 
-  it("shows each model's state and why", async () => {
-    await render();
-    const list = document.querySelector('[aria-label="模型状态"]');
-    expect(list?.textContent).toContain("gpt-1");
-    expect(list?.textContent).toContain("gpt-2");
-    expect(document.body.textContent).toContain(
-      "gpt-1 暂时故障：上游暂时故障（HTTP 502），稍后会自动重试。仍可发送",
-    );
-  });
-
   it("checks again once however often it is pressed, then shows the result", async () => {
     const response = deferred<Response>();
     const requests: string[] = [];
@@ -127,7 +117,6 @@ describe("refreshing model status", () => {
     expect(refreshButton().disabled).toBe(false);
     expect(status()).toMatch(/^已于 .+ 重新检查，账号均可连接$/);
     expect(models()?.every((m) => m.status === "available")).toBe(true);
-    expect(document.body.textContent).not.toContain("暂时故障：");
   });
 
   it("keeps the status it had when the check fails", async () => {

@@ -1,4 +1,4 @@
-import type { Connection, Connector, Model, Usage } from "@/queries/llm";
+import type { Connection, Connector, Usage } from "@/queries/llm";
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/ArrowClockwise";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
 import { CopyIcon } from "@phosphor-icons/react/Copy";
@@ -52,11 +52,7 @@ import {
   useStartLogin,
   useUsage,
 } from "@/queries/llm";
-import {
-  connectionStateLabels,
-  modelStatusLabels,
-  untilText,
-} from "./connection-state";
+import { connectionStateLabels, untilText } from "./connection-state";
 import { useAgents } from "./use-agents";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -370,62 +366,6 @@ function ConnectionRow({
   );
 }
 
-const modelDot: Record<Model["status"], string> = {
-  available: "bg-emerald-500",
-  degraded: "bg-amber-500",
-  unavailable: "bg-destructive",
-};
-
-/** Each model of a provider with its state; why, for those not available. */
-function ModelStatusList({ models }: { models: Model[] }) {
-  if (!models.length) return null;
-  const troubled = models.filter((model) => model.status !== "available");
-  return (
-    <div className="space-y-1.5">
-      <ul aria-label="模型状态" className="flex flex-wrap gap-1.5">
-        {models.map((model) => (
-          <li
-            key={model.id}
-            className="inline-flex max-w-full items-center gap-1.5 border px-1.5 py-0.5 text-xs"
-          >
-            <span
-              role="img"
-              aria-label={modelStatusLabels[model.status]}
-              title={modelStatusLabels[model.status]}
-              className={cn("size-1.5 shrink-0", modelDot[model.status])}
-            />
-            <span className="truncate">{model.display_name}</span>
-          </li>
-        ))}
-      </ul>
-      {troubled.length ? (
-        <ul className="space-y-0.5 text-xs text-muted-foreground">
-          {troubled.map((model) => (
-            <li key={model.id}>
-              <span
-                className={
-                  model.status === "degraded"
-                    ? "text-amber-600 dark:text-amber-500"
-                    : "text-destructive"
-                }
-              >
-                {model.display_name} {modelStatusLabels[model.status]}
-              </span>
-              ：{model.reason?.message}
-              {[
-                untilText(model.retry_at),
-                model.status === "degraded" ? "仍可发送" : "",
-              ]
-                .filter(Boolean)
-                .join("，")}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
-  );
-}
-
 function timeText(ms: number) {
   return new Date(ms).toLocaleTimeString("zh-CN", { hour12: false });
 }
@@ -564,11 +504,6 @@ export function ConnectorSection({
           尚未绑定账号
         </p>
       )}
-      <ModelStatusList
-        models={(models ?? []).filter(
-          (model) => model.connector === connector.id,
-        )}
-      />
       {login ? (
         // Keyed so every open starts a fresh login.
         <LoginDialog
