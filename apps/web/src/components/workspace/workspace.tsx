@@ -38,7 +38,6 @@ export function Workspace({
   view: WorkspaceView;
   onViewChange: (view: WorkspaceView) => void;
 }) {
-  const sessionTheme = useWorkspaceStore((s) => s.workspace.sessionTheme);
   const mobilePanel = useWorkspaceStore((s) => s.mobilePanel);
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
@@ -130,7 +129,6 @@ export function Workspace({
           )}
         >
           <ChatPanel
-            theme={sessionTheme}
             agentId={selected?.id}
             agentName={selected?.name}
             model={

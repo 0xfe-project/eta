@@ -23,20 +23,6 @@ import { ClaudePrompt } from "@/components/brainless/claude/claude-prompt";
 import { ClaudeSlashMenu } from "@/components/brainless/claude/claude-slash-menu";
 import { ClaudeThinking } from "@/components/brainless/claude/claude-thinking";
 import { ClaudeToolCall } from "@/components/brainless/claude/claude-tool-call";
-import { CodexExec } from "@/components/brainless/codex/codex-exec";
-import { CodexHeader } from "@/components/brainless/codex/codex-header";
-import { CodexMessage } from "@/components/brainless/codex/codex-message";
-import { CodexPermissions } from "@/components/brainless/codex/codex-permissions";
-import { CodexPrompt } from "@/components/brainless/codex/codex-prompt";
-import { CodexSlashMenu } from "@/components/brainless/codex/codex-slash-menu";
-import { CodexWorking } from "@/components/brainless/codex/codex-working";
-import { GrokHeader } from "@/components/brainless/grok/grok-header";
-import { GrokMessage } from "@/components/brainless/grok/grok-message";
-import { GrokPermission } from "@/components/brainless/grok/grok-permission";
-import { GrokPrompt } from "@/components/brainless/grok/grok-prompt";
-import { GrokSlashMenu } from "@/components/brainless/grok/grok-slash-menu";
-import { GrokThinking } from "@/components/brainless/grok/grok-thinking";
-import { GrokTool } from "@/components/brainless/grok/grok-tool";
 import { Markdown } from "@/components/markdown";
 import { ActivityOperationCards } from "@/components/workspace/activity-operation";
 import { ActivityRefCard } from "@/components/workspace/activity-ref";
@@ -57,22 +43,8 @@ import { useOutbox } from "@/queries/outbox";
 import { AttachmentChip, PastedText } from "./composer-block";
 import { ComposerEditor } from "./composer-editor";
 
-// Each theme is laid out like its brainless session block
-// (components/brainless/blocks): header, turn, working line, composer.
-export type SessionTheme = "claude" | "codex" | "grok";
 type Activity = Extract<Block, { type: "activity" }>;
 type Reply = Exclude<Block, { type: "attachment" }>;
-interface MessageProps {
-  role?: "user" | "assistant";
-  time?: string;
-  children: React.ReactNode;
-}
-interface ChoiceProps {
-  prompt: string;
-  labels: string[];
-  onChoose: (index: number) => void;
-}
-
 type SlashName = "/stop" | "/queue" | "/steer" | "/compact";
 interface SlashCommand {
   name: SlashName;
@@ -88,11 +60,6 @@ const SLASH_COMMANDS: SlashCommand[] = [
 ];
 
 const activityText = { running: "进行中", completed: "完成", failed: "失败" };
-/** The activity as one line: the tool and what it was given. */
-function activityTitle(block: Activity) {
-  const tool = block.name || block.label;
-  return block.input ? `${tool} ${block.input}` : tool;
-}
 // Replies holding the agent's runtime; queued ones wait behind them.
 const EXECUTING = new Set<ChatMessage["status"]>([
   "responding",
@@ -137,113 +104,24 @@ function UserParts({ parts }: { parts: OutgoingPart[] }) {
   );
 }
 
-const sessions = {
-  claude: {
-    Message: ({ role, children }: MessageProps) => (
-      <ClaudeMessage role={role}>{children}</ClaudeMessage>
-    ),
-    textClass: "text-[var(--terminal-claude-foreground)]",
-    turnClass: "space-y-3 pt-1",
-    promptClass: "pt-2",
-    // Under the tool's name, past the ⏺.
-    refClass: "ml-[2ch]",
-    Activity: ({ block }: { block: Activity }) => (
-      <ClaudeToolCall
-        tool={block.name || block.label}
-        arg={block.input || undefined}
-        result={activityText[block.status]}
-        status={
-          block.status === "running"
-            ? "pending"
-            : block.status === "completed"
-              ? "success"
-              : "error"
-        }
-      >
-        {block.output}
-      </ClaudeToolCall>
-    ),
-    Choice: ({ prompt, labels, onChoose }: ChoiceProps) => (
-      <ClaudePermission
-        title="需要确认"
-        command={prompt}
-        question="是否继续？"
-        options={labels}
-        onChoose={onChoose}
-      />
-    ),
-    Working: ({ label }: { label: string }) => (
-      <ClaudeThinking verbs={[label]} showTokens={false} />
-    ),
-    SlashMenu: ClaudeSlashMenu,
-    slashMenuBelow: false,
-  },
-  codex: {
-    Message: ({ role, children }: MessageProps) => (
-      <CodexMessage role={role}>{children}</CodexMessage>
-    ),
-    textClass: "text-[var(--terminal-foreground)]",
-    turnClass: "space-y-3 pt-1",
-    promptClass: "pt-2",
-    // Under the command, past the •.
-    refClass: "ml-[2ch]",
-    Activity: ({ block }: { block: Activity }) => (
-      <CodexExec
-        command={activityTitle(block)}
-        status={
-          block.status === "running"
-            ? "run"
-            : block.status === "completed"
-              ? "ok"
-              : "error"
-        }
-      >
-        {block.output}
-      </CodexExec>
-    ),
-    Choice: ({ prompt, labels, onChoose }: ChoiceProps) => (
-      <CodexPermissions
-        title={prompt}
-        options={labels.map((label) => ({ label, description: "" }))}
-        onChoose={onChoose}
-      />
-    ),
-    Working: ({ label }: { label: string }) => <CodexWorking label={label} />,
-    SlashMenu: CodexSlashMenu,
-    slashMenuBelow: true,
-  },
-  grok: {
-    Message: ({ role, time, children }: MessageProps) => (
-      <GrokMessage role={role} time={time}>
-        {children}
-      </GrokMessage>
-    ),
-    textClass: "text-[var(--terminal-foreground)]",
-    turnClass: "space-y-2 pt-1",
-    promptClass: "pt-3",
-    refClass: "",
-    Activity: ({ block }: { block: Activity }) => (
-      <GrokTool
-        verb={block.name || block.label}
-        path={block.input || undefined}
-        meta={activityText[block.status]}
-      >
-        {block.output}
-      </GrokTool>
-    ),
-    Choice: ({ prompt, labels, onChoose }: ChoiceProps) => (
-      <GrokPermission
-        title="需要确认"
-        command={prompt}
-        options={labels}
-        onChoose={onChoose}
-      />
-    ),
-    Working: ({ label }: { label: string }) => <GrokThinking verbs={[label]} />,
-    SlashMenu: GrokSlashMenu,
-    slashMenuBelow: false,
-  },
-};
+function ToolActivity({ block }: { block: Activity }) {
+  return (
+    <ClaudeToolCall
+      tool={block.name || block.label}
+      arg={block.input || undefined}
+      result={activityText[block.status]}
+      status={
+        block.status === "running"
+          ? "pending"
+          : block.status === "completed"
+            ? "success"
+            : "error"
+      }
+    >
+      {block.output}
+    </ClaudeToolCall>
+  );
+}
 
 /** A warning with the ways out of it. */
 export function ComposerNotice({
@@ -418,61 +296,55 @@ function replyLines(
  */
 const Turn = memo(
   ({
-    theme,
     message,
     pending,
     actions,
     ...line
   }: {
-    theme: SessionTheme;
     message: ChatMessage;
     /** Its interactions waiting for the user. */
     pending: Interaction[];
     actions: React.RefObject<TurnActions>;
   } & ReplyLine) => {
-    const session = sessions[theme];
-    const { Message, Activity, Choice, Working } = session;
-    const timeLabel = theme === "grok" ? time(message.created_at) : undefined;
     if (message.role === "user")
       return (
-        <Message role="user" time={timeLabel}>
+        <ClaudeMessage role="user">
           <UserParts parts={userParts(message)} />
-        </Message>
+        </ClaudeMessage>
       );
     // Only a reply at work still grows; the rest render as finished text.
     const streaming = ACTIVE_STATUSES.has(message.status);
     return (
-      <div className={session.turnClass}>
+      <div className="space-y-3 pt-1">
         {message.blocks
           .filter((block): block is Reply => block.type !== "attachment")
           .map((block) =>
             block.type === "text" ? (
-              <Message key={block.id} time={timeLabel}>
+              <ClaudeMessage key={block.id}>
                 <Markdown streaming={streaming}>{block.text}</Markdown>
-              </Message>
+              </ClaudeMessage>
             ) : (
               <div key={block.id} className="space-y-1">
-                <Activity block={block} />
+                <ToolActivity block={block} />
                 {block.ref && block.status === "completed" ? (
-                  <ActivityRefCard
-                    value={block.ref}
-                    className={session.refClass}
-                  />
+                  <ActivityRefCard value={block.ref} className="ml-[2ch]" />
                 ) : null}
                 {block.operations?.length && block.status !== "running" ? (
                   <ActivityOperationCards
                     operations={block.operations}
-                    className={session.refClass}
+                    className="ml-[2ch]"
                   />
                 ) : null}
               </div>
             ),
           )}
         {pending.map((interaction) => (
-          <Choice
+          <ClaudePermission
+            title="需要确认"
+            question="是否继续？"
             key={interaction.id}
-            prompt={interaction.prompt}
-            labels={interaction.options.map((option) => option.label)}
+            command={interaction.prompt}
+            options={interaction.options.map((option) => option.label)}
             onChoose={(index) =>
               actions.current.onAnswer(
                 interaction.id,
@@ -485,7 +357,6 @@ const Turn = memo(
           message={message}
           asking={pending.length > 0}
           line={line}
-          Working={Working}
           onStop={() => actions.current.onStop(message.id)}
           onResend={(parts) => actions.current.onResend(parts)}
         />
@@ -502,25 +373,26 @@ function ReplyState({
   message,
   asking,
   line,
-  Working,
   onStop,
   onResend,
 }: {
   message: ChatMessage;
   asking: boolean;
   line: ReplyLine;
-  Working: (props: { label: string }) => React.ReactNode;
   onStop: () => void;
   onResend: (parts: OutgoingPart[]) => void;
 }) {
   switch (message.status) {
     case "responding":
     case "waiting_for_input":
-      return asking ? null : <Working label="工作中" />;
+      return asking ? null : (
+        <ClaudeThinking verbs={["工作中"]} showTokens={false} />
+      );
     case "stopping":
-      return <Working label="正在停止" />;
+      return <ClaudeThinking verbs={["正在停止"]} showTokens={false} />;
     case "queued": {
-      if (line.starting) return <Working label="正在启动智能体" />;
+      if (line.starting)
+        return <ClaudeThinking verbs={["正在启动智能体"]} showTokens={false} />;
       return (
         <div className="flex flex-wrap items-baseline gap-x-3 text-[var(--terminal-muted)]">
           <span>
@@ -560,15 +432,7 @@ function ReplyState({
   }
 }
 
-function time(iso: string) {
-  return new Date(iso).toLocaleTimeString("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 export function ChatPanel({
-  theme,
   agentId,
   agentName,
   messages,
@@ -597,7 +461,6 @@ export function ChatPanel({
   onDiscard,
   onResend,
 }: {
-  theme: SessionTheme;
   agentId: string | undefined;
   agentName: string | undefined;
   /** The conversation with the current agent, as far back as loaded. */
@@ -638,8 +501,6 @@ export function ChatPanel({
   onResend: (parts: OutgoingPart[]) => void;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
-  const session = sessions[theme];
-  const { Message, SlashMenu } = session;
   // The reply in progress; later ones wait behind it.
   const active = messages.find(
     (message) =>
@@ -767,11 +628,7 @@ export function ChatPanel({
           return;
         }
       }
-      // The CLIs' interrupt keys, as their working lines advertise.
-      const interrupt =
-        theme === "grok"
-          ? event.ctrlKey && event.key === "c" && !draft.length
-          : event.key === "Escape";
+      const interrupt = event.key === "Escape";
       if (interrupt && active) {
         event.preventDefault();
         onStop(active.id);
@@ -796,7 +653,7 @@ export function ChatPanel({
     ),
   };
   const slashMenu = menuOpen ? (
-    <SlashMenu
+    <ClaudeSlashMenu
       id={listId}
       commands={matches}
       active={menuActive}
@@ -809,7 +666,7 @@ export function ChatPanel({
   return (
     <section
       aria-label="对话"
-      data-session-theme={theme}
+      data-session-theme="claude"
       className="relative isolate flex h-full min-h-0 flex-col bg-[var(--terminal-background)]"
     >
       <div
@@ -826,7 +683,7 @@ export function ChatPanel({
         ) : null}
         <div
           ref={transcript.contentRef}
-          className={`space-y-3 pt-2 font-mono text-[13px] leading-[1.6] ${session.textClass}`}
+          className="space-y-3 pt-2 font-mono text-[13px] leading-[1.6] text-[var(--terminal-claude-foreground)]"
         >
           {/* Stays put while a page loads, so nothing shifts until it lands. */}
           {hasOlder ? (
@@ -836,7 +693,7 @@ export function ChatPanel({
             >
               加载更早的消息…
             </div>
-          ) : theme === "claude" ? (
+          ) : (
             <ClaudeHeader
               user="Eric"
               version=""
@@ -846,10 +703,6 @@ export function ChatPanel({
               tips={[]}
               whatsNew={[]}
             />
-          ) : theme === "codex" ? (
-            <CodexHeader version="" model={model} directory="workspace" />
-          ) : (
-            <GrokHeader version="" headline="AXP" subhead={model} />
           )}
           {error ? <Warning>{error}</Warning> : null}
           {connectionLost && !error ? (
@@ -862,7 +715,7 @@ export function ChatPanel({
           ) : null}
           {/* Off-screen turns skip rendering; `auto` remembers their size. */}
           <div
-            className={`${session.turnClass} *:[contain-intrinsic-size:auto_120px] *:[content-visibility:auto]`}
+            className="space-y-3 pt-1 *:[contain-intrinsic-size:auto_120px] *:[content-visibility:auto]"
             role="log"
             aria-label="对话消息"
             aria-live="polite"
@@ -870,7 +723,6 @@ export function ChatPanel({
             {messages.map((message) => (
               <Turn
                 key={message.id}
-                theme={theme}
                 message={message}
                 pending={pendingByMessage.get(message.id) ?? NO_INTERACTIONS}
                 {...lines.get(message.id)}
@@ -878,10 +730,10 @@ export function ChatPanel({
               />
             ))}
             {outgoing.map((item) => (
-              <div key={item.id} className={session.turnClass}>
-                <Message role="user">
+              <div key={item.id} className="space-y-3 pt-1">
+                <ClaudeMessage role="user">
                   <UserParts parts={item.parts} />
-                </Message>
+                </ClaudeMessage>
                 {item.failure ? (
                   <ComposerNotice
                     message={item.failure}
@@ -903,7 +755,7 @@ export function ChatPanel({
       </div>
       <form
         ref={formRef}
-        className={`shrink-0 ${session.promptClass}`}
+        className="shrink-0 pt-2"
         onSubmit={(event) => {
           event.preventDefault();
           send();
@@ -925,21 +777,8 @@ export function ChatPanel({
         ) : null}
         {/* A disabled fieldset disables the session's own input. */}
         <fieldset disabled={Boolean(blocked)} className="contents">
-          {session.slashMenuBelow ? null : slashMenu}
-          {theme === "claude" ? (
-            <ClaudePrompt {...promptProps} mode="manual" effort={false} />
-          ) : theme === "codex" ? (
-            <CodexPrompt {...promptProps} model={model} directory="workspace" />
-          ) : (
-            <GrokPrompt
-              {...promptProps}
-              model={model}
-              mode="normal"
-              busy={Boolean(active)}
-              showShortcuts={false}
-            />
-          )}
-          {session.slashMenuBelow ? slashMenu : null}
+          {slashMenu}
+          <ClaudePrompt {...promptProps} mode="manual" effort={false} />
         </fieldset>
       </form>
     </section>

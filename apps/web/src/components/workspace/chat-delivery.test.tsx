@@ -93,7 +93,6 @@ function Chat({ agentStatus = "idle" }: { agentStatus?: "idle" | "starting" }) {
   const outbox = useOutboxActions();
   return (
     <ChatPanel
-      theme="codex"
       agentId={AGENT}
       agentName="研究员"
       agentStatus={agentStatus}

@@ -34,11 +34,6 @@ const colorModes = [
   { value: "light", label: "浅色" },
   { value: "dark", label: "深色" },
 ] as const;
-const sessionThemes = [
-  { value: "claude", label: "Claude" },
-  { value: "codex", label: "Codex" },
-  { value: "grok", label: "Grok" },
-] as const;
 const fontFields = [
   { key: "fontSans", label: "界面字体", placeholder: "Geist" },
   { key: "fontMono", label: "等宽字体", placeholder: "Geist Mono" },
@@ -153,15 +148,6 @@ function AppearanceSettings() {
         options={colorModes}
         value={theme as (typeof colorModes)[number]["value"]}
         onChange={setTheme}
-      />
-      <Segmented
-        label="会话外观"
-        name="session-theme"
-        options={sessionThemes}
-        value={workspace.sessionTheme}
-        onChange={(sessionTheme) =>
-          setWorkspace((state) => ({ ...state, sessionTheme }))
-        }
       />
       {fontFields.map(({ key, label, placeholder }) => (
         <div

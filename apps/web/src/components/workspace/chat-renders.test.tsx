@@ -103,7 +103,6 @@ function Chat() {
   draft = (value) => setText(plainDraft(value));
   return (
     <ChatPanel
-      theme="codex"
       agentId={AGENT}
       agentName="研究员"
       messages={timeline.messages}

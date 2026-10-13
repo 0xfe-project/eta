@@ -95,7 +95,7 @@ bun run --cwd apps/web typecheck
 
 首页左侧为聊天，顶部居中是当前智能体的头像（点击切换），右上角是设置；右侧是浮起的概览 / 任务 / 定时 / 记忆 / 确认面板，与窗口边缘留出间距；全窗口工作台在 `/workspace`（见「页面与路由」）。源码在 `src/components/workspace/`。
 
-聊天使用 brainless 消息与输入组件，默认 Claude 外观，支持 Enter 发送。消息经控制面交给当前智能体的 runtime，回复经 SSE 流式到达，对话记录在控制面（见[聊天运行时](../../docs/architecture/chat-runtime.md)）。设置 → 外观可以切换 Claude / Codex / Grok 外观，切换保留消息与草稿。`localStorage` 只放这个浏览器自己的东西，都用 Zod 校验：`axp.workspace.v1` 是界面状态（选中的智能体、外观、字体、上次用的模型、任务页布局），`axp.chat.v1` 是草稿和还没送达的消息。
+聊天使用 brainless 消息与输入组件，统一 Claude 外观，支持 Enter 发送。消息经控制面交给当前智能体的 runtime，回复经 SSE 流式到达，对话记录在控制面（见[聊天运行时](../../docs/architecture/chat-runtime.md)）。设置 → 外观保留颜色模式与字体设置。旧的会话外观偏好读取时丢弃，统一使用 Claude，其他偏好保持。`localStorage` 只放这个浏览器自己的东西，都用 Zod 校验：`axp.workspace.v1` 是界面状态（选中的智能体、字体、上次用的模型、任务页布局），`axp.chat.v1` 是草稿和还没送达的消息。
 
 已验证桌面/手机布局、深浅主题、任务与上下文操作、消息发送、刷新持久化、页签 URL 与浏览器后退。
 
@@ -109,15 +109,13 @@ bun run --cwd apps/web typecheck
 
 终端 agent 界面优先使用 [brainless](https://brainless.swerdlow.dev/components)，不要自行拼 ASCII 界面或将整段 agent 输出塞进 `<pre>`。保留组件的 `details`、`listbox`、`radiogroup`、`aria-live` 等语义。
 
-`components.json` 已注册 `@brainless`，安装了 Claude、Codex、Grok 三套 session 及其基础组件，源码在 `src/components/brainless/`。后续在 `apps/web` 执行 `bunx shadcn@latest add @brainless/<name>`。
+`components.json` 已注册 `@brainless`，保留 Claude session 及其基础组件，源码在 `src/components/brainless/`。后续在 `apps/web` 执行 `bunx shadcn@latest add @brainless/<name>`。
 
 ```tsx
 import { ClaudeSession } from "@/components/brainless/blocks/claude-session";
-import { CodexHeader } from "@/components/brainless/codex/codex-header";
-import { GrokThought } from "@/components/brainless/grok/grok-thought";
 ```
 
-`blocks/*-session.tsx` 是带静态演示内容的组合示例，尚未挂载到首页。首页已复用三套消息与输入组件；Header、Message、Prompt 保留 registry 原版结构与样式，不注入演示会话记录。仅把颜色常量映射到 `brainless/theme.css` 的 `--terminal-*` 语义变量。深浅色跟随 `ThemeProvider`。接入运行时数据时继续组合工具调用、思考状态等组件；保持项目的零圆角规则。
+`blocks/*-session.tsx` 是带静态演示内容的组合示例，尚未挂载到首页。首页复用 Claude 消息与输入组件；Header、Message、Prompt 保留 registry 原版结构与样式，不注入演示会话记录。仅把颜色常量映射到 `brainless/theme.css` 的 `--terminal-*` 语义变量。深浅色跟随 `ThemeProvider`。接入运行时数据时继续组合工具调用、思考状态等组件；保持项目的零圆角规则。
 
 ## 页面与路由
 

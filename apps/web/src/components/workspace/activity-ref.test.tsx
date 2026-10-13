@@ -1,4 +1,3 @@
-import type { SessionTheme } from "./chat-panel";
 import type { ActivityOperation, ActivityRef } from "@/api/control-plane.gen";
 import type { Block, ChatMessage } from "@/queries/chat";
 import { afterEach, describe, expect, it } from "@rstest/core";
@@ -15,7 +14,7 @@ import { createRoot } from "react-dom/client";
 import { ChatPanel } from "./chat-panel";
 
 // A tool call that made or touched one thing links to it from a card under
-// its line, in every theme; the line keeps the call's details.
+// its Claude line; the line keeps the call's details.
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -61,13 +60,9 @@ function reply(blocks: Block[]): ChatMessage {
   };
 }
 
-async function mount(
-  blocks: Block[],
-  { path = "/", theme = "claude" as SessionTheme } = {},
-) {
+async function mount(blocks: Block[], { path = "/" } = {}) {
   const ui = () => (
     <ChatPanel
-      theme={theme}
       agentId="a"
       agentName="助手"
       messages={[reply(blocks)]}
@@ -120,25 +115,23 @@ describe("activity ref cards", () => {
     document.body.innerHTML = "";
   });
 
-  for (const theme of ["claude", "codex", "grok"] as const) {
-    it(`opens the task beside the chat (${theme})`, async () => {
-      const { container } = await mount(
-        [activity({ status: "completed", ref: task })],
-        { theme },
-      );
-      expect(cards(container)).toEqual([
-        {
-          href: "/?view=tasks&task=t1",
-          label: "打开任务 #16 整理 Q4 发布说明",
-          text: "#16 整理 Q4 发布说明待办",
-        },
-      ]);
-      // The call's line is still there to expand, apart from the card.
-      expect(container.querySelector("details summary")?.textContent).toContain(
-        "tasks.create_task",
-      );
-    });
-  }
+  it(`opens the task beside the chat (Claude)`, async () => {
+    const { container } = await mount(
+      [activity({ status: "completed", ref: task })],
+      {},
+    );
+    expect(cards(container)).toEqual([
+      {
+        href: "/?view=tasks&task=t1",
+        label: "打开任务 #16 整理 Q4 发布说明",
+        text: "#16 整理 Q4 发布说明待办",
+      },
+    ]);
+    // The call's line is still there to expand, apart from the card.
+    expect(container.querySelector("details summary")?.textContent).toContain(
+      "tasks.create_task",
+    );
+  });
 
   it("opens it on its page in the full-window workspace", async () => {
     const { container, router } = await mount(
@@ -334,26 +327,24 @@ describe("activity operation cards", () => {
     document.body.innerHTML = "";
   });
 
-  for (const theme of ["claude", "codex", "grok"] as const) {
-    it(`shows what a script made, where (${theme})`, async () => {
-      const { container } = await mount(
-        [execute({ status: "completed", operations: [worktree] })],
-        { theme },
-      );
-      expect(operationCards(container)).toEqual([
-        "创建 worktree：修复登录，已创建（办公室 Mac · Paseo）",
-      ]);
-      const card = container.querySelector('[role="log"] li > button')!;
-      expect(card.textContent).toBe(
-        "创建 worktree 修复登录已创建办公室 Mac · Paseo · axp · feat/x ← main/home/u/.paseo/worktrees/axp/feat-x",
-      );
-      // It links nowhere, and the script's line still expands on its own.
-      expect(container.querySelector('[role="log"] a')).toBeNull();
-      expect(container.querySelector("details summary")?.textContent).toContain(
-        "agenvo.execute",
-      );
-    });
-  }
+  it(`shows what a script made, where (Claude)`, async () => {
+    const { container } = await mount(
+      [execute({ status: "completed", operations: [worktree] })],
+      {},
+    );
+    expect(operationCards(container)).toEqual([
+      "创建 worktree：修复登录，已创建（办公室 Mac · Paseo）",
+    ]);
+    const card = container.querySelector('[role="log"] li > button')!;
+    expect(card.textContent).toBe(
+      "创建 worktree 修复登录已创建办公室 Mac · Paseo · axp · feat/x ← main/home/u/.paseo/worktrees/axp/feat-x",
+    );
+    // It links nowhere, and the script's line still expands on its own.
+    expect(container.querySelector('[role="log"] a')).toBeNull();
+    expect(container.querySelector("details summary")?.textContent).toContain(
+      "agenvo.execute",
+    );
+  });
 
   it("tells each call of a script apart, a failed one's too", async () => {
     const { container } = await mount([
