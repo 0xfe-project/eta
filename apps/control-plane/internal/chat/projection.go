@@ -312,6 +312,12 @@ func activityRef(v any) ActivityRef {
 		if ref.ID != "" {
 			return ref
 		}
+	case "artifact":
+		// Number is the version the tool published.
+		ref.ID, ref.Number = text("id", 100), refNumber(raw["number"])
+		if _, ok := pg.ParseID(ref.ID); ok && ref.Number > 0 {
+			return ref
+		}
 	case "pull_request":
 		ref.Number, ref.URL = refNumber(raw["number"]), text("url", 500)
 		if ref.Number > 0 && githubURL(ref.URL, pullPath) {

@@ -8,6 +8,7 @@ import type {
   TaskRun,
   TaskStatus,
 } from "@/queries/tasks";
+import { AppWindowIcon } from "@phosphor-icons/react/AppWindow";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
@@ -56,6 +57,7 @@ import {
   useTasks,
   useUpdateTask,
 } from "@/queries/tasks";
+import { ArtifactButton } from "./artifact-dialog";
 import {
   draftInput,
   draftOf,
@@ -703,6 +705,24 @@ function describe(a: TaskActivity): React.ReactNode {
           >
             {str(d.title) || str(d.url).replace("https://github.com/", "")}
           </a>
+        </>
+      );
+    case "artifact":
+      return (
+        <>
+          <AppWindowIcon
+            aria-hidden="true"
+            className="mr-1 inline size-3.5 align-[-2px]"
+          />
+          发布了 Artifact{" "}
+          <ArtifactButton
+            id={str(d.artifact_id)}
+            version={typeof d.version === "number" ? d.version : undefined}
+            className="text-foreground underline underline-offset-4"
+          >
+            {str(d.title) || "Artifact"}
+            {typeof d.version === "number" ? ` · 第 ${d.version} 版` : ""}
+          </ArtifactButton>
         </>
       );
     case "cleanup":

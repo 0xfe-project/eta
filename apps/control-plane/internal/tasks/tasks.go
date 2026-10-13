@@ -217,7 +217,7 @@ type TaskActor struct {
 
 type TaskActivity struct {
 	ID    string    `json:"id"`
-	Kind  string    `json:"kind" doc:"created, comment, status, assignee, title, description, run_queued, run_started, run_completed, run_failed, run_cancelled, run_nudged, cleanup or deliverable."`
+	Kind  string    `json:"kind" doc:"created, comment, status, assignee, title, description, run_queued, run_started, run_completed, run_failed, run_cancelled, run_nudged, cleanup, deliverable or artifact (data: artifact_id, title, version)."`
 	Actor TaskActor `json:"actor"`
 	RunID *string   `json:"run_id" nullable:"true"`
 	Body  *string   `json:"body" nullable:"true"`

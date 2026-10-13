@@ -208,6 +208,15 @@ export AXP_RELAY_CA_FILE="$relay_dir/cert.pem"
 AXP_RELAY_ADMIN_SECRET="$(<"$relay_dir/admin_secret")"
 export AXP_RELAY_ADMIN_SECRET
 
+# --- Object storage ---------------------------------------------------------------
+# SeaweedFS's S3 API, where artifacts' files are, on loopback (the control
+# plane's default AXP_S3_ENDPOINT in development). Only the control plane
+# talks to it; it is not on the runtime network. Shared by every instance.
+dev_container axp-dev-s3 chrislusf/seaweedfs:4.48 \
+  -p 127.0.0.1:18333:8333 -v axp-dev-s3:/data \
+  -e AWS_ACCESS_KEY_ID=axp-dev -e AWS_SECRET_ACCESS_KEY=axp-dev-secret \
+  -- mini -dir=/data
+
 # --- NATS -----------------------------------------------------------------------
 # JetStream, on the runtime network's gateway address, so host processes and
 # runtimes use one URL.

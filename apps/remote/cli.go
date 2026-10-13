@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -61,12 +62,14 @@ func taskCommand(args []string) error {
 	if err != nil {
 		return err
 	}
-	a, err := parseTaskArgs(args[1:])
+	// --task: the task's number or id (default: the one this directory
+	// belongs to). --file: a comment's text from a file (- for stdin).
+	a, err := parseArgs(args[1:], "task", "file")
 	if err != nil {
 		return err
 	}
-	positional := a.positional
-	id, err := currentTask(c, a.task)
+	positional, file := a.positional, a.flags["file"]
+	id, err := currentTask(c, a.flags["task"])
 	if err != nil {
 		return err
 	}
@@ -80,12 +83,12 @@ func taskCommand(args []string) error {
 		return nil
 	case "comment":
 		body := strings.Join(positional, " ")
-		if a.file != "" {
+		if file != "" {
 			var data []byte
-			if a.file == "-" {
+			if file == "-" {
 				data, err = io.ReadAll(os.Stdin)
 			} else {
-				data, err = os.ReadFile(a.file)
+				data, err = os.ReadFile(file)
 			}
 			if err != nil {
 				return err
@@ -113,18 +116,16 @@ func taskCommand(args []string) error {
 	return fmt.Errorf("unknown task command %q", args[0])
 }
 
-type taskArgs struct {
-	// --task: the task's number or id (default: the one this directory
-	// belongs to). --file: comment's text from a file (- for stdin).
-	task, file string
+type cliArgs struct {
+	flags      map[string]string
 	positional []string
 }
 
-// parseTaskArgs takes --task and --file (or -task, -file, =value) wherever
-// they are; everything else is text, even when it starts with "-" (a
-// comment that is a Markdown list), and so is everything after "--".
-func parseTaskArgs(args []string) (taskArgs, error) {
-	var a taskArgs
+// parseArgs takes the named flags (--task, -task, --task=3) wherever they
+// are; everything else is text, even when it starts with "-" (a comment
+// that is a Markdown list), and so is everything after "--".
+func parseArgs(args []string, names ...string) (cliArgs, error) {
+	a := cliArgs{flags: map[string]string{}}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
@@ -132,8 +133,7 @@ func parseTaskArgs(args []string) (taskArgs, error) {
 			break
 		}
 		name, value, inline := strings.Cut(strings.TrimLeft(arg, "-"), "=")
-		target := map[string]*string{"task": &a.task, "file": &a.file}[name]
-		if !strings.HasPrefix(arg, "-") || target == nil {
+		if !strings.HasPrefix(arg, "-") || !slices.Contains(names, name) {
 			a.positional = append(a.positional, arg)
 			continue
 		}
@@ -144,7 +144,7 @@ func parseTaskArgs(args []string) (taskArgs, error) {
 			i++
 			value = args[i]
 		}
-		*target = value
+		a.flags[name] = value
 	}
 	return a, nil
 }
@@ -171,6 +171,8 @@ func printTask(t *taskDetail) {
 			fmt.Printf("\n- %s %s：状态 %v → %v\n", at, who, a.Data["from"], a.Data["to"])
 		case "deliverable":
 			fmt.Printf("\n- %s 交付：%v\n", at, a.Data["url"])
+		case "artifact":
+			fmt.Printf("\n- %s %s 发布了 Artifact「%v」第 %v 版（%v）\n", at, who, a.Data["title"], a.Data["version"], a.Data["artifact_id"])
 		}
 	}
 }

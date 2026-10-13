@@ -1,5 +1,6 @@
 import type { ActivityRef } from "@/api/control-plane.gen";
 import type { TaskStatus } from "@/queries/tasks";
+import { AppWindowIcon } from "@phosphor-icons/react/AppWindow";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
@@ -11,6 +12,7 @@ import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { actionClass, frameClass, muted } from "./activity-card";
+import { ArtifactButton } from "./artifact-dialog";
 import { statuses } from "./task-format";
 import { StatusIcon } from "./task-status-icon";
 import { useSectionLink } from "./workspace-search";
@@ -19,7 +21,8 @@ import { useSectionLink } from "./workspace-search";
  * The card under a tool call that made or touched one thing (its block's
  * ref, which the tool's own result names): the whole card opens it, where
  * the rest of the app does. An issue draft is not a thing yet: its card,
- * dashed, is the action that files it on GitHub. The tool line above keeps
+ * dashed, is the action that files it on GitHub. An artifact's card opens
+ * the version the tool published in a dialog. The tool line above keeps
  * the call's details.
  */
 const kinds = {
@@ -27,6 +30,7 @@ const kinds = {
   routine: { icon: ClockIcon, open: "打开定时" },
   pull_request: { icon: GitPullRequestIcon, open: "打开 PR" },
   issue_draft: { icon: NotePencilIcon, open: "去 GitHub 创建 issue" },
+  artifact: { icon: AppWindowIcon, open: "打开 Artifact" },
 } satisfies Record<ActivityRef["kind"], unknown>;
 
 const iconClass = cn("size-3.5 shrink-0", muted);
@@ -53,22 +57,36 @@ export function ActivityRefCard({
   const status = value.kind === "task" ? taskStatus(value.status) : undefined;
   const repo = value.url ? repository(value.url) : undefined;
   const draft = value.kind === "issue_draft";
+  // An artifact's number is its version, not an id to show first.
+  const artifact = value.kind === "artifact";
+  const number = value.number && !artifact ? value.number : undefined;
   const label = draft
     ? `${open}：${value.title}${repo ? `（${repo}）` : ""}`
-    : [open, value.number ? `#${value.number}` : null, value.title || repo]
+    : [
+        open,
+        number ? `#${number}` : null,
+        value.title || repo,
+        artifact && value.number ? `第 ${value.number} 版` : null,
+      ]
         .filter(Boolean)
         .join(" ");
   const body = (
     <>
       <Icon aria-hidden="true" className={cn("size-4 shrink-0", muted)} />
       <span className="min-w-0 flex-1 truncate">
-        {value.number ? (
-          <span className={cn("tabular-nums", muted)}>#{value.number} </span>
+        {number ? (
+          <span className={cn("tabular-nums", muted)}>#{number} </span>
         ) : null}
         <span className="text-[var(--terminal-foreground)]">
           {value.title || repo}
         </span>
         {value.title && repo ? <span className={muted}> · {repo}</span> : null}
+        {artifact && value.number ? (
+          <span className={cn("tabular-nums", muted)}>
+            {" "}
+            · 第 {value.number} 版
+          </span>
+        ) : null}
       </span>
       {status ? (
         <span className={cn("flex shrink-0 items-center gap-1", muted)}>
@@ -110,6 +128,20 @@ export function ActivityRefCard({
     );
   }
   if (!value.id) return null;
+  if (artifact)
+    return (
+      <div className={cn(frameClass, className)}>
+        <ArtifactButton
+          id={value.id}
+          version={value.number}
+          aria-label={label}
+          title={label}
+          className={cn(actionClass, "flex-1")}
+        >
+          {body}
+        </ArtifactButton>
+      </div>
+    );
   const link =
     value.kind === "task"
       ? sectionLink("tasks", { task: value.id })

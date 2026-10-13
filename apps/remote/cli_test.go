@@ -46,12 +46,12 @@ func TestTaskArgsTakeOnlyTheirFlags(t *testing.T) {
 		{args: []string{"--file", "-", "--task", "#4"}, task: "#4", file: "-"},
 		{args: []string{"--task", "3", "--", "--file", "x", "--"}, task: "3", text: []string{"--file", "x", "--"}},
 	} {
-		a, err := parseTaskArgs(tc.args)
-		if err != nil || a.task != tc.task || a.file != tc.file || !slices.Equal(a.positional, tc.text) {
+		a, err := parseArgs(tc.args, "task", "file")
+		if err != nil || a.flags["task"] != tc.task || a.flags["file"] != tc.file || !slices.Equal(a.positional, tc.text) {
 			t.Errorf("%q: %+v %v", tc.args, a, err)
 		}
 	}
-	if _, err := parseTaskArgs([]string{"text", "--task"}); err == nil {
+	if _, err := parseArgs([]string{"text", "--task"}, "task"); err == nil {
 		t.Error("--task without its value")
 	}
 }

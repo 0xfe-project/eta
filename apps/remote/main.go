@@ -7,7 +7,8 @@
 // the agenvo connectors, pairs them with AXP's relay and runs them as their
 // own user services.
 //
-// Agents working on a task use the rest: `axp task …`, `axp gh …`, as the
+// Agents working on a task use the rest: `axp task …`, `axp gh …`,
+// `axp artifact …`, as the
 // axp skill setup installs for them tells them (skills/axp/SKILL.md).
 package main
 
@@ -24,6 +25,8 @@ Agents, where they work on a task (or with --task N):
   axp task comment <text> | --file F  reply on the task (ends your turn)
   axp task status in_progress|in_review|blocked
   axp gh <args…>                      gh as AXP's GitHub App; PRs become deliverables
+  axp artifact upload <dir|zip> --title T [--artifact ID]
+                                      publish a static site (index.html at its root) on the task
 
 This computer:
   axp setup --url URL --code CODE     connect it to AXP (the install command);
@@ -50,6 +53,8 @@ func main() {
 		err = taskCommand(args[1:])
 	case "gh":
 		err = ghCommand(args[1:])
+	case "artifact":
+		err = artifactCommand(args[1:])
 	default:
 		err = fmt.Errorf("unknown command %q\n\n%s", args[0], usage)
 	}

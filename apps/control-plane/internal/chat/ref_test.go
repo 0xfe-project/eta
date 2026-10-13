@@ -33,6 +33,10 @@ func TestActivityRefKeepsOnlyWholeRefs(t *testing.T) {
 		{"issue draft elsewhere", map[string]any{"kind": "issue_draft", "title": "Bug", "url": "https://github.com.evil.example/o/r/issues/new"}, ActivityRef{}},
 		{"issue draft as someone", map[string]any{"kind": "issue_draft", "title": "Bug", "url": "https://u:p@github.com/o/r/issues/new"}, ActivityRef{}},
 		{"issue draft without title", map[string]any{"kind": "issue_draft", "url": "https://github.com/o/r/issues/new"}, ActivityRef{}},
+		{"artifact", map[string]any{"kind": "artifact", "id": "0b7e2b1c-58f8-4a3c-9d3c-1f0e2a9b6c11", "number": 2.0, "title": "报告"},
+			ActivityRef{Kind: "artifact", ID: "0b7e2b1c-58f8-4a3c-9d3c-1f0e2a9b6c11", Number: 2, Title: "报告"}},
+		{"artifact without version", map[string]any{"kind": "artifact", "id": "0b7e2b1c-58f8-4a3c-9d3c-1f0e2a9b6c11"}, ActivityRef{}},
+		{"artifact with a bad id", map[string]any{"kind": "artifact", "id": "../x", "number": 1.0}, ActivityRef{}},
 		{"fractional number", map[string]any{"kind": "task", "id": "t1", "number": 1.5}, ActivityRef{Kind: "task", ID: "t1"}},
 	}
 	for _, c := range cases {

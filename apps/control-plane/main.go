@@ -22,12 +22,14 @@ import (
 	"time"
 
 	"github.com/akarachen/axp/apps/control-plane/internal/api"
+	"github.com/akarachen/axp/apps/control-plane/internal/artifacts"
 	"github.com/akarachen/axp/apps/control-plane/internal/bundles"
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
 	"github.com/akarachen/axp/apps/control-plane/internal/config"
 	"github.com/akarachen/axp/apps/control-plane/internal/container"
 	"github.com/akarachen/axp/apps/control-plane/internal/control"
 	"github.com/akarachen/axp/apps/control-plane/internal/llm"
+	"github.com/akarachen/axp/apps/control-plane/internal/objects"
 	"github.com/akarachen/axp/apps/control-plane/internal/plugins"
 	"github.com/akarachen/axp/apps/control-plane/internal/relay"
 	"github.com/akarachen/axp/apps/control-plane/internal/store"
@@ -92,7 +94,7 @@ func main() {
 // openAPIDeps are enough to build the APIs for their documents, connecting
 // to nothing.
 func openAPIDeps() *api.Deps {
-	return &api.Deps{Chat: &chat.Service{}, Tasks: &tasks.Service{}, Dev: true}
+	return &api.Deps{Chat: &chat.Service{}, Tasks: &tasks.Service{}, Artifacts: &artifacts.Service{}, Dev: true}
 }
 
 // services is everything a role may need, connected lazily where possible.
@@ -125,6 +127,17 @@ func connect(ctx context.Context) (*services, error) {
 		Bundles: &bundles.Catalog{Dir: cfg.BundlesDir, Plugins: &plugins.Catalog{Dir: cfg.PluginsDir}},
 		Cursors: chat.Cursors{Secret: []byte(cfg.SecretKey)},
 	}
+	artifactService := &artifacts.Service{DB: pool, Tasks: taskService, Secret: []byte(cfg.SecretKey), Limits: artifacts.DefaultLimits}
+	if cfg.S3Endpoint != "" {
+		store, err := objects.NewS3(objects.Config{
+			Endpoint: cfg.S3Endpoint, Bucket: cfg.S3Bucket, Region: cfg.S3Region,
+			AccessKeyID: cfg.S3AccessKeyID, SecretAccessKey: cfg.S3SecretAccessKey,
+		})
+		if err != nil {
+			return nil, err
+		}
+		artifactService.Store = store
+	}
 	return &services{
 		cfg:    cfg,
 		models: models,
@@ -132,6 +145,7 @@ func connect(ctx context.Context) (*services, error) {
 			DB:        pool,
 			Chat:      chatService,
 			Tasks:     taskService,
+			Artifacts: artifactService,
 			Secret:    []byte(cfg.SecretKey),
 			PublicURL: cfg.PublicURL, ForgeURL: cfg.ForgeURL, RemoteDist: cfg.RemoteDist,
 			Dev: cfg.Dev,

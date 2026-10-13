@@ -22,7 +22,7 @@ deploy/deploy.sh          # 首次执行 kamal setup
 
 首次运行会：
 
-- 生成 `~/.config/axp/production.env`（控制面的密钥 `AXP_SECRET_KEY`、Postgres 和 SeaweedFS 的密码等，每台机器独立，不入库；后来新增的密钥会在下次部署时自动补上）。模型账号不在这里配置：部署后在 Web 设置的“模型服务”中绑定，凭据保存在 llm 角色的卷 `axp-llm`。
+- 生成 `~/.config/axp/production.env`（控制面的密钥 `AXP_SECRET_KEY`、Postgres 的密码、内置 S3 的凭据等，每台机器独立，不入库；后来新增的密钥会在下次部署时自动补上）。模型账号不在这里配置：部署后在 Web 设置的“模型服务”中绑定，凭据保存在 llm 角色的卷 `axp-llm`。
 - 生成 `~/.config/axp/kamal_ed25519` 并加入 `~/.ssh/authorized_keys`，限制为只能从 `127.0.0.1`/`::1` 登录。sshd 不在 22 端口时在 `production.env` 设 `AXP_SSH_PORT`。
 - 启动本地镜像仓库 `axp-registry`，创建 runtime 网络 `axp-prod-runtime`（子网由 Docker 选空闲的），用 Turbo 构建（或从缓存恢复）镜像产物和两个镜像（见下文“一次部署做什么”）。
 - 按本机 CPU 架构构建镜像。保留端口被其他服务占用、Docker 不可用或 SSH 不通时，会在部署前报错。
@@ -70,7 +70,7 @@ web、api、llm、memory、forge、routines 不经过 kamal-proxy，重新部署
 
 等待都由检查完成，不靠固定时长：每个角色都有 Docker 健康检查（启动期每 0.5 秒一次，能响应 HTTP 即就绪；controller 进程在即就绪），Kamal 据此判断就绪（`readiness_delay: 0`）。旧容器最多等 2 秒（`drain_timeout`）：聊天 SSE 连接不会自己结束，浏览器断开后会带 `Last-Event-ID` 自动续上；控制面收到 SIGTERM 后最多等 1 秒就关闭连接。controller 收到 SIGTERM 后跑完当前一轮即退出（停止时限 30 秒，留给正在进行的 Docker 操作）。
 
-accessory `axp-nats`（NATS JetStream，卷 `axp-nats`）承载 runtime 的事件（见[命令与事件](../docs/architecture/queue.md)）和定时任务的计划，在 Kamal 网络和 runtime 网络上可达、不发布端口，不设鉴权；已有的机器在下一次部署前会自动启动它。数据库是 Kamal accessory `axp-postgres`（卷 `axp-postgres`，镜像 `pgvector/pgvector:pg17-trixie`：PostgreSQL 17 加 pgvector，智能体记忆存在表 `memories`；镜像变化时 `deploy.sh` 在迁移前重启它）。每个智能体的全部状态（工作区和 Codex 会话）在它自己的卷 `axp-agent-<id>` 里，只挂进它自己的容器（`axp-agent-<id>`，重启策略 `unless-stopped`）。以前的 SeaweedFS（`axp-s3`、`axp-s3-proxy`）和旧 controller 的 runtime 容器在部署时删除，卷 `axp-s3` 留着，确认不再需要后手动删除。数据都在本机卷里，换机器不会自动迁移；开发环境的 `axp-dev-*` 容器和卷与这些完全分开。
+accessory `axp-nats`（NATS JetStream，卷 `axp-nats`）承载 runtime 的事件（见[命令与事件](../docs/architecture/queue.md)）和定时任务的计划，在 Kamal 网络和 runtime 网络上可达、不发布端口，不设鉴权；已有的机器在下一次部署前会自动启动它。数据库是 Kamal accessory `axp-postgres`（卷 `axp-postgres`，镜像 `pgvector/pgvector:pg17-trixie`：PostgreSQL 17 加 pgvector，智能体记忆存在表 `memories`；镜像变化时 `deploy.sh` 在迁移前重启它）。每个智能体的全部状态（工作区和 Codex 会话）在它自己的卷 `axp-agent-<id>` 里，只挂进它自己的容器（`axp-agent-<id>`，重启策略 `unless-stopped`）。以前存智能体快照的 SeaweedFS（挂着卷 `axp-s3` 的 `axp-s3`、`axp-s3-proxy`）和旧 controller 的 runtime 容器在部署时删除，卷 `axp-s3` 留着，确认不再需要后手动删除。数据都在本机卷里，换机器不会自动迁移；开发环境的 `axp-dev-*` 容器和卷与这些完全分开。
 
 日志由 Kamal accessory `axp-openobserve`（[OpenObserve](https://openobserve.ai)，卷 `axp-openobserve`）收集：各角色通过 OTLP 发送，`OTEL_SERVICE_NAME` 区分来源（`web`、`llm-gateway`、`memory-service`、`forge-service`、`routine-service`、`control-plane-api`、`control-plane-internal`、`control-plane-controller`）。agent runtime 容器运行智能体执行的代码、不持有任何凭据：它们把日志、trace 和指标（包括 Codex 原生的 OpenTelemetry 数据，日志事件含 prompt）发给 accessory `axp-otel-collector`（runtime 网络上的 `otel-collector:4318`，配置见 `otel-collector.yaml`），由它带上凭据转发到 OpenObserve，记录带有 `axp.agent.id`。Codex 每收到一段流式输出都会产生一条日志和几个 span（约每两个字一条），Collector 会过滤掉这部分，只保留回合级的事件和 span；Collector 不保存状态，每次部署都会重启以应用配置变更。root 账号是 `root@axp.local`，密码 `AXP_OBSERVE_PASSWORD` 由 `deploy.sh` 首次需要时写入 `production.env`；已有的机器在下一次部署前会自动启动这个 accessory。
 
@@ -80,6 +80,27 @@ accessory `axp-nats`（NATS JetStream，卷 `axp-nats`）承载 runtime 的事�
 - 业务错误中，调用方自己的错（4xx）不记；上游或服务端的失败（424、5xx）记一条 WARN，带 `request_id`、`code`、方法和路径（`packages/service-go/httpapi`）。`request_id` 就是 gateway 访问日志里的 `uuid`。
 - 循环里每轮都会重复的失败（远程电脑离线、数据库断开）在错误变化时记一次；同一个错误持续时，每 10 分钟再记一次，这样最近的时间窗里也能看到；恢复后重新计算（`telemetry.Repeats`）。
 - 每条记录带 `service.version`，值为部署的 git commit（Kamal 的 `KAMAL_VERSION`）。
+
+## Artifact 的对象存储
+
+[Artifact](../docs/architecture/artifacts.md) 的文件在 S3 兼容的对象存储里，由控制面（`api`、`internal`）读写，浏览器和 runtime 都不直接访问它。两种模式由 `production.env` 里的部署参数选择：
+
+**内置（默认）**：accessory `s3`（SeaweedFS `mini`，容器 `axp-s3`，卷 `axp-objects`），只在 Kamal 网络上（`http://axp-s3:8333`），不发布端口、不在 runtime 网络上；桶 `axp-artifacts` 在第一次上传时创建。`deploy.sh` 首次需要时生成 `AXP_S3_ACCESS_KEY_ID`、`AXP_S3_SECRET_ACCESS_KEY` 写入 `production.env`，同一对凭据交给 SeaweedFS 和控制面。已有的机器下一次部署前自动启动它。
+
+**外部 S3**：在 `production.env` 设
+
+```sh
+AXP_S3_BUILTIN=false
+AXP_S3_ENDPOINT=https://<account>.r2.cloudflarestorage.com   # 或 https://s3.<region>.amazonaws.com、MinIO 的地址等
+AXP_S3_BUCKET=axp-artifacts      # 可选，默认 axp-artifacts；凭据不能建桶时先建好
+AXP_S3_REGION=auto               # 可选，默认 us-east-1
+AXP_S3_ACCESS_KEY_ID=...
+AXP_S3_SECRET_ACCESS_KEY=...
+```
+
+缺少 endpoint 或凭据时 `deploy.sh` 在部署前报错；内置模式下设置了 `AXP_S3_ENDPOINT` 也会报错（避免以为在用外部 S3，实际写进内置的）。切到外部后，下一次部署删除 `axp-s3` 容器，卷 `axp-objects` 留着；已有的 Artifact 不会自动迁移，需要的话用任意 S3 工具把桶里的 `artifacts/` 复制过去。凭据只在 `production.env`（经 `deploy/secrets` 交给 Kamal），不进仓库。桶不需要公开：所有读取都经过控制面。
+
+公开分享和私有预览需要 Cloudflare Access 放行 `/share/artifacts` 和 `/preview/artifacts`（见 [Artifact 的路由矩阵](../docs/architecture/artifacts.md#路由矩阵)）。
 
 ## 端口与访问
 

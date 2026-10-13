@@ -6,6 +6,7 @@
 package api
 
 import (
+	"github.com/akarachen/axp/apps/control-plane/internal/artifacts"
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
 	"github.com/akarachen/axp/apps/control-plane/internal/tasks"
 	"github.com/akarachen/axp/packages/service-go/httpapi"
@@ -17,6 +18,8 @@ type Deps struct {
 	DB    *pgxpool.Pool
 	Chat  *chat.Service
 	Tasks *tasks.Service
+	// Static sites agents publish.
+	Artifacts *artifacts.Service
 	// Agents' keys are derived from it.
 	Secret []byte
 	// Where remote computers reach AXP; the browser's address when empty.
@@ -29,14 +32,15 @@ type Deps struct {
 	Dev bool
 }
 
-// Public is the browser's API under /api, and remote computers' under
-// /remote.
+// Public is the browser's API under /api, remote computers' under
+// /remote, and artifacts' pages under /share and /preview.
 func Public(d *Deps) *httpapi.API {
 	api := httpapi.New(httpapi.Config{Title: "AXP Control Plane", Version: "0.1.0", Prefix: "/api", Docs: true})
 	httpapi.AddHealth(api, "/api/health", "control-plane")
 	remote(api, d)
 	registerChat(api, d)
 	registerTasks(api, d)
+	registerArtifacts(api, d)
 	return api
 }
 
@@ -49,5 +53,7 @@ func Internal(d *Deps) *httpapi.API {
 	api.Router.Handle("/tasks/mcp", tasksMCP(d))
 	// The agenvo plugin, through the runtime gateway's /agenvo.
 	api.Router.Handle("/agenvo/mcp", agenvoMCP(d))
+	// The artifacts plugin's upload, through the runtime gateway's /artifacts.
+	api.Router.Post("/artifacts/v1/upload", agentUpload(d))
 	return api
 }

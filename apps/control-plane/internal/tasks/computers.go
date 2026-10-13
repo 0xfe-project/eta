@@ -690,3 +690,40 @@ func (s *Service) RecordDeliverable(ctx context.Context, tx pgx.Tx, c *RemoteCom
 	data["kind"], data["url"], data["title"] = in.Kind, in.URL, in.Title
 	return record(ctx, tx, r.ID, run, "deliverable", Remote, nil, data)
 }
+
+// ArtifactTask is the id of the task an artifact upload names, when its
+// uploader may put it there: an AXP agent (c nil) any task, a remote agent
+// one its computer works on.
+func ArtifactTask(ctx context.Context, db pg.DB, c *RemoteComputer, ref string) (string, error) {
+	var r *taskRow
+	var err error
+	if c == nil {
+		r, err = find(ctx, db, ref, false)
+	} else {
+		r, err = remoteTask(ctx, db, c, ref, false)
+	}
+	if err != nil {
+		return "", err
+	}
+	return r.ID, nil
+}
+
+// RecordArtifact puts a published artifact version on the task's timeline,
+// as the AXP agent agentID or the computer c's agent did it.
+func (s *Service) RecordArtifact(ctx context.Context, tx pgx.Tx, taskID, agentID string, c *RemoteComputer, data map[string]any) error {
+	if c == nil {
+		return record(ctx, tx, taskID, nil, "artifact", AgentActor(agentID), nil, data)
+	}
+	r, err := remoteTask(ctx, tx, c, taskID, true)
+	if err != nil {
+		return err
+	}
+	run, err := activeRun(ctx, tx, c, r.ID)
+	if err != nil {
+		return err
+	}
+	for k, v := range s.remoteData(ctx, tx, c, r) {
+		data[k] = v
+	}
+	return record(ctx, tx, r.ID, run, "artifact", Remote, nil, data)
+}

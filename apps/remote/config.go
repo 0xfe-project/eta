@@ -103,21 +103,27 @@ var client = &http.Client{Timeout: 60 * time.Second}
 // call is one request to AXP's /remote API.
 func call(url, token, method, path string, in, out any) error {
 	var body io.Reader
+	contentType := ""
 	if in != nil {
 		data, _ := json.Marshal(in)
-		body = bytes.NewReader(data)
+		body, contentType = bytes.NewReader(data), "application/json"
 	}
+	return send(client, url, token, method, path, contentType, body, out)
+}
+
+// send is one request with any body, answered with JSON.
+func send(hc *http.Client, url, token, method, path, contentType string, body io.Reader, out any) error {
 	req, err := http.NewRequest(method, strings.TrimRight(url, "/")+path, body)
 	if err != nil {
 		return err
 	}
-	if in != nil {
-		req.Header.Set("Content-Type", "application/json")
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
 	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	resp, err := client.Do(req)
+	resp, err := hc.Do(req)
 	if err != nil {
 		return fmt.Errorf("cannot reach AXP: %w", err)
 	}
