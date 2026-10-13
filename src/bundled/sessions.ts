@@ -231,6 +231,7 @@ export class SessionsService extends Service implements SessionsApi {
 		const attached = this.held.get(id);
 		if (attached !== undefined) attached.managed.meta = meta;
 		await this.refresh();
+		this.wire.pushNow(`sessions.${id}`);
 		return meta;
 	}
 
@@ -568,10 +569,17 @@ export class SessionsService extends Service implements SessionsApi {
 				attached.updated = Date.now();
 				this.announce(attached);
 				this.wire.event(`sessions.${id}`, name, payload);
-				// Paced, not immediate: this is run traffic (a streamed token is an event), and
-				// it is exactly what the budget exists for.
-				this.wire.push(`sessions.${id}`);
-				this.wire.push("sessions");
+				// Task changes are user-visible state, not run traffic: flush immediately.
+				const isTaskChange = name.startsWith("task:");
+				if (isTaskChange) {
+					this.wire.pushNow(`sessions.${id}`);
+					this.wire.pushNow("sessions");
+				} else {
+					// Paced, not immediate: this is run traffic (a streamed token is an event), and
+					// it is exactly what the budget exists for.
+					this.wire.push(`sessions.${id}`);
+					this.wire.push("sessions");
+				}
 			}),
 		);
 	}
@@ -584,7 +592,7 @@ export class SessionsService extends Service implements SessionsApi {
 			// Cheap on purpose: ids, what a row shows, and who is focused.
 			revisions: {
 				list: list
-					.map((row) => `${row.id}:${row.updated ?? 0}:${row.badges.join("+")}:${row.broken ?? ""}`)
+					.map((row) => `${row.id}:${row.title ?? ""}:${row.updated ?? 0}:${row.badges.join("+")}:${row.broken ?? ""}`)
 					.join("|"),
 				focused: this.focusedId ?? "",
 			},
