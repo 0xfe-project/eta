@@ -227,7 +227,9 @@ func fileExists(path string) bool {
 	return err == nil && info.Mode().IsRegular()
 }
 
-var downloadable = regexp.MustCompile(`^axp-(linux|darwin)-(amd64|arm64)$`)
+// The axp binaries and the agenvo connectors (agenvo-<kind>-<version>.tgz,
+// the relay's version, which setup asks for).
+var downloadable = regexp.MustCompile(`^(axp-(linux|darwin)-(amd64|arm64)|agenvo-(paseo|herdr)-[0-9A-Za-z.+-]+\.tgz)$`)
 
 // forgeCredentials asks the forge service for gh's token, as the runtime
 // gateway would for an agent.

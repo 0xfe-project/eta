@@ -1,0 +1,12 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    // Everything comes from the pinned commit: the checkout in out/src is
+    // the next build's starting point, not an artifact.
+    "build": {
+      "inputs": ["package.json", "$TURBO_ROOT$/scripts/build/agenvo.sh"],
+      "outputs": ["out/**", "!out/src/**"]
+    }
+  }
+}

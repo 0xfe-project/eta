@@ -4,20 +4,20 @@
 
 ## agenvo
 
-AXP 用 [Xuanwo/agenvo](https://github.com/Xuanwo/agenvo) 发布在 npm 上的包，版本只在 `apps/relay/package.json` 固定一处（`@agenvo/server`）：开发的中继从这里装，生产的中继镜像（`deploy/relay.Dockerfile`）按这个版本从 npm 装。远程电脑依赖的 `paseo.workspaces.archive`（[#3](https://github.com/Xuanwo/agenvo/pull/3)，任务完成时归档 AXP 开的 Paseo worktree）和 Herdr 的 `worktree.*`、`tab.*`（[#4](https://github.com/Xuanwo/agenvo/pull/4)）从 0.2.0 起都在。
+AXP 从源码构建 agenvo，不等上游发布：`apps/agenvo/package.json` 固定 [AkaraChen/agenvo](https://github.com/AkaraChen/agenvo)（[Xuanwo/agenvo](https://github.com/Xuanwo/agenvo) 的 fork）的一个完整提交，`scripts/build/agenvo.sh`（`@axp/agenvo#build`，Turbo 按这个提交缓存）取出这个提交，构建中继（`out/relay`：`@agenvo/server` 及其生产依赖，`package-lock.json` 记下解析结果）和 connector（`out/dist/agenvo-<kind>-<版本>.tgz`）。版本是 agenvo 自己的版本加 `+<提交前 12 位>`（如 `0.2.0+5ec6084157f7`），中继的 `/health` 和 connector 都报告它，所以 npm 上同号的发布也会被认作需要更新。开发的中继直接运行 `out/relay`，生产的中继镜像（`deploy/relay.Dockerfile`）复制它，应用镜像带上 connector 包由 `/remote/dl` 提供。远程电脑依赖的 `paseo.workspaces.archive`（[#3](https://github.com/Xuanwo/agenvo/pull/3)，任务完成时归档 AXP 开的 Paseo worktree）、Herdr 的 `worktree.*`、`tab.*`（[#4](https://github.com/Xuanwo/agenvo/pull/4)）和 Paseo 的 `terminals.*`、`projects.*`（[#50](https://github.com/Xuanwo/agenvo/pull/50)，在 fork 的 main 上）都在固定的提交里。换提交：把 PR 合进 fork 的 main，改 `apps/agenvo/package.json` 的 `commit`，部署后已接入的电脑显示“connector 需要更新”。
 
-远程电脑上的 connector（`@agenvo/paseo`、`@agenvo/herdr`）与中继同一版本：控制面从中继的 `/health` 读出它的版本，`axp setup` 登记或报告时得到这个版本，从 npm 安装。控制面经中继的 MCP 工具 `execute` 调用 connector：每次调用是一段只含一次 `call` 的脚本，返回这次调用的结果。升级版本时要核对 agenvo 的破坏性变化（方法参数、MCP 工具、中继配置），旧版 connector 不支持的调用会报「connector 不支持……，需要更新」或「connector 需要更新」，在那台电脑上重新运行 `axp setup` 即可。
+远程电脑上的 connector（`@agenvo/paseo`、`@agenvo/herdr`）与中继同一版本：控制面从中继的 `/health` 读出它的版本，`axp setup` 登记或报告时得到这个版本，用 npm 安装 AXP 在 `/remote/dl/agenvo-<kind>-<版本>.tgz` 提供的包（同一提交构建，各平台通用的 Node 包，依赖从 npm 装）。控制面经中继的 MCP 工具 `execute` 调用 connector：每次调用是一段只含一次 `call` 的脚本，返回这次调用的结果。升级版本时要核对 agenvo 的破坏性变化（方法参数、MCP 工具、中继配置），旧版 connector 不支持的调用会报「connector 不支持……，需要更新」或「connector 需要更新」，在那台电脑上重新运行 `axp setup` 即可。
 
 ## 组成
 
-| 部分         | 位置                                                                  | 作用                                                                                                                        |
-| ------------ | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| 任务看板     | `apps/control-plane/internal/tasks`、Web 的“任务”tab                  | 任务、时间线、运行；打开工作位置、派发与观察远程智能体、收尾（runner）                                                      |
-| 中继         | `@agenvo/server`（`apps/relay/package.json`），生产 accessory `relay` | 远程电脑上的 connector 与中继配对、保持 WSS 连接；控制面经它调用 Paseo/Herdr                                                |
-| 中继客户端   | `apps/control-plane/internal/relay`                                   | 管理员接口（配对、批准、撤销、状态）和 MCP `execute`                                                                        |
-| `axp`        | `apps/remote`（Go，`/remote/dl/axp-<os>-<arch>`）                     | 远程电脑上的安装（`axp setup`）和给智能体用的 CLI                                                                           |
-| tasks 插件   | `apps/agent-runtime/plugins/tasks`                                    | AXP 智能体读写看板：`list_tasks`、`get_task`、`list_assignees`、`list_places`、`create_task`、`update_task`、`comment_task` |
-| 远程电脑设置 | Web 设置的“远程电脑”                                                  | 添加电脑（安装命令）、核对指纹后批准、在线状态、撤销                                                                        |
+| 部分         | 位置                                                                 | 作用                                                                                                                        |
+| ------------ | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| 任务看板     | `apps/control-plane/internal/tasks`、Web 的“任务”tab                 | 任务、时间线、运行；打开工作位置、派发与观察远程智能体、收尾（runner）                                                      |
+| 中继         | `@agenvo/server`（`apps/agenvo` 从源码构建），生产 accessory `relay` | 远程电脑上的 connector 与中继配对、保持 WSS 连接；控制面经它调用 Paseo/Herdr                                                |
+| 中继客户端   | `apps/control-plane/internal/relay`                                  | 管理员接口（配对、批准、撤销、状态）和 MCP `execute`                                                                        |
+| `axp`        | `apps/remote`（Go，`/remote/dl/axp-<os>-<arch>`）                    | 远程电脑上的安装（`axp setup`）和给智能体用的 CLI                                                                           |
+| tasks 插件   | `apps/agent-runtime/plugins/tasks`                                   | AXP 智能体读写看板：`list_tasks`、`get_task`、`list_assignees`、`list_places`、`create_task`、`update_task`、`comment_task` |
+| 远程电脑设置 | Web 设置的“远程电脑”                                                 | 添加电脑（安装命令）、核对指纹后批准、在线状态、撤销                                                                        |
 
 ## 任务
 
@@ -95,7 +95,7 @@ Paseo 归档 worktree 时不检查未提交的改动，未提交的内容会丢�
 ### 接入
 
 1. 设置 → 远程电脑 → 添加电脑，得到一条一次性的安装命令（24 小时内有效）：`curl -fsSL https://<AXP>/remote/install.sh | sh -s -- <code>`。
-2. 在那台电脑上运行。脚本下载 `axp`，`axp setup` 检查 Node.js 24.13+ 以及正在运行的 Paseo daemon 和/或已安装的 Herdr（只检查，不代装），用安装码换到这台电脑的令牌并报告运行时和 provider，为这里的智能体装上 `axp` skill，从 npm 安装 agenvo connector（`@agenvo/<kind>`，AXP 给出的中继版本），给每个 connector 配置唯一的实例（以运行时命名）。
+2. 在那台电脑上运行。脚本下载 `axp`，`axp setup` 检查 Node.js 24.13+ 以及正在运行的 Paseo daemon 和/或已安装的 Herdr（只检查，不代装），用安装码换到这台电脑的令牌并报告运行时和 provider，为这里的智能体装上 `axp` skill，安装 AXP 提供的 agenvo connector（`/remote/dl/agenvo-<kind>-<版本>.tgz`，AXP 给出的中继版本；AXP 读不到这个版本时停下，稍后重试），给每个 connector 配置唯一的实例（以运行时命名）。
 3. 每个 connector 以名字 `axp:<电脑 id>:<运行时>` 向中继发起配对，安装命令打印指纹并等待。设置页从中继的管理接口按这个名字找到待批准的配对，用户核对指纹一致后批准，控制面用管理员接口批准。同一个名字下有多个待批准的配对时（重跑了 `axp setup`，或别人用了同样的名字），设置页全部列出；批准请求带上用户核对的那个指纹，控制面只批准摘要完全一致的配对，对不上返回 409 `FINGERPRINT_MISMATCH`。
 4. 批准后，安装命令用 agenvo 自己的 `service install` 把每个 connector 注册为用户服务（Linux systemd、macOS launchd）。之后在线状态就是中继看到的 connector 状态，AXP 与那台电脑之间没有别的进程或心跳。connector 的运行时有变化时（比如 Paseo daemon 换了身份），设置里会再次出现“等待批准”。再次运行 `axp setup` 会重新报告运行时，并接入新出现的运行时。
 5. 撤销：设置里“撤销并移除”在中继上撤销这台电脑的设备，令牌随电脑一起删除；它的任务改为未指派。撤销不会停止已经在那台电脑上进行的工作。`axp uninstall` 卸载 connector 的服务并清除凭据。被移除的电脑要重新接入，在设置里复制新的安装命令再运行即可：带安装码的 `axp setup` 总是重新登记，登记成另一台电脑时先断开 connector 原来的配对（`disconnect`），再按新标签配对；不带安装码、而令牌已被删除时，`axp setup` 提示去复制新的安装命令。

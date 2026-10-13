@@ -182,3 +182,26 @@ func TestSetupMovesPairedConnectorsToTheRelaysAddress(t *testing.T) {
 		t.Fatalf("saved %+v", saved)
 	}
 }
+
+func TestSetupInstallsTheConnectorsAXPServesAtTheRelaysVersion(t *testing.T) {
+	bin := t.TempDir()
+	args := filepath.Join(t.TempDir(), "args")
+	if err := os.WriteFile(filepath.Join(bin, "npm"), []byte("#!/bin/sh\necho \"$@\" > "+args+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	c := &Config{URL: "https://axp", Home: t.TempDir(), Paseo: &PaseoConfig{}, Herdr: &HerdrConfig{}}
+	if err := installConnectors(c); err == nil {
+		t.Fatal("without the relay's version there is nothing to install")
+	}
+	c.ConnectorVersion = "0.2.0+5ec6084157f7"
+	if err := installConnectors(c); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(args)
+	want := "install --global --prefix " + filepath.Join(c.Home, "agenvo") + " --no-audit --no-fund --loglevel=error" +
+		" https://axp/remote/dl/agenvo-paseo-0.2.0+5ec6084157f7.tgz https://axp/remote/dl/agenvo-herdr-0.2.0+5ec6084157f7.tgz\n"
+	if string(got) != want {
+		t.Fatalf("npm %s", got)
+	}
+}

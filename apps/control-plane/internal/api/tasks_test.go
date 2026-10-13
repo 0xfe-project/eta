@@ -1167,3 +1167,19 @@ func TestAgentsUseTheBoard(t *testing.T) {
 	expect(t, len(list["tasks"].([]any)), 1)
 	expect(t, meta["axp/ref"], nil)
 }
+
+func TestRemoteDownloadsAreTheBinariesAndConnectors(t *testing.T) {
+	for name, ok := range map[string]bool{
+		"axp-linux-amd64":                     true,
+		"axp-darwin-arm64":                    true,
+		"agenvo-paseo-0.2.0+5ec6084157f7.tgz": true,
+		"agenvo-herdr-0.2.0.tgz":              true,
+		"agenvo-server-0.2.0.tgz":             false,
+		"agenvo-paseo-../x.tgz":               false,
+		"axp-windows-amd64":                   false,
+	} {
+		if downloadable.MatchString(name) != ok {
+			t.Errorf("%s: %v", name, !ok)
+		}
+	}
+}

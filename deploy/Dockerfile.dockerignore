@@ -15,5 +15,6 @@
 !apps/agent-runtime/bundles/
 !apps/agent-runtime/plugins/
 !apps/remote/out/dist/
+!apps/agenvo/out/dist/
 **/__pycache__
 **/*.py[cod]

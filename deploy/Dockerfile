@@ -48,9 +48,10 @@ COPY apps/memory-service/axp_memory /app/apps/memory-service/axp_memory/
 # also what routine runs get.
 COPY apps/agent-runtime/bundles /app/apps/agent-runtime/bundles/
 COPY apps/agent-runtime/plugins /app/apps/agent-runtime/plugins/
-# What remote computers download from /remote/dl: the axp binaries (where
-# the control plane looks for them by default).
+# What remote computers download from /remote/dl: the axp binaries and the
+# agenvo connectors (where the control plane looks for them by default).
 COPY apps/remote/out/dist/ /app/apps/remote/out/dist/
+COPY apps/agenvo/out/dist/ /app/apps/agenvo/out/dist/
 # The control plane finds them at ../agent-runtime/; the LLM gateway keeps
 # its state under var/ here (deploy/deploy.yml).
 WORKDIR /app/apps/control-plane

@@ -179,8 +179,8 @@ bash scripts/build/runtime-image.sh "$AXP_RUNTIME_IMAGE"
 # and the web client's types from the control plane's OpenAPI document.
 bunx turbo run build --filter=@axp/memory-service --output-logs=errors-only
 bunx turbo run generate --filter=@axp/web --output-logs=errors-only
-# What remote computers download (/remote/dl).
-bunx turbo run build --filter=@axp/remote --output-logs=errors-only
+# What remote computers download (/remote/dl) and the relay (apps/agenvo).
+bunx turbo run build --filter=@axp/remote --filter=@axp/agenvo --output-logs=errors-only
 
 # --- Relay ------------------------------------------------------------------------
 # agenvo accepts only an HTTPS base URL, so development's relay
@@ -282,5 +282,5 @@ exec node node_modules/concurrently/dist/bin/concurrently.js --kill-others \
   "bun run dev:memory-service" \
   "bun run dev:forge-service" \
   "bun run dev:routine-service" \
-  "AGENVO_ADMIN_SECRET=\$AXP_RELAY_ADMIN_SECRET node apps/relay/node_modules/@agenvo/server/dist/cli.js serve --config $relay_dir/relay.json" \
+  "AGENVO_ADMIN_SECRET=\$AXP_RELAY_ADMIN_SECRET node apps/agenvo/out/relay/node_modules/@agenvo/server/dist/cli.js serve --config $relay_dir/relay.json" \
   "bun run dev:web"

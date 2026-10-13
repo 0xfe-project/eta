@@ -59,8 +59,8 @@ type Config struct {
 	// The forge service, for remote computers' GitHub credentials.
 	ForgeURL string `env:"AXP_FORGE_URL" prod:"http://axp-forge:8330"`
 	// Directories (colon-separated) with what remote computers download: the
-	// axp binaries.
-	RemoteDist string `env:"AXP_REMOTE_DIST" default:"../remote/out/dist"`
+	// axp binaries and the agenvo connectors built from the pinned commit.
+	RemoteDist string `env:"AXP_REMOTE_DIST" default:"../remote/out/dist:../agenvo/out/dist"`
 }
 
 // Load reads the settings from the environment (service-go/config).
