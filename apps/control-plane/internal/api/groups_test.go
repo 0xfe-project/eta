@@ -272,25 +272,6 @@ func TestGroupSearchMatchesAllChineseTermsAndLiteralWildcards(t *testing.T) {
 	}
 }
 
-func TestRecallResolvesCurrentNamesOnlyForParticipatedGroups(t *testing.T) {
-	e := newEnv(t)
-	a := e.createAgent("Aria")
-	b := e.createAgent("Bolt")
-	var g chat.Group
-	e.post("/groups", map[string]any{"name": "旧群名", "members": []string{a.ID}}).json(t, &g)
-	names := func() map[string]string {
-		r := do(t, e.internal, http.MethodPost, "/groups/names", map[string]any{"ids": []string{g.ID, e.direct(b.ID)}}, map[string]string{"X-AXP-Agent-Id": a.ID})
-		expect(t, r.status, 200)
-		var names map[string]string
-		r.json(t, &names)
-		return names
-	}
-	expect(t, names()[g.ID], "旧群名")
-	expect(t, len(names()), 1)
-	expect(t, e.patch("/groups/"+g.ID, map[string]any{"name": "新群名"}).status, 200)
-	expect(t, names()[g.ID], "新群名")
-}
-
 func TestGroupListUsesLastMessageTimeAndKindControlsAuthor(t *testing.T) {
 	e := newEnv(t)
 	a := e.createAgent("Aria")

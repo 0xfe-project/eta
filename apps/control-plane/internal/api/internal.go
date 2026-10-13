@@ -7,9 +7,6 @@ import (
 
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
 	"github.com/akarachen/axp/apps/control-plane/internal/control"
-	"github.com/akarachen/axp/packages/service-go/apierr"
-	"github.com/akarachen/axp/packages/service-go/httpapi"
-	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -27,30 +24,6 @@ func (b Bearer) token() string {
 }
 
 func registerInternal(api huma.API, d *Deps) {
-	// Memory stores ids only; recall resolves the current names on demand.
-	huma.Register(api, huma.Operation{OperationID: "memorySourceGroups", Method: http.MethodPost, Path: "/groups/names", DefaultStatus: 200}, func(ctx context.Context, in *struct {
-		AgentID string `header:"X-AXP-Agent-Id"`
-		Body    struct {
-			IDs []string `json:"ids" maxItems:"50"`
-		}
-	}) (*httpapi.Body[map[string]string], error) {
-		if _, ok := pg.ParseID(in.AgentID); !ok {
-			return nil, apierr.New(401, "UNAUTHENTICATED", "没有智能体身份。")
-		}
-		rows, err := pg.All[struct {
-			ID   string `db:"id"`
-			Name string `db:"name"`
-		}](ctx, d.DB, `SELECT g.id,g.name FROM chat_group g JOIN group_participant p ON p.group_id=g.id WHERE p.agent_id=$1 AND g.id::text=ANY($2::text[])`, in.AgentID, in.Body.IDs)
-		if err != nil {
-			return nil, err
-		}
-		names := map[string]string{}
-		for _, g := range rows {
-			names[g.ID] = g.Name
-		}
-		return &httpapi.Body[map[string]string]{Body: names}, nil
-	})
-
 	huma.Register(api, huma.Operation{
 		OperationID: "runtimeAuth", Method: http.MethodGet, Path: "/internal/v1/runtime-auth",
 		Summary:       "The runtime gateway's forward auth: which agent holds this key, and whether it has the route's plugin",

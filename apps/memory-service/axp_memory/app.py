@@ -82,11 +82,12 @@ def create_app(provider: MemoryProvider):
 
     @mcp.tool()
     async def recall(query: str, ctx: Context, limit: int = 10) -> list[dict]:
-        """Search your memories of earlier conversations."""
+        """Search your memories; group_context marks this group or another group."""
         found = await anyio.to_thread.run_sync(
             provider.search, agent_of(ctx), query[:MAX_TEXT], max(1, min(limit, 50))
         )
-        return [_view(memory) for memory in found]
+        group_id = ctx.request_context.request.headers.get("X-AXP-Group-Id")
+        return [_recall_view(memory, group_id) for memory in found]
 
     @mcp.tool()
     async def forget(memory_id: str, ctx: Context) -> dict:
@@ -109,7 +110,8 @@ def create_app(provider: MemoryProvider):
             provider.search, agent, query, RECALL_LIMIT
         )
         relevant = [m for m in found if (m.score or 0) >= RECALL_MIN_SCORE]
-        return JSONResponse({"memories": [_view(m) for m in relevant]})
+        group_id = request.headers.get("X-AXP-Group-Id")
+        return JSONResponse({"memories": [_recall_view(m, group_id) for m in relevant]})
 
     @mcp.custom_route("/memory/capture", methods=["POST"])
     async def capture_route(request: Request) -> Response:
@@ -244,6 +246,14 @@ def _view(memory: Memory) -> dict:
         view["source"] = memory.source
     if memory.source_group_id is not None:
         view["source_group_id"] = memory.source_group_id
+    return view
+
+
+def _recall_view(memory: Memory, group_id: str | None) -> dict:
+    view = _view(memory)
+    source = view.pop("source_group_id", None)
+    if source is not None:
+        view["group_context"] = "this" if source == group_id else "other"
     return view
 
 

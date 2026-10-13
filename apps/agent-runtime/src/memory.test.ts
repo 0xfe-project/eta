@@ -4,23 +4,20 @@ import { join } from "node:path";
 import process from "node:process";
 import { expect, test } from "bun:test";
 
-test("recall resolves current source names without storing them in memory", async () => {
+test("recall labels group context using only the memory route", async () => {
   const codexHome = await mkdtemp(join(tmpdir(), "axp-memory-test-"));
-  let name = "原来的群名";
+  const requests: string[] = [];
   const server = Bun.serve({
     port: 0,
-    async fetch(request) {
-      if (new URL(request.url).pathname === "/groups/names") {
-        expect(await request.json()).toEqual({ ids: ["group-id"] });
-        return Response.json({ "group-id": name });
-      }
+    fetch(request) {
+      const path = new URL(request.url).pathname;
+      requests.push(path);
+      if (path !== "/memory/recall") return new Response(null, { status: 404 });
       return Response.json({
         memories: [
-          {
-            id: "memory-id",
-            text: "使用独立数据库",
-            source_group_id: "group-id",
-          },
+          { id: "local", text: "使用独立数据库", group_context: "this" },
+          { id: "elsewhere", text: "部署需要确认", group_context: "other" },
+          { id: "unknown", text: "回答简洁" },
         ],
       });
     },
@@ -52,11 +49,13 @@ test("recall resolves current source names without storing them in memory", asyn
     return output.context as string;
   };
   try {
-    expect(await recall()).toContain("source group: 原来的群名");
-    name = "改名后的群";
     const context = await recall();
-    expect(context).toContain("source group: 改名后的群");
-    expect(context).not.toContain("原来的群名");
+    expect(context).toContain("使用独立数据库 (memory local; from this group)");
+    expect(context).toContain(
+      "部署需要确认 (memory elsewhere; from another group)",
+    );
+    expect(context).toContain("回答简洁 (memory unknown)");
+    expect(requests).toEqual(["/memory/recall"]);
   } finally {
     server.stop(true);
     await rm(codexHome, { recursive: true, force: true });

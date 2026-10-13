@@ -381,7 +381,8 @@ def test_group_source_survives_capture_and_cross_group_recall(client, provider):
         headers={**as_agent("a"), "X-AXP-Group-Id": "g2"},
         json={"query": "偏好"},
     ).json()
-    assert recalled["memories"][0]["source_group_id"] == "g1"
+    assert recalled["memories"][0]["group_context"] == "other"
+    assert "source_group_id" not in recalled["memories"][0]
     assert (
         client.get("/api/memory/v1/agents/b/memories?group_id=g1").json()["memories"]
         == []
@@ -408,3 +409,55 @@ def test_remember_uses_gateway_group_metadata(client):
     )
     memory = json.loads(response.json()["result"]["content"][0]["text"])
     assert memory["source_group_id"] == "g1"
+
+
+@pytest.mark.parametrize("route", ["hook", "mcp"])
+@pytest.mark.parametrize("current_group", ["g1", "g2", None])
+def test_recall_marks_group_context_from_gateway_header(
+    client, provider, route, current_group
+):
+    for group in ["g1", "g2", None]:
+        provider.add(
+            "a",
+            [{"role": "user", "content": f"偏好 {group}"}],
+            source="agent",
+            infer=False,
+            group_id=group,
+        )
+    headers = {**as_agent("a"), "Accept": "application/json, text/event-stream"}
+    if current_group:
+        headers["X-AXP-Group-Id"] = current_group
+    if route == "hook":
+        found = client.post(
+            "/memory/recall",
+            headers=headers,
+            json={"query": "偏好", "group_id": "forged"},
+        ).json()["memories"]
+    else:
+        response = client.post(
+            "/memory/mcp",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "recall", "arguments": {"query": "偏好"}},
+            },
+        ).json()["result"]
+        assert not response["isError"]
+        found = response["structuredContent"]["result"]
+    assert {m["text"]: m.get("group_context") for m in found} == {
+        "偏好 g1": "this" if current_group == "g1" else "other",
+        "偏好 g2": "this" if current_group == "g2" else "other",
+        "偏好 None": None,
+    }
+    assert all("source_group_id" not in m for m in found)
+    assert "group_context" not in next(m for m in found if m["text"] == "偏好 None")
+    # The browser still gets source ids and resolves names from its group snapshot.
+    stored = client.get("/api/memory/v1/agents/a/memories").json()["memories"]
+    assert {m["text"]: m.get("source_group_id") for m in stored} == {
+        "偏好 g1": "g1",
+        "偏好 g2": "g2",
+        "偏好 None": None,
+    }
+    assert all("group_context" not in m for m in stored)
