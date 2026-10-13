@@ -10,6 +10,7 @@ import { NotePencilIcon } from "@phosphor-icons/react/NotePencil";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { actionClass, frameClass, muted } from "./activity-card";
 import { statuses } from "./task-format";
 import { StatusIcon } from "./task-status-icon";
 import { useSectionLink } from "./workspace-search";
@@ -28,11 +29,6 @@ const kinds = {
   issue_draft: { icon: NotePencilIcon, open: "去 GitHub 创建 issue" },
 } satisfies Record<ActivityRef["kind"], unknown>;
 
-const frameClass =
-  "flex min-h-11 max-w-md items-stretch border border-[var(--terminal-muted)]/40 sm:min-h-8";
-const actionClass =
-  "flex min-w-0 items-center gap-2 px-2 py-1 text-left outline-none transition-colors duration-[60ms] ease-linear hover:bg-[var(--terminal-muted)]/10 focus-visible:ring-1 focus-visible:ring-[var(--terminal-link)]/60 motion-reduce:transition-none";
-const muted = "text-[var(--terminal-muted)]";
 const iconClass = cn("size-3.5 shrink-0", muted);
 
 const taskStatus = (status: string | undefined) =>

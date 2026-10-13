@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"math"
 	"net/url"
+	"reflect"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -326,6 +328,39 @@ func activityRef(v any) ActivityRef {
 	return ActivityRef{}
 }
 
+// activityOperations are the operations a runtime passed on from a tool's
+// result (tasks.Operation), those that are whole.
+func activityOperations(v any) []ActivityOperation {
+	raw, _ := v.([]any)
+	var out []ActivityOperation
+	for _, item := range raw {
+		fields, _ := item.(map[string]any)
+		text := func(key string, limit int) string {
+			s, _ := fields[key].(string)
+			return truncate(s, limit)
+		}
+		op := ActivityOperation{
+			Action: text("action", 20), Status: text("status", 20), Runtime: text("runtime", 20),
+			Computer: text("computer", 100), ID: text("id", 256), Name: text("name", 200), Project: text("project", 200),
+			Path: text("path", 1000), Branch: text("branch", 256), Base: text("base", 256), Error: text("error", 300),
+		}
+		if slices.Contains(operationActions, op.Action) && slices.Contains(operationStatuses, op.Status) &&
+			slices.Contains(operationRuntimes, op.Runtime) {
+			out = append(out, op)
+		}
+		if len(out) == 20 {
+			break
+		}
+	}
+	return out
+}
+
+var (
+	operationActions  = []string{"create_workspace", "create_worktree", "open_worktree", "add_project"}
+	operationStatuses = []string{"completed", "accepted", "failed", "unknown"}
+	operationRuntimes = []string{"paseo", "herdr"}
+)
+
 var (
 	pullPath     = regexp.MustCompile(`^/[A-Za-z0-9-]+/[A-Za-z0-9._-]+/pull/[0-9]+$`)
 	newIssuePath = regexp.MustCompile(`^/[A-Za-z0-9-]+/[A-Za-z0-9._-]+/issues/new$`)
@@ -389,13 +424,17 @@ func (p *projection) itemUpdated(ctx context.Context, command *CommandRecord, pa
 		if status == "completed" {
 			block.Ref = activityRef(item["ref"])
 		}
+		if status != "running" {
+			// A script that failed may have made some first.
+			block.Operations = activityOperations(item["operations"])
+		}
 	} else {
 		return nil
 	}
 	found := false
 	for i, existing := range r.Content {
 		if existing.ID == block.ID {
-			if existing == block {
+			if reflect.DeepEqual(existing, block) {
 				return nil
 			}
 			r.Content[i], found = block, true
