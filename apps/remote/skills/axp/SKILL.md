@@ -21,6 +21,10 @@ directory or below it, which is how it knows the task; elsewhere, add
   work is ready to be checked, `blocked` when you need a person. Marking the
   task done is the user's call.
 
+When the prompt says you are assisting (请 Agent 协助), the task belongs to
+another agent: do only what was asked, in the worktree AXP opened for you,
+and reply with `axp task comment`. Status changes are refused to you.
+
 ## Artifacts
 
 When a result is best seen as a page (a report, a chart, a prototype),

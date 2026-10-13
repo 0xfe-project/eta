@@ -18,7 +18,8 @@ import (
 // The runner moves runs along, in the controller process, on its own loop:
 // relay calls take seconds and must not hold up the agents' runtimes.
 //
-//	queued     waits for the task's previous run and the computer's capacity
+//	queued     waits for the task's previous run (in its lane: the assignee's,
+//	           or assisting agents') and the computer's capacity
 //	starting   the place is opened and the native agent started (once per
 //	           session), then sent the prompt
 //	running    watched until its turn ends; then completed, reminded once to
@@ -108,16 +109,16 @@ func (r *Runner) fail(ctx context.Context, runID, message string) error {
 	})
 }
 
-// dispatch starts the oldest queued run of each idle task, within the
-// computer's capacity.
+// dispatch starts the oldest queued run of each idle lane of a task (its
+// assignee's, its assisting agents'), within the computer's capacity.
 func (r *Runner) dispatch(ctx context.Context) error {
 	if r.Service.Relay == nil {
 		return nil
 	}
-	queued, err := pg.All[runRow](ctx, r.DB, `SELECT DISTINCT ON (q.task_id) q.* FROM task_run q
+	queued, err := pg.All[runRow](ctx, r.DB, `SELECT DISTINCT ON (q.task_id, q.assist) q.* FROM task_run q
 		WHERE q.status = 'queued' AND NOT EXISTS (SELECT 1 FROM task_run a WHERE a.task_id = q.task_id
-			AND a.status IN ('starting', 'running'))
-		ORDER BY q.task_id, q.created_at`)
+			AND a.assist = q.assist AND a.status IN ('starting', 'running'))
+		ORDER BY q.task_id, q.assist, q.created_at`)
 	if err != nil {
 		return err
 	}
@@ -158,7 +159,7 @@ func openSession(ctx context.Context, db interface {
 	Query(context.Context, string, ...any) (pgx.Rows, error)
 }, run *runRow) (*sessionRow, error) {
 	rows, err := db.Query(ctx, `SELECT * FROM task_session WHERE task_id = $1 AND computer_id = $2 AND runtime = $3
-		AND provider = $4 AND closed_at IS NULL`, run.TaskID, *run.ComputerID, run.Runtime, run.Provider)
+		AND provider = $4 AND assist = $5 AND closed_at IS NULL`, run.TaskID, *run.ComputerID, run.Runtime, run.Provider, run.Assist)
 	if err != nil {
 		return nil, err
 	}
@@ -229,6 +230,10 @@ func (r *Runner) startOne(ctx context.Context, a agents, run *runRow) error {
 		}); err != nil {
 			return err
 		}
+		if run.Assist {
+			// Assisting is not working on the task.
+			return nil
+		}
 		task, err := find(ctx, tx, run.TaskID, true)
 		if err != nil || task.Status != StatusTodo {
 			return err
@@ -268,6 +273,17 @@ func (r *Runner) session(ctx context.Context, a agents, run *runRow) (*sessionRo
 	if task.Place == nil {
 		return nil, r.fail(ctx, run.ID, "任务没有工作位置。")
 	}
+	place := *task.Place
+	if run.Assist {
+		// Read only, before anything is opened.
+		if place, err = a.assistPlace(ctx, target{*deviceID, run.Runtime}, place, task.Number, run.ID); err != nil {
+			if isTransport(err) && !errors.Is(err, errAssigneePlaceGone) {
+				// The computer may be offline: try again later.
+				return nil, err
+			}
+			return nil, r.fail(ctx, run.ID, "找不到主执行者工作位置所在的仓库，无法为协助开 worktree："+err.Error())
+		}
+	}
 	if run.OpeningAt != nil {
 		return nil, r.fail(ctx, run.ID, "上次打开工作位置时被中断（例如部署），可能已经打开了一个；为了不重复打开，这次运行失败，请重新运行。")
 	}
@@ -279,9 +295,9 @@ func (r *Runner) session(ctx context.Context, a agents, run *runRow) (*sessionRo
 	}
 	s := &sessionRow{
 		ID: pg.NewID(), TaskID: run.TaskID, ComputerID: *run.ComputerID, Runtime: run.Runtime, Provider: run.Provider,
-		DeviceID: *deviceID, InstanceID: instanceFor(run.Runtime), CreatedAt: pg.Now(),
+		DeviceID: *deviceID, InstanceID: instanceFor(run.Runtime), CreatedAt: pg.Now(), Assist: run.Assist,
 	}
-	n, dir, openErr := a.open(ctx, s, opening{TaskID: task.ID, Number: task.Number, Title: task.Title, Place: *task.Place})
+	n, dir, openErr := a.open(ctx, s, opening{TaskID: task.ID, Number: task.Number, Title: task.Title, Place: place, Assist: run.Assist})
 	if openErr != nil {
 		// The run fails without logging; this keeps the runtime's own
 		// answer, which the task's message only summarizes.
@@ -303,9 +319,9 @@ func (r *Runner) session(ctx context.Context, a agents, run *runRow) (*sessionRo
 			closed = pg.Now()
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO task_session (id, task_id, computer_id, runtime, provider, device_id, instance_id,
-			workspace, native, created_at, closed_at, cleanup_pending) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+			workspace, native, created_at, closed_at, cleanup_pending, assist) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
 			s.ID, s.TaskID, s.ComputerID, s.Runtime, s.Provider, s.DeviceID, s.InstanceID, s.Workspace, s.Native, s.CreatedAt,
-			closed, openErr != nil); err != nil {
+			closed, openErr != nil, s.Assist); err != nil {
 			return err
 		}
 		_, err := tx.Exec(ctx, "UPDATE task_run SET session_id = $2, workspace = $3 WHERE id = $1", run.ID, s.ID, s.Workspace)
@@ -389,8 +405,9 @@ func (r *Runner) watchOne(ctx context.Context, a agents, run *runRow) error {
 		return nil
 	}
 	delete(r.working, run.ID)
-	commented, err := pg.Exists(ctx, r.DB, `SELECT 1 FROM task_activity WHERE task_id = $1 AND kind = 'comment'
-		AND actor = 'remote' AND created_at >= $2`, run.TaskID, sent)
+	// Its own agent's: an assisting agent's reply is not the assignee's.
+	commented, err := pg.Exists(ctx, r.DB, `SELECT 1 FROM task_activity WHERE run_id = $1 AND kind = 'comment'
+		AND actor = 'remote' AND created_at >= $2`, run.ID, sent)
 	if err != nil {
 		return err
 	}

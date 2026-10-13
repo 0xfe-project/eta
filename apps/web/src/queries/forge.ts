@@ -163,6 +163,7 @@ export function usePullRequest(task: string, url: string) {
       pullSchema.parse(
         await forgeApi.get(`/pulls?url=${encodeURIComponent(url)}`, signal),
       ),
+    enabled: Boolean(url),
     // Changes on GitHub, so every look at the task reads it again.
     staleTime: 0,
     // GitHub computes mergeability in the background.

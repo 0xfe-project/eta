@@ -156,9 +156,15 @@ func printTask(t *taskDetail) {
 	}
 	fmt.Println("\n## 时间线")
 	for _, a := range t.Activity {
-		who := map[string]string{"user": "用户", "agent": "AXP 智能体", "remote": "你（远程智能体）", "system": "AXP"}[a.Actor.Kind]
+		who := map[string]string{"user": "用户", "agent": "AXP 智能体", "remote": "远程智能体", "system": "AXP"}[a.Actor.Kind]
 		if a.Actor.AgentName != nil {
 			who = "AXP 智能体 " + *a.Actor.AgentName
+		}
+		if provider, ok := a.Data["provider"].(string); ok && a.Actor.Kind == "remote" {
+			who = "远程智能体 " + provider
+			if a.Data["assist"] == true {
+				who += "（协助）"
+			}
 		}
 		at := a.CreatedAt
 		if len(at) >= 16 {
@@ -167,6 +173,8 @@ func printTask(t *taskDetail) {
 		switch a.Kind {
 		case "comment":
 			fmt.Printf("\n### %s · %s\n\n%s\n", who, at, strings.TrimSpace(*a.Body))
+		case "assist":
+			fmt.Printf("\n### %s · %s：请 %v 协助\n\n%s\n", who, at, a.Data["provider"], strings.TrimSpace(*a.Body))
 		case "status":
 			fmt.Printf("\n- %s %s：状态 %v → %v\n", at, who, a.Data["from"], a.Data["to"])
 		case "deliverable":

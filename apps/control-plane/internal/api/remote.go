@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -28,11 +29,20 @@ import (
 
 type RemoteBearer struct {
 	Authorization string `header:"Authorization" doc:"Bearer <the computer's token>"`
+	Dir           string `header:"X-Working-Dir" maxLength:"4096" doc:"The CLI's working directory: whose session on the computer it speaks for (the assignee's or an assisting agent's)."`
 }
 
 func (b RemoteBearer) computer(ctx context.Context, d *Deps) (*tasks.RemoteComputer, error) {
 	token, _ := strings.CutPrefix(b.Authorization, "Bearer ")
-	return tasks.Authenticate(ctx, d.DB, token)
+	c, err := tasks.Authenticate(ctx, d.DB, token)
+	if err != nil {
+		return nil, err
+	}
+	// Escaped by the CLI, for paths that are not ASCII.
+	if dir, err := url.PathUnescape(b.Dir); err == nil {
+		c.Dir = dir
+	}
+	return c, nil
 }
 
 type EnrollIn struct {

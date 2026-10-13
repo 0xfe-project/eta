@@ -99,7 +99,7 @@ type taskRow struct {
 }
 
 const taskSelect = `SELECT t.*, c.name AS computer_name, a.name AS agent_name,
-	(SELECT r.status FROM task_run r WHERE r.task_id = t.id ORDER BY r.created_at DESC LIMIT 1) AS run_status,
+	(SELECT r.status FROM task_run r WHERE r.task_id = t.id AND NOT r.assist ORDER BY r.created_at DESC LIMIT 1) AS run_status,
 	(SELECT count(*) FROM task_activity x WHERE x.task_id = t.id AND x.kind = 'comment') AS comments
 	FROM task t LEFT JOIN computer c ON c.id = t.computer_id LEFT JOIN agent a ON a.id = t.created_by_agent`
 
@@ -133,6 +133,8 @@ type runRow struct {
 	Error                *string    `db:"error"`
 	CreatedAt            time.Time  `db:"created_at"`
 	FinishedAt           *time.Time `db:"finished_at"`
+	// Another agent's assistance, beside the assignee's runs.
+	Assist bool `db:"assist"`
 }
 
 type sessionRow struct {
@@ -149,6 +151,8 @@ type sessionRow struct {
 	ClosedAt   *time.Time      `db:"closed_at"`
 	// What AXP opened for it is to be archived or removed.
 	CleanupPending bool `db:"cleanup_pending"`
+	// An assisting agent's, in a place of its own.
+	Assist bool `db:"assist"`
 }
 
 func (s *sessionRow) native() native {
@@ -203,7 +207,7 @@ type Task struct {
 	Status    string        `json:"status" enum:"backlog,todo,in_progress,in_review,done,blocked,cancelled"`
 	Assignee  TaskAssignee  `json:"assignee"`
 	CreatedBy TaskCreator   `json:"created_by"`
-	RunStatus *string       `json:"run_status" nullable:"true" enum:"queued,starting,running,completed,failed,cancelled" doc:"The latest run's status."`
+	RunStatus *string       `json:"run_status" nullable:"true" enum:"queued,starting,running,completed,failed,cancelled" doc:"The assignee's latest run's status (assisting runs aside)."`
 	Comments  int64         `json:"comments"`
 	CreatedAt jsontime.Time `json:"created_at"`
 	UpdatedAt jsontime.Time `json:"updated_at"`
@@ -217,7 +221,7 @@ type TaskActor struct {
 
 type TaskActivity struct {
 	ID    string    `json:"id"`
-	Kind  string    `json:"kind" doc:"created, comment, status, assignee, title, description, run_queued, run_started, run_completed, run_failed, run_cancelled, run_nudged, cleanup, deliverable or artifact (data: artifact_id, title, version)."`
+	Kind  string    `json:"kind" doc:"created, comment, assist (body: the request; data: computer_id, computer_name, runtime, provider, pull), status, assignee, title, description, run_queued, run_started, run_completed, run_failed, run_cancelled, run_nudged, cleanup, deliverable or artifact (data: artifact_id, title, version)."`
 	Actor TaskActor `json:"actor"`
 	RunID *string   `json:"run_id" nullable:"true"`
 	Body  *string   `json:"body" nullable:"true"`
@@ -239,6 +243,7 @@ type TaskRun struct {
 	CreatedAt    jsontime.Time  `json:"created_at"`
 	SentAt       *jsontime.Time `json:"sent_at" nullable:"true"`
 	FinishedAt   *jsontime.Time `json:"finished_at" nullable:"true"`
+	Assist       bool           `json:"assist" doc:"Another agent's assistance (请 Agent 协助), not the assignee's work."`
 }
 
 type TaskDetail struct {
@@ -357,7 +362,7 @@ func detail(ctx context.Context, db pg.DB, r *taskRow) (*TaskDetail, error) {
 			ID: run.ID, Status: run.Status, ComputerID: run.ComputerID, ComputerName: run.ComputerName,
 			Runtime: run.Runtime, Provider: run.Provider, Workspace: run.Workspace, Nudged: run.NudgedAt != nil,
 			Error: run.Error, CreatedAt: jsontime.From(run.CreatedAt), SentAt: jsontime.Ptr(run.SentAt),
-			FinishedAt: jsontime.Ptr(run.FinishedAt),
+			FinishedAt: jsontime.Ptr(run.FinishedAt), Assist: run.Assist,
 		})
 	}
 	return out, nil
@@ -646,7 +651,7 @@ func setStatus(ctx context.Context, tx pgx.Tx, r *taskRow, status string, by Act
 // startIfIdle queues the first brief when the remote agent has no run yet.
 func (s *Service) startIfIdle(ctx context.Context, tx pgx.Tx, r *taskRow) error {
 	started, err := pg.Exists(ctx, tx, `SELECT 1 FROM task_run WHERE task_id = $1 AND computer_id = $2
-		AND runtime = $3 AND provider = $4 AND status <> 'cancelled'`, r.ID, *r.ComputerID, *r.Runtime, *r.Provider)
+		AND runtime = $3 AND provider = $4 AND status <> 'cancelled' AND NOT assist`, r.ID, *r.ComputerID, *r.Runtime, *r.Provider)
 	if err != nil || started {
 		return err
 	}

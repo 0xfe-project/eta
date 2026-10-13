@@ -24,8 +24,7 @@ import {
 } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo } from "react";
 import { create } from "zustand";
-import { ApiError, controlPlane, unwrap } from "@/lib/api";
-import { refreshLlm } from "@/queries/llm";
+import { controlPlane, unwrap } from "@/lib/api";
 
 // The control plane's chat API; every type comes from its OpenAPI document.
 
@@ -421,33 +420,6 @@ export function addSent(queryClient: QueryClient, sent: Sent) {
   update(queryClient, (s) =>
     upsertMessage(upsertMessage(s, sent.message), sent.reply),
   );
-}
-
-/** A one-off send; the chat's composer sends through the outbox instead. */
-export function useSendMessage() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (input: {
-      agentId: string;
-      text: string;
-      mode?: SendMode;
-    }) =>
-      unwrap(
-        controlPlane.POST("/api/v1/chat/messages", {
-          body: {
-            agent_id: input.agentId,
-            text: input.text,
-            mode: input.mode ?? "queue",
-          },
-        }),
-      ),
-    onSuccess: (sent) => addSent(queryClient, sent),
-    // The model became unusable since the catalog was last loaded.
-    onError: (error) => {
-      if (error instanceof ApiError && error.code.startsWith("MODEL_"))
-        void refreshLlm(queryClient);
-    },
-  });
 }
 
 /** Compact the agent's context; shows as a `/compact` turn. */

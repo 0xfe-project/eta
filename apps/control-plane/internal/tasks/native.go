@@ -153,14 +153,16 @@ type PlaceProject struct {
 
 // PlaceWorkspace is an existing workspace an agent can work in.
 type PlaceWorkspace struct {
-	ID      string  `json:"id"`
-	Name    string  `json:"name"`
-	Path    string  `json:"path"`
-	Project string  `json:"project,omitempty"`
-	Kind    string  `json:"kind" enum:"worktree,checkout,directory"`
-	Branch  *string `json:"branch,omitempty"`
-	Dirty   *bool   `json:"dirty,omitempty"`
-	Session *string `json:"session,omitempty" doc:"Herdr's session."`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Path    string `json:"path"`
+	Project string `json:"project,omitempty"`
+	// Paseo's id of its project.
+	ProjectID string  `json:"-"`
+	Kind      string  `json:"kind" enum:"worktree,checkout,directory"`
+	Branch    *string `json:"branch,omitempty"`
+	Dirty     *bool   `json:"dirty,omitempty"`
+	Session   *string `json:"session,omitempty" doc:"Herdr's session."`
 }
 
 // Places is where on a computer's runtime an agent can work.
@@ -210,7 +212,7 @@ func (a agents) places(ctx context.Context, t target) (*Places, error) {
 			if dir == "" {
 				dir = e.ProjectRootPath
 			}
-			w := PlaceWorkspace{ID: e.ID, Name: e.Name, Path: dir, Project: e.ProjectDisplayName, Kind: "directory"}
+			w := PlaceWorkspace{ID: e.ID, Name: e.Name, Path: dir, Project: e.ProjectDisplayName, ProjectID: e.ProjectID, Kind: "directory"}
 			switch e.WorkspaceKind {
 			case "worktree":
 				w.Kind = "worktree"
@@ -298,6 +300,8 @@ type opening struct {
 	Number int64
 	Title  string
 	Place  Place
+	// For an assisting agent.
+	Assist bool
 }
 
 // open opens the run's place (a new worktree, or an existing workspace) and
@@ -305,7 +309,10 @@ type opening struct {
 // the directory it works in; on failure, whatever it already opened.
 func (a agents) open(ctx context.Context, s *sessionRow, o opening) (native, string, error) {
 	t := s.target()
-	label := fmt.Sprintf("AXP #%d %s", o.Number, o.Title)
+	label, tabLabel := fmt.Sprintf("AXP #%d %s", o.Number, o.Title), fmt.Sprintf("AXP #%d", o.Number)
+	if o.Assist {
+		label, tabLabel = label+" · 协助", tabLabel+" 协助"
+	}
 	branch := deref(o.Place.Branch)
 	if branch == "" {
 		branch = defaultBranch(o.Number, o.Title)
@@ -403,7 +410,7 @@ func (a agents) open(ctx context.Context, s *sessionRow, o opening) (native, str
 			} `json:"result"`
 		}
 		if err := a.call(ctx, t, "tab.create", merge(sess.ref(), map[string]any{
-			"workspaceId": n.WorkspaceID, "label": fmt.Sprintf("AXP #%d", o.Number), "env": map[string]string{"AXP_TASK_ID": o.TaskID},
+			"workspaceId": n.WorkspaceID, "label": tabLabel, "env": map[string]string{"AXP_TASK_ID": o.TaskID},
 		}), &tab); err != nil {
 			return n, "", err
 		}
@@ -417,6 +424,36 @@ func (a agents) open(ctx context.Context, s *sessionRow, o opening) (native, str
 		return n, dir, a.herdrReady(ctx, t, n)
 	}
 	return native{}, "", fmt.Errorf("unknown runtime %q", s.Runtime)
+}
+
+// errAssigneePlaceGone is the assignee's workspace no longer in its runtime.
+var errAssigneePlaceGone = errors.New("Paseo 里没有主执行者的工作区了")
+
+// assistPlace is where an assisting agent works: a new worktree of the
+// repository the assignee works in (its project in Paseo, the workspace its
+// worktree branches off in Herdr), on a branch of its own. It only reads.
+func (a agents) assistPlace(ctx context.Context, t target, p Place, number int64, runID string) (Place, error) {
+	from := deref(p.From)
+	if p.Kind == PlaceKindWorkspace {
+		from = deref(p.WorkspaceID)
+		if t.Runtime == "paseo" {
+			places, err := a.places(ctx, t)
+			if err != nil {
+				return Place{}, err
+			}
+			from = ""
+			for _, w := range places.Workspaces {
+				if w.ID == deref(p.WorkspaceID) {
+					from = w.ProjectID
+				}
+			}
+			if from == "" {
+				return Place{}, errAssigneePlaceGone
+			}
+		}
+	}
+	branch := fmt.Sprintf("axp/%d-assist-%s", number, strings.ReplaceAll(runID, "-", "")[:8])
+	return Place{Kind: PlaceKindWorktree, From: &from, Branch: &branch, Session: p.Session, Name: p.Name}, nil
 }
 
 // withBaseHint says how to fix a base branch Paseo did not find: it

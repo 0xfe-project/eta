@@ -187,6 +187,22 @@ func registerTasks(api huma.API, d *Deps) {
 			})
 		})
 
+	huma.Register(api, taskOp("assistTask", http.MethodPost, "/api/v1/tasks/{task_id}/assists",
+		"请 Agent 协助: another agent on the task's computer does one piece of work on it, in a place of its own, without changing the task's status or assignee", 201, "tasks"),
+		func(ctx context.Context, in *struct {
+			idempotency.Keyed
+			TaskPath
+			Body tasks.AssistInput
+		}) (*idempotency.Response[tasks.TaskDetail], error) {
+			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[tasks.TaskDetail], error) {
+				t, err := s.Assist(ctx, tx, in.TaskID, in.Body, tasks.User)
+				if err != nil {
+					return idempotency.Result[tasks.TaskDetail]{}, err
+				}
+				return idempotency.Result[tasks.TaskDetail]{Status: 201, Body: t, Resource: t.ID}, nil
+			})
+		})
+
 	huma.Register(api, taskOp("interruptTaskRun", http.MethodPost, "/api/v1/tasks/{task_id}/runs/{run_id}/interrupt",
 		"Stop a run", 200, "tasks"),
 		func(ctx context.Context, in *TaskRunPath) (*httpapi.Body[tasks.TaskDetail], error) {

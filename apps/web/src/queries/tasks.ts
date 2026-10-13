@@ -1,6 +1,7 @@
 import type {
   AssigneeInput,
   AssigneeOption,
+  AssistInput,
   Computer,
   ComputerRuntime,
   Computers,
@@ -163,6 +164,26 @@ export function useCommentTask() {
             header: { "Idempotency-Key": key },
           },
           body: { body },
+        }),
+      ),
+  );
+}
+
+/**
+ * 请 Agent 协助: another agent on the task's computer does one piece of work
+ * on it, beside its assignee. `key` is the Idempotency-Key: a retry of one
+ * request is never a second assist.
+ */
+export function useAssistTask() {
+  return useTaskMutation(
+    ({ id, input, key }: { id: string; input: AssistInput; key: string }) =>
+      unwrap(
+        controlPlane.POST("/api/v1/tasks/{task_id}/assists", {
+          params: {
+            path: { task_id: id },
+            header: { "Idempotency-Key": key },
+          },
+          body: input,
         }),
       ),
   );
