@@ -508,7 +508,8 @@ type Enrolled struct {
 	Name       string `json:"name"`
 	Token      string `json:"token"`
 	RelayURL   string `json:"relay_url"`
-	// The agenvo version setup installs; the latest when empty.
+	// The agenvo version whose connectors setup installs from /remote/dl;
+	// empty when the relay cannot say.
 	ConnectorVersion string `json:"connector_version,omitempty"`
 }
 

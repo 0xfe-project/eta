@@ -1,7 +1,0 @@
-{
-  "name": "@axp/relay",
-  "private": true,
-  "dependencies": {
-    "@agenvo/server": "0.2.0"
-  }
-}

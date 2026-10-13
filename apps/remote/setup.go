@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -340,16 +341,18 @@ func (c *Config) kinds() []string {
 	return kinds
 }
 
-// installConnectors installs the connectors from npm, at the relay's
-// version, under the installation, away from any global one.
+// installConnectors installs the connectors AXP serves at the relay's
+// version (built with the relay from the same agenvo commit) under the
+// installation, away from any global one. Another version is another
+// address, so npm replaces what it installed before; the connectors' own
+// configuration (instances, pairing, device identity) stays.
 func installConnectors(c *Config) error {
+	if c.ConnectorVersion == "" {
+		return errors.New("AXP 暂时读不到中继的 agenvo 版本（中继可能没有运行），稍后再运行一次安装命令")
+	}
 	args := []string{"install", "--global", "--prefix", filepath.Join(c.Home, "agenvo"), "--no-audit", "--no-fund", "--loglevel=error"}
 	for _, kind := range c.kinds() {
-		pkg := "@agenvo/" + kind
-		if c.ConnectorVersion != "" {
-			pkg += "@" + c.ConnectorVersion
-		}
-		args = append(args, pkg)
+		args = append(args, c.URL+"/remote/dl/agenvo-"+kind+"-"+url.PathEscape(c.ConnectorVersion)+".tgz")
 	}
 	cmd := exec.Command("npm", args...)
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr

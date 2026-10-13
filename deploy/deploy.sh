@@ -204,15 +204,18 @@ prepare_accessories() {
   fi
 }
 
-# The relay's image: @agenvo/server at the version apps/relay/package.json
-# pins, tagged with it and its Dockerfile, so it is built (and the accessory
-# rebooted onto it) only when either changes. Its state stays in the volume.
-AGENVO_VERSION="$(bun -p 'require("./apps/relay/package.json").dependencies["@agenvo/server"]')"
-relay_tag="$AGENVO_VERSION-$(sha256sum deploy/relay.Dockerfile | cut -c1-8)"
+# The relay's image: the relay scripts/build/agenvo.sh builds from the commit
+# apps/agenvo/package.json pins (restored from Turbo's cache when unchanged),
+# tagged with its version and a hash of its Dockerfile and resolved
+# dependencies, so it is built (and the accessory rebooted onto it) only when
+# they change. Its state stays in the volume.
+bunx turbo run build --filter=@axp/agenvo --output-logs=errors-only >/dev/null
+AGENVO_VERSION="$(<apps/agenvo/out/version)"
+relay_tag="${AGENVO_VERSION//+/-}-$(cat deploy/relay.Dockerfile apps/agenvo/out/relay/package-lock.json | sha256sum | cut -c1-8)"
 export AXP_RELAY_IMAGE="127.0.0.1:$AXP_PROD_REGISTRY_PORT/axp-relay:$relay_tag"
 build_relay() {
   docker manifest inspect --insecure "$AXP_RELAY_IMAGE" >/dev/null 2>&1 && return
-  docker build -q --build-arg AGENVO_VERSION="$AGENVO_VERSION" -t "$AXP_RELAY_IMAGE" - <deploy/relay.Dockerfile >/dev/null
+  docker build -q -f deploy/relay.Dockerfile -t "$AXP_RELAY_IMAGE" apps/agenvo/out >/dev/null
   docker push -q "$AXP_RELAY_IMAGE" >/dev/null
 }
 update_relay() {

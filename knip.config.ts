@@ -7,9 +7,9 @@ export default {
   ignore: ["vendor/**"],
   // System tools the Turbo scripts call.
   ignoreBinaries: ["go", "gofmt", "uv"],
-  // Run by path: scripts/dev.sh runs concurrently and the agenvo relay, the
-  // forge service's Go tests run emulate (their emulated GitHub).
-  ignoreDependencies: ["concurrently", "@agenvo/server", "emulate"],
+  // Run by path: scripts/dev.sh runs concurrently, the forge service's Go
+  // tests run emulate (their emulated GitHub).
+  ignoreDependencies: ["concurrently", "emulate"],
   // CSS files are part of the module graph: their @imports reference
   // packages (fonts, tw-animate-css, shadcn) and other stylesheets.
   compilers: {
