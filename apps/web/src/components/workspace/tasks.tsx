@@ -16,6 +16,7 @@ import { ChatCircleIcon } from "@phosphor-icons/react/ChatCircle";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { GitPullRequestIcon } from "@phosphor-icons/react/GitPullRequest";
+import { ImageIcon } from "@phosphor-icons/react/Image";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
@@ -798,6 +799,7 @@ const logKindLabels: Record<LogEntry["kind"], string> = {
   tool: "工具",
   reasoning: "思考",
   terminal: "终端",
+  image: "图片",
   other: "其他",
 };
 
@@ -828,12 +830,18 @@ function RunLog({ task, run }: { task: string; run: TaskRun }) {
           {loadingOlder ? "正在读取更早的记录…" : "加载更早的记录"}
         </Button>
       ) : null}
-      <RunLogEntries entries={entries} />
+      <RunLogEntries entries={entries} computer={run.computer_name} />
     </div>
   );
 }
 
-function RunLogEntries({ entries }: { entries: LogEntry[] }) {
+function RunLogEntries({
+  entries,
+  computer,
+}: {
+  entries: LogEntry[];
+  computer: string | null;
+}) {
   // Entries can be alike (same time, kind and start): number the repeats.
   const seen = new Map<string, number>();
   const key = (entry: LogEntry) => {
@@ -858,7 +866,9 @@ function RunLogEntries({ entries }: { entries: LogEntry[] }) {
               $ {entry.command}
             </pre>
           ) : null}
-          {entry.text ? (
+          {entry.kind === "image" ? (
+            <RemoteImage name={entry.text} computer={computer} />
+          ) : entry.text ? (
             entry.kind === "assistant" || entry.kind === "user" ? (
               <Folded max="max-h-40">
                 <Markdown className="mt-0.5 text-xs">{entry.text}</Markdown>
@@ -874,6 +884,33 @@ function RunLogEntries({ entries }: { entries: LogEntry[] }) {
         </li>
       ))}
     </ol>
+  );
+}
+
+/**
+ * An image the agent saw (a screenshot it read, say). Its runtime keeps it in
+ * a temporary file on that computer, which the relay cannot read: say what it
+ * is, in its place, rather than show a broken image.
+ */
+function RemoteImage({
+  name,
+  computer,
+}: {
+  name: string;
+  computer: string | null;
+}) {
+  const type = name.split(".").at(-1)?.toUpperCase();
+  return (
+    <p
+      className="mt-0.5 flex items-start gap-1.5 border border-dashed px-2 py-1 text-muted-foreground"
+      title={name}
+    >
+      <ImageIcon aria-hidden="true" className="mt-0.5 shrink-0" />
+      <span className="wrap-anywhere">
+        {type ? `${type} 图片` : "图片"}，只在 {computer ?? "远程电脑"}{" "}
+        上，执行记录里看不到原图
+      </span>
+    </p>
   );
 }
 
@@ -1085,6 +1122,12 @@ export function CommentBox({ task }: { task: TaskDetail }) {
     };
   }, []);
   const remote = task.assignee.kind === "remote";
+  const leftOut = (files: number) => {
+    if (files)
+      toast.warning(
+        `${remote ? "追问" : "评论"}还不能带图片或文件，${files} 个没有加进来。`,
+      );
+  };
   // Arrived once the task has one more of it, from the response or a refresh:
   // the timeline shows it in the same render this stops showing it.
   const waiting =
@@ -1159,6 +1202,14 @@ export function CommentBox({ task }: { task: TaskDetail }) {
           className="min-h-16 text-sm md:text-sm"
           value={text}
           onChange={(e) => setText(e.target.value)}
+          // A comment is text only: a pasted or dropped file would vanish
+          // without a word, so say it stayed out (a paste's text still goes in).
+          onPaste={(e) => leftOut(e.clipboardData.files.length)}
+          onDrop={(e) => {
+            if (!e.dataTransfer.files.length) return;
+            e.preventDefault();
+            leftOut(e.dataTransfer.files.length);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();

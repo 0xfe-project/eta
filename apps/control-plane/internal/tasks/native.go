@@ -54,7 +54,8 @@ type agentState struct {
 
 // LogEntry is one item of a remote agent's transcript.
 type LogEntry struct {
-	Kind    string `json:"kind" enum:"user,assistant,tool,reasoning,terminal,other"`
+	Kind string `json:"kind" enum:"user,assistant,tool,reasoning,terminal,image,other"`
+	// An image's file name on the remote computer.
 	Text    string `json:"text"`
 	Tool    string `json:"tool,omitempty"`
 	Command string `json:"command,omitempty"`
@@ -764,9 +765,29 @@ type paseoEntry struct {
 		Status string `json:"status"`
 		Detail struct {
 			Command string `json:"command"`
-			Output  string `json:"output"`
+			// A string for a shell command; any value for a tool Paseo
+			// does not know.
+			Output json.RawMessage `json:"output"`
 		} `json:"detail"`
 	} `json:"item"`
+}
+
+// Paseo writes an image a provider shows (a screenshot an agent reads) to a
+// temporary file on the remote computer, named after its content's hash, and
+// puts it in the timeline as a message linking to it by a local path. The
+// same pattern Paseo's own replay recognizes them by.
+var paseoImage = regexp.MustCompile(`^!\[[^\]]*\]\([^)]*paseo-attachments(?:-[^/\\)]+)?[/\\]+(?:[^/\\)]+[/\\]+)?([0-9a-f]{64}\.[a-z0-9]+)\)$`)
+
+// outputText is a tool output as text: a string as is, anything else as JSON.
+func outputText(raw json.RawMessage) string {
+	var s string
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	if json.Unmarshal(raw, &s) == nil {
+		return s
+	}
+	return string(raw)
 }
 
 func (e paseoEntry) entry() LogEntry {
@@ -776,10 +797,15 @@ func (e paseoEntry) entry() LogEntry {
 		entry.Kind = "user"
 	case "assistant_message":
 		entry.Kind = "assistant"
+		// Only on that computer, beyond the relay's reach: AXP says what
+		// it is rather than link a path no browser can open.
+		if m := paseoImage.FindStringSubmatch(strings.TrimSpace(entry.Text)); m != nil {
+			entry.Kind, entry.Text = "image", m[1]
+		}
 	case "reasoning":
 		entry.Kind = "reasoning"
 	case "tool_call":
-		entry.Kind, entry.Tool, entry.Command, entry.Status, entry.Text = "tool", e.Item.Name, e.Item.Detail.Command, e.Item.Status, e.Item.Detail.Output
+		entry.Kind, entry.Tool, entry.Command, entry.Status, entry.Text = "tool", e.Item.Name, e.Item.Detail.Command, e.Item.Status, outputText(e.Item.Detail.Output)
 	default:
 		entry.Kind = "other"
 		if entry.Text == "" {
