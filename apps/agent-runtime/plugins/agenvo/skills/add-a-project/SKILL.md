@@ -7,7 +7,9 @@ description: Clone a repository on a user's remote computer and register or open
 
 Use agenvo `search` and `execute` to work on the requested computer. Discover
 its instances, read their context, and retrieve the relevant method schemas.
-All paths and commands belong to that computer. Do not substitute another
+All paths and commands belong to that computer. Prefer that computer's Paseo
+terminal when it exposes the methods below; Herdr is not a prerequisite for
+cloning. Do not substitute another
 computer when a runtime is unavailable.
 
 ## Find a terminal and destination
@@ -16,8 +18,12 @@ computer when a runtime is unavailable.
   If none are useful, open a home workspace and a plain shell. Determine the
   actual home directory from instance context or native state; do not assume a
   username or OS. Inspect likely development directories before choosing one.
-- Paseo: use `paseo.workspaces.create` for a directory workspace, then
-  `paseo.terminals.create`. Herdr: discover a live `session`, then use
+- Paseo: discover `paseo.projects.list`, `paseo.workspaces.list`, and
+  `paseo.terminals.create/run/read/close` with their schemas. Once a real
+  directory is known, create a setup terminal with `cwd` and an optional
+  `workspaceId` (it need not belong to a workspace). Create a directory
+  workspace first only when useful; do not register home as a project just
+  to obtain a shell. Herdr: discover a live `session`, then use
   `workspace.create` or `tab.create`; retain the returned pane ID. Neither
   path requires creating an Agent. Use a terminal you created for this work;
   do not send shell commands into somebody else's active pane.
@@ -26,6 +32,37 @@ computer when a runtime is unavailable.
   them, a Herdr terminal on the same computer can perform the clone. If neither
   provides a usable terminal, report the missing capability instead of starting
   an Agent to work around it.
+- New terminal/project methods require a connector containing those methods.
+  Discover live capabilities rather than inferring them from the Paseo daemon
+  version or an AXP deployment. If missing, explain that the computer's
+  connector may still need updating; do not automatically restart or upgrade it.
+
+## Paseo terminal flow
+
+Keep the returned `terminalId`. Run a small discovery command such as
+`pwd; printf '%s\n' "$HOME"`, then inspect the owner's development directories
+in this terminal. Use those observed paths for the destination.
+
+`paseo.terminals.run` takes `{terminalId, command}` and submits command text
+plus Enter. It is an interactive shell, not an exec API returning an exit
+code. Append a unique completion marker and the immediately captured exit
+status to the clone command, for example:
+
+```sh
+git clone -- '<repository URL>' '<destination>'; axp_clone_status=$?; printf '\nAXP_CLONE_<unique-id>:%s\n' "$axp_clone_status"
+```
+
+Replace and shell-quote the placeholders; inspect for the printed marker and
+its status, not just the echoed command. Read in a later tool call using
+`{terminalId, start: -80, stripAnsi: true}` as an initial bounded capture;
+adjust `start`/`end` from capture metadata if needed. Missing output or marker
+means pending or uncertain, not failure: inspect before resubmitting clone.
+Do not poll inside an `execute` script.
+
+Use `send-text` for literal input without Enter and `send-keys` only when
+needed. Paseo keys are objects such as `{key: "Enter"}` or
+`{key: "c", ctrl: true}`, not Herdr key strings or hand-coded escape sequences.
+Do not interrupt an in-progress clone merely because a read has no output.
 
 ## Clone and verify
 
@@ -50,7 +87,8 @@ then adjust using the returned capture information. Reduce ranges after
 ## Register and open
 
 - Paseo: `paseo.projects.add` registers the checkout by `cwd`. Verify its path
-  and ID with `paseo.projects.list`, then open a directory workspace referencing
+  and ID with `paseo.projects.list` (reuse an already registered project), then
+  open a directory workspace referencing
   the returned project ID if one is not already open. Creating a workspace
   alone is not proof of project registration. If the connector lacks project
   registration, report that gap rather than claiming it succeeded.
