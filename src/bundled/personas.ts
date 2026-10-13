@@ -14,6 +14,7 @@
 import { watch } from "node:fs";
 import type { StateSnapshot } from "@eta/client-wire-proto";
 import type { PersonaCard } from "@eta/core";
+import type { ManagedSession } from "../manager";
 import type { SessionManager } from "../manager";
 import { discoverPersonas, resolvePersona, summarize } from "../personas";
 import type { WireService } from "../wire-service";
@@ -31,10 +32,11 @@ export interface PersonasPluginOptions {
 export function personasPlugin(options: PersonasPluginOptions) {
 	return {
 		name: "personas",
-		inject: ["wire"],
+		inject: ["wire", "sessions"],
 		apply(ctx: unknown): unknown {
 			const context = ctx as {
 				wire: WireService;
+				sessions: { open(id: string): Promise<{ managed: ManagedSession | undefined }> };
 				effect(execute: () => () => unknown): unknown;
 			};
 			const wire = context.wire;
@@ -80,7 +82,7 @@ export function personasPlugin(options: PersonasPluginOptions) {
 						if (session === undefined || persona === undefined) {
 							throw new Error("personas.set needs a session and a persona");
 						}
-						const managed = await options.manager.session(session);
+						const { managed } = await context.sessions.open(session);
 						if (managed === undefined) throw new Error(`no such session: ${session}`);
 						// The cards that apply to *this* session's directory, re-read: the user may have
 						// just written one.
@@ -96,12 +98,11 @@ export function personasPlugin(options: PersonasPluginOptions) {
 							if (!folded.exact) throw new Error(`no such persona: ${persona}`);
 						}
 						managed.session.kernel.persona.loadCards([...cards.values()]);
-						managed.session.kernel.persona.setActive([persona]);
-						await options.manager.setMeta(session, { persona });
-						// The card list did not move (the user picked one that exists), so there is nothing
-						// to push for `personas`. The session's own target moves — the plugin that owns it
-						// pushes it, and this one would be lying to claim otherwise.
-						return { result: { session, persona } };
+					managed.session.kernel.persona.setActive([persona]);
+					await options.manager.setMeta(session, { persona });
+					wire.pushNow(`sessions.${session}`);
+					wire.pushNow("sessions");
+					return { result: { session, persona } };
 					}),
 				];
 

@@ -17,6 +17,7 @@ import { PERSONA_ACTIONS, personasPlugin } from "../src/bundled/personas";
 import { SessionManager } from "../src/manager";
 import { MemorySessionStore } from "../src/memory-store";
 import { WireService } from "../src/wire-service";
+import { SessionsService } from "../src/bundled/sessions";
 
 const roots: string[] = [];
 
@@ -63,6 +64,7 @@ async function harness(): Promise<Harness> {
 		modelsFor: () => fakeModels([assistantMessage()]) as never,
 		personasFor: async () => [],
 	});
+	const sessions = new SessionsService(ctx, { manager, wire });
 	return {
 		wire,
 		manager,
