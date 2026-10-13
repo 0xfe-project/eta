@@ -313,6 +313,18 @@ func (s *Service) assist(ctx context.Context, tx pgx.Tx, r *taskRow, in AssistIn
 		if open {
 			return nil, apierr.New(409, "LOOP_OPEN", "这个任务已经有一个没有结束的审查循环；由用户继续或停止它。")
 		}
+		// Nor may an agent start over a loop the user or the task stopped:
+		// starting again is the user's call.
+		if by.Kind != ActorUser {
+			var last string
+			err := tx.QueryRow(ctx, "SELECT state FROM task_review_loop WHERE task_id = $1 ORDER BY created_at DESC LIMIT 1", r.ID).Scan(&last)
+			if err != nil && err != pgx.ErrNoRows {
+				return nil, err
+			}
+			if last != "" && last != LoopPassed {
+				return nil, apierr.New(409, "LOOP_USER_ONLY", "这个任务上一个审查循环没有通过就结束了；重新开始审查循环要由用户决定。")
+			}
+		}
 		id, now := pg.NewID(), pg.Now()
 		if _, err := tx.Exec(ctx, `INSERT INTO task_review_loop (id, task_id, runtime, provider, request, max_rounds, state, created_at, updated_at)
 			VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, $7)`, id, r.ID, in.Runtime, in.Provider, request, maxRounds, now); err != nil {

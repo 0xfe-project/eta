@@ -96,10 +96,12 @@ describe("a run's log", () => {
     const open = [...container.querySelectorAll("button")].find((b) =>
       b.textContent?.includes("执行记录"),
     )!;
-    await act(async () => {
-      open.click();
-      await new Promise((r) => setTimeout(r, 20));
-    });
+    await act(async () => open.click());
+    // The log is read on opening; wait for it, as long as a busy test run needs.
+    for (let i = 0; i < 100; i++) {
+      if (container.querySelector('ol[aria-label="执行记录"]')) break;
+      await act(() => new Promise((r) => setTimeout(r, 20)));
+    }
     const log = container.querySelector('ol[aria-label="执行记录"]')!;
     const items = [...log.children].map((li) => li.textContent);
     // In order, and no broken <img>.

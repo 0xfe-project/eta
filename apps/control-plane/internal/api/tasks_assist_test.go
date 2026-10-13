@@ -467,6 +467,14 @@ func TestAReviewLoopStopsWhenItsRoundsAreSpent(t *testing.T) {
 	task = e.task("1")
 	expect(t, task.Loops[0].State, "stopped")
 	expect(t, task.Assists[1].State, "cancelled")
+	// Stopped, an agent cannot start a fresh budget; the user can.
+	if s, code := e.remoteIn(token, mainDir, http.MethodPost, "/tasks/"+task.ID+"/assists", map[string]any{
+		"runtime": "paseo", "provider": "codex", "request": "Review again.", "after_run": "current", "loop": map[string]any{},
+	}).error(); s != 409 || code != "LOOP_USER_ONLY" {
+		t.Fatalf("an agent's new loop after a stop: %d %s", s, code)
+	}
+	e.assist(task.ID, map[string]any{"runtime": "paseo", "provider": "codex", "request": "Review again.", "after_run": "current", "loop": map[string]any{}})
+	expect(t, len(e.task("1").Loops), 2)
 }
 
 // A review that ends without a verdict blocks its loop; a new runner (a
