@@ -1084,7 +1084,11 @@ function LoopRow({ task, loop }: { task: TaskDetail; loop: TaskLoop }) {
   return (
     <div className="space-y-1 py-1.5 text-sm">
       <p className="wrap-anywhere">
-        {remoteLabel({ runtime: loop.runtime, provider: loop.provider })}{" "}
+        {remoteLabel({
+          computer_name: task.assignee.computer_name,
+          runtime: loop.runtime,
+          provider: loop.provider,
+        })}{" "}
         <span className="text-muted-foreground">
           · 已审 {loop.rounds}/{loop.max_rounds} 轮 ·{" "}
           {loopStateLabels[loop.state]}

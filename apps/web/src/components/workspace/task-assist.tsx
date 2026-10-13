@@ -361,8 +361,8 @@ function AssistForm({
           />
           <span className="min-w-0">
             要求修改时交给主执行者改，改完再审
-            <span className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-              最多
+            <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+              <span className="whitespace-nowrap">最多</span>
               <Select
                 aria-label="最多审查几轮"
                 size="sm"
@@ -379,8 +379,11 @@ function AssistForm({
                   ),
                 )}
               </Select>
-              轮审查；通过即停，用完停下等你。Agent 用 axp task review
-              给出结论。
+              <span className="whitespace-nowrap">轮审查</span>
+              <span className="basis-full">
+                通过即停，用完停下等你决定。审查 Agent 用 axp task review
+                给出结论。
+              </span>
             </span>
           </span>
         </label>
