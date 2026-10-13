@@ -1,3 +1,4 @@
+import type { Icon } from "@phosphor-icons/react";
 import type { SettingsSection, WorkspaceState } from "./workspace-store";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
 import { ChartLineIcon } from "@phosphor-icons/react/ChartLine";
@@ -25,6 +26,7 @@ import { BundleSettings } from "./bundle-settings";
 import { ComputerSettings } from "./computer-settings";
 import { ConnectionSettings } from "./connection-settings";
 import { ProviderSettings } from "./provider-settings";
+import { AttentionDot, SettingsNav } from "./settings-nav";
 import { useWorkspaceStore } from "./workspace-store";
 
 const colorModes = [
@@ -48,7 +50,7 @@ const fontFields = [
 const sections: {
   value: SettingsSection;
   label: string;
-  icon: typeof RobotIcon;
+  icon: Icon;
 }[] = [
   { value: "agents", label: "智能体", icon: RobotIcon },
   { value: "bundles", label: "环境包", icon: PackageIcon },
@@ -188,16 +190,6 @@ function AppearanceSettings() {
   );
 }
 
-/** Marks places that lead to accounts the user has to act on. */
-function AttentionDot({ className }: { className?: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn("size-1.5 shrink-0 bg-destructive", className)}
-    />
-  );
-}
-
 /** Opens settings; the dot marks accounts the user has to act on. */
 export function SettingsButton({ className }: { className?: string }) {
   const setSettings = useWorkspaceStore((s) => s.setSettings);
@@ -260,35 +252,18 @@ export function SettingsDialog() {
           <DialogTitle className="text-base">设置</DialogTitle>
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
-          <nav
-            aria-label="设置分类"
-            className="flex shrink-0 gap-1 overflow-x-auto border-b p-2 sm:w-44 sm:flex-col sm:border-r sm:border-b-0"
-          >
-            {sections.map(({ value, label, icon: Icon }) => (
-              <button
-                key={value}
-                type="button"
-                aria-current={settings.section === value ? "page" : undefined}
-                onClick={() =>
-                  setSettings((state) => ({ ...state, section: value }))
-                }
-                className={cn(
-                  "flex shrink-0 items-center gap-2 px-2 py-2 text-sm whitespace-nowrap text-muted-foreground transition-colors duration-[60ms] ease-linear outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring",
-                  settings.section === value &&
-                    "bg-accent font-medium text-accent-foreground",
-                )}
-              >
-                <Icon aria-hidden="true" className="size-4" />
-                {label}
-                {attention[value] ? (
-                  <>
-                    <AttentionDot className="ml-auto" />
-                    <span className="sr-only">（有账号需要处理）</span>
-                  </>
-                ) : null}
-              </button>
-            ))}
-          </nav>
+          <SettingsNav
+            label="设置分类"
+            sections={sections.map((section) => ({
+              ...section,
+              attention: attention[section.value],
+              hint: "有账号需要处理",
+            }))}
+            value={settings.section}
+            onChange={(section) =>
+              setSettings((state) => ({ ...state, section }))
+            }
+          />
           <section className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4">
             {settings.section === "agents" ? (
               <AgentSettings />
