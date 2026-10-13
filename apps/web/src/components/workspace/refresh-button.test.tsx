@@ -370,3 +370,8 @@ describe.each([false, true])("refresh (sidebar: %s)", (panel) => {
     });
   }
 });
+
+rstest.mock("./use-groups", () => ({
+  useGroups: () => ({ groups: [], current: undefined, groupId: null }),
+  useOpenGroup: () => () => {},
+}));

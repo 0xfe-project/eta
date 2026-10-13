@@ -1,8 +1,4 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { More } from "@/pages/more";
 
-// The full-window workspace opens on its first section.
-export const Route = createFileRoute("/workspace/")({
-  beforeLoad: () => {
-    throw redirect({ to: "/workspace/tasks" });
-  },
-});
+export const Route = createFileRoute("/workspace/")({ component: More });

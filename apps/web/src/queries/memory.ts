@@ -13,6 +13,8 @@ import { memoryApi } from "@/lib/api";
 const memorySchema = z.object({
   id: z.string(),
   text: z.string(),
+  source_group_id: z.string().optional(),
+  source_group_name: z.string().nullable().optional(),
   // Relevance, on search results only.
   score: z.number().optional(),
   created_at: z.string().optional(),
@@ -26,10 +28,19 @@ export type Memory = z.infer<typeof memorySchema>;
 
 const keys = {
   agent: (agentId: string) => ["memory", agentId] as const,
-  memories: (agentId: string, query: string, source?: MemorySource) =>
-    source
-      ? (["memory", agentId, query, source] as const)
-      : (["memory", agentId, query] as const),
+  memories: (
+    agentId: string,
+    query: string,
+    source?: MemorySource,
+    groupId?: string,
+  ) =>
+    [
+      "memory",
+      agentId,
+      query,
+      ...(source ? [source] : []),
+      ...(groupId ? [{ groupId }] : []),
+    ] as const,
 };
 
 const path = (agentId: string) =>
@@ -43,13 +54,15 @@ function memoriesQueryOptions(
   agentId: string,
   query: string,
   source?: MemorySource,
+  groupId?: string,
 ) {
   return queryOptions({
-    queryKey: keys.memories(agentId, query, source),
+    queryKey: keys.memories(agentId, query, source, groupId),
     queryFn: async ({ signal }) => {
       const params = new URLSearchParams();
       if (query) params.set("q", query);
       if (source) params.set("source", source);
+      if (groupId) params.set("group_id", groupId);
       const search = params.size ? `?${params}` : "";
       const body = await memoryApi.get(`${path(agentId)}${search}`, signal);
       return z.array(memorySchema).parse(body.memories);
@@ -62,9 +75,10 @@ export function useMemories(
   agentId: string | undefined,
   query: string,
   source?: MemorySource,
+  groupId?: string,
 ) {
   return useQuery({
-    ...memoriesQueryOptions(agentId ?? "", query, source),
+    ...memoriesQueryOptions(agentId ?? "", query, source, groupId),
     enabled: Boolean(agentId),
   });
 }

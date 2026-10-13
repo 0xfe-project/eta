@@ -9,6 +9,7 @@ import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { TrashIcon } from "@phosphor-icons/react/Trash";
 import { UserIcon } from "@phosphor-icons/react/User";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Empty, LoadError, Loading } from "@/components/states";
@@ -16,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { chatQueryOptions } from "@/queries/chat";
 import { useForget, useMemories, useRemember } from "@/queries/memory";
 import { Select, SelectOption } from "./select-field";
 import { ago } from "./task-format";
@@ -128,6 +130,14 @@ function MemoryRow({ agentId, memory }: { agentId: string; memory: Memory }) {
             {source.label}
           </span>
         ) : null}
+        {memory.source_group_id && (
+          <a
+            className="max-w-32 truncate underline underline-offset-2"
+            href={`/?group=${encodeURIComponent(memory.source_group_id)}`}
+          >
+            {memory.source_group_name || "来源群"}
+          </a>
+        )}
         {memory.created_at ? (
           <time
             dateTime={memory.created_at}
@@ -238,6 +248,8 @@ export function MemoryView({
 }) {
   const { agents, loaded, error: agentsError, retry, openEditor } = useAgents();
   const current = agents.find((agent) => agent.id === agentId) ?? agents.at(-1);
+  const { data: snapshot } = useQuery(chatQueryOptions());
+  const [groupId, setGroupId] = useState("");
   const [source, setSource] = useState<MemorySource | "">("");
   const [search, setSearch] = useState("");
   const query = useDebounced(search.trim());
@@ -245,6 +257,7 @@ export function MemoryView({
     current?.id,
     query,
     source || undefined,
+    groupId || undefined,
   );
 
   if (agentsError && !loaded)
@@ -320,6 +333,18 @@ export function MemoryView({
               </SelectOption>
             ))}
           </Select>
+          <Select
+            aria-label="来源群"
+            value={groupId}
+            onValueChange={setGroupId}
+          >
+            <SelectOption value="">全部群</SelectOption>
+            {snapshot?.groups?.map((g) => (
+              <SelectOption key={g.id} value={g.id}>
+                {g.name}
+              </SelectOption>
+            ))}
+          </Select>
           <div className="relative min-w-0 flex-1 sm:w-48 sm:flex-none">
             <MagnifyingGlassIcon
               aria-hidden="true"
@@ -342,7 +367,7 @@ export function MemoryView({
       ) : isPending ? (
         <Loading />
       ) : data.length === 0 ? (
-        query || source ? (
+        query || source || groupId ? (
           <Empty icon={MagnifyingGlassIcon} title="没有相关的记忆">
             {source ? "试试其他种类或全部种类。" : "换个说法再搜一次。"}
           </Empty>
@@ -354,7 +379,7 @@ export function MemoryView({
       ) : (
         // Agent, search and source changes all start on the first page.
         <MemoryList
-          key={`${current.id}\n${query}\n${source}`}
+          key={`${current.id}\n${query}\n${source}\n${groupId}`}
           agentId={current.id}
           memories={data}
         />

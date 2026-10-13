@@ -13,13 +13,13 @@ import { useTasks } from "@/queries/tasks";
 import { AgentEditor } from "./agent-editor";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels } from "./agent-status";
+import { GroupList } from "./groups";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
 import { useAgents, useOpenAgent } from "./use-agents";
 import { useAttention } from "./use-attention";
 
-// The full-window workspace (/workspace) around its pages: from md up
-// a sidebar of sections and agents, on narrow ones a bar along the top. The
-// conversation stays on the home page.
+// Shared navigation: the full-window sidebar on wide screens and four
+// bottom tabs on mobile. Conversation lists are the mobile home screen.
 
 const sections = [
   { to: "/", label: "对话", icon: ChatsCircleIcon },
@@ -51,12 +51,12 @@ function Badge({ count }: { count: number | undefined }) {
   ) : null;
 }
 
-function Sidebar() {
+export function Sidebar() {
   const badges = useBadges();
   const { agents, loaded, error, openEditor } = useAgents();
   const openAgent = useOpenAgent();
   return (
-    <aside className="hidden w-48 shrink-0 flex-col border-r bg-sidebar md:flex lg:w-56">
+    <aside className="hidden w-48 shrink-0 flex-col overflow-y-auto border-r bg-sidebar lg:flex lg:w-56">
       <div className="flex h-12 shrink-0 items-center justify-between pr-2 pl-4">
         <Link to="/workspace" className="text-lg font-semibold tracking-tight">
           axp.
@@ -80,6 +80,7 @@ function Sidebar() {
           </Link>
         ))}
       </nav>
+      <GroupList compact />
       <section
         aria-labelledby="sidebar-agents"
         className="mt-5 flex min-h-0 flex-col px-2"
@@ -142,41 +143,39 @@ function Sidebar() {
   );
 }
 
-/** Narrow screens: the sections as icons along the top. */
-function TopBar() {
+/** Mobile A: lists first, with a persistent bottom navigation outside a conversation. */
+export function BottomNav() {
   const badges = useBadges();
+  const tabs = [
+    sections[0],
+    sections[2],
+    sections[1],
+    { to: "/workspace", label: "更多", icon: ListChecksIcon },
+  ] as const;
   return (
-    <header className="flex h-12 shrink-0 items-center gap-1 px-4 sm:px-6 md:hidden">
-      <Link
-        to="/workspace"
-        className="mr-auto text-xl font-semibold tracking-tight"
-      >
-        axp.
-      </Link>
-      <nav aria-label="分区" className="flex">
-        {sections.map(({ to, label, icon: Icon }) => (
-          <Button key={to} variant="ghost" size="icon" asChild>
-            <Link
-              to={to}
-              aria-label={badges[to] ? `${label}（${badges[to]}）` : label}
-              title={label}
-              activeOptions={{ exact: to === "/", includeSearch: false }}
-              activeProps={{ className: "bg-muted" }}
-              className="relative"
-            >
-              <Icon aria-hidden="true" />
-              {badges[to] ? (
-                <span
-                  aria-hidden="true"
-                  className="absolute top-1.5 right-1.5 size-1.5 bg-foreground"
-                />
-              ) : null}
-            </Link>
-          </Button>
-        ))}
-      </nav>
-      <SettingsButton />
-    </header>
+    <nav
+      aria-label="分区"
+      className="flex shrink-0 border-t bg-background pb-[env(safe-area-inset-bottom)] lg:hidden"
+    >
+      {tabs.map(({ to, label, icon: Icon }) => (
+        <Link
+          key={to}
+          to={to}
+          search={{}}
+          className="flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-xs text-muted-foreground"
+          activeOptions={{ exact: true, includeSearch: false }}
+          activeProps={{ className: "text-foreground bg-muted/50" }}
+        >
+          <Icon className="size-5" aria-hidden="true" />
+          <span>
+            {label}
+            {badges[to as keyof typeof badges]
+              ? ` · ${badges[to as keyof typeof badges]}`
+              : ""}
+          </span>
+        </Link>
+      ))}
+    </nav>
   );
 }
 
@@ -203,8 +202,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex h-dvh min-h-0 bg-background">
       <Sidebar />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <TopBar />
         {children}
+        <BottomNav />
       </div>
       <SettingsDialog />
       <AgentEditor />

@@ -54,3 +54,12 @@ export function useShareArtifact(id: string) {
 /** Where a version's ZIP downloads from, as the user. */
 export const archiveURL = (id: string, version: number) =>
   `/api/v1/artifacts/${id}/versions/${version}/archive`;
+
+export function useArtifacts() {
+  return useQuery({
+    queryKey: ["artifacts"],
+    queryFn: async ({ signal }) =>
+      unwrap(controlPlane.GET("/api/v1/artifacts", { signal })),
+    refetchInterval: 15_000,
+  });
+}

@@ -3,6 +3,7 @@ import type {
   Agent,
   Block,
   ChatMessage,
+  Group,
   Interaction,
   SendMode,
 } from "@/queries/chat";
@@ -24,6 +25,7 @@ import { ClaudeSlashMenu } from "@/components/brainless/claude/claude-slash-menu
 import { ClaudeThinking } from "@/components/brainless/claude/claude-thinking";
 import { ClaudeToolCall } from "@/components/brainless/claude/claude-tool-call";
 import { Markdown } from "@/components/markdown";
+import { Button } from "@/components/ui/button";
 import { ActivityOperationCards } from "@/components/workspace/activity-operation";
 import { ActivityRefCard } from "@/components/workspace/activity-ref";
 import {
@@ -38,22 +40,26 @@ import {
   onlyText,
   plainDraft,
 } from "@/lib/composer";
+import { mentionedMembers, mentionLabel } from "@/lib/mentions";
 import { ACTIVE_STATUSES } from "@/queries/chat";
 import { useOutbox } from "@/queries/outbox";
+import { AgentAvatar } from "./agent-identity";
 import { AttachmentChip, PastedText } from "./composer-block";
 import { ComposerEditor } from "./composer-editor";
+import { GroupNotice } from "./group-notice";
+import { TaskMessage } from "./task-message";
 
 type Activity = Extract<Block, { type: "activity" }>;
 type Reply = Exclude<Block, { type: "attachment" }>;
 type SlashName = "/stop" | "/queue" | "/steer" | "/compact";
 interface SlashCommand {
-  name: SlashName;
+  name: SlashName | `@${string}`;
   description: string;
   /** Completes to `name ` for the message to follow. */
   takesText?: boolean;
 }
 const SLASH_COMMANDS: SlashCommand[] = [
-  { name: "/stop", description: "停止当前回复" },
+  { name: "/stop", description: "停止群内全部回复" },
   { name: "/queue", description: "当前回复结束后发送", takesText: true },
   { name: "/steer", description: "插入当前回复", takesText: true },
   { name: "/compact", description: "压缩上下文" },
@@ -164,13 +170,13 @@ function Warning({ children }: { children: React.ReactNode }) {
  * view where it was, and come in as the top is approached.
  */
 function useTranscriptScroll({
-  agentId,
+  groupId,
   firstId,
   hasOlder,
   loadingOlder,
   onLoadOlder,
 }: {
-  agentId: string | undefined;
+  groupId: string | undefined;
   firstId: string | undefined;
   hasOlder: boolean;
   loadingOlder: boolean;
@@ -196,7 +202,7 @@ function useTranscriptScroll({
   }
 
   // A new agent's transcript opens at its end.
-  useLayoutEffect(toBottom, [agentId]);
+  useLayoutEffect(toBottom, [groupId]);
   // Older messages arrived above: keep the same distance from the bottom.
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -238,7 +244,7 @@ const NO_INTERACTIONS: Interaction[] = [];
 interface TurnActions {
   onStop: (replyId: string) => void;
   onAnswer: (interactionId: string, value: string) => void;
-  onResend: (parts: OutgoingPart[]) => void;
+  onResend: (parts: OutgoingPart[], agentId?: string) => void;
 }
 
 /**
@@ -248,6 +254,7 @@ interface TurnActions {
 interface ReplyLine {
   /** Replies ahead of a queued one. */
   ahead?: number;
+  elsewhere?: string;
   /** The agent is starting for this reply. */
   starting?: boolean;
   /** The next reply failed the same way; this one says so. */
@@ -259,31 +266,45 @@ interface ReplyLine {
 /** The state line facts per reply. */
 function replyLines(
   messages: ChatMessage[],
-  agentStatus: Agent["status"] | undefined,
+  agents: Agent[],
+  activeReplies: ChatMessage[],
+  groups: Group[],
 ) {
-  const replies = messages.filter((message) => message.role === "assistant");
-  const executing = replies.filter((message) =>
-    EXECUTING.has(message.status),
-  ).length;
+  const replies = messages.filter(
+    (m) => m.role === "assistant" && m.kind === "message",
+  );
   const lines = new Map<string, ReplyLine>();
-  let queued = 0;
   replies.forEach((message, i) => {
     if (message.status === "queued") {
-      const ahead = executing + queued++;
+      const before = activeReplies.filter(
+        (m) =>
+          m.agent_id === message.agent_id &&
+          m.id !== message.id &&
+          ACTIVE_STATUSES.has(m.status) &&
+          (m.created_at < message.created_at || EXECUTING.has(m.status)),
+      );
+      const other = before.find((m) => m.group_id !== message.group_id);
       lines.set(message.id, {
-        ahead,
-        starting: ahead === 0 && agentStatus === "starting",
+        ahead: before.length,
+        starting:
+          !before.length &&
+          agents.find((a) => a.id === message.agent_id)?.status === "starting",
+        elsewhere: other
+          ? groups.find((g) => g.id === other.group_id)?.name
+          : undefined,
       });
     } else if (message.status === "failed") {
       const code = message.failure?.code ?? "";
       const next = replies[i + 1];
       lines.set(message.id, {
-        // A run of replies failed by the same environment trouble says it once.
         sameAsNext:
           ENVIRONMENT_FAILURES.has(code) &&
+          next?.agent_id === message.agent_id &&
           next?.status === "failed" &&
           next.failure?.code === code,
-        resend: messages.find((m) => m.id === message.reply_to_id),
+        resend: messages.find(
+          (m) => m.id === message.reply_to_id && m.role === "user",
+        ),
       });
     }
   });
@@ -298,14 +319,19 @@ const Turn = memo(
   ({
     message,
     pending,
+    author,
     actions,
     ...line
   }: {
     message: ChatMessage;
+    author?: string;
     /** Its interactions waiting for the user. */
     pending: Interaction[];
     actions: React.RefObject<TurnActions>;
   } & ReplyLine) => {
+    if (message.kind === "task_draft" || message.kind === "task_card")
+      return <TaskMessage message={message} />;
+    if (message.role === "system") return <GroupNotice message={message} />;
     if (message.role === "user")
       return (
         <ClaudeMessage role="user">
@@ -316,6 +342,17 @@ const Turn = memo(
     const streaming = ACTIVE_STATUSES.has(message.status);
     return (
       <div className="space-y-3 pt-1">
+        {author && (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <AgentAvatar agent={{ id: message.agent_id }} className="size-4" />
+            <span>
+              {author}
+              {message.kind === "mention"
+                ? ` → ${String(message.data.to ?? "智能体")}`
+                : ""}
+            </span>
+          </div>
+        )}
         {message.blocks
           .filter((block): block is Reply => block.type !== "attachment")
           .map((block) =>
@@ -358,7 +395,9 @@ const Turn = memo(
           asking={pending.length > 0}
           line={line}
           onStop={() => actions.current.onStop(message.id)}
-          onResend={(parts) => actions.current.onResend(parts)}
+          onResend={(parts) =>
+            actions.current.onResend(parts, message.agent_id)
+          }
         />
       </div>
     );
@@ -380,13 +419,24 @@ function ReplyState({
   asking: boolean;
   line: ReplyLine;
   onStop: () => void;
-  onResend: (parts: OutgoingPart[]) => void;
+  onResend: (parts: OutgoingPart[], agentId?: string) => void;
 }) {
   switch (message.status) {
     case "responding":
     case "waiting_for_input":
-      return asking ? null : (
-        <ClaudeThinking verbs={["工作中"]} showTokens={false} />
+      return (
+        <div className="flex items-center gap-3">
+          {asking ? null : (
+            <ClaudeThinking verbs={["工作中"]} showTokens={false} />
+          )}
+          <button
+            type="button"
+            onClick={onStop}
+            className="text-xs text-muted-foreground underline underline-offset-2"
+          >
+            停止
+          </button>
+        </div>
       );
     case "stopping":
       return <ClaudeThinking verbs={["正在停止"]} showTokens={false} />;
@@ -396,7 +446,11 @@ function ReplyState({
       return (
         <div className="flex flex-wrap items-baseline gap-x-3 text-[var(--terminal-muted)]">
           <span>
-            {line.ahead ? `等待中 · 前面还有 ${line.ahead} 条` : "等待中"}
+            {line.elsewhere
+              ? `在「${line.elsewhere}」回复中 · 等待中`
+              : line.ahead
+                ? `等待中 · 前面还有 ${line.ahead} 条`
+                : "等待中"}
           </span>
           <button
             type="button"
@@ -433,8 +487,8 @@ function ReplyState({
 }
 
 export function ChatPanel({
-  agentId,
-  agentName,
+  groupId,
+  groupName,
   messages,
   loading,
   hasOlder,
@@ -447,6 +501,7 @@ export function ChatPanel({
   onSend,
   onCompact,
   onStop,
+  onStopAll,
   onAnswer,
   head,
   error,
@@ -454,15 +509,18 @@ export function ChatPanel({
   model: modelLabel,
   blocked,
   notice,
-  agentStatus,
+  group,
+  agents,
+  groups,
+  activeReplies,
   outgoing,
   onRetry,
   onEdit,
   onDiscard,
   onResend,
 }: {
-  agentId: string | undefined;
-  agentName: string | undefined;
+  groupId: string | undefined;
+  groupName: string | undefined;
   /** The conversation with the current agent, as far back as loaded. */
   messages: ChatMessage[];
   /** The conversation is still being read. */
@@ -479,6 +537,7 @@ export function ChatPanel({
   onSend: (parts: OutgoingPart[], mode: SendMode) => void;
   onCompact: () => void;
   onStop: (replyId: string) => void;
+  onStopAll: () => void;
   onAnswer: (interactionId: string, value: string) => void;
   /** Shows and switches the agent being talked to. */
   head?: React.ReactNode;
@@ -491,14 +550,17 @@ export function ChatPanel({
   blocked?: React.ReactNode;
   /** A warning above the composer that leaves it usable. */
   notice?: React.ReactNode;
-  agentStatus?: Agent["status"];
+  group?: Group;
+  agents: Agent[];
+  groups: Group[];
+  activeReplies: ChatMessage[];
   /** The user's messages on their way, after the transcript. */
   outgoing: Outgoing[];
   onRetry: (outgoing: Outgoing) => void;
   onEdit: (outgoing: Outgoing) => void;
   onDiscard: (id: string) => void;
   /** Send a failed reply's message again, as a new message. */
-  onResend: (parts: OutgoingPart[]) => void;
+  onResend: (parts: OutgoingPart[], agentId?: string) => void;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
   // The reply in progress; later ones wait behind it.
@@ -509,8 +571,8 @@ export function ChatPanel({
       message.status !== "stopping",
   );
   const lines = useMemo(
-    () => replyLines(messages, agentStatus),
-    [messages, agentStatus],
+    () => replyLines(messages, agents, activeReplies, groups),
+    [messages, agents, activeReplies, groups],
   );
   const pendingByMessage = useMemo(() => {
     const byMessage = new Map<string, Interaction[]>();
@@ -529,7 +591,7 @@ export function ChatPanel({
     actionsRef.current = { onStop, onAnswer, onResend };
   });
   const transcript = useTranscriptScroll({
-    agentId,
+    groupId,
     firstId: messages[0]?.id,
     hasOlder,
     loadingOlder,
@@ -541,6 +603,11 @@ export function ChatPanel({
   const [menuDismissed, setMenuDismissed] = useState(false);
   // The menu offers commands while the draft is a bare `/name`.
   const plain = onlyText(draft);
+  const members = group?.participants.filter((p) => p.member) ?? [];
+  const mentionQuery = /(?:^|[\s，。！？、,:;!?])@([^@\n]*)$/.exec(
+    draftText(draft),
+  );
+  const mentioned = mentionedMembers(draftText(draft), members);
   const query =
     plain !== null && /^\/\S*$/.test(plain)
       ? plain.slice(1).toLowerCase()
@@ -556,18 +623,34 @@ export function ChatPanel({
         ? `消息文本超过 ${MAX_MESSAGE_CHARS} 字符，更长的内容请作为文件粘贴。`
         : undefined;
   const uploading = files.some((f) => !uploads[f.id]?.attachment);
-  const matches =
-    query === null || menuDismissed || blocked
+  const matches: SlashCommand[] =
+    menuDismissed || blocked
       ? []
-      : SLASH_COMMANDS.filter((command) =>
-          command.name.slice(1).startsWith(query),
-        );
+      : mentionQuery
+        ? [
+            { name: "@所有人" as const, description: "唤醒所有群成员" },
+            ...members.map((p) => ({
+              name: `@${mentionLabel(p, members)}` as const,
+              description:
+                agents.find((a) => a.id === p.agent_id)?.status === "working"
+                  ? "忙碌 · 消息会排队"
+                  : "请他回复",
+            })),
+          ].filter((c) =>
+            c.name
+              .slice(1)
+              .toLowerCase()
+              .startsWith(mentionQuery[1].toLowerCase()),
+          )
+        : query === null
+          ? []
+          : SLASH_COMMANDS.filter((c) => c.name.slice(1).startsWith(query));
   const menuOpen = matches.length > 0;
   const menuActive = Math.min(menuIndex, matches.length - 1);
 
-  function run(name: SlashName, parts: OutgoingPart[]) {
+  function run(name: SlashCommand["name"], parts: OutgoingPart[]) {
     if (name === "/stop") {
-      if (active) onStop(active.id);
+      onStopAll();
       setDraft([]);
     } else if (name === "/compact") {
       onCompact();
@@ -576,7 +659,20 @@ export function ChatPanel({
     }
   }
   function choose(command: SlashCommand) {
-    if (command.takesText) setDraft(plainDraft(`${command.name} `));
+    if (command.name.startsWith("@")) {
+      const next = [...draft];
+      const last = next.at(-1);
+      if (last?.type === "text")
+        next[next.length - 1] = {
+          ...last,
+          text: last.text.replace(/@[^@\n]*$/, `${command.name} `),
+        };
+      setDraft(next);
+      setMenuIndex(0);
+      setMenuDismissed(true);
+    } else if (command.name === "/compact" && members.length > 1)
+      setDraft(plainDraft("/compact "));
+    else if (command.takesText) setDraft(plainDraft(`${command.name} `));
     else run(command.name, []);
   }
   function send() {
@@ -637,7 +733,7 @@ export function ChatPanel({
         send();
       }
     },
-    placeholder: agentName ? `发消息给 ${agentName}…` : "先创建智能体",
+    placeholder: groupName ? `发消息给 ${groupName}…` : "先创建智能体",
     inputProps: {
       role: "combobox",
       "aria-autocomplete": "list",
@@ -649,7 +745,7 @@ export function ChatPanel({
   const promptProps = {
     renderInput: (input: { className: string; style: React.CSSProperties }) => (
       // A new agent's composer starts from its own draft.
-      <ComposerEditor key={agentId} {...editorProps} {...input} />
+      <ComposerEditor key={groupId} {...editorProps} {...input} />
     ),
   };
   const slashMenu = menuOpen ? (
@@ -661,7 +757,7 @@ export function ChatPanel({
       onChoose={(command) => choose(command as SlashCommand)}
     />
   ) : null;
-  const model = modelLabel ?? agentName ?? "未选择智能体";
+  const model = modelLabel ?? groupName ?? "未选择智能体";
 
   return (
     <section
@@ -676,9 +772,21 @@ export function ChatPanel({
       >
         {/* Floats over the transcript, which scrolls on beneath it and stays
             clickable around it; only the buttons catch. */}
-        {head ? (
+        {head || active ? (
           <div className="pointer-events-none sticky top-0 z-10 [&_button]:pointer-events-auto">
             {head}
+            {active && (
+              <div className="absolute right-1 top-1">
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="outline"
+                  onClick={onStopAll}
+                >
+                  停止全部
+                </Button>
+              </div>
+            )}
           </div>
         ) : null}
         <div
@@ -699,7 +807,7 @@ export function ChatPanel({
               version=""
               model={model}
               org="AXP"
-              cwd="workspace"
+              cwd={groupName ?? "workspace"}
               tips={[]}
               whatsNew={[]}
             />
@@ -724,6 +832,16 @@ export function ChatPanel({
               <Turn
                 key={message.id}
                 message={message}
+                author={
+                  group?.kind === "group" ||
+                  (group?.participants.length ?? 0) > 1 ||
+                  message.kind === "mention"
+                    ? (agents.find((a) => a.id === message.agent_id)?.name ??
+                      group?.participants.find(
+                        (p) => p.agent_id === message.agent_id,
+                      )?.name)
+                    : undefined
+                }
                 pending={pendingByMessage.get(message.id) ?? NO_INTERACTIONS}
                 {...lines.get(message.id)}
                 actions={actionsRef}
@@ -775,6 +893,32 @@ export function ChatPanel({
             附件上传中，完成后才能发送。
           </div>
         ) : null}
+        {members.length > 1 && (
+          <div className="flex flex-wrap items-center gap-1 px-1 pb-1 text-xs text-muted-foreground">
+            {members.map((p) => (
+              <Button
+                key={p.agent_id}
+                type="button"
+                size="xs"
+                variant="ghost"
+                disabled={mentioned.includes(p.agent_id)}
+                onClick={() =>
+                  setDraft([
+                    ...draft,
+                    { type: "text", text: ` @${mentionLabel(p, members)} ` },
+                  ])
+                }
+              >
+                @{mentionLabel(p, members)}
+              </Button>
+            ))}
+            <span>
+              {mentioned.length
+                ? `将唤醒 ${mentioned.map((id) => members.find((p) => p.agent_id === id)?.name).join("、")}`
+                : "没 @ 的消息只记入群聊"}
+            </span>
+          </div>
+        )}
         {/* A disabled fieldset disables the session's own input. */}
         <fieldset disabled={Boolean(blocked)} className="contents">
           {slashMenu}

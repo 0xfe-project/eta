@@ -1,0 +1,574 @@
+import type { Group } from "@/queries/chat";
+import { PlusIcon } from "@phosphor-icons/react/Plus";
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import { useArtifacts } from "@/queries/artifacts";
+import { chatQueryOptions } from "@/queries/chat";
+import { useGroupActions } from "@/queries/groups";
+import { useTasks, useUpdateTask } from "@/queries/tasks";
+import { ActivityRefCard } from "./activity-ref";
+import { AgentAvatar, AgentStatus } from "./agent-identity";
+import { useAgents } from "./use-agents";
+import { useGroups, useOpenGroup } from "./use-groups";
+
+const onError = (error: Error) => toast.error(error.message);
+
+function GroupAvatars({
+  group,
+  className,
+}: {
+  group: Group;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn("flex shrink-0 -space-x-2", className)}
+      aria-hidden="true"
+    >
+      {group.participants
+        .filter((p) => p.member)
+        .slice(0, 3)
+        .map((p) => (
+          <AgentAvatar
+            key={p.agent_id}
+            agent={{ id: p.agent_id }}
+            className="size-6"
+          />
+        ))}
+    </span>
+  );
+}
+
+export function CreateGroup({
+  members = [],
+  children,
+}: {
+  members?: string[];
+  children?: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [goal, setGoal] = useState("");
+  const [chosen, setChosen] = useState<string[]>(members);
+  const { agents } = useAgents();
+  const { create } = useGroupActions();
+  const openGroup = useOpenGroup();
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(value) => {
+        setOpen(value);
+        if (value) setChosen(members);
+      }}
+    >
+      <DialogTrigger asChild>
+        {children ?? (
+          <Button variant="ghost" size="icon-xs" aria-label="新建群">
+            <PlusIcon />
+          </Button>
+        )}
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>新建群</DialogTitle>
+          <DialogDescription>选几位智能体，一起讨论一件事。</DialogDescription>
+        </DialogHeader>
+        <form
+          className="grid gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            create.mutate(
+              { name: name.trim(), goal, members: chosen },
+              {
+                onError,
+                onSuccess: (g) => {
+                  setOpen(false);
+                  setName("");
+                  setGoal("");
+                  openGroup(g.id);
+                },
+              },
+            );
+          }}
+        >
+          <label className="grid gap-2 text-sm">
+            群名
+            <Input
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={100}
+              required
+            />
+          </label>
+          <label className="grid gap-2 text-sm">
+            目标（可选）
+            <Textarea
+              value={goal}
+              onChange={(e) => setGoal(e.target.value)}
+              maxLength={10000}
+            />
+          </label>
+          <fieldset className="grid max-h-64 gap-1 overflow-y-auto">
+            <legend className="mb-2 text-sm">成员</legend>
+            {agents.map((a) => (
+              <label
+                key={a.id}
+                className="flex min-h-10 items-center gap-2 text-sm"
+              >
+                <Checkbox
+                  checked={chosen.includes(a.id)}
+                  onCheckedChange={(v) =>
+                    setChosen(
+                      v
+                        ? [...chosen, a.id]
+                        : chosen.filter((id) => id !== a.id),
+                    )
+                  }
+                />
+                <AgentAvatar agent={a} className="size-6" />
+                {a.name}
+              </label>
+            ))}
+          </fieldset>
+          <DialogFooter>
+            <Button
+              type="submit"
+              disabled={!name.trim() || !chosen.length || create.isPending}
+            >
+              创建群
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function GroupList({ compact = false }: { compact?: boolean }) {
+  const { groups, current } = useGroups();
+  const open = useOpenGroup();
+  const [archived, setArchived] = useState(false);
+  const shown = groups.filter(
+    (g) => g.archived === archived && (!compact || g.kind === "group"),
+  );
+  return (
+    <section
+      className={cn(
+        "min-h-0",
+        compact ? "mt-5 px-2" : "flex-1 overflow-y-auto px-3",
+      )}
+    >
+      <div className="flex h-9 items-center justify-between px-2">
+        <h2 className="text-xs font-medium text-muted-foreground">
+          {archived ? "已归档" : compact ? "群" : "最近对话"}
+        </h2>
+        <CreateGroup />
+      </div>
+      <ul className="grid gap-px">
+        {shown.map((g) => (
+          <li key={g.id}>
+            <button
+              type="button"
+              onClick={() => open(g.id)}
+              className={cn(
+                "flex w-full items-center gap-2 px-2 text-left outline-none transition-colors duration-[60ms] hover:bg-sidebar-accent focus-visible:ring-1 focus-visible:ring-ring",
+                compact ? "h-9" : "min-h-18 py-3",
+                current?.id === g.id && compact && "bg-sidebar-accent",
+              )}
+            >
+              <GroupAvatars group={g} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm">{g.name}</span>
+                {!compact && (
+                  <span className="mt-1 block truncate text-xs text-muted-foreground">
+                    {g.preview || (g.kind === "direct" ? "私聊" : "还没有消息")}
+                  </span>
+                )}
+              </span>
+              {g.unread > 0 && (
+                <span className="text-xs tabular-nums">{g.unread}</span>
+              )}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {!shown.length && (
+        <p className="px-2 py-6 text-xs text-muted-foreground">
+          {archived ? "没有已归档的对话" : "还没有对话"}
+        </p>
+      )}
+      {groups.some((g) => g.archived) && (
+        <Button
+          variant="ghost"
+          size="xs"
+          className="mt-2 text-muted-foreground"
+          onClick={() => setArchived(!archived)}
+        >
+          {archived ? "返回最近对话" : "已归档"}
+        </Button>
+      )}
+    </section>
+  );
+}
+
+export function GroupBar({
+  group,
+  onInfo,
+}: {
+  group?: Group;
+  onInfo: () => void;
+}) {
+  return (
+    <div className="hidden shrink-0 justify-center px-3 pt-3 pb-2 md:flex">
+      {group && (
+        <button
+          type="button"
+          onClick={onInfo}
+          className="group flex max-w-full flex-col items-center outline-none"
+          aria-label={`${group.name}，查看群信息`}
+        >
+          <span className="flex -space-x-6">
+            {group.participants
+              .filter((p) => p.member)
+              .slice(0, 3)
+              .map((p) => (
+                <AgentAvatar
+                  key={p.agent_id}
+                  agent={{ id: p.agent_id }}
+                  animate={group.kind === "direct"}
+                  className="size-16"
+                />
+              ))}
+          </span>
+          <span className="relative -mt-2.5 max-w-48 truncate border bg-background px-2.5 py-0.5 text-sm font-medium shadow-sm group-hover:bg-muted group-focus-visible:ring-1 group-focus-visible:ring-ring">
+            {group.name}
+          </span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function GroupInfo() {
+  const { data: chat } = useQuery(chatQueryOptions());
+  const { current: group, groups } = useGroups();
+  const { agents, openEditor } = useAgents();
+  const { update, member } = useGroupActions();
+  const [edit, setEdit] = useState(false);
+  const [name, setName] = useState("");
+  const [goal, setGoal] = useState("");
+  const [decided, setDecided] = useState("");
+  const { data: board } = useTasks();
+  const { data: artifacts } = useArtifacts();
+  const updateTask = useUpdateTask();
+  const [linkTask, setLinkTask] = useState(false);
+  const [invite, setInvite] = useState(false);
+  if (!group)
+    return (
+      <p className="p-4 text-sm text-muted-foreground">选一个群开始讨论。</p>
+    );
+  const members = group.participants.filter((p) => p.member);
+  return (
+    <div className="grid gap-6 p-2">
+      <div className="flex items-center gap-2">
+        <h2 className="min-w-0 flex-1 truncate font-medium">{group.name}</h2>
+        <Button
+          size="xs"
+          variant="ghost"
+          onClick={() => {
+            setName(group.name);
+            setGoal(group.goal);
+            setDecided(group.decided);
+            setEdit(true);
+          }}
+        >
+          编辑
+        </Button>
+        <Button
+          size="xs"
+          variant="ghost"
+          onClick={() =>
+            update.mutate(
+              { id: group.id, archived: !group.archived },
+              { onError },
+            )
+          }
+        >
+          {group.archived ? "取消归档" : "归档"}
+        </Button>
+      </div>
+      <section>
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-xs text-muted-foreground">
+            {group.kind === "direct" ? "私聊" : `成员 · ${members.length}`}
+          </h3>
+          {group.kind === "group" && !group.archived && (
+            <Button size="xs" variant="ghost" onClick={() => setInvite(true)}>
+              邀请
+            </Button>
+          )}
+        </div>
+        {members.map((p) => {
+          const agent = agents.find((a) => a.id === p.agent_id);
+          const active = chat?.messages.find(
+            (m) =>
+              m.agent_id === p.agent_id &&
+              ["responding", "waiting_for_input", "stopping"].includes(
+                m.status,
+              ),
+          );
+          const elsewhere =
+            active && active.group_id !== group.id
+              ? groups.find((g) => g.id === active.group_id)?.name
+              : undefined;
+          return (
+            <div key={p.agent_id} className="flex min-h-12 items-center gap-2">
+              <AgentAvatar agent={{ id: p.agent_id }} />
+              <div className="min-w-0 flex-1 text-sm">
+                <span className="block truncate">{p.name}</span>
+                <span className="text-xs text-muted-foreground">
+                  {elsewhere ? (
+                    `在「${elsewhere}」回复中`
+                  ) : agent ? (
+                    <AgentStatus status={agent.status} />
+                  ) : (
+                    "已删除"
+                  )}
+                </span>
+              </div>
+              {agent && (
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  onClick={() => openEditor(agent.id)}
+                >
+                  设置
+                </Button>
+              )}
+              {group.kind === "group" && members.length > 1 && (
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  disabled={member.isPending}
+                  onClick={() =>
+                    member.mutate(
+                      { groupId: group.id, agentId: p.agent_id, member: false },
+                      { onError },
+                    )
+                  }
+                >
+                  移除
+                </Button>
+              )}
+            </div>
+          );
+        })}
+      </section>
+      <section>
+        <h3 className="mb-3 text-xs text-muted-foreground">群简报</h3>
+        <div className="space-y-4 border-l-2 pl-3 text-sm">
+          <div>
+            <h4 className="mb-1 font-medium">目标</h4>
+            <p className="whitespace-pre-wrap text-muted-foreground">
+              {group.goal || "还没有目标"}
+            </p>
+          </div>
+          <div>
+            <h4 className="mb-1 font-medium">已决定</h4>
+            <p className="whitespace-pre-wrap text-muted-foreground">
+              {group.decided || "还没有记录决定"}
+            </p>
+          </div>
+        </div>
+      </section>
+      <section>
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-xs text-muted-foreground">相关任务</h3>
+          <Button size="xs" variant="ghost" onClick={() => setLinkTask(true)}>
+            关联任务
+          </Button>
+        </div>
+        <div className="space-y-2">
+          {board?.tasks
+            .filter((t) => t.group_id === group.id)
+            .map((t) => (
+              <div key={t.id}>
+                <ActivityRefCard
+                  value={{
+                    kind: "task",
+                    id: t.id,
+                    number: t.number,
+                    title: t.title,
+                    status: t.status,
+                  }}
+                />
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  onClick={() =>
+                    updateTask.mutate(
+                      { id: t.id, changes: { group_id: "" } },
+                      { onError },
+                    )
+                  }
+                >
+                  解除关联
+                </Button>
+              </div>
+            ))}
+        </div>
+      </section>
+      <section>
+        <h3 className="mb-2 text-xs text-muted-foreground">Artifacts</h3>
+        <div className="space-y-2">
+          {artifacts?.artifacts
+            .filter((a) => a.group_id === group.id)
+            .map((a) => (
+              <ActivityRefCard
+                key={a.id}
+                value={{
+                  kind: "artifact",
+                  id: a.id,
+                  title: a.title,
+                  number: a.versions[0]?.number,
+                }}
+              />
+            ))}
+        </div>
+      </section>
+      <Dialog open={linkTask} onOpenChange={setLinkTask}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>关联任务</DialogTitle>
+            <DialogDescription>
+              任务只关联一个群，重新关联会替换之前的群。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid max-h-80 gap-1 overflow-y-auto">
+            {board?.tasks
+              .filter((t) => t.group_id !== group.id)
+              .map((t) => (
+                <Button
+                  key={t.id}
+                  variant="ghost"
+                  className="justify-start truncate"
+                  disabled={updateTask.isPending || group.archived}
+                  onClick={() =>
+                    updateTask.mutate(
+                      { id: t.id, changes: { group_id: group.id } },
+                      { onError, onSuccess: () => setLinkTask(false) },
+                    )
+                  }
+                >
+                  #{t.number} {t.title}
+                </Button>
+              ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={edit} onOpenChange={setEdit}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>编辑群信息</DialogTitle>
+            <DialogDescription>
+              记录当前目标和已经达成的决定。
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="grid gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              update.mutate(
+                {
+                  id: group.id,
+                  name: group.kind === "group" ? name : undefined,
+                  goal,
+                  decided,
+                },
+                { onError, onSuccess: () => setEdit(false) },
+              );
+            }}
+          >
+            {group.kind === "group" && (
+              <label className="grid gap-2 text-sm">
+                群名
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  maxLength={100}
+                  required
+                />
+              </label>
+            )}
+            <label className="grid gap-2 text-sm">
+              目标
+              <Textarea
+                value={goal}
+                onChange={(e) => setGoal(e.target.value)}
+                maxLength={10000}
+              />
+            </label>
+            <label className="grid gap-2 text-sm">
+              已决定
+              <Textarea
+                value={decided}
+                onChange={(e) => setDecided(e.target.value)}
+                maxLength={10000}
+              />
+            </label>
+            <DialogFooter>
+              <Button disabled={update.isPending}>保存</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={invite} onOpenChange={setInvite}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>邀请智能体</DialogTitle>
+            <DialogDescription>
+              加入后可以查看群聊，并在被 @ 时回复。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid max-h-80 gap-1 overflow-y-auto">
+            {agents
+              .filter((a) => !members.some((p) => p.agent_id === a.id))
+              .map((a) => (
+                <Button
+                  key={a.id}
+                  variant="ghost"
+                  className="justify-start"
+                  disabled={member.isPending}
+                  onClick={() =>
+                    member.mutate(
+                      { groupId: group.id, agentId: a.id, member: true },
+                      { onError, onSuccess: () => setInvite(false) },
+                    )
+                  }
+                >
+                  <AgentAvatar agent={a} className="size-6" />
+                  {a.name}
+                </Button>
+              ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

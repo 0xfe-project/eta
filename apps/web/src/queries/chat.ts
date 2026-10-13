@@ -7,6 +7,8 @@ import type {
   AttachmentBlock,
   Bundle,
   Snapshot as ChatSnapshot,
+  Group,
+  GroupUpdated,
   Interaction,
   InteractionUpdated,
   Message,
@@ -28,7 +30,7 @@ import { controlPlane, unwrap } from "@/lib/api";
 
 // The control plane's chat API; every type comes from its OpenAPI document.
 
-export type { Agent, Bundle, Interaction };
+export type { Agent, Bundle, Group, Interaction };
 /** Editable agent fields; grows as agents gain settings. */
 export type AgentDraft = Pick<Agent, "name" | "description"> & {
   model?: string;
@@ -40,7 +42,7 @@ export type Block = TextBlock | AttachmentBlock | ActivityBlock;
 /**
  * The snapshot plus `messages`: every message seen since it was taken (over
  * SSE or from our own writes), starting with the active replies. History
- * pages fill in the rest; see useAgentMessages.
+ * pages fill in the rest; see useGroupMessages.
  */
 type Snapshot = ChatSnapshot & { messages: ChatMessage[] };
 
@@ -86,10 +88,7 @@ function upsert<T extends { id: string; revision: number }>(
 
 // Send order; a reply sorts after its user message.
 function compareMessages(a: ChatMessage, b: ChatMessage) {
-  return (
-    a.created_at.localeCompare(b.created_at) ||
-    (a.role === b.role ? 0 : a.role === "user" ? -1 : 1)
-  );
+  return a.seq - b.seq;
 }
 function sortMessages(messages: ChatMessage[]) {
   return messages.sort(compareMessages);
@@ -150,6 +149,7 @@ function update(queryClient: QueryClient, apply: (s: Snapshot) => Snapshot) {
 }
 
 const EVENT_TYPES = [
+  "group.updated",
   "agent.updated",
   "agent.deleted",
   "message.updated",
@@ -157,7 +157,10 @@ const EVENT_TYPES = [
 ] as const;
 
 function applyEvent(queryClient: QueryClient, type: string, data: unknown) {
-  if (type === "agent.updated") {
+  if (type === "group.updated") {
+    const { group } = data as GroupUpdated;
+    update(queryClient, (s) => ({ ...s, groups: upsert(s.groups, group) }));
+  } else if (type === "agent.updated") {
     const { agent } = data as AgentUpdated;
     update(queryClient, (s) => ({ ...s, agents: upsert(s.agents, agent) }));
   } else if (type === "agent.deleted") {
@@ -166,6 +169,8 @@ function applyEvent(queryClient: QueryClient, type: string, data: unknown) {
   } else if (type === "message.updated") {
     const { message } = data as MessageUpdated;
     update(queryClient, (s) => upsertMessage(s, message));
+    if (message.kind === "task_card")
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
   } else if (type === "interaction.updated") {
     const { interaction } = data as InteractionUpdated;
     update(queryClient, (s) => ({
@@ -276,14 +281,14 @@ export function useInteractionHistory() {
 }
 
 // Under chatKey, so reloading the snapshot reloads history with it.
-function messagesQueryOptions(agentId: string) {
+function messagesQueryOptions(groupId: string) {
   return infiniteQueryOptions({
-    queryKey: [...chatKey, "messages", agentId],
+    queryKey: [...chatKey, "messages", groupId],
     queryFn: async ({ pageParam, signal }) => {
       return unwrap(
-        controlPlane.GET("/api/v1/agents/{agent_id}/messages", {
+        controlPlane.GET("/api/v1/groups/{group_id}/messages", {
           params: {
-            path: { agent_id: agentId },
+            path: { group_id: groupId },
             query: pageParam ? { before: pageParam } : {},
           },
           signal,
@@ -300,11 +305,11 @@ function messagesQueryOptions(agentId: string) {
 }
 
 /**
- * One agent's timeline: history pages merged with the messages seen since
+ * One group's timeline: history pages merged with the messages seen since
  * the snapshot, by revision. Unchanged messages keep their objects, so a
  * memoized row only renders again when its own message changes.
  */
-export function useAgentMessages(agentId: string | undefined) {
+export function useGroupMessages(groupId: string | undefined) {
   const queryClient = useQueryClient();
   // Only this agent's live messages: other agents' updates change nothing
   // here, and structural sharing keeps the array until one of these changes.
@@ -312,14 +317,14 @@ export function useAgentMessages(agentId: string | undefined) {
     ...chatQueryOptions(),
     select: useCallback(
       (snapshot: Snapshot) =>
-        snapshot.messages.filter((message) => message.agent_id === agentId),
-      [agentId],
+        snapshot.messages.filter((message) => message.group_id === groupId),
+      [groupId],
     ),
   });
   // History read after the snapshot leaves no gap before the live messages.
   const history = useInfiniteQuery({
-    ...messagesQueryOptions(agentId ?? ""),
-    enabled: Boolean(agentId && live),
+    ...messagesQueryOptions(groupId ?? ""),
+    enabled: Boolean(groupId && live),
   });
   const pages = history.data?.pages;
   // Merged once per page; each live update then only places its message.
@@ -339,7 +344,7 @@ export function useAgentMessages(agentId: string | undefined) {
   }, [loaded, queryClient]);
   return {
     messages,
-    loading: history.isPending && Boolean(agentId),
+    loading: history.isPending && Boolean(groupId),
     error: history.error,
     hasOlder: history.hasNextPage,
     loadingOlder: history.isFetchingNextPage,
@@ -418,7 +423,7 @@ export function useCreateAgent() {
 export type SendMode = "queue" | "steer";
 export function addSent(queryClient: QueryClient, sent: Sent) {
   update(queryClient, (s) =>
-    upsertMessage(upsertMessage(s, sent.message), sent.reply),
+    sent.replies.reduce(upsertMessage, upsertMessage(s, sent.message)),
   );
 }
 
@@ -426,10 +431,17 @@ export function addSent(queryClient: QueryClient, sent: Sent) {
 export function useCompact() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (agentId: string) =>
+    mutationFn: async ({
+      groupId,
+      mentions,
+    }: {
+      groupId: string;
+      mentions: string[];
+    }) =>
       unwrap(
-        controlPlane.POST("/api/v1/agents/{agent_id}/compact", {
-          params: { path: { agent_id: agentId } },
+        controlPlane.POST("/api/v1/groups/{group_id}/compact", {
+          params: { path: { group_id: groupId } },
+          body: { mentions },
         }),
       ),
     onSuccess: (sent) => addSent(queryClient, sent),

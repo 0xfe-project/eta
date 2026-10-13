@@ -15,7 +15,7 @@ import {
 import { act, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import { EMPTY_DRAFT, plainDraft } from "@/lib/composer";
-import { chatQueryOptions, useAgentMessages } from "@/queries/chat";
+import { chatQueryOptions, useGroupMessages } from "@/queries/chat";
 import {
   useOutbox,
   useOutboxActions,
@@ -54,6 +54,10 @@ function message(
   return {
     id: `00000000-0000-0000-0001-${String(n).padStart(12, "0")}`,
     agent_id: AGENT,
+    group_id: AGENT,
+    seq: n,
+    kind: "message",
+    data: {},
     role,
     reply_to_id: null,
     status: role === "user" ? "completed" : "queued",
@@ -82,7 +86,7 @@ let reading = 0;
 /** The chat as Workspace wires it, for one agent. */
 function Chat({ agentStatus = "idle" }: { agentStatus?: "idle" | "starting" }) {
   const chat = useQuery(chatQueryOptions());
-  const history = useAgentMessages(chat.data ? AGENT : undefined);
+  const history = useGroupMessages(chat.data ? AGENT : undefined);
   const draft = useOutbox((s) => s.drafts[AGENT] ?? EMPTY_DRAFT);
   const all = useOutbox((s) => s.outgoing);
   const arrived = useMemo(
@@ -93,9 +97,22 @@ function Chat({ agentStatus = "idle" }: { agentStatus?: "idle" | "starting" }) {
   const outbox = useOutboxActions();
   return (
     <ChatPanel
-      agentId={AGENT}
-      agentName="研究员"
-      agentStatus={agentStatus}
+      groupId={AGENT}
+      groupName="研究员"
+      agents={[
+        {
+          id: AGENT,
+          name: "研究员",
+          description: "",
+          model: "model",
+          bundles: [],
+          build_error: null,
+          revision: 1,
+          status: agentStatus,
+        },
+      ]}
+      groups={[]}
+      activeReplies={history.messages}
       messages={history.messages}
       hasOlder={false}
       loadingOlder={false}
@@ -105,15 +122,16 @@ function Chat({ agentStatus = "idle" }: { agentStatus?: "idle" | "starting" }) {
       onDraftChange={(next) => useOutbox.getState().setDraft(AGENT, next)}
       onFiles={() => []}
       onSend={(parts, mode) => {
-        outbox.send(AGENT, parts, mode);
+        outbox.send(AGENT, parts, mode, [AGENT]);
         useOutbox.getState().setDraft(AGENT, []);
       }}
       outgoing={all.filter((o) => !arrived.has(o.id))}
       onRetry={outbox.retry}
       onEdit={outbox.edit}
       onDiscard={outbox.discard}
-      onResend={(parts) => outbox.send(AGENT, parts, "queue")}
+      onResend={(parts) => outbox.send(AGENT, parts, "queue", [AGENT])}
       onCompact={() => {}}
+      onStopAll={() => {}}
       onStop={() => {}}
       onAnswer={() => {}}
     />
@@ -211,7 +229,7 @@ function accepted(post: Post) {
     text: post.body.parts.map((p) => p.text ?? "").join(""),
   });
   const reply = message("assistant", { reply_to_id: user.id });
-  return Response.json({ message: user, reply }, { status: 202 });
+  return Response.json({ message: user, replies: [reply] }, { status: 202 });
 }
 const count = (text: string, part: string) => text.split(part).length - 1;
 
@@ -345,7 +363,7 @@ describe("sending blocks", () => {
   it("waits for uploads, then sends text, files and pastes in order", async () => {
     const c = await render();
     await act(async () => {
-      useOutbox.getState().setUpload("f", { agentId: AGENT });
+      useOutbox.getState().setUpload("f", { groupId: AGENT });
       useOutbox.getState().setDraft(AGENT, draft);
     });
     expect(composed(c)).toContain("粘贴文本 · 80 字符");
@@ -355,7 +373,7 @@ describe("sending blocks", () => {
     expect(c.textContent).toContain("附件上传中，完成后才能发送。");
 
     await act(async () =>
-      useOutbox.getState().setUpload("f", { agentId: AGENT, attachment: csv }),
+      useOutbox.getState().setUpload("f", { groupId: AGENT, attachment: csv }),
     );
     await enter(c);
     expect(posts).toHaveLength(1);
@@ -375,7 +393,7 @@ describe("sending blocks", () => {
     const c = await render();
     await act(async () => {
       useOutbox.getState().setUpload("f", {
-        agentId: AGENT,
+        groupId: AGENT,
         error: "网络连接失败，上传未完成。",
       });
       useOutbox.getState().setDraft(AGENT, draft);
@@ -388,29 +406,10 @@ describe("sending blocks", () => {
   });
 });
 
-describe("drafts saved before blocks", () => {
-  it("load as text, and messages on their way as their text", async () => {
-    const id = crypto.randomUUID();
-    localStorage.setItem(
-      "axp.chat.v1",
-      JSON.stringify({
-        drafts: { [AGENT]: "写了一半" },
-        outgoing: [
-          { id, agentId: AGENT, text: "发送中", mode: "queue", failure: "x" },
-        ],
-      }),
-    );
-    await act(() => useOutbox.persist.rehydrate());
-    const { drafts, outgoing, uploads } = useOutbox.getState();
-    expect(drafts[AGENT]).toEqual([{ type: "text", text: "写了一半" }]);
-    expect(outgoing[0].parts).toEqual([{ type: "text", text: "发送中" }]);
-    expect(uploads).toEqual({});
-    localStorage.clear();
-  });
-
+describe("saved group drafts", () => {
   it("fail uploads a reload cut off", async () => {
     localStorage.setItem(
-      "axp.chat.v1",
+      "axp.groups.v1",
       JSON.stringify({
         drafts: {
           [AGENT]: [
@@ -423,13 +422,13 @@ describe("drafts saved before blocks", () => {
             },
           ],
         },
-        uploads: { f: { agentId: AGENT }, gone: { agentId: AGENT } },
+        uploads: { f: { groupId: AGENT }, gone: { groupId: AGENT } },
         outgoing: [],
       }),
     );
     await act(() => useOutbox.persist.rehydrate());
     expect(useOutbox.getState().uploads).toEqual({
-      f: { agentId: AGENT, error: "上传中断，请移除后重新粘贴。" },
+      f: { groupId: AGENT, error: "上传中断，请移除后重新粘贴。" },
     });
     localStorage.clear();
   });

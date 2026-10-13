@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { GroupInfo } from "./groups";
 import { Inbox } from "./inbox";
 import { Overview } from "./overview";
 import { RefreshButton } from "./refresh-button";
@@ -88,6 +89,7 @@ export function WorkspacePanel({
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {views.map(({ value }) => (
           <TabsContent key={value} value={value}>
+            {value === "group" ? <GroupInfo /> : null}
             {value === "overview" ? <Overview /> : null}
             {value === "tasks" ? <Tasks /> : null}
             {value === "routines" ? <Routines /> : null}

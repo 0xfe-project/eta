@@ -115,7 +115,13 @@ describe("what waits for the user", () => {
       [routine("a", 2, 0), routine("b", 0, 1), routine("c", 0, 0)],
     );
     const router = createRouter({
-      routeTree: createRootRoute({ component: () => <PendingList /> }),
+      routeTree: createRootRoute({
+        component: () => (
+          <NuqsAdapter>
+            <PendingList />
+          </NuqsAdapter>
+        ),
+      }),
       history: createMemoryHistory(),
     });
     const container = document.createElement("div");
@@ -147,6 +153,7 @@ describe("what waits for the user", () => {
       defaultOptions: { queries: { staleTime: Infinity, retry: false } },
     });
     client.setQueryData(["chat"], {
+      groups: [],
       agents: [{ id: "a1", name: "研究员" }],
       interactions: [confirmation("i1", "pending")],
     });

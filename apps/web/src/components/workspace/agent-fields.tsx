@@ -93,7 +93,7 @@ function BundleList({
   return (
     <ul className="grid grid-cols-2 gap-2">
       {bundles.map((bundle, index) => {
-        const on = chosen.includes(bundle.name);
+        const on = bundle.required || chosen.includes(bundle.name);
         return (
           <li key={bundle.name} className="flex">
             {/* A card per bundle, as in choosing where GitHub's App lives. */}
@@ -107,11 +107,13 @@ function BundleList({
                 className="mt-px"
                 autoFocus={autoFocus && index === 0}
                 checked={on}
+                disabled={bundle.required}
                 onCheckedChange={(next) => toggle(bundle.name, next === true)}
               />
               <span className="min-w-0 space-y-0.5">
                 <span className="block font-medium break-words">
                   {bundle.name}
+                  {bundle.required ? " · 必选" : ""}
                   {bundle.builtin ? null : (
                     <span className="ml-1.5 font-normal text-muted-foreground">
                       自定义

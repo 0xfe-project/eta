@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 // - Empty: what goes here and how to start, centred in the space.
 // - LoadError: laid out the same, saying what failed, with a retry.
 
-export function Skeleton({ className }: { className?: string }) {
+function Skeleton({ className }: { className?: string }) {
   return (
     <div
       aria-hidden="true"

@@ -19,8 +19,9 @@ import {
 import { useRoutines } from "@/queries/routines";
 import { useTasks } from "@/queries/tasks";
 import { AgentAvatar } from "./agent-identity";
-import { useAgents, useOpenAgent } from "./use-agents";
+import { useAgents } from "./use-agents";
 import { useAttention } from "./use-attention";
+import { useGroups, useOpenGroup } from "./use-groups";
 import { useSectionLink } from "./workspace-search";
 
 // Everything waiting for the user, the same in the side panel and on the
@@ -48,7 +49,8 @@ function outcome(interaction: Interaction) {
 /** A confirmation: who asked, what, and its answers or how it ended. */
 export function Confirmation({ interaction }: { interaction: Interaction }) {
   const { agents } = useAgents();
-  const openAgent = useOpenAgent();
+  const openGroup = useOpenGroup();
+  const { groups } = useGroups();
   const answer = useAnswerInteraction();
   const agent = agents.find((a) => a.id === interaction.agent_id);
   const pending = interaction.status === "pending";
@@ -65,10 +67,11 @@ export function Confirmation({ interaction }: { interaction: Interaction }) {
         <div className="flex items-baseline gap-2 text-xs text-muted-foreground">
           <button
             type="button"
-            onClick={() => openAgent(interaction.agent_id)}
+            onClick={() => openGroup(interaction.group_id)}
             className="min-w-0 truncate font-medium text-foreground underline-offset-4 outline-none hover:underline focus-visible:underline"
           >
-            {agent?.name ?? "已删除的智能体"}
+            {agent?.name ?? "已删除的智能体"} ·{" "}
+            {groups.find((g) => g.id === interaction.group_id)?.name ?? "群聊"}
           </button>
           <span className="ml-auto shrink-0 tabular-nums">
             {clock(interaction.created_at)}

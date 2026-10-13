@@ -19,7 +19,7 @@ import { createRoot } from "react-dom/client";
 import { plainDraft } from "@/lib/composer";
 import {
   chatQueryOptions,
-  useAgentMessages,
+  useGroupMessages,
   useLiveChat,
 } from "@/queries/chat";
 import { ChatPanel } from "./chat-panel";
@@ -78,6 +78,10 @@ function message(
   return {
     id: `00000000-0000-0000-0001-${String(n).padStart(12, "0")}`,
     agent_id: AGENT,
+    group_id: AGENT,
+    seq: n,
+    kind: "message",
+    data: {},
     role,
     reply_to_id: null,
     status: role === "user" ? "completed" : "completed",
@@ -98,13 +102,16 @@ let draft: (text: string) => void;
 function Chat() {
   useLiveChat();
   const chat = useQuery(chatQueryOptions());
-  const timeline = useAgentMessages(chat.data ? AGENT : undefined);
+  const timeline = useGroupMessages(chat.data ? AGENT : undefined);
   const [text, setText] = useState<Draft>([]);
   draft = (value) => setText(plainDraft(value));
   return (
     <ChatPanel
-      agentId={AGENT}
-      agentName="研究员"
+      agents={[]}
+      groups={[]}
+      activeReplies={chat.data?.messages ?? []}
+      groupId={AGENT}
+      groupName="研究员"
       messages={timeline.messages}
       hasOlder={false}
       loadingOlder={false}
@@ -121,6 +128,7 @@ function Chat() {
       onDiscard={() => {}}
       onResend={() => {}}
       onCompact={() => {}}
+      onStopAll={() => {}}
       onStop={() => {}}
       onAnswer={() => {}}
     />
@@ -208,6 +216,7 @@ describe("a streamed update", () => {
     });
     elsewhere = message("assistant", {
       agent_id: OTHER,
+      group_id: OTHER,
       status: "responding",
       text: "别处",
     });
@@ -271,6 +280,7 @@ describe("a streamed update", () => {
     const interaction: Interaction = {
       id: "00000000-0000-0000-0002-000000000001",
       agent_id: AGENT,
+      group_id: AGENT,
       message_id: streaming.id,
       status: "pending",
       kind: "choice",
@@ -310,6 +320,7 @@ describe("a streamed update", () => {
     // A message that lands out of order still goes where it was sent.
     const early = message("assistant", {
       text: "补上的",
+      seq: history[1].seq + 0.5,
       created_at: history[1].created_at.replace(".000Z", ".500Z"),
     });
     await emit("message.updated", { message: early });

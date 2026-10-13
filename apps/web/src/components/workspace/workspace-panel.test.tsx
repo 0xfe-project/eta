@@ -112,10 +112,11 @@ const tabs = (container: HTMLElement) =>
     (tab) => [tab.textContent, tab.getAttribute("aria-selected")],
   );
 
-it("leaves memory out of the side panel and opens an old memory link on the overview", async () => {
+it("leaves memory out of the side panel and defaults an unknown tab to group info", async () => {
   const { container } = await mount();
   expect(tabs(container)).toEqual([
-    ["概览", "true"],
+    ["群", "true"],
+    ["概览", "false"],
     ["任务", "false"],
     ["定时", "false"],
     ["待处理", "false"],
