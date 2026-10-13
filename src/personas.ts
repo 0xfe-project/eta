@@ -8,6 +8,11 @@
  * <cwd>/.eta/persona/<id>.persona.md this project only
  * ```
  *
+ * And then there are the built-in cards (`builtinPersonas`, the harness's battery): they are
+ * the floor of the same namespace, not a directory — every file shadows them by naming one,
+ * and none of them can be deleted. A session left on `Thinker` must open on `Thinker` even on
+ * a machine nobody has written a card on.
+ *
  * The project's cards win on a name clash — a project that has an opinion about `Executor` means
  * it, and the user's home card is the general case. Discovery is re-run whenever it is asked for,
  * so dropping a file in shows up without a restart, and a *broken* card (unreadable, empty) is a
@@ -22,6 +27,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { PersonaCard } from "@eta/core";
+import { builtinPersonas } from "@eta/harness";
 
 /** The fallback card's name, matching eta-agent's own. */
 export const FALLBACK_PERSONA = "Thinker";
@@ -41,6 +47,10 @@ export interface DiscoverPersonasOptions {
 /** Every card that applies here, keyed by id. The project's cards win on a clash. */
 export async function discoverPersonas(options: DiscoverPersonasOptions): Promise<Map<string, PersonaCard>> {
 	const cards = new Map<string, PersonaCard>();
+	// The built-ins go down first: a file is the sharper intent and overwrites by naming one.
+	for (const [id, content] of Object.entries(builtinPersonas())) {
+		cards.set(id, { id, name: id, content });
+	}
 	// Least specific first, so a later (more specific) directory overwrites.
 	for (const directory of personaDirs(options.cwd, options.home).reverse()) {
 		const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
@@ -79,11 +89,20 @@ export function describeCard(card: PersonaCard): string {
 }
 
 /** The cards as the summaries a new-session dialog shows. */
-export function summarize(cards: Map<string, PersonaCard>): { id: string; name: string; description: string }[] {
+export function summarize(cards: Map<string, PersonaCard>): {
+	id: string;
+	name: string;
+	description: string;
+	custom: boolean;
+}[] {
+	const builtin = builtinPersonas();
 	return [...cards.values()].map((card) => ({
 		id: card.id,
 		name: card.name,
 		description: describeCard(card),
+		// A file that shadows a built-in is custom even though it carries a built-in's name:
+		// the badge is about who wrote the words, not what the id is.
+		custom: builtin[card.id] !== card.content,
 	}));
 }
 

@@ -98,18 +98,24 @@ describe("the personas target", () => {
 		expect(h.wire.descriptors()).toEqual([]);
 	});
 
-	it("publishes the cards that apply, and re-reads on reload", async () => {
+	it("publishes the cards that apply — built-ins included — and re-reads on reload", async () => {
 		const h = await harness();
 		const unload = await h.load();
 		await card(join(h.home, ".eta", "persona"), "Executor", "# Executor\nShip the thing.\n");
 		const reloaded = (await h.wire.dispatch(
 			{ op: "call", target: "personas", action: "reload", args: { cwd: h.project } },
 			{ reply: () => undefined } as never,
-		)) as { result: { cards: { id: string }[] } };
-		expect(reloaded.result.cards.map((entry) => entry.id)).toEqual(["Executor"]);
-		// The state section says the same thing, because it is the same read.
-		await until(() => h.cards().length === 1);
-		expect(h.cards()[0]).toMatchObject({ id: "Executor", description: "Executor" });
+		)) as { result: { cards: { id: string; custom: boolean; description: string }[] } };
+		expect(reloaded.result.cards.map((entry) => entry.id).sort()).toEqual([
+			"Artist",
+			"Executor",
+			"Insighter",
+			"Thinker",
+		]);
+		// The state section says the same thing, because it is the same read. The written
+		// card shadows the built-in by name and is marked as somebody's own.
+		await until(() => h.cards().length === 4);
+		expect(h.cards()).toContainEqual({ id: "Executor", name: "Executor", description: "Executor", custom: true });
 		await unload();
 	});
 });

@@ -18,6 +18,7 @@ import {
 	parsePersonaAnswer,
 	personaDirs,
 	resolvePersona,
+	summarize,
 	suggestPersonaId,
 } from "../src/personas";
 
@@ -52,7 +53,7 @@ describe("finding cards", () => {
 		await card(projectDir as string, "Executor", "# This project's executor\nShip it.\n");
 
 		const cards = await discoverPersonas({ cwd: project, home });
-		expect([...cards.keys()].sort()).toEqual(["Executor", "Thinker"]);
+		expect([...cards.keys()].sort()).toEqual(["Artist", "Executor", "Insighter", "Thinker"]);
 		// The project said something about `Executor`, so the project's card is the one.
 		expect(cards.get("Executor")?.content).toContain("This project's executor");
 		expect(describeCard(cards.get("Executor") as never)).toBe("This project's executor");
@@ -60,9 +61,16 @@ describe("finding cards", () => {
 
 	it("shows a card the moment it is written, with no restart", async () => {
 		const { home, project } = await scratch();
-		expect((await discoverPersonas({ cwd: project, home })).size).toBe(0);
+		// The built-ins are there from the first read; a file arrives beside them.
+		expect((await discoverPersonas({ cwd: project, home })).size).toBe(4);
 		await card(join(home, ".eta", "persona"), "Newcomer", "# Newcomer\nJust arrived.\n");
-		expect([...(await discoverPersonas({ cwd: project, home })).keys()]).toEqual(["Newcomer"]);
+		expect([...(await discoverPersonas({ cwd: project, home })).keys()].sort()).toEqual([
+			"Artist",
+			"Executor",
+			"Insighter",
+			"Newcomer",
+			"Thinker",
+		]);
 	});
 
 	it("treats an unreadable or empty card as absent rather than as a failure", async () => {
@@ -74,7 +82,7 @@ describe("finding cards", () => {
 		await mkdir(join(dir, "Odd.persona.md"), { recursive: true });
 		const warnings: string[] = [];
 		const cards = await discoverPersonas({ cwd: project, home, warn: (message) => warnings.push(message) });
-		expect([...cards.keys()]).toEqual(["Good"]);
+		expect([...cards.keys()].sort()).toEqual(["Artist", "Executor", "Good", "Insighter", "Thinker"]);
 		expect(warnings.some((message) => message.includes("Empty"))).toBe(true);
 	});
 
@@ -84,7 +92,40 @@ describe("finding cards", () => {
 		await card(dir, "Real", "# Real\nYes.\n");
 		await writeFile(join(dir, "notes.md"), "not a card", "utf8");
 		await writeFile(join(dir, ".persona.md"), "no id", "utf8");
-		expect([...(await discoverPersonas({ cwd: project, home })).keys()]).toEqual(["Real"]);
+		expect([...(await discoverPersonas({ cwd: project, home })).keys()].sort()).toEqual([
+			"Artist",
+			"Executor",
+			"Insighter",
+			"Real",
+			"Thinker",
+		]);
+	});
+});
+
+describe("the built-in cards", () => {
+	it("are the floor of the same namespace, and a file shadows one by name", async () => {
+		const { home, project } = await scratch();
+		const cards = await discoverPersonas({ cwd: project, home });
+		expect([...cards.keys()].sort()).toEqual(["Artist", "Executor", "Insighter", "Thinker"]);
+		// The fallback is one of them, so a session left on it opens on it anywhere.
+		expect((cards.get(FALLBACK_PERSONA)?.content.length ?? 0)).toBeGreaterThan(0);
+
+		await card(join(project, ".eta", "persona"), "Thinker", "# Thinker\nThis project thinks.\n");
+		const shadowed = await discoverPersonas({ cwd: project, home });
+		expect(shadowed.get("Thinker")?.content).toContain("This project thinks.");
+	});
+
+	it("are the only cards a summary does not mark custom", async () => {
+		const { home, project } = await scratch();
+		await card(join(project, ".eta", "persona"), "Thinker", "# Thinker\nThis project thinks.\n");
+		await card(join(project, ".eta", "persona"), "Scribe", "# Scribe\nWrites.\n");
+		const custom = new Map(
+			summarize(await discoverPersonas({ cwd: project, home })).map((entry) => [entry.id, entry.custom]),
+		);
+		// A file that shadows a built-in is somebody's card, whatever its id is called.
+		expect(custom.get("Thinker")).toBe(true);
+		expect(custom.get("Scribe")).toBe(true);
+		expect(custom.get("Executor")).toBe(false);
 	});
 });
 
@@ -170,7 +211,7 @@ describe("picking one", () => {
 		});
 
 		// No model at all: no request is even attempted.
-		expect(await suggestPersonaId({ cards, prompt: "hi" })).toEqual({ id: "Executor", source: "fallback" });
+		expect(await suggestPersonaId({ cards, prompt: "hi" })).toEqual({ id: FALLBACK_PERSONA, source: "fallback" });
 		// A call that throws.
 		expect(
 			await suggestPersonaId({
@@ -180,14 +221,14 @@ describe("picking one", () => {
 					throw new Error("upstream 500");
 				}),
 			}),
-		).toEqual({ id: "Executor", source: "fallback" });
+		).toEqual({ id: FALLBACK_PERSONA, source: "fallback" });
 		// Prose where an id belonged.
 		expect(await suggestPersonaId({ cards, prompt: "hi", model: model("I think maybe Executor?") })).toEqual({
 			id: "Executor",
 			source: "model",
 		});
 		expect(await suggestPersonaId({ cards, prompt: "hi", model: model("I cannot decide") })).toEqual({
-			id: "Executor",
+			id: FALLBACK_PERSONA,
 			source: "fallback",
 		});
 		// A call that never comes back.
@@ -201,7 +242,7 @@ describe("picking one", () => {
 				},
 				timeoutMs: 20,
 			}),
-		).toEqual({ id: "Executor", source: "fallback" });
+		).toEqual({ id: FALLBACK_PERSONA, source: "fallback" });
 		// An empty message is not worth a model call.
 		let called = false;
 		await suggestPersonaId({
