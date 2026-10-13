@@ -901,14 +901,13 @@ function RemoteImage({
 }) {
   const type = name.split(".").at(-1)?.toUpperCase();
   return (
-    <p
-      className="mt-0.5 flex items-start gap-1.5 border border-dashed px-2 py-1 text-muted-foreground"
-      title={name}
-    >
-      <ImageIcon aria-hidden="true" className="mt-0.5 shrink-0" />
+    <p className="mt-0.5 flex gap-1 text-muted-foreground" title={name}>
+      {/* As tall as a line, so the icon stays by the first one. */}
+      <span className="flex h-lh shrink-0 items-center">
+        <ImageIcon aria-hidden="true" className="size-3.5" />
+      </span>
       <span className="wrap-anywhere">
-        {type ? `${type} 图片` : "图片"}，只在 {computer ?? "远程电脑"}{" "}
-        上，执行记录里看不到原图
+        {type ? `${type} 图片` : "图片"}，原图在 {computer ?? "远程电脑"} 上
       </span>
     </p>
   );

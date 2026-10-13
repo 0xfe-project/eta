@@ -105,8 +105,8 @@ describe("a run's log", () => {
     // In order, each with its own type, and no broken <img>.
     expect(items).toEqual([
       "回复截图看看",
-      "图片PNG 图片，只在 remote-builder 上，执行记录里看不到原图",
-      "图片JPG 图片，只在 remote-builder 上，执行记录里看不到原图",
+      "图片PNG 图片，原图在 remote-builder 上",
+      "图片JPG 图片，原图在 remote-builder 上",
       "回复布局对了",
     ]);
     expect(log.querySelector("img")).toBeNull();
