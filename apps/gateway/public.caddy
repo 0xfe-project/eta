@@ -1,8 +1,8 @@
 # The browser's entry: by longest prefix, /api/llm to the LLM gateway,
 # /api/memory to the memory service, /api/forge to the forge service,
 # /api/routines to the routine service, /observe to OpenObserve,
-# /remote/relay to the agenvo relay, /api and /remote to the control plane,
-# everything else to web.
+# /remote/relay to the agenvo relay, /api, /remote and artifacts' /share and
+# /preview pages to the control plane, everything else to web.
 # Paths are not rewritten and the browser's Host is kept.
 http://:{$AXP_GATEWAY_PORT:8080} {
 	bind {$AXP_GATEWAY_BIND:0.0.0.0}
@@ -12,8 +12,28 @@ http://:{$AXP_GATEWAY_PORT:8080} {
 	request_header -X-AXP-*
 	request_header X-Request-Id {http.request.uuid}
 	header >X-Request-Id {http.request.uuid}
-	request_body {
+	# Artifact uploads (a ZIP up to 90 MiB) from remote computers; 32 MB
+	# for everything else.
+	@artifact_upload path /remote/v1/artifacts
+	request_body @artifact_upload {
+		max_size 100MB
+	}
+	@other_requests not path /remote/v1/artifacts
+	request_body @other_requests {
 		max_size 32MB
+	}
+
+	# Cross-site requests (Fetch Metadata) reach only artifacts' public and
+	# preview pages, whose sandboxed frames are an opaque origin: a page
+	# there, or on any other site, cannot use the browser's cookies to act
+	# on AXP. Plain navigations (links, GitHub's redirect back) still work.
+	# Clients without Fetch Metadata (the axp CLI, curl) send neither header.
+	@cross_site {
+		not path /share/artifacts/* /preview/artifacts/*
+		expression `{http.request.header.Origin} == "null" || ({http.request.header.Sec-Fetch-Site} in ["cross-site", "same-site"] && !({method} in ["GET", "HEAD"] && {http.request.header.Sec-Fetch-Mode} == "navigate"))`
+	}
+	handle @cross_site {
+		error 403
 	}
 
 	# kamal-proxy's health check.
@@ -53,6 +73,15 @@ http://:{$AXP_GATEWAY_PORT:8080} {
 	# Remote computers' install script, downloads and API: the one path the
 	# edge's access control lets through; each endpoint authenticates itself.
 	handle /remote/* {
+		reverse_proxy {$AXP_UPSTREAM_API:axp-api:8000}
+	}
+	# Artifacts' public pages (a share's token) and private previews (an
+	# expiring capability): with /remote, the only paths the edge's access
+	# control lets through. The control plane serves nothing else there.
+	handle /share/artifacts/* {
+		reverse_proxy {$AXP_UPSTREAM_API:axp-api:8000}
+	}
+	handle /preview/artifacts/* {
 		reverse_proxy {$AXP_UPSTREAM_API:axp-api:8000}
 	}
 	handle /api/* {

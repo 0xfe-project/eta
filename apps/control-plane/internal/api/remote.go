@@ -196,6 +196,10 @@ func remote(public *httpapi.API, d *Deps) {
 		})
 	})
 
+	// An artifact for a task the computer works on: a ZIP as the body,
+	// title, task and artifact (for a new version) in the query.
+	r.Post("/remote/v1/artifacts", remoteUpload(d))
+
 	huma.Register(api, remoteOp("gitCredentials", http.MethodGet, "/remote/v1/git/credentials",
 		"The token for git and gh: the user's once they authorized the GitHub App, else the App's", 200),
 		func(ctx context.Context, in *struct {

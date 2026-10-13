@@ -238,6 +238,57 @@ describe("activity ref cards", () => {
     expect(copied).toEqual(["很长的正文"]);
   });
 
+  it("opens an artifact's version in a sandboxed dialog", async () => {
+    const id = "0b7e2b1c-58f8-4a3c-9d3c-1f0e2a9b6c11";
+    const preview = (n: number) => `/preview/artifacts/v${n}.1.sig/files/`;
+    const asked: string[] = [];
+    g.fetch = async (input: RequestInfo | URL) => {
+      asked.push(input instanceof Request ? input.url : String(input));
+      return Response.json({
+        id,
+        title: "季度报告",
+        versions: [2, 1].map((n) => ({
+          number: n,
+          files: 3,
+          bytes: 10,
+          size: 10,
+          created_at: "2026-10-13T00:00:00Z",
+          preview_url: preview(n),
+        })),
+      });
+    };
+    const { container } = await mount([
+      activity({
+        status: "completed",
+        name: "artifacts.publish_artifact",
+        ref: { kind: "artifact", id, number: 1, title: "季度报告" },
+      }),
+    ]);
+    const card = container.querySelector<HTMLButtonElement>(
+      '[role="log"] button[aria-label^="打开 Artifact"]',
+    )!;
+    expect(card.getAttribute("aria-label")).toBe(
+      "打开 Artifact 季度报告 第 1 版",
+    );
+    await act(async () => {
+      card.click();
+      for (let i = 0; i < 50 && !document.querySelector("iframe"); i++)
+        await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(asked.some((u) => u.endsWith(`/api/v1/artifacts/${id}`))).toBe(true);
+    // The version the tool published, not the latest; scripts but no origin.
+    const frame = document.querySelector("iframe")!;
+    expect(frame.getAttribute("src")).toBe(preview(1));
+    expect(frame.getAttribute("sandbox")).toContain("allow-scripts");
+    expect(frame.getAttribute("sandbox")).not.toContain("allow-same-origin");
+    const download = [...document.querySelectorAll("a")].find(
+      (a) => a.textContent === "下载",
+    );
+    expect(download?.getAttribute("href")).toBe(
+      `/api/v1/artifacts/${id}/versions/1/archive`,
+    );
+  });
+
   it("links nothing without a ref, or before the call completes", async () => {
     const { container } = await mount([
       activity({ status: "completed" }), // list results, history, unknown tools

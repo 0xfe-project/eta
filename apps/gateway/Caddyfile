@@ -34,6 +34,8 @@
 		header Content-Type application/json
 		@too_large expression {err.status_code} == 413
 		respond @too_large `{"error":{"code":"PAYLOAD_TOO_LARGE","message":"请求内容过大。","request_id":"{http.request.uuid}"}}` 413
+		@forbidden expression {err.status_code} == 403
+		respond @forbidden `{"error":{"code":"CROSS_SITE_FORBIDDEN","message":"不接受来自其他站点的请求。","request_id":"{http.request.uuid}"}}` 403
 		respond `{"error":{"code":"UPSTREAM_UNAVAILABLE","message":"服务暂时不可用，请稍后再试。","request_id":"{http.request.uuid}"}}` 503
 	}
 }

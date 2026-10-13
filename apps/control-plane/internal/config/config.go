@@ -61,6 +61,14 @@ type Config struct {
 	// Directories (colon-separated) with what remote computers download: the
 	// axp binaries and the agenvo connectors built from the pinned commit.
 	RemoteDist string `env:"AXP_REMOTE_DIST" default:"../remote/out/dist:../agenvo/out/dist"`
+	// S3-compatible object storage for artifacts: development's SeaweedFS
+	// (scripts/dev.sh), production's built-in one or any external service
+	// (deploy/README.md). Artifacts are off without an endpoint.
+	S3Endpoint        string `env:"AXP_S3_ENDPOINT" dev:"http://127.0.0.1:18333"`
+	S3Bucket          string `env:"AXP_S3_BUCKET" default:"axp-artifacts"`
+	S3Region          string `env:"AXP_S3_REGION" default:"us-east-1"`
+	S3AccessKeyID     string `env:"AXP_S3_ACCESS_KEY_ID" dev:"axp-dev"`
+	S3SecretAccessKey string `env:"AXP_S3_SECRET_ACCESS_KEY" dev:"axp-dev-secret"`
 }
 
 // Load reads the settings from the environment (service-go/config).

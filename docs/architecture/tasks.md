@@ -115,6 +115,7 @@ Paseo 归档 worktree 时不检查未提交的改动，未提交的内容会丢�
 | `axp task comment <text>` / `--file <path>`       | 在任务下回复（结束这一轮的条件）                                                                                    |
 | `axp task status in_progress\|in_review\|blocked` | 远程智能体能设的状态                                                                                                |
 | `axp gh <args…>`                                  | 经 AXP 的 GitHub App 运行 gh：用户授权过 App 时以用户的名义，否则是 App 的 bot；`gh pr create` 开出的 PR 记为交付物 |
+| `axp artifact upload <dir\|zip> --title T`        | 把静态网页发布为这个任务的 [Artifact](artifacts.md)（`--artifact <id>` 发新版本）                                   |
 | `axp setup` / `status` / `uninstall`              | 电脑本身的接入、查看和卸载                                                                                          |
 
 怎么用这些命令（回报、状态、开 PR、补附件）只写在 `axp` skill 里（`apps/remote/skills/axp/SKILL.md`）：它编进 `axp` 二进制，`axp setup` 把它装到 `~/.claude/skills/axp`（Claude Code）和 `~/.agents/skills/axp`（Codex），`axp uninstall` 删除。skill 与 CLI 同一版本；控制面的指令和 AXP 智能体的插件都不再复述它。已接入的电脑重新运行一次安装命令即可装上。
@@ -128,6 +129,7 @@ Paseo 归档 worktree 时不检查未提交的改动，未提交的内容会丢�
 | `/api/v1/tasks*`、`/api/v1/computers*` | 浏览器（经 `gateway`）             | 与其余 `/api` 相同（边缘的 Cloudflare Access）                                    |
 | `/remote/install.sh`、`/remote/dl/*`   | 远程电脑                           | 无（公开内容）                                                                    |
 | `/remote/v1/enroll`                    | `axp setup`                        | 一次性安装码（只存摘要）                                                          |
+| `/remote/v1/artifacts`                 | `axp artifact upload`              | 电脑的令牌；只能发到指派给它或它运行过的任务（见 [Artifact](artifacts.md)）       |
 | `/remote/v1/*`                         | `axp setup` 与 CLI                 | 电脑的令牌（`Authorization: Bearer`，只存摘要）；只能读写指派给它或它运行过的任务 |
 | `/remote/relay/*`                      | connector（经 `gateway` 到中继）   | 中继自己：配对需在 AXP 里批准，之后用设备密钥；管理页用管理员密钥                 |
 | `/tasks/mcp`                           | AXP 智能体（经 `runtime-gateway`） | runtime 网关注入的 `X-AXP-Agent-Id`                                               |

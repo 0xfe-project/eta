@@ -81,6 +81,19 @@ if ! grep -q "^AXP_OBSERVE_PASSWORD=" "$ENV_FILE"; then
   echo "Added AXP_OBSERVE_PASSWORD to $ENV_FILE."
 fi
 
+# Artifacts' S3: the built-in SeaweedFS gets generated credentials; an
+# external one (AXP_S3_BUILTIN=false) is configured by hand.
+if grep -q '^AXP_S3_BUILTIN=false$' "$ENV_FILE"; then
+  for name in AXP_S3_ENDPOINT AXP_S3_ACCESS_KEY_ID AXP_S3_SECRET_ACCESS_KEY; do
+    grep -q "^$name=." "$ENV_FILE" || fail "AXP_S3_BUILTIN=false: set $name (and AXP_S3_BUCKET, AXP_S3_REGION if not axp-artifacts, us-east-1) in $ENV_FILE."
+  done
+else
+  ! grep -q '^AXP_S3_ENDPOINT=' "$ENV_FILE" ||
+    fail "AXP_S3_ENDPOINT names an external S3: also set AXP_S3_BUILTIN=false in $ENV_FILE, or remove it to use the built-in one."
+  ensure_secret AXP_S3_ACCESS_KEY_ID 12
+  ensure_secret AXP_S3_SECRET_ACCESS_KEY 24
+fi
+
 set -a
 # shellcheck disable=SC1090
 source "$ENV_FILE"
@@ -183,13 +196,24 @@ kamal() {
 # added, boot it before the first deploy that uses it. The collector holds no
 # state and is rebooted on every deploy so config changes take effect.
 prepare_accessories() {
-  # Agents' snapshots (SeaweedFS) are gone with the runtimes that kept them:
-  # agents keep their state on volumes of their own. Its volume axp-s3 stays
-  # until removed by hand, and so do the runtimes of the old controller,
-  # which would otherwise go on running.
-  docker rm -f axp-s3 axp-s3-proxy >/dev/null 2>&1 || true
+  # Agents' snapshots (SeaweedFS on the volume axp-s3) are gone with the
+  # runtimes that kept them: agents keep their state on volumes of their
+  # own. That volume stays until removed by hand, and so do the runtimes of
+  # the old controller, which would otherwise go on running.
+  if docker inspect -f '{{range .Mounts}}{{println .Name}}{{end}}' axp-s3 2>/dev/null | grep -qx axp-s3; then
+    docker rm -f axp-s3 >/dev/null
+  fi
+  docker rm -f axp-s3-proxy >/dev/null 2>&1 || true
   docker ps -aq --filter label=dev.axp.runtime=runtime --filter name='^axp-agent-' | xargs -r docker rm -f >/dev/null
   docker container inspect axp-nats >/dev/null 2>&1 || kamal accessory boot nats
+  # Artifacts' built-in S3; switched to an external one, it stops (its
+  # volume axp-objects stays).
+  if [[ "${AXP_S3_BUILTIN:-true}" != "false" ]]; then
+    docker container inspect axp-s3 >/dev/null 2>&1 || kamal accessory boot s3
+  elif docker container inspect axp-s3 >/dev/null 2>&1; then
+    docker rm -f axp-s3 >/dev/null
+    echo "Removed the built-in S3 (AXP_S3_BUILTIN=false); its volume axp-objects stays."
+  fi
   if ! docker container inspect axp-openobserve >/dev/null 2>&1; then
     kamal accessory boot openobserve
   elif ! docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' axp-openobserve | grep -qx 'ZO_BASE_URI=/observe'; then

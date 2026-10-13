@@ -74,12 +74,13 @@ runtime 每次启动把镜像里的插件装进 `CODEX_HOME`、在副本里填�
 
 ## 现有插件
 
-| 插件     | targets       | 内容                                                                                                |
-| -------- | ------------- | --------------------------------------------------------------------------------------------------- |
-| agenvo   | chat          | 远程电脑上 Paseo、Herdr 的原生方法：agenvo 中继自己的 MCP（[任务与远程电脑](tasks.md#agenvo-插件)） |
-| approval | chat          | 用户确认 akhook `ask` 规则拦下的命令（[确认](agent-hooks.md)）                                      |
-| github   | chat          | GitHub App 的 git、gh 凭据与 `open_pull_request`（[代码托管](forge.md)）                            |
-| grok     | chat、routine | [grok-api](https://github.com/AkaraChen/grok-api)：Grok Imagine 图像和视频，网页和 X 搜索           |
-| memory   | chat          | 长期记忆（[记忆](memory.md)），带 recall / capture hook（Node 脚本）                                |
-| routines | chat          | 定时任务（[定时任务](routines.md)）：列出、查看报告、新建和修改                                     |
-| tasks    | chat          | 任务看板（[任务与远程电脑](tasks.md)）                                                              |
+| 插件      | targets       | 内容                                                                                                  |
+| --------- | ------------- | ----------------------------------------------------------------------------------------------------- |
+| agenvo    | chat          | 远程电脑上 Paseo、Herdr 的原生方法：agenvo 中继自己的 MCP（[任务与远程电脑](tasks.md#agenvo-插件)）   |
+| artifacts | chat          | 把静态网页发布为 [Artifact](artifacts.md)：`publish_artifact`（stdio，打包目录并经 runtime 网关上传） |
+| approval  | chat          | 用户确认 akhook `ask` 规则拦下的命令（[确认](agent-hooks.md)）                                        |
+| github    | chat          | GitHub App 的 git、gh 凭据与 `open_pull_request`（[代码托管](forge.md)）                              |
+| grok      | chat、routine | [grok-api](https://github.com/AkaraChen/grok-api)：Grok Imagine 图像和视频，网页和 X 搜索             |
+| memory    | chat          | 长期记忆（[记忆](memory.md)），带 recall / capture hook（Node 脚本）                                  |
+| routines  | chat          | 定时任务（[定时任务](routines.md)）：列出、查看报告、新建和修改                                       |
+| tasks     | chat          | 任务看板（[任务与远程电脑](tasks.md)）                                                                |

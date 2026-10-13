@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "artifacts": {
+      "command": "node",
+      "args": ["server.mjs"],
+      "cwd": "${PLUGIN_ROOT}",
+      "env": {
+        "AXP_AGENT_KEY": "${AXP_AGENT_KEY}",
+        "AXP_GATEWAY_URL": "${AXP_GATEWAY_URL}",
+        "AXP_WORKSPACE_DIR": "${AXP_WORKSPACE_DIR}"
+      }
+    }
+  }
+}

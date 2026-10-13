@@ -51,6 +51,10 @@ http://:{$AXP_RUNTIME_GATEWAY_PORT:8090} {
 	handle /agenvo/* {
 		import as_agent_with {$AXP_UPSTREAM_INTERNAL:axp-internal:8001} agenvo
 	}
+	# Artifacts: the artifacts plugin's upload, in the internal API.
+	handle /artifacts/* {
+		import as_agent_with {$AXP_UPSTREAM_INTERNAL:axp-internal:8001} artifacts
+	}
 	# Routines: the routines plugin's MCP server, in the routine service.
 	handle /routines/* {
 		import as_agent_with {$AXP_UPSTREAM_ROUTINES:axp-routines:8340} routines

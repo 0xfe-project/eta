@@ -1,6 +1,6 @@
 ---
 name: axp
-description: Working on a task from AXP's task board on this computer with the axp CLI. Use when you were handed an AXP task: to read it, reply on it, set its status, or open a pull request or add attachments as AXP's GitHub App.
+description: Working on a task from AXP's task board on this computer with the axp CLI. Use when you were handed an AXP task: to read it, reply on it, set its status, publish a static page as an artifact, or open a pull request or add attachments as AXP's GitHub App.
 ---
 
 # AXP tasks
@@ -20,6 +20,19 @@ directory or below it, which is how it knows the task; elsewhere, add
 - `axp task status in_review|blocked|in_progress`: `in_review` when your
   work is ready to be checked, `blocked` when you need a person. Marking the
   task done is the user's call.
+
+## Artifacts
+
+When a result is best seen as a page (a report, a chart, a prototype),
+publish it on the task:
+`axp artifact upload <dir|zip> --title "<title>"`. The directory (or the
+ZIP's root) holds `index.html` with its CSS, JS and images, linked by
+relative paths. The user opens it from the task's timeline and may share it
+publicly, so never put secrets in it. Each upload is a new version; pass
+`--artifact <id>` (printed by the first upload) to update that artifact
+instead of making another. It runs sandboxed: no cookies, storage or AXP
+API; public CDNs work, bundled files are more reliable. Limits: 90 MiB
+zipped, 5000 files.
 
 ## GitHub
 
