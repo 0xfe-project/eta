@@ -162,7 +162,11 @@ export function DeliveredPull({
                   <CaretDownIcon aria-hidden="true" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              {/* As wide as its option, not the icon trigger, within the viewport. */}
+              <DropdownMenuContent
+                align="end"
+                className="w-max max-w-(--radix-dropdown-menu-content-available-width)"
+              >
                 <DropdownMenuItem onSelect={() => mergeIt(true)}>
                   合并并标记任务完成
                 </DropdownMenuItem>
