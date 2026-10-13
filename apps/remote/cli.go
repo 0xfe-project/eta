@@ -92,8 +92,8 @@ func taskCommand(args []string) error {
 	}
 	// --task: the task's number or id (default: the one this directory
 	// belongs to). --file: a comment's text from a file (- for stdin).
-	// assist: --after, --pull, --rounds, --key (see help).
-	a, err := parseArgs(args[1:], "task", "file", "after", "pull", "rounds", "key")
+	// assist: --after, --rounds, --key (see help).
+	a, err := parseArgs(args[1:], "task", "file", "after", "rounds", "key")
 	if err != nil {
 		return err
 	}
@@ -168,9 +168,9 @@ func taskCommand(args []string) error {
 
 // assistCommand asks another agent on this computer to assist, as the web
 // and the tasks tool do: axp task assist <runtime>/<provider> <request> |
-// --file F [--after current|<run id>] [--pull yes|no] [--rounds N] [--key K].
+// --file F [--after current|<run id>] [--rounds N] [--key K].
 func assistCommand(c *Config, id string, a cliArgs, text func([]string) (string, error)) error {
-	usage := errors.New("usage: axp task assist <runtime>/<provider> <request> | --file <path> [--after current|<run id>] [--pull yes|no] [--rounds N] [--key K]")
+	usage := errors.New("usage: axp task assist <runtime>/<provider> <request> | --file <path> [--after current|<run id>] [--rounds N] [--key K]")
 	if len(a.positional) == 0 {
 		return usage
 	}
@@ -186,15 +186,6 @@ func assistCommand(c *Config, id string, a cliArgs, text func([]string) (string,
 		return usage
 	}
 	in := map[string]any{"runtime": runtime, "provider": provider, "request": request, "after_run": a.flags["after"]}
-	switch a.flags["pull"] {
-	case "":
-	case "yes":
-		in["review_pull"] = true
-	case "no":
-		in["review_pull"] = false
-	default:
-		return usage
-	}
 	if rounds := a.flags["rounds"]; rounds != "" {
 		n, err := strconv.Atoi(rounds)
 		if err != nil || n < 1 {

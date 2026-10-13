@@ -51,20 +51,14 @@ function agentsFor(task: TaskDetail, assignees: AssigneeOption[]) {
     .sort((a, b) => rank(a) - rank(b));
 }
 
-/** The task's latest delivered pull request, if any. */
-function latestPull(task: TaskDetail) {
-  for (const a of [...task.activity].reverse()) {
-    const url = a.data.url;
-    if (a.kind === "deliverable" && typeof url === "string" && isPullURL(url))
-      return {
-        url,
-        title:
-          (typeof a.data.title === "string" && a.data.title) ||
-          url.replace("https://github.com/", ""),
-      };
-  }
-  return null;
-}
+/** Whether the task has delivered a pull request. */
+const hasPull = (task: TaskDetail) =>
+  task.activity.some(
+    (a) =>
+      a.kind === "deliverable" &&
+      typeof a.data.url === "string" &&
+      isPullURL(a.data.url),
+  );
 
 /** Why the task cannot be assisted now, and how to make it so. */
 function blocker(task: TaskDetail, agents: AssigneeOption[] | undefined) {
@@ -159,24 +153,22 @@ function AssistForm({
     ),
   );
   const [request, setRequest] = useState("");
-  const pull = latestPull(task);
   const run = mainRun(task);
   // While the assignee works, what it delivers is what to look at.
   const [after, setAfter] = useState(() =>
     Boolean(run && isActive(run.status)),
   );
-  const [reviewPull, setReviewPull] = useState(() => Boolean(pull) || after);
   const [loop, setLoop] = useState(false);
   const [rounds, setRounds] = useState("3");
   // One request, however often it is sent: a retry is the same assist.
   const [key] = useState(() => crypto.randomUUID());
   const agent = agents.find((a) => agentKey(a) === chosen);
-  const pullOK = Boolean(pull) || after;
+  // A review loop reviews the pull request: there is one, or will be.
+  const canLoop = hasPull(task) || after;
   const ready = Boolean(agent && request.trim());
   const submit = () => {
     const body = request.trim();
     if (!agent || !ready || assist.isPending) return;
-    const review = reviewPull && pullOK;
     assist.mutate(
       {
         id: task.id,
@@ -185,9 +177,8 @@ function AssistForm({
           runtime: agent.runtime as "paseo" | "herdr",
           provider: agent.provider,
           request: body,
-          review_pull: review,
           after_run: after && run ? run.id : undefined,
-          loop: review && loop ? { max_rounds: Number(rounds) } : undefined,
+          loop: canLoop && loop ? { max_rounds: Number(rounds) } : undefined,
           key,
         },
       },
@@ -274,10 +265,7 @@ function AssistForm({
             size="sm"
             variant={after ? "default" : "outline"}
             disabled={!run}
-            onClick={() => {
-              setAfter(true);
-              setReviewPull(true);
-            }}
+            onClick={() => setAfter(true)}
           >
             主执行者这一轮交付后
           </Button>
@@ -288,26 +276,7 @@ function AssistForm({
             : "排在其他协助之后，马上开始。"}
         </p>
       </fieldset>
-      <label className="flex items-start gap-2 text-sm">
-        <input
-          type="checkbox"
-          className="mt-1"
-          checked={reviewPull && pullOK}
-          disabled={!pullOK}
-          onChange={(e) => setReviewPull(e.target.checked)}
-        />
-        <span className="min-w-0">
-          <span className="wrap-anywhere">
-            看交付的 PR{pull ? `：${pull.title}` : ""}
-          </span>
-          <span className="block text-xs text-muted-foreground">
-            {pullOK
-              ? "开始时固定 PR 那一刻的 head 提交，Agent 检出它来看，不看本地分支。"
-              : "任务还没有交付 PR。"}
-          </span>
-        </span>
-      </label>
-      {reviewPull && pullOK ? (
+      {canLoop ? (
         <label className="flex items-start gap-2 text-sm">
           <input
             type="checkbox"

@@ -65,7 +65,7 @@ func assistPrompt(r *taskRow, a *assistRow, pull, head string, loop *loopRow) st
 	}
 	fmt.Fprintf(&b, "---\n\n## 这次的协助要求（已确认）\n\n%s\n\n## 要看的交付\n\n", a.Request)
 	if pull == "" {
-		b.WriteString("这次没有指定要看的 PR；按要求看任务描述、时间线（交付也在里面）和主执行者的工作。\n\n")
+		b.WriteString("任务还没有交付 PR；按要求看任务描述、时间线和主执行者的工作。\n\n")
 	} else {
 		fmt.Fprintf(&b, "PR：%s\n\n固定的提交：`%s`（这次协助开始时 PR 的 head）。先 `git fetch origin %s`，再 `git checkout --detach %s`，用 `git rev-parse HEAD` 确认后再看；"+
 			"不要假设本地哪个分支就是最新交付。回复里写明你看的 SHA；PR 之后又有新提交的话，那不在这次的范围里。\n\n", pull, head, head, head)

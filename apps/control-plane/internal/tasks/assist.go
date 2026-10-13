@@ -72,14 +72,12 @@ const (
 // AssistInput is a request for assistance, the same from the web, the tasks
 // tool and the axp CLI.
 type AssistInput struct {
-	Runtime  string `json:"runtime" enum:"paseo,herdr" jsonschema:"the agent's runtime on the task's computer: paseo or herdr (list_assignees)"`
-	Provider string `json:"provider" minLength:"1" maxLength:"32" jsonschema:"the agent: codex, claude, ... (list_assignees)"`
-	Request  string `json:"request" minLength:"1" maxLength:"20000" doc:"What the agent is to do; it is told this is the confirmed request." jsonschema:"what the agent is to do, in Markdown; it gets this as the user's confirmed request"`
-	// Whether it looks at the delivered pull request, pinned at its head.
-	ReviewPull *bool      `json:"review_pull,omitempty" doc:"Look at the task's delivered pull request, pinned at its head when it starts. Default: when it waits for a delivery, or the task has a pull request." jsonschema:"look at the task's delivered pull request, pinned at its head commit when it starts; default true when after_run is set or the task already has one"`
-	AfterRun   string     `json:"after_run,omitempty" maxLength:"64" doc:"Start once this run of the assignee's has delivered: current (its current or latest run) or a run id. Empty: now." jsonschema:"start once this run of the assignee's has completed and delivered: current (its current or latest run) or a run id; empty to start now"`
-	Loop       *LoopInput `json:"loop,omitempty" doc:"Make it a review loop: changes it asks for go to the assignee, whose next run it reviews again." jsonschema:"make it a review loop: the agent reports pass or changes_requested, changes go to the assignee and its next run is reviewed again, up to max_rounds reviews"`
-	Key        string     `json:"key,omitempty" maxLength:"200" doc:"The request's idempotency key: sending it again is the same request." jsonschema:"an idempotency key of your choosing; the same key is the same request"`
+	Runtime  string     `json:"runtime" enum:"paseo,herdr" jsonschema:"the agent's runtime on the task's computer: paseo or herdr (list_assignees)"`
+	Provider string     `json:"provider" minLength:"1" maxLength:"32" jsonschema:"the agent: codex, claude, ... (list_assignees)"`
+	Request  string     `json:"request" minLength:"1" maxLength:"20000" doc:"What the agent is to do; it is told this is the confirmed request." jsonschema:"what the agent is to do, in Markdown; it gets this as the user's confirmed request"`
+	AfterRun string     `json:"after_run,omitempty" maxLength:"64" doc:"Start once this run of the assignee's has delivered: current (its current or latest run) or a run id. Empty: now." jsonschema:"start once this run of the assignee's has completed and delivered: current (its current or latest run) or a run id; empty to start now"`
+	Loop     *LoopInput `json:"loop,omitempty" doc:"Make it a review loop: changes it asks for go to the assignee, whose next run it reviews again." jsonschema:"make it a review loop: the agent reports pass or changes_requested, changes go to the assignee and its next run is reviewed again, up to max_rounds reviews"`
+	Key      string     `json:"key,omitempty" maxLength:"200" doc:"The request's idempotency key: sending it again is the same request." jsonschema:"an idempotency key of your choosing; the same key is the same request"`
 }
 
 // LoopInput is a review loop's budget.
@@ -95,7 +93,6 @@ type TaskAssist struct {
 	Runtime    string         `json:"runtime"`
 	Provider   string         `json:"provider"`
 	Request    string         `json:"request"`
-	ReviewPull bool           `json:"review_pull"`
 	AfterRunID *string        `json:"after_run_id" nullable:"true"`
 	LoopID     *string        `json:"loop_id" nullable:"true"`
 	Round      *int           `json:"round" nullable:"true"`
@@ -123,13 +120,15 @@ type TaskLoop struct {
 }
 
 type assistRow struct {
-	ID         string     `db:"id"`
-	TaskID     string     `db:"task_id"`
-	Key        *string    `db:"key"`
-	Runtime    string     `db:"runtime"`
-	Provider   string     `db:"provider"`
-	Request    string     `db:"request"`
-	ReviewPull bool       `db:"review_pull"`
+	ID       string  `db:"id"`
+	TaskID   string  `db:"task_id"`
+	Key      *string `db:"key"`
+	Runtime  string  `db:"runtime"`
+	Provider string  `db:"provider"`
+	Request  string  `db:"request"`
+	// Only a review loop's rounds need a pull request; the others get the
+	// task's, if it has one.
+	NeedsPull  bool       `db:"needs_pull"`
 	AfterRunID *string    `db:"after_run_id"`
 	Waits      bool       `db:"waits"`
 	LoopID     *string    `db:"loop_id"`
@@ -163,7 +162,7 @@ type loopRow struct {
 func (a *assistRow) public() TaskAssist {
 	return TaskAssist{
 		ID: a.ID, State: a.State, Reason: a.Reason, Runtime: a.Runtime, Provider: a.Provider, Request: a.Request,
-		ReviewPull: a.ReviewPull, AfterRunID: a.AfterRunID, LoopID: a.LoopID, Round: a.Round, RunID: a.RunID,
+		AfterRunID: a.AfterRunID, LoopID: a.LoopID, Round: a.Round, RunID: a.RunID,
 		PullURL: a.PullURL, HeadSHA: a.HeadSHA, Verdict: a.Verdict, Feedback: a.Feedback,
 		CreatedAt: jsontime.From(a.CreatedAt), StartedAt: jsontime.Ptr(a.StartedAt),
 	}
@@ -282,13 +281,6 @@ func (s *Service) assist(ctx context.Context, tx pgx.Tx, r *taskRow, in AssistIn
 	if err != nil {
 		return nil, err
 	}
-	reviewPull := afterRun != nil || pull != ""
-	if in.ReviewPull != nil {
-		reviewPull = *in.ReviewPull
-	}
-	if reviewPull && afterRun == nil && pull == "" {
-		return nil, invalid("任务还没有交付 PR：等开发交付后再审查（after_run: current），或者不审查 PR。")
-	}
 	var loopID *string
 	var round *int
 	maxRounds := 0
@@ -303,8 +295,8 @@ func (s *Service) assist(ctx context.Context, tx pgx.Tx, r *taskRow, in AssistIn
 		if maxRounds > DefaultRounds && by.Kind != ActorUser {
 			return nil, apierr.New(403, "ROUNDS_USER_ONLY", fmt.Sprintf("只有用户能把审查循环设到 %d 轮以上。", DefaultRounds))
 		}
-		if !reviewPull {
-			return nil, invalid("审查循环要审查交付的 PR。")
+		if afterRun == nil && pull == "" {
+			return nil, invalid("审查循环要审查交付的 PR，任务还没有：等开发交付后再开始（after_run: current）。")
 		}
 		open, err := pg.Exists(ctx, tx, `SELECT 1 FROM task_review_loop WHERE task_id = $1 AND state IN ('active', 'exhausted', 'blocked')`, r.ID)
 		if err != nil {
@@ -335,7 +327,7 @@ func (s *Service) assist(ctx context.Context, tx pgx.Tx, r *taskRow, in AssistIn
 	}
 	id, err := insertAssist(ctx, tx, assistRow{
 		TaskID: r.ID, Key: nonEmpty(key), Runtime: in.Runtime, Provider: in.Provider, Request: request,
-		ReviewPull: reviewPull, AfterRunID: afterRun, Waits: afterRun != nil, LoopID: loopID, Round: round,
+		NeedsPull: in.Loop != nil, AfterRunID: afterRun, Waits: afterRun != nil, LoopID: loopID, Round: round,
 	})
 	if err != nil {
 		return nil, err
@@ -366,9 +358,9 @@ func nonEmpty(s string) *string {
 
 func insertAssist(ctx context.Context, tx pgx.Tx, a assistRow) (string, error) {
 	id := pg.NewID()
-	_, err := tx.Exec(ctx, `INSERT INTO task_assist (id, task_id, key, runtime, provider, request, review_pull, after_run_id, waits,
+	_, err := tx.Exec(ctx, `INSERT INTO task_assist (id, task_id, key, runtime, provider, request, needs_pull, after_run_id, waits,
 		loop_id, round, state, reason, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'waiting', $12, $13)`,
-		id, a.TaskID, a.Key, a.Runtime, a.Provider, a.Request, a.ReviewPull, a.AfterRunID, a.Waits, a.LoopID, a.Round,
+		id, a.TaskID, a.Key, a.Runtime, a.Provider, a.Request, a.NeedsPull, a.AfterRunID, a.Waits, a.LoopID, a.Round,
 		"排队中。", pg.Now())
 	return id, err
 }
@@ -640,7 +632,7 @@ func (s *Service) rework(ctx context.Context, tx pgx.Tx, r *taskRow, l *loopRow,
 func nextRound(ctx context.Context, tx pgx.Tx, r *taskRow, l *loopRow, afterRun string) error {
 	next := l.Rounds + 1
 	id, err := insertAssist(ctx, tx, assistRow{
-		TaskID: r.ID, Runtime: l.Runtime, Provider: l.Provider, Request: l.Request, ReviewPull: true,
+		TaskID: r.ID, Runtime: l.Runtime, Provider: l.Provider, Request: l.Request, NeedsPull: true,
 		AfterRunID: &afterRun, Waits: true, LoopID: &l.ID, Round: &next,
 	})
 	if err != nil {
@@ -719,12 +711,13 @@ func (s *Service) ready(ctx context.Context, db pg.DB, a *assistRow) (readiness,
 			return readiness{state: AssistWaiting, reason: "等主执行者手头的运行结束。"}, nil
 		}
 	}
-	if !a.ReviewPull {
-		return readiness{start: true}, nil
-	}
 	pull, err := latestPull(ctx, db, r.ID, until)
 	if err != nil {
 		return readiness{}, err
+	}
+	// Without a pull request, a request that does not need one starts as it is.
+	if pull == "" && !a.NeedsPull {
+		return readiness{start: true}, nil
 	}
 	if pull == "" {
 		if a.Waits {

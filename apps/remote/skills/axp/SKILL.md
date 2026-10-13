@@ -26,8 +26,9 @@ directory or below it, which is how it knows the task; elsewhere, add
   `axp task assist paseo/codex "审查 PR" --after current --rounds 3` to have
   Codex review your pull request once your current run has delivered, and
   send you its changes until it passes (at most 3 reviews). `--after`
-  waits for a run of the task's assignee; `--pull no` for work that is not
-  about the pull request. `axp task show` lists the requests and loops.
+  waits for a run of the task's assignee; when the task has a pull request
+  the agent is given it, pinned at its head. `axp task show` lists the
+  requests and loops.
 
 When the prompt says you are assisting (请 Agent 协助), the task belongs to
 another agent: do only what was asked, in the worktree AXP opened for you,

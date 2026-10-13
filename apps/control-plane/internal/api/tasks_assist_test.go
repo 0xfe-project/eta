@@ -310,13 +310,33 @@ func TestAFailedDeliveryBlocksTheReview(t *testing.T) {
 	e.post("/tasks/1/comments", map[string]any{"body": "Try again."})
 	e.ticks(2)
 	run := runsOf(e.task("1"), false)[1]
-	e.assist(task.ID, map[string]any{"runtime": "paseo", "provider": "claude", "request": "Test it.", "after_run": run.ID, "review_pull": false})
+	e.assist(task.ID, map[string]any{"runtime": "paseo", "provider": "claude", "request": "Test it.", "after_run": run.ID})
 	e.post("/tasks/1/runs/"+run.ID+"/interrupt", nil)
 	e.ticks(2)
 	task = e.task("1")
 	expect(t, task.Assists[1].State, "blocked")
 	if !strings.Contains(*task.Assists[1].Reason, "停止") {
 		t.Fatalf("reason %q", *task.Assists[1].Reason)
+	}
+}
+
+// Without a pull request, a request starts once the run it waits for is
+// done, and is told so; a review loop's round is blocked instead.
+func TestWithoutAPullRequestOnlyALoopWaitsForOne(t *testing.T) {
+	e := newTaskEnv(t)
+	task, token, mainDir := e.claudeAtWork()
+	e.assist(task.ID, map[string]any{"runtime": "paseo", "provider": "codex", "request": "Run the tests.", "after_run": "current"})
+	e.assist(task.ID, map[string]any{"runtime": "paseo", "provider": "claude", "request": "Review it.", "after_run": "current", "loop": map[string]any{}})
+	e.reply(token, mainDir, task.ID, "Done, no PR needed.")
+	e.ticks(3)
+	task = e.task("1")
+	expect(t, task.Assists[0].State, "started")
+	expect(t, task.Assists[0].PullURL == nil, true)
+	expect(t, task.Assists[1].State, "blocked")
+	expect(t, task.Loops[0].State, "blocked")
+	_, codex := e.relay.otherAgent(t, mainDir)
+	if !strings.Contains(codex.inputs[0], "Run the tests.") || !strings.Contains(codex.inputs[0], "还没有交付 PR") {
+		t.Fatalf("brief %q", codex.inputs[0])
 	}
 }
 
@@ -609,7 +629,8 @@ func TestAssistingNeedsTheTasksComputerAndAnAgentThere(t *testing.T) {
 	e.create(remoteAssignee(computer, "paseo", newWorktree))
 	for _, bad := range []map[string]any{
 		{"runtime": "herdr", "provider": "codex", "request": "x"},
-		{"runtime": "paseo", "provider": "codex", "request": "x", "review_pull": true},
+		// A review loop needs a delivered pull request, or a delivery to wait for.
+		{"runtime": "paseo", "provider": "codex", "request": "x", "loop": map[string]any{}},
 		{"runtime": "paseo", "provider": "codex", "request": "x", "after_run": "nonsense"},
 		{"runtime": "paseo", "provider": "codex", "request": "x", "after_run": "current", "loop": map[string]any{"max_rounds": 11}},
 	} {

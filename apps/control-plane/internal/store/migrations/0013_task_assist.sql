@@ -45,8 +45,10 @@ CREATE TABLE task_assist (
     runtime text NOT NULL,
     provider text NOT NULL,
     request text NOT NULL,
-    -- It looks at the task's delivered pull request, pinned at its head.
-    review_pull boolean NOT NULL,
+    -- It needs the task's delivered pull request (a review loop's rounds);
+    -- others are given one when the task has it. Either way pinned at its
+    -- head when it starts.
+    needs_pull boolean NOT NULL,
     -- The assignee's run whose successful delivery it waits for; none: now.
     after_run_id uuid REFERENCES task_run(id) ON DELETE SET NULL,
     waits boolean NOT NULL,

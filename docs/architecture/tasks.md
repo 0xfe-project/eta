@@ -73,13 +73,13 @@ Herdr 运行的是交互式终端程序。agent 启动后停在阻塞界面时�
 - tasks plugin：`assist_task` 和 `cancel_assist`；
 - CLI：`axp task assist`。
 
-输入是：Agent（运行时 + provider）、要求、`review_pull`、`after_run`、`loop`，以及可选的幂等 `key`（同一个任务里 key 相同就是同一个请求）。要求完全由用户自己写，没有预制的模板。时间线上请求和回复都只署 Agent 的名字（电脑 · 运行时 · provider）。
+输入是：Agent（运行时 + provider）、要求、`after_run`、`loop`，以及可选的幂等 `key`（同一个任务里 key 相同就是同一个请求）。要求完全由用户自己写，没有预制的模板。时间线上请求和回复都只署 Agent 的名字（电脑 · 运行时 · provider）。
 
 **请求与队列**（`task_assist`）。每个请求是一行，状态是 waiting、blocked、started 或 cancelled，附带原因：
 
 - `after_run` 为空时马上可以开始；为 `current` 或一个 run id 时，等主执行者的这一轮。
 - runner 的 `release_assists` 每一轮都从数据库重新判断 waiting 的请求，不靠事件，所以请求之前就结束的运行、重启时错过的事件都不会漏。
-- 依赖的运行 completed、主执行通道空闲（没有排队或在跑的主运行），并且在 `review_pull` 时任务有 PR、forge 能读到它的 head，这些都满足才开始。开始时在事务里重新核对、锁住请求，原子地转成协助通道里的一个运行，PR URL 和 head SHA 固定进 prompt。
+- 依赖的运行 completed、主执行通道空闲（没有排队或在跑的主运行），并且任务有 PR 时 forge 能读到它的 head，这些都满足才开始；任务没有 PR 时照样开始，指令里说明没有 PR，只有审查循环必须有 PR（没有就 blocked）。没有“要不要看 PR”的开关：有 PR 就固定它的 head 给 Agent。开始时在事务里重新核对、锁住请求，原子地转成协助通道里的一个运行，PR URL 和 head SHA 固定进 prompt。
 - 依赖的运行 failed 或 cancelled、运行结束了却没有登记 PR：请求转为 blocked 并写明原因，从不当成交付。读不到 head、主执行者还在跑：继续 waiting 并写明原因。
 - waiting 的请求按创建顺序开始，每个请求是一次独立的运行和 prompt，在协助通道里排队执行。
 - 任务完成、取消或改派时，没开始的请求取消，循环停止。
@@ -168,7 +168,7 @@ Paseo 归档 worktree 时不检查未提交的改动，未提交的内容会丢�
 | `axp task show`                                   | 任务的描述、状态和时间线                                                                                            |
 | `axp task comment <text>` / `--file <path>`       | 在任务下回复（结束这一轮的条件）                                                                                    |
 | `axp task status in_progress\|in_review\|blocked` | 远程智能体能设的状态（协助的 Agent 不能设）                                                                         |
-| `axp task assist <runtime>/<provider> <request>`  | 请这台电脑上的另一个 Agent 协助（`--after`、`--pull`、`--rounds` 审查循环、`--key`），同 Web 和 `assist_task`       |
+| `axp task assist <runtime>/<provider> <request>`  | 请这台电脑上的另一个 Agent 协助（`--after`、`--rounds` 审查循环、`--key`），同 Web 和 `assist_task`                 |
 | `axp task review pass\|changes`                   | 协助 Agent 的结构化结论（changes 带反馈）                                                                           |
 | `axp gh <args…>`                                  | 经 AXP 的 GitHub App 运行 gh：用户授权过 App 时以用户的名义，否则是 App 的 bot；`gh pr create` 开出的 PR 记为交付物 |
 | `axp artifact upload <dir\|zip> --title T`        | 把静态网页发布为这个任务的 [Artifact](artifacts.md)（`--artifact <id>` 发新版本）                                   |

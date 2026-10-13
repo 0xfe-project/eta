@@ -108,7 +108,6 @@ const detail = {
       runtime: "paseo",
       provider: "codex",
       request: "审查 PR 的边界情况",
-      review_pull: true,
       run_id: "r2",
       pull_url: pr,
       head_sha: sha,
@@ -120,7 +119,6 @@ const detail = {
       runtime: "paseo",
       provider: "codex",
       request: "审查 PR",
-      review_pull: true,
       run_id: null,
       loop_id: "l1",
       round: 2,
@@ -282,7 +280,7 @@ describe("请 Agent 协助", () => {
     expect(
       dialog.querySelector('[role="radio"][aria-checked="true"]')!.textContent,
     ).toBe("主执行者这一轮交付后");
-    expect(dialog.textContent).toContain("固定 PR 那一刻的 head");
+    expect(dialog.textContent).not.toContain("看交付的 PR");
     // The request is the user's own words: no ready-made ones, no blurb.
     expect(dialog.textContent).not.toContain("代码审查");
     expect(dialog.textContent).not.toContain("它在单独的");
@@ -304,7 +302,6 @@ describe("请 Agent 协助", () => {
       runtime: "paseo",
       provider: "codex",
       request: "看一下 Safari",
-      review_pull: true,
       after_run: "r1",
     });
   });

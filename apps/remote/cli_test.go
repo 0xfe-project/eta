@@ -105,7 +105,7 @@ func TestAssistAndReviewSendTheSharedRequest(t *testing.T) {
 	_ = os.WriteFile(feedback, []byte("Fix login.css:12."), 0o600)
 	for _, args := range [][]string{
 		{"assist", "paseo/codex", "Review", "it.", "--after", "current", "--rounds", "2", "--key", "k1", "--task", "3"},
-		{"assist", "herdr/claude", "Run the tests.", "--pull", "no", "--task", "3"},
+		{"assist", "herdr/claude", "Run the tests.", "--task", "3"},
 		{"review", "changes", "--file", feedback, "--task", "3"},
 		{"review", "pass", "--task", "3"},
 	} {
@@ -120,7 +120,7 @@ func TestAssistAndReviewSendTheSharedRequest(t *testing.T) {
 	if string(first) != `{"after_run":"current","key":"k1","loop":{"max_rounds":2},"provider":"codex","request":"Review it.","runtime":"paseo"}` {
 		t.Fatal(string(first))
 	}
-	if bodies[1]["review_pull"] != false || bodies[1]["loop"] != nil || !strings.HasPrefix(fmt.Sprint(bodies[1]["key"]), "cli-") {
+	if bodies[1]["after_run"] != "" || bodies[1]["loop"] != nil || !strings.HasPrefix(fmt.Sprint(bodies[1]["key"]), "cli-") {
 		t.Fatal(bodies[1])
 	}
 	if bodies[2]["verdict"] != "changes_requested" || bodies[2]["feedback"] != "Fix login.css:12." || bodies[3]["verdict"] != "pass" {
