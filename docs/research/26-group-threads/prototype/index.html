@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AXP 群聊原型 · #111</title>
+<style>
+  :root {
+    --bg: #fff; --fg: #18181b; --muted: #71717a; --line: #e4e4e7; --soft: #f4f4f5;
+    --side: #fafafa; --accent: #2563eb; --ok: #16a34a; --warn: #d97706; --bad: #dc2626;
+    font-family: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-size: 14px; line-height: 1.6; }
+  button { font: inherit; cursor: pointer; white-space: nowrap; border: 1px solid var(--line); background: #fff; padding: 4px 10px; color: var(--fg); }
+  button.primary { background: var(--fg); color: #fff; border-color: var(--fg); }
+  button.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+  button.ghost:hover { color: var(--fg); background: var(--soft); }
+  input, textarea { font: inherit; border: 1px solid var(--line); padding: 6px 8px; width: 100%; color: var(--fg); background: #fff; }
+  textarea { resize: vertical; }
+  .app { display: grid; grid-template-columns: 248px 1fr 340px; height: 100vh; }
+  aside.list { border-right: 1px solid var(--line); background: var(--side); display: flex; flex-direction: column; min-height: 0; }
+  .brand { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 16px; font-weight: 600; }
+  .section { padding: 10px 16px 4px; font-size: 12px; color: var(--muted); }
+  .scroll { overflow-y: auto; flex: 1; min-height: 0; }
+  .row { display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 16px; cursor: pointer; }
+  .row:hover { background: var(--soft); }
+  .row.on { background: #e9e9ec; }
+  .row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .meta { font-size: 12px; color: var(--muted); }
+  .badge { font-size: 11px; background: var(--fg); color: #fff; padding: 0 6px; border-radius: 9px; }
+  .stack { display: flex; }
+  .stack .av { margin-left: -6px; border: 2px solid var(--side); }
+  .stack .av:first-child { margin-left: 0; }
+  .av { width: 22px; height: 22px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 11px; color: #fff; flex: none; font-weight: 600; }
+  .av.lg { width: 30px; height: 30px; font-size: 13px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); display: inline-block; }
+  .dot.busy { background: var(--warn); animation: pulse 1s infinite; }
+  .dot.off { background: #a1a1aa; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  header.top { height: 48px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; padding: 0 12px 0 16px; }
+  header.top h1 { font-size: 15px; margin: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pill { font-size: 12px; border: 1px solid var(--line); padding: 0 8px; color: var(--muted); white-space: nowrap; }
+  .pill.exec { color: var(--accent); border-color: #bfdbfe; background: #eff6ff; }
+  .pill.done { color: var(--ok); border-color: #bbf7d0; background: #f0fdf4; }
+  .brief { border-bottom: 1px solid var(--line); background: var(--side); padding: 8px 16px; font-size: 13px; display: flex; gap: 12px; align-items: center; }
+  .brief .goal { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+  .feed { flex: 1; overflow-y: auto; padding: 16px 0 24px; }
+  .msg { display: flex; gap: 10px; padding: 6px 20px; max-width: 860px; }
+  .msg .body { min-width: 0; flex: 1; }
+  .msg .who { font-size: 13px; font-weight: 600; display: flex; gap: 8px; align-items: center; }
+  .msg .who .t { font-weight: 400; color: var(--muted); font-size: 12px; }
+  .msg .text { white-space: pre-wrap; }
+  .msg.me { justify-content: flex-end; margin-left: auto; }
+  .msg.me .bubble { background: var(--soft); padding: 8px 12px; max-width: 560px; white-space: pre-wrap; }
+  .mention { color: var(--accent); font-weight: 500; }
+  .sys { text-align: center; font-size: 12px; color: var(--muted); padding: 6px 20px; }
+  .status { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .card { border: 1px solid var(--line); margin-top: 8px; max-width: 560px; background: #fff; }
+  .card .hd { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); font-weight: 600; font-size: 13px; }
+  .card .bd { padding: 10px 12px; font-size: 13px; }
+  .card .ft { display: flex; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .card.draft { border-style: dashed; }
+  .card dl { margin: 0; display: grid; grid-template-columns: 56px 1fr; gap: 4px 8px; }
+  .card dt { color: var(--muted); }
+  .card dd { margin: 0; }
+  .steps { display: flex; gap: 4px; margin: 6px 0; }
+  .steps span { flex: 1; height: 3px; background: var(--line); }
+  .steps span.on { background: var(--accent); }
+  .ref { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); padding: 6px 10px; margin-top: 6px; font-size: 13px; }
+  .ref .k { font-size: 11px; color: var(--muted); border: 1px solid var(--line); padding: 0 4px; }
+  footer.composer { border-top: 1px solid var(--line); padding: 8px 16px 12px; }
+  .to { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .chip { display: inline-flex; gap: 4px; align-items: center; border: 1px solid var(--line); padding: 1px 8px 1px 2px; color: var(--fg); background: #fff; font-size: 12px; cursor: pointer; }
+  .chip.off { opacity: .45; }
+  .chip .av { width: 18px; height: 18px; font-size: 10px; }
+  .inputrow { display: flex; gap: 8px; align-items: flex-end; position: relative; }
+  .inputrow textarea { min-height: 44px; max-height: 160px; }
+  .menu { position: absolute; bottom: 52px; left: 0; background: #fff; border: 1px solid var(--line); box-shadow: 0 4px 16px rgb(0 0 0 / .08); min-width: 200px; z-index: 5; }
+  .menu div { padding: 6px 10px; display: flex; gap: 8px; align-items: center; cursor: pointer; }
+  .menu div:hover, .menu div.hl { background: var(--soft); }
+  aside.panel { border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  .tabs { display: flex; height: 48px; border-bottom: 1px solid var(--line); align-items: stretch; }
+  .tabs button { border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); flex: 1; }
+  .tabs button.on { color: var(--fg); border-bottom-color: var(--fg); }
+  .pane { padding: 14px 16px; overflow-y: auto; flex: 1; }
+  .pane h3 { font-size: 12px; color: var(--muted); font-weight: 500; margin: 14px 0 6px; }
+  .pane h3:first-child { margin-top: 0; }
+  .member { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+  .member .name { flex: 1; }
+  .timeline { border-left: 1px solid var(--line); margin-left: 6px; padding-left: 12px; font-size: 13px; }
+  .timeline div { margin-bottom: 8px; }
+  .timeline .t { color: var(--muted); font-size: 12px; }
+  .modal-bg { position: fixed; inset: 0; background: rgb(0 0 0 / .3); display: none; place-items: center; z-index: 20; }
+  .modal-bg.show { display: grid; }
+  .modal { background: #fff; width: min(440px, 92vw); padding: 18px; display: grid; gap: 12px; }
+  .modal h2 { margin: 0; font-size: 16px; }
+  .modal label { font-size: 13px; color: var(--muted); display: grid; gap: 4px; }
+  .pick { display: flex; flex-wrap: wrap; gap: 6px; }
+  .note { font-size: 12px; color: var(--muted); }
+  .proto-bar { position: fixed; left: 12px; bottom: 12px; font-size: 12px; background: #18181b; color: #fff; padding: 4px 10px; opacity: .85; z-index: 30; }
+  .back { display: none; }
+  .typing::after { content: "▍"; animation: pulse 1s infinite; }
+
+  /* phone */
+  @media (max-width: 760px) {
+    .app { grid-template-columns: 1fr; }
+    aside.list { display: none; }
+    aside.panel { display: none; position: fixed; inset: 0; background: #fff; z-index: 10; }
+    .app.v-list aside.list { display: flex; }
+    .app.v-list main { display: none; }
+    .app.v-panel aside.panel { display: flex; }
+    .back { display: inline-block; }
+    .brief .goal { display: none; }
+    .msg { padding: 6px 12px; }
+    .msg.me .bubble { max-width: 82vw; }
+    .card { max-width: 100%; }
+    footer.composer { padding: 8px 10px calc(10px + env(safe-area-inset-bottom)); }
+    .hide-phone { display: none; }
+    .proto-bar { display: none; }
+    .panel-close { display: inline-block !important; }
+  }
+  .panel-close { display: none; }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="list">
+    <div class="brand">AXP <button class="ghost" title="新建群" onclick="openNew()">＋ 新建群</button></div>
+    <div class="scroll" id="threads"></div>
+  </aside>
+  <main>
+    <header class="top">
+      <button class="ghost back" onclick="setView('list')" aria-label="返回群列表">‹</button>
+      <h1 id="title"></h1>
+      <span class="pill" id="state"></span>
+      <span style="flex:1"></span>
+      <span class="stack" id="topMembers"></span>
+      <button class="ghost hide-phone" onclick="stopAll()" title="停止本群所有进行中的回复">全部停止</button>
+      <button class="ghost" onclick="setView('panel')" aria-label="群信息">☰</button>
+    </header>
+    <div class="brief" id="brief"></div>
+    <div class="feed" id="feed"></div>
+    <footer class="composer">
+      <div class="to" id="to"></div>
+      <div class="inputrow">
+        <div class="menu" id="menu" hidden></div>
+        <textarea id="input" placeholder="说点什么，@ 选择发给谁…" rows="2"></textarea>
+        <button class="primary" onclick="send()">发送</button>
+      </div>
+    </footer>
+  </main>
+  <aside class="panel">
+    <div class="tabs" id="tabs"></div>
+    <div class="pane" id="pane"></div>
+  </aside>
+</div>
+
+<div class="modal-bg" id="newModal">
+  <div class="modal">
+    <h2>新建群</h2>
+    <label>名字<input id="newName" placeholder="例如：首页性能优化"></label>
+    <label>目标（可选）<textarea id="newGoal" rows="2" placeholder="这件事要达成什么"></textarea></label>
+    <label>成员（至少一个智能体）<div class="pick" id="newPick"></div></label>
+    <div class="note">只有你和一个智能体也是一个群；之后随时可以邀请更多。</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="closeNew()">取消</button><button class="primary" onclick="createThread()">创建</button>
+    </div>
+  </div>
+</div>
+<div class="proto-bar">原型 · 数据均为示例 · 任务 #111</div>
+
+<script>
+const AGENTS = {
+  a: { name: "Aria", color: "#7c3aed", role: "产品与前端" },
+  b: { name: "Bolt", color: "#0891b2", role: "后端与基础设施" },
+  c: { name: "Cleo", color: "#db2777", role: "审阅与测试" },
+};
+const state = {
+  current: "t1", tab: "brief", view: "chat",
+  agentBusy: { a: null, b: null, c: null },
+  threads: [
+    { id: "t1", name: "首页首屏加载优化", status: "讨论中", members: ["a", "b"], target: ["a"], unread: 0,
+      goal: "首页 LCP 从 3.1s 降到 1.5s 以内，不改视觉。", decisions: ["先只动打包与图片，不碰 SSR", "PR 必须附前后 Lighthouse 截图"],
+      feed: [
+        { sys: "你创建了群，邀请了 Aria、Bolt" },
+        { me: true, text: "首页太慢了，先看看瓶颈在哪？@Aria @Bolt", to: ["a", "b"] },
+        { agent: "a", text: "前端侧：首屏同步加载了整个图标库（~380KB），hero 图是 2.4MB 的 PNG。换成按路径导入 + AVIF 能省一大半。" },
+        { agent: "b", text: "服务端：/api/v1/chat 快照 p95 420ms，主要是活跃回复查询；可以加个索引，但它不在 LCP 关键路径上，建议这次不做。" },
+        { me: true, text: "同意，这次只动打包和图片，不碰 SSR。@Aria 整理成任务吧，交给我那台 Mac 上的 Claude 做。", to: ["a"] },
+        { agent: "a", text: "好，我起草了一个任务，你看下：", draft: {
+            title: "首页首屏：图标按需导入 + hero 图转 AVIF",
+            goal: "LCP ≤ 1.5s（Lighthouse 移动端），视觉不变",
+            decisions: "只改打包与图片；不碰 SSR",
+            accept: "PR 附前后 Lighthouse 截图；bun run check 通过",
+            assignee: "MacBook · Paseo · claude" } },
+      ], tasks: [], artifacts: [] },
+    { id: "t2", name: "周报自动化", status: "执行中", members: ["c"], target: ["c"], unread: 2,
+      goal: "每周一 9 点把上周合并的 PR 汇总成周报。", decisions: ["用定时，不用远程电脑"],
+      feed: [{ sys: "你创建了群，邀请了 Cleo" }, { me: true, text: "上周的周报格式可以，就按这个来。", to: ["c"] }, { agent: "c", text: "好，我已经把它做成每周一 9:00 的定时，第一份预览在这：", artifact: "周报预览 v1" }],
+      tasks: [], artifacts: ["周报预览 v1"] },
+    { id: "dm-a", name: "Aria", dm: true, status: "讨论中", members: ["a"], target: ["a"], unread: 0, goal: "", decisions: [],
+      feed: [{ sys: "这是你和 Aria 原来的对话，迁移为私聊群，历史保留" }, { me: true, text: "记住：我喜欢简体中文回复。", to: ["a"] }, { agent: "a", text: "记下了。" }], tasks: [], artifacts: [] },
+    { id: "dm-b", name: "Bolt", dm: true, status: "讨论中", members: ["b"], target: ["b"], unread: 0, goal: "", decisions: [], feed: [{ sys: "这是你和 Bolt 原来的对话，迁移为私聊群，历史保留" }], tasks: [], artifacts: [] },
+    { id: "dm-c", name: "Cleo", dm: true, status: "讨论中", members: ["c"], target: ["c"], unread: 0, goal: "", decisions: [], feed: [{ sys: "这是你和 Cleo 原来的对话，迁移为私聊群，历史保留" }], tasks: [], artifacts: [] },
+    { id: "t9", name: "迁移到 pgvector trixie 镜像", status: "已完成", members: ["b"], target: ["b"], unread: 0, goal: "", decisions: [], feed: [{ sys: "群已标记完成 · 仍可继续聊，继续说话会回到「讨论中」" }], tasks: [{ n: 98, title: "切换 PostgreSQL 镜像", step: 4 }], artifacts: [] },
+  ],
+};
+let taskNo = 112;
+const T = () => state.threads.find((t) => t.id === state.current);
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const av = (k, cls = "") => `<span class="av ${cls}" style="background:${AGENTS[k].color}" title="${AGENTS[k].name}">${AGENTS[k].name[0]}</span>`;
+const me = (cls = "") => `<span class="av ${cls}" style="background:#3f3f46">我</span>`;
+const mentions = (s) => esc(s).replace(/@(Aria|Bolt|Cleo|所有人)/g, '<span class="mention">@$1</span>');
+const STEPS = ["排队", "运行中", "待验收", "已完成"];
+
+function busyLabel(k) {
+  const where = state.agentBusy[k];
+  if (!where) return { dot: "", text: "空闲" };
+  if (where === state.current) return { dot: "busy", text: "在本群工作" };
+  return { dot: "busy", text: "在《" + state.threads.find((t) => t.id === where).name + "》工作" };
+}
+
+function renderList() {
+  const groups = [["群", (t) => !t.dm && t.status !== "已完成"], ["私聊", (t) => t.dm], ["已完成", (t) => !t.dm && t.status === "已完成"]];
+  document.getElementById("threads").innerHTML = groups.map(([label, f]) => `<div class="section">${label}</div>` +
+    state.threads.filter(f).map((t) => {
+      const working = t.members.some((k) => state.agentBusy[k] === t.id);
+      return `<div class="row ${t.id === state.current ? "on" : ""}" onclick="openThread('${t.id}')">
+        <span class="stack">${t.members.slice(0, 3).map((k) => av(k)).join("")}</span>
+        <span class="name">${esc(t.name)}</span>
+        ${working ? '<span class="dot busy" title="有智能体在工作"></span>' : ""}
+        ${t.unread ? `<span class="badge">${t.unread}</span>` : ""}
+      </div>`;
+    }).join("")).join("");
+}
+
+function renderTop() {
+  const t = T();
+  document.getElementById("title").textContent = t.name;
+  const st = document.getElementById("state");
+  st.textContent = t.status;
+  st.className = "pill " + (t.status === "执行中" ? "exec" : t.status === "已完成" ? "done" : "");
+  document.getElementById("topMembers").innerHTML = t.members.map((k) => av(k)).join("");
+  const task = t.tasks[0];
+  document.getElementById("brief").innerHTML = t.dm ? `<span class="goal">私聊群 · 只有你和 ${t.name}；可以「邀请」把它变成多人群</span>` :
+    `<span class="goal"><b style="color:var(--fg)">目标</b>　${esc(t.goal || "还没写目标")}</span>` +
+    (task ? `<span class="pill exec">#${task.n} ${STEPS[task.step - 1]}</span>` : "") +
+    `<button class="ghost" onclick="draftTask()">起草任务</button>`;
+}
+
+function taskCard(task) {
+  return `<div class="card"><div class="hd">任务 #${task.n} <span style="font-weight:400">${esc(task.title)}</span><span style="flex:1"></span><span class="pill ${task.step === 4 ? "done" : "exec"}">${STEPS[task.step - 1]}</span></div>
+    <div class="bd"><div class="steps">${STEPS.map((_, i) => `<span class="${i < task.step ? "on" : ""}"></span>`).join("")}</div>
+    <div class="status">执行者：MacBook · Paseo · claude　·　${task.comments || 0} 条评论</div>
+    ${task.last ? `<div style="margin-top:6px">${esc(task.last)}</div>` : ""}
+    ${task.pr ? `<div class="ref"><span class="k">PR</span>akarachen/axp#240 首页首屏：图标按需导入 + AVIF</div>` : ""}
+    ${task.art ? `<div class="ref"><span class="k">Artifact</span>Lighthouse 前后对比 v1 <span style="flex:1"></span><a href="#" onclick="return false">预览</a></div>` : ""}
+    </div><div class="ft">
+      <button onclick="openTask(${task.n})">在侧栏查看</button>
+      <button onclick="replyExec(${task.n})">回复给执行者</button>
+      ${task.step === 3 ? `<button class="primary" onclick="accept(${task.n})">验收通过</button>` : ""}
+      ${task.step < 3 ? `<button class="ghost" onclick="advance(${task.n})">（原型：推进一步）</button>` : ""}
+    </div></div>`;
+}
+
+function renderFeed() {
+  const t = T();
+  const html = t.feed.map((m, i) => {
+    if (m.sys) return `<div class="sys">${esc(m.sys)}</div>`;
+    if (m.me) return `<div class="msg me"><div class="bubble">${m.toExec ? `<span class="pill exec">→ #${m.toExec} 执行者</span> ` : ""}${mentions(m.text)}</div></div>`;
+    if (m.taskRef) return `<div class="msg">${me("lg")}<div class="body"><div class="who">你 <span class="t">创建了任务</span></div>${taskCard(t.tasks.find((x) => x.n === m.taskRef))}</div></div>`;
+    const a = AGENTS[m.agent];
+    let extra = "";
+    if (m.draft && !m.draft.created) {
+      const d = m.draft;
+      extra = `<div class="card draft"><div class="hd">任务草稿 <span class="note" style="font-weight:400">· 未进看板，可直接改</span></div>
+        <div class="bd"><dl>
+          <dt>标题</dt><dd contenteditable="true">${esc(d.title)}</dd>
+          <dt>目标</dt><dd contenteditable="true">${esc(d.goal)}</dd>
+          <dt>决定</dt><dd contenteditable="true">${esc(d.decisions)}</dd>
+          <dt>验收</dt><dd contenteditable="true">${esc(d.accept)}</dd>
+          <dt>指派</dt><dd>${esc(d.assignee)} <a href="#" onclick="return false">更改</a></dd>
+          <dt>来源</dt><dd class="note">本群消息 2–6（创建时定稿为任务描述）</dd>
+        </dl></div>
+        <div class="ft"><button class="primary" onclick="createTask(${i})">创建任务</button><button onclick="splitTask(${i})">拆成两个</button><button class="ghost" onclick="discard(${i})">丢弃</button></div></div>`;
+    } else if (m.draft && m.draft.created) {
+      extra = `<div class="note" style="margin-top:6px">草稿已创建为 #${m.draft.created}（见下方卡片）</div>`;
+    }
+    if (m.artifact) extra += `<div class="ref"><span class="k">Artifact</span>${esc(m.artifact)}<span style="flex:1"></span><a href="#" onclick="return false">预览</a></div>`;
+    const st = m.pending ? (m.waitingElsewhere ? `<div class="status"><span class="dot off"></span>排队中 · ${a.name} 正在《${esc(m.waitingElsewhere)}》里工作，前面 1 条</div>`
+      : `<div class="status"><span class="dot busy"></span>工作中… <button class="ghost" style="padding:0 4px" onclick="stopOne(${i})">停止</button></div>`) : "";
+    return `<div class="msg">${av(m.agent, "lg")}<div class="body"><div class="who">${a.name} <span class="t">${m.order ? "回复 · 第 " + m.order + " 位" : a.role}</span></div>
+      <div class="text ${m.typing ? "typing" : ""}">${mentions(m.text || "")}</div>${st}${extra}</div></div>`;
+  }).join("");
+  const feed = document.getElementById("feed");
+  feed.innerHTML = html;
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function renderTo() {
+  const t = T();
+  const el = document.getElementById("to");
+  if (t.members.length === 1) {
+    el.innerHTML = `发给 <span class="chip">${av(t.members[0])}${AGENTS[t.members[0]].name}</span><span class="note">单智能体群：每条消息都发给它</span>`;
+    return;
+  }
+  el.innerHTML = "发给 " + t.members.map((k) => `<span class="chip ${t.target.includes(k) ? "" : "off"}" onclick="toggleTarget('${k}')">${av(k)}${AGENTS[k].name}</span>`).join("") +
+    `<span class="note hide-phone">默认是上一次的对象；没选中的成员能看到，但不会被唤醒</span>`;
+}
+
+function renderPanel() {
+  const t = T();
+  const tabs = [["brief", "简报"], ["members", "成员"], ["tasks", "任务"], ["art", "Artifact"]];
+  document.getElementById("tabs").innerHTML = `<button class="ghost panel-close" onclick="setView('chat')" aria-label="关闭">✕</button>` +
+    tabs.map(([k, l]) => `<button class="${state.tab === k ? "on" : ""}" onclick="state.tab='${k}';renderPanel()">${l}</button>`).join("");
+  let h = "";
+  if (state.tab === "brief") {
+    h = `<h3>目标</h3><div>${esc(t.goal || "—")}</div><h3>已定的决定</h3>` +
+      (t.decisions.length ? `<ul style="margin:0;padding-left:18px">${t.decisions.map((d) => `<li>${esc(d)}</li>`).join("")}</ul>` : "—") +
+      `<h3>状态</h3><div class="pick">${["讨论中", "执行中", "已完成"].map((s) => `<button class="${t.status === s ? "primary" : ""}" onclick="setStatus('${s}')">${s}</button>`).join("")}</div>
+      <h3>进行中的回复</h3><button onclick="stopAll()">全部停止</button><h3>设置</h3><label class="note"><input type="checkbox" style="width:auto"> 本群不写入长期记忆</label>
+      <div class="note" style="margin-top:8px">每个智能体在本群有独立的对话上下文；长期记忆按智能体跨群共享，召回时会标出来源群。</div>`;
+  } else if (state.tab === "members") {
+    h = `<h3>成员</h3><div class="member">${me()}<span class="name">你</span></div>` + t.members.map((k) => {
+      const b = busyLabel(k);
+      return `<div class="member">${av(k)}<span class="name">${AGENTS[k].name}<div class="status"><span class="dot ${b.dot}"></span>${b.text}</div></span>${t.members.length > 1 ? `<button class="ghost" onclick="removeMember('${k}')">移除</button>` : ""}</div>`;
+    }).join("") + `<h3>邀请</h3>` + Object.keys(AGENTS).filter((k) => !t.members.includes(k)).map((k) => `<div class="member">${av(k)}<span class="name">${AGENTS[k].name}<div class="status">${AGENTS[k].role}</div></span><button onclick="invite('${k}')">邀请</button></div>`).join("") +
+      `<div class="note" style="margin-top:10px">被邀请的智能体第一次被点名时，会先读到简报和最近的消息。移除后它不再被唤醒，发言保留。</div>`;
+  } else if (state.tab === "tasks") {
+    h = t.tasks.length ? t.tasks.map((task) => `<h3>#${task.n} ${esc(task.title)}</h3><div class="pill ${task.step === 4 ? "done" : "exec"}" style="display:inline-block">${STEPS[task.step - 1]}</div>
+      <div class="timeline" style="margin-top:10px">
+        <div><span class="t">你</span> 从群《${esc(t.name)}》创建，指派给 MacBook · Paseo · claude</div>
+        ${task.step >= 2 ? `<div><span class="t">系统</span> 运行开始：新 worktree axp/${task.n}-home-lcp</div>` : ""}
+        ${task.comments ? `<div><span class="t">远程智能体</span> ${esc(task.last || "")}</div>` : ""}
+        ${task.pr ? `<div><span class="t">交付物</span> PR akarachen/axp#240</div>` : ""}
+        ${task.art ? `<div><span class="t">Artifact</span> Lighthouse 前后对比 v1</div>` : ""}
+        ${task.step === 4 ? `<div><span class="t">你</span> 验收通过 · 收尾：归档 worktree</div>` : ""}
+      </div><div class="note">时间线就是任务的记录；群里只有一张随它更新的卡片。</div>`).join("")
+      : `<div class="note">这个群还没有派出任务。点顶部「起草任务」，或对智能体说「整理成任务」。</div>`;
+  } else {
+    const arts = [...t.artifacts, ...t.tasks.filter((x) => x.art).map(() => "Lighthouse 前后对比 v1（#" + t.tasks[0].n + "）")];
+    h = arts.length ? arts.map((a) => `<div class="ref"><span class="k">Artifact</span>${esc(a)}</div>`).join("") : `<div class="note">还没有 Artifact。</div>`;
+  }
+  document.getElementById("pane").innerHTML = h;
+}
+
+function render() { renderList(); renderTop(); renderFeed(); renderTo(); renderPanel(); }
+
+function setView(v) {
+  state.view = v;
+  document.getElementById("app").className = "app v-" + v;
+}
+function openThread(id) { state.current = id; T().unread = 0; setView("chat"); render(); }
+function toggleTarget(k) {
+  const t = T();
+  t.target = t.target.includes(k) ? t.target.filter((x) => x !== k) : [...t.target, k];
+  if (!t.target.length) t.target = [k];
+  renderTo();
+}
+function setStatus(s) { T().status = s; T().feed.push({ sys: "你把群标记为「" + s + "」" }); render(); }
+function invite(k) { const t = T(); t.members.push(k); t.feed.push({ sys: "你邀请了 " + AGENTS[k].name + "（它第一次被点名时会先读简报和最近消息）" }); if (t.dm) { t.dm = false; t.name = t.name + " 等"; } render(); }
+function removeMember(k) { const t = T(); t.members = t.members.filter((x) => x !== k); t.target = t.target.filter((x) => x !== k); if (!t.target.length) t.target = [t.members[0]]; t.feed.push({ sys: "你移除了 " + AGENTS[k].name + "，它的发言保留" }); render(); }
+
+const REPLIES = {
+  a: "从前端看可以，我顺手把首屏骨架也查了，没有额外阻塞。",
+  b: "同意。我这边不改服务端，等 PR 出来我看一下构建产物大小。",
+  c: "我可以负责验收：对比 Lighthouse 截图，并跑一遍 bun run check。",
+};
+function send() {
+  const box = document.getElementById("input");
+  const text = box.value.trim();
+  if (!text) return;
+  const t = T();
+  if (t.status === "已完成") { t.status = "讨论中"; t.feed.push({ sys: "继续讨论 · 群回到「讨论中」" }); }
+  const named = Object.keys(AGENTS).filter((k) => t.members.includes(k) && text.includes("@" + AGENTS[k].name));
+  const all = text.includes("@所有人");
+  const targets = all ? [...t.members] : named.length ? named : t.target;
+  t.target = targets;
+  t.feed.push({ me: true, text, to: targets });
+  // One placeholder per target, in the order they were named: the display order never jumps.
+  targets.forEach((k, idx) => {
+    const elsewhere = state.agentBusy[k] && state.agentBusy[k] !== t.id ? state.threads.find((x) => x.id === state.agentBusy[k]).name : null;
+    const m = { agent: k, text: "", pending: true, typing: !elsewhere, waitingElsewhere: elsewhere, order: targets.length > 1 ? idx + 1 : 0 };
+    t.feed.push(m);
+    const start = elsewhere ? 2600 : 0;
+    setTimeout(() => {
+      m.waitingElsewhere = null; m.typing = true; state.agentBusy[k] = t.id; render();
+      const full = REPLIES[k]; let n = 0;
+      const tick = setInterval(() => {
+        if (m.stopped) { clearInterval(tick); return; }
+        n += 3; m.text = full.slice(0, n);
+        if (n >= full.length) { clearInterval(tick); m.pending = false; m.typing = false; state.agentBusy[k] = null; }
+        if (state.current === t.id) render(); else { t.unread++; renderList(); }
+      }, 90 + idx * 40);
+    }, start + 400);
+  });
+  box.value = "";
+  hideMenu();
+  render();
+}
+function stopOne(i) { const m = T().feed[i]; m.stopped = true; m.pending = false; m.typing = false; m.text += "（已停止）"; state.agentBusy[m.agent] = null; render(); }
+function stopAll() { T().feed.forEach((m, i) => { if (m.pending) stopOne(i); }); }
+
+function draftTask() {
+  const t = T();
+  const k = t.target[0];
+  t.feed.push({ agent: k, text: "根据目前的讨论起草了一个任务：", draft: { title: t.name, goal: t.goal || "（从讨论里整理）", decisions: t.decisions.join("；") || "—", accept: "附截图；bun run check 通过", assignee: "MacBook · Paseo · claude" } });
+  render();
+}
+function readDraft(i) {
+  const dds = document.querySelectorAll("#feed .card.draft dd");
+  const d = T().feed[i].draft;
+  if (dds.length >= 4) { d.title = dds[0].textContent; d.goal = dds[1].textContent; d.decisions = dds[2].textContent; d.accept = dds[3].textContent; }
+  return d;
+}
+function createTask(i) {
+  const t = T();
+  const d = readDraft(i);
+  const task = { n: taskNo++, title: d.title, step: 1, comments: 0 };
+  d.created = task.n;
+  t.tasks.push(task);
+  t.feed.push({ taskRef: task.n });
+  t.status = "执行中";
+  state.tab = "tasks";
+  render();
+}
+function splitTask(i) {
+  const t = T(); const d = readDraft(i);
+  t.feed[i].draft = { ...d, title: "首页首屏：图标按需导入" };
+  t.feed.push({ agent: t.feed[i].agent, text: "拆出的第二个：", draft: { ...d, title: "首页首屏：hero 图转 AVIF" } });
+  render();
+}
+function discard(i) { T().feed.splice(i, 1); render(); }
+function advance(n) {
+  const task = T().tasks.find((x) => x.n === n);
+  task.step++;
+  if (task.step === 2) { task.comments = 1; task.last = "已开 worktree，开始改图标导入。"; }
+  if (task.step === 3) { task.comments = 2; task.last = "完成：LCP 3.1s → 1.3s，PR 和对比截图已附。"; task.pr = true; task.art = true; }
+  render();
+}
+function accept(n) {
+  const t = T(); const task = t.tasks.find((x) => x.n === n); task.step = 4;
+  t.feed.push({ sys: "#" + n + " 已完成 · 群里的任务都完成了，要把群标记为「已完成」吗？" });
+  render();
+}
+function replyExec(n) {
+  const box = document.getElementById("input");
+  box.value = "";
+  box.placeholder = "这条会作为 #" + n + " 的评论发给执行者（会触发一次远程运行）";
+  box.focus();
+  box.dataset.exec = n;
+}
+function openTask() { state.tab = "tasks"; renderPanel(); setView("panel"); if (window.innerWidth > 760) setView("chat"); }
+
+// the composer: Enter sends, @ opens the member menu
+const input = document.getElementById("input");
+input.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    if (input.dataset.exec) {
+      const n = +input.dataset.exec; const t = T(); const task = t.tasks.find((x) => x.n === n);
+      if (input.value.trim()) { t.feed.push({ me: true, text: input.value.trim(), toExec: n }); task.comments = (task.comments || 0) + 1; task.last = "（收到你的评论，排了一次新的运行）"; }
+      delete input.dataset.exec; input.placeholder = "说点什么，@ 选择发给谁…"; input.value = ""; render(); return;
+    }
+    send();
+  }
+});
+input.addEventListener("input", () => {
+  const m = /@([^\s@]*)$/.exec(input.value.slice(0, input.selectionStart));
+  if (!m) return hideMenu();
+  const t = T();
+  const opts = [...t.members.map((k) => ({ k, label: AGENTS[k].name })), ...(t.members.length > 1 ? [{ k: "all", label: "所有人" }] : [])].filter((o) => o.label.toLowerCase().startsWith(m[1].toLowerCase()));
+  if (!opts.length) return hideMenu();
+  const menu = document.getElementById("menu");
+  menu.hidden = false;
+  menu.innerHTML = opts.map((o) => `<div onmousedown="pick('${o.label}', ${m[1].length})">${o.k === "all" ? "👥" : av(o.k)} ${o.label}</div>`).join("");
+});
+function pick(label, len) {
+  const pos = input.selectionStart;
+  input.value = input.value.slice(0, pos - len) + label + " " + input.value.slice(pos);
+  hideMenu(); input.focus();
+}
+function hideMenu() { document.getElementById("menu").hidden = true; }
+
+// new thread
+function openNew() {
+  document.getElementById("newPick").innerHTML = Object.keys(AGENTS).map((k) => `<span class="chip off" data-k="${k}" onclick="this.classList.toggle('off')">${av(k)}${AGENTS[k].name}</span>`).join("");
+  document.getElementById("newModal").classList.add("show");
+  document.getElementById("newName").focus();
+}
+function closeNew() { document.getElementById("newModal").classList.remove("show"); }
+function createThread() {
+  const name = document.getElementById("newName").value.trim();
+  const members = [...document.querySelectorAll("#newPick .chip:not(.off)")].map((e) => e.dataset.k);
+  if (!name || !members.length) { alert("要有名字和至少一个智能体"); return; }
+  const id = "t" + Date.now();
+  state.threads.unshift({ id, name, status: "讨论中", members, target: [members[0]], unread: 0, goal: document.getElementById("newGoal").value.trim(), decisions: [],
+    feed: [{ sys: "你创建了群，邀请了 " + members.map((k) => AGENTS[k].name).join("、") }], tasks: [], artifacts: [] });
+  closeNew(); openThread(id);
+}
+
+// Something else keeps Bolt busy elsewhere, to show cross-thread queueing.
+state.agentBusy.b = "t2";
+setTimeout(() => { if (state.agentBusy.b === "t2") { state.agentBusy.b = null; render(); } }, 15000);
+const params = new URLSearchParams(location.search);
+if (params.get("thread")) state.current = params.get("thread");
+if (params.get("tab")) state.tab = params.get("tab");
+render();
+setView(params.get("view") || "chat");
+</script>
+</body>
+</html>
