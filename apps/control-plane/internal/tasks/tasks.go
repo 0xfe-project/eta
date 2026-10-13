@@ -83,8 +83,6 @@ type Service struct {
 
 type taskRow struct {
 	GroupID        *string   `db:"group_id"`
-	SourceFrom     *int64    `db:"source_from"`
-	SourceTo       *int64    `db:"source_to"`
 	ID             string    `db:"id"`
 	Number         int64     `db:"number"`
 	Title          string    `db:"title"`
@@ -208,19 +206,17 @@ type TaskCreator struct {
 }
 
 type Task struct {
-	GroupID    *string       `json:"group_id" nullable:"true"`
-	SourceFrom *int64        `json:"source_from" nullable:"true"`
-	SourceTo   *int64        `json:"source_to" nullable:"true"`
-	ID         string        `json:"id"`
-	Number     int64         `json:"number"`
-	Title      string        `json:"title"`
-	Status     string        `json:"status" enum:"backlog,todo,in_progress,in_review,done,blocked,cancelled"`
-	Assignee   TaskAssignee  `json:"assignee"`
-	CreatedBy  TaskCreator   `json:"created_by"`
-	RunStatus  *string       `json:"run_status" nullable:"true" enum:"queued,starting,running,completed,failed,cancelled" doc:"The assignee's latest run's status (assisting runs aside)."`
-	Comments   int64         `json:"comments"`
-	CreatedAt  jsontime.Time `json:"created_at"`
-	UpdatedAt  jsontime.Time `json:"updated_at"`
+	GroupID   *string       `json:"group_id" nullable:"true"`
+	ID        string        `json:"id"`
+	Number    int64         `json:"number"`
+	Title     string        `json:"title"`
+	Status    string        `json:"status" enum:"backlog,todo,in_progress,in_review,done,blocked,cancelled"`
+	Assignee  TaskAssignee  `json:"assignee"`
+	CreatedBy TaskCreator   `json:"created_by"`
+	RunStatus *string       `json:"run_status" nullable:"true" enum:"queued,starting,running,completed,failed,cancelled" doc:"The assignee's latest run's status (assisting runs aside)."`
+	Comments  int64         `json:"comments"`
+	CreatedAt jsontime.Time `json:"created_at"`
+	UpdatedAt jsontime.Time `json:"updated_at"`
 }
 
 type TaskActor struct {
@@ -269,7 +265,7 @@ type TaskDetail struct {
 func (r *taskRow) public() Task {
 	t := Task{
 		ID: r.ID, Number: r.Number, Title: r.Title, Status: r.Status,
-		GroupID: r.GroupID, SourceFrom: r.SourceFrom, SourceTo: r.SourceTo,
+		GroupID:   r.GroupID,
 		RunStatus: r.RunStatus, Comments: r.Comments,
 		CreatedAt: jsontime.From(r.CreatedAt), UpdatedAt: jsontime.From(r.UpdatedAt),
 		Assignee:  TaskAssignee{Kind: r.Assignee, ComputerID: r.ComputerID, ComputerName: r.ComputerName, Runtime: r.Runtime, Provider: r.Provider, Place: r.Place},
@@ -292,9 +288,15 @@ func (a *activityRow) public() TaskActivity {
 
 // --- reads -------------------------------------------------------------------------------
 
-// List is every task, most recently updated first.
-func (s *Service) List(ctx context.Context, db pg.DB) ([]Task, error) {
-	rows, err := pg.All[taskRow](ctx, db, taskSelect+" ORDER BY t.updated_at DESC")
+// List returns tasks most recently updated first, optionally limited to a group.
+func (s *Service) List(ctx context.Context, db pg.DB, groupID string) ([]Task, error) {
+	query := taskSelect
+	args := []any{}
+	if groupID != "" {
+		query += " WHERE t.group_id=$1"
+		args = append(args, groupID)
+	}
+	rows, err := pg.All[taskRow](ctx, db, query+" ORDER BY t.updated_at DESC", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -495,8 +497,6 @@ func assigneeData(r *taskRow) map[string]any {
 
 type Input struct {
 	GroupID     *string
-	SourceFrom  *int64
-	SourceTo    *int64
 	Title       string
 	Description string
 	Status      string
@@ -522,7 +522,7 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, in Input, by Actor) (*T
 		return nil, err
 	}
 	if in.GroupID != nil {
-		if err := setGroup(ctx, tx, id, *in.GroupID, in.SourceFrom, in.SourceTo); err != nil {
+		if err := setGroup(ctx, tx, id, *in.GroupID); err != nil {
 			return nil, err
 		}
 	}
@@ -566,7 +566,7 @@ func (s *Service) Update(ctx context.Context, tx pgx.Tx, ref string, c Changes, 
 		return nil, err
 	}
 	if c.GroupID != nil && deref(r.GroupID) != *c.GroupID {
-		if err := setGroup(ctx, tx, r.ID, *c.GroupID, nil, nil); err != nil {
+		if err := setGroup(ctx, tx, r.ID, *c.GroupID); err != nil {
 			return nil, err
 		}
 		if err := record(ctx, tx, r.ID, nil, "group", by, nil, map[string]any{"from": r.GroupID, "to": *c.GroupID}); err != nil {

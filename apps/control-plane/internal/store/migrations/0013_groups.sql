@@ -32,21 +32,28 @@ ALTER TABLE agent_command ADD COLUMN root_message_id uuid;
 ALTER TABLE message ADD COLUMN group_id uuid REFERENCES chat_group(id);
 ALTER TABLE message ADD COLUMN kind text NOT NULL DEFAULT 'message' CHECK (kind IN ('message', 'mention', 'system', 'task_draft', 'task_card'));
 ALTER TABLE message ADD COLUMN data jsonb NOT NULL DEFAULT '{}';
-ALTER TABLE message ADD COLUMN mention_count integer NOT NULL DEFAULT 0 CHECK (mention_count BETWEEN 0 AND 5);
-ALTER TABLE message ADD COLUMN chain_stopped boolean NOT NULL DEFAULT false;
 ALTER TABLE message ALTER COLUMN agent_id DROP NOT NULL;
 ALTER TABLE message ALTER COLUMN command_id DROP NOT NULL;
 ALTER TABLE message DROP CONSTRAINT message_role_shape_valid;
+ALTER TABLE message ADD CONSTRAINT message_author_valid CHECK (
+    CASE
+        WHEN kind IN ('system', 'task_card') THEN agent_id IS NULL AND role = 'assistant'
+        WHEN kind IN ('mention', 'task_draft') THEN agent_id IS NOT NULL AND role = 'assistant'
+        ELSE (role = 'user') = (agent_id IS NULL)
+    END
+);
 ALTER TABLE message DROP CONSTRAINT message_reply_to_same_turn_fk;
-ALTER TABLE message DROP CONSTRAINT message_role_valid;
-ALTER TABLE message ADD CONSTRAINT message_role_valid CHECK (role IN ('user', 'assistant', 'system'));
 ALTER TABLE agent_command ADD CONSTRAINT command_root_message_fk FOREIGN KEY (root_message_id) REFERENCES message(id) DEFERRABLE INITIALLY DEFERRED;
 ALTER TABLE interaction ADD COLUMN group_id uuid REFERENCES chat_group(id);
 ALTER TABLE chat_attachment DROP COLUMN agent_id;
 ALTER TABLE chat_attachment ADD COLUMN group_id uuid REFERENCES chat_group(id);
 CREATE INDEX message_group_seq ON message (group_id, seq);
-CREATE INDEX message_group_search ON message USING gin (to_tsvector('simple', content::text || ' ' || data::text));
 CREATE INDEX command_group_active ON agent_command (group_id) WHERE status IN ('queued', 'running', 'waiting_approval');
 CREATE INDEX chat_attachment_group ON chat_attachment (group_id);
 ALTER TABLE ui_event DROP CONSTRAINT ui_event_type_valid;
 ALTER TABLE ui_event ADD CONSTRAINT ui_event_type_valid CHECK (type IN ('agent.updated','agent.deleted','message.updated','interaction.updated','group.updated'));
+
+ALTER TABLE task ADD COLUMN group_id uuid REFERENCES chat_group(id);
+CREATE INDEX task_group ON task(group_id) WHERE group_id IS NOT NULL;
+CREATE UNIQUE INDEX message_group_task_card ON message(group_id, (data->>'task_id')) WHERE kind = 'task_card';
+ALTER TABLE artifact ADD COLUMN group_id uuid REFERENCES chat_group(id);

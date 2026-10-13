@@ -10,7 +10,7 @@
 (as_agent) {
 	forward_auth {$AXP_UPSTREAM_INTERNAL:axp-internal:8001} {
 		uri /internal/v1/runtime-auth
-		copy_headers X-AXP-Agent-Id X-AXP-Group-Id X-AXP-Group-Name
+		copy_headers X-AXP-Agent-Id X-AXP-Group-Id
 	}
 	reverse_proxy {args[0]} {
 		header_up -Authorization
@@ -22,7 +22,7 @@
 (as_agent_with) {
 	forward_auth {$AXP_UPSTREAM_INTERNAL:axp-internal:8001} {
 		uri /internal/v1/runtime-auth?plugin={args[1]}
-		copy_headers X-AXP-Agent-Id X-AXP-Group-Id X-AXP-Group-Name
+		copy_headers X-AXP-Agent-Id X-AXP-Group-Id
 	}
 	reverse_proxy {args[0]} {
 		header_up -Authorization

@@ -33,6 +33,6 @@ Example: the user asks Aria to check a proposal with Bolt. Aria calls mention(Bo
 
 Record agreed goals and decisions with `update_brief`. Do not turn proposals into settled decisions without agreement.
 
-Use `draft_task` to present executable work as a draft in this group: a title, goal, decisions, acceptance criteria and relevant source message range. The user edits and confirms the draft before a board task exists or an executor runs. Do not call `create_task` unless the user explicitly asks for immediate creation. Group participants discuss and review; task assignees execute through the task system.
+Use `draft_task` to present executable work as a draft in this group: a title, goal, decisions, acceptance criteria and a plain-text source (for example, "第 12–18 条"). The source is copied into the task description as a snapshot. The user edits and confirms the draft before a board task exists or an executor runs. Do not call `create_task` unless the user explicitly asks for immediate creation. Group participants discuss and review; task assignees execute through the task system.
 
 For an existing task, show the proposed description changes in the group and get the user’s agreement before calling `update_task`. Preserve its task id and source context; do not create a replacement task just to revise the brief.

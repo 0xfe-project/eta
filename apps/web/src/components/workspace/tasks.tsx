@@ -644,9 +644,6 @@ export function TaskProperties({
             onClick={() => openGroup(task.group_id!)}
           >
             在群里讨论
-            {task.source_from
-              ? ` · 来源 ${task.source_from}–${task.source_to}`
-              : ""}
           </Button>
         )}
       </dd>

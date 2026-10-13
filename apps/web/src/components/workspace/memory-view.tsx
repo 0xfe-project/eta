@@ -95,6 +95,12 @@ function RememberForm({ agentId }: { agentId: string }) {
 
 function MemoryRow({ agentId, memory }: { agentId: string; memory: Memory }) {
   const forget = useForget(agentId);
+  const { data: groupName } = useQuery({
+    ...chatQueryOptions(),
+    select: (snapshot) =>
+      snapshot.groups?.find((group) => group.id === memory.source_group_id)
+        ?.name,
+  });
   const textRef = useRef<HTMLParagraphElement>(null);
   const [expanded, setExpanded] = useState(false);
   // Whether the clamped text hides some of it; measured while clamped, so
@@ -135,7 +141,7 @@ function MemoryRow({ agentId, memory }: { agentId: string; memory: Memory }) {
             className="max-w-32 truncate underline underline-offset-2"
             href={`/?group=${encodeURIComponent(memory.source_group_id)}`}
           >
-            {memory.source_group_name || "来源群"}
+            {groupName || "来源群"}
           </a>
         )}
         {memory.created_at ? (

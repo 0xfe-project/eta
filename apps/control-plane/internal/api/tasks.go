@@ -126,7 +126,7 @@ func registerTasks(api huma.API, d *Deps) {
 
 	huma.Register(api, taskOp("listTasks", http.MethodGet, "/api/v1/tasks", "Every task, and who they can be assigned to", 200, "tasks"),
 		func(ctx context.Context, _ *struct{}) (*httpapi.Body[TaskList], error) {
-			list, err := s.List(ctx, d.DB)
+			list, err := s.List(ctx, d.DB, "")
 			if err != nil {
 				return nil, err
 			}

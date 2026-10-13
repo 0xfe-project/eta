@@ -9,7 +9,7 @@ runtime 容器
       .mcp.json  ── MCP（streamable HTTP）──┐  Authorization: Bearer <runtime key>
       hooks      ── HTTP ──────────────────┤
                                            ▼
-runtime 网关 /memory/*  forward_auth → X-AXP-Agent-Id、X-AXP-Group-Id、X-AXP-Group-Name
+runtime 网关 /memory/*  forward_auth → X-AXP-Agent-Id、X-AXP-Group-Id
                                            ▼
 memory-service
   MemoryProvider → Mem0Provider（mem0 作为库）
@@ -44,9 +44,9 @@ mem0 v2 只追加不改写：同一事实的新说法会成为新记忆，过时
 
 ## 来源群
 
-长期记忆仍按智能体共享，跨群召回不加群过滤。`remember` 和 `capture` 从 runtime 网关的 `X-AXP-Group-Id` 取来源群，`X-AXP-Group-Name` 是当时的群名（URL 编码，避免中文直接进入 HTTP 头）。来源在接收请求时记下，再跟随后台抽取入队；模型和请求正文不能指定来源。
+长期记忆仍按智能体共享，跨群召回不加群过滤。`remember` 和 `capture` 从 runtime 网关的 `X-AXP-Group-Id` 取来源群。来源在接收请求时记下，再跟随后台抽取入队；模型和请求正文不能指定来源。
 
-mem0 metadata 保存 `source_group_id`、`source_group_name`，公开记忆形状和 hook 召回文本带上它们。手动添加的记忆没有来源群。Web 显示可跳回群的来源名，GET 的 `group_id=` 可与 `source=`、`q=` 组合，存储先过滤再应用条数上限。skill 要求引用其他群的事实时说明来源，不把它当作当前群已经达成的决定。不写 `MEMORY.md`，不为群另建记忆库。
+mem0 metadata 和公开记忆形状只保存 `source_group_id`。Web 按群列表查当前名称，召回 hook 将来源 id 交给控制面的 `POST /groups/names`，仅查询这个智能体曾参与的群名；群改名后下次显示或召回就使用新名字，不在记忆中保留旧名。手动添加的记忆没有来源群。Web 显示可跳回群的来源名，GET 的 `group_id=` 可与 `source=`、`q=` 组合，存储先过滤再应用条数上限。skill 要求引用其他群的事实时说明来源，不把它当作当前群已经达成的决定。不写 `MEMORY.md`，不为群另建记忆库。
 
 ## 隔离
 

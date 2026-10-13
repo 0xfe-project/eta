@@ -181,7 +181,7 @@ type Message struct {
 	Data      map[string]any `json:"data"`
 	ID        string         `json:"id"`
 	AgentID   string         `json:"agent_id"`
-	Role      string         `json:"role" enum:"user,assistant,system"`
+	Role      string         `json:"role" enum:"user,assistant"`
 	ReplyToID *string        `json:"reply_to_id"`
 	Status    string         `json:"status" enum:"queued,responding,waiting_for_input,stopping,completed,stopped,failed"`
 	Revision  int64          `json:"revision"`

@@ -23,6 +23,7 @@ import { useGroupActions } from "@/queries/groups";
 import { useTasks, useUpdateTask } from "@/queries/tasks";
 import { ActivityRefCard } from "./activity-ref";
 import { AgentAvatar, AgentStatus } from "./agent-identity";
+import { when } from "./routine-format";
 import { useAgents } from "./use-agents";
 import { useGroups, useOpenGroup } from "./use-groups";
 
@@ -194,7 +195,17 @@ export function GroupList({ compact = false }: { compact?: boolean }) {
             >
               <GroupAvatars group={g} />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm">{g.name}</span>
+                <span className="flex items-center justify-between gap-2">
+                  <span className="truncate text-sm">{g.name}</span>
+                  {!compact && g.last_message_at && (
+                    <time
+                      dateTime={g.last_message_at}
+                      className="shrink-0 text-xs text-muted-foreground tabular-nums"
+                    >
+                      {when(g.last_message_at).replace(/^今天 /u, "")}
+                    </time>
+                  )}
+                </span>
                 {!compact && (
                   <span className="mt-1 block truncate text-xs text-muted-foreground">
                     {g.preview || (g.kind === "direct" ? "私聊" : "还没有消息")}

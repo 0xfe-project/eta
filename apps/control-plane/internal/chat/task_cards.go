@@ -17,8 +17,7 @@ type DraftTaskInput struct {
 	Goal       string `json:"goal" maxLength:"10000"`
 	Decided    string `json:"decided" maxLength:"10000"`
 	Acceptance string `json:"acceptance" maxLength:"10000"`
-	SourceFrom int64  `json:"source_from,omitempty" minimum:"0"`
-	SourceTo   int64  `json:"source_to,omitempty" minimum:"0"`
+	Source     string `json:"source,omitempty" maxLength:"1000" jsonschema:"Relevant message range as plain text, e.g. 第12–18条. Defaults to the message that woke you through the present."`
 }
 
 func (s *Service) DraftTask(ctx context.Context, tx pgx.Tx, groupID, agentID string, in DraftTaskInput) (*Message, error) {
@@ -36,31 +35,18 @@ func (s *Service) DraftTask(ctx context.Context, tx pgx.Tx, groupID, agentID str
 	if g.Archived || strings.TrimSpace(in.Title) == "" || len([]rune(in.Title)) > 200 || strings.TrimSpace(in.Goal) == "" || strings.TrimSpace(in.Acceptance) == "" {
 		return nil, apierr.New(422, "INVALID_DRAFT", "草稿需要标题、目标和验收标准。")
 	}
-	var last int64
-	if err = tx.QueryRow(ctx, `SELECT COALESCE(max(seq),0) FROM message WHERE group_id=$1`, groupID).Scan(&last); err != nil {
-		return nil, err
-	}
-	if in.SourceFrom == 0 && in.SourceTo == 0 {
-		if err = tx.QueryRow(ctx, `SELECT seq FROM message WHERE id=$1`, c.RootMessageID).Scan(&in.SourceFrom); err != nil {
+	if strings.TrimSpace(in.Source) == "" {
+		var first, last int64
+		if err = tx.QueryRow(ctx, `SELECT seq,(SELECT max(seq) FROM message WHERE group_id=$2) FROM message WHERE id=$1`, c.RootMessageID, groupID).Scan(&first, &last); err != nil {
 			return nil, err
 		}
-		in.SourceTo = last
+		in.Source = fmt.Sprintf("第 %d–%d 条", first, last)
 	}
-	if in.SourceFrom <= 0 || in.SourceTo < in.SourceFrom || in.SourceTo > last {
-		return nil, apierr.New(422, "INVALID_SOURCE", "来源消息范围无效。")
-	}
-	valid, err := pg.Exists(ctx, tx, `SELECT 1 FROM message a JOIN message b ON b.group_id=a.group_id WHERE a.group_id=$1 AND a.seq=$2 AND b.seq=$3`, groupID, in.SourceFrom, in.SourceTo)
-	if err != nil {
-		return nil, err
-	}
-	if !valid {
-		return nil, apierr.New(422, "INVALID_SOURCE", "来源消息范围无效。")
-	}
-	desc := "## 目标\n\n" + in.Goal + "\n\n## 已决定\n\n" + in.Decided + "\n\n## 验收标准\n\n" + in.Acceptance
+	desc := "## 目标\n\n" + in.Goal + "\n\n## 已决定\n\n" + in.Decided + "\n\n## 验收标准\n\n" + in.Acceptance + fmt.Sprintf("\n\n来源：群《%s》%s。", g.Name, in.Source)
 	if len([]rune(desc)) > 20000 {
 		return nil, apierr.New(422, "INVALID_DRAFT", "草稿正文不能超过 20000 字。")
 	}
-	m, err := insertMessage(ctx, tx, g, pg.NewID(), &agentID, nil, &c.RootMessageID, "assistant", "task_draft", []Block{}, map[string]any{"title": strings.TrimSpace(in.Title), "description": desc, "source_from": in.SourceFrom, "source_to": in.SourceTo})
+	m, err := insertMessage(ctx, tx, g, pg.NewID(), &agentID, nil, &c.RootMessageID, "assistant", "task_draft", []Block{}, map[string]any{"title": strings.TrimSpace(in.Title), "description": desc})
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +82,7 @@ func TaskDraft(ctx context.Context, tx pgx.Tx, groupID, messageID string) (*Mess
 
 // ConfirmTaskDraft turns the original proposal into the group's one live task card.
 func ConfirmTaskDraft(ctx context.Context, tx pgx.Tx, messageID, taskID string) error {
-	if _, err := tx.Exec(ctx, `UPDATE message SET kind='task_card',data=jsonb_build_object('task_id',$2::text) WHERE id=$1`, messageID, taskID); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE message SET kind='task_card',agent_id=NULL,data=jsonb_build_object('task_id',$2::text) WHERE id=$1`, messageID, taskID); err != nil {
 		return err
 	}
 	return SyncTaskCard(ctx, tx, taskID)
@@ -153,7 +139,7 @@ func SyncTaskCard(ctx context.Context, tx pgx.Tx, taskID string) error {
 		if err = json.Unmarshal(data, &card); err != nil {
 			return err
 		}
-		if _, err = insertMessage(ctx, tx, g, pg.NewID(), nil, nil, nil, "system", "task_card", []Block{}, card); err != nil {
+		if _, err = insertMessage(ctx, tx, g, pg.NewID(), nil, nil, nil, RoleAssistant, "task_card", []Block{}, card); err != nil {
 			return err
 		}
 		return touchGroup(ctx, tx, *groupID)
@@ -173,7 +159,7 @@ func TaskReplyNotice(ctx context.Context, tx pgx.Tx, groupID, taskID string, num
 	if err = LockConversation(ctx, tx, g.ConversationID); err != nil {
 		return err
 	}
-	if _, err = insertMessage(ctx, tx, g, "", nil, nil, nil, "system", "system", []Block{textBlock(fmt.Sprintf("已转给 #%d 的执行者。", number))}, map[string]any{"task_id": taskID}); err != nil {
+	if _, err = insertMessage(ctx, tx, g, "", nil, nil, nil, RoleAssistant, "system", []Block{textBlock(fmt.Sprintf("已转给 #%d 的执行者。", number))}, map[string]any{"task_id": taskID}); err != nil {
 		return err
 	}
 	return touchGroup(ctx, tx, groupID)

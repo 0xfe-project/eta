@@ -43,8 +43,7 @@ func registerGroups(api huma.API, d *Deps) {
 			if err = chat.ConfirmTaskDraft(ctx, tx, draft.ID, task.ID); err != nil {
 				return nil, err
 			}
-			from, to := int64(draft.Data["source_from"].(float64)), int64(draft.Data["source_to"].(float64))
-			return d.Tasks.LinkGroup(ctx, tx, task.ID, in.GroupID, &from, &to)
+			return d.Tasks.LinkGroup(ctx, tx, task.ID, in.GroupID)
 		})
 		if err != nil {
 			return nil, err
@@ -65,7 +64,7 @@ func registerGroups(api huma.API, d *Deps) {
 		})
 	})
 	huma.Register(api, op("getGroup", http.MethodGet, "/api/v1/groups/{group_id}", "A group and its participants", 200, "chat"), func(ctx context.Context, in *GroupPath) (*httpapi.Body[chat.Group], error) {
-		g, err := s.Group(ctx, d.DB, in.GroupID)
+		g, err := chat.GetGroup(ctx, d.DB, in.GroupID)
 		if err != nil {
 			return nil, err
 		}

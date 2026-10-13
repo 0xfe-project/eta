@@ -18,7 +18,6 @@ the path: the user sees and edits every agent's memories.
 import logging
 import queue
 import threading
-from urllib.parse import unquote_plus
 
 import anyio
 from mcp.server.fastmcp import Context, FastMCP
@@ -75,7 +74,8 @@ def create_app(provider: MemoryProvider):
                 [message],
                 source="agent",
                 infer=False,
-                **_group(ctx.request_context.request),
+                group_id=ctx.request_context.request.headers.get("X-AXP-Group-Id")
+                or None,
             )
         )
         return _view(added[0]) if added else {}
@@ -123,7 +123,10 @@ def create_app(provider: MemoryProvider):
             if m.get("role") in ("user", "assistant") and m.get("content")
         ]
         if messages and not captures.put(
-            agent, messages, body.get("model"), **_group(request)
+            agent,
+            messages,
+            body.get("model"),
+            group_id=request.headers.get("X-AXP-Group-Id") or None,
         ):
             return _error(503, "BUSY")
         return Response(status_code=202)
@@ -201,17 +204,16 @@ class _Captures:
         model: str | None,
         *,
         group_id=None,
-        group_name=None,
     ) -> bool:
         try:
-            self.queue.put_nowait((agent, messages, model, group_id, group_name))
+            self.queue.put_nowait((agent, messages, model, group_id))
         except queue.Full:
             return False
         return True
 
     def _run(self) -> None:
         while True:
-            agent, messages, model, group_id, group_name = self.queue.get()
+            agent, messages, model, group_id = self.queue.get()
             try:
                 added = self.provider.add(
                     agent,
@@ -220,20 +222,12 @@ class _Captures:
                     infer=True,
                     model=model,
                     group_id=group_id,
-                    group_name=group_name,
                 )
                 logger.info("Remembered %d facts for agent %s", len(added), agent)
             except Exception:
                 logger.exception("Could not remember a turn for agent %s", agent)
             finally:
                 self.queue.task_done()
-
-
-def _group(request: Request) -> dict:
-    return {
-        "group_id": request.headers.get("X-AXP-Group-Id") or None,
-        "group_name": unquote_plus(request.headers.get("X-AXP-Group-Name", "")) or None,
-    }
 
 
 def _agent(request: Request) -> str:
@@ -250,7 +244,6 @@ def _view(memory: Memory) -> dict:
         view["source"] = memory.source
     if memory.source_group_id is not None:
         view["source_group_id"] = memory.source_group_id
-        view["source_group_name"] = memory.source_group_name
     return view
 
 

@@ -16,27 +16,27 @@ import (
 )
 
 type Group struct {
-	ID           string        `json:"id"`
-	Name         string        `json:"name"`
-	Kind         string        `json:"kind" enum:"group,direct"`
-	Goal         string        `json:"goal"`
-	Decided      string        `json:"decided"`
-	Archived     bool          `json:"archived"`
-	ReadSeq      int64         `json:"read_seq"`
-	LastSeq      int64         `json:"last_seq"`
-	Unread       int           `json:"unread"`
-	Preview      string        `json:"preview"`
-	Revision     int64         `json:"revision"`
-	UpdatedAt    jsontime.Time `json:"updated_at"`
-	Participants []Participant `json:"participants"`
+	ID            string         `json:"id"`
+	Name          string         `json:"name"`
+	Kind          string         `json:"kind" enum:"group,direct"`
+	Goal          string         `json:"goal"`
+	Decided       string         `json:"decided"`
+	Archived      bool           `json:"archived"`
+	ReadSeq       int64          `json:"read_seq"`
+	LastSeq       int64          `json:"last_seq"`
+	Unread        int            `json:"unread"`
+	Preview       string         `json:"preview"`
+	Revision      int64          `json:"revision"`
+	LastMessageAt *jsontime.Time `json:"last_message_at" nullable:"true"`
+	UpdatedAt     jsontime.Time  `json:"updated_at"`
+	Participants  []Participant  `json:"participants"`
 }
 
 type Participant struct {
-	AgentID       string  `json:"agent_id" db:"agent_id"`
-	Member        bool    `json:"member" db:"member"`
-	Name          string  `json:"name" db:"name"`
-	Status        string  `json:"status" db:"status"`
-	ActiveGroupID *string `json:"active_group_id" db:"active_group_id"`
+	AgentID string `json:"agent_id" db:"agent_id"`
+	Member  bool   `json:"member" db:"member"`
+	Name    string `json:"name" db:"name"`
+	Status  string `json:"status" db:"status"`
 }
 
 type groupRow struct {
@@ -69,14 +69,13 @@ func findGroup(ctx context.Context, db pg.DB, id string) (*groupRow, error) {
 	return g, nil
 }
 
-func (s *Service) Group(ctx context.Context, db pg.DB, id string) (*Group, error) {
+func GetGroup(ctx context.Context, db pg.DB, id string) (*Group, error) {
 	g, err := findGroup(ctx, db, id)
 	if err != nil {
 		return nil, err
 	}
 	out := &Group{ID: g.ID, Name: g.Name, Kind: g.Kind, Goal: g.Goal, Decided: g.Decided, Archived: g.Archived, ReadSeq: g.ReadSeq, Revision: g.Revision, UpdatedAt: jsontime.From(g.UpdatedAt), Participants: []Participant{}}
-	participants, err := pg.All[Participant](ctx, db, `SELECT p.agent_id, p.member, a.name, a.product_status AS status,
-        (SELECT c.group_id FROM agent_command c WHERE c.agent_id = a.id AND c.status IN ('running','waiting_approval') ORDER BY c.agent_sequence LIMIT 1) AS active_group_id
+	participants, err := pg.All[Participant](ctx, db, `SELECT p.agent_id, p.member, a.name, a.product_status AS status
         FROM group_participant p JOIN agent a ON a.id = p.agent_id WHERE p.group_id = $1 AND p.removed_at IS NULL AND a.deleted_at IS NULL ORDER BY p.joined_at, p.agent_id`, g.ID)
 	if err != nil {
 		return nil, err
@@ -84,9 +83,11 @@ func (s *Service) Group(ctx context.Context, db pg.DB, id string) (*Group, error
 	for _, p := range participants {
 		out.Participants = append(out.Participants, *p)
 	}
-	if err := db.QueryRow(ctx, `SELECT COALESCE(max(seq),0), count(*) FILTER (WHERE seq > $2 AND role <> 'user') FROM message WHERE group_id = $1`, g.ID, g.ReadSeq).Scan(&out.LastSeq, &out.Unread); err != nil {
+	var lastMessageAt *time.Time
+	if err := db.QueryRow(ctx, `SELECT COALESCE(max(seq),0), count(*) FILTER (WHERE seq > $2 AND role <> 'user'), max(created_at) FROM message WHERE group_id = $1`, g.ID, g.ReadSeq).Scan(&out.LastSeq, &out.Unread, &lastMessageAt); err != nil {
 		return nil, err
 	}
+	out.LastMessageAt = jsontime.Ptr(lastMessageAt)
 	var content []Block
 	err = db.QueryRow(ctx, `SELECT content FROM message WHERE group_id = $1 AND content <> '[]'::jsonb ORDER BY seq DESC LIMIT 1`, g.ID).Scan(&content)
 	if err != nil && err != pgx.ErrNoRows {
@@ -108,7 +109,7 @@ func (s *Service) Groups(ctx context.Context, db pg.DB) ([]Group, error) {
 	}
 	out := []Group{}
 	for _, r := range rows {
-		g, err := s.Group(ctx, db, r.ID)
+		g, err := GetGroup(ctx, db, r.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -118,8 +119,7 @@ func (s *Service) Groups(ctx context.Context, db pg.DB) ([]Group, error) {
 }
 
 func emitGroup(ctx context.Context, tx pgx.Tx, id string) error {
-	s := &Service{}
-	g, err := s.Group(ctx, tx, id)
+	g, err := GetGroup(ctx, tx, id)
 	if err != nil {
 		return err
 	}
@@ -185,7 +185,7 @@ func (s *Service) CreateGroup(ctx context.Context, tx pgx.Tx, name, goal string,
 	if err != nil {
 		return nil, err
 	}
-	return s.Group(ctx, tx, g.ID)
+	return GetGroup(ctx, tx, g.ID)
 }
 
 type GroupChanges struct {
@@ -225,14 +225,14 @@ func (s *Service) UpdateGroup(ctx context.Context, tx pgx.Tx, id string, changes
 		return nil, err
 	}
 	if changes.Goal != nil || changes.Decided != nil {
-		if _, err := insertMessage(ctx, tx, g, "", nil, nil, nil, "system", "system", []Block{textBlock("群简报已更新")}, nil); err != nil {
+		if _, err := insertMessage(ctx, tx, g, "", nil, nil, nil, RoleAssistant, "system", []Block{textBlock("群简报已更新")}, nil); err != nil {
 			return nil, err
 		}
 	}
 	if err := touchGroup(ctx, tx, g.ID); err != nil {
 		return nil, err
 	}
-	return s.Group(ctx, tx, g.ID)
+	return GetGroup(ctx, tx, g.ID)
 }
 
 func (s *Service) SetMember(ctx context.Context, tx pgx.Tx, id, agentID string, member bool) (*Group, error) {
@@ -277,13 +277,13 @@ func (s *Service) SetMember(ctx context.Context, tx pgx.Tx, id, agentID string, 
 	if member {
 		action = "加入了群"
 	}
-	if _, err := insertMessage(ctx, tx, g, "", nil, nil, nil, "system", "system", []Block{textBlock(a.Name + action)}, nil); err != nil {
+	if _, err := insertMessage(ctx, tx, g, "", nil, nil, nil, RoleAssistant, "system", []Block{textBlock(a.Name + action)}, nil); err != nil {
 		return nil, err
 	}
 	if err := touchGroup(ctx, tx, id); err != nil {
 		return nil, err
 	}
-	return s.Group(ctx, tx, id)
+	return GetGroup(ctx, tx, id)
 }
 
 func (s *Service) ReadGroupTo(ctx context.Context, tx pgx.Tx, id string, seq int64) (*Group, error) {
@@ -299,7 +299,7 @@ func (s *Service) ReadGroupTo(ctx context.Context, tx pgx.Tx, id string, seq int
 	if err := emitGroup(ctx, tx, id); err != nil {
 		return nil, err
 	}
-	return s.Group(ctx, tx, id)
+	return GetGroup(ctx, tx, id)
 }
 
 func (s *Service) StopGroup(ctx context.Context, tx pgx.Tx, id string) error {
@@ -307,9 +307,6 @@ func (s *Service) StopGroup(ctx context.Context, tx pgx.Tx, id string) error {
 		return err
 	}
 	if _, err := findGroup(ctx, tx, id); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(ctx, `UPDATE message SET chain_stopped=true WHERE group_id=$1 AND role='user'`, id); err != nil {
 		return err
 	}
 	replies, err := pg.All[messageRow](ctx, tx, `SELECT * FROM message WHERE group_id=$1 AND role='assistant' AND status=ANY($2) ORDER BY seq`, id, activeMessageStatuses)
@@ -477,7 +474,7 @@ func RuntimeInput(ctx context.Context, db pg.DB, c *CommandRecord) (map[string]a
 	if err := db.QueryRow(ctx, `SELECT codex_thread_id,seen_seq FROM group_participant WHERE group_id=$1 AND agent_id=$2`, c.GroupID, c.AgentID).Scan(&threadID, &seen); err != nil {
 		return nil, err
 	}
-	group, err := (&Service{}).Group(ctx, db, g.ID)
+	group, err := GetGroup(ctx, db, g.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -505,6 +502,11 @@ func RuntimeInput(ctx context.Context, db pg.DB, c *CommandRecord) (map[string]a
 	return map[string]any{"command_id": c.ID, "thread_key": g.ID, "codex_thread_id": threadID, "text": header + c.Text(), "parts": parts, "kind": c.Kind}, nil
 }
 
+// ActiveCommand is the agent's single execution slot, shared by auth and tools.
+func ActiveCommand(ctx context.Context, db pg.DB, agentID string) (*CommandRecord, error) {
+	return pg.One[CommandRecord](ctx, db, `SELECT c.* FROM agent_command c JOIN group_participant p ON p.group_id=c.group_id AND p.agent_id=c.agent_id WHERE c.agent_id=$1 AND c.status IN ('running','waiting_approval') AND p.removed_at IS NULL ORDER BY c.agent_sequence LIMIT 1`, agentID)
+}
+
 // CurrentCommand validates the gateway's context against the active execution slot.
 func CurrentCommand(ctx context.Context, db pg.DB, groupID, agentID string) (*CommandRecord, error) {
 	if _, ok := pg.ParseID(groupID); !ok {
@@ -513,12 +515,15 @@ func CurrentCommand(ctx context.Context, db pg.DB, groupID, agentID string) (*Co
 	if _, ok := pg.ParseID(agentID); !ok {
 		return nil, apierr.NotFound()
 	}
-	c, err := pg.One[CommandRecord](ctx, db, `SELECT c.* FROM agent_command c JOIN group_participant p ON p.group_id=c.group_id AND p.agent_id=c.agent_id WHERE c.agent_id=$1 AND c.group_id=$2 AND c.status IN ('running','waiting_approval') AND p.removed_at IS NULL ORDER BY c.agent_sequence LIMIT 1`, agentID, groupID)
+	c, err := ActiveCommand(ctx, db, agentID)
 	if err != nil {
 		return nil, err
 	}
-	if c == nil {
+	if c == nil || c.GroupID != groupID {
 		return nil, apierr.New(403, "NO_GROUP", "当前没有群对话。")
+	}
+	if c.InterruptRequestedAt != nil {
+		return nil, apierr.New(409, "COMMAND_STOPPED", "用户已停止这次对话。")
 	}
 	return c, nil
 }
@@ -536,9 +541,6 @@ func (s *Service) Mention(ctx context.Context, tx pgx.Tx, groupID, agentID, targ
 	c, err := CurrentCommand(ctx, tx, groupID, agentID)
 	if err != nil {
 		return nil, err
-	}
-	if c.InterruptRequestedAt != nil {
-		return nil, apierr.New(409, "CHAIN_STOPPED", "用户已停止这次对话。")
 	}
 	g, err := findGroup(ctx, tx, groupID)
 	if err != nil {
@@ -568,14 +570,15 @@ func (s *Service) Mention(ctx context.Context, tx pgx.Tx, groupID, agentID, targ
 	if err != nil {
 		return nil, err
 	}
-	root, err := pg.One[messageRow](ctx, tx, `SELECT * FROM message WHERE id=$1`, c.RootMessageID)
+	root, err := pg.One[messageRow](ctx, tx, `SELECT * FROM message WHERE id=$1 FOR UPDATE`, c.RootMessageID)
 	if err != nil {
 		return nil, err
 	}
-	if root == nil || root.ChainStopped {
-		return &MentionResult{Message: "用户已停止这次往来；等待新的用户消息。"}, nil
+	var mentions int
+	if err = tx.QueryRow(ctx, `SELECT count(*) FROM message WHERE reply_to_id=$1 AND kind='mention'`, root.ID).Scan(&mentions); err != nil {
+		return nil, err
 	}
-	if root.MentionCount >= 5 {
+	if mentions >= 5 {
 		return &MentionResult{Message: "已达到 5 次唤醒上限；请用户审阅后再继续。"}, nil
 	}
 	var member bool
@@ -597,23 +600,20 @@ func (s *Service) Mention(ctx context.Context, tx pgx.Tx, groupID, agentID, targ
 		return nil, err
 	}
 	if !member {
-		if _, err := insertMessage(ctx, tx, g, "", nil, nil, &root.ID, "system", "system", []Block{textBlock(a.Name + " 和这里的讨论有关，可以拉进群。")}, map[string]any{"invite_agent_id": target}); err != nil {
+		if _, err := insertMessage(ctx, tx, g, "", nil, nil, &root.ID, RoleAssistant, "system", []Block{textBlock(a.Name + " 和这里的讨论有关，可以拉进群。")}, map[string]any{"invite_agent_id": target}); err != nil {
 			return nil, err
 		}
 	}
-	root.MentionCount++
-	if _, err := tx.Exec(ctx, `UPDATE message SET mention_count=$2 WHERE id=$1`, root.ID, root.MentionCount); err != nil {
-		return nil, err
-	}
-	if root.MentionCount == 5 {
-		if _, err := insertMessage(ctx, tx, g, "", nil, nil, &root.ID, "system", "system", []Block{textBlock("智能体已经往来唤醒 5 次了，请你看一下。")}, map[string]any{"mention_limit": true}); err != nil {
+	mentions++
+	if mentions == 5 {
+		if _, err := insertMessage(ctx, tx, g, "", nil, nil, &root.ID, RoleAssistant, "system", []Block{textBlock("智能体已经往来唤醒 5 次了，请你看一下。")}, map[string]any{"mention_limit": true}); err != nil {
 			return nil, err
 		}
 	}
 	if err := touchGroup(ctx, tx, groupID); err != nil {
 		return nil, err
 	}
-	return &MentionResult{Sent: true, Remaining: 5 - root.MentionCount, Message: "已通知，回复会留在当前群。不要等待或回叫；下次被唤醒时用 read_group 查看。"}, nil
+	return &MentionResult{Sent: true, Remaining: 5 - mentions, Message: "已通知，回复会留在当前群。不要等待或回叫；下次被唤醒时用 read_group 查看。"}, nil
 }
 
 // GroupMessages reads only this context. Guests have access during their invited turn.
@@ -633,7 +633,7 @@ func (s *Service) GroupMessages(ctx context.Context, db pg.DB, groupID, agentID 
 		}
 	}
 	rows, err := pg.All[messageRow](ctx, db, `SELECT * FROM message WHERE group_id=$1 AND ($2::bigint=0 OR seq>$2) AND ($3::bigint=0 OR seq<$3)
-        AND ($5='' OR to_tsvector('simple',content::text || ' ' || data::text) @@ plainto_tsquery('simple',$5) OR (content::text || ' ' || data::text) ILIKE '%' || replace(replace(replace($5,'\','\\'),'%','\%'),'_','\_') || '%') ORDER BY seq DESC LIMIT $4`, groupID, after, before, limit, query)
+        AND NOT EXISTS (SELECT 1 FROM unnest($5::text[]) word WHERE (content::text || ' ' || data::text) NOT ILIKE '%' || replace(replace(replace(word,'\','\\'),'%','\%'),'_','\_') || '%') ORDER BY seq DESC LIMIT $4`, groupID, after, before, limit, strings.Fields(query))
 	if err != nil {
 		return nil, err
 	}

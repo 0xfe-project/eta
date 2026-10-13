@@ -31,7 +31,6 @@ class FakeProvider:
         infer,
         model=None,
         group_id=None,
-        group_name=None,
     ):
         if infer:
             self.extractions.append((agent_id, messages, model))
@@ -44,7 +43,7 @@ class FakeProvider:
             self.memories[memory_id] = (agent_id, text)
             self.created[memory_id] = f"2026-10-08T00:00:{next(self.clock):02d}+00:00"
             self.sources[memory_id] = source
-            self.groups[memory_id] = (group_id, group_name)
+            self.groups[memory_id] = group_id
             added.append(
                 Memory(
                     memory_id,
@@ -52,7 +51,6 @@ class FakeProvider:
                     created_at=self.created[memory_id],
                     source=source,
                     source_group_id=group_id,
-                    source_group_name=group_name,
                 )
             )
         return added
@@ -64,13 +62,12 @@ class FakeProvider:
                 text,
                 self.scores.get(text, 0.9),
                 source=self.sources.get(memory_id),
-                source_group_id=self.groups[memory_id][0],
-                source_group_name=self.groups[memory_id][1],
+                source_group_id=self.groups[memory_id],
             )
             for memory_id, (owner, text) in self.memories.items()
             if owner == agent_id
             and (source is None or self.sources.get(memory_id) == source)
-            and (group_id is None or self.groups[memory_id][0] == group_id)
+            and (group_id is None or self.groups[memory_id] == group_id)
             and any(w in text for w in query.split())
         ]
         return found[:limit]
@@ -82,13 +79,12 @@ class FakeProvider:
                 text,
                 created_at=self.created[memory_id],
                 source=self.sources.get(memory_id),
-                source_group_id=self.groups[memory_id][0],
-                source_group_name=self.groups[memory_id][1],
+                source_group_id=self.groups[memory_id],
             )
             for memory_id, (owner, text) in self.memories.items()
             if owner == agent_id
             and (source is None or self.sources.get(memory_id) == source)
-            and (group_id is None or self.groups[memory_id][0] == group_id)
+            and (group_id is None or self.groups[memory_id] == group_id)
         ]
 
     def delete(self, agent_id, memory_id):
@@ -358,14 +354,11 @@ def test_up(client):
 
 
 def test_group_source_survives_capture_and_cross_group_recall(client, provider):
-    from urllib.parse import quote
-
     response = client.post(
         "/memory/capture",
         headers={
             **as_agent("a"),
             "X-AXP-Group-Id": "g1",
-            "X-AXP-Group-Name": quote("设计 讨论"),
         },
         json={
             "model": "test",
@@ -379,7 +372,6 @@ def test_group_source_survives_capture_and_cross_group_recall(client, provider):
         "memories"
     ]
     assert memory["source_group_id"] == "g1"
-    assert memory["source_group_name"] == "设计 讨论"
     assert (
         client.get("/api/memory/v1/agents/a/memories?group_id=g2").json()["memories"]
         == []
@@ -402,7 +394,6 @@ def test_remember_uses_gateway_group_metadata(client):
         headers={
             **as_agent("a"),
             "X-AXP-Group-Id": "g1",
-            "X-AXP-Group-Name": "Review",
             "Accept": "application/json, text/event-stream",
         },
         json={
@@ -417,4 +408,3 @@ def test_remember_uses_gateway_group_metadata(client):
     )
     memory = json.loads(response.json()["result"]["content"][0]["text"])
     assert memory["source_group_id"] == "g1"
-    assert memory["source_group_name"] == "Review"

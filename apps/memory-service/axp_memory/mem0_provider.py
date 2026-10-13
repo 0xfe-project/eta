@@ -93,7 +93,6 @@ class Mem0Provider:
         infer,
         model=None,
         group_id=None,
-        group_name=None,
     ):
         if not infer:
             return self._add(
@@ -102,7 +101,6 @@ class Mem0Provider:
                 source,
                 infer=False,
                 group_id=group_id,
-                group_name=group_name,
             )
         with self._extracting:
             self.memory.llm.config.model = model
@@ -114,12 +112,11 @@ class Mem0Provider:
                     source,
                     infer=True,
                     group_id=group_id,
-                    group_name=group_name,
                 )
             finally:
                 _agent.reset(token)
 
-    def _add(self, agent_id, messages, source, *, infer, group_id, group_name):
+    def _add(self, agent_id, messages, source, *, infer, group_id):
         # mem0 stamps created_at unless the metadata has it; stamping it here
         # lets the new memories carry it, which mem0's add result does not.
         created_at = datetime.now(UTC).isoformat()
@@ -130,11 +127,7 @@ class Mem0Provider:
             metadata={
                 "source": source,
                 "created_at": created_at,
-                **(
-                    {"source_group_id": group_id, "source_group_name": group_name}
-                    if group_id
-                    else {}
-                ),
+                **({"source_group_id": group_id} if group_id else {}),
             },
         )
         return [
@@ -144,7 +137,6 @@ class Mem0Provider:
                 created_at=created_at,
                 source=source,
                 source_group_id=group_id,
-                source_group_name=group_name,
             )
             for item in result["results"]
         ]
@@ -188,5 +180,4 @@ def _memory(item: dict) -> Memory:
         item.get("created_at"),
         (item.get("metadata") or {}).get("source"),
         (item.get("metadata") or {}).get("source_group_id"),
-        (item.get("metadata") or {}).get("source_group_name"),
     )

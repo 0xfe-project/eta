@@ -331,7 +331,7 @@ const Turn = memo(
   } & ReplyLine) => {
     if (message.kind === "task_draft" || message.kind === "task_card")
       return <TaskMessage message={message} />;
-    if (message.role === "system") return <GroupNotice message={message} />;
+    if (message.kind === "system") return <GroupNotice message={message} />;
     if (message.role === "user")
       return (
         <ClaudeMessage role="user">

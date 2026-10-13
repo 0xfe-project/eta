@@ -22,7 +22,6 @@ class Memory:
     # user). None for memories from before sources were recorded.
     source: str | None = None
     source_group_id: str | None = None
-    source_group_name: str | None = None
 
 
 class MemoryProvider(Protocol):
@@ -35,7 +34,6 @@ class MemoryProvider(Protocol):
         infer: bool,
         model: str | None = None,
         group_id: str | None = None,
-        group_name: str | None = None,
     ) -> list[Memory]:
         """Remember ``messages`` ({"role", "content"}) for the agent.
 

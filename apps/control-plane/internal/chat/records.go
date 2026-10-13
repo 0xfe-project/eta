@@ -132,8 +132,6 @@ type messageRow struct {
 	GroupID        string         `db:"group_id"`
 	Kind           string         `db:"kind"`
 	Data           map[string]any `db:"data"`
-	MentionCount   int            `db:"mention_count"`
-	ChainStopped   bool           `db:"chain_stopped"`
 	ID             string         `db:"id"`
 	ConversationID string         `db:"conversation_id"`
 	AgentID        *string        `db:"agent_id"`

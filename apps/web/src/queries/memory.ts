@@ -14,7 +14,6 @@ const memorySchema = z.object({
   id: z.string(),
   text: z.string(),
   source_group_id: z.string().optional(),
-  source_group_name: z.string().nullable().optional(),
   // Relevance, on search results only.
   score: z.number().optional(),
   created_at: z.string().optional(),

@@ -55,8 +55,7 @@ export function TaskMessage({ message }: { message: ChatMessage }) {
             <Markdown>{String(data.description ?? "")}</Markdown>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
-            尚未创建任务或指派执行者。来源：消息 {String(data.source_from)}–
-            {String(data.source_to)}。
+            尚未创建任务或指派执行者。
           </p>
         </div>
         <Dialog open={edit} onOpenChange={setEdit}>
@@ -168,8 +167,18 @@ export function TaskMessage({ message }: { message: ChatMessage }) {
               验收通过
             </Button>
           )}
-          <Button variant="ghost" size="xs" asChild>
+          <Button
+            variant="ghost"
+            size="xs"
+            className="hidden md:inline-flex"
+            asChild
+          >
             <Link {...sectionLink("tasks", { task: taskId })}>在侧栏打开</Link>
+          </Button>
+          <Button variant="ghost" size="xs" className="md:hidden" asChild>
+            <Link to="/workspace/tasks" search={{ task: taskId }}>
+              打开任务
+            </Link>
           </Button>
           {members.map((p) => (
             <Button

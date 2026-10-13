@@ -31,19 +31,13 @@ func groupsMCP(d *Deps) http.Handler {
 		if err != nil {
 			return nil, nil, err
 		}
-		g, err := d.Chat.Group(ctx, d.DB, group)
+		g, err := chat.GetGroup(ctx, d.DB, group)
 		if err != nil {
 			return nil, nil, toolError(err)
 		}
-		all, err := d.Tasks.List(ctx, d.DB)
+		linked, err := d.Tasks.List(ctx, d.DB, group)
 		if err != nil {
 			return nil, nil, toolError(err)
-		}
-		linked := []tasks.Task{}
-		for _, task := range all {
-			if task.GroupID != nil && *task.GroupID == group {
-				linked = append(linked, task)
-			}
 		}
 		return nil, struct {
 			*chat.Group
@@ -58,7 +52,7 @@ func groupsMCP(d *Deps) http.Handler {
 		messages, err := d.Chat.GroupMessages(ctx, d.DB, group, agent, in.After, in.Before, in.Limit, "")
 		return nil, map[string]any{"messages": messages}, toolError(err)
 	})
-	mcp.AddTool(srv, &mcp.Tool{Name: "search_group", Description: "Search only this group's history for relevant decisions, data or links. Use specific terms; cross-group knowledge is available through memory, not this tool."}, func(ctx context.Context, _ *mcp.CallToolRequest, in struct {
+	mcp.AddTool(srv, &mcp.Tool{Name: "search_group", Description: "Search only this group's history for relevant decisions, data or links. Whitespace-separated terms must all match; cross-group knowledge is available through memory, not this tool."}, func(ctx context.Context, _ *mcp.CallToolRequest, in struct {
 		Query string `json:"query"`
 		Limit int    `json:"limit,omitempty"`
 	}) (*mcp.CallToolResult, any, error) {
@@ -95,7 +89,7 @@ func groupsMCP(d *Deps) http.Handler {
 		})
 		return nil, result, toolError(err)
 	})
-	mcp.AddTool(srv, &mcp.Tool{Name: "draft_task", Description: "Propose executable work in this group as an editable task draft: title, goal, agreed decisions, acceptance criteria, and the relevant source message sequence range. This does NOT create a board task or wake an executor. The user must confirm it. Never silently create a task instead."}, func(ctx context.Context, _ *mcp.CallToolRequest, in chat.DraftTaskInput) (*mcp.CallToolResult, any, error) {
+	mcp.AddTool(srv, &mcp.Tool{Name: "draft_task", Description: "Propose executable work in this group as an editable task draft: title, goal, agreed decisions, acceptance criteria, and a plain-text source message range, copied into the description. This does NOT create a board task or wake an executor. The user must confirm it. Never silently create a task instead."}, func(ctx context.Context, _ *mcp.CallToolRequest, in chat.DraftTaskInput) (*mcp.CallToolResult, any, error) {
 		group, agent, err := current(ctx)
 		if err != nil {
 			return nil, nil, err

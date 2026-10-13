@@ -76,9 +76,13 @@ async function recall(event) {
   if (!memories.length) {
     return {};
   }
+  const ids = [
+    ...new Set(memories.map((m) => m.source_group_id).filter(Boolean)),
+  ];
+  const names = ids.length ? await post("/groups/names", { ids }) : {};
   const lines = memories.map(
     (m) =>
-      `- ${m.text} (memory ${m.id}${m.source_group_name ? `; source group: ${m.source_group_name}` : ""})`,
+      `- ${m.text} (memory ${m.id}${m.source_group_id ? `; source group: ${names[m.source_group_id] ?? m.source_group_id}` : ""})`,
   );
   const context = [
     "Memories from earlier conversations that may be relevant. They can be outdated; forget the ones that turn out wrong.",

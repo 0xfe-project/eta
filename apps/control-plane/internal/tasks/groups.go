@@ -7,7 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-func setGroup(ctx context.Context, tx pgx.Tx, taskID, groupID string, from, to *int64) error {
+func setGroup(ctx context.Context, tx pgx.Tx, taskID, groupID string) error {
 	var id *string
 	if groupID != "" {
 		parsed, ok := pg.ParseID(groupID)
@@ -23,31 +23,16 @@ func setGroup(ctx context.Context, tx pgx.Tx, taskID, groupID string, from, to *
 		}
 		id = &parsed
 	}
-	if (from == nil) != (to == nil) || (id == nil && from != nil) {
-		return invalid("来源消息范围无效。")
-	}
-	if from != nil {
-		if *from <= 0 || *to < *from {
-			return invalid("来源消息范围无效。")
-		}
-		ok, err := pg.Exists(ctx, tx, `SELECT 1 FROM message a JOIN message b ON b.group_id=a.group_id WHERE a.group_id=$1 AND a.seq=$2 AND b.seq=$3`, *id, *from, *to)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return invalid("来源消息范围无效。")
-		}
-	}
-	_, err := tx.Exec(ctx, `UPDATE task SET group_id=$2,source_from=$3,source_to=$4 WHERE id=$1`, taskID, id, from, to)
+	_, err := tx.Exec(ctx, `UPDATE task SET group_id=$2 WHERE id=$1`, taskID, id)
 	return err
 }
 
-func (s *Service) LinkGroup(ctx context.Context, tx pgx.Tx, ref, groupID string, from, to *int64) (*TaskDetail, error) {
+func (s *Service) LinkGroup(ctx context.Context, tx pgx.Tx, ref, groupID string) (*TaskDetail, error) {
 	r, err := find(ctx, tx, ref, true)
 	if err != nil {
 		return nil, err
 	}
-	if err = setGroup(ctx, tx, r.ID, groupID, from, to); err != nil {
+	if err = setGroup(ctx, tx, r.ID, groupID); err != nil {
 		return nil, err
 	}
 	if err = record(ctx, tx, r.ID, nil, "group", User, nil, map[string]any{"to": groupID}); err != nil {

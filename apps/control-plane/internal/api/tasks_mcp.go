@@ -113,7 +113,7 @@ func tasksMCP(d *Deps) http.Handler {
 		Name:        "list_tasks",
 		Description: "List the task board's tasks (the user's and agents'), most recently updated first.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in listTasksIn) (*mcp.CallToolResult, any, error) {
-		list, err := s.List(ctx, d.DB)
+		list, err := s.List(ctx, d.DB, "")
 		if err != nil {
 			return nil, nil, toolError(err)
 		}
