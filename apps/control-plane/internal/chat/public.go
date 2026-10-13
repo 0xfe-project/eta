@@ -40,6 +40,8 @@ type Block struct {
 	Output string
 	// The one thing it made or touched; the zero ActivityRef when it names none.
 	Ref ActivityRef
+	// The places it made or opened on remote computers (the agenvo plugin).
+	Operations []ActivityOperation
 }
 
 // ActivityRef is the one thing an activity made or touched, as its tool
@@ -54,6 +56,23 @@ type ActivityRef struct {
 	Status string `json:"status,omitempty" doc:"The task's status as the tool left it."`
 	URL    string `json:"url,omitempty" doc:"The pull request, or GitHub's new-issue page prefilled with the draft."`
 	Body   string `json:"body,omitempty" doc:"A draft's body, when its URL is too long to carry it."`
+}
+
+// ActivityOperation is a workspace or worktree an agenvo script made or
+// opened on a remote computer, as the control plane recorded its native call
+// (tasks.Operation). Nothing links to it: AXP has no page for those places.
+type ActivityOperation struct {
+	Action   string `json:"action" enum:"create_workspace,create_worktree,open_worktree,add_project"`
+	Status   string `json:"status" enum:"completed,accepted,failed,unknown" doc:"accepted: the runtime took it but had not made it yet. unknown: it may or may not have happened."`
+	Runtime  string `json:"runtime" enum:"paseo,herdr"`
+	Computer string `json:"computer,omitempty" doc:"The AXP computer's name."`
+	ID       string `json:"id,omitempty" doc:"The runtime's own workspace id."`
+	Name     string `json:"name,omitempty"`
+	Project  string `json:"project,omitempty"`
+	Path     string `json:"path,omitempty"`
+	Branch   string `json:"branch,omitempty"`
+	Base     string `json:"base,omitempty"`
+	Error    string `json:"error,omitempty" doc:"Why it failed or is unknown, as the runtime said."`
 }
 
 type TextBlock struct {
@@ -71,6 +90,8 @@ type ActivityBlock struct {
 	Input  string       `json:"input,omitempty"`
 	Output string       `json:"output,omitempty"`
 	Ref    *ActivityRef `json:"ref,omitempty"`
+	// Old blocks and other tools have none.
+	Operations []ActivityOperation `json:"operations,omitempty"`
 }
 
 func (b Block) MarshalJSON() ([]byte, error) {
@@ -79,7 +100,7 @@ func (b Block) MarshalJSON() ([]byte, error) {
 	}
 	activity := ActivityBlock{
 		ID: b.ID, Type: b.Type, Label: b.Label, Status: b.Status,
-		Name: b.Name, Input: b.Input, Output: b.Output,
+		Name: b.Name, Input: b.Input, Output: b.Output, Operations: b.Operations,
 	}
 	if b.Ref.Kind != "" {
 		activity.Ref = &b.Ref
@@ -89,15 +110,16 @@ func (b Block) MarshalJSON() ([]byte, error) {
 
 func (b *Block) UnmarshalJSON(data []byte) error {
 	var raw struct {
-		ID     string       `json:"id"`
-		Type   string       `json:"type"`
-		Text   string       `json:"text"`
-		Label  string       `json:"label"`
-		Status string       `json:"status"`
-		Name   *string      `json:"name"`
-		Input  *string      `json:"input"`
-		Output *string      `json:"output"`
-		Ref    *ActivityRef `json:"ref"`
+		ID         string              `json:"id"`
+		Type       string              `json:"type"`
+		Text       string              `json:"text"`
+		Label      string              `json:"label"`
+		Status     string              `json:"status"`
+		Name       *string             `json:"name"`
+		Input      *string             `json:"input"`
+		Output     *string             `json:"output"`
+		Ref        *ActivityRef        `json:"ref"`
+		Operations []ActivityOperation `json:"operations"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
@@ -111,6 +133,7 @@ func (b *Block) UnmarshalJSON(data []byte) error {
 	*b = Block{
 		ID: raw.ID, Type: raw.Type, Text: raw.Text, Label: raw.Label, Status: raw.Status,
 		Name: deref(raw.Name), Input: deref(raw.Input), Output: deref(raw.Output),
+		Operations: raw.Operations,
 	}
 	if raw.Ref != nil {
 		b.Ref = *raw.Ref

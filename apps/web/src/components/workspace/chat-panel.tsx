@@ -37,6 +37,7 @@ import { GrokSlashMenu } from "@/components/brainless/grok/grok-slash-menu";
 import { GrokThinking } from "@/components/brainless/grok/grok-thinking";
 import { GrokTool } from "@/components/brainless/grok/grok-tool";
 import { Markdown } from "@/components/markdown";
+import { ActivityOperationCards } from "@/components/workspace/activity-operation";
 import { ActivityRefCard } from "@/components/workspace/activity-ref";
 import { ACTIVE_STATUSES } from "@/queries/chat";
 
@@ -416,6 +417,12 @@ const Turn = memo(
               {block.ref && block.status === "completed" ? (
                 <ActivityRefCard
                   value={block.ref}
+                  className={session.refClass}
+                />
+              ) : null}
+              {block.operations?.length && block.status !== "running" ? (
+                <ActivityOperationCards
+                  operations={block.operations}
                   className={session.refClass}
                 />
               ) : null}

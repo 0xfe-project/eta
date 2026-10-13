@@ -638,8 +638,9 @@ func TestPublicSchemaHasNoInternalFields(t *testing.T) {
 		t.Fatalf("paths %v", paths)
 	}
 	// The task board's own vocabulary is not the agents' internals: a
-	// remote computer's runtime (Paseo, Herdr), a tool call's command.
-	board := regexp.MustCompile(`^(Task|Computer|Assignee|LogEntry|RunLog|Install|Enrollment|Comment|Place)`)
+	// remote computer's runtime (Paseo, Herdr), also where an agenvo script
+	// made a workspace, and a tool call's command.
+	board := regexp.MustCompile(`^(Task|Computer|Assignee|LogEntry|RunLog|Install|Enrollment|Comment|Place|ActivityOperation)`)
 	properties := map[string]any{}
 	for schemaName, schema := range spec.Components.Schemas.Map() {
 		if board.MatchString(schemaName) {

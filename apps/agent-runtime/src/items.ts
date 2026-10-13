@@ -1,6 +1,7 @@
 // How a Codex thread item (app-server v2) shows in the transcript: a reply's
 // text, or an activity with a name, an input and an output, clipped, and the
-// one thing it made or touched when its tool says so. The control plane
+// one thing it made or touched, or the places it made on remote computers,
+// when its tool says so. The control plane
 // projects these views onto message blocks (item.updated).
 
 type Json = Record<string, unknown>;
@@ -31,12 +32,16 @@ export interface ItemView {
   input?: string;
   output?: string;
   ref?: Json;
+  operations?: unknown[];
 }
 
 // Where an MCP tool's result names the one thing it made or touched (a task,
 // a routine, a pull request), for the transcript to link to. The control
 // plane checks its fields; the runtime knows no plugin.
 const REF_META = "axp/ref";
+// Where the agenvo plugin's execute names the workspaces and worktrees its
+// script made, even when it failed after making some.
+const OPERATIONS_META = "axp/operations";
 
 const str = (value: unknown): string =>
   typeof value === "string" ? value : "";
@@ -145,6 +150,14 @@ export function itemView(item: Json, completed: boolean): ItemView | null {
     ref !== null
   ) {
     view.ref = ref as Json;
+  }
+  const operations = meta?.[OPERATIONS_META];
+  if (
+    kind === "mcp_tool" &&
+    view.status !== "running" &&
+    Array.isArray(operations)
+  ) {
+    view.operations = operations;
   }
   return view;
 }

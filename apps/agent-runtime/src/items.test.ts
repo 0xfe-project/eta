@@ -37,4 +37,27 @@ describe("itemView", () => {
     expect(itemView(mcpCall("failed", named), true)?.ref).toBeUndefined();
     expect(itemView(mcpCall("inProgress", null), false)?.ref).toBeUndefined();
   });
+
+  test("passes on the operations an ended agenvo execute names, failed too", () => {
+    const op = {
+      action: "create_worktree",
+      status: "completed",
+      runtime: "paseo",
+    };
+    const result = {
+      content: [{ type: "text", text: "Execution failed" }],
+      _meta: { "axp/operations": [op] },
+    };
+    expect(itemView(mcpCall("completed", result), true)?.operations).toEqual([
+      op,
+    ]);
+    expect(itemView(mcpCall("failed", result), true)?.operations).toEqual([op]);
+    expect(
+      itemView(mcpCall("inProgress", result), false)?.operations,
+    ).toBeUndefined();
+    const other = { ...result, _meta: { "axp/operations": "nope" } };
+    expect(
+      itemView(mcpCall("completed", other), true)?.operations,
+    ).toBeUndefined();
+  });
 });

@@ -1,5 +1,5 @@
 import type { SessionTheme } from "./chat-panel";
-import type { ActivityRef } from "@/api/control-plane.gen";
+import type { ActivityOperation, ActivityRef } from "@/api/control-plane.gen";
 import type { Block, ChatMessage } from "@/queries/chat";
 import { afterEach, describe, expect, it } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -245,6 +245,135 @@ describe("activity ref cards", () => {
       activity({ status: "failed", ref: task }),
     ]);
     expect(cards(container)).toEqual([]);
+    expect(container.querySelectorAll("details")).toHaveLength(3);
+  });
+});
+
+// An agenvo script's workspaces and worktrees, read from the native calls
+// it made: one card each, telling done from accepted, refused and unknown.
+const worktree: ActivityOperation = {
+  action: "create_worktree",
+  status: "completed",
+  runtime: "paseo",
+  computer: "办公室 Mac",
+  id: "wks_1",
+  name: "修复登录",
+  project: "axp",
+  path: "/home/u/.paseo/worktrees/axp/feat-x",
+  branch: "feat/x",
+  base: "main",
+};
+const execute = (fields: {
+  status: string;
+  operations?: ActivityOperation[];
+}) =>
+  activity({
+    name: "agenvo.execute",
+    input: '{"code":"return await call(…)"}',
+    ...fields,
+  } as Partial<Block> & { status: string });
+const operationCards = (c: HTMLElement) =>
+  [...c.querySelectorAll<HTMLButtonElement>('[role="log"] li > button')].map(
+    (b) => b.getAttribute("aria-label"),
+  );
+
+describe("activity operation cards", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  for (const theme of ["claude", "codex", "grok"] as const) {
+    it(`shows what a script made, where (${theme})`, async () => {
+      const { container } = await mount(
+        [execute({ status: "completed", operations: [worktree] })],
+        { theme },
+      );
+      expect(operationCards(container)).toEqual([
+        "创建 worktree：修复登录，已创建（办公室 Mac · Paseo）",
+      ]);
+      const card = container.querySelector('[role="log"] li > button')!;
+      expect(card.textContent).toBe(
+        "创建 worktree 修复登录已创建办公室 Mac · Paseo · axp · feat/x ← main/home/u/.paseo/worktrees/axp/feat-x",
+      );
+      // It links nowhere, and the script's line still expands on its own.
+      expect(container.querySelector('[role="log"] a')).toBeNull();
+      expect(container.querySelector("details summary")?.textContent).toContain(
+        "agenvo.execute",
+      );
+    });
+  }
+
+  it("tells each call of a script apart, a failed one's too", async () => {
+    const { container } = await mount([
+      execute({
+        status: "failed",
+        operations: [
+          worktree,
+          {
+            action: "add_project",
+            status: "unknown",
+            runtime: "paseo",
+            computer: "办公室 Mac",
+            path: "/home/u/new",
+            error: "native_error: Paseo creation failed: timed out",
+          },
+          {
+            action: "create_workspace",
+            status: "accepted",
+            runtime: "paseo",
+            path: "/home/u/p",
+          },
+          {
+            action: "create_worktree",
+            status: "failed",
+            runtime: "herdr",
+            computer: "办公室 Mac",
+            branch: "feat/x",
+            error: "worktree_create_failed: fatal: already exists",
+          },
+          {
+            action: "open_worktree",
+            status: "completed",
+            runtime: "herdr",
+            name: "repo",
+          },
+        ],
+      }),
+    ]);
+    expect(operationCards(container)).toEqual([
+      "创建 worktree：修复登录，已创建（办公室 Mac · Paseo）",
+      "添加项目：/home/u/new，结果未确认（办公室 Mac · Paseo）",
+      "创建工作区：/home/u/p，已受理，未确认完成（Paseo）",
+      "创建 worktree，失败（办公室 Mac · Herdr）",
+      "打开 worktree：repo，已打开（Herdr）",
+    ]);
+    const failed = container.querySelectorAll('[role="log"] li > button')[3];
+    expect(failed.textContent).toContain("worktree_create_failed");
+    expect(failed.className).toContain("border-dashed");
+  });
+
+  it("unfolds a card to show every field whole", async () => {
+    const { container } = await mount([
+      execute({ status: "completed", operations: [worktree] }),
+    ]);
+    const card = container.querySelector<HTMLButtonElement>(
+      '[role="log"] li > button',
+    )!;
+    expect(card.getAttribute("aria-expanded")).toBe("false");
+    expect(card.textContent).not.toContain("wks_1");
+    await act(async () => card.click());
+    expect(card.getAttribute("aria-expanded")).toBe("true");
+    expect(card.textContent).toContain("ID wks_1");
+    expect(card.querySelector(".truncate")).toBeNull();
+  });
+
+  it("shows nothing for older history, other calls, or while running", async () => {
+    const { container } = await mount([
+      execute({ status: "completed" }),
+      execute({ status: "running", operations: [worktree] }),
+      execute({ status: "completed", operations: [] }),
+    ]);
+    expect(operationCards(container)).toEqual([]);
     expect(container.querySelectorAll("details")).toHaveLength(3);
   });
 });

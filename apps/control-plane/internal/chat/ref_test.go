@@ -2,6 +2,7 @@ package chat
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -52,7 +53,7 @@ func TestActivityBlockRoundTripsItsRef(t *testing.T) {
 	if err := json.Unmarshal(data, &back); err != nil {
 		t.Fatal(err)
 	}
-	if back != block {
+	if !reflect.DeepEqual(back, block) {
 		t.Fatalf("got %+v, want %+v", back, block)
 	}
 	// Blocks without one, such as history from before refs, carry none.
@@ -61,5 +62,42 @@ func TestActivityBlockRoundTripsItsRef(t *testing.T) {
 	_ = json.Unmarshal(data, &raw)
 	if _, ok := raw["ref"]; ok {
 		t.Fatalf("ref in %s", data)
+	}
+}
+
+func TestActivityOperationsKeepOnlyWholeOnes(t *testing.T) {
+	raw := []any{
+		map[string]any{"action": "create_worktree", "status": "completed", "runtime": "paseo", "computer": "办公室 Mac",
+			"id": "wks_1", "name": "feat-x", "path": "/repo/.paseo/feat-x", "branch": "feat/x", "base": "main"},
+		map[string]any{"action": "add_project", "status": "unknown", "runtime": "paseo", "error": "timeout"},
+		map[string]any{"action": "delete_everything", "status": "completed", "runtime": "paseo"},
+		map[string]any{"action": "create_workspace", "status": "done", "runtime": "herdr"},
+		map[string]any{"action": "create_workspace", "status": "failed", "runtime": "codex"},
+		"not an operation",
+	}
+	want := []ActivityOperation{
+		{Action: "create_worktree", Status: "completed", Runtime: "paseo", Computer: "办公室 Mac",
+			ID: "wks_1", Name: "feat-x", Path: "/repo/.paseo/feat-x", Branch: "feat/x", Base: "main"},
+		{Action: "add_project", Status: "unknown", Runtime: "paseo", Error: "timeout"},
+	}
+	if got := activityOperations(raw); !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+	if got := activityOperations(nil); got != nil {
+		t.Fatalf("got %+v from nothing", got)
+	}
+
+	// They round-trip, and blocks without any (older history, other tools) carry none.
+	block := Block{ID: "a-1", Type: "activity", Label: "调用工具", Status: "failed", Operations: want}
+	data, _ := json.Marshal(block)
+	var back Block
+	if err := json.Unmarshal(data, &back); err != nil || !reflect.DeepEqual(back, block) {
+		t.Fatalf("got %+v (%v), want %+v", back, err, block)
+	}
+	data, _ = json.Marshal(Block{ID: "a-2", Type: "activity", Status: "completed"})
+	var fields map[string]any
+	_ = json.Unmarshal(data, &fields)
+	if _, ok := fields["operations"]; ok {
+		t.Fatalf("operations in %s", data)
 	}
 }
