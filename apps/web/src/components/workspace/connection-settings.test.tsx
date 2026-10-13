@@ -16,13 +16,15 @@ const weather = {
   plugins: ["weather"],
   config: {
     type: "object",
+    additionalProperties: false,
     required: ["WEATHER_KEY"],
     properties: {
-      WEATHER_CITY: { type: "string", title: "城市" },
+      WEATHER_CITY: { type: "string", title: "城市", maxLength: 40 },
       WEATHER_KEY: {
         type: "string",
         title: "API key",
         writeOnly: true,
+        maxLength: 64,
         description: "在 [控制台](https://example.com/keys) 生成",
       },
     },

@@ -281,7 +281,24 @@ function GrokConnection() {
   );
 }
 
-type Configured = Bundle & { config: NonNullable<Bundle["config"]> };
+/**
+ * What config.schema.json (apps/control-plane internal/bundles) lets a
+ * bundle's config say, which the control plane checked when it read it.
+ */
+interface ConfigSchema {
+  required?: string[];
+  properties: Record<
+    string,
+    {
+      title?: string;
+      description?: string;
+      writeOnly?: boolean;
+      maxLength: number;
+    }
+  >;
+}
+
+type Configured = Bundle & { config: ConfigSchema };
 
 /**
  * A bundle's config as a form, built from its schema: one field per
@@ -349,7 +366,7 @@ function BundleConfigForm({
               type={property.writeOnly ? "password" : "text"}
               value={draft[name] ?? ""}
               required={required.includes(name) && !saved}
-              maxLength={property.maxLength || 4096}
+              maxLength={property.maxLength}
               autoComplete="off"
               spellCheck={false}
               placeholder={

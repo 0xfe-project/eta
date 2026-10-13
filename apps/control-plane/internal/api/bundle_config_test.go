@@ -27,8 +27,8 @@ func withWeather(t *testing.T, e *env) {
 	}
 	write("tasks", `{"name": "tasks", "description": "任务", "plugins": ["tasks"]}`)
 	write("weather", `{"name": "weather", "description": "天气", "plugins": ["grok"], "config": {
-		"type": "object", "required": ["WEATHER_KEY"], "properties": {
-			"WEATHER_KEY": {"type": "string", "title": "Key", "writeOnly": true},
+		"type": "object", "additionalProperties": false, "required": ["WEATHER_KEY"], "properties": {
+			"WEATHER_KEY": {"type": "string", "title": "Key", "writeOnly": true, "maxLength": 64},
 			"WEATHER_CITY": {"type": "string", "title": "城市", "maxLength": 20}}}}`)
 	catalog := &bundles.Catalog{Dir: dir, Plugins: &plugins.Catalog{Dir: repoPlugins}}
 	e.chat.Bundles, e.controller.Bundles = catalog, catalog
@@ -42,7 +42,7 @@ func TestBundleConfigBecomesTheAgentsEnvironment(t *testing.T) {
 	agent := r.m(t)["id"].(string)
 	var listed []bundles.Bundle
 	e.get("/bundles").json(t, &listed)
-	expect(t, listed[1].Config.Properties["WEATHER_KEY"].WriteOnly, true)
+	expect(t, listed[1].Config["properties"].(map[string]any)["WEATHER_KEY"].(map[string]any)["writeOnly"], any(true))
 
 	// Nothing set: the agent goes without the bundle's plugins.
 	expect(t, e.get("/bundles/weather/config").m(t)["ready"], any(false))
@@ -83,7 +83,7 @@ func TestBundleConfigBecomesTheAgentsEnvironment(t *testing.T) {
 	expect(t, env["WEATHER_KEY"], weatherKey)
 	expect(t, env["WEATHER_CITY"], "")
 
-	expectError(t, set(map[string]any{"PATH": "/tmp"}), 422, "CONFIG_UNKNOWN")
+	expectError(t, set(map[string]any{"PATH": "/tmp"}), 422, "CONFIG_INVALID")
 	expectError(t, set(map[string]any{"WEATHER_CITY": strings.Repeat("长", 21)}), 422, "CONFIG_INVALID")
 	expectError(t, e.get("/bundles/tasks/config"), 404, "NOT_FOUND")
 

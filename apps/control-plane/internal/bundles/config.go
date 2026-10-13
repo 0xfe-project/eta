@@ -2,10 +2,9 @@ package bundles
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/akarachen/axp/apps/control-plane/internal/auth"
 	"github.com/akarachen/axp/packages/service-go/apierr"
 	"github.com/akarachen/axp/packages/service-go/pg"
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -23,57 +23,79 @@ import (
 // sealed, and given to every agent that loads it; until the required ones
 // are set its plugins stay out of those agents.
 
-// ConfigSchema is the subset of JSON Schema a bundle's config may use.
+// config.schema.json is what a bundle's config may be; the validation is
+// jsonschema-go's, both of a bundle's schema against it and of the user's
+// values against that schema.
+//
+//go:embed config.schema.json
+var metaSchemaJSON []byte
+
+var metaSchema = mustResolve(metaSchemaJSON)
+
+func mustResolve(data []byte) *jsonschema.Resolved {
+	var s jsonschema.Schema
+	if err := json.Unmarshal(data, &s); err != nil {
+		panic(err)
+	}
+	r, err := s.Resolve(nil)
+	if err != nil {
+		panic(err)
+	}
+	return r
+}
+
+// ConfigSchema is a bundle's config, resolved: whole (all of it, the
+// required values included, makes it ready) and without required (what
+// any save must satisfy).
 type ConfigSchema struct {
-	Type       string                    `json:"type" enum:"object"`
-	Properties map[string]ConfigProperty `json:"properties"`
-	Required   []string                  `json:"required,omitempty"`
+	schema         *jsonschema.Schema
+	whole, partial *jsonschema.Resolved
 }
 
-type ConfigProperty struct {
-	Type        string `json:"type" enum:"string"`
-	Title       string `json:"title,omitempty"`
-	Description string `json:"description,omitempty" doc:"Markdown."`
-	// A secret: it goes in and never comes back out.
-	WriteOnly bool `json:"writeOnly,omitempty" doc:"A secret: it goes in and never comes back out."`
-	MaxLength int  `json:"maxLength,omitempty"`
+// parseConfig checks a bundle.json's config against config.schema.json.
+func parseConfig(raw map[string]any) (*ConfigSchema, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	if err := metaSchema.Validate(raw); err != nil {
+		return nil, err
+	}
+	data, _ := json.Marshal(raw)
+	var s jsonschema.Schema
+	if err := json.Unmarshal(data, &s); err != nil {
+		return nil, err
+	}
+	whole, err := s.Resolve(nil)
+	if err != nil {
+		return nil, err
+	}
+	optional := s
+	optional.Required = nil
+	partial, err := optional.Resolve(nil)
+	if err != nil {
+		return nil, err
+	}
+	return &ConfigSchema{schema: &s, whole: whole, partial: partial}, nil
 }
 
-// defaultMaxLength bounds a value whose property sets none.
-const defaultMaxLength = 4096
-
-var envName = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
-
-// Variables the runtime, Codex and the system own.
-var reservedEnv = []string{"AXP_", "OTEL_", "CODEX_", "AKHOOK_", "NODE_", "LD_", "PATH", "HOME", "USER", "SHELL", "PWD", "HOSTNAME", "TERM", "LANG"}
-
-func reserved(name string) bool {
-	return slices.ContainsFunc(reservedEnv, func(r string) bool {
-		return name == r || strings.HasSuffix(r, "_") && strings.HasPrefix(name, r)
-	})
+func instance(values map[string]string) map[string]any {
+	out := make(map[string]any, len(values))
+	for k, v := range values {
+		out[k] = v
+	}
+	return out
 }
 
-func (s *ConfigSchema) check() error {
-	if s == nil {
-		return nil
-	}
-	if s.Type != "object" || len(s.Properties) == 0 {
-		return errors.New(`type must be "object", with properties`)
-	}
-	for name, p := range s.Properties {
-		if !envName.MatchString(name) || reserved(name) {
-			return fmt.Errorf("property %q is not an environment variable a bundle may set", name)
-		}
-		if p.Type != "string" {
-			return fmt.Errorf("property %q: only strings", name)
+// ready: the stored values make a valid config. Values of properties the
+// bundle no longer has are left out, not held against it.
+func (s *ConfigSchema) ready(values map[string]string) bool {
+	known := map[string]any{}
+	for k, v := range values {
+		if _, ok := s.schema.Properties[k]; ok {
+			known[k] = v
 		}
 	}
-	for _, name := range s.Required {
-		if _, ok := s.Properties[name]; !ok {
-			return fmt.Errorf("required %q is not a property", name)
-		}
-	}
-	return nil
+	return s.whole.Validate(known) == nil
 }
 
 // ConfigState is what the browser sees of a bundle's config: its values,
@@ -90,20 +112,16 @@ type ConfigState struct {
 // control plane's secret.
 const configPurpose = "bundle-config"
 
-func (s *ConfigSchema) ready(values map[string]string) bool {
-	return !slices.ContainsFunc(s.Required, func(name string) bool { return values[name] == "" })
-}
-
 func (c *Catalog) configured(name string) (*ConfigSchema, error) {
 	builtin, err := c.Builtin()
 	if err != nil {
 		return nil, err
 	}
 	i := slices.IndexFunc(builtin, func(b Bundle) bool { return b.Name == name })
-	if i < 0 || builtin[i].Config == nil {
+	if i < 0 || builtin[i].config == nil {
 		return nil, apierr.NotFound()
 	}
-	return builtin[i].Config, nil
+	return builtin[i].config, nil
 }
 
 func readConfig(ctx context.Context, db pg.DB, secret []byte, name string) (map[string]string, *time.Time, error) {
@@ -136,7 +154,7 @@ func open(secret, sealed []byte) (map[string]string, error) {
 func state(s *ConfigSchema, values map[string]string, updated *time.Time) *ConfigState {
 	out := &ConfigState{Values: map[string]string{}, Set: []string{}, Ready: s.ready(values), UpdatedAt: updated}
 	for name, v := range values {
-		if p, ok := s.Properties[name]; ok && v != "" {
+		if p, ok := s.schema.Properties[name]; ok && v != "" {
 			out.Set = append(out.Set, name)
 			if !p.WriteOnly {
 				out.Values[name] = v
@@ -172,24 +190,20 @@ func (c *Catalog) SetConfig(ctx context.Context, db pg.DB, secret []byte, name s
 	if err != nil {
 		return nil, err
 	}
-	for key, v := range changes {
-		p, ok := s.Properties[key]
-		if !ok {
-			return nil, apierr.New(422, "CONFIG_UNKNOWN", "环境包没有这一项配置："+key+"。")
+	for key := range values {
+		if _, ok := s.schema.Properties[key]; !ok {
+			delete(values, key) // a property the bundle no longer has
 		}
+	}
+	for key, v := range changes {
 		if v == nil || strings.TrimSpace(*v) == "" {
 			delete(values, key)
-			continue
+		} else {
+			values[key] = strings.TrimSpace(*v)
 		}
-		value := strings.TrimSpace(*v)
-		limit := p.MaxLength
-		if limit == 0 {
-			limit = defaultMaxLength
-		}
-		if len([]rune(value)) > limit || strings.ContainsRune(value, 0) {
-			return nil, apierr.New(422, "CONFIG_INVALID", fmt.Sprintf("%s 太长或含有无效字符。", title(key, p)))
-		}
-		values[key] = value
+	}
+	if err := s.partial.Validate(instance(values)); err != nil {
+		return nil, s.invalid(values)
 	}
 	plain, _ := json.Marshal(values)
 	sealed, err := auth.Seal(secret, configPurpose, plain)
@@ -213,11 +227,24 @@ func (c *Catalog) DeleteConfig(ctx context.Context, db pg.DB, name string) error
 	return err
 }
 
-func title(key string, p ConfigProperty) string {
-	if p.Title != "" {
-		return p.Title
+// invalid names the values that break the schema. The library's messages
+// quote values, and some are secrets, so they are not passed on.
+func (s *ConfigSchema) invalid(values map[string]string) error {
+	var bad []string
+	for key, v := range values {
+		p, ok := s.schema.Properties[key]
+		switch {
+		case !ok:
+			bad = append(bad, key)
+		case s.partial.Validate(map[string]any{key: v}) != nil:
+			if p.Title != "" {
+				key = p.Title
+			}
+			bad = append(bad, key)
+		}
 	}
-	return key
+	slices.Sort(bad)
+	return apierr.New(422, "CONFIG_INVALID", "配置不符合要求："+strings.Join(bad, "、")+"。")
 }
 
 // Configs are the bundles' values, by bundle, for the controller.
@@ -249,14 +276,14 @@ func Environment(chosen []Bundle, configs map[string]map[string]string) (env map
 	var enabled []string
 	for _, b := range chosen {
 		values := configs[b.Name]
-		if b.Config != nil && !b.Config.ready(values) {
+		if b.config != nil && !b.config.ready(values) {
 			continue
 		}
 		enabled = append(enabled, b.Plugins...)
-		if b.Config == nil {
+		if b.config == nil {
 			continue
 		}
-		for name := range b.Config.Properties {
+		for name := range b.config.schema.Properties {
 			if v := values[name]; v != "" {
 				env[name] = v
 			}
