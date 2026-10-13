@@ -24,8 +24,10 @@ export interface Settings {
   home: string;
   workspace: string;
   codexHome: string;
-  // The image's compiled plugins.
+  // The image's compiled plugins, and those left out: the controller
+  // disables the plugins of a bundle whose config is incomplete.
   pluginsDir: string;
+  disabledPlugins: string[];
   // Outside the volume: gh's login and git's commit identity.
   runDir: string;
   port: number;
@@ -60,6 +62,10 @@ export function loadSettings(env: NodeJS.ProcessEnv = process.env): Settings {
     workspace: join(home, "workspace"),
     codexHome: env.CODEX_HOME || join(home, "codex"),
     pluginsDir: env.AXP_PLUGINS_DIR || "/opt/axp/plugins",
+    disabledPlugins: (env.AXP_DISABLED_PLUGINS ?? "")
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean),
     runDir: env.AXP_RUN_DIR || "/run/axp",
     port: Number(env.AXP_RUNTIME_PORT) || 8080,
   };

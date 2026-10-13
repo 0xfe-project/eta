@@ -126,7 +126,7 @@ import { GrokThought } from "@/components/brainless/grok/grok-thought";
 - `/workspace/tasks`：任务列表（按状态分组，点状态图标直接改）或看板（拖动卡片改状态），可按指派过滤；布局和过滤记在浏览器里（`axp.workspace.v1`），下次打开保持上次的选择；`?task=<id>` 打开任务，正文和时间线在左、属性在右；`?task=new` 新建。
 - `/workspace/routines`：列表在左、定时任务详情或报告在右，参数同面板（`routine`、`run`、`edit`）。
 - `/workspace/memory`：对应面板内容的全窗口版本。
-- 设置是首页和 `/workspace` 共用的弹层；“连接”分区管理需要用户自己配置的 GitHub（App 向导）和 Grok（就是“模型服务”里 LLM 网关的 xAI 账号，grok 插件也用它；两处显示同一组账号，没有第二份凭据）。`?settings=<分区>` 在任意页面打开对应分区，GitHub 的回调用 `/?settings=connections&github=…`；旧的 `/workspace/capabilities` 带参数跳到这里。
+- 设置是首页和 `/workspace` 共用的弹层；“连接”分区管理需要用户自己配置的 GitHub（App 向导）和 Grok（就是“模型服务”里 LLM 网关的 xAI 账号，grok 插件也用它；两处显示同一组账号，没有第二份凭据），以及每个声明了配置的内置环境包（表单由它的 schema 生成，见[环境包](../../docs/architecture/bundles.md#配置)）。`?settings=<分区>` 在任意页面打开对应分区，GitHub 的回调用 `/?settings=connections&github=…`；旧的 `/workspace/capabilities` 带参数跳到这里。
 - `/workspace/inbox`：确认请求，形态像通知：按天分组，待处理的标记出来、就地答复，之前的显示当时的选择或已过期；`?filter=pending` 只看待处理。历史来自 `GET /api/v1/chat/interactions`，并由聊天事件流保持实时。
 
 分区和面板共用同一套组件与 URL 参数（`task-nav.ts`、`routine-nav.ts`、`workspace-search.ts`），都支持直接访问、刷新和浏览器历史导航。

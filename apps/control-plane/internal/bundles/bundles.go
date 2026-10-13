@@ -35,6 +35,9 @@ type Bundle struct {
 	Script string `json:"script" doc:"Run as root when an agent's image is built, from the bundle's directory."`
 	// Plugins it adds, by name (GET /api/v1/plugins).
 	Plugins []string `json:"plugins" doc:"Plugins it adds, by name (GET /api/v1/plugins)."`
+	// What the user sets for it (config.go); built-in bundles only.
+	Config map[string]any `json:"config,omitempty" doc:"What the user sets for it, a JSON Schema of string properties: environment variables of the agents that load it."`
+	config *ConfigSchema
 	// A built-in bundle's directory.
 	Dir string `json:"-"`
 }
@@ -85,6 +88,9 @@ func readDir(dir string) ([]Bundle, error) {
 		b.Script = string(script)
 		if b.Plugins == nil {
 			b.Plugins = []string{}
+		}
+		if b.config, err = parseConfig(b.Config); err != nil {
+			return nil, fmt.Errorf("%s: config: %w", manifest, err)
 		}
 		out = append(out, b)
 	}
