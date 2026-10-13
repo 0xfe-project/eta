@@ -448,7 +448,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		...(compaction === undefined ? {} : { compaction }),
 		initialTranscript: transcript,
 		...(options.runner?.systemPrompt === undefined
-			? { systemPrompt: async () => composeEtaSystemPrompt(base, await promptState()) }
+			? { systemPrompt: async () => composeEtaSystemPrompt(base, (await refreshPrompt()).state) }
 			: {}),
 		// The cadence's nudge rides with the request it was due for: drained once, so a
 		// turn that is never sent does not spend it, and never written to the transcript
@@ -495,12 +495,29 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 			...(memoryBlock === undefined || memoryBlock.length === 0 ? {} : { memory: memoryBlock }),
 		};
 	};
-	const promptSections = async () => {
+	// One refresh, two consumers: the runner composes its system prompt from the state
+	// this returns, and the view's `prompt` section reads the box the same read leaves
+	// behind. The Context panel asks "what will it send?" before the first run as often
+	// as "what did it send?" after one, so every composition writes the box — not just
+	// the ones a caller asked for. A refresh that a newer one superseded drops its
+	// write: a persona switch mid-read must not come back as the card it replaced.
+	let promptRevision = 0;
+	const refreshPrompt = async (): Promise<{
+		state: EtaPromptState;
+		sections: EtaPromptSection[];
+		stableChars: number;
+		adaptiveChars: number;
+	}> => {
+		const revision = ++promptRevision;
 		const state = await promptState();
 		const blocks = etaPromptBlockChars(base, state);
 		const sections = etaPromptSectionsDetailed(base, state);
-		promptBox.value = { sections, ...blocks };
-		return { sections, ...blocks };
+		if (revision === promptRevision) promptBox.value = { sections, ...blocks };
+		return { state, sections, ...blocks };
+	};
+	const promptSections = async () => {
+		const { sections, stableChars, adaptiveChars } = await refreshPrompt();
+		return { sections, stableChars, adaptiveChars };
 	};
 
 	// The end of a run is when a stretch of work stops being read: ask what was worth
@@ -621,6 +638,15 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		revision: () => String(memoryBox.chars ?? -1),
 	});
 
+	// The panel is filled before the first generation, not by it: a prompt section that
+	// stays empty until the model has run answers "what did it send?" when the person is
+	// asking "what will it send?". A persona switch re-reads it the way eta-agent's
+	// `applyPersona` refreshed its blocks — the card moved, so the panel moves with it.
+	await refreshPrompt();
+	const stopPromptRefresh = kernelOn(kernel.ctx)("persona:switched", () => {
+		void refreshPrompt();
+	});
+
 	return {
 		kernel,
 		models: options.models,
@@ -654,6 +680,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
 		tasks,
 		stop: () => {
 			stopExtraction?.();
+			stopPromptRefresh();
 			stopGoalEntries();
 		},
 	};

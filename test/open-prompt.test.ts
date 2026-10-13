@@ -8,7 +8,7 @@
  */
 import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { openSession } from "../src/open";
 import { DEFAULT_SYSTEM_PROMPT } from "../src/prompts";
 
@@ -191,5 +191,42 @@ describe("what a restarted session composes", () => {
 		expect(prompt).toContain("remember me");
 		await restarted.kernel.dispose();
 		restarted.stop();
+	});
+});
+
+describe("what the prompt panel reads", () => {
+	/** The `prompt` view section — the one the Context panel's button is gated on. */
+	const promptSection = (session: Awaited<ReturnType<typeof openSession>>) =>
+		session.view.snapshot().sections.prompt as
+			| { sections: { name: string; text: string }[]; stableChars: number; adaptiveChars: number }
+			| undefined;
+
+	it("is filled at open, before any generation has run", async () => {
+		const session = await sessionWith({
+			storage: new MemoryStorage(),
+			models: fakeModels([]) as never,
+			memorySource: () => "<memory>notes</memory>",
+		});
+		// No run happened; the panel already answers "what will it send?".
+		const prompt = promptSection(session);
+		expect(prompt?.sections.map((section) => section.name)).toEqual(["base", "memory"]);
+		expect(prompt?.sections[0]?.text).toBe(DEFAULT_SYSTEM_PROMPT);
+		expect(prompt?.stableChars).toBeGreaterThan(0);
+		await session.kernel.dispose();
+		session.stop();
+	});
+
+	it("follows a persona switch without a run", async () => {
+		const session = await sessionWith({ storage: new MemoryStorage(), models: fakeModels([]) as never });
+		expect(promptSection(session)?.sections.some((section) => section.name === "persona")).toBe(false);
+		session.kernel.persona.loadCards([{ id: "Executor", name: "Executor", content: "Ship it." }]);
+		session.kernel.persona.setActive(["Executor"]);
+		// The switch re-reads the prompt off the event; the card moved, so the panel moves.
+		await vi.waitFor(() => {
+			expect(promptSection(session)?.sections.map((section) => section.name)).toContain("persona");
+		});
+		expect(promptSection(session)?.sections.find((section) => section.name === "persona")?.text).toBe("Ship it.");
+		await session.kernel.dispose();
+		session.stop();
 	});
 });
