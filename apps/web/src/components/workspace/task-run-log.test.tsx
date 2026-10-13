@@ -60,7 +60,7 @@ describe("a run's log", () => {
     rstest.restoreAllMocks();
   });
 
-  it("shows an image the agent saw in its place, as what it is", async () => {
+  it("says where the agent read an image, in order, without a broken one", async () => {
     rstest.spyOn(globalThis, "fetch").mockImplementation(
       async () =>
         new Response(
@@ -102,11 +102,11 @@ describe("a run's log", () => {
     });
     const log = container.querySelector('ol[aria-label="执行记录"]')!;
     const items = [...log.children].map((li) => li.textContent);
-    // In order, each with its own type, and no broken <img>.
+    // In order, and no broken <img>.
     expect(items).toEqual([
       "回复截图看看",
-      "图片PNG 图片，原图在 remote-builder 上",
-      "图片JPG 图片，原图在 remote-builder 上",
+      "读取了图片",
+      "读取了图片",
       "回复布局对了",
     ]);
     expect(log.querySelector("img")).toBeNull();

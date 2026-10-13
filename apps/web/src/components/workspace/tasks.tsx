@@ -16,7 +16,6 @@ import { ChatCircleIcon } from "@phosphor-icons/react/ChatCircle";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { GitPullRequestIcon } from "@phosphor-icons/react/GitPullRequest";
-import { ImageIcon } from "@phosphor-icons/react/Image";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
@@ -799,7 +798,8 @@ const logKindLabels: Record<LogEntry["kind"], string> = {
   tool: "工具",
   reasoning: "思考",
   terminal: "终端",
-  image: "图片",
+  // Its file is on the remote computer, out of the relay's reach.
+  image: "读取了图片",
   other: "其他",
 };
 
@@ -830,18 +830,12 @@ function RunLog({ task, run }: { task: string; run: TaskRun }) {
           {loadingOlder ? "正在读取更早的记录…" : "加载更早的记录"}
         </Button>
       ) : null}
-      <RunLogEntries entries={entries} computer={run.computer_name} />
+      <RunLogEntries entries={entries} />
     </div>
   );
 }
 
-function RunLogEntries({
-  entries,
-  computer,
-}: {
-  entries: LogEntry[];
-  computer: string | null;
-}) {
+function RunLogEntries({ entries }: { entries: LogEntry[] }) {
   // Entries can be alike (same time, kind and start): number the repeats.
   const seen = new Map<string, number>();
   const key = (entry: LogEntry) => {
@@ -866,9 +860,7 @@ function RunLogEntries({
               $ {entry.command}
             </pre>
           ) : null}
-          {entry.kind === "image" ? (
-            <RemoteImage name={entry.text} computer={computer} />
-          ) : entry.text ? (
+          {entry.text && entry.kind !== "image" ? (
             entry.kind === "assistant" || entry.kind === "user" ? (
               <Folded max="max-h-40">
                 <Markdown className="mt-0.5 text-xs">{entry.text}</Markdown>
@@ -884,32 +876,6 @@ function RunLogEntries({
         </li>
       ))}
     </ol>
-  );
-}
-
-/**
- * An image the agent saw (a screenshot it read, say). Its runtime keeps it in
- * a temporary file on that computer, which the relay cannot read: say what it
- * is, in its place, rather than show a broken image.
- */
-function RemoteImage({
-  name,
-  computer,
-}: {
-  name: string;
-  computer: string | null;
-}) {
-  const type = name.split(".").at(-1)?.toUpperCase();
-  return (
-    <p className="mt-0.5 flex gap-1 text-muted-foreground" title={name}>
-      {/* As tall as a line, so the icon stays by the first one. */}
-      <span className="flex h-lh shrink-0 items-center">
-        <ImageIcon aria-hidden="true" className="size-3.5" />
-      </span>
-      <span className="wrap-anywhere">
-        {type ? `${type} 图片` : "图片"}，原图在 {computer ?? "远程电脑"} 上
-      </span>
-    </p>
   );
 }
 
