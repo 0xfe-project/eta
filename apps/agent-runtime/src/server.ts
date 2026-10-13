@@ -3,7 +3,7 @@
 // network and can reach this port, never the token.
 
 import type { Context } from "hono";
-import type { Agent, Answer, Kind } from "./agent.ts";
+import type { Agent, Answer, Kind, ThreadTarget } from "./agent.ts";
 import type { Fetcher, Part } from "./attachments.ts";
 import type { UserInput } from "./protocol/v2/UserInput";
 import { Buffer } from "node:buffer";
@@ -15,6 +15,8 @@ interface Input {
   boot_id?: unknown;
   command_id?: unknown;
   text?: unknown;
+  thread_key?: unknown;
+  codex_thread_id?: unknown;
   parts?: unknown;
   kind?: unknown;
   approval_id?: unknown;
@@ -52,13 +54,21 @@ export function controlAPI(
         commandId: string,
         input: string | UserInput[],
         kind: Kind,
+        target: ThreadTarget,
       ) => Promise<Answer>,
     ) =>
     async (c: Context) => {
       const body = (await c.req.json().catch(() => null)) as Input | null;
       if (
         typeof body?.command_id !== "string" ||
-        typeof body.text !== "string"
+        typeof body.text !== "string" ||
+        typeof body.thread_key !== "string" ||
+        body.thread_key.length === 0 ||
+        !(
+          body.codex_thread_id === null ||
+          (typeof body.codex_thread_id === "string" &&
+            body.codex_thread_id.length > 0)
+        )
       ) {
         return c.json({ error: "invalid" }, 400);
       }
@@ -81,16 +91,19 @@ export function controlAPI(
           );
         }
       }
-      const answer = await run(body.command_id, input, kind);
+      const answer = await run(body.command_id, input, kind, {
+        thread_key: body.thread_key,
+        codex_thread_id: body.codex_thread_id,
+      });
       return c.json(answer, answer.accepted ? 200 : 409);
     };
   app.post(
     "/prompt",
-    deliver((id, text, kind) => agent.prompt(id, text, kind)),
+    deliver((id, text, kind, target) => agent.prompt(id, text, target, kind)),
   );
   app.post(
     "/steer",
-    deliver((id, text) => agent.steer(id, text)),
+    deliver((id, text, _kind, target) => agent.steer(id, text, target)),
   );
 
   // The user's answer to an approval; "not_pending" once it is gone.

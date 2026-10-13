@@ -1,4 +1,4 @@
-// The agent's one Codex thread, as the control plane drives it: a prompt
+// The agent's group threads, as the control plane drives them: a prompt
 // starts a turn (or a compaction) for a command, a steer joins the running
 // turn, an abort stops it, a decision answers an approval Codex asked for.
 // What the turn does is reported as events for the command that owns it
@@ -8,9 +8,11 @@
 import type { Codex, Notification, Request } from "./appserver.ts";
 import type { ItemView } from "./items.ts";
 import type { UserInput } from "./protocol/v2/UserInput";
+import type { ThreadSettings } from "./thread.ts";
 import { randomUUID } from "node:crypto";
 import { RpcError } from "./appserver.ts";
 import { itemView, textView } from "./items.ts";
+import { openThread, ResumeFailed } from "./thread.ts";
 
 type Json = Record<string, unknown>;
 
@@ -21,6 +23,11 @@ export type Answer =
   | { accepted: false; code: string; reason?: string };
 
 export type Kind = "turn" | "compact";
+
+export interface ThreadTarget {
+  thread_key: string;
+  codex_thread_id: string | null;
+}
 
 export interface Timing {
   // Streamed reply text is reported at most this often.
@@ -115,6 +122,9 @@ function response(kind: string, decision: string): unknown {
 }
 
 export class Agent {
+  private readonly threads = new Map<string, string>();
+  private threadKey: string | null = null;
+  private threadId: string | null = null;
   // The command whose turn runs (or is starting), and Codex's id for the turn.
   private owner: string | null = null;
   private turnId: string | null = null;
@@ -138,7 +148,7 @@ export class Agent {
 
   constructor(
     private readonly codex: Codex,
-    readonly threadId: string,
+    private readonly settings: ThreadSettings,
     private readonly emit: Emit,
     private readonly timing: Timing = defaultTiming,
   ) {
@@ -157,14 +167,19 @@ export class Agent {
     return this.reading;
   }
 
-  status(): { command_id: string | null; turn_id: string | null } {
-    return { command_id: this.owner, turn_id: this.turnId };
+  status() {
+    return {
+      command_id: this.owner,
+      turn_id: this.turnId,
+      thread_key: this.threadKey,
+    };
   }
 
   /** Start the command's turn, or compact the thread; refused while another runs. */
   async prompt(
     commandId: string,
     input: string | UserInput[],
+    target: ThreadTarget,
     kind: Kind = "turn",
   ): Promise<Answer> {
     if (this.taken.has(commandId)) {
@@ -177,6 +192,34 @@ export class Agent {
     this.owner = commandId;
     this.taken.add(commandId);
     try {
+      const cached = this.threads.get(target.thread_key);
+      if (
+        cached &&
+        target.codex_thread_id &&
+        cached !== target.codex_thread_id
+      ) {
+        throw new ResumeFailed(
+          "The control plane changed this group's thread id",
+        );
+      }
+      this.threadKey = target.thread_key;
+      if (cached) {
+        this.threadId = cached;
+      } else {
+        const thread = await openThread(
+          this.codex,
+          this.settings,
+          target.codex_thread_id,
+        );
+        this.threadId = thread.threadId;
+        this.threads.set(target.thread_key, thread.threadId);
+        this.emit("thread.opened", {
+          command_id: commandId,
+          thread_key: target.thread_key,
+          codex_thread_id: thread.threadId,
+          resumed: thread.resumed,
+        });
+      }
       if (kind === "compact") {
         await this.codex.request("thread/compact/start", {
           threadId: this.threadId,
@@ -193,19 +236,44 @@ export class Agent {
       this.taken.delete(commandId);
       if (this.owner === commandId && this.turnId === null) {
         this.owner = null;
+        this.threadKey = null;
+        this.threadId = null;
+      }
+      if (error instanceof ResumeFailed) {
+        return {
+          accepted: false,
+          code: "RECOVERY_RESUME_FAILED",
+          reason: error.message,
+        };
       }
       return refusal(error);
     }
   }
 
   /** Add the command's input to the running turn; refused without one. */
-  async steer(commandId: string, input: string | UserInput[]): Promise<Answer> {
+  async steer(
+    commandId: string,
+    input: string | UserInput[],
+    target: ThreadTarget,
+  ): Promise<Answer> {
+    if (
+      target.thread_key !== this.threadKey ||
+      (target.codex_thread_id !== null &&
+        target.codex_thread_id !== this.threadId)
+    ) {
+      return { accepted: false, code: "no_active_turn" };
+    }
     if (this.taken.has(commandId) || this.steers.has(commandId)) {
       return { accepted: true };
     }
     const owner = this.owner;
     const turnId = this.turnId;
-    if (owner === null || turnId === null || this.stopped.has(owner)) {
+    if (
+      owner === null ||
+      turnId === null ||
+      this.threadId === null ||
+      this.stopped.has(owner)
+    ) {
       return { accepted: false, code: "no_active_turn" };
     }
     let answer: (taken: boolean) => void = () => {};
@@ -281,6 +349,7 @@ export class Agent {
   }
 
   private async interrupt(turnId: string): Promise<void> {
+    if (this.threadId === null) return;
     try {
       await this.codex.request("turn/interrupt", {
         threadId: this.threadId,
@@ -304,6 +373,9 @@ export class Agent {
     const commandId = this.owner;
     if (
       commandId === null ||
+      (typeof params.threadId === "string" &&
+        params.threadId !== this.threadId) ||
+      (typeof params.turnId === "string" && params.turnId !== this.turnId) ||
       (kind === "elicitation" && !confirmation(params))
     ) {
       return response(kind, "decline");
@@ -354,6 +426,12 @@ export class Agent {
     ) {
       return;
     }
+    if (
+      typeof params.turnId === "string" &&
+      this.turnId !== null &&
+      params.turnId !== this.turnId
+    )
+      return;
     switch (notification.method) {
       case "turn/started":
         this.turnStarted(params);
@@ -462,6 +540,7 @@ export class Agent {
     this.flush();
     const turn = record(params.turn);
     const turnId = str(turn.id) || this.turnId;
+    if (this.turnId !== null && turnId !== this.turnId) return;
     // Steers Codex accepted but never echoed still went to this turn; never
     // run them again. One still waiting for its answer is waited for:
     // refused (the turn had ended), it was never part of it.
@@ -491,6 +570,8 @@ export class Agent {
     }
     this.owner = null;
     this.turnId = null;
+    this.threadKey = null;
+    this.threadId = null;
     this.texts.clear();
     this.dirty.clear();
   }

@@ -17,7 +17,7 @@
 ## 一条消息的路径
 
 1. `POST /chat/messages` 在一个事务里写入幂等记录、用户消息、助手回复占位和 `agent_command(queued)`，并通知 controller，返回 202。用户消息的 id 可以由客户端给出（见下文[发送](#发送)）。每个智能体最多 20 条在等（`429 QUEUE_FULL`）。
-2. controller 的 `Dispatch`：智能体的容器是当前配置、它的 runtime 已经报告启动（`agent.boot_id`），且没有正在执行的命令时，取最早的一条，先在事务里记为已交付（`status = running`、`delivered_at`、`boot_id`），再 `POST /prompt {boot_id, command_id, text, kind}`。
+2. controller 的 `Dispatch`：智能体的容器是当前配置、它的 runtime 已经报告启动（`agent.boot_id`），且没有正在执行的命令时，取最早的一条，先在事务里记为已交付（`status = running`、`delivered_at`、`boot_id`），再 `POST /prompt {boot_id, command_id, thread_key, codex_thread_id, text, kind}`。
 3. runtime 用 `turn/start` 开始一个 turn（`clientUserMessageId` 就是命令 id），Codex 的通知被转换成事件：`turn.started`、`item.updated`（增量文本每 0.3 秒合并一次）、`approval.*`、`turn.steered`、`turn.completed`。
 4. 事件发到 `axp.agent.<agent>.events`；controller 按顺序读 stream，每批在一个事务里导入 `agent_event` 并投影为消息块和 `ui_event`，同时记下读到的位置（`event_position`），SSE 推给浏览器。导入后唤醒该智能体：turn 结束了，下一条随即交付。
 
@@ -65,7 +65,7 @@ agenvo 插件的 `execute` 是任意脚本，可以调用多个原生方法、�
 
 容器启动所用的一切（镜像、模型、指令）由 controller 每个 tick 算出一份配置摘要，写在容器的标签上：
 
-- 名称、指令、模型或环境包变了（`config_version` 递增），或者某个环境包、插件、runtime 镜像变了（镜像摘要不同），controller 在该智能体没有执行中的工作时替换它的容器，新容器在同一个卷上恢复同一个 thread。替换前不再交付新的命令，所以配置不会在 turn 中途改变，也不会被排队的消息一直拖住。
+- 名称、指令、模型或环境包变了（`config_version` 递增），或者某个环境包、插件、runtime 镜像变了（镜像摘要不同），controller 在该智能体没有执行中的工作时替换它的容器，新容器在同一个卷上按控制面给出的 id 恢复各群的 thread。替换前不再交付新的命令，所以配置不会在 turn 中途改变，也不会被排队的消息一直拖住。
 - 重启（`POST /agents/{id}/restart`）递增 `config_version` 并停止该智能体进行中的回复，中断确认后容器被替换。
 - 删除只隐藏智能体：排队的取消、进行中的中断，controller 移除它的容器；卷和历史消息保留。
 
@@ -75,18 +75,20 @@ agenvo 插件的 `execute` 是任意脚本，可以调用多个原生方法、�
 
 1. 把镜像里编译好的插件装进 `CODEX_HOME`（卷上的 `/agent/codex`）：Codex 只加载装过的副本；上一个镜像装过、这个镜像没有的，卸掉。装好后在副本的 `.mcp.json` 里填入网关地址和工作区。
 2. 开始定时刷新 GitHub 凭据（gh 的 `hosts.yml` 和 git 的提交身份，在 `/run/axp`，不在卷上）。
-3. 启动 `codex app-server`，用 `thread/list` 找到智能体的 thread：工作区（`/agent/workspace`）里最近更新的根 thread（子智能体的 thread 有 `parentThreadId`，跳过）。有就 `thread/resume`，没有（第一个 turn 之前 Codex 不保存 thread）就 `thread/start`。resume 失败（不是“找不到”）时报告 `runtime.failed(RECOVERY_RESUME_FAILED)`，绝不另起 thread。
-4. 在 `:8080` 提供控制接口，发出 `runtime.started {thread_id, resumed}`。
+3. 启动 `codex app-server`，此时不开 thread。在 `:8080` 提供控制接口，发出 `runtime.started {}`。
+4. 命令带 `thread_key`（群 id）和 `codex_thread_id`（首次为 null）。首次遇到这个群时按给出的 id `thread/resume`，没有 id 才 `thread/start`；发出 `thread.opened {command_id, thread_key, codex_thread_id, resumed}`，控制面保存映射。已经加载的群直接复用；所有 thread 共用智能体的工作目录，不调用 `thread/list` 猜上下文。
+
+runtime 只有一个执行槽，打开或恢复 thread 时也占用它。压缩和停止只作用于当前 thread；插话必须属于同一群。通知和审批检查当前 thread / turn，其他群的迟到事件不进入当前回复。恢复失败返回 `RECOVERY_RESUME_FAILED`，只影响该命令，不新建替代 thread，也不让整个 runtime 退出。
 
 控制接口（hono）只认 controller 的令牌（`HMAC(AXP_SECRET_KEY, control:<agent>)`，`Authorization: Bearer`）：同一网络上的其他 runtime 连得到端口，拿不到令牌。Codex 和智能体执行的命令看不到这个令牌。
 
-| 接口           | 内容                                             | 说明                                                                                                              |
-| -------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| `POST /prompt` | `boot_id`、`command_id`、`text`、`parts`、`kind` | 开始命令的 turn（`kind: compact` 时压缩）；有 turn 在运行时 `409 busy`；附件取不到时 `409 attachment_unavailable` |
-| `POST /steer`  | `boot_id`、`command_id`、`text`、`parts`         | 加入运行中的 turn；没有时 `409 no_active_turn`                                                                    |
-| `POST /abort`  | `command_id`                                     | 中断这个命令的 turn，现在或它开始时                                                                               |
-| `POST /decide` | `approval_id`、`decision`                        | 用户对审批的决定（`accept`、`decline`）                                                                           |
-| `GET /status`  |                                                  | `boot_id`、当前命令和 turn                                                                                        |
+| 接口           | 内容                                                                              | 说明                                                                                                              |
+| -------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `POST /prompt` | `boot_id`、`command_id`、`thread_key`、`codex_thread_id`、`text`、`parts`、`kind` | 开始命令的 turn（`kind: compact` 时压缩）；有 turn 在运行时 `409 busy`；附件取不到时 `409 attachment_unavailable` |
+| `POST /steer`  | `boot_id`、`command_id`、`thread_key`、`codex_thread_id`、`text`、`parts`         | 加入同一群运行中的 turn；没有时 `409 no_active_turn`                                                              |
+| `POST /abort`  | `command_id`                                                                      | 中断这个命令的 turn，现在或它开始时                                                                               |
+| `POST /decide` | `approval_id`、`decision`                                                         | 用户对审批的决定（`accept`、`decline`）                                                                           |
+| `GET /status`  |                                                                                   | `boot_id`、当前命令、群和 turn                                                                                    |
 
 `boot_id` 是 runtime 每次启动生成的。prompt 和 steer 必须带上 controller 记下的那一次（`409 wrong_boot`）：Docker 重启了 runtime 而它还没报告时，发给它的命令退回等待，不会在新的启动里被当成旧的。
 
@@ -96,7 +98,7 @@ Codex 的静态配置是 `danger-full-access` 沙箱、`on-request` 审批：容
 
 ## 恢复与隔离
 
-- runtime 不能继续时退出（Codex 退出、插件安装失败、无法恢复 thread），Docker 按重启策略（`unless-stopped`，越来越久的间隔）重新启动它。新的启动发出 `runtime.started` 时，交付给之前启动的命令以“执行中断，无法确认结果，未自动重试”失败，绝不重放；还在等的命令交给新的启动。
+- runtime 不能继续时退出（Codex 退出、插件安装失败），Docker 按重启策略（`unless-stopped`，越来越久的间隔）重新启动它。新的启动发出 `runtime.started` 时，交付给之前启动的命令以“执行中断，无法确认结果，未自动重试”失败，绝不重放；还在等的命令交给新的启动。
 - `runtime.failed` 把智能体置为不可用，等待中的回复以中文原因失败（插件：“智能体扩展启动失败”；恢复：“智能体会话无法恢复”）。下一次启动报告成功后恢复可用。
 - 镜像构建失败时，智能体不可用，`build_error` 是构建输出的末尾（智能体编辑器里显示），等待中和之后的消息以“智能体环境构建失败”失败；修改智能体、修改环境包或重启后再构建。
 - runtime 没发出去的事件在它退出时丢失；它最后的状态以 controller 的处理为准。

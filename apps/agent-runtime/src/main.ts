@@ -1,7 +1,6 @@
 // The agent runtime: one container per agent, always running, its state on
 // the agent's volume (/agent). On start it installs the image's plugins,
-// starts Codex's app-server, resumes the agent's thread (or starts one: there
-// is none before the first turn), serves the control API and reports itself
+// starts Codex's app-server, serves the control API and reports itself
 // started. Docker restarts it when it exits.
 
 import { randomUUID } from "node:crypto";
@@ -18,7 +17,6 @@ import { Outbox } from "./outbox.ts";
 import { installPlugins } from "./plugins.ts";
 import { controlAPI } from "./server.ts";
 import { codexArgs, loadSettings } from "./settings.ts";
-import { openThread, ResumeFailed } from "./thread.ts";
 
 function info(...parts: unknown[]): void {
   process.stdout.write(`${parts.join(" ")}\n`);
@@ -61,7 +59,6 @@ async function main(): Promise<void> {
     process.exit(code);
   };
 
-  let thread: { threadId: string; resumed: boolean };
   try {
     await mkdir(s.workspace, { recursive: true });
     await mkdir(s.codexHome, { recursive: true });
@@ -80,13 +77,6 @@ async function main(): Promise<void> {
     };
     delete env.AXP_CONTROL_TOKEN;
     codex = await AppServer.start("codex", codexArgs(s), env, s.workspace);
-    try {
-      thread = await openThread(codex, s);
-    } catch (error) {
-      throw error instanceof ResumeFailed
-        ? new StartFailed("RECOVERY_RESUME_FAILED", error)
-        : error;
-    }
   } catch (error) {
     console.error("Runtime not ready", error);
     outbox.emit("runtime.failed", {
@@ -95,7 +85,7 @@ async function main(): Promise<void> {
     return exit(1);
   }
 
-  const agent = new Agent(codex, thread.threadId, outbox.emit);
+  const agent = new Agent(codex, s, outbox.emit);
   agent.onExit = (code) => {
     if (!stopping) {
       console.error("Codex exited", code);
@@ -111,13 +101,8 @@ async function main(): Promise<void> {
     hostname: "0.0.0.0",
     port: s.port,
   });
-  info(
-    `${thread.resumed ? "Resumed" : "Started"} thread ${thread.threadId}; control API on :${s.port}`,
-  );
-  outbox.emit("runtime.started", {
-    thread_id: thread.threadId,
-    resumed: thread.resumed,
-  });
+  info(`Control API on :${s.port}; group threads open on demand`);
+  outbox.emit("runtime.started", {});
 
   // Docker stops containers with SIGTERM, then kills them after 10 seconds.
   const stop = (): void => {
