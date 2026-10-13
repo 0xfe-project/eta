@@ -1,0 +1,6 @@
+{
+  "name": "groups",
+  "version": "1.0.0",
+  "description": "在当前群内检索、协作和整理决定。",
+  "targets": ["chat"]
+}

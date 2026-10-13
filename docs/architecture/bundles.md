@@ -9,7 +9,7 @@
 | 内置   | `apps/agent-runtime/bundles/<name>/`  | `bundle.json`（`name`、`description`、`plugins`），可选 `setup` 脚本和它用到的文件；只读 |
 | 自定义 | 表 `bundle`，设置里的“环境包”页面编辑 | 名称（小写字母、数字和连字符）、说明、脚本、插件                                         |
 
-内置的环境包现在各带一个插件（agenvo、approval、artifacts、github、grok、memory、oomol、routines、tasks），所以按插件选择的方式不变。新建智能体时默认载入全部内置环境包。
+内置的环境包现在各带一个插件（agenvo、approval、artifacts、github、grok、groups、memory、oomol、routines、tasks），所以按插件选择的方式不变。新建智能体时默认载入全部内置环境包。
 
 脚本以 root 在镜像里运行，有网络：可以 `apt-get install`、下载工具。不以 `#!` 开头的自定义脚本按 `sh -eu` 执行。脚本运行时的当前目录是环境包在镜像里的目录（`/opt/axp/bundles/<name>`，即 `BUNDLE_ROOT`），`TARGETARCH` 是目标架构。
 
@@ -66,3 +66,7 @@ RUN axp-plugins chat /opt/axp/plugins /etc/codex /opt/axp/plugins
 | `GET /api/v1/plugins`           | 环境包可以带的插件                                   |
 
 智能体的 `bundles` 在 `POST /api/v1/agents` 和 `PATCH /api/v1/agents/{id}` 里设置，按目录顺序保存。
+
+## 必选环境包
+
+内置的 `groups` 和 `memory` 在 `bundle.json` 中声明 `required: true`，没有用户必填配置。`POST/PATCH /agents` 保存选择时自动包含必选项，编辑器把它们显示为已选且不可取消。必选只约束智能体的选择，不另建启用状态。旧智能体的补齐属于 #237 的手工迁移，controller 启动时不改数据库。

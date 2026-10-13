@@ -175,15 +175,19 @@ type Failure struct {
 }
 
 type Message struct {
-	ID        string        `json:"id"`
-	AgentID   string        `json:"agent_id"`
-	Role      string        `json:"role" enum:"user,assistant"`
-	ReplyToID *string       `json:"reply_to_id"`
-	Status    string        `json:"status" enum:"queued,responding,waiting_for_input,stopping,completed,stopped,failed"`
-	Revision  int64         `json:"revision"`
-	Blocks    []Block       `json:"blocks"`
-	Failure   *Failure      `json:"failure"`
-	CreatedAt jsontime.Time `json:"created_at"`
+	GroupID   string         `json:"group_id"`
+	Seq       int64          `json:"seq"`
+	Kind      string         `json:"kind" enum:"message,mention,system,task_draft,task_card"`
+	Data      map[string]any `json:"data"`
+	ID        string         `json:"id"`
+	AgentID   string         `json:"agent_id"`
+	Role      string         `json:"role" enum:"user,assistant,system"`
+	ReplyToID *string        `json:"reply_to_id"`
+	Status    string         `json:"status" enum:"queued,responding,waiting_for_input,stopping,completed,stopped,failed"`
+	Revision  int64          `json:"revision"`
+	Blocks    []Block        `json:"blocks"`
+	Failure   *Failure       `json:"failure"`
+	CreatedAt jsontime.Time  `json:"created_at"`
 }
 
 type InteractionOption struct {
@@ -192,6 +196,7 @@ type InteractionOption struct {
 }
 
 type Interaction struct {
+	GroupID   string              `json:"group_id"`
 	ID        string              `json:"id"`
 	AgentID   string              `json:"agent_id"`
 	MessageID string              `json:"message_id"`
@@ -215,6 +220,7 @@ type InteractionList struct {
 // Snapshot is the chat as of EventCursor: every agent, the replies still in
 // progress and the interactions still open. The rest arrives over the stream.
 type Snapshot struct {
+	Groups        []Group       `json:"groups"`
 	Agents        []Agent       `json:"agents"`
 	ActiveReplies []Message     `json:"active_replies"`
 	Interactions  []Interaction `json:"interactions"`
@@ -229,11 +235,15 @@ type MessagePage struct {
 
 // Sent is a user message and the reply that will answer it.
 type Sent struct {
-	Message Message `json:"message"`
-	Reply   Message `json:"reply"`
+	Message Message   `json:"message"`
+	Replies []Message `json:"replies"`
 }
 
 // Stream events' payloads.
+
+type GroupUpdated struct {
+	Group Group `json:"group"`
+}
 
 type AgentUpdated struct {
 	Agent Agent `json:"agent"`
@@ -268,7 +278,7 @@ func (m *messageRow) public() Message {
 		blocks = []Block{}
 	}
 	return Message{
-		ID: m.ID, AgentID: m.AgentID, Role: m.Role, ReplyToID: m.ReplyToID,
+		ID: m.ID, GroupID: m.GroupID, Seq: m.Seq, Kind: m.Kind, Data: m.Data, AgentID: orEmptyString(m.AgentID), Role: m.Role, ReplyToID: m.ReplyToID,
 		Status: m.Status, Revision: m.Revision, Blocks: blocks, Failure: m.Failure,
 		CreatedAt: jsontime.From(m.CreatedAt),
 	}
@@ -284,8 +294,15 @@ func (i *interactionRow) public() Interaction {
 		chosen = &i.Answer.Value
 	}
 	return Interaction{
-		ID: i.ID, AgentID: i.AgentID, MessageID: i.MessageID, Kind: i.Kind,
+		ID: i.ID, GroupID: i.GroupID, AgentID: i.AgentID, MessageID: i.MessageID, Kind: i.Kind,
 		Prompt: i.Prompt, Options: options, Status: i.Status, Revision: i.Revision,
 		Answer: chosen, CreatedAt: jsontime.From(i.CreatedAt), UpdatedAt: jsontime.From(i.UpdatedAt),
 	}
+}
+
+func orEmptyString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

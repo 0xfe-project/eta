@@ -68,8 +68,9 @@ type BundlePath struct {
 type MessageCreateIn struct {
 	// The client's id for the message, so it knows the message when it
 	// arrives; a new UUID per message. Left out, the server picks one.
-	ID      string `json:"id,omitempty" maxLength:"64" doc:"The client's id for the message (a UUID, new per message), so it knows the message when it arrives; left out, the server picks one."`
-	AgentID string `json:"agent_id" minLength:"1" maxLength:"64"`
+	ID       string   `json:"id,omitempty" maxLength:"64" doc:"The client's id for the message (a UUID, new per message), so it knows the message when it arrives; left out, the server picks one."`
+	GroupID  string   `json:"group_id" minLength:"1" maxLength:"64"`
+	Mentions []string `json:"mentions,omitempty" maxItems:"50"`
 	// Kept verbatim so code indentation survives.
 	Text string `json:"text,omitempty" maxLength:"100000" doc:"The message as text alone, kept verbatim so code indentation survives. Leave it out to send parts."`
 	// Text and attachments in the order the user wrote them.
@@ -116,14 +117,14 @@ func registerChat(api huma.API, d *Deps) {
 			return &httpapi.Body[chat.Snapshot]{Body: *snapshot}, nil
 		})
 
-	huma.Register(api, op("listMessages", http.MethodGet, "/api/v1/agents/{agent_id}/messages",
-		"One agent's history, newest page first", 200, "chat"),
+	huma.Register(api, op("listMessages", http.MethodGet, "/api/v1/groups/{group_id}/messages",
+		"One group's history, newest page first", 200, "chat"),
 		func(ctx context.Context, in *struct {
-			AgentPath
+			GroupPath
 			Before string `query:"before" doc:"next_cursor of the previous page."`
 			Limit  int    `query:"limit" default:"50" minimum:"1" maximum:"100"`
 		}) (*httpapi.Body[chat.MessagePage], error) {
-			page, err := s.History(ctx, d.DB, in.AgentID, in.Before, in.Limit)
+			page, err := s.History(ctx, d.DB, in.GroupID, in.Before, in.Limit)
 			if err != nil {
 				return nil, err
 			}
@@ -296,26 +297,29 @@ func registerChat(api huma.API, d *Deps) {
 				in.Body.Mode = "queue"
 			}
 			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[chat.Sent], error) {
-				sent, err := s.SendMessage(ctx, tx, in.Body.AgentID, in.Body.ID, parts, in.Body.Mode == "steer")
+				sent, err := s.SendMessage(ctx, tx, in.Body.GroupID, in.Body.ID, in.Body.Mentions, parts, in.Body.Mode == "steer")
 				if err != nil {
 					return idempotency.Result[chat.Sent]{}, err
 				}
-				return idempotency.Result[chat.Sent]{Status: 202, Body: sent, Resource: sent.Reply.ID}, nil
+				return idempotency.Result[chat.Sent]{Status: 202, Body: sent, Resource: sent.Message.ID}, nil
 			})
 		})
 
-	huma.Register(api, op("compactAgent", http.MethodPost, "/api/v1/agents/{agent_id}/compact",
+	huma.Register(api, op("compactGroup", http.MethodPost, "/api/v1/groups/{group_id}/compact",
 		"Compact the agent's context, shown as /compact", 202, "chat"),
 		func(ctx context.Context, in *struct {
 			idempotency.Keyed
-			AgentPath
+			GroupPath
+			Body struct {
+				Mentions []string `json:"mentions,omitempty" maxItems:"50"`
+			}
 		}) (*idempotency.Response[chat.Sent], error) {
-			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, struct{}{}, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[chat.Sent], error) {
-				sent, err := s.Compact(ctx, tx, in.AgentID)
+			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[chat.Sent], error) {
+				sent, err := s.Compact(ctx, tx, in.GroupID, in.Body.Mentions)
 				if err != nil {
 					return idempotency.Result[chat.Sent]{}, err
 				}
-				return idempotency.Result[chat.Sent]{Status: 202, Body: sent, Resource: sent.Reply.ID}, nil
+				return idempotency.Result[chat.Sent]{Status: 202, Body: sent, Resource: sent.Message.ID}, nil
 			})
 		})
 
@@ -350,5 +354,6 @@ func registerChat(api huma.API, d *Deps) {
 			})
 		})
 
+	registerGroups(api, d)
 	registerStream(api, d)
 }

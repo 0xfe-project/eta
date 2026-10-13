@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/akarachen/axp/apps/control-plane/internal/chat"
 	"github.com/akarachen/axp/apps/control-plane/internal/relay"
 	"github.com/akarachen/axp/packages/service-go/apierr"
 	"github.com/akarachen/axp/packages/service-go/jsontime"
@@ -81,6 +82,9 @@ type Service struct {
 // --- rows ------------------------------------------------------------------------------
 
 type taskRow struct {
+	GroupID        *string   `db:"group_id"`
+	SourceFrom     *int64    `db:"source_from"`
+	SourceTo       *int64    `db:"source_to"`
 	ID             string    `db:"id"`
 	Number         int64     `db:"number"`
 	Title          string    `db:"title"`
@@ -204,16 +208,19 @@ type TaskCreator struct {
 }
 
 type Task struct {
-	ID        string        `json:"id"`
-	Number    int64         `json:"number"`
-	Title     string        `json:"title"`
-	Status    string        `json:"status" enum:"backlog,todo,in_progress,in_review,done,blocked,cancelled"`
-	Assignee  TaskAssignee  `json:"assignee"`
-	CreatedBy TaskCreator   `json:"created_by"`
-	RunStatus *string       `json:"run_status" nullable:"true" enum:"queued,starting,running,completed,failed,cancelled" doc:"The assignee's latest run's status (assisting runs aside)."`
-	Comments  int64         `json:"comments"`
-	CreatedAt jsontime.Time `json:"created_at"`
-	UpdatedAt jsontime.Time `json:"updated_at"`
+	GroupID    *string       `json:"group_id" nullable:"true"`
+	SourceFrom *int64        `json:"source_from" nullable:"true"`
+	SourceTo   *int64        `json:"source_to" nullable:"true"`
+	ID         string        `json:"id"`
+	Number     int64         `json:"number"`
+	Title      string        `json:"title"`
+	Status     string        `json:"status" enum:"backlog,todo,in_progress,in_review,done,blocked,cancelled"`
+	Assignee   TaskAssignee  `json:"assignee"`
+	CreatedBy  TaskCreator   `json:"created_by"`
+	RunStatus  *string       `json:"run_status" nullable:"true" enum:"queued,starting,running,completed,failed,cancelled" doc:"The assignee's latest run's status (assisting runs aside)."`
+	Comments   int64         `json:"comments"`
+	CreatedAt  jsontime.Time `json:"created_at"`
+	UpdatedAt  jsontime.Time `json:"updated_at"`
 }
 
 type TaskActor struct {
@@ -262,6 +269,7 @@ type TaskDetail struct {
 func (r *taskRow) public() Task {
 	t := Task{
 		ID: r.ID, Number: r.Number, Title: r.Title, Status: r.Status,
+		GroupID: r.GroupID, SourceFrom: r.SourceFrom, SourceTo: r.SourceTo,
 		RunStatus: r.RunStatus, Comments: r.Comments,
 		CreatedAt: jsontime.From(r.CreatedAt), UpdatedAt: jsontime.From(r.UpdatedAt),
 		Assignee:  TaskAssignee{Kind: r.Assignee, ComputerID: r.ComputerID, ComputerName: r.ComputerName, Runtime: r.Runtime, Provider: r.Provider, Place: r.Place},
@@ -395,7 +403,10 @@ func record(ctx context.Context, tx pgx.Tx, taskID string, runID *string, kind s
 		return err
 	}
 	_, err = tx.Exec(ctx, "UPDATE task SET updated_at = $2 WHERE id = $1", taskID, pg.Now())
-	return err
+	if err != nil {
+		return err
+	}
+	return chat.SyncTaskCard(ctx, tx, taskID)
 }
 
 // AssigneeInput is who a task is for.
@@ -483,6 +494,9 @@ func assigneeData(r *taskRow) map[string]any {
 }
 
 type Input struct {
+	GroupID     *string
+	SourceFrom  *int64
+	SourceTo    *int64
 	Title       string
 	Description string
 	Status      string
@@ -506,6 +520,11 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, in Input, by Actor) (*T
 		place, created_by_agent, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)`,
 		id, strings.TrimSpace(in.Title), in.Description, in.Status, a.Kind, a.ComputerID, a.Runtime, a.Provider, placeOf(a), agent, now); err != nil {
 		return nil, err
+	}
+	if in.GroupID != nil {
+		if err := setGroup(ctx, tx, id, *in.GroupID, in.SourceFrom, in.SourceTo); err != nil {
+			return nil, err
+		}
 	}
 	if err := record(ctx, tx, id, nil, "created", by, nil, nil); err != nil {
 		return nil, err
@@ -534,6 +553,7 @@ func workable(status string) bool {
 
 // Changes are an update's fields; nil ones stay.
 type Changes struct {
+	GroupID     *string
 	Title       *string
 	Description *string
 	Status      *string
@@ -544,6 +564,14 @@ func (s *Service) Update(ctx context.Context, tx pgx.Tx, ref string, c Changes, 
 	r, err := find(ctx, tx, ref, true)
 	if err != nil {
 		return nil, err
+	}
+	if c.GroupID != nil && deref(r.GroupID) != *c.GroupID {
+		if err := setGroup(ctx, tx, r.ID, *c.GroupID, nil, nil); err != nil {
+			return nil, err
+		}
+		if err := record(ctx, tx, r.ID, nil, "group", by, nil, map[string]any{"from": r.GroupID, "to": *c.GroupID}); err != nil {
+			return nil, err
+		}
 	}
 	if c.Title != nil && strings.TrimSpace(*c.Title) != r.Title {
 		title := strings.TrimSpace(*c.Title)
@@ -687,6 +715,9 @@ func (s *Service) Delete(ctx context.Context, tx pgx.Tx, ref string) error {
 	}
 	if active {
 		return apierr.New(409, "TASK_RUNNING", "远程智能体正在处理这个任务，先停止它再删除。")
+	}
+	if err = chat.DeleteTaskCards(ctx, tx, r.ID); err != nil {
+		return err
 	}
 	_, err = tx.Exec(ctx, "DELETE FROM task WHERE id = $1", r.ID)
 	return err

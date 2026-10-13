@@ -414,7 +414,7 @@ func (e *env) createAgent(name string, model ...string) chat.Agent {
 
 func (e *env) send(agentID, text string) chat.Sent {
 	e.t.Helper()
-	r := e.post("/chat/messages", map[string]any{"agent_id": agentID, "text": text})
+	r := e.post("/chat/messages", map[string]any{"group_id": e.direct(agentID), "text": text})
 	if r.status != 202 {
 		e.t.Fatalf("send: %d %s", r.status, r.body)
 	}
@@ -449,7 +449,7 @@ func (e *env) exec(sql string, args ...any) {
 // Fields that must never reach the browser.
 var internalMarkers = []string{
 	"command", "thread", "runtime", "generation", "lease", "claim", "container",
-	"conversation", "agent_sequence", "seq", "product_status", "deleted_at",
+	"conversation", "agent_sequence", "product_status", "deleted_at",
 }
 
 func collectKeys(v any, keys map[string]bool) {
@@ -585,15 +585,15 @@ func (c *controlEnv) boot() *runtimeHarness {
 }
 
 func (c *controlEnv) commandOf(sent chat.Sent) string {
-	return scalar[string](c.env, "SELECT command_id FROM message WHERE id = $1", sent.Reply.ID)
+	return scalar[string](c.env, "SELECT command_id FROM message WHERE id = $1", sent.Replies[0].ID)
 }
 
 func (c *controlEnv) replyStatus(sent chat.Sent) string {
-	return scalar[string](c.env, "SELECT status FROM message WHERE id = $1", sent.Reply.ID)
+	return scalar[string](c.env, "SELECT status FROM message WHERE id = $1", sent.Replies[0].ID)
 }
 
 func (c *controlEnv) replyFailure(sent chat.Sent) string {
-	return scalar[string](c.env, "SELECT coalesce(failure->>'code', '') FROM message WHERE id = $1", sent.Reply.ID)
+	return scalar[string](c.env, "SELECT coalesce(failure->>'code', '') FROM message WHERE id = $1", sent.Replies[0].ID)
 }
 
 func (c *controlEnv) commandStatus(id string) string {
@@ -620,4 +620,8 @@ func (c *controlEnv) running() (chat.Sent, *runtimeHarness, string) {
 	}
 	r.turnStarted(command, "turn-1")
 	return sent, r, command
+}
+
+func (e *env) direct(agentID string) string {
+	return scalar[string](e, "SELECT id::text FROM chat_group WHERE direct_agent_id=$1", agentID)
 }

@@ -10,7 +10,7 @@
 (as_agent) {
 	forward_auth {$AXP_UPSTREAM_INTERNAL:axp-internal:8001} {
 		uri /internal/v1/runtime-auth
-		copy_headers X-AXP-Agent-Id
+		copy_headers X-AXP-Agent-Id X-AXP-Group-Id X-AXP-Group-Name
 	}
 	reverse_proxy {args[0]} {
 		header_up -Authorization
@@ -22,7 +22,7 @@
 (as_agent_with) {
 	forward_auth {$AXP_UPSTREAM_INTERNAL:axp-internal:8001} {
 		uri /internal/v1/runtime-auth?plugin={args[1]}
-		copy_headers X-AXP-Agent-Id
+		copy_headers X-AXP-Agent-Id X-AXP-Group-Id X-AXP-Group-Name
 	}
 	reverse_proxy {args[0]} {
 		header_up -Authorization
@@ -41,6 +41,9 @@ http://:{$AXP_RUNTIME_GATEWAY_PORT:8090} {
 	# Agents' memories: the memory plugin's MCP server and hooks.
 	handle /memory/* {
 		import as_agent_with {$AXP_UPSTREAM_MEMORY:axp-memory:8320} memory
+	}
+	handle /groups/* {
+		import as_agent_with {$AXP_UPSTREAM_INTERNAL:axp-internal:8001} groups
 	}
 	# The task board: the tasks plugin's MCP server, in the internal API.
 	handle /tasks/* {

@@ -52,6 +52,7 @@ func Internal(d *Deps) *httpapi.API {
 	registerInternal(api, d)
 	// The tasks plugin, through the runtime gateway's /tasks.
 	api.Router.Handle("/tasks/mcp", tasksMCP(d))
+	api.Router.Handle("/groups/mcp", groupsMCP(d))
 	// The agenvo plugin, through the runtime gateway's /agenvo.
 	api.Router.Handle("/agenvo/mcp", agenvoMCP(d))
 	// The artifacts plugin's upload, through the runtime gateway's /artifacts.

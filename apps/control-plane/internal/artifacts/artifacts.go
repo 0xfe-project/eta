@@ -60,6 +60,7 @@ type Service struct {
 // Uploader is who publishes: an AXP agent (through the runtime gateway) or
 // a remote computer's agent (with the computer's token).
 type Uploader struct {
+	GroupID  *string
 	AgentID  string
 	Computer *tasks.RemoteComputer
 }
@@ -84,6 +85,7 @@ type Published struct {
 }
 
 type Artifact struct {
+	GroupID      *string           `json:"group_id" nullable:"true"`
 	ID           string            `json:"id"`
 	Title        string            `json:"title"`
 	AgentID      *string           `json:"agent_id" nullable:"true" doc:"The AXP agent that publishes it, in its chat."`
@@ -267,8 +269,8 @@ func (s *Service) newVersion(ctx context.Context, tx pgx.Tx, by Uploader, existi
 		} else {
 			agent = &by.AgentID
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO artifact (id, title, agent_id, computer_id, task_id, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $6)`, v.ArtifactID, title, agent, computer, taskID, now); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO artifact (id, title, agent_id, computer_id, task_id, created_at, updated_at, group_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $6, $7)`, v.ArtifactID, title, agent, computer, taskID, now, by.GroupID); err != nil {
 			return nil, err
 		}
 	} else {
@@ -379,12 +381,13 @@ func (s *Service) sweep(ctx context.Context) {
 
 // --- reading and managing ----------------------------------------------------------
 
-const artifactSelect = `SELECT a.id, a.title, a.agent_id, ag.name AS agent_name, c.name AS computer_name,
+const artifactSelect = `SELECT a.id, a.title, a.agent_id, COALESCE(a.group_id,t.group_id) AS group_id, ag.name AS agent_name, c.name AS computer_name,
 	a.task_id, t.number AS task_number, a.created_at, a.updated_at
 	FROM artifact a LEFT JOIN agent ag ON ag.id = a.agent_id LEFT JOIN computer c ON c.id = a.computer_id
 	LEFT JOIN task t ON t.id = a.task_id`
 
 type listRow struct {
+	GroupID      *string   `db:"group_id"`
 	ID           string    `db:"id"`
 	Title        string    `db:"title"`
 	AgentID      *string   `db:"agent_id"`
@@ -480,7 +483,7 @@ func (s *Service) withVersions(ctx context.Context, rows []*listRow) ([]Artifact
 			vs = []ArtifactVersion{}
 		}
 		out = append(out, Artifact{
-			ID: r.ID, Title: r.Title, AgentID: r.AgentID, AgentName: r.AgentName, ComputerName: r.ComputerName,
+			ID: r.ID, Title: r.Title, GroupID: r.GroupID, AgentID: r.AgentID, AgentName: r.AgentName, ComputerName: r.ComputerName,
 			TaskID: r.TaskID, TaskNumber: r.TaskNumber, CreatedAt: jsontime.From(r.CreatedAt),
 			UpdatedAt: jsontime.From(r.UpdatedAt), Versions: vs,
 		})

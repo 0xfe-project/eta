@@ -203,7 +203,11 @@ func agentUpload(d *Deps) http.HandlerFunc {
 		if !ok {
 			return artifacts.Uploader{}, apierr.New(403, "FORBIDDEN", "只有智能体可以发布 Artifact。")
 		}
-		return artifacts.Uploader{AgentID: id}, nil
+		var group *string
+		if value, ok := pg.ParseID(r.Header.Get("X-AXP-Group-Id")); ok {
+			group = &value
+		}
+		return artifacts.Uploader{AgentID: id, GroupID: group}, nil
 	})
 }
 

@@ -72,6 +72,8 @@ var terminalCommandStatuses = []string{CommandSucceeded, CommandFailed, CommandC
 // runs) or as a steer the running turn took (it stays queued until the turn
 // hands over to it).
 type CommandRecord struct {
+	GroupID       string         `db:"group_id"`
+	RootMessageID string         `db:"root_message_id"`
 	ID            string         `db:"id"`
 	AgentID       string         `db:"agent_id"`
 	AgentSequence int64          `db:"agent_sequence"`
@@ -127,19 +129,24 @@ const (
 var activeMessageStatuses = []string{MessageQueued, MessageResponding, MessageWaitingForInput, MessageStopping}
 
 type messageRow struct {
-	ID             string    `db:"id"`
-	ConversationID string    `db:"conversation_id"`
-	AgentID        string    `db:"agent_id"`
-	CommandID      string    `db:"command_id"`
-	ReplyToID      *string   `db:"reply_to_id"`
-	Seq            int64     `db:"seq"`
-	Role           string    `db:"role"`
-	Content        []Block   `db:"content"`
-	Status         string    `db:"status"`
-	Failure        *Failure  `db:"failure"`
-	Revision       int64     `db:"revision"`
-	CreatedAt      time.Time `db:"created_at"`
-	UpdatedAt      time.Time `db:"updated_at"`
+	GroupID        string         `db:"group_id"`
+	Kind           string         `db:"kind"`
+	Data           map[string]any `db:"data"`
+	MentionCount   int            `db:"mention_count"`
+	ChainStopped   bool           `db:"chain_stopped"`
+	ID             string         `db:"id"`
+	ConversationID string         `db:"conversation_id"`
+	AgentID        *string        `db:"agent_id"`
+	CommandID      *string        `db:"command_id"`
+	ReplyToID      *string        `db:"reply_to_id"`
+	Seq            int64          `db:"seq"`
+	Role           string         `db:"role"`
+	Content        []Block        `db:"content"`
+	Status         string         `db:"status"`
+	Failure        *Failure       `db:"failure"`
+	Revision       int64          `db:"revision"`
+	CreatedAt      time.Time      `db:"created_at"`
+	UpdatedAt      time.Time      `db:"updated_at"`
 }
 
 func (m *messageRow) terminal() bool {
@@ -158,6 +165,7 @@ type answer struct {
 }
 
 type interactionRow struct {
+	GroupID        string              `db:"group_id"`
 	ID             string              `db:"id"`
 	ConversationID string              `db:"conversation_id"`
 	AgentID        string              `db:"agent_id"`
