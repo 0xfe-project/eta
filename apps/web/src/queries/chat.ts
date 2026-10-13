@@ -4,6 +4,7 @@ import type {
   Agent,
   AgentDeleted,
   AgentUpdated,
+  AttachmentBlock,
   Bundle,
   Snapshot as ChatSnapshot,
   Interaction,
@@ -36,7 +37,7 @@ export type AgentDraft = Pick<Agent, "name" | "description"> & {
   bundles?: string[];
 };
 export type ChatMessage = Message;
-export type Block = TextBlock | ActivityBlock;
+export type Block = TextBlock | AttachmentBlock | ActivityBlock;
 /**
  * The snapshot plus `messages`: every message seen since it was taken (over
  * SSE or from our own writes), starting with the active replies. History

@@ -93,6 +93,7 @@ export function ClaudePrompt({
   className,
   inputClassName,
   inputProps,
+  renderInput,
 }: {
   value?: string;
   defaultValue?: string;
@@ -106,6 +107,11 @@ export function ClaudePrompt({
   inputClassName?: string;
   /** Extra attributes for the textarea, e.g. combobox semantics. */
   inputProps?: React.TextareaHTMLAttributes<HTMLTextAreaElement>;
+  /** An editor of the caller's in the textarea's place, styled as it would be. */
+  renderInput?: (input: {
+    className: string;
+    style: React.CSSProperties;
+  }) => React.ReactNode;
 }) {
   const m = MODES[mode];
   const e = effort === false ? null : EFFORTS[effort];
@@ -145,25 +151,36 @@ export function ClaudePrompt({
         <span aria-hidden className="shrink-0 py-0.5" style={{ color: FG }}>
           ❯
         </span>
-        <textarea
-          rows={1}
-          aria-label="消息"
-          placeholder={placeholder}
-          onKeyDown={onKeyDown}
-          {...(controlled ? { value, onChange } : { defaultValue, onChange })}
-          {...inputProps}
-          className={cn(
-            "term-input max-h-[40vh] min-w-0 flex-1 resize-none bg-transparent [field-sizing:content] py-0.5 pl-[1ch] outline-none placeholder:text-[var(--terminal-muted)]",
-            inputClassName,
-          )}
-          style={
-            {
+        {renderInput ? (
+          renderInput({
+            className: cn("py-0.5 pl-[1ch]", inputClassName),
+            style: {
               color: FG,
               caretColor: FG,
               caretShape: "block",
-            } as React.CSSProperties
-          }
-        />
+            } as React.CSSProperties,
+          })
+        ) : (
+          <textarea
+            rows={1}
+            aria-label="消息"
+            placeholder={placeholder}
+            onKeyDown={onKeyDown}
+            {...(controlled ? { value, onChange } : { defaultValue, onChange })}
+            {...inputProps}
+            className={cn(
+              "term-input max-h-[40vh] min-w-0 flex-1 resize-none bg-transparent [field-sizing:content] py-0.5 pl-[1ch] outline-none placeholder:text-[var(--terminal-muted)]",
+              inputClassName,
+            )}
+            style={
+              {
+                color: FG,
+                caretColor: FG,
+                caretShape: "block",
+              } as React.CSSProperties
+            }
+          />
+        )}
       </div>
 
       <div className="mt-1.5 min-w-0 break-words px-1 text-[12px]">

@@ -222,7 +222,7 @@ func TestCreateWithDescription(t *testing.T) {
 	expect(t, r.status, 201)
 	expect(t, r.m(t)["description"], any(instructions))
 	expect(t, agent.Description, "")
-	expect(t, e.post("/agents", map[string]any{"name": "x", "description": strings.Repeat("x", 10_001)}).status, 422)
+	expect(t, e.post("/agents", map[string]any{"name": "x", "description": strings.Repeat("字", 100_001)}).status, 422)
 }
 
 func TestUpdateNameOrDescriptionBumpsConfigVersion(t *testing.T) {
@@ -388,7 +388,7 @@ func TestSendReturnsMessageAndReplyPlaceholder(t *testing.T) {
 func TestTextValidation(t *testing.T) {
 	e := newEnv(t)
 	agent := e.createAgent("开发助手")
-	for _, text := range []string{"", "   \n\t", strings.Repeat("x", 10_001)} {
+	for _, text := range []string{"", "   \n\t", strings.Repeat("字", 100_001)} {
 		expect(t, e.post("/chat/messages", map[string]any{"agent_id": agent.ID, "text": text}).status, 422)
 	}
 }
@@ -627,6 +627,7 @@ func TestPublicSchemaHasNoInternalFields(t *testing.T) {
 		"/api/v1/agents/{agent_id}/messages", "/api/v1/agents/{agent_id}/restart", "/api/v1/artifacts",
 		"/api/v1/artifacts/{artifact_id}", "/api/v1/artifacts/{artifact_id}/versions/{number}/share",
 		"/api/v1/bundles", "/api/v1/bundles/{name}", "/api/v1/bundles/{name}/config", "/api/v1/chat",
+		"/api/v1/chat/attachments/{attachment_id}",
 		"/api/v1/chat/interactions", "/api/v1/chat/interactions/{interaction_id}/answer", "/api/v1/chat/messages",
 		"/api/v1/chat/messages/{message_id}/stop", "/api/v1/chat/stream", "/api/v1/computers",
 		"/api/v1/computers/{computer_id}", "/api/v1/computers/{computer_id}/install",

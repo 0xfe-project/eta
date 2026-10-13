@@ -14,6 +14,7 @@ import {
 } from "@tanstack/react-query";
 import { act, useMemo } from "react";
 import { createRoot } from "react-dom/client";
+import { EMPTY_DRAFT, plainDraft } from "@/lib/composer";
 import { chatQueryOptions, useAgentMessages } from "@/queries/chat";
 import {
   useOutbox,
@@ -67,7 +68,10 @@ function message(
 // happy-dom drops a Request's headers, so the Idempotency-Key (the same id)
 // cannot be checked here; the body's id can.
 interface Post {
-  body: { id: string; text: string };
+  body: {
+    id: string;
+    parts: { type: string; text?: string; attachment_id?: string }[];
+  };
   resolve: (response: Response) => void;
   reject: (error: unknown) => void;
 }
@@ -79,7 +83,7 @@ let reading = 0;
 function Chat({ agentStatus = "idle" }: { agentStatus?: "idle" | "starting" }) {
   const chat = useQuery(chatQueryOptions());
   const history = useAgentMessages(chat.data ? AGENT : undefined);
-  const draft = useOutbox((s) => s.drafts[AGENT] ?? "");
+  const draft = useOutbox((s) => s.drafts[AGENT] ?? EMPTY_DRAFT);
   const all = useOutbox((s) => s.outgoing);
   const arrived = useMemo(
     () => new Set(history.messages.map((m) => m.id)),
@@ -99,16 +103,17 @@ function Chat({ agentStatus = "idle" }: { agentStatus?: "idle" | "starting" }) {
       onLoadOlder={() => {}}
       interactions={[]}
       draft={draft}
-      onDraftChange={(text) => useOutbox.getState().setDraft(AGENT, text)}
-      onSend={(text, mode) => {
-        outbox.send(AGENT, text, mode);
-        useOutbox.getState().setDraft(AGENT, "");
+      onDraftChange={(next) => useOutbox.getState().setDraft(AGENT, next)}
+      onFiles={() => []}
+      onSend={(parts, mode) => {
+        outbox.send(AGENT, parts, mode);
+        useOutbox.getState().setDraft(AGENT, []);
       }}
       outgoing={all.filter((o) => !arrived.has(o.id))}
       onRetry={outbox.retry}
       onEdit={outbox.edit}
       onDiscard={outbox.discard}
-      onResend={(text) => outbox.send(AGENT, text, "queue")}
+      onResend={(parts) => outbox.send(AGENT, parts, "queue")}
       onCompact={() => {}}
       onStop={() => {}}
       onAnswer={() => {}}
@@ -176,21 +181,24 @@ async function settle(ms = 10) {
     quiet = idle() ? quiet + 1 : 0;
   }
 }
-const textarea = (c: HTMLElement) => c.querySelector("textarea")!;
-async function type(c: HTMLElement, value: string) {
-  await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(
-      HTMLTextAreaElement.prototype,
-      "value",
-    )!.set!;
-    setter.call(textarea(c), value);
-    textarea(c).dispatchEvent(new Event("input", { bubbles: true }));
-  });
+const editor = (c: HTMLElement) =>
+  c.querySelector<HTMLElement>("[contenteditable]")!;
+// What the composer holds, as the user sees it.
+const composed = (c: HTMLElement) => editor(c).textContent;
+// Typing goes through the draft: the composer shows what the draft holds.
+async function type(_c: HTMLElement, value: string) {
+  await act(async () =>
+    useOutbox.getState().setDraft(AGENT, plainDraft(value)),
+  );
 }
 async function enter(c: HTMLElement) {
   await act(async () => {
-    textarea(c).dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    editor(c).dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        cancelable: true,
+      }),
     );
   });
   await settle();
@@ -199,7 +207,10 @@ const log = (c: HTMLElement) => c.querySelector('[role="log"]')!.textContent!;
 const button = (c: HTMLElement, text: string) =>
   [...c.querySelectorAll("button")].find((b) => b.textContent === text);
 function accepted(post: Post) {
-  const user = message("user", { id: post.body.id, text: post.body.text });
+  const user = message("user", {
+    id: post.body.id,
+    text: post.body.parts.map((p) => p.text ?? "").join(""),
+  });
   const reply = message("assistant", { reply_to_id: user.id });
   return Response.json({ message: user, reply }, { status: 202 });
 }
@@ -207,7 +218,7 @@ const count = (text: string, part: string) => text.split(part).length - 1;
 
 describe("sending a message", () => {
   beforeEach(() => {
-    useOutbox.setState({ drafts: {}, outgoing: [] });
+    useOutbox.setState({ drafts: {}, uploads: {}, outgoing: [] });
   });
   afterEach(async () => {
     // Ends the deliveries still waiting, so none outlives its test.
@@ -229,7 +240,7 @@ describe("sending a message", () => {
     await enter(c);
     await enter(c);
     expect(posts).toHaveLength(1);
-    expect(textarea(c).value).toBe("");
+    expect(composed(c)).toBe("");
     expect(log(c)).toContain("你好");
     expect(log(c)).toContain("发送中");
     await act(async () => posts[0].resolve(accepted(posts[0])));
@@ -245,7 +256,7 @@ describe("sending a message", () => {
     await type(c, "正在写第二条");
     await act(async () => posts[0].resolve(accepted(posts[0])));
     await settle();
-    expect(textarea(c).value).toBe("正在写第二条");
+    expect(composed(c)).toBe("正在写第二条");
   });
 
   it("tries again as the same message, then offers a retry", async () => {
@@ -295,8 +306,133 @@ describe("sending a message", () => {
     expect(posts).toHaveLength(1);
     expect(log(c)).toContain("该智能体待处理的消息过多。");
     await act(async () => button(c, "编辑")!.click());
-    expect(textarea(c).value).toBe("你好");
+    expect(composed(c)).toBe("你好");
     expect(log(c)).not.toContain("你好");
+  });
+});
+
+describe("sending blocks", () => {
+  const csv = {
+    id: "a1",
+    name: "data.csv",
+    content_type: "text/csv",
+    size: 8,
+  };
+  const long = "第一行\n".repeat(20);
+  const draft = [
+    { type: "text" as const, text: "看" },
+    {
+      type: "file" as const,
+      id: "f",
+      name: "data.csv",
+      contentType: "text/csv",
+      size: 8,
+    },
+    { type: "paste" as const, id: "p", text: long },
+  ];
+  beforeEach(() => {
+    useOutbox.setState({ drafts: {}, uploads: {}, outgoing: [] });
+  });
+  afterEach(async () => {
+    useOutbox.setState({ outgoing: [] });
+    for (const post of posts)
+      post.resolve(Response.json({ error: {} }, { status: 400 }));
+    await settle();
+    document.body.innerHTML = "";
+    posts = [];
+    rstest.restoreAllMocks();
+  });
+
+  it("waits for uploads, then sends text, files and pastes in order", async () => {
+    const c = await render();
+    await act(async () => {
+      useOutbox.getState().setUpload("f", { agentId: AGENT });
+      useOutbox.getState().setDraft(AGENT, draft);
+    });
+    expect(composed(c)).toContain("粘贴文本 · 80 字符");
+    expect(composed(c)).toContain("上传中");
+    await enter(c);
+    expect(posts).toHaveLength(0);
+    expect(c.textContent).toContain("附件上传中，完成后才能发送。");
+
+    await act(async () =>
+      useOutbox.getState().setUpload("f", { agentId: AGENT, attachment: csv }),
+    );
+    await enter(c);
+    expect(posts).toHaveLength(1);
+    expect(posts[0].body.parts).toEqual([
+      { type: "text", text: "看" },
+      { type: "attachment", attachment_id: "a1" },
+      { type: "text", text: long },
+    ]);
+    expect(composed(c)).toBe("");
+    // On its way, as written: the paste folded, the file by name.
+    expect(log(c)).toContain("[data.csv · 8 B]");
+    expect(log(c)).toContain("粘贴文本 · 80 字符");
+    expect(log(c)).not.toContain("第一行");
+  });
+
+  it("keeps a draft whose upload failed, and says why", async () => {
+    const c = await render();
+    await act(async () => {
+      useOutbox.getState().setUpload("f", {
+        agentId: AGENT,
+        error: "网络连接失败，上传未完成。",
+      });
+      useOutbox.getState().setDraft(AGENT, draft);
+    });
+    await enter(c);
+    expect(posts).toHaveLength(0);
+    expect(c.textContent).toContain("网络连接失败，上传未完成。");
+    expect(c.textContent).toContain("有附件上传失败：重试或移除后再发送。");
+    expect(useOutbox.getState().drafts[AGENT]).toEqual(draft);
+  });
+});
+
+describe("drafts saved before blocks", () => {
+  it("load as text, and messages on their way as their text", async () => {
+    const id = crypto.randomUUID();
+    localStorage.setItem(
+      "axp.chat.v1",
+      JSON.stringify({
+        drafts: { [AGENT]: "写了一半" },
+        outgoing: [
+          { id, agentId: AGENT, text: "发送中", mode: "queue", failure: "x" },
+        ],
+      }),
+    );
+    await act(() => useOutbox.persist.rehydrate());
+    const { drafts, outgoing, uploads } = useOutbox.getState();
+    expect(drafts[AGENT]).toEqual([{ type: "text", text: "写了一半" }]);
+    expect(outgoing[0].parts).toEqual([{ type: "text", text: "发送中" }]);
+    expect(uploads).toEqual({});
+    localStorage.clear();
+  });
+
+  it("fail uploads a reload cut off", async () => {
+    localStorage.setItem(
+      "axp.chat.v1",
+      JSON.stringify({
+        drafts: {
+          [AGENT]: [
+            {
+              type: "file",
+              id: "f",
+              name: "a.png",
+              contentType: "image/png",
+              size: 1,
+            },
+          ],
+        },
+        uploads: { f: { agentId: AGENT }, gone: { agentId: AGENT } },
+        outgoing: [],
+      }),
+    );
+    await act(() => useOutbox.persist.rehydrate());
+    expect(useOutbox.getState().uploads).toEqual({
+      f: { agentId: AGENT, error: "上传中断，请移除后重新粘贴。" },
+    });
+    localStorage.clear();
   });
 });
 

@@ -39,6 +39,7 @@ func Public(d *Deps) *httpapi.API {
 	httpapi.AddHealth(api, "/api/health", "control-plane")
 	remote(api, d)
 	registerChat(api, d)
+	registerAttachments(api, d)
 	registerTasks(api, d)
 	registerArtifacts(api, d)
 	return api
@@ -55,5 +56,7 @@ func Internal(d *Deps) *httpapi.API {
 	api.Router.Handle("/agenvo/mcp", agenvoMCP(d))
 	// The artifacts plugin's upload, through the runtime gateway's /artifacts.
 	api.Router.Post("/artifacts/v1/upload", agentUpload(d))
+	// Its messages' attachments, through the runtime gateway's /attachments.
+	api.Router.Get("/attachments/v1/{attachment_id}", agentAttachment(d))
 	return api
 }

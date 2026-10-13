@@ -6,6 +6,7 @@
 
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import process from "node:process";
 import { serve } from "@hono/node-server";
 import { jetstream } from "@nats-io/jetstream";
@@ -102,7 +103,11 @@ async function main(): Promise<void> {
     }
   };
   const server = serve({
-    fetch: controlAPI(agent, s.controlToken, outbox.bootId).fetch,
+    fetch: controlAPI(agent, s.controlToken, outbox.bootId, {
+      gatewayUrl: s.gatewayUrl,
+      agentKey: s.agentKey,
+      dir: join(s.home, "attachments"),
+    }).fetch,
     hostname: "0.0.0.0",
     port: s.port,
   });

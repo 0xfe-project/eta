@@ -101,11 +101,15 @@ func (c *CommandRecord) terminal() bool {
 // Steer reports whether the command asks to join the running turn.
 func (c *CommandRecord) Steer() bool { return c.Input["steer"] == true }
 
-// Text is the command's input.
+// Text is the command's input as text alone.
 func (c *CommandRecord) Text() string {
 	text, _ := c.Input["text"].(string)
 	return text
 }
+
+// Parts is the command's input as the user wrote it, text and attachments
+// in order; nil for commands without (compactions, older messages).
+func (c *CommandRecord) Parts() any { return c.Input["parts"] }
 
 const (
 	RoleUser      = "user"

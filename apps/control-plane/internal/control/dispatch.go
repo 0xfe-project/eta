@@ -198,8 +198,8 @@ func (c *Controller) steer(ctx context.Context, url string, agent *chat.AgentRec
 		return nil
 	}
 	c.steers[command.ID] = true
-	a, err := c.call(ctx, url, agent.ID, "/steer", map[string]string{
-		"boot_id": *agent.BootID, "command_id": command.ID, "text": command.Text(),
+	a, err := c.call(ctx, url, agent.ID, "/steer", map[string]any{
+		"boot_id": *agent.BootID, "command_id": command.ID, "text": command.Text(), "parts": command.Parts(),
 	})
 	if err != nil {
 		delete(c.steers, command.ID)
@@ -231,8 +231,8 @@ func (c *Controller) prompt(ctx context.Context, url string, agent *chat.AgentRe
 	if err != nil || !claimed {
 		return err
 	}
-	a, err := c.call(ctx, url, agent.ID, "/prompt", map[string]string{
-		"boot_id": *agent.BootID, "command_id": command.ID, "text": command.Text(), "kind": command.Kind,
+	a, err := c.call(ctx, url, agent.ID, "/prompt", map[string]any{
+		"boot_id": *agent.BootID, "command_id": command.ID, "text": command.Text(), "parts": command.Parts(), "kind": command.Kind,
 	})
 	switch {
 	case err == nil && a.Accepted:

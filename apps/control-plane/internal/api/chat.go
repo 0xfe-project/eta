@@ -71,7 +71,9 @@ type MessageCreateIn struct {
 	ID      string `json:"id,omitempty" maxLength:"64" doc:"The client's id for the message (a UUID, new per message), so it knows the message when it arrives; left out, the server picks one."`
 	AgentID string `json:"agent_id" minLength:"1" maxLength:"64"`
 	// Kept verbatim so code indentation survives.
-	Text string `json:"text" minLength:"1" maxLength:"10000" doc:"Kept verbatim so code indentation survives."`
+	Text string `json:"text,omitempty" maxLength:"100000" doc:"The message as text alone, kept verbatim so code indentation survives. Leave it out to send parts."`
+	// Text and attachments in the order the user wrote them.
+	Parts []chat.Part `json:"parts,omitempty" maxItems:"200" doc:"The message as text and attachments in the order the user wrote them; instead of text."`
 	// "queue" waits for the agent's current turn; "steer" joins it.
 	Mode string `json:"mode,omitempty" enum:"queue,steer" default:"queue" doc:"\"queue\" waits for the agent's current turn; \"steer\" joins it."`
 }
@@ -283,14 +285,18 @@ func registerChat(api huma.API, d *Deps) {
 			idempotency.Keyed
 			Body MessageCreateIn
 		}) (*idempotency.Response[chat.Sent], error) {
-			if strings.TrimSpace(in.Body.Text) == "" {
-				return nil, apierr.Invalid()
+			parts := in.Body.Parts
+			if in.Body.Text != "" {
+				if len(parts) > 0 {
+					return nil, apierr.Invalid()
+				}
+				parts = []chat.Part{{Type: "text", Text: in.Body.Text}}
 			}
 			if in.Body.Mode == "" {
 				in.Body.Mode = "queue"
 			}
 			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[chat.Sent], error) {
-				sent, err := s.SendMessage(ctx, tx, in.Body.AgentID, in.Body.ID, in.Body.Text, in.Body.Mode == "steer")
+				sent, err := s.SendMessage(ctx, tx, in.Body.AgentID, in.Body.ID, parts, in.Body.Mode == "steer")
 				if err != nil {
 					return idempotency.Result[chat.Sent]{}, err
 				}

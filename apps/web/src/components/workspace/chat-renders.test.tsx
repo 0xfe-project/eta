@@ -1,3 +1,4 @@
+import type { Draft } from "@/lib/composer";
 import type { ChatMessage, Interaction } from "@/queries/chat";
 import { writeFileSync } from "node:fs";
 import {
@@ -15,6 +16,7 @@ import {
 } from "@tanstack/react-query";
 import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { plainDraft } from "@/lib/composer";
 import {
   chatQueryOptions,
   useAgentMessages,
@@ -97,8 +99,8 @@ function Chat() {
   useLiveChat();
   const chat = useQuery(chatQueryOptions());
   const timeline = useAgentMessages(chat.data ? AGENT : undefined);
-  const [text, setText] = useState("");
-  draft = setText;
+  const [text, setText] = useState<Draft>([]);
+  draft = (value) => setText(plainDraft(value));
   return (
     <ChatPanel
       theme="codex"
@@ -111,6 +113,7 @@ function Chat() {
       interactions={chat.data?.interactions ?? []}
       draft={text}
       onDraftChange={setText}
+      onFiles={() => []}
       // Fresh handlers every render, as Workspace passes them.
       onSend={() => {}}
       outgoing={[]}

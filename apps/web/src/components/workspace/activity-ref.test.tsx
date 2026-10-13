@@ -75,7 +75,8 @@ async function mount(
       loadingOlder={false}
       onLoadOlder={() => {}}
       interactions={[]}
-      draft=""
+      draft={[]}
+      onFiles={() => []}
       onDraftChange={() => {}}
       onSend={() => {}}
       outgoing={[]}

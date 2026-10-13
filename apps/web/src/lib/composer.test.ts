@@ -1,0 +1,87 @@
+import type { Attachment, Draft } from "./composer";
+import { describe, expect, it } from "@rstest/core";
+import {
+  afterCommand,
+  charCount,
+  draftOf,
+  isBlank,
+  isLongPaste,
+  LONG_PASTE,
+  messageParts,
+} from "./composer";
+
+const csv: Attachment = {
+  id: "a1",
+  name: "data.csv",
+  content_type: "text/csv",
+  size: 8,
+};
+
+describe("long pastes", () => {
+  it("count characters as people see them, and lines", () => {
+    expect(charCount("😀字a")).toBe(3);
+    expect(isLongPaste("字".repeat(LONG_PASTE.chars))).toBe(false);
+    expect(isLongPaste("字".repeat(LONG_PASTE.chars + 1))).toBe(true);
+    expect(isLongPaste("x\n".repeat(LONG_PASTE.lines - 1))).toBe(false);
+    expect(isLongPaste("x\n".repeat(LONG_PASTE.lines))).toBe(true);
+  });
+});
+
+describe("a draft as a message", () => {
+  const draft: Draft = [
+    { type: "text", text: "看：" },
+    { type: "paste", id: "p", text: "很长\n的日志" },
+    { type: "text", text: "和" },
+    {
+      type: "file",
+      id: "f",
+      name: "data.csv",
+      contentType: "text/csv",
+      size: 8,
+    },
+  ];
+
+  it("keeps the order, a paste as its own text, files as attachments", () => {
+    expect(messageParts(draft, (id) => (id === "f" ? csv : undefined))).toEqual(
+      [
+        { type: "text", text: "看：" },
+        { type: "text", text: "很长\n的日志" },
+        { type: "text", text: "和" },
+        { type: "attachment", attachment: csv },
+      ],
+    );
+  });
+
+  it("waits for every file's upload", () => {
+    expect(messageParts(draft, () => undefined)).toBeUndefined();
+  });
+
+  it("is blank without text or files", () => {
+    expect(isBlank([{ type: "text", text: " \n" }])).toBe(true);
+    expect(isBlank([draft[3]])).toBe(false);
+  });
+
+  it("drops a slash command's name, keeping what follows", () => {
+    expect(
+      afterCommand(
+        [
+          { type: "text", text: "/steer " },
+          { type: "attachment", attachment: csv },
+        ],
+        "/steer",
+      ),
+    ).toEqual([{ type: "attachment", attachment: csv }]);
+  });
+
+  it("comes back as a draft to edit, long text folded again", () => {
+    const long = "x\n".repeat(LONG_PASTE.lines + 1);
+    const { draft: back, attachments } = draftOf([
+      { type: "text", text: "短" },
+      { type: "text", text: long },
+      { type: "attachment", attachment: csv },
+    ]);
+    expect(back.map((p) => p.type)).toEqual(["text", "paste", "file"]);
+    const file = back[2] as Extract<Draft[number], { type: "file" }>;
+    expect(attachments[file.id]).toEqual(csv);
+  });
+});

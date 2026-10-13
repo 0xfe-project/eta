@@ -4,14 +4,18 @@
 
 import type { Context } from "hono";
 import type { Agent, Answer, Kind } from "./agent.ts";
+import type { Fetcher, Part } from "./attachments.ts";
+import type { UserInput } from "./protocol/v2/UserInput";
 import { Buffer } from "node:buffer";
 import { timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
+import { userInput } from "./attachments.ts";
 
 interface Input {
   boot_id?: unknown;
   command_id?: unknown;
   text?: unknown;
+  parts?: unknown;
   kind?: unknown;
   approval_id?: unknown;
   decision?: unknown;
@@ -23,7 +27,12 @@ function same(a: string, b: string): boolean {
   return x.length === y.length && timingSafeEqual(x, y);
 }
 
-export function controlAPI(agent: Agent, token: string, bootId: string): Hono {
+export function controlAPI(
+  agent: Agent,
+  token: string,
+  bootId: string,
+  attachments: Fetcher,
+): Hono {
   const app = new Hono();
   app.use("*", async (c, next) => {
     if (!same(c.req.header("authorization") ?? "", `Bearer ${token}`)) {
@@ -36,8 +45,15 @@ export function controlAPI(agent: Agent, token: string, bootId: string): Hono {
 
   // A prompt or steer names the boot it was meant for: one sent before this
   // boot reported itself started belongs to the previous one.
+  // A message's parts (text and attachments) when it has them, else its text.
   const deliver =
-    (run: (commandId: string, text: string, kind: Kind) => Promise<Answer>) =>
+    (
+      run: (
+        commandId: string,
+        input: string | UserInput[],
+        kind: Kind,
+      ) => Promise<Answer>,
+    ) =>
     async (c: Context) => {
       const body = (await c.req.json().catch(() => null)) as Input | null;
       if (
@@ -50,7 +66,22 @@ export function controlAPI(agent: Agent, token: string, bootId: string): Hono {
         return c.json({ accepted: false, code: "wrong_boot" }, 409);
       }
       const kind = body.kind === "compact" ? "compact" : "turn";
-      const answer = await run(body.command_id, body.text, kind);
+      let input: string | UserInput[] = body.text;
+      if (Array.isArray(body.parts)) {
+        try {
+          input = await userInput(attachments, body.parts as Part[]);
+        } catch (error) {
+          return c.json(
+            {
+              accepted: false,
+              code: "attachment_unavailable",
+              reason: error instanceof Error ? error.message : String(error),
+            },
+            409,
+          );
+        }
+      }
+      const answer = await run(body.command_id, input, kind);
       return c.json(answer, answer.accepted ? 200 : 409);
     };
   app.post(
