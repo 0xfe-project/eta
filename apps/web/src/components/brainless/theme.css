@@ -1,8 +1,7 @@
-/* Shared brainless palette. Appearance (Claude/Codex/Grok) is independent of color mode. */
+/* Shared brainless palette. Claude appearance supports both color modes. */
 :root {
   --terminal-foreground: #242424;
   --terminal-claude-foreground: #30313b;
-  --terminal-secondary: #454545;
   --terminal-muted: #666666;
   --terminal-background: var(--background);
   --terminal-surface: #f2f2f2;
@@ -29,7 +28,6 @@
 .dark {
   --terminal-foreground: #ededed;
   --terminal-claude-foreground: #c0caf5;
-  --terminal-secondary: #c9c9c9;
   --terminal-muted: #a0a0a0;
   --terminal-surface: #353535;
   --terminal-code-background: #101010;

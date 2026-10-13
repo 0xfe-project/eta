@@ -8,12 +8,12 @@ const storageKey = "axp.workspace.v1";
 
 // Local UI state only. Chat history lives in the control plane; older saved
 // messages are dropped rather than uploaded.
+// Zod strips retired fields, including sessionTheme, while retaining other preferences.
 const workspaceSchema = z.object({
   selectedAgentId: z.string().max(64).optional(),
   tasks: z.array(
     z.object({ id: z.string(), title: z.string().max(200), done: z.boolean() }),
   ),
-  sessionTheme: z.enum(["claude", "codex", "grok"]).default("claude"),
   // CSS font-family lists for UI and code text; unset uses Geist.
   fontSans: z.string().max(200).optional(),
   fontMono: z.string().max(200).optional(),
@@ -95,7 +95,7 @@ const storage: PersistStorage<Persisted> = {
 export const useWorkspaceStore = create<WorkspaceStore>()(
   persist(
     (set) => ({
-      workspace: { tasks: [], sessionTheme: "claude" },
+      workspace: { tasks: [] },
       mobilePanel: "chat",
       settings: { open: false, section: "agents" },
       agentEditor: { open: false, agentId: null },

@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, it } from "@rstest/core";
 import { useWorkspaceStore } from "./workspace-store";
 
 const key = "axp.workspace.v1";
-const saved = { tasks: [], sessionTheme: "grok", lastModel: "m1" };
+const saved = { tasks: [], lastModel: "m1" };
 
 describe("workspace store persistence", () => {
   beforeEach(() => {
     localStorage.clear();
     useWorkspaceStore.setState({
-      workspace: { tasks: [], sessionTheme: "claude" },
+      workspace: { tasks: [] },
     });
   });
 
@@ -19,10 +19,28 @@ describe("workspace store persistence", () => {
     expect(useWorkspaceStore.getState().workspace).toEqual(saved);
   });
 
+  for (const sessionTheme of ["codex", "grok", "claude"]) {
+    it(`discards retired ${sessionTheme} appearance and preserves other preferences`, async () => {
+      localStorage.setItem(
+        key,
+        JSON.stringify({ ...saved, sessionTheme, fontSans: "Arial" }),
+      );
+      await useWorkspaceStore.persist.rehydrate();
+      expect(useWorkspaceStore.getState().workspace).toEqual({
+        ...saved,
+        fontSans: "Arial",
+      });
+      useWorkspaceStore.getState().setWorkspace((w) => ({ ...w }));
+      expect(JSON.parse(localStorage.getItem(key)!)).not.toHaveProperty(
+        "sessionTheme",
+      );
+    });
+  }
+
   it("ignores saved data that does not validate", async () => {
     localStorage.setItem(key, JSON.stringify({ sessionTheme: "nope" }));
     await useWorkspaceStore.persist.rehydrate();
-    expect(useWorkspaceStore.getState().workspace.sessionTheme).toBe("claude");
+    expect(useWorkspaceStore.getState().workspace).toEqual({ tasks: [] });
   });
 
   it("remembers how the task page was left", async () => {
@@ -38,7 +56,6 @@ describe("workspace store persistence", () => {
     setMobilePanel("workspace");
     expect(JSON.parse(localStorage.getItem(key)!)).toEqual({
       tasks: [],
-      sessionTheme: "claude",
       selectedAgentId: "a1",
     });
   });
