@@ -17,13 +17,25 @@ import { useAgents } from "./use-agents";
 import { useAttention } from "./use-attention";
 import { hasPage, sectionPaths, views } from "./workspace-search";
 
-/** Opens the full window where the side panel is: its tab, task or routine. */
-function FullWindowButton({ view }: { view: WorkspaceView }) {
+/** Opens the full window at the side panel's current data context. */
+function FullWindowButton({
+  view,
+  agentId,
+}: {
+  view: WorkspaceView;
+  agentId: string | undefined;
+}) {
   const [{ task }] = useTaskNav();
   const [routineNav] = useRoutineNav();
   const search = Object.fromEntries(
     Object.entries(
-      view === "tasks" ? { task } : view === "routines" ? routineNav : {},
+      view === "tasks"
+        ? { task }
+        : view === "routines"
+          ? routineNav
+          : view === "memory"
+            ? { agent: agentId }
+            : {},
     ).filter(([, value]) => value !== null),
   );
   return (
@@ -85,7 +97,7 @@ export function WorkspacePanel({
         <div className="flex justify-self-end">
           {/* Phones keep theirs in the panel switcher above. */}
           <SettingsButton className="hidden md:inline-flex" />
-          <FullWindowButton view={view} />
+          <FullWindowButton view={view} agentId={current?.id} />
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
