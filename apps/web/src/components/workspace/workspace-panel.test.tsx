@@ -14,6 +14,7 @@ import { createRoot } from "react-dom/client";
 import { MemoryPage } from "@/pages/memory";
 import { validateMemorySearch } from "./memory-nav";
 import { WorkspacePanel } from "./workspace-panel";
+import { useWorkspaceView, validateWorkspaceSearch } from "./workspace-search";
 import { useWorkspaceStore } from "./workspace-store";
 
 (
@@ -61,9 +62,16 @@ async function mount(path = "/?view=memory") {
       createRoute({
         getParentRoute: () => route,
         path: "/",
-        component: () => (
-          <WorkspacePanel view="memory" onViewChange={() => {}} />
-        ),
+        validateSearch: validateWorkspaceSearch,
+        component: function Home() {
+          const [view, setView] = useWorkspaceView();
+          return (
+            <WorkspacePanel
+              view={view}
+              onViewChange={(value) => void setView(value)}
+            />
+          );
+        },
       }),
       createRoute({
         getParentRoute: () => route,
@@ -99,39 +107,34 @@ const selectAgent = (id: string) =>
     selectedAgentId: id,
   }));
 
-it("keeps the displayed agent's memories on navigation and a fresh URL load", async () => {
-  selectAgent("a");
-  const { container, router } = await mount();
-  const link = container.querySelector<HTMLAnchorElement>(
-    'a[aria-label="在全窗口中打开"]',
-  )!;
-  expect(link.getAttribute("href")).toBe("/workspace/memory?agent=a");
-  expect(container.textContent).toContain("a 的专属记忆");
-  await act(async () => {
-    link.click();
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  });
-  expect(router.state.location.search).toEqual({ agent: "a" });
-  expect(container.textContent).toContain("a 的专属记忆");
-  expect(container.textContent).not.toContain("b 的专属记忆");
+const tabs = (container: HTMLElement) =>
+  [...container.querySelectorAll('[aria-label="工作区标签"] [role="tab"]')].map(
+    (tab) => [tab.textContent, tab.getAttribute("aria-selected")],
+  );
 
-  // A direct load must use the URL even if this browser's chat selected B.
-  selectAgent("b");
-  const refreshed = await mount(router.state.location.href);
-  expect(
-    refreshed.container.querySelector('[aria-label="智能体"]')?.textContent,
-  ).toContain("研究员 A");
-  expect(refreshed.container.textContent).toContain("a 的专属记忆");
-  expect(refreshed.container.textContent).not.toContain("b 的专属记忆");
-});
-
-it("links the actual fallback agent when the stored selection no longer exists", async () => {
-  selectAgent("deleted-agent");
+it("leaves memory out of the side panel and opens an old memory link on the overview", async () => {
   const { container } = await mount();
-  expect(container.textContent).toContain("b 的专属记忆");
+  expect(tabs(container)).toEqual([
+    ["概览", "true"],
+    ["任务", "false"],
+    ["定时", "false"],
+    ["待处理", "false"],
+  ]);
+  expect(container.textContent).not.toContain("的专属记忆");
   expect(
     container
       .querySelector('a[aria-label="在全窗口中打开"]')
       ?.getAttribute("href"),
-  ).toBe("/workspace/memory?agent=b");
+  ).toBe("/workspace");
+});
+
+it("keeps the full-window memory page at the agent in its URL", async () => {
+  // A direct load must use the URL even if this browser's chat selected B.
+  selectAgent("b");
+  const { container } = await mount("/workspace/memory?agent=a");
+  expect(
+    container.querySelector('[aria-label="智能体"]')?.textContent,
+  ).toContain("研究员 A");
+  expect(container.textContent).toContain("a 的专属记忆");
+  expect(container.textContent).not.toContain("b 的专属记忆");
 });

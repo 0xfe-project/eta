@@ -1,6 +1,7 @@
 import type { WorkspaceView } from "./types";
 import { useLocation } from "@tanstack/react-router";
 import {
+  createParser,
   createStandardSchemaV1,
   parseAsString,
   parseAsStringLiteral,
@@ -9,11 +10,10 @@ import {
 import { useEffect } from "react";
 import { useWorkspaceStore } from "./workspace-store";
 
-/** The sections with a page in the full-window workspace. */
+/** The side panel's tabs that have a page in the full-window workspace. */
 export const sectionPaths = {
   tasks: "/workspace/tasks",
   routines: "/workspace/routines",
-  memory: "/workspace/memory",
   inbox: "/workspace/inbox",
 } as const satisfies Partial<Record<WorkspaceView, string>>;
 
@@ -43,7 +43,6 @@ export const views = [
   { value: "overview", label: "概览" },
   { value: "tasks", label: "任务" },
   { value: "routines", label: "定时" },
-  { value: "memory", label: "记忆" },
   { value: "inbox", label: "待处理" },
 ] as const;
 
@@ -51,10 +50,14 @@ const linkedViewParser = parseAsStringLiteral([
   "overview",
   "tasks",
   "routines",
-  "memory",
   "inbox",
 ] as const);
-const viewParser = linkedViewParser
+// Any other view, like an old link to the memory tab the panel no longer
+// has, opens the overview rather than failing the route.
+const viewParser = createParser({
+  parse: (value) => linkedViewParser.parse(value) ?? "overview",
+  serialize: linkedViewParser.serialize,
+})
   .withDefault("overview")
   .withOptions({ history: "push" });
 export const validateWorkspaceSearch = createStandardSchemaV1(
