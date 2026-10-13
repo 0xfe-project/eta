@@ -377,7 +377,7 @@ export function TaskForm({
           id="task-description"
           rows={6}
           maxLength={20000}
-          className="min-h-32"
+          className="max-h-[40dvh] min-h-32 overflow-y-auto"
           placeholder="目标、背景、完成的标准……"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
