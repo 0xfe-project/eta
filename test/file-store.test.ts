@@ -132,11 +132,12 @@ describe("what only a real directory tree gives", () => {
 
 		// Opening what cannot be read is an error, and says so.
 		await expect(watching.open("eta-broken")).rejects.toThrow(/meta\.json/);
-		// Listing a directory that holds no metadata still names the reason.
+		// Listing a directory that holds no metadata still names the reason — including
+		// why nothing could be rebuilt from the journal the recovery reads.
 		await mkdir(join(root, "eta-empty"));
 		const withEmpty = await watching.list();
 		const empty = withEmpty.find((listing) => listing.id === "eta-empty");
-		expect(empty?.ok === false ? empty.reason : "").toBe("meta.json is missing");
+		expect(empty?.ok === false ? empty.reason : "").toContain("meta.json is missing");
 	});
 
 	it("refuses an id that would leave the session directory, and a duplicate", async () => {
