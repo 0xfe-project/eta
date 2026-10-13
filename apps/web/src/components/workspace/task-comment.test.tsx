@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { toast } from "sonner";
 import { CommentBox, Timeline } from "./tasks";
 
 (
@@ -249,5 +250,20 @@ describe("follow-up comments", () => {
     // A late failure (the response was lost) changes nothing.
     await respond(posts[0]!, failed());
     expect(outgoing(container)).toBeNull();
+  });
+
+  it("says a pasted image stays out of the comment, and keeps the pasted text", async () => {
+    const warn = rstest.spyOn(toast, "warning");
+    const { container } = await render();
+    const paste = new Event("paste", { bubbles: true, cancelable: true });
+    const image = new File(["x"], "shot.png", { type: "image/png" });
+    Object.defineProperty(paste, "clipboardData", {
+      value: { files: [image, image], getData: () => "" },
+    });
+    await act(async () => box(container).dispatchEvent(paste));
+    expect(warn).toHaveBeenCalledWith(
+      "追问还不能带图片或文件，2 个没有加进来。",
+    );
+    expect(paste.defaultPrevented).toBe(false);
   });
 });

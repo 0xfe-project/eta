@@ -798,6 +798,8 @@ const logKindLabels: Record<LogEntry["kind"], string> = {
   tool: "工具",
   reasoning: "思考",
   terminal: "终端",
+  // Its file is on the remote computer, out of the relay's reach.
+  image: "读取了图片",
   other: "其他",
 };
 
@@ -858,7 +860,7 @@ function RunLogEntries({ entries }: { entries: LogEntry[] }) {
               $ {entry.command}
             </pre>
           ) : null}
-          {entry.text ? (
+          {entry.text && entry.kind !== "image" ? (
             entry.kind === "assistant" || entry.kind === "user" ? (
               <Folded max="max-h-40">
                 <Markdown className="mt-0.5 text-xs">{entry.text}</Markdown>
@@ -1085,6 +1087,12 @@ export function CommentBox({ task }: { task: TaskDetail }) {
     };
   }, []);
   const remote = task.assignee.kind === "remote";
+  const leftOut = (files: number) => {
+    if (files)
+      toast.warning(
+        `${remote ? "追问" : "评论"}还不能带图片或文件，${files} 个没有加进来。`,
+      );
+  };
   // Arrived once the task has one more of it, from the response or a refresh:
   // the timeline shows it in the same render this stops showing it.
   const waiting =
@@ -1159,6 +1167,14 @@ export function CommentBox({ task }: { task: TaskDetail }) {
           className="min-h-16 text-sm md:text-sm"
           value={text}
           onChange={(e) => setText(e.target.value)}
+          // A comment is text only: a pasted or dropped file would vanish
+          // without a word, so say it stayed out (a paste's text still goes in).
+          onPaste={(e) => leftOut(e.clipboardData.files.length)}
+          onDrop={(e) => {
+            if (!e.dataTransfer.files.length) return;
+            e.preventDefault();
+            leftOut(e.dataTransfer.files.length);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();
