@@ -73,7 +73,7 @@ Herdr 运行的是交互式终端程序。agent 启动后停在阻塞界面时�
 - tasks plugin：`assist_task` 和 `cancel_assist`；
 - CLI：`axp task assist`。
 
-输入是：Agent（运行时 + provider）、要求、`review_pull`、`after_run`、`loop`，以及可选的幂等 `key`（同一个任务里 key 相同就是同一个请求）。前端的“代码审查 / 测试验证 / 问题分析 / 其他”只是填好要求的起点，不存、不显示。时间线上请求和回复都只署 Agent 的名字（电脑 · 运行时 · provider）。
+输入是：Agent（运行时 + provider）、要求、`review_pull`、`after_run`、`loop`，以及可选的幂等 `key`（同一个任务里 key 相同就是同一个请求）。要求完全由用户自己写，没有预制的模板。时间线上请求和回复都只署 Agent 的名字（电脑 · 运行时 · provider）。
 
 **请求与队列**（`task_assist`）。每个请求是一行，状态是 waiting、blocked、started 或 cancelled，附带原因：
 

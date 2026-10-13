@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -25,24 +24,7 @@ import { useWorkspaceStore } from "./workspace-store";
 
 // 请 Agent 协助: another agent on the task's computer does one piece of work
 // on it (a review, a test run) beside its assignee, in a place of its own.
-// Who it is reads as its name only; what it is for is in the request.
-
-/** What the request can start from; none is required. */
-const purposes = [
-  {
-    label: "代码审查",
-    text: "审查交付的改动：正确性、边界情况、和任务要求是否一致。列出问题（附文件和行号）和建议，只读，不要改代码。",
-  },
-  {
-    label: "测试验证",
-    text: "检出交付的改动，运行相关测试并实际验证行为，报告结果和复现步骤。不要提交改动。",
-  },
-  {
-    label: "问题分析",
-    text: "分析下面这个问题，找出原因并给出修复建议：\n\n",
-  },
-  { label: "其他", text: "" },
-];
+// Who it is reads as its name only; what it is to do is the user's own words.
 
 /** "runtime:provider", an agent on the task's computer. */
 const agentKey = (a: { runtime: string; provider: string }) =>
@@ -113,13 +95,9 @@ export function AssistDialog({
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent aria-describedby={undefined} className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>请 Agent 协助</DialogTitle>
-          <DialogDescription>
-            请这台电脑上的另一个 Agent 做一件事，例如审查交付的 PR。它在单独的
-            worktree 里工作，结果回复在这个任务下；主执行者和任务状态不变。
-          </DialogDescription>
         </DialogHeader>
         {why ? (
           <>
@@ -261,33 +239,11 @@ function AssistForm({
         <Label htmlFor="assist-request" className="text-xs">
           协助要求
         </Label>
-        <div
-          className="flex flex-wrap gap-1"
-          role="group"
-          aria-label="从常用要求开始"
-        >
-          {purposes.map((p) => (
-            <Button
-              key={p.label}
-              type="button"
-              size="xs"
-              variant="outline"
-              onClick={() => {
-                // Only an empty request, or one still a starting text, is replaced.
-                if (!request.trim() || purposes.some((q) => q.text === request))
-                  setRequest(p.text);
-                document.getElementById("assist-request")?.focus();
-              }}
-            >
-              {p.label}
-            </Button>
-          ))}
-        </div>
         <Textarea
           id="assist-request"
           rows={4}
           maxLength={20000}
-          placeholder="要它做什么，例如：审查 PR，重点看边界情况和测试覆盖"
+          placeholder="要它做什么"
           value={request}
           onChange={(e) => setRequest(e.target.value)}
           onKeyDown={(e) => {

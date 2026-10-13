@@ -283,16 +283,12 @@ describe("请 Agent 协助", () => {
       dialog.querySelector('[role="radio"][aria-checked="true"]')!.textContent,
     ).toBe("主执行者这一轮交付后");
     expect(dialog.textContent).toContain("固定 PR 那一刻的 head");
-    await act(async () =>
-      (
-        [...dialog.querySelectorAll("button")].find(
-          (b) => b.textContent === "代码审查",
-        ) as HTMLButtonElement
-      ).click(),
-    );
+    // The request is the user's own words: no ready-made ones, no blurb.
+    expect(dialog.textContent).not.toContain("代码审查");
+    expect(dialog.textContent).not.toContain("它在单独的");
     const request =
       dialog.querySelector<HTMLTextAreaElement>("#assist-request")!;
-    expect(request.value).toContain("审查交付的改动");
+    expect(request.value).toBe("");
     await type(request, "看一下 Safari");
     await act(async () =>
       request.form!.dispatchEvent(
