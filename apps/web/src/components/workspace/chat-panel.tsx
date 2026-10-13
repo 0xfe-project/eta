@@ -1,3 +1,4 @@
+import type { Draft, FilePart, OutgoingPart } from "@/lib/composer";
 import type {
   Agent,
   Block,
@@ -39,12 +40,28 @@ import { GrokTool } from "@/components/brainless/grok/grok-tool";
 import { Markdown } from "@/components/markdown";
 import { ActivityOperationCards } from "@/components/workspace/activity-operation";
 import { ActivityRefCard } from "@/components/workspace/activity-ref";
+import {
+  afterCommand,
+  charCount,
+  draftText,
+  isBlank,
+  isLongPaste,
+  MAX_ATTACHMENTS,
+  MAX_MESSAGE_CHARS,
+  messageParts,
+  onlyText,
+  plainDraft,
+} from "@/lib/composer";
 import { ACTIVE_STATUSES } from "@/queries/chat";
+import { useOutbox } from "@/queries/outbox";
+import { AttachmentChip, PastedText } from "./composer-block";
+import { ComposerEditor } from "./composer-editor";
 
 // Each theme is laid out like its brainless session block
 // (components/brainless/blocks): header, turn, working line, composer.
 export type SessionTheme = "claude" | "codex" | "grok";
 type Activity = Extract<Block, { type: "activity" }>;
+type Reply = Exclude<Block, { type: "attachment" }>;
 interface MessageProps {
   role?: "user" | "assistant";
   time?: string;
@@ -90,10 +107,34 @@ const ENVIRONMENT_FAILURES = new Set([
   "AGENT_BUILD_FAILED",
 ]);
 
-function messageText(message: ChatMessage | undefined) {
-  return (message?.blocks ?? [])
-    .map((block) => (block.type === "text" ? block.text : ""))
-    .join("");
+/** A user message's text and attachments, to send again. */
+function userParts(message: ChatMessage): OutgoingPart[] {
+  return message.blocks.flatMap((block): OutgoingPart[] =>
+    block.type === "text"
+      ? [{ type: "text", text: block.text }]
+      : block.type === "attachment"
+        ? [{ type: "attachment", attachment: block.attachment }]
+        : [],
+  );
+}
+
+/** What the user wrote: text, with long pastes and attachments folded where they stand. */
+function UserParts({ parts }: { parts: OutgoingPart[] }) {
+  return (
+    <span className="whitespace-pre-wrap">
+      {parts.map((part, i) =>
+        part.type === "attachment" ? (
+          // eslint-disable-next-line react/no-array-index-key -- parts never move
+          <AttachmentChip key={i} attachment={part.attachment} />
+        ) : isLongPaste(part.text) ? (
+          // eslint-disable-next-line react/no-array-index-key -- parts never move
+          <PastedText key={i} text={part.text} />
+        ) : (
+          part.text
+        ),
+      )}
+    </span>
+  );
 }
 
 const sessions = {
@@ -319,7 +360,7 @@ const NO_INTERACTIONS: Interaction[] = [];
 interface TurnActions {
   onStop: (replyId: string) => void;
   onAnswer: (interactionId: string, value: string) => void;
-  onResend: (text: string) => void;
+  onResend: (parts: OutgoingPart[]) => void;
 }
 
 /**
@@ -333,8 +374,8 @@ interface ReplyLine {
   starting?: boolean;
   /** The next reply failed the same way; this one says so. */
   sameAsNext?: boolean;
-  /** The text of the user message a failed reply answered. */
-  resend?: string;
+  /** The user message a failed reply answered. */
+  resend?: ChatMessage;
 }
 
 /** The state line facts per reply. */
@@ -364,7 +405,7 @@ function replyLines(
           ENVIRONMENT_FAILURES.has(code) &&
           next?.status === "failed" &&
           next.failure?.code === code,
-        resend: messageText(messages.find((m) => m.id === message.reply_to_id)),
+        resend: messages.find((m) => m.id === message.reply_to_id),
       });
     }
   });
@@ -395,40 +436,38 @@ const Turn = memo(
     if (message.role === "user")
       return (
         <Message role="user" time={timeLabel}>
-          <span className="whitespace-pre-wrap">
-            {message.blocks.map((block) =>
-              block.type === "text" ? block.text : null,
-            )}
-          </span>
+          <UserParts parts={userParts(message)} />
         </Message>
       );
     // Only a reply at work still grows; the rest render as finished text.
     const streaming = ACTIVE_STATUSES.has(message.status);
     return (
       <div className={session.turnClass}>
-        {message.blocks.map((block) =>
-          block.type === "text" ? (
-            <Message key={block.id} time={timeLabel}>
-              <Markdown streaming={streaming}>{block.text}</Markdown>
-            </Message>
-          ) : (
-            <div key={block.id} className="space-y-1">
-              <Activity block={block} />
-              {block.ref && block.status === "completed" ? (
-                <ActivityRefCard
-                  value={block.ref}
-                  className={session.refClass}
-                />
-              ) : null}
-              {block.operations?.length && block.status !== "running" ? (
-                <ActivityOperationCards
-                  operations={block.operations}
-                  className={session.refClass}
-                />
-              ) : null}
-            </div>
-          ),
-        )}
+        {message.blocks
+          .filter((block): block is Reply => block.type !== "attachment")
+          .map((block) =>
+            block.type === "text" ? (
+              <Message key={block.id} time={timeLabel}>
+                <Markdown streaming={streaming}>{block.text}</Markdown>
+              </Message>
+            ) : (
+              <div key={block.id} className="space-y-1">
+                <Activity block={block} />
+                {block.ref && block.status === "completed" ? (
+                  <ActivityRefCard
+                    value={block.ref}
+                    className={session.refClass}
+                  />
+                ) : null}
+                {block.operations?.length && block.status !== "running" ? (
+                  <ActivityOperationCards
+                    operations={block.operations}
+                    className={session.refClass}
+                  />
+                ) : null}
+              </div>
+            ),
+          )}
         {pending.map((interaction) => (
           <Choice
             key={interaction.id}
@@ -448,7 +487,7 @@ const Turn = memo(
           line={line}
           Working={Working}
           onStop={() => actions.current.onStop(message.id)}
-          onResend={(text) => actions.current.onResend(text)}
+          onResend={(parts) => actions.current.onResend(parts)}
         />
       </div>
     );
@@ -472,7 +511,7 @@ function ReplyState({
   line: ReplyLine;
   Working: (props: { label: string }) => React.ReactNode;
   onStop: () => void;
-  onResend: (text: string) => void;
+  onResend: (parts: OutgoingPart[]) => void;
 }) {
   switch (message.status) {
     case "responding":
@@ -500,7 +539,7 @@ function ReplyState({
     case "stopped":
       return <Warning>已停止</Warning>;
     case "failed": {
-      const text = line.resend;
+      const parts = line.resend && userParts(line.resend);
       return (
         <ComposerNotice
           message={
@@ -509,7 +548,9 @@ function ReplyState({
               : (message.failure?.message ?? "回复失败。")
           }
           actions={
-            text ? [{ label: "重新发送", onClick: () => onResend(text) }] : []
+            parts?.length
+              ? [{ label: "重新发送", onClick: () => onResend(parts) }]
+              : []
           }
         />
       );
@@ -538,6 +579,7 @@ export function ChatPanel({
   interactions,
   draft,
   onDraftChange: setDraft,
+  onFiles,
   onSend,
   onCompact,
   onStop,
@@ -567,9 +609,11 @@ export function ChatPanel({
   loadingOlder: boolean;
   onLoadOlder: () => void;
   interactions: Interaction[];
-  draft: string;
-  onDraftChange: (value: string) => void;
-  onSend: (content: string, mode: SendMode) => void;
+  draft: Draft;
+  onDraftChange: (draft: Draft) => void;
+  /** Start uploading files pasted into the draft; their blocks. */
+  onFiles: (files: File[]) => FilePart[];
+  onSend: (parts: OutgoingPart[], mode: SendMode) => void;
   onCompact: () => void;
   onStop: (replyId: string) => void;
   onAnswer: (interactionId: string, value: string) => void;
@@ -591,7 +635,7 @@ export function ChatPanel({
   onEdit: (outgoing: Outgoing) => void;
   onDiscard: (id: string) => void;
   /** Send a failed reply's message again, as a new message. */
-  onResend: (text: string) => void;
+  onResend: (parts: OutgoingPart[]) => void;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
   const session = sessions[theme];
@@ -635,7 +679,22 @@ export function ChatPanel({
   const [menuIndex, setMenuIndex] = useState(0);
   const [menuDismissed, setMenuDismissed] = useState(false);
   // The menu offers commands while the draft is a bare `/name`.
-  const query = /^\/\S*$/.test(draft) ? draft.slice(1).toLowerCase() : null;
+  const plain = onlyText(draft);
+  const query =
+    plain !== null && /^\/\S*$/.test(plain)
+      ? plain.slice(1).toLowerCase()
+      : null;
+  // Why the draft cannot go yet: its files' uploads, or the limits.
+  const uploads = useOutbox((s) => s.uploads);
+  const files = draft.filter((part) => part.type === "file");
+  const hold = files.some((f) => uploads[f.id]?.error)
+    ? "有附件上传失败：重试或移除后再发送。"
+    : files.length > MAX_ATTACHMENTS
+      ? `一条消息最多带 ${MAX_ATTACHMENTS} 个附件。`
+      : charCount(draftText(draft)) > MAX_MESSAGE_CHARS
+        ? `消息文本超过 ${MAX_MESSAGE_CHARS} 字符，更长的内容请作为文件粘贴。`
+        : undefined;
+  const uploading = files.some((f) => !uploads[f.id]?.attachment);
   const matches =
     query === null || menuDismissed || blocked
       ? []
@@ -645,41 +704,51 @@ export function ChatPanel({
   const menuOpen = matches.length > 0;
   const menuActive = Math.min(menuIndex, matches.length - 1);
 
-  function run(name: SlashName, text: string) {
+  function run(name: SlashName, parts: OutgoingPart[]) {
     if (name === "/stop") {
       if (active) onStop(active.id);
-      setDraft("");
+      setDraft([]);
     } else if (name === "/compact") {
       onCompact();
-    } else if (text.trim()) {
-      onSend(text, name === "/steer" ? "steer" : "queue");
+    } else if (parts.length) {
+      onSend(parts, name === "/steer" ? "steer" : "queue");
     }
   }
   function choose(command: SlashCommand) {
-    if (command.takesText) setDraft(`${command.name} `);
-    else run(command.name, "");
+    if (command.takesText) setDraft(plainDraft(`${command.name} `));
+    else run(command.name, []);
   }
   function send() {
-    if (blocked || !draft.trim()) return;
-    const space = draft.search(/\s/);
-    const name = space === -1 ? draft : draft.slice(0, space);
-    const text = space === -1 ? "" : draft.slice(space).trimStart();
+    if (blocked || hold || uploading || isBlank(draft)) return;
+    const parts = messageParts(draft, (id) => uploads[id]?.attachment);
+    if (!parts) return;
+    const first = parts[0]?.type === "text" ? parts[0].text : "";
+    const space = first.search(/\s/);
+    const name = space === -1 ? first : first.slice(0, space);
     const command = SLASH_COMMANDS.find((c) => c.name === name);
-    if (command) run(command.name, text);
-    else onSend(draft, "queue");
+    if (command) {
+      const rest = afterCommand(parts, name);
+      run(
+        command.name,
+        rest.some((p) => p.type !== "text" || p.text.trim()) ? rest : [],
+      );
+    } else onSend(parts, "queue");
     // Sending jumps back to the live end, as in a terminal.
     transcript.toBottom();
-    formRef.current?.querySelector("textarea")?.focus();
+    formRef.current?.querySelector<HTMLElement>("[contenteditable]")?.focus();
   }
-  const promptProps = {
+  const editorProps = {
     value: draft,
-    onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-      setDraft(event.target.value);
+    onChange: (next: Draft) => {
+      setDraft(next);
       setMenuIndex(0);
       setMenuDismissed(false);
     },
-    onKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (event.nativeEvent.isComposing) return;
+    onFiles,
+    disabled: Boolean(blocked),
+    onKeyDown: (event: KeyboardEvent) => {
+      // Safari ends a composition with a keydown that no longer says so.
+      if (event.isComposing || event.keyCode === 229) return;
       if (menuOpen) {
         const step = { ArrowDown: 1, ArrowUp: -1 }[event.key];
         if (step) {
@@ -701,7 +770,7 @@ export function ChatPanel({
       // The CLIs' interrupt keys, as their working lines advertise.
       const interrupt =
         theme === "grok"
-          ? event.ctrlKey && event.key === "c" && !draft
+          ? event.ctrlKey && event.key === "c" && !draft.length
           : event.key === "Escape";
       if (interrupt && active) {
         event.preventDefault();
@@ -718,7 +787,13 @@ export function ChatPanel({
       "aria-expanded": menuOpen,
       "aria-controls": menuOpen ? listId : undefined,
       "aria-activedescendant": menuOpen ? `${listId}-${menuActive}` : undefined,
-    } satisfies React.TextareaHTMLAttributes<HTMLTextAreaElement>,
+    } satisfies React.HTMLAttributes<HTMLDivElement>,
+  };
+  const promptProps = {
+    renderInput: (input: { className: string; style: React.CSSProperties }) => (
+      // A new agent's composer starts from its own draft.
+      <ComposerEditor key={agentId} {...editorProps} {...input} />
+    ),
   };
   const slashMenu = menuOpen ? (
     <SlashMenu
@@ -805,7 +880,7 @@ export function ChatPanel({
             {outgoing.map((item) => (
               <div key={item.id} className={session.turnClass}>
                 <Message role="user">
-                  <span className="whitespace-pre-wrap">{item.text}</span>
+                  <UserParts parts={item.parts} />
                 </Message>
                 {item.failure ? (
                   <ComposerNotice
@@ -836,6 +911,17 @@ export function ChatPanel({
       >
         {blocked || notice ? (
           <div className="px-[1ch] pb-[1lh]">{blocked ?? notice}</div>
+        ) : hold ? (
+          <div className="px-[1ch] pb-[0.5lh]">
+            <Warning>{hold}</Warning>
+          </div>
+        ) : uploading ? (
+          <div
+            role="status"
+            className="px-[1ch] pb-[0.5lh] text-[var(--terminal-muted)]"
+          >
+            附件上传中，完成后才能发送。
+          </div>
         ) : null}
         {/* A disabled fieldset disables the session's own input. */}
         <fieldset disabled={Boolean(blocked)} className="contents">

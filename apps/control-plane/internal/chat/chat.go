@@ -27,6 +27,9 @@ type Service struct {
 	Models  llm.Catalog
 	Bundles *bundles.Catalog
 	Cursors Cursors
+	// Where attachments are; nil when no S3 is configured: messages carry
+	// text only.
+	Store Store
 }
 
 // --- reads --------------------------------------------------------------------
@@ -334,20 +337,22 @@ func (s *Service) stopReplies(ctx context.Context, tx pgx.Tx, agentID string) er
 // the agent's running turn instead; with no running turn (or one that
 // refuses it) it waits like any turn. messageID is the client's id for the
 // message, or "" for a new one.
-func (s *Service) SendMessage(ctx context.Context, tx pgx.Tx, agentID, messageID, text string, steer bool) (*Sent, error) {
-	input := map[string]any{"text": text}
+func (s *Service) SendMessage(ctx context.Context, tx pgx.Tx, agentID, messageID string, parts []Part, steer bool) (*Sent, error) {
+	input := map[string]any{"parts": parts}
 	if steer {
 		input["steer"] = true
 	}
-	return s.enqueue(ctx, tx, agentID, messageID, text, input, KindTurn)
+	return s.enqueue(ctx, tx, agentID, messageID, nil, input, KindTurn)
 }
 
 // Compact queues a compaction of the agent's context, shown as /compact.
 func (s *Service) Compact(ctx context.Context, tx pgx.Tx, agentID string) (*Sent, error) {
-	return s.enqueue(ctx, tx, agentID, "", "/compact", map[string]any{"text": "/compact"}, KindCompact)
+	return s.enqueue(ctx, tx, agentID, "", []Block{textBlock("/compact")}, map[string]any{"text": "/compact"}, KindCompact)
 }
 
-func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, agentID, messageID, text string, input map[string]any, kind string) (*Sent, error) {
+// enqueue queues a command with input, shown as a user message of blocks;
+// nil blocks are the input's parts (a message the user wrote).
+func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, agentID, messageID string, blocks []Block, input map[string]any, kind string) (*Sent, error) {
 	if messageID == "" {
 		messageID = pg.NewID()
 	} else if id, ok := pg.ParseID(messageID); ok {
@@ -383,6 +388,17 @@ func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, agentID, messageID, te
 	if waiting >= MaxQueuedPerAgent {
 		return nil, apierr.New(429, "QUEUE_FULL", "该智能体待处理的消息过多，请稍后再发送。")
 	}
+	if blocks == nil {
+		parts, _ := input["parts"].([]Part)
+		var text string
+		var err error
+		blocks, input["parts"], text, err = content(ctx, tx, agent.ID, parts)
+		if err != nil {
+			return nil, err
+		}
+		// What runtimes without parts read.
+		input["text"] = text
+	}
 	now := pg.Now()
 	command := &CommandRecord{ID: pg.NewID(), AgentID: agent.ID, Kind: kind, Status: CommandQueued, Input: input, CreatedAt: now}
 	if err := tx.QueryRow(ctx, `UPDATE agent SET last_command_seq = last_command_seq + 1
@@ -401,7 +417,7 @@ func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, agentID, messageID, te
 	}
 	message := &messageRow{
 		ID: messageID, ConversationID: conversationID, AgentID: agent.ID, CommandID: command.ID,
-		Seq: seq - 1, Role: RoleUser, Status: MessageCompleted, Content: []Block{textBlock(text)},
+		Seq: seq - 1, Role: RoleUser, Status: MessageCompleted, Content: blocks,
 		Revision: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	answer := &messageRow{

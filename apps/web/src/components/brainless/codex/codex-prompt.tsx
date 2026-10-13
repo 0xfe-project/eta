@@ -33,6 +33,7 @@ export function CodexPrompt({
   className,
   inputClassName,
   inputProps,
+  renderInput,
 }: {
   value?: string;
   defaultValue?: string;
@@ -46,6 +47,11 @@ export function CodexPrompt({
   inputClassName?: string;
   /** Extra attributes for the textarea, e.g. combobox semantics. */
   inputProps?: React.TextareaHTMLAttributes<HTMLTextAreaElement>;
+  /** An editor of the caller's in the textarea's place, styled as it would be. */
+  renderInput?: (input: {
+    className: string;
+    style: React.CSSProperties;
+  }) => React.ReactNode;
 }) {
   const controlled = value !== undefined;
   const displayModel =
@@ -65,25 +71,38 @@ export function CodexPrompt({
           <span aria-hidden className="inline-block w-[2ch] shrink-0 font-bold">
             ›
           </span>
-          <textarea
-            rows={1}
-            aria-label="消息"
-            placeholder={placeholder}
-            onKeyDown={onKeyDown}
-            {...(controlled ? { value, onChange } : { defaultValue, onChange })}
-            {...inputProps}
-            className={cn(
-              "term-input max-h-[40vh] min-w-0 flex-1 resize-none bg-transparent [field-sizing:content] outline-none placeholder:text-[var(--terminal-muted)]",
-              inputClassName,
-            )}
-            style={
-              {
+          {renderInput ? (
+            renderInput({
+              className: cn(inputClassName),
+              style: {
                 color: FG,
                 caretColor: FG,
                 caretShape: "block",
-              } as React.CSSProperties
-            }
-          />
+              } as React.CSSProperties,
+            })
+          ) : (
+            <textarea
+              rows={1}
+              aria-label="消息"
+              placeholder={placeholder}
+              onKeyDown={onKeyDown}
+              {...(controlled
+                ? { value, onChange }
+                : { defaultValue, onChange })}
+              {...inputProps}
+              className={cn(
+                "term-input max-h-[40vh] min-w-0 flex-1 resize-none bg-transparent [field-sizing:content] outline-none placeholder:text-[var(--terminal-muted)]",
+                inputClassName,
+              )}
+              style={
+                {
+                  color: FG,
+                  caretColor: FG,
+                  caretShape: "block",
+                } as React.CSSProperties
+              }
+            />
+          )}
         </div>
       </div>
 

@@ -1,8 +1,10 @@
 import type { WorkspaceView } from "./types";
+import type { Draft } from "@/lib/composer";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { EMPTY_DRAFT, partsText } from "@/lib/composer";
 import { cn } from "@/lib/utils";
 import {
   chatQueryOptions,
@@ -15,6 +17,7 @@ import {
 } from "@/queries/chat";
 import { useModelAvailability } from "@/queries/llm";
 import {
+  upload,
   useOutbox,
   useOutboxActions,
   useOutboxDelivery,
@@ -48,9 +51,9 @@ export function Workspace({
   const connectionLost = useStreamLost((s) => s.lost);
   // The draft and the messages on their way are the selected agent's.
   const draftKey = selected?.id ?? "";
-  const draft = useOutbox((s) => s.drafts[draftKey] ?? "");
-  const setDraft = (text: string) =>
-    useOutbox.getState().setDraft(draftKey, text);
+  const draft = useOutbox((s) => s.drafts[draftKey] ?? EMPTY_DRAFT);
+  const setDraft = (next: Draft) =>
+    useOutbox.getState().setDraft(draftKey, next);
   const allOutgoing = useOutbox((s) => s.outgoing);
   const arrived = useMemo(
     () => new Set(history.messages.map((message) => message.id)),
@@ -159,10 +162,11 @@ export function Workspace({
             onRetry={outbox.retry}
             onEdit={outbox.edit}
             onDiscard={outbox.discard}
-            onResend={(text) => {
+            onResend={(parts) => {
               if (!selected) return;
-              if (text === "/compact") compact.mutate(selected.id, { onError });
-              else outbox.send(selected.id, text, "queue");
+              if (partsText(parts) === "/compact" && parts.length === 1)
+                compact.mutate(selected.id, { onError });
+              else outbox.send(selected.id, parts, "queue");
             }}
             error={
               (chat.error ?? history.error)
@@ -171,14 +175,28 @@ export function Workspace({
             }
             draft={draft}
             onDraftChange={setDraft}
-            onSend={(text, mode) => {
+            onFiles={(files) =>
+              // Uploaded to the agent whose draft they are in, never another.
+              (selected ? files : []).map((file) => {
+                const id = crypto.randomUUID();
+                void upload(selected!.id, id, file);
+                return {
+                  type: "file" as const,
+                  id,
+                  name: file.name || "粘贴的文件",
+                  contentType: file.type || "application/octet-stream",
+                  size: file.size,
+                };
+              })
+            }
+            onSend={(parts, mode) => {
               if (!selected) {
                 openEditor();
                 return;
               }
               // On its way: the transcript shows it from here on.
-              outbox.send(selected.id, text, mode);
-              setDraft("");
+              outbox.send(selected.id, parts, mode);
+              setDraft([]);
             }}
             onCompact={() => {
               if (!selected) {
@@ -186,7 +204,7 @@ export function Workspace({
                 return;
               }
               compact.mutate(selected.id, { onError });
-              setDraft("");
+              setDraft([]);
             }}
             onStop={(id) => stopReply.mutate(id, { onError })}
             onAnswer={(id, value) => answer.mutate({ id, value }, { onError })}

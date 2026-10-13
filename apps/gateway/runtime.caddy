@@ -55,6 +55,11 @@ http://:{$AXP_RUNTIME_GATEWAY_PORT:8090} {
 	handle /artifacts/* {
 		import as_agent_with {$AXP_UPSTREAM_INTERNAL:axp-internal:8001} artifacts
 	}
+	# The files the user attached to messages to this agent, which the
+	# runtime fetches before handing a turn to Codex.
+	handle /attachments/* {
+		import as_agent {$AXP_UPSTREAM_INTERNAL:axp-internal:8001}
+	}
 	# Routines: the routines plugin's MCP server, in the routine service.
 	handle /routines/* {
 		import as_agent_with {$AXP_UPSTREAM_ROUTINES:axp-routines:8340} routines

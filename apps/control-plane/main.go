@@ -137,6 +137,7 @@ func connect(ctx context.Context) (*services, error) {
 			return nil, err
 		}
 		artifactService.Store = store
+		chatService.Store = store
 	}
 	return &services{
 		cfg:    cfg,

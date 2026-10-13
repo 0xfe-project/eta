@@ -45,6 +45,16 @@ agenvo 插件的 `execute` 是任意脚本，可以调用多个原生方法、�
 - 没有响应（断网、超时 20 秒）或 5xx 时自动再试，共 4 次；仍不成功，或服务端明确拒绝（4xx），消息标为“未送达”并给出原因，可以“重试”“编辑”或“丢弃”。
 - 消息经 SSE 先于响应到达时，按 id 认出它，不会显示两遍。
 
+### 输入框里的块与附件
+
+输入框是 Lexical 的纯文本编辑器（`apps/web/src/components/workspace/composer-*.ts*`），文字之间可以有块：
+
+- 粘贴超过 1000 字符（按 Unicode 码点）或 12 行的文本折成 `[粘贴文本 · N 字符]`，点开看全文、移除或展开回文本；阈值在 `apps/web/src/lib/composer.ts` 的 `LONG_PASTE`。发送时它就是原文，单独作为一个文本 part，对话里同样折叠显示。超过一条消息的文本上限（100000 字符）的粘贴改为 `粘贴文本.txt` 附件。
+- 粘贴的图片和文件立刻上传到当前智能体（`POST /api/v1/agents/{agent_id}/attachments`，请求体就是文件，单个 ≤ 20 MB），块上显示上传中、失败（可重试）或缩略图；有附件未上传完或失败时不能发送。剪贴板同时有文件和文本时取文件；Office/网页复制的文字旁边附带的渲染图会被忽略，取文字。任何 HTML 都不会插入。
+- 草稿按智能体保存为有序的 parts，上传状态按块保存在 `uploads`，刷新后上传中断的块标为失败；附件只属于它上传到的那个智能体。
+
+发送时消息是有序的 `parts`（`text` 或 `attachment_id`，最多 10 个附件），服务端校验附件属于收件智能体并标为已发送（`chat_attachment.sent_at`，之后不能删除），消息内容里附件是 `attachment` 块。runtime 收到 `/prompt`、`/steer` 的 `parts` 时，经 runtime gateway 的 `/attachments/v1/{id}`（只能取本智能体的附件）把文件下载到 `/agent/attachments/<id>/<文件名>`，再按顺序交给 Codex：文本原样；png/jpeg/gif/webp 作为 `localImage`（模型不支持图像时这一轮会失败并显示错误）；每个附件另有一行说明它的路径、类型和大小，其他文件由智能体用工具读取。文件内容和 base64 都不会进入 prompt。浏览器通过 `GET /api/v1/chat/attachments/{id}` 查看（图片和纯文本内联，其余下载；`nosniff`、`CSP: sandbox`）。
+
 对话里每个智能体同一时刻只有一行在动：正在执行的回复（“工作中”“正在停止”），或者智能体启动时排在第一条的回复（“正在启动智能体”）；其余等待中的回复是静态的“等待中 · 前面还有 n 条”，可以撤回。因环境原因连续失败的回复只在最后一条写出原因。
 
 ## 智能体
@@ -70,13 +80,13 @@ agenvo 插件的 `execute` 是任意脚本，可以调用多个原生方法、�
 
 控制接口（hono）只认 controller 的令牌（`HMAC(AXP_SECRET_KEY, control:<agent>)`，`Authorization: Bearer`）：同一网络上的其他 runtime 连得到端口，拿不到令牌。Codex 和智能体执行的命令看不到这个令牌。
 
-| 接口           | 内容                                    | 说明                                                                   |
-| -------------- | --------------------------------------- | ---------------------------------------------------------------------- |
-| `POST /prompt` | `boot_id`、`command_id`、`text`、`kind` | 开始命令的 turn（`kind: compact` 时压缩）；有 turn 在运行时 `409 busy` |
-| `POST /steer`  | `boot_id`、`command_id`、`text`         | 加入运行中的 turn；没有时 `409 no_active_turn`                         |
-| `POST /abort`  | `command_id`                            | 中断这个命令的 turn，现在或它开始时                                    |
-| `POST /decide` | `approval_id`、`decision`               | 用户对审批的决定（`accept`、`decline`）                                |
-| `GET /status`  |                                         | `boot_id`、当前命令和 turn                                             |
+| 接口           | 内容                                             | 说明                                                                                                              |
+| -------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `POST /prompt` | `boot_id`、`command_id`、`text`、`parts`、`kind` | 开始命令的 turn（`kind: compact` 时压缩）；有 turn 在运行时 `409 busy`；附件取不到时 `409 attachment_unavailable` |
+| `POST /steer`  | `boot_id`、`command_id`、`text`、`parts`         | 加入运行中的 turn；没有时 `409 no_active_turn`                                                                    |
+| `POST /abort`  | `command_id`                                     | 中断这个命令的 turn，现在或它开始时                                                                               |
+| `POST /decide` | `approval_id`、`decision`                        | 用户对审批的决定（`accept`、`decline`）                                                                           |
+| `GET /status`  |                                                  | `boot_id`、当前命令和 turn                                                                                        |
 
 `boot_id` 是 runtime 每次启动生成的。prompt 和 steer 必须带上 controller 记下的那一次（`409 wrong_boot`）：Docker 重启了 runtime 而它还没报告时，发给它的命令退回等待，不会在新的启动里被当成旧的。
 
@@ -94,10 +104,11 @@ Codex 的静态配置是 `danger-full-access` 沙箱、`on-request` 审批：容
 
 ## 状态
 
-一个智能体的全部状态是它的卷 `/agent`：`workspace/`（工作区，Codex 的 cwd）和 `codex/`（`CODEX_HOME`，含 Codex 的 thread 记录和装好的插件）。没有快照、没有对象存储：容器重建时卷还在，runtime 从卷上恢复 thread。宿主机的卷就是数据，换机器需要自己迁移（`docker volume` 备份）。
+一个智能体的全部状态是它的卷 `/agent`：`workspace/`（工作区，Codex 的 cwd）和 `codex/`（`CODEX_HOME`，含 Codex 的 thread 记录和装好的插件），以及 `attachments/`（用户发来的附件，原件在对象存储）。没有快照、没有对象存储：容器重建时卷还在，runtime 从卷上恢复 thread。宿主机的卷就是数据，换机器需要自己迁移（`docker volume` 备份）。
 
 ## 已知限制
 
+- 上传后既没发送也没在输入框里移除的附件（例如关掉了页面）留在对象存储和 `chat_attachment` 里，目前没有定期清理。
 - Codex 在容器内使用 `danger-full-access` 沙箱、`on-request` 审批：容器本身是隔离边界。
 - 插话没有进入正在运行的 turn 时，发送的响应不再说明（交付在发送之后才发生），回复照常排队等待。
 - 每个智能体的容器常驻，空闲时也占内存（约几百 MB）。

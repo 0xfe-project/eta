@@ -7,6 +7,7 @@
 
 import type { Codex, Notification, Request } from "./appserver.ts";
 import type { ItemView } from "./items.ts";
+import type { UserInput } from "./protocol/v2/UserInput";
 import { randomUUID } from "node:crypto";
 import { RpcError } from "./appserver.ts";
 import { itemView, textView } from "./items.ts";
@@ -67,9 +68,10 @@ const record = (value: unknown): Json =>
   typeof value === "object" && value !== null ? (value as Json) : {};
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
-const text = (input: string) => [
-  { type: "text" as const, text: input, text_elements: [] },
-];
+const text = (input: string | UserInput[]): UserInput[] =>
+  typeof input === "string"
+    ? [{ type: "text", text: input, text_elements: [] }]
+    : input;
 
 function refusal(error: unknown): Answer {
   return {
@@ -162,7 +164,7 @@ export class Agent {
   /** Start the command's turn, or compact the thread; refused while another runs. */
   async prompt(
     commandId: string,
-    input: string,
+    input: string | UserInput[],
     kind: Kind = "turn",
   ): Promise<Answer> {
     if (this.taken.has(commandId)) {
@@ -197,7 +199,7 @@ export class Agent {
   }
 
   /** Add the command's input to the running turn; refused without one. */
-  async steer(commandId: string, input: string): Promise<Answer> {
+  async steer(commandId: string, input: string | UserInput[]): Promise<Answer> {
     if (this.taken.has(commandId) || this.steers.has(commandId)) {
       return { accepted: true };
     }

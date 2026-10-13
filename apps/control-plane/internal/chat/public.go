@@ -26,12 +26,14 @@ type Agent struct {
 	Revision   int64   `json:"revision"`
 }
 
-// Block is a part of a message: text, or an activity (a tool call, a
-// command, a search...).
+// Block is a part of a message: text, a file the user attached, or an
+// activity (a tool call, a command, a search...).
 type Block struct {
 	ID   string
 	Type string
 	Text string
+	// Attachments only.
+	Attachment *Attachment
 	// Activities only.
 	Label  string
 	Status string
@@ -82,6 +84,12 @@ type TextBlock struct {
 	Text string `json:"text"`
 }
 
+type AttachmentBlock struct {
+	ID         string     `json:"id"`
+	Type       string     `json:"type" enum:"attachment"`
+	Attachment Attachment `json:"attachment"`
+}
+
 type ActivityBlock struct {
 	ID     string       `json:"id"`
 	Type   string       `json:"type" enum:"activity"`
@@ -99,6 +107,9 @@ func (b Block) MarshalJSON() ([]byte, error) {
 	if b.Type == "text" {
 		return json.Marshal(TextBlock{ID: b.ID, Type: b.Type, Text: b.Text})
 	}
+	if b.Type == "attachment" && b.Attachment != nil {
+		return json.Marshal(AttachmentBlock{ID: b.ID, Type: b.Type, Attachment: *b.Attachment})
+	}
 	activity := ActivityBlock{
 		ID: b.ID, Type: b.Type, Label: b.Label, Status: b.Status,
 		Name: b.Name, Input: b.Input, Output: b.Output, Operations: b.Operations,
@@ -114,6 +125,7 @@ func (b *Block) UnmarshalJSON(data []byte) error {
 		ID         string              `json:"id"`
 		Type       string              `json:"type"`
 		Text       string              `json:"text"`
+		Attachment *Attachment         `json:"attachment"`
 		Label      string              `json:"label"`
 		Status     string              `json:"status"`
 		Name       *string             `json:"name"`
@@ -132,7 +144,7 @@ func (b *Block) UnmarshalJSON(data []byte) error {
 		return *s
 	}
 	*b = Block{
-		ID: raw.ID, Type: raw.Type, Text: raw.Text, Label: raw.Label, Status: raw.Status,
+		ID: raw.ID, Type: raw.Type, Text: raw.Text, Attachment: raw.Attachment, Label: raw.Label, Status: raw.Status,
 		Name: deref(raw.Name), Input: deref(raw.Input), Output: deref(raw.Output),
 		Operations: raw.Operations,
 	}
@@ -144,12 +156,13 @@ func (b *Block) UnmarshalJSON(data []byte) error {
 
 func (Block) Schema(r huma.Registry) *huma.Schema {
 	text := r.Schema(reflect.TypeFor[TextBlock](), true, "")
+	attachment := r.Schema(reflect.TypeFor[AttachmentBlock](), true, "")
 	activity := r.Schema(reflect.TypeFor[ActivityBlock](), true, "")
 	return &huma.Schema{
-		OneOf: []*huma.Schema{text, activity},
+		OneOf: []*huma.Schema{text, attachment, activity},
 		Discriminator: &huma.Discriminator{
 			PropertyName: "type",
-			Mapping:      map[string]string{"text": text.Ref, "activity": activity.Ref},
+			Mapping:      map[string]string{"text": text.Ref, "attachment": attachment.Ref, "activity": activity.Ref},
 		},
 	}
 }
