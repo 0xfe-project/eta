@@ -36,6 +36,8 @@ const routine = (id: string, reports: number, failures: number) => ({
   enabled: true,
   next_run_at: null,
   runs: [],
+  assists: [],
+  loops: [],
   revising: false,
   unseen_reports: reports,
   unseen_failures: failures,

@@ -52,6 +52,8 @@ async function mount(ui: () => React.ReactNode, path: string) {
         enabled: true,
         next_run_at: null,
         runs: [],
+        assists: [],
+        loops: [],
         revising: false,
         unseen_reports: 1,
         unseen_failures: 0,

@@ -185,6 +185,27 @@ func remote(public *httpapi.API, d *Deps) {
 			})
 		})
 	})
+	write("remoteAssist", "assists", "Ask another agent on the computer to assist, as the web and the tasks tool do", func(o huma.Operation) {
+		huma.Register(api, o, func(ctx context.Context, in *struct {
+			RemoteTaskPath
+			Body tasks.AssistInput
+		}) (*struct{}, error) {
+			return nil, remoteWrite(ctx, d, in.RemoteBearer, func(tx pgx.Tx, c *tasks.RemoteComputer) error {
+				_, err := s.RemoteAssist(ctx, tx, c, in.TaskID, in.Body)
+				return err
+			})
+		})
+	})
+	write("remoteReview", "review", "Report an assisting agent's structured verdict on its request", func(o huma.Operation) {
+		huma.Register(api, o, func(ctx context.Context, in *struct {
+			RemoteTaskPath
+			Body tasks.ReviewInput
+		}) (*struct{}, error) {
+			return nil, remoteWrite(ctx, d, in.RemoteBearer, func(tx pgx.Tx, c *tasks.RemoteComputer) error {
+				return s.ReportReview(ctx, tx, c, in.TaskID, in.Body)
+			})
+		})
+	})
 	write("remoteStatus", "status", "Set the task's status as the remote agent", func(o huma.Operation) {
 		huma.Register(api, o, func(ctx context.Context, in *struct {
 			RemoteTaskPath

@@ -73,6 +73,9 @@ func AgentActor(id string) Actor { return Actor{Kind: ActorAgent, AgentID: id} }
 // Service is the task board.
 type Service struct {
 	Relay relay.Relay
+	// Reads a delivered pull request's head, for the assistance that looks
+	// at it (the forge service); nil leaves such requests waiting.
+	PullHead PullHead
 }
 
 // --- rows ------------------------------------------------------------------------------
@@ -221,7 +224,7 @@ type TaskActor struct {
 
 type TaskActivity struct {
 	ID    string    `json:"id"`
-	Kind  string    `json:"kind" doc:"created, comment, assist (body: the request; data: computer_id, computer_name, runtime, provider, pull), status, assignee, title, description, run_queued, run_started, run_completed, run_failed, run_cancelled, run_nudged, cleanup, deliverable or artifact (data: artifact_id, title, version)."`
+	Kind  string    `json:"kind" doc:"created, comment, assist (body: the request; data: assist_id, agent {runtime, provider}, after_run_id, loop_id, max_rounds), review (a structured result; body: the feedback; data: verdict, assist_id, loop_id, round, head_sha), status, assignee, title, description, run_queued, run_started, run_completed, run_failed, run_cancelled, run_nudged, cleanup, deliverable or artifact (data: artifact_id, title, version)."`
 	Actor TaskActor `json:"actor"`
 	RunID *string   `json:"run_id" nullable:"true"`
 	Body  *string   `json:"body" nullable:"true"`
@@ -251,6 +254,9 @@ type TaskDetail struct {
 	Description string         `json:"description"`
 	Activity    []TaskActivity `json:"activity"`
 	Runs        []TaskRun      `json:"runs"`
+	// Requests for assistance, oldest first, and review loops.
+	Assists []TaskAssist `json:"assists"`
+	Loops   []TaskLoop   `json:"loops"`
 }
 
 func (r *taskRow) public() Task {
@@ -354,6 +360,9 @@ func detail(ctx context.Context, db pg.DB, r *taskRow) (*TaskDetail, error) {
 		return nil, err
 	}
 	out := &TaskDetail{Task: r.public(), Description: r.Description, Activity: []TaskActivity{}, Runs: []TaskRun{}}
+	if out.Assists, out.Loops, err = assistsOf(ctx, db, r.ID); err != nil {
+		return nil, err
+	}
 	for _, a := range activity {
 		out.Activity = append(out.Activity, a.public())
 	}
@@ -567,6 +576,9 @@ func (s *Service) Update(ctx context.Context, tx pgx.Tx, ref string, c Changes, 
 		if err := s.stopRuns(ctx, tx, r.ID, "任务已改派。"); err != nil {
 			return nil, err
 		}
+		if err := stopAssists(ctx, tx, r.ID, "任务已改派。"); err != nil {
+			return nil, err
+		}
 		if _, err := tx.Exec(ctx, "UPDATE task_session SET closed_at = $2 WHERE task_id = $1 AND closed_at IS NULL", r.ID, pg.Now()); err != nil {
 			return nil, err
 		}
@@ -588,9 +600,15 @@ func (s *Service) Update(ctx context.Context, tx pgx.Tx, ref string, c Changes, 
 			if err := s.stopRuns(ctx, tx, r.ID, "任务已取消。"); err != nil {
 				return nil, err
 			}
+			if err := stopAssists(ctx, tx, r.ID, "任务已取消。"); err != nil {
+				return nil, err
+			}
 		}
 		if *c.Status == StatusDone {
 			if err := s.finish(ctx, tx, r.ID); err != nil {
+				return nil, err
+			}
+			if err := stopAssists(ctx, tx, r.ID, "任务已完成。"); err != nil {
 				return nil, err
 			}
 		}
@@ -701,12 +719,18 @@ func (s *Service) Comment(ctx context.Context, tx pgx.Tx, ref, body string, by A
 // enqueue queues a run for the task's remote agent; the runner starts it
 // once the task has no other active run.
 func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, r *taskRow, prompt string) error {
+	_, err := s.enqueueRun(ctx, tx, r, prompt)
+	return err
+}
+
+// enqueueRun is enqueue, answering the run's id.
+func (s *Service) enqueueRun(ctx context.Context, tx pgx.Tx, r *taskRow, prompt string) (string, error) {
 	id := pg.NewID()
 	if _, err := tx.Exec(ctx, `INSERT INTO task_run (id, task_id, computer_id, runtime, provider, status, prompt, created_at)
 		VALUES ($1, $2, $3, $4, $5, 'queued', $6, $7)`, id, r.ID, *r.ComputerID, *r.Runtime, *r.Provider, prompt, pg.Now()); err != nil {
-		return err
+		return "", err
 	}
-	return record(ctx, tx, r.ID, &id, "run_queued", System, nil, nil)
+	return id, record(ctx, tx, r.ID, &id, "run_queued", System, nil, nil)
 }
 
 // stopRuns cancels queued runs and asks the active one to stop.

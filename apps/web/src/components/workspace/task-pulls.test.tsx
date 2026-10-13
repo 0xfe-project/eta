@@ -25,6 +25,8 @@ const task = {
   created_at: "2026-10-09T09:00:00Z",
   activity: [],
   runs: [],
+  assists: [],
+  loops: [],
 } as unknown as TaskDetail;
 const open = {
   url,

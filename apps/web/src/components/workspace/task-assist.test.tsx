@@ -8,7 +8,7 @@ import {
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { useTaskDraft } from "./task-draft";
-import { CommentBox, Timeline } from "./tasks";
+import { CommentBox, TaskProperties, Timeline } from "./tasks";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -67,12 +67,10 @@ const detail = {
       kind: "pull_request",
       url: pr,
     }),
-    activity("a3", "assist", "user", "r2", "审查 PR 的边界情况", {
-      computer_id: "c1",
+    activity("a3", "assist", "user", null, "审查 PR 的边界情况", {
+      assist_id: "x1",
+      agent: { runtime: "paseo", provider: "codex" },
       computer_name: "工作站",
-      runtime: "paseo",
-      provider: "codex",
-      pull: { url: pr, head_sha: sha },
     }),
     activity("a4", "run_started", "system", "r2", null),
     activity("a5", "comment", "remote", "r2", "Safari 下间距有问题。", {
@@ -82,8 +80,64 @@ const detail = {
       provider: "codex",
       assist: true,
     }),
+    activity("a6", "assist", "system", null, "审查 PR", {
+      assist_id: "x2",
+      agent: { runtime: "paseo", provider: "codex" },
+      computer_name: "工作站",
+      loop_id: "l1",
+      round: 2,
+    }),
+    activity("a7", "review", "remote", "r2", "改一下 login.css:12。", {
+      computer_id: "c1",
+      computer_name: "工作站",
+      runtime: "paseo",
+      provider: "codex",
+      assist: true,
+      verdict: "changes_requested",
+      round: 1,
+      max_rounds: 3,
+      head_sha: sha,
+    }),
   ],
   runs: [run("r1", false, "running"), run("r2", true, "completed")],
+  assists: [
+    {
+      id: "x1",
+      state: "started",
+      reason: null,
+      runtime: "paseo",
+      provider: "codex",
+      request: "审查 PR 的边界情况",
+      review_pull: true,
+      run_id: "r2",
+      pull_url: pr,
+      head_sha: sha,
+    },
+    {
+      id: "x2",
+      state: "waiting",
+      reason: "等主执行者这一轮完成并交付。",
+      runtime: "paseo",
+      provider: "codex",
+      request: "审查 PR",
+      review_pull: true,
+      run_id: null,
+      loop_id: "l1",
+      round: 2,
+    },
+  ],
+  loops: [
+    {
+      id: "l1",
+      runtime: "paseo",
+      provider: "codex",
+      request: "审查 PR",
+      max_rounds: 1,
+      rounds: 1,
+      state: "exhausted",
+      reason: "1 轮审查已用完",
+    },
+  ],
 } as unknown as TaskDetail;
 
 const tasks = {
@@ -103,6 +157,7 @@ function Detail() {
   });
   return data ? (
     <>
+      <TaskProperties task={data} onDone={() => {}} />
       <Timeline task={data} />
       <CommentBox task={data} />
     </>
@@ -127,7 +182,8 @@ async function render(task: TaskDetail = detail) {
     const request = input as Request;
     if (typeof input === "string" || request.method !== "POST")
       return new Promise<Response>(() => {});
-    posts.push({ url: request.url, body: await request.json() });
+    const text = await request.text();
+    posts.push({ url: request.url, body: text ? JSON.parse(text) : {} });
     return Response.json(task, { status: 201 });
   });
   const client = new QueryClient({
@@ -222,7 +278,11 @@ describe("请 Agent 协助", () => {
     const dialog = document.querySelector('[role="dialog"]')!;
     // Online agents other than the assignee, in its runtime, come first.
     expect(dialog.textContent).toContain("工作站 · Paseo · Codex");
-    expect(dialog.textContent).toContain("固定在当前 head 0123456");
+    // Claude is at work: by default it waits for that run's delivery.
+    expect(
+      dialog.querySelector('[role="radio"][aria-checked="true"]')!.textContent,
+    ).toBe("主执行者这一轮交付后");
+    expect(dialog.textContent).toContain("固定 PR 那一刻的 head");
     await act(async () =>
       (
         [...dialog.querySelectorAll("button")].find(
@@ -242,12 +302,45 @@ describe("请 Agent 协助", () => {
     await settle();
     expect(posts).toHaveLength(1);
     expect(posts[0].url).toContain("/api/v1/tasks/t1/assists");
-    expect(posts[0].body).toEqual({
+    const { key, ...body } = posts[0].body;
+    expect(typeof key).toBe("string");
+    expect(body).toEqual({
       runtime: "paseo",
       provider: "codex",
       request: "看一下 Safari",
-      pull: { url: pr, head_sha: sha },
+      review_pull: true,
+      after_run: "r1",
     });
+  });
+
+  it("shows where requests and the review loop stand", async () => {
+    const c = await render();
+    const timeline =
+      c.querySelector('ol[aria-label="时间线"]')!.textContent ?? "";
+    expect(timeline).toContain(
+      "AXP 请 工作站 · Paseo · Codex 协助（审查第 2 轮）",
+    );
+    expect(timeline).toContain("等待中：等主执行者这一轮完成并交付。");
+    expect(timeline).toContain("要求修改 · 第 1/3 轮 · 提交 0123456");
+    // The verdict's author is the agent's name alone.
+    const verdict = [...c.querySelectorAll("li")].find((li) =>
+      li.textContent?.includes("改一下 login.css:12。"),
+    )!;
+    expect(verdict.querySelector(".font-medium")!.textContent).toBe(
+      "工作站 · Paseo · Codex",
+    );
+    await click("取消");
+    await settle();
+    expect(posts.at(-1)!.url).toContain("/api/v1/tasks/t1/assists/x2/cancel");
+  });
+
+  it("lets the user alone carry on a spent loop with more rounds", async () => {
+    const c = await render();
+    expect(c.textContent).toContain("已审 1/1 轮 · 轮数用尽，等你决定");
+    await click("继续审查");
+    await settle();
+    expect(posts.at(-1)!.url).toContain("/api/v1/tasks/t1/loops/l1/resume");
+    expect(posts.at(-1)!.body).toEqual({ max_rounds: 2 });
   });
 
   it("says how to assign the task before it can be assisted", async () => {

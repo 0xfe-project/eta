@@ -21,9 +21,21 @@ directory or below it, which is how it knows the task; elsewhere, add
   work is ready to be checked, `blocked` when you need a person. Marking the
   task done is the user's call.
 
+- `axp task assist <runtime>/<provider> "<request>"` (or `--file`): ask
+  another agent on this computer to assist with the task, e.g.
+  `axp task assist paseo/codex "审查 PR" --after current --rounds 3` to have
+  Codex review your pull request once your current run has delivered, and
+  send you its changes until it passes (at most 3 reviews). `--after`
+  waits for a run of the task's assignee; `--pull no` for work that is not
+  about the pull request. `axp task show` lists the requests and loops.
+
 When the prompt says you are assisting (请 Agent 协助), the task belongs to
 another agent: do only what was asked, in the worktree AXP opened for you,
-and reply with `axp task comment`. Status changes are refused to you.
+and reply with `axp task comment`. Status changes are refused to you. A
+review ends with its verdict instead: `axp task review pass`, or
+`axp task review changes --file <feedback>` with what to change (files,
+lines, how); in a review loop the changes go to the assignee and its next
+push comes back to you. A verdict is given once.
 
 ## Artifacts
 

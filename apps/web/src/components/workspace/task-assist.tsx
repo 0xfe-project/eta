@@ -12,10 +12,10 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { usePullRequest } from "@/queries/forge";
 import { useAssistTask, useTasks } from "@/queries/tasks";
 import { Select, SelectOption } from "./select-field";
 import {
+  isActive,
   isPullURL,
   providerLabel,
   remoteLabel,
@@ -159,6 +159,9 @@ export function AssistDialog({
   );
 }
 
+/** The assignee's latest run, which a request can wait for. */
+const mainRun = (task: TaskDetail) => task.runs.filter((r) => !r.assist).at(-1);
+
 function AssistForm({
   task,
   agents,
@@ -179,18 +182,23 @@ function AssistForm({
   );
   const [request, setRequest] = useState("");
   const pull = latestPull(task);
-  const [withPull, setWithPull] = useState(Boolean(pull));
+  const run = mainRun(task);
+  // While the assignee works, what it delivers is what to look at.
+  const [after, setAfter] = useState(() =>
+    Boolean(run && isActive(run.status)),
+  );
+  const [reviewPull, setReviewPull] = useState(() => Boolean(pull) || after);
+  const [loop, setLoop] = useState(false);
+  const [rounds, setRounds] = useState("3");
   // One request, however often it is sent: a retry is the same assist.
   const [key] = useState(() => crypto.randomUUID());
   const agent = agents.find((a) => agentKey(a) === chosen);
-  const { head, reading } = usePullHead(
-    task.id,
-    withPull ? pull?.url : undefined,
-  );
-  const ready = Boolean(agent && request.trim()) && !reading;
+  const pullOK = Boolean(pull) || after;
+  const ready = Boolean(agent && request.trim());
   const submit = () => {
     const body = request.trim();
     if (!agent || !ready || assist.isPending) return;
+    const review = reviewPull && pullOK;
     assist.mutate(
       {
         id: task.id,
@@ -199,8 +207,10 @@ function AssistForm({
           runtime: agent.runtime as "paseo" | "herdr",
           provider: agent.provider,
           request: body,
-          pull:
-            withPull && pull ? { url: pull.url, head_sha: head } : undefined,
+          review_pull: review,
+          after_run: after && run ? run.id : undefined,
+          loop: review && loop ? { max_rounds: Number(rounds) } : undefined,
+          key,
         },
       },
       {
@@ -288,22 +298,89 @@ function AssistForm({
           }}
         />
       </div>
-      {pull ? (
+      <fieldset className="grid gap-1.5">
+        <legend className="mb-1.5 text-xs font-medium">什么时候开始</legend>
+        <div role="radiogroup" aria-label="什么时候开始" className="flex gap-1">
+          <Button
+            type="button"
+            role="radio"
+            aria-checked={!after}
+            size="sm"
+            variant={after ? "outline" : "default"}
+            onClick={() => setAfter(false)}
+          >
+            现在
+          </Button>
+          <Button
+            type="button"
+            role="radio"
+            aria-checked={after}
+            size="sm"
+            variant={after ? "default" : "outline"}
+            disabled={!run}
+            onClick={() => {
+              setAfter(true);
+              setReviewPull(true);
+            }}
+          >
+            主执行者这一轮交付后
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {after
+            ? "等主执行者这一轮成功完成、登记了 PR 再开始；失败或被停止则不开始，并说明原因。"
+            : "排在其他协助之后，马上开始。"}
+        </p>
+      </fieldset>
+      <label className="flex items-start gap-2 text-sm">
+        <input
+          type="checkbox"
+          className="mt-1"
+          checked={reviewPull && pullOK}
+          disabled={!pullOK}
+          onChange={(e) => setReviewPull(e.target.checked)}
+        />
+        <span className="min-w-0">
+          <span className="wrap-anywhere">
+            看交付的 PR{pull ? `：${pull.title}` : ""}
+          </span>
+          <span className="block text-xs text-muted-foreground">
+            {pullOK
+              ? "开始时固定 PR 那一刻的 head 提交，Agent 检出它来看，不看本地分支。"
+              : "任务还没有交付 PR。"}
+          </span>
+        </span>
+      </label>
+      {reviewPull && pullOK ? (
         <label className="flex items-start gap-2 text-sm">
           <input
             type="checkbox"
             className="mt-1"
-            checked={withPull}
-            onChange={(e) => setWithPull(e.target.checked)}
+            checked={loop}
+            onChange={(e) => setLoop(e.target.checked)}
           />
           <span className="min-w-0">
-            <span className="wrap-anywhere">附上交付的 PR：{pull.title}</span>
-            <span className="block text-xs text-muted-foreground">
-              {!withPull
-                ? "不指定 PR，Agent 按要求自己看。"
-                : reading
-                  ? "正在读取 PR 当前的 head…"
-                  : headNote(head)}
+            要求修改时交给主执行者改，改完再审
+            <span className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+              最多
+              <Select
+                aria-label="最多审查几轮"
+                size="sm"
+                className="w-16"
+                value={rounds}
+                disabled={!loop}
+                onValueChange={setRounds}
+              >
+                {Array.from({ length: 10 }, (_, i) => String(i + 1)).map(
+                  (n) => (
+                    <SelectOption key={n} value={n}>
+                      {n}
+                    </SelectOption>
+                  ),
+                )}
+              </Select>
+              轮审查；通过即停，用完停下等你。Agent 用 axp task review
+              给出结论。
             </span>
           </span>
         </label>
@@ -315,19 +392,4 @@ function AssistForm({
       </DialogFooter>
     </form>
   );
-}
-
-/** The pull request's head commit now, as GitHub has it; empty if unknown. */
-function usePullHead(task: string, url: string | undefined) {
-  const pull = usePullRequest(task, url ?? "");
-  return {
-    head: url && pull.data ? pull.data.head_sha : "",
-    reading: Boolean(url) && pull.isPending,
-  };
-}
-
-function headNote(head: string) {
-  return head
-    ? `固定在当前 head ${head.slice(0, 7)}：Agent 检出这个提交来看，不看本地分支。`
-    : "读不到 PR 当前的 head：Agent 会自己查出来，并在回复里写明看的是哪个提交。";
 }

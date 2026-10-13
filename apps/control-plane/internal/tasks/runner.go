@@ -74,6 +74,8 @@ func (r *Runner) Tick(ctx context.Context) {
 		name string
 		run  func(context.Context) error
 	}{
+		{"settle_loops", r.settleLoops},
+		{"release_assists", r.releaseAssists},
 		{"dispatch_runs", r.dispatch},
 		{"start_runs", r.start},
 		{"watch_runs", r.watch},
@@ -107,6 +109,54 @@ func (r *Runner) fail(ctx context.Context, runID, message string) error {
 		delete(r.working, runID)
 		return finishRun(ctx, tx, run, RunFailed, &message)
 	})
+}
+
+// releaseAssists starts waiting requests for assistance whose dependencies
+// are met, oldest first, and records why the others wait or are blocked.
+// What they depend on is read anew every tick, so nothing is missed across
+// a restart or a run that ended before the request was made.
+func (r *Runner) releaseAssists(ctx context.Context) error {
+	waiting, err := pg.All[assistRow](ctx, r.DB, "SELECT * FROM task_assist WHERE state = 'waiting' ORDER BY created_at, id")
+	if err != nil {
+		return err
+	}
+	for _, a := range waiting {
+		if ctx.Err() != nil {
+			return nil
+		}
+		// Reading the pull request's head is a call to GitHub: outside the
+		// transaction, which checks again what it relied on.
+		callCtx, cancel := context.WithTimeout(ctx, callTimeout)
+		ready, err := r.Service.ready(callCtx, r.DB, a)
+		cancel()
+		if err != nil {
+			return err
+		}
+		if err := r.inTx(ctx, func(tx pgx.Tx) error {
+			if ready.start {
+				return r.Service.start(ctx, tx, a.ID, ready)
+			}
+			return hold(ctx, tx, a, ready)
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// settleLoops blocks active review loops whose current review ended
+// without a verdict.
+func (r *Runner) settleLoops(ctx context.Context) error {
+	loops, err := pg.All[loopRow](ctx, r.DB, "SELECT * FROM task_review_loop WHERE state = 'active'")
+	if err != nil {
+		return err
+	}
+	for _, l := range loops {
+		if err := r.inTx(ctx, func(tx pgx.Tx) error { return settleLoop(ctx, tx, l) }); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // dispatch starts the oldest queued run of each idle lane of a task (its
@@ -406,7 +456,7 @@ func (r *Runner) watchOne(ctx context.Context, a agents, run *runRow) error {
 	}
 	delete(r.working, run.ID)
 	// Its own agent's: an assisting agent's reply is not the assignee's.
-	commented, err := pg.Exists(ctx, r.DB, `SELECT 1 FROM task_activity WHERE run_id = $1 AND kind = 'comment'
+	commented, err := pg.Exists(ctx, r.DB, `SELECT 1 FROM task_activity WHERE run_id = $1 AND kind IN ('comment', 'review')
 		AND actor = 'remote' AND created_at >= $2`, run.ID, sent)
 	if err != nil {
 		return err

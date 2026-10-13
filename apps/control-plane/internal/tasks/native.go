@@ -521,11 +521,12 @@ func merge(a, b map[string]any) map[string]any {
 	return out
 }
 
-func deref(s *string) string {
-	if s == nil {
-		return ""
+func deref[T any](p *T) T {
+	var zero T
+	if p == nil {
+		return zero
 	}
-	return *s
+	return *p
 }
 
 // herdrName is the agent's name in Herdr, unique per session.

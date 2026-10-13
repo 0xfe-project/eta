@@ -35,6 +35,8 @@ const detail = {
   created_at: task.updated_at,
   activity: [],
   runs: [],
+  assists: [],
+  loops: [],
 };
 
 const cleanup: (() => void)[] = [];

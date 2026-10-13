@@ -67,13 +67,57 @@ Herdr 运行的是交互式终端程序。agent 启动后停在阻塞界面时�
 
 ### 请 Agent 协助
 
-任务详情里可以请同一台电脑上的另一个 Agent 做一次协助（`POST /api/v1/tasks/{id}/assists`，带 Idempotency-Key），例如 Claude 开发、Codex 审查它交付的 PR。请求只有 Agent（运行时 + provider）、协助要求和可选的 PR；前端的“代码审查 / 测试验证 / 问题分析 / 其他”只是填好要求的起点，不存、不显示。时间线上这条请求和它的回复只署 Agent 的名字（电脑 · 运行时 · provider）。
+可以请任务所在电脑上的另一个 Agent 做一次协助，例如 Claude 开发、Codex 审查它交付的 PR。三个入口用同一个输入（`tasks.AssistInput`）和同一个 `Service.Assist`：
 
-- 协助是任务运行的第二条通道（`task_run.assist`、`task_session.assist`）：每条通道同时一次运行，与主执行并行，排队、opening_at、发送时间、未确认不重发、离线等待、提醒一次、失败、停止都走同一个 runner。协助不改任务状态（不会 todo → in_progress）、不改指派、不排主执行的运行；看板上的运行状态只看主执行。改派、取消、完成任务时协助一起停止和收尾。
-- 协助 Agent 有自己的会话和工作位置：AXP 从主执行者所在的仓库新开一个 worktree（Paseo 用主执行者工作区的项目；Herdr 用它的工作区），分支 `axp/<编号>-assist-<id>`，从不占用或替换主执行者的会话和目录。同一个 Agent 再次被请（例如追问它的结果）时继续它的会话。主执行者的工作区在 Paseo 里已不存在时，协助直接失败并说明原因。
-- 指令把用户的要求标成“已确认”，任务描述标成背景，点明主执行者是谁、不许改状态、只读审查不提交、要改代码时在自己的 worktree 开分支并说明交付方式。PR 固定在用户发起时看到的 head（前端从 forge 读 `head_sha`，与合并时相同）：Agent `git fetch origin <sha>` 后 detached 检出再看，不猜本地分支；读不到 head 时让它自己用 `axp gh pr view` 查并写明看的是哪个提交。PR 必须是这个任务的交付。
-- `axp` 在每次请求里带上当前目录（`X-Working-Dir`）。控制面按目录找到它所在的会话，把评论、交付和 Artifact 记在那个会话当前的运行上，署那个 Agent 的名字；协助 Agent 设状态返回 403 `ASSISTING`。一轮是否回复过只看本运行自己的评论，所以协助的回复不会结束主执行的一轮；远程评论从不转发，协助的结果也不会唤醒主执行者。没有带目录的旧 CLI 按主执行处理。
-- 前端在协助的回复下提供“追问”（再请同一个 Agent）和“交给主执行者”（把结果引用进评论框，由用户发给主执行者）。任务没有指派到远程电脑、已经结束、或电脑上没有可用 Agent 时，对话框说明原因和怎么恢复。
+- Web：`POST /api/v1/tasks/{id}/assists`；
+- tasks plugin：`assist_task` 和 `cancel_assist`；
+- CLI：`axp task assist`。
+
+输入是：Agent（运行时 + provider）、要求、`review_pull`、`after_run`、`loop`，以及可选的幂等 `key`（同一个任务里 key 相同就是同一个请求）。前端的“代码审查 / 测试验证 / 问题分析 / 其他”只是填好要求的起点，不存、不显示。时间线上请求和回复都只署 Agent 的名字（电脑 · 运行时 · provider）。
+
+**请求与队列**（`task_assist`）。每个请求是一行，状态是 waiting、blocked、started 或 cancelled，附带原因：
+
+- `after_run` 为空时马上可以开始；为 `current` 或一个 run id 时，等主执行者的这一轮。
+- runner 的 `release_assists` 每一轮都从数据库重新判断 waiting 的请求，不靠事件，所以请求之前就结束的运行、重启时错过的事件都不会漏。
+- 依赖的运行 completed、主执行通道空闲（没有排队或在跑的主运行），并且在 `review_pull` 时任务有 PR、forge 能读到它的 head，这些都满足才开始。开始时在事务里重新核对、锁住请求，原子地转成协助通道里的一个运行，PR URL 和 head SHA 固定进 prompt。
+- 依赖的运行 failed 或 cancelled、运行结束了却没有登记 PR：请求转为 blocked 并写明原因，从不当成交付。读不到 head、主执行者还在跑：继续 waiting 并写明原因。
+- waiting 的请求按创建顺序开始，每个请求是一次独立的运行和 prompt，在协助通道里排队执行。
+- 任务完成、取消或改派时，没开始的请求取消，循环停止。
+
+**协助通道**（`task_run.assist`、`task_session.assist`）：
+
+- 每条通道同时只有一次运行，与主执行并行。排队、opening_at、发送时间、未确认不重发、离线等待、提醒一次、失败、停止都走同一个 runner。
+- 协助不改任务状态（不会 todo → in_progress），不改指派；看板上的运行状态只看主执行。
+- 协助 Agent 有自己的会话和工作位置：AXP 从主执行者所在的仓库新开一个 worktree（Paseo 用主执行者工作区的项目；Herdr 用它的工作区），分支 `axp/<编号>-assist-<id>`，从不占用或替换主执行者的会话和目录。同一个 Agent 再被请时继续它的会话。
+
+**指令**：用户的要求标为“已确认”，任务描述标为背景。指令点明主执行者是谁、不许改状态、只读审查不提交、要改代码时在自己的 worktree 开分支并说明交付方式。PR 固定在开始时读到的 head：Agent `git fetch origin <sha>` 后 detached 检出再看，不猜本地分支。
+
+**身份**：
+
+- `axp` 每次请求都带当前目录（`X-Working-Dir`；不用 `X-AXP-*`，因为公网网关会剥掉客户端发来的这类 header）。控制面按目录找到所在的会话，把评论、交付、结论和 Artifact 记在那个会话当前的运行上，署它的名字。
+- 协助 Agent 设状态返回 403 `ASSISTING`。
+- 一轮是否回复过只看本运行自己的评论或结论，所以协助的回复不会结束主执行的一轮；远程评论从不转发，协助的结果也不会唤醒主执行者。
+- 没带目录的旧 CLI 按主执行处理。
+
+**结构化结论**：协助 Agent 用 `axp task review pass|changes` 提交结论（`POST /remote/v1/tasks/{id}/review`）。
+
+- changes_requested 必须附上可操作的反馈。
+- 每个请求只接受一次结论：重复提交同样的内容不做任何事，提交不同的内容返回 409 `VERDICT_GIVEN`。
+- 结论记在请求上，时间线上是一条 `review`。普通评论不会被当成结论。
+
+**有限反馈循环**（`task_review_loop`，带 `loop` 的请求才有）：
+
+- 每完成一次审查算一轮，第一次审查是第 1 轮。`max_rounds` 默认 3，服务端硬上限 10。Agent（CLI、工具）最多只能设 3；更高的上限、继续循环都只能由用户在 Web 上操作。
+- 每个任务同时只能有一个未结束的循环（active、exhausted、blocked），所以 Agent 不能另开一个循环来重置预算。
+- 只有循环正在等的那一轮（`round = rounds + 1`）给出的结论会推动循环，计数在同一个事务里持久化，重复提交、重试、重连都不会多算。
+  - pass：循环 passed。
+  - changes_requested 且没到上限：给主执行者的同一会话排一次返工运行（指令里有反馈、轮次、审查过的提交），并以 AXP 的名义登记下一轮请求，依赖这次返工运行。
+  - 到上限：循环 exhausted，保留审查结果和 PR，停下等用户。
+- 审查运行失败、被停止或结束了却没给结论，或者依赖的开发运行失败、被停止：循环 blocked（`settle_loops`）并写明原因，不当成通过，也不继续。
+- 用户可以停止循环（没开始的请求一起取消），也可以继续：exhausted 的循环（调高上限后）把最后一次要求的修改交给主执行者；blocked 的循环重新审查主执行者最近一次运行。
+- 什么都不会自动合并 PR 或完成任务。
+
+`get_task`、`axp task show` 和任务详情列出请求（`assists`）和循环（`loops`），以及它们的状态、原因、运行、固定的提交和结论。前端在任务属性里显示循环（第几轮、状态、继续或停止），在时间线上显示每个请求的状态和取消按钮、结论（通过或要求修改、第几轮、哪个提交），以及“追问”和“交给主执行者”。任务没有指派到远程电脑、已经结束、或电脑上没有可用 Agent 时，对话框说明原因和怎么恢复。
 
 执行记录（`GET …/runs/{run}/log`）从远程智能体现读，不在 AXP 存：
 
@@ -124,6 +168,8 @@ Paseo 归档 worktree 时不检查未提交的改动，未提交的内容会丢�
 | `axp task show`                                   | 任务的描述、状态和时间线                                                                                            |
 | `axp task comment <text>` / `--file <path>`       | 在任务下回复（结束这一轮的条件）                                                                                    |
 | `axp task status in_progress\|in_review\|blocked` | 远程智能体能设的状态（协助的 Agent 不能设）                                                                         |
+| `axp task assist <runtime>/<provider> <request>`  | 请这台电脑上的另一个 Agent 协助（`--after`、`--pull`、`--rounds` 审查循环、`--key`），同 Web 和 `assist_task`       |
+| `axp task review pass\|changes`                   | 协助 Agent 的结构化结论（changes 带反馈）                                                                           |
 | `axp gh <args…>`                                  | 经 AXP 的 GitHub App 运行 gh：用户授权过 App 时以用户的名义，否则是 App 的 bot；`gh pr create` 开出的 PR 记为交付物 |
 | `axp artifact upload <dir\|zip> --title T`        | 把静态网页发布为这个任务的 [Artifact](artifacts.md)（`--artifact <id>` 发新版本）                                   |
 | `axp setup` / `status` / `uninstall`              | 电脑本身的接入、查看和卸载                                                                                          |
