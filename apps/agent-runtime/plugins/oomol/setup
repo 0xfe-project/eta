@@ -1,0 +1,34 @@
+#!/bin/sh
+# The oo CLI: a pinned release, checked against checksums taken when it was
+# pinned (OOMOL publishes none), behind a wrapper that keeps it from
+# updating itself or syncing its skills into ~/.agents. The skills it ships
+# (oo, oo-find-skills) are copied into this plugin instead, so agents only
+# see them while the oomol bundle's config, which sets OO_API_KEY and
+# OO_TEAM_NAME (oo's own variables), is complete.
+set -eu
+version=1.9.8
+case "$TARGETARCH" in
+  amd64) platform=linux-x64 sha256=d3b91943c7bff6291dba5677e0cf537a0d78fa3e1ea314f9646aca158c9506e8 ;;
+  arm64) platform=linux-arm64 sha256=5ea78f5096b655d073bd859187e0fd038c43b8f13ef9af23d19fd9bd0fbacca2 ;;
+  *) echo "unsupported architecture: $TARGETARCH" >&2; exit 1 ;;
+esac
+cache="$AXP_PLUGIN_CACHE/$version/$platform"
+mkdir -p "$cache"
+[ -f "$cache/oo" ] || curl -fsSLo "$cache/oo" "https://static.oomol.com/release/apps/oo-cli/$version/$platform/oo"
+echo "$sha256  $cache/oo" | sha256sum -c -
+install -D -m 0755 "$cache/oo" /usr/local/lib/oomol/oo
+cat >"$AXP_PLUGIN_BIN/oo" <<'WRAPPER'
+#!/bin/sh
+export OO_NO_SELF_UPDATE=1 OO_SKILLS_SYNC_DISABLED=1
+exec /usr/local/lib/oomol/oo "$@"
+WRAPPER
+chmod 0755 "$AXP_PLUGIN_BIN/oo"
+home="$(mktemp -d)"
+HOME="$home" /usr/local/lib/oomol/oo install --no-modify-path >/dev/null
+mkdir -p "$PLUGIN_ROOT/skills"
+for skill in oo oo-find-skills; do
+  rm -rf "$PLUGIN_ROOT/skills/$skill"
+  cp -R "$home/.agents/skills/$skill" "$PLUGIN_ROOT/skills/$skill"
+done
+rm -rf "$home"
+HOME=/nonexistent "$AXP_PLUGIN_BIN/oo" --version

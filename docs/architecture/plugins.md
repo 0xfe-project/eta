@@ -82,5 +82,6 @@ runtime 每次启动把镜像里的插件装进 `CODEX_HOME`、在副本里填�
 | github    | chat          | GitHub App 的 git、gh 凭据与 `open_pull_request`（[代码托管](forge.md)）                              |
 | grok      | chat、routine | [grok-api](https://github.com/AkaraChen/grok-api)：Grok Imagine 图像和视频，网页和 X 搜索             |
 | memory    | chat          | 长期记忆（[记忆](memory.md)），带 recall / capture hook（Node 脚本）                                  |
+| oomol     | chat          | [OOMOL](oomol.md) 的 oo CLI 和它自带的 skill；凭据来自 oomol 环境包的配置                             |
 | routines  | chat          | 定时任务（[定时任务](routines.md)）：列出、查看报告、新建和修改                                       |
 | tasks     | chat          | 任务看板（[任务与远程电脑](tasks.md)）                                                                |

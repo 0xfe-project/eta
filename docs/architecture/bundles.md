@@ -9,7 +9,7 @@
 | 内置   | `apps/agent-runtime/bundles/<name>/`  | `bundle.json`（`name`、`description`、`plugins`），可选 `setup` 脚本和它用到的文件；只读 |
 | 自定义 | 表 `bundle`，设置里的“环境包”页面编辑 | 名称（小写字母、数字和连字符）、说明、脚本、插件                                         |
 
-内置的环境包现在各带一个插件（agenvo、approval、github、grok、memory、routines、tasks），所以按插件选择的方式不变。新建智能体时默认载入全部内置环境包。
+内置的环境包现在各带一个插件（agenvo、approval、artifacts、github、grok、memory、oomol、routines、tasks），所以按插件选择的方式不变。新建智能体时默认载入全部内置环境包。
 
 脚本以 root 在镜像里运行，有网络：可以 `apt-get install`、下载工具。不以 `#!` 开头的自定义脚本按 `sh -eu` 执行。脚本运行时的当前目录是环境包在镜像里的目录（`/opt/axp/bundles/<name>`，即 `BUNDLE_ROOT`），`TARGETARCH` 是目标架构。
 

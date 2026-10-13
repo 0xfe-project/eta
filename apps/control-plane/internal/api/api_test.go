@@ -124,7 +124,7 @@ func TestCreateAgentReturnsProductFieldsOnly(t *testing.T) {
 	delete(got, "id")
 	want := map[string]any{
 		"name": "开发助手", "description": "", "model": "test-model",
-		"bundles": []any{"agenvo", "approval", "artifacts", "github", "grok", "memory", "routines", "tasks"}, "status": "idle",
+		"bundles": []any{"agenvo", "approval", "artifacts", "github", "grok", "memory", "oomol", "routines", "tasks"}, "status": "idle",
 		"build_error": nil, "revision": float64(1),
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -252,7 +252,7 @@ func TestBundlesAreChosenFromTheCatalog(t *testing.T) {
 		names = append(names, b.Name)
 		expect(t, b.Builtin, true)
 	}
-	if !slices.Equal(names, []string{"agenvo", "approval", "artifacts", "github", "grok", "memory", "routines", "tasks"}) {
+	if !slices.Equal(names, []string{"agenvo", "approval", "artifacts", "github", "grok", "memory", "oomol", "routines", "tasks"}) {
 		t.Fatalf("bundles %v", names)
 	}
 	created := e.post("/agents", map[string]any{"name": "a", "bundles": []string{"tasks", "grok"}})
@@ -277,7 +277,7 @@ func TestUsersBundles(t *testing.T) {
 	e := newEnv(t)
 	var plugins []struct{ Name string }
 	e.get("/plugins").json(t, &plugins)
-	expect(t, len(plugins), 8)
+	expect(t, len(plugins), 9)
 	created := e.post("/bundles", map[string]any{
 		"name": "python", "description": "Python 3", "script": "apt-get install -y python3", "plugins": []string{"memory"},
 	})
