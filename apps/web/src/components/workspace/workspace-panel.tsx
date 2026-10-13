@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { Inbox } from "./inbox";
-import { MemoryView } from "./memory-view";
 import { Overview } from "./overview";
 import { RefreshButton } from "./refresh-button";
 import { useRoutineNav } from "./routine-nav";
@@ -13,29 +12,16 @@ import { Routines } from "./routines";
 import { SettingsButton } from "./settings-dialog";
 import { useTaskNav } from "./task-nav";
 import { Tasks } from "./tasks";
-import { useAgents } from "./use-agents";
 import { useAttention } from "./use-attention";
 import { hasPage, sectionPaths, views } from "./workspace-search";
 
 /** Opens the full window at the side panel's current data context. */
-function FullWindowButton({
-  view,
-  agentId,
-}: {
-  view: WorkspaceView;
-  agentId: string | undefined;
-}) {
+function FullWindowButton({ view }: { view: WorkspaceView }) {
   const [{ task }] = useTaskNav();
   const [routineNav] = useRoutineNav();
   const search = Object.fromEntries(
     Object.entries(
-      view === "tasks"
-        ? { task }
-        : view === "routines"
-          ? routineNav
-          : view === "memory"
-            ? { agent: agentId }
-            : {},
+      view === "tasks" ? { task } : view === "routines" ? routineNav : {},
     ).filter(([, value]) => value !== null),
   );
   return (
@@ -63,7 +49,6 @@ export function WorkspacePanel({
   className?: string;
 }) {
   const pending = useAttention().total;
-  const { current } = useAgents();
   return (
     <Tabs
       id="workspace-panel"
@@ -97,7 +82,7 @@ export function WorkspacePanel({
         <div className="flex justify-self-end">
           {/* Phones keep theirs in the panel switcher above. */}
           <SettingsButton className="hidden md:inline-flex" />
-          <FullWindowButton view={view} agentId={current?.id} />
+          <FullWindowButton view={view} />
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
@@ -106,7 +91,6 @@ export function WorkspacePanel({
             {value === "overview" ? <Overview /> : null}
             {value === "tasks" ? <Tasks /> : null}
             {value === "routines" ? <Routines /> : null}
-            {value === "memory" ? <MemoryView agentId={current?.id} /> : null}
             {value === "inbox" ? <Inbox /> : null}
           </TabsContent>
         ))}
