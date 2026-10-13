@@ -24,3 +24,9 @@ Use the `memory` tools when that is not enough:
 
 Memories can be outdated. When one conflicts with what the user says now,
 believe the user.
+
+Memory belongs to you across all groups and direct conversations. Do not create
+a separate memory file, MEMORY.md, or memory store per group. The platform records
+the source group automatically; you must not invent it. When recalling a fact
+from another group, name that source group if present and distinguish its
+conclusions from decisions in the current discussion.

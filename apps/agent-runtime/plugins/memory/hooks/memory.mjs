@@ -76,7 +76,10 @@ async function recall(event) {
   if (!memories.length) {
     return {};
   }
-  const lines = memories.map((m) => `- ${m.text} (memory ${m.id})`);
+  const lines = memories.map(
+    (m) =>
+      `- ${m.text} (memory ${m.id}${m.source_group_name ? `; source group: ${m.source_group_name}` : ""})`,
+  );
   const context = [
     "Memories from earlier conversations that may be relevant. They can be outdated; forget the ones that turn out wrong.",
     ...lines,

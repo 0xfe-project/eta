@@ -19,9 +19,20 @@ class FakeProvider:
         self.sources: dict[str, str] = {}
         self.extractions: list[tuple[str, list, str | None]] = []
         self.scores: dict[str, float] = {}
+        self.groups = {}
         self.clock = itertools.count()
 
-    def add(self, agent_id, messages, *, source, infer, model=None):
+    def add(
+        self,
+        agent_id,
+        messages,
+        *,
+        source,
+        infer,
+        model=None,
+        group_id=None,
+        group_name=None,
+    ):
         if infer:
             self.extractions.append((agent_id, messages, model))
             texts = [f"fact: {m['content']}" for m in messages if m["role"] == "user"]
@@ -33,39 +44,51 @@ class FakeProvider:
             self.memories[memory_id] = (agent_id, text)
             self.created[memory_id] = f"2026-10-08T00:00:{next(self.clock):02d}+00:00"
             self.sources[memory_id] = source
+            self.groups[memory_id] = (group_id, group_name)
             added.append(
                 Memory(
-                    memory_id, text, created_at=self.created[memory_id], source=source
+                    memory_id,
+                    text,
+                    created_at=self.created[memory_id],
+                    source=source,
+                    source_group_id=group_id,
+                    source_group_name=group_name,
                 )
             )
         return added
 
-    def search(self, agent_id, query, limit, *, source=None):
+    def search(self, agent_id, query, limit, *, source=None, group_id=None):
         found = [
             Memory(
                 memory_id,
                 text,
                 self.scores.get(text, 0.9),
                 source=self.sources.get(memory_id),
+                source_group_id=self.groups[memory_id][0],
+                source_group_name=self.groups[memory_id][1],
             )
             for memory_id, (owner, text) in self.memories.items()
             if owner == agent_id
             and (source is None or self.sources.get(memory_id) == source)
+            and (group_id is None or self.groups[memory_id][0] == group_id)
             and any(w in text for w in query.split())
         ]
         return found[:limit]
 
-    def list(self, agent_id, *, source=None):
+    def list(self, agent_id, *, source=None, group_id=None):
         return [
             Memory(
                 memory_id,
                 text,
                 created_at=self.created[memory_id],
                 source=self.sources.get(memory_id),
+                source_group_id=self.groups[memory_id][0],
+                source_group_name=self.groups[memory_id][1],
             )
             for memory_id, (owner, text) in self.memories.items()
             if owner == agent_id
             and (source is None or self.sources.get(memory_id) == source)
+            and (group_id is None or self.groups[memory_id][0] == group_id)
         ]
 
     def delete(self, agent_id, memory_id):
@@ -332,3 +355,66 @@ class TestMem0Provider:
 
 def test_up(client):
     assert client.get("/up").status_code == 204
+
+
+def test_group_source_survives_capture_and_cross_group_recall(client, provider):
+    from urllib.parse import quote
+
+    response = client.post(
+        "/memory/capture",
+        headers={
+            **as_agent("a"),
+            "X-AXP-Group-Id": "g1",
+            "X-AXP-Group-Name": quote("设计 讨论"),
+        },
+        json={
+            "model": "test",
+            "group_id": "forged",
+            "messages": [{"role": "user", "content": "偏好 简洁"}],
+        },
+    )
+    assert response.status_code == 202
+    client.app.state.captures.queue.join()
+    [memory] = client.get("/api/memory/v1/agents/a/memories?group_id=g1").json()[
+        "memories"
+    ]
+    assert memory["source_group_id"] == "g1"
+    assert memory["source_group_name"] == "设计 讨论"
+    assert (
+        client.get("/api/memory/v1/agents/a/memories?group_id=g2").json()["memories"]
+        == []
+    )
+    recalled = client.post(
+        "/memory/recall",
+        headers={**as_agent("a"), "X-AXP-Group-Id": "g2"},
+        json={"query": "偏好"},
+    ).json()
+    assert recalled["memories"][0]["source_group_id"] == "g1"
+    assert (
+        client.get("/api/memory/v1/agents/b/memories?group_id=g1").json()["memories"]
+        == []
+    )
+
+
+def test_remember_uses_gateway_group_metadata(client):
+    response = client.post(
+        "/memory/mcp",
+        headers={
+            **as_agent("a"),
+            "X-AXP-Group-Id": "g1",
+            "X-AXP-Group-Name": "Review",
+            "Accept": "application/json, text/event-stream",
+        },
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "remember",
+                "arguments": {"text": "Prefer concise reports"},
+            },
+        },
+    )
+    memory = json.loads(response.json()["result"]["content"][0]["text"])
+    assert memory["source_group_id"] == "g1"
+    assert memory["source_group_name"] == "Review"
