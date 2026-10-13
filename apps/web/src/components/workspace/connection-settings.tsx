@@ -1,19 +1,41 @@
+import type { Bundle } from "@/api/control-plane.gen";
 import type { GitHubStatus } from "@/queries/forge";
 import type { Connection } from "@/queries/llm";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { GithubLogoIcon } from "@phosphor-icons/react/GithubLogo";
 import { ImageIcon } from "@phosphor-icons/react/Image";
-import { useCallback, useEffect, useState } from "react";
+import { PuzzlePieceIcon } from "@phosphor-icons/react/PuzzlePiece";
+import { useCallback, useEffect, useId, useState } from "react";
 import { toast } from "sonner";
+import { Markdown } from "@/components/markdown";
 import { LoadError, Loading } from "@/components/states";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import {
+  useBundleConfig,
+  useClearBundleConfig,
+  useSetBundleConfig,
+} from "@/queries/bundle-config";
+import { useBundles } from "@/queries/chat";
 import { useGitHubStatus, useRefreshGitHub } from "@/queries/forge";
 import {
   GROK_CONNECTOR,
@@ -259,14 +281,205 @@ function GrokConnection() {
   );
 }
 
+type Configured = Bundle & { config: NonNullable<Bundle["config"]> };
+
+/**
+ * A bundle's config as a form, built from its schema: one field per
+ * property, secrets write-only (left blank, the saved one stays).
+ */
+function BundleConfigForm({
+  bundle,
+  set,
+  values,
+  onClose,
+}: {
+  bundle: Configured;
+  set: string[];
+  values: Record<string, string>;
+  onClose: () => void;
+}) {
+  const save = useSetBundleConfig(bundle.name);
+  const clear = useClearBundleConfig(bundle.name);
+  const { properties, required = [] } = bundle.config;
+  const [draft, setDraft] = useState<Record<string, string>>(values);
+  const id = useId();
+  const changes = () => {
+    const out: Record<string, string | null> = {};
+    for (const [name, property] of Object.entries(properties)) {
+      const value = (draft[name] ?? "").trim();
+      if (property.writeOnly && value === "") continue;
+      if (value !== (values[name] ?? "")) out[name] = value || null;
+    }
+    return out;
+  };
+
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        save.mutate(changes(), {
+          onSuccess: (state) => {
+            toast.success(
+              state.ready
+                ? "已保存，载入它的智能体空闲时会重启"
+                : "已保存，还有必填项未填",
+            );
+            onClose();
+          },
+          onError: (error) => toast.error(error.message),
+        });
+      }}
+    >
+      {Object.entries(properties).map(([name, property]) => {
+        const saved = set.includes(name);
+        return (
+          <div key={name} className="space-y-1">
+            <label htmlFor={`${id}-${name}`} className="text-xs font-medium">
+              {property.title || name}
+              {required.includes(name) ? null : (
+                <span className="font-normal text-muted-foreground">
+                  {" "}
+                  （可选）
+                </span>
+              )}
+            </label>
+            <Input
+              id={`${id}-${name}`}
+              type={property.writeOnly ? "password" : "text"}
+              value={draft[name] ?? ""}
+              required={required.includes(name) && !saved}
+              maxLength={property.maxLength || 4096}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder={
+                property.writeOnly && saved ? "已设置，留空不替换" : undefined
+              }
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, [name]: e.target.value }))
+              }
+            />
+            {property.description ? (
+              <Markdown className="text-xs text-muted-foreground">
+                {property.description}
+              </Markdown>
+            ) : null}
+          </div>
+        );
+      })}
+      <p className="text-xs text-muted-foreground">
+        这些值加密保存在 AXP，作为环境变量交给载入“{bundle.name}
+        ”环境包的智能体。
+      </p>
+      <DialogFooter className="gap-2 sm:justify-end">
+        {set.length > 0 ? (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-muted-foreground sm:mr-auto"
+              >
+                清除配置
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>清除 {bundle.name} 的配置？</AlertDialogTitle>
+                <AlertDialogDescription>
+                  AXP
+                  会删除保存的值。载入这个环境包的智能体空闲时重启，之后不再有它的插件。
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>取消</AlertDialogCancel>
+                <AlertDialogAction
+                  variant="destructive"
+                  onClick={() =>
+                    clear.mutate(undefined, {
+                      onSuccess: () => {
+                        toast.success("已清除配置");
+                        onClose();
+                      },
+                      onError: (error) => toast.error(error.message),
+                    })
+                  }
+                >
+                  清除
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        ) : null}
+        <Button type="submit" disabled={save.isPending}>
+          {save.isPending ? "正在保存…" : "保存"}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
+/** A built-in bundle that asks the user for values (its config schema). */
+function BundleConnection({ bundle }: { bundle: Configured }) {
+  const { data, error, refetch } = useBundleConfig(bundle.name);
+  const [open, setOpen] = useState(false);
+  const current: Summary = error
+    ? { summary: error.message, todo: "出错" }
+    : data && !data.ready
+      ? { summary: bundle.description, todo: "未配置" }
+      : { summary: bundle.description };
+
+  return (
+    <>
+      <ConnectionCard
+        icon={PuzzlePieceIcon}
+        name={bundle.name}
+        {...current}
+        onOpen={() => setOpen(true)}
+      />
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent aria-describedby={undefined} className="sm:max-w-lg">
+          <DialogHeader className="flex-row items-center gap-2">
+            <PuzzlePieceIcon aria-hidden="true" className="size-5" />
+            <DialogTitle className="text-sm">{bundle.name}</DialogTitle>
+          </DialogHeader>
+          {error ? (
+            <LoadError
+              what="配置"
+              error={error}
+              onRetry={() => void refetch()}
+            />
+          ) : data ? (
+            <BundleConfigForm
+              key={data.updated_at ?? "new"}
+              bundle={bundle}
+              set={data.set}
+              values={data.values}
+              onClose={() => setOpen(false)}
+            />
+          ) : (
+            <Loading rows={1} />
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 /** Settings → 连接: the integrations the user has to set up themselves. */
 export function ConnectionSettings() {
+  const bundles = useBundles();
   return (
     <div className="space-y-3">
       <h2 className="text-sm font-semibold">连接</h2>
       <div className="grid gap-2 sm:grid-cols-2">
         <GitHubConnection />
         <GrokConnection />
+        {bundles.data
+          ?.filter((b): b is Configured => b.builtin && !!b.config)
+          .map((b) => (
+            <BundleConnection key={b.name} bundle={b} />
+          ))}
       </div>
     </div>
   );

@@ -9,9 +9,13 @@
 package auth
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"strings"
 )
@@ -53,4 +57,40 @@ func Bearer(r *http.Request) string {
 		return ""
 	}
 	return token
+}
+
+// Seal encrypts what the control plane keeps for the user (bundles'
+// configs): AES-256-GCM with a key derived from the secret for the purpose,
+// which also binds the result to it.
+func Seal(secret []byte, purpose string, plain []byte) ([]byte, error) {
+	a, err := aead(secret, purpose)
+	if err != nil {
+		return nil, err
+	}
+	nonce := make([]byte, a.NonceSize())
+	_, _ = rand.Read(nonce)
+	return a.Seal(nonce, nonce, plain, []byte(purpose)), nil
+}
+
+// Open decrypts what Seal sealed for the purpose; it fails once the secret
+// has changed.
+func Open(secret []byte, purpose string, sealed []byte) ([]byte, error) {
+	a, err := aead(secret, purpose)
+	if err != nil {
+		return nil, err
+	}
+	if len(sealed) < a.NonceSize() {
+		return nil, errors.New("sealed data too short")
+	}
+	return a.Open(nil, sealed[:a.NonceSize()], sealed[a.NonceSize():], []byte(purpose))
+}
+
+func aead(secret []byte, purpose string) (cipher.AEAD, error) {
+	mac := hmac.New(sha256.New, secret)
+	mac.Write([]byte("seal:" + purpose))
+	block, err := aes.NewCipher(mac.Sum(nil))
+	if err != nil {
+		return nil, err
+	}
+	return cipher.NewGCM(block)
 }

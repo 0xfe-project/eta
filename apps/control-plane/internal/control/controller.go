@@ -151,6 +151,10 @@ func (c *Controller) reconcile(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	configs, err := bundles.Configs(ctx, c.DB, c.Secret)
+	if err != nil {
+		return err
+	}
 	live := map[string]bool{}
 	desired, images := map[string]string{}, map[string]string{}
 	started := 0
@@ -168,7 +172,7 @@ func (c *Controller) reconcile(ctx context.Context) error {
 			errs = append(errs, err)
 			continue
 		}
-		spec := c.spec(ctx, agent, img.Tag)
+		spec := c.spec(ctx, agent, img, configs)
 		desired[agent.ID] = spec.Config
 		ran, err := c.ensureContainer(ctx, agent, spec)
 		if ran {
@@ -330,14 +334,22 @@ func (c *Controller) contextWindow(ctx context.Context, model *string) string {
 
 // spec is the agent's container. Its model provider is the LLM gateway,
 // through the runtime gateway, with the agent's key: provider credentials
-// never enter the container.
-func (c *Controller) spec(ctx context.Context, agent *chat.AgentRecord, image string) container.Spec {
+// never enter the container. Its bundles' configs do, as environment
+// variables (bundles.Environment); a bundle whose config is incomplete
+// keeps its plugins out (AXP_DISABLED_PLUGINS). Both are in the spec, so
+// setting or clearing a config replaces the container between turns.
+func (c *Controller) spec(ctx context.Context, agent *chat.AgentRecord, img image, configs map[string]map[string]string) container.Spec {
+	image := img.Tag
 	key := auth.AgentKey(c.Secret, agent.ID)
 	model := ""
 	if agent.Model != nil {
 		model = *agent.Model
 	}
-	env := map[string]string{
+	env, disabled := bundles.Environment(img.bundles, configs)
+	if len(disabled) > 0 {
+		env["AXP_DISABLED_PLUGINS"] = strings.Join(disabled, ",")
+	}
+	for k, v := range map[string]string{
 		"AXP_AGENT_ID":      agent.ID,
 		"AXP_AGENT_KEY":     key,
 		"AXP_CONTROL_TOKEN": auth.ControlToken(c.Secret, agent.ID),
@@ -354,6 +366,8 @@ func (c *Controller) spec(ctx context.Context, agent *chat.AgentRecord, image st
 		"OTEL_EXPORTER_OTLP_ENDPOINT": runtimeOTLPEndpoint,
 		"OTEL_SERVICE_NAME":           "agent-runtime",
 		"OTEL_RESOURCE_ATTRIBUTES":    resourceAttributes("axp.agent.id=" + agent.ID),
+	} {
+		env[k] = v
 	}
 	if window := c.contextWindow(ctx, agent.Model); window != "" {
 		env["AXP_MODEL_CONTEXT_WINDOW"] = window

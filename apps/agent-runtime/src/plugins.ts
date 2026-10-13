@@ -2,7 +2,8 @@
 // marketplace when the agent's image was built) installed into CODEX_HOME,
 // which is on the agent's volume: Codex only loads installed copies. Every
 // start installs them again from the image, and removes the ones an older
-// image installed that this one lacks.
+// image installed that this one lacks or that are disabled now (a plugin
+// whose bundle's config is incomplete, AXP_DISABLED_PLUGINS).
 
 import { execFile } from "node:child_process";
 import { readdir, readFile, writeFile } from "node:fs/promises";
@@ -19,6 +20,7 @@ const ENABLED = /^\[plugins\."([^"]+)"\]/gm;
 
 export interface PluginSettings {
   pluginsDir: string;
+  disabledPlugins: string[];
   codexHome: string;
   gatewayUrl: string;
   workspace: string;
@@ -48,6 +50,9 @@ export async function installPlugins(s: PluginSettings): Promise<string[]> {
     return [];
   }
   const catalog = JSON.parse(text) as Catalog;
+  catalog.plugins = catalog.plugins.filter(
+    (plugin) => !s.disabledPlugins.includes(plugin.name),
+  );
   const marketplace = catalog.name;
   const codex = [
     "--config",

@@ -57,6 +57,10 @@ type BundleUpdateIn struct {
 	Plugins     *[]string `json:"plugins,omitempty" nullable:"true" maxItems:"50"`
 }
 
+type BundleConfigIn struct {
+	Values map[string]*string `json:"values" doc:"By property: a value sets it, null clears it; properties left out stay."`
+}
+
 type BundlePath struct {
 	Name string `path:"name" maxLength:"40"`
 }
@@ -187,6 +191,35 @@ func registerChat(api huma.API, d *Deps) {
 				return struct{}{}, s.Bundles.Delete(ctx, tx, in.Name)
 			})
 			return nil, err
+		})
+
+	huma.Register(api, op("getBundleConfig", http.MethodGet, "/api/v1/bundles/{name}/config",
+		"A built-in bundle's config, secrets left out", 200, "bundles"),
+		func(ctx context.Context, in *BundlePath) (*httpapi.Body[bundles.ConfigState], error) {
+			c, err := s.Bundles.Config(ctx, d.DB, d.Secret, in.Name)
+			if err != nil {
+				return nil, err
+			}
+			return &httpapi.Body[bundles.ConfigState]{Body: *c}, nil
+		})
+
+	huma.Register(api, op("setBundleConfig", http.MethodPatch, "/api/v1/bundles/{name}/config",
+		"Set, clear (null) or keep (left out) a bundle's config values; agents that load it restart once idle", 200, "bundles"),
+		func(ctx context.Context, in *struct {
+			BundlePath
+			Body BundleConfigIn
+		}) (*httpapi.Body[bundles.ConfigState], error) {
+			c, err := s.Bundles.SetConfig(ctx, d.DB, d.Secret, in.Name, in.Body.Values)
+			if err != nil {
+				return nil, err
+			}
+			return &httpapi.Body[bundles.ConfigState]{Body: *c}, nil
+		})
+
+	huma.Register(api, op("deleteBundleConfig", http.MethodDelete, "/api/v1/bundles/{name}/config",
+		"Clear a bundle's config; agents that load it lose its plugins once idle", 204, "bundles"),
+		func(ctx context.Context, in *BundlePath) (*struct{}, error) {
+			return nil, s.Bundles.DeleteConfig(ctx, d.DB, in.Name)
 		})
 
 	huma.Register(api, op("createAgent", http.MethodPost, "/api/v1/agents", "Create an agent", 201, "chat"),
