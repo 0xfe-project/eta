@@ -20,7 +20,7 @@ packages/
   telemetry-go/    Go 服务共用的日志与 OpenTelemetry
 ```
 
-设计见 [RFC #1](https://github.com/akarachen/axp/issues/1)，实现说明见 [控制面](docs/architecture/control-plane.md)、[聊天与运行时架构](docs/architecture/chat-runtime.md)、[统一入口网关](docs/architecture/gateway.md)、[LLM 网关](docs/architecture/llm-gateway.md)、[记忆](docs/architecture/memory.md)、[代码托管（GitHub）](docs/architecture/forge.md) 、[工具调用规则](docs/architecture/agent-hooks.md)、[环境包](docs/architecture/bundles.md)、[任务与远程电脑](docs/architecture/tasks.md)、[定时任务](docs/architecture/routines.md)、[插件](docs/architecture/plugins.md)、[Artifact](docs/architecture/artifacts.md) 与 [Go 服务框架](docs/architecture/service-framework.md)；新增服务时按[清单](docs/architecture/services.md)核对。
+设计见 [RFC #1](https://github.com/akarachen/axp/issues/1)，实现说明见 [控制面](docs/architecture/control-plane.md)、[聊天与运行时架构](docs/architecture/chat-runtime.md)、[统一入口网关](docs/architecture/gateway.md)、[LLM 网关](docs/architecture/llm-gateway.md)、[记忆](docs/architecture/memory.md)、[代码托管（GitHub）](docs/architecture/forge.md) 、[工具调用规则](docs/architecture/agent-hooks.md)、[环境包](docs/architecture/bundles.md)、[任务与远程电脑](docs/architecture/tasks.md)、[定时任务](docs/architecture/routines.md)、[插件](docs/architecture/plugins.md)、[Artifact](docs/architecture/artifacts.md)、[OOMOL](docs/architecture/oomol.md) 与 [Go 服务框架](docs/architecture/service-framework.md)；新增服务时按[清单](docs/architecture/services.md)核对。
 
 ## 环境与初始化
 
