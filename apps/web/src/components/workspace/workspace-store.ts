@@ -6,15 +6,11 @@ import { persist } from "zustand/middleware";
 
 const storageKey = "axp.workspace.v1";
 
-// Local UI state only. Chat history lives in the control plane; older saved
-// messages are dropped rather than uploaded.
-// Zod strips retired fields, including sessionTheme, while retaining other preferences.
+// Local UI state only; everything else lives in the control plane. Zod
+// drops fields this schema does not have.
 const workspaceSchema = z.object({
   selectedGroupId: z.string().max(64).optional(),
   selectedAgentId: z.string().max(64).optional(),
-  tasks: z.array(
-    z.object({ id: z.string(), title: z.string().max(200), done: z.boolean() }),
-  ),
   // CSS font-family lists for UI and code text; unset uses Geist.
   fontSans: z.string().max(200).optional(),
   fontMono: z.string().max(200).optional(),
@@ -68,8 +64,7 @@ function apply<T>(update: Update<T>, state: T): T {
 
 type Persisted = Pick<WorkspaceStore, "workspace">;
 
-// Keeps the format saved before the store existed: the bare workspace object
-// under the same key, validated on load.
+// The bare workspace object under its key, validated on load.
 const storage: PersistStorage<Persisted> = {
   getItem: (name) => {
     try {
@@ -96,7 +91,7 @@ const storage: PersistStorage<Persisted> = {
 export const useWorkspaceStore = create<WorkspaceStore>()(
   persist(
     (set) => ({
-      workspace: { tasks: [] },
+      workspace: {},
       mobilePanel: "chat",
       settings: { open: false, section: "agents" },
       agentEditor: { open: false, agentId: null },

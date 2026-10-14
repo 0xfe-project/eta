@@ -40,7 +40,7 @@ Web 的 `build`、`lint`、`test` 都依赖 `generate`，Turbo 按 Go 代码的�
 
 ## 数据库
 
-迁移由框架的 `pg.Migrate`（[goose](https://github.com/pressly/goose)）执行，SQL 文件在 `internal/store/migrations/`，编译进二进制，记录在表 `goose_db_version`，执行时持有 PostgreSQL 会话锁；框架自己的表（`api_idempotency`，已由 1 号迁移建好）记录在 `service_framework_version`。1 号迁移是 Django 版控制面最后的表结构（`internal/store/django.sql`）：已经由 Django 迁移过的数据库只记录它、不执行。
+迁移由框架的 `pg.Migrate`（[goose](https://github.com/pressly/goose)）执行，SQL 文件在 `internal/store/migrations/`，编译进二进制，记录在表 `goose_db_version`，执行时持有 PostgreSQL 会话锁；框架自己的表（`api_idempotency`）记录在 `service_framework_version`。`0015_schema.sql` 是到 15 号为止的完整表结构：空库只执行它，之前迁移过的数据库已记录 1–15 号，跳过它。之后的改动是它后面的新文件。routines 的库同样从 `00003_routines.sql` 开始。
 
 ## 测试
 

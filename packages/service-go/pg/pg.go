@@ -81,32 +81,29 @@ func WithDatabase(rawURL, name string) (string, error) {
 	return u.String(), nil
 }
 
-// Migrations is a service's schema: SQL files (goose's format) and,
-// optionally, migrations written in Go.
+// Migrations is a service's schema: SQL files in goose's format.
 type Migrations struct {
 	FS fs.FS
-	Go []*goose.Migration
 }
 
 // Migrate applies the service's migrations, then the framework's (its own
-// tables, such as idempotency keys, created only where the service's schema
-// has not), each under a PostgreSQL session lock so that concurrent starts
-// take turns. Each keeps its own version table.
+// tables, such as idempotency keys), each under a PostgreSQL session lock so
+// that concurrent starts take turns. Each keeps its own version table.
 func Migrate(ctx context.Context, pool *pgxpool.Pool, service Migrations) error {
 	db := stdlib.OpenDBFromPool(pool)
 	defer db.Close()
-	if service.FS != nil || len(service.Go) > 0 {
-		if err := up(ctx, db, service.FS, goose.DefaultTablename, service.Go); err != nil {
+	if service.FS != nil {
+		if err := up(ctx, db, service.FS, goose.DefaultTablename); err != nil {
 			return err
 		}
 	}
-	if err := up(ctx, db, framework, "service_framework_version", nil); err != nil {
+	if err := up(ctx, db, framework, "service_framework_version"); err != nil {
 		return fmt.Errorf("framework migrations: %w", err)
 	}
 	return nil
 }
 
-func up(ctx context.Context, db *sql.DB, fsys fs.FS, table string, gomigrations []*goose.Migration) error {
+func up(ctx context.Context, db *sql.DB, fsys fs.FS, table string) error {
 	locker, err := lock.NewPostgresSessionLocker()
 	if err != nil {
 		return err
@@ -115,8 +112,7 @@ func up(ctx context.Context, db *sql.DB, fsys fs.FS, table string, gomigrations 
 	if err != nil {
 		return err
 	}
-	provider, err := goose.NewProvider("", db, fsys,
-		goose.WithStore(store), goose.WithSessionLocker(locker), goose.WithGoMigrations(gomigrations...))
+	provider, err := goose.NewProvider("", db, fsys, goose.WithStore(store), goose.WithSessionLocker(locker))
 	if err != nil {
 		return err
 	}
@@ -187,12 +183,6 @@ func Exists(ctx context.Context, db DB, sql string, args ...any) (bool, error) {
 	var exists bool
 	err := db.QueryRow(ctx, "SELECT EXISTS ("+sql+")", args...).Scan(&exists)
 	return exists, err
-}
-
-// IsUniqueViolation reports whether err is a unique constraint violation.
-func IsUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
 // NewID is a new row id (a UUID).

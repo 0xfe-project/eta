@@ -46,7 +46,7 @@ apps/<service>/
 func main() {
 	service.Main("memory-like-service",
 		service.Command{Name: "serve", Default: true, Run: serve},
-		service.Migrate(databaseURL, migrations.All, true),
+		service.Command{Name: "migrate", Run: migrate},
 		service.OpenAPI(map[string]func() huma.API{
 			"public": func() huma.API { return api.New(&api.Deps{}).API },
 		}),
@@ -60,9 +60,9 @@ func main() {
 
 ## 用到它的服务
 
-| 服务                                                 | 命令                                                                                    | 库                                                                                                           |
-| ---------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| 控制面（`apps/control-plane`，含代码托管和定时任务） | `serve`、`controller`、`routine-worker`、`migrate`、`openapi`、`ensure-runtime-network` | `axp`（迁移 1 是 Django 留下的 schema，Go 迁移，其余是 SQL）与定时任务的 `axp_routines`，都由 `migrate` 迁移 |
+| 服务                                                 | 命令                                                          | 库                                                     |
+| ---------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------ |
+| 控制面（`apps/control-plane`，含代码托管和定时任务） | `serve`、`controller`、`routine-worker`、`migrate`、`openapi` | `axp` 与定时任务的 `axp_routines`，都由 `migrate` 迁移 |
 
 [LLM 网关](llm-gateway.md)（`internal/llm`）的路由不是 huma：浏览器的 `/api/llm` 是普通的 `net/http` handler，`/v1` 是嵌入的 CLIProxyAPI 的 gin 引擎。以后若需要生成 OpenAPI，应当迁到 huma，而不是各自再写一份。代码托管（`internal/forge`）的路由是普通的 `net/http` handler，没有数据库，不生成 OpenAPI。
 
