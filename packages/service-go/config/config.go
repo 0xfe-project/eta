@@ -8,8 +8,8 @@
 //
 // A set variable wins; otherwise the field gets `dev` in development
 // (AXP_DEV=true, which only scripts/dev.sh sets) or `prod` in production,
-// then `default`. Development's defaults are fixed addresses on loopback or
-// the runtime network; production's are Kamal network aliases. Fields are
+// then `default`. Development's defaults are the cluster's development services or
+// loopback; production's are the cluster's Services (deploy/k3s). Fields are
 // strings, bools, ints or durations.
 package config
 

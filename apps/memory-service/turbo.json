@@ -28,6 +28,13 @@
         ".python-version"
       ]
     },
+    // The memory bundle's service: the model, the dependencies, the source.
+    "image:linux-amd64": {
+      "dependsOn": ["build", "build:linux-amd64"]
+    },
+    "image:linux-arm64": {
+      "dependsOn": ["build", "build:linux-arm64"]
+    },
     "lint": {
       "inputs": [
         "$TURBO_DEFAULT$",

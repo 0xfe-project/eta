@@ -12,7 +12,8 @@ test("recall labels group context using only the memory route", async () => {
     fetch(request) {
       const path = new URL(request.url).pathname;
       requests.push(path);
-      if (path !== "/memory/recall") return new Response(null, { status: 404 });
+      if (path !== "/bundles/memory/recall")
+        return new Response(null, { status: 404 });
       return Response.json({
         memories: [
           { id: "local", text: "使用独立数据库", group_context: "this" },
@@ -55,7 +56,7 @@ test("recall labels group context using only the memory route", async () => {
       "部署需要确认 (memory elsewhere; from another group)",
     );
     expect(context).toContain("回答简洁 (memory unknown)");
-    expect(requests).toEqual(["/memory/recall"]);
+    expect(requests).toEqual(["/bundles/memory/recall"]);
   } finally {
     server.stop(true);
     await rm(codexHome, { recursive: true, force: true });

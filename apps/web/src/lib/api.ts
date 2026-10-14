@@ -1,7 +1,7 @@
 // Browser clients for the same-origin API behind the edge gateway: the
 // control plane (/api/v1, its routines under /api/routines/v1 and its
 // GitHub connection under /api/forge/v1), the LLM gateway (/api/llm/v1) and
-// the memory service (/api/memory/v1). POSTs carry an Idempotency-Key so a
+// the memory bundle's service (/api/bundles/memory/v1). POSTs carry an Idempotency-Key so a
 // retried request cannot run twice.
 //
 // The control plane's and routines' clients are typed by their OpenAPI
@@ -75,7 +75,7 @@ function client(base: string) {
 }
 
 export const llmApi = client("/api/llm/v1");
-export const memoryApi = client("/api/memory/v1");
+export const memoryApi = client("/api/bundles/memory/v1");
 export const forgeApi = client("/api/forge/v1");
 
 /** A service's client, typed by its OpenAPI document. */

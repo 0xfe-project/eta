@@ -103,11 +103,11 @@ def test_successful_reads_are_not_logged(monkeypatch, capsys):
     assert "POST /memory/capture" in err
 
 
-def test_service_version_from_kamal(monkeypatch):
+def test_service_version_from_the_deployment(monkeypatch):
     import axp_telemetry
 
     monkeypatch.setattr(axp_telemetry, "_provider", None)
     monkeypatch.setattr(axp_telemetry, "_handler", None)
-    monkeypatch.setenv("KAMAL_VERSION", "abc123")
+    monkeypatch.setenv("AXP_VERSION", "abc123")
     axp_telemetry.handler("t")
     assert axp_telemetry._provider.resource.attributes["service.version"] == "abc123"

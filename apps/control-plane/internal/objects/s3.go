@@ -1,5 +1,5 @@
 // Package objects is object storage on any S3-compatible service: the
-// built-in SeaweedFS (deploy/deploy.yml) or an external one. It knows keys
+// built-in SeaweedFS (deploy/k3s/infra/s3.yaml) or an external one. It knows keys
 // and bytes, nothing about what they are.
 package objects
 

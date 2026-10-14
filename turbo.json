@@ -28,44 +28,41 @@
     "build:linux-arm64": {
       "outputs": ["out/linux-arm64/**"]
     },
-    // Images from those artifacts (scripts/build/image.sh). Docker's layer
-    // cache already skips unchanged work, so they always run.
+    // Images from those artifacts, built by the cluster's BuildKit and pushed
+    // as AXP_IMAGE (scripts/build/image.sh). BuildKit's cache already skips
+    // unchanged work, so they always run.
     "image:linux-amd64": {
       "dependsOn": ["build:linux-amd64"],
       "cache": false,
-      "passThroughEnv": ["AXP_RUNTIME_IMAGE"]
+      "passThroughEnv": ["AXP_IMAGE", "AXP_BUILDKIT"]
     },
     "image:linux-arm64": {
       "dependsOn": ["build:linux-arm64"],
       "cache": false,
-      "passThroughEnv": ["AXP_RUNTIME_IMAGE"]
+      "passThroughEnv": ["AXP_IMAGE", "AXP_BUILDKIT"]
     },
     // The production app image (deploy/Dockerfile) copies these artifacts.
     "//#image:linux-amd64": {
       "dependsOn": [
         "@axp/web#build",
         "@axp/control-plane#build:linux-amd64",
-        "@axp/memory-service#build",
-        "@axp/memory-service#build:linux-amd64",
         "@axp/plugins-go#build:linux-amd64",
         "@axp/remote#build",
         "@axp/agenvo#build"
       ],
       "cache": false,
-      "passThroughEnv": ["AXP_APP_IMAGE"]
+      "passThroughEnv": ["AXP_IMAGE", "AXP_BUILDKIT"]
     },
     "//#image:linux-arm64": {
       "dependsOn": [
         "@axp/web#build",
         "@axp/control-plane#build:linux-arm64",
-        "@axp/memory-service#build",
-        "@axp/memory-service#build:linux-arm64",
         "@axp/plugins-go#build:linux-arm64",
         "@axp/remote#build",
         "@axp/agenvo#build"
       ],
       "cache": false,
-      "passThroughEnv": ["AXP_APP_IMAGE"]
+      "passThroughEnv": ["AXP_IMAGE", "AXP_BUILDKIT"]
     },
     // Knip reads the whole repository, so it always runs.
     "//#knip": {

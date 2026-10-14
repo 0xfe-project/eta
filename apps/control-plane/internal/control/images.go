@@ -22,6 +22,9 @@ import (
 // a hash of all of that, so agents with the same bundles share an image, and
 // changing a bundle, a plugin or the runtime image builds a new one.
 
+// serviceDir is a built-in bundle's service (bundles.Service), left out.
+const serviceDir = "service"
+
 type image struct {
 	Tag     string
 	bundles []bundles.Bundle
@@ -83,8 +86,15 @@ func (c *Controller) treeHash(dir string) (string, error) {
 	}
 	h := sha256.New()
 	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil || entry.IsDir() {
+		if err != nil {
 			return err
+		}
+		if entry.IsDir() {
+			// A bundle's service runs in the cluster, not in agents' images.
+			if path == filepath.Join(dir, serviceDir) {
+				return fs.SkipDir
+			}
+			return nil
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -115,6 +125,9 @@ func (c *Controller) context(dir, baseRef string, img image) error {
 		target := filepath.Join(dir, "bundles", b.Name)
 		if b.Builtin {
 			if err := os.CopyFS(target, os.DirFS(b.Dir)); err != nil {
+				return err
+			}
+			if err := os.RemoveAll(filepath.Join(target, serviceDir)); err != nil {
 				return err
 			}
 			continue
@@ -237,4 +250,4 @@ func keep(images map[string]string, building string) []string {
 	return out
 }
 
-var _ container.Driver = (*container.Docker)(nil)
+var _ container.Driver = (*container.Kubernetes)(nil)

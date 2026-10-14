@@ -36,7 +36,7 @@ def _name_agent(request: httpx.Request) -> None:
 
 
 class Mem0Provider:
-    def __init__(self, database_url: str, llm_url: str):
+    def __init__(self, database_url: str, llm_url: str, token: str):
         self.memory = Mem0.from_config(
             {
                 "vector_store": {
@@ -71,12 +71,11 @@ class Mem0Provider:
                 "llm": {"provider": "openai", "config": {"api_key": "unused"}},
             }
         )
-        # The LLM gateway authenticates nothing but the agent header, which
-        # the runtime gateway sets for runtimes; here it names the agent the
-        # memory is extracted for.
+        # Through the runtime gateway with the bundle's token, which may call
+        # models; the agent header says whose usage the extraction is.
         self.memory.llm.client = OpenAI(
             base_url=llm_url,
-            api_key="unused",
+            api_key=token,
             http_client=httpx.Client(
                 event_hooks={"request": [_name_agent]}, timeout=120
             ),

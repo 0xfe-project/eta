@@ -1,5 +1,7 @@
 {
   "name": "agenvo",
+  "required": true,
   "description": "操作用户远程电脑上的 Paseo 和 Herdr：工作区、智能体、输入、历史和终端。",
-  "plugins": ["agenvo"]
+  "plugins": ["agenvo"],
+  "service": {}
 }

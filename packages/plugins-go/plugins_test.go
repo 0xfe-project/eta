@@ -211,7 +211,7 @@ func TestMarketplaceListsTheChatPlugins(t *testing.T) {
 func TestCodexGetsTheAgentKeyItsWay(t *testing.T) {
 	root, _ := compiled(t)
 	expect(t, readMCP(t, root, "memory")["memory"], map[string]any{
-		"type": "streamable-http", "url": "${AXP_GATEWAY_URL}/memory/mcp", "bearer_token_env_var": "AXP_AGENT_KEY",
+		"type": "streamable-http", "url": "${AXP_GATEWAY_URL}/bundles/memory/mcp", "bearer_token_env_var": "AXP_AGENT_KEY",
 	})
 	// Codex passes the key on by name; the server wants it as XAI_API_KEY.
 	expect(t, readMCP(t, root, "grok")["grok"], map[string]any{

@@ -1,0 +1,14 @@
+# Production's infrastructure (deploy/k3s/infra) in the namespace axp, with
+# the registry and BuildKit at their fixed addresses. deploy.sh applies it
+# first: AXP's images are built with it.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: axp
+resources:
+  - namespace.yaml
+  - ../../infra
+patches:
+  - target: { kind: Service, name: registry }
+    patch: '[{"op": "add", "path": "/spec/clusterIP", "value": "10.43.100.1"}]'
+  - target: { kind: Service, name: buildkitd }
+    patch: '[{"op": "add", "path": "/spec/clusterIP", "value": "10.43.100.2"}]'

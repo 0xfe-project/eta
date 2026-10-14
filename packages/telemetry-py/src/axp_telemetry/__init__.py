@@ -47,8 +47,8 @@ def handler(service: str) -> logging.Handler:
     # default name only applies without OTEL_SERVICE_NAME (as in Go and JS).
     name = os.environ.get("OTEL_SERVICE_NAME") or service
     attributes = {SERVICE_NAME: name}
-    # Kamal sets the deployed version (its git commit) in every container.
-    if version := os.environ.get("KAMAL_VERSION"):
+    # deploy/k3s sets the deployed version (its git commit) in every container.
+    if version := os.environ.get("AXP_VERSION"):
         attributes[SERVICE_VERSION] = version
     provider = LoggerProvider(resource=Resource.create(attributes))
     provider.add_log_record_processor(SimpleLogRecordProcessor(ConsoleExporter()))

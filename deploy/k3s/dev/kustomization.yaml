@@ -1,0 +1,24 @@
+# Development's infrastructure (scripts/dev.sh), shared by every checkout
+# on the machine: deploy/k3s/infra in the namespace axp-dev, with fixed
+# development credentials. The processes under development run on the host.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: axp-dev
+resources:
+  - ../infra
+  - namespace.yaml
+secretGenerator:
+  - name: infra
+    options: { disableNameSuffixHash: true }
+    literals:
+      - POSTGRES_PASSWORD=axp
+      - AXP_S3_ACCESS_KEY_ID=axp-dev
+      - AXP_S3_SECRET_ACCESS_KEY=axp-dev-secret
+      - AXP_OBSERVE_PASSWORD=Axp-dev-observe-1
+      # root@axp.local:Axp-dev-observe-1
+      - OPENOBSERVE_AUTHORIZATION=Basic cm9vdEBheHAubG9jYWw6QXhwLWRldi1vYnNlcnZlLTE=
+patches:
+  - target: { kind: Service, name: registry }
+    patch: '[{"op": "add", "path": "/spec/clusterIP", "value": "10.43.100.11"}]'
+  - target: { kind: Service, name: buildkitd }
+    patch: '[{"op": "add", "path": "/spec/clusterIP", "value": "10.43.100.12"}]'

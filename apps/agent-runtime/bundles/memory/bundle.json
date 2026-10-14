@@ -2,5 +2,10 @@
   "name": "memory",
   "required": true,
   "description": "跨对话的长期记忆：每轮开始时回忆，结束时记下。",
-  "plugins": ["memory"]
+  "plugins": ["memory"],
+  "service": {
+    "protocol": "axp.memory/1",
+    "uses": ["llm"],
+    "database": true
+  }
 }

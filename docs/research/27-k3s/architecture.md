@@ -123,90 +123,13 @@ Agent 的 Dockerfile、内容摘要、空闲时替换、构建失败显示都与
 
 ## Bundle 服务
 
-### Bundle 的形状
+已实现，规范见[环境包的服务](../../architecture/bundles.md#服务)。要点：
 
-```
-apps/agent-runtime/bundles/memory/
-  bundle.json
-  service/
-    kustomization.yaml
-    deployment.yaml
-    service.yaml
-```
-
-```json
-{
-  "name": "memory",
-  "required": true,
-  "plugins": ["memory"],
-  "service": {
-    "protocol": "axp.memory/1",
-    "uses": ["llm"],
-    "database": true
-  }
-}
-```
-
-- `service/` 是普通的 Kustomize 目录，用户自己写 YAML，没有模板语言。自定义 Bundle 在设置页提交 YAML，存在表 `bundle`。
-- 约定：服务必须有一个名为 `<bundle>` 的 Service，端口名 `http`，并在 `GET /.well-known/axp-service` 返回 `{protocol, version, capabilities}`。
-- 每个部署一份，被所有载入该 Bundle 的 Agent 共享；服务按 `X-AXP-Agent-Id` 自己隔离数据。
-- `service.external: "https://…"` 表示使用已有的外部服务：不部署 YAML，只建 ExternalName Service，其余契约相同。
-
-### `BundleService` 资源
-
-```yaml
-apiVersion: axp.dev/v1alpha1
-kind: BundleService
-metadata: { name: memory, namespace: axp-bundles }
-spec:
-  revision: 3f2a… # YAML、配置、令牌 generation 的摘要
-  protocol: axp.memory/1
-  uses: [llm]
-  database: true
-  external: ""
-  manifests: | # kustomize build 的结果
-    apiVersion: apps/v1
-    kind: Deployment
-    …
-status:
-  observedGeneration: 4
-  conditions: [Applied, Ready, Compatible] # metav1.Condition
-  version: 1.4.0
-  capabilities: [mcp, capture, recall]
-```
-
-- **来源在数据库，资源是投影。** Bundle 定义、加密的配置、令牌 generation 在 PostgreSQL（内置 Bundle 在镜像里）。`api` 保存 Bundle 或其配置时用 server-side apply 写 `spec`；`controller` 启动时为内置 Bundle 补齐。手工修改 `spec` 会在下一次保存时被覆盖。
-- **一个 kind，`v1alpha1`，只加字段。** 校验用 CRD 自带的 OpenAPI/CEL 规则，没有 webhook，没有版本转换。
-- `api` 对 `bundleservices` 只读，用 `status` 给 Web 显示状态。
-
-### 调谐
-
-`controller` 进程里运行一个 controller-runtime manager，在拿到现有 advisory lock 之后启动（自身的 leader election 关闭）。它 watch `BundleService` 和它拥有的 Deployment/StatefulSet，变化即入队，失败退避重试；同一对象不会被并发调谐。每次调谐：
-
-1. 解析 `spec.manifests`。只允许白名单 kind（Deployment、StatefulSet、Service、ConfigMap、Secret、PVC、Job、CronJob、ServiceAccount），且只能在 `axp-bundles`；不合规则整体失败（`Applied=False`），不部分应用。
-2. 准备平台提供的 Secret：`axp-bundle-<name>`（令牌，有 `uses` 时）、`axp-bundle-<name>-config`（`ready` 的配置值）、`axp-bundle-<name>-postgres`（`database: true` 时，先在共享 PostgreSQL 上建库 `axp_bundle_<name>` 和同名角色）。
-3. 给每个子资源加 ownerReference 和标签 `axp.dev/bundle=<name>`，server-side apply（字段属主 `axp-controller`）。PVC 不加 ownerReference。
-4. 按标签列出白名单 kind，删除不在本次清单里的子资源（PVC 除外）。
-5. 用 kstatus 判断子资源是否就绪，写 `Ready`；就绪后读一次 `/.well-known/axp-service`，主版本与 `spec.protocol` 不同则 `Compatible=False`。
-
-删除 `BundleService` 时，子资源由 Kubernetes 的垃圾回收器级联删除；PVC 和数据库保留，设置里另有“删除数据”。
-
-### 权限
-
-`controller` 的 ServiceAccount 在 `axp-bundles` 只有一个 Role：上面的白名单 kind 和 `bundleservices`（含 `status`）。没有 ClusterRole，不能创建 RBAC 对象，碰不到其他 namespace。`axp-bundles` 启用 Pod Security `baseline`，并有 `ResourceQuota`/`LimitRange`。Bundle 的 YAML 视为管理员提交的受信配置，这些限制约束的是出错时的影响范围。
-
-### 路由
-
-| 网关              | 路径                   | 上游                                    | 鉴权                                                                         |
-| ----------------- | ---------------------- | --------------------------------------- | ---------------------------------------------------------------------------- |
-| `gateway`         | `/api/bundles/<name>/` | `<name>.axp-bundles.svc` 的 `http` 端口 | Access（用户）                                                               |
-| `runtime-gateway` | `/bundles/<name>/`     | 同上                                    | Agent key，且该 Agent 载入了这个 Bundle；或 Bundle 令牌且 `uses` 含此 Bundle |
-
-路由用 Caddy 的路径占位符拼出上游地址，新增 Bundle 服务不改网关配置。服务按路径前缀区分来自用户还是来自 Agent。Bundle 不能声明 Access 放行的公开路径；relay 的 `/remote/relay/` 是写在 `public.caddy` 里的内置路由。
-
-### 可用性
-
-必选 Bundle 的服务不就绪时，Agent 照常运行，相关路由返回 503 `BUNDLE_SERVICE_UNAVAILABLE`，Web 在设置和 Agent 页显示 `BundleService` 的状态。`api` 的就绪不依赖任何 Bundle 服务。
+- Bundle 的 `service/*.yaml` 是普通 Kubernetes YAML（自定义 Bundle 存在表 `bundle`），`bundle.json` 的 `service` 声明 `protocol`、`uses`、`database`。只允许白名单 kind，不能写命名空间。
+- 约定：与 Bundle 同名、端口名 `http` 的 Service；智能体经 runtime 网关 `/bundles/<name>/x`（服务收到 `/<name>/x`），用户经公共网关 `/api/bundles/<name>/x`（服务收到 `/api/<name>/x`）。网关用路径里的名字找 Service，新增服务不改网关。
+- 每个 Bundle 一个 `BundleService`（CRD，`spec` 是清单与摘要，`status` 是 `applying`/`ready`/`incompatible`/`error`）。controller 每 5 秒按 Bundle 目录调谐：写 Secret `axp-<name>`（网关地址、令牌、数据库、配置……）和清单里的对象（server-side apply，ownerReference 指向 `BundleService`，Pod 模板带版本摘要），删掉清单里没有了的对象，读 kstatus 式的就绪和 `/.well-known/axp-service`。删 `BundleService` 由 Kubernetes 级联删除，PVC 与数据库保留。
+- 与计划的差别：没有用 controller-runtime，也没有 watch：controller 已有循环和 advisory lock，一个 5 秒的周期调谐（摘要不变时只是幂等的 apply）就够了，少一个依赖和一套事件机制；状态是一个 `state` 加 `message`，不是多个 conditions；`external`（外部端点）没有做，需要时再加。
+- 权限：controller 的 ServiceAccount 只在 `<ns>-agents`、`<ns>-bundles` 有 Role（`deploy/k3s/workloads.yaml`），API 只能读 `bundleservices`。
 
 ## 内置 Bundle 服务
 
@@ -235,12 +158,14 @@ CPA 嵌在 `api` 进程里：模型账号和目录的管理接口 `/api/llm/*` �
 
 ## 部署形态
 
-- **安装物**：`deploy/k3s/` 下一个 Kustomize base（CRD、namespace、工作负载、NetworkPolicy、RBAC、CronJob）和一个 `overlays/production`；一个安装脚本从 `~/.config/axp/production.env` 生成 Secret，再 `kubectl apply -k`。
-- **k3s**：单节点，关闭 traefik 和 servicelb。
-- **入口**：`gateway` 绑定 `127.0.0.1:24180`。宿主 Caddy、Cloudflare Access 配置不变：Access 放行 `/remote/`、`/share/artifacts/`、`/preview/artifacts/`，其余都要登录。
-- **存储**：`local-path`，PV 回收策略 `Retain`，PVC 与原 Docker 卷同名（`axp-postgres`、`axp-nats`、`axp-objects`、`axp-forge`、`axp-llm`、`axp-relay`、`axp-openobserve`、`axp-agent-<id>`）。
-- **备份**：每日 CronJob：`pg_dumpall` 加 `local-path` 目录快照，写到 `~/axp-backups`，保留 7 天。
-- **迁移**：每次部署先用新镜像跑 `axp-control-plane migrate` 的 Job，成功后才更新工作负载；失败时旧版本继续运行。
-- **就绪与观测**：每个工作负载有 `readinessProbe`（`api` 两个 listener 各一个）；`OTEL_SERVICE_NAME` 沿用现有命名，`service.version` 为镜像 tag（git commit）；Agent 和 Bundle 服务的 OTLP 都发到 `otel-collector`。
-- **更新与回滚**：镜像 tag 即 git commit；回滚是用上一个 tag 重新 apply。迁移保持向前兼容。
-- **资源**：现有服务实测约 1.9 GiB（核心 0.35、memory 0.85、基础设施 0.7），每个 Agent 0.06–0.5 GiB；k3s 自身约 0.5–0.8 GiB，buildkitd 空闲约 0.1 GiB。8 核 / 16 GiB 的单机足够。
+已实现，操作见 [deploy/README.md](../../../deploy/README.md)。
+
+- **清单**：`deploy/k3s/infra`（基础设施与 CRD，开发和生产共用）、`deploy/k3s/app`（AXP 自己）、`deploy/k3s/production` 与 `deploy/k3s/dev` 两个 overlay、`deploy/k3s/workloads.yaml`（`<ns>-agents`/`<ns>-bundles` 的命名空间、网络策略和权限）。不用 Helm。
+- **脚本**：`deploy/k3s/deploy.sh` 从 `~/.config/axp/production.env` 写 Secret，部署基础设施，用集群里的 BuildKit 构建镜像，跑迁移 Job，再部署 AXP；`--version` 重新部署仓库里已有的版本（回滚）。
+- **k3s**：单节点，关闭 traefik、servicelb、metrics-server，flannel 用 host-gw；`registries.yaml` 写明两个集群内仓库的固定地址；`fs.inotify.max_user_instances` 调到 1024（k3s 和它的容器会用完 root 的默认 128 个，API 里 CLIProxyAPI 的文件监视就起不来）。
+- **入口**：`gateway` 在节点网络上绑定 `127.0.0.1:24180`，宿主 Caddy、Cloudflare Access 配置不变。
+- **存储**：StorageClass `axp`（local-path，`Retain`）。PVC 名不带 `axp-` 前缀（命名空间已经区分）：`postgres`、`nats`、`objects`、`openobserve`、`forge`、`llm`、`registry`、`buildkit`、`backups`，`agenvo-relay`（`axp-bundles`），`agent-<id>`（`axp-agents`）。
+- **备份**：每日 CronJob 把 `pg_dumpall` 写到卷 `backups`，保留 7 份；其他卷手动复制。
+- **迁移**：每次部署先用新镜像跑 `axp-control-plane migrate` 的 Job，成功后才更新工作负载。
+- **就绪与观测**：每个工作负载有 `readinessProbe`；`service.version` 来自 `AXP_VERSION`（ConfigMap `axp`）；Agent 和 Bundle 服务的 OTLP 发到 `otel-collector`。
+- **资源**：现有服务实测约 1.9 GiB（核心 0.35、memory 0.85、基础设施 0.7），每个 Agent 0.06–0.5 GiB；k3s 自身约 0.5–0.8 GiB，buildkitd 空闲约 0.1 GiB。

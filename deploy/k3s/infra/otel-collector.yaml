@@ -1,6 +1,6 @@
-# OpenTelemetry Collector for agent runtimes (production accessory and dev's
-# docker mode). Runtimes run agent code and hold no secrets, so they send OTLP
-# here without credentials; the collector adds OpenObserve's.
+# OpenTelemetry Collector for agent runtimes and bundles' services. They run
+# code and hold no secrets, so they send OTLP here without credentials; the
+# collector adds OpenObserve's (deploy/k3s/infra/observe.yaml).
 receivers:
   otlp:
     protocols:

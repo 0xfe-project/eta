@@ -8,7 +8,7 @@ import {
 import { z } from "zod";
 import { memoryApi } from "@/lib/api";
 
-// Agents' long-term memories (/api/memory/v1). See apps/memory-service.
+// Agents' long-term memories (/api/bundles/memory/v1). See apps/memory-service.
 
 const memorySchema = z.object({
   id: z.string(),

@@ -72,7 +72,7 @@ async function recall(event) {
   // Steers add prompts to a running turn; the turn keeps them all.
   const path = pending(event.turn_id);
   writeFileSync(path, JSON.stringify([...(read(path) ?? []), prompt]));
-  const { memories } = await post("/memory/recall", { query: prompt });
+  const { memories } = await post("/bundles/memory/recall", { query: prompt });
   if (!memories.length) {
     return {};
   }
@@ -101,7 +101,7 @@ async function capture(event) {
     messages.push({ role: "assistant", content: event.last_assistant_message });
   }
   if (messages.length) {
-    await post("/memory/capture", { model: event.model, messages });
+    await post("/bundles/memory/capture", { model: event.model, messages });
   }
   return {};
 }

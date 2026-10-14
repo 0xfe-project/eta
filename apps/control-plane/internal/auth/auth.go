@@ -94,3 +94,26 @@ func aead(secret []byte, purpose string) (cipher.AEAD, error) {
 	}
 	return cipher.NewGCM(block)
 }
+
+// BundleToken is a bundle's service's credential for the runtime gateway
+// ("bundle.<name>.<token>"); it works while the bundle's service uses AXP.
+func BundleToken(secret []byte, bundle string) string {
+	return "bundle." + bundle + "." + sign(secret, "bundle:"+bundle)
+}
+
+// BundleOf is the bundle whose token this is, or "".
+func BundleOf(secret []byte, token string) string {
+	rest, ok := strings.CutPrefix(token, "bundle.")
+	name, _, _ := strings.Cut(rest, ".")
+	if !ok || name == "" || !Matches(token, BundleToken(secret, name)) {
+		return ""
+	}
+	return name
+}
+
+// BundleSecret is a secret of the bundle's service's own (purpose
+// separates several), which the control plane can derive too: the agenvo
+// relay's administrator secret, its database's password.
+func BundleSecret(secret []byte, purpose string) string {
+	return sign(secret, "bundle-secret:"+purpose)
+}

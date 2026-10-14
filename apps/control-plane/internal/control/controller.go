@@ -39,12 +39,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const (
-	// The OpenTelemetry Collector on the runtime network.
-	runtimeOTLPEndpoint = "http://otel-collector:4318"
-	// Unused agent images are removed this often.
-	pruneEvery = 10 * time.Minute
-)
+// Unused agent images are removed this often.
+const pruneEvery = 10 * time.Minute
 
 type Controller struct {
 	DB      *pgxpool.Pool
@@ -55,9 +51,11 @@ type Controller struct {
 	Secret  []byte
 	// The plugins bundles name (apps/agent-runtime/plugins).
 	PluginsDir string
-	// Where runtimes reach AXP's services (the runtime gateway) and NATS.
+	// Where runtimes reach AXP's services (the runtime gateway), NATS and
+	// the OpenTelemetry Collector (which holds the credentials).
 	RuntimeGatewayURL string
 	NATSURL           string
+	OTLPURL           string
 	// Calls to runtimes' control API.
 	HTTP *http.Client
 	// Wakes the loop for an agent, when a build finishes.
@@ -235,10 +233,6 @@ func (c *Controller) ensureContainer(ctx context.Context, agent *chat.AgentRecor
 	runtime, exists := c.runtimes[agent.ID]
 	switch {
 	case exists && runtime.Config == spec.Config:
-		if runtime.State == container.Stopped {
-			// Stopped by hand, or the daemon restarted.
-			return true, c.Driver.Start(ctx, runtime.ContainerID)
-		}
 		return false, nil
 	case exists:
 		// Its configuration changed (or it was restarted): replaced between
@@ -363,7 +357,7 @@ func (c *Controller) spec(ctx context.Context, agent *chat.AgentRecord, img imag
 		"AXP_CONFIG_VERSION": fmt.Sprint(agent.ConfigVersion),
 		// The runtime and Codex export without credentials; the collector
 		// holds them. Resource attributes tie records to the agent.
-		"OTEL_EXPORTER_OTLP_ENDPOINT": runtimeOTLPEndpoint,
+		"OTEL_EXPORTER_OTLP_ENDPOINT": c.OTLPURL,
 		"OTEL_SERVICE_NAME":           "agent-runtime",
 		"OTEL_RESOURCE_ATTRIBUTES":    resourceAttributes("axp.agent.id=" + agent.ID),
 	} {

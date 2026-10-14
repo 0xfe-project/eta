@@ -7,6 +7,13 @@
     "build": {
       "inputs": ["package.json", "$TURBO_ROOT$/scripts/build/agenvo.sh"],
       "outputs": ["out/**", "!out/src/**"]
+    },
+    // The agenvo bundle's service: the relay from that build.
+    "image:linux-amd64": {
+      "dependsOn": ["build"]
+    },
+    "image:linux-arm64": {
+      "dependsOn": ["build"]
     }
   }
 }

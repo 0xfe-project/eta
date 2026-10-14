@@ -1,0 +1,11 @@
+# The controller's and the API's identities; what they may do, in the
+# agents' and bundles' namespaces only, is in deploy/k3s/workloads.yaml.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: controller
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: api

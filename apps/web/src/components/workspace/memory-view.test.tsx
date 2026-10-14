@@ -94,7 +94,7 @@ it("filters through the API, resets pagination, and restores the full cached lis
     .spyOn(globalThis, "fetch")
     .mockImplementation(async (input) => {
       expect(String(input)).toBe(
-        "/api/memory/v1/agents/a/memories?source=user",
+        "/api/bundles/memory/v1/agents/a/memories?source=user",
       );
       return new Response(
         JSON.stringify({
@@ -153,7 +153,7 @@ it("combines debounced search with source and hides stale results while loading"
     await pause(350);
   });
   expect(fetch).toHaveBeenLastCalledWith(
-    "/api/memory/v1/agents/a/memories?q=%E9%83%A8%E7%BD%B2&source=user",
+    "/api/bundles/memory/v1/agents/a/memories?q=%E9%83%A8%E7%BD%B2&source=user",
     { signal: expect.any(AbortSignal) },
   );
   await act(async () => {

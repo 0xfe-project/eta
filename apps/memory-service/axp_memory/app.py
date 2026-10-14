@@ -1,5 +1,8 @@
 """HTTP surface, for runtimes under /memory and for the browser under /api/memory.
 
+It is the memory bundle's service: runtimes reach it as /bundles/memory/*
+through the runtime gateway, the browser as /api/bundles/memory/* through
+the gateway, which take /bundles off (docs/architecture/bundles.md#服务).
 The runtime gateway authenticates the runtime and sets X-AXP-Agent-Id; that
 header is the only identity there, so an agent reaches nothing but its own
 memories.
@@ -37,6 +40,9 @@ RECALL_MIN_SCORE = 0.2
 MAX_TEXT = 8000
 CAPTURE_BACKLOG = 1000
 SEARCH_LIMIT = 50
+# The bundle's service contract (bundle.json's protocol) and this service's version.
+PROTOCOL = "axp.memory/1"
+VERSION = "0.1.0"
 
 
 def create_app(provider: MemoryProvider):
@@ -181,6 +187,11 @@ def create_app(provider: MemoryProvider):
     @mcp.custom_route("/up", methods=["GET"])
     async def up(_: Request) -> Response:
         return Response(status_code=204)
+
+    # What AXP checks the bundle's service against (bundle.json's protocol).
+    @mcp.custom_route("/.well-known/axp-service", methods=["GET"])
+    async def describe(_: Request) -> Response:
+        return JSONResponse({"protocol": PROTOCOL, "version": VERSION})
 
     app = mcp.streamable_http_app()
     app.state.captures = captures

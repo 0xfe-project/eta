@@ -2,6 +2,26 @@
 
 本文是把现状改成[目标架构](architecture.md)的步骤：基线、拆分的任务、每步改哪些文件、生产迁移与回滚、验收、成本，以及需要用户决定的事。AXP 任务 #117；审阅后再分派实施。
 
+## 实现状态（2026-10-14）
+
+T1–T5 和 T7 的代码已在本分支实现；T6（生产切换）没有执行，生产仍在 Kamal 上。合并本分支就是切换：之后仓库里只有 k3s 的部署，切换用 `deploy/k3s/migrate-from-kamal.sh`（[deploy/README.md](../../../deploy/README.md#从-kamal-迁移)）。
+
+| 任务 | 结果                                                                                                                                                                                                                     |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| T1   | `apps/llm-gateway` 删除，CPA 在 `serve` 进程里（`internal/models`），`/api/llm` 在公共 listener，`/v1` 和模型目录在内部 listener                                                                                         |
+| T2   | `deploy/k3s`：infra/app 两组清单、production/dev 两个 overlay、`workloads.yaml`、`deploy.sh`；本机已装 k3s v1.36.5                                                                                                       |
+| T3   | `container.Driver` 只剩 Kubernetes 实现（Pod + PVC、`buildctl`、仓库 API）；Docker driver、Docker socket、`ensure-runtime-network` 删除                                                                                  |
+| T4   | `BundleService` CRD + controller 里 5 秒一次的调谐（`internal/bundlesvc`），没有用 controller-runtime；Bundle 令牌、`?bundle=`/`?use=llm` 的 runtime-auth；网关按路径找服务；Web 显示服务状态、可编辑自定义环境包的 YAML |
+| T5   | memory、agenvo relay 是内置必选环境包的服务，镜像 `axp-memory`、`axp-relay`；memory 有自己的库，经 runtime 网关用令牌调模型                                                                                              |
+| T7   | `deploy/deploy.yml`、`deploy.sh`、`secrets`、`ports.env`、`relay.json.erb`、`scripts/dev-container.sh` 删除；开发也在 k3s 上（U1 按默认）                                                                                |
+
+验证：
+
+- 开发栈（`scripts/dev.sh`）在 k3s 上跑通：BuildKit 18 秒构建智能体镜像，Pod 启动、聊天、memory MCP（`/bundles/memory`）、Web 记忆页（`/api/bundles/memory`）、后台抽取用 Bundle 令牌调模型并记在对应智能体名下；relay 就绪，经开发的 HTTPS 地址可达。
+- 生产清单在临时命名空间 `staging` 里完整跑过一次（之后删除）：迁移 Job、六个工作负载、RBAC 下 controller 部署 Bundle 服务、智能体聊天、记忆写入和抽取。发现并修正：kustomize 不接受绝对路径；root 的 inotify 实例用完导致 CPA 的文件监视起不来（README 里加了 sysctl）。
+- 迁移脚本的卷复制方式（`docker run … tar | kubectl exec … tar`）用测试卷验证过属主和权限保留；完整迁移脚本没有对生产数据运行过。
+- `bun run check` 全部通过（Web 的几个界面测试在机器负载约 98 时超时，负载正常后重跑通过）。
+
 ## 基线
 
 - 代码：main `d0c1e16`（#241 / PR #246 合并后）。Kamal 8 个角色：`gateway`、`runtime-gateway`、`web`、`api`（`serve`）、`llm`、`memory`、`routine-worker`、`controller`；accessory：postgres、nats、relay、s3、openobserve、otel-collector。

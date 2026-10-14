@@ -1,0 +1,11 @@
+# Development's HTTPS address (scripts/dev.sh), AXP's public URL there: the
+# browser's site behind a self-signed certificate for localhost, so remote
+# computers and the agenvo relay (which takes only an HTTPS base URL) work
+# as in production, where TLS ends before the gateway.
+https://localhost:{$AXP_PUBLIC_PORT} {
+	bind 127.0.0.1
+	tls /etc/axp-tls/cert.pem /etc/axp-tls/key.pem
+	reverse_proxy 127.0.0.1:{$AXP_GATEWAY_PORT} {
+		flush_interval -1
+	}
+}

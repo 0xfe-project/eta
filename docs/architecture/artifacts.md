@@ -11,7 +11,7 @@
 | 上传者的身份 | 要么复制远程电脑令牌的校验，要么每次回调控制面           | 直接复用：runtime 网关的 `X-AXP-Agent-Id`、`/remote` 的电脑令牌 |
 | 绑定任务     | 要调控制面的接口写时间线、校验“这台电脑能不能写这个任务” | 同一事务里 `tasks.RecordArtifact`，复用 `remoteTask` 的权限检查 |
 | 聊天卡片     | 控制面仍要认识 `artifact` 这种 ref                       | 同左，只多一个 ref kind                                         |
-| 部署         | 新角色、新库、新网关路由、新密钥                         | 没有新进程；只多一个 S3 accessory（可换成外部 S3）              |
+| 部署         | 新角色、新库、新网关路由、新密钥                         | 没有新进程；只多一个 S3（可换成外部 S3）                        |
 
 独立服务的隔离收益很小（对象存储本来就在 adapter 后面），却要多一套身份和跨服务写入。所以 Artifact 是控制面的 `internal/artifacts`（领域：校验、版本、分享、预览能力）加 `internal/objects`（S3 adapter，只认 key 和字节），HTTP 只在 `internal/api/artifacts.go`。数据库存元数据和关联，S3 存对象。
 
@@ -91,12 +91,12 @@ AXP 自己没有登录，浏览器 API 靠边缘的 Cloudflare Access，原先�
 
 控制面的配置（`internal/config`）：`AXP_S3_ENDPOINT`（为空时 Artifact 关闭，接口返回 503 `ARTIFACTS_UNAVAILABLE`）、`AXP_S3_BUCKET`（默认 `axp-artifacts`）、`AXP_S3_REGION`（默认 `us-east-1`）、`AXP_S3_ACCESS_KEY_ID`、`AXP_S3_SECRET_ACCESS_KEY`。桶不存在时第一次使用时创建（外部 S3 的凭据没有建桶权限时，请预先建好）。
 
-| 环境 | 服务                                                                                                                                                                                                               |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 开发 | `scripts/dev.sh` 启动共享的 `axp-dev-s3`（SeaweedFS `mini`，卷 `axp-dev-s3`），只发布到 `127.0.0.1:18333`，不在 runtime 网络上；控制面的开发默认值指向它                                                           |
-| 生产 | 默认是 accessory `s3`（SeaweedFS，卷 `axp-objects`，Kamal 网络上的 `axp-s3:8333`，不发布端口、不在 runtime 网络上）；`AXP_S3_BUILTIN=false` 时不启动它，改用外部 S3。见 [deploy/README.md](../../deploy/README.md) |
+| 环境 | 服务                                                                                                                                                                         |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 开发 | 开发基础设施（`deploy/k3s/dev`）里的 `s3`（SeaweedFS `mini`），控制面的开发默认值指向它                                                                                      |
+| 生产 | 默认是命名空间 `axp` 里的 `s3`（SeaweedFS，卷 `objects`，`s3.axp.svc:8333`）；设了 `AXP_S3_ENDPOINT` 时改用外部 S3。见 [deploy/README.md](../../deploy/README.md#存储与备份) |
 
-SeaweedFS 在同一个容器里还提供不鉴权的 filer、master、volume 等接口，所以只放在 Kamal 网络上：能连到它的只有 AXP 自己的角色。
+SeaweedFS 在同一个容器里还提供不鉴权的 filer、master、volume 等接口，所以网络策略只让 AXP 自己的命名空间连它：智能体和环境包的服务连不到。
 
 ## 验证
 

@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  bundleDraft,
   useBundles,
   useDeleteBundle,
   usePlugins,
@@ -24,8 +25,29 @@ import {
 } from "@/queries/chat";
 
 // Bundles are what agents are built from: a script run into the agent's
-// image and the plugins it adds. AXP's own are read only; the user's are
-// edited here, and every agent that loads one is rebuilt.
+// image and the plugins it adds, and a service some run in the cluster
+// (docs/architecture/bundles.md#服务). AXP's own are read only; the user's
+// are edited here, and every agent that loads one is rebuilt.
+
+const serviceStates: Record<string, string> = {
+  applying: "部署中",
+  ready: "运行中",
+  incompatible: "协议不兼容",
+  error: "出错",
+};
+
+function ServiceStatus({ bundle }: { bundle: Bundle }) {
+  if (!bundle.service) return null;
+  const status = bundle.service_status;
+  const state = status ? (serviceStates[status.state] ?? status.state) : "未知";
+  return (
+    <p className="text-xs text-muted-foreground">
+      服务：{state}
+      {status?.version ? ` · ${status.version}` : ""}
+      {status?.message ? ` · ${status.message}` : ""}
+    </p>
+  );
+}
 
 const showError = (error: Error) => toast.error(error.message);
 
@@ -40,7 +62,7 @@ function BundleDialog({
 }) {
   const { data: plugins } = usePlugins();
   const save = useUpdateBundle();
-  const [draft, setDraft] = useState<BundleDraft>(bundle);
+  const [draft, setDraft] = useState<BundleDraft>(() => bundleDraft(bundle));
   const toggle = (name: string, on: boolean) =>
     setDraft((d) => ({
       ...d,
@@ -96,6 +118,40 @@ function BundleDialog({
                 setDraft((d) => ({ ...d, script: e.target.value }))
               }
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="bundle-service">服务</Label>
+            <Textarea
+              id="bundle-service"
+              rows={6}
+              spellCheck={false}
+              className="max-h-[40dvh] min-h-24 font-mono text-xs leading-relaxed"
+              placeholder={`# 可选：在集群里运行的 Kubernetes 对象，载入它的智能体经 /bundles/${bundle.name}/ 访问\n# 需要一个名为 ${bundle.name}、端口名 http 的 Service`}
+              value={draft.manifests}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, manifests: e.target.value }))
+              }
+            />
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+              <Label className="gap-2">
+                <Checkbox
+                  checked={draft.usesModels}
+                  onCheckedChange={(on) =>
+                    setDraft((d) => ({ ...d, usesModels: on === true }))
+                  }
+                />
+                可调用模型
+              </Label>
+              <Label className="gap-2">
+                <Checkbox
+                  checked={draft.database}
+                  onCheckedChange={(on) =>
+                    setDraft((d) => ({ ...d, database: on === true }))
+                  }
+                />
+                独立数据库
+              </Label>
+            </div>
           </div>
           {plugins?.length ? (
             <div
@@ -179,6 +235,7 @@ export function BundleSettings() {
                     插件：{bundle.plugins.join("、")}
                   </p>
                 ) : null}
+                <ServiceStatus bundle={bundle} />
               </div>
               {bundle.builtin ? null : (
                 <div className="flex shrink-0 gap-1">

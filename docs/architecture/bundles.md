@@ -51,7 +51,7 @@ RUN axp-plugins chat /opt/axp/plugins /etc/codex /opt/axp/plugins
 
 最后一步运行插件自己的 `setup`、把插件编译成 Codex plugin 的本地 marketplace、在 `/etc/codex/config.toml` 里免除插件工具的确认，并把插件的 hook 合成一份 akhook 配置（[插件](plugins.md#chat-目标编译成-codex-plugin)）。
 
-镜像的标签是内容的摘要：基础镜像的 ID、Dockerfile、每个环境包的文件（或脚本）和每个插件的文件。所以环境包相同的智能体共用一个镜像；改一个环境包、一个插件，或部署了新的 runtime，摘要就变，controller 构建新镜像，再在智能体空闲时替换它的容器。构建在后台一次一个，用宿主机 Docker 的 BuildKit（`docker build`，生产的 controller 镜像里带着 Docker CLI）；没有容器在用的旧镜像每 10 分钟清理一次。
+镜像的标签是内容的摘要：基础镜像的 ID、Dockerfile、每个环境包的文件（或脚本）和每个插件的文件。所以环境包相同的智能体共用一个镜像；改一个环境包、一个插件，或部署了新的 runtime，摘要就变，controller 构建新镜像，再在智能体空闲时替换它的容器。构建在后台一次一个，用集群里的 BuildKit（`buildctl`，controller 的镜像里带着它），镜像推到集群里的仓库，节点从那里拉（`deploy/k3s/infra/images.yaml`）；没有智能体在用的旧镜像每 10 分钟从仓库删除，仓库每晚回收空间。环境包目录里的 `service/` 不进智能体的镜像。
 
 构建失败时，智能体显示为不可用，编辑器里显示构建输出的末尾。修改环境包、修改智能体或重启智能体后再构建。
 
@@ -70,3 +70,23 @@ RUN axp-plugins chat /opt/axp/plugins /etc/codex /opt/axp/plugins
 ## 必选环境包
 
 内置的 `groups` 和 `memory` 在 `bundle.json` 中声明 `required: true`，没有用户必填配置。`POST/PATCH /agents` 保存选择时自动包含必选项，编辑器把它们显示为已选且不可取消。必选只约束智能体的选择，不另建启用状态。旧智能体的补齐属于 #237 的手工迁移，controller 启动时不改数据库。
+
+## 服务
+
+环境包可以带一个在集群里运行的服务，供载入它的智能体使用（[#243](https://github.com/AkaraChen/axp/issues/243)）。内置的 `memory`（[记忆](memory.md)）和 `agenvo`（远程电脑的中继，见[任务与远程电脑](tasks.md)）就是这样：它们必选，没有关闭开关。
+
+```json
+"service": { "protocol": "axp.memory/1", "uses": ["llm"], "database": true }
+```
+
+- **清单**是普通的 Kubernetes YAML：内置环境包的在 `service/*.yaml`，自定义环境包的在 `POST/PATCH /api/v1/bundles` 的 `service.manifests`。只能有 Deployment、StatefulSet、Service、ConfigMap、Secret、PVC、Job、CronJob、ServiceAccount，不能写命名空间；不符合时整个服务报错，不部分应用。
+- **约定**：有一个与环境包同名的 Service，端口名 `http`。智能体经 runtime 网关的 `/bundles/<name>/x` 访问它（服务收到 `/<name>/x`，只有载入了这个环境包的智能体能访问，身份在 `X-AXP-Agent-Id`），用户经公共网关的 `/api/bundles/<name>/x`（服务收到 `/api/<name>/x`）。服务按路径前缀区分两者。网关不用为新服务改配置。
+- **AXP 给它的**都在 Secret `axp-<name>` 里：`AXP_GATEWAY_URL`（runtime 网关）、`OTEL_EXPORTER_OTLP_ENDPOINT`（无凭据的 Collector）、`AXP_PUBLIC_URL`、`AXP_VERSION`、`AXP_BUNDLE_SECRET`（它自己的密钥，控制面也能派生）、声明了 `uses` 时的 `AXP_BUNDLE_TOKEN`、`database: true` 时的 `DATABASE_URL`（AXP 在自己的 PostgreSQL 上建的库 `<主库>_bundle_<name>` 和同名账号，带 pgvector），以及环境包配置（`config`）完整时的值。清单用 `envFrom` 或 `secretKeyRef` 引用。
+- **令牌**只能用 `uses` 里声明的：`llm`（模型的 `/v1`）和其他环境包的服务（按名字）。它碰不到插件路由、GitHub 凭据和管理接口；在集群里本身不给任何权限。
+- **镜像**：名字是 `axp-<x>`、没有仓库和标签的镜像是 AXP 自己构建的，换成集群仓库里本次部署的版本；其他镜像原样使用。
+- **共享**：每个 AXP 只有一份，所有载入它的智能体共用，服务自己按智能体隔离数据。
+- **发现**：`protocol` 写了时，服务就绪后 controller 读一次它的 `/.well-known/axp-service`（`{"protocol", "version"}`），协议不同就是 `incompatible`。
+
+controller 每 5 秒按环境包目录调谐一次（`internal/bundlesvc`）：为每个有服务的环境包写一个 `BundleService` 对象（`deploy/k3s/infra/crd.yaml`，命名空间 `<ns>-bundles`），把清单和 Secret 用 server-side apply 应用在它下面（`ownerReference` 指向它，Pod 模板带上版本摘要，任何一项变化都会滚动），删掉清单里已经没有的对象，再把状态（`applying`、`ready`、`incompatible`、`error`）写回它的 `status`。`kubectl get bundleservices -n <ns>-bundles` 能看到全部；`GET /api/v1/bundles` 的 `service_status` 也是它。环境包或它的服务没了，就删掉 `BundleService`，Kubernetes 级联删除它的对象；**卷（PVC）和数据库保留**。手工修改 `BundleService` 会在下一轮被覆盖。
+
+服务不就绪时，载入它的智能体照常运行，访问它的路由返回网关的 503；控制面的就绪不依赖任何环境包的服务。

@@ -6,6 +6,8 @@
     "commit": "5ec6084157f7544e1317eb189f0b93be09a565fa"
   },
   "scripts": {
-    "build": "bash ../../scripts/build/agenvo.sh"
+    "build": "bash ../../scripts/build/agenvo.sh",
+    "image:linux-amd64": "bash ../../scripts/build/image.sh relay linux amd64",
+    "image:linux-arm64": "bash ../../scripts/build/image.sh relay linux arm64"
   }
 }

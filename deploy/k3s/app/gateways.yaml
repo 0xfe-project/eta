@@ -1,0 +1,76 @@
+# The two gateways (apps/gateway). The browser's is on the node's network,
+# on 127.0.0.1:24180, where the host's Caddy (behind Cloudflare Access)
+# proxies to it: nothing else publishes AXP. The runtime gateway is agents'
+# and bundles' services' only way in.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+spec:
+  # One holds the port at a time.
+  strategy: { type: Recreate }
+  selector: { matchLabels: { app: gateway } }
+  template:
+    metadata: { labels: { app: gateway } }
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      containers:
+        - name: caddy
+          image: axp
+          command: [caddy, run, --config, /app/apps/gateway/Caddyfile]
+          env:
+            - { name: AXP_GATEWAY_SITES, value: public.caddy }
+            - { name: AXP_GATEWAY_BIND, value: 127.0.0.1 }
+            - { name: AXP_GATEWAY_PORT, value: "24180" }
+            - { name: AXP_UPSTREAM_OBSERVE, value: "openobserve:5080" }
+          readinessProbe:
+            httpGet: { host: 127.0.0.1, path: /up, port: 24180 }
+            periodSeconds: 2
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runtime-gateway
+spec:
+  selector: { matchLabels: { app: runtime-gateway } }
+  template:
+    metadata: { labels: { app: runtime-gateway } }
+    spec:
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      containers:
+        - name: caddy
+          image: axp
+          command: [caddy, run, --config, /app/apps/gateway/Caddyfile]
+          env: [{ name: AXP_GATEWAY_SITES, value: runtime.caddy }]
+          ports: [{ containerPort: 8090 }]
+          readinessProbe:
+            tcpSocket: { port: 8090 }
+            periodSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: runtime-gateway
+spec:
+  selector: { app: runtime-gateway }
+  ports: [{ port: 8090 }]
+---
+# Agents' runtimes and bundles' services reach the runtime gateway (and,
+# deploy/k3s/infra/policies.yaml, NATS and the collector).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: runtime-gateway
+spec:
+  podSelector: { matchLabels: { app: runtime-gateway } }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchExpressions: [
+              { key: axp.dev/role, operator: In, values: [agents, bundles] },
+            ]
