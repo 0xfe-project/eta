@@ -8,9 +8,9 @@
 
 1. **先做 #245（LLM 合入 control-plane），不依赖 k3s**，在 Kamal 上就能上线，角色 8→7。它定下了“internal listener 是 Agent 和 Bundle 服务唯一的平台入口”，后面的 Bundle 身份都建在它上面。
 2. **k3s 采用干净方案**：Agent 也由 Kubernetes 运行（`container.Driver` 的 Kubernetes 实现），镜像用集群内 BuildKit 构建、推到集群内 registry。不做“核心进 k3s、Agent 仍走宿主 Docker socket”的混合态：那要永久桥接两套网络，NetworkPolicy 管不到 Agent。
-3. **Bundle 服务是独立工作负载，不做 sidecar**；每个部署一份，所有载入该 Bundle 的 Agent 共享，按请求里的 `X-AXP-Agent-Id` 区分。control-plane 只做“把这个 Bundle 的 YAML apply 到 `axp-bundles` namespace、按标签 prune、读 kstatus 判就绪、发 Bundle 令牌”，apply/prune/状态用 `sigs.k8s.io/cli-utils`，不写 Operator/CRD。
+3. **Bundle 服务是独立工作负载，不做 sidecar**；每个部署一份，所有载入该 Bundle 的 Agent 共享，按请求里的 `X-AXP-Agent-Id` 区分。control-plane 把每个 Bundle 服务写成一个 `BundleService` 自定义资源（**一个 CRD**，见[要不要用 CRD](#要不要用-crd)），controller 进程里用 controller-runtime 的一个 Reconcile 把它展开成子资源、按 ownerReference 回收、用 kstatus 判就绪；另外发 Bundle 令牌。不做 webhook、多版本转换，Agent 不做成 CRD。
 4. **Memory、agenvo relay 变成内置必选 Bundle 的服务**：部署清单从核心部署里移到各自 Bundle 目录，经同一条 Bundle 服务通路上线；路由用约定（`/bundles/<name>/`），新增 Bundle 服务不改网关。
-5. **代码量不会在第一阶段下降**。真正删掉的是 Kamal（`deploy.yml`/`deploy.sh` ≈ 660 行 + relay 打包）、llm-gateway 的进程外壳、Docker driver 与 Docker socket；新增的是 Kustomize 清单、Kubernetes driver、Bundle 服务 applier。估算净变化接近持平，换来的是“新增一个服务 = 一个 Bundle 目录”，不再改 9 个地方（[新增服务清单](../architecture/services.md)）。运维上 k3s 本身多一层要升级的东西，这是用户为 Bundle 服务能力付出的真实代价。
+5. **代码量不会在第一阶段下降**。真正删掉的是 Kamal（`deploy.yml`/`deploy.sh` ≈ 660 行 + relay 打包）、llm-gateway 的进程外壳、Docker driver 与 Docker socket；新增的是 Kustomize 清单、Kubernetes driver、`BundleService` CRD 与它的 Reconcile。估算净变化接近持平，换来的是“新增一个服务 = 一个 Bundle 目录”，不再改 9 个地方（[新增服务清单](../architecture/services.md)）。运维上 k3s 本身多一层要升级的东西，这是用户为 Bundle 服务能力付出的真实代价。
 
 ## 两种方案比较
 
@@ -72,7 +72,7 @@ flowchart LR
   RGW -->|"/bundles/&lt;name&gt;/*"| MEM & UB
   A1 & A2 --> NATS & OTC
   CTL -->|"client-go: Pod/PVC"| NSAgents
-  CTL -->|"cli-utils apply/prune"| NSBundles
+  CTL -->|"Reconcile BundleService"| NSBundles
   CTL -->|"control API :8080"| A1
   CTL --> BK --> REG
   RW -->|"/v1"| API
@@ -162,17 +162,64 @@ apps/agent-runtime/bundles/memory/
 
 ### control-plane 真正要管的
 
-| 管                                                                                                        | 不管（交给 Kubernetes/现成库）                      |
-| --------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| 期望集合：哪些 Bundle 有服务、内容摘要（YAML + 配置 + 令牌 generation）                                   | 滚动、重启、调度、探针：Deployment/kubelet          |
-| apply 与 prune：cli-utils applier，每个 Bundle 一个 inventory ConfigMap，server-side apply 字段属主 `axp` | 依赖顺序、等待就绪：cli-utils 的 kstatus            |
-| Bundle 令牌、配置 Secret、数据库角色                                                                      | 资源配额：namespace 的 `ResourceQuota`/`LimitRange` |
-| 状态：`applying` / `ready` / `degraded` / `incompatible` / `error`，写表，Web 显示                        | 日志：OTel（服务自己发到 otel-collector）           |
+| 管                                                                                                | 不管（交给 Kubernetes/现成库）                                       |
+| ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| 期望状态：`api` 把 Bundle 的服务写成 `BundleService`（来源仍是镜像里的内置 Bundle 和表 `bundle`） | 滚动、重启、调度、探针：Deployment/kubelet                           |
+| Reconcile：展开子资源、server-side apply、删除不再声明的子资源                                    | 删除整个 Bundle 时的级联回收：ownerReference + 垃圾回收器            |
+| Bundle 令牌、配置 Secret、数据库角色                                                              | 就绪判断：kstatus（`sigs.k8s.io/cli-utils/pkg/kstatus`，只用这个库） |
+| 状态写在 `BundleService.status.conditions`，`api` 只读它给 Web                                    | 资源配额：namespace 的 `ResourceQuota`/`LimitRange`                  |
 
-- 在 controller 的现有循环里做（它已经持有 advisory lock 保证单实例），摘要不变就不 apply，重启或重复提交不会重复创建。
-- RBAC：controller 的 ServiceAccount 在 `axp-bundles` 只有一个 Role，kind 白名单：Deployment、StatefulSet、Service、ConfigMap、Secret、PVC、Job、CronJob、ServiceAccount。没有 ClusterRole、没有 RBAC 对象、没有其他 namespace。`axp-bundles` 打 Pod Security `baseline`。用户 YAML 里出现白名单外的 kind 或别的 namespace 时整个 Bundle 报错，不部分应用。
-- 卸载/升级：卸载 prune 工作负载，**PVC 和数据库默认保留**（PVC 带 `axp.dev/keep` 注解，applier 跳过），设置里另有“删除数据”按钮。
-- 外部端点：`service.external: "https://…"` 时不 apply，网关路由到这个地址（ExternalName Service），其余契约相同。
+- RBAC：controller 的 ServiceAccount 在 `axp-bundles` 只有一个 Role，kind 白名单：Deployment、StatefulSet、Service、ConfigMap、Secret、PVC、Job、CronJob、ServiceAccount，加上 `bundleservices` 及其 `status`。没有 ClusterRole、没有 RBAC 对象、没有其他 namespace；`api` 只能读 `bundleservices`。`axp-bundles` 打 Pod Security `baseline`。用户 YAML 里出现白名单外的 kind 或别的 namespace 时整个 Bundle 报错（`Applied=False`），不部分应用。
+- 卸载/升级：子资源带 ownerReference，删掉 `BundleService` 即级联删除工作负载；**PVC 不挂 ownerReference，数据库角色也不随之删除**，默认保留，设置里另有“删除数据”按钮。
+- 外部端点：`spec.external: "https://…"` 时不展开 YAML，只建一个 ExternalName Service，其余契约相同。
+
+### 要不要用 CRD
+
+用户在 PR 审阅时问：走 CRD 会不会让实现更可控、实现方更好写。结论是**会，但只用在 Bundle 服务这一处**，而且只是一个 CRD 加一个 Reconcile，不是 Operator 框架。
+
+```yaml
+apiVersion: axp.dev/v1alpha1
+kind: BundleService
+metadata: { name: memory, namespace: axp-bundles }
+spec:
+  revision: 3f2a… # YAML + 配置 + 令牌 generation 的摘要
+  protocol: axp.memory/1
+  uses: [llm]
+  database: true
+  external: "" # 可选：外部端点，不部署
+  manifests: | # kustomize build 的结果
+    apiVersion: apps/v1
+    kind: Deployment
+    …
+status:
+  observedGeneration: 4
+  conditions: [Applied, Ready, Compatible] # 标准 metav1.Condition
+  version: 1.4.0
+  capabilities: [mcp, capture, recall]
+```
+
+|                    | 不用 CRD（原稿：cli-utils applier + 状态表）                                       | 一个 CRD + controller-runtime（推荐）                                                                     |
+| ------------------ | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| 期望状态与实际状态 | 摘要和状态在 PostgreSQL 的状态表里，实际资源在集群里，两边对账靠 controller 自己写 | 期望在 `spec`，结果在 `status`，同一个对象；`kubectl get bundleservices` 就能看全部状态                   |
+| 触发方式           | 跟着 controller 的 tick 轮询                                                       | watch：`BundleService` 改了、它拥有的 Deployment/StatefulSet 状态变了就入队，失败自动退避重试             |
+| 回收               | 每个 Bundle 一个 inventory ConfigMap，靠 cli-utils 做差集删除                      | 删除整个 Bundle：ownerReference 级联；只删了 YAML 中的某个对象：按标签列出白名单 kind 后删差集（≈ 30 行） |
+| 并发与冲突         | 自己保证同一时刻只有一个 controller 在 apply                                       | 工作队列保证同一对象不会并发 Reconcile；乐观并发冲突自动重试                                              |
+| 测试               | 要模拟 cli-utils 和数据库                                                          | `envtest`（真实 kube-apiserver，无节点）测 Reconcile 的输入输出；单元测试用 fake client                   |
+| 排查               | 看 controller 日志和状态表                                                         | `kubectl describe bundleservice memory`：conditions 与 Events                                             |
+| 估算代码           | applier 胶水 ≈ 300 行 + 状态表迁移与读写 ≈ 150 行                                  | 类型 ≈ 80 行（deepcopy 与 CRD YAML 由 controller-gen 生成）+ Reconcile ≈ 250 行                           |
+
+为什么实现方更好写：Reconcile 是一个纯函数式的契约——“给定这个 `BundleService`，让集群收敛到它，并写回 status”，幂等、可重入，不用关心是谁、何时、改了几次。重启、重复提交、半途失败都由同一条路径处理，这正是原稿里要单独保证的“重启不重复创建”。可控体现在三处：期望/结果都在一个可读的对象上；Bundle 的作者能用 `kubectl` 自己看自己的服务为什么没就绪；回收由 Kubernetes 的垃圾回收器完成，不是我们自己的差集代码。
+
+边界，避免它长成 Operator：
+
+- **只有一个 kind，`v1alpha1`，只加字段不改字段**，所以不需要转换 webhook；校验用 CRD 自带的 OpenAPI/CEL 规则，不写准入 webhook。
+- **它是投影，不是来源**。Bundle 的定义、配置（加密）和令牌 generation 仍在 PostgreSQL 和镜像里；`api` 在保存时用 server-side apply 写 `spec`（字段属主 `axp-api`），controller 启动时为内置 Bundle 补齐。手工 `kubectl edit spec` 会被下一次保存覆盖，文档写明。这样不出现两份真相，也不需要把数据库迁到 etcd。
+- **Reconcile 在现有的 `controller` 进程里**，controller-runtime 的 manager 关掉它自己的 leader election，在 controller 拿到现有的 advisory lock 之后才启动，所以不新增进程，也不出现两把锁。
+- **Agent 不做成 CRD**：Agent 的期望状态和对话锁、派发、忙闲判断在同一个数据库事务里，镜像到 CR 只会多一份需要同步的状态。Agent 继续由现有 tick 通过 `container.Driver` 管 Pod，以后若 tick 里的 Kubernetes 部分变复杂再评估。
+
+不选的现成 CRD：k3s 自带的 `HelmChart`（helm-controller）要把用户 YAML 打成 chart，每次变更起一个 Job 跑 helm，状态只有 Job 成败，没有就绪；Flux 的 `Kustomization` 功能对得上，但要引入整套 Flux（源控制器、多个 CRD、自己的升级周期），对单节点自托管过重。
+
+代价：controller 的依赖增加 controller-runtime（client-go 本来就要引入）；部署要先装 CRD 再起 controller（放在同一份 Kustomize base 里，`kubectl apply -k` 保证 CRD 先建）；dev 也需要一个 API server，这让 D3（dev 用 k3d）从“推荐”变成“基本必须”。
 
 必选 Bundle 的服务不健康时，载入它的 Agent 照常运行，相关插件路由返回 503 `BUNDLE_SERVICE_UNAVAILABLE`，Web 在设置和 Agent 页显示状态——不静默移除功能，也不让整个 control-plane 不就绪。
 
@@ -226,39 +273,39 @@ apps/agent-runtime/bundles/memory/
 
 ## 实施拆分
 
-| # | 内容                                                                                                                                             | 依赖      | 验收                                                                                                               |
-| - | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------- | ------------------------------------------------------------------------------------------------------------------ |
-| 1 | #245 LLM 合入 control-plane（含 CPA handler 审计）                                                                                               | #246 上线 | 真实流式请求、取消、OAuth 登录、模型目录、用量、`contract_test`；Kamal 7 角色                                      |
-| 2 | `deploy/k3s` Kustomize 清单 + install 脚本 + NetworkPolicy/RBAC + 迁移 Job + 备份 CronJob                                                        | 1         | staging 新装、升级、回滚、重启恢复；策略测试（Agent Pod 连不到 `api:8000`/postgres，Bundle Pod 连不到 `api:8001`） |
-| 3 | Kubernetes driver + BuildKit 构建 + registry prune；dev 方案（D3）                                                                               | 2         | Agent 构建、重建、空闲替换、PVC 保留、镜像清理                                                                     |
-| 4 | Bundle 服务：`service` 段、kustomize 展开、cli-utils apply/prune/kstatus、Bundle 令牌与 `runtime-auth`、配置 Secret、数据库供给、状态 API 与 Web | 3         | 重复提交不重复创建；卸载保留 PVC；越权 kind 拒绝；令牌撤销立即生效                                                 |
-| 5 | memory、relay 改为内置 Bundle 服务；数据迁移 Job；能力发现                                                                                       | 4         | memory 数据行数一致；relay 设备与授权保留；connector 版本检查                                                      |
-| 6 | 生产切换、观察、删除 Kamal                                                                                                                       | 5         | 上表阶段 3–5                                                                                                       |
+| # | 内容                                                                                                                                                                                         | 依赖      | 验收                                                                                                               |
+| - | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------ |
+| 1 | #245 LLM 合入 control-plane（含 CPA handler 审计）                                                                                                                                           | #246 上线 | 真实流式请求、取消、OAuth 登录、模型目录、用量、`contract_test`；Kamal 7 角色                                      |
+| 2 | `deploy/k3s` Kustomize 清单 + install 脚本 + NetworkPolicy/RBAC + 迁移 Job + 备份 CronJob                                                                                                    | 1         | staging 新装、升级、回滚、重启恢复；策略测试（Agent Pod 连不到 `api:8000`/postgres，Bundle Pod 连不到 `api:8001`） |
+| 3 | Kubernetes driver + BuildKit 构建 + registry prune；dev 方案（D3）                                                                                                                           | 2         | Agent 构建、重建、空闲替换、PVC 保留、镜像清理                                                                     |
+| 4 | Bundle 服务：`service` 段、kustomize 展开、`BundleService` CRD 与 Reconcile（ownerReference、白名单差集删除、kstatus）、Bundle 令牌与 `runtime-auth`、配置 Secret、数据库供给、Web 读 status | 3         | envtest 覆盖重复提交、半途失败、删除子对象、卸载保留 PVC、越权 kind 拒绝；令牌撤销立即生效                         |
+| 5 | memory、relay 改为内置 Bundle 服务；数据迁移 Job；能力发现                                                                                                                                   | 4         | memory 数据行数一致；relay 设备与授权保留；connector 版本检查                                                      |
+| 6 | 生产切换、观察、删除 Kamal                                                                                                                                                                   | 5         | 上表阶段 3–5                                                                                                       |
 
 1 可以立即开始；2–5 在 staging 上推进，不影响生产；6 需要用户另行批准。
 
 ## 代码与运维的真实账
 
-|             | 删除                                                                                                                         | 新增（估算）                                        |
-| ----------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| #245        | llm-gateway 进程外壳与 Go 模块样板、control-plane 的 LLM HTTP client、一个角色、一个 upstream 变量（业务代码只是搬家，不计） | CPA 挂载 ≈ 100 行                                   |
-| 部署        | `deploy.yml` 331、`deploy.sh` ≈ 250、relay 打包、kamal-proxy、registry 容器、SSH 回环                                        | Kustomize ≈ 500–700 行 YAML、install ≈ 150          |
-| 运行时      | Docker driver 309（D3 后）、Docker socket 挂载                                                                               | k8s driver ≈ 300、buildctl ≈ 50、prune ≈ 50         |
-| Bundle 服务 | memory、relay 在部署里的专属段落；“新增服务清单”里的大部分步骤                                                               | applier/令牌/数据库/状态 ≈ 500–700 行 Go + Web 状态 |
+|             | 删除                                                                                                                         | 新增（估算）                                                |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| #245        | llm-gateway 进程外壳与 Go 模块样板、control-plane 的 LLM HTTP client、一个角色、一个 upstream 变量（业务代码只是搬家，不计） | CPA 挂载 ≈ 100 行                                           |
+| 部署        | `deploy.yml` 331、`deploy.sh` ≈ 250、relay 打包、kamal-proxy、registry 容器、SSH 回环                                        | Kustomize ≈ 500–700 行 YAML、install ≈ 150                  |
+| 运行时      | Docker driver 309（D3 后）、Docker socket 挂载                                                                               | k8s driver ≈ 300、buildctl ≈ 50、prune ≈ 50                 |
+| Bundle 服务 | memory、relay 在部署里的专属段落；“新增服务清单”里的大部分步骤                                                               | CRD 类型与 Reconcile/令牌/数据库 ≈ 450–600 行 Go + Web 状态 |
 
 净行数大约持平或略增；减少的是**机制**：特殊服务的部署段落和网关路由被一条通用通路取代，Docker 退出生产路径。运维上多了 k3s 本身（版本升级、证书自动轮换、kine/SQLite 状态），少了 Kamal 的 SSH 回环、registry 与 proxy。若用户只看“代码行数”，这个计划不划算；它的收益是 Bundle 能带服务这一能力，以及之后每个新服务的边际成本接近零。
 
 ## 待用户决定
 
-| #  | 问题                                                                | 默认（不回复则按此推进） |
-| -- | ------------------------------------------------------------------- | ------------------------ |
-| D1 | 是否接受方案 A（Agent 也进 k3s，Docker 退出生产）                   | 接受                     |
-| D2 | 先做 #245（在 Kamal 上），再开始 k3s                                | 是                       |
-| D3 | dev 也迁到 k3d 并删 Docker driver，还是 dev 永久保留 Docker driver  | k3d，删 Docker driver    |
-| D4 | Bundle 服务的数据库：平台在共享 PostgreSQL 上供给，还是 Bundle 自带 | 平台供给                 |
-| D5 | `agenvo` Bundle 改为必选（relay 是内置不可关闭插件）                | 必选                     |
-| D6 | memory 数据从主库 `memories` 表迁到独立库                           | 迁（旧表留 14 天）       |
-| D7 | 生产切换的停机窗口（约 10–20 分钟）和时间                           | 需要用户指定             |
-| D8 | 是否新增每日备份 CronJob 与备份位置                                 | 新增，`~/axp-backups`    |
+| #  | 问题                                                                | 默认（不回复则按此推进）                                         |
+| -- | ------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| D1 | 是否接受方案 A（Agent 也进 k3s，Docker 退出生产）                   | 接受                                                             |
+| D2 | 先做 #245（在 Kamal 上），再开始 k3s                                | 是                                                               |
+| D3 | dev 也迁到 k3d 并删 Docker driver，还是 dev 永久保留 Docker driver  | k3d，删 Docker driver（用 CRD 后 dev 也要 API server，基本必须） |
+| D4 | Bundle 服务的数据库：平台在共享 PostgreSQL 上供给，还是 Bundle 自带 | 平台供给                                                         |
+| D5 | `agenvo` Bundle 改为必选（relay 是内置不可关闭插件）                | 必选                                                             |
+| D6 | memory 数据从主库 `memories` 表迁到独立库                           | 迁（旧表留 14 天）                                               |
+| D7 | 生产切换的停机窗口（约 10–20 分钟）和时间                           | 需要用户指定                                                     |
+| D8 | 是否新增每日备份 CronJob 与备份位置                                 | 新增，`~/axp-backups`                                            |
 
-可以按默认推进的：namespace 划分、Kustomize 而非 Helm、cli-utils、Bundle 服务的命名/端口/发现约定、PVC 名与现有卷同名、`Retain` 回收、镜像 tag 用 commit。
+可以按默认推进的：namespace 划分、Kustomize 而非 Helm、Bundle 服务用一个 `BundleService` CRD（Agent 不用）、Bundle 服务的命名/端口/发现约定、PVC 名与现有卷同名、`Retain` 回收、镜像 tag 用 commit。
