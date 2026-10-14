@@ -584,7 +584,6 @@ export function TaskProperties({
   children?: React.ReactNode;
   onDone: () => void;
 }) {
-  const { groups } = useGroups();
   const update = useUpdateTask();
   const links = deliverables(task);
   return (
@@ -611,31 +610,6 @@ export function TaskProperties({
       <dt className={propertyLabel}>指派给</dt>
       <dd className="min-w-0">
         <AssigneeRow task={task} />
-      </dd>
-      <dt className={propertyLabel}>群</dt>
-      <dd className="min-w-0">
-        <Select
-          aria-label="关联群"
-          value={task.group_id ?? "none"}
-          onValueChange={(value) =>
-            update.mutate(
-              {
-                id: task.id,
-                changes: { group_id: value === "none" ? "" : value },
-              },
-              { onError: showError },
-            )
-          }
-        >
-          <SelectOption value="none">不关联</SelectOption>
-          {groups
-            .filter((g) => !g.archived || g.id === task.group_id)
-            .map((g) => (
-              <SelectOption key={g.id} value={g.id}>
-                {g.name}
-              </SelectOption>
-            ))}
-        </Select>
       </dd>
       {links.length ? (
         <>
