@@ -43,7 +43,7 @@ http://:{$AXP_RUNTIME_GATEWAY_PORT:8090} {
 		import as_agent_with {$AXP_UPSTREAM_MEMORY:axp-memory:8320} memory
 	}
 	handle /groups/* {
-		import as_agent_with {$AXP_UPSTREAM_INTERNAL:axp-internal:8001} groups
+		import as_agent_with {$AXP_UPSTREAM_INTERNAL:axp-api:8001} groups
 	}
 	# The task board: the tasks plugin's MCP server, in the internal API.
 	handle /tasks/* {

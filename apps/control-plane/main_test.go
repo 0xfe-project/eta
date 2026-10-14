@@ -37,6 +37,7 @@ func TestListenersKeepTheirRoutes(t *testing.T) {
 		{"public", public, "GET", "/forge/credentials", false},
 		{"public", public, "POST", "/routines/mcp", false},
 		{"public", public, "POST", "/tasks/mcp", false},
+		{"public", public, "POST", "/groups/mcp", false},
 		{"public", public, "GET", "/internal/v1/runtime-auth", false},
 		{"internal", internal, "GET", "/forge/credentials", true},
 		{"internal", internal, "GET", "/api/forge/v1/github", false},

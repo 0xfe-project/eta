@@ -6,7 +6,7 @@
 //	                              the browser's (AXP_API_ADDR, default :8000) under /api,
 //	                              /api/forge, /api/routines, /remote, /share and /preview;
 //	                              runtimes' (AXP_INTERNAL_ADDR, default :8001) under /internal,
-//	                              /forge, /routines, /tasks, /agenvo, /artifacts and /attachments
+//	                              /forge, /routines, /tasks, /groups, /agenvo, /artifacts and /attachments
 //	axp-control-plane controller  builds and runs agents' containers and delivers their work (Docker socket)
 //	axp-control-plane routine-worker
 //	                              runs routines when they fire and revises their briefs
