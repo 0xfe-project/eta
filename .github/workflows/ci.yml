@@ -64,10 +64,10 @@ jobs:
       # The queue tests' NATS.
       - name: Start NATS
         run: docker run -d --name nats -p 127.0.0.1:14222:4222 nats:2.14-alpine --jetstream
-      # The tests that need PostgreSQL run scripts/dev-postgres.sh themselves,
+      # The tests that need PostgreSQL run scripts/test-postgres.sh themselves,
       # in parallel; on a fresh machine they would race to create it.
       - name: Start PostgreSQL
-        run: bash scripts/dev-postgres.sh
+        run: bash scripts/test-postgres.sh
 
       - run: bun install --frozen-lockfile
       - run: bun run check

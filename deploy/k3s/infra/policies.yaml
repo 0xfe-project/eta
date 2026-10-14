@@ -1,0 +1,41 @@
+# The namespace takes connections only from itself (and the node). Agents'
+# runtimes and bundles' services (namespaces labelled axp.dev/role) also
+# reach NATS and the collector, which hold no credentials.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: same-namespace
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{ podSelector: {} }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: from-workloads
+spec:
+  podSelector:
+    matchExpressions: [
+      { key: app, operator: In, values: [nats, otel-collector] },
+    ]
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchExpressions: [
+              { key: axp.dev/role, operator: In, values: [agents, bundles] },
+            ]
+---
+# Bundles' services reach their databases, each with its own role
+# (internal/bundlesvc).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-from-bundles
+spec:
+  podSelector: { matchLabels: { app: postgres } }
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{ namespaceSelector: { matchLabels: { axp.dev/role: bundles } } }]

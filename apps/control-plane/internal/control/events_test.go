@@ -46,7 +46,7 @@ func TestEventsAreImportedOnceInOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	db := pgtest.DB(t)
-	service := &chat.Service{Bundles: &bundles.Catalog{Dir: "../../../agent-runtime/bundles", Plugins: &plugins.Catalog{Dir: "../../../agent-runtime/plugins"}}}
+	service := &chat.Service{Bundles: &bundles.Catalog{Dir: "../../../../bundles", Plugins: &plugins.Catalog{Dir: "../../../../plugins"}}}
 	agent, err := pg.InTxValue(ctx, db, func(tx pgx.Tx) (*chat.Agent, error) {
 		return service.CreateAgent(ctx, tx, "a", "", nil, []string{})
 	})

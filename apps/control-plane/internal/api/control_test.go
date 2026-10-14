@@ -539,3 +539,34 @@ func TestCompactRunsAsItsOwnCommand(t *testing.T) {
 	expect(t, c.replyStatus(sent), "completed")
 	expect(t, scalar[string](c.env, "SELECT content->0->>'label' FROM message WHERE id = $1", sent.Replies[0].ID), "压缩上下文")
 }
+
+func TestRuntimeAuthForBundlesServices(t *testing.T) {
+	c := newControl(t)
+	ask := func(key, query string, headers map[string]string) response {
+		if headers == nil {
+			headers = map[string]string{}
+		}
+		headers["Authorization"] = "Bearer " + key
+		return do(c.env.t, c.env.internal, http.MethodGet, "/internal/v1/runtime-auth"+query, nil, headers)
+	}
+	agent := auth.AgentKey(c.secret, c.agent.ID)
+	// An agent reaches the services of the bundles it loads.
+	expect(t, ask(agent, "?bundle=memory", nil).status, 204)
+	expectError(t, ask(agent, "?bundle=nope", nil), 403, "BUNDLE_NOT_LOADED")
+
+	// The memory's service uses the models, for the agent it names.
+	memory := auth.BundleToken(c.secret, "memory")
+	r := ask(memory, "?use=llm", map[string]string{"X-AXP-Agent-Id": c.agent.ID})
+	expect(t, r.status, 204)
+	expect(t, r.header.Get("X-AXP-Agent-Id"), c.agent.ID)
+	expect(t, r.header.Get("X-AXP-Bundle"), "memory")
+	// Nothing else: not another agent's service, plugin routes or
+	// credentials, and as itself.
+	r = ask(memory, "?bundle=agenvo", map[string]string{"X-AXP-Agent-Id": c.agent.ID})
+	expectError(t, r, 403, "BUNDLE_NOT_ALLOWED")
+	expectError(t, ask(memory, "?plugin=tasks", nil), 403, "BUNDLE_NOT_ALLOWED")
+	expectError(t, ask(memory, "", nil), 403, "BUNDLE_NOT_ALLOWED")
+	// agenvo's service declares no uses; forged tokens are nobody's.
+	expectError(t, ask(auth.BundleToken(c.secret, "agenvo"), "?use=llm", nil), 403, "BUNDLE_NOT_ALLOWED")
+	expectError(t, ask(auth.BundleToken([]byte("other"), "memory"), "?use=llm", nil), 403, "INVALID_AGENT_KEY")
+}

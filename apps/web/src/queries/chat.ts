@@ -376,7 +376,22 @@ export function useBundles() {
 export type BundleDraft = Pick<
   Bundle,
   "name" | "description" | "script" | "plugins"
->;
+> & {
+  // The service's Kubernetes objects; empty for none.
+  manifests: string;
+  usesModels: boolean;
+  database: boolean;
+};
+
+export const bundleDraft = (bundle: Bundle): BundleDraft => ({
+  name: bundle.name,
+  description: bundle.description,
+  script: bundle.script,
+  plugins: bundle.plugins,
+  manifests: bundle.service?.manifests ?? "",
+  usesModels: bundle.service?.uses?.includes("llm") ?? false,
+  database: bundle.service?.database ?? false,
+});
 
 export function useUpdateBundle() {
   const queryClient = useQueryClient();
@@ -389,6 +404,11 @@ export function useUpdateBundle() {
             description: draft.description,
             script: draft.script,
             plugins: draft.plugins,
+            service: {
+              manifests: draft.manifests,
+              uses: draft.usesModels ? ["llm"] : [],
+              database: draft.database,
+            },
           },
         }),
       ),

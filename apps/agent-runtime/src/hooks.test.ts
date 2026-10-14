@@ -110,10 +110,14 @@ describe.skipIf(akhook === undefined)("the approval plugin", () => {
     requestId: string,
     action: string,
   ) {
-    const server = spawn("node", [join(root, "plugins/approval/server.mjs")], {
-      env,
-      stdio: ["pipe", "pipe", "inherit"],
-    });
+    const server = spawn(
+      "node",
+      [join(root, "../../plugins/approval/server.mjs")],
+      {
+        env,
+        stdio: ["pipe", "pipe", "inherit"],
+      },
+    );
     const send = (message: object) =>
       server.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", ...message })}\n`);
     const asked: Record<string, unknown>[] = [];

@@ -1,0 +1,31 @@
+[project]
+name = "axp-memory-service"
+version = "0.1.0"
+description = "Agents' long-term memory behind the runtime gateway."
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "axp-telemetry",
+  "fastembed>=0.7",
+  "mcp>=1.20,<2",
+  "mem0ai>=2,<3",
+  "psycopg[binary,pool]>=3.2,<4",
+  "uvicorn>=0.35",
+]
+
+[dependency-groups]
+dev = [
+  "httpx>=0.28.1",
+  "pytest>=9.1.1",
+  "ruff>=0.14,<1",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+axp-telemetry = { path = "../../../packages/telemetry-py", editable = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-p no:cacheprovider"

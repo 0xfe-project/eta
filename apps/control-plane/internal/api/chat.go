@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -46,8 +47,9 @@ type BundleCreateIn struct {
 	Description string `json:"description,omitempty" maxLength:"500"`
 	// Run as root when an agent's image is built; a shell script unless it
 	// starts with #!.
-	Script  string   `json:"script,omitempty" maxLength:"100000" doc:"Run as root when an agent's image is built; a shell script unless it starts with #!."`
-	Plugins []string `json:"plugins" maxItems:"50" doc:"Names from GET /api/v1/plugins."`
+	Script  string           `json:"script,omitempty" maxLength:"100000" doc:"Run as root when an agent's image is built; a shell script unless it starts with #!."`
+	Plugins []string         `json:"plugins" maxItems:"50" doc:"Names from GET /api/v1/plugins."`
+	Service *bundles.Service `json:"service,omitempty"`
 }
 
 // BundleUpdateIn is a partial update: only fields that are sent change.
@@ -55,6 +57,8 @@ type BundleUpdateIn struct {
 	Description *string   `json:"description,omitempty" nullable:"true" maxLength:"500"`
 	Script      *string   `json:"script,omitempty" nullable:"true" maxLength:"100000"`
 	Plugins     *[]string `json:"plugins,omitempty" nullable:"true" maxItems:"50"`
+	// Empty manifests remove the service.
+	Service *bundles.Service `json:"service,omitempty" doc:"Its service; empty manifests remove it."`
 }
 
 type BundleConfigIn struct {
@@ -156,6 +160,17 @@ func registerChat(api huma.API, d *Deps) {
 			if err != nil {
 				return nil, err
 			}
+			if d.ServiceStatuses != nil {
+				statuses, err := d.ServiceStatuses(ctx)
+				if err != nil {
+					slog.WarnContext(ctx, "Cannot read bundles' services", "error", err)
+				}
+				for i, b := range all {
+					if status, ok := statuses[b.Name]; ok && b.Service != nil {
+						all[i].ServiceStatus = &status
+					}
+				}
+			}
 			return &httpapi.Body[[]bundles.Bundle]{Body: all}, nil
 		})
 
@@ -163,7 +178,7 @@ func registerChat(api huma.API, d *Deps) {
 		func(ctx context.Context, in *struct{ Body BundleCreateIn }) (*httpapi.Body[bundles.Bundle], error) {
 			b := in.Body
 			bundle, err := pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (*bundles.Bundle, error) {
-				return s.Bundles.Create(ctx, tx, bundles.Input{Name: &b.Name, Description: &b.Description, Script: &b.Script, Plugins: &b.Plugins})
+				return s.Bundles.Create(ctx, tx, bundles.Input{Name: &b.Name, Description: &b.Description, Script: &b.Script, Plugins: &b.Plugins, Service: b.Service})
 			})
 			if err != nil {
 				return nil, err
@@ -179,7 +194,7 @@ func registerChat(api huma.API, d *Deps) {
 		}) (*httpapi.Body[bundles.Bundle], error) {
 			b := in.Body
 			bundle, err := pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (*bundles.Bundle, error) {
-				return s.Bundles.Update(ctx, tx, in.Name, bundles.Input{Description: b.Description, Script: b.Script, Plugins: b.Plugins})
+				return s.Bundles.Update(ctx, tx, in.Name, bundles.Input{Description: b.Description, Script: b.Script, Plugins: b.Plugins, Service: b.Service})
 			})
 			if err != nil {
 				return nil, err

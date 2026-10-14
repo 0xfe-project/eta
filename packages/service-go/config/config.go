@@ -3,13 +3,13 @@
 //
 //	type Config struct {
 //		Addr    string `env:"AXP_API_ADDR" default:":8000"`
-//		NATSURL string `env:"AXP_NATS_URL" dev:"nats://172.30.0.1:4222" prod:"nats://axp-nats:4222"`
+//		NATSURL string `env:"AXP_NATS_URL" dev:"nats://nats.axp-dev.svc.cluster.local:4222" prod:"nats://nats.axp.svc.cluster.local:4222"`
 //	}
 //
 // A set variable wins; otherwise the field gets `dev` in development
 // (AXP_DEV=true, which only scripts/dev.sh sets) or `prod` in production,
-// then `default`. Development's defaults are fixed addresses on loopback or
-// the runtime network; production's are Kamal network aliases. Fields are
+// then `default`. Development's defaults are the cluster's development services or
+// loopback; production's are the cluster's Services (deploy/k3s). Fields are
 // strings, bools, ints or durations.
 package config
 

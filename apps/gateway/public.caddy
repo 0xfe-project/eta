@@ -1,10 +1,10 @@
-# The browser's entry: by longest prefix, /api/memory to the memory
-# service, /observe to OpenObserve, /remote/relay to the agenvo relay, /api
-# (with /api/forge, /api/routines and /api/llm), /remote and
-# artifacts' /share and /preview pages to the control plane's public
-# listener, everything else to web. The control plane's internal listener
-# is never an upstream here.
-# Paths are not rewritten and the browser's Host is kept.
+# The browser's entry: by longest prefix, /api/bundles/<name> to that
+# bundle's service (as /api/<name>), /observe to OpenObserve, /remote/relay
+# to the agenvo relay (the agenvo bundle's service), /api (with /api/forge,
+# /api/routines and /api/llm), /remote and artifacts' /share and /preview
+# pages to the control plane's public listener, everything else to web. The
+# control plane's internal listener is never an upstream here.
+# Paths are otherwise not rewritten and the browser's Host is kept.
 http://:{$AXP_GATEWAY_PORT:8080} {
 	bind {$AXP_GATEWAY_BIND:0.0.0.0}
 	import access_log
@@ -37,49 +37,57 @@ http://:{$AXP_GATEWAY_PORT:8080} {
 		error 403
 	}
 
-	# kamal-proxy's health check.
+	# The gateway's own health check.
 	handle /up {
 		log_skip
 		respond "ok"
 	}
-	# Agents' memories, for the user to see and edit.
-	handle /api/memory/* {
-		reverse_proxy {$AXP_UPSTREAM_MEMORY:axp-memory:8320}
+	# Bundles' services, for the user (docs/architecture/bundles.md#服务):
+	# /api/bundles/<name>/x is /api/<name>/x at the Service <name> in the
+	# bundles' namespace. A service tells the user's requests (/api/<name>)
+	# from agents' (/<name>, through the runtime gateway) by path.
+	@bundle path_regexp ^/api/bundles/[a-z0-9][a-z0-9-]*/
+	handle @bundle {
+		uri replace /api/bundles/ /api/ 1
+		import bundle_service {http.request.uri.path.1}
 	}
 	# OpenObserve's UI and API, served under /observe (ZO_BASE_URI).
 	handle /observe/* {
 		log_skip
-		reverse_proxy {$AXP_UPSTREAM_OBSERVE:axp-openobserve:5080}
+		reverse_proxy {$AXP_UPSTREAM_OBSERVE:openobserve:5080}
 	}
-	# The agenvo relay, at its base URL (AXP_RELAY_BASE_URL): remote
+	# The agenvo relay, at its base URL (AXP_PUBLIC_URL/remote/relay): remote
 	# computers' connectors pair and connect (WebSocket) here; it
 	# authenticates devices itself. Cloudflare's client address goes on as
 	# X-Forwarded-For (the relay trusts one hop) for its rate limits.
 	handle /remote/relay/* {
-		reverse_proxy {$AXP_UPSTREAM_RELAY:axp-relay:8080} {
+		reverse_proxy agenvo.{$AXP_BUNDLES_NAMESPACE:axp-bundles}.svc.cluster.local:80 {
+			transport http {
+				resolvers {$AXP_CLUSTER_DNS:10.43.0.10}
+			}
 			header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
 		}
 	}
 	# Remote computers' install script, downloads and API: the one path the
 	# edge's access control lets through; each endpoint authenticates itself.
 	handle /remote/* {
-		reverse_proxy {$AXP_UPSTREAM_API:axp-api:8000}
+		reverse_proxy {$AXP_UPSTREAM_API:api:8000}
 	}
 	# Artifacts' public pages (a share's token) and private previews (an
 	# expiring capability): with /remote, the only paths the edge's access
 	# control lets through. The control plane serves nothing else there.
 	handle /share/artifacts/* {
-		reverse_proxy {$AXP_UPSTREAM_API:axp-api:8000}
+		reverse_proxy {$AXP_UPSTREAM_API:api:8000}
 	}
 	handle /preview/artifacts/* {
-		reverse_proxy {$AXP_UPSTREAM_API:axp-api:8000}
+		reverse_proxy {$AXP_UPSTREAM_API:api:8000}
 	}
 	# Includes code hosting (/api/forge: connecting the GitHub App, and
-	# GitHub's redirect back), routines (/api/routines) and the LLM gateway
-	# (/api/llm: connections, logins, the catalog and usage).
+	# GitHub's redirect back), routines (/api/routines) and the models'
+	# accounts and catalog (/api/llm).
 	handle /api/* {
 		# Chat streams (SSE) pass through as they are written.
-		reverse_proxy {$AXP_UPSTREAM_API:axp-api:8000} {
+		reverse_proxy {$AXP_UPSTREAM_API:api:8000} {
 			flush_interval -1
 		}
 	}
@@ -87,7 +95,7 @@ http://:{$AXP_GATEWAY_PORT:8080} {
 	# Vite module is one).
 	handle {
 		log_skip
-		reverse_proxy {$AXP_UPSTREAM_WEB:axp-web:3000}
+		reverse_proxy {$AXP_UPSTREAM_WEB:web:3000}
 	}
 
 	import errors

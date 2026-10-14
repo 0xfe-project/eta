@@ -1,14 +1,14 @@
 // Package control operates agents' runtimes (docs/architecture/chat-runtime.md).
-// Every agent has one long-lived container, built from its bundles, with its
-// state on its own volume. The controller keeps that container in step with
+// Every agent has one long-lived Pod, built from its bundles, with its
+// state on its own volume. The controller keeps that Pod in step with
 // the agent, delivers the agent's waiting commands to its runtime's control
 // API one at a time, stops what the user stopped, and imports what the
 // runtimes report (events.go).
 //
-// Only the controller reaches runtimes: it is the one control plane process
-// on their network. It runs alone (an advisory lock), in one goroutine: a
+// Only the controller calls runtimes' control API (with a token derived per
+// agent). It runs alone (an advisory lock), in one goroutine: a
 // tick reconciles every agent, a wake-up (the API's NOTIFY, an imported
-// event, a finished build) delivers one agent's work at once. Docker and
+// event, a finished build) delivers one agent's work at once. Kubernetes and
 // runtime calls happen outside database transactions; every write locks the
 // conversation row first, like the API, so the controller and request
 // handlers never deadlock.
@@ -39,12 +39,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const (
-	// The OpenTelemetry Collector on the runtime network.
-	runtimeOTLPEndpoint = "http://otel-collector:4318"
-	// Unused agent images are removed this often.
-	pruneEvery = 10 * time.Minute
-)
+// Unused agent images are removed this often.
+const pruneEvery = 10 * time.Minute
 
 type Controller struct {
 	DB      *pgxpool.Pool
@@ -53,11 +49,13 @@ type Controller struct {
 	Driver  container.Driver
 	Models  llm.Catalog
 	Secret  []byte
-	// The plugins bundles name (apps/agent-runtime/plugins).
+	// The plugins bundles name (the repository's plugins/).
 	PluginsDir string
-	// Where runtimes reach AXP's services (the runtime gateway) and NATS.
+	// Where runtimes reach AXP's services (the runtime gateway), NATS and
+	// the OpenTelemetry Collector (which holds the credentials).
 	RuntimeGatewayURL string
 	NATSURL           string
+	OTLPURL           string
 	// Calls to runtimes' control API.
 	HTTP *http.Client
 	// Wakes the loop for an agent, when a build finishes.
@@ -235,10 +233,6 @@ func (c *Controller) ensureContainer(ctx context.Context, agent *chat.AgentRecor
 	runtime, exists := c.runtimes[agent.ID]
 	switch {
 	case exists && runtime.Config == spec.Config:
-		if runtime.State == container.Stopped {
-			// Stopped by hand, or the daemon restarted.
-			return true, c.Driver.Start(ctx, runtime.ContainerID)
-		}
 		return false, nil
 	case exists:
 		// Its configuration changed (or it was restarted): replaced between
@@ -363,7 +357,7 @@ func (c *Controller) spec(ctx context.Context, agent *chat.AgentRecord, img imag
 		"AXP_CONFIG_VERSION": fmt.Sprint(agent.ConfigVersion),
 		// The runtime and Codex export without credentials; the collector
 		// holds them. Resource attributes tie records to the agent.
-		"OTEL_EXPORTER_OTLP_ENDPOINT": runtimeOTLPEndpoint,
+		"OTEL_EXPORTER_OTLP_ENDPOINT": c.OTLPURL,
 		"OTEL_SERVICE_NAME":           "agent-runtime",
 		"OTEL_RESOURCE_ATTRIBUTES":    resourceAttributes("axp.agent.id=" + agent.ID),
 	} {

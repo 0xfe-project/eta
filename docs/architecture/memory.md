@@ -1,6 +1,6 @@
 # 记忆
 
-本文说明 [#12](https://github.com/akarachen/axp/issues/12) 的实现：智能体跨对话的长期记忆。它由两部分组成：runtime 镜像里的 `memory` plugin（见[聊天与运行时架构](chat-runtime.md#plugin)）和 `apps/memory-service`。
+本文说明 [#12](https://github.com/akarachen/axp/issues/12) 的实现：智能体跨对话的长期记忆。它是必选的内置环境包 `memory`：runtime 镜像里的 `memory` plugin（见[聊天与运行时架构](chat-runtime.md#plugin)），和这个环境包的服务 `bundles/memory/service`（[环境包](bundles.md#服务)）。
 
 ```
 runtime 容器
@@ -9,13 +9,13 @@ runtime 容器
       .mcp.json  ── MCP（streamable HTTP）──┐  Authorization: Bearer <runtime key>
       hooks      ── HTTP ──────────────────┤
                                            ▼
-runtime 网关 /memory/*  forward_auth → X-AXP-Agent-Id、X-AXP-Group-Id
+runtime 网关 /bundles/memory/* → /memory/*  forward_auth → X-AXP-Agent-Id、X-AXP-Group-Id
                                            ▼
-memory-service
+memory-service（Service memory，命名空间 <ns>-bundles）
   MemoryProvider → Mem0Provider（mem0 作为库）
-    抽取：智能体自己的模型，经 LLM 网关（控制面内部 API 的 /v1，chat completions）
+    抽取：智能体自己的模型，带环境包的令牌经 runtime 网关的 /v1（chat completions）
     向量：fastembed，CPU 推理
-    存储：PostgreSQL + pgvector（表 memories）
+    存储：自己的库 axp_bundle_memory（PostgreSQL + pgvector，表 memories）
 ```
 
 ## 记忆怎么来、怎么用
@@ -30,7 +30,7 @@ mem0 v2 只追加不改写：同一事实的新说法会成为新记忆，过时
 
 ## 在界面中查看和编辑
 
-全窗口工作区的「记忆」页列出当前智能体的记忆（新的在前，每 15 秒刷新），可以搜索、手动添加（原样记下，不经模型抽取）和删除。浏览器经公共网关的 `/api/memory/*` 访问 memory-service：
+全窗口工作区的「记忆」页列出当前智能体的记忆（新的在前，每 15 秒刷新），可以搜索、手动添加（原样记下，不经模型抽取）和删除。浏览器经公共网关的 `/api/bundles/memory/*` 访问记忆服务，网关把路径改成下表的 `/api/memory/*`：
 
 记忆页面提供种类筛选：对话中记下（`conversation`）、智能体记下（`agent`）、手动添加（`user`），或全部种类。GET 接口可带 `source=`，与 `q=` 组合；存储先按来源筛选，再应用列表最多 1000 条、搜索最多 50 条的现有上限。未指定种类时显示全部记忆。前端每页显示 20 条，切换种类、来源群、搜索或智能体时回到第一页。
 
@@ -40,7 +40,7 @@ mem0 v2 只追加不改写：同一事实的新说法会成为新记忆，过时
 | `POST /api/memory/v1/agents/{agent}/memories`        | `{"text"}`，原样记下一条                                        |
 | `DELETE /api/memory/v1/agents/{agent}/memories/{id}` | 删除；不属于该智能体时 404                                      |
 
-这组接口的智能体由路径指定，因为用户可以看所有智能体的记忆。它们只能从公共网关到达：runtime 网关只转发 `/memory/*`，智能体碰不到 `/api/memory/*`。
+这组接口的智能体由路径指定，因为用户可以看所有智能体的记忆。它们只能从公共网关到达：runtime 网关只把 `/bundles/memory/*` 转成 `/memory/*`，智能体碰不到 `/api/memory/*`。
 
 ## 来源群
 
@@ -50,7 +50,7 @@ mem0 metadata 和公开记忆形状只保存 `source_group_id`。Web 按群快�
 
 ## 隔离
 
-memory-service 只认 runtime 网关设置的 `X-AXP-Agent-Id`，并把它作为 mem0 的 `user_id`；请求里自称的身份不起作用，没有这个头的请求被拒绝。删除前检查记忆属于该智能体（mem0 按 id 删除不区分用户）。memory-service 不在 runtime 网络上，也不持有任何凭据：调用 LLM 网关时它同样只带 `X-AXP-Agent-Id`，因此抽取用量记在对应的智能体上。
+memory-service 只认 runtime 网关设置的 `X-AXP-Agent-Id`，并把它作为 mem0 的 `user_id`；请求里自称的身份不起作用，没有这个头的请求被拒绝。删除前检查记忆属于该智能体（mem0 按 id 删除不区分用户）。记忆服务只有 AXP 给它的凭据：它的库的账号，和只能调用模型的环境包令牌。调用模型时它在 `X-AXP-Agent-Id` 里写明是哪个智能体的抽取，因此用量记在对应的智能体上。
 
 ## Provider 接口
 
@@ -58,14 +58,10 @@ memory-service 只认 runtime 网关设置的 `X-AXP-Agent-Id`，并把它作为
 
 ## Embedding 模型
 
-`jinaai/jina-embeddings-v2-base-zh`（768 维，中英混合，长输入）。它由 Turbo 的 `build` 任务下载到 `apps/memory-service/out/models`（约 600 MB，缓存），生产镜像带上它，服务运行时不联网。换模型要重新嵌入所有记忆。
+`jinaai/jina-embeddings-v2-base-zh`（768 维，中英混合，长输入）。它由 Turbo 的 `build` 任务下载到 `bundles/memory/service/out/models`（约 600 MB，缓存），生产镜像带上它，服务运行时不联网。换模型要重新嵌入所有记忆。
 
 ## 运行
 
-|          | 开发                                               | 生产                                            |
-| -------- | -------------------------------------------------- | ----------------------------------------------- |
-| 进程     | `bun run dev:memory-service`，`127.0.0.1:P+6`      | Kamal 角色 `memory`，网络别名 `axp-memory:8320` |
-| 数据库   | 开发 PostgreSQL（`pgvector/pgvector:pg17-trixie`） | accessory `postgres`（同一镜像）                |
-| LLM 网关 | `AXP_LLM_GATEWAY_URL`（`dev.sh` 设为内部 API）     | `http://axp-api:8001`（控制面的内部 API）       |
+开发和生产一样：controller 按 `bundles/memory/service/memory.yaml` 把它部署到 `<ns>-bundles`，镜像 `axp-memory` 由 `bundles/memory/service/Dockerfile` 从 Turbo 的产物打包（`scripts/build/image.sh memory`）。库 `axp_bundle_memory` 由 AXP 在 PostgreSQL（`pgvector/pgvector:pg17-trixie`）上创建并装好 `vector` 扩展，连接串在 Secret `axp-memory`；mem0 首次启动时创建 `memories` 表。它在 `/.well-known/axp-service` 报告协议 `axp.memory/1`。
 
-PostgreSQL 镜像是 `postgres:17` 加 pgvector，同为 Debian trixie，因此原有数据目录的排序规则不变（bookworm 版的 `pgvector/pgvector:pg17` 会导致 collation 版本不匹配）。mem0 首次启动时创建 `vector` 扩展和 `memories` 表，它们不归控制面的迁移管理。mem0 的遥测已关闭；它的变更历史写在容器内的 SQLite，不保留。
+PostgreSQL 镜像是 `postgres:17` 加 pgvector，同为 Debian trixie，因此原有数据目录的排序规则不变（bookworm 版的 `pgvector/pgvector:pg17` 会导致 collation 版本不匹配）。mem0 的遥测已关闭；它的变更历史写在容器内的 SQLite，不保留。从 Kamal 迁移时，主库原来的 `memories` 表被复制到 `axp_bundle_memory`（`deploy/k3s/migrate-from-kamal.sh`）。

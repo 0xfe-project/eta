@@ -1,128 +1,112 @@
 # 生产部署
 
-用 [Kamal](https://kamal-deploy.org) 把**当前工作区**部署到运行脚本的这台机器。Kamal 相关文件都在本目录，任何一台满足条件的机器克隆仓库后都能直接拉起：
+AXP 部署在运行脚本的这台机器上的单节点 [k3s](https://k3s.io)。开发用同一个集群（`scripts/dev.sh`），命名空间分开。
 
-| 文件                      | 作用                                                                |
-| ------------------------- | ------------------------------------------------------------------- |
-| `deploy.yml`              | Kamal 配置（角色、kamal-proxy、accessory、镜像仓库）                |
-| `deploy.sh`               | 入口：检查环境、准备 SSH/仓库/网络/runtime 镜像，再以容器运行 Kamal |
-| `ports.env`               | 生产保留端口，所有机器一致                                          |
-| `secrets`                 | Kamal secrets 映射，只引用环境变量，不含密钥                        |
-| `Dockerfile`              | 应用镜像，只复制 Turbo 构建的产物（构建上下文是仓库根目录）         |
-| `Dockerfile.dockerignore` | 该 Dockerfile 专用的 ignore 规则                                    |
+| 文件                        | 作用                                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------------------- |
+| `k3s/deploy.sh`             | 入口：密钥与设置、基础设施、用集群里的 BuildKit 构建镜像、迁移、部署                        |
+| `k3s/infra/`                | 基础设施：PostgreSQL、NATS、S3、OpenObserve 与 Collector、镜像仓库和 BuildKit；CRD          |
+| `k3s/app/`                  | AXP 自己：两个网关、web、控制面的三个进程、权限、备份                                       |
+| `k3s/production/`           | 生产的 overlay：命名空间 `axp`，镜像仓库和 BuildKit 的固定地址                              |
+| `k3s/dev/`                  | 开发的基础设施：命名空间 `axp-dev`，开发用的固定凭据                                        |
+| `k3s/workloads.yaml`        | 智能体与环境包服务的命名空间（`<ns>-agents`、`<ns>-bundles`）、它们的网络策略和控制面的权限 |
+| `k3s/migrate-from-kamal.sh` | 一次性：把这台机器上 Kamal 的生产搬到 k3s                                                   |
+| `Dockerfile`                | AXP 的镜像，只复制 Turbo 构建的产物（构建上下文是仓库根目录）                               |
 
-## 新机器上拉起
+## 一台机器装好 k3s
 
-要求：Linux（amd64 或 arm64）、当前用户无需 sudo 即可使用 Docker、git、openssl，以及本机运行着接受公钥登录的 sshd（Kamal 通过 SSH 回到本机）。不需要安装 Ruby 或 Kamal。
-
-```sh
-git clone <repo> axp && cd axp
-deploy/deploy.sh          # 首次执行 kamal setup
-```
-
-首次运行会：
-
-- 生成 `~/.config/axp/production.env`（控制面的密钥 `AXP_SECRET_KEY`、Postgres 的密码、内置 S3 的凭据等，每台机器独立，不入库；后来新增的密钥会在下次部署时自动补上）。模型账号不在这里配置：部署后在 Web 设置的“模型服务”中绑定，凭据保存在卷 `axp-llm`（挂在 `api` 角色上，见[LLM 网关](../docs/architecture/llm-gateway.md)）。
-- 生成 `~/.config/axp/kamal_ed25519` 并加入 `~/.ssh/authorized_keys`，限制为只能从 `127.0.0.1`/`::1` 登录。sshd 不在 22 端口时在 `production.env` 设 `AXP_SSH_PORT`。
-- 启动本地镜像仓库 `axp-registry`，创建 runtime 网络 `axp-prod-runtime`（子网由 Docker 选空闲的），用 Turbo 构建（或从缓存恢复）镜像产物和两个镜像（见下文“一次部署做什么”）。
-- 按本机 CPU 架构构建镜像。保留端口被其他服务占用、Docker 不可用或 SSH 不通时，会在部署前报错。
-
-之后：
+只需要一次（需要 root）。网关由宿主的 Caddy 反代，所以不装 traefik 和 servicelb；节点从集群里的镜像仓库拉镜像，地址固定：
 
 ```sh
-deploy/deploy.sh                         # kamal deploy
-deploy/deploy.sh app logs -r api -f      # 其他参数原样传给 kamal
-deploy/deploy.sh rollback <version>
+sudo mkdir -p /etc/rancher/k3s
+sudo tee /etc/rancher/k3s/config.yaml <<'EOF'
+disable: [traefik, servicelb, metrics-server]
+flannel-backend: host-gw
+write-kubeconfig-mode: "0600"
+EOF
+sudo tee /etc/rancher/k3s/registries.yaml <<'EOF'
+mirrors:
+  "10.43.100.1:5000":
+    endpoint: ["http://10.43.100.1:5000"]
+  "10.43.100.11:5000":
+    endpoint: ["http://10.43.100.11:5000"]
+EOF
+# k3s and its containers take root's inotify instances (128 by default); the
+# models' file watcher in the API needs one too.
+echo 'fs.inotify.max_user_instances = 1024' | sudo tee /etc/sysctl.d/90-axp-k3s.conf
+sudo sysctl -p /etc/sysctl.d/90-axp-k3s.conf
+curl -sfL https://get.k3s.io | sudo INSTALL_K3S_VERSION=v1.36.5+k3s1 sh -
+mkdir -p ~/.kube && sudo cat /etc/rancher/k3s/k3s.yaml >~/.kube/config && chmod 600 ~/.kube/config
 ```
 
-`bun run deploy` 等同于 `deploy/deploy.sh`。
+`10.43.100.1`/`.2` 是生产的镜像仓库和 BuildKit，`10.43.100.11`/`.12` 是开发的（`k3s/production`、`k3s/dev` 里的 Service 固定了这些地址）。API server（6443）和 kubelet（10250）都要求证书认证；机器在公网上时，用防火墙只放行需要的端口更稳妥。
 
-### 回滚到 #245 之前
+## 部署
 
-#245 把 LLM 网关（原 `llm` 角色，`axp-llm-gateway`）合进了控制面的 `api` 角色。数据没有搬：卷 `axp-llm` 原样挂到 `api` 的同一路径（`/app/apps/control-plane/var/llm-gateway`），里面的 `auths/`（各账号凭据）、`models.json`（见过的模型目录）、`usage.json`（按智能体/定时任务的用量）新旧版本格式相同，`config.yaml` 每次启动都会重新生成。所以上线不需要迁移步骤，也不需要新配置：
+```sh
+deploy/k3s/deploy.sh                  # 部署工作区（bun run deploy 同此）
+deploy/k3s/deploy.sh --version <tag>  # 回到仓库里已有的版本（回滚），不构建也不迁移
+kubectl -n axp logs deploy/api -f     # 日志，也在 OpenObserve
+```
 
-- 上线：正常执行 `deploy.sh`。`api` 起来时 LLM 网关加载卷里的凭据，健康后 runtime 网关的 `/v1` 改指向 `axp-api:8001`；`deploy.sh` 最后删除旧 `llm` 容器（卷不动）。部署期间新旧两份 LLM 网关会短暂同时挂着这个卷（与以前重新部署 `llm` 角色时一样），只有 CPA 的自动刷新可能同时写同一个账号文件。
-- 核对：设置 → 模型服务里账号、状态和用量都在；智能体能对话；`deploy/deploy.sh app exec -r api 'ls var/llm-gateway/auths'` 只看文件名，不要打印内容。
-- 回滚：`deploy.sh rollback <version>` 只能在 #245 之后的版本之间用（它沿用当前 `deploy.yml`，没有 `llm` 角色）。回到 #245 之前的提交：在另一个 checkout 里检出它，运行它的 `deploy/deploy.sh`；Kamal 重新启动 `llm`（挂同一个卷 `axp-llm`），`api`、两个网关和 `memory` 换回旧配置，旧的 `api` 不再挂这个卷。之后新绑定或刷新过的账号也都在卷里，旧版本照常读取。
-- 再前进时正常部署当前版本即可。
+一次部署做的事：
 
-### 回滚到 #241 之前
+1. 第一次运行时生成 `~/.config/axp/production.env`（`AXP_SECRET_KEY`、Postgres 密码、OpenObserve 密码、内置 S3 的凭据；每台机器独立，不入库）；之后新增的密钥在下一次部署时补上。再从它写出 Secret `infra`（基础设施的）和 `axp`（控制面的）。
+2. 部署基础设施（`k3s/production/infra`），以及 `axp-agents`、`axp-bundles` 两个命名空间（`k3s/workloads.yaml`）。
+3. 版本是 git commit（工作区有改动时加 `-dirty-<时间>`）。仓库里还没有这个版本时，用集群里的 BuildKit 构建四个镜像并推到集群里的仓库：`axp:<版本>`（`deploy/Dockerfile`）、`axp-agent-runtime:production`（智能体镜像的底）、`axp-memory:<版本>` 和 `axp-relay:<版本>`（内置环境包的服务）。BuildKit 的缓存让没变的镜像约一秒完成。
+4. 写 ConfigMap `axp`（版本、`AXP_PUBLIC_URL`、S3 的地址），用新镜像跑迁移 Job（`axp-control-plane migrate`）。迁移失败时停止，正在跑的版本不受影响。
+5. 部署 AXP（`k3s/production`）并等它们就绪。
 
-#241 把 forge、routines 两个服务和 internal 角色合进了控制面（`api` 角色运行 `axp-control-plane serve`，新增 `routine-worker`）。它没有改表结构，也没有搬数据：GitHub App 的凭据仍在卷 `axp-forge`，定时任务仍在库 `axp_routines`（迁移历史不变），计划仍在 `axp-nats` 的流 `ROUTINES`，所以新旧版本读写的是同一份数据。
-
-`deploy.sh rollback <version>` 只能在 #241 之后的版本之间用：它沿用当前的 `deploy.yml`，旧镜像里没有 `serve` 和 `routine-worker`，新容器起不来，Kamal 会保留现在的版本。回到 #241 之前的提交：
-
-1. 先停掉旧配置不认识的 worker，免得它和恢复的 routines 服务同时取触发：`docker ps -aq --filter label=service=axp --filter label=role=routine-worker | xargs -r docker rm -f`。
-2. 在另一个 checkout 里检出那个提交，运行它的 `deploy/deploy.sh`：Turbo 从缓存恢复旧产物，Kamal 重新启动 `forge`、`routines`、`internal`（以及 #245 合进来的 `llm`），`api` 换回 `axp-control-plane api`。
-3. 确认 Settings → 连接里 GitHub 仍是已连接，定时任务列表和历史都在。
-
-再前进时正常部署当前版本即可，`deploy.sh` 会删掉旧角色的容器。
+模型账号不在这里配置：部署后在 Web 设置的「模型服务」里绑定，凭据在卷 `llm`。
 
 ## 组成
 
-同一个镜像按角色运行：
+命名空间 `axp`：
 
-| 角色              | 进程                               | 说明                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| ----------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `gateway`         | Caddy，`public.caddy`              | 唯一由 kamal-proxy 代理的角色；按路径转发到 memory、api（含 `/api/forge`、`/api/routines`、`/api/llm`）、web、OpenObserve                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `runtime-gateway` | Caddy，`runtime.caddy`             | runtime 网络上唯一提供服务的角色（`axp-runtime-gateway:8090`）；认证 runtime 并转发到控制面的内部 listener（含 `/forge`、`/routines`、模型请求 `/v1`）、memory                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `web`             | Bun 运行 `apps/web/server.js`      | SSR 与静态资源；网络别名 `axp-web`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `api`             | `axp-control-plane serve`（Go）    | 控制面：同一进程两个 listener，公共 API `:8000`（只经网关访问，含[代码托管](../docs/architecture/forge.md) `/api/forge` 和[定时任务](../docs/architecture/routines.md) `/api/routines`）和内部 API `:8001`（经 runtime 网关访问：runtime 认证、tasks/groups/agenvo/artifacts 插件、`/forge`、`/routines`、[LLM 网关](../docs/architecture/llm-gateway.md)的 `/v1`；controller、routine-worker、memory 也直连它读模型目录、调用模型）；LLM 网关（嵌入 CLIProxyAPI，原 `llm` 角色）也在这个进程里；网络别名 `axp-api`；GitHub App 的凭据在卷 `axp-forge`（挂在 `/app/var/forge`），模型账号的凭据、目录和用量在卷 `axp-llm`（挂在 `/app/apps/control-plane/var/llm-gateway`）；LLM 网关加载完凭据、两个 listener 都能响应才算就绪，上游模型故障不影响就绪 |
-| `routine-worker`  | `axp-control-plane routine-worker` | 定时任务的执行：从 `axp-nats` 取触发、以 ADK 智能体运行、按反馈修订要求；启动时同步计划、把上一个 worker 中断的运行记为失败；数据库 `axp_routines`（accessory `postgres`，由 `migrate` 创建和迁移）；用 advisory lock 保证同一时刻只有一个在运行，停止时把进行中的运行记为中断（停止时限 30 秒）                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `memory`          | `python -m axp_memory`             | 智能体记忆（[记忆](../docs/architecture/memory.md)）；网络别名 `axp-memory`，runtime 只能经 runtime 网关访问；数据在 accessory `postgres`（pgvector）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `controller`      | `axp-control-plane controller`     | 挂载 Docker socket：构建每个智能体的镜像（镜像里带 Docker CLI 和 buildx）、运行它的容器、交付工作、导入事件；用 PostgreSQL advisory lock 保证同一时刻只有一个在运行                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| 工作负载          | 说明                                                                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `gateway`         | Caddy `public.caddy`，在节点网络上监听 `127.0.0.1:24180`：浏览器唯一的入口                                                                              |
+| `runtime-gateway` | Caddy `runtime.caddy`，Service `runtime-gateway:8090`：智能体和环境包服务唯一的入口                                                                     |
+| `web`             | SSR 与静态资源                                                                                                                                          |
+| `api`             | `axp-control-plane serve`：公共 API `:8000`、内部 API `:8001`、模型（CLIProxyAPI）；GitHub App 的凭据在卷 `forge`，模型账号在卷 `llm`，所以同时只跑一个 |
+| `routine-worker`  | 定时任务的执行（库 `axp_routines`）；同一时刻只有一个（advisory lock）                                                                                  |
+| `controller`      | 智能体的镜像（BuildKit → 仓库）和 Pod（`axp-agents`，每个一个卷 `agent-<id>`）、派发、事件导入、环境包服务（`axp-bundles`）；同一时刻只有一个           |
+| 基础设施          | `postgres`（pgvector）、`nats`（JetStream）、`s3`（SeaweedFS）、`openobserve`、`otel-collector`、`registry`、`buildkitd`                                |
 
-每个角色只拿自己读取的机密（`deploy.yml` 的 `x-secrets`，没有顶层 `env.secret`：Kamal 把角色的 secret 与顶层的取并集，角色里无法去掉顶层的项）：`api`、`controller` 共用同一套初始化，拿全部（`AXP_SECRET_KEY`、`DATABASE_URL`、`AXP_RELAY_ADMIN_SECRET`、`OTEL_EXPORTER_OTLP_HEADERS`、S3 凭据）；`memory`、`routine-worker` 拿 `DATABASE_URL` 和 `OTEL_EXPORTER_OTLP_HEADERS`；`web` 只拿 `OTEL_EXPORTER_OTLP_HEADERS`；两个网关没有机密。新增机密时加到读取它的角色上。
+命名空间 `axp-bundles` 里是环境包的服务，由 controller 按环境包创建（[环境包](../docs/architecture/bundles.md#服务)）：内置的 `memory`（智能体的记忆，库 `axp_bundle_memory`）和 `agenvo-relay`（远程电脑接入的中继，卷 `agenvo-relay`，在 AXP 地址的 `/remote/relay` 下对外）。`kubectl -n axp-bundles get bundleservices` 看它们的状态。
 
-accessory `relay` 是远程电脑接入用的 agenvo 中继（[任务与远程电脑](../docs/architecture/tasks.md)）：它的镜像 `axp-relay:<agenvo 版本>-<摘要>` 由 `deploy.sh` 用 `apps/agenvo` 从固定提交构建的中继（`apps/agenvo/out/relay`）打包，推送到本地仓库，只在版本、`relay.Dockerfile` 或中继解析出的依赖变化时重建并重启；状态（配对的设备、OAuth 授权）在卷 `axp-relay`；不发布端口，由 `gateway` 在 AXP 地址的 `/remote/relay` 下对外（`AXP_RELAY_BASE_URL`，由 `AXP_PUBLIC_URL` 推出）。在 `production.env` 设置 `AXP_PUBLIC_URL`（安装命令里的 AXP 地址，没有它远程电脑功能关闭），并让 Access 对 AXP 的 `/remote/` 放行（中继在其下，自己鉴权设备）。
+信任边界由 NetworkPolicy 划定，服务之间不共享密钥（见[网关](../docs/architecture/gateway.md)）：`axp` 只接受自己命名空间里的连接；智能体和环境包服务只连得到 `runtime-gateway`、NATS 和 Collector，环境包服务另外连得到自己的数据库。controller 和 API 的权限只在 `axp-agents`、`axp-bundles` 里（`k3s/workloads.yaml`），智能体的 Pod 不挂 ServiceAccount 令牌。
 
-服务之间没有共享密钥：角色中只有 `runtime-gateway` 和 controller 加入 runtime 网络（accessory 中还有 `axp-nats` 和 `axp-otel-collector`），其余角色只在 Kamal 网络上，runtime 连不到（见[网关](../docs/architecture/gateway.md)）。两个网关的访问日志是 JSON，写在容器输出里（`deploy/deploy.sh app logs -r gateway`），不进 OpenObserve。
+## 入口与访问
 
-web、api、memory 不经过 kamal-proxy，重新部署时会有几秒中断（单用户场景可接受）。
+AXP 没有登录。`gateway` 只监听 `127.0.0.1:24180`，宿主的 Caddy 把域名反代到这里，Cloudflare Access 在更外层：Access 放行的只有 `/remote/`（远程电脑，每个接口自己鉴权）和 Artifact 的 `/share/artifacts/`、`/preview/artifacts/`（见 [Artifact](../docs/architecture/artifacts.md#路由矩阵)）。远程电脑功能需要在 `production.env` 设 `AXP_PUBLIC_URL`（安装命令里的 AXP 地址），中继的地址由它推出。
 
-### 一次部署做什么
+OpenObserve 在 `/observe/`（经网关和 Access），root 账号 `root@axp.local`，密码是 `production.env` 的 `AXP_OBSERVE_PASSWORD`。
 
-1. 一次 `turbo run image:linux-<arch>`：所有产物并行构建（或从缓存恢复），每个镜像在自己的产物就绪后立即构建——应用镜像（`deploy/Dockerfile`）推送到本地仓库，runtime 的基础镜像 `axp-agent-runtime:production` 载入本机 Docker（`scripts/build/image.sh`），controller 在它上面构建各智能体的镜像。镜像任务不进 Turbo 缓存，Docker 层缓存让未变的镜像约一秒完成。与此同时在后台准备 accessory（重启 otel-collector 等）。
-2. 用新镜像执行迁移（`axp-control-plane migrate`，经 `kamal app exec -r api`，不占部署锁，与 accessory 并行），保证随后同时启动的各角色不会跑在旧表结构上。首次 `setup` 在 Kamal 启动数据库之后执行。
-3. `kamal deploy --skip-push --version <版本>` 部署 Turbo 构建的镜像：gateway 健康后，其余角色并行启动（`boot.parallel_roles`）。
-4. 删除 `deploy.yml` 已经没有、Kamal 不会自己停的旧角色容器（`deploy.sh` 的 `RETIRED_ROLES`：#241 合进控制面的 `forge`、`routines`、`internal`，#245 合进来的 `llm`），数据（卷 `axp-forge`、`axp-llm`，库 `axp_routines`）不动。
+## 存储与备份
 
-等待都由检查完成，不靠固定时长：每个角色都有 Docker 健康检查（启动期每 0.5 秒一次，能响应 HTTP 即就绪；controller 进程在即就绪），Kamal 据此判断就绪（`readiness_delay: 0`）。旧容器最多等 2 秒（`drain_timeout`）：聊天 SSE 连接不会自己结束，浏览器断开后会带 `Last-Event-ID` 自动续上；控制面收到 SIGTERM 后最多等 1 秒就关闭连接。controller 收到 SIGTERM 后跑完当前一轮即退出（停止时限 30 秒，留给正在进行的 Docker 操作）。控制面的两个 listener 一起停：任一个监听失败，进程整体退出。routine-worker 收到 SIGTERM 后不再取触发，把进行中的运行记为「运行被中断（服务重启）」，没修订完的反馈留给下一个 worker；新 worker 等旧的放开锁之后才开始，所以部署时不会两边同时执行。
+卷都用 StorageClass `axp`（k3s 的 local-path，数据在 `/var/lib/rancher/k3s/storage`），回收策略 `Retain`：删掉 PVC（卸载环境包、删智能体、重装）不会删数据，PV 和目录要手动清理。
 
-accessory `axp-nats`（NATS JetStream，卷 `axp-nats`）承载 runtime 的事件（见[命令与事件](../docs/architecture/queue.md)）和定时任务的计划，在 Kamal 网络和 runtime 网络上可达、不发布端口，不设鉴权；已有的机器在下一次部署前会自动启动它。数据库是 Kamal accessory `axp-postgres`（卷 `axp-postgres`，镜像 `pgvector/pgvector:pg17-trixie`：PostgreSQL 17 加 pgvector，智能体记忆存在表 `memories`；镜像变化时 `deploy.sh` 在迁移前重启它）。每个智能体的全部状态（工作区和 Codex 会话）在它自己的卷 `axp-agent-<id>` 里，只挂进它自己的容器（`axp-agent-<id>`，重启策略 `unless-stopped`）。以前存智能体快照的 SeaweedFS（挂着卷 `axp-s3` 的 `axp-s3`、`axp-s3-proxy`）和旧 controller 的 runtime 容器在部署时删除，卷 `axp-s3` 留着，确认不再需要后手动删除。数据都在本机卷里，换机器不会自动迁移；开发环境的 `axp-dev-*` 容器和卷与这些完全分开。
+- 每天 04:00 的 CronJob `backup` 把所有数据库 `pg_dumpall` 到卷 `backups`，保留 7 份。
+- 其他卷（`objects`、`forge`、`llm`、`agenvo-relay`、`agent-*`、`openobserve`）在 local-path 的目录里，需要的话自己复制到机器外。
+- Artifact 也可以放外部 S3：在 `production.env` 设 `AXP_S3_ENDPOINT`、`AXP_S3_BUCKET`、`AXP_S3_REGION` 和 `AXP_S3_ACCESS_KEY_ID`/`AXP_S3_SECRET_ACCESS_KEY`；已有的对象不会自动搬。
 
-日志由 Kamal accessory `axp-openobserve`（[OpenObserve](https://openobserve.ai)，卷 `axp-openobserve`）收集：各角色通过 OTLP 发送，`OTEL_SERVICE_NAME` 区分来源（`web`、`memory-service`、`control-plane`、`control-plane-controller`、`control-plane-routine-worker`；#241 之前的 `forge-service`、`routine-service`、`control-plane-api`、`control-plane-internal` 和 #245 之前的 `llm-gateway` 只出现在旧日志里；LLM 网关内嵌的 CLIProxyAPI 的日志现在是 `control-plane` 下带 `library=cliproxy` 的记录）。agent runtime 容器运行智能体执行的代码、不持有任何凭据：它们把日志、trace 和指标（包括 Codex 原生的 OpenTelemetry 数据，日志事件含 prompt）发给 accessory `axp-otel-collector`（runtime 网络上的 `otel-collector:4318`，配置见 `otel-collector.yaml`），由它带上凭据转发到 OpenObserve，记录带有 `axp.agent.id`。Codex 每收到一段流式输出都会产生一条日志和几个 span（约每两个字一条），Collector 会过滤掉这部分，只保留回合级的事件和 span；Collector 不保存状态，每次部署都会重启以应用配置变更。root 账号是 `root@axp.local`，密码 `AXP_OBSERVE_PASSWORD` 由 `deploy.sh` 首次需要时写入 `production.env`；已有的机器在下一次部署前会自动启动这个 accessory。
+## 日志
 
-记什么由服务自己决定，规则是：记下排查时需要的，不记重复的。
+各进程用 OTLP 发到 OpenObserve，`OTEL_SERVICE_NAME` 区分来源（`web`、`control-plane`、`control-plane-controller`、`control-plane-routine-worker`、`memory-service`），`service.version` 是部署的版本（`AXP_VERSION`）。智能体和环境包服务不持有凭据，发到 `otel-collector`，由它带上凭据转发；Collector 过滤掉 Codex 每段流式输出的日志和 span（`k3s/infra/otel-collector.yaml`）。
 
-- 健康检查和前端轮询路由的成功 GET 不记，路由由各服务自己列出（memory-service 的 `setup(quiet=…)`）；其他请求照记，4xx 记 WARN，5xx 记 ERROR。
-- 业务错误中，调用方自己的错（4xx）不记；上游或服务端的失败（424、5xx）记一条 WARN，带 `request_id`、`code`、方法和路径（`packages/service-go/httpapi`）。`request_id` 就是 gateway 访问日志里的 `uuid`。
-- 循环里每轮都会重复的失败（远程电脑离线、数据库断开）在错误变化时记一次；同一个错误持续时，每 10 分钟再记一次，这样最近的时间窗里也能看到；恢复后重新计算（`telemetry.Repeats`）。
-- 每条记录带 `service.version`，值为部署的 git commit（Kamal 的 `KAMAL_VERSION`）。
+记什么由服务自己决定：健康检查和前端轮询的成功 GET 不记；调用方自己的错（4xx）不记，上游和服务端的失败（424、5xx）记 WARN；循环里重复的失败在变化时记一次，持续时每 10 分钟再记一次（`telemetry.Repeats`）。
 
-## Artifact 的对象存储
+## 从 Kamal 迁移
 
-[Artifact](../docs/architecture/artifacts.md) 的文件在 S3 兼容的对象存储里，由控制面（`api`）读写，浏览器和 runtime 都不直接访问它。两种模式由 `production.env` 里的部署参数选择：
+`deploy/k3s/migrate-from-kamal.sh` 一次完成（AXP 停机，时间约为读完所有卷）：
 
-**内置（默认）**：accessory `s3`（SeaweedFS `mini`，容器 `axp-s3`，卷 `axp-objects`），只在 Kamal 网络上（`http://axp-s3:8333`），不发布端口、不在 runtime 网络上；桶 `axp-artifacts` 在第一次上传时创建。`deploy.sh` 首次需要时生成 `AXP_S3_ACCESS_KEY_ID`、`AXP_S3_SECRET_ACCESS_KEY` 写入 `production.env`，同一对凭据交给 SeaweedFS 和控制面。已有的机器下一次部署前自动启动它。
+1. 按 AXP 的清单建好 PVC（生产的、`agenvo-relay`、每个 `axp-agent-<id>` 对应的 `agent-<id>`）。
+2. 停掉 Kamal 的所有容器和 kamal-proxy（**只停不删**）。
+3. 把每个 Docker 卷**复制**进对应的 PVC（`axp-postgres`→`postgres`、`axp-nats`→`nats`、`axp-objects`→`objects`、`axp-openobserve`→`openobserve`、`axp-forge`→`forge`、`axp-llm`→`llm`、`axp-relay`→`axp-bundles/agenvo-relay`），保留属主和权限。
+4. 运行 `deploy.sh`：同一个 `production.env`，所以数据库密码、`AXP_SECRET_KEY`（智能体的 key、环境包配置的加密都由它派生）都不变；宿主 Caddy 和 Access 也不变（还是 `127.0.0.1:24180`）。
+5. 把主库的 `memories` 表搬到记忆服务自己的库 `axp_bundle_memory`，重启记忆服务。主库里的旧表保留。
 
-**外部 S3**：在 `production.env` 设
+中继的管理员密钥换成了由 `AXP_SECRET_KEY` 派生的（控制面也能派生），`production.env` 里的 `AXP_RELAY_ADMIN_SECRET` 不再使用；已配对的设备和授权在卷里，不受影响。
 
-```sh
-AXP_S3_BUILTIN=false
-AXP_S3_ENDPOINT=https://<account>.r2.cloudflarestorage.com   # 或 https://s3.<region>.amazonaws.com、MinIO 的地址等
-AXP_S3_BUCKET=axp-artifacts      # 可选，默认 axp-artifacts；凭据不能建桶时先建好
-AXP_S3_REGION=auto               # 可选，默认 us-east-1
-AXP_S3_ACCESS_KEY_ID=...
-AXP_S3_SECRET_ACCESS_KEY=...
-```
-
-缺少 endpoint 或凭据时 `deploy.sh` 在部署前报错；内置模式下设置了 `AXP_S3_ENDPOINT` 也会报错（避免以为在用外部 S3，实际写进内置的）。切到外部后，下一次部署删除 `axp-s3` 容器，卷 `axp-objects` 留着；已有的 Artifact 不会自动迁移，需要的话用任意 S3 工具把桶里的 `artifacts/` 复制过去。凭据只在 `production.env`（经 `deploy/secrets` 交给 Kamal），不进仓库。桶不需要公开：所有读取都经过控制面。
-
-公开分享和私有预览需要 Cloudflare Access 放行 `/share/artifacts` 和 `/preview/artifacts`（见 [Artifact 的路由矩阵](../docs/architecture/artifacts.md#路由矩阵)）。
-
-## 端口与访问
-
-生产端口固定在 `ports.env`：kamal-proxy HTTP `24180`、HTTPS `24143`，镜像仓库 `24150`，OpenObserve `24160`（只绑定 `127.0.0.1`，用 `ssh -L 24160:127.0.0.1:24160` 或反向代理访问）。它们不在 dev 的 3000–3992 范围、Linux 临时端口范围（32768+）和常用服务端口内；`production.env` 不能覆盖，`bun run dev --port` 也会拒绝。
-
-kamal-proxy 默认只监听 `127.0.0.1:24180`。AXP 没有登录，**不要直接暴露到公网**：在 Caddy 或隧道后面加访问控制再反代到该地址。可在 `production.env` 中用 `AXP_PUBLIC_HOST`、`AXP_PROXY_BIND` 调整。
+回到 Kamal：`kubectl -n axp scale deploy --all --replicas=0`，`docker start kamal-proxy`，再 `docker start` 停掉的 `axp-*` 容器（检出迁移前的提交，旧的部署文件还在那里）。Docker 卷没被动过，但迁移后在 k3s 里写入的数据不会带回去。在 k3s 上稳定运行一段时间后，再 `docker rm` 那些容器、删掉 Docker 卷。

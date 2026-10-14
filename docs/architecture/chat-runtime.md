@@ -1,6 +1,6 @@
 # 聊天与运行时架构
 
-本文说明聊天智能体怎样运行：每个智能体一个常驻容器，由它的[环境包](bundles.md)构建，状态在它自己的 Docker 卷上；容器里的 runtime 直接驱动 Codex 的 app-server（JSON-RPC，类型由固定版本的 Codex 生成），控制面经 runtime 的控制接口把工作交给它，runtime 把发生的事发到 NATS。公开契约以 [RFC #1](https://github.com/akarachen/axp/issues/1) 第 3–4 节为准，本文只记录实现取舍和运维要点。
+本文说明聊天智能体怎样运行：每个智能体一个常驻 Pod（k3s，命名空间 `<ns>-agents`），由它的[环境包](bundles.md)构建，状态在它自己的卷（PVC）上；容器里的 runtime 直接驱动 Codex 的 app-server（JSON-RPC，类型由固定版本的 Codex 生成），控制面经 runtime 的控制接口把工作交给它，runtime 把发生的事发到 NATS。公开契约以 [RFC #1](https://github.com/akarachen/axp/issues/1) 第 3–4 节为准，本文只记录实现取舍和运维要点。
 
 ## 组件与进程
 
@@ -8,11 +8,11 @@
 | ---------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | 公共 API（`api`）      | `api/chat.go`、`chat/chat.go`                       | 产品接口、SSE、幂等、产品投影与 `ui_event`；工作只写进 PostgreSQL                              |
 | 内部 API（`internal`） | `api/internal.go`、`control/gate.go`                | runtime 网关的 forward auth（谁持有这把 key、有没有这个插件），以及 groups、tasks、agenvo 插件 |
-| controller             | `control/controller.go`、`dispatch.go`、`events.go` | 唯一持有 Docker socket、唯一能连到 runtime 的进程：构建镜像、运行容器、交付工作、导入事件      |
+| controller             | `control/controller.go`、`dispatch.go`、`events.go` | 唯一管理 runtime 的 Pod、唯一能连到 runtime 的进程：构建镜像、运行 Pod、交付工作、导入事件     |
 | NATS JetStream         | stream `AGENT_EVENTS`                               | runtime 发出的事件，按智能体一个 subject                                                       |
 | agent runtime（容器）  | `apps/agent-runtime/src`                            | Node 24：驱动 Codex app-server，hono 提供控制接口，事件发到 NATS                               |
 
-代码路径相对于 `apps/control-plane/internal`。公共 API 不在 runtime 网络上，所以它从不直接调用 runtime：它写入命令后 `NOTIFY axp_agent_work`（提交时才送达），controller 收到后立即交付。
+代码路径相对于 `apps/control-plane/internal`。公共 API 从不直接调用 runtime：它写入命令后 `NOTIFY axp_agent_work`（提交时才送达），controller 收到后立即交付。
 
 ## 群与参与者
 
@@ -108,7 +108,7 @@ runtime 只有一个执行槽，打开或恢复 thread 时也占用它。压缩�
 | `POST /decide` | `approval_id`、`decision`                                                         | 用户对审批的决定（`accept`、`decline`）                                                                           |
 | `GET /status`  |                                                                                   | `boot_id`、当前命令、群和 turn                                                                                    |
 
-`boot_id` 是 runtime 每次启动生成的。prompt 和 steer 必须带上 controller 记下的那一次（`409 wrong_boot`）：Docker 重启了 runtime 而它还没报告时，发给它的命令退回等待，不会在新的启动里被当成旧的。
+`boot_id` 是 runtime 每次启动生成的。prompt 和 steer 必须带上 controller 记下的那一次（`409 wrong_boot`）：kubelet 重启了 runtime 而它还没报告时，发给它的命令退回等待，不会在新的启动里被当成旧的。
 
 启动参数（环境变量，`control.spec`）：`AXP_AGENT_ID`、`AXP_AGENT_KEY`（访问 AXP 服务的 key，`<agent>.<HMAC(agent:<agent>)>`）、`AXP_CONTROL_TOKEN`、`AXP_GATEWAY_URL`、`AXP_NATS_URL`、模型服务 `AXP_LLM_BASE_URL`（runtime 网关的 `/v1`，即 LLM 网关）、`AXP_LLM_API_KEY`（智能体的 key）、`AXP_MODEL`、`AXP_MODEL_CONTEXT_WINDOW`、`AXP_INSTRUCTIONS`（名称和指令，作为 Codex 的 developer instructions）、`AXP_CONFIG_VERSION`，以及 OpenTelemetry 的端点和资源属性。容器里没有任何模型服务商的凭据。
 
@@ -116,7 +116,7 @@ Codex 的静态配置是 `danger-full-access` 沙箱、`on-request` 审批：容
 
 ## 恢复与隔离
 
-- runtime 不能继续时退出（Codex 退出、插件安装失败），Docker 按重启策略（`unless-stopped`，越来越久的间隔）重新启动它。新的启动发出 `runtime.started` 时，交付给之前启动的命令以“执行中断，无法确认结果，未自动重试”失败，绝不重放；还在等的命令交给新的启动。
+- runtime 不能继续时退出（Codex 退出、插件安装失败），kubelet 按 Pod 的重启策略（`Always`，越来越久的间隔）重新启动它。新的启动发出 `runtime.started` 时，交付给之前启动的命令以“执行中断，无法确认结果，未自动重试”失败，绝不重放；还在等的命令交给新的启动。
 - `runtime.failed` 把智能体置为不可用，等待中的回复以中文原因失败（插件：“智能体扩展启动失败”；恢复：“智能体会话无法恢复”）。下一次启动报告成功后恢复可用。
 - 镜像构建失败时，智能体不可用，`build_error` 是构建输出的末尾（智能体编辑器里显示），等待中和之后的消息以“智能体环境构建失败”失败；修改智能体、修改环境包或重启后再构建。
 - runtime 没发出去的事件在它退出时丢失；它最后的状态以 controller 的处理为准。
@@ -124,7 +124,7 @@ Codex 的静态配置是 `danger-full-access` 沙箱、`on-request` 审批：容
 
 ## 状态
 
-一个智能体的全部状态是它的卷 `/agent`：`workspace/`（工作区，Codex 的 cwd）和 `codex/`（`CODEX_HOME`，含 Codex 的 thread 记录和装好的插件），以及 `attachments/`（用户发来的附件，原件在对象存储）。没有快照、没有对象存储：容器重建时卷还在，runtime 从卷上恢复 thread。宿主机的卷就是数据，换机器需要自己迁移（`docker volume` 备份）。
+一个智能体的全部状态是它的卷 `/agent`：`workspace/`（工作区，Codex 的 cwd）和 `codex/`（`CODEX_HOME`，含 Codex 的 thread 记录和装好的插件），以及 `attachments/`（用户发来的附件，原件在对象存储）。没有快照、没有对象存储：容器重建时卷还在，runtime 从卷上恢复 thread。节点上的卷就是数据（StorageClass `axp`，删除智能体时卷保留），换机器需要自己迁移（见 [deploy/README.md](../../deploy/README.md#存储与备份)）。
 
 ## 已知限制
 

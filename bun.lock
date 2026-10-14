@@ -45,9 +45,6 @@
     "apps/gateway": {
       "name": "@axp/gateway",
     },
-    "apps/memory-service": {
-      "name": "@axp/memory-service",
-    },
     "apps/remote": {
       "name": "@axp/remote",
     },
@@ -106,6 +103,9 @@
         "vite": "^8.3.4",
       },
     },
+    "bundles/memory/service": {
+      "name": "@axp/memory-service",
+    },
     "packages/akhook": {
       "name": "@axp/akhook",
     },
@@ -137,7 +137,7 @@
 
     "@axp/gateway": ["@axp/gateway@workspace:apps/gateway"],
 
-    "@axp/memory-service": ["@axp/memory-service@workspace:apps/memory-service"],
+    "@axp/memory-service": ["@axp/memory-service@workspace:bundles/memory/service"],
 
     "@axp/plugins-go": ["@axp/plugins-go@workspace:packages/plugins-go"],
 

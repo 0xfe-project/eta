@@ -10,14 +10,14 @@ AXP 从源码构建 agenvo，不等上游发布：`apps/agenvo/package.json` 固
 
 ## 组成
 
-| 部分         | 位置                                                                 | 作用                                                                                                                        |
-| ------------ | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| 任务看板     | `apps/control-plane/internal/tasks`、Web 的“任务”tab                 | 任务、时间线、运行；打开工作位置、派发与观察远程智能体、收尾（runner）                                                      |
-| 中继         | `@agenvo/server`（`apps/agenvo` 从源码构建），生产 accessory `relay` | 远程电脑上的 connector 与中继配对、保持 WSS 连接；控制面经它调用 Paseo/Herdr                                                |
-| 中继客户端   | `apps/control-plane/internal/relay`                                  | 管理员接口（配对、批准、撤销、状态）和 MCP `execute`                                                                        |
-| `axp`        | `apps/remote`（Go，`/remote/dl/axp-<os>-<arch>`）                    | 远程电脑上的安装（`axp setup`）和给智能体用的 CLI                                                                           |
-| tasks 插件   | `apps/agent-runtime/plugins/tasks`                                   | AXP 智能体读写看板：`list_tasks`、`get_task`、`list_assignees`、`list_places`、`create_task`、`update_task`、`comment_task` |
-| 远程电脑设置 | Web 设置的“远程电脑”                                                 | 添加电脑（安装命令）、核对指纹后批准、在线状态、撤销                                                                        |
+| 部分         | 位置                                                                     | 作用                                                                                                                        |
+| ------------ | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| 任务看板     | `apps/control-plane/internal/tasks`、Web 的“任务”tab                     | 任务、时间线、运行；打开工作位置、派发与观察远程智能体、收尾（runner）                                                      |
+| 中继         | `@agenvo/server`（`apps/agenvo` 从源码构建），内置环境包 `agenvo` 的服务 | 远程电脑上的 connector 与中继配对、保持 WSS 连接；控制面经它调用 Paseo/Herdr                                                |
+| 中继客户端   | `apps/control-plane/internal/relay`                                      | 管理员接口（配对、批准、撤销、状态）和 MCP `execute`                                                                        |
+| `axp`        | `apps/remote`（Go，`/remote/dl/axp-<os>-<arch>`）                        | 远程电脑上的安装（`axp setup`）和给智能体用的 CLI                                                                           |
+| tasks 插件   | `plugins/tasks`                                                          | AXP 智能体读写看板：`list_tasks`、`get_task`、`list_assignees`、`list_places`、`create_task`、`update_task`、`comment_task` |
+| 远程电脑设置 | Web 设置的“远程电脑”                                                     | 添加电脑（安装命令）、核对指纹后批准、在线状态、撤销                                                                        |
 
 ## 任务
 
@@ -207,16 +207,13 @@ Paseo 归档 worktree 时不检查未提交的改动，未提交的内容会丢�
 - **管理员接口**（`/api/admin/*`，Bearer 管理员密钥）：状态（设备、实例、在线、待批准的配对）、批准配对（配对码 + 指纹）、批准实例、撤销设备。
 - **MCP**（`/mcp`，工具 `execute`）：中继只接受 OAuth 访问令牌，令牌在所有者于浏览器中同意后签发。控制面持有管理员密钥，所以自己完成这一流程：动态注册客户端、用管理员密钥登录、读取同意页的一次性 handle 并同意、用授权码（S256 PKCE）换令牌。令牌存在表 `relay_token`（一行），API 与 controller 共用；刷新令牌只能用一次，所以刷新在事务的 advisory lock 下进行，授权失效（30 天或被撤销）时重新走一遍。
 
-中继的公开地址是它的 base URL：生产为 AXP 地址下的 `/remote/relay`（`AXP_RELAY_BASE_URL`，由 `AXP_PUBLIC_URL` 推出）。它检查 `Host` 和路径前缀，所以控制面在内网访问它时也带上 base URL 的主机名和前缀。`axp setup` 登记或报告时从 AXP 得到这个地址；地址变化时（迁移、开发实例换端口），它把已配对的 connector 改到新地址并重启服务，不需要重新配对，因为设备随中继的状态保留。
+中继的公开地址是它的 base URL：即 AXP 地址（`AXP_PUBLIC_URL`）下的 `/remote/relay`。它检查 `Host` 和路径前缀，所以控制面在内网访问它时也带上 base URL 的主机名和前缀。`axp setup` 登记或报告时从 AXP 得到这个地址；地址变化时（迁移、开发实例换端口），它把已配对的 connector 改到新地址并重启服务，不需要重新配对，因为设备随中继的状态保留。
 
 ## 部署
 
-| 环境 | 中继                                                                                                                                                                                                               |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 开发 | `bun run dev` 在端口块的 `P+8` 启动，自签证书（`var/relay`）直接提供 TLS（开发网关是 HTTP），base URL 为 `https://localhost:P+8/remote/relay`。本机的 connector 用 `axp setup --ca-file var/relay/cert.pem` 信任它 |
-| 生产 | accessory `relay`（`deploy/relay.Dockerfile`，标签为 agenvo commit 与 Dockerfile 的摘要，只在它们变化时重建并重启），状态在卷 `axp-relay`，不发布端口，由 `gateway` 在 `/remote/relay/*` 转发                      |
+中继是必选的内置环境包 `agenvo` 的服务（`bundles/agenvo/service`，见[环境包](bundles.md#服务)），开发和生产一样：controller 把它部署到 `<ns>-bundles`，镜像 `axp-relay` 由 `apps/agenvo/Dockerfile` 从固定提交构建的中继打包，状态（配对的设备、OAuth 授权）在卷 `agenvo-relay`。`gateway` 把 `/remote/relay/*` 原样（保留 `Host` 和路径）转发给 Service `agenvo`，WebSocket（`/remote/relay/connect`）同样经过它；客户端地址取 Cloudflare 的 `CF-Connecting-IP` 作为 `X-Forwarded-For`（中继信任一跳），用于中继的限流。
 
-生产的中继在 AXP 自己的域名下（`https://axp.akr.moe/remote/relay`）：`/remote/` 已对 Cloudflare Access 放行，中继由自己的配对和设备密钥鉴权。`gateway` 把 `/remote/relay/*` 原样（保留 `Host` 和路径）转发给 `axp-relay:8080`，WebSocket（`/remote/relay/connect`）同样经过它；客户端地址取 Cloudflare 的 `CF-Connecting-IP` 作为 `X-Forwarded-For`（中继信任一跳），用于中继的限流。管理员密钥 `AXP_RELAY_ADMIN_SECRET` 由 `deploy.sh` 生成，同时交给中继和控制面。`AXP_PUBLIC_URL` 是安装命令里的 AXP 地址，没有设置时远程电脑功能关闭。
+生产的中继在 AXP 自己的域名下（`https://axp.akr.moe/remote/relay`）：`/remote/` 已对 Cloudflare Access 放行，中继由自己的配对和设备密钥鉴权。开发时 AXP 的地址是 `bun run dev` 端口块的 `P+8`：开发网关在那里用自签证书（`var/relay`）提供 HTTPS（中继只接受 HTTPS 的 base URL），本机的 connector 用 `axp setup --ca-file var/relay/cert.pem` 信任它。中继的管理员密钥是 AXP 为这个环境包的服务派生的密钥（`AXP_BUNDLE_SECRET`），控制面用同样的方式派生，不用另外配置。`AXP_PUBLIC_URL` 没有设置时远程电脑功能关闭。
 
 ## 验证
 

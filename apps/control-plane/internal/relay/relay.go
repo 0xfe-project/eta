@@ -22,8 +22,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -32,7 +30,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -133,9 +130,8 @@ type Client struct {
 	HTTP   *http.Client
 }
 
-// New is the relay client, or nil when no relay is configured. caFile, when
-// set, is the only CA trusted for the relay (development's self-signed one).
-func New(internalURL, baseURL, secret, caFile string, db *pgxpool.Pool) (*Client, error) {
+// New is the relay client, or nil when no relay is configured.
+func New(internalURL, baseURL, secret string, db *pgxpool.Pool) (*Client, error) {
 	if internalURL == "" || baseURL == "" || secret == "" {
 		return nil, nil
 	}
@@ -143,25 +139,13 @@ func New(internalURL, baseURL, secret, caFile string, db *pgxpool.Pool) (*Client
 	if err != nil || public.Scheme != "https" || public.Host == "" {
 		return nil, fmt.Errorf("relay: base URL %q is not an HTTPS URL", baseURL)
 	}
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	if caFile != "" {
-		pem, err := os.ReadFile(caFile)
-		if err != nil {
-			return nil, err
-		}
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(pem) {
-			return nil, fmt.Errorf("relay: no certificate in %s", caFile)
-		}
-		transport.TLSClientConfig = &tls.Config{RootCAs: pool, ServerName: public.Hostname()}
-	}
 	return &Client{
 		URL: strings.TrimRight(internalURL, "/"), Public: public, Secret: secret, DB: db,
 		// Never follow redirects: consent answers with one to our callback.
 		// An execute script runs up to 30 seconds, and its calls are
 		// confirmed after that.
 		HTTP: &http.Client{
-			Transport: transport, Timeout: 90 * time.Second,
+			Timeout:       90 * time.Second,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
 	}, nil

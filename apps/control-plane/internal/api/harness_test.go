@@ -162,18 +162,7 @@ func (f *fakeDriver) Run(_ context.Context, spec container.Spec) error {
 	defer f.mu.Unlock()
 	f.runs = append(f.runs, spec)
 	f.containers[spec.AgentID] = &container.Runtime{
-		AgentID: spec.AgentID, ContainerID: uuid.NewString(), Config: spec.Config, State: container.Running,
-	}
-	return nil
-}
-
-func (f *fakeDriver) Start(_ context.Context, id string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	for _, c := range f.containers {
-		if c.ContainerID == id {
-			c.State = container.Running
-		}
+		AgentID: spec.AgentID, Config: spec.Config, State: container.Running,
 	}
 	return nil
 }
@@ -250,8 +239,8 @@ type env struct {
 }
 
 const (
-	repoBundles = "../../../agent-runtime/bundles"
-	repoPlugins = "../../../agent-runtime/plugins"
+	repoBundles = "../../../../bundles"
+	repoPlugins = "../../../../plugins"
 )
 
 func newEnv(t *testing.T) *env {

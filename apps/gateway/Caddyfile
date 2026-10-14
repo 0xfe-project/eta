@@ -1,18 +1,19 @@
-# AXP's gateways (Caddy). Two sites, each its own Kamal role in production:
+# AXP's gateways (Caddy). Two sites, each a Deployment in production
+# (deploy/k3s/app/gateways.yaml):
 #
 #   public.caddy   the browser's single same-origin entry
-#   runtime.caddy  agent runtimes' only route to the control plane's internal
-#                  API (with code hosting, routines and the LLM gateway's
-#                  /v1) and the memory service; it authenticates each runtime
-#                  once for them
+#   runtime.caddy  agent runtimes' and bundles' services' only route to the
+#                  control plane's internal API (with code hosting, routines
+#                  and the models) and to bundles' services; it
+#                  authenticates each caller once for them
 #
-# Upstreams trust the network instead of a shared secret: only the public
-# gateway reaches web, the control plane's public listener, OpenObserve and
-# the memory service's /api, only the runtime gateway (and AXP's own
-# services) the control plane's internal listener, and runtimes (on their
-# own network) reach only the runtime gateway, S3, NATS and the
-# OpenTelemetry Collector. AXP_GATEWAY_SITES picks the sites to serve; every
-# address defaults to production's and scripts/dev.sh overrides them.
+# Upstreams trust the network instead of a shared secret (NetworkPolicy,
+# deploy/k3s): only the public gateway reaches web and the control plane's
+# public listener, only the runtime gateway the control plane's internal
+# listener for runtimes and services, which reach nothing else of AXP's but
+# NATS and the OpenTelemetry Collector. AXP_GATEWAY_SITES picks the sites to
+# serve; every address defaults to production's and scripts/dev.sh
+# overrides them.
 {
 	admin off
 	auto_https off
@@ -25,6 +26,18 @@
 		format filter {
 			request>headers delete
 			resp_headers delete
+		}
+	}
+}
+
+# The bundle's service named in the first argument (a path segment): the
+# Service <name> (port 80) in the bundles' namespace, found through the
+# cluster's DNS (development's gateway runs outside the cluster).
+(bundle_service) {
+	reverse_proxy {args[0]}.{$AXP_BUNDLES_NAMESPACE:axp-bundles}.svc.cluster.local:80 {
+		flush_interval -1
+		transport http {
+			resolvers {$AXP_CLUSTER_DNS:10.43.0.10}
 		}
 	}
 }

@@ -1,16 +1,17 @@
-# Only the prebuilt artifacts, the memory service's sources, the bundles and
-# plugins agents are built from, the gateway configuration and what remote
-# computers download are sent to Docker.
+# Only the prebuilt artifacts, the bundles and plugins agents are built
+# from, the gateway configuration and what remote computers download are
+# sent to BuildKit.
 *
 !apps/control-plane/out/
 !packages/plugins-go/out/
 !apps/gateway/Caddyfile
 !apps/gateway/*.caddy
 !apps/web/out/
-!apps/memory-service/out/
-!apps/memory-service/axp_memory/
-!apps/agent-runtime/bundles/
-!apps/agent-runtime/plugins/
+!bundles/
+!plugins/
+# Bundles' services run from images of their own; only their manifests.
+bundles/*/service/*
+!bundles/*/service/*.yaml
 !apps/remote/out/dist/
 !apps/agenvo/out/dist/
 **/__pycache__

@@ -1,6 +1,6 @@
 // Package bundles is what agents are built from (docs/architecture/bundles.md):
 // a bundle is a script run into the agent's image and the plugins it adds.
-// The built-in ones are directories in apps/agent-runtime/bundles
+// The built-in ones are directories in the repository's bundles/
 // (bundle.json, an optional setup script and its files); the user's are rows
 // of the bundle table. An agent loads any number of them.
 package bundles
@@ -39,6 +39,10 @@ type Bundle struct {
 	// What the user sets for it (config.go); built-in bundles only.
 	Config map[string]any `json:"config,omitempty" doc:"What the user sets for it, a JSON Schema of string properties: environment variables of the agents that load it."`
 	config *ConfigSchema
+	// What it runs in the cluster, if anything (service.go).
+	Service *Service `json:"service,omitempty"`
+	// How its service is, when it has one and the cluster is reachable.
+	ServiceStatus *ServiceStatus `json:"service_status,omitempty"`
 	// A built-in bundle's directory.
 	Dir string `json:"-"`
 }
@@ -93,6 +97,11 @@ func readDir(dir string) ([]Bundle, error) {
 		if b.config, err = parseConfig(b.Config); err != nil {
 			return nil, fmt.Errorf("%s: config: %w", manifest, err)
 		}
+		if b.Service != nil {
+			if err := readService(b.Service, b.Dir); err != nil {
+				return nil, fmt.Errorf("%s: service: %w", manifest, err)
+			}
+		}
 		out = append(out, b)
 	}
 	return out, nil
@@ -103,6 +112,7 @@ type row struct {
 	Description string    `db:"description"`
 	Script      string    `db:"script"`
 	Plugins     []string  `db:"plugins"`
+	Service     *Service  `db:"service"`
 	CreatedAt   time.Time `db:"created_at"`
 	UpdatedAt   time.Time `db:"updated_at"`
 }
@@ -119,7 +129,7 @@ func (c *Catalog) All(ctx context.Context, db pg.DB) ([]Bundle, error) {
 	}
 	out := slices.Clone(builtin)
 	for _, r := range rows {
-		out = append(out, Bundle{Name: r.Name, Description: r.Description, Script: r.Script, Plugins: r.Plugins})
+		out = append(out, *public(r))
 	}
 	return out, nil
 }
@@ -192,6 +202,8 @@ type Input struct {
 	Description *string
 	Script      *string
 	Plugins     *[]string
+	// A service whose manifests are empty removes it.
+	Service *Service
 }
 
 func (c *Catalog) check(in Input) error {
@@ -203,7 +215,15 @@ func (c *Catalog) check(in Input) error {
 			return err
 		}
 	}
-	return nil
+	return checkService(in.Service)
+}
+
+// service is what to store of in: nothing for none.
+func (in Input) service() *Service {
+	if in.Service == nil || in.Service.Manifests == "" {
+		return nil
+	}
+	return in.Service
 }
 
 func (c *Catalog) builtinNamed(name string) (bool, error) {
@@ -214,7 +234,7 @@ func (c *Catalog) builtinNamed(name string) (bool, error) {
 func readOnly() error { return apierr.New(409, "BUNDLE_BUILTIN", "内置环境包不能修改。") }
 
 func public(r *row) *Bundle {
-	return &Bundle{Name: r.Name, Description: r.Description, Script: r.Script, Plugins: r.Plugins}
+	return &Bundle{Name: r.Name, Description: r.Description, Script: r.Script, Plugins: r.Plugins, Service: r.Service}
 }
 
 func (c *Catalog) Create(ctx context.Context, tx pgx.Tx, in Input) (*Bundle, error) {
@@ -232,15 +252,15 @@ func (c *Catalog) Create(ctx context.Context, tx pgx.Tx, in Input) (*Bundle, err
 		return nil, apierr.New(409, "BUNDLE_EXISTS", "已有同名环境包。")
 	}
 	now := pg.Now()
-	created, err := tx.Exec(ctx, `INSERT INTO bundle (name, description, script, plugins, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $5) ON CONFLICT (name) DO NOTHING`, *in.Name, *in.Description, *in.Script, added, now)
+	created, err := tx.Exec(ctx, `INSERT INTO bundle (name, description, script, plugins, service, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $6) ON CONFLICT (name) DO NOTHING`, *in.Name, *in.Description, *in.Script, added, in.service(), now)
 	if err != nil {
 		return nil, err
 	}
 	if created.RowsAffected() == 0 {
 		return nil, apierr.New(409, "BUNDLE_EXISTS", "已有同名环境包。")
 	}
-	return &Bundle{Name: *in.Name, Description: *in.Description, Script: *in.Script, Plugins: added}, nil
+	return &Bundle{Name: *in.Name, Description: *in.Description, Script: *in.Script, Plugins: added, Service: in.service()}, nil
 }
 
 // Update changes the user's bundle; agents loading it get its new plugins
@@ -271,8 +291,11 @@ func (c *Catalog) Update(ctx context.Context, tx pgx.Tx, name string, in Input) 
 	if in.Plugins != nil {
 		r.Plugins, _ = c.Plugins.Choose(*in.Plugins)
 	}
-	if _, err := tx.Exec(ctx, `UPDATE bundle SET description = $2, script = $3, plugins = $4, updated_at = $5
-		WHERE name = $1`, name, r.Description, r.Script, r.Plugins, pg.Now()); err != nil {
+	if in.Service != nil {
+		r.Service = in.service()
+	}
+	if _, err := tx.Exec(ctx, `UPDATE bundle SET description = $2, script = $3, plugins = $4, service = $5, updated_at = $6
+		WHERE name = $1`, name, r.Description, r.Script, r.Plugins, r.Service, pg.Now()); err != nil {
 		return nil, err
 	}
 	if in.Plugins != nil {

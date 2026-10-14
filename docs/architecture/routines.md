@@ -50,7 +50,7 @@ worker 通过 durable consumer `routine-fires` 取触发消息，取到即确认
 
 ## 聊天智能体的 routines 插件
 
-RFC #23 §6 的浅集成：聊天智能体启用 `routines` 插件（`apps/agent-runtime/plugins/routines`）后，可以在对话里替用户建定时任务（“每天早上帮我做个日报”）、查看已有的任务和报告、修改要求、暂停或立即运行。插件的 MCP 服务在控制面的内部 listener 上（`/routines/mcp`，`internal/routineapi/mcp.go`），工具是 `list_routines`、`get_routine`、`get_run`、`create_routine`、`update_routine`、`run_routine`，直接包装上面的领域函数；没有删除和反馈（反馈是用户自己的声音）。runtime 经 runtime 网关的 `/routines/*` 访问它，网关先确认这个智能体启用了 `routines` 插件（见[网关](gateway.md)），这个路由只接受带 `X-AXP-Agent-Id` 的请求，而它只在内部 listener 上，只有 runtime 网关连得到。新建时不指定模型，就用用户最近更新的那个定时任务的模型。
+RFC #23 §6 的浅集成：聊天智能体启用 `routines` 插件（`plugins/routines`）后，可以在对话里替用户建定时任务（“每天早上帮我做个日报”）、查看已有的任务和报告、修改要求、暂停或立即运行。插件的 MCP 服务在控制面的内部 listener 上（`/routines/mcp`，`internal/routineapi/mcp.go`），工具是 `list_routines`、`get_routine`、`get_run`、`create_routine`、`update_routine`、`run_routine`，直接包装上面的领域函数；没有删除和反馈（反馈是用户自己的声音）。runtime 经 runtime 网关的 `/routines/*` 访问它，网关先确认这个智能体启用了 `routines` 插件（见[网关](gateway.md)），这个路由只接受带 `X-AXP-Agent-Id` 的请求，而它只在内部 listener 上，只有 runtime 网关连得到。新建时不指定模型，就用用户最近更新的那个定时任务的模型。
 
 ## 反馈
 

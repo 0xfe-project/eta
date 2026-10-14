@@ -2,7 +2,7 @@
 # Builds agenvo from the commit apps/agenvo/package.json pins (the fork, so
 # AXP need not wait for an upstream release) into apps/agenvo/out:
 #   relay/    the relay (@agenvo/server and its production dependencies),
-#             which development runs and deploy/relay.Dockerfile copies
+#             which apps/agenvo/Dockerfile copies (the agenvo bundle's service)
 #   dist/     the connectors remote computers install, served at
 #             /remote/dl/agenvo-<kind>-<version>.tgz
 #   version   the version the relay and the connectors report: agenvo's own

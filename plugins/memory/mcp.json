@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "memory": {
+      "url": "${AXP_GATEWAY_URL}/bundles/memory/mcp",
+      "headers": { "Authorization": "Bearer ${AXP_AGENT_KEY}" }
+    }
+  }
+}

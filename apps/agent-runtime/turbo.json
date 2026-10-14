@@ -27,6 +27,8 @@
     // The image's rules run with akhook; in CI (CI set) they never skip.
     "test": {
       "dependsOn": ["generate", "@axp/akhook#build"],
+      // The plugins' hooks and servers are tested here too.
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/plugins/**"],
       "env": ["CI"]
     }
   }

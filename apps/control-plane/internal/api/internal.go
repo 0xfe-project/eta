@@ -31,11 +31,25 @@ func registerInternal(api huma.API, d *Deps) {
 	}, func(ctx context.Context, in *struct {
 		Bearer
 		Plugin string `query:"plugin" maxLength:"64" doc:"The plugin whose route this is; the agent must have it."`
-	}) (*struct {
-		AgentID string `header:"X-AXP-Agent-Id"`
-		GroupID string `header:"X-AXP-Group-Id"`
-	}, error) {
-		agent, err := control.AgentFor(ctx, d.DB, d.Secret, in.token(), in.Plugin)
+		Bundle string `query:"bundle" maxLength:"40" doc:"The bundle whose service the route reaches; the agent must load it, or the calling service use it."`
+		Use    string `query:"use" enum:"llm" doc:"What the route serves, for bundles' services that declare they use it."`
+		// For a bundle's service: the agent its model requests are for.
+		For string `header:"X-AXP-Agent-Id" maxLength:"100"`
+	}) (*runtimeAuthOut, error) {
+		if strings.HasPrefix(in.token(), "bundle.") {
+			name, err := control.BundleFor(ctx, d.DB, d.Chat.Bundles, d.Secret, in.token(), in.Use, in.Bundle)
+			if err != nil {
+				return nil, err
+			}
+			// A model request's usage is the agent's the service works for,
+			// which it names; anywhere else it is only itself.
+			agent := "bundle-" + name
+			if in.Use == "llm" && in.For != "" {
+				agent = in.For
+			}
+			return &runtimeAuthOut{AgentID: agent, Bundle: name}, nil
+		}
+		agent, err := control.AgentFor(ctx, d.DB, d.Secret, in.token(), in.Plugin, in.Bundle)
 		if err != nil {
 			return nil, err
 		}
@@ -47,9 +61,12 @@ func registerInternal(api huma.API, d *Deps) {
 		if command != nil {
 			groupID = command.GroupID
 		}
-		return &struct {
-			AgentID string `header:"X-AXP-Agent-Id"`
-			GroupID string `header:"X-AXP-Group-Id"`
-		}{agent, groupID}, nil
+		return &runtimeAuthOut{AgentID: agent, GroupID: groupID}, nil
 	})
+}
+
+type runtimeAuthOut struct {
+	AgentID string `header:"X-AXP-Agent-Id"`
+	GroupID string `header:"X-AXP-Group-Id"`
+	Bundle  string `header:"X-AXP-Bundle"`
 }

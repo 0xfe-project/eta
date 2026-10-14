@@ -2,20 +2,18 @@
 // and operates their runtimes, connects the GitHub App agents act as (forge),
 // keeps routines and is the LLM gateway (llm). One binary, one role per process:
 //
-//	axp-control-plane serve       both APIs, each on its own listener:
+//	axp-control-plane serve       both APIs, each on its own listener, and the models (CLIProxyAPI):
 //	                              the browser's (AXP_API_ADDR, default :8000) under /api,
 //	                              /api/forge, /api/routines, /api/llm, /remote, /share and /preview;
 //	                              runtimes' (AXP_INTERNAL_ADDR, default :8001) under /internal,
 //	                              /forge, /routines, /tasks, /groups, /agenvo, /artifacts, /attachments,
 //	                              /v1 (the LLM gateway's OpenAI-compatible API) and /llm
-//	axp-control-plane controller  builds and runs agents' containers and delivers their work (Docker socket)
+//	axp-control-plane controller  builds and runs agents' runtimes (Kubernetes) and delivers their work
 //	axp-control-plane routine-worker
 //	                              runs routines when they fire and revises their briefs
 //	axp-control-plane migrate     applies both databases' migrations (the control plane's, routines')
 //	axp-control-plane openapi public|internal|routines
 //	                              prints an API's OpenAPI document
-//	axp-control-plane ensure-runtime-network
-//	                              creates the Docker network runtimes run on
 //
 // Settings come from the environment (internal/config); service-go runs
 // the commands (docs/architecture/service-framework.md).
@@ -29,13 +27,16 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 	_ "time/tzdata" // routines' time zones, wherever this runs
 
 	"github.com/akarachen/axp/apps/control-plane/internal/api"
 	"github.com/akarachen/axp/apps/control-plane/internal/artifacts"
+	"github.com/akarachen/axp/apps/control-plane/internal/auth"
 	"github.com/akarachen/axp/apps/control-plane/internal/bundles"
+	"github.com/akarachen/axp/apps/control-plane/internal/bundlesvc"
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
 	"github.com/akarachen/axp/apps/control-plane/internal/config"
 	"github.com/akarachen/axp/apps/control-plane/internal/container"
@@ -58,6 +59,8 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/sync/errgroup"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 )
 
 func main() {
@@ -111,17 +114,6 @@ func main() {
 			"internal": func() huma.API { return api.Internal(openAPIDeps()).API },
 			"routines": func() huma.API { return routineapi.New(&routineapi.Deps{}).API },
 		}),
-		service.Command{Name: "ensure-runtime-network", Run: func(ctx context.Context, _ []string) error {
-			cfg, err := config.Load()
-			if err != nil {
-				return err
-			}
-			driver, err := container.NewDocker(cfg.Dev, cfg.RuntimeImage)
-			if err != nil {
-				return err
-			}
-			return driver.EnsureNetwork(ctx)
-		}},
 	)
 }
 
@@ -186,7 +178,12 @@ func connect(ctx context.Context, serving bool) (*services, error) {
 		}
 		return pull.HeadSHA, nil
 	}}
-	relayClient, err := relay.New(cfg.RelayURL, cfg.RelayBaseURL, cfg.RelayAdminSecret, cfg.RelayCAFile, pool)
+	// The relay is the agenvo bundle's service, in the bundles' namespace.
+	relayURL, relayBase := "http://agenvo."+cfg.Namespace+"-bundles.svc.cluster.local", ""
+	if cfg.PublicURL != "" {
+		relayBase = strings.TrimRight(cfg.PublicURL, "/") + "/remote/relay"
+	}
+	relayClient, err := relay.New(relayURL, relayBase, auth.BundleSecret([]byte(cfg.SecretKey), "agenvo"), pool)
 	if err != nil {
 		return nil, err
 	}
@@ -260,6 +257,13 @@ func handlers(deps *api.Deps, code *forge.Server, routines *routineapi.Deps, mod
 // and Codex retries a model stream cut short, so stopping does not wait for
 // them.
 func serve(ctx context.Context, s *services) error {
+	if kube, err := container.KubeConfig(); err == nil {
+		if objects, err := dynamic.NewForConfig(kube); err == nil {
+			s.deps.ServiceStatuses = func(ctx context.Context) (map[string]bundles.ServiceStatus, error) {
+				return bundlesvc.Statuses(ctx, objects, s.cfg.Namespace+"-bundles")
+			}
+		}
+	}
 	public, internal := handlers(s.deps, s.forge, s.routines, s.llm)
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return s.llm.Run(ctx) })
@@ -318,12 +322,26 @@ func runController(ctx context.Context, s *services, interval time.Duration) err
 	// The step in progress always finishes, even after SIGTERM: it may be
 	// starting a container or delivering a command.
 	work := context.WithoutCancel(ctx)
-	driver, err := container.NewDocker(s.cfg.Dev, s.cfg.RuntimeImage)
+	kube, err := container.KubeConfig()
 	if err != nil {
 		return err
 	}
-	if err := driver.EnsureNetwork(work); err != nil {
+	client, err := kubernetes.NewForConfig(kube)
+	if err != nil {
 		return err
+	}
+	objects, err := dynamic.NewForConfig(kube)
+	if err != nil {
+		return err
+	}
+	services := &bundlesvc.Reconciler{
+		Client: objects, Namespace: s.cfg.Namespace + "-bundles", Bundles: s.deps.Chat.Bundles, DB: s.deps.DB,
+		DatabaseURL: s.cfg.DatabaseURL, Secret: []byte(s.cfg.SecretKey), GatewayURL: s.cfg.RuntimeGatewayURL,
+		OTLPURL: s.cfg.RuntimeOTLPURL, PublicURL: s.cfg.PublicURL, Registry: s.cfg.Registry, ImageTag: s.cfg.ImageTag,
+	}
+	driver := &container.Kubernetes{
+		Client: client, Namespace: s.cfg.Namespace + "-agents",
+		Registry: s.cfg.Registry, BuildKit: s.cfg.BuildKit, BaseImage: s.cfg.RuntimeImage,
 	}
 	events, err := control.ConnectEvents(s.cfg.NATSURL)
 	if err != nil {
@@ -342,7 +360,7 @@ func runController(ctx context.Context, s *services, interval time.Duration) err
 	controller := &control.Controller{
 		DB: s.deps.DB, Chat: s.deps.Chat, Bundles: s.deps.Chat.Bundles, Driver: driver, Models: s.models,
 		Secret: []byte(s.cfg.SecretKey), PluginsDir: s.cfg.PluginsDir,
-		RuntimeGatewayURL: s.cfg.RuntimeGatewayURL, NATSURL: s.cfg.NATSURL, Wake: wake,
+		RuntimeGatewayURL: s.cfg.RuntimeGatewayURL, NATSURL: s.cfg.NATSURL, OTLPURL: s.cfg.RuntimeOTLPURL, Wake: wake,
 	}
 	// Remote agents' runs, on their own loop: relay calls take seconds. It
 	// runs only while this controller holds the lock (a computer's capacity
@@ -358,6 +376,8 @@ func runController(ctx context.Context, s *services, interval time.Duration) err
 		// stop. Notifications missed while it reconnects are found by the
 		// next tick.
 		running.Go(func() { pg.Listen(loopCtx, s.cfg.DatabaseURL, chat.WorkChannel, wake) })
+		// Bundles' services, as the catalog and their configs say.
+		running.Go(func() { services.Run(loopCtx, 5*time.Second) })
 		// Stopping twice is fine.
 		return func() { stop(); running.Wait() }
 	}

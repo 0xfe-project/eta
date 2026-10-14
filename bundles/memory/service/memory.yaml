@@ -1,0 +1,33 @@
+# Agents' memories (axp_memory, next to this file): one for every agent, each reaching
+# only its own (X-AXP-Agent-Id). Its database, its token for the models,
+# the gateway's and the collector's addresses are in the Secret axp-memory
+# that AXP writes.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memory
+spec:
+  selector: { matchLabels: { app: memory } }
+  template:
+    metadata: { labels: { app: memory } }
+    spec:
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      containers:
+        - name: memory
+          image: axp-memory
+          envFrom: [{ secretRef: { name: axp-memory } }]
+          env: [{ name: OTEL_SERVICE_NAME, value: memory-service }]
+          ports: [{ containerPort: 8320 }]
+          readinessProbe:
+            httpGet: { path: /up, port: 8320 }
+          resources:
+            limits: { memory: 2Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: memory
+spec:
+  selector: { app: memory }
+  ports: [{ name: http, port: 80, targetPort: 8320 }]

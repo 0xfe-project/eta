@@ -48,7 +48,7 @@ func TestVersionIsTheRelaysHealthVersion(t *testing.T) {
 		_, _ = w.Write([]byte(`{"service":"agenvo","version":"0.2.0"}`))
 	}))
 	defer srv.Close()
-	c, err := New(srv.URL, "https://axp.test/remote/relay", "secret", "", nil)
+	c, err := New(srv.URL, "https://axp.test/remote/relay", "secret", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3,6 +3,6 @@
   "private": true,
   "scripts": {
     "lint": "test -z \"$(gofmt -l .)\" && go vet ./...",
-    "test": "bash ../../scripts/dev-postgres.sh && go test ./..."
+    "test": "bash ../../scripts/test-postgres.sh && go test ./..."
   }
 }

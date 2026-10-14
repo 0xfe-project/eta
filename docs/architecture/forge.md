@@ -10,7 +10,7 @@
 | 向导          | 设置 → 连接里的 GitHub，点开是分步向导（`connection-settings.tsx`、`github-wizard.tsx`）  | 了解、创建 App、安装到仓库、完成                    |
 | runtime       | `apps/agent-runtime/axp_runtime/runtime.py`（`_refresh_github`）                          | 启动时以 App 的身份登录 gh，过期前刷新              |
 | git 配置      | `apps/agent-runtime/git/gitconfig` → `/etc/gitconfig`                                     | GitHub 走 HTTPS，凭据来自 gh，commit 身份           |
-| `github` 插件 | `apps/agent-runtime/plugins/github`                                                       | `open_pull_request`（`/forge/mcp`）与使用说明 skill |
+| `github` 插件 | `plugins/github`                                                                          | `open_pull_request`（`/forge/mcp`）与使用说明 skill |
 
 | 路径              | 调用方                                                 | 鉴权                        |
 | ----------------- | ------------------------------------------------------ | --------------------------- |
