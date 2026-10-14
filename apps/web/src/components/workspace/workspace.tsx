@@ -26,10 +26,11 @@ import {
   useOutboxActions,
   useOutboxDelivery,
 } from "@/queries/outbox";
+import { AgentBar, AgentTitle } from "./agent-bar";
 import { AgentEditor } from "./agent-editor";
 import { BottomNav, Sidebar } from "./app-shell";
 import { ChatPanel, ComposerNotice } from "./chat-panel";
-import { GroupBar, GroupList } from "./groups";
+import { GroupList } from "./groups";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
 import { useAgents } from "./use-agents";
 import { useGroups } from "./use-groups";
@@ -181,9 +182,7 @@ export function Workspace({
           >
             <ArrowLeftIcon />
           </Button>
-          <h1 className="min-w-0 flex-1 truncate text-sm font-medium">
-            {group?.name}
-          </h1>
+          <AgentTitle group={group} onInfo={showInfo} />
           <Button
             size="icon"
             variant="ghost"
@@ -223,7 +222,7 @@ export function Workspace({
               loadingOlder={history.loadingOlder}
               onLoadOlder={history.loadOlder}
               interactions={waiting}
-              head={<GroupBar group={group} onInfo={showInfo} />}
+              head={<AgentBar group={group} onInfo={showInfo} />}
               connectionLost={connectionLost}
               outgoing={outgoing}
               onRetry={outbox.retry}

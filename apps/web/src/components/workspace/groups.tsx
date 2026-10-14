@@ -277,44 +277,6 @@ export function ArchivedGroups() {
   );
 }
 
-export function GroupBar({
-  group,
-  onInfo,
-}: {
-  group?: Group;
-  onInfo: () => void;
-}) {
-  return (
-    <div className="hidden shrink-0 justify-center px-3 pt-3 pb-2 md:flex">
-      {group && (
-        <button
-          type="button"
-          onClick={onInfo}
-          className="group flex max-w-full flex-col items-center outline-none"
-          aria-label={`${group.name}，${group.kind === "direct" ? "智能体设置" : "查看群信息"}`}
-        >
-          <span className="flex -space-x-6">
-            {group.participants
-              .filter((p) => p.member)
-              .slice(0, 3)
-              .map((p) => (
-                <AgentAvatar
-                  key={p.agent_id}
-                  agent={{ id: p.agent_id }}
-                  animate={group.kind === "direct"}
-                  className="size-16"
-                />
-              ))}
-          </span>
-          <span className="relative -mt-2.5 max-w-48 truncate border bg-background px-2.5 py-0.5 text-sm font-medium shadow-sm group-hover:bg-muted group-focus-visible:ring-1 group-focus-visible:ring-ring">
-            {group.name}
-          </span>
-        </button>
-      )}
-    </div>
-  );
-}
-
 export function GroupInfo() {
   const { data: chat } = useQuery(chatQueryOptions());
   const { current: group, groups } = useGroups();
