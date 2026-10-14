@@ -26,6 +26,7 @@ import { AgentAvatar, AgentStatus } from "./agent-identity";
 import { when } from "./routine-format";
 import { useAgents } from "./use-agents";
 import { useGroups, useOpenGroup } from "./use-groups";
+import { useWorkspaceStore } from "./workspace-store";
 
 const onError = (error: Error) => toast.error(error.message);
 
@@ -164,9 +165,8 @@ export function CreateGroup({
 export function GroupList({ compact = false }: { compact?: boolean }) {
   const { groups, current } = useGroups();
   const open = useOpenGroup();
-  const [archived, setArchived] = useState(false);
   const shown = groups.filter(
-    (g) => g.archived === archived && (!compact || g.kind === "group"),
+    (g) => !g.archived && (!compact || g.kind === "group"),
   );
   return (
     <section
@@ -177,7 +177,7 @@ export function GroupList({ compact = false }: { compact?: boolean }) {
     >
       <div className="flex h-9 items-center justify-between px-2">
         <h2 className="text-xs font-medium text-muted-foreground">
-          {archived ? "已归档" : compact ? "群" : "最近对话"}
+          {compact ? "群" : "最近对话"}
         </h2>
         <CreateGroup />
       </div>
@@ -220,21 +220,60 @@ export function GroupList({ compact = false }: { compact?: boolean }) {
         ))}
       </ul>
       {!shown.length && (
-        <p className="px-2 py-6 text-xs text-muted-foreground">
-          {archived ? "没有已归档的对话" : "还没有对话"}
-        </p>
-      )}
-      {groups.some((g) => g.archived) && (
-        <Button
-          variant="ghost"
-          size="xs"
-          className="mt-2 text-muted-foreground"
-          onClick={() => setArchived(!archived)}
-        >
-          {archived ? "返回最近对话" : "已归档"}
-        </Button>
+        <p className="px-2 py-6 text-xs text-muted-foreground">还没有对话</p>
       )}
     </section>
+  );
+}
+
+/** Settings' 已归档: archived conversations, to open or bring back. */
+export function ArchivedGroups() {
+  const { groups } = useGroups();
+  const open = useOpenGroup();
+  const { update } = useGroupActions();
+  const setSettings = useWorkspaceStore((s) => s.setSettings);
+  const archived = groups.filter((g) => g.archived);
+  return (
+    <div className="space-y-3">
+      <h2 className="text-sm font-semibold">已归档</h2>
+      {archived.length ? (
+        <ul className="grid gap-px">
+          {archived.map((g) => (
+            <li key={g.id} className="flex min-h-14 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setSettings((state) => ({ ...state, open: false }));
+                  open(g.id);
+                }}
+                className="flex min-w-0 flex-1 items-center gap-2 self-stretch px-2 text-left outline-none transition-colors duration-[60ms] hover:bg-accent focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <GroupAvatars group={g} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm">{g.name}</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {g.last_message_at && `${when(g.last_message_at)} · `}
+                    {g.preview || (g.kind === "direct" ? "私聊" : "还没有消息")}
+                  </span>
+                </span>
+              </button>
+              <Button
+                size="xs"
+                variant="outline"
+                disabled={update.isPending}
+                onClick={() =>
+                  update.mutate({ id: g.id, archived: false }, { onError })
+                }
+              >
+                取消归档
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground">没有已归档的对话。</p>
+      )}
+    </div>
   );
 }
 

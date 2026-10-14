@@ -30,6 +30,7 @@ export type SettingsSection =
   | "providers"
   | "connections"
   | "computers"
+  | "archived"
   | "appearance"
   | "logs";
 interface SettingsState {
