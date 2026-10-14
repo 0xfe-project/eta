@@ -65,7 +65,6 @@ import {
 } from "./assignee-draft";
 import { AssigneeFields } from "./assignee-picker";
 import { BackToTop } from "./back-to-top";
-import { CreateGroup } from "./groups";
 import { when } from "./routine-format";
 import { Select, SelectOption } from "./select-field";
 import { AssistDialog } from "./task-assist";
@@ -86,7 +85,7 @@ import {
 import { useTaskNav } from "./task-nav";
 import { DeliveredPull } from "./task-pulls";
 import { StatusIcon } from "./task-status-icon";
-import { useGroups, useOpenGroup } from "./use-groups";
+import { useGroups } from "./use-groups";
 
 const showError = (error: Error) => toast.error(error.message);
 
@@ -586,7 +585,6 @@ export function TaskProperties({
   onDone: () => void;
 }) {
   const { groups } = useGroups();
-  const openGroup = useOpenGroup();
   const update = useUpdateTask();
   const links = deliverables(task);
   return (
@@ -638,21 +636,6 @@ export function TaskProperties({
               </SelectOption>
             ))}
         </Select>
-        {task.group_id ? (
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={() => openGroup(task.group_id!)}
-          >
-            在群里讨论
-          </Button>
-        ) : (
-          <CreateGroup key={task.id} task={task}>
-            <Button variant="ghost" size="xs">
-              新建群讨论
-            </Button>
-          </CreateGroup>
-        )}
       </dd>
       {links.length ? (
         <>
