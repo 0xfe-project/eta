@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/akarachen/axp/apps/control-plane/internal/github"
 	"github.com/akarachen/axp/apps/control-plane/internal/relay"
 	"github.com/akarachen/axp/apps/control-plane/internal/tasks"
 	"github.com/google/uuid"
@@ -409,7 +410,7 @@ func newTaskEnv(t *testing.T) *taskEnv {
 	e := newEnv(t)
 	fake := newFakeRelay()
 	service := &tasks.Service{Relay: fake}
-	deps := &Deps{DB: e.db, Chat: e.chat, Tasks: service, PublicURL: "https://axp.test"}
+	deps := &Deps{DB: e.db, Chat: e.chat, Tasks: service, GitHub: github.New(t.TempDir()), PublicURL: "https://axp.test"}
 	e.public = Public(deps).Router
 	e.internal = Internal(deps).Router
 	te := &taskEnv{env: e, relay: fake, runner: &tasks.Runner{DB: e.db, Service: service}, heads: map[string]string{}}
@@ -423,6 +424,21 @@ func newTaskEnv(t *testing.T) *taskEnv {
 		return "", errors.New("GitHub App 没有安装到这个仓库")
 	}
 	return te
+}
+
+// A computer's `axp gh` gets the GitHub App's credentials straight from the
+// control plane's forge module (the same answer runtimes get); before the
+// App is connected, GitHub's refusal.
+func TestRemoteGitCredentialsComeFromTheGitHubApp(t *testing.T) {
+	e := newTaskEnv(t)
+	_, token := e.computer("laptop", "paseo")
+	if s, _ := e.remote("", http.MethodGet, "/git/credentials", nil).error(); s != 401 {
+		t.Fatalf("without a token: %d", s)
+	}
+	r := e.remote(token, http.MethodGet, "/git/credentials", nil)
+	if s, code := r.error(); s != 424 || code != "FORGE_ERROR" || !strings.Contains(string(r.body), "GitHub 还没有连接") {
+		t.Fatalf("%d %s", r.status, r.body)
+	}
 }
 
 func (e *taskEnv) remote(token, method, path string, body any) response {

@@ -118,7 +118,7 @@ func TestNATSSchedulesAndFires(t *testing.T) {
 
 // Fires that piled up in the stream while the worker was down are not made
 // up when it starts: only fires from then on start runs.
-func TestFiresFromBeforeTheServiceStartedAreDropped(t *testing.T) {
+func TestFiresFromBeforeTheWorkerStartedAreDropped(t *testing.T) {
 	url := os.Getenv("AXP_TEST_NATS_URL")
 	if url == "" {
 		t.Skip("AXP_TEST_NATS_URL is not set")

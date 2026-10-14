@@ -714,3 +714,48 @@ func TestRecoverRevisesPendingFeedback(t *testing.T) {
 	}
 	expect(t, scalar[string](e, "SELECT text FROM routine_brief WHERE version = 2"), "带来源的要求")
 }
+
+// The worker stopping (its Base ending) mid-run records the run as
+// interrupted, so the next worker has nothing to clean up and never runs it
+// again.
+func TestAStoppingWorkerRecordsItsRunsAsInterrupted(t *testing.T) {
+	e := newEnv(t)
+	routine := e.create(news())
+	base, stop := context.WithCancel(context.Background())
+	e.runner.Base = base
+	e.llm.script = func(*model.LLMRequest, int) (*genai.Content, error) {
+		stop()
+		return nil, context.Canceled
+	}
+	expect(t, e.post("/routines/"+routine.ID+"/run", nil).status, 202)
+	e.tick()
+	expect(t, scalar[string](e, "SELECT status FROM routine_run"), routines.RunFailed)
+	expect(t, scalar[string](e, "SELECT error FROM routine_run"), "运行被中断（服务重启）。")
+	// The next worker recovers nothing and starts no run of its own.
+	e.runner.Base = nil
+	if err := e.runner.Recover(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, scalar[int](e, "SELECT count(*) FROM routine_run"), 1)
+}
+
+// A revision the stopping worker could not finish is left for the next one,
+// not marked failed.
+func TestAStoppingWorkerLeavesRevisionsToTheNext(t *testing.T) {
+	e, routine, run := reported(t)
+	base, stop := context.WithCancel(context.Background())
+	e.runner.Base = base
+	e.llm.script = func(*model.LLMRequest, int) (*genai.Content, error) {
+		stop()
+		return nil, context.Canceled
+	}
+	e.feedback(routine.ID, run, "短一点")
+	expect(t, scalar[bool](e, "SELECT revision_failed FROM routine_feedback"), false)
+	expect(t, scalar[int](e, "SELECT count(*) FROM routine_brief"), 1)
+	e.runner.Base = nil
+	e.llm.requests, e.llm.script = nil, steps(text("更短的要求"))
+	if err := e.runner.Recover(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, scalar[string](e, "SELECT text FROM routine_brief WHERE version = 2"), "更短的要求")
+}
