@@ -181,7 +181,7 @@ export function GroupList({ compact = false }: { compact?: boolean }) {
         </h2>
         <CreateGroup />
       </div>
-      <ul className="grid gap-px">
+      <ul className="space-y-px">
         {shown.map((g) => (
           <li key={g.id}>
             <button
@@ -213,7 +213,9 @@ export function GroupList({ compact = false }: { compact?: boolean }) {
                 )}
               </span>
               {g.unread > 0 && (
-                <span className="text-xs tabular-nums">{g.unread}</span>
+                <span className="shrink-0 text-xs tabular-nums">
+                  {g.unread}
+                </span>
               )}
             </button>
           </li>
@@ -237,7 +239,7 @@ export function ArchivedGroups() {
     <div className="space-y-3">
       <h2 className="text-sm font-semibold">已归档</h2>
       {archived.length ? (
-        <ul className="grid gap-px">
+        <ul className="space-y-px">
           {archived.map((g) => (
             <li key={g.id} className="flex min-h-14 items-center gap-2">
               <button
