@@ -537,6 +537,7 @@ export function ChatPanel({
   onSend: (parts: OutgoingPart[], mode: SendMode) => void;
   onCompact: () => void;
   onStop: (replyId: string) => void;
+  /** `/stop`: stops every reply in the group. */
   onStopAll: () => void;
   onAnswer: (interactionId: string, value: string) => void;
   /** Shows and switches the agent being talked to. */
@@ -772,21 +773,9 @@ export function ChatPanel({
       >
         {/* Floats over the transcript, which scrolls on beneath it and stays
             clickable around it; only the buttons catch. */}
-        {head || active ? (
+        {head ? (
           <div className="pointer-events-none sticky top-0 z-10 [&_button]:pointer-events-auto">
             {head}
-            {active && (
-              <div className="absolute right-1 top-1">
-                <Button
-                  type="button"
-                  size="xs"
-                  variant="outline"
-                  onClick={onStopAll}
-                >
-                  停止全部
-                </Button>
-              </div>
-            )}
           </div>
         ) : null}
         <div
