@@ -1,5 +1,4 @@
 import type { Group } from "@/queries/chat";
-import type { Task } from "@/queries/tasks";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -58,22 +57,17 @@ function GroupAvatars({
 
 export function CreateGroup({
   members = [],
-  task,
   children,
 }: {
   members?: string[];
-  task?: Pick<Task, "id" | "title" | "number">;
   children?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState(task?.title ?? "");
-  const [goal, setGoal] = useState(
-    task ? `讨论任务 #${task.number}：${task.title}` : "",
-  );
+  const [name, setName] = useState("");
+  const [goal, setGoal] = useState("");
   const [chosen, setChosen] = useState<string[]>(members);
   const { agents } = useAgents();
   const { create } = useGroupActions();
-  const updateTask = useUpdateTask();
   const openGroup = useOpenGroup();
   return (
     <Dialog
@@ -103,18 +97,7 @@ export function CreateGroup({
               { name: name.trim(), goal, members: chosen },
               {
                 onError,
-                onSuccess: async (g) => {
-                  if (task) {
-                    try {
-                      await updateTask.mutateAsync({
-                        id: task.id,
-                        changes: { group_id: g.id },
-                      });
-                    } catch (error) {
-                      onError(error as Error);
-                      return;
-                    }
-                  }
+                onSuccess: (g) => {
                   setOpen(false);
                   setName("");
                   setGoal("");
@@ -167,12 +150,7 @@ export function CreateGroup({
           <DialogFooter>
             <Button
               type="submit"
-              disabled={
-                !name.trim() ||
-                !chosen.length ||
-                create.isPending ||
-                updateTask.isPending
-              }
+              disabled={!name.trim() || !chosen.length || create.isPending}
             >
               创建群
             </Button>
