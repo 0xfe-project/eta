@@ -18,6 +18,7 @@ import { BundleSettings } from "./bundle-settings";
 import { ComputerSettings } from "./computer-settings";
 import { ConnectionSettings } from "./connection-settings";
 import { ArchivedGroups } from "./groups";
+import { MemorySettings } from "./memory-settings";
 import { ProviderSettings } from "./provider-settings";
 import { AttentionDot, SettingsNav } from "./settings-nav";
 import { settingsSections, useSettingsAttention } from "./settings-sections";
@@ -233,6 +234,8 @@ export function SettingsDialog() {
               <BundleSettings />
             ) : settings.section === "providers" ? (
               <ProviderSettings />
+            ) : settings.section === "memory" ? (
+              <MemorySettings />
             ) : settings.section === "connections" ? (
               <ConnectionSettings />
             ) : settings.section === "computers" ? (

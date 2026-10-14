@@ -31,7 +31,13 @@ export function useSetBundleConfig(name: string) {
           body: { values },
         }),
       ),
-    onSuccess: (state) => queryClient.setQueryData(key(name), state),
+    onSuccess: (state) => {
+      queryClient.setQueryData(key(name), state);
+      void queryClient.invalidateQueries({
+        queryKey: ["bundles"],
+        exact: true,
+      });
+    },
   });
 }
 

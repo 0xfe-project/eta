@@ -92,3 +92,44 @@ func TestBundleConfigBecomesTheAgentsEnvironment(t *testing.T) {
 	expect(t, env["WEATHER_KEY"], "")
 	expect(t, env["AXP_DISABLED_PLUGINS"], "grok")
 }
+
+func TestMemoryAPISettingsAreSealedAndOnlyReachTheService(t *testing.T) {
+	e := newEnv(t)
+	expect(t, e.get("/bundles/memory/config").m(t)["ready"], any(true))
+	set := func(values map[string]any) response {
+		return do(t, e.public, http.MethodPatch, "/api/v1/bundles/memory/config",
+			map[string]any{"values": values}, nil)
+	}
+	expectError(t, set(map[string]any{"MEMORY_EMBEDDING_URL": "http://example.com/v1"}), 422, "CONFIG_INVALID")
+	key := "embedding-private-key"
+	r := set(map[string]any{
+		"MEMORY_EMBEDDING_URL":     "http://example.com/v1",
+		"MEMORY_EMBEDDING_MODEL":   "native-model",
+		"MEMORY_EMBEDDING_API_KEY": key,
+	})
+	expect(t, r.status, 200)
+	if strings.Contains(string(r.body), key) || strings.Contains(string(e.get("/bundles/memory/config").body), key) {
+		t.Fatal("embedding key came back")
+	}
+	var sealed []byte
+	if err := e.db.QueryRow(e.ctx, "SELECT sealed FROM bundle_config WHERE bundle='memory'").Scan(&sealed); err != nil || strings.Contains(string(sealed), key) {
+		t.Fatalf("key was not sealed: %v", err)
+	}
+	agent := e.post("/agents", map[string]any{"name": "a", "model": testModel, "bundles": []string{"memory"}}).m(t)["id"].(string)
+	e.settle()
+	runs := e.driver.runsOf(agent)
+	if len(runs) == 0 {
+		t.Fatal("agent did not start")
+	}
+	for name := range runs[0].Env {
+		if strings.HasPrefix(name, "MEMORY_EMBEDDING_") {
+			t.Fatalf("service config reached agent: %s", name)
+		}
+	}
+	values, err := bundles.Configs(e.ctx, e.db, e.secret)
+	if err != nil || values["memory"]["MEMORY_EMBEDDING_API_KEY"] != key {
+		t.Fatalf("service could not recover its key: %v", err)
+	}
+	expect(t, set(map[string]any{"MEMORY_EMBEDDING_URL": nil}).status, 200)
+	expect(t, e.get("/bundles/memory/config").m(t)["ready"], any(true))
+}

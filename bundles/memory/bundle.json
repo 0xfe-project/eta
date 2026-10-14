@@ -3,6 +3,34 @@
   "required": true,
   "description": "跨对话的长期记忆：每轮开始时回忆，结束时记下。",
   "plugins": ["memory"],
+  "config": {
+    "type": "object",
+    "additionalProperties": false,
+    "x-axp-service-only": true,
+    "dependentRequired": {
+      "MEMORY_EMBEDDING_URL": ["MEMORY_EMBEDDING_MODEL"]
+    },
+    "properties": {
+      "MEMORY_EMBEDDING_URL": {
+        "type": "string",
+        "title": "API 地址",
+        "maxLength": 2048,
+        "pattern": "^https?://[^\\s?#@]+$"
+      },
+      "MEMORY_EMBEDDING_MODEL": {
+        "type": "string",
+        "title": "模型",
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "MEMORY_EMBEDDING_API_KEY": {
+        "type": "string",
+        "title": "API key",
+        "writeOnly": true,
+        "maxLength": 4096
+      }
+    }
+  },
   "service": {
     "protocol": "axp.memory/1",
     "uses": ["llm"],

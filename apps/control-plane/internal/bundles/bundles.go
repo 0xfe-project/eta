@@ -97,6 +97,9 @@ func readDir(dir string) ([]Bundle, error) {
 		if b.config, err = parseConfig(b.Config); err != nil {
 			return nil, fmt.Errorf("%s: config: %w", manifest, err)
 		}
+		if b.config != nil && b.config.serviceOnly && b.Service == nil {
+			return nil, fmt.Errorf("%s: service-only config requires a service", manifest)
+		}
 		if b.Service != nil {
 			if err := readService(b.Service, b.Dir); err != nil {
 				return nil, fmt.Errorf("%s: service: %w", manifest, err)

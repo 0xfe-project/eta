@@ -286,6 +286,7 @@ function GrokConnection() {
  * bundle's config say, which the control plane checked when it read it.
  */
 interface ConfigSchema {
+  "x-axp-service-only"?: boolean;
   required?: string[];
   properties: Record<
     string,
@@ -493,7 +494,12 @@ export function ConnectionSettings() {
         <GitHubConnection />
         <GrokConnection />
         {bundles.data
-          ?.filter((b): b is Configured => b.builtin && !!b.config)
+          ?.filter(
+            (b): b is Configured =>
+              b.builtin &&
+              !!b.config &&
+              b.config["x-axp-service-only"] !== true,
+          )
           .map((b) => (
             <BundleConnection key={b.name} bundle={b} />
           ))}

@@ -365,9 +365,10 @@ export function usePlugins() {
 const bundlesKey = ["bundles"] as const;
 
 /** The bundles agents are built from: the built-in ones, then the user's. */
-export function useBundles() {
+export function useBundles(refetchInterval?: number) {
   return useQuery({
     queryKey: bundlesKey,
+    refetchInterval,
     queryFn: async ({ signal }) =>
       unwrap(controlPlane.GET("/api/v1/bundles", { signal })),
   });

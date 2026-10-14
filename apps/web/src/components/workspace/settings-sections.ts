@@ -1,6 +1,7 @@
 import type { Icon } from "@phosphor-icons/react";
 import type { SettingsSection } from "./workspace-store";
 import { ArchiveIcon } from "@phosphor-icons/react/Archive";
+import { BrainIcon } from "@phosphor-icons/react/Brain";
 import { ChartLineIcon } from "@phosphor-icons/react/ChartLine";
 import { DesktopIcon } from "@phosphor-icons/react/Desktop";
 import { LinkIcon } from "@phosphor-icons/react/Link";
@@ -20,6 +21,7 @@ export const settingsSections: {
   { value: "agents", label: "智能体", icon: RobotIcon },
   { value: "bundles", label: "环境包", icon: PackageIcon },
   { value: "providers", label: "模型服务", icon: PlugsConnectedIcon },
+  { value: "memory", label: "记忆", icon: BrainIcon },
   { value: "connections", label: "连接", icon: LinkIcon },
   { value: "computers", label: "远程电脑", icon: DesktopIcon },
   { value: "archived", label: "已归档", icon: ArchiveIcon },

@@ -3,6 +3,7 @@ package bundles
 import (
 	"encoding/json"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -86,5 +87,29 @@ func TestStateLeavesSecretsOut(t *testing.T) {
 	got := state(mustParse(t, weather), map[string]string{"WEATHER_KEY": "secret-value", "WEATHER_CITY": "a"}, nil)
 	if !got.Ready || !reflect.DeepEqual(got.Set, []string{"WEATHER_CITY", "WEATHER_KEY"}) || !reflect.DeepEqual(got.Values, map[string]string{"WEATHER_CITY": "a"}) {
 		t.Fatalf("%+v", got)
+	}
+}
+
+func TestServiceOnlyConfigKeepsSecretsOutOfAgents(t *testing.T) {
+	s := mustParse(t, `{"type":"object","additionalProperties":false,"x-axp-service-only":true,
+		"dependentRequired":{"EMBED_URL":["EMBED_MODEL"]},
+		"properties":{"EMBED_URL":{"type":"string","maxLength":200},
+		"EMBED_MODEL":{"type":"string","maxLength":200},
+		"EMBED_KEY":{"type":"string","maxLength":200,"writeOnly":true}}}`)
+	if !s.ready(nil) || s.ready(map[string]string{"EMBED_URL": "https://example.com/v1"}) {
+		t.Fatal("local default or incomplete API config")
+	}
+	values := map[string]string{"EMBED_URL": "https://example.com/v1", "EMBED_MODEL": "embed", "EMBED_KEY": "secret"}
+	if !s.ready(values) {
+		t.Fatal("complete API config")
+	}
+	b := Bundle{Name: "memory", Plugins: []string{"memory"}, config: s}
+	env, disabled := Environment([]Bundle{b}, map[string]map[string]string{"memory": values})
+	if len(env) != 0 || len(disabled) != 0 {
+		t.Fatalf("service-only values reached agent or disabled plugin: %v %v", env, disabled)
+	}
+	got := state(s, values, nil)
+	if _, exists := got.Values["EMBED_KEY"]; exists || !slices.Contains(got.Set, "EMBED_KEY") {
+		t.Fatalf("secret response: %+v", got)
 	}
 }

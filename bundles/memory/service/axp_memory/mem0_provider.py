@@ -1,7 +1,7 @@
 """The mem0 provider: mem0 as a library over PostgreSQL (pgvector).
 
-Facts are extracted by the agent's own model through the LLM gateway and
-embedded locally on the CPU (fastembed), so the service holds no credentials.
+Facts are extracted by the agent's own model through the LLM gateway.
+Embeddings use the bundled INT8 model or the configured external API.
 """
 
 import contextvars
@@ -23,6 +23,7 @@ from psycopg_pool import ConnectionPool  # noqa: E402
 
 from . import embedding  # noqa: E402
 from .provider import Memory  # noqa: E402
+from .reindex import reindex  # noqa: E402
 
 TABLE = "memories"
 LIST_LIMIT = 1000
@@ -37,6 +38,16 @@ def _name_agent(request: httpx.Request) -> None:
 
 class Mem0Provider:
     def __init__(self, database_url: str, llm_url: str, token: str):
+        embedder = embedding.Embedding.from_environment()
+        dimensions = embedder.config.embedding_dims
+        pool = ConnectionPool(
+            database_url,
+            min_size=1,
+            max_size=5,
+            check=ConnectionPool.check_connection,
+            open=True,
+        )
+        reindex(pool, embedder)
         self.memory = Mem0.from_config(
             {
                 "vector_store": {
@@ -44,22 +55,19 @@ class Mem0Provider:
                     "config": {
                         # Checked on checkout, so a database restart costs no
                         # failed request.
-                        "connection_pool": ConnectionPool(
-                            database_url,
-                            min_size=1,
-                            max_size=5,
-                            check=ConnectionPool.check_connection,
-                            open=True,
-                        ),
+                        "connection_pool": pool,
                         "collection_name": TABLE,
-                        "embedding_model_dims": embedding.DIMS,
+                        "embedding_model_dims": dimensions,
+                        "hnsw": dimensions <= 2000,
                     },
                 },
                 "embedder": {
-                    "provider": "fastembed",
+                    # mem0 accepts provider configs, not an existing embedder.
+                    # Bootstrap a lightweight client, then inject our instance.
+                    "provider": "openai",
                     "config": {
-                        "model": embedding.MODEL,
-                        "embedding_dims": embedding.DIMS,
+                        "api_key": "unused",
+                        "embedding_dims": dimensions,
                     },
                 },
                 # Queries are in the user's language; facts translated to
@@ -71,6 +79,8 @@ class Mem0Provider:
                 "llm": {"provider": "openai", "config": {"api_key": "unused"}},
             }
         )
+        self.memory.embedding_model.client.close()
+        self.memory.embedding_model = embedder
         # Through the runtime gateway with the bundle's token, which may call
         # models; the agent header says whose usage the extraction is.
         self.memory.llm.client = OpenAI(

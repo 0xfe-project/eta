@@ -7,6 +7,9 @@ kind: Deployment
 metadata:
   name: memory
 spec:
+  # A model change rebuilds vectors before serving. Stop the previous model
+  # first so it cannot query or write into the new model's vector space.
+  strategy: { type: Recreate, rollingUpdate: null }
   selector: { matchLabels: { app: memory } }
   template:
     metadata: { labels: { app: memory } }

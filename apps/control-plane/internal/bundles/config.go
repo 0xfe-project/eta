@@ -50,6 +50,7 @@ func mustResolve(data []byte) *jsonschema.Resolved {
 type ConfigSchema struct {
 	schema         *jsonschema.Schema
 	whole, partial *jsonschema.Resolved
+	serviceOnly    bool
 }
 
 // parseConfig checks a bundle.json's config against config.schema.json.
@@ -75,7 +76,8 @@ func parseConfig(raw map[string]any) (*ConfigSchema, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ConfigSchema{schema: &s, whole: whole, partial: partial}, nil
+	serviceOnly, _ := raw["x-axp-service-only"].(bool)
+	return &ConfigSchema{schema: &s, whole: whole, partial: partial, serviceOnly: serviceOnly}, nil
 }
 
 func instance(values map[string]string) map[string]any {
@@ -236,14 +238,31 @@ func (s *ConfigSchema) invalid(values map[string]string) error {
 		switch {
 		case !ok:
 			bad = append(bad, key)
-		case s.partial.Validate(map[string]any{key: v}) != nil:
-			if p.Title != "" {
-				key = p.Title
+		default:
+			property, err := p.Resolve(nil)
+			if err != nil || property.Validate(v) != nil {
+				if p.Title != "" {
+					key = p.Title
+				}
+				bad = append(bad, key)
 			}
-			bad = append(bad, key)
+		}
+	}
+	for trigger, required := range s.schema.DependentRequired {
+		if values[trigger] == "" {
+			continue
+		}
+		for _, key := range required {
+			if values[key] == "" {
+				if p := s.schema.Properties[key]; p != nil && p.Title != "" {
+					key = p.Title
+				}
+				bad = append(bad, key)
+			}
 		}
 	}
 	slices.Sort(bad)
+	bad = slices.Compact(bad)
 	return apierr.New(422, "CONFIG_INVALID", "配置不符合要求："+strings.Join(bad, "、")+"。")
 }
 
@@ -280,7 +299,7 @@ func Environment(chosen []Bundle, configs map[string]map[string]string) (env map
 			continue
 		}
 		enabled = append(enabled, b.Plugins...)
-		if b.config == nil {
+		if b.config == nil || b.config.serviceOnly {
 			continue
 		}
 		for name := range b.config.schema.Properties {

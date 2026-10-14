@@ -82,6 +82,7 @@ function capture() {
   const sent: unknown[] = [];
   rstest.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const request = input as Request;
+    if (request.method === "GET") return Response.json([weather]);
     sent.push({ method: request.method, body: await request.json() });
     return Response.json({ values: {}, set: [], ready: true });
   });

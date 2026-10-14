@@ -30,7 +30,8 @@
 ```
 
 - 它是标准的 JSON Schema（2020-12）。能写什么由 `apps/control-plane/internal/bundles/config.schema.json` 这个元 schema 规定：`type: object`，`additionalProperties: false`，属性只能是字符串且必须写 `maxLength`（不超过 4096），另外可选 `title`、`description`（Markdown）、`writeOnly`（机密值）、`minLength`、`pattern`。属性名就是环境变量名（大写字母、数字和下划线），不能以 `AXP_`、`OTEL_`、`CODEX_`、`AKHOOK_`、`NODE_`、`LD_` 开头，也不能是 `PATH`、`HOME` 这类系统变量。校验全部由 [jsonschema-go](https://github.com/google/jsonschema-go) 完成：读取环境包时用元 schema 校验它的 `config`（不合法则控制面启动失败）；保存时用环境包自己的 schema 校验值（必填项除外，允许分次填写）；必填项都有值并通过完整校验时为 `ready`。库的报错会引用值，值里可能有机密，所以 422 `CONFIG_INVALID` 只列出不合格的项名。
-- 设置 →「连接」为每个声明了配置的内置环境包生成一张卡片和表单。机密值只写不读，留空表示不替换。值属于环境包，全局只有一份，不分智能体。
+- 设置 →「连接」为声明了智能体配置的内置环境包生成卡片和表单。机密值只写不读，留空表示不替换。值属于环境包，全局只有一份，不分智能体。
+- 带服务的环境包可以在 `config` 顶层写 `x-axp-service-only: true`：这些值只交给服务的 Secret，不进入智能体环境，也不放在「连接」的通用表单中。memory 使用专门的「设置 → 记忆」界面。无配置时仍可使用默认本地模型；服务配置更新不改变智能体的容器环境。顶层也支持 `dependentRequired`，用于要求外部 API 地址和模型名在同一次保存中完整提供。
 - 接口：`GET /api/v1/bundles/{name}/config` 返回非机密的值、已设置的项和 `ready`（必填项都有值）；`PATCH` 的 `values` 里写字符串表示设置，`null` 表示清除，没写的项保持不变；`DELETE` 清除全部。值以 JSON 存在表 `bundle_config` 中，用 AES-256-GCM 加密（密钥由 `AXP_SECRET_KEY` 派生，`auth.Seal`）。`AXP_SECRET_KEY` 换了以后解不开，按未设置处理。
 - controller 把 `ready` 的环境包的值作为环境变量放进载入它的智能体的容器。不 `ready` 的环境包，它的插件写进 `AXP_DISABLED_PLUGINS`（其他载入的环境包也带这个插件时除外），runtime 安装插件时跳过它们，智能体看不到用不了的 skill 和工具。值也是容器 spec 的一部分，所以设置、修改或清除之后，容器会在两轮之间被替换。
 - 这些值在智能体的容器里，智能体执行的命令也读得到（Codex 0.162.1 默认的 `shell_environment_policy` 会透传名字带 `KEY`、`TOKEN` 的变量，已实测）。所以只适合交给智能体自己使用的凭据。需要对智能体隐藏的凭据，仍然应该像 GitHub、LLM 那样放在服务端，经 runtime 网关代理。

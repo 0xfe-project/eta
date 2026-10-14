@@ -7,6 +7,15 @@
   "properties": {
     "type": { "const": "object" },
     "additionalProperties": { "const": false },
+    "x-axp-service-only": { "const": true },
+    "dependentRequired": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string" },
+        "uniqueItems": true
+      }
+    },
     "required": {
       "type": "array",
       "items": { "type": "string" },
