@@ -1,5 +1,6 @@
 import type { Icon } from "@phosphor-icons/react";
 import type { SettingsSection, WorkspaceState } from "./workspace-store";
+import { ArchiveIcon } from "@phosphor-icons/react/Archive";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
 import { ChartLineIcon } from "@phosphor-icons/react/ChartLine";
 import { DesktopIcon } from "@phosphor-icons/react/Desktop";
@@ -25,6 +26,7 @@ import { AgentSettings } from "./agent-settings";
 import { BundleSettings } from "./bundle-settings";
 import { ComputerSettings } from "./computer-settings";
 import { ConnectionSettings } from "./connection-settings";
+import { ArchivedGroups } from "./groups";
 import { ProviderSettings } from "./provider-settings";
 import { AttentionDot, SettingsNav } from "./settings-nav";
 import { useWorkspaceStore } from "./workspace-store";
@@ -52,6 +54,7 @@ const sections: {
   { value: "providers", label: "模型服务", icon: PlugsConnectedIcon },
   { value: "connections", label: "连接", icon: LinkIcon },
   { value: "computers", label: "远程电脑", icon: DesktopIcon },
+  { value: "archived", label: "已归档", icon: ArchiveIcon },
   { value: "appearance", label: "外观", icon: PaletteIcon },
   { value: "logs", label: "日志", icon: ChartLineIcon },
 ];
@@ -261,6 +264,8 @@ export function SettingsDialog() {
               <ConnectionSettings />
             ) : settings.section === "computers" ? (
               <ComputerSettings />
+            ) : settings.section === "archived" ? (
+              <ArchivedGroups />
             ) : settings.section === "logs" ? (
               <LogSettings />
             ) : (
