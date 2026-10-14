@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/akarachen/axp/apps/control-plane/internal/llm"
 	"github.com/akarachen/axp/packages/service-go/apierr"
 	"github.com/akarachen/axp/packages/service-go/jsontime"
 	"github.com/akarachen/axp/packages/service-go/pg"
@@ -184,7 +185,7 @@ type Schedules interface {
 // any DB; writes take the caller's transaction, which commits them.
 type Service struct {
 	Schedules Schedules
-	Models    Catalog
+	Models    llm.Catalog
 }
 
 func feedbackFor(ctx context.Context, db pg.DB, runIDs []string) (map[string][]Feedback, error) {
@@ -407,7 +408,7 @@ type Input struct {
 }
 
 func (s *Service) Create(ctx context.Context, tx pgx.Tx, in Input) (*Routine, error) {
-	if err := Validate(ctx, s.Models, in.Model); err != nil {
+	if err := llm.Validate(ctx, s.Models, in.Model); err != nil {
 		return nil, err
 	}
 	if err := CheckSchedule(in.Schedule, in.Timezone); err != nil {
@@ -443,7 +444,7 @@ type Changes struct {
 
 func (s *Service) Update(ctx context.Context, tx pgx.Tx, id string, c Changes) (*Routine, error) {
 	if c.Model != nil {
-		if err := Validate(ctx, s.Models, *c.Model); err != nil {
+		if err := llm.Validate(ctx, s.Models, *c.Model); err != nil {
 			return nil, err
 		}
 	}

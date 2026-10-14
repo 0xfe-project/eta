@@ -5,7 +5,7 @@ import { z } from "zod";
 import { llmApi } from "@/lib/api";
 
 // The LLM gateway's public API (/api/llm/v1): model services, accounts and
-// the model catalog. See apps/llm-gateway.
+// the model catalog. See apps/control-plane/internal/llm.
 
 const reasonSchema = z.object({ code: z.string(), message: z.string() });
 

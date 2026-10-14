@@ -271,10 +271,11 @@ migrate() {
 
 # Roles deploy.yml no longer has, whose containers Kamal leaves running: the
 # forge and routine services and the internal API, now in the control
-# plane's api and routine-worker roles (#241). Removed once the deploy is
-# healthy; their data stays (the axp-forge volume, the axp_routines
-# database). Rolling back past #241 is in deploy/README.md.
-RETIRED_ROLES=(forge routines internal)
+# plane's api and routine-worker roles (#241), and the LLM gateway, now in
+# the api role (#245). Removed once the deploy is healthy; their data stays
+# (the axp-forge and axp-llm volumes, the axp_routines database). Rolling
+# back past either is in deploy/README.md.
+RETIRED_ROLES=(forge routines internal llm)
 retire_roles() {
   local role ids
   for role in "${RETIRED_ROLES[@]}"; do

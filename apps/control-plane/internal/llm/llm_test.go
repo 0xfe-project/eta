@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestGatewayKeepsItsLastCatalogWhenUnreachable(t *testing.T) {
+func TestRemoteKeepsItsLastCatalogWhenUnreachable(t *testing.T) {
 	var down atomic.Bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if down.Load() {
@@ -26,7 +26,7 @@ func TestGatewayKeepsItsLastCatalogWhenUnreachable(t *testing.T) {
 	ctx := context.Background()
 
 	down.Store(true)
-	g := NewGateway(srv.URL)
+	g := NewRemote(srv.URL)
 	gpt := "gpt"
 	if _, err := g.Models(ctx, true); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("never read: %v", err)

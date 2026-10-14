@@ -34,9 +34,10 @@ http://:{$AXP_RUNTIME_GATEWAY_PORT:8090} {
 	bind {$AXP_RUNTIME_GATEWAY_BIND:0.0.0.0}
 	import access_log
 
-	# The LLM gateway's OpenAI-compatible API: Codex's model provider.
+	# The LLM gateway's OpenAI-compatible API, in the internal API: Codex's
+	# model provider.
 	handle /v1/* {
-		import as_agent {$AXP_UPSTREAM_LLM:axp-llm:8317}
+		import as_agent {$AXP_UPSTREAM_INTERNAL:axp-api:8001}
 	}
 	# Agents' memories: the memory plugin's MCP server and hooks.
 	handle /memory/* {

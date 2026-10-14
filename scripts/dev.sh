@@ -7,10 +7,10 @@ Usage: scripts/dev.sh [--port PORT]
 
 Starts the development stack. Each instance uses a block of consecutive
 ports: gateway PORT (open this one), the control plane's public API PORT+1
-and internal API PORT+2 (one process), web PORT+3, LLM gateway PORT+4,
+and internal API PORT+2 (one process, with the LLM gateway), web PORT+3,
 runtime gateway PORT+5, memory service PORT+6 and the agenvo relay PORT+8
-(HTTPS with a self-signed certificate, for remote computers); PORT+7 and
-PORT+9 are spare.
+(HTTPS with a self-signed certificate, for remote computers); PORT+4,
+PORT+7 and PORT+9 are spare.
 
   --port PORT   Use exactly this gateway port; fail if any port of its block is taken.
                 Also settable as AXP_DEV_PORT.
@@ -144,7 +144,6 @@ export AXP_GATEWAY_PORT="$web_port"
 export AXP_API_PORT="$((web_port + 1))"
 export AXP_INTERNAL_PORT="$((web_port + 2))"
 export AXP_WEB_PORT="$((web_port + 3))"
-export AXP_LLM_PORT="$((web_port + 4))"
 export AXP_RUNTIME_GATEWAY_PORT="$((web_port + 5))"
 export AXP_MEMORY_PORT="$((web_port + 6))"
 # Services listen on loopback, which runtime containers cannot reach; the
@@ -154,12 +153,12 @@ export AXP_MEMORY_PORT="$((web_port + 6))"
 export AXP_GATEWAY_BIND=127.0.0.1
 export AXP_RUNTIME_GATEWAY_BIND=172.30.0.1
 export AXP_RUNTIME_GATEWAY_URL="http://$AXP_RUNTIME_GATEWAY_BIND:$AXP_RUNTIME_GATEWAY_PORT"
-export AXP_LLM_ADDR="127.0.0.1:$AXP_LLM_PORT"
-export AXP_LLM_GATEWAY_URL="http://$AXP_LLM_ADDR"
+# The LLM gateway, in the internal API: the controller, the routine worker
+# and the memory service reach it there.
+export AXP_LLM_GATEWAY_URL="http://127.0.0.1:$AXP_INTERNAL_PORT"
 export AXP_UPSTREAM_WEB="127.0.0.1:$AXP_WEB_PORT"
 export AXP_UPSTREAM_API="127.0.0.1:$AXP_API_PORT"
 export AXP_UPSTREAM_INTERNAL="127.0.0.1:$AXP_INTERNAL_PORT"
-export AXP_UPSTREAM_LLM="$AXP_LLM_ADDR"
 export AXP_MEMORY_ADDR="127.0.0.1:$AXP_MEMORY_PORT"
 export AXP_UPSTREAM_MEMORY="$AXP_MEMORY_ADDR"
 export AXP_RELAY_PORT="$((web_port + 8))"
@@ -180,6 +179,16 @@ bunx turbo run build --filter=@axp/memory-service --output-logs=errors-only
 bunx turbo run generate --filter=@axp/web --output-logs=errors-only
 # What remote computers download (/remote/dl) and the relay (apps/agenvo).
 bunx turbo run build --filter=@axp/remote --filter=@axp/agenvo --output-logs=errors-only
+
+# The LLM gateway's credentials, catalog and usage moved with it into the
+# control plane (#245): a checkout that ran the old llm-gateway keeps its own.
+old_llm="$ROOT_DIR/apps/llm-gateway/var/llm-gateway"
+if [[ -d "$old_llm" && ! -e "$ROOT_DIR/apps/control-plane/var/llm-gateway" ]]; then
+  mkdir -p "$ROOT_DIR/apps/control-plane/var"
+  mv "$old_llm" "$ROOT_DIR/apps/control-plane/var/llm-gateway"
+  rmdir "$ROOT_DIR/apps/llm-gateway/var" "$ROOT_DIR/apps/llm-gateway" 2>/dev/null || true
+  echo "Moved the LLM gateway's state to apps/control-plane/var/llm-gateway."
+fi
 
 # --- Relay ------------------------------------------------------------------------
 # agenvo accepts only an HTTPS base URL, so development's relay
@@ -273,20 +282,19 @@ gateway=axp-dev-gateway-$web_port
 docker rm -f "$gateway" >/dev/null 2>&1 || true
 gateway_env=""
 for name in AXP_GATEWAY_BIND AXP_GATEWAY_PORT AXP_RUNTIME_GATEWAY_BIND AXP_RUNTIME_GATEWAY_PORT \
-  AXP_UPSTREAM_WEB AXP_UPSTREAM_API AXP_UPSTREAM_INTERNAL AXP_UPSTREAM_LLM AXP_UPSTREAM_MEMORY \
+  AXP_UPSTREAM_WEB AXP_UPSTREAM_API AXP_UPSTREAM_INTERNAL AXP_UPSTREAM_MEMORY \
   AXP_UPSTREAM_OBSERVE; do
   gateway_env+=" -e $name"
 done
 
 # Every process stops on Ctrl+C or when any of them exits.
 exec node node_modules/concurrently/dist/bin/concurrently.js --kill-others \
-  --names gateway,control-plane,controller,routine-worker,llm,memory,relay,web \
-  --prefix-colors gray,blue,cyan,yellow,magenta,red,gray,green \
+  --names gateway,control-plane,controller,routine-worker,memory,relay,web \
+  --prefix-colors gray,blue,cyan,yellow,red,gray,green \
   "docker run --rm --name $gateway --network host$gateway_env -v $ROOT_DIR/apps/gateway:/etc/axp-gateway:ro caddy:2.11.7-alpine caddy run --config /etc/axp-gateway/Caddyfile" \
   "OTEL_SERVICE_NAME=control-plane bun run dev:control-plane" \
   "OTEL_SERVICE_NAME=control-plane-controller bun run dev:controller" \
   "OTEL_SERVICE_NAME=control-plane-routine-worker bun run dev:routine-worker" \
-  "bun run dev:llm-gateway" \
   "bun run dev:memory-service" \
   "AGENVO_ADMIN_SECRET=\$AXP_RELAY_ADMIN_SECRET node apps/agenvo/out/relay/node_modules/@agenvo/server/dist/cli.js serve --config $relay_dir/relay.json" \
   "bun run dev:web"

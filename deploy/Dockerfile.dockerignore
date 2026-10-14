@@ -3,7 +3,6 @@
 # computers download are sent to Docker.
 *
 !apps/control-plane/out/
-!apps/llm-gateway/out/
 !packages/plugins-go/out/
 !apps/gateway/Caddyfile
 !apps/gateway/*.caddy

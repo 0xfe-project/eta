@@ -1,28 +1,49 @@
 # LLM 网关
 
-本文说明 [#5](https://github.com/akarachen/axp/issues/5)（llm-gateway 与模型选择）、[#4](https://github.com/akarachen/axp/issues/4)（OAuth 登录）和 [#6](https://github.com/akarachen/axp/issues/6)（前端）的实现。
+本文说明 [#5](https://github.com/akarachen/axp/issues/5)（LLM 网关与模型选择）、[#4](https://github.com/akarachen/axp/issues/4)（OAuth 登录）、[#6](https://github.com/akarachen/axp/issues/6)（前端）和 [#245](https://github.com/akarachen/axp/issues/245)（合入控制面）的实现。
 
 ## 组成
 
-`apps/llm-gateway` 是一个 Go 进程，按 CLIProxyAPI（CPA）的 [SDK 用法](https://github.com/router-for-me/CLIProxyAPI/blob/main/docs/sdk-usage.md) 嵌入 `cliproxy.Service`，并在 CPA 的 gin 引擎上挂载 AXP 自己的路由：
+LLM 网关是控制面的模块（`apps/control-plane/internal/llm`），运行在提供 API 的 `axp-control-plane serve` 进程里，不是单独的服务或部署角色（#245 之前是 `apps/llm-gateway` 和 `llm` 角色）。它按 CLIProxyAPI（CPA）的 [SDK 用法](https://github.com/router-for-me/CLIProxyAPI/blob/main/docs/sdk-usage.md) 嵌入 `cliproxy.Service`：
 
-| 路径               | 调用方                                                              | 鉴权                                       |
-| ------------------ | ------------------------------------------------------------------- | ------------------------------------------ |
-| `/api/llm/v1/*`    | 浏览器（经 `gateway`）、control-plane 与它的 routine worker（直连） | 无：只有它们连得到（见[网关](gateway.md)） |
-| `/v1/*`            | runtime 中的 Codex（经 `runtime-gateway`）、routine worker（直连）  | 调用方给出的 `X-AXP-Agent-Id`              |
-| `/v0/management/*` | 仅进程内回环调用                                                    | 每次启动随机生成的管理密码                 |
+- `llm.Module`：打开状态目录、运行 CPA 和用量账本，给出两个 listener 的路由和进程内的模型目录（`llm.Catalog`）。
+- `llm/gateway`：与供应商无关的一层（连接、登录、目录、用量，以及 `/api/llm` 的 handler）；`gateway/connectors`（Codex、Grok）、`gateway/cpa`（嵌入 CPA）、`gateway/usage`（按主体记账）。
+- `llm.Remote`：控制面的其他进程（controller、routine worker）经 internal listener 读目录的 HTTP client，带缓存和“读不到时沿用上次”。
 
-CPA 负责 token 刷新、按模型名在账号间轮换、协议转换。凭据只存在 llm-gateway 的状态目录（工作目录下的 `var/llm-gateway/auths`，生产为卷 `axp-llm`）；runtime 容器只拿到 runtime 网关的地址和自己的实例令牌。
+| 路径               | listener             | 调用方                                                                               | 鉴权                                                        |
+| ------------------ | -------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| `/api/llm/v1/*`    | 公共（`:8000`）      | 浏览器（经 `gateway`）                                                               | 与公共 API 相同：只有公开网关连得到（见[网关](gateway.md)） |
+| `/v1/*`            | 内部（`:8001`）      | runtime 中的 Codex（经 `runtime-gateway`）、routine worker 与 memory-service（直连） | 调用方给出的 `X-AXP-Agent-Id`                               |
+| `/llm/v1/models`   | 内部（`:8001`）      | controller、routine worker（`llm.Remote`）                                           | 无：只读目录                                                |
+| `/v0/management/*` | 不在任何 listener 上 | 仅进程内调用（`cpa.Proxy.Management()`）                                             | 每次启动随机生成的管理密钥                                  |
+
+提供 API 的进程直接调用模块读目录（聊天的模型校验、发送前检查、定时任务的模型校验），不经 HTTP。CPA 负责 token 刷新、按模型名在账号间轮换、协议转换。凭据只存在模块的状态目录（`AXP_LLM_STATE_DIR`，默认工作目录下的 `var/llm-gateway`：开发时是 `apps/control-plane/var/llm-gateway`，生产是 `api` 角色上的卷 `axp-llm`，路径与原来的 `llm` 角色相同）；runtime 容器只拿到 runtime 网关的地址和自己的实例令牌。
 
 ### runtime 鉴权
 
-runtime 用 `<实例 ID>.<令牌>`（control-plane 签发，换代即失效）作为调用 `/v1` 的 API key。runtime 网关逐个请求向内部运行协议确认这个 key，再以 `X-AXP-Agent-Id` 把所属 Agent 交给 llm-gateway；被替换的实例立即无法再调用模型。llm-gateway 向 CPA 注册的唯一访问提供者只读这个头（`cpa.AgentHeader`），没有它的请求一律 401。
+runtime 用 `<实例 ID>.<令牌>`（control-plane 签发，换代即失效）作为调用 `/v1` 的 API key。runtime 网关逐个请求向内部运行协议确认这个 key，再以 `X-AXP-Agent-Id` 把所属 Agent 交给 internal listener 上的 `/v1`；被替换的实例立即无法再调用模型。模块向 CPA 注册的唯一访问提供者只读这个头（`cpa.AgentHeader`），没有它的请求一律 401。
+
+### Bundle 服务（设计，尚未实现）
+
+环境包将来可以带自己的服务容器（[#243](https://github.com/akarachen/axp/issues/243)），它们也要调用模型。这里只定下接口，目前**没有**任何 Bundle 服务身份：
+
+- 身份：控制面在安装或启用 Bundle 服务时签发一个可撤销、只属于这一次安装的令牌（与 runtime 实例令牌同一套签发/换代/撤销机制），主体记为 `bundle-<安装 id>`，用量照常按主体记账。
+- 入口：Bundle 服务和 runtime 一样只能经 `runtime-gateway` 访问，由 `forward_auth`（`/internal/v1/runtime-auth` 的扩展）校验令牌并改写 `X-AXP-Agent-Id`；它的范围只有 `/v1/*`（以及该 Bundle 自己声明的插件路由），不继承 Agent 的 `/tasks`、`/forge`、`/attachments` 等权限，更不能直连 internal listener。
+- 网络：Bundle 服务不得与 control-plane 同网；k3s 下用 NetworkPolicy 只放行到 runtime 网关（[#242](https://github.com/akarachen/axp/issues/242)）。“在集群内”本身不是身份。
+
+在此之前，只有 runtime 网关和 AXP 自己的服务（Kamal 网络上的 controller、routine worker、memory-service）连得到 internal listener，这与合并前直连 `axp-llm:8317` 的信任边界相同。
 
 ### 与 CPA 的边界
 
-只使用 SDK 导出的包（`sdk/cliproxy`、`sdk/cliproxy/auth`、`sdk/access`、`sdk/api`、`sdk/config`、`sdk/translator/builtin`）和 CPA 的管理 HTTP API，不导入 `internal/`。`config.yaml` 在每次启动时生成。管理 API 通过 `MANAGEMENT_PASSWORD` 开启、`allow-remote: false`，并由 `cpa.Proxy.Management()` 在进程内直接调用 gin 引擎，不经过网络。
+只使用 SDK 导出的包（`sdk/cliproxy`、`sdk/cliproxy/auth`、`sdk/access`、`sdk/api`、`sdk/config`、`sdk/translator/builtin`）和 CPA 的管理 HTTP API，不导入 `internal/`。CPA 嵌进控制面主进程后的边界：
 
-`contract_test.go` 守住依赖的 CPA 行为：`/v1` 只接受访问提供者认可的 key，通过管理 API 上传 CPA 格式的 codex 凭据后，auth manager 能列出它、模型进入注册表和 `/v1/models`，停用和删除生效。升级 CPA 时必须通过。
+- 监听：SDK 的 `Service.Run` 一定会自己 `net.Listen`，无法关闭，所以让它监听 `127.0.0.1:0`（随机端口，没有任何路由指向它）。CPA 的 gin 引擎由 `RouterConfigurator` 交出来，作为 `http.Handler` 挂到控制面自己的 internal listener 的 `/v1/` 下；客户端断开即取消请求上下文（CPA 随之取消上游请求），流式响应逐段写到 net/http 的 `ResponseWriter`（背压就是 TCP 背压，不经缓冲）。CPA 的 `OnAfterStart` 之后（凭据已加载、路由已注册完）才算就绪：之前 `/v1` 返回 503，`serve` 也要等它就绪才打开两个 listener，所以 readiness 通过时模型目录已可读。
+- 全局状态：CPA 的 logrus、模型注册表、访问提供者、用量插件、gin 模式都是进程级的，所以只有 `serve` 打开模块，controller 和 routine worker 不加载 CPA。
+- 日志：CPA 用 logrus。模块把 logrus 的输出丢弃，改用 hook 把每条记录（级别、字段）交给 slog（`library=cliproxy`），走控制面同一套 OpenTelemetry；不再接管整个进程的 stdout。CPA 启动和重载配置时各有一行 `fmt.Printf` 写到 stdout，只进容器日志。
+- 管理 API：`config.yaml` 在每次启动时生成，管理密钥是每次启动随机生成的 `secret-key`（不放进环境变量，否则会被这个进程启动的命令继承），`allow-remote: false`；`cpa.Proxy.Management()` 在进程内直接调用 gin 引擎，不经过网络。
+- 停机与故障：`serve` 的 SIGTERM 同时结束两个 listener 和 CPA（CPA 停 watcher、自动刷新，账本退出时写盘）。CPA 启动失败会让 `serve` 整体退出重启；上游的任何失败只体现在单个请求和账号/模型的状态上，不影响 readiness。
+
+`contract_test.go` 用真实的模块和两个 listener 守住依赖的 CPA 行为，升级 CPA 时必须通过：通过管理 API 上传 CPA 格式的 codex 凭据后，auth manager 能列出它、模型进入注册表、目录（公共、internal 与进程内三种读法）和 `/v1/models`，`/v1` 只接受带 `X-AXP-Agent-Id` 的请求，停用和删除（含凭据文件）生效，用量按主体记账；再把一个 Codex API key 指向本地的假上游，验证非流式 chat completions、流式 responses（逐段到达）、客户端断开后上游请求被取消、上游 500/429 只影响该请求。
 
 ## 接入方式（Connector）
 
@@ -56,18 +77,18 @@ Connector 只负责“凭据怎么进来”；连接列表、启停、删除统�
 
 ### 服务直连
 
-Kamal 网络上的服务（不是 runtime）直接调用 `/v1`，不带 key，自己在 `X-AXP-Agent-Id` 里写明用量记在谁名下：网关只在 Kamal 网络和 runtime 网络上，runtime 网络上只有 runtime 网关连得到它，而 runtime 网关总会改写这个头。[定时任务](routines.md)服务用 ADK 的 `openaimodel`（Chat Completions）调用 `/v1`，以 `routine-<id>` 记账；Codex 和 Grok 两类模型的多轮工具调用都经它验证过（[#57](https://github.com/AkaraChen/axp/issues/57)）。
+Kamal 网络上的服务（不是 runtime）直接调用 internal listener 的 `/v1`（`AXP_LLM_GATEWAY_URL`，生产 `http://axp-api:8001`），不带 key，自己在 `X-AXP-Agent-Id` 里写明用量记在谁名下：internal listener 不在 runtime 网络上，runtime 只能经 runtime 网关访问它，而 runtime 网关总会改写这个头。[定时任务](routines.md)的 worker 用 ADK 的 `openaimodel`（Chat Completions）调用 `/v1`，以 `routine-<id>` 记账；Codex 和 Grok 两类模型的多轮工具调用都经它验证过（[#57](https://github.com/AkaraChen/axp/issues/57)）。
 
 ### 用量
 
-账号的订阅窗口（`GET /api/llm/v1/usage`）只说明一个账号用了多少，不说明是谁用的。网关另外按“谁”记账（#101）：每个 `/v1` 请求的主体就是上面的 `X-AXP-Agent-Id`——聊天智能体的 id（记忆抽取经 memory-service 调用时也带这个智能体的 id，所以算在它头上）或 `routine-<id>`。CLIProxyAPI 对每个上游请求都把一条用量记录交给注册的用量插件（`sdk/cliproxy/usage`，与它自己的 `usage-statistics-enabled` 开关无关，配置里仍然关着它）；网关的插件（`internal/usage`）按小时累计（主体、账号、模型）的请求数、失败数和 token，存在状态目录的 `usage.json`，每分钟和退出时写一次，保留 30 天。
+账号的订阅窗口（`GET /api/llm/v1/usage`）只说明一个账号用了多少，不说明是谁用的。网关另外按“谁”记账（#101）：每个 `/v1` 请求的主体就是上面的 `X-AXP-Agent-Id`——聊天智能体的 id（记忆抽取经 memory-service 调用时也带这个智能体的 id，所以算在它头上）或 `routine-<id>`。CLIProxyAPI 对每个上游请求都把一条用量记录交给注册的用量插件（`sdk/cliproxy/usage`，与它自己的 `usage-statistics-enabled` 开关无关，配置里仍然关着它）；网关的插件（`gateway/usage`）按小时累计（主体、账号、模型）的请求数、失败数和 token，存在状态目录的 `usage.json`，每分钟和退出时写一次，保留 30 天。
 
 `GET /api/llm/v1/usage/agents` 返回每个主体近 5 小时、24 小时、7 天的合计，以及近 7 天按模型、按账号的分布。Web 在智能体的设置里和定时任务的详情里各显示一行。
 
 ## control-plane 与 runtime
 
 - `Agent.model` 存目录中的模型 ID；创建、修改时校验存在性，修改模型与修改指令一样递增 `config_version`，空闲时重启 runtime。
-- `POST /chat/messages` 在加锁前检查模型：未设置返回 409 `MODEL_NOT_SET`，`unavailable` 返回 409 `MODEL_UNAVAILABLE`；`degraded` 放行。目录在进程内缓存 10 秒；网关读不到时沿用上次读到的目录，从未读到过才返回 409。
+- `POST /chat/messages` 在加锁前检查模型：未设置返回 409 `MODEL_NOT_SET`，`unavailable` 返回 409 `MODEL_UNAVAILABLE`；`degraded` 放行。API 进程直接读模块的目录；controller 经 `llm.Remote` 读，缓存 10 秒，读不到时沿用上次读到的目录，从未读到过才算不可用。
 - controller 给 runtime 注入 runtime 网关的地址（`AXP_GATEWAY_URL`）和模型的上下文窗口；runtime 自己在后面加上 `/v1`。
 - runtime 给 Codex 加上 `model_provider = "axp"` 及 `model_providers.axp.{base_url, wire_api = "responses", env_key = "AXP_RUNTIME_LLM_KEY"}`，并在需要时设置 `model_context_window`；Codex 进程的 `AXP_RUNTIME_LLM_KEY` 就是上面的实例 key。
 

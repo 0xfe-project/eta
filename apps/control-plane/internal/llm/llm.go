@@ -1,8 +1,9 @@
-// Package llm is the client for the LLM gateway (apps/llm-gateway).
-//
-// The control plane calls the LLM gateway directly for the catalog: to
-// validate an agent's model, to refuse chats whose model is unusable and to
-// tell runtimes a model's context window.
+// Package llm is the control plane's LLM gateway (Module, built on the
+// gateway package) and how the rest of the control plane reads its model
+// catalog (Catalog): to validate an agent's model, to refuse chats whose
+// model is unusable and to tell runtimes a model's context window. The
+// process serving the APIs reads it in process; the controller and the
+// routine worker read it from the internal listener (Remote).
 package llm
 
 import (
@@ -16,8 +17,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/akarachen/axp/apps/control-plane/internal/llm/gateway"
 	"github.com/akarachen/axp/packages/service-go/apierr"
 )
+
+// catalogPath is the catalog on the internal listener.
+const catalogPath = "/llm/v1/models"
 
 const (
 	cacheFor       = 10 * time.Second
@@ -34,7 +39,7 @@ type Model struct {
 	UnavailableMessage string
 }
 
-// Catalog is the gateway's model catalog.
+// Catalog is the model catalog: a Module, or a Remote one.
 type Catalog interface {
 	Models(ctx context.Context, refresh bool) (map[string]Model, error)
 }
@@ -42,10 +47,11 @@ type Catalog interface {
 // ErrUnavailable is any failure to read the catalog.
 var ErrUnavailable = errors.New("LLM gateway unavailable")
 
-// Gateway is the LLM gateway at URL, its catalog cached briefly. When the
-// gateway cannot be read, the last catalog it served stands in for it: a
-// blip must not refuse every chat, and what it said was unusable still is.
-type Gateway struct {
+// Remote is the catalog of the Module behind the internal listener at URL,
+// cached briefly. When it cannot be read, the last catalog it served stands
+// in for it: a blip must not refuse every chat, and what it said was
+// unusable still is.
+type Remote struct {
 	URL    string
 	Client *http.Client
 
@@ -54,11 +60,11 @@ type Gateway struct {
 	models  map[string]Model
 }
 
-func NewGateway(url string) *Gateway {
-	return &Gateway{URL: strings.TrimRight(url, "/"), Client: &http.Client{}}
+func NewRemote(url string) *Remote {
+	return &Remote{URL: strings.TrimRight(url, "/"), Client: &http.Client{}}
 }
 
-func (g *Gateway) Models(ctx context.Context, refresh bool) (map[string]Model, error) {
+func (g *Remote) Models(ctx context.Context, refresh bool) (map[string]Model, error) {
 	g.mu.Lock()
 	if !refresh && g.models != nil && time.Since(g.fetched) < cacheFor {
 		models := g.models
@@ -72,7 +78,7 @@ func (g *Gateway) Models(ctx context.Context, refresh bool) (map[string]Model, e
 		last := g.models
 		g.mu.Unlock()
 		if last != nil {
-			slog.WarnContext(ctx, "LLM gateway unavailable; using its last catalog", "error", err)
+			slog.WarnContext(ctx, "Model catalog unavailable; using the last one read", "error", err)
 			return last, nil
 		}
 		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
@@ -83,10 +89,10 @@ func (g *Gateway) Models(ctx context.Context, refresh bool) (map[string]Model, e
 	return models, nil
 }
 
-func (g *Gateway) fetch(ctx context.Context) (map[string]Model, error) {
+func (g *Remote) fetch(ctx context.Context) (map[string]Model, error) {
 	ctx, cancel := context.WithTimeout(ctx, catalogTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, g.URL+"/api/llm/v1/models", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, g.URL+catalogPath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -98,35 +104,31 @@ func (g *Gateway) fetch(ctx context.Context) (map[string]Model, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("catalog returned %d", resp.StatusCode)
 	}
-	var items []struct {
-		ID            string `json:"id"`
-		DisplayName   string `json:"display_name"`
-		ContextWindow int    `json:"context_window"`
-		Available     bool   `json:"available"`
-		Reason        *struct {
-			Message string `json:"message"`
-		} `json:"reason"`
-	}
+	var items []gateway.Model
 	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
 		return nil, err
 	}
 	models := make(map[string]Model, len(items))
 	for _, item := range items {
-		m := Model{
-			ID:            item.ID,
-			DisplayName:   item.DisplayName,
-			ContextWindow: item.ContextWindow,
-			Available:     item.Available,
-		}
-		if m.DisplayName == "" {
-			m.DisplayName = item.ID
-		}
-		if !item.Available && item.Reason != nil {
-			m.UnavailableMessage = item.Reason.Message
-		}
-		models[item.ID] = m
+		models[item.ID] = fromCatalog(item)
 	}
 	return models, nil
+}
+
+func fromCatalog(item gateway.Model) Model {
+	m := Model{
+		ID:            item.ID,
+		DisplayName:   item.DisplayName,
+		ContextWindow: item.ContextWindow,
+		Available:     item.Available,
+	}
+	if m.DisplayName == "" {
+		m.DisplayName = item.ID
+	}
+	if !item.Available && item.Reason != nil {
+		m.UnavailableMessage = item.Reason.Message
+	}
+	return m
 }
 
 // Validate rejects model ids the gateway has never offered.

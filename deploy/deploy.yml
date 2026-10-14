@@ -54,9 +54,9 @@ drain_timeout: 2
 
 servers:
   # The browser's gateway (apps/gateway/public.caddy): the only role behind
-  # kamal-proxy. It routes /api/llm to the LLM gateway, /api/memory to the
-  # memory service, /api (with /api/forge and /api/routines) to the control
-  # plane's public listener and everything else to web.
+  # kamal-proxy. It routes /api/memory to the memory service, /api (with
+  # /api/forge, /api/routines and /api/llm) to the control plane's public
+  # listener and everything else to web.
   gateway:
     hosts: [<%= host %>]
     cmd: caddy run --config /app/apps/gateway/Caddyfile
@@ -73,8 +73,8 @@ servers:
         path: /up
   # Runtimes' gateway (apps/gateway/runtime.caddy), on their network as
   # axp-runtime-gateway:8090: their only route to the control plane's
-  # internal listener (with /forge and /routines), the LLM gateway and the
-  # memory, which it authenticates them for.
+  # internal listener (with /forge, /routines and the LLM gateway's /v1)
+  # and the memory, which it authenticates them for.
   runtime-gateway:
     hosts: [<%= host %>]
     cmd: caddy run --config /app/apps/gateway/Caddyfile
@@ -95,11 +95,16 @@ servers:
       network-alias: axp-web
       <<: *health
       health-cmd: <%= ready.(3000) %>
-  # The control plane's APIs (with code hosting and routines' API), in one
-  # process on two listeners: the public one (:8000) reached only through
-  # the gateway, the internal one (:8001) only through the runtime gateway.
-  # The GitHub App's credentials live in the axp-forge volume. Ready once
-  # both listeners answer.
+  # The control plane's APIs (with code hosting, routines' API and the LLM
+  # gateway), in one process on two listeners: the public one (:8000)
+  # reached only through the gateway, the internal one (:8001) through the
+  # runtime gateway and by the control plane's other roles and the memory
+  # service (the LLM gateway's /v1 and catalog). The GitHub App's
+  # credentials live in the axp-forge volume, the LLM gateway's
+  # (connections, catalog, usage) in axp-llm, at the path the retired llm
+  # role used. Ready once both listeners answer, which they do once the LLM
+  # gateway has loaded its credentials; upstream model failures never make
+  # it unready.
   api:
     hosts: [<%= host %>]
     # deploy/deploy.sh migrates with the new image before the roles boot.
@@ -111,28 +116,15 @@ servers:
         AXP_FORGE_STATE_DIR: /app/var/forge
     options:
       network-alias: axp-api
-      volume: axp-forge:/app/var/forge
+      volume:
+        - axp-forge:/app/var/forge
+        - axp-llm:/app/apps/control-plane/var/llm-gateway
       <<: *health
       health-cmd: <%= ready.(8000, "/api/health") %> && <%= ready.(8001) %>
-  # LLM gateway (embedded CLIProxyAPI): connections and model catalog behind
-  # the gateway, its OpenAI-compatible API behind the runtime gateway. Both
-  # reach it as axp-llm. Credentials live in the axp-llm volume.
-  llm:
-    hosts: [<%= host %>]
-    cmd: axp-llm-gateway
-    env:
-      secret: *telemetry-secrets
-      clear:
-        AXP_LLM_ADDR: ":8317"
-    options:
-      network-alias: axp-llm
-      volume: axp-llm:/app/apps/control-plane/var/llm-gateway
-      <<: *health
-      health-cmd: <%= ready.(8317) %>
   # Agents' memories (apps/memory-service) as axp-memory: runtimes reach
   # /memory through the runtime gateway, the browser /api/memory through the
-  # gateway. Facts are extracted through the LLM
-  # gateway and kept in PostgreSQL (pgvector).
+  # gateway. Facts are extracted through the LLM gateway (the control
+  # plane's internal listener) and kept in PostgreSQL (pgvector).
   memory:
     hosts: [<%= host %>]
     cmd: python -m axp_memory
@@ -144,7 +136,7 @@ servers:
         # The model is in the image; never look for it online.
         HF_HUB_OFFLINE: "1"
         AXP_MEMORY_ADDR: ":8320"
-        AXP_LLM_GATEWAY_URL: http://axp-llm:8317
+        AXP_LLM_GATEWAY_URL: http://axp-api:8001
     options:
       network-alias: axp-memory
       <<: *health

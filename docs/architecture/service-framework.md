@@ -64,7 +64,7 @@ func main() {
 | ---------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | 控制面（`apps/control-plane`，含代码托管和定时任务） | `serve`、`controller`、`routine-worker`、`migrate`、`openapi`、`ensure-runtime-network` | `axp`（迁移 1 是 Django 留下的 schema，Go 迁移，其余是 SQL）与定时任务的 `axp_routines`，都由 `migrate` 迁移 |
 
-llm-gateway 没有用这个框架：它是嵌入的 CLIProxyAPI（gin）。以后若需要数据库或生成 OpenAPI，应当迁过来，而不是各自再写一份。代码托管（`internal/forge`）的路由是普通的 `net/http` handler，没有数据库，不生成 OpenAPI。
+[LLM 网关](llm-gateway.md)（`internal/llm`）的路由不是 huma：浏览器的 `/api/llm` 是普通的 `net/http` handler，`/v1` 是嵌入的 CLIProxyAPI 的 gin 引擎。以后若需要生成 OpenAPI，应当迁到 huma，而不是各自再写一份。代码托管（`internal/forge`）的路由是普通的 `net/http` handler，没有数据库，不生成 OpenAPI。
 
 ## 测试
 

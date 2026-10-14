@@ -1,12 +1,13 @@
 // Command axp-control-plane is AXP's control plane: it keeps agents' state
-// and operates their runtimes, connects the GitHub App agents act as (forge)
-// and keeps routines. One binary, one role per process:
+// and operates their runtimes, connects the GitHub App agents act as (forge),
+// keeps routines and is the LLM gateway (llm). One binary, one role per process:
 //
 //	axp-control-plane serve       both APIs, each on its own listener:
 //	                              the browser's (AXP_API_ADDR, default :8000) under /api,
-//	                              /api/forge, /api/routines, /remote, /share and /preview;
+//	                              /api/forge, /api/routines, /api/llm, /remote, /share and /preview;
 //	                              runtimes' (AXP_INTERNAL_ADDR, default :8001) under /internal,
-//	                              /forge, /routines, /tasks, /groups, /agenvo, /artifacts and /attachments
+//	                              /forge, /routines, /tasks, /groups, /agenvo, /artifacts, /attachments,
+//	                              /v1 (the LLM gateway's OpenAI-compatible API) and /llm
 //	axp-control-plane controller  builds and runs agents' containers and delivers their work (Docker socket)
 //	axp-control-plane routine-worker
 //	                              runs routines when they fire and revises their briefs
@@ -62,7 +63,7 @@ import (
 func main() {
 	service.Main("control-plane",
 		service.Command{Name: "serve", Run: func(ctx context.Context, _ []string) error {
-			s, err := connect(ctx)
+			s, err := connect(ctx, true)
 			if err != nil {
 				return err
 			}
@@ -73,7 +74,7 @@ func main() {
 			flags := flag.NewFlagSet("controller", flag.ExitOnError)
 			interval := flags.Duration("interval", time.Second, "time between ticks")
 			_ = flags.Parse(args)
-			s, err := connect(ctx)
+			s, err := connect(ctx, false)
 			if err != nil {
 				return err
 			}
@@ -132,9 +133,12 @@ func openAPIDeps() *api.Deps {
 
 // services is everything a role may need, connected lazily where possible.
 type services struct {
-	cfg    config.Config
-	deps   *api.Deps
-	models *llm.Gateway
+	cfg  config.Config
+	deps *api.Deps
+	// The LLM gateway, in serve's process only; the controller reads its
+	// catalog from the internal listener.
+	llm    *llm.Module
+	models llm.Catalog
 	forge  *forge.Server
 	// Routines' own database, and their schedules (only published to).
 	routines *routineapi.Deps
@@ -147,7 +151,9 @@ func (s *services) close() {
 	s.deps.DB.Close()
 }
 
-func connect(ctx context.Context) (*services, error) {
+// connect prepares what the roles share; serving opens the LLM gateway
+// too, which only the process serving the APIs may run.
+func connect(ctx context.Context, serving bool) (*services, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, err
@@ -164,7 +170,14 @@ func connect(ctx context.Context) (*services, error) {
 	if err != nil {
 		return nil, err
 	}
-	models := llm.NewGateway(cfg.LLMGatewayURL)
+	var module *llm.Module
+	var models llm.Catalog = llm.NewRemote(cfg.LLMGatewayURL)
+	if serving {
+		if module, err = llm.Open(cfg.LLMStateDir, slog.Default()); err != nil {
+			return nil, err
+		}
+		models = module
+	}
 	gh := github.New(cfg.ForgeStateDir)
 	taskService := &tasks.Service{PullHead: func(ctx context.Context, url string) (string, error) {
 		pull, err := gh.PullRequest(ctx, url)
@@ -199,11 +212,12 @@ func connect(ctx context.Context) (*services, error) {
 	}
 	return &services{
 		cfg:    cfg,
+		llm:    module,
 		models: models,
 		forge:  forge.New(gh, slog.Default()),
 		routines: &routineapi.Deps{
 			DB:       routinesDB,
-			Routines: &routines.Service{Schedules: queue, Models: &routines.Gateway{URL: cfg.LLMGatewayURL, Client: &http.Client{}}},
+			Routines: &routines.Service{Schedules: queue, Models: models},
 			Docs:     cfg.Dev,
 		},
 		queue: queue,
@@ -221,27 +235,39 @@ func connect(ctx context.Context) (*services, error) {
 }
 
 // handlers are the two listeners' routes.
-func handlers(deps *api.Deps, code *forge.Server, routines *routineapi.Deps) (public, internal http.Handler) {
+func handlers(deps *api.Deps, code *forge.Server, routines *routineapi.Deps, models *llm.Module) (public, internal http.Handler) {
 	pub := http.NewServeMux()
 	pub.Handle("/", api.Public(deps).Router)
 	pub.Handle("/api/forge/", code.Public())
 	pub.Handle("/api/routines/", routineapi.New(routines).Router)
+	pub.Handle("/api/llm/", models.Public())
 	in := http.NewServeMux()
 	in.Handle("/", api.Internal(deps).Router)
 	in.Handle("/forge/", code.Runtime())
 	in.Handle("/routines/mcp", routineapi.MCP(routines))
+	in.Handle("/v1/", models.Internal())
+	in.Handle("/llm/", models.Internal())
 	return pub, in
 }
 
-// serve runs both APIs in this process, each on its own listener: the
-// public one is all the browser's gateway reaches, the internal one all the
-// runtime gateway does, so routes that trust X-AXP-Agent-Id are never on
-// the public listener. Either failing stops both, and SIGTERM stops both.
-// Chat streams (SSE) never finish; browsers reconnect with Last-Event-ID, so
-// stopping does not wait for them.
+// serve runs both APIs and the LLM gateway in this process, each API on
+// its own listener: the public one is all the browser's gateway reaches,
+// the internal one all the runtime gateway (and the control plane's other
+// processes) do, so routes that trust X-AXP-Agent-Id are never on the
+// public listener. The listeners open once the LLM gateway has loaded its
+// credentials. Any of the three failing stops all, and SIGTERM stops all.
+// Chat streams (SSE) never finish; browsers reconnect with Last-Event-ID,
+// and Codex retries a model stream cut short, so stopping does not wait for
+// them.
 func serve(ctx context.Context, s *services) error {
-	public, internal := handlers(s.deps, s.forge, s.routines)
+	public, internal := handlers(s.deps, s.forge, s.routines, s.llm)
 	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error { return s.llm.Run(ctx) })
+	select {
+	case <-s.llm.Ready():
+	case <-ctx.Done():
+		return g.Wait()
+	}
 	g.Go(func() error { return httpapi.Serve(ctx, s.cfg.APIAddr, public, time.Second) })
 	g.Go(func() error { return httpapi.Serve(ctx, s.cfg.InternalAddr, internal, time.Second) })
 	return g.Wait()
@@ -390,6 +416,7 @@ func runRoutineWorker(ctx context.Context, cfg config.Config) error {
 	}
 	defer queue.Close()
 	gateway := &routines.Gateway{URL: cfg.LLMGatewayURL, Client: &http.Client{}}
+	models := llm.NewRemote(cfg.LLMGatewayURL)
 	proxy, err := routines.NewKeyProxy(cfg.LLMGatewayURL)
 	if err != nil {
 		return err
@@ -407,7 +434,7 @@ func runRoutineWorker(ctx context.Context, cfg config.Config) error {
 	if err := runner.Recover(ctx); err != nil {
 		return err
 	}
-	if err := routines.SyncSchedules(ctx, db, &routines.Service{Schedules: queue, Models: gateway}, queue); err != nil {
+	if err := routines.SyncSchedules(ctx, db, &routines.Service{Schedules: queue, Models: models}, queue); err != nil {
 		return err
 	}
 	g, ctx := errgroup.WithContext(ctx)

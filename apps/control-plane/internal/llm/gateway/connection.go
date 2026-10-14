@@ -1,4 +1,4 @@
-package llm
+package gateway
 
 import (
 	"encoding/base64"

@@ -1,4 +1,4 @@
-// Package connectors implements llm.Connector for the supported providers.
+// Package connectors implements gateway.Connector for the supported providers.
 package connectors
 
 import (
@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/akarachen/axp/apps/llm-gateway/internal/llm"
+	"github.com/akarachen/axp/apps/control-plane/internal/llm/gateway"
 )
 
 // XAI logs in to xAI (Grok) with the device-code flow that CPA's management
@@ -22,44 +22,44 @@ type XAI struct {
 	HTTP *http.Client
 
 	mu       sync.Mutex
-	sessions map[string]*llm.LoginSession
+	sessions map[string]*gateway.LoginSession
 }
 
-func (x *XAI) Info() llm.ConnectorInfo {
-	return llm.ConnectorInfo{
+func (x *XAI) Info() gateway.ConnectorInfo {
+	return gateway.ConnectorInfo{
 		ID:          "xai",
 		DisplayName: "Grok",
-		Flow:        llm.FlowDevice,
+		Flow:        gateway.FlowDevice,
 		Provider:    "xai",
 		Hint:        "需要可以使用 Grok API 的 xAI 账号（例如 SuperGrok 订阅）。",
 	}
 }
 
-func (x *XAI) StartLogin(ctx context.Context, _ llm.LoginInput) (*llm.LoginSession, error) {
+func (x *XAI) StartLogin(ctx context.Context, _ gateway.LoginInput) (*gateway.LoginSession, error) {
 	var res struct {
 		URL       string `json:"url"`
 		State     string `json:"state"`
 		UserCode  string `json:"user_code"`
 		ExpiresIn int    `json:"expires_in"`
 	}
-	if err := llm.Manage(ctx, x.Management, x.ManagementURL("/xai-auth-url"), http.MethodGet, nil, &res); err != nil {
-		return nil, &llm.UserError{Code: "LOGIN_START_FAILED", Message: "无法发起 xAI 登录，请稍后再试。", Cause: err}
+	if err := gateway.Manage(ctx, x.Management, x.ManagementURL("/xai-auth-url"), http.MethodGet, nil, &res); err != nil {
+		return nil, &gateway.UserError{Code: "LOGIN_START_FAILED", Message: "无法发起 xAI 登录，请稍后再试。", Cause: err}
 	}
 	if res.ExpiresIn <= 0 {
 		res.ExpiresIn = 900
 	}
-	sess := &llm.LoginSession{
+	sess := &gateway.LoginSession{
 		ID:        res.State,
 		Connector: "xai",
-		Flow:      llm.FlowDevice,
-		Status:    llm.LoginPending,
+		Flow:      gateway.FlowDevice,
+		Status:    gateway.LoginPending,
 		URL:       res.URL,
 		UserCode:  res.UserCode,
 		ExpiresAt: time.Now().Add(time.Duration(res.ExpiresIn) * time.Second),
 	}
 	x.mu.Lock()
 	if x.sessions == nil {
-		x.sessions = map[string]*llm.LoginSession{}
+		x.sessions = map[string]*gateway.LoginSession{}
 	}
 	x.sessions[sess.ID] = sess
 	x.mu.Unlock()
@@ -67,55 +67,57 @@ func (x *XAI) StartLogin(ctx context.Context, _ llm.LoginInput) (*llm.LoginSessi
 	return &copy, nil
 }
 
-func (x *XAI) PollLogin(ctx context.Context, id string) (*llm.LoginSession, error) {
+func (x *XAI) PollLogin(ctx context.Context, id string) (*gateway.LoginSession, error) {
 	x.mu.Lock()
 	sess, ok := x.sessions[id]
 	x.mu.Unlock()
 	if !ok {
-		return nil, llm.ErrNotFound
+		return nil, gateway.ErrNotFound
 	}
-	snapshot := func() (*llm.LoginSession, error) {
+	snapshot := func() (*gateway.LoginSession, error) {
 		x.mu.Lock()
 		defer x.mu.Unlock()
 		copy := *sess
 		return &copy, nil
 	}
-	if sess.Status != llm.LoginPending {
+	if sess.Status != gateway.LoginPending {
 		return snapshot()
 	}
 	if time.Now().After(sess.ExpiresAt) {
-		x.finish(sess, llm.LoginExpired, "验证码已过期，请重新发起。")
+		x.finish(sess, gateway.LoginExpired, "验证码已过期，请重新发起。")
 		return snapshot()
 	}
 	var res struct {
 		Status string `json:"status"`
 		Error  string `json:"error"`
 	}
-	err := llm.Manage(ctx, x.Management, x.ManagementURL("/get-auth-status?state="+url.QueryEscape(id)), http.MethodGet, nil, &res)
+	err := gateway.Manage(ctx, x.Management, x.ManagementURL("/get-auth-status?state="+url.QueryEscape(id)), http.MethodGet, nil, &res)
 	switch {
 	case err != nil:
 		return nil, err
 	case res.Status == "ok":
-		x.finish(sess, llm.LoginSucceeded, "")
+		x.finish(sess, gateway.LoginSucceeded, "")
 	case res.Status == "error":
 		msg := "登录失败，请重试。"
 		if strings.Contains(strings.ToLower(res.Error), "timeout") || strings.Contains(res.Error, "expired") {
-			x.finish(sess, llm.LoginExpired, "验证码已过期，请重新发起。")
+			x.finish(sess, gateway.LoginExpired, "验证码已过期，请重新发起。")
 		} else {
-			x.finish(sess, llm.LoginFailed, msg)
+			x.finish(sess, gateway.LoginFailed, msg)
 		}
 	}
 	return snapshot()
 }
 
-func (x *XAI) finish(sess *llm.LoginSession, status, msg string) {
+func (x *XAI) finish(sess *gateway.LoginSession, status, msg string) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	sess.Status = status
 	sess.Error = msg
 }
 
-func (x *XAI) SubmitLogin(context.Context, string, llm.LoginInput) error { return llm.ErrUnsupported }
+func (x *XAI) SubmitLogin(context.Context, string, gateway.LoginInput) error {
+	return gateway.ErrUnsupported
+}
 
 func (x *XAI) CancelLogin(ctx context.Context, id string) error {
 	x.mu.Lock()
@@ -123,10 +125,10 @@ func (x *XAI) CancelLogin(ctx context.Context, id string) error {
 	delete(x.sessions, id)
 	x.mu.Unlock()
 	if !ok {
-		return llm.ErrNotFound
+		return gateway.ErrNotFound
 	}
-	if sess.Status != llm.LoginPending {
+	if sess.Status != gateway.LoginPending {
 		return nil
 	}
-	return llm.Manage(ctx, x.Management, x.ManagementURL("/oauth-session?state="+url.QueryEscape(id)), http.MethodDelete, nil, nil)
+	return gateway.Manage(ctx, x.Management, x.ManagementURL("/oauth-session?state="+url.QueryEscape(id)), http.MethodDelete, nil, nil)
 }

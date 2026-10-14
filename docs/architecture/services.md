@@ -1,6 +1,6 @@
 # 新增一个服务
 
-本文是 [#60](https://github.com/AkaraChen/axp/issues/60) 的清单：新增一个后端服务时要改的地方。先考虑做成控制面的模块（[#241](https://github.com/AkaraChen/axp/issues/241) 把原来的 forge-service、routine-service 合了进去）：只有需要独立的运行时（如 Python 的 memory-service、嵌入 CLIProxyAPI 的 llm-gateway）或独立扩缩时才新起服务。漏改的地方往往到部署时才暴露，所以逐项核对。
+本文是 [#60](https://github.com/AkaraChen/axp/issues/60) 的清单：新增一个后端服务时要改的地方。先考虑做成控制面的模块（[#241](https://github.com/AkaraChen/axp/issues/241) 把原来的 forge-service、routine-service 合了进去）：只有需要独立的运行时（如 Python 的 memory-service）或独立扩缩时才新起服务；嵌入 CLIProxyAPI 的 LLM 网关也已在 [#245](https://github.com/AkaraChen/axp/issues/245) 合入。漏改的地方往往到部署时才暴露，所以逐项核对。
 
 ## 代码与构建
 

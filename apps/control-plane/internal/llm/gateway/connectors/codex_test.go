@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akarachen/axp/apps/llm-gateway/internal/llm"
+	"github.com/akarachen/axp/apps/control-plane/internal/llm/gateway"
 )
 
 type roundTrip func(*http.Request) (*http.Response, error)
@@ -71,11 +71,11 @@ func TestCodexDeviceLogin(t *testing.T) {
 		ManagementURL: func(p string) string { return "http://cpa" + p },
 		Issuer:        openai.URL,
 	}
-	sess, err := c.StartLogin(context.Background(), llm.LoginInput{})
+	sess, err := c.StartLogin(context.Background(), gateway.LoginInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sess.UserCode != "ABCD-1234" || sess.URL != codexVerificationURL || sess.Status != llm.LoginPending {
+	if sess.UserCode != "ABCD-1234" || sess.URL != codexVerificationURL || sess.Status != gateway.LoginPending {
 		t.Fatalf("session = %+v", sess)
 	}
 
@@ -96,7 +96,7 @@ func TestCodexDeviceLogin(t *testing.T) {
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		got, _ := c.PollLogin(context.Background(), sess.ID)
-		if got.Status == llm.LoginSucceeded {
+		if got.Status == gateway.LoginSucceeded {
 			break
 		}
 		if time.Now().After(deadline) {

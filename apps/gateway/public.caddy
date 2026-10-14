@@ -1,6 +1,6 @@
-# The browser's entry: by longest prefix, /api/llm to the LLM gateway,
-# /api/memory to the memory service, /observe to OpenObserve, /remote/relay
-# to the agenvo relay, /api (with /api/forge and /api/routines), /remote and
+# The browser's entry: by longest prefix, /api/memory to the memory
+# service, /observe to OpenObserve, /remote/relay to the agenvo relay, /api
+# (with /api/forge, /api/routines and /api/llm), /remote and
 # artifacts' /share and /preview pages to the control plane's public
 # listener, everything else to web. The control plane's internal listener
 # is never an upstream here.
@@ -42,9 +42,6 @@ http://:{$AXP_GATEWAY_PORT:8080} {
 		log_skip
 		respond "ok"
 	}
-	handle /api/llm/* {
-		reverse_proxy {$AXP_UPSTREAM_LLM:axp-llm:8317}
-	}
 	# Agents' memories, for the user to see and edit.
 	handle /api/memory/* {
 		reverse_proxy {$AXP_UPSTREAM_MEMORY:axp-memory:8320}
@@ -78,7 +75,8 @@ http://:{$AXP_GATEWAY_PORT:8080} {
 		reverse_proxy {$AXP_UPSTREAM_API:axp-api:8000}
 	}
 	# Includes code hosting (/api/forge: connecting the GitHub App, and
-	# GitHub's redirect back) and routines (/api/routines).
+	# GitHub's redirect back), routines (/api/routines) and the LLM gateway
+	# (/api/llm: connections, logins, the catalog and usage).
 	handle /api/* {
 		# Chat streams (SSE) pass through as they are written.
 		reverse_proxy {$AXP_UPSTREAM_API:axp-api:8000} {
