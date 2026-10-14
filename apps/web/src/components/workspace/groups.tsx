@@ -1,5 +1,7 @@
 import type { Group } from "@/queries/chat";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
+import { RobotIcon } from "@phosphor-icons/react/Robot";
+import { UsersThreeIcon } from "@phosphor-icons/react/UsersThree";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -14,6 +16,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -56,14 +64,24 @@ function GroupAvatars({
   );
 }
 
+/**
+ * The 新建群 dialog, opened by its own trigger (children, or a plus), or
+ * by its owner through open and onOpenChange.
+ */
 export function CreateGroup({
   members = [],
   children,
+  open: controlled,
+  onOpenChange,
 }: {
   members?: string[];
   children?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [uncontrolled, setUncontrolled] = useState(false);
+  const open = controlled ?? uncontrolled;
+  const setOpen = onOpenChange ?? setUncontrolled;
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
   const [chosen, setChosen] = useState<string[]>(members);
@@ -78,13 +96,15 @@ export function CreateGroup({
         if (value) setChosen(members);
       }}
     >
-      <DialogTrigger asChild>
-        {children ?? (
-          <Button variant="ghost" size="icon-xs" aria-label="新建群">
-            <PlusIcon />
-          </Button>
-        )}
-      </DialogTrigger>
+      {controlled === undefined && (
+        <DialogTrigger asChild>
+          {children ?? (
+            <Button variant="ghost" size="icon-xs" aria-label="新建群">
+              <PlusIcon />
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>新建群</DialogTitle>
@@ -162,6 +182,49 @@ export function CreateGroup({
   );
 }
 
+/** The conversation list's plus on mobile: a new group or a new agent. */
+function CreateMenu() {
+  const [group, setGroup] = useState(false);
+  const { openEditor } = useAgents();
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-lg"
+            aria-label="新建"
+            className="-mr-2"
+          >
+            <PlusIcon />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          collisionPadding={8}
+          className="w-auto"
+        >
+          <DropdownMenuItem
+            className="min-h-10 text-sm"
+            onSelect={() => setGroup(true)}
+          >
+            <UsersThreeIcon aria-hidden="true" />
+            新建群
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="min-h-10 text-sm"
+            onSelect={() => openEditor()}
+          >
+            <RobotIcon aria-hidden="true" />
+            新建智能体
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <CreateGroup open={group} onOpenChange={setGroup} />
+    </>
+  );
+}
+
 export function GroupList({ compact = false }: { compact?: boolean }) {
   const { groups, current } = useGroups();
   const open = useOpenGroup();
@@ -175,11 +238,17 @@ export function GroupList({ compact = false }: { compact?: boolean }) {
         compact ? "mt-5 px-2" : "flex-1 overflow-y-auto px-3",
       )}
     >
-      <div className="flex h-9 items-center justify-between px-2">
+      <div
+        className={cn(
+          "flex h-9 items-center justify-between px-2",
+          // The list scrolls under its plus, which stays in reach.
+          !compact && "sticky top-0 z-10 bg-background",
+        )}
+      >
         <h2 className="text-xs font-medium text-muted-foreground">
           {compact ? "群" : "最近对话"}
         </h2>
-        <CreateGroup />
+        {compact ? <CreateGroup /> : <CreateMenu />}
       </div>
       <ul className="grid gap-px">
         {shown.map((g) => (

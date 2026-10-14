@@ -153,11 +153,6 @@ export function Workspace({
           <SettingsButton />
         </header>
         <GroupList />
-        <div className="px-5 py-3">
-          <Button size="sm" variant="outline" onClick={() => openEditor()}>
-            新建智能体
-          </Button>
-        </div>
         <BottomNav />
       </div>
       <div
