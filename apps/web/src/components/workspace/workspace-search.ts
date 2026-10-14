@@ -8,6 +8,7 @@ import {
   useQueryState,
 } from "nuqs";
 import { useEffect } from "react";
+import { useGroups } from "./use-groups";
 import { useWorkspaceStore } from "./workspace-store";
 
 /** The side panel's tabs that have a page in the full-window workspace. */
@@ -28,6 +29,7 @@ export const hasPage = (
  */
 export function useSectionLink() {
   const [group] = useQueryState("group", parseAsString);
+  const tabs = usePanelViews();
   const fullWindow = useLocation({
     select: (location) => location.pathname.startsWith("/workspace"),
   });
@@ -35,7 +37,7 @@ export function useSectionLink() {
     view: keyof typeof sectionPaths,
     search: { task?: string; routine?: string } = {},
   ) =>
-    fullWindow
+    fullWindow || !tabs.some((tab) => tab.value === view)
       ? ({ to: sectionPaths[view], search } as const)
       : ({
           to: "/",
@@ -43,27 +45,42 @@ export function useSectionLink() {
         } as const);
 }
 
-export const views = [
-  { value: "group", label: "群" },
+// A group chat's panel is about the group; any other chat's (a direct
+// chat, or none yet) is the workspace's.
+const groupViews = [
+  { value: "members", label: "成员" },
+  { value: "artifacts", label: "Artifacts" },
+] as const;
+const workspaceViews = [
   { value: "overview", label: "概览" },
   { value: "tasks", label: "任务" },
   { value: "routines", label: "定时" },
   { value: "inbox", label: "待处理" },
 ] as const;
 
+/** The side panel's tabs beside the current chat. */
+export function usePanelViews(): readonly {
+  value: WorkspaceView;
+  label: string;
+}[] {
+  return useGroups().current?.kind === "group" ? groupViews : workspaceViews;
+}
+
 const linkedViewParser = parseAsStringLiteral([
-  "group",
+  "members",
+  "artifacts",
   "overview",
   "tasks",
   "routines",
   "inbox",
 ] as const);
-// Any other view opens the group rather than failing the route.
+// Any other view (such as the old "group") opens the first tab rather than
+// failing the route.
 const viewParser = createParser({
-  parse: (value) => linkedViewParser.parse(value) ?? "group",
+  parse: (value) => linkedViewParser.parse(value) ?? "members",
   serialize: linkedViewParser.serialize,
 })
-  .withDefault("group")
+  .withDefault("members")
   .withOptions({ history: "push" });
 export const validateWorkspaceSearch = createStandardSchemaV1(
   // The routines tab's place: a routine, one of its runs, or its editor;
@@ -90,6 +107,6 @@ export function useShowLinkedView() {
   const [linked] = useQueryState("view", linkedViewParser);
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
   useEffect(() => {
-    if (linked && linked !== "group") setMobilePanel("workspace");
+    if (linked && linked !== "members") setMobilePanel("workspace");
   }, [linked, setMobilePanel]);
 }

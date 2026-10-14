@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "@rstest/core";
+import { afterEach, expect, it, rstest } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   createMemoryHistory,
@@ -65,6 +65,7 @@ async function mount(path = "/?group=team&view=memory") {
     interactions: [],
   });
   client.setQueryData(["tasks"], { tasks: [], assignees: [] });
+  client.setQueryData(["artifacts"], { artifacts: [] });
   client.setQueryData(["routines"], []);
   client.setQueryData(["llm", "connections"], []);
   for (const id of ["a", "b"])
@@ -135,11 +136,25 @@ const tabs = (container: HTMLElement) =>
     (tab) => [tab.textContent, tab.getAttribute("aria-selected")],
   );
 
-it("leaves memory out of the side panel and defaults an unknown tab to group info", async () => {
-  const { container } = await mount();
+it("gives a group chat 成员 and Artifacts, falling back to 成员", async () => {
+  // memory was never a tab; group, overview, tasks, routines and inbox were
+  // a group chat's before.
+  for (const view of ["memory", "group", "overview", "tasks", "routines"]) {
+    const { container } = await mount(`/?group=team&view=${view}`);
+    expect(tabs(container)).toEqual([
+      ["成员", "true"],
+      ["Artifacts", "false"],
+    ]);
+  }
+  const { container } = await mount("/?group=team&view=artifacts");
+  expect(tabs(container)[1]).toEqual(["Artifacts", "true"]);
+  expect(container.textContent).toContain("还没有 Artifacts");
+});
+
+it("leaves memory out of a direct chat's side panel", async () => {
+  const { container } = await mount("/?group=dm&view=memory");
   expect(tabs(container)).toEqual([
-    ["群", "true"],
-    ["概览", "false"],
+    ["概览", "true"],
     ["任务", "false"],
     ["定时", "false"],
     ["待处理", "false"],
@@ -152,18 +167,14 @@ it("leaves memory out of the side panel and defaults an unknown tab to group inf
   ).toBe("/workspace");
 });
 
-it("leaves the group tab out of a direct chat but keeps it for any group", async () => {
-  // An old link to the direct chat's group info opens the overview.
-  const { container } = await mount("/?group=dm&view=group");
-  expect(tabs(container)).toEqual([
-    ["概览", "true"],
-    ["任务", "false"],
-    ["定时", "false"],
-    ["待处理", "false"],
-  ]);
+it("opens a direct chat's overview for a group chat's tab", async () => {
+  for (const view of ["group", "members", "artifacts"]) {
+    const { container } = await mount(`/?group=dm&view=${view}`);
+    expect(tabs(container)[0]).toEqual(["概览", "true"]);
+  }
   for (const id of ["solo", "team"]) {
     const { container } = await mount(`/?group=${id}`);
-    expect(tabs(container)[0]).toEqual(["群", "true"]);
+    expect(tabs(container)[0]).toEqual(["成员", "true"]);
   }
 });
 
@@ -176,4 +187,65 @@ it("keeps the full-window memory page at the agent in its URL", async () => {
   ).toContain("研究员 A");
   expect(container.textContent).toContain("a 的专属记忆");
   expect(container.textContent).not.toContain("b 的专属记忆");
+});
+
+it("removes a member from its menu only after confirming", async () => {
+  const puts: string[] = [];
+  rstest.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const request = input as Request;
+    if (request.method === "PUT") puts.push(new URL(request.url).pathname);
+    return new Promise<Response>(() => {});
+  });
+  cleanup.push(() => rstest.restoreAllMocks());
+  const { container } = await mount("/?group=team");
+  const press = (element: Element) =>
+    act(async () =>
+      element.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      ),
+    );
+  await press(container.querySelector('[aria-label="b 的操作"]')!);
+  const items = [...document.querySelectorAll('[role="menuitem"]')];
+  expect(items.map((item) => item.textContent)).toEqual(["设置", "移除"]);
+  await press(items[1]!);
+  const dialog = document.querySelector('[role="alertdialog"]')!;
+  expect(dialog.textContent).toContain("把「b」移出群？");
+  expect(puts).toEqual([]);
+  const confirm = [...dialog.querySelectorAll("button")].find(
+    (button) => button.textContent === "移除",
+  )!;
+  await act(async () => confirm.click());
+  expect(puts).toEqual(["/api/v1/groups/team/members/b"]);
+});
+
+it("offers no removal in a group of one", async () => {
+  const { container } = await mount("/?group=solo");
+  await act(async () =>
+    container
+      .querySelector('[aria-label="a 的操作"]')!
+      .dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      ),
+  );
+  expect(
+    [...document.querySelectorAll('[role="menuitem"]')].map(
+      (item) => item.textContent,
+    ),
+  ).toEqual(["设置"]);
+});
+
+it("keeps the group's own actions in its menu", async () => {
+  const { container } = await mount("/?group=team");
+  await act(async () =>
+    container
+      .querySelector('[aria-label="群操作"]')!
+      .dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      ),
+  );
+  expect(
+    [...document.querySelectorAll('[role="menuitem"]')].map(
+      (item) => item.textContent,
+    ),
+  ).toEqual(["编辑群信息", "相关任务", "归档"]);
 });

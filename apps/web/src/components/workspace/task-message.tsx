@@ -23,7 +23,7 @@ import { ActivityRefCard } from "./activity-ref";
 import { runStatusLabels } from "./task-format";
 import { TaskForm } from "./tasks";
 import { useGroups } from "./use-groups";
-import { useSectionLink } from "./workspace-search";
+import { usePanelViews, useSectionLink } from "./workspace-search";
 
 export function TaskMessage({ message }: { message: ChatMessage }) {
   const [edit, setEdit] = useState(false);
@@ -36,6 +36,8 @@ export function TaskMessage({ message }: { message: ChatMessage }) {
   const group = groups.find((g) => g.id === message.group_id);
   const members = group?.participants.filter((p) => p.member) ?? [];
   const sectionLink = useSectionLink();
+  // A group chat's panel has no tasks tab.
+  const besideChat = usePanelViews().some((tab) => tab.value === "tasks");
   const data = message.data;
   const title = String(data.title ?? "任务");
   if (message.kind === "task_draft")
@@ -167,15 +169,24 @@ export function TaskMessage({ message }: { message: ChatMessage }) {
               验收通过
             </Button>
           )}
+          {besideChat && (
+            <Button
+              variant="ghost"
+              size="xs"
+              className="hidden md:inline-flex"
+              asChild
+            >
+              <Link {...sectionLink("tasks", { task: taskId })}>
+                在侧栏打开
+              </Link>
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="xs"
-            className="hidden md:inline-flex"
+            className={besideChat ? "md:hidden" : undefined}
             asChild
           >
-            <Link {...sectionLink("tasks", { task: taskId })}>在侧栏打开</Link>
-          </Button>
-          <Button variant="ghost" size="xs" className="md:hidden" asChild>
             <Link to="/workspace/tasks" search={{ task: taskId }}>
               打开任务
             </Link>

@@ -118,7 +118,7 @@ export function Sidebar() {
             }
           />
         )}
-        <ul className="grid min-h-0 gap-px overflow-y-auto">
+        <ul className="grid min-h-0 grid-cols-1 gap-px overflow-y-auto">
           {agents.map((agent) => (
             <li key={agent.id}>
               <button

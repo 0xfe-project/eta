@@ -1,5 +1,6 @@
 export type WorkspaceView =
-  | "group"
+  | "members"
+  | "artifacts"
   | "overview"
   | "tasks"
   | "routines"
