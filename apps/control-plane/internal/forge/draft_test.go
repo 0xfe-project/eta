@@ -1,4 +1,4 @@
-package server
+package forge
 
 import (
 	"encoding/json"

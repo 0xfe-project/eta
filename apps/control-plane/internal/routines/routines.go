@@ -2,8 +2,9 @@
 // (docs/architecture/routines.md).
 //
 // A routine has a versioned brief, a schedule and a history of runs. Each run
-// is an ADK agent in this process, may leave a report, and leaves a handoff
-// note for the next run. The user's feedback on a run revises the brief.
+// is an ADK agent in the routine worker (Runner), may leave a report, and
+// leaves a handoff note for the next run. The user's feedback on a run
+// revises the brief, also in the worker. The API (Service) only records.
 //
 // A routine's schedule lives in NATS; every write that changes whether or
 // when it runs updates it before its transaction commits, so a failure rolls
@@ -551,7 +552,7 @@ func (s *Service) RestoreBrief(ctx context.Context, tx pgx.Tx, id string, versio
 }
 
 // AddFeedback records the user's feedback on a run; once it is committed,
-// Runner.Revise revises the brief from it.
+// the worker is notified (FeedbackChannel) and revises the brief from it.
 func (s *Service) AddFeedback(ctx context.Context, tx pgx.Tx, routineID, runID, text string) (*Feedback, error) {
 	routine, ok1 := pg.ParseID(routineID)
 	run, ok2 := pg.ParseID(runID)
@@ -568,6 +569,9 @@ func (s *Service) AddFeedback(ctx context.Context, tx pgx.Tx, routineID, runID, 
 	f := &feedbackRow{ID: pg.NewID(), RunID: run, Text: text, CreatedAt: pg.Now()}
 	if _, err := tx.Exec(ctx, `INSERT INTO routine_feedback (id, run_id, text, created_at)
 		VALUES ($1, $2, $3, $4)`, f.ID, f.RunID, f.Text, f.CreatedAt); err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, "SELECT pg_notify($1, $2)", FeedbackChannel, f.ID); err != nil {
 		return nil, err
 	}
 	p := f.public()

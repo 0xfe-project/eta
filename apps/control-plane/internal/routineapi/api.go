@@ -1,14 +1,16 @@
-// Package api is the routine service's HTTP API, which the browser calls
-// under /api/routines through the gateway: transport only, over the
-// routines package.
-package api
+// Package routineapi is routines' HTTP surface, transport only over the
+// routines package: the browser's API under /api/routines (New), on the
+// control plane's public listener, and chat agents' routines plugin under
+// /routines/mcp (MCP), on its internal one. Neither runs routines: the
+// routine worker does (cmd routine-worker).
+package routineapi
 
 import (
 	"context"
 	"net/http"
 	"strings"
 
-	"github.com/akarachen/axp/apps/routine-service/internal/routines"
+	"github.com/akarachen/axp/apps/control-plane/internal/routines"
 	"github.com/akarachen/axp/packages/service-go/httpapi"
 	"github.com/akarachen/axp/packages/service-go/idempotency"
 	"github.com/akarachen/axp/packages/service-go/pg"
@@ -23,8 +25,6 @@ const prefix = "/api/routines"
 type Deps struct {
 	DB       *pgxpool.Pool
 	Routines *routines.Service
-	// Revise revises a brief from committed feedback, in the background.
-	Revise func(feedbackID string)
 	// Docs serves the API's documentation page.
 	Docs bool
 }
@@ -68,7 +68,7 @@ func op(id, method, path, summary string, status int) huma.Operation {
 // New is the API.
 func New(d *Deps) *httpapi.API {
 	api := httpapi.New(httpapi.Config{Title: "AXP Routines", Version: "0.1.0", Prefix: prefix, Docs: d.Docs})
-	httpapi.AddHealth(api, prefix+"/health", "routine-service")
+	httpapi.AddHealth(api, prefix+"/health", "control-plane")
 	s := d.Routines
 
 	huma.Register(api, op("listRoutines", http.MethodGet, "/routines", "Every routine, with its last runs in summary", 200),
@@ -166,19 +166,13 @@ func New(d *Deps) *httpapi.API {
 			RunID string `path:"run_id"`
 			Body  FeedbackIn
 		}) (*idempotency.Response[routines.Feedback], error) {
-			out, err := idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[routines.Feedback], error) {
+			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[routines.Feedback], error) {
 				f, err := s.AddFeedback(ctx, tx, in.RoutineID, in.RunID, strings.TrimSpace(in.Body.Text))
 				if err != nil {
 					return idempotency.Result[routines.Feedback]{}, err
 				}
 				return idempotency.Created(f, f.ID), nil
 			})
-			if err == nil && d.Revise != nil {
-				d.Revise(out.Body.ID)
-			}
-			return out, err
 		})
-	// Chat agents' routines plugin (MCP), through the runtime gateway.
-	api.Router.Handle("/routines/mcp", routinesMCP(d))
 	return api
 }

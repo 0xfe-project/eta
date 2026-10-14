@@ -63,7 +63,7 @@ func TestDescribeAndNextRun(t *testing.T) {
 }
 
 // With AXP_TEST_NATS_URL, against a NATS server of the test's own (no other
-// routine service may consume its fires).
+// routine worker may consume its fires).
 func TestNATSSchedulesAndFires(t *testing.T) {
 	url := os.Getenv("AXP_TEST_NATS_URL")
 	if url == "" {
@@ -71,7 +71,7 @@ func TestNATSSchedulesAndFires(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 70*time.Second)
 	defer cancel()
-	n, err := ConnectNATS(ctx, url)
+	n, err := ConnectNATS(ctx, url, "routines-test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,11 @@ func TestNATSSchedulesAndFires(t *testing.T) {
 	if err := n.Unschedule(ctx, scheduled); err != nil {
 		t.Fatal(err)
 	}
-	info, err := n.stream.Info(ctx)
+	stream, err := n.js.Stream(ctx, Stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := stream.Info(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +116,7 @@ func TestNATSSchedulesAndFires(t *testing.T) {
 	}
 }
 
-// Fires that piled up in the stream while the service was down are not made
+// Fires that piled up in the stream while the worker was down are not made
 // up when it starts: only fires from then on start runs.
 func TestFiresFromBeforeTheServiceStartedAreDropped(t *testing.T) {
 	url := os.Getenv("AXP_TEST_NATS_URL")
@@ -123,7 +127,7 @@ func TestFiresFromBeforeTheServiceStartedAreDropped(t *testing.T) {
 	staleFire = 500 * time.Millisecond
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	n, err := ConnectNATS(ctx, url)
+	n, err := ConnectNATS(ctx, url, "routines-test")
 	if err != nil {
 		t.Fatal(err)
 	}

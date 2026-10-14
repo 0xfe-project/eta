@@ -1,11 +1,11 @@
-package api
+package routineapi
 
 import (
 	"context"
 	"errors"
 	"net/http"
 
-	"github.com/akarachen/axp/apps/routine-service/internal/routines"
+	"github.com/akarachen/axp/apps/control-plane/internal/routines"
 	"github.com/akarachen/axp/packages/service-go/apierr"
 	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/jackc/pgx/v5"
@@ -83,7 +83,8 @@ func mcpError(err error) error {
 	return err
 }
 
-func routinesMCP(d *Deps) http.Handler {
+// MCP is the routines plugin's server, for the internal listener only.
+func MCP(d *Deps) http.Handler {
 	s := d.Routines
 	srv := mcp.NewServer(&mcp.Implementation{Name: "routines"}, nil)
 

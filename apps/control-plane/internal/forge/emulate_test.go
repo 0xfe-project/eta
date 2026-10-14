@@ -1,4 +1,4 @@
-package server
+package forge
 
 // The tests talk to GitHub as emulated by emulate (vercel-labs/emulate, an
 // apps/forge-service dev dependency): App JWTs, installation tokens with

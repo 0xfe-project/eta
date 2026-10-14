@@ -2,12 +2,7 @@ package tasks
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -726,7 +721,7 @@ func (s *Service) ready(ctx context.Context, db pg.DB, a *assistRow) (readiness,
 		return readiness{state: AssistBlocked, reason: "任务没有登记 PR。"}, nil
 	}
 	if s.PullHead == nil {
-		return readiness{state: AssistWaiting, reason: "读不到 PR 的 head：代码托管服务没有配置。"}, nil
+		return readiness{state: AssistWaiting, reason: "读不到 PR 的 head：GitHub 还没有连接。"}, nil
 	}
 	head, err := s.PullHead(ctx, pull)
 	if err != nil || !commitSHA(head) {
@@ -838,38 +833,4 @@ func settleLoop(ctx context.Context, tx pgx.Tx, l *loopRow) error {
 		return nil
 	}
 	return setLoop(ctx, tx, l.ID, LoopBlocked, fmt.Sprintf("第 %d 轮审查%s", deref(a.Round), why))
-}
-
-// ForgePullHead reads pull requests' heads from the forge service, with
-// the GitHub App's or the authorizing user's token.
-func ForgePullHead(forgeURL string) PullHead {
-	if forgeURL == "" {
-		return nil
-	}
-	return func(ctx context.Context, pull string) (string, error) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-			strings.TrimRight(forgeURL, "/")+"/api/forge/v1/pulls?url="+url.QueryEscape(pull), nil)
-		if err != nil {
-			return "", err
-		}
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return "", errors.New("代码托管服务不可用")
-		}
-		defer resp.Body.Close()
-		var out struct {
-			HeadSHA string `json:"head_sha"`
-			Error   struct {
-				Message string `json:"message"`
-			} `json:"error"`
-		}
-		_ = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&out)
-		if resp.StatusCode != http.StatusOK {
-			if out.Error.Message == "" {
-				out.Error.Message = resp.Status
-			}
-			return "", errors.New(out.Error.Message)
-		}
-		return out.HeadSHA, nil
-	}
 }

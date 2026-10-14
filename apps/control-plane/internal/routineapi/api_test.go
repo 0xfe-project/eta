@@ -1,4 +1,4 @@
-package api
+package routineapi
 
 import (
 	"bytes"
@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akarachen/axp/apps/routine-service/internal/routines"
-	"github.com/akarachen/axp/apps/routine-service/migrations"
+	"github.com/akarachen/axp/apps/control-plane/internal/routines"
+	"github.com/akarachen/axp/apps/control-plane/internal/routines/migrations"
 	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/akarachen/axp/packages/service-go/pg/pgtest"
 	"github.com/google/uuid"
@@ -146,7 +146,12 @@ func newEnv(t *testing.T) *env {
 		Go:    func(f func()) { f() },
 	}
 	service := &routines.Service{Schedules: e.schedules, Models: e.catalog}
-	e.server = httptest.NewServer(New(&Deps{DB: pool, Routines: service, Revise: e.runner.Revise}).Router)
+	d := &Deps{DB: pool, Routines: service}
+	// The control plane serves these on different listeners.
+	mux := http.NewServeMux()
+	mux.Handle("/api/routines/", New(d).Router)
+	mux.Handle("/routines/mcp", MCP(d))
+	e.server = httptest.NewServer(mux)
 	t.Cleanup(e.server.Close)
 	return e
 }
@@ -588,6 +593,19 @@ func TestTimeLimit(t *testing.T) {
 
 // --- feedback --------------------------------------------------------------------
 
+// feedback sends feedback on a run, which the API only records; then the
+// worker revises the brief from it.
+func (e *env) feedback(routineID, runID, text string) response {
+	e.t.Helper()
+	briefs := scalar[int](e, "SELECT count(*) FROM routine_brief")
+	sent := e.post("/routines/"+routineID+"/runs/"+runID+"/feedback", map[string]any{"text": text})
+	expect(e.t, scalar[int](e, "SELECT count(*) FROM routine_brief"), briefs)
+	if err := e.runner.RevisePending(context.Background()); err != nil {
+		e.t.Fatal(err)
+	}
+	return sent
+}
+
 func reported(t *testing.T) (*env, routines.Routine, string) {
 	e := newEnv(t)
 	routine := e.create(news())
@@ -597,7 +615,7 @@ func reported(t *testing.T) (*env, routines.Routine, string) {
 func TestFeedbackRevisesTheBrief(t *testing.T) {
 	e, routine, run := reported(t)
 	e.llm.requests, e.llm.script = nil, steps(text("新要求"))
-	sent := e.post("/routines/"+routine.ID+"/runs/"+run+"/feedback", map[string]any{"text": "别放体育新闻"})
+	sent := e.feedback(routine.ID, run, "别放体育新闻")
 	expect(t, sent.status, 201)
 	prompt := e.llm.requests[0].Contents[0].Parts[0].Text
 	if !strings.Contains(prompt, "别放体育新闻") || !strings.Contains(prompt, "体育新闻……") {
@@ -612,7 +630,7 @@ func TestFeedbackRevisesTheBrief(t *testing.T) {
 func TestFailedRevisionIsMarked(t *testing.T) {
 	e, routine, run := reported(t)
 	e.llm.script = func(*model.LLMRequest, int) (*genai.Content, error) { return nil, errors.New("down") }
-	e.post("/routines/"+routine.ID+"/runs/"+run+"/feedback", map[string]any{"text": "短一点"})
+	e.feedback(routine.ID, run, "短一点")
 	expect(t, scalar[bool](e, "SELECT revision_failed FROM routine_feedback"), true)
 	expect(t, scalar[int](e, "SELECT count(*) FROM routine_brief"), 1)
 }
@@ -629,7 +647,7 @@ func TestARevisionDoesNotOverwriteANewerBrief(t *testing.T) {
 		}
 		return text("基于新要求的修订"), nil
 	}
-	expect(t, e.post("/routines/"+routine.ID+"/runs/"+run+"/feedback", map[string]any{"text": "别放体育新闻"}).status, 201)
+	expect(t, e.feedback(routine.ID, run, "别放体育新闻").status, 201)
 	expect(t, len(e.llm.requests), 2)
 	if prompt := e.llm.requests[1].Contents[0].Parts[0].Text; !strings.Contains(prompt, "手动改过的要求") {
 		t.Fatalf("redone from %q", prompt)
@@ -646,8 +664,42 @@ func TestARevisionThatRunsOutOfTimeIsMarkedFailed(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		return nil, context.DeadlineExceeded
 	}
-	e.post("/routines/"+routine.ID+"/runs/"+run+"/feedback", map[string]any{"text": "短一点"})
+	e.feedback(routine.ID, run, "短一点")
 	expect(t, scalar[bool](e, "SELECT revision_failed FROM routine_feedback"), true)
+}
+
+// Committed feedback wakes the worker (pg.Listen in cmd routine-worker).
+func TestFeedbackNotifiesTheWorker(t *testing.T) {
+	e, routine, run := reported(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	notified := make(chan string, 64)
+	go pg.Listen(ctx, pool.Config().ConnString(), routines.FeedbackChannel, func(id string) { notified <- id })
+	// Listening once a ping comes back.
+	for listening := false; !listening; {
+		_, _ = pool.Exec(ctx, "SELECT pg_notify($1, 'ping')", routines.FeedbackChannel)
+		select {
+		case <-notified:
+			listening = true
+		case <-time.After(100 * time.Millisecond):
+		case <-ctx.Done():
+			t.Fatal("not listening")
+		}
+	}
+	sent := e.post("/routines/"+routine.ID+"/runs/"+run+"/feedback", map[string]any{"text": "短一点"})
+	var f routines.Feedback
+	sent.json(t, &f)
+	for {
+		select {
+		case id := <-notified:
+			if id != "ping" {
+				expect(t, id, f.ID)
+				return
+			}
+		case <-ctx.Done():
+			t.Fatal("no notification")
+		}
+	}
 }
 
 func TestRecoverRevisesPendingFeedback(t *testing.T) {

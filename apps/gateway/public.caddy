@@ -1,8 +1,9 @@
 # The browser's entry: by longest prefix, /api/llm to the LLM gateway,
-# /api/memory to the memory service, /api/forge to the forge service,
-# /api/routines to the routine service, /observe to OpenObserve,
-# /remote/relay to the agenvo relay, /api, /remote and artifacts' /share and
-# /preview pages to the control plane, everything else to web.
+# /api/memory to the memory service, /observe to OpenObserve, /remote/relay
+# to the agenvo relay, /api (with /api/forge and /api/routines), /remote and
+# artifacts' /share and /preview pages to the control plane's public
+# listener, everything else to web. The control plane's internal listener
+# is never an upstream here.
 # Paths are not rewritten and the browser's Host is kept.
 http://:{$AXP_GATEWAY_PORT:8080} {
 	bind {$AXP_GATEWAY_BIND:0.0.0.0}
@@ -48,14 +49,6 @@ http://:{$AXP_GATEWAY_PORT:8080} {
 	handle /api/memory/* {
 		reverse_proxy {$AXP_UPSTREAM_MEMORY:axp-memory:8320}
 	}
-	# Code hosting: connecting the GitHub App, and GitHub's redirect back.
-	handle /api/forge/* {
-		reverse_proxy {$AXP_UPSTREAM_FORGE:axp-forge:8330}
-	}
-	# Routines: agents that run on a schedule and leave reports.
-	handle /api/routines/* {
-		reverse_proxy {$AXP_UPSTREAM_ROUTINES:axp-routines:8340}
-	}
 	# OpenObserve's UI and API, served under /observe (ZO_BASE_URI).
 	handle /observe/* {
 		log_skip
@@ -84,6 +77,8 @@ http://:{$AXP_GATEWAY_PORT:8080} {
 	handle /preview/artifacts/* {
 		reverse_proxy {$AXP_UPSTREAM_API:axp-api:8000}
 	}
+	# Includes code hosting (/api/forge: connecting the GitHub App, and
+	# GitHub's redirect back) and routines (/api/routines).
 	handle /api/* {
 		# Chat streams (SSE) pass through as they are written.
 		reverse_proxy {$AXP_UPSTREAM_API:axp-api:8000} {

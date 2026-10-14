@@ -1,13 +1,13 @@
-# The services whose OpenAPI documents the web client's types come from
-# (`bun run generate`, after each service's `openapi` task). Adding a service:
-# an entry here, its `openapi` task in turbo.json's generate, and a client in
-# src/lib/api.ts.
+# The OpenAPI documents the web client's types come from (`bun run
+# generate`, after the control plane's `openapi` task, which writes both:
+# its public API and routines'). Adding one: an entry here, its document in
+# that task, and a client in src/lib/api.ts.
 apis:
   control-plane:
     root: ../control-plane/out/openapi.json
     x-openapi-ts:
       output: ./src/api/control-plane.gen.ts
   routines:
-    root: ../routine-service/out/openapi.json
+    root: ../control-plane/out/routines.openapi.json
     x-openapi-ts:
       output: ./src/api/routines.gen.ts

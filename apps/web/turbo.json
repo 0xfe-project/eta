@@ -5,10 +5,7 @@
     // The services' types, from their OpenAPI documents, which are
     // generated from their code (redocly.yaml lists them).
     "generate": {
-      "dependsOn": [
-        "@axp/control-plane#openapi",
-        "@axp/routine-service#openapi"
-      ],
+      "dependsOn": ["@axp/control-plane#openapi"],
       "outputs": ["src/api/*.gen.ts"]
     },
     "lint": {
