@@ -60,17 +60,17 @@ afterEach(async () => {
   await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
 });
 
-describe("任务的关联群", () => {
+describe("任务详情的来源", () => {
   it.each([["g1"], [null]])(
-    "keeps the group link but offers no discussion entry (%s)",
+    "shows neither the source group nor a way to it (%s)",
     async (group_id) => {
       const container = await render(group_id);
-      const row = [...container.querySelectorAll("dt")].find(
-        (dt) => dt.textContent === "群",
-      )!.nextElementSibling!;
-      expect(row.querySelector('[aria-label="关联群"]')).not.toBeNull();
-      expect(row.querySelectorAll("button:not([aria-label])")).toHaveLength(0);
-      expect(container.textContent).not.toMatch(/在群里讨论|新建群讨论/);
+      const labels = [...container.querySelectorAll("dt")].map(
+        (dt) => dt.textContent,
+      );
+      expect(labels).toEqual(["状态", "指派给"]);
+      expect(container.querySelector('[aria-label="关联群"]')).toBeNull();
+      expect(container.textContent).not.toContain("任务讨论");
     },
   );
 });
