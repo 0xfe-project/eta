@@ -88,12 +88,17 @@ func ConfirmTaskDraft(ctx context.Context, tx pgx.Tx, messageID, taskID string) 
 	return SyncTaskCard(ctx, tx, taskID)
 }
 
-// SyncTaskCard projects task facts into one message in each context where it was linked.
-// Task changes call it in the same transaction; it neither wakes members nor copies logs.
+// SyncTaskCard refreshes the cards confirmed drafts became with the task's facts.
+// Linking a task to a group adds no card: the tool call that made it already shows
+// one, and the group's info lists its tasks. Task changes call it in the same
+// transaction; it neither wakes members nor copies logs.
 func SyncTaskCard(ctx context.Context, tx pgx.Tx, taskID string) error {
-	var groupID *string
+	rows, err := pg.All[messageRow](ctx, tx, `SELECT * FROM message WHERE kind='task_card' AND data->>'task_id'=$1 ORDER BY group_id`, taskID)
+	if err != nil || len(rows) == 0 {
+		return err
+	}
 	var data []byte
-	err := tx.QueryRow(ctx, `SELECT t.group_id,jsonb_build_object(
+	err = tx.QueryRow(ctx, `SELECT jsonb_build_object(
         'task_id',t.id,'number',t.number,'title',t.title,'status',t.status,'group_id',t.group_id,
         'assignee',t.assignee,'computer_name',c.name,'provider',t.provider,
         'run_status',(SELECT status FROM task_run WHERE task_id=t.id AND NOT assist ORDER BY created_at DESC,id DESC LIMIT 1),
@@ -101,19 +106,11 @@ func SyncTaskCard(ctx context.Context, tx pgx.Tx, taskID string) error {
         'summary',COALESCE((SELECT body FROM task_activity WHERE task_id=t.id AND kind='comment' AND actor='remote' ORDER BY created_at DESC,id DESC LIMIT 1),(SELECT body FROM task_activity WHERE task_id=t.id AND kind='comment' ORDER BY created_at DESC,id DESC LIMIT 1),''),
         'deliverables',COALESCE((SELECT jsonb_agg(x.data ORDER BY x.created_at) FROM (SELECT DISTINCT ON (data->>'url') data,created_at FROM task_activity WHERE task_id=t.id AND kind='deliverable' ORDER BY data->>'url',created_at DESC,id DESC) x),'[]'::jsonb),
         'artifacts',COALESCE((SELECT jsonb_agg(x.data ORDER BY x.created_at) FROM (SELECT DISTINCT ON (data->>'artifact_id') data,created_at FROM task_activity WHERE task_id=t.id AND kind='artifact' ORDER BY data->>'artifact_id',created_at DESC,id DESC) x),'[]'::jsonb)
-        ) FROM task t LEFT JOIN computer c ON c.id=t.computer_id WHERE t.id=$1`, taskID).Scan(&groupID, &data)
+        ) FROM task t LEFT JOIN computer c ON c.id=t.computer_id WHERE t.id=$1`, taskID).Scan(&data)
 	if err != nil {
 		return err
 	}
-	rows, err := pg.All[messageRow](ctx, tx, `SELECT * FROM message WHERE kind='task_card' AND data->>'task_id'=$1 ORDER BY group_id`, taskID)
-	if err != nil {
-		return err
-	}
-	seen := false
 	for _, m := range rows {
-		if groupID != nil && m.GroupID == *groupID {
-			seen = true
-		}
 		if err = LockConversation(ctx, tx, m.ConversationID); err != nil {
 			return err
 		}
@@ -126,23 +123,6 @@ func SyncTaskCard(ctx context.Context, tx pgx.Tx, taskID string) error {
 		if err = touchGroup(ctx, tx, m.GroupID); err != nil {
 			return err
 		}
-	}
-	if groupID != nil && !seen {
-		g, err := findGroup(ctx, tx, *groupID)
-		if err != nil {
-			return err
-		}
-		if err = LockConversation(ctx, tx, g.ConversationID); err != nil {
-			return err
-		}
-		var card map[string]any
-		if err = json.Unmarshal(data, &card); err != nil {
-			return err
-		}
-		if _, err = insertMessage(ctx, tx, g, pg.NewID(), nil, nil, nil, RoleAssistant, "task_card", []Block{}, card); err != nil {
-			return err
-		}
-		return touchGroup(ctx, tx, *groupID)
 	}
 	return nil
 }
