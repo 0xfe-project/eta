@@ -17,7 +17,10 @@ export function RootDocument() {
 }
 
 function LocalizedDocument() {
-  const { t: translateText, i18n } = useTranslation();
+  const { t: translateText, i18n } = useTranslation([
+    "navigation",
+    "common",
+  ] as const);
   // Saved workspace state and drafts load after hydration, so the first client render
   // matches the server's.
   useEffect(() => {
@@ -69,7 +72,7 @@ function LocalizedDocument() {
             href="#main"
             className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:bg-background focus:p-3 focus:text-foreground"
           >
-            {translateText("跳转到内容")}
+            {translateText("accessibility.skipToContent")}
           </a>
           <LiveChat />
           <Outlet />

@@ -22,9 +22,10 @@ function day(iso: string) {
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(today.getDate() - 1);
-  if (date.toDateString() === today.toDateString()) return translate("今天");
+  if (date.toDateString() === today.toDateString())
+    return translate("common:time.today");
   if (date.toDateString() === yesterday.toDateString())
-    return translate("昨天");
+    return translate("common:time.yesterday");
   return new Intl.DateTimeFormat(formatLocale(), {
     month: "short",
     day: "numeric",
@@ -33,7 +34,11 @@ function day(iso: string) {
 
 /** What waits for the user and, under 全部, what was confirmed before. */
 export function Notifications() {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "chat",
+    "common",
+    "navigation",
+  ] as const);
   const [filter, setFilter] = useQueryState("filter", filterParser);
   const { interactions, isPending, error, refetch } = useInteractionHistory();
   const days = new Map<string, Interaction[]>();
@@ -44,17 +49,20 @@ export function Notifications() {
   }
   return (
     <>
-      <PageHeader title={translateText("待处理")}>
+      <PageHeader title={translateText("navigation:sections.pending")}>
         <Tabs
           value={filter}
           onValueChange={(value) => void setFilter(value as typeof filter)}
         >
-          <TabsList aria-label={translateText("筛选")} className="gap-1">
+          <TabsList
+            aria-label={translateText("common:labels.filter")}
+            className="gap-1"
+          >
             <TabsTrigger value="all" className="px-2 text-xs">
-              {translateText("全部")}
+              {translateText("common:labels.all")}
             </TabsTrigger>
             <TabsTrigger value="pending" className="px-2 text-xs">
-              {translateText("待处理")}
+              {translateText("navigation:sections.pending")}
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -68,11 +76,11 @@ export function Notifications() {
                 id="history"
                 className="px-3 text-sm font-medium text-muted-foreground"
               >
-                {translateText("已处理的确认")}
+                {translateText("confirmations.historyTitle")}
               </h2>
               {error ? (
                 <LoadError
-                  what={translateText("确认记录")}
+                  what={translateText("confirmations.historyLabel")}
                   error={error}
                   onRetry={() => void refetch()}
                 />
@@ -81,7 +89,7 @@ export function Notifications() {
               ) : days.size === 0 ? (
                 <Empty
                   icon={BellIcon}
-                  title={translateText("还没有处理过的确认")}
+                  title={translateText("confirmations.emptyHistory")}
                 />
               ) : (
                 [...days].map(([label, items]) => (

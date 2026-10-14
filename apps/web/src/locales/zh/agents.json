@@ -1,0 +1,89 @@
+{
+  "settings": {
+    "title": "智能体设置"
+  },
+  "actions": {
+    "create": "新建智能体",
+    "delete": "删除智能体",
+    "edit": "编辑智能体",
+    "chatWith": "与 {{name}} 对话",
+    "configure": "设置 {{name}}"
+  },
+  "delete": {
+    "confirmTitle": "删除「{{name}}」？",
+    "confirmDescription": "正在进行的回复会被停止，智能体不再运行。已有的对话记录会保留。"
+  },
+  "editor": {
+    "tabs": {
+      "general": "常规",
+      "instructions": "指令",
+      "environment": "环境"
+    },
+    "sectionsLabel": "智能体设置分类"
+  },
+  "environment": {
+    "buildFailed": "环境构建失败"
+  },
+  "models": {
+    "loading": "正在加载模型…",
+    "select": "选择模型",
+    "deletedOption": "{{modelName}}（已不存在）",
+    "noneAvailable": "暂无可用模型。",
+    "noneSelected": "未选择模型",
+    "errors": {
+      "deleted": "{{modelName}} 已不存在，请更换模型。",
+      "checkAccounts": "请检查模型服务中的账号。",
+      "unavailable": "{{modelName}} 暂不可用：{{reason}}",
+      "upstreamFailure": "上游暂时故障，稍后会自动重试。",
+      "degradedSendAllowed": "{{modelName}} {{reason}}仍可发送。"
+    }
+  },
+  "bundles": {
+    "requiredSuffix": " · 必选",
+    "help": "智能体的环境由这些环境包构建：安装的工具、可用的插件。修改后重新构建，在空闲时生效。"
+  },
+  "fields": {
+    "namePlaceholder": "例如：代码审查",
+    "instructionsPlaceholder": "职责、工作方式和约束。例如：你负责审查 Pull Request，只指出会导致错误的问题。",
+    "instructionsHelp": "注入智能体的上下文；修改在空闲时生效，不打断进行中的回复。",
+    "instructionsNotSet": "未设置指令"
+  },
+  "feedback": {
+    "restarted": "已重启 {{name}}",
+    "created": "已创建「{{name}}」"
+  },
+  "empty": {
+    "title": "还没有智能体",
+    "description": "智能体是你对话、交代任务的对象，每个都有自己的模型和记忆。"
+  },
+  "accessibility": {
+    "agentList": "智能体列表"
+  },
+  "status": {
+    "idle": "空闲",
+    "working": "工作中",
+    "awaitingConfirmation": "等待确认"
+  },
+  "errors": {
+    "loadFailed": "无法加载智能体"
+  },
+  "labels": {
+    "deletedAgent": "已删除的智能体"
+  },
+  "createWizard": {
+    "nameAndModel": "名称与模型",
+    "stepsLabel": "新建步骤",
+    "failed": "创建失败：{{message}}",
+    "noBundles": "还没有环境包，智能体使用默认环境。",
+    "retry": "重试创建"
+  },
+  "usage": {
+    "hundredMillion": "{{amount}}亿",
+    "tenThousand": "{{amount}}万",
+    "tokensAndRequests": "{{tokens}} tokens（7 天 {{count}} 次请求）",
+    "noRecentUsage": "近 7 天没有",
+    "summary": "模型用量：{{usage}}",
+    "tokensAndRequests_one": "{{tokens}} tokens（7 天 {{count}} 次请求）",
+    "tokensAndRequests_other": "{{tokens}} tokens（7 天 {{count}} 次请求）"
+  }
+}

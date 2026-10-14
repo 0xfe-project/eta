@@ -11,12 +11,12 @@ import { useTranslation } from "react-i18next";
 import { Toaster as Sonner } from "sonner";
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { t } = useTranslation();
+  const { t } = useTranslation("common");
   const { theme = "system", forcedTheme } = useTheme();
 
   return (
     <Sonner
-      containerAriaLabel={t("通知")}
+      containerAriaLabel={t("accessibility.notifications")}
       theme={(forcedTheme ?? theme) as ToasterProps["theme"]}
       className="toaster group"
       offset={{
@@ -44,7 +44,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
         } as React.CSSProperties
       }
       toastOptions={{
-        closeButtonAriaLabel: t("关闭通知"),
+        closeButtonAriaLabel: t("accessibility.dismissNotification"),
         classNames: {
           toast: "cn-toast",
         },

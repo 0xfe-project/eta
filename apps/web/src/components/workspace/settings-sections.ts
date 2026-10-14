@@ -21,56 +21,56 @@ export const settingsSections: {
   {
     value: "agents",
     get label() {
-      return translate("智能体");
+      return translate("common:entities.agents");
     },
     icon: RobotIcon,
   },
   {
     value: "bundles",
     get label() {
-      return translate("环境包");
+      return translate("bundles:title");
     },
     icon: PackageIcon,
   },
   {
     value: "providers",
     get label() {
-      return translate("模型服务");
+      return translate("providers:title");
     },
     icon: PlugsConnectedIcon,
   },
   {
     value: "connections",
     get label() {
-      return translate("连接");
+      return translate("connections:title");
     },
     icon: LinkIcon,
   },
   {
     value: "computers",
     get label() {
-      return translate("远程电脑");
+      return translate("computers:title");
     },
     icon: DesktopIcon,
   },
   {
     value: "archived",
     get label() {
-      return translate("已归档");
+      return translate("chat:groups.archived.title");
     },
     icon: ArchiveIcon,
   },
   {
     value: "appearance",
     get label() {
-      return translate("外观");
+      return translate("settings:sections.appearance");
     },
     icon: PaletteIcon,
   },
   {
     value: "logs",
     get label() {
-      return translate("日志");
+      return translate("settings:sections.logs");
     },
     icon: ChartLineIcon,
   },

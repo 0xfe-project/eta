@@ -3,18 +3,18 @@ import { translate } from "@/lib/i18n";
 
 export const agentStatusLabels: Record<Agent["status"], string> = {
   get idle() {
-    return translate("空闲");
+    return translate("agents:status.idle");
   },
   get starting() {
-    return translate("启动中");
+    return translate("common:status.starting");
   },
   get working() {
-    return translate("工作中");
+    return translate("agents:status.working");
   },
   get waiting_for_input() {
-    return translate("等待确认");
+    return translate("agents:status.awaitingConfirmation");
   },
   get unavailable() {
-    return translate("不可用");
+    return translate("common:status.unavailable");
   },
 };

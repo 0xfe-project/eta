@@ -1,0 +1,39 @@
+{
+  "source": {
+    "conversation": "From conversations",
+    "agent": "Saved by agent",
+    "manual": "Added manually",
+    "group": "Source group"
+  },
+  "create": {
+    "title": "New memory",
+    "placeholder": "Remember something, e.g. I prefer pnpm"
+  },
+  "actions": {
+    "remember": "Remember",
+    "forgetLabel": "Forget this memory",
+    "forget": "Forget",
+    "refreshLabel": "Refresh memory list"
+  },
+  "accessibility": {
+    "list": "Memory list",
+    "pagination": "Memory pagination"
+  },
+  "empty": {
+    "noAgentDescription": "Memories belong to individual agents and build up through conversations.",
+    "title": "No memories yet",
+    "description": "Facts worth remembering are saved automatically at the end of each turn."
+  },
+  "titleSuffix": "’s memory",
+  "filters": {
+    "typeLabel": "Memory types",
+    "allTypes": "All types",
+    "allGroups": "All groups"
+  },
+  "search": {
+    "label": "Search memories",
+    "emptyTitle": "No matching memories",
+    "changeTypeHint": "Try another type or all types.",
+    "changeQueryHint": "Try searching with different words."
+  }
+}

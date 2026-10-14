@@ -314,27 +314,30 @@ export function modelAvailability(
     return {
       state: "unavailable",
       model,
-      message: translate("{{value1}} 已不存在，请更换模型。", {
-        value1: agent.model,
+      message: translate("agents:models.errors.deleted", {
+        modelName: agent.model,
       }),
     };
   if (model.status === "unavailable")
     return {
       state: "unavailable",
       model,
-      message: translate("{{value1}} 暂不可用：{{value2}}", {
-        value1: model.display_name,
-        value2: model.reason?.message ?? translate("请检查模型服务中的账号。"),
+      message: translate("agents:models.errors.unavailable", {
+        modelName: model.display_name,
+        reason:
+          model.reason?.message ??
+          translate("agents:models.errors.checkAccounts"),
       }),
     };
   if (model.status === "degraded")
     return {
       state: "degraded",
       model,
-      message: translate("{{value1}} {{value2}}仍可发送。", {
-        value1: model.display_name,
-        value2:
-          model.reason?.message ?? translate("上游暂时故障，稍后会自动重试。"),
+      message: translate("agents:models.errors.degradedSendAllowed", {
+        modelName: model.display_name,
+        reason:
+          model.reason?.message ??
+          translate("agents:models.errors.upstreamFailure"),
       }),
     };
   return { state: "ok", model };

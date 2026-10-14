@@ -1,0 +1,25 @@
+{
+  "title": "Settings",
+  "appearance": {
+    "system": "System",
+    "light": "Light",
+    "dark": "Dark",
+    "interfaceFont": "Interface font",
+    "monospaceFont": "Monospace font",
+    "colorMode": "Color mode",
+    "language": "Language"
+  },
+  "sections": {
+    "logs": "Logs",
+    "appearance": "Appearance"
+  },
+  "logs": {
+    "signInAccount": "Sign-in account: root@axp.local"
+  },
+  "accessibility": {
+    "needsAttention": "Settings (accounts need attention)",
+    "sections": "Settings sections",
+    "accountsNeedAttention": "Accounts need attention",
+    "accountAttentionSuffix": "(accounts need attention)"
+  }
+}

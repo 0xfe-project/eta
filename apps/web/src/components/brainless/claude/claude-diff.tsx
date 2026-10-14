@@ -26,7 +26,7 @@ export function ClaudeDiff({
   lines: DiffLine[];
   className?: string;
 }) {
-  const { t } = useTranslation();
+  const { t } = useTranslation(["chat", "common"] as const);
   return (
     <div
       className={cn("min-w-0 font-mono text-[13px] leading-[1.55]", className)}
@@ -36,7 +36,7 @@ export function ClaudeDiff({
           ⏺
         </span>
         <span className="text-[var(--terminal-claude-foreground)]">
-          {t("更新")}
+          {t("common:actions.update")}
         </span>
         <span className="min-w-0 break-all">
           <span className="text-[var(--terminal-muted)]">(</span>
@@ -101,7 +101,9 @@ export function ClaudeDiff({
               >
                 {l.type !== "ctx" ? (
                   <span className="sr-only">
-                    {l.type === "add" ? t("新增：") : t("移除：")}
+                    {l.type === "add"
+                      ? t("diff.addedLabel")
+                      : t("diff.removedLabel")}
                   </span>
                 ) : null}
                 {l.text}

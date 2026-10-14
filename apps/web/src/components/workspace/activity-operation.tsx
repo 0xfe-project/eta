@@ -25,37 +25,37 @@ const actions = {
   create_workspace: {
     icon: FolderOpenIcon,
     get label() {
-      return translate("创建工作区");
+      return translate("tasks:operations.createWorkspace");
     },
     get done() {
-      return translate("已创建");
+      return translate("common:status.created");
     },
   },
   create_worktree: {
     icon: GitBranchIcon,
     get label() {
-      return translate("创建 worktree");
+      return translate("tasks:operations.createWorktree");
     },
     get done() {
-      return translate("已创建");
+      return translate("common:status.created");
     },
   },
   open_worktree: {
     icon: GitBranchIcon,
     get label() {
-      return translate("打开 worktree");
+      return translate("tasks:operations.openWorktree");
     },
     get done() {
-      return translate("已打开");
+      return translate("common:status.opened");
     },
   },
   add_project: {
     icon: FolderPlusIcon,
     get label() {
-      return translate("添加项目");
+      return translate("tasks:operations.addProject");
     },
     get done() {
-      return translate("已添加");
+      return translate("common:status.added");
     },
   },
 } satisfies Record<ActivityOperation["action"], unknown>;
@@ -71,21 +71,21 @@ const statuses = {
   accepted: {
     icon: HourglassMediumIcon,
     get label() {
-      return translate("已受理，未确认完成");
+      return translate("tasks:operations.acceptedUnconfirmed");
     },
     className: muted,
   },
   failed: {
     icon: XCircleIcon,
     get label() {
-      return translate("失败");
+      return translate("common:status.failed");
     },
     className: "text-[var(--terminal-error)]",
   },
   unknown: {
     icon: QuestionIcon,
     get label() {
-      return translate("结果未确认");
+      return translate("tasks:operations.resultUnconfirmed");
     },
     className: "text-[var(--terminal-warning)]",
   },
@@ -114,7 +114,7 @@ export function ActivityOperationCards({
 }
 
 function ActivityOperationCard({ value }: { value: ActivityOperation }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["common", "tasks"] as const);
   const [open, setOpen] = useState(false);
   const action = actions[value.action];
   const status = statuses[value.status];
@@ -137,11 +137,15 @@ function ActivityOperationCard({ value }: { value: ActivityOperation }) {
     <button
       type="button"
       aria-expanded={open}
-      aria-label={translateText("{{value1}}{{value2}}，{{value3}}{{value4}}", {
-        value1: action.label,
-        value2: name ? translateText("：{{value1}}", { value1: name }) : "",
-        value3: statusLabel,
-        value4: where ? translateText("（{{value1}}）", { value1: where }) : "",
+      aria-label={translateText("format.operationSummary", {
+        action: action.label,
+        detail: name
+          ? translateText("format.namedValueSuffix", { value: name })
+          : "",
+        status: statusLabel,
+        locationHint: where
+          ? translateText("format.parenthesizedSuffix", { value: where })
+          : "",
       })}
       onClick={() => setOpen((v) => !v)}
       className={cn(

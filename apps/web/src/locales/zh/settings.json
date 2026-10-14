@@ -1,0 +1,25 @@
+{
+  "title": "设置",
+  "appearance": {
+    "system": "跟随系统",
+    "light": "浅色",
+    "dark": "深色",
+    "interfaceFont": "界面字体",
+    "monospaceFont": "等宽字体",
+    "colorMode": "颜色模式",
+    "language": "语言"
+  },
+  "sections": {
+    "logs": "日志",
+    "appearance": "外观"
+  },
+  "logs": {
+    "signInAccount": "登录账号 root@axp.local"
+  },
+  "accessibility": {
+    "needsAttention": "设置（有账号需要处理）",
+    "sections": "设置分类",
+    "accountsNeedAttention": "有账号需要处理",
+    "accountAttentionSuffix": "（有账号需要处理）"
+  }
+}

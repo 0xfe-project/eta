@@ -1,0 +1,193 @@
+{
+  "session": {
+    "welcomeBack": "欢迎回来，{{name}}！",
+    "gettingStarted": "入门提示",
+    "recentUpdates": "最近更新",
+    "releaseNotesHint": "/release-notes 查看更新"
+  },
+  "modes": {
+    "auto": "自动模式",
+    "switchHint": "（Shift+Tab 切换）· ← 查看智能体",
+    "manual": "手动模式",
+    "shortcutsHint": "· ? 查看快捷键 · ← 查看智能体",
+    "acceptEdits": "自动接受编辑",
+    "plan": "计划模式"
+  },
+  "composer": {
+    "messageLabel": "消息",
+    "slashCommands": "斜杠命令",
+    "errors": {
+      "failedAttachments": "有附件上传失败：重试或移除后再发送。",
+      "attachmentLimit": "一条消息最多带 {{maxAttachments}} 个附件。",
+      "messageLength": "消息文本超过 {{maxCharacters}} 字符，更长的内容请作为文件粘贴。"
+    },
+    "placeholder": "发消息给 {{agentName}}…",
+    "createAgentFirst": "先创建智能体",
+    "noAgentSelected": "未选择智能体",
+    "waitForUploads": "附件上传中，完成后才能发送。"
+  },
+  "tools": {
+    "expandHint": "（点击展开）"
+  },
+  "agentSwitcher": {
+    "currentDirectChat": "正在与 {{agentName}} 私聊（{{status}}），切换智能体",
+    "currentGroup": "正在群「{{groupName}}」中，切换到智能体私聊"
+  },
+  "groups": {
+    "nameLabel": "群 · {{name}}",
+    "directChat": "私聊",
+    "info": "群信息",
+    "groupChat": "群聊",
+    "createWithMembers": "和他们新建群",
+    "inviteSelected": "邀请加入群",
+    "joined": "已加入群",
+    "actions": {
+      "create": "新建群",
+      "createGroup": "创建群",
+      "unarchive": "取消归档",
+      "invite": "邀请",
+      "editInfo": "编辑群信息",
+      "archive": "归档",
+      "viewInfo": "查看群信息"
+    },
+    "createDescription": "选几位智能体，一起讨论一件事。",
+    "fields": {
+      "name": "群名",
+      "optionalGoal": "目标（可选）",
+      "goalHelp": "记录当前目标和已经达成的决定。",
+      "goal": "目标",
+      "decisions": "已决定"
+    },
+    "members": {
+      "title": "成员",
+      "count": "{{count}} 位成员",
+      "replyingElsewhere": "在「{{groupName}}」回复中",
+      "removeConfirmTitle": "把「{{name}}」移出群？",
+      "removeConfirmDescription": "它不再收到这个群的消息，之后可以重新邀请。",
+      "inviteTitle": "邀请智能体",
+      "inviteDescription": "加入后可以查看群聊，并在被 @ 时回复。",
+      "count_one": "{{count}} 位成员",
+      "count_other": "{{count}} 位成员"
+    },
+    "title": "群",
+    "archived": {
+      "title": "已归档",
+      "empty": "没有已归档的对话。"
+    },
+    "accessibility": {
+      "actions": "群操作"
+    },
+    "relatedTasks": {
+      "title": "相关任务",
+      "help": "任务只关联一个群，重新关联会替换之前的群。",
+      "unlink": "解除关联",
+      "linkLabel": "关联 #{{number}} {{title}}"
+    }
+  },
+  "confirmations": {
+    "selectedChoice": "已选择「{{choice}}」",
+    "expired": "已过期，没有答复",
+    "answered": "已答复",
+    "requestLabel": "确认请求",
+    "required": "需要确认",
+    "continueQuestion": "是否继续？",
+    "historyTitle": "已处理的确认",
+    "historyLabel": "确认记录",
+    "emptyHistory": "还没有处理过的确认",
+    "bashCommand": "Bash 命令",
+    "allowForSession": "是，本次会话不再询问",
+    "denyAndExplain": "否，告诉 Claude 接下来怎么做（esc）"
+  },
+  "commands": {
+    "stopAllDescription": "停止群内全部回复",
+    "compactDescription": "压缩上下文",
+    "compactRequiresMention": "先 @ 要压缩上下文的智能体。"
+  },
+  "sendModes": {
+    "afterReply": "当前回复结束后发送",
+    "interruptReply": "插入当前回复"
+  },
+  "messages": {
+    "mentionTarget": " → {{name}}"
+  },
+  "reply": {
+    "stopping": "正在停止",
+    "startingAgent": "正在启动智能体",
+    "waitingElsewhere": "在「{{groupName}}」回复中 · 等待中",
+    "queuePosition": "等待中 · 前面还有 {{count}} 条",
+    "sameFailureAsNext": "此消息未执行，原因同下。",
+    "failed": "回复失败。",
+    "queuePosition_one": "等待中 · 前面还有 {{count}} 条",
+    "queuePosition_other": "等待中 · 前面还有 {{count}} 条"
+  },
+  "actions": {
+    "withdraw": "撤回",
+    "resend": "重新发送"
+  },
+  "mentions": {
+    "everyoneCommand": "@所有人",
+    "notifyEveryone": "唤醒所有群成员",
+    "busyHint": "忙碌 · 消息会排队",
+    "replyHint": "请他回复",
+    "notifyTargets": "将唤醒 {{names}}",
+    "noTargetsHint": "没 @ 的消息只记入群聊",
+    "everyoneLabel": "所有人"
+  },
+  "history": {
+    "loadEarlier": "加载更早的消息…",
+    "loading": "正在读取对话…",
+    "recentChats": "最近对话",
+    "noMessages": "还没有消息",
+    "noConversations": "还没有对话"
+  },
+  "connection": {
+    "reconnecting": "连接中断，正在重连…显示的状态可能不是最新的。"
+  },
+  "accessibility": {
+    "messages": "对话消息"
+  },
+  "attachments": {
+    "fullContentLabel": "{{name}}的完整内容",
+    "pastedTextSummary": "粘贴文本 · {{characterCount}} 字符",
+    "removePastedText": "移除粘贴文本",
+    "expandText": "展开为文本",
+    "pastedFile": "粘贴的文件",
+    "pastedFileName": "粘贴文本.txt",
+    "errors": {
+      "interrupted": "上传中断，请移除后重新粘贴。",
+      "fileTooLarge": "单个附件不能超过 20 MB。",
+      "uploadFailed": "上传失败，请重试。",
+      "uploadNetworkFailure": "网络连接失败，上传未完成。",
+      "removed": "附件已移除，请重新粘贴。"
+    }
+  },
+  "notices": {
+    "groupArchived": "群已归档，取消归档后可以继续讨论。",
+    "noMembers": "群里暂无智能体，邀请成员后可以继续讨论。",
+    "modelNotSelected": "{{agentNames}} 还没有选择模型。",
+    "messageQueuedElsewhere": "{{agentName}} 在「{{groupName}}」回复，这条消息已排队。"
+  },
+  "errors": {
+    "loadConversation": "无法加载对话：{{message}}",
+    "messageNetworkFailure": "网络连接失败，消息未送达。"
+  },
+  "thinking": {
+    "interruptHint": "esc 中断",
+    "verbs": {
+      "thinking": "思考中",
+      "levitating": "酝酿中",
+      "schlepping": "忙碌中",
+      "herding": "整理中",
+      "percolating": "琢磨中",
+      "noodling": "推敲中",
+      "conjuring": "构思中"
+    }
+  },
+  "diff": {
+    "addedLabel": "新增：",
+    "removedLabel": "移除："
+  },
+  "effort": {
+    "ultracodeHelp": "ultracode · xhigh 推理强度 + 动态工作流，尽可能全面"
+  }
+}

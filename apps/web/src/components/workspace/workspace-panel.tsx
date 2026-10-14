@@ -19,7 +19,10 @@ import { hasPage, sectionPaths, usePanelViews } from "./workspace-search";
 
 /** Opens the full window at the side panel's current data context. */
 function FullWindowButton({ view }: { view: WorkspaceView }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "navigation",
+    "common",
+  ] as const);
   const [{ task }] = useTaskNav();
   const [routineNav] = useRoutineNav();
   const search = Object.fromEntries(
@@ -32,8 +35,8 @@ function FullWindowButton({ view }: { view: WorkspaceView }) {
       <Link
         to={hasPage(view) ? sectionPaths[view] : "/workspace"}
         search={hasPage(view) ? search : {}}
-        aria-label={translateText("在全窗口中打开")}
-        title={translateText("在全窗口中打开")}
+        aria-label={translateText("actions.openFullWindow")}
+        title={translateText("actions.openFullWindow")}
       >
         <ArrowsOutIcon aria-hidden="true" />
       </Link>
@@ -55,7 +58,10 @@ export function WorkspacePanel({
   onViewChange: (view: WorkspaceView) => void;
   className?: string;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "navigation",
+    "common",
+  ] as const);
   const pending = useAttention().total;
   const tabs = usePanelViews();
   const view = tabs.some((tab) => tab.value === linked)
@@ -79,7 +85,7 @@ export function WorkspacePanel({
         </div>
         <TabsList
           variant="default"
-          aria-label={translateText("工作区标签")}
+          aria-label={translateText("accessibility.workspaceTabs")}
           className="gap-1"
         >
           {tabs.map(({ value, label }) => (

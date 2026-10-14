@@ -34,19 +34,19 @@ const sources = {
   conversation: {
     icon: ChatCircleDotsIcon,
     get label() {
-      return translate("对话中记下");
+      return translate("memory:source.conversation");
     },
   },
   agent: {
     icon: RobotIcon,
     get label() {
-      return translate("智能体记下");
+      return translate("memory:source.agent");
     },
   },
   user: {
     icon: UserIcon,
     get label() {
-      return translate("手动添加");
+      return translate("memory:source.manual");
     },
   },
 };
@@ -71,7 +71,12 @@ function date(iso: string) {
 }
 
 function RememberForm({ agentId }: { agentId: string }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "memory",
+    "agents",
+    "common",
+    "navigation",
+  ] as const);
   const [text, setText] = useState("");
   const remember = useRemember(agentId);
   const submit = () => {
@@ -91,8 +96,8 @@ function RememberForm({ agentId }: { agentId: string }) {
       }}
     >
       <Textarea
-        aria-label={translateText("新的记忆")}
-        placeholder={translateText("让智能体记住一件事，例如：我习惯用 pnpm")}
+        aria-label={translateText("create.title")}
+        placeholder={translateText("create.placeholder")}
         value={text}
         maxLength={8000}
         rows={1}
@@ -106,14 +111,19 @@ function RememberForm({ agentId }: { agentId: string }) {
         }}
       />
       <Button type="submit" disabled={!text.trim() || remember.isPending}>
-        {translateText("记住")}
+        {translateText("actions.remember")}
       </Button>
     </form>
   );
 }
 
 function MemoryRow({ agentId, memory }: { agentId: string; memory: Memory }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "memory",
+    "agents",
+    "common",
+    "navigation",
+  ] as const);
   const forget = useForget(agentId);
   const { data: groupName } = useQuery({
     ...chatQueryOptions(),
@@ -161,7 +171,7 @@ function MemoryRow({ agentId, memory }: { agentId: string; memory: Memory }) {
             className="max-w-32 truncate underline underline-offset-2"
             href={`/?group=${encodeURIComponent(memory.source_group_id)}`}
           >
-            {groupName || translateText("来源群")}
+            {groupName || translateText("source.group")}
           </a>
         )}
         {memory.created_at ? (
@@ -180,14 +190,16 @@ function MemoryRow({ agentId, memory }: { agentId: string; memory: Memory }) {
             onClick={() => setExpanded(!expanded)}
             className="text-foreground/70 outline-none hover:text-foreground focus-visible:underline"
           >
-            {expanded ? translateText("收起") : translateText("展开")}
+            {expanded
+              ? translateText("common:actions.collapse")
+              : translateText("common:actions.expand")}
           </button>
         ) : null}
         <Button
           variant="ghost"
           size="icon-xs"
-          aria-label={translateText("忘记这条记忆")}
-          title={translateText("忘记")}
+          aria-label={translateText("actions.forgetLabel")}
+          title={translateText("actions.forget")}
           disabled={forget.isPending}
           className="ml-auto opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
           onClick={() =>
@@ -211,7 +223,12 @@ function MemoryList({
   agentId: string;
   memories: Memory[];
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "memory",
+    "agents",
+    "common",
+    "navigation",
+  ] as const);
   const listRef = useRef<HTMLUListElement>(null);
   const [page, setPage] = useState(0);
   const pages = Math.ceil(memories.length / PAGE_SIZE);
@@ -225,7 +242,7 @@ function MemoryList({
     <div className="space-y-2">
       <ul
         ref={listRef}
-        aria-label={translateText("记忆列表")}
+        aria-label={translateText("accessibility.list")}
         className="divide-y border"
       >
         {memories
@@ -236,13 +253,13 @@ function MemoryList({
       </ul>
       {pages > 1 ? (
         <nav
-          aria-label={translateText("记忆分页")}
+          aria-label={translateText("accessibility.pagination")}
           className="flex items-center justify-end gap-1 text-xs text-muted-foreground tabular-nums"
         >
           <Button
             variant="ghost"
             size="icon-xs"
-            aria-label={translateText("上一页")}
+            aria-label={translateText("common:actions.previousPage")}
             disabled={current === 0}
             onClick={() => go(current - 1)}
           >
@@ -254,7 +271,7 @@ function MemoryList({
           <Button
             variant="ghost"
             size="icon-xs"
-            aria-label={translateText("下一页")}
+            aria-label={translateText("common:actions.nextPage")}
             disabled={current === pages - 1}
             onClick={() => go(current + 1)}
           >
@@ -277,7 +294,12 @@ export function MemoryView({
   agentId: string | undefined;
   onAgentChange?: (agentId: string) => void;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "memory",
+    "agents",
+    "common",
+    "navigation",
+  ] as const);
   const { agents, loaded, error: agentsError, retry, openEditor } = useAgents();
   const current = agents.find((agent) => agent.id === agentId) ?? agents.at(-1);
   const { data: snapshot } = useQuery(chatQueryOptions());
@@ -295,7 +317,7 @@ export function MemoryView({
   if (agentsError && !loaded)
     return (
       <LoadError
-        what={translateText("智能体")}
+        what={translateText("common:entities.agents")}
         error={agentsError}
         onRetry={retry}
       />
@@ -305,15 +327,15 @@ export function MemoryView({
     return (
       <Empty
         icon={RobotIcon}
-        title={translateText("还没有智能体")}
+        title={translateText("agents:empty.title")}
         action={
           <Button size="sm" onClick={() => openEditor()}>
             <PlusIcon aria-hidden="true" data-icon="inline-start" />
-            {translateText("新建智能体")}
+            {translateText("agents:actions.create")}
           </Button>
         }
       >
-        {translateText("记忆属于某个智能体，在和它的对话里慢慢积累。")}
+        {translateText("empty.noAgentDescription")}
       </Empty>
     );
 
@@ -324,7 +346,7 @@ export function MemoryView({
           {onAgentChange ? (
             <Select
               size="sm"
-              aria-label={translateText("智能体")}
+              aria-label={translateText("common:entities.agents")}
               value={current.id}
               onValueChange={(value) => onAgentChange(value)}
             >
@@ -337,7 +359,7 @@ export function MemoryView({
           ) : (
             <span className="truncate">{current.name}</span>
           )}
-          <span className="shrink-0">{translateText("的记忆")}</span>
+          <span className="shrink-0">{translateText("titleSuffix")}</span>
           {data ? (
             <span className="font-normal tabular-nums text-muted-foreground">
               {data.length}
@@ -348,8 +370,8 @@ export function MemoryView({
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label={translateText("刷新记忆列表")}
-            title={translateText("刷新")}
+            aria-label={translateText("actions.refreshLabel")}
+            title={translateText("common:actions.refresh")}
             disabled={isFetching}
             onClick={() => void refetch()}
           >
@@ -359,12 +381,14 @@ export function MemoryView({
             />
           </Button>
           <Select
-            aria-label={translateText("记忆种类")}
+            aria-label={translateText("filters.typeLabel")}
             value={source}
             onValueChange={(value) => setSource(value as MemorySource | "")}
             className="shrink-0"
           >
-            <SelectOption value="">{translateText("全部种类")}</SelectOption>
+            <SelectOption value="">
+              {translateText("filters.allTypes")}
+            </SelectOption>
             {Object.entries(sources).map(([value, { label }]) => (
               <SelectOption key={value} value={value}>
                 {label}
@@ -372,11 +396,13 @@ export function MemoryView({
             ))}
           </Select>
           <Select
-            aria-label={translateText("来源群")}
+            aria-label={translateText("source.group")}
             value={groupId}
             onValueChange={setGroupId}
           >
-            <SelectOption value="">{translateText("全部群")}</SelectOption>
+            <SelectOption value="">
+              {translateText("filters.allGroups")}
+            </SelectOption>
             {snapshot?.groups?.map((g) => (
               <SelectOption key={g.id} value={g.id}>
                 {g.name}
@@ -390,8 +416,8 @@ export function MemoryView({
             />
             <Input
               type="search"
-              aria-label={translateText("搜索记忆")}
-              placeholder={translateText("搜索")}
+              aria-label={translateText("search.label")}
+              placeholder={translateText("common:actions.search")}
               value={search}
               className="pl-7"
               onChange={(e) => setSearch(e.target.value)}
@@ -402,7 +428,7 @@ export function MemoryView({
       <RememberForm agentId={current.id} />
       {error ? (
         <LoadError
-          what={translateText("记忆")}
+          what={translateText("navigation:sections.memory")}
           error={error}
           onRetry={() => void refetch()}
         />
@@ -412,15 +438,15 @@ export function MemoryView({
         query || source || groupId ? (
           <Empty
             icon={MagnifyingGlassIcon}
-            title={translateText("没有相关的记忆")}
+            title={translateText("search.emptyTitle")}
           >
             {source
-              ? translateText("试试其他种类或全部种类。")
-              : translateText("换个说法再搜一次。")}
+              ? translateText("search.changeTypeHint")
+              : translateText("search.changeQueryHint")}
           </Empty>
         ) : (
-          <Empty icon={BrainIcon} title={translateText("还没有记忆")}>
-            {translateText("对话中值得长期记住的事实会在每轮结束后自动记下。")}
+          <Empty icon={BrainIcon} title={translateText("empty.title")}>
+            {translateText("empty.description")}
           </Empty>
         )
       ) : (

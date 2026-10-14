@@ -1,0 +1,63 @@
+{
+  "empty": {
+    "selectTitle": "选择一个定时任务",
+    "selectDescription": "在左边选一个，查看它的说明和每次运行的报告。",
+    "title": "还没有定时任务",
+    "description": "让智能体按时去做一件事，比如每天早上整理新闻，每次的结果留成一份报告。",
+    "deletedTitle": "这个定时任务已不存在"
+  },
+  "actions": {
+    "create": "新建定时任务",
+    "runNow": "立即运行"
+  },
+  "schedule": {
+    "kinds": {
+      "daily": "每天",
+      "hourly": "每隔几小时",
+      "cron": "自定义 cron"
+    },
+    "frequencyLabel": "频率",
+    "weekdaysLabel": "星期",
+    "timeLabel": "时间",
+    "intervalLabel": "间隔",
+    "cronLabel": "cron 表达式",
+    "localTimeSuffix": "（本机时间）",
+    "cronSyntaxHint": "分 时 日 月 星期",
+    "timeZoneLabel": "时区",
+    "describe": {
+      "daily": "每天 {{time}}",
+      "weekly": "每周{{weekdays}} {{time}}",
+      "hourly": "每小时",
+      "hourInterval": "每 {{count}} 小时"
+    },
+    "nextRun": "下一次"
+  },
+  "title": "定时任务",
+  "fields": {
+    "namePlaceholder": "例如：科技日报",
+    "briefLabel": "要求",
+    "briefPlaceholder": "例如：每天早上整理 Hacker News 和 36 氪的科技新闻，挑出最重要的 3 条，每条一两句话说明为什么重要，附原文链接。发过的不要重复；没有新内容就不发。",
+    "scheduleLabel": "计划"
+  },
+  "runStatus": {
+    "sent": "已发送",
+    "nothingNew": "没有新内容"
+  },
+  "reports": {
+    "handoffNotes": "交接说明（写给下一次运行）：{{notes}}",
+    "previous": "上一份报告",
+    "next": "下一份报告"
+  },
+  "brief": {
+    "version": "要求 v{{version}}",
+    "revisedFrom": " · 按“{{feedback}}”修订",
+    "restored": "已恢复 v{{version}}"
+  },
+  "feedback": {
+    "label": "反馈",
+    "placeholder": "反馈，例如：融资新闻不用放",
+    "revisionFailed": "没能据此修订要求",
+    "revising": "修订要求中…",
+    "briefUpdated": "要求已更新为 v{{version}}"
+  }
+}

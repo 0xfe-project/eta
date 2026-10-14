@@ -1,0 +1,58 @@
+{
+  "title": "环境包",
+  "service": {
+    "status": {
+      "deploying": "部署中",
+      "incompatibleProtocol": "协议不兼容"
+    },
+    "summary": "服务：{{runtime}}{{status}}{{details}}"
+  },
+  "editor": {
+    "scriptHelp": "脚本在构建智能体环境时以 root 运行；用到它的智能体会重新构建。",
+    "descriptionLabel": "说明",
+    "scriptLabel": "脚本",
+    "serviceLabel": "服务",
+    "manifestsPlaceholder": "# 可选：在集群里运行的 Kubernetes 对象，载入它的智能体经 /bundles/{{bundleName}}/ 访问\n# 需要一个名为 {{serviceName}}、端口名 http 的 Service",
+    "callableModels": "可调用模型",
+    "separateDatabase": "独立数据库",
+    "pluginsLabel": "插件"
+  },
+  "description": "智能体的环境由它选择的环境包构建：脚本装好工具，插件带来 MCP、技能和钩子。",
+  "empty": {
+    "title": "还没有环境包"
+  },
+  "plugins": {
+    "summary": "插件：{{plugins}}"
+  },
+  "configuration": {
+    "oomol": {
+      "apiKeyHelp": "登录 [OOMOL 的 MCP 配置页](https://oomol.com/install/mcp/) 生成；在 OOMOL 重置后这里要换新的。",
+      "teamNameLabel": "团队名",
+      "teamNameHelp": "OOMOL 里的团队，即那里给出的配置中的 `x-oo-team-name`。"
+    }
+  },
+  "descriptions": {
+    "agenvo": "操作用户远程电脑上的 Paseo 和 Herdr：工作区、智能体、输入、历史和终端。",
+    "approval": "规则拦下的命令先请用户在 AXP 里确认，同意后放行一次。",
+    "artifacts": "Artifact：把静态网页发布到 AXP，在聊天和任务里预览，可公开分享。",
+    "github": "以 AXP 的 GitHub App 身份使用 git、gh，并开 PR。",
+    "grok": "Grok Imagine 生成图片和视频，网页和 X 搜索。",
+    "groups": "群聊：读取前情、点名协作、整理简报和任务草稿。",
+    "memory": "跨对话的长期记忆：每轮开始时回忆，结束时记下。",
+    "oomol": "OOMOL：用 oo CLI 使用在 OOMOL 里连接的应用（邮件、日历、文档等）和托管能力。",
+    "routines": "定时任务：查看、新建和修改定时任务及其报告。",
+    "tasks": "任务看板：创建、指派和跟进任务，包括远程电脑上的智能体执行的任务。"
+  },
+  "pluginDescriptions": {
+    "agenvo": "通过 agenvo 操作远程电脑上的 Paseo 和 Herdr：管理工作区与智能体，发送输入，查看历史，打断运行及使用终端。",
+    "approval": "请用户确认被 AXP 规则拦下的命令。",
+    "artifacts": "把静态网页（ZIP 或目录）发布为 Artifact，在聊天和任务里预览、分享。",
+    "github": "使用 AXP 的 GitHub App 获取 git 和 gh 凭据，由 App 创建拉取请求，并起草由用户自己提交的 issue。",
+    "grok": "通过 LLM 网关的 Grok 账号使用 Grok Imagine 生成图像和视频，搜索网页及 X。",
+    "groups": "在当前群内检索、协作和整理决定。",
+    "memory": "由记忆服务保存跨对话的长期记忆。",
+    "oomol": "OOMOL 的 oo CLI 和它自带的 skill；凭据来自 oomol 环境包的配置（OO_API_KEY、OO_TEAM_NAME）。",
+    "routines": "列出和查看定时智能体及其报告，创建和修改定时任务。",
+    "tasks": "创建、指派和跟进任务，包括远程电脑上智能体执行的任务。"
+  }
+}

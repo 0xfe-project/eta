@@ -59,31 +59,35 @@ export function DeleteAgentDialog({
   onOpenChange: (open: boolean) => void;
   onDeleted?: () => void;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "agents",
+    "common",
+    "validation",
+  ] as const);
   const remove = useDeleteAgent();
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            {translateText("删除「{{value1}}」？", { value1: agent.name })}
+            {translateText("delete.confirmTitle", { name: agent.name })}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {translateText(
-              "正在进行的回复会被停止，智能体不再运行。已有的对话记录会保留。",
-            )}
+            {translateText("delete.confirmDescription")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{translateText("取消")}</AlertDialogCancel>
+          <AlertDialogCancel>
+            {translateText("common:actions.cancel")}
+          </AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             onClick={() =>
               remove.mutate(agent.id, {
                 onSuccess: () => {
                   toast.success(
-                    translateText("已删除「{{value1}}」", {
-                      value1: agent.name,
+                    translateText("common:feedback.deletedItem", {
+                      name: agent.name,
                     }),
                   );
                   onDeleted?.();
@@ -92,7 +96,7 @@ export function DeleteAgentDialog({
               })
             }
           >
-            {translateText("删除")}
+            {translateText("common:actions.delete")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -111,7 +115,7 @@ const tabs: {
   {
     value: "general",
     get label() {
-      return translate("常规");
+      return translate("agents:editor.tabs.general");
     },
     icon: SlidersHorizontalIcon,
     fields: ["name", "model"],
@@ -119,7 +123,7 @@ const tabs: {
   {
     value: "instructions",
     get label() {
-      return translate("指令");
+      return translate("agents:editor.tabs.instructions");
     },
     icon: ScrollIcon,
     fields: ["description"],
@@ -127,7 +131,7 @@ const tabs: {
   {
     value: "environment",
     get label() {
-      return translate("环境");
+      return translate("agents:editor.tabs.environment");
     },
     icon: PackageIcon,
     fields: ["bundles"],
@@ -141,7 +145,11 @@ function AgentEditorForm({
   agent: Agent;
   onDone: () => void;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "agents",
+    "common",
+    "validation",
+  ] as const);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const { data: models } = useModels();
@@ -180,7 +188,9 @@ function AgentEditorForm({
     (values) => {
       // Agents can be created before any account is connected, not after.
       if (!values.model && models?.some((model) => model.available)) {
-        form.setError("model", { message: translateText("请选择模型。") });
+        form.setError("model", {
+          message: translateText("validation:modelRequired"),
+        });
         showError("model");
         return;
       }
@@ -191,7 +201,7 @@ function AgentEditorForm({
         { id: agent.id, ...agentDraft(values) },
         {
           onSuccess: () => {
-            toast.success(translateText("已保存"));
+            toast.success(translateText("common:feedback.saved"));
             onDone();
           },
           onError: (error) => toast.error(error.message),
@@ -208,17 +218,17 @@ function AgentEditorForm({
     <form noValidate onSubmit={save} className="flex min-h-0 flex-1 flex-col">
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <SettingsNav
-          label={translateText("智能体设置分类")}
+          label={translateText("editor.sectionsLabel")}
           sections={tabs.map((t) => ({
             ...t,
             ...(t.value === "environment"
               ? {
                   attention: Boolean(agent.build_error),
-                  hint: translateText("环境构建失败"),
+                  hint: translateText("environment.buildFailed"),
                 }
               : {
                   attention: t.fields.some((name) => errors[name]),
-                  hint: translateText("有错误"),
+                  hint: translateText("common:states.hasErrors"),
                 }),
           }))}
           value={tab}
@@ -245,7 +255,7 @@ function AgentEditorForm({
               {agent.build_error ? (
                 <div className="space-y-1.5" role="alert">
                   <p className="text-xs leading-none text-destructive">
-                    {translateText("环境构建失败")}
+                    {translateText("environment.buildFailed")}
                   </p>
                   <pre
                     // The build's last lines say what failed: show them first.
@@ -270,17 +280,17 @@ function AgentEditorForm({
           onClick={() => setConfirmDelete(true)}
         >
           <TrashIcon aria-hidden="true" data-icon="inline-start" />
-          {translateText("删除智能体")}
+          {translateText("actions.delete")}
         </Button>
         <div className="flex gap-2">
           <Button type="button" variant="outline" onClick={onDone}>
-            {translateText("取消")}
+            {translateText("common:actions.cancel")}
           </Button>
           <Button
             type="submit"
             disabled={updateAgent.isPending || !form.formState.isDirty}
           >
-            {translateText("保存")}
+            {translateText("common:actions.save")}
           </Button>
         </div>
       </DialogFooter>
@@ -299,7 +309,11 @@ function AgentEditorForm({
  * entry (the chat head, settings, empty states) opens this one dialog.
  */
 export function AgentEditor() {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "agents",
+    "common",
+    "validation",
+  ] as const);
   const agentEditor = useWorkspaceStore((s) => s.agentEditor);
   const setAgentEditor = useWorkspaceStore((s) => s.setAgentEditor);
   const { agents } = useAgents();
@@ -329,12 +343,12 @@ export function AgentEditor() {
           {agent ? <AgentAvatar agent={agent} /> : null}
           <div className="min-w-0">
             <DialogTitle className="truncate text-base">
-              {agent ? agent.name : translateText("新建智能体")}
+              {agent ? agent.name : translateText("actions.create")}
             </DialogTitle>
             <DialogDescription className="sr-only">
               {agent
-                ? translateText("编辑智能体")
-                : translateText("新建智能体")}
+                ? translateText("actions.edit")
+                : translateText("actions.create")}
             </DialogDescription>
           </div>
         </DialogHeader>

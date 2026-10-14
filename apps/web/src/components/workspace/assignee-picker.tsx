@@ -41,7 +41,7 @@ export function AssigneeFields({
   draft: AssigneeDraft;
   onChange: (draft: AssigneeDraft) => void;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["tasks", "common"] as const);
   const tasks = useTasks();
   const assignee = assigneeFromKey(draft.key);
   const remote = assignee.kind === "remote";
@@ -60,7 +60,7 @@ export function AssigneeFields({
   const worktree = draft.place.startsWith("worktree");
   return (
     <div className="grid gap-3">
-      <Field id={`${id}-assignee`} label={translateText("指派给")}>
+      <Field id={`${id}-assignee`} label={translateText("assignee.label")}>
         <AssigneeMenu
           id={`${id}-assignee`}
           value={draft.key}
@@ -76,7 +76,7 @@ export function AssigneeFields({
         />
       </Field>
       {remote ? (
-        <Field id={`${id}-place`} label={translateText("工作位置")}>
+        <Field id={`${id}-place`} label={translateText("location.label")}>
           {places.error ? (
             <div className="grid gap-1">
               <p className="text-xs text-destructive">{places.error.message}</p>
@@ -87,7 +87,7 @@ export function AssigneeFields({
                   void places.refetch();
                 }}
               >
-                {translateText("重试")}
+                {translateText("common:actions.retry")}
               </Button>
             </div>
           ) : (
@@ -100,34 +100,38 @@ export function AssigneeFields({
             >
               <SelectOption value="">
                 {places.isPending
-                  ? translateText("读取那台电脑上的项目……")
-                  : translateText("选择工作位置")}
+                  ? translateText("location.loadingProjects")
+                  : translateText("location.select")}
               </SelectOption>
               {draft.place && !knownPlace ? (
                 <SelectOption value={draft.place} disabled>
-                  {translateText("当前工作位置（{{value1}}）{{value2}}", {
-                    value1: draft.place.split("\u0000")[1],
-                    value2: places.isPending ? "" : translateText(" · 不可用"),
+                  {translateText("location.current", {
+                    name: draft.place.split("\u0000")[1],
+                    availabilitySuffix: places.isPending
+                      ? ""
+                      : translateText("common:status.unavailableInline"),
                   })}
                 </SelectOption>
               ) : null}
               {places.data?.projects.length ? (
-                <SelectGroup label={translateText("新开一个 worktree")}>
+                <SelectGroup label={translateText("location.newWorktree")}>
                   {places.data.projects.map((p) => (
                     <SelectOption
                       key={`w${p.id}`}
                       value={placeKey("worktree", p.id, p.session)}
                     >
-                      {translateText("从 {{value1}} 开（{{value2}}）", {
-                        value1: p.name,
-                        value2: p.path,
+                      {translateText("location.branchFrom", {
+                        name: p.name,
+                        branch: p.path,
                       })}
                     </SelectOption>
                   ))}
                 </SelectGroup>
               ) : null}
               {places.data?.workspaces.length ? (
-                <SelectGroup label={translateText("在已有的工作区里")}>
+                <SelectGroup
+                  label={translateText("location.existingWorkspace")}
+                >
                   {places.data.workspaces.map((w) => (
                     <SelectOption
                       key={`s${w.id}`}
@@ -135,8 +139,10 @@ export function AssigneeFields({
                     >
                       {w.name}
                       {w.branch ? ` · ${w.branch}` : ""}
-                      {w.dirty ? translateText(" · 有未提交改动") : ""}（
-                      {w.path}）
+                      {w.dirty
+                        ? translateText("location.uncommittedChanges")
+                        : ""}
+                      （{w.path}）
                     </SelectOption>
                   ))}
                 </SelectGroup>
@@ -147,19 +153,25 @@ export function AssigneeFields({
       ) : null}
       {remote && worktree ? (
         <div className="grid grid-cols-2 gap-3">
-          <Field id={`${id}-branch`} label={translateText("分支（可选）")}>
+          <Field
+            id={`${id}-branch`}
+            label={translateText("location.branchLabel")}
+          >
             <Input
               id={`${id}-branch`}
-              placeholder={translateText("默认 axp/<编号>-<标题>")}
+              placeholder={translateText("location.branchPlaceholder")}
               maxLength={200}
               value={draft.branch}
               onChange={(e) => onChange({ ...draft, branch: e.target.value })}
             />
           </Field>
-          <Field id={`${id}-base`} label={translateText("从哪里开（可选）")}>
+          <Field
+            id={`${id}-base`}
+            label={translateText("location.baseBranchLabel")}
+          >
             <Input
               id={`${id}-base`}
-              placeholder={translateText("默认当前分支")}
+              placeholder={translateText("location.baseBranchPlaceholder")}
               maxLength={200}
               value={draft.base}
               onChange={(e) => onChange({ ...draft, base: e.target.value })}

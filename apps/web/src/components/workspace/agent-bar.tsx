@@ -36,7 +36,11 @@ function AgentSwitch({
   onInfo: () => void;
   children: (open: string) => React.ReactNode;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "agents",
+    "chat",
+    "common",
+  ] as const);
   const { agents, openEditor } = useAgents();
   const { groups } = useGroups();
   const openGroup = useOpenGroup();
@@ -52,12 +56,12 @@ function AgentSwitch({
       .map((g) => [g.participants.find((p) => p.member)?.agent_id, g.id]),
   );
   const open = agent
-    ? translateText("正在与 {{value1}} 私聊（{{value2}}），切换智能体", {
-        value1: agent.name,
-        value2: agentStatusLabels[agent.status],
+    ? translateText("chat:agentSwitcher.currentDirectChat", {
+        agentName: agent.name,
+        status: agentStatusLabels[agent.status],
       })
-    : translateText("正在群「{{value1}}」中，切换到智能体私聊", {
-        value1: group.name,
+    : translateText("chat:agentSwitcher.currentGroup", {
+        groupName: group.name,
       });
   return (
     <DropdownMenu {...menu.root}>
@@ -69,15 +73,15 @@ function AgentSwitch({
           <>
             <DropdownMenuItem>
               <span className="min-w-0 flex-1 truncate">
-                {translateText("群 · {{value1}}", { value1: group.name })}
+                {translateText("chat:groups.nameLabel", { name: group.name })}
               </span>
-              <CheckIcon aria-label={translateText("当前")} />
+              <CheckIcon aria-label={translateText("common:labels.current")} />
             </DropdownMenuItem>
             <DropdownMenuSeparator />
           </>
         )}
         <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-          {translateText("私聊")}
+          {translateText("chat:groups.directChat")}
         </DropdownMenuLabel>
         {agents.map((a) => {
           const target = directs.get(a.id);
@@ -93,7 +97,9 @@ function AgentSwitch({
               <span className="min-w-0 flex-1 truncate">{a.name}</span>
               <AgentStatusDot status={a.status} />
               {a.id === direct ? (
-                <CheckIcon aria-label={translateText("当前")} />
+                <CheckIcon
+                  aria-label={translateText("common:labels.current")}
+                />
               ) : null}
             </DropdownMenuItem>
           );
@@ -101,11 +107,13 @@ function AgentSwitch({
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={onInfo}>
           <InfoIcon aria-hidden="true" />
-          {direct ? translateText("智能体设置") : translateText("群信息")}
+          {direct
+            ? translateText("settings.title")
+            : translateText("chat:groups.info")}
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => openEditor()}>
           <PlusIcon aria-hidden="true" />
-          {translateText("新建智能体")}
+          {translateText("actions.create")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

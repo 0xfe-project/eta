@@ -45,8 +45,8 @@ export function assigneeTree(options: AssigneeOption[]): Choice[] {
     computer.offline = computer.children!.every((r) => r.offline);
   }
   return [
-    { key: "none", label: translate("未指派") },
-    { key: "user", label: translate("我") },
+    { key: "none", label: translate("tasks:assignee.unassigned") },
+    { key: "user", label: translate("tasks:assignee.me") },
     ...computers,
   ];
 }

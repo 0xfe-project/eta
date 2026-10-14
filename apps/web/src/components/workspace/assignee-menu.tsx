@@ -51,7 +51,7 @@ export function AssigneeMenu({
   retry: () => void;
   onChange: (value: string) => void;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["tasks", "common"] as const);
   const compact = useSyncExternalStore(subscribe, snapshot, serverSnapshot);
   const [path, setPath] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
@@ -63,14 +63,16 @@ export function AssigneeMenu({
   const assignee = assigneeFromKey(value);
   const label =
     value === "none"
-      ? translateText("未指派")
+      ? translateText("assignee.unassigned")
       : value === "user"
-        ? translateText("我")
+        ? translateText("assignee.me")
         : selected
           ? remoteLabel(selected) +
-            (selected.online ? "" : translateText("（离线）"))
-          : translateText("{{value1}}（不可用）", {
-              value1: remoteLabel({
+            (selected.online
+              ? ""
+              : translateText("common:status.offlineSuffix"))
+          : translateText("common:labels.unavailableItem", {
+              name: remoteLabel({
                 ...assignee,
                 computer_name: assignee.computer_id,
               }),
@@ -97,11 +99,11 @@ export function AssigneeMenu({
     <>
       <span className="min-w-0 break-words">
         {choice.label}
-        {choice.offline ? translateText("（离线）") : ""}
+        {choice.offline ? translateText("common:status.offlineSuffix") : ""}
       </span>
       {isSelected(choice) ? (
         <CheckIcon
-          aria-label={translateText("已选")}
+          aria-label={translateText("common:labels.selected")}
           className="ml-auto shrink-0"
         />
       ) : null}
@@ -166,7 +168,7 @@ export function AssigneeMenu({
               }}
             >
               <CaretLeftIcon />
-              {translateText("返回")}
+              {translateText("common:actions.back")}
             </DropdownMenuItem>
             <DropdownMenuLabel className="break-words">
               {ancestors.map((c) => c.label).join(" · ")}
@@ -194,7 +196,7 @@ export function AssigneeMenu({
           : renderChoices(tree)}
         {pending ? (
           <DropdownMenuLabel>
-            {translateText("读取指派对象……")}
+            {translateText("assignee.loading")}
           </DropdownMenuLabel>
         ) : null}
         {error ? (
@@ -208,12 +210,12 @@ export function AssigneeMenu({
                 retry();
               }}
             >
-              {translateText("重试")}
+              {translateText("common:actions.retry")}
             </DropdownMenuItem>
           </>
         ) : !pending && !options.length ? (
           <DropdownMenuLabel>
-            {translateText("暂无远程智能体")}
+            {translateText("assignee.noRemoteAgents")}
           </DropdownMenuLabel>
         ) : null}
       </DropdownMenuContent>

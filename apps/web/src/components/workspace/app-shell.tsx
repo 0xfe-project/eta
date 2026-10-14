@@ -28,35 +28,35 @@ const sections = [
   {
     to: "/",
     get label() {
-      return translate("对话");
+      return translate("navigation:sections.chat");
     },
     icon: ChatsCircleIcon,
   },
   {
     to: "/workspace/inbox",
     get label() {
-      return translate("待处理");
+      return translate("navigation:sections.pending");
     },
     icon: BellIcon,
   },
   {
     to: "/workspace/tasks",
     get label() {
-      return translate("任务");
+      return translate("navigation:sections.tasks");
     },
     icon: ListChecksIcon,
   },
   {
     to: "/workspace/routines",
     get label() {
-      return translate("定时");
+      return translate("navigation:sections.routines");
     },
     icon: ClockIcon,
   },
   {
     to: "/workspace/memory",
     get label() {
-      return translate("记忆");
+      return translate("navigation:sections.memory");
     },
     icon: BrainIcon,
   },
@@ -85,7 +85,11 @@ function Badge({ count }: { count: number | undefined }) {
 }
 
 export function Sidebar() {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "navigation",
+    "agents",
+    "common",
+  ] as const);
   const badges = useBadges();
   const { agents, loaded, error, openEditor } = useAgents();
   const openAgent = useOpenAgent();
@@ -97,7 +101,10 @@ export function Sidebar() {
         </Link>
         <SettingsButton />
       </div>
-      <nav aria-label={translateText("分区")} className="grid gap-px px-2">
+      <nav
+        aria-label={translateText("accessibility.sections")}
+        className="grid gap-px px-2"
+      >
         {sections.map(({ to, label, icon: Icon }) => (
           <Link
             key={to}
@@ -124,13 +131,13 @@ export function Sidebar() {
             id="sidebar-agents"
             className="text-xs font-medium text-muted-foreground"
           >
-            {translateText("智能体")}
+            {translateText("common:entities.agents")}
           </h2>
           <Button
             variant="ghost"
             size="icon-xs"
-            aria-label={translateText("新建智能体")}
-            title={translateText("新建智能体")}
+            aria-label={translateText("agents:actions.create")}
+            title={translateText("agents:actions.create")}
             onClick={() => openEditor()}
           >
             <PlusIcon aria-hidden="true" />
@@ -138,17 +145,17 @@ export function Sidebar() {
         </div>
         {error && !loaded ? (
           <p className="px-2 text-xs text-muted-foreground">
-            {translateText("无法加载智能体")}
+            {translateText("agents:errors.loadFailed")}
           </p>
         ) : !loaded ? (
           <Loading rows={2} />
         ) : agents.length ? null : (
           <Empty
-            title={translateText("还没有智能体")}
+            title={translateText("agents:empty.title")}
             className="px-3 py-4"
             action={
               <Button size="xs" variant="outline" onClick={() => openEditor()}>
-                {translateText("新建智能体")}
+                {translateText("agents:actions.create")}
               </Button>
             }
           />
@@ -159,8 +166,8 @@ export function Sidebar() {
               <button
                 type="button"
                 onClick={() => openAgent(agent.id)}
-                title={translateText("与 {{value1}} 对话", {
-                  value1: agent.name,
+                title={translateText("agents:actions.chatWith", {
+                  name: agent.name,
                 })}
                 className={cn(item, "w-full")}
               >
@@ -186,7 +193,11 @@ export function Sidebar() {
  * conversation. 更多 stays lit on the pages it leads to.
  */
 export function BottomNav() {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "navigation",
+    "agents",
+    "common",
+  ] as const);
   const badges = useBadges();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const tabs = [
@@ -195,14 +206,14 @@ export function BottomNav() {
     { ...sections[1], also: [] },
     {
       to: "/workspace/more",
-      label: translateText("更多"),
+      label: translateText("sections.more"),
       icon: DotsThreeIcon,
       also: ["/workspace", "/workspace/routines", "/workspace/memory"],
     },
   ] as const;
   return (
     <nav
-      aria-label={translateText("分区")}
+      aria-label={translateText("accessibility.sections")}
       className="flex shrink-0 border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       {tabs.map(({ to, label, icon: Icon, also }) => (

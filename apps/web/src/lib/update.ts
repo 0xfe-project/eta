@@ -19,9 +19,12 @@ export async function checkForUpdate() {
   if (!response?.ok) return;
   if ((await response.text()) === __AXP_BUILD__) return;
   offered = true;
-  toast(translate("AXP 已更新"), {
+  toast(translate("common:updates.available"), {
     duration: Infinity,
-    action: { label: translate("刷新"), onClick: () => location.reload() },
+    action: {
+      label: translate("common:actions.refresh"),
+      onClick: () => location.reload(),
+    },
   });
 }
 

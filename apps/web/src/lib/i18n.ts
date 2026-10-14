@@ -1,9 +1,9 @@
-import type { TOptions } from "i18next";
+import type { ParseKeys } from "i18next";
+import type { TranslationNamespace } from "@/locales/resources";
 import { createInstance } from "i18next";
 import { initReactI18next } from "react-i18next";
 import { z } from "zod";
-import en from "@/locales/en.json";
-import zh from "@/locales/zh.json";
+import { namespaces, resources } from "@/locales/resources";
 
 export type Language = "en" | "zh";
 export type LanguagePreference = Language | "system";
@@ -21,13 +21,10 @@ export function createI18n(language: Language = "en") {
     lng: language,
     fallbackLng: "en",
     supportedLngs: ["en", "zh"],
-    resources: {
-      en: { translation: { ...en } },
-      zh: { translation: { ...zh } },
-    },
+    ns: [...namespaces],
+    defaultNS: "common",
+    resources: structuredClone(resources),
     initAsync: false,
-    keySeparator: false,
-    nsSeparator: false,
     interpolation: { escapeValue: false },
     react: { useSuspense: false },
   });
@@ -37,9 +34,11 @@ export function createI18n(language: Language = "en") {
 export const i18n = createI18n();
 
 /** Utilities and event handlers translate at call time, never at module load. */
-export function translate(key: string, options?: TOptions): string {
-  return i18n.t(key, options);
-}
+export const translate = i18n.getFixedT(null, namespaces);
+export type TranslationKey = Extract<
+  ParseKeys<typeof namespaces>,
+  `${TranslationNamespace}:${string}`
+>;
 
 export function detectLanguage(languages: readonly string[]): Language {
   for (const language of languages) {

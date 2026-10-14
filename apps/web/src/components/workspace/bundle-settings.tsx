@@ -20,6 +20,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { listSeparator, translate } from "@/lib/i18n";
 import {
+  translateBundleDescription,
+  translatePluginDescription,
+} from "@/lib/i18n-metadata";
+import {
   bundleDraft,
   useBundles,
   useDeleteBundle,
@@ -34,32 +38,32 @@ import {
 
 const serviceStates: Record<string, string> = {
   get applying() {
-    return translate("部署中");
+    return translate("bundles:service.status.deploying");
   },
   get ready() {
-    return translate("运行中");
+    return translate("common:status.running");
   },
   get incompatible() {
-    return translate("协议不兼容");
+    return translate("bundles:service.status.incompatibleProtocol");
   },
   get error() {
-    return translate("出错");
+    return translate("common:status.error");
   },
 };
 
 function ServiceStatus({ bundle }: { bundle: Bundle }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["bundles", "common"] as const);
   if (!bundle.service) return null;
   const status = bundle.service_status;
   const state = status
     ? (serviceStates[status.state] ?? status.state)
-    : translateText("未知");
+    : translateText("common:status.unknown");
   return (
     <p className="text-xs text-muted-foreground">
-      {translateText("服务：{{value1}}{{value2}}{{value3}}", {
-        value1: state,
-        value2: status?.version ? ` · ${status.version}` : "",
-        value3: status?.message ? ` · ${status.message}` : "",
+      {translateText("service.summary", {
+        runtime: state,
+        status: status?.version ? ` · ${status.version}` : "",
+        details: status?.message ? ` · ${status.message}` : "",
       })}
     </p>
   );
@@ -76,7 +80,7 @@ function BundleDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["bundles", "common"] as const);
   const { data: plugins } = usePlugins();
   const save = useUpdateBundle();
   const [draft, setDraft] = useState<BundleDraft>(() => bundleDraft(bundle));
@@ -93,9 +97,7 @@ function BundleDialog({
         <DialogHeader>
           <DialogTitle>{bundle.name}</DialogTitle>
           <DialogDescription>
-            {translateText(
-              "脚本在构建智能体环境时以 root 运行；用到它的智能体会重新构建。",
-            )}
+            {translateText("editor.scriptHelp")}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -104,7 +106,7 @@ function BundleDialog({
             event.preventDefault();
             save.mutate(draft, {
               onSuccess: () => {
-                toast.success(translateText("已保存"));
+                toast.success(translateText("common:feedback.saved"));
                 onOpenChange(false);
               },
               onError: showError,
@@ -112,7 +114,9 @@ function BundleDialog({
           }}
         >
           <div className="space-y-1.5">
-            <Label htmlFor="bundle-description">{translateText("说明")}</Label>
+            <Label htmlFor="bundle-description">
+              {translateText("editor.descriptionLabel")}
+            </Label>
             <Input
               id="bundle-description"
               value={draft.description}
@@ -123,7 +127,9 @@ function BundleDialog({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="bundle-script">{translateText("脚本")}</Label>
+            <Label htmlFor="bundle-script">
+              {translateText("editor.scriptLabel")}
+            </Label>
             <Textarea
               id="bundle-script"
               rows={8}
@@ -139,16 +145,18 @@ function BundleDialog({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="bundle-service">{translateText("服务")}</Label>
+            <Label htmlFor="bundle-service">
+              {translateText("editor.serviceLabel")}
+            </Label>
             <Textarea
               id="bundle-service"
               rows={6}
               spellCheck={false}
               className="max-h-[40dvh] min-h-24 font-mono text-xs leading-relaxed"
-              placeholder={translateText(
-                "# 可选：在集群里运行的 Kubernetes 对象，载入它的智能体经 /bundles/{{value1}}/ 访问\n# 需要一个名为 {{value2}}、端口名 http 的 Service",
-                { value1: bundle.name, value2: bundle.name },
-              )}
+              placeholder={translateText("editor.manifestsPlaceholder", {
+                bundleName: bundle.name,
+                serviceName: bundle.name,
+              })}
               value={draft.manifests}
               onChange={(e) =>
                 setDraft((d) => ({ ...d, manifests: e.target.value }))
@@ -162,7 +170,7 @@ function BundleDialog({
                     setDraft((d) => ({ ...d, usesModels: on === true }))
                   }
                 />
-                {translateText("可调用模型")}
+                {translateText("editor.callableModels")}
               </Label>
               <Label className="gap-2">
                 <Checkbox
@@ -171,7 +179,7 @@ function BundleDialog({
                     setDraft((d) => ({ ...d, database: on === true }))
                   }
                 />
-                {translateText("独立数据库")}
+                {translateText("editor.separateDatabase")}
               </Label>
             </div>
           </div>
@@ -182,7 +190,7 @@ function BundleDialog({
               className="space-y-1.5"
             >
               <p id="bundle-plugins" className="text-xs leading-none">
-                {translateText("插件")}
+                {translateText("editor.pluginsLabel")}
               </p>
               <ul className="divide-y border">
                 {plugins.map((plugin) => (
@@ -198,9 +206,10 @@ function BundleDialog({
                       <span className="min-w-0 space-y-0.5">
                         <span className="block font-medium">{plugin.name}</span>
                         <span className="block text-muted-foreground">
-                          {translateText(plugin.description, {
-                            defaultValue: plugin.description,
-                          })}
+                          {translatePluginDescription(
+                            plugin.name,
+                            plugin.description,
+                          )}
                         </span>
                       </span>
                     </Label>
@@ -211,7 +220,7 @@ function BundleDialog({
           ) : null}
           <DialogFooter>
             <Button type="submit" disabled={save.isPending}>
-              {translateText("保存")}
+              {translateText("common:actions.save")}
             </Button>
           </DialogFooter>
         </form>
@@ -221,28 +230,26 @@ function BundleDialog({
 }
 
 export function BundleSettings() {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["bundles", "common"] as const);
   const { data: bundles, isPending, error, refetch } = useBundles();
   const remove = useDeleteBundle();
   const [editing, setEditing] = useState<Bundle | null>(null);
   return (
     <div className="space-y-3">
-      <h2 className="text-sm font-semibold">{translateText("环境包")}</h2>
+      <h2 className="text-sm font-semibold">{translateText("title")}</h2>
       <p className="text-xs text-muted-foreground">
-        {translateText(
-          "智能体的环境由它选择的环境包构建：脚本装好工具，插件带来 MCP、技能和钩子。",
-        )}
+        {translateText("description")}
       </p>
       {error ? (
         <LoadError
-          what={translateText("环境包")}
+          what={translateText("title")}
           error={error}
           onRetry={() => void refetch()}
         />
       ) : isPending ? (
         <Loading rows={4} />
       ) : !bundles.length ? (
-        <Empty icon={PackageIcon} title={translateText("还没有环境包")} />
+        <Empty icon={PackageIcon} title={translateText("empty.title")} />
       ) : (
         <ul className="divide-y border">
           {bundles.map((bundle) => (
@@ -255,21 +262,22 @@ export function BundleSettings() {
                   {bundle.name}
                   <span className="ml-1.5 text-xs font-normal text-muted-foreground">
                     {bundle.builtin
-                      ? translateText("内置")
-                      : translateText("自定义")}
+                      ? translateText("common:labels.builtIn")
+                      : translateText("common:labels.custom")}
                   </span>
                 </p>
                 {bundle.description ? (
                   <p className="text-muted-foreground">
-                    {translateText(bundle.description, {
-                      defaultValue: bundle.description,
-                    })}
+                    {translateBundleDescription(
+                      bundle.name,
+                      bundle.description,
+                    )}
                   </p>
                 ) : null}
                 {bundle.plugins.length ? (
                   <p className="text-xs text-muted-foreground">
-                    {translateText("插件：{{value1}}", {
-                      value1: bundle.plugins.join(listSeparator()),
+                    {translateText("plugins.summary", {
+                      plugins: bundle.plugins.join(listSeparator()),
                     })}
                   </p>
                 ) : null}
@@ -282,7 +290,7 @@ export function BundleSettings() {
                     variant="ghost"
                     onClick={() => setEditing(bundle)}
                   >
-                    {translateText("编辑")}
+                    {translateText("common:actions.edit")}
                   </Button>
                   <Button
                     size="sm"
@@ -292,15 +300,15 @@ export function BundleSettings() {
                       remove.mutate(bundle.name, {
                         onSuccess: () =>
                           toast.success(
-                            translateText("已删除「{{value1}}」", {
-                              value1: bundle.name,
+                            translateText("common:feedback.deletedItem", {
+                              name: bundle.name,
                             }),
                           ),
                         onError: showError,
                       })
                     }
                   >
-                    {translateText("删除")}
+                    {translateText("common:actions.delete")}
                   </Button>
                 </div>
               )}

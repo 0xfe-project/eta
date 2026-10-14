@@ -45,14 +45,23 @@ function outcome(interaction: Interaction) {
     (option) => option.value === interaction.answer,
   );
   if (chosen)
-    return translate("已选择「{{value1}}」", { value1: chosen.label });
-  if (interaction.status === "expired") return translate("已过期，没有答复");
-  return translate("已答复");
+    return translate("chat:confirmations.selectedChoice", {
+      choice: chosen.label,
+    });
+  if (interaction.status === "expired")
+    return translate("chat:confirmations.expired");
+  return translate("chat:confirmations.answered");
 }
 
 /** A confirmation: who asked, what, and its answers or how it ended. */
 export function Confirmation({ interaction }: { interaction: Interaction }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "overview",
+    "agents",
+    "chat",
+    "common",
+    "navigation",
+  ] as const);
   const { agents } = useAgents();
   const openGroup = useOpenGroup();
   const { groups } = useGroups();
@@ -75,9 +84,9 @@ export function Confirmation({ interaction }: { interaction: Interaction }) {
             onClick={() => openGroup(interaction.group_id)}
             className="min-w-0 truncate font-medium text-foreground underline-offset-4 outline-none hover:underline focus-visible:underline"
           >
-            {agent?.name ?? translateText("已删除的智能体")} ·{" "}
+            {agent?.name ?? translateText("agents:labels.deletedAgent")} ·{" "}
             {groups.find((g) => g.id === interaction.group_id)?.name ??
-              translateText("群聊")}
+              translateText("chat:groups.groupChat")}
           </button>
           <span className="ml-auto shrink-0 tabular-nums">
             {clock(interaction.created_at)}
@@ -202,13 +211,25 @@ function Group({
 
 /** Confirmations, tasks and routines waiting for the user, by kind. */
 export function PendingList() {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "overview",
+    "agents",
+    "chat",
+    "common",
+    "navigation",
+  ] as const);
   // Only their state: the items come from usePendingInteractions and
   // useAttention.
   const sources = [
-    { what: translateText("确认请求"), query: useQuery(chatQueryOptions()) },
-    { what: translateText("任务"), query: useTasks() },
-    { what: translateText("定时"), query: useRoutines() },
+    {
+      what: translateText("chat:confirmations.requestLabel"),
+      query: useQuery(chatQueryOptions()),
+    },
+    { what: translateText("navigation:sections.tasks"), query: useTasks() },
+    {
+      what: translateText("navigation:sections.routines"),
+      query: useRoutines(),
+    },
   ];
   const confirmations = usePendingInteractions();
   const { tasks, routines } = useAttention();
@@ -229,18 +250,22 @@ export function PendingList() {
         />
       ) : null}
       {!total && !failed.length && !loading ? (
-        <Empty icon={BellIcon} title={translateText("没有等你处理的事")}>
-          {translateText(
-            "智能体请你确认的操作、交给你的任务、新的定时报告，都会在这里。",
-          )}
+        <Empty icon={BellIcon} title={translateText("attention.emptyTitle")}>
+          {translateText("attention.emptyDescription")}
         </Empty>
       ) : null}
-      <Group label={translateText("确认请求")} count={confirmations.length}>
+      <Group
+        label={translateText("chat:confirmations.requestLabel")}
+        count={confirmations.length}
+      >
         {confirmations.map((interaction) => (
           <Confirmation key={interaction.id} interaction={interaction} />
         ))}
       </Group>
-      <Group label={translateText("任务")} count={tasks.length}>
+      <Group
+        label={translateText("navigation:sections.tasks")}
+        count={tasks.length}
+      >
         {tasks.map(({ task, reason, alert }) => (
           <li key={task.id}>
             <Link
@@ -265,7 +290,10 @@ export function PendingList() {
           </li>
         ))}
       </Group>
-      <Group label={translateText("定时")} count={routines.length}>
+      <Group
+        label={translateText("navigation:sections.routines")}
+        count={routines.length}
+      >
         {routines.map(({ routine, reason, alert }) => (
           <li key={routine.id}>
             <Link

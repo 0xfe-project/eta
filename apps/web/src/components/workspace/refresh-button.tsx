@@ -11,7 +11,7 @@ export function RefreshButton({
 }: {
   resource: "tasks" | "routines";
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation("common");
   const client = useQueryClient();
   const fetching = useIsFetching({ queryKey: [resource], type: "active" });
   const lockedRef = useRef(false);
@@ -28,7 +28,9 @@ export function RefreshButton({
       );
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : translateText("刷新失败"),
+        error instanceof Error
+          ? error.message
+          : translateText("errors.refreshFailed"),
       );
     } finally {
       lockedRef.current = false;
@@ -40,9 +42,13 @@ export function RefreshButton({
       type="button"
       variant="ghost"
       size="icon-sm"
-      aria-label={translateText("刷新")}
+      aria-label={translateText("actions.refresh")}
       aria-busy={busy}
-      title={busy ? translateText("刷新中…") : translateText("刷新")}
+      title={
+        busy
+          ? translateText("states.refreshing")
+          : translateText("actions.refresh")
+      }
       disabled={busy}
       onClick={() => void refresh()}
     >

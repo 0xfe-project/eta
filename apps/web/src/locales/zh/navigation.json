@@ -1,0 +1,22 @@
+{
+  "sections": {
+    "chat": "对话",
+    "pending": "待处理",
+    "tasks": "任务",
+    "routines": "定时",
+    "memory": "记忆",
+    "more": "更多",
+    "overview": "概览",
+    "capabilities": "功能"
+  },
+  "accessibility": {
+    "sections": "分区",
+    "workspaceTabs": "工作区标签",
+    "skipToContent": "跳转到内容"
+  },
+  "actions": {
+    "openFullWindow": "在全窗口中打开",
+    "backToChat": "返回对话",
+    "backToConversations": "返回对话列表"
+  }
+}

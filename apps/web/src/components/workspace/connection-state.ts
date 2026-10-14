@@ -3,48 +3,45 @@ import { translate } from "@/lib/i18n";
 
 export const connectionStateLabels: Record<Connection["state"], string> = {
   get active() {
-    return translate("正常");
+    return translate("providers:status.healthy");
   },
   get disabled() {
-    return translate("已停用");
+    return translate("providers:status.disabled");
   },
   get needs_login() {
-    return translate("需要重新登录");
+    return translate("providers:status.needsLogin");
   },
   get rate_limited() {
-    return translate("额度已用尽");
+    return translate("providers:status.quotaExhausted");
   },
   get error() {
-    return translate("出错");
+    return translate("common:status.error");
   },
   get degraded() {
-    return translate("暂时故障");
+    return translate("providers:status.degraded");
   },
 };
 
 export function untilText(
   iso: string | undefined,
-  verb = translate("服务恢复"),
+  verb = translate("providers:recovery.available"),
 ) {
   if (!iso) return "";
   const minutes = Math.ceil((new Date(iso).getTime() - Date.now()) / 60_000);
   if (minutes <= 0) return "";
   if (minutes < 60)
-    return translate("约 {{value1}} 分钟后{{value2}}", {
-      value1: minutes,
-      value2: verb,
+    return translate("providers:recovery.minutes", {
+      action: verb,
       count: minutes,
     });
   const hours = Math.round(minutes / 60);
   return hours < 48
-    ? translate("约 {{value1}} 小时后{{value2}}", {
-        value1: hours,
-        value2: verb,
+    ? translate("providers:recovery.hours", {
+        action: verb,
         count: hours,
       })
-    : translate("约 {{value1}} 天后{{value2}}", {
-        value1: Math.round(hours / 24),
-        value2: verb,
+    : translate("providers:recovery.days", {
+        action: verb,
         count: Math.round(hours / 24),
       });
 }

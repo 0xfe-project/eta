@@ -80,9 +80,7 @@ const storage: PersistStorage<Persisted> = {
     try {
       localStorage.setItem(name, JSON.stringify(value.state.workspace));
     } catch {
-      toast.error(
-        translate("无法保存到当前浏览器，请保持页面打开以保留内容。"),
-      );
+      toast.error(translate("common:errors.storageUnavailable"));
     }
   },
   removeItem: (name) => localStorage.removeItem(name),

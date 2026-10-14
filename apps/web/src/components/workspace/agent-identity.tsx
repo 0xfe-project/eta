@@ -56,7 +56,7 @@ export function AgentStatusDot({
 }
 
 export function AgentStatus({ status }: { status: Agent["status"] }) {
-  useTranslation();
+  useTranslation(["agents", "common"] as const);
   return (
     <span className="inline-flex items-center gap-1.5 text-muted-foreground">
       <AgentStatusDot status={status} />

@@ -26,7 +26,7 @@ import { AgentAvatar, AgentStatus } from "./agent-identity";
 import { useAgents } from "./use-agents";
 
 function AgentRow({ agent }: { agent: Agent }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["agents", "common"] as const);
   const { openEditor } = useAgents();
   const restart = useRestartAgent();
   const [confirming, setConfirming] = useState(false);
@@ -34,7 +34,7 @@ function AgentRow({ agent }: { agent: Agent }) {
   const availability = useModelAvailability(agent);
   const modelName =
     availability.state === "not_set"
-      ? translateText("未选择模型")
+      ? translateText("models.noneSelected")
       : (availability.model?.display_name ?? agent.model);
 
   return (
@@ -43,7 +43,9 @@ function AgentRow({ agent }: { agent: Agent }) {
       <button
         type="button"
         onClick={() => openEditor(agent.id)}
-        aria-label={translateText("编辑 {{value1}}", { value1: agent.name })}
+        aria-label={translateText("common:actions.editItem", {
+          name: agent.name,
+        })}
         className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left outline-none focus-visible:underline"
       >
         <span className="flex max-w-full items-center gap-2">
@@ -84,7 +86,7 @@ function AgentRow({ agent }: { agent: Agent }) {
             !instructions && "opacity-60",
           )}
         >
-          {instructions || translateText("未设置指令")}
+          {instructions || translateText("fields.instructionsNotSet")}
         </span>
       </button>
       <DropdownMenu>
@@ -92,8 +94,8 @@ function AgentRow({ agent }: { agent: Agent }) {
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label={translateText("{{value1}} 的操作", {
-              value1: agent.name,
+            aria-label={translateText("common:accessibility.itemActions", {
+              name: agent.name,
             })}
           >
             <DotsThreeIcon aria-hidden="true" />
@@ -102,7 +104,7 @@ function AgentRow({ agent }: { agent: Agent }) {
         <DropdownMenuContent align="end" className="w-36">
           <DropdownMenuItem onSelect={() => openEditor(agent.id)}>
             <PencilSimpleIcon aria-hidden="true" />
-            {translateText("编辑")}
+            {translateText("common:actions.edit")}
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={restart.isPending}
@@ -110,14 +112,14 @@ function AgentRow({ agent }: { agent: Agent }) {
               restart.mutate(agent.id, {
                 onSuccess: () =>
                   toast.success(
-                    translateText("已重启 {{value1}}", { value1: agent.name }),
+                    translateText("feedback.restarted", { name: agent.name }),
                   ),
                 onError: (error) => toast.error(error.message),
               })
             }
           >
             <ArrowClockwiseIcon aria-hidden="true" />
-            {translateText("重启")}
+            {translateText("common:actions.restart")}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
@@ -125,7 +127,7 @@ function AgentRow({ agent }: { agent: Agent }) {
             onSelect={() => setConfirming(true)}
           >
             <TrashIcon aria-hidden="true" />
-            {translateText("删除")}
+            {translateText("common:actions.delete")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -139,29 +141,31 @@ function AgentRow({ agent }: { agent: Agent }) {
 }
 
 export function AgentSettings() {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["agents", "common"] as const);
   const { agents, loaded, error, retry, openEditor } = useAgents();
 
   if (error && !loaded)
     return (
-      <LoadError what={translateText("智能体")} error={error} onRetry={retry} />
+      <LoadError
+        what={translateText("common:entities.agents")}
+        error={error}
+        onRetry={retry}
+      />
     );
   if (!loaded) return <Loading />;
   if (agents.length === 0)
     return (
       <Empty
         icon={RobotIcon}
-        title={translateText("还没有智能体")}
+        title={translateText("empty.title")}
         action={
           <Button size="sm" onClick={() => openEditor()}>
             <PlusIcon aria-hidden="true" data-icon="inline-start" />
-            {translateText("新建智能体")}
+            {translateText("actions.create")}
           </Button>
         }
       >
-        {translateText(
-          "智能体是你对话、交代任务的对象，每个都有自己的模型和记忆。",
-        )}
+        {translateText("empty.description")}
       </Empty>
     );
 
@@ -169,17 +173,20 @@ export function AgentSettings() {
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">
-          {translateText("智能体")}
+          {translateText("common:entities.agents")}
           <span className="ml-1.5 font-normal tabular-nums text-muted-foreground">
             {agents.length}
           </span>
         </h2>
         <Button size="sm" onClick={() => openEditor()}>
           <PlusIcon aria-hidden="true" data-icon="inline-start" />
-          {translateText("新建")}
+          {translateText("common:actions.new")}
         </Button>
       </div>
-      <ul aria-label={translateText("智能体列表")} className="divide-y border">
+      <ul
+        aria-label={translateText("accessibility.agentList")}
+        className="divide-y border"
+      >
         {agents.map((agent) => (
           <AgentRow key={agent.id} agent={agent} />
         ))}

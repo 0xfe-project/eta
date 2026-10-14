@@ -36,7 +36,7 @@ export function Loading({
   label?: string;
   className?: string;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation("common");
   const lines = Array.from({ length: rows }, (_, i) => widths[i % 5]);
   return (
     <div
@@ -46,7 +46,9 @@ export function Loading({
         className,
       )}
     >
-      <span className="sr-only">{label ?? translateText("正在加载…")}</span>
+      <span className="sr-only">
+        {label ?? translateText("states.loading")}
+      </span>
       {layout === "list" ? (
         <div className="grid">
           {lines.map((width, i) => (
@@ -122,19 +124,19 @@ export function LoadError({
   onRetry?: () => void;
   className?: string;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation("common");
   return (
     <div role="alert" className={cn(box, className)}>
       <WarningIcon aria-hidden="true" className="size-8 text-destructive" />
       <p className="text-sm font-medium">
-        {translateText("无法加载{{value1}}", { value1: what })}
+        {translateText("errors.loadFailed", { target: what })}
       </p>
       <p className="max-w-xs text-xs break-words text-muted-foreground">
         {error.message}
       </p>
       {onRetry ? (
         <Button size="sm" variant="outline" className="mt-1" onClick={onRetry}>
-          {translateText("重试")}
+          {translateText("actions.retry")}
         </Button>
       ) : null}
     </div>

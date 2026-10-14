@@ -1,0 +1,27 @@
+{
+  "actions": {
+    "open": "打开 Artifact"
+  },
+  "version": {
+    "label": "第 {{version}} 版",
+    "inlineLabel": " · 第 {{version}} 版",
+    "title": "版本",
+    "latestSuffix": "（最新）",
+    "option": "第 {{version}} 版{{latestLabel}}"
+  },
+  "sandboxDescription": "智能体发布的静态网页，在沙箱里运行，不能访问 AXP 的登录状态和接口。",
+  "loadTarget": "这个 Artifact",
+  "sharing": {
+    "revokeHint": "撤销后链接立即失效，再次分享会生成新链接",
+    "createHint": "生成公开链接：任何拿到链接的人都能打开这个版本",
+    "revoked": "已撤销公开链接",
+    "created": "已生成公开链接",
+    "revoke": "撤销分享",
+    "sharePublicly": "公开分享",
+    "publicLink": "公开链接"
+  },
+  "empty": {
+    "title": "还没有 Artifacts",
+    "description": "智能体在这个群里发布的页面会出现在这里。"
+  }
+}

@@ -53,13 +53,13 @@ function Viewer({
   children: React.ReactNode;
   actions?: React.ReactNode;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["chat", "common"] as const);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="grid-rows-[auto_minmax(0,1fr)_auto] gap-3 overflow-hidden sm:max-w-3xl">
         <DialogTitle className="truncate pr-8">{title}</DialogTitle>
         <DialogDescription className="sr-only">
-          {translateText("{{value1}}的完整内容", { value1: title })}
+          {translateText("attachments.fullContentLabel", { name: title })}
         </DialogDescription>
         <div className="min-h-0 overflow-auto">{children}</div>
         {actions ? <DialogFooter>{actions}</DialogFooter> : null}
@@ -82,10 +82,10 @@ function PasteBlock({
 }: {
   part: Extract<DraftPart, { type: "paste" }>;
 } & BlockActions) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["chat", "common"] as const);
   const [open, setOpen] = useState(false);
-  const title = translateText("粘贴文本 · {{value1}} 字符", {
-    value1: charCount(part.text),
+  const title = translateText("attachments.pastedTextSummary", {
+    characterCount: charCount(part.text),
   });
   return (
     <span className={CHIP}>
@@ -95,7 +95,7 @@ function PasteBlock({
       <button
         type="button"
         className={ACTION}
-        aria-label={translateText("移除粘贴文本")}
+        aria-label={translateText("attachments.removePastedText")}
         onClick={remove}
       >
         ×
@@ -107,10 +107,10 @@ function PasteBlock({
         actions={
           <>
             <Button variant="outline" onClick={expand}>
-              {translateText("展开为文本")}
+              {translateText("attachments.expandText")}
             </Button>
             <Button variant="outline" onClick={remove}>
-              {translateText("移除")}
+              {translateText("common:actions.remove")}
             </Button>
           </>
         }
@@ -129,7 +129,7 @@ function FileBlock({
 }: {
   part: Extract<DraftPart, { type: "file" }>;
 } & BlockActions) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["chat", "common"] as const);
   const upload = useOutbox((s) => s.uploads[part.id]);
   const local = isImage(part.contentType) ? pastedPreview(part.id) : undefined;
   const attachment = upload?.attachment;
@@ -144,7 +144,9 @@ function FileBlock({
         size={part.size}
         thumbnail={local}
       />
-      {uploading ? <span role="status">{translateText("上传中…")}</span> : null}
+      {uploading ? (
+        <span role="status">{translateText("common:states.uploading")}</span>
+      ) : null}
       {failure ? (
         <span
           role="alert"
@@ -159,13 +161,15 @@ function FileBlock({
           className={ACTION}
           onClick={() => retryUpload(part.id)}
         >
-          {translateText("重试")}
+          {translateText("common:actions.retry")}
         </button>
       ) : null}
       <button
         type="button"
         className={ACTION}
-        aria-label={translateText("移除 {{value1}}", { value1: part.name })}
+        aria-label={translateText("common:actions.removeItem", {
+          name: part.name,
+        })}
         onClick={() => {
           dropUpload(part.id);
           remove();
@@ -256,10 +260,10 @@ function AttachmentLink({
 
 /** A sent message's long text, folded as it was pasted. */
 export function PastedText({ text }: { text: string }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["chat", "common"] as const);
   const [open, setOpen] = useState(false);
-  const title = translateText("粘贴文本 · {{value1}} 字符", {
-    value1: charCount(text),
+  const title = translateText("attachments.pastedTextSummary", {
+    characterCount: charCount(text),
   });
   return (
     <span className={CHIP}>

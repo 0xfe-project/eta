@@ -1,0 +1,89 @@
+{
+  "settings": {
+    "title": "Agent settings"
+  },
+  "actions": {
+    "create": "New agent",
+    "delete": "Delete agent",
+    "edit": "Edit agent",
+    "chatWith": "Chat with {{name}}",
+    "configure": "Configure {{name}}"
+  },
+  "delete": {
+    "confirmTitle": "Delete “{{name}}”?",
+    "confirmDescription": "Active replies will stop and the agent will no longer run. Existing conversations will be kept."
+  },
+  "editor": {
+    "tabs": {
+      "general": "General",
+      "instructions": "Instructions",
+      "environment": "Environment"
+    },
+    "sectionsLabel": "Agent settings sections"
+  },
+  "environment": {
+    "buildFailed": "Environment build failed"
+  },
+  "models": {
+    "loading": "Loading models…",
+    "select": "Select model",
+    "deletedOption": "{{modelName}} (no longer exists)",
+    "noneAvailable": "No models available.",
+    "noneSelected": "No model selected",
+    "errors": {
+      "deleted": "{{modelName}} no longer exists. Select another model.",
+      "checkAccounts": "Check your accounts in model services.",
+      "unavailable": "{{modelName}} is temporarily unavailable: {{reason}}",
+      "upstreamFailure": "The upstream service is temporarily failing. It will retry automatically.",
+      "degradedSendAllowed": "{{modelName}} {{reason}} You can still send messages."
+    }
+  },
+  "bundles": {
+    "requiredSuffix": " · Required",
+    "help": "These bundles build the agent’s environment, including tools and plugins. Changes rebuild the environment and take effect when the agent is idle."
+  },
+  "fields": {
+    "namePlaceholder": "e.g. Code review",
+    "instructionsPlaceholder": "Responsibilities, working style and constraints. For example: Review pull requests and only flag issues that cause errors.",
+    "instructionsHelp": "Added to the agent’s context. Changes take effect when idle without interrupting active replies.",
+    "instructionsNotSet": "No instructions set"
+  },
+  "feedback": {
+    "restarted": "Restarted {{name}}",
+    "created": "Created “{{name}}”"
+  },
+  "empty": {
+    "title": "No agents yet",
+    "description": "Agents are who you chat with and assign work to. Each has its own model and memory."
+  },
+  "accessibility": {
+    "agentList": "Agent list"
+  },
+  "status": {
+    "idle": "Idle",
+    "working": "Working",
+    "awaitingConfirmation": "Awaiting confirmation"
+  },
+  "errors": {
+    "loadFailed": "Unable to load agents"
+  },
+  "labels": {
+    "deletedAgent": "Deleted agent"
+  },
+  "createWizard": {
+    "nameAndModel": "Name and model",
+    "stepsLabel": "Creation steps",
+    "failed": "Creation failed: {{message}}",
+    "noBundles": "No bundles yet; the agent uses the default environment.",
+    "retry": "Retry creation"
+  },
+  "usage": {
+    "hundredMillion": "{{amount}} × 100M",
+    "tenThousand": "{{amount}} × 10K",
+    "tokensAndRequests": "{{tokens}} tokens ({{count}} requests in 7 days)",
+    "noRecentUsage": "None in the past 7 days",
+    "summary": "Model usage: {{usage}}",
+    "tokensAndRequests_one": "{{tokens}} tokens ({{count}} request in 7 days)",
+    "tokensAndRequests_other": "{{tokens}} tokens ({{count}} requests in 7 days)"
+  }
+}

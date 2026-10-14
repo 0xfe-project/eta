@@ -30,19 +30,19 @@ const colorModes = [
   {
     value: "system",
     get label() {
-      return translate("跟随系统");
+      return translate("settings:appearance.system");
     },
   },
   {
     value: "light",
     get label() {
-      return translate("浅色");
+      return translate("settings:appearance.light");
     },
   },
   {
     value: "dark",
     get label() {
-      return translate("深色");
+      return translate("settings:appearance.dark");
     },
   },
 ] as const;
@@ -50,14 +50,14 @@ const fontFields = [
   {
     key: "fontSans",
     get label() {
-      return translate("界面字体");
+      return translate("settings:appearance.interfaceFont");
     },
     placeholder: "Geist",
   },
   {
     key: "fontMono",
     get label() {
-      return translate("等宽字体");
+      return translate("settings:appearance.monospaceFont");
     },
     placeholder: "Geist Mono",
   },
@@ -68,20 +68,22 @@ const fontFields = [
 }[];
 /** OpenObserve, proxied by the edge gateway under /observe. */
 function LogSettings() {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["settings", "common"] as const);
   return (
     <div className="space-y-3">
-      <h2 className="text-sm font-semibold">{translateText("日志")}</h2>
+      <h2 className="text-sm font-semibold">
+        {translateText("sections.logs")}
+      </h2>
       <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
         <div className="min-w-0 text-sm">
           <p className="font-medium">OpenObserve</p>
           <p className="text-muted-foreground">
-            {translateText("登录账号 root@axp.local")}
+            {translateText("logs.signInAccount")}
           </p>
         </div>
         <Button asChild variant="outline" size="sm" className="w-fit">
           <a href="/observe/web/" target="_blank" rel="noreferrer">
-            {translateText("打开")}
+            {translateText("common:actions.open")}
             <ArrowSquareOutIcon aria-hidden="true" />
           </a>
         </Button>
@@ -149,16 +151,18 @@ function Segmented<T extends string>({
 }
 
 function AppearanceSettings() {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["settings", "common"] as const);
   const workspace = useWorkspaceStore((s) => s.workspace);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const { theme = "system", setTheme } = useTheme();
   return (
     <div className="space-y-3">
-      <h2 className="text-sm font-semibold">{translateText("外观")}</h2>
+      <h2 className="text-sm font-semibold">
+        {translateText("sections.appearance")}
+      </h2>
       <LanguageSettings />
       <Segmented
-        label={translateText("颜色模式")}
+        label={translateText("appearance.colorMode")}
         name="color-mode"
         options={colorModes}
         value={theme as (typeof colorModes)[number]["value"]}
@@ -193,7 +197,7 @@ function AppearanceSettings() {
 
 /** Opens settings; the dot marks accounts the user has to act on. */
 export function SettingsButton({ className }: { className?: string }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["settings", "common"] as const);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const attention = useNeedsAttention();
   return (
@@ -202,10 +206,10 @@ export function SettingsButton({ className }: { className?: string }) {
       size="icon"
       aria-label={
         attention
-          ? translateText("设置（有账号需要处理）")
-          : translateText("设置")
+          ? translateText("accessibility.needsAttention")
+          : translateText("title")
       }
-      title={translateText("设置")}
+      title={translateText("title")}
       className={cn("relative", className)}
       onClick={() => setSettings((state) => ({ ...state, open: true }))}
     >
@@ -236,7 +240,7 @@ function useSettingsLink() {
 }
 
 export function SettingsDialog() {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["settings", "common"] as const);
   const settings = useWorkspaceStore((s) => s.settings);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const attention = useSettingsAttention();
@@ -253,16 +257,16 @@ export function SettingsDialog() {
       >
         <DialogHeader className="shrink-0 border-b p-3 pr-12">
           <DialogTitle className="text-base">
-            {translateText("设置")}
+            {translateText("title")}
           </DialogTitle>
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col md:flex-row">
           <SettingsNav
-            label={translateText("设置分类")}
+            label={translateText("accessibility.sections")}
             sections={settingsSections.map((section) => ({
               ...section,
               attention: attention[section.value],
-              hint: translateText("有账号需要处理"),
+              hint: translateText("accessibility.accountsNeedAttention"),
             }))}
             value={settings.section}
             onChange={(section) =>

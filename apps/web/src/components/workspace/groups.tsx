@@ -94,7 +94,13 @@ export function CreateGroup({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "chat",
+    "agents",
+    "artifacts",
+    "common",
+    "settings",
+  ] as const);
   const [uncontrolled, setUncontrolled] = useState(false);
   const open = controlled ?? uncontrolled;
   const setOpen = onOpenChange ?? setUncontrolled;
@@ -122,7 +128,7 @@ export function CreateGroup({
             <Button
               variant="ghost"
               size="icon-xs"
-              aria-label={translateText("新建群")}
+              aria-label={translateText("groups.actions.create")}
             >
               <PlusIcon />
             </Button>
@@ -131,9 +137,9 @@ export function CreateGroup({
       )}
       <DialogContent onCloseAutoFocus={returnFocus}>
         <DialogHeader>
-          <DialogTitle>{translateText("新建群")}</DialogTitle>
+          <DialogTitle>{translateText("groups.actions.create")}</DialogTitle>
           <DialogDescription>
-            {translateText("选几位智能体，一起讨论一件事。")}
+            {translateText("groups.createDescription")}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -160,7 +166,7 @@ export function CreateGroup({
           }}
         >
           <label className="grid gap-2 text-sm">
-            {translateText("群名")}
+            {translateText("groups.fields.name")}
             <Input
               autoFocus
               value={name}
@@ -170,7 +176,7 @@ export function CreateGroup({
             />
           </label>
           <label className="grid gap-2 text-sm">
-            {translateText("目标（可选）")}
+            {translateText("groups.fields.optionalGoal")}
             <Textarea
               value={goal}
               onChange={(e) => setGoal(e.target.value)}
@@ -178,7 +184,9 @@ export function CreateGroup({
             />
           </label>
           <fieldset className="grid max-h-64 gap-1 overflow-y-auto">
-            <legend className="mb-2 text-sm">{translateText("成员")}</legend>
+            <legend className="mb-2 text-sm">
+              {translateText("groups.members.title")}
+            </legend>
             {agents.map((a) => (
               <label
                 key={a.id}
@@ -204,7 +212,7 @@ export function CreateGroup({
               type="submit"
               disabled={!name.trim() || !chosen.length || create.isPending}
             >
-              {translateText("创建群")}
+              {translateText("groups.actions.createGroup")}
             </Button>
           </DialogFooter>
         </form>
@@ -215,7 +223,13 @@ export function CreateGroup({
 
 /** The conversation list's plus on mobile: a new group or a new agent. */
 function CreateMenu() {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "chat",
+    "agents",
+    "artifacts",
+    "common",
+    "settings",
+  ] as const);
   const [group, setGroup] = useState(false);
   const { openEditor } = useAgents();
   // Opened once the menu has given focus back to the plus, so that closing
@@ -228,7 +242,7 @@ function CreateMenu() {
           <Button
             variant="ghost"
             size="icon-lg"
-            aria-label={translateText("新建")}
+            aria-label={translateText("common:actions.new")}
             className="-mr-2 size-11"
           >
             <PlusIcon />
@@ -248,14 +262,14 @@ function CreateMenu() {
             onSelect={() => (choiceRef.current = () => setGroup(true))}
           >
             <UsersThreeIcon aria-hidden="true" />
-            {translateText("新建群")}
+            {translateText("groups.actions.create")}
           </DropdownMenuItem>
           <DropdownMenuItem
             className="min-h-11 text-sm"
             onSelect={() => (choiceRef.current = () => openEditor())}
           >
             <RobotIcon aria-hidden="true" />
-            {translateText("新建智能体")}
+            {translateText("agents:actions.create")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -265,7 +279,13 @@ function CreateMenu() {
 }
 
 export function GroupList({ compact = false }: { compact?: boolean }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "chat",
+    "agents",
+    "artifacts",
+    "common",
+    "settings",
+  ] as const);
   const { groups, current } = useGroups();
   const open = useOpenGroup();
   const shown = groups.filter(
@@ -286,7 +306,9 @@ export function GroupList({ compact = false }: { compact?: boolean }) {
         )}
       >
         <h2 className="text-xs font-medium text-muted-foreground">
-          {compact ? translateText("群") : translateText("最近对话")}
+          {compact
+            ? translateText("groups.title")
+            : translateText("history.recentChats")}
         </h2>
         {compact ? <CreateGroup /> : <CreateMenu />}
       </div>
@@ -313,7 +335,7 @@ export function GroupList({ compact = false }: { compact?: boolean }) {
                       className="shrink-0 text-xs text-muted-foreground tabular-nums"
                     >
                       {when(g.last_message_at).replace(
-                        `${translateText("今天")} `,
+                        `${translateText("common:time.today")} `,
                         "",
                       )}
                     </time>
@@ -323,8 +345,8 @@ export function GroupList({ compact = false }: { compact?: boolean }) {
                   <span className="mt-1 block truncate text-xs text-muted-foreground">
                     {g.preview ||
                       (g.kind === "direct"
-                        ? translateText("私聊")
-                        : translateText("还没有消息"))}
+                        ? translateText("groups.directChat")
+                        : translateText("history.noMessages"))}
                   </span>
                 )}
               </span>
@@ -339,7 +361,7 @@ export function GroupList({ compact = false }: { compact?: boolean }) {
       </ul>
       {!shown.length && (
         <p className="px-2 py-6 text-xs text-muted-foreground">
-          {translateText("还没有对话")}
+          {translateText("history.noConversations")}
         </p>
       )}
     </section>
@@ -348,7 +370,13 @@ export function GroupList({ compact = false }: { compact?: boolean }) {
 
 /** Settings' 已归档: archived conversations, to open or bring back. */
 export function ArchivedGroups() {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "chat",
+    "agents",
+    "artifacts",
+    "common",
+    "settings",
+  ] as const);
   const { groups } = useGroups();
   const open = useOpenGroup();
   const { update } = useGroupActions();
@@ -356,7 +384,9 @@ export function ArchivedGroups() {
   const archived = groups.filter((g) => g.archived);
   return (
     <div className="space-y-3">
-      <h2 className="text-sm font-semibold">{translateText("已归档")}</h2>
+      <h2 className="text-sm font-semibold">
+        {translateText("groups.archived.title")}
+      </h2>
       {archived.length ? (
         <ul className="space-y-px">
           {archived.map((g) => (
@@ -376,8 +406,8 @@ export function ArchivedGroups() {
                     {g.last_message_at && `${when(g.last_message_at)} · `}
                     {g.preview ||
                       (g.kind === "direct"
-                        ? translateText("私聊")
-                        : translateText("还没有消息"))}
+                        ? translateText("groups.directChat")
+                        : translateText("history.noMessages"))}
                   </span>
                 </span>
               </button>
@@ -389,14 +419,14 @@ export function ArchivedGroups() {
                   update.mutate({ id: g.id, archived: false }, { onError })
                 }
               >
-                {translateText("取消归档")}
+                {translateText("groups.actions.unarchive")}
               </Button>
             </li>
           ))}
         </ul>
       ) : (
         <p className="text-sm text-muted-foreground">
-          {translateText("没有已归档的对话。")}
+          {translateText("groups.archived.empty")}
         </p>
       )}
     </div>
@@ -405,7 +435,13 @@ export function ArchivedGroups() {
 
 /** A group chat's 成员 tab: who is in it, and the group's own actions. */
 export function GroupMembers() {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "chat",
+    "agents",
+    "artifacts",
+    "common",
+    "settings",
+  ] as const);
   const { data: chat } = useQuery(chatQueryOptions());
   const { current: group, groups } = useGroups();
   const { agents, openEditor } = useAgents();
@@ -423,17 +459,16 @@ export function GroupMembers() {
   const members = group.participants.filter((p) => p.member);
   const linked = board?.tasks.filter((t) => t.group_id === group.id) ?? [];
   return (
-    <section aria-label={translateText("成员")}>
+    <section aria-label={translateText("groups.members.title")}>
       <div className="mb-2 flex items-center gap-1">
         <h3 className="flex-1 text-xs text-muted-foreground tabular-nums">
-          {translateText("{{value1}} 位成员", {
-            value1: members.length,
+          {translateText("groups.members.count", {
             count: members.length,
           })}
         </h3>
         {!group.archived && (
           <Button size="xs" variant="ghost" onClick={() => setInvite(true)}>
-            {translateText("邀请")}
+            {translateText("groups.actions.invite")}
           </Button>
         )}
         <DropdownMenu>
@@ -441,7 +476,7 @@ export function GroupMembers() {
             <Button
               size="icon-sm"
               variant="ghost"
-              aria-label={translateText("群操作")}
+              aria-label={translateText("groups.accessibility.actions")}
             >
               <DotsThreeIcon aria-hidden="true" />
             </Button>
@@ -455,10 +490,10 @@ export function GroupMembers() {
                 setEdit(true);
               }}
             >
-              {translateText("编辑群信息")}
+              {translateText("groups.actions.editInfo")}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setLinkTask(true)}>
-              {translateText("相关任务")}
+              {translateText("groups.relatedTasks.title")}
               {linked.length ? (
                 <span className="ml-auto text-xs tabular-nums text-muted-foreground">
                   {linked.length}
@@ -474,8 +509,8 @@ export function GroupMembers() {
               }
             >
               {group.archived
-                ? translateText("取消归档")
-                : translateText("归档")}
+                ? translateText("groups.actions.unarchive")
+                : translateText("groups.actions.archive")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -507,13 +542,13 @@ export function GroupMembers() {
                 </span>
                 <span className="block truncate text-xs text-muted-foreground">
                   {elsewhere ? (
-                    translateText("在「{{value1}}」回复中", {
-                      value1: elsewhere,
+                    translateText("groups.members.replyingElsewhere", {
+                      groupName: elsewhere,
                     })
                   ) : agent ? (
                     <AgentStatus status={agent.status} />
                   ) : (
-                    translateText("已删除")
+                    translateText("common:status.deleted")
                   )}
                 </span>
               </div>
@@ -523,9 +558,12 @@ export function GroupMembers() {
                     <Button
                       size="icon-sm"
                       variant="ghost"
-                      aria-label={translateText("{{value1}} 的操作", {
-                        value1: p.name,
-                      })}
+                      aria-label={translateText(
+                        "common:accessibility.itemActions",
+                        {
+                          name: p.name,
+                        },
+                      )}
                     >
                       <DotsThreeIcon aria-hidden="true" />
                     </Button>
@@ -533,7 +571,7 @@ export function GroupMembers() {
                   <DropdownMenuContent align="end">
                     {agent && (
                       <DropdownMenuItem onSelect={() => openEditor(agent.id)}>
-                        {translateText("设置")}
+                        {translateText("settings:title")}
                       </DropdownMenuItem>
                     )}
                     {removable && (
@@ -541,7 +579,7 @@ export function GroupMembers() {
                         variant="destructive"
                         onSelect={() => setRemoving(p)}
                       >
-                        {translateText("移除")}
+                        {translateText("common:actions.remove")}
                       </DropdownMenuItem>
                     )}
                   </DropdownMenuContent>
@@ -558,16 +596,18 @@ export function GroupMembers() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="wrap-anywhere">
-              {translateText("把「{{value1}}」移出群？", {
-                value1: removing?.name,
+              {translateText("groups.members.removeConfirmTitle", {
+                name: removing?.name,
               })}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {translateText("它不再收到这个群的消息，之后可以重新邀请。")}
+              {translateText("groups.members.removeConfirmDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>{translateText("取消")}</AlertDialogCancel>
+            <AlertDialogCancel>
+              {translateText("common:actions.cancel")}
+            </AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               disabled={member.isPending}
@@ -583,7 +623,7 @@ export function GroupMembers() {
                 )
               }
             >
-              {translateText("移除")}
+              {translateText("common:actions.remove")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -591,9 +631,11 @@ export function GroupMembers() {
       <Dialog open={linkTask} onOpenChange={setLinkTask}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{translateText("相关任务")}</DialogTitle>
+            <DialogTitle>
+              {translateText("groups.relatedTasks.title")}
+            </DialogTitle>
             <DialogDescription>
-              {translateText("任务只关联一个群，重新关联会替换之前的群。")}
+              {translateText("groups.relatedTasks.help")}
             </DialogDescription>
           </DialogHeader>
           <div className="grid max-h-96 gap-2 overflow-y-auto">
@@ -620,7 +662,7 @@ export function GroupMembers() {
                     )
                   }
                 >
-                  {translateText("解除关联")}
+                  {translateText("groups.relatedTasks.unlink")}
                 </Button>
               </div>
             ))}
@@ -632,9 +674,9 @@ export function GroupMembers() {
                   variant="ghost"
                   className="justify-start truncate"
                   disabled={updateTask.isPending || group.archived}
-                  aria-label={translateText("关联 #{{value1}} {{value2}}", {
-                    value1: t.number,
-                    value2: t.title,
+                  aria-label={translateText("groups.relatedTasks.linkLabel", {
+                    number: t.number,
+                    title: t.title,
                   })}
                   onClick={() =>
                     updateTask.mutate(
@@ -652,9 +694,11 @@ export function GroupMembers() {
       <Dialog open={edit} onOpenChange={setEdit}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{translateText("编辑群信息")}</DialogTitle>
+            <DialogTitle>
+              {translateText("groups.actions.editInfo")}
+            </DialogTitle>
             <DialogDescription>
-              {translateText("记录当前目标和已经达成的决定。")}
+              {translateText("groups.fields.goalHelp")}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -674,7 +718,7 @@ export function GroupMembers() {
           >
             {group.kind === "group" && (
               <label className="grid gap-2 text-sm">
-                {translateText("群名")}
+                {translateText("groups.fields.name")}
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -684,7 +728,7 @@ export function GroupMembers() {
               </label>
             )}
             <label className="grid gap-2 text-sm">
-              {translateText("目标")}
+              {translateText("groups.fields.goal")}
               <Textarea
                 value={goal}
                 onChange={(e) => setGoal(e.target.value)}
@@ -692,7 +736,7 @@ export function GroupMembers() {
               />
             </label>
             <label className="grid gap-2 text-sm">
-              {translateText("已决定")}
+              {translateText("groups.fields.decisions")}
               <Textarea
                 value={decided}
                 onChange={(e) => setDecided(e.target.value)}
@@ -701,7 +745,7 @@ export function GroupMembers() {
             </label>
             <DialogFooter>
               <Button disabled={update.isPending}>
-                {translateText("保存")}
+                {translateText("common:actions.save")}
               </Button>
             </DialogFooter>
           </form>
@@ -710,9 +754,11 @@ export function GroupMembers() {
       <Dialog open={invite} onOpenChange={setInvite}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{translateText("邀请智能体")}</DialogTitle>
+            <DialogTitle>
+              {translateText("groups.members.inviteTitle")}
+            </DialogTitle>
             <DialogDescription>
-              {translateText("加入后可以查看群聊，并在被 @ 时回复。")}
+              {translateText("groups.members.inviteDescription")}
             </DialogDescription>
           </DialogHeader>
           <div className="grid max-h-80 gap-1 overflow-y-auto">
@@ -744,7 +790,13 @@ export function GroupMembers() {
 
 /** A group chat's Artifacts tab: what its agents published in it. */
 export function GroupArtifacts() {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "chat",
+    "agents",
+    "artifacts",
+    "common",
+    "settings",
+  ] as const);
   const { current: group } = useGroups();
   const { data } = useArtifacts();
   if (!group) return null;
@@ -752,8 +804,11 @@ export function GroupArtifacts() {
   if (!data) return <Loading rows={2} />;
   if (!artifacts?.length)
     return (
-      <Empty icon={AppWindowIcon} title={translateText("还没有 Artifacts")}>
-        {translateText("智能体在这个群里发布的页面会出现在这里。")}
+      <Empty
+        icon={AppWindowIcon}
+        title={translateText("artifacts:empty.title")}
+      >
+        {translateText("artifacts:empty.description")}
       </Empty>
     );
   return (

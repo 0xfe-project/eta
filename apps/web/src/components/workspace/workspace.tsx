@@ -48,7 +48,12 @@ export function Workspace({
   view: WorkspaceView;
   onViewChange: (view: WorkspaceView) => void;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "navigation",
+    "agents",
+    "chat",
+    "common",
+  ] as const);
   const mobilePanel = useWorkspaceStore((s) => s.mobilePanel);
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
   const navigate = useNavigate();
@@ -89,10 +94,10 @@ export function Workspace({
   const onError = (error: Error) => toast.error(error.message);
   const blocked = group?.archived ? (
     <ComposerNotice
-      message={translateText("群已归档，取消归档后可以继续讨论。")}
+      message={translateText("chat:notices.groupArchived")}
       actions={[
         {
-          label: translateText("取消归档"),
+          label: translateText("chat:groups.actions.unarchive"),
           onClick: () =>
             actions.update.mutate(
               { id: group.id, archived: false },
@@ -103,10 +108,10 @@ export function Workspace({
     />
   ) : group && members.length === 0 ? (
     <ComposerNotice
-      message={translateText("群里暂无智能体，邀请成员后可以继续讨论。")}
+      message={translateText("chat:notices.noMembers")}
       actions={[
         {
-          label: translateText("查看群信息"),
+          label: translateText("chat:groups.actions.viewInfo"),
           onClick: () => {
             onViewChange("members");
             setMobilePanel("workspace");
@@ -116,11 +121,11 @@ export function Workspace({
     />
   ) : unavailable.length && selectedTargets.length === 1 ? (
     <ComposerNotice
-      message={translateText("{{value1}} 还没有选择模型。", {
-        value1: unavailable.map((a) => a!.name).join(listSeparator()),
+      message={translateText("chat:notices.modelNotSelected", {
+        agentNames: unavailable.map((a) => a!.name).join(listSeparator()),
       })}
       actions={unavailable.map((a) => ({
-        label: translateText("设置 {{value1}}", { value1: a!.name }),
+        label: translateText("agents:actions.configure", { name: a!.name }),
         onClick: () => openEditor(a!.id),
       }))}
     />
@@ -156,7 +161,9 @@ export function Workspace({
         )}
       >
         <header className="flex h-14 shrink-0 items-center justify-between px-5">
-          <h1 className="text-lg font-semibold">{translateText("对话")}</h1>
+          <h1 className="text-lg font-semibold">
+            {translateText("sections.chat")}
+          </h1>
           <SettingsButton />
         </header>
         <GroupList />
@@ -174,8 +181,8 @@ export function Workspace({
             variant="ghost"
             aria-label={
               mobilePanel === "workspace"
-                ? translateText("返回对话")
-                : translateText("返回对话列表")
+                ? translateText("actions.backToChat")
+                : translateText("actions.backToConversations")
             }
             onClick={() =>
               mobilePanel === "workspace"
@@ -190,7 +197,9 @@ export function Workspace({
             size="icon"
             variant="ghost"
             aria-label={
-              direct ? translateText("智能体设置") : translateText("群信息")
+              direct
+                ? translateText("agents:settings.title")
+                : translateText("chat:groups.info")
             }
             onClick={showInfo}
           >
@@ -244,8 +253,8 @@ export function Workspace({
               }}
               error={
                 (chat.error ?? history.error)
-                  ? translateText("无法加载对话：{{value1}}", {
-                      value1: (chat.error ?? history.error)?.message,
+                  ? translateText("chat:errors.loadConversation", {
+                      message: (chat.error ?? history.error)?.message,
                     })
                   : undefined
               }
@@ -258,7 +267,8 @@ export function Workspace({
                   return {
                     type: "file" as const,
                     id,
-                    name: file.name || translateText("粘贴的文件"),
+                    name:
+                      file.name || translateText("chat:attachments.pastedFile"),
                     contentType: file.type || "application/octet-stream",
                     size: file.size,
                   };
@@ -284,10 +294,10 @@ export function Workspace({
                         (g) => g.id === active.group_id,
                       )?.name;
                       toast.info(
-                        translateText(
-                          "{{value1}} 在「{{value2}}」回复，这条消息已排队。",
-                          { value1: name, value2: elsewhere },
-                        ),
+                        translateText("chat:notices.messageQueuedElsewhere", {
+                          agentName: name,
+                          groupName: elsewhere,
+                        }),
                       );
                     }
                   }
@@ -299,7 +309,7 @@ export function Workspace({
                 if (!group) return;
                 if (!selectedTargets.length)
                   return toast.error(
-                    translateText("先 @ 要压缩上下文的智能体。"),
+                    translateText("chat:commands.compactRequiresMention"),
                   );
                 compact.mutate(
                   { groupId: group.id, mentions: selectedTargets },

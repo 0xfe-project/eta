@@ -19,16 +19,16 @@ import { useUpdateTask } from "@/queries/tasks";
 
 const stateLabels: Record<PullRequest["state"], string> = {
   get open() {
-    return translate("打开");
+    return translate("common:actions.open");
   },
   get draft() {
-    return translate("草稿");
+    return translate("tasks:pullRequests.status.draft");
   },
   get merged() {
-    return translate("已合并");
+    return translate("tasks:pullRequests.status.merged");
   },
   get closed() {
-    return translate("已关闭");
+    return translate("tasks:pullRequests.status.closed");
   },
 };
 
@@ -54,7 +54,7 @@ export function DeliveredPull({
   title: string;
   onDone: () => void;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["tasks", "common"] as const);
   const pull = usePullRequest(task.id, url);
   const merge = useMergePullRequest(task.id);
   const update = useUpdateTask();
@@ -78,18 +78,18 @@ export function DeliveredPull({
           onDone();
           toast.success(
             mergedHereRef.current
-              ? translateText("PR 已合并，任务已完成")
-              : translateText("任务已完成"),
+              ? translateText("pullRequests.mergedAndCompleted")
+              : translateText("feedback.completed"),
             { position: "bottom-right" },
           );
         },
         (error: Error) => {
           setUnfinished(
-            translateText("PR 已合并，任务未完成：{{value1}}", {
-              value1: error.message,
+            translateText("pullRequests.mergedTaskIncompleteWithError", {
+              message: error.message,
             }),
           );
-          toast.error(translateText("PR 已合并，任务未完成"));
+          toast.error(translateText("pullRequests.mergedTaskIncomplete"));
         },
       )
       .finally(() => {
@@ -115,13 +115,11 @@ export function DeliveredPull({
           mergedHereRef.current = true;
           setUnfinished(null);
           if (andComplete) complete();
-          else toast.success(translateText("已合并"));
+          else toast.success(translateText("pullRequests.status.merged"));
         },
         onError: (error) => {
           const message = unanswered(error)
-            ? translateText(
-                "没有得到合并结果，已重新读取 PR 状态，请确认后再决定是否重试。",
-              )
+            ? translateText("pullRequests.mergeResultUnknown")
             : error.message;
           setUnfinished(message);
           toast.error(message);
@@ -155,10 +153,10 @@ export function DeliveredPull({
               <span className="text-destructive">−{data.deletions}</span>
             </>
           ) : pull.isPending ? (
-            translateText("读取中…")
+            translateText("common:states.reading")
           ) : (
             <span title={pull.error?.message}>
-              {translateText("状态暂不可用")}
+              {translateText("pullRequests.status.unavailable")}
             </span>
           )}
         </span>
@@ -171,8 +169,8 @@ export function DeliveredPull({
               onClick={() => mergeIt(false)}
             >
               {merge.isPending
-                ? translateText("合并中…")
-                : translateText("合并")}
+                ? translateText("pullRequests.merging")
+                : translateText("pullRequests.actions.merge")}
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -180,7 +178,9 @@ export function DeliveredPull({
                   size="icon-sm"
                   className="border-l-primary-foreground/20"
                   disabled={!mergeable || finished}
-                  aria-label={translateText("更多合并方式")}
+                  aria-label={translateText(
+                    "pullRequests.actions.moreMergeOptions",
+                  )}
                 >
                   <CaretDownIcon aria-hidden="true" />
                 </Button>
@@ -191,7 +191,7 @@ export function DeliveredPull({
                 className="w-max max-w-(--radix-dropdown-menu-content-available-width)"
               >
                 <DropdownMenuItem onSelect={() => mergeIt(true)}>
-                  {translateText("合并并标记任务完成")}
+                  {translateText("pullRequests.actions.mergeAndComplete")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -203,7 +203,7 @@ export function DeliveredPull({
             disabled={busy}
             onClick={complete}
           >
-            {translateText("标记任务完成")}
+            {translateText("actions.complete")}
           </Button>
         ) : null}
       </div>

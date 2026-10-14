@@ -44,41 +44,41 @@ const MODES: Record<
   auto: {
     glyph: "⏵⏵",
     get label() {
-      return translate("自动模式");
+      return translate("chat:modes.auto");
     },
     color: "var(--terminal-warning)", // 38;5;220
     get hint() {
-      return translate("（Shift+Tab 切换）· ← 查看智能体");
+      return translate("chat:modes.switchHint");
     },
   },
   manual: {
     glyph: "⏸",
     get label() {
-      return translate("手动模式");
+      return translate("chat:modes.manual");
     },
     color: GRAY,
     get hint() {
-      return translate("· ? 查看快捷键 · ← 查看智能体");
+      return translate("chat:modes.shortcutsHint");
     },
   },
   "accept-edits": {
     glyph: "⏵⏵",
     get label() {
-      return translate("自动接受编辑");
+      return translate("chat:modes.acceptEdits");
     },
     color: "var(--terminal-purple)", // 38;5;147
     get hint() {
-      return translate("（Shift+Tab 切换）· ← 查看智能体");
+      return translate("chat:modes.switchHint");
     },
   },
   plan: {
     glyph: "⏸",
     get label() {
-      return translate("计划模式");
+      return translate("chat:modes.plan");
     },
     color: "var(--terminal-teal)", // 38;5;73
     get hint() {
-      return translate("（Shift+Tab 切换）· ← 查看智能体");
+      return translate("chat:modes.switchHint");
     },
   },
 };
@@ -95,7 +95,7 @@ const EFFORTS: Record<
   ultracode: {
     glyph: "✦",
     get label() {
-      return translate("ultracode · xhigh 推理强度 + 动态工作流，尽可能全面");
+      return translate("chat:effort.ultracodeHelp");
     },
     rainbow: true,
   },
@@ -132,7 +132,7 @@ export function ClaudePrompt({
     style: React.CSSProperties;
   }) => React.ReactNode;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["chat", "common"] as const);
   const m = MODES[mode];
   const e = effort === false ? null : EFFORTS[effort];
   const controlled = value !== undefined;
@@ -183,7 +183,7 @@ export function ClaudePrompt({
         ) : (
           <textarea
             rows={1}
-            aria-label={translateText("消息")}
+            aria-label={translateText("composer.messageLabel")}
             placeholder={placeholder}
             onKeyDown={onKeyDown}
             {...(controlled ? { value, onChange } : { defaultValue, onChange })}

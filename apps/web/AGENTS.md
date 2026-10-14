@@ -22,7 +22,7 @@
 
 ## 6. 中英文 UI
 
-所有产品 UI 通过 react-i18next 维护简体中文与英文，包括按钮、导航、设置、提示、错误和无障碍标签。文案放在 `src/locales/zh.json` 与 `en.json`，默认跟随用户系统语言，不支持的语言回退英文；设置 → 外观可以切换。Claude、Codex、Grok 等产品名、代码及命令保留原文；路由路径、内部标识和用户内容不必翻译。
+所有产品 UI 通过 react-i18next 维护简体中文与英文，包括按钮、导航、设置、提示、错误和无障碍标签。按功能维护 `src/locales/zh/<namespace>.json` 与 `en/<namespace>.json`，共用文案放在 common。必须使用英文语义 key 和嵌套路径，禁止中文 key、整句文案 key 和把动态文本当 key；插值参数按含义命名。组件显式声明 namespace，如 `useTranslation(["tasks", "common"] as const)`；组件外使用带 namespace 的 `translate("tasks:status.todo")`。新增文案同时更新中英文资源，遵守 i18next 类型约束和资源覆盖检查。默认跟随用户系统语言，不支持的语言回退英文；设置 → 外观可以切换。Claude、Codex、Grok 等产品名、代码及命令保留原文；路由路径、内部标识和用户内容不必翻译。
 
 ## 7. 视觉约束
 

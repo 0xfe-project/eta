@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatLocale } from "@/lib/i18n";
+import { translateBundleDescription } from "@/lib/i18n-metadata";
 import { cn } from "@/lib/utils";
 import { useConnectors } from "@/queries/llm";
 import { DESCRIPTION_MAX } from "./agent-form";
@@ -28,7 +29,12 @@ export function ModelSelect({
   models: Model[] | undefined;
   invalid?: boolean;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "agents",
+    "bundles",
+    "common",
+    "providers",
+  ] as const);
   const { data: connectors } = useConnectors();
   const loading = !models || !connectors;
   const groups = (connectors ?? []).map((connector) => ({
@@ -45,13 +51,15 @@ export function ModelSelect({
       disabled={loading || props.disabled}
     >
       <SelectOption value="" disabled>
-        {loading ? translateText("正在加载模型…") : translateText("选择模型")}
+        {loading
+          ? translateText("models.loading")
+          : translateText("models.select")}
       </SelectOption>
       {value && !known ? (
         <SelectOption value={value} disabled>
           {loading
-            ? translateText("正在加载模型…")
-            : translateText("{{value1}}（已不存在）", { value1: value })}
+            ? translateText("models.loading")
+            : translateText("models.deletedOption", { modelName: value })}
         </SelectOption>
       ) : null}
       {groups
@@ -66,9 +74,9 @@ export function ModelSelect({
               >
                 {model.display_name}
                 {model.status === "unavailable"
-                  ? translateText("（不可用）")
+                  ? translateText("common:status.unavailableSuffix")
                   : model.status === "degraded"
-                    ? translateText("（暂时故障）")
+                    ? translateText("providers:status.degradedSuffix")
                     : ""}
               </SelectOption>
             ))}
@@ -90,7 +98,12 @@ function BundleList({
   autoFocus?: boolean;
   onChange: (value: string[]) => void;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "agents",
+    "bundles",
+    "common",
+    "providers",
+  ] as const);
   const names = bundles.map((bundle) => bundle.name);
   const chosen =
     value ?? bundles.filter((bundle) => bundle.builtin).map((b) => b.name);
@@ -119,18 +132,21 @@ function BundleList({
               <span className="min-w-0 space-y-0.5">
                 <span className="block font-medium break-words">
                   {bundle.name}
-                  {bundle.required ? translateText(" · 必选") : ""}
+                  {bundle.required
+                    ? translateText("bundles.requiredSuffix")
+                    : ""}
                   {bundle.builtin ? null : (
                     <span className="ml-1.5 font-normal text-muted-foreground">
-                      {translateText("自定义")}
+                      {translateText("common:labels.custom")}
                     </span>
                   )}
                 </span>
                 {bundle.description ? (
                   <span className="block text-muted-foreground">
-                    {translateText(bundle.description, {
-                      defaultValue: bundle.description,
-                    })}
+                    {translateBundleDescription(
+                      bundle.name,
+                      bundle.description,
+                    )}
                   </span>
                 ) : null}
               </span>
@@ -149,15 +165,20 @@ export function NameField({
   form: Form;
   autoFocus?: boolean;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "agents",
+    "bundles",
+    "common",
+    "providers",
+  ] as const);
   const error = form.formState.errors.name;
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="agent-name">{translateText("名称")}</Label>
+      <Label htmlFor="agent-name">{translateText("common:labels.name")}</Label>
       <Input
         id="agent-name"
         autoFocus={autoFocus}
-        placeholder={translateText("例如：代码审查")}
+        placeholder={translateText("fields.namePlaceholder")}
         aria-invalid={Boolean(error)}
         aria-describedby={error ? "agent-name-error" : undefined}
         {...form.register("name")}
@@ -185,14 +206,21 @@ export function ModelField({
   models: Model[] | undefined;
   onOpenProviders: () => void;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "agents",
+    "bundles",
+    "common",
+    "providers",
+  ] as const);
   const error = form.formState.errors.model;
   // Only once they have loaded can there be none.
   const noModels =
     models !== undefined && !models.some((model) => model.available);
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="agent-model">{translateText("模型")}</Label>
+      <Label htmlFor="agent-model">
+        {translateText("common:entities.model")}
+      </Label>
       <ModelSelect
         id="agent-model"
         value={form.watch("model")}
@@ -214,7 +242,7 @@ export function ModelField({
             error ? "text-xs text-destructive" : "text-xs text-muted-foreground"
           }
         >
-          {error?.message ?? translateText("暂无可用模型。")}
+          {error?.message ?? translateText("models.noneAvailable")}
           {noModels ? (
             <Button
               type="button"
@@ -223,7 +251,7 @@ export function ModelField({
               className="h-auto px-1"
               onClick={onOpenProviders}
             >
-              {translateText("前往模型服务")}
+              {translateText("providers:actions.openSettings")}
             </Button>
           ) : null}
         </p>
@@ -241,7 +269,12 @@ export function BundlesField({
   bundles: Bundle[];
   autoFocus?: boolean;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "agents",
+    "bundles",
+    "common",
+    "providers",
+  ] as const);
   return (
     <div
       role="group"
@@ -250,7 +283,7 @@ export function BundlesField({
       className="space-y-1.5"
     >
       <p id="agent-bundles" className="text-xs leading-none">
-        {translateText("环境包")}
+        {translateText("bundles:title")}
       </p>
       <BundleList
         value={form.watch("bundles")}
@@ -261,9 +294,7 @@ export function BundlesField({
         }
       />
       <p id="agent-bundles-hint" className="text-xs text-muted-foreground">
-        {translateText(
-          "智能体的环境由这些环境包构建：安装的工具、可用的插件。修改后重新构建，在空闲时生效。",
-        )}
+        {translateText("bundles.help")}
       </p>
     </div>
   );
@@ -276,13 +307,20 @@ export function InstructionsField({
   form: Form;
   autoFocus?: boolean;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "agents",
+    "bundles",
+    "common",
+    "providers",
+  ] as const);
   const error = form.formState.errors.description;
   const length = form.watch("description").length;
   return (
     <div className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-2">
-        <Label htmlFor="agent-description">{translateText("指令")}</Label>
+        <Label htmlFor="agent-description">
+          {translateText("editor.tabs.instructions")}
+        </Label>
         <span
           className="text-xs tabular-nums text-muted-foreground"
           aria-live="polite"
@@ -296,9 +334,7 @@ export function InstructionsField({
         rows={12}
         autoFocus={autoFocus}
         className="max-h-[50dvh] min-h-48 font-mono leading-relaxed"
-        placeholder={translateText(
-          "职责、工作方式和约束。例如：你负责审查 Pull Request，只指出会导致错误的问题。",
-        )}
+        placeholder={translateText("fields.instructionsPlaceholder")}
         aria-invalid={Boolean(error)}
         aria-describedby="agent-description-hint"
         {...form.register("description")}
@@ -310,10 +346,7 @@ export function InstructionsField({
         }
         role={error ? "alert" : undefined}
       >
-        {error?.message ??
-          translateText(
-            "注入智能体的上下文；修改在空闲时生效，不打断进行中的回复。",
-          )}
+        {error?.message ?? translateText("fields.instructionsHelp")}
       </p>
     </div>
   );

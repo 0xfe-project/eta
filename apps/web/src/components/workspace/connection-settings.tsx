@@ -33,6 +33,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { translate } from "@/lib/i18n";
 import {
+  translateBundleConfigField,
+  translateBundleDescription,
+} from "@/lib/i18n-metadata";
+import {
   useBundleConfig,
   useClearBundleConfig,
   useSetBundleConfig,
@@ -70,7 +74,7 @@ function ConnectionCard({
   name: string;
   onOpen: () => void;
 }) {
-  useTranslation();
+  useTranslation(["connections", "common", "providers"] as const);
   return (
     <button
       type="button"
@@ -103,27 +107,27 @@ function githubSummary(status: GitHubStatus): Summary {
     case "ready":
       return {
         summary: status.user
-          ? translate("智能体以 {{value1}} 的名义使用 GitHub", {
-              value1: status.user.login,
+          ? translate("connections:github.identity.user", {
+              username: status.user.login,
             })
-          : translate("智能体以 {{value1}}[bot] 的身份使用 GitHub", {
-              value1: status.app?.slug,
+          : translate("connections:github.identity.bot", {
+              appName: status.app?.slug,
             }),
       };
     case "not_installed":
       return {
-        summary: translate("App 已创建，还需安装到仓库"),
-        todo: translate("待安装"),
+        summary: translate("connections:github.status.createdNotInstalled"),
+        todo: translate("connections:github.status.awaitingInstallation"),
       };
     case "error":
       return {
-        summary: status.error?.message ?? translate("连接出错"),
-        todo: translate("出错"),
+        summary: status.error?.message ?? translate("connections:status.error"),
+        todo: translate("common:status.error"),
       };
     default:
       return {
-        summary: translate("推送代码、处理 PR、创建仓库、读取 CI"),
-        todo: translate("未连接"),
+        summary: translate("connections:github.summary"),
+        todo: translate("connections:status.notConnected"),
       };
   }
 }
@@ -141,7 +145,11 @@ const RETURN_PARAMS = [
  * wizard where it now stands and drop the parameters from the address.
  */
 function useReturnFromGitHub(onReturn: (error: string | undefined) => void) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "connections",
+    "common",
+    "providers",
+  ] as const);
   const refresh = useRefreshGitHub();
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -149,11 +157,11 @@ function useReturnFromGitHub(onReturn: (error: string | undefined) => void) {
     if (!RETURN_PARAMS.some((name) => params.has(name))) return;
     const error = params.get("github_error") ?? undefined;
     if (!error && params.get("github") === "created")
-      toast.success(translateText("GitHub App 已创建"));
+      toast.success(translateText("github.feedback.appCreated"));
     else if (!error && params.get("github") === "authorized")
-      toast.success(translateText("已授权，智能体将以你的名义使用 GitHub"));
+      toast.success(translateText("github.feedback.authorized"));
     else if (!error && params.get("setup_action"))
-      toast.success(translateText("已在 GitHub 上安装 App"));
+      toast.success(translateText("github.feedback.appInstalled"));
     for (const name of RETURN_PARAMS) params.delete(name);
     window.history.replaceState(window.history.state, "", url);
     onReturn(error);
@@ -162,7 +170,11 @@ function useReturnFromGitHub(onReturn: (error: string | undefined) => void) {
 }
 
 function GitHubConnection() {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "connections",
+    "common",
+    "providers",
+  ] as const);
   const { data: status, error } = useGitHubStatus();
   const [open, setOpen] = useState(false);
   const [returned, setReturned] = useState<{ error?: string }>();
@@ -177,10 +189,10 @@ function GitHubConnection() {
     ? githubSummary(status)
     : error
       ? {
-          summary: translateText("无法加载连接状态"),
-          todo: translateText("出错"),
+          summary: translateText("errors.loadStatus"),
+          todo: translateText("common:status.error"),
         }
-      : { summary: translateText("推送代码、处理 PR、创建仓库、读取 CI") };
+      : { summary: translateText("github.summary") };
 
   return (
     <>
@@ -201,16 +213,16 @@ function GitHubConnection() {
   );
 }
 
-const grokDescription = () => translate("生成图片和视频，搜索网页与 X");
+const grokDescription = () => translate("connections:grok.summary");
 
 function grokSummary(accounts: Connection[] | undefined): Summary {
   if (!accounts) return { summary: grokDescription() };
   const active = accounts.find((account) => USABLE.has(account.state));
   if (active)
     return {
-      summary: translate("用 {{value1}} {{value2}}", {
-        value1: active.label,
-        value2: grokDescription(),
+      summary: translate("connections:grok.usingAccount", {
+        accountName: active.label,
+        summary: grokDescription(),
       }),
     };
   const stuck = accounts.find((account) => NEEDS_ACTION.has(account.state));
@@ -224,7 +236,10 @@ function grokSummary(accounts: Connection[] | undefined): Summary {
       summary: accounts[0].label,
       todo: connectionStateLabels[accounts[0].state],
     };
-  return { summary: grokDescription(), todo: translate("未绑定") };
+  return {
+    summary: grokDescription(),
+    todo: translate("connections:status.notLinked"),
+  };
 }
 
 /**
@@ -232,7 +247,11 @@ function grokSummary(accounts: Connection[] | undefined): Summary {
  * Grok models and the grok plugin's images, videos and search.
  */
 function GrokConnection() {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "connections",
+    "common",
+    "providers",
+  ] as const);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const connectors = useConnectors();
   const connections = useConnections();
@@ -244,7 +263,7 @@ function GrokConnection() {
   );
   const failed = connectors.error ?? connections.error;
   const current: Summary = failed
-    ? { summary: failed.message, todo: translateText("出错") }
+    ? { summary: failed.message, todo: translateText("common:status.error") }
     : grokSummary(accounts);
 
   return (
@@ -263,7 +282,7 @@ function GrokConnection() {
           </DialogHeader>
           {failed ? (
             <LoadError
-              what={translateText("Grok 账号")}
+              what={translateText("grok.accountTitle")}
               error={failed}
               onRetry={() => {
                 void connectors.refetch();
@@ -280,7 +299,7 @@ function GrokConnection() {
                 hideHeading
                 description={
                   <>
-                    {translateText("与")}
+                    {translateText("grok.sharedAccountPrefix")}
                     <Button
                       variant="link"
                       size="xs"
@@ -290,9 +309,9 @@ function GrokConnection() {
                         setSettings({ open: true, section: "providers" });
                       }}
                     >
-                      {translateText("模型服务")}
+                      {translateText("providers:title")}
                     </Button>
-                    {translateText("里的 Grok 是同一账号，也提供 Grok 模型")}
+                    {translateText("grok.sharedAccountSuffix")}
                   </>
                 }
               />
@@ -340,7 +359,11 @@ function BundleConfigForm({
   values: Record<string, string>;
   onClose: () => void;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "connections",
+    "common",
+    "providers",
+  ] as const);
   const save = useSetBundleConfig(bundle.name);
   const clear = useClearBundleConfig(bundle.name);
   const { properties, required = [] } = bundle.config;
@@ -365,8 +388,8 @@ function BundleConfigForm({
           onSuccess: (state) => {
             toast.success(
               state.ready
-                ? translateText("已保存，载入它的智能体空闲时会重启")
-                : translateText("已保存，还有必填项未填"),
+                ? translateText("configuration.savedReady")
+                : translateText("configuration.savedIncomplete"),
             );
             onClose();
           },
@@ -380,13 +403,16 @@ function BundleConfigForm({
           <div key={name} className="space-y-1">
             <label htmlFor={`${id}-${name}`} className="text-xs font-medium">
               {property.title
-                ? translateText(property.title, {
-                    defaultValue: property.title,
-                  })
+                ? translateBundleConfigField(
+                    bundle.name,
+                    name,
+                    "title",
+                    property.title,
+                  )
                 : name}
               {required.includes(name) ? null : (
                 <span className="font-normal text-muted-foreground">
-                  {translateText(" （可选）")}
+                  {translateText("common:labels.optionalSuffix")}
                 </span>
               )}
             </label>
@@ -400,7 +426,7 @@ function BundleConfigForm({
               spellCheck={false}
               placeholder={
                 property.writeOnly && saved
-                  ? translateText("已设置，留空不替换")
+                  ? translateText("configuration.secretPlaceholder")
                   : undefined
               }
               onChange={(e) =>
@@ -409,19 +435,21 @@ function BundleConfigForm({
             />
             {property.description ? (
               <Markdown className="text-xs text-muted-foreground">
-                {translateText(property.description, {
-                  defaultValue: property.description,
-                })}
+                {translateBundleConfigField(
+                  bundle.name,
+                  name,
+                  "description",
+                  property.description,
+                )}
               </Markdown>
             ) : null}
           </div>
         );
       })}
       <p className="text-xs text-muted-foreground">
-        {translateText(
-          "这些值加密保存在 AXP，作为环境变量交给载入“{{value1}}”环境包的智能体。",
-          { value1: bundle.name },
-        )}
+        {translateText("configuration.encryptionHelp", {
+          bundleName: bundle.name,
+        })}
       </p>
       <DialogFooter className="gap-2 sm:justify-end">
         {set.length > 0 ? (
@@ -432,44 +460,46 @@ function BundleConfigForm({
                 variant="ghost"
                 className="text-muted-foreground sm:mr-auto"
               >
-                {translateText("清除配置")}
+                {translateText("configuration.clear")}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>
-                  {translateText("清除 {{value1}} 的配置？", {
-                    value1: bundle.name,
+                  {translateText("configuration.clearConfirmTitle", {
+                    bundleName: bundle.name,
                   })}
                 </AlertDialogTitle>
                 <AlertDialogDescription>
-                  {translateText(
-                    "AXP 会删除保存的值。载入这个环境包的智能体空闲时重启，之后不再有它的插件。",
-                  )}
+                  {translateText("configuration.clearConfirmDescription")}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>{translateText("取消")}</AlertDialogCancel>
+                <AlertDialogCancel>
+                  {translateText("common:actions.cancel")}
+                </AlertDialogCancel>
                 <AlertDialogAction
                   variant="destructive"
                   onClick={() =>
                     clear.mutate(undefined, {
                       onSuccess: () => {
-                        toast.success(translateText("已清除配置"));
+                        toast.success(translateText("configuration.cleared"));
                         onClose();
                       },
                       onError: (error) => toast.error(error.message),
                     })
                   }
                 >
-                  {translateText("清除")}
+                  {translateText("common:actions.clear")}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
         ) : null}
         <Button type="submit" disabled={save.isPending}>
-          {save.isPending ? translateText("正在保存…") : translateText("保存")}
+          {save.isPending
+            ? translateText("common:states.saving")
+            : translateText("common:actions.save")}
         </Button>
       </DialogFooter>
     </form>
@@ -478,22 +508,22 @@ function BundleConfigForm({
 
 /** A built-in bundle that asks the user for values (its config schema). */
 function BundleConnection({ bundle }: { bundle: Configured }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "connections",
+    "common",
+    "providers",
+  ] as const);
   const { data, error, refetch } = useBundleConfig(bundle.name);
   const [open, setOpen] = useState(false);
   const current: Summary = error
-    ? { summary: error.message, todo: translateText("出错") }
+    ? { summary: error.message, todo: translateText("common:status.error") }
     : data && !data.ready
       ? {
-          summary: translateText(bundle.description, {
-            defaultValue: bundle.description,
-          }),
-          todo: translateText("未配置"),
+          summary: translateBundleDescription(bundle.name, bundle.description),
+          todo: translateText("status.notConfigured"),
         }
       : {
-          summary: translateText(bundle.description, {
-            defaultValue: bundle.description,
-          }),
+          summary: translateBundleDescription(bundle.name, bundle.description),
         };
 
   return (
@@ -512,7 +542,7 @@ function BundleConnection({ bundle }: { bundle: Configured }) {
           </DialogHeader>
           {error ? (
             <LoadError
-              what={translateText("配置")}
+              what={translateText("common:actions.configure")}
               error={error}
               onRetry={() => void refetch()}
             />
@@ -535,11 +565,15 @@ function BundleConnection({ bundle }: { bundle: Configured }) {
 
 /** Settings → 连接: the integrations the user has to set up themselves. */
 export function ConnectionSettings() {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "connections",
+    "common",
+    "providers",
+  ] as const);
   const bundles = useBundles();
   return (
     <div className="space-y-3">
-      <h2 className="text-sm font-semibold">{translateText("连接")}</h2>
+      <h2 className="text-sm font-semibold">{translateText("title")}</h2>
       <div className="grid gap-2 sm:grid-cols-2">
         <GitHubConnection />
         <GrokConnection />

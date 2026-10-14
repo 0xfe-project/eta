@@ -6,8 +6,7 @@ import ts from "typescript";
 import { agentFormSchema } from "@/components/workspace/agent-form";
 import { describeSchedule } from "@/components/workspace/routine-format";
 import { ago, statusLabel } from "@/components/workspace/task-format";
-import en from "@/locales/en.json";
-import zh from "@/locales/zh.json";
+import { en, namespaces, zh } from "@/locales/resources";
 import {
   createI18n,
   detectLanguage,
@@ -19,6 +18,11 @@ import {
   setLanguagePreference,
   translate,
 } from "./i18n";
+import {
+  translateBundleConfigField,
+  translateBundleDescription,
+  translatePluginDescription,
+} from "./i18n-metadata";
 import { mentionedMembers } from "./mentions";
 
 afterEach(() => {
@@ -76,17 +80,12 @@ describe("language detection and preferences", () => {
   it("starts SSR in English and falls back to English for missing resources", () => {
     const instance = createI18n();
     expect(instance.isInitialized).toBe(true);
-    expect(instance.t("设置")).toBe("Settings");
+    expect(instance.t("settings:title")).toBe("Settings");
     void instance.changeLanguage("fr");
-    expect(instance.t("设置")).toBe("Settings");
-    instance.addResource(
-      "en",
-      "translation",
-      "fallback-test",
-      "English fallback",
-    );
+    expect(instance.t("settings:title")).toBe("Settings");
+    instance.removeResourceBundle("zh", "common");
     void instance.changeLanguage("zh");
-    expect(instance.t("fallback-test")).toBe("English fallback");
+    expect(instance.t("common:actions.save")).toBe("Save");
   });
 });
 
@@ -111,16 +110,16 @@ describe("live translations", () => {
     expect(agentFormSchema.safeParse(values).error?.issues[0].message).toBe(
       "Enter a name.",
     );
-    expect(translate("{{value1}} 位成员", { value1: 1, count: 1 })).toBe(
+    expect(translate("chat:groups.members.count", { count: 1 })).toBe(
       "1 member",
     );
-    expect(translate("{{value1}} 位成员", { value1: 2, count: 2 })).toBe(
+    expect(translate("chat:groups.members.count", { count: 2 })).toBe(
       "2 members",
     );
     expect(ago(new Date(Date.now() - 65_000).toISOString())).toBe(
       "1 minute ago",
     );
-    expect(translate("删除「{{value1}}」？", { value1: "<Agent>" })).toBe(
+    expect(translate("agents:delete.confirmTitle", { name: "<Agent>" })).toBe(
       "Delete “<Agent>”?",
     );
   });
@@ -138,24 +137,30 @@ describe("live translations", () => {
   });
 });
 
+function flatten(value: object, prefix = ""): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, child]) => {
+      const path = prefix ? `${prefix}.${key}` : key;
+      return typeof child === "string"
+        ? [[path, child]]
+        : Object.entries(flatten(child, path));
+    }),
+  );
+}
+
+const catalog = Object.fromEntries(
+  namespaces.flatMap((namespace) =>
+    Object.entries(flatten(en[namespace])).map(([key, text]) => [
+      `${namespace}:${key}`,
+      text,
+    ]),
+  ),
+);
+
 describe("translation coverage", () => {
-  it("covers built-in bundle, plugin and configuration descriptions", () => {
-    const missing: string[] = [];
-    function inspect(value: unknown) {
-      if (!value || typeof value !== "object") return;
-      for (const [key, child] of Object.entries(value)) {
-        if (
-          ["title", "description"].includes(key) &&
-          typeof child === "string" &&
-          /\p{Script=Han}/u.test(child) &&
-          !(child in en)
-        )
-          missing.push(child);
-        if (typeof child === "object") inspect(child);
-      }
-    }
+  it("translates built-in metadata by ID and preserves custom content", () => {
     const root = join(process.cwd(), "../..");
-    for (const dir of ["bundles", "plugins"]) {
+    for (const dir of ["bundles", "plugins"] as const) {
       for (const entry of readdirSync(join(root, dir), {
         withFileTypes: true,
       })) {
@@ -166,40 +171,141 @@ describe("translation coverage", () => {
           entry.name,
           dir === "bundles" ? "bundle.json" : "plugin.json",
         );
+        let manifest;
         try {
-          inspect(JSON.parse(readFileSync(file, "utf8")));
+          manifest = JSON.parse(readFileSync(file, "utf8"));
         } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+          throw error;
+        }
+        const description =
+          dir === "bundles"
+            ? translateBundleDescription
+            : translatePluginDescription;
+        setLanguagePreference("zh");
+        expect(description(manifest.name, manifest.description), file).toBe(
+          manifest.description,
+        );
+        setLanguagePreference("en");
+        expect(
+          description(manifest.name, manifest.description),
+          file,
+        ).not.toMatch(/\p{Script=Han}/u);
+        for (const [field, property] of Object.entries(
+          manifest.config?.properties ?? {},
+        )) {
+          for (const kind of ["title", "description"] as const) {
+            const value = (property as Record<string, string>)[kind];
+            if (!value) continue;
+            expect(
+              translateBundleConfigField(manifest.name, field, kind, value),
+              `${file}:${field}:${kind}`,
+            ).not.toMatch(/\p{Script=Han}/u);
+            setLanguagePreference("zh");
+            // The canonical API-key title is English in the source schema.
+            if (/\p{Script=Han}/u.test(value)) {
+              expect(
+                translateBundleConfigField(manifest.name, field, kind, value),
+              ).toBe(value);
+            }
+            setLanguagePreference("en");
+          }
         }
       }
     }
-    expect(missing).toEqual([]);
+    expect(translateBundleDescription("oomol", "我的自定义说明")).toBe(
+      "我的自定义说明",
+    );
+    expect(translatePluginDescription("custom", "自定义插件")).toBe(
+      "自定义插件",
+    );
+    expect(
+      translateBundleConfigField(
+        "oomol",
+        "OO_TEAM_NAME",
+        "title",
+        "我的团队名称",
+      ),
+    ).toBe("我的团队名称");
+    expect(
+      translateBundleConfigField("weather", "API_KEY", "title", "API key"),
+    ).toBe("API key");
   });
-  it("has matching catalogs and interpolation variables, with complete English text", () => {
-    expect(Object.keys(en).sort()).toEqual(Object.keys(zh).sort());
+
+  it("has matching semantic keys, English text and named interpolation variables", () => {
+    expect(Object.keys(en).sort()).toEqual([...namespaces].sort());
+    expect(Object.keys(zh).sort()).toEqual([...namespaces].sort());
     const variables = (text: string) =>
       [...text.matchAll(/\{\{.*?\}\}/g)].map((match) => match[0]).sort();
-    for (const key of Object.keys(en) as (keyof typeof en)[]) {
-      expect(en[key].trim(), key).not.toBe("");
-      expect(zh[key].trim(), key).not.toBe("");
-      expect(en[key], key).not.toMatch(/\p{Script=Han}/u);
-      expect(variables(en[key]), key).toEqual(variables(zh[key]));
+    for (const namespace of namespaces) {
+      const english = flatten(en[namespace]);
+      const chinese = flatten(zh[namespace]);
+      expect(Object.keys(english).sort(), namespace).toEqual(
+        Object.keys(chinese).sort(),
+      );
+      for (const [key, text] of Object.entries(english)) {
+        const id = `${namespace}:${key}`;
+        expect(key, id).toMatch(
+          /^[a-z][a-zA-Z0-9]*(?:\.[a-z][a-zA-Z0-9]*)*(?:_(?:one|other))?$/,
+        );
+        expect(text.trim(), id).not.toBe("");
+        expect(chinese[key].trim(), id).not.toBe("");
+        expect(text, id).not.toMatch(/\p{Script=Han}/u);
+        expect(text, id).not.toMatch(/\{\{value\d+\}\}/);
+        expect(variables(text), id).toEqual(variables(chinese[key]));
+      }
     }
   });
 
-  it("covers every literal translation key used in the application", () => {
-    const missing: string[] = [];
+  it("requires explicit namespaces and resolves every literal source key", () => {
+    const errors: string[] = [];
     function scan(dir: string) {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
         const file = join(dir, entry.name);
         if (entry.isDirectory()) scan(file);
-        else if (/\.tsx?$/.test(file) && !/\.(?:test|gen)\./.test(file)) {
+        else if (/\.tsx?$/.test(file) && !/\.(?:test|gen|d)\./.test(file)) {
           const source = ts.createSourceFile(
             file,
             readFileSync(file, "utf8"),
             ts.ScriptTarget.Latest,
             true,
           );
+          const scopes: string[] = [];
+          function findScopes(node: ts.Node) {
+            if (
+              ts.isCallExpression(node) &&
+              node.expression.getText(source) === "useTranslation"
+            ) {
+              let argument = node.arguments[0];
+              if (argument && ts.isAsExpression(argument))
+                argument = argument.expression;
+              if (argument && ts.isStringLiteral(argument))
+                scopes.push(argument.text);
+              else if (
+                argument &&
+                ts.isArrayLiteralExpression(argument) &&
+                argument.elements.every(ts.isStringLiteral)
+              ) {
+                scopes.push((argument.elements[0] as ts.StringLiteral).text);
+                for (const scope of argument.elements) {
+                  if (
+                    !namespaces.includes(
+                      (scope as ts.StringLiteral)
+                        .text as (typeof namespaces)[number],
+                    )
+                  )
+                    errors.push(
+                      `${file}: unknown namespace ${scope.getText(source)}`,
+                    );
+                }
+              } else
+                errors.push(
+                  `${file}: useTranslation needs an explicit namespace`,
+                );
+            }
+            ts.forEachChild(node, findScopes);
+          }
+          findScopes(source);
           function visit(node: ts.Node) {
             if (
               ts.isCallExpression(node) &&
@@ -210,7 +316,31 @@ describe("translation coverage", () => {
               ts.isStringLiteral(node.arguments[0])
             ) {
               const key = node.arguments[0].text;
-              if (!(key in en)) missing.push(`${file}: ${key}`);
+              const scope =
+                node.expression.getText(source) === "translate" ? [] : scopes;
+              const candidates = key.includes(":")
+                ? [key]
+                : scope.map((namespace) => `${namespace}:${key}`);
+              const id = candidates.find((candidate) => candidate in catalog);
+              if (!id) errors.push(`${file}: ${key}`);
+              else {
+                const variables = [
+                  ...catalog[id].matchAll(/\{\{\s*(\w+)\s*\}\}/g),
+                ].map((match) => match[1]);
+                const options = node.arguments[1];
+                const supplied =
+                  options && ts.isObjectLiteralExpression(options)
+                    ? options.properties.map((property) =>
+                        property.name?.getText(source),
+                      )
+                    : [];
+                for (const variable of variables) {
+                  if (!supplied.includes(variable))
+                    errors.push(
+                      `${file}: ${key} needs interpolation ${variable}`,
+                    );
+                }
+              }
             }
             ts.forEachChild(node, visit);
           }
@@ -219,6 +349,20 @@ describe("translation coverage", () => {
       }
     }
     scan(join(process.cwd(), "src"));
-    expect(missing).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+  it("rejects unknown namespaces, missing keys and natural-language keys at compile time", () => {
+    // These unreachable calls make typecheck verify the resource augmentation.
+    if (false) {
+      // @ts-expect-error: unknown namespace
+      translate("unknown:actions.save");
+      // @ts-expect-error: missing semantic key
+      translate("tasks:missing.key");
+      // @ts-expect-error: Chinese text is not a key
+      translate("保存");
+    }
+    expect(i18n.options.keySeparator).toBe(".");
+    expect(i18n.options.nsSeparator).toBe(":");
   });
 });

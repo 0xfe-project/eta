@@ -35,7 +35,7 @@ export function ClaudeToolCall({
   className?: string;
   children?: React.ReactNode;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["chat", "common"] as const);
   const expandable = Boolean(children);
 
   return (
@@ -87,7 +87,7 @@ export function ClaudeToolCall({
               {result}
               {expandable ? (
                 <span className="ml-2 text-[var(--terminal-muted)] group-open:hidden">
-                  {translateText("（点击展开）")}
+                  {translateText("tools.expandHint")}
                 </span>
               ) : null}
             </span>

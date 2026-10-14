@@ -40,7 +40,7 @@ function ArtifactDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["artifacts", "common"] as const);
   const artifact = useArtifact(id, open);
   const [chosen, setChosen] = useState<number | undefined>(version);
   const versions = artifact.data?.versions ?? [];
@@ -58,26 +58,24 @@ function ArtifactDialog({
             {artifact.data?.title ?? "Artifact"}
           </DialogTitle>
           <DialogDescription className="sr-only">
-            {translateText(
-              "智能体发布的静态网页，在沙箱里运行，不能访问 AXP 的登录状态和接口。",
-            )}
+            {translateText("sandboxDescription")}
           </DialogDescription>
           {current && artifact.data ? (
             <div className="flex w-full items-center gap-1 sm:w-auto">
               {versions.length > 1 ? (
                 <select
-                  aria-label={translateText("版本")}
+                  aria-label={translateText("version.title")}
                   value={current.number}
                   onChange={(e) => setChosen(Number(e.target.value))}
                   className="h-7 border bg-background px-1.5 text-xs tabular-nums"
                 >
                   {versions.map((v) => (
                     <option key={v.number} value={v.number}>
-                      {translateText("第 {{value1}} 版{{value2}}", {
-                        value1: v.number,
-                        value2:
+                      {translateText("version.option", {
+                        version: v.number,
+                        latestLabel:
                           v.number === versions[0].number
-                            ? translateText("（最新）")
+                            ? translateText("version.latestSuffix")
                             : "",
                       })}
                     </option>
@@ -85,8 +83,8 @@ function ArtifactDialog({
                 </select>
               ) : (
                 <span className="px-1 text-xs text-muted-foreground tabular-nums">
-                  {translateText("第 {{value1}} 版", {
-                    value1: current.number,
+                  {translateText("version.label", {
+                    version: current.number,
                   })}
                 </span>
               )}
@@ -100,7 +98,7 @@ function ArtifactDialog({
                 >
                   <ArrowSquareOutIcon aria-hidden="true" />
                   <span className="max-sm:sr-only">
-                    {translateText("新窗口打开")}
+                    {translateText("common:actions.openInNewWindow")}
                   </span>
                 </a>
               </Button>
@@ -108,7 +106,7 @@ function ArtifactDialog({
                 <a href={archiveURL(id, current.number)} download>
                   <DownloadSimpleIcon aria-hidden="true" />
                   <span className="max-sm:sr-only">
-                    {translateText("下载")}
+                    {translateText("common:actions.download")}
                   </span>
                 </a>
               </Button>
@@ -121,11 +119,11 @@ function ArtifactDialog({
             <Loading
               layout="detail"
               className="p-6"
-              label={translateText("正在打开…")}
+              label={translateText("common:states.opening")}
             />
           ) : artifact.error ? (
             <LoadError
-              what={translateText("这个 Artifact")}
+              what={translateText("loadTarget")}
               error={artifact.error}
               onRetry={() => void artifact.refetch()}
             />
@@ -153,7 +151,7 @@ function ShareControl({
   id: string;
   version: ArtifactVersion;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["artifacts", "common"] as const);
   const share = useShareArtifact(id);
   const shared = Boolean(version.share);
   return (
@@ -163,8 +161,8 @@ function ShareControl({
       disabled={share.isPending}
       title={
         shared
-          ? translateText("撤销后链接立即失效，再次分享会生成新链接")
-          : translateText("生成公开链接：任何拿到链接的人都能打开这个版本")
+          ? translateText("sharing.revokeHint")
+          : translateText("sharing.createHint")
       }
       onClick={() =>
         share.mutate(
@@ -173,8 +171,8 @@ function ShareControl({
             onSuccess: () =>
               toast(
                 shared
-                  ? translateText("已撤销公开链接")
-                  : translateText("已生成公开链接"),
+                  ? translateText("sharing.revoked")
+                  : translateText("sharing.created"),
               ),
             onError: (error) => toast.error(error.message),
           },
@@ -183,19 +181,21 @@ function ShareControl({
     >
       <GlobeIcon aria-hidden="true" />
       <span className="max-sm:sr-only">
-        {shared ? translateText("撤销分享") : translateText("公开分享")}
+        {shared
+          ? translateText("sharing.revoke")
+          : translateText("sharing.sharePublicly")}
       </span>
     </Button>
   );
 }
 
 function ShareLink({ url }: { url: string }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["artifacts", "common"] as const);
   const link = new URL(url, window.location.origin).href;
   return (
     <div className="flex shrink-0 items-center gap-2 border-b bg-muted/40 px-3 py-1.5 text-xs">
       <span className="shrink-0 text-muted-foreground">
-        {translateText("公开链接")}
+        {translateText("sharing.publicLink")}
       </span>
       <a
         href={link}
@@ -211,14 +211,14 @@ function ShareLink({ url }: { url: string }) {
         onClick={() =>
           void navigator.clipboard
             .writeText(link)
-            .then(() => toast(translateText("已复制链接")))
+            .then(() => toast(translateText("common:feedback.linkCopied")))
             .catch(() =>
-              toast.error(translateText("复制失败：浏览器不允许访问剪贴板")),
+              toast.error(translateText("common:errors.clipboardBlocked")),
             )
         }
       >
         <CopyIcon aria-hidden="true" />
-        {translateText("复制")}
+        {translateText("common:actions.copy")}
       </Button>
     </div>
   );

@@ -1,0 +1,56 @@
+{
+  "attention": {
+    "emptyTitle": "没有等你处理的事",
+    "emptyDescription": "智能体请你确认的操作、交给你的任务、新的定时报告，都会在这里。",
+    "awaitingConfirmation": "待确认",
+    "awaitingRemoteAssignment": "等你确认交给远程智能体",
+    "remoteRunFailed": "远程运行失败",
+    "assignedToYou": "指派给你",
+    "newReports": "{{count}} 份新报告",
+    "failedRuns": "{{count}} 次失败",
+    "newReports_one": "{{count}} 份新报告",
+    "newReports_other": "{{count}} 份新报告",
+    "failedRuns_one": "{{count}} 次失败",
+    "failedRuns_other": "{{count}} 次失败"
+  },
+  "accounts": {
+    "allHealthy": "全部正常",
+    "empty": "还没有账号",
+    "title": "模型账号"
+  },
+  "models": {
+    "availableCount": "{{available}} / {{total}} 可用",
+    "title": "模型目录",
+    "unavailableCount": "{{count}} 个不可用",
+    "degradedCount": "{{count}} 个暂时故障",
+    "allAvailable": "全部可用",
+    "empty": "没有模型",
+    "contextWindow": "上下文窗口",
+    "availability": {
+      "available": "■ 可用",
+      "degraded": "▨ 暂时故障",
+      "unavailable": "■ 不可用"
+    }
+  },
+  "load": {
+    "summary": "负载：{{total}} 个智能体中 {{active}} 个在运转",
+    "label": "负载 · 运转中",
+    "agentStates": "{{working}} 工作中 · {{waiting}} 等待确认",
+    "activeReplies": "{{status}} · {{countText}} 条进行中",
+    "activeReplies_one": "{{status}} · {{countText}} 条进行中",
+    "activeReplies_other": "{{status}} · {{countText}} 条进行中"
+  },
+  "turn": {
+    "usage": "本轮已用 {{usage}}",
+    "noActiveReply": "当前智能体没有进行中的回复",
+    "duration": "本轮计时",
+    "replying": "回复中",
+    "notReplying": "未在回复"
+  },
+  "memory": {
+    "count": "{{countText}} 记忆",
+    "label": "记忆条目",
+    "count_one": "{{countText}} 记忆",
+    "count_other": "{{countText}} 记忆"
+  }
+}

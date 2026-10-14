@@ -107,7 +107,7 @@ describe("a bundle's config", () => {
     expect(document.body.textContent).toContain("weather未配置");
     expect(document.body.textContent).not.toContain("plain");
     await act(async () => button(/weather/).click());
-    const key = input("API 密钥");
+    const key = input("API key");
     expect(key.type).toBe("password");
     expect(key.required).toBe(true);
     expect(input("城市").required).toBe(false);
@@ -136,7 +136,7 @@ describe("a bundle's config", () => {
     });
     expect(document.body.textContent).not.toContain("未配置");
     await act(async () => button(/weather/).click());
-    const key = input("API 密钥");
+    const key = input("API key");
     expect(key.value).toBe("");
     expect(key.required).toBe(false);
     expect(key.placeholder).toBe("已设置，留空不替换");

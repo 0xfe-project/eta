@@ -17,25 +17,25 @@ function taskReason(task: Task): string | null {
   if (closed.has(task.status)) return null;
   // A run an AXP agent asked for (#99), once the board has that status.
   if ((task.run_status as string | null) === "awaiting_confirmation")
-    return translate("等你确认交给远程智能体");
-  if (task.run_status === "failed") return translate("远程运行失败");
-  if (task.status === "blocked") return translate("受阻");
-  if (task.status === "in_review") return translate("待验收");
-  if (task.assignee.kind === "user") return translate("指派给你");
+    return translate("overview:attention.awaitingRemoteAssignment");
+  if (task.run_status === "failed")
+    return translate("overview:attention.remoteRunFailed");
+  if (task.status === "blocked") return translate("tasks:status.blocked");
+  if (task.status === "in_review") return translate("tasks:status.inReview");
+  if (task.assignee.kind === "user")
+    return translate("overview:attention.assignedToYou");
   return null;
 }
 
 function routineReason(routine: RoutineSummary): string | null {
   const parts = [
     routine.unseen_reports
-      ? translate("{{value1}} 份新报告", {
-          value1: routine.unseen_reports,
+      ? translate("overview:attention.newReports", {
           count: routine.unseen_reports,
         })
       : null,
     routine.unseen_failures
-      ? translate("{{value1}} 次失败", {
-          value1: routine.unseen_failures,
+      ? translate("overview:attention.failedRuns", {
           count: routine.unseen_failures,
         })
       : null,

@@ -36,7 +36,11 @@ export function ClaudeTodoList({
   todos: Todo[];
   className?: string;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "chat",
+    "common",
+    "tasks",
+  ] as const);
   return (
     <ol className={cn("font-mono text-[13px] leading-[1.6]", className)}>
       {todos.map((t, i) => {
@@ -73,10 +77,10 @@ export function ClaudeTodoList({
                 {" "}
                 (
                 {t.status === "done"
-                  ? translateText("已完成")
+                  ? translateText("tasks:status.done")
                   : t.status === "active"
-                    ? translateText("进行中")
-                    : translateText("待办")}
+                    ? translateText("tasks:status.inProgress")
+                    : translateText("tasks:status.todo")}
                 )
               </span>
             </span>

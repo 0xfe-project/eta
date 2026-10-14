@@ -21,7 +21,11 @@ import {
  * or its editor; on narrow screens one at a time.
  */
 export function RoutineBoard() {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "routines",
+    "common",
+    "navigation",
+  ] as const);
   const [nav, setNav] = useRoutineNav();
   const editing = nav.edit && nav.edit !== "new" ? nav.edit : null;
   const {
@@ -57,14 +61,14 @@ export function RoutineBoard() {
       />
     ) : routines?.length ? (
       // With none yet, the list says how to start.
-      <Empty icon={ClockIcon} title={translateText("选择一个定时任务")}>
-        {translateText("在左边选一个，查看它的说明和每次运行的报告。")}
+      <Empty icon={ClockIcon} title={translateText("empty.selectTitle")}>
+        {translateText("empty.selectDescription")}
       </Empty>
     ) : null;
 
   return (
     <>
-      <PageHeader title={translateText("定时")}>
+      <PageHeader title={translateText("navigation:sections.routines")}>
         <RefreshButton resource="routines" />
         <Button
           size="sm"
@@ -72,10 +76,10 @@ export function RoutineBoard() {
         >
           <PlusIcon aria-hidden="true" />
           <span className="hidden sm:inline">
-            {translateText("新建定时任务")}
+            {translateText("actions.create")}
           </span>
           <span className="sr-only sm:hidden">
-            {translateText("新建定时任务")}
+            {translateText("actions.create")}
           </span>
         </Button>
       </PageHeader>

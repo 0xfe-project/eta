@@ -1,0 +1,56 @@
+{
+  "attention": {
+    "emptyTitle": "Nothing waiting for you",
+    "emptyDescription": "Agent confirmations, tasks assigned to you, and new routine reports appear here.",
+    "awaitingConfirmation": "Awaiting confirmation",
+    "awaitingRemoteAssignment": "Awaiting your confirmation to assign to a remote agent",
+    "remoteRunFailed": "Remote run failed",
+    "assignedToYou": "Assigned to you",
+    "newReports": "{{count}} new reports",
+    "failedRuns": "{{count}} failures",
+    "newReports_one": "{{count}} new report",
+    "newReports_other": "{{count}} new reports",
+    "failedRuns_one": "{{count}} failure",
+    "failedRuns_other": "{{count}} failures"
+  },
+  "accounts": {
+    "allHealthy": "All healthy",
+    "empty": "No accounts yet",
+    "title": "Model accounts"
+  },
+  "models": {
+    "availableCount": "{{available}} / {{total}} available",
+    "title": "Model catalog",
+    "unavailableCount": "{{count}} unavailable",
+    "degradedCount": "{{count}} temporarily failing",
+    "allAvailable": "All available",
+    "empty": "No models",
+    "contextWindow": "Context window",
+    "availability": {
+      "available": "■ Available",
+      "degraded": "▨ Temporary failure",
+      "unavailable": "■ Unavailable"
+    }
+  },
+  "load": {
+    "summary": "Load: {{active}} of {{total}} agents active",
+    "label": "Load · Active",
+    "agentStates": "{{working}} working · {{waiting}} awaiting confirmation",
+    "activeReplies": "{{status}} · {{countText}} active",
+    "activeReplies_one": "{{status}} · {{countText}} active",
+    "activeReplies_other": "{{status}} · {{countText}} active"
+  },
+  "turn": {
+    "usage": "Used this turn: {{usage}}",
+    "noActiveReply": "The current agent has no active reply",
+    "duration": "Turn duration",
+    "replying": "Replying",
+    "notReplying": "Not replying"
+  },
+  "memory": {
+    "count": "{{countText}} memories",
+    "label": "Memory entries",
+    "count_one": "{{countText}} memory",
+    "count_other": "{{countText}} memories"
+  }
+}

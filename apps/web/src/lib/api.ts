@@ -23,7 +23,7 @@ export class ApiError extends Error {
   }
 }
 
-const fallbackMessage = () => translate("请求失败，请稍后再试。");
+const fallbackMessage = () => translate("common:errors.requestFailed");
 
 async function parse(response: Response) {
   const body = await response.json().catch(() => null);

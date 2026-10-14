@@ -21,7 +21,7 @@ export const MAX_MESSAGE_CHARS = 100_000;
 export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 export const MAX_ATTACHMENTS = 10;
 /** A paste too long to send as text goes as a file of this name. */
-export const pasteFileName = () => translate("粘贴文本.txt");
+export const pasteFileName = () => translate("chat:attachments.pastedFileName");
 
 export type DraftPart =
   | { type: "text"; text: string }

@@ -3,23 +3,35 @@ import { formatLocale, translate } from "@/lib/i18n";
 
 // How routines read: their schedules and their times.
 
-const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
+const WEEKDAYS = [
+  "common:weekdays.sunday",
+  "common:weekdays.monday",
+  "common:weekdays.tuesday",
+  "common:weekdays.wednesday",
+  "common:weekdays.thursday",
+  "common:weekdays.friday",
+  "common:weekdays.saturday",
+] as const;
 
 export function describeSchedule(schedule: Schedule) {
   switch (schedule.kind) {
     case "daily":
-      return translate("每天 {{value1}}", { value1: schedule.time });
+      return translate("routines:schedule.describe.daily", {
+        time: schedule.time,
+      });
     case "weekly":
-      return translate("每周{{value1}} {{value2}}", {
-        value1: schedule.days
+      return translate("routines:schedule.describe.weekly", {
+        weekdays: schedule.days
           .map((d) => translate(WEEKDAYS[d]))
           .join(formatLocale() === "zh-CN" ? "、" : ", "),
-        value2: schedule.time,
+        time: schedule.time,
       });
     case "hourly":
       return schedule.every === 1
-        ? translate("每小时")
-        : translate("每 {{value1}} 小时", { value1: schedule.every });
+        ? translate("routines:schedule.describe.hourly")
+        : translate("routines:schedule.describe.hourInterval", {
+            count: schedule.every,
+          });
     case "cron":
       return `cron ${schedule.cron}`;
   }
@@ -41,9 +53,12 @@ export function when(iso: string) {
       86_400_000,
   );
   const label =
-    { [-1]: translate("昨天"), 0: translate("今天"), 1: translate("明天") }[
-      days
-    ] ?? `${date.getMonth() + 1}-${String(date.getDate()).padStart(2, "0")}`;
+    {
+      [-1]: translate("common:time.yesterday"),
+      0: translate("common:time.today"),
+      1: translate("common:time.tomorrow"),
+    }[days] ??
+    `${date.getMonth() + 1}-${String(date.getDate()).padStart(2, "0")}`;
   return `${label} ${time}`;
 }
 

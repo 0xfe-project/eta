@@ -15,14 +15,14 @@ import { useTranslation } from "react-i18next";
 // Captured cycle from claude/thinking frames: · ✢ ✳ ✶ ✻ ✽ ✻ ✶ ✳ ✢
 const GLYPHS = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"];
 const VERBS = [
-  "Thinking",
-  "Levitating",
-  "Schlepping",
-  "Herding",
-  "Percolating",
-  "Noodling",
-  "Conjuring",
-];
+  "chat:thinking.verbs.thinking",
+  "chat:thinking.verbs.levitating",
+  "chat:thinking.verbs.schlepping",
+  "chat:thinking.verbs.herding",
+  "chat:thinking.verbs.percolating",
+  "chat:thinking.verbs.noodling",
+  "chat:thinking.verbs.conjuring",
+] as const;
 
 const CLAUDE = "var(--terminal-accent)"; // terracotta base
 const HILITE = "var(--terminal-accent-highlight)"; // the highlight the wave carries
@@ -30,7 +30,7 @@ const DIM = "var(--terminal-muted)";
 
 export function ClaudeThinking({
   running = true,
-  verbs = VERBS,
+  verbs,
   showTokens = true,
   className,
 }: {
@@ -39,7 +39,7 @@ export function ClaudeThinking({
   showTokens?: boolean;
   className?: string;
 }) {
-  const { t } = useTranslation();
+  const { t } = useTranslation(["chat", "common"] as const);
   const prefersReduced = usePrefersReducedMotion();
   const [glyph, setGlyph] = React.useState(0);
   const [verbIdx, setVerbIdx] = React.useState(0);
@@ -57,19 +57,20 @@ export function ClaudeThinking({
     return () => clearInterval(id);
   }, [running]);
 
+  const verbCount = verbs?.length || VERBS.length;
+
   React.useEffect(() => {
     if (!running) return;
     // Verbs change slowly, like the real thing — not every second.
-    const id = setInterval(
-      () => setVerbIdx((v) => (v + 1) % verbs.length),
-      5200,
-    );
+    const id = setInterval(() => setVerbIdx((v) => (v + 1) % verbCount), 5200);
     return () => clearInterval(id);
-  }, [running, verbs.length]);
+  }, [running, verbCount]);
 
   if (!running) return null;
 
-  const verb = verbs[verbIdx % verbs.length];
+  const verb = verbs?.length
+    ? verbs[verbIdx % verbs.length]
+    : t(VERBS[verbIdx % VERBS.length]);
   const tokens = showTokens ? ` · ↑ ${Math.max(0, secs * 137)} tokens` : "";
 
   return (
@@ -114,9 +115,9 @@ export function ClaudeThinking({
       >
         {prefersReduced ? "✳" : GLYPHS[glyph]}
       </span>
-      <span className="cw-verb">{verbs === VERBS ? t(verb) : verb}…</span>
+      <span className="cw-verb">{verb}…</span>
       <span style={{ color: DIM }}>
-        ({secs}s{tokens} · {t("esc 中断")})
+        ({secs}s{tokens} · {t("thinking.interruptHint")})
       </span>
     </div>
   );

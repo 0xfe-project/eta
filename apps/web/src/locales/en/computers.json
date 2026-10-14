@@ -1,0 +1,95 @@
+{
+  "status": {
+    "awaitingPairing": "Awaiting pairing",
+    "awaitingApproval": "Awaiting approval",
+    "changedAwaitingApproval": "Changed; awaiting approval",
+    "awaitingInstallation": "Awaiting installation"
+  },
+  "runtimes": {
+    "noProviders": "No providers available",
+    "connectorUpdateRequired": "connector {{version}} needs updating",
+    "title": "Runtimes",
+    "noAgents": "No agents available"
+  },
+  "pairing": {
+    "fingerprintChanged": "Fingerprint changed for {{name}}",
+    "multipleRequests": "{{name}} received {{count}} pairing requests. Only approve the one matching axp setup on that computer.",
+    "requestTitle": "{{name}} requests pairing",
+    "approved": "Approved {{name}}",
+    "verifyFingerprint": "Verify the fingerprint matches the one printed in that computer’s terminal before approving.",
+    "verifyAndApprove": "Verify fingerprint and approve",
+    "commandFingerprintHelp": "The command prints a fingerprint in that computer’s terminal. Approve only when it matches the one shown here.",
+    "label": "pairing",
+    "approveTarget": "Approve {{target}}",
+    "multipleRequests_one": "{{name}} received {{count}} pairing request. Only approve the one matching axp setup on that computer.",
+    "multipleRequests_other": "{{name}} received {{count}} pairing requests. Only approve the one matching axp setup on that computer."
+  },
+  "install": {
+    "copyCommand": "Copy installation command",
+    "connectTitle": "Connect computer",
+    "permissionsNotice": "Agents run with full permissions on that computer. Only connect computers dedicated to work.",
+    "runCommand": "Run in that computer’s terminal",
+    "chooseName": "Choose a name",
+    "generateCommand": "Generate installation command",
+    "commandExpiry": "This command works once and expires at {{time}}.",
+    "commandExpiryDefault": "This command works once and expires in 24 hours.",
+    "requirements": "Requires Node.js 24.13+ and a running Paseo daemon or Herdr. Installs the agenvo connector and axp command as startup services. {{expiryHint}}",
+    "waitingForCommand": "Waiting for the command to run on that computer…"
+  },
+  "actions": {
+    "add": "Add computer",
+    "updateConnector": "Update connector",
+    "revokeAndRemove": "Revoke and remove",
+    "openSettings": "Open remote computer settings"
+  },
+  "update": {
+    "description": "Update axp and the agenvo connector to the version currently provided by AXP{{versionSuffix}}, and connect to AXP’s current relay address.",
+    "commandHelp": "This downloads axp, installs the new connector, updates the relay address and restarts their services without pairing again. Running Paseo and Herdr agents will continue. The command works once and expires in 24 hours. Running it invalidates the computer’s previous token.",
+    "verify": "Verify update",
+    "allOnline": "Updated; all runtimes are online.",
+    "waitingForReconnect": "Waiting for the computer to reconnect. If the connector has changed and needs approval, verify its fingerprint against the terminal before approving.",
+    "versionMismatch": "Some computers have an agenvo connector that differs from AXP’s version{{version}}. Choose “Update” on the computer and run the command there."
+  },
+  "fields": {
+    "nameLabel": "Computer name",
+    "namePlaceholder": "e.g. Home Mac mini"
+  },
+  "limits": {
+    "saved": "{{name}} can run up to {{limit}} concurrently",
+    "dialogTitle": "Concurrent run limit for {{name}}",
+    "description": "Maximum concurrent task runs on this computer. Primary execution, assistance and reviews each count as a run. Paseo and Herdr share this limit.",
+    "label": "Concurrent runs",
+    "queueHelp": "Runs exceeding the limit are queued and start in order as slots become available.",
+    "slotUsageHelp": "A run occupies a slot from opening its workspace until it completes, fails or stops. Active runs still occupy slots while the computer is offline.",
+    "loweringHelp": "Lowering the limit does not stop active runs. New runs follow the new limit after they finish.",
+    "loweredHint": "Limit lowered: new runs wait for active runs to finish",
+    "atCapacity": "At capacity; new runs are queued",
+    "summaryLabel": "Concurrent runs ",
+    "queuedSummary": " · Queued {{count}}",
+    "adjustLabel": "Adjust concurrent run limit for {{name}}",
+    "adjust": "Adjust limit"
+  },
+  "offline": {
+    "detailsLabel": "Offline details for {{name}}",
+    "help": "If an offline computer is powered on, its connector may be outdated or the relay address may have changed. Choose “Update connector” from its “⋯” menu and run the command on that computer."
+  },
+  "revoke": {
+    "confirmTitle": "Revoke {{name}}?",
+    "cancelActiveRuns": "; {{count}} active runs will be cancelled",
+    "confirmDescription": "Its tasks will become unassigned{{activeRunsHint}}. To reconnect, add the computer again.",
+    "success": "Revoked {{name}}"
+  },
+  "title": "Remote computers",
+  "empty": {
+    "relayNotConfigured": "The server has no agenvo relay configured. Remote computers cannot be connected yet.",
+    "title": "No computers connected yet",
+    "description": "Once connected, tasks can be assigned to its Paseo or Herdr agents."
+  },
+  "errors": {
+    "relayConnection": "Unable to connect to relay {{relayUrl}}: {{message}}"
+  },
+  "labels": {
+    "thisComputer": "this computer",
+    "removedComputer": "Removed computer"
+  }
+}

@@ -12,9 +12,9 @@ function tokens(n: number) {
 }
 
 const WINDOWS = [
-  ["5h", "5 小时"],
-  ["24h", "24 小时"],
-  ["7d", "7 天"],
+  ["5h", "common:time.windows.fiveHours"],
+  ["24h", "common:time.windows.day"],
+  ["7d", "common:time.windows.week"],
 ] as const;
 
 /**
@@ -22,23 +22,22 @@ const WINDOWS = [
  * tokens over the last 5 hours, day and week.
  */
 export function UsageLine({ principal }: { principal: string }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["agents", "common"] as const);
   const { data: usage, isPending } = useAgentUsage(principal);
   if (isPending) return null;
   const week = usage?.windows["7d"];
   return (
     <p className="text-xs text-muted-foreground tabular-nums">
-      {translateText("模型用量：{{value1}}", {
-        value1: week?.requests
-          ? translateText("{{value1}} tokens（7 天 {{value2}} 次请求）", {
-              value1: WINDOWS.map(
+      {translateText("usage.summary", {
+        usage: week?.requests
+          ? translateText("usage.tokensAndRequests", {
+              tokens: WINDOWS.map(
                 ([key, label]) =>
                   `${translateText(label)} ${tokens(usage?.windows[key]?.total_tokens ?? 0)}`,
               ).join(" · "),
-              value2: week.requests,
               count: week.requests,
             })
-          : translateText("近 7 天没有"),
+          : translateText("usage.noRecentUsage"),
       })}
     </p>
   );

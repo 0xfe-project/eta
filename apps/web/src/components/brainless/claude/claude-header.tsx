@@ -95,7 +95,7 @@ export function ClaudeHeader({
   whatsNew?: string[];
   className?: string;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["chat", "common"] as const);
   return (
     <fieldset
       className={cn(
@@ -112,7 +112,7 @@ export function ClaudeHeader({
         {/* left: identity */}
         <div className="flex min-w-0 flex-col items-center gap-2 py-1 text-center">
           <div className="font-semibold">
-            {translateText("欢迎回来，{{value1}}！", { value1: user })}
+            {translateText("session.welcomeBack", { name: user })}
           </div>
           <ClaudeLogo className="my-1.5" />
           <div
@@ -134,7 +134,7 @@ export function ClaudeHeader({
         {/* right: tips + what's new */}
         <div className="min-w-0 space-y-1">
           <div className="font-semibold" style={{ color: ROSE }}>
-            {translateText("入门提示")}
+            {translateText("session.gettingStarted")}
           </div>
           {tips.map((t) => (
             <div key={t} className="truncate">
@@ -143,7 +143,7 @@ export function ClaudeHeader({
           ))}
           <div className="my-1.5 h-px" style={{ background: ROSE }} />
           <div className="font-semibold" style={{ color: ROSE }}>
-            {translateText("最近更新")}
+            {translateText("session.recentUpdates")}
           </div>
           {whatsNew.map((t) => (
             <div key={t} className="truncate">
@@ -151,7 +151,7 @@ export function ClaudeHeader({
             </div>
           ))}
           <div className="truncate italic" style={{ color: GRAY }}>
-            {translateText("/release-notes 查看更新")}
+            {translateText("session.releaseNotesHint")}
           </div>
         </div>
       </div>

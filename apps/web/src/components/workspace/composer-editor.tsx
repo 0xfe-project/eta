@@ -168,7 +168,7 @@ export function ComposerEditor({
   style?: React.CSSProperties;
   inputProps?: React.HTMLAttributes<HTMLDivElement>;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["chat", "common"] as const);
   return (
     <LexicalComposer
       initialConfig={{
@@ -185,7 +185,7 @@ export function ComposerEditor({
         <PlainTextPlugin
           contentEditable={
             <ContentEditable
-              aria-label={translateText("消息")}
+              aria-label={translateText("composer.messageLabel")}
               aria-multiline
               {...inputProps}
               aria-placeholder={placeholder}

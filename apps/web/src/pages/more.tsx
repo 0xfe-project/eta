@@ -21,14 +21,14 @@ const pages = [
   {
     to: "/workspace/routines",
     get label() {
-      return translate("定时");
+      return translate("navigation:sections.routines");
     },
     icon: ClockIcon,
   },
   {
     to: "/workspace/memory",
     get label() {
-      return translate("记忆");
+      return translate("navigation:sections.memory");
     },
     icon: BrainIcon,
   },
@@ -75,14 +75,18 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export function More() {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "navigation",
+    "common",
+    "settings",
+  ] as const);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const attention = useSettingsAttention();
   return (
     <>
-      <PageHeader title={translateText("更多")} />
+      <PageHeader title={translateText("sections.more")} />
       <main id="main" className="min-h-0 flex-1 overflow-y-auto pb-6">
-        <Group title={translateText("功能")}>
+        <Group title={translateText("sections.capabilities")}>
           {pages.map(({ to, label, icon }) => (
             <li key={to}>
               <Link to={to} className={row}>
@@ -91,7 +95,7 @@ export function More() {
             </li>
           ))}
         </Group>
-        <Group title={translateText("设置")}>
+        <Group title={translateText("settings:title")}>
           {settingsSections.map(({ value, label, icon }) => (
             <li key={value}>
               <button
@@ -104,7 +108,9 @@ export function More() {
                     <>
                       <AttentionDot />
                       <span className="sr-only">
-                        {translateText("（有账号需要处理）")}
+                        {translateText(
+                          "settings:accessibility.accountAttentionSuffix",
+                        )}
                       </span>
                     </>
                   ) : null}

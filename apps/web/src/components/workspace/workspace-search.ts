@@ -52,7 +52,7 @@ const groupViews = [
   {
     value: "members",
     get label() {
-      return translate("成员");
+      return translate("chat:groups.members.title");
     },
   },
   { value: "artifacts", label: "Artifacts" },
@@ -61,25 +61,25 @@ const workspaceViews = [
   {
     value: "overview",
     get label() {
-      return translate("概览");
+      return translate("navigation:sections.overview");
     },
   },
   {
     value: "tasks",
     get label() {
-      return translate("任务");
+      return translate("navigation:sections.tasks");
     },
   },
   {
     value: "routines",
     get label() {
-      return translate("定时");
+      return translate("navigation:sections.routines");
     },
   },
   {
     value: "inbox",
     get label() {
-      return translate("待处理");
+      return translate("navigation:sections.pending");
     },
   },
 ] as const;

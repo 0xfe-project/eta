@@ -26,10 +26,10 @@ afterEach(async () => {
 });
 
 function Content() {
-  const { t, i18n: instance } = useTranslation();
+  const { t, i18n: instance } = useTranslation(["settings", "common"] as const);
   return (
     <section lang={instance.resolvedLanguage}>
-      <h1>{t("设置")}</h1>
+      <h1>{t("title")}</h1>
       <LanguageSettings />
       <AgentStatus status="idle" />
       <Loading />

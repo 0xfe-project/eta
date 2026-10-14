@@ -209,14 +209,19 @@ function AccountsGauge({
   connections: Connection[] | undefined;
   loading: boolean;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "overview",
+    "agents",
+    "common",
+    "navigation",
+  ] as const);
   const active = connections.filter((c) => USABLE.has(c.state)).length;
   const broken = connections.find((c) => NEEDS_ACTION.has(c.state));
   const limited = connections.find(
     (c) => c.state === "rate_limited" || c.state === "degraded",
   );
   const note = loading
-    ? translateText("读取中…")
+    ? translateText("common:states.reading")
     : broken
       ? `${broken.label} ${connectionStateLabels[broken.state]}`
       : limited
@@ -227,17 +232,17 @@ function AccountsGauge({
             .filter(Boolean)
             .join(" · ")
         : connections.length
-          ? translateText("全部正常")
-          : translateText("还没有账号");
+          ? translateText("accounts.allHealthy")
+          : translateText("accounts.empty");
   return (
     <Meter
-      title={translateText("模型账号")}
+      title={translateText("accounts.title")}
       reading={
         loading
           ? "—"
-          : translateText("{{value1}} / {{value2}} 可用", {
-              value1: active,
-              value2: connections.length,
+          : translateText("models.availableCount", {
+              available: active,
+              total: connections.length,
             })
       }
       ends={["E", "F"]}
@@ -262,41 +267,46 @@ function ModelsGauge({
   models: Model[] | undefined;
   loading: boolean;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "overview",
+    "agents",
+    "common",
+    "navigation",
+  ] as const);
   const available = models.filter((model) => model.available).length;
   const unavailable = models.length - available;
   const degraded = models.filter((model) => model.status === "degraded").length;
   return (
     <Meter
-      title={translateText("模型目录")}
+      title={translateText("models.title")}
       reading={
         loading
           ? "—"
-          : translateText("{{value1}} / {{value2}} 可用", {
-              value1: available,
-              value2: models.length,
+          : translateText("models.availableCount", {
+              available,
+              total: models.length,
             })
       }
       ends={["0", String(models.length)]}
       note={
         loading
-          ? translateText("读取中…")
+          ? translateText("common:states.reading")
           : unavailable || degraded
             ? [
                 unavailable
-                  ? translateText("{{value1}} 个不可用", {
-                      value1: unavailable,
+                  ? translateText("models.unavailableCount", {
+                      count: unavailable,
                     })
                   : "",
                 degraded
-                  ? translateText("{{value1}} 个暂时故障", { value1: degraded })
+                  ? translateText("models.degradedCount", { count: degraded })
                   : "",
               ]
                 .filter(Boolean)
                 .join(" · ")
             : models.length
-              ? translateText("全部可用")
-              : translateText("没有模型")
+              ? translateText("models.allAvailable")
+              : translateText("models.empty")
       }
     >
       {models.map((model) => (
@@ -305,9 +315,11 @@ function ModelsGauge({
           title={
             model.status === "available"
               ? model.display_name
-              : translateText("{{value1}}：{{value2}}", {
-                  value1: model.display_name,
-                  value2: model.reason?.message ?? translateText("不可用"),
+              : translateText("common:format.namedValue", {
+                  name: model.display_name,
+                  value:
+                    model.reason?.message ??
+                    translateText("common:status.unavailable"),
                 })
           }
           className={model.status === "available" ? "bg-foreground" : undefined}
@@ -384,7 +396,12 @@ function Display({
   agent: Agent | undefined;
   loading: boolean;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "overview",
+    "agents",
+    "common",
+    "navigation",
+  ] as const);
   const availability = useModelAvailability(agent);
   const model =
     availability.state === "not_set" ? undefined : availability.model;
@@ -412,36 +429,38 @@ function Display({
             <div className="truncate font-mono text-[10px] text-muted-foreground">
               {model?.display_name ??
                 agent.model ??
-                translateText("未选择模型")}{" "}
+                translateText("agents:models.noneSelected")}{" "}
               · {agentStatusLabels[agent.status]}
             </div>
           </div>
-          <Row label={translateText("上下文窗口")}>
+          <Row label={translateText("models.contextWindow")}>
             {contextText(model?.context_window)}
           </Row>
-          <Row label={translateText("模型")}>
+          <Row label={translateText("common:entities.model")}>
             {availability.state === "ok" ? (
-              <span className="text-foreground">{translateText("■ 可用")}</span>
+              <span className="text-foreground">
+                {translateText("models.availability.available")}
+              </span>
             ) : availability.state === "degraded" ? (
               <span className="text-foreground">
-                {translateText("▨ 暂时故障")}
+                {translateText("models.availability.degraded")}
               </span>
             ) : availability.state === "unavailable" ? (
               <span className="text-destructive">
-                {translateText("■ 不可用")}
+                {translateText("models.availability.unavailable")}
               </span>
             ) : (
-              translateText("未选择")
+              translateText("common:labels.notSelected")
             )}
           </Row>
         </>
       ) : loading ? (
         <div className="text-sm text-muted-foreground motion-safe:animate-pulse">
-          {translateText("读取中…")}
+          {translateText("common:states.reading")}
         </div>
       ) : (
         <div className="text-sm text-muted-foreground">
-          {translateText("还没有智能体")}
+          {translateText("agents:empty.title")}
         </div>
       )}
     </div>
@@ -498,7 +517,12 @@ function currentReply(messages: ChatMessage[], agentId: string | undefined) {
 }
 
 export function Overview() {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "overview",
+    "agents",
+    "common",
+    "navigation",
+  ] as const);
   const now = useNow();
   const { data: snapshot } = useQuery(chatQueryOptions());
   const { agents, current } = useAgents();
@@ -530,7 +554,7 @@ export function Overview() {
 
   return (
     <section
-      aria-label={translateText("概览")}
+      aria-label={translateText("navigation:sections.overview")}
       aria-busy={!loaded}
       className="mx-auto max-w-2xl border p-3.5 text-foreground"
     >
@@ -540,10 +564,10 @@ export function Overview() {
             value={(working + waiting) / load.max}
             labels={load.labels}
             redFrom={0.9}
-            label={translateText(
-              "负载：{{value1}} 个智能体中 {{value2}} 个在运转",
-              { value1: agents.length, value2: working + waiting },
-            )}
+            label={translateText("load.summary", {
+              total: agents.length,
+              active: working + waiting,
+            })}
           >
             <span className="font-mono text-[2.25rem] leading-none font-semibold tracking-tight tabular-nums">
               {loaded ? working + waiting : "—"}
@@ -552,13 +576,13 @@ export function Overview() {
               </span>
             </span>
             <span className="mt-1.5">
-              <Caption>{translateText("负载 · 运转中")}</Caption>
+              <Caption>{translateText("load.label")}</Caption>
             </span>
           </Gauge>
           <p className="-mt-3 text-center font-mono text-[10px] text-muted-foreground">
-            {translateText("{{value1}} 工作中 · {{value2}} 等待确认", {
-              value1: loaded ? working : "—",
-              value2: loaded ? waiting : "—",
+            {translateText("load.agentStates", {
+              working: loaded ? working : "—",
+              waiting: loaded ? waiting : "—",
             })}
           </p>
         </div>
@@ -571,10 +595,10 @@ export function Overview() {
             labels={timer.labels}
             label={
               reply
-                ? translateText("本轮已用 {{value1}}", {
-                    value1: clock(elapsed),
+                ? translateText("turn.usage", {
+                    usage: clock(elapsed),
                   })
-                : translateText("当前智能体没有进行中的回复")
+                : translateText("turn.noActiveReply")
             }
           >
             <span
@@ -584,16 +608,16 @@ export function Overview() {
               {reply ? clock(elapsed) : "—"}
             </span>
             <span className="mt-1.5">
-              <Caption>{translateText("本轮计时")}</Caption>
+              <Caption>{translateText("turn.duration")}</Caption>
             </span>
           </Gauge>
           <p className="-mt-3 text-center font-mono text-[10px] text-muted-foreground">
-            {translateText("{{value1}} · {{value2}} 条进行中", {
-              value1: reply
-                ? translateText("回复中")
-                : translateText("未在回复"),
-              value2: loaded ? replies : "—",
-              count: loaded ? replies : "—",
+            {translateText("load.activeReplies", {
+              status: reply
+                ? translateText("turn.replying")
+                : translateText("turn.notReplying"),
+              count: replies,
+              countText: loaded ? replies : "—",
             })}
           </p>
         </div>
@@ -609,7 +633,7 @@ export function Overview() {
 
       {agents.length ? (
         <ul
-          aria-label={translateText("智能体")}
+          aria-label={translateText("common:entities.agents")}
           className="mt-3.5 grid gap-0.5 border-t pt-2"
         >
           {agents.map((agent) => {
@@ -630,12 +654,12 @@ export function Overview() {
                     {models.find((model) => model.id === agent.model)
                       ?.display_name ??
                       agent.model ??
-                      translateText("未选择模型")}
+                      translateText("agents:models.noneSelected")}
                   </span>
                   <span className="text-right font-mono text-[10px] text-muted-foreground tabular-nums">
-                    {translateText("{{value1}} 记忆", {
-                      value1: memoryCount ?? "—",
-                      count: memoryCount ?? "—",
+                    {translateText("memory.count", {
+                      count: memoryCount ?? 0,
+                      countText: memoryCount ?? "—",
                     })}
                   </span>
                   <span className="text-right font-mono text-[10px] text-muted-foreground">
@@ -650,15 +674,15 @@ export function Overview() {
 
       <div className="mt-3.5 flex items-end justify-between border-t pt-2.5">
         <div className="flex flex-col">
-          <Caption>{translateText("智能体")}</Caption>
+          <Caption>{translateText("common:entities.agents")}</Caption>
           <Digits value={loaded ? agents.length : undefined} width={2} strong />
         </div>
         <div className="flex flex-col items-center">
-          <Caption>{translateText("待确认")}</Caption>
+          <Caption>{translateText("attention.awaitingConfirmation")}</Caption>
           <Digits value={loaded ? pending.length : undefined} width={2} />
         </div>
         <div className="flex flex-col items-end">
-          <Caption>{translateText("记忆条目")}</Caption>
+          <Caption>{translateText("memory.label")}</Caption>
           <Digits value={loaded ? memories.total : undefined} width={4} />
         </div>
       </div>

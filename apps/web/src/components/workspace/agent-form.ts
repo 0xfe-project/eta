@@ -8,12 +8,12 @@ export const agentFormSchema = z.object({
   name: z
     .string()
     .trim()
-    .min(1, { error: () => translate("请输入名称。") })
-    .max(100, { error: () => translate("名称最多 100 个字符。") }),
+    .min(1, { error: () => translate("validation:nameRequired") })
+    .max(100, { error: () => translate("validation:nameMaxLength") }),
   description: z.string().max(DESCRIPTION_MAX, {
     error: () =>
-      translate("指令最多 {{value1}} 个字符。", {
-        value1: DESCRIPTION_MAX.toLocaleString(formatLocale()),
+      translate("validation:instructionsMaxLength", {
+        maxCharacters: DESCRIPTION_MAX.toLocaleString(formatLocale()),
       }),
   }),
   // "" until a model is chosen.

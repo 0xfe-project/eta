@@ -30,13 +30,13 @@ export function ClaudePermission({
   onChoose?: (index: number) => void;
   className?: string;
 }) {
-  const { t } = useTranslation();
-  const title = providedTitle ?? t("Bash 命令");
-  const question = providedQuestion ?? t("是否继续？");
+  const { t } = useTranslation(["chat", "common"] as const);
+  const title = providedTitle ?? t("confirmations.bashCommand");
+  const question = providedQuestion ?? t("confirmations.continueQuestion");
   const options = providedOptions ?? [
-    t("是"),
-    t("是，本次会话不再询问"),
-    t("否，告诉 Claude 接下来怎么做（esc）"),
+    t("common:actions.yes"),
+    t("confirmations.allowForSession"),
+    t("confirmations.denyAndExplain"),
   ];
   const [sel, setSel] = React.useState(defaultSelected);
 

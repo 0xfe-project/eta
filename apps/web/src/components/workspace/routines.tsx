@@ -48,16 +48,16 @@ import { UsageLine } from "./usage-line";
 
 const runStatusLabels: Record<RunStatus, string> = {
   get running() {
-    return translate("运行中");
+    return translate("common:status.running");
   },
   get sent() {
-    return translate("已发送");
+    return translate("routines:runStatus.sent");
   },
   get nothing_new() {
-    return translate("没有新内容");
+    return translate("routines:runStatus.nothingNew");
   },
   get failed() {
-    return translate("失败");
+    return translate("common:status.failed");
   },
 };
 
@@ -70,10 +70,10 @@ function took(run: Run) {
       1000,
   );
   return seconds < 60
-    ? translate("{{value1}} 秒", { value1: seconds })
-    : translate("{{value1}} 分 {{value2}} 秒", {
-        value1: Math.floor(seconds / 60),
-        value2: seconds % 60,
+    ? translate("common:time.durationSeconds", { seconds })
+    : translate("common:time.durationMinutesSeconds", {
+        minutes: Math.floor(seconds / 60),
+        seconds: seconds % 60,
       });
 }
 
@@ -118,7 +118,7 @@ function History({
   runs: ListedRun[];
   length?: number;
 }) {
-  useTranslation();
+  useTranslation(["routines", "common", "navigation"] as const);
   const recent = runs.slice(0, length).reverse();
   return (
     <span
@@ -139,15 +139,19 @@ function History({
 }
 
 function NextRun({ routine }: { routine: RoutineSummary }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "routines",
+    "common",
+    "navigation",
+  ] as const);
   if (routine.runs[0]?.status === "running")
     return (
       <span className="inline-flex items-center gap-1.5 text-foreground">
         <span className="size-1.5 bg-foreground motion-safe:animate-pulse" />
-        {translateText("运行中")}
+        {translateText("common:status.running")}
       </span>
     );
-  if (!routine.enabled) return translateText("已暂停");
+  if (!routine.enabled) return translateText("common:status.paused");
   return routine.next_run_at ? when(routine.next_run_at) : "—";
 }
 
@@ -162,7 +166,11 @@ export function RoutineList({
   selected?: string | null;
   bare?: boolean;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "routines",
+    "common",
+    "navigation",
+  ] as const);
   const [, setNav] = useRoutineNav();
   const { data, error, refetch } = useRoutines();
   return (
@@ -170,12 +178,12 @@ export function RoutineList({
       <div
         className={cn("flex items-center justify-between", bare && "hidden")}
       >
-        <h2 className="text-sm font-semibold">{translateText("定时任务")}</h2>
+        <h2 className="text-sm font-semibold">{translateText("title")}</h2>
         <Button
           size="icon-sm"
           variant="ghost"
-          aria-label={translateText("新建定时任务")}
-          title={translateText("新建")}
+          aria-label={translateText("actions.create")}
+          title={translateText("common:actions.new")}
           onClick={() => void setNav({ edit: "new" })}
         >
           <PlusIcon aria-hidden="true" />
@@ -183,7 +191,7 @@ export function RoutineList({
       </div>
       {error && !data ? (
         <LoadError
-          what={translateText("定时任务")}
+          what={translateText("title")}
           error={error}
           onRetry={() => void refetch()}
         />
@@ -192,20 +200,18 @@ export function RoutineList({
       ) : data.length === 0 ? (
         <Empty
           icon={ClockIcon}
-          title={translateText("还没有定时任务")}
+          title={translateText("empty.title")}
           action={
             <Button size="sm" onClick={() => void setNav({ edit: "new" })}>
               <PlusIcon aria-hidden="true" data-icon="inline-start" />
-              {translateText("新建定时任务")}
+              {translateText("actions.create")}
             </Button>
           }
         >
-          {translateText(
-            "让智能体按时去做一件事，比如每天早上整理新闻，每次的结果留成一份报告。",
-          )}
+          {translateText("empty.description")}
         </Empty>
       ) : (
-        <ul aria-label={translateText("定时任务")} className="-mx-2">
+        <ul aria-label={translateText("title")} className="-mx-2">
           {data.map((routine) => (
             <li key={routine.id}>
               <button
@@ -281,7 +287,7 @@ function Entry({
   last: boolean;
   children: React.ReactNode;
 }) {
-  useTranslation();
+  useTranslation(["routines", "common", "navigation"] as const);
   return (
     <li className="relative grid grid-cols-[0.75rem_5.25rem_1fr] gap-x-2 pb-3">
       {last ? null : (
@@ -310,7 +316,11 @@ function RunMoment({
   handoff: boolean;
   last: boolean;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "routines",
+    "common",
+    "navigation",
+  ] as const);
   const [, setNav] = useRoutineNav();
   const open = () => void setNav({ routine: routine.id, run: run.id });
   return (
@@ -351,8 +361,8 @@ function RunMoment({
       ))}
       {handoff && routine.handoff ? (
         <p
-          title={translateText("交接说明（写给下一次运行）：{{value1}}", {
-            value1: routine.handoff.text,
+          title={translateText("reports.handoffNotes", {
+            notes: routine.handoff.text,
           })}
           className="mt-1 line-clamp-2 border-l pl-2 text-xs text-muted-foreground"
         >
@@ -372,7 +382,11 @@ function BriefMoment({
   brief: BriefVersion;
   last: boolean;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "routines",
+    "common",
+    "navigation",
+  ] as const);
   const restore = useRestoreBrief();
   const current = brief.version === routine.briefs[0].version;
   return (
@@ -390,11 +404,11 @@ function BriefMoment({
         <p className="min-w-0 truncate text-muted-foreground">
           <span className="text-foreground">
             {brief.version === 1
-              ? translateText("创建")
-              : translateText("要求 v{{value1}}", { value1: brief.version })}
+              ? translateText("common:actions.create")
+              : translateText("brief.version", { version: brief.version })}
           </span>
           {brief.feedback
-            ? translateText(" · 按“{{value1}}”修订", { value1: brief.feedback })
+            ? translateText("brief.revisedFrom", { feedback: brief.feedback })
             : null}
         </p>
         {current ? null : (
@@ -409,8 +423,8 @@ function BriefMoment({
                 {
                   onSuccess: () =>
                     toast(
-                      translateText("已恢复 v{{value1}}", {
-                        value1: brief.version,
+                      translateText("brief.restored", {
+                        version: brief.version,
                       }),
                     ),
                   onError: showError,
@@ -418,7 +432,7 @@ function BriefMoment({
               )
             }
           >
-            {translateText("恢复")}
+            {translateText("common:actions.resume")}
           </Button>
         )}
       </div>
@@ -427,11 +441,15 @@ function BriefMoment({
 }
 
 function Timeline({ routine }: { routine: Routine }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "routines",
+    "common",
+    "navigation",
+  ] as const);
   const all = moments(routine);
   const latest = routine.runs.find((run) => run.status !== "running");
   return (
-    <ol aria-label={translateText("时间线")}>
+    <ol aria-label={translateText("common:labels.timeline")}>
       {all.map((moment, i) => {
         const last = i === all.length - 1;
         if (moment.kind === "next")
@@ -445,7 +463,7 @@ function Timeline({ routine }: { routine: Routine }) {
               last={last}
             >
               <span className="text-muted-foreground">
-                {translateText("下一次")}
+                {translateText("schedule.nextRun")}
               </span>
             </Entry>
           );
@@ -480,7 +498,11 @@ export function RoutineDetail({
   routine: Routine;
   listed?: boolean;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "routines",
+    "common",
+    "navigation",
+  ] as const);
   const [, setNav] = useRoutineNav();
   const setEnabled = useSetRoutineEnabled();
   const runNow = useRunRoutineNow();
@@ -499,7 +521,7 @@ export function RoutineDetail({
       <div>
         <span className={listed ? "md:hidden" : undefined}>
           <Back
-            label={translateText("定时任务")}
+            label={translateText("title")}
             onClick={() => void setNav({ routine: null })}
           />
         </span>
@@ -510,10 +532,14 @@ export function RoutineDetail({
           <Switch
             checked={routine.enabled}
             aria-label={
-              routine.enabled ? translateText("暂停") : translateText("启用")
+              routine.enabled
+                ? translateText("common:actions.pause")
+                : translateText("common:actions.enable")
             }
             title={
-              routine.enabled ? translateText("暂停") : translateText("启用")
+              routine.enabled
+                ? translateText("common:actions.pause")
+                : translateText("common:actions.enable")
             }
             onCheckedChange={(enabled) =>
               setEnabled.mutate(
@@ -525,8 +551,8 @@ export function RoutineDetail({
           <Button
             size="icon-sm"
             variant="ghost"
-            aria-label={translateText("立即运行")}
-            title={translateText("立即运行")}
+            aria-label={translateText("actions.runNow")}
+            title={translateText("actions.runNow")}
             disabled={running || runNow.isPending}
             onClick={() => runNow.mutate(routine.id, { onError: showError })}
           >
@@ -537,7 +563,7 @@ export function RoutineDetail({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                aria-label={translateText("更多")}
+                aria-label={translateText("navigation:sections.more")}
               >
                 <DotsThreeIcon aria-hidden="true" />
               </Button>
@@ -546,7 +572,7 @@ export function RoutineDetail({
               <DropdownMenuItem
                 onSelect={() => void setNav({ edit: routine.id })}
               >
-                {translateText("编辑")}
+                {translateText("common:actions.edit")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -558,7 +584,7 @@ export function RoutineDetail({
                   })
                 }
               >
-                {translateText("删除")}
+                {translateText("common:actions.delete")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -573,8 +599,8 @@ export function RoutineDetail({
       <button
         type="button"
         aria-expanded={expanded}
-        aria-label={translateText("要求 v{{value1}}", {
-          value1: brief.version,
+        aria-label={translateText("brief.version", {
+          version: brief.version,
         })}
         onClick={() => setExpanded(!expanded)}
         className="block w-full border-l-2 border-foreground pl-3 text-left outline-none focus-visible:bg-muted/60"
@@ -597,7 +623,11 @@ export function RoutineDetail({
 // --- report ---------------------------------------------------------------------
 
 function FeedbackForm({ routine, run }: { routine: Routine; run: Run }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "routines",
+    "common",
+    "navigation",
+  ] as const);
   const [text, setText] = useState("");
   const send = useSendFeedback();
   const submit = () => {
@@ -617,8 +647,8 @@ function FeedbackForm({ routine, run }: { routine: Routine; run: Run }) {
       }}
     >
       <Textarea
-        aria-label={translateText("反馈")}
-        placeholder={translateText("反馈，例如：融资新闻不用放")}
+        aria-label={translateText("feedback.label")}
+        placeholder={translateText("feedback.placeholder")}
         value={text}
         rows={1}
         maxLength={4000}
@@ -632,14 +662,18 @@ function FeedbackForm({ routine, run }: { routine: Routine; run: Run }) {
         }}
       />
       <Button type="submit" disabled={!text.trim() || send.isPending}>
-        {translateText("发送")}
+        {translateText("common:actions.send")}
       </Button>
     </form>
   );
 }
 
 export function RunView({ routine, run }: { routine: Routine; run: Run }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "routines",
+    "common",
+    "navigation",
+  ] as const);
   const [, setNav] = useRoutineNav();
   const reports = routine.runs.filter((r) => r.status === "sent");
   const index = reports.findIndex((r) => r.id === run.id);
@@ -658,7 +692,7 @@ export function RunView({ routine, run }: { routine: Routine; run: Run }) {
           <Button
             variant="ghost"
             size="icon-xs"
-            aria-label={translateText("上一份报告")}
+            aria-label={translateText("reports.previous")}
             disabled={!older}
             onClick={() => older && void setNav({ run: older.id })}
           >
@@ -667,7 +701,7 @@ export function RunView({ routine, run }: { routine: Routine; run: Run }) {
           <Button
             variant="ghost"
             size="icon-xs"
-            aria-label={translateText("下一份报告")}
+            aria-label={translateText("reports.next")}
             disabled={!newer}
             onClick={() => newer && void setNav({ run: newer.id })}
           >
@@ -682,7 +716,10 @@ export function RunView({ routine, run }: { routine: Routine; run: Run }) {
           {run.error}
         </p>
       ) : null}
-      <section aria-label={translateText("反馈")} className="space-y-2">
+      <section
+        aria-label={translateText("feedback.label")}
+        className="space-y-2"
+      >
         {run.feedback.map((feedback) => (
           <div key={feedback.id} className="border-l-2 border-foreground pl-3">
             <p className="text-sm">{feedback.text}</p>
@@ -690,11 +727,11 @@ export function RunView({ routine, run }: { routine: Routine; run: Run }) {
               {when(feedback.created_at)} ·{" "}
               {feedback.revision_failed ? (
                 <span className="text-destructive">
-                  {translateText("没能据此修订要求")}
+                  {translateText("feedback.revisionFailed")}
                 </span>
               ) : feedback.brief_version === null ? (
                 <span className="motion-safe:animate-pulse">
-                  {translateText("修订要求中…")}
+                  {translateText("feedback.revising")}
                 </span>
               ) : (
                 <button
@@ -702,8 +739,8 @@ export function RunView({ routine, run }: { routine: Routine; run: Run }) {
                   className="underline-offset-4 outline-none hover:underline focus-visible:underline"
                   onClick={() => void setNav({ run: null })}
                 >
-                  {translateText("要求已更新为 v{{value1}}", {
-                    value1: feedback.brief_version,
+                  {translateText("feedback.briefUpdated", {
+                    version: feedback.brief_version,
                   })}
                 </button>
               )}
@@ -728,26 +765,34 @@ export function RoutineMissing({
   error: Error | null;
   onRetry: () => void;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "routines",
+    "common",
+    "navigation",
+  ] as const);
   if (error)
     return (
       <LoadError
-        what={translateText("定时任务")}
+        what={translateText("title")}
         error={error}
         onRetry={onRetry}
       />
     );
   if (isPending) return <Loading layout="detail" />;
   return (
-    <Empty icon={ClockIcon} title={translateText("这个定时任务已不存在")}>
-      {translateText("它可能已被删除。")}
+    <Empty icon={ClockIcon} title={translateText("empty.deletedTitle")}>
+      {translateText("common:empty.mayBeDeleted")}
     </Empty>
   );
 }
 
 /** Routines: agents that run on a schedule and leave reports. */
 export function Routines() {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "routines",
+    "common",
+    "navigation",
+  ] as const);
   const [nav, setNav] = useRoutineNav();
   const editing = nav.edit && nav.edit !== "new" ? nav.edit : null;
   const {
@@ -776,7 +821,7 @@ export function Routines() {
     return (
       <div className="space-y-3">
         <Back
-          label={translateText("定时任务")}
+          label={translateText("title")}
           onClick={() => void setNav({ edit: null, routine: null, run: null })}
         />
         <RoutineMissing

@@ -7,7 +7,7 @@ import { CreateGroup } from "./groups";
 import { useGroups } from "./use-groups";
 
 export function GroupNotice({ message }: { message: ChatMessage }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation(["chat", "common"] as const);
   const { groups } = useGroups();
   const { member } = useGroupActions();
   const group = groups.find((g) => g.id === message.group_id);
@@ -36,7 +36,7 @@ export function GroupNotice({ message }: { message: ChatMessage }) {
             ]}
           >
             <Button size="xs" variant="outline" className="mt-2">
-              {translateText("和他们新建群")}
+              {translateText("groups.createWithMembers")}
             </Button>
           </CreateGroup>
         ) : (
@@ -52,10 +52,10 @@ export function GroupNotice({ message }: { message: ChatMessage }) {
               )
             }
           >
-            {translateText("邀请加入群")}
+            {translateText("groups.inviteSelected")}
           </Button>
         ))}
-      {guest && invited && <span>{translateText("已加入群")}</span>}
+      {guest && invited && <span>{translateText("groups.joined")}</span>}
     </div>
   );
 }

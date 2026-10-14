@@ -82,34 +82,38 @@ const scopes = [
   {
     value: "all",
     get label() {
-      return translate("全部");
+      return translate("common:labels.all");
     },
   },
   {
     value: "user",
     get label() {
-      return translate("我的");
+      return translate("tasks:scope.mine");
     },
   },
   {
     value: "remote",
     get label() {
-      return translate("智能体");
+      return translate("common:entities.agents");
     },
   },
 ] as const;
 
 /** The status icon as a menu: change a task's status without opening it. */
 function StatusMenu({ task }: { task: Task }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "tasks",
+    "common",
+    "navigation",
+  ] as const);
   const update = useUpdateTask();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          aria-label={translateText("状态：{{value1}}，修改", {
-            value1: statusLabel(task.status),
+          aria-label={translateText("status.changeLabel", {
+            status: statusLabel(task.status),
           })}
           className="flex size-7 shrink-0 items-center justify-center outline-none hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring"
         >
@@ -151,7 +155,11 @@ function ListView({
   hidden: boolean;
   onCreate: (status: TaskStatus) => void;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "tasks",
+    "common",
+    "navigation",
+  ] as const);
   const [, setNav] = useTaskNav();
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const selectedRef = useRef<HTMLButtonElement>(null);
@@ -189,10 +197,10 @@ function ListView({
               <Button
                 size="icon-xs"
                 variant="ghost"
-                aria-label={translateText("新建{{value1}}任务", {
-                  value1: label,
+                aria-label={translateText("actions.createWithStatusLabel", {
+                  status: label,
                 })}
-                title={translateText("新建")}
+                title={translateText("common:actions.new")}
                 onClick={() => onCreate(value)}
               >
                 <PlusIcon aria-hidden="true" />
@@ -247,7 +255,7 @@ function ListView({
 const dragType = "application/x-axp-task";
 
 function Card({ task }: { task: Task }) {
-  useTranslation();
+  useTranslation(["tasks", "common", "navigation"] as const);
   const [, setNav] = useTaskNav();
   return (
     <li>
@@ -285,7 +293,11 @@ function BoardView({
   tasks: Task[];
   onCreate: (status: TaskStatus) => void;
 }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "tasks",
+    "common",
+    "navigation",
+  ] as const);
   const update = useUpdateTask();
   const [over, setOver] = useState<TaskStatus | null>(null);
   const columns = flow.filter(
@@ -336,10 +348,10 @@ function BoardView({
                 size="icon-xs"
                 variant="ghost"
                 className="ml-auto"
-                aria-label={translateText("新建{{value1}}任务", {
-                  value1: label,
+                aria-label={translateText("actions.createWithStatusLabel", {
+                  status: label,
                 })}
-                title={translateText("新建")}
+                title={translateText("common:actions.new")}
                 onClick={() => onCreate(status)}
               >
                 <PlusIcon aria-hidden="true" />
@@ -360,7 +372,11 @@ function BoardView({
 // --- task ---------------------------------------------------------------------------
 
 function TaskPage({ id }: { id: string }) {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "tasks",
+    "common",
+    "navigation",
+  ] as const);
   const [, setNav] = useTaskNav();
   const { data: task, isPending, error, refetch } = useTask(id);
   const remove = useDeleteTask();
@@ -373,7 +389,7 @@ function TaskPage({ id }: { id: string }) {
         className="flex items-center gap-1.5 text-muted-foreground outline-none hover:text-foreground focus-visible:underline"
       >
         <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
-        {translateText("任务")}
+        {translateText("navigation:sections.tasks")}
       </button>
       {task ? (
         <span className="truncate tabular-nums">#{task.number}</span>
@@ -404,7 +420,7 @@ function TaskPage({ id }: { id: string }) {
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label={translateText("更多")}
+              aria-label={translateText("navigation:sections.more")}
             >
               <DotsThreeIcon aria-hidden="true" />
             </Button>
@@ -416,7 +432,7 @@ function TaskPage({ id }: { id: string }) {
                 remove.mutate(task.id, { onSuccess: back, onError: showError })
               }
             >
-              {translateText("删除")}
+              {translateText("common:actions.delete")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -438,7 +454,7 @@ function TaskPage({ id }: { id: string }) {
             <Description key={task.description} task={task} />
             <section aria-labelledby="task-activity" className="space-y-3">
               <h2 id="task-activity" className="text-sm font-semibold">
-                {translateText("动态")}
+                {translateText("details.activityTab")}
               </h2>
               <Timeline task={task} />
               <CommentBox task={task} />
@@ -447,7 +463,7 @@ function TaskPage({ id }: { id: string }) {
           <BackToTop className="px-4 sm:px-8" />
         </div>
         <aside
-          aria-label={translateText("属性")}
+          aria-label={translateText("details.propertiesTab")}
           className="border-t px-4 py-5 text-xs sm:px-8 @2xl:overflow-y-auto @2xl:border-t-0 @2xl:border-l @2xl:px-4"
         >
           <TaskProperties
@@ -455,7 +471,7 @@ function TaskPage({ id }: { id: string }) {
             onDone={() => void setNav({ task: null }, { history: "replace" })}
           >
             <dt className="text-xs leading-8 text-muted-foreground">
-              {translateText("更新于")}
+              {translateText("fields.updatedAt")}
             </dt>
             <dd className="leading-8 tabular-nums">{when(task.updated_at)}</dd>
           </TaskProperties>
@@ -468,7 +484,11 @@ function TaskPage({ id }: { id: string }) {
 // --- page ---------------------------------------------------------------------------
 
 export function TaskBoard() {
-  const { t: translateText } = useTranslation();
+  const { t: translateText } = useTranslation([
+    "tasks",
+    "common",
+    "navigation",
+  ] as const);
   const [nav, setNav] = useTaskNav();
   const { data, error, refetch } = useTasks();
   const [newStatus, setNewStatus] = useState<TaskStatus>("todo");
@@ -503,7 +523,7 @@ export function TaskBoard() {
         <PageHeader
           title={
             <>
-              {translateText("任务")}
+              {translateText("navigation:sections.tasks")}
               {data ? (
                 <span className="font-normal text-muted-foreground tabular-nums">
                   {tasks.length}
@@ -520,7 +540,10 @@ export function TaskBoard() {
             }
             className="hidden @md:flex"
           >
-            <TabsList aria-label={translateText("指派范围")} className="gap-1">
+            <TabsList
+              aria-label={translateText("scope.label")}
+              className="gap-1"
+            >
               {scopes.map((s) => (
                 <TabsTrigger
                   key={s.value}
@@ -538,19 +561,19 @@ export function TaskBoard() {
               setView({ taskLayout: value as typeof layout })
             }
           >
-            <TabsList aria-label={translateText("布局")}>
+            <TabsList aria-label={translateText("layout.label")}>
               <TabsTrigger
                 value="list"
-                aria-label={translateText("列表")}
-                title={translateText("列表")}
+                aria-label={translateText("layout.list")}
+                title={translateText("layout.list")}
                 className="px-2"
               >
                 <ListIcon aria-hidden="true" />
               </TabsTrigger>
               <TabsTrigger
                 value="board"
-                aria-label={translateText("看板")}
-                title={translateText("看板")}
+                aria-label={translateText("layout.board")}
+                title={translateText("layout.board")}
                 className="px-2"
               >
                 <KanbanIcon aria-hidden="true" />
@@ -560,10 +583,10 @@ export function TaskBoard() {
           <Button size="sm" onClick={() => create()}>
             <PlusIcon aria-hidden="true" />
             <span className="hidden @md:inline">
-              {translateText("新建任务")}
+              {translateText("actions.create")}
             </span>
             <span className="sr-only @md:hidden">
-              {translateText("新建任务")}
+              {translateText("actions.create")}
             </span>
           </Button>
         </PageHeader>
@@ -580,7 +603,7 @@ export function TaskBoard() {
           {error && !data ? (
             <div className="mx-auto max-w-md px-4 py-16">
               <LoadError
-                what={translateText("任务")}
+                what={translateText("navigation:sections.tasks")}
                 error={error}
                 onRetry={() => void refetch()}
               />
@@ -592,25 +615,23 @@ export function TaskBoard() {
               {data.tasks.length === 0 ? (
                 <Empty
                   icon={ListChecksIcon}
-                  title={translateText("还没有任务")}
+                  title={translateText("empty.title")}
                   action={
                     <Button size="sm" onClick={() => create()}>
                       <PlusIcon aria-hidden="true" data-icon="inline-start" />
-                      {translateText("新建任务")}
+                      {translateText("actions.create")}
                     </Button>
                   }
                 >
-                  {translateText(
-                    "把要做的事交给智能体，它会在时间线里记下每一步。",
-                  )}
+                  {translateText("empty.description")}
                 </Empty>
               ) : (
                 <Empty
                   icon={ListChecksIcon}
                   title={
                     scope === "user"
-                      ? translateText("没有指派给你的任务")
-                      : translateText("没有指派给智能体的任务")
+                      ? translateText("empty.noUserTasks")
+                      : translateText("empty.noAgentTasks")
                   }
                   action={
                     <Button
@@ -618,7 +639,7 @@ export function TaskBoard() {
                       variant="outline"
                       onClick={() => setView({ taskScope: "all" })}
                     >
-                      {translateText("查看全部任务")}
+                      {translateText("actions.viewAll")}
                     </Button>
                   }
                 />
@@ -647,7 +668,7 @@ export function TaskBoard() {
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{translateText("新建任务")}</DialogTitle>
+            <DialogTitle>{translateText("actions.create")}</DialogTitle>
           </DialogHeader>
           <TaskForm
             key={newStatus}
