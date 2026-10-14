@@ -13,6 +13,7 @@ import { useSaveRoutine } from "@/queries/routines";
 import { ModelSelect } from "./agent-fields";
 import { occurrences, when } from "./routine-format";
 import { Select, SelectOption } from "./select-field";
+import { useWorkspaceStore } from "./workspace-store";
 
 const KINDS = [
   { value: "daily", label: "每天" },
@@ -182,6 +183,9 @@ export function RoutineForm({
   onDone: (id?: string) => void;
 }) {
   const { data: models } = useModels();
+  const setSettings = useWorkspaceStore((s) => s.setSettings);
+  const noModels =
+    models !== undefined && !models.some((item) => item.available);
   const save = useSaveRoutine();
   const [name, setName] = useState(routine?.name ?? "");
   const [brief, setBrief] = useState(routine?.briefs[0]?.text ?? "");
@@ -285,9 +289,32 @@ export function RoutineForm({
             ))}
           </Select>
         </Field>
-        <Field label="模型">
+        <Field
+          id="routine-model"
+          label="模型"
+          hint={
+            noModels ? (
+              <span id="routine-model-hint">
+                暂无可用模型。
+                <Button
+                  type="button"
+                  variant="link"
+                  size="xs"
+                  className="h-auto px-1"
+                  onClick={() =>
+                    setSettings({ open: true, section: "providers" })
+                  }
+                >
+                  前往模型服务
+                </Button>
+              </span>
+            ) : undefined
+          }
+        >
           <ModelSelect
+            id="routine-model"
             aria-label="模型"
+            aria-describedby={noModels ? "routine-model-hint" : undefined}
             value={model}
             models={models}
             onValueChange={(value) => setModel(value)}
