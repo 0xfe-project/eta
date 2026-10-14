@@ -80,6 +80,10 @@ type ComputerIn struct {
 	Name string `json:"name" minLength:"1" maxLength:"100"`
 }
 
+type ComputerLimitIn struct {
+	MaxActiveRuns int `json:"max_active_runs" minimum:"1" maximum:"20" doc:"How many runs the computer works on at once, its assignees' and assisting agents' on every runtime; more wait in the queue."`
+}
+
 type ApproveIn struct {
 	Fingerprint string `json:"fingerprint" minLength:"1" maxLength:"200" doc:"The fingerprint the user compared with setup's output; only that pairing is approved."`
 }
@@ -336,6 +340,18 @@ func registerTasks(api huma.API, d *Deps) {
 			Body ApproveIn
 		}) (*struct{}, error) {
 			return nil, s.Approve(ctx, d.DB, in.ComputerID, in.Kind, in.Body.Fingerprint)
+		})
+
+	huma.Register(api, taskOp("setComputerLimit", http.MethodPut, "/api/v1/computers/{computer_id}/limit",
+		"Set how many runs a computer works on at once; runs already active go on", 204, "computers"),
+		func(ctx context.Context, in *struct {
+			ComputerPath
+			Body ComputerLimitIn
+		}) (*struct{}, error) {
+			_, err := pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (struct{}, error) {
+				return struct{}{}, s.SetMaxActiveRuns(ctx, tx, in.ComputerID, in.Body.MaxActiveRuns)
+			})
+			return nil, err
 		})
 
 	huma.Register(api, taskOp("deleteComputer", http.MethodDelete, "/api/v1/computers/{computer_id}",

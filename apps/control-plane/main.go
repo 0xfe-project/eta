@@ -363,8 +363,9 @@ func runController(ctx context.Context, s *services, interval time.Duration) err
 		RuntimeGatewayURL: s.cfg.RuntimeGatewayURL, NATSURL: s.cfg.NATSURL, OTLPURL: s.cfg.RuntimeOTLPURL, Wake: wake,
 	}
 	// Remote agents' runs, on their own loop: relay calls take seconds. It
-	// runs only while this controller holds the lock (a computer's capacity
-	// assumes one runner), and is waited for: a start under way finishes.
+	// runs only while this controller holds the lock (one runner watches
+	// and starts each run; a computer's limit holds even with two), and is
+	// waited for: a start under way finishes.
 	// So are the event import and the notifications.
 	runner := &tasks.Runner{DB: s.deps.DB, Service: s.deps.Tasks}
 	var running sync.WaitGroup

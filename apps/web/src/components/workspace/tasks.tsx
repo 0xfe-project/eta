@@ -983,20 +983,25 @@ function RunControls({ task, run }: { task: TaskDetail; run: TaskRun }) {
           <RunStatusText run={run} />
         </span>
         <StopRun task={task.id} run={run} />
-        <Button
-          variant="ghost"
-          size="xs"
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
-        >
-          {open ? (
-            <CaretDownIcon aria-hidden="true" />
-          ) : (
-            <CaretRightIcon aria-hidden="true" />
-          )}
-          执行记录
-        </Button>
+        {run.status === "queued" ? null : (
+          <Button
+            variant="ghost"
+            size="xs"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+          >
+            {open ? (
+              <CaretDownIcon aria-hidden="true" />
+            ) : (
+              <CaretRightIcon aria-hidden="true" />
+            )}
+            执行记录
+          </Button>
+        )}
       </div>
+      {run.status === "queued" && run.queue_reason ? (
+        <p className="text-xs text-muted-foreground">{run.queue_reason}</p>
+      ) : null}
       {run.workspace && open ? (
         <p className="text-xs text-muted-foreground wrap-anywhere">
           工作区 <code>{run.workspace}</code>
@@ -1318,13 +1323,18 @@ const dot = (destructive = false) => (
  * logs on demand, and bookkeeping folded into "N 条变更".
  */
 export function Timeline({ task }: { task: TaskDetail }) {
-  // Runs show where they started; their queueing is not news.
+  // Runs show where they started; their queueing is news only while they
+  // still wait, with why.
   const runs = new Map(task.runs.map((r) => [r.id, r]));
+  const waiting = (a: TaskActivity) => {
+    const run = a.kind === "run_queued" && a.run_id && runs.get(a.run_id);
+    return run && run.status === "queued" && !run.assist ? run : undefined;
+  };
   // An assist's run starts and ends where it was asked for.
   const items = entries(
     task.activity.filter(
       (a) =>
-        describe(a) !== null &&
+        (describe(a) !== null || waiting(a)) &&
         !(
           (a.kind === "run_started" || a.kind === "run_completed") &&
           a.run_id &&
@@ -1399,7 +1409,9 @@ export function Timeline({ task }: { task: TaskDetail }) {
               <AssistEntry task={task} activity={a} />
             </Entry>
           );
-        const run = a.kind === "run_started" && a.run_id && runs.get(a.run_id);
+        const run =
+          (a.kind === "run_started" && a.run_id && runs.get(a.run_id)) ||
+          waiting(a);
         return (
           <Entry key={a.id} last={last} mark={dot(a.kind === "run_failed")}>
             {run ? (

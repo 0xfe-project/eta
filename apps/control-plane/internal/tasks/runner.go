@@ -27,6 +27,16 @@ import (
 //
 // When a task is done, what AXP opened for it is archived or removed.
 //
+// Each computer works on at most its max_active_runs runs at once, of every
+// runtime and lane: a run takes one of its places when it starts (queued
+// takes none) and keeps it while starting or running, so through the
+// opening of its place, an unconfirmed send, the agent's whole turn (and
+// whatever keeps the run running, such as its subagents) and an offline
+// spell, until it is known to have ended: completed, failed, or cancelled
+// once its agent was interrupted. A stop asked for while a place is being
+// opened waits for the opening to return; a run whose opening a dead runner
+// left behind fails (or is cancelled, if asked to stop) at the next tick.
+//
 // Writes to remote agents are never repeated: the time a prompt is handed to
 // the relay is recorded first, and a lost confirmation is settled from the
 // native state. So is the time a place starts being opened: a run whose
@@ -100,6 +110,18 @@ func (r *Runner) inTx(ctx context.Context, fn func(pgx.Tx) error) error {
 	return pgx.BeginFunc(ctx, r.DB, fn)
 }
 
+// cancelStopped cancels a starting run asked to stop once nothing is
+// under way for it any more; its computer's place is free then.
+func (r *Runner) cancelStopped(ctx context.Context, tx pgx.Tx, runID string) error {
+	run, err := pg.One[runRow](ctx, tx, `SELECT * FROM task_run WHERE id = $1 AND status = 'starting'
+		AND interrupt_requested_at IS NOT NULL FOR UPDATE`, runID)
+	if err != nil || run == nil {
+		return err
+	}
+	reason := "已停止。"
+	return finishRun(ctx, tx, run, RunCancelled, &reason)
+}
+
 func (r *Runner) fail(ctx context.Context, runID, message string) error {
 	return r.inTx(ctx, func(tx pgx.Tx) error {
 		run, err := pg.One[runRow](ctx, tx, "SELECT * FROM task_run WHERE id = $1 FOR UPDATE", runID)
@@ -160,30 +182,53 @@ func (r *Runner) settleLoops(ctx context.Context) error {
 }
 
 // dispatch starts the oldest queued run of each idle lane of a task (its
-// assignee's, its assisting agents'), within the computer's capacity.
+// assignee's, its assisting agents'), within its computer's limit:
+// computers fill their places oldest run first, each on its own, so one
+// that is full or offline holds up only its own queue.
+//
+// A place is taken by moving the run to starting, in a transaction holding
+// the computer's row: two dispatchers (or a start racing a change of the
+// limit) count one after the other, never both under the limit. (NO KEY:
+// queuing a run, whose foreign key only shares the row, is not held up.) It is held
+// until the run is known to have ended (see Runner): a queued run takes
+// none.
 func (r *Runner) dispatch(ctx context.Context) error {
 	if r.Service.Relay == nil {
 		return nil
 	}
-	queued, err := pg.All[runRow](ctx, r.DB, `SELECT DISTINCT ON (q.task_id, q.assist) q.* FROM task_run q
-		WHERE q.status = 'queued' AND NOT EXISTS (SELECT 1 FROM task_run a WHERE a.task_id = q.task_id
-			AND a.assist = q.assist AND a.status IN ('starting', 'running'))
-		ORDER BY q.task_id, q.assist, q.created_at`)
+	queued, err := pg.All[runRow](ctx, r.DB, `SELECT * FROM (SELECT DISTINCT ON (q.task_id, q.assist) q.* FROM task_run q
+			WHERE q.status = 'queued' AND NOT EXISTS (SELECT 1 FROM task_run a WHERE a.task_id = q.task_id
+				AND a.assist = q.assist AND a.status IN ('starting', 'running'))
+			ORDER BY q.task_id, q.assist, q.created_at, q.id) oldest
+		ORDER BY created_at, id`)
 	if err != nil {
 		return err
 	}
+	full := map[string]bool{}
 	for _, q := range queued {
+		if q.ComputerID == nil || full[*q.ComputerID] {
+			continue
+		}
 		err := r.inTx(ctx, func(tx pgx.Tx) error {
+			var limit int
+			if err := tx.QueryRow(ctx, "SELECT max_active_runs FROM computer WHERE id = $1 FOR NO KEY UPDATE",
+				*q.ComputerID).Scan(&limit); err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return nil
+				}
+				return err
+			}
 			run, err := pg.One[runRow](ctx, tx, "SELECT * FROM task_run WHERE id = $1 AND status = 'queued' FOR UPDATE", q.ID)
-			if err != nil || run == nil || run.ComputerID == nil {
+			if err != nil || run == nil || run.ComputerID == nil || *run.ComputerID != *q.ComputerID {
 				return err
 			}
-			var active int
-			if err := tx.QueryRow(ctx, `SELECT count(*) FROM task_run WHERE computer_id = $1
-				AND status IN ('starting', 'running')`, *run.ComputerID).Scan(&active); err != nil {
+			active, err := activeRuns(ctx, tx, *run.ComputerID)
+			if err != nil {
 				return err
 			}
-			if active >= MaxActiveRuns {
+			if active >= limit {
+				// Later runs on it wait too: the oldest goes first.
+				full[*run.ComputerID] = true
 				return nil
 			}
 			session, err := openSession(ctx, tx, run)
@@ -203,6 +248,14 @@ func (r *Runner) dispatch(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// activeRuns is how many of the computer's places are taken.
+func activeRuns(ctx context.Context, db pg.DB, computerID string) (int, error) {
+	var n int
+	err := db.QueryRow(ctx, `SELECT count(*) FROM task_run WHERE computer_id = $1
+		AND status IN ('starting', 'running')`, computerID).Scan(&n)
+	return n, err
 }
 
 func openSession(ctx context.Context, db interface {
@@ -251,23 +304,27 @@ func (r *Runner) startOne(ctx context.Context, a agents, run *runRow) error {
 		return err
 	}
 	// Recorded before the call: if its confirmation is lost, watch settles
-	// it from the native state. Only a run still starting is sent anything:
-	// stopping, reassigning or finishing the task cancels one that is.
+	// it from the native state. Only a run still starting, and not asked to
+	// stop, is sent anything: stopping, reassigning or finishing the task
+	// cancels one, or asks one whose place was being opened to stop.
 	sentAt := pg.Now()
-	started, err := r.DB.Exec(ctx, `UPDATE task_run SET status = 'running', sent_at = $2 WHERE id = $1 AND status = 'starting'`,
-		run.ID, sentAt)
+	started, err := r.DB.Exec(ctx, `UPDATE task_run SET status = 'running', sent_at = $2 WHERE id = $1 AND status = 'starting'
+		AND interrupt_requested_at IS NULL`, run.ID, sentAt)
 	if err != nil {
 		return err
 	}
 	if started.RowsAffected() == 0 {
-		if !opened {
-			return nil
-		}
-		// Cancelled while its place was being opened: what was opened for
-		// it is closed and cleaned up, never reused.
-		_, err := r.DB.Exec(ctx, `UPDATE task_session SET closed_at = COALESCE(closed_at, $2), cleanup_pending = true
-			WHERE id = $1`, session.ID, pg.Now())
-		return err
+		return r.inTx(ctx, func(tx pgx.Tx) error {
+			if opened {
+				// Stopped while its place was being opened: what was opened
+				// for it is closed and cleaned up, never reused.
+				if _, err := tx.Exec(ctx, `UPDATE task_session SET closed_at = COALESCE(closed_at, $2), cleanup_pending = true
+					WHERE id = $1`, session.ID, pg.Now()); err != nil {
+					return err
+				}
+			}
+			return r.cancelStopped(ctx, tx, run.ID)
+		})
 	}
 	delete(r.working, run.ID)
 	err = a.send(ctx, session, session.native(), r.withCLI(ctx, run, run.Prompt))
@@ -308,6 +365,15 @@ func (r *Runner) session(ctx context.Context, a agents, run *runRow) (*sessionRo
 	if run.ComputerID == nil {
 		return nil, r.fail(ctx, run.ID, "这次运行没有电脑。")
 	}
+	// Being opened by a runner that died (a stopped one finishes its
+	// start): what it opened is not known. A run asked to stop meanwhile is
+	// cancelled; others fail.
+	if run.OpeningAt != nil {
+		if run.InterruptRequestedAt != nil {
+			return nil, r.inTx(ctx, func(tx pgx.Tx) error { return r.cancelStopped(ctx, tx, run.ID) })
+		}
+		return nil, r.fail(ctx, run.ID, "上次打开工作位置时被中断（例如部署），可能已经打开了一个；为了不重复打开，这次运行失败，请重新运行。")
+	}
 	var deviceID *string
 	if err := r.DB.QueryRow(ctx, "SELECT device_id FROM computer_runtime WHERE computer_id = $1 AND kind = $2",
 		*run.ComputerID, run.Runtime).Scan(&deviceID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -333,9 +399,6 @@ func (r *Runner) session(ctx context.Context, a agents, run *runRow) (*sessionRo
 			}
 			return nil, r.fail(ctx, run.ID, "找不到主执行者工作位置所在的仓库，无法为协助开 worktree："+err.Error())
 		}
-	}
-	if run.OpeningAt != nil {
-		return nil, r.fail(ctx, run.ID, "上次打开工作位置时被中断（例如部署），可能已经打开了一个；为了不重复打开，这次运行失败，请重新运行。")
 	}
 	marked, err := r.DB.Exec(ctx, "UPDATE task_run SET opening_at = $2 WHERE id = $1 AND status = 'starting' AND opening_at IS NULL",
 		run.ID, pg.Now())

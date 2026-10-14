@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"log/slog"
 	"path/filepath"
 	"slices"
@@ -30,8 +31,11 @@ import (
 const (
 	// EnrollFor is how long an install command works.
 	EnrollFor = 24 * time.Hour
-	// MaxActiveRuns is how many runs a computer works on at once.
-	MaxActiveRuns = 4
+	// DefaultMaxActiveRuns is how many runs a computer works on at once
+	// until the user sets it (the column's default); MaxActiveRunsLimit the
+	// most it can be set to.
+	DefaultMaxActiveRuns = 3
+	MaxActiveRunsLimit   = 20
 )
 
 var Runtimes = []string{"paseo", "herdr"}
@@ -47,6 +51,7 @@ type computerRow struct {
 	Arch            *string    `db:"arch"`
 	CLIPath         *string    `db:"cli_path"`
 	CreatedAt       time.Time  `db:"created_at"`
+	MaxActiveRuns   int        `db:"max_active_runs"`
 }
 
 type computerRuntimeRow struct {
@@ -89,8 +94,16 @@ type Computer struct {
 	// Until it enrolls: when the install command stops working.
 	EnrollExpiresAt *jsontime.Time    `json:"enroll_expires_at" nullable:"true"`
 	Runtimes        []ComputerRuntime `json:"runtimes"`
-	ActiveRuns      int64             `json:"active_runs"`
-	CreatedAt       jsontime.Time     `json:"created_at"`
+	// Its runs that hold one of its places to work at once: starting or
+	// running (its assignees' and assisting agents', every runtime), until
+	// they are known to have ended. Above max_active_runs after the limit
+	// was lowered: those finish, and nothing new starts meanwhile.
+	ActiveRuns    int64 `json:"active_runs"`
+	MaxActiveRuns int   `json:"max_active_runs" minimum:"1" maximum:"20"`
+	// Its queued runs: waiting for a free place, or for their task's
+	// previous run in the same lane.
+	QueuedRuns int64         `json:"queued_runs"`
+	CreatedAt  jsontime.Time `json:"created_at"`
 }
 
 type Computers struct {
@@ -151,18 +164,20 @@ func (s *Service) ListComputers(ctx context.Context, db pg.DB) (*Computers, erro
 	if err != nil {
 		return nil, err
 	}
-	active, err := pg.All[struct {
+	counts, err := pg.All[struct {
 		ComputerID string `db:"computer_id"`
-		N          int64  `db:"n"`
-	}](ctx, db, `SELECT computer_id, count(*) AS n FROM task_run WHERE status IN ('starting', 'running')
-		AND computer_id IS NOT NULL GROUP BY computer_id`)
+		Active     int64  `db:"active"`
+		Queued     int64  `db:"queued"`
+	}](ctx, db, `SELECT computer_id, count(*) FILTER (WHERE status IN ('starting', 'running')) AS active,
+		count(*) FILTER (WHERE status = 'queued') AS queued FROM task_run
+		WHERE status IN ('queued', 'starting', 'running') AND computer_id IS NOT NULL GROUP BY computer_id`)
 	if err != nil {
 		return nil, err
 	}
 	for _, r := range rows {
 		c := Computer{
 			ID: r.ID, Name: r.Name, Enrolled: r.TokenHash != nil, Hostname: r.Hostname, OS: r.OS, Arch: r.Arch,
-			Runtimes: []ComputerRuntime{}, CreatedAt: jsontime.From(r.CreatedAt),
+			Runtimes: []ComputerRuntime{}, MaxActiveRuns: r.MaxActiveRuns, CreatedAt: jsontime.From(r.CreatedAt),
 		}
 		if r.TokenHash == nil {
 			c.EnrollExpiresAt = jsontime.Ptr(r.EnrollExpiresAt)
@@ -174,9 +189,9 @@ func (s *Service) ListComputers(ctx context.Context, db pg.DB) (*Computers, erro
 				c.Online = c.Online || public.State == "online"
 			}
 		}
-		for _, a := range active {
-			if a.ComputerID == r.ID {
-				c.ActiveRuns = a.N
+		for _, n := range counts {
+			if n.ComputerID == r.ID {
+				c.ActiveRuns, c.QueuedRuns = n.Active, n.Queued
 			}
 		}
 		out.Computers = append(out.Computers, c)
@@ -254,7 +269,8 @@ func (s *Service) CreateComputer(ctx context.Context, tx pgx.Tx, name string) (*
 		return nil, err
 	}
 	return &Enrollment{Code: code, Computer: Computer{
-		ID: id, Name: name, Runtimes: []ComputerRuntime{}, CreatedAt: jsontime.From(now), EnrollExpiresAt: jsontime.Ptr(&expires),
+		ID: id, Name: name, Runtimes: []ComputerRuntime{}, MaxActiveRuns: DefaultMaxActiveRuns, CreatedAt: jsontime.From(now),
+		EnrollExpiresAt: jsontime.Ptr(&expires),
 	}}, nil
 }
 
@@ -275,8 +291,25 @@ func (s *Service) RenewEnrollment(ctx context.Context, tx pgx.Tx, id string) (*E
 		return nil, err
 	}
 	return &Enrollment{Code: code, Computer: Computer{
-		ID: r.ID, Name: r.Name, Runtimes: []ComputerRuntime{}, CreatedAt: jsontime.From(r.CreatedAt), EnrollExpiresAt: jsontime.Ptr(&expires),
+		ID: r.ID, Name: r.Name, Runtimes: []ComputerRuntime{}, MaxActiveRuns: r.MaxActiveRuns, CreatedAt: jsontime.From(r.CreatedAt),
+		EnrollExpiresAt: jsontime.Ptr(&expires),
 	}}, nil
+}
+
+// SetMaxActiveRuns sets how many runs the computer works on at once. The
+// runner reads it at every dispatch, so it applies to the next run that
+// would start; lowering it below what is active stops nothing: those runs
+// finish and no new one starts until fewer are active than the new limit.
+func (s *Service) SetMaxActiveRuns(ctx context.Context, tx pgx.Tx, id string, limit int) error {
+	if limit < 1 || limit > MaxActiveRunsLimit {
+		return invalid(fmt.Sprintf("同时执行数要在 1 到 %d 之间。", MaxActiveRunsLimit))
+	}
+	r, err := computer(ctx, tx, id)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, "UPDATE computer SET max_active_runs = $2 WHERE id = $1", r.ID, limit)
+	return err
 }
 
 func computer(ctx context.Context, db pg.DB, id string) (*computerRow, error) {
@@ -367,6 +400,10 @@ func (s *Service) Approve(ctx context.Context, db pg.DB, id, kind, fingerprint s
 func (s *Service) DeleteComputer(ctx context.Context, tx pgx.Tx, id string) error {
 	r, err := computer(ctx, tx, id)
 	if err != nil {
+		return err
+	}
+	// Before its runs, as the runner's dispatch locks them.
+	if _, err := tx.Exec(ctx, "SELECT 1 FROM computer WHERE id = $1 FOR NO KEY UPDATE", r.ID); err != nil {
 		return err
 	}
 	runtimes, err := pg.All[computerRuntimeRow](ctx, tx, "SELECT * FROM computer_runtime WHERE computer_id = $1", r.ID)

@@ -389,7 +389,7 @@ func (s *Service) CancelAssist(ctx context.Context, tx pgx.Tx, ref, assistID str
 			return nil, err
 		}
 		if run != nil {
-			if err := stopRun(ctx, tx, run); err != nil {
+			if err := stopRun(ctx, tx, run, "已停止。"); err != nil {
 				return nil, err
 			}
 		}
@@ -404,14 +404,17 @@ func (s *Service) CancelAssist(ctx context.Context, tx pgx.Tx, ref, assistID str
 	return detail(ctx, tx, r)
 }
 
-// stopRun stops a run: a running one is asked to, others stop now.
-func stopRun(ctx context.Context, tx pgx.Tx, run *runRow) error {
-	switch run.Status {
-	case RunRunning:
+// stopRun stops a run. Queued ones stop now, and so do starting ones
+// before their place is being opened. A running one is asked to (watch
+// interrupts its agent), and so is one whose place is being opened: the
+// runner cancels it once the opening returns. Either way it keeps its
+// computer's place until it is known to have stopped.
+func stopRun(ctx context.Context, tx pgx.Tx, run *runRow, reason string) error {
+	switch {
+	case run.Status == RunRunning || run.Status == RunStarting && run.OpeningAt != nil:
 		_, err := tx.Exec(ctx, "UPDATE task_run SET interrupt_requested_at = $2 WHERE id = $1 AND interrupt_requested_at IS NULL", run.ID, pg.Now())
 		return err
-	case RunQueued, RunStarting:
-		reason := "已停止。"
+	case run.Status == RunQueued || run.Status == RunStarting:
 		return finishRun(ctx, tx, run, RunCancelled, &reason)
 	}
 	return nil

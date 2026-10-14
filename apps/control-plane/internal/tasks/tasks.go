@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"strings"
 	"time"
@@ -250,6 +251,7 @@ type TaskRun struct {
 	SentAt       *jsontime.Time `json:"sent_at" nullable:"true"`
 	FinishedAt   *jsontime.Time `json:"finished_at" nullable:"true"`
 	Assist       bool           `json:"assist" doc:"Another agent's assistance (请 Agent 协助), not the assignee's work."`
+	QueueReason  *string        `json:"queue_reason" nullable:"true" doc:"Why a queued run waits: its task's previous run in the same lane, or its computer's limit on runs at once."`
 }
 
 type TaskDetail struct {
@@ -376,15 +378,54 @@ func detail(ctx context.Context, db pg.DB, r *taskRow) (*TaskDetail, error) {
 	for _, a := range activity {
 		out.Activity = append(out.Activity, a.public())
 	}
+	// A lane is busy from its oldest unfinished run on.
+	busy := map[bool]bool{}
 	for _, run := range runs {
-		out.Runs = append(out.Runs, TaskRun{
+		public := TaskRun{
 			ID: run.ID, Status: run.Status, ComputerID: run.ComputerID, ComputerName: run.ComputerName,
 			Runtime: run.Runtime, Provider: run.Provider, Workspace: run.Workspace, Nudged: run.NudgedAt != nil,
 			Error: run.Error, CreatedAt: jsontime.From(run.CreatedAt), SentAt: jsontime.Ptr(run.SentAt),
 			FinishedAt: jsontime.Ptr(run.FinishedAt), Assist: run.Assist,
-		})
+		}
+		if run.Status == RunQueued {
+			if public.QueueReason, err = queueReason(ctx, db, &run.runRow, run.ComputerName, busy[run.Assist]); err != nil {
+				return nil, err
+			}
+		}
+		if run.FinishedAt == nil {
+			busy[run.Assist] = true
+		}
+		out.Runs = append(out.Runs, public)
 	}
 	return out, nil
+}
+
+// queueReason is why a queued run waits, if it does; one that does not
+// starts at the runner's next tick.
+func queueReason(ctx context.Context, db pg.DB, run *runRow, computerName *string, laneBusy bool) (*string, error) {
+	if laneBusy {
+		reason := "等这个任务的上一次运行结束。"
+		if run.Assist {
+			reason = "等这个任务上一次协助结束。"
+		}
+		return &reason, nil
+	}
+	if run.ComputerID == nil {
+		return nil, nil
+	}
+	var limit int
+	if err := db.QueryRow(ctx, "SELECT max_active_runs FROM computer WHERE id = $1", *run.ComputerID).Scan(&limit); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	active, err := activeRuns(ctx, db, *run.ComputerID)
+	if err != nil || active < limit {
+		return nil, err
+	}
+	reason := fmt.Sprintf("「%s」同时执行已满（%d/%d），有运行结束后按排队先后开始。", deref(computerName), active, limit)
+	return &reason, nil
 }
 
 // --- writes (in the caller's transaction) -------------------------------------------------
@@ -764,7 +805,7 @@ func (s *Service) enqueueRun(ctx context.Context, tx pgx.Tx, r *taskRow, prompt 
 	return id, record(ctx, tx, r.ID, &id, "run_queued", System, nil, nil)
 }
 
-// stopRuns cancels queued runs and asks the active one to stop.
+// stopRuns stops the task's unfinished runs (stopRun).
 func (s *Service) stopRuns(ctx context.Context, tx pgx.Tx, taskID, reason string) error {
 	runs, err := pg.All[runRow](ctx, tx, `SELECT * FROM task_run WHERE task_id = $1
 		AND status IN ('queued', 'starting', 'running') FOR UPDATE`, taskID)
@@ -772,21 +813,14 @@ func (s *Service) stopRuns(ctx context.Context, tx pgx.Tx, taskID, reason string
 		return err
 	}
 	for _, run := range runs {
-		if run.Status == RunRunning {
-			if _, err := tx.Exec(ctx, "UPDATE task_run SET interrupt_requested_at = $2 WHERE id = $1 AND interrupt_requested_at IS NULL",
-				run.ID, pg.Now()); err != nil {
-				return err
-			}
-			continue
-		}
-		if err := finishRun(ctx, tx, run, RunCancelled, &reason); err != nil {
+		if err := stopRun(ctx, tx, run, reason); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// Interrupt asks a running run to stop; queued and starting ones stop now.
+// Interrupt stops a run (stopRun).
 func (s *Service) Interrupt(ctx context.Context, tx pgx.Tx, ref, runID string) (*TaskDetail, error) {
 	r, err := find(ctx, tx, ref, true)
 	if err != nil {
@@ -803,18 +837,11 @@ func (s *Service) Interrupt(ctx context.Context, tx pgx.Tx, ref, runID string) (
 	if run == nil {
 		return nil, apierr.NotFound()
 	}
-	switch run.Status {
-	case RunRunning:
-		if _, err := tx.Exec(ctx, "UPDATE task_run SET interrupt_requested_at = $2 WHERE id = $1", run.ID, pg.Now()); err != nil {
-			return nil, err
-		}
-	case RunQueued, RunStarting:
-		reason := "已停止。"
-		if err := finishRun(ctx, tx, run, RunCancelled, &reason); err != nil {
-			return nil, err
-		}
-	default:
+	if run.FinishedAt != nil {
 		return nil, apierr.New(409, "RUN_FINISHED", "这次运行已经结束。")
+	}
+	if err := stopRun(ctx, tx, run, "已停止。"); err != nil {
+		return nil, err
 	}
 	return detail(ctx, tx, r)
 }

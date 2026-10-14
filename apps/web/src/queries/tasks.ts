@@ -356,6 +356,19 @@ export function useApproveRuntime() {
   );
 }
 
+/** How many runs the computer works on at once; the next dispatch reads it. */
+export function useSetComputerLimit() {
+  return useComputerMutation(
+    ({ id, maxActiveRuns }: { id: string; maxActiveRuns: number }) =>
+      unwrap(
+        controlPlane.PUT("/api/v1/computers/{computer_id}/limit", {
+          params: { path: { computer_id: id } },
+          body: { max_active_runs: maxActiveRuns },
+        }),
+      ),
+  );
+}
+
 export function useDeleteComputer() {
   return useComputerMutation((id: string) =>
     unwrap(
