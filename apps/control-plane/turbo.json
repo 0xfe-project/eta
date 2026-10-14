@@ -43,7 +43,7 @@
         "**/*.go",
         "!**/*_test.go"
       ],
-      "outputs": ["out/openapi.json"]
+      "outputs": ["out/openapi.json", "out/routines.openapi.json"]
     },
     "lint": {
       "inputs": [
