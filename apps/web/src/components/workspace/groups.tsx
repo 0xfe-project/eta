@@ -291,7 +291,7 @@ export function GroupBar({
           type="button"
           onClick={onInfo}
           className="group flex max-w-full flex-col items-center outline-none"
-          aria-label={`${group.name}，查看群信息`}
+          aria-label={`${group.name}，${group.kind === "direct" ? "智能体设置" : "查看群信息"}`}
         >
           <span className="flex -space-x-6">
             {group.participants
