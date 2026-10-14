@@ -55,8 +55,8 @@
       ]
     },
     // Tests run against development's PostgreSQL, each binary in a database
-    // of its own; AXP_TEST_NATS_URL and AXP_TEST_DOCKER add the NATS and
-    // Docker tests.
+    // of its own; AXP_TEST_NATS_URL and AXP_TEST_KUBERNETES add the NATS and
+    // cluster tests.
     "test": {
       "inputs": [
         "$TURBO_DEFAULT$",
@@ -69,7 +69,7 @@
         "$TURBO_ROOT$/bundles/*/service/*.yaml",
         "$TURBO_ROOT$/plugins/**"
       ],
-      "env": ["DATABASE_URL", "AXP_TEST_NATS_URL", "AXP_TEST_DOCKER"]
+      "env": ["DATABASE_URL", "AXP_TEST_NATS_URL", "AXP_TEST_KUBERNETES"]
     }
   }
 }

@@ -11,8 +11,7 @@ COPY axp_memory /app/axp_memory/
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
     FASTEMBED_CACHE_PATH=/app/models \
-    HF_HUB_OFFLINE=1 \
-    AXP_MEMORY_ADDR=0.0.0.0:8320
+    HF_HUB_OFFLINE=1
 EXPOSE 8320
 USER nobody
 CMD ["python", "-m", "axp_memory"]

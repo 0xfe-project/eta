@@ -11,7 +11,7 @@
 # The plugins routine runs get (the routine target, docs/architecture/plugins.md):
 # their setup scripts install what they run (grok-api) into /opt/axp/bin, with
 # a download cache kept across builds.
-FROM python:3.13-slim AS routine-plugins
+FROM debian:trixie-slim AS routine-plugins
 ARG TARGETOS
 ARG TARGETARCH
 RUN apt-get update \
@@ -22,10 +22,13 @@ COPY packages/plugins-go/out/${TARGETOS}-${TARGETARCH}/axp-plugins /usr/local/bi
 RUN --mount=type=cache,target=/var/cache/axp-plugins \
     axp-plugins setup routine /opt/axp/plugins /opt/axp/bin
 
-FROM python:3.13-slim
+FROM debian:trixie-slim
 ARG TARGETOS
 ARG TARGETARCH
 LABEL service="axp"
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=oven/bun:1.3.14 /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=caddy:2.11.7-alpine /usr/bin/caddy /usr/local/bin/caddy
 # The controller builds agents' images with the cluster's BuildKit daemon.
@@ -47,6 +50,5 @@ COPY apps/agenvo/out/dist/ /app/apps/agenvo/out/dist/
 # The control plane finds them at ../../bundles and ../../plugins.
 WORKDIR /app/apps/control-plane
 
-ENV PYTHONUNBUFFERED=1
 EXPOSE 3000 8000 8001 8080 8090
 CMD ["bun", "/app/apps/web/server.js"]

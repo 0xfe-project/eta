@@ -19,7 +19,7 @@ import (
 var ErrNotFound = errors.New("object not found")
 
 // Config is where the bucket is: Endpoint is the service's URL
-// (http://axp-s3:8333, https://s3.us-east-1.amazonaws.com, ...).
+// (http://s3.axp.svc.cluster.local:8333, https://s3.us-east-1.amazonaws.com, ...).
 type Config struct {
 	Endpoint        string
 	Bucket          string

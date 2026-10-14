@@ -1,7 +1,7 @@
 // The agent runtime: one container per agent, always running, its state on
 // the agent's volume (/agent). On start it installs the image's plugins,
 // starts Codex's app-server, serves the control API and reports itself
-// started. Docker restarts it when it exits.
+// started. The kubelet restarts it when it exits.
 
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
@@ -104,7 +104,7 @@ async function main(): Promise<void> {
   info(`Control API on :${s.port}; group threads open on demand`);
   outbox.emit("runtime.started", {});
 
-  // Docker stops containers with SIGTERM, then kills them after 10 seconds.
+  // Kubernetes stops the Pod with SIGTERM, then kills it after 10 seconds.
   const stop = (): void => {
     if (stopping) {
       return;

@@ -23,7 +23,7 @@ import (
 )
 
 type Config struct {
-	// Development: its own runtime network, image and container names.
+	// Development: development's services, namespaces and image tags.
 	Dev bool `env:"AXP_DEV"`
 	// Signs runtime tokens and cursors; every control plane process must
 	// share it. Without it, a key generated once per checkout is used.
@@ -72,17 +72,13 @@ type Config struct {
 	// built from; the production image copies them alongside.
 	BundlesDir string `env:"AXP_BUNDLES_DIR" default:"../../bundles"`
 	PluginsDir string `env:"AXP_PLUGINS_DIR" default:"../../plugins"`
-	// The agenvo relay (@agenvo/server), the agenvo bundle's service, which
-	// remote computers' connectors pair with at AXP_PUBLIC_URL under
-	// /remote/relay. The control plane reaches it at RelayURL (by default
-	// its Service in the bundles' namespace) with the administrator secret
-	// AXP gives the service. Remote computers are off without a public URL.
-	RelayURL string `env:"AXP_RELAY_URL"`
-	// Where remote computers reach AXP (install commands); the browser's
-	// address when empty.
+	// Where remote computers reach AXP (install commands), and their
+	// connectors the agenvo relay (the agenvo bundle's service) under
+	// /remote/relay. Empty: install commands name the browser's address,
+	// and the relay is not used.
 	PublicURL string `env:"AXP_PUBLIC_URL"`
 	// The GitHub App's credentials and the user's authorization
-	// (internal/github); production keeps them on the axp-forge volume.
+	// (internal/github); production keeps them on the volume forge.
 	ForgeStateDir string `env:"AXP_FORGE_STATE_DIR" default:"var/forge"`
 	// Directories (colon-separated) with what remote computers download: the
 	// axp binaries and the agenvo connectors built from the pinned commit.

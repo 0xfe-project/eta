@@ -10,12 +10,12 @@ LLM 网关是控制面的模块（`apps/control-plane/internal/llm`），运行�
 - `llm/gateway`：与供应商无关的一层（连接、登录、目录、用量，以及 `/api/llm` 的 handler）；`gateway/connectors`（Codex、Grok）、`gateway/cpa`（嵌入 CPA）、`gateway/usage`（按主体记账）。
 - `llm.Remote`：控制面的其他进程（controller、routine worker）经 internal listener 读目录的 HTTP client，带缓存和“读不到时沿用上次”。
 
-| 路径               | listener             | 调用方                                                                               | 鉴权                                                        |
-| ------------------ | -------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
-| `/api/llm/v1/*`    | 公共（`:8000`）      | 浏览器（经 `gateway`）                                                               | 与公共 API 相同：只有公开网关连得到（见[网关](gateway.md)） |
-| `/v1/*`            | 内部（`:8001`）      | runtime 中的 Codex（经 `runtime-gateway`）、routine worker 与 memory-service（直连） | 调用方给出的 `X-AXP-Agent-Id`                               |
-| `/llm/v1/models`   | 内部（`:8001`）      | controller、routine worker（`llm.Remote`）                                           | 无：只读目录                                                |
-| `/v0/management/*` | 不在任何 listener 上 | 仅进程内调用（`cpa.Proxy.Management()`）                                             | 每次启动随机生成的管理密钥                                  |
+| 路径               | listener             | 调用方                                                                            | 鉴权                                                        |
+| ------------------ | -------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `/api/llm/v1/*`    | 公共（`:8000`）      | 浏览器（经 `gateway`）                                                            | 与公共 API 相同：只有公开网关连得到（见[网关](gateway.md)） |
+| `/v1/*`            | 内部（`:8001`）      | runtime 中的 Codex 和环境包的服务（经 `runtime-gateway`）、routine worker（直连） | 调用方给出的 `X-AXP-Agent-Id`                               |
+| `/llm/v1/models`   | 内部（`:8001`）      | controller、routine worker（`llm.Remote`）                                        | 无：只读目录                                                |
+| `/v0/management/*` | 不在任何 listener 上 | 仅进程内调用（`cpa.Proxy.Management()`）                                          | 每次启动随机生成的管理密钥                                  |
 
 提供 API 的进程直接调用模块读目录（聊天的模型校验、发送前检查、定时任务的模型校验），不经 HTTP。CPA 负责 token 刷新、按模型名在账号间轮换、协议转换。凭据只存在模块的状态目录（`AXP_LLM_STATE_DIR`，默认工作目录下的 `var/llm-gateway`：开发时是 `apps/control-plane/var/llm-gateway`，生产是 `api` 上的卷 `llm`）；runtime 只拿到 runtime 网关的地址和自己的实例令牌。
 

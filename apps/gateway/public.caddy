@@ -56,7 +56,7 @@ http://:{$AXP_GATEWAY_PORT:8080} {
 		log_skip
 		reverse_proxy {$AXP_UPSTREAM_OBSERVE:openobserve:5080}
 	}
-	# The agenvo relay, at its base URL (AXP_RELAY_BASE_URL): remote
+	# The agenvo relay, at its base URL (AXP_PUBLIC_URL/remote/relay): remote
 	# computers' connectors pair and connect (WebSocket) here; it
 	# authenticates devices itself. Cloudflare's client address goes on as
 	# X-Forwarded-For (the relay trusts one hop) for its rate limits.

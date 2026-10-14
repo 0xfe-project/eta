@@ -26,7 +26,7 @@ packages/
 
 ## 环境与初始化
 
-需要 Node.js 24、Bun 1.3.14、uv 和 Go（各 `go.mod` 统一要求 1.26.9，较旧的 go 会自动下载对应工具链）。Python 项目使用 3.13，uv 会按 `.python-version` 自动获取。还需要 Docker。
+需要 Node.js 24、Bun 1.3.14、uv 和 Go（各 `go.mod` 统一要求 1.26.9，较旧的 go 会自动下载对应工具链）。Python 项目使用 3.13，uv 会按 `.python-version` 自动获取。还需要 Docker（开发网关和测试数据库）和本机的 k3s（见 [deploy/README.md](deploy/README.md#一台机器装好-k3s)）。
 
 runtime 镜像里的 hook 规则引擎 [akhook](https://github.com/aghub-app/akhook) 以 submodule 放在 `vendor/akhook`，构建镜像时如果还没拉取会自动初始化；也可以直接 `git clone --recurse-submodules`。
 

@@ -178,10 +178,8 @@ func connect(ctx context.Context, serving bool) (*services, error) {
 		}
 		return pull.HeadSHA, nil
 	}}
-	relayURL, relayBase := cfg.RelayURL, ""
-	if relayURL == "" {
-		relayURL = "http://agenvo." + cfg.Namespace + "-bundles.svc.cluster.local"
-	}
+	// The relay is the agenvo bundle's service, in the bundles' namespace.
+	relayURL, relayBase := "http://agenvo."+cfg.Namespace+"-bundles.svc.cluster.local", ""
 	if cfg.PublicURL != "" {
 		relayBase = strings.TrimRight(cfg.PublicURL, "/") + "/remote/relay"
 	}
