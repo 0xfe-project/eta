@@ -269,6 +269,22 @@ migrate() {
     "axp-control-plane migrate"
 }
 
+# Roles deploy.yml no longer has, whose containers Kamal leaves running: the
+# forge and routine services and the internal API, now in the control
+# plane's api and routine-worker roles (#241). Removed once the deploy is
+# healthy; their data stays (the axp-forge volume, the axp_routines
+# database). Rolling back past #241 is in deploy/README.md.
+RETIRED_ROLES=(forge routines internal)
+retire_roles() {
+  local role ids
+  for role in "${RETIRED_ROLES[@]}"; do
+    ids="$(docker ps -aq --filter label=service=axp --filter "label=role=$role")"
+    [[ -n "$ids" ]] || continue
+    xargs docker rm -f <<<"$ids" >/dev/null
+    echo "Removed the retired $role role's containers."
+  done
+}
+
 if [[ "$1" == "setup" || "$1" == "deploy" ]]; then
   docker buildx version >/dev/null 2>&1 || fail "missing docker buildx (the images need BuildKit)."
   # Kamal deploys the image Turbo builds and pushes, under this version.
@@ -306,6 +322,7 @@ if [[ "$1" == "setup" || "$1" == "deploy" ]]; then
   kamal "$command" --skip-push --version "$version" "${@:2}"
   # A first setup has no database until Kamal boots it.
   [[ "$command" == "deploy" ]] || migrate
+  retire_roles
 else
   kamal "$@"
 fi

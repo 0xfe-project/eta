@@ -4,20 +4,22 @@
 
 ## 组成
 
-| 部分          | 位置                                                                                     | 作用                                                    |
-| ------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| forge 服务    | `apps/forge-service`（Go，二进制 `axp-forge`，生产角色 `forge`，别名 `axp-forge:8330`）  | 保存 App 凭据，签发 gh 的 token，开 PR                  |
-| 向导          | 设置 → 连接里的 GitHub，点开是分步向导（`connection-settings.tsx`、`github-wizard.tsx`） | 了解、创建 App、安装到仓库、完成                        |
-| runtime       | `apps/agent-runtime/axp_runtime/runtime.py`（`_refresh_github`）                         | 启动时以 App 的身份登录 gh，过期前刷新                  |
-| git 配置      | `apps/agent-runtime/git/gitconfig` → `/etc/gitconfig`                                    | GitHub 走 HTTPS，凭据来自 gh，commit 身份               |
-| `github` 插件 | `apps/agent-runtime/plugins/github`                                                      | `open_pull_request`（forge 服务的 MCP）与使用说明 skill |
+| 部分          | 位置                                                                                      | 作用                                                |
+| ------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| 控制面模块    | `apps/control-plane/internal/github`（App）与 `internal/forge`（路由），在 `serve` 进程里 | 保存 App 凭据，签发 gh 的 token，开 PR              |
+| 向导          | 设置 → 连接里的 GitHub，点开是分步向导（`connection-settings.tsx`、`github-wizard.tsx`）  | 了解、创建 App、安装到仓库、完成                    |
+| runtime       | `apps/agent-runtime/axp_runtime/runtime.py`（`_refresh_github`）                          | 启动时以 App 的身份登录 gh，过期前刷新              |
+| git 配置      | `apps/agent-runtime/git/gitconfig` → `/etc/gitconfig`                                     | GitHub 走 HTTPS，凭据来自 gh，commit 身份           |
+| `github` 插件 | `apps/agent-runtime/plugins/github`                                                       | `open_pull_request`（`/forge/mcp`）与使用说明 skill |
 
-| 路径              | 调用方                          | 鉴权                        |
-| ----------------- | ------------------------------- | --------------------------- |
-| `/api/forge/v1/*` | 浏览器（经 `gateway`）          | 无：只有网关连得到          |
-| `/forge/*`        | runtime（经 `runtime-gateway`） | 网关注入的 `X-AXP-Agent-Id` |
+| 路径              | 调用方                                                 | 鉴权                        |
+| ----------------- | ------------------------------------------------------ | --------------------------- |
+| `/api/forge/v1/*` | 浏览器（经 `gateway`），控制面的公共 listener          | 无：只有网关连得到          |
+| `/forge/*`        | runtime（经 `runtime-gateway`），控制面的内部 listener | 网关注入的 `X-AXP-Agent-Id` |
 
-一个 provider 只有一个连接，始终是用户自己的 App。App 是公开的（manifest 的 `public: true`），这样可以安装到拥有它的账号以外的账号和组织；私有 App 只能安装到拥有它的账号上。这个值只在创建时生效，之前创建的私有 App 要在 GitHub 的 App 设置里手动 Make public，AXP 不改已有 App 的可见性。公开也意味着知道链接的其他人能安装它，他们授予的仓库同样会被 AXP 的智能体访问到；不保存 installation，用到时从 `GET /app/installations` 查（缓存 30 秒）。凭据只在 forge 服务的状态目录（开发为仓库根目录的 `var/forge`，生产为卷 `axp-forge`）：`github.json`、私钥 `github.pem` 和 client secret `github.secret`，用户的授权在 `user.json`（后三者 0600）。没有数据库，也不接收 webhook。
+控制面自己需要 GitHub 的地方直接调用模块，不走 HTTP：任务等待审查时读 PR 的 head（`tasks.Service.PullHead`），远程电脑的 `axp gh` 取凭据（`/remote/v1/git/credentials`）。
+
+一个 provider 只有一个连接，始终是用户自己的 App。App 是公开的（manifest 的 `public: true`），这样可以安装到拥有它的账号以外的账号和组织；私有 App 只能安装到拥有它的账号上。这个值只在创建时生效，之前创建的私有 App 要在 GitHub 的 App 设置里手动 Make public，AXP 不改已有 App 的可见性。公开也意味着知道链接的其他人能安装它，他们授予的仓库同样会被 AXP 的智能体访问到；不保存 installation，用到时从 `GET /app/installations` 查（缓存 30 秒）。凭据只在状态目录 `AXP_FORGE_STATE_DIR`（开发为 `apps/control-plane/var/forge`，`scripts/dev.sh` 会把 #241 之前的 `apps/forge-service/var/forge` 搬过来；生产为卷 `axp-forge`，挂在 `api` 角色的 `/app/var/forge`，与原来的 `forge` 角色同一个卷、同一个路径）：`github.json`、私钥 `github.pem` 和 client secret `github.secret`，用户的授权在 `user.json`（后三者 0600）。没有数据库，也不接收 webhook。
 
 git 和 gh 的凭据、commit 身份是镜像级的，对每个 agent 都生效；`github` 插件只带来 `open_pull_request` 和使用说明，可以在智能体编辑器里关掉。
 
@@ -33,20 +35,20 @@ App 申请 GitHub 允许的全部仓库权限（含 `workflows`、`administratio
 
 ## runtime 里的 git 与 gh
 
-- runtime 启动时（在 Codex 之前）向 `/forge/credentials` 要 gh 的 token（谁的 token 见[身份](#身份)），写进 gh 的 `hosts.yml`（`GH_CONFIG_DIR=/run/axp/gh`，0600，不在快照里），`user` 是用户的登录名或 App 的 bot，所以 `gh` 一开始就是登录状态，`gh auth status` 能看出以谁的身份。之后在过期前 5 分钟刷新；GitHub 还没连接或 forge 服务不可达时每 60 秒再试，连接之后不用重启 agent。断开连接后 `hosts.yml` 被删除。
+- runtime 启动时（在 Codex 之前）向 `/forge/credentials` 要 gh 的 token（谁的 token 见[身份](#身份)），写进 gh 的 `hosts.yml`（`GH_CONFIG_DIR=/run/axp/gh`，0600，不在快照里），`user` 是用户的登录名或 App 的 bot，所以 `gh` 一开始就是登录状态，`gh auth status` 能看出以谁的身份。之后在过期前 5 分钟刷新；GitHub 还没连接或控制面不可达时每 60 秒再试，连接之后不用重启 agent。断开连接后 `hosts.yml` 被删除。
 - `/etc/gitconfig` 把 `git@github.com:` 改写为 HTTPS，凭据助手是 `gh auth git-credential`，所以 git 与 gh 用的是同一个 token。
 - commit 身份：默认是 `AXP Agent`；GitHub 仓库里由 `includeIf` 引入 `/run/axp/git/github.inc`，即 App 的 bot（`<slug>[bot]` 与 `<id>+<slug>[bot]@users.noreply.github.com`），runtime 拿到凭据时一并写入。
 - GitHub 没有连接时 gh 是未登录状态；App 没授权某个仓库时，GitHub 对它回答 404。`open_pull_request` 的错误里有服务的说明（引导用户去“设置 → 连接”）。公开仓库不需要凭据，照常可以 clone。
 
 ## open_pull_request
 
-forge 服务在 `/forge/mcp` 提供这个 MCP 工具（`github` 插件的 `.mcp.json` 指向它，经 runtime 网关鉴权）。参数是仓库（`owner/name` 或 remote URL）、已推送的分支、标题、正文，可选的 base（默认是仓库的默认分支）和 draft。同一分支已有打开的 PR 时返回它，而不是报错。规则 `gh-pr-create` 把 `gh pr create` 引导到这个工具（见[工具调用规则与用户确认](agent-hooks.md)）。
+控制面的内部 listener 在 `/forge/mcp` 提供这个 MCP 工具（`github` 插件的 `.mcp.json` 指向它，经 runtime 网关鉴权）。参数是仓库（`owner/name` 或 remote URL）、已推送的分支、标题、正文，可选的 base（默认是仓库的默认分支）和 draft。同一分支已有打开的 PR 时返回它，而不是报错。规则 `gh-pr-create` 把 `gh pr create` 引导到这个工具（见[工具调用规则与用户确认](agent-hooks.md)）。
 
 ## 身份
 
 GitHub App 有两种身份（[官方说明](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-with-a-github-app-on-behalf-of-a-user)）：installation token（`ghs_`）的动作属于 App 的 bot，成败只看 App 获批的权限；用户授权 App 后得到的 user access token（`ghu_`）的动作属于用户，GitHub 显示用户的头像并带 App 的标识，权限是用户与 App 的交集，且只在 App 安装了的账号里。PR 等的作者取决于调用的 token，与 commit 的 author 无关。
 
-forge 服务只有一条规则：**用户授权过 App 时，所有出口都以用户的身份**——runtime 里的 git 与 gh、远程电脑上的 `axp gh`（全部子命令）、`open_pull_request`、任务详情里的读 PR 与合并；没有授权（或授权失效）时都以 App 的 bot。`/forge/credentials` 对智能体和远程电脑（`computer-<id>`）回答相同，结果里的 `user` 说明是谁；旧版 CLI 带的 `?as=user` 被忽略。commit 的 author 始终是 App 的 bot。
+代码托管只有一条规则：**用户授权过 App 时，所有出口都以用户的身份**——runtime 里的 git 与 gh、远程电脑上的 `axp gh`（全部子命令）、`open_pull_request`、任务详情里的读 PR 与合并；没有授权（或授权失效）时都以 App 的 bot。智能体的 `/forge/credentials` 和远程电脑的 `/remote/v1/git/credentials` 回答相同（同一个 `GitHub.Credentials`），结果里的 `user` 说明是谁；旧版 CLI 带的 `?as=user` 被忽略。commit 的 author 始终是 App 的 bot。
 
 有些操作 GitHub 只给用户身份，App 权限给全了 bot 也做不了。实测（#47）：App 安装在个人账号上、已获批 `administration: write` 时，installation token 调用 GraphQL `createRepository` 得到 `Resource not accessible by integration`，`POST /user/repos` 得到 403；同样的请求用用户的 token 通过了权限检查。官方[权限表](https://docs.github.com/en/rest/authentication/permissions-required-for-github-apps)把 `POST /user/repos` 列为 `administration` 或 `repository_creation` 写权限、两种 token 都可，与实测不符，以实测为准。所以在个人账号下建仓库要求用户授权过 App；在组织里，installation token 可以用 `POST /orgs/{org}/repos`。
 
@@ -70,8 +72,8 @@ forge 服务只有一条规则：**用户授权过 App 时，所有出口都以�
 
 ## 验证
 
-- `apps/forge-service/internal/server`：测试对着 [emulate](https://github.com/vercel-labs/emulate)（forge-service 的开发依赖，`bun install` 安装）模拟的 GitHub 运行：App 的 JWT 校验、installation token 的权限、分支、开 PR 及其作者都是它的真实行为。它缺的或行为不同的几处（manifest 换凭据、`/installation/repositories`、同一分支重复开 PR 的 422、被删除的 App，以及用户授权的 client secret 校验、过期与刷新、`/user/installations` 和撤销）由测试里一层很薄的处理补上，其余请求原样转发；那一层还按 GitHub 的实际行为拒绝 installation token 在个人账号下建仓库（emulate 允许）。`open_pull_request` 通过 MCP 客户端调用，与 Codex 一样。`TestEveryCallerActsAsTheUserWhoAuthorized`：授权前智能体与远程电脑都拿到 bot 的 token、建不了仓库；授权后都拿到用户的 token（最多一小时）、能推送和建仓库，commit 身份仍是 bot，旧的 `?as=user` 无影响；取消授权后回到 bot。
-- `apps/forge-service/internal/server/pulls_test.go`：同一个 emulate 上读 PR、草稿不能合并、读不到的 PR、过期的 head（本地检查与 GitHub 的 409）、合并成功、GitHub 已合并但回答丢失（核实为成功）、GitHub 失败（`MERGE_UNKNOWN`，没有合并）；以及仓库权限按 GitHub 的真实形状报告时（emulate 总报告全为 true，测试那层按用例改写）：App 身份权限全 false 仍能合并、用户没有写权限不能合并且不调用 GitHub、用户的 token 被拒后以 App 判断并合并、GitHub 拒绝用户的合并（403）不改用 App。
+- `apps/control-plane/internal/forge`：测试对着 [emulate](https://github.com/vercel-labs/emulate)（control-plane 的开发依赖，`bun install` 安装）模拟的 GitHub 运行：App 的 JWT 校验、installation token 的权限、分支、开 PR 及其作者都是它的真实行为。它缺的或行为不同的几处（manifest 换凭据、`/installation/repositories`、同一分支重复开 PR 的 422、被删除的 App，以及用户授权的 client secret 校验、过期与刷新、`/user/installations` 和撤销）由测试里一层很薄的处理补上，其余请求原样转发；那一层还按 GitHub 的实际行为拒绝 installation token 在个人账号下建仓库（emulate 允许）。`open_pull_request` 通过 MCP 客户端调用，与 Codex 一样。`TestEveryCallerActsAsTheUserWhoAuthorized`：授权前智能体与远程电脑都拿到 bot 的 token、建不了仓库；授权后都拿到用户的 token（最多一小时）、能推送和建仓库，commit 身份仍是 bot，旧的 `?as=user` 无影响；取消授权后回到 bot。
+- `apps/control-plane/internal/forge/pulls_test.go`：同一个 emulate 上读 PR、草稿不能合并、读不到的 PR、过期的 head（本地检查与 GitHub 的 409）、合并成功、GitHub 已合并但回答丢失（核实为成功）、GitHub 失败（`MERGE_UNKNOWN`，没有合并）；以及仓库权限按 GitHub 的真实形状报告时（emulate 总报告全为 true，测试那层按用例改写）：App 身份权限全 false 仍能合并、用户没有写权限不能合并且不调用 GitHub、用户的 token 被拒后以 App 判断并合并、GitHub 拒绝用户的合并（403）不改用 App。
 - `apps/web/src/components/workspace/task-pulls.test.tsx`：增删行数、读不到时不显示数字、不能合并时禁用并说明原因、按看到的 head 合并且只发一次、合并并完成时完成失败后只重试改状态、没有回答时重新读取而不重试。
-- `apps/agent-runtime/tests/test_runtime.py`：runtime 对假的 forge 服务写出 gh 的 `hosts.yml`（用户授权时登录名是用户）与 commit 身份，断开后删除。
+- `apps/agent-runtime/tests/test_runtime.py`：runtime 对假的 `/forge/credentials` 写出 gh 的 `hosts.yml`（用户授权时登录名是用户）与 commit 身份，断开后删除。
 - 在开发环境中用浏览器走过向导：提交 manifest 后跳转到 GitHub，回调出错时显示原因；安装与已连接状态的界面。创建真实的 App 需要用户在 GitHub 上确认，没有自动化。

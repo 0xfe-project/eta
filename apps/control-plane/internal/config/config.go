@@ -40,10 +40,11 @@ type Config struct {
 	RuntimeGatewayURL string `env:"AXP_RUNTIME_GATEWAY_URL" dev:"http://172.30.0.1:8090" prod:"http://axp-runtime-gateway:8090"`
 	// The runtime image agents' images are built on (apps/agent-runtime).
 	RuntimeImage string `env:"AXP_RUNTIME_IMAGE" dev:"axp-agent-runtime:dev" prod:"axp-agent-runtime:production"`
-	// The LLM gateway (apps/llm-gateway), for its model catalog.
+	// The LLM gateway (apps/llm-gateway), for its model catalog and
+	// routines' runs.
 	LLMGatewayURL string `env:"AXP_LLM_GATEWAY_URL" dev:"http://127.0.0.1:8317" prod:"http://axp-llm:8317"`
-	// NATS JetStream, where runtimes publish their events. Runtimes reach it
-	// at the same address.
+	// NATS JetStream, where runtimes publish their events (runtimes reach it
+	// at the same address) and routines' schedules live.
 	NATSURL string `env:"AXP_NATS_URL" dev:"nats://172.30.0.1:4222" prod:"nats://axp-nats:4222"`
 	// The built-in bundles and the plugins bundles add
 	// (apps/agent-runtime/bundles and plugins), which agents' images are

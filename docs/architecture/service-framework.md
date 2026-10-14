@@ -44,7 +44,7 @@ apps/<service>/
 
 ```go
 func main() {
-	service.Main("routine-service",
+	service.Main("memory-like-service",
 		service.Command{Name: "serve", Default: true, Run: serve},
 		service.Migrate(databaseURL, migrations.All, true),
 		service.OpenAPI(map[string]func() huma.API{
@@ -54,16 +54,17 @@ func main() {
 }
 ```
 
+一个服务里可以有几个领域各自带传输层和库，例如控制面里的定时任务（`internal/routines` 与 `internal/routineapi`，库 `axp_routines`，迁移在 `internal/routines/migrations`）。
+
 `openapi` 命令只构造 API、不连接任何东西，Turbo 的 `openapi` 任务用它产出文档，web 的 `generate` 再从文档生成类型（`apps/web/redocly.yaml`）。
 
-## 两个服务
+## 用到它的服务
 
-| 服务                               | 命令                                                                            | 库                                                           |
-| ---------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| 控制面（`apps/control-plane`）     | `api`、`internal`、`controller`、`migrate`、`openapi`、`ensure-runtime-network` | `axp`；迁移 1 是 Django 留下的 schema（Go 迁移），其余是 SQL |
-| 定时任务（`apps/routine-service`） | `serve`（默认）、`migrate`、`openapi`                                           | `axp_routines`，启动时自建并迁移                             |
+| 服务                                                 | 命令                                                                                    | 库                                                                                                           |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| 控制面（`apps/control-plane`，含代码托管和定时任务） | `serve`、`controller`、`routine-worker`、`migrate`、`openapi`、`ensure-runtime-network` | `axp`（迁移 1 是 Django 留下的 schema，Go 迁移，其余是 SQL）与定时任务的 `axp_routines`，都由 `migrate` 迁移 |
 
-forge-service 和 llm-gateway 没有用这个框架：前者没有数据库、API 很小，后者是嵌入的 CLIProxyAPI（gin）。它们以后若需要数据库或生成 OpenAPI，应当迁过来，而不是各自再写一份。
+llm-gateway 没有用这个框架：它是嵌入的 CLIProxyAPI（gin）。以后若需要数据库或生成 OpenAPI，应当迁过来，而不是各自再写一份。代码托管（`internal/forge`）的路由是普通的 `net/http` handler，没有数据库，不生成 OpenAPI。
 
 ## 测试
 

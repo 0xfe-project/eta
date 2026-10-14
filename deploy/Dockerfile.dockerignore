@@ -4,8 +4,6 @@
 *
 !apps/control-plane/out/
 !apps/llm-gateway/out/
-!apps/forge-service/out/
-!apps/routine-service/out/
 !packages/plugins-go/out/
 !apps/gateway/Caddyfile
 !apps/gateway/*.caddy

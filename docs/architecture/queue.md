@@ -1,6 +1,6 @@
 # 命令与事件
 
-聊天智能体的工作和结果走两条路：等待执行的命令在 PostgreSQL 里，由 controller 交给 runtime 的控制接口；runtime 发生的事经 NATS JetStream 回到控制面。[定时任务](routines.md)服务把计划放在同一个 NATS 里，用它自己的 stream `ROUTINES`，与本文无关。
+聊天智能体的工作和结果走两条路：等待执行的命令在 PostgreSQL 里，由 controller 交给 runtime 的控制接口；runtime 发生的事经 NATS JetStream 回到控制面。[定时任务](routines.md)把计划放在同一个 NATS 里，用它自己的 stream `ROUTINES`，与本文无关。
 
 ## 命令只在一个地方
 
