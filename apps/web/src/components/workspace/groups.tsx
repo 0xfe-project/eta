@@ -3,7 +3,7 @@ import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { UsersThreeIcon } from "@phosphor-icons/react/UsersThree";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -31,6 +31,7 @@ import { useGroupActions } from "@/queries/groups";
 import { useTasks, useUpdateTask } from "@/queries/tasks";
 import { ActivityRefCard } from "./activity-ref";
 import { AgentAvatar, AgentStatus } from "./agent-identity";
+import { useReturnFocus } from "./return-focus";
 import { when } from "./routine-format";
 import { useAgents } from "./use-agents";
 import { useGroups, useOpenGroup } from "./use-groups";
@@ -88,6 +89,10 @@ export function CreateGroup({
   const { agents } = useAgents();
   const { create } = useGroupActions();
   const openGroup = useOpenGroup();
+  const returnFocus = useReturnFocus(open);
+  // isPending only updates on the next render; a double click on 创建群
+  // must not create the group twice.
+  const sendingRef = useRef(false);
   return (
     <Dialog
       open={open}
@@ -105,7 +110,7 @@ export function CreateGroup({
           )}
         </DialogTrigger>
       )}
-      <DialogContent>
+      <DialogContent onCloseAutoFocus={returnFocus}>
         <DialogHeader>
           <DialogTitle>新建群</DialogTitle>
           <DialogDescription>选几位智能体，一起讨论一件事。</DialogDescription>
@@ -114,9 +119,14 @@ export function CreateGroup({
           className="grid gap-4"
           onSubmit={(e) => {
             e.preventDefault();
+            if (sendingRef.current) return;
+            sendingRef.current = true;
             create.mutate(
               { name: name.trim(), goal, members: chosen },
               {
+                onSettled: () => {
+                  sendingRef.current = false;
+                },
                 onError,
                 onSuccess: (g) => {
                   setOpen(false);
@@ -186,6 +196,9 @@ export function CreateGroup({
 function CreateMenu() {
   const [group, setGroup] = useState(false);
   const { openEditor } = useAgents();
+  // Opened once the menu has given focus back to the plus, so that closing
+  // the dialog returns there rather than to the removed menu item.
+  const choiceRef = useRef<() => void>(undefined);
   return (
     <>
       <DropdownMenu>
@@ -194,7 +207,7 @@ function CreateMenu() {
             variant="ghost"
             size="icon-lg"
             aria-label="新建"
-            className="-mr-2"
+            className="-mr-2 size-11"
           >
             <PlusIcon />
           </Button>
@@ -203,17 +216,21 @@ function CreateMenu() {
           align="end"
           collisionPadding={8}
           className="w-auto"
+          onCloseAutoFocus={() => {
+            choiceRef.current?.();
+            choiceRef.current = undefined;
+          }}
         >
           <DropdownMenuItem
-            className="min-h-10 text-sm"
-            onSelect={() => setGroup(true)}
+            className="min-h-11 text-sm"
+            onSelect={() => (choiceRef.current = () => setGroup(true))}
           >
             <UsersThreeIcon aria-hidden="true" />
             新建群
           </DropdownMenuItem>
           <DropdownMenuItem
-            className="min-h-10 text-sm"
-            onSelect={() => openEditor()}
+            className="min-h-11 text-sm"
+            onSelect={() => (choiceRef.current = () => openEditor())}
           >
             <RobotIcon aria-hidden="true" />
             新建智能体
@@ -240,9 +257,9 @@ export function GroupList({ compact = false }: { compact?: boolean }) {
     >
       <div
         className={cn(
-          "flex h-9 items-center justify-between px-2",
+          "flex items-center justify-between px-2",
           // The list scrolls under its plus, which stays in reach.
-          !compact && "sticky top-0 z-10 bg-background",
+          compact ? "h-9" : "sticky top-0 z-10 h-11 bg-background",
         )}
       >
         <h2 className="text-xs font-medium text-muted-foreground">

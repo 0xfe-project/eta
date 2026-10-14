@@ -40,6 +40,7 @@ import {
 import { agentDraft, agentFormSchema } from "./agent-form";
 import { AgentAvatar } from "./agent-identity";
 import { CreateAgentWizard } from "./create-agent-wizard";
+import { useReturnFocus } from "./return-focus";
 import { SettingsNav } from "./settings-nav";
 import { UsageLine } from "./usage-line";
 import { useAgents } from "./use-agents";
@@ -284,16 +285,16 @@ export function AgentEditor() {
   const close = () => setAgentEditor((state) => ({ ...state, open: false }));
   // An agent deleted elsewhere closes its editor.
   const missing = agentEditor.open && agentEditor.agentId !== null && !agent;
+  const open = agentEditor.open && !missing;
+  const returnFocus = useReturnFocus(open);
   useEffect(() => {
     if (missing) close();
   });
 
   return (
-    <Dialog
-      open={agentEditor.open && !missing}
-      onOpenChange={(open) => !open && close()}
-    >
+    <Dialog open={open} onOpenChange={(open) => !open && close()}>
       <DialogContent
+        onCloseAutoFocus={returnFocus}
         className={cn(
           "flex max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0",
           // Editing is laid out as settings are; creating is a short wizard.
