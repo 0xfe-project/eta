@@ -630,7 +630,7 @@ func TestPublicSchemaHasNoInternalFields(t *testing.T) {
 		"/api/v1/chat/attachments/{attachment_id}",
 		"/api/v1/chat/interactions", "/api/v1/chat/interactions/{interaction_id}/answer", "/api/v1/chat/messages",
 		"/api/v1/chat/messages/{message_id}/stop", "/api/v1/chat/stream", "/api/v1/computers",
-		"/api/v1/computers/{computer_id}", "/api/v1/computers/{computer_id}/install",
+		"/api/v1/computers/{computer_id}", "/api/v1/computers/{computer_id}/install", "/api/v1/computers/{computer_id}/limit",
 		"/api/v1/computers/{computer_id}/runtimes/{kind}/approve",
 		"/api/v1/computers/{computer_id}/runtimes/{kind}/places", "/api/v1/plugins",
 		"/api/v1/groups", "/api/v1/groups/{group_id}", "/api/v1/groups/{group_id}/compact", "/api/v1/groups/{group_id}/drafts/{message_id}/confirm", "/api/v1/groups/{group_id}/members/{agent_id}", "/api/v1/groups/{group_id}/messages", "/api/v1/groups/{group_id}/read", "/api/v1/groups/{group_id}/stop",

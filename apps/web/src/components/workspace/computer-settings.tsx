@@ -34,6 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Tooltip,
   TooltipContent,
@@ -46,6 +47,7 @@ import {
   useComputers,
   useDeleteComputer,
   useRenewInstall,
+  useSetComputerLimit,
 } from "@/queries/tasks";
 import { when } from "./routine-format";
 import { providerLabel, runtimeLabel } from "./task-format";
@@ -467,6 +469,143 @@ function ComputerDialog({
  * One card per computer: its name and whatever needs doing on top, then
  * where it runs and its runtimes.
  */
+// The control plane's bounds on a computer's limit.
+const MIN_LIMIT = 1;
+const MAX_LIMIT = 20;
+
+/**
+ * How many runs the computer works on at once, as the runner counts them:
+ * every run that has started and not ended, the assignee's and assisting
+ * agents' alike, on Paseo and Herdr together.
+ */
+function LimitDialog({
+  computer,
+  onClose,
+}: {
+  computer: Computer;
+  onClose: () => void;
+}) {
+  const save = useSetComputerLimit();
+  const [value, setValue] = useState(String(computer.max_active_runs));
+  const limit = Number(value);
+  const valid =
+    /^\d+$/.test(value.trim()) && limit >= MIN_LIMIT && limit <= MAX_LIMIT;
+  const submit = () => {
+    if (!valid) return;
+    save.mutate(
+      { id: computer.id, maxActiveRuns: limit },
+      {
+        onSuccess: () => {
+          toast(`${computer.name} 最多同时执行 ${limit} 个`);
+          onClose();
+        },
+        onError: showError,
+      },
+    );
+  };
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-[calc(100%-2rem)] gap-4 sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{computer.name} 的并发执行上限</DialogTitle>
+          <DialogDescription>
+            这台电脑上最多同时执行几个任务运行。主执行、协助和审查各算一个，Paseo
+            和 Herdr 共用这个上限。
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="space-y-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit();
+          }}
+        >
+          <Label htmlFor={`limit-${computer.id}`} className="text-xs">
+            并发执行数
+          </Label>
+          <Input
+            id={`limit-${computer.id}`}
+            type="number"
+            inputMode="numeric"
+            min={MIN_LIMIT}
+            max={MAX_LIMIT}
+            step={1}
+            value={value}
+            aria-invalid={!valid}
+            aria-describedby={`limit-${computer.id}-hint`}
+            onChange={(event) => setValue(event.target.value)}
+            className="w-28"
+          />
+          <ul
+            id={`limit-${computer.id}-hint`}
+            className="list-disc space-y-1 pl-4 text-xs text-muted-foreground"
+          >
+            {valid ? null : (
+              <li className="text-destructive">
+                请输入 {MIN_LIMIT} 到 {MAX_LIMIT} 之间的整数。
+              </li>
+            )}
+            <li>
+              超过上限的运行会排队，不会失败；有运行结束后，按排队先后自动开始。
+            </li>
+            <li>
+              从开始打开工作区起，到确认结束（完成、失败或停止）为止都占名额；电脑离线时，正在执行的仍然占着。
+            </li>
+            <li>调低不会停止正在执行的运行：它们做完后，再按新上限派新的。</li>
+          </ul>
+        </form>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            取消
+          </Button>
+          <Button disabled={!valid || save.isPending} onClick={submit}>
+            保存
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** The computer's places at work, its limit and its queue. */
+function Load({
+  computer,
+  onEdit,
+}: {
+  computer: Computer;
+  onEdit: () => void;
+}) {
+  const {
+    active_runs: active,
+    max_active_runs: max,
+    queued_runs: queued,
+  } = computer;
+  const note =
+    active > max
+      ? "上限调低了：正在执行的做完后再派新的"
+      : queued && active >= max
+        ? "已满，新的运行排队等名额"
+        : "";
+  return (
+    <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+      <span className="min-w-0 flex-1">
+        并发执行 <span className="text-foreground tabular-nums">{active}</span>/
+        <span className="tabular-nums">{max}</span>
+        {queued ? <> · 排队 {queued}</> : null}
+        {note ? <span className="block">{note}</span> : null}
+      </span>
+      <Button
+        variant="ghost"
+        size="xs"
+        aria-label={`调整 ${computer.name} 的并发执行上限`}
+        onClick={onEdit}
+      >
+        调整上限
+      </Button>
+    </div>
+  );
+}
+
 function ComputerCard({
   computer,
   onOpen,
@@ -478,6 +617,7 @@ function ComputerCard({
   const remove = useDeleteComputer();
   const [confirming, setConfirming] = useState(false);
   const [offlineHintOpen, setOfflineHintOpen] = useState(false);
+  const [editingLimit, setEditingLimit] = useState(false);
   const approvals = pending(computer);
   const updates = outdated(computer);
   const startUpdate = () =>
@@ -596,10 +736,14 @@ function ComputerCard({
       ) : (
         <RuntimeSummary runtimes={computer.runtimes} />
       )}
-      {computer.active_runs ? (
-        <p className="text-xs text-muted-foreground">
-          {computer.active_runs} 个任务进行中
-        </p>
+      {computer.enrolled ? (
+        <Load computer={computer} onEdit={() => setEditingLimit(true)} />
+      ) : null}
+      {editingLimit ? (
+        <LimitDialog
+          computer={computer}
+          onClose={() => setEditingLimit(false)}
+        />
       ) : null}
       <AlertDialog open={confirming} onOpenChange={setConfirming}>
         <AlertDialogContent>
