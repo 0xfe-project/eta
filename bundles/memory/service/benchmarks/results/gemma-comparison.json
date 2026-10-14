@@ -1,0 +1,2455 @@
+{
+  "date": "2026-10-14",
+  "cpu": "Intel Core i7-11800H, CPU only",
+  "model_identity": "EmbeddingGemma 2, Gemma 4 architecture, text only",
+  "tokenizer_sha256": "4d777ef5bdc1aa36227abdfb77c3e49e7b9c892d16e1b6bda41c393504828be4",
+  "tokenizer_matches_google_revision": "914f7f89142e33e77833254d9c9b90c3cef7303b",
+  "scope": "40 synthetic-memory queries and 40 public Chinese queries; exact cosine; independently rebuilt indexes; default ONNX thread settings except explicit 2-thread runs. RSS before indexing excludes corpus vectors; active RSS includes the harness. Not production or a full MTEB result.",
+  "runs": {
+    "jina": {
+      "variant": "jina",
+      "scope": "Existing service imports + real embedding adapter. No database/server startup, LLM extraction, mem0 hybrid ranking, production memories or WAN latency. RSS includes one-text inference, retained corpus vectors and benchmark harness.",
+      "host": {
+        "platform": "Linux-7.0.0-34-generic-x86_64-with-glibc2.43",
+        "processor": "",
+        "cpu_count": 16
+      },
+      "versions": {
+        "fastembed": "0.9.0",
+        "onnxruntime": "1.30.0",
+        "mem0ai": "2.2.1",
+        "openai": "3.26.0",
+        "numpy": "2.5.3"
+      },
+      "model": {
+        "dims": 768,
+        "revision": "c1ff9086a89a1123d7b5eff58055a665db4fb4b9",
+        "model_file_bytes": 641212851,
+        "tokenizer_truncation": {
+          "max_length": 512,
+          "stride": 0,
+          "strategy": "longest_first",
+          "direction": "right"
+        },
+        "query_prefix": ""
+      },
+      "setup_seconds": 2.55,
+      "indexing_seconds": 98.26,
+      "dataset": {
+        "memory": "Hand-labelled diagnostic memory retrieval cases. Synthetic facts; not production memory or a representative quality benchmark.",
+        "public": "C-MTEB/T2Reranking, dev rows 0-39, all positive passages and the first six negative passages per query, pooled into one corpus",
+        "public_rows_sha256": "0b5a045e9d2c0c2b725afcdafa6a1229a89ca66bfd35b62a51f1987abe2aa33e"
+      },
+      "memory": [
+        {
+          "stage": "python",
+          "rss_mib": 25.27,
+          "peak_rss_mib": 25.97,
+          "threads": 1
+        },
+        {
+          "stage": "service_imports",
+          "rss_mib": 169.22,
+          "peak_rss_mib": 169.22,
+          "threads": 17
+        },
+        {
+          "stage": "embedder_ready",
+          "rss_mib": 1013.59,
+          "peak_rss_mib": 1013.59,
+          "threads": 24
+        },
+        {
+          "stage": "first_query",
+          "rss_mib": 1016.15,
+          "peak_rss_mib": 1016.15,
+          "threads": 40
+        },
+        {
+          "stage": "after_indexing",
+          "rss_mib": 1090.49,
+          "peak_rss_mib": 1090.49,
+          "threads": 40
+        },
+        {
+          "stage": "after_queries",
+          "rss_mib": 1090.61,
+          "peak_rss_mib": 1090.61,
+          "threads": 40
+        }
+      ],
+      "retrieval": {
+        "memory": {
+          "documents": 48,
+          "queries": 40,
+          "hit_at_1": 0.75,
+          "hit_at_5": 0.95,
+          "mrr_at_10": 0.85,
+          "by_category": {
+            "zh": {
+              "queries": 24,
+              "hit_at_1": 0.7083333333333334,
+              "hit_at_5": 0.9166666666666666,
+              "mrr_at_10": 0.8125
+            },
+            "mixed": {
+              "queries": 8,
+              "hit_at_1": 0.75,
+              "hit_at_5": 1,
+              "mrr_at_10": 0.875
+            },
+            "detail": {
+              "queries": 8,
+              "hit_at_1": 0.875,
+              "hit_at_5": 1,
+              "mrr_at_10": 0.9375
+            }
+          },
+          "latency_ms": {
+            "samples": 120,
+            "p50": 26.98,
+            "p95": 28.84
+          }
+        },
+        "public_zh": {
+          "documents": 531,
+          "queries": 40,
+          "hit_at_1": 0.8,
+          "hit_at_5": 1,
+          "mrr_at_10": 0.8916666666666667,
+          "by_category": {
+            "public_zh": {
+              "queries": 40,
+              "hit_at_1": 0.8,
+              "hit_at_5": 1,
+              "mrr_at_10": 0.8916666666666667
+            }
+          },
+          "latency_ms": {
+            "samples": 120,
+            "p50": 26.38,
+            "p95": 28.12
+          }
+        }
+      }
+    },
+    "jina-int8": {
+      "variant": "jina-int8",
+      "scope": "Existing service imports + real embedding adapter. No database/server startup, LLM extraction, mem0 hybrid ranking, production memories or WAN latency. RSS includes one-text inference, retained corpus vectors and benchmark harness.",
+      "host": {
+        "platform": "Linux-7.0.0-34-generic-x86_64-with-glibc2.43",
+        "processor": "",
+        "cpu_count": 16
+      },
+      "versions": {
+        "fastembed": "0.9.0",
+        "onnxruntime": "1.30.0",
+        "mem0ai": "2.2.1",
+        "openai": "3.26.0",
+        "numpy": "2.5.3"
+      },
+      "model": {
+        "dims": 768,
+        "revision": "c1ff9086a89a1123d7b5eff58055a665db4fb4b9",
+        "model_file_bytes": 161565239,
+        "tokenizer_truncation": {
+          "max_length": 512,
+          "stride": 0,
+          "strategy": "longest_first",
+          "direction": "right"
+        },
+        "query_prefix": ""
+      },
+      "setup_seconds": 1.6,
+      "indexing_seconds": 84.56,
+      "dataset": {
+        "memory": "Hand-labelled diagnostic memory retrieval cases. Synthetic facts; not production memory or a representative quality benchmark.",
+        "public": "C-MTEB/T2Reranking, dev rows 0-39, all positive passages and the first six negative passages per query, pooled into one corpus",
+        "public_rows_sha256": "0b5a045e9d2c0c2b725afcdafa6a1229a89ca66bfd35b62a51f1987abe2aa33e"
+      },
+      "memory": [
+        {
+          "stage": "python",
+          "rss_mib": 25.27,
+          "peak_rss_mib": 26.02,
+          "threads": 1
+        },
+        {
+          "stage": "service_imports",
+          "rss_mib": 169.1,
+          "peak_rss_mib": 169.1,
+          "threads": 17
+        },
+        {
+          "stage": "embedder_ready",
+          "rss_mib": 407.34,
+          "peak_rss_mib": 407.34,
+          "threads": 24
+        },
+        {
+          "stage": "first_query",
+          "rss_mib": 410.16,
+          "peak_rss_mib": 410.16,
+          "threads": 40
+        },
+        {
+          "stage": "after_indexing",
+          "rss_mib": 488.36,
+          "peak_rss_mib": 488.36,
+          "threads": 40
+        },
+        {
+          "stage": "after_queries",
+          "rss_mib": 488.92,
+          "peak_rss_mib": 488.92,
+          "threads": 40
+        }
+      ],
+      "retrieval": {
+        "memory": {
+          "documents": 48,
+          "queries": 40,
+          "hit_at_1": 0.7,
+          "hit_at_5": 0.9,
+          "mrr_at_10": 0.8108630952380952,
+          "by_category": {
+            "zh": {
+              "queries": 24,
+              "hit_at_1": 0.7083333333333334,
+              "hit_at_5": 0.8333333333333334,
+              "mrr_at_10": 0.7958829365079365
+            },
+            "mixed": {
+              "queries": 8,
+              "hit_at_1": 0.75,
+              "hit_at_5": 1,
+              "mrr_at_10": 0.875
+            },
+            "detail": {
+              "queries": 8,
+              "hit_at_1": 0.625,
+              "hit_at_5": 1,
+              "mrr_at_10": 0.7916666666666666
+            }
+          },
+          "latency_ms": {
+            "samples": 120,
+            "p50": 9.01,
+            "p95": 10.48
+          },
+          "int8_queries_against_fp32_index": {
+            "documents": 48,
+            "queries": 40,
+            "hit_at_1": 0.825,
+            "hit_at_5": 0.925,
+            "mrr_at_10": 0.8708333333333333,
+            "by_category": {
+              "zh": {
+                "queries": 24,
+                "hit_at_1": 0.8333333333333334,
+                "hit_at_5": 0.9166666666666666,
+                "mrr_at_10": 0.8680555555555556
+              },
+              "mixed": {
+                "queries": 8,
+                "hit_at_1": 0.75,
+                "hit_at_5": 1,
+                "mrr_at_10": 0.875
+              },
+              "detail": {
+                "queries": 8,
+                "hit_at_1": 0.875,
+                "hit_at_5": 0.875,
+                "mrr_at_10": 0.875
+              }
+            }
+          }
+        },
+        "public_zh": {
+          "documents": 531,
+          "queries": 40,
+          "hit_at_1": 0.7,
+          "hit_at_5": 0.975,
+          "mrr_at_10": 0.8327380952380953,
+          "by_category": {
+            "public_zh": {
+              "queries": 40,
+              "hit_at_1": 0.7,
+              "hit_at_5": 0.975,
+              "mrr_at_10": 0.8327380952380953
+            }
+          },
+          "latency_ms": {
+            "samples": 120,
+            "p50": 9.01,
+            "p95": 10.16
+          },
+          "int8_queries_against_fp32_index": {
+            "documents": 531,
+            "queries": 40,
+            "hit_at_1": 0.675,
+            "hit_at_5": 1,
+            "mrr_at_10": 0.8229166666666666,
+            "by_category": {
+              "public_zh": {
+                "queries": 40,
+                "hit_at_1": 0.675,
+                "hit_at_5": 1,
+                "mrr_at_10": 0.8229166666666666
+              }
+            }
+          }
+        }
+      }
+    },
+    "gemma-fp32-512": {
+      "variant": "gemma-fp32",
+      "scope": "Same original service imports + ONNX CPU, batch=1. No DB, LLM extraction, hybrid ranking, production data, WAN or vision/audio. RSS includes retained vectors/harness after indexing.",
+      "host": {
+        "platform": "Linux-7.0.0-34-generic-x86_64-with-glibc2.43",
+        "cpu_count": 16
+      },
+      "versions": {
+        "fastembed": "0.9.0",
+        "onnxruntime": "1.30.0",
+        "tokenizers": "0.23.2",
+        "mem0ai": "2.2.1",
+        "numpy": "2.5.3"
+      },
+      "dataset": {
+        "memory": "Hand-labelled diagnostic memory retrieval cases. Synthetic facts; not production memory or a representative quality benchmark.",
+        "public": "C-MTEB/T2Reranking, dev rows 0-39, all positive passages and the first six negative passages per query, pooled into one corpus",
+        "public_rows_sha256": "0b5a045e9d2c0c2b725afcdafa6a1229a89ca66bfd35b62a51f1987abe2aa33e"
+      },
+      "model": {
+        "source": "google/embeddinggemma-2",
+        "export": "onnx-community/embeddinggemma-2-ONNX",
+        "revision": "daa72c51243991dfcaf9f9137d2c573d8f7790c0",
+        "dims": 768,
+        "text_only": true,
+        "model_file_bytes": 1084591661,
+        "sha256": {
+          "model.onnx": "bc47de15f81208a5c99e5ab10f746d5e33b51ea228b7dc0bef9c133a94f1c1c3",
+          "model.onnx_data": "9fd452bfc6916e5a92f080f8dada35598ca4512b21c65897d4c5974d5f9630a2"
+        },
+        "max_tokens": 512,
+        "prefixes": {
+          "query": "task: search result | query: ",
+          "document": "title: none | text: "
+        },
+        "pooling": "ONNX sentence_embedding: projection, masked mean pooling, L2 normalization",
+        "threads_option": 0,
+        "tokenizer_memory": {
+          "stage": "tokenizer_ready",
+          "rss_mib": 413.25,
+          "peak_rss_mib": 522.39,
+          "threads": 17
+        }
+      },
+      "memory": [
+        {
+          "stage": "python",
+          "rss_mib": 25.06,
+          "peak_rss_mib": 25.81,
+          "threads": 1
+        },
+        {
+          "stage": "service_imports",
+          "rss_mib": 168.96,
+          "peak_rss_mib": 168.96,
+          "threads": 17
+        },
+        {
+          "stage": "embedder_ready",
+          "rss_mib": 797.24,
+          "peak_rss_mib": 798.09,
+          "threads": 24
+        },
+        {
+          "stage": "first_query",
+          "rss_mib": 804.58,
+          "peak_rss_mib": 804.58,
+          "threads": 24
+        },
+        {
+          "stage": "after_memory_indexing",
+          "rss_mib": 843.48,
+          "peak_rss_mib": 843.48,
+          "threads": 24
+        },
+        {
+          "stage": "after_public_zh_indexing",
+          "rss_mib": 1248.13,
+          "peak_rss_mib": 1248.13,
+          "threads": 24
+        },
+        {
+          "stage": "after_indexing",
+          "rss_mib": 1248.13,
+          "peak_rss_mib": 1248.13,
+          "threads": 24
+        },
+        {
+          "stage": "after_queries",
+          "rss_mib": 1248.18,
+          "peak_rss_mib": 1248.18,
+          "threads": 25
+        }
+      ],
+      "setup_seconds": 3.52,
+      "indexing_seconds": 135.85,
+      "token_lengths": {
+        "query": {
+          "max": 26,
+          "p50": 19.0,
+          "p95": 23.0,
+          "at_limit": 0
+        },
+        "document": {
+          "max": 512,
+          "p50": 264.0,
+          "p95": 512.0,
+          "at_limit": 160
+        }
+      },
+      "retrieval": {
+        "memory": {
+          "documents": 48,
+          "queries": 40,
+          "hit_at_1": 0.925,
+          "hit_at_5": 0.975,
+          "mrr_at_10": 0.9460714285714286,
+          "by_category": {
+            "zh": {
+              "queries": 24,
+              "hit_at_1": 0.875,
+              "hit_at_5": 0.9583333333333334,
+              "mrr_at_10": 0.9101190476190476
+            },
+            "mixed": {
+              "queries": 8,
+              "hit_at_1": 1,
+              "hit_at_5": 1,
+              "mrr_at_10": 1.0
+            },
+            "detail": {
+              "queries": 8,
+              "hit_at_1": 1,
+              "hit_at_5": 1,
+              "mrr_at_10": 1.0
+            }
+          },
+          "latency_ms": {
+            "samples": 120,
+            "p50": 33.49,
+            "p95": 37.79
+          }
+        },
+        "public_zh": {
+          "documents": 531,
+          "queries": 40,
+          "hit_at_1": 0.7,
+          "hit_at_5": 1,
+          "mrr_at_10": 0.8270833333333333,
+          "by_category": {
+            "public_zh": {
+              "queries": 40,
+              "hit_at_1": 0.7,
+              "hit_at_5": 1,
+              "mrr_at_10": 0.8270833333333333
+            }
+          },
+          "latency_ms": {
+            "samples": 120,
+            "p50": 33.55,
+            "p95": 40.22
+          }
+        }
+      }
+    },
+    "gemma-int8-512": {
+      "variant": "gemma-int8",
+      "scope": "Same original service imports + ONNX CPU, batch=1. No DB, LLM extraction, hybrid ranking, production data, WAN or vision/audio. RSS includes retained vectors/harness after indexing.",
+      "host": {
+        "platform": "Linux-7.0.0-34-generic-x86_64-with-glibc2.43",
+        "cpu_count": 16
+      },
+      "versions": {
+        "fastembed": "0.9.0",
+        "onnxruntime": "1.30.0",
+        "tokenizers": "0.23.2",
+        "mem0ai": "2.2.1",
+        "numpy": "2.5.3"
+      },
+      "dataset": {
+        "memory": "Hand-labelled diagnostic memory retrieval cases. Synthetic facts; not production memory or a representative quality benchmark.",
+        "public": "C-MTEB/T2Reranking, dev rows 0-39, all positive passages and the first six negative passages per query, pooled into one corpus",
+        "public_rows_sha256": "0b5a045e9d2c0c2b725afcdafa6a1229a89ca66bfd35b62a51f1987abe2aa33e"
+      },
+      "model": {
+        "source": "google/embeddinggemma-2",
+        "export": "onnx-community/embeddinggemma-2-ONNX",
+        "revision": "daa72c51243991dfcaf9f9137d2c573d8f7790c0",
+        "dims": 768,
+        "text_only": true,
+        "model_file_bytes": 314220093,
+        "sha256": {
+          "model_quantized.onnx": "d06edd601f851c633a2519304cbeb8dc6170d7ceb61b436625c17fb9b6e74953",
+          "model_quantized.onnx_data": "278a7ff1248c3618e4bd11a607fc54f7bdc7778854230f3956d3f86bd9db4f3b"
+        },
+        "max_tokens": 512,
+        "prefixes": {
+          "query": "task: search result | query: ",
+          "document": "title: none | text: "
+        },
+        "pooling": "ONNX sentence_embedding: projection, masked mean pooling, L2 normalization",
+        "threads_option": 0,
+        "tokenizer_memory": {
+          "stage": "tokenizer_ready",
+          "rss_mib": 413.29,
+          "peak_rss_mib": 522.48,
+          "threads": 17
+        }
+      },
+      "memory": [
+        {
+          "stage": "python",
+          "rss_mib": 24.88,
+          "peak_rss_mib": 25.57,
+          "threads": 1
+        },
+        {
+          "stage": "service_imports",
+          "rss_mib": 169.01,
+          "peak_rss_mib": 169.01,
+          "threads": 17
+        },
+        {
+          "stage": "embedder_ready",
+          "rss_mib": 420.96,
+          "peak_rss_mib": 522.48,
+          "threads": 24
+        },
+        {
+          "stage": "first_query",
+          "rss_mib": 576.76,
+          "peak_rss_mib": 576.76,
+          "threads": 24
+        },
+        {
+          "stage": "after_memory_indexing",
+          "rss_mib": 614.92,
+          "peak_rss_mib": 614.92,
+          "threads": 24
+        },
+        {
+          "stage": "after_public_zh_indexing",
+          "rss_mib": 783.22,
+          "peak_rss_mib": 783.22,
+          "threads": 24
+        },
+        {
+          "stage": "after_indexing",
+          "rss_mib": 783.23,
+          "peak_rss_mib": 783.23,
+          "threads": 24
+        },
+        {
+          "stage": "after_queries",
+          "rss_mib": 783.26,
+          "peak_rss_mib": 783.26,
+          "threads": 24
+        }
+      ],
+      "setup_seconds": 2.12,
+      "indexing_seconds": 212.13,
+      "token_lengths": {
+        "query": {
+          "max": 26,
+          "p50": 19.0,
+          "p95": 23.0,
+          "at_limit": 0
+        },
+        "document": {
+          "max": 512,
+          "p50": 264.0,
+          "p95": 512.0,
+          "at_limit": 160
+        }
+      },
+      "retrieval": {
+        "memory": {
+          "documents": 48,
+          "queries": 40,
+          "hit_at_1": 0.925,
+          "hit_at_5": 0.975,
+          "mrr_at_10": 0.9460714285714286,
+          "by_category": {
+            "zh": {
+              "queries": 24,
+              "hit_at_1": 0.875,
+              "hit_at_5": 0.9583333333333334,
+              "mrr_at_10": 0.9101190476190476
+            },
+            "mixed": {
+              "queries": 8,
+              "hit_at_1": 1,
+              "hit_at_5": 1,
+              "mrr_at_10": 1.0
+            },
+            "detail": {
+              "queries": 8,
+              "hit_at_1": 1,
+              "hit_at_5": 1,
+              "mrr_at_10": 1.0
+            }
+          },
+          "latency_ms": {
+            "samples": 120,
+            "p50": 77.25,
+            "p95": 85.87
+          }
+        },
+        "public_zh": {
+          "documents": 531,
+          "queries": 40,
+          "hit_at_1": 0.7,
+          "hit_at_5": 1,
+          "mrr_at_10": 0.8270833333333333,
+          "by_category": {
+            "public_zh": {
+              "queries": 40,
+              "hit_at_1": 0.7,
+              "hit_at_5": 1,
+              "mrr_at_10": 0.8270833333333333
+            }
+          },
+          "latency_ms": {
+            "samples": 120,
+            "p50": 74.37,
+            "p95": 80.12
+          }
+        }
+      }
+    },
+    "gemma-int4-512": {
+      "variant": "gemma-int4",
+      "scope": "Same original service imports + ONNX CPU, batch=1. No DB, LLM extraction, hybrid ranking, production data, WAN or vision/audio. RSS includes retained vectors/harness after indexing.",
+      "host": {
+        "platform": "Linux-7.0.0-34-generic-x86_64-with-glibc2.43",
+        "cpu_count": 16
+      },
+      "versions": {
+        "fastembed": "0.9.0",
+        "onnxruntime": "1.30.0",
+        "tokenizers": "0.23.2",
+        "mem0ai": "2.2.1",
+        "numpy": "2.5.3"
+      },
+      "dataset": {
+        "memory": "Hand-labelled diagnostic memory retrieval cases. Synthetic facts; not production memory or a representative quality benchmark.",
+        "public": "C-MTEB/T2Reranking, dev rows 0-39, all positive passages and the first six negative passages per query, pooled into one corpus",
+        "public_rows_sha256": "0b5a045e9d2c0c2b725afcdafa6a1229a89ca66bfd35b62a51f1987abe2aa33e"
+      },
+      "model": {
+        "source": "google/embeddinggemma-2",
+        "export": "onnx-community/embeddinggemma-2-ONNX",
+        "revision": "daa72c51243991dfcaf9f9137d2c573d8f7790c0",
+        "dims": 768,
+        "text_only": true,
+        "model_file_bytes": 174519542,
+        "sha256": {
+          "model_q4.onnx": "f9eeba97acddf139b8ee2ddf04bc30dceafa88de93fadf74d7644e0d61a477a9",
+          "model_q4.onnx_data": "c3975f2d1ab7a1878ae31a7d7a9b7804a827aff3800b60dfceafce21cac3df49"
+        },
+        "max_tokens": 512,
+        "prefixes": {
+          "query": "task: search result | query: ",
+          "document": "title: none | text: "
+        },
+        "pooling": "ONNX sentence_embedding: projection, masked mean pooling, L2 normalization",
+        "threads_option": 0,
+        "tokenizer_memory": {
+          "stage": "tokenizer_ready",
+          "rss_mib": 413.2,
+          "peak_rss_mib": 522.49,
+          "threads": 17
+        }
+      },
+      "memory": [
+        {
+          "stage": "python",
+          "rss_mib": 24.88,
+          "peak_rss_mib": 25.63,
+          "threads": 1
+        },
+        {
+          "stage": "service_imports",
+          "rss_mib": 168.92,
+          "peak_rss_mib": 168.92,
+          "threads": 17
+        },
+        {
+          "stage": "embedder_ready",
+          "rss_mib": 421.04,
+          "peak_rss_mib": 522.49,
+          "threads": 24
+        },
+        {
+          "stage": "first_query",
+          "rss_mib": 445.79,
+          "peak_rss_mib": 522.49,
+          "threads": 24
+        },
+        {
+          "stage": "after_memory_indexing",
+          "rss_mib": 478.71,
+          "peak_rss_mib": 522.49,
+          "threads": 24
+        },
+        {
+          "stage": "after_public_zh_indexing",
+          "rss_mib": 592.33,
+          "peak_rss_mib": 592.33,
+          "threads": 24
+        },
+        {
+          "stage": "after_indexing",
+          "rss_mib": 592.33,
+          "peak_rss_mib": 592.33,
+          "threads": 24
+        },
+        {
+          "stage": "after_queries",
+          "rss_mib": 592.36,
+          "peak_rss_mib": 592.36,
+          "threads": 24
+        }
+      ],
+      "setup_seconds": 2.29,
+      "indexing_seconds": 114.77,
+      "token_lengths": {
+        "query": {
+          "max": 26,
+          "p50": 19.0,
+          "p95": 23.0,
+          "at_limit": 0
+        },
+        "document": {
+          "max": 512,
+          "p50": 264.0,
+          "p95": 512.0,
+          "at_limit": 160
+        }
+      },
+      "retrieval": {
+        "memory": {
+          "documents": 48,
+          "queries": 40,
+          "hit_at_1": 0.9,
+          "hit_at_5": 0.95,
+          "mrr_at_10": 0.9316964285714285,
+          "by_category": {
+            "zh": {
+              "queries": 24,
+              "hit_at_1": 0.875,
+              "hit_at_5": 0.9166666666666666,
+              "mrr_at_10": 0.9069940476190477
+            },
+            "mixed": {
+              "queries": 8,
+              "hit_at_1": 0.875,
+              "hit_at_5": 1,
+              "mrr_at_10": 0.9375
+            },
+            "detail": {
+              "queries": 8,
+              "hit_at_1": 1,
+              "hit_at_5": 1,
+              "mrr_at_10": 1.0
+            }
+          },
+          "latency_ms": {
+            "samples": 120,
+            "p50": 20.76,
+            "p95": 23.56
+          }
+        },
+        "public_zh": {
+          "documents": 531,
+          "queries": 40,
+          "hit_at_1": 0.7,
+          "hit_at_5": 1,
+          "mrr_at_10": 0.8195833333333333,
+          "by_category": {
+            "public_zh": {
+              "queries": 40,
+              "hit_at_1": 0.7,
+              "hit_at_5": 1,
+              "mrr_at_10": 0.8195833333333333
+            }
+          },
+          "latency_ms": {
+            "samples": 120,
+            "p50": 18.39,
+            "p95": 21.64
+          }
+        }
+      }
+    },
+    "gemma-int4-no-prefix-memory": {
+      "variant": "gemma-int4",
+      "scope": "Same original service imports + ONNX CPU, batch=1. No DB, LLM extraction, hybrid ranking, production data, WAN or vision/audio. RSS includes retained vectors/harness after indexing.",
+      "host": {
+        "platform": "Linux-7.0.0-34-generic-x86_64-with-glibc2.43",
+        "cpu_count": 16
+      },
+      "versions": {
+        "fastembed": "0.9.0",
+        "onnxruntime": "1.30.0",
+        "tokenizers": "0.23.2",
+        "mem0ai": "2.2.1",
+        "numpy": "2.5.3"
+      },
+      "dataset": {
+        "memory": "Hand-labelled diagnostic memory retrieval cases. Synthetic facts; not production memory or a representative quality benchmark.",
+        "public": "C-MTEB/T2Reranking, dev rows 0-39, all positive passages and the first six negative passages per query, pooled into one corpus",
+        "public_rows_sha256": "0b5a045e9d2c0c2b725afcdafa6a1229a89ca66bfd35b62a51f1987abe2aa33e"
+      },
+      "model": {
+        "source": "google/embeddinggemma-2",
+        "export": "onnx-community/embeddinggemma-2-ONNX",
+        "revision": "daa72c51243991dfcaf9f9137d2c573d8f7790c0",
+        "dims": 768,
+        "text_only": true,
+        "model_file_bytes": 174519542,
+        "sha256": {
+          "model_q4.onnx": "f9eeba97acddf139b8ee2ddf04bc30dceafa88de93fadf74d7644e0d61a477a9",
+          "model_q4.onnx_data": "c3975f2d1ab7a1878ae31a7d7a9b7804a827aff3800b60dfceafce21cac3df49"
+        },
+        "max_tokens": 512,
+        "prefixes": {},
+        "pooling": "ONNX sentence_embedding: projection, masked mean pooling, L2 normalization",
+        "threads_option": 0,
+        "tokenizer_memory": {
+          "stage": "tokenizer_ready",
+          "rss_mib": 412.27,
+          "peak_rss_mib": 521.52,
+          "threads": 17
+        }
+      },
+      "memory": [
+        {
+          "stage": "python",
+          "rss_mib": 25.79,
+          "peak_rss_mib": 26.62,
+          "threads": 1
+        },
+        {
+          "stage": "service_imports",
+          "rss_mib": 167.99,
+          "peak_rss_mib": 167.99,
+          "threads": 17
+        },
+        {
+          "stage": "embedder_ready",
+          "rss_mib": 420.11,
+          "peak_rss_mib": 521.52,
+          "threads": 24
+        },
+        {
+          "stage": "first_query",
+          "rss_mib": 444.07,
+          "peak_rss_mib": 521.52,
+          "threads": 24
+        },
+        {
+          "stage": "after_memory_indexing",
+          "rss_mib": 476.5,
+          "peak_rss_mib": 521.52,
+          "threads": 24
+        },
+        {
+          "stage": "after_indexing",
+          "rss_mib": 476.5,
+          "peak_rss_mib": 521.52,
+          "threads": 24
+        },
+        {
+          "stage": "after_queries",
+          "rss_mib": 476.53,
+          "peak_rss_mib": 521.52,
+          "threads": 24
+        }
+      ],
+      "setup_seconds": 2.26,
+      "indexing_seconds": 1.6,
+      "token_lengths": {
+        "query": {
+          "max": 18,
+          "p50": 13.0,
+          "p95": 16.0,
+          "at_limit": 0
+        },
+        "document": {
+          "max": 30,
+          "p50": 18.0,
+          "p95": 24.0,
+          "at_limit": 0
+        }
+      },
+      "retrieval": {
+        "memory": {
+          "documents": 48,
+          "queries": 40,
+          "hit_at_1": 0.875,
+          "hit_at_5": 0.95,
+          "mrr_at_10": 0.915625,
+          "by_category": {
+            "zh": {
+              "queries": 24,
+              "hit_at_1": 0.7916666666666666,
+              "hit_at_5": 0.9166666666666666,
+              "mrr_at_10": 0.859375
+            },
+            "mixed": {
+              "queries": 8,
+              "hit_at_1": 1,
+              "hit_at_5": 1,
+              "mrr_at_10": 1.0
+            },
+            "detail": {
+              "queries": 8,
+              "hit_at_1": 1,
+              "hit_at_5": 1,
+              "mrr_at_10": 1.0
+            }
+          },
+          "latency_ms": {
+            "samples": 120,
+            "p50": 17.81,
+            "p95": 20.94
+          }
+        }
+      }
+    },
+    "gemma-int4-2threads-memory": {
+      "variant": "gemma-int4",
+      "scope": "Same original service imports + ONNX CPU, batch=1. No DB, LLM extraction, hybrid ranking, production data, WAN or vision/audio. RSS includes retained vectors/harness after indexing.",
+      "host": {
+        "platform": "Linux-7.0.0-34-generic-x86_64-with-glibc2.43",
+        "cpu_count": 16
+      },
+      "versions": {
+        "fastembed": "0.9.0",
+        "onnxruntime": "1.30.0",
+        "tokenizers": "0.23.2",
+        "mem0ai": "2.2.1",
+        "numpy": "2.5.3"
+      },
+      "dataset": {
+        "memory": "Hand-labelled diagnostic memory retrieval cases. Synthetic facts; not production memory or a representative quality benchmark.",
+        "public": "C-MTEB/T2Reranking, dev rows 0-39, all positive passages and the first six negative passages per query, pooled into one corpus",
+        "public_rows_sha256": "0b5a045e9d2c0c2b725afcdafa6a1229a89ca66bfd35b62a51f1987abe2aa33e"
+      },
+      "model": {
+        "source": "google/embeddinggemma-2",
+        "export": "onnx-community/embeddinggemma-2-ONNX",
+        "revision": "daa72c51243991dfcaf9f9137d2c573d8f7790c0",
+        "dims": 768,
+        "text_only": true,
+        "model_file_bytes": 174519542,
+        "sha256": {
+          "model_q4.onnx": "f9eeba97acddf139b8ee2ddf04bc30dceafa88de93fadf74d7644e0d61a477a9",
+          "model_q4.onnx_data": "c3975f2d1ab7a1878ae31a7d7a9b7804a827aff3800b60dfceafce21cac3df49"
+        },
+        "max_tokens": 512,
+        "prefixes": {
+          "query": "task: search result | query: ",
+          "document": "title: none | text: "
+        },
+        "pooling": "ONNX sentence_embedding: projection, masked mean pooling, L2 normalization",
+        "threads_option": 2,
+        "tokenizer_memory": {
+          "stage": "tokenizer_ready",
+          "rss_mib": 412.32,
+          "peak_rss_mib": 521.54,
+          "threads": 17
+        }
+      },
+      "memory": [
+        {
+          "stage": "python",
+          "rss_mib": 25.86,
+          "peak_rss_mib": 26.58,
+          "threads": 1
+        },
+        {
+          "stage": "service_imports",
+          "rss_mib": 168.05,
+          "peak_rss_mib": 168.05,
+          "threads": 17
+        },
+        {
+          "stage": "embedder_ready",
+          "rss_mib": 420.07,
+          "peak_rss_mib": 521.54,
+          "threads": 18
+        },
+        {
+          "stage": "first_query",
+          "rss_mib": 443.13,
+          "peak_rss_mib": 521.54,
+          "threads": 18
+        },
+        {
+          "stage": "after_memory_indexing",
+          "rss_mib": 475.66,
+          "peak_rss_mib": 521.54,
+          "threads": 18
+        },
+        {
+          "stage": "after_indexing",
+          "rss_mib": 475.66,
+          "peak_rss_mib": 521.54,
+          "threads": 18
+        },
+        {
+          "stage": "after_queries",
+          "rss_mib": 477.83,
+          "peak_rss_mib": 521.54,
+          "threads": 19
+        }
+      ],
+      "setup_seconds": 2.22,
+      "indexing_seconds": 4.07,
+      "token_lengths": {
+        "query": {
+          "max": 26,
+          "p50": 20.0,
+          "p95": 24.0,
+          "at_limit": 0
+        },
+        "document": {
+          "max": 37,
+          "p50": 24.0,
+          "p95": 31.0,
+          "at_limit": 0
+        }
+      },
+      "retrieval": {
+        "memory": {
+          "documents": 48,
+          "queries": 40,
+          "hit_at_1": 0.9,
+          "hit_at_5": 0.95,
+          "mrr_at_10": 0.9316964285714285,
+          "by_category": {
+            "zh": {
+              "queries": 24,
+              "hit_at_1": 0.875,
+              "hit_at_5": 0.9166666666666666,
+              "mrr_at_10": 0.9069940476190477
+            },
+            "mixed": {
+              "queries": 8,
+              "hit_at_1": 0.875,
+              "hit_at_5": 1,
+              "mrr_at_10": 0.9375
+            },
+            "detail": {
+              "queries": 8,
+              "hit_at_1": 1,
+              "hit_at_5": 1,
+              "mrr_at_10": 1.0
+            }
+          },
+          "latency_ms": {
+            "samples": 120,
+            "p50": 43.36,
+            "p95": 48.89
+          }
+        }
+      }
+    },
+    "jina-int8-2threads-memory": {
+      "variant": "jina-int8",
+      "scope": "Same original service imports + ONNX CPU, batch=1. No DB, LLM extraction, hybrid ranking, production data, WAN or vision/audio. RSS includes retained vectors/harness after indexing.",
+      "host": {
+        "platform": "Linux-7.0.0-34-generic-x86_64-with-glibc2.43",
+        "cpu_count": 16
+      },
+      "versions": {
+        "fastembed": "0.9.0",
+        "onnxruntime": "1.30.0",
+        "tokenizers": "0.23.2",
+        "mem0ai": "2.2.1",
+        "numpy": "2.5.3"
+      },
+      "dataset": {
+        "memory": "Hand-labelled diagnostic memory retrieval cases. Synthetic facts; not production memory or a representative quality benchmark.",
+        "public": "C-MTEB/T2Reranking, dev rows 0-39, all positive passages and the first six negative passages per query, pooled into one corpus",
+        "public_rows_sha256": "0b5a045e9d2c0c2b725afcdafa6a1229a89ca66bfd35b62a51f1987abe2aa33e"
+      },
+      "model": {
+        "dims": 768,
+        "revision": "c1ff9086a89a1123d7b5eff58055a665db4fb4b9",
+        "model_file_bytes": 161565239,
+        "tokenizer_truncation": {
+          "max_length": 512,
+          "stride": 0,
+          "strategy": "longest_first",
+          "direction": "right"
+        },
+        "query_prefix": "",
+        "threads_option": 2
+      },
+      "memory": [
+        {
+          "stage": "python",
+          "rss_mib": 25.04,
+          "peak_rss_mib": 25.8,
+          "threads": 1
+        },
+        {
+          "stage": "service_imports",
+          "rss_mib": 168.18,
+          "peak_rss_mib": 168.18,
+          "threads": 17
+        },
+        {
+          "stage": "embedder_ready",
+          "rss_mib": 403.7,
+          "peak_rss_mib": 403.7,
+          "threads": 18
+        },
+        {
+          "stage": "first_query",
+          "rss_mib": 406.06,
+          "peak_rss_mib": 406.06,
+          "threads": 34
+        },
+        {
+          "stage": "after_memory_indexing",
+          "rss_mib": 408.15,
+          "peak_rss_mib": 408.15,
+          "threads": 34
+        },
+        {
+          "stage": "after_indexing",
+          "rss_mib": 408.16,
+          "peak_rss_mib": 408.16,
+          "threads": 34
+        },
+        {
+          "stage": "after_queries",
+          "rss_mib": 408.19,
+          "peak_rss_mib": 408.19,
+          "threads": 34
+        }
+      ],
+      "setup_seconds": 1.54,
+      "indexing_seconds": 0.96,
+      "token_lengths": {},
+      "retrieval": {
+        "memory": {
+          "documents": 48,
+          "queries": 40,
+          "hit_at_1": 0.7,
+          "hit_at_5": 0.9,
+          "mrr_at_10": 0.8108630952380952,
+          "by_category": {
+            "zh": {
+              "queries": 24,
+              "hit_at_1": 0.7083333333333334,
+              "hit_at_5": 0.8333333333333334,
+              "mrr_at_10": 0.7958829365079365
+            },
+            "mixed": {
+              "queries": 8,
+              "hit_at_1": 0.75,
+              "hit_at_5": 1,
+              "mrr_at_10": 0.875
+            },
+            "detail": {
+              "queries": 8,
+              "hit_at_1": 0.625,
+              "hit_at_5": 1,
+              "mrr_at_10": 0.7916666666666666
+            }
+          },
+          "latency_ms": {
+            "samples": 120,
+            "p50": 9.91,
+            "p95": 12.26
+          }
+        }
+      }
+    },
+    "jina-int8-repeat-memory": {
+      "variant": "jina-int8",
+      "scope": "Same original service imports + ONNX CPU, batch=1. No DB, LLM extraction, hybrid ranking, production data, WAN or vision/audio. RSS includes retained vectors/harness after indexing.",
+      "host": {
+        "platform": "Linux-7.0.0-34-generic-x86_64-with-glibc2.43",
+        "cpu_count": 16
+      },
+      "versions": {
+        "fastembed": "0.9.0",
+        "onnxruntime": "1.30.0",
+        "tokenizers": "0.23.2",
+        "mem0ai": "2.2.1",
+        "numpy": "2.5.3"
+      },
+      "dataset": {
+        "memory": "Hand-labelled diagnostic memory retrieval cases. Synthetic facts; not production memory or a representative quality benchmark.",
+        "public": "C-MTEB/T2Reranking, dev rows 0-39, all positive passages and the first six negative passages per query, pooled into one corpus",
+        "public_rows_sha256": "0b5a045e9d2c0c2b725afcdafa6a1229a89ca66bfd35b62a51f1987abe2aa33e"
+      },
+      "model": {
+        "dims": 768,
+        "revision": "c1ff9086a89a1123d7b5eff58055a665db4fb4b9",
+        "model_file_bytes": 161565239,
+        "tokenizer_truncation": {
+          "max_length": 512,
+          "stride": 0,
+          "strategy": "longest_first",
+          "direction": "right"
+        },
+        "query_prefix": "",
+        "threads_option": 0
+      },
+      "memory": [
+        {
+          "stage": "python",
+          "rss_mib": 25.04,
+          "peak_rss_mib": 25.87,
+          "threads": 1
+        },
+        {
+          "stage": "service_imports",
+          "rss_mib": 167.98,
+          "peak_rss_mib": 167.98,
+          "threads": 17
+        },
+        {
+          "stage": "embedder_ready",
+          "rss_mib": 385.33,
+          "peak_rss_mib": 385.33,
+          "threads": 24
+        },
+        {
+          "stage": "first_query",
+          "rss_mib": 388.21,
+          "peak_rss_mib": 388.21,
+          "threads": 40
+        },
+        {
+          "stage": "after_memory_indexing",
+          "rss_mib": 390.33,
+          "peak_rss_mib": 390.33,
+          "threads": 40
+        },
+        {
+          "stage": "after_indexing",
+          "rss_mib": 390.34,
+          "peak_rss_mib": 390.34,
+          "threads": 40
+        },
+        {
+          "stage": "after_queries",
+          "rss_mib": 390.37,
+          "peak_rss_mib": 390.37,
+          "threads": 40
+        }
+      ],
+      "setup_seconds": 1.54,
+      "indexing_seconds": 0.85,
+      "token_lengths": {},
+      "retrieval": {
+        "memory": {
+          "documents": 48,
+          "queries": 40,
+          "hit_at_1": 0.7,
+          "hit_at_5": 0.9,
+          "mrr_at_10": 0.8108630952380952,
+          "by_category": {
+            "zh": {
+              "queries": 24,
+              "hit_at_1": 0.7083333333333334,
+              "hit_at_5": 0.8333333333333334,
+              "mrr_at_10": 0.7958829365079365
+            },
+            "mixed": {
+              "queries": 8,
+              "hit_at_1": 0.75,
+              "hit_at_5": 1,
+              "mrr_at_10": 0.875
+            },
+            "detail": {
+              "queries": 8,
+              "hit_at_1": 0.625,
+              "hit_at_5": 1,
+              "mrr_at_10": 0.7916666666666666
+            }
+          },
+          "latency_ms": {
+            "samples": 120,
+            "p50": 9.04,
+            "p95": 10.22
+          }
+        }
+      }
+    }
+  },
+  "quantized_cosine_against_fp32": {
+    "gemma-int8-512": {
+      "rows": 659,
+      "mean": 0.9999394484644414,
+      "min": 0.9998091459274292
+    },
+    "gemma-int4-512": {
+      "rows": 659,
+      "mean": 0.983508833623258,
+      "min": 0.9710841774940491
+    }
+  },
+  "first_relevant_ranks": {
+    "memory": {
+      "m01": {
+        "category": "zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m02": {
+        "category": "zh",
+        "rank": {
+          "jina": 2,
+          "jina-int8": 7,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 7,
+          "jina-int8-repeat-memory": 7
+        }
+      },
+      "m03": {
+        "category": "zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 2,
+          "gemma-int8-512": 2,
+          "gemma-int4-512": 2,
+          "gemma-int4-no-prefix-memory": 2,
+          "gemma-int4-2threads-memory": 2,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m04": {
+        "category": "zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m05": {
+        "category": "zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m06": {
+        "category": "zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m07": {
+        "category": "zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 2,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 2,
+          "jina-int8-repeat-memory": 2
+        }
+      },
+      "m08": {
+        "category": "zh",
+        "rank": {
+          "jina": 2,
+          "jina-int8": 6,
+          "gemma-fp32-512": 7,
+          "gemma-int8-512": 7,
+          "gemma-int4-512": 7,
+          "gemma-int4-no-prefix-memory": 11,
+          "gemma-int4-2threads-memory": 7,
+          "jina-int8-2threads-memory": 6,
+          "jina-int8-repeat-memory": 6
+        }
+      },
+      "m09": {
+        "category": "zh",
+        "rank": {
+          "jina": 2,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m10": {
+        "category": "zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m11": {
+        "category": "zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 2,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m12": {
+        "category": "zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m13": {
+        "category": "zh",
+        "rank": {
+          "jina": 2,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m14": {
+        "category": "zh",
+        "rank": {
+          "jina": 6,
+          "jina-int8": 8,
+          "gemma-fp32-512": 5,
+          "gemma-int8-512": 5,
+          "gemma-int4-512": 8,
+          "gemma-int4-no-prefix-memory": 8,
+          "gemma-int4-2threads-memory": 8,
+          "jina-int8-2threads-memory": 8,
+          "jina-int8-repeat-memory": 8
+        }
+      },
+      "m15": {
+        "category": "zh",
+        "rank": {
+          "jina": 3,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m16": {
+        "category": "zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 2,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 2,
+          "jina-int8-repeat-memory": 2
+        }
+      },
+      "m17": {
+        "category": "zh",
+        "rank": {
+          "jina": 22,
+          "jina-int8": 6,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 6,
+          "jina-int8-repeat-memory": 6
+        }
+      },
+      "m18": {
+        "category": "zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m19": {
+        "category": "zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m20": {
+        "category": "zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 2,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m21": {
+        "category": "zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 2,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 2,
+          "jina-int8-repeat-memory": 2
+        }
+      },
+      "m22": {
+        "category": "zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m23": {
+        "category": "zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m24": {
+        "category": "zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m25": {
+        "category": "mixed",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m26": {
+        "category": "mixed",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m27": {
+        "category": "mixed",
+        "rank": {
+          "jina": 2,
+          "jina-int8": 2,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 2,
+          "jina-int8-repeat-memory": 2
+        }
+      },
+      "m28": {
+        "category": "mixed",
+        "rank": {
+          "jina": 2,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 2,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 2,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m29": {
+        "category": "mixed",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m30": {
+        "category": "mixed",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m31": {
+        "category": "mixed",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 2,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 2,
+          "jina-int8-repeat-memory": 2
+        }
+      },
+      "m32": {
+        "category": "mixed",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m33": {
+        "category": "detail",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m34": {
+        "category": "detail",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m35": {
+        "category": "detail",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m36": {
+        "category": "detail",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m37": {
+        "category": "detail",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 2,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 2,
+          "jina-int8-repeat-memory": 2
+        }
+      },
+      "m38": {
+        "category": "detail",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 2,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 2,
+          "jina-int8-repeat-memory": 2
+        }
+      },
+      "m39": {
+        "category": "detail",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 1,
+          "jina-int8-repeat-memory": 1
+        }
+      },
+      "m40": {
+        "category": "detail",
+        "rank": {
+          "jina": 2,
+          "jina-int8": 3,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1,
+          "gemma-int4-no-prefix-memory": 1,
+          "gemma-int4-2threads-memory": 1,
+          "jina-int8-2threads-memory": 3,
+          "jina-int8-repeat-memory": 3
+        }
+      }
+    },
+    "public_zh": {
+      "t2-q0": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q1": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 2,
+          "gemma-int8-512": 2,
+          "gemma-int4-512": 2
+        }
+      },
+      "t2-q2": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q3": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q4": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q5": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 2,
+          "jina-int8": 2,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 2
+        }
+      },
+      "t2-q6": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q7": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 2,
+          "jina-int8": 2,
+          "gemma-fp32-512": 2,
+          "gemma-int8-512": 2,
+          "gemma-int4-512": 2
+        }
+      },
+      "t2-q8": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q9": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q10": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 3,
+          "jina-int8": 1,
+          "gemma-fp32-512": 3,
+          "gemma-int8-512": 3,
+          "gemma-int4-512": 3
+        }
+      },
+      "t2-q11": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 2,
+          "gemma-int8-512": 2,
+          "gemma-int4-512": 2
+        }
+      },
+      "t2-q12": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 2,
+          "gemma-int8-512": 2,
+          "gemma-int4-512": 2
+        }
+      },
+      "t2-q13": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 3,
+          "jina-int8": 2,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q14": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q15": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 7,
+          "gemma-fp32-512": 2,
+          "gemma-int8-512": 2,
+          "gemma-int4-512": 5
+        }
+      },
+      "t2-q16": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q17": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 2,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q18": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q19": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 2,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q20": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q21": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q22": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 2,
+          "gemma-fp32-512": 3,
+          "gemma-int8-512": 3,
+          "gemma-int4-512": 3
+        }
+      },
+      "t2-q23": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 2,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q24": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q25": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q26": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q27": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q28": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 4,
+          "gemma-int8-512": 4,
+          "gemma-int4-512": 3
+        }
+      },
+      "t2-q29": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 2,
+          "jina-int8": 2,
+          "gemma-fp32-512": 2,
+          "gemma-int8-512": 2,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q30": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q31": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q32": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 2,
+          "jina-int8": 2,
+          "gemma-fp32-512": 3,
+          "gemma-int8-512": 3,
+          "gemma-int4-512": 4
+        }
+      },
+      "t2-q33": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q34": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 2,
+          "jina-int8": 2,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q35": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 3,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q36": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 3,
+          "gemma-fp32-512": 2,
+          "gemma-int8-512": 2,
+          "gemma-int4-512": 2
+        }
+      },
+      "t2-q37": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      },
+      "t2-q38": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 3,
+          "gemma-int8-512": 3,
+          "gemma-int4-512": 3
+        }
+      },
+      "t2-q39": {
+        "category": "public_zh",
+        "rank": {
+          "jina": 1,
+          "jina-int8": 1,
+          "gemma-fp32-512": 1,
+          "gemma-int8-512": 1,
+          "gemma-int4-512": 1
+        }
+      }
+    }
+  },
+  "dimension_truncation": {
+    "gemma-fp32-512": {
+      "memory": {
+        "128": {
+          "queries": 40,
+          "hit_at_1": 0.825,
+          "hit_at_5": 0.95,
+          "mrr_at_10": 0.8791666666666667
+        },
+        "256": {
+          "queries": 40,
+          "hit_at_1": 0.8,
+          "hit_at_5": 0.95,
+          "mrr_at_10": 0.8785714285714286
+        },
+        "512": {
+          "queries": 40,
+          "hit_at_1": 0.9,
+          "hit_at_5": 0.975,
+          "mrr_at_10": 0.9364583333333333
+        },
+        "768": {
+          "queries": 40,
+          "hit_at_1": 0.925,
+          "hit_at_5": 0.975,
+          "mrr_at_10": 0.9460714285714286
+        }
+      },
+      "public_zh": {
+        "128": {
+          "queries": 40,
+          "hit_at_1": 0.625,
+          "hit_at_5": 1,
+          "mrr_at_10": 0.7791666666666667
+        },
+        "256": {
+          "queries": 40,
+          "hit_at_1": 0.65,
+          "hit_at_5": 1,
+          "mrr_at_10": 0.7979166666666667
+        },
+        "512": {
+          "queries": 40,
+          "hit_at_1": 0.7,
+          "hit_at_5": 1,
+          "mrr_at_10": 0.8270833333333333
+        },
+        "768": {
+          "queries": 40,
+          "hit_at_1": 0.7,
+          "hit_at_5": 1,
+          "mrr_at_10": 0.8270833333333333
+        }
+      }
+    },
+    "gemma-int8-512": {
+      "memory": {
+        "128": {
+          "queries": 40,
+          "hit_at_1": 0.825,
+          "hit_at_5": 0.95,
+          "mrr_at_10": 0.8791666666666667
+        },
+        "256": {
+          "queries": 40,
+          "hit_at_1": 0.8,
+          "hit_at_5": 0.95,
+          "mrr_at_10": 0.8785714285714286
+        },
+        "512": {
+          "queries": 40,
+          "hit_at_1": 0.9,
+          "hit_at_5": 0.975,
+          "mrr_at_10": 0.9364583333333333
+        },
+        "768": {
+          "queries": 40,
+          "hit_at_1": 0.925,
+          "hit_at_5": 0.975,
+          "mrr_at_10": 0.9460714285714286
+        }
+      },
+      "public_zh": {
+        "128": {
+          "queries": 40,
+          "hit_at_1": 0.625,
+          "hit_at_5": 1,
+          "mrr_at_10": 0.7791666666666667
+        },
+        "256": {
+          "queries": 40,
+          "hit_at_1": 0.65,
+          "hit_at_5": 1,
+          "mrr_at_10": 0.7979166666666667
+        },
+        "512": {
+          "queries": 40,
+          "hit_at_1": 0.7,
+          "hit_at_5": 1,
+          "mrr_at_10": 0.8291666666666667
+        },
+        "768": {
+          "queries": 40,
+          "hit_at_1": 0.7,
+          "hit_at_5": 1,
+          "mrr_at_10": 0.8270833333333333
+        }
+      }
+    },
+    "gemma-int4-512": {
+      "memory": {
+        "128": {
+          "queries": 40,
+          "hit_at_1": 0.8,
+          "hit_at_5": 0.95,
+          "mrr_at_10": 0.85875
+        },
+        "256": {
+          "queries": 40,
+          "hit_at_1": 0.85,
+          "hit_at_5": 0.95,
+          "mrr_at_10": 0.8958333333333334
+        },
+        "512": {
+          "queries": 40,
+          "hit_at_1": 0.9,
+          "hit_at_5": 0.95,
+          "mrr_at_10": 0.9285714285714286
+        },
+        "768": {
+          "queries": 40,
+          "hit_at_1": 0.9,
+          "hit_at_5": 0.95,
+          "mrr_at_10": 0.9316964285714285
+        }
+      },
+      "public_zh": {
+        "128": {
+          "queries": 40,
+          "hit_at_1": 0.65,
+          "hit_at_5": 0.975,
+          "mrr_at_10": 0.7841666666666667
+        },
+        "256": {
+          "queries": 40,
+          "hit_at_1": 0.675,
+          "hit_at_5": 0.975,
+          "mrr_at_10": 0.8020833333333334
+        },
+        "512": {
+          "queries": 40,
+          "hit_at_1": 0.7,
+          "hit_at_5": 0.975,
+          "mrr_at_10": 0.8145833333333333
+        },
+        "768": {
+          "queries": 40,
+          "hit_at_1": 0.7,
+          "hit_at_5": 1,
+          "mrr_at_10": 0.8195833333333333
+        }
+      }
+    }
+  },
+  "long_context_stress": {
+    "variant": "gemma-int4",
+    "max_tokens": 8192,
+    "complete": false,
+    "reason": "Stopped after RSS exceeded the service 2 GiB limit during public corpus indexing; no retrieval result claimed",
+    "rss_mib": 6780.18,
+    "peak_rss_mib": 6780.18,
+    "command": "bundles/memory/service/.venv/bin/python bundles/memory/service/benchmarks/gemma_benchmark.py --variant gemma-int4 --work-dir /tmp/axp-embedding-bench --service-dir /home/akrc/Developer/axp/bundles/memory/service --output /home/akrc/.codex/worktrees/c42c/axp/bundles/memory/service/benchmarks/results/gemma-int4.json "
+  }
+}

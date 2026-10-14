@@ -1,0 +1,406 @@
+{
+  "description": "Hand-labelled diagnostic memory retrieval cases. Synthetic facts; not production memory or a representative quality benchmark.",
+  "documents": [
+    {
+      "id": "language",
+      "text": "用户偏好使用中文沟通，即使问题中包含英文技术术语。"
+    },
+    {
+      "id": "concise",
+      "text": "用户希望回答简洁，先给结论，再说明必要的依据。"
+    },
+    { "id": "approval", "text": "生产环境发布必须先获得 Eric 的明确批准。" },
+    {
+      "id": "nohup",
+      "text": "生产部署脚本需要通过 nohup 运行并观察日志，防止 SSH 断开导致部署没有执行。"
+    },
+    { "id": "storage", "text": "AXP 的业务数据保存在 PostgreSQL 数据库中。" },
+    {
+      "id": "vectors",
+      "text": "记忆向量存储在 PostgreSQL 的 pgvector 扩展里。"
+    },
+    { "id": "queue", "text": "AXP 使用 NATS 处理任务消息。" },
+    {
+      "id": "runtime",
+      "text": "每个智能体的 Codex runtime 在独立容器中运行。"
+    },
+    {
+      "id": "isolation",
+      "text": "长期记忆按智能体隔离，网关提供的 X-AXP-Agent-Id 被用作 mem0 的 user_id。"
+    },
+    {
+      "id": "shared",
+      "text": "同一个智能体的记忆可以跨群召回，不会按当前群过滤。"
+    },
+    {
+      "id": "source",
+      "text": "记忆来源群只保存 source_group_id，群名称由界面根据当前快照查询。"
+    },
+    {
+      "id": "extract",
+      "text": "对话结束后，memory 服务使用该智能体自己的语言模型抽取长期事实。"
+    },
+    {
+      "id": "async",
+      "text": "对话记忆保存先返回 HTTP 202，再由后台队列异步处理。"
+    },
+    {
+      "id": "embedding",
+      "text": "本地向量模型 jina-embeddings-v2-base-zh 使用 CPU 推理，输出 768 维向量。"
+    },
+    {
+      "id": "offline",
+      "text": "向量模型在构建时打包进镜像，生产服务运行时不下载模型。"
+    },
+    {
+      "id": "migration",
+      "text": "更换 embedding 模型后，需要对已有记忆文本重新生成向量，不能直接混用两个模型的向量。"
+    },
+    {
+      "id": "deletion",
+      "text": "删除一条记忆前，服务先检查该记忆是否属于当前智能体。"
+    },
+    {
+      "id": "manual",
+      "text": "用户手动添加记忆时直接保存原文，不调用语言模型抽取事实。"
+    },
+    {
+      "id": "hookfailure",
+      "text": "记忆 hook 调用失败只会导致本轮没有记忆，不影响聊天本身。"
+    },
+    {
+      "id": "queue_loss",
+      "text": "记忆保存队列没有持久化，服务停止时尚未处理的对话保存会丢失。"
+    },
+    { "id": "telemetry", "text": "memory 服务的 mem0 遥测已关闭。" },
+    {
+      "id": "languagefacts",
+      "text": "抽取出的事实应该保持用户原文的语言，避免中文查询与英文事实难以匹配。"
+    },
+    { "id": "memorylimit", "text": "memory 容器的内存上限配置为 2Gi。" },
+    { "id": "polling", "text": "界面的记忆列表每 15 秒刷新一次。" },
+    {
+      "id": "profile",
+      "text": "embedding 权重加载使 memory 服务的启动内存接近 1GiB。"
+    },
+    {
+      "id": "threads",
+      "text": "限制 ONNX 推理线程数对模型启动时的内存占用改善很小。"
+    },
+    {
+      "id": "modelname",
+      "text": "当前记忆模型使用 jinaai/jina-embeddings-v2-base-zh。"
+    },
+    {
+      "id": "dimension",
+      "text": "替换模型时，即使向量维度相同，也不代表两个模型的语义空间兼容。"
+    },
+    {
+      "id": "teacher",
+      "text": "老师只能查看自己的云盘文件，租户 IT 管理员能查看全部文件。"
+    },
+    {
+      "id": "onboard",
+      "text": "为学校老师开通账号，需要以租户 IT 管理员身份调用已有用户管理接口。"
+    },
+    {
+      "id": "dmgintegrity",
+      "text": "安装新的 Hamu DMG 前需要验证 sha256、stapler 和 Gatekeeper。"
+    },
+    {
+      "id": "git",
+      "text": "Hamu 仓库使用 conventional commits，并推送到 origin/main。"
+    },
+    {
+      "id": "extractmodel",
+      "text": "语言模型负责抽取事实，embedding 模型负责把文本转换为向量。"
+    },
+    { "id": "listsize", "text": "记忆列表接口每次最多读取 1000 条记录。" },
+    { "id": "searchsize", "text": "记忆界面的搜索接口最多返回 50 条结果。" },
+    {
+      "id": "recallsize",
+      "text": "聊天开始时的自动召回最多提供 5 条相关记忆。"
+    },
+    { "id": "score", "text": "聊天自动召回会过滤掉相关度低于 0.2 的记忆。" },
+    {
+      "id": "timestamp",
+      "text": "新记忆使用 UTC 的 ISO 8601 时间记录创建时间。"
+    },
+    { "id": "health", "text": "memory 服务通过 /up 路径提供健康检查。" },
+    { "id": "port", "text": "memory 服务监听容器内的 8320 端口。" },
+    {
+      "id": "token",
+      "text": "memory 服务通过环境包令牌访问 runtime 网关的语言模型 API。"
+    },
+    {
+      "id": "append",
+      "text": "mem0 v2 采用追加写入，相同事实的新说法可能形成新的记忆。"
+    },
+    {
+      "id": "forget",
+      "text": "过时或错误的长期事实可以通过 forget 工具按记忆 ID 删除。"
+    },
+    {
+      "id": "remember",
+      "text": "智能体可以使用 remember 工具主动记录一条原文事实。"
+    },
+    {
+      "id": "sqlite",
+      "text": "mem0 的变更历史写在容器内 SQLite 中，不做持久保存。"
+    },
+    {
+      "id": "pgversion",
+      "text": "PostgreSQL 镜像使用带 pgvector 的 PostgreSQL 17 Debian trixie 版本。"
+    },
+    {
+      "id": "pagination",
+      "text": "记忆页面每页展示 20 条记录，切换过滤条件会返回第一页。"
+    },
+    {
+      "id": "othergroup",
+      "text": "引用其他群的记忆时，需要说明事实来自其他群，必要时向用户确认。"
+    }
+  ],
+  "queries": [
+    {
+      "id": "m01",
+      "category": "zh",
+      "text": "以后和我交流应该选哪种语言？",
+      "relevant": ["language"]
+    },
+    {
+      "id": "m02",
+      "category": "zh",
+      "text": "我喜欢怎样的回答组织方式？",
+      "relevant": ["concise"]
+    },
+    {
+      "id": "m03",
+      "category": "zh",
+      "text": "上线之前要征得谁的同意？",
+      "relevant": ["approval"]
+    },
+    {
+      "id": "m04",
+      "category": "zh",
+      "text": "怎么保证断开远程终端后发布脚本还在执行？",
+      "relevant": ["nohup"]
+    },
+    {
+      "id": "m05",
+      "category": "zh",
+      "text": "项目的业务数据落在哪种数据库？",
+      "relevant": ["storage"]
+    },
+    {
+      "id": "m06",
+      "category": "zh",
+      "text": "记忆的向量索引存在哪里？",
+      "relevant": ["vectors"]
+    },
+    {
+      "id": "m07",
+      "category": "zh",
+      "text": "项目里任务消息由哪个中间件处理？",
+      "relevant": ["queue"]
+    },
+    {
+      "id": "m08",
+      "category": "zh",
+      "text": "两个智能体会读到彼此的长期记忆吗？",
+      "relevant": ["isolation"]
+    },
+    {
+      "id": "m09",
+      "category": "zh",
+      "text": "换到另一个聊天群之后还能找到同一智能体的旧事实吗？",
+      "relevant": ["shared"]
+    },
+    {
+      "id": "m10",
+      "category": "zh",
+      "text": "群聊改了名字，记忆里显示的来源怎么更新？",
+      "relevant": ["source"]
+    },
+    {
+      "id": "m11",
+      "category": "zh",
+      "text": "是谁把聊天记录中的事实提取出来？",
+      "relevant": ["extract", "extractmodel"]
+    },
+    {
+      "id": "m12",
+      "category": "zh",
+      "text": "保存对话时返回 202 是已经处理完成了吗？",
+      "relevant": ["async"]
+    },
+    {
+      "id": "m13",
+      "category": "zh",
+      "text": "向量模型需要 GPU 吗，输出有多少维？",
+      "relevant": ["embedding"]
+    },
+    {
+      "id": "m14",
+      "category": "zh",
+      "text": "生产环境离线能启动这个 embedding 模型吗？",
+      "relevant": ["offline"]
+    },
+    {
+      "id": "m15",
+      "category": "zh",
+      "text": "新向量模型能直接查询旧模型建好的记忆库吗？",
+      "relevant": ["migration", "dimension"]
+    },
+    {
+      "id": "m16",
+      "category": "zh",
+      "text": "怎样避免智能体删除别人存的事实？",
+      "relevant": ["deletion"]
+    },
+    {
+      "id": "m17",
+      "category": "zh",
+      "text": "界面里自己写的记忆还要交给大模型总结吗？",
+      "relevant": ["manual"]
+    },
+    {
+      "id": "m18",
+      "category": "zh",
+      "text": "召回接口挂掉会不会中断当前聊天？",
+      "relevant": ["hookfailure"]
+    },
+    {
+      "id": "m19",
+      "category": "zh",
+      "text": "重启服务时还没处理的聊天保存任务会怎样？",
+      "relevant": ["queue_loss"]
+    },
+    {
+      "id": "m20",
+      "category": "zh",
+      "text": "为什么抽取中文偏好时不能都翻译成英文？",
+      "relevant": ["languagefacts"]
+    },
+    {
+      "id": "m21",
+      "category": "zh",
+      "text": "这容器最多可以占用多少 RAM？",
+      "relevant": ["memorylimit"]
+    },
+    {
+      "id": "m22",
+      "category": "zh",
+      "text": "老师能看到其他老师上传到云盘的文件吗？",
+      "relevant": ["teacher"]
+    },
+    {
+      "id": "m23",
+      "category": "zh",
+      "text": "学校新增教师应该用什么权限创建账号？",
+      "relevant": ["onboard"]
+    },
+    {
+      "id": "m24",
+      "category": "zh",
+      "text": "这个进程刚启动怎么已经占了一千兆内存？",
+      "relevant": ["profile"]
+    },
+    {
+      "id": "m25",
+      "category": "mixed",
+      "text": "Who must approve a production deployment?",
+      "relevant": ["approval"]
+    },
+    {
+      "id": "m26",
+      "category": "mixed",
+      "text": "How can deployment survive an SSH disconnect?",
+      "relevant": ["nohup"]
+    },
+    {
+      "id": "m27",
+      "category": "mixed",
+      "text": "Which database extension stores memory embeddings?",
+      "relevant": ["vectors"]
+    },
+    {
+      "id": "m28",
+      "category": "mixed",
+      "text": "Can one agent access another agent's memories?",
+      "relevant": ["isolation"]
+    },
+    {
+      "id": "m29",
+      "category": "mixed",
+      "text": "Must existing memories be re-embedded when the model changes?",
+      "relevant": ["migration", "dimension"]
+    },
+    {
+      "id": "m30",
+      "category": "mixed",
+      "text": "Does a memory hook failure stop the conversation?",
+      "relevant": ["hookfailure"]
+    },
+    {
+      "id": "m31",
+      "category": "mixed",
+      "text": "What happens to queued captures when the memory service restarts?",
+      "relevant": ["queue_loss"]
+    },
+    {
+      "id": "m32",
+      "category": "mixed",
+      "text": "Should Chinese facts be translated to English during extraction?",
+      "relevant": ["languagefacts"]
+    },
+    {
+      "id": "m33",
+      "category": "detail",
+      "text": "搜索上限是 50 还是聊天召回也是 50？",
+      "relevant": ["searchsize", "recallsize"]
+    },
+    {
+      "id": "m34",
+      "category": "detail",
+      "text": "向量大小一样是不是就能直接互换模型？",
+      "relevant": ["dimension", "migration"]
+    },
+    {
+      "id": "m35",
+      "category": "detail",
+      "text": "降低推理线程数能显著降低服务刚启动的内存吗？",
+      "relevant": ["threads"]
+    },
+    {
+      "id": "m36",
+      "category": "detail",
+      "text": "保存事实和计算 embedding 分别是哪种模型负责？",
+      "relevant": ["extractmodel"]
+    },
+    {
+      "id": "m37",
+      "category": "detail",
+      "text": "哪些旧事实需要清理，该用哪个工具？",
+      "relevant": ["forget"]
+    },
+    {
+      "id": "m38",
+      "category": "detail",
+      "text": "把别的群的结论拿到当前群里用需要说明什么？",
+      "relevant": ["othergroup"]
+    },
+    {
+      "id": "m39",
+      "category": "detail",
+      "text": "管理员和普通教师查看文件的范围有什么区别？",
+      "relevant": ["teacher"]
+    },
+    {
+      "id": "m40",
+      "category": "detail",
+      "text": "模型文件是在服务启动时从网上拉下来的吗？",
+      "relevant": ["offline"]
+    }
+  ]
+}

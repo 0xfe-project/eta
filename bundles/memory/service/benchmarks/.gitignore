@@ -1,0 +1,4 @@
+results/*.npz
+results/*.json
+!results/summary.json
+!results/gemma-comparison.json

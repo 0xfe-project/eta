@@ -1,0 +1,47 @@
+{
+  "run_date": "2026-10-14",
+  "rss_units": "MiB; existing service imports plus embedding adapter and benchmark harness, before indexing",
+  "retrieval": "Exact cosine retrieval, 40 memory queries over 48 synthetic documents; 40 public Chinese queries over 531 candidate documents; not a full production or leaderboard evaluation",
+  "models": [
+    {
+      "variant": "jina",
+      "startup_rss_mib": 1013.59,
+      "active_rss_mib_including_benchmark": 1090.61,
+      "query_p50_ms": 26.98,
+      "memory_hit_at_1": 0.75,
+      "memory_hit_at_5": 0.95,
+      "public_zh_hit_at_1": 0.8,
+      "public_zh_hit_at_5": 1
+    },
+    {
+      "variant": "jina-int8",
+      "startup_rss_mib": 407.34,
+      "active_rss_mib_including_benchmark": 488.92,
+      "query_p50_ms": 9.01,
+      "memory_hit_at_1": 0.7,
+      "memory_hit_at_5": 0.9,
+      "public_zh_hit_at_1": 0.7,
+      "public_zh_hit_at_5": 0.975
+    },
+    {
+      "variant": "bge-small",
+      "startup_rss_mib": 306.1,
+      "active_rss_mib_including_benchmark": 343.14,
+      "query_p50_ms": 3.08,
+      "memory_hit_at_1": 0.65,
+      "memory_hit_at_5": 0.875,
+      "public_zh_hit_at_1": 0.6,
+      "public_zh_hit_at_5": 1
+    },
+    {
+      "variant": "api",
+      "startup_rss_mib": 171.52,
+      "active_rss_mib_including_benchmark": 199.54,
+      "query_p50_ms": 2.22,
+      "memory_hit_at_1": 0.75,
+      "memory_hit_at_5": 0.95,
+      "public_zh_hit_at_1": 0.8,
+      "public_zh_hit_at_5": 1
+    }
+  ]
+}
