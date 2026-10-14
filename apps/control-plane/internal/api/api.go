@@ -8,6 +8,7 @@ package api
 import (
 	"github.com/akarachen/axp/apps/control-plane/internal/artifacts"
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
+	"github.com/akarachen/axp/apps/control-plane/internal/github"
 	"github.com/akarachen/axp/apps/control-plane/internal/tasks"
 	"github.com/akarachen/axp/packages/service-go/httpapi"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -24,8 +25,8 @@ type Deps struct {
 	Secret []byte
 	// Where remote computers reach AXP; the browser's address when empty.
 	PublicURL string
-	// The forge service, for remote computers' GitHub credentials.
-	ForgeURL string
+	// The GitHub App, for remote computers' git and gh credentials.
+	GitHub *github.GitHub
 	// What remote computers download from /remote/dl: the axp binaries.
 	RemoteDist string
 	// Dev serves the internal API's docs.

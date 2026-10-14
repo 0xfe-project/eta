@@ -2,7 +2,7 @@
 // struct whose fields declare where each comes from:
 //
 //	type Config struct {
-//		Addr    string `env:"AXP_ROUTINES_ADDR" default:":8340"`
+//		Addr    string `env:"AXP_API_ADDR" default:":8000"`
 //		NATSURL string `env:"AXP_NATS_URL" dev:"nats://172.30.0.1:4222" prod:"nats://axp-nats:4222"`
 //	}
 //

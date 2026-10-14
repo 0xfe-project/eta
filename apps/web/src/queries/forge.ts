@@ -2,8 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { forgeApi } from "@/lib/api";
 
-// The forge service's public API (/api/forge/v1): connecting the GitHub App
-// that agents act as. See apps/forge-service.
+// The control plane's code hosting API (/api/forge/v1): connecting the
+// GitHub App that agents act as. See apps/control-plane/internal/forge.
 
 const installationSchema = z.object({
   id: z.number(),

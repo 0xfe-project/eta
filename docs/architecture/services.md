@@ -1,6 +1,6 @@
 # 新增一个服务
 
-本文是 [#60](https://github.com/AkaraChen/axp/issues/60) 的清单：新增一个后端服务（例如 `apps/forge-service`、`apps/routine-service`）时要改的地方。漏改的地方往往到部署时才暴露，所以逐项核对。
+本文是 [#60](https://github.com/AkaraChen/axp/issues/60) 的清单：新增一个后端服务时要改的地方。先考虑做成控制面的模块（[#241](https://github.com/AkaraChen/axp/issues/241) 把原来的 forge-service、routine-service 合了进去）：只有需要独立的运行时（如 Python 的 memory-service、嵌入 CLIProxyAPI 的 llm-gateway）或独立扩缩时才新起服务。漏改的地方往往到部署时才暴露，所以逐项核对。
 
 ## 代码与构建
 
@@ -30,7 +30,7 @@ Go 服务建在 [Go 服务框架](service-framework.md)上，按它的结构组�
 - [ ] `deploy/Dockerfile.dockerignore`：放行它的 `out/`。
 - [ ] `deploy/deploy.yml`：角色（`cmd`、`env`、`network-alias`、健康检查），需要卷时加 `volume`；文件里的路由说明。
 - [ ] `deploy/README.md`：角色表、日志的 `OTEL_SERVICE_NAME` 列表。
-- [ ] 需要数据库时：自己的库，`pg.Setup` 在启动时建库并迁移（如 routine-service）；或用 `service.Migrate` 命令，在 `deploy/deploy.sh` 的 `migrate` 里执行（如控制面）。
+- [ ] 需要数据库时：自己的库，`pg.Setup` 在启动时建库并迁移；或用 `migrate` 命令，在 `deploy/deploy.sh` 的 `migrate` 里执行（如控制面和它的 `axp_routines`）。
 
 ## 文档
 

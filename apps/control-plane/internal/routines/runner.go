@@ -72,10 +72,16 @@ const revise = `你维护一个定时任务的要求。用户对某次运行的�
 %s`
 
 // Runner runs routines when their schedules fire, and revises briefs from
-// feedback. Runs are ADK agents in this process: the routine's own tools,
-// and the plugins of the routine target.
+// feedback: the routine worker's work, never the API's. Runs are ADK agents
+// in the worker's process: the routine's own tools, and the plugins of the
+// routine target. One worker runs at a time (cmd routine-worker holds a
+// lock), so Recover never fails another worker's runs.
 type Runner struct {
 	DB *pgxpool.Pool
+	// Runs and revisions stop when it ends (the worker shutting down): a
+	// run is recorded as interrupted, a revision is left for the next
+	// worker. Never ends when nil.
+	Base context.Context
 	// Model is the named model for the routine's agent.
 	Model func(ctx context.Context, name, routineID string) (model.LLM, error)
 	// Plugins every run gets, and how they reach AXP's services.
@@ -91,6 +97,14 @@ type Runner struct {
 
 	mu       sync.Mutex
 	revising map[string]bool
+	working  sync.WaitGroup
+}
+
+func (r *Runner) base() context.Context {
+	if r.Base == nil {
+		return context.Background()
+	}
+	return r.Base
 }
 
 func (r *Runner) background(f func()) {
@@ -98,16 +112,32 @@ func (r *Runner) background(f func()) {
 		r.Go(f)
 		return
 	}
-	go f()
+	r.working.Go(f)
 }
 
-// Recover cleans up after the service stopped: runs it was running failed,
-// and feedback it had not revised the brief from yet is.
+// Wait waits for the runs and revisions under way, which end soon after
+// Base does.
+func (r *Runner) Wait() { r.working.Wait() }
+
+const interrupted = "运行被中断（服务重启）。"
+
+// Recover cleans up after the previous worker stopped: runs it left running
+// failed, and feedback it had not revised the brief from yet is.
 func (r *Runner) Recover(ctx context.Context) error {
-	if _, err := r.DB.Exec(ctx, `UPDATE routine_run SET status = 'failed', error = '运行被中断（服务重启）。',
-		finished_at = $1 WHERE status = 'running'`, pg.Now()); err != nil {
+	if _, err := r.DB.Exec(ctx, `UPDATE routine_run SET status = 'failed', error = $1,
+		finished_at = $2 WHERE status = 'running'`, interrupted, pg.Now()); err != nil {
 		return err
 	}
+	return r.RevisePending(ctx)
+}
+
+// FeedbackChannel is the notification (pg_notify, with the feedback's id)
+// the API sends when it commits feedback, for the worker to revise from.
+const FeedbackChannel = "axp_routine_feedback"
+
+// RevisePending revises the brief from every feedback that has not been
+// yet, nor failed to be: what notifications missed.
+func (r *Runner) RevisePending(ctx context.Context) error {
 	rows, err := r.DB.Query(ctx, `SELECT f.id FROM routine_feedback f
 		WHERE NOT f.revision_failed AND NOT EXISTS (SELECT 1 FROM routine_brief b WHERE b.feedback_id = f.id)
 		ORDER BY f.created_at`)
@@ -157,11 +187,13 @@ func (r *Runner) run(routine *routineRow, run *runRow) {
 	if limit == 0 {
 		limit = RunLimit
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), limit)
+	ctx, cancel := context.WithTimeout(r.base(), limit)
 	defer cancel()
 	log := slog.With("routine", routine.ID, "run", run.ID)
 	message, err := r.agent(ctx, routine, run)
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+	if r.base().Err() != nil {
+		err = errors.New(interrupted)
+	} else if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		err = fmt.Errorf("运行超过 %d 分钟，已停止。", int(limit.Minutes()))
 	} else if err != nil {
 		log.Error("Routine run failed", "error", err)
@@ -357,11 +389,15 @@ func (r *Runner) Revise(feedbackID string) {
 		if limit == 0 {
 			limit = ReviseLimit
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), limit)
+		ctx, cancel := context.WithTimeout(r.base(), limit)
 		defer cancel()
 		err := r.revise(ctx, feedbackID)
 		for try := 1; errors.Is(err, errBriefChanged) && try < reviseTries; try++ {
 			err = r.revise(ctx, feedbackID)
+		}
+		if err != nil && r.base().Err() != nil {
+			// Stopping: the next worker revises it (RevisePending).
+			return
 		}
 		if err != nil {
 			slog.Error("Revising the brief from feedback failed", "feedback", feedbackID, "error", err)

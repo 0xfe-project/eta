@@ -8,8 +8,8 @@
 
 | 路径               | 调用方                                                              | 鉴权                                       |
 | ------------------ | ------------------------------------------------------------------- | ------------------------------------------ |
-| `/api/llm/v1/*`    | 浏览器（经 `gateway`）、control-plane 与 routine-service（直连）    | 无：只有它们连得到（见[网关](gateway.md)） |
-| `/v1/*`            | runtime 中的 Codex（经 `runtime-gateway`）、routine-service（直连） | 调用方给出的 `X-AXP-Agent-Id`              |
+| `/api/llm/v1/*`    | 浏览器（经 `gateway`）、control-plane 与它的 routine worker（直连） | 无：只有它们连得到（见[网关](gateway.md)） |
+| `/v1/*`            | runtime 中的 Codex（经 `runtime-gateway`）、routine worker（直连）  | 调用方给出的 `X-AXP-Agent-Id`              |
 | `/v0/management/*` | 仅进程内回环调用                                                    | 每次启动随机生成的管理密码                 |
 
 CPA 负责 token 刷新、按模型名在账号间轮换、协议转换。凭据只存在 llm-gateway 的状态目录（工作目录下的 `var/llm-gateway/auths`，生产为卷 `axp-llm`）；runtime 容器只拿到 runtime 网关的地址和自己的实例令牌。

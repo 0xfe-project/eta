@@ -1,12 +1,12 @@
 // Browser clients for the same-origin API behind the edge gateway: the
-// control plane (/api/v1), the routine service (/api/routines/v1), the LLM
-// gateway (/api/llm/v1), the memory service (/api/memory/v1) and the forge
-// service (/api/forge/v1). POSTs carry an Idempotency-Key so a retried
-// request cannot run twice.
+// control plane (/api/v1, its routines under /api/routines/v1 and its
+// GitHub connection under /api/forge/v1), the LLM gateway (/api/llm/v1) and
+// the memory service (/api/memory/v1). POSTs carry an Idempotency-Key so a
+// retried request cannot run twice.
 //
-// The control plane's and the routine service's clients are typed by their
-// OpenAPI documents, which are generated from their code (`bun run generate`
-// writes src/api; redocly.yaml lists the services).
+// The control plane's and routines' clients are typed by their OpenAPI
+// documents, which are generated from the code (`bun run generate` writes
+// src/api; redocly.yaml lists the documents).
 
 import type { paths as ControlPlanePaths } from "@/api/control-plane.gen";
 import type { paths as RoutinesPaths } from "@/api/routines.gen";

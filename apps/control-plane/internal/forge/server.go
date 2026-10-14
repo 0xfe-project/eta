@@ -1,13 +1,16 @@
-// Package server is the forge service's HTTP surface, for runtimes under
-// /forge and for the browser under /api/forge.
+// Package forge is code hosting's HTTP surface: the GitHub App agents act
+// as (internal/github). Its routes are split by who may reach them: the
+// browser's on the control plane's public listener, runtimes' on its
+// internal one (behind the runtime gateway).
 //
-// The runtime gateway authenticates the runtime and sets X-AXP-Agent-Id;
-// routes under /forge require it. The browser's gateway forwards /api/forge,
-// where the user connects the GitHub App.
+// Runtimes (Runtime), under /forge; the runtime gateway authenticates the
+// runtime and sets X-AXP-Agent-Id, which every route requires:
 //
 //	/forge/mcp                  MCP (streamable HTTP): open_pull_request, draft_issue
 //	/forge/credentials          GET: gh's token (the user's once they authorized
 //	                            the App, else the App's) and the commit identity
+//
+// The browser (Public), where the user connects the GitHub App:
 //
 //	/api/forge/v1/github                          GET status (?fresh=1), DELETE
 //	/api/forge/v1/github/manifest                 POST {name, organization?, origin}
@@ -17,7 +20,7 @@
 //	/api/forge/v1/github/authorization/callback   GitHub's redirect after authorizing
 //	/api/forge/v1/pulls?url=                      GET a task's pull request now
 //	/api/forge/v1/pulls/merge                     POST {url, head_sha}: merge it
-package server
+package forge
 
 import (
 	"context"
@@ -29,7 +32,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/akarachen/axp/apps/forge-service/internal/github"
+	"github.com/akarachen/axp/apps/control-plane/internal/github"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -39,11 +42,22 @@ const (
 	connections = "/?settings=connections"
 )
 
-// New returns the service's handler.
-func New(gh *github.GitHub, logger *slog.Logger) http.Handler {
-	s := &server{gh: gh, logger: logger}
+// Server is code hosting's routes over one GitHub App.
+type Server struct {
+	gh     *github.GitHub
+	logger *slog.Logger
+	// The pull requests being merged, so a second click does not race the
+	// first.
+	merging sync.Map
+}
+
+func New(gh *github.GitHub, logger *slog.Logger) *Server {
+	return &Server{gh: gh, logger: logger}
+}
+
+// Public is the browser's routes, under /api/forge.
+func (s *Server) Public() http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle("/forge/", requireAgent(s.runtime()))
 	mux.HandleFunc("GET /api/forge/v1/github", s.status)
 	mux.HandleFunc("DELETE /api/forge/v1/github", s.forget)
 	mux.HandleFunc("POST /api/forge/v1/github/manifest", s.manifest)
@@ -54,18 +68,15 @@ func New(gh *github.GitHub, logger *slog.Logger) http.Handler {
 	mux.HandleFunc("GET "+github.CallbackPath, s.authorized)
 	mux.HandleFunc("GET /api/forge/v1/pulls", s.pull)
 	mux.HandleFunc("POST /api/forge/v1/pulls/merge", s.merge)
-	mux.HandleFunc("GET /up", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	})
 	return mux
 }
 
-type server struct {
-	gh     *github.GitHub
-	logger *slog.Logger
-	// The pull requests being merged, so a second click does not race the
-	// first.
-	merging sync.Map
+// Runtime is runtimes' routes, under /forge, for the internal listener only.
+func (s *Server) Runtime() http.Handler {
+	mux := http.NewServeMux()
+	mux.Handle("/forge/mcp", s.mcp())
+	mux.HandleFunc("GET /forge/credentials", s.credentials)
+	return requireAgent(mux)
 }
 
 // requireAgent admits only requests the runtime gateway authenticated.
@@ -79,13 +90,6 @@ func requireAgent(next http.Handler) http.Handler {
 	})
 }
 
-func (s *server) runtime() http.Handler {
-	mux := http.NewServeMux()
-	mux.Handle("/forge/mcp", s.mcp())
-	mux.HandleFunc("GET /forge/credentials", s.credentials)
-	return mux
-}
-
 type openPullRequestIn struct {
 	Repository string `json:"repository" jsonschema:"\"owner/name\" or the remote URL (git remote get-url origin)"`
 	Head       string `json:"head" jsonschema:"the pushed branch"`
@@ -95,7 +99,7 @@ type openPullRequestIn struct {
 	Draft      bool   `json:"draft,omitempty"`
 }
 
-func (s *server) mcp() http.Handler {
+func (s *Server) mcp() http.Handler {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "forge"}, nil)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "open_pull_request",
@@ -149,15 +153,15 @@ func (s *server) mcp() http.Handler {
 
 // credentials are the same for agents in runtimes and for remote computers
 // (the control plane asks as computer-<id>, for `axp gh`).
-func (s *server) credentials(w http.ResponseWriter, r *http.Request) {
+func (s *Server) credentials(w http.ResponseWriter, r *http.Request) {
 	s.answer(w, func() (any, error) { return s.gh.Credentials(r.Context()) })
 }
 
-func (s *server) status(w http.ResponseWriter, r *http.Request) {
+func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	s.answer(w, func() (any, error) { return s.gh.Status(r.Context(), r.URL.Query().Get("fresh") == "1") })
 }
 
-func (s *server) forget(w http.ResponseWriter, r *http.Request) {
+func (s *Server) forget(w http.ResponseWriter, r *http.Request) {
 	if err := s.gh.Forget(r.Context()); err != nil {
 		s.fail(w, err)
 		return
@@ -165,7 +169,7 @@ func (s *server) forget(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *server) manifest(w http.ResponseWriter, r *http.Request) {
+func (s *Server) manifest(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Name         string `json:"name"`
 		Organization string `json:"organization"`
@@ -181,7 +185,7 @@ func (s *server) manifest(w http.ResponseWriter, r *http.Request) {
 
 // callback is GitHub sending the browser back after the App was created; the
 // browser goes on to Settings → 连接, with what happened.
-func (s *server) callback(w http.ResponseWriter, r *http.Request) {
+func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	target := back("github", "created")
 	if _, err := s.gh.FinishManifest(r.Context(), q.Get("code"), q.Get("state")); err != nil {
@@ -191,7 +195,7 @@ func (s *server) callback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, target, http.StatusSeeOther)
 }
 
-func (s *server) oauthClient(w http.ResponseWriter, r *http.Request) {
+func (s *Server) oauthClient(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		ClientID     string `json:"client_id"`
 		ClientSecret string `json:"client_secret"`
@@ -206,7 +210,7 @@ func (s *server) oauthClient(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *server) authorize(w http.ResponseWriter, r *http.Request) {
+func (s *Server) authorize(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Origin string `json:"origin"`
 	}
@@ -219,7 +223,7 @@ func (s *server) authorize(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *server) unauthorize(w http.ResponseWriter, r *http.Request) {
+func (s *Server) unauthorize(w http.ResponseWriter, r *http.Request) {
 	if err := s.gh.ForgetUser(r.Context()); err != nil {
 		s.fail(w, err)
 		return
@@ -234,7 +238,7 @@ func back(key, value string) string {
 
 // authorized is GitHub sending the browser back after the user authorized
 // the App, from the wizard or right after installing it.
-func (s *server) authorized(w http.ResponseWriter, r *http.Request) {
+func (s *Server) authorized(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	target := back("github", "authorized")
 	var err error
@@ -256,11 +260,11 @@ func (s *server) authorized(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, target, http.StatusSeeOther)
 }
 
-func (s *server) pull(w http.ResponseWriter, r *http.Request) {
+func (s *Server) pull(w http.ResponseWriter, r *http.Request) {
 	s.answer(w, func() (any, error) { return s.gh.PullRequest(r.Context(), r.URL.Query().Get("url")) })
 }
 
-func (s *server) merge(w http.ResponseWriter, r *http.Request) {
+func (s *Server) merge(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		URL     string `json:"url"`
 		HeadSHA string `json:"head_sha"`
@@ -283,7 +287,7 @@ func (s *server) merge(w http.ResponseWriter, r *http.Request) {
 }
 
 // answer writes what produce returns as JSON, or its error.
-func (s *server) answer(w http.ResponseWriter, produce func() (any, error)) {
+func (s *Server) answer(w http.ResponseWriter, produce func() (any, error)) {
 	value, err := produce()
 	if err != nil {
 		s.fail(w, err)
@@ -293,7 +297,7 @@ func (s *server) answer(w http.ResponseWriter, produce func() (any, error)) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 
-func (s *server) fail(w http.ResponseWriter, err error) {
+func (s *Server) fail(w http.ResponseWriter, err error) {
 	var forgeErr *github.Error
 	if errors.As(err, &forgeErr) {
 		writeError(w, forgeErr)

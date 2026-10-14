@@ -8,7 +8,7 @@
 
 # Proxies to the upstream in the first argument as the runtime's agent.
 (as_agent) {
-	forward_auth {$AXP_UPSTREAM_INTERNAL:axp-internal:8001} {
+	forward_auth {$AXP_UPSTREAM_INTERNAL:axp-api:8001} {
 		uri /internal/v1/runtime-auth
 		copy_headers X-AXP-Agent-Id X-AXP-Group-Id
 	}
@@ -20,7 +20,7 @@
 
 # As as_agent, for an agent with the plugin in the second argument.
 (as_agent_with) {
-	forward_auth {$AXP_UPSTREAM_INTERNAL:axp-internal:8001} {
+	forward_auth {$AXP_UPSTREAM_INTERNAL:axp-api:8001} {
 		uri /internal/v1/runtime-auth?plugin={args[1]}
 		copy_headers X-AXP-Agent-Id X-AXP-Group-Id
 	}
@@ -43,37 +43,37 @@ http://:{$AXP_RUNTIME_GATEWAY_PORT:8090} {
 		import as_agent_with {$AXP_UPSTREAM_MEMORY:axp-memory:8320} memory
 	}
 	handle /groups/* {
-		import as_agent_with {$AXP_UPSTREAM_INTERNAL:axp-internal:8001} groups
+		import as_agent_with {$AXP_UPSTREAM_INTERNAL:axp-api:8001} groups
 	}
 	# The task board: the tasks plugin's MCP server, in the internal API.
 	handle /tasks/* {
-		import as_agent_with {$AXP_UPSTREAM_INTERNAL:axp-internal:8001} tasks
+		import as_agent_with {$AXP_UPSTREAM_INTERNAL:axp-api:8001} tasks
 	}
 	# Remote runtimes' native methods: the agenvo plugin's MCP server, the
 	# relay's tools forwarded with the control plane's grant.
 	handle /agenvo/* {
-		import as_agent_with {$AXP_UPSTREAM_INTERNAL:axp-internal:8001} agenvo
+		import as_agent_with {$AXP_UPSTREAM_INTERNAL:axp-api:8001} agenvo
 	}
 	# Artifacts: the artifacts plugin's upload, in the internal API.
 	handle /artifacts/* {
-		import as_agent_with {$AXP_UPSTREAM_INTERNAL:axp-internal:8001} artifacts
+		import as_agent_with {$AXP_UPSTREAM_INTERNAL:axp-api:8001} artifacts
 	}
 	# The files the user attached to messages to this agent, which the
 	# runtime fetches before handing a turn to Codex.
 	handle /attachments/* {
-		import as_agent {$AXP_UPSTREAM_INTERNAL:axp-internal:8001}
+		import as_agent {$AXP_UPSTREAM_INTERNAL:axp-api:8001}
 	}
-	# Routines: the routines plugin's MCP server, in the routine service.
+	# Routines: the routines plugin's MCP server, in the internal API.
 	handle /routines/* {
-		import as_agent_with {$AXP_UPSTREAM_ROUTINES:axp-routines:8340} routines
+		import as_agent_with {$AXP_UPSTREAM_INTERNAL:axp-api:8001} routines
 	}
 	# Code hosting: the github plugin's MCP server (open_pull_request)...
 	handle /forge/mcp* {
-		import as_agent_with {$AXP_UPSTREAM_FORGE:axp-forge:8330} github
+		import as_agent_with {$AXP_UPSTREAM_INTERNAL:axp-api:8001} github
 	}
 	# ...and git's and gh's GitHub credentials, which every runtime fetches.
 	handle /forge/* {
-		import as_agent {$AXP_UPSTREAM_FORGE:axp-forge:8330}
+		import as_agent {$AXP_UPSTREAM_INTERNAL:axp-api:8001}
 	}
 	respond 404
 

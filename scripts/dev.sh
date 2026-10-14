@@ -6,11 +6,11 @@ usage() {
 Usage: scripts/dev.sh [--port PORT]
 
 Starts the development stack. Each instance uses a block of consecutive
-ports: gateway PORT (open this one), control plane PORT+1, internal runtime
-API PORT+2, web PORT+3, LLM gateway PORT+4, runtime gateway PORT+5, memory
-service PORT+6, forge service PORT+7, the agenvo relay PORT+8 (HTTPS with
-a self-signed certificate, for remote computers) and the routine service
-PORT+9.
+ports: gateway PORT (open this one), the control plane's public API PORT+1
+and internal API PORT+2 (one process), web PORT+3, LLM gateway PORT+4,
+runtime gateway PORT+5, memory service PORT+6 and the agenvo relay PORT+8
+(HTTPS with a self-signed certificate, for remote computers); PORT+7 and
+PORT+9 are spare.
 
   --port PORT   Use exactly this gateway port; fail if any port of its block is taken.
                 Also settable as AXP_DEV_PORT.
@@ -72,6 +72,12 @@ if [[ ! -d apps/memory-service/.venv ]]; then
 fi
 bash scripts/dev-postgres.sh
 go -C apps/control-plane run . migrate
+# The GitHub App's credentials moved with code hosting into the control
+# plane (#241); a checkout connected before keeps its App.
+if [[ -d apps/forge-service/var/forge && ! -e apps/control-plane/var/forge ]]; then
+  mkdir -p apps/control-plane/var
+  mv apps/forge-service/var/forge apps/control-plane/var/forge
+fi
 
 # --- Port allocation --------------------------------------------------------
 # Every running instance records its ports under a shared lock; a reservation
@@ -141,8 +147,6 @@ export AXP_WEB_PORT="$((web_port + 3))"
 export AXP_LLM_PORT="$((web_port + 4))"
 export AXP_RUNTIME_GATEWAY_PORT="$((web_port + 5))"
 export AXP_MEMORY_PORT="$((web_port + 6))"
-export AXP_FORGE_PORT="$((web_port + 7))"
-export AXP_ROUTINES_PORT="$((web_port + 9))"
 # Services listen on loopback, which runtime containers cannot reach; the
 # runtime gateway alone listens on the runtime network's gateway address (its
 # subnet is fixed in development). As in production, the browser and runtimes
@@ -158,11 +162,6 @@ export AXP_UPSTREAM_INTERNAL="127.0.0.1:$AXP_INTERNAL_PORT"
 export AXP_UPSTREAM_LLM="$AXP_LLM_ADDR"
 export AXP_MEMORY_ADDR="127.0.0.1:$AXP_MEMORY_PORT"
 export AXP_UPSTREAM_MEMORY="$AXP_MEMORY_ADDR"
-export AXP_FORGE_ADDR="127.0.0.1:$AXP_FORGE_PORT"
-export AXP_UPSTREAM_FORGE="$AXP_FORGE_ADDR"
-export AXP_FORGE_URL="http://$AXP_FORGE_ADDR"
-export AXP_ROUTINES_ADDR="127.0.0.1:$AXP_ROUTINES_PORT"
-export AXP_UPSTREAM_ROUTINES="$AXP_ROUTINES_ADDR"
 export AXP_RELAY_PORT="$((web_port + 8))"
 
 # Instances share the runtime network; only their ports differ.
@@ -275,21 +274,19 @@ docker rm -f "$gateway" >/dev/null 2>&1 || true
 gateway_env=""
 for name in AXP_GATEWAY_BIND AXP_GATEWAY_PORT AXP_RUNTIME_GATEWAY_BIND AXP_RUNTIME_GATEWAY_PORT \
   AXP_UPSTREAM_WEB AXP_UPSTREAM_API AXP_UPSTREAM_INTERNAL AXP_UPSTREAM_LLM AXP_UPSTREAM_MEMORY \
-  AXP_UPSTREAM_FORGE AXP_UPSTREAM_ROUTINES AXP_UPSTREAM_OBSERVE; do
+  AXP_UPSTREAM_OBSERVE; do
   gateway_env+=" -e $name"
 done
 
 # Every process stops on Ctrl+C or when any of them exits.
 exec node node_modules/concurrently/dist/bin/concurrently.js --kill-others \
-  --names gateway,control-plane,internal,controller,llm,memory,forge,routines,relay,web \
-  --prefix-colors gray,blue,yellow,cyan,magenta,red,white,blue,gray,green \
+  --names gateway,control-plane,controller,routine-worker,llm,memory,relay,web \
+  --prefix-colors gray,blue,cyan,yellow,magenta,red,gray,green \
   "docker run --rm --name $gateway --network host$gateway_env -v $ROOT_DIR/apps/gateway:/etc/axp-gateway:ro caddy:2.11.7-alpine caddy run --config /etc/axp-gateway/Caddyfile" \
-  "OTEL_SERVICE_NAME=control-plane-api bun run dev:control-plane" \
-  "OTEL_SERVICE_NAME=control-plane-internal bun run dev:internal" \
+  "OTEL_SERVICE_NAME=control-plane bun run dev:control-plane" \
   "OTEL_SERVICE_NAME=control-plane-controller bun run dev:controller" \
+  "OTEL_SERVICE_NAME=control-plane-routine-worker bun run dev:routine-worker" \
   "bun run dev:llm-gateway" \
   "bun run dev:memory-service" \
-  "bun run dev:forge-service" \
-  "bun run dev:routine-service" \
   "AGENVO_ADMIN_SECRET=\$AXP_RELAY_ADMIN_SECRET node apps/agenvo/out/relay/node_modules/@agenvo/server/dist/cli.js serve --config $relay_dir/relay.json" \
   "bun run dev:web"

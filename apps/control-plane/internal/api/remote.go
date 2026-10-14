@@ -2,17 +2,16 @@ package api
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
 
+	"github.com/akarachen/axp/apps/control-plane/internal/github"
 	"github.com/akarachen/axp/apps/control-plane/internal/tasks"
 	"github.com/akarachen/axp/packages/service-go/apierr"
 	"github.com/akarachen/axp/packages/service-go/httpapi"
@@ -74,10 +73,19 @@ type RemoteTaskPath struct {
 // or, asked for as the user, the token of the user who authorized the App
 // (User names them).
 type GitCredentials struct {
-	Token     string         `json:"token"`
-	ExpiresAt int64          `json:"expires_at"`
-	Identity  map[string]any `json:"identity,omitempty"`
-	User      string         `json:"user,omitempty"`
+	Token     string           `json:"token"`
+	ExpiresAt int64            `json:"expires_at"`
+	Identity  *github.Identity `json:"identity,omitempty"`
+	User      string           `json:"user,omitempty"`
+}
+
+// forgeError is the GitHub App's refusal (not connected, GitHub's error)
+// as the API's.
+func forgeError(err error) error {
+	if e, ok := errors.AsType[*github.Error](err); ok {
+		return apierr.Upstream("FORGE_ERROR", e.Message)
+	}
+	return err
 }
 
 func remoteOp(id, method, path, summary string, status int) huma.Operation {
@@ -236,15 +244,14 @@ func remote(public *httpapi.API, d *Deps) {
 		func(ctx context.Context, in *struct {
 			RemoteBearer
 		}) (*httpapi.Body[GitCredentials], error) {
-			c, err := in.computer(ctx, d)
-			if err != nil {
+			if _, err := in.computer(ctx, d); err != nil {
 				return nil, err
 			}
-			creds, err := forgeCredentials(ctx, d.ForgeURL, "computer-"+c.ID)
+			creds, err := d.GitHub.Credentials(ctx)
 			if err != nil {
-				return nil, err
+				return nil, forgeError(err)
 			}
-			return &httpapi.Body[GitCredentials]{Body: *creds}, nil
+			return &httpapi.Body[GitCredentials]{Body: GitCredentials(*creds)}, nil
 		})
 }
 
@@ -265,45 +272,6 @@ func fileExists(path string) bool {
 // The axp binaries and the agenvo connectors (agenvo-<kind>-<version>.tgz,
 // the relay's version, which setup asks for).
 var downloadable = regexp.MustCompile(`^(axp-(linux|darwin)-(amd64|arm64)|agenvo-(paseo|herdr)-[0-9A-Za-z.+-]+\.tgz)$`)
-
-// forgeCredentials asks the forge service for gh's token, as the runtime
-// gateway would for an agent.
-func forgeCredentials(ctx context.Context, forgeURL, caller string) (*GitCredentials, error) {
-	if forgeURL == "" {
-		return nil, apierr.New(503, "FORGE_UNAVAILABLE", "代码托管服务不可用。")
-	}
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	target := strings.TrimRight(forgeURL, "/") + "/forge/credentials"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("X-AXP-Agent-Id", caller)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, apierr.New(503, "FORGE_UNAVAILABLE", "代码托管服务不可用。")
-	}
-	defer resp.Body.Close()
-	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode != http.StatusOK {
-		var e struct {
-			Error struct {
-				Message string `json:"message"`
-			} `json:"error"`
-		}
-		_ = json.Unmarshal(data, &e)
-		if e.Error.Message == "" {
-			e.Error.Message = "GitHub 还没有连接。"
-		}
-		return nil, apierr.Upstream("FORGE_ERROR", e.Error.Message)
-	}
-	var creds GitCredentials
-	if err := json.Unmarshal(data, &creds); err != nil {
-		return nil, err
-	}
-	return &creds, nil
-}
 
 // installScript installs the `axp` binary, which sets up everything else:
 // sh -s -- <code> [setup flags]. %[1]s is AXP's address.

@@ -1,4 +1,4 @@
-package server
+package forge
 
 import (
 	"errors"
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/akarachen/axp/apps/forge-service/internal/github"
+	"github.com/akarachen/axp/apps/control-plane/internal/github"
 )
 
 // An issue draft is an issue the user files themself: GitHub's new-issue

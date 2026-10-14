@@ -1,6 +1,6 @@
 # Production image for every Kamal role (gateway, runtime-gateway, web, api,
-# internal, controller, llm, memory, forge, routines); the roles differ only in
-# their command. Build context is the repository root. Agents' images are
+# controller, routine-worker, llm, memory); the roles differ only in their
+# command. Build context is the repository root. Agents' images are
 # built by the controller on apps/agent-runtime's.
 #
 # Nothing is compiled here: `bun run build` (Turbo) produces the artifacts for
@@ -36,9 +36,7 @@ COPY --from=docker:29-cli /usr/local/libexec/docker/cli-plugins/docker-buildx /u
 COPY apps/memory-service/out/${TARGETOS}-${TARGETARCH}/site-packages/ /app/apps/memory-service/site-packages/
 COPY apps/memory-service/out/models/ /app/apps/memory-service/models/
 COPY apps/llm-gateway/out/${TARGETOS}-${TARGETARCH}/axp-llm-gateway /usr/local/bin/
-COPY apps/forge-service/out/${TARGETOS}-${TARGETARCH}/axp-forge /usr/local/bin/
 COPY --from=routine-plugins /opt/axp/bin/ /usr/local/bin/
-COPY apps/routine-service/out/${TARGETOS}-${TARGETARCH}/axp-routines /usr/local/bin/
 COPY apps/control-plane/out/${TARGETOS}-${TARGETARCH}/axp-control-plane /usr/local/bin/
 # Self-contained server bundle plus client assets; no node_modules.
 COPY apps/web/out/ /app/apps/web/
@@ -57,5 +55,5 @@ COPY apps/agenvo/out/dist/ /app/apps/agenvo/out/dist/
 WORKDIR /app/apps/control-plane
 
 ENV PYTHONUNBUFFERED=1
-EXPOSE 3000 8000 8001 8080 8090 8317 8320 8330 8340
+EXPOSE 3000 8000 8001 8080 8090 8317 8320
 CMD ["bun", "/app/apps/web/server.js"]

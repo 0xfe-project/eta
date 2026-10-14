@@ -1,4 +1,4 @@
-package server
+package forge
 
 import (
 	"bytes"
@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akarachen/axp/apps/forge-service/internal/github"
+	"github.com/akarachen/axp/apps/control-plane/internal/github"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -33,7 +33,12 @@ type env struct {
 func newEnv(t *testing.T) *env {
 	gh := github.New(t.TempDir())
 	gh.APIURL, gh.OAuthURL = emulator.URL, emulator.URL
-	srv := httptest.NewServer(New(gh, slog.New(slog.NewTextHandler(io.Discard, nil))))
+	forge := New(gh, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	// The control plane serves these on different listeners.
+	mux := http.NewServeMux()
+	mux.Handle("/api/forge/", forge.Public())
+	mux.Handle("/forge/", forge.Runtime())
+	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return &env{t: t, gh: gh, server: srv}
 }

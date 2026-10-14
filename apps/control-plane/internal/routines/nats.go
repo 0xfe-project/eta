@@ -7,15 +7,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/akarachen/axp/packages/service-go/pg"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
-// Schedules in NATS JetStream: stream ROUTINES, which this service owns.
+// Schedules in NATS JetStream: stream ROUTINES, which routines own.
 // axp.routine.<routine>.schedule holds a routine's message schedule (cron
 // with a time zone), which NATS publishes to axp.routine.<routine>.fire when
-// it is due; "run now" publishes there directly. The service takes fires
-// through the durable consumer routine-fires.
+// it is due; "run now" publishes there directly. The API only publishes
+// these; the routine worker makes the stream, syncs the schedules when it
+// starts (SyncSchedules) and takes fires through the durable consumer
+// routine-fires.
 
 const (
 	Stream    = "ROUTINES"
@@ -23,7 +28,7 @@ const (
 	natsLimit = 5 * time.Second
 )
 
-// A fire that waited longer than this in the stream (the service was down,
+// A fire that waited longer than this in the stream (the worker was down,
 // so it piled up) is dropped when it is finally taken: missed fires are not
 // made up, and neither is a "run now" nobody took in time.
 var staleFire = time.Minute
@@ -48,15 +53,14 @@ func fireSubject(id string) string     { return "axp.routine." + id + ".fire" }
 
 // NATS is the routines' schedules on a NATS server.
 type NATS struct {
-	nc     *nats.Conn
-	js     jetstream.JetStream
-	stream jetstream.Stream
+	nc *nats.Conn
+	js jetstream.JetStream
 }
 
-// ConnectNATS connects to url and makes sure the stream and its consumer
-// exist.
-func ConnectNATS(ctx context.Context, url string) (*NATS, error) {
-	nc, err := nats.Connect(url, nats.Name("routine-service"), nats.Timeout(natsLimit),
+// DialNATS connects to url, reconnecting for as long as it takes: the API
+// starts without NATS, and only its writes to schedules fail meanwhile.
+func DialNATS(url, name string) (*NATS, error) {
+	nc, err := nats.Connect(url, nats.Name(name), nats.Timeout(natsLimit),
 		nats.RetryOnFailedConnect(true), nats.MaxReconnects(-1))
 	if err != nil {
 		return nil, err
@@ -66,19 +70,29 @@ func ConnectNATS(ctx context.Context, url string) (*NATS, error) {
 		nc.Close()
 		return nil, err
 	}
+	return &NATS{nc: nc, js: js}, nil
+}
+
+// ConnectNATS connects to url and makes sure the stream and its consumer
+// exist: the worker's connection.
+func ConnectNATS(ctx context.Context, url, name string) (*NATS, error) {
+	n, err := DialNATS(url, name)
+	if err != nil {
+		return nil, err
+	}
 	ctx, cancel := context.WithTimeout(ctx, natsLimit)
 	defer cancel()
-	stream, err := js.CreateOrUpdateStream(ctx, streamConfig)
+	stream, err := n.js.CreateOrUpdateStream(ctx, streamConfig)
 	if err == nil {
 		_, err = stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
 			Durable: consumer, FilterSubject: fireSubject("*"), AckPolicy: jetstream.AckExplicitPolicy,
 		})
 	}
 	if err != nil {
-		nc.Close()
+		n.Close()
 		return nil, err
 	}
-	return &NATS{nc: nc, js: js, stream: stream}, nil
+	return n, nil
 }
 
 func (n *NATS) Close() { n.nc.Close() }
@@ -97,9 +111,17 @@ func (n *NATS) Schedule(ctx context.Context, routineID, cron, timezone string) e
 }
 
 func (n *NATS) Unschedule(ctx context.Context, routineID string) error {
+	return n.purge(ctx, scheduleSubject(routineID))
+}
+
+func (n *NATS) purge(ctx context.Context, subject string) error {
 	ctx, cancel := context.WithTimeout(ctx, natsLimit)
 	defer cancel()
-	return n.stream.Purge(ctx, jetstream.WithPurgeSubject(scheduleSubject(routineID)))
+	stream, err := n.js.Stream(ctx, Stream)
+	if err != nil {
+		return err
+	}
+	return stream.Purge(ctx, jetstream.WithPurgeSubject(subject))
 }
 
 func (n *NATS) Fire(ctx context.Context, routineID string) error {
@@ -109,13 +131,26 @@ func (n *NATS) Fire(ctx context.Context, routineID string) error {
 	return err
 }
 
-// Sync makes the stream's schedules the enabled routines': it purges every
-// schedule and publishes theirs again, so schedules of routines that are
-// gone do not outlive them.
-func (n *NATS) Sync(ctx context.Context, rows []RoutineSummary) error {
-	purge, cancel := context.WithTimeout(ctx, natsLimit)
-	defer cancel()
-	if err := n.stream.Purge(purge, jetstream.WithPurgeSubject(scheduleSubject("*"))); err != nil {
+// SyncSchedules makes the stream's schedules the enabled routines': it
+// purges every schedule and publishes theirs again, so schedules of routines
+// that are gone do not outlive them. It holds a lock on the routine table
+// meanwhile, so no write from the API (which schedules before it commits)
+// falls between the list and the purge.
+func SyncSchedules(ctx context.Context, db *pgxpool.Pool, s *Service, n *NATS) error {
+	return pg.InTx(ctx, db, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, "LOCK TABLE routine IN SHARE MODE"); err != nil {
+			return err
+		}
+		rows, err := s.List(ctx, tx)
+		if err != nil {
+			return err
+		}
+		return n.sync(ctx, rows)
+	})
+}
+
+func (n *NATS) sync(ctx context.Context, rows []RoutineSummary) error {
+	if err := n.purge(ctx, scheduleSubject("*")); err != nil {
 		return err
 	}
 	for _, r := range rows {
@@ -130,9 +165,9 @@ func (n *NATS) Sync(ctx context.Context, rows []RoutineSummary) error {
 
 // Consume hands fires to fire as they arrive (now when asked to run now),
 // until ctx ends. A fire is acked when it is taken; one that waited since
-// before the service started (staleFire) is dropped, not made up.
+// before the worker started (staleFire) is dropped, not made up.
 func (n *NATS) Consume(ctx context.Context, fire func(ctx context.Context, routineID string, now bool) error) error {
-	c, err := n.stream.Consumer(ctx, consumer)
+	c, err := n.js.Consumer(ctx, Stream, consumer)
 	if err != nil {
 		return err
 	}
@@ -143,7 +178,7 @@ func (n *NATS) Consume(ctx context.Context, fire func(ctx context.Context, routi
 			return
 		}
 		if meta, err := msg.Metadata(); err == nil && time.Since(meta.Timestamp) > staleFire {
-			slog.InfoContext(ctx, "Skipped a routine fire that waited while the service was down",
+			slog.InfoContext(ctx, "Skipped a routine fire that waited while the worker was down",
 				"routine", parts[2], "fired_at", meta.Timestamp)
 			return
 		}

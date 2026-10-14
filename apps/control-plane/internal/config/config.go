@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/akarachen/axp/packages/service-go/config"
+	"github.com/akarachen/axp/packages/service-go/pg"
 )
 
 type Config struct {
@@ -26,18 +27,24 @@ type Config struct {
 	// share it. Without it, a key generated once per checkout is used.
 	SecretKey   string `env:"AXP_SECRET_KEY"`
 	DatabaseURL string `env:"DATABASE_URL" default:"postgres://axp:axp@127.0.0.1:15432/axp"`
-	APIAddr     string `env:"AXP_API_ADDR" default:":8000"`
-	// The internal API, for runtimes (through the runtime gateway).
+	// Routines keep their own database (and its migration history); by
+	// default axp_routines on DATABASE_URL's server.
+	RoutinesDatabaseURL string `env:"AXP_ROUTINES_DATABASE_URL"`
+	// The public API, for the browser (through the gateway).
+	APIAddr string `env:"AXP_API_ADDR" default:":8000"`
+	// The internal API, for runtimes (through the runtime gateway), served
+	// by the same process on a listener of its own.
 	InternalAddr string `env:"AXP_INTERNAL_ADDR" default:":8001"`
 	// The runtime gateway (apps/gateway): runtimes' only route to AXP's
 	// services and the LLM gateway.
 	RuntimeGatewayURL string `env:"AXP_RUNTIME_GATEWAY_URL" dev:"http://172.30.0.1:8090" prod:"http://axp-runtime-gateway:8090"`
 	// The runtime image agents' images are built on (apps/agent-runtime).
 	RuntimeImage string `env:"AXP_RUNTIME_IMAGE" dev:"axp-agent-runtime:dev" prod:"axp-agent-runtime:production"`
-	// The LLM gateway (apps/llm-gateway), for its model catalog.
+	// The LLM gateway (apps/llm-gateway), for its model catalog and
+	// routines' runs.
 	LLMGatewayURL string `env:"AXP_LLM_GATEWAY_URL" dev:"http://127.0.0.1:8317" prod:"http://axp-llm:8317"`
-	// NATS JetStream, where runtimes publish their events. Runtimes reach it
-	// at the same address.
+	// NATS JetStream, where runtimes publish their events (runtimes reach it
+	// at the same address) and routines' schedules live.
 	NATSURL string `env:"AXP_NATS_URL" dev:"nats://172.30.0.1:4222" prod:"nats://axp-nats:4222"`
 	// The built-in bundles and the plugins bundles add
 	// (apps/agent-runtime/bundles and plugins), which agents' images are
@@ -56,8 +63,9 @@ type Config struct {
 	// Where remote computers reach AXP (install commands); the browser's
 	// address when empty.
 	PublicURL string `env:"AXP_PUBLIC_URL"`
-	// The forge service, for remote computers' GitHub credentials.
-	ForgeURL string `env:"AXP_FORGE_URL" prod:"http://axp-forge:8330"`
+	// The GitHub App's credentials and the user's authorization
+	// (internal/github); production keeps them on the axp-forge volume.
+	ForgeStateDir string `env:"AXP_FORGE_STATE_DIR" default:"var/forge"`
 	// Directories (colon-separated) with what remote computers download: the
 	// axp binaries and the agenvo connectors built from the pinned commit.
 	RemoteDist string `env:"AXP_REMOTE_DIST" default:"../remote/out/dist:../agenvo/out/dist"`
@@ -79,6 +87,11 @@ func Load() (Config, error) {
 	}
 	if c.SecretKey == "" {
 		if c.SecretKey, err = localSecretKey("var/secret_key"); err != nil {
+			return Config{}, err
+		}
+	}
+	if c.RoutinesDatabaseURL == "" {
+		if c.RoutinesDatabaseURL, err = pg.WithDatabase(c.DatabaseURL, "axp_routines"); err != nil {
 			return Config{}, err
 		}
 	}

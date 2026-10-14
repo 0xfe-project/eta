@@ -19,8 +19,8 @@ import {
 import { ApiError, routinesApi, unwrap } from "@/lib/api";
 
 // Routines (#23): agents that run on a schedule and leave a report
-// (/api/routines/v1; apps/routine-service). Every type comes from the routine
-// service's OpenAPI document. The list is in summary (no reports, no
+// (/api/routines/v1; the control plane's internal/routineapi). Every type
+// comes from routines' OpenAPI document. The list is in summary (no reports, no
 // briefs); a routine's page is fetched when it is opened.
 
 export type { ListedRun, Routine, RoutineSummary, Run };

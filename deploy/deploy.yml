@@ -26,7 +26,8 @@ x-health: &health
   health-retries: 3
 
 # Secrets: each role gets only those it reads (deploy/README.md). The
-# control plane's three roles share one initialization, so they get all.
+# control plane's API and controller share one initialization, so they get
+# all; its routine worker reads only the database.
 x-secrets:
   control-plane: &control-plane-secrets
     - AXP_SECRET_KEY
@@ -54,8 +55,8 @@ drain_timeout: 2
 servers:
   # The browser's gateway (apps/gateway/public.caddy): the only role behind
   # kamal-proxy. It routes /api/llm to the LLM gateway, /api/memory to the
-  # memory service, /api/forge to the forge service, /api/routines to the
-  # routine service, /api to the control plane and everything else to web.
+  # memory service, /api (with /api/forge and /api/routines) to the control
+  # plane's public listener and everything else to web.
   gateway:
     hosts: [<%= host %>]
     cmd: caddy run --config /app/apps/gateway/Caddyfile
@@ -71,9 +72,9 @@ servers:
       healthcheck:
         path: /up
   # Runtimes' gateway (apps/gateway/runtime.caddy), on their network as
-  # axp-runtime-gateway:8090: their only route to the internal API, the LLM
-  # gateway, the memory and the forge service, which it authenticates them
-  # for.
+  # axp-runtime-gateway:8090: their only route to the control plane's
+  # internal listener (with /forge and /routines), the LLM gateway and the
+  # memory, which it authenticates them for.
   runtime-gateway:
     hosts: [<%= host %>]
     cmd: caddy run --config /app/apps/gateway/Caddyfile
@@ -94,19 +95,25 @@ servers:
       network-alias: axp-web
       <<: *health
       health-cmd: <%= ready.(3000) %>
-  # The control plane's public API; reached only through the gateway.
+  # The control plane's APIs (with code hosting and routines' API), in one
+  # process on two listeners: the public one (:8000) reached only through
+  # the gateway, the internal one (:8001) only through the runtime gateway.
+  # The GitHub App's credentials live in the axp-forge volume. Ready once
+  # both listeners answer.
   api:
     hosts: [<%= host %>]
     # deploy/deploy.sh migrates with the new image before the roles boot.
-    cmd: axp-control-plane api
+    cmd: axp-control-plane serve
     env:
       secret: *control-plane-secrets
       clear:
-        OTEL_SERVICE_NAME: control-plane-api
+        OTEL_SERVICE_NAME: control-plane
+        AXP_FORGE_STATE_DIR: /app/var/forge
     options:
       network-alias: axp-api
+      volume: axp-forge:/app/var/forge
       <<: *health
-      health-cmd: <%= ready.(8000, "/api/health") %>
+      health-cmd: <%= ready.(8000, "/api/health") %> && <%= ready.(8001) %>
   # LLM gateway (embedded CLIProxyAPI): connections and model catalog behind
   # the gateway, its OpenAI-compatible API behind the runtime gateway. Both
   # reach it as axp-llm. Credentials live in the axp-llm volume.
@@ -142,52 +149,24 @@ servers:
       network-alias: axp-memory
       <<: *health
       health-cmd: <%= ready.(8320, "/up") %>
-  # Code hosting (apps/forge-service) as axp-forge: the browser connects the
-  # GitHub App through the gateway at /api/forge, runtimes get git and gh
-  # credentials and open_pull_request at /forge through the runtime gateway.
-  # The App's credentials live in the axp-forge volume.
-  forge:
+  # Routines' runs (axp-control-plane routine-worker): takes their fires
+  # from NATS and runs each as an ADK agent in this process, and revises
+  # briefs from feedback; the API only records and publishes. Routines keep
+  # their own database (axp_routines on the postgres accessory). One worker
+  # at a time: a new one waits for the old one's lock, and the old one
+  # records its runs as interrupted when it stops.
+  routine-worker:
     hosts: [<%= host %>]
-    cmd: axp-forge
-    env:
-      secret: *telemetry-secrets
-      clear:
-        AXP_FORGE_ADDR: ":8330"
-        AXP_FORGE_STATE_DIR: /app/var/forge
-    options:
-      network-alias: axp-forge
-      volume: axp-forge:/app/var/forge
-      <<: *health
-      health-cmd: <%= ready.(8330, "/up") %>
-  # Routines (apps/routine-service) as axp-routines: the browser reaches
-  # /api/routines through the gateway. Runs are ADK agents in this process;
-  # it keeps its own database (axp_routines on the postgres accessory,
-  # created and migrated when it starts) and its schedules in NATS. One
-  # container: a new one fails the runs the old one left running.
-  routines:
-    hosts: [<%= host %>]
-    cmd: axp-routines
+    cmd: axp-control-plane routine-worker
     env:
       secret: *database-secrets
       clear:
-        AXP_ROUTINES_ADDR: ":8340"
-        AXP_PLUGINS_DIR: /app/apps/agent-runtime/plugins
+        OTEL_SERVICE_NAME: control-plane-routine-worker
+    stop_timeout: 30
     options:
-      network-alias: axp-routines
+      # No port: the process running is ready.
       <<: *health
-      health-cmd: <%= ready.(8340, "/api/routines/health") %>
-  # Internal runtime API, reached by runtimes only through the runtime gateway.
-  internal:
-    hosts: [<%= host %>]
-    cmd: axp-control-plane internal
-    env:
-      secret: *control-plane-secrets
-      clear:
-        OTEL_SERVICE_NAME: control-plane-internal
-    options:
-      network-alias: axp-internal
-      <<: *health
-      health-cmd: <%= ready.(8001) %>
+      health-cmd: "true"
   # Builds agents' images and runs their containers through the host Docker
   # socket, and delivers their work: the one role runtimes' control API is
   # reachable from.
@@ -277,8 +256,8 @@ accessories:
     volumes:
       - axp-postgres:/var/lib/postgresql/data
   # NATS JetStream, on the runtime network as axp-nats:4222 for runtimes
-  # (their events) and on Kamal's for the control plane and the routine
-  # service. Never published.
+  # (their events) and on Kamal's for the control plane (with routines'
+  # schedules). Never published.
   nats:
     image: nats:2.14-alpine
     host: <%= host %>
