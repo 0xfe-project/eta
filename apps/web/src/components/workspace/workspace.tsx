@@ -132,7 +132,10 @@ export function Workspace({
     document.addEventListener("visibilitychange", read);
     return () => document.removeEventListener("visibilitychange", read);
   }, [group, groupId, markRead]);
+  // A direct chat has no group info; its agent's settings stand in.
+  const direct = group?.kind === "direct" ? members[0] : undefined;
   const showInfo = () => {
+    if (direct) return openEditor(direct.agent_id);
     onViewChange("group");
     setMobilePanel("workspace");
   };
@@ -184,7 +187,7 @@ export function Workspace({
           <Button
             size="icon"
             variant="ghost"
-            aria-label="群信息"
+            aria-label={direct ? "智能体设置" : "群信息"}
             onClick={showInfo}
           >
             <InfoIcon />

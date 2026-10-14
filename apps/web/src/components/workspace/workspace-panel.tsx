@@ -14,6 +14,7 @@ import { SettingsButton } from "./settings-dialog";
 import { useTaskNav } from "./task-nav";
 import { Tasks } from "./tasks";
 import { useAttention } from "./use-attention";
+import { useGroups } from "./use-groups";
 import { hasPage, sectionPaths, views } from "./workspace-search";
 
 /** Opens the full window at the side panel's current data context. */
@@ -39,9 +40,13 @@ function FullWindowButton({ view }: { view: WorkspaceView }) {
   );
 }
 
-/** The home page's side panel. */
+/**
+ * The home page's side panel. A direct chat has no group info, so its panel
+ * leaves the group tab out and shows the overview in its place, whatever
+ * the URL says.
+ */
 export function WorkspacePanel({
-  view,
+  view: linked,
   onViewChange,
   className,
 }: {
@@ -50,6 +55,9 @@ export function WorkspacePanel({
   className?: string;
 }) {
   const pending = useAttention().total;
+  const direct = useGroups().current?.kind === "direct";
+  const tabs = direct ? views.filter((v) => v.value !== "group") : views;
+  const view = direct && linked === "group" ? "overview" : linked;
   return (
     <Tabs
       id="workspace-panel"
@@ -67,7 +75,7 @@ export function WorkspacePanel({
           ) : null}
         </div>
         <TabsList variant="default" aria-label="工作区标签" className="gap-1">
-          {views.map(({ value, label }) => (
+          {tabs.map(({ value, label }) => (
             <TabsTrigger
               key={value}
               value={value}
@@ -87,7 +95,7 @@ export function WorkspacePanel({
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        {views.map(({ value }) => (
+        {tabs.map(({ value }) => (
           <TabsContent key={value} value={value}>
             {value === "group" ? <GroupInfo /> : null}
             {value === "overview" ? <Overview /> : null}

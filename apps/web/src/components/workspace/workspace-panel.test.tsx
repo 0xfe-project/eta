@@ -30,7 +30,24 @@ afterEach(async () => {
   }));
 });
 
-async function mount(path = "/?view=memory") {
+const group = (id: string, kind: "direct" | "group", agents: string[]) => ({
+  id,
+  kind,
+  name: id,
+  archived: false,
+  updated_at: "2026-10-14T00:00:00Z",
+  last_seq: 0,
+  read_seq: 0,
+  goal: "",
+  decided: "",
+  participants: agents.map((agent_id) => ({
+    agent_id,
+    name: agent_id,
+    member: true,
+  })),
+});
+
+async function mount(path = "/?group=team&view=memory") {
   const client = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity } },
   });
@@ -39,6 +56,12 @@ async function mount(path = "/?view=memory") {
       { id: "a", name: "研究员 A" },
       { id: "b", name: "研究员 B" },
     ],
+    groups: [
+      group("dm", "direct", ["a"]),
+      group("solo", "group", ["a"]),
+      group("team", "group", ["a", "b"]),
+    ],
+    messages: [],
     interactions: [],
   });
   client.setQueryData(["tasks"], { tasks: [], assignees: [] });
@@ -127,6 +150,21 @@ it("leaves memory out of the side panel and defaults an unknown tab to group inf
       .querySelector('a[aria-label="在全窗口中打开"]')
       ?.getAttribute("href"),
   ).toBe("/workspace");
+});
+
+it("leaves the group tab out of a direct chat but keeps it for any group", async () => {
+  // An old link to the direct chat's group info opens the overview.
+  const { container } = await mount("/?group=dm&view=group");
+  expect(tabs(container)).toEqual([
+    ["概览", "true"],
+    ["任务", "false"],
+    ["定时", "false"],
+    ["待处理", "false"],
+  ]);
+  for (const id of ["solo", "team"]) {
+    const { container } = await mount(`/?group=${id}`);
+    expect(tabs(container)[0]).toEqual(["群", "true"]);
+  }
 });
 
 it("keeps the full-window memory page at the agent in its URL", async () => {
