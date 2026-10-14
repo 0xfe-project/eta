@@ -1,10 +1,21 @@
 import type { Group } from "@/queries/chat";
+import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { UsersThreeIcon } from "@phosphor-icons/react/UsersThree";
 import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -273,6 +284,7 @@ export function GroupList({ compact = false }: { compact?: boolean }) {
             <button
               type="button"
               onClick={() => open(g.id)}
+              title={g.name}
               className={cn(
                 "flex w-full items-center gap-2 px-2 text-left outline-none transition-colors duration-[60ms] hover:bg-sidebar-accent focus-visible:ring-1 focus-visible:ring-ring",
                 compact ? "h-9" : "min-h-18 py-3",
@@ -282,7 +294,7 @@ export function GroupList({ compact = false }: { compact?: boolean }) {
               <GroupAvatars group={g} />
               <span className="min-w-0 flex-1">
                 <span className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm">{g.name}</span>
+                  <span className="min-w-0 truncate text-sm">{g.name}</span>
                   {!compact && g.last_message_at && (
                     <time
                       dateTime={g.last_message_at}
@@ -379,6 +391,7 @@ export function GroupInfo() {
   const updateTask = useUpdateTask();
   const [linkTask, setLinkTask] = useState(false);
   const [invite, setInvite] = useState(false);
+  const [removing, setRemoving] = useState<Group["participants"][number]>();
   if (!group)
     return (
       <p className="p-4 text-sm text-muted-foreground">选一个群开始讨论。</p>
@@ -424,61 +437,108 @@ export function GroupInfo() {
             </Button>
           )}
         </div>
-        {members.map((p) => {
-          const agent = agents.find((a) => a.id === p.agent_id);
-          const active = chat?.messages.find(
-            (m) =>
-              m.agent_id === p.agent_id &&
-              ["responding", "waiting_for_input", "stopping"].includes(
-                m.status,
-              ),
-          );
-          const elsewhere =
-            active && active.group_id !== group.id
-              ? groups.find((g) => g.id === active.group_id)?.name
-              : undefined;
-          return (
-            <div key={p.agent_id} className="flex min-h-12 items-center gap-2">
-              <AgentAvatar agent={{ id: p.agent_id }} />
-              <div className="min-w-0 flex-1 text-sm">
-                <span className="block truncate">{p.name}</span>
-                <span className="text-xs text-muted-foreground">
-                  {elsewhere ? (
-                    `在「${elsewhere}」回复中`
-                  ) : agent ? (
-                    <AgentStatus status={agent.status} />
-                  ) : (
-                    "已删除"
-                  )}
-                </span>
-              </div>
-              {agent && (
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  onClick={() => openEditor(agent.id)}
-                >
-                  设置
-                </Button>
-              )}
-              {group.kind === "group" && members.length > 1 && (
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  disabled={member.isPending}
-                  onClick={() =>
-                    member.mutate(
-                      { groupId: group.id, agentId: p.agent_id, member: false },
-                      { onError },
-                    )
-                  }
-                >
-                  移除
-                </Button>
-              )}
-            </div>
-          );
-        })}
+        <ul className="grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-1">
+          {members.map((p) => {
+            const agent = agents.find((a) => a.id === p.agent_id);
+            const active = chat?.messages.find(
+              (m) =>
+                m.agent_id === p.agent_id &&
+                ["responding", "waiting_for_input", "stopping"].includes(
+                  m.status,
+                ),
+            );
+            const elsewhere =
+              active && active.group_id !== group.id
+                ? groups.find((g) => g.id === active.group_id)?.name
+                : undefined;
+            const removable = group.kind === "group" && members.length > 1;
+            return (
+              <li
+                key={p.agent_id}
+                className="flex min-h-12 min-w-0 items-center gap-2"
+              >
+                <AgentAvatar agent={{ id: p.agent_id }} />
+                <div className="min-w-0 flex-1 text-sm">
+                  <span className="block truncate" title={p.name}>
+                    {p.name}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {elsewhere ? (
+                      `在「${elsewhere}」回复中`
+                    ) : agent ? (
+                      <AgentStatus status={agent.status} />
+                    ) : (
+                      "已删除"
+                    )}
+                  </span>
+                </div>
+                {(agent || removable) && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={`${p.name} 的操作`}
+                      >
+                        <DotsThreeIcon aria-hidden="true" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {agent && (
+                        <DropdownMenuItem onSelect={() => openEditor(agent.id)}>
+                          设置
+                        </DropdownMenuItem>
+                      )}
+                      {removable && (
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onSelect={() => setRemoving(p)}
+                        >
+                          移除
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        <AlertDialog
+          open={!!removing}
+          onOpenChange={(open) => !open && setRemoving(undefined)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="wrap-anywhere">
+                把「{removing?.name}」移出群？
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                它不再收到这个群的消息，之后可以重新邀请。
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>取消</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                disabled={member.isPending}
+                onClick={() =>
+                  removing &&
+                  member.mutate(
+                    {
+                      groupId: group.id,
+                      agentId: removing.agent_id,
+                      member: false,
+                    },
+                    { onError },
+                  )
+                }
+              >
+                移除
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </section>
       <section>
         <h3 className="mb-3 text-xs text-muted-foreground">群简报</h3>
