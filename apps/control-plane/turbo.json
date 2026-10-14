@@ -65,8 +65,9 @@
         "!$TURBO_ROOT$/packages/*-go/out/**",
         "!$TURBO_ROOT$/packages/*-go/node_modules/**",
         // The bundles and plugins agents' images are built from.
-        "$TURBO_ROOT$/apps/agent-runtime/bundles/**",
-        "$TURBO_ROOT$/apps/agent-runtime/plugins/**"
+        "$TURBO_ROOT$/bundles/*/bundle.json",
+        "$TURBO_ROOT$/bundles/*/service/*.yaml",
+        "$TURBO_ROOT$/plugins/**"
       ],
       "env": ["DATABASE_URL", "AXP_TEST_NATS_URL", "AXP_TEST_DOCKER"]
     }

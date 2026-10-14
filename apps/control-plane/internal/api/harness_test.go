@@ -239,8 +239,8 @@ type env struct {
 }
 
 const (
-	repoBundles = "../../../agent-runtime/bundles"
-	repoPlugins = "../../../agent-runtime/plugins"
+	repoBundles = "../../../../bundles"
+	repoPlugins = "../../../../plugins"
 )
 
 func newEnv(t *testing.T) *env {

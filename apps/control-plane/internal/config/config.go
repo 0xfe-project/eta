@@ -68,10 +68,10 @@ type Config struct {
 	// at the same address) and routines' schedules live.
 	NATSURL string `env:"AXP_NATS_URL" dev:"nats://nats.axp-dev.svc.cluster.local:4222" prod:"nats://nats.axp.svc.cluster.local:4222"`
 	// The built-in bundles and the plugins bundles add
-	// (apps/agent-runtime/bundles and plugins), which agents' images are
+	// (the repository's bundles/ and plugins/), which agents' images are
 	// built from; the production image copies them alongside.
-	BundlesDir string `env:"AXP_BUNDLES_DIR" default:"../agent-runtime/bundles"`
-	PluginsDir string `env:"AXP_PLUGINS_DIR" default:"../agent-runtime/plugins"`
+	BundlesDir string `env:"AXP_BUNDLES_DIR" default:"../../bundles"`
+	PluginsDir string `env:"AXP_PLUGINS_DIR" default:"../../plugins"`
 	// The agenvo relay (@agenvo/server), the agenvo bundle's service, which
 	// remote computers' connectors pair with at AXP_PUBLIC_URL under
 	// /remote/relay. The control plane reaches it at RelayURL (by default

@@ -7,8 +7,11 @@
 !apps/gateway/Caddyfile
 !apps/gateway/*.caddy
 !apps/web/out/
-!apps/agent-runtime/bundles/
-!apps/agent-runtime/plugins/
+!bundles/
+!plugins/
+# Bundles' services run from images of their own; only their manifests.
+bundles/*/service/*
+!bundles/*/service/*.yaml
 !apps/remote/out/dist/
 !apps/agenvo/out/dist/
 **/__pycache__

@@ -23,7 +23,7 @@ dev = [
 package = false
 
 [tool.uv.sources]
-axp-telemetry = { path = "../../packages/telemetry-py", editable = true }
+axp-telemetry = { path = "../../../packages/telemetry-py", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

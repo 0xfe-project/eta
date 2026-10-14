@@ -1,6 +1,6 @@
 // Package bundles is what agents are built from (docs/architecture/bundles.md):
 // a bundle is a script run into the agent's image and the plugins it adds.
-// The built-in ones are directories in apps/agent-runtime/bundles
+// The built-in ones are directories in the repository's bundles/
 // (bundle.json, an optional setup script and its files); the user's are rows
 // of the bundle table. An agent loads any number of them.
 package bundles

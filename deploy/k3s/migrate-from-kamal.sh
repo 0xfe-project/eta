@@ -44,7 +44,7 @@ sed 's/NAMESPACE/axp/g' deploy/k3s/workloads.yaml | kubectl apply -f - >/dev/nul
 # AXP's claims as its manifests have them: the deploy then finds them made.
 docs() { awk -v kind="$1" 'BEGIN { RS = "\n---\n" } $0 ~ "kind: " kind "\n" { print "---"; print }'; }
 kubectl kustomize deploy/k3s/production | docs PersistentVolumeClaim | kubectl apply -f - >/dev/null
-docs PersistentVolumeClaim <apps/agent-runtime/bundles/agenvo/service/relay.yaml |
+docs PersistentVolumeClaim <bundles/agenvo/service/relay.yaml |
   kubectl -n axp-bundles apply -f - >/dev/null
 kubectl -n axp-bundles label pvc agenvo-relay axp.dev/bundle=agenvo --overwrite >/dev/null
 for pair in "${volumes[@]}"; do

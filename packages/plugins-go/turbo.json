@@ -49,7 +49,7 @@
         "!$TURBO_ROOT$/packages/*-go/.turbo/**",
         "!$TURBO_ROOT$/packages/*-go/out/**",
         "!$TURBO_ROOT$/packages/*-go/node_modules/**",
-        "$TURBO_ROOT$/apps/agent-runtime/plugins/**",
+        "$TURBO_ROOT$/plugins/**",
         "$TURBO_ROOT$/apps/agent-runtime/codex/**"
       ]
     }

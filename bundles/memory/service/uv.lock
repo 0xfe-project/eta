@@ -55,7 +55,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "axp-telemetry", editable = "../../packages/telemetry-py" },
+    { name = "axp-telemetry", editable = "../../../packages/telemetry-py" },
     { name = "fastembed", specifier = ">=0.7" },
     { name = "mcp", specifier = ">=1.20,<2" },
     { name = "mem0ai", specifier = ">=2,<3" },
@@ -73,7 +73,7 @@ dev = [
 [[package]]
 name = "axp-telemetry"
 version = "0.1.0"
-source = { editable = "../../packages/telemetry-py" }
+source = { editable = "../../../packages/telemetry-py" }
 dependencies = [
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-instrumentation-logging" },

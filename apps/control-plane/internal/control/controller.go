@@ -49,7 +49,7 @@ type Controller struct {
 	Driver  container.Driver
 	Models  llm.Catalog
 	Secret  []byte
-	// The plugins bundles name (apps/agent-runtime/plugins).
+	// The plugins bundles name (the repository's plugins/).
 	PluginsDir string
 	// Where runtimes reach AXP's services (the runtime gateway), NATS and
 	// the OpenTelemetry Collector (which holds the credentials).

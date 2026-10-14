@@ -4,7 +4,7 @@
 
 ## 一个插件是什么
 
-`apps/agent-runtime/plugins` 下的一个目录，新增插件只需新增目录：
+`plugins` 下的一个目录，新增插件只需新增目录：
 
 ```
 plugins/grok/

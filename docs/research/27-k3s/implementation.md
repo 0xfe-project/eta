@@ -4,15 +4,16 @@
 
 ## 实现状态（2026-10-14）
 
-T1–T5 和 T7 的代码已在本分支实现；T6（生产切换）没有执行，生产仍在 Kamal 上。合并本分支就是切换：之后仓库里只有 k3s 的部署，切换用 `deploy/k3s/migrate-from-kamal.sh`（[deploy/README.md](../../../deploy/README.md#从-kamal-迁移)）。
+T2–T5 和 T7 的代码已在本分支实现（T1 已在 main）；T6（生产切换）没有执行，生产仍在 Kamal 上。合并本分支就是切换：之后仓库里只有 k3s 的部署，切换用 `deploy/k3s/migrate-from-kamal.sh`（[deploy/README.md](../../../deploy/README.md#从-kamal-迁移)）。
 
 | 任务 | 结果                                                                                                                                                                                                                     |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| T1   | `apps/llm-gateway` 删除，CPA 在 `serve` 进程里（`internal/models`），`/api/llm` 在公共 listener，`/v1` 和模型目录在内部 listener                                                                                         |
+| T1   | 已在 main 由 #248（`03fc207`）完成；本分支 rebase 后沿用它的 `internal/llm`，只把 Bundle 服务调用 `/v1` 的身份（`?use=llm`）接上                                                                                         |
 | T2   | `deploy/k3s`：infra/app 两组清单、production/dev 两个 overlay、`workloads.yaml`、`deploy.sh`；本机已装 k3s v1.36.5                                                                                                       |
 | T3   | `container.Driver` 只剩 Kubernetes 实现（Pod + PVC、`buildctl`、仓库 API）；Docker driver、Docker socket、`ensure-runtime-network` 删除                                                                                  |
 | T4   | `BundleService` CRD + controller 里 5 秒一次的调谐（`internal/bundlesvc`），没有用 controller-runtime；Bundle 令牌、`?bundle=`/`?use=llm` 的 runtime-auth；网关按路径找服务；Web 显示服务状态、可编辑自定义环境包的 YAML |
 | T5   | memory、agenvo relay 是内置必选环境包的服务，镜像 `axp-memory`、`axp-relay`；memory 有自己的库，经 runtime 网关用令牌调模型                                                                                              |
+| 布局 | 环境包移出 `apps/`：内置环境包在 `bundles/`（memory 服务的代码在 `bundles/memory/service`），插件在 `plugins/`；`apps/`、`packages/` 只剩核心代码                                                                        |
 | T7   | `deploy/deploy.yml`、`deploy.sh`、`secrets`、`ports.env`、`relay.json.erb`、`scripts/dev-container.sh` 删除；开发也在 k3s 上（U1 按默认）                                                                                |
 
 验证：

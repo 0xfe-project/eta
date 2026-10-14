@@ -1,6 +1,6 @@
 # 记忆
 
-本文说明 [#12](https://github.com/akarachen/axp/issues/12) 的实现：智能体跨对话的长期记忆。它是必选的内置环境包 `memory`：runtime 镜像里的 `memory` plugin（见[聊天与运行时架构](chat-runtime.md#plugin)），和这个环境包的服务 `apps/memory-service`（[环境包](bundles.md#服务)）。
+本文说明 [#12](https://github.com/akarachen/axp/issues/12) 的实现：智能体跨对话的长期记忆。它是必选的内置环境包 `memory`：runtime 镜像里的 `memory` plugin（见[聊天与运行时架构](chat-runtime.md#plugin)），和这个环境包的服务 `bundles/memory/service`（[环境包](bundles.md#服务)）。
 
 ```
 runtime 容器
@@ -58,10 +58,10 @@ memory-service 只认 runtime 网关设置的 `X-AXP-Agent-Id`，并把它作为
 
 ## Embedding 模型
 
-`jinaai/jina-embeddings-v2-base-zh`（768 维，中英混合，长输入）。它由 Turbo 的 `build` 任务下载到 `apps/memory-service/out/models`（约 600 MB，缓存），生产镜像带上它，服务运行时不联网。换模型要重新嵌入所有记忆。
+`jinaai/jina-embeddings-v2-base-zh`（768 维，中英混合，长输入）。它由 Turbo 的 `build` 任务下载到 `bundles/memory/service/out/models`（约 600 MB，缓存），生产镜像带上它，服务运行时不联网。换模型要重新嵌入所有记忆。
 
 ## 运行
 
-开发和生产一样：controller 按 `apps/agent-runtime/bundles/memory/service/memory.yaml` 把它部署到 `<ns>-bundles`，镜像 `axp-memory` 由 `apps/memory-service/Dockerfile` 从 Turbo 的产物打包（`scripts/build/image.sh memory`）。库 `axp_bundle_memory` 由 AXP 在 PostgreSQL（`pgvector/pgvector:pg17-trixie`）上创建并装好 `vector` 扩展，连接串在 Secret `axp-memory`；mem0 首次启动时创建 `memories` 表。它在 `/.well-known/axp-service` 报告协议 `axp.memory/1`。
+开发和生产一样：controller 按 `bundles/memory/service/memory.yaml` 把它部署到 `<ns>-bundles`，镜像 `axp-memory` 由 `bundles/memory/service/Dockerfile` 从 Turbo 的产物打包（`scripts/build/image.sh memory`）。库 `axp_bundle_memory` 由 AXP 在 PostgreSQL（`pgvector/pgvector:pg17-trixie`）上创建并装好 `vector` 扩展，连接串在 Secret `axp-memory`；mem0 首次启动时创建 `memories` 表。它在 `/.well-known/axp-service` 报告协议 `axp.memory/1`。
 
 PostgreSQL 镜像是 `postgres:17` 加 pgvector，同为 Debian trixie，因此原有数据目录的排序规则不变（bookworm 版的 `pgvector/pgvector:pg17` 会导致 collation 版本不匹配）。mem0 的遥测已关闭；它的变更历史写在容器内的 SQLite，不保留。从 Kamal 迁移时，主库原来的 `memories` 表被复制到 `axp_bundle_memory`（`deploy/k3s/migrate-from-kamal.sh`）。

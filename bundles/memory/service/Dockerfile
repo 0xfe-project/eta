@@ -1,4 +1,4 @@
-# The memory bundle's service (apps/agent-runtime/bundles/memory/service),
+# The memory bundle's service (memory.yaml next to this file),
 # from the artifacts Turbo builds (`build`, `build:linux-<arch>`): the
 # dependencies, the embedding model, the source. scripts/build/image.sh
 # builds it as axp-memory.

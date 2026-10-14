@@ -10,10 +10,12 @@ apps/
                    含代码托管（用户自己的 GitHub App，agent 的 git、gh 凭据与 open_pull_request）和定时任务
                    （每次运行是 worker 里的 ADK agent；自己的数据库，计划在 NATS）
   web/             TanStack Start + React + Vite + TypeScript
-  agent-runtime/   每个 Agent 一个常驻 Pod 的运行时（Node，直接驱动 Codex app-server）；bundles/ 是内置环境包（有的带集群里的服务），plugins/ 是聊天智能体和定时任务用的插件
-  memory-service/  Python：Agent 的长期记忆（mem0 + pgvector），内置环境包 memory 的服务
+  agent-runtime/   每个 Agent 一个常驻 Pod 的运行时（Node，直接驱动 Codex app-server）
   remote/          Go：远程电脑上的 axp（daemon 与给智能体用的 CLI）
   agenvo/          固定的 agenvo 提交，从源码构建中继（内置环境包 agenvo 的服务）和 connector
+bundles/           内置环境包（不是核心代码）：每个一个目录（bundle.json、setup 脚本），有的带集群里的服务
+                   （service/：Kubernetes 清单，memory 的还有它的 Python 代码，mem0 + pgvector）
+plugins/           环境包带来的插件（MCP、skill、hook），聊天智能体和定时任务都用
 packages/
   plugins-go/      插件标准：读取插件，编译到聊天智能体（Codex），加载进定时任务（ADK）
   service-go/      Go 服务框架：配置、数据库与迁移、HTTP API、错误、幂等、命令

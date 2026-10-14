@@ -19,10 +19,13 @@ export default {
         .join("\n"),
   },
   workspaces: {
+    // Plugins' scripts run in agents' images.
+    ".": {
+      entry: ["plugins/*/hooks/*.mjs", "plugins/*/server.mjs"],
+    },
     "apps/agent-runtime": {
-      // The runtime is bundled from main.ts; plugins' scripts run in agents'
-      // images.
-      entry: ["src/main.ts", "plugins/*/hooks/*.mjs", "plugins/*/server.mjs"],
+      // The runtime is bundled from main.ts.
+      entry: ["src/main.ts"],
       // Generated from the pinned Codex's app-server schema.
       ignore: ["src/protocol/**"],
     },

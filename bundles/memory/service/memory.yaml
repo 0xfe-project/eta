@@ -1,4 +1,4 @@
-# Agents' memories (apps/memory-service): one for every agent, each reaching
+# Agents' memories (axp_memory, next to this file): one for every agent, each reaching
 # only its own (X-AXP-Agent-Id). Its database, its token for the models,
 # the gateway's and the collector's addresses are in the Secret axp-memory
 # that AXP writes.

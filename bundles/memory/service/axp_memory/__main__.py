@@ -1,6 +1,6 @@
 """Entry point: ``python -m axp_memory``.
 
-It runs as the memory bundle's service (apps/agent-runtime/bundles/memory):
+It runs as the memory bundle's service (bundles/memory):
 AXP_MEMORY_ADDR is the listen address (host:port); DATABASE_URL its
 PostgreSQL database (with pgvector); AXP_GATEWAY_URL the runtime gateway,
 whose /v1 is the models' OpenAI-compatible API, and AXP_BUNDLE_TOKEN what it

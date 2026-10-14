@@ -14,7 +14,7 @@ import (
 
 // The repository's plugins and Codex configuration.
 var (
-	repoPlugins = filepath.Join("..", "..", "apps", "agent-runtime", "plugins")
+	repoPlugins = filepath.Join("..", "..", "plugins")
 	repoCodex   = filepath.Join("..", "..", "apps", "agent-runtime", "codex")
 )
 

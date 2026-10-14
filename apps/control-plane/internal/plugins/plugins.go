@@ -1,5 +1,5 @@
 // Package plugins is the plugins agents choose from: those of the chat
-// target in apps/agent-runtime/plugins (docs/architecture/plugins.md), which
+// target in the repository's plugins/ (docs/architecture/plugins.md), which
 // the runtime image compiles for Codex in the same order.
 package plugins
 

@@ -16,7 +16,7 @@ AXP 从源码构建 agenvo，不等上游发布：`apps/agenvo/package.json` 固
 | 中继         | `@agenvo/server`（`apps/agenvo` 从源码构建），内置环境包 `agenvo` 的服务 | 远程电脑上的 connector 与中继配对、保持 WSS 连接；控制面经它调用 Paseo/Herdr                                                |
 | 中继客户端   | `apps/control-plane/internal/relay`                                      | 管理员接口（配对、批准、撤销、状态）和 MCP `execute`                                                                        |
 | `axp`        | `apps/remote`（Go，`/remote/dl/axp-<os>-<arch>`）                        | 远程电脑上的安装（`axp setup`）和给智能体用的 CLI                                                                           |
-| tasks 插件   | `apps/agent-runtime/plugins/tasks`                                       | AXP 智能体读写看板：`list_tasks`、`get_task`、`list_assignees`、`list_places`、`create_task`、`update_task`、`comment_task` |
+| tasks 插件   | `plugins/tasks`                                                          | AXP 智能体读写看板：`list_tasks`、`get_task`、`list_assignees`、`list_places`、`create_task`、`update_task`、`comment_task` |
 | 远程电脑设置 | Web 设置的“远程电脑”                                                     | 添加电脑（安装命令）、核对指纹后批准、在线状态、撤销                                                                        |
 
 ## 任务
@@ -211,7 +211,7 @@ Paseo 归档 worktree 时不检查未提交的改动，未提交的内容会丢�
 
 ## 部署
 
-中继是必选的内置环境包 `agenvo` 的服务（`apps/agent-runtime/bundles/agenvo/service`，见[环境包](bundles.md#服务)），开发和生产一样：controller 把它部署到 `<ns>-bundles`，镜像 `axp-relay` 由 `apps/agenvo/Dockerfile` 从固定提交构建的中继打包，状态（配对的设备、OAuth 授权）在卷 `agenvo-relay`。`gateway` 把 `/remote/relay/*` 原样（保留 `Host` 和路径）转发给 Service `agenvo`，WebSocket（`/remote/relay/connect`）同样经过它；客户端地址取 Cloudflare 的 `CF-Connecting-IP` 作为 `X-Forwarded-For`（中继信任一跳），用于中继的限流。
+中继是必选的内置环境包 `agenvo` 的服务（`bundles/agenvo/service`，见[环境包](bundles.md#服务)），开发和生产一样：controller 把它部署到 `<ns>-bundles`，镜像 `axp-relay` 由 `apps/agenvo/Dockerfile` 从固定提交构建的中继打包，状态（配对的设备、OAuth 授权）在卷 `agenvo-relay`。`gateway` 把 `/remote/relay/*` 原样（保留 `Host` 和路径）转发给 Service `agenvo`，WebSocket（`/remote/relay/connect`）同样经过它；客户端地址取 Cloudflare 的 `CF-Connecting-IP` 作为 `X-Forwarded-For`（中继信任一跳），用于中继的限流。
 
 生产的中继在 AXP 自己的域名下（`https://axp.akr.moe/remote/relay`）：`/remote/` 已对 Cloudflare Access 放行，中继由自己的配对和设备密钥鉴权。开发时 AXP 的地址是 `bun run dev` 端口块的 `P+8`：开发网关在那里用自签证书（`var/relay`）提供 HTTPS（中继只接受 HTTPS 的 base URL），本机的 connector 用 `axp setup --ca-file var/relay/cert.pem` 信任它。中继的管理员密钥是 AXP 为这个环境包的服务派生的密钥（`AXP_BUNDLE_SECRET`），控制面用同样的方式派生，不用另外配置。`AXP_PUBLIC_URL` 没有设置时远程电脑功能关闭。
 

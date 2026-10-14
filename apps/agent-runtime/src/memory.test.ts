@@ -27,7 +27,7 @@ test("recall labels group context using only the memory route", async () => {
     const hook = Bun.spawn(
       [
         "node",
-        join(import.meta.dir, "../plugins/memory/hooks/memory.mjs"),
+        join(import.meta.dir, "../../../plugins/memory/hooks/memory.mjs"),
         "recall",
       ],
       {

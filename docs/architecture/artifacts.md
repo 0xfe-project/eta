@@ -32,7 +32,7 @@
 | AXP 智能体（包括主智能体） | `artifacts` 插件的 `publish_artifact` → runtime 网关 `/artifacts/v1/upload` | runtime 网关核对 agent key 和插件后给出 `X-AXP-Agent-Id`   | 任何任务（与 tasks 插件一致），可不挂          |
 | 远程电脑上的智能体         | `axp artifact upload <dir\|zip>` → `POST /remote/v1/artifacts`              | 电脑的令牌（`Authorization: Bearer`），不依赖浏览器 Cookie | 必须挂任务，且是指派给这台电脑或它运行过的任务 |
 
-`publish_artifact`（`apps/agent-runtime/plugins/artifacts/server.mjs`）和 `axp artifact upload`（`apps/remote/artifact.go`）都接受目录（就地打包，拒绝符号链接，跳过 `.git`、`node_modules`）或 ZIP。工具结果在 `_meta["axp/ref"]` 里写 `{kind: "artifact", id, title, number: 版本}`，控制面存为活动块的 ref，聊天里显示卡片（见[聊天与运行时架构](chat-runtime.md)）；挂了任务时时间线上记一条 `artifact`。用法写在 `artifacts` 插件的 skill 和 `axp` skill 里。
+`publish_artifact`（`plugins/artifacts/server.mjs`）和 `axp artifact upload`（`apps/remote/artifact.go`）都接受目录（就地打包，拒绝符号链接，跳过 `.git`、`node_modules`）或 ZIP。工具结果在 `_meta["axp/ref"]` 里写 `{kind: "artifact", id, title, number: 版本}`，控制面存为活动块的 ref，聊天里显示卡片（见[聊天与运行时架构](chat-runtime.md)）；挂了任务时时间线上记一条 `artifact`。用法写在 `artifacts` 插件的 skill 和 `axp` skill 里。
 
 处理顺序：
 

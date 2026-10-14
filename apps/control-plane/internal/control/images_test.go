@@ -16,7 +16,7 @@ func (tags) ImageTag(hash string) string { return "agent:" + hash }
 
 func builtin(t *testing.T, name string) bundles.Bundle {
 	t.Helper()
-	all, err := (&bundles.Catalog{Dir: "../../../agent-runtime/bundles"}).Builtin()
+	all, err := (&bundles.Catalog{Dir: "../../../../bundles"}).Builtin()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func builtin(t *testing.T, name string) bundles.Bundle {
 }
 
 func TestAnImageIsItsBundlesAndPlugins(t *testing.T) {
-	c := &Controller{Driver: tags{}, PluginsDir: "../../../agent-runtime/plugins"}
+	c := &Controller{Driver: tags{}, PluginsDir: "../../../../plugins"}
 	custom := bundles.Bundle{Name: "python", Script: "apt-get install -y python3", Plugins: []string{"memory"}}
 	chosen := []bundles.Bundle{builtin(t, "grok"), custom}
 	img, err := c.plan("sha256:a", "runtime:dev", chosen)
@@ -85,5 +85,34 @@ func expectSame(t *testing.T, got, want string) {
 	t.Helper()
 	if got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+// A built-in bundle's service (manifests, source, data) stays out of agents'
+// images.
+func TestBundleServiceStaysOutOfImages(t *testing.T) {
+	src, dst := t.TempDir(), t.TempDir()
+	for path, data := range map[string]string{"bundle.json": "{}", "setup": "true", "service/a.yaml": "x", "service/src/m.py": "x"} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(src, path)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(src, path), []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.CopyFS(filepath.Join(dst, "b"), withoutService{os.DirFS(src)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "b", "setup")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "b", "service")); err == nil {
+		t.Fatal("service/ was copied")
+	}
+	c := &Controller{}
+	with, _ := c.treeHash(src)
+	_ = os.WriteFile(filepath.Join(src, "service", "a.yaml"), []byte("y"), 0o644)
+	if again, _ := (&Controller{}).treeHash(src); again != with {
+		t.Fatal("the service changes the image")
 	}
 }

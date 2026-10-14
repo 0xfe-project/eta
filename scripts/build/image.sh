@@ -9,7 +9,7 @@
 #   app      deploy/Dockerfile: the gateways, web and the control plane
 #   runtime  apps/agent-runtime (with vendor/akhook and axp-plugins from
 #            packages/plugins-go), what agents' images are built on
-#   memory   apps/memory-service, the memory bundle's service
+#   memory   bundles/memory/service, the memory bundle's service
 #   relay    apps/agenvo, the agenvo bundle's service
 #
 # BuildKit's cache makes an unchanged image cost about a second, so Turbo
@@ -29,7 +29,7 @@ case "$1" in
       --opt "build-arg:CODEX_VERSION=$codex"
       --local akhook-src=vendor/akhook --opt context:akhook-src=local:akhook-src
       --local plugins-tool=packages/plugins-go/out --opt context:plugins-tool=local:plugins-tool) ;;
-  memory) build+=(--local context=apps/memory-service --local dockerfile=apps/memory-service) ;;
+  memory) build+=(--local context=bundles/memory/service --local dockerfile=bundles/memory/service) ;;
   relay) build+=(--local context=apps/agenvo --local dockerfile=apps/agenvo) ;;
   *) echo "unknown image: $1" >&2; exit 1 ;;
 esac

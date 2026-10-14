@@ -257,9 +257,9 @@ func TestBundlesAreChosenFromTheCatalog(t *testing.T) {
 	}
 	created := e.post("/agents", map[string]any{"name": "a", "bundles": []string{"tasks", "grok"}})
 	// Catalog order, whatever order they were sent in.
-	expect(t, fmt.Sprint(created.m(t)["bundles"]), "[grok groups memory tasks]")
+	expect(t, fmt.Sprint(created.m(t)["bundles"]), "[agenvo grok groups memory tasks]")
 	id := created.m(t)["id"].(string)
-	expect(t, scalar[string](e, "SELECT plugins::text FROM agent WHERE id = $1", id), `["grok", "groups", "memory", "tasks"]`)
+	expect(t, scalar[string](e, "SELECT plugins::text FROM agent WHERE id = $1", id), `["agenvo", "grok", "groups", "memory", "tasks"]`)
 	expectError(t, e.post("/agents", map[string]any{"name": "a", "bundles": []string{"nope"}}), 422, "BUNDLE_NOT_FOUND")
 }
 
@@ -268,9 +268,9 @@ func TestChangingBundlesBumpsConfigVersion(t *testing.T) {
 	agent := e.createAgent("旧名字")
 	before := scalar[int64](e, "SELECT config_version FROM agent WHERE id = $1", agent.ID)
 	r := e.patch("/agents/"+agent.ID, map[string]any{"bundles": []string{}})
-	expect(t, fmt.Sprint(r.m(t)["bundles"]), "[groups memory]")
+	expect(t, fmt.Sprint(r.m(t)["bundles"]), "[agenvo groups memory]")
 	expect(t, scalar[int64](e, "SELECT config_version FROM agent WHERE id = $1", agent.ID), before+1)
-	expect(t, scalar[string](e, "SELECT plugins::text FROM agent WHERE id = $1", agent.ID), `["groups", "memory"]`)
+	expect(t, scalar[string](e, "SELECT plugins::text FROM agent WHERE id = $1", agent.ID), `["agenvo", "groups", "memory"]`)
 }
 
 func TestUsersBundles(t *testing.T) {
@@ -287,12 +287,12 @@ func TestUsersBundles(t *testing.T) {
 	expectError(t, e.post("/bundles", map[string]any{"name": "Bad Name", "plugins": []string{}}), 422, "INVALID_BUNDLE_NAME")
 	expectError(t, e.post("/bundles", map[string]any{"name": "x", "plugins": []string{"nope"}}), 422, "PLUGIN_NOT_FOUND")
 	agent := e.post("/agents", map[string]any{"name": "a", "bundles": []string{"python"}}).m(t)["id"].(string)
-	expect(t, scalar[string](e, "SELECT plugins::text FROM agent WHERE id = $1", agent), `["groups", "memory"]`)
+	expect(t, scalar[string](e, "SELECT plugins::text FROM agent WHERE id = $1", agent), `["agenvo", "groups", "memory"]`)
 	// Its agents get its plugins at once.
 	r := do(t, e.public, http.MethodPatch, "/api/v1/bundles/python", map[string]any{"plugins": []string{"grok", "tasks"}}, nil)
 	expect(t, r.status, 200)
 	expect(t, fmt.Sprint(r.m(t)["plugins"]), "[grok tasks]")
-	expect(t, scalar[string](e, "SELECT plugins::text FROM agent WHERE id = $1", agent), `["grok", "groups", "memory", "tasks"]`)
+	expect(t, scalar[string](e, "SELECT plugins::text FROM agent WHERE id = $1", agent), `["agenvo", "grok", "groups", "memory", "tasks"]`)
 	expectError(t, do(t, e.public, http.MethodPatch, "/api/v1/bundles/github", map[string]any{"script": "x"}, nil), 409, "BUNDLE_BUILTIN")
 	expectError(t, e.delete("/bundles/python"), 409, "BUNDLE_IN_USE")
 	expect(t, e.delete("/agents/"+agent).status, 204)

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -124,10 +125,7 @@ func (c *Controller) context(dir, baseRef string, img image) error {
 	for _, b := range img.bundles {
 		target := filepath.Join(dir, "bundles", b.Name)
 		if b.Builtin {
-			if err := os.CopyFS(target, os.DirFS(b.Dir)); err != nil {
-				return err
-			}
-			if err := os.RemoveAll(filepath.Join(target, serviceDir)); err != nil {
+			if err := os.CopyFS(target, withoutService{os.DirFS(b.Dir)}); err != nil {
 				return err
 			}
 			continue
@@ -251,3 +249,22 @@ func keep(images map[string]string, building string) []string {
 }
 
 var _ container.Driver = (*container.Kubernetes)(nil)
+
+// withoutService is a built-in bundle's files without its service/ (which
+// may hold the service's source and data).
+type withoutService struct{ fs.FS }
+
+func (f withoutService) Open(name string) (fs.File, error) {
+	if name == serviceDir || strings.HasPrefix(name, serviceDir+"/") {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+	}
+	return f.FS.Open(name)
+}
+
+func (f withoutService) ReadDir(name string) ([]fs.DirEntry, error) {
+	entries, err := fs.ReadDir(f.FS, name)
+	if name == "." {
+		entries = slices.DeleteFunc(entries, func(e fs.DirEntry) bool { return e.Name() == serviceDir })
+	}
+	return entries, err
+}
