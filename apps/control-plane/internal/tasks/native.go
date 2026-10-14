@@ -105,7 +105,7 @@ func (a agents) call(ctx context.Context, t target, method string, params any, o
 	if err != nil {
 		var fault *relay.Fault
 		if errors.As(err, &fault) && fault.Code == "unsupported_method" {
-			return fmt.Errorf("这台电脑的 agenvo connector 不支持 %s，需要更新：%s", method, updateHint)
+			return outdated{method, fault}
 		}
 		return err
 	}
@@ -116,6 +116,25 @@ func (a agents) call(ctx context.Context, t target, method string, params any, o
 		return json.Unmarshal(outcome.Result, out)
 	}
 	return nil
+}
+
+// outdated is a method the computer's connector does not have.
+type outdated struct {
+	method string
+	fault  *relay.Fault
+}
+
+func (e outdated) Error() string {
+	return fmt.Sprintf("这台电脑的 agenvo connector 不支持 %s，需要更新：%s", e.method, updateHint)
+}
+
+func (e outdated) Unwrap() error { return e.fault }
+
+// unsupported is a method the connector does not have, or the runtime
+// behind it cannot do.
+func unsupported(err error) bool {
+	var fault *relay.Fault
+	return errors.As(err, &fault) && (fault.Code == "unsupported_method" || fault.Code == "unsupported_capability")
 }
 
 // updateHint is how a computer gets the connectors AXP serves.
@@ -726,6 +745,37 @@ func (a agents) state(ctx context.Context, s *sessionRow, n native) (*agentState
 		return &agentState{Activity: "working"}, nil
 	}
 	return nil, fmt.Errorf("unknown runtime %q", s.Runtime)
+}
+
+// errNoSubagents is a Paseo agent whose provider subagents cannot be read:
+// a connector before agenvo's paseo.agents.subagents, or a daemon that does
+// not track them. It is not the same as having none.
+var errNoSubagents = errors.New("Paseo 子 Agent 的状态读不到（connector 或 Paseo 太旧）")
+
+// runningSubagents is how many of a Paseo agent's provider subagents, nested
+// ones included, are running: only its own, never other agents of its
+// workspace.
+func (a agents) runningSubagents(ctx context.Context, s *sessionRow, n native) (int, error) {
+	var out struct {
+		Subagents []struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		} `json:"subagents"`
+	}
+	err := a.call(ctx, s.target(), "paseo.agents.subagents", map[string]any{"agentId": n.AgentID, "status": "running"}, &out)
+	if unsupported(err) {
+		return 0, errNoSubagents
+	}
+	if err != nil {
+		return 0, err
+	}
+	running := map[string]bool{}
+	for _, sub := range out.Subagents {
+		if sub.Status == "running" {
+			running[sub.ID] = true
+		}
+	}
+	return len(running), nil
 }
 
 // LogPage is part of a run's transcript, oldest first, and where the part

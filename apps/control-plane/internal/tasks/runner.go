@@ -23,7 +23,8 @@ import (
 //	starting   the place is opened and the native agent started (once per
 //	           session), then sent the prompt
 //	running    watched until its turn ends; then completed, reminded once to
-//	           comment, or failed
+//	           comment, or failed. A Paseo agent that is idle while its
+//	           provider subagents run has not ended its turn.
 //
 // When a task is done, what AXP opened for it is archived or removed.
 //
@@ -41,6 +42,13 @@ const (
 	// counts as the end of the turn.
 	settleAfter = 15 * time.Second
 	callTimeout = 30 * time.Second
+	// An idle Paseo agent's running subagents hold its turn open this long
+	// at most: one Paseo never saw end (its history replayed, say) must not
+	// hold a run forever.
+	subagentWait = 2 * time.Hour
+	// Subagents that cannot be read hold the turn this long, then it ends as
+	// it would without them.
+	subagentUnknownWait = 10 * time.Minute
 )
 
 type Runner struct {
@@ -49,6 +57,10 @@ type Runner struct {
 	// Runs seen working since their last send (for runtimes without a native
 	// turn-end time).
 	working map[string]bool
+	// Runs held open by their Paseo agent's subagents.
+	held map[string]*subagentHold
+	// Now is the clock those holds are measured with; time.Now unless set.
+	Now func() time.Time
 	// Failures of steps, runs and sessions: a computer that stays offline is
 	// logged when it changes and now and then, not every tick.
 	failures telemetry.Repeats
@@ -69,6 +81,9 @@ func (r *Runner) Loop(ctx context.Context, interval time.Duration) {
 func (r *Runner) Tick(ctx context.Context) {
 	if r.working == nil {
 		r.working = map[string]bool{}
+	}
+	if r.held == nil {
+		r.held = map[string]*subagentHold{}
 	}
 	steps := []struct {
 		name string
@@ -106,7 +121,7 @@ func (r *Runner) fail(ctx context.Context, runID, message string) error {
 		if err != nil || run == nil || run.FinishedAt != nil {
 			return err
 		}
-		delete(r.working, runID)
+		r.forget(runID)
 		return finishRun(ctx, tx, run, RunFailed, &message)
 	})
 }
@@ -250,6 +265,10 @@ func (r *Runner) startOne(ctx context.Context, a agents, run *runRow) error {
 	if err != nil || session == nil {
 		return err
 	}
+	if !opened && r.busy(ctx, a, run, session) {
+		// Sending would interrupt it: the run waits for it.
+		return nil
+	}
 	// Recorded before the call: if its confirmation is lost, watch settles
 	// it from the native state. Only a run still starting is sent anything:
 	// stopping, reassigning or finishing the task cancels one that is.
@@ -269,7 +288,7 @@ func (r *Runner) startOne(ctx context.Context, a agents, run *runRow) error {
 			WHERE id = $1`, session.ID, pg.Now())
 		return err
 	}
-	delete(r.working, run.ID)
+	r.forget(run.ID)
 	err = a.send(ctx, session, session.native(), r.withCLI(ctx, run, run.Prompt))
 	if err != nil && !errors.Is(err, errUnknown) && !isTransport(err) {
 		return r.fail(ctx, run.ID, "远程智能体没有接受指令："+err.Error())
@@ -416,7 +435,7 @@ func (r *Runner) watchOne(ctx context.Context, a agents, run *runRow) error {
 		}
 		return r.inTx(ctx, func(tx pgx.Tx) error {
 			reason := "已停止。"
-			delete(r.working, run.ID)
+			r.forget(run.ID)
 			return finishRun(ctx, tx, run, RunCancelled, &reason)
 		})
 	}
@@ -434,6 +453,7 @@ func (r *Runner) watchOne(ctx context.Context, a agents, run *runRow) error {
 		return r.fail(ctx, run.ID, "远程智能体出错："+state.Error)
 	case "working", "blocked":
 		r.working[run.ID] = true
+		delete(r.held, run.ID)
 		return nil
 	}
 	// Idle. Did this turn happen?
@@ -454,7 +474,10 @@ func (r *Runner) watchOne(ctx context.Context, a agents, run *runRow) error {
 	if !ended {
 		return nil
 	}
-	delete(r.working, run.ID)
+	if wait, err := r.holdForSubagents(ctx, a, run, session, n); wait {
+		return err
+	}
+	r.forget(run.ID)
 	// Its own agent's: an assisting agent's reply is not the assignee's.
 	commented, err := pg.Exists(ctx, r.DB, `SELECT 1 FROM task_activity WHERE run_id = $1 AND kind IN ('comment', 'review')
 		AND actor = 'remote' AND created_at >= $2`, run.ID, sent)
@@ -481,6 +504,97 @@ func (r *Runner) watchOne(ctx context.Context, a agents, run *runRow) error {
 		return r.fail(ctx, run.ID, "无法提醒远程智能体回复："+err.Error())
 	}
 	return nil
+}
+
+func (r *Runner) now() time.Time {
+	if r.Now != nil {
+		return r.Now()
+	}
+	return time.Now()
+}
+
+func (r *Runner) forget(runID string) {
+	delete(r.working, runID)
+	delete(r.held, runID)
+}
+
+// subagentHold is since when an ended turn has been held for subagents, and
+// since when they could not be read or were last seen running.
+type subagentHold struct {
+	since, unknown, stopped time.Time
+}
+
+// holdForSubagents tells whether a run whose Paseo agent is idle waits for
+// the agent's provider subagents: while any of them runs, then settleAfter
+// more for the agent to take up their results; while they cannot be read,
+// for a while. Their finishing is not the run's delivery: the turn then ends
+// as it would have.
+func (r *Runner) holdForSubagents(ctx context.Context, a agents, run *runRow, session *sessionRow, n native) (bool, error) {
+	if session.Runtime != "paseo" {
+		return false, nil
+	}
+	running, err := a.runningSubagents(ctx, session, n)
+	if errors.Is(err, errNoSubagents) {
+		// The turn ends as before; the computer's connector shows as
+		// outdated.
+		r.failures.Log(ctx, slog.LevelWarn, "subagents:"+session.ComputerID, err,
+			"Cannot tell whether a Paseo agent's subagents are running", "run", run.ID, "computer", session.ComputerID)
+		delete(r.held, run.ID)
+		return false, nil
+	}
+	now := r.now()
+	h := r.held[run.ID]
+	if h == nil {
+		if err == nil && running == 0 {
+			return false, nil
+		}
+		h = &subagentHold{since: now}
+		r.held[run.ID] = h
+	}
+	switch {
+	case err != nil:
+		if h.unknown.IsZero() {
+			h.unknown = now
+		}
+		if now.Sub(h.unknown) < subagentUnknownWait {
+			return true, err
+		}
+	case running > 0:
+		h.unknown, h.stopped = time.Time{}, time.Time{}
+		if now.Sub(h.since) < subagentWait {
+			return true, nil
+		}
+	default:
+		h.unknown = time.Time{}
+		if h.stopped.IsZero() {
+			h.stopped = now
+		}
+		if now.Sub(h.stopped) < settleAfter {
+			return true, nil
+		}
+		delete(r.held, run.ID)
+		return false, nil
+	}
+	slog.WarnContext(ctx, "A Paseo agent's subagents held its turn too long; it ends", "run", run.ID,
+		"running", running, "since", h.since, "error", err)
+	delete(r.held, run.ID)
+	return false, nil
+}
+
+// busy tells whether a run's reused Paseo agent is still at work, its own or
+// its subagents', from a turn AXP no longer watches; for at most
+// subagentWait after the run was queued. Not knowing is not busy.
+func (r *Runner) busy(ctx context.Context, a agents, run *runRow, session *sessionRow) bool {
+	if session.Runtime != "paseo" || r.now().Sub(run.CreatedAt) > subagentWait {
+		return false
+	}
+	n := session.native()
+	state, err := a.state(ctx, session, n)
+	if err != nil || state.Activity != "idle" {
+		return err == nil && state.Activity == "working"
+	}
+	running, err := a.runningSubagents(ctx, session, n)
+	return err == nil && running > 0
 }
 
 // withCLI tells the agent where `axp` is: agents run in their runtime's

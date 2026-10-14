@@ -45,6 +45,8 @@ type fakeRelay struct {
 	sources []map[string]any
 	// When set, every runtime call fails with this relay error code.
 	failing string
+	// When set, listing Paseo subagents fails with this relay error code.
+	subagentsFailing string
 	// Every agent's Paseo timeline, oldest first (two entries by default),
 	// in epoch "e1" unless set.
 	history      []map[string]any
@@ -118,6 +120,9 @@ type fakeAgent struct {
 	lastSent       time.Time
 	finished       time.Time
 	archived       bool
+	// Its provider subagents as Paseo lists them: id, parentSubagentId and
+	// status.
+	subagents []map[string]any
 }
 
 type fakeTab struct {
@@ -284,6 +289,22 @@ func (f *fakeRelay) Call(_ context.Context, _, _, method string, params any) (*r
 		return result(out)
 	case "paseo.agents.history":
 		return f.readHistory(p)
+	case "paseo.agents.subagents":
+		if f.subagentsFailing != "" {
+			fault := &relay.Fault{Code: f.subagentsFailing, Message: f.subagentsFailing}
+			return &relay.Outcome{Execution: "not_started", Error: fault}, fault
+		}
+		a := f.agents[str("agentId")]
+		if a == nil {
+			return nil, &relay.Fault{Code: "not_found"}
+		}
+		subagents := []map[string]any{}
+		for _, sub := range a.subagents {
+			if str("status") == "" || sub["status"] == str("status") {
+				subagents = append(subagents, sub)
+			}
+		}
+		return result(map[string]any{"agentId": str("agentId"), "loaded": true, "nesting": true, "subagents": subagents})
 	// --- Herdr
 	case "session.list":
 		if f.oldHerdr {

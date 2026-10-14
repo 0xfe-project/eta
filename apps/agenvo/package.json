@@ -3,7 +3,7 @@
   "private": true,
   "agenvo": {
     "repository": "https://github.com/AkaraChen/agenvo",
-    "commit": "5ec6084157f7544e1317eb189f0b93be09a565fa"
+    "commit": "773743bb25c4a0eae196da92528669e2458798ba"
   },
   "scripts": {
     "build": "bash ../../scripts/build/agenvo.sh"
