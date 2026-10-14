@@ -4,7 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { GroupInfo } from "./groups";
+import { GroupArtifacts, GroupMembers } from "./groups";
 import { Inbox } from "./inbox";
 import { Overview } from "./overview";
 import { RefreshButton } from "./refresh-button";
@@ -14,8 +14,7 @@ import { SettingsButton } from "./settings-dialog";
 import { useTaskNav } from "./task-nav";
 import { Tasks } from "./tasks";
 import { useAttention } from "./use-attention";
-import { useGroups } from "./use-groups";
-import { hasPage, sectionPaths, views } from "./workspace-search";
+import { hasPage, sectionPaths, usePanelViews } from "./workspace-search";
 
 /** Opens the full window at the side panel's current data context. */
 function FullWindowButton({ view }: { view: WorkspaceView }) {
@@ -41,9 +40,9 @@ function FullWindowButton({ view }: { view: WorkspaceView }) {
 }
 
 /**
- * The home page's side panel. A direct chat has no group info, so its panel
- * leaves the group tab out and shows the overview in its place, whatever
- * the URL says.
+ * The home page's side panel. A group chat's holds the group (成员 and
+ * Artifacts); a direct chat's the workspace. A view the panel has no tab for,
+ * such as an old link's, opens its first tab.
  */
 export function WorkspacePanel({
   view: linked,
@@ -55,9 +54,10 @@ export function WorkspacePanel({
   className?: string;
 }) {
   const pending = useAttention().total;
-  const direct = useGroups().current?.kind === "direct";
-  const tabs = direct ? views.filter((v) => v.value !== "group") : views;
-  const view = direct && linked === "group" ? "overview" : linked;
+  const tabs = usePanelViews();
+  const view = tabs.some((tab) => tab.value === linked)
+    ? linked
+    : tabs[0].value;
   return (
     <Tabs
       id="workspace-panel"
@@ -97,7 +97,8 @@ export function WorkspacePanel({
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {tabs.map(({ value }) => (
           <TabsContent key={value} value={value}>
-            {value === "group" ? <GroupInfo /> : null}
+            {value === "members" ? <GroupMembers /> : null}
+            {value === "artifacts" ? <GroupArtifacts /> : null}
             {value === "overview" ? <Overview /> : null}
             {value === "tasks" ? <Tasks /> : null}
             {value === "routines" ? <Routines /> : null}

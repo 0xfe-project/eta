@@ -1,4 +1,5 @@
 import type { Group } from "@/queries/chat";
+import { AppWindowIcon } from "@phosphor-icons/react/AppWindow";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
@@ -6,6 +7,7 @@ import { UsersThreeIcon } from "@phosphor-icons/react/UsersThree";
 import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { Empty, Loading } from "@/components/states";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -377,7 +379,8 @@ export function ArchivedGroups() {
   );
 }
 
-export function GroupInfo() {
+/** A group chat's 成员 tab: who is in it, and the group's own actions. */
+export function GroupMembers() {
   const { data: chat } = useQuery(chatQueryOptions());
   const { current: group, groups } = useGroups();
   const { agents, openEditor } = useAgents();
@@ -387,189 +390,177 @@ export function GroupInfo() {
   const [goal, setGoal] = useState("");
   const [decided, setDecided] = useState("");
   const { data: board } = useTasks();
-  const { data: artifacts } = useArtifacts();
   const updateTask = useUpdateTask();
   const [linkTask, setLinkTask] = useState(false);
   const [invite, setInvite] = useState(false);
   const [removing, setRemoving] = useState<Group["participants"][number]>();
-  if (!group)
-    return (
-      <p className="p-4 text-sm text-muted-foreground">选一个群开始讨论。</p>
-    );
+  if (!group) return null;
   const members = group.participants.filter((p) => p.member);
+  const linked = board?.tasks.filter((t) => t.group_id === group.id) ?? [];
   return (
-    <div className="grid gap-6 p-2">
-      <div className="flex items-center gap-2">
-        <h2 className="min-w-0 flex-1 truncate font-medium">{group.name}</h2>
-        <Button
-          size="xs"
-          variant="ghost"
-          onClick={() => {
-            setName(group.name);
-            setGoal(group.goal);
-            setDecided(group.decided);
-            setEdit(true);
-          }}
-        >
-          编辑
-        </Button>
-        <Button
-          size="xs"
-          variant="ghost"
-          onClick={() =>
-            update.mutate(
-              { id: group.id, archived: !group.archived },
-              { onError },
-            )
-          }
-        >
-          {group.archived ? "取消归档" : "归档"}
-        </Button>
-      </div>
-      <section>
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-xs text-muted-foreground">
-            {group.kind === "direct" ? "私聊" : `成员 · ${members.length}`}
-          </h3>
-          {group.kind === "group" && !group.archived && (
-            <Button size="xs" variant="ghost" onClick={() => setInvite(true)}>
-              邀请
-            </Button>
-          )}
-        </div>
-        <ul className="grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-1">
-          {members.map((p) => {
-            const agent = agents.find((a) => a.id === p.agent_id);
-            const active = chat?.messages.find(
-              (m) =>
-                m.agent_id === p.agent_id &&
-                ["responding", "waiting_for_input", "stopping"].includes(
-                  m.status,
-                ),
-            );
-            const elsewhere =
-              active && active.group_id !== group.id
-                ? groups.find((g) => g.id === active.group_id)?.name
-                : undefined;
-            const removable = group.kind === "group" && members.length > 1;
-            return (
-              <li
-                key={p.agent_id}
-                className="flex min-h-12 min-w-0 items-center gap-2"
-              >
-                <AgentAvatar agent={{ id: p.agent_id }} />
-                <div className="min-w-0 flex-1 text-sm">
-                  <span className="block truncate" title={p.name}>
-                    {p.name}
-                  </span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {elsewhere ? (
-                      `在「${elsewhere}」回复中`
-                    ) : agent ? (
-                      <AgentStatus status={agent.status} />
-                    ) : (
-                      "已删除"
-                    )}
-                  </span>
-                </div>
-                {(agent || removable) && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        aria-label={`${p.name} 的操作`}
-                      >
-                        <DotsThreeIcon aria-hidden="true" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {agent && (
-                        <DropdownMenuItem onSelect={() => openEditor(agent.id)}>
-                          设置
-                        </DropdownMenuItem>
-                      )}
-                      {removable && (
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onSelect={() => setRemoving(p)}
-                        >
-                          移除
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-        <AlertDialog
-          open={!!removing}
-          onOpenChange={(open) => !open && setRemoving(undefined)}
-        >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle className="wrap-anywhere">
-                把「{removing?.name}」移出群？
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                它不再收到这个群的消息，之后可以重新邀请。
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>取消</AlertDialogCancel>
-              <AlertDialogAction
-                variant="destructive"
-                disabled={member.isPending}
-                onClick={() =>
-                  removing &&
-                  member.mutate(
-                    {
-                      groupId: group.id,
-                      agentId: removing.agent_id,
-                      member: false,
-                    },
-                    { onError },
-                  )
-                }
-              >
-                移除
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </section>
-      <section>
-        <h3 className="mb-3 text-xs text-muted-foreground">群简报</h3>
-        <div className="space-y-4 border-l-2 pl-3 text-sm">
-          <div>
-            <h4 className="mb-1 font-medium">目标</h4>
-            <p className="whitespace-pre-wrap text-muted-foreground">
-              {group.goal || "还没有目标"}
-            </p>
-          </div>
-          <div>
-            <h4 className="mb-1 font-medium">已决定</h4>
-            <p className="whitespace-pre-wrap text-muted-foreground">
-              {group.decided || "还没有记录决定"}
-            </p>
-          </div>
-        </div>
-      </section>
-      <section>
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-xs text-muted-foreground">相关任务</h3>
-          <Button size="xs" variant="ghost" onClick={() => setLinkTask(true)}>
-            关联任务
+    <section aria-label="成员">
+      <div className="mb-2 flex items-center gap-1">
+        <h3 className="flex-1 text-xs text-muted-foreground tabular-nums">
+          {members.length} 位成员
+        </h3>
+        {!group.archived && (
+          <Button size="xs" variant="ghost" onClick={() => setInvite(true)}>
+            邀请
           </Button>
-        </div>
-        <div className="space-y-2">
-          {board?.tasks
-            .filter((t) => t.group_id === group.id)
-            .map((t) => (
-              <div key={t.id}>
+        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="icon-sm" variant="ghost" aria-label="群操作">
+              <DotsThreeIcon aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onSelect={() => {
+                setName(group.name);
+                setGoal(group.goal);
+                setDecided(group.decided);
+                setEdit(true);
+              }}
+            >
+              编辑群信息
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setLinkTask(true)}>
+              相关任务
+              {linked.length ? (
+                <span className="ml-auto text-xs tabular-nums text-muted-foreground">
+                  {linked.length}
+                </span>
+              ) : null}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() =>
+                update.mutate(
+                  { id: group.id, archived: !group.archived },
+                  { onError },
+                )
+              }
+            >
+              {group.archived ? "取消归档" : "归档"}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      <ul className="grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-1">
+        {members.map((p) => {
+          const agent = agents.find((a) => a.id === p.agent_id);
+          const active = chat?.messages.find(
+            (m) =>
+              m.agent_id === p.agent_id &&
+              ["responding", "waiting_for_input", "stopping"].includes(
+                m.status,
+              ),
+          );
+          const elsewhere =
+            active && active.group_id !== group.id
+              ? groups.find((g) => g.id === active.group_id)?.name
+              : undefined;
+          const removable = group.kind === "group" && members.length > 1;
+          return (
+            <li
+              key={p.agent_id}
+              className="flex min-h-12 min-w-0 items-center gap-2"
+            >
+              <AgentAvatar agent={{ id: p.agent_id }} />
+              <div className="min-w-0 flex-1 text-sm">
+                <span className="block truncate" title={p.name}>
+                  {p.name}
+                </span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {elsewhere ? (
+                    `在「${elsewhere}」回复中`
+                  ) : agent ? (
+                    <AgentStatus status={agent.status} />
+                  ) : (
+                    "已删除"
+                  )}
+                </span>
+              </div>
+              {(agent || removable) && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label={`${p.name} 的操作`}
+                    >
+                      <DotsThreeIcon aria-hidden="true" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {agent && (
+                      <DropdownMenuItem onSelect={() => openEditor(agent.id)}>
+                        设置
+                      </DropdownMenuItem>
+                    )}
+                    {removable && (
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onSelect={() => setRemoving(p)}
+                      >
+                        移除
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <AlertDialog
+        open={!!removing}
+        onOpenChange={(open) => !open && setRemoving(undefined)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="wrap-anywhere">
+              把「{removing?.name}」移出群？
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              它不再收到这个群的消息，之后可以重新邀请。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={member.isPending}
+              onClick={() =>
+                removing &&
+                member.mutate(
+                  {
+                    groupId: group.id,
+                    agentId: removing.agent_id,
+                    member: false,
+                  },
+                  { onError },
+                )
+              }
+            >
+              移除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <Dialog open={linkTask} onOpenChange={setLinkTask}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>相关任务</DialogTitle>
+            <DialogDescription>
+              任务只关联一个群，重新关联会替换之前的群。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid max-h-96 gap-2 overflow-y-auto">
+            {linked.map((t) => (
+              <div key={t.id} className="flex min-w-0 items-center gap-1">
                 <ActivityRefCard
+                  className="min-w-0 flex-1"
                   value={{
                     kind: "task",
                     id: t.id,
@@ -581,6 +572,7 @@ export function GroupInfo() {
                 <Button
                   size="xs"
                   variant="ghost"
+                  disabled={updateTask.isPending}
                   onClick={() =>
                     updateTask.mutate(
                       { id: t.id, changes: { group_id: "" } },
@@ -592,35 +584,6 @@ export function GroupInfo() {
                 </Button>
               </div>
             ))}
-        </div>
-      </section>
-      <section>
-        <h3 className="mb-2 text-xs text-muted-foreground">Artifacts</h3>
-        <div className="space-y-2">
-          {artifacts?.artifacts
-            .filter((a) => a.group_id === group.id)
-            .map((a) => (
-              <ActivityRefCard
-                key={a.id}
-                value={{
-                  kind: "artifact",
-                  id: a.id,
-                  title: a.title,
-                  number: a.versions[0]?.number,
-                }}
-              />
-            ))}
-        </div>
-      </section>
-      <Dialog open={linkTask} onOpenChange={setLinkTask}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>关联任务</DialogTitle>
-            <DialogDescription>
-              任务只关联一个群，重新关联会替换之前的群。
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid max-h-80 gap-1 overflow-y-auto">
             {board?.tasks
               .filter((t) => t.group_id !== group.id)
               .map((t) => (
@@ -629,14 +592,15 @@ export function GroupInfo() {
                   variant="ghost"
                   className="justify-start truncate"
                   disabled={updateTask.isPending || group.archived}
+                  aria-label={`关联 #${t.number} ${t.title}`}
                   onClick={() =>
                     updateTask.mutate(
                       { id: t.id, changes: { group_id: group.id } },
-                      { onError, onSuccess: () => setLinkTask(false) },
+                      { onError },
                     )
                   }
                 >
-                  #{t.number} {t.title}
+                  <PlusIcon aria-hidden="true" />#{t.number} {t.title}
                 </Button>
               ))}
           </div>
@@ -729,6 +693,37 @@ export function GroupInfo() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </section>
+  );
+}
+
+/** A group chat's Artifacts tab: what its agents published in it. */
+export function GroupArtifacts() {
+  const { current: group } = useGroups();
+  const { data } = useArtifacts();
+  if (!group) return null;
+  const artifacts = data?.artifacts.filter((a) => a.group_id === group.id);
+  if (!data) return <Loading rows={2} />;
+  if (!artifacts?.length)
+    return (
+      <Empty icon={AppWindowIcon} title="还没有 Artifacts">
+        智能体在这个群里发布的页面会出现在这里。
+      </Empty>
+    );
+  return (
+    <ul aria-label="Artifacts" className="space-y-2">
+      {artifacts.map((a) => (
+        <li key={a.id}>
+          <ActivityRefCard
+            value={{
+              kind: "artifact",
+              id: a.id,
+              title: a.title,
+              number: a.versions[0]?.number,
+            }}
+          />
+        </li>
+      ))}
+    </ul>
   );
 }

@@ -104,7 +104,7 @@ export function Workspace({
         {
           label: "查看群信息",
           onClick: () => {
-            onViewChange("group");
+            onViewChange("members");
             setMobilePanel("workspace");
           },
         },
@@ -137,7 +137,7 @@ export function Workspace({
   const direct = group?.kind === "direct" ? members[0] : undefined;
   const showInfo = () => {
     if (direct) return openEditor(direct.agent_id);
-    onViewChange("group");
+    onViewChange("members");
     setMobilePanel("workspace");
   };
   return (
