@@ -3,9 +3,10 @@ import { BellIcon } from "@phosphor-icons/react/Bell";
 import { BrainIcon } from "@phosphor-icons/react/Brain";
 import { ChatsCircleIcon } from "@phosphor-icons/react/ChatsCircle";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
+import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
-import { Link } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { Empty, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -143,26 +144,39 @@ export function Sidebar() {
   );
 }
 
-/** Mobile A: lists first, with a persistent bottom navigation outside a conversation. */
+/**
+ * Mobile A: lists first, with a persistent bottom navigation outside a
+ * conversation. 更多 stays lit on the pages it leads to.
+ */
 export function BottomNav() {
   const badges = useBadges();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const tabs = [
-    sections[0],
-    sections[2],
-    sections[1],
-    { to: "/workspace", label: "更多", icon: ListChecksIcon },
+    { ...sections[0], also: [] },
+    { ...sections[2], also: [] },
+    { ...sections[1], also: [] },
+    {
+      to: "/workspace/more",
+      label: "更多",
+      icon: DotsThreeIcon,
+      also: ["/workspace", "/workspace/routines", "/workspace/memory"],
+    },
   ] as const;
   return (
     <nav
       aria-label="分区"
       className="flex shrink-0 border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden"
     >
-      {tabs.map(({ to, label, icon: Icon }) => (
+      {tabs.map(({ to, label, icon: Icon, also }) => (
         <Link
           key={to}
           to={to}
           search={{}}
-          className="flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-xs text-muted-foreground"
+          className={cn(
+            "flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-xs text-muted-foreground",
+            (also as readonly string[]).includes(pathname) &&
+              "bg-muted/50 text-foreground",
+          )}
           activeOptions={{ exact: true, includeSearch: false }}
           activeProps={{ className: "text-foreground bg-muted/50" }}
         >
