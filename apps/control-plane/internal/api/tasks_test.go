@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -397,6 +398,8 @@ type taskEnv struct {
 	*env
 	relay  *fakeRelay
 	runner *tasks.Runner
+	// Pull requests' heads on GitHub, by URL; others cannot be read.
+	heads map[string]string
 }
 
 // servedVersion is the relay's agenvo version, which connectors should run.
@@ -409,7 +412,17 @@ func newTaskEnv(t *testing.T) *taskEnv {
 	deps := &Deps{DB: e.db, Chat: e.chat, Tasks: service, PublicURL: "https://axp.test"}
 	e.public = Public(deps).Router
 	e.internal = Internal(deps).Router
-	return &taskEnv{env: e, relay: fake, runner: &tasks.Runner{DB: e.db, Service: service}}
+	te := &taskEnv{env: e, relay: fake, runner: &tasks.Runner{DB: e.db, Service: service}, heads: map[string]string{}}
+	var mu sync.Mutex
+	service.PullHead = func(_ context.Context, url string) (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if head, ok := te.heads[url]; ok {
+			return head, nil
+		}
+		return "", errors.New("GitHub App 没有安装到这个仓库")
+	}
+	return te
 }
 
 func (e *taskEnv) remote(token, method, path string, body any) response {

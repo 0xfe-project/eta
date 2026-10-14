@@ -93,6 +93,46 @@ func TestCommentMayStartWithADash(t *testing.T) {
 	}
 }
 
+// assist and review send what the web and the tasks tool send.
+func TestAssistAndReviewSendTheSharedRequest(t *testing.T) {
+	var paths []string
+	var bodies []map[string]any
+	remoteAXP(t, func(w http.ResponseWriter, path string, body map[string]any) {
+		paths, bodies = append(paths, path), append(bodies, body)
+		w.WriteHeader(http.StatusNoContent)
+	})
+	feedback := filepath.Join(t.TempDir(), "feedback.md")
+	_ = os.WriteFile(feedback, []byte("Fix login.css:12."), 0o600)
+	for _, args := range [][]string{
+		{"assist", "paseo/codex", "Review", "it.", "--after", "current", "--rounds", "2", "--key", "k1", "--task", "3"},
+		{"assist", "herdr/claude", "Run the tests.", "--task", "3"},
+		{"review", "changes", "--file", feedback, "--task", "3"},
+		{"review", "pass", "--task", "3"},
+	} {
+		if err := taskCommand(args); err != nil {
+			t.Fatal(args, err)
+		}
+	}
+	if !slices.Equal(paths, []string{"/remote/v1/tasks/3/assists", "/remote/v1/tasks/3/assists", "/remote/v1/tasks/3/review", "/remote/v1/tasks/3/review"}) {
+		t.Fatal(paths)
+	}
+	first, _ := json.Marshal(bodies[0])
+	if string(first) != `{"after_run":"current","key":"k1","loop":{"max_rounds":2},"provider":"codex","request":"Review it.","runtime":"paseo"}` {
+		t.Fatal(string(first))
+	}
+	if bodies[1]["after_run"] != "" || bodies[1]["loop"] != nil || !strings.HasPrefix(fmt.Sprint(bodies[1]["key"]), "cli-") {
+		t.Fatal(bodies[1])
+	}
+	if bodies[2]["verdict"] != "changes_requested" || bodies[2]["feedback"] != "Fix login.css:12." || bodies[3]["verdict"] != "pass" {
+		t.Fatal(bodies[2:])
+	}
+	for _, bad := range [][]string{{"assist", "codex", "x"}, {"assist", "paseo/codex", "x", "--rounds", "0"}, {"review", "maybe"}} {
+		if err := taskCommand(append(bad, "--task", "3")); err == nil {
+			t.Error(bad)
+		}
+	}
+}
+
 func TestSetupWithACodeEnrollsAgain(t *testing.T) {
 	var enrolledWith any
 	c := remoteAXP(t, func(w http.ResponseWriter, path string, body map[string]any) {

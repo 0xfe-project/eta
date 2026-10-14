@@ -35,6 +35,8 @@ const detail = {
   created_at: at,
   activity: [],
   runs: [],
+  assists: [],
+  loops: [],
 } as unknown as TaskDetail;
 
 const commented = (task: TaskDetail, body: string): TaskDetail => ({

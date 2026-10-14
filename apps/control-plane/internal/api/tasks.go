@@ -31,6 +31,11 @@ type TaskUpdateIn struct {
 	Assignee    *tasks.AssigneeInput `json:"assignee,omitempty"`
 }
 
+// LoopResumeIn raises a review loop's budget as it carries on.
+type LoopResumeIn struct {
+	MaxRounds int `json:"max_rounds,omitempty" minimum:"0" maximum:"10" doc:"Reviews at most; the current budget when 0."`
+}
+
 type CommentIn struct {
 	Body string `json:"body" minLength:"1" maxLength:"20000"`
 }
@@ -43,6 +48,12 @@ type TaskList struct {
 
 type TaskPath struct {
 	TaskID string `path:"task_id" doc:"The task's id or number."`
+}
+
+// TaskItemPath is one of a task's requests for assistance or review loops.
+type TaskItemPath struct {
+	TaskPath
+	ItemID string `path:"item_id"`
 }
 
 type TaskRunPath struct {
@@ -185,6 +196,55 @@ func registerTasks(api huma.API, d *Deps) {
 				}
 				return idempotency.Result[tasks.TaskDetail]{Status: 201, Body: t, Resource: t.ID}, nil
 			})
+		})
+
+	huma.Register(api, taskOp("assistTask", http.MethodPost, "/api/v1/tasks/{task_id}/assists",
+		"请 Agent 协助: ask another agent on the task's computer for one piece of work, now or once the assignee has delivered, optionally as a bounded review loop; the task's status and assignee stay", 201, "tasks"),
+		func(ctx context.Context, in *struct {
+			idempotency.Keyed
+			TaskPath
+			Body tasks.AssistInput
+		}) (*idempotency.Response[tasks.TaskDetail], error) {
+			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[tasks.TaskDetail], error) {
+				t, err := s.Assist(ctx, tx, in.TaskID, in.Body, tasks.User)
+				if err != nil {
+					return idempotency.Result[tasks.TaskDetail]{}, err
+				}
+				return idempotency.Result[tasks.TaskDetail]{Status: 201, Body: t, Resource: t.ID}, nil
+			})
+		})
+
+	// item is a write on one of a task's items (a request, a loop).
+	item := func(id, path, summary string, fn func(ctx context.Context, tx pgx.Tx, task, item string) (*tasks.TaskDetail, error)) {
+		huma.Register(api, taskOp(id, http.MethodPost, path, summary, 200, "tasks"),
+			func(ctx context.Context, in *TaskItemPath) (*httpapi.Body[tasks.TaskDetail], error) {
+				t, err := pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (*tasks.TaskDetail, error) { return fn(ctx, tx, in.TaskID, in.ItemID) })
+				if err != nil {
+					return nil, err
+				}
+				return &httpapi.Body[tasks.TaskDetail]{Body: *t}, nil
+			})
+	}
+	item("cancelTaskAssist", "/api/v1/tasks/{task_id}/assists/{item_id}/cancel",
+		"Cancel a request for assistance, or stop its run; a review loop's stops the loop", s.CancelAssist)
+	item("stopTaskLoop", "/api/v1/tasks/{task_id}/loops/{item_id}/stop", "Stop a review loop", s.StopLoop)
+	huma.Register(api, taskOp("resumeTaskLoop", http.MethodPost, "/api/v1/tasks/{task_id}/loops/{item_id}/resume",
+		"Carry on a blocked or exhausted review loop, with a budget only the user may raise", 200, "tasks"),
+		func(ctx context.Context, in *struct {
+			TaskItemPath
+			Body *LoopResumeIn
+		}) (*httpapi.Body[tasks.TaskDetail], error) {
+			maxRounds := 0
+			if in.Body != nil {
+				maxRounds = in.Body.MaxRounds
+			}
+			t, err := pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (*tasks.TaskDetail, error) {
+				return s.ResumeLoop(ctx, tx, in.TaskID, in.ItemID, maxRounds)
+			})
+			if err != nil {
+				return nil, err
+			}
+			return &httpapi.Body[tasks.TaskDetail]{Body: *t}, nil
 		})
 
 	huma.Register(api, taskOp("interruptTaskRun", http.MethodPost, "/api/v1/tasks/{task_id}/runs/{run_id}/interrupt",

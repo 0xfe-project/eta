@@ -633,7 +633,7 @@ func TestPublicSchemaHasNoInternalFields(t *testing.T) {
 		"/api/v1/computers/{computer_id}", "/api/v1/computers/{computer_id}/install",
 		"/api/v1/computers/{computer_id}/runtimes/{kind}/approve",
 		"/api/v1/computers/{computer_id}/runtimes/{kind}/places", "/api/v1/plugins",
-		"/api/v1/tasks", "/api/v1/tasks/{task_id}", "/api/v1/tasks/{task_id}/comments",
+		"/api/v1/tasks", "/api/v1/tasks/{task_id}", "/api/v1/tasks/{task_id}/assists", "/api/v1/tasks/{task_id}/assists/{item_id}/cancel", "/api/v1/tasks/{task_id}/comments", "/api/v1/tasks/{task_id}/loops/{item_id}/resume", "/api/v1/tasks/{task_id}/loops/{item_id}/stop",
 		"/api/v1/tasks/{task_id}/runs/{run_id}/interrupt", "/api/v1/tasks/{task_id}/runs/{run_id}/log",
 	}
 	if !slices.Equal(paths, want) {
@@ -642,7 +642,7 @@ func TestPublicSchemaHasNoInternalFields(t *testing.T) {
 	// The task board's own vocabulary is not the agents' internals: a
 	// remote computer's runtime (Paseo, Herdr), also where an agenvo script
 	// made a workspace, and a tool call's command.
-	board := regexp.MustCompile(`^(Task|Computer|Assignee|LogEntry|RunLog|Install|Enrollment|Comment|Place|ActivityOperation)`)
+	board := regexp.MustCompile(`^(Task|Computer|Assi(gnee|st)|Loop|Review|LogEntry|RunLog|Install|Enrollment|Comment|Place|ActivityOperation)`)
 	properties := map[string]any{}
 	for schemaName, schema := range spec.Components.Schemas.Map() {
 		if board.MatchString(schemaName) {

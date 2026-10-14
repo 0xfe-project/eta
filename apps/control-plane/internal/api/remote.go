@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -28,11 +29,20 @@ import (
 
 type RemoteBearer struct {
 	Authorization string `header:"Authorization" doc:"Bearer <the computer's token>"`
+	Dir           string `header:"X-Working-Dir" maxLength:"4096" doc:"The CLI's working directory: whose session on the computer it speaks for (the assignee's or an assisting agent's)."`
 }
 
 func (b RemoteBearer) computer(ctx context.Context, d *Deps) (*tasks.RemoteComputer, error) {
 	token, _ := strings.CutPrefix(b.Authorization, "Bearer ")
-	return tasks.Authenticate(ctx, d.DB, token)
+	c, err := tasks.Authenticate(ctx, d.DB, token)
+	if err != nil {
+		return nil, err
+	}
+	// Escaped by the CLI, for paths that are not ASCII.
+	if dir, err := url.PathUnescape(b.Dir); err == nil {
+		c.Dir = dir
+	}
+	return c, nil
 }
 
 type EnrollIn struct {
@@ -172,6 +182,27 @@ func remote(public *httpapi.API, d *Deps) {
 		}) (*struct{}, error) {
 			return nil, remoteWrite(ctx, d, in.RemoteBearer, func(tx pgx.Tx, c *tasks.RemoteComputer) error {
 				return s.RemoteComment(ctx, tx, c, in.TaskID, in.Body.Body)
+			})
+		})
+	})
+	write("remoteAssist", "assists", "Ask another agent on the computer to assist, as the web and the tasks tool do", func(o huma.Operation) {
+		huma.Register(api, o, func(ctx context.Context, in *struct {
+			RemoteTaskPath
+			Body tasks.AssistInput
+		}) (*struct{}, error) {
+			return nil, remoteWrite(ctx, d, in.RemoteBearer, func(tx pgx.Tx, c *tasks.RemoteComputer) error {
+				_, err := s.RemoteAssist(ctx, tx, c, in.TaskID, in.Body)
+				return err
+			})
+		})
+	})
+	write("remoteReview", "review", "Report an assisting agent's structured verdict on its request", func(o huma.Operation) {
+		huma.Register(api, o, func(ctx context.Context, in *struct {
+			RemoteTaskPath
+			Body tasks.ReviewInput
+		}) (*struct{}, error) {
+			return nil, remoteWrite(ctx, d, in.RemoteBearer, func(tx pgx.Tx, c *tasks.RemoteComputer) error {
+				return s.ReportReview(ctx, tx, c, in.TaskID, in.Body)
 			})
 		})
 	})

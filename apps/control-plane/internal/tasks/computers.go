@@ -468,6 +468,9 @@ func (s *Service) Places(ctx context.Context, db pg.DB, id, kind string) (*Place
 type RemoteComputer struct {
 	ID   string
 	Name string
+	// The CLI's working directory, which tells whose session on the
+	// computer it speaks for; empty from a CLI too old to send it.
+	Dir string
 }
 
 func unauthenticated() error {
@@ -605,18 +608,41 @@ func remoteTask(ctx context.Context, db pg.DB, c *RemoteComputer, ref string, lo
 	return r, nil
 }
 
-// activeRun is the computer's current run on the task, if any.
-func activeRun(ctx context.Context, db pg.DB, c *RemoteComputer, taskID string) (*string, error) {
-	var id string
-	err := db.QueryRow(ctx, `SELECT id FROM task_run WHERE task_id = $1 AND computer_id = $2
-		ORDER BY (status = 'running') DESC, created_at DESC LIMIT 1`, taskID, c.ID).Scan(&id)
-	if err == pgx.ErrNoRows {
-		return nil, nil
+// callerRun is the run a CLI call on the task speaks for: the current run
+// of the session whose place its directory is in (the assignee's or an
+// assisting agent's), else the assignee's on the computer. Nil when there
+// is none.
+func callerRun(ctx context.Context, db pg.DB, c *RemoteComputer, taskID string) (*runRow, error) {
+	session := ""
+	if c.Dir != "" {
+		sessions, err := pg.All[sessionRow](ctx, db, `SELECT * FROM task_session WHERE task_id = $1 AND computer_id = $2
+			AND workspace <> '' ORDER BY closed_at IS NULL DESC, length(workspace) DESC, created_at DESC`, taskID, c.ID)
+		if err != nil {
+			return nil, err
+		}
+		dir := filepath.Clean(c.Dir)
+		for _, s := range sessions {
+			root := filepath.Clean(s.Workspace)
+			if dir == root || strings.HasPrefix(dir, root+string(filepath.Separator)) {
+				session = s.ID
+				break
+			}
+		}
 	}
-	if err != nil {
-		return nil, err
+	if session != "" {
+		return pg.One[runRow](ctx, db, `SELECT * FROM task_run WHERE session_id = $1
+			ORDER BY (status = 'running') DESC, created_at DESC LIMIT 1`, session)
 	}
-	return &id, nil
+	return pg.One[runRow](ctx, db, `SELECT * FROM task_run WHERE task_id = $1 AND computer_id = $2 AND NOT assist
+		ORDER BY (status = 'running') DESC, created_at DESC LIMIT 1`, taskID, c.ID)
+}
+
+// runID is the run's id, or nil.
+func (r *runRow) id() *string {
+	if r == nil {
+		return nil
+	}
+	return &r.ID
 }
 
 func (s *Service) RemoteTask(ctx context.Context, db pg.DB, c *RemoteComputer, ref string) (*TaskDetail, error) {
@@ -636,19 +662,25 @@ func (s *Service) RemoteComment(ctx context.Context, tx pgx.Tx, c *RemoteCompute
 	if body == "" {
 		return invalid("评论不能为空。")
 	}
-	run, err := activeRun(ctx, tx, c, r.ID)
+	run, err := callerRun(ctx, tx, c, r.ID)
 	if err != nil {
 		return err
 	}
-	return record(ctx, tx, r.ID, run, "comment", Remote, &body, s.remoteData(ctx, tx, c, r))
+	return record(ctx, tx, r.ID, run.id(), "comment", Remote, &body, remoteData(c, r, run))
 }
 
-func (s *Service) remoteData(ctx context.Context, db pg.DB, c *RemoteComputer, r *taskRow) map[string]any {
+// remoteData is who did it: the computer and the run's agent (its runtime and
+// provider, the name it goes by), and whether it was assisting.
+func remoteData(c *RemoteComputer, r *taskRow, run *runRow) map[string]any {
 	d := map[string]any{"computer_id": c.ID, "computer_name": c.Name}
-	var runtime, provider string
-	if db.QueryRow(ctx, `SELECT runtime, provider FROM task_run WHERE task_id = $1 AND computer_id = $2
-		ORDER BY created_at DESC LIMIT 1`, r.ID, c.ID).Scan(&runtime, &provider) == nil {
-		d["runtime"], d["provider"] = runtime, provider
+	switch {
+	case run != nil:
+		d["runtime"], d["provider"] = run.Runtime, run.Provider
+		if run.Assist {
+			d["assist"] = true
+		}
+	case r.ComputerID != nil && *r.ComputerID == c.ID:
+		d["runtime"], d["provider"] = deref(r.Runtime), deref(r.Provider)
 	}
 	return d
 }
@@ -664,11 +696,14 @@ func (s *Service) RemoteStatus(ctx context.Context, tx pgx.Tx, c *RemoteComputer
 	if err != nil {
 		return err
 	}
-	run, err := activeRun(ctx, tx, c, r.ID)
+	run, err := callerRun(ctx, tx, c, r.ID)
 	if err != nil {
 		return err
 	}
-	return setStatus(ctx, tx, r, status, Remote, run, s.remoteData(ctx, tx, c, r))
+	if run != nil && run.Assist {
+		return apierr.New(403, "ASSISTING", "你是来协助的 Agent，不能改任务状态：把结论用 axp task comment 回复在任务下，状态由用户和主执行者决定。")
+	}
+	return setStatus(ctx, tx, r, status, Remote, run.id(), remoteData(c, r, run))
 }
 
 type Deliverable struct {
@@ -682,13 +717,13 @@ func (s *Service) RecordDeliverable(ctx context.Context, tx pgx.Tx, c *RemoteCom
 	if err != nil {
 		return err
 	}
-	run, err := activeRun(ctx, tx, c, r.ID)
+	run, err := callerRun(ctx, tx, c, r.ID)
 	if err != nil {
 		return err
 	}
-	data := s.remoteData(ctx, tx, c, r)
+	data := remoteData(c, r, run)
 	data["kind"], data["url"], data["title"] = in.Kind, in.URL, in.Title
-	return record(ctx, tx, r.ID, run, "deliverable", Remote, nil, data)
+	return record(ctx, tx, r.ID, run.id(), "deliverable", Remote, nil, data)
 }
 
 // ArtifactTask is the id of the task an artifact upload names, when its
@@ -718,12 +753,12 @@ func (s *Service) RecordArtifact(ctx context.Context, tx pgx.Tx, taskID, agentID
 	if err != nil {
 		return err
 	}
-	run, err := activeRun(ctx, tx, c, r.ID)
+	run, err := callerRun(ctx, tx, c, r.ID)
 	if err != nil {
 		return err
 	}
-	for k, v := range s.remoteData(ctx, tx, c, r) {
+	for k, v := range remoteData(c, r, run) {
 		data[k] = v
 	}
-	return record(ctx, tx, r.ID, run, "artifact", Remote, nil, data)
+	return record(ctx, tx, r.ID, run.id(), "artifact", Remote, nil, data)
 }

@@ -1,6 +1,7 @@
 import type {
   AssigneeInput,
   AssigneeOption,
+  AssistInput,
   Computer,
   ComputerRuntime,
   Computers,
@@ -9,8 +10,10 @@ import type {
   Places,
   Task,
   TaskActivity,
+  TaskAssist,
   TaskDetail,
   TaskIn,
+  TaskLoop,
   TaskRun,
   TaskUpdateIn,
 } from "@/api/control-plane.gen";
@@ -36,7 +39,9 @@ export type {
   Places,
   Task,
   TaskActivity,
+  TaskAssist,
   TaskDetail,
+  TaskLoop,
   TaskRun,
 };
 export type TaskStatus = Task["status"];
@@ -163,6 +168,68 @@ export function useCommentTask() {
             header: { "Idempotency-Key": key },
           },
           body: { body },
+        }),
+      ),
+  );
+}
+
+/**
+ * 请 Agent 协助: another agent on the task's computer does one piece of work
+ * on it, beside its assignee. `key` is the Idempotency-Key: a retry of one
+ * request is never a second assist.
+ */
+export function useAssistTask() {
+  return useTaskMutation(
+    ({ id, input, key }: { id: string; input: AssistInput; key: string }) =>
+      unwrap(
+        controlPlane.POST("/api/v1/tasks/{task_id}/assists", {
+          params: {
+            path: { task_id: id },
+            header: { "Idempotency-Key": key },
+          },
+          body: input,
+        }),
+      ),
+  );
+}
+
+/** Cancels a request for assistance, or stops its run. */
+export function useCancelAssist() {
+  return useTaskMutation(({ id, assist }: { id: string; assist: string }) =>
+    unwrap(
+      controlPlane.POST("/api/v1/tasks/{task_id}/assists/{item_id}/cancel", {
+        params: { path: { task_id: id, item_id: assist } },
+      }),
+    ),
+  );
+}
+
+export function useStopLoop() {
+  return useTaskMutation(({ id, loop }: { id: string; loop: string }) =>
+    unwrap(
+      controlPlane.POST("/api/v1/tasks/{task_id}/loops/{item_id}/stop", {
+        params: { path: { task_id: id, item_id: loop } },
+      }),
+    ),
+  );
+}
+
+/** Carries on a paused review loop; only the user may raise its budget. */
+export function useResumeLoop() {
+  return useTaskMutation(
+    ({
+      id,
+      loop,
+      maxRounds,
+    }: {
+      id: string;
+      loop: string;
+      maxRounds: number;
+    }) =>
+      unwrap(
+        controlPlane.POST("/api/v1/tasks/{task_id}/loops/{item_id}/resume", {
+          params: { path: { task_id: id, item_id: loop } },
+          body: { max_rounds: maxRounds },
         }),
       ),
   );

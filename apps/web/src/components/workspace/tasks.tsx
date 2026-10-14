@@ -4,7 +4,9 @@ import type {
   RunStatus,
   Task,
   TaskActivity,
+  TaskAssist,
   TaskDetail,
+  TaskLoop,
   TaskRun,
   TaskStatus,
 } from "@/queries/tasks";
@@ -27,14 +29,7 @@ import { toast } from "sonner";
 import { Markdown } from "@/components/markdown";
 import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,13 +41,15 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { useSendMessage } from "@/queries/chat";
 import {
+  useCancelAssist,
   useCommentTask,
   useCreateTask,
   useDeleteTask,
   useInterruptRun,
+  useResumeLoop,
   useRunLog,
+  useStopLoop,
   useTask,
   useTasks,
   useUpdateTask,
@@ -68,6 +65,8 @@ import { AssigneeFields } from "./assignee-picker";
 import { BackToTop } from "./back-to-top";
 import { when } from "./routine-format";
 import { Select, SelectOption } from "./select-field";
+import { AssistDialog } from "./task-assist";
+import { useTaskDraft } from "./task-draft";
 import {
   ago,
   assigneeLabel,
@@ -75,6 +74,7 @@ import {
   isActive,
   isPullURL,
   placeLabel,
+  providerLabel,
   remoteLabel,
   runStatusLabels,
   statuses,
@@ -83,8 +83,6 @@ import {
 import { useTaskNav } from "./task-nav";
 import { DeliveredPull } from "./task-pulls";
 import { StatusIcon } from "./task-status-icon";
-import { useAgents } from "./use-agents";
-import { useWorkspaceStore } from "./workspace-store";
 
 const showError = (error: Error) => toast.error(error.message);
 
@@ -613,6 +611,14 @@ export function TaskProperties({
           </dd>
         </>
       ) : null}
+      {task.loops.length ? (
+        <>
+          <dt className={propertyLabel}>审查</dt>
+          <dd className="min-w-0">
+            <LoopRow task={task} loop={task.loops.at(-1)!} />
+          </dd>
+        </>
+      ) : null}
       {children}
     </dl>
   );
@@ -666,6 +672,21 @@ function actorName(a: TaskActivity) {
   }
   return "AXP";
 }
+
+/** The agent a request is for, by the name it goes by. */
+function assistAgent(a: TaskActivity) {
+  const agent = (a.data.agent ?? {}) as { runtime?: string; provider?: string };
+  return remoteLabel({
+    computer_name: str(a.data.computer_name) || null,
+    runtime: agent.runtime,
+    provider: agent.provider,
+  });
+}
+
+const verdictLabels: Record<string, string> = {
+  pass: "审查通过",
+  changes_requested: "要求修改",
+};
 
 function str(v: unknown) {
   return typeof v === "string" ? v : "";
@@ -727,6 +748,8 @@ function describe(a: TaskActivity): React.ReactNode {
       );
     case "cleanup":
       return a.body ?? "收尾完成";
+    case "assist":
+      return `请 ${assistAgent(a)} 协助${typeof d.round === "number" && d.loop_id ? `（审查第 ${d.round} 轮）` : ""}`;
     case "run_queued":
       return null;
     case "run_started":
@@ -783,10 +806,16 @@ function Time({ at }: { at: string }) {
 }
 
 /** An event as a line: who, what, when. */
-function EventLine({ a }: { a: TaskActivity }) {
+function EventLine({ a, run }: { a: TaskActivity; run?: TaskRun }) {
+  // A run's events read as the assignee's; an assisting agent's are named.
+  const who = !a.kind.startsWith("run_")
+    ? `${actorName(a)} `
+    : run?.assist
+      ? `${remoteLabel(run)} `
+      : null;
   return (
     <p className="text-muted-foreground wrap-anywhere">
-      {a.kind.startsWith("run_") ? null : `${actorName(a)} `}
+      {who}
       {describe(a)} <Time at={a.created_at} />
     </p>
   );
@@ -889,7 +918,6 @@ function RunEntry({
   run: TaskRun;
   activity: TaskActivity;
 }) {
-  const [open, setOpen] = useState(false);
   return (
     <div className="space-y-1">
       <p className="text-muted-foreground wrap-anywhere">
@@ -900,6 +928,16 @@ function RunEntry({
         })}{" "}
         {describe(activity)} <Time at={activity.created_at} />
       </p>
+      <RunControls task={task} run={run} />
+    </div>
+  );
+}
+
+/** How a run went, stopping it, and its log on demand. */
+function RunControls({ task, run }: { task: TaskDetail; run: TaskRun }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
       <div className="-ml-2 flex flex-wrap items-center gap-x-1">
         <span className="px-2">
           <RunStatusText run={run} />
@@ -925,6 +963,246 @@ function RunEntry({
         </p>
       ) : null}
       {open ? <RunLog task={task.id} run={run} /> : null}
+    </>
+  );
+}
+
+const assistStateLabels: Record<TaskAssist["state"], string> = {
+  waiting: "等待中",
+  blocked: "没有开始",
+  started: "已开始",
+  cancelled: "已取消",
+};
+
+const loopStateLabels: Record<TaskLoop["state"], string> = {
+  active: "进行中",
+  passed: "已通过",
+  exhausted: "轮数用尽，等你决定",
+  blocked: "受阻，等你决定",
+  stopped: "已停止",
+};
+
+/**
+ * A request of an assisting agent: whom (by name only), what, and where it
+ * stands: waiting or blocked and why, or its run, pinned at the commit it
+ * was given.
+ */
+function AssistEntry({
+  task,
+  activity,
+}: {
+  task: TaskDetail;
+  activity: TaskActivity;
+}) {
+  const cancel = useCancelAssist();
+  const assist = task.assists.find((x) => x.id === activity.data.assist_id);
+  const run = assist?.run_id
+    ? task.runs.find((r) => r.id === assist.run_id)
+    : undefined;
+  const waiting = assist?.state === "waiting" || assist?.state === "blocked";
+  return (
+    <div className="space-y-1">
+      <p className="flex flex-wrap items-baseline gap-x-2">
+        <span className="text-xs wrap-anywhere">
+          <span className="font-medium">{actorName(activity)}</span>{" "}
+          <span className="text-muted-foreground">{describe(activity)}</span>
+        </span>
+        <Time at={activity.created_at} />
+      </p>
+      <Folded max="max-h-40">
+        <Markdown className="text-sm">{activity.body ?? ""}</Markdown>
+      </Folded>
+      {assist?.pull_url ? (
+        <p className="text-xs text-muted-foreground wrap-anywhere">
+          <GitPullRequestIcon
+            aria-hidden="true"
+            className="mr-1 inline size-3.5 align-[-2px]"
+          />
+          <a
+            href={assist.pull_url}
+            target="_blank"
+            rel="noreferrer"
+            className="underline underline-offset-4"
+          >
+            {assist.pull_url.replace("https://github.com/", "")}
+          </a>
+          {assist.head_sha ? (
+            <>
+              {" "}
+              @ <code>{assist.head_sha.slice(0, 7)}</code>
+            </>
+          ) : null}
+        </p>
+      ) : null}
+      {assist && !run ? (
+        <div className="-ml-2 flex flex-wrap items-center gap-x-1">
+          <span
+            className={cn(
+              "px-2 text-xs wrap-anywhere",
+              assist.state === "blocked"
+                ? "text-destructive"
+                : "text-muted-foreground",
+            )}
+          >
+            {assistStateLabels[assist.state]}
+            {assist.reason ? `：${assist.reason}` : ""}
+          </span>
+          {waiting ? (
+            <Button
+              variant="ghost"
+              size="xs"
+              disabled={cancel.isPending}
+              onClick={() =>
+                cancel.mutate(
+                  { id: task.id, assist: assist.id },
+                  { onError: showError },
+                )
+              }
+            >
+              取消
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      {run ? <RunControls task={task} run={run} /> : null}
+    </div>
+  );
+}
+
+/**
+ * The task's latest review loop: its round and state, and what the user
+ * alone may do with it: carry it on (with more rounds) or stop it.
+ */
+function LoopRow({ task, loop }: { task: TaskDetail; loop: TaskLoop }) {
+  const stop = useStopLoop();
+  const resume = useResumeLoop();
+  const [rounds, setRounds] = useState(() =>
+    String(Math.min(10, Math.max(loop.max_rounds, loop.rounds + 1))),
+  );
+  const paused = loop.state === "exhausted" || loop.state === "blocked";
+  const open = paused || loop.state === "active";
+  return (
+    <div className="space-y-1 py-1.5 text-sm">
+      <p className="wrap-anywhere">
+        {remoteLabel({
+          computer_name: task.assignee.computer_name,
+          runtime: loop.runtime,
+          provider: loop.provider,
+        })}{" "}
+        <span className="text-muted-foreground">
+          · 已审 {loop.rounds}/{loop.max_rounds} 轮 ·{" "}
+          {loopStateLabels[loop.state]}
+        </span>
+      </p>
+      {loop.reason ? (
+        <p
+          className={cn(
+            "text-xs wrap-anywhere",
+            paused ? "text-destructive" : "text-muted-foreground",
+          )}
+        >
+          {loop.reason}
+        </p>
+      ) : null}
+      {open ? (
+        <div className="-ml-2 flex flex-wrap items-center gap-x-1">
+          {paused ? (
+            <>
+              <Select
+                aria-label="审查轮数上限"
+                size="sm"
+                className="ml-2 w-16"
+                value={rounds}
+                onValueChange={setRounds}
+              >
+                {Array.from({ length: 10 }, (_, i) => String(i + 1))
+                  .filter((n) => Number(n) > loop.rounds)
+                  .map((n) => (
+                    <SelectOption key={n} value={n}>
+                      {n}
+                    </SelectOption>
+                  ))}
+              </Select>
+              <Button
+                variant="ghost"
+                size="xs"
+                disabled={resume.isPending || Number(rounds) <= loop.rounds}
+                onClick={() =>
+                  resume.mutate(
+                    { id: task.id, loop: loop.id, maxRounds: Number(rounds) },
+                    { onError: showError },
+                  )
+                }
+              >
+                继续审查
+              </Button>
+            </>
+          ) : null}
+          <Button
+            variant="ghost"
+            size="xs"
+            disabled={stop.isPending}
+            onClick={() =>
+              stop.mutate(
+                { id: task.id, loop: loop.id },
+                { onError: showError },
+              )
+            }
+          >
+            停止循环
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Under an assisting agent's answer: ask it more, or pass it on. */
+function AssistReplyActions({
+  task,
+  activity,
+}: {
+  task: TaskDetail;
+  activity: TaskActivity;
+}) {
+  const [asking, setAsking] = useState(false);
+  const setDraft = useTaskDraft((s) => s.setDraft);
+  const runtime = str(activity.data.runtime);
+  const provider = str(activity.data.provider);
+  const remote = task.assignee.kind === "remote";
+  return (
+    <div className="-ml-2 flex flex-wrap gap-x-1">
+      <Button size="xs" variant="ghost" onClick={() => setAsking(true)}>
+        追问 {providerLabel(provider)}
+      </Button>
+      {remote ? (
+        <Button
+          size="xs"
+          variant="ghost"
+          onClick={() => {
+            const quote = (activity.body ?? "")
+              .split("\n")
+              .map((line) => `> ${line}`)
+              .join("\n");
+            setDraft(
+              task.id,
+              (draft) =>
+                `${draft ? `${draft}\n\n` : ""}${actorName(activity)} 的协助结果：\n\n${quote}\n\n`,
+            );
+            const box = document.getElementById(commentBoxId);
+            box?.scrollIntoView({ block: "center" });
+            box?.focus({ preventScroll: true });
+          }}
+        >
+          交给主执行者
+        </Button>
+      ) : null}
+      <AssistDialog
+        task={task}
+        open={asking}
+        onOpenChange={setAsking}
+        agent={{ runtime, provider }}
+      />
     </div>
   );
 }
@@ -1001,8 +1279,19 @@ const dot = (destructive = false) => (
  */
 export function Timeline({ task }: { task: TaskDetail }) {
   // Runs show where they started; their queueing is not news.
-  const items = entries(task.activity.filter((a) => describe(a) !== null));
   const runs = new Map(task.runs.map((r) => [r.id, r]));
+  // An assist's run starts and ends where it was asked for.
+  const items = entries(
+    task.activity.filter(
+      (a) =>
+        describe(a) !== null &&
+        !(
+          (a.kind === "run_started" || a.kind === "run_completed") &&
+          a.run_id &&
+          runs.get(a.run_id)?.assist
+        ),
+    ),
+  );
   return (
     <ol aria-label="时间线">
       {items.map((a, i) => {
@@ -1013,7 +1302,7 @@ export function Timeline({ task }: { task: TaskDetail }) {
               <Changes items={a} />
             </Entry>
           );
-        if (a.kind === "comment")
+        if (a.kind === "comment" || a.kind === "review")
           return (
             <Entry
               key={a.id}
@@ -1032,9 +1321,42 @@ export function Timeline({ task }: { task: TaskDetail }) {
                 </span>
                 <Time at={a.created_at} />
               </p>
+              {a.kind === "review" ? (
+                <p className="mt-1 text-xs">
+                  <span
+                    className={cn(
+                      "font-medium",
+                      a.data.verdict !== "pass" && "text-destructive",
+                    )}
+                  >
+                    {verdictLabels[str(a.data.verdict)] ?? str(a.data.verdict)}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {typeof a.data.round === "number"
+                      ? ` · 第 ${a.data.round}/${String(a.data.max_rounds)} 轮`
+                      : ""}
+                    {str(a.data.head_sha)
+                      ? ` · 提交 ${str(a.data.head_sha).slice(0, 7)}`
+                      : ""}
+                  </span>
+                </p>
+              ) : null}
               <Folded max="max-h-60" className="mt-1">
                 <Markdown className="text-sm">{a.body ?? ""}</Markdown>
               </Folded>
+              {a.actor.kind === "remote" && a.data.assist === true ? (
+                <AssistReplyActions task={task} activity={a} />
+              ) : null}
+            </Entry>
+          );
+        if (a.kind === "assist")
+          return (
+            <Entry
+              key={a.id}
+              last={last}
+              mark={<span className="size-2 bg-foreground" />}
+            >
+              <AssistEntry task={task} activity={a} />
             </Entry>
           );
         const run = a.kind === "run_started" && a.run_id && runs.get(a.run_id);
@@ -1043,7 +1365,10 @@ export function Timeline({ task }: { task: TaskDetail }) {
             {run ? (
               <RunEntry task={task} run={run} activity={a} />
             ) : (
-              <EventLine a={a} />
+              <EventLine
+                a={a}
+                run={a.run_id ? runs.get(a.run_id) : undefined}
+              />
             )}
           </Entry>
         );
@@ -1075,10 +1400,13 @@ interface Outgoing {
 }
 
 export function CommentBox({ task }: { task: TaskDetail }) {
-  const [text, setText] = useState("");
+  const text = useTaskDraft((s) => s.drafts[task.id] ?? "");
+  const setDraft = useTaskDraft((s) => s.setDraft);
+  const setText = (update: string | ((draft: string) => string)) =>
+    setDraft(task.id, update);
   const [outgoing, setOutgoing] = useState<Outgoing | null>(null);
   const comment = useCommentTask();
-  const [feedback, setFeedback] = useState(false);
+  const [assisting, setAssisting] = useState(false);
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -1187,10 +1515,9 @@ export function CommentBox({ task }: { task: TaskDetail }) {
             type="button"
             size="sm"
             variant="outline"
-            onClick={() => setFeedback(true)}
+            onClick={() => setAssisting(true)}
           >
-            <RobotIcon aria-hidden="true" />
-            让智能体反馈
+            <RobotIcon aria-hidden="true" />请 Agent 协助
           </Button>
           <Button
             type="submit"
@@ -1210,7 +1537,7 @@ export function CommentBox({ task }: { task: TaskDetail }) {
           </Button>
         </div>
       </form>
-      <FeedbackDialog task={task} open={feedback} onOpenChange={setFeedback} />
+      <AssistDialog task={task} open={assisting} onOpenChange={setAssisting} />
     </>
   );
 }
@@ -1269,115 +1596,6 @@ function OutgoingComment({
         )}
       </Entry>
     </ol>
-  );
-}
-
-/** Ask one of the AXP agents to look at the task and give feedback on it. */
-function FeedbackDialog({
-  task,
-  open,
-  onOpenChange,
-}: {
-  task: TaskDetail;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const { agents } = useAgents();
-  const send = useSendMessage();
-  const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
-  const [agentId, setAgentId] = useState<string>("");
-  const [mode, setMode] = useState<"queue" | "steer">("queue");
-  const [note, setNote] = useState("");
-  const chosen = agentId || agents.at(-1)?.id || "";
-  const text = [
-    `请看一下任务 #${task.number}「${task.title}」，读它的描述和时间线（get_task），然后用 comment_task 在任务下给出你的反馈。`,
-    note.trim(),
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>让智能体反馈</DialogTitle>
-          <DialogDescription>
-            给一个 AXP 智能体发一条消息，请它审阅这个任务，并在任务下评论。
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <Field id="feedback-agent" label="智能体">
-            <Select
-              id="feedback-agent"
-              className="w-full"
-              value={chosen}
-              onValueChange={(value) => setAgentId(value)}
-            >
-              {agents.map((agent) => (
-                <SelectOption key={agent.id} value={agent.id}>
-                  {agent.name}
-                </SelectOption>
-              ))}
-            </Select>
-          </Field>
-          <Field
-            label="方式"
-            hint={
-              mode === "queue"
-                ? "排在它手头的工作之后。"
-                : "插进它正在进行的这一轮。"
-            }
-          >
-            <div role="radiogroup" aria-label="方式" className="flex gap-1">
-              {(["queue", "steer"] as const).map((m) => (
-                <Button
-                  key={m}
-                  type="button"
-                  role="radio"
-                  aria-checked={mode === m}
-                  size="sm"
-                  variant={mode === m ? "default" : "outline"}
-                  onClick={() => setMode(m)}
-                >
-                  {m === "queue" ? "排队（queue）" : "插话（steer）"}
-                </Button>
-              ))}
-            </div>
-          </Field>
-          <Field id="feedback-note" label="补充（可选）">
-            <Textarea
-              id="feedback-note"
-              rows={2}
-              maxLength={4000}
-              placeholder="例如：重点看测试是否覆盖了边界情况"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-            />
-          </Field>
-        </div>
-        <DialogFooter>
-          <Button
-            disabled={!chosen || send.isPending}
-            onClick={() =>
-              send.mutate(
-                { agentId: chosen, text, mode },
-                {
-                  onSuccess: () => {
-                    const name = agents.find((a) => a.id === chosen)?.name;
-                    toast(`已发给${name ?? "智能体"}`);
-                    onOpenChange(false);
-                    setNote("");
-                    setMobilePanel("chat");
-                  },
-                  onError: showError,
-                },
-              )
-            }
-          >
-            发送
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 

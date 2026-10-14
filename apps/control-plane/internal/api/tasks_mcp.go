@@ -51,6 +51,16 @@ type commentTaskIn struct {
 	Body string `json:"body" jsonschema:"the comment, in Markdown"`
 }
 
+type assistTaskIn struct {
+	taskRef
+	tasks.AssistInput
+}
+
+type cancelAssistIn struct {
+	taskRef
+	Assist string `json:"assist" jsonschema:"the request's id, from get_task's assists"`
+}
+
 type taskListOut struct {
 	Tasks []tasks.Task `json:"tasks"`
 }
@@ -173,6 +183,29 @@ func tasksMCP(d *Deps) http.Handler {
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in commentTaskIn) (*mcp.CallToolResult, any, error) {
 		t, err := write(ctx, func(tx pgx.Tx, by tasks.Actor) (*tasks.TaskDetail, error) {
 			return s.Comment(ctx, tx, in.Task, in.Body, by)
+		})
+		return taskResult(t), t, err
+	})
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name: "assist_task",
+		Description: "请 Agent 协助: ask another agent on the task's computer (list_assignees) for one piece of work on the task, such as " +
+			"reviewing its pull request, in a worktree of its own; the task's status and assignee stay. It starts now, or with " +
+			"after_run once the assignee's run has completed and delivered (a review then looks at the pull request's head at that " +
+			"moment); requests start one after another in the order asked. With loop it is a bounded review loop: changes it asks for " +
+			"go to the assignee, whose next delivery it reviews again. get_task shows the queue (assists, loops) and the results.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in assistTaskIn) (*mcp.CallToolResult, any, error) {
+		t, err := write(ctx, func(tx pgx.Tx, by tasks.Actor) (*tasks.TaskDetail, error) {
+			return s.Assist(ctx, tx, in.Task, in.AssistInput, by)
+		})
+		return taskResult(t), t, err
+	})
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "cancel_assist",
+		Description: "Cancel a request for assistance that has not started, or stop its run; a review loop's request stops the loop.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in cancelAssistIn) (*mcp.CallToolResult, any, error) {
+		t, err := write(ctx, func(tx pgx.Tx, _ tasks.Actor) (*tasks.TaskDetail, error) {
+			return s.CancelAssist(ctx, tx, in.Task, in.Assist)
 		})
 		return taskResult(t), t, err
 	})

@@ -24,6 +24,10 @@ Agents, where they work on a task (or with --task N):
   axp task show                       the task, its status and comments
   axp task comment <text> | --file F  reply on the task (ends your turn)
   axp task status in_progress|in_review|blocked
+  axp task assist <runtime>/<provider> <request> | --file F [--after current|<run id>] [--rounds N] [--key K]
+                                      ask another agent here to assist (--rounds: a review loop)
+  axp task review pass [<text>] | changes <feedback> | --file F
+                                      an assisting reviewer's verdict
   axp gh <args…>                      gh as AXP's GitHub App; PRs become deliverables
   axp artifact upload <dir|zip> --title T [--artifact ID]
                                       publish a static site (index.html at its root) on the task

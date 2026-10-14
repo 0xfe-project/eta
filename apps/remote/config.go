@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -122,6 +123,12 @@ func send(hc *http.Client, url, token, method, path, contentType string, body io
 	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	// Whose session on this computer the call speaks for: the assignee's,
+	// or an assisting agent's in its own worktree. Not X-AXP-*: the gateway
+	// drops those from clients.
+	if cwd, err := os.Getwd(); err == nil {
+		req.Header.Set("X-Working-Dir", neturl.PathEscape(cwd))
 	}
 	resp, err := hc.Do(req)
 	if err != nil {

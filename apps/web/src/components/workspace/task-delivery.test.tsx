@@ -25,6 +25,8 @@ const task = {
   created_by: { kind: "user" },
   created_at: "2026-10-11T06:00:00Z",
   runs: [],
+  assists: [],
+  loops: [],
   activity: [
     {
       id: "a1",

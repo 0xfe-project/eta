@@ -23,6 +23,18 @@ in_review when its work is ready; checking that work and marking the task
 done is the user's call unless they ask you to. A done task's worktree (or
 the agent AXP started in an existing workspace) is archived.
 
+Another agent on the task's computer can assist with it without taking it
+over (`assist_task`): a review of the pull request, a test run. It works in
+a worktree of its own and replies on the task; the task's status and
+assignee stay. To have one agent build and another review, create the task
+for the builder, then at once `assist_task` the reviewer with
+`after_run: current` (it starts when that run has completed and delivered a
+pull request, pinned at its head) and `loop` (changes it asks for go back
+to the builder and come back for review, at most 3 rounds unless the user
+allows more). Requests start one after another; `get_task` shows them
+(`assists`, `loops`) with their results, `cancel_assist` stops one. Nothing
+merges or completes the task on its own.
+
 - Give a remote agent everything it needs in the description: the goal,
   what done means.
 - Read a task with `get_task` before acting on it: its timeline holds the

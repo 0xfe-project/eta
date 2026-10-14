@@ -210,7 +210,7 @@ func agentUpload(d *Deps) http.HandlerFunc {
 // remoteUpload is `axp artifact upload` on a remote computer.
 func remoteUpload(d *Deps) http.HandlerFunc {
 	return upload(d, func(r *http.Request) (artifacts.Uploader, error) {
-		c, err := RemoteBearer{Authorization: r.Header.Get("Authorization")}.computer(r.Context(), d)
+		c, err := RemoteBearer{Authorization: r.Header.Get("Authorization"), Dir: r.Header.Get("X-Working-Dir")}.computer(r.Context(), d)
 		if err != nil {
 			return artifacts.Uploader{}, err
 		}
