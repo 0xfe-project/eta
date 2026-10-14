@@ -7,13 +7,16 @@ import { SpinnerIcon } from "@phosphor-icons/react/Spinner";
 import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { XCircleIcon } from "@phosphor-icons/react/XCircle";
 import { useTheme } from "next-themes";
+import { useTranslation } from "react-i18next";
 import { Toaster as Sonner } from "sonner";
 
 const Toaster = ({ ...props }: ToasterProps) => {
+  const { t } = useTranslation();
   const { theme = "system", forcedTheme } = useTheme();
 
   return (
     <Sonner
+      containerAriaLabel={t("通知")}
       theme={(forcedTheme ?? theme) as ToasterProps["theme"]}
       className="toaster group"
       offset={{
@@ -41,6 +44,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
         } as React.CSSProperties
       }
       toastOptions={{
+        closeButtonAriaLabel: t("关闭通知"),
         classNames: {
           toast: "cn-toast",
         },

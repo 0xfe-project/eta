@@ -1,4 +1,6 @@
 "use client";
+import { useTranslation } from "react-i18next";
+import { translate } from "@/lib/i18n";
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
@@ -41,27 +43,43 @@ const MODES: Record<
 > = {
   auto: {
     glyph: "⏵⏵",
-    label: "自动模式",
+    get label() {
+      return translate("自动模式");
+    },
     color: "var(--terminal-warning)", // 38;5;220
-    hint: "（Shift+Tab 切换）· ← 查看智能体",
+    get hint() {
+      return translate("（Shift+Tab 切换）· ← 查看智能体");
+    },
   },
   manual: {
     glyph: "⏸",
-    label: "手动模式",
+    get label() {
+      return translate("手动模式");
+    },
     color: GRAY,
-    hint: "· ? 查看快捷键 · ← 查看智能体",
+    get hint() {
+      return translate("· ? 查看快捷键 · ← 查看智能体");
+    },
   },
   "accept-edits": {
     glyph: "⏵⏵",
-    label: "自动接受编辑",
+    get label() {
+      return translate("自动接受编辑");
+    },
     color: "var(--terminal-purple)", // 38;5;147
-    hint: "（Shift+Tab 切换）· ← 查看智能体",
+    get hint() {
+      return translate("（Shift+Tab 切换）· ← 查看智能体");
+    },
   },
   plan: {
     glyph: "⏸",
-    label: "计划模式",
+    get label() {
+      return translate("计划模式");
+    },
     color: "var(--terminal-teal)", // 38;5;73
-    hint: "（Shift+Tab 切换）· ← 查看智能体",
+    get hint() {
+      return translate("（Shift+Tab 切换）· ← 查看智能体");
+    },
   },
 };
 
@@ -76,8 +94,9 @@ const EFFORTS: Record<
   max: { glyph: "◈", label: "max · /effort" },
   ultracode: {
     glyph: "✦",
-    label:
-      "ultracode · xhigh effort + dynamic workflows for maximum thoroughness",
+    get label() {
+      return translate("ultracode · xhigh 推理强度 + 动态工作流，尽可能全面");
+    },
     rainbow: true,
   },
 };
@@ -113,6 +132,7 @@ export function ClaudePrompt({
     style: React.CSSProperties;
   }) => React.ReactNode;
 }) {
+  const { t: translateText } = useTranslation();
   const m = MODES[mode];
   const e = effort === false ? null : EFFORTS[effort];
   const controlled = value !== undefined;
@@ -163,7 +183,7 @@ export function ClaudePrompt({
         ) : (
           <textarea
             rows={1}
-            aria-label="消息"
+            aria-label={translateText("消息")}
             placeholder={placeholder}
             onKeyDown={onKeyDown}
             {...(controlled ? { value, onChange } : { defaultValue, onChange })}

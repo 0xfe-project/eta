@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 /**
  * ClaudeThinking — Claude Code's "working" line.
@@ -38,6 +39,7 @@ export function ClaudeThinking({
   showTokens?: boolean;
   className?: string;
 }) {
+  const { t } = useTranslation();
   const prefersReduced = usePrefersReducedMotion();
   const [glyph, setGlyph] = React.useState(0);
   const [verbIdx, setVerbIdx] = React.useState(0);
@@ -112,9 +114,9 @@ export function ClaudeThinking({
       >
         {prefersReduced ? "✳" : GLYPHS[glyph]}
       </span>
-      <span className="cw-verb">{verb}…</span>
+      <span className="cw-verb">{verbs === VERBS ? t(verb) : verb}…</span>
       <span style={{ color: DIM }}>
-        ({secs}s{tokens} · esc to interrupt)
+        ({secs}s{tokens} · {t("esc 中断")})
       </span>
     </div>
   );

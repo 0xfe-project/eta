@@ -1,4 +1,5 @@
 import type { Draft, FilePart, OutgoingPart } from "@/lib/composer";
+
 import type {
   Agent,
   Block,
@@ -17,6 +18,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { ClaudeHeader } from "@/components/brainless/claude/claude-header";
 import { ClaudeMessage } from "@/components/brainless/claude/claude-message";
 import { ClaudePermission } from "@/components/brainless/claude/claude-permission";
@@ -40,6 +42,7 @@ import {
   onlyText,
   plainDraft,
 } from "@/lib/composer";
+import { listSeparator, translate } from "@/lib/i18n";
 import { mentionedMembers, mentionLabel } from "@/lib/mentions";
 import { ACTIVE_STATUSES } from "@/queries/chat";
 import { useOutbox } from "@/queries/outbox";
@@ -59,13 +62,45 @@ interface SlashCommand {
   takesText?: boolean;
 }
 const SLASH_COMMANDS: SlashCommand[] = [
-  { name: "/stop", description: "停止群内全部回复" },
-  { name: "/queue", description: "当前回复结束后发送", takesText: true },
-  { name: "/steer", description: "插入当前回复", takesText: true },
-  { name: "/compact", description: "压缩上下文" },
+  {
+    name: "/stop",
+    get description() {
+      return translate("停止群内全部回复");
+    },
+  },
+  {
+    name: "/queue",
+    get description() {
+      return translate("当前回复结束后发送");
+    },
+    takesText: true,
+  },
+  {
+    name: "/steer",
+    get description() {
+      return translate("插入当前回复");
+    },
+    takesText: true,
+  },
+  {
+    name: "/compact",
+    get description() {
+      return translate("压缩上下文");
+    },
+  },
 ];
 
-const activityText = { running: "进行中", completed: "完成", failed: "失败" };
+const activityText = {
+  get running() {
+    return translate("进行中");
+  },
+  get completed() {
+    return translate("完成");
+  },
+  get failed() {
+    return translate("失败");
+  },
+};
 // Replies holding the agent's runtime; queued ones wait behind them.
 const EXECUTING = new Set<ChatMessage["status"]>([
   "responding",
@@ -329,6 +364,7 @@ const Turn = memo(
     pending: Interaction[];
     actions: React.RefObject<TurnActions>;
   } & ReplyLine) => {
+    useTranslation();
     if (message.kind === "task_draft" || message.kind === "task_card")
       return <TaskMessage message={message} />;
     if (message.kind === "system") return <GroupNotice message={message} />;
@@ -348,7 +384,9 @@ const Turn = memo(
             <span>
               {author}
               {message.kind === "mention"
-                ? ` → ${String(message.data.to ?? "智能体")}`
+                ? translate(" → {{value1}}", {
+                    value1: String(message.data.to ?? translate("智能体")),
+                  })
                 : ""}
             </span>
           </div>
@@ -377,8 +415,8 @@ const Turn = memo(
           )}
         {pending.map((interaction) => (
           <ClaudePermission
-            title="需要确认"
-            question="是否继续？"
+            title={translate("需要确认")}
+            question={translate("是否继续？")}
             key={interaction.id}
             command={interaction.prompt}
             options={interaction.options.map((option) => option.label)}
@@ -421,61 +459,85 @@ function ReplyState({
   onStop: () => void;
   onResend: (parts: OutgoingPart[], agentId?: string) => void;
 }) {
+  const { t: translateText } = useTranslation();
   switch (message.status) {
     case "responding":
     case "waiting_for_input":
       return (
         <div className="flex items-center gap-3">
           {asking ? null : (
-            <ClaudeThinking verbs={["工作中"]} showTokens={false} />
+            <ClaudeThinking
+              verbs={[translateText("工作中")]}
+              showTokens={false}
+            />
           )}
           <button
             type="button"
             onClick={onStop}
             className="text-xs text-muted-foreground underline underline-offset-2"
           >
-            停止
+            {translateText("停止")}
           </button>
         </div>
       );
     case "stopping":
-      return <ClaudeThinking verbs={["正在停止"]} showTokens={false} />;
+      return (
+        <ClaudeThinking
+          verbs={[translateText("正在停止")]}
+          showTokens={false}
+        />
+      );
     case "queued": {
       if (line.starting)
-        return <ClaudeThinking verbs={["正在启动智能体"]} showTokens={false} />;
+        return (
+          <ClaudeThinking
+            verbs={[translateText("正在启动智能体")]}
+            showTokens={false}
+          />
+        );
       return (
         <div className="flex flex-wrap items-baseline gap-x-3 text-[var(--terminal-muted)]">
           <span>
             {line.elsewhere
-              ? `在「${line.elsewhere}」回复中 · 等待中`
+              ? translateText("在「{{value1}}」回复中 · 等待中", {
+                  value1: line.elsewhere,
+                })
               : line.ahead
-                ? `等待中 · 前面还有 ${line.ahead} 条`
-                : "等待中"}
+                ? translateText("等待中 · 前面还有 {{value1}} 条", {
+                    value1: line.ahead,
+                    count: line.ahead,
+                  })
+                : translateText("等待中")}
           </span>
           <button
             type="button"
             onClick={onStop}
             className="underline underline-offset-2 outline-none hover:text-[var(--terminal-foreground)] focus-visible:ring-1 focus-visible:ring-ring"
           >
-            撤回
+            {translateText("撤回")}
           </button>
         </div>
       );
     }
     case "stopped":
-      return <Warning>已停止</Warning>;
+      return <Warning>{translateText("已停止")}</Warning>;
     case "failed": {
       const parts = line.resend && userParts(line.resend);
       return (
         <ComposerNotice
           message={
             line.sameAsNext
-              ? "此消息未执行，原因同下。"
-              : (message.failure?.message ?? "回复失败。")
+              ? translateText("此消息未执行，原因同下。")
+              : (message.failure?.message ?? translateText("回复失败。"))
           }
           actions={
             parts?.length
-              ? [{ label: "重新发送", onClick: () => onResend(parts) }]
+              ? [
+                  {
+                    label: translateText("重新发送"),
+                    onClick: () => onResend(parts),
+                  },
+                ]
               : []
           }
         />
@@ -563,6 +625,7 @@ export function ChatPanel({
   /** Send a failed reply's message again, as a new message. */
   onResend: (parts: OutgoingPart[], agentId?: string) => void;
 }) {
+  const { t: translateText } = useTranslation();
   const formRef = useRef<HTMLFormElement>(null);
   // The reply in progress; later ones wait behind it.
   const active = messages.find(
@@ -617,11 +680,16 @@ export function ChatPanel({
   const uploads = useOutbox((s) => s.uploads);
   const files = draft.filter((part) => part.type === "file");
   const hold = files.some((f) => uploads[f.id]?.error)
-    ? "有附件上传失败：重试或移除后再发送。"
+    ? translateText("有附件上传失败：重试或移除后再发送。")
     : files.length > MAX_ATTACHMENTS
-      ? `一条消息最多带 ${MAX_ATTACHMENTS} 个附件。`
+      ? translateText("一条消息最多带 {{value1}} 个附件。", {
+          value1: MAX_ATTACHMENTS,
+        })
       : charCount(draftText(draft)) > MAX_MESSAGE_CHARS
-        ? `消息文本超过 ${MAX_MESSAGE_CHARS} 字符，更长的内容请作为文件粘贴。`
+        ? translateText(
+            "消息文本超过 {{value1}} 字符，更长的内容请作为文件粘贴。",
+            { value1: MAX_MESSAGE_CHARS },
+          )
         : undefined;
   const uploading = files.some((f) => !uploads[f.id]?.attachment);
   const matches: SlashCommand[] =
@@ -629,13 +697,16 @@ export function ChatPanel({
       ? []
       : mentionQuery
         ? [
-            { name: "@所有人" as const, description: "唤醒所有群成员" },
+            {
+              name: translateText("@所有人") as `@${string}`,
+              description: translateText("唤醒所有群成员"),
+            },
             ...members.map((p) => ({
               name: `@${mentionLabel(p, members)}` as const,
               description:
                 agents.find((a) => a.id === p.agent_id)?.status === "working"
-                  ? "忙碌 · 消息会排队"
-                  : "请他回复",
+                  ? translateText("忙碌 · 消息会排队")
+                  : translateText("请他回复"),
             })),
           ].filter((c) =>
             c.name
@@ -734,7 +805,9 @@ export function ChatPanel({
         send();
       }
     },
-    placeholder: groupName ? `发消息给 ${groupName}…` : "先创建智能体",
+    placeholder: groupName
+      ? translateText("发消息给 {{value1}}…", { value1: groupName })
+      : translateText("先创建智能体"),
     inputProps: {
       role: "combobox",
       "aria-autocomplete": "list",
@@ -758,11 +831,11 @@ export function ChatPanel({
       onChoose={(command) => choose(command as SlashCommand)}
     />
   ) : null;
-  const model = modelLabel ?? groupName ?? "未选择智能体";
+  const model = modelLabel ?? groupName ?? translateText("未选择智能体");
 
   return (
     <section
-      aria-label="对话"
+      aria-label={translateText("对话")}
       data-session-theme="claude"
       className="relative isolate flex h-full min-h-0 flex-col bg-[var(--terminal-background)]"
     >
@@ -788,7 +861,7 @@ export function ChatPanel({
               ref={transcript.topRef}
               className="text-[var(--terminal-muted)]"
             >
-              加载更早的消息…
+              {translateText("加载更早的消息…")}
             </div>
           ) : (
             <ClaudeHeader
@@ -803,18 +876,20 @@ export function ChatPanel({
           )}
           {error ? <Warning>{error}</Warning> : null}
           {connectionLost && !error ? (
-            <Warning>连接中断，正在重连…显示的状态可能不是最新的。</Warning>
+            <Warning>
+              {translateText("连接中断，正在重连…显示的状态可能不是最新的。")}
+            </Warning>
           ) : null}
           {loading && !error && !messages.length ? (
             <div role="status" className="text-[var(--terminal-muted)]">
-              正在读取对话…
+              {translateText("正在读取对话…")}
             </div>
           ) : null}
           {/* Off-screen turns skip rendering; `auto` remembers their size. */}
           <div
             className="space-y-3 pt-1 *:[contain-intrinsic-size:auto_120px] *:[content-visibility:auto]"
             role="log"
-            aria-label="对话消息"
+            aria-label={translateText("对话消息")}
             aria-live="polite"
           >
             {messages.map((message) => (
@@ -845,14 +920,23 @@ export function ChatPanel({
                   <ComposerNotice
                     message={item.failure}
                     actions={[
-                      { label: "重试", onClick: () => onRetry(item) },
-                      { label: "编辑", onClick: () => onEdit(item) },
-                      { label: "丢弃", onClick: () => onDiscard(item.id) },
+                      {
+                        label: translateText("重试"),
+                        onClick: () => onRetry(item),
+                      },
+                      {
+                        label: translateText("编辑"),
+                        onClick: () => onEdit(item),
+                      },
+                      {
+                        label: translateText("丢弃"),
+                        onClick: () => onDiscard(item.id),
+                      },
                     ]}
                   />
                 ) : (
                   <div role="status" className="text-[var(--terminal-muted)]">
-                    发送中…
+                    {translateText("发送中…")}
                   </div>
                 )}
               </div>
@@ -879,7 +963,7 @@ export function ChatPanel({
             role="status"
             className="px-[1ch] pb-[0.5lh] text-[var(--terminal-muted)]"
           >
-            附件上传中，完成后才能发送。
+            {translateText("附件上传中，完成后才能发送。")}
           </div>
         ) : null}
         {members.length > 1 && (
@@ -903,8 +987,12 @@ export function ChatPanel({
             ))}
             <span>
               {mentioned.length
-                ? `将唤醒 ${mentioned.map((id) => members.find((p) => p.agent_id === id)?.name).join("、")}`
-                : "没 @ 的消息只记入群聊"}
+                ? translateText("将唤醒 {{value1}}", {
+                    value1: mentioned
+                      .map((id) => members.find((p) => p.agent_id === id)?.name)
+                      .join(listSeparator()),
+                  })
+                : translateText("没 @ 的消息只记入群聊")}
             </span>
           </div>
         )}

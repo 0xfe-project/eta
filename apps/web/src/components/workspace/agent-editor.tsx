@@ -8,6 +8,7 @@ import { SlidersHorizontalIcon } from "@phosphor-icons/react/SlidersHorizontal";
 import { TrashIcon } from "@phosphor-icons/react/Trash";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -28,6 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useBundles, useDeleteAgent, useUpdateAgent } from "@/queries/chat";
 import { useModels } from "@/queries/llm";
@@ -57,31 +59,40 @@ export function DeleteAgentDialog({
   onOpenChange: (open: boolean) => void;
   onDeleted?: () => void;
 }) {
+  const { t: translateText } = useTranslation();
   const remove = useDeleteAgent();
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>删除「{agent.name}」？</AlertDialogTitle>
+          <AlertDialogTitle>
+            {translateText("删除「{{value1}}」？", { value1: agent.name })}
+          </AlertDialogTitle>
           <AlertDialogDescription>
-            正在进行的回复会被停止，智能体不再运行。已有的对话记录会保留。
+            {translateText(
+              "正在进行的回复会被停止，智能体不再运行。已有的对话记录会保留。",
+            )}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogCancel>{translateText("取消")}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             onClick={() =>
               remove.mutate(agent.id, {
                 onSuccess: () => {
-                  toast.success(`已删除「${agent.name}」`);
+                  toast.success(
+                    translateText("已删除「{{value1}}」", {
+                      value1: agent.name,
+                    }),
+                  );
                   onDeleted?.();
                 },
                 onError: (error) => toast.error(error.message),
               })
             }
           >
-            删除
+            {translateText("删除")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -99,19 +110,25 @@ const tabs: {
 }[] = [
   {
     value: "general",
-    label: "常规",
+    get label() {
+      return translate("常规");
+    },
     icon: SlidersHorizontalIcon,
     fields: ["name", "model"],
   },
   {
     value: "instructions",
-    label: "指令",
+    get label() {
+      return translate("指令");
+    },
     icon: ScrollIcon,
     fields: ["description"],
   },
   {
     value: "environment",
-    label: "环境",
+    get label() {
+      return translate("环境");
+    },
     icon: PackageIcon,
     fields: ["bundles"],
   },
@@ -124,6 +141,7 @@ function AgentEditorForm({
   agent: Agent;
   onDone: () => void;
 }) {
+  const { t: translateText } = useTranslation();
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const { data: models } = useModels();
@@ -162,7 +180,7 @@ function AgentEditorForm({
     (values) => {
       // Agents can be created before any account is connected, not after.
       if (!values.model && models?.some((model) => model.available)) {
-        form.setError("model", { message: "请选择模型。" });
+        form.setError("model", { message: translateText("请选择模型。") });
         showError("model");
         return;
       }
@@ -173,7 +191,7 @@ function AgentEditorForm({
         { id: agent.id, ...agentDraft(values) },
         {
           onSuccess: () => {
-            toast.success("已保存");
+            toast.success(translateText("已保存"));
             onDone();
           },
           onError: (error) => toast.error(error.message),
@@ -190,14 +208,17 @@ function AgentEditorForm({
     <form noValidate onSubmit={save} className="flex min-h-0 flex-1 flex-col">
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <SettingsNav
-          label="智能体设置分类"
+          label={translateText("智能体设置分类")}
           sections={tabs.map((t) => ({
             ...t,
             ...(t.value === "environment"
-              ? { attention: Boolean(agent.build_error), hint: "环境构建失败" }
+              ? {
+                  attention: Boolean(agent.build_error),
+                  hint: translateText("环境构建失败"),
+                }
               : {
                   attention: t.fields.some((name) => errors[name]),
-                  hint: "有错误",
+                  hint: translateText("有错误"),
                 }),
           }))}
           value={tab}
@@ -224,7 +245,7 @@ function AgentEditorForm({
               {agent.build_error ? (
                 <div className="space-y-1.5" role="alert">
                   <p className="text-xs leading-none text-destructive">
-                    环境构建失败
+                    {translateText("环境构建失败")}
                   </p>
                   <pre
                     // The build's last lines say what failed: show them first.
@@ -249,17 +270,17 @@ function AgentEditorForm({
           onClick={() => setConfirmDelete(true)}
         >
           <TrashIcon aria-hidden="true" data-icon="inline-start" />
-          删除智能体
+          {translateText("删除智能体")}
         </Button>
         <div className="flex gap-2">
           <Button type="button" variant="outline" onClick={onDone}>
-            取消
+            {translateText("取消")}
           </Button>
           <Button
             type="submit"
             disabled={updateAgent.isPending || !form.formState.isDirty}
           >
-            保存
+            {translateText("保存")}
           </Button>
         </div>
       </DialogFooter>
@@ -278,6 +299,7 @@ function AgentEditorForm({
  * entry (the chat head, settings, empty states) opens this one dialog.
  */
 export function AgentEditor() {
+  const { t: translateText } = useTranslation();
   const agentEditor = useWorkspaceStore((s) => s.agentEditor);
   const setAgentEditor = useWorkspaceStore((s) => s.setAgentEditor);
   const { agents } = useAgents();
@@ -307,10 +329,12 @@ export function AgentEditor() {
           {agent ? <AgentAvatar agent={agent} /> : null}
           <div className="min-w-0">
             <DialogTitle className="truncate text-base">
-              {agent ? agent.name : "新建智能体"}
+              {agent ? agent.name : translateText("新建智能体")}
             </DialogTitle>
             <DialogDescription className="sr-only">
-              {agent ? "编辑智能体" : "新建智能体"}
+              {agent
+                ? translateText("编辑智能体")
+                : translateText("新建智能体")}
             </DialogDescription>
           </div>
         </DialogHeader>

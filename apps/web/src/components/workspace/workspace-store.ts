@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { translate } from "@/lib/i18n";
 
 const storageKey = "axp.workspace.v1";
 
@@ -79,7 +80,9 @@ const storage: PersistStorage<Persisted> = {
     try {
       localStorage.setItem(name, JSON.stringify(value.state.workspace));
     } catch {
-      toast.error("无法保存到当前浏览器，请保持页面打开以保留内容。");
+      toast.error(
+        translate("无法保存到当前浏览器，请保持页面打开以保留内容。"),
+      );
     }
   },
   removeItem: (name) => localStorage.removeItem(name),

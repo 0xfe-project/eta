@@ -3,6 +3,7 @@ import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { CheckIcon } from "@phosphor-icons/react/Check";
 import { InfoIcon } from "@phosphor-icons/react/Info";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
+import { useTranslation } from "react-i18next";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +36,7 @@ function AgentSwitch({
   onInfo: () => void;
   children: (open: string) => React.ReactNode;
 }) {
+  const { t: translateText } = useTranslation();
   const { agents, openEditor } = useAgents();
   const { groups } = useGroups();
   const openGroup = useOpenGroup();
@@ -50,8 +52,13 @@ function AgentSwitch({
       .map((g) => [g.participants.find((p) => p.member)?.agent_id, g.id]),
   );
   const open = agent
-    ? `正在与 ${agent.name} 私聊（${agentStatusLabels[agent.status]}），切换智能体`
-    : `正在群「${group.name}」中，切换到智能体私聊`;
+    ? translateText("正在与 {{value1}} 私聊（{{value2}}），切换智能体", {
+        value1: agent.name,
+        value2: agentStatusLabels[agent.status],
+      })
+    : translateText("正在群「{{value1}}」中，切换到智能体私聊", {
+        value1: group.name,
+      });
   return (
     <DropdownMenu {...menu.root}>
       <DropdownMenuTrigger asChild {...menu.trigger}>
@@ -61,14 +68,16 @@ function AgentSwitch({
         {direct ? null : (
           <>
             <DropdownMenuItem>
-              <span className="min-w-0 flex-1 truncate">群 · {group.name}</span>
-              <CheckIcon aria-label="当前" />
+              <span className="min-w-0 flex-1 truncate">
+                {translateText("群 · {{value1}}", { value1: group.name })}
+              </span>
+              <CheckIcon aria-label={translateText("当前")} />
             </DropdownMenuItem>
             <DropdownMenuSeparator />
           </>
         )}
         <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-          私聊
+          {translateText("私聊")}
         </DropdownMenuLabel>
         {agents.map((a) => {
           const target = directs.get(a.id);
@@ -83,18 +92,20 @@ function AgentSwitch({
               <AgentAvatar agent={a} className="size-5" />
               <span className="min-w-0 flex-1 truncate">{a.name}</span>
               <AgentStatusDot status={a.status} />
-              {a.id === direct ? <CheckIcon aria-label="当前" /> : null}
+              {a.id === direct ? (
+                <CheckIcon aria-label={translateText("当前")} />
+              ) : null}
             </DropdownMenuItem>
           );
         })}
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={onInfo}>
           <InfoIcon aria-hidden="true" />
-          {direct ? "智能体设置" : "群信息"}
+          {direct ? translateText("智能体设置") : translateText("群信息")}
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => openEditor()}>
           <PlusIcon aria-hidden="true" />
-          新建智能体
+          {translateText("新建智能体")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

@@ -1,4 +1,5 @@
 import { toast } from "sonner";
+import { translate } from "@/lib/i18n";
 
 // A tab opened before a deploy keeps running the code it loaded, which the
 // API may have outgrown: an agent editor from before environment bundles
@@ -18,9 +19,9 @@ export async function checkForUpdate() {
   if (!response?.ok) return;
   if ((await response.text()) === __AXP_BUILD__) return;
   offered = true;
-  toast("AXP 已更新", {
+  toast(translate("AXP 已更新"), {
     duration: Infinity,
-    action: { label: "刷新", onClick: () => location.reload() },
+    action: { label: translate("刷新"), onClick: () => location.reload() },
   });
 }
 

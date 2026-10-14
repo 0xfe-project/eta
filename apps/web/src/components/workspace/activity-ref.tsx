@@ -9,7 +9,9 @@ import { GitPullRequestIcon } from "@phosphor-icons/react/GitPullRequest";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { NotePencilIcon } from "@phosphor-icons/react/NotePencil";
 import { Link } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { actionClass, frameClass, muted } from "./activity-card";
 import { ArtifactButton } from "./artifact-dialog";
@@ -26,11 +28,36 @@ import { useSectionLink } from "./workspace-search";
  * the call's details.
  */
 const kinds = {
-  task: { icon: ListChecksIcon, open: "打开任务" },
-  routine: { icon: ClockIcon, open: "打开定时" },
-  pull_request: { icon: GitPullRequestIcon, open: "打开 PR" },
-  issue_draft: { icon: NotePencilIcon, open: "去 GitHub 创建 issue" },
-  artifact: { icon: AppWindowIcon, open: "打开 Artifact" },
+  task: {
+    icon: ListChecksIcon,
+    get open() {
+      return translate("打开任务");
+    },
+  },
+  routine: {
+    icon: ClockIcon,
+    get open() {
+      return translate("打开定时");
+    },
+  },
+  pull_request: {
+    icon: GitPullRequestIcon,
+    get open() {
+      return translate("打开 PR");
+    },
+  },
+  issue_draft: {
+    icon: NotePencilIcon,
+    get open() {
+      return translate("去 GitHub 创建 issue");
+    },
+  },
+  artifact: {
+    icon: AppWindowIcon,
+    get open() {
+      return translate("打开 Artifact");
+    },
+  },
 } satisfies Record<ActivityRef["kind"], unknown>;
 
 const iconClass = cn("size-3.5 shrink-0", muted);
@@ -52,6 +79,7 @@ export function ActivityRefCard({
   value: ActivityRef;
   className?: string;
 }) {
+  const { t: translateText } = useTranslation();
   const sectionLink = useSectionLink();
   const { icon: Icon, open } = kinds[value.kind];
   const status = value.kind === "task" ? taskStatus(value.status) : undefined;
@@ -61,12 +89,18 @@ export function ActivityRefCard({
   const artifact = value.kind === "artifact";
   const number = value.number && !artifact ? value.number : undefined;
   const label = draft
-    ? `${open}：${value.title}${repo ? `（${repo}）` : ""}`
+    ? translateText("{{value1}}：{{value2}}{{value3}}", {
+        value1: open,
+        value2: value.title,
+        value3: repo ? translateText("（{{value1}}）", { value1: repo }) : "",
+      })
     : [
         open,
         number ? `#${number}` : null,
         value.title || repo,
-        artifact && value.number ? `第 ${value.number} 版` : null,
+        artifact && value.number
+          ? translateText("第 {{value1}} 版", { value1: value.number })
+          : null,
       ]
         .filter(Boolean)
         .join(" ");
@@ -83,8 +117,7 @@ export function ActivityRefCard({
         {value.title && repo ? <span className={muted}> · {repo}</span> : null}
         {artifact && value.number ? (
           <span className={cn("tabular-nums", muted)}>
-            {" "}
-            · 第 {value.number} 版
+            {translateText(" · 第 {{value1}} 版", { value1: value.number })}
           </span>
         ) : null}
       </span>
@@ -99,7 +132,7 @@ export function ActivityRefCard({
       ) : null}
       {draft ? (
         <span className="shrink-0 text-[var(--terminal-link)]">
-          去 GitHub 创建
+          {translateText("去 GitHub 创建")}
         </span>
       ) : null}
       {value.url ? (
@@ -160,7 +193,8 @@ export function ActivityRefCard({
 
 /** A draft's body when its link was too long to carry it: to paste. */
 function CopyBody({ text }: { text: string }) {
-  const hint = "正文太长，没放进链接：复制后粘贴到 GitHub";
+  const { t: translateText } = useTranslation();
+  const hint = translateText("正文太长，没放进链接：复制后粘贴到 GitHub");
   return (
     <button
       type="button"
@@ -174,12 +208,14 @@ function CopyBody({ text }: { text: string }) {
       onClick={() =>
         void navigator.clipboard
           .writeText(text)
-          .then(() => toast("已复制正文"))
-          .catch(() => toast.error("复制失败：浏览器不允许访问剪贴板"))
+          .then(() => toast(translateText("已复制正文")))
+          .catch(() =>
+            toast.error(translateText("复制失败：浏览器不允许访问剪贴板")),
+          )
       }
     >
       <CopyIcon aria-hidden="true" className={iconClass} />
-      复制正文
+      {translateText("复制正文")}
     </button>
   );
 }

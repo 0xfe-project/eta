@@ -26,21 +26,23 @@ import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { SpinnerIcon } from "@phosphor-icons/react/Spinner";
 import { StopIcon } from "@phosphor-icons/react/Stop";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Markdown } from "@/components/markdown";
 import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
-
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
+import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import {
   useCancelAssist,
@@ -109,6 +111,7 @@ function Back({ label, onClick }: { label: string; onClick: () => void }) {
  * words carry it either way.
  */
 function Working({ status }: { status: RunStatus }) {
+  useTranslation();
   const queued = status === "queued";
   const Icon = queued ? ClockIcon : SpinnerIcon;
   return (
@@ -138,16 +141,20 @@ const folded = new Set<TaskStatus>(["done", "cancelled"]);
  * says the rest.
  */
 export function RunState({ task }: { task: Task }) {
+  const { t: translateText } = useTranslation();
   if (isActive(task.run_status)) return <Working status={task.run_status} />;
   if (task.run_status === "failed")
-    return <span className="text-destructive">运行失败</span>;
+    return (
+      <span className="text-destructive">{translateText("运行失败")}</span>
+    );
   return null;
 }
 
 export function Comments({ count }: { count: number }) {
+  const { t: translateText } = useTranslation();
   return count ? (
     <span className="inline-flex items-center gap-1">
-      <ChatCircleIcon aria-label="评论" className="size-3.5" />
+      <ChatCircleIcon aria-label={translateText("评论")} className="size-3.5" />
       {count}
     </span>
   ) : null;
@@ -155,6 +162,7 @@ export function Comments({ count }: { count: number }) {
 
 /** Title and when on top; number, assignee and activity beneath. */
 function TaskRow({ task }: { task: Task }) {
+  useTranslation();
   const [, setNav] = useTaskNav();
   return (
     <li>
@@ -191,6 +199,7 @@ function TaskRow({ task }: { task: Task }) {
 }
 
 function TaskList() {
+  const { t: translateText } = useTranslation();
   const [, setNav] = useTaskNav();
   const { data, error, refetch } = useTasks();
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -198,33 +207,37 @@ function TaskList() {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold">任务</h2>
+        <h2 className="text-sm font-semibold">{translateText("任务")}</h2>
         <Button
           size="icon-sm"
           variant="ghost"
-          aria-label="新建任务"
-          title="新建"
+          aria-label={translateText("新建任务")}
+          title={translateText("新建")}
           onClick={() => void setNav({ task: "new" })}
         >
           <PlusIcon aria-hidden="true" />
         </Button>
       </div>
       {error && !data ? (
-        <LoadError what="任务" error={error} onRetry={() => void refetch()} />
+        <LoadError
+          what={translateText("任务")}
+          error={error}
+          onRetry={() => void refetch()}
+        />
       ) : !data ? (
         <Loading />
       ) : data.tasks.length === 0 ? (
         <Empty
           icon={ListChecksIcon}
-          title="还没有任务"
+          title={translateText("还没有任务")}
           action={
             <Button size="sm" onClick={() => void setNav({ task: "new" })}>
               <PlusIcon aria-hidden="true" data-icon="inline-start" />
-              新建任务
+              {translateText("新建任务")}
             </Button>
           }
         >
-          把要做的事交给智能体，它会在时间线里记下每一步。
+          {translateText("把要做的事交给智能体，它会在时间线里记下每一步。")}
         </Empty>
       ) : (
         statuses.map(({ value, label }) => {
@@ -297,10 +310,11 @@ function StatusSelect({
   onChange: (status: TaskStatus) => void;
   className?: string;
 }) {
+  const { t: translateText } = useTranslation();
   return (
     <Select
       id={id}
-      aria-label={id ? undefined : "状态"}
+      aria-label={id ? undefined : translateText("状态")}
       className={className}
       value={value}
       onValueChange={(value) => onChange(value as TaskStatus)}
@@ -326,6 +340,7 @@ export function TaskForm({
   initialStatus?: TaskStatus;
   proposal?: ChatMessage;
 }) {
+  const { t: translateText } = useTranslation();
   const create = useCreateTask();
   const confirm = useConfirmTaskDraft();
   const { groups } = useGroups();
@@ -368,27 +383,27 @@ export function TaskForm({
     >
       {bare ? null : (
         <div className="space-y-1">
-          <Back label="任务" onClick={() => onDone()} />
-          <h2 className="text-sm font-semibold">新建任务</h2>
+          <Back label={translateText("任务")} onClick={() => onDone()} />
+          <h2 className="text-sm font-semibold">{translateText("新建任务")}</h2>
         </div>
       )}
-      <Field id="task-title" label="标题">
+      <Field id="task-title" label={translateText("标题")}>
         <Input
           id="task-title"
           autoFocus={bare}
           maxLength={200}
-          placeholder="例如：修复登录页在 Safari 上的布局"
+          placeholder={translateText("例如：修复登录页在 Safari 上的布局")}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
       </Field>
       <Field
         id="task-description"
-        label="描述"
+        label={translateText("描述")}
         hint={
           remote
-            ? "远程智能体会把它当作任务说明。支持 Markdown。"
-            : "支持 Markdown。"
+            ? translateText("远程智能体会把它当作任务说明。支持 Markdown。")
+            : translateText("支持 Markdown。")
         }
       >
         <Textarea
@@ -396,12 +411,12 @@ export function TaskForm({
           rows={6}
           maxLength={20000}
           className="max-h-[40dvh] min-h-32 overflow-y-auto"
-          placeholder="目标、背景、完成的标准……"
+          placeholder={translateText("目标、背景、完成的标准……")}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
       </Field>
-      <Field id="task-status" label="状态">
+      <Field id="task-status" label={translateText("状态")}>
         <StatusSelect
           id="task-status"
           className="w-full"
@@ -410,12 +425,12 @@ export function TaskForm({
         />
       </Field>
       {!proposal && (
-        <Field label="关联群（可选）">
+        <Field label={translateText("关联群（可选）")}>
           <Select
             value={groupId || "none"}
             onValueChange={(value) => setGroupId(value === "none" ? "" : value)}
           >
-            <SelectOption value="none">不关联</SelectOption>
+            <SelectOption value="none">{translateText("不关联")}</SelectOption>
             {groups
               .filter((g) => !g.archived)
               .map((g) => (
@@ -429,12 +444,14 @@ export function TaskForm({
       <AssigneeFields id="task" draft={draft} onChange={setDraft} />
       {noComputers ? (
         <p className="text-xs text-muted-foreground">
-          要让远程电脑上的智能体领任务，先在 设置 → 远程电脑 中接入一台电脑。
+          {translateText(
+            "要让远程电脑上的智能体领任务，先在 设置 → 远程电脑 中接入一台电脑。",
+          )}
         </p>
       ) : null}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={() => onDone()}>
-          取消
+          {translateText("取消")}
         </Button>
         <Button
           type="submit"
@@ -442,7 +459,9 @@ export function TaskForm({
             !title.trim() || !assignee || create.isPending || confirm.isPending
           }
         >
-          {remote && status !== "backlog" ? "创建并开始" : "创建"}
+          {remote && status !== "backlog"
+            ? translateText("创建并开始")
+            : translateText("创建")}
         </Button>
       </div>
     </form>
@@ -470,6 +489,7 @@ function Folded({
   enabled?: boolean;
   actions?: React.ReactNode;
 }) {
+  const { t: translateText } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [long, setLong] = useState(false);
@@ -508,7 +528,7 @@ function Folded({
               aria-expanded={open}
               onClick={() => setOpen(!open)}
             >
-              {open ? "收起" : "展开全文"}
+              {open ? translateText("收起") : translateText("展开全文")}
             </Button>
           ) : null}
           {actions}
@@ -519,6 +539,7 @@ function Folded({
 }
 
 function StopRun({ task, run }: { task: string; run: TaskRun }) {
+  const { t: translateText } = useTranslation();
   const interrupt = useInterruptRun();
   if (run.status !== "running") return null;
   return (
@@ -531,13 +552,14 @@ function StopRun({ task, run }: { task: string; run: TaskRun }) {
       }
     >
       <StopIcon aria-hidden="true" />
-      停止
+      {translateText("停止")}
     </Button>
   );
 }
 
 /** A run's state: spinning while at work, red when it failed. */
 function RunStatusText({ run }: { run: TaskRun }) {
+  useTranslation();
   if (isActive(run.status)) return <Working status={run.status} />;
   return (
     <span
@@ -584,6 +606,7 @@ export function TaskProperties({
   children?: React.ReactNode;
   onDone: () => void;
 }) {
+  const { t: translateText } = useTranslation();
   const update = useUpdateTask();
   const links = deliverables(task);
   return (
@@ -593,7 +616,7 @@ export function TaskProperties({
         className,
       )}
     >
-      <dt className={propertyLabel}>状态</dt>
+      <dt className={propertyLabel}>{translateText("状态")}</dt>
       <dd className="flex min-w-0 items-center gap-2">
         <StatusIcon status={task.status} />
         <StatusSelect
@@ -607,13 +630,13 @@ export function TaskProperties({
           }
         />
       </dd>
-      <dt className={propertyLabel}>指派给</dt>
+      <dt className={propertyLabel}>{translateText("指派给")}</dt>
       <dd className="min-w-0">
         <AssigneeRow task={task} />
       </dd>
       {links.length ? (
         <>
-          <dt className={propertyLabel}>交付</dt>
+          <dt className={propertyLabel}>{translateText("交付")}</dt>
           <dd className="min-w-0">
             <ul>
               {links.map((link) =>
@@ -650,7 +673,7 @@ export function TaskProperties({
       ) : null}
       {task.loops.length ? (
         <>
-          <dt className={propertyLabel}>审查</dt>
+          <dt className={propertyLabel}>{translateText("审查")}</dt>
           <dd className="min-w-0">
             <LoopRow task={task} loop={task.loops.at(-1)!} />
           </dd>
@@ -665,14 +688,21 @@ const commentBoxId = "task-comment";
 
 /** A blocked task's open question: the agent's last word, if it is the last. */
 export function Question({ task }: { task: TaskDetail }) {
+  const { t: translateText } = useTranslation();
   if (task.status !== "blocked") return null;
   const last = task.activity.filter((a) => a.kind === "comment").at(-1);
   if (!last || last.actor.kind === "user") return null;
   return (
-    <section aria-label="待回复" className="space-y-1 bg-muted px-3 py-2">
+    <section
+      aria-label={translateText("待回复")}
+      className="space-y-1 bg-muted px-3 py-2"
+    >
       <p className="text-xs">
         <span className="font-medium">{actorName(last)}</span>
-        <span className="text-muted-foreground"> 在等你回复</span>
+        <span className="text-muted-foreground">
+          {" "}
+          {translateText(" 在等你回复")}
+        </span>
       </p>
       <Folded
         max="max-h-32"
@@ -686,7 +716,7 @@ export function Question({ task }: { task: TaskDetail }) {
               box?.focus({ preventScroll: true });
             }}
           >
-            回复
+            {translateText("回复")}
           </Button>
         }
       >
@@ -701,9 +731,9 @@ export function Question({ task }: { task: TaskDetail }) {
 function actorName(a: TaskActivity) {
   switch (a.actor.kind) {
     case "user":
-      return "我";
+      return translate("我");
     case "agent":
-      return a.actor.agent_name ?? "智能体";
+      return a.actor.agent_name ?? translate("智能体");
     case "remote":
       return remoteLabel(a.data as Parameters<typeof remoteLabel>[0]);
   }
@@ -721,8 +751,12 @@ function assistAgent(a: TaskActivity) {
 }
 
 const verdictLabels: Record<string, string> = {
-  pass: "审查通过",
-  changes_requested: "要求修改",
+  get pass() {
+    return translate("审查通过");
+  },
+  get changes_requested() {
+    return translate("要求修改");
+  },
 };
 
 function str(v: unknown) {
@@ -734,21 +768,27 @@ function describe(a: TaskActivity): React.ReactNode {
   const d = a.data;
   switch (a.kind) {
     case "created":
-      return "创建了任务";
+      return translate("创建了任务");
     case "status":
-      return `把状态从「${statusLabel(str(d.from) as TaskStatus)}」改为「${statusLabel(str(d.to) as TaskStatus)}」`;
+      return translate("把状态从「{{value1}}」改为「{{value2}}」", {
+        value1: statusLabel(str(d.from) as TaskStatus),
+        value2: statusLabel(str(d.to) as TaskStatus),
+      });
     case "assignee": {
       const to = d.to as Task["assignee"] | undefined;
-      if (!to) return "改了指派";
+      if (!to) return translate("改了指派");
       const place = placeLabel(to.place);
-      return `指派给 ${assigneeLabel(to)}${place ? `，${place}` : ""}`;
+      return translate("指派给 {{value1}}{{value2}}", {
+        value1: assigneeLabel(to),
+        value2: place ? translate("，{{value1}}", { value1: place }) : "",
+      });
     }
     case "title":
-      return `把标题改为「${str(d.to)}」`;
+      return translate("把标题改为「{{value1}}」", { value1: str(d.to) });
     case "description":
-      return "修改了描述";
+      return translate("修改了描述");
     case "group":
-      return d.to ? "关联了群" : "解除了群关联";
+      return d.to ? translate("关联了群") : translate("解除了群关联");
     case "deliverable":
       return (
         <>
@@ -756,7 +796,7 @@ function describe(a: TaskActivity): React.ReactNode {
             aria-hidden="true"
             className="mr-1 inline size-3.5 align-[-2px]"
           />
-          交付了{" "}
+          {translate("交付了 ")}
           <a
             href={str(d.url)}
             target="_blank"
@@ -774,37 +814,49 @@ function describe(a: TaskActivity): React.ReactNode {
             aria-hidden="true"
             className="mr-1 inline size-3.5 align-[-2px]"
           />
-          发布了 Artifact{" "}
+          {translate("发布了 Artifact ")}
           <ArtifactButton
             id={str(d.artifact_id)}
             version={typeof d.version === "number" ? d.version : undefined}
             className="text-foreground underline underline-offset-4"
           >
             {str(d.title) || "Artifact"}
-            {typeof d.version === "number" ? ` · 第 ${d.version} 版` : ""}
+            {typeof d.version === "number"
+              ? translate(" · 第 {{value1}} 版", { value1: d.version })
+              : ""}
           </ArtifactButton>
         </>
       );
     case "cleanup":
-      return a.body ?? "收尾完成";
+      return a.body ?? translate("收尾完成");
     case "assist":
-      return `请 ${assistAgent(a)} 协助${typeof d.round === "number" && d.loop_id ? `（审查第 ${d.round} 轮）` : ""}`;
+      return translate("请 {{value1}} 协助{{value2}}", {
+        value1: assistAgent(a),
+        value2:
+          typeof d.round === "number" && d.loop_id
+            ? translate("（审查第 {{value1}} 轮）", { value1: d.round })
+            : "",
+      });
     case "run_queued":
       return null;
     case "run_started":
-      return "开始工作";
+      return translate("开始工作");
     case "run_completed":
-      return "完成了这一轮";
+      return translate("完成了这一轮");
     case "run_nudged":
-      return "这一轮结束时没有回复，已提醒一次";
+      return translate("这一轮结束时没有回复，已提醒一次");
     case "run_failed":
       return (
         <span className="text-destructive">
-          这一轮失败了{a.body ? `：${a.body}` : ""}
+          {translate("这一轮失败了{{value1}}", {
+            value1: a.body ? `：${a.body}` : "",
+          })}
         </span>
       );
     case "run_cancelled":
-      return `这一轮已停止${a.body ? `：${a.body}` : ""}`;
+      return translate("这一轮已停止{{value1}}", {
+        value1: a.body ? `：${a.body}` : "",
+      });
   }
   return a.kind;
 }
@@ -835,6 +887,7 @@ function entries(items: TaskActivity[]) {
 }
 
 function Time({ at }: { at: string }) {
+  useTranslation();
   return (
     <time
       dateTime={at}
@@ -847,6 +900,7 @@ function Time({ at }: { at: string }) {
 
 /** An event as a line: who, what, when. */
 function EventLine({ a, run }: { a: TaskActivity; run?: TaskRun }) {
+  useTranslation();
   // A run's events read as the assignee's; an assisting agent's are named.
   const who = !a.kind.startsWith("run_")
     ? `${actorName(a)} `
@@ -862,28 +916,48 @@ function EventLine({ a, run }: { a: TaskActivity; run?: TaskRun }) {
 }
 
 const logKindLabels: Record<LogEntry["kind"], string> = {
-  user: "指令",
-  assistant: "回复",
-  tool: "工具",
-  reasoning: "思考",
-  terminal: "终端",
+  get user() {
+    return translate("指令");
+  },
+  get assistant() {
+    return translate("回复");
+  },
+  get tool() {
+    return translate("工具");
+  },
+  get reasoning() {
+    return translate("思考");
+  },
+  get terminal() {
+    return translate("终端");
+  },
   // Its file is on the remote computer, out of the relay's reach.
-  image: "读取了图片",
-  other: "其他",
+  get image() {
+    return translate("读取了图片");
+  },
+  get other() {
+    return translate("其他");
+  },
 };
 
 function RunLog({ task, run }: { task: string; run: TaskRun }) {
+  const { t: translateText } = useTranslation();
   const live = isActive(run.status);
   const { entries, error, isPending, hasOlder, loadingOlder, loadOlder } =
     useRunLog(task, run.id, live);
-  if (isPending) return <Loading layout="lines" label="正在读取记录…" />;
+  if (isPending)
+    return <Loading layout="lines" label={translateText("正在读取记录…")} />;
   // A read that fails keeps what was read before: it says nothing about the run.
   const failed = error ? (
     <p className="text-xs text-destructive">{error.message}</p>
   ) : null;
   if (!entries.length)
     return (
-      failed ?? <p className="text-xs text-muted-foreground">还没有记录。</p>
+      failed ?? (
+        <p className="text-xs text-muted-foreground">
+          {translateText("还没有记录。")}
+        </p>
+      )
     );
   return (
     <div className="space-y-2">
@@ -896,7 +970,9 @@ function RunLog({ task, run }: { task: string; run: TaskRun }) {
           disabled={loadingOlder}
           onClick={() => void loadOlder()}
         >
-          {loadingOlder ? "正在读取更早的记录…" : "加载更早的记录"}
+          {loadingOlder
+            ? translateText("正在读取更早的记录…")
+            : translateText("加载更早的记录")}
         </Button>
       ) : null}
       <RunLogEntries entries={entries} />
@@ -905,6 +981,7 @@ function RunLog({ task, run }: { task: string; run: TaskRun }) {
 }
 
 function RunLogEntries({ entries }: { entries: LogEntry[] }) {
+  const { t: translateText } = useTranslation();
   // Entries can be alike (same time, kind and start): number the repeats.
   const seen = new Map<string, number>();
   const key = (entry: LogEntry) => {
@@ -914,7 +991,10 @@ function RunLogEntries({ entries }: { entries: LogEntry[] }) {
     return `${base}-${n}`;
   };
   return (
-    <ol aria-label="执行记录" className="space-y-2 border-l pl-3 text-xs">
+    <ol
+      aria-label={translateText("执行记录")}
+      className="space-y-2 border-l pl-3 text-xs"
+    >
       {entries.map((entry) => (
         <li key={key(entry)} className="min-w-0">
           <span className="text-muted-foreground">
@@ -958,6 +1038,7 @@ function RunEntry({
   run: TaskRun;
   activity: TaskActivity;
 }) {
+  useTranslation();
   return (
     <div className="space-y-1">
       <p className="text-muted-foreground wrap-anywhere">
@@ -975,6 +1056,7 @@ function RunEntry({
 
 /** How a run went, stopping it, and its log on demand. */
 function RunControls({ task, run }: { task: TaskDetail; run: TaskRun }) {
+  const { t: translateText } = useTranslation();
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -995,7 +1077,7 @@ function RunControls({ task, run }: { task: TaskDetail; run: TaskRun }) {
             ) : (
               <CaretRightIcon aria-hidden="true" />
             )}
-            执行记录
+            {translateText("执行记录")}
           </Button>
         )}
       </div>
@@ -1004,7 +1086,8 @@ function RunControls({ task, run }: { task: TaskDetail; run: TaskRun }) {
       ) : null}
       {run.workspace && open ? (
         <p className="text-xs text-muted-foreground wrap-anywhere">
-          工作区 <code>{run.workspace}</code>
+          {translateText("工作区 ")}
+          <code>{run.workspace}</code>
         </p>
       ) : null}
       {open ? <RunLog task={task.id} run={run} /> : null}
@@ -1013,18 +1096,36 @@ function RunControls({ task, run }: { task: TaskDetail; run: TaskRun }) {
 }
 
 const assistStateLabels: Record<TaskAssist["state"], string> = {
-  waiting: "等待中",
-  blocked: "没有开始",
-  started: "已开始",
-  cancelled: "已取消",
+  get waiting() {
+    return translate("等待中");
+  },
+  get blocked() {
+    return translate("没有开始");
+  },
+  get started() {
+    return translate("已开始");
+  },
+  get cancelled() {
+    return translate("已取消");
+  },
 };
 
 const loopStateLabels: Record<TaskLoop["state"], string> = {
-  active: "进行中",
-  passed: "已通过",
-  exhausted: "轮数用尽，等你决定",
-  blocked: "受阻，等你决定",
-  stopped: "已停止",
+  get active() {
+    return translate("进行中");
+  },
+  get passed() {
+    return translate("已通过");
+  },
+  get exhausted() {
+    return translate("轮数用尽，等你决定");
+  },
+  get blocked() {
+    return translate("受阻，等你决定");
+  },
+  get stopped() {
+    return translate("已停止");
+  },
 };
 
 /**
@@ -1039,6 +1140,7 @@ function AssistEntry({
   task: TaskDetail;
   activity: TaskActivity;
 }) {
+  const { t: translateText } = useTranslation();
   const cancel = useCancelAssist();
   const assist = task.assists.find((x) => x.id === activity.data.assist_id);
   const run = assist?.run_id
@@ -1104,7 +1206,7 @@ function AssistEntry({
                 )
               }
             >
-              取消
+              {translateText("取消")}
             </Button>
           ) : null}
         </div>
@@ -1119,6 +1221,7 @@ function AssistEntry({
  * alone may do with it: carry it on (with more rounds) or stop it.
  */
 function LoopRow({ task, loop }: { task: TaskDetail; loop: TaskLoop }) {
+  const { t: translateText } = useTranslation();
   const stop = useStopLoop();
   const resume = useResumeLoop();
   const [rounds, setRounds] = useState(() =>
@@ -1135,8 +1238,11 @@ function LoopRow({ task, loop }: { task: TaskDetail; loop: TaskLoop }) {
           provider: loop.provider,
         })}{" "}
         <span className="text-muted-foreground">
-          · 已审 {loop.rounds}/{loop.max_rounds} 轮 ·{" "}
-          {loopStateLabels[loop.state]}
+          {translateText("· 已审 {{value1}}/{{value2}} 轮 · {{value3}}", {
+            value1: loop.rounds,
+            value2: loop.max_rounds,
+            value3: loopStateLabels[loop.state],
+          })}
         </span>
       </p>
       {loop.reason ? (
@@ -1154,7 +1260,7 @@ function LoopRow({ task, loop }: { task: TaskDetail; loop: TaskLoop }) {
           {paused ? (
             <>
               <Select
-                aria-label="审查轮数上限"
+                aria-label={translateText("审查轮数上限")}
                 size="sm"
                 className="ml-2 w-16"
                 value={rounds}
@@ -1179,7 +1285,7 @@ function LoopRow({ task, loop }: { task: TaskDetail; loop: TaskLoop }) {
                   )
                 }
               >
-                继续审查
+                {translateText("继续审查")}
               </Button>
             </>
           ) : null}
@@ -1194,7 +1300,7 @@ function LoopRow({ task, loop }: { task: TaskDetail; loop: TaskLoop }) {
               )
             }
           >
-            停止循环
+            {translateText("停止循环")}
           </Button>
         </div>
       ) : null}
@@ -1210,6 +1316,7 @@ function AssistReplyActions({
   task: TaskDetail;
   activity: TaskActivity;
 }) {
+  const { t: translateText } = useTranslation();
   const [asking, setAsking] = useState(false);
   const setDraft = useTaskDraft((s) => s.setDraft);
   const runtime = str(activity.data.runtime);
@@ -1218,7 +1325,7 @@ function AssistReplyActions({
   return (
     <div className="-ml-2 flex flex-wrap gap-x-1">
       <Button size="xs" variant="ghost" onClick={() => setAsking(true)}>
-        追问 {providerLabel(provider)}
+        {translateText("追问 {{value1}}", { value1: providerLabel(provider) })}
       </Button>
       {remote ? (
         <Button
@@ -1229,17 +1336,22 @@ function AssistReplyActions({
               .split("\n")
               .map((line) => `> ${line}`)
               .join("\n");
-            setDraft(
-              task.id,
-              (draft) =>
-                `${draft ? `${draft}\n\n` : ""}${actorName(activity)} 的协助结果：\n\n${quote}\n\n`,
+            setDraft(task.id, (draft) =>
+              translateText(
+                "{{value1}}{{value2}} 的协助结果：\n\n{{value3}}\n\n",
+                {
+                  value1: draft ? `${draft}\n\n` : "",
+                  value2: actorName(activity),
+                  value3: quote,
+                },
+              ),
             );
             const box = document.getElementById(commentBoxId);
             box?.scrollIntoView({ block: "center" });
             box?.focus({ preventScroll: true });
           }}
         >
-          交给主执行者
+          {translateText("交给主执行者")}
         </Button>
       ) : null}
       <AssistDialog
@@ -1254,6 +1366,7 @@ function AssistReplyActions({
 
 /** Minor events in a row, as one line that unfolds into them. */
 function Changes({ items }: { items: TaskActivity[] }) {
+  const { t: translateText } = useTranslation();
   const [open, setOpen] = useState(false);
   return (
     <div>
@@ -1268,7 +1381,10 @@ function Changes({ items }: { items: TaskActivity[] }) {
         ) : (
           <CaretRightIcon aria-hidden="true" className="size-3" />
         )}
-        {items.length} 条变更
+        {translateText("{{value1}} 条变更", {
+          value1: items.length,
+          count: items.length,
+        })}
         <span className="ml-1">
           <Time at={items.at(-1)!.created_at} />
         </span>
@@ -1323,6 +1439,7 @@ const dot = (destructive = false) => (
  * logs on demand, and bookkeeping folded into "N 条变更".
  */
 export function Timeline({ task }: { task: TaskDetail }) {
+  const { t: translateText } = useTranslation();
   // Runs show where they started; their queueing is news only while they
   // still wait, with why.
   const runs = new Map(task.runs.map((r) => [r.id, r]));
@@ -1343,7 +1460,7 @@ export function Timeline({ task }: { task: TaskDetail }) {
     ),
   );
   return (
-    <ol aria-label="时间线">
+    <ol aria-label={translateText("时间线")}>
       {items.map((a, i) => {
         const last = i === items.length - 1;
         if (Array.isArray(a))
@@ -1383,10 +1500,15 @@ export function Timeline({ task }: { task: TaskDetail }) {
                   </span>
                   <span className="text-muted-foreground">
                     {typeof a.data.round === "number"
-                      ? ` · 第 ${a.data.round}/${String(a.data.max_rounds)} 轮`
+                      ? translateText(" · 第 {{value1}}/{{value2}} 轮", {
+                          value1: a.data.round,
+                          value2: String(a.data.max_rounds),
+                        })
                       : ""}
                     {str(a.data.head_sha)
-                      ? ` · 提交 ${str(a.data.head_sha).slice(0, 7)}`
+                      ? translateText(" · 提交 {{value1}}", {
+                          value1: str(a.data.head_sha).slice(0, 7),
+                        })
                       : ""}
                   </span>
                 </p>
@@ -1452,6 +1574,7 @@ interface Outgoing {
 }
 
 export function CommentBox({ task }: { task: TaskDetail }) {
+  const { t: translateText } = useTranslation();
   const text = useTaskDraft((s) => s.drafts[task.id] ?? "");
   const setDraft = useTaskDraft((s) => s.setDraft);
   const setText = (update: string | ((draft: string) => string)) =>
@@ -1470,7 +1593,13 @@ export function CommentBox({ task }: { task: TaskDetail }) {
   const leftOut = (files: number) => {
     if (files)
       toast.warning(
-        `${remote ? "追问" : "评论"}还不能带图片或文件，${files} 个没有加进来。`,
+        translateText(
+          "{{value1}}还不能带图片或文件，{{value2}} 个没有加进来。",
+          {
+            value1: remote ? translateText("追问") : translateText("评论"),
+            value2: files,
+          },
+        ),
       );
   };
   // Arrived once the task has one more of it, from the response or a refresh:
@@ -1484,10 +1613,17 @@ export function CommentBox({ task }: { task: TaskDetail }) {
       .mutateAsync({ id: task.id, body: o.body, key: o.key })
       .catch((error: unknown) => {
         const failure =
-          error instanceof ApiError ? error.message : "网络连接失败。";
+          error instanceof ApiError
+            ? error.message
+            : translateText("网络连接失败。");
         // Gone with the task's view: say so, as the box that held it is gone.
         if (!mountedRef.current) {
-          toast.error(`${remote ? "追问" : "评论"}未送达：${failure}`);
+          toast.error(
+            translateText("{{value1}}未送达：{{value2}}", {
+              value1: remote ? translateText("追问") : translateText("评论"),
+              value2: failure,
+            }),
+          );
           return;
         }
         setOutgoing((current) =>
@@ -1536,11 +1672,13 @@ export function CommentBox({ task }: { task: TaskDetail }) {
       >
         <Textarea
           id={commentBoxId}
-          aria-label={remote ? "追问" : "评论"}
+          aria-label={remote ? translateText("追问") : translateText("评论")}
           placeholder={
             remote
-              ? `追问 ${assigneeLabel(task.assignee)}，支持 Markdown`
-              : "写一条评论，支持 Markdown"
+              ? translateText("追问 {{value1}}，支持 Markdown", {
+                  value1: assigneeLabel(task.assignee),
+                })
+              : translateText("写一条评论，支持 Markdown")
           }
           rows={2}
           maxLength={20000}
@@ -1569,7 +1707,8 @@ export function CommentBox({ task }: { task: TaskDetail }) {
             variant="outline"
             onClick={() => setAssisting(true)}
           >
-            <RobotIcon aria-hidden="true" />请 Agent 协助
+            <RobotIcon aria-hidden="true" />
+            {translateText("请 Agent 协助")}
           </Button>
           <Button
             type="submit"
@@ -1579,12 +1718,12 @@ export function CommentBox({ task }: { task: TaskDetail }) {
             {waiting && !waiting.failure ? (
               <>
                 <SpinnerIcon aria-hidden="true" className="animate-spin" />
-                发送中…
+                {translateText("发送中…")}
               </>
             ) : remote ? (
-              "发送追问"
+              translateText("发送追问")
             ) : (
-              "评论"
+              translateText("评论")
             )}
           </Button>
         </div>
@@ -1606,8 +1745,9 @@ function OutgoingComment({
   onEdit: () => void;
   onDiscard: () => void;
 }) {
+  const { t: translateText } = useTranslation();
   return (
-    <ol aria-label="待发送">
+    <ol aria-label={translateText("待发送")}>
       <Entry
         last
         mark={
@@ -1627,23 +1767,25 @@ function OutgoingComment({
         {outgoing.failure ? (
           <div className="mt-1 space-y-1">
             <p role="alert" className="text-xs text-destructive">
-              未送达：{outgoing.failure}
+              {translateText("未送达：{{value1}}", {
+                value1: outgoing.failure,
+              })}
             </p>
             <div className="-ml-2 flex flex-wrap gap-x-1">
               <Button size="xs" variant="ghost" onClick={onRetry}>
-                重试
+                {translateText("重试")}
               </Button>
               <Button size="xs" variant="ghost" onClick={onEdit}>
-                编辑
+                {translateText("编辑")}
               </Button>
               <Button size="xs" variant="ghost" onClick={onDiscard}>
-                丢弃
+                {translateText("丢弃")}
               </Button>
             </div>
           </div>
         ) : (
           <p role="status" className="mt-1 text-xs text-muted-foreground">
-            发送中…
+            {translateText("发送中…")}
           </p>
         )}
       </Entry>
@@ -1658,6 +1800,7 @@ export function EditableTitle({
   task: TaskDetail;
   className?: string;
 }) {
+  const { t: translateText } = useTranslation();
   const update = useUpdateTask();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(task.title);
@@ -1671,7 +1814,7 @@ export function EditableTitle({
       >
         <button
           type="button"
-          title="修改标题"
+          title={translateText("修改标题")}
           // Kept in view while the task scrolls, so a long title stays short.
           className="line-clamp-2 cursor-text text-left outline-none focus-visible:underline"
           onClick={() => {
@@ -1693,7 +1836,7 @@ export function EditableTitle({
   };
   return (
     <Input
-      aria-label="标题"
+      aria-label={translateText("标题")}
       autoFocus
       className={cn("h-8 flex-1 text-base font-semibold", className)}
       maxLength={200}
@@ -1716,6 +1859,7 @@ export function Description({
   task: TaskDetail;
   fold?: boolean;
 }) {
+  const { t: translateText } = useTranslation();
   const update = useUpdateTask();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(task.description);
@@ -1723,7 +1867,7 @@ export function Description({
     return (
       <div className="space-y-2">
         <Textarea
-          aria-label="描述"
+          aria-label={translateText("描述")}
           autoFocus
           rows={8}
           maxLength={20000}
@@ -1733,7 +1877,7 @@ export function Description({
         />
         <div className="flex justify-end gap-2">
           <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
-            取消
+            {translateText("取消")}
           </Button>
           <Button
             size="sm"
@@ -1745,7 +1889,7 @@ export function Description({
               )
             }
           >
-            保存
+            {translateText("保存")}
           </Button>
         </div>
       </div>
@@ -1761,7 +1905,9 @@ export function Description({
       }}
     >
       <PencilSimpleIcon aria-hidden="true" />
-      {task.description.trim() ? "编辑描述" : "添加描述"}
+      {task.description.trim()
+        ? translateText("编辑描述")
+        : translateText("添加描述")}
     </Button>
   );
   if (!task.description.trim()) return <div className="-ml-2">{edit}</div>;
@@ -1779,6 +1925,7 @@ export function Description({
 
 /** The assignee and its place, changed together. */
 function AssigneeRow({ task }: { task: TaskDetail }) {
+  const { t: translateText } = useTranslation();
   const update = useUpdateTask();
   const [draft, setDraft] = useState<AssigneeDraft | null>(null);
   const places = useDraftPlaces(draft ?? emptyDraft);
@@ -1800,7 +1947,7 @@ function AssigneeRow({ task }: { task: TaskDetail }) {
           className="mt-0.5 text-muted-foreground"
           onClick={() => setDraft(draftOf(task.assignee))}
         >
-          修改
+          {translateText("修改")}
         </Button>
       </div>
     );
@@ -1811,7 +1958,7 @@ function AssigneeRow({ task }: { task: TaskDetail }) {
       <AssigneeFields id="task-detail" draft={draft} onChange={setDraft} />
       <div className="flex justify-end gap-2">
         <Button size="sm" variant="ghost" onClick={() => setDraft(null)}>
-          取消
+          {translateText("取消")}
         </Button>
         <Button
           size="sm"
@@ -1824,7 +1971,7 @@ function AssigneeRow({ task }: { task: TaskDetail }) {
             )
           }
         >
-          保存
+          {translateText("保存")}
         </Button>
       </div>
     </div>
@@ -1833,6 +1980,7 @@ function AssigneeRow({ task }: { task: TaskDetail }) {
 
 /** A task in the side panel: one column, what matters first. */
 function TaskView({ task }: { task: TaskDetail }) {
+  const { t: translateText } = useTranslation();
   const [, setNav] = useTaskNav();
   const remove = useDeleteTask();
   return (
@@ -1841,10 +1989,17 @@ function TaskView({ task }: { task: TaskDetail }) {
         {/* Pinned to the panel's edge, over its padding (p-3), as the rest scrolls. */}
         <header className="sticky -top-3 z-10 -mx-3 -mt-3 mb-2 space-y-1 bg-background px-3 pt-3 pb-2">
           <div className="flex items-center justify-between gap-2">
-            <Back label="任务" onClick={() => void setNav({ task: null })} />
+            <Back
+              label={translateText("任务")}
+              onClick={() => void setNav({ task: null })}
+            />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon-sm" aria-label="更多">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={translateText("更多")}
+                >
                   <DotsThreeIcon aria-hidden="true" />
                 </Button>
               </DropdownMenuTrigger>
@@ -1858,7 +2013,7 @@ function TaskView({ task }: { task: TaskDetail }) {
                     })
                   }
                 >
-                  删除
+                  {translateText("删除")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -1880,7 +2035,7 @@ function TaskView({ task }: { task: TaskDetail }) {
             id="task-activity"
             className="text-xs font-medium text-muted-foreground"
           >
-            动态
+            {translateText("动态")}
           </h3>
           <Timeline task={task} />
           <CommentBox task={task} />
@@ -1903,19 +2058,23 @@ export function TaskMissing({
   error: Error | null;
   onRetry: () => void;
 }) {
+  const { t: translateText } = useTranslation();
   const gone = error instanceof ApiError && error.status === 404;
   if (error && !gone)
-    return <LoadError what="任务" error={error} onRetry={onRetry} />;
+    return (
+      <LoadError what={translateText("任务")} error={error} onRetry={onRetry} />
+    );
   if (isPending) return <Loading layout="detail" />;
   return (
-    <Empty icon={ListChecksIcon} title="这个任务已不存在">
-      它可能已被删除。
+    <Empty icon={ListChecksIcon} title={translateText("这个任务已不存在")}>
+      {translateText("它可能已被删除。")}
     </Empty>
   );
 }
 
 /** The task board: a status-grouped list, a task, or a new one. */
 export function Tasks() {
+  const { t: translateText } = useTranslation();
   const [nav, setNav] = useTaskNav();
   const id = nav.task && nav.task !== "new" ? nav.task : null;
   const listRef = useRef<HTMLDivElement>(null);
@@ -1953,7 +2112,10 @@ export function Tasks() {
         <TaskForm onDone={(id) => void setNav({ task: id ?? null })} />
       ) : !id ? null : !task ? (
         <div className="space-y-3">
-          <Back label="任务" onClick={() => void setNav({ task: null })} />
+          <Back
+            label={translateText("任务")}
+            onClick={() => void setNav({ task: null })}
+          />
           <TaskMissing
             isPending={isPending}
             error={error}

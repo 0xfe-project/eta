@@ -1,5 +1,6 @@
 import type { Agent } from "@/queries/chat";
 import { Blobatar } from "@blobatar/react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { agentStatusLabels } from "./agent-status";
 
@@ -55,6 +56,7 @@ export function AgentStatusDot({
 }
 
 export function AgentStatus({ status }: { status: Agent["status"] }) {
+  useTranslation();
   return (
     <span className="inline-flex items-center gap-1.5 text-muted-foreground">
       <AgentStatusDot status={status} />

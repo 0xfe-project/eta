@@ -1,8 +1,10 @@
 import type { Interaction } from "@/queries/chat";
 import { BellIcon } from "@phosphor-icons/react/Bell";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
+import { useTranslation } from "react-i18next";
 import { Empty, LoadError, Loading } from "@/components/states";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { formatLocale, translate } from "@/lib/i18n";
 import { useInteractionHistory } from "@/queries/chat";
 import { PageHeader } from "./app-shell";
 import { Confirmation, PendingList } from "./attention";
@@ -20,13 +22,18 @@ function day(iso: string) {
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(today.getDate() - 1);
-  if (date.toDateString() === today.toDateString()) return "今天";
-  if (date.toDateString() === yesterday.toDateString()) return "昨天";
-  return `${date.getMonth() + 1}月${date.getDate()}日`;
+  if (date.toDateString() === today.toDateString()) return translate("今天");
+  if (date.toDateString() === yesterday.toDateString())
+    return translate("昨天");
+  return new Intl.DateTimeFormat(formatLocale(), {
+    month: "short",
+    day: "numeric",
+  }).format(date);
 }
 
 /** What waits for the user and, under 全部, what was confirmed before. */
 export function Notifications() {
+  const { t: translateText } = useTranslation();
   const [filter, setFilter] = useQueryState("filter", filterParser);
   const { interactions, isPending, error, refetch } = useInteractionHistory();
   const days = new Map<string, Interaction[]>();
@@ -37,17 +44,17 @@ export function Notifications() {
   }
   return (
     <>
-      <PageHeader title="待处理">
+      <PageHeader title={translateText("待处理")}>
         <Tabs
           value={filter}
           onValueChange={(value) => void setFilter(value as typeof filter)}
         >
-          <TabsList aria-label="筛选" className="gap-1">
+          <TabsList aria-label={translateText("筛选")} className="gap-1">
             <TabsTrigger value="all" className="px-2 text-xs">
-              全部
+              {translateText("全部")}
             </TabsTrigger>
             <TabsTrigger value="pending" className="px-2 text-xs">
-              待处理
+              {translateText("待处理")}
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -61,18 +68,21 @@ export function Notifications() {
                 id="history"
                 className="px-3 text-sm font-medium text-muted-foreground"
               >
-                已处理的确认
+                {translateText("已处理的确认")}
               </h2>
               {error ? (
                 <LoadError
-                  what="确认记录"
+                  what={translateText("确认记录")}
                   error={error}
                   onRetry={() => void refetch()}
                 />
               ) : isPending ? (
                 <Loading rows={3} />
               ) : days.size === 0 ? (
-                <Empty icon={BellIcon} title="还没有处理过的确认" />
+                <Empty
+                  icon={BellIcon}
+                  title={translateText("还没有处理过的确认")}
+                />
               ) : (
                 [...days].map(([label, items]) => (
                   <section key={label} aria-label={label}>

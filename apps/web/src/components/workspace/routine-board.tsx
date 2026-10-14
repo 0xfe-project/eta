@@ -1,5 +1,6 @@
 import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
+import { useTranslation } from "react-i18next";
 import { Empty } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -20,6 +21,7 @@ import {
  * or its editor; on narrow screens one at a time.
  */
 export function RoutineBoard() {
+  const { t: translateText } = useTranslation();
   const [nav, setNav] = useRoutineNav();
   const editing = nav.edit && nav.edit !== "new" ? nav.edit : null;
   const {
@@ -55,22 +57,26 @@ export function RoutineBoard() {
       />
     ) : routines?.length ? (
       // With none yet, the list says how to start.
-      <Empty icon={ClockIcon} title="选择一个定时任务">
-        在左边选一个，查看它的说明和每次运行的报告。
+      <Empty icon={ClockIcon} title={translateText("选择一个定时任务")}>
+        {translateText("在左边选一个，查看它的说明和每次运行的报告。")}
       </Empty>
     ) : null;
 
   return (
     <>
-      <PageHeader title="定时">
+      <PageHeader title={translateText("定时")}>
         <RefreshButton resource="routines" />
         <Button
           size="sm"
           onClick={() => void setNav({ edit: "new", routine: null, run: null })}
         >
           <PlusIcon aria-hidden="true" />
-          <span className="hidden sm:inline">新建定时任务</span>
-          <span className="sr-only sm:hidden">新建定时任务</span>
+          <span className="hidden sm:inline">
+            {translateText("新建定时任务")}
+          </span>
+          <span className="sr-only sm:hidden">
+            {translateText("新建定时任务")}
+          </span>
         </Button>
       </PageHeader>
       <main id="main" className="flex min-h-0 flex-1">

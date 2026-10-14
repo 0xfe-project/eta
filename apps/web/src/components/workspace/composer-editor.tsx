@@ -14,11 +14,8 @@ import {
   PASTE_COMMAND,
 } from "lexical";
 import { useEffect, useRef } from "react";
-import {
-  isLongPaste,
-  MAX_MESSAGE_CHARS,
-  PASTE_FILE_NAME,
-} from "@/lib/composer";
+import { useTranslation } from "react-i18next";
+import { isLongPaste, MAX_MESSAGE_CHARS, pasteFileName } from "@/lib/composer";
 import { cn } from "@/lib/utils";
 import { $readDraft, $writeDraft, BlockNode } from "./composer-nodes";
 
@@ -77,7 +74,7 @@ function PastePlugin({ onFiles }: { onFiles: (files: File[]) => FilePart[] }) {
           if (files.length) blocks = onFilesRef.current(files);
           else if (text.length > MAX_MESSAGE_CHARS)
             blocks = onFilesRef.current([
-              new File([text], PASTE_FILE_NAME, {
+              new File([text], pasteFileName(), {
                 type: "text/plain;charset=utf-8",
               }),
             ]);
@@ -171,6 +168,7 @@ export function ComposerEditor({
   style?: React.CSSProperties;
   inputProps?: React.HTMLAttributes<HTMLDivElement>;
 }) {
+  const { t: translateText } = useTranslation();
   return (
     <LexicalComposer
       initialConfig={{
@@ -187,7 +185,7 @@ export function ComposerEditor({
         <PlainTextPlugin
           contentEditable={
             <ContentEditable
-              aria-label="消息"
+              aria-label={translateText("消息")}
               aria-multiline
               {...inputProps}
               aria-placeholder={placeholder}

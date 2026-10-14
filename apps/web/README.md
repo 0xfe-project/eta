@@ -19,6 +19,16 @@ TanStack Start + React。开发命令在仓库根目录执行 `bun run dev`。
 
 `@/` 同时在 TypeScript 和 Vite 中指向 `src/`。
 
+## 国际化
+
+使用 `react-i18next`，简体中文与英文资源在 `src/locales/zh.json` 和 `en.json`。所有界面文字、无障碍标签、通知和校验提示都从资源读取；用户内容、产品名、代码和命令保留原文。采用原中文文案作为自然语言 key，禁用 key / namespace 分隔符；带变量的句子使用 i18next 插值，英文数量文案维护单复数。
+
+默认按 `navigator.languages` 的优先级选择中英文，中文地区变体统一使用简体中文，其他语言回退英文。设置 → 外观 → 语言可选择跟随系统、中文或 English，保存在当前浏览器的 `axp.language.v1`，即时切换并支持跨标签页同步。存储不可用时仍可切换当前页面。日期、时间和数字随当前语言格式化。
+
+SSR 和客户端首次渲染统一使用英文；hydration 后加载浏览器语言偏好，避免服务端请求共享用户语言或 hydration 不一致。React 组件使用 `useTranslation()`；组件外的格式化和事件逻辑通过 `src/lib/i18n.ts` 的 `translate()` 在调用时读取语言，避免模块加载时固定文案。
+
+新增文案需同时更新两个资源文件。`i18n.test.ts` 检查资源 key、插值变量和源代码调用覆盖，并验证系统语言、英文回退、持久化、动态切换及校验文案。
+
 ## Query
 
 `getRouter()` 为每个路由实例创建独立 QueryClient，避免 SSR 请求间共享缓存。SSR integration 提供 QueryClientProvider、缓存序列化和 hydration。默认查询保鲜 30 秒，失败重试一次；mutation 不自动重试。

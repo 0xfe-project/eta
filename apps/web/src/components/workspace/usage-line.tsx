@@ -1,10 +1,14 @@
+import { useTranslation } from "react-i18next";
+import { formatLocale } from "@/lib/i18n";
 import { useAgentUsage } from "@/queries/llm";
 
 /** 12,345 → "1.2万"; tokens read best in 万 and 亿. */
 function tokens(n: number) {
-  if (n >= 1e8) return `${(n / 1e8).toFixed(1)}亿`;
-  if (n >= 1e4) return `${(n / 1e4).toFixed(1)}万`;
-  return n.toLocaleString();
+  return new Intl.NumberFormat(formatLocale(), {
+    notation: "compact",
+    maximumFractionDigits: 1,
+    minimumFractionDigits: formatLocale() === "zh-CN" && n >= 1e4 ? 1 : 0,
+  }).format(n);
 }
 
 const WINDOWS = [
@@ -18,18 +22,24 @@ const WINDOWS = [
  * tokens over the last 5 hours, day and week.
  */
 export function UsageLine({ principal }: { principal: string }) {
+  const { t: translateText } = useTranslation();
   const { data: usage, isPending } = useAgentUsage(principal);
   if (isPending) return null;
   const week = usage?.windows["7d"];
   return (
     <p className="text-xs text-muted-foreground tabular-nums">
-      模型用量：
-      {week?.requests
-        ? `${WINDOWS.map(
-            ([key, label]) =>
-              `${label} ${tokens(usage?.windows[key]?.total_tokens ?? 0)}`,
-          ).join(" · ")} tokens（7 天 ${week.requests} 次请求）`
-        : "近 7 天没有"}
+      {translateText("模型用量：{{value1}}", {
+        value1: week?.requests
+          ? translateText("{{value1}} tokens（7 天 {{value2}} 次请求）", {
+              value1: WINDOWS.map(
+                ([key, label]) =>
+                  `${translateText(label)} ${tokens(usage?.windows[key]?.total_tokens ?? 0)}`,
+              ).join(" · "),
+              value2: week.requests,
+              count: week.requests,
+            })
+          : translateText("近 7 天没有"),
+      })}
     </p>
   );
 }

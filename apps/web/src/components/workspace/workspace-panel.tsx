@@ -1,6 +1,7 @@
 import type { WorkspaceView } from "./types";
 import { ArrowsOutIcon } from "@phosphor-icons/react/ArrowsOut";
 import { Link } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,7 @@ import { hasPage, sectionPaths, usePanelViews } from "./workspace-search";
 
 /** Opens the full window at the side panel's current data context. */
 function FullWindowButton({ view }: { view: WorkspaceView }) {
+  const { t: translateText } = useTranslation();
   const [{ task }] = useTaskNav();
   const [routineNav] = useRoutineNav();
   const search = Object.fromEntries(
@@ -30,8 +32,8 @@ function FullWindowButton({ view }: { view: WorkspaceView }) {
       <Link
         to={hasPage(view) ? sectionPaths[view] : "/workspace"}
         search={hasPage(view) ? search : {}}
-        aria-label="在全窗口中打开"
-        title="在全窗口中打开"
+        aria-label={translateText("在全窗口中打开")}
+        title={translateText("在全窗口中打开")}
       >
         <ArrowsOutIcon aria-hidden="true" />
       </Link>
@@ -53,6 +55,7 @@ export function WorkspacePanel({
   onViewChange: (view: WorkspaceView) => void;
   className?: string;
 }) {
+  const { t: translateText } = useTranslation();
   const pending = useAttention().total;
   const tabs = usePanelViews();
   const view = tabs.some((tab) => tab.value === linked)
@@ -74,7 +77,11 @@ export function WorkspacePanel({
             <RefreshButton resource={view} />
           ) : null}
         </div>
-        <TabsList variant="default" aria-label="工作区标签" className="gap-1">
+        <TabsList
+          variant="default"
+          aria-label={translateText("工作区标签")}
+          className="gap-1"
+        >
           {tabs.map(({ value, label }) => (
             <TabsTrigger
               key={value}

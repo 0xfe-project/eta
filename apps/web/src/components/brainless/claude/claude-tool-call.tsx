@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import * as React from "react";
 import { toolHeadingClass } from "@/components/brainless/tool-call-styles";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,7 @@ export function ClaudeToolCall({
   className?: string;
   children?: React.ReactNode;
 }) {
+  const { t: translateText } = useTranslation();
   const expandable = Boolean(children);
 
   return (
@@ -85,7 +87,7 @@ export function ClaudeToolCall({
               {result}
               {expandable ? (
                 <span className="ml-2 text-[var(--terminal-muted)] group-open:hidden">
-                  （点击展开）
+                  {translateText("（点击展开）")}
                 </span>
               ) : null}
             </span>

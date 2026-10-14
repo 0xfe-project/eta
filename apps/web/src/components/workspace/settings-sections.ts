@@ -8,6 +8,7 @@ import { PackageIcon } from "@phosphor-icons/react/Package";
 import { PaletteIcon } from "@phosphor-icons/react/Palette";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
+import { translate } from "@/lib/i18n";
 import { useNeedsAttention } from "@/queries/llm";
 
 // Settings' sections, listed by the dialog and by the phone's 更多 page.
@@ -17,14 +18,62 @@ export const settingsSections: {
   label: string;
   icon: Icon;
 }[] = [
-  { value: "agents", label: "智能体", icon: RobotIcon },
-  { value: "bundles", label: "环境包", icon: PackageIcon },
-  { value: "providers", label: "模型服务", icon: PlugsConnectedIcon },
-  { value: "connections", label: "连接", icon: LinkIcon },
-  { value: "computers", label: "远程电脑", icon: DesktopIcon },
-  { value: "archived", label: "已归档", icon: ArchiveIcon },
-  { value: "appearance", label: "外观", icon: PaletteIcon },
-  { value: "logs", label: "日志", icon: ChartLineIcon },
+  {
+    value: "agents",
+    get label() {
+      return translate("智能体");
+    },
+    icon: RobotIcon,
+  },
+  {
+    value: "bundles",
+    get label() {
+      return translate("环境包");
+    },
+    icon: PackageIcon,
+  },
+  {
+    value: "providers",
+    get label() {
+      return translate("模型服务");
+    },
+    icon: PlugsConnectedIcon,
+  },
+  {
+    value: "connections",
+    get label() {
+      return translate("连接");
+    },
+    icon: LinkIcon,
+  },
+  {
+    value: "computers",
+    get label() {
+      return translate("远程电脑");
+    },
+    icon: DesktopIcon,
+  },
+  {
+    value: "archived",
+    get label() {
+      return translate("已归档");
+    },
+    icon: ArchiveIcon,
+  },
+  {
+    value: "appearance",
+    get label() {
+      return translate("外观");
+    },
+    icon: PaletteIcon,
+  },
+  {
+    value: "logs",
+    get label() {
+      return translate("日志");
+    },
+    icon: ChartLineIcon,
+  },
 ];
 
 /** The sections with accounts the user has to act on. */

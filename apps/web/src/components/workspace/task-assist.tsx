@@ -1,5 +1,6 @@
 import type { AssigneeOption, TaskDetail } from "@/queries/tasks";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { translate } from "@/lib/i18n";
 import { useAssistTask, useTasks } from "@/queries/tasks";
 import { Select, SelectOption } from "./select-field";
 import {
@@ -63,11 +65,18 @@ const hasPull = (task: TaskDetail) =>
 /** Why the task cannot be assisted now, and how to make it so. */
 function blocker(task: TaskDetail, agents: AssigneeOption[] | undefined) {
   if (task.assignee.kind !== "remote")
-    return "这个任务还没有指派到远程电脑。协助的 Agent 和主执行者在同一台电脑上工作：先在「指派给」里选一台电脑。";
+    return translate(
+      "这个任务还没有指派到远程电脑。协助的 Agent 和主执行者在同一台电脑上工作：先在「指派给」里选一台电脑。",
+    );
   if (task.status === "done" || task.status === "cancelled")
-    return "任务已经结束，它的工作位置已收尾。把状态改回进行中后再请 Agent 协助。";
+    return translate(
+      "任务已经结束，它的工作位置已收尾。把状态改回进行中后再请 Agent 协助。",
+    );
   if (agents && !agents.length)
-    return `${task.assignee.computer_name ?? "这台电脑"} 上没有可用的 Agent。在 设置 → 远程电脑 里看它的运行时是否在线、已配对；装了新的 Agent 后点「更新」重新上报。`;
+    return translate(
+      "{{value1}} 上没有可用的 Agent。在 设置 → 远程电脑 里看它的运行时是否在线、已配对；装了新的 Agent 后点「更新」重新上报。",
+      { value1: task.assignee.computer_name ?? translate("这台电脑") },
+    );
   return null;
 }
 
@@ -83,6 +92,7 @@ export function AssistDialog({
   /** Preselected, to ask an agent about its answer. */
   agent?: { runtime: string; provider: string };
 }) {
+  const { t: translateText } = useTranslation();
   const { data } = useTasks();
   const agents = data ? agentsFor(task, data.assignees) : undefined;
   const why = blocker(task, agents);
@@ -91,7 +101,7 @@ export function AssistDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent aria-describedby={undefined} className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>请 Agent 协助</DialogTitle>
+          <DialogTitle>{translateText("请 Agent 协助")}</DialogTitle>
         </DialogHeader>
         {why ? (
           <>
@@ -107,10 +117,12 @@ export function AssistDialog({
                     setSettings({ open: true, section: "computers" });
                   }}
                 >
-                  打开远程电脑设置
+                  {translateText("打开远程电脑设置")}
                 </Button>
               ) : null}
-              <Button onClick={() => onOpenChange(false)}>知道了</Button>
+              <Button onClick={() => onOpenChange(false)}>
+                {translateText("知道了")}
+              </Button>
             </DialogFooter>
           </>
         ) : agents ? (
@@ -123,7 +135,7 @@ export function AssistDialog({
           />
         ) : (
           <p role="status" className="text-sm text-muted-foreground">
-            正在读取这台电脑上的 Agent…
+            {translateText("正在读取这台电脑上的 Agent…")}
           </p>
         )}
       </DialogContent>
@@ -145,6 +157,7 @@ function AssistForm({
   initial?: { runtime: string; provider: string };
   onDone: () => void;
 }) {
+  const { t: translateText } = useTranslation();
   const assist = useAssistTask();
   const [chosen, setChosen] = useState(() =>
     agentKey(
@@ -184,7 +197,11 @@ function AssistForm({
       },
       {
         onSuccess: () => {
-          toast(`已请 ${providerLabel(agent.provider)} 协助`);
+          toast(
+            translateText("已请 {{value1}} 协助", {
+              value1: providerLabel(agent.provider),
+            }),
+          );
           onDone();
         },
         onError: (error) => toast.error(error.message),
@@ -201,7 +218,7 @@ function AssistForm({
     >
       <div className="grid gap-1.5">
         <Label htmlFor="assist-agent" className="text-xs">
-          Agent
+          {translateText("智能体")}
         </Label>
         <Select
           id="assist-agent"
@@ -214,27 +231,30 @@ function AssistForm({
               {remoteLabel(a)}
               {a.runtime === task.assignee.runtime &&
               a.provider === task.assignee.provider
-                ? "（主执行者，另开会话）"
+                ? translateText("（主执行者，另开会话）")
                 : ""}
-              {a.online ? "" : "（离线）"}
+              {a.online ? "" : translateText("（离线）")}
             </SelectOption>
           ))}
         </Select>
         {agent && !agent.online ? (
           <p className="text-xs text-muted-foreground">
-            {runtimeLabel(agent.runtime)} 现在离线：请求会排队，电脑连上后开始。
+            {translateText(
+              "{{value1}} 现在离线：请求会排队，电脑连上后开始。",
+              { value1: runtimeLabel(agent.runtime) },
+            )}
           </p>
         ) : null}
       </div>
       <div className="grid gap-1.5">
         <Label htmlFor="assist-request" className="text-xs">
-          协助要求
+          {translateText("协助要求")}
         </Label>
         <Textarea
           id="assist-request"
           rows={4}
           maxLength={20000}
-          placeholder="要它做什么"
+          placeholder={translateText("要它做什么")}
           value={request}
           onChange={(e) => setRequest(e.target.value)}
           onKeyDown={(e) => {
@@ -246,8 +266,14 @@ function AssistForm({
         />
       </div>
       <fieldset className="grid gap-1.5">
-        <legend className="mb-1.5 text-xs font-medium">什么时候开始</legend>
-        <div role="radiogroup" aria-label="什么时候开始" className="flex gap-1">
+        <legend className="mb-1.5 text-xs font-medium">
+          {translateText("什么时候开始")}
+        </legend>
+        <div
+          role="radiogroup"
+          aria-label={translateText("什么时候开始")}
+          className="flex gap-1"
+        >
           <Button
             type="button"
             role="radio"
@@ -256,7 +282,7 @@ function AssistForm({
             variant={after ? "outline" : "default"}
             onClick={() => setAfter(false)}
           >
-            现在
+            {translateText("现在")}
           </Button>
           <Button
             type="button"
@@ -267,13 +293,15 @@ function AssistForm({
             disabled={!run}
             onClick={() => setAfter(true)}
           >
-            主执行者这一轮交付后
+            {translateText("主执行者这一轮交付后")}
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
           {after
-            ? "等主执行者这一轮成功完成、登记了 PR 再开始；失败或被停止则不开始，并说明原因。"
-            : "排在其他协助之后，马上开始。"}
+            ? translateText(
+                "等主执行者这一轮成功完成、登记了 PR 再开始；失败或被停止则不开始，并说明原因。",
+              )
+            : translateText("排在其他协助之后，马上开始。")}
         </p>
       </fieldset>
       {canLoop ? (
@@ -285,11 +313,11 @@ function AssistForm({
             onChange={(e) => setLoop(e.target.checked)}
           />
           <span className="min-w-0">
-            要求修改时交给主执行者改，改完再审
+            {translateText("要求修改时交给主执行者改，改完再审")}
             <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              <span className="whitespace-nowrap">最多</span>
+              <span className="whitespace-nowrap">{translateText("最多")}</span>
               <Select
-                aria-label="最多审查几轮"
+                aria-label={translateText("最多审查几轮")}
                 size="sm"
                 className="w-16"
                 value={rounds}
@@ -304,10 +332,13 @@ function AssistForm({
                   ),
                 )}
               </Select>
-              <span className="whitespace-nowrap">轮审查</span>
+              <span className="whitespace-nowrap">
+                {translateText("轮审查")}
+              </span>
               <span className="basis-full">
-                通过即停，用完停下等你决定。审查 Agent 用 axp task review
-                给出结论。
+                {translateText(
+                  "通过即停，用完停下等你决定。审查 Agent 用 axp task review 给出结论。",
+                )}
               </span>
             </span>
           </span>
@@ -315,7 +346,9 @@ function AssistForm({
       ) : null}
       <DialogFooter>
         <Button type="submit" disabled={!ready || assist.isPending}>
-          {assist.isPending ? "正在发送…" : "请 Agent 协助"}
+          {assist.isPending
+            ? translateText("正在发送…")
+            : translateText("请 Agent 协助")}
         </Button>
       </DialogFooter>
     </form>

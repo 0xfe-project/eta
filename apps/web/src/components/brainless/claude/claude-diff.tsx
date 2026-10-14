@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 /**
@@ -25,6 +26,7 @@ export function ClaudeDiff({
   lines: DiffLine[];
   className?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className={cn("min-w-0 font-mono text-[13px] leading-[1.55]", className)}
@@ -33,7 +35,9 @@ export function ClaudeDiff({
         <span aria-hidden className="shrink-0" style={{ color: GREEN }}>
           ⏺
         </span>
-        <span className="text-[var(--terminal-claude-foreground)]">Update</span>
+        <span className="text-[var(--terminal-claude-foreground)]">
+          {t("更新")}
+        </span>
         <span className="min-w-0 break-all">
           <span className="text-[var(--terminal-muted)]">(</span>
           <span className="text-[var(--terminal-link)]">{file}</span>
@@ -97,7 +101,7 @@ export function ClaudeDiff({
               >
                 {l.type !== "ctx" ? (
                   <span className="sr-only">
-                    {l.type === "add" ? "added: " : "removed: "}
+                    {l.type === "add" ? t("新增：") : t("移除：")}
                   </span>
                 ) : null}
                 {l.text}

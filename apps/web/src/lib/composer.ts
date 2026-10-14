@@ -1,4 +1,5 @@
 import type { Attachment } from "@/api/control-plane.gen";
+import { translate } from "@/lib/i18n";
 
 // What the chat composer holds: text the user typed, with blocks among it
 // where they pasted long text or files. Blocks are the composer's own: a
@@ -20,7 +21,7 @@ export const MAX_MESSAGE_CHARS = 100_000;
 export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 export const MAX_ATTACHMENTS = 10;
 /** A paste too long to send as text goes as a file of this name. */
-export const PASTE_FILE_NAME = "粘贴文本.txt";
+export const pasteFileName = () => translate("粘贴文本.txt");
 
 export type DraftPart =
   | { type: "text"; text: string }

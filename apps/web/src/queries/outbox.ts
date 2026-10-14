@@ -9,6 +9,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { ApiError, controlPlane, unwrap } from "@/lib/api";
 import { draftOf, MAX_ATTACHMENT_BYTES } from "@/lib/composer";
+import { translate } from "@/lib/i18n";
 import { addSent } from "@/queries/chat";
 import { refreshLlm } from "@/queries/llm";
 
@@ -76,7 +77,7 @@ interface OutboxStore extends Saved {
   remove: (id: string) => void;
 }
 
-const INTERRUPTED = "上传中断，请移除后重新粘贴。";
+const interrupted = () => translate("上传中断，请移除后重新粘贴。");
 
 const storage: PersistStorage<Saved> = {
   getItem: (name) => {
@@ -99,7 +100,7 @@ const storage: PersistStorage<Saved> = {
             id,
             upload.attachment || upload.error
               ? upload
-              : { ...upload, error: INTERRUPTED },
+              : { ...upload, error: interrupted() },
           ]),
       );
       return { state: { ...result.data, uploads } };
@@ -158,7 +159,7 @@ export const useOutbox = create<OutboxStore>()(
 /** Tries a request makes before the message shows as not delivered. */
 const TRIES = 4;
 const TRY_TIMEOUT = 20_000;
-const NETWORK_FAILURE = "网络连接失败，消息未送达。";
+const networkFailure = () => translate("网络连接失败，消息未送达。");
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -216,7 +217,7 @@ async function attempt(queryClient: QueryClient, outgoing: Outgoing) {
       if (error instanceof ApiError && error.code.startsWith("MODEL_"))
         void refreshLlm(queryClient);
       update(outgoing.id, {
-        failure: error instanceof ApiError ? error.message : NETWORK_FAILURE,
+        failure: error instanceof ApiError ? error.message : networkFailure(),
       });
       return;
     }
@@ -318,7 +319,7 @@ export async function upload(groupId: string, id: string, file: File) {
   const { setUpload } = useOutbox.getState();
   files.set(id, file);
   if (file.size > MAX_ATTACHMENT_BYTES) {
-    setUpload(id, { groupId, error: "单个附件不能超过 20 MB。" });
+    setUpload(id, { groupId, error: translate("单个附件不能超过 20 MB。") });
     return;
   }
   setUpload(id, { groupId });
@@ -333,14 +334,14 @@ export async function upload(groupId: string, id: string, file: File) {
     );
     const body = await response.json().catch(() => null);
     if (!response.ok)
-      throw new Error(body?.error?.message ?? "上传失败，请重试。");
+      throw new Error(body?.error?.message ?? translate("上传失败，请重试。"));
     setUpload(id, { groupId, attachment: body as Attachment });
   } catch (error) {
     setUpload(id, {
       groupId,
       error:
         error instanceof TypeError
-          ? "网络连接失败，上传未完成。"
+          ? translate("网络连接失败，上传未完成。")
           : (error as Error).message,
     });
   }
@@ -367,7 +368,7 @@ export function dropUpload(id: string) {
   if (uploads[id])
     setUpload(id, {
       groupId: uploads[id].groupId,
-      error: "附件已移除，请重新粘贴。",
+      error: translate("附件已移除，请重新粘贴。"),
     });
   if (attachment)
     void controlPlane

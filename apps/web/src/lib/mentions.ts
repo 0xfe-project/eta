@@ -18,7 +18,10 @@ export function mentionedMembers(text: string, members: Member[]) {
       `(?:^|[\\s，。！？、,:;!?])@${escaped(label)}(?=\\s|[，。！？、,:;!?]|$)`,
       "u",
     ).exec(text);
-  const everyone = match("所有人");
+  // Both aliases remain valid in saved drafts after switching language.
+  const everyone = [match("所有人"), match("everyone")]
+    .filter((result) => result !== null)
+    .sort((a, b) => a.index - b.index)[0];
   const ordered = members.flatMap((p) => {
     const named = match(mentionLabel(p, members));
     const index = Math.min(

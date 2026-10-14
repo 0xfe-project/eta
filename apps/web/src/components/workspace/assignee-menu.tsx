@@ -7,6 +7,7 @@ import {
   CheckIcon,
 } from "@phosphor-icons/react";
 import { useRef, useState, useSyncExternalStore } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -50,6 +51,7 @@ export function AssigneeMenu({
   retry: () => void;
   onChange: (value: string) => void;
 }) {
+  const { t: translateText } = useTranslation();
   const compact = useSyncExternalStore(subscribe, snapshot, serverSnapshot);
   const [path, setPath] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
@@ -61,12 +63,18 @@ export function AssigneeMenu({
   const assignee = assigneeFromKey(value);
   const label =
     value === "none"
-      ? "未指派"
+      ? translateText("未指派")
       : value === "user"
-        ? "我"
+        ? translateText("我")
         : selected
-          ? remoteLabel(selected) + (selected.online ? "" : "（离线）")
-          : `${remoteLabel({ ...assignee, computer_name: assignee.computer_id })}（不可用）`;
+          ? remoteLabel(selected) +
+            (selected.online ? "" : translateText("（离线）"))
+          : translateText("{{value1}}（不可用）", {
+              value1: remoteLabel({
+                ...assignee,
+                computer_name: assignee.computer_id,
+              }),
+            });
   const ancestors: Choice[] = [];
   let choices = tree;
   for (const key of path) {
@@ -89,10 +97,13 @@ export function AssigneeMenu({
     <>
       <span className="min-w-0 break-words">
         {choice.label}
-        {choice.offline ? "（离线）" : ""}
+        {choice.offline ? translateText("（离线）") : ""}
       </span>
       {isSelected(choice) ? (
-        <CheckIcon aria-label="已选" className="ml-auto shrink-0" />
+        <CheckIcon
+          aria-label={translateText("已选")}
+          className="ml-auto shrink-0"
+        />
       ) : null}
     </>
   );
@@ -155,7 +166,7 @@ export function AssigneeMenu({
               }}
             >
               <CaretLeftIcon />
-              返回
+              {translateText("返回")}
             </DropdownMenuItem>
             <DropdownMenuLabel className="break-words">
               {ancestors.map((c) => c.label).join(" · ")}
@@ -181,7 +192,11 @@ export function AssigneeMenu({
               </DropdownMenuItem>
             ))
           : renderChoices(tree)}
-        {pending ? <DropdownMenuLabel>读取指派对象……</DropdownMenuLabel> : null}
+        {pending ? (
+          <DropdownMenuLabel>
+            {translateText("读取指派对象……")}
+          </DropdownMenuLabel>
+        ) : null}
         {error ? (
           <>
             <DropdownMenuLabel className="break-words text-destructive">
@@ -193,11 +208,13 @@ export function AssigneeMenu({
                 retry();
               }}
             >
-              重试
+              {translateText("重试")}
             </DropdownMenuItem>
           </>
         ) : !pending && !options.length ? (
-          <DropdownMenuLabel>暂无远程智能体</DropdownMenuLabel>
+          <DropdownMenuLabel>
+            {translateText("暂无远程智能体")}
+          </DropdownMenuLabel>
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>

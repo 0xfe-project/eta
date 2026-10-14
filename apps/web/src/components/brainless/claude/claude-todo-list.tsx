@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 /**
@@ -35,6 +36,7 @@ export function ClaudeTodoList({
   todos: Todo[];
   className?: string;
 }) {
+  const { t: translateText } = useTranslation();
   return (
     <ol className={cn("font-mono text-[13px] leading-[1.6]", className)}>
       {todos.map((t, i) => {
@@ -71,10 +73,10 @@ export function ClaudeTodoList({
                 {" "}
                 (
                 {t.status === "done"
-                  ? "completed"
+                  ? translateText("已完成")
                   : t.status === "active"
-                    ? "in progress"
-                    : "pending"}
+                    ? translateText("进行中")
+                    : translateText("待办")}
                 )
               </span>
             </span>

@@ -1,5 +1,6 @@
 import { ArrowUpIcon } from "@phosphor-icons/react/ArrowUp";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,7 @@ function scroller(el: HTMLElement | null) {
  * scrolled to the end, takes its own row below the content instead of covering it.
  */
 export function BackToTop({ className }: { className?: string }) {
+  const { t: translateText } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(false);
   useEffect(() => {
@@ -50,8 +52,8 @@ export function BackToTop({ className }: { className?: string }) {
         <Button
           variant="outline"
           size="icon"
-          aria-label="回到顶部"
-          title="回到顶部"
+          aria-label={translateText("回到顶部")}
+          title={translateText("回到顶部")}
           className="pointer-events-auto my-3 shadow-sm dark:bg-background"
           onClick={() => {
             const area = scroller(ref.current);

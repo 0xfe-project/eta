@@ -2,11 +2,13 @@ import type { UseFormReturn } from "react-hook-form";
 import type { AgentForm } from "./agent-form";
 import type { Bundle } from "@/queries/chat";
 import type { Model } from "@/queries/llm";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { formatLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useConnectors } from "@/queries/llm";
 import { DESCRIPTION_MAX } from "./agent-form";
@@ -26,6 +28,7 @@ export function ModelSelect({
   models: Model[] | undefined;
   invalid?: boolean;
 }) {
+  const { t: translateText } = useTranslation();
   const { data: connectors } = useConnectors();
   const loading = !models || !connectors;
   const groups = (connectors ?? []).map((connector) => ({
@@ -42,11 +45,13 @@ export function ModelSelect({
       disabled={loading || props.disabled}
     >
       <SelectOption value="" disabled>
-        {loading ? "正在加载模型…" : "选择模型"}
+        {loading ? translateText("正在加载模型…") : translateText("选择模型")}
       </SelectOption>
       {value && !known ? (
         <SelectOption value={value} disabled>
-          {loading ? "正在加载模型…" : `${value}（已不存在）`}
+          {loading
+            ? translateText("正在加载模型…")
+            : translateText("{{value1}}（已不存在）", { value1: value })}
         </SelectOption>
       ) : null}
       {groups
@@ -61,9 +66,9 @@ export function ModelSelect({
               >
                 {model.display_name}
                 {model.status === "unavailable"
-                  ? "（不可用）"
+                  ? translateText("（不可用）")
                   : model.status === "degraded"
-                    ? "（暂时故障）"
+                    ? translateText("（暂时故障）")
                     : ""}
               </SelectOption>
             ))}
@@ -85,6 +90,7 @@ function BundleList({
   autoFocus?: boolean;
   onChange: (value: string[]) => void;
 }) {
+  const { t: translateText } = useTranslation();
   const names = bundles.map((bundle) => bundle.name);
   const chosen =
     value ?? bundles.filter((bundle) => bundle.builtin).map((b) => b.name);
@@ -113,16 +119,18 @@ function BundleList({
               <span className="min-w-0 space-y-0.5">
                 <span className="block font-medium break-words">
                   {bundle.name}
-                  {bundle.required ? " · 必选" : ""}
+                  {bundle.required ? translateText(" · 必选") : ""}
                   {bundle.builtin ? null : (
                     <span className="ml-1.5 font-normal text-muted-foreground">
-                      自定义
+                      {translateText("自定义")}
                     </span>
                   )}
                 </span>
                 {bundle.description ? (
                   <span className="block text-muted-foreground">
-                    {bundle.description}
+                    {translateText(bundle.description, {
+                      defaultValue: bundle.description,
+                    })}
                   </span>
                 ) : null}
               </span>
@@ -141,14 +149,15 @@ export function NameField({
   form: Form;
   autoFocus?: boolean;
 }) {
+  const { t: translateText } = useTranslation();
   const error = form.formState.errors.name;
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="agent-name">名称</Label>
+      <Label htmlFor="agent-name">{translateText("名称")}</Label>
       <Input
         id="agent-name"
         autoFocus={autoFocus}
-        placeholder="例如：代码审查"
+        placeholder={translateText("例如：代码审查")}
         aria-invalid={Boolean(error)}
         aria-describedby={error ? "agent-name-error" : undefined}
         {...form.register("name")}
@@ -176,13 +185,14 @@ export function ModelField({
   models: Model[] | undefined;
   onOpenProviders: () => void;
 }) {
+  const { t: translateText } = useTranslation();
   const error = form.formState.errors.model;
   // Only once they have loaded can there be none.
   const noModels =
     models !== undefined && !models.some((model) => model.available);
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="agent-model">模型</Label>
+      <Label htmlFor="agent-model">{translateText("模型")}</Label>
       <ModelSelect
         id="agent-model"
         value={form.watch("model")}
@@ -204,7 +214,7 @@ export function ModelField({
             error ? "text-xs text-destructive" : "text-xs text-muted-foreground"
           }
         >
-          {error?.message ?? "暂无可用模型。"}
+          {error?.message ?? translateText("暂无可用模型。")}
           {noModels ? (
             <Button
               type="button"
@@ -213,7 +223,7 @@ export function ModelField({
               className="h-auto px-1"
               onClick={onOpenProviders}
             >
-              前往模型服务
+              {translateText("前往模型服务")}
             </Button>
           ) : null}
         </p>
@@ -231,6 +241,7 @@ export function BundlesField({
   bundles: Bundle[];
   autoFocus?: boolean;
 }) {
+  const { t: translateText } = useTranslation();
   return (
     <div
       role="group"
@@ -239,7 +250,7 @@ export function BundlesField({
       className="space-y-1.5"
     >
       <p id="agent-bundles" className="text-xs leading-none">
-        环境包
+        {translateText("环境包")}
       </p>
       <BundleList
         value={form.watch("bundles")}
@@ -250,7 +261,9 @@ export function BundlesField({
         }
       />
       <p id="agent-bundles-hint" className="text-xs text-muted-foreground">
-        智能体的环境由这些环境包构建：安装的工具、可用的插件。修改后重新构建，在空闲时生效。
+        {translateText(
+          "智能体的环境由这些环境包构建：安装的工具、可用的插件。修改后重新构建，在空闲时生效。",
+        )}
       </p>
     </div>
   );
@@ -263,17 +276,19 @@ export function InstructionsField({
   form: Form;
   autoFocus?: boolean;
 }) {
+  const { t: translateText } = useTranslation();
   const error = form.formState.errors.description;
   const length = form.watch("description").length;
   return (
     <div className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-2">
-        <Label htmlFor="agent-description">指令</Label>
+        <Label htmlFor="agent-description">{translateText("指令")}</Label>
         <span
           className="text-xs tabular-nums text-muted-foreground"
           aria-live="polite"
         >
-          {length.toLocaleString()} / {DESCRIPTION_MAX.toLocaleString()}
+          {length.toLocaleString(formatLocale())} /{" "}
+          {DESCRIPTION_MAX.toLocaleString(formatLocale())}
         </span>
       </div>
       <Textarea
@@ -281,7 +296,9 @@ export function InstructionsField({
         rows={12}
         autoFocus={autoFocus}
         className="max-h-[50dvh] min-h-48 font-mono leading-relaxed"
-        placeholder="职责、工作方式和约束。例如：你负责审查 Pull Request，只指出会导致错误的问题。"
+        placeholder={translateText(
+          "职责、工作方式和约束。例如：你负责审查 Pull Request，只指出会导致错误的问题。",
+        )}
         aria-invalid={Boolean(error)}
         aria-describedby="agent-description-hint"
         {...form.register("description")}
@@ -294,7 +311,9 @@ export function InstructionsField({
         role={error ? "alert" : undefined}
       >
         {error?.message ??
-          "注入智能体的上下文；修改在空闲时生效，不打断进行中的回复。"}
+          translateText(
+            "注入智能体的上下文；修改在空闲时生效，不打断进行中的回复。",
+          )}
       </p>
     </div>
   );

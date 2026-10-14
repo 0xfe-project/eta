@@ -1,3 +1,4 @@
+import type { paths as ControlPlanePaths } from "@/api/control-plane.gen";
 // Browser clients for the same-origin API behind the edge gateway: the
 // control plane (/api/v1, its routines under /api/routines/v1 and its
 // GitHub connection under /api/forge/v1), the LLM gateway (/api/llm/v1) and
@@ -8,9 +9,9 @@
 // documents, which are generated from the code (`bun run generate` writes
 // src/api; redocly.yaml lists the documents).
 
-import type { paths as ControlPlanePaths } from "@/api/control-plane.gen";
 import type { paths as RoutinesPaths } from "@/api/routines.gen";
 import createClient from "openapi-fetch";
+import { translate } from "@/lib/i18n";
 
 export class ApiError extends Error {
   constructor(
@@ -22,7 +23,7 @@ export class ApiError extends Error {
   }
 }
 
-const FALLBACK_MESSAGE = "请求失败，请稍后再试。";
+const fallbackMessage = () => translate("请求失败，请稍后再试。");
 
 async function parse(response: Response) {
   const body = await response.json().catch(() => null);
@@ -31,7 +32,7 @@ async function parse(response: Response) {
     throw new ApiError(
       response.status,
       error?.code ?? "UNKNOWN",
-      error?.message ?? FALLBACK_MESSAGE,
+      error?.message ?? fallbackMessage(),
     );
   }
   return body;
@@ -109,7 +110,7 @@ export async function unwrap<T>(
     throw new ApiError(
       response.status,
       body.error?.code ?? "UNKNOWN",
-      body.error?.message ?? FALLBACK_MESSAGE,
+      body.error?.message ?? fallbackMessage(),
     );
   }
   return data as T;

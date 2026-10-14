@@ -2,7 +2,6 @@
   "id": "/",
   "name": "AXP",
   "short_name": "AXP",
-  "lang": "zh-CN",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

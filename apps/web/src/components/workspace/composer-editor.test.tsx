@@ -2,7 +2,7 @@ import type { Draft, FilePart } from "@/lib/composer";
 import { afterEach, describe, expect, it } from "@rstest/core";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { LONG_PASTE, MAX_MESSAGE_CHARS, PASTE_FILE_NAME } from "@/lib/composer";
+import { LONG_PASTE, MAX_MESSAGE_CHARS, pasteFileName } from "@/lib/composer";
 import { ComposerEditor } from "./composer-editor";
 
 (
@@ -126,7 +126,7 @@ describe("pasting into the composer", () => {
     const editor = await render();
     await paste(editor, { "text/plain": "x".repeat(MAX_MESSAGE_CHARS + 1) });
     expect(pastedFiles.map((f) => [f.name, f.size])).toEqual([
-      [PASTE_FILE_NAME, MAX_MESSAGE_CHARS + 1],
+      [pasteFileName(), MAX_MESSAGE_CHARS + 1],
     ]);
     expect(draft.map((p) => p.type)).toEqual(["file"]);
   });

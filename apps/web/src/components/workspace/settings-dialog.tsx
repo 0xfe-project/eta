@@ -3,6 +3,8 @@ import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { useTheme } from "next-themes";
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { LanguageSettings } from "@/components/language-settings";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useNeedsAttention } from "@/queries/llm";
 import { AgentSettings } from "./agent-settings";
@@ -24,13 +27,40 @@ import { settingsSections, useSettingsAttention } from "./settings-sections";
 import { useWorkspaceStore } from "./workspace-store";
 
 const colorModes = [
-  { value: "system", label: "跟随系统" },
-  { value: "light", label: "浅色" },
-  { value: "dark", label: "深色" },
+  {
+    value: "system",
+    get label() {
+      return translate("跟随系统");
+    },
+  },
+  {
+    value: "light",
+    get label() {
+      return translate("浅色");
+    },
+  },
+  {
+    value: "dark",
+    get label() {
+      return translate("深色");
+    },
+  },
 ] as const;
 const fontFields = [
-  { key: "fontSans", label: "界面字体", placeholder: "Geist" },
-  { key: "fontMono", label: "等宽字体", placeholder: "Geist Mono" },
+  {
+    key: "fontSans",
+    get label() {
+      return translate("界面字体");
+    },
+    placeholder: "Geist",
+  },
+  {
+    key: "fontMono",
+    get label() {
+      return translate("等宽字体");
+    },
+    placeholder: "Geist Mono",
+  },
 ] as const satisfies {
   key: keyof WorkspaceState;
   label: string;
@@ -38,17 +68,20 @@ const fontFields = [
 }[];
 /** OpenObserve, proxied by the edge gateway under /observe. */
 function LogSettings() {
+  const { t: translateText } = useTranslation();
   return (
     <div className="space-y-3">
-      <h2 className="text-sm font-semibold">日志</h2>
+      <h2 className="text-sm font-semibold">{translateText("日志")}</h2>
       <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
         <div className="min-w-0 text-sm">
           <p className="font-medium">OpenObserve</p>
-          <p className="text-muted-foreground">登录账号 root@axp.local</p>
+          <p className="text-muted-foreground">
+            {translateText("登录账号 root@axp.local")}
+          </p>
         </div>
         <Button asChild variant="outline" size="sm" className="w-fit">
           <a href="/observe/web/" target="_blank" rel="noreferrer">
-            打开
+            {translateText("打开")}
             <ArrowSquareOutIcon aria-hidden="true" />
           </a>
         </Button>
@@ -116,14 +149,16 @@ function Segmented<T extends string>({
 }
 
 function AppearanceSettings() {
+  const { t: translateText } = useTranslation();
   const workspace = useWorkspaceStore((s) => s.workspace);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const { theme = "system", setTheme } = useTheme();
   return (
     <div className="space-y-3">
-      <h2 className="text-sm font-semibold">外观</h2>
+      <h2 className="text-sm font-semibold">{translateText("外观")}</h2>
+      <LanguageSettings />
       <Segmented
-        label="颜色模式"
+        label={translateText("颜色模式")}
         name="color-mode"
         options={colorModes}
         value={theme as (typeof colorModes)[number]["value"]}
@@ -158,14 +193,19 @@ function AppearanceSettings() {
 
 /** Opens settings; the dot marks accounts the user has to act on. */
 export function SettingsButton({ className }: { className?: string }) {
+  const { t: translateText } = useTranslation();
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const attention = useNeedsAttention();
   return (
     <Button
       variant="ghost"
       size="icon"
-      aria-label={attention ? "设置（有账号需要处理）" : "设置"}
-      title="设置"
+      aria-label={
+        attention
+          ? translateText("设置（有账号需要处理）")
+          : translateText("设置")
+      }
+      title={translateText("设置")}
       className={cn("relative", className)}
       onClick={() => setSettings((state) => ({ ...state, open: true }))}
     >
@@ -196,6 +236,7 @@ function useSettingsLink() {
 }
 
 export function SettingsDialog() {
+  const { t: translateText } = useTranslation();
   const settings = useWorkspaceStore((s) => s.settings);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const attention = useSettingsAttention();
@@ -211,15 +252,17 @@ export function SettingsDialog() {
         className="flex h-[min(36rem,calc(100dvh-2rem))] max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
       >
         <DialogHeader className="shrink-0 border-b p-3 pr-12">
-          <DialogTitle className="text-base">设置</DialogTitle>
+          <DialogTitle className="text-base">
+            {translateText("设置")}
+          </DialogTitle>
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col md:flex-row">
           <SettingsNav
-            label="设置分类"
+            label={translateText("设置分类")}
             sections={settingsSections.map((section) => ({
               ...section,
               attention: attention[section.value],
-              hint: "有账号需要处理",
+              hint: translateText("有账号需要处理"),
             }))}
             value={settings.section}
             onChange={(section) =>
