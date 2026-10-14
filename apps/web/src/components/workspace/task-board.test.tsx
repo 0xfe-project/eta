@@ -49,22 +49,28 @@ async function render() {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
-  await act(async () =>
-    root.render(
-      <QueryClientProvider client={client}>
-        <TaskBoard />
-      </QueryClientProvider>,
-    ),
-  );
+  const draw = () =>
+    act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <TaskBoard />
+        </QueryClientProvider>,
+      ),
+    );
+  await draw();
   cleanup.push(() => {
     root.unmount();
     client.clear();
     container.remove();
   });
-  return container;
+  return { container, rerender: draw };
 }
 
-describe("task board with a task open", () => {
+/** The list's pane: the page's first child, behind an open task. */
+const listPane = (container: HTMLElement) =>
+  container.firstElementChild!.firstElementChild as HTMLElement;
+
+describe("task board", () => {
   afterEach(async () => {
     await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
     navigation.task = null;
@@ -72,86 +78,70 @@ describe("task board with a task open", () => {
     useWorkspaceStore.getState().setWorkspace((workspace) => ({
       ...workspace,
       taskLayout: "list",
-      taskListWidth: undefined,
     }));
   });
 
-  it("keeps the list beside the task from md, and leaves phones the task alone", async () => {
+  it("gives an open task the page, with the list out of the way", async () => {
     navigation.task = "t1";
-    const container = await render();
-    const list = container.querySelector('section[aria-label="任务列表"]')!;
-    // The list's column and the separator after it: hidden on phones,
-    // beside the task from md.
-    const pane = container.querySelector("[data-panel]")!;
-    expect(pane.contains(list)).toBe(true);
-    expect(pane.parentElement!.className).toContain(
-      "max-md:[&>[data-panel]:first-child]:hidden!",
-    );
-    const separator = container.querySelector('[role="separator"]')!;
-    expect(separator.getAttribute("aria-label")).toBe("调整任务列表宽度");
-    expect(separator.className).toContain("max-md:hidden");
-    expect(separator.previousElementSibling).toBe(pane);
-    // The task is the page's one main, and its row in the list is marked.
-    expect(container.querySelectorAll("main")).toHaveLength(1);
-    expect(container.querySelector("main")!.textContent).toContain("任务说明");
-    const current = list.querySelector('[aria-current="true"]')!;
-    expect(current.textContent).toContain("测试任务");
-    // Another row opens that task in place.
-    const next = [...list.querySelectorAll("button")].find((b) =>
-      b.textContent?.includes("另一个任务"),
+    const { container } = await render();
+    // The list takes no room and no focus; nothing is left to resize.
+    const pane = listPane(container);
+    expect(pane.inert).toBe(true);
+    expect(pane.className).toContain("invisible absolute inset-0");
+    expect(container.querySelector('[role="separator"]')).toBeNull();
+    // The task is the page's one main.
+    const main = container.querySelectorAll("main");
+    expect(main).toHaveLength(1);
+    expect(main[0]!.id).toBe("main");
+    expect(main[0]!.textContent).toContain("任务说明");
+    // 任务 goes back to the list.
+    const back = [...container.querySelectorAll("button")].find(
+      (b) => !pane.contains(b) && b.textContent === "任务",
     )!;
-    await act(async () => next.click());
-    expect(navigation.set).toHaveBeenCalledWith({ task: "t2" });
+    await act(async () => back.click());
+    expect(navigation.set).toHaveBeenCalledWith({ task: null });
   });
 
-  it("shows the list beside a task even when the board layout is chosen", async () => {
+  it("finds the list as it was left, at the task just open", async () => {
+    const { container, rerender } = await render();
+    navigation.task = "t1";
+    await rerender();
+    navigation.task = null;
+    await rerender();
+    const pane = listPane(container);
+    expect(pane.inert).toBe(false);
+    expect(pane.className).not.toContain("invisible");
+    const current = container.querySelector<HTMLElement>(
+      '[role="main"] [aria-current="true"]',
+    )!;
+    expect(current.textContent).toContain("测试任务");
+    expect(document.activeElement).toBe(current);
+  });
+
+  it("keeps the board behind a task", async () => {
     useWorkspaceStore.getState().setWorkspace((workspace) => ({
       ...workspace,
       taskLayout: "board",
     }));
     navigation.task = "t1";
-    const container = await render();
-    const list = container.querySelector('section[aria-label="任务列表"]')!;
-    expect(list.querySelector("ul li")?.textContent).toContain("测试任务");
+    const { container } = await render();
+    expect(
+      listPane(container).querySelector('section[aria-label="待办"]'),
+    ).not.toBeNull();
     expect(useWorkspaceStore.getState().workspace.taskLayout).toBe("board");
   });
 
-  it("opens the list at its remembered width", async () => {
-    // happy-dom lays nothing out: two 500px panels around a 1px separator.
-    const offsetWidth = Object.getOwnPropertyDescriptor(
-      HTMLElement.prototype,
-      "offsetWidth",
-    )!;
-    Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
-      configurable: true,
-      get(this: HTMLElement) {
-        if (this.hasAttribute("data-group")) return 1001;
-        if (this.hasAttribute("data-panel")) return 500;
-        return this.getAttribute("role") === "separator" ? 1 : 0;
-      },
-    });
-    cleanup.push(() =>
-      Object.defineProperty(HTMLElement.prototype, "offsetWidth", offsetWidth),
-    );
-    useWorkspaceStore.getState().setWorkspace((workspace) => ({
-      ...workspace,
-      taskListWidth: 400,
-    }));
-    navigation.task = "t1";
-    const container = await render();
-    const pane = container.querySelector<HTMLElement>("[data-panel]")!;
-    // Sizes are percentages of the group.
-    expect(Number(pane.style.flexGrow)).toBeCloseTo(40);
-  });
-
   it("is the whole page without a task", async () => {
-    const container = await render();
+    const { container } = await render();
     const main = container.querySelector('[role="main"]#main')!;
-    expect(container.querySelector("[data-panel]")!.className).not.toContain(
-      "hidden",
-    );
-    expect(container.querySelector('[role="separator"]')).toBeNull();
+    expect(listPane(container).contains(main)).toBe(true);
     expect(main.querySelector('[aria-current="true"]')).toBeNull();
+    // Another row opens that task in place.
+    const next = [...main.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("另一个任务"),
+    )!;
+    await act(async () => next.click());
+    expect(navigation.set).toHaveBeenCalledWith({ task: "t2" });
   });
 });
 

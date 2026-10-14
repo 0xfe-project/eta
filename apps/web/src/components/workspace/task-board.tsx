@@ -1,5 +1,6 @@
 import type { WorkspaceState } from "./workspace-store";
 import type { Task, TaskStatus } from "@/queries/tasks";
+import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
@@ -7,7 +8,7 @@ import { KanbanIcon } from "@phosphor-icons/react/Kanban";
 import { ListIcon } from "@phosphor-icons/react/List";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -23,11 +24,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/ui/resizable";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import {
@@ -64,7 +60,7 @@ import {
 import { useWorkspaceStore } from "./workspace-store";
 
 // The task board as a full-window page: every task as rows grouped by status
-// or as a board to drag them across, and an open task beside the list. The
+// or as a board to drag them across, or one open task in their place. The
 // task lays itself out by its own width (container queries), not the window's.
 
 const showError = (error: Error) => toast.error(error.message);
@@ -126,14 +122,22 @@ function StatusMenu({ task }: { task: Task }) {
 function ListView({
   tasks,
   selected,
+  hidden,
   onCreate,
 }: {
   tasks: Task[];
+  /** The task last open, marked so the list reads as left. */
   selected: string | null;
+  hidden: boolean;
   onCreate: (status: TaskStatus) => void;
 }) {
   const [, setNav] = useTaskNav();
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const selectedRef = useRef<HTMLButtonElement>(null);
+  // Back from a task, focus returns to its row.
+  useEffect(() => {
+    if (!hidden) selectedRef.current?.focus();
+  }, [hidden]);
   // Every group starts open; a click folds it.
   const isOpen = (status: TaskStatus) => open[status] ?? true;
   return (
@@ -183,6 +187,7 @@ function ListView({
                   >
                     <StatusMenu task={task} />
                     <button
+                      ref={task.id === selected ? selectedRef : undefined}
                       type="button"
                       aria-current={task.id === selected || undefined}
                       onClick={() => void setNav({ task: task.id })}
@@ -337,14 +342,11 @@ function TaskPage({ id }: { id: string }) {
       <button
         type="button"
         onClick={back}
-        className="text-muted-foreground outline-none hover:text-foreground focus-visible:underline"
+        className="flex items-center gap-1.5 text-muted-foreground outline-none hover:text-foreground focus-visible:underline"
       >
+        <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
         任务
       </button>
-      <CaretRightIcon
-        aria-hidden="true"
-        className="size-3 text-muted-foreground"
-      />
       {task ? (
         <span className="truncate tabular-nums">#{task.number}</span>
       ) : null}
@@ -438,53 +440,30 @@ export function TaskBoard() {
   // Remembered in this browser, so the page opens as it was left.
   const layout = useWorkspaceStore((s) => s.workspace.taskLayout ?? "list");
   const scope = useWorkspaceStore((s) => s.workspace.taskScope ?? "all");
-  const listWidth = useWorkspaceStore((s) => s.workspace.taskListWidth);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
-  const groupRef = useRef<HTMLDivElement>(null);
   const setView = (changes: Pick<WorkspaceState, "taskLayout" | "taskScope">) =>
     setWorkspace((workspace) => ({ ...workspace, ...changes }));
   const id = nav.task && nav.task !== "new" ? nav.task : null;
+  const [last, setLast] = useState(id);
+  if (id && id !== last) setLast(id);
   const tasks = (data?.tasks ?? []).filter(
     (task) => scope === "all" || task.assignee.kind === scope,
   );
-  // Beside a task the board has no room; the list keeps its place.
-  const board = layout === "board" && !id;
-  // The open task is the page's main content; the list beside it is not.
-  const Main = "section";
+  const board = layout === "board";
   const create = (status: TaskStatus = "todo") => {
     setNewStatus(status);
     void setNav({ task: "new" });
   };
-  // With a task open the list narrows to a column beside it (from md, the
-  // sidebar's breakpoint) that the separator between them resizes; on phones
-  // the task takes the page, 任务 goes back.
+  // An open task takes the page; the list stays behind it, laid out but
+  // unseen, so going back finds it scrolled and folded as it was left.
   return (
-    <ResizablePanelGroup
-      className={cn(
-        "min-h-0 flex-1",
-        // The panel sets its own display inline; only !important hides it.
-        id && "max-md:[&>[data-panel]:first-child]:hidden!",
-      )}
-      elementRef={groupRef}
-      onLayoutChanged={(layout, { isUserInteraction }) => {
-        // Sizes come as percentages of the group.
-        const width = Math.round(
-          ((layout["task-list"] ?? 0) * (groupRef.current?.offsetWidth ?? 0)) /
-            100,
-        );
-        if (isUserInteraction && width)
-          setWorkspace((workspace) => ({ ...workspace, taskListWidth: width }));
-      }}
-    >
-      <ResizablePanel
-        id="task-list"
-        // Alone it fills the page; beside a task it keeps its pixels as the
-        // window resizes and leaves the task room for its title and actions.
-        defaultSize={id ? (listWidth ?? "20rem") : undefined}
-        minSize={id ? "16rem" : undefined}
-        groupResizeBehavior={id ? "preserve-pixel-size" : undefined}
-        className="@container flex min-w-0 flex-col"
-        style={{ overflow: "hidden" }}
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <div
+        inert={Boolean(id)}
+        className={cn(
+          "@container flex min-h-0 min-w-0 flex-1 flex-col",
+          id && "invisible absolute inset-0",
+        )}
       >
         <PageHeader
           title={
@@ -523,7 +502,6 @@ export function TaskBoard() {
             onValueChange={(value) =>
               setView({ taskLayout: value as typeof layout })
             }
-            className={id ? "hidden" : undefined}
           >
             <TabsList aria-label="布局">
               <TabsTrigger
@@ -550,10 +528,11 @@ export function TaskBoard() {
             <span className="sr-only @md:hidden">新建任务</span>
           </Button>
         </PageHeader>
-        <Main
+        {/* The page's main until a task takes the page; the same element
+            either way, so the list keeps its place behind the task. */}
+        <section
           role={id ? undefined : "main"}
           id={id ? undefined : "main"}
-          aria-label={id ? "任务列表" : undefined}
           className={cn(
             "min-h-0 flex-1",
             board ? "overflow-hidden" : "overflow-y-auto",
@@ -607,25 +586,19 @@ export function TaskBoard() {
           ) : board ? (
             <BoardView tasks={tasks} onCreate={create} />
           ) : (
-            <ListView tasks={tasks} selected={id} onCreate={create} />
+            <ListView
+              tasks={tasks}
+              selected={last}
+              hidden={Boolean(id)}
+              onCreate={create}
+            />
           )}
-        </Main>
-      </ResizablePanel>
+        </section>
+      </div>
       {id ? (
-        <>
-          <ResizableHandle
-            aria-label="调整任务列表宽度"
-            className="transition-colors duration-[60ms] ease-linear data-[separator=active]:bg-ring data-[separator=hover]:bg-ring max-md:hidden"
-          />
-          <ResizablePanel
-            id="task"
-            minSize="18rem"
-            className="@container flex min-w-0 flex-col"
-            style={{ overflow: "hidden" }}
-          >
-            <TaskPage key={id} id={id} />
-          </ResizablePanel>
-        </>
+        <div className="@container flex min-h-0 min-w-0 flex-1 flex-col">
+          <TaskPage key={id} id={id} />
+        </div>
       ) : null}
       <Dialog
         open={nav.task === "new"}
@@ -643,6 +616,6 @@ export function TaskBoard() {
           />
         </DialogContent>
       </Dialog>
-    </ResizablePanelGroup>
+    </div>
   );
 }
