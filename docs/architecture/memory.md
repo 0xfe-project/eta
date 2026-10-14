@@ -64,4 +64,4 @@ memory-service 只认 runtime 网关设置的 `X-AXP-Agent-Id`，并把它作为
 
 开发和生产一样：controller 按 `bundles/memory/service/memory.yaml` 把它部署到 `<ns>-bundles`，镜像 `axp-memory` 由 `bundles/memory/service/Dockerfile` 从 Turbo 的产物打包（`scripts/build/image.sh memory`）。库 `axp_bundle_memory` 由 AXP 在 PostgreSQL（`pgvector/pgvector:pg17-trixie`）上创建并装好 `vector` 扩展，连接串在 Secret `axp-memory`；mem0 首次启动时创建 `memories` 表。它在 `/.well-known/axp-service` 报告协议 `axp.memory/1`。
 
-PostgreSQL 镜像是 `postgres:17` 加 pgvector，同为 Debian trixie，因此原有数据目录的排序规则不变（bookworm 版的 `pgvector/pgvector:pg17` 会导致 collation 版本不匹配）。mem0 的遥测已关闭；它的变更历史写在容器内的 SQLite，不保留。从 Kamal 迁移时，主库原来的 `memories` 表被复制到 `axp_bundle_memory`（`deploy/k3s/migrate-from-kamal.sh`）。
+PostgreSQL 镜像是 `postgres:17` 加 pgvector，同为 Debian trixie，因此原有数据目录的排序规则不变（bookworm 版的 `pgvector/pgvector:pg17` 会导致 collation 版本不匹配）。mem0 的遥测已关闭；它的变更历史写在容器内的 SQLite，不保留。

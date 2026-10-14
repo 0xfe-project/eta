@@ -376,7 +376,7 @@ func nextRunAt(r *routineRow) *jsontime.Time {
 
 func scheduleUnavailable(ctx context.Context, err error) error {
 	slog.ErrorContext(ctx, "Routine schedules unavailable", "error", err)
-	return apierr.New(503, "QUEUE_UNAVAILABLE", "消息队列暂时不可用，请稍后再试。")
+	return apierr.QueueUnavailable()
 }
 
 func (s *Service) syncSchedule(ctx context.Context, r *routineRow) error {

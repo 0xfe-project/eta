@@ -29,7 +29,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/akarachen/axp/packages/telemetry-go"
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -137,25 +136,6 @@ func OpenAPI(apis map[string]func() huma.API) Command {
 				return err
 			}
 			_, err = fmt.Println(string(data))
-			return err
-		},
-	}
-}
-
-// Migrate is the command `migrate`: it applies the database's migrations,
-// creating the database first when create is set.
-func Migrate(databaseURL func() (string, error), migrations pg.Migrations, create bool) Command {
-	return Command{
-		Name: "migrate",
-		Run: func(ctx context.Context, _ []string) error {
-			url, err := databaseURL()
-			if err != nil {
-				return err
-			}
-			pool, err := pg.Setup(ctx, url, migrations, create)
-			if err == nil {
-				pool.Close()
-			}
 			return err
 		},
 	}

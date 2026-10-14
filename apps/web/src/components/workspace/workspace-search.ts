@@ -58,8 +58,7 @@ const linkedViewParser = parseAsStringLiteral([
   "routines",
   "inbox",
 ] as const);
-// Any other view, like an old link to the memory tab the panel no longer
-// has, opens the overview rather than failing the route.
+// Any other view opens the group rather than failing the route.
 const viewParser = createParser({
   parse: (value) => linkedViewParser.parse(value) ?? "group",
   serialize: linkedViewParser.serialize,

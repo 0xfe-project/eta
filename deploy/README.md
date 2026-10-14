@@ -2,16 +2,15 @@
 
 AXP 部署在运行脚本的这台机器上的单节点 [k3s](https://k3s.io)。开发用同一个集群（`scripts/dev.sh`），命名空间分开。
 
-| 文件                        | 作用                                                                                        |
-| --------------------------- | ------------------------------------------------------------------------------------------- |
-| `k3s/deploy.sh`             | 入口：密钥与设置、基础设施、用集群里的 BuildKit 构建镜像、迁移、部署                        |
-| `k3s/infra/`                | 基础设施：PostgreSQL、NATS、S3、OpenObserve 与 Collector、镜像仓库和 BuildKit；CRD          |
-| `k3s/app/`                  | AXP 自己：两个网关、web、控制面的三个进程、权限、备份                                       |
-| `k3s/production/`           | 生产的 overlay：命名空间 `axp`，镜像仓库和 BuildKit 的固定地址                              |
-| `k3s/dev/`                  | 开发的基础设施：命名空间 `axp-dev`，开发用的固定凭据                                        |
-| `k3s/workloads.yaml`        | 智能体与环境包服务的命名空间（`<ns>-agents`、`<ns>-bundles`）、它们的网络策略和控制面的权限 |
-| `k3s/migrate-from-kamal.sh` | 一次性：把这台机器上 Kamal 的生产搬到 k3s                                                   |
-| `Dockerfile`                | AXP 的镜像，只复制 Turbo 构建的产物（构建上下文是仓库根目录）                               |
+| 文件                 | 作用                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------- |
+| `k3s/deploy.sh`      | 入口：密钥与设置、基础设施、用集群里的 BuildKit 构建镜像、迁移、部署                        |
+| `k3s/infra/`         | 基础设施：PostgreSQL、NATS、S3、OpenObserve 与 Collector、镜像仓库和 BuildKit；CRD          |
+| `k3s/app/`           | AXP 自己：两个网关、web、控制面的三个进程、权限、备份                                       |
+| `k3s/production/`    | 生产的 overlay：命名空间 `axp`，镜像仓库和 BuildKit 的固定地址                              |
+| `k3s/dev/`           | 开发的基础设施：命名空间 `axp-dev`，开发用的固定凭据                                        |
+| `k3s/workloads.yaml` | 智能体与环境包服务的命名空间（`<ns>-agents`、`<ns>-bundles`）、它们的网络策略和控制面的权限 |
+| `Dockerfile`         | AXP 的镜像，只复制 Turbo 构建的产物（构建上下文是仓库根目录）                               |
 
 ## 一台机器装好 k3s
 
@@ -96,17 +95,3 @@ OpenObserve 在 `/observe/`（经网关和 Access），root 账号 `root@axp.loc
 各进程用 OTLP 发到 OpenObserve，`OTEL_SERVICE_NAME` 区分来源（`web`、`control-plane`、`control-plane-controller`、`control-plane-routine-worker`、`memory-service`），`service.version` 是部署的版本（`AXP_VERSION`）。智能体和环境包服务不持有凭据，发到 `otel-collector`，由它带上凭据转发；Collector 过滤掉 Codex 每段流式输出的日志和 span（`k3s/infra/otel-collector.yaml`）。
 
 记什么由服务自己决定：健康检查和前端轮询的成功 GET 不记；调用方自己的错（4xx）不记，上游和服务端的失败（424、5xx）记 WARN；循环里重复的失败在变化时记一次，持续时每 10 分钟再记一次（`telemetry.Repeats`）。
-
-## 从 Kamal 迁移
-
-`deploy/k3s/migrate-from-kamal.sh` 一次完成（AXP 停机，时间约为读完所有卷）：
-
-1. 按 AXP 的清单建好 PVC（生产的、`agenvo-relay`、每个 `axp-agent-<id>` 对应的 `agent-<id>`）。
-2. 停掉 Kamal 的所有容器和 kamal-proxy（**只停不删**）。
-3. 把每个 Docker 卷**复制**进对应的 PVC（`axp-postgres`→`postgres`、`axp-nats`→`nats`、`axp-objects`→`objects`、`axp-openobserve`→`openobserve`、`axp-forge`→`forge`、`axp-llm`→`llm`、`axp-relay`→`axp-bundles/agenvo-relay`），保留属主和权限。
-4. 运行 `deploy.sh`：同一个 `production.env`，所以数据库密码、`AXP_SECRET_KEY`（智能体的 key、环境包配置的加密都由它派生）都不变；宿主 Caddy 和 Access 也不变（还是 `127.0.0.1:24180`）。
-5. 把主库的 `memories` 表搬到记忆服务自己的库 `axp_bundle_memory`，重启记忆服务。主库里的旧表保留。
-
-中继的管理员密钥换成了由 `AXP_SECRET_KEY` 派生的（控制面也能派生），`production.env` 里的 `AXP_RELAY_ADMIN_SECRET` 不再使用；已配对的设备和授权在卷里，不受影响。
-
-回到 Kamal：`kubectl -n axp scale deploy --all --replicas=0`，`docker start kamal-proxy`，再 `docker start` 停掉的 `axp-*` 容器（检出迁移前的提交，旧的部署文件还在那里）。Docker 卷没被动过，但迁移后在 k3s 里写入的数据不会带回去。在 k3s 上稳定运行一段时间后，再 `docker rm` 那些容器、删掉 Docker 卷。
