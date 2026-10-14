@@ -7,8 +7,8 @@ apps/
   gateway/         Go：统一入口网关，浏览器访问的唯一同源地址
   control-plane/   Go：产品 API 与内部 API（同一进程两个 listener）、controller、routine worker；
                    构建并运行每个智能体的容器；含代码托管（用户自己的 GitHub App，agent 的 git、gh 凭据与
-                   open_pull_request）和定时任务（每次运行是 worker 里的 ADK agent；自己的数据库，计划在 NATS）
-  llm-gateway/     Go：LLM 连接与模型目录（嵌入 CLIProxyAPI）
+                   open_pull_request）、定时任务（每次运行是 worker 里的 ADK agent；自己的数据库，计划在 NATS）
+                   和 LLM 网关（模型账号、目录、用量与 OpenAI 兼容 API，嵌入 CLIProxyAPI）
   web/             TanStack Start + React + Vite + TypeScript
   agent-runtime/   每个 Agent 一个常驻容器的运行时（Node，直接驱动 Codex app-server）；bundles/ 是内置环境包，plugins/ 是聊天智能体和定时任务用的插件
   memory-service/  Python：Agent 的长期记忆（mem0 + pgvector），memory plugin 的后端
@@ -37,13 +37,13 @@ bun run dev
 
 打开脚本输出的 Web 地址（默认 http://localhost:3000 ），新建智能体后即可对话。AXP 是单用户服务。对话区顶部显示当前智能体，点击可切换、新建或进入管理；每个智能体有名称、模型和指令（注入其上下文的系统提示），可在编辑器或设置的“智能体”中修改和删除。
 
-模型来自 llm-gateway：在设置的“模型服务”中用设备码绑定 Codex（ChatGPT）或 Grok（xAI）账号，每个服务可以绑定多个账号并自动轮换。账号登录失效、额度用尽等状态会显示在那里；智能体的模型不可用时不能发送消息，绑定或重新登录后自动恢复。详见 [LLM 网关](docs/architecture/llm-gateway.md)。
+模型来自控制面里的 LLM 网关：在设置的“模型服务”中用设备码绑定 Codex（ChatGPT）或 Grok（xAI）账号，每个服务可以绑定多个账号并自动轮换。账号登录失效、额度用尽等状态会显示在那里；智能体的模型不可用时不能发送消息，绑定或重新登录后自动恢复。详见 [LLM 网关](docs/architecture/llm-gateway.md)。
 
-`bun run dev` 启动网关、控制面（公共与内部 API、controller、routine worker）、llm-gateway、memory-service 和 Web，与生产相同。controller 用每个 Agent 的环境包构建它的镜像，为它运行一个常驻容器（状态在它自己的卷上），容器内的 Codex 把所有模型请求发给 llm-gateway，不持有任何账号凭据。runtime 的基础镜像在每次启动时自动重建（没有变化时约 1 秒），每个 checkout 一个标签，worktree 之间互不覆盖。
+`bun run dev` 启动网关、控制面（公共与内部 API 和 LLM 网关在同一进程，以及 controller、routine worker）、memory-service 和 Web，与生产相同。controller 用每个 Agent 的环境包构建它的镜像，为它运行一个常驻容器（状态在它自己的卷上），容器内的 Codex 把所有模型请求经 runtime 网关发给 LLM 网关，不持有任何账号凭据。runtime 的基础镜像在每次启动时自动重建（没有变化时约 1 秒），每个 checkout 一个标签，worktree 之间互不覆盖。
 
-智能体要选一个可用的模型才能对话：首次使用在“模型服务”中绑定账号（开发凭据保存在仓库根目录的 `var/llm-gateway`）。`bun run dev` 需要 Docker：它在本机启动一组所有实例共享、名为 `axp-dev-*` 的容器（数据库、日志、工作区存储），与生产的容器、卷和网络互不相干。
+智能体要选一个可用的模型才能对话：首次使用在“模型服务”中绑定账号（开发凭据保存在 `apps/control-plane/var/llm-gateway`；以前在 `apps/llm-gateway/var/llm-gateway` 的，`bun run dev` 会自动移过来）。`bun run dev` 需要 Docker：它在本机启动一组所有实例共享、名为 `axp-dev-*` 的容器（数据库、日志、工作区存储），与生产的容器、卷和网络互不相干。
 
-`bun run dev` 每个实例占用十个连续端口：网关 `P`（浏览器打开的地址）、控制面的 API `P+1` 与内部 API `P+2`（同一进程）、Web `P+3`、llm-gateway `P+4`、runtime 网关 `P+5`（监听 runtime 网络的网关地址 `172.30.0.1`，其余都只监听 loopback）、memory-service `P+6`、agenvo 中继 `P+8`（自签证书的 HTTPS，见[任务与远程电脑](docs/architecture/tasks.md)），`P+7`、`P+9` 空着，默认 `P=3000`。被占用时（其他 checkout、worktree 或 agent 已在运行）自动顺延到下一个空闲端口块（3010、3020……），并用文件锁避免并行启动抢到同一端口，因此可以同时运行任意多个实例。用 `bun run dev --port 4000`（或 `AXP_DEV_PORT=4000`）指定端口，被占用或与生产端口（`deploy/ports.env`）重叠时直接报错。新的 worktree 首次运行会自动安装依赖并执行 migrations。
+`bun run dev` 每个实例占用十个连续端口：网关 `P`（浏览器打开的地址）、控制面的 API `P+1` 与内部 API `P+2`（同一进程，含 LLM 网关）、Web `P+3`、runtime 网关 `P+5`（监听 runtime 网络的网关地址 `172.30.0.1`，其余都只监听 loopback）、memory-service `P+6`、agenvo 中继 `P+8`（自签证书的 HTTPS，见[任务与远程电脑](docs/architecture/tasks.md)），`P+4`、`P+7`、`P+9` 空着，默认 `P=3000`。被占用时（其他 checkout、worktree 或 agent 已在运行）自动顺延到下一个空闲端口块（3010、3020……），并用文件锁避免并行启动抢到同一端口，因此可以同时运行任意多个实例。用 `bun run dev --port 4000`（或 `AXP_DEV_PORT=4000`）指定端口，被占用或与生产端口（`deploy/ports.env`）重叠时直接报错。新的 worktree 首次运行会自动安装依赖并执行 migrations。
 
 `setup` 安装 JS/Python/Go 依赖并执行数据库迁移。锁文件（`bun.lock`、两个 `uv.lock`、`go.sum`）应一起提交。
 
@@ -57,7 +57,7 @@ bun run dev
 - 内部 API 文档：http://127.0.0.1:3002/internal/docs
 - runtime 的入口（AXP 的服务与 OpenAI 兼容接口）：http://172.30.0.1:3005
 
-浏览器只访问网关，runtime 只访问 runtime 网关（`apps/gateway`，Caddy 配置），开发和生产使用同一套路由：`/api/llm/` → llm-gateway，`/api/` → control-plane，其余 → Web。服务之间没有共享密钥，信任边界由网络划定：服务只监听 loopback（生产中不在 runtime 网络上），runtime 网关替所有服务认证 runtime。详见[网关](docs/architecture/gateway.md)。
+浏览器只访问网关，runtime 只访问 runtime 网关（`apps/gateway`，Caddy 配置），开发和生产使用同一套路由：`/api/` → control-plane（含 `/api/llm/`），其余 → Web。服务之间没有共享密钥，信任边界由网络划定：服务只监听 loopback（生产中不在 runtime 网络上），runtime 网关替所有服务认证 runtime。详见[网关](docs/architecture/gateway.md)。
 
 Web 已配置 Query、nuqs、Phosphor Icons、表单校验、通知、Markdown 和 Tailwind，使用方式见 [Web 开发说明](apps/web/README.md)。
 
@@ -67,7 +67,6 @@ Web 已配置 Query、nuqs、Phosphor Icons、表单校验、通知、Markdown �
 | ---------------------------- | ---------------------------------------------------------------------------- |
 | `bun run dev`                | 启动开发环境，任一进程退出时关闭所有进程                                     |
 | `bun run deploy`             | 用 Kamal 把工作区部署到本机（见 `deploy/README.md`）                         |
-| `bun run dev:llm-gateway`    | 单独启动 llm-gateway                                                         |
 | `bun run dev:control-plane`  | 单独启动控制面的公共 API 与内部 API（同一进程）                              |
 | `bun run dev:controller`     | 单独启动 runtime controller（需要 Docker）                                   |
 | `bun run dev:routine-worker` | 单独启动定时任务的 worker                                                    |
@@ -108,7 +107,7 @@ Turbo 用 Vercel Remote Cache（`turbo.json` 的 `remoteCache.teamId`），本�
 
 ## 日志
 
-三种语言的服务都走 OpenTelemetry：Go 用 `log/slog`（`packages/telemetry-go`），Python 用标准库 `logging`（`packages/telemetry-py`），Web 服务端用 LogTape（`apps/web/src/server/telemetry.ts`）。llm-gateway 内嵌的 CLIProxyAPI 会自己打印到 stdout，这些行也被逐行转成日志（`library=cliproxy`）。每条日志同时：
+三种语言的服务都走 OpenTelemetry：Go 用 `log/slog`（`packages/telemetry-go`），Python 用标准库 `logging`（`packages/telemetry-py`），Web 服务端用 LogTape（`apps/web/src/server/telemetry.ts`）。LLM 网关内嵌的 CLIProxyAPI 用 logrus 记日志，这些记录被转交给 slog（`library=cliproxy`）。每条日志同时：
 
 - 在 stderr 输出一行可读格式 `15:04:05.000 INFO  消息 key=value`（UTC，`INFO` 及以上）；
 - 通过 OTLP 发往 [OpenObserve](https://openobserve.ai)。

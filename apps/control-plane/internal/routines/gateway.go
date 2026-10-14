@@ -4,85 +4,33 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"strings"
 	"sync"
-	"time"
 
-	"github.com/akarachen/axp/packages/service-go/apierr"
 	"github.com/openai/openai-go/v3/option"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/model/openaimodel"
 )
 
-// The LLM gateway (apps/llm-gateway), which this service calls directly:
-// its catalog and its OpenAI-compatible API. It trusts X-AXP-Agent-Id from
-// the services that reach it; a run's usage is its routine's,
-// "routine-<id>".
+// The LLM gateway (internal/llm), which this worker reaches on the control
+// plane's internal listener: its catalog (llm.Remote) and its
+// OpenAI-compatible API. That listener trusts X-AXP-Agent-Id from the
+// services that reach it; a run's usage is its routine's, "routine-<id>".
 
 // AgentHeader names the agent an LLM gateway request is for.
 const AgentHeader = "X-AXP-Agent-Id"
 
 func agentOf(routineID string) string { return "routine-" + routineID }
 
-// Catalog is the models the gateway offers.
-type Catalog interface {
-	Has(ctx context.Context, model string) (bool, error)
-}
-
-// Validate rejects models the gateway has never offered.
-func Validate(ctx context.Context, catalog Catalog, model string) error {
-	ok, err := catalog.Has(ctx, model)
-	if err != nil {
-		slog.WarnContext(ctx, "LLM gateway unavailable", "error", err)
-		return apierr.New(503, "MODEL_SERVICE_UNAVAILABLE", "模型服务暂时不可用，请稍后再试。")
-	}
-	if !ok {
-		return apierr.New(422, "MODEL_NOT_FOUND", "所选模型不存在。")
-	}
-	return nil
-}
-
-// Gateway is the LLM gateway at URL.
+// Gateway is the LLM gateway's OpenAI-compatible API under URL/v1.
 type Gateway struct {
 	URL    string
 	Client *http.Client
-}
-
-func (g *Gateway) Has(ctx context.Context, id string) (bool, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, g.URL+"/api/llm/v1/models", nil)
-	if err != nil {
-		return false, err
-	}
-	resp, err := g.Client.Do(req)
-	if err != nil {
-		return false, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return false, fmt.Errorf("catalog returned %d", resp.StatusCode)
-	}
-	var models []struct {
-		ID string `json:"id"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&models); err != nil {
-		return false, err
-	}
-	for _, m := range models {
-		if m.ID == id {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 // Model is name through the gateway, for the routine's agent.

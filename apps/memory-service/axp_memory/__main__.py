@@ -24,7 +24,7 @@ def main() -> None:
     host, _, port = os.environ.get("AXP_MEMORY_ADDR", "0.0.0.0:8320").rpartition(":")
     provider = Mem0Provider(
         database_url=os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL),
-        llm_url=os.environ.get("AXP_LLM_GATEWAY_URL", "http://axp-llm:8317").rstrip("/")
+        llm_url=os.environ.get("AXP_LLM_GATEWAY_URL", "http://axp-api:8001").rstrip("/")
         + "/v1",
     )
     uvicorn.run(

@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	llmcatalog "github.com/akarachen/axp/apps/control-plane/internal/llm"
 	"github.com/akarachen/axp/apps/control-plane/internal/routines"
 	"github.com/akarachen/axp/apps/control-plane/internal/routines/migrations"
 	"github.com/akarachen/axp/packages/service-go/pg"
@@ -36,11 +37,11 @@ const testModel = "test-model"
 
 type catalog struct{ down bool }
 
-func (c *catalog) Has(_ context.Context, id string) (bool, error) {
+func (c *catalog) Models(context.Context, bool) (map[string]llmcatalog.Model, error) {
 	if c.down {
-		return false, errors.New("down")
+		return nil, errors.New("down")
 	}
-	return id == testModel, nil
+	return map[string]llmcatalog.Model{testModel: {ID: testModel, Available: true}}, nil
 }
 
 // schedules is NATS: schedules by routine, and fires waiting to be taken.

@@ -45,7 +45,6 @@
       "dependsOn": [
         "@axp/web#build",
         "@axp/control-plane#build:linux-amd64",
-        "@axp/llm-gateway#build:linux-amd64",
         "@axp/memory-service#build",
         "@axp/memory-service#build:linux-amd64",
         "@axp/plugins-go#build:linux-amd64",
@@ -59,7 +58,6 @@
       "dependsOn": [
         "@axp/web#build",
         "@axp/control-plane#build:linux-arm64",
-        "@axp/llm-gateway#build:linux-arm64",
         "@axp/memory-service#build",
         "@axp/memory-service#build:linux-arm64",
         "@axp/plugins-go#build:linux-arm64",

@@ -35,7 +35,6 @@ COPY --from=docker:29-cli /usr/local/libexec/docker/cli-plugins/docker-buildx /u
 # its embedding model.
 COPY apps/memory-service/out/${TARGETOS}-${TARGETARCH}/site-packages/ /app/apps/memory-service/site-packages/
 COPY apps/memory-service/out/models/ /app/apps/memory-service/models/
-COPY apps/llm-gateway/out/${TARGETOS}-${TARGETARCH}/axp-llm-gateway /usr/local/bin/
 COPY --from=routine-plugins /opt/axp/bin/ /usr/local/bin/
 COPY apps/control-plane/out/${TARGETOS}-${TARGETARCH}/axp-control-plane /usr/local/bin/
 # Self-contained server bundle plus client assets; no node_modules.
@@ -50,10 +49,10 @@ COPY apps/agent-runtime/plugins /app/apps/agent-runtime/plugins/
 # agenvo connectors (where the control plane looks for them by default).
 COPY apps/remote/out/dist/ /app/apps/remote/out/dist/
 COPY apps/agenvo/out/dist/ /app/apps/agenvo/out/dist/
-# The control plane finds them at ../agent-runtime/; the LLM gateway keeps
-# its state under var/ here (deploy/deploy.yml).
+# The control plane finds them at ../agent-runtime/, and keeps the LLM
+# gateway's state under var/ here (deploy/deploy.yml).
 WORKDIR /app/apps/control-plane
 
 ENV PYTHONUNBUFFERED=1
-EXPOSE 3000 8000 8001 8080 8090 8317 8320
+EXPOSE 3000 8000 8001 8080 8090 8320
 CMD ["bun", "/app/apps/web/server.js"]

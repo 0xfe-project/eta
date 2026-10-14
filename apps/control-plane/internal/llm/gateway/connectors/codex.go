@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/akarachen/axp/apps/llm-gateway/internal/llm"
+	"github.com/akarachen/axp/apps/control-plane/internal/llm/gateway"
 )
 
 // OpenAI's device authorization for Codex. CPA implements the same protocol
@@ -47,15 +47,15 @@ type Codex struct {
 }
 
 type codexSession struct {
-	llm.LoginSession
+	gateway.LoginSession
 	cancel context.CancelFunc
 }
 
-func (c *Codex) Info() llm.ConnectorInfo {
-	return llm.ConnectorInfo{
+func (c *Codex) Info() gateway.ConnectorInfo {
+	return gateway.ConnectorInfo{
 		ID:          "codex",
 		DisplayName: "Codex",
-		Flow:        llm.FlowDevice,
+		Flow:        gateway.FlowDevice,
 		Provider:    "codex",
 		Hint:        "使用 ChatGPT 账号登录。如果授权页提示不允许设备码登录，请先在 ChatGPT 设置的“安全”中开启 Codex 的设备码授权。",
 	}
@@ -82,7 +82,7 @@ func (c *Codex) logger() *slog.Logger {
 	return slog.Default()
 }
 
-func (c *Codex) StartLogin(ctx context.Context, _ llm.LoginInput) (*llm.LoginSession, error) {
+func (c *Codex) StartLogin(ctx context.Context, _ gateway.LoginInput) (*gateway.LoginSession, error) {
 	var code struct {
 		DeviceAuthID string          `json:"device_auth_id"`
 		UserCode     string          `json:"user_code"`
@@ -91,22 +91,22 @@ func (c *Codex) StartLogin(ctx context.Context, _ llm.LoginInput) (*llm.LoginSes
 	}
 	status, err := c.postJSON(ctx, "/api/accounts/deviceauth/usercode", map[string]string{"client_id": CodexClientID}, &code)
 	if err != nil || status/100 != 2 {
-		return nil, &llm.UserError{Code: "LOGIN_START_FAILED", Message: "无法发起 Codex 登录，请稍后再试。",
+		return nil, &gateway.UserError{Code: "LOGIN_START_FAILED", Message: "无法发起 Codex 登录，请稍后再试。",
 			Cause: fmt.Errorf("device code request: status %d: %v", status, err)}
 	}
 	userCode := firstNonEmpty(code.UserCode, code.UserCodeAlt)
 	if userCode == "" || code.DeviceAuthID == "" {
-		return nil, &llm.UserError{Code: "LOGIN_START_FAILED", Message: "无法发起 Codex 登录，请稍后再试。",
+		return nil, &gateway.UserError{Code: "LOGIN_START_FAILED", Message: "无法发起 Codex 登录，请稍后再试。",
 			Cause: fmt.Errorf("device code response missing fields")}
 	}
 
 	pollCtx, cancel := context.WithTimeout(context.Background(), codexDeviceTimeout)
 	sess := &codexSession{
-		LoginSession: llm.LoginSession{
+		LoginSession: gateway.LoginSession{
 			ID:        "codex-" + randomHex(12),
 			Connector: "codex",
-			Flow:      llm.FlowDevice,
-			Status:    llm.LoginPending,
+			Flow:      gateway.FlowDevice,
+			Status:    gateway.LoginPending,
 			URL:       codexVerificationURL,
 			UserCode:  userCode,
 			ExpiresAt: time.Now().Add(codexDeviceTimeout),
@@ -137,7 +137,7 @@ func (c *Codex) complete(ctx context.Context, sess *codexSession, deviceAuthID, 
 		status, err := c.postJSON(ctx, "/api/accounts/deviceauth/token",
 			map[string]string{"device_auth_id": deviceAuthID, "user_code": userCode}, &grant)
 		if ctx.Err() != nil {
-			c.finish(sess, llm.LoginExpired, "验证码已过期，请重新发起。")
+			c.finish(sess, gateway.LoginExpired, "验证码已过期，请重新发起。")
 			return
 		}
 		if err == nil && status/100 == 2 {
@@ -146,12 +146,12 @@ func (c *Codex) complete(ctx context.Context, sess *codexSession, deviceAuthID, 
 		// 403/404 mean "not approved yet"; anything else is final.
 		if err == nil && status != http.StatusForbidden && status != http.StatusNotFound {
 			c.logger().Warn("codex device polling failed", "status", status)
-			c.finish(sess, llm.LoginFailed, "登录失败，请重试。")
+			c.finish(sess, gateway.LoginFailed, "登录失败，请重试。")
 			return
 		}
 		select {
 		case <-ctx.Done():
-			c.finish(sess, llm.LoginExpired, "验证码已过期，请重新发起。")
+			c.finish(sess, gateway.LoginExpired, "验证码已过期，请重新发起。")
 			return
 		case <-time.After(interval):
 		}
@@ -159,10 +159,10 @@ func (c *Codex) complete(ctx context.Context, sess *codexSession, deviceAuthID, 
 
 	if err := c.exchangeAndStore(ctx, grant.AuthorizationCode, grant.CodeVerifier); err != nil {
 		c.logger().Error("codex login failed", "error", err)
-		c.finish(sess, llm.LoginFailed, "登录成功但保存凭据失败，请重试。")
+		c.finish(sess, gateway.LoginFailed, "登录成功但保存凭据失败，请重试。")
 		return
 	}
-	c.finish(sess, llm.LoginSucceeded, "")
+	c.finish(sess, gateway.LoginSucceeded, "")
 }
 
 func (c *Codex) exchangeAndStore(ctx context.Context, code, verifier string) error {
@@ -201,7 +201,7 @@ func (c *Codex) exchangeAndStore(ctx context.Context, code, verifier string) err
 	if err != nil {
 		return err
 	}
-	return llm.Manage(ctx, c.Management, c.ManagementURL("/auth-files?name="+url.QueryEscape(name)), http.MethodPost, cred, nil)
+	return gateway.Manage(ctx, c.Management, c.ManagementURL("/auth-files?name="+url.QueryEscape(name)), http.MethodPost, cred, nil)
 }
 
 // CodexCredential builds a credential in CPA's codex auth file format and
@@ -214,7 +214,7 @@ func CodexCredential(idToken, accessToken, refreshToken string, expiresIn int, n
 			Plan      string `json:"chatgpt_plan_type"`
 		} `json:"https://api.openai.com/auth"`
 	}
-	if err := llm.JWTClaims(idToken, &claims); err != nil {
+	if err := gateway.JWTClaims(idToken, &claims); err != nil {
 		return nil, "", fmt.Errorf("parse id token: %w", err)
 	}
 	if claims.Email == "" || accessToken == "" || refreshToken == "" {
@@ -248,24 +248,26 @@ func CodexCredential(idToken, accessToken, refreshToken string, expiresIn int, n
 func (c *Codex) finish(sess *codexSession, status, msg string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if sess.Status == llm.LoginPending {
+	if sess.Status == gateway.LoginPending {
 		sess.Status = status
 		sess.Error = msg
 	}
 }
 
-func (c *Codex) PollLogin(_ context.Context, id string) (*llm.LoginSession, error) {
+func (c *Codex) PollLogin(_ context.Context, id string) (*gateway.LoginSession, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	sess, ok := c.sessions[id]
 	if !ok {
-		return nil, llm.ErrNotFound
+		return nil, gateway.ErrNotFound
 	}
 	copy := sess.LoginSession
 	return &copy, nil
 }
 
-func (c *Codex) SubmitLogin(context.Context, string, llm.LoginInput) error { return llm.ErrUnsupported }
+func (c *Codex) SubmitLogin(context.Context, string, gateway.LoginInput) error {
+	return gateway.ErrUnsupported
+}
 
 func (c *Codex) CancelLogin(_ context.Context, id string) error {
 	c.mu.Lock()
@@ -273,7 +275,7 @@ func (c *Codex) CancelLogin(_ context.Context, id string) error {
 	delete(c.sessions, id)
 	c.mu.Unlock()
 	if !ok {
-		return llm.ErrNotFound
+		return gateway.ErrNotFound
 	}
 	sess.cancel()
 	return nil

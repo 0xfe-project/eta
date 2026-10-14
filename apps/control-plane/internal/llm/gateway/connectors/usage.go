@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akarachen/axp/apps/llm-gateway/internal/llm"
+	"github.com/akarachen/axp/apps/control-plane/internal/llm/gateway"
 )
 
 // The endpoints the Codex CLI and the Grok CLI read their own limits from.
@@ -20,13 +20,13 @@ const (
 	grokSettingsURL = "https://cli-chat-proxy.grok.com/v1/settings"
 )
 
-var errNoToken = &llm.UserError{Code: "NO_TOKEN", Message: "该账号没有可用的登录令牌。"}
+var errNoToken = &gateway.UserError{Code: "NO_TOKEN", Message: "该账号没有可用的登录令牌。"}
 
 // Usage reads the 5-hour and weekly windows of a ChatGPT subscription.
-func (c *Codex) Usage(ctx context.Context, metadata map[string]any) (llm.Usage, error) {
+func (c *Codex) Usage(ctx context.Context, metadata map[string]any) (gateway.Usage, error) {
 	token, _ := metadata["access_token"].(string)
 	if token == "" {
-		return llm.Usage{}, errNoToken
+		return gateway.Usage{}, errNoToken
 	}
 	accountID, _ := metadata["account_id"].(string)
 	var body struct {
@@ -37,9 +37,9 @@ func (c *Codex) Usage(ctx context.Context, metadata map[string]any) (llm.Usage, 
 		} `json:"rate_limit"`
 	}
 	if err := getUsage(ctx, c.client(), codexUsageURL, token, map[string]string{"ChatGPT-Account-Id": accountID}, &body); err != nil {
-		return llm.Usage{}, err
+		return gateway.Usage{}, err
 	}
-	u := llm.Usage{Plan: codexPlanName(body.PlanType)}
+	u := gateway.Usage{Plan: codexPlanName(body.PlanType)}
 	for _, w := range []struct {
 		window   *codexWindow
 		fallback string
@@ -57,9 +57,9 @@ type codexWindow struct {
 	ResetAt            int64   `json:"reset_at"`
 }
 
-func (w codexWindow) usage(fallback string) llm.UsageWindow {
-	out := llm.UsageWindow{
-		Kind:            llm.WindowKind(w.LimitWindowSeconds, fallback),
+func (w codexWindow) usage(fallback string) gateway.UsageWindow {
+	out := gateway.UsageWindow{
+		Kind:            gateway.WindowKind(w.LimitWindowSeconds, fallback),
 		Used:            clampPercent(w.UsedPercent),
 		DurationSeconds: w.LimitWindowSeconds,
 	}
@@ -91,10 +91,10 @@ func codexPlanName(plan string) string {
 
 // Usage reads the credit window of a Grok subscription. Accounts billed
 // without a period (no subscription) report no windows.
-func (x *XAI) Usage(ctx context.Context, metadata map[string]any) (llm.Usage, error) {
+func (x *XAI) Usage(ctx context.Context, metadata map[string]any) (gateway.Usage, error) {
 	token, _ := metadata["access_token"].(string)
 	if token == "" {
-		return llm.Usage{}, errNoToken
+		return gateway.Usage{}, errNoToken
 	}
 	var billing struct {
 		Config struct {
@@ -106,18 +106,18 @@ func (x *XAI) Usage(ctx context.Context, metadata map[string]any) (llm.Usage, er
 		} `json:"config"`
 	}
 	if err := getUsage(ctx, x.client(), grokBillingURL, token, nil, &billing); err != nil {
-		return llm.Usage{}, err
+		return gateway.Usage{}, err
 	}
 	var settings struct {
 		Tier string `json:"subscription_tier_display"`
 	}
 	_ = getUsage(ctx, x.client(), grokSettingsURL, token, nil, &settings) // the plan name is optional
-	u := llm.Usage{Plan: strings.TrimSpace(settings.Tier)}
+	u := gateway.Usage{Plan: strings.TrimSpace(settings.Tier)}
 	if p := billing.Config.CurrentPeriod; p != nil && p.End.After(p.Start) {
 		seconds := int64(p.End.Sub(p.Start).Seconds())
 		end := p.End.UTC()
-		u.Windows = []llm.UsageWindow{{
-			Kind:            llm.WindowKind(seconds, "weekly"),
+		u.Windows = []gateway.UsageWindow{{
+			Kind:            gateway.WindowKind(seconds, "weekly"),
 			Used:            clampPercent(float64(billing.Config.CreditUsagePercent)),
 			ResetsAt:        &end,
 			DurationSeconds: seconds,
@@ -147,18 +147,18 @@ func getUsage(ctx context.Context, client *http.Client, url, token string, heade
 	}
 	res, err := client.Do(req)
 	if err != nil {
-		return &llm.UserError{Code: "USAGE_UNAVAILABLE", Message: "暂时无法读取用量。", Cause: err}
+		return &gateway.UserError{Code: "USAGE_UNAVAILABLE", Message: "暂时无法读取用量。", Cause: err}
 	}
 	defer res.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 	switch {
 	case res.StatusCode == http.StatusUnauthorized:
-		return &llm.UserError{Code: "AUTH_EXPIRED", Message: "登录已失效，无法读取用量。", Cause: fmt.Errorf("usage: status 401")}
+		return &gateway.UserError{Code: "AUTH_EXPIRED", Message: "登录已失效，无法读取用量。", Cause: fmt.Errorf("usage: status 401")}
 	case res.StatusCode/100 != 2:
-		return &llm.UserError{Code: "USAGE_UNAVAILABLE", Message: "暂时无法读取用量。", Cause: fmt.Errorf("usage: status %d", res.StatusCode)}
+		return &gateway.UserError{Code: "USAGE_UNAVAILABLE", Message: "暂时无法读取用量。", Cause: fmt.Errorf("usage: status %d", res.StatusCode)}
 	}
 	if err := json.Unmarshal(raw, out); err != nil {
-		return &llm.UserError{Code: "USAGE_UNAVAILABLE", Message: "暂时无法读取用量。", Cause: err}
+		return &gateway.UserError{Code: "USAGE_UNAVAILABLE", Message: "暂时无法读取用量。", Cause: err}
 	}
 	return nil
 }

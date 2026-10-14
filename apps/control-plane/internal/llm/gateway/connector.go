@@ -1,7 +1,7 @@
-// Package llm is the llm-gateway's provider-neutral layer: connectors bring
+// Package gateway is the LLM gateway's provider-neutral layer: connectors bring
 // credentials in, the core auth manager routes with them, and the catalog
 // lists the models they unlock.
-package llm
+package gateway
 
 import (
 	"context"

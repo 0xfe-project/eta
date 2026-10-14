@@ -45,9 +45,6 @@
     "apps/gateway": {
       "name": "@axp/gateway",
     },
-    "apps/llm-gateway": {
-      "name": "@axp/llm-gateway",
-    },
     "apps/memory-service": {
       "name": "@axp/memory-service",
     },
@@ -139,8 +136,6 @@
     "@axp/control-plane": ["@axp/control-plane@workspace:apps/control-plane"],
 
     "@axp/gateway": ["@axp/gateway@workspace:apps/gateway"],
-
-    "@axp/llm-gateway": ["@axp/llm-gateway@workspace:apps/llm-gateway"],
 
     "@axp/memory-service": ["@axp/memory-service@workspace:apps/memory-service"],
 

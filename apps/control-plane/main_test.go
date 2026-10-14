@@ -9,6 +9,7 @@ import (
 
 	"github.com/akarachen/axp/apps/control-plane/internal/forge"
 	"github.com/akarachen/axp/apps/control-plane/internal/github"
+	"github.com/akarachen/axp/apps/control-plane/internal/llm"
 	"github.com/akarachen/axp/apps/control-plane/internal/routineapi"
 )
 
@@ -17,7 +18,12 @@ import (
 // the internal one.
 func TestListenersKeepTheirRoutes(t *testing.T) {
 	code := forge.New(github.New(t.TempDir()), slog.New(slog.NewTextHandler(io.Discard, nil)))
-	public, internal := handlers(openAPIDeps(), code, &routineapi.Deps{})
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	models, err := llm.Open(t.TempDir(), logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	public, internal := handlers(openAPIDeps(), code, &routineapi.Deps{}, models)
 	status := func(h http.Handler, method, path string) int {
 		req := httptest.NewRequest(method, path, nil)
 		req.Header.Set("X-AXP-Agent-Id", "agent-1")
@@ -39,10 +45,17 @@ func TestListenersKeepTheirRoutes(t *testing.T) {
 		{"public", public, "POST", "/tasks/mcp", false},
 		{"public", public, "POST", "/groups/mcp", false},
 		{"public", public, "GET", "/internal/v1/runtime-auth", false},
+		{"public", public, "GET", "/api/llm/v1/connections", true},
+		{"public", public, "GET", "/v1/models", false},
+		{"public", public, "POST", "/v1/responses", false},
+		{"public", public, "GET", "/llm/v1/models", false},
 		{"internal", internal, "GET", "/forge/credentials", true},
 		{"internal", internal, "GET", "/api/forge/v1/github", false},
 		{"internal", internal, "GET", "/api/routines/health", false},
 		{"internal", internal, "GET", "/api/health", false},
+		{"internal", internal, "GET", "/api/llm/v1/connections", false},
+		{"internal", internal, "POST", "/v1/responses", true},
+		{"internal", internal, "GET", "/llm/v1/models", true},
 	} {
 		got := status(c.h, c.method, c.path)
 		if (got != http.StatusNotFound && got != http.StatusMethodNotAllowed) != c.found {

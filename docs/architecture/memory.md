@@ -13,7 +13,7 @@ runtime 网关 /memory/*  forward_auth → X-AXP-Agent-Id、X-AXP-Group-Id
                                            ▼
 memory-service
   MemoryProvider → Mem0Provider（mem0 作为库）
-    抽取：智能体自己的模型，经 llm-gateway（chat completions）
+    抽取：智能体自己的模型，经 LLM 网关（控制面内部 API 的 /v1，chat completions）
     向量：fastembed，CPU 推理
     存储：PostgreSQL + pgvector（表 memories）
 ```
@@ -50,7 +50,7 @@ mem0 metadata 和公开记忆形状只保存 `source_group_id`。Web 按群快�
 
 ## 隔离
 
-memory-service 只认 runtime 网关设置的 `X-AXP-Agent-Id`，并把它作为 mem0 的 `user_id`；请求里自称的身份不起作用，没有这个头的请求被拒绝。删除前检查记忆属于该智能体（mem0 按 id 删除不区分用户）。memory-service 不在 runtime 网络上，也不持有任何凭据：调用 llm-gateway 时它同样只带 `X-AXP-Agent-Id`，因此抽取用量记在对应的智能体上。
+memory-service 只认 runtime 网关设置的 `X-AXP-Agent-Id`，并把它作为 mem0 的 `user_id`；请求里自称的身份不起作用，没有这个头的请求被拒绝。删除前检查记忆属于该智能体（mem0 按 id 删除不区分用户）。memory-service 不在 runtime 网络上，也不持有任何凭据：调用 LLM 网关时它同样只带 `X-AXP-Agent-Id`，因此抽取用量记在对应的智能体上。
 
 ## Provider 接口
 
@@ -62,10 +62,10 @@ memory-service 只认 runtime 网关设置的 `X-AXP-Agent-Id`，并把它作为
 
 ## 运行
 
-|             | 开发                                               | 生产                                            |
-| ----------- | -------------------------------------------------- | ----------------------------------------------- |
-| 进程        | `bun run dev:memory-service`，`127.0.0.1:P+6`      | Kamal 角色 `memory`，网络别名 `axp-memory:8320` |
-| 数据库      | 开发 PostgreSQL（`pgvector/pgvector:pg17-trixie`） | accessory `postgres`（同一镜像）                |
-| llm-gateway | `AXP_LLM_GATEWAY_URL`（`dev.sh` 设定）             | `http://axp-llm:8317`                           |
+|          | 开发                                               | 生产                                            |
+| -------- | -------------------------------------------------- | ----------------------------------------------- |
+| 进程     | `bun run dev:memory-service`，`127.0.0.1:P+6`      | Kamal 角色 `memory`，网络别名 `axp-memory:8320` |
+| 数据库   | 开发 PostgreSQL（`pgvector/pgvector:pg17-trixie`） | accessory `postgres`（同一镜像）                |
+| LLM 网关 | `AXP_LLM_GATEWAY_URL`（`dev.sh` 设为内部 API）     | `http://axp-api:8001`（控制面的内部 API）       |
 
 PostgreSQL 镜像是 `postgres:17` 加 pgvector，同为 Debian trixie，因此原有数据目录的排序规则不变（bookworm 版的 `pgvector/pgvector:pg17` 会导致 collation 版本不匹配）。mem0 首次启动时创建 `vector` 扩展和 `memories` 表，它们不归控制面的迁移管理。mem0 的遥测已关闭；它的变更历史写在容器内的 SQLite，不保留。
