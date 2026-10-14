@@ -14,7 +14,8 @@ export function AttentionDot({ className }: { className?: string }) {
 /**
  * Settings' section list: a column beside the content, a scrolling row
  * above it on phones. A section with `attention` shows a dot, `hint` names
- * it to screen readers.
+ * it to screen readers. The open section scrolls into view, for sections
+ * opened from elsewhere (the phone's 更多 page).
  */
 export function SettingsNav<T extends string>({
   label,
@@ -44,6 +45,11 @@ export function SettingsNav<T extends string>({
             key={section}
             type="button"
             aria-current={value === section ? "page" : undefined}
+            ref={
+              value === section
+                ? (button) => button?.scrollIntoView({ block: "nearest" })
+                : undefined
+            }
             onClick={() => onChange(section)}
             className={cn(
               "flex shrink-0 items-center gap-2 px-2 py-2 text-sm whitespace-nowrap text-muted-foreground transition-colors duration-[60ms] ease-linear outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring",

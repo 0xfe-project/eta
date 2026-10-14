@@ -1,15 +1,6 @@
-import type { Icon } from "@phosphor-icons/react";
-import type { SettingsSection, WorkspaceState } from "./workspace-store";
-import { ArchiveIcon } from "@phosphor-icons/react/Archive";
+import type { WorkspaceState } from "./workspace-store";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
-import { ChartLineIcon } from "@phosphor-icons/react/ChartLine";
-import { DesktopIcon } from "@phosphor-icons/react/Desktop";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
-import { LinkIcon } from "@phosphor-icons/react/Link";
-import { PackageIcon } from "@phosphor-icons/react/Package";
-import { PaletteIcon } from "@phosphor-icons/react/Palette";
-import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
-import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { useTheme } from "next-themes";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -29,6 +20,7 @@ import { ConnectionSettings } from "./connection-settings";
 import { ArchivedGroups } from "./groups";
 import { ProviderSettings } from "./provider-settings";
 import { AttentionDot, SettingsNav } from "./settings-nav";
+import { settingsSections, useSettingsAttention } from "./settings-sections";
 import { useWorkspaceStore } from "./workspace-store";
 
 const colorModes = [
@@ -44,21 +36,6 @@ const fontFields = [
   label: string;
   placeholder: string;
 }[];
-const sections: {
-  value: SettingsSection;
-  label: string;
-  icon: Icon;
-}[] = [
-  { value: "agents", label: "智能体", icon: RobotIcon },
-  { value: "bundles", label: "环境包", icon: PackageIcon },
-  { value: "providers", label: "模型服务", icon: PlugsConnectedIcon },
-  { value: "connections", label: "连接", icon: LinkIcon },
-  { value: "computers", label: "远程电脑", icon: DesktopIcon },
-  { value: "archived", label: "已归档", icon: ArchiveIcon },
-  { value: "appearance", label: "外观", icon: PaletteIcon },
-  { value: "logs", label: "日志", icon: ChartLineIcon },
-];
-
 /** OpenObserve, proxied by the edge gateway under /observe. */
 function LogSettings() {
   return (
@@ -209,7 +186,7 @@ function useSettingsLink() {
   useEffect(() => {
     const url = new URL(window.location.href);
     if (!url.searchParams.has("settings")) return;
-    const section = sections.find(
+    const section = settingsSections.find(
       ({ value }) => value === url.searchParams.get("settings"),
     );
     url.searchParams.delete("settings");
@@ -221,11 +198,7 @@ function useSettingsLink() {
 export function SettingsDialog() {
   const settings = useWorkspaceStore((s) => s.settings);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
-  // 模型服务 lists every account; 连接 only Grok's, for the grok plugin.
-  const attention: Partial<Record<SettingsSection, boolean>> = {
-    providers: useNeedsAttention(),
-    connections: useNeedsAttention(true),
-  };
+  const attention = useSettingsAttention();
   useSettingsLink();
 
   return (
@@ -243,7 +216,7 @@ export function SettingsDialog() {
         <div className="flex min-h-0 flex-1 flex-col md:flex-row">
           <SettingsNav
             label="设置分类"
-            sections={sections.map((section) => ({
+            sections={settingsSections.map((section) => ({
               ...section,
               attention: attention[section.value],
               hint: "有账号需要处理",
