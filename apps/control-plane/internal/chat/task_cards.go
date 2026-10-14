@@ -96,7 +96,7 @@ func SyncTaskCard(ctx context.Context, tx pgx.Tx, taskID string) error {
 	err := tx.QueryRow(ctx, `SELECT t.group_id,jsonb_build_object(
         'task_id',t.id,'number',t.number,'title',t.title,'status',t.status,'group_id',t.group_id,
         'assignee',t.assignee,'computer_name',c.name,'provider',t.provider,
-        'run_status',(SELECT status FROM task_run WHERE task_id=t.id ORDER BY created_at DESC,id DESC LIMIT 1),
+        'run_status',(SELECT status FROM task_run WHERE task_id=t.id AND NOT assist ORDER BY created_at DESC,id DESC LIMIT 1),
         'comments',(SELECT count(*) FROM task_activity WHERE task_id=t.id AND kind='comment'),
         'summary',COALESCE((SELECT body FROM task_activity WHERE task_id=t.id AND kind='comment' AND actor='remote' ORDER BY created_at DESC,id DESC LIMIT 1),(SELECT body FROM task_activity WHERE task_id=t.id AND kind='comment' ORDER BY created_at DESC,id DESC LIMIT 1),''),
         'deliverables',COALESCE((SELECT jsonb_agg(x.data ORDER BY x.created_at) FROM (SELECT DISTINCT ON (data->>'url') data,created_at FROM task_activity WHERE task_id=t.id AND kind='deliverable' ORDER BY data->>'url',created_at DESC,id DESC) x),'[]'::jsonb),

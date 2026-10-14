@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/akarachen/axp/apps/control-plane/internal/chat"
 	"github.com/akarachen/axp/apps/control-plane/internal/tasks"
 )
 
@@ -140,6 +141,10 @@ func (e *taskEnv) deliver(token, dir, taskID string) {
 func TestAnotherAgentReviewsBesideTheAssignee(t *testing.T) {
 	e := newTaskEnv(t)
 	task, token, mainDir := e.claudeAtWork()
+	member := e.createAgent("讨论成员")
+	var group chat.Group
+	e.post("/groups", map[string]any{"name": "任务讨论", "members": []string{member.ID}}).json(t, &group)
+	expect(t, e.patch("/tasks/"+task.ID, map[string]any{"group_id": group.ID}).status, 200)
 	mainID, main := e.relay.agentIn(t, mainDir)
 	e.deliver(token, mainDir, task.ID)
 	e.heads[pullURL] = headSHA
@@ -201,6 +206,9 @@ func TestAnotherAgentReviewsBesideTheAssignee(t *testing.T) {
 
 	// Claude's turn is not ended by Codex's reply, nor sent it.
 	expect(t, runsOf(task, false)[0].Status, "running")
+	// The discussion card follows the assignee's run, not the completed assist.
+	expect(t, scalar[string](e.env, "SELECT data->>'run_status' FROM message WHERE kind='task_card' AND group_id=$1", group.ID), "running")
+	expect(t, scalar[int](e.env, "SELECT count(*) FROM agent_command"), 0)
 	expect(t, len(main.inputs), 1)
 	e.relay.finish(mainID)
 	e.ticks(1)

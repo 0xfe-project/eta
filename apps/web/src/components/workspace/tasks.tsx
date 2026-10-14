@@ -65,6 +65,7 @@ import {
 } from "./assignee-draft";
 import { AssigneeFields } from "./assignee-picker";
 import { BackToTop } from "./back-to-top";
+import { CreateGroup } from "./groups";
 import { when } from "./routine-format";
 import { Select, SelectOption } from "./select-field";
 import { AssistDialog } from "./task-assist";
@@ -637,7 +638,7 @@ export function TaskProperties({
               </SelectOption>
             ))}
         </Select>
-        {task.group_id && (
+        {task.group_id ? (
           <Button
             variant="ghost"
             size="xs"
@@ -645,6 +646,12 @@ export function TaskProperties({
           >
             在群里讨论
           </Button>
+        ) : (
+          <CreateGroup key={task.id} task={task}>
+            <Button variant="ghost" size="xs">
+              新建群讨论
+            </Button>
+          </CreateGroup>
         )}
       </dd>
       {links.length ? (
@@ -783,6 +790,8 @@ function describe(a: TaskActivity): React.ReactNode {
       return `把标题改为「${str(d.to)}」`;
     case "description":
       return "修改了描述";
+    case "group":
+      return d.to ? "关联了群" : "解除了群关联";
     case "deliverable":
       return (
         <>
@@ -849,6 +858,7 @@ const minor = new Set<string>([
   "title",
   "description",
   "assignee",
+  "group",
   "status",
   "cleanup",
   "run_completed",
