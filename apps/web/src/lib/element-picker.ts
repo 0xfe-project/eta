@@ -13,7 +13,7 @@ export function elementPickerDefault() {
 
 /**
  * The saved choice, read straight from storage at startup: the workspace
- * store loads only after hydration, and the picker is best installed before
+ * store is rehydrated later, and the picker is best installed before
  * React's first commit.
  */
 export function savedElementPicker() {

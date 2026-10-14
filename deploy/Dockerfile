@@ -36,7 +36,7 @@ COPY --from=moby/buildkit:v0.34.0 /usr/bin/buildctl /usr/local/bin/buildctl
 # Least to most frequently changing.
 COPY --from=routine-plugins /opt/axp/bin/ /usr/local/bin/
 COPY apps/control-plane/out/${TARGETOS}-${TARGETARCH}/axp-control-plane /usr/local/bin/
-# Self-contained server bundle plus client assets; no node_modules.
+# Self-contained static server plus SPA assets; no node_modules.
 COPY apps/web/out/ /app/apps/web/
 COPY apps/gateway/Caddyfile apps/gateway/*.caddy /app/apps/gateway/
 # The bundles and plugins agents' images are built from; the plugins are

@@ -77,7 +77,7 @@ describe("language detection and preferences", () => {
     expect(readLanguagePreference()).toBe("zh");
   });
 
-  it("starts SSR in English and falls back to English for missing resources", () => {
+  it("starts in English and falls back to English for missing resources", () => {
     const instance = createI18n();
     expect(instance.isInitialized).toBe(true);
     expect(instance.t("settings:title")).toBe("Settings");

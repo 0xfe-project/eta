@@ -12,9 +12,8 @@ const preferenceSchema = z.enum(["en", "zh", "system"]);
 const preferenceEvent = "axp:language-preference";
 let volatilePreference: LanguagePreference | undefined;
 
-// Inline resources initialize synchronously. SSR always reads English; browser
-// preferences load after hydration, matching the other local UI preferences.
-// The server never changes this instance's language between requests.
+// Inline resources initialize synchronously. The shared instance starts in
+// English; main.tsx applies the browser preference before the first paint.
 export function createI18n(language: Language = "en") {
   const instance = createInstance();
   void instance.use(initReactI18next).init({
@@ -94,6 +93,11 @@ export function subscribeLanguagePreference(onChange: () => void) {
     window.removeEventListener(preferenceEvent, onChange);
     window.removeEventListener("storage", onStorage);
   };
+}
+
+export function applyDocumentLanguage() {
+  document.documentElement.lang =
+    i18n.resolvedLanguage === "zh" ? "zh-CN" : "en";
 }
 
 export function formatLocale(): string {

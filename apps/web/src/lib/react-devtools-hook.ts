@@ -1,5 +1,5 @@
 // A bare React DevTools hook, installed before react-dom loads (first import
-// in client.tsx): React registers its renderer only with a hook that exists
+// in main.tsx): React registers its renderer only with a hook that exists
 // when it starts. React Grab (lib/element-picker.ts) needs that renderer to
 // list a production element's components; loaded later, it finds the hook
 // here, so 圈选元素 can be turned on without a reload. A real DevTools

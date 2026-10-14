@@ -1,4 +1,4 @@
-# TanStack Start SSR and static assets; reached only through the gateway.
+# Vite SPA and static assets; reached only through the gateway.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
