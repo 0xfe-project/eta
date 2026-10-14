@@ -187,7 +187,7 @@ function AgentEditorForm({
 
   return (
     <form noValidate onSubmit={save} className="flex min-h-0 flex-1 flex-col">
-      <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <SettingsNav
           label="智能体设置分类"
           sections={tabs.map((t) => ({

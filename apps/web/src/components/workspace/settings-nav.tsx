@@ -36,7 +36,7 @@ export function SettingsNav<T extends string>({
   return (
     <nav
       aria-label={label}
-      className="flex shrink-0 gap-1 overflow-x-auto border-b p-2 sm:w-44 sm:flex-col sm:border-r sm:border-b-0"
+      className="flex shrink-0 gap-1 overflow-x-auto border-b p-2 md:w-44 md:flex-col md:border-r md:border-b-0"
     >
       {sections.map(
         ({ value: section, label, icon: Icon, attention, hint }) => (

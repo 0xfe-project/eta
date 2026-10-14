@@ -458,7 +458,7 @@ export function RoutineDetail({
   return (
     <div className="space-y-4">
       <div>
-        <span className={listed ? "lg:hidden" : undefined}>
+        <span className={listed ? "md:hidden" : undefined}>
           <Back
             label="定时任务"
             onClick={() => void setNav({ routine: null })}

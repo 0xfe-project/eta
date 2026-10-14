@@ -124,7 +124,7 @@ export function Workspace({
     const read = () => {
       if (
         document.visibilityState === "visible" &&
-        (groupId || window.matchMedia("(min-width: 1024px)").matches)
+        (groupId || window.matchMedia("(min-width: 768px)").matches)
       )
         markRead({ id: group.id, seq: group.last_seq });
     };
@@ -141,7 +141,7 @@ export function Workspace({
       <Sidebar />
       <div
         className={cn(
-          "min-h-0 min-w-0 flex-1 flex-col lg:hidden",
+          "min-h-0 min-w-0 flex-1 flex-col md:hidden",
           groupId ? "hidden" : "flex",
         )}
       >
@@ -159,7 +159,7 @@ export function Workspace({
       </div>
       <div
         className={cn(
-          "min-h-0 min-w-0 flex-1 flex-col p-2 md:p-3 lg:flex",
+          "min-h-0 min-w-0 flex-1 flex-col p-2 md:flex md:p-3",
           groupId ? "flex" : "hidden",
         )}
       >

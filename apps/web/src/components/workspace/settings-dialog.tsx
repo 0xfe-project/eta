@@ -61,7 +61,7 @@ function LogSettings() {
   return (
     <div className="space-y-3">
       <h2 className="text-sm font-semibold">日志</h2>
-      <div className="grid min-w-0 gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+      <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
         <div className="min-w-0 text-sm">
           <p className="font-medium">OpenObserve</p>
           <p className="text-muted-foreground">登录账号 root@axp.local</p>
@@ -93,7 +93,7 @@ function Segmented<T extends string>({
 }) {
   const index = options.findIndex((option) => option.value === value);
   return (
-    <fieldset className="grid min-w-0 gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+    <fieldset className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
       <legend className="sr-only">{label}</legend>
       <span aria-hidden="true" className="text-sm font-medium">
         {label}
@@ -152,7 +152,7 @@ function AppearanceSettings() {
       {fontFields.map(({ key, label, placeholder }) => (
         <div
           key={key}
-          className="grid min-w-0 gap-2 lg:grid-cols-[minmax(0,1fr)_16rem] lg:items-center"
+          className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_16rem] md:items-center"
         >
           <label htmlFor={key} className="text-sm font-medium">
             {label}
@@ -237,7 +237,7 @@ export function SettingsDialog() {
         <DialogHeader className="shrink-0 border-b p-3 pr-12">
           <DialogTitle className="text-base">设置</DialogTitle>
         </DialogHeader>
-        <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
           <SettingsNav
             label="设置分类"
             sections={sections.map((section) => ({

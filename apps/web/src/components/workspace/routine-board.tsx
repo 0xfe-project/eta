@@ -76,7 +76,7 @@ export function RoutineBoard() {
       <main id="main" className="flex min-h-0 flex-1">
         <div
           className={cn(
-            "w-full overflow-y-auto px-2 py-3 sm:px-4 lg:block lg:w-96 lg:shrink-0 lg:border-r",
+            "w-full overflow-y-auto px-2 py-3 sm:px-4 md:block md:w-80 md:shrink-0 md:border-r lg:w-96",
             open && "hidden",
           )}
         >
@@ -85,7 +85,7 @@ export function RoutineBoard() {
         <div
           className={cn(
             "min-w-0 flex-1 overflow-y-auto",
-            !open && "hidden lg:block",
+            !open && "hidden md:block",
           )}
         >
           <div className="mx-auto max-w-3xl px-4 py-6 sm:px-8">{content}</div>

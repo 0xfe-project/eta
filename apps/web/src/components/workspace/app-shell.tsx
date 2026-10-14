@@ -56,7 +56,7 @@ export function Sidebar() {
   const { agents, loaded, error, openEditor } = useAgents();
   const openAgent = useOpenAgent();
   return (
-    <aside className="hidden w-48 shrink-0 flex-col overflow-y-auto border-r bg-sidebar lg:flex lg:w-56">
+    <aside className="hidden w-48 shrink-0 flex-col overflow-y-auto border-r bg-sidebar md:flex lg:w-56">
       <div className="flex h-12 shrink-0 items-center justify-between pr-2 pl-4">
         <Link to="/workspace" className="text-lg font-semibold tracking-tight">
           axp.
@@ -155,7 +155,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label="分区"
-      className="flex shrink-0 border-t bg-background pb-[env(safe-area-inset-bottom)] lg:hidden"
+      className="flex shrink-0 border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       {tabs.map(({ to, label, icon: Icon }) => (
         <Link
