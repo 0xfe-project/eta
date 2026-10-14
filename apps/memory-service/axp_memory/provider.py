@@ -21,6 +21,7 @@ class Memory:
     # turn), "agent" (the agent's remember tool) or "user" (added by the
     # user). None for memories from before sources were recorded.
     source: str | None = None
+    source_group_id: str | None = None
 
 
 class MemoryProvider(Protocol):
@@ -32,6 +33,7 @@ class MemoryProvider(Protocol):
         source: str,
         infer: bool,
         model: str | None = None,
+        group_id: str | None = None,
     ) -> list[Memory]:
         """Remember ``messages`` ({"role", "content"}) for the agent.
 
@@ -41,10 +43,18 @@ class MemoryProvider(Protocol):
         ...
 
     def search(
-        self, agent_id: str, query: str, limit: int, *, source: str | None = None
+        self,
+        agent_id: str,
+        query: str,
+        limit: int,
+        *,
+        source: str | None = None,
+        group_id: str | None = None,
     ) -> list[Memory]: ...
 
-    def list(self, agent_id: str, *, source: str | None = None) -> list[Memory]: ...
+    def list(
+        self, agent_id: str, *, source: str | None = None, group_id: str | None = None
+    ) -> list[Memory]: ...
 
     def delete(self, agent_id: str, memory_id: str) -> bool:
         """Forget one of the agent's memories; False if it has no such one."""

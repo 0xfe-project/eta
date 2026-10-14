@@ -4,20 +4,38 @@
 
 ## 组件与进程
 
-| 进程                   | 代码                                                | 职责                                                                                      |
-| ---------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| 公共 API（`api`）      | `api/chat.go`、`chat/chat.go`                       | 产品接口、SSE、幂等、产品投影与 `ui_event`；工作只写进 PostgreSQL                         |
-| 内部 API（`internal`） | `api/internal.go`、`control/gate.go`                | runtime 网关的 forward auth（谁持有这把 key、有没有这个插件），以及 tasks、agenvo 插件    |
-| controller             | `control/controller.go`、`dispatch.go`、`events.go` | 唯一持有 Docker socket、唯一能连到 runtime 的进程：构建镜像、运行容器、交付工作、导入事件 |
-| NATS JetStream         | stream `AGENT_EVENTS`                               | runtime 发出的事件，按智能体一个 subject                                                  |
-| agent runtime（容器）  | `apps/agent-runtime/src`                            | Node 24：驱动 Codex app-server，hono 提供控制接口，事件发到 NATS                          |
+| 进程                   | 代码                                                | 职责                                                                                           |
+| ---------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| 公共 API（`api`）      | `api/chat.go`、`chat/chat.go`                       | 产品接口、SSE、幂等、产品投影与 `ui_event`；工作只写进 PostgreSQL                              |
+| 内部 API（`internal`） | `api/internal.go`、`control/gate.go`                | runtime 网关的 forward auth（谁持有这把 key、有没有这个插件），以及 groups、tasks、agenvo 插件 |
+| controller             | `control/controller.go`、`dispatch.go`、`events.go` | 唯一持有 Docker socket、唯一能连到 runtime 的进程：构建镜像、运行容器、交付工作、导入事件      |
+| NATS JetStream         | stream `AGENT_EVENTS`                               | runtime 发出的事件，按智能体一个 subject                                                       |
+| agent runtime（容器）  | `apps/agent-runtime/src`                            | Node 24：驱动 Codex app-server，hono 提供控制接口，事件发到 NATS                               |
 
 代码路径相对于 `apps/control-plane/internal`。公共 API 不在 runtime 网络上，所以它从不直接调用 runtime：它写入命令后 `NOTIFY axp_agent_work`（提交时才送达），controller 收到后立即交付。
 
+## 群与参与者
+
+任务详情从属性的“群”一行进入讨论：已关联时打开群，未关联时可以新建群、邀请所选智能体并关联任务。这里的群成员参与 AXP 对话；任务底部的“请 Agent 协助”走远程任务运行通道，详见 [任务与远程电脑](tasks.md)。
+
+`conversation` 仍是整个工作区的事件分区，不代表群。`chat_group` 有名字、目标、已定事项、归档标记和用户读到的 seq，没有业务状态。`group_participant` 记录成员和临时参与者，同时保存 `(群, 智能体)` 的 Codex thread id、恢复状态及上次参与的 seq。新建智能体时在同一事务里创建唯一的私聊群；私聊不能改成员，要按话题多聊几段就新建群。
+
+单智能体群和私聊默认唤醒唯一成员。多智能体群只有 `mentions` 中的成员会被唤醒，没有点名的消息只留作上下文。每个智能体仍有自己的队列和工作区，跨群串行；不同智能体可以并行。历史只提供 `GET /groups/{id}/messages`，快照包含群列表、活跃回复和交互，仍由一条工作区 SSE 推送；`group.updated` 更新群，消息和交互均带 `group_id`。消息 seq 固定回复顺序，revision 用于重连去重。
+
+群的“全部停止”只停止本群的排队和执行中命令。执行中的命令记下中断请求，`CurrentCommand` 会拒绝它后续的工具调用；排队命令直接取消，不另存唤醒链状态。移除成员会停止它在本群的工作，保留发言和 thread 映射，恢复状态记为 archived；重新邀请时仍使用原来的 thread。
+
+控制面给 runtime 的输入只有群头（名称、成员、点名者、新消息数）和被点名的消息。前情由必选 groups 插件的 skill 指导智能体用 `read_group` / `search_group` 自取，不批量注入历史或简报。智能体的普通回复即使写了 @ 也不会唤醒其他智能体。
+
+智能体之间只能用 `mention`：在当前群或私聊里写下一条有作者和接收者的消息，再给接收者排队，回答仍留在这里，不自动回叫。非成员成为这次上下文的临时参与者，群里写邀请提示。`agent_command.root_message_id` 指向最初的用户消息，先用 `FOR UPDATE` 锁住根消息，再数以它为根的 `kind=mention` 消息，所有分支合计最多五次；第五次排队时写审阅提醒，后续调用不再排队。MCP 工具用网关注入的身份和当前群检查执行槽，不能由参数跨群读写。forward auth 和工具共用 `ActiveCommand` 查询当前执行槽。系统事件由 `kind=system` 表达，role 仍只有 user / assistant，作者约束按 kind 校验。
+
+`search_group` 按空白拆词，每个词都用转义后的 `ILIKE` 匹配消息正文或卡片数据，要求全部命中；中文不依赖分词索引。
+
+表结构使用 goose；既有消息、附件和环境包的转换按 #237 手工完成，应用没有迁移或兼容路径。
+
 ## 一条消息的路径
 
-1. `POST /chat/messages` 在一个事务里写入幂等记录、用户消息、助手回复占位和 `agent_command(queued)`，并通知 controller，返回 202。用户消息的 id 可以由客户端给出（见下文[发送](#发送)）。每个智能体最多 20 条在等（`429 QUEUE_FULL`）。
-2. controller 的 `Dispatch`：智能体的容器是当前配置、它的 runtime 已经报告启动（`agent.boot_id`），且没有正在执行的命令时，取最早的一条，先在事务里记为已交付（`status = running`、`delivered_at`、`boot_id`），再 `POST /prompt {boot_id, command_id, text, kind}`。
+1. `POST /chat/messages {group_id, mentions, parts}` 在一个事务里写入幂等记录、一条用户消息、按点名顺序排列的助手回复占位和各自的 `agent_command(queued)`，并通知 controller，返回 202。用户消息的 id 可以由客户端给出（见下文[发送](#发送)）。每个智能体最多 20 条在等（`429 QUEUE_FULL`）。
+2. controller 的 `Dispatch`：智能体的容器是当前配置、它的 runtime 已经报告启动（`agent.boot_id`），且没有正在执行的命令时，取最早的一条，先在事务里记为已交付（`status = running`、`delivered_at`、`boot_id`），再 `POST /prompt {boot_id, command_id, thread_key, codex_thread_id, text, kind}`。
 3. runtime 用 `turn/start` 开始一个 turn（`clientUserMessageId` 就是命令 id），Codex 的通知被转换成事件：`turn.started`、`item.updated`（增量文本每 0.3 秒合并一次）、`approval.*`、`turn.steered`、`turn.completed`。
 4. 事件发到 `axp.agent.<agent>.events`；controller 按顺序读 stream，每批在一个事务里导入 `agent_event` 并投影为消息块和 `ui_event`，同时记下读到的位置（`event_position`），SSE 推给浏览器。导入后唤醒该智能体：turn 结束了，下一条随即交付。
 
@@ -31,17 +49,17 @@ agenvo 插件的 `execute` 是任意脚本，可以调用多个原生方法、�
 
 停止：命令还在等时直接取消。已交付的记录 `interrupt_requested_at`、回复置为 `stopping`，controller 向 runtime 发 `POST /abort {command_id}`（直到 turn 结束，每 5 秒最多一次）；turn 还没开始时，runtime 记下它，开始时立即中断。runtime 以 `turn.completed(interrupted)` 确认后回复才变为 `stopped`。
 
-压缩：`POST /agents/{id}/compact` 像发消息一样建一条 `/compact` 用户消息和回复，但命令 `kind` 为 `compact`，同样排队、一次一个。runtime 调用 `thread/compact/start`，它在 turn 开始前就返回，turn id 从随后的 `turn/started` 得到，之后与普通 turn 一样流式处理，`contextCompaction` 显示为“压缩上下文”。
+压缩：`POST /groups/{id}/compact {mentions}` 像发消息一样建一条 `/compact` 用户消息和回复，但命令 `kind` 为 `compact`，同样排队、一次一个。runtime 调用 `thread/compact/start`，它在 turn 开始前就返回，turn id 从随后的 `turn/started` 得到，之后与普通 turn 一样流式处理，`contextCompaction` 显示为“压缩上下文”。
 
 确认：Codex 以 `on-request` 审批运行（`/etc/codex/config.toml`）。runtime 接住 `commandExecution` / `fileChange` 的审批请求和 plugin 工具的确认请求（只有字段为空的 MCP elicitation，见[用户确认](user-attention.md)），发出 `approval.requested`；控制面建 `approval` 与 choice `interaction`，回复显示“等待确认”。用户回答后审批变为 `decided`，controller 把决定交给 runtime 的 `POST /decide`（每 5 秒一次，直到 runtime 发出 `approval.applied`），交互才显示 `resolved`。等待中被停止时请求以 `cancel` 应答：命令和文件审批的 `cancel` 本身就中断 turn；plugin 确认的 `cancel` 只表示“用户关掉了提示”，所以 runtime 另外调用 `turn/interrupt`。Codex 自己撤回的请求（`serverRequest/resolved`）同样以 `cancel` 结束。其他服务端请求（权限扩展、带表单字段的 elicitation 等）一律保守拒绝。
 
-插话：`mode: "steer"` 的消息照常写入。有 turn 在运行时，controller 先把它交给 runtime 的 `POST /steer`（只试一次）：Codex 采纳后回显带同一 `clientId` 的 `userMessage`，runtime 发出 `turn.steered`，原命令记为成功，turn 的剩余输出和最终的 `turn.completed` 都归插话命令。turn 结束时仍未回显的已采纳插话同样转交，绝不重跑；还没有应答的，turn 结束时先等它的应答（最多 30 秒）。不被采纳的插话照常等待，轮到时作为普通 turn 执行。
+插话：`mode: "steer"` 的消息照常写入。同一群有 turn 在运行时，controller 先把它交给 runtime 的 `POST /steer`（只试一次）：Codex 采纳后回显带同一 `clientId` 的 `userMessage`，runtime 发出 `turn.steered`，原命令记为成功，turn 的剩余输出和最终的 `turn.completed` 都归插话命令。turn 结束时仍未回显的已采纳插话同样转交，绝不重跑；还没有应答的，turn 结束时先等它的应答（最多 30 秒）。不被采纳的插话照常等待，轮到时作为普通 turn 执行。
 
 ## 发送
 
 用户按下发送时消息就有了身份：Web 生成它的 id，消息立刻出现在对话里（“发送中…”），输入框清空。之后每一次尝试都带着同一个 id，既作为消息 id，也作为 `Idempotency-Key`，因此重试、响应丢失后再发、刷新页面后继续发送都是同一条消息。
 
-- 待送达的消息和每个智能体的草稿保存在浏览器里（`apps/web/src/queries/outbox.ts`，localStorage 的 `axp.chat.v1`），刷新后未送达的会继续发送。同一个智能体的消息按发送顺序一条一条发。
+- 待送达的消息和每个群的草稿保存在浏览器里（`apps/web/src/queries/outbox.ts`，localStorage 的 `axp.groups.v1`），刷新后未送达的会继续发送。同一个群的消息按发送顺序一条一条发。
 - 没有响应（断网、超时 20 秒）或 5xx 时自动再试，共 4 次；仍不成功，或服务端明确拒绝（4xx），消息标为“未送达”并给出原因，可以“重试”“编辑”或“丢弃”。
 - 消息经 SSE 先于响应到达时，按 id 认出它，不会显示两遍。
 
@@ -50,10 +68,10 @@ agenvo 插件的 `execute` 是任意脚本，可以调用多个原生方法、�
 输入框是 Lexical 的纯文本编辑器（`apps/web/src/components/workspace/composer-*.ts*`），文字之间可以有块：
 
 - 粘贴超过 1000 字符（按 Unicode 码点）或 12 行的文本折成 `[粘贴文本 · N 字符]`，点开看全文、移除或展开回文本；阈值在 `apps/web/src/lib/composer.ts` 的 `LONG_PASTE`。发送时它就是原文，单独作为一个文本 part，对话里同样折叠显示。超过一条消息的文本上限（100000 字符）的粘贴改为 `粘贴文本.txt` 附件。
-- 粘贴的图片和文件立刻上传到当前智能体（`POST /api/v1/agents/{agent_id}/attachments`，请求体就是文件，单个 ≤ 20 MB），块上显示上传中、失败（可重试）或缩略图；有附件未上传完或失败时不能发送。剪贴板同时有文件和文本时取文件；Office/网页复制的文字旁边附带的渲染图会被忽略，取文字。任何 HTML 都不会插入。
-- 草稿按智能体保存为有序的 parts，上传状态按块保存在 `uploads`，刷新后上传中断的块标为失败；附件只属于它上传到的那个智能体。
+- 粘贴的图片和文件立刻上传到当前群（`POST /api/v1/groups/{group_id}/attachments`，请求体就是文件，单个 ≤ 20 MB），块上显示上传中、失败（可重试）或缩略图；有附件未上传完或失败时不能发送。剪贴板同时有文件和文本时取文件；Office/网页复制的文字旁边附带的渲染图会被忽略，取文字。任何 HTML 都不会插入。
+- 草稿按群保存为有序的 parts，上传状态按块保存在 `uploads`，刷新后上传中断的块标为失败；附件只属于它上传到的那个群。
 
-发送时消息是有序的 `parts`（`text` 或 `attachment_id`，最多 10 个附件），服务端校验附件属于收件智能体并标为已发送（`chat_attachment.sent_at`，之后不能删除），消息内容里附件是 `attachment` 块。runtime 收到 `/prompt`、`/steer` 的 `parts` 时，经 runtime gateway 的 `/attachments/v1/{id}`（只能取本智能体的附件）把文件下载到 `/agent/attachments/<id>/<文件名>`，再按顺序交给 Codex：文本原样；png/jpeg/gif/webp 作为 `localImage`（模型不支持图像时这一轮会失败并显示错误）；每个附件另有一行说明它的路径、类型和大小，其他文件由智能体用工具读取。文件内容和 base64 都不会进入 prompt。浏览器通过 `GET /api/v1/chat/attachments/{id}` 查看（图片和纯文本内联，其余下载；`nosniff`、`CSP: sandbox`）。
+发送时消息是有序的 `parts`（`text` 或 `attachment_id`，最多 10 个附件），服务端校验附件属于当前群并标为已发送（`chat_attachment.sent_at`，之后不能删除），消息内容里附件是 `attachment` 块。runtime 收到 `/prompt`、`/steer` 的 `parts` 时，经 runtime gateway 的 `/attachments/v1/{id}`（只能取网关注入的当前群的附件，成员和被点名的临时参与者均可取）把文件下载到 `/agent/attachments/<id>/<文件名>`，再按顺序交给 Codex：文本原样；png/jpeg/gif/webp 作为 `localImage`（模型不支持图像时这一轮会失败并显示错误）；每个附件另有一行说明它的路径、类型和大小，其他文件由智能体用工具读取。文件内容和 base64 都不会进入 prompt。浏览器通过 `GET /api/v1/chat/attachments/{id}` 查看（图片和纯文本内联，其余下载；`nosniff`、`CSP: sandbox`）。
 
 对话里每个智能体同一时刻只有一行在动：正在执行的回复（“工作中”“正在停止”），或者智能体启动时排在第一条的回复（“正在启动智能体”）；其余等待中的回复是静态的“等待中 · 前面还有 n 条”，可以撤回。因环境原因连续失败的回复只在最后一条写出原因。
 
@@ -65,7 +83,7 @@ agenvo 插件的 `execute` 是任意脚本，可以调用多个原生方法、�
 
 容器启动所用的一切（镜像、模型、指令）由 controller 每个 tick 算出一份配置摘要，写在容器的标签上：
 
-- 名称、指令、模型或环境包变了（`config_version` 递增），或者某个环境包、插件、runtime 镜像变了（镜像摘要不同），controller 在该智能体没有执行中的工作时替换它的容器，新容器在同一个卷上恢复同一个 thread。替换前不再交付新的命令，所以配置不会在 turn 中途改变，也不会被排队的消息一直拖住。
+- 名称、指令、模型或环境包变了（`config_version` 递增），或者某个环境包、插件、runtime 镜像变了（镜像摘要不同），controller 在该智能体没有执行中的工作时替换它的容器，新容器在同一个卷上按控制面给出的 id 恢复各群的 thread。替换前不再交付新的命令，所以配置不会在 turn 中途改变，也不会被排队的消息一直拖住。
 - 重启（`POST /agents/{id}/restart`）递增 `config_version` 并停止该智能体进行中的回复，中断确认后容器被替换。
 - 删除只隐藏智能体：排队的取消、进行中的中断，controller 移除它的容器；卷和历史消息保留。
 
@@ -75,18 +93,20 @@ agenvo 插件的 `execute` 是任意脚本，可以调用多个原生方法、�
 
 1. 把镜像里编译好的插件装进 `CODEX_HOME`（卷上的 `/agent/codex`）：Codex 只加载装过的副本；上一个镜像装过、这个镜像没有的，卸掉。装好后在副本的 `.mcp.json` 里填入网关地址和工作区。
 2. 开始定时刷新 GitHub 凭据（gh 的 `hosts.yml` 和 git 的提交身份，在 `/run/axp`，不在卷上）。
-3. 启动 `codex app-server`，用 `thread/list` 找到智能体的 thread：工作区（`/agent/workspace`）里最近更新的根 thread（子智能体的 thread 有 `parentThreadId`，跳过）。有就 `thread/resume`，没有（第一个 turn 之前 Codex 不保存 thread）就 `thread/start`。resume 失败（不是“找不到”）时报告 `runtime.failed(RECOVERY_RESUME_FAILED)`，绝不另起 thread。
-4. 在 `:8080` 提供控制接口，发出 `runtime.started {thread_id, resumed}`。
+3. 启动 `codex app-server`，此时不开 thread。在 `:8080` 提供控制接口，发出 `runtime.started {}`。
+4. 命令带 `thread_key`（群 id）和 `codex_thread_id`（首次为 null）。首次遇到这个群时按给出的 id `thread/resume`，没有 id 才 `thread/start`；发出 `thread.opened {command_id, thread_key, codex_thread_id, resumed}`，控制面保存映射。已经加载的群直接复用；所有 thread 共用智能体的工作目录，不调用 `thread/list` 猜上下文。
+
+runtime 只有一个执行槽，打开或恢复 thread 时也占用它。压缩和停止只作用于当前 thread；插话必须属于同一群。通知和审批检查当前 thread / turn，其他群的迟到事件不进入当前回复。恢复失败返回 `RECOVERY_RESUME_FAILED`，只影响该命令，不新建替代 thread，也不让整个 runtime 退出。
 
 控制接口（hono）只认 controller 的令牌（`HMAC(AXP_SECRET_KEY, control:<agent>)`，`Authorization: Bearer`）：同一网络上的其他 runtime 连得到端口，拿不到令牌。Codex 和智能体执行的命令看不到这个令牌。
 
-| 接口           | 内容                                             | 说明                                                                                                              |
-| -------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| `POST /prompt` | `boot_id`、`command_id`、`text`、`parts`、`kind` | 开始命令的 turn（`kind: compact` 时压缩）；有 turn 在运行时 `409 busy`；附件取不到时 `409 attachment_unavailable` |
-| `POST /steer`  | `boot_id`、`command_id`、`text`、`parts`         | 加入运行中的 turn；没有时 `409 no_active_turn`                                                                    |
-| `POST /abort`  | `command_id`                                     | 中断这个命令的 turn，现在或它开始时                                                                               |
-| `POST /decide` | `approval_id`、`decision`                        | 用户对审批的决定（`accept`、`decline`）                                                                           |
-| `GET /status`  |                                                  | `boot_id`、当前命令和 turn                                                                                        |
+| 接口           | 内容                                                                              | 说明                                                                                                              |
+| -------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `POST /prompt` | `boot_id`、`command_id`、`thread_key`、`codex_thread_id`、`text`、`parts`、`kind` | 开始命令的 turn（`kind: compact` 时压缩）；有 turn 在运行时 `409 busy`；附件取不到时 `409 attachment_unavailable` |
+| `POST /steer`  | `boot_id`、`command_id`、`thread_key`、`codex_thread_id`、`text`、`parts`         | 加入同一群运行中的 turn；没有时 `409 no_active_turn`                                                              |
+| `POST /abort`  | `command_id`                                                                      | 中断这个命令的 turn，现在或它开始时                                                                               |
+| `POST /decide` | `approval_id`、`decision`                                                         | 用户对审批的决定（`accept`、`decline`）                                                                           |
+| `GET /status`  |                                                                                   | `boot_id`、当前命令、群和 turn                                                                                    |
 
 `boot_id` 是 runtime 每次启动生成的。prompt 和 steer 必须带上 controller 记下的那一次（`409 wrong_boot`）：Docker 重启了 runtime 而它还没报告时，发给它的命令退回等待，不会在新的启动里被当成旧的。
 
@@ -96,7 +116,7 @@ Codex 的静态配置是 `danger-full-access` 沙箱、`on-request` 审批：容
 
 ## 恢复与隔离
 
-- runtime 不能继续时退出（Codex 退出、插件安装失败、无法恢复 thread），Docker 按重启策略（`unless-stopped`，越来越久的间隔）重新启动它。新的启动发出 `runtime.started` 时，交付给之前启动的命令以“执行中断，无法确认结果，未自动重试”失败，绝不重放；还在等的命令交给新的启动。
+- runtime 不能继续时退出（Codex 退出、插件安装失败），Docker 按重启策略（`unless-stopped`，越来越久的间隔）重新启动它。新的启动发出 `runtime.started` 时，交付给之前启动的命令以“执行中断，无法确认结果，未自动重试”失败，绝不重放；还在等的命令交给新的启动。
 - `runtime.failed` 把智能体置为不可用，等待中的回复以中文原因失败（插件：“智能体扩展启动失败”；恢复：“智能体会话无法恢复”）。下一次启动报告成功后恢复可用。
 - 镜像构建失败时，智能体不可用，`build_error` 是构建输出的末尾（智能体编辑器里显示），等待中和之后的消息以“智能体环境构建失败”失败；修改智能体、修改环境包或重启后再构建。
 - runtime 没发出去的事件在它退出时丢失；它最后的状态以 controller 的处理为准。
@@ -110,7 +130,7 @@ Codex 的静态配置是 `danger-full-access` 沙箱、`on-request` 审批：容
 
 - 上传后既没发送也没在输入框里移除的附件（例如关掉了页面）留在对象存储和 `chat_attachment` 里，目前没有定期清理。
 - Codex 在容器内使用 `danger-full-access` 沙箱、`on-request` 审批：容器本身是隔离边界。
-- 插话没有进入正在运行的 turn 时，发送的响应不再说明（交付在发送之后才发生），回复照常排队等待。
+- 智能体在其他群工作时，Web 在发送插话时说明已排队。同群插话是否被采纳要等 runtime 交付；未进入 turn 的回复照常排队等待。
 - 每个智能体的容器常驻，空闲时也占内存（约几百 MB）。
 - 幂等记录与 `ui_event` 暂不清理（RFC v1 约定）。
 - SSE 每个连接一个 goroutine，每 500 毫秒轮询一次持久事件表。

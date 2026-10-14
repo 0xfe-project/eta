@@ -1,4 +1,5 @@
 import type { AssigneeDraft } from "./assignee-draft";
+import type { ChatMessage } from "@/queries/chat";
 import type {
   LogEntry,
   RunStatus,
@@ -44,6 +45,7 @@ import { cn } from "@/lib/utils";
 import {
   useCancelAssist,
   useCommentTask,
+  useConfirmTaskDraft,
   useCreateTask,
   useDeleteTask,
   useInterruptRun,
@@ -63,6 +65,7 @@ import {
 } from "./assignee-draft";
 import { AssigneeFields } from "./assignee-picker";
 import { BackToTop } from "./back-to-top";
+import { CreateGroup } from "./groups";
 import { when } from "./routine-format";
 import { Select, SelectOption } from "./select-field";
 import { AssistDialog } from "./task-assist";
@@ -83,6 +86,7 @@ import {
 import { useTaskNav } from "./task-nav";
 import { DeliveredPull } from "./task-pulls";
 import { StatusIcon } from "./task-status-icon";
+import { useGroups, useOpenGroup } from "./use-groups";
 
 const showError = (error: Error) => toast.error(error.message);
 
@@ -316,15 +320,22 @@ export function TaskForm({
   onDone,
   bare = false,
   initialStatus = "todo",
+  proposal,
 }: {
   onDone: (id?: string) => void;
   bare?: boolean;
   initialStatus?: TaskStatus;
+  proposal?: ChatMessage;
 }) {
   const create = useCreateTask();
+  const confirm = useConfirmTaskDraft();
+  const { groups } = useGroups();
+  const [groupId, setGroupId] = useState(proposal?.group_id ?? "");
   const { data } = useTasks();
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const [title, setTitle] = useState(String(proposal?.data.title ?? ""));
+  const [description, setDescription] = useState(
+    String(proposal?.data.description ?? ""),
+  );
   const [status, setStatus] = useState<TaskStatus>(initialStatus);
   const [draft, setDraft] = useState<AssigneeDraft>(emptyDraft);
   const places = useDraftPlaces(draft);
@@ -337,15 +348,23 @@ export function TaskForm({
       onSubmit={(e) => {
         e.preventDefault();
         if (!title.trim() || !assignee) return;
-        create.mutate(
-          {
-            title: title.trim(),
-            description: description.trim(),
-            status,
-            assignee,
-          },
-          { onSuccess: (task) => onDone(task.id), onError: showError },
-        );
+        const input = {
+          title: title.trim(),
+          description: description.trim(),
+          status,
+          assignee,
+          group_id: groupId || undefined,
+        };
+        const callbacks = {
+          onSuccess: (task: TaskDetail) => onDone(task.id),
+          onError: showError,
+        };
+        if (proposal)
+          confirm.mutate(
+            { groupId: proposal.group_id, messageId: proposal.id, input },
+            callbacks,
+          );
+        else create.mutate(input, callbacks);
       }}
     >
       {bare ? null : (
@@ -391,6 +410,23 @@ export function TaskForm({
           onChange={setStatus}
         />
       </Field>
+      {!proposal && (
+        <Field label="关联群（可选）">
+          <Select
+            value={groupId || "none"}
+            onValueChange={(value) => setGroupId(value === "none" ? "" : value)}
+          >
+            <SelectOption value="none">不关联</SelectOption>
+            {groups
+              .filter((g) => !g.archived)
+              .map((g) => (
+                <SelectOption key={g.id} value={g.id}>
+                  {g.name}
+                </SelectOption>
+              ))}
+          </Select>
+        </Field>
+      )}
       <AssigneeFields id="task" draft={draft} onChange={setDraft} />
       {noComputers ? (
         <p className="text-xs text-muted-foreground">
@@ -403,7 +439,9 @@ export function TaskForm({
         </Button>
         <Button
           type="submit"
-          disabled={!title.trim() || !assignee || create.isPending}
+          disabled={
+            !title.trim() || !assignee || create.isPending || confirm.isPending
+          }
         >
           {remote && status !== "backlog" ? "创建并开始" : "创建"}
         </Button>
@@ -547,6 +585,8 @@ export function TaskProperties({
   children?: React.ReactNode;
   onDone: () => void;
 }) {
+  const { groups } = useGroups();
+  const openGroup = useOpenGroup();
   const update = useUpdateTask();
   const links = deliverables(task);
   return (
@@ -573,6 +613,46 @@ export function TaskProperties({
       <dt className={propertyLabel}>指派给</dt>
       <dd className="min-w-0">
         <AssigneeRow task={task} />
+      </dd>
+      <dt className={propertyLabel}>群</dt>
+      <dd className="min-w-0">
+        <Select
+          aria-label="关联群"
+          value={task.group_id ?? "none"}
+          onValueChange={(value) =>
+            update.mutate(
+              {
+                id: task.id,
+                changes: { group_id: value === "none" ? "" : value },
+              },
+              { onError: showError },
+            )
+          }
+        >
+          <SelectOption value="none">不关联</SelectOption>
+          {groups
+            .filter((g) => !g.archived || g.id === task.group_id)
+            .map((g) => (
+              <SelectOption key={g.id} value={g.id}>
+                {g.name}
+              </SelectOption>
+            ))}
+        </Select>
+        {task.group_id ? (
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => openGroup(task.group_id!)}
+          >
+            在群里讨论
+          </Button>
+        ) : (
+          <CreateGroup key={task.id} task={task}>
+            <Button variant="ghost" size="xs">
+              新建群讨论
+            </Button>
+          </CreateGroup>
+        )}
       </dd>
       {links.length ? (
         <>
@@ -710,6 +790,8 @@ function describe(a: TaskActivity): React.ReactNode {
       return `把标题改为「${str(d.to)}」`;
     case "description":
       return "修改了描述";
+    case "group":
+      return d.to ? "关联了群" : "解除了群关联";
     case "deliverable":
       return (
         <>
@@ -776,6 +858,7 @@ const minor = new Set<string>([
   "title",
   "description",
   "assignee",
+  "group",
   "status",
   "cleanup",
   "run_completed",

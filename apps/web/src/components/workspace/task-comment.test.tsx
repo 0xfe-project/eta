@@ -269,3 +269,8 @@ describe("follow-up comments", () => {
     expect(paste.defaultPrevented).toBe(false);
   });
 });
+
+rstest.mock("./use-groups", () => ({
+  useGroups: () => ({ groups: [], current: undefined, groupId: null }),
+  useOpenGroup: () => () => {},
+}));

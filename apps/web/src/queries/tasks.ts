@@ -160,14 +160,24 @@ export function useUpdateTask() {
 /** `key` is the comment's Idempotency-Key: every try of one comment shares it. */
 export function useCommentTask() {
   return useTaskMutation(
-    ({ id, body, key }: { id: string; body: string; key: string }) =>
+    ({
+      id,
+      body,
+      key,
+      groupId,
+    }: {
+      id: string;
+      body: string;
+      key: string;
+      groupId?: string;
+    }) =>
       unwrap(
         controlPlane.POST("/api/v1/tasks/{task_id}/comments", {
           params: {
             path: { task_id: id },
             header: { "Idempotency-Key": key },
           },
-          body: { body },
+          body: { body, group_id: groupId },
         }),
       ),
   );
@@ -353,5 +363,28 @@ export function useDeleteComputer() {
         params: { path: { computer_id: id } },
       }),
     ),
+  );
+}
+
+export function useConfirmTaskDraft() {
+  return useTaskMutation(
+    ({
+      groupId,
+      messageId,
+      input,
+    }: {
+      groupId: string;
+      messageId: string;
+      input: TaskInput;
+    }) =>
+      unwrap(
+        controlPlane.POST(
+          "/api/v1/groups/{group_id}/drafts/{message_id}/confirm",
+          {
+            params: { path: { group_id: groupId, message_id: messageId } },
+            body: input,
+          },
+        ),
+      ),
   );
 }

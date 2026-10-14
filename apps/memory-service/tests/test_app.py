@@ -19,9 +19,19 @@ class FakeProvider:
         self.sources: dict[str, str] = {}
         self.extractions: list[tuple[str, list, str | None]] = []
         self.scores: dict[str, float] = {}
+        self.groups = {}
         self.clock = itertools.count()
 
-    def add(self, agent_id, messages, *, source, infer, model=None):
+    def add(
+        self,
+        agent_id,
+        messages,
+        *,
+        source,
+        infer,
+        model=None,
+        group_id=None,
+    ):
         if infer:
             self.extractions.append((agent_id, messages, model))
             texts = [f"fact: {m['content']}" for m in messages if m["role"] == "user"]
@@ -33,39 +43,48 @@ class FakeProvider:
             self.memories[memory_id] = (agent_id, text)
             self.created[memory_id] = f"2026-10-08T00:00:{next(self.clock):02d}+00:00"
             self.sources[memory_id] = source
+            self.groups[memory_id] = group_id
             added.append(
                 Memory(
-                    memory_id, text, created_at=self.created[memory_id], source=source
+                    memory_id,
+                    text,
+                    created_at=self.created[memory_id],
+                    source=source,
+                    source_group_id=group_id,
                 )
             )
         return added
 
-    def search(self, agent_id, query, limit, *, source=None):
+    def search(self, agent_id, query, limit, *, source=None, group_id=None):
         found = [
             Memory(
                 memory_id,
                 text,
                 self.scores.get(text, 0.9),
                 source=self.sources.get(memory_id),
+                source_group_id=self.groups[memory_id],
             )
             for memory_id, (owner, text) in self.memories.items()
             if owner == agent_id
             and (source is None or self.sources.get(memory_id) == source)
+            and (group_id is None or self.groups[memory_id] == group_id)
             and any(w in text for w in query.split())
         ]
         return found[:limit]
 
-    def list(self, agent_id, *, source=None):
+    def list(self, agent_id, *, source=None, group_id=None):
         return [
             Memory(
                 memory_id,
                 text,
                 created_at=self.created[memory_id],
                 source=self.sources.get(memory_id),
+                source_group_id=self.groups[memory_id],
             )
             for memory_id, (owner, text) in self.memories.items()
             if owner == agent_id
             and (source is None or self.sources.get(memory_id) == source)
+            and (group_id is None or self.groups[memory_id] == group_id)
         ]
 
     def delete(self, agent_id, memory_id):
@@ -332,3 +351,113 @@ class TestMem0Provider:
 
 def test_up(client):
     assert client.get("/up").status_code == 204
+
+
+def test_group_source_survives_capture_and_cross_group_recall(client, provider):
+    response = client.post(
+        "/memory/capture",
+        headers={
+            **as_agent("a"),
+            "X-AXP-Group-Id": "g1",
+        },
+        json={
+            "model": "test",
+            "group_id": "forged",
+            "messages": [{"role": "user", "content": "偏好 简洁"}],
+        },
+    )
+    assert response.status_code == 202
+    client.app.state.captures.queue.join()
+    [memory] = client.get("/api/memory/v1/agents/a/memories?group_id=g1").json()[
+        "memories"
+    ]
+    assert memory["source_group_id"] == "g1"
+    assert (
+        client.get("/api/memory/v1/agents/a/memories?group_id=g2").json()["memories"]
+        == []
+    )
+    recalled = client.post(
+        "/memory/recall",
+        headers={**as_agent("a"), "X-AXP-Group-Id": "g2"},
+        json={"query": "偏好"},
+    ).json()
+    assert recalled["memories"][0]["group_context"] == "other"
+    assert "source_group_id" not in recalled["memories"][0]
+    assert (
+        client.get("/api/memory/v1/agents/b/memories?group_id=g1").json()["memories"]
+        == []
+    )
+
+
+def test_remember_uses_gateway_group_metadata(client):
+    response = client.post(
+        "/memory/mcp",
+        headers={
+            **as_agent("a"),
+            "X-AXP-Group-Id": "g1",
+            "Accept": "application/json, text/event-stream",
+        },
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "remember",
+                "arguments": {"text": "Prefer concise reports"},
+            },
+        },
+    )
+    memory = json.loads(response.json()["result"]["content"][0]["text"])
+    assert memory["source_group_id"] == "g1"
+
+
+@pytest.mark.parametrize("route", ["hook", "mcp"])
+@pytest.mark.parametrize("current_group", ["g1", "g2", None])
+def test_recall_marks_group_context_from_gateway_header(
+    client, provider, route, current_group
+):
+    for group in ["g1", "g2", None]:
+        provider.add(
+            "a",
+            [{"role": "user", "content": f"偏好 {group}"}],
+            source="agent",
+            infer=False,
+            group_id=group,
+        )
+    headers = {**as_agent("a"), "Accept": "application/json, text/event-stream"}
+    if current_group:
+        headers["X-AXP-Group-Id"] = current_group
+    if route == "hook":
+        found = client.post(
+            "/memory/recall",
+            headers=headers,
+            json={"query": "偏好", "group_id": "forged"},
+        ).json()["memories"]
+    else:
+        response = client.post(
+            "/memory/mcp",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "recall", "arguments": {"query": "偏好"}},
+            },
+        ).json()["result"]
+        assert not response["isError"]
+        found = response["structuredContent"]["result"]
+    assert {m["text"]: m.get("group_context") for m in found} == {
+        "偏好 g1": "this" if current_group == "g1" else "other",
+        "偏好 g2": "this" if current_group == "g2" else "other",
+        "偏好 None": None,
+    }
+    assert all("source_group_id" not in m for m in found)
+    assert "group_context" not in next(m for m in found if m["text"] == "偏好 None")
+    # The browser still gets source ids and resolves names from its group snapshot.
+    stored = client.get("/api/memory/v1/agents/a/memories").json()["memories"]
+    assert {m["text"]: m.get("source_group_id") for m in stored} == {
+        "偏好 g1": "g1",
+        "偏好 g2": "g2",
+        "偏好 None": None,
+    }
+    assert all("group_context" not in m for m in stored)

@@ -5,6 +5,7 @@ import { RpcError } from "./appserver.ts";
 import { openThread } from "./thread.ts";
 
 const THREAD = "thread-1";
+const TARGET = { thread_key: "group-1", codex_thread_id: THREAD };
 
 /** A scripted app-server: the test writes Codex's notifications and requests. */
 class FakeCodex implements Codex {
@@ -64,8 +65,10 @@ function setUp(timing = { flushMs: 5, steerAnswerMs: 50 }) {
   const events: { type: string; payload: Record<string, unknown> }[] = [];
   const agent = new Agent(
     codex,
-    THREAD,
-    (type, payload) => events.push({ type, payload }),
+    { workspace: "/agent/workspace", instructions: "" },
+    (type, payload) => {
+      if (type !== "thread.opened") events.push({ type, payload });
+    },
     timing,
   );
   const types = () => events.map((e) => e.type);
@@ -92,7 +95,7 @@ describe("a turn", () => {
   test("reports its start, its items and its end for the command", async () => {
     const { codex, agent, events, types, turnStarted, turnCompleted, item } =
       setUp();
-    expect(await agent.prompt("c1", "hi")).toEqual({ accepted: true });
+    expect(await agent.prompt("c1", "hi", TARGET)).toEqual({ accepted: true });
     expect(codex.sent("turn/start")).toEqual([
       {
         threadId: THREAD,
@@ -159,7 +162,11 @@ describe("a turn", () => {
       turn_id: "turn-1",
       status: "completed",
     });
-    expect(agent.status()).toEqual({ command_id: null, turn_id: null });
+    expect(agent.status()).toEqual({
+      command_id: null,
+      turn_id: null,
+      thread_key: null,
+    });
   });
 
   test("streams text between items at most every flush", async () => {
@@ -167,7 +174,7 @@ describe("a turn", () => {
       flushMs: 20,
       steerAnswerMs: 50,
     });
-    await agent.prompt("c1", "hi");
+    await agent.prompt("c1", "hi", TARGET);
     await turnStarted();
     codex.notify("item/agentMessage/delta", {
       threadId: THREAD,
@@ -190,10 +197,10 @@ describe("a turn", () => {
 
   test("an interrupted or failed turn says so", async () => {
     const { agent, events, turnStarted, turnCompleted } = setUp();
-    await agent.prompt("c1", "hi");
+    await agent.prompt("c1", "hi", TARGET);
     await turnStarted();
     await turnCompleted("interrupted");
-    await agent.prompt("c2", "again");
+    await agent.prompt("c2", "again", TARGET);
     await turnStarted("turn-2");
     await turnCompleted("failed", "turn-2");
     expect(
@@ -205,7 +212,7 @@ describe("a turn", () => {
 
   test("sub-agents' threads stay out of the transcript", async () => {
     const { agent, types, turnStarted, turnCompleted, item } = setUp();
-    await agent.prompt("c1", "hi");
+    await agent.prompt("c1", "hi", TARGET);
     await turnStarted();
     await item(
       "item/completed",
@@ -218,7 +225,7 @@ describe("a turn", () => {
 
   test("compacting is a turn of its own", async () => {
     const { codex, agent, events, turnStarted, turnCompleted, item } = setUp();
-    expect(await agent.prompt("c1", "/compact", "compact")).toEqual({
+    expect(await agent.prompt("c1", "/compact", TARGET, "compact")).toEqual({
       accepted: true,
     });
     expect(codex.sent("thread/compact/start")).toEqual([{ threadId: THREAD }]);
@@ -245,9 +252,9 @@ describe("a turn", () => {
 describe("prompts", () => {
   test("one turn at a time", async () => {
     const { codex, agent, turnStarted } = setUp();
-    await agent.prompt("c1", "hi");
+    await agent.prompt("c1", "hi", TARGET);
     await turnStarted();
-    expect(await agent.prompt("c2", "more")).toEqual({
+    expect(await agent.prompt("c2", "more", TARGET)).toEqual({
       accepted: false,
       code: "busy",
     });
@@ -256,8 +263,8 @@ describe("prompts", () => {
 
   test("asking again for the same command changes nothing", async () => {
     const { codex, agent } = setUp();
-    await agent.prompt("c1", "hi");
-    expect(await agent.prompt("c1", "hi")).toEqual({ accepted: true });
+    await agent.prompt("c1", "hi", TARGET);
+    expect(await agent.prompt("c1", "hi", TARGET)).toEqual({ accepted: true });
     expect(codex.sent("turn/start").length).toBe(1);
   });
 
@@ -266,19 +273,21 @@ describe("prompts", () => {
     codex.answers["turn/start"] = async () => {
       throw new RpcError("turn/start", -32600, "no");
     };
-    const refused = await agent.prompt("c1", "hi");
+    const refused = await agent.prompt("c1", "hi", TARGET);
     expect(refused).toMatchObject({ accepted: false, code: "runtime_refused" });
     delete codex.answers["turn/start"];
-    expect(await agent.prompt("c2", "hi")).toEqual({ accepted: true });
+    expect(await agent.prompt("c2", "hi", TARGET)).toEqual({ accepted: true });
   });
 });
 
 describe("steers", () => {
   test("join the running turn, which then answers them", async () => {
     const { codex, agent, events, turnStarted, turnCompleted, item } = setUp();
-    await agent.prompt("c1", "hi");
+    await agent.prompt("c1", "hi", TARGET);
     await turnStarted();
-    expect(await agent.steer("s1", "also this")).toEqual({ accepted: true });
+    expect(await agent.steer("s1", "also this", TARGET)).toEqual({
+      accepted: true,
+    });
     expect(codex.sent("turn/steer")).toEqual([
       {
         threadId: THREAD,
@@ -308,9 +317,9 @@ describe("steers", () => {
 
   test("an accepted steer Codex never echoed still belongs to the turn", async () => {
     const { agent, events, turnStarted, turnCompleted } = setUp();
-    await agent.prompt("c1", "hi");
+    await agent.prompt("c1", "hi", TARGET);
     await turnStarted();
-    await agent.steer("s1", "also this");
+    await agent.steer("s1", "also this", TARGET);
     await turnCompleted();
     expect(events.map((e) => [e.type, e.payload.command_id])).toEqual([
       ["turn.started", "c1"],
@@ -328,9 +337,9 @@ describe("steers", () => {
           (refuse = () =>
             reject(new RpcError("turn/steer", -32600, "not steerable"))),
       );
-    await agent.prompt("c1", "hi");
+    await agent.prompt("c1", "hi", TARGET);
     await turnStarted();
-    const steered = agent.steer("s1", "too late");
+    const steered = agent.steer("s1", "too late", TARGET);
     codex.notify("turn/completed", {
       threadId: THREAD,
       turn: { id: "turn-1", status: "completed" },
@@ -351,12 +360,12 @@ describe("steers", () => {
 
   test("need a running turn", async () => {
     const { codex, agent } = setUp();
-    expect(await agent.steer("s1", "hi")).toEqual({
+    expect(await agent.steer("s1", "hi", TARGET)).toEqual({
       accepted: false,
       code: "no_active_turn",
     });
-    await agent.prompt("c1", "hi");
-    expect(await agent.steer("s1", "hi")).toEqual({
+    await agent.prompt("c1", "hi", TARGET);
+    expect(await agent.steer("s1", "hi", TARGET)).toEqual({
       accepted: false,
       code: "no_active_turn",
     });
@@ -367,7 +376,7 @@ describe("steers", () => {
 describe("stops", () => {
   test("interrupt the running turn", async () => {
     const { codex, agent, turnStarted } = setUp();
-    await agent.prompt("c1", "hi");
+    await agent.prompt("c1", "hi", TARGET);
     await turnStarted();
     await agent.abort("c1");
     expect(codex.sent("turn/interrupt")).toEqual([
@@ -377,7 +386,7 @@ describe("stops", () => {
 
   test("before the turn started, interrupt it once it does", async () => {
     const { codex, agent, turnStarted } = setUp();
-    await agent.prompt("c1", "hi");
+    await agent.prompt("c1", "hi", TARGET);
     await agent.abort("c1");
     expect(codex.sent("turn/interrupt")).toEqual([]);
     await turnStarted();
@@ -386,9 +395,9 @@ describe("stops", () => {
 
   test("of a steer not yet taken in interrupt the turn when it takes over", async () => {
     const { codex, agent, events, turnStarted, item } = setUp();
-    await agent.prompt("c1", "hi");
+    await agent.prompt("c1", "hi", TARGET);
     await turnStarted();
-    await agent.steer("s1", "also");
+    await agent.steer("s1", "also", TARGET);
     await agent.abort("s1");
     expect(codex.sent("turn/interrupt")).toEqual([]);
     await item("item/started", {
@@ -402,7 +411,7 @@ describe("stops", () => {
 
   test("of other commands do nothing", async () => {
     const { codex, agent, turnStarted } = setUp();
-    await agent.prompt("c1", "hi");
+    await agent.prompt("c1", "hi", TARGET);
     await turnStarted();
     await agent.abort("c2");
     expect(codex.sent("turn/interrupt")).toEqual([]);
@@ -412,7 +421,7 @@ describe("stops", () => {
 describe("approvals", () => {
   async function asking(method: string, params: Record<string, unknown>) {
     const s = setUp();
-    await s.agent.prompt("c1", "hi");
+    await s.agent.prompt("c1", "hi", TARGET);
     await s.turnStarted();
     const answer = s.codex.ask(method, {
       threadId: THREAD,
@@ -575,23 +584,13 @@ describe("the agent's thread", () => {
     instructions: "be brief",
   };
 
-  test("is the workspace's latest root thread, resumed", async () => {
+  test("resumes only the id supplied by the control plane", async () => {
     const codex = new FakeCodex();
-    codex.answers["thread/list"] = async () => ({
-      data: [
-        { id: "child", parentThreadId: "root", ephemeral: false },
-        { id: "root", parentThreadId: null, ephemeral: false },
-      ],
-    });
-    expect(await openThread(codex, settings)).toEqual({
+    expect(await openThread(codex, settings, "root")).toEqual({
       threadId: "root",
       resumed: true,
     });
-    expect(codex.sent("thread/list")[0]).toMatchObject({
-      cwd: "/agent/workspace",
-      sortKey: "updated_at",
-      sortDirection: "desc",
-    });
+    expect(codex.sent("thread/list")).toEqual([]);
     expect(codex.sent("thread/resume")).toEqual([
       {
         threadId: "root",
@@ -605,9 +604,8 @@ describe("the agent's thread", () => {
 
   test("is started when there is none yet", async () => {
     const codex = new FakeCodex();
-    codex.answers["thread/list"] = async () => ({ data: [] });
     codex.answers["thread/start"] = async () => ({ thread: { id: "new" } });
-    expect(await openThread(codex, settings)).toEqual({
+    expect(await openThread(codex, settings, null)).toEqual({
       threadId: "new",
       resumed: false,
     });
@@ -615,13 +613,130 @@ describe("the agent's thread", () => {
 
   test("is never replaced when it cannot be resumed", async () => {
     const codex = new FakeCodex();
-    codex.answers["thread/list"] = async () => ({
-      data: [{ id: "root", parentThreadId: null, ephemeral: false }],
-    });
     codex.answers["thread/resume"] = async () => {
       throw new RpcError("thread/resume", -32600, "broken");
     };
-    await expect(openThread(codex, settings)).rejects.toThrow("broken");
+    await expect(openThread(codex, settings, "root")).rejects.toThrow("broken");
     expect(codex.sent("thread/start")).toEqual([]);
+  });
+});
+
+describe("group threads in one app-server", () => {
+  test("opens lazily, serializes turns, and switches back without resuming again", async () => {
+    const { codex, agent, turnStarted, turnCompleted } = setUp();
+    const other = { thread_key: "group-2", codex_thread_id: null };
+    codex.answers["thread/start"] = async () => ({
+      thread: { id: "thread-2" },
+    });
+    await agent.prompt("a", "first", TARGET);
+    await turnStarted();
+    expect(await agent.prompt("b", "second", other)).toEqual({
+      accepted: false,
+      code: "busy",
+    });
+    expect(await agent.steer("s", "wrong group", other)).toEqual({
+      accepted: false,
+      code: "no_active_turn",
+    });
+    await turnCompleted();
+    await agent.prompt("b", "second", other);
+    codex.notify("turn/started", {
+      threadId: "thread-2",
+      turn: { id: "turn-2" },
+    });
+    await agent.settled();
+    await turnCompleted();
+    expect(agent.status().command_id).toBe("b");
+    expect(
+      await codex.ask("item/commandExecution/requestApproval", {
+        threadId: THREAD,
+        turnId: "turn-1",
+      }),
+    ).toEqual({ decision: "decline" });
+    await agent.abort("a");
+    expect(codex.sent("turn/interrupt")).toEqual([]);
+    await agent.abort("b");
+    expect(codex.sent("turn/interrupt")).toEqual([
+      { threadId: "thread-2", turnId: "turn-2" },
+    ]);
+    codex.notify("turn/completed", {
+      threadId: "thread-2",
+      turn: { id: "turn-2", status: "interrupted" },
+    });
+    await agent.settled();
+    await agent.prompt("c", "/compact", TARGET, "compact");
+    expect(codex.sent("thread/compact/start")).toEqual([{ threadId: THREAD }]);
+    expect(codex.sent("thread/resume")).toHaveLength(1);
+    expect(codex.sent("thread/start")).toHaveLength(1);
+    expect(codex.sent("thread/list")).toEqual([]);
+  });
+
+  test("a broken group's recovery does not block other groups or create a replacement", async () => {
+    const { codex, agent } = setUp();
+    codex.answers["thread/resume"] = async ({ threadId }) => {
+      if (threadId === THREAD)
+        throw new RpcError("thread/resume", -32600, "missing");
+      return {};
+    };
+    expect(await agent.prompt("a", "hi", TARGET)).toMatchObject({
+      accepted: false,
+      code: "RECOVERY_RESUME_FAILED",
+    });
+    expect(
+      await agent.prompt("b", "hi", {
+        thread_key: "group-2",
+        codex_thread_id: "thread-2",
+      }),
+    ).toEqual({ accepted: true });
+    expect(codex.sent("thread/start")).toEqual([]);
+  });
+
+  test("reports the mapping and guards the boot at the API", async () => {
+    const { controlAPI } = await import("./server.ts");
+    const codex = new FakeCodex();
+    codex.answers["thread/start"] = async () => ({ thread: { id: "new" } });
+    const events: { type: string; payload: Record<string, unknown> }[] = [];
+    const agent = new Agent(
+      codex,
+      { workspace: "/agent/workspace", instructions: "" },
+      (type, payload) => events.push({ type, payload }),
+    );
+    const app = controlAPI(agent, "secret", "boot-2", {
+      gatewayUrl: "http://unused",
+      agentKey: "key",
+      dir: "/unused",
+    });
+    const send = (boot: string) =>
+      app.request("/prompt", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer secret",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          boot_id: boot,
+          command_id: "a",
+          text: "hi",
+          thread_key: "group-1",
+          codex_thread_id: null,
+        }),
+      });
+    expect(await (await send("boot-1")).json()).toEqual({
+      accepted: false,
+      code: "wrong_boot",
+    });
+    expect(codex.requests).toEqual([]);
+    expect((await send("boot-2")).status).toBe(200);
+    expect(events).toEqual([
+      {
+        type: "thread.opened",
+        payload: {
+          command_id: "a",
+          thread_key: "group-1",
+          codex_thread_id: "new",
+          resumed: false,
+        },
+      },
+    ]);
   });
 });

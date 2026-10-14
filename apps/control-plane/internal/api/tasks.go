@@ -2,6 +2,9 @@ package api
 
 import (
 	"context"
+
+	"github.com/akarachen/axp/apps/control-plane/internal/chat"
+	"github.com/akarachen/axp/packages/service-go/apierr"
 	"net/http"
 	"strings"
 
@@ -17,6 +20,7 @@ import (
 // 远程电脑 settings.
 
 type TaskIn struct {
+	GroupID     *string             `json:"group_id,omitempty"`
 	Title       string              `json:"title" minLength:"1" maxLength:"200"`
 	Description string              `json:"description,omitempty" maxLength:"20000"`
 	Status      string              `json:"status,omitempty" enum:"backlog,todo,in_progress,in_review,done,blocked,cancelled" default:"todo"`
@@ -25,6 +29,7 @@ type TaskIn struct {
 
 // TaskUpdateIn is a partial update: only fields that are sent change.
 type TaskUpdateIn struct {
+	GroupID     *string              `json:"group_id,omitempty" doc:"An existing group id, or an empty string to unlink."`
 	Title       *string              `json:"title,omitempty" nullable:"true" minLength:"1" maxLength:"200"`
 	Description *string              `json:"description,omitempty" nullable:"true" maxLength:"20000"`
 	Status      *string              `json:"status,omitempty" nullable:"true" enum:"backlog,todo,in_progress,in_review,done,blocked,cancelled"`
@@ -121,7 +126,7 @@ func registerTasks(api huma.API, d *Deps) {
 
 	huma.Register(api, taskOp("listTasks", http.MethodGet, "/api/v1/tasks", "Every task, and who they can be assigned to", 200, "tasks"),
 		func(ctx context.Context, _ *struct{}) (*httpapi.Body[TaskList], error) {
-			list, err := s.List(ctx, d.DB)
+			list, err := s.List(ctx, d.DB, "")
 			if err != nil {
 				return nil, err
 			}
@@ -148,7 +153,7 @@ func registerTasks(api huma.API, d *Deps) {
 		}) (*idempotency.Response[tasks.TaskDetail], error) {
 			b := in.Body
 			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, b, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[tasks.TaskDetail], error) {
-				t, err := s.Create(ctx, tx, tasks.Input{
+				t, err := s.Create(ctx, tx, tasks.Input{GroupID: in.Body.GroupID,
 					Title: b.Title, Description: b.Description, Status: b.Status, Assignee: b.Assignee,
 				}, tasks.User)
 				if err != nil {
@@ -166,7 +171,7 @@ func registerTasks(api huma.API, d *Deps) {
 		}) (*httpapi.Body[tasks.TaskDetail], error) {
 			b := in.Body
 			t, err := pg.InTxValue(ctx, d.DB, func(tx pgx.Tx) (*tasks.TaskDetail, error) {
-				return s.Update(ctx, tx, in.TaskID, tasks.Changes{
+				return s.Update(ctx, tx, in.TaskID, tasks.Changes{GroupID: in.Body.GroupID,
 					Title: b.Title, Description: b.Description, Status: b.Status, Assignee: b.Assignee,
 				}, tasks.User)
 			})
@@ -187,12 +192,23 @@ func registerTasks(api huma.API, d *Deps) {
 		func(ctx context.Context, in *struct {
 			idempotency.Keyed
 			TaskPath
-			Body CommentIn
+			Body struct {
+				CommentIn
+				GroupID string `json:"group_id,omitempty"`
+			}
 		}) (*idempotency.Response[tasks.TaskDetail], error) {
 			return idempotency.Do(ctx, d.DB, in.IdempotencyKey, in.Body, func(ctx context.Context, tx pgx.Tx) (idempotency.Result[tasks.TaskDetail], error) {
 				t, err := s.Comment(ctx, tx, in.TaskID, in.Body.Body, tasks.User)
 				if err != nil {
 					return idempotency.Result[tasks.TaskDetail]{}, err
+				}
+				if in.Body.GroupID != "" {
+					if t.GroupID == nil || *t.GroupID != in.Body.GroupID {
+						return idempotency.Result[tasks.TaskDetail]{}, apierr.New(422, "TASK_GROUP_MISMATCH", "任务未关联这个群。")
+					}
+					if err = chat.TaskReplyNotice(ctx, tx, in.Body.GroupID, t.ID, t.Number); err != nil {
+						return idempotency.Result[tasks.TaskDetail]{}, err
+					}
 				}
 				return idempotency.Result[tasks.TaskDetail]{Status: 201, Body: t, Resource: t.ID}, nil
 			})

@@ -10,6 +10,7 @@ const storageKey = "axp.workspace.v1";
 // messages are dropped rather than uploaded.
 // Zod strips retired fields, including sessionTheme, while retaining other preferences.
 const workspaceSchema = z.object({
+  selectedGroupId: z.string().max(64).optional(),
   selectedAgentId: z.string().max(64).optional(),
   tasks: z.array(
     z.object({ id: z.string(), title: z.string().max(200), done: z.boolean() }),

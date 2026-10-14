@@ -1,32 +1,38 @@
 import type { WorkspaceView } from "./types";
 import type { Draft } from "@/lib/composer";
+import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
+import { InfoIcon } from "@phosphor-icons/react/Info";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { EMPTY_DRAFT, partsText } from "@/lib/composer";
+import { draftText, EMPTY_DRAFT, partsText } from "@/lib/composer";
+import { mentionedMembers } from "@/lib/mentions";
 import { cn } from "@/lib/utils";
 import {
   chatQueryOptions,
-  useAgentMessages,
   useAnswerInteraction,
   useCompact,
+  useGroupMessages,
   usePendingInteractions,
   useStopReply,
   useStreamLost,
 } from "@/queries/chat";
-import { useModelAvailability } from "@/queries/llm";
+import { useGroupActions } from "@/queries/groups";
 import {
   upload,
   useOutbox,
   useOutboxActions,
   useOutboxDelivery,
 } from "@/queries/outbox";
-import { AgentBar } from "./agent-bar";
 import { AgentEditor } from "./agent-editor";
+import { BottomNav, Sidebar } from "./app-shell";
 import { ChatPanel, ComposerNotice } from "./chat-panel";
+import { GroupBar, GroupList } from "./groups";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
 import { useAgents } from "./use-agents";
+import { useGroups } from "./use-groups";
 import { WorkspacePanel } from "./workspace-panel";
 import { useShowLinkedView } from "./workspace-search";
 import { useWorkspaceStore } from "./workspace-store";
@@ -40,180 +46,269 @@ export function Workspace({
 }) {
   const mobilePanel = useWorkspaceStore((s) => s.mobilePanel);
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
-  const setSettings = useWorkspaceStore((s) => s.setSettings);
+  const navigate = useNavigate();
   useShowLinkedView();
   const chat = useQuery(chatQueryOptions());
   const waiting = usePendingInteractions();
-  const pending = waiting.length;
-  const { current: selected, openEditor } = useAgents();
-  const history = useAgentMessages(selected?.id);
+  const { agents, openEditor } = useAgents();
+  const { current: group, groupId, groups } = useGroups();
+  const history = useGroupMessages(group?.id);
   const connectionLost = useStreamLost((s) => s.lost);
-  // The draft and the messages on their way are the selected agent's.
-  const draftKey = selected?.id ?? "";
+  const draftKey = group?.id ?? "";
   const draft = useOutbox((s) => s.drafts[draftKey] ?? EMPTY_DRAFT);
   const setDraft = (next: Draft) =>
     useOutbox.getState().setDraft(draftKey, next);
   const allOutgoing = useOutbox((s) => s.outgoing);
   const arrived = useMemo(
-    () => new Set(history.messages.map((message) => message.id)),
+    () => new Set(history.messages.map((m) => m.id)),
     [history.messages],
   );
   useOutboxDelivery(arrived);
   const outbox = useOutboxActions();
   const outgoing = allOutgoing.filter(
-    (o) => o.agentId === selected?.id && !arrived.has(o.id),
+    (o) => o.groupId === group?.id && !arrived.has(o.id),
   );
-  const availability = useModelAvailability(selected);
-  const changeModel = {
-    label: "更换模型",
-    onClick: () => selected && openEditor(selected.id),
+  const members = group?.participants.filter((p) => p.member) ?? [];
+  const targets = (text: string) => {
+    const ids = mentionedMembers(text, members);
+    return ids.length ? ids : members.length === 1 ? [members[0].agent_id] : [];
   };
-  const blocked = !selected ? undefined : availability.state === "not_set" ? (
-    <ComposerNotice
-      message="这个智能体还没有选择模型。"
-      actions={[{ ...changeModel, label: "选择模型" }]}
-    />
-  ) : availability.state === "unavailable" ? (
-    <ComposerNotice
-      message={availability.message}
-      actions={[
-        {
-          label: "前往模型服务",
-          onClick: () => setSettings({ open: true, section: "providers" }),
-        },
-        changeModel,
-      ]}
-    />
-  ) : undefined;
+  const selectedTargets = targets(draftText(draft));
+  const unavailable = selectedTargets
+    .map((id) => agents.find((a) => a.id === id))
+    .filter((a) => a && !a.model);
   const compact = useCompact();
   const stopReply = useStopReply();
   const answer = useAnswerInteraction();
+  const actions = useGroupActions();
   const onError = (error: Error) => toast.error(error.message);
-
+  const blocked = group?.archived ? (
+    <ComposerNotice
+      message="群已归档，取消归档后可以继续讨论。"
+      actions={[
+        {
+          label: "取消归档",
+          onClick: () =>
+            actions.update.mutate(
+              { id: group.id, archived: false },
+              { onError },
+            ),
+        },
+      ]}
+    />
+  ) : group && members.length === 0 ? (
+    <ComposerNotice
+      message="群里暂无智能体，邀请成员后可以继续讨论。"
+      actions={[
+        {
+          label: "查看群信息",
+          onClick: () => {
+            onViewChange("group");
+            setMobilePanel("workspace");
+          },
+        },
+      ]}
+    />
+  ) : unavailable.length && selectedTargets.length === 1 ? (
+    <ComposerNotice
+      message={`${unavailable.map((a) => a!.name).join("、")} 还没有选择模型。`}
+      actions={unavailable.map((a) => ({
+        label: `设置 ${a!.name}`,
+        onClick: () => openEditor(a!.id),
+      }))}
+    />
+  ) : undefined;
+  const markRead = actions.read.mutate;
+  useEffect(() => {
+    if (!group || group.last_seq <= group.read_seq) return;
+    const read = () => {
+      if (
+        document.visibilityState === "visible" &&
+        (groupId || window.matchMedia("(min-width: 1024px)").matches)
+      )
+        markRead({ id: group.id, seq: group.last_seq });
+    };
+    read();
+    document.addEventListener("visibilitychange", read);
+    return () => document.removeEventListener("visibilitychange", read);
+  }, [group, groupId, markRead]);
+  const showInfo = () => {
+    onViewChange("group");
+    setMobilePanel("workspace");
+  };
   return (
-    // The chat fills the left; the workspace panel floats on the right,
-    // inset from the window's edges.
-    <div className="flex h-dvh w-full min-h-0 flex-col bg-background p-2 md:p-3">
-      <h1 className="sr-only">axp.</h1>
+    <div className="flex h-dvh min-h-0 bg-background">
+      <Sidebar />
       <div
-        className="grid shrink-0 grid-cols-[1fr_1fr_auto] items-center gap-1 pb-2 md:hidden"
-        aria-label="工作区面板"
+        className={cn(
+          "min-h-0 min-w-0 flex-1 flex-col lg:hidden",
+          groupId ? "hidden" : "flex",
+        )}
       >
-        <Button
-          variant="ghost"
-          className={cn("h-10", mobilePanel === "chat" && "bg-muted")}
-          onClick={() => setMobilePanel("chat")}
-          aria-pressed={mobilePanel === "chat"}
-        >
-          对话
-        </Button>
-        <Button
-          variant="ghost"
-          className={cn("h-10", mobilePanel === "workspace" && "bg-muted")}
-          onClick={() => setMobilePanel("workspace")}
-          aria-pressed={mobilePanel === "workspace"}
-        >
-          工作区
-          {pending ? <span className="tabular-nums">{pending}</span> : null}
-        </Button>
-        <SettingsButton />
-      </div>
-      <main
-        id="main"
-        className="isolate grid min-h-0 flex-1 gap-3 md:grid-cols-2"
-      >
-        <div
-          className={cn(
-            "relative min-h-0 min-w-0 md:px-3",
-            mobilePanel === "workspace" && "hidden md:block",
-          )}
-        >
-          <ChatPanel
-            agentId={selected?.id}
-            agentName={selected?.name}
-            model={
-              availability.state === "ok" || availability.state === "degraded"
-                ? (availability.model?.display_name ??
-                  selected?.model ??
-                  undefined)
-                : undefined
-            }
-            blocked={blocked}
-            notice={
-              availability.state === "degraded" ? (
-                <ComposerNotice
-                  message={availability.message}
-                  actions={[changeModel]}
-                />
-              ) : undefined
-            }
-            messages={history.messages}
-            loading={!chat.data || history.loading}
-            hasOlder={history.hasOlder}
-            loadingOlder={history.loadingOlder}
-            onLoadOlder={history.loadOlder}
-            interactions={waiting}
-            head={<AgentBar />}
-            agentStatus={selected?.status}
-            connectionLost={connectionLost}
-            outgoing={outgoing}
-            onRetry={outbox.retry}
-            onEdit={outbox.edit}
-            onDiscard={outbox.discard}
-            onResend={(parts) => {
-              if (!selected) return;
-              if (partsText(parts) === "/compact" && parts.length === 1)
-                compact.mutate(selected.id, { onError });
-              else outbox.send(selected.id, parts, "queue");
-            }}
-            error={
-              (chat.error ?? history.error)
-                ? `无法加载对话：${(chat.error ?? history.error)?.message}`
-                : undefined
-            }
-            draft={draft}
-            onDraftChange={setDraft}
-            onFiles={(files) =>
-              // Uploaded to the agent whose draft they are in, never another.
-              (selected ? files : []).map((file) => {
-                const id = crypto.randomUUID();
-                void upload(selected!.id, id, file);
-                return {
-                  type: "file" as const,
-                  id,
-                  name: file.name || "粘贴的文件",
-                  contentType: file.type || "application/octet-stream",
-                  size: file.size,
-                };
-              })
-            }
-            onSend={(parts, mode) => {
-              if (!selected) {
-                openEditor();
-                return;
-              }
-              // On its way: the transcript shows it from here on.
-              outbox.send(selected.id, parts, mode);
-              setDraft([]);
-            }}
-            onCompact={() => {
-              if (!selected) {
-                openEditor();
-                return;
-              }
-              compact.mutate(selected.id, { onError });
-              setDraft([]);
-            }}
-            onStop={(id) => stopReply.mutate(id, { onError })}
-            onAnswer={(id, value) => answer.mutate({ id, value }, { onError })}
-          />
+        <header className="flex h-14 shrink-0 items-center justify-between px-5">
+          <h1 className="text-lg font-semibold">对话</h1>
+          <SettingsButton />
+        </header>
+        <GroupList />
+        <div className="px-5 py-3">
+          <Button size="sm" variant="outline" onClick={() => openEditor()}>
+            新建智能体
+          </Button>
         </div>
-        <WorkspacePanel
-          view={view}
-          onViewChange={onViewChange}
-          className={mobilePanel === "chat" ? "hidden md:flex" : undefined}
-        />
-      </main>
+        <BottomNav />
+      </div>
+      <div
+        className={cn(
+          "min-h-0 min-w-0 flex-1 flex-col p-2 md:p-3 lg:flex",
+          groupId ? "flex" : "hidden",
+        )}
+      >
+        <header className="flex h-11 shrink-0 items-center gap-2 pb-2 md:hidden">
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={
+              mobilePanel === "workspace" ? "返回对话" : "返回对话列表"
+            }
+            onClick={() =>
+              mobilePanel === "workspace"
+                ? setMobilePanel("chat")
+                : void navigate({ to: "/", search: {} })
+            }
+          >
+            <ArrowLeftIcon />
+          </Button>
+          <h1 className="min-w-0 flex-1 truncate text-sm font-medium">
+            {group?.name}
+          </h1>
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label="群信息"
+            onClick={showInfo}
+          >
+            <InfoIcon />
+          </Button>
+        </header>
+        <main
+          id="main"
+          className="isolate grid min-h-0 flex-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]"
+        >
+          <div
+            className={cn(
+              "relative min-h-0 min-w-0 md:px-3",
+              mobilePanel === "workspace" && "hidden md:block",
+            )}
+          >
+            <ChatPanel
+              groupId={group?.id}
+              groupName={group?.name}
+              group={group}
+              agents={agents}
+              groups={groups}
+              activeReplies={chat.data?.messages ?? []}
+              model={
+                members.length === 1
+                  ? (agents.find((a) => a.id === members[0].agent_id)?.model ??
+                    undefined)
+                  : members.map((p) => p.name).join(" · ")
+              }
+              blocked={blocked}
+              messages={history.messages}
+              loading={!chat.data || history.loading}
+              hasOlder={history.hasOlder}
+              loadingOlder={history.loadingOlder}
+              onLoadOlder={history.loadOlder}
+              interactions={waiting}
+              head={<GroupBar group={group} onInfo={showInfo} />}
+              connectionLost={connectionLost}
+              outgoing={outgoing}
+              onRetry={outbox.retry}
+              onEdit={outbox.edit}
+              onDiscard={outbox.discard}
+              onResend={(parts, agentId) => {
+                if (!group) return;
+                const mentions = agentId
+                  ? [agentId]
+                  : targets(partsText(parts));
+                if (partsText(parts) === "/compact" && parts.length === 1)
+                  compact.mutate({ groupId: group.id, mentions }, { onError });
+                else outbox.send(group.id, parts, "queue", mentions);
+              }}
+              error={
+                (chat.error ?? history.error)
+                  ? `无法加载对话：${(chat.error ?? history.error)?.message}`
+                  : undefined
+              }
+              draft={draft}
+              onDraftChange={setDraft}
+              onFiles={(files) =>
+                (group ? files : []).map((file) => {
+                  const id = crypto.randomUUID();
+                  void upload(group!.id, id, file);
+                  return {
+                    type: "file" as const,
+                    id,
+                    name: file.name || "粘贴的文件",
+                    contentType: file.type || "application/octet-stream",
+                    size: file.size,
+                  };
+                })
+              }
+              onSend={(parts, mode) => {
+                if (!group) return openEditor();
+                const mentions = targets(partsText(parts));
+                if (mode === "steer") {
+                  for (const id of mentions) {
+                    const active = chat.data?.messages.find(
+                      (m) =>
+                        m.agent_id === id &&
+                        [
+                          "responding",
+                          "waiting_for_input",
+                          "stopping",
+                        ].includes(m.status),
+                    );
+                    if (active && active.group_id !== group.id) {
+                      const name = agents.find((a) => a.id === id)?.name;
+                      const elsewhere = groups.find(
+                        (g) => g.id === active.group_id,
+                      )?.name;
+                      toast.info(
+                        `${name} 在「${elsewhere}」回复，这条消息已排队。`,
+                      );
+                    }
+                  }
+                }
+                outbox.send(group.id, parts, mode, mentions);
+                setDraft([]);
+              }}
+              onCompact={() => {
+                if (!group) return;
+                if (!selectedTargets.length)
+                  return toast.error("先 @ 要压缩上下文的智能体。");
+                compact.mutate(
+                  { groupId: group.id, mentions: selectedTargets },
+                  { onError },
+                );
+                setDraft([]);
+              }}
+              onStop={(id) => stopReply.mutate(id, { onError })}
+              onStopAll={() => {
+                if (group) actions.stop.mutate(group.id, { onError });
+              }}
+              onAnswer={(id, value) =>
+                answer.mutate({ id, value }, { onError })
+              }
+            />
+          </div>
+          <WorkspacePanel
+            view={view}
+            onViewChange={onViewChange}
+            className={mobilePanel === "chat" ? "hidden md:flex" : undefined}
+          />
+        </main>
+      </div>
       <SettingsDialog />
       <AgentEditor />
     </div>

@@ -8,12 +8,12 @@ import { z } from "zod";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { ApiError, controlPlane, unwrap } from "@/lib/api";
-import { draftOf, MAX_ATTACHMENT_BYTES, plainDraft } from "@/lib/composer";
+import { draftOf, MAX_ATTACHMENT_BYTES } from "@/lib/composer";
 import { addSent } from "@/queries/chat";
 import { refreshLlm } from "@/queries/llm";
 
-// What the user has written and not yet seen arrive: a draft per agent, the
-// files pasted into drafts (uploaded to that agent at once), and the
+// What the user has written and not yet seen arrive: a draft per group, the
+// files pasted into drafts (uploaded to that group at once), and the
 // messages on their way to the control plane. A message has its id from the
 // moment it is sent; every try carries it, as the message's id and as the
 // Idempotency-Key, so trying again (after a lost response, a reload, a
@@ -44,36 +44,22 @@ const partsSchema = z.array(
     z.object({ type: z.literal("attachment"), attachment: attachmentSchema }),
   ]),
 );
-const outgoingSchema = z.preprocess(
-  // Saved before messages had parts: their text.
-  (saved) =>
-    saved && typeof saved === "object" && "text" in saved && !("parts" in saved)
-      ? { ...saved, parts: [{ type: "text", text: saved.text }] }
-      : saved,
-  z.object({
-    id: z.string().uuid(),
-    agentId: z.string().max(64),
-    parts: partsSchema,
-    mode: z.enum(["queue", "steer"]),
-    /** Why it did not arrive; absent while it is being sent. */
-    failure: z.string().max(500).optional(),
-  }),
-);
+const outgoingSchema = z.object({
+  id: z.string().uuid(),
+  groupId: z.string().max(64),
+  parts: partsSchema,
+  mentions: z.array(z.string()),
+  mode: z.enum(["queue", "steer"]),
+  failure: z.string().max(500).optional(),
+});
 /** A pasted file's upload: uploading until it has its attachment or an error. */
 const uploadSchema = z.object({
-  agentId: z.string().max(64),
+  groupId: z.string().max(64),
   attachment: attachmentSchema.optional(),
   error: z.string().max(500).optional(),
 });
 const savedSchema = z.object({
-  drafts: z.record(
-    z.string(),
-    // Saved before drafts had blocks: plain text.
-    z.preprocess(
-      (saved) => (typeof saved === "string" ? plainDraft(saved) : saved),
-      draftSchema,
-    ),
-  ),
+  drafts: z.record(z.string(), draftSchema),
   uploads: z.record(z.string(), uploadSchema).default({}),
   outgoing: z.array(outgoingSchema).max(100),
 });
@@ -83,7 +69,7 @@ type Upload = z.infer<typeof uploadSchema>;
 type Saved = z.infer<typeof savedSchema>;
 
 interface OutboxStore extends Saved {
-  setDraft: (agentId: string, draft: Draft) => void;
+  setDraft: (groupId: string, draft: Draft) => void;
   setUpload: (id: string, upload: Upload) => void;
   add: (outgoing: Outgoing) => void;
   update: (id: string, changes: Partial<Outgoing>) => void;
@@ -137,10 +123,10 @@ export const useOutbox = create<OutboxStore>()(
       drafts: {},
       uploads: {},
       outgoing: [],
-      setDraft: (agentId, draft) =>
+      setDraft: (groupId, draft) =>
         set((s) => {
-          const drafts = { ...s.drafts, [agentId]: draft };
-          if (!draft.length) delete drafts[agentId];
+          const drafts = { ...s.drafts, [groupId]: draft };
+          if (!draft.length) delete drafts[groupId];
           return { drafts };
         }),
       setUpload: (id, upload) =>
@@ -156,7 +142,7 @@ export const useOutbox = create<OutboxStore>()(
         set((s) => ({ outgoing: s.outgoing.filter((o) => o.id !== id) })),
     }),
     {
-      name: "axp.chat.v1",
+      name: "axp.groups.v1",
       storage,
       partialize: ({ drafts, uploads, outgoing }) => ({
         drafts,
@@ -176,17 +162,17 @@ const NETWORK_FAILURE = "网络连接失败，消息未送达。";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// One agent's messages go out one at a time, in the order they were sent.
+// One group's messages go out one at a time, in the order they were sent.
 const lines = new Map<string, Promise<void>>();
 const delivering = new Set<string>();
 
 function deliver(queryClient: QueryClient, outgoing: Outgoing) {
   if (delivering.has(outgoing.id)) return;
   delivering.add(outgoing.id);
-  const line = (lines.get(outgoing.agentId) ?? Promise.resolve())
+  const line = (lines.get(outgoing.groupId) ?? Promise.resolve())
     .then(() => attempt(queryClient, outgoing))
     .finally(() => delivering.delete(outgoing.id));
-  lines.set(outgoing.agentId, line);
+  lines.set(outgoing.groupId, line);
 }
 
 async function attempt(queryClient: QueryClient, outgoing: Outgoing) {
@@ -200,7 +186,8 @@ async function attempt(queryClient: QueryClient, outgoing: Outgoing) {
         controlPlane.POST("/api/v1/chat/messages", {
           body: {
             id: outgoing.id,
-            agent_id: outgoing.agentId,
+            group_id: outgoing.groupId,
+            mentions: outgoing.mentions,
             parts: outgoing.parts.map((part) =>
               part.type === "text"
                 ? part
@@ -241,8 +228,19 @@ export function useOutboxActions() {
   const queryClient = useQueryClient();
   const { add, update, remove, setDraft } = useOutbox.getState();
   return {
-    send(agentId: string, parts: OutgoingPart[], mode: SendMode) {
-      const outgoing = { id: crypto.randomUUID(), agentId, parts, mode };
+    send(
+      groupId: string,
+      parts: OutgoingPart[],
+      mode: SendMode,
+      mentions: string[],
+    ) {
+      const outgoing = {
+        id: crypto.randomUUID(),
+        groupId,
+        parts,
+        mode,
+        mentions,
+      };
       add(outgoing);
       deliver(queryClient, outgoing);
     },
@@ -258,10 +256,10 @@ export function useOutboxActions() {
       for (const [id, attachment] of Object.entries(attachments))
         useOutbox
           .getState()
-          .setUpload(id, { agentId: outgoing.agentId, attachment });
-      const current = useOutbox.getState().drafts[outgoing.agentId] ?? [];
+          .setUpload(id, { groupId: outgoing.groupId, attachment });
+      const current = useOutbox.getState().drafts[outgoing.groupId] ?? [];
       setDraft(
-        outgoing.agentId,
+        outgoing.groupId,
         current.length
           ? [...draft, { type: "text", text: "\n" }, ...current]
           : draft,
@@ -315,18 +313,18 @@ export function pastedPreview(id: string) {
   return url;
 }
 
-/** Upload a file pasted into the agent's draft, as the block id. */
-export async function upload(agentId: string, id: string, file: File) {
+/** Upload a file pasted into the group's draft, as the block id. */
+export async function upload(groupId: string, id: string, file: File) {
   const { setUpload } = useOutbox.getState();
   files.set(id, file);
   if (file.size > MAX_ATTACHMENT_BYTES) {
-    setUpload(id, { agentId, error: "单个附件不能超过 20 MB。" });
+    setUpload(id, { groupId, error: "单个附件不能超过 20 MB。" });
     return;
   }
-  setUpload(id, { agentId });
+  setUpload(id, { groupId });
   try {
     const response = await fetch(
-      `/api/v1/agents/${agentId}/attachments?name=${encodeURIComponent(file.name)}`,
+      `/api/v1/groups/${groupId}/attachments?name=${encodeURIComponent(file.name)}`,
       {
         method: "POST",
         headers: { "Content-Type": file.type || "application/octet-stream" },
@@ -336,10 +334,10 @@ export async function upload(agentId: string, id: string, file: File) {
     const body = await response.json().catch(() => null);
     if (!response.ok)
       throw new Error(body?.error?.message ?? "上传失败，请重试。");
-    setUpload(id, { agentId, attachment: body as Attachment });
+    setUpload(id, { groupId, attachment: body as Attachment });
   } catch (error) {
     setUpload(id, {
-      agentId,
+      groupId,
       error:
         error instanceof TypeError
           ? "网络连接失败，上传未完成。"
@@ -353,7 +351,7 @@ export function retryUpload(id: string) {
   const file = files.get(id);
   const saved = useOutbox.getState().uploads[id];
   if (!file || !saved) return false;
-  void upload(saved.agentId, id, file);
+  void upload(saved.groupId, id, file);
   return true;
 }
 
@@ -368,7 +366,7 @@ export function dropUpload(id: string) {
   // Should an undo bring the block back, it says so.
   if (uploads[id])
     setUpload(id, {
-      agentId: uploads[id].agentId,
+      groupId: uploads[id].groupId,
       error: "附件已移除，请重新粘贴。",
     });
   if (attachment)

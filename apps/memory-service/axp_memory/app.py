@@ -69,17 +69,25 @@ def create_app(provider: MemoryProvider):
         """
         message = {"role": "user", "content": text[:MAX_TEXT]}
         added = await anyio.to_thread.run_sync(
-            lambda: provider.add(agent_of(ctx), [message], source="agent", infer=False)
+            lambda: provider.add(
+                agent_of(ctx),
+                [message],
+                source="agent",
+                infer=False,
+                group_id=ctx.request_context.request.headers.get("X-AXP-Group-Id")
+                or None,
+            )
         )
         return _view(added[0]) if added else {}
 
     @mcp.tool()
     async def recall(query: str, ctx: Context, limit: int = 10) -> list[dict]:
-        """Search your memories of earlier conversations."""
+        """Search your memories; group_context marks this group or another group."""
         found = await anyio.to_thread.run_sync(
             provider.search, agent_of(ctx), query[:MAX_TEXT], max(1, min(limit, 50))
         )
-        return [_view(memory) for memory in found]
+        group_id = ctx.request_context.request.headers.get("X-AXP-Group-Id")
+        return [_recall_view(memory, group_id) for memory in found]
 
     @mcp.tool()
     async def forget(memory_id: str, ctx: Context) -> dict:
@@ -102,7 +110,8 @@ def create_app(provider: MemoryProvider):
             provider.search, agent, query, RECALL_LIMIT
         )
         relevant = [m for m in found if (m.score or 0) >= RECALL_MIN_SCORE]
-        return JSONResponse({"memories": [_view(m) for m in relevant]})
+        group_id = request.headers.get("X-AXP-Group-Id")
+        return JSONResponse({"memories": [_recall_view(m, group_id) for m in relevant]})
 
     @mcp.custom_route("/memory/capture", methods=["POST"])
     async def capture_route(request: Request) -> Response:
@@ -115,7 +124,12 @@ def create_app(provider: MemoryProvider):
             for m in body.get("messages") or []
             if m.get("role") in ("user", "assistant") and m.get("content")
         ]
-        if messages and not captures.put(agent, messages, body.get("model")):
+        if messages and not captures.put(
+            agent,
+            messages,
+            body.get("model"),
+            group_id=request.headers.get("X-AXP-Group-Id") or None,
+        ):
             return _error(503, "BUSY")
         return Response(status_code=202)
 
@@ -135,15 +149,18 @@ def create_app(provider: MemoryProvider):
         source = request.query_params.get("source") or None
         if source is not None and source not in {"conversation", "agent", "user"}:
             return _error(400, "INVALID_SOURCE", "无效的记忆种类。")
+        group_id = request.query_params.get("group_id") or None
         query = request.query_params.get("q", "").strip()[:MAX_TEXT]
         if query:
             found = await anyio.to_thread.run_sync(
-                lambda: provider.search(agent, query, SEARCH_LIMIT, source=source)
+                lambda: provider.search(
+                    agent, query, SEARCH_LIMIT, source=source, group_id=group_id
+                )
             )
             found = [m for m in found if (m.score or 0) >= RECALL_MIN_SCORE]
         else:
             found = await anyio.to_thread.run_sync(
-                lambda: provider.list(agent, source=source)
+                lambda: provider.list(agent, source=source, group_id=group_id)
             )
             # Newest first; ISO 8601 in UTC sorts as text.
             found.sort(key=lambda m: m.created_at or "", reverse=True)
@@ -182,19 +199,31 @@ class _Captures:
         self.queue: queue.Queue = queue.Queue(CAPTURE_BACKLOG)
         threading.Thread(target=self._run, name="captures", daemon=True).start()
 
-    def put(self, agent: str, messages: list[dict], model: str | None) -> bool:
+    def put(
+        self,
+        agent: str,
+        messages: list[dict],
+        model: str | None,
+        *,
+        group_id=None,
+    ) -> bool:
         try:
-            self.queue.put_nowait((agent, messages, model))
+            self.queue.put_nowait((agent, messages, model, group_id))
         except queue.Full:
             return False
         return True
 
     def _run(self) -> None:
         while True:
-            agent, messages, model = self.queue.get()
+            agent, messages, model, group_id = self.queue.get()
             try:
                 added = self.provider.add(
-                    agent, messages, source="conversation", infer=True, model=model
+                    agent,
+                    messages,
+                    source="conversation",
+                    infer=True,
+                    model=model,
+                    group_id=group_id,
                 )
                 logger.info("Remembered %d facts for agent %s", len(added), agent)
             except Exception:
@@ -215,6 +244,16 @@ def _view(memory: Memory) -> dict:
         view["created_at"] = memory.created_at
     if memory.source is not None:
         view["source"] = memory.source
+    if memory.source_group_id is not None:
+        view["source_group_id"] = memory.source_group_id
+    return view
+
+
+def _recall_view(memory: Memory, group_id: str | None) -> dict:
+    view = _view(memory)
+    source = view.pop("source_group_id", None)
+    if source is not None:
+        view["group_context"] = "this" if source == group_id else "other"
     return view
 
 

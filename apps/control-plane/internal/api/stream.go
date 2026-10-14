@@ -96,7 +96,7 @@ func registerStream(api huma.API, d *Deps) {
 	registry := api.OpenAPI().Components.Schemas
 	var payloads []*huma.Schema
 	for _, t := range []reflect.Type{
-		reflect.TypeFor[chat.AgentUpdated](), reflect.TypeFor[chat.AgentDeleted](),
+		reflect.TypeFor[chat.GroupUpdated](), reflect.TypeFor[chat.AgentUpdated](), reflect.TypeFor[chat.AgentDeleted](),
 		reflect.TypeFor[chat.MessageUpdated](), reflect.TypeFor[chat.InteractionUpdated](),
 	} {
 		payloads = append(payloads, registry.Schema(t, true, ""))

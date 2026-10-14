@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/akarachen/axp/apps/control-plane/internal/chat"
 	"github.com/akarachen/axp/apps/control-plane/internal/relay"
 	"github.com/akarachen/axp/packages/service-go/apierr"
 	"github.com/akarachen/axp/packages/service-go/jsontime"
@@ -81,6 +82,7 @@ type Service struct {
 // --- rows ------------------------------------------------------------------------------
 
 type taskRow struct {
+	GroupID        *string   `db:"group_id"`
 	ID             string    `db:"id"`
 	Number         int64     `db:"number"`
 	Title          string    `db:"title"`
@@ -204,6 +206,7 @@ type TaskCreator struct {
 }
 
 type Task struct {
+	GroupID   *string       `json:"group_id" nullable:"true"`
 	ID        string        `json:"id"`
 	Number    int64         `json:"number"`
 	Title     string        `json:"title"`
@@ -262,6 +265,7 @@ type TaskDetail struct {
 func (r *taskRow) public() Task {
 	t := Task{
 		ID: r.ID, Number: r.Number, Title: r.Title, Status: r.Status,
+		GroupID:   r.GroupID,
 		RunStatus: r.RunStatus, Comments: r.Comments,
 		CreatedAt: jsontime.From(r.CreatedAt), UpdatedAt: jsontime.From(r.UpdatedAt),
 		Assignee:  TaskAssignee{Kind: r.Assignee, ComputerID: r.ComputerID, ComputerName: r.ComputerName, Runtime: r.Runtime, Provider: r.Provider, Place: r.Place},
@@ -284,9 +288,15 @@ func (a *activityRow) public() TaskActivity {
 
 // --- reads -------------------------------------------------------------------------------
 
-// List is every task, most recently updated first.
-func (s *Service) List(ctx context.Context, db pg.DB) ([]Task, error) {
-	rows, err := pg.All[taskRow](ctx, db, taskSelect+" ORDER BY t.updated_at DESC")
+// List returns tasks most recently updated first, optionally limited to a group.
+func (s *Service) List(ctx context.Context, db pg.DB, groupID string) ([]Task, error) {
+	query := taskSelect
+	args := []any{}
+	if groupID != "" {
+		query += " WHERE t.group_id=$1"
+		args = append(args, groupID)
+	}
+	rows, err := pg.All[taskRow](ctx, db, query+" ORDER BY t.updated_at DESC", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +405,10 @@ func record(ctx context.Context, tx pgx.Tx, taskID string, runID *string, kind s
 		return err
 	}
 	_, err = tx.Exec(ctx, "UPDATE task SET updated_at = $2 WHERE id = $1", taskID, pg.Now())
-	return err
+	if err != nil {
+		return err
+	}
+	return chat.SyncTaskCard(ctx, tx, taskID)
 }
 
 // AssigneeInput is who a task is for.
@@ -483,6 +496,7 @@ func assigneeData(r *taskRow) map[string]any {
 }
 
 type Input struct {
+	GroupID     *string
 	Title       string
 	Description string
 	Status      string
@@ -506,6 +520,11 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, in Input, by Actor) (*T
 		place, created_by_agent, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)`,
 		id, strings.TrimSpace(in.Title), in.Description, in.Status, a.Kind, a.ComputerID, a.Runtime, a.Provider, placeOf(a), agent, now); err != nil {
 		return nil, err
+	}
+	if in.GroupID != nil {
+		if err := setGroup(ctx, tx, id, *in.GroupID); err != nil {
+			return nil, err
+		}
 	}
 	if err := record(ctx, tx, id, nil, "created", by, nil, nil); err != nil {
 		return nil, err
@@ -534,6 +553,7 @@ func workable(status string) bool {
 
 // Changes are an update's fields; nil ones stay.
 type Changes struct {
+	GroupID     *string
 	Title       *string
 	Description *string
 	Status      *string
@@ -544,6 +564,14 @@ func (s *Service) Update(ctx context.Context, tx pgx.Tx, ref string, c Changes, 
 	r, err := find(ctx, tx, ref, true)
 	if err != nil {
 		return nil, err
+	}
+	if c.GroupID != nil && deref(r.GroupID) != *c.GroupID {
+		if err := setGroup(ctx, tx, r.ID, *c.GroupID); err != nil {
+			return nil, err
+		}
+		if err := record(ctx, tx, r.ID, nil, "group", by, nil, map[string]any{"from": r.GroupID, "to": *c.GroupID}); err != nil {
+			return nil, err
+		}
 	}
 	if c.Title != nil && strings.TrimSpace(*c.Title) != r.Title {
 		title := strings.TrimSpace(*c.Title)
@@ -687,6 +715,9 @@ func (s *Service) Delete(ctx context.Context, tx pgx.Tx, ref string) error {
 	}
 	if active {
 		return apierr.New(409, "TASK_RUNNING", "远程智能体正在处理这个任务，先停止它再删除。")
+	}
+	if err = chat.DeleteTaskCards(ctx, tx, r.ID); err != nil {
+		return err
 	}
 	_, err = tx.Exec(ctx, "DELETE FROM task WHERE id = $1", r.ID)
 	return err

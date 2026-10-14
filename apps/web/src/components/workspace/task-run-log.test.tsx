@@ -55,8 +55,8 @@ const task = {
 const cleanup: (() => void)[] = [];
 
 describe("a run's log", () => {
-  afterEach(() => {
-    cleanup.splice(0).forEach((dispose) => dispose());
+  afterEach(async () => {
+    await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
     rstest.restoreAllMocks();
   });
 
@@ -84,6 +84,7 @@ describe("a run's log", () => {
     const root = createRoot(container);
     cleanup.push(() => {
       root.unmount();
+      client.clear();
       container.remove();
     });
     await act(async () =>
@@ -97,11 +98,9 @@ describe("a run's log", () => {
       b.textContent?.includes("执行记录"),
     )!;
     await act(async () => open.click());
-    // The log is read on opening; wait for it, as long as a busy test run needs.
-    for (let i = 0; i < 100; i++) {
-      if (container.querySelector('ol[aria-label="执行记录"]')) break;
-      await act(() => new Promise((r) => setTimeout(r, 20)));
-    }
+    await act(async () =>
+      rstest.waitFor(() => expect(client.isFetching()).toBe(0)),
+    );
     const log = container.querySelector('ol[aria-label="执行记录"]')!;
     const items = [...log.children].map((li) => li.textContent);
     // In order, and no broken <img>.

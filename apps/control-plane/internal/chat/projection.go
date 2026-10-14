@@ -69,6 +69,7 @@ func (p *projection) flush(ctx context.Context) error {
 type handler func(p *projection, ctx context.Context, command *CommandRecord, payload map[string]any) error
 
 var handlers = map[string]handler{
+	"thread.opened":      (*projection).threadOpened,
 	"runtime.started":    (*projection).runtimeStarted,
 	"runtime.failed":     (*projection).runtimeFailed,
 	"turn.started":       (*projection).turnStarted,
@@ -137,6 +138,9 @@ func (s *Service) ImportEvents(ctx context.Context, tx pgx.Tx, agentID string, e
 			if err := p.flush(ctx); err != nil {
 				return err
 			}
+		}
+		if command != nil && command.BootID != nil && *command.BootID != boot {
+			continue
 		}
 		if h, ok := handlers[event.Type]; ok {
 			if err := h(p, ctx, command, payload); err != nil {
@@ -392,7 +396,7 @@ func (p *projection) itemUpdated(ctx context.Context, command *CommandRecord, pa
 		return nil
 	}
 	r := p.unsaved
-	if r == nil || r.CommandID != command.ID {
+	if r == nil || orEmptyString(r.CommandID) != command.ID {
 		// Another reply's run ends here.
 		if err := p.flush(ctx); err != nil {
 			return err
@@ -521,7 +525,7 @@ func (p *projection) approvalRequested(ctx context.Context, command *CommandReco
 	}
 	stopping := r.Status != MessageQueued && r.Status != MessageResponding
 	interaction := &interactionRow{
-		ID: pg.NewID(), ConversationID: r.ConversationID, AgentID: p.agentID, MessageID: r.ID,
+		ID: pg.NewID(), ConversationID: r.ConversationID, GroupID: r.GroupID, AgentID: p.agentID, MessageID: r.ID,
 		ApprovalID: &approvalID, Kind: "choice", Prompt: approvalPrompt(kind, summary),
 		Options:  []InteractionOption{{Value: "allow", Label: "允许"}, {Value: "deny", Label: "拒绝"}},
 		Status:   InteractionPending,
@@ -531,11 +535,11 @@ func (p *projection) approvalRequested(ctx context.Context, command *CommandReco
 		// A stop already in flight will cancel this request.
 		interaction.Status = InteractionExpired
 	}
-	if _, err := p.tx.Exec(ctx, `INSERT INTO interaction (id, conversation_id, agent_id, message_id, approval_id,
+	if _, err := p.tx.Exec(ctx, `INSERT INTO interaction (id, conversation_id, agent_id, message_id, approval_id, group_id,
 		kind, prompt, options, status, revision, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, 'choice', $6, $7, $8, 1, $9, $9)`,
+		VALUES ($1, $2, $3, $4, $5, $10, 'choice', $6, $7, $8, 1, $9, $9)`,
 		interaction.ID, interaction.ConversationID, p.agentID, r.ID, approvalID,
-		interaction.Prompt, interaction.Options, interaction.Status, now); err != nil {
+		interaction.Prompt, interaction.Options, interaction.Status, now, r.GroupID); err != nil {
 		return err
 	}
 	if err := emitInteraction(ctx, p.tx, interaction); err != nil {
@@ -560,8 +564,8 @@ func (p *projection) approvalRequested(ctx context.Context, command *CommandReco
 // approval is the agent's latest approval with the payload's id, and its
 // interaction.
 func (p *projection) approval(ctx context.Context, payload map[string]any) (*ApprovalRecord, *interactionRow, error) {
-	approval, err := pg.One[ApprovalRecord](ctx, p.tx, `SELECT * FROM approval WHERE agent_id = $1 AND sdk_request_id = $2
-		ORDER BY created_at DESC LIMIT 1`, p.agentID, pyStr(payload["approval_id"]))
+	approval, err := pg.One[ApprovalRecord](ctx, p.tx, `SELECT * FROM approval WHERE agent_id = $1 AND sdk_request_id = $2 AND boot_id=$3
+		ORDER BY created_at DESC LIMIT 1`, p.agentID, pyStr(payload["approval_id"]), p.bootID)
 	if err != nil || approval == nil {
 		return nil, nil, err
 	}
@@ -762,4 +766,16 @@ func MarkAgentFailed(ctx context.Context, tx pgx.Tx, agentID, code string, build
 		}
 	}
 	return RefreshAgentStatus(ctx, tx, agentID)
+}
+
+func (p *projection) threadOpened(ctx context.Context, command *CommandRecord, payload map[string]any) error {
+	if command == nil || command.BootID == nil || *command.BootID != p.bootID || payload["thread_key"] != command.GroupID {
+		return nil
+	}
+	id, ok := payload["codex_thread_id"].(string)
+	if !ok || id == "" {
+		return nil
+	}
+	_, err := p.tx.Exec(ctx, `UPDATE group_participant SET codex_thread_id=$3,thread_status=CASE WHEN removed_at IS NULL THEN 'ready' ELSE 'archived' END WHERE group_id=$1 AND agent_id=$2 AND (codex_thread_id IS NULL OR codex_thread_id=$3)`, command.GroupID, p.agentID, id)
+	return err
 }

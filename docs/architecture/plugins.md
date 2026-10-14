@@ -58,7 +58,7 @@ rules:
 4. 在 `config.toml` 里让每个插件 MCP 服务器的工具免确认，否则每次调用都会被 runtime 以“无人应答”拒绝；
 5. 把各插件的 hook 合成一份 akhook 配置 `/opt/axp/plugins/akhook.yml`：规则 ID 加上插件名（`memory/recall`），`${PLUGIN_ROOT}` 换成镜像里的目录，命令前加一层 `sh -c`，只有 `CODEX_HOME/plugins/cache/axp/<plugin>` 存在（装好了这个插件）才运行；智能体的 key 就在环境里（`AXP_AGENT_KEY`）。Codex 那边不生成任何东西：镜像的 `requirements.toml` 固定把 `PreToolUse`、`UserPromptSubmit`、`Stop` 交给 akhook（managed hook，`allow_managed_hooks_only` 让其他来源的 hook 一律不执行），akhook 从 `AKHOOK_ADDITIONAL_CONFIG_PATH` 读这份配置和镜像自己的规则（后者在后，插件改不了）。
 
-runtime 每次启动把镜像里的插件装进 `CODEX_HOME`、在副本里填入 `${AXP_GATEWAY_URL}` 和 `${AXP_WORKSPACE_DIR}`，见[聊天与运行时架构](chat-runtime.md#runtime)。插件背后的服务路由（`/memory/*`、`/tasks/*`、`/agenvo/*`、`/forge/mcp`）由 runtime 网关按智能体的插件（它的环境包带来的）放行，没有的直接 403：容器里的代码拿着自己的 key 也调不到（见[网关](gateway.md)的 runtime 站点）。控制面的插件目录（`GET /plugins`）用同一个包读取，只列 chat 插件。
+runtime 每次启动把镜像里的插件装进 `CODEX_HOME`、在副本里填入 `${AXP_GATEWAY_URL}` 和 `${AXP_WORKSPACE_DIR}`，见[聊天与运行时架构](chat-runtime.md#runtime)。插件背后的服务路由（`/memory/*`、`/groups/*`、`/tasks/*`、`/agenvo/*`、`/forge/mcp`）由 runtime 网关按智能体的插件（它的环境包带来的）放行，没有的直接 403：容器里的代码拿着自己的 key 也调不到（见[网关](gateway.md)的 runtime 站点）。控制面的插件目录（`GET /plugins`）用同一个包读取，只列 chat 插件。
 
 ## routine 目标：加载进 ADK agent
 
@@ -85,3 +85,9 @@ runtime 每次启动把镜像里的插件装进 `CODEX_HOME`、在副本里填�
 | oomol     | chat          | [OOMOL](oomol.md) 的 oo CLI 和它自带的 skill；凭据来自 oomol 环境包的配置                             |
 | routines  | chat          | 定时任务（[定时任务](routines.md)）：列出、查看报告、新建和修改                                       |
 | tasks     | chat          | 任务看板（[任务与远程电脑](tasks.md)）                                                                |
+
+## 当前群
+
+runtime 网关的 forward auth 除 `X-AXP-Agent-Id` 外，还按控制面当前执行命令注入 `X-AXP-Group-Id`，先移除调用方自带的群头。空闲时没有当前群。`groups` 插件的 streamable HTTP MCP 位于 `/groups/mcp`，由控制面内部 API 提供；`read_group`、`search_group`、`group_info`、`mention` 和 `update_brief` 都只操作当前群。它的 skill 规定何时检索前情、何时通知其他智能体，以及通知后不等待、不轮询、不回叫。五次唤醒上限和非成员提示由控制面执行，不能只靠模型遵守。
+
+群聊和记忆通过必选环境包载入；两者的能力是 MCP 工具和 skill，不通过 CLI，不写 `MEMORY.md`。

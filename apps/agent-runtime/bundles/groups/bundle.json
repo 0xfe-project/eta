@@ -1,0 +1,6 @@
+{
+  "name": "groups",
+  "description": "群聊：读取前情、点名协作、整理简报和任务草稿。",
+  "required": true,
+  "plugins": ["groups"]
+}

@@ -50,6 +50,10 @@ function reply(blocks: Block[]): ChatMessage {
   return {
     id: "00000000-0000-0000-0001-000000000001",
     agent_id: "a",
+    group_id: "g",
+    seq: 1,
+    kind: "message",
+    data: {},
     role: "assistant",
     reply_to_id: null,
     status: "completed",
@@ -63,8 +67,11 @@ function reply(blocks: Block[]): ChatMessage {
 async function mount(blocks: Block[], { path = "/" } = {}) {
   const ui = () => (
     <ChatPanel
-      agentId="a"
-      agentName="助手"
+      agents={[]}
+      groups={[]}
+      activeReplies={[]}
+      groupId="a"
+      groupName="助手"
       messages={[reply(blocks)]}
       hasOlder={false}
       loadingOlder={false}
@@ -80,6 +87,7 @@ async function mount(blocks: Block[], { path = "/" } = {}) {
       onDiscard={() => {}}
       onResend={() => {}}
       onCompact={() => {}}
+      onStopAll={() => {}}
       onStop={() => {}}
       onAnswer={() => {}}
     />

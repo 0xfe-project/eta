@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/akarachen/axp/apps/control-plane/internal/chat"
 	"github.com/akarachen/axp/apps/control-plane/internal/control"
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -32,13 +33,23 @@ func registerInternal(api huma.API, d *Deps) {
 		Plugin string `query:"plugin" maxLength:"64" doc:"The plugin whose route this is; the agent must have it."`
 	}) (*struct {
 		AgentID string `header:"X-AXP-Agent-Id"`
+		GroupID string `header:"X-AXP-Group-Id"`
 	}, error) {
 		agent, err := control.AgentFor(ctx, d.DB, d.Secret, in.token(), in.Plugin)
 		if err != nil {
 			return nil, err
 		}
+		command, err := chat.ActiveCommand(ctx, d.DB, agent)
+		if err != nil {
+			return nil, err
+		}
+		var groupID string
+		if command != nil {
+			groupID = command.GroupID
+		}
 		return &struct {
 			AgentID string `header:"X-AXP-Agent-Id"`
-		}{agent}, nil
+			GroupID string `header:"X-AXP-Group-Id"`
+		}{agent, groupID}, nil
 	})
 }

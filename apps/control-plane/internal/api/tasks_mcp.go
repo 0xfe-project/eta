@@ -113,7 +113,7 @@ func tasksMCP(d *Deps) http.Handler {
 		Name:        "list_tasks",
 		Description: "List the task board's tasks (the user's and agents'), most recently updated first.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in listTasksIn) (*mcp.CallToolResult, any, error) {
-		list, err := s.List(ctx, d.DB)
+		list, err := s.List(ctx, d.DB, "")
 		if err != nil {
 			return nil, nil, toolError(err)
 		}
@@ -153,14 +153,18 @@ func tasksMCP(d *Deps) http.Handler {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "create_task",
 		Description: "Create a task on the board. Assigned to a remote agent, it starts working on it in the task's own workspace on that " +
-			"computer, and reports back as comments; assigned to the user, it waits for them.",
+			"computer, and reports back as comments; assigned to the user, it waits for them. In group discussion prefer groups.draft_task so the user can review. Only create immediately when explicitly asked; this task links to the current group.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in createTaskIn) (*mcp.CallToolResult, any, error) {
 		assignee := tasks.AssigneeInput{Kind: "none"}
 		if in.Assignee != nil {
 			assignee = *in.Assignee
 		}
 		t, err := write(ctx, func(tx pgx.Tx, by tasks.Actor) (*tasks.TaskDetail, error) {
-			return s.Create(ctx, tx, tasks.Input{
+			var groupID *string
+			if group, ok := ctx.Value(groupKey{}).(string); ok && group != "" {
+				groupID = &group
+			}
+			return s.Create(ctx, tx, tasks.Input{GroupID: groupID,
 				Title: in.Title, Description: in.Description, Status: in.Status, Assignee: assignee,
 			}, by)
 		})
@@ -217,6 +221,7 @@ func tasksMCP(d *Deps) http.Handler {
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), agentKey{}, r.Header.Get("X-AXP-Agent-Id"))
+		ctx = context.WithValue(ctx, groupKey{}, r.Header.Get("X-AXP-Group-Id"))
 		handler.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

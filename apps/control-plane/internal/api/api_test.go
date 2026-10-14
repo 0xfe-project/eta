@@ -44,7 +44,7 @@ func TestSnapshotContainsAgentsAndActiveReplies(t *testing.T) {
 	// The message waits on a runtime that is not there yet.
 	expect(t, snapshot.Agents[0].Status, "starting")
 	expect(t, len(snapshot.ActiveReplies), 1)
-	expect(t, snapshot.ActiveReplies[0].ID, sent.Reply.ID)
+	expect(t, snapshot.ActiveReplies[0].ID, sent.Replies[0].ID)
 	if _, ok := r.m(t)["messages"]; ok {
 		t.Fatal("messages in the snapshot")
 	}
@@ -63,7 +63,7 @@ func TestHistoryPagesBackwardsInSendOrder(t *testing.T) {
 			e.exec("UPDATE agent_command SET status = 'succeeded' WHERE status = 'queued'")
 		}
 	}
-	path := "/agents/" + agent.ID + "/messages"
+	path := "/groups/" + e.direct(agent.ID) + "/messages"
 	var latest, page chat.MessagePage
 	e.get(path).json(t, &latest)
 	expect(t, len(latest.Items), 50)
@@ -92,26 +92,26 @@ func TestHistoryIsOnlyThatAgents(t *testing.T) {
 	mine := e.send(agent.ID, "mine")
 	e.send(other.ID, "theirs")
 	var page chat.MessagePage
-	e.get("/agents/"+agent.ID+"/messages").json(t, &page)
+	e.get("/groups/"+e.direct(agent.ID)+"/messages").json(t, &page)
 	expect(t, len(page.Items), 2)
 	expect(t, page.Items[0].ID, mine.Message.ID)
-	expect(t, page.Items[1].ID, mine.Reply.ID)
+	expect(t, page.Items[1].ID, mine.Replies[0].ID)
 }
 
 func TestHistoryOfUnknownOrDeletedAgentIs404(t *testing.T) {
 	e := newEnv(t)
 	agent := e.createAgent("开发助手")
-	expect(t, e.get("/agents/"+uuid.NewString()+"/messages").status, 404)
-	expect(t, e.get("/agents/not-a-uuid/messages").status, 404)
+	expect(t, e.get("/groups/"+uuid.NewString()+"/messages").status, 404)
+	expect(t, e.get("/groups/not-a-uuid/messages").status, 404)
 	e.delete("/agents/" + agent.ID)
-	expect(t, e.get("/agents/"+agent.ID+"/messages").status, 404)
+	expect(t, e.get("/groups/"+e.direct(agent.ID)+"/messages").status, 200)
 }
 
 func TestTamperedCursorRejected(t *testing.T) {
 	e := newEnv(t)
 	agent := e.createAgent("开发助手")
 	cursor := chat.Cursors{Secret: e.secret}.History(10) + "x"
-	expect(t, e.get("/agents/"+agent.ID+"/messages", "before", cursor).status, 400)
+	expect(t, e.get("/groups/"+e.direct(agent.ID)+"/messages", "before", cursor).status, 400)
 }
 
 func TestCreateAgentReturnsProductFieldsOnly(t *testing.T) {
@@ -124,7 +124,7 @@ func TestCreateAgentReturnsProductFieldsOnly(t *testing.T) {
 	delete(got, "id")
 	want := map[string]any{
 		"name": "开发助手", "description": "", "model": "test-model",
-		"bundles": []any{"agenvo", "approval", "artifacts", "github", "grok", "memory", "oomol", "routines", "tasks"}, "status": "idle",
+		"bundles": []any{"agenvo", "approval", "artifacts", "github", "grok", "groups", "memory", "oomol", "routines", "tasks"}, "status": "idle",
 		"build_error": nil, "revision": float64(1),
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -189,7 +189,7 @@ func TestChatNeedsAnAvailableModel(t *testing.T) {
 	e := newEnv(t)
 	catalog(e)
 	agent := e.createAgent("a", "")
-	body := map[string]any{"agent_id": agent.ID, "text": "hi"}
+	body := map[string]any{"group_id": e.direct(agent.ID), "text": "hi"}
 	expectError(t, e.post("/chat/messages", body), 409, "MODEL_NOT_SET")
 
 	e.patch("/agents/"+agent.ID, map[string]any{"model": "grok-4"})
@@ -211,7 +211,7 @@ func TestGatewayDownBlocksChat(t *testing.T) {
 	var agent chat.Agent
 	e.post("/agents", map[string]any{"name": "a", "model": "gpt-5.5"}).json(t, &agent)
 	e.models.down = true
-	expectError(t, e.post("/chat/messages", map[string]any{"agent_id": agent.ID, "text": "hi"}), 409, "MODEL_UNAVAILABLE")
+	expectError(t, e.post("/chat/messages", map[string]any{"group_id": e.direct(agent.ID), "text": "hi"}), 409, "MODEL_UNAVAILABLE")
 }
 
 func TestCreateWithDescription(t *testing.T) {
@@ -252,14 +252,14 @@ func TestBundlesAreChosenFromTheCatalog(t *testing.T) {
 		names = append(names, b.Name)
 		expect(t, b.Builtin, true)
 	}
-	if !slices.Equal(names, []string{"agenvo", "approval", "artifacts", "github", "grok", "memory", "oomol", "routines", "tasks"}) {
+	if !slices.Equal(names, []string{"agenvo", "approval", "artifacts", "github", "grok", "groups", "memory", "oomol", "routines", "tasks"}) {
 		t.Fatalf("bundles %v", names)
 	}
 	created := e.post("/agents", map[string]any{"name": "a", "bundles": []string{"tasks", "grok"}})
 	// Catalog order, whatever order they were sent in.
-	expect(t, fmt.Sprint(created.m(t)["bundles"]), "[grok tasks]")
+	expect(t, fmt.Sprint(created.m(t)["bundles"]), "[grok groups memory tasks]")
 	id := created.m(t)["id"].(string)
-	expect(t, scalar[string](e, "SELECT plugins::text FROM agent WHERE id = $1", id), `["grok", "tasks"]`)
+	expect(t, scalar[string](e, "SELECT plugins::text FROM agent WHERE id = $1", id), `["grok", "groups", "memory", "tasks"]`)
 	expectError(t, e.post("/agents", map[string]any{"name": "a", "bundles": []string{"nope"}}), 422, "BUNDLE_NOT_FOUND")
 }
 
@@ -268,16 +268,16 @@ func TestChangingBundlesBumpsConfigVersion(t *testing.T) {
 	agent := e.createAgent("旧名字")
 	before := scalar[int64](e, "SELECT config_version FROM agent WHERE id = $1", agent.ID)
 	r := e.patch("/agents/"+agent.ID, map[string]any{"bundles": []string{}})
-	expect(t, fmt.Sprint(r.m(t)["bundles"]), "[]")
+	expect(t, fmt.Sprint(r.m(t)["bundles"]), "[groups memory]")
 	expect(t, scalar[int64](e, "SELECT config_version FROM agent WHERE id = $1", agent.ID), before+1)
-	expect(t, scalar[string](e, "SELECT plugins::text FROM agent WHERE id = $1", agent.ID), "[]")
+	expect(t, scalar[string](e, "SELECT plugins::text FROM agent WHERE id = $1", agent.ID), `["groups", "memory"]`)
 }
 
 func TestUsersBundles(t *testing.T) {
 	e := newEnv(t)
 	var plugins []struct{ Name string }
 	e.get("/plugins").json(t, &plugins)
-	expect(t, len(plugins), 9)
+	expect(t, len(plugins), 10)
 	created := e.post("/bundles", map[string]any{
 		"name": "python", "description": "Python 3", "script": "apt-get install -y python3", "plugins": []string{"memory"},
 	})
@@ -287,12 +287,12 @@ func TestUsersBundles(t *testing.T) {
 	expectError(t, e.post("/bundles", map[string]any{"name": "Bad Name", "plugins": []string{}}), 422, "INVALID_BUNDLE_NAME")
 	expectError(t, e.post("/bundles", map[string]any{"name": "x", "plugins": []string{"nope"}}), 422, "PLUGIN_NOT_FOUND")
 	agent := e.post("/agents", map[string]any{"name": "a", "bundles": []string{"python"}}).m(t)["id"].(string)
-	expect(t, scalar[string](e, "SELECT plugins::text FROM agent WHERE id = $1", agent), `["memory"]`)
+	expect(t, scalar[string](e, "SELECT plugins::text FROM agent WHERE id = $1", agent), `["groups", "memory"]`)
 	// Its agents get its plugins at once.
 	r := do(t, e.public, http.MethodPatch, "/api/v1/bundles/python", map[string]any{"plugins": []string{"grok", "tasks"}}, nil)
 	expect(t, r.status, 200)
 	expect(t, fmt.Sprint(r.m(t)["plugins"]), "[grok tasks]")
-	expect(t, scalar[string](e, "SELECT plugins::text FROM agent WHERE id = $1", agent), `["grok", "tasks"]`)
+	expect(t, scalar[string](e, "SELECT plugins::text FROM agent WHERE id = $1", agent), `["grok", "groups", "memory", "tasks"]`)
 	expectError(t, do(t, e.public, http.MethodPatch, "/api/v1/bundles/github", map[string]any{"script": "x"}, nil), 409, "BUNDLE_BUILTIN")
 	expectError(t, e.delete("/bundles/python"), 409, "BUNDLE_IN_USE")
 	expect(t, e.delete("/agents/"+agent).status, 204)
@@ -322,7 +322,7 @@ func TestDeleteHidesAgentKeepsHistoryAndStopsWork(t *testing.T) {
 	var snapshot chat.Snapshot
 	e.get("/chat").json(t, &snapshot)
 	expect(t, len(snapshot.Agents), 0)
-	expect(t, scalar[string](e, "SELECT status FROM message WHERE id = $1", sent.Reply.ID), "stopped")
+	expect(t, scalar[string](e, "SELECT status FROM message WHERE id = $1", sent.Replies[0].ID), "stopped")
 	expect(t, scalar[int](e, "SELECT count(*) FROM message WHERE id = $1", sent.Message.ID), 1)
 	kind := scalar[string](e, "SELECT type FROM ui_event ORDER BY seq DESC LIMIT 1")
 	payload := scalar[map[string]any](e, "SELECT payload FROM ui_event ORDER BY seq DESC LIMIT 1")
@@ -330,7 +330,7 @@ func TestDeleteHidesAgentKeepsHistoryAndStopsWork(t *testing.T) {
 	expect(t, fmt.Sprint(payload), fmt.Sprint(map[string]any{"agent_id": agent.ID}))
 	expect(t, scalar[bool](e, "SELECT deleted_at IS NOT NULL FROM agent"), true)
 	// A deleted agent cannot be used, renamed or deleted again.
-	expect(t, e.post("/chat/messages", map[string]any{"agent_id": agent.ID, "text": "hi"}).status, 404)
+	expect(t, e.post("/chat/messages", map[string]any{"group_id": e.direct(agent.ID), "text": "hi"}).status, 404)
 	expect(t, e.patch("/agents/"+agent.ID, map[string]any{"name": "x"}).status, 404)
 	expect(t, e.delete("/agents/"+agent.ID).status, 404)
 }
@@ -338,7 +338,7 @@ func TestDeleteHidesAgentKeepsHistoryAndStopsWork(t *testing.T) {
 func TestSendRetryReturnsSameMessages(t *testing.T) {
 	e := newEnv(t)
 	agent := e.createAgent("开发助手")
-	body := map[string]any{"agent_id": agent.ID, "text": "hi"}
+	body := map[string]any{"group_id": e.direct(agent.ID), "text": "hi"}
 	first := e.post("/chat/messages", body, "send-1")
 	second := e.post("/chat/messages", body, "send-1")
 	expect(t, string(second.body), string(first.body))
@@ -350,7 +350,7 @@ func TestSendRetryReturnsSameMessages(t *testing.T) {
 func TestConcurrentSendsWithOneKeyQueueOnce(t *testing.T) {
 	e := newEnv(t)
 	agent := e.createAgent("研究员")
-	body := map[string]any{"agent_id": agent.ID, "text": "你好"}
+	body := map[string]any{"group_id": e.direct(agent.ID), "text": "你好"}
 	responses := make(chan response, 8)
 	var wg sync.WaitGroup
 	for range 8 {
@@ -378,10 +378,10 @@ func TestSendReturnsMessageAndReplyPlaceholder(t *testing.T) {
 		t.Fatal("a user message replies to nothing")
 	}
 	expect(t, sent.Message.Blocks[0].Text, text) // indentation kept
-	expect(t, sent.Reply.Role, "assistant")
-	expect(t, sent.Reply.Status, "queued")
-	expect(t, *sent.Reply.ReplyToID, sent.Message.ID)
-	expect(t, len(sent.Reply.Blocks), 0)
+	expect(t, sent.Replies[0].Role, "assistant")
+	expect(t, sent.Replies[0].Status, "queued")
+	expect(t, *sent.Replies[0].ReplyToID, sent.Message.ID)
+	expect(t, len(sent.Replies[0].Blocks), 0)
 	assertNoInternalFields(t, sent)
 }
 
@@ -389,14 +389,14 @@ func TestTextValidation(t *testing.T) {
 	e := newEnv(t)
 	agent := e.createAgent("开发助手")
 	for _, text := range []string{"", "   \n\t", strings.Repeat("字", 100_001)} {
-		expect(t, e.post("/chat/messages", map[string]any{"agent_id": agent.ID, "text": text}).status, 422)
+		expect(t, e.post("/chat/messages", map[string]any{"group_id": e.direct(agent.ID), "text": text}).status, 422)
 	}
 }
 
 func TestSendToUnknownAgentIs404(t *testing.T) {
 	e := newEnv(t)
 	for _, id := range []string{uuid.NewString(), "not-a-uuid"} {
-		expect(t, e.post("/chat/messages", map[string]any{"agent_id": id, "text": "hi"}).status, 404)
+		expect(t, e.post("/chat/messages", map[string]any{"group_id": id, "text": "hi"}).status, 404)
 	}
 }
 
@@ -406,7 +406,7 @@ func TestQueueFullIs429(t *testing.T) {
 	for i := range chat.MaxQueuedPerAgent {
 		e.send(agent.ID, fmt.Sprint(i))
 	}
-	expectError(t, e.post("/chat/messages", map[string]any{"agent_id": agent.ID, "text": "hi"}), 429, "QUEUE_FULL")
+	expectError(t, e.post("/chat/messages", map[string]any{"group_id": e.direct(agent.ID), "text": "hi"}), 429, "QUEUE_FULL")
 }
 
 func TestEventsAreWrittenWithProjection(t *testing.T) {
@@ -430,25 +430,25 @@ func TestEventsAreWrittenWithProjection(t *testing.T) {
 		kinds = append(kinds, e.Type)
 		assertNoInternalFields(t, e.Payload)
 	}
-	if !slices.Equal(kinds, []string{"agent.updated", "message.updated", "message.updated", "agent.updated"}) {
+	if !slices.Equal(kinds, []string{"group.updated", "agent.updated", "message.updated", "message.updated", "agent.updated", "group.updated"}) {
 		t.Fatalf("events %v", kinds)
 	}
-	reply, _ := json.Marshal(sent.Reply)
-	stored, _ := json.Marshal(events[2].Payload["message"])
+	reply, _ := json.Marshal(sent.Replies[0])
+	stored, _ := json.Marshal(events[3].Payload["message"])
 	var a, b any
 	_ = json.Unmarshal(reply, &a)
 	_ = json.Unmarshal(stored, &b)
 	if !reflect.DeepEqual(a, b) {
 		t.Fatalf("stored %s, sent %s", stored, reply)
 	}
-	expect(t, events[3].Payload["agent"].(map[string]any)["status"], any("starting"))
+	expect(t, events[4].Payload["agent"].(map[string]any)["status"], any("starting"))
 }
 
 func TestClientChoosesTheMessageID(t *testing.T) {
 	e := newEnv(t)
 	agent := e.createAgent("开发助手")
 	id := "0b8f2a6c-58c4-4d1e-9a8e-2f0c1d3e4b5a"
-	body := map[string]any{"id": id, "agent_id": agent.ID, "text": "你好"}
+	body := map[string]any{"id": id, "group_id": e.direct(agent.ID), "text": "你好"}
 	r := e.post("/chat/messages", body, id)
 	expect(t, r.status, 202)
 	var sent chat.Sent
@@ -460,21 +460,21 @@ func TestClientChoosesTheMessageID(t *testing.T) {
 	expect(t, again.status, 202)
 	var replayed chat.Sent
 	again.json(t, &replayed)
-	expect(t, replayed.Reply.ID, sent.Reply.ID)
+	expect(t, replayed.Replies[0].ID, sent.Replies[0].ID)
 	expect(t, scalar[int](e, "SELECT count(*) FROM message WHERE role = 'user'"), 1)
-	expectError(t, e.post("/chat/messages", map[string]any{"id": "nope", "agent_id": agent.ID, "text": "你好"}), 422, "VALIDATION_ERROR")
+	expectError(t, e.post("/chat/messages", map[string]any{"id": "nope", "group_id": e.direct(agent.ID), "text": "你好"}), 422, "VALIDATION_ERROR")
 }
 
 func TestStopQueuedReplyCancels(t *testing.T) {
 	e := newEnv(t)
 	agent := e.createAgent("开发助手")
 	sent := e.send(agent.ID, "检查项目结构")
-	r := e.post("/chat/messages/"+sent.Reply.ID+"/stop", nil)
+	r := e.post("/chat/messages/"+sent.Replies[0].ID+"/stop", nil)
 	expect(t, r.status, 200)
 	expect(t, r.m(t)["status"], any("stopped"))
 	expect(t, scalar[string](e, "SELECT status FROM agent_command"), "cancelled")
 	// Repeating is a no-op with a fresh key.
-	expect(t, string(e.post("/chat/messages/"+sent.Reply.ID+"/stop", nil).body), string(r.body))
+	expect(t, string(e.post("/chat/messages/"+sent.Replies[0].ID+"/stop", nil).body), string(r.body))
 	expect(t, e.agentStatus(), "idle")
 }
 
@@ -490,11 +490,11 @@ func TestStopTargetsOnlyThatReply(t *testing.T) {
 	agent := e.createAgent("开发助手")
 	sent := e.send(agent.ID, "a")
 	second := e.send(agent.ID, "b")
-	e.post("/chat/messages/"+sent.Reply.ID+"/stop", nil)
+	e.post("/chat/messages/"+sent.Replies[0].ID+"/stop", nil)
 	var page chat.MessagePage
-	e.get("/agents/"+agent.ID+"/messages").json(t, &page)
+	e.get("/groups/"+e.direct(agent.ID)+"/messages").json(t, &page)
 	for _, m := range page.Items {
-		if m.ID == second.Reply.ID {
+		if m.ID == second.Replies[0].ID {
 			expect(t, m.Status, "queued")
 		}
 	}
@@ -545,10 +545,10 @@ func TestStreamResumesFromLastEventID(t *testing.T) {
 			ids = append(ids, id)
 		}
 	}
-	expect(t, len(ids), 4) // the agent, then the send's three
+	expect(t, len(ids), 6) // group, agent and the send
 	seq, _ := chat.Cursors{Secret: e.secret}.DecodeEvent(ids[1])
 	rest := drain(t, e, seq, streamOptions{})
-	expect(t, strings.Count(rest, "event: "), 2)
+	expect(t, strings.Count(rest, "event: "), 4)
 	if strings.Contains(rest, ": heartbeat") {
 		t.Fatal("heartbeat")
 	}
@@ -623,8 +623,8 @@ func TestPublicSchemaHasNoInternalFields(t *testing.T) {
 	}
 	slices.Sort(paths)
 	want := []string{
-		"/api/v1/agents", "/api/v1/agents/{agent_id}", "/api/v1/agents/{agent_id}/compact",
-		"/api/v1/agents/{agent_id}/messages", "/api/v1/agents/{agent_id}/restart", "/api/v1/artifacts",
+		"/api/v1/agents", "/api/v1/agents/{agent_id}",
+		"/api/v1/agents/{agent_id}/restart", "/api/v1/artifacts",
 		"/api/v1/artifacts/{artifact_id}", "/api/v1/artifacts/{artifact_id}/versions/{number}/share",
 		"/api/v1/bundles", "/api/v1/bundles/{name}", "/api/v1/bundles/{name}/config", "/api/v1/chat",
 		"/api/v1/chat/attachments/{attachment_id}",
@@ -633,9 +633,11 @@ func TestPublicSchemaHasNoInternalFields(t *testing.T) {
 		"/api/v1/computers/{computer_id}", "/api/v1/computers/{computer_id}/install",
 		"/api/v1/computers/{computer_id}/runtimes/{kind}/approve",
 		"/api/v1/computers/{computer_id}/runtimes/{kind}/places", "/api/v1/plugins",
+		"/api/v1/groups", "/api/v1/groups/{group_id}", "/api/v1/groups/{group_id}/compact", "/api/v1/groups/{group_id}/drafts/{message_id}/confirm", "/api/v1/groups/{group_id}/members/{agent_id}", "/api/v1/groups/{group_id}/messages", "/api/v1/groups/{group_id}/read", "/api/v1/groups/{group_id}/stop",
 		"/api/v1/tasks", "/api/v1/tasks/{task_id}", "/api/v1/tasks/{task_id}/assists", "/api/v1/tasks/{task_id}/assists/{item_id}/cancel", "/api/v1/tasks/{task_id}/comments", "/api/v1/tasks/{task_id}/loops/{item_id}/resume", "/api/v1/tasks/{task_id}/loops/{item_id}/stop",
 		"/api/v1/tasks/{task_id}/runs/{run_id}/interrupt", "/api/v1/tasks/{task_id}/runs/{run_id}/log",
 	}
+	slices.Sort(want)
 	if !slices.Equal(paths, want) {
 		t.Fatalf("paths %v", paths)
 	}

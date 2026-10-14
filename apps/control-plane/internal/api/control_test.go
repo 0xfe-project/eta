@@ -61,7 +61,7 @@ func TestWorkWaitsForTheRuntimeToReportItself(t *testing.T) {
 	c.boot()
 	expect(t, c.prompted()[0], c.commandOf(sent))
 	body := c.runtimes.called("/prompt")[0]
-	expect(t, body["text"], any("你好"))
+	expect(t, strings.HasSuffix(body["text"].(string), "\n你好"), true)
 	expect(t, body["boot_id"], any(scalar[string](c.env, "SELECT boot_id::text FROM agent WHERE id = $1", c.agent.ID)))
 }
 
@@ -78,7 +78,7 @@ func TestATurnStreamsAndCompletes(t *testing.T) {
 	expect(t, c.replyStatus(sent), "completed")
 	expect(t, c.commandStatus(command), "succeeded")
 	expect(t, c.agentStatus(), "idle")
-	blocks := scalar[string](c.env, "SELECT content::text FROM message WHERE id = $1", sent.Reply.ID)
+	blocks := scalar[string](c.env, "SELECT content::text FROM message WHERE id = $1", sent.Replies[0].ID)
 	if !strings.Contains(blocks, "运行命令") || !strings.Contains(blocks, "完成。") {
 		t.Fatalf("blocks: %s", blocks)
 	}
@@ -160,11 +160,11 @@ func TestRedeliveredEventsAreImportedOnce(t *testing.T) {
 	c := newControl(t)
 	sent, r, command := c.running()
 	r.events(item(command, "id", "m1", "kind", "agent_message", "text", "一"))
-	revision := scalar[int64](c.env, "SELECT revision FROM message WHERE id = $1", sent.Reply.ID)
+	revision := scalar[int64](c.env, "SELECT revision FROM message WHERE id = $1", sent.Replies[0].ID)
 	r.resend(chat.RuntimeEvent{BootID: r.boot, Seq: r.seq, Type: "item.updated", Payload: map[string]any{
 		"command_id": command, "item": map[string]any{"id": "m1", "kind": "agent_message", "text": "一"},
 	}})
-	expect(t, scalar[int64](c.env, "SELECT revision FROM message WHERE id = $1", sent.Reply.ID), revision)
+	expect(t, scalar[int64](c.env, "SELECT revision FROM message WHERE id = $1", sent.Replies[0].ID), revision)
 	expect(t, scalar[int](c.env, "SELECT count(*) FROM agent_event WHERE type = 'item.updated'"), 1)
 }
 
@@ -172,7 +172,7 @@ func TestEventsWithNULAreImported(t *testing.T) {
 	c := newControl(t)
 	sent, r, command := c.running()
 	r.events(item(command, "id", "x1", "kind", "command", "status", "completed", "input", "find . -print0", "output", "a\x00b"))
-	content := scalar[string](c.env, "SELECT content::text FROM message WHERE id = $1", sent.Reply.ID)
+	content := scalar[string](c.env, "SELECT content::text FROM message WHERE id = $1", sent.Replies[0].ID)
 	if !strings.Contains(content, `"output": "ab"`) {
 		t.Fatalf("content: %s", content)
 	}
@@ -183,7 +183,7 @@ func TestEventsWithNULAreImported(t *testing.T) {
 func TestStopQueuedReplyCancelsIt(t *testing.T) {
 	c := newControl(t)
 	sent := c.sendText("你好")
-	r := c.post("/chat/messages/"+sent.Reply.ID+"/stop", nil)
+	r := c.post("/chat/messages/"+sent.Replies[0].ID+"/stop", nil)
 	expect(t, r.status, 200)
 	expect(t, c.replyStatus(sent), "stopped")
 	c.boot()
@@ -193,7 +193,7 @@ func TestStopQueuedReplyCancelsIt(t *testing.T) {
 func TestStopAsksTheRuntimeAndItConfirms(t *testing.T) {
 	c := newControl(t)
 	sent, r, command := c.running()
-	expect(t, c.post("/chat/messages/"+sent.Reply.ID+"/stop", nil).status, 200)
+	expect(t, c.post("/chat/messages/"+sent.Replies[0].ID+"/stop", nil).status, 200)
 	expect(t, c.replyStatus(sent), "stopping")
 	c.controller.Dispatch(c.ctx, c.agent.ID)
 	aborts := c.runtimes.called("/abort")
@@ -211,7 +211,7 @@ func TestStopAsksTheRuntimeAndItConfirms(t *testing.T) {
 
 func steer(c *controlEnv, text string) chat.Sent {
 	c.t.Helper()
-	r := c.post("/chat/messages", map[string]any{"agent_id": c.agent.ID, "text": text, "mode": "steer"})
+	r := c.post("/chat/messages", map[string]any{"group_id": c.direct(c.agent.ID), "text": text, "mode": "steer"})
 	expect(c.t, r.status, 202)
 	var sent chat.Sent
 	r.json(c.t, &sent)
@@ -227,7 +227,7 @@ func TestSteerJoinsTheRunningTurn(t *testing.T) {
 	expect(t, len(steers), 1)
 	steerCommand := c.commandOf(sent)
 	expect(t, steers[0]["command_id"], any(steerCommand))
-	expect(t, steers[0]["text"], any("也看看测试"))
+	expect(t, strings.HasSuffix(steers[0]["text"].(string), "\n也看看测试"), true)
 	expect(t, c.commandStatus(steerCommand), "queued")
 	r.events(event{"turn.steered", map[string]any{"command_id": command, "steer_command_id": steerCommand, "turn_id": "turn-1"}})
 	expect(t, c.replyStatus(first), "completed")
@@ -268,7 +268,7 @@ func TestStoppingADeliveredSteerAsksTheRuntime(t *testing.T) {
 	c := newControl(t)
 	_, _, _ = c.running()
 	sent := steer(c, "也看看测试")
-	expect(t, c.post("/chat/messages/"+sent.Reply.ID+"/stop", nil).status, 200)
+	expect(t, c.post("/chat/messages/"+sent.Replies[0].ID+"/stop", nil).status, 200)
 	expect(t, c.replyStatus(sent), "stopping")
 	c.controller.Dispatch(c.ctx, c.agent.ID)
 	aborts := c.runtimes.called("/abort")
@@ -322,7 +322,7 @@ func TestChangingBundlesBuildsAnotherImage(t *testing.T) {
 	runs := c.driver.runsOf(c.agent.ID)
 	expect(t, len(runs), 2)
 	expect(t, runs[1].Image, builds[1])
-	if strings.Contains(c.driver.contexts[1], "bundles/memory") {
+	if !strings.Contains(c.driver.contexts[1], "bundles/memory") {
 		t.Fatalf("Dockerfile:\n%s", c.driver.contexts[1])
 	}
 }
@@ -417,7 +417,9 @@ func TestRuntimeAuthChecksTheRoutesPlugin(t *testing.T) {
 	key := auth.AgentKey(c.secret, c.agent.ID)
 	expect(t, runtimeAuth(c.env, key, "memory").status, 204)
 	expect(t, c.patch("/agents/"+c.agent.ID, map[string]any{"bundles": []string{"grok"}}).status, 200)
-	expectError(t, runtimeAuth(c.env, key, "memory"), 403, "PLUGIN_NOT_ENABLED")
+	expect(t, runtimeAuth(c.env, key, "memory").status, 204)
+	expect(t, runtimeAuth(c.env, key, "groups").status, 204)
+	expectError(t, runtimeAuth(c.env, key, "tasks"), 403, "PLUGIN_NOT_ENABLED")
 	expect(t, runtimeAuth(c.env, key, "grok").status, 204)
 }
 
@@ -494,7 +496,7 @@ func TestStoppingWhileWaitingForApprovalExpiresIt(t *testing.T) {
 	r.events(event{"approval.requested", map[string]any{
 		"approval_id": "sdk-1", "command_id": command, "kind": "command", "summary": map[string]any{"command": "ls"},
 	}})
-	expect(t, c.post("/chat/messages/"+sent.Reply.ID+"/stop", nil).status, 200)
+	expect(t, c.post("/chat/messages/"+sent.Replies[0].ID+"/stop", nil).status, 200)
 	expect(t, c.replyStatus(sent), "stopping")
 	expect(t, scalar[string](c.env, "SELECT status FROM interaction"), "expired")
 	c.wake()
@@ -520,7 +522,7 @@ func TestApprovalsOfAGoneBootExpire(t *testing.T) {
 
 func TestCompactRunsAsItsOwnCommand(t *testing.T) {
 	c := newControl(t)
-	r := c.post("/agents/"+c.agent.ID+"/compact", nil)
+	r := c.post("/groups/"+c.direct(c.agent.ID)+"/compact", map[string]any{})
 	expect(t, r.status, 202)
 	var sent chat.Sent
 	r.json(t, &sent)
@@ -535,5 +537,5 @@ func TestCompactRunsAsItsOwnCommand(t *testing.T) {
 	runtime.events(item(command, "id", "k1", "kind", "compaction"))
 	runtime.turnCompleted(command, "completed")
 	expect(t, c.replyStatus(sent), "completed")
-	expect(t, scalar[string](c.env, "SELECT content->0->>'label' FROM message WHERE id = $1", sent.Reply.ID), "压缩上下文")
+	expect(t, scalar[string](c.env, "SELECT content->0->>'label' FROM message WHERE id = $1", sent.Replies[0].ID), "压缩上下文")
 }

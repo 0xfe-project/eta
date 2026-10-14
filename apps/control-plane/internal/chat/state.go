@@ -66,6 +66,7 @@ func lockedDefault(ctx context.Context, tx pgx.Tx) (string, error) {
 // --- events (callers hold the conversation lock) ------------------------------
 
 const (
+	EventGroupUpdated       = "group.updated"
 	EventAgentUpdated       = "agent.updated"
 	EventAgentDeleted       = "agent.deleted"
 	EventMessageUpdated     = "message.updated"
@@ -134,8 +135,8 @@ func saveMessage(ctx context.Context, tx pgx.Tx, m *messageRow) error {
 		content = []Block{}
 	}
 	if _, err := tx.Exec(ctx, `UPDATE message SET status = $2, content = $3, failure = $4,
-		revision = $5, updated_at = $6 WHERE id = $1`,
-		m.ID, m.Status, content, m.Failure, m.Revision, m.UpdatedAt); err != nil {
+		revision = $5, updated_at = $6, kind=$7, data=$8 WHERE id = $1`,
+		m.ID, m.Status, content, m.Failure, m.Revision, m.UpdatedAt, m.Kind, m.Data); err != nil {
 		return err
 	}
 	return emit(ctx, tx, m.ConversationID, EventMessageUpdated, MessageUpdated{m.public()})
@@ -282,6 +283,14 @@ func FinishCommand(ctx context.Context, tx pgx.Tx, command *CommandRecord, outco
 			r.Failure = &Failure{Code: code, Message: failures[code]}
 		}
 		if err := saveMessage(ctx, tx, r); err != nil {
+			return false, err
+		}
+	}
+	if r != nil && command.StartedAt != nil {
+		if _, err := tx.Exec(ctx, `UPDATE group_participant SET seen_seq=GREATEST(seen_seq,$3) WHERE group_id=$1 AND agent_id=$2`, command.GroupID, command.AgentID, r.Seq); err != nil {
+			return false, err
+		}
+		if err := touchGroup(ctx, tx, command.GroupID); err != nil {
 			return false, err
 		}
 	}

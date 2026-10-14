@@ -49,7 +49,7 @@ func (c *controlEnv) published() []chat.Message {
 func (c *controlEnv) stored(sent chat.Sent) (content string, revision int64) {
 	c.t.Helper()
 	if err := c.db.QueryRow(c.ctx, "SELECT content::text, revision FROM message WHERE id = $1",
-		sent.Reply.ID).Scan(&content, &revision); err != nil {
+		sent.Replies[0].ID).Scan(&content, &revision); err != nil {
 		c.t.Fatal(err)
 	}
 	return content, revision
@@ -171,8 +171,8 @@ func TestInterleavedRepliesKeepTheirOrder(t *testing.T) {
 		}
 	}
 	expect(t, fmt.Sprint(order), fmt.Sprint([]string{"responding 甲甲", "completed 甲甲", "responding 乙乙"}))
-	expect(t, scalar[string](c.env, "SELECT content->0->>'text' FROM message WHERE id = $1", sent.Reply.ID), "甲甲")
-	expect(t, scalar[string](c.env, "SELECT content->0->>'text' FROM message WHERE id = $1", steered.Reply.ID), "乙乙")
+	expect(t, scalar[string](c.env, "SELECT content->0->>'text' FROM message WHERE id = $1", sent.Replies[0].ID), "甲甲")
+	expect(t, scalar[string](c.env, "SELECT content->0->>'text' FROM message WHERE id = $1", steered.Replies[0].ID), "乙乙")
 }
 
 func TestResentBatchOfMergedUpdatesChangesNothing(t *testing.T) {
@@ -192,5 +192,5 @@ func TestResentBatchOfMergedUpdatesChangesNothing(t *testing.T) {
 	// Part of it again, then what follows: only the new events count.
 	r.resend(r.numbered(start+3, append(batch[3:], item(command, "id", "m1", "kind", "agent_message", "text", "完"))...)...)
 	expect(t, len(c.published()), updates+1)
-	expect(t, scalar[string](c.env, "SELECT content->1->>'text' FROM message WHERE id = $1", sent.Reply.ID), "完")
+	expect(t, scalar[string](c.env, "SELECT content->1->>'text' FROM message WHERE id = $1", sent.Replies[0].ID), "完")
 }

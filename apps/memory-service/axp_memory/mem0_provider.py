@@ -84,18 +84,39 @@ class Mem0Provider:
         # The model is set per extraction.
         self._extracting = threading.Lock()
 
-    def add(self, agent_id, messages, *, source, infer, model=None):
+    def add(
+        self,
+        agent_id,
+        messages,
+        *,
+        source,
+        infer,
+        model=None,
+        group_id=None,
+    ):
         if not infer:
-            return self._add(agent_id, messages, source, infer=False)
+            return self._add(
+                agent_id,
+                messages,
+                source,
+                infer=False,
+                group_id=group_id,
+            )
         with self._extracting:
             self.memory.llm.config.model = model
             token = _agent.set(agent_id)
             try:
-                return self._add(agent_id, messages, source, infer=True)
+                return self._add(
+                    agent_id,
+                    messages,
+                    source,
+                    infer=True,
+                    group_id=group_id,
+                )
             finally:
                 _agent.reset(token)
 
-    def _add(self, agent_id, messages, source, *, infer):
+    def _add(self, agent_id, messages, source, *, infer, group_id):
         # mem0 stamps created_at unless the metadata has it; stamping it here
         # lets the new memories carry it, which mem0's add result does not.
         created_at = datetime.now(UTC).isoformat()
@@ -103,24 +124,38 @@ class Mem0Provider:
             messages,
             user_id=agent_id,
             infer=infer,
-            metadata={"source": source, "created_at": created_at},
+            metadata={
+                "source": source,
+                "created_at": created_at,
+                **({"source_group_id": group_id} if group_id else {}),
+            },
         )
         return [
-            Memory(item["id"], item["memory"], created_at=created_at, source=source)
+            Memory(
+                item["id"],
+                item["memory"],
+                created_at=created_at,
+                source=source,
+                source_group_id=group_id,
+            )
             for item in result["results"]
         ]
 
-    def search(self, agent_id, query, limit, *, source=None):
+    def search(self, agent_id, query, limit, *, source=None, group_id=None):
         filters = {"user_id": agent_id}
         if source is not None:
             filters["source"] = source
+        if group_id is not None:
+            filters["source_group_id"] = group_id
         result = self.memory.search(query, top_k=limit, filters=filters)
         return [_memory(item) for item in result["results"]]
 
-    def list(self, agent_id, *, source=None):
+    def list(self, agent_id, *, source=None, group_id=None):
         filters = {"user_id": agent_id}
         if source is not None:
             filters["source"] = source
+        if group_id is not None:
+            filters["source_group_id"] = group_id
         result = self.memory.get_all(filters=filters, top_k=LIST_LIMIT)
         return [_memory(item) for item in result["results"]]
 
@@ -144,4 +179,5 @@ def _memory(item: dict) -> Memory:
         item.get("score"),
         item.get("created_at"),
         (item.get("metadata") or {}).get("source"),
+        (item.get("metadata") or {}).get("source_group_id"),
     )

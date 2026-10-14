@@ -39,6 +39,37 @@ async function render() {
   );
 }
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+it("updates source names from the group snapshot without rewriting memories", async () => {
+  await render();
+  const updateGroup = (name: string) =>
+    client.setQueryData(["chat"], {
+      agents: [{ id: "a", name: "助手" }],
+      groups: [{ id: "g", name }],
+      messages: [],
+      interactions: [],
+    });
+  await act(async () => {
+    client.setQueryData(
+      ["memory", "a", ""],
+      [{ id: "m", text: "独立数据库", source_group_id: "g" }],
+    );
+    updateGroup("原来的群名");
+    await pause(20);
+  });
+  expect(container.querySelector('a[href="/?group=g"]')?.textContent).toBe(
+    "原来的群名",
+  );
+  await act(async () => {
+    updateGroup("改名后的群");
+    await pause(20);
+  });
+  expect(container.querySelector('a[href="/?group=g"]')?.textContent).toBe(
+    "改名后的群",
+  );
+  expect(container.textContent).not.toContain("原来的群名");
+});
+
 async function choose(label: string) {
   const trigger = container.querySelector<HTMLButtonElement>(
     '[aria-label="记忆种类"]',

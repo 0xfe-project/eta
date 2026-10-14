@@ -9,7 +9,6 @@ import type { InitializeResponse } from "./protocol/InitializeResponse";
 import type { ServerNotification } from "./protocol/ServerNotification";
 import type { ServerRequest } from "./protocol/ServerRequest";
 import type { ThreadCompactStartResponse } from "./protocol/v2/ThreadCompactStartResponse";
-import type { ThreadListResponse } from "./protocol/v2/ThreadListResponse";
 import type { ThreadResumeResponse } from "./protocol/v2/ThreadResumeResponse";
 import type { ThreadStartResponse } from "./protocol/v2/ThreadStartResponse";
 import type { TurnInterruptResponse } from "./protocol/v2/TurnInterruptResponse";
@@ -27,7 +26,6 @@ export type Params<M extends Method> = Extract<
 /** What each request the runtime makes answers. */
 interface Results {
   initialize: InitializeResponse;
-  "thread/list": ThreadListResponse;
   "thread/start": ThreadStartResponse;
   "thread/resume": ThreadResumeResponse;
   "turn/start": TurnStartResponse;

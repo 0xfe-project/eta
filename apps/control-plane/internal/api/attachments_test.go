@@ -11,7 +11,7 @@ import (
 // attach uploads a file for a message to the agent.
 func (c *controlEnv) attach(agentID, name, contentType, data string) chat.Attachment {
 	c.t.Helper()
-	r := do(c.t, c.public, http.MethodPost, "/api/v1/agents/"+agentID+"/attachments?name="+name, data,
+	r := do(c.t, c.public, http.MethodPost, "/api/v1/groups/"+c.direct(agentID)+"/attachments?name="+name, data,
 		map[string]string{"Content-Type": contentType})
 	if r.status != 201 {
 		c.t.Fatalf("attach: %d %s", r.status, r.body)
@@ -38,7 +38,7 @@ func TestAMessageCarriesAttachmentsAmongItsText(t *testing.T) {
 	expect(t, store.keys("attachments/"), 2)
 
 	long := strings.Repeat("日志\n", 20_000)
-	r := c.post("/chat/messages", map[string]any{"agent_id": c.agent.ID, "parts": []map[string]any{
+	r := c.post("/chat/messages", map[string]any{"group_id": c.direct(c.agent.ID), "parts": []map[string]any{
 		{"type": "text", "text": "看图："},
 		{"type": "attachment", "attachment_id": shot.ID},
 		{"type": "text", "text": long},
@@ -58,8 +58,8 @@ func TestAMessageCarriesAttachmentsAmongItsText(t *testing.T) {
 	c.wake()
 	c.boot()
 	body := c.runtimes.called("/prompt")[0]
-	expect(t, body["text"], any("看图："+long))
-	parts := body["parts"].([]any)
+	expect(t, strings.HasSuffix(body["text"].(string), "\n看图："+long), true)
+	parts := body["parts"].([]any)[1:] // after the group header
 	expect(t, len(parts), 4)
 	expect(t, parts[1].(map[string]any)["id"], any(shot.ID))
 	expect(t, parts[1].(map[string]any)["content_type"], any("image/png"))
@@ -75,17 +75,17 @@ func TestARuntimeReadsOnlyItsOwnAgentsAttachments(t *testing.T) {
 	c, _ := newAttachmentEnv(t)
 	other := c.createAgent("另一个")
 	a := c.attach(c.agent.ID, "notes.txt", "text/plain", "hello")
-	own := do(t, c.internal, http.MethodGet, "/attachments/v1/"+a.ID, nil, map[string]string{"X-AXP-Agent-Id": c.agent.ID})
+	own := do(t, c.internal, http.MethodGet, "/attachments/v1/"+a.ID, nil, map[string]string{"X-AXP-Group-Id": c.direct(c.agent.ID)})
 	expect(t, own.status, 200)
 	expect(t, string(own.body), "hello")
 	expect(t, own.header.Get("X-Content-Type-Options"), "nosniff")
-	theirs := do(t, c.internal, http.MethodGet, "/attachments/v1/"+a.ID, nil, map[string]string{"X-AXP-Agent-Id": other.ID})
+	theirs := do(t, c.internal, http.MethodGet, "/attachments/v1/"+a.ID, nil, map[string]string{"X-AXP-Group-Id": c.direct(other.ID)})
 	expect(t, theirs.status, 404)
 	none := do(t, c.internal, http.MethodGet, "/attachments/v1/"+a.ID, nil, nil)
 	expect(t, none.status, 404)
 
 	// Nor can a message to another agent carry it.
-	r := c.post("/chat/messages", map[string]any{"agent_id": other.ID, "parts": []map[string]any{
+	r := c.post("/chat/messages", map[string]any{"group_id": c.direct(other.ID), "parts": []map[string]any{
 		{"type": "attachment", "attachment_id": a.ID},
 	}})
 	status, code := r.error()
@@ -111,7 +111,7 @@ func TestTheBrowserShowsDownloadsAndDropsAttachments(t *testing.T) {
 
 func TestAttachmentLimits(t *testing.T) {
 	c, store := newAttachmentEnv(t)
-	r := do(t, c.public, http.MethodPost, "/api/v1/agents/"+c.agent.ID+"/attachments?name=big.bin",
+	r := do(t, c.public, http.MethodPost, "/api/v1/groups/"+c.direct(c.agent.ID)+"/attachments?name=big.bin",
 		strings.Repeat("x", chat.MaxAttachmentBytes+1), map[string]string{"Content-Type": "application/octet-stream"})
 	status, code := r.error()
 	expect(t, status, 413)
@@ -122,18 +122,18 @@ func TestAttachmentLimits(t *testing.T) {
 	for range chat.MaxAttachments + 1 {
 		parts = append(parts, map[string]any{"type": "attachment", "attachment_id": c.attach(c.agent.ID, "f.txt", "text/plain", "x").ID})
 	}
-	status, code = c.post("/chat/messages", map[string]any{"agent_id": c.agent.ID, "parts": parts}).error()
+	status, code = c.post("/chat/messages", map[string]any{"group_id": c.direct(c.agent.ID), "parts": parts}).error()
 	expect(t, status, 422)
 	expect(t, code, "TOO_MANY_ATTACHMENTS")
 
 	// Text and parts at once, or nothing to send, are refused.
-	expect(t, c.post("/chat/messages", map[string]any{"agent_id": c.agent.ID, "text": "hi", "parts": parts[:1]}).status, 422)
-	expect(t, c.post("/chat/messages", map[string]any{"agent_id": c.agent.ID, "parts": []map[string]any{{"type": "text", "text": "  "}}}).status, 422)
+	expect(t, c.post("/chat/messages", map[string]any{"group_id": c.direct(c.agent.ID), "text": "hi", "parts": parts[:1]}).status, 422)
+	expect(t, c.post("/chat/messages", map[string]any{"group_id": c.direct(c.agent.ID), "parts": []map[string]any{{"type": "text", "text": "  "}}}).status, 422)
 }
 
 func TestAttachmentsNeedStorage(t *testing.T) {
 	c := newControl(t)
-	r := do(t, c.public, http.MethodPost, "/api/v1/agents/"+c.agent.ID+"/attachments?name=a.txt", "x", map[string]string{"Content-Type": "text/plain"})
+	r := do(t, c.public, http.MethodPost, "/api/v1/groups/"+c.direct(c.agent.ID)+"/attachments?name=a.txt", "x", map[string]string{"Content-Type": "text/plain"})
 	status, code := r.error()
 	expect(t, status, 503)
 	expect(t, code, "ATTACHMENTS_UNAVAILABLE")

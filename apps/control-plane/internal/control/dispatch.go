@@ -134,7 +134,7 @@ func (c *Controller) dispatch(ctx context.Context, agentID string) error {
 	if running != nil {
 		if running.CodexTurnID != nil {
 			for _, command := range waiting {
-				if command.Steer() {
+				if command.Steer() && command.GroupID == running.GroupID {
 					if err := c.steer(ctx, url, agent, command); err != nil {
 						return err
 					}
@@ -198,9 +198,12 @@ func (c *Controller) steer(ctx context.Context, url string, agent *chat.AgentRec
 		return nil
 	}
 	c.steers[command.ID] = true
-	a, err := c.call(ctx, url, agent.ID, "/steer", map[string]any{
-		"boot_id": *agent.BootID, "command_id": command.ID, "text": command.Text(), "parts": command.Parts(),
-	})
+	input, err := chat.RuntimeInput(ctx, c.DB, command)
+	if err != nil {
+		return err
+	}
+	input["boot_id"] = *agent.BootID
+	a, err := c.call(ctx, url, agent.ID, "/steer", input)
 	if err != nil {
 		delete(c.steers, command.ID)
 		return err
@@ -231,9 +234,12 @@ func (c *Controller) prompt(ctx context.Context, url string, agent *chat.AgentRe
 	if err != nil || !claimed {
 		return err
 	}
-	a, err := c.call(ctx, url, agent.ID, "/prompt", map[string]any{
-		"boot_id": *agent.BootID, "command_id": command.ID, "text": command.Text(), "parts": command.Parts(), "kind": command.Kind,
-	})
+	input, err := chat.RuntimeInput(ctx, c.DB, command)
+	var a *answer
+	if err == nil {
+		input["boot_id"] = *agent.BootID
+		a, err = c.call(ctx, url, agent.ID, "/prompt", input)
+	}
 	switch {
 	case err == nil && a.Accepted:
 		return nil
@@ -252,6 +258,9 @@ func (c *Controller) prompt(ctx context.Context, url string, agent *chat.AgentRe
 		code = "REPLY_INTERRUPTED"
 		c.abort(ctx, url, command)
 	} else {
+		if a.Code == "RECOVERY_RESUME_FAILED" {
+			code = "AGENT_RECOVERY_FAILED"
+		}
 		slog.WarnContext(ctx, "The runtime refused a command", "command", command.ID, "code", a.Code, "reason", a.Reason)
 	}
 	return c.inConversation(ctx, agent.ID, func(tx pgx.Tx) error {

@@ -6,6 +6,7 @@ import {
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
+import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { Inbox } from "./inbox";
@@ -19,6 +20,7 @@ const agent = (id: string, name: string) => ({ id, name });
 const interaction = (id: string, agentId: string, status = "pending") => ({
   id,
   agent_id: agentId,
+  group_id: `g-${agentId}`,
   message_id: `m-${id}`,
   kind: "choice",
   prompt: `tasks 请求确认\n${id}`,
@@ -37,12 +39,16 @@ async function render(snapshot: object) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity } },
   });
-  queryClient.setQueryData(["chat"], snapshot);
+  queryClient.setQueryData(["chat"], { groups: [], ...snapshot });
   queryClient.setQueryData(["tasks"], { tasks: [], assignees: [] });
   queryClient.setQueryData(["routines"], []);
   const router = createRouter({
     routeTree: createRootRoute({
-      component: () => <Inbox />,
+      component: () => (
+        <NuqsAdapter>
+          <Inbox />
+        </NuqsAdapter>
+      ),
     }),
     history: createMemoryHistory(),
   });
@@ -119,9 +125,9 @@ describe("Inbox", () => {
       agents: [agent("a1", "研究员"), agent("a2", "运维")],
       interactions: [interaction("i2", "a2")],
     });
-    await act(async () => button(container, "运维").click());
+    await act(async () => button(container, "运维 · 群聊").click());
     const state = useWorkspaceStore.getState();
-    expect(state.workspace.selectedAgentId).toBe("a2");
+    expect(window.location.pathname).toBe("/");
     expect(state.mobilePanel).toBe("chat");
   });
 });

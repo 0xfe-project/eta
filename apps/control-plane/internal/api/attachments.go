@@ -55,8 +55,8 @@ type AttachmentPath struct {
 func registerAttachments(api *httpapi.API, d *Deps) {
 	s := d.Chat
 	// The body is the file itself, streamed to storage.
-	api.Router.Post("/api/v1/agents/{agent_id}/attachments", func(w http.ResponseWriter, r *http.Request) {
-		a, err := s.AddAttachment(r.Context(), d.DB, chi.URLParam(r, "agent_id"),
+	api.Router.Post("/api/v1/groups/{group_id}/attachments", func(w http.ResponseWriter, r *http.Request) {
+		a, err := s.AddAttachment(r.Context(), d.DB, chi.URLParam(r, "group_id"),
 			r.URL.Query().Get("name"), r.Header.Get("Content-Type"), r.ContentLength, r.Body)
 		if err != nil {
 			httpapi.WriteError(w, r, err)
@@ -85,12 +85,12 @@ func registerAttachments(api *httpapi.API, d *Deps) {
 // agent; the runtime gateway passes on the agent whose key it checked.
 func agentAttachment(d *Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		agentID, ok := pg.ParseID(r.Header.Get("X-AXP-Agent-Id"))
+		groupID, ok := pg.ParseID(r.Header.Get("X-AXP-Group-Id"))
 		if !ok {
 			httpapi.WriteError(w, r, apierr.NotFound())
 			return
 		}
-		a, rc, err := d.Chat.OpenAttachment(r.Context(), d.DB, chi.URLParam(r, "attachment_id"), agentID)
+		a, rc, err := d.Chat.OpenAttachment(r.Context(), d.DB, chi.URLParam(r, "attachment_id"), groupID)
 		if err != nil {
 			httpapi.WriteError(w, r, err)
 			return

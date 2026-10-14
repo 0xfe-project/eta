@@ -154,3 +154,8 @@ describe("task board with a task open", () => {
     expect(main.querySelector('[aria-current="true"]')).toBeNull();
   });
 });
+
+rstest.mock("./use-groups", () => ({
+  useGroups: () => ({ groups: [], current: undefined, groupId: null }),
+  useOpenGroup: () => () => {},
+}));

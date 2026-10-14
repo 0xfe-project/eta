@@ -47,7 +47,7 @@ type Attachment struct {
 
 type attachmentRow struct {
 	ID          string     `db:"id"`
-	AgentID     string     `db:"agent_id"`
+	GroupID     string     `db:"group_id"`
 	Name        string     `db:"name"`
 	ContentType string     `db:"content_type"`
 	Size        int64      `db:"size"`
@@ -64,7 +64,7 @@ func (r *attachmentRow) public() Attachment {
 type Part struct {
 	Type         string `json:"type" enum:"text,attachment"`
 	Text         string `json:"text,omitempty" doc:"A text part's text, verbatim."`
-	AttachmentID string `json:"attachment_id,omitempty" doc:"An attachment part's attachment, uploaded to the same agent."`
+	AttachmentID string `json:"attachment_id,omitempty" doc:"An attachment part's attachment, uploaded to the same group."`
 }
 
 func attachmentKey(id string) string { return "attachments/" + id }
@@ -119,23 +119,23 @@ func (c *counter) Read(p []byte) (int, error) {
 
 // AddAttachment stores a file for a message to the agent. size is -1 when
 // unknown; r is read up to just past MaxAttachmentBytes.
-func (s *Service) AddAttachment(ctx context.Context, db pg.DB, agentID, name, contentType string, size int64, r io.Reader) (*Attachment, error) {
+func (s *Service) AddAttachment(ctx context.Context, db pg.DB, groupID, name, contentType string, size int64, r io.Reader) (*Attachment, error) {
 	if s.Store == nil {
 		return nil, unavailable()
 	}
 	if size > MaxAttachmentBytes {
 		return nil, tooLarge()
 	}
-	id, ok := pg.ParseID(agentID)
+	id, ok := pg.ParseID(groupID)
 	if !ok {
 		return nil, apierr.NotFound()
 	}
-	if live, err := pg.Exists(ctx, db, "SELECT 1 FROM agent WHERE id = $1 AND deleted_at IS NULL", id); err != nil {
+	if live, err := pg.Exists(ctx, db, "SELECT 1 FROM chat_group WHERE id = $1 AND NOT archived", id); err != nil {
 		return nil, err
 	} else if !live {
 		return nil, apierr.NotFound()
 	}
-	row := &attachmentRow{ID: pg.NewID(), AgentID: id, Name: cleanName(name), ContentType: cleanType(contentType), CreatedAt: pg.Now()}
+	row := &attachmentRow{ID: pg.NewID(), GroupID: id, Name: cleanName(name), ContentType: cleanType(contentType), CreatedAt: pg.Now()}
 	body := &counter{r: io.LimitReader(r, MaxAttachmentBytes+1)}
 	if err := s.Store.Put(ctx, attachmentKey(row.ID), body, size, row.ContentType); err != nil {
 		return nil, apierr.Upstream("STORAGE_FAILED", "附件写入对象存储失败，请重试。")
@@ -145,8 +145,8 @@ func (s *Service) AddAttachment(ctx context.Context, db pg.DB, agentID, name, co
 		return nil, tooLarge()
 	}
 	row.Size = body.n
-	if _, err := db.Exec(ctx, `INSERT INTO chat_attachment (id, agent_id, name, content_type, size, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)`, row.ID, row.AgentID, row.Name, row.ContentType, row.Size, row.CreatedAt); err != nil {
+	if _, err := db.Exec(ctx, `INSERT INTO chat_attachment (id, group_id, name, content_type, size, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6)`, row.ID, row.GroupID, row.Name, row.ContentType, row.Size, row.CreatedAt); err != nil {
 		_ = s.Store.DeletePrefix(context.WithoutCancel(ctx), attachmentKey(row.ID))
 		return nil, err
 	}
@@ -158,9 +158,9 @@ func tooLarge() error {
 	return apierr.New(413, "ATTACHMENT_TOO_LARGE", "单个附件不能超过 20 MB。")
 }
 
-// OpenAttachment is the attachment's bytes. agentID, when not empty, is the
+// OpenAttachment is the attachment's bytes. groupID, when not empty, is the
 // only agent it may belong to (a runtime reading its own).
-func (s *Service) OpenAttachment(ctx context.Context, db pg.DB, id, agentID string) (*Attachment, io.ReadCloser, error) {
+func (s *Service) OpenAttachment(ctx context.Context, db pg.DB, id, groupID string) (*Attachment, io.ReadCloser, error) {
 	if s.Store == nil {
 		return nil, nil, unavailable()
 	}
@@ -168,7 +168,7 @@ func (s *Service) OpenAttachment(ctx context.Context, db pg.DB, id, agentID stri
 	if err != nil {
 		return nil, nil, err
 	}
-	if agentID != "" && row.AgentID != agentID {
+	if groupID != "" && row.GroupID != groupID {
 		return nil, nil, apierr.NotFound()
 	}
 	rc, _, err := s.Store.Get(ctx, attachmentKey(row.ID))
@@ -221,7 +221,7 @@ func findAttachment(ctx context.Context, db pg.DB, id string) (*attachmentRow, e
 // content is a message's parts as blocks, and as the command's input parts
 // (attachments with what the runtime needs to fetch and describe them). The
 // attachments must be the agent's; they are marked sent.
-func content(ctx context.Context, tx pgx.Tx, agentID string, parts []Part) ([]Block, []map[string]any, string, error) {
+func content(ctx context.Context, tx pgx.Tx, groupID string, parts []Part) ([]Block, []map[string]any, string, error) {
 	blocks := []Block{}
 	input := []map[string]any{}
 	var text strings.Builder
@@ -238,8 +238,8 @@ func content(ctx context.Context, tx pgx.Tx, agentID string, parts []Part) ([]Bl
 		case "attachment":
 			attached++
 			row, err := findAttachment(ctx, tx, p.AttachmentID)
-			if err != nil || row.AgentID != agentID {
-				return nil, nil, "", apierr.New(422, "ATTACHMENT_NOT_FOUND", "附件不存在或不属于这个智能体，请重新添加。")
+			if err != nil || row.GroupID != groupID {
+				return nil, nil, "", apierr.New(422, "ATTACHMENT_NOT_FOUND", "附件不存在或不属于这个群，请重新添加。")
 			}
 			if row.SentAt == nil {
 				if _, err := tx.Exec(ctx, "UPDATE chat_attachment SET sent_at = $2 WHERE id = $1", row.ID, pg.Now()); err != nil {

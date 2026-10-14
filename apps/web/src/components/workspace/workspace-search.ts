@@ -27,6 +27,7 @@ export const hasPage = (
  * chat (the agent is remembered in the browser, not in the URL).
  */
 export function useSectionLink() {
+  const [group] = useQueryState("group", parseAsString);
   const fullWindow = useLocation({
     select: (location) => location.pathname.startsWith("/workspace"),
   });
@@ -36,10 +37,14 @@ export function useSectionLink() {
   ) =>
     fullWindow
       ? ({ to: sectionPaths[view], search } as const)
-      : ({ to: "/", search: { view, ...search } } as const);
+      : ({
+          to: "/",
+          search: { group: group ?? undefined, view, ...search },
+        } as const);
 }
 
 export const views = [
+  { value: "group", label: "群" },
   { value: "overview", label: "概览" },
   { value: "tasks", label: "任务" },
   { value: "routines", label: "定时" },
@@ -47,6 +52,7 @@ export const views = [
 ] as const;
 
 const linkedViewParser = parseAsStringLiteral([
+  "group",
   "overview",
   "tasks",
   "routines",
@@ -55,16 +61,17 @@ const linkedViewParser = parseAsStringLiteral([
 // Any other view, like an old link to the memory tab the panel no longer
 // has, opens the overview rather than failing the route.
 const viewParser = createParser({
-  parse: (value) => linkedViewParser.parse(value) ?? "overview",
+  parse: (value) => linkedViewParser.parse(value) ?? "group",
   serialize: linkedViewParser.serialize,
 })
-  .withDefault("overview")
+  .withDefault("group")
   .withOptions({ history: "push" });
 export const validateWorkspaceSearch = createStandardSchemaV1(
   // The routines tab's place: a routine, one of its runs, or its editor;
   // the tasks tab's: a task or "new".
   {
     view: viewParser,
+    group: parseAsString,
     task: parseAsString,
     routine: parseAsString,
     run: parseAsString,
@@ -84,6 +91,6 @@ export function useShowLinkedView() {
   const [linked] = useQueryState("view", linkedViewParser);
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
   useEffect(() => {
-    if (linked) setMobilePanel("workspace");
+    if (linked && linked !== "group") setMobilePanel("workspace");
   }, [linked, setMobilePanel]);
 }

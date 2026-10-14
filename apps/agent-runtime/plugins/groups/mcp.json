@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "groups": {
+      "url": "${AXP_GATEWAY_URL}/groups/mcp",
+      "headers": { "Authorization": "Bearer ${AXP_AGENT_KEY}" }
+    }
+  }
+}

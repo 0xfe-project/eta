@@ -347,3 +347,8 @@ describe("请 Agent 协助", () => {
     expect(dialog.querySelector("#assist-request")).toBeNull();
   });
 });
+
+rstest.mock("./use-groups", () => ({
+  useGroups: () => ({ groups: [], current: undefined, groupId: null }),
+  useOpenGroup: () => () => {},
+}));

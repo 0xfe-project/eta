@@ -27,6 +27,7 @@ import (
 )
 
 type Bundle struct {
+	Required    bool   `json:"required" doc:"Built in and always loaded; cannot be disabled."`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	// Built in: part of AXP, read only.
@@ -160,6 +161,11 @@ func (c *Catalog) Choose(ctx context.Context, db pg.DB, names []string) (chosen,
 			if b.Builtin {
 				names = append(names, b.Name)
 			}
+		}
+	}
+	for _, b := range all {
+		if b.Required && !slices.Contains(names, b.Name) {
+			names = append(names, b.Name)
 		}
 	}
 	var unknown []string
