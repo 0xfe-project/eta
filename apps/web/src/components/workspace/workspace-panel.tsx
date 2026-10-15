@@ -1,5 +1,7 @@
 import type { WorkspaceView } from "./types";
 import { ArrowsOutIcon } from "@phosphor-icons/react/ArrowsOut";
+import { SidebarSimpleIcon } from "@phosphor-icons/react/SidebarSimple";
+import { XIcon } from "@phosphor-icons/react/X";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -48,10 +50,16 @@ export function WorkspacePanel({
   view: linked,
   onViewChange,
   className,
+  onClose,
+  onCollapse,
 }: {
   view: WorkspaceView;
   onViewChange: (view: WorkspaceView) => void;
   className?: string;
+  /** Closes the drawer it is between md and lg. */
+  onClose?: () => void;
+  /** Folds it away from lg up. */
+  onCollapse?: () => void;
 }) {
   const pending = useAttention().total;
   const tabs = usePanelViews();
@@ -92,6 +100,30 @@ export function WorkspacePanel({
           {/* Phones keep theirs in the panel switcher above. */}
           <SettingsButton className="hidden md:inline-flex" />
           <FullWindowButton view={view} />
+          {onClose ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="关闭工作区"
+              title="关闭"
+              className="hidden md:max-lg:inline-flex"
+              onClick={onClose}
+            >
+              <XIcon aria-hidden="true" />
+            </Button>
+          ) : null}
+          {onCollapse ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="收起工作区"
+              title="收起"
+              className="hidden lg:inline-flex"
+              onClick={onCollapse}
+            >
+              <SidebarSimpleIcon aria-hidden="true" className="-scale-x-100" />
+            </Button>
+          ) : null}
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">

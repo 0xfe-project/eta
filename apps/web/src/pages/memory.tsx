@@ -8,7 +8,7 @@ export function MemoryPage() {
     <>
       <PageHeader title="记忆" />
       <main id="main" className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
+        <div className="mx-auto max-w-content px-4 py-6 sm:px-6">
           <MemoryView
             agentId={agentId ?? undefined}
             onAgentChange={(id) => void setAgentId(id)}
