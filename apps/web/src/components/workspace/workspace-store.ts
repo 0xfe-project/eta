@@ -4,7 +4,7 @@ import { z } from "zod";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-const storageKey = "axp.workspace.v1";
+export const storageKey = "axp.workspace.v1";
 
 // Local UI state only; everything else lives in the control plane. Zod
 // drops fields this schema does not have.
@@ -19,6 +19,8 @@ const workspaceSchema = z.object({
   // The task page as last left: rows or a board, and whose tasks.
   taskLayout: z.enum(["list", "board"]).optional(),
   taskScope: z.enum(["all", "user", "remote"]).optional(),
+  // 圈选元素 (lib/element-picker.ts); unset follows the build.
+  reactGrab: z.boolean().optional(),
 });
 
 export type WorkspaceState = z.infer<typeof workspaceSchema>;

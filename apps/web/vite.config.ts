@@ -1,3 +1,4 @@
+import { dirname, relative, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
@@ -28,6 +29,8 @@ function vendorGroups() {
   }));
 }
 
+const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+
 // One per build, shared by its browser and server code (routes/version.ts).
 // The config is evaluated once per environment, so it is kept in the process.
 const build = (process.env.AXP_WEB_BUILD ||= Date.now().toString(36));
@@ -47,6 +50,10 @@ export default defineConfig(({ mode }) => {
     environments: {
       client: {
         build: {
+          // Public, so React Grab (圈选元素, lib/element-picker.ts) can map the
+          // production bundle back to source files and component names.
+          // Browser only: the server bundles get none.
+          sourcemap: true,
           rolldownOptions: {
             output: {
               codeSplitting: {
@@ -56,6 +63,12 @@ export default defineConfig(({ mode }) => {
                 includeDependenciesRecursively: false,
                 groups: vendorGroups(),
               },
+              // apps/web/src/… rather than ../../../src/…, as copied by React
+              // Grab.
+              sourcemapPathTransform: (source, map) =>
+                relative(repoRoot, resolve(dirname(map), source)),
+              // Component names survive minification, for the same copy.
+              keepNames: true,
             },
           },
         },
