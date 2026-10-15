@@ -51,6 +51,16 @@ export function Workspace({
 }) {
   const mobilePanel = useWorkspaceStore((s) => s.mobilePanel);
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
+  const showPanel = useWorkspaceStore((s) => s.showPanel);
+  // Wide screens can fold the panel away; remembered in this browser.
+  const collapsed = useWorkspaceStore(
+    (s) => s.workspace.panelCollapsed ?? false,
+  );
+  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
+  const collapse = () => {
+    setMobilePanel("chat");
+    setWorkspace((workspace) => ({ ...workspace, panelCollapsed: true }));
+  };
   const navigate = useNavigate();
   useShowLinkedView();
   const chat = useQuery(chatQueryOptions());
@@ -109,7 +119,7 @@ export function Workspace({
           label: "查看群信息",
           onClick: () => {
             onViewChange("members");
-            setMobilePanel("workspace");
+            showPanel();
           },
         },
       ]}
@@ -142,7 +152,7 @@ export function Workspace({
   const showInfo = () => {
     if (direct) return openEditor(direct.agent_id);
     onViewChange("members");
-    setMobilePanel("workspace");
+    showPanel();
   };
   // Between md and lg the panel is a drawer over the chat, open while
   // mobilePanel is "workspace"; Escape closes it unless a menu or dialog
@@ -212,11 +222,16 @@ export function Workspace({
         </header>
         <main
           id="main"
-          className="isolate grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]"
+          className={cn(
+            "isolate grid min-h-0 flex-1 gap-3",
+            !collapsed && "lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]",
+          )}
         >
+          {/* The chat alone stops at the content width; the panel beside it
+              keeps its own. */}
           <div
             className={cn(
-              "relative min-h-0 min-w-0 md:px-3",
+              "relative mx-auto min-h-0 w-full max-w-content min-w-0 md:px-3",
               mobilePanel === "workspace" && "hidden md:block",
             )}
           >
@@ -225,8 +240,11 @@ export function Workspace({
               variant="outline"
               aria-label="打开工作区"
               title="工作区"
-              className="absolute top-3 right-3 z-10 hidden bg-background shadow-sm md:max-lg:inline-flex"
-              onClick={() => setMobilePanel("workspace")}
+              className={cn(
+                "absolute top-3 right-3 z-10 hidden bg-background shadow-sm",
+                collapsed ? "md:inline-flex" : "md:max-lg:inline-flex",
+              )}
+              onClick={showPanel}
             >
               <SidebarSimpleIcon aria-hidden="true" className="-scale-x-100" />
             </Button>
@@ -343,11 +361,13 @@ export function Workspace({
             view={view}
             onViewChange={onViewChange}
             onClose={() => setMobilePanel("chat")}
-            className={
+            onCollapse={collapse}
+            className={cn(
               drawerOpen
                 ? "md:max-lg:fixed md:max-lg:inset-y-0 md:max-lg:right-0 md:max-lg:z-50 md:max-lg:w-[min(28rem,calc(100vw-3rem))] md:max-lg:border-y-0 md:max-lg:border-r-0 md:max-lg:animate-in md:max-lg:duration-200 md:max-lg:slide-in-from-right"
-                : "hidden lg:flex"
-            }
+                : "hidden lg:flex",
+              collapsed && "lg:hidden",
+            )}
           />
         </main>
       </div>

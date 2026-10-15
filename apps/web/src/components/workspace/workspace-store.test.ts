@@ -35,6 +35,17 @@ describe("workspace store persistence", () => {
     expect(useWorkspaceStore.getState().workspace).toMatchObject(page);
   });
 
+  it("remembers a folded side panel until something shows it", async () => {
+    localStorage.setItem(key, JSON.stringify({ panelCollapsed: true }));
+    await useWorkspaceStore.persist.rehydrate();
+    expect(useWorkspaceStore.getState().workspace.panelCollapsed).toBe(true);
+    useWorkspaceStore.getState().showPanel();
+    expect(useWorkspaceStore.getState().mobilePanel).toBe("workspace");
+    expect(JSON.parse(localStorage.getItem(key)!)).toEqual({
+      panelCollapsed: false,
+    });
+  });
+
   it("saves the bare workspace object, not other UI state", () => {
     const { setWorkspace, setMobilePanel } = useWorkspaceStore.getState();
     setWorkspace((w) => ({ ...w, selectedAgentId: "a1" }));
