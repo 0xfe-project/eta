@@ -160,8 +160,7 @@ function AppearanceSettings() {
             圈选元素
           </label>
           <p id="react-grab-hint" className="text-muted-foreground">
-            打开后可以圈选元素并复制组件和源码位置；生产环境靠源码映射定位，不是
-            React 开发模式。
+            打开后可以圈选元素并复制组件和源码位置。
           </p>
         </div>
         <Switch
