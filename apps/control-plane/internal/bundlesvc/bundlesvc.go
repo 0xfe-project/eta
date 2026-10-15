@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -66,10 +67,12 @@ type Reconciler struct {
 	// The control plane's database, whose server bundles' databases are on.
 	DatabaseURL string
 	Secret      []byte
-	// Where the service reaches AXP (the runtime gateway) and the
-	// OpenTelemetry Collector, which holds the credentials; where users
+	// Where the service reaches AXP (the runtime gateway); where users
 	// reach AXP (empty when they reach it only at the browser's address).
-	GatewayURL, OTLPURL, PublicURL string
+	GatewayURL, PublicURL string
+	// The control plane's own DSN (empty: nothing is sent), whose project
+	// services report to through the runtime gateway's /sentry.
+	SentryDSN string
 	// AXP's own images (named axp-*) come from Registry, at ImageTag.
 	Registry, ImageTag string
 	HTTP               *http.Client
@@ -157,15 +160,18 @@ func (r *Reconciler) sync(ctx context.Context, b bundles.Bundle, config map[stri
 }
 
 // environment is what AXP gives the service, in the Secret axp-<bundle>:
-// where AXP and the collector are, a secret of its own, its token when it
-// uses AXP, its database, and the bundle's configuration once complete.
+// where AXP is, where to report errors and logs, a secret of its own, its
+// token when it uses AXP, its database, and the bundle's configuration once
+// complete.
 func (r *Reconciler) environment(ctx context.Context, b bundles.Bundle, config map[string]string) (map[string]string, error) {
 	env := map[string]string{
-		"AXP_GATEWAY_URL":             r.GatewayURL,
-		"AXP_BUNDLE_SECRET":           auth.BundleSecret(r.Secret, b.Name),
-		"OTEL_EXPORTER_OTLP_ENDPOINT": r.OTLPURL,
-		"AXP_PUBLIC_URL":              r.PublicURL,
-		"AXP_VERSION":                 r.ImageTag,
+		"AXP_GATEWAY_URL":   r.GatewayURL,
+		"AXP_BUNDLE_SECRET": auth.BundleSecret(r.Secret, b.Name),
+		"AXP_PUBLIC_URL":    r.PublicURL,
+		"AXP_VERSION":       r.ImageTag,
+	}
+	if dsn := gatewayDSN(r.SentryDSN, r.GatewayURL); dsn != "" {
+		env["SENTRY_DSN"] = dsn
 	}
 	if len(b.Service.Uses) > 0 {
 		env["AXP_BUNDLE_TOKEN"] = auth.BundleToken(r.Secret, b.Name)
@@ -432,4 +438,17 @@ func ignoreNotFound(err error) error {
 		return nil
 	}
 	return err
+}
+
+// gatewayDSN is dsn (http://key@rustrak:8080/1) at the runtime gateway, which
+// passes only Sentry's envelopes on (http://key@runtime-gateway:8090/sentry/1):
+// services reach nothing else of AXP's, and hold no credentials that could.
+func gatewayDSN(dsn, gateway string) string {
+	d, err := url.Parse(dsn)
+	g, gerr := url.Parse(gateway)
+	if dsn == "" || err != nil || gerr != nil {
+		return ""
+	}
+	d.Scheme, d.Host, d.Path = g.Scheme, g.Host, "/sentry"+d.Path
+	return d.String()
 }

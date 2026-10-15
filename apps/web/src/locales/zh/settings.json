@@ -12,11 +12,7 @@
     "elementPickerHint": "打开后可以圈选元素并复制组件和源码位置。"
   },
   "sections": {
-    "logs": "日志",
     "appearance": "外观"
-  },
-  "logs": {
-    "signInAccount": "登录账号 root@axp.local"
   },
   "accessibility": {
     "needsAttention": "设置（有账号需要处理）",

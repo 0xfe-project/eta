@@ -25,7 +25,6 @@ spec:
             - { name: AXP_GATEWAY_SITES, value: public.caddy }
             - { name: AXP_GATEWAY_BIND, value: 127.0.0.1 }
             - { name: AXP_GATEWAY_PORT, value: "24180" }
-            - { name: AXP_UPSTREAM_OBSERVE, value: "openobserve:5080" }
           readinessProbe:
             httpGet: { host: 127.0.0.1, path: /up, port: 24180 }
             periodSeconds: 2
@@ -60,7 +59,7 @@ spec:
   ports: [{ port: 8090 }]
 ---
 # Agents' runtimes and bundles' services reach the runtime gateway (and,
-# deploy/k3s/infra/policies.yaml, NATS and the collector).
+# deploy/k3s/infra/policies.yaml, NATS).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

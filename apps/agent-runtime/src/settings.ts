@@ -88,41 +88,18 @@ const config = (key: string, value: unknown): string[] => [
 ];
 
 /**
- * Codex's own OpenTelemetry export, to the runtime's OTLP endpoint (the
- * collector, which holds the credentials). Codex reads
- * OTEL_RESOURCE_ATTRIBUTES itself, so its records name the agent.
+ * Codex's own OpenTelemetry export (logs with prompts, traces, metrics) is
+ * off: AXP reports through Sentry, which Codex does not speak, and keeps no
+ * collector for it. Set explicitly, so a default (metrics) never leaves.
  */
-function telemetry(env: NodeJS.ProcessEnv): string[] {
-  const endpoint = (env.OTEL_EXPORTER_OTLP_ENDPOINT ?? "").replace(/\/+$/, "");
-  if (endpoint === "") {
-    return [];
-  }
-  const exporter = (signal: string) => ({
-    "otlp-http": { endpoint: `${endpoint}/v1/${signal}`, protocol: "binary" },
-  });
-  const attributes = Object.fromEntries(
-    (env.OTEL_RESOURCE_ATTRIBUTES ?? "")
-      .split(",")
-      .filter((item) => item.includes("="))
-      .map((item) => item.split("=", 2)),
-  );
-  return [
-    ...config(
-      "otel.environment",
-      attributes["deployment.environment.name"] ?? "dev",
-    ),
-    ...config("otel.log_user_prompt", true),
-    ...config("otel.exporter", exporter("logs")),
-    ...config("otel.trace_exporter", exporter("traces")),
-    ...config("otel.metrics_exporter", exporter("metrics")),
-  ];
-}
+const telemetry = [
+  ...config("otel.exporter", "none"),
+  ...config("otel.trace_exporter", "none"),
+  ...config("otel.metrics_exporter", "none"),
+];
 
 /** Codex's model provider and telemetry, as app-server command-line overrides. */
-export function codexArgs(
-  s: Settings,
-  env: NodeJS.ProcessEnv = process.env,
-): string[] {
+export function codexArgs(s: Settings): string[] {
   return [
     ...config("model_provider", "axp"),
     ...config("model_providers.axp.name", "AXP"),
@@ -132,6 +109,6 @@ export function codexArgs(
     ...(s.contextWindow === undefined
       ? []
       : config("model_context_window", s.contextWindow)),
-    ...telemetry(env),
+    ...telemetry,
   ];
 }

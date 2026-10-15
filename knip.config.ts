@@ -19,9 +19,14 @@ export default {
         .join("\n"),
   },
   workspaces: {
-    // Plugins' scripts run in agents' images.
+    // Plugins' scripts run in agents' images; scripts/dev.sh and
+    // deploy/k3s/deploy.sh run rustrak.ts by path.
     ".": {
-      entry: ["plugins/*/hooks/*.mjs", "plugins/*/server.mjs"],
+      entry: [
+        "plugins/*/hooks/*.mjs",
+        "plugins/*/server.mjs",
+        "deploy/k3s/rustrak.ts",
+      ],
     },
     "apps/agent-runtime": {
       // The runtime is bundled from main.ts.

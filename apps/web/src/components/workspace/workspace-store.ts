@@ -34,8 +34,7 @@ export type SettingsSection =
   | "connections"
   | "computers"
   | "archived"
-  | "appearance"
-  | "logs";
+  | "appearance";
 interface SettingsState {
   open: boolean;
   section: SettingsSection;

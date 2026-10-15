@@ -25,6 +25,8 @@ import (
 	"github.com/akarachen/axp/packages/service-go/apierr"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
+	"github.com/getsentry/sentry-go"
+	sentryhttp "github.com/getsentry/sentry-go/http"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
@@ -63,7 +65,7 @@ type API struct {
 // New is an API with no operations yet.
 func New(c Config) *API {
 	r := chi.NewRouter()
-	r.Use(requests, middleware.Recoverer)
+	r.Use(requests, middleware.Recoverer, traces.Handle, routeName)
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) { writeJSON(w, newError(r.Context(), 404, "")) })
 	r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) { writeJSON(w, newError(r.Context(), 405, "")) })
 	return &API{API: humachi.New(r, humaConfig(c)), Router: r}
@@ -132,6 +134,23 @@ func requests(next http.Handler) http.Handler {
 		}
 		w.Header().Set("X-Request-ID", id)
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestKey{}, request{id, r})))
+	})
+}
+
+// traces makes each request a Sentry transaction and reports its panic
+// before Recoverer answers 500 (a no-op without SENTRY_DSN).
+var traces = sentryhttp.New(sentryhttp.Options{Repanic: true})
+
+// routeName names the request's transaction by its route (GET
+// /api/agents/{id}), not its path, once chi has routed it.
+func routeName(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r)
+		if tx := sentry.TransactionFromContext(r.Context()); tx != nil {
+			if pattern := chi.RouteContext(r.Context()).RoutePattern(); pattern != "" {
+				tx.Name, tx.Source = r.Method+" "+pattern, sentry.SourceRoute
+			}
+		}
 	})
 }
 

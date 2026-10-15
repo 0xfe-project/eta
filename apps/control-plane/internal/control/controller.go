@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -51,11 +50,9 @@ type Controller struct {
 	Secret  []byte
 	// The plugins bundles name (the repository's plugins/).
 	PluginsDir string
-	// Where runtimes reach AXP's services (the runtime gateway), NATS and
-	// the OpenTelemetry Collector (which holds the credentials).
+	// Where runtimes reach AXP's services (the runtime gateway) and NATS.
 	RuntimeGatewayURL string
 	NATSURL           string
-	OTLPURL           string
 	// Calls to runtimes' control API.
 	HTTP *http.Client
 	// Wakes the loop for an agent, when a build finishes.
@@ -355,11 +352,6 @@ func (c *Controller) spec(ctx context.Context, agent *chat.AgentRecord, img imag
 		"AXP_INSTRUCTIONS":  instructions(agent),
 		// A restart replaces the container even when nothing else changed.
 		"AXP_CONFIG_VERSION": fmt.Sprint(agent.ConfigVersion),
-		// The runtime and Codex export without credentials; the collector
-		// holds them. Resource attributes tie records to the agent.
-		"OTEL_EXPORTER_OTLP_ENDPOINT": c.OTLPURL,
-		"OTEL_SERVICE_NAME":           "agent-runtime",
-		"OTEL_RESOURCE_ATTRIBUTES":    resourceAttributes("axp.agent.id=" + agent.ID),
 	} {
 		env[k] = v
 	}
@@ -377,13 +369,4 @@ func (c *Controller) spec(ctx context.Context, agent *chat.AgentRecord, img imag
 		fmt.Fprintf(h, "%s=%s\n", k, env[k])
 	}
 	return container.Spec{AgentID: agent.ID, Image: image, Env: env, Config: hex.EncodeToString(h.Sum(nil))[:24]}
-}
-
-// resourceAttributes is OTEL_RESOURCE_ATTRIBUTES for a runtime: this
-// process's, then attrs.
-func resourceAttributes(attrs ...string) string {
-	if own := os.Getenv("OTEL_RESOURCE_ATTRIBUTES"); own != "" {
-		attrs = append([]string{own}, attrs...)
-	}
-	return strings.Join(attrs, ",")
 }

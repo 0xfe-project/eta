@@ -6,9 +6,10 @@ usage() {
 Usage: deploy/k3s/deploy.sh [--version TAG]
 
 Deploys the working tree to the k3s cluster on this machine (deploy/k3s/README.md):
-the infrastructure, AXP's images built by the cluster's BuildKit, the
-database migrations, then AXP itself. With --version it deploys images
-already in the registry (a rollback): nothing is built or migrated.
+the infrastructure, AXP's images built by the cluster's BuildKit (and the
+web's source maps, uploaded to Rustrak), the database migrations, then AXP
+itself. With --version it deploys images already in the registry (a
+rollback): nothing is built or migrated.
 
 Needs k3s (with /etc/rancher/k3s/registries.yaml), bun, git and openssl.
 Settings and secrets live in ~/.config/axp/production.env (generated once).
@@ -49,32 +50,26 @@ ensure() {
 }
 ensure AXP_SECRET_KEY "$(openssl rand -hex 32)"
 ensure POSTGRES_PASSWORD "$(openssl rand -hex 24)"
-# OpenObserve wants upper and lower case letters, a digit and a symbol.
-ensure AXP_OBSERVE_PASSWORD "Axp-$(openssl rand -hex 16)"
+ensure RUSTRAK_SESSION_SECRET_KEY "$(openssl rand -hex 32)"
+ensure RUSTRAK_SUPERUSER "admin@axp.local:$(openssl rand -hex 16)"
 ensure AXP_S3_ACCESS_KEY_ID "$(openssl rand -hex 12)"
 ensure AXP_S3_SECRET_ACCESS_KEY "$(openssl rand -hex 24)"
 set -a
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 set +a
-observe_basic="$(printf '%s' "root@axp.local:$AXP_OBSERVE_PASSWORD" | base64 -w0)"
 
 kubectl apply -f deploy/k3s/production/infra/namespace.yaml >/dev/null
 secret() {
   kubectl -n axp create secret generic "$1" "${@:2}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 }
-# The infrastructure's, and AXP's. An external S3 (AXP_S3_ENDPOINT) takes
-# its own credentials; the built-in one shares them.
+# The infrastructure's here, AXP's once Rustrak is up. An external S3
+# (AXP_S3_ENDPOINT) takes its own credentials; the built-in one shares them.
 secret infra --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
   --from-literal=AXP_S3_ACCESS_KEY_ID="$AXP_S3_ACCESS_KEY_ID" \
   --from-literal=AXP_S3_SECRET_ACCESS_KEY="$AXP_S3_SECRET_ACCESS_KEY" \
-  --from-literal=AXP_OBSERVE_PASSWORD="$AXP_OBSERVE_PASSWORD" \
-  --from-literal=OPENOBSERVE_AUTHORIZATION="Basic $observe_basic"
-secret axp --from-literal=AXP_SECRET_KEY="$AXP_SECRET_KEY" \
-  --from-literal=DATABASE_URL="postgres://axp:$POSTGRES_PASSWORD@postgres.axp.svc.cluster.local:5432/axp" \
-  --from-literal=AXP_S3_ACCESS_KEY_ID="$AXP_S3_ACCESS_KEY_ID" \
-  --from-literal=AXP_S3_SECRET_ACCESS_KEY="$AXP_S3_SECRET_ACCESS_KEY" \
-  --from-literal=OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic%20$observe_basic"
+  --from-literal=RUSTRAK_SESSION_SECRET_KEY="$RUSTRAK_SESSION_SECRET_KEY" \
+  --from-literal=RUSTRAK_SUPERUSER="$RUSTRAK_SUPERUSER"
 
 # --- Infrastructure and images -------------------------------------------------
 if [[ -z "$version" ]]; then
@@ -84,8 +79,27 @@ fi
 # The infrastructure first: images are built by its BuildKit into its
 # registry.
 kubectl apply -k deploy/k3s/production/infra >/dev/null
-kubectl -n axp rollout status deploy/registry deploy/buildkitd deploy/postgres --timeout=5m >/dev/null
+kubectl -n axp rollout status deploy/registry deploy/buildkitd deploy/postgres deploy/rustrak --timeout=5m >/dev/null
 sed 's/NAMESPACE/axp/g' deploy/k3s/workloads.yaml | kubectl apply -f - >/dev/null
+# Rustrak replaced OpenObserve and the OpenTelemetry Collector (#141); the
+# volume openobserve stays, with the logs it holds.
+kubectl -n axp delete deploy/openobserve svc/openobserve deploy/otel-collector svc/otel-collector \
+  --ignore-not-found >/dev/null
+kubectl -n axp get configmap -o name | grep '^configmap/otel-collector-' | xargs -r kubectl -n axp delete >/dev/null
+
+# Rustrak's project for AXP, and a token for the web's source maps, once.
+export RUSTRAK_URL="http://$(kubectl -n axp get svc rustrak -o jsonpath='{.spec.clusterIP}'):8080"
+grep -q '^SENTRY_DSN=' "$ENV_FILE" || ensure SENTRY_DSN "$(bun deploy/k3s/rustrak.ts dsn)"
+grep -q '^RUSTRAK_TOKEN=' "$ENV_FILE" || ensure RUSTRAK_TOKEN "$(bun deploy/k3s/rustrak.ts token)"
+set -a
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+set +a
+secret axp --from-literal=AXP_SECRET_KEY="$AXP_SECRET_KEY" \
+  --from-literal=DATABASE_URL="postgres://axp:$POSTGRES_PASSWORD@postgres.axp.svc.cluster.local:5432/axp" \
+  --from-literal=AXP_S3_ACCESS_KEY_ID="$AXP_S3_ACCESS_KEY_ID" \
+  --from-literal=AXP_S3_SECRET_ACCESS_KEY="$AXP_S3_SECRET_ACCESS_KEY" \
+  --from-literal=SENTRY_DSN="$SENTRY_DSN"
 
 if ! curl -sfI "http://$REGISTRY/v2/axp/manifests/$version" >/dev/null 2>&1 || [[ "$version" == *-dirty-* ]]; then
   case "$(uname -m)" in
@@ -99,6 +113,12 @@ if ! curl -sfI "http://$REGISTRY/v2/axp/manifests/$version" >/dev/null 2>&1 || [
   build @axp/agent-runtime "axp-agent-runtime:production"
   build @axp/memory-service "axp-memory:$version"
   build @axp/agenvo "axp-relay:$version"
+  # Rustrak maps the browser's minified stacks back to the source with these
+  # (by the debug ids the build gave each file). Errors still arrive
+  # without them.
+  SENTRY_URL="$RUSTRAK_URL" SENTRY_AUTH_TOKEN="$RUSTRAK_TOKEN" SENTRY_ORG=axp SENTRY_PROJECT=axp \
+    bun run --cwd apps/web sourcemaps:upload >/dev/null ||
+    echo "deploy: the web's source maps were not uploaded to Rustrak." >&2
 fi
 
 # --- AXP ---------------------------------------------------------------------------
@@ -108,8 +128,7 @@ kubectl -n axp create configmap axp --dry-run=client -o yaml \
   --from-literal=AXP_S3_ENDPOINT="${AXP_S3_ENDPOINT:-http://s3.axp.svc.cluster.local:8333}" \
   --from-literal=AXP_S3_BUCKET="${AXP_S3_BUCKET:-axp-artifacts}" \
   --from-literal=AXP_S3_REGION="${AXP_S3_REGION:-us-east-1}" \
-  --from-literal=OTEL_EXPORTER_OTLP_ENDPOINT=http://openobserve.axp.svc.cluster.local:5080/observe/api/default \
-  --from-literal=OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=production |
+  --from-literal=SENTRY_ENVIRONMENT=production |
   kubectl apply -f - >/dev/null
 
 # Migrations run with the new image before anything uses it; a failure

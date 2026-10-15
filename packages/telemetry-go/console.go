@@ -4,81 +4,90 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"strconv"
 	"strings"
 	"sync"
-
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/log"
-	sdklog "go.opentelemetry.io/otel/sdk/log"
 )
 
-// consoleExporter writes each record as one readable line:
+// consoleHandler writes each record as one readable line:
 //
-//	15:04:05.000 INFO  message key=value trace=0af76519
+//	15:04:05.000 INFO  message key=value
 //
 // Times are UTC, like the containers.
 // The same format is used by the Python and JavaScript services.
-type consoleExporter struct {
-	mu  sync.Mutex
-	out io.Writer
+type consoleHandler struct {
+	mu     *sync.Mutex
+	out    io.Writer
+	attrs  string // pre-rendered " key=value…"
+	prefix string // the open groups, "group."
 }
 
-func newConsoleExporter(out io.Writer) *consoleExporter {
-	return &consoleExporter{out: out}
+func newConsoleHandler(out io.Writer) *consoleHandler {
+	return &consoleHandler{mu: &sync.Mutex{}, out: out}
 }
 
-func (e *consoleExporter) Export(_ context.Context, records []sdklog.Record) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	for _, r := range records {
-		if _, err := io.WriteString(e.out, formatLine(r)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
+func (h *consoleHandler) Enabled(context.Context, slog.Level) bool { return true }
 
-func (e *consoleExporter) Shutdown(context.Context) error   { return nil }
-func (e *consoleExporter) ForceFlush(context.Context) error { return nil }
-
-func formatLine(r sdklog.Record) string {
+func (h *consoleHandler) Handle(_ context.Context, r slog.Record) error {
 	var b strings.Builder
-	ts := r.Timestamp()
-	if ts.IsZero() {
-		ts = r.ObservedTimestamp()
-	}
-	b.WriteString(ts.UTC().Format("15:04:05.000"))
-	message := r.Body().AsString()
-	if message == "" {
-		// Events (such as ADK's GenAI events) may have a name but no text.
-		message = r.EventName()
-	}
-	fmt.Fprintf(&b, " %-5s %s", levelName(r.Severity()), message)
-	r.WalkAttributes(func(kv attribute.KeyValue) bool {
-		b.WriteString(" ")
-		b.WriteString(string(kv.Key))
-		b.WriteString("=")
-		b.WriteString(formatValue(kv.Value))
+	b.WriteString(r.Time.UTC().Format("15:04:05.000"))
+	fmt.Fprintf(&b, " %-5s %s", levelName(r.Level), r.Message)
+	b.WriteString(h.attrs)
+	r.Attrs(func(a slog.Attr) bool {
+		writeAttr(&b, h.prefix, a)
 		return true
 	})
-	if id := r.TraceID(); id.IsValid() {
-		b.WriteString(" trace=")
-		b.WriteString(id.String()[:8])
-	}
 	b.WriteString("\n")
-	return b.String()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	_, err := io.WriteString(h.out, b.String())
+	return err
 }
 
-func levelName(s log.Severity) string {
+func (h *consoleHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	var b strings.Builder
+	for _, a := range attrs {
+		writeAttr(&b, h.prefix, a)
+	}
+	next := *h
+	next.attrs += b.String()
+	return &next
+}
+
+func (h *consoleHandler) WithGroup(name string) slog.Handler {
+	next := *h
+	next.prefix += name + "."
+	return &next
+}
+
+func writeAttr(b *strings.Builder, prefix string, a slog.Attr) {
+	a.Value = a.Value.Resolve()
+	if a.Value.Kind() == slog.KindGroup {
+		if a.Key != "" {
+			prefix += a.Key + "."
+		}
+		for _, g := range a.Value.Group() {
+			writeAttr(b, prefix, g)
+		}
+		return
+	}
+	if a.Equal(slog.Attr{}) {
+		return
+	}
+	b.WriteString(" ")
+	b.WriteString(prefix + a.Key)
+	b.WriteString("=")
+	b.WriteString(formatValue(a.Value))
+}
+
+func levelName(l slog.Level) string {
 	switch {
-	case s >= log.SeverityFatal:
-		return "FATAL"
-	case s >= log.SeverityError:
+	case l >= slog.LevelError:
 		return "ERROR"
-	case s >= log.SeverityWarn:
+	case l >= slog.LevelWarn:
 		return "WARN"
-	case s >= log.SeverityInfo:
+	case l >= slog.LevelInfo:
 		return "INFO"
 	default:
 		return "DEBUG"
@@ -86,12 +95,10 @@ func levelName(s log.Severity) string {
 }
 
 // formatValue quotes strings that would break the key=value layout.
-func formatValue(v attribute.Value) string {
-	if v.Type() != attribute.STRING {
-		return v.Emit()
-	}
-	s := v.AsString()
-	if s == "" || strings.ContainsAny(s, " \t\n\"=") {
+func formatValue(v slog.Value) string {
+	s := v.String()
+	if v.Kind() == slog.KindString && (s == "" || strings.ContainsAny(s, " \t\n\"=")) ||
+		v.Kind() == slog.KindAny && strings.ContainsAny(s, " \t\n\"=") {
 		return strconv.Quote(s)
 	}
 	return s

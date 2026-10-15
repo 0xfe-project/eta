@@ -1,5 +1,4 @@
 import type { WorkspaceState } from "./workspace-store";
-import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { useTheme } from "next-themes";
 import { useEffect } from "react";
@@ -68,32 +67,6 @@ const fontFields = [
   label: string;
   placeholder: string;
 }[];
-/** OpenObserve, proxied by the edge gateway under /observe. */
-function LogSettings() {
-  const { t: translateText } = useTranslation(["settings", "common"] as const);
-  return (
-    <div className="space-y-3">
-      <h2 className="text-sm font-semibold">
-        {translateText("sections.logs")}
-      </h2>
-      <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-        <div className="min-w-0 text-sm">
-          <p className="font-medium">OpenObserve</p>
-          <p className="text-muted-foreground">
-            {translateText("logs.signInAccount")}
-          </p>
-        </div>
-        <Button asChild variant="outline" size="sm" className="w-fit">
-          <a href="/observe/web/" target="_blank" rel="noreferrer">
-            {translateText("common:actions.open")}
-            <ArrowSquareOutIcon aria-hidden="true" />
-          </a>
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 /** A row of mutually exclusive choices with a sliding selection. */
 function Segmented<T extends string>({
   label,
@@ -307,8 +280,6 @@ export function SettingsDialog() {
               <ComputerSettings />
             ) : settings.section === "archived" ? (
               <ArchivedGroups />
-            ) : settings.section === "logs" ? (
-              <LogSettings />
             ) : (
               <AppearanceSettings />
             )}

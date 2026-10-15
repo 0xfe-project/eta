@@ -14,11 +14,16 @@ secretGenerator:
       - POSTGRES_PASSWORD=axp
       - AXP_S3_ACCESS_KEY_ID=axp-dev
       - AXP_S3_SECRET_ACCESS_KEY=axp-dev-secret
-      - AXP_OBSERVE_PASSWORD=Axp-dev-observe-1
-      # root@axp.local:Axp-dev-observe-1
-      - OPENOBSERVE_AUTHORIZATION=Basic cm9vdEBheHAubG9jYWw6QXhwLWRldi1vYnNlcnZlLTE=
+      # Rustrak's (scripts/dev.sh); at least 64 characters.
+      - RUSTRAK_SESSION_SECRET_KEY=axp-dev-rustrak-session-key-not-a-secret-0123456789abcdef0123456789
+      - RUSTRAK_SUPERUSER=admin@axp.local:axp-dev-rustrak
 patches:
   - target: { kind: Service, name: registry }
     patch: '[{"op": "add", "path": "/spec/clusterIP", "value": "10.43.100.11"}]'
   - target: { kind: Service, name: buildkitd }
     patch: '[{"op": "add", "path": "/spec/clusterIP", "value": "10.43.100.12"}]'
+  # Development's processes run on the host and send to this address.
+  - target: { kind: Service, name: rustrak }
+    patch: '[{"op": "add", "path": "/spec/clusterIP", "value": "10.43.100.13"}]'
+  - target: { kind: Deployment, name: rustrak }
+    patch: '[{"op": "replace", "path": "/spec/template/spec/containers/0/env/0/value", "value": "http://10.43.100.13:8080"}]'

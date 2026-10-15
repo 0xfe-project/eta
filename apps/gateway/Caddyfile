@@ -11,7 +11,7 @@
 # deploy/k3s): only the public gateway reaches web and the control plane's
 # public listener, only the runtime gateway the control plane's internal
 # listener for runtimes and services, which reach nothing else of AXP's but
-# NATS and the OpenTelemetry Collector. AXP_GATEWAY_SITES picks the sites to
+# NATS. AXP_GATEWAY_SITES picks the sites to
 # serve; every address defaults to production's and scripts/dev.sh
 # overrides them.
 {
@@ -39,6 +39,19 @@
 		transport http {
 			resolvers {$AXP_CLUSTER_DNS:10.43.0.10}
 		}
+	}
+}
+
+# Sentry's envelopes (errors, logs, transactions) for the project in the
+# path, at Rustrak (deploy/k3s/infra/rustrak.yaml), from the browser and
+# bundles' services: their DSN is a gateway's /sentry. Nothing else of
+# Rustrak's (its dashboard, its API) is reachable through a gateway.
+(sentry) {
+	@sentry path_regexp ^/sentry/api/[0-9]+/envelope/$
+	handle @sentry {
+		log_skip
+		uri strip_prefix /sentry
+		reverse_proxy {$AXP_UPSTREAM_SENTRY:rustrak:8080}
 	}
 }
 

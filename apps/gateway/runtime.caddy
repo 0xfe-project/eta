@@ -66,6 +66,9 @@ http://:{$AXP_RUNTIME_GATEWAY_PORT:8090} {
 		request_header -Authorization
 		import bundle_service {http.request.uri.path.0}
 	}
+	# Bundles' services' error reports and logs (internal/bundlesvc); like
+	# the browser's, with the DSN's public key and nothing to authenticate.
+	import sentry
 	handle /groups/* {
 		import as_agent_with {$AXP_UPSTREAM_INTERNAL:api:8001} groups
 	}

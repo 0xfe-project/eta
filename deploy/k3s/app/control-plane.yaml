@@ -46,7 +46,6 @@ spec:
             { secretRef: { name: axp } },
           ]
           env:
-            - { name: OTEL_SERVICE_NAME, value: control-plane }
             - { name: AXP_FORGE_STATE_DIR, value: /app/var/forge }
             - { name: AXP_LLM_STATE_DIR, value: /app/var/llm }
           ports: [{ containerPort: 8000 }, { containerPort: 8001 }]
@@ -94,9 +93,6 @@ spec:
             { configMapRef: { name: axp } },
             { secretRef: { name: axp } },
           ]
-          env: [
-            { name: OTEL_SERVICE_NAME, value: control-plane-routine-worker },
-          ]
 ---
 # Agents' runtimes (Pods in axp-agents, images built by buildkitd into the
 # registry), bundles' services (axp-bundles), delivering work and importing
@@ -123,4 +119,3 @@ spec:
             { configMapRef: { name: axp } },
             { secretRef: { name: axp } },
           ]
-          env: [{ name: OTEL_SERVICE_NAME, value: control-plane-controller }]

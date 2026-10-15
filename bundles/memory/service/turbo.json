@@ -11,8 +11,6 @@
     "build:linux-amd64": {
       "inputs": [
         "$TURBO_ROOT$/scripts/build/python.sh",
-        "$TURBO_ROOT$/packages/telemetry-py/src/**",
-        "$TURBO_ROOT$/packages/telemetry-py/pyproject.toml",
         "pyproject.toml",
         "uv.lock",
         ".python-version"
@@ -21,8 +19,6 @@
     "build:linux-arm64": {
       "inputs": [
         "$TURBO_ROOT$/scripts/build/python.sh",
-        "$TURBO_ROOT$/packages/telemetry-py/src/**",
-        "$TURBO_ROOT$/packages/telemetry-py/pyproject.toml",
         "pyproject.toml",
         "uv.lock",
         ".python-version"
@@ -36,11 +32,7 @@
       "dependsOn": ["build", "build:linux-arm64"]
     },
     "lint": {
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "$TURBO_ROOT$/ruff.toml",
-        "$TURBO_ROOT$/packages/telemetry-py/src/**"
-      ]
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/ruff.toml"]
     }
   }
 }

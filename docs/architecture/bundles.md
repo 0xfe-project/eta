@@ -29,7 +29,7 @@
 }
 ```
 
-- 它是标准的 JSON Schema（2020-12）。能写什么由 `apps/control-plane/internal/bundles/config.schema.json` 这个元 schema 规定：`type: object`，`additionalProperties: false`，属性只能是字符串且必须写 `maxLength`（不超过 4096），另外可选 `title`、`description`（Markdown）、`writeOnly`（机密值）、`minLength`、`pattern`。属性名就是环境变量名（大写字母、数字和下划线），不能以 `AXP_`、`OTEL_`、`CODEX_`、`AKHOOK_`、`NODE_`、`LD_` 开头，也不能是 `PATH`、`HOME` 这类系统变量。校验全部由 [jsonschema-go](https://github.com/google/jsonschema-go) 完成：读取环境包时用元 schema 校验它的 `config`（不合法则控制面启动失败）；保存时用环境包自己的 schema 校验值（必填项除外，允许分次填写）；必填项都有值并通过完整校验时为 `ready`。库的报错会引用值，值里可能有机密，所以 422 `CONFIG_INVALID` 只列出不合格的项名。
+- 它是标准的 JSON Schema（2020-12）。能写什么由 `apps/control-plane/internal/bundles/config.schema.json` 这个元 schema 规定：`type: object`，`additionalProperties: false`，属性只能是字符串且必须写 `maxLength`（不超过 4096），另外可选 `title`、`description`（Markdown）、`writeOnly`（机密值）、`minLength`、`pattern`。属性名就是环境变量名（大写字母、数字和下划线），不能以 `AXP_`、`SENTRY_`、`CODEX_`、`AKHOOK_`、`NODE_`、`LD_` 开头，也不能是 `PATH`、`HOME` 这类系统变量。校验全部由 [jsonschema-go](https://github.com/google/jsonschema-go) 完成：读取环境包时用元 schema 校验它的 `config`（不合法则控制面启动失败）；保存时用环境包自己的 schema 校验值（必填项除外，允许分次填写）；必填项都有值并通过完整校验时为 `ready`。库的报错会引用值，值里可能有机密，所以 422 `CONFIG_INVALID` 只列出不合格的项名。
 - 设置 →「连接」为每个声明了配置的内置环境包生成一张卡片和表单。机密值只写不读，留空表示不替换。值属于环境包，全局只有一份，不分智能体。
 - 接口：`GET /api/v1/bundles/{name}/config` 返回非机密的值、已设置的项和 `ready`（必填项都有值）；`PATCH` 的 `values` 里写字符串表示设置，`null` 表示清除，没写的项保持不变；`DELETE` 清除全部。值以 JSON 存在表 `bundle_config` 中，用 AES-256-GCM 加密（密钥由 `AXP_SECRET_KEY` 派生，`auth.Seal`）。`AXP_SECRET_KEY` 换了以后解不开，按未设置处理。
 - controller 把 `ready` 的环境包的值作为环境变量放进载入它的智能体的容器。不 `ready` 的环境包，它的插件写进 `AXP_DISABLED_PLUGINS`（其他载入的环境包也带这个插件时除外），runtime 安装插件时跳过它们，智能体看不到用不了的 skill 和工具。值也是容器 spec 的一部分，所以设置、修改或清除之后，容器会在两轮之间被替换。
@@ -81,7 +81,7 @@ RUN axp-plugins chat /opt/axp/plugins /etc/codex /opt/axp/plugins
 
 - **清单**是普通的 Kubernetes YAML：内置环境包的在 `service/*.yaml`，自定义环境包的在 `POST/PATCH /api/v1/bundles` 的 `service.manifests`。只能有 Deployment、StatefulSet、Service、ConfigMap、Secret、PVC、Job、CronJob、ServiceAccount，不能写命名空间；不符合时整个服务报错，不部分应用。
 - **约定**：有一个与环境包同名的 Service，端口名 `http`。智能体经 runtime 网关的 `/bundles/<name>/x` 访问它（服务收到 `/<name>/x`，只有载入了这个环境包的智能体能访问，身份在 `X-AXP-Agent-Id`），用户经公共网关的 `/api/bundles/<name>/x`（服务收到 `/api/<name>/x`）。服务按路径前缀区分两者。网关不用为新服务改配置。
-- **AXP 给它的**都在 Secret `axp-<name>` 里：`AXP_GATEWAY_URL`（runtime 网关）、`OTEL_EXPORTER_OTLP_ENDPOINT`（无凭据的 Collector）、`AXP_PUBLIC_URL`、`AXP_VERSION`、`AXP_BUNDLE_SECRET`（它自己的密钥，控制面也能派生）、声明了 `uses` 时的 `AXP_BUNDLE_TOKEN`、`database: true` 时的 `DATABASE_URL`（AXP 在自己的 PostgreSQL 上建的库 `<主库>_bundle_<name>` 和同名账号，带 pgvector），以及环境包配置（`config`）完整时的值。清单用 `envFrom` 或 `secretKeyRef` 引用。
+- **AXP 给它的**都在 Secret `axp-<name>` 里：`AXP_GATEWAY_URL`（runtime 网关）、配置了 Sentry 时的 `SENTRY_DSN`（控制面的项目，经 runtime 网关的 `/sentry`，只有公钥）、`AXP_PUBLIC_URL`、`AXP_VERSION`、`AXP_BUNDLE_SECRET`（它自己的密钥，控制面也能派生）、声明了 `uses` 时的 `AXP_BUNDLE_TOKEN`、`database: true` 时的 `DATABASE_URL`（AXP 在自己的 PostgreSQL 上建的库 `<主库>_bundle_<name>` 和同名账号，带 pgvector），以及环境包配置（`config`）完整时的值。清单用 `envFrom` 或 `secretKeyRef` 引用。
 - **令牌**只能用 `uses` 里声明的：`llm`（模型的 `/v1`）和其他环境包的服务（按名字）。它碰不到插件路由、GitHub 凭据和管理接口；在集群里本身不给任何权限。
 - **镜像**：名字是 `axp-<x>`、没有仓库和标签的镜像是 AXP 自己构建的，换成集群仓库里本次部署的版本；其他镜像原样使用。
 - **共享**：每个 AXP 只有一份，所有载入它的智能体共用，服务自己按智能体隔离数据。

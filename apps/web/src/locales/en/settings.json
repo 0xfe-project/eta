@@ -12,11 +12,7 @@
     "elementPickerHint": "When on, you can pick an element on the page and copy its component and source location."
   },
   "sections": {
-    "logs": "Logs",
     "appearance": "Appearance"
-  },
-  "logs": {
-    "signInAccount": "Sign-in account: root@axp.local"
   },
   "accessibility": {
     "needsAttention": "Settings (accounts need attention)",

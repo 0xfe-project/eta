@@ -53,8 +53,10 @@ type Config struct {
 	// The runtime image agents' images are built on (apps/agent-runtime), in
 	// the registry.
 	RuntimeImage string `env:"AXP_RUNTIME_IMAGE" dev:"10.43.100.11:5000/axp-agent-runtime:dev" prod:"10.43.100.1:5000/axp-agent-runtime:production"`
-	// The OpenTelemetry Collector runtimes export to without credentials.
-	RuntimeOTLPURL string `env:"AXP_RUNTIME_OTLP_URL" dev:"http://otel-collector.axp-dev.svc.cluster.local:4318" prod:"http://otel-collector.axp.svc.cluster.local:4318"`
+	// Where this process's Sentry SDK sends (internal/telemetry reads it
+	// too); bundles' services send to the same project through the runtime
+	// gateway. Empty: nothing is sent.
+	SentryDSN string `env:"SENTRY_DSN"`
 	// Development's processes run outside the cluster: this is its DNS
 	// server, for the cluster's names (*.svc.cluster.local) and every other.
 	ClusterDNS string `env:"AXP_CLUSTER_DNS" dev:"10.43.0.10:53"`

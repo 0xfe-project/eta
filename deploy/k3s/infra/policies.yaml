@@ -1,6 +1,6 @@
 # The namespace takes connections only from itself (and the node). Agents'
 # runtimes and bundles' services (namespaces labelled axp.dev/role) also
-# reach NATS and the collector, which hold no credentials.
+# reach NATS, which holds no credentials.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -18,7 +18,7 @@ metadata:
 spec:
   podSelector:
     matchExpressions: [
-      { key: app, operator: In, values: [nats, otel-collector] },
+      { key: app, operator: In, values: [nats] },
     ]
   policyTypes: [Ingress]
   ingress:
