@@ -21,7 +21,7 @@ export function setupTelemetry(service: string): void {
     tracesSampleRate: 1,
     // Health checks and the browser's polling for a new build are not worth
     // a transaction each.
-    ignoreTransactions: ["GET /up", "GET /version"],
+    ignoreSpans: ["GET /up", "GET /version"],
     initialScope: { tags: { service } },
   });
 }

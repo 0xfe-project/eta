@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -71,5 +72,22 @@ func TestErrorsAreIssuesGroupedByMessage(t *testing.T) {
 	attrs := e.Contexts["attributes"]
 	if attrs["bundle"] != "memory" || attrs["n"] != "2" {
 		t.Fatalf("attributes %v", attrs)
+	}
+}
+
+func TestLogTimestampsAreSeconds(t *testing.T) {
+	logs := `{"items":[{"timestamp":"2026-10-15T18:49:11.979506+02:00","level":"info","body":"a\nb"}]}`
+	envelope := `{"event_id":"1"}` + "\n" +
+		`{"type":"log","length":` + strconv.Itoa(len(logs)) + `}` + "\n" + logs + "\n" +
+		`{"type":"event"}` + "\n" + `{"timestamp":"2026-10-15T18:49:11Z"}` + "\n"
+	got := string(numericLogTimes([]byte(envelope)))
+	if !strings.Contains(got, `"timestamp":1792082951.979506`) {
+		t.Fatalf("log timestamp not in seconds: %s", got)
+	}
+	if !strings.Contains(got, `{"type":"event"}`+"\n"+`{"timestamp":"2026-10-15T18:49:11Z"}`) {
+		t.Fatalf("event item changed: %s", got)
+	}
+	if strings.Contains(got, `"length":`+strconv.Itoa(len(logs))+"}") {
+		t.Fatalf("length not updated: %s", got)
 	}
 }

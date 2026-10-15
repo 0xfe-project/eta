@@ -13,6 +13,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -35,6 +36,7 @@ func Setup(_ context.Context, service, command string) (*slog.Logger, func(conte
 			Release:       release,
 			Tags:          map[string]string{"service": service, "command": command},
 			EnableTracing: true,
+			HTTPTransport: logTimestamps{http.DefaultTransport},
 			// Health checks are not worth a transaction each.
 			TracesSampler: func(ctx sentry.SamplingContext) float64 {
 				if strings.HasSuffix(ctx.Span.Name, "/health") {
