@@ -81,6 +81,8 @@
 }
 
 @theme inline {
+  /* The one width page bodies and the chat column stop at (max-w-content). */
+  --container-content: 60rem;
   --default-transition-duration: 60ms;
   --default-transition-timing-function: linear;
   --ease-in: linear;

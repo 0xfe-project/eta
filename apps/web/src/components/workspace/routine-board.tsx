@@ -83,7 +83,10 @@ export function RoutineBoard() {
           </span>
         </Button>
       </PageHeader>
-      <main id="main" className="flex min-h-0 flex-1">
+      <main
+        id="main"
+        className="mx-auto flex min-h-0 w-full max-w-content flex-1"
+      >
         <div
           className={cn(
             "w-full overflow-y-auto px-2 py-3 sm:px-4 md:block md:w-80 md:shrink-0 md:border-r lg:w-96",
@@ -98,7 +101,7 @@ export function RoutineBoard() {
             !open && "hidden md:block",
           )}
         >
-          <div className="mx-auto max-w-3xl px-4 py-6 sm:px-8">{content}</div>
+          <div className="px-4 py-6 sm:px-8">{content}</div>
         </div>
       </main>
     </>

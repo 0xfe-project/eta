@@ -7,7 +7,8 @@
     "memory": "Memory",
     "more": "More",
     "overview": "Overview",
-    "capabilities": "Features"
+    "capabilities": "Features",
+    "workspace": "Workspace"
   },
   "accessibility": {
     "sections": "Sections",
@@ -17,6 +18,9 @@
   "actions": {
     "openFullWindow": "Open in full window",
     "backToChat": "Back to chat",
-    "backToConversations": "Back to conversations"
+    "backToConversations": "Back to conversations",
+    "openWorkspace": "Open workspace",
+    "closeWorkspace": "Close workspace",
+    "collapseWorkspace": "Collapse workspace"
   }
 }

@@ -1,5 +1,7 @@
 import type { WorkspaceView } from "./types";
 import { ArrowsOutIcon } from "@phosphor-icons/react/ArrowsOut";
+import { SidebarSimpleIcon } from "@phosphor-icons/react/SidebarSimple";
+import { XIcon } from "@phosphor-icons/react/X";
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -53,10 +55,16 @@ export function WorkspacePanel({
   view: linked,
   onViewChange,
   className,
+  onClose,
+  onCollapse,
 }: {
   view: WorkspaceView;
   onViewChange: (view: WorkspaceView) => void;
   className?: string;
+  /** Closes the drawer it is between md and lg. */
+  onClose?: () => void;
+  /** Folds it away from lg up. */
+  onCollapse?: () => void;
 }) {
   const { t: translateText } = useTranslation([
     "navigation",
@@ -105,6 +113,30 @@ export function WorkspacePanel({
           {/* Phones keep theirs in the panel switcher above. */}
           <SettingsButton className="hidden md:inline-flex" />
           <FullWindowButton view={view} />
+          {onClose ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={translateText("actions.closeWorkspace")}
+              title={translateText("common:actions.close")}
+              className="hidden md:max-lg:inline-flex"
+              onClick={onClose}
+            >
+              <XIcon aria-hidden="true" />
+            </Button>
+          ) : null}
+          {onCollapse ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={translateText("actions.collapseWorkspace")}
+              title={translateText("common:actions.collapse")}
+              className="hidden lg:inline-flex"
+              onClick={onCollapse}
+            >
+              <SidebarSimpleIcon aria-hidden="true" className="-scale-x-100" />
+            </Button>
+          ) : null}
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">

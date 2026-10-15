@@ -7,7 +7,8 @@
     "memory": "记忆",
     "more": "更多",
     "overview": "概览",
-    "capabilities": "功能"
+    "capabilities": "功能",
+    "workspace": "工作区"
   },
   "accessibility": {
     "sections": "分区",
@@ -17,6 +18,9 @@
   "actions": {
     "openFullWindow": "在全窗口中打开",
     "backToChat": "返回对话",
-    "backToConversations": "返回对话列表"
+    "backToConversations": "返回对话列表",
+    "openWorkspace": "打开工作区",
+    "closeWorkspace": "关闭工作区",
+    "collapseWorkspace": "收起工作区"
   }
 }

@@ -86,39 +86,41 @@ export function More() {
     <>
       <PageHeader title={translateText("sections.more")} />
       <main id="main" className="min-h-0 flex-1 overflow-y-auto pb-6">
-        <Group title={translateText("sections.capabilities")}>
-          {pages.map(({ to, label, icon }) => (
-            <li key={to}>
-              <Link to={to} className={row}>
-                <RowContent icon={icon} label={label} />
-              </Link>
-            </li>
-          ))}
-        </Group>
-        <Group title={translateText("settings:title")}>
-          {settingsSections.map(({ value, label, icon }) => (
-            <li key={value}>
-              <button
-                type="button"
-                className={row}
-                onClick={() => setSettings({ open: true, section: value })}
-              >
-                <RowContent icon={icon} label={label}>
-                  {attention[value] ? (
-                    <>
-                      <AttentionDot />
-                      <span className="sr-only">
-                        {translateText(
-                          "settings:accessibility.accountAttentionSuffix",
-                        )}
-                      </span>
-                    </>
-                  ) : null}
-                </RowContent>
-              </button>
-            </li>
-          ))}
-        </Group>
+        <div className="mx-auto max-w-content">
+          <Group title={translateText("sections.capabilities")}>
+            {pages.map(({ to, label, icon }) => (
+              <li key={to}>
+                <Link to={to} className={row}>
+                  <RowContent icon={icon} label={label} />
+                </Link>
+              </li>
+            ))}
+          </Group>
+          <Group title={translateText("settings:title")}>
+            {settingsSections.map(({ value, label, icon }) => (
+              <li key={value}>
+                <button
+                  type="button"
+                  className={row}
+                  onClick={() => setSettings({ open: true, section: value })}
+                >
+                  <RowContent icon={icon} label={label}>
+                    {attention[value] ? (
+                      <>
+                        <AttentionDot />
+                        <span className="sr-only">
+                          {translateText(
+                            "settings:accessibility.accountAttentionSuffix",
+                          )}
+                        </span>
+                      </>
+                    ) : null}
+                  </RowContent>
+                </button>
+              </li>
+            ))}
+          </Group>
+        </div>
       </main>
     </>
   );

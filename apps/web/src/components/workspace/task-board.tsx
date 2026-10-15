@@ -170,7 +170,7 @@ function ListView({
   // Every group starts open; a click folds it.
   const isOpen = (status: TaskStatus) => open[status] ?? true;
   return (
-    <div className="pb-6">
+    <div className="mx-auto max-w-content pb-6">
       {statuses.map(({ value, label }) => {
         const group = tasks.filter((t) => t.status === value);
         if (!group.length) return null;
@@ -402,7 +402,10 @@ function TaskPage({ id }: { id: string }) {
         <PageHeader title={crumbs}>
           <RefreshButton resource="tasks" />
         </PageHeader>
-        <main id="main" className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8">
+        <main
+          id="main"
+          className="mx-auto w-full max-w-content px-4 py-6 sm:px-8"
+        >
           <TaskMissing
             isPending={isPending}
             error={error}
@@ -439,10 +442,10 @@ function TaskPage({ id }: { id: string }) {
       </PageHeader>
       <main
         id="main"
-        className="min-h-0 flex-1 overflow-y-auto @2xl:grid @2xl:grid-cols-[minmax(0,1fr)_18rem] @2xl:overflow-hidden"
+        className="mx-auto min-h-0 w-full max-w-content flex-1 overflow-y-auto @2xl:grid @2xl:grid-cols-[minmax(0,1fr)_18rem] @2xl:overflow-hidden"
       >
         <div className="@2xl:overflow-y-auto">
-          <div className="mx-auto max-w-3xl space-y-6 px-4 pb-6 sm:px-8">
+          <div className="space-y-6 px-4 pb-6 sm:px-8">
             {/* Pinned under the page header (任务 and the number) as the rest scrolls. */}
             <div className="sticky top-0 z-10 mb-3 space-y-1 bg-background pt-4 pb-3">
               <EditableTitle key={task.title} task={task} className="text-xl" />
@@ -609,7 +612,10 @@ export function TaskBoard() {
               />
             </div>
           ) : !data ? (
-            <Loading rows={6} className="px-2 py-3 sm:px-4" />
+            <Loading
+              rows={6}
+              className="mx-auto max-w-content px-2 py-3 sm:px-4"
+            />
           ) : tasks.length === 0 ? (
             <div className="mx-auto max-w-md px-4 py-16">
               {data.tasks.length === 0 ? (

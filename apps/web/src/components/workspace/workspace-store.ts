@@ -20,6 +20,8 @@ const workspaceSchema = z.object({
   // The task page as last left: rows or a board, and whose tasks.
   taskLayout: z.enum(["list", "board"]).optional(),
   taskScope: z.enum(["all", "user", "remote"]).optional(),
+  // The chat's side panel folded away on wide screens.
+  panelCollapsed: z.boolean().optional(),
 });
 
 export type WorkspaceState = z.infer<typeof workspaceSchema>;
@@ -52,6 +54,8 @@ interface WorkspaceStore {
   agentEditor: AgentEditorState;
   setWorkspace: (update: Update<WorkspaceState>) => void;
   setMobilePanel: (panel: "chat" | "workspace") => void;
+  /** Shows the side panel: over the chat when narrow, unfolded when wide. */
+  showPanel: () => void;
   setSettings: (update: Update<SettingsState>) => void;
   setAgentEditor: (update: Update<AgentEditorState>) => void;
 }
@@ -98,6 +102,11 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       setWorkspace: (update) =>
         set((s) => ({ workspace: apply(update, s.workspace) })),
       setMobilePanel: (mobilePanel) => set({ mobilePanel }),
+      showPanel: () =>
+        set((s) => ({
+          mobilePanel: "workspace",
+          workspace: { ...s.workspace, panelCollapsed: false },
+        })),
       setSettings: (update) =>
         set((s) => ({ settings: apply(update, s.settings) })),
       setAgentEditor: (update) =>

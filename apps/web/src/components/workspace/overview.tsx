@@ -556,7 +556,7 @@ export function Overview() {
     <section
       aria-label={translateText("navigation:sections.overview")}
       aria-busy={!loaded}
-      className="mx-auto max-w-2xl border p-3.5 text-foreground"
+      className="mx-auto max-w-content border p-3.5 text-foreground"
     >
       <div className="grid grid-cols-[1fr_minmax(8rem,10rem)_1fr] items-center gap-1">
         <div>
