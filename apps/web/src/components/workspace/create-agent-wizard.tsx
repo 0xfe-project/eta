@@ -3,6 +3,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -20,7 +21,11 @@ import { Stepper } from "./stepper";
 import { useAgents } from "./use-agents";
 import { useWorkspaceStore } from "./workspace-store";
 
-const steps = ["名称与模型", "指令", "环境包"] as const;
+const steps = [
+  "agents:createWizard.nameAndModel",
+  "agents:editor.tabs.instructions",
+  "bundles:title",
+] as const;
 // The fields each step checks before moving on.
 const stepFields = [["name", "model"], ["description"], ["bundles"]] as const;
 const last = steps.length - 1;
@@ -31,6 +36,12 @@ const last = steps.length - 1;
  * field kept, to retry. Mounted per open, so a cancelled draft is gone.
  */
 export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
+  const { t: translateText } = useTranslation([
+    "agents",
+    "bundles",
+    "common",
+    "validation",
+  ] as const);
   const { select } = useAgents();
   const lastModel = useWorkspaceStore((s) => s.workspace.lastModel);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
@@ -64,7 +75,9 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
     if (!(await form.trigger([...stepFields[at]]))) return false;
     // Agents can be created before any account is connected, not after.
     if (at === 0 && !form.getValues("model") && usable.length) {
-      form.setError("model", { message: "请选择模型。" });
+      form.setError("model", {
+        message: translateText("validation:modelRequired"),
+      });
       return false;
     }
     return true;
@@ -96,7 +109,9 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
     create.mutate(agentDraft(values), {
       onSuccess: (created) => {
         select(created.id);
-        toast.success(`已创建「${created.name}」`);
+        toast.success(
+          translateText("feedback.created", { name: created.name }),
+        );
         onDone();
       },
       onError: (error) => setFailure(error.message),
@@ -110,11 +125,15 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
     <form
       noValidate
       onSubmit={(event) => void onSubmit(event)}
-      aria-label="新建智能体"
+      aria-label={translateText("actions.create")}
       className="flex min-h-0 flex-1 flex-col"
     >
       <div className="shrink-0 border-b px-4 py-3">
-        <Stepper steps={steps} step={step} label="新建步骤" />
+        <Stepper
+          steps={steps.map((key) => translateText(key))}
+          step={step}
+          label={translateText("createWizard.stepsLabel")}
+        />
       </div>
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
         {step === 0 ? (
@@ -139,7 +158,9 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
                   aria-hidden="true"
                   className="mt-0.5 size-4 shrink-0"
                 />
-                <span className="min-w-0 break-words">创建失败：{failure}</span>
+                <span className="min-w-0 break-words">
+                  {translateText("createWizard.failed", { message: failure })}
+                </span>
               </p>
             ) : null}
             {!bundles ? (
@@ -148,7 +169,7 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
               <BundlesField form={form} bundles={bundles} autoFocus />
             ) : (
               <p className="text-sm text-muted-foreground">
-                还没有环境包，智能体使用默认环境。
+                {translateText("createWizard.noBundles")}
               </p>
             )}
           </>
@@ -156,7 +177,7 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
       </div>
       <DialogFooter className="shrink-0 flex-row justify-between border-t p-3">
         <Button type="button" variant="ghost" onClick={onDone}>
-          取消
+          {translateText("common:actions.cancel")}
         </Button>
         <div className="flex gap-2">
           {step > 0 ? (
@@ -166,12 +187,12 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
               disabled={create.isPending}
               onClick={() => setStep(step - 1)}
             >
-              上一步
+              {translateText("common:actions.previous")}
             </Button>
           ) : null}
           {step < last ? (
             <Button key="next" type="submit">
-              下一步
+              {translateText("common:actions.next")}
             </Button>
           ) : (
             <Button
@@ -181,7 +202,11 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
               // A double click on 下一步 lands its second click here.
               onClick={(event) => event.detail > 1 && event.preventDefault()}
             >
-              {create.isPending ? "正在创建…" : failure ? "重试创建" : "创建"}
+              {create.isPending
+                ? translateText("common:states.creating")
+                : failure
+                  ? translateText("createWizard.retry")
+                  : translateText("common:actions.create")}
             </Button>
           )}
         </div>

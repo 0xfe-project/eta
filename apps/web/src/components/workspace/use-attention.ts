@@ -1,5 +1,7 @@
 import type { RoutineSummary } from "@/queries/routines";
+
 import type { Task } from "@/queries/tasks";
+import { listSeparator, translate } from "@/lib/i18n";
 import { usePendingInteractions } from "@/queries/chat";
 import { useRoutines } from "@/queries/routines";
 import { useTasks } from "@/queries/tasks";
@@ -15,20 +17,30 @@ function taskReason(task: Task): string | null {
   if (closed.has(task.status)) return null;
   // A run an AXP agent asked for (#99), once the board has that status.
   if ((task.run_status as string | null) === "awaiting_confirmation")
-    return "等你确认交给远程智能体";
-  if (task.run_status === "failed") return "远程运行失败";
-  if (task.status === "blocked") return "受阻";
-  if (task.status === "in_review") return "待验收";
-  if (task.assignee.kind === "user") return "指派给你";
+    return translate("overview:attention.awaitingRemoteAssignment");
+  if (task.run_status === "failed")
+    return translate("overview:attention.remoteRunFailed");
+  if (task.status === "blocked") return translate("tasks:status.blocked");
+  if (task.status === "in_review") return translate("tasks:status.inReview");
+  if (task.assignee.kind === "user")
+    return translate("overview:attention.assignedToYou");
   return null;
 }
 
 function routineReason(routine: RoutineSummary): string | null {
   const parts = [
-    routine.unseen_reports ? `${routine.unseen_reports} 份新报告` : null,
-    routine.unseen_failures ? `${routine.unseen_failures} 次失败` : null,
+    routine.unseen_reports
+      ? translate("overview:attention.newReports", {
+          count: routine.unseen_reports,
+        })
+      : null,
+    routine.unseen_failures
+      ? translate("overview:attention.failedRuns", {
+          count: routine.unseen_failures,
+        })
+      : null,
   ].filter(Boolean);
-  return parts.length ? parts.join("、") : null;
+  return parts.length ? parts.join(listSeparator()) : null;
 }
 
 /** The things waiting for the user, and how many in all. */

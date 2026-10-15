@@ -8,6 +8,7 @@ import {
   useQueryState,
 } from "nuqs";
 import { useEffect, useRef } from "react";
+import { translate } from "@/lib/i18n";
 import { useGroups } from "./use-groups";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -48,14 +49,39 @@ export function useSectionLink() {
 // A group chat's panel is about the group; any other chat's (a direct
 // chat, or none yet) is the workspace's.
 const groupViews = [
-  { value: "members", label: "成员" },
+  {
+    value: "members",
+    get label() {
+      return translate("chat:groups.members.title");
+    },
+  },
   { value: "artifacts", label: "Artifacts" },
 ] as const;
 const workspaceViews = [
-  { value: "overview", label: "概览" },
-  { value: "tasks", label: "任务" },
-  { value: "routines", label: "定时" },
-  { value: "inbox", label: "待处理" },
+  {
+    value: "overview",
+    get label() {
+      return translate("navigation:sections.overview");
+    },
+  },
+  {
+    value: "tasks",
+    get label() {
+      return translate("navigation:sections.tasks");
+    },
+  },
+  {
+    value: "routines",
+    get label() {
+      return translate("navigation:sections.routines");
+    },
+  },
+  {
+    value: "inbox",
+    get label() {
+      return translate("navigation:sections.pending");
+    },
+  },
 ] as const;
 
 /** The side panel's tabs beside the current chat. */

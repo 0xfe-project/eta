@@ -3,6 +3,7 @@ import type { ChatMessage } from "@/queries/chat";
 import type { RunStatus } from "@/queries/tasks";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,12 @@ import { useGroups } from "./use-groups";
 import { usePanelViews, useSectionLink } from "./workspace-search";
 
 export function TaskMessage({ message }: { message: ChatMessage }) {
+  const { t: translateText } = useTranslation([
+    "tasks",
+    "common",
+    "computers",
+    "navigation",
+  ] as const);
   const [edit, setEdit] = useState(false);
   const [reply, setReply] = useState(false);
   const [body, setBody] = useState("");
@@ -39,7 +46,9 @@ export function TaskMessage({ message }: { message: ChatMessage }) {
   // A group chat's panel has no tasks tab.
   const besideChat = usePanelViews().some((tab) => tab.value === "tasks");
   const data = message.data;
-  const title = String(data.title ?? "任务");
+  const title = String(
+    data.title ?? translateText("navigation:sections.tasks"),
+  );
   if (message.kind === "task_draft")
     return (
       <>
@@ -47,25 +56,27 @@ export function TaskMessage({ message }: { message: ChatMessage }) {
           className={`${frameClass} flex-col items-stretch border-dashed p-3`}
         >
           <div className="mb-2 flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">任务草稿</span>
+            <span className="text-xs text-muted-foreground">
+              {translateText("draft.title")}
+            </span>
             <span className="min-w-0 flex-1 truncate">{title}</span>
             <Button size="xs" variant="outline" onClick={() => setEdit(true)}>
-              编辑并创建
+              {translateText("draft.editAndCreate")}
             </Button>
           </div>
           <div className="max-h-52 overflow-y-auto">
             <Markdown>{String(data.description ?? "")}</Markdown>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
-            尚未创建任务或指派执行者。
+            {translateText("draft.notCreatedHint")}
           </p>
         </div>
         <Dialog open={edit} onOpenChange={setEdit}>
           <DialogContent className="max-h-[90dvh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>确认任务草稿</DialogTitle>
+              <DialogTitle>{translateText("draft.confirmTitle")}</DialogTitle>
               <DialogDescription>
-                编辑内容，选择执行者后创建。
+                {translateText("draft.confirmDescription")}
               </DialogDescription>
             </DialogHeader>
             <TaskForm bare proposal={message} onDone={() => setEdit(false)} />
@@ -77,7 +88,10 @@ export function TaskMessage({ message }: { message: ChatMessage }) {
   if (data.deleted)
     return (
       <p className="border-l pl-3 text-xs text-muted-foreground">
-        #{Number(data.number)} {title} · 任务已删除
+        {translateText("card.deletedSummary", {
+          number: Number(data.number),
+          title,
+        })}
       </p>
     );
   const deliverables = (data.deliverables ?? []) as {
@@ -110,16 +124,24 @@ export function TaskMessage({ message }: { message: ChatMessage }) {
       <div className="px-3 text-xs text-muted-foreground">
         <span>
           {data.assignee === "remote"
-            ? `${data.computer_name ?? "远程电脑"} · ${data.provider ?? ""}`
+            ? translateText("common:format.joinedValues", {
+                first: data.computer_name ?? translateText("computers:title"),
+                second: data.provider ?? "",
+              })
             : data.assignee === "user"
-              ? "由你执行"
-              : "未指派"}
+              ? translateText("card.assignedToYou")
+              : translateText("assignee.unassigned")}
         </span>
         {data.run_status ? (
           <span> · {runStatusLabels[data.run_status as RunStatus]}</span>
         ) : null}
         {Number(data.comments) > 0 && (
-          <span> · {Number(data.comments)} 条评论</span>
+          <span>
+            {" "}
+            {translateText("card.commentCount", {
+              count: Number(data.comments),
+            })}
+          </span>
         )}
         {data.summary ? (
           <p className="mt-1 line-clamp-3 whitespace-pre-wrap">
@@ -166,7 +188,7 @@ export function TaskMessage({ message }: { message: ChatMessage }) {
                 )
               }
             >
-              验收通过
+              {translateText("actions.approve")}
             </Button>
           )}
           {besideChat && (
@@ -177,7 +199,7 @@ export function TaskMessage({ message }: { message: ChatMessage }) {
               asChild
             >
               <Link {...sectionLink("tasks", { task: taskId })}>
-                在侧栏打开
+                {translateText("actions.openInSidebar")}
               </Link>
             </Button>
           )}
@@ -188,7 +210,7 @@ export function TaskMessage({ message }: { message: ChatMessage }) {
             asChild
           >
             <Link to="/workspace/tasks" search={{ task: taskId }}>
-              打开任务
+              {translateText("common:actions.openTask")}
             </Link>
           </Button>
           {members.map((p) => (
@@ -203,12 +225,16 @@ export function TaskMessage({ message }: { message: ChatMessage }) {
                   ...(outbox.drafts[message.group_id] ?? []),
                   {
                     type: "text",
-                    text: ` @${mentionLabel(p, members)} 请审阅任务 #${Number(data.number)}「${title}」的结果。`,
+                    text: translateText("messages.reviewRequest", {
+                      agentName: mentionLabel(p, members),
+                      number: Number(data.number),
+                      title,
+                    }),
                   },
                 ]);
               }}
             >
-              请 @{p.name} 审阅
+              {translateText("actions.askToReview", { agentName: p.name })}
             </Button>
           ))}
           {data.assignee === "remote" && (
@@ -218,7 +244,7 @@ export function TaskMessage({ message }: { message: ChatMessage }) {
               className="mt-1"
               onClick={() => setReply(true)}
             >
-              回复执行者
+              {translateText("messages.replyToAssignee")}
             </Button>
           )}
         </div>
@@ -226,13 +252,17 @@ export function TaskMessage({ message }: { message: ChatMessage }) {
       <Dialog open={reply} onOpenChange={setReply}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>回复执行者 · #{Number(data.number)}</DialogTitle>
+            <DialogTitle>
+              {translateText("messages.replyTitle", {
+                number: Number(data.number),
+              })}
+            </DialogTitle>
             <DialogDescription>
-              作为任务评论发送，执行者会继续处理。
+              {translateText("messages.replyHelp")}
             </DialogDescription>
           </DialogHeader>
           <Textarea
-            aria-label="回复执行者"
+            aria-label={translateText("messages.replyToAssignee")}
             value={body}
             onChange={(e) => {
               setBody(e.target.value);
@@ -257,7 +287,7 @@ export function TaskMessage({ message }: { message: ChatMessage }) {
                 )
               }
             >
-              发送
+              {translateText("common:actions.send")}
             </Button>
           </DialogFooter>
         </DialogContent>

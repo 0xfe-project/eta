@@ -1,6 +1,7 @@
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/ArrowClockwise";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
@@ -10,6 +11,7 @@ export function RefreshButton({
 }: {
   resource: "tasks" | "routines";
 }) {
+  const { t: translateText } = useTranslation("common");
   const client = useQueryClient();
   const fetching = useIsFetching({ queryKey: [resource], type: "active" });
   const lockedRef = useRef(false);
@@ -25,7 +27,11 @@ export function RefreshButton({
         { cancelRefetch: false, throwOnError: true },
       );
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "刷新失败");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : translateText("errors.refreshFailed"),
+      );
     } finally {
       lockedRef.current = false;
       setRefreshing(false);
@@ -36,9 +42,13 @@ export function RefreshButton({
       type="button"
       variant="ghost"
       size="icon-sm"
-      aria-label="刷新"
+      aria-label={translateText("actions.refresh")}
       aria-busy={busy}
-      title={busy ? "刷新中…" : "刷新"}
+      title={
+        busy
+          ? translateText("states.refreshing")
+          : translateText("actions.refresh")
+      }
       disabled={busy}
       onClick={() => void refresh()}
     >

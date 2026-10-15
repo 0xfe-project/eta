@@ -1,12 +1,26 @@
 import type { CSSProperties } from "react";
 import { HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { LanguageProvider } from "@/components/language-provider";
 import { AppProviders } from "@/components/providers";
 import { LiveChat } from "@/components/workspace/live-chat";
 import { useWorkspaceStore } from "@/components/workspace/workspace-store";
 import { useOutbox } from "@/queries/outbox";
 
 export function RootDocument() {
+  return (
+    <LanguageProvider>
+      <LocalizedDocument />
+    </LanguageProvider>
+  );
+}
+
+function LocalizedDocument() {
+  const { t: translateText, i18n } = useTranslation([
+    "navigation",
+    "common",
+  ] as const);
   // Saved workspace state and drafts load after hydration, so the first client render
   // matches the server's.
   useEffect(() => {
@@ -33,7 +47,11 @@ export function RootDocument() {
     "--user-font-mono": fontMono,
   } as CSSProperties;
   return (
-    <html lang="zh-CN" style={fonts} suppressHydrationWarning>
+    <html
+      lang={i18n.resolvedLanguage === "zh" ? "zh-CN" : "en"}
+      style={fonts}
+      suppressHydrationWarning
+    >
       <head>
         <HeadContent />
         {/* Rendered here because head() keeps one meta per name. */}
@@ -54,7 +72,7 @@ export function RootDocument() {
             href="#main"
             className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:bg-background focus:p-3 focus:text-foreground"
           >
-            跳转到内容
+            {translateText("accessibility.skipToContent")}
           </a>
           <LiveChat />
           <Outlet />

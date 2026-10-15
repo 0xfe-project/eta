@@ -1,0 +1,26 @@
+{
+  "sections": {
+    "chat": "Chat",
+    "pending": "Pending",
+    "tasks": "Tasks",
+    "routines": "Routines",
+    "memory": "Memory",
+    "more": "More",
+    "overview": "Overview",
+    "capabilities": "Features",
+    "workspace": "Workspace"
+  },
+  "accessibility": {
+    "sections": "Sections",
+    "workspaceTabs": "Workspace tabs",
+    "skipToContent": "Skip to content"
+  },
+  "actions": {
+    "openFullWindow": "Open in full window",
+    "backToChat": "Back to chat",
+    "backToConversations": "Back to conversations",
+    "openWorkspace": "Open workspace",
+    "closeWorkspace": "Close workspace",
+    "collapseWorkspace": "Collapse workspace"
+  }
+}

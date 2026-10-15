@@ -1,4 +1,5 @@
 import type { WorkspaceView } from "./types";
+
 import type { Draft } from "@/lib/composer";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
 import { InfoIcon } from "@phosphor-icons/react/Info";
@@ -6,9 +7,11 @@ import { SidebarSimpleIcon } from "@phosphor-icons/react/SidebarSimple";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { draftText, EMPTY_DRAFT, partsText } from "@/lib/composer";
+import { listSeparator } from "@/lib/i18n";
 import { mentionedMembers } from "@/lib/mentions";
 import { cn } from "@/lib/utils";
 import {
@@ -49,6 +52,12 @@ export function Workspace({
   view: WorkspaceView;
   onViewChange: (view: WorkspaceView) => void;
 }) {
+  const { t: translateText } = useTranslation([
+    "navigation",
+    "agents",
+    "chat",
+    "common",
+  ] as const);
   const mobilePanel = useWorkspaceStore((s) => s.mobilePanel);
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
   const showPanel = useWorkspaceStore((s) => s.showPanel);
@@ -99,10 +108,10 @@ export function Workspace({
   const onError = (error: Error) => toast.error(error.message);
   const blocked = group?.archived ? (
     <ComposerNotice
-      message="群已归档，取消归档后可以继续讨论。"
+      message={translateText("chat:notices.groupArchived")}
       actions={[
         {
-          label: "取消归档",
+          label: translateText("chat:groups.actions.unarchive"),
           onClick: () =>
             actions.update.mutate(
               { id: group.id, archived: false },
@@ -113,10 +122,10 @@ export function Workspace({
     />
   ) : group && members.length === 0 ? (
     <ComposerNotice
-      message="群里暂无智能体，邀请成员后可以继续讨论。"
+      message={translateText("chat:notices.noMembers")}
       actions={[
         {
-          label: "查看群信息",
+          label: translateText("chat:groups.actions.viewInfo"),
           onClick: () => {
             onViewChange("members");
             showPanel();
@@ -126,9 +135,11 @@ export function Workspace({
     />
   ) : unavailable.length && selectedTargets.length === 1 ? (
     <ComposerNotice
-      message={`${unavailable.map((a) => a!.name).join("、")} 还没有选择模型。`}
+      message={translateText("chat:notices.modelNotSelected", {
+        agentNames: unavailable.map((a) => a!.name).join(listSeparator()),
+      })}
       actions={unavailable.map((a) => ({
-        label: `设置 ${a!.name}`,
+        label: translateText("agents:actions.configure", { name: a!.name }),
         onClick: () => openEditor(a!.id),
       }))}
     />
@@ -183,7 +194,9 @@ export function Workspace({
         )}
       >
         <header className="flex h-14 shrink-0 items-center justify-between px-5">
-          <h1 className="text-lg font-semibold">对话</h1>
+          <h1 className="text-lg font-semibold">
+            {translateText("sections.chat")}
+          </h1>
           <SettingsButton />
         </header>
         <GroupList />
@@ -200,7 +213,9 @@ export function Workspace({
             size="icon"
             variant="ghost"
             aria-label={
-              mobilePanel === "workspace" ? "返回对话" : "返回对话列表"
+              mobilePanel === "workspace"
+                ? translateText("actions.backToChat")
+                : translateText("actions.backToConversations")
             }
             onClick={() =>
               mobilePanel === "workspace"
@@ -214,7 +229,11 @@ export function Workspace({
           <Button
             size="icon"
             variant="ghost"
-            aria-label={direct ? "智能体设置" : "群信息"}
+            aria-label={
+              direct
+                ? translateText("agents:settings.title")
+                : translateText("chat:groups.info")
+            }
             onClick={showInfo}
           >
             <InfoIcon />
@@ -238,8 +257,8 @@ export function Workspace({
             <Button
               size="icon"
               variant="outline"
-              aria-label="打开工作区"
-              title="工作区"
+              aria-label={translateText("actions.openWorkspace")}
+              title={translateText("sections.workspace")}
               className={cn(
                 "absolute top-3 right-3 z-10 hidden bg-background shadow-sm",
                 collapsed ? "md:inline-flex" : "md:max-lg:inline-flex",
@@ -285,7 +304,9 @@ export function Workspace({
               }}
               error={
                 (chat.error ?? history.error)
-                  ? `无法加载对话：${(chat.error ?? history.error)?.message}`
+                  ? translateText("chat:errors.loadConversation", {
+                      message: (chat.error ?? history.error)?.message,
+                    })
                   : undefined
               }
               draft={draft}
@@ -297,7 +318,8 @@ export function Workspace({
                   return {
                     type: "file" as const,
                     id,
-                    name: file.name || "粘贴的文件",
+                    name:
+                      file.name || translateText("chat:attachments.pastedFile"),
                     contentType: file.type || "application/octet-stream",
                     size: file.size,
                   };
@@ -323,7 +345,10 @@ export function Workspace({
                         (g) => g.id === active.group_id,
                       )?.name;
                       toast.info(
-                        `${name} 在「${elsewhere}」回复，这条消息已排队。`,
+                        translateText("chat:notices.messageQueuedElsewhere", {
+                          agentName: name,
+                          groupName: elsewhere,
+                        }),
                       );
                     }
                   }
@@ -334,7 +359,9 @@ export function Workspace({
               onCompact={() => {
                 if (!group) return;
                 if (!selectedTargets.length)
-                  return toast.error("先 @ 要压缩上下文的智能体。");
+                  return toast.error(
+                    translateText("chat:commands.compactRequiresMention"),
+                  );
                 compact.mutate(
                   { groupId: group.id, mentions: selectedTargets },
                   { onError },

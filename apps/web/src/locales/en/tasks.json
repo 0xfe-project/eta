@@ -1,0 +1,244 @@
+{
+  "operations": {
+    "createWorkspace": "Create workspace",
+    "createWorktree": "Create worktree",
+    "openWorktree": "Open worktree",
+    "addProject": "Add project",
+    "acceptedUnconfirmed": "Accepted; completion unconfirmed",
+    "resultUnconfirmed": "Result unconfirmed"
+  },
+  "assignee": {
+    "unassigned": "Unassigned",
+    "me": "Me",
+    "loading": "Loading assignees…",
+    "noRemoteAgents": "No remote agents available",
+    "label": "Assignee"
+  },
+  "location": {
+    "label": "Work location",
+    "loadingProjects": "Loading projects on that computer…",
+    "select": "Select work location",
+    "current": "Current work location ({{name}}){{availabilitySuffix}}",
+    "newWorktree": "New worktree",
+    "branchFrom": "From {{name}} ({{branch}})",
+    "existingWorkspace": "In an existing workspace",
+    "uncommittedChanges": " · Uncommitted changes",
+    "branchLabel": "Branch (optional)",
+    "branchPlaceholder": "Defaults to axp/<number>-<title>",
+    "baseBranchLabel": "Base branch (optional)",
+    "baseBranchPlaceholder": "Defaults to the current branch",
+    "projectFallback": "project",
+    "worktreeSummary": "New worktree (from {{projectName}}{{branchSuffix}})",
+    "workspaceSummary": "Workspace {{name}}"
+  },
+  "status": {
+    "inProgress": "In progress",
+    "changeLabel": "Status: {{status}}; change",
+    "inReview": "In review",
+    "blocked": "Blocked",
+    "todo": "To do",
+    "backlog": "Backlog",
+    "done": "Completed",
+    "cancelled": "Cancelled"
+  },
+  "assist": {
+    "errors": {
+      "noRemoteAssignee": "This task has no remote computer assigned. Assisting agents work on the same computer as the primary agent. Select a computer under “Assignee” first.",
+      "taskEnded": "This task has ended and its work location has been cleaned up. Set it back to in progress before requesting assistance.",
+      "noAvailableAgents": "No agents available on {{computerName}}. Check its runtimes are online and paired in Settings → Remote computers. After installing an agent, choose “Update” to refresh its capabilities."
+    },
+    "title": "Ask an agent to assist",
+    "loadingAgents": "Loading agents on this computer…",
+    "requested": "Asked {{name}} to assist",
+    "primaryAgentSuffix": "(primary agent, separate session)",
+    "offlineWarning": "{{computerName}} is offline. The request will be queued until it reconnects.",
+    "fields": {
+      "briefLabel": "Assistance brief",
+      "briefPlaceholder": "What should it do?",
+      "startLabel": "When to start"
+    },
+    "start": {
+      "now": "Now",
+      "afterDelivery": "After the primary agent delivers this turn",
+      "afterDeliveryHelp": "Start once the primary agent successfully finishes this turn and registers a PR. If it fails or stops, assistance will not start and the reason will be shown.",
+      "nowHelp": "Start now, after any other assistance in the queue."
+    },
+    "review": {
+      "requestChangesLoop": "Send requested changes to the primary agent, then review again",
+      "upTo": "Up to",
+      "maxRoundsLabel": "Maximum review rounds",
+      "roundsSuffix": "review rounds",
+      "help": "Stop on approval. When rounds run out, wait for your decision. The reviewing agent reports its verdict with axp task review.",
+      "progress": "· Reviewed {{reviewed}}/{{maxRounds}} rounds · {{status}}",
+      "roundLimit": "Review round limit",
+      "continue": "Continue review",
+      "stopLoop": "Stop loop",
+      "roundProgress": " · Round {{round}}/{{maxRounds}}"
+    },
+    "sending": "Sending…",
+    "status": {
+      "notStarted": "Not started",
+      "started": "Started",
+      "approved": "Approved",
+      "roundsExhausted": "Review rounds exhausted; awaiting your decision",
+      "blocked": "Blocked; awaiting your decision"
+    },
+    "followUpWith": "Follow up with {{name}}",
+    "resultsMessage": "Assistance results from {{name}}{{roundSuffix}}:\n\n{{result}}\n\n",
+    "sendToPrimary": "Send to primary agent",
+    "changeCount": "{{count}} changes",
+    "commitSuffix": " · Commit {{commit}}",
+    "changeCount_one": "{{count}} change",
+    "changeCount_other": "{{count}} changes"
+  },
+  "scope": {
+    "mine": "Mine",
+    "label": "Assignee scope"
+  },
+  "actions": {
+    "createWithStatusLabel": "New task: {{status}}",
+    "create": "New task",
+    "viewAll": "View all tasks",
+    "approve": "Approved",
+    "openInSidebar": "Open in sidebar",
+    "askToReview": "Ask @{{agentName}} to review",
+    "complete": "Complete task",
+    "createAndStart": "Create and start",
+    "changeTitle": "Change title",
+    "editDescription": "Edit description",
+    "addDescription": "Add description"
+  },
+  "details": {
+    "activityTab": "Activity",
+    "propertiesTab": "Properties",
+    "deliveryTab": "Delivery",
+    "reviewTab": "Review"
+  },
+  "fields": {
+    "updatedAt": "Updated",
+    "status": "Status",
+    "title": "Title",
+    "titlePlaceholder": "e.g. Fix the login page layout in Safari",
+    "description": "Description",
+    "remoteDescriptionHelp": "Remote agents use this as the task brief. Markdown supported.",
+    "descriptionPlaceholder": "Goal, background, completion criteria…",
+    "optionalGroup": "Related group (optional)",
+    "noGroup": "None"
+  },
+  "layout": {
+    "label": "Layout",
+    "list": "List",
+    "board": "Board"
+  },
+  "empty": {
+    "title": "No tasks yet",
+    "description": "Give an agent work to do. It will record each step in the timeline.",
+    "noUserTasks": "No tasks assigned to you",
+    "noAgentTasks": "No tasks assigned to agents",
+    "deletedTitle": "This task no longer exists"
+  },
+  "runStatus": {
+    "queued": "Queued",
+    "running": "Running",
+    "replied": "Replied",
+    "failed": "Run failed"
+  },
+  "activity": {
+    "createdByAgent": "Created by {{name}}",
+    "createdByMe": "Created by me",
+    "created": "Created the task",
+    "statusChanged": "Changed status from “{{from}}” to “{{to}}”",
+    "assigneeChanged": "Changed assignee",
+    "assigned": "Assigned to {{assignee}}{{locationSuffix}}",
+    "titleChanged": "Changed title to “{{title}}”",
+    "descriptionChanged": "Updated the description",
+    "groupLinked": "Linked a group",
+    "groupUnlinked": "Unlinked the group",
+    "deliveredPrefix": "Delivered ",
+    "artifactPublishedPrefix": "Published Artifact ",
+    "cleanupCompleted": "Cleanup completed",
+    "assistanceRequested": "Asked {{name}} to assist{{roundSuffix}}",
+    "started": "Started work",
+    "turnCompleted": "Completed this turn",
+    "noReplyReminder": "This turn ended without a reply; one reminder was sent",
+    "turnFailed": "This turn failed{{reason}}",
+    "turnStopped": "This turn stopped{{reason}}"
+  },
+  "draft": {
+    "title": "Task draft",
+    "editAndCreate": "Edit and create",
+    "notCreatedHint": "No task created or assignee selected yet.",
+    "confirmTitle": "Confirm task draft",
+    "confirmDescription": "Edit the content and select an assignee to create it."
+  },
+  "card": {
+    "deletedSummary": "#{{number}} {{title}} · Task deleted",
+    "assignedToYou": "Assigned to you",
+    "commentCount": " · {{count}} comments",
+    "commentCount_one": " · {{count}} comment",
+    "commentCount_other": " · {{count}} comments"
+  },
+  "messages": {
+    "reviewRequest": " @{{agentName}} Please review the results of task #{{number}} “{{title}}”.",
+    "replyToAssignee": "Reply to assignee",
+    "replyTitle": "Reply to assignee · #{{number}}",
+    "replyHelp": "Send as a task comment so the assignee can continue."
+  },
+  "pullRequests": {
+    "status": {
+      "draft": "Draft",
+      "merged": "Merged",
+      "closed": "Closed",
+      "unavailable": "Status temporarily unavailable"
+    },
+    "mergedAndCompleted": "PR merged; task completed",
+    "mergedTaskIncompleteWithError": "PR merged; task incomplete: {{message}}",
+    "mergedTaskIncomplete": "PR merged; task incomplete",
+    "mergeResultUnknown": "No merge result was received. PR status has been refreshed. Check it before deciding whether to retry.",
+    "merging": "Merging…",
+    "actions": {
+      "merge": "Merge",
+      "moreMergeOptions": "More merge options",
+      "mergeAndComplete": "Merge and complete task"
+    }
+  },
+  "feedback": {
+    "completed": "Task completed"
+  },
+  "comments": {
+    "title": "Comments",
+    "awaitingReply": "Awaiting reply",
+    "awaitingYourReply": " Waiting for your reply",
+    "followUpLabel": "Follow-up",
+    "unsupportedAttachments": "{{action}} does not support images or files yet; {{count}} were not added.",
+    "deliveryFailed": "{{action}} was not delivered: {{message}}",
+    "followUpPlaceholder": "Follow up with {{name}}; Markdown supported",
+    "placeholder": "Write a comment; Markdown supported",
+    "sendFollowUp": "Send follow-up",
+    "queuedToSend": "Queued to send",
+    "notDelivered": "Not delivered: {{message}}"
+  },
+  "create": {
+    "remoteComputerHelp": "To assign work to a remote agent, first connect a computer in Settings → Remote computers."
+  },
+  "review": {
+    "approved": "Review approved",
+    "changesRequested": "Changes requested",
+    "roundSuffix": "(review round {{round}})"
+  },
+  "log": {
+    "types": {
+      "tool": "Tool",
+      "thinking": "Thinking",
+      "terminal": "Terminal",
+      "image": "Read an image",
+      "other": "Other"
+    },
+    "loading": "Loading records…",
+    "empty": "No records yet.",
+    "loadingEarlier": "Loading earlier records…",
+    "loadEarlier": "Load earlier records",
+    "title": "Execution log",
+    "workspacePrefix": "Workspace "
+  }
+}

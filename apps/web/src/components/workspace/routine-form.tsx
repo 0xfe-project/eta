@@ -1,12 +1,15 @@
 import type { HourlySchedule } from "@/api/routines.gen";
+
 import type { Routine, Schedule } from "@/queries/routines";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { listSeparator, translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useModels } from "@/queries/llm";
 import { useSaveRoutine } from "@/queries/routines";
@@ -16,13 +19,41 @@ import { Select, SelectOption } from "./select-field";
 import { useWorkspaceStore } from "./workspace-store";
 
 const KINDS = [
-  { value: "daily", label: "每天" },
-  { value: "weekly", label: "每周" },
-  { value: "hourly", label: "每隔几小时" },
-  { value: "cron", label: "自定义 cron" },
+  {
+    value: "daily",
+    get label() {
+      return translate("routines:schedule.kinds.daily");
+    },
+  },
+  {
+    value: "weekly",
+    get label() {
+      return translate("common:time.windows.weekly");
+    },
+  },
+  {
+    value: "hourly",
+    get label() {
+      return translate("routines:schedule.kinds.hourly");
+    },
+  },
+  {
+    value: "cron",
+    get label() {
+      return translate("routines:schedule.kinds.cron");
+    },
+  },
 ] as const;
 
-const WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"];
+const WEEKDAYS = [
+  "common:weekdays.monday",
+  "common:weekdays.tuesday",
+  "common:weekdays.wednesday",
+  "common:weekdays.thursday",
+  "common:weekdays.friday",
+  "common:weekdays.saturday",
+  "common:weekdays.sunday",
+] as const;
 // The intervals the control plane accepts.
 const HOURS: HourlySchedule["every"][] = [1, 2, 3, 4, 6, 8, 12];
 
@@ -66,10 +97,16 @@ function ScheduleFields({
   schedule: Schedule;
   onChange: (schedule: Schedule) => void;
 }) {
+  const { t: translateText } = useTranslation([
+    "routines",
+    "agents",
+    "common",
+    "providers",
+  ] as const);
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Select
-        aria-label="频率"
+        aria-label={translateText("schedule.frequencyLabel")}
         value={schedule.kind}
         onValueChange={(value) =>
           onChange(defaults(value as Schedule["kind"], schedule))
@@ -82,7 +119,11 @@ function ScheduleFields({
         ))}
       </Select>
       {schedule.kind === "weekly" ? (
-        <div role="group" aria-label="星期" className="flex">
+        <div
+          role="group"
+          aria-label={translateText("schedule.weekdaysLabel")}
+          className="flex"
+        >
           {WEEKDAYS.map((label, i) => {
             const day = (i + 1) % 7;
             const on = schedule.days.includes(day);
@@ -104,7 +145,7 @@ function ScheduleFields({
                     : "text-muted-foreground hover:bg-muted",
                 )}
               >
-                {label}
+                {translateText(label)}
               </button>
             );
           })}
@@ -113,7 +154,7 @@ function ScheduleFields({
       {schedule.kind === "daily" || schedule.kind === "weekly" ? (
         <Input
           type="time"
-          aria-label="时间"
+          aria-label={translateText("schedule.timeLabel")}
           className="w-32"
           value={schedule.time}
           onChange={(e) =>
@@ -123,7 +164,7 @@ function ScheduleFields({
       ) : null}
       {schedule.kind === "hourly" ? (
         <Select
-          aria-label="间隔"
+          aria-label={translateText("schedule.intervalLabel")}
           value={String(schedule.every)}
           onValueChange={(value) =>
             onChange({
@@ -134,14 +175,14 @@ function ScheduleFields({
         >
           {HOURS.map((n) => (
             <SelectOption key={n} value={n}>
-              {n} 小时
+              {translateText("common:time.hours", { count: n })}
             </SelectOption>
           ))}
         </Select>
       ) : null}
       {schedule.kind === "cron" ? (
         <Input
-          aria-label="cron 表达式"
+          aria-label={translateText("schedule.cronLabel")}
           className="w-40 font-mono"
           value={schedule.cron}
           spellCheck={false}
@@ -182,6 +223,12 @@ export function RoutineForm({
   routine: Routine | null;
   onDone: (id?: string) => void;
 }) {
+  const { t: translateText } = useTranslation([
+    "routines",
+    "agents",
+    "common",
+    "providers",
+  ] as const);
   const { data: models } = useModels();
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const noModels =
@@ -233,51 +280,55 @@ export function RoutineForm({
           onClick={() => onDone()}
         >
           <ArrowLeftIcon aria-hidden="true" />
-          {routine ? routine.name : "定时任务"}
+          {routine ? routine.name : translateText("title")}
         </Button>
         <h2 className="text-sm font-semibold">
-          {routine ? "编辑" : "新建定时任务"}
+          {routine
+            ? translateText("common:actions.edit")
+            : translateText("actions.create")}
         </h2>
       </div>
-      <Field id="routine-name" label="名称">
+      <Field id="routine-name" label={translateText("common:labels.name")}>
         <Input
           id="routine-name"
-          placeholder="例如：科技日报"
+          placeholder={translateText("fields.namePlaceholder")}
           maxLength={100}
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
       </Field>
-      <Field id="routine-brief" label="要求">
+      <Field id="routine-brief" label={translateText("fields.briefLabel")}>
         <Textarea
           id="routine-brief"
           rows={6}
           maxLength={8000}
           className="min-h-32"
-          placeholder="例如：每天早上整理 Hacker News 和 36 氪的科技新闻，挑出最重要的 3 条，每条一两句话说明为什么重要，附原文链接。发过的不要重复；没有新内容就不发。"
+          placeholder={translateText("fields.briefPlaceholder")}
           value={brief}
           onChange={(e) => setBrief(e.target.value)}
         />
       </Field>
       <Field
-        label="计划"
+        label={translateText("fields.scheduleLabel")}
         hint={
           preview.length ? (
             <span className="tabular-nums">
-              {preview.map((d) => when(d.toISOString())).join("、")}…
-              {timezone === browserZone() ? null : "（本机时间）"}
+              {preview.map((d) => when(d.toISOString())).join(listSeparator())}…
+              {timezone === browserZone()
+                ? null
+                : translateText("schedule.localTimeSuffix")}
             </span>
           ) : (
-            "分 时 日 月 星期"
+            translateText("schedule.cronSyntaxHint")
           )
         }
       >
         <ScheduleFields schedule={schedule} onChange={setSchedule} />
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="时区">
+        <Field label={translateText("schedule.timeZoneLabel")}>
           <Select
-            aria-label="时区"
+            aria-label={translateText("schedule.timeZoneLabel")}
             className="w-full"
             value={timezone}
             onValueChange={(value) => setTimezone(value)}
@@ -291,11 +342,11 @@ export function RoutineForm({
         </Field>
         <Field
           id="routine-model"
-          label="模型"
+          label={translateText("common:entities.model")}
           hint={
             noModels ? (
               <span id="routine-model-hint">
-                暂无可用模型。
+                {translateText("agents:models.noneAvailable")}
                 <Button
                   type="button"
                   variant="link"
@@ -305,7 +356,7 @@ export function RoutineForm({
                     setSettings({ open: true, section: "providers" })
                   }
                 >
-                  前往模型服务
+                  {translateText("providers:actions.openSettings")}
                 </Button>
               </span>
             ) : undefined
@@ -313,7 +364,7 @@ export function RoutineForm({
         >
           <ModelSelect
             id="routine-model"
-            aria-label="模型"
+            aria-label={translateText("common:entities.model")}
             aria-describedby={noModels ? "routine-model-hint" : undefined}
             value={model}
             models={models}
@@ -323,10 +374,12 @@ export function RoutineForm({
       </div>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={() => onDone()}>
-          取消
+          {translateText("common:actions.cancel")}
         </Button>
         <Button type="submit" disabled={!ready || save.isPending}>
-          {routine ? "保存" : "创建"}
+          {routine
+            ? translateText("common:actions.save")
+            : translateText("common:actions.create")}
         </Button>
       </div>
     </form>

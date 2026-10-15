@@ -1,0 +1,63 @@
+{
+  "empty": {
+    "selectTitle": "Select a routine",
+    "selectDescription": "Select one on the left to view its instructions and run reports.",
+    "title": "No routines yet",
+    "description": "Have an agent do something on a schedule, such as summarizing morning news. Each run leaves a report.",
+    "deletedTitle": "This routine no longer exists"
+  },
+  "actions": {
+    "create": "New routine",
+    "runNow": "Run now"
+  },
+  "schedule": {
+    "kinds": {
+      "daily": "Daily",
+      "hourly": "Every few hours",
+      "cron": "Custom cron"
+    },
+    "frequencyLabel": "Frequency",
+    "weekdaysLabel": "Weekdays",
+    "timeLabel": "Time",
+    "intervalLabel": "Interval",
+    "cronLabel": "cron expression",
+    "localTimeSuffix": "(local time)",
+    "cronSyntaxHint": "minute hour day month weekday",
+    "timeZoneLabel": "Time zone",
+    "describe": {
+      "daily": "Daily at {{time}}",
+      "weekly": "Weekly on {{weekdays}} at {{time}}",
+      "hourly": "Every hour",
+      "hourInterval": "Every {{count}} hours"
+    },
+    "nextRun": "Next run"
+  },
+  "title": "Routines",
+  "fields": {
+    "namePlaceholder": "e.g. Daily tech news",
+    "briefLabel": "Brief",
+    "briefPlaceholder": "For example: Each morning, summarize tech news from Hacker News and 36Kr. Pick the 3 most important stories, explain each in one or two sentences and include the source link. Skip previously shared stories; send nothing if there’s no new content.",
+    "scheduleLabel": "Schedule"
+  },
+  "runStatus": {
+    "sent": "Sent",
+    "nothingNew": "Nothing new"
+  },
+  "reports": {
+    "handoffNotes": "Handoff notes for the next run: {{notes}}",
+    "previous": "Previous report",
+    "next": "Next report"
+  },
+  "brief": {
+    "version": "Brief v{{version}}",
+    "revisedFrom": " · Revised from “{{feedback}}”",
+    "restored": "Restored v{{version}}"
+  },
+  "feedback": {
+    "label": "Feedback",
+    "placeholder": "Feedback, e.g. Skip funding news",
+    "revisionFailed": "Could not revise the brief from this feedback",
+    "revising": "Revising brief…",
+    "briefUpdated": "Brief updated to v{{version}}"
+  }
+}

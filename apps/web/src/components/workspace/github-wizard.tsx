@@ -1,4 +1,5 @@
 import type { GitHubStatus, Installation } from "@/queries/forge";
+
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
 import { CheckCircleIcon } from "@phosphor-icons/react/CheckCircle";
 import { GitBranchIcon } from "@phosphor-icons/react/GitBranch";
@@ -6,6 +7,7 @@ import { GithubLogoIcon } from "@phosphor-icons/react/GithubLogo";
 import { GitPullRequestIcon } from "@phosphor-icons/react/GitPullRequest";
 import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { useId, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { LoadError, Loading } from "@/components/states";
 import {
@@ -28,6 +30,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { listSeparator, translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import {
   authorizationCallbackPath,
@@ -41,7 +44,12 @@ import {
 } from "@/queries/forge";
 import { Stepper } from "./stepper";
 
-const steps = ["了解", "创建 App", "安装到仓库", "完成"] as const;
+const steps = [
+  "connections:github.steps.overview",
+  "connections:github.steps.createApp",
+  "connections:github.steps.install",
+  "common:actions.done",
+] as const;
 type Step = 0 | 1 | 2 | 3;
 
 /** Where the setup stands on the server; steps before it are done. */
@@ -51,23 +59,26 @@ function serverStep(status: GitHubStatus | undefined): Step {
 }
 
 const features = [
-  [GitBranchIcon, "在你授权的仓库里 clone、提交和推送分支"],
-  [GitPullRequestIcon, "用 gh 处理 PR、Issue、Release 和 CI"],
+  [GitBranchIcon, "connections:github.features.git"],
+  [GitPullRequestIcon, "connections:github.features.gh"],
 ] as const;
 
 function Intro() {
+  const { t: translateText } = useTranslation([
+    "connections",
+    "common",
+    "validation",
+  ] as const);
   return (
     <div className="space-y-3">
-      <p className="text-sm">
-        AXP 会在你的 GitHub 上创建一个专属 App，智能体以它的身份工作：
-      </p>
+      <p className="text-sm">{translateText("github.introduction")}</p>
       <ul className="space-y-2">
         {features.map(([Icon, text]) => (
           <li key={text} className="flex items-center gap-2.5 text-sm">
             <span className="flex size-7 shrink-0 items-center justify-center bg-muted">
               <Icon aria-hidden="true" className="size-4" />
             </span>
-            {text}
+            {translateText(text)}
           </li>
         ))}
       </ul>
@@ -82,6 +93,11 @@ function CreateForm({
   error?: string;
   onSubmit: (input: { name: string; organization?: string }) => void;
 }) {
+  const { t: translateText } = useTranslation([
+    "connections",
+    "common",
+    "validation",
+  ] as const);
   const [name, setName] = useState("");
   const [owner, setOwner] = useState<"user" | "organization">("user");
   const [organization, setOrganization] = useState("");
@@ -105,12 +121,22 @@ function CreateForm({
     >
       {error ? <Alert>{error}</Alert> : null}
       <fieldset className="space-y-2">
-        <legend className="mb-2 text-sm font-medium">创建在</legend>
+        <legend className="mb-2 text-sm font-medium">
+          {translateText("github.fields.ownerLabel")}
+        </legend>
         <div className="grid grid-cols-2 gap-2">
           {(
             [
-              ["user", "我的个人账号", "仓库在你自己名下"],
-              ["organization", "一个组织", "需要你是组织的 owner"],
+              [
+                "user",
+                translateText("github.fields.personalAccount"),
+                translateText("github.fields.personalAccountHint"),
+              ],
+              [
+                "organization",
+                translateText("github.fields.organization"),
+                translateText("github.fields.organizationHint"),
+              ],
             ] as const
           ).map(([value, label, hint]) => (
             <label
@@ -136,19 +162,23 @@ function CreateForm({
         {owner === "organization" ? (
           <div className="space-y-1.5 pt-1">
             <label htmlFor={orgId} className="text-xs font-medium">
-              组织名称
+              {translateText("github.fields.organizationName")}
             </label>
             <Input
               id={orgId}
               value={organization}
-              placeholder="例如 acme"
+              placeholder={translateText(
+                "github.fields.organizationPlaceholder",
+              )}
               maxLength={39}
               required
               pattern={String.raw`.*\S.*`}
               spellCheck={false}
               autoFocus
               onInvalid={(e) =>
-                e.currentTarget.setCustomValidity("请输入组织名称")
+                e.currentTarget.setCustomValidity(
+                  translateText("validation:organizationRequired"),
+                )
               }
               onChange={(e) => {
                 e.currentTarget.setCustomValidity("");
@@ -160,32 +190,41 @@ function CreateForm({
       </fieldset>
       <div className="space-y-1.5">
         <label htmlFor={nameId} className="text-sm font-medium">
-          App 名称
-          <span className="ml-1.5 font-normal text-muted-foreground">可选</span>
+          {translateText("github.fields.appName")}
+          <span className="ml-1.5 font-normal text-muted-foreground">
+            {translateText("common:labels.optional")}
+          </span>
         </label>
         <Input
           id={nameId}
           value={name}
           maxLength={34}
-          placeholder="留空则自动生成，例如 AXP 3f2a"
+          placeholder={translateText("github.fields.appNamePlaceholder")}
           spellCheck={false}
           onChange={(e) => setName(e.target.value)}
         />
-        <p className="text-xs text-muted-foreground">在 GitHub 上不能重名</p>
+        <p className="text-xs text-muted-foreground">
+          {translateText("github.fields.appNameHint")}
+        </p>
       </div>
       <p className="text-xs text-muted-foreground">
-        在 GitHub 上点击「Create GitHub App」后会自动回到这里。
+        {translateText("github.createApp.redirectHelp")}
       </p>
     </form>
   );
 }
 
 function Install({ status }: { status: GitHubStatus }) {
+  const { t: translateText } = useTranslation([
+    "connections",
+    "common",
+    "validation",
+  ] as const);
   const app = status.app!;
   return (
     <div className="space-y-4">
       <p className="text-sm">
-        App{" "}
+        {translateText("common:entities.app")}{" "}
         <a
           href={app.html_url}
           target="_blank"
@@ -193,14 +232,14 @@ function Install({ status }: { status: GitHubStatus }) {
           className="font-medium underline underline-offset-2"
         >
           {app.name}
-        </a>{" "}
-        已创建，接下来把它安装到你的仓库：
+        </a>
+        {translateText("github.install.createdPrefix")}
       </p>
       <ol className="space-y-2">
         {[
-          "选择要安装到的账号或组织",
-          "勾选智能体可以访问的仓库，或选择「All repositories」",
-          "点击「Install」；GitHub 接着请你授权时确认，智能体就能以你的名义使用 GitHub",
+          translateText("github.install.chooseAccount"),
+          translateText("github.install.chooseRepositories"),
+          translateText("github.install.authorize"),
         ].map((text, index) => (
           <li key={text} className="flex gap-3 text-sm">
             <span
@@ -218,18 +257,27 @@ function Install({ status }: { status: GitHubStatus }) {
 }
 
 function repositoriesText(installation: Installation) {
-  if (installation.repository_selection === "all") return "全部仓库";
+  if (installation.repository_selection === "all")
+    return translate("connections:github.repositories.all");
   const shown = installation.repositories
     .slice(0, 3)
     .map((name) => name.split("/")[1]);
-  if (!shown.length) return "还没有选择仓库";
+  if (!shown.length) return translate("connections:github.repositories.none");
   const more = installation.total_repositories - shown.length;
   return more > 0
-    ? `${shown.join("、")} 等 ${installation.total_repositories} 个仓库`
-    : shown.join("、");
+    ? translate("connections:github.repositories.more", {
+        names: shown.join(listSeparator()),
+        count: installation.total_repositories,
+      })
+    : shown.join(listSeparator());
 }
 
 function Done({ status }: { status: GitHubStatus }) {
+  const { t: translateText } = useTranslation([
+    "connections",
+    "common",
+    "validation",
+  ] as const);
   const app = status.app!;
   return (
     <div className="space-y-4">
@@ -240,11 +288,15 @@ function Done({ status }: { status: GitHubStatus }) {
           className="size-6 shrink-0"
         />
         <div>
-          <p className="text-sm font-medium">已连接</p>
+          <p className="text-sm font-medium">
+            {translateText("status.connected")}
+          </p>
           <p className="text-xs text-muted-foreground">
             {status.user
-              ? `智能体以 ${status.user.login} 的名义使用 GitHub，commit 作者是 `
-              : "智能体以 "}
+              ? translateText("github.identity.commitAuthorPrefix", {
+                  username: status.user.login,
+                })
+              : translateText("github.identity.appPrefix")}
             <a
               href={app.html_url}
               target="_blank"
@@ -253,12 +305,17 @@ function Done({ status }: { status: GitHubStatus }) {
             >
               {app.slug}[bot]
             </a>
-            {status.user ? "。" : " 的身份使用 GitHub。"}
+            {status.user
+              ? translateText("common:format.period")
+              : translateText("github.identity.appSuffix")}
           </p>
         </div>
       </div>
       <div className="space-y-2">
-        <ul aria-label="已安装的账号" className="divide-y border">
+        <ul
+          aria-label={translateText("github.install.accounts")}
+          className="divide-y border"
+        >
           {status.installations.map((installation) => (
             <li
               key={installation.id}
@@ -269,8 +326,8 @@ function Done({ status }: { status: GitHubStatus }) {
                   {installation.account}
                   <span className="ml-1.5 text-xs font-normal text-muted-foreground">
                     {installation.account_type === "Organization"
-                      ? "组织"
-                      : "个人"}
+                      ? translateText("github.accountType.organization")
+                      : translateText("github.accountType.personal")}
                   </span>
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
@@ -284,7 +341,7 @@ function Done({ status }: { status: GitHubStatus }) {
                     target="_blank"
                     rel="noreferrer"
                   >
-                    管理
+                    {translateText("common:actions.manage")}
                     <ArrowSquareOutIcon aria-hidden="true" />
                   </a>
                 </Button>
@@ -293,7 +350,9 @@ function Done({ status }: { status: GitHubStatus }) {
           ))}
         </ul>
         <Button asChild variant="link" size="sm" className="h-auto px-0">
-          <a href={app.install_url}>安装到其他账号或组织</a>
+          <a href={app.install_url}>
+            {translateText("github.install.otherAccount")}
+          </a>
         </Button>
       </div>
       <Authorization status={status} />
@@ -308,6 +367,11 @@ function Done({ status }: { status: GitHubStatus }) {
  * created before AXP kept its client secret needs the secret first.
  */
 function Authorization({ status }: { status: GitHubStatus }) {
+  const { t: translateText } = useTranslation([
+    "connections",
+    "common",
+    "validation",
+  ] as const);
   const authorize = useAuthorizeGitHub();
   const unauthorize = useUnauthorizeGitHub();
   const onError = (error: Error) => toast.error(error.message);
@@ -316,11 +380,12 @@ function Authorization({ status }: { status: GitHubStatus }) {
       <section className="flex items-center gap-3 border px-3 py-2.5">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">
-            智能体的身份：{status.user.login}
+            {translateText("github.identity.agentLabel", {
+              name: status.user.login,
+            })}
           </p>
           <p className="text-xs text-muted-foreground">
-            gh、推送、PR 和合并都以你的名义，GitHub 显示为你本人并带 App
-            的标识。取消授权后一小时内回到 App 的身份。
+            {translateText("github.authorization.identityHelp")}
           </p>
         </div>
         <Button
@@ -329,7 +394,7 @@ function Authorization({ status }: { status: GitHubStatus }) {
           disabled={unauthorize.isPending}
           onClick={() => unauthorize.mutate(undefined, { onError })}
         >
-          取消授权
+          {translateText("github.authorization.revoke")}
         </Button>
       </section>
     );
@@ -337,11 +402,11 @@ function Authorization({ status }: { status: GitHubStatus }) {
   return (
     <section className="space-y-3 border px-3 py-2.5">
       <div>
-        <p className="text-sm font-medium">以你的名义使用 GitHub</p>
+        <p className="text-sm font-medium">
+          {translateText("github.authorization.title")}
+        </p>
         <p className="text-xs text-muted-foreground">
-          授权后，智能体以你的名义使用
-          GitHub，也能在你的个人账号下创建仓库；不授权时是 App 的 bot，GitHub
-          不允许它在个人账号下创建仓库。
+          {translateText("github.authorization.description")}
         </p>
       </div>
       {status.oauth ? null : (
@@ -353,13 +418,20 @@ function Authorization({ status }: { status: GitHubStatus }) {
         onClick={() => authorize.mutate(undefined, { onError })}
       >
         <GithubLogoIcon aria-hidden="true" data-icon="inline-start" />
-        {authorize.isPending ? "正在打开 GitHub…" : "前往 GitHub 授权"}
+        {authorize.isPending
+          ? translateText("github.authorization.opening")
+          : translateText("github.authorization.open")}
       </Button>
     </section>
   );
 }
 
 function OAuthClientForm({ settingsURL }: { settingsURL: string }) {
+  const { t: translateText } = useTranslation([
+    "connections",
+    "common",
+    "validation",
+  ] as const);
   const save = useSetGitHubOAuthClient();
   const [clientID, setClientID] = useState("");
   const [secret, setSecret] = useState("");
@@ -377,25 +449,25 @@ function OAuthClientForm({ settingsURL }: { settingsURL: string }) {
       }}
     >
       <p className="text-xs text-muted-foreground">
-        这个 App 创建得早，AXP 没有保存它的 client secret。请在{" "}
+        {translateText("github.oauth.legacyAppHelp")}
         <a
           href={settingsURL}
           target="_blank"
           rel="noreferrer"
           className="text-foreground underline underline-offset-2"
         >
-          App 设置
-        </a>{" "}
-        里把 Callback URL 设为{" "}
+          {translateText("github.oauth.appSettings")}
+        </a>
+        {translateText("github.oauth.callbackPrefix")}
         <code className="break-all text-foreground">
           {window.location.origin + authorizationCallbackPath}
         </code>
-        ，生成一个新的 client secret，然后填在这里：
+        {translateText("github.oauth.clientSecretHelp")}
       </p>
       <div className="grid gap-2 sm:grid-cols-2">
         <div className="space-y-1">
           <label htmlFor={idId} className="text-xs font-medium">
-            Client ID
+            {translateText("github.oauth.clientId")}
           </label>
           <Input
             id={idId}
@@ -407,7 +479,7 @@ function OAuthClientForm({ settingsURL }: { settingsURL: string }) {
         </div>
         <div className="space-y-1">
           <label htmlFor={secretId} className="text-xs font-medium">
-            Client secret
+            {translateText("github.oauth.clientSecret")}
           </label>
           <Input
             id={secretId}
@@ -425,7 +497,7 @@ function OAuthClientForm({ settingsURL }: { settingsURL: string }) {
         size="sm"
         disabled={save.isPending}
       >
-        保存
+        {translateText("common:actions.save")}
       </Button>
     </form>
   );
@@ -444,33 +516,43 @@ function Alert({ children }: { children: React.ReactNode }) {
 }
 
 function Disconnect({ status }: { status: GitHubStatus }) {
+  const { t: translateText } = useTranslation([
+    "connections",
+    "common",
+    "validation",
+  ] as const);
   const disconnect = useDisconnectGitHub();
   const app = status.app!;
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
         <Button variant="ghost" className="text-muted-foreground sm:mr-auto">
-          断开连接
+          {translateText("actions.disconnect")}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>断开 GitHub？</AlertDialogTitle>
+          <AlertDialogTitle>
+            {translateText("github.disconnect.confirmTitle")}
+          </AlertDialogTitle>
           <AlertDialogDescription>
-            AXP 会删除保存的 App 凭据，智能体将无法再访问私有仓库，也不能推送和
-            打开 PR。GitHub 上的 App {app.name} 不会被删除。
+            {translateText("github.disconnect.confirmDescription", {
+              appName: app.name,
+            })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogCancel>
+            {translateText("common:actions.cancel")}
+          </AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             onClick={() =>
               disconnect.mutate(undefined, {
                 onSuccess: () =>
-                  toast.success("已断开 GitHub", {
+                  toast.success(translateText("github.disconnect.success"), {
                     action: {
-                      label: "去 GitHub 删除 App",
+                      label: translateText("github.disconnect.deleteApp"),
                       onClick: () => window.open(app.settings_url, "_blank"),
                     },
                   }),
@@ -478,7 +560,7 @@ function Disconnect({ status }: { status: GitHubStatus }) {
               })
             }
           >
-            断开
+            {translateText("common:actions.disconnect")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -500,6 +582,11 @@ export function GitHubWizard({
   onOpenChange: (open: boolean) => void;
   returnError?: string;
 }) {
+  const { t: translateText } = useTranslation([
+    "connections",
+    "common",
+    "validation",
+  ] as const);
   const {
     data: status,
     error,
@@ -517,14 +604,16 @@ export function GitHubWizard({
 
   const body = error ? (
     <LoadError
-      what="GitHub 的连接状态"
+      what={translateText("github.status.label")}
       error={error}
       onRetry={() => void refetch()}
     />
   ) : isPending ? (
     <Loading layout="lines" />
   ) : status.state === "error" ? (
-    <Alert>{status.error?.message ?? "GitHub 连接出错。"}</Alert>
+    <Alert>
+      {status.error?.message ?? translateText("github.errors.connectionFailed")}
+    </Alert>
   ) : step === 0 ? (
     <Intro />
   ) : step === 1 ? (
@@ -548,12 +637,16 @@ export function GitHubWizard({
       <>
         <Disconnect status={status} />
         <Button onClick={() => void refetch()} disabled={isFetching}>
-          重试
+          {translateText("common:actions.retry")}
         </Button>
       </>
     );
   } else if (status && step === 0) {
-    footer = <Button onClick={() => setLocal(1)}>开始连接</Button>;
+    footer = (
+      <Button onClick={() => setLocal(1)}>
+        {translateText("actions.connect")}
+      </Button>
+    );
   } else if (status && step === 1) {
     footer = (
       <>
@@ -562,11 +655,13 @@ export function GitHubWizard({
           className="sm:mr-auto"
           onClick={() => setLocal(0)}
         >
-          上一步
+          {translateText("common:actions.previous")}
         </Button>
         <Button type="submit" form="github-create" disabled={create.isPending}>
           <GithubLogoIcon aria-hidden="true" data-icon="inline-start" />
-          {create.isPending ? "正在打开 GitHub…" : "前往 GitHub 创建"}
+          {create.isPending
+            ? translateText("github.authorization.opening")
+            : translateText("github.actions.create")}
         </Button>
       </>
     );
@@ -579,12 +674,12 @@ export function GitHubWizard({
           disabled={isFetching}
           onClick={() => void refresh()}
         >
-          我已安装
+          {translateText("github.actions.confirmInstalled")}
         </Button>
         <Button asChild>
           <a href={status.app!.install_url}>
             <GithubLogoIcon aria-hidden="true" data-icon="inline-start" />
-            前往 GitHub 安装
+            {translateText("github.actions.install")}
           </a>
         </Button>
       </>
@@ -593,7 +688,9 @@ export function GitHubWizard({
     footer = (
       <>
         <Disconnect status={status} />
-        <Button onClick={() => onOpenChange(false)}>完成</Button>
+        <Button onClick={() => onOpenChange(false)}>
+          {translateText("common:actions.done")}
+        </Button>
       </>
     );
   }
@@ -603,12 +700,14 @@ export function GitHubWizard({
       <DialogContent aria-describedby={undefined} className="sm:max-w-lg">
         <DialogHeader className="flex-row items-center gap-2">
           <GithubLogoIcon aria-hidden="true" className="size-5" />
-          <DialogTitle className="text-sm">连接 GitHub</DialogTitle>
+          <DialogTitle className="text-sm">
+            {translateText("github.title")}
+          </DialogTitle>
         </DialogHeader>
         <Stepper
-          steps={steps}
+          steps={steps.map((key) => translateText(key))}
           step={step}
-          label="连接步骤"
+          label={translateText("github.steps.label")}
           complete={step === 3}
         />
         <div className="min-h-64">{body}</div>

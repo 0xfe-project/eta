@@ -1,4 +1,5 @@
 import type { ActivityOperation } from "@/api/control-plane.gen";
+
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { CheckCircleIcon } from "@phosphor-icons/react/CheckCircle";
 import { FolderOpenIcon } from "@phosphor-icons/react/FolderOpen";
@@ -8,6 +9,8 @@ import { HourglassMediumIcon } from "@phosphor-icons/react/HourglassMedium";
 import { QuestionIcon } from "@phosphor-icons/react/Question";
 import { XCircleIcon } from "@phosphor-icons/react/XCircle";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { actionClass, frameClass, muted } from "./activity-card";
 
@@ -21,20 +24,40 @@ import { actionClass, frameClass, muted } from "./activity-card";
 const actions = {
   create_workspace: {
     icon: FolderOpenIcon,
-    label: "创建工作区",
-    done: "已创建",
+    get label() {
+      return translate("tasks:operations.createWorkspace");
+    },
+    get done() {
+      return translate("common:status.created");
+    },
   },
   create_worktree: {
     icon: GitBranchIcon,
-    label: "创建 worktree",
-    done: "已创建",
+    get label() {
+      return translate("tasks:operations.createWorktree");
+    },
+    get done() {
+      return translate("common:status.created");
+    },
   },
   open_worktree: {
     icon: GitBranchIcon,
-    label: "打开 worktree",
-    done: "已打开",
+    get label() {
+      return translate("tasks:operations.openWorktree");
+    },
+    get done() {
+      return translate("common:status.opened");
+    },
   },
-  add_project: { icon: FolderPlusIcon, label: "添加项目", done: "已添加" },
+  add_project: {
+    icon: FolderPlusIcon,
+    get label() {
+      return translate("tasks:operations.addProject");
+    },
+    get done() {
+      return translate("common:status.added");
+    },
+  },
 } satisfies Record<ActivityOperation["action"], unknown>;
 
 // Accepted is not done, and an unconfirmed call is not a failure.
@@ -47,17 +70,23 @@ const statuses = {
   },
   accepted: {
     icon: HourglassMediumIcon,
-    label: "已受理，未确认完成",
+    get label() {
+      return translate("tasks:operations.acceptedUnconfirmed");
+    },
     className: muted,
   },
   failed: {
     icon: XCircleIcon,
-    label: "失败",
+    get label() {
+      return translate("common:status.failed");
+    },
     className: "text-[var(--terminal-error)]",
   },
   unknown: {
     icon: QuestionIcon,
-    label: "结果未确认",
+    get label() {
+      return translate("tasks:operations.resultUnconfirmed");
+    },
     className: "text-[var(--terminal-warning)]",
   },
 } satisfies Record<ActivityOperation["status"], unknown>;
@@ -85,6 +114,7 @@ export function ActivityOperationCards({
 }
 
 function ActivityOperationCard({ value }: { value: ActivityOperation }) {
+  const { t: translateText } = useTranslation(["common", "tasks"] as const);
   const [open, setOpen] = useState(false);
   const action = actions[value.action];
   const status = statuses[value.status];
@@ -107,7 +137,16 @@ function ActivityOperationCard({ value }: { value: ActivityOperation }) {
     <button
       type="button"
       aria-expanded={open}
-      aria-label={`${action.label}${name ? `：${name}` : ""}，${statusLabel}${where ? `（${where}）` : ""}`}
+      aria-label={translateText("format.operationSummary", {
+        action: action.label,
+        detail: name
+          ? translateText("format.namedValueSuffix", { value: name })
+          : "",
+        status: statusLabel,
+        locationHint: where
+          ? translateText("format.parenthesizedSuffix", { value: where })
+          : "",
+      })}
       onClick={() => setOpen((v) => !v)}
       className={cn(
         frameClass,

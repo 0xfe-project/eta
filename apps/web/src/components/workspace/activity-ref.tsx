@@ -9,7 +9,9 @@ import { GitPullRequestIcon } from "@phosphor-icons/react/GitPullRequest";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { NotePencilIcon } from "@phosphor-icons/react/NotePencil";
 import { Link } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { actionClass, frameClass, muted } from "./activity-card";
 import { ArtifactButton } from "./artifact-dialog";
@@ -26,11 +28,36 @@ import { useSectionLink } from "./workspace-search";
  * the call's details.
  */
 const kinds = {
-  task: { icon: ListChecksIcon, open: "打开任务" },
-  routine: { icon: ClockIcon, open: "打开定时" },
-  pull_request: { icon: GitPullRequestIcon, open: "打开 PR" },
-  issue_draft: { icon: NotePencilIcon, open: "去 GitHub 创建 issue" },
-  artifact: { icon: AppWindowIcon, open: "打开 Artifact" },
+  task: {
+    icon: ListChecksIcon,
+    get open() {
+      return translate("common:actions.openTask");
+    },
+  },
+  routine: {
+    icon: ClockIcon,
+    get open() {
+      return translate("common:actions.openRoutine");
+    },
+  },
+  pull_request: {
+    icon: GitPullRequestIcon,
+    get open() {
+      return translate("common:actions.openPullRequest");
+    },
+  },
+  issue_draft: {
+    icon: NotePencilIcon,
+    get open() {
+      return translate("connections:github.createIssue");
+    },
+  },
+  artifact: {
+    icon: AppWindowIcon,
+    get open() {
+      return translate("artifacts:actions.open");
+    },
+  },
 } satisfies Record<ActivityRef["kind"], unknown>;
 
 const iconClass = cn("size-3.5 shrink-0", muted);
@@ -52,6 +79,11 @@ export function ActivityRefCard({
   value: ActivityRef;
   className?: string;
 }) {
+  const { t: translateText } = useTranslation([
+    "common",
+    "artifacts",
+    "connections",
+  ] as const);
   const sectionLink = useSectionLink();
   const { icon: Icon, open } = kinds[value.kind];
   const status = value.kind === "task" ? taskStatus(value.status) : undefined;
@@ -61,12 +93,20 @@ export function ActivityRefCard({
   const artifact = value.kind === "artifact";
   const number = value.number && !artifact ? value.number : undefined;
   const label = draft
-    ? `${open}：${value.title}${repo ? `（${repo}）` : ""}`
+    ? translateText("format.referenceSummary", {
+        action: open,
+        title: value.title,
+        repositoryHint: repo
+          ? translateText("format.parenthesizedSuffix", { value: repo })
+          : "",
+      })
     : [
         open,
         number ? `#${number}` : null,
         value.title || repo,
-        artifact && value.number ? `第 ${value.number} 版` : null,
+        artifact && value.number
+          ? translateText("artifacts:version.label", { version: value.number })
+          : null,
       ]
         .filter(Boolean)
         .join(" ");
@@ -83,8 +123,9 @@ export function ActivityRefCard({
         {value.title && repo ? <span className={muted}> · {repo}</span> : null}
         {artifact && value.number ? (
           <span className={cn("tabular-nums", muted)}>
-            {" "}
-            · 第 {value.number} 版
+            {translateText("artifacts:version.inlineLabel", {
+              version: value.number,
+            })}
           </span>
         ) : null}
       </span>
@@ -99,7 +140,7 @@ export function ActivityRefCard({
       ) : null}
       {draft ? (
         <span className="shrink-0 text-[var(--terminal-link)]">
-          去 GitHub 创建
+          {translateText("connections:github.createOnGitHub")}
         </span>
       ) : null}
       {value.url ? (
@@ -160,7 +201,12 @@ export function ActivityRefCard({
 
 /** A draft's body when its link was too long to carry it: to paste. */
 function CopyBody({ text }: { text: string }) {
-  const hint = "正文太长，没放进链接：复制后粘贴到 GitHub";
+  const { t: translateText } = useTranslation([
+    "common",
+    "artifacts",
+    "connections",
+  ] as const);
+  const hint = translateText("connections:github.issueDraft.bodyTooLong");
   return (
     <button
       type="button"
@@ -174,12 +220,14 @@ function CopyBody({ text }: { text: string }) {
       onClick={() =>
         void navigator.clipboard
           .writeText(text)
-          .then(() => toast("已复制正文"))
-          .catch(() => toast.error("复制失败：浏览器不允许访问剪贴板"))
+          .then(() =>
+            toast(translateText("connections:github.issueDraft.bodyCopied")),
+          )
+          .catch(() => toast.error(translateText("errors.clipboardBlocked")))
       }
     >
       <CopyIcon aria-hidden="true" className={iconClass} />
-      复制正文
+      {translateText("connections:github.issueDraft.copyBody")}
     </button>
   );
 }

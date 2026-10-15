@@ -4,6 +4,7 @@ import { BrainIcon } from "@phosphor-icons/react/Brain";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { Link } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/workspace/app-shell";
 import { AttentionDot } from "@/components/workspace/settings-nav";
 import {
@@ -11,13 +12,26 @@ import {
   useSettingsAttention,
 } from "@/components/workspace/settings-sections";
 import { useWorkspaceStore } from "@/components/workspace/workspace-store";
+import { translate } from "@/lib/i18n";
 
 // The phone's way to everything the bottom tabs leave out: the pages the
 // wide sidebar lists, then each settings section, opened in the dialog.
 
 const pages = [
-  { to: "/workspace/routines", label: "定时", icon: ClockIcon },
-  { to: "/workspace/memory", label: "记忆", icon: BrainIcon },
+  {
+    to: "/workspace/routines",
+    get label() {
+      return translate("navigation:sections.routines");
+    },
+    icon: ClockIcon,
+  },
+  {
+    to: "/workspace/memory",
+    get label() {
+      return translate("navigation:sections.memory");
+    },
+    icon: BrainIcon,
+  },
 ] as const;
 
 const row =
@@ -61,14 +75,19 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export function More() {
+  const { t: translateText } = useTranslation([
+    "navigation",
+    "common",
+    "settings",
+  ] as const);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const attention = useSettingsAttention();
   return (
     <>
-      <PageHeader title="更多" />
+      <PageHeader title={translateText("sections.more")} />
       <main id="main" className="min-h-0 flex-1 overflow-y-auto pb-6">
         <div className="mx-auto max-w-content">
-          <Group title="功能">
+          <Group title={translateText("sections.capabilities")}>
             {pages.map(({ to, label, icon }) => (
               <li key={to}>
                 <Link to={to} className={row}>
@@ -77,7 +96,7 @@ export function More() {
               </li>
             ))}
           </Group>
-          <Group title="设置">
+          <Group title={translateText("settings:title")}>
             {settingsSections.map(({ value, label, icon }) => (
               <li key={value}>
                 <button
@@ -89,7 +108,11 @@ export function More() {
                     {attention[value] ? (
                       <>
                         <AttentionDot />
-                        <span className="sr-only">（有账号需要处理）</span>
+                        <span className="sr-only">
+                          {translateText(
+                            "settings:accessibility.accountAttentionSuffix",
+                          )}
+                        </span>
                       </>
                     ) : null}
                   </RowContent>

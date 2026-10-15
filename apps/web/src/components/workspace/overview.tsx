@@ -3,6 +3,7 @@ import type { Agent, ChatMessage } from "@/queries/chat";
 import type { Connection, Model } from "@/queries/llm";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import {
   ACTIVE_STATUSES,
@@ -208,13 +209,19 @@ function AccountsGauge({
   connections: Connection[] | undefined;
   loading: boolean;
 }) {
+  const { t: translateText } = useTranslation([
+    "overview",
+    "agents",
+    "common",
+    "navigation",
+  ] as const);
   const active = connections.filter((c) => USABLE.has(c.state)).length;
   const broken = connections.find((c) => NEEDS_ACTION.has(c.state));
   const limited = connections.find(
     (c) => c.state === "rate_limited" || c.state === "degraded",
   );
   const note = loading
-    ? "读取中…"
+    ? translateText("common:states.reading")
     : broken
       ? `${broken.label} ${connectionStateLabels[broken.state]}`
       : limited
@@ -225,12 +232,19 @@ function AccountsGauge({
             .filter(Boolean)
             .join(" · ")
         : connections.length
-          ? "全部正常"
-          : "还没有账号";
+          ? translateText("accounts.allHealthy")
+          : translateText("accounts.empty");
   return (
     <Meter
-      title="模型账号"
-      reading={loading ? "—" : `${active} / ${connections.length} 可用`}
+      title={translateText("accounts.title")}
+      reading={
+        loading
+          ? "—"
+          : translateText("models.availableCount", {
+              available: active,
+              total: connections.length,
+            })
+      }
       ends={["E", "F"]}
       note={note}
       alert={Boolean(broken)}
@@ -253,27 +267,46 @@ function ModelsGauge({
   models: Model[] | undefined;
   loading: boolean;
 }) {
+  const { t: translateText } = useTranslation([
+    "overview",
+    "agents",
+    "common",
+    "navigation",
+  ] as const);
   const available = models.filter((model) => model.available).length;
   const unavailable = models.length - available;
   const degraded = models.filter((model) => model.status === "degraded").length;
   return (
     <Meter
-      title="模型目录"
-      reading={loading ? "—" : `${available} / ${models.length} 可用`}
+      title={translateText("models.title")}
+      reading={
+        loading
+          ? "—"
+          : translateText("models.availableCount", {
+              available,
+              total: models.length,
+            })
+      }
       ends={["0", String(models.length)]}
       note={
         loading
-          ? "读取中…"
+          ? translateText("common:states.reading")
           : unavailable || degraded
             ? [
-                unavailable ? `${unavailable} 个不可用` : "",
-                degraded ? `${degraded} 个暂时故障` : "",
+                unavailable
+                  ? translateText("models.unavailableCount", {
+                      count: unavailable,
+                    })
+                  : "",
+                degraded
+                  ? translateText("models.degradedCount", { count: degraded })
+                  : "",
               ]
                 .filter(Boolean)
                 .join(" · ")
             : models.length
-              ? "全部可用"
-              : "没有模型"
+              ? translateText("models.allAvailable")
+              : translateText("models.empty")
       }
     >
       {models.map((model) => (
@@ -282,7 +315,12 @@ function ModelsGauge({
           title={
             model.status === "available"
               ? model.display_name
-              : `${model.display_name}：${model.reason?.message ?? "不可用"}`
+              : translateText("common:format.namedValue", {
+                  name: model.display_name,
+                  value:
+                    model.reason?.message ??
+                    translateText("common:status.unavailable"),
+                })
           }
           className={model.status === "available" ? "bg-foreground" : undefined}
           style={
@@ -358,6 +396,12 @@ function Display({
   agent: Agent | undefined;
   loading: boolean;
 }) {
+  const { t: translateText } = useTranslation([
+    "overview",
+    "agents",
+    "common",
+    "navigation",
+  ] as const);
   const availability = useModelAvailability(agent);
   const model =
     availability.state === "not_set" ? undefined : availability.model;
@@ -383,29 +427,41 @@ function Display({
           <div className="min-w-0">
             <div className="truncate font-semibold">{agent.name}</div>
             <div className="truncate font-mono text-[10px] text-muted-foreground">
-              {model?.display_name ?? agent.model ?? "未选择模型"} ·{" "}
-              {agentStatusLabels[agent.status]}
+              {model?.display_name ??
+                agent.model ??
+                translateText("agents:models.noneSelected")}{" "}
+              · {agentStatusLabels[agent.status]}
             </div>
           </div>
-          <Row label="上下文窗口">{contextText(model?.context_window)}</Row>
-          <Row label="模型">
+          <Row label={translateText("models.contextWindow")}>
+            {contextText(model?.context_window)}
+          </Row>
+          <Row label={translateText("common:entities.model")}>
             {availability.state === "ok" ? (
-              <span className="text-foreground">■ 可用</span>
+              <span className="text-foreground">
+                {translateText("models.availability.available")}
+              </span>
             ) : availability.state === "degraded" ? (
-              <span className="text-foreground">▨ 暂时故障</span>
+              <span className="text-foreground">
+                {translateText("models.availability.degraded")}
+              </span>
             ) : availability.state === "unavailable" ? (
-              <span className="text-destructive">■ 不可用</span>
+              <span className="text-destructive">
+                {translateText("models.availability.unavailable")}
+              </span>
             ) : (
-              "未选择"
+              translateText("common:labels.notSelected")
             )}
           </Row>
         </>
       ) : loading ? (
         <div className="text-sm text-muted-foreground motion-safe:animate-pulse">
-          读取中…
+          {translateText("common:states.reading")}
         </div>
       ) : (
-        <div className="text-sm text-muted-foreground">还没有智能体</div>
+        <div className="text-sm text-muted-foreground">
+          {translateText("agents:empty.title")}
+        </div>
       )}
     </div>
   );
@@ -461,6 +517,12 @@ function currentReply(messages: ChatMessage[], agentId: string | undefined) {
 }
 
 export function Overview() {
+  const { t: translateText } = useTranslation([
+    "overview",
+    "agents",
+    "common",
+    "navigation",
+  ] as const);
   const now = useNow();
   const { data: snapshot } = useQuery(chatQueryOptions());
   const { agents, current } = useAgents();
@@ -492,7 +554,7 @@ export function Overview() {
 
   return (
     <section
-      aria-label="概览"
+      aria-label={translateText("navigation:sections.overview")}
       aria-busy={!loaded}
       className="mx-auto max-w-content border p-3.5 text-foreground"
     >
@@ -502,7 +564,10 @@ export function Overview() {
             value={(working + waiting) / load.max}
             labels={load.labels}
             redFrom={0.9}
-            label={`负载：${agents.length} 个智能体中 ${working + waiting} 个在运转`}
+            label={translateText("load.summary", {
+              total: agents.length,
+              active: working + waiting,
+            })}
           >
             <span className="font-mono text-[2.25rem] leading-none font-semibold tracking-tight tabular-nums">
               {loaded ? working + waiting : "—"}
@@ -511,11 +576,14 @@ export function Overview() {
               </span>
             </span>
             <span className="mt-1.5">
-              <Caption>负载 · 运转中</Caption>
+              <Caption>{translateText("load.label")}</Caption>
             </span>
           </Gauge>
           <p className="-mt-3 text-center font-mono text-[10px] text-muted-foreground">
-            {loaded ? working : "—"} 工作中 · {loaded ? waiting : "—"} 等待确认
+            {translateText("load.agentStates", {
+              working: loaded ? working : "—",
+              waiting: loaded ? waiting : "—",
+            })}
           </p>
         </div>
 
@@ -527,8 +595,10 @@ export function Overview() {
             labels={timer.labels}
             label={
               reply
-                ? `本轮已用 ${clock(elapsed)}`
-                : "当前智能体没有进行中的回复"
+                ? translateText("turn.usage", {
+                    usage: clock(elapsed),
+                  })
+                : translateText("turn.noActiveReply")
             }
           >
             <span
@@ -538,11 +608,17 @@ export function Overview() {
               {reply ? clock(elapsed) : "—"}
             </span>
             <span className="mt-1.5">
-              <Caption>本轮计时</Caption>
+              <Caption>{translateText("turn.duration")}</Caption>
             </span>
           </Gauge>
           <p className="-mt-3 text-center font-mono text-[10px] text-muted-foreground">
-            {reply ? "回复中" : "未在回复"} · {loaded ? replies : "—"} 条进行中
+            {translateText("load.activeReplies", {
+              status: reply
+                ? translateText("turn.replying")
+                : translateText("turn.notReplying"),
+              count: replies,
+              countText: loaded ? replies : "—",
+            })}
           </p>
         </div>
       </div>
@@ -556,7 +632,10 @@ export function Overview() {
       </div>
 
       {agents.length ? (
-        <ul aria-label="智能体" className="mt-3.5 grid gap-0.5 border-t pt-2">
+        <ul
+          aria-label={translateText("common:entities.agents")}
+          className="mt-3.5 grid gap-0.5 border-t pt-2"
+        >
           {agents.map((agent) => {
             const memoryCount = memories.byAgent.get(agent.id);
             return (
@@ -575,10 +654,13 @@ export function Overview() {
                     {models.find((model) => model.id === agent.model)
                       ?.display_name ??
                       agent.model ??
-                      "未选择模型"}
+                      translateText("agents:models.noneSelected")}
                   </span>
                   <span className="text-right font-mono text-[10px] text-muted-foreground tabular-nums">
-                    {memoryCount ?? "—"} 记忆
+                    {translateText("memory.count", {
+                      count: memoryCount ?? 0,
+                      countText: memoryCount ?? "—",
+                    })}
                   </span>
                   <span className="text-right font-mono text-[10px] text-muted-foreground">
                     {agentStatusLabels[agent.status]}
@@ -592,15 +674,15 @@ export function Overview() {
 
       <div className="mt-3.5 flex items-end justify-between border-t pt-2.5">
         <div className="flex flex-col">
-          <Caption>智能体</Caption>
+          <Caption>{translateText("common:entities.agents")}</Caption>
           <Digits value={loaded ? agents.length : undefined} width={2} strong />
         </div>
         <div className="flex flex-col items-center">
-          <Caption>待确认</Caption>
+          <Caption>{translateText("attention.awaitingConfirmation")}</Caption>
           <Digits value={loaded ? pending.length : undefined} width={2} />
         </div>
         <div className="flex flex-col items-end">
-          <Caption>记忆条目</Caption>
+          <Caption>{translateText("memory.label")}</Caption>
           <Digits value={loaded ? memories.total : undefined} width={4} />
         </div>
       </div>

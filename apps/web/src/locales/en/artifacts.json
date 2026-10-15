@@ -1,0 +1,27 @@
+{
+  "actions": {
+    "open": "Open Artifact"
+  },
+  "version": {
+    "label": "Version {{version}}",
+    "inlineLabel": " · Version {{version}}",
+    "title": "Version",
+    "latestSuffix": " (latest)",
+    "option": "Version {{version}}{{latestLabel}}"
+  },
+  "sandboxDescription": "Static pages published by agents run in a sandbox and cannot access AXP’s login state or APIs.",
+  "loadTarget": "this Artifact",
+  "sharing": {
+    "revokeHint": "Revoking immediately invalidates the link. Sharing again creates a new link.",
+    "createHint": "Create a public link: anyone with the link can open this version.",
+    "revoked": "Public link revoked",
+    "created": "Public link created",
+    "revoke": "Revoke sharing",
+    "sharePublicly": "Share publicly",
+    "publicLink": "Public link"
+  },
+  "empty": {
+    "title": "No Artifacts yet",
+    "description": "Pages published by agents in this group appear here."
+  }
+}

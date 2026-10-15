@@ -19,6 +19,20 @@ TanStack Start + React。开发命令在仓库根目录执行 `bun run dev`。
 
 `@/` 同时在 TypeScript 和 Vite 中指向 `src/`。
 
+## 国际化
+
+使用 `react-i18next`，简体中文与英文资源按功能放在 `src/locales/zh/<namespace>.json` 和 `en/<namespace>.json`，由 `resources.ts` 注册。当前包括 common、chat、tasks、agents、artifacts、bundles、computers、connections、providers、validation、navigation、memory、overview、routines、settings 共 15 个 namespace。共用按钮、时间和通用标签放在 common，各功能维护自己的资源。
+
+所有界面文字、无障碍标签、通知和校验提示都从资源读取；用户内容、产品名、代码和命令保留原文。key 使用稳定的英文语义路径，如 `tasks:status.todo`、`agents:delete.confirmTitle`，禁止中文 key 或整句文案 key。保留 i18next 的 `:` namespace 分隔符和 `.` 嵌套 key 分隔符。插值参数按含义命名，如 `name`、`count`、`modelName`；英文数量文案维护 `_one` / `_other`。
+
+默认按 `navigator.languages` 的优先级选择中英文，中文地区变体统一使用简体中文，其他语言回退英文。设置 → 外观 → 语言可选择跟随系统、中文或 English，保存在当前浏览器的 `axp.language.v1`，即时切换并支持跨标签页同步。存储不可用时仍可切换当前页面。日期、时间和数字随当前语言格式化。
+
+SSR 和客户端首次渲染统一使用英文；hydration 后加载浏览器语言偏好，避免服务端请求共享用户语言或 hydration 不一致。React 组件显式声明使用的 namespace，例如 `const { t } = useTranslation(["tasks", "common"] as const)`，主功能调用 `t("status.todo")`，共用文案调用 `t("common:actions.save")`。组件外的格式化和事件逻辑通过 `src/lib/i18n.ts` 的 `translate("tasks:status.todo")` 在调用时读取语言，避免模块加载时固定文案。`src/@types/i18next.d.ts` 从英文资源推导 key 类型，拼错 key 或 namespace 会在类型检查中失败。
+
+内置环境包、插件和配置字段由 `i18n-metadata.ts` 按稳定 ID 映射语义 key；只翻译已知默认说明，修改后的说明及自定义 schema 保留原文，不把 API 返回的文本当 key。
+
+新增文案需同时更新对应 namespace 的中英文资源文件。`i18n.test.ts` 检查 namespace/key 一致性、英文语义 key、插值变量、内置元数据和源代码调用覆盖，并验证错误 key 的类型约束、系统语言、英文回退、持久化、动态切换及校验文案。
+
 ## Query
 
 `getRouter()` 为每个路由实例创建独立 QueryClient，避免 SSR 请求间共享缓存。SSR integration 提供 QueryClientProvider、缓存序列化和 hydration。默认查询保鲜 30 秒，失败重试一次；mutation 不自动重试。

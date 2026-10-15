@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 /**
@@ -13,14 +14,10 @@ import { cn } from "@/lib/utils";
 const ROSE = "var(--terminal-accent)";
 
 export function ClaudePermission({
-  title = "Bash command",
+  title: providedTitle,
   command = "rm -rf node_modules",
-  question = "Do you want to proceed?",
-  options = [
-    "Yes",
-    "Yes, and don't ask again this session",
-    "No, and tell Claude what to do (esc)",
-  ],
+  question: providedQuestion,
+  options: providedOptions,
   defaultSelected = 0,
   onChoose,
   className,
@@ -33,6 +30,14 @@ export function ClaudePermission({
   onChoose?: (index: number) => void;
   className?: string;
 }) {
+  const { t } = useTranslation(["chat", "common"] as const);
+  const title = providedTitle ?? t("confirmations.bashCommand");
+  const question = providedQuestion ?? t("confirmations.continueQuestion");
+  const options = providedOptions ?? [
+    t("common:actions.yes"),
+    t("confirmations.allowForSession"),
+    t("confirmations.denyAndExplain"),
+  ];
   const [sel, setSel] = React.useState(defaultSelected);
 
   function onKey(e: React.KeyboardEvent, i: number) {

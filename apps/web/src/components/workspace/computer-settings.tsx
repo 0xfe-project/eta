@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+
 import type { Computer, ComputerRuntime } from "@/queries/tasks";
 import { CopyIcon } from "@phosphor-icons/react/Copy";
 import { DesktopIcon } from "@phosphor-icons/react/Desktop";
@@ -6,6 +7,7 @@ import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { InfoIcon } from "@phosphor-icons/react/Info";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Empty, LoadError, Loading } from "@/components/states";
 import {
@@ -40,6 +42,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { listSeparator, translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import {
   useAddComputer,
@@ -58,11 +61,21 @@ import { providerLabel, runtimeLabel } from "./task-format";
 const showError = (error: Error) => toast.error(error.message);
 
 const stateLabels: Record<ComputerRuntime["state"], string> = {
-  waiting: "等待配对",
-  pairing: "等待批准",
-  needs_approval: "有变化，等待批准",
-  online: "在线",
-  offline: "离线",
+  get waiting() {
+    return translate("computers:status.awaitingPairing");
+  },
+  get pairing() {
+    return translate("computers:status.awaitingApproval");
+  },
+  get needs_approval() {
+    return translate("computers:status.changedAwaitingApproval");
+  },
+  get online() {
+    return translate("common:status.online");
+  },
+  get offline() {
+    return translate("common:status.offline");
+  },
 };
 
 const osLabels: Record<string, string> = {
@@ -90,6 +103,11 @@ function StatusDot({ online, label }: { online: boolean; label: string }) {
 
 /** Paseo · Claude、Codex, with the state when it is not simply online. */
 function Runtimes({ runtimes }: { runtimes: ComputerRuntime[] }) {
+  const { t: translateText } = useTranslation([
+    "computers",
+    "common",
+    "validation",
+  ] as const);
   return (
     <ul className="space-y-1 text-xs">
       {runtimes.map((runtime) => (
@@ -104,13 +122,15 @@ function Runtimes({ runtimes }: { runtimes: ComputerRuntime[] }) {
           <span className="font-medium">{runtimeLabel(runtime.kind)}</span>
           <span className="min-w-0 text-muted-foreground">
             {runtime.state === "online"
-              ? runtime.providers.map(providerLabel).join("、") ||
-                "没有可用的 provider"
+              ? runtime.providers.map(providerLabel).join(listSeparator()) ||
+                translateText("runtimes.noProviders")
               : stateLabels[runtime.state]}
           </span>
           {runtime.needs_update ? (
             <span className="text-amber-600 dark:text-amber-500">
-              connector {runtime.connector_version}，需要更新
+              {translateText("runtimes.connectorUpdateRequired", {
+                version: runtime.connector_version,
+              })}
             </span>
           ) : null}
         </li>
@@ -124,6 +144,11 @@ function Runtimes({ runtimes }: { runtimes: ComputerRuntime[] }) {
  * together: which runtime offers which agent does not matter here.
  */
 function RuntimeSummary({ runtimes }: { runtimes: ComputerRuntime[] }) {
+  const { t: translateText } = useTranslation([
+    "computers",
+    "common",
+    "validation",
+  ] as const);
   const agents = [
     ...new Set(
       runtimes
@@ -133,7 +158,9 @@ function RuntimeSummary({ runtimes }: { runtimes: ComputerRuntime[] }) {
   ];
   return (
     <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
-      <dt className="text-muted-foreground">运行时</dt>
+      <dt className="text-muted-foreground">
+        {translateText("runtimes.title")}
+      </dt>
       <dd>
         <ul className="flex flex-wrap gap-x-3 gap-y-0.5">
           {runtimes.map((runtime) => (
@@ -153,17 +180,23 @@ function RuntimeSummary({ runtimes }: { runtimes: ComputerRuntime[] }) {
               )}
               {runtime.needs_update ? (
                 <span className="text-amber-600 dark:text-amber-500">
-                  connector {runtime.connector_version}，需要更新
+                  {translateText("runtimes.connectorUpdateRequired", {
+                    version: runtime.connector_version,
+                  })}
                 </span>
               ) : null}
             </li>
           ))}
         </ul>
       </dd>
-      <dt className="text-muted-foreground">智能体</dt>
+      <dt className="text-muted-foreground">
+        {translateText("common:entities.agents")}
+      </dt>
       <dd className="min-w-0 break-words">
-        {agents.map(providerLabel).join("、") || (
-          <span className="text-muted-foreground">没有可用的智能体</span>
+        {agents.map(providerLabel).join(listSeparator()) || (
+          <span className="text-muted-foreground">
+            {translateText("runtimes.noAgents")}
+          </span>
         )}
       </dd>
     </dl>
@@ -182,6 +215,11 @@ function Approval({
   computer: Computer;
   runtime: ComputerRuntime;
 }) {
+  const { t: translateText } = useTranslation([
+    "computers",
+    "common",
+    "validation",
+  ] as const);
   const approve = useApproveRuntime();
   const label = runtimeLabel(runtime.kind);
   const several = runtime.fingerprints.length > 1;
@@ -189,10 +227,13 @@ function Approval({
     <div className="space-y-1.5 bg-muted px-3 py-2">
       <p className="text-xs text-muted-foreground">
         {runtime.state === "needs_approval"
-          ? `${label} 的指纹变了`
+          ? translateText("pairing.fingerprintChanged", { name: label })
           : several
-            ? `${label} 收到 ${runtime.fingerprints.length} 个配对请求：只批准与电脑上 axp setup 输出一致的那个`
-            : `${label} 请求配对`}
+            ? translateText("pairing.multipleRequests", {
+                name: label,
+                count: runtime.fingerprints.length,
+              })
+            : translateText("pairing.requestTitle", { name: label })}
       </p>
       {runtime.fingerprints.map((fingerprint) => (
         <div key={fingerprint} className="flex items-center gap-3">
@@ -206,13 +247,14 @@ function Approval({
               approve.mutate(
                 { id: computer.id, kind: runtime.kind, fingerprint },
                 {
-                  onSuccess: () => toast(`已批准 ${label}`),
+                  onSuccess: () =>
+                    toast(translateText("pairing.approved", { name: label })),
                   onError: showError,
                 },
               )
             }
           >
-            批准
+            {translateText("common:actions.approve")}
           </Button>
         </div>
       ))}
@@ -269,6 +311,11 @@ function Step({
 }
 
 function CommandBox({ command }: { command: string }) {
+  const { t: translateText } = useTranslation([
+    "computers",
+    "common",
+    "validation",
+  ] as const);
   return (
     <div className="flex items-stretch border">
       <code className="min-w-0 flex-1 overflow-x-auto px-2 py-1.5 font-mono text-xs whitespace-nowrap">
@@ -278,11 +325,11 @@ function CommandBox({ command }: { command: string }) {
         variant="ghost"
         size="icon-sm"
         className="h-auto shrink-0 border-l"
-        aria-label="复制安装命令"
+        aria-label={translateText("install.copyCommand")}
         onClick={() =>
           void navigator.clipboard
             .writeText(command)
-            .then(() => toast("已复制"))
+            .then(() => toast(translateText("common:feedback.copied")))
         }
       >
         <CopyIcon aria-hidden="true" />
@@ -319,6 +366,11 @@ function ComputerDialog({
   connectorVersion?: string | null;
   onClose: () => void;
 }) {
+  const { t: translateText } = useTranslation([
+    "computers",
+    "common",
+    "validation",
+  ] as const);
   const add = useAddComputer();
   const [name, setName] = useState("");
   const [made, setMade] = useState(target);
@@ -355,41 +407,58 @@ function ComputerDialog({
       <DialogContent className="max-w-[calc(100%-2rem)] gap-4 sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            {made.id ? (computer?.name ?? "接入电脑") : "添加电脑"}
+            {made.id
+              ? (computer?.name ?? translateText("install.connectTitle"))
+              : translateText("actions.add")}
           </DialogTitle>
           <DialogDescription>
             {approveOnly
-              ? "核对指纹与那台电脑终端里打印的一致，再批准。"
+              ? translateText("pairing.verifyFingerprint")
               : update
-                ? `把这台电脑上的 axp 和 agenvo connector 更新到 AXP 当前提供的版本${connectorVersion ? `（${connectorVersion}）` : ""}，并连到 AXP 当前的中继地址。`
-                : "智能体会在那台电脑上以完全权限运行，请只接入专门用来干活的电脑。"}
+                ? translateText("update.description", {
+                    versionSuffix: connectorVersion
+                      ? translateText("common:format.parenthesizedSuffix", {
+                          value: connectorVersion,
+                        })
+                      : "",
+                  })
+                : translateText("install.permissionsNotice")}
           </DialogDescription>
         </DialogHeader>
         {approveOnly ? (
           progress
         ) : update ? (
           <ol className="space-y-4">
-            <Step n={1} title="在那台电脑的终端里运行" active={!done}>
+            <Step
+              n={1}
+              title={translateText("install.runCommand")}
+              active={!done}
+            >
               {made.command ? <CommandBox command={made.command} /> : null}
               <p className="text-xs text-muted-foreground">
-                它会下载新的 axp，安装新的 connector，把 connector
-                改到当前的中继地址并重启它们的服务，不需要重新配对。Paseo 和
-                Herdr 里正在运行的智能体不会被停止。命令只能用一次，24
-                小时内有效；运行后这台电脑原来的令牌失效。
+                {translateText("update.commandHelp")}
               </p>
             </Step>
-            <Step n={2} title="确认已更新" active={connected && !done}>
+            <Step
+              n={2}
+              title={translateText("update.verify")}
+              active={connected && !done}
+            >
               {connected ? progress : null}
               <p className="text-xs text-muted-foreground">
                 {done
-                  ? "已更新，所有运行时都在线。"
-                  : "等待那台电脑重新连上。若出现“等待批准”（connector 有变化），核对指纹与终端里打印的一致后批准。"}
+                  ? translateText("update.allOnline")
+                  : translateText("update.waitingForReconnect")}
               </p>
             </Step>
           </ol>
         ) : (
           <ol className="space-y-4">
-            <Step n={1} title="起个名字" active={!made.id}>
+            <Step
+              n={1}
+              title={translateText("install.chooseName")}
+              active={!made.id}
+            >
               {made.id ? (
                 <p className="text-sm text-muted-foreground">
                   {computer?.name}
@@ -411,8 +480,8 @@ function ComputerDialog({
                   }}
                 >
                   <Input
-                    aria-label="电脑名称"
-                    placeholder="例如：家里的 Mac mini"
+                    aria-label={translateText("fields.nameLabel")}
+                    placeholder={translateText("fields.namePlaceholder")}
                     maxLength={100}
                     autoFocus
                     value={name}
@@ -422,34 +491,39 @@ function ComputerDialog({
                     type="submit"
                     disabled={!name.trim() || add.isPending}
                   >
-                    生成安装命令
+                    {translateText("install.generateCommand")}
                   </Button>
                 </form>
               )}
             </Step>
             <Step
               n={2}
-              title="在那台电脑的终端里运行"
+              title={translateText("install.runCommand")}
               active={Boolean(made.command) && !connected}
             >
               {made.command ? <CommandBox command={made.command} /> : null}
               <p className="text-xs text-muted-foreground">
-                需要 Node.js 24.13+，以及正在运行的 Paseo daemon 或
-                Herdr。它会安装 agenvo connector 和 axp
-                命令，并注册为开机启动的服务。
-                {computer?.enroll_expires_at
-                  ? `命令只能用一次，${when(computer.enroll_expires_at)} 前有效。`
-                  : "命令只能用一次，24 小时内有效。"}
+                {translateText("install.requirements", {
+                  expiryHint: computer?.enroll_expires_at
+                    ? translateText("install.commandExpiry", {
+                        time: when(computer.enroll_expires_at),
+                      })
+                    : translateText("install.commandExpiryDefault"),
+                })}
               </p>
             </Step>
-            <Step n={3} title="核对指纹，批准连接" active={connected}>
+            <Step
+              n={3}
+              title={translateText("pairing.verifyAndApprove")}
+              active={connected}
+            >
               {connected ? (
                 progress
               ) : (
                 <p className="text-xs text-muted-foreground">
                   {made.command
-                    ? "等待那台电脑运行命令…"
-                    : "命令运行后，那台电脑的终端会打印一个指纹，与这里显示的一致再批准。"}
+                    ? translateText("install.waitingForCommand")
+                    : translateText("pairing.commandFingerprintHelp")}
                 </p>
               )}
             </Step>
@@ -457,7 +531,11 @@ function ComputerDialog({
         )}
         <DialogFooter>
           <Button variant={done ? "default" : "outline"} onClick={onClose}>
-            {done ? "完成" : made.id ? "关闭" : "取消"}
+            {done
+              ? translateText("common:actions.done")
+              : made.id
+                ? translateText("common:actions.close")
+                : translateText("common:actions.cancel")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -485,6 +563,11 @@ function LimitDialog({
   computer: Computer;
   onClose: () => void;
 }) {
+  const { t: translateText } = useTranslation([
+    "computers",
+    "common",
+    "validation",
+  ] as const);
   const save = useSetComputerLimit();
   const [value, setValue] = useState(String(computer.max_active_runs));
   const limit = Number(value);
@@ -496,7 +579,12 @@ function LimitDialog({
       { id: computer.id, maxActiveRuns: limit },
       {
         onSuccess: () => {
-          toast(`${computer.name} 最多同时执行 ${limit} 个`);
+          toast(
+            translateText("limits.saved", {
+              name: computer.name,
+              limit,
+            }),
+          );
           onClose();
         },
         onError: showError,
@@ -507,10 +595,13 @@ function LimitDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-[calc(100%-2rem)] gap-4 sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{computer.name} 的并发执行上限</DialogTitle>
+          <DialogTitle>
+            {translateText("limits.dialogTitle", {
+              name: computer.name,
+            })}
+          </DialogTitle>
           <DialogDescription>
-            这台电脑上最多同时执行几个任务运行。主执行、协助和审查各算一个，Paseo
-            和 Herdr 共用这个上限。
+            {translateText("limits.description")}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -521,7 +612,7 @@ function LimitDialog({
           }}
         >
           <Label htmlFor={`limit-${computer.id}`} className="text-xs">
-            并发执行数
+            {translateText("limits.label")}
           </Label>
           <Input
             id={`limit-${computer.id}`}
@@ -542,24 +633,23 @@ function LimitDialog({
           >
             {valid ? null : (
               <li className="text-destructive">
-                请输入 {MIN_LIMIT} 到 {MAX_LIMIT} 之间的整数。
+                {translateText("validation:integerRange", {
+                  min: MIN_LIMIT,
+                  max: MAX_LIMIT,
+                })}
               </li>
             )}
-            <li>
-              超过上限的运行会排队，不会失败；有运行结束后，按排队先后自动开始。
-            </li>
-            <li>
-              从开始打开工作区起，到确认结束（完成、失败或停止）为止都占名额；电脑离线时，正在执行的仍然占着。
-            </li>
-            <li>调低不会停止正在执行的运行：它们做完后，再按新上限派新的。</li>
+            <li>{translateText("limits.queueHelp")}</li>
+            <li>{translateText("limits.slotUsageHelp")}</li>
+            <li>{translateText("limits.loweringHelp")}</li>
           </ul>
         </form>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            取消
+            {translateText("common:actions.cancel")}
           </Button>
           <Button disabled={!valid || save.isPending} onClick={submit}>
-            保存
+            {translateText("common:actions.save")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -575,6 +665,11 @@ function Load({
   computer: Computer;
   onEdit: () => void;
 }) {
+  const { t: translateText } = useTranslation([
+    "computers",
+    "common",
+    "validation",
+  ] as const);
   const {
     active_runs: active,
     max_active_runs: max,
@@ -582,25 +677,30 @@ function Load({
   } = computer;
   const note =
     active > max
-      ? "上限调低了：正在执行的做完后再派新的"
+      ? translateText("limits.loweredHint")
       : queued && active >= max
-        ? "已满，新的运行排队等名额"
+        ? translateText("limits.atCapacity")
         : "";
   return (
     <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
       <span className="min-w-0 flex-1">
-        并发执行 <span className="text-foreground tabular-nums">{active}</span>/
+        {translateText("limits.summaryLabel")}
+        <span className="text-foreground tabular-nums">{active}</span>/
         <span className="tabular-nums">{max}</span>
-        {queued ? <> · 排队 {queued}</> : null}
+        {queued ? (
+          <>{translateText("limits.queuedSummary", { count: queued })}</>
+        ) : null}
         {note ? <span className="block">{note}</span> : null}
       </span>
       <Button
         variant="ghost"
         size="xs"
-        aria-label={`调整 ${computer.name} 的并发执行上限`}
+        aria-label={translateText("limits.adjustLabel", {
+          name: computer.name,
+        })}
         onClick={onEdit}
       >
-        调整上限
+        {translateText("limits.adjust")}
       </Button>
     </div>
   );
@@ -613,6 +713,11 @@ function ComputerCard({
   computer: Computer;
   onOpen: (target: Target) => void;
 }) {
+  const { t: translateText } = useTranslation([
+    "computers",
+    "common",
+    "validation",
+  ] as const);
   const renew = useRenewInstall();
   const remove = useDeleteComputer();
   const [confirming, setConfirming] = useState(false);
@@ -641,7 +746,11 @@ function ComputerCard({
       <div className="flex min-w-0 items-center gap-2">
         <StatusDot
           online={computer.online}
-          label={computer.online ? "在线" : "离线"}
+          label={
+            computer.online
+              ? translateText("common:status.online")
+              : translateText("common:status.offline")
+          }
         />
         <span
           className="min-w-0 flex-1 truncate text-sm font-medium"
@@ -662,18 +771,20 @@ function ComputerCard({
               })
             }
           >
-            安装
+            {translateText("common:actions.install")}
           </Button>
         ) : approvals.length ? (
           <Button size="sm" onClick={() => onOpen({ id: computer.id })}>
-            批准
-            {approvals.length === 1
-              ? ` ${runtimeLabel(approvals[0].kind)}`
-              : "配对"}
+            {translateText("pairing.approveTarget", {
+              target:
+                approvals.length === 1
+                  ? ` ${runtimeLabel(approvals[0].kind)}`
+                  : translateText("pairing.label"),
+            })}
           </Button>
         ) : updates.length ? (
           <Button size="sm" disabled={renew.isPending} onClick={startUpdate}>
-            更新
+            {translateText("common:actions.update")}
           </Button>
         ) : null}
         <DropdownMenu>
@@ -681,7 +792,9 @@ function ComputerCard({
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label={`${computer.name} 的操作`}
+              aria-label={translateText("common:accessibility.itemActions", {
+                name: computer.name,
+              })}
             >
               <DotsThreeIcon aria-hidden="true" />
             </Button>
@@ -692,14 +805,14 @@ function ComputerCard({
                 disabled={renew.isPending}
                 onSelect={startUpdate}
               >
-                更新 connector
+                {translateText("actions.updateConnector")}
               </DropdownMenuItem>
             ) : null}
             <DropdownMenuItem
               variant="destructive"
               onSelect={() => setConfirming(true)}
             >
-              撤销并移除
+              {translateText("actions.revokeAndRemove")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -710,27 +823,27 @@ function ComputerCard({
         </p>
       ) : null}
       {!computer.enrolled ? (
-        <p className="text-xs text-muted-foreground">等待安装</p>
+        <p className="text-xs text-muted-foreground">
+          {translateText("status.awaitingInstallation")}
+        </p>
       ) : !computer.online ? (
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          离线
+          {translateText("common:status.offline")}
           <Tooltip open={offlineHintOpen} onOpenChange={setOfflineHintOpen}>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon-xs"
                 className="text-muted-foreground"
-                aria-label={`${computer.name} 的离线说明`}
+                aria-label={translateText("offline.detailsLabel", {
+                  name: computer.name,
+                })}
                 onClick={() => setOfflineHintOpen((open) => !open)}
               >
                 <InfoIcon aria-hidden="true" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>
-              离线的电脑如果开着机，可能是 connector
-              版本过旧或中继地址变了：在它的“⋯”菜单里选“更新
-              connector”，按提示在那台电脑上运行命令。
-            </TooltipContent>
+            <TooltipContent>{translateText("offline.help")}</TooltipContent>
           </Tooltip>
         </div>
       ) : (
@@ -748,27 +861,38 @@ function ComputerCard({
       <AlertDialog open={confirming} onOpenChange={setConfirming}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>撤销 {computer.name}？</AlertDialogTitle>
+            <AlertDialogTitle>
+              {translateText("revoke.confirmTitle", { name: computer.name })}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              指派给它的任务会变成未指派
-              {computer.active_runs
-                ? `，进行中的 ${computer.active_runs} 个会被取消`
-                : ""}
-              。要再接入，需要重新添加。
+              {translateText("revoke.confirmDescription", {
+                activeRunsHint: computer.active_runs
+                  ? translateText("revoke.cancelActiveRuns", {
+                      count: computer.active_runs,
+                    })
+                  : "",
+              })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>
+              {translateText("common:actions.cancel")}
+            </AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               onClick={() =>
                 remove.mutate(computer.id, {
-                  onSuccess: () => toast(`已撤销 ${computer.name}`),
+                  onSuccess: () =>
+                    toast(
+                      translateText("revoke.success", {
+                        name: computer.name,
+                      }),
+                    ),
                   onError: showError,
                 })
               }
             >
-              撤销并移除
+              {translateText("actions.revokeAndRemove")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -779,6 +903,11 @@ function ComputerCard({
 
 /** Settings → 远程电脑. */
 export function ComputerSettings() {
+  const { t: translateText } = useTranslation([
+    "computers",
+    "common",
+    "validation",
+  ] as const);
   const { data, error, refetch } = useComputers();
   // Install commands are shown once, in the dialog, right after they are
   // made; approvals happen there too. `n` keys the dialog so every open
@@ -794,17 +923,17 @@ export function ComputerSettings() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold">远程电脑</h2>
+        <h2 className="text-sm font-semibold">{translateText("title")}</h2>
         {usable ? (
           <Button size="sm" variant="outline" onClick={() => open()}>
             <PlusIcon aria-hidden="true" data-icon="inline-start" />
-            添加电脑
+            {translateText("actions.add")}
           </Button>
         ) : null}
       </div>
       {error ? (
         <LoadError
-          what="远程电脑"
+          what={translateText("title")}
           error={error}
           onRetry={() => void refetch()}
         />
@@ -812,13 +941,16 @@ export function ComputerSettings() {
         <Loading rows={2} />
       ) : !usable ? (
         <p className="text-sm text-muted-foreground">
-          服务器没有配置中继（agenvo relay），暂时不能接入远程电脑。
+          {translateText("empty.relayNotConfigured")}
         </p>
       ) : (
         <>
           {data.relay_error ? (
             <p role="alert" className="text-xs text-destructive">
-              无法连接中继 {data.relay_url}：{data.relay_error}
+              {translateText("errors.relayConnection", {
+                relayUrl: data.relay_url,
+                message: data.relay_error,
+              })}
             </p>
           ) : null}
           {data.computers.some((c) => outdated(c).length) ? (
@@ -826,15 +958,17 @@ export function ComputerSettings() {
               role="status"
               className="text-xs text-amber-600 dark:text-amber-500"
             >
-              有电脑的 agenvo connector 与 AXP 提供的版本
-              {data.connector_version ? ` ${data.connector_version}` : ""}{" "}
-              不一致：点那台电脑上的“更新”，按提示在那台电脑上运行命令。
+              {translateText("update.versionMismatch", {
+                version: data.connector_version
+                  ? ` ${data.connector_version}`
+                  : "",
+              })}
             </p>
           ) : null}
           {data.computers.length ? (
             <div className="@container">
               <ul
-                aria-label="远程电脑"
+                aria-label={translateText("title")}
                 className="grid grid-cols-1 gap-2 @lg:grid-cols-2"
               >
                 {data.computers.map((computer) => (
@@ -847,8 +981,8 @@ export function ComputerSettings() {
               </ul>
             </div>
           ) : (
-            <Empty icon={DesktopIcon} title="还没有接入电脑">
-              接入后，可以把任务指派给它上面的 Paseo 或 Herdr 智能体。
+            <Empty icon={DesktopIcon} title={translateText("empty.title")}>
+              {translateText("empty.description")}
             </Empty>
           )}
           {dialog ? (

@@ -1,4 +1,5 @@
 "use client";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 
@@ -35,11 +36,12 @@ export function ClaudeSlashMenu({
   onChoose: (command: SlashCommand) => void;
   className?: string;
 }) {
+  const { t: translateText } = useTranslation(["chat", "common"] as const);
   return (
     <ul
       id={id}
       role="listbox"
-      aria-label="斜杠命令"
+      aria-label={translateText("composer.slashCommands")}
       className={cn(
         "mb-2 space-y-0.5 font-mono text-[13px] leading-[1.6]",
         className,

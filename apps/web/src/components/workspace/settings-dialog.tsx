@@ -3,6 +3,8 @@ import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { useTheme } from "next-themes";
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { LanguageSettings } from "@/components/language-settings";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { elementPickerDefault, setElementPicker } from "@/lib/element-picker";
+import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useNeedsAttention } from "@/queries/llm";
 import { AgentSettings } from "./agent-settings";
@@ -26,13 +29,40 @@ import { settingsSections, useSettingsAttention } from "./settings-sections";
 import { useWorkspaceStore } from "./workspace-store";
 
 const colorModes = [
-  { value: "system", label: "跟随系统" },
-  { value: "light", label: "浅色" },
-  { value: "dark", label: "深色" },
+  {
+    value: "system",
+    get label() {
+      return translate("settings:appearance.system");
+    },
+  },
+  {
+    value: "light",
+    get label() {
+      return translate("settings:appearance.light");
+    },
+  },
+  {
+    value: "dark",
+    get label() {
+      return translate("settings:appearance.dark");
+    },
+  },
 ] as const;
 const fontFields = [
-  { key: "fontSans", label: "界面字体", placeholder: "Geist" },
-  { key: "fontMono", label: "等宽字体", placeholder: "Geist Mono" },
+  {
+    key: "fontSans",
+    get label() {
+      return translate("settings:appearance.interfaceFont");
+    },
+    placeholder: "Geist",
+  },
+  {
+    key: "fontMono",
+    get label() {
+      return translate("settings:appearance.monospaceFont");
+    },
+    placeholder: "Geist Mono",
+  },
 ] as const satisfies {
   key: keyof WorkspaceState;
   label: string;
@@ -40,17 +70,22 @@ const fontFields = [
 }[];
 /** OpenObserve, proxied by the edge gateway under /observe. */
 function LogSettings() {
+  const { t: translateText } = useTranslation(["settings", "common"] as const);
   return (
     <div className="space-y-3">
-      <h2 className="text-sm font-semibold">日志</h2>
+      <h2 className="text-sm font-semibold">
+        {translateText("sections.logs")}
+      </h2>
       <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
         <div className="min-w-0 text-sm">
           <p className="font-medium">OpenObserve</p>
-          <p className="text-muted-foreground">登录账号 root@axp.local</p>
+          <p className="text-muted-foreground">
+            {translateText("logs.signInAccount")}
+          </p>
         </div>
         <Button asChild variant="outline" size="sm" className="w-fit">
           <a href="/observe/web/" target="_blank" rel="noreferrer">
-            打开
+            {translateText("common:actions.open")}
             <ArrowSquareOutIcon aria-hidden="true" />
           </a>
         </Button>
@@ -118,14 +153,18 @@ function Segmented<T extends string>({
 }
 
 function AppearanceSettings() {
+  const { t: translateText } = useTranslation(["settings", "common"] as const);
   const workspace = useWorkspaceStore((s) => s.workspace);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const { theme = "system", setTheme } = useTheme();
   return (
     <div className="space-y-3">
-      <h2 className="text-sm font-semibold">外观</h2>
+      <h2 className="text-sm font-semibold">
+        {translateText("sections.appearance")}
+      </h2>
+      <LanguageSettings />
       <Segmented
-        label="颜色模式"
+        label={translateText("appearance.colorMode")}
         name="color-mode"
         options={colorModes}
         value={theme as (typeof colorModes)[number]["value"]}
@@ -157,10 +196,10 @@ function AppearanceSettings() {
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
         <div className="min-w-0 text-sm">
           <label htmlFor="react-grab" className="font-medium">
-            圈选元素
+            {translateText("appearance.elementPicker")}
           </label>
           <p id="react-grab-hint" className="text-muted-foreground">
-            打开后可以圈选元素并复制组件和源码位置。
+            {translateText("appearance.elementPickerHint")}
           </p>
         </div>
         <Switch
@@ -179,14 +218,19 @@ function AppearanceSettings() {
 
 /** Opens settings; the dot marks accounts the user has to act on. */
 export function SettingsButton({ className }: { className?: string }) {
+  const { t: translateText } = useTranslation(["settings", "common"] as const);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const attention = useNeedsAttention();
   return (
     <Button
       variant="ghost"
       size="icon"
-      aria-label={attention ? "设置（有账号需要处理）" : "设置"}
-      title="设置"
+      aria-label={
+        attention
+          ? translateText("accessibility.needsAttention")
+          : translateText("title")
+      }
+      title={translateText("title")}
       className={cn("relative", className)}
       onClick={() => setSettings((state) => ({ ...state, open: true }))}
     >
@@ -217,6 +261,7 @@ function useSettingsLink() {
 }
 
 export function SettingsDialog() {
+  const { t: translateText } = useTranslation(["settings", "common"] as const);
   const settings = useWorkspaceStore((s) => s.settings);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const attention = useSettingsAttention();
@@ -232,15 +277,17 @@ export function SettingsDialog() {
         className="flex h-[min(36rem,calc(100dvh-2rem))] max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
       >
         <DialogHeader className="shrink-0 border-b p-3 pr-12">
-          <DialogTitle className="text-base">设置</DialogTitle>
+          <DialogTitle className="text-base">
+            {translateText("title")}
+          </DialogTitle>
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col md:flex-row">
           <SettingsNav
-            label="设置分类"
+            label={translateText("accessibility.sections")}
             sections={settingsSections.map((section) => ({
               ...section,
               attention: attention[section.value],
-              hint: "有账号需要处理",
+              hint: translateText("accessibility.accountsNeedAttention"),
             }))}
             value={settings.section}
             onChange={(section) =>

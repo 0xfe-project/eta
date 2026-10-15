@@ -1,4 +1,5 @@
 import type { AssigneeOption } from "@/queries/tasks";
+import { translate } from "@/lib/i18n";
 import { assigneeKey, providerLabel, runtimeLabel } from "./task-format";
 export interface Choice {
   key: string;
@@ -44,8 +45,8 @@ export function assigneeTree(options: AssigneeOption[]): Choice[] {
     computer.offline = computer.children!.every((r) => r.offline);
   }
   return [
-    { key: "none", label: "未指派" },
-    { key: "user", label: "我" },
+    { key: "none", label: translate("tasks:assignee.unassigned") },
+    { key: "user", label: translate("tasks:assignee.me") },
     ...computers,
   ];
 }

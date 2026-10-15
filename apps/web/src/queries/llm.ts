@@ -3,6 +3,7 @@ import type { Agent } from "@/queries/chat";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { llmApi } from "@/lib/api";
+import { translate } from "@/lib/i18n";
 
 // The LLM gateway's public API (/api/llm/v1): model services, accounts and
 // the model catalog. See apps/control-plane/internal/llm.
@@ -313,19 +314,31 @@ export function modelAvailability(
     return {
       state: "unavailable",
       model,
-      message: `${agent.model} 已不存在，请更换模型。`,
+      message: translate("agents:models.errors.deleted", {
+        modelName: agent.model,
+      }),
     };
   if (model.status === "unavailable")
     return {
       state: "unavailable",
       model,
-      message: `${model.display_name} 暂不可用：${model.reason?.message ?? "请检查模型服务中的账号。"}`,
+      message: translate("agents:models.errors.unavailable", {
+        modelName: model.display_name,
+        reason:
+          model.reason?.message ??
+          translate("agents:models.errors.checkAccounts"),
+      }),
     };
   if (model.status === "degraded")
     return {
       state: "degraded",
       model,
-      message: `${model.display_name} ${model.reason?.message ?? "上游暂时故障，稍后会自动重试。"}仍可发送。`,
+      message: translate("agents:models.errors.degradedSendAllowed", {
+        modelName: model.display_name,
+        reason:
+          model.reason?.message ??
+          translate("agents:models.errors.upstreamFailure"),
+      }),
     };
   return { state: "ok", model };
 }

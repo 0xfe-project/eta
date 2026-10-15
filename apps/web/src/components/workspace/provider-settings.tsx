@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { Connection, Connector, Usage } from "@/queries/llm";
+
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/ArrowClockwise";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
 import { CopyIcon } from "@phosphor-icons/react/Copy";
@@ -8,6 +9,7 @@ import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { useIsMutating } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { LoadError, Loading } from "@/components/states";
 import {
@@ -37,6 +39,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { formatLocale, listSeparator, translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import {
   GROK_CONNECTOR,
@@ -58,13 +61,24 @@ import { useAgents } from "./use-agents";
 import { useWorkspaceStore } from "./workspace-store";
 
 const windowLabels: Record<string, string> = {
-  "5h": "5 小时",
-  weekly: "每周",
-  monthly: "每月",
+  get "5h"() {
+    return translate("common:time.windows.fiveHours");
+  },
+  get weekly() {
+    return translate("common:time.windows.weekly");
+  },
+  get monthly() {
+    return translate("common:time.windows.monthly");
+  },
 };
 
 /** Remaining share of each subscription window, as the provider reports it. */
 function UsageWindows({ usage }: { usage: Usage }) {
+  const { t: translateText } = useTranslation([
+    "providers",
+    "common",
+    "connections",
+  ] as const);
   if (usage.error)
     return <p className="text-xs text-muted-foreground">{usage.error}</p>;
   if (!usage.windows.length) return null;
@@ -78,7 +92,9 @@ function UsageWindows({ usage }: { usage: Usage }) {
             <dt className="text-muted-foreground">{label}</dt>
             <dd
               role="meter"
-              aria-label={`${label}剩余额度`}
+              aria-label={translateText("usage.remainingQuotaLabel", {
+                label,
+              })}
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={left}
@@ -93,9 +109,17 @@ function UsageWindows({ usage }: { usage: Usage }) {
               />
             </dd>
             <dd className="text-right tabular-nums text-muted-foreground">
-              <span className="text-foreground">剩余 {left}%</span>
+              <span className="text-foreground">
+                {translateText("usage.remainingPercent", { percent: left })}
+              </span>
               {window.resets_at
-                ? ` · ${untilText(window.resets_at, "重置") || "即将重置"}`
+                ? translateText("common:format.inlineSeparator", {
+                    label:
+                      untilText(
+                        window.resets_at,
+                        translateText("usage.resets"),
+                      ) || translateText("usage.resetsSoon"),
+                  })
                 : null}
             </dd>
           </div>
@@ -106,6 +130,7 @@ function UsageWindows({ usage }: { usage: Usage }) {
 }
 
 function ConnectionState({ connection }: { connection: Connection }) {
+  useTranslation(["providers", "common", "connections"] as const);
   const warn = NEEDS_ACTION.has(connection.state);
   const degraded = connection.state === "degraded";
   const until =
@@ -142,6 +167,11 @@ function LoginDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t: translateText } = useTranslation([
+    "providers",
+    "common",
+    "connections",
+  ] as const);
   const start = useStartLogin();
   const cancel = useCancelLogin();
   const status = useLoginStatus(start.data?.id);
@@ -162,10 +192,14 @@ function LoginDialog({
   }, [open, login?.status]);
   useEffect(() => {
     if (login?.status === "succeeded") {
-      toast.success(`已绑定 ${connector.display_name} 账号`);
+      toast.success(
+        translateText("login.linked", {
+          providerName: connector.display_name,
+        }),
+      );
       onOpenChange(false);
     }
-  }, [login?.status, connector.display_name, onOpenChange]);
+  }, [login?.status, connector.display_name, onOpenChange, translateText]);
 
   const close = (next: boolean) => {
     if (!next && login?.status === "pending") cancel.mutate(login.id);
@@ -185,34 +219,42 @@ function LoginDialog({
     start.error?.message ??
     status.error?.message ??
     (login && login.status !== "pending" && login.status !== "succeeded"
-      ? (login.error ?? "登录失败，请重试。")
+      ? (login.error ?? translateText("login.failed"))
       : undefined);
 
   return (
     <Dialog open={open} onOpenChange={close}>
       <DialogContent className="max-w-[calc(100%-2rem)] gap-3 sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>绑定 {connector.display_name} 账号</DialogTitle>
+          <DialogTitle>
+            {translateText("login.title", {
+              providerName: connector.display_name,
+            })}
+          </DialogTitle>
           <DialogDescription>
-            打开授权页面，登录后输入下面的验证码。
+            {translateText("login.instructions")}
           </DialogDescription>
         </DialogHeader>
         {login?.user_code && !error ? (
           <div className="flex items-center justify-between gap-2 bg-muted px-3 py-2">
             <span
               className="font-mono text-2xl font-semibold tracking-widest"
-              aria-label={`验证码 ${login.user_code}`}
+              aria-label={translateText("login.codeLabel", {
+                code: login.user_code,
+              })}
             >
               {login.user_code}
             </span>
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label="复制验证码"
+              aria-label={translateText("login.copyCode")}
               onClick={() =>
                 navigator.clipboard
                   .writeText(login.user_code ?? "")
-                  .then(() => toast.success("已复制"))
+                  .then(() =>
+                    toast.success(translateText("common:feedback.copied")),
+                  )
               }
             >
               <CopyIcon aria-hidden="true" />
@@ -226,8 +268,11 @@ function LoginDialog({
         ) : (
           <p className="text-xs text-muted-foreground" aria-live="polite">
             {login
-              ? `等待授权… ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")} 后过期`
-              : "正在获取验证码…"}
+              ? translateText("login.waitingWithExpiry", {
+                  minutes: Math.floor(seconds / 60),
+                  seconds: String(seconds % 60).padStart(2, "0"),
+                })
+              : translateText("login.loadingCode")}
           </p>
         )}
         {connector.hint ? (
@@ -236,7 +281,7 @@ function LoginDialog({
         <DialogFooter>
           {error ? (
             <Button onClick={retry} disabled={start.isPending}>
-              重试
+              {translateText("common:actions.retry")}
             </Button>
           ) : (
             <Button asChild disabled={!login?.url}>
@@ -245,7 +290,7 @@ function LoginDialog({
                   aria-hidden="true"
                   data-icon="inline-start"
                 />
-                打开授权页面
+                {translateText("login.openAuthorization")}
               </a>
             </Button>
           )}
@@ -268,6 +313,11 @@ function ConnectionRow({
   onRelogin: () => void;
   affectedAgents: string[];
 }) {
+  const { t: translateText } = useTranslation([
+    "providers",
+    "common",
+    "connections",
+  ] as const);
   const setEnabled = useSetConnectionEnabled();
   const remove = useDeleteConnection();
   const [confirming, setConfirming] = useState(false);
@@ -291,7 +341,7 @@ function ConnectionRow({
         </span>
         {NEEDS_ACTION.has(connection.state) ? (
           <Button size="sm" variant="outline" onClick={onRelogin}>
-            重新登录
+            {translateText("actions.signInAgain")}
           </Button>
         ) : null}
         <DropdownMenu>
@@ -299,13 +349,17 @@ function ConnectionRow({
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label={`${connection.label} 的操作`}
+              aria-label={translateText("common:accessibility.itemActions", {
+                name: connection.label,
+              })}
             >
               <DotsThreeIcon aria-hidden="true" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-36">
-            <DropdownMenuItem onSelect={onRelogin}>重新登录</DropdownMenuItem>
+            <DropdownMenuItem onSelect={onRelogin}>
+              {translateText("actions.signInAgain")}
+            </DropdownMenuItem>
             <DropdownMenuItem
               onSelect={() =>
                 setEnabled.mutate(
@@ -314,14 +368,16 @@ function ConnectionRow({
                 )
               }
             >
-              {disabled ? "启用" : "停用"}
+              {disabled
+                ? translateText("common:actions.enable")
+                : translateText("common:actions.disable")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               variant="destructive"
               onSelect={() => setConfirming(true)}
             >
-              移除
+              {translateText("common:actions.remove")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -340,25 +396,41 @@ function ConnectionRow({
       <AlertDialog open={confirming} onOpenChange={setConfirming}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>移除 {connection.label}？</AlertDialogTitle>
+            <AlertDialogTitle>
+              {translateText("remove.confirmTitle", {
+                accountName: connection.label,
+              })}
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {affectedAgents.length
-                ? `${affectedAgents.join("、")} 使用的 ${connector.display_name} 模型将不可用，直到重新绑定账号。`
-                : `该 ${connector.display_name} 账号的登录信息会被删除。`}
+                ? translateText("remove.affectedAgents", {
+                    agents: affectedAgents.join(listSeparator()),
+                    providerName: connector.display_name,
+                  })
+                : translateText("remove.credentialsNotice", {
+                    providerName: connector.display_name,
+                  })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>
+              {translateText("common:actions.cancel")}
+            </AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               onClick={() =>
                 remove.mutate(connection.id, {
-                  onSuccess: () => toast.success(`已移除 ${connection.label}`),
+                  onSuccess: () =>
+                    toast.success(
+                      translateText("remove.success", {
+                        accountName: connection.label,
+                      }),
+                    ),
                   onError,
                 })
               }
             >
-              移除
+              {translateText("common:actions.remove")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -368,7 +440,7 @@ function ConnectionRow({
 }
 
 function timeText(ms: number) {
-  return new Date(ms).toLocaleTimeString("zh-CN", { hour12: false });
+  return new Date(ms).toLocaleTimeString(formatLocale(), { hour12: false });
 }
 
 /**
@@ -376,6 +448,11 @@ function timeText(ms: number) {
  * status shown; the outcome stays next to the button until the next one.
  */
 export function RefreshStatus({ className }: { className?: string }) {
+  const { t: translateText } = useTranslation([
+    "providers",
+    "common",
+    "connections",
+  ] as const);
   const refresh = useRefreshLlmStatus();
   // Another settings page may be checking: one round at a time.
   const busy = useIsMutating({ mutationKey: ["llm", "refresh"] }) > 0;
@@ -384,12 +461,20 @@ export function RefreshStatus({ className }: { className?: string }) {
     (connection) => connection.check_error,
   ).length;
   const outcome = refresh.isError
-    ? `刷新失败：${refresh.error.message}仍显示之前的状态。`
+    ? translateText("refresh.failedWithPreviousStatus", {
+        message: refresh.error.message,
+      })
     : result
       ? [
-          `已于 ${timeText(refresh.submittedAt)} 重新检查`,
-          failedChecks ? `${failedChecks} 个账号未能检查` : "账号均可连接",
-        ].join("，")
+          translateText("refresh.checkedAt", {
+            time: timeText(refresh.submittedAt),
+          }),
+          failedChecks
+            ? translateText("refresh.failedCount", {
+                count: failedChecks,
+              })
+            : translateText("refresh.allReachable"),
+        ].join(formatLocale() === "zh-CN" ? "，" : ", ")
       : "";
   return (
     <div
@@ -407,7 +492,7 @@ export function RefreshStatus({ className }: { className?: string }) {
             : "text-muted-foreground",
         )}
       >
-        {busy ? "正在检查…" : outcome}
+        {busy ? translateText("refresh.checking") : outcome}
       </p>
       <Button
         type="button"
@@ -423,7 +508,9 @@ export function RefreshStatus({ className }: { className?: string }) {
           data-icon="inline-start"
           className={busy ? "motion-safe:animate-spin" : undefined}
         />
-        {busy ? "检查中" : "刷新状态"}
+        {busy
+          ? translateText("refresh.checkingLabel")
+          : translateText("refresh.label")}
       </Button>
     </div>
   );
@@ -444,6 +531,11 @@ export function ConnectorSection({
   /** A line under the heading, about what else the accounts serve. */
   description?: ReactNode;
 }) {
+  const { t: translateText } = useTranslation([
+    "providers",
+    "common",
+    "connections",
+  ] as const);
   const [login, setLogin] = useState(0);
   const { agents } = useAgents();
   const { data: models } = useModels();
@@ -461,7 +553,9 @@ export function ConnectorSection({
     );
     return agents
       .filter((agent) => agent.model && ids.has(agent.model))
-      .map((agent) => `「${agent.name}」`);
+      .map((agent) =>
+        translateText("common:format.quotedValue", { value: agent.name }),
+      );
   };
 
   return (
@@ -484,7 +578,7 @@ export function ConnectorSection({
           onClick={() => setLogin((n) => n + 1)}
         >
           <PlusIcon aria-hidden="true" data-icon="inline-start" />
-          绑定账号
+          {translateText("actions.linkAccount")}
         </Button>
       </div>
       {description ? (
@@ -492,7 +586,9 @@ export function ConnectorSection({
       ) : null}
       {connections.length ? (
         <ul
-          aria-label={`${connector.display_name} 账号`}
+          aria-label={translateText("accounts.title", {
+            providerName: connector.display_name,
+          })}
           className="divide-y border"
         >
           {connections.map((connection) => (
@@ -508,7 +604,7 @@ export function ConnectorSection({
         </ul>
       ) : (
         <p className="border border-dashed px-3 py-2.5 text-xs text-muted-foreground">
-          尚未绑定账号
+          {translateText("accounts.empty")}
         </p>
       )}
       {login ? (
@@ -529,6 +625,11 @@ export function ConnectorSection({
  * also powers the grok plugin, whose card under 连接 shows the same accounts.
  */
 export function ProviderSettings() {
+  const { t: translateText } = useTranslation([
+    "providers",
+    "common",
+    "connections",
+  ] as const);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const connectors = useConnectors();
   const connections = useConnections();
@@ -537,7 +638,7 @@ export function ProviderSettings() {
   if (connectors.error)
     return (
       <LoadError
-        what="模型服务"
+        what={translateText("title")}
         error={connectors.error}
         onRetry={() => void connectors.refetch()}
       />
@@ -545,12 +646,14 @@ export function ProviderSettings() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold">模型服务</h2>
+        <h2 className="text-sm font-semibold">{translateText("title")}</h2>
         <RefreshStatus />
       </div>
       {connections.error ? (
         <p role="alert" className="text-xs text-destructive">
-          无法加载账号：{connections.error.message}
+          {translateText("accounts.loadFailed", {
+            message: connections.error.message,
+          })}
         </p>
       ) : null}
       {connectors.isPending ? <Loading rows={2} /> : null}
@@ -565,7 +668,7 @@ export function ProviderSettings() {
           description={
             connector.id === GROK_CONNECTOR ? (
               <>
-                同一账号也供 grok 插件生成图片、视频和搜索，见
+                {translateText("grok.sharedAccountHelp")}
                 <Button
                   variant="link"
                   size="xs"
@@ -574,7 +677,7 @@ export function ProviderSettings() {
                     setSettings({ open: true, section: "connections" })
                   }
                 >
-                  连接
+                  {translateText("connections:title")}
                 </Button>
               </>
             ) : undefined

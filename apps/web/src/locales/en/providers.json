@@ -1,0 +1,70 @@
+{
+  "status": {
+    "degradedSuffix": "(temporarily failing)",
+    "healthy": "Healthy",
+    "disabled": "Disabled",
+    "needsLogin": "Sign in again",
+    "quotaExhausted": "Quota exhausted",
+    "degraded": "Temporary failure"
+  },
+  "actions": {
+    "openSettings": "Go to model services",
+    "signInAgain": "Sign in again",
+    "linkAccount": "Link account"
+  },
+  "title": "Model services",
+  "recovery": {
+    "minutes": "{{action}} in about {{count}} minutes",
+    "hours": "{{action}} in about {{count}} hours",
+    "days": "{{action}} in about {{count}} days",
+    "available": "Available",
+    "minutes_one": "{{action}} in about {{count}} minute",
+    "minutes_other": "{{action}} in about {{count}} minutes",
+    "hours_one": "{{action}} in about {{count}} hour",
+    "hours_other": "{{action}} in about {{count}} hours",
+    "days_one": "{{action}} in about {{count}} day",
+    "days_other": "{{action}} in about {{count}} days"
+  },
+  "usage": {
+    "remainingQuotaLabel": "Remaining quota for {{label}}",
+    "remainingPercent": "{{percent}}% remaining",
+    "resets": "Resets",
+    "resetsSoon": "Resets soon"
+  },
+  "login": {
+    "linked": "Linked {{providerName}} account",
+    "failed": "Sign-in failed. Try again.",
+    "title": "Link {{providerName}} account",
+    "instructions": "Open the authorization page, sign in and enter the code below.",
+    "codeLabel": "Verification code {{code}}",
+    "copyCode": "Copy verification code",
+    "waitingWithExpiry": "Awaiting authorization… Expires in {{minutes}}:{{seconds}}",
+    "loadingCode": "Getting verification code…",
+    "openAuthorization": "Open authorization page"
+  },
+  "remove": {
+    "confirmTitle": "Remove {{accountName}}?",
+    "affectedAgents": "{{providerName}} models used by {{agents}} will be unavailable until the account is linked again.",
+    "credentialsNotice": "Sign-in credentials for this {{providerName}} account will be deleted.",
+    "success": "Removed {{accountName}}"
+  },
+  "refresh": {
+    "failedWithPreviousStatus": "Refresh failed: {{message}}Showing the previous status.",
+    "checkedAt": "Checked again at {{time}}",
+    "failedCount": "Unable to check {{count}} accounts",
+    "allReachable": "All accounts are reachable",
+    "checking": "Checking…",
+    "checkingLabel": "Checking",
+    "label": "Refresh status",
+    "failedCount_one": "Unable to check {{count}} account",
+    "failedCount_other": "Unable to check {{count}} accounts"
+  },
+  "accounts": {
+    "title": "{{providerName}} accounts",
+    "empty": "No accounts linked yet",
+    "loadFailed": "Unable to load accounts: {{message}}"
+  },
+  "grok": {
+    "sharedAccountHelp": "The grok plugin also uses this account for images, videos and search. See"
+  }
+}

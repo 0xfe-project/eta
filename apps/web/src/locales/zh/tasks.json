@@ -1,0 +1,244 @@
+{
+  "operations": {
+    "createWorkspace": "创建工作区",
+    "createWorktree": "创建 worktree",
+    "openWorktree": "打开 worktree",
+    "addProject": "添加项目",
+    "acceptedUnconfirmed": "已受理，未确认完成",
+    "resultUnconfirmed": "结果未确认"
+  },
+  "assignee": {
+    "unassigned": "未指派",
+    "me": "我",
+    "loading": "读取指派对象……",
+    "noRemoteAgents": "暂无远程智能体",
+    "label": "指派给"
+  },
+  "location": {
+    "label": "工作位置",
+    "loadingProjects": "读取那台电脑上的项目……",
+    "select": "选择工作位置",
+    "current": "当前工作位置（{{name}}）{{availabilitySuffix}}",
+    "newWorktree": "新开一个 worktree",
+    "branchFrom": "从 {{name}} 开（{{branch}}）",
+    "existingWorkspace": "在已有的工作区里",
+    "uncommittedChanges": " · 有未提交改动",
+    "branchLabel": "分支（可选）",
+    "branchPlaceholder": "默认 axp/<编号>-<标题>",
+    "baseBranchLabel": "从哪里开（可选）",
+    "baseBranchPlaceholder": "默认当前分支",
+    "projectFallback": "项目",
+    "worktreeSummary": "新 worktree（从 {{projectName}} 开{{branchSuffix}}）",
+    "workspaceSummary": "工作区 {{name}}"
+  },
+  "status": {
+    "inProgress": "进行中",
+    "changeLabel": "状态：{{status}}，修改",
+    "inReview": "待验收",
+    "blocked": "受阻",
+    "todo": "待办",
+    "backlog": "积压",
+    "done": "已完成",
+    "cancelled": "已取消"
+  },
+  "assist": {
+    "errors": {
+      "noRemoteAssignee": "这个任务还没有指派到远程电脑。协助的 Agent 和主执行者在同一台电脑上工作：先在「指派给」里选一台电脑。",
+      "taskEnded": "任务已经结束，它的工作位置已收尾。把状态改回进行中后再请 Agent 协助。",
+      "noAvailableAgents": "{{computerName}} 上没有可用的 Agent。在 设置 → 远程电脑 里看它的运行时是否在线、已配对；装了新的 Agent 后点「更新」重新上报。"
+    },
+    "title": "请 Agent 协助",
+    "loadingAgents": "正在读取这台电脑上的 Agent…",
+    "requested": "已请 {{name}} 协助",
+    "primaryAgentSuffix": "（主执行者，另开会话）",
+    "offlineWarning": "{{computerName}} 现在离线：请求会排队，电脑连上后开始。",
+    "fields": {
+      "briefLabel": "协助要求",
+      "briefPlaceholder": "要它做什么",
+      "startLabel": "什么时候开始"
+    },
+    "start": {
+      "now": "现在",
+      "afterDelivery": "主执行者这一轮交付后",
+      "afterDeliveryHelp": "等主执行者这一轮成功完成、登记了 PR 再开始；失败或被停止则不开始，并说明原因。",
+      "nowHelp": "排在其他协助之后，马上开始。"
+    },
+    "review": {
+      "requestChangesLoop": "要求修改时交给主执行者改，改完再审",
+      "upTo": "最多",
+      "maxRoundsLabel": "最多审查几轮",
+      "roundsSuffix": "轮审查",
+      "help": "通过即停，用完停下等你决定。审查 Agent 用 axp task review 给出结论。",
+      "progress": "· 已审 {{reviewed}}/{{maxRounds}} 轮 · {{status}}",
+      "roundLimit": "审查轮数上限",
+      "continue": "继续审查",
+      "stopLoop": "停止循环",
+      "roundProgress": " · 第 {{round}}/{{maxRounds}} 轮"
+    },
+    "sending": "正在发送…",
+    "status": {
+      "notStarted": "没有开始",
+      "started": "已开始",
+      "approved": "已通过",
+      "roundsExhausted": "轮数用尽，等你决定",
+      "blocked": "受阻，等你决定"
+    },
+    "followUpWith": "追问 {{name}}",
+    "resultsMessage": "{{name}}{{roundSuffix}} 的协助结果：\n\n{{result}}\n\n",
+    "sendToPrimary": "交给主执行者",
+    "changeCount": "{{count}} 条变更",
+    "commitSuffix": " · 提交 {{commit}}",
+    "changeCount_one": "{{count}} 条变更",
+    "changeCount_other": "{{count}} 条变更"
+  },
+  "scope": {
+    "mine": "我的",
+    "label": "指派范围"
+  },
+  "actions": {
+    "createWithStatusLabel": "新建{{status}}任务",
+    "create": "新建任务",
+    "viewAll": "查看全部任务",
+    "approve": "验收通过",
+    "openInSidebar": "在侧栏打开",
+    "askToReview": "请 @{{agentName}} 审阅",
+    "complete": "标记任务完成",
+    "createAndStart": "创建并开始",
+    "changeTitle": "修改标题",
+    "editDescription": "编辑描述",
+    "addDescription": "添加描述"
+  },
+  "details": {
+    "activityTab": "动态",
+    "propertiesTab": "属性",
+    "deliveryTab": "交付",
+    "reviewTab": "审查"
+  },
+  "fields": {
+    "updatedAt": "更新于",
+    "status": "状态",
+    "title": "标题",
+    "titlePlaceholder": "例如：修复登录页在 Safari 上的布局",
+    "description": "描述",
+    "remoteDescriptionHelp": "远程智能体会把它当作任务说明。支持 Markdown。",
+    "descriptionPlaceholder": "目标、背景、完成的标准……",
+    "optionalGroup": "关联群（可选）",
+    "noGroup": "不关联"
+  },
+  "layout": {
+    "label": "布局",
+    "list": "列表",
+    "board": "看板"
+  },
+  "empty": {
+    "title": "还没有任务",
+    "description": "把要做的事交给智能体，它会在时间线里记下每一步。",
+    "noUserTasks": "没有指派给你的任务",
+    "noAgentTasks": "没有指派给智能体的任务",
+    "deletedTitle": "这个任务已不存在"
+  },
+  "runStatus": {
+    "queued": "排队中",
+    "running": "正在运行",
+    "replied": "已回复",
+    "failed": "运行失败"
+  },
+  "activity": {
+    "createdByAgent": "由 {{name}} 创建",
+    "createdByMe": "由我创建",
+    "created": "创建了任务",
+    "statusChanged": "把状态从「{{from}}」改为「{{to}}」",
+    "assigneeChanged": "改了指派",
+    "assigned": "指派给 {{assignee}}{{locationSuffix}}",
+    "titleChanged": "把标题改为「{{title}}」",
+    "descriptionChanged": "修改了描述",
+    "groupLinked": "关联了群",
+    "groupUnlinked": "解除了群关联",
+    "deliveredPrefix": "交付了 ",
+    "artifactPublishedPrefix": "发布了 Artifact ",
+    "cleanupCompleted": "收尾完成",
+    "assistanceRequested": "请 {{name}} 协助{{roundSuffix}}",
+    "started": "开始工作",
+    "turnCompleted": "完成了这一轮",
+    "noReplyReminder": "这一轮结束时没有回复，已提醒一次",
+    "turnFailed": "这一轮失败了{{reason}}",
+    "turnStopped": "这一轮已停止{{reason}}"
+  },
+  "draft": {
+    "title": "任务草稿",
+    "editAndCreate": "编辑并创建",
+    "notCreatedHint": "尚未创建任务或指派执行者。",
+    "confirmTitle": "确认任务草稿",
+    "confirmDescription": "编辑内容，选择执行者后创建。"
+  },
+  "card": {
+    "deletedSummary": "#{{number}} {{title}} · 任务已删除",
+    "assignedToYou": "由你执行",
+    "commentCount": " · {{count}} 条评论",
+    "commentCount_one": " · {{count}} 条评论",
+    "commentCount_other": " · {{count}} 条评论"
+  },
+  "messages": {
+    "reviewRequest": " @{{agentName}} 请审阅任务 #{{number}}「{{title}}」的结果。",
+    "replyToAssignee": "回复执行者",
+    "replyTitle": "回复执行者 · #{{number}}",
+    "replyHelp": "作为任务评论发送，执行者会继续处理。"
+  },
+  "pullRequests": {
+    "status": {
+      "draft": "草稿",
+      "merged": "已合并",
+      "closed": "已关闭",
+      "unavailable": "状态暂不可用"
+    },
+    "mergedAndCompleted": "PR 已合并，任务已完成",
+    "mergedTaskIncompleteWithError": "PR 已合并，任务未完成：{{message}}",
+    "mergedTaskIncomplete": "PR 已合并，任务未完成",
+    "mergeResultUnknown": "没有得到合并结果，已重新读取 PR 状态，请确认后再决定是否重试。",
+    "merging": "合并中…",
+    "actions": {
+      "merge": "合并",
+      "moreMergeOptions": "更多合并方式",
+      "mergeAndComplete": "合并并标记任务完成"
+    }
+  },
+  "feedback": {
+    "completed": "任务已完成"
+  },
+  "comments": {
+    "title": "评论",
+    "awaitingReply": "待回复",
+    "awaitingYourReply": " 在等你回复",
+    "followUpLabel": "追问",
+    "unsupportedAttachments": "{{action}}还不能带图片或文件，{{count}} 个没有加进来。",
+    "deliveryFailed": "{{action}}未送达：{{message}}",
+    "followUpPlaceholder": "追问 {{name}}，支持 Markdown",
+    "placeholder": "写一条评论，支持 Markdown",
+    "sendFollowUp": "发送追问",
+    "queuedToSend": "待发送",
+    "notDelivered": "未送达：{{message}}"
+  },
+  "create": {
+    "remoteComputerHelp": "要让远程电脑上的智能体领任务，先在 设置 → 远程电脑 中接入一台电脑。"
+  },
+  "review": {
+    "approved": "审查通过",
+    "changesRequested": "要求修改",
+    "roundSuffix": "（审查第 {{round}} 轮）"
+  },
+  "log": {
+    "types": {
+      "tool": "工具",
+      "thinking": "思考",
+      "terminal": "终端",
+      "image": "读取了图片",
+      "other": "其他"
+    },
+    "loading": "正在读取记录…",
+    "empty": "还没有记录。",
+    "loadingEarlier": "正在读取更早的记录…",
+    "loadEarlier": "加载更早的记录",
+    "title": "执行记录",
+    "workspacePrefix": "工作区 "
+  }
+}

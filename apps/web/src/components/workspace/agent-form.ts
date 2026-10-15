@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { formatLocale, translate } from "@/lib/i18n";
 
 export const DESCRIPTION_MAX = 10_000;
 
@@ -7,14 +8,14 @@ export const agentFormSchema = z.object({
   name: z
     .string()
     .trim()
-    .min(1, "请输入名称。")
-    .max(100, "名称最多 100 个字符。"),
-  description: z
-    .string()
-    .max(
-      DESCRIPTION_MAX,
-      `指令最多 ${DESCRIPTION_MAX.toLocaleString()} 个字符。`,
-    ),
+    .min(1, { error: () => translate("validation:nameRequired") })
+    .max(100, { error: () => translate("validation:nameMaxLength") }),
+  description: z.string().max(DESCRIPTION_MAX, {
+    error: () =>
+      translate("validation:instructionsMaxLength", {
+        maxCharacters: DESCRIPTION_MAX.toLocaleString(formatLocale()),
+      }),
+  }),
   // "" until a model is chosen.
   model: z.string(),
   // null: every built-in bundle, the default for new agents.

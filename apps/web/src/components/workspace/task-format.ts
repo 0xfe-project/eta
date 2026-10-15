@@ -6,31 +6,79 @@ import type {
   TaskDetail,
   TaskStatus,
 } from "@/queries/tasks";
+import { translate } from "@/lib/i18n";
 import { when } from "./routine-format";
 
 // How tasks read: their statuses, assignees and runs.
 
 /** The board's order: what needs attention first. */
 export const statuses: { value: TaskStatus; label: string }[] = [
-  { value: "in_review", label: "待验收" },
-  { value: "in_progress", label: "进行中" },
-  { value: "blocked", label: "受阻" },
-  { value: "todo", label: "待办" },
-  { value: "backlog", label: "积压" },
-  { value: "done", label: "已完成" },
-  { value: "cancelled", label: "已取消" },
+  {
+    value: "in_review",
+    get label() {
+      return translate("tasks:status.inReview");
+    },
+  },
+  {
+    value: "in_progress",
+    get label() {
+      return translate("tasks:status.inProgress");
+    },
+  },
+  {
+    value: "blocked",
+    get label() {
+      return translate("tasks:status.blocked");
+    },
+  },
+  {
+    value: "todo",
+    get label() {
+      return translate("tasks:status.todo");
+    },
+  },
+  {
+    value: "backlog",
+    get label() {
+      return translate("tasks:status.backlog");
+    },
+  },
+  {
+    value: "done",
+    get label() {
+      return translate("tasks:status.done");
+    },
+  },
+  {
+    value: "cancelled",
+    get label() {
+      return translate("tasks:status.cancelled");
+    },
+  },
 ];
 
 export const statusLabel = (status: TaskStatus) =>
   statuses.find((s) => s.value === status)?.label ?? status;
 
 export const runStatusLabels: Record<RunStatus, string> = {
-  queued: "排队中",
-  starting: "启动中",
-  running: "正在运行",
-  completed: "已回复",
-  failed: "失败",
-  cancelled: "已停止",
+  get queued() {
+    return translate("tasks:runStatus.queued");
+  },
+  get starting() {
+    return translate("common:status.starting");
+  },
+  get running() {
+    return translate("tasks:runStatus.running");
+  },
+  get completed() {
+    return translate("tasks:runStatus.replied");
+  },
+  get failed() {
+    return translate("common:status.failed");
+  },
+  get cancelled() {
+    return translate("common:status.stopped");
+  },
 };
 
 export const isActive = (
@@ -60,7 +108,7 @@ export function remoteLabel(a: {
   provider?: string | null;
 }) {
   return [
-    a.computer_name ?? "已移除的电脑",
+    a.computer_name ?? translate("computers:labels.removedComputer"),
     a.runtime && runtimeLabel(a.runtime),
     a.provider && providerLabel(a.provider),
   ]
@@ -69,9 +117,9 @@ export function remoteLabel(a: {
 }
 
 export function assigneeLabel(assignee: Task["assignee"]) {
-  if (assignee.kind === "user") return "我";
+  if (assignee.kind === "user") return translate("tasks:assignee.me");
   if (assignee.kind === "remote") return remoteLabel(assignee);
-  return "未指派";
+  return translate("tasks:assignee.unassigned");
 }
 
 /** A select's value for an assignee. */
@@ -100,9 +148,15 @@ export function assigneeFromKey(key: string): AssigneeInput {
 /** "刚刚", "5 分钟前", "3 小时前", "10-11". */
 export function ago(iso: string) {
   const seconds = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (seconds < 60) return "刚刚";
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟前`;
-  if (seconds < 86_400) return `${Math.floor(seconds / 3600)} 小时前`;
+  if (seconds < 60) return translate("common:time.justNow");
+  if (seconds < 3600)
+    return translate("common:time.minutesAgo", {
+      count: Math.floor(seconds / 60),
+    });
+  if (seconds < 86_400)
+    return translate("common:time.hoursAgo", {
+      count: Math.floor(seconds / 3600),
+    });
   const date = new Date(iso);
   return `${date.getMonth() + 1}-${String(date.getDate()).padStart(2, "0")}`;
 }
@@ -111,17 +165,29 @@ export function ago(iso: string) {
 export function placeLabel(place: Place | null | undefined) {
   if (!place) return null;
   if (place.kind === "worktree")
-    return `新 worktree（从 ${place.name ?? "项目"} 开${place.branch ? `，${place.branch}` : ""}）`;
-  return `工作区 ${place.name ?? place.workspace_id}`;
+    return translate("tasks:location.worktreeSummary", {
+      projectName: place.name ?? translate("tasks:location.projectFallback"),
+      branchSuffix: place.branch
+        ? translate("common:format.commaSuffix", { value: place.branch })
+        : "",
+    });
+  return translate("tasks:location.workspaceSummary", {
+    name: place.name ?? place.workspace_id,
+  });
 }
 
 /** "由 Josh 创建 · 今天 08:58". */
 export function createdBy(task: TaskDetail) {
-  return `${
-    task.created_by.kind === "agent"
-      ? `由 ${task.created_by.agent_name ?? "智能体"} 创建`
-      : "由我创建"
-  } · ${when(task.created_at)}`;
+  return translate("common:format.joinedValues", {
+    first:
+      task.created_by.kind === "agent"
+        ? translate("tasks:activity.createdByAgent", {
+            name:
+              task.created_by.agent_name ?? translate("common:entities.agents"),
+          })
+        : translate("tasks:activity.createdByMe"),
+    second: when(task.created_at),
+  });
 }
 
 /** Whether a deliverable is a pull request on github.com. */

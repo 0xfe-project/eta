@@ -1,17 +1,37 @@
 import type { Schedule } from "@/queries/routines";
+import { formatLocale, translate } from "@/lib/i18n";
 
 // How routines read: their schedules and their times.
 
-const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
+const WEEKDAYS = [
+  "common:weekdays.sunday",
+  "common:weekdays.monday",
+  "common:weekdays.tuesday",
+  "common:weekdays.wednesday",
+  "common:weekdays.thursday",
+  "common:weekdays.friday",
+  "common:weekdays.saturday",
+] as const;
 
 export function describeSchedule(schedule: Schedule) {
   switch (schedule.kind) {
     case "daily":
-      return `每天 ${schedule.time}`;
+      return translate("routines:schedule.describe.daily", {
+        time: schedule.time,
+      });
     case "weekly":
-      return `每周${schedule.days.map((d) => WEEKDAYS[d]).join("、")} ${schedule.time}`;
+      return translate("routines:schedule.describe.weekly", {
+        weekdays: schedule.days
+          .map((d) => translate(WEEKDAYS[d]))
+          .join(formatLocale() === "zh-CN" ? "、" : ", "),
+        time: schedule.time,
+      });
     case "hourly":
-      return schedule.every === 1 ? "每小时" : `每 ${schedule.every} 小时`;
+      return schedule.every === 1
+        ? translate("routines:schedule.describe.hourly")
+        : translate("routines:schedule.describe.hourInterval", {
+            count: schedule.every,
+          });
     case "cron":
       return `cron ${schedule.cron}`;
   }
@@ -24,7 +44,7 @@ function startOfDay(date: Date) {
 /** "今天 08:02", "明天 08:00", "10-11 08:03". */
 export function when(iso: string) {
   const date = new Date(iso);
-  const time = date.toLocaleTimeString("zh-CN", {
+  const time = date.toLocaleTimeString(formatLocale(), {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -33,7 +53,11 @@ export function when(iso: string) {
       86_400_000,
   );
   const label =
-    { [-1]: "昨天", 0: "今天", 1: "明天" }[days] ??
+    {
+      [-1]: translate("common:time.yesterday"),
+      0: translate("common:time.today"),
+      1: translate("common:time.tomorrow"),
+    }[days] ??
     `${date.getMonth() + 1}-${String(date.getDate()).padStart(2, "0")}`;
   return `${label} ${time}`;
 }

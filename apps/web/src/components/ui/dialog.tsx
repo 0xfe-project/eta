@@ -1,4 +1,5 @@
 "use client";
+import { useTranslation } from "react-i18next";
 
 import { XIcon } from "@phosphor-icons/react/X";
 import { cn } from "cn";
@@ -55,6 +56,7 @@ function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean;
 }) {
+  const { t: translateText } = useTranslation("common");
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -75,7 +77,7 @@ function DialogContent({
               size="icon-sm"
             >
               <XIcon />
-              <span className="sr-only">关闭</span>
+              <span className="sr-only">{translateText("actions.close")}</span>
             </Button>
           </DialogPrimitive.Close>
         )}
@@ -102,6 +104,7 @@ function DialogFooter({
 }: React.ComponentProps<"div"> & {
   showCloseButton?: boolean;
 }) {
+  const { t: translateText } = useTranslation("common");
   return (
     <div
       data-slot="dialog-footer"
@@ -114,7 +117,7 @@ function DialogFooter({
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close asChild>
-          <Button variant="outline">关闭</Button>
+          <Button variant="outline">{translateText("actions.close")}</Button>
         </DialogPrimitive.Close>
       )}
     </div>

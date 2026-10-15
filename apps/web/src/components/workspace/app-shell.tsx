@@ -7,8 +7,10 @@ import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import { Empty, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
+import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useTasks } from "@/queries/tasks";
 import { AgentEditor } from "./agent-editor";
@@ -23,11 +25,41 @@ import { useAttention } from "./use-attention";
 // bottom tabs on mobile. Conversation lists are the mobile home screen.
 
 const sections = [
-  { to: "/", label: "对话", icon: ChatsCircleIcon },
-  { to: "/workspace/inbox", label: "待处理", icon: BellIcon },
-  { to: "/workspace/tasks", label: "任务", icon: ListChecksIcon },
-  { to: "/workspace/routines", label: "定时", icon: ClockIcon },
-  { to: "/workspace/memory", label: "记忆", icon: BrainIcon },
+  {
+    to: "/",
+    get label() {
+      return translate("navigation:sections.chat");
+    },
+    icon: ChatsCircleIcon,
+  },
+  {
+    to: "/workspace/inbox",
+    get label() {
+      return translate("navigation:sections.pending");
+    },
+    icon: BellIcon,
+  },
+  {
+    to: "/workspace/tasks",
+    get label() {
+      return translate("navigation:sections.tasks");
+    },
+    icon: ListChecksIcon,
+  },
+  {
+    to: "/workspace/routines",
+    get label() {
+      return translate("navigation:sections.routines");
+    },
+    icon: ClockIcon,
+  },
+  {
+    to: "/workspace/memory",
+    get label() {
+      return translate("navigation:sections.memory");
+    },
+    icon: BrainIcon,
+  },
 ] as const;
 
 /**
@@ -53,6 +85,11 @@ function Badge({ count }: { count: number | undefined }) {
 }
 
 export function Sidebar() {
+  const { t: translateText } = useTranslation([
+    "navigation",
+    "agents",
+    "common",
+  ] as const);
   const badges = useBadges();
   const { agents, loaded, error, openEditor } = useAgents();
   const openAgent = useOpenAgent();
@@ -64,7 +101,10 @@ export function Sidebar() {
         </Link>
         <SettingsButton />
       </div>
-      <nav aria-label="分区" className="grid gap-px px-2">
+      <nav
+        aria-label={translateText("accessibility.sections")}
+        className="grid gap-px px-2"
+      >
         {sections.map(({ to, label, icon: Icon }) => (
           <Link
             key={to}
@@ -91,29 +131,31 @@ export function Sidebar() {
             id="sidebar-agents"
             className="text-xs font-medium text-muted-foreground"
           >
-            智能体
+            {translateText("common:entities.agents")}
           </h2>
           <Button
             variant="ghost"
             size="icon-xs"
-            aria-label="新建智能体"
-            title="新建智能体"
+            aria-label={translateText("agents:actions.create")}
+            title={translateText("agents:actions.create")}
             onClick={() => openEditor()}
           >
             <PlusIcon aria-hidden="true" />
           </Button>
         </div>
         {error && !loaded ? (
-          <p className="px-2 text-xs text-muted-foreground">无法加载智能体</p>
+          <p className="px-2 text-xs text-muted-foreground">
+            {translateText("agents:errors.loadFailed")}
+          </p>
         ) : !loaded ? (
           <Loading rows={2} />
         ) : agents.length ? null : (
           <Empty
-            title="还没有智能体"
+            title={translateText("agents:empty.title")}
             className="px-3 py-4"
             action={
               <Button size="xs" variant="outline" onClick={() => openEditor()}>
-                新建智能体
+                {translateText("agents:actions.create")}
               </Button>
             }
           />
@@ -124,7 +166,9 @@ export function Sidebar() {
               <button
                 type="button"
                 onClick={() => openAgent(agent.id)}
-                title={`与 ${agent.name} 对话`}
+                title={translateText("agents:actions.chatWith", {
+                  name: agent.name,
+                })}
                 className={cn(item, "w-full")}
               >
                 <AgentAvatar agent={agent} className="size-5" />
@@ -149,6 +193,11 @@ export function Sidebar() {
  * conversation. 更多 stays lit on the pages it leads to.
  */
 export function BottomNav() {
+  const { t: translateText } = useTranslation([
+    "navigation",
+    "agents",
+    "common",
+  ] as const);
   const badges = useBadges();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const tabs = [
@@ -157,14 +206,14 @@ export function BottomNav() {
     { ...sections[1], also: [] },
     {
       to: "/workspace/more",
-      label: "更多",
+      label: translateText("sections.more"),
       icon: DotsThreeIcon,
       also: ["/workspace", "/workspace/routines", "/workspace/memory"],
     },
   ] as const;
   return (
     <nav
-      aria-label="分区"
+      aria-label={translateText("accessibility.sections")}
       className="flex shrink-0 border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       {tabs.map(({ to, label, icon: Icon, also }) => (

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
@@ -94,6 +95,7 @@ export function ClaudeHeader({
   whatsNew?: string[];
   className?: string;
 }) {
+  const { t: translateText } = useTranslation(["chat", "common"] as const);
   return (
     <fieldset
       className={cn(
@@ -109,7 +111,9 @@ export function ClaudeHeader({
       <div className="grid min-w-0 gap-4 sm:grid-cols-[minmax(0,1fr)_1px_minmax(0,1.1fr)]">
         {/* left: identity */}
         <div className="flex min-w-0 flex-col items-center gap-2 py-1 text-center">
-          <div className="font-semibold">欢迎回来，{user}！</div>
+          <div className="font-semibold">
+            {translateText("session.welcomeBack", { name: user })}
+          </div>
           <ClaudeLogo className="my-1.5" />
           <div
             className="min-w-0 space-y-0.5 break-words"
@@ -130,7 +134,7 @@ export function ClaudeHeader({
         {/* right: tips + what's new */}
         <div className="min-w-0 space-y-1">
           <div className="font-semibold" style={{ color: ROSE }}>
-            入门提示
+            {translateText("session.gettingStarted")}
           </div>
           {tips.map((t) => (
             <div key={t} className="truncate">
@@ -139,7 +143,7 @@ export function ClaudeHeader({
           ))}
           <div className="my-1.5 h-px" style={{ background: ROSE }} />
           <div className="font-semibold" style={{ color: ROSE }}>
-            最近更新
+            {translateText("session.recentUpdates")}
           </div>
           {whatsNew.map((t) => (
             <div key={t} className="truncate">
@@ -147,7 +151,7 @@ export function ClaudeHeader({
             </div>
           ))}
           <div className="truncate italic" style={{ color: GRAY }}>
-            /release-notes 查看更新
+            {translateText("session.releaseNotesHint")}
           </div>
         </div>
       </div>

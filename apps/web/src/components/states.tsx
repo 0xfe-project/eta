@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { WarningIcon } from "@phosphor-icons/react/Warning";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -27,7 +28,7 @@ const widths = ["w-3/5", "w-2/5", "w-1/2", "w-2/3", "w-1/3"];
 export function Loading({
   layout = "list",
   rows = 3,
-  label = "正在加载…",
+  label,
   className,
 }: {
   layout?: "list" | "detail" | "lines";
@@ -35,6 +36,7 @@ export function Loading({
   label?: string;
   className?: string;
 }) {
+  const { t: translateText } = useTranslation("common");
   const lines = Array.from({ length: rows }, (_, i) => widths[i % 5]);
   return (
     <div
@@ -44,7 +46,9 @@ export function Loading({
         className,
       )}
     >
-      <span className="sr-only">{label}</span>
+      <span className="sr-only">
+        {label ?? translateText("states.loading")}
+      </span>
       {layout === "list" ? (
         <div className="grid">
           {lines.map((width, i) => (
@@ -120,16 +124,19 @@ export function LoadError({
   onRetry?: () => void;
   className?: string;
 }) {
+  const { t: translateText } = useTranslation("common");
   return (
     <div role="alert" className={cn(box, className)}>
       <WarningIcon aria-hidden="true" className="size-8 text-destructive" />
-      <p className="text-sm font-medium">无法加载{what}</p>
+      <p className="text-sm font-medium">
+        {translateText("errors.loadFailed", { target: what })}
+      </p>
       <p className="max-w-xs text-xs break-words text-muted-foreground">
         {error.message}
       </p>
       {onRetry ? (
         <Button size="sm" variant="outline" className="mt-1" onClick={onRetry}>
-          重试
+          {translateText("actions.retry")}
         </Button>
       ) : null}
     </div>

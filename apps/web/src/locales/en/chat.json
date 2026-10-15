@@ -1,0 +1,193 @@
+{
+  "session": {
+    "welcomeBack": "Welcome back, {{name}}!",
+    "gettingStarted": "Getting started",
+    "recentUpdates": "Recent updates",
+    "releaseNotesHint": "/release-notes for updates"
+  },
+  "modes": {
+    "auto": "Auto mode",
+    "switchHint": "(Shift+Tab to switch) · ← view agents",
+    "manual": "Manual mode",
+    "shortcutsHint": "· ? for shortcuts · ← view agents",
+    "acceptEdits": "Accept edits automatically",
+    "plan": "Plan mode"
+  },
+  "composer": {
+    "messageLabel": "Message",
+    "slashCommands": "Slash commands",
+    "errors": {
+      "failedAttachments": "Some attachments failed to upload. Retry or remove them before sending.",
+      "attachmentLimit": "Each message can include up to {{maxAttachments}} attachments.",
+      "messageLength": "Message text exceeds {{maxCharacters}} characters. Paste longer content as a file."
+    },
+    "placeholder": "Message {{agentName}}…",
+    "createAgentFirst": "Create an agent first",
+    "noAgentSelected": "No agent selected",
+    "waitForUploads": "Wait for attachments to finish uploading before sending."
+  },
+  "tools": {
+    "expandHint": "(click to expand)"
+  },
+  "agentSwitcher": {
+    "currentDirectChat": "Chatting with {{agentName}} ({{status}}); switch agent",
+    "currentGroup": "In group “{{groupName}}”; switch to a direct chat"
+  },
+  "groups": {
+    "nameLabel": "Group · {{name}}",
+    "directChat": "Direct chat",
+    "info": "Group info",
+    "groupChat": "Group chat",
+    "createWithMembers": "Create a group with them",
+    "inviteSelected": "Invite to group",
+    "joined": "Joined group",
+    "actions": {
+      "create": "New group",
+      "createGroup": "Create group",
+      "unarchive": "Unarchive",
+      "invite": "Invite",
+      "editInfo": "Edit group info",
+      "archive": "Archive",
+      "viewInfo": "View group info"
+    },
+    "createDescription": "Choose a few agents to discuss something together.",
+    "fields": {
+      "name": "Group name",
+      "optionalGoal": "Goal (optional)",
+      "goalHelp": "Record the current goal and decisions made so far.",
+      "goal": "Goal",
+      "decisions": "Decisions"
+    },
+    "members": {
+      "title": "Members",
+      "count": "{{count}} members",
+      "replyingElsewhere": "Replying in “{{groupName}}”",
+      "removeConfirmTitle": "Remove “{{name}}” from the group?",
+      "removeConfirmDescription": "It will stop receiving group messages. You can invite it again later.",
+      "inviteTitle": "Invite agents",
+      "inviteDescription": "Members can read the group chat and reply when @mentioned.",
+      "count_one": "{{count}} member",
+      "count_other": "{{count}} members"
+    },
+    "title": "Groups",
+    "archived": {
+      "title": "Archived",
+      "empty": "No archived conversations."
+    },
+    "accessibility": {
+      "actions": "Group actions"
+    },
+    "relatedTasks": {
+      "title": "Related tasks",
+      "help": "Each task belongs to one group. Linking it replaces its previous group.",
+      "unlink": "Unlink",
+      "linkLabel": "Link #{{number}} {{title}}"
+    }
+  },
+  "confirmations": {
+    "selectedChoice": "Selected “{{choice}}”",
+    "expired": "Expired without a response",
+    "answered": "Answered",
+    "requestLabel": "Confirmation request",
+    "required": "Confirmation needed",
+    "continueQuestion": "Continue?",
+    "historyTitle": "Past confirmations",
+    "historyLabel": "Confirmation history",
+    "emptyHistory": "No past confirmations yet",
+    "bashCommand": "Bash command",
+    "allowForSession": "Yes, and don’t ask again this session",
+    "denyAndExplain": "No, tell Claude what to do next (esc)"
+  },
+  "commands": {
+    "stopAllDescription": "Stop all replies in the group",
+    "compactDescription": "Compact context",
+    "compactRequiresMention": "@mention the agent whose context you want to compact first."
+  },
+  "sendModes": {
+    "afterReply": "Send after the current reply",
+    "interruptReply": "Insert into the current reply"
+  },
+  "messages": {
+    "mentionTarget": " → {{name}}"
+  },
+  "reply": {
+    "stopping": "Stopping",
+    "startingAgent": "Starting agent",
+    "waitingElsewhere": "Replying in “{{groupName}}” · Waiting",
+    "queuePosition": "Waiting · {{count}} ahead",
+    "sameFailureAsNext": "This message was not executed for the reason below.",
+    "failed": "Reply failed.",
+    "queuePosition_one": "Waiting · {{count}} ahead",
+    "queuePosition_other": "Waiting · {{count}} ahead"
+  },
+  "actions": {
+    "withdraw": "Withdraw",
+    "resend": "Resend"
+  },
+  "mentions": {
+    "everyoneCommand": "@everyone",
+    "notifyEveryone": "Notify all group members",
+    "busyHint": "Busy · Message will be queued",
+    "replyHint": "Ask for a reply",
+    "notifyTargets": "Will notify {{names}}",
+    "noTargetsHint": "Messages without @mentions are only saved to the group",
+    "everyoneLabel": "Everyone"
+  },
+  "history": {
+    "loadEarlier": "Load earlier messages…",
+    "loading": "Loading conversation…",
+    "recentChats": "Recent chats",
+    "noMessages": "No messages yet",
+    "noConversations": "No conversations yet"
+  },
+  "connection": {
+    "reconnecting": "Connection lost, reconnecting… Status may be out of date."
+  },
+  "accessibility": {
+    "messages": "Conversation messages"
+  },
+  "attachments": {
+    "fullContentLabel": "Full content of {{name}}",
+    "pastedTextSummary": "Pasted text · {{characterCount}} characters",
+    "removePastedText": "Remove pasted text",
+    "expandText": "Expand as text",
+    "pastedFile": "Pasted file",
+    "pastedFileName": "Pasted text.txt",
+    "errors": {
+      "interrupted": "Upload interrupted. Remove the attachment and paste it again.",
+      "fileTooLarge": "Each attachment must be 20 MB or smaller.",
+      "uploadFailed": "Upload failed. Try again.",
+      "uploadNetworkFailure": "Network connection failed; upload incomplete.",
+      "removed": "Attachment removed. Paste it again."
+    }
+  },
+  "notices": {
+    "groupArchived": "This group is archived. Unarchive it to continue the discussion.",
+    "noMembers": "This group has no agents. Invite members to continue the discussion.",
+    "modelNotSelected": "{{agentNames}} has no model selected.",
+    "messageQueuedElsewhere": "{{agentName}} is replying in “{{groupName}}”. This message has been queued."
+  },
+  "errors": {
+    "loadConversation": "Unable to load conversation: {{message}}",
+    "messageNetworkFailure": "Network connection failed; message not delivered."
+  },
+  "thinking": {
+    "interruptHint": "esc to interrupt",
+    "verbs": {
+      "thinking": "Thinking",
+      "levitating": "Levitating",
+      "schlepping": "Schlepping",
+      "herding": "Herding",
+      "percolating": "Percolating",
+      "noodling": "Noodling",
+      "conjuring": "Conjuring"
+    }
+  },
+  "diff": {
+    "addedLabel": "added: ",
+    "removedLabel": "removed: "
+  },
+  "effort": {
+    "ultracodeHelp": "ultracode · xhigh effort + dynamic workflows for maximum thoroughness"
+  }
+}

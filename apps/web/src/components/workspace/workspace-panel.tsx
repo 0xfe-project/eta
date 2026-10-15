@@ -3,6 +3,7 @@ import { ArrowsOutIcon } from "@phosphor-icons/react/ArrowsOut";
 import { SidebarSimpleIcon } from "@phosphor-icons/react/SidebarSimple";
 import { XIcon } from "@phosphor-icons/react/X";
 import { Link } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -20,6 +21,10 @@ import { hasPage, sectionPaths, usePanelViews } from "./workspace-search";
 
 /** Opens the full window at the side panel's current data context. */
 function FullWindowButton({ view }: { view: WorkspaceView }) {
+  const { t: translateText } = useTranslation([
+    "navigation",
+    "common",
+  ] as const);
   const [{ task }] = useTaskNav();
   const [routineNav] = useRoutineNav();
   const search = Object.fromEntries(
@@ -32,8 +37,8 @@ function FullWindowButton({ view }: { view: WorkspaceView }) {
       <Link
         to={hasPage(view) ? sectionPaths[view] : "/workspace"}
         search={hasPage(view) ? search : {}}
-        aria-label="在全窗口中打开"
-        title="在全窗口中打开"
+        aria-label={translateText("actions.openFullWindow")}
+        title={translateText("actions.openFullWindow")}
       >
         <ArrowsOutIcon aria-hidden="true" />
       </Link>
@@ -61,6 +66,10 @@ export function WorkspacePanel({
   /** Folds it away from lg up. */
   onCollapse?: () => void;
 }) {
+  const { t: translateText } = useTranslation([
+    "navigation",
+    "common",
+  ] as const);
   const pending = useAttention().total;
   const tabs = usePanelViews();
   const view = tabs.some((tab) => tab.value === linked)
@@ -82,7 +91,11 @@ export function WorkspacePanel({
             <RefreshButton resource={view} />
           ) : null}
         </div>
-        <TabsList variant="default" aria-label="工作区标签" className="gap-1">
+        <TabsList
+          variant="default"
+          aria-label={translateText("accessibility.workspaceTabs")}
+          className="gap-1"
+        >
           {tabs.map(({ value, label }) => (
             <TabsTrigger
               key={value}
@@ -104,8 +117,8 @@ export function WorkspacePanel({
             <Button
               variant="ghost"
               size="icon"
-              aria-label="关闭工作区"
-              title="关闭"
+              aria-label={translateText("actions.closeWorkspace")}
+              title={translateText("common:actions.close")}
               className="hidden md:max-lg:inline-flex"
               onClick={onClose}
             >
@@ -116,8 +129,8 @@ export function WorkspacePanel({
             <Button
               variant="ghost"
               size="icon"
-              aria-label="收起工作区"
-              title="收起"
+              aria-label={translateText("actions.collapseWorkspace")}
+              title={translateText("common:actions.collapse")}
               className="hidden lg:inline-flex"
               onClick={onCollapse}
             >
