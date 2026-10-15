@@ -1,7 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import { ApiError } from "./api";
 
-// Called once per router: server requests must never share a query cache.
+// Called once per router instance so tests and the app do not share a cache.
 export function createQueryClient() {
   return new QueryClient({
     defaultOptions: {

@@ -150,7 +150,7 @@ export const useOutbox = create<OutboxStore>()(
         uploads,
         outgoing,
       }),
-      // Loaded after hydration (see RootDocument), like the workspace store.
+      // Loaded in main.tsx before the first render, like the workspace store.
       skipHydration: true,
     },
   ),

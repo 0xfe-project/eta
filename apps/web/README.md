@@ -1,21 +1,22 @@
 # Web
 
-TanStack Start + React。开发命令在仓库根目录执行 `bun run dev`。
+Vite + React + React Compiler。开发命令在仓库根目录执行 `bun run dev`。生产是静态 SPA，由 Bun 提供 `index.html` 回退、`GET /version` 和 `POST /telemetry/logs`。
 
 ## 已配置的库
 
-| 用途         | 库                                                | 配置入口                                                                                          |
-| ------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| 图标         | `@phosphor-icons/react`                           | `src/components/providers.tsx`，默认 20px / regular                                               |
-| 智能体头像   | `blobatar` + `@blobatar/react`                    | `AgentAvatar`（`agent-identity.tsx`），按 id 生成；动画需 `styles.css` 引入 `blobatar/motion.css` |
-| 服务端状态   | `@tanstack/react-query`                           | `src/lib/query-client.ts`                                                                         |
-| Query SSR    | `@tanstack/react-router-ssr-query`                | `src/router.tsx`                                                                                  |
-| URL 状态     | `nuqs`                                            | 根组件 adapter，首页 `view` 示例                                                                  |
-| 表单与校验   | `react-hook-form` + `@hookform/resolvers` + `zod` | `src/components/workspace/agent-editor.tsx`                                                       |
-| 通知         | `sonner`                                          | 根组件挂载 `Toaster`，业务中调用 `toast.success()`                                                |
-| Markdown     | `streamdown` + `@streamdown/cjk`                  | `src/components/markdown.tsx`                                                                     |
-| 样式         | Tailwind CSS v4                                   | `vite.config.ts` + `src/styles.css`                                                               |
-| 条件样式合并 | `cn`（shadcn CLI 配置）                           | `src/lib/utils.ts` 的 `cn()`                                                                      |
+| 用途           | 库                                                | 配置入口                                                                                          |
+| -------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| 图标           | `@phosphor-icons/react`                           | `src/components/providers.tsx`，默认 20px / regular                                               |
+| 智能体头像     | `blobatar` + `@blobatar/react`                    | `AgentAvatar`（`agent-identity.tsx`），按 id 生成；动画需 `styles.css` 引入 `blobatar/motion.css` |
+| 路由           | `@tanstack/react-router`                          | `src/router.tsx` + `src/routes/`                                                                  |
+| 服务端状态     | `@tanstack/react-query`                           | `src/lib/query-client.ts`，在 `src/main.tsx` 提供                                                 |
+| URL 状态       | `nuqs`                                            | 根组件 adapter，首页 `view` 示例                                                                  |
+| 表单与校验     | `react-hook-form` + `@hookform/resolvers` + `zod` | `src/components/workspace/agent-editor.tsx`                                                       |
+| 通知           | `sonner`                                          | 根组件挂载 `Toaster`，业务中调用 `toast.success()`                                                |
+| Markdown       | `streamdown` + `@streamdown/cjk`                  | `src/components/markdown.tsx`                                                                     |
+| 样式           | Tailwind CSS v4                                   | `vite.config.ts` + `src/styles.css`                                                               |
+| 条件样式合并   | `cn`（shadcn CLI 配置）                           | `src/lib/utils.ts` 的 `cn()`                                                                      |
+| React Compiler | `babel-plugin-react-compiler`                     | `vite.config.ts` 的 `reactCompilerPreset`                                                         |
 
 `@/` 同时在 TypeScript 和 Vite 中指向 `src/`。
 
@@ -27,7 +28,7 @@ TanStack Start + React。开发命令在仓库根目录执行 `bun run dev`。
 
 默认按 `navigator.languages` 的优先级选择中英文，中文地区变体统一使用简体中文，其他语言回退英文。设置 → 外观 → 语言可选择跟随系统、中文或 English，保存在当前浏览器的 `axp.language.v1`，即时切换并支持跨标签页同步。存储不可用时仍可切换当前页面。日期、时间和数字随当前语言格式化。
 
-SSR 和客户端首次渲染统一使用英文；hydration 后加载浏览器语言偏好，避免服务端请求共享用户语言或 hydration 不一致。React 组件显式声明使用的 namespace，例如 `const { t } = useTranslation(["tasks", "common"] as const)`，主功能调用 `t("status.todo")`，共用文案调用 `t("common:actions.save")`。组件外的格式化和事件逻辑通过 `src/lib/i18n.ts` 的 `translate("tasks:status.todo")` 在调用时读取语言，避免模块加载时固定文案。`src/@types/i18next.d.ts` 从英文资源推导 key 类型，拼错 key 或 namespace 会在类型检查中失败。
+首次绘制前由 `src/main.tsx` 按浏览器偏好切换语言并设置 `document.documentElement.lang`，避免先闪英文。React 组件显式声明使用的 namespace，例如 `const { t } = useTranslation(["tasks", "common"] as const)`，主功能调用 `t("status.todo")`，共用文案调用 `t("common:actions.save")`。组件外的格式化和事件逻辑通过 `src/lib/i18n.ts` 的 `translate("tasks:status.todo")` 在调用时读取语言，避免模块加载时固定文案。`src/@types/i18next.d.ts` 从英文资源推导 key 类型，拼错 key 或 namespace 会在类型检查中失败。
 
 内置环境包、插件和配置字段由 `i18n-metadata.ts` 按稳定 ID 映射语义 key；只翻译已知默认说明，修改后的说明及自定义 schema 保留原文，不把 API 返回的文本当 key。
 
@@ -35,17 +36,15 @@ SSR 和客户端首次渲染统一使用英文；hydration 后加载浏览器语
 
 ## Query
 
-`getRouter()` 为每个路由实例创建独立 QueryClient，避免 SSR 请求间共享缓存。SSR integration 提供 QueryClientProvider、缓存序列化和 hydration。默认查询保鲜 30 秒，失败重试一次；mutation 不自动重试。
+`getRouter()` 为每个路由实例创建独立 QueryClient，由 `QueryClientProvider` 包在 `RouterProvider` 外。默认查询保鲜 30 秒，失败重试一次；mutation 不自动重试。
 
 按功能在 `src/queries/` 中定义 `queryOptions()`，在组件中通过 `useQuery()` 消费。控制面接口经 `src/lib/api.ts` 的 `controlPlane`（openapi-fetch）调用，路径、参数、请求体和响应的类型都由 `bun run generate` 从控制面的 OpenAPI 文档生成到 `src/api/control-plane.gen.ts`（不入库）。该相对路径 query 仅用于浏览器，由开发代理或生产反向代理处理。
-
-需要 SSR 预取时，在 loader 中调用 `context.queryClient.ensureQueryData(options)`，并在组件中通过 `useSuspenseQuery(options)` 读取；此时 queryFn 必须能够在服务端执行，例如调用 Start server function，由其访问后端绝对 URL。不要在 SSR 中直接复用相对路径的 health query。
 
 ## URL 状态
 
 根组件使用 `nuqs/adapters/tanstack-router`。首页的 `view` parser 同时用于 `useQueryState` 和 `createStandardSchemaV1`，后者传给路由的 `validateSearch`，使 Router 的搜索参数类型与 nuqs 保持一致。示例使用 `history: 'push'` 支持浏览器前进后退。
 
-**兼容性限制：** [nuqs 官方文档](https://nuqs.dev/docs/adapters#tanstack-router)仍将 TanStack Router adapter 标记为实验性，未承诺 TanStack Start 支持。本项目已验证字符串视图状态的 SSR、hydration、刷新和前进后退；页面 hydration 尚未完成时立即进行历史导航的检查中曾出现一次 hydration mismatch；全新会话和等待页面就绪后的重复检查均未报错。复杂参数或升级后需重新验证。Router loader 依赖的参数也可以直接使用 TanStack Router 的 `validateSearch` / `Route.useSearch()`。
+Router loader 依赖的参数也可以直接使用 TanStack Router 的 `validateSearch` / `Route.useSearch()`。
 
 ## 图标与样式
 
@@ -61,7 +60,7 @@ import { cn } from "@/lib/utils";
 />;
 ```
 
-图标按钮应有可访问名称，例如 `aria-label` 或可见文字。Phosphor 的常规 React 组件支持本项目的 React SSR；不需要切换为 RSC 版本。
+图标按钮应有可访问名称，例如 `aria-label` 或可见文字。不需要切换为 Phosphor 的 RSC 版本。
 
 ## 加载、空与出错
 
@@ -88,7 +87,7 @@ bun run --cwd apps/web typecheck
 
 已验证构建、类型检查、浏览器健康请求、表单校验、通知、Markdown 和 nuqs URL 状态。Query Devtools 已关闭，不挂载或加载。
 
-参考：[Query SSR integration](https://tanstack.com/router/latest/docs/integrations/query)、[Phosphor React](https://github.com/phosphor-icons/react)、[React Hook Form resolvers](https://github.com/react-hook-form/resolvers)、[Streamdown](https://streamdown.ai/docs)。
+参考：[TanStack Router + Vite](https://tanstack.com/router/latest/docs/framework/react/installation/with-vite)、[React Compiler](https://react.dev/learn/react-compiler)、[Phosphor React](https://github.com/phosphor-icons/react)、[React Hook Form resolvers](https://github.com/react-hook-form/resolvers)、[Streamdown](https://streamdown.ai/docs)。
 
 ## shadcn 与设计规范
 
@@ -115,7 +114,7 @@ bun run --cwd apps/web typecheck
 
 ## React Grab
 
-开发依赖 `react-grab` 在 `src/client.tsx` 中按 `import.meta.env.DEV` 动态加载，并在 React hydration 前初始化。生产构建不加载此工具。
+开发依赖 `react-grab` 在 `src/main.tsx` 中按 `import.meta.env.DEV` 动态加载，并在第一次 React 提交前初始化。生产构建不加载此工具。
 
 启动 `bun run dev` 后，将鼠标移到页面元素上，按 ⌘C（Windows/Linux 为 Ctrl+C），即可复制元素、组件和源码位置信息，再粘贴给 coding agent。参考 [React Grab 官方说明](https://github.com/aidenybai/react-grab)。
 

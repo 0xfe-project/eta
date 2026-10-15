@@ -1,6 +1,6 @@
 import { getLogger } from "@logtape/logtape";
 import { z } from "zod";
-import { setupTelemetry } from "./telemetry";
+import { setupTelemetry } from "./telemetry.ts";
 
 const log = getLogger(["web", "browser"]);
 const MAX_BYTES = 64 * 1024;

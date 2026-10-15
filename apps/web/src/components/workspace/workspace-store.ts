@@ -92,8 +92,8 @@ const storage: PersistStorage<Persisted> = {
   removeItem: (name) => localStorage.removeItem(name),
 };
 
-// A module-level store is shared by server renders, which only read its
-// defaults; it changes and loads saved state in the browser only.
+// A module-level store; saved state is loaded in main.tsx before the first
+// render.
 export const useWorkspaceStore = create<WorkspaceStore>()(
   persist(
     (set) => ({
@@ -118,8 +118,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       name: storageKey,
       storage,
       partialize: (s) => ({ workspace: s.workspace }),
-      // Loaded after hydration (see RootDocument) so the first client render
-      // matches the server's.
+      // Loaded in main.tsx before the first render (see skipHydration).
       skipHydration: true,
     },
   ),

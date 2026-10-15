@@ -2,7 +2,7 @@
  * Logging for the web server (Bun), via LogTape. Lines on stderr match the Go
  * and Python services; records also go to OTLP, to OTEL_EXPORTER_OTLP_ENDPOINT
  * or OTEL_EXPORTER_OTLP_LOGS_ENDPOINT (unset only in tests).
- * Server-only; the browser does not report logs yet.
+ * Used by the Bun static server, not the browser bundle.
  */
 import type { Sink } from "@logtape/logtape";
 import type { LoggerProvider as ApiLoggerProvider } from "@opentelemetry/api-logs";

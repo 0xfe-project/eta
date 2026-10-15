@@ -9,7 +9,7 @@ apps/
                    OpenAI 兼容接口）、controller、routine worker；在 k3s 里构建并运行每个智能体的 Pod 和环境包的服务；
                    含代码托管（用户自己的 GitHub App，agent 的 git、gh 凭据与 open_pull_request）和定时任务
                    （每次运行是 worker 里的 ADK agent；自己的数据库，计划在 NATS）
-  web/             TanStack Start + React + Vite + TypeScript
+  web/             Vite + React + React Compiler + TypeScript
   agent-runtime/   每个 Agent 一个常驻 Pod 的运行时（Node，直接驱动 Codex app-server）
   remote/          Go：远程电脑上的 axp（daemon 与给智能体用的 CLI）
   agenvo/          固定的 agenvo 提交，从源码构建中继（内置环境包 agenvo 的服务）和 connector
@@ -86,7 +86,7 @@ TanStack 的 `src/routeTree.gen.ts` 由 `dev` 或 `build` 自动生成；控制�
 
 构建、检查和测试都通过 [Turborepo](https://turborepo.com) 运行，结果缓存在 `.turbo/cache`，输入没变的任务直接复用。镜像所需的产物在 Docker 之外构建，输出到各应用的 `out/`：
 
-- Web：`out/server.js`（打包了全部依赖的 SSR 服务）和 `out/dist/client`，与平台无关；agent runtime 同样是一个打包好的 `out/main.js`。
+- Web：`out/server.js`（打包了全部依赖的静态文件服务）和 `out/dist`（SPA 资源），与平台无关；agent runtime 同样是一个打包好的 `out/main.js`。
 - Go：`out/<平台>/` 下的静态二进制，交叉编译。
 - Python：`out/<平台>/site-packages`，只用目标平台的 wheel 安装锁定的依赖。
 
@@ -131,4 +131,4 @@ agent runtime 和环境包的服务运行代码、不持有凭据，它们把 OT
 
 k3s 的清单和部署脚本都在 [`deploy/`](deploy/README.md)。在装好 k3s 的 Linux 机器上克隆仓库后执行 `deploy/k3s/deploy.sh`（或 `bun run deploy`），即可把工作区部署到这台机器。
 
-配置参考：[TanStack Start 官方初始化指南](https://tanstack.com/start/latest/docs/framework/react/build-from-scratch)、[huma](https://huma.rocks)、[Codex app-server](https://github.com/openai/codex/tree/main/codex-rs/app-server)。
+配置参考：[Vite + React](https://vite.dev/guide/)、[TanStack Router](https://tanstack.com/router/latest/docs/framework/react/installation/with-vite)、[huma](https://huma.rocks)、[Codex app-server](https://github.com/openai/codex/tree/main/codex-rs/app-server)。
