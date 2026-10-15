@@ -67,35 +67,37 @@ export function More() {
     <>
       <PageHeader title="更多" />
       <main id="main" className="min-h-0 flex-1 overflow-y-auto pb-6">
-        <Group title="功能">
-          {pages.map(({ to, label, icon }) => (
-            <li key={to}>
-              <Link to={to} className={row}>
-                <RowContent icon={icon} label={label} />
-              </Link>
-            </li>
-          ))}
-        </Group>
-        <Group title="设置">
-          {settingsSections.map(({ value, label, icon }) => (
-            <li key={value}>
-              <button
-                type="button"
-                className={row}
-                onClick={() => setSettings({ open: true, section: value })}
-              >
-                <RowContent icon={icon} label={label}>
-                  {attention[value] ? (
-                    <>
-                      <AttentionDot />
-                      <span className="sr-only">（有账号需要处理）</span>
-                    </>
-                  ) : null}
-                </RowContent>
-              </button>
-            </li>
-          ))}
-        </Group>
+        <div className="mx-auto max-w-content">
+          <Group title="功能">
+            {pages.map(({ to, label, icon }) => (
+              <li key={to}>
+                <Link to={to} className={row}>
+                  <RowContent icon={icon} label={label} />
+                </Link>
+              </li>
+            ))}
+          </Group>
+          <Group title="设置">
+            {settingsSections.map(({ value, label, icon }) => (
+              <li key={value}>
+                <button
+                  type="button"
+                  className={row}
+                  onClick={() => setSettings({ open: true, section: value })}
+                >
+                  <RowContent icon={icon} label={label}>
+                    {attention[value] ? (
+                      <>
+                        <AttentionDot />
+                        <span className="sr-only">（有账号需要处理）</span>
+                      </>
+                    ) : null}
+                  </RowContent>
+                </button>
+              </li>
+            ))}
+          </Group>
+        </div>
       </main>
     </>
   );

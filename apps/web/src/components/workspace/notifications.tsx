@@ -53,7 +53,7 @@ export function Notifications() {
         </Tabs>
       </PageHeader>
       <main id="main" className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-1 pb-8 sm:px-3">
+        <div className="mx-auto max-w-content px-1 pb-8 sm:px-3">
           <PendingList />
           {filter === "all" ? (
             <section aria-labelledby="history" className="pt-6">

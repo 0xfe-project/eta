@@ -7,7 +7,7 @@ import {
   parseAsStringLiteral,
   useQueryState,
 } from "nuqs";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useGroups } from "./use-groups";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -101,12 +101,28 @@ export function useWorkspaceView() {
 
 /**
  * Shows the panel on narrow screens, where it hides behind the chat, when
- * the URL opens one of its tabs: a link, a reload, back and forward.
+ * the URL opens one of its tabs: a link, a reload, back and forward. A link
+ * followed on the page also unfolds it on wide screens; a reload leaves it
+ * as it was left.
  */
 export function useShowLinkedView() {
   const [linked] = useQueryState("view", linkedViewParser);
+  const place = useLocation({
+    select: ({ searchStr }) => {
+      const search = new URLSearchParams(searchStr);
+      return ["view", "task", "routine", "run"]
+        .map((key) => search.get(key))
+        .join();
+    },
+  });
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
+  const showPanel = useWorkspaceStore((s) => s.showPanel);
+  const seen = useRef(place);
   useEffect(() => {
-    if (linked && linked !== "members") setMobilePanel("workspace");
-  }, [linked, setMobilePanel]);
+    if (linked && linked !== "members") {
+      if (place !== seen.current) showPanel();
+      else setMobilePanel("workspace");
+    }
+    seen.current = place;
+  }, [linked, place, setMobilePanel, showPanel]);
 }
