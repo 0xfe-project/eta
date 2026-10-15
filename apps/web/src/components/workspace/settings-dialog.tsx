@@ -13,6 +13,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { elementPickerDefault, setElementPicker } from "@/lib/element-picker";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useNeedsAttention } from "@/queries/llm";
@@ -191,6 +193,25 @@ function AppearanceSettings() {
           />
         </div>
       ))}
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+        <div className="min-w-0 text-sm">
+          <label htmlFor="react-grab" className="font-medium">
+            {translateText("appearance.elementPicker")}
+          </label>
+          <p id="react-grab-hint" className="text-muted-foreground">
+            {translateText("appearance.elementPickerHint")}
+          </p>
+        </div>
+        <Switch
+          id="react-grab"
+          aria-describedby="react-grab-hint"
+          checked={workspace.reactGrab ?? elementPickerDefault()}
+          onCheckedChange={(reactGrab) => {
+            setWorkspace((state) => ({ ...state, reactGrab }));
+            void setElementPicker(reactGrab);
+          }}
+        />
+      </div>
     </div>
   );
 }

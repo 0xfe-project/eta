@@ -7,7 +7,9 @@
     "interfaceFont": "界面字体",
     "monospaceFont": "等宽字体",
     "colorMode": "颜色模式",
-    "language": "语言"
+    "language": "语言",
+    "elementPicker": "圈选元素",
+    "elementPickerHint": "打开后可以圈选元素并复制组件和源码位置。"
   },
   "sections": {
     "logs": "日志",

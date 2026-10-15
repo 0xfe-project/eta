@@ -1,6 +1,10 @@
+/* eslint-disable perfectionist/sort-imports -- the hook is imported first,
+   so it exists when react-dom loads */
+import "@/lib/react-devtools-hook";
 import { StartClient } from "@tanstack/react-start/client";
 import { startTransition, StrictMode } from "react";
 import { hydrateRoot } from "react-dom/client";
+import { savedElementPicker, setElementPicker } from "@/lib/element-picker";
 import { installErrorReporting } from "@/lib/report";
 import { watchForUpdates } from "@/lib/update";
 
@@ -13,10 +17,8 @@ async function start() {
     void navigator.serviceWorker.register("/sw.js");
   }
 
-  // Install the inspector before the first React commit, only in development.
-  if (import.meta.env.DEV) {
-    await import("react-grab");
-  }
+  // 圈选元素, installed before the first React commit when turned on.
+  if (savedElementPicker()) await setElementPicker(true);
 
   startTransition(() => {
     hydrateRoot(
