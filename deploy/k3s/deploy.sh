@@ -85,7 +85,7 @@ sed 's/NAMESPACE/axp/g' deploy/k3s/workloads.yaml | kubectl apply -f - >/dev/nul
 # volume openobserve stays, with the logs it holds.
 kubectl -n axp delete deploy/openobserve svc/openobserve deploy/otel-collector svc/otel-collector \
   --ignore-not-found >/dev/null
-kubectl -n axp get configmap -o name | grep '^configmap/otel-collector-' | xargs -r kubectl -n axp delete >/dev/null
+kubectl -n axp get configmap -o name | sed -n '/^configmap\/otel-collector-/p' | xargs -r kubectl -n axp delete >/dev/null
 
 # Rustrak's project for AXP, and a token for the web's source maps, once.
 export RUSTRAK_URL="http://$(kubectl -n axp get svc rustrak -o jsonpath='{.spec.clusterIP}'):8080"

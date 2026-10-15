@@ -150,7 +150,7 @@ kubectl -n axp-dev rollout status deploy/postgres deploy/registry deploy/buildki
 # Rustrak replaced OpenObserve and the OpenTelemetry Collector (#141).
 kubectl -n axp-dev delete deploy/openobserve svc/openobserve deploy/otel-collector svc/otel-collector \
   --ignore-not-found >/dev/null
-kubectl -n axp-dev get configmap -o name | grep '^configmap/otel-collector-' | xargs -r kubectl -n axp-dev delete >/dev/null
+kubectl -n axp-dev get configmap -o name | sed -n '/^configmap\/otel-collector-/p' | xargs -r kubectl -n axp-dev delete >/dev/null
 database="${DATABASE_URL:-postgres://axp:axp@postgres.axp-dev.svc.cluster.local:5432/axp}"
 database="${database##*/}"
 database="${database%%\?*}"

@@ -69,6 +69,10 @@ func TestErrorsAreIssuesGroupedByMessage(t *testing.T) {
 	if len(e.Exception) != 1 || e.Exception[0].Type != e.Message || e.Exception[0].Value != "pod 7 crashed" {
 		t.Fatalf("exception %+v", e.Exception)
 	}
+	frames := e.Exception[0].Stacktrace.Frames
+	if top := frames[len(frames)-1]; top.Function != "TestErrorsAreIssuesGroupedByMessage" {
+		t.Fatalf("culprit %s.%s, want the test that logged", top.Module, top.Function)
+	}
 	attrs := e.Contexts["attributes"]
 	if attrs["bundle"] != "memory" || attrs["n"] != "2" {
 		t.Fatalf("attributes %v", attrs)

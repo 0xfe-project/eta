@@ -3,6 +3,7 @@ package telemetry
 import (
 	"context"
 	"log/slog"
+	"strings"
 
 	"github.com/getsentry/sentry-go"
 )
@@ -49,7 +50,7 @@ func (h issueHandler) Handle(ctx context.Context, r slog.Record) error {
 	if err != nil {
 		// The message is the title; the stack is where it was logged.
 		event.Exception = []sentry.Exception{{
-			Type: r.Message, Value: err.Error(), Stacktrace: sentry.NewStacktrace(),
+			Type: r.Message, Value: err.Error(), Stacktrace: callerStack(),
 		}}
 	}
 	hub.CaptureEvent(event)
@@ -88,4 +89,27 @@ func flatten(prefix string, a slog.Attr) []flatAttr {
 		out = append(out, flatten(prefix, g)...)
 	}
 	return out
+}
+
+// callerStack is the stack up to the code that logged, without slog's and
+// these handlers' frames (the issue's culprit is its innermost frame).
+func callerStack() *sentry.Stacktrace {
+	stack := sentry.NewStacktrace()
+	if stack == nil {
+		return nil
+	}
+	frames := stack.Frames // outermost first
+	for len(frames) > 1 && logging(frames[len(frames)-1]) {
+		frames = frames[:len(frames)-1]
+	}
+	stack.Frames = frames
+	return stack
+}
+
+func logging(f sentry.Frame) bool {
+	if f.Module == "log/slog" {
+		return true
+	}
+	return f.Module == "github.com/akarachen/axp/packages/telemetry-go" &&
+		(strings.HasPrefix(f.Function, "issueHandler.") || strings.HasPrefix(f.Function, "levelHandler.") || f.Function == "callerStack")
 }
