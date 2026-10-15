@@ -117,12 +117,12 @@ export function useShowLinkedView() {
   });
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
   const showPanel = useWorkspaceStore((s) => s.showPanel);
-  const seen = useRef(place);
+  const seenRef = useRef(place);
   useEffect(() => {
     if (linked && linked !== "members") {
-      if (place !== seen.current) showPanel();
+      if (place !== seenRef.current) showPanel();
       else setMobilePanel("workspace");
     }
-    seen.current = place;
+    seenRef.current = place;
   }, [linked, place, setMobilePanel, showPanel]);
 }
