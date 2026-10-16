@@ -64,6 +64,8 @@ const CATALOG = {
   AgentDeleted: agentDeletedSchema,
   AgentDraft: agentDraftSchema,
   AgentPatch: agentDraftSchema.partial(),
+  BundleList: z.array(z.unknown()),
+  PluginList: z.array(z.unknown()),
   Answer: answerSchema,
   AgentList: agentListSchema,
   AgentUpdated: agentUpdatedSchema,
@@ -239,6 +241,19 @@ export const PRODUCT_ROUTES: readonly ProductRoute[] = [
     },
     body: { binary: "application/zip" },
     response: { status: 201, shape: "Artifact" },
+  },
+  {
+    method: "GET",
+    path: "/api/v1/plugins",
+    summary: "The plugins bundles add. Empty until the plugin manager (P3.6).",
+    response: { status: 200, shape: "PluginList" },
+  },
+  {
+    method: "GET",
+    path: "/api/v1/bundles",
+    summary:
+      "The bundles agents are built from. Empty until the plugin manager (P3.6).",
+    response: { status: 200, shape: "BundleList" },
   },
   {
     method: "GET",

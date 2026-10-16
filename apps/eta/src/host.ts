@@ -45,6 +45,7 @@ import { WakeRunner } from "./groups/runner";
 import { GroupStore } from "./groups/store";
 import { EventHub } from "./http/events";
 import { IdempotencyStore, withIdempotency } from "./http/idempotency";
+import { StaticWeb } from "./http/static";
 import { approvalMiddleware } from "./interactions/approval";
 import { AskBridge } from "./interactions/bridge";
 import { InteractionStore } from "./interactions/store";
@@ -80,6 +81,10 @@ export interface HostOptions {
   models?: KernelModels | undefined;
   /** How many events stay replayable. Defaults to the hub's own (512); a test wants a small one. */
   hubCapacity?: number | undefined;
+  /** The SPA's built bundle, served at `/` with a fallback to `index.html` (P3.11). */
+  webDir?: string | undefined;
+  /** What `/version` says; the deployment's build number. */
+  version?: string | undefined;
   warn?: (message: string) => void;
 }
 
@@ -309,6 +314,23 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   // still somewhere for a client to listen.
   routes.register("GET", "/health", () => Response.json({ ok: true }));
   routes.register("GET", "/events", (request) => hub.handle(request));
+  // The two the old gateway answered and a deployment watches (P3.11): alive, and which build.
+  routes.register(
+    "GET",
+    "/up",
+    () => new Response("ok", { headers: { "content-type": "text/plain" } }),
+  );
+  routes.register("GET", "/version", () =>
+    Response.json({
+      version: options.version ?? "0.0.0",
+      startedAt: status.startedAt,
+      pid: process.pid,
+    }),
+  );
+  // The plugin surface's empty lists (P3.6 fills them): the web's agent editor reads these to know
+  // what a bundle is, and an empty answer is the truth today — a 404 would look like a failure.
+  routes.register("GET", "/api/v1/plugins", () => Response.json([]));
+  routes.register("GET", "/api/v1/bundles", () => Response.json([]));
 
   // Routines' runner and clock: a run is a short-lived session, and the clock is this process's
   // (no broker), derived from the rows so what runs is always what the database says.
@@ -391,10 +413,19 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   if (options.watchIntervalMs !== undefined && options.watchIntervalMs > 0)
     manager.watch(ctx);
 
+  const web = new StaticWeb(options.webDir);
   const server = Bun.serve({
     port: options.port ?? 0,
     hostname: options.hostname ?? "127.0.0.1",
-    fetch: (request) => routes.dispatch(request),
+    fetch: (request) =>
+      routes.dispatch(request).then(async (response) => {
+        if (response.status !== 404) return response;
+        // What no route answered: the SPA's bundle, when there is one — a deep link into
+        // /workspace/... is a page the browser renders, not a missing file. The host's own
+        // prefixes stay JSON-404s (StaticWeb refuses them), so an API typo is still an API typo.
+        const page = await web.serve(new URL(request.url).pathname);
+        return page ?? response;
+      }),
   });
 
   return {

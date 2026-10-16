@@ -7,12 +7,13 @@ import { PackageIcon } from "@phosphor-icons/react/Package";
 import { PaletteIcon } from "@phosphor-icons/react/Palette";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
+import { capabilities } from "@/lib/capabilities";
 import { translate } from "@/lib/i18n";
 import { useNeedsAttention } from "@/queries/llm";
 
 // Settings' sections, listed by the dialog and by the phone's 更多 page.
 
-export const settingsSections: {
+const everySection: {
   value: SettingsSection;
   label: string;
   icon: Icon;
@@ -68,13 +69,29 @@ export const settingsSections: {
   },
 ];
 
+/**
+ * What this host offers, minus the surfaces whose API is not on it yet (capabilities.ts names the
+ * phase for each). Hidden here rather than broken there: a section that cannot load is a bug the
+ * user found, not a setting.
+ */
+export const settingsSections = everySection.filter(
+  ({ value }) =>
+    !(
+      (value === "bundles" && !capabilities.bundles) ||
+      (value === "connections" && !capabilities.connections) ||
+      (value === "computers" && !capabilities.computers)
+    ),
+);
+
 /** The sections with accounts the user has to act on. */
 export function useSettingsAttention(): Partial<
   Record<SettingsSection, boolean>
 > {
-  // 模型服务 lists every account; 连接 only Grok's, for the grok plugin.
+  // 模型服务 lists every account; 连接 only Grok's, for the grok plugin. Both hooks always run
+  // (hooks cannot be conditional); a surface this host does not serve never needs attention.
+  const grok = useNeedsAttention(true);
   return {
     providers: useNeedsAttention(),
-    connections: useNeedsAttention(true),
+    connections: capabilities.connections ? grok : false,
   };
 }

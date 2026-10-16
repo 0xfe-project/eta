@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { capabilities } from "@/lib/capabilities";
 import { BellIcon } from "@phosphor-icons/react/Bell";
 import { BrainIcon } from "@phosphor-icons/react/Brain";
 import { ChatsCircleIcon } from "@phosphor-icons/react/ChatsCircle";
@@ -105,21 +106,27 @@ export function Sidebar() {
         aria-label={translateText("accessibility.sections")}
         className="grid gap-px px-2"
       >
-        {sections.map(({ to, label, icon: Icon }) => (
-          <Link
-            key={to}
-            to={to}
-            className={item}
-            activeOptions={{ exact: to === "/", includeSearch: false }}
-            activeProps={{
-              className: "bg-sidebar-accent font-medium text-foreground",
-            }}
-          >
-            <Icon aria-hidden="true" className="size-4" />
-            {label}
-            <Badge count={badges[to]} />
-          </Link>
-        ))}
+        {sections
+          .filter(
+            ({ to }) =>
+              // Hidden until its API is on this host (capabilities.ts says which phase).
+              !(to === "/workspace/memory" && !capabilities.memory),
+          )
+          .map(({ to, label, icon: Icon }) => (
+            <Link
+              key={to}
+              to={to}
+              className={item}
+              activeOptions={{ exact: to === "/", includeSearch: false }}
+              activeProps={{
+                className: "bg-sidebar-accent font-medium text-foreground",
+              }}
+            >
+              <Icon aria-hidden="true" className="size-4" />
+              {label}
+              <Badge count={badges[to]} />
+            </Link>
+          ))}
       </nav>
       <GroupList compact />
       <section

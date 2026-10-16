@@ -93,6 +93,12 @@ async function main(): Promise<void> {
   }
 
   const host = await assembleHost({
+    ...(argument("web-dir", "").length === 0
+      ? {}
+      : { webDir: argument("web-dir", "") }),
+    ...(argument("version", "").length === 0
+      ? {}
+      : { version: argument("version", "") }),
     dataDir,
     configPath,
     port,

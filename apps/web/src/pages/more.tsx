@@ -12,6 +12,7 @@ import {
   useSettingsAttention,
 } from "@/components/workspace/settings-sections";
 import { useWorkspaceStore } from "@/components/workspace/workspace-store";
+import { capabilities } from "@/lib/capabilities";
 import { translate } from "@/lib/i18n";
 
 // The phone's way to everything the bottom tabs leave out: the pages the
@@ -88,13 +89,19 @@ export function More() {
       <main id="main" className="min-h-0 flex-1 overflow-y-auto pb-6">
         <div className="mx-auto max-w-content">
           <Group title={translateText("sections.capabilities")}>
-            {pages.map(({ to, label, icon }) => (
-              <li key={to}>
-                <Link to={to} className={row}>
-                  <RowContent icon={icon} label={label} />
-                </Link>
-              </li>
-            ))}
+            {pages
+              .filter(
+                ({ to }) =>
+                  // Hidden until its API is on this host (capabilities.ts says which phase).
+                  !(to === "/workspace/memory" && !capabilities.memory),
+              )
+              .map(({ to, label, icon }) => (
+                <li key={to}>
+                  <Link to={to} className={row}>
+                    <RowContent icon={icon} label={label} />
+                  </Link>
+                </li>
+              ))}
           </Group>
           <Group title={translateText("settings:title")}>
             {settingsSections.map(({ value, label, icon }) => (
