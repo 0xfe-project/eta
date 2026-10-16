@@ -16,9 +16,6 @@
   button:not(:disabled) {
     cursor: pointer;
   }
-  :focus-visible {
-    @apply outline-2 outline-offset-2 outline-ring;
-  }
   * {
     @apply border-border outline-ring/50;
   }
