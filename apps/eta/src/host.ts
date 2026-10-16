@@ -1,9 +1,10 @@
 import type { MountedPlugin } from "@eta/server";
 import type { HostStatus } from "./bundled/host";
 import type { EtaConfig } from "./config";
+import type { Migration } from "./db/migrations";
 /**
- * The host: read the config, build the cordis tree, mount the plugins, listen — and be able to
- * stop in the reverse order.
+ * The host: read the config, open the database, build the cordis tree, mount the plugins,
+ * listen — and be able to stop in the reverse order.
  *
  * One process, one cordis root. A session gets its own root when it is opened (REFACTOR.md §9,
  * P0.7), because cordis dispatches a tree's events tree-wide: two kernels under one root would
@@ -15,6 +16,13 @@ import { PluginManager } from "@eta/server";
 import { Context } from "cordis";
 import { hostPlugin } from "./bundled/host";
 import { readConfig } from "./config";
+import { databasePath, openDatabase } from "./db/database";
+import {
+  applyMigrations,
+  loadMigrations,
+  schemaVersion,
+} from "./db/migrations";
+import { DbService } from "./db/service";
 import { RouteService } from "./routes";
 
 export interface HostOptions {
@@ -28,12 +36,15 @@ export interface HostOptions {
   hostname?: string;
   /** How often to look for edits in the user's plugin directory. Zero disables watching. */
   watchIntervalMs?: number;
+  /** The migrations to apply. Defaults to the ones on disk. */
+  migrations?: readonly Migration[];
   warn?: (message: string) => void;
 }
 
 export interface Host {
   ctx: Context;
   routes: RouteService;
+  db: DbService;
   port: number;
   config: EtaConfig;
   mounted: () => MountedPlugin[];
@@ -46,10 +57,25 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   const config = await readConfig(configPath, warn);
 
   const ctx = new Context();
+
+  // The database first: a module that injects `db` must find a migrated schema, not a promise.
+  const dbPath = databasePath(options.dataDir);
+  const handle = await openDatabase(dbPath);
+  const migrations = options.migrations ?? (await loadMigrations());
+  const applied = applyMigrations(handle, migrations);
+  if (applied.length > 0) {
+    warn(
+      `[eta] applied ${applied.length} migration(s) to ${dbPath}: ${applied.join(", ")}`,
+    );
+  }
+  const db = new DbService(ctx, { path: dbPath, handle, applied });
+
   const routes = new RouteService(ctx);
   const status: HostStatus = {
     pid: process.pid,
     dataDir: options.dataDir,
+    dbPath,
+    schema: schemaVersion(handle),
     startedAt: Date.now(),
     mounted: [],
   };
@@ -86,20 +112,21 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   return {
     ctx,
     routes,
-    // Bun sets this once the listener is up; the type allows for the other case.
+    db,
     port: server.port ?? 0,
     config,
     mounted: () => manager.mounted(),
     async close() {
       // Reverse order: stop taking requests, take the plugins out (the user's first, then
-      // ours — their effects unregister what they registered), then take back whatever is
-      // left. A route a plugin forgot to clean up is gone with the rest, so stopping is a
-      // shutdown rather than a leak.
+      // ours — their effects unregister what they registered), take back whatever routes are
+      // left, and only then close the file. A route a plugin forgot to clean up goes with
+      // the rest, so stopping is a shutdown rather than a leak.
       server.stop();
       manager.stop();
       await manager.dispose();
       for (const fiber of fibers.splice(0)) await fiber.dispose();
       routes.registry.clear();
+      handle.close();
     },
   };
 }

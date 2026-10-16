@@ -12,6 +12,10 @@ import type { PluginContext } from "../plugin-api";
 export interface HostStatus {
   pid: number;
   dataDir: string;
+  /** Where the database file is, so a caller can find it without guessing. */
+  dbPath: string;
+  /** The last migration that ran. */
+  schema: string | undefined;
   startedAt: number;
   /** The mounted plugins, by name, with the reason when one failed. */
   mounted: string[];
