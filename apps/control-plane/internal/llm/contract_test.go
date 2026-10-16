@@ -22,6 +22,7 @@ import (
 	"github.com/akarachen/axp/apps/control-plane/internal/llm/gateway/cpa"
 	"github.com/akarachen/axp/apps/control-plane/internal/llm/gateway/usage"
 	sdkusage "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/usage"
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/config"
 )
 
 func fakeJWT(claims map[string]any) string {
@@ -408,5 +409,158 @@ func waitFor(t *testing.T, cond func() bool) {
 			t.Fatal("condition not met in time")
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// TestGeminiAPIKey adds a Google AI Studio key through the browser's API:
+// it is checked with Google (a fake here) and kept in providers.json, its
+// models reach the catalog, it is disabled, found invalid and removed like
+// any account, and the config generated on the next start still has it.
+func TestGeminiAPIKey(t *testing.T) {
+	f := shared
+	ctx := context.Background()
+	const key = "AIza-test-key-1234"
+	var accepted atomic.Bool
+	accepted.Store(true)
+	google := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1beta/models" || r.Header.Get("x-goog-api-key") != key || !accepted.Load() {
+			http.Error(w, `{"error":{"code":400,"status":"INVALID_ARGUMENT","details":[{"reason":"API_KEY_INVALID"}]}}`, http.StatusBadRequest)
+			return
+		}
+		_, _ = w.Write([]byte(`{"models":[{"name":"models/gemini-2.5-flash"}]}`))
+	}))
+	defer google.Close()
+	f.m.gemini.API = google.URL
+
+	submit := func(apiKey string) (int, string) {
+		var sess gateway.LoginSession
+		postJSON(t, f.public.URL+"/api/llm/v1/logins", `{"connector":"gemini"}`, http.StatusCreated, &sess)
+		body, _ := json.Marshal(map[string]string{"api_key": apiKey})
+		res, err := http.Post(f.public.URL+"/api/llm/v1/logins/"+sess.ID+"/input", "application/json", strings.NewReader(string(body)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		raw, _ := io.ReadAll(res.Body)
+		return res.StatusCode, string(raw)
+	}
+	if status, body := submit("AIza-wrong-key"); status != http.StatusFailedDependency || !strings.Contains(body, "INVALID_API_KEY") {
+		t.Fatalf("wrong key: %d %s", status, body)
+	}
+	if status, body := submit(key); status != http.StatusOK || !strings.Contains(body, `"succeeded"`) {
+		t.Fatalf("key: %d %s", status, body)
+	}
+	if status, body := submit(key); status != http.StatusFailedDependency || !strings.Contains(body, "DUPLICATE_API_KEY") {
+		t.Fatalf("same key again: %d %s", status, body)
+	}
+	providers := f.stateDir + "/providers.json"
+	if info, err := os.Stat(providers); err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("providers.json: %v %v", info, err)
+	}
+
+	gemini := func() (gateway.Connection, bool) {
+		for _, c := range f.m.service.Connections() {
+			if c.Connector == "gemini" {
+				return c, true
+			}
+		}
+		return gateway.Connection{}, false
+	}
+	geminiModels := func(available bool) bool {
+		n := 0
+		for _, m := range f.m.service.Models() {
+			if m.Connector == "gemini" {
+				if m.Available != available {
+					return false
+				}
+				n++
+			}
+		}
+		return n > 0
+	}
+	var conn gateway.Connection
+	waitFor(t, func() bool {
+		var ok bool
+		conn, ok = gemini()
+		return ok && geminiModels(true)
+	})
+	if conn.Label != "…1234" || conn.State != gateway.StateActive {
+		t.Fatalf("connection = %+v", conn)
+	}
+	setEnabled := func(enabled bool) {
+		t.Helper()
+		patch, _ := http.NewRequest(http.MethodPatch, f.public.URL+"/api/llm/v1/connections/"+url.PathEscape(conn.ID), strings.NewReader(fmt.Sprintf(`{"enabled":%t}`, enabled)))
+		if res, err := http.DefaultClient.Do(patch); err != nil || res.StatusCode != http.StatusOK {
+			t.Fatalf("enabled=%t: %v %v", enabled, res, err)
+		}
+	}
+
+	// Disabled: it stays, serving nothing, also after a restart.
+	setEnabled(false)
+	waitFor(t, func() bool {
+		c, ok := gemini()
+		return ok && c.State == gateway.StateDisabled && geminiModels(false)
+	})
+	restarted := t.TempDir()
+	raw, _ := os.ReadFile(providers)
+	if err := os.WriteFile(restarted+"/providers.json", raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfgPath, err := cpa.WriteConfig(restarted, "secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadConfig(cfgPath)
+	if err != nil || len(cfg.GeminiKey) != 1 || cfg.GeminiKey[0].APIKey != key ||
+		len(cfg.GeminiKey[0].ExcludedModels) != 1 || cfg.GeminiKey[0].ExcludedModels[0] != "*" {
+		t.Fatalf("config after a restart: %+v %v", cfg, err)
+	}
+
+	setEnabled(true)
+	waitFor(t, func() bool {
+		c, ok := gemini()
+		if ok {
+			conn = c
+		}
+		return ok && c.State == gateway.StateActive && geminiModels(true)
+	})
+
+	// A key Google stops accepting needs the user, once checked.
+	accepted.Store(false)
+	var status gateway.Status
+	postJSON(t, f.public.URL+"/api/llm/v1/refresh", `{}`, http.StatusOK, &status)
+	conn, _ = gemini()
+	if conn.State != gateway.StateNeedsLogin || conn.Error == nil || conn.Error.Message != "API key 无效，请重新填写。" {
+		t.Fatalf("connection with a rejected key = %+v %+v", conn, conn.Error)
+	}
+	accepted.Store(true)
+
+	del, _ := http.NewRequest(http.MethodDelete, f.public.URL+"/api/llm/v1/connections/"+url.PathEscape(conn.ID), nil)
+	if res, err := http.DefaultClient.Do(del); err != nil || res.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete: %v %v", res, err)
+	}
+	waitFor(t, func() bool { _, ok := gemini(); return !ok && geminiModels(false) })
+	if raw, _ := os.ReadFile(providers); strings.Contains(string(raw), key) {
+		t.Fatalf("providers.json after delete: %s", raw)
+	}
+	var listed map[string][]any
+	if err := gateway.Manage(ctx, f.m.proxy.Management(), cpa.ManagementURL("/gemini-api-key"), http.MethodGet, nil, &listed); err != nil || len(listed["gemini-api-key"]) != 0 {
+		t.Fatalf("CPA's keys after delete: %v %v", listed, err)
+	}
+}
+
+func postJSON(t *testing.T, url, body string, want int, out any) {
+	t.Helper()
+	res, err := http.Post(url, "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != want {
+		raw, _ := io.ReadAll(res.Body)
+		t.Fatalf("POST %s: %d %s", url, res.StatusCode, raw)
+	}
+	if err := json.NewDecoder(res.Body).Decode(out); err != nil {
+		t.Fatal(err)
 	}
 }

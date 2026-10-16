@@ -234,6 +234,30 @@ export function useNeedsAttention(grok?: boolean) {
   );
 }
 
+/** Connectors whose accounts are API keys the user enters, not logins. */
+export const FLOW_API_KEY = "api_key";
+
+/**
+ * Adds an API key: a login takes it, and the service checks it with the
+ * provider before keeping it. A rejected key fails with the reason.
+ */
+export function useSubmitApiKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { connector: string; apiKey: string }) => {
+      const login = loginSchema.parse(
+        await llmApi.post("/logins", { connector: input.connector }),
+      );
+      return loginSchema.parse(
+        await llmApi.post(`/logins/${login.id}/input`, {
+          api_key: input.apiKey,
+        }),
+      );
+    },
+    onSuccess: () => refreshLlm(queryClient),
+  });
+}
+
 export function useStartLogin() {
   return useMutation({
     mutationFn: async (connector: string) =>
