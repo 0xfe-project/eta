@@ -65,6 +65,13 @@ export default antfu(
     },
   },
   {
+    // dprint formats TypeScript with Biome, which writes hex literals in lower case; this
+    // rule wants upper case, and the two can never both be satisfied. The repository's rule is
+    // that formatting belongs to dprint, so the linter yields here.
+    files: ["packages/eta-*/**", "packages/client-*/**", "apps/eta/**"],
+    rules: { "unicorn/number-literal-case": "off" },
+  },
+  {
     // Smoke scenarios and tests print their progress on purpose; the .mjs ones
     // run under Bun and use its globals.
     files: [

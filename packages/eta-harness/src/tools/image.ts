@@ -1,10 +1,10 @@
-const PNG_SIGNATURE = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
 export function detectSupportedImageMimeType(
   buffer: Uint8Array,
 ): string | undefined {
-  if (startsWith(buffer, [0xFF, 0xD8, 0xFF]))
-    return buffer[3] === 0xF7 ? undefined : "image/jpeg";
+  if (startsWith(buffer, [0xff, 0xd8, 0xff]))
+    return buffer[3] === 0xf7 ? undefined : "image/jpeg";
   if (startsWith(buffer, PNG_SIGNATURE))
     return isPng(buffer) && !isAnimatedPng(buffer) ? "image/png" : undefined;
   if (startsWithAscii(buffer, 0, "GIF")) return "image/gif";
@@ -27,8 +27,8 @@ export function encodeBase64(bytes: Uint8Array): string {
     output +=
       second === undefined
         ? "="
-        : alphabet[((second & 0x0F) << 2) | ((third ?? 0) >> 6)];
-    output += third === undefined ? "=" : alphabet[third & 0x3F];
+        : alphabet[((second & 0x0f) << 2) | ((third ?? 0) >> 6)];
+    output += third === undefined ? "=" : alphabet[third & 0x3f];
   }
   return output;
 }

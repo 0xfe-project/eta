@@ -54,13 +54,13 @@ export function utf8ByteLength(content: string): number {
   let bytes = firstNonAscii;
   for (let i = firstNonAscii; i < content.length; i++) {
     const code = content.charCodeAt(i);
-    if (code <= 0x7F) {
+    if (code <= 0x7f) {
       bytes += 1;
-    } else if (code <= 0x7FF) {
+    } else if (code <= 0x7ff) {
       bytes += 2;
-    } else if (code >= 0xD800 && code <= 0xDBFF && i + 1 < content.length) {
+    } else if (code >= 0xd800 && code <= 0xdbff && i + 1 < content.length) {
       const next = content.charCodeAt(i + 1);
-      if (next >= 0xDC00 && next <= 0xDFFF) {
+      if (next >= 0xdc00 && next <= 0xdfff) {
         bytes += 4;
         i++;
       } else {
@@ -84,17 +84,17 @@ function replaceUnpairedSurrogates(content: string): string {
   let output = "";
   for (let i = 0; i < content.length; i++) {
     const code = content.charCodeAt(i);
-    if (code >= 0xD800 && code <= 0xDBFF) {
+    if (code >= 0xd800 && code <= 0xdbff) {
       if (i + 1 < content.length) {
         const next = content.charCodeAt(i + 1);
-        if (next >= 0xDC00 && next <= 0xDFFF) {
+        if (next >= 0xdc00 && next <= 0xdfff) {
           output += content[i] + content[i + 1];
           i++;
           continue;
         }
       }
       output += "�";
-    } else if (code >= 0xDC00 && code <= 0xDFFF) {
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
       output += "�";
     } else {
       output += content[i];
@@ -314,20 +314,20 @@ function truncateStringToBytesFromEnd(str: string, maxBytes: number): string {
     const code = str.charCodeAt(characterStart);
     let characterBytes: number;
     let unpairedSurrogate = false;
-    if (code >= 0xDC00 && code <= 0xDFFF && characterStart > 0) {
+    if (code >= 0xdc00 && code <= 0xdfff && characterStart > 0) {
       const previous = str.charCodeAt(characterStart - 1);
-      if (previous >= 0xD800 && previous <= 0xDBFF) {
+      if (previous >= 0xd800 && previous <= 0xdbff) {
         characterStart--;
         characterBytes = 4;
       } else {
         characterBytes = 3;
         unpairedSurrogate = true;
       }
-    } else if (code >= 0xD800 && code <= 0xDFFF) {
+    } else if (code >= 0xd800 && code <= 0xdfff) {
       characterBytes = 3;
       unpairedSurrogate = true;
     } else {
-      characterBytes = code <= 0x7F ? 1 : code <= 0x7FF ? 2 : 3;
+      characterBytes = code <= 0x7f ? 1 : code <= 0x7ff ? 2 : 3;
     }
     if (outputBytes + characterBytes > maxBytes) break;
     outputBytes += characterBytes;
