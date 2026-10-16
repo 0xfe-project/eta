@@ -75,13 +75,20 @@ func TestEventsAreImportedOnceInOrder(t *testing.T) {
 		for imported() < want && time.Now().Before(deadline) {
 			time.Sleep(20 * time.Millisecond)
 		}
+		// The wake comes after the commit: stopping in between could fail
+		// the commit's return and skip it, so stop only once it came.
+		var id string
+		select {
+		case id = <-woken:
+		case <-time.After(time.Until(deadline)):
+		}
 		cancel()
 		<-done
 		if got := imported(); got != want {
 			t.Fatalf("imported %d, want %d", got, want)
 		}
-		if id := <-woken; id != agent.ID {
-			t.Fatalf("woke %s", id)
+		if id != agent.ID {
+			t.Fatalf("woke %q, want %s", id, agent.ID)
 		}
 	}
 	publish(1, "runtime.started")
