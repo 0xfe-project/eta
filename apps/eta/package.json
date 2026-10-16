@@ -1,28 +1,29 @@
 {
-  "name": "@eta/app",
-  "type": "module",
-  "version": "0.1.0",
-  "private": true,
-  "description": "The eta host process: one process, one cordis tree, one listener.",
-  "main": "./src/main.ts",
-  "scripts": {
-    "dev": "bun --watch src/main.ts",
-    "start": "bun src/main.ts",
-    "test": "bun --bun vitest --run",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
-  },
-  "dependencies": {
-    "@earendil-works/pi-ai": "0.85.1",
-    "@eta/client-contracts": "*",
-    "@eta/core": "*",
-    "@eta/server": "*",
-    "cordis": "4.0.0-rc.10"
-  },
-  "devDependencies": {
-    "@types/node": "22.19.19",
-    "bun-types": "1.4.2",
-    "typescript": "5.9.3",
-    "vitest": "4.1.9"
-  }
+	"name": "@eta/app",
+	"type": "module",
+	"version": "0.1.0",
+	"private": true,
+	"description": "The eta host process: one process, one cordis tree, one listener.",
+	"main": "./src/main.ts",
+	"scripts": {
+		"dev": "bun --watch src/main.ts",
+		"start": "bun src/main.ts",
+		"test": "bun --bun vitest --run",
+		"typecheck": "tsc --noEmit",
+		"lint": "eslint ."
+	},
+	"dependencies": {
+		"@earendil-works/pi-ai": "0.85.1",
+		"@eta/client-contracts": "*",
+		"@eta/core": "*",
+		"@eta/execution-node": "*",
+		"@eta/server": "*",
+		"cordis": "4.0.0-rc.10"
+	},
+	"devDependencies": {
+		"@types/node": "22.19.19",
+		"bun-types": "1.4.2",
+		"typescript": "5.9.3",
+		"vitest": "4.1.9"
+	}
 }

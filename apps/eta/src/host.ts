@@ -14,9 +14,11 @@ import type { ProviderBuildFailure } from "./providers/runtime";
  */
 import { join } from "node:path";
 import process from "node:process";
-import { PluginManager } from "@eta/server";
+import { createLocalEnvironment } from "@eta/execution-node";
+import { FileSessionStore, PluginManager, SessionManager } from "@eta/server";
 import { Context } from "cordis";
 import { hostPlugin } from "./bundled/host";
+import { sessionsPlugin } from "./bundled/sessions";
 import { codexAuthPath, CodexCredentialStore } from "./codex-auth";
 import { configuredProviders, readConfig } from "./config";
 import { databasePath, openDatabase } from "./db/database";
@@ -44,6 +46,11 @@ export interface HostOptions {
   watchIntervalMs?: number;
   /** The migrations to apply. Defaults to the ones on disk. */
   migrations?: readonly Migration[];
+  /**
+   * The model layer, when the host has one of its own — a test with scripted answers. Omitted,
+   * it is built from the config, which is what a normal start does.
+   */
+  models?: KernelModels | undefined;
   warn?: (message: string) => void;
 }
 
@@ -55,6 +62,9 @@ export interface Host {
   hub: EventHub;
   /** The configured providers as one model layer, or `undefined` when none are configured. */
   models: KernelModels | undefined;
+  /** The sessions this process holds open, and the store they come from. */
+  sessions: SessionManager;
+  store: FileSessionStore;
   /** Providers that could not be built, with the reason. The rest are in `models`. */
   providerFailures: readonly ProviderBuildFailure[];
   port: number;
@@ -87,14 +97,42 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   // the ones that work still work.
   const providers = configuredProviders(config);
   const credentials = new CodexCredentialStore(codexAuthPath(configPath));
-  const { models, failed } = await buildModels(providers, {
+  const { models: built, failed } = await buildModels(providers, {
     credentials,
     warn,
   });
+  // A host may bring its own model layer (a test with scripted answers); otherwise it is the
+  // one the config named.
+  const models = options.models ?? built;
 
   // Idempotency sits in front of every POST that carries a key: a retry gets the first answer
   // instead of a second effect (P0.5).
   const idempotency = new IdempotencyStore(handle);
+  // Sessions: jsonl journals and a meta file each, under the data directory (P0.7). The
+  // manager decides nothing about models — it asks, per session — so which provider a session
+  // uses stays the application's decision.
+  const store = new FileSessionStore({
+    root: join(options.dataDir, "sessions"),
+    warn,
+  });
+  const sessions = new SessionManager({
+    store,
+    modelsFor: () => {
+      if (models === undefined)
+        throw new Error("no model providers are configured");
+      return models;
+    },
+    // A new session starts on the config's default model. Read once at startup, so changing the
+    // file needs a restart — settings, and the per-session choice, are P1's and P2's business.
+    defaults:
+      config.defaultModel === undefined ? {} : { model: config.defaultModel },
+    envFor: (meta) => {
+      const env = createLocalEnvironment(meta.cwd);
+      return env === undefined ? undefined : { env };
+    },
+    warn,
+  });
+
   const routes = new RouteService(
     ctx,
     new RouteRegistry((request, run) =>
@@ -123,7 +161,10 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
 
   // The bundled plugins. Everything else that answers a request is one of these or a user
   // plugin; the floor knows no feature name of its own.
-  const fibers = [ctx.plugin(hostPlugin, { status })];
+  const fibers = [
+    ctx.plugin(hostPlugin, { status }),
+    ctx.plugin(sessionsPlugin, { sessions, hub }),
+  ];
 
   const manager = new PluginManager({
     modulesDir: join(options.dataDir, "modules"),
@@ -154,6 +195,8 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     hub,
     models,
     providerFailures: failed,
+    sessions,
+    store,
     port: server.port ?? 0,
     config,
     mounted: () => manager.mounted(),
@@ -167,6 +210,9 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
       await manager.dispose();
       for (const fiber of fibers.splice(0)) await fiber.dispose();
       routes.registry.clear();
+      // Sessions write their journals here, so they go before the store and the file.
+      await sessions.closeAll();
+      await store.close();
       handle.close();
     },
   };
