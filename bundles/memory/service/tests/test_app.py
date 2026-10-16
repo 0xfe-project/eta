@@ -300,6 +300,7 @@ class TestMem0Provider:
                 return {"results": [{"id": "m1", "memory": "x", "event": "ADD"}]}
 
         provider = mem0_provider.Mem0Provider.__new__(mem0_provider.Mem0Provider)
+        provider._init_state()
         provider.memory = Store()
         [added] = provider.add(
             "a", [{"role": "user", "content": "x"}], source="user", infer=False
@@ -322,6 +323,7 @@ class TestMem0Provider:
                 return {"results": []}
 
         provider = mem0_provider.Mem0Provider.__new__(mem0_provider.Mem0Provider)
+        provider._init_state()
         provider.memory = Store()
         for source in (None, "conversation", "agent", "user"):
             filters = {"user_id": "a", **({"source": source} if source else {})}
@@ -341,6 +343,7 @@ class TestMem0Provider:
                 self.deleted.append(memory_id)
 
         provider = mem0_provider.Mem0Provider.__new__(mem0_provider.Mem0Provider)
+        provider._init_state()
         provider.memory = Store()
         memory_id = str(uuid.uuid4())
         assert not provider.delete("b", memory_id)

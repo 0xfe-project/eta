@@ -16,6 +16,10 @@ the path: the user sees and edits every agent's memories.
 
   /api/memory/v1/agents/{agent}/memories       GET (?q= searches), POST
   /api/memory/v1/agents/{agent}/memories/{id}  DELETE
+  /api/memory/v1/embedding                     GET, PUT {model, dims}: the
+                                               vector space, and rebuilding
+                                               into another (rebuild.py)
+  /api/memory/v1/embedding/rebuild             DELETE: cancel the rebuild
 """
 
 import logging
@@ -29,6 +33,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from .provider import Memory, MemoryProvider
+from .rebuild import Conflict, Rebuilds, parse_space
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +50,7 @@ PROTOCOL = "axp.memory/1"
 VERSION = "0.1.0"
 
 
-def create_app(provider: MemoryProvider):
+def create_app(provider: MemoryProvider, rebuilds: Rebuilds | None = None):
     mcp = FastMCP(
         "memory",
         streamable_http_path="/memory/mcp",
@@ -182,6 +187,29 @@ def create_app(provider: MemoryProvider):
         )
         if not await anyio.to_thread.run_sync(provider.delete, agent, memory_id):
             return _error(404, "NOT_FOUND", "这条记忆不存在。")
+        return Response(status_code=204)
+
+    @mcp.custom_route("/api/memory/v1/embedding", methods=["GET", "PUT"])
+    async def embedding_route(request: Request) -> Response:
+        if rebuilds is None:
+            return _error(404, "NOT_FOUND")
+        if request.method == "GET":
+            return JSONResponse(await anyio.to_thread.run_sync(rebuilds.status))
+        try:
+            body = await request.json()
+            space = parse_space(body.get("model"), body.get("dims"))
+        except ValueError as e:
+            return _error(400, "INVALID_SPACE", str(e) or "请求参数无效。")
+        try:
+            status = await anyio.to_thread.run_sync(rebuilds.start, space)
+        except Conflict:
+            return _error(409, "SAME_SPACE", "记忆已经在使用这个模型。")
+        return JSONResponse(status, status_code=202)
+
+    @mcp.custom_route("/api/memory/v1/embedding/rebuild", methods=["DELETE"])
+    async def rebuild_route(_: Request) -> Response:
+        if rebuilds is None or not await anyio.to_thread.run_sync(rebuilds.cancel):
+            return _error(404, "NOT_FOUND", "没有进行中的重建。")
         return Response(status_code=204)
 
     @mcp.custom_route("/up", methods=["GET"])
