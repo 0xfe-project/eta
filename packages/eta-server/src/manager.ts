@@ -62,7 +62,9 @@ export function registerSessionTools(
 ): void {
   for (const tool of tools) session.kernel.tools.register(tool);
   const active = session.kernel.config.read("activeToolNames");
-  const added = tools.map((tool) => tool.name).filter((name) => !active.includes(name));
+  const added = tools
+    .map((tool) => tool.name)
+    .filter((name) => !active.includes(name));
   if (added.length > 0 && active.length > 0) {
     session.kernel.config.update({ activeToolNames: [...active, ...added] });
   }

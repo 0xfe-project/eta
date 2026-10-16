@@ -1,4 +1,3 @@
-import type { AgentMessage } from "@eta/core";
 import type { SessionManager } from "@eta/server";
 /**
  * The sessions plugin: the REST surface over the session host (REFACTOR.md §9, P0.7).
@@ -20,6 +19,7 @@ import type { Context } from "cordis";
 import type { EventHub } from "../http/events";
 import type { PluginContext } from "../plugin-api";
 import { errorResponse } from "../routes";
+import { lastAssistantText, textOf } from "../sessions/transcript";
 
 export interface SessionsPluginConfig {
   sessions: SessionManager;
@@ -27,25 +27,6 @@ export interface SessionsPluginConfig {
 }
 
 /** The text of a message, for a client that wants to read a conversation rather than replay it. */
-function textOf(message: AgentMessage): string {
-  switch (message.role) {
-    case "assistant":
-    case "user":
-    case "toolResult": {
-      const content = message.content;
-      if (typeof content === "string") return content;
-      return content
-        .filter((block) => block.type === "text")
-        .map((block) => block.text)
-        .join("");
-    }
-    case "compactionSummary":
-    case "branchSummary":
-      return message.summary;
-    default:
-      return "";
-  }
-}
 
 const readJson = async (request: Request): Promise<Record<string, unknown>> => {
   try {
@@ -156,15 +137,8 @@ export const sessionsPlugin = {
             content: [{ type: "text", text }],
           });
           const result = await managed.session.runner.run();
-          // `session.transcript` is the snapshot taken when the session opened; the live
-          // conversation is the journal's, which is what a run just wrote to.
-          const messages = managed.session.journaling.transcript();
-          // The last thing the model said; a reverse loop rather than `findLast`, which the
-          // app's target library does not have.
-          let last: AgentMessage | undefined;
-          for (const message of messages) {
-            if (message.role === "assistant") last = message;
-          }
+          // The live conversation is the journal's; the snapshot taken at open is not it.
+          const said = lastAssistantText(managed);
           hub.publish("session.turn", {
             id,
             status: result.status,
@@ -181,7 +155,7 @@ export const sessionsPlugin = {
           return Response.json({
             status: result.status,
             turns: result.turns,
-            text: last === undefined ? "" : textOf(last),
+            text: said,
           });
         },
       ),

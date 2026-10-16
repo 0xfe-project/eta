@@ -1,4 +1,4 @@
-import type { AgentMessage, Kernel } from "@eta/core";
+import type { Kernel } from "@eta/core";
 import type { ManagedSession, SessionManager } from "@eta/server";
 import type { AgentStore } from "../agents/store";
 import type { EventHub } from "../http/events";
@@ -34,6 +34,7 @@ import type {
  * it — find the row, mark it, abort the session it belongs to, and let the run finish the job.
  */
 import process from "node:process";
+import { lastAssistantText } from "../sessions/transcript";
 
 export interface WakeRunnerOptions {
   groups: GroupStore;
@@ -63,26 +64,6 @@ export interface DeliveredReply {
   /** What the agent last said (P2.3 projects it), or why this delivery failed. */
   text: string;
 }
-
-const textOf = (message: AgentMessage): string => {
-  switch (message.role) {
-    case "assistant":
-    case "user":
-    case "toolResult": {
-      const content = message.content;
-      if (typeof content === "string") return content;
-      return content
-        .filter((block) => block.type === "text")
-        .map((block) => block.text)
-        .join("");
-    }
-    case "compactionSummary":
-    case "branchSummary":
-      return message.summary;
-    default:
-      return "";
-  }
-};
 
 export class WakeRunner {
   readonly #groups: GroupStore;
@@ -419,7 +400,7 @@ export class WakeRunner {
         ],
       });
       const result = await managed.session.runner.run();
-      const text = this.#lastAssistantText(managed);
+      const text = lastAssistantText(managed);
       // An aborted run is a stopped reply: not a failure, and not a finished one either. The text
       // is whatever the transcript holds — for a turn that was stopped mid-generation that is
       // usually empty, because the kernel does not journal a partial (a partial is not history).
@@ -478,14 +459,6 @@ export class WakeRunner {
         text: reason,
       };
     }
-  }
-
-  #lastAssistantText(managed: ManagedSession): string {
-    let last: AgentMessage | undefined;
-    for (const entry of managed.session.journaling.transcript()) {
-      if (entry.role === "assistant") last = entry;
-    }
-    return last === undefined ? "" : textOf(last);
   }
 
   /** What the agent is told: who is speaking, and in which group. */

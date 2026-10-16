@@ -27,6 +27,7 @@ import { artifactsPlugin } from "./bundled/artifacts";
 import { compatPlugin } from "./bundled/compat";
 import { groupsPlugin } from "./bundled/groups";
 import { hostPlugin } from "./bundled/host";
+import { routinesPlugin } from "./bundled/routines";
 import { sessionsPlugin } from "./bundled/sessions";
 import { tasksPlugin } from "./bundled/tasks";
 import { usagePlugin } from "./bundled/usage";
@@ -50,6 +51,9 @@ import { InteractionStore } from "./interactions/store";
 import { providerCatalog } from "./providers/catalog";
 import { buildModels } from "./providers/runtime";
 import { RouteRegistry, RouteService } from "./routes";
+import { RoutineRunner } from "./routines/runner";
+import { Scheduler } from "./routines/scheduler";
+import { RoutineStore } from "./routines/store";
 import { TaskCards } from "./tasks/cards";
 import { TaskStore } from "./tasks/store";
 import { taskTools } from "./tasks/tools";
@@ -164,6 +168,8 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   const interactions = new InteractionStore(handle);
   const tasks = new TaskStore(handle);
   // Artifacts: the rows here, the bytes under the data directory (P3.2).
+  // Routines (P3.3): the rows, the runner that gives a run its session, and this process's clock.
+  const routines = new RoutineStore(handle);
   const artifacts = new ArtifactService({
     handle,
     objectsRoot: join(options.dataDir, "artifacts"),
@@ -304,6 +310,21 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   routes.register("GET", "/health", () => Response.json({ ok: true }));
   routes.register("GET", "/events", (request) => hub.handle(request));
 
+  // Routines' runner and clock: a run is a short-lived session, and the clock is this process's
+  // (no broker), derived from the rows so what runs is always what the database says.
+  const routineRunner = new RoutineRunner({
+    routines,
+    sessions,
+    warn,
+  });
+  const scheduler = new Scheduler({
+    routines,
+    run: (routineId) => {
+      routineRunner.start(routineId);
+    },
+    warn,
+  });
+
   // The bundled plugins. Everything else that answers a request is one of these or a user
   // plugin; the floor knows no feature name of its own.
   const fibers = [
@@ -327,6 +348,14 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     ctx.plugin(tasksPlugin, { tasks, cards, groups, agents }),
     // Artifacts (P3.2): publish a site, preview it privately, share a version publicly.
     ctx.plugin(artifactsPlugin, { artifacts, agents, tasks }),
+    // Routines (P3.3): the clock, the runs, and the page's API.
+    ctx.plugin(routinesPlugin, {
+      routines,
+      runner: routineRunner,
+      scheduler,
+      defaultModel: () => config.defaultModel,
+      revising: () => routineRunner.revising(),
+    }),
     // The product API the existing web speaks (P2.4): AXP's shapes over our rows.
     ctx.plugin(compatPlugin, {
       agents,
@@ -338,6 +367,13 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
       runner,
     }),
   ];
+
+  // A run that was `running` when the process died is a failure now: its session is gone, and a row
+  // that says `running` forever would keep the routine from ever starting again. Then the clock.
+  for (const recovered of routines.recover()) {
+    warn(`[eta] routine run ${recovered.id} was interrupted; marked failed`);
+  }
+  scheduler.start();
 
   const manager = new PluginManager({
     modulesDir: join(options.dataDir, "modules"),
@@ -377,6 +413,8 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     config,
     mounted: () => manager.mounted(),
     async close() {
+      // The clock stops first: nothing should fire into a host that is coming down.
+      scheduler.stop();
       // Reverse order: stop taking requests, take the plugins out (the user's first, then
       // ours — their effects unregister what they registered), take back whatever routes are
       // left, and only then close the file. A route a plugin forgot to clean up goes with
