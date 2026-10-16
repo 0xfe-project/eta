@@ -49,6 +49,7 @@
         "@earendil-works/pi-ai": "0.85.1",
         "@eta/client-contracts": "*",
         "@eta/core": "*",
+        "@eta/execution-node": "*",
         "@eta/server": "*",
         "cordis": "4.0.0-rc.10",
       },
