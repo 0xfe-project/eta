@@ -27,6 +27,20 @@ export interface EventHubOptions {
   heartbeatMs?: number;
 }
 
+/**
+ * How another surface names an event. Returning `undefined` means "this surface has no word for
+ * it" and no frame is written — the seq is still consumed, so a client resuming from the id of
+ * the last frame it *saw* loses nothing.
+ */
+export interface EventTranslation {
+  name: string;
+  data: unknown;
+}
+
+export type EventTranslator = (
+  event: ProductEvent,
+) => EventTranslation | undefined;
+
 export type Cursor =
   | { kind: "none" }
   | { kind: "cursor"; value: number }
@@ -71,6 +85,11 @@ export class EventHub {
     return this.#buffer;
   }
 
+  /** The last seq handed out: what a snapshot reports as its cursor. */
+  get sequence(): number {
+    return this.#seq;
+  }
+
   /** How many clients are following right now. */
   get subscriberCount(): number {
     return this.#subscribers.size;
@@ -84,8 +103,17 @@ export class EventHub {
     return oldest === undefined || cursor >= oldest - 1;
   }
 
-  /** The SSE response for `GET /events`. */
-  handle(request: Request): Response {
+  /**
+   * The SSE response for a stream of these events.
+   *
+   * `translate` lets a surface with its own vocabulary (the product API, P2.4) rename and reshape
+   * events on the way out, instead of a second copy of the cursor, replay and heartbeat rules
+   * living here.
+   */
+  handle(
+    request: Request,
+    options: { translate?: EventTranslator | undefined } = {},
+  ): Response {
     const cursor = parseCursor(request);
     if (cursor.kind === "invalid") {
       return errorResponse(
@@ -105,8 +133,14 @@ export class EventHub {
     }
 
     const encoder = new TextEncoder();
-    const frame = (event: ProductEvent): string =>
-      `id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`;
+    const frame = (event: ProductEvent): string | undefined => {
+      const translated =
+        options.translate === undefined
+          ? { name: event.type, data: event.data }
+          : options.translate(event);
+      if (translated === undefined) return undefined;
+      return `id: ${event.seq}\nevent: ${translated.name}\ndata: ${JSON.stringify(translated.data)}\n\n`;
+    };
 
     let heartbeat: ReturnType<typeof setInterval> | undefined;
     let subscriber: ((event: ProductEvent) => void) | undefined;
@@ -137,11 +171,16 @@ export class EventHub {
         // Catch the client up: only what it has not seen.
         if (cursor.kind === "cursor") {
           for (const event of this.#buffer) {
-            if (event.seq > cursor.value) write(frame(event));
+            if (event.seq <= cursor.value) continue;
+            const text = frame(event);
+            if (text !== undefined) write(text);
           }
         }
 
-        subscriber = (event) => write(frame(event));
+        subscriber = (event) => {
+          const text = frame(event);
+          if (text !== undefined) write(text);
+        };
         this.#subscribers.add(subscriber);
         // A comment every so often: no event, no seq, just something on the wire.
         heartbeat = setInterval(write, this.#heartbeatMs, ": keep-alive\n\n");

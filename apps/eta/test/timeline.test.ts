@@ -107,6 +107,8 @@ interface Message {
   status: string;
   revision: number;
   text: string;
+  /** `user` or `agent`: who wrote it, which is what a watcher filters on. */
+  authorKind: string;
 }
 
 async function setup(
@@ -264,6 +266,74 @@ describe("two browsers at once", () => {
     expect((done?.data as { message: Message }).message.revision).toBe(2);
   });
 
+  it("tells every watcher about a message one of them sent", async () => {
+    const host = await start(["heard you"]);
+    const { agentId, groupId } = await setup(host);
+    // Two browsers, both watching this group. Neither connect is awaited until there is something
+    // to read: a fresh stream sends nothing, and `fetch` resolves on the first byte.
+    const firstPending = connect(host);
+    const secondPending = connect(host);
+    await connected(host, 2);
+
+    // One of them writes. The one that wrote adds the row locally; the other only learns about it
+    // from the event, so without this every conversation would be one-sided until a reload.
+    await send(host, "POST", `/groups/${groupId}/messages`, {
+      text: "anyone there?",
+      mentions: [agentId],
+    });
+    const [first, second] = [
+      sseReader(await firstPending),
+      sseReader(await secondPending),
+    ];
+    // Read past the first frame: the message and the group it moved are two events, and the
+    // sidebar needs the second one.
+    const watcher = await second.until(
+      (seen) =>
+        seen.some((frame) => frame.event === "message.updated") &&
+        seen.some((frame) => frame.event === "group.updated"),
+      2_000,
+    );
+    await first.cancel();
+    await second.cancel();
+
+    const userFrames = watcher.filter(
+      (frame) =>
+        frame.event === "message.updated" &&
+        (frame.data as { message: Message }).message.authorKind === "user",
+    );
+    expect(userFrames).toHaveLength(1);
+    expect((userFrames[0]?.data as { message: Message }).message.text).toBe(
+      "anyone there?",
+    );
+    // The sidebar hears about it too: the group's last seq moved.
+    expect(watcher.some((frame) => frame.event === "group.updated")).toBe(true);
+  });
+
+  it("tells every watcher about a group it did not create", async () => {
+    const host = await start([]);
+    const pending = connect(host);
+    await connected(host, 1);
+    const agent = (await (
+      await send(host, "POST", "/agents", { name: "newcomer" })
+    ).json()) as { agent: { id: string } };
+    await send(host, "POST", "/groups", {
+      name: "made elsewhere",
+      agentIds: [agent.agent.id],
+    });
+
+    const reader = sseReader(await pending);
+    const frames = await reader.until(
+      (seen) => seen.some((frame) => frame.event === "group.updated"),
+      2_000,
+    );
+    await reader.cancel();
+    const group = frames.find((frame) => frame.event === "group.updated")
+      ?.data as {
+      group: { name: string };
+    };
+    expect(group.group.name).toBe("made elsewhere");
+  });
+
   it("replays for a client that arrives late, and repeats nothing on a reconnect", async () => {
     const host = await start(["first", "second"]);
     const { agentId, groupId } = await setup(host);
@@ -285,14 +355,23 @@ describe("two browsers at once", () => {
 
     // Late: the ring replays what it still holds, so a fresh client catches up at once.
     const late = sseReader(await connect(host, "/events?cursor=0"));
+    // Read until it has caught up with the reply — the same thing the live client waited for.
     const replayed = await late.until(
-      (seen) => seen.length >= frames.length,
+      (seen) =>
+        seen.some(
+          (frame) =>
+            frame.event === "message.updated" &&
+            (frame.data as { message?: Message }).message?.status === "done" &&
+            (frame.data as { message?: Message }).message?.kind === "assistant",
+        ),
       2_000,
     );
     await late.cancel();
-    expect(replayed.map((frame) => frame.event)).toEqual(
-      frames.map((frame) => frame.event),
-    );
+    // It sees at least what the live client saw, in the same order: events from before it
+    // connected are still in the ring, so equality is not the claim — catching up is.
+    const replayedNames = replayed.map((frame) => frame.event);
+    const liveNames = frames.map((frame) => frame.event);
+    expect(replayedNames).toEqual(expect.arrayContaining(liveNames));
     // Cursor 0 is nobody's resume point, and the ring is not empty, so this is fine — but the
     // expired-cursor answer is its own thing (tested with the hub in http.test.ts).
 

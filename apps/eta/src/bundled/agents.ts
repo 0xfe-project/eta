@@ -19,14 +19,18 @@ import type { KernelModels } from "@eta/core";
 import type { Context } from "cordis";
 import type { AgentStore } from "../agents/store";
 import type { GroupStore } from "../groups/store";
+import type { EventHub } from "../http/events";
 import type { PluginContext } from "../plugin-api";
-import { formatModelId, parseModelId } from "@eta/server";
+import { publishAgentDeleted, publishAgentUpdated } from "../agents/events";
+import { modelRejection } from "../agents/model-check";
 import { errorResponse } from "../routes";
 
 export interface AgentsPluginConfig {
   agents: AgentStore;
   /** The one product rule that ties the two together: an agent has a private group. */
   groups: GroupStore;
+  /** Where `agent.updated` and `agent.deleted` go, so a sidebar hears about an edit. */
+  hub: EventHub;
   /** The model layer, for checking that a named model is one this host can actually reach. */
   models: KernelModels | undefined;
 }
@@ -55,7 +59,7 @@ export const agentsPlugin = {
   inject: ["routes"],
   apply(ctx: Context, config: AgentsPluginConfig): void {
     const plugin = ctx as unknown as PluginContext;
-    const { agents, groups, models } = config;
+    const { agents, groups, hub, models } = config;
 
     const notFound = (id: string): Response =>
       errorResponse(
@@ -66,20 +70,19 @@ export const agentsPlugin = {
       );
 
     /**
-     * `undefined` when the model is fine (or absent); a response to send back when it is not.
-     * `provider:modelId` is the form; a bare id is read as the default provider, which this host
-     * very likely does not serve — and that is an answer, not a guess.
+     * The model check, from `agents/model-check.ts`: the product API asks the same question, and a
+     * rule that lives twice is a rule that will disagree with itself.
      */
     const checkModel = (raw: string): Response | undefined => {
-      const identity = parseModelId(raw);
-      if (models?.getModel(identity.provider, identity.modelId) !== undefined)
-        return undefined;
-      return errorResponse(
-        409,
-        "MODEL_UNKNOWN",
-        `no model ${formatModelId(identity)} is configured; use provider:modelId`,
-        crypto.randomUUID(),
-      );
+      const problem = modelRejection(models, raw);
+      return problem === undefined
+        ? undefined
+        : errorResponse(
+            409,
+            problem.code,
+            problem.message,
+            crypto.randomUUID(),
+          );
     };
 
     plugin.effect(() =>
@@ -118,6 +121,7 @@ export const agentsPlugin = {
         // The agent's private group, made in the same breath: a conversation belongs to
         // something, and an agent nobody can open a conversation with is a row nobody reaches.
         groups.ensurePrivateGroup(agent.id, agent.name);
+        publishAgentUpdated(hub, agent);
         return Response.json({ agent }, { status: 201 });
       }),
     );
@@ -156,7 +160,9 @@ export const agentsPlugin = {
               ? {}
               : { plugins: asPlugins(body.plugins)! }),
           });
-          return agent === undefined ? notFound(id) : Response.json({ agent });
+          if (agent === undefined) return notFound(id);
+          publishAgentUpdated(hub, agent);
+          return Response.json({ agent });
         },
       ),
     );
@@ -171,6 +177,7 @@ export const agentsPlugin = {
         // the group would then be an empty room nobody can find.
         groups.removePrivateGroupsOf(id);
         if (!agents.remove(id)) return notFound(id);
+        publishAgentDeleted(hub, id);
         return new Response(null, { status: 204 });
       }),
     );

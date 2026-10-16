@@ -371,6 +371,22 @@ export class GroupStore {
     return this.#post(id, input);
   }
 
+  /**
+   * The newest message in a group, or `undefined` when it has none.
+   *
+   * A sidebar wants one line of preview, and reading the whole timeline to find its last row costs
+   * more the longer a conversation gets — every `group.updated` would pay that. This asks the
+   * database for the last row instead.
+   */
+  lastMessage(groupId: string): MessageRecord | undefined {
+    const row = this.#handle
+      .query(
+        "SELECT * FROM group_message WHERE group_id = ? ORDER BY seq DESC LIMIT 1",
+      )
+      .get(groupId) as MessageRow | null;
+    return row === null ? undefined : messageOf(row);
+  }
+
   messages(groupId: string, sinceSeq = 0): MessageRecord[] {
     const rows = this.#handle
       .query(

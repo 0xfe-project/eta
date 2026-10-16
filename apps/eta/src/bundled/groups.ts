@@ -19,6 +19,7 @@
  * the store's business, which is where the tests for it live.
  */
 import type { Context } from "cordis";
+import type { TimelineProjector } from "../groups/projection";
 import type { WakeRunner } from "../groups/runner";
 import type { GroupStore } from "../groups/store";
 import type { PluginContext } from "../plugin-api";
@@ -28,6 +29,8 @@ export interface GroupsPluginConfig {
   groups: GroupStore;
   /** Turns the wakes this plugin records into runs (P2.2). */
   runner: WakeRunner;
+  /** The write-and-publish pair: a post from one browser has to reach the others. */
+  projector: TimelineProjector;
 }
 
 const readJson = async (request: Request): Promise<Record<string, unknown>> => {
@@ -54,7 +57,7 @@ export const groupsPlugin = {
   inject: ["routes"],
   apply(ctx: Context, config: GroupsPluginConfig): void {
     const plugin = ctx as unknown as PluginContext;
-    const { groups, runner } = config;
+    const { groups, runner, projector } = config;
 
     const notFound = (id: string): Response =>
       errorResponse(
@@ -90,6 +93,8 @@ export const groupsPlugin = {
             : { goal: asString(body.goal)! }),
           agentIds,
         });
+        // A new group has to reach every open sidebar, not just the browser that made it.
+        projector.groupChanged(created.group.id);
         return Response.json(created, { status: 201 });
       }),
     );
@@ -121,7 +126,9 @@ export const groupsPlugin = {
               ? {}
               : { decided: asString(body.decided)! }),
           });
-          return updated === undefined ? notFound(id) : Response.json(updated);
+          if (updated === undefined) return notFound(id);
+          projector.groupChanged(id);
+          return Response.json(updated);
         },
       ),
     );
@@ -168,6 +175,7 @@ export const groupsPlugin = {
               crypto.randomUUID(),
             );
           }
+          projector.groupChanged(id);
           return Response.json(groups.get(id), { status: 201 });
         },
       ),
@@ -190,9 +198,9 @@ export const groupsPlugin = {
               crypto.randomUUID(),
             );
           }
-          return outcome === "ok"
-            ? new Response(null, { status: 204 })
-            : notFound(agentId);
+          if (outcome !== "ok") return notFound(agentId);
+          projector.groupChanged(id);
+          return new Response(null, { status: 204 });
         },
       ),
     );
@@ -231,14 +239,15 @@ export const groupsPlugin = {
               crypto.randomUUID(),
             );
           }
-          const posted = groups.postUserMessage(id, {
+          // Through the projector, so the row and the event are written together.
+          const posted = projector.userMessage({
+            groupId: id,
             text,
             mentions: asIds(body.mentions) ?? [],
           });
-          if (posted === undefined) return notFound(id);
-          // The wakes this message recorded are delivered now, and the answer says what each
-          // agent replied. P2.3 projects these into the timeline and streams them; until then,
-          // "the reply is in this response" is what makes a group answerable with curl.
+          // The wakes this message recorded are delivered now, and the answer says what each agent
+          // replied. The timeline is projected as it runs (P2.3), so this response is only a
+          // convenience for curl — a browser hears about all of it over the stream.
           const replies = await runner.deliver(id, posted.message.id);
           return Response.json({ ...posted, replies }, { status: 201 });
         },

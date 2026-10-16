@@ -19,6 +19,7 @@ import { FileSessionStore, PluginManager, SessionManager } from "@eta/server";
 import { Context } from "cordis";
 import { AgentStore } from "./agents/store";
 import { agentsPlugin } from "./bundled/agents";
+import { compatPlugin } from "./bundled/compat";
 import { groupsPlugin } from "./bundled/groups";
 import { hostPlugin } from "./bundled/host";
 import { sessionsPlugin } from "./bundled/sessions";
@@ -60,6 +61,8 @@ export interface HostOptions {
    * it is built from the config, which is what a normal start does.
    */
   models?: KernelModels | undefined;
+  /** How many events stay replayable. Defaults to the hub's own (512); a test wants a small one. */
+  hubCapacity?: number | undefined;
   warn?: (message: string) => void;
 }
 
@@ -165,7 +168,9 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
       withIdempotency(idempotency, request, run),
     ),
   );
-  const hub = new EventHub();
+  const hub = new EventHub(
+    options.hubCapacity === undefined ? {} : { capacity: options.hubCapacity },
+  );
   const agents = new AgentStore(handle);
   const groups = new GroupStore(handle);
   // Wakes become runs here (P2.2): one session per (agent × group), found by the participant
@@ -203,9 +208,11 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   const fibers = [
     ctx.plugin(hostPlugin, { status }),
     ctx.plugin(sessionsPlugin, { sessions, hub }),
-    ctx.plugin(agentsPlugin, { agents, groups, models }),
+    ctx.plugin(agentsPlugin, { agents, groups, hub, models }),
     ctx.plugin(usagePlugin, { usage }),
-    ctx.plugin(groupsPlugin, { groups, runner }),
+    ctx.plugin(groupsPlugin, { groups, runner, projector }),
+    // The product API the existing web speaks (P2.4): AXP's shapes over our rows.
+    ctx.plugin(compatPlugin, { agents, groups, hub, models }),
   ];
 
   const manager = new PluginManager({

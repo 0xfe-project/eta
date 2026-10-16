@@ -6,16 +6,25 @@
  * how a browser hears about it. A browser that was not connected reads the rows; one that was
  * connected applies events by id and revision.
  *
- * A reply is projected twice — once when it starts, once when it ends:
+ * Both directions go through here. A reply is projected twice — once when it starts, once when it
+ * ends:
  *
  *   start    a row with status `working` takes its place in the timeline (its `seq` is fixed here)
  *   finish   the same row gets its text, its status and a higher `revision`
  *
  * That is what makes "working, then the answer" visible without the client guessing, and what
  * makes applying the same event twice harmless: same id, same revision, nothing changes.
+ *
+ * The user's own message is projected too, which is not a detail: the browser that sent it adds it
+ * locally, but every *other* browser watching the group only learns about it from this event.
  */
 import type { EventHub } from "../http/events";
-import type { GroupRecord, GroupStore, MessageRecord } from "./store";
+import type {
+  GroupRecord,
+  GroupStore,
+  MessageRecord,
+  PostedMessage,
+} from "./store";
 
 export interface TimelineProjectorOptions {
   groups: GroupStore;
@@ -34,6 +43,31 @@ export class TimelineProjector {
   constructor(options: TimelineProjectorOptions) {
     this.#groups = options.groups;
     this.#hub = options.hub;
+  }
+
+  /** The user speaks: a row in the timeline, and every watcher hears about it. */
+  userMessage(input: {
+    groupId: string;
+    text: string;
+    mentions?: readonly string[] | undefined;
+  }): PostedMessage & { group: GroupRecord & { seq: number } } {
+    const posted = this.#groups.postUserMessage(input.groupId, input);
+    if (posted === undefined)
+      throw new Error(`group ${input.groupId} vanished while posting`);
+    const group = this.#summary(input.groupId);
+    this.#hub?.publish("message.updated", {
+      group_id: input.groupId,
+      message: posted.message,
+    });
+    this.#hub?.publish("group.updated", { group });
+    return { ...posted, group };
+  }
+
+  /** The group itself changed — created, renamed, a member joined or left. */
+  groupChanged(groupId: string): GroupRecord & { seq: number } {
+    const group = this.#summary(groupId);
+    this.#hub?.publish("group.updated", { group });
+    return group;
   }
 
   /** An agent started answering: take a place in the timeline and say so. */
