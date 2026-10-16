@@ -146,4 +146,3 @@ export class StaticWeb {
     return joined.length === 0 ? "index.html" : joined;
   }
 }
-
