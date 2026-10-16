@@ -57,7 +57,8 @@ jobs:
           cache: false
       - uses: astral-sh/setup-uv@v10.2.0
         with:
-          python-version-file: bundles/memory/service/.python-version
+          # bundles/memory/service/.python-version.
+          python-version: "3.13"
           cache-python: true
           enable-cache: true
           cache-dependency-glob: "**/uv.lock"
