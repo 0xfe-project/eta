@@ -86,7 +86,19 @@ export function WorkspacePanel({
       )}
     >
       <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 pt-3">
-        <div className="justify-self-start">
+        <div className="flex justify-self-start">
+          {onCollapse ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={translateText("actions.collapseWorkspace")}
+              title={translateText("common:actions.collapse")}
+              className="hidden lg:inline-flex"
+              onClick={onCollapse}
+            >
+              <SidebarSimpleIcon aria-hidden="true" className="-scale-x-100" />
+            </Button>
+          ) : null}
           {view === "tasks" || view === "routines" ? (
             <RefreshButton resource={view} />
           ) : null}
@@ -123,18 +135,6 @@ export function WorkspacePanel({
               onClick={onClose}
             >
               <XIcon aria-hidden="true" />
-            </Button>
-          ) : null}
-          {onCollapse ? (
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={translateText("actions.collapseWorkspace")}
-              title={translateText("common:actions.collapse")}
-              className="hidden lg:inline-flex"
-              onClick={onCollapse}
-            >
-              <SidebarSimpleIcon aria-hidden="true" className="-scale-x-100" />
             </Button>
           ) : null}
         </div>
