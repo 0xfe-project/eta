@@ -39,7 +39,12 @@ export default {
       // routeTree.gen.ts is gitignored, which knip skips, so the file routes
       // are entries themselves. public/sw.js is registered by URL in
       // main.tsx.
-      entry: ["src/routes/**/*.{ts,tsx}", "public/sw.js"],
+      entry: [
+        "src/routes/**/*.{ts,tsx}",
+        "src/**/*.stories.tsx",
+        ".storybook/**/*.{ts,tsx}",
+        "public/sw.js",
+      ],
       // Generated from the shadcn and brainless registries; unused exports
       // there are expected.
       ignore: ["src/components/ui/**", "src/components/brainless/**"],
