@@ -37,6 +37,33 @@ export default antfu(
     },
   },
   {
+    // The @eta/* packages were ported verbatim from the other repository
+    // (eta-old), which was formatted and linted with Biome. They stay under
+    // this repository's rules except for the handful below, which are
+    // Biome-era style or runtime-assumption differences rather than defects.
+    // TODO: revisit the two regexes flagged by
+    // regexp/no-super-linear-backtracking (harness/src/memory.ts,
+    // harness/src/subagent-plan.ts) when that code is next touched.
+    files: ["packages/eta-*/**"],
+    rules: {
+      "ts/no-use-before-define": "off",
+      "antfu/no-top-level-await": "off",
+      "node/prefer-global/process": "off",
+      "node/prefer-global/buffer": "off",
+      "unicorn/no-new-array": "off",
+      "import/no-duplicates": "off",
+      "no-control-regex": "off",
+      "regexp/no-super-linear-backtracking": "off",
+    },
+  },
+  {
+    // Smoke scenarios and tests print their progress on purpose; the .mjs ones
+    // run under Bun and use its globals.
+    files: ["packages/eta-*/test/**", "packages/eta-*/src/testing/**"],
+    languageOptions: { globals: globals.bunBuiltin },
+    rules: { "no-console": "off" },
+  },
+  {
     files: ["apps/web/public/sw.js"],
     languageOptions: { globals: globals.serviceworker },
     rules: { "no-restricted-globals": "off" },
