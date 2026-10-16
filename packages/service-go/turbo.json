@@ -5,10 +5,11 @@
     "lint": {
       "inputs": [
         "$TURBO_DEFAULT$",
-        "$TURBO_ROOT$/packages/*-go/**",
-        "!$TURBO_ROOT$/packages/*-go/.turbo/**",
-        "!$TURBO_ROOT$/packages/*-go/out/**",
-        "!$TURBO_ROOT$/packages/*-go/node_modules/**"
+        "!**/*.md",
+        "$TURBO_ROOT$/packages/telemetry-go/**/*.go",
+        "!$TURBO_ROOT$/packages/telemetry-go/**/*_test.go",
+        "$TURBO_ROOT$/packages/telemetry-go/go.mod",
+        "$TURBO_ROOT$/packages/telemetry-go/go.sum"
       ]
     },
     // The idempotency tests run against development's PostgreSQL, in a
@@ -16,10 +17,12 @@
     "test": {
       "inputs": [
         "$TURBO_DEFAULT$",
-        "$TURBO_ROOT$/packages/*-go/**",
-        "!$TURBO_ROOT$/packages/*-go/.turbo/**",
-        "!$TURBO_ROOT$/packages/*-go/out/**",
-        "!$TURBO_ROOT$/packages/*-go/node_modules/**"
+        "!**/*.md",
+        "$TURBO_ROOT$/scripts/test-postgres.sh",
+        "$TURBO_ROOT$/packages/telemetry-go/**/*.go",
+        "!$TURBO_ROOT$/packages/telemetry-go/**/*_test.go",
+        "$TURBO_ROOT$/packages/telemetry-go/go.mod",
+        "$TURBO_ROOT$/packages/telemetry-go/go.sum"
       ],
       "env": ["DATABASE_URL"]
     }

@@ -3,7 +3,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "generate": "openapi-typescript --root-types --root-types-no-schema-prefix --default-non-nullable false",
+    "generate": "openapi-typescript --root-types --root-types-no-schema-prefix --default-non-nullable false && bun -e 'import { tanstackRouterGenerator } from \"@tanstack/router-plugin/vite\"; await tanstackRouterGenerator({ target: \"react\", autoCodeSplitting: true, quoteStyle: \"double\" }).configResolved({ root: process.cwd() })'",
     "dev": "vite",
     "build": "vite build && bun run sourcemaps:inject && bun run bundle",
     "bundle": "rm -rf out && bun build server.js --target=bun --outdir out --define process.env.NODE_ENV='\"production\"' && mkdir -p out/dist && cp -r dist/. out/dist/",
@@ -13,7 +13,7 @@
     "storybook": "storybook dev -p 6006 --no-open",
     "build-storybook": "storybook build -o storybook-static",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint .",
     "test": "rstest run"
   },
   "dependencies": {

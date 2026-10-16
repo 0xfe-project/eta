@@ -4,8 +4,13 @@
 set -euo pipefail
 cd "$(dirname -- "${BASH_SOURCE[0]}")/../../apps/remote"
 rm -rf out/dist
+pids=()
 for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
   os="${target%/*}" arch="${target#*/}"
   CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
-    go build -trimpath -buildvcs=false -ldflags="-s -w" -o "out/dist/axp-$os-$arch" .
+    go build -trimpath -buildvcs=false -ldflags="-s -w" -o "out/dist/axp-$os-$arch" . &
+  pids+=("$!")
+done
+for pid in "${pids[@]}"; do
+  wait "$pid"
 done

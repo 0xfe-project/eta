@@ -10,11 +10,25 @@
     // One bundle for every platform (Node); the image copies it.
     "build": {
       "dependsOn": ["generate"],
-      "inputs": ["src/**", "package.json", "tsconfig.json"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!src/**/*.test.ts",
+        "!codex/**",
+        "!**/*.md"
+      ],
       "outputs": ["out/**"]
     },
     "typecheck": {
-      "dependsOn": ["generate"]
+      "dependsOn": ["generate"],
+      "inputs": ["$TURBO_DEFAULT$", "!codex/**", "!**/*.md"]
+    },
+    "lint": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!codex/**",
+        "!**/*.md",
+        "$TURBO_ROOT$/eslint.config.js"
+      ]
     },
     // The base image: the runtime's bundle, akhook and axp-plugins, which
     // compiles each agent's plugins when the control plane builds its image.
@@ -28,7 +42,7 @@
     "test": {
       "dependsOn": ["generate", "@axp/akhook#build"],
       // The plugins' hooks and servers are tested here too.
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/plugins/**"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "$TURBO_ROOT$/plugins/**"],
       "env": ["CI"]
     }
   }
