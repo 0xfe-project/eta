@@ -367,6 +367,20 @@ export class GroupStore {
     return rows.map(messageOf);
   }
 
+  /** Mark a wake's state. Taking one is a write before the run, never after (P2.2). */
+  markWake(
+    groupId: string,
+    agentId: string,
+    messageId: string,
+    state: WakeRecord["state"],
+  ): void {
+    this.#handle
+      .query(
+        "UPDATE group_wake SET state = ? WHERE group_id = ? AND agent_id = ? AND message_id = ?",
+      )
+      .run(state, groupId, agentId, messageId);
+  }
+
   /** What is waiting for an agent (P2.2 takes these). */
   wakes(groupId: string, agentId?: string): WakeRecord[] {
     const rows = (

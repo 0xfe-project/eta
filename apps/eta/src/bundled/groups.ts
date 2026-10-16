@@ -19,12 +19,15 @@
  * the store's business, which is where the tests for it live.
  */
 import type { Context } from "cordis";
+import type { WakeRunner } from "../groups/runner";
 import type { GroupStore } from "../groups/store";
 import type { PluginContext } from "../plugin-api";
 import { errorResponse } from "../routes";
 
 export interface GroupsPluginConfig {
   groups: GroupStore;
+  /** Turns the wakes this plugin records into runs (P2.2). */
+  runner: WakeRunner;
 }
 
 const readJson = async (request: Request): Promise<Record<string, unknown>> => {
@@ -51,7 +54,7 @@ export const groupsPlugin = {
   inject: ["routes"],
   apply(ctx: Context, config: GroupsPluginConfig): void {
     const plugin = ctx as unknown as PluginContext;
-    const { groups } = config;
+    const { groups, runner } = config;
 
     const notFound = (id: string): Response =>
       errorResponse(
@@ -232,9 +235,12 @@ export const groupsPlugin = {
             text,
             mentions: asIds(body.mentions) ?? [],
           });
-          return posted === undefined
-            ? notFound(id)
-            : Response.json(posted, { status: 201 });
+          if (posted === undefined) return notFound(id);
+          // The wakes this message recorded are delivered now, and the answer says what each
+          // agent replied. P2.3 projects these into the timeline and streams them; until then,
+          // "the reply is in this response" is what makes a group answerable with curl.
+          const replies = await runner.deliver(id, posted.message.id);
+          return Response.json({ ...posted, replies }, { status: 201 });
         },
       ),
     );

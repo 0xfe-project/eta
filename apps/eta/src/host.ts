@@ -32,6 +32,7 @@ import {
   schemaVersion,
 } from "./db/migrations";
 import { DbService } from "./db/service";
+import { WakeRunner } from "./groups/runner";
 import { GroupStore } from "./groups/store";
 import { EventHub } from "./http/events";
 import { IdempotencyStore, withIdempotency } from "./http/idempotency";
@@ -166,6 +167,9 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   const hub = new EventHub();
   const agents = new AgentStore(handle);
   const groups = new GroupStore(handle);
+  // Wakes become runs here (P2.2): one session per (agent × group), found by the participant
+  // row and remembered in the session's own meta.
+  const runner = new WakeRunner({ groups, sessions, agents, hub, warn });
   const status: HostStatus = {
     pid: process.pid,
     dataDir: options.dataDir,
@@ -192,7 +196,7 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     ctx.plugin(sessionsPlugin, { sessions, hub }),
     ctx.plugin(agentsPlugin, { agents, groups, models }),
     ctx.plugin(usagePlugin, { usage }),
-    ctx.plugin(groupsPlugin, { groups }),
+    ctx.plugin(groupsPlugin, { groups, runner }),
   ];
 
   const manager = new PluginManager({

@@ -449,6 +449,8 @@ function isSessionMeta(value: unknown): value is SessionMeta {
     (meta.title === undefined || typeof meta.title === "string") &&
     (meta.persona === undefined || typeof meta.persona === "string") &&
     (meta.model === undefined || typeof meta.model === "string") &&
+    (meta.agentId === undefined || typeof meta.agentId === "string") &&
+    (meta.groupId === undefined || typeof meta.groupId === "string") &&
     (meta.pinned === undefined || typeof meta.pinned === "boolean") &&
     (meta.archived === undefined || typeof meta.archived === "boolean")
   );

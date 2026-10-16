@@ -144,6 +144,10 @@ export interface ForkSessionOptions {
 export interface CreateSessionOptions {
   /** The project the session works in. Defaults to the process's directory. */
   cwd?: string | undefined;
+  /** The agent whose side of a group this session is (P2.2). */
+  agentId?: string | undefined;
+  /** The group it is held in, with the agent above. */
+  groupId?: string | undefined;
   title?: string | undefined;
   persona?: string | undefined;
   model?: string | undefined;
@@ -201,6 +205,8 @@ export class SessionManager {
         : { title: (options.title ?? this.defaults?.title) as string }),
       ...(persona === undefined ? {} : { persona }),
       ...(model === undefined ? {} : { model }),
+      ...(options.agentId === undefined ? {} : { agentId: options.agentId }),
+      ...(options.groupId === undefined ? {} : { groupId: options.groupId }),
     };
     await this.store.create(meta);
     return await this.openSession(

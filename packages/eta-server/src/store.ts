@@ -26,6 +26,13 @@ export interface SessionMeta {
   persona?: string | undefined;
   /** The model it was left on, as `provider:modelId`. */
   model?: string | undefined;
+  /**
+   * The agent this conversation belongs to, and the group it is held in (P2.2). A session that
+   * is one agent's side of a group carries both; a bare session carries neither. They live in
+   * meta.json, which is what makes the mapping survive a restart.
+   */
+  agentId?: string | undefined;
+  groupId?: string | undefined;
   /** Kept at the top of the sidebar. */
   pinned?: boolean | undefined;
   /** Put out of the way without being deleted. */
