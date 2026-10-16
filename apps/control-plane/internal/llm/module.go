@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/akarachen/axp/apps/control-plane/internal/llm/gateway"
 	"github.com/akarachen/axp/apps/control-plane/internal/llm/gateway/connectors"
@@ -87,10 +88,13 @@ func (m *Module) Public() http.Handler { return gateway.Public(m.service, m.book
 
 // Internal is for the internal listener: the OpenAI-compatible API under
 // /v1 (for the agent X-AXP-Agent-Id names) and the catalog at
-// /llm/v1/models, for the control plane's other processes (Remote).
+// /llm/v1/models, for the control plane's other processes (Remote). CPA
+// has no embeddings: /v1/embeddings is the gateway's own, over Google AI
+// Studio's accounts.
 func (m *Module) Internal() http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", m.proxy.Handler())
+	mux.Handle("POST /v1/embeddings", gateway.Embeddings(m.service, m.book, &http.Client{Timeout: 2 * time.Minute}, m.logger))
 	mux.Handle("GET "+catalogPath, gateway.Catalog(m.service))
 	return mux
 }

@@ -33,6 +33,10 @@ func Public(s *Service, book *usage.Book, logger *slog.Logger) http.Handler {
 		writeJSON(w, http.StatusOK, map[string]any{"usage": book.Report(time.Now())})
 	})
 	mux.Handle("GET /api/llm/v1/models", Catalog(s))
+	// What memory may embed with (POST /v1/embeddings), and whether it can now.
+	mux.HandleFunc("GET /api/llm/v1/embedding-models", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, s.EmbeddingModels())
+	})
 	// Checks every account against its provider now, rather than reporting
 	// what the last requests left behind.
 	mux.HandleFunc("POST /api/llm/v1/refresh", h.refresh)
