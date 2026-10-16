@@ -119,7 +119,11 @@ func (s *Service) Connections() []Connection {
 		if !ok {
 			continue
 		}
-		out = append(out, s.withCheck(normalize(a, connector, now), a))
+		c := normalize(a, connector, now)
+		if c.Error != nil && c.Error.Code == "AUTH_EXPIRED" {
+			c.Error = s.authExpired(connector)
+		}
+		out = append(out, s.withCheck(c, a))
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Connector != out[j].Connector {
@@ -145,18 +149,36 @@ func (s *Service) SetEnabled(ctx context.Context, id string, enabled bool) (Conn
 	if err != nil {
 		return c, err
 	}
+	d, _ := s.byID[c.Connector].(Disabler)
+	a, _ := s.auths.GetByID(id)
+	if d != nil && a != nil {
+		if err := d.SetDisabled(ctx, a, !enabled); err != nil {
+			return c, err
+		}
+	}
 	body, _ := json.Marshal(map[string]any{"name": c.fileName, "disabled": !enabled})
 	if err := s.manage(ctx, http.MethodPatch, "/auth-files/status", body); err != nil {
+		if d != nil && a != nil {
+			_ = d.SetDisabled(ctx, a, c.State == StateDisabled)
+		}
 		return c, err
 	}
 	return s.connection(id)
 }
 
-// Delete removes a connection and its credential file.
+// Delete removes a connection and its credential file, or has its
+// connector remove a credential that is not a file.
 func (s *Service) Delete(ctx context.Context, id string) error {
 	c, err := s.connection(id)
 	if err != nil {
 		return err
+	}
+	if r, ok := s.byID[c.Connector].(Remover); ok {
+		a, ok := s.auths.GetByID(id)
+		if !ok {
+			return ErrNotFound
+		}
+		return r.Remove(ctx, a)
 	}
 	return s.manage(ctx, http.MethodDelete, "/auth-files?name="+url.QueryEscape(c.fileName), nil)
 }
@@ -209,7 +231,7 @@ func (s *Service) Models() []Model {
 				s.catalog[m.ID] = m
 				changed = true
 			}
-			state, reason, retryAt := modelStatus(a, conn, m.ID, name, now)
+			state, reason, retryAt := modelStatus(a, conn, m.ID, name, s.apiKey(connector), now)
 			if prev, ok := best[m.ID]; !ok || modelRank(state) > modelRank(prev.state) {
 				best[m.ID] = status{state, reason, retryAt}
 			}
@@ -225,7 +247,7 @@ func (s *Service) Models() []Model {
 		if !ok {
 			// No account serves it: none is connected, or they all are down.
 			w := worst[m.Connector]
-			st = status{ModelUnavailable, connectionReason(s.connectorName(m.Connector), w), w.RetryAt}
+			st = status{ModelUnavailable, connectionReason(s.connectorName(m.Connector), s.apiKey(m.Connector), w), w.RetryAt}
 			if w.State == StateDegraded {
 				st.state = ModelDegraded
 			}
@@ -248,6 +270,21 @@ func (s *Service) connectorName(id string) string {
 		return c.Info().DisplayName
 	}
 	return "该服务"
+}
+
+// apiKey reports a connector whose credentials are API keys the user
+// enters: nothing to log in to again, nothing to refresh.
+func (s *Service) apiKey(connector string) bool {
+	c, ok := s.byID[connector]
+	return ok && c.Info().Flow == FlowAPIKey
+}
+
+// authExpired is a credential the provider rejects, as the user fixes it.
+func (s *Service) authExpired(connector string) *ConnectionError {
+	if s.apiKey(connector) {
+		return &ConnectionError{"AUTH_EXPIRED", "API key 无效，请重新填写。"}
+	}
+	return &ConnectionError{"AUTH_EXPIRED", "登录已失效，请重新登录。"}
 }
 
 func modelRank(state string) int {
