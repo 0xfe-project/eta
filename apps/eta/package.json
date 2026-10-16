@@ -13,6 +13,9 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@earendil-works/pi-ai": "0.85.1",
+    "@eta/client-contracts": "*",
+    "@eta/core": "*",
     "@eta/server": "*",
     "cordis": "4.0.0-rc.10"
   },

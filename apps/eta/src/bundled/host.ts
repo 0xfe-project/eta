@@ -16,6 +16,8 @@ export interface HostStatus {
   dbPath: string;
   /** The last migration that ran. */
   schema: string | undefined;
+  /** The providers the config lists, each marked when it could not be built. */
+  providers: string[];
   startedAt: number;
   /** The mounted plugins, by name, with the reason when one failed. */
   mounted: string[];

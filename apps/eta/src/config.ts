@@ -1,28 +1,21 @@
+import type { EtaConfig, EtaProviderConfig } from "./providers/config-types";
 /**
- * The host's configuration: `~/.eta/config.json`, the file eta and its editor both write.
+ * The configuration file: `~/.eta/config.json`, the one eta and its editor both write.
  *
- * A missing or unreadable file is a warning, not a failure: a host with no providers still
- * serves, and saying so on stderr is more useful than refusing to start.
+ * The shape of it lives with the providers runtime (`providers/config-types.ts`); this file is
+ * only the reading, and a missing or unreadable file is a warning rather than a failure — a host
+ * with no providers still serves, and saying so on stderr beats refusing to start.
  */
 import { readFile } from "node:fs/promises";
 
-/** One model service, as the config file lists it (`providers` is an array). */
-export interface ProviderConfig {
-  id: string;
-  baseUrl: string;
-  apiKey?: string | undefined;
-  kind?: string | undefined;
-  name?: string | undefined;
-  headers?: Record<string, string> | undefined;
-  models?: unknown[] | undefined;
-}
+export type { EtaConfig, EtaProviderConfig };
 
-export interface EtaConfig {
-  providers: ProviderConfig[];
-  defaultModel?: string | undefined;
-}
+export const EMPTY_CONFIG: EtaConfig = {};
 
-export const EMPTY_CONFIG: EtaConfig = { providers: [] };
+/** The providers the config lists, in the order it lists them. */
+export function configuredProviders(config: EtaConfig): EtaProviderConfig[] {
+  return config.providers ?? [];
+}
 
 export async function readConfig(
   path: string,
@@ -30,13 +23,15 @@ export async function readConfig(
 ): Promise<EtaConfig> {
   try {
     const text = await readFile(path, "utf8");
-    const parsed = JSON.parse(text) as Partial<EtaConfig>;
-    return {
-      providers: Array.isArray(parsed.providers) ? parsed.providers : [],
-      ...(parsed.defaultModel === undefined
-        ? {}
-        : { defaultModel: parsed.defaultModel }),
-    };
+    const parsed = JSON.parse(text) as EtaConfig;
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      throw new Error("not an object");
+    }
+    return parsed;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       warn(`[eta] no config at ${path}; starting with no providers`);

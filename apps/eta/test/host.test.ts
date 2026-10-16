@@ -11,6 +11,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { configuredProviders } from "../src/config";
 import { assembleHost } from "../src/host";
 
 const roots: string[] = [];
@@ -89,7 +90,8 @@ describe("the floor", () => {
   it("starts without a config file and says so", async () => {
     const dataDir = await scratch();
     const host = await start(dataDir);
-    expect(host.config.providers).toEqual([]);
+    expect(host.config.providers).toBeUndefined();
+    expect(host.models).toBeUndefined();
     expect(warnings.join("\n")).toContain("no config at");
     expect((await fetch(url(host, "/health"))).status).toBe(200);
   });
@@ -104,9 +106,9 @@ describe("the floor", () => {
       "utf8",
     );
     const host = await start(dataDir);
-    expect(host.config.providers.map((provider) => provider.id)).toEqual([
-      "local",
-    ]);
+    expect(
+      configuredProviders(host.config).map((provider) => provider.id),
+    ).toEqual(["local"]);
   });
 });
 

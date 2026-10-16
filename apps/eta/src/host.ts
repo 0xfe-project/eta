@@ -1,7 +1,9 @@
+import type { KernelModels } from "@eta/core";
 import type { MountedPlugin } from "@eta/server";
 import type { HostStatus } from "./bundled/host";
 import type { EtaConfig } from "./config";
 import type { Migration } from "./db/migrations";
+import type { ProviderBuildFailure } from "./providers/runtime";
 /**
  * The host: read the config, open the database, build the cordis tree, mount the plugins,
  * listen — and be able to stop in the reverse order.
@@ -15,7 +17,8 @@ import process from "node:process";
 import { PluginManager } from "@eta/server";
 import { Context } from "cordis";
 import { hostPlugin } from "./bundled/host";
-import { readConfig } from "./config";
+import { codexAuthPath, CodexCredentialStore } from "./codex-auth";
+import { configuredProviders, readConfig } from "./config";
 import { databasePath, openDatabase } from "./db/database";
 import {
   applyMigrations,
@@ -25,6 +28,7 @@ import {
 import { DbService } from "./db/service";
 import { EventHub } from "./http/events";
 import { IdempotencyStore, withIdempotency } from "./http/idempotency";
+import { buildModels } from "./providers/runtime";
 import { RouteRegistry, RouteService } from "./routes";
 
 export interface HostOptions {
@@ -49,6 +53,10 @@ export interface Host {
   db: DbService;
   /** Where modules publish what a client follows; `/events` is this hub's. */
   hub: EventHub;
+  /** The configured providers as one model layer, or `undefined` when none are configured. */
+  models: KernelModels | undefined;
+  /** Providers that could not be built, with the reason. The rest are in `models`. */
+  providerFailures: readonly ProviderBuildFailure[];
   port: number;
   config: EtaConfig;
   mounted: () => MountedPlugin[];
@@ -74,6 +82,16 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   }
   const db = new DbService(ctx, { path: dbPath, handle, applied });
 
+  // The model layer, built from the config: this is what a session asks for a model by name
+  // (P0.6). A provider that cannot be built is a warning and a line in /host, not a dead host —
+  // the ones that work still work.
+  const providers = configuredProviders(config);
+  const credentials = new CodexCredentialStore(codexAuthPath(configPath));
+  const { models, failed } = await buildModels(providers, {
+    credentials,
+    warn,
+  });
+
   // Idempotency sits in front of every POST that carries a key: a retry gets the first answer
   // instead of a second effect (P0.5).
   const idempotency = new IdempotencyStore(handle);
@@ -90,6 +108,11 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     dbPath,
     schema: schemaVersion(handle),
     startedAt: Date.now(),
+    providers: providers.map(
+      (provider) =>
+        `${provider.id}${provider.name === undefined ? "" : ` (${provider.name})`}` +
+        `${failed.some((failure) => failure.id === provider.id) ? " — unusable" : ""}`,
+    ),
     mounted: [],
   };
 
@@ -129,6 +152,8 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     routes,
     db,
     hub,
+    models,
+    providerFailures: failed,
     port: server.port ?? 0,
     config,
     mounted: () => manager.mounted(),

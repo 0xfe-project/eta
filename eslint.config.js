@@ -44,7 +44,14 @@ export default antfu(
     // TODO: revisit the two regexes flagged by
     // regexp/no-super-linear-backtracking (harness/src/memory.ts,
     // harness/src/subagent-plan.ts) when that code is next touched.
-    files: ["packages/eta-*/**"],
+    files: [
+      "packages/eta-*/**",
+      // Ported from the same place: the providers runtime, the codex auth kit and its test.
+      "apps/eta/src/providers/**",
+      "apps/eta/src/codex-auth.ts",
+      "apps/eta/src/codex-provider.ts",
+      "apps/eta/test/codex-auth.test.ts",
+    ],
     rules: {
       "ts/method-signature-style": "off",
       "ts/no-use-before-define": "off",
@@ -60,7 +67,11 @@ export default antfu(
   {
     // Smoke scenarios and tests print their progress on purpose; the .mjs ones
     // run under Bun and use its globals.
-    files: ["packages/eta-*/test/**", "packages/eta-*/src/testing/**"],
+    files: [
+      "packages/eta-*/test/**",
+      "packages/eta-*/src/testing/**",
+      "apps/eta/test/**",
+    ],
     languageOptions: { globals: globals.bunBuiltin },
     rules: { "no-console": "off" },
   },
