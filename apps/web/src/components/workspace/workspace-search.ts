@@ -1,4 +1,11 @@
+import type { Icon } from "@phosphor-icons/react";
 import type { WorkspaceView } from "./types";
+import { BellIcon } from "@phosphor-icons/react/Bell";
+import { BrowsersIcon } from "@phosphor-icons/react/Browsers";
+import { ClockIcon } from "@phosphor-icons/react/Clock";
+import { GaugeIcon } from "@phosphor-icons/react/Gauge";
+import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
+import { UsersThreeIcon } from "@phosphor-icons/react/UsersThree";
 import { useLocation } from "@tanstack/react-router";
 import {
   createParser,
@@ -51,33 +58,38 @@ export function useSectionLink() {
 const groupViews = [
   {
     value: "members",
+    icon: UsersThreeIcon,
     get label() {
       return translate("chat:groups.members.title");
     },
   },
-  { value: "artifacts", label: "Artifacts" },
+  { value: "artifacts", icon: BrowsersIcon, label: "Artifacts" },
 ] as const;
 const workspaceViews = [
   {
     value: "overview",
+    icon: GaugeIcon,
     get label() {
       return translate("navigation:sections.overview");
     },
   },
   {
     value: "tasks",
+    icon: ListChecksIcon,
     get label() {
       return translate("navigation:sections.tasks");
     },
   },
   {
     value: "routines",
+    icon: ClockIcon,
     get label() {
       return translate("navigation:sections.routines");
     },
   },
   {
     value: "inbox",
+    icon: BellIcon,
     get label() {
       return translate("navigation:sections.pending");
     },
@@ -87,6 +99,7 @@ const workspaceViews = [
 /** The side panel's tabs beside the current chat. */
 export function usePanelViews(): readonly {
   value: WorkspaceView;
+  icon: Icon;
   label: string;
 }[] {
   return useGroups().current?.kind === "group" ? groupViews : workspaceViews;

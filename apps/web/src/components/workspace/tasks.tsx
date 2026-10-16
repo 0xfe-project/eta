@@ -173,7 +173,7 @@ export function Comments({ count }: { count: number }) {
     "navigation",
   ] as const);
   return count ? (
-    <span className="inline-flex items-center gap-1">
+    <span className="inline-flex items-center gap-1 tabular-nums">
       <ChatCircleIcon
         aria-label={translateText("comments.title")}
         className="size-3.5"
