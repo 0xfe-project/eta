@@ -1,6 +1,7 @@
 /**
  * The product API: AXP's shapes over our data (REFACTOR.md §9, P2.4).
  *
+ *   GET    /api/v1/openapi.json               this surface's own contract (P2.5)
  *   GET    /api/v1/chat                       the snapshot (groups, agents, active replies, cursor)
  *   GET    /api/v1/chat/stream?cursor=…       one SSE stream of product events
  *   POST   /api/v1/chat/messages              send a message: a row, and joined by mode
@@ -35,6 +36,7 @@ import type {
 import type { PluginContext } from "../plugin-api";
 import { publishAgentDeleted, publishAgentUpdated } from "../agents/events";
 import { modelRejection } from "../agents/model-check";
+import { productDocument } from "../compat/openapi";
 import { toAgent, toGroup, toInteraction, toMessage } from "../compat/shapes";
 import { errorResponse } from "../routes";
 
@@ -219,6 +221,14 @@ export const compatPlugin = {
         crypto.randomUUID(),
       );
     };
+
+    plugin.effect(() =>
+      // The document the web generates its client from (P2.5). Served here rather than shipped as
+      // a file, so what a client reads is what this process actually answers.
+      plugin.routes.register("GET", "/api/v1/openapi.json", () =>
+        Response.json(productDocument()),
+      ),
+    );
 
     plugin.effect(() =>
       plugin.routes.register("GET", "/api/v1/chat", () => {
@@ -463,9 +473,9 @@ export const compatPlugin = {
     plugin.effect(() =>
       plugin.routes.register(
         "PATCH",
-        "/api/v1/agents/:id",
+        "/api/v1/agents/:agent_id",
         async (request, params) => {
-          const id = params.id ?? "";
+          const id = params.agent_id ?? "";
           if (agents.get(id) === undefined) {
             return errorResponse(
               404,
@@ -509,9 +519,9 @@ export const compatPlugin = {
     plugin.effect(() =>
       plugin.routes.register(
         "DELETE",
-        "/api/v1/agents/:id",
+        "/api/v1/agents/:agent_id",
         (_request, params) => {
-          const id = params.id ?? "";
+          const id = params.agent_id ?? "";
           if (!agents.remove(id)) {
             return errorResponse(
               404,
@@ -529,9 +539,9 @@ export const compatPlugin = {
     plugin.effect(() =>
       plugin.routes.register(
         "POST",
-        "/api/v1/agents/:id/restart",
+        "/api/v1/agents/:agent_id/restart",
         (_request, params) => {
-          const id = params.id ?? "";
+          const id = params.agent_id ?? "";
           if (agents.get(id) === undefined) {
             return errorResponse(
               404,

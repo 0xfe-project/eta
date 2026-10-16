@@ -1,0 +1,11 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    // The product API's document (P2.5). The web's `generate` depends on this file, so the types a
+    // client compiles against are always the ones this host answers.
+    "openapi": {
+      "outputs": ["out/openapi.json"]
+    }
+  }
+}

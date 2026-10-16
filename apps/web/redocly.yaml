@@ -3,6 +3,13 @@
 # its public API and routines'). Adding one: an entry here, its document in
 # that task, and a client in src/lib/api.ts.
 apis:
+  # The new host's own document (P2.5): written by `bun run --cwd apps/eta openapi`, so the web's
+  # client types come from the code that answers the routes. The control-plane entry below is the
+  # old stack's, still read while its routes are ported over — the web calls both.
+  eta:
+    root: ../eta/out/openapi.json
+    x-openapi-ts:
+      output: ./src/api/eta.gen.ts
   control-plane:
     root: ../control-plane/out/openapi.json
     x-openapi-ts:

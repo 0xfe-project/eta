@@ -13,13 +13,13 @@
  */
 import type { Database } from "bun:sqlite";
 
-export interface InteractionOption {
+interface InteractionOption {
   value: string;
   label: string;
 }
 
 /** Where an interaction is in its life. `pending` is the only state that wants an answer. */
-export type InteractionStatus = "pending" | "resolved" | "expired";
+type InteractionStatus = "pending" | "resolved" | "expired";
 
 export interface InteractionRecord {
   id: string;

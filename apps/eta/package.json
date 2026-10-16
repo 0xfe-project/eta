@@ -7,6 +7,7 @@
   "main": "./src/main.ts",
   "scripts": {
     "dev": "bun --watch src/main.ts",
+    "openapi": "bun src/openapi-export.ts",
     "start": "bun src/main.ts",
     "test": "bun --bun vitest --run",
     "typecheck": "tsc --noEmit",
@@ -21,7 +22,8 @@
     "@eta/execution-node": "*",
     "@eta/harness": "*",
     "@eta/server": "*",
-    "cordis": "4.0.0-rc.10"
+    "cordis": "4.0.0-rc.10",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "22.19.19",
